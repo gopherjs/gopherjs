@@ -108,7 +108,8 @@ func translateDecl(decl ast.Decl, out *Printer, info *types.Info) {
 				case *types.Array:
 					switch elt := t.Elem().(type) {
 					case *types.Basic:
-						defaultValue = fmt.Sprintf("new %s(%d)", toTypedArray(elt), t.Len())
+						defaultValue = fmt.Sprintf("newNumericArray(%d)", t.Len())
+					// 	defaultValue = fmt.Sprintf("new %s(%d)", toTypedArray(elt), t.Len())
 					default:
 						panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
 					}
@@ -125,6 +126,41 @@ func translateDecl(decl ast.Decl, out *Printer, info *types.Info) {
 					out.Print("var %s = %s;", name, value)
 				}
 			}
+		case token.TYPE:
+			for _, spec := range d.Specs {
+				nt := info.Objects[spec.(*ast.TypeSpec).Name].Type().(*types.Named)
+				switch t := nt.Underlying().(type) {
+				case *types.Struct:
+					params := make([]string, t.NumFields())
+					for i := 0; i < t.NumFields(); i++ {
+						params[i] = t.Field(i).Name()
+					}
+					out.Print("var %s = function(%s) {", nt.Obj().Name(), strings.Join(params, ", "))
+					out.Indent(func() {
+						for i := 0; i < t.NumFields(); i++ {
+							out.Print("this.%s = %s;", t.Field(i).Name(), t.Field(i).Name())
+						}
+					})
+					out.Print("};")
+				case *types.Slice:
+					// switch elt := t.Elem().(type) {
+					// case *types.Basic:
+					// 	// 	out.Print("var %s = %s;", nt.Obj().Name(), toTypedArray(elt))
+					// case *types.Named:
+					out.Print("var %s = function() { Slice.apply(this, arguments); };", nt.Obj().Name())
+					out.Print("var _keys = Object.keys(Slice.prototype); for(var i = 0; i < _keys.length; i++) { %s.prototype[_keys[i]] = Slice.prototype[_keys[i]]; }", nt.Obj().Name())
+					// default:
+					// 	panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
+					// }
+				case *types.Interface:
+				default:
+					panic(fmt.Sprintf("Unhandled type: %T\n", t))
+				}
+			}
+		case token.IMPORT:
+			// ignored
+		default:
+			panic("Unhandled declaration: " + d.Tok.String())
 		}
 
 	case *ast.FuncDecl:
@@ -195,11 +231,13 @@ func translateStmtList(stmts []ast.Stmt, out *Printer, info *types.Info) {
 			out.Print("for (%s_i = 0, _len = _ref.length; _i < _len; %s++_i) {", keyAssign, keyAssign)
 			out.Indent(func() {
 				if s.Value != nil && s.Value.(*ast.Ident).Name != "_" {
-					switch info.Types[s.X].(type) {
+					switch t := info.Types[s.X].Underlying().(type) {
 					case *types.Array:
 						out.Print("var %s = _ref[_i];", s.Value.(*ast.Ident).Name)
 					case *types.Slice:
 						out.Print("var %s = _ref.get(_i);", s.Value.(*ast.Ident).Name)
+					default:
+						panic(fmt.Sprintf("Unhandled range type: %T\n", t))
 					}
 				}
 				translateStmtList(s.Body.List, out, info)
@@ -285,13 +323,14 @@ func translateExpr(expr ast.Expr, info *types.Info) string {
 			}
 			return fmt.Sprintf("{ %s }", strings.Join(elements, ", "))
 		case *types.Named:
+			if s, isSlice := t.Underlying().(*types.Slice); isSlice {
+				return fmt.Sprintf("new %s(%s)", t.Obj().Name(), createListComposite(s.Elem(), elements))
+			}
 			return fmt.Sprintf("new %s(%s)", t.Obj().Name(), strings.Join(elements, ", "))
 		default:
 			fmt.Println(e.Type, elements)
 			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", info.Types[e]))
 		}
-	case *ast.Ident:
-		return e.Name
 	case *ast.UnaryExpr:
 		if e.Op == token.AND {
 			return translateExpr(e.X, info)
@@ -309,10 +348,17 @@ func translateExpr(expr ast.Expr, info *types.Info) string {
 	case *ast.ParenExpr:
 		return fmt.Sprintf("(%s)", translateExpr(e.X, info))
 	case *ast.IndexExpr:
-		if _, ok := info.Types[e.X].(*types.Slice); ok {
-			return fmt.Sprintf("%s.get(%s)", translateExpr(e.X, info), translateExpr(e.Index, info))
+		x := translateExpr(e.X, info)
+		index := translateExpr(e.Index, info)
+		switch t := info.Types[e.X].Underlying().(type) {
+		case *types.Basic:
+			if t.Kind() == types.UntypedString {
+				return fmt.Sprintf("%s.charCodeAt(%s)", x, index)
+			}
+		case *types.Slice:
+			return fmt.Sprintf("%s.get(%s)", x, index)
 		}
-		return fmt.Sprintf("%s[%s]", translateExpr(e.X, info), translateExpr(e.Index, info))
+		return fmt.Sprintf("%s[%s]", x, index)
 	case *ast.SliceExpr:
 		method := "subslice"
 		if b, ok := info.Types[e.X].(*types.Basic); ok && b.Kind() == types.String {
@@ -354,8 +400,15 @@ func translateExpr(expr ast.Expr, info *types.Info) string {
 		return fmt.Sprintf("%s(%s)", translateExpr(e.Fun, info), strings.Join(args, ", "))
 	case *ast.TypeAssertExpr:
 		return translateExpr(e.X, info)
-	case *ast.ArrayType:
-		return toTypedArray(info.Types[e].(*types.Slice).Elem().(*types.Basic))
+	// case *ast.ArrayType:
+	// 	return toTypedArray(info.Types[e].(*types.Slice).Elem().(*types.Basic))
+	case *ast.Ident:
+		// if tn, isTypeName := info.Objects[e].(*types.TypeName); isTypeName {
+		// 	if _, isSlice := tn.Type().Underlying().(*types.Slice); isSlice {
+		// 		return "Array"
+		// 	}
+		// }
+		return e.Name
 	case nil:
 		return ""
 	default:
@@ -364,43 +417,44 @@ func translateExpr(expr ast.Expr, info *types.Info) string {
 	return ""
 }
 
-func toTypedArray(t *types.Basic) string {
-	switch t.Kind() {
-	case types.Int8:
-		return "Int8Array"
-	case types.Uint8:
-		return "Uint8Array"
-	case types.Int16:
-		return "Int16Array"
-	case types.Uint16:
-		return "Uint16Array"
-	case types.Int32, types.Int:
-		return "Int32Array"
-	case types.Uint32:
-		return "Uint32Array"
-	case types.Float32:
-		return "Float32Array"
-	case types.Float64, types.Complex64, types.Complex128:
-		return "Float64Array"
-	default:
-		panic("Unhandled typed array: " + t.String())
-	}
-	return ""
-}
+// func toTypedArray(t *types.Basic) string {
+// 	switch t.Kind() {
+// 	case types.Int8:
+// 		return "Int8Array"
+// 	case types.Uint8:
+// 		return "Uint8Array"
+// 	case types.Int16:
+// 		return "Int16Array"
+// 	case types.Uint16:
+// 		return "Uint16Array"
+// 	case types.Int32, types.Int:
+// 		return "Int32Array"
+// 	case types.Uint32:
+// 		return "Uint32Array"
+// 	case types.Float32:
+// 		return "Float32Array"
+// 	case types.Float64, types.Complex64, types.Complex128:
+// 		return "Float64Array"
+// 	default:
+// 		panic("Unhandled typed array: " + t.String())
+// 	}
+// 	return ""
+// }
 
 func createListComposite(elementType types.Type, elements []string) string {
-	switch elt := elementType.(type) {
-	case *types.Basic:
-		switch elt.Kind() {
-		case types.Bool, types.String:
-			return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
-		default:
-			return fmt.Sprintf("new %s([%s])", toTypedArray(elt), strings.Join(elements, ", "))
-		}
-	default:
-		return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
-		// panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
-	}
+	return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
+	// switch elt := elementType.(type) {
+	// case *types.Basic:
+	// 	switch elt.Kind() {
+	// 	case types.Bool, types.String:
+	// 		return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
+	// 	default:
+	// 		return fmt.Sprintf("new %s([%s])", toTypedArray(elt), strings.Join(elements, ", "))
+	// 	}
+	// default:
+	// 	return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
+	// 	// panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
+	// }
 }
 
 func getVariadicInfo(funType types.Type) (bool, int, types.Type) {

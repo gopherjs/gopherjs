@@ -1,29 +1,30 @@
-var Slice = function(array) {
-  this.array = array
+var Slice = function(data) {
+  if (data.constructor === Number) {
+    data = new Array(data);
+  }
+  this.array = data
   this.offset = 0
-  this.length = array.length
+  this.length = data.length
 }
 
-Slice.prototype = {
-  get: function(index) {
-    return this.array[this.offset + index];
-  },
-  set: function(index, value) {
-    this.array[this.offset + index] = value;
-  },
-  subslice: function(begin, end) {
-    var s = new Slice(this.array);
-    s.offset = this.offset + begin;
-    s.length = this.length - begin;
-    if (end !== undefined) {
-      s.length = end - begin;
-    }
-    return s;
-  },
-  toArray: function() {
-    return this.array.slice(this.offset, this.offset + this.length);
-  },
-};
+Slice.prototype.get = function(index) {
+  return this.array[this.offset + index];
+}
+Slice.prototype.set = function(index, value) {
+  this.array[this.offset + index] = value;
+}
+Slice.prototype.subslice = function(begin, end) {
+  var s = new this.constructor(this.array);
+  s.offset = this.offset + begin;
+  s.length = this.length - begin;
+  if (end !== undefined) {
+    s.length = end - begin;
+  }
+  return s;
+}
+Slice.prototype.toArray = function() {
+  return this.array.slice(this.offset, this.offset + this.length);
+}
 
 String.prototype.toSlice = function() {
   var array = new Uint8Array(this.length);
@@ -45,9 +46,17 @@ var make = function(constructor, length, capacity) {
   if (capacity === undefined) {
     capacity = length;
   }
-  var slice = new Slice(new constructor(capacity));
+  var slice = new constructor(capacity);
   slice.length = length;
   return slice;
+}
+
+var copy = function(dst, src) {
+  var n = Math.min(src.length, dst.length)
+  for (var i = 0; i < n; i++) {
+    dst.set(i, src.get(i))
+  }
+  return n
 }
 
 var append = function(slice, toAppend) {
@@ -67,7 +76,7 @@ var append = function(slice, toAppend) {
     newArray[newOffset + slice.length + i] = toAppend.get(i);
   }
 
-  var newSlice = new Slice(newArray);
+  var newSlice = new slice.constructor(newArray);
   newSlice.offset = newOffset;
   newSlice.length = newLength;
   return newSlice;
@@ -81,15 +90,54 @@ var panic = function(msg) {
   throw msg;
 };
 
+var float64 = function(v) { return v; };
+
+var newNumericArray = function(len) {
+  var a = new Array(len);
+  for (var i = 0; i < len; i++) {
+    a[i] = 0;
+  }
+  return a;
+}
+
 var fmt = {
-  Println: function(parts) {
-    console.log.apply(console, parts.toArray());
+  Println: function(a) {
+    console.log.apply(console, a.toArray());
+  },
+  Sprintf: function(format, a) {
+    return a.get(0).toString()
   }
 };
 
 var reflect = {
   DeepEqual: function(a, b) {
-    return JSON.stringify(a) === JSON.stringify(b) 
+    if (a === b) {
+      return true;
+    }
+    if (a.constructor === Number) {
+      return false;
+    }
+    if (a.constructor !== b.constructor) {
+      return false;
+    }
+    if (a.length !== undefined) {
+      if (a.length !== b.length) {
+        return false;
+      }
+      for (var i = 0; i < a.length; i++) {
+        if (!this.DeepEqual(a.get(i), b.get(i))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    var keys = Object.keys(a);
+    for (var i = 0; i < keys.length;  i++) {
+      if (!this.DeepEqual(a[keys[i]], b[keys[i]])) {
+        return false;
+      }
+    }
+    return true;
   }
 };
 

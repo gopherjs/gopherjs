@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
 	"go/ast"
@@ -32,6 +33,15 @@ func (c *Context) Indent(f func()) {
 	c.indentation += 1
 	f()
 	c.indentation -= 1
+}
+
+func (c *Context) CatchOutput(f func()) string {
+	origWriter := c.writer
+	b := bytes.NewBuffer(nil)
+	c.writer = b
+	f()
+	c.writer = origWriter
+	return b.String()
 }
 
 func main() {
@@ -361,8 +371,15 @@ func (c *Context) translateExpr(expr ast.Expr, info *types.Info) string {
 			fmt.Println(e.Type, elements)
 			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", info.Types[e]))
 		}
-	// case *ast.FuncLit:
-	// 	translateParams(info.Objects[d.Name].Type().(*types.Signature).Params())
+	case *ast.FuncLit:
+		params := translateParams(info.Types[e].(*types.Signature).Params())
+		body := c.CatchOutput(func() {
+			c.Indent(func() {
+				c.translateStmtList(e.Body.List, info)
+			})
+			c.Print("")
+		})
+		return fmt.Sprintf("function (%s) {\n%s}", params, body[:len(body)-1])
 	case *ast.UnaryExpr:
 		if e.Op == token.AND {
 			return c.translateExpr(e.X, info)
@@ -434,8 +451,15 @@ func (c *Context) translateExpr(expr ast.Expr, info *types.Info) string {
 		return "starExpr"
 	case *ast.TypeAssertExpr:
 		return c.translateExpr(e.X, info)
-	// case *ast.ArrayType:
+	case *ast.ArrayType:
+		return "Slice"
 	// 	return toTypedArray(info.Types[e].(*types.Slice).Elem().(*types.Basic))
+	case *ast.MapType:
+		return "Map"
+	case *ast.InterfaceType:
+		return "Interface"
+	case *ast.ChanType:
+		return "Channel"
 	case *ast.Ident:
 		// if tn, isTypeName := info.Objects[e].(*types.TypeName); isTypeName {
 		// 	if _, isSlice := tn.Type().Underlying().(*types.Slice); isSlice {

@@ -15,16 +15,21 @@ import (
 )
 
 type Context struct {
-	writer      io.Writer
-	indentation int
-	info        *types.Info
-	varCounters map[string]int
-	hasInit     bool
+	writer          io.Writer
+	indentation     int
+	info            *types.Info
+	varNames        map[*types.Var]string
+	varNameCounters map[string]int
+	hasInit         bool
 }
 
-func (c *Context) varName(prefix string) string {
-	c.varCounters[prefix] += 1
-	return fmt.Sprintf("_%s%d", prefix, c.varCounters[prefix])
+func (c *Context) newVarName(prefix string) string {
+	n := c.varNameCounters[prefix]
+	c.varNameCounters[prefix] = n + 1
+	if n == 0 {
+		return prefix
+	}
+	return fmt.Sprintf("%s%d", prefix, n)
 }
 
 func (c *Context) Write(b []byte) (int, error) {
@@ -91,7 +96,8 @@ func main() {
 			Types:   make(map[ast.Expr]types.Type),
 			Objects: make(map[*ast.Ident]types.Object),
 		},
-		varCounters: make(map[string]int),
+		varNames:        make(map[*types.Var]string),
+		varNameCounters: make(map[string]int),
 	}
 	_, err = config.Check(files[0].Name.Name, fileSet, files, c.info)
 	if err != nil {
@@ -149,7 +155,7 @@ func (c *Context) translateDecl(decl ast.Decl) {
 					if len(valueSpec.Values) != 0 {
 						value = c.translateExpr(valueSpec.Values[i])
 					}
-					c.Print("var %s = %s;", name, value)
+					c.Print("var %s = %s;", c.translateExpr(name), value)
 				}
 			}
 		case token.TYPE:
@@ -195,7 +201,7 @@ func (c *Context) translateDecl(decl ast.Decl) {
 		if d.Name.Name == "init" {
 			c.hasInit = true
 		}
-		c.Print("var %s = function(%s) {", d.Name.Name, translateParams(c.info.Objects[d.Name].Type().(*types.Signature).Params()))
+		c.Print("var %s = function(%s) {", d.Name.Name, c.translateParams(d.Type))
 		c.Indent(func() {
 			c.translateStmtList(d.Body.List)
 		})
@@ -320,20 +326,21 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 			c.Print("}")
 
 		case *ast.RangeStmt:
-			refVar := c.varName("ref")
-			lenVar := c.varName("len")
-			iVar := c.varName("i")
+			refVar := c.newVarName("_ref")
+			lenVar := c.newVarName("_len")
+			iVar := c.newVarName("_i")
 			vars := []string{refVar, lenVar, iVar}
-			var key, keyAssign, value string
-			if s.Key != nil && s.Key.(*ast.Ident).Name != "_" {
-				key = s.Key.(*ast.Ident).Name
+
+			key := c.translateExpr(s.Key)
+			value := c.translateExpr(s.Value)
+			keyAssign := ""
+			if key != "" {
 				keyAssign = fmt.Sprintf(", %s = %s", key, iVar)
 				if s.Tok == token.DEFINE {
 					vars = append(vars, key)
 				}
 			}
-			if s.Value != nil && s.Value.(*ast.Ident).Name != "_" {
-				value = s.Value.(*ast.Ident).Name
+			if value != "" {
 				if s.Tok == token.DEFINE {
 					vars = append(vars, value)
 				}
@@ -422,7 +429,7 @@ func (c *Context) translateStmt(stmt ast.Stmt) string {
 				rhs = "[" + strings.Join(exprs, ", ") + "]"
 			}
 
-			refVar := c.varName("ref")
+			refVar := c.newVarName("_ref")
 			assignments := make([]string, len(s.Lhs))
 			for i, lhs := range s.Lhs {
 				assignments[i] = fmt.Sprintf("%s = %s[%d]", c.translateExpr(lhs), refVar, i)
@@ -430,19 +437,22 @@ func (c *Context) translateStmt(stmt ast.Stmt) string {
 			return fmt.Sprintf("var %s = %s, %s", refVar, rhs, strings.Join(assignments, ", "))
 		}
 
+		lhs := c.translateExpr(s.Lhs[0])
+		rhs := c.translateExpr(s.Rhs[0])
+
+		if lhs == "" {
+			return rhs
+		}
+
 		if s.Tok == token.DEFINE {
-			return fmt.Sprintf("var %s = %s", c.translateExpr(s.Lhs[0]), c.translateExpr(s.Rhs[0]))
+			return fmt.Sprintf("var %s = %s", lhs, rhs)
 		}
 
 		if iExpr, ok := s.Lhs[0].(*ast.IndexExpr); ok && s.Tok == token.ASSIGN {
-			return fmt.Sprintf("%s.set(%s, %s)", c.translateExpr(iExpr.X), c.translateExpr(iExpr.Index), c.translateExpr(s.Rhs[0]))
+			return fmt.Sprintf("%s.set(%s, %s)", c.translateExpr(iExpr.X), c.translateExpr(iExpr.Index), rhs)
 		}
 
-		if id, isIdent := s.Lhs[0].(*ast.Ident); isIdent && id.Name == "_" {
-			return c.translateExpr(s.Rhs[0])
-		}
-
-		return fmt.Sprintf("%s %s %s", c.translateExpr(s.Lhs[0]), s.Tok, c.translateExpr(s.Rhs[0]))
+		return fmt.Sprintf("%s %s %s", lhs, s.Tok, rhs)
 
 	case *ast.IncDecStmt:
 		return fmt.Sprintf("%s%s", c.translateExpr(s.X), s.Tok)
@@ -495,14 +505,13 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		}
 
 	case *ast.FuncLit:
-		params := translateParams(c.info.Types[e].(*types.Signature).Params())
 		body := c.CatchOutput(func() {
 			c.Indent(func() {
 				c.translateStmtList(e.Body.List)
 			})
 			c.Print("")
 		})
-		return fmt.Sprintf("function (%s) {\n%s}", params, body[:len(body)-1])
+		return fmt.Sprintf("function (%s) {\n%s}", c.translateParams(e.Type), body[:len(body)-1])
 
 	case *ast.UnaryExpr:
 		if e.Op == token.AND {
@@ -574,7 +583,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			}
 		}
 		if _, isSliceType := funType.(*types.Slice); isSliceType {
-			return fmt.Sprintf("(%s).toSlice()", args[0])
+			return fmt.Sprintf("%s.toSlice()", args[0])
 		}
 		return fmt.Sprintf("%s(%s)", c.translateExpr(e.Fun), strings.Join(args, ", "))
 
@@ -586,7 +595,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 
 	case *ast.ArrayType:
 		return "Slice"
-	// 	return toTypedArray(c.info.Types[e].(*types.Slice).Elem().(*types.Basic))
+		// 	return toTypedArray(c.info.Types[e].(*types.Slice).Elem().(*types.Basic))
 
 	case *ast.MapType:
 		return "Map"
@@ -598,6 +607,9 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		return "Channel"
 
 	case *ast.Ident:
+		if e.Name == "_" {
+			return ""
+		}
 		if e.Name == "nil" {
 			return "null"
 		}
@@ -606,6 +618,15 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		// 		return "Array"
 		// 	}
 		// }
+		// fmt.Printf("%T %v\n", c.info.Objects[e], c.info.Objects[e].Pos())
+		if v, isVar := c.info.Objects[e].(*types.Var); isVar {
+			name, found := c.varNames[v]
+			if !found {
+				name = c.newVarName(e.Name)
+				c.varNames[v] = name
+			}
+			return name
+		}
 		return e.Name
 
 	case nil:
@@ -616,6 +637,16 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 
 	}
 	return ""
+}
+
+func (c *Context) translateParams(t *ast.FuncType) string {
+	params := make([]string, 0)
+	for _, param := range t.Params.List {
+		for _, ident := range param.Names {
+			params = append(params, c.translateExpr(ident))
+		}
+	}
+	return strings.Join(params, ", ")
 }
 
 // func toTypedArray(t *types.Basic) string {
@@ -673,14 +704,6 @@ func getVariadicInfo(funType types.Type) (bool, int, types.Type) {
 		}
 	}
 	return false, 0, nil
-}
-
-func translateParams(t *types.Tuple) string {
-	params := make([]string, t.Len())
-	for i := 0; i < t.Len(); i++ {
-		params[i] = t.At(i).Name()
-	}
-	return strings.Join(params, ", ")
 }
 
 func hasFallthrough(caseClause *ast.CaseClause) bool {

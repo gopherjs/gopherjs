@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 )
 
@@ -472,7 +473,8 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 	case *ast.BasicLit:
 		value := strings.Replace(e.Value, "\n", "\\n", -1)
 		if e.Kind == token.CHAR {
-			return fmt.Sprintf("%s.charCodeAt(0)", value)
+			v, _, _, _ := strconv.UnquoteChar(value[1:len(value)-1], '\'')
+			return strconv.Itoa(int(v))
 		}
 		if e.Kind == token.STRING && value[0] == '`' {
 			return `"` + strings.Replace(value[1:len(value)-1], `"`, `\"`, -1) + `"`

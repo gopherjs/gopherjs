@@ -42,7 +42,7 @@ Slice.prototype.toArray = function() {
 };
 
 String.prototype.toSlice = function() {
-  var array = new Uint8Array(this.length);
+  var array = new Int32Array(this.length);
   for (var i = 0; i < this.length; i++) {
     array[i] = this.charCodeAt(i);
   }
@@ -105,7 +105,14 @@ var append = function(slice, toAppend) {
 };
 
 var string = function(s) {
-  return String.fromCharCode(s);
+  switch (s.constructor) {
+  case Number:
+    return String.fromCharCode(s);
+  case Slice:
+    return String.fromCharCode.apply(null, s.toArray());
+  default:
+    throw "Can not cast to string.";
+  }
 };
 
 var panic = function(msg) {
@@ -113,8 +120,10 @@ var panic = function(msg) {
 };
 
 var print = function(a) {
-  console.log(a.toArray().join(""));
+  console.log(a.toArray().join(" "));
 };
+
+var println = print;
 
 var float64 = function(v) { return v; };
 
@@ -127,9 +136,8 @@ var newNumericArray = function(len) {
 };
 
 var fmt = {
-  Println: function(a) {
-    console.log.apply(console, a.toArray());
-  },
+  Print: print,
+  Println: print,
   Sprintf: function(format, a) {
     return a.get(0).toString();
   }

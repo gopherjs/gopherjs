@@ -18,6 +18,13 @@ type Context struct {
 	writer      io.Writer
 	indentation int
 	info        *types.Info
+	varCounters map[string]int
+	hasInit     bool
+}
+
+func (c *Context) varName(prefix string) string {
+	c.varCounters[prefix] += 1
+	return fmt.Sprintf("_%s%d", prefix, c.varCounters[prefix])
 }
 
 func (c *Context) Write(b []byte) (int, error) {
@@ -84,6 +91,7 @@ func main() {
 			Types:   make(map[ast.Expr]types.Type),
 			Objects: make(map[*ast.Ident]types.Object),
 		},
+		varCounters: make(map[string]int),
 	}
 	_, err = config.Check(files[0].Name.Name, fileSet, files, c.info)
 	if err != nil {
@@ -103,6 +111,9 @@ func main() {
 		}
 	}
 
+	if c.hasInit {
+		c.Print("init();")
+	}
 	c.Print("main();")
 }
 
@@ -181,6 +192,9 @@ func (c *Context) translateDecl(decl ast.Decl) {
 		}
 
 	case *ast.FuncDecl:
+		if d.Name.Name == "init" {
+			c.hasInit = true
+		}
 		c.Print("var %s = function(%s) {", d.Name.Name, translateParams(c.info.Objects[d.Name].Type().(*types.Signature).Params()))
 		c.Indent(func() {
 			c.translateStmtList(d.Body.List)
@@ -306,20 +320,42 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 			c.Print("}")
 
 		case *ast.RangeStmt:
-			keyAssign := ""
+			refVar := c.varName("ref")
+			lenVar := c.varName("len")
+			iVar := c.varName("i")
+			vars := []string{refVar, lenVar, iVar}
+			var key, keyAssign, value string
 			if s.Key != nil && s.Key.(*ast.Ident).Name != "_" {
-				keyAssign = fmt.Sprintf(", %s = _i", s.Key.(*ast.Ident).Name)
+				key = s.Key.(*ast.Ident).Name
+				keyAssign = fmt.Sprintf(", %s = %s", key, iVar)
+				if s.Tok == token.DEFINE {
+					vars = append(vars, key)
+				}
 			}
-			c.Print("var _ref = %s;", c.translateExpr(s.X))
-			c.Print("var _i, _len;")
-			c.Print("for (_i = 0%s, _len = _ref.length; _i < _len; _i++%s) {", keyAssign, keyAssign)
+			if s.Value != nil && s.Value.(*ast.Ident).Name != "_" {
+				value = s.Value.(*ast.Ident).Name
+				if s.Tok == token.DEFINE {
+					vars = append(vars, value)
+				}
+			}
+
+			c.Print("var %s;", strings.Join(vars, ", "))
+			forParams := "" +
+				fmt.Sprintf("%s = %s", refVar, c.translateExpr(s.X)) +
+				fmt.Sprintf(", %s = %s.length", lenVar, refVar) +
+				fmt.Sprintf(", %s = 0", iVar) +
+				keyAssign +
+				fmt.Sprintf("; %s < %s", iVar, lenVar) +
+				fmt.Sprintf("; %s++", iVar) +
+				keyAssign
+			c.Print("for (%s) {", forParams)
 			c.Indent(func() {
-				if s.Value != nil && s.Value.(*ast.Ident).Name != "_" {
+				if value != "" {
 					switch t := c.info.Types[s.X].Underlying().(type) {
 					case *types.Array:
-						c.Print("var %s = _ref[_i];", s.Value.(*ast.Ident).Name)
+						c.Print("var %s = %s[%s];", value, refVar, iVar)
 					case *types.Slice:
-						c.Print("var %s = _ref.get(_i);", s.Value.(*ast.Ident).Name)
+						c.Print("var %s = %s.get(%s);", value, refVar, iVar)
 					default:
 						panic(fmt.Sprintf("Unhandled range type: %T\n", t))
 					}
@@ -386,12 +422,12 @@ func (c *Context) translateStmt(stmt ast.Stmt) string {
 				rhs = "[" + strings.Join(exprs, ", ") + "]"
 			}
 
+			refVar := c.varName("ref")
 			assignments := make([]string, len(s.Lhs))
 			for i, lhs := range s.Lhs {
-				assignments[i] = fmt.Sprintf("%s = _ref[%d]", c.translateExpr(lhs), i)
+				assignments[i] = fmt.Sprintf("%s = %s[%d]", c.translateExpr(lhs), refVar, i)
 			}
-
-			return fmt.Sprintf("var _ref = %s, %s", rhs, strings.Join(assignments, ", "))
+			return fmt.Sprintf("var %s = %s, %s", refVar, rhs, strings.Join(assignments, ", "))
 		}
 
 		if s.Tok == token.DEFINE {
@@ -424,13 +460,14 @@ func (c *Context) translateStmt(stmt ast.Stmt) string {
 func (c *Context) translateExpr(expr ast.Expr) string {
 	switch e := expr.(type) {
 	case *ast.BasicLit:
+		value := strings.Replace(e.Value, "\n", "\\n", -1)
 		if e.Kind == token.CHAR {
-			return fmt.Sprintf("%s.charCodeAt(0)", e.Value)
+			return fmt.Sprintf("%s.charCodeAt(0)", value)
 		}
-		if e.Kind == token.STRING && e.Value[0] == '`' {
-			return `"` + strings.Replace(e.Value[1:len(e.Value)-1], `"`, `\"`, -1) + `"`
+		if e.Kind == token.STRING && value[0] == '`' {
+			return `"` + strings.Replace(value[1:len(value)-1], `"`, `\"`, -1) + `"`
 		}
-		return e.Value
+		return value
 
 	case *ast.CompositeLit:
 		elements := make([]string, len(e.Elts))
@@ -631,7 +668,7 @@ func getVariadicInfo(funType types.Type) (bool, int, types.Type) {
 		switch t.Name() {
 		case "append":
 			return true, 2, types.NewInterface(nil)
-		case "print":
+		case "print", "println":
 			return true, 1, types.NewInterface(nil)
 		}
 	}

@@ -16,21 +16,27 @@ import (
 )
 
 type Context struct {
-	writer          io.Writer
-	indentation     int
-	info            *types.Info
-	varNames        map[*types.Var]string
-	varNameCounters map[string]int
-	hasInit         bool
+	writer      io.Writer
+	indentation int
+	info        *types.Info
+	varToName   map[*types.Var]string
+	varNameUsed map[string]bool
+	hasInit     bool
 }
 
 func (c *Context) newVarName(prefix string) string {
-	n := c.varNameCounters[prefix]
-	c.varNameCounters[prefix] = n + 1
-	if n == 0 {
-		return prefix
+	n := 0
+	for {
+		name := prefix
+		if n != 0 {
+			name += strconv.Itoa(n)
+		}
+		if !c.varNameUsed[name] {
+			c.varNameUsed[name] = true
+			return name
+		}
+		n += 1
 	}
-	return fmt.Sprintf("%s%d", prefix, n)
 }
 
 func (c *Context) Write(b []byte) (int, error) {
@@ -97,8 +103,8 @@ func main() {
 			Types:   make(map[ast.Expr]types.Type),
 			Objects: make(map[*ast.Ident]types.Object),
 		},
-		varNames:        make(map[*types.Var]string),
-		varNameCounters: make(map[string]int),
+		varToName:   make(map[*types.Var]string),
+		varNameUsed: make(map[string]bool),
 	}
 	_, err = config.Check(files[0].Name.Name, fileSet, files, c.info)
 	if err != nil {
@@ -128,7 +134,7 @@ func (c *Context) translateDecl(decl ast.Decl) {
 	switch d := decl.(type) {
 	case *ast.GenDecl:
 		switch d.Tok {
-		case token.VAR, token.CONST:
+		case token.VAR:
 			for _, spec := range d.Specs {
 				valueSpec := spec.(*ast.ValueSpec)
 
@@ -192,7 +198,7 @@ func (c *Context) translateDecl(decl ast.Decl) {
 					panic(fmt.Sprintf("Unhandled type: %T\n", t))
 				}
 			}
-		case token.IMPORT:
+		case token.IMPORT, token.CONST:
 			// ignored
 		default:
 			panic("Unhandled declaration: " + d.Tok.String())
@@ -523,10 +529,14 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 
 	case *ast.BinaryExpr:
 		op := e.Op.String()
-		if e.Op == token.EQL {
+		switch e.Op {
+		case token.QUO:
+			if c.info.Types[e].(*types.Basic).Info()&types.IsInteger != 0 {
+				return fmt.Sprintf("Math.floor(%s / %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
+			}
+		case token.EQL:
 			op = "==="
-		}
-		if e.Op == token.NEQ {
+		case token.NEQ:
 			op = "!=="
 		}
 		return fmt.Sprintf("%s %s %s", c.translateExpr(e.X), op, c.translateExpr(e.Y))
@@ -539,7 +549,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		index := c.translateExpr(e.Index)
 		switch t := c.info.Types[e.X].Underlying().(type) {
 		case *types.Basic:
-			if t.Kind() == types.UntypedString {
+			if t.Info()&types.IsString != 0 {
 				return fmt.Sprintf("%s.charCodeAt(%s)", x, index)
 			}
 		case *types.Slice:
@@ -549,7 +559,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 
 	case *ast.SliceExpr:
 		method := "subslice"
-		if b, ok := c.info.Types[e.X].(*types.Basic); ok && b.Kind() == types.String {
+		if b, ok := c.info.Types[e.X].(*types.Basic); ok && b.Info()&types.IsString != 0 {
 			method = "substring"
 		}
 		slice := c.translateExpr(e.X)
@@ -580,7 +590,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		}
 		if e.Ellipsis.IsValid() && len(e.Args) > 0 {
 			l := len(e.Args)
-			if t, isBasic := c.info.Types[e.Args[l-1]].(*types.Basic); isBasic && t.Kind() == types.UntypedString {
+			if t, isBasic := c.info.Types[e.Args[l-1]].(*types.Basic); isBasic && t.Info()&types.IsString != 0 {
 				args[l-1] = fmt.Sprintf("%s.toSlice()", args[l-1])
 			}
 		}
@@ -622,12 +632,15 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		// }
 		// fmt.Printf("%T %v\n", c.info.Objects[e], c.info.Objects[e].Pos())
 		if v, isVar := c.info.Objects[e].(*types.Var); isVar {
-			name, found := c.varNames[v]
+			name, found := c.varToName[v]
 			if !found {
 				name = c.newVarName(e.Name)
-				c.varNames[v] = name
+				c.varToName[v] = name
 			}
 			return name
+		}
+		if c, isConst := c.info.Objects[e].(*types.Const); isConst {
+			return c.Val().String()
 		}
 		return e.Name
 

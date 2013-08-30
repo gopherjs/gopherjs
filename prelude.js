@@ -1,18 +1,32 @@
-var Slice = function(data) {
-  if (data.constructor === Number) {
-    data = new Array(data);
+"use strict";
+
+var Slice = function(data, length, capacity) {
+  if (capacity === undefined) {
+    capacity = length;
   }
-  this.array = data
-  this.offset = 0
-  this.length = data.length
-}
+  if (data === undefined) {
+    data = new Array(capacity);
+  }
+  this.array = data;
+  this.offset = 0;
+  this.length = data.length;
+  if (length !== undefined) {
+    this.length = length;
+  }
+};
+
+Slice.prototype.length = function() {
+  return this.length;
+};
 
 Slice.prototype.get = function(index) {
   return this.array[this.offset + index];
-}
+};
+
 Slice.prototype.set = function(index, value) {
   this.array[this.offset + index] = value;
-}
+};
+
 Slice.prototype.subslice = function(begin, end) {
   var s = new this.constructor(this.array);
   s.offset = this.offset + begin;
@@ -21,43 +35,51 @@ Slice.prototype.subslice = function(begin, end) {
     s.length = end - begin;
   }
   return s;
-}
+};
+
 Slice.prototype.toArray = function() {
   return this.array.slice(this.offset, this.offset + this.length);
-}
+};
 
 String.prototype.toSlice = function() {
   var array = new Uint8Array(this.length);
   for (var i = 0; i < this.length; i++) {
     array[i] = this.charCodeAt(i);
   }
-  return new Slice(array)
+  return new Slice(array);
+};
+
+var Map = function(data, capacity) {};
+
+var Interface = function(value) {
+  return value;
+};
+
+var Channel = function() {};
+
+var starExpr = function(value) {
+  return value;
 };
 
 var len = function(slice) {
   return slice.length;
-}
+};
 
 var cap = function(slice) {
   return slice.array.length;
-}
+};
 
-var make = function(constructor, length, capacity) {
-  if (capacity === undefined) {
-    capacity = length;
-  }
-  var slice = new constructor(capacity);
-  slice.length = length;
-  return slice;
-}
+var make = function(constructor, arg1, arg2) {
+  return new constructor(undefined, arg1, arg2);
+};
 
 var copy = function(dst, src) {
-  var n = Math.min(src.length, dst.length)
+  var n = Math.min(src.length, dst.length);
   for (var i = 0; i < n; i++) {
-    dst.set(i, src.get(i))
+    dst.set(i, src.get(i));
   }
-  return n
-}
+  return n;
+};
 
 var append = function(slice, toAppend) {
   var newArray = slice.array;
@@ -72,8 +94,8 @@ var append = function(slice, toAppend) {
     newOffset = 0;
   }
 
-  for (var i = 0; i < toAppend.length; i++) {
-    newArray[newOffset + slice.length + i] = toAppend.get(i);
+  for (var j = 0; j < toAppend.length; j++) {
+    newArray[newOffset + slice.length + j] = toAppend.get(j);
   }
 
   var newSlice = new slice.constructor(newArray);
@@ -90,6 +112,10 @@ var panic = function(msg) {
   throw msg;
 };
 
+var print = function(a) {
+  console.log(a.toArray().join(""));
+};
+
 var float64 = function(v) { return v; };
 
 var newNumericArray = function(len) {
@@ -98,14 +124,14 @@ var newNumericArray = function(len) {
     a[i] = 0;
   }
   return a;
-}
+};
 
 var fmt = {
   Println: function(a) {
     console.log.apply(console, a.toArray());
   },
   Sprintf: function(format, a) {
-    return a.get(0).toString()
+    return a.get(0).toString();
   }
 };
 
@@ -132,8 +158,8 @@ var reflect = {
       return true;
     }
     var keys = Object.keys(a);
-    for (var i = 0; i < keys.length;  i++) {
-      if (!this.DeepEqual(a[keys[i]], b[keys[i]])) {
+    for (var j = 0; j < keys.length;  j++) {
+      if (!this.DeepEqual(a[keys[j]], b[keys[j]])) {
         return false;
       }
     }

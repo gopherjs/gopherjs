@@ -202,6 +202,7 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 				c.translateStmtList(s.List)
 			})
 			c.Print("}")
+
 		case *ast.IfStmt:
 			c.Print("if (%s) {", c.translateExpr(s.Cond))
 			c.Indent(func() {
@@ -213,36 +214,60 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 				continue
 			}
 			c.Print("}")
+
 		case *ast.SwitchStmt:
 			if s.Init != nil {
 				c.Print(c.translateStmt(s.Init) + ";")
 			}
 			if s.Tag == nil {
+				if s.Body.List == nil {
+					continue
+				}
+				if len(s.Body.List) == 1 && s.Body.List[0].(*ast.CaseClause).List == nil {
+					c.translateStmtList(s.Body.List[0].(*ast.CaseClause).Body)
+					continue
+				}
+				var defaultClause []ast.Stmt
 				for i, child := range s.Body.List {
 					caseClause := child.(*ast.CaseClause)
 					if len(caseClause.List) == 0 {
+						defaultClause = caseClause.Body
 						continue
 					}
-					c.Print("if (%s) {", c.translateExpr(caseClause.List[0]))
+					conds := make([]string, len(caseClause.List))
+					for i, cond := range caseClause.List {
+						conds[i] = c.translateExpr(cond)
+					}
+					c.Print("if (%s) {", strings.Join(conds, " || "))
 					c.Indent(func() {
 						c.translateStmtList(caseClause.Body)
 					})
-					if i < len(s.Body.List)-1 {
+					if i < len(s.Body.List)-1 || defaultClause != nil {
 						c.Print("} else")
 						continue
 					}
 					c.Print("}")
 				}
+				if defaultClause != nil {
+					c.Print("{")
+					c.Indent(func() {
+						c.translateStmtList(defaultClause)
+					})
+					c.Print("}")
+				}
 				continue
 			}
 			c.Print("switch (%s) {", c.translateExpr(s.Tag))
+			hasDefault := false
 			for _, child := range s.Body.List {
 				caseClause := child.(*ast.CaseClause)
-				s := "default:"
-				if len(caseClause.List) > 0 {
-					s = fmt.Sprintf("case %s:", c.translateExpr(caseClause.List[0]))
+				for _, cond := range caseClause.List {
+					c.Print("case %s:", c.translateExpr(cond))
 				}
-				c.Print(s)
+				if len(caseClause.List) == 0 {
+					c.Print("default:")
+					hasDefault = true
+				}
 				c.Indent(func() {
 					c.translateStmtList(caseClause.Body)
 					var lastStmt ast.Stmt
@@ -254,21 +279,28 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 					}
 				})
 			}
+			if !hasDefault {
+				c.Print("default:")
+				c.Print("  // empty")
+				c.Print("  break;")
+			}
 			c.Print("}")
+
 		case *ast.ForStmt:
 			c.Print("for (%s; %s; %s) {", c.translateStmt(s.Init), c.translateExpr(s.Cond), c.translateStmt(s.Post))
 			c.Indent(func() {
 				c.translateStmtList(s.Body.List)
 			})
 			c.Print("}")
+
 		case *ast.RangeStmt:
 			keyAssign := ""
 			if s.Key != nil && s.Key.(*ast.Ident).Name != "_" {
-				keyAssign = s.Key.(*ast.Ident).Name + " = "
+				keyAssign = fmt.Sprintf(", %s = _i", s.Key.(*ast.Ident).Name)
 			}
 			c.Print("var _ref = %s;", c.translateExpr(s.X))
 			c.Print("var _i, _len;")
-			c.Print("for (%s_i = 0, _len = _ref.length; _i < _len; %s++_i) {", keyAssign, keyAssign)
+			c.Print("for (_i = 0%s, _len = _ref.length; _i < _len; _i++%s) {", keyAssign, keyAssign)
 			c.Indent(func() {
 				if s.Value != nil && s.Value.(*ast.Ident).Name != "_" {
 					switch t := c.info.Types[s.X].Underlying().(type) {
@@ -283,6 +315,7 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 				c.translateStmtList(s.Body.List)
 			})
 			c.Print("}")
+
 		case *ast.BranchStmt:
 			switch s.Tok {
 			case token.BREAK:
@@ -296,6 +329,7 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 			default:
 				panic("Unhandled branch statment: " + s.Tok.String())
 			}
+
 		case *ast.ReturnStmt:
 			switch len(s.Results) {
 			case 0:
@@ -309,14 +343,19 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 				}
 				c.Print("return [%s];", strings.Join(results, ", "))
 			}
+
 		case *ast.ExprStmt:
 			c.Print("%s;", c.translateExpr(s.X))
+
 		case *ast.DeclStmt:
 			c.translateDecl(s.Decl)
+
 		case *ast.LabeledStmt:
 			c.Print("// label: %s", s.Label.Name)
+
 		default:
 			c.Print("%s;", c.translateStmt(s))
+
 		}
 	}
 
@@ -331,13 +370,20 @@ func (c *Context) translateStmt(stmt ast.Stmt) string {
 		if iExpr, ok := s.Lhs[0].(*ast.IndexExpr); ok && s.Tok == token.ASSIGN {
 			return fmt.Sprintf("%s.set(%s, %s)", c.translateExpr(iExpr.X), c.translateExpr(iExpr.Index), c.translateExpr(s.Rhs[0]))
 		}
+		if id, isIdent := s.Lhs[0].(*ast.Ident); isIdent && id.Name == "_" {
+			return c.translateExpr(s.Rhs[0])
+		}
 		return fmt.Sprintf("%s %s %s", c.translateExpr(s.Lhs[0]), s.Tok, c.translateExpr(s.Rhs[0]))
+
 	case *ast.IncDecStmt:
 		return fmt.Sprintf("%s%s", c.translateExpr(s.X), s.Tok)
+
 	case nil:
 		return ""
+
 	default:
 		panic(fmt.Sprintf("Unhandled statement: %T\n", s))
+
 	}
 	return ""
 }
@@ -352,6 +398,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			return `"` + strings.Replace(e.Value[1:len(e.Value)-1], `"`, `\"`, -1) + `"`
 		}
 		return e.Value
+
 	case *ast.CompositeLit:
 		elements := make([]string, len(e.Elts))
 		for i, element := range e.Elts {
@@ -376,6 +423,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			fmt.Println(e.Type, elements)
 			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", c.info.Types[e]))
 		}
+
 	case *ast.FuncLit:
 		params := translateParams(c.info.Types[e].(*types.Signature).Params())
 		body := c.CatchOutput(func() {
@@ -385,11 +433,13 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			c.Print("")
 		})
 		return fmt.Sprintf("function (%s) {\n%s}", params, body[:len(body)-1])
+
 	case *ast.UnaryExpr:
 		if e.Op == token.AND {
 			return c.translateExpr(e.X)
 		}
 		return fmt.Sprintf("%s%s", e.Op.String(), c.translateExpr(e.X))
+
 	case *ast.BinaryExpr:
 		op := e.Op.String()
 		if e.Op == token.EQL {
@@ -399,8 +449,10 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			op = "!=="
 		}
 		return fmt.Sprintf("%s %s %s", c.translateExpr(e.X), op, c.translateExpr(e.Y))
+
 	case *ast.ParenExpr:
 		return fmt.Sprintf("(%s)", c.translateExpr(e.X))
+
 	case *ast.IndexExpr:
 		x := c.translateExpr(e.X)
 		index := c.translateExpr(e.Index)
@@ -413,6 +465,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			return fmt.Sprintf("%s.get(%s)", x, index)
 		}
 		return fmt.Sprintf("%s[%s]", x, index)
+
 	case *ast.SliceExpr:
 		method := "subslice"
 		if b, ok := c.info.Types[e.X].(*types.Basic); ok && b.Kind() == types.String {
@@ -430,8 +483,10 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			low = c.translateExpr(e.Low)
 		}
 		return fmt.Sprintf("%s.%s(%s, %s)", slice, method, low, c.translateExpr(e.High))
+
 	case *ast.SelectorExpr:
 		return fmt.Sprintf("%s.%s", c.translateExpr(e.X), e.Sel.Name)
+
 	case *ast.CallExpr:
 		funType := c.info.Types[e.Fun]
 		args := make([]string, len(e.Args))
@@ -452,30 +507,43 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			return fmt.Sprintf("(%s).toSlice()", args[0])
 		}
 		return fmt.Sprintf("%s(%s)", c.translateExpr(e.Fun), strings.Join(args, ", "))
+
 	case *ast.StarExpr:
 		return "starExpr"
+
 	case *ast.TypeAssertExpr:
 		return c.translateExpr(e.X)
+
 	case *ast.ArrayType:
 		return "Slice"
 	// 	return toTypedArray(c.info.Types[e].(*types.Slice).Elem().(*types.Basic))
+
 	case *ast.MapType:
 		return "Map"
+
 	case *ast.InterfaceType:
 		return "Interface"
+
 	case *ast.ChanType:
 		return "Channel"
+
 	case *ast.Ident:
+		if e.Name == "nil" {
+			return "null"
+		}
 		// if tn, isTypeName := c.info.Objects[e].(*types.TypeName); isTypeName {
 		// 	if _, isSlice := tn.Type().Underlying().(*types.Slice); isSlice {
 		// 		return "Array"
 		// 	}
 		// }
 		return e.Name
+
 	case nil:
 		return ""
+
 	default:
 		panic(fmt.Sprintf("Unhandled expression: %T\n", e))
+
 	}
 	return ""
 }
@@ -527,8 +595,11 @@ func getVariadicInfo(funType types.Type) (bool, int, types.Type) {
 			return true, t.Params().Len(), t.Params().At(t.Params().Len() - 1).Type()
 		}
 	case *types.Builtin:
-		if t.Name() == "append" {
+		switch t.Name() {
+		case "append":
 			return true, 2, types.NewInterface(nil)
+		case "print":
+			return true, 1, types.NewInterface(nil)
 		}
 	}
 	return false, 0, nil

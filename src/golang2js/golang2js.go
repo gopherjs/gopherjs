@@ -219,6 +219,7 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 			if s.Init != nil {
 				c.Print(c.translateStmt(s.Init) + ";")
 			}
+
 			if s.Tag == nil {
 				if s.Body.List == nil {
 					continue
@@ -227,11 +228,25 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 					c.translateStmtList(s.Body.List[0].(*ast.CaseClause).Body)
 					continue
 				}
+
+				clauseStmts := make([][]ast.Stmt, len(s.Body.List))
+				openClauses := make([]int, 0)
+				for i, child := range s.Body.List {
+					caseClause := child.(*ast.CaseClause)
+					openClauses = append(openClauses, i)
+					for _, j := range openClauses {
+						clauseStmts[j] = append(clauseStmts[j], caseClause.Body...)
+					}
+					if !hasFallthrough(caseClause) {
+						openClauses = nil
+					}
+				}
+
 				var defaultClause []ast.Stmt
 				for i, child := range s.Body.List {
 					caseClause := child.(*ast.CaseClause)
 					if len(caseClause.List) == 0 {
-						defaultClause = caseClause.Body
+						defaultClause = clauseStmts[i]
 						continue
 					}
 					conds := make([]string, len(caseClause.List))
@@ -240,7 +255,7 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 					}
 					c.Print("if (%s) {", strings.Join(conds, " || "))
 					c.Indent(func() {
-						c.translateStmtList(caseClause.Body)
+						c.translateStmtList(clauseStmts[i])
 					})
 					if i < len(s.Body.List)-1 || defaultClause != nil {
 						c.Print("} else")
@@ -257,6 +272,7 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 				}
 				continue
 			}
+
 			c.Print("switch (%s) {", c.translateExpr(s.Tag))
 			hasDefault := false
 			for _, child := range s.Body.List {
@@ -270,11 +286,7 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 				}
 				c.Indent(func() {
 					c.translateStmtList(caseClause.Body)
-					var lastStmt ast.Stmt
-					if len(caseClause.Body) != 0 {
-						lastStmt = caseClause.Body[len(caseClause.Body)-1]
-					}
-					if b, isBranchStmt := lastStmt.(*ast.BranchStmt); !isBranchStmt || b.Tok != token.FALLTHROUGH {
+					if !hasFallthrough(caseClause) {
 						c.Print("break;")
 					}
 				})
@@ -364,15 +376,36 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 func (c *Context) translateStmt(stmt ast.Stmt) string {
 	switch s := stmt.(type) {
 	case *ast.AssignStmt:
+		if len(s.Lhs) > 1 {
+			exprs := make([]string, len(s.Rhs))
+			for i, rhs := range s.Rhs {
+				exprs[i] = c.translateExpr(rhs)
+			}
+			rhs := exprs[0]
+			if len(exprs) > 1 {
+				rhs = "[" + strings.Join(exprs, ", ") + "]"
+			}
+
+			assignments := make([]string, len(s.Lhs))
+			for i, lhs := range s.Lhs {
+				assignments[i] = fmt.Sprintf("%s = _ref[%d]", c.translateExpr(lhs), i)
+			}
+
+			return fmt.Sprintf("var _ref = %s, %s", rhs, strings.Join(assignments, ", "))
+		}
+
 		if s.Tok == token.DEFINE {
 			return fmt.Sprintf("var %s = %s", c.translateExpr(s.Lhs[0]), c.translateExpr(s.Rhs[0]))
 		}
+
 		if iExpr, ok := s.Lhs[0].(*ast.IndexExpr); ok && s.Tok == token.ASSIGN {
 			return fmt.Sprintf("%s.set(%s, %s)", c.translateExpr(iExpr.X), c.translateExpr(iExpr.Index), c.translateExpr(s.Rhs[0]))
 		}
+
 		if id, isIdent := s.Lhs[0].(*ast.Ident); isIdent && id.Name == "_" {
 			return c.translateExpr(s.Rhs[0])
 		}
+
 		return fmt.Sprintf("%s %s %s", c.translateExpr(s.Lhs[0]), s.Tok, c.translateExpr(s.Rhs[0]))
 
 	case *ast.IncDecStmt:
@@ -611,4 +644,12 @@ func translateParams(t *types.Tuple) string {
 		params[i] = t.At(i).Name()
 	}
 	return strings.Join(params, ", ")
+}
+
+func hasFallthrough(caseClause *ast.CaseClause) bool {
+	if len(caseClause.Body) == 0 {
+		return false
+	}
+	b, isBranchStmt := caseClause.Body[len(caseClause.Body)-1].(*ast.BranchStmt)
+	return isBranchStmt && b.Tok == token.FALLTHROUGH
 }

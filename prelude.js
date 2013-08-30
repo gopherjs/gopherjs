@@ -135,6 +135,10 @@ var fmt = {
   }
 };
 
+var os = {
+  Exit: process.exit,
+};
+
 var reflect = {
   DeepEqual: function(a, b) {
     if (a === b) {

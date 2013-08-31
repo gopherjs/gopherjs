@@ -57,6 +57,21 @@ var Interface = function(value) {
 
 var Channel = function() {};
 
+var DeferredList = function() {
+  this.calls = [];
+};
+
+DeferredList.prototype.push = function(fun, recv, args) {
+  this.calls.push({ fun: fun, recv: recv, args: args });
+};
+
+DeferredList.prototype.call = function() {
+  for (var i = this.calls.length - 1; i >= 0; i--) {
+    var call = this.calls[i];
+    call.fun.apply(call.recv, call.args);
+  }
+};
+
 var starExpr = function(value) {
   return value;
 };
@@ -138,6 +153,14 @@ var newNumericArray = function(len) {
 var fmt = {
   Print: print,
   Println: print,
+  Printf: function(format, a) {
+    var array = a.toArray();
+    array.unshift(format);
+    console.log(array.join(" "));
+  },
+  Sprint: function(a) {
+    return a.get(0).toString();
+  },
   Sprintf: function(format, a) {
     return a.get(0).toString();
   }

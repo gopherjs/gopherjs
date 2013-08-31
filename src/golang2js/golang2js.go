@@ -210,7 +210,7 @@ func (c *Context) translateDecl(decl ast.Decl) {
 		}
 		c.Print("var %s = function(%s) {", d.Name.Name, c.translateParams(d.Type))
 		c.Indent(func() {
-			c.translateStmtList(d.Body.List)
+			c.translateFunctionBody(d.Body.List)
 		})
 		c.Print("};")
 
@@ -218,6 +218,57 @@ func (c *Context) translateDecl(decl ast.Decl) {
 		panic(fmt.Sprintf("Unhandled declaration: %T\n", d))
 
 	}
+}
+
+func (c *Context) translateFunctionBody(stmts []ast.Stmt) {
+	if c.hasDefer(stmts) {
+		c.Print("var _deferred = new DeferredList();")
+		c.Print("try {")
+		c.Indent(func() {
+			c.translateStmtList(stmts)
+		})
+		c.Print("} finally {")
+		c.Indent(func() {
+			c.Print("_deferred.call();")
+		})
+		c.Print("}")
+		return
+	}
+	c.translateStmtList(stmts)
+}
+
+func (c *Context) hasDefer(stmts []ast.Stmt) bool {
+	for _, stmt := range stmts {
+		switch s := stmt.(type) {
+		case *ast.BlockStmt:
+			if c.hasDefer(s.List) {
+				return true
+			}
+		case *ast.IfStmt:
+			if c.hasDefer(s.Body.List) {
+				return true
+			}
+		case *ast.SwitchStmt:
+			if c.hasDefer(s.Body.List) {
+				return true
+			}
+		case *ast.CaseClause:
+			if c.hasDefer(s.Body) {
+				return true
+			}
+		case *ast.ForStmt:
+			if c.hasDefer(s.Body.List) {
+				return true
+			}
+		case *ast.RangeStmt:
+			if c.hasDefer(s.Body.List) {
+				return true
+			}
+		case *ast.DeferStmt:
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Context) translateStmtList(stmts []ast.Stmt) {
@@ -406,6 +457,10 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 				c.Print("return [%s];", strings.Join(results, ", "))
 			}
 
+		case *ast.DeferStmt:
+			args := c.translateArgs(s.Call)
+			c.Print("_deferred.push(%s, %s, [%s]);", c.translateExpr(s.Call.Fun), "this", strings.Join(args, ", ")) // TODO fix receiver
+
 		case *ast.ExprStmt:
 			c.Print("%s;", c.translateExpr(s.X))
 
@@ -515,11 +570,11 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 	case *ast.FuncLit:
 		body := c.CatchOutput(func() {
 			c.Indent(func() {
-				c.translateStmtList(e.Body.List)
+				c.translateFunctionBody(e.Body.List)
 			})
 			c.Print("")
 		})
-		return fmt.Sprintf("function (%s) {\n%s}", c.translateParams(e.Type), body[:len(body)-1])
+		return fmt.Sprintf("function(%s) {\n%s}", c.translateParams(e.Type), body[:len(body)-1])
 
 	case *ast.UnaryExpr:
 		if e.Op == token.AND {
@@ -579,21 +634,8 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s.%s", c.translateExpr(e.X), e.Sel.Name)
 
 	case *ast.CallExpr:
+		args := c.translateArgs(e)
 		funType := c.info.Types[e.Fun]
-		args := make([]string, len(e.Args))
-		for i, arg := range e.Args {
-			args[i] = c.translateExpr(arg)
-		}
-		isVariadic, numParams, variadicType := getVariadicInfo(funType)
-		if isVariadic && !e.Ellipsis.IsValid() {
-			args = append(args[:numParams-1], fmt.Sprintf("new Slice(%s)", createListComposite(variadicType, args[numParams-1:])))
-		}
-		if e.Ellipsis.IsValid() && len(e.Args) > 0 {
-			l := len(e.Args)
-			if t, isBasic := c.info.Types[e.Args[l-1]].(*types.Basic); isBasic && t.Info()&types.IsString != 0 {
-				args[l-1] = fmt.Sprintf("%s.toSlice()", args[l-1])
-			}
-		}
 		if _, isSliceType := funType.(*types.Slice); isSliceType {
 			return fmt.Sprintf("%s.toSlice()", args[0])
 		}
@@ -662,6 +704,25 @@ func (c *Context) translateParams(t *ast.FuncType) string {
 		}
 	}
 	return strings.Join(params, ", ")
+}
+
+func (c *Context) translateArgs(call *ast.CallExpr) []string {
+	funType := c.info.Types[call.Fun]
+	args := make([]string, len(call.Args))
+	for i, arg := range call.Args {
+		args[i] = c.translateExpr(arg)
+	}
+	isVariadic, numParams, variadicType := getVariadicInfo(funType)
+	if isVariadic && !call.Ellipsis.IsValid() {
+		args = append(args[:numParams-1], fmt.Sprintf("new Slice(%s)", createListComposite(variadicType, args[numParams-1:])))
+	}
+	if call.Ellipsis.IsValid() && len(call.Args) > 0 {
+		l := len(call.Args)
+		if t, isBasic := c.info.Types[call.Args[l-1]].(*types.Basic); isBasic && t.Info()&types.IsString != 0 {
+			args[l-1] = fmt.Sprintf("%s.toSlice()", args[l-1])
+		}
+	}
+	return args
 }
 
 // func toTypedArray(t *types.Basic) string {

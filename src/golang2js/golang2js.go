@@ -378,15 +378,11 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 		c.Print("}")
 
 	case *ast.ForStmt:
-		c.translateStmt(s.Init)
-		cond := "true"
-		if s.Cond != nil {
-			cond = c.translateExpr(s.Cond)
-		}
-		c.Print("while (%s) {", cond)
+		init := strings.TrimSuffix(c.CatchOutput(func() { c.translateStmt(s.Init) }), ";\n")
+		post := strings.TrimSuffix(c.CatchOutput(func() { c.translateStmt(s.Post) }), ";\n")
+		c.Print("for (%s; %s; %s) {", init, c.translateExpr(s.Cond), post)
 		c.Indent(func() {
 			c.translateStmtList(s.Body.List)
-			c.translateStmt(s.Post)
 		})
 		c.Print("}")
 

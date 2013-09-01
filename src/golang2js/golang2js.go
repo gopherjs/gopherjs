@@ -163,7 +163,7 @@ func (c *Context) translateDecl(decl ast.Decl) {
 					default:
 						panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
 					}
-				case nil:
+				case *types.Slice, nil:
 					// skip
 				default:
 					panic(fmt.Sprintf("Unhandled type: %T\n", t))
@@ -219,14 +219,14 @@ func (c *Context) translateDecl(decl ast.Decl) {
 		if d.Name.Name == "init" {
 			c.hasInit = true
 		}
-		c.Print("%s;", c.translateStmt(&ast.AssignStmt{
+		c.translateStmt(&ast.AssignStmt{
 			Tok: token.DEFINE,
 			Lhs: []ast.Expr{d.Name},
 			Rhs: []ast.Expr{&ast.FuncLit{
 				Type: d.Type,
 				Body: d.Body,
 			}},
-		}))
+		})
 
 	default:
 		panic(fmt.Sprintf("Unhandled declaration: %T\n", d))
@@ -270,222 +270,220 @@ func (c *Context) hasDefer(stmts []ast.Stmt) bool {
 
 func (c *Context) translateStmtList(stmts []ast.Stmt) {
 	for _, stmt := range stmts {
-		switch s := stmt.(type) {
-		case *ast.BlockStmt:
-			c.Print("{")
-			c.Indent(func() {
-				c.translateStmtList(s.List)
-			})
-			c.Print("}")
-
-		case *ast.IfStmt:
-			if s.Init != nil {
-				c.Print("%s;", c.translateStmt(s.Init))
-			}
-			c.Print("if (%s) {", c.translateExpr(s.Cond))
-			c.Indent(func() {
-				c.translateStmtList(s.Body.List)
-			})
-			if s.Else != nil {
-				c.Print("} else")
-				c.translateStmtList([]ast.Stmt{s.Else})
-				continue
-			}
-			c.Print("}")
-
-		case *ast.SwitchStmt:
-			if s.Init != nil {
-				c.Print("%s;", c.translateStmt(s.Init))
-			}
-
-			if s.Tag == nil {
-				if s.Body.List == nil {
-					continue
-				}
-				if len(s.Body.List) == 1 && s.Body.List[0].(*ast.CaseClause).List == nil {
-					c.translateStmtList(s.Body.List[0].(*ast.CaseClause).Body)
-					continue
-				}
-
-				clauseStmts := make([][]ast.Stmt, len(s.Body.List))
-				openClauses := make([]int, 0)
-				for i, child := range s.Body.List {
-					caseClause := child.(*ast.CaseClause)
-					openClauses = append(openClauses, i)
-					for _, j := range openClauses {
-						clauseStmts[j] = append(clauseStmts[j], caseClause.Body...)
-					}
-					if !hasFallthrough(caseClause) {
-						openClauses = nil
-					}
-				}
-
-				var defaultClause []ast.Stmt
-				for i, child := range s.Body.List {
-					caseClause := child.(*ast.CaseClause)
-					if len(caseClause.List) == 0 {
-						defaultClause = clauseStmts[i]
-						continue
-					}
-					conds := make([]string, len(caseClause.List))
-					for i, cond := range caseClause.List {
-						conds[i] = c.translateExpr(cond)
-					}
-					c.Print("if (%s) {", strings.Join(conds, " || "))
-					c.Indent(func() {
-						c.translateStmtList(clauseStmts[i])
-					})
-					if i < len(s.Body.List)-1 || defaultClause != nil {
-						c.Print("} else")
-						continue
-					}
-					c.Print("}")
-				}
-				if defaultClause != nil {
-					c.Print("{")
-					c.Indent(func() {
-						c.translateStmtList(defaultClause)
-					})
-					c.Print("}")
-				}
-				continue
-			}
-
-			c.Print("switch (%s) {", c.translateExpr(s.Tag))
-			hasDefault := false
-			for _, child := range s.Body.List {
-				caseClause := child.(*ast.CaseClause)
-				for _, cond := range caseClause.List {
-					c.Print("case %s:", c.translateExpr(cond))
-				}
-				if len(caseClause.List) == 0 {
-					c.Print("default:")
-					hasDefault = true
-				}
-				c.Indent(func() {
-					c.translateStmtList(caseClause.Body)
-					if !hasFallthrough(caseClause) {
-						c.Print("break;")
-					}
-				})
-			}
-			if !hasDefault {
-				c.Print("default:")
-				c.Print("  // empty")
-				c.Print("  break;")
-			}
-			c.Print("}")
-
-		case *ast.ForStmt:
-			c.Print("for (%s; %s; %s) {", c.translateStmt(s.Init), c.translateExpr(s.Cond), c.translateStmt(s.Post))
-			c.Indent(func() {
-				c.translateStmtList(s.Body.List)
-			})
-			c.Print("}")
-
-		case *ast.RangeStmt:
-			refVar := c.newVarName("_ref")
-			lenVar := c.newVarName("_len")
-			iVar := c.newVarName("_i")
-			vars := []string{refVar, lenVar, iVar}
-
-			key := c.translateExpr(s.Key)
-			value := c.translateExpr(s.Value)
-			keyAssign := ""
-			if key != "" {
-				keyAssign = fmt.Sprintf(", %s = %s", key, iVar)
-				if s.Tok == token.DEFINE {
-					vars = append(vars, key)
-				}
-			}
-			if value != "" {
-				if s.Tok == token.DEFINE {
-					vars = append(vars, value)
-				}
-			}
-
-			c.Print("var %s;", strings.Join(vars, ", "))
-			forParams := "" +
-				fmt.Sprintf("%s = %s", refVar, c.translateExpr(s.X)) +
-				fmt.Sprintf(", %s = %s.length", lenVar, refVar) +
-				fmt.Sprintf(", %s = 0", iVar) +
-				keyAssign +
-				fmt.Sprintf("; %s < %s", iVar, lenVar) +
-				fmt.Sprintf("; %s++", iVar) +
-				keyAssign
-			c.Print("for (%s) {", forParams)
-			c.Indent(func() {
-				if value != "" {
-					switch t := c.info.Types[s.X].Underlying().(type) {
-					case *types.Array:
-						c.Print("var %s = %s[%s];", value, refVar, iVar)
-					case *types.Slice:
-						c.Print("var %s = %s.get(%s);", value, refVar, iVar)
-					default:
-						panic(fmt.Sprintf("Unhandled range type: %T\n", t))
-					}
-				}
-				c.translateStmtList(s.Body.List)
-			})
-			c.Print("}")
-
-		case *ast.BranchStmt:
-			switch s.Tok {
-			case token.BREAK:
-				c.Print("break;")
-			case token.CONTINUE:
-				c.Print("continue;")
-			case token.GOTO:
-				c.Print(`throw "goto not implemented";`)
-			case token.FALLTHROUGH:
-				// handled in CaseClause
-			default:
-				panic("Unhandled branch statment: " + s.Tok.String())
-			}
-
-		case *ast.ReturnStmt:
-			results := make([]string, len(s.Results))
-			for i, result := range s.Results {
-				results[i] = c.translateExpr(result)
-				if c.namedResults != nil {
-					c.Print("%s = %s;", c.namedResults[i], results[i])
-				}
-			}
-			if c.namedResults != nil {
-				results = c.namedResults
-			}
-			switch len(results) {
-			case 0:
-				c.Print("return;")
-			case 1:
-				c.Print("return %s;", results[0])
-			default:
-				c.Print("return [%s];", strings.Join(results, ", "))
-			}
-
-		case *ast.DeferStmt:
-			args := c.translateArgs(s.Call)
-			c.Print("_deferred.push({ fun: %s, recv: %s, args: [%s] });", c.translateExpr(s.Call.Fun), "this", strings.Join(args, ", ")) // TODO fix receiver
-
-		case *ast.ExprStmt:
-			c.Print("%s;", c.translateExpr(s.X))
-
-		case *ast.DeclStmt:
-			c.translateDecl(s.Decl)
-
-		case *ast.LabeledStmt:
-			c.Print("// label: %s", s.Label.Name)
-
-		default:
-			c.Print("%s;", c.translateStmt(s))
-
-		}
+		c.translateStmt(stmt)
 	}
-
 }
 
-func (c *Context) translateStmt(stmt ast.Stmt) string {
+func (c *Context) translateStmt(stmt ast.Stmt) {
 	switch s := stmt.(type) {
+	case *ast.BlockStmt:
+		c.Print("{")
+		c.Indent(func() {
+			c.translateStmtList(s.List)
+		})
+		c.Print("}")
+
+	case *ast.IfStmt:
+		c.translateStmt(s.Init)
+		c.Print("if (%s) {", c.translateExpr(s.Cond))
+		c.Indent(func() {
+			c.translateStmtList(s.Body.List)
+		})
+		if s.Else != nil {
+			c.Print("} else")
+			c.translateStmt(s.Else)
+			return
+		}
+		c.Print("}")
+
+	case *ast.SwitchStmt:
+		c.translateStmt(s.Init)
+
+		if s.Tag == nil {
+			if s.Body.List == nil {
+				return
+			}
+			if len(s.Body.List) == 1 && s.Body.List[0].(*ast.CaseClause).List == nil {
+				c.translateStmtList(s.Body.List[0].(*ast.CaseClause).Body)
+				return
+			}
+
+			clauseStmts := make([][]ast.Stmt, len(s.Body.List))
+			openClauses := make([]int, 0)
+			for i, child := range s.Body.List {
+				caseClause := child.(*ast.CaseClause)
+				openClauses = append(openClauses, i)
+				for _, j := range openClauses {
+					clauseStmts[j] = append(clauseStmts[j], caseClause.Body...)
+				}
+				if !hasFallthrough(caseClause) {
+					openClauses = nil
+				}
+			}
+
+			var defaultClause []ast.Stmt
+			for i, child := range s.Body.List {
+				caseClause := child.(*ast.CaseClause)
+				if len(caseClause.List) == 0 {
+					defaultClause = clauseStmts[i]
+					continue
+				}
+				conds := make([]string, len(caseClause.List))
+				for i, cond := range caseClause.List {
+					conds[i] = c.translateExpr(cond)
+				}
+				c.Print("if (%s) {", strings.Join(conds, " || "))
+				c.Indent(func() {
+					c.translateStmtList(clauseStmts[i])
+				})
+				if i < len(s.Body.List)-1 || defaultClause != nil {
+					c.Print("} else")
+					continue
+				}
+				c.Print("}")
+			}
+			if defaultClause != nil {
+				c.Print("{")
+				c.Indent(func() {
+					c.translateStmtList(defaultClause)
+				})
+				c.Print("}")
+			}
+			return
+		}
+
+		c.Print("switch (%s) {", c.translateExpr(s.Tag))
+		hasDefault := false
+		for _, child := range s.Body.List {
+			caseClause := child.(*ast.CaseClause)
+			for _, cond := range caseClause.List {
+				c.Print("case %s:", c.translateExpr(cond))
+			}
+			if len(caseClause.List) == 0 {
+				c.Print("default:")
+				hasDefault = true
+			}
+			c.Indent(func() {
+				c.translateStmtList(caseClause.Body)
+				if !hasFallthrough(caseClause) {
+					c.Print("break;")
+				}
+			})
+		}
+		if !hasDefault {
+			c.Print("default:")
+			c.Print("  // empty")
+			c.Print("  break;")
+		}
+		c.Print("}")
+
+	case *ast.ForStmt:
+		c.translateStmt(s.Init)
+		cond := "true"
+		if s.Cond != nil {
+			cond = c.translateExpr(s.Cond)
+		}
+		c.Print("while (%s) {", cond)
+		c.Indent(func() {
+			c.translateStmtList(s.Body.List)
+			c.translateStmt(s.Post)
+		})
+		c.Print("}")
+
+	case *ast.RangeStmt:
+		refVar := c.newVarName("_ref")
+		lenVar := c.newVarName("_len")
+		iVar := c.newVarName("_i")
+		vars := []string{refVar, lenVar, iVar}
+
+		key := c.translateExpr(s.Key)
+		value := c.translateExpr(s.Value)
+		keyAssign := ""
+		if key != "" {
+			keyAssign = fmt.Sprintf(", %s = %s", key, iVar)
+			if s.Tok == token.DEFINE {
+				vars = append(vars, key)
+			}
+		}
+		if value != "" {
+			if s.Tok == token.DEFINE {
+				vars = append(vars, value)
+			}
+		}
+
+		c.Print("var %s;", strings.Join(vars, ", "))
+		forParams := "" +
+			fmt.Sprintf("%s = %s", refVar, c.translateExpr(s.X)) +
+			fmt.Sprintf(", %s = %s.length", lenVar, refVar) +
+			fmt.Sprintf(", %s = 0", iVar) +
+			keyAssign +
+			fmt.Sprintf("; %s < %s", iVar, lenVar) +
+			fmt.Sprintf("; %s++", iVar) +
+			keyAssign
+		c.Print("for (%s) {", forParams)
+		c.Indent(func() {
+			if value != "" {
+				switch t := c.info.Types[s.X].Underlying().(type) {
+				case *types.Array:
+					c.Print("var %s = %s[%s];", value, refVar, iVar)
+				case *types.Slice:
+					c.Print("var %s = %s.get(%s);", value, refVar, iVar)
+				default:
+					panic(fmt.Sprintf("Unhandled range type: %T\n", t))
+				}
+			}
+			c.translateStmtList(s.Body.List)
+		})
+		c.Print("}")
+
+	case *ast.BranchStmt:
+		switch s.Tok {
+		case token.BREAK:
+			c.Print("break;")
+		case token.CONTINUE:
+			c.Print("continue;")
+		case token.GOTO:
+			c.Print(`throw "goto not implemented";`)
+		case token.FALLTHROUGH:
+			// handled in CaseClause
+		default:
+			panic("Unhandled branch statment: " + s.Tok.String())
+		}
+
+	case *ast.ReturnStmt:
+		results := make([]string, len(s.Results))
+		for i, result := range s.Results {
+			results[i] = c.translateExpr(result)
+			if c.namedResults != nil {
+				c.Print("%s = %s;", c.namedResults[i], results[i])
+			}
+		}
+		if c.namedResults != nil {
+			results = c.namedResults
+		}
+		switch len(results) {
+		case 0:
+			c.Print("return;")
+		case 1:
+			c.Print("return %s;", results[0])
+		default:
+			c.Print("return [%s];", strings.Join(results, ", "))
+		}
+
+	case *ast.DeferStmt:
+		args := c.translateArgs(s.Call)
+		c.Print("_deferred.push({ fun: %s, recv: %s, args: [%s] });", c.translateExpr(s.Call.Fun), "this", strings.Join(args, ", ")) // TODO fix receiver
+
+	case *ast.ExprStmt:
+		c.Print("%s;", c.translateExpr(s.X))
+
+	case *ast.DeclStmt:
+		c.translateDecl(s.Decl)
+
+	case *ast.LabeledStmt:
+		c.Print("// label: %s", s.Label.Name)
+		c.translateStmt(s.Stmt)
+
 	case *ast.AssignStmt:
 		if len(s.Lhs) > 1 {
 			exprs := make([]string, len(s.Rhs))
@@ -502,39 +500,42 @@ func (c *Context) translateStmt(stmt ast.Stmt) string {
 			for i, lhs := range s.Lhs {
 				assignments[i] = fmt.Sprintf("%s = %s[%d]", c.translateExpr(lhs), refVar, i)
 			}
-			return fmt.Sprintf("var %s = %s, %s", refVar, rhs, strings.Join(assignments, ", "))
+			c.Print("var %s = %s, %s;", refVar, rhs, strings.Join(assignments, ", "))
+			return
 		}
 
 		lhs := c.translateExpr(s.Lhs[0])
 		rhs := c.translateExpr(s.Rhs[0])
 
 		if lhs == "" {
-			return rhs
+			c.Print("%s;", rhs)
+			return
 		}
 
 		if s.Tok == token.DEFINE {
-			return fmt.Sprintf("var %s = %s", lhs, rhs)
+			c.Print("var %s = %s;", lhs, rhs)
+			return
 		}
 
 		if iExpr, ok := s.Lhs[0].(*ast.IndexExpr); ok && s.Tok == token.ASSIGN {
-			if _, isSlice := c.info.Types[iExpr.X].(*types.Slice); isSlice {
-				return fmt.Sprintf("%s.set(%s, %s)", c.translateExpr(iExpr.X), c.translateExpr(iExpr.Index), rhs)
+			if _, isSlice := c.info.Types[iExpr.X].Underlying().(*types.Slice); isSlice {
+				c.Print("%s.set(%s, %s);", c.translateExpr(iExpr.X), c.translateExpr(iExpr.Index), rhs)
+				return
 			}
 		}
 
-		return fmt.Sprintf("%s %s %s", lhs, s.Tok, rhs)
+		c.Print("%s %s %s;", lhs, s.Tok, rhs)
 
 	case *ast.IncDecStmt:
-		return fmt.Sprintf("%s%s", c.translateExpr(s.X), s.Tok)
+		c.Print("%s%s;", c.translateExpr(s.X), s.Tok)
 
 	case nil:
-		return ""
+		// skip
 
 	default:
 		panic(fmt.Sprintf("Unhandled statement: %T\n", s))
 
 	}
-	return ""
 }
 
 func (c *Context) translateExpr(expr ast.Expr) string {
@@ -604,7 +605,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 						c.Indent(func() {
 							c.Print("callDeferred(_deferred);")
 							if namedResults != nil {
-								c.translateStmtList([]ast.Stmt{&ast.ReturnStmt{}})
+								c.translateStmt(&ast.ReturnStmt{})
 							}
 						})
 						c.Print("}")

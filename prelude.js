@@ -82,6 +82,7 @@ var copy = function(dst, src) {
   return n;
 };
 
+// TODO improve performance by increasing capacity in bigger steps
 var append = function(slice, toAppend) {
   var newArray = slice.array;
   var newOffset = slice.offset;

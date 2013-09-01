@@ -7,6 +7,7 @@ Successful Tests
 - defer.go
 - empty.go
 - recover.go
+- recover1.go
 - solitaire.go
 - switch.go (without cases that only differ in type)
 - turing.go

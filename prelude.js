@@ -129,19 +129,23 @@ var callDeferred = function(deferred) {
     try {
       call.fun.apply(call.recv, call.args);
     } catch (err) {
-      _error_stack[getStackDepth()] = err;
+      _error_stack.push({ frame: getStackDepth(), error: err });
     }
+  }
+  var err = _error_stack[_error_stack.length - 1];
+  if (err !== undefined && err.frame === getStackDepth()) {
+    _error_stack.pop();
+    throw err.error;
   }
 }
 
 var recover = function() {
-  var d = getStackDepth() - 2;
-  var err = _error_stack[d];
-  _error_stack[d] = undefined;
-  if (err === undefined) {
+  var err = _error_stack[_error_stack.length - 1];
+  if (err === undefined || err.frame !== getStackDepth() - 2) {
     return null;
   }
-  return err;
+  _error_stack.pop();
+  return err.error;
 };
 
 var getStackDepth = function() {

@@ -56,6 +56,7 @@ func (c *Context) Indent(f func()) {
 	c.indentation -= 1
 }
 
+// TODO start new variable naming scope
 func (c *Context) NewScope(namedResults []string, f func()) {
 	origNamedResults := c.namedResults
 	c.namedResults = namedResults
@@ -516,7 +517,9 @@ func (c *Context) translateStmt(stmt ast.Stmt) string {
 		}
 
 		if iExpr, ok := s.Lhs[0].(*ast.IndexExpr); ok && s.Tok == token.ASSIGN {
-			return fmt.Sprintf("%s.set(%s, %s)", c.translateExpr(iExpr.X), c.translateExpr(iExpr.Index), rhs)
+			if _, isSlice := c.info.Types[iExpr.X].(*types.Slice); isSlice {
+				return fmt.Sprintf("%s.set(%s, %s)", c.translateExpr(iExpr.X), c.translateExpr(iExpr.Index), rhs)
+			}
 		}
 
 		return fmt.Sprintf("%s %s %s", lhs, s.Tok, rhs)
@@ -595,7 +598,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 						})
 						c.Print("} catch(err) {")
 						c.Indent(func() {
-							c.Print("_error_stack[getStackDepth()] = err;")
+							c.Print("_error_stack.push({ frame: getStackDepth(), error: err });")
 						})
 						c.Print("} finally {")
 						c.Indent(func() {

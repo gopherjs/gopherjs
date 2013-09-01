@@ -1,4 +1,5 @@
 "use strict";
+Error.stackTraceLimit = -1;
 
 var Slice = function(data, length, capacity) {
   if (capacity === undefined) {
@@ -56,21 +57,6 @@ var Interface = function(value) {
 };
 
 var Channel = function() {};
-
-var DeferredList = function() {
-  this.calls = [];
-};
-
-DeferredList.prototype.push = function(fun, recv, args) {
-  this.calls.push({ fun: fun, recv: recv, args: args });
-};
-
-DeferredList.prototype.call = function() {
-  for (var i = this.calls.length - 1; i >= 0; i--) {
-    var call = this.calls[i];
-    call.fun.apply(call.recv, call.args);
-  }
-};
 
 var starExpr = function(value) {
   return value;
@@ -134,6 +120,41 @@ var panic = function(msg) {
   throw msg;
 };
 
+var _error_stack = [];
+
+// TODO inline
+var callDeferred = function(deferred) {
+  for (var i = deferred.length - 1; i >= 0; i--) {
+    var call = deferred[i];
+    try {
+      call.fun.apply(call.recv, call.args);
+    } catch (err) {
+      _error_stack[getStackDepth()] = err;
+    }
+  }
+}
+
+var recover = function() {
+  var d = getStackDepth() - 2;
+  var err = _error_stack[d];
+  _error_stack[d] = undefined;
+  if (err === undefined) {
+    return null;
+  }
+  return err;
+};
+
+var getStackDepth = function() {
+  var s = (new Error()).stack.split("\n");
+  var d = 0;
+  for (var i = 0; i < s.length; i++) {
+    if (s[i].indexOf("callDeferred") == -1) {
+      d++;
+    }
+  }
+  return d;
+};
+
 var print = function(a) {
   console.log(a.toArray().join(" "));
 };
@@ -168,6 +189,13 @@ var fmt = {
 
 var os = {
   Exit: process.exit,
+  Getenv: function(name) {
+    var value = process.env[name];
+    if (value === undefined) {
+      return "";
+    }
+    return value;
+  }
 };
 
 var reflect = {

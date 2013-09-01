@@ -16,12 +16,13 @@ import (
 )
 
 type Context struct {
-	writer      io.Writer
-	indentation int
-	info        *types.Info
-	varToName   map[*types.Var]string
-	varNameUsed map[string]bool
-	hasInit     bool
+	writer       io.Writer
+	indentation  int
+	info         *types.Info
+	varToName    map[*types.Var]string
+	varNameUsed  map[string]bool
+	hasInit      bool
+	namedResults []string
 }
 
 func (c *Context) newVarName(prefix string) string {
@@ -53,6 +54,13 @@ func (c *Context) Indent(f func()) {
 	c.indentation += 1
 	f()
 	c.indentation -= 1
+}
+
+func (c *Context) NewScope(namedResults []string, f func()) {
+	origNamedResults := c.namedResults
+	c.namedResults = namedResults
+	f()
+	c.namedResults = origNamedResults
 }
 
 func (c *Context) CatchOutput(f func()) string {
@@ -103,8 +111,10 @@ func main() {
 			Types:   make(map[ast.Expr]types.Type),
 			Objects: make(map[*ast.Ident]types.Object),
 		},
-		varToName:   make(map[*types.Var]string),
-		varNameUsed: make(map[string]bool),
+		varToName: make(map[*types.Var]string),
+		varNameUsed: map[string]bool{
+			"try": true,
+		},
 	}
 	_, err = config.Check(files[0].Name.Name, fileSet, files, c.info)
 	if err != nil {
@@ -208,33 +218,19 @@ func (c *Context) translateDecl(decl ast.Decl) {
 		if d.Name.Name == "init" {
 			c.hasInit = true
 		}
-		c.Print("var %s = function(%s) {", d.Name.Name, c.translateParams(d.Type))
-		c.Indent(func() {
-			c.translateFunctionBody(d.Body.List)
-		})
-		c.Print("};")
+		c.Print("%s;", c.translateStmt(&ast.AssignStmt{
+			Tok: token.DEFINE,
+			Lhs: []ast.Expr{d.Name},
+			Rhs: []ast.Expr{&ast.FuncLit{
+				Type: d.Type,
+				Body: d.Body,
+			}},
+		}))
 
 	default:
 		panic(fmt.Sprintf("Unhandled declaration: %T\n", d))
 
 	}
-}
-
-func (c *Context) translateFunctionBody(stmts []ast.Stmt) {
-	if c.hasDefer(stmts) {
-		c.Print("var _deferred = new DeferredList();")
-		c.Print("try {")
-		c.Indent(func() {
-			c.translateStmtList(stmts)
-		})
-		c.Print("} finally {")
-		c.Indent(func() {
-			c.Print("_deferred.call();")
-		})
-		c.Print("}")
-		return
-	}
-	c.translateStmtList(stmts)
 }
 
 func (c *Context) hasDefer(stmts []ast.Stmt) bool {
@@ -282,6 +278,9 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 			c.Print("}")
 
 		case *ast.IfStmt:
+			if s.Init != nil {
+				c.Print("%s;", c.translateStmt(s.Init))
+			}
 			c.Print("if (%s) {", c.translateExpr(s.Cond))
 			c.Indent(func() {
 				c.translateStmtList(s.Body.List)
@@ -295,7 +294,7 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 
 		case *ast.SwitchStmt:
 			if s.Init != nil {
-				c.Print(c.translateStmt(s.Init) + ";")
+				c.Print("%s;", c.translateStmt(s.Init))
 			}
 
 			if s.Tag == nil {
@@ -444,22 +443,28 @@ func (c *Context) translateStmtList(stmts []ast.Stmt) {
 			}
 
 		case *ast.ReturnStmt:
-			switch len(s.Results) {
+			results := make([]string, len(s.Results))
+			for i, result := range s.Results {
+				results[i] = c.translateExpr(result)
+				if c.namedResults != nil {
+					c.Print("%s = %s;", c.namedResults[i], results[i])
+				}
+			}
+			if c.namedResults != nil {
+				results = c.namedResults
+			}
+			switch len(results) {
 			case 0:
 				c.Print("return;")
 			case 1:
-				c.Print("return %s;", c.translateExpr(s.Results[0]))
+				c.Print("return %s;", results[0])
 			default:
-				results := make([]string, len(s.Results))
-				for i, result := range s.Results {
-					results[i] = c.translateExpr(result)
-				}
 				c.Print("return [%s];", strings.Join(results, ", "))
 			}
 
 		case *ast.DeferStmt:
 			args := c.translateArgs(s.Call)
-			c.Print("_deferred.push(%s, %s, [%s]);", c.translateExpr(s.Call.Fun), "this", strings.Join(args, ", ")) // TODO fix receiver
+			c.Print("_deferred.push({ fun: %s, recv: %s, args: [%s] });", c.translateExpr(s.Call.Fun), "this", strings.Join(args, ", ")) // TODO fix receiver
 
 		case *ast.ExprStmt:
 			c.Print("%s;", c.translateExpr(s.X))
@@ -570,11 +575,44 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 	case *ast.FuncLit:
 		body := c.CatchOutput(func() {
 			c.Indent(func() {
-				c.translateFunctionBody(e.Body.List)
+				var namedResults []string
+				if e.Type.Results != nil && e.Type.Results.List[0].Names != nil {
+					for _, result := range e.Type.Results.List {
+						for _, name := range result.Names {
+							namedResults = append(namedResults, c.translateExpr(name))
+						}
+					}
+				}
+				c.NewScope(namedResults, func() {
+					if namedResults != nil {
+						c.Print("var %s;", strings.Join(namedResults, ", "))
+					}
+					if c.hasDefer(e.Body.List) {
+						c.Print("var _deferred = [];")
+						c.Print("try {")
+						c.Indent(func() {
+							c.translateStmtList(e.Body.List)
+						})
+						c.Print("} catch(err) {")
+						c.Indent(func() {
+							c.Print("_error_stack[getStackDepth()] = err;")
+						})
+						c.Print("} finally {")
+						c.Indent(func() {
+							c.Print("callDeferred(_deferred);")
+							if namedResults != nil {
+								c.translateStmtList([]ast.Stmt{&ast.ReturnStmt{}})
+							}
+						})
+						c.Print("}")
+						return
+					}
+					c.translateStmtList(e.Body.List)
+				})
 			})
 			c.Print("")
 		})
-		return fmt.Sprintf("function(%s) {\n%s}", c.translateParams(e.Type), body[:len(body)-1])
+		return fmt.Sprintf("(function(%s) {\n%s})", c.translateParams(e.Type), body[:len(body)-1])
 
 	case *ast.UnaryExpr:
 		if e.Op == token.AND {
@@ -673,16 +711,22 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		// 	}
 		// }
 		// fmt.Printf("%T %v\n", c.info.Objects[e], c.info.Objects[e].Pos())
-		if v, isVar := c.info.Objects[e].(*types.Var); isVar {
-			name, found := c.varToName[v]
+		switch o := c.info.Objects[e].(type) {
+		case *types.Var:
+			name, found := c.varToName[o]
 			if !found {
 				name = c.newVarName(e.Name)
-				c.varToName[v] = name
+				c.varToName[o] = name
 			}
 			return name
-		}
-		if c, isConst := c.info.Objects[e].(*types.Const); isConst {
-			return c.Val().String()
+		case *types.Const:
+			return o.Val().String()
+		case *types.Func:
+			switch o.Name() {
+			case "try":
+				return "try_"
+			}
+			return o.Name()
 		}
 		return e.Name
 

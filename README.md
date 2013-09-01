@@ -8,6 +8,7 @@ Successful Tests
 - empty.go
 - recover.go
 - recover1.go
+- rename.go
 - solitaire.go
 - switch.go (without cases that only differ in type)
 - turing.go

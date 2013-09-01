@@ -705,9 +705,6 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		if e.Name == "_" {
 			return ""
 		}
-		if e.Name == "nil" {
-			return "null"
-		}
 		// if tn, isTypeName := c.info.Objects[e].(*types.TypeName); isTypeName {
 		// 	if _, isSlice := tn.Type().Underlying().(*types.Slice); isSlice {
 		// 		return "Array"
@@ -723,6 +720,9 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			}
 			return name
 		case *types.Const:
+			if o.Val().String() == "nil" {
+				return "null"
+			}
 			return o.Val().String()
 		case *types.Func:
 			switch o.Name() {

@@ -6,6 +6,7 @@ Successful Tests
 - char_lit.go
 - defer.go
 - empty.go
+- initcomma.go
 - recover.go
 - recover1.go
 - rename.go

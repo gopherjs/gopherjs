@@ -163,10 +163,6 @@ func (c *Context) translateDecl(decl ast.Decl) {
 					default:
 						panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
 					}
-				case *types.Slice, nil:
-					// skip
-				default:
-					panic(fmt.Sprintf("Unhandled type: %T\n", t))
 				}
 				for i, name := range valueSpec.Names {
 					value := defaultValue
@@ -219,9 +215,22 @@ func (c *Context) translateDecl(decl ast.Decl) {
 		if d.Name.Name == "init" {
 			c.hasInit = true
 		}
+		var lhs ast.Expr = d.Name
+		tok := token.DEFINE
+		if d.Recv != nil {
+			recv := d.Recv.List[0].Type
+			lhs = &ast.SelectorExpr{
+				X: &ast.SelectorExpr{
+					X:   recv,
+					Sel: ast.NewIdent("prototype"),
+				},
+				Sel: d.Name,
+			}
+			tok = token.ASSIGN
+		}
 		c.translateStmt(&ast.AssignStmt{
-			Tok: token.DEFINE,
-			Lhs: []ast.Expr{d.Name},
+			Tok: tok,
+			Lhs: []ast.Expr{lhs},
 			Rhs: []ast.Expr{&ast.FuncLit{
 				Type: d.Type,
 				Body: d.Body,
@@ -552,6 +561,9 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		}
 		switch t := c.info.Types[e].(type) {
 		case *types.Array:
+			for i := int64(len(elements)); i < t.Len(); i++ {
+				elements = append(elements, "0") // TODO default value depending on type
+			}
 			return createListComposite(t.Elem(), elements)
 		case *types.Slice:
 			return fmt.Sprintf("new Slice(%s)", createListComposite(t.Elem(), elements))
@@ -671,6 +683,16 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s.%s", c.translateExpr(e.X), e.Sel.Name)
 
 	case *ast.CallExpr:
+		// if sel, isSelector := e.Fun.(*ast.SelectorExpr); isSelector {
+		// 	t := c.info.Types[sel.X]
+		// 	if ptr, isPointer := t.(*types.Pointer); isPointer {
+		// 		t = ptr.Elem()
+		// 	}
+		// 	if named, isNamed := t.(*types.Named); isNamed {
+		// 		c.Print("%s.prototype.%s", named.Obj().Name(), sel.Sel.Name)
+		// 	}
+		// }
+
 		fun := c.translateExpr(e.Fun)
 		args := c.translateArgs(e)
 		funType := c.info.Types[e.Fun]
@@ -687,7 +709,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s(%s)", fun, strings.Join(args, ", "))
 
 	case *ast.StarExpr:
-		return "starExpr"
+		return c.translateExpr(e.X)
 
 	case *ast.TypeAssertExpr:
 		return c.translateExpr(e.X)

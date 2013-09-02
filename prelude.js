@@ -205,6 +205,12 @@ var os = {
   }
 };
 
+var utf8 = {
+  DecodeRuneInString: function(str) {
+    return str.charCodeAt(0);
+  }
+};
+
 var reflect = {
   DeepEqual: function(a, b) {
     if (a === b) {

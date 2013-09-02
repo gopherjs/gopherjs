@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
 	"go/ast"
@@ -11,7 +12,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 )
 
@@ -30,7 +30,7 @@ func (c *Context) newVarName(prefix string) string {
 	for {
 		name := prefix
 		if n != 0 {
-			name += strconv.Itoa(n)
+			name += fmt.Sprintf("%d", n)
 		}
 		if !c.varNameUsed[name] {
 			c.varNameUsed[name] = true
@@ -114,6 +114,7 @@ func main() {
 		writer: os.Stdout,
 		info: &types.Info{
 			Types:   make(map[ast.Expr]types.Type),
+			Values:  make(map[ast.Expr]exact.Value),
 			Objects: make(map[*ast.Ident]types.Object),
 		},
 		varToName: make(map[*types.Var]string),
@@ -450,6 +451,8 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 					c.Print("var %s = %s[%s];", value, refVar, iVar)
 				case *types.Slice:
 					c.Print("var %s = %s.get(%s);", value, refVar, iVar)
+				case *types.Basic:
+					c.Print("var %s = %s.charCodeAt(%s);", value, refVar, iVar)
 				default:
 					panic(fmt.Sprintf("Unhandled range type: %T\n", t))
 				}
@@ -559,18 +562,56 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 }
 
 func (c *Context) translateExpr(expr ast.Expr) string {
-	switch e := expr.(type) {
-	case *ast.BasicLit:
-		value := strings.Replace(e.Value, "\n", "\\n", -1)
-		if e.Kind == token.CHAR {
-			v, _, _, _ := strconv.UnquoteChar(value[1:len(value)-1], '\'')
-			return strconv.Itoa(int(v))
+	if value, valueFound := c.info.Values[expr]; valueFound {
+		switch value.Kind() {
+		case exact.Nil:
+			return "null"
+		case exact.Bool:
+			return fmt.Sprintf("%t", exact.BoolVal(value))
+		case exact.Int:
+			d, _ := exact.Int64Val(value)
+			return fmt.Sprintf("%d", d)
+		case exact.Float:
+			f, _ := exact.Float64Val(value)
+			return fmt.Sprintf("%f", f)
+		case exact.String:
+			buffer := bytes.NewBuffer(nil)
+			for _, r := range exact.StringVal(value) {
+				switch r {
+				case '\b':
+					buffer.WriteString(`\b`)
+				case '\f':
+					buffer.WriteString(`\f`)
+				case '\n':
+					buffer.WriteString(`\n`)
+				case '\r':
+					buffer.WriteString(`\r`)
+				case '\t':
+					buffer.WriteString(`\t`)
+				case '\v':
+					buffer.WriteString(`\v`)
+				case 0:
+					buffer.WriteString(`\0`)
+				case '"':
+					buffer.WriteString(`\"`)
+				default:
+					if r > 0xFFFF {
+						panic("Too big unicode character in string.")
+					}
+					if r < 0x20 || r > 0x7E {
+						fmt.Fprintf(buffer, `\u%04x`, r)
+						continue
+					}
+					buffer.WriteRune(r)
+				}
+			}
+			return `"` + buffer.String() + `"`
+		default:
+			panic("Unhandled BasicLit: " + value.String())
 		}
-		if e.Kind == token.STRING && value[0] == '`' {
-			return `"` + strings.Replace(value[1:len(value)-1], `"`, `\"`, -1) + `"`
-		}
-		return value
+	}
 
+	switch e := expr.(type) {
 	case *ast.CompositeLit:
 		elements := make([]string, len(e.Elts))
 		for i, element := range e.Elts {
@@ -762,11 +803,6 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 				c.varToName[o] = name
 			}
 			return name
-		case *types.Const:
-			if o.Val().String() == "nil" {
-				return "null"
-			}
-			return o.Val().String()
 		case *types.Func:
 			switch o.Name() {
 			case "try":

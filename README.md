@@ -7,6 +7,10 @@ Successful Tests
 - defer.go
 - empty.go
 - for.go
+- func.go
+- func6.go
+- func7.go
+- func8.go
 - initcomma.go
 - recover.go
 - recover1.go

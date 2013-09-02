@@ -166,6 +166,8 @@ var print = function(a) {
 
 var println = print;
 
+var int = Math.floor;
+
 var float64 = function(v) { return v; };
 
 var newNumericArray = function(len) {

@@ -73,6 +73,10 @@ func (c *Context) CatchOutput(f func()) string {
 	return b.String()
 }
 
+type This struct {
+	ast.Ident
+}
+
 func main() {
 	fi, err := os.Stat(os.Args[1])
 	if err != nil {
@@ -152,8 +156,11 @@ func (c *Context) translateDecl(decl ast.Decl) {
 				defaultValue := "null"
 				switch t := c.info.Types[valueSpec.Type].(type) {
 				case *types.Basic:
-					if t.Info()&types.IsInteger != 0 {
+					if t.Info()&types.IsNumeric != 0 {
 						defaultValue = "0"
+					}
+					if t.Info()&types.IsString != 0 {
+						defaultValue = `""`
 					}
 				case *types.Array:
 					switch elt := t.Elem().(type) {
@@ -217,6 +224,7 @@ func (c *Context) translateDecl(decl ast.Decl) {
 		}
 		var lhs ast.Expr = d.Name
 		tok := token.DEFINE
+		body := d.Body.List
 		if d.Recv != nil {
 			recv := d.Recv.List[0].Type
 			lhs = &ast.SelectorExpr{
@@ -227,13 +235,22 @@ func (c *Context) translateDecl(decl ast.Decl) {
 				Sel: d.Name,
 			}
 			tok = token.ASSIGN
+			body = append([]ast.Stmt{
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{d.Recv.List[0].Names[0]},
+					Tok: token.DEFINE,
+					Rhs: []ast.Expr{&This{}},
+				},
+			}, body...)
 		}
 		c.translateStmt(&ast.AssignStmt{
 			Tok: tok,
 			Lhs: []ast.Expr{lhs},
 			Rhs: []ast.Expr{&ast.FuncLit{
 				Type: d.Type,
-				Body: d.Body,
+				Body: &ast.BlockStmt{
+					List: body,
+				},
 			}},
 		})
 
@@ -758,6 +775,9 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			return o.Name()
 		}
 		return e.Name
+
+	case *This:
+		return "this"
 
 	case nil:
 		return ""

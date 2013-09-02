@@ -481,46 +481,44 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 		c.translateStmt(s.Stmt)
 
 	case *ast.AssignStmt:
+		exprs := make([]string, len(s.Rhs))
+		for i, rhs := range s.Rhs {
+			exprs[i] = c.translateExpr(rhs)
+		}
+		rhs := exprs[0]
+		if len(exprs) > 1 {
+			rhs = "[" + strings.Join(exprs, ", ") + "]"
+		}
+
 		if len(s.Lhs) > 1 {
-			exprs := make([]string, len(s.Rhs))
-			for i, rhs := range s.Rhs {
-				exprs[i] = c.translateExpr(rhs)
-			}
-			rhs := exprs[0]
-			if len(exprs) > 1 {
-				rhs = "[" + strings.Join(exprs, ", ") + "]"
-			}
-
-			refVar := c.newVarName("_ref")
-			assignments := make([]string, len(s.Lhs))
-			for i, lhs := range s.Lhs {
-				assignments[i] = fmt.Sprintf("%s = %s[%d]", c.translateExpr(lhs), refVar, i)
-			}
-			c.Print("var %s = %s, %s;", refVar, rhs, strings.Join(assignments, ", "))
-			return
+			c.Print("_tuple = %s;", rhs)
 		}
 
-		lhs := c.translateExpr(s.Lhs[0])
-		rhs := c.translateExpr(s.Rhs[0])
-
-		if lhs == "" {
-			c.Print("%s;", rhs)
-			return
-		}
-
-		if s.Tok == token.DEFINE {
-			c.Print("var %s = %s;", lhs, rhs)
-			return
-		}
-
-		if iExpr, ok := s.Lhs[0].(*ast.IndexExpr); ok && s.Tok == token.ASSIGN {
-			if _, isSlice := c.info.Types[iExpr.X].Underlying().(*types.Slice); isSlice {
-				c.Print("%s.set(%s, %s);", c.translateExpr(iExpr.X), c.translateExpr(iExpr.Index), rhs)
-				return
+		for i, l := range s.Lhs {
+			lhs := c.translateExpr(l)
+			if len(s.Lhs) > 1 {
+				rhs = fmt.Sprintf("_tuple[%d]", i)
 			}
-		}
 
-		c.Print("%s %s %s;", lhs, s.Tok, rhs)
+			if lhs == "" && len(s.Lhs) == 1 {
+				c.Print("%s;", rhs)
+				continue
+			}
+
+			if s.Tok == token.DEFINE {
+				c.Print("var %s = %s;", lhs, rhs)
+				continue
+			}
+
+			if iExpr, ok := s.Lhs[0].(*ast.IndexExpr); ok && s.Tok == token.ASSIGN {
+				if _, isSlice := c.info.Types[iExpr.X].Underlying().(*types.Slice); isSlice {
+					c.Print("%s.set(%s, %s);", c.translateExpr(iExpr.X), c.translateExpr(iExpr.Index), rhs)
+					continue
+				}
+			}
+
+			c.Print("%s %s %s;", lhs, s.Tok, rhs)
+		}
 
 	case *ast.IncDecStmt:
 		c.Print("%s%s;", c.translateExpr(s.X), s.Tok)
@@ -584,6 +582,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 					}
 				}
 				c.NewScope(namedResults, func() {
+					c.Print("var _tuple;")
 					if namedResults != nil {
 						c.Print("var %s;", strings.Join(namedResults, ", "))
 					}
@@ -672,12 +671,20 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s.%s", c.translateExpr(e.X), e.Sel.Name)
 
 	case *ast.CallExpr:
+		fun := c.translateExpr(e.Fun)
 		args := c.translateArgs(e)
 		funType := c.info.Types[e.Fun]
 		if _, isSliceType := funType.(*types.Slice); isSliceType {
 			return fmt.Sprintf("%s.toSlice()", args[0])
 		}
-		return fmt.Sprintf("%s(%s)", c.translateExpr(e.Fun), strings.Join(args, ", "))
+		if sig, isSignature := funType.(*types.Signature); isSignature && sig.Params().Len() > 1 && len(args) == 1 {
+			argRefs := make([]string, sig.Params().Len())
+			for i := range argRefs {
+				argRefs[i] = fmt.Sprintf("_tuple[%d]", i)
+			}
+			return fmt.Sprintf("(_tuple = %s, %s(%s))", args[0], fun, strings.Join(argRefs, ", "))
+		}
+		return fmt.Sprintf("%s(%s)", fun, strings.Join(args, ", "))
 
 	case *ast.StarExpr:
 		return "starExpr"

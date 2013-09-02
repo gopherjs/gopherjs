@@ -9,6 +9,7 @@ Successful Tests
 - recover.go
 - recover1.go
 - rename.go
+- simassign.go
 - solitaire.go
 - switch.go (without cases that only differ in type)
 - turing.go

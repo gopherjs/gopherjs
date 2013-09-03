@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strings"
 )
 
@@ -154,7 +155,7 @@ func (c *Context) translateDecl(decl ast.Decl) {
 			for _, spec := range d.Specs {
 				valueSpec := spec.(*ast.ValueSpec)
 				t := c.info.Types[valueSpec.Type]
-				defaultValue := getDefaultValue(t)
+				defaultValue := zeroValue(t)
 				for i, name := range valueSpec.Names {
 					value := defaultValue
 					if len(valueSpec.Values) != 0 {
@@ -174,6 +175,9 @@ func (c *Context) translateDecl(decl ast.Decl) {
 				switch t := nt.Underlying().(type) {
 				case *types.Basic:
 					c.Print("var %s = function(v) { this.v = v; };", nt.Obj().Name())
+					if t.Info()&types.IsString != 0 {
+						c.Print("%s.prototype.len = function() { return this.v.length; };", nt.Obj().Name())
+					}
 				case *types.Struct:
 					params := make([]string, t.NumFields())
 					for i := 0; i < t.NumFields(); i++ {
@@ -190,7 +194,28 @@ func (c *Context) translateDecl(decl ast.Decl) {
 					c.Print("var %s = function() { Slice.apply(this, arguments); };", nt.Obj().Name())
 					c.Print("var _keys = Object.keys(Slice.prototype); for(var i = 0; i < _keys.length; i++) { %s.prototype[_keys[i]] = Slice.prototype[_keys[i]]; }", nt.Obj().Name())
 				case *types.Interface:
-					// skip
+					if t.MethodSet().Len() == 0 {
+						c.Print("var %s = function(t) { return true };", nt.Obj().Name())
+						continue
+					}
+					implementedBy := make([]string, 0)
+					for _, other := range c.info.Objects {
+						if otherTypeName, isTypeName := other.(*types.TypeName); isTypeName {
+							index := sort.SearchStrings(implementedBy, otherTypeName.Name())
+							if (index == len(implementedBy) || implementedBy[index] != otherTypeName.Name()) && types.IsAssignableTo(otherTypeName.Type(), t) {
+								implementedBy = append(implementedBy, otherTypeName.Name())
+								sort.Strings(implementedBy)
+							}
+						}
+					}
+					conditions := make([]string, len(implementedBy))
+					for i, other := range implementedBy {
+						conditions[i] = "t === " + other
+					}
+					if len(conditions) == 0 {
+						conditions = []string{"false"}
+					}
+					c.Print("var %s = function(t) { return %s };", nt.Obj().Name(), strings.Join(conditions, " || "))
 				default:
 					panic(fmt.Sprintf("Unhandled type: %T\n", t))
 				}
@@ -507,11 +532,15 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 
 		for i, l := range s.Lhs {
 			lhs := c.translateExpr(l)
+
 			if len(s.Lhs) > 1 {
+				if lhs == "" {
+					continue
+				}
 				rhs = fmt.Sprintf("_tuple[%d]", i)
 			}
 
-			if lhs == "" && len(s.Lhs) == 1 {
+			if lhs == "" {
 				c.Print("%s;", rhs)
 				continue
 			}
@@ -545,17 +574,18 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 
 func (c *Context) translateExpr(expr ast.Expr) string {
 	if value, valueFound := c.info.Values[expr]; valueFound {
+		jsValue := ""
 		switch value.Kind() {
 		case exact.Nil:
-			return "null"
+			jsValue = "null"
 		case exact.Bool:
-			return fmt.Sprintf("%t", exact.BoolVal(value))
+			jsValue = fmt.Sprintf("%t", exact.BoolVal(value))
 		case exact.Int:
 			d, _ := exact.Int64Val(value)
-			return fmt.Sprintf("%d", d)
+			jsValue = fmt.Sprintf("%d", d)
 		case exact.Float:
 			f, _ := exact.Float64Val(value)
-			return fmt.Sprintf("%f", f)
+			jsValue = fmt.Sprintf("%f", f)
 		case exact.String:
 			buffer := bytes.NewBuffer(nil)
 			for _, r := range exact.StringVal(value) {
@@ -587,10 +617,15 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 					buffer.WriteRune(r)
 				}
 			}
-			return `"` + buffer.String() + `"`
+			jsValue = `"` + buffer.String() + `"`
 		default:
 			panic("Unhandled BasicLit: " + value.String())
 		}
+
+		if call, isCall := expr.(*ast.CallExpr); isCall {
+			return fmt.Sprintf("new %s(%s)", c.translateExpr(call.Fun), jsValue)
+		}
+		return jsValue
 	}
 
 	switch e := expr.(type) {
@@ -605,7 +640,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		if isStruct {
 			elements = make([]string, structType.NumFields())
 			for i := range elements {
-				elements[i] = getDefaultValue(structType.Field(i).Type())
+				elements[i] = zeroValue(structType.Field(i).Type())
 			}
 		}
 
@@ -629,7 +664,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		switch t := compType.(type) {
 		case *types.Array:
 			for i := int64(len(elements)); i < t.Len(); i++ {
-				elements = append(elements, getDefaultValue(t.Elem()))
+				elements = append(elements, zeroValue(t.Elem()))
 			}
 			return createListComposite(t.Elem(), elements)
 		case *types.Slice:
@@ -663,7 +698,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 					}
 				}
 				c.NewScope(namedResults, func() {
-					c.Print("var _tuple;")
+					c.Print("var _obj, _tuple;")
 					if namedResults != nil {
 						c.Print("var %s;", strings.Join(namedResults, ", "))
 					}
@@ -752,19 +787,10 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s.%s", c.translateExpr(e.X), e.Sel.Name)
 
 	case *ast.CallExpr:
-		// if sel, isSelector := e.Fun.(*ast.SelectorExpr); isSelector {
-		// 	t := c.info.Types[sel.X]
-		// 	if ptr, isPointer := t.(*types.Pointer); isPointer {
-		// 		t = ptr.Elem()
-		// 	}
-		// 	if named, isNamed := t.(*types.Named); isNamed {
-		// 		c.Print("%s.prototype.%s", named.Obj().Name(), sel.Sel.Name)
-		// 	}
-		// }
-
 		fun := c.translateExpr(e.Fun)
 		args := c.translateArgs(e)
 		funType := c.info.Types[e.Fun]
+
 		if _, isSliceType := funType.(*types.Slice); isSliceType {
 			return fmt.Sprintf("%s.toSlice()", args[0])
 		}
@@ -775,17 +801,29 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			}
 			return fmt.Sprintf("(_tuple = %s, %s(%s))", args[0], fun, strings.Join(argRefs, ", "))
 		}
+		_, isSignature := funType.(*types.Signature)
+		_, isBuiltin := funType.(*types.Builtin)
+		ident, isIdent := e.Fun.(*ast.Ident)
+		if !isSignature && !isBuiltin && isIdent {
+			return fmt.Sprintf("cast(%s, %s)", c.translateExpr(ident), args[0])
+		}
 		return fmt.Sprintf("%s(%s)", fun, strings.Join(args, ", "))
 
 	case *ast.StarExpr:
 		return c.translateExpr(e.X)
 
 	case *ast.TypeAssertExpr:
-		return c.translateExpr(e.X)
+		check := fmt.Sprintf("_obj.constructor === %s", c.translateExpr(e.Type))
+		if _, isInterface := c.info.Types[e.Type].Underlying().(*types.Interface); isInterface {
+			check = fmt.Sprintf("%s(_obj.constructor)", c.translateExpr(e.Type))
+		}
+		if _, isTuple := c.info.Types[e].(*types.Tuple); isTuple {
+			return fmt.Sprintf("(_obj = %s, %s ? [_obj, true] : [%s, false])", c.translateExpr(e.X), check, zeroValue(c.info.Types[e.Type]))
+		}
+		return fmt.Sprintf("(_obj = %s, %s ? _obj : typeAssertionFailed())", c.translateExpr(e.X), check)
 
 	case *ast.ArrayType:
 		return "Slice"
-		// 	return toTypedArray(c.info.Types[e].(*types.Slice).Elem().(*types.Basic))
 
 	case *ast.MapType:
 		return "Map"
@@ -800,12 +838,14 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		if e.Name == "_" {
 			return ""
 		}
-		// if tn, isTypeName := c.info.Objects[e].(*types.TypeName); isTypeName {
-		// 	if _, isSlice := tn.Type().Underlying().(*types.Slice); isSlice {
-		// 		return "Array"
-		// 	}
-		// }
-		// fmt.Printf("%T %v\n", c.info.Objects[e], c.info.Objects[e].Pos())
+		if tn, isTypeName := c.info.Objects[e].(*types.TypeName); isTypeName {
+			switch tn.Name() {
+			case "int", "int64", "float64":
+				return "Number"
+			case "string":
+				return "String"
+			}
+		}
 		switch o := c.info.Objects[e].(type) {
 		case *types.Var:
 			name, found := c.varToName[o]
@@ -816,8 +856,8 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			return name
 		case *types.Func:
 			switch o.Name() {
-			case "try":
-				return "try_"
+			case "true", "false", "try":
+				return o.Name() + "_"
 			}
 			return o.Name()
 		}
@@ -865,7 +905,7 @@ func (c *Context) translateArgs(call *ast.CallExpr) []string {
 	return args
 }
 
-func getDefaultValue(t types.Type) string {
+func zeroValue(t types.Type) string {
 	switch t := t.(type) {
 	case *types.Basic:
 		if t.Info()&types.IsNumeric != 0 {

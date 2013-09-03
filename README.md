@@ -14,6 +14,7 @@ Successful Tests
 - func8.go
 - initcomma.go
 - interface/bigdata.go
+- interface/convert.go
 - recover.go
 - recover1.go
 - rename.go

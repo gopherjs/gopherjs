@@ -116,17 +116,6 @@ var append = function(slice, toAppend) {
   return newSlice;
 };
 
-var string = function(s) {
-  switch (s.constructor) {
-  case Number:
-    return String.fromCharCode(s);
-  case Slice:
-    return String.fromCharCode.apply(null, s.toArray());
-  default:
-    throw "Can not cast to string.";
-  }
-};
-
 var panic = function(msg) {
   throw msg;
 };
@@ -170,22 +159,39 @@ var getStackDepth = function() {
   return d;
 };
 
+var typeAssertionFailed = function() {
+  throw new Error("type assertion failed");
+};
+
 var print = function(a) {
   console.log(a.toArray().join(" "));
 };
 
 var println = print;
 
-var int = Math.floor;
-
-var toBasic = function(value) {
-  if (value.constructor !== Number) {
-    return value.v;
+var cast = function(type, value) {
+  switch (type) {
+  case String:
+    switch (value.constructor) {
+    case Number:
+      return String.fromCharCode(value);
+    case Slice:
+      return String.fromCharCode.apply(null, value.toArray());
+    default:
+      if (value.v === undefined) {
+        throw new Error("Can not cast to string.");
+      }
+      return value.v;
+    }
+  case Number:
+    if (value.constructor !== Number) {
+      return value.v;
+    }
+    return value;
+  default:
+    throw new Error("Can not cast.")
   }
-  return value;
 };
-var int64 = toBasic;
-var float64 = toBasic;
 
 var newNumericArray = function(len) {
   var a = new Array(len);

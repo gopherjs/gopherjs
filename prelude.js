@@ -16,8 +16,12 @@ var Slice = function(data, length, capacity) {
   }
 };
 
-Slice.prototype.length = function() {
+Slice.prototype.len = function() {
   return this.length;
+};
+
+Slice.prototype.cap = function() {
+  return this.array.length;
 };
 
 Slice.prototype.get = function(index) {
@@ -50,7 +54,13 @@ String.prototype.toSlice = function() {
   return new Slice(array);
 };
 
-var Map = function(data, capacity) {};
+var Map = function(data, capacity) {
+  this.data = data;
+};
+
+Map.prototype.len = function() {
+  return Object.keys(this.data).length;
+};
 
 var Interface = function(value) {
   return value;
@@ -62,12 +72,12 @@ var starExpr = function(value) {
   return value;
 };
 
-var len = function(slice) {
-  return slice.length;
+var len = function(v) {
+  return v.len();
 };
 
-var cap = function(slice) {
-  return slice.array.length;
+var cap = function(v) {
+  return v.cap();
 };
 
 var make = function(constructor, arg1, arg2) {

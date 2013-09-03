@@ -2,8 +2,9 @@ Successful Tests
 ----------------
 
 - append.go
-- const.go (without 64 bit values)
 - char_lit.go
+- complit.go
+- const.go (without 64 bit values)
 - defer.go
 - empty.go
 - for.go

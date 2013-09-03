@@ -154,24 +154,7 @@ func (c *Context) translateDecl(decl ast.Decl) {
 			for _, spec := range d.Specs {
 				valueSpec := spec.(*ast.ValueSpec)
 
-				defaultValue := "null"
-				switch t := c.info.Types[valueSpec.Type].(type) {
-				case *types.Basic:
-					if t.Info()&types.IsNumeric != 0 {
-						defaultValue = "0"
-					}
-					if t.Info()&types.IsString != 0 {
-						defaultValue = `""`
-					}
-				case *types.Array:
-					switch elt := t.Elem().(type) {
-					case *types.Basic:
-						defaultValue = fmt.Sprintf("newNumericArray(%d)", t.Len())
-					// 	defaultValue = fmt.Sprintf("new %s(%d)", toTypedArray(elt), t.Len())
-					default:
-						panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
-					}
-				}
+				defaultValue := getDefaultValue(c.info.Types[valueSpec.Type])
 				for i, name := range valueSpec.Names {
 					value := defaultValue
 					if len(valueSpec.Values) != 0 {
@@ -613,14 +596,41 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 
 	switch e := expr.(type) {
 	case *ast.CompositeLit:
+		compType := c.info.Types[e]
+		if ptrType, isPointer := compType.(*types.Pointer); isPointer {
+			compType = ptrType.Elem()
+		}
+		structType, isStruct := compType.Underlying().(*types.Struct)
+
 		elements := make([]string, len(e.Elts))
+		if isStruct {
+			elements = make([]string, structType.NumFields())
+			for i := range elements {
+				elements[i] = getDefaultValue(structType.Field(i).Type())
+			}
+		}
+
 		for i, element := range e.Elts {
+			if kve, isKve := element.(*ast.KeyValueExpr); isKve {
+				if isStruct {
+					for j := range elements {
+						if kve.Key.(*ast.Ident).Name == structType.Field(j).Name() {
+							elements[j] = c.translateExpr(kve.Value)
+							break
+						}
+					}
+					continue
+				}
+				elements[i] = fmt.Sprintf("%s: %s", c.translateExpr(kve.Key), c.translateExpr(kve.Value))
+				continue
+			}
 			elements[i] = c.translateExpr(element)
 		}
-		switch t := c.info.Types[e].(type) {
+
+		switch t := compType.(type) {
 		case *types.Array:
 			for i := int64(len(elements)); i < t.Len(); i++ {
-				elements = append(elements, "0") // TODO default value depending on type
+				elements = append(elements, getDefaultValue(t.Elem()))
 			}
 			return createListComposite(t.Elem(), elements)
 		case *types.Slice:
@@ -635,6 +645,8 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 				return fmt.Sprintf("new %s(%s)", t.Obj().Name(), createListComposite(s.Elem(), elements))
 			}
 			return fmt.Sprintf("new %s(%s)", t.Obj().Name(), strings.Join(elements, ", "))
+		case *types.Map:
+			return fmt.Sprintf("new Map({ %s })", strings.Join(elements, ", "))
 		default:
 			fmt.Println(e.Type, elements)
 			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", c.info.Types[e]))
@@ -852,6 +864,27 @@ func (c *Context) translateArgs(call *ast.CallExpr) []string {
 		}
 	}
 	return args
+}
+
+func getDefaultValue(t types.Type) string {
+	switch t := t.(type) {
+	case *types.Basic:
+		if t.Info()&types.IsNumeric != 0 {
+			return "0"
+		}
+		if t.Info()&types.IsString != 0 {
+			return `""`
+		}
+	case *types.Array:
+		switch elt := t.Elem().(type) {
+		case *types.Basic:
+			return fmt.Sprintf("newNumericArray(%d)", t.Len())
+			// return fmt.Sprintf("new %s(%d)", toTypedArray(elt), t.Len())
+		default:
+			panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
+		}
+	}
+	return "null"
 }
 
 // func toTypedArray(t *types.Basic) string {

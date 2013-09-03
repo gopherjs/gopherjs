@@ -153,12 +153,17 @@ func (c *Context) translateDecl(decl ast.Decl) {
 		case token.VAR:
 			for _, spec := range d.Specs {
 				valueSpec := spec.(*ast.ValueSpec)
-
-				defaultValue := getDefaultValue(c.info.Types[valueSpec.Type])
+				t := c.info.Types[valueSpec.Type]
+				defaultValue := getDefaultValue(t)
 				for i, name := range valueSpec.Names {
 					value := defaultValue
 					if len(valueSpec.Values) != 0 {
 						value = c.translateExpr(valueSpec.Values[i])
+						named, isNamed := t.(*types.Named)
+						_, isLit := valueSpec.Values[i].(*ast.BasicLit)
+						if isNamed && isLit {
+							value = fmt.Sprintf("new %s(%s)", named.Obj().Name(), value)
+						}
 					}
 					c.Print("var %s = %s;", c.translateExpr(name), value)
 				}
@@ -168,7 +173,7 @@ func (c *Context) translateDecl(decl ast.Decl) {
 				nt := c.info.Objects[spec.(*ast.TypeSpec).Name].Type().(*types.Named)
 				switch t := nt.Underlying().(type) {
 				case *types.Basic:
-					// skip
+					c.Print("var %s = function(v) { this.v = v; };", nt.Obj().Name())
 				case *types.Struct:
 					params := make([]string, t.NumFields())
 					for i := 0; i < t.NumFields(); i++ {
@@ -182,16 +187,10 @@ func (c *Context) translateDecl(decl ast.Decl) {
 					})
 					c.Print("};")
 				case *types.Slice:
-					// switch elt := t.Elem().(type) {
-					// case *types.Basic:
-					// 	// 	c.Print("var %s = %s;", nt.Obj().Name(), toTypedArray(elt))
-					// case *types.Named:
 					c.Print("var %s = function() { Slice.apply(this, arguments); };", nt.Obj().Name())
 					c.Print("var _keys = Object.keys(Slice.prototype); for(var i = 0; i < _keys.length; i++) { %s.prototype[_keys[i]] = Slice.prototype[_keys[i]]; }", nt.Obj().Name())
-					// default:
-					// 	panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
-					// }
 				case *types.Interface:
+					// skip
 				default:
 					panic(fmt.Sprintf("Unhandled type: %T\n", t))
 				}

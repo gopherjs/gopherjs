@@ -178,7 +178,14 @@ var println = print;
 
 var int = Math.floor;
 
-var float64 = function(v) { return v; };
+var toBasic = function(value) {
+  if (value.constructor !== Number) {
+    return value.v;
+  }
+  return value;
+};
+var int64 = toBasic;
+var float64 = toBasic;
 
 var newNumericArray = function(len) {
   var a = new Array(len);

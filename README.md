@@ -13,6 +13,7 @@ Successful Tests
 - func7.go
 - func8.go
 - initcomma.go
+- interface/bigdata.go
 - recover.go
 - recover1.go
 - rename.go

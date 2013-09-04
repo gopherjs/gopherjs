@@ -186,10 +186,26 @@ func (c *Context) translateDecl(decl ast.Decl) {
 					c.Print("var %s = function(%s) {", nt.Obj().Name(), strings.Join(params, ", "))
 					c.Indent(func() {
 						for i := 0; i < t.NumFields(); i++ {
-							c.Print("this.%s = %s;", t.Field(i).Name(), t.Field(i).Name())
+							field := t.Field(i)
+							c.Print("this.%s = %s;", field.Name(), field.Name())
 						}
 					})
 					c.Print("};")
+					for i := 0; i < t.NumFields(); i++ {
+						field := t.Field(i)
+						if field.Anonymous() {
+							methods := field.Type().MethodSet()
+							for j := 0; j < methods.Len(); j++ {
+								name := methods.At(j).Obj().Name()
+								sig := methods.At(j).Type().(*types.Signature)
+								params := make([]string, sig.Params().Len())
+								for k := range params {
+									params[k] = sig.Params().At(k).Name()
+								}
+								c.Print("%s.prototype.%s = function(%s) { return this.%s.%s(%s); };", nt.Obj().Name(), name, strings.Join(params, ", "), field.Name(), name, strings.Join(params, ", "))
+							}
+						}
+					}
 				case *types.Slice:
 					c.Print("var %s = function() { Slice.apply(this, arguments); };", nt.Obj().Name())
 					c.Print("var _keys = Object.keys(Slice.prototype); for(var i = 0; i < _keys.length; i++) { %s.prototype[_keys[i]] = Slice.prototype[_keys[i]]; }", nt.Obj().Name())

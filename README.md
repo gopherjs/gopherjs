@@ -15,6 +15,7 @@ Successful Tests
 - initcomma.go
 - interface/bigdata.go
 - interface/convert.go
+- interface/embed.go
 - recover.go
 - recover1.go
 - rename.go

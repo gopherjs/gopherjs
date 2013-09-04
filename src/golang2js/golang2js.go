@@ -154,17 +154,11 @@ func (c *Context) translateDecl(decl ast.Decl) {
 		case token.VAR:
 			for _, spec := range d.Specs {
 				valueSpec := spec.(*ast.ValueSpec)
-				t := c.info.Types[valueSpec.Type]
-				defaultValue := zeroValue(t)
+				defaultValue := zeroValue(c.info.Types[valueSpec.Type])
 				for i, name := range valueSpec.Names {
 					value := defaultValue
 					if len(valueSpec.Values) != 0 {
 						value = c.translateExpr(valueSpec.Values[i])
-						named, isNamed := t.(*types.Named)
-						_, isLit := valueSpec.Values[i].(*ast.BasicLit)
-						if isNamed && isLit {
-							value = fmt.Sprintf("new %s(%s)", named.Obj().Name(), value)
-						}
 					}
 					c.Print("var %s = %s;", c.translateExpr(name), value)
 				}
@@ -194,7 +188,13 @@ func (c *Context) translateDecl(decl ast.Decl) {
 					for i := 0; i < t.NumFields(); i++ {
 						field := t.Field(i)
 						if field.Anonymous() {
-							methods := field.Type().MethodSet()
+							fieldType := field.Type()
+							_, isPointer := fieldType.(*types.Pointer)
+							_, isUnderlyingInterface := fieldType.Underlying().(*types.Interface)
+							if !isPointer && !isUnderlyingInterface {
+								fieldType = types.NewPointer(fieldType) // strange, seems like a bug in go/types
+							}
+							methods := fieldType.MethodSet()
 							for j := 0; j < methods.Len(); j++ {
 								name := methods.At(j).Obj().Name()
 								sig := methods.At(j).Type().(*types.Signature)
@@ -638,8 +638,8 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			panic("Unhandled BasicLit: " + value.String())
 		}
 
-		if call, isCall := expr.(*ast.CallExpr); isCall {
-			return fmt.Sprintf("new %s(%s)", c.translateExpr(call.Fun), jsValue)
+		if named, isNamed := c.info.Types[expr].(*types.Named); isNamed {
+			return fmt.Sprintf("(new %s(%s))", named.Obj().Name(), jsValue)
 		}
 		return jsValue
 	}
@@ -752,23 +752,25 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s%s", e.Op.String(), c.translateExpr(e.X))
 
 	case *ast.BinaryExpr:
+		ex := c.translateExpressionToBasic(e.X)
+		ey := c.translateExpressionToBasic(e.Y)
 		op := e.Op.String()
 		switch e.Op {
 		case token.QUO:
 			if c.info.Types[e].(*types.Basic).Info()&types.IsInteger != 0 {
-				return fmt.Sprintf("Math.floor(%s / %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
+				return fmt.Sprintf("Math.floor(%s / %s)", ex, ey)
 			}
 		case token.EQL:
-			xi, xIsI := c.info.Types[e.X].(*types.Interface)
-			yi, yIsI := c.info.Types[e.Y].(*types.Interface)
-			if xIsI && xi.MethodSet().Len() == 0 && yIsI && yi.MethodSet().Len() == 0 {
-				return fmt.Sprintf("_isEqual(%s, %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
+			ix, xIsI := c.info.Types[e.X].(*types.Interface)
+			iy, yIsI := c.info.Types[e.Y].(*types.Interface)
+			if xIsI && ix.MethodSet().Len() == 0 && yIsI && iy.MethodSet().Len() == 0 {
+				return fmt.Sprintf("_isEqual(%s, %s)", ex, ey)
 			}
 			op = "==="
 		case token.NEQ:
 			op = "!=="
 		}
-		return fmt.Sprintf("%s %s %s", c.translateExpr(e.X), op, c.translateExpr(e.Y))
+		return fmt.Sprintf("%s %s %s", ex, op, ey)
 
 	case *ast.ParenExpr:
 		return fmt.Sprintf("(%s)", c.translateExpr(e.X))
@@ -897,6 +899,16 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 	return ""
 }
 
+func (c *Context) translateExpressionToBasic(expr ast.Expr) string {
+	t := c.info.Types[expr]
+	_, isNamed := t.(*types.Named)
+	_, iUnderlyingBasic := t.Underlying().(*types.Basic)
+	if isNamed && iUnderlyingBasic {
+		return c.translateExpr(expr) + ".v"
+	}
+	return c.translateExpr(expr)
+}
+
 func (c *Context) translateParams(t *ast.FuncType) string {
 	params := make([]string, 0)
 	for _, param := range t.Params.List {
@@ -943,6 +955,15 @@ func zeroValue(t types.Type) string {
 		default:
 			panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
 		}
+	case *types.Named:
+		if s, isStruct := t.Underlying().(*types.Struct); isStruct {
+			zeros := make([]string, s.NumFields())
+			for i := range zeros {
+				zeros[i] = zeroValue(s.Field(i).Type())
+			}
+			return fmt.Sprintf("new %s(%s)", t.Obj().Name(), strings.Join(zeros, ", "))
+		}
+		return fmt.Sprintf("new %s(%s)", t.Obj().Name(), zeroValue(t.Underlying()))
 	}
 	return "null"
 }

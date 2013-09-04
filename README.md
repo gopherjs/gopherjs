@@ -18,6 +18,7 @@ Successful Tests
 - interface/embed.go
 - interface/fail.go
 - interface/noeq.go (with non-nil values)
+- interface/receiver.go
 - recover.go
 - recover1.go
 - rename.go

@@ -16,6 +16,8 @@ Successful Tests
 - interface/bigdata.go
 - interface/convert.go
 - interface/embed.go
+- interface/fail.go
+- interface/noeq.go (with non-nil values)
 - recover.go
 - recover1.go
 - rename.go

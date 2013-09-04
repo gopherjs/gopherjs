@@ -163,6 +163,19 @@ var typeAssertionFailed = function() {
   throw new Error("type assertion failed");
 };
 
+var _isEqual = function(a, b) {
+  if (a === null || b === null) {
+    return a === null && b === null;
+  }
+  if (a.constructor !== b.constructor) {
+    return false;
+  }
+  if (a.constructor === Number || a.constructor === String) {
+    return a === b;
+  }
+  throw new Error("runtime error: comparing uncomparable type " + a.constructor);
+};
+
 var print = function(a) {
   console.log(a.toArray().join(" "));
 };

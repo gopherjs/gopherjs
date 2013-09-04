@@ -759,6 +759,11 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 				return fmt.Sprintf("Math.floor(%s / %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
 			}
 		case token.EQL:
+			xi, xIsI := c.info.Types[e.X].(*types.Interface)
+			yi, yIsI := c.info.Types[e.Y].(*types.Interface)
+			if xIsI && xi.MethodSet().Len() == 0 && yIsI && yi.MethodSet().Len() == 0 {
+				return fmt.Sprintf("_isEqual(%s, %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
+			}
 			op = "==="
 		case token.NEQ:
 			op = "!=="

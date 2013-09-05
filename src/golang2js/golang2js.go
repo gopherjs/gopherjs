@@ -21,7 +21,7 @@ type Context struct {
 	writer       io.Writer
 	indentation  int
 	info         *types.Info
-	varToName    map[*types.Var]string
+	varToName    map[types.Object]string
 	varNameUsed  map[string]bool
 	hasInit      bool
 	namedResults []string
@@ -130,12 +130,10 @@ func main() {
 			Values:  make(map[ast.Expr]exact.Value),
 			Objects: make(map[*ast.Ident]types.Object),
 		},
-		varToName: make(map[*types.Var]string),
-		varNameUsed: map[string]bool{
-			"try": true,
-		},
+		varToName:   make(map[types.Object]string),
+		varNameUsed: make(map[string]bool),
 	}
-	_, err = config.Check(files[0].Name.Name, fileSet, files, c.info)
+	pkg, err := config.Check(files[0].Name.Name, fileSet, files, c.info)
 	if err != nil {
 		return
 	}
@@ -147,23 +145,86 @@ func main() {
 	io.Copy(c, prelude)
 	prelude.Close()
 
-	for _, file := range files {
-		for _, decl := range file.Decls {
-			c.translateDecl(decl)
-		}
-	}
+	c.Printf("var packages = {}")
 
-	if c.hasInit {
-		c.Printf("init();")
-	}
-	c.Printf("main();")
+	c.Printf(`packages["%s"] = (function() {`, pkg.Name())
+	c.Indent(func() {
+		for _, file := range files {
+			for _, decl := range file.Decls {
+				c.translateDecl(decl)
+			}
+		}
+		for _, file := range files {
+			for _, decl := range file.Decls {
+				fun, isFunction := decl.(*ast.FuncDecl)
+				if !isFunction {
+					continue
+				}
+
+				if fun.Name.Name == "init" {
+					c.hasInit = true
+				}
+				var lhs ast.Expr = fun.Name
+				tok := token.DEFINE
+				body := fun.Body.List
+				if fun.Recv != nil {
+					recv := fun.Recv.List[0].Type
+					lhs = &ast.SelectorExpr{
+						X: &ast.SelectorExpr{
+							X:   recv,
+							Sel: ast.NewIdent("prototype"),
+						},
+						Sel: fun.Name,
+					}
+					tok = token.ASSIGN
+					var this ast.Expr = &This{}
+					thisType := c.info.Objects[fun.Recv.List[0].Names[0]].Type()
+					if _, isUnderlyingStruct := thisType.Underlying().(*types.Struct); isUnderlyingStruct {
+						this = &ast.StarExpr{X: this}
+					}
+					c.info.Types[this] = thisType
+					body = append([]ast.Stmt{
+						&ast.AssignStmt{
+							Lhs: []ast.Expr{fun.Recv.List[0].Names[0]},
+							Tok: token.DEFINE,
+							Rhs: []ast.Expr{this},
+						},
+					}, body...)
+				}
+				c.translateStmt(&ast.AssignStmt{
+					Tok: tok,
+					Lhs: []ast.Expr{lhs},
+					Rhs: []ast.Expr{&ast.FuncLit{
+						Type: fun.Type,
+						Body: &ast.BlockStmt{
+							List: body,
+						},
+					}},
+				})
+			}
+		}
+		if c.hasInit {
+			c.Printf("init();")
+		}
+		if pkg.Name() == "main" {
+			c.Printf("main();")
+		}
+		exports := make([]string, 0)
+		for _, name := range pkg.Scope().Names() {
+			if ast.IsExported(name) {
+				exports = append(exports, fmt.Sprintf("%s: %s", name, name))
+			}
+		}
+		c.Printf("return { %s };", strings.Join(exports, ", "))
+	})
+	c.Printf("})()")
 }
 
 func (c *Context) translateDecl(decl ast.Decl) {
 	switch d := decl.(type) {
 	case *ast.GenDecl:
 		switch d.Tok {
-		case token.VAR:
+		case token.VAR, token.CONST:
 			for _, spec := range d.Specs {
 				valueSpec := spec.(*ast.ValueSpec)
 				defaultValue := zeroValue(c.info.Types[valueSpec.Type])
@@ -248,53 +309,14 @@ func (c *Context) translateDecl(decl ast.Decl) {
 					panic(fmt.Sprintf("Unhandled type: %T\n", t))
 				}
 			}
-		case token.IMPORT, token.CONST:
+		case token.IMPORT:
 			// ignored
 		default:
 			panic("Unhandled declaration: " + d.Tok.String())
 		}
 
 	case *ast.FuncDecl:
-		if d.Name.Name == "init" {
-			c.hasInit = true
-		}
-		var lhs ast.Expr = d.Name
-		tok := token.DEFINE
-		body := d.Body.List
-		if d.Recv != nil {
-			recv := d.Recv.List[0].Type
-			lhs = &ast.SelectorExpr{
-				X: &ast.SelectorExpr{
-					X:   recv,
-					Sel: ast.NewIdent("prototype"),
-				},
-				Sel: d.Name,
-			}
-			tok = token.ASSIGN
-			var this ast.Expr = &This{}
-			thisType := c.info.Objects[d.Recv.List[0].Names[0]].Type()
-			if _, isUnderlyingStruct := thisType.Underlying().(*types.Struct); isUnderlyingStruct {
-				this = &ast.StarExpr{X: this}
-			}
-			c.info.Types[this] = thisType
-			body = append([]ast.Stmt{
-				&ast.AssignStmt{
-					Lhs: []ast.Expr{d.Recv.List[0].Names[0]},
-					Tok: token.DEFINE,
-					Rhs: []ast.Expr{this},
-				},
-			}, body...)
-		}
-		c.translateStmt(&ast.AssignStmt{
-			Tok: tok,
-			Lhs: []ast.Expr{lhs},
-			Rhs: []ast.Expr{&ast.FuncLit{
-				Type: d.Type,
-				Body: &ast.BlockStmt{
-					List: body,
-				},
-			}},
-		})
+		// skip
 
 	default:
 		panic(fmt.Sprintf("Unhandled declaration: %T\n", d))
@@ -446,9 +468,9 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 		c.Printf("}")
 
 	case *ast.ForStmt:
-		init := strings.TrimSuffix(c.CatchOutput(func() { c.translateStmt(s.Init) }), ";\n")
-		post := strings.TrimSuffix(c.CatchOutput(func() { c.translateStmt(s.Post) }), ";\n")
-		c.Printf("for (%s; %s; %s) {", init, c.translateExpr(s.Cond), post)
+		c.translateStmt(s.Init)
+		post := strings.TrimSuffix(strings.TrimSpace(c.CatchOutput(func() { c.translateStmt(s.Post) })), ";") // TODO ugly
+		c.Printf("for (; %s; %s) {", c.translateExpr(s.Cond), post)
 		c.Indent(func() {
 			c.translateStmtList(s.Body.List)
 		})
@@ -647,6 +669,8 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 					buffer.WriteString(`\0`)
 				case '"':
 					buffer.WriteString(`\"`)
+				case '\\':
+					buffer.WriteString(`\\`)
 				default:
 					if r > 0xFFFF {
 						panic("Too big unicode character in string.")
@@ -660,7 +684,7 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			}
 			jsValue = `"` + buffer.String() + `"`
 		default:
-			panic("Unhandled BasicLit: " + value.String())
+			panic("Unhandled value: " + value.String())
 		}
 
 		if named, isNamed := c.info.Types[expr].(*types.Named); isNamed {
@@ -675,41 +699,74 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		if ptrType, isPointer := compType.(*types.Pointer); isPointer {
 			compType = ptrType.Elem()
 		}
-		structType, isStruct := compType.Underlying().(*types.Struct)
 
-		elements := make([]string, len(e.Elts))
-		if isStruct {
-			elements = make([]string, structType.NumFields())
-			for i := range elements {
-				elements[i] = zeroValue(structType.Field(i).Type())
+		var elements []string
+		switch t := compType.Underlying().(type) {
+		case *types.Array:
+			elements = make([]string, t.Len())
+			var i int64 = 0
+			zero := zeroValue(t.Elem())
+			for _, element := range e.Elts {
+				if kve, isKve := element.(*ast.KeyValueExpr); isKve {
+					key, _ := exact.Int64Val(c.info.Values[kve.Key])
+					for i < key {
+						elements[i] = zero
+						i += 1
+					}
+					element = kve.Value
+				}
+				elements[i] = c.translateExpr(element)
+				i += 1
 			}
-		}
-
-		for i, element := range e.Elts {
-			if kve, isKve := element.(*ast.KeyValueExpr); isKve {
-				if isStruct {
+			for i < t.Len() {
+				elements[i] = zero
+				i += 1
+			}
+		case *types.Slice:
+			elements = make([]string, len(e.Elts))
+			for i, element := range e.Elts {
+				elements[i] = c.translateExpr(element)
+			}
+		case *types.Map:
+			elements = make([]string, len(e.Elts))
+			for i, element := range e.Elts {
+				kve := element.(*ast.KeyValueExpr)
+				elements[i] = fmt.Sprintf("%s: %s", c.translateExpr(kve.Key), c.translateExpr(kve.Value))
+			}
+		case *types.Struct:
+			elements = make([]string, t.NumFields())
+			isKeyValue := true
+			if len(e.Elts) != 0 {
+				_, isKeyValue = e.Elts[0].(*ast.KeyValueExpr)
+			}
+			if !isKeyValue {
+				for i, element := range e.Elts {
+					elements[i] = c.translateExpr(element)
+				}
+			}
+			if isKeyValue {
+				for i := range elements {
+					elements[i] = zeroValue(t.Field(i).Type())
+				}
+				for _, element := range e.Elts {
+					kve := element.(*ast.KeyValueExpr)
 					for j := range elements {
-						if kve.Key.(*ast.Ident).Name == structType.Field(j).Name() {
+						if kve.Key.(*ast.Ident).Name == t.Field(j).Name() {
 							elements[j] = c.translateExpr(kve.Value)
 							break
 						}
 					}
-					continue
 				}
-				elements[i] = fmt.Sprintf("%s: %s", c.translateExpr(kve.Key), c.translateExpr(kve.Value))
-				continue
 			}
-			elements[i] = c.translateExpr(element)
 		}
 
 		switch t := compType.(type) {
 		case *types.Array:
-			for i := int64(len(elements)); i < t.Len(); i++ {
-				elements = append(elements, zeroValue(t.Elem()))
-			}
 			return createListComposite(t.Elem(), elements)
 		case *types.Slice:
 			return fmt.Sprintf("new Slice(%s)", createListComposite(t.Elem(), elements))
+		case *types.Map:
+			return fmt.Sprintf("new Map({ %s })", strings.Join(elements, ", "))
 		case *types.Struct:
 			for i, element := range elements {
 				elements[i] = fmt.Sprintf("%s: %s", t.Field(i).Name(), element)
@@ -720,8 +777,6 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 				return fmt.Sprintf("new %s(%s)", t.Obj().Name(), createListComposite(s.Elem(), elements))
 			}
 			return fmt.Sprintf("new %s(%s)", t.Obj().Name(), strings.Join(elements, ", "))
-		case *types.Map:
-			return fmt.Sprintf("new Map({ %s })", strings.Join(elements, ", "))
 		default:
 			fmt.Println(e.Type, elements)
 			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", c.info.Types[e]))
@@ -771,10 +826,14 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("(function(%s) {\n%s})", c.translateParams(e.Type), body[:len(body)-1])
 
 	case *ast.UnaryExpr:
-		if e.Op == token.AND {
-			return c.translateExpr(e.X)
+		op := e.Op.String()
+		switch e.Op {
+		case token.AND:
+			op = ""
+		case token.XOR:
+			op = "~"
 		}
-		return fmt.Sprintf("%s%s", e.Op.String(), c.translateExpr(e.X))
+		return fmt.Sprintf("%s%s", op, c.translateExpr(e.X))
 
 	case *ast.BinaryExpr:
 		ex := c.translateExpressionToBasic(e.X)
@@ -794,6 +853,8 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			op = "==="
 		case token.NEQ:
 			op = "!=="
+		case token.AND_NOT:
+			op = "&~"
 		}
 		return fmt.Sprintf("%s %s %s", ex, op, ey)
 
@@ -899,19 +960,18 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			}
 		}
 		switch o := c.info.Objects[e].(type) {
-		case *types.Var:
+		case *types.Var, *types.Const:
 			name, found := c.varToName[o]
 			if !found {
-				name = c.newVarName(e.Name)
+				name = c.newVarName(avoidKeywords(o.Name()))
 				c.varToName[o] = name
 			}
 			return name
 		case *types.Func:
-			switch o.Name() {
-			case "true", "false", "try":
-				return o.Name() + "_"
+			if _, isBuiltin := o.Type().(*types.Builtin); isBuiltin {
+				return e.Name
 			}
-			return o.Name()
+			return avoidKeywords(o.Name())
 		}
 		return e.Name
 
@@ -964,6 +1024,14 @@ func (c *Context) translateArgs(call *ast.CallExpr) []string {
 		}
 	}
 	return args
+}
+
+func avoidKeywords(name string) string {
+	switch name {
+	case "delete", "false", "new", "true", "try":
+		return name + "_"
+	}
+	return name
 }
 
 func zeroValue(t types.Type) string {

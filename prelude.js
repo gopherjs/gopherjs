@@ -243,6 +243,12 @@ var os = {
   }
 };
 
+var errors = {
+  New: function(msg) {
+    return new Error(msg);
+  }
+};
+
 var utf8 = {
   DecodeRuneInString: function(str) {
     return str.charCodeAt(0);

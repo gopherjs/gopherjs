@@ -23,7 +23,7 @@ type Context struct {
 	info         *types.Info
 	pkgVars      map[string]string
 	objectVars   map[types.Object]string
-	varNameUsed  map[string]bool
+	usedVarNames []string
 	hasInit      bool
 	namedResults []string
 }
@@ -35,8 +35,10 @@ func (c *Context) newVarName(prefix string) string {
 		if n != 0 {
 			name += fmt.Sprintf("%d", n)
 		}
-		if !c.varNameUsed[name] {
-			c.varNameUsed[name] = true
+		index := sort.SearchStrings(c.usedVarNames, name)
+		if index == len(c.usedVarNames) || c.usedVarNames[index] != name {
+			c.usedVarNames = append(c.usedVarNames, name)
+			sort.Strings(c.usedVarNames)
 			return name
 		}
 		n += 1
@@ -57,14 +59,6 @@ func (c *Context) Indent(f func()) {
 	c.indentation += 1
 	f()
 	c.indentation -= 1
-}
-
-// TODO start new variable naming scope
-func (c *Context) NewScope(namedResults []string, f func()) {
-	origNamedResults := c.namedResults
-	c.namedResults = namedResults
-	f()
-	c.namedResults = origNamedResults
 }
 
 func (c *Context) CatchOutput(f func()) string {
@@ -131,9 +125,8 @@ func main() {
 			Values:  make(map[ast.Expr]exact.Value),
 			Objects: make(map[*ast.Ident]types.Object),
 		},
-		pkgVars:     make(map[string]string),
-		objectVars:  make(map[types.Object]string),
-		varNameUsed: make(map[string]bool),
+		pkgVars:    make(map[string]string),
+		objectVars: make(map[types.Object]string),
 	}
 	pkg, err := config.Check(files[0].Name.Name, fileSet, files, c.info)
 	if err != nil {
@@ -788,6 +781,8 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		}
 
 	case *ast.FuncLit:
+		n := c.usedVarNames
+		defer func() { c.usedVarNames = n }()
 		body := c.CatchOutput(func() {
 			c.Indent(func() {
 				var namedResults []string
@@ -798,33 +793,34 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 						}
 					}
 				}
-				c.NewScope(namedResults, func() {
-					c.Printf("var _obj, _tuple;")
-					if namedResults != nil {
-						c.Printf("var %s;", strings.Join(namedResults, ", "))
-					}
-					if c.hasDefer(e.Body.List) {
-						c.Printf("var _deferred = [];")
-						c.Printf("try {")
-						c.Indent(func() {
-							c.translateStmtList(e.Body.List)
-						})
-						c.Printf("} catch(err) {")
-						c.Indent(func() {
-							c.Printf("_error_stack.push({ frame: getStackDepth(), error: err });")
-						})
-						c.Printf("} finally {")
-						c.Indent(func() {
-							c.Printf("callDeferred(_deferred);")
-							if namedResults != nil {
-								c.translateStmt(&ast.ReturnStmt{})
-							}
-						})
-						c.Printf("}")
-						return
-					}
-					c.translateStmtList(e.Body.List)
-				})
+				r := c.namedResults
+				defer func() { c.namedResults = r }()
+				c.namedResults = namedResults
+				c.Printf("var _obj, _tuple;")
+				if namedResults != nil {
+					c.Printf("var %s;", strings.Join(namedResults, ", "))
+				}
+				if c.hasDefer(e.Body.List) {
+					c.Printf("var _deferred = [];")
+					c.Printf("try {")
+					c.Indent(func() {
+						c.translateStmtList(e.Body.List)
+					})
+					c.Printf("} catch(err) {")
+					c.Indent(func() {
+						c.Printf("_error_stack.push({ frame: getStackDepth(), error: err });")
+					})
+					c.Printf("} finally {")
+					c.Indent(func() {
+						c.Printf("callDeferred(_deferred);")
+						if namedResults != nil {
+							c.translateStmt(&ast.ReturnStmt{})
+						}
+					})
+					c.Printf("}")
+					return
+				}
+				c.translateStmtList(e.Body.List)
 			})
 			c.Printf("")
 		})

@@ -259,11 +259,17 @@ func (c *Context) translateDecl(decl ast.Decl) {
 				Sel: d.Name,
 			}
 			tok = token.ASSIGN
+			var this ast.Expr = &This{}
+			thisType := c.info.Objects[d.Recv.List[0].Names[0]].Type()
+			if _, isUnderlyingStruct := thisType.Underlying().(*types.Struct); isUnderlyingStruct {
+				this = &ast.StarExpr{X: this}
+			}
+			c.info.Types[this] = thisType
 			body = append([]ast.Stmt{
 				&ast.AssignStmt{
 					Lhs: []ast.Expr{d.Recv.List[0].Names[0]},
 					Tok: token.DEFINE,
-					Rhs: []ast.Expr{&This{}},
+					Rhs: []ast.Expr{this},
 				},
 			}, body...)
 		}
@@ -533,13 +539,17 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 		c.translateStmt(s.Stmt)
 
 	case *ast.AssignStmt:
-		exprs := make([]string, len(s.Rhs))
+		rhsExprs := make([]string, len(s.Rhs))
+		// rhsTypes := make([]types.Type, len(s.Rhs))
 		for i, rhs := range s.Rhs {
-			exprs[i] = c.translateExpr(rhs)
+			rhsExprs[i] = c.translateExpr(rhs)
+			// rhsTypes[i] = c.info.Types[rhs]
 		}
-		rhs := exprs[0]
-		if len(exprs) > 1 {
-			rhs = "[" + strings.Join(exprs, ", ") + "]"
+		rhs := rhsExprs[0]
+		// completeRhsType := rhsTypes[0]
+		if len(rhsExprs) > 1 {
+			rhs = "[" + strings.Join(rhsExprs, ", ") + "]"
+			// completeRhsType = types.NewTuple(rhsTypes...)
 		}
 
 		if len(s.Lhs) > 1 {
@@ -548,12 +558,15 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 
 		for i, l := range s.Lhs {
 			lhs := c.translateExpr(l)
+			// lhsType := c.info.Types[l]
 
+			// rhsType := completeRhsType
 			if len(s.Lhs) > 1 {
 				if lhs == "" {
 					continue
 				}
 				rhs = fmt.Sprintf("_tuple[%d]", i)
+				// rhsType = completeRhsType.(*types.Tuple).At(i)
 			}
 
 			if lhs == "" {
@@ -833,6 +846,10 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s(%s)", fun, strings.Join(args, ", "))
 
 	case *ast.StarExpr:
+		t := c.info.Types[e]
+		if _, isStruct := t.Underlying().(*types.Struct); isStruct {
+			return fmt.Sprintf("(_obj = %s, %s)", c.translateExpr(e.X), cloneStruct([]string{"_obj"}, t.(*types.Named)))
+		}
 		return c.translateExpr(e.X)
 
 	case *ast.TypeAssertExpr:
@@ -966,6 +983,21 @@ func zeroValue(t types.Type) string {
 		return fmt.Sprintf("new %s(%s)", t.Obj().Name(), zeroValue(t.Underlying()))
 	}
 	return "null"
+}
+
+func cloneStruct(srcPath []string, t *types.Named) string {
+	s := t.Underlying().(*types.Struct)
+	fields := make([]string, s.NumFields())
+	for i := range fields {
+		field := s.Field(i)
+		fieldPath := append(srcPath, field.Name())
+		if _, isStruct := field.Type().Underlying().(*types.Struct); isStruct {
+			fields[i] = cloneStruct(fieldPath, field.Type().(*types.Named))
+			continue
+		}
+		fields[i] = strings.Join(fieldPath, ".")
+	}
+	return fmt.Sprintf("new %s(%s)", t.Obj().Name(), strings.Join(fields, ", "))
 }
 
 // func toTypedArray(t *types.Basic) string {

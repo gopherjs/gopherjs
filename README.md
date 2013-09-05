@@ -19,6 +19,7 @@ Successful Tests
 - interface/fail.go
 - interface/noeq.go (with non-nil values)
 - interface/receiver.go
+- interface/struct.go
 - recover.go
 - recover1.go
 - rename.go

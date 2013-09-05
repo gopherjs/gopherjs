@@ -216,7 +216,9 @@ var newNumericArray = function(len) {
   return a;
 };
 
-var fmt = {
+var packages = {};
+
+packages["fmt"] = {
   Print: print,
   Println: print,
   Printf: function(format, a) {
@@ -232,7 +234,7 @@ var fmt = {
   }
 };
 
-var os = {
+packages["os"] = {
   Exit: process.exit,
   Getenv: function(name) {
     var value = process.env[name];
@@ -243,19 +245,19 @@ var os = {
   }
 };
 
-var errors = {
+packages["errors"] = {
   New: function(msg) {
     return new Error(msg);
   }
 };
 
-var utf8 = {
+packages["utf8"] = {
   DecodeRuneInString: function(str) {
     return str.charCodeAt(0);
   }
 };
 
-var reflect = {
+packages["reflect"] = {
   DeepEqual: function(a, b) {
     if (a === b) {
       return true;

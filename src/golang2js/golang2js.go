@@ -21,7 +21,8 @@ type Context struct {
 	writer       io.Writer
 	indentation  int
 	info         *types.Info
-	varToName    map[types.Object]string
+	pkgVars      map[string]string
+	objectVars   map[types.Object]string
 	varNameUsed  map[string]bool
 	hasInit      bool
 	namedResults []string
@@ -130,7 +131,8 @@ func main() {
 			Values:  make(map[ast.Expr]exact.Value),
 			Objects: make(map[*ast.Ident]types.Object),
 		},
-		varToName:   make(map[types.Object]string),
+		pkgVars:     make(map[string]string),
+		objectVars:  make(map[types.Object]string),
 		varNameUsed: make(map[string]bool),
 	}
 	pkg, err := config.Check(files[0].Name.Name, fileSet, files, c.info)
@@ -145,10 +147,13 @@ func main() {
 	io.Copy(c, prelude)
 	prelude.Close()
 
-	c.Printf("var packages = {}")
-
 	c.Printf(`packages["%s"] = (function() {`, pkg.Name())
 	c.Indent(func() {
+		for _, importedPkg := range pkg.Imports() {
+			varName := c.newVarName(importedPkg.Name())
+			c.Printf(`var %s = packages["%s"];`, varName, importedPkg.Path())
+			c.pkgVars[importedPkg.Path()] = varName
+		}
 		for _, file := range files {
 			for _, decl := range file.Decls {
 				c.translateDecl(decl)
@@ -960,20 +965,23 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			}
 		}
 		switch o := c.info.Objects[e].(type) {
+		case *types.Package:
+			return c.pkgVars[o.Path()]
 		case *types.Var, *types.Const:
-			name, found := c.varToName[o]
+			name, found := c.objectVars[o]
 			if !found {
 				name = c.newVarName(avoidKeywords(o.Name()))
-				c.varToName[o] = name
+				c.objectVars[o] = name
 			}
 			return name
-		case *types.Func:
+		case *types.TypeName, *types.Func:
 			if _, isBuiltin := o.Type().(*types.Builtin); isBuiltin {
 				return e.Name
 			}
 			return avoidKeywords(o.Name())
+		default:
+			panic(fmt.Sprintf("Unhandled object: %T\n", o))
 		}
-		return e.Name
 
 	case *This:
 		return "this"
@@ -1028,7 +1036,7 @@ func (c *Context) translateArgs(call *ast.CallExpr) []string {
 
 func avoidKeywords(name string) string {
 	switch name {
-	case "delete", "false", "new", "true", "try":
+	case "delete", "false", "new", "true", "try", "packages":
 		return name + "_"
 	}
 	return name

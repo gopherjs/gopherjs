@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/build"
 	"go/parser"
+	"go/scanner"
 	"go/token"
 	"io"
 	"os"
@@ -100,14 +101,25 @@ func main() {
 	for _, name := range fileNames {
 		file, err := parser.ParseFile(fileSet, dir+"/"+name, nil, 0)
 		if err != nil {
-			panic(err)
+			list, isList := err.(scanner.ErrorList)
+			if !isList {
+				panic(err)
+			}
+			for _, entry := range list {
+				fmt.Println(entry)
+			}
+			return
 		}
 		files = append(files, file)
 	}
 
+	var previousErr string
 	config := &types.Config{
 		Error: func(err error) {
-			panic(err)
+			if err.Error() != previousErr {
+				fmt.Println(err.Error())
+			}
+			previousErr = err.Error()
 		},
 	}
 
@@ -125,7 +137,7 @@ func main() {
 	}
 	_, err = config.Check(files[0].Name.Name, fileSet, files, c.info)
 	if err != nil {
-		panic(err)
+		return
 	}
 
 	prelude, err := os.Open("prelude.js")

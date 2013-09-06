@@ -35,10 +35,15 @@ func (c *Context) newVarName(prefix string) string {
 		if n != 0 {
 			name += fmt.Sprintf("%d", n)
 		}
-		index := sort.SearchStrings(c.usedVarNames, name)
-		if index == len(c.usedVarNames) || c.usedVarNames[index] != name {
+		used := false
+		for _, usedName := range c.usedVarNames {
+			if usedName == name {
+				used = true
+				break
+			}
+		}
+		if !used {
 			c.usedVarNames = append(c.usedVarNames, name)
-			sort.Strings(c.usedVarNames)
 			return name
 		}
 		n += 1
@@ -124,6 +129,7 @@ func main() {
 			Types:   make(map[ast.Expr]types.Type),
 			Values:  make(map[ast.Expr]exact.Value),
 			Objects: make(map[*ast.Ident]types.Object),
+			Scopes:  make(map[ast.Node]*types.Scope),
 		},
 		pkgVars:    make(map[string]string),
 		objectVars: make(map[types.Object]string),
@@ -162,6 +168,7 @@ func main() {
 				if fun.Name.Name == "init" {
 					c.hasInit = true
 				}
+
 				var lhs ast.Expr = fun.Name
 				tok := token.DEFINE
 				body := fun.Body.List
@@ -337,6 +344,10 @@ func (c *Context) hasDefer(stmts []ast.Stmt) bool {
 			if c.hasDefer(s.Body.List) {
 				return true
 			}
+		case *ast.TypeSwitchStmt:
+			if c.hasDefer(s.Body.List) {
+				return true
+			}
 		case *ast.CaseClause:
 			if c.hasDefer(s.Body) {
 				return true
@@ -462,6 +473,32 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 			c.Printf("default:")
 			c.Printf("  // empty")
 			c.Printf("  break;")
+		}
+		c.Printf("}")
+
+	case *ast.TypeSwitchStmt:
+		c.translateStmt(s.Init)
+		assign := s.Assign.(*ast.AssignStmt)
+		id := assign.Lhs[0].(*ast.Ident)
+		varName := c.newVarName(id.Name)
+		obj := &types.Var{}
+		c.info.Objects[id] = obj
+		c.objectVars[obj] = varName
+		c.translateStmt(s.Assign)
+		c.Printf("switch (typeOf(%s)) {", c.translateExpr(assign.Lhs[0]))
+		for _, child := range s.Body.List {
+			caseClause := child.(*ast.CaseClause)
+			for _, cond := range caseClause.List {
+				c.Printf("case %s:", c.translateExpr(cond))
+			}
+			if len(caseClause.List) == 0 {
+				c.Printf("default:")
+			}
+			c.Indent(func() {
+				c.objectVars[c.info.Scopes[caseClause].Lookup(id.Name)] = varName
+				c.translateStmtList(caseClause.Body)
+			})
+			c.Printf("break;")
 		}
 		c.Printf("}")
 
@@ -646,6 +683,9 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 			jsValue = fmt.Sprintf("%d", d)
 		case exact.Float:
 			f, _ := exact.Float64Val(value)
+			jsValue = fmt.Sprintf("%f", f)
+		case exact.Complex:
+			f, _ := exact.Float64Val(exact.Real(value))
 			jsValue = fmt.Sprintf("%f", f)
 		case exact.String:
 			buffer := bytes.NewBuffer(nil)
@@ -927,9 +967,14 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		return c.translateExpr(e.X)
 
 	case *ast.TypeAssertExpr:
-		check := fmt.Sprintf("_obj.constructor === %s", c.translateExpr(e.Type))
-		if _, isInterface := c.info.Types[e.Type].Underlying().(*types.Interface); isInterface {
-			check = fmt.Sprintf("%s(_obj.constructor)", c.translateExpr(e.Type))
+		if e.Type == nil {
+			return c.translateExpr(e.X)
+		}
+		check := fmt.Sprintf("typeOf(_obj) === %s", c.translateExpr(e.Type))
+		if e.Type != nil {
+			if _, isInterface := c.info.Types[e.Type].Underlying().(*types.Interface); isInterface {
+				check = fmt.Sprintf("%s(typeOf(_obj))", c.translateExpr(e.Type))
+			}
 		}
 		if _, isTuple := c.info.Types[e].(*types.Tuple); isTuple {
 			return fmt.Sprintf("(_obj = %s, %s ? [_obj, true] : [%s, false])", c.translateExpr(e.X), check, zeroValue(c.info.Types[e.Type]))
@@ -948,14 +993,21 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 	case *ast.ChanType:
 		return "Channel"
 
+	case *ast.FuncType:
+		return "Function"
+
 	case *ast.Ident:
 		if e.Name == "_" {
 			return ""
 		}
 		if tn, isTypeName := c.info.Objects[e].(*types.TypeName); isTypeName {
 			switch tn.Name() {
-			case "int", "int64", "float64":
-				return "Number"
+			case "bool":
+				return "Boolean"
+			case "int", "int8", "int16", "int32", "int64":
+				return "Integer"
+			case "float32", "float64":
+				return "Float"
 			case "string":
 				return "String"
 			}
@@ -1032,7 +1084,7 @@ func (c *Context) translateArgs(call *ast.CallExpr) []string {
 
 func avoidKeywords(name string) string {
 	switch name {
-	case "delete", "false", "new", "true", "try", "packages":
+	case "delete", "false", "new", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Map", "Slice", "String":
 		return name + "_"
 	}
 	return name

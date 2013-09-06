@@ -27,4 +27,5 @@ Successful Tests
 - solitaire.go
 - switch.go (without cases that only differ in type)
 - turing.go
+- typeswitch.go
 - varinit.go

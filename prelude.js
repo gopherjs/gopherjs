@@ -161,10 +161,6 @@ var getStackDepth = function() {
   return d;
 };
 
-var typeAssertionFailed = function() {
-  throw new Error("type assertion failed");
-};
-
 var _isEqual = function(a, b) {
   if (a === null || b === null) {
     return a === null && b === null;
@@ -184,6 +180,21 @@ var print = function(a) {
 
 var println = print;
 
+var Integer = function() {};
+var Float = function() {};
+
+var typeOf = function(value) {
+  var type = value.constructor;
+  if (type === Number) {
+    return (Math.floor(value) === value) ? Integer : Float;
+  }
+  return type;
+};
+
+var typeAssertionFailed = function() {
+  throw new Error("type assertion failed");
+};
+
 var cast = function(type, value) {
   switch (type) {
   case String:
@@ -198,7 +209,12 @@ var cast = function(type, value) {
       }
       return value.v;
     }
-  case Number:
+  case Integer:
+    if (value.constructor !== Number) {
+      return Math.floor(value.v);
+    }
+    return Math.floor(value);
+  case Float:
     if (value.constructor !== Number) {
       return value.v;
     }

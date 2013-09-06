@@ -447,21 +447,22 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 
 	case *ast.TypeSwitchStmt:
 		c.translateStmt(s.Init)
-		var varName, originalVarName string
+		expr := ""
 		if assign, isAssign := s.Assign.(*ast.AssignStmt); isAssign {
 			id := assign.Lhs[0].(*ast.Ident)
-			originalVarName = id.Name
-			varName = c.newVarName(id.Name)
+			expr = c.newVarName(id.Name)
 			obj := &types.Var{}
 			c.info.Objects[id] = obj
-			c.objectVars[obj] = varName
+			c.objectVars[obj] = expr
 			c.translateStmt(s.Assign)
+			for _, caseClause := range s.Body.List {
+				c.objectVars[c.info.Implicits[caseClause]] = expr
+			}
 		}
-		if varName == "" {
-			varName = c.newVarName("obj")
-			c.Printf("var %s = %s;", varName, c.translateExpr(s.Assign.(*ast.ExprStmt).X))
+		if expr == "" {
+			expr = c.translateExpr(s.Assign.(*ast.ExprStmt).X)
 		}
-		c.Printf("switch (typeOf(%s)) {", varName)
+		c.Printf("switch (typeOf(%s)) {", expr)
 		for _, child := range s.Body.List {
 			caseClause := child.(*ast.CaseClause)
 			for _, cond := range caseClause.List {
@@ -471,9 +472,6 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 				c.Printf("default:")
 			}
 			c.Indent(func() {
-				if originalVarName != "" {
-					c.objectVars[c.info.Implicits[caseClause]] = varName
-				}
 				c.translateStmtList(caseClause.Body)
 				c.Printf("break;")
 			})

@@ -154,28 +154,19 @@ func main() {
 			c.Printf(`var %s = packages["%s"];`, varName, importedPkg.Path())
 			c.pkgVars[importedPkg.Path()] = varName
 		}
-		var specs []ast.Spec
+
+		// first types
 		for _, file := range files {
 			for _, decl := range file.Decls {
-				if genDecl, isGenDecl := decl.(*ast.GenDecl); isGenDecl {
-					specs = append(specs, genDecl.Specs...)
+				if genDecl, isGenDecl := decl.(*ast.GenDecl); isGenDecl && genDecl.Tok == token.TYPE {
+					for _, spec := range genDecl.Specs {
+						c.translateSpec(spec)
+					}
 				}
 			}
 		}
-		// translatedObjects := make(map[types.Object]bool)
-		for _, spec := range specs {
-			// v := IsReadyVisitor{translatedObjects: translatedObjects, isReady: true}
-			// ast.Walk(&v, decl)
-			// if v.isReady {
-			c.translateSpec(spec)
-			// translatedObjects[]
-			// }
-		}
-		// for len(decls) != 0 {
-		// 	c.translateDecl(decls[0])
-		// 	decls[0] = decls[len(decls)-1]
-		// 	decls = decls[:len(decls)-1]
-		// }
+
+		// then functions
 		for _, file := range files {
 			for _, decl := range file.Decls {
 				fun, isFunction := decl.(*ast.FuncDecl)
@@ -226,6 +217,52 @@ func main() {
 				})
 			}
 		}
+
+		// finally constants and variables
+		var specs []*ast.ValueSpec
+		pendingObjects := make(map[types.Object]bool)
+		for _, file := range files {
+			for _, decl := range file.Decls {
+				if genDecl, isGenDecl := decl.(*ast.GenDecl); isGenDecl && (genDecl.Tok == token.CONST || genDecl.Tok == token.VAR) {
+					for _, spec := range genDecl.Specs {
+						s := spec.(*ast.ValueSpec)
+						for i, name := range s.Names {
+							var values []ast.Expr
+							if len(s.Values) != 0 {
+								values = []ast.Expr{s.Values[i]}
+							}
+							specs = append(specs, &ast.ValueSpec{
+								Names:  []*ast.Ident{name},
+								Type:   s.Type,
+								Values: values,
+							})
+							pendingObjects[c.info.Objects[s.Names[0]]] = true
+						}
+					}
+				}
+			}
+		}
+		complete := false
+		for !complete {
+			complete = true
+			for i, spec := range specs {
+				if spec == nil {
+					continue
+				}
+				if spec.Values != nil {
+					v := IsReadyVisitor{info: c.info, pendingObjects: pendingObjects, isReady: true}
+					ast.Walk(&v, spec.Values[0])
+					if !v.isReady {
+						complete = false
+						continue
+					}
+				}
+				c.translateSpec(spec)
+				delete(pendingObjects, c.info.Objects[spec.Names[0]])
+				specs[i] = nil
+			}
+		}
+
 		if c.hasInit {
 			c.Printf("init();")
 		}
@@ -1190,9 +1227,9 @@ func (v *HasDeferVisitor) Visit(node ast.Node) (w ast.Visitor) {
 }
 
 type IsReadyVisitor struct {
-	isReady           bool
-	info              *types.Info
-	translatedObjects map[types.Object]bool
+	info           *types.Info
+	pendingObjects map[types.Object]bool
+	isReady        bool
 }
 
 func (v *IsReadyVisitor) Visit(node ast.Node) (w ast.Visitor) {
@@ -1201,7 +1238,8 @@ func (v *IsReadyVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	}
 	switch n := node.(type) {
 	case *ast.Ident:
-		if !v.translatedObjects[v.info.Objects[n]] {
+		o := v.info.Objects[n]
+		if v.pendingObjects[o] {
 			v.isReady = false
 			return nil
 		}

@@ -478,14 +478,21 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 
 	case *ast.TypeSwitchStmt:
 		c.translateStmt(s.Init)
-		assign := s.Assign.(*ast.AssignStmt)
-		id := assign.Lhs[0].(*ast.Ident)
-		varName := c.newVarName(id.Name)
-		obj := &types.Var{}
-		c.info.Objects[id] = obj
-		c.objectVars[obj] = varName
-		c.translateStmt(s.Assign)
-		c.Printf("switch (typeOf(%s)) {", c.translateExpr(assign.Lhs[0]))
+		var varName, originalVarName string
+		if assign, isAssign := s.Assign.(*ast.AssignStmt); isAssign {
+			id := assign.Lhs[0].(*ast.Ident)
+			originalVarName = id.Name
+			varName = c.newVarName(id.Name)
+			obj := &types.Var{}
+			c.info.Objects[id] = obj
+			c.objectVars[obj] = varName
+			c.translateStmt(s.Assign)
+		}
+		if varName == "" {
+			varName = c.newVarName("obj")
+			c.Printf("var %s = %s;", varName, c.translateExpr(s.Assign.(*ast.ExprStmt).X))
+		}
+		c.Printf("switch (typeOf(%s)) {", varName)
 		for _, child := range s.Body.List {
 			caseClause := child.(*ast.CaseClause)
 			for _, cond := range caseClause.List {
@@ -495,10 +502,12 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 				c.Printf("default:")
 			}
 			c.Indent(func() {
-				c.objectVars[c.info.Scopes[caseClause].Lookup(id.Name)] = varName
+				if originalVarName != "" {
+					c.objectVars[c.info.Scopes[caseClause].Lookup(originalVarName)] = varName
+				}
 				c.translateStmtList(caseClause.Body)
+				c.Printf("break;")
 			})
-			c.Printf("break;")
 		}
 		c.Printf("}")
 

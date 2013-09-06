@@ -243,10 +243,14 @@ packages["fmt"] = {
     console.log(array.join(" "));
   },
   Sprint: function(a) {
-    return a.get(0).toString();
+    var parts = [];
+    for (var i = 0; i < a.length; i++) {
+      parts.push(a.get(i).toString());
+    }
+    return parts.join("");
   },
   Sprintf: function(format, a) {
-    return a.get(0).toString();
+    return this.Sprint(a);
   }
 };
 

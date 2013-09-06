@@ -306,6 +306,15 @@ packages["reflect"] = {
       }
     }
     return true;
+  },
+  TypeOf: function(v) {
+    return {
+      Bits: function() { return 32; }
+    };
   }
+};
+
+packages["sync"] = {
+  Mutex: function() {}
 };
 

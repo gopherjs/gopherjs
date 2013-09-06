@@ -20,6 +20,7 @@ import (
 type Context struct {
 	writer       io.Writer
 	indentation  int
+	pkg          *types.Package
 	info         *types.Info
 	pkgVars      map[string]string
 	objectVars   map[types.Object]string
@@ -135,7 +136,7 @@ func main() {
 		objectVars:   make(map[types.Object]string),
 		usedVarNames: []string{"delete", "false", "new", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Map", "Slice", "String"},
 	}
-	pkg, err := config.Check(files[0].Name.Name, fileSet, files, c.info)
+	c.pkg, err = config.Check(files[0].Name.Name, fileSet, files, c.info)
 	if err != nil {
 		return
 	}
@@ -147,9 +148,9 @@ func main() {
 	io.Copy(c, prelude)
 	prelude.Close()
 
-	c.Printf(`packages["%s"] = (function() {`, pkg.Name())
+	c.Printf(`packages["%s"] = (function() {`, c.pkg.Name())
 	c.Indent(func() {
-		for _, importedPkg := range pkg.Imports() {
+		for _, importedPkg := range c.pkg.Imports() {
 			varName := c.newVarName(importedPkg.Name())
 			c.Printf(`var %s = packages["%s"];`, varName, importedPkg.Path())
 			c.pkgVars[importedPkg.Path()] = varName
@@ -266,11 +267,11 @@ func main() {
 		if c.hasInit {
 			c.Printf("init();")
 		}
-		if pkg.Name() == "main" {
+		if c.pkg.Name() == "main" {
 			c.Printf("main();")
 		}
 		exports := make([]string, 0)
-		for _, name := range pkg.Scope().Names() {
+		for _, name := range c.pkg.Scope().Names() {
 			if ast.IsExported(name) {
 				exports = append(exports, fmt.Sprintf("%s: %s", name, name))
 			}
@@ -283,7 +284,7 @@ func main() {
 func (c *Context) translateSpec(spec ast.Spec) {
 	switch s := spec.(type) {
 	case *ast.ValueSpec:
-		defaultValue := zeroValue(c.info.Types[s.Type])
+		defaultValue := c.zeroValue(c.info.Types[s.Type])
 		for i, name := range s.Names {
 			value := defaultValue
 			if len(s.Values) != 0 {
@@ -392,7 +393,7 @@ func (c *Context) translateArgs(call *ast.CallExpr) []string {
 	return args
 }
 
-func zeroValue(t types.Type) string {
+func (c *Context) zeroValue(t types.Type) string {
 	switch t := t.(type) {
 	case *types.Basic:
 		if t.Info()&types.IsNumeric != 0 {
@@ -410,14 +411,19 @@ func zeroValue(t types.Type) string {
 			panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
 		}
 	case *types.Named:
+		name := t.Obj().Name()
+		objPkg := t.Obj().Pkg()
+		if objPkg != nil && objPkg != c.pkg {
+			name = c.pkgVars[objPkg.Path()] + "." + name
+		}
 		if s, isStruct := t.Underlying().(*types.Struct); isStruct {
 			zeros := make([]string, s.NumFields())
 			for i := range zeros {
-				zeros[i] = zeroValue(s.Field(i).Type())
+				zeros[i] = c.zeroValue(s.Field(i).Type())
 			}
-			return fmt.Sprintf("new %s(%s)", t.Obj().Name(), strings.Join(zeros, ", "))
+			return fmt.Sprintf("new %s(%s)", name, strings.Join(zeros, ", "))
 		}
-		return fmt.Sprintf("new %s(%s)", t.Obj().Name(), zeroValue(t.Underlying()))
+		return fmt.Sprintf("new %s(%s)", name, c.zeroValue(t.Underlying()))
 	}
 	return "null"
 }

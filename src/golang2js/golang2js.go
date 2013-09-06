@@ -126,13 +126,14 @@ func main() {
 	c := &Context{
 		writer: os.Stdout,
 		info: &types.Info{
-			Types:   make(map[ast.Expr]types.Type),
-			Values:  make(map[ast.Expr]exact.Value),
-			Objects: make(map[*ast.Ident]types.Object),
-			Scopes:  make(map[ast.Node]*types.Scope),
+			Types:     make(map[ast.Expr]types.Type),
+			Values:    make(map[ast.Expr]exact.Value),
+			Objects:   make(map[*ast.Ident]types.Object),
+			Implicits: make(map[ast.Node]types.Object),
 		},
-		pkgVars:    make(map[string]string),
-		objectVars: make(map[types.Object]string),
+		pkgVars:      make(map[string]string),
+		objectVars:   make(map[types.Object]string),
+		usedVarNames: []string{"delete", "false", "new", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Map", "Slice", "String"},
 	}
 	pkg, err := config.Check(files[0].Name.Name, fileSet, files, c.info)
 	if err != nil {
@@ -153,11 +154,28 @@ func main() {
 			c.Printf(`var %s = packages["%s"];`, varName, importedPkg.Path())
 			c.pkgVars[importedPkg.Path()] = varName
 		}
+		var specs []ast.Spec
 		for _, file := range files {
 			for _, decl := range file.Decls {
-				c.translateDecl(decl)
+				if genDecl, isGenDecl := decl.(*ast.GenDecl); isGenDecl {
+					specs = append(specs, genDecl.Specs...)
+				}
 			}
 		}
+		// translatedObjects := make(map[types.Object]bool)
+		for _, spec := range specs {
+			// v := IsReadyVisitor{translatedObjects: translatedObjects, isReady: true}
+			// ast.Walk(&v, decl)
+			// if v.isReady {
+			c.translateSpec(spec)
+			// translatedObjects[]
+			// }
+		}
+		// for len(decls) != 0 {
+		// 	c.translateDecl(decls[0])
+		// 	decls[0] = decls[len(decls)-1]
+		// 	decls = decls[:len(decls)-1]
+		// }
 		for _, file := range files {
 			for _, decl := range file.Decls {
 				fun, isFunction := decl.(*ast.FuncDecl)
@@ -225,146 +243,97 @@ func main() {
 	c.Printf("})()")
 }
 
-func (c *Context) translateDecl(decl ast.Decl) {
-	switch d := decl.(type) {
-	case *ast.GenDecl:
-		switch d.Tok {
-		case token.VAR, token.CONST:
-			for _, spec := range d.Specs {
-				valueSpec := spec.(*ast.ValueSpec)
-				defaultValue := zeroValue(c.info.Types[valueSpec.Type])
-				for i, name := range valueSpec.Names {
-					value := defaultValue
-					if len(valueSpec.Values) != 0 {
-						value = c.translateExpr(valueSpec.Values[i])
-					}
-					c.Printf("var %s = %s;", c.translateExpr(name), value)
-				}
+func (c *Context) translateSpec(spec ast.Spec) {
+	switch s := spec.(type) {
+	case *ast.ValueSpec:
+		defaultValue := zeroValue(c.info.Types[s.Type])
+		for i, name := range s.Names {
+			value := defaultValue
+			if len(s.Values) != 0 {
+				value = c.translateExpr(s.Values[i])
 			}
-		case token.TYPE:
-			for _, spec := range d.Specs {
-				nt := c.info.Objects[spec.(*ast.TypeSpec).Name].Type().(*types.Named)
-				switch t := nt.Underlying().(type) {
-				case *types.Basic:
-					c.Printf("var %s = function(v) { this.v = v; };", nt.Obj().Name())
-					if t.Info()&types.IsString != 0 {
-						c.Printf("%s.prototype.len = function() { return this.v.length; };", nt.Obj().Name())
-					}
-				case *types.Struct:
-					params := make([]string, t.NumFields())
-					for i := 0; i < t.NumFields(); i++ {
-						params[i] = t.Field(i).Name()
-					}
-					c.Printf("var %s = function(%s) {", nt.Obj().Name(), strings.Join(params, ", "))
-					c.Indent(func() {
-						for i := 0; i < t.NumFields(); i++ {
-							field := t.Field(i)
-							c.Printf("this.%s = %s;", field.Name(), field.Name())
-						}
-					})
-					c.Printf("};")
-					for i := 0; i < t.NumFields(); i++ {
-						field := t.Field(i)
-						if field.Anonymous() {
-							fieldType := field.Type()
-							_, isPointer := fieldType.(*types.Pointer)
-							_, isUnderlyingInterface := fieldType.Underlying().(*types.Interface)
-							if !isPointer && !isUnderlyingInterface {
-								fieldType = types.NewPointer(fieldType) // strange, seems like a bug in go/types
-							}
-							methods := fieldType.MethodSet()
-							for j := 0; j < methods.Len(); j++ {
-								name := methods.At(j).Obj().Name()
-								sig := methods.At(j).Type().(*types.Signature)
-								params := make([]string, sig.Params().Len())
-								for k := range params {
-									params[k] = sig.Params().At(k).Name()
-								}
-								c.Printf("%s.prototype.%s = function(%s) { return this.%s.%s(%s); };", nt.Obj().Name(), name, strings.Join(params, ", "), field.Name(), name, strings.Join(params, ", "))
-							}
-						}
-					}
-				case *types.Slice:
-					c.Printf("var %s = function() { Slice.apply(this, arguments); };", nt.Obj().Name())
-					c.Printf("var _keys = Object.keys(Slice.prototype); for(var i = 0; i < _keys.length; i++) { %s.prototype[_keys[i]] = Slice.prototype[_keys[i]]; }", nt.Obj().Name())
-				case *types.Interface:
-					if t.MethodSet().Len() == 0 {
-						c.Printf("var %s = function(t) { return true };", nt.Obj().Name())
-						continue
-					}
-					implementedBy := make([]string, 0)
-					for _, other := range c.info.Objects {
-						if otherTypeName, isTypeName := other.(*types.TypeName); isTypeName {
-							index := sort.SearchStrings(implementedBy, otherTypeName.Name())
-							if (index == len(implementedBy) || implementedBy[index] != otherTypeName.Name()) && types.IsAssignableTo(otherTypeName.Type(), t) {
-								implementedBy = append(implementedBy, otherTypeName.Name())
-								sort.Strings(implementedBy)
-							}
-						}
-					}
-					conditions := make([]string, len(implementedBy))
-					for i, other := range implementedBy {
-						conditions[i] = "t === " + other
-					}
-					if len(conditions) == 0 {
-						conditions = []string{"false"}
-					}
-					c.Printf("var %s = function(t) { return %s };", nt.Obj().Name(), strings.Join(conditions, " || "))
-				default:
-					panic(fmt.Sprintf("Unhandled type: %T\n", t))
-				}
-			}
-		case token.IMPORT:
-			// ignored
-		default:
-			panic("Unhandled declaration: " + d.Tok.String())
+			c.Printf("var %s = %s;", c.translateExpr(name), value)
 		}
 
-	case *ast.FuncDecl:
-		// skip
+	case *ast.TypeSpec:
+		nt := c.info.Objects[s.Name].Type().(*types.Named)
+		switch t := nt.Underlying().(type) {
+		case *types.Basic:
+			c.Printf("var %s = function(v) { this.v = v; };", nt.Obj().Name())
+			if t.Info()&types.IsString != 0 {
+				c.Printf("%s.prototype.len = function() { return this.v.length; };", nt.Obj().Name())
+			}
+		case *types.Struct:
+			params := make([]string, t.NumFields())
+			for i := 0; i < t.NumFields(); i++ {
+				params[i] = t.Field(i).Name() + "_"
+			}
+			c.Printf("var %s = function(%s) {", nt.Obj().Name(), strings.Join(params, ", "))
+			c.Indent(func() {
+				for i := 0; i < t.NumFields(); i++ {
+					field := t.Field(i)
+					c.Printf("this.%s = %s_;", field.Name(), field.Name())
+				}
+			})
+			c.Printf("};")
+			for i := 0; i < t.NumFields(); i++ {
+				field := t.Field(i)
+				if field.Anonymous() {
+					fieldType := field.Type()
+					_, isPointer := fieldType.(*types.Pointer)
+					_, isUnderlyingInterface := fieldType.Underlying().(*types.Interface)
+					if !isPointer && !isUnderlyingInterface {
+						fieldType = types.NewPointer(fieldType) // strange, seems like a bug in go/types
+					}
+					methods := fieldType.MethodSet()
+					for j := 0; j < methods.Len(); j++ {
+						name := methods.At(j).Obj().Name()
+						sig := methods.At(j).Type().(*types.Signature)
+						params := make([]string, sig.Params().Len())
+						for k := range params {
+							params[k] = sig.Params().At(k).Name()
+						}
+						c.Printf("%s.prototype.%s = function(%s) { return this.%s.%s(%s); };", nt.Obj().Name(), name, strings.Join(params, ", "), field.Name(), name, strings.Join(params, ", "))
+					}
+				}
+			}
+		case *types.Slice:
+			c.Printf("var %s = function() { Slice.apply(this, arguments); };", nt.Obj().Name())
+			c.Printf("var _keys = Object.keys(Slice.prototype); for(var i = 0; i < _keys.length; i++) { %s.prototype[_keys[i]] = Slice.prototype[_keys[i]]; }", nt.Obj().Name())
+		case *types.Interface:
+			if t.MethodSet().Len() == 0 {
+				c.Printf("var %s = function(t) { return true };", nt.Obj().Name())
+				return
+			}
+			implementedBy := make([]string, 0)
+			for _, other := range c.info.Objects {
+				if otherTypeName, isTypeName := other.(*types.TypeName); isTypeName {
+					index := sort.SearchStrings(implementedBy, otherTypeName.Name())
+					if (index == len(implementedBy) || implementedBy[index] != otherTypeName.Name()) && types.IsAssignableTo(otherTypeName.Type(), t) {
+						implementedBy = append(implementedBy, otherTypeName.Name())
+						sort.Strings(implementedBy)
+					}
+				}
+			}
+			conditions := make([]string, len(implementedBy))
+			for i, other := range implementedBy {
+				conditions[i] = "t === " + other
+			}
+			if len(conditions) == 0 {
+				conditions = []string{"false"}
+			}
+			c.Printf("var %s = function(t) { return %s };", nt.Obj().Name(), strings.Join(conditions, " || "))
+		default:
+			panic(fmt.Sprintf("Unhandled type: %T\n", t))
+		}
+
+	case *ast.ImportSpec:
+		// ignored
 
 	default:
-		panic(fmt.Sprintf("Unhandled declaration: %T\n", d))
+		panic(fmt.Sprintf("Unhandled spec: %T\n", s))
 
 	}
-}
-
-func (c *Context) hasDefer(stmts []ast.Stmt) bool {
-	for _, stmt := range stmts {
-		switch s := stmt.(type) {
-		case *ast.BlockStmt:
-			if c.hasDefer(s.List) {
-				return true
-			}
-		case *ast.IfStmt:
-			if c.hasDefer(s.Body.List) {
-				return true
-			}
-		case *ast.SwitchStmt:
-			if c.hasDefer(s.Body.List) {
-				return true
-			}
-		case *ast.TypeSwitchStmt:
-			if c.hasDefer(s.Body.List) {
-				return true
-			}
-		case *ast.CaseClause:
-			if c.hasDefer(s.Body) {
-				return true
-			}
-		case *ast.ForStmt:
-			if c.hasDefer(s.Body.List) {
-				return true
-			}
-		case *ast.RangeStmt:
-			if c.hasDefer(s.Body.List) {
-				return true
-			}
-		case *ast.DeferStmt:
-			return true
-		}
-	}
-	return false
 }
 
 func (c *Context) translateStmtList(stmts []ast.Stmt) {
@@ -503,7 +472,7 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 			}
 			c.Indent(func() {
 				if originalVarName != "" {
-					c.objectVars[c.info.Scopes[caseClause].Lookup(originalVarName)] = varName
+					c.objectVars[c.info.Implicits[caseClause]] = varName
 				}
 				c.translateStmtList(caseClause.Body)
 				c.Printf("break;")
@@ -610,7 +579,9 @@ func (c *Context) translateStmt(stmt ast.Stmt) {
 		c.Printf("%s;", c.translateExpr(s.X))
 
 	case *ast.DeclStmt:
-		c.translateDecl(s.Decl)
+		for _, spec := range s.Decl.(*ast.GenDecl).Specs {
+			c.translateSpec(spec)
+		}
 
 	case *ast.LabeledStmt:
 		c.Printf("// label: %s", s.Label.Name)
@@ -849,7 +820,10 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 				if namedResults != nil {
 					c.Printf("var %s;", strings.Join(namedResults, ", "))
 				}
-				if c.hasDefer(e.Body.List) {
+
+				v := HasDeferVisitor{}
+				ast.Walk(&v, e.Body)
+				if v.hasDefer {
 					c.Printf("var _deferred = [];")
 					c.Printf("try {")
 					c.Indent(func() {
@@ -1024,18 +998,16 @@ func (c *Context) translateExpr(expr ast.Expr) string {
 		switch o := c.info.Objects[e].(type) {
 		case *types.Package:
 			return c.pkgVars[o.Path()]
-		case *types.Var, *types.Const:
-			name, found := c.objectVars[o]
-			if !found {
-				name = c.newVarName(avoidKeywords(o.Name()))
-				c.objectVars[o] = name
-			}
-			return name
-		case *types.TypeName, *types.Func:
+		case *types.Var, *types.Const, *types.TypeName, *types.Func:
 			if _, isBuiltin := o.Type().(*types.Builtin); isBuiltin {
 				return e.Name
 			}
-			return avoidKeywords(o.Name())
+			name, found := c.objectVars[o]
+			if !found {
+				name = c.newVarName(o.Name())
+				c.objectVars[o] = name
+			}
+			return name
 		default:
 			panic(fmt.Sprintf("Unhandled object: %T\n", o))
 		}
@@ -1089,14 +1061,6 @@ func (c *Context) translateArgs(call *ast.CallExpr) []string {
 		}
 	}
 	return args
-}
-
-func avoidKeywords(name string) string {
-	switch name {
-	case "delete", "false", "new", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Map", "Slice", "String":
-		return name + "_"
-	}
-	return name
 }
 
 func zeroValue(t types.Type) string {
@@ -1207,4 +1171,44 @@ func hasFallthrough(caseClause *ast.CaseClause) bool {
 	}
 	b, isBranchStmt := caseClause.Body[len(caseClause.Body)-1].(*ast.BranchStmt)
 	return isBranchStmt && b.Tok == token.FALLTHROUGH
+}
+
+type HasDeferVisitor struct {
+	hasDefer bool
+}
+
+func (v *HasDeferVisitor) Visit(node ast.Node) (w ast.Visitor) {
+	if v.hasDefer {
+		return nil
+	}
+	switch node.(type) {
+	case *ast.DeferStmt:
+		v.hasDefer = true
+		return nil
+	case *ast.FuncLit, *This:
+		return nil
+	}
+	return v
+}
+
+type IsReadyVisitor struct {
+	isReady           bool
+	info              *types.Info
+	translatedObjects map[types.Object]bool
+}
+
+func (v *IsReadyVisitor) Visit(node ast.Node) (w ast.Visitor) {
+	if !v.isReady {
+		return nil
+	}
+	switch n := node.(type) {
+	case *ast.Ident:
+		if !v.translatedObjects[v.info.Objects[n]] {
+			v.isReady = false
+			return nil
+		}
+	case *This:
+		return nil
+	}
+	return v
 }

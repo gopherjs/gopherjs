@@ -4,12 +4,8 @@
 Error.stackTraceLimit = -1;
 
 var Slice = function(data, length, capacity) {
-  if (capacity === undefined) {
-    capacity = length;
-  }
-  if (data === undefined) {
-    data = new Array(capacity);
-  }
+  capacity = capacity || length || 0;
+  data = data || new Array(capacity);
   this.array = data;
   this.offset = 0;
   this.length = data.length;
@@ -118,8 +114,10 @@ var append = function(slice, toAppend) {
   return newSlice;
 };
 
-var panic = function(msg) {
-  throw msg;
+var panic = function(value) {
+  var e = new Error(value);
+  e.value = value;
+  throw e;
 };
 
 var _error_stack = [];
@@ -147,7 +145,7 @@ var recover = function() {
     return null;
   }
   _error_stack.pop();
-  return err.error;
+  return err.error.value;
 };
 
 var getStackDepth = function() {
@@ -182,6 +180,7 @@ var println = print;
 
 var Integer = function() {};
 var Float = function() {};
+var Complex = function() {};
 
 var typeOf = function(value) {
   var type = value.constructor;
@@ -311,10 +310,36 @@ packages["reflect"] = {
     return {
       Bits: function() { return 32; }
     };
-  }
+  },
+  flag: function() {},
+  Value: function() {},  
+};
+
+packages["runtime"] = {
+  SetFinalizer: function() {}
 };
 
 packages["sync"] = {
   Mutex: function() {}
+};
+packages["sync"].Mutex.prototype.Lock = function() {};
+packages["sync"].Mutex.prototype.Unlock = function() {};
+
+packages["sync/atomic"] = {
+  StoreInt32: function() {}
+}
+
+packages["syscall"] = {
+  Stdin: 0,
+  Stdout: 1,
+  Stderr: 2,
+  Write: function(fd, p) {
+    console.log(p);
+    throw new Error();
+    process.stdout.write(String.fromCharCode.apply(null, p.toArray()));
+    return [p.length, null]
+  },
+  Errno: function(v) { this.v = v; },
+  Signal: function() {}
 };
 

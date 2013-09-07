@@ -17,9 +17,12 @@ import (
 	"strings"
 )
 
-type Context struct {
-	writer       io.Writer
-	indentation  int
+type Translator struct {
+	packages map[string]*PkgContext
+	writer   io.Writer
+}
+
+type PkgContext struct {
 	pkg          *types.Package
 	info         *types.Info
 	pkgVars      map[string]string
@@ -27,9 +30,11 @@ type Context struct {
 	usedVarNames []string
 	hasInit      bool
 	namedResults []string
+	writer       io.Writer
+	indentation  int
 }
 
-func (c *Context) newVarName(prefix string) string {
+func (c *PkgContext) newVarName(prefix string) string {
 	n := 0
 	for {
 		name := prefix
@@ -51,23 +56,23 @@ func (c *Context) newVarName(prefix string) string {
 	}
 }
 
-func (c *Context) Write(b []byte) (int, error) {
+func (c *PkgContext) Write(b []byte) (int, error) {
 	return c.writer.Write(b)
 }
 
-func (c *Context) Printf(format string, values ...interface{}) {
+func (c *PkgContext) Printf(format string, values ...interface{}) {
 	c.Write([]byte(strings.Repeat("  ", c.indentation)))
 	fmt.Fprintf(c, format, values...)
 	c.Write([]byte{'\n'})
 }
 
-func (c *Context) Indent(f func()) {
+func (c *PkgContext) Indent(f func()) {
 	c.indentation += 1
 	f()
 	c.indentation -= 1
 }
 
-func (c *Context) CatchOutput(f func()) string {
+func (c *PkgContext) CatchOutput(f func()) string {
 	origWriter := c.writer
 	b := bytes.NewBuffer(nil)
 	c.writer = b
@@ -76,31 +81,63 @@ func (c *Context) CatchOutput(f func()) string {
 	return b.String()
 }
 
-type This struct {
-	ast.Ident
-}
-
 func main() {
 	fi, err := os.Stat(os.Args[1])
 	if err != nil {
 		panic(err)
 	}
 
-	dir := path.Dir(os.Args[1])
-	fileNames := []string{path.Base(os.Args[1])}
+	var pkg *build.Package
+	if !fi.IsDir() {
+		pkg = &build.Package{
+			Name:    "main",
+			Dir:     path.Dir(os.Args[1]),
+			GoFiles: []string{path.Base(os.Args[1])},
+		}
+	}
 	if fi.IsDir() {
-		pkg, err := build.ImportDir(os.Args[1], 0)
+		var err error
+		pkg, err = build.ImportDir(os.Args[1], 0)
 		if err != nil {
 			panic(err)
 		}
-		dir = pkg.Dir
-		fileNames = pkg.GoFiles
 	}
 
-	files := make([]*ast.File, 0)
 	fileSet := token.NewFileSet()
-	for _, name := range fileNames {
-		file, err := parser.ParseFile(fileSet, dir+"/"+name, nil, 0)
+	out := os.Stdout
+
+	prelude, err := os.Open("prelude.js")
+	if err != nil {
+		panic(err)
+	}
+	io.Copy(out, prelude)
+	prelude.Close()
+
+	t := &Translator{
+		writer:   out,
+		packages: make(map[string]*PkgContext),
+	}
+	t.packages["math"] = nil
+	t.packages["reflect"] = nil
+	t.packages["runtime"] = nil
+	t.packages["syscall"] = nil
+	t.packages["sync"] = nil
+	t.packages["sync/atomic"] = nil
+	t.packages["time"] = nil
+	t.translatePackage(fileSet, pkg)
+}
+
+type This struct {
+	ast.Ident
+}
+
+func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package) {
+	// os.Stderr.WriteString(pkg.Name + "\n")
+
+	files := make([]*ast.File, 0)
+	for _, name := range pkg.GoFiles {
+		fullName := pkg.Dir + "/" + name
+		file, err := parser.ParseFile(fileSet, fullName, nil, 0)
 		if err != nil {
 			list, isList := err.(scanner.ErrorList)
 			if !isList {
@@ -124,31 +161,40 @@ func main() {
 		},
 	}
 
-	c := &Context{
-		writer: os.Stdout,
-		info: &types.Info{
-			Types:     make(map[ast.Expr]types.Type),
-			Values:    make(map[ast.Expr]exact.Value),
-			Objects:   make(map[*ast.Ident]types.Object),
-			Implicits: make(map[ast.Node]types.Object),
-		},
-		pkgVars:      make(map[string]string),
-		objectVars:   make(map[types.Object]string),
-		usedVarNames: []string{"delete", "false", "new", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Map", "Slice", "String"},
+	info := &types.Info{
+		Types:     make(map[ast.Expr]types.Type),
+		Values:    make(map[ast.Expr]exact.Value),
+		Objects:   make(map[*ast.Ident]types.Object),
+		Implicits: make(map[ast.Node]types.Object),
 	}
-	c.pkg, err = config.Check(files[0].Name.Name, fileSet, files, c.info)
+	typesPkg, err := config.Check(files[0].Name.Name, fileSet, files, info)
 	if err != nil {
 		return
 	}
 
-	prelude, err := os.Open("prelude.js")
-	if err != nil {
-		panic(err)
-	}
-	io.Copy(c, prelude)
-	prelude.Close()
+	// for _, importedPkg := range typesPkg.Imports() {
+	// 	if _, found := t.packages[importedPkg.Path()]; found {
+	// 		continue
+	// 	}
 
-	c.Printf(`packages["%s"] = (function() {`, c.pkg.Name())
+	// 	otherPkg, err := build.Import(importedPkg.Path(), pkg.Dir, 0)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	t.translatePackage(fileSet, otherPkg)
+	// }
+
+	c := &PkgContext{
+		pkg:          typesPkg,
+		info:         info,
+		pkgVars:      make(map[string]string),
+		objectVars:   make(map[types.Object]string),
+		usedVarNames: []string{"delete", "false", "new", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Map", "Slice", "String"},
+		writer:       t.writer,
+	}
+	t.packages[pkg.ImportPath] = c
+
+	c.Printf(`packages["%s"] = (function() {`, pkg.ImportPath)
 	c.Indent(func() {
 		for _, importedPkg := range c.pkg.Imports() {
 			varName := c.newVarName(importedPkg.Name())
@@ -179,10 +225,15 @@ func main() {
 					c.hasInit = true
 				}
 
+				if fun.Body == nil {
+					c.Printf(`var %s = function() { throw new Error("Native function not implemented: %s"); };`, fun.Name, fun.Name)
+					continue
+				}
+
 				var lhs ast.Expr = fun.Name
 				tok := token.DEFINE
 				body := fun.Body.List
-				if fun.Recv != nil {
+				if fun.Recv != nil && len(fun.Recv.List[0].Names) == 1 {
 					recv := fun.Recv.List[0].Type
 					lhs = &ast.SelectorExpr{
 						X: &ast.SelectorExpr{
@@ -267,7 +318,7 @@ func main() {
 		if c.hasInit {
 			c.Printf("init();")
 		}
-		if c.pkg.Name() == "main" {
+		if pkg.IsCommand() {
 			c.Printf("main();")
 		}
 		exports := make([]string, 0)
@@ -281,16 +332,20 @@ func main() {
 	c.Printf("})()")
 }
 
-func (c *Context) translateSpec(spec ast.Spec) {
+func (c *PkgContext) translateSpec(spec ast.Spec) {
 	switch s := spec.(type) {
 	case *ast.ValueSpec:
 		defaultValue := c.zeroValue(c.info.Types[s.Type])
 		for i, name := range s.Names {
 			value := defaultValue
-			if len(s.Values) != 0 {
+			if i < len(s.Values) {
 				value = c.translateExpr(s.Values[i])
 			}
-			c.Printf("var %s = %s;", c.translateExpr(name), value)
+			n := c.translateExpr(name)
+			if n == "" {
+				continue
+			}
+			c.Printf("var %s = %s;", n, value)
 		}
 
 	case *ast.TypeSpec:
@@ -374,7 +429,7 @@ func (c *Context) translateSpec(spec ast.Spec) {
 	}
 }
 
-func (c *Context) translateArgs(call *ast.CallExpr) []string {
+func (c *PkgContext) translateArgs(call *ast.CallExpr) []string {
 	funType := c.info.Types[call.Fun]
 	args := make([]string, len(call.Args))
 	for i, arg := range call.Args {
@@ -393,7 +448,7 @@ func (c *Context) translateArgs(call *ast.CallExpr) []string {
 	return args
 }
 
-func (c *Context) zeroValue(t types.Type) string {
+func (c *PkgContext) zeroValue(t types.Type) string {
 	switch t := t.(type) {
 	case *types.Basic:
 		if t.Info()&types.IsNumeric != 0 {
@@ -403,29 +458,33 @@ func (c *Context) zeroValue(t types.Type) string {
 			return `""`
 		}
 	case *types.Array:
-		switch elt := t.Elem().(type) {
+		switch t.Elem().(type) {
 		case *types.Basic:
 			return fmt.Sprintf("newNumericArray(%d)", t.Len())
 			// return fmt.Sprintf("new %s(%d)", toTypedArray(elt), t.Len())
 		default:
-			panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
+			return fmt.Sprintf("new Array(%d)", t.Len())
 		}
 	case *types.Named:
-		name := t.Obj().Name()
-		objPkg := t.Obj().Pkg()
-		if objPkg != nil && objPkg != c.pkg {
-			name = c.pkgVars[objPkg.Path()] + "." + name
-		}
 		if s, isStruct := t.Underlying().(*types.Struct); isStruct {
 			zeros := make([]string, s.NumFields())
 			for i := range zeros {
 				zeros[i] = c.zeroValue(s.Field(i).Type())
 			}
-			return fmt.Sprintf("new %s(%s)", name, strings.Join(zeros, ", "))
+			return fmt.Sprintf("new %s(%s)", c.TypeName(t), strings.Join(zeros, ", "))
 		}
-		return fmt.Sprintf("new %s(%s)", name, c.zeroValue(t.Underlying()))
+		return fmt.Sprintf("new %s(%s)", c.TypeName(t), c.zeroValue(t.Underlying()))
 	}
 	return "null"
+}
+
+func (c *PkgContext) TypeName(t *types.Named) string {
+	name := t.Obj().Name()
+	objPkg := t.Obj().Pkg()
+	if objPkg != nil && objPkg != c.pkg {
+		name = c.pkgVars[objPkg.Path()] + "." + name
+	}
+	return name
 }
 
 // func toTypedArray(t *types.Basic) string {

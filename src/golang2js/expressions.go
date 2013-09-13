@@ -213,6 +213,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		op := e.Op.String()
 		switch e.Op {
 		case token.AND:
+			if c.savedAsPointer(e) {
+				name := e.X.(*ast.Ident).Name
+				pointerType := "_Pointer"
+				if named, isNamed := c.info.Types[e.X].(*types.Named); isNamed {
+					pointerType = named.Obj().Name() + "._Pointer"
+				}
+				return fmt.Sprintf("new %s(function() { return %s; }, function(v) { %s = v; })", pointerType, name, name)
+			}
 			op = ""
 		case token.XOR:
 			op = "~"
@@ -345,7 +353,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 	case *ast.Ident:
 		if e.Name == "_" {
-			return ""
+			panic("Tried to translate underscore identifier.")
 		}
 		if tn, isTypeName := c.info.Objects[e].(*types.TypeName); isTypeName {
 			switch tn.Name() {
@@ -398,16 +406,6 @@ func (c *PkgContext) translateExpressionToBasic(expr ast.Expr) string {
 		return c.translateExpr(expr) + ".v"
 	}
 	return c.translateExpr(expr)
-}
-
-func (c *PkgContext) translateParams(t *ast.FuncType) string {
-	params := make([]string, 0)
-	for _, param := range t.Params.List {
-		for _, ident := range param.Names {
-			params = append(params, c.translateExpr(ident))
-		}
-	}
-	return strings.Join(params, ", ")
 }
 
 func (c *PkgContext) cloneStruct(srcPath []string, t *types.Named) string {

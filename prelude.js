@@ -66,9 +66,7 @@ var Interface = function(value) {
 
 var Channel = function() {};
 
-var starExpr = function(value) {
-  return value;
-};
+var _Pointer = function(getter, setter) { this.get = getter; this.set = setter; };
 
 var len = function(v) {
   return v.len();

@@ -165,10 +165,10 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt) {
 		iVar := c.newVarName("_i")
 		vars := []string{refVar, lenVar, iVar}
 
-		key := c.translateExpr(s.Key)
 		value := c.translateExpr(s.Value)
 		keyAssign := ""
-		if key != "" {
+		if !isUnderscore(s.Key) {
+			key := c.translateExpr(s.Key)
 			keyAssign = fmt.Sprintf(", %s = %s", key, iVar)
 			if s.Tok == token.DEFINE {
 				vars = append(vars, key)
@@ -275,32 +275,37 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt) {
 			c.Printf("_tuple = %s;", rhs)
 		}
 
-		for i, l := range s.Lhs {
-			lhs := c.translateExpr(l)
+		for i, lhs := range s.Lhs {
 			// lhsType := c.info.Types[l]
 
 			// rhsType := completeRhsType
 			if len(s.Lhs) > 1 {
-				if lhs == "" {
+				if isUnderscore(lhs) {
 					continue
 				}
 				rhs = fmt.Sprintf("_tuple[%d]", i)
 				// rhsType = completeRhsType.(*types.Tuple).At(i)
 			}
 
-			if lhs == "" {
+			if isUnderscore(lhs) {
 				c.Printf("%s;", rhs)
 				continue
 			}
 
 			if s.Tok == token.DEFINE {
-				c.Printf("var %s = %s;", lhs, rhs)
+				c.Printf("var %s = %s;", c.translateExpr(lhs), rhs)
 				continue
 			}
 
-			if iExpr, ok := s.Lhs[0].(*ast.IndexExpr); ok && s.Tok == token.ASSIGN {
-				if _, isSlice := c.info.Types[iExpr.X].Underlying().(*types.Slice); isSlice {
-					c.Printf("%s.set(%s, %s);", c.translateExpr(iExpr.X), c.translateExpr(iExpr.Index), rhs)
+			switch l := lhs.(type) {
+			case *ast.StarExpr:
+				if _, isStruct := c.info.Types[l].(*types.Struct); !isStruct {
+					c.Printf("%s.set(%s);", c.translateExpr(l.X), rhs)
+					continue
+				}
+			case *ast.IndexExpr:
+				if _, isSlice := c.info.Types[l.X].Underlying().(*types.Slice); isSlice {
+					c.Printf("%s.set(%s, %s);", c.translateExpr(l.X), c.translateExpr(l.Index), rhs)
 					continue
 				}
 			}
@@ -309,7 +314,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt) {
 			if s.Tok == token.AND_NOT_ASSIGN {
 				tok = "&=~"
 			}
-			c.Printf("%s %s %s;", lhs, tok, rhs)
+			c.Printf("%s %s %s;", c.translateExpr(lhs), tok, rhs)
 		}
 
 	case *ast.IncDecStmt:

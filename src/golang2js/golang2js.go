@@ -28,7 +28,6 @@ type PkgContext struct {
 	pkgVars      map[string]string
 	objectVars   map[types.Object]string
 	usedVarNames []string
-	hasInit      bool
 	namedResults []string
 	writer       io.Writer
 	indentation  int
@@ -194,6 +193,22 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 	}
 	t.packages[pkg.ImportPath] = c
 
+	functions := make(map[types.Type][]*ast.FuncDecl)
+	for _, file := range files {
+		for _, decl := range file.Decls {
+			if fun, isFunction := decl.(*ast.FuncDecl); isFunction {
+				var recvType types.Type
+				if fun.Recv != nil && len(fun.Recv.List[0].Names) == 1 {
+					recvType = c.info.Objects[fun.Recv.List[0].Names[0]].Type()
+					if ptr, isPtr := recvType.(*types.Pointer); isPtr {
+						recvType = ptr.Elem()
+					}
+				}
+				functions[recvType] = append(functions[recvType], fun)
+			}
+		}
+	}
+
 	c.Printf(`packages["%s"] = (function() {`, pkg.ImportPath)
 	c.Indent(func() {
 		for _, importedPkg := range c.pkg.Imports() {
@@ -202,75 +217,44 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 			c.pkgVars[importedPkg.Path()] = varName
 		}
 
-		// first types
+		// types and their functions
 		for _, file := range files {
 			for _, decl := range file.Decls {
 				if genDecl, isGenDecl := decl.(*ast.GenDecl); isGenDecl && genDecl.Tok == token.TYPE {
 					for _, spec := range genDecl.Specs {
+						recvType := c.info.Objects[spec.(*ast.TypeSpec).Name].Type().(*types.Named)
+						_, isStruct := recvType.Underlying().(*types.Struct)
+						hasPtrType := !isStruct
 						c.translateSpec(spec)
+						if hasPtrType {
+							c.Printf("%s._Pointer = function(getter, setter) { this.get = getter; this.set = setter; };", recvType.Obj().Name())
+						}
+						for _, fun := range functions[recvType] {
+							c.translateFunction(fun)
+							if hasPtrType {
+								params := c.translateParams(fun.Type)
+								c.Printf("%s._Pointer.prototype.%s = function(%s) { return this.get().%s(%s); };", recvType.Obj().Name(), fun.Name.Name, params, fun.Name.Name, params)
+							}
+						}
 					}
 				}
 			}
 		}
 
-		// then functions
-		for _, file := range files {
-			for _, decl := range file.Decls {
-				fun, isFunction := decl.(*ast.FuncDecl)
-				if !isFunction {
-					continue
-				}
-
-				if fun.Name.Name == "init" {
-					c.hasInit = true
-				}
-
-				if fun.Body == nil {
-					c.Printf(`var %s = function() { throw new Error("Native function not implemented: %s"); };`, fun.Name, fun.Name)
-					continue
-				}
-
-				var lhs ast.Expr = fun.Name
-				tok := token.DEFINE
-				body := fun.Body.List
-				if fun.Recv != nil && len(fun.Recv.List[0].Names) == 1 {
-					recv := fun.Recv.List[0].Type
-					lhs = &ast.SelectorExpr{
-						X: &ast.SelectorExpr{
-							X:   recv,
-							Sel: ast.NewIdent("prototype"),
-						},
-						Sel: fun.Name,
-					}
-					tok = token.ASSIGN
-					var this ast.Expr = &This{}
-					thisType := c.info.Objects[fun.Recv.List[0].Names[0]].Type()
-					if _, isUnderlyingStruct := thisType.Underlying().(*types.Struct); isUnderlyingStruct {
-						this = &ast.StarExpr{X: this}
-					}
-					c.info.Types[this] = thisType
-					body = append([]ast.Stmt{
-						&ast.AssignStmt{
-							Lhs: []ast.Expr{fun.Recv.List[0].Names[0]},
-							Tok: token.DEFINE,
-							Rhs: []ast.Expr{this},
-						},
-					}, body...)
-				}
-				c.translateStmt(&ast.AssignStmt{
-					Tok: tok,
-					Lhs: []ast.Expr{lhs},
-					Rhs: []ast.Expr{&ast.FuncLit{
-						Type: fun.Type,
-						Body: &ast.BlockStmt{
-							List: body,
-						},
-					}},
-				})
+		// package functions
+		hasInit := false
+		for _, fun := range functions[nil] {
+			if fun.Name.Name == "init" {
+				hasInit = true
 			}
+			if fun.Body == nil {
+				c.Printf(`var %s = function() { throw new Error("Native function not implemented: %s"); };`, fun.Name, fun.Name)
+				continue
+			}
+			c.translateFunction(fun)
 		}
 
-		// finally constants and variables
+		// constants and variables in dependency aware order
 		var specs []*ast.ValueSpec
 		pendingObjects := make(map[types.Object]bool)
 		for _, file := range files {
@@ -315,7 +299,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 			}
 		}
 
-		if c.hasInit {
+		if hasInit {
 			c.Printf("init();")
 		}
 		if pkg.IsCommand() {
@@ -341,11 +325,10 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			if i < len(s.Values) {
 				value = c.translateExpr(s.Values[i])
 			}
-			n := c.translateExpr(name)
-			if n == "" {
+			if isUnderscore(name) {
 				continue
 			}
-			c.Printf("var %s = %s;", n, value)
+			c.Printf("var %s = %s;", c.translateExpr(name), value)
 		}
 
 	case *ast.TypeSpec:
@@ -429,11 +412,80 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 	}
 }
 
+func (c *PkgContext) translateFunction(fun *ast.FuncDecl) {
+	var lhs ast.Expr = fun.Name
+	tok := token.DEFINE
+	body := fun.Body.List
+	var recv *ast.Field
+	var recvType types.Type
+	if fun.Recv != nil && len(fun.Recv.List[0].Names) == 1 {
+		recv = fun.Recv.List[0]
+		recvType = c.info.Objects[recv.Names[0]].Type()
+	}
+	if recv != nil {
+		lhs = &ast.SelectorExpr{
+			X: &ast.SelectorExpr{
+				X:   recv.Type,
+				Sel: ast.NewIdent("prototype"),
+			},
+			Sel: fun.Name,
+		}
+		tok = token.ASSIGN
+		var this ast.Expr = &This{}
+		if _, isUnderlyingStruct := recvType.Underlying().(*types.Struct); isUnderlyingStruct {
+			this = &ast.StarExpr{X: this}
+		}
+		c.info.Types[this] = recvType
+		body = append([]ast.Stmt{
+			&ast.AssignStmt{
+				Lhs: []ast.Expr{recv.Names[0]},
+				Tok: token.DEFINE,
+				Rhs: []ast.Expr{this},
+			},
+		}, body...)
+	}
+	c.translateStmt(&ast.AssignStmt{
+		Tok: tok,
+		Lhs: []ast.Expr{lhs},
+		Rhs: []ast.Expr{&ast.FuncLit{
+			Type: fun.Type,
+			Body: &ast.BlockStmt{
+				List: body,
+			},
+		}},
+	})
+}
+
+func (c *PkgContext) savedAsPointer(expr ast.Expr) bool {
+	t := c.info.Types[expr].Underlying()
+	if ptr, isPtr := t.(*types.Pointer); isPtr {
+		_, isStruct := ptr.Elem().Underlying().(*types.Struct)
+		return !isStruct
+	}
+	return false
+}
+
+func (c *PkgContext) translateParams(t *ast.FuncType) string {
+	params := make([]string, 0)
+	for _, param := range t.Params.List {
+		for _, ident := range param.Names {
+			params = append(params, c.translateExpr(ident))
+		}
+	}
+	return strings.Join(params, ", ")
+}
+
 func (c *PkgContext) translateArgs(call *ast.CallExpr) []string {
 	funType := c.info.Types[call.Fun]
 	args := make([]string, len(call.Args))
 	for i, arg := range call.Args {
 		args[i] = c.translateExpr(arg)
+		sig, isSig := funType.(*types.Signature)
+		if isSig && c.savedAsPointer(arg) {
+			if _, isInt := sig.Params().At(i).Type().Underlying().(*types.Interface); isInt {
+				args[i] += ".get()"
+			}
+		}
 	}
 	isVariadic, numParams, variadicType := getVariadicInfo(funType)
 	if isVariadic && !call.Ellipsis.IsValid() {
@@ -542,6 +594,13 @@ func getVariadicInfo(funType types.Type) (bool, int, types.Type) {
 		}
 	}
 	return false, 0, nil
+}
+
+func isUnderscore(expr ast.Expr) bool {
+	if id, isIdent := expr.(*ast.Ident); isIdent {
+		return id.Name == "_"
+	}
+	return false
 }
 
 type IsReadyVisitor struct {

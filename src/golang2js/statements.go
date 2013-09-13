@@ -258,37 +258,50 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt) {
 		c.translateStmt(s.Stmt)
 
 	case *ast.AssignStmt:
-		rhsExprs := make([]string, len(s.Rhs))
-		// rhsTypes := make([]types.Type, len(s.Rhs))
-		for i, rhs := range s.Rhs {
-			rhsExprs[i] = c.translateExpr(rhs)
-			// rhsTypes[i] = c.info.Types[rhs]
-		}
-		rhs := rhsExprs[0]
-		// completeRhsType := rhsTypes[0]
-		if len(rhsExprs) > 1 {
-			rhs = "[" + strings.Join(rhsExprs, ", ") + "]"
-			// completeRhsType = types.NewTuple(rhsTypes...)
-		}
+		rhsExprs := make([]string, len(s.Lhs))
+		// rhsTypes := make([]types.Type, len(s.Lhs))
 
-		if len(s.Lhs) > 1 {
-			c.Printf("_tuple = %s;", rhs)
+		switch {
+		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
+			lhsType := c.info.Types[s.Lhs[0]]
+			if _, isComp := s.Rhs[0].(*ast.CompositeLit); lhsType != nil && isComp {
+				c.info.Types[s.Rhs[0]] = lhsType
+			}
+			rhsExprs[0] = c.translateExpr(s.Rhs[0])
+			// rhsTypes[0] = c.info.Types[s.Rhs[0]]
+
+		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
+			// tuple := c.info.Types[s.Rhs[0]].(*types.Tuple)
+			for i := range s.Lhs {
+				rhsExprs[i] = fmt.Sprintf("_tuple[%d]", i)
+				// rhsTypes[i] = tuple.At(i).Type()
+			}
+			c.Printf("_tuple = %s;", c.translateExpr(s.Rhs[0]))
+
+		case len(s.Lhs) == len(s.Rhs):
+			parts := make([]string, len(s.Rhs))
+			for i, rhs := range s.Rhs {
+				lhsType := c.info.Types[s.Lhs[i]]
+				if _, isComp := s.Rhs[i].(*ast.CompositeLit); lhsType != nil && isComp {
+					c.info.Types[rhs] = lhsType
+				}
+				parts[i] = c.translateExpr(rhs)
+				rhsExprs[i] = fmt.Sprintf("_tuple[%d]", i)
+				// rhsTypes[i] = c.info.Types[rhs]
+			}
+			c.Printf("_tuple = [%s];", strings.Join(parts, ", "))
+
+		default:
+			panic("Invalid arity of AssignStmt.")
+
 		}
 
 		for i, lhs := range s.Lhs {
-			// lhsType := c.info.Types[l]
-
-			// rhsType := completeRhsType
-			if len(s.Lhs) > 1 {
-				if isUnderscore(lhs) {
-					continue
-				}
-				rhs = fmt.Sprintf("_tuple[%d]", i)
-				// rhsType = completeRhsType.(*types.Tuple).At(i)
-			}
-
+			rhs := rhsExprs[i]
 			if isUnderscore(lhs) {
-				c.Printf("%s;", rhs)
+				if len(s.Lhs) == 1 {
+					c.Printf("%s;", rhs)
+				}
 				continue
 			}
 

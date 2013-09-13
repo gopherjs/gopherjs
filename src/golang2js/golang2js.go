@@ -89,9 +89,10 @@ func main() {
 	var pkg *build.Package
 	if !fi.IsDir() {
 		pkg = &build.Package{
-			Name:    "main",
-			Dir:     path.Dir(os.Args[1]),
-			GoFiles: []string{path.Base(os.Args[1])},
+			Name:       "main",
+			ImportPath: "main",
+			Dir:        path.Dir(os.Args[1]),
+			GoFiles:    []string{path.Base(os.Args[1])},
 		}
 	}
 	if fi.IsDir() {
@@ -161,10 +162,11 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 	}
 
 	info := &types.Info{
-		Types:     make(map[ast.Expr]types.Type),
-		Values:    make(map[ast.Expr]exact.Value),
-		Objects:   make(map[*ast.Ident]types.Object),
-		Implicits: make(map[ast.Node]types.Object),
+		Types:      make(map[ast.Expr]types.Type),
+		Values:     make(map[ast.Expr]exact.Value),
+		Objects:    make(map[*ast.Ident]types.Object),
+		Implicits:  make(map[ast.Node]types.Object),
+		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 	}
 	typesPkg, err := config.Check(files[0].Name.Name, fileSet, files, info)
 	if err != nil {
@@ -230,11 +232,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 							c.Printf("%s._Pointer = function(getter, setter) { this.get = getter; this.set = setter; };", recvType.Obj().Name())
 						}
 						for _, fun := range functions[recvType] {
-							c.translateFunction(fun)
-							if hasPtrType {
-								params := c.translateParams(fun.Type)
-								c.Printf("%s._Pointer.prototype.%s = function(%s) { return this.get().%s(%s); };", recvType.Obj().Name(), fun.Name.Name, params, fun.Name.Name, params)
-							}
+							c.translateFunction(fun, hasPtrType)
 						}
 					}
 				}
@@ -251,7 +249,16 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 				c.Printf(`var %s = function() { throw new Error("Native function not implemented: %s"); };`, fun.Name, fun.Name)
 				continue
 			}
-			c.translateFunction(fun)
+			c.translateStmt(&ast.AssignStmt{
+				Tok: token.DEFINE,
+				Lhs: []ast.Expr{fun.Name},
+				Rhs: []ast.Expr{&ast.FuncLit{
+					Type: fun.Type,
+					Body: &ast.BlockStmt{
+						List: fun.Body.List,
+					},
+				}},
+			})
 		}
 
 		// constants and variables in dependency aware order
@@ -319,11 +326,15 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 func (c *PkgContext) translateSpec(spec ast.Spec) {
 	switch s := spec.(type) {
 	case *ast.ValueSpec:
-		defaultValue := c.zeroValue(c.info.Types[s.Type])
 		for i, name := range s.Names {
-			value := defaultValue
-			if i < len(s.Values) {
+			fieldType := c.info.Objects[name].Type()
+			var value string
+			switch {
+			case i < len(s.Values):
+				c.info.Types[s.Values[i]] = fieldType
 				value = c.translateExpr(s.Values[i])
+			default:
+				value = c.zeroValue(fieldType)
 			}
 			if isUnderscore(name) {
 				continue
@@ -412,48 +423,58 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 	}
 }
 
-func (c *PkgContext) translateFunction(fun *ast.FuncDecl) {
-	var lhs ast.Expr = fun.Name
-	tok := token.DEFINE
-	body := fun.Body.List
-	var recv *ast.Field
-	var recvType types.Type
-	if fun.Recv != nil && len(fun.Recv.List[0].Names) == 1 {
-		recv = fun.Recv.List[0]
-		recvType = c.info.Objects[recv.Names[0]].Type()
+func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
+	recv := fun.Recv.List[0]
+	recvType := c.info.Objects[recv.Names[0]].Type()
+	_, recvIsPtr := recvType.(*types.Pointer)
+
+	typeTarget := recv.Type
+	if recvIsPtr && hasPtrType {
+		typeTarget = &ast.SelectorExpr{
+			X:   recv.Type,
+			Sel: ast.NewIdent("_Pointer"),
+		}
 	}
-	if recv != nil {
-		lhs = &ast.SelectorExpr{
+
+	var this ast.Expr = &This{}
+	if _, isUnderlyingStruct := recvType.Underlying().(*types.Struct); isUnderlyingStruct {
+		this = &ast.StarExpr{X: this}
+	}
+	c.info.Types[this] = recvType
+
+	c.translateStmt(&ast.AssignStmt{
+		Tok: token.ASSIGN,
+		Lhs: []ast.Expr{&ast.SelectorExpr{
 			X: &ast.SelectorExpr{
-				X:   recv.Type,
+				X:   typeTarget,
 				Sel: ast.NewIdent("prototype"),
 			},
 			Sel: fun.Name,
-		}
-		tok = token.ASSIGN
-		var this ast.Expr = &This{}
-		if _, isUnderlyingStruct := recvType.Underlying().(*types.Struct); isUnderlyingStruct {
-			this = &ast.StarExpr{X: this}
-		}
-		c.info.Types[this] = recvType
-		body = append([]ast.Stmt{
-			&ast.AssignStmt{
-				Lhs: []ast.Expr{recv.Names[0]},
-				Tok: token.DEFINE,
-				Rhs: []ast.Expr{this},
-			},
-		}, body...)
-	}
-	c.translateStmt(&ast.AssignStmt{
-		Tok: tok,
-		Lhs: []ast.Expr{lhs},
+		}},
 		Rhs: []ast.Expr{&ast.FuncLit{
 			Type: fun.Type,
 			Body: &ast.BlockStmt{
-				List: body,
+				List: append([]ast.Stmt{
+					&ast.AssignStmt{
+						Lhs: []ast.Expr{recv.Names[0]},
+						Tok: token.DEFINE,
+						Rhs: []ast.Expr{this},
+					},
+				}, fun.Body.List...),
 			},
 		}},
 	})
+
+	if hasPtrType {
+		typeName := c.translateExpr(recv.Type)
+		params := c.translateParams(fun.Type)
+		if !recvIsPtr {
+			c.Printf("%s._Pointer.prototype.%s = function(%s) { return this.get().%s(%s); };", typeName, fun.Name.Name, params, fun.Name.Name, params)
+		}
+		if recvIsPtr {
+			c.Printf("%s.prototype.%s = function(%s) { var obj = this; return (new %s._Pointer(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, params, typeName, fun.Name.Name, params)
+		}
+	}
 }
 
 func (c *PkgContext) savedAsPointer(expr ast.Expr) bool {

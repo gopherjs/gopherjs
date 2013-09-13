@@ -213,15 +213,15 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		op := e.Op.String()
 		switch e.Op {
 		case token.AND:
+			target := c.translateExpr(e.X)
 			if c.savedAsPointer(e) {
-				name := e.X.(*ast.Ident).Name
 				pointerType := "_Pointer"
 				if named, isNamed := c.info.Types[e.X].(*types.Named); isNamed {
 					pointerType = named.Obj().Name() + "._Pointer"
 				}
-				return fmt.Sprintf("new %s(function() { return %s; }, function(v) { %s = v; })", pointerType, name, name)
+				return fmt.Sprintf("new %s(function() { return %s; }, function(v) { %s = v; })", pointerType, target, target)
 			}
-			op = ""
+			return target
 		case token.XOR:
 			op = "~"
 		}
@@ -285,6 +285,23 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s.%s(%s, %s)", slice, method, low, c.translateExpr(e.High))
 
 	case *ast.SelectorExpr:
+		sel := c.info.Selections[e]
+		if sel != nil && sel.Kind() == types.MethodVal {
+			methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
+			_, isStruct := sel.Recv().Underlying().(*types.Struct)
+			if !isStruct && !types.IsIdentical(sel.Recv(), methodsRecvType) {
+				fakeExpr := &ast.UnaryExpr{
+					Op: token.AND,
+					X:  e.X,
+				}
+				c.info.Types[fakeExpr] = methodsRecvType
+				return c.translateExpr(&ast.SelectorExpr{
+					X:   fakeExpr,
+					Sel: e.Sel,
+				})
+			}
+		}
+
 		return fmt.Sprintf("%s.%s", c.translateExpr(e.X), e.Sel.Name)
 
 	case *ast.CallExpr:
@@ -296,18 +313,17 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		fun := c.translateExpr(e.Fun)
 		args := c.translateArgs(e)
-
 		if _, isSliceType := funType.(*types.Slice); isSliceType {
 			return fmt.Sprintf("%s.toSlice()", args[0])
 		}
-		if sig, isSignature := funType.(*types.Signature); isSignature && sig.Params().Len() > 1 && len(args) == 1 {
+		sig, isSignature := funType.(*types.Signature)
+		if isSignature && sig.Params().Len() > 1 && len(args) == 1 {
 			argRefs := make([]string, sig.Params().Len())
 			for i := range argRefs {
 				argRefs[i] = fmt.Sprintf("_tuple[%d]", i)
 			}
 			return fmt.Sprintf("(_tuple = %s, %s(%s))", args[0], fun, strings.Join(argRefs, ", "))
 		}
-		_, isSignature := funType.(*types.Signature)
 		ident, isIdent := e.Fun.(*ast.Ident)
 		if !isSignature && !isBuiltin && isIdent {
 			return fmt.Sprintf("cast(%s, %s)", c.translateExpr(ident), args[0])
@@ -318,6 +334,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		t := c.info.Types[e]
 		if _, isStruct := t.Underlying().(*types.Struct); isStruct {
 			return fmt.Sprintf("(_obj = %s, %s)", c.translateExpr(e.X), c.cloneStruct([]string{"_obj"}, t.(*types.Named)))
+		}
+		if c.savedAsPointer(e.X) {
+			return c.translateExpr(e.X) + ".get()"
 		}
 		return c.translateExpr(e.X)
 

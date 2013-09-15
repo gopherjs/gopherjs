@@ -258,7 +258,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 						List: fun.Body.List,
 					},
 				}},
-			})
+			}, "")
 		}
 
 		// constants and variables in dependency aware order
@@ -463,7 +463,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 				}, fun.Body.List...),
 			},
 		}},
-	})
+	}, "")
 
 	if hasPtrType {
 		typeName := c.translateExpr(recv.Type)

@@ -44,6 +44,10 @@ Slice.prototype.toArray = function() {
   return this.array.slice(this.offset, this.offset + this.length);
 };
 
+String.prototype.len = function() {
+  return this.length;
+};
+
 String.prototype.toSlice = function() {
   var array = new Int32Array(this.length);
   for (var i = 0; i < this.length; i++) {
@@ -202,7 +206,7 @@ var cast = function(type, value) {
       return String.fromCharCode.apply(null, value.toArray());
     default:
       if (value.v === undefined) {
-        throw new Error("Can not cast to string.");
+        throw new Error("Can not cast to string: " + value.constructor);
       }
       return value.v;
     }
@@ -332,8 +336,6 @@ packages["syscall"] = {
   Stdout: 1,
   Stderr: 2,
   Write: function(fd, p) {
-    console.log(p);
-    throw new Error();
     process.stdout.write(String.fromCharCode.apply(null, p.toArray()));
     return [p.length, null]
   },

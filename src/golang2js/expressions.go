@@ -197,7 +197,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					c.Indent(func() {
 						c.Printf("callDeferred(_deferred);")
 						if namedResults != nil {
-							c.translateStmt(&ast.ReturnStmt{})
+							c.translateStmt(&ast.ReturnStmt{}, "")
 						}
 					})
 					c.Printf("}")
@@ -378,7 +378,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			switch tn.Name() {
 			case "bool":
 				return "Boolean"
-			case "int", "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "uintptr":
+			case "int", "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "uintptr", "byte", "rune":
 				return "Integer"
 			case "float32", "float64":
 				return "Float"

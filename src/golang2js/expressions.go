@@ -306,13 +306,27 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 	case *ast.CallExpr:
 		funType := c.info.Types[e.Fun]
-		builtin, isBuiltin := funType.(*types.Builtin)
-		if isBuiltin && builtin.Name() == "new" {
-			return c.zeroValue(c.info.Types[e].(*types.Pointer).Elem())
+		args := c.translateArgs(e)
+		if builtin, isBuiltin := funType.(*types.Builtin); isBuiltin {
+			switch builtin.Name() {
+			case "new":
+				return c.zeroValue(c.info.Types[e].(*types.Pointer).Elem())
+			case "make":
+				constructor := args[0]
+				args[0] = "undefined"
+				return fmt.Sprintf("new %s(%s)", constructor, strings.Join(args, ", "))
+			case "len", "cap":
+				return fmt.Sprintf("%s.%s()", args[0], builtin.Name())
+			case "panic":
+				return fmt.Sprintf("throw new GoError(%s)", args[0])
+			case "append", "copy", "recover", "print", "println":
+				return fmt.Sprintf("%s(%s)", builtin.Name(), strings.Join(args, ", "))
+			default:
+				panic(fmt.Sprintf("Unhandled builtin: %s\n", builtin.Name()))
+			}
 		}
 
 		fun := c.translateExpr(e.Fun)
-		args := c.translateArgs(e)
 		if _, isSliceType := funType.(*types.Slice); isSliceType {
 			return fmt.Sprintf("%s.toSlice()", args[0])
 		}
@@ -325,7 +339,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return fmt.Sprintf("(_tuple = %s, %s(%s))", args[0], fun, strings.Join(argRefs, ", "))
 		}
 		ident, isIdent := e.Fun.(*ast.Ident)
-		if !isSignature && !isBuiltin && isIdent {
+		if !isSignature && isIdent {
 			return fmt.Sprintf("cast(%s, %s)", c.translateExpr(ident), args[0])
 		}
 		return fmt.Sprintf("%s(%s)", fun, strings.Join(args, ", "))
@@ -374,24 +388,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		if e.Name == "_" {
 			panic("Tried to translate underscore identifier.")
 		}
-		if tn, isTypeName := c.info.Objects[e].(*types.TypeName); isTypeName {
-			switch tn.Name() {
-			case "bool":
-				return "Boolean"
-			case "int", "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "uintptr", "byte", "rune":
-				return "Integer"
-			case "float32", "float64":
-				return "Float"
-			case "complex64", "complex128":
-				return "Complex"
-			case "string":
-				return "String"
-			}
-		}
 		switch o := c.info.Objects[e].(type) {
 		case *types.Package:
 			return c.pkgVars[o.Path()]
-		case *types.Var, *types.Const, *types.TypeName, *types.Func:
+		case *types.Var, *types.Const, *types.Func:
 			if _, isBuiltin := o.Type().(*types.Builtin); isBuiltin {
 				return e.Name
 			}
@@ -401,6 +401,24 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				c.objectVars[o] = name
 			}
 			return name
+		case *types.TypeName:
+			if basic, isBasic := o.Type().(*types.Basic); isBasic {
+				switch {
+				case basic.Info()&types.IsInteger != 0:
+					return "Integer"
+				case basic.Info()&types.IsFloat != 0:
+					return "Float"
+				case basic.Info()&types.IsComplex != 0:
+					return "Complex"
+				case basic.Info()&types.IsBoolean != 0:
+					return "Boolean"
+				case basic.Info()&types.IsString != 0:
+					return "String"
+				default:
+					panic(fmt.Sprintf("Unhandled basic type: %v\n", basic))
+				}
+			}
+			return o.Name()
 		default:
 			panic(fmt.Sprintf("Unhandled object: %T\n", o))
 		}

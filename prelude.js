@@ -72,18 +72,6 @@ var Channel = function() {};
 
 var _Pointer = function(getter, setter) { this.get = getter; this.set = setter; };
 
-var len = function(v) {
-  return v.len();
-};
-
-var cap = function(v) {
-  return v.cap();
-};
-
-var make = function(constructor, arg1, arg2) {
-  return new constructor(undefined, arg1, arg2);
-};
-
 var copy = function(dst, src) {
   var n = Math.min(src.length, dst.length);
   for (var i = 0; i < n; i++) {
@@ -116,11 +104,13 @@ var append = function(slice, toAppend) {
   return newSlice;
 };
 
-var panic = function(value) {
-  var e = new Error(value);
-  e.value = value;
-  throw e;
+var GoError = function(value) {
+  this.value = value;
+  Error.captureStackTrace(this);
 };
+GoError.prototype.toString = function() {
+  return this.value;
+}
 
 var _error_stack = [];
 

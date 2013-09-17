@@ -173,17 +173,17 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 		return
 	}
 
-	// for _, importedPkg := range typesPkg.Imports() {
-	// 	if _, found := t.packages[importedPkg.Path()]; found {
-	// 		continue
-	// 	}
+	for _, importedPkg := range typesPkg.Imports() {
+		if _, found := t.packages[importedPkg.Path()]; found {
+			continue
+		}
 
-	// 	otherPkg, err := build.Import(importedPkg.Path(), pkg.Dir, 0)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	t.translatePackage(fileSet, otherPkg)
-	// }
+		otherPkg, err := build.Import(importedPkg.Path(), pkg.Dir, 0)
+		if err != nil {
+			panic(err)
+		}
+		t.translatePackage(fileSet, otherPkg)
+	}
 
 	c := &PkgContext{
 		pkg:          typesPkg,

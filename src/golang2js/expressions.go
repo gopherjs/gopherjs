@@ -306,7 +306,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 	case *ast.CallExpr:
 		args := c.translateArgs(e)
-		switch t := c.info.Types[e.Fun].(type) {
+		switch t := c.info.Types[e.Fun].Underlying().(type) {
 		case *types.Builtin:
 			switch t.Name() {
 			case "new":
@@ -327,20 +327,27 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Basic:
 			src := args[0]
 			srcType := c.info.Types[e.Args[0]]
-			if _, isNamed := srcType.(*types.Named); isNamed {
-				src = src + ".v"
-			}
+			_, scrTypeIsNamed := srcType.(*types.Named)
 			switch {
 			case t.Info()&types.IsInteger != 0:
+				if scrTypeIsNamed {
+					src = src + ".v"
+				}
 				if srcType.Underlying().(*types.Basic).Info()&types.IsFloat != 0 {
 					return fmt.Sprintf("Math.floor(%s)", src)
 				}
 				return src
 			case t.Info()&types.IsFloat != 0:
+				if scrTypeIsNamed {
+					src = src + ".v"
+				}
 				return src
 			case t.Info()&types.IsString != 0:
 				switch st := srcType.Underlying().(type) {
 				case *types.Basic:
+					if scrTypeIsNamed {
+						src = src + ".v"
+					}
 					if st.Info()&types.IsNumeric != 0 {
 						return fmt.Sprintf("String.fromCharCode(%s)", src)
 					}
@@ -350,6 +357,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				default:
 					panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 				}
+			case t.Info()&types.IsComplex != 0:
+				return src
 			default:
 				panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 			}

@@ -196,49 +196,6 @@ var newNumericArray = function(len) {
 
 var packages = {};
 
-packages["fmt"] = {
-  Print: print,
-  Println: print,
-  Printf: function(format, a) {
-    var array = a.toArray();
-    array.unshift(format);
-    console.log(array.join(" "));
-  },
-  Sprint: function(a) {
-    var parts = [];
-    for (var i = 0; i < a.length; i++) {
-      parts.push(a.get(i).toString());
-    }
-    return parts.join("");
-  },
-  Sprintf: function(format, a) {
-    return this.Sprint(a);
-  }
-};
-
-packages["os"] = {
-  Exit: process.exit,
-  Getenv: function(name) {
-    var value = process.env[name];
-    if (value === undefined) {
-      return "";
-    }
-    return value;
-  }
-};
-
-packages["errors"] = {
-  New: function(msg) {
-    return new Error(msg);
-  }
-};
-
-packages["utf8"] = {
-  DecodeRuneInString: function(str) {
-    return str.charCodeAt(0);
-  }
-};
-
 packages["reflect"] = {
   DeepEqual: function(a, b) {
     if (a === b) {
@@ -296,11 +253,19 @@ packages["syscall"] = {
   Stdin: 0,
   Stdout: 1,
   Stderr: 2,
+  Errno: function(v) { this.v = v; },
+  Exit: process.exit,
+  Getenv: function(key) {
+    var value = process.env[key];
+    if (value === undefined) {
+      return ["", false];
+    }
+    return value, true;
+  },
+  Signal: function() {},
   Write: function(fd, p) {
     process.stdout.write(String.fromCharCode.apply(null, p.toArray()));
     return [p.length, null]
-  },
-  Errno: function(v) { this.v = v; },
-  Signal: function() {}
+  }
 };
 

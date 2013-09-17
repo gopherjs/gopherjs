@@ -106,7 +106,7 @@ var append = function(slice, toAppend) {
 
 var GoError = function(value) {
   this.value = value;
-  Error.captureStackTrace(this);
+  Error.captureStackTrace(this, GoError);
 };
 GoError.prototype.toString = function() {
   return this.value;
@@ -184,35 +184,6 @@ var typeOf = function(value) {
 
 var typeAssertionFailed = function() {
   throw new Error("type assertion failed");
-};
-
-var cast = function(type, value) {
-  switch (type) {
-  case String:
-    switch (value.constructor) {
-    case Number:
-      return String.fromCharCode(value);
-    case Slice:
-      return String.fromCharCode.apply(null, value.toArray());
-    default:
-      if (value.v === undefined) {
-        throw new Error("Can not cast to string: " + value.constructor);
-      }
-      return value.v;
-    }
-  case Integer:
-    if (value.constructor !== Number) {
-      return Math.floor(value.v);
-    }
-    return Math.floor(value);
-  case Float:
-    if (value.constructor !== Number) {
-      return value.v;
-    }
-    return value;
-  default:
-    throw new Error("Can not cast.")
-  }
 };
 
 var newNumericArray = function(len) {

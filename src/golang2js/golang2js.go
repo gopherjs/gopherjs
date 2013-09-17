@@ -386,7 +386,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			}
 		case *types.Slice:
 			c.Printf("var %s = function() { Slice.apply(this, arguments); };", nt.Obj().Name())
-			c.Printf("var _keys = Object.keys(Slice.prototype); for(var i = 0; i < _keys.length; i++) { %s.prototype[_keys[i]] = Slice.prototype[_keys[i]]; }", nt.Obj().Name())
+			c.Printf("%s.prototype = Slice.prototype;", nt.Obj().Name())
 		case *types.Interface:
 			if t.MethodSet().Len() == 0 {
 				c.Printf("var %s = function(t) { return true };", nt.Obj().Name())

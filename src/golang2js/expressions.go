@@ -305,44 +305,70 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s.%s", c.translateExpr(e.X), e.Sel.Name)
 
 	case *ast.CallExpr:
-		funType := c.info.Types[e.Fun]
 		args := c.translateArgs(e)
-		if builtin, isBuiltin := funType.(*types.Builtin); isBuiltin {
-			switch builtin.Name() {
+		switch t := c.info.Types[e.Fun].(type) {
+		case *types.Builtin:
+			switch t.Name() {
 			case "new":
 				return c.zeroValue(c.info.Types[e].(*types.Pointer).Elem())
 			case "make":
 				constructor := args[0]
 				args[0] = "undefined"
 				return fmt.Sprintf("new %s(%s)", constructor, strings.Join(args, ", "))
-			case "len", "cap":
-				return fmt.Sprintf("%s.%s()", args[0], builtin.Name())
+			case "len", "cap", "real", "imag":
+				return fmt.Sprintf("%s.%s()", args[0], t.Name())
 			case "panic":
 				return fmt.Sprintf("throw new GoError(%s)", args[0])
-			case "append", "copy", "recover", "print", "println":
-				return fmt.Sprintf("%s(%s)", builtin.Name(), strings.Join(args, ", "))
+			case "append", "copy", "recover", "complex", "print", "println":
+				return fmt.Sprintf("%s(%s)", t.Name(), strings.Join(args, ", "))
 			default:
-				panic(fmt.Sprintf("Unhandled builtin: %s\n", builtin.Name()))
+				panic(fmt.Sprintf("Unhandled builtin: %s\n", t.Name()))
 			}
-		}
-
-		fun := c.translateExpr(e.Fun)
-		if _, isSliceType := funType.(*types.Slice); isSliceType {
+		case *types.Basic:
+			src := args[0]
+			srcType := c.info.Types[e.Args[0]]
+			if _, isNamed := srcType.(*types.Named); isNamed {
+				src = src + ".v"
+			}
+			switch {
+			case t.Info()&types.IsInteger != 0:
+				if srcType.Underlying().(*types.Basic).Info()&types.IsFloat != 0 {
+					return fmt.Sprintf("Math.floor(%s)", src)
+				}
+				return src
+			case t.Info()&types.IsFloat != 0:
+				return src
+			case t.Info()&types.IsString != 0:
+				switch st := srcType.Underlying().(type) {
+				case *types.Basic:
+					if st.Info()&types.IsNumeric != 0 {
+						return fmt.Sprintf("String.fromCharCode(%s)", src)
+					}
+					return src
+				case *types.Slice:
+					return fmt.Sprintf("String.fromCharCode.apply(null, %s.toArray())", src)
+				default:
+					panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
+				}
+			default:
+				panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
+			}
+		case *types.Slice:
 			return fmt.Sprintf("%s.toSlice()", args[0])
-		}
-		sig, isSignature := funType.(*types.Signature)
-		if isSignature && sig.Params().Len() > 1 && len(args) == 1 {
-			argRefs := make([]string, sig.Params().Len())
-			for i := range argRefs {
-				argRefs[i] = fmt.Sprintf("_tuple[%d]", i)
+		case *types.Interface, *types.Pointer:
+			return args[0]
+		case *types.Signature:
+			if t.Params().Len() > 1 && len(args) == 1 {
+				argRefs := make([]string, t.Params().Len())
+				for i := range argRefs {
+					argRefs[i] = fmt.Sprintf("_tuple[%d]", i)
+				}
+				return fmt.Sprintf("(_tuple = %s, %s(%s))", args[0], c.translateExpr(e.Fun), strings.Join(argRefs, ", "))
 			}
-			return fmt.Sprintf("(_tuple = %s, %s(%s))", args[0], fun, strings.Join(argRefs, ", "))
+			return fmt.Sprintf("%s(%s)", c.translateExpr(e.Fun), strings.Join(args, ", "))
+		default:
+			panic(fmt.Sprintf("Unhandled call: %T\n", t))
 		}
-		ident, isIdent := e.Fun.(*ast.Ident)
-		if !isSignature && isIdent {
-			return fmt.Sprintf("cast(%s, %s)", c.translateExpr(ident), args[0])
-		}
-		return fmt.Sprintf("%s(%s)", fun, strings.Join(args, ", "))
 
 	case *ast.StarExpr:
 		t := c.info.Types[e]

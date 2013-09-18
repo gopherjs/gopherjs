@@ -184,11 +184,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 		switch {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
-			lhsType := c.info.Types[s.Lhs[0]]
-			if _, isComp := s.Rhs[0].(*ast.CompositeLit); lhsType != nil && isComp {
-				c.info.Types[s.Rhs[0]] = lhsType
-			}
-			rhsExprs[0] = c.translateExpr(s.Rhs[0])
+			rhsExprs[0] = c.translateExprToNamed(s.Rhs[0])
 			// rhsTypes[0] = c.info.Types[s.Rhs[0]]
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
@@ -197,16 +193,12 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				rhsExprs[i] = fmt.Sprintf("_tuple[%d]", i)
 				// rhsTypes[i] = tuple.At(i).Type()
 			}
-			c.Printf("_tuple = %s;", c.translateExpr(s.Rhs[0]))
+			c.Printf("_tuple = %s;", c.translateExprToNamed(s.Rhs[0]))
 
 		case len(s.Lhs) == len(s.Rhs):
 			parts := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
-				lhsType := c.info.Types[s.Lhs[i]]
-				if _, isComp := s.Rhs[i].(*ast.CompositeLit); lhsType != nil && isComp {
-					c.info.Types[rhs] = lhsType
-				}
-				parts[i] = c.translateExpr(rhs)
+				parts[i] = c.translateExprToNamed(rhs)
 				rhsExprs[i] = fmt.Sprintf("_tuple[%d]", i)
 				// rhsTypes[i] = c.info.Types[rhs]
 			}
@@ -253,6 +245,12 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.IncDecStmt:
 		c.Printf("%s%s;", c.translateExpr(s.X), s.Tok)
+
+	case *ast.SelectStmt:
+		c.Printf(`throw new GoError("Select statement not supported.");`)
+
+	case *ast.GoStmt:
+		c.Printf(`throw new GoError("Go statement not supported.");`)
 
 	case nil:
 		// skip

@@ -117,13 +117,7 @@ func main() {
 		writer:   out,
 		packages: make(map[string]*PkgContext),
 	}
-	t.packages["math"] = nil
 	t.packages["reflect"] = nil
-	t.packages["runtime"] = nil
-	t.packages["syscall"] = nil
-	t.packages["sync"] = nil
-	t.packages["sync/atomic"] = nil
-	t.packages["time"] = nil
 	t.translatePackage(fileSet, pkg)
 }
 
@@ -190,7 +184,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 		info:         info,
 		pkgVars:      make(map[string]string),
 		objectVars:   make(map[types.Object]string),
-		usedVarNames: []string{"delete", "false", "new", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Map", "Slice", "String"},
+		usedVarNames: []string{"delete", "false", "implements", "in", "new", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Map", "Slice", "String"},
 		writer:       t.writer,
 	}
 	t.packages[pkg.ImportPath] = c
@@ -246,7 +240,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 				hasInit = true
 			}
 			if fun.Body == nil {
-				c.Printf(`var %s = function() { throw new Error("Native function not implemented: %s"); };`, fun.Name, fun.Name)
+				c.Printf(`var %s = function() { throw new GoError("Native function not implemented: %s"); };`, fun.Name, fun.Name)
 				continue
 			}
 			c.translateStmt(&ast.AssignStmt{
@@ -271,7 +265,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 						s := spec.(*ast.ValueSpec)
 						for i, name := range s.Names {
 							var values []ast.Expr
-							if len(s.Values) != 0 {
+							if i < len(s.Values) {
 								values = []ast.Expr{s.Values[i]}
 							}
 							specs = append(specs, &ast.ValueSpec{
@@ -306,6 +300,8 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 			}
 		}
 
+		c.Write([]byte(natives[pkg.ImportPath]))
+
 		if hasInit {
 			c.Printf("init();")
 		}
@@ -331,8 +327,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			var value string
 			switch {
 			case i < len(s.Values):
-				c.info.Types[s.Values[i]] = fieldType
-				value = c.translateExpr(s.Values[i])
+				value = c.translateExprToNamed(s.Values[i])
 			default:
 				value = c.zeroValue(fieldType)
 			}

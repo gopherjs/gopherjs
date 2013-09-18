@@ -234,38 +234,3 @@ packages["reflect"] = {
   flag: function() {},
   Value: function() {},  
 };
-
-packages["runtime"] = {
-  SetFinalizer: function() {}
-};
-
-packages["sync"] = {
-  Mutex: function() {}
-};
-packages["sync"].Mutex.prototype.Lock = function() {};
-packages["sync"].Mutex.prototype.Unlock = function() {};
-
-packages["sync/atomic"] = {
-  StoreInt32: function() {}
-}
-
-packages["syscall"] = {
-  Stdin: 0,
-  Stdout: 1,
-  Stderr: 2,
-  Errno: function(v) { this.v = v; },
-  Exit: process.exit,
-  Getenv: function(key) {
-    var value = process.env[key];
-    if (value === undefined) {
-      return ["", false];
-    }
-    return value, true;
-  },
-  Signal: function() {},
-  Write: function(fd, p) {
-    process.stdout.write(String.fromCharCode.apply(null, p.toArray()));
-    return [p.length, null]
-  }
-};
-

@@ -60,7 +60,7 @@ func (c *PkgContext) Write(b []byte) (int, error) {
 }
 
 func (c *PkgContext) Printf(format string, values ...interface{}) {
-	c.Write([]byte(strings.Repeat("  ", c.indentation)))
+	c.Write([]byte(strings.Repeat("\t", c.indentation)))
 	fmt.Fprintf(c, format, values...)
 	c.Write([]byte{'\n'})
 }

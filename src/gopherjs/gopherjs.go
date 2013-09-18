@@ -106,18 +106,13 @@ func main() {
 	fileSet := token.NewFileSet()
 	out := os.Stdout
 
-	prelude, err := os.Open("prelude.js")
-	if err != nil {
-		panic(err)
-	}
-	io.Copy(out, prelude)
-	prelude.Close()
-
 	t := &Translator{
 		writer:   out,
 		packages: make(map[string]*PkgContext),
 	}
 	t.packages["reflect"] = nil
+	out.WriteString(strings.TrimSpace(prelude))
+	out.WriteString("\n")
 	t.translatePackage(fileSet, pkg)
 }
 

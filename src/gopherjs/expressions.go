@@ -310,11 +310,31 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				constructor := args[0]
 				args[0] = "undefined"
 				return fmt.Sprintf("new %s(%s)", constructor, strings.Join(args, ", "))
-			case "len", "cap", "real", "imag":
-				return fmt.Sprintf("%s.%s()", args[0], t.Name())
+			case "len":
+				arg := c.translateExprToBasic(e.Args[0])
+				argType := c.info.Types[e.Args[0]]
+				switch argt := argType.Underlying().(type) {
+				case *types.Basic, *types.Array, *types.Slice:
+					return fmt.Sprintf("%s.length", arg)
+				case *types.Map:
+					return fmt.Sprintf("Object.keys(%s.data).length", arg)
+				default:
+					panic(fmt.Sprintf("Unhandled len type: %T\n", argt))
+				}
+			case "cap":
+				arg := c.translateExprToBasic(e.Args[0])
+				argType := c.info.Types[e.Args[0]]
+				switch argt := argType.Underlying().(type) {
+				case *types.Array:
+					return fmt.Sprintf("%s.length", arg)
+				case *types.Slice:
+					return fmt.Sprintf("%s.array.length", arg)
+				default:
+					panic(fmt.Sprintf("Unhandled cap type: %T\n", argt))
+				}
 			case "panic":
 				return fmt.Sprintf("throw new GoError(%s)", args[0])
-			case "append", "copy", "delete", "recover", "complex", "print", "println":
+			case "append", "copy", "delete", "real", "imag", "recover", "complex", "print", "println":
 				return fmt.Sprintf("%s(%s)", t.Name(), strings.Join(args, ", "))
 			default:
 				panic(fmt.Sprintf("Unhandled builtin: %s\n", t.Name()))

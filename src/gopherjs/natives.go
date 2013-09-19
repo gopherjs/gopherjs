@@ -17,14 +17,6 @@ var Slice = function(data, length, capacity) {
 	}
 };
 
-Slice.prototype.len = function() {
-	return this.length;
-};
-
-Slice.prototype.cap = function() {
-	return this.array.length;
-};
-
 Slice.prototype.get = function(index) {
 	return this.array[this.offset + index];
 };
@@ -47,10 +39,6 @@ Slice.prototype.toArray = function() {
 	return this.array.slice(this.offset, this.offset + this.length);
 };
 
-String.prototype.len = function() {
-	return this.length;
-};
-
 String.prototype.toSlice = function() {
 	var array = new Int32Array(this.length);
 	for (var i = 0; i < this.length; i++) {
@@ -61,10 +49,6 @@ String.prototype.toSlice = function() {
 
 var Map = function(data, capacity) {
 	this.data = data;
-};
-
-Map.prototype.len = function() {
-	return Object.keys(this.data).length;
 };
 
 var Interface = function(value) {

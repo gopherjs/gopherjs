@@ -337,9 +337,6 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 		switch t := nt.Underlying().(type) {
 		case *types.Basic:
 			c.Printf("var %s = function(v) { this.v = v; };", nt.Obj().Name())
-			if t.Info()&types.IsString != 0 {
-				c.Printf("%s.prototype.len = function() { return this.v.length; };", nt.Obj().Name())
-			}
 		case *types.Struct:
 			params := make([]string, t.NumFields())
 			for i := 0; i < t.NumFields(); i++ {

@@ -111,7 +111,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Indent(func() {
 			if value != "" {
 				switch t := c.info.Types[s.X].Underlying().(type) {
-				case *types.Array:
+				case *types.Array, *types.Map:
 					c.Printf("var %s = %s[%s];", value, refVar, iVar)
 				case *types.Slice:
 					c.Printf("var %s = %s.get(%s);", value, refVar, iVar)
@@ -246,11 +246,8 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 	case *ast.IncDecStmt:
 		c.Printf("%s%s;", c.translateExpr(s.X), s.Tok)
 
-	case *ast.SelectStmt:
-		c.Printf(`throw new GoError("Select statement not supported.");`)
-
-	case *ast.GoStmt:
-		c.Printf(`throw new GoError("Go statement not supported.");`)
+	case *ast.SelectStmt, *ast.GoStmt, *ast.SendStmt:
+		c.Printf(`throw new GoError("Statement not supported: %T");`, s)
 
 	case nil:
 		// skip

@@ -163,6 +163,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				if e.Type.Results != nil && e.Type.Results.List[0].Names != nil {
 					for _, result := range e.Type.Results.List {
 						for _, name := range result.Names {
+							if isUnderscore(name) {
+								namedResults = append(namedResults, c.newVarName("result"))
+								continue
+							}
 							namedResults = append(namedResults, c.translateExpr(name))
 						}
 					}

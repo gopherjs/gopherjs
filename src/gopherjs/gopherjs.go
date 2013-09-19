@@ -335,7 +335,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 	case *ast.TypeSpec:
 		nt := c.info.Objects[s.Name].Type().(*types.Named)
 		switch t := nt.Underlying().(type) {
-		case *types.Basic:
+		case *types.Basic, *types.Array, *types.Map, *types.Signature:
 			c.Printf("var %s = function(v) { this.v = v; };", nt.Obj().Name())
 		case *types.Struct:
 			params := make([]string, t.NumFields())
@@ -477,6 +477,10 @@ func (c *PkgContext) translateParams(t *ast.FuncType) string {
 	params := make([]string, 0)
 	for _, param := range t.Params.List {
 		for _, ident := range param.Names {
+			if isUnderscore(ident) {
+				params = append(params, c.newVarName("param"))
+				continue
+			}
 			params = append(params, c.translateExpr(ident))
 		}
 	}

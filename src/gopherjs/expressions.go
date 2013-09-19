@@ -419,8 +419,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			panic("Tried to translate underscore identifier.")
 		}
 		switch o := c.info.Objects[e].(type) {
-		case *types.Package:
-			return c.pkgVars[o.Path()]
+		case *types.PkgName:
+			return c.pkgVars[o.Pkg().Path()]
 		case *types.Var, *types.Const, *types.Func:
 			if _, isBuiltin := o.Type().(*types.Builtin); isBuiltin {
 				return e.Name

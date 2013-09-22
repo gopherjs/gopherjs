@@ -146,9 +146,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return fmt.Sprintf("{ %s }", strings.Join(elements, ", "))
 		case *types.Named:
 			if s, isSlice := t.Underlying().(*types.Slice); isSlice {
-				return fmt.Sprintf("new %s(%s)", c.TypeName(t), createListComposite(s.Elem(), elements))
+				return fmt.Sprintf("new %s(%s)", c.typeName(t), createListComposite(s.Elem(), elements))
 			}
-			return fmt.Sprintf("new %s(%s)", c.TypeName(t), strings.Join(elements, ", "))
+			return fmt.Sprintf("new %s(%s)", c.typeName(t), strings.Join(elements, ", "))
 		default:
 			fmt.Println(e.Type, elements)
 			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", c.info.Types[e]))
@@ -212,7 +212,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		switch e.Op {
 		case token.AND:
 			target := c.translateExpr(e.X)
-			if c.savedAsPointer(e) {
+			if _, isStruct := c.info.Types[e.X].Underlying().(*types.Struct); !isStruct {
 				pointerType := "_Pointer"
 				if named, isNamed := c.info.Types[e.X].(*types.Named); isNamed {
 					pointerType = named.Obj().Name() + "._Pointer"
@@ -284,20 +284,25 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 	case *ast.SelectorExpr:
 		sel := c.info.Selections[e]
-		if sel != nil && sel.Kind() == types.MethodVal {
-			methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
-			_, pointerExpected := methodsRecvType.(*types.Pointer)
-			_, isStruct := sel.Recv().Underlying().(*types.Struct)
-			if pointerExpected && !isStruct && !types.IsIdentical(sel.Recv(), methodsRecvType) {
-				fakeExpr := &ast.UnaryExpr{
-					Op: token.AND,
-					X:  e.X,
+		if sel != nil {
+			switch sel.Kind() {
+			case types.MethodVal:
+				methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
+				_, pointerExpected := methodsRecvType.(*types.Pointer)
+				_, isStruct := sel.Recv().Underlying().(*types.Struct)
+				if pointerExpected && !isStruct && !types.IsIdentical(sel.Recv(), methodsRecvType) {
+					fakeExpr := &ast.UnaryExpr{
+						Op: token.AND,
+						X:  e.X,
+					}
+					c.info.Types[fakeExpr] = methodsRecvType
+					return c.translateExpr(&ast.SelectorExpr{ // TODO
+						X:   fakeExpr,
+						Sel: e.Sel,
+					})
 				}
-				c.info.Types[fakeExpr] = methodsRecvType
-				return c.translateExpr(&ast.SelectorExpr{ // TODO
-					X:   fakeExpr,
-					Sel: e.Sel,
-				})
+			case types.MethodExpr:
+				return fmt.Sprintf("%s.prototype.%s", c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
 			}
 		}
 
@@ -307,14 +312,15 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		funType := c.info.Types[e.Fun]
 		switch t := funType.Underlying().(type) {
 		case *types.Builtin:
-			args := c.translateArgs(e)
 			switch t.Name() {
 			case "new":
 				return c.zeroValue(c.info.Types[e].(*types.Pointer).Elem())
 			case "make":
-				constructor := args[0]
-				args[0] = "undefined"
-				return fmt.Sprintf("new %s(%s)", constructor, strings.Join(args, ", "))
+				args := []string{"undefined"}
+				for _, arg := range e.Args[1:] {
+					args = append(args, c.translateExpr(arg))
+				}
+				return fmt.Sprintf("new %s(%s)", c.typeName(c.info.Types[e.Args[0]]), strings.Join(args, ", "))
 			case "len":
 				arg := c.translateExpr(e.Args[0])
 				argType := c.info.Types[e.Args[0]]
@@ -338,9 +344,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					panic(fmt.Sprintf("Unhandled cap type: %T\n", argt))
 				}
 			case "panic":
-				return fmt.Sprintf("throw new GoError(%s)", args[0])
+				return fmt.Sprintf("throw new GoError(%s)", c.translateExpr(e.Args[0]))
 			case "append", "copy", "delete", "real", "imag", "recover", "complex", "print", "println":
-				return fmt.Sprintf("%s(%s)", t.Name(), strings.Join(args, ", "))
+				return fmt.Sprintf("%s(%s)", t.Name(), strings.Join(c.translateArgs(e), ", "))
 			default:
 				panic(fmt.Sprintf("Unhandled builtin: %s\n", t.Name()))
 			}
@@ -404,24 +410,22 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		if _, isStruct := t.Underlying().(*types.Struct); isStruct {
 			return fmt.Sprintf("(_obj = %s, %s)", c.translateExpr(e.X), c.cloneStruct([]string{"_obj"}, t.(*types.Named)))
 		}
-		if c.savedAsPointer(e.X) {
-			return c.translateExpr(e.X) + ".get()"
-		}
-		return c.translateExpr(e.X)
+		return c.translateExpr(e.X) + ".get()"
 
 	case *ast.TypeAssertExpr:
 		if e.Type == nil {
 			return c.translateExpr(e.X)
 		}
-		check := fmt.Sprintf("typeOf(_obj) === %s", c.translateExpr(e.Type))
+		t := c.info.Types[e.Type]
+		check := fmt.Sprintf("typeOf(_obj) === %s", c.typeName(t))
 		if e.Type != nil {
-			if _, isInterface := c.info.Types[e.Type].Underlying().(*types.Interface); isInterface {
-				check = fmt.Sprintf("%s(typeOf(_obj))", c.translateExpr(e.Type))
+			if _, isInterface := t.Underlying().(*types.Interface); isInterface {
+				check = fmt.Sprintf("%s(typeOf(_obj))", c.typeName(t))
 			}
 		}
 		value := "_obj"
-		_, isNamed := c.info.Types[e.Type].(*types.Named)
-		_, isUnderlyingBasic := c.info.Types[e.Type].Underlying().(*types.Basic)
+		_, isNamed := t.(*types.Named)
+		_, isUnderlyingBasic := t.Underlying().(*types.Basic)
 		if isNamed && isUnderlyingBasic {
 			value += ".v"
 		}
@@ -429,21 +433,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return fmt.Sprintf("(_obj = %s, %s ? [%s, true] : [%s, false])", c.translateExpr(e.X), check, value, c.zeroValue(c.info.Types[e.Type]))
 		}
 		return fmt.Sprintf("(_obj = %s, %s ? %s : typeAssertionFailed())", c.translateExpr(e.X), check, value)
-
-	case *ast.ArrayType:
-		return "Slice"
-
-	case *ast.MapType:
-		return "Map"
-
-	case *ast.InterfaceType:
-		return "Interface"
-
-	case *ast.ChanType:
-		return "Channel"
-
-	case *ast.FuncType:
-		return "Function"
 
 	case *ast.Ident:
 		if e.Name == "_" {
@@ -462,24 +451,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				c.objectVars[o] = name
 			}
 			return name
-		case *types.TypeName:
-			if basic, isBasic := o.Type().(*types.Basic); isBasic {
-				switch {
-				case basic.Info()&types.IsInteger != 0:
-					return "Integer"
-				case basic.Info()&types.IsFloat != 0:
-					return "Float"
-				case basic.Info()&types.IsComplex != 0:
-					return "Complex"
-				case basic.Info()&types.IsBoolean != 0:
-					return "Boolean"
-				case basic.Info()&types.IsString != 0:
-					return "String"
-				default:
-					panic(fmt.Sprintf("Unhandled basic type: %v\n", basic))
-				}
-			}
-			return o.Name()
 		case nil:
 			return e.Name
 		default:
@@ -505,7 +476,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		_, isUnderlyingBasic := exprType.Underlying().(*types.Basic)
 		_, interfaceIsDesired := desiredType.Underlying().(*types.Interface)
 		if isNamed && isUnderlyingBasic && interfaceIsDesired {
-			return fmt.Sprintf("new %s(%s)", c.TypeName(named), c.translateExpr(expr))
+			return fmt.Sprintf("new %s(%s)", c.typeName(named), c.translateExpr(expr))
 		}
 	}
 	return c.translateExpr(expr)
@@ -523,7 +494,7 @@ func (c *PkgContext) cloneStruct(srcPath []string, t *types.Named) string {
 		}
 		fields[i] = strings.Join(fieldPath, ".")
 	}
-	return fmt.Sprintf("new %s(%s)", c.TypeName(t), strings.Join(fields, ", "))
+	return fmt.Sprintf("new %s(%s)", c.typeName(t), strings.Join(fields, ", "))
 }
 
 type HasDeferVisitor struct {

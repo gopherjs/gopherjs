@@ -421,15 +421,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 	ptr, isPointer := recvType.(*types.Pointer)
 	_, isUnderlyingBasic := recvType.Underlying().(*types.Basic)
 
-	typeName := ""
-	if !isPointer {
-		typeName = c.TypeName(recvType.(*types.Named))
-	}
-	if isPointer {
-		typeName = c.TypeName(ptr.Elem().(*types.Named))
-	}
-
-	typeTarget := typeName
+	typeTarget := c.typeName(recvType)
 	if isPointer && hasPtrType {
 		typeTarget += "._Pointer"
 	}
@@ -468,6 +460,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 	if hasPtrType {
 		params := c.translateParams(fun.Type)
 		if !isPointer {
+			typeName := c.typeName(recvType)
 			value := "this.get()"
 			if isUnderlyingBasic {
 				value = fmt.Sprintf("new %s(%s)", typeName, value)
@@ -475,6 +468,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 			c.Printf("%s._Pointer.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, params, value, fun.Name.Name, params)
 		}
 		if isPointer {
+			typeName := c.typeName(ptr.Elem())
 			value := "this"
 			if _, isUnderlyingBasic := ptr.Elem().Underlying().(*types.Basic); isUnderlyingBasic {
 				value = "this.v"
@@ -482,15 +476,6 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 			c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new %s._Pointer(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, params, value, typeName, fun.Name.Name, params)
 		}
 	}
-}
-
-func (c *PkgContext) savedAsPointer(expr ast.Expr) bool {
-	t := c.info.Types[expr].Underlying()
-	if ptr, isPtr := t.(*types.Pointer); isPtr {
-		_, isStruct := ptr.Elem().Underlying().(*types.Struct)
-		return !isStruct
-	}
-	return false
 }
 
 func (c *PkgContext) translateParams(t *ast.FuncType) string {
@@ -553,20 +538,55 @@ func (c *PkgContext) zeroValue(t types.Type) string {
 			for i := range zeros {
 				zeros[i] = c.zeroValue(s.Field(i).Type())
 			}
-			return fmt.Sprintf("new %s(%s)", c.TypeName(t), strings.Join(zeros, ", "))
+			return fmt.Sprintf("new %s(%s)", c.typeName(t), strings.Join(zeros, ", "))
 		}
-		return fmt.Sprintf("new %s(%s)", c.TypeName(t), c.zeroValue(t.Underlying()))
+		return fmt.Sprintf("new %s(%s)", c.typeName(t), c.zeroValue(t.Underlying()))
 	}
 	return "null"
 }
 
-func (c *PkgContext) TypeName(t *types.Named) string {
-	name := t.Obj().Name()
-	objPkg := t.Obj().Pkg()
-	if objPkg != nil && objPkg != c.pkg {
-		name = c.pkgVars[objPkg.Path()] + "." + name
+func (c *PkgContext) typeName(ty types.Type) string {
+	switch t := ty.(type) {
+	case *types.Basic:
+		switch {
+		case t.Info()&types.IsInteger != 0:
+			return "Integer"
+		case t.Info()&types.IsFloat != 0:
+			return "Float"
+		case t.Info()&types.IsComplex != 0:
+			return "Complex"
+		case t.Info()&types.IsBoolean != 0:
+			return "Boolean"
+		case t.Info()&types.IsString != 0:
+			return "String"
+		case t.Kind() == types.UntypedNil:
+			return "null"
+		default:
+			panic(fmt.Sprintf("Unhandled basic type: %v\n", t))
+		}
+	case *types.Named:
+		objPkg := t.Obj().Pkg()
+		if objPkg != nil && objPkg != c.pkg {
+			return c.pkgVars[objPkg.Path()] + "." + t.Obj().Name()
+		}
+		return t.Obj().Name()
+	case *types.Pointer:
+		return c.typeName(t.Elem())
+	case *types.Array:
+		return "Array"
+	case *types.Slice:
+		return "Slice"
+	case *types.Map:
+		return "Map"
+	case *types.Interface:
+		return "Interface"
+	case *types.Chan:
+		return "Channel"
+	case *types.Signature:
+		return "Function"
+	default:
+		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
-	return name
 }
 
 // func toTypedArray(t *types.Basic) string {

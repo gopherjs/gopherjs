@@ -44,7 +44,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			c.Printf("var %s = %s;", refVar, c.translateExpr(s.Tag))
 			condPrefix = refVar + " === "
 		}
-		c.translateSwitch(s.Body.List, condPrefix, label)
+		c.translateSwitch(s.Body.List, false, condPrefix, label)
 
 	case *ast.TypeSwitchStmt:
 		c.translateStmt(s.Init, "")
@@ -66,7 +66,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		typeVar := c.newVarName("_type")
 		c.Printf("var %s = typeOf(%s);", typeVar, expr)
 		condPrefix := typeVar + " === "
-		c.translateSwitch(s.Body.List, condPrefix, label)
+		c.translateSwitch(s.Body.List, true, condPrefix, label)
 
 	case *ast.ForStmt:
 		c.translateStmt(s.Init, "")
@@ -253,7 +253,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 	}
 }
 
-func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, condPrefix string, label string) {
+func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, typeSwitch bool, condPrefix string, label string) {
 	if len(caseClauses) == 0 {
 		return
 	}
@@ -286,6 +286,10 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, condPrefix string, 
 			}
 			conds := make([]string, len(caseClause.List))
 			for i, cond := range caseClause.List {
+				if typeSwitch {
+					conds[i] = condPrefix + c.typeName(c.info.Types[cond])
+					continue
+				}
 				conds[i] = condPrefix + c.translateExpr(cond)
 			}
 			c.Printf("if (%s) {", strings.Join(conds, " || "))

@@ -180,27 +180,22 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.AssignStmt:
 		rhsExprs := make([]string, len(s.Lhs))
-		// rhsTypes := make([]types.Type, len(s.Lhs))
 
 		switch {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
-			rhsExprs[0] = c.translateExprToInterface(s.Rhs[0])
-			// rhsTypes[0] = c.info.Types[s.Rhs[0]]
+			rhsExprs[0] = c.translateExprToType(s.Rhs[0], c.info.Types[s.Lhs[0]])
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
-			// tuple := c.info.Types[s.Rhs[0]].(*types.Tuple)
 			for i := range s.Lhs {
 				rhsExprs[i] = fmt.Sprintf("_tuple[%d]", i)
-				// rhsTypes[i] = tuple.At(i).Type()
 			}
-			c.Printf("_tuple = %s;", c.translateExprToInterface(s.Rhs[0]))
+			c.Printf("_tuple = %s;", c.translateExpr(s.Rhs[0])) // TODO translateExprToType
 
 		case len(s.Lhs) == len(s.Rhs):
 			parts := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
-				parts[i] = c.translateExprToInterface(rhs)
+				parts[i] = c.translateExprToType(rhs, c.info.Types[s.Lhs[i]])
 				rhsExprs[i] = fmt.Sprintf("_tuple[%d]", i)
-				// rhsTypes[i] = c.info.Types[rhs]
 			}
 			c.Printf("_tuple = [%s];", strings.Join(parts, ", "))
 

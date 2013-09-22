@@ -322,7 +322,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			var value string
 			switch {
 			case i < len(s.Values):
-				value = c.translateExprToInterface(s.Values[i])
+				value = c.translateExprToType(s.Values[i], fieldType)
 			default:
 				value = c.zeroValue(fieldType)
 			}
@@ -355,6 +355,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				if field.Anonymous() {
 					fieldType := field.Type()
 					_, isPointer := fieldType.(*types.Pointer)
+					_, isUnderlyingBasic := fieldType.Underlying().(*types.Basic)
 					_, isUnderlyingInterface := fieldType.Underlying().(*types.Interface)
 					if !isPointer && !isUnderlyingInterface {
 						fieldType = types.NewPointer(fieldType) // strange, seems like a bug in go/types
@@ -367,7 +368,11 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 						for k := range params {
 							params[k] = sig.Params().At(k).Name()
 						}
-						c.Printf("%s.prototype.%s = function(%s) { return this.%s.%s(%s); };", nt.Obj().Name(), name, strings.Join(params, ", "), field.Name(), name, strings.Join(params, ", "))
+						value := "this." + field.Name()
+						if isUnderlyingBasic {
+							value = fmt.Sprintf("new %s(%s)", field.Name(), value)
+						}
+						c.Printf("%s.prototype.%s = function(%s) { return %s.%s(%s); };", nt.Obj().Name(), name, strings.Join(params, ", "), value, name, strings.Join(params, ", "))
 					}
 				}
 			}
@@ -411,31 +416,47 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 }
 
 func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
-	recv := fun.Recv.List[0]
-	recvType := c.info.Objects[recv.Names[0]].Type()
-	_, recvIsPtr := recvType.(*types.Pointer)
+	recv := fun.Recv.List[0].Names[0]
+	recvType := c.info.Objects[recv].Type()
+	ptr, isPointer := recvType.(*types.Pointer)
+	_, isUnderlyingBasic := recvType.Underlying().(*types.Basic)
 
-	typeName := c.translateExpr(recv.Type)
+	typeName := ""
+	if !isPointer {
+		typeName = c.TypeName(recvType.(*types.Named))
+	}
+	if isPointer {
+		typeName = c.TypeName(ptr.Elem().(*types.Named))
+	}
+
 	typeTarget := typeName
-	if recvIsPtr && hasPtrType {
+	if isPointer && hasPtrType {
 		typeTarget += "._Pointer"
 	}
 
 	var this ast.Expr = &This{}
+	if isUnderlyingBasic {
+		this = &ast.SelectorExpr{
+			X:   this,
+			Sel: ast.NewIdent("v"),
+		}
+	}
 	if _, isUnderlyingStruct := recvType.Underlying().(*types.Struct); isUnderlyingStruct {
 		this = &ast.StarExpr{X: this}
 	}
 	c.info.Types[this] = recvType
 
+	lhs := ast.NewIdent(typeTarget + ".prototype." + fun.Name.Name)
+	c.info.Types[lhs] = c.info.Objects[fun.Name].Type()
 	c.translateStmt(&ast.AssignStmt{
 		Tok: token.ASSIGN,
-		Lhs: []ast.Expr{ast.NewIdent(typeTarget + ".prototype." + fun.Name.Name)},
+		Lhs: []ast.Expr{lhs},
 		Rhs: []ast.Expr{&ast.FuncLit{
 			Type: fun.Type,
 			Body: &ast.BlockStmt{
 				List: append([]ast.Stmt{
 					&ast.AssignStmt{
-						Lhs: []ast.Expr{recv.Names[0]},
+						Lhs: []ast.Expr{recv},
 						Tok: token.DEFINE,
 						Rhs: []ast.Expr{this},
 					},
@@ -446,11 +467,19 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 
 	if hasPtrType {
 		params := c.translateParams(fun.Type)
-		if !recvIsPtr {
-			c.Printf("%s._Pointer.prototype.%s = function(%s) { return this.get().%s(%s); };", typeName, fun.Name.Name, params, fun.Name.Name, params)
+		if !isPointer {
+			value := "this.get()"
+			if isUnderlyingBasic {
+				value = fmt.Sprintf("new %s(%s)", typeName, value)
+			}
+			c.Printf("%s._Pointer.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, params, value, fun.Name.Name, params)
 		}
-		if recvIsPtr {
-			c.Printf("%s.prototype.%s = function(%s) { var obj = this; return (new %s._Pointer(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, params, typeName, fun.Name.Name, params)
+		if isPointer {
+			value := "this"
+			if _, isUnderlyingBasic := ptr.Elem().Underlying().(*types.Basic); isUnderlyingBasic {
+				value = "this.v"
+			}
+			c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new %s._Pointer(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, params, value, typeName, fun.Name.Name, params)
 		}
 	}
 }
@@ -482,13 +511,11 @@ func (c *PkgContext) translateArgs(call *ast.CallExpr) []string {
 	funType := c.info.Types[call.Fun]
 	args := make([]string, len(call.Args))
 	for i, arg := range call.Args {
-		args[i] = c.translateExpr(arg)
-		sig, isSig := funType.(*types.Signature)
-		if isSig && c.savedAsPointer(arg) {
-			if _, isInt := sig.Params().At(i).Type().Underlying().(*types.Interface); isInt {
-				args[i] += ".get()"
-			}
+		if sig, isSig := funType.(*types.Signature); isSig && i < sig.Params().Len() {
+			args[i] = c.translateExprToType(arg, sig.Params().At(i).Type())
+			continue
 		}
+		args[i] = c.translateExpr(arg)
 	}
 	isVariadic, numParams, variadicType := getVariadicInfo(funType)
 	if isVariadic && !call.Ellipsis.IsValid() {

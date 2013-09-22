@@ -226,8 +226,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s%s", op, c.translateExpr(e.X))
 
 	case *ast.BinaryExpr:
-		ex := c.translateExprToUnderlyingType(e.X)
-		ey := c.translateExprToUnderlyingType(e.Y)
+		ex := c.translateExpr(e.X)
+		ey := c.translateExpr(e.Y)
 		op := e.Op.String()
 		switch e.Op {
 		case token.QUO:
@@ -286,21 +286,22 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		sel := c.info.Selections[e]
 		if sel != nil && sel.Kind() == types.MethodVal {
 			methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
+			_, pointerExpected := methodsRecvType.(*types.Pointer)
 			_, isStruct := sel.Recv().Underlying().(*types.Struct)
-			if !isStruct && !types.IsIdentical(sel.Recv(), methodsRecvType) {
+			if pointerExpected && !isStruct && !types.IsIdentical(sel.Recv(), methodsRecvType) {
 				fakeExpr := &ast.UnaryExpr{
 					Op: token.AND,
 					X:  e.X,
 				}
 				c.info.Types[fakeExpr] = methodsRecvType
-				return c.translateExpr(&ast.SelectorExpr{
+				return c.translateExpr(&ast.SelectorExpr{ // TODO
 					X:   fakeExpr,
 					Sel: e.Sel,
 				})
 			}
 		}
 
-		return fmt.Sprintf("%s.%s", c.translateExpr(e.X), e.Sel.Name)
+		return fmt.Sprintf("%s.%s", c.translateExprToType(e.X, types.NewInterface(nil)), e.Sel.Name)
 
 	case *ast.CallExpr:
 		funType := c.info.Types[e.Fun]
@@ -315,7 +316,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				args[0] = "undefined"
 				return fmt.Sprintf("new %s(%s)", constructor, strings.Join(args, ", "))
 			case "len":
-				arg := c.translateExprToUnderlyingType(e.Args[0])
+				arg := c.translateExpr(e.Args[0])
 				argType := c.info.Types[e.Args[0]]
 				switch argt := argType.Underlying().(type) {
 				case *types.Basic, *types.Array, *types.Slice:
@@ -326,7 +327,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					panic(fmt.Sprintf("Unhandled len type: %T\n", argt))
 				}
 			case "cap":
-				arg := c.translateExprToUnderlyingType(e.Args[0])
+				arg := c.translateExpr(e.Args[0])
 				argType := c.info.Types[e.Args[0]]
 				switch argt := argType.Underlying().(type) {
 				case *types.Array:
@@ -345,7 +346,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 		case *types.Basic:
 			jsValue := func() string {
-				src := c.translateExprToUnderlyingType(e.Args[0])
+				src := c.translateExpr(e.Args[0])
 				srcType := c.info.Types[e.Args[0]]
 				switch {
 				case t.Info()&types.IsInteger != 0:
@@ -418,10 +419,16 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				check = fmt.Sprintf("%s(typeOf(_obj))", c.translateExpr(e.Type))
 			}
 		}
-		if _, isTuple := c.info.Types[e].(*types.Tuple); isTuple {
-			return fmt.Sprintf("(_obj = %s, %s ? [_obj, true] : [%s, false])", c.translateExpr(e.X), check, c.zeroValue(c.info.Types[e.Type]))
+		value := "_obj"
+		_, isNamed := c.info.Types[e.Type].(*types.Named)
+		_, isUnderlyingBasic := c.info.Types[e.Type].Underlying().(*types.Basic)
+		if isNamed && isUnderlyingBasic {
+			value += ".v"
 		}
-		return fmt.Sprintf("(_obj = %s, %s ? _obj : typeAssertionFailed())", c.translateExpr(e.X), check)
+		if _, isTuple := c.info.Types[e].(*types.Tuple); isTuple {
+			return fmt.Sprintf("(_obj = %s, %s ? [%s, true] : [%s, false])", c.translateExpr(e.X), check, value, c.zeroValue(c.info.Types[e.Type]))
+		}
+		return fmt.Sprintf("(_obj = %s, %s ? %s : typeAssertionFailed())", c.translateExpr(e.X), check, value)
 
 	case *ast.ArrayType:
 		return "Slice"
@@ -491,27 +498,15 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	}
 }
 
-func (c *PkgContext) translateExprToInterface(expr ast.Expr) string {
-	t := c.info.Types[expr]
-	if t != nil {
-		named, isNamed := t.(*types.Named)
-		_, isUnderlyingBasic := t.Underlying().(*types.Basic)
-		_, isValue := c.info.Values[expr]
-		if isNamed && isUnderlyingBasic && isValue {
+func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) string {
+	exprType := c.info.Types[expr]
+	if exprType != nil && desiredType != nil {
+		named, isNamed := exprType.(*types.Named)
+		_, isUnderlyingBasic := exprType.Underlying().(*types.Basic)
+		_, interfaceIsDesired := desiredType.Underlying().(*types.Interface)
+		if isNamed && isUnderlyingBasic && interfaceIsDesired {
 			return fmt.Sprintf("new %s(%s)", c.TypeName(named), c.translateExpr(expr))
 		}
-	}
-	return c.translateExpr(expr)
-}
-
-func (c *PkgContext) translateExprToUnderlyingType(expr ast.Expr) string {
-	t := c.info.Types[expr]
-	_, isNamed := t.(*types.Named)
-	_, isUnderlyingBasic := t.Underlying().(*types.Basic)
-	_, isValue := c.info.Values[expr]
-	_, isBinary := expr.(*ast.BinaryExpr)
-	if isNamed && isUnderlyingBasic && !isValue && !isBinary {
-		return fmt.Sprintf("%s.v", c.translateExpr(expr))
 	}
 	return c.translateExpr(expr)
 }

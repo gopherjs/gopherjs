@@ -473,6 +473,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 			}
 			return o.Name()
+		case nil:
+			return e.Name
 		default:
 			panic(fmt.Sprintf("Unhandled object: %T\n", o))
 		}

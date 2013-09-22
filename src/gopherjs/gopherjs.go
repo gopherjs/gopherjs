@@ -415,12 +415,10 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 	recvType := c.info.Objects[recv.Names[0]].Type()
 	_, recvIsPtr := recvType.(*types.Pointer)
 
-	typeTarget := recv.Type
+	typeName := c.translateExpr(recv.Type)
+	typeTarget := typeName
 	if recvIsPtr && hasPtrType {
-		typeTarget = &ast.SelectorExpr{
-			X:   recv.Type,
-			Sel: ast.NewIdent("_Pointer"),
-		}
+		typeTarget += "._Pointer"
 	}
 
 	var this ast.Expr = &This{}
@@ -431,13 +429,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 
 	c.translateStmt(&ast.AssignStmt{
 		Tok: token.ASSIGN,
-		Lhs: []ast.Expr{&ast.SelectorExpr{
-			X: &ast.SelectorExpr{
-				X:   typeTarget,
-				Sel: ast.NewIdent("prototype"),
-			},
-			Sel: fun.Name,
-		}},
+		Lhs: []ast.Expr{ast.NewIdent(typeTarget + ".prototype." + fun.Name.Name)},
 		Rhs: []ast.Expr{&ast.FuncLit{
 			Type: fun.Type,
 			Body: &ast.BlockStmt{
@@ -453,7 +445,6 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 	}, "")
 
 	if hasPtrType {
-		typeName := c.translateExpr(recv.Type)
 		params := c.translateParams(fun.Type)
 		if !recvIsPtr {
 			c.Printf("%s._Pointer.prototype.%s = function(%s) { return this.get().%s(%s); };", typeName, fun.Name.Name, params, fun.Name.Name, params)

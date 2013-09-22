@@ -184,7 +184,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 		switch {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
-			rhsExprs[0] = c.translateExprToNamed(s.Rhs[0])
+			rhsExprs[0] = c.translateExprToInterface(s.Rhs[0])
 			// rhsTypes[0] = c.info.Types[s.Rhs[0]]
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
@@ -193,12 +193,12 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				rhsExprs[i] = fmt.Sprintf("_tuple[%d]", i)
 				// rhsTypes[i] = tuple.At(i).Type()
 			}
-			c.Printf("_tuple = %s;", c.translateExprToNamed(s.Rhs[0]))
+			c.Printf("_tuple = %s;", c.translateExprToInterface(s.Rhs[0]))
 
 		case len(s.Lhs) == len(s.Rhs):
 			parts := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
-				parts[i] = c.translateExprToNamed(rhs)
+				parts[i] = c.translateExprToInterface(rhs)
 				rhsExprs[i] = fmt.Sprintf("_tuple[%d]", i)
 				// rhsTypes[i] = c.info.Types[rhs]
 			}

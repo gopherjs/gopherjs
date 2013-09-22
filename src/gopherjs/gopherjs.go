@@ -322,7 +322,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			var value string
 			switch {
 			case i < len(s.Values):
-				value = c.translateExprToNamed(s.Values[i])
+				value = c.translateExprToInterface(s.Values[i])
 			default:
 				value = c.zeroValue(fieldType)
 			}

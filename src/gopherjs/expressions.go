@@ -226,8 +226,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s%s", op, c.translateExpr(e.X))
 
 	case *ast.BinaryExpr:
-		ex := c.translateExprToBasic(e.X)
-		ey := c.translateExprToBasic(e.Y)
+		ex := c.translateExprToUnderlyingType(e.X)
+		ey := c.translateExprToUnderlyingType(e.Y)
 		op := e.Op.String()
 		switch e.Op {
 		case token.QUO:
@@ -315,7 +315,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				args[0] = "undefined"
 				return fmt.Sprintf("new %s(%s)", constructor, strings.Join(args, ", "))
 			case "len":
-				arg := c.translateExprToBasic(e.Args[0])
+				arg := c.translateExprToUnderlyingType(e.Args[0])
 				argType := c.info.Types[e.Args[0]]
 				switch argt := argType.Underlying().(type) {
 				case *types.Basic, *types.Array, *types.Slice:
@@ -326,7 +326,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					panic(fmt.Sprintf("Unhandled len type: %T\n", argt))
 				}
 			case "cap":
-				arg := c.translateExprToBasic(e.Args[0])
+				arg := c.translateExprToUnderlyingType(e.Args[0])
 				argType := c.info.Types[e.Args[0]]
 				switch argt := argType.Underlying().(type) {
 				case *types.Array:
@@ -345,7 +345,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 		case *types.Basic:
 			jsValue := func() string {
-				src := c.translateExprToBasic(e.Args[0])
+				src := c.translateExprToUnderlyingType(e.Args[0])
 				srcType := c.info.Types[e.Args[0]]
 				switch {
 				case t.Info()&types.IsInteger != 0:
@@ -489,7 +489,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	}
 }
 
-func (c *PkgContext) translateExprToNamed(expr ast.Expr) string {
+func (c *PkgContext) translateExprToInterface(expr ast.Expr) string {
 	t := c.info.Types[expr]
 	if t != nil {
 		named, isNamed := t.(*types.Named)
@@ -502,7 +502,7 @@ func (c *PkgContext) translateExprToNamed(expr ast.Expr) string {
 	return c.translateExpr(expr)
 }
 
-func (c *PkgContext) translateExprToBasic(expr ast.Expr) string {
+func (c *PkgContext) translateExprToUnderlyingType(expr ast.Expr) string {
 	t := c.info.Types[expr]
 	_, isNamed := t.(*types.Named)
 	_, isUnderlyingBasic := t.Underlying().(*types.Basic)

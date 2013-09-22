@@ -213,11 +213,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case token.AND:
 			target := c.translateExpr(e.X)
 			if _, isStruct := c.info.Types[e.X].Underlying().(*types.Struct); !isStruct {
-				pointerType := "_Pointer"
-				if named, isNamed := c.info.Types[e.X].(*types.Named); isNamed {
-					pointerType = named.Obj().Name() + "._Pointer"
-				}
-				return fmt.Sprintf("new %s(function() { return %s; }, function(v) { %s = v; })", pointerType, target, target)
+				return fmt.Sprintf("new %s(function() { return %s; }, function(v) { %s = v; })", c.typeName(c.info.Types[e]), target, target)
 			}
 			return target
 		case token.XOR:
@@ -291,18 +287,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				_, pointerExpected := methodsRecvType.(*types.Pointer)
 				_, isStruct := sel.Recv().Underlying().(*types.Struct)
 				if pointerExpected && !isStruct && !types.IsIdentical(sel.Recv(), methodsRecvType) {
-					fakeExpr := &ast.UnaryExpr{
-						Op: token.AND,
-						X:  e.X,
-					}
-					c.info.Types[fakeExpr] = methodsRecvType
-					return c.translateExpr(&ast.SelectorExpr{ // TODO
-						X:   fakeExpr,
-						Sel: e.Sel,
-					})
+					target := c.translateExpr(e.X)
+					return fmt.Sprintf("(new %s(function() { return %s; }, function(v) { %s = v; })).%s", c.typeName(methodsRecvType), target, target, e.Sel.Name)
 				}
 			case types.MethodExpr:
-				return fmt.Sprintf("%s.prototype.%s", c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
+				return fmt.Sprintf("%s.prototype.%s.call", c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
 			}
 		}
 
@@ -451,6 +440,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				c.objectVars[o] = name
 			}
 			return name
+		case *types.TypeName:
+			return c.typeName(o.Type())
 		case nil:
 			return e.Name
 		default:

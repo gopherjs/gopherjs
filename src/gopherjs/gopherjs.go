@@ -421,11 +421,6 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 	ptr, isPointer := recvType.(*types.Pointer)
 	_, isUnderlyingBasic := recvType.Underlying().(*types.Basic)
 
-	typeTarget := c.typeName(recvType)
-	if isPointer && hasPtrType {
-		typeTarget += "._Pointer"
-	}
-
 	var this ast.Expr = &This{}
 	if isUnderlyingBasic {
 		this = &ast.SelectorExpr{
@@ -438,7 +433,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 	}
 	c.info.Types[this] = recvType
 
-	lhs := ast.NewIdent(typeTarget + ".prototype." + fun.Name.Name)
+	lhs := ast.NewIdent(c.typeName(recvType) + ".prototype." + fun.Name.Name)
 	c.info.Types[lhs] = c.info.Objects[fun.Name].Type()
 	c.translateStmt(&ast.AssignStmt{
 		Tok: token.ASSIGN,
@@ -571,7 +566,13 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		}
 		return t.Obj().Name()
 	case *types.Pointer:
-		return c.typeName(t.Elem())
+		if _, isNamed := t.Elem().(*types.Named); isNamed {
+			if _, isStruct := t.Elem().Underlying().(*types.Struct); !isStruct {
+				return c.typeName(t.Elem()) + "._Pointer"
+			}
+			return c.typeName(t.Elem())
+		}
+		return "_Pointer"
 	case *types.Array:
 		return "Array"
 	case *types.Slice:

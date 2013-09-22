@@ -83,16 +83,17 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		iVar := c.newVarName("_i")
 		vars := []string{refVar, lenVar, iVar}
 
-		value := c.translateExpr(s.Value)
 		keyAssign := ""
-		if !isUnderscore(s.Key) {
+		if s.Key != nil && !isUnderscore(s.Key) {
 			key := c.translateExpr(s.Key)
 			keyAssign = fmt.Sprintf(", %s = %s", key, iVar)
 			if s.Tok == token.DEFINE {
 				vars = append(vars, key)
 			}
 		}
-		if value != "" {
+		value := ""
+		if s.Value != nil && !isUnderscore(s.Value) {
+			value = c.translateExpr(s.Value)
 			if s.Tok == token.DEFINE {
 				vars = append(vars, value)
 			}

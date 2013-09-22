@@ -179,7 +179,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 		info:         info,
 		pkgVars:      make(map[string]string),
 		objectVars:   make(map[types.Object]string),
-		usedVarNames: []string{"delete", "false", "implements", "in", "new", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Map", "Slice", "String"},
+		usedVarNames: []string{"delete", "false", "implements", "in", "new", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Slice", "String"},
 		writer:       t.writer,
 	}
 	t.packages[pkg.ImportPath] = c
@@ -335,7 +335,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 	case *ast.TypeSpec:
 		nt := c.info.Objects[s.Name].Type().(*types.Named)
 		switch t := nt.Underlying().(type) {
-		case *types.Basic, *types.Array, *types.Map, *types.Signature:
+		case *types.Basic, *types.Array, *types.Signature:
 			c.Printf("var %s = function(v) { this.v = v; };", nt.Obj().Name())
 		case *types.Struct:
 			params := make([]string, t.NumFields())
@@ -344,6 +344,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			}
 			c.Printf("var %s = function(%s) {", nt.Obj().Name(), strings.Join(params, ", "))
 			c.Indent(func() {
+				c.Printf("this._id = _idCounter++;")
 				for i := 0; i < t.NumFields(); i++ {
 					field := t.Field(i)
 					c.Printf("this.%s = %s_;", field.Name(), field.Name())
@@ -379,6 +380,8 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 		case *types.Slice:
 			c.Printf("var %s = function() { Slice.apply(this, arguments); };", nt.Obj().Name())
 			c.Printf("%s.prototype = Slice.prototype;", nt.Obj().Name())
+		case *types.Map:
+			c.Printf("var %s = function() { Go$Map.apply(this, arguments); };", nt.Obj().Name())
 		case *types.Interface:
 			if t.MethodSet().Len() == 0 {
 				c.Printf("var %s = function(t) { return true };", nt.Obj().Name())
@@ -578,7 +581,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	case *types.Slice:
 		return "Slice"
 	case *types.Map:
-		return "Map"
+		return "Go$Map"
 	case *types.Interface:
 		return "Interface"
 	case *types.Chan:

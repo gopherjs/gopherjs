@@ -1,10 +1,13 @@
 package main
 
+// TODO cleanup global names
 var prelude = `
 #!/usr/bin/env node
 
 "use strict";
 Error.stackTraceLimit = -1;
+
+var _idCounter = 0;
 
 var Slice = function(data, length, capacity) {
 	capacity = capacity || length || 0;
@@ -47,8 +50,11 @@ String.prototype.toSlice = function() {
 	return new Slice(array);
 };
 
-var Map = function(data, capacity) {
-	this.data = data;
+var Go$Map = function(data, capacity) {
+	data = data || [];
+	for (var i = 0; i < data.length; i += 2) {
+		this[data[i]] = data[i + 1];
+	}
 };
 
 var Interface = function(value) {

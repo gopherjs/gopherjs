@@ -100,10 +100,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Slice:
 			collectIndexedElements(t.Elem(), 0)
 		case *types.Map:
-			elements = make([]string, len(e.Elts))
+			elements = make([]string, len(e.Elts)*2)
 			for i, element := range e.Elts {
 				kve := element.(*ast.KeyValueExpr)
-				elements[i] = fmt.Sprintf("%s: %s", c.translateExpr(kve.Key), c.translateExpr(kve.Value))
+				elements[i*2] = c.translateExpr(kve.Key)
+				elements[i*2+1] = c.translateExpr(kve.Value)
 			}
 		case *types.Struct:
 			elements = make([]string, t.NumFields())
@@ -138,20 +139,25 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Slice:
 			return fmt.Sprintf("new Slice(%s)", createListComposite(t.Elem(), elements))
 		case *types.Map:
-			return fmt.Sprintf("new Map({ %s })", strings.Join(elements, ", "))
+			return fmt.Sprintf("new Go$Map([%s])", strings.Join(elements, ", "))
 		case *types.Struct:
 			for i, element := range elements {
 				elements[i] = fmt.Sprintf("%s: %s", t.Field(i).Name(), element)
 			}
 			return fmt.Sprintf("{ %s }", strings.Join(elements, ", "))
 		case *types.Named:
-			if s, isSlice := t.Underlying().(*types.Slice); isSlice {
-				return fmt.Sprintf("new %s(%s)", c.typeName(t), createListComposite(s.Elem(), elements))
+			switch u := t.Underlying().(type) {
+			case *types.Slice:
+				return fmt.Sprintf("new %s(%s)", c.typeName(t), createListComposite(u.Elem(), elements))
+			case *types.Map:
+				return fmt.Sprintf("new %s([%s])", c.typeName(t), strings.Join(elements, ", "))
+			case *types.Struct:
+				return fmt.Sprintf("new %s(%s)", c.typeName(t), strings.Join(elements, ", "))
+			default:
+				panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", u))
 			}
-			return fmt.Sprintf("new %s(%s)", c.typeName(t), strings.Join(elements, ", "))
 		default:
-			fmt.Println(e.Type, elements)
-			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", c.info.Types[e]))
+			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", t))
 		}
 
 	case *ast.FuncLit:
@@ -250,15 +256,25 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	case *ast.IndexExpr:
 		x := c.translateExpr(e.X)
 		index := c.translateExpr(e.Index)
-		switch t := c.info.Types[e.X].Underlying().(type) {
-		case *types.Basic:
-			if t.Info()&types.IsString != 0 {
-				return fmt.Sprintf("%s.charCodeAt(%s)", x, index)
-			}
+		xType := c.info.Types[e.X]
+		if ptr, isPointer := xType.(*types.Pointer); isPointer {
+			xType = ptr.Elem()
+		}
+		switch t := xType.Underlying().(type) {
+		case *types.Array:
+			return fmt.Sprintf("%s[%s]", x, index)
 		case *types.Slice:
 			return fmt.Sprintf("%s.get(%s)", x, index)
+		case *types.Map:
+			if _, isPointer := t.Key().Underlying().(*types.Pointer); isPointer {
+				index += "._id"
+			}
+			return fmt.Sprintf("%s[%s]", x, index)
+		case *types.Basic:
+			return fmt.Sprintf("%s.charCodeAt(%s)", x, index)
+		default:
+			panic(fmt.Sprintf("Unhandled IndexExpr: %T\n", t))
 		}
-		return fmt.Sprintf("%s[%s]", x, index)
 
 	case *ast.SliceExpr:
 		method := "subslice"
@@ -317,7 +333,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case *types.Basic, *types.Array, *types.Slice:
 					return fmt.Sprintf("%s.length", arg)
 				case *types.Map:
-					return fmt.Sprintf("Object.keys(%s.data).length", arg)
+					return fmt.Sprintf("Object.keys(%s).length", arg)
 				default:
 					panic(fmt.Sprintf("Unhandled len type: %T\n", argt))
 				}

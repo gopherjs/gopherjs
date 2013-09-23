@@ -116,10 +116,6 @@ func main() {
 	t.translatePackage(fileSet, pkg)
 }
 
-type This struct {
-	ast.Ident
-}
-
 func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package) {
 	// os.Stderr.WriteString(pkg.Name + "\n")
 
@@ -424,12 +420,9 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 	ptr, isPointer := recvType.(*types.Pointer)
 	_, isUnderlyingBasic := recvType.Underlying().(*types.Basic)
 
-	var this ast.Expr = &This{}
+	var this ast.Expr = ast.NewIdent("this")
 	if isUnderlyingBasic {
-		this = &ast.SelectorExpr{
-			X:   this,
-			Sel: ast.NewIdent("v"),
-		}
+		this = ast.NewIdent("this.v")
 	}
 	if _, isUnderlyingStruct := recvType.Underlying().(*types.Struct); isUnderlyingStruct {
 		this = &ast.StarExpr{X: this}
@@ -674,8 +667,6 @@ func (v *IsReadyVisitor) Visit(node ast.Node) (w ast.Visitor) {
 			v.isReady = false
 			return nil
 		}
-	case *This:
-		return nil
 	}
 	return v
 }

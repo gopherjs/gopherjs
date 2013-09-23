@@ -299,21 +299,18 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 	case *ast.SelectorExpr:
 		sel := c.info.Selections[e]
-		if sel != nil {
-			switch sel.Kind() {
-			case types.MethodVal:
-				methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
-				_, pointerExpected := methodsRecvType.(*types.Pointer)
-				_, isStruct := sel.Recv().Underlying().(*types.Struct)
-				if pointerExpected && !isStruct && !types.IsIdentical(sel.Recv(), methodsRecvType) {
-					target := c.translateExpr(e.X)
-					return fmt.Sprintf("(new %s(function() { return %s; }, function(v) { %s = v; })).%s", c.typeName(methodsRecvType), target, target, e.Sel.Name)
-				}
-			case types.MethodExpr:
-				return fmt.Sprintf("%s.prototype.%s.call", c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
+		switch sel.Kind() {
+		case types.MethodVal:
+			methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
+			_, pointerExpected := methodsRecvType.(*types.Pointer)
+			_, isStruct := sel.Recv().Underlying().(*types.Struct)
+			if pointerExpected && !isStruct && !types.IsIdentical(sel.Recv(), methodsRecvType) {
+				target := c.translateExpr(e.X)
+				return fmt.Sprintf("(new %s(function() { return %s; }, function(v) { %s = v; })).%s", c.typeName(methodsRecvType), target, target, e.Sel.Name)
 			}
+		case types.MethodExpr:
+			return fmt.Sprintf("%s.prototype.%s.call", c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
 		}
-
 		return fmt.Sprintf("%s.%s", c.translateExprToType(e.X, types.NewInterface(nil)), e.Sel.Name)
 
 	case *ast.CallExpr:
@@ -467,9 +464,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			panic(fmt.Sprintf("Unhandled object: %T\n", o))
 		}
 
-	case *This:
-		return "this"
-
 	case nil:
 		return ""
 
@@ -519,7 +513,7 @@ func (v *HasDeferVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	case *ast.DeferStmt:
 		v.hasDefer = true
 		return nil
-	case *ast.FuncLit, *This:
+	case *ast.FuncLit:
 		return nil
 	}
 	return v

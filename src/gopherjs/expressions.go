@@ -267,9 +267,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return fmt.Sprintf("%s.get(%s)", x, index)
 		case *types.Map:
 			if _, isPointer := t.Key().Underlying().(*types.Pointer); isPointer {
-				index += "._id"
+				index = fmt.Sprintf("(%s || Go$Nil)._id", index)
 			}
-			return fmt.Sprintf("%s[%s]", x, index)
+			if _, isTuple := c.info.Types[e].(*types.Tuple); isTuple {
+				return fmt.Sprintf("(_obj = %s[%s], _obj !== undefined ? [_obj.v, true] : [%s, false])", x, index, c.zeroValue(t.Elem()))
+			}
+			return fmt.Sprintf("(_obj = %s[%s], _obj !== undefined ? _obj.v : %s)", x, index, c.zeroValue(t.Elem()))
 		case *types.Basic:
 			return fmt.Sprintf("%s.charCodeAt(%s)", x, index)
 		default:

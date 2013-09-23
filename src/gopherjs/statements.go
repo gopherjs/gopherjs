@@ -1,6 +1,7 @@
 package main
 
 import (
+	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
 	"go/ast"
@@ -78,46 +79,60 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Printf("}")
 
 	case *ast.RangeStmt:
-		refVar := c.newVarName("_ref")
-		lenVar := c.newVarName("_len")
-		iVar := c.newVarName("_i")
-		vars := []string{refVar, lenVar, iVar}
-
-		keyAssign := ""
+		key := ""
 		if s.Key != nil && !isUnderscore(s.Key) {
-			key := c.translateExpr(s.Key)
-			keyAssign = fmt.Sprintf(", %s = %s", key, iVar)
-			if s.Tok == token.DEFINE {
-				vars = append(vars, key)
-			}
+			key = c.translateExpr(s.Key)
 		}
 		value := ""
 		if s.Value != nil && !isUnderscore(s.Value) {
 			value = c.translateExpr(s.Value)
-			if s.Tok == token.DEFINE {
-				vars = append(vars, value)
-			}
+		}
+		varKeyword := ""
+		if s.Tok == token.DEFINE {
+			varKeyword = "var "
 		}
 
-		c.Printf("var %s;", strings.Join(vars, ", "))
-		forParams := "" +
-			fmt.Sprintf("%s = %s", refVar, c.translateExpr(s.X)) +
-			fmt.Sprintf(", %s = %s.length", lenVar, refVar) +
-			fmt.Sprintf(", %s = 0", iVar) +
-			keyAssign +
-			fmt.Sprintf("; %s < %s", iVar, lenVar) +
-			fmt.Sprintf("; %s++", iVar) +
-			keyAssign
-		c.Printf("%sfor (%s) {", label, forParams)
+		refVar := c.newVarName("_ref")
+		c.Printf("var %s = %s;", refVar, c.translateExpr(s.X))
+
+		lenTarget := refVar
+		_, isMap := c.info.Types[s.X].Underlying().(*types.Map)
+		var keysVar string
+		if isMap {
+			keysVar = c.newVarName("_keys")
+			c.Printf("var %s = %s !== null ? Object.keys(%s) : [];", keysVar, refVar, refVar)
+			lenTarget = keysVar
+		}
+
+		lenVar := c.newVarName("_len")
+		c.Printf("var %s = %s.length;", lenVar, lenTarget)
+
+		iVar := c.newVarName("_i")
+		c.Printf("var %s = 0;", iVar)
+
+		c.Printf("%sfor (; %s < %s; %s++) {", label, iVar, lenVar, iVar)
 		c.Indent(func() {
+			var entryVar string
+			if isMap {
+				entryVar = c.newVarName("_entry")
+				c.Printf("var %s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
+				if key != "" {
+					c.Printf("%s%s = %s.k;", varKeyword, key, entryVar)
+				}
+			}
+			if !isMap && key != "" {
+				c.Printf("%s%s = %s;", varKeyword, key, iVar)
+			}
 			if value != "" {
 				switch t := c.info.Types[s.X].Underlying().(type) {
-				case *types.Array, *types.Map:
-					c.Printf("var %s = %s[%s];", value, refVar, iVar)
+				case *types.Array:
+					c.Printf("%s%s = %s[%s];", varKeyword, value, refVar, iVar)
 				case *types.Slice:
-					c.Printf("var %s = %s.get(%s);", value, refVar, iVar)
+					c.Printf("%s%s = %s.get(%s);", varKeyword, value, refVar, iVar)
+				case *types.Map:
+					c.Printf("%s%s = %s.v;", varKeyword, value, entryVar)
 				case *types.Basic:
-					c.Printf("var %s = %s.charCodeAt(%s);", value, refVar, iVar)
+					c.Printf("%s%s = %s.charCodeAt(%s);", varKeyword, value, refVar, iVar)
 				default:
 					panic(fmt.Sprintf("Unhandled range type: %T\n", t))
 				}
@@ -226,8 +241,18 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					continue
 				}
 			case *ast.IndexExpr:
-				if _, isSlice := c.info.Types[l.X].Underlying().(*types.Slice); isSlice {
+				switch t := c.info.Types[l.X].Underlying().(type) {
+				case *types.Slice:
 					c.Printf("%s.set(%s, %s);", c.translateExpr(l.X), c.translateExpr(l.Index), rhs)
+					continue
+				case *types.Map:
+					index := c.translateExpr(l.Index)
+					if _, isPointer := t.Key().Underlying().(*types.Pointer); isPointer {
+						index = fmt.Sprintf("(%s || Go$Nil)._id", index)
+					}
+					keyVar := c.newVarName("_key")
+					c.Printf("var %s = %s;", keyVar, index)
+					c.Printf("%s[%s] = { k: %s, v: %s };", c.translateExpr(l.X), keyVar, keyVar, rhs)
 					continue
 				}
 			}
@@ -240,6 +265,31 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.IncDecStmt:
+		if iExpr, isIExpr := s.X.(*ast.IndexExpr); isIExpr {
+			if _, isMap := c.info.Types[iExpr.X].Underlying().(*types.Map); isMap {
+				op := token.ADD
+				if s.Tok == token.DEC {
+					op = token.SUB
+				}
+				one := &ast.BasicLit{
+					Kind:  token.INT,
+					Value: "1",
+				}
+				c.info.Values[one] = exact.MakeInt64(1)
+				c.translateStmt(&ast.AssignStmt{
+					Lhs: []ast.Expr{s.X},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{
+						&ast.BinaryExpr{
+							X:  s.X,
+							Op: op,
+							Y:  one,
+						},
+					},
+				}, label)
+				return
+			}
+		}
 		c.Printf("%s%s;", c.translateExpr(s.X), s.Tok)
 
 	case *ast.SelectStmt, *ast.GoStmt, *ast.SendStmt:

@@ -20,6 +20,7 @@ Successful Tests
 - interface/noeq.go (with non-nil values)
 - interface/receiver.go
 - interface/struct.go
+- map.go (without float/nan tests)
 - recover.go
 - recover1.go
 - rename.go

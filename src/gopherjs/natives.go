@@ -7,7 +7,8 @@ var prelude = `
 "use strict";
 Error.stackTraceLimit = -1;
 
-var _idCounter = 0;
+var _idCounter = 1;
+var Go$Nil = { _id: 0 };
 
 var Slice = function(data, length, capacity) {
 	capacity = capacity || length || 0;
@@ -50,10 +51,15 @@ String.prototype.toSlice = function() {
 	return new Slice(array);
 };
 
+String.Kind = function() { return 24; };
+
+Number.Kind = function() { return 2; };
+Number.Bits = function() { return 32; };
+
 var Go$Map = function(data, capacity) {
 	data = data || [];
 	for (var i = 0; i < data.length; i += 2) {
-		this[data[i]] = data[i + 1];
+		this[data[i]] = { k: data[i], v: data[i + 1] };
 	}
 };
 
@@ -220,9 +226,7 @@ packages["reflect"] = {
 		return true;
 	},
 	TypeOf: function(v) {
-		return {
-			Bits: function() { return 32; }
-		};
+		return v.constructor;
 	},
 	flag: function() {},
 	Value: function() {}, 

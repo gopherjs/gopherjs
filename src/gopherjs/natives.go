@@ -262,6 +262,9 @@ var natives = map[string]string{
 	`,
 
 	"syscall": `
+		// var syscall = require("./node-syscall/build/Release/syscall");
+		// Syscall = syscall.Syscall;
+		// Syscall = function() { console.log(arguments); };
 		Exit = process.exit;
 		Getenv = function(key) {
 			var value = process.env[key];

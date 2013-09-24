@@ -310,6 +310,18 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 		case types.MethodExpr:
 			return fmt.Sprintf("%s.prototype.%s.call", c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
+		case types.FieldVal:
+			val := c.translateExprToType(e.X, types.NewInterface(nil))
+			t := sel.Recv()
+			for _, index := range sel.Index() {
+				if ptr, isPtr := t.(*types.Pointer); isPtr {
+					t = ptr.Elem()
+				}
+				field := t.Underlying().(*types.Struct).Field(index)
+				val += "." + field.Name()
+				t = field.Type()
+			}
+			return val
 		}
 		return fmt.Sprintf("%s.%s", c.translateExprToType(e.X, types.NewInterface(nil)), e.Sel.Name)
 

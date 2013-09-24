@@ -516,20 +516,24 @@ func (c *PkgContext) zeroValue(t types.Type) string {
 			return `""`
 		}
 	case *types.Array:
-		switch t.Elem().(type) {
+		switch et := t.Elem().(type) {
 		case *types.Basic:
-			return fmt.Sprintf("newNumericArray(%d)", t.Len())
-			// return fmt.Sprintf("new %s(%d)", toTypedArray(elt), t.Len())
+			if et.Info()&types.IsNumeric != 0 {
+				return fmt.Sprintf("new %s(%d)", toTypedArray(et), t.Len())
+			}
 		default:
 			return fmt.Sprintf("new Array(%d)", t.Len())
 		}
 	case *types.Named:
-		if s, isStruct := t.Underlying().(*types.Struct); isStruct {
-			zeros := make([]string, s.NumFields())
+		switch ut := t.Underlying().(type) {
+		case *types.Struct:
+			zeros := make([]string, ut.NumFields())
 			for i := range zeros {
-				zeros[i] = c.zeroValue(s.Field(i).Type())
+				zeros[i] = c.zeroValue(ut.Field(i).Type())
 			}
 			return fmt.Sprintf("new %s(%s)", c.typeName(t), strings.Join(zeros, ", "))
+		case *types.Slice:
+			return fmt.Sprintf("new %s(%s)", c.typeName(t), c.zeroValue(types.NewArray(ut.Elem(), 0)))
 		}
 		return fmt.Sprintf("new %s(%s)", c.typeName(t), c.zeroValue(t.Underlying()))
 	}
@@ -586,44 +590,38 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	}
 }
 
-// func toTypedArray(t *types.Basic) string {
-// 	switch t.Kind() {
-// 	case types.Int8:
-// 		return "Int8Array"
-// 	case types.Uint8:
-// 		return "Uint8Array"
-// 	case types.Int16:
-// 		return "Int16Array"
-// 	case types.Uint16:
-// 		return "Uint16Array"
-// 	case types.Int32, types.Int:
-// 		return "Int32Array"
-// 	case types.Uint32:
-// 		return "Uint32Array"
-// 	case types.Float32:
-// 		return "Float32Array"
-// 	case types.Float64, types.Complex64, types.Complex128:
-// 		return "Float64Array"
-// 	default:
-// 		panic("Unhandled typed array: " + t.String())
-// 	}
-// 	return ""
-// }
+func toTypedArray(t *types.Basic) string {
+	switch t.Kind() {
+	case types.Int8:
+		return "Int8Array"
+	case types.Uint8:
+		return "Uint8Array"
+	case types.Int16:
+		return "Int16Array"
+	case types.Uint16:
+		return "Uint16Array"
+	case types.Int32, types.Int64, types.Int:
+		return "Int32Array"
+	case types.Uint32, types.Uint64, types.Uint:
+		return "Uint32Array"
+	case types.Float32:
+		return "Float32Array"
+	case types.Float64, types.Complex64, types.Complex128:
+		return "Float64Array"
+	default:
+		panic("Unhandled typed array: " + t.String())
+	}
+	return ""
+}
 
 func createListComposite(elementType types.Type, elements []string) string {
+	switch elt := elementType.(type) {
+	case *types.Basic:
+		if elt.Info()&types.IsNumeric != 0 {
+			return fmt.Sprintf("new %s([%s])", toTypedArray(elt), strings.Join(elements, ", "))
+		}
+	}
 	return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
-	// switch elt := elementType.(type) {
-	// case *types.Basic:
-	// 	switch elt.Kind() {
-	// 	case types.Bool, types.String:
-	// 		return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
-	// 	default:
-	// 		return fmt.Sprintf("new %s([%s])", toTypedArray(elt), strings.Join(elements, ", "))
-	// 	}
-	// default:
-	// 	return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
-	// 	// panic(fmt.Sprintf("Unhandled element type: %T\n", elt))
-	// }
 }
 
 func getVariadicInfo(funType types.Type) (bool, int, types.Type) {

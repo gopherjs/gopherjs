@@ -262,20 +262,14 @@ var natives = map[string]string{
 	`,
 
 	"syscall": `
-		// var syscall = require("./node-syscall/build/Release/syscall");
-		// Syscall = syscall.Syscall;
-		// Syscall = function() { console.log(arguments); };
-		Exit = process.exit;
+		var syscall = require("./node-syscall/build/Release/syscall");
+		Syscall = syscall.Syscall;
 		Getenv = function(key) {
 			var value = process.env[key];
 			if (value === undefined) {
 				return ["", false];
 			}
 			return [value, true];
-		};
-		Write = function(fd, p) {
-			process.stdout.write(String.fromCharCode.apply(null, p.toArray()));
-			return [p.length, null]
 		};
 	`,
 }

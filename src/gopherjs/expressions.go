@@ -396,6 +396,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case t.Info()&types.IsBoolean != 0:
 					return src
 				case t.Kind() == types.UnsafePointer:
+					if unary, isUnary := e.Args[0].(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
+						if indexExpr, isIndexExpr := unary.X.(*ast.IndexExpr); isIndexExpr {
+							return fmt.Sprintf("new Buffer(%s.toArray())", c.translateExpr(indexExpr.X))
+						}
+						if ident, isIdent := unary.X.(*ast.Ident); isIdent && ident.Name == "_zero" {
+							return "new Buffer(0)"
+						}
+					}
 					return src
 				default:
 					panic(fmt.Sprintf("Unhandled conversion: %v\n", t))

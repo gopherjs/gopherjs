@@ -1,27 +1,33 @@
 #include <node.h>
 #include <v8.h>
-#include <node_buffer.h>
 #include <unistd.h>
-#include <iostream>
 
 using namespace v8;
 
-void* toNative(v8::Local<v8::Value> value) {
-  if (node::Buffer::HasInstance(value)) {
-    return node::Buffer::Data(value);
+size_t toNative(v8::Local<v8::Value> value) {
+  if (value->IsArrayBufferView()) {
+    Local<ArrayBufferView> view = Local<ArrayBufferView>::Cast(value);
+    return size_t(view->BaseAddress());
   }
-  return (void*) value->ToInteger()->Value();
+  return value->ToInteger()->Value();
 }
 
-Handle<Value> Syscall(const Arguments& args) {
-  HandleScope scope;
-  syscall(
-    args[0]->ToInteger()->Value(),
-    toNative(args[1]),
-    toNative(args[2]),
-    toNative(args[3])
+void Syscall(const FunctionCallbackInfo<Value>& info) {
+  int r = syscall(
+    info[0]->ToInteger()->Value(),
+    toNative(info[1]),
+    toNative(info[2]),
+    toNative(info[3])
   );
-  return scope.Close(String::New("world"));
+  int err = 0;
+  if (r < 0) {
+    err = errno;
+  }
+  Local<Array> res = Array::New(3);
+  res->Set(0, Integer::New(r));
+  res->Set(1, Integer::New(0));
+  res->Set(2, Integer::New(err));
+  info.GetReturnValue().Set(res);
 }
 
 void init(Handle<Object> target) {

@@ -165,25 +165,27 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		defer func() { c.usedVarNames = n }()
 		body := c.CatchOutput(func() {
 			c.Indent(func() {
+				c.Printf("var _obj, _tuple;")
+
 				var namedResults []string
 				if e.Type.Results != nil && e.Type.Results.List[0].Names != nil {
 					for _, result := range e.Type.Results.List {
 						for _, name := range result.Names {
+							var res string
 							if isUnderscore(name) {
-								namedResults = append(namedResults, c.newVarName("result"))
-								continue
+								res = c.newVarName("result")
 							}
-							namedResults = append(namedResults, c.translateExpr(name))
+							if !isUnderscore(name) {
+								res = c.translateExpr(name)
+							}
+							c.Printf("var %s = %s;", res, c.zeroValue(c.info.Types[name]))
+							namedResults = append(namedResults, res)
 						}
 					}
 				}
 				r := c.namedResults
 				defer func() { c.namedResults = r }()
 				c.namedResults = namedResults
-				c.Printf("var _obj, _tuple;")
-				if namedResults != nil {
-					c.Printf("var %s;", strings.Join(namedResults, ", "))
-				}
 
 				v := HasDeferVisitor{}
 				ast.Walk(&v, e.Body)
@@ -398,10 +400,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case t.Kind() == types.UnsafePointer:
 					if unary, isUnary := e.Args[0].(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
 						if indexExpr, isIndexExpr := unary.X.(*ast.IndexExpr); isIndexExpr {
-							return fmt.Sprintf("new Buffer(%s.toArray())", c.translateExpr(indexExpr.X))
+							return fmt.Sprintf("%s.toArray()", c.translateExpr(indexExpr.X))
 						}
 						if ident, isIdent := unary.X.(*ast.Ident); isIdent && ident.Name == "_zero" {
-							return "new Buffer(0)"
+							return "new Uint8Array(0)"
 						}
 					}
 					return src

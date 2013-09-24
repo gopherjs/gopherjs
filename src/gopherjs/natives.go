@@ -40,11 +40,14 @@ Slice.prototype.subslice = function(begin, end) {
 };
 
 Slice.prototype.toArray = function() {
+	if (this.array.constructor !== Array) {
+		return this.array.subarray(this.offset, this.offset + this.length);
+	}
 	return this.array.slice(this.offset, this.offset + this.length);
 };
 
 String.prototype.toSlice = function() {
-	var array = new Int32Array(this.length);
+	var array = new Uint8Array(this.length);
 	for (var i = 0; i < this.length; i++) {
 		array[i] = this.charCodeAt(i);
 	}
@@ -264,6 +267,7 @@ var natives = map[string]string{
 	"syscall": `
 		var syscall = require("./node-syscall/build/Release/syscall");
 		Syscall = syscall.Syscall;
+		BytePtrFromString = function(s) { return new Buffer(s); };
 		Getenv = function(key) {
 			var value = process.env[key];
 			if (value === undefined) {

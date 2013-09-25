@@ -434,6 +434,36 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						return "new Uint8Array(0)"
 					}
 				}
+				if ptr, isPtr := c.info.Types[e.Args[0]].(*types.Pointer); isPtr {
+					if s, isStruct := ptr.Elem().Underlying().(*types.Struct); isStruct {
+						array := c.newVarName("_array")
+						view := c.newVarName("_view")
+						target := c.newVarName("_struct")
+						c.Printf("var %s = new Uint8Array(%d);", array, types.DefaultSizeof(s))
+						c.PrintfDelayed("var %s = new DataView(%s.buffer);", view, array)
+						c.PrintfDelayed("var %s = %s;", target, c.translateExpr(e.Args[0]))
+						var fields []*types.Var
+						var collectFields func(s *types.Struct, path string)
+						collectFields = func(s *types.Struct, path string) {
+							for i := 0; i < s.NumFields(); i++ {
+								field := s.Field(i)
+								if fs, isStruct := field.Type().Underlying().(*types.Struct); isStruct {
+									collectFields(fs, path+"."+field.Name())
+									continue
+								}
+								fields = append(fields, types.NewVar(0, nil, path+"."+field.Name(), field.Type()))
+							}
+						}
+						collectFields(s, target)
+						offsets := types.DefaultOffsetsof(fields)
+						for i, field := range fields {
+							if basic, isBasic := field.Type().Underlying().(*types.Basic); isBasic && basic.Info()&types.IsNumeric != 0 {
+								c.PrintfDelayed("%s = %s.get%s(%d, true);", field.Name(), view, toJavaScriptType(basic), offsets[i])
+							}
+						}
+						return array
+					}
+				}
 				return src
 			default:
 				panic(fmt.Sprintf("Unhandled conversion: %v\n", t))

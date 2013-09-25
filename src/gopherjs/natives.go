@@ -248,7 +248,7 @@ packages["reflect"] = {
 
 var natives = map[string]string{
 	"os": `
-	  Args = new Go$Slice(process.argv);
+	  Args = new Go$Slice(process.argv.slice(1));
 	`,
 
 	"runtime": `

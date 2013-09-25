@@ -31,6 +31,7 @@ type PkgContext struct {
 	resultNames  []ast.Expr
 	writer       io.Writer
 	indentation  int
+	delayedLines *bytes.Buffer
 }
 
 func (c *PkgContext) newVarName(prefix string) string {
@@ -63,6 +64,14 @@ func (c *PkgContext) Printf(format string, values ...interface{}) {
 	c.Write([]byte(strings.Repeat("\t", c.indentation)))
 	fmt.Fprintf(c, format, values...)
 	c.Write([]byte{'\n'})
+	c.delayedLines.WriteTo(c.writer)
+	c.delayedLines.Reset()
+}
+
+func (c *PkgContext) PrintfDelayed(format string, values ...interface{}) {
+	c.delayedLines.Write([]byte(strings.Repeat("\t", c.indentation)))
+	fmt.Fprintf(c.delayedLines, format, values...)
+	c.delayedLines.Write([]byte{'\n'})
 }
 
 func (c *PkgContext) Indent(f func()) {
@@ -176,6 +185,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 		objectVars:   make(map[types.Object]string),
 		usedVarNames: []string{"class", "delete", "eval", "export", "false", "implements", "in", "new", "static", "this", "true", "try", "packages", "Array", "Boolean", "Float", "Integer", "String"},
 		writer:       t.writer,
+		delayedLines: bytes.NewBuffer(nil),
 	}
 	t.packages[pkg.ImportPath] = c
 
@@ -591,26 +601,31 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	}
 }
 
+func toJavaScriptType(t *types.Basic) string {
+	switch t.Kind() {
+	case types.Int8:
+		return "Int8"
+	case types.Uint8:
+		return "Uint8"
+	case types.Int16:
+		return "Int16"
+	case types.Uint16:
+		return "Uint16"
+	case types.Int32, types.Int64, types.Int:
+		return "Int32"
+	case types.Uint32, types.Uint64, types.Uint, types.Uintptr:
+		return "Uint32"
+	case types.Float32:
+		return "Float32"
+	case types.Float64, types.Complex64, types.Complex128:
+		return "Float64"
+	}
+	panic(fmt.Sprintf("Unhandled basic type: %v\n", t))
+}
+
 func toTypedArray(t types.Type) string {
-	if basic, isBasic := t.(*types.Basic); isBasic {
-		switch basic.Kind() {
-		case types.Int8:
-			return "Int8Array"
-		case types.Uint8:
-			return "Uint8Array"
-		case types.Int16:
-			return "Int16Array"
-		case types.Uint16:
-			return "Uint16Array"
-		case types.Int32, types.Int64, types.Int:
-			return "Int32Array"
-		case types.Uint32, types.Uint64, types.Uint:
-			return "Uint32Array"
-		case types.Float32:
-			return "Float32Array"
-		case types.Float64, types.Complex64, types.Complex128:
-			return "Float64Array"
-		}
+	if basic, isBasic := t.(*types.Basic); isBasic && basic.Info()&types.IsNumeric != 0 {
+		return toJavaScriptType(basic) + "Array"
 	}
 	return "Array"
 }

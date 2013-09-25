@@ -167,25 +167,22 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			c.Indent(func() {
 				c.Printf("var _obj, _tuple;")
 
-				var namedResults []string
+				var resultNames []ast.Expr
 				if e.Type.Results != nil && e.Type.Results.List[0].Names != nil {
 					for _, result := range e.Type.Results.List {
 						for _, name := range result.Names {
-							var res string
 							if isUnderscore(name) {
-								res = c.newVarName("result")
+								name = ast.NewIdent("result")
+								c.info.Objects[name] = types.NewVar(0, nil, "result", c.info.Types[result.Type])
 							}
-							if !isUnderscore(name) {
-								res = c.translateExpr(name)
-							}
-							c.Printf("var %s = %s;", res, c.zeroValue(c.info.Types[name]))
-							namedResults = append(namedResults, res)
+							c.Printf("var %s = %s;", c.translateExpr(name), c.zeroValue(c.info.Types[name]))
+							resultNames = append(resultNames, name)
 						}
 					}
 				}
-				r := c.namedResults
-				defer func() { c.namedResults = r }()
-				c.namedResults = namedResults
+				r := c.resultNames
+				defer func() { c.resultNames = r }()
+				c.resultNames = resultNames
 
 				v := HasDeferVisitor{}
 				ast.Walk(&v, e.Body)
@@ -202,7 +199,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					c.Printf("} finally {")
 					c.Indent(func() {
 						c.Printf("callDeferred(_deferred);")
-						if namedResults != nil {
+						if resultNames != nil {
 							c.translateStmt(&ast.ReturnStmt{}, "")
 						}
 					})
@@ -335,11 +332,19 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case "new":
 				return c.zeroValue(c.info.Types[e].(*types.Pointer).Elem())
 			case "make":
-				args := []string{"undefined"}
-				for _, arg := range e.Args[1:] {
-					args = append(args, c.translateExpr(arg))
+				switch t2 := c.info.Types[e.Args[0]].(type) {
+				case *types.Slice:
+					if len(e.Args) == 3 {
+						return fmt.Sprintf("new %s(new %s(%s), %s)", c.typeName(c.info.Types[e.Args[0]]), toTypedArray(t2.Elem()), c.translateExpr(e.Args[2]), c.translateExpr(e.Args[1]))
+					}
+					return fmt.Sprintf("new %s(new %s(%s))", c.typeName(c.info.Types[e.Args[0]]), toTypedArray(t2.Elem()), c.translateExpr(e.Args[1]))
+				default:
+					args := []string{"undefined"}
+					for _, arg := range e.Args[1:] {
+						args = append(args, c.translateExpr(arg))
+					}
+					return fmt.Sprintf("new %s(%s)", c.typeName(c.info.Types[e.Args[0]]), strings.Join(args, ", "))
 				}
-				return fmt.Sprintf("new %s(%s)", c.typeName(c.info.Types[e.Args[0]]), strings.Join(args, ", "))
 			case "len":
 				arg := c.translateExpr(e.Args[0])
 				argType := c.info.Types[e.Args[0]]
@@ -493,6 +498,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		panic(fmt.Sprintf("Unhandled expression: %T\n", e))
 
 	}
+}
+
+func (c *PkgContext) translateExprSlice(exprs []ast.Expr) string {
+	parts := make([]string, len(exprs))
+	for i, expr := range exprs {
+		parts[i] = c.translateExpr(expr)
+	}
+	return strings.Join(parts, ", ")
 }
 
 func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) string {

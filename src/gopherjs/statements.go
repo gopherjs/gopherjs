@@ -160,23 +160,24 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.ReturnStmt:
-		results := make([]string, len(s.Results))
-		for i, result := range s.Results {
-			results[i] = c.translateExpr(result)
-			if c.namedResults != nil {
-				c.Printf("%s = %s;", c.namedResults[i], results[i])
+		results := s.Results
+		if c.resultNames != nil {
+			if len(s.Results) != 0 {
+				c.translateStmt(&ast.AssignStmt{
+					Lhs: c.resultNames,
+					Tok: token.ASSIGN,
+					Rhs: s.Results,
+				}, label)
 			}
-		}
-		if c.namedResults != nil {
-			results = c.namedResults
+			results = c.resultNames
 		}
 		switch len(results) {
 		case 0:
 			c.Printf("return;")
 		case 1:
-			c.Printf("return %s;", results[0])
+			c.Printf("return %s;", c.translateExpr(results[0]))
 		default:
-			c.Printf("return [%s];", strings.Join(results, ", "))
+			c.Printf("return [%s];", c.translateExprSlice(results))
 		}
 
 	case *ast.DeferStmt:

@@ -46,10 +46,13 @@ Slice.prototype.toArray = function() {
 	return this.array.slice(this.offset, this.offset + this.length);
 };
 
-String.prototype.toSlice = function() {
-	var array = new Uint8Array(this.length);
+String.prototype.toSlice = function(terminateWithNull) {
+	var array = new Uint8Array(terminateWithNull ? this.length + 1 : this.length);
 	for (var i = 0; i < this.length; i++) {
 		array[i] = this.charCodeAt(i);
+	}
+	if (terminateWithNull) {
+		array[this.length] = 0;
 	}
 	return new Slice(array);
 };
@@ -267,7 +270,7 @@ var natives = map[string]string{
 	"syscall": `
 		var syscall = require("./node-syscall/build/Release/syscall");
 		Syscall = syscall.Syscall;
-		BytePtrFromString = function(s) { return new Buffer(s); };
+		BytePtrFromString = function(s) { return [s.toSlice(true).array, null]; };
 		Getenv = function(key) {
 			var value = process.env[key];
 			if (value === undefined) {

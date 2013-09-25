@@ -28,7 +28,7 @@ type PkgContext struct {
 	pkgVars      map[string]string
 	objectVars   map[types.Object]string
 	usedVarNames []string
-	namedResults []string
+	resultNames  []ast.Expr
 	writer       io.Writer
 	indentation  int
 }
@@ -516,14 +516,7 @@ func (c *PkgContext) zeroValue(t types.Type) string {
 			return `""`
 		}
 	case *types.Array:
-		switch et := t.Elem().(type) {
-		case *types.Basic:
-			if et.Info()&types.IsNumeric != 0 {
-				return fmt.Sprintf("new %s(%d)", toTypedArray(et), t.Len())
-			}
-		default:
-			return fmt.Sprintf("new Array(%d)", t.Len())
-		}
+		return fmt.Sprintf("new %s(%d)", toTypedArray(t.Elem()), t.Len())
 	case *types.Named:
 		switch ut := t.Underlying().(type) {
 		case *types.Struct:
@@ -590,28 +583,28 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	}
 }
 
-func toTypedArray(t *types.Basic) string {
-	switch t.Kind() {
-	case types.Int8:
-		return "Int8Array"
-	case types.Uint8:
-		return "Uint8Array"
-	case types.Int16:
-		return "Int16Array"
-	case types.Uint16:
-		return "Uint16Array"
-	case types.Int32, types.Int64, types.Int:
-		return "Int32Array"
-	case types.Uint32, types.Uint64, types.Uint:
-		return "Uint32Array"
-	case types.Float32:
-		return "Float32Array"
-	case types.Float64, types.Complex64, types.Complex128:
-		return "Float64Array"
-	default:
-		panic("Unhandled typed array: " + t.String())
+func toTypedArray(t types.Type) string {
+	if basic, isBasic := t.(*types.Basic); isBasic {
+		switch basic.Kind() {
+		case types.Int8:
+			return "Int8Array"
+		case types.Uint8:
+			return "Uint8Array"
+		case types.Int16:
+			return "Int16Array"
+		case types.Uint16:
+			return "Uint16Array"
+		case types.Int32, types.Int64, types.Int:
+			return "Int32Array"
+		case types.Uint32, types.Uint64, types.Uint:
+			return "Uint32Array"
+		case types.Float32:
+			return "Float32Array"
+		case types.Float64, types.Complex64, types.Complex128:
+			return "Float64Array"
+		}
 	}
-	return ""
+	return "Array"
 }
 
 func createListComposite(elementType types.Type, elements []string) string {

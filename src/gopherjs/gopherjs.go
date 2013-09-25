@@ -111,6 +111,7 @@ func main() {
 		packages: make(map[string]*PkgContext),
 	}
 	t.packages["reflect"] = nil
+	t.packages["go/doc"] = nil
 	out.WriteString(strings.TrimSpace(prelude))
 	out.WriteString("\n")
 	t.translatePackage(fileSet, pkg)
@@ -175,7 +176,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 		info:         info,
 		pkgVars:      make(map[string]string),
 		objectVars:   make(map[types.Object]string),
-		usedVarNames: []string{"delete", "false", "implements", "in", "new", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Slice", "String"},
+		usedVarNames: []string{"class", "delete", "eval", "export", "false", "implements", "in", "new", "static", "this", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Slice", "String"},
 		writer:       t.writer,
 	}
 	t.packages[pkg.ImportPath] = c
@@ -516,7 +517,7 @@ func (c *PkgContext) zeroValue(t types.Type) string {
 			return `""`
 		}
 	case *types.Array:
-		return fmt.Sprintf("new %s(%d)", toTypedArray(t.Elem()), t.Len())
+		return fmt.Sprintf("Go$clear(new %s(%d))", toTypedArray(t.Elem()), t.Len())
 	case *types.Named:
 		switch ut := t.Underlying().(type) {
 		case *types.Struct:

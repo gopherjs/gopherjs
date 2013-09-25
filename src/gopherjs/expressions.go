@@ -147,6 +147,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return fmt.Sprintf("{ %s }", strings.Join(elements, ", "))
 		case *types.Named:
 			switch u := t.Underlying().(type) {
+			case *types.Array:
+				return fmt.Sprintf("new %s(%s)", c.typeName(t), createListComposite(u.Elem(), elements))
 			case *types.Slice:
 				return fmt.Sprintf("new %s(%s)", c.typeName(t), createListComposite(u.Elem(), elements))
 			case *types.Map:
@@ -187,18 +189,18 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				v := HasDeferVisitor{}
 				ast.Walk(&v, e.Body)
 				if v.hasDefer {
-					c.Printf("var _deferred = [];")
+					c.Printf("var Go$deferred = [];")
 					c.Printf("try {")
 					c.Indent(func() {
 						c.translateStmtList(e.Body.List)
 					})
 					c.Printf("} catch(err) {")
 					c.Indent(func() {
-						c.Printf("_error_stack.push({ frame: getStackDepth(), error: err });")
+						c.Printf("Go$errorStack.push({ frame: Go$getStackDepth(), error: err });")
 					})
 					c.Printf("} finally {")
 					c.Indent(func() {
-						c.Printf("callDeferred(_deferred);")
+						c.Printf("Go$callDeferred(Go$deferred);")
 						if resultNames != nil {
 							c.translateStmt(&ast.ReturnStmt{}, "")
 						}
@@ -288,6 +290,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			slice = fmt.Sprintf("new Slice(%s)", slice)
 		}
 		if e.High == nil {
+			if e.Low == nil {
+				return slice
+			}
 			return fmt.Sprintf("%s.%s(%s)", slice, method, c.translateExpr(e.Low))
 		}
 		low := "0"
@@ -335,9 +340,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				switch t2 := c.info.Types[e.Args[0]].(type) {
 				case *types.Slice:
 					if len(e.Args) == 3 {
-						return fmt.Sprintf("new %s(new %s(%s), %s)", c.typeName(c.info.Types[e.Args[0]]), toTypedArray(t2.Elem()), c.translateExpr(e.Args[2]), c.translateExpr(e.Args[1]))
+						return fmt.Sprintf("new %s(Go$clear(new %s(%s)), %s)", c.typeName(c.info.Types[e.Args[0]]), toTypedArray(t2.Elem()), c.translateExpr(e.Args[2]), c.translateExpr(e.Args[1]))
 					}
-					return fmt.Sprintf("new %s(new %s(%s))", c.typeName(c.info.Types[e.Args[0]]), toTypedArray(t2.Elem()), c.translateExpr(e.Args[1]))
+					return fmt.Sprintf("new %s(Go$clear(new %s(%s)))", c.typeName(c.info.Types[e.Args[0]]), toTypedArray(t2.Elem()), c.translateExpr(e.Args[1]))
 				default:
 					args := []string{"undefined"}
 					for _, arg := range e.Args[1:] {
@@ -349,8 +354,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				arg := c.translateExpr(e.Args[0])
 				argType := c.info.Types[e.Args[0]]
 				switch argt := argType.Underlying().(type) {
-				case *types.Basic, *types.Array, *types.Slice:
+				case *types.Basic, *types.Array:
 					return fmt.Sprintf("%s.length", arg)
+				case *types.Slice:
+					return fmt.Sprintf("(_obj = %s, _obj !== null ? _obj.length : 0)", arg)
 				case *types.Map:
 					return fmt.Sprintf("Object.keys(%s).length", arg)
 				default:
@@ -369,8 +376,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 			case "panic":
 				return fmt.Sprintf("throw new GoError(%s)", c.translateExpr(e.Args[0]))
+			// case "append":
+			// 	return fmt.Sprintf("Go$append(, %s)", strings.Join(c.translateArgs(e), ", "))
 			case "append", "copy", "delete", "real", "imag", "recover", "complex", "print", "println":
-				return fmt.Sprintf("%s(%s)", t.Name(), strings.Join(c.translateArgs(e), ", "))
+				return fmt.Sprintf("Go$%s(%s)", t.Name(), strings.Join(c.translateArgs(e), ", "))
 			default:
 				panic(fmt.Sprintf("Unhandled builtin: %s\n", t.Name()))
 			}
@@ -475,7 +484,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return c.pkgVars[o.Pkg().Path()]
 		case *types.Var, *types.Const, *types.Func:
 			if _, isBuiltin := o.Type().(*types.Builtin); isBuiltin {
-				return e.Name
+				return "Go$" + e.Name
 			}
 			name, found := c.objectVars[o]
 			if !found {

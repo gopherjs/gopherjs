@@ -57,6 +57,8 @@ String.prototype.toSlice = function(terminateWithNull) {
 	return new Slice(array);
 };
 
+var Go$clear = function(array) { for (var i = 0; i < array.length; i++) { array[i] = 0; }; return array; }; // TODO remove when NodeJS is behaving according to spec
+
 String.Kind = function() { return 24; };
 
 Number.Kind = function() { return 2; };
@@ -77,7 +79,7 @@ var Channel = function() {};
 
 var _Pointer = function(getter, setter) { this.get = getter; this.set = setter; };
 
-var copy = function(dst, src) {
+var Go$copy = function(dst, src) {
 	var n = Math.min(src.length, dst.length);
 	for (var i = 0; i < n; i++) {
 		dst.set(i, src.get(i));
@@ -86,7 +88,11 @@ var copy = function(dst, src) {
 };
 
 // TODO improve performance by increasing capacity in bigger steps
-var append = function(slice, toAppend) {
+var Go$append = function(slice, toAppend) {
+	// if (slice === null) {
+	// 	return new 
+	// }
+
 	var newArray = slice.array;
 	var newOffset = slice.offset;
 	var newLength = slice.length + toAppend.length;
@@ -117,39 +123,39 @@ GoError.prototype.toString = function() {
 	return this.value;
 }
 
-var _error_stack = [];
+var Go$errorStack = [];
 
 // TODO inline
-var callDeferred = function(deferred) {
+var Go$callDeferred = function(deferred) {
 	for (var i = deferred.length - 1; i >= 0; i--) {
 		var call = deferred[i];
 		try {
 			call.fun.apply(call.recv, call.args);
 		} catch (err) {
-			_error_stack.push({ frame: getStackDepth(), error: err });
+			Go$errorStack.push({ frame: Go$getStackDepth(), error: err });
 		}
 	}
-	var err = _error_stack[_error_stack.length - 1];
-	if (err !== undefined && err.frame === getStackDepth()) {
-		_error_stack.pop();
+	var err = Go$errorStack[Go$errorStack.length - 1];
+	if (err !== undefined && err.frame === Go$getStackDepth()) {
+		Go$errorStack.pop();
 		throw err.error;
 	}
 }
 
-var recover = function() {
-	var err = _error_stack[_error_stack.length - 1];
-	if (err === undefined || err.frame !== getStackDepth() - 2) {
+var Go$recover = function() {
+	var err = Go$errorStack[Go$errorStack.length - 1];
+	if (err === undefined || err.frame !== Go$getStackDepth() - 2) {
 		return null;
 	}
-	_error_stack.pop();
+	Go$errorStack.pop();
 	return err.error.value;
 };
 
-var getStackDepth = function() {
+var Go$getStackDepth = function() {
 	var s = (new Error()).stack.split("\n");
 	var d = 0;
 	for (var i = 0; i < s.length; i++) {
-		if (s[i].indexOf("callDeferred") == -1) {
+		if (s[i].indexOf("Go$callDeferred") == -1) {
 			d++;
 		}
 	}
@@ -169,11 +175,11 @@ var _isEqual = function(a, b) {
 	throw new Error("runtime error: comparing uncomparable type " + a.constructor);
 };
 
-var print = function(a) {
+var Go$print = function(a) {
 	console.log(a.toArray().join(" "));
 };
 
-var println = print;
+var Go$println = Go$print;
 
 var Integer = function() {};
 var Float = function() {};
@@ -198,6 +204,8 @@ var newNumericArray = function(len) {
 	}
 	return a;
 };
+
+var Go$now = function() { var msec = (new Date()).getTime(); return [Math.floor(msec / 1000), (msec % 1000) * 1000000]; };
 
 var packages = {};
 
@@ -278,5 +286,9 @@ var natives = map[string]string{
 			}
 			return [value, true];
 		};
+	`,
+
+	"time": `
+	  now = Go$now;
 	`,
 }

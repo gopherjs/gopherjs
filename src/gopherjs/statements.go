@@ -182,7 +182,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.DeferStmt:
 		args := c.translateArgs(s.Call)
-		c.Printf("_deferred.push({ fun: %s, recv: %s, args: [%s] });", c.translateExpr(s.Call.Fun), "this", strings.Join(args, ", ")) // TODO fix receiver
+		c.Printf("Go$deferred.push({ fun: %s, recv: %s, args: [%s] });", c.translateExpr(s.Call.Fun), "this", strings.Join(args, ", ")) // TODO fix receiver
 
 	case *ast.ExprStmt:
 		c.Printf("%s;", c.translateExpr(s.X))

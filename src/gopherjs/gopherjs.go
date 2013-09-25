@@ -118,8 +118,6 @@ func main() {
 }
 
 func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package) {
-	// os.Stderr.WriteString(pkg.Name + "\n")
-
 	files := make([]*ast.File, 0)
 	for _, name := range pkg.GoFiles {
 		fullName := pkg.Dir + "/" + name
@@ -176,12 +174,13 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 		info:         info,
 		pkgVars:      make(map[string]string),
 		objectVars:   make(map[types.Object]string),
-		usedVarNames: []string{"class", "delete", "eval", "export", "false", "implements", "in", "new", "static", "this", "true", "try", "packages", "Array", "Boolean", "Channel", "Float", "Integer", "Slice", "String"},
+		usedVarNames: []string{"class", "delete", "eval", "export", "false", "implements", "in", "new", "static", "this", "true", "try", "packages", "Array", "Boolean", "Float", "Integer", "String"},
 		writer:       t.writer,
 	}
 	t.packages[pkg.ImportPath] = c
 
-	functions := make(map[types.Type][]*ast.FuncDecl)
+	functionsByType := make(map[types.Type][]*ast.FuncDecl)
+	functionsByObject := make(map[types.Object]*ast.FuncDecl)
 	for _, file := range files {
 		for _, decl := range file.Decls {
 			if fun, isFunction := decl.(*ast.FuncDecl); isFunction {
@@ -192,7 +191,8 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 						recvType = ptr.Elem()
 					}
 				}
-				functions[recvType] = append(functions[recvType], fun)
+				functionsByType[recvType] = append(functionsByType[recvType], fun)
+				functionsByObject[c.info.Objects[fun.Name]] = fun
 			}
 		}
 	}
@@ -215,9 +215,9 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 						hasPtrType := !isStruct
 						c.translateSpec(spec)
 						if hasPtrType {
-							c.Printf("%s._Pointer = function(getter, setter) { this.get = getter; this.set = setter; };", recvType.Obj().Name())
+							c.Printf("%s.Go$Pointer = function(getter, setter) { this.get = getter; this.set = setter; };", recvType.Obj().Name())
 						}
-						for _, fun := range functions[recvType] {
+						for _, fun := range functionsByType[recvType] {
 							c.translateFunction(fun, hasPtrType)
 						}
 					}
@@ -227,7 +227,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 
 		// package functions
 		hasInit := false
-		for _, fun := range functions[nil] {
+		for _, fun := range functionsByType[nil] {
 			if fun.Name.Name == "init" {
 				hasInit = true
 			}
@@ -279,7 +279,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 					continue
 				}
 				if spec.Values != nil {
-					v := IsReadyVisitor{info: c.info, pendingObjects: pendingObjects, isReady: true}
+					v := IsReadyVisitor{info: c.info, functions: functionsByObject, pendingObjects: pendingObjects, isReady: true}
 					ast.Walk(&v, spec.Values[0])
 					if !v.isReady {
 						complete = false
@@ -314,19 +314,33 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 func (c *PkgContext) translateSpec(spec ast.Spec) {
 	switch s := spec.(type) {
 	case *ast.ValueSpec:
-		for i, name := range s.Names {
-			fieldType := c.info.Objects[name].Type()
-			var value string
-			switch {
-			case i < len(s.Values):
-				value = c.translateExprToType(s.Values[i], fieldType)
-			default:
-				value = c.zeroValue(fieldType)
+		for _, name := range s.Names {
+			c.info.Types[name] = c.info.Objects[name].Type()
+		}
+		i := 0
+		for i < len(s.Names) {
+			var rhs ast.Expr
+			n := 1
+			if i < len(s.Values) {
+				rhs = s.Values[i]
+				if tuple, isTuple := c.info.Types[rhs].(*types.Tuple); isTuple {
+					n = tuple.Len()
+				}
 			}
-			if isUnderscore(name) {
-				continue
+			lhs := make([]ast.Expr, n)
+			for j := range lhs {
+				if j >= len(s.Names) {
+					lhs[j] = ast.NewIdent("_")
+					continue
+				}
+				lhs[j] = s.Names[i+j]
 			}
-			c.Printf("var %s = %s;", c.translateExpr(name), value)
+			c.translateStmt(&ast.AssignStmt{
+				Lhs: lhs,
+				Tok: token.DEFINE,
+				Rhs: []ast.Expr{rhs},
+			}, "")
+			i += n
 		}
 
 	case *ast.TypeSpec:
@@ -341,7 +355,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			}
 			c.Printf("var %s = function(%s) {", nt.Obj().Name(), strings.Join(params, ", "))
 			c.Indent(func() {
-				c.Printf("this._id = _idCounter++;")
+				c.Printf("this.Go$id = Go$idCounter++;")
 				for i := 0; i < t.NumFields(); i++ {
 					field := t.Field(i)
 					c.Printf("this.%s = %s_;", field.Name(), field.Name())
@@ -375,8 +389,8 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				}
 			}
 		case *types.Slice:
-			c.Printf("var %s = function() { Slice.apply(this, arguments); };", nt.Obj().Name())
-			c.Printf("%s.prototype = Slice.prototype;", nt.Obj().Name())
+			c.Printf("var %s = function() { Go$Slice.apply(this, arguments); };", nt.Obj().Name())
+			c.Printf("%s.prototype = Go$Slice.prototype;", nt.Obj().Name())
 		case *types.Map:
 			c.Printf("var %s = function() { Go$Map.apply(this, arguments); };", nt.Obj().Name())
 		case *types.Interface:
@@ -457,7 +471,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 			if isUnderlyingBasic {
 				value = fmt.Sprintf("new %s(%s)", typeName, value)
 			}
-			c.Printf("%s._Pointer.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, params, value, fun.Name.Name, params)
+			c.Printf("%s.Go$Pointer.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, params, value, fun.Name.Name, params)
 		}
 		if isPointer {
 			typeName := c.typeName(ptr.Elem())
@@ -465,7 +479,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 			if _, isUnderlyingBasic := ptr.Elem().Underlying().(*types.Basic); isUnderlyingBasic {
 				value = "this.v"
 			}
-			c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new %s._Pointer(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, params, value, typeName, fun.Name.Name, params)
+			c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new %s.Go$Pointer(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, params, value, typeName, fun.Name.Name, params)
 		}
 	}
 }
@@ -485,24 +499,18 @@ func (c *PkgContext) translateParams(t *ast.FuncType) string {
 }
 
 func (c *PkgContext) translateArgs(call *ast.CallExpr) []string {
-	funType := c.info.Types[call.Fun]
-	args := make([]string, len(call.Args))
-	for i, arg := range call.Args {
-		if sig, isSig := funType.(*types.Signature); isSig && i < sig.Params().Len() {
-			args[i] = c.translateExprToType(arg, sig.Params().At(i).Type())
-			continue
+	funType := c.info.Types[call.Fun].Underlying().(*types.Signature)
+	args := make([]string, funType.Params().Len())
+	for i := range args {
+		if funType.IsVariadic() && i == len(args)-1 {
+			if call.Ellipsis.IsValid() {
+				args[i] = c.translateExprToSlice(call.Args[i])
+				break
+			}
+			args[i] = fmt.Sprintf("new Go$Slice(%s)", createListComposite(funType.Params().At(i).Type(), c.translateExprSlice(call.Args[i:])))
+			break
 		}
-		args[i] = c.translateExpr(arg)
-	}
-	isVariadic, numParams, variadicType := getVariadicInfo(funType)
-	if isVariadic && !call.Ellipsis.IsValid() {
-		args = append(args[:numParams-1], fmt.Sprintf("new Slice(%s)", createListComposite(variadicType, args[numParams-1:])))
-	}
-	if call.Ellipsis.IsValid() && len(call.Args) > 0 {
-		l := len(call.Args)
-		if t, isBasic := c.info.Types[call.Args[l-1]].(*types.Basic); isBasic && t.Info()&types.IsString != 0 {
-			args[l-1] = fmt.Sprintf("%s.toSlice()", args[l-1])
-		}
+		args[i] = c.translateExprToType(call.Args[i], funType.Params().At(i).Type())
 	}
 	return args
 }
@@ -529,7 +537,6 @@ func (c *PkgContext) zeroValue(t types.Type) string {
 		case *types.Slice:
 			return fmt.Sprintf("new %s(%s)", c.typeName(t), c.zeroValue(types.NewArray(ut.Elem(), 0)))
 		}
-		return fmt.Sprintf("new %s(%s)", c.typeName(t), c.zeroValue(t.Underlying()))
 	}
 	return "null"
 }
@@ -562,21 +569,21 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	case *types.Pointer:
 		if _, isNamed := t.Elem().(*types.Named); isNamed {
 			if _, isStruct := t.Elem().Underlying().(*types.Struct); !isStruct {
-				return c.typeName(t.Elem()) + "._Pointer"
+				return c.typeName(t.Elem()) + ".Go$Pointer"
 			}
 			return c.typeName(t.Elem())
 		}
-		return "_Pointer"
+		return "Go$Pointer"
 	case *types.Array:
 		return "Array"
 	case *types.Slice:
-		return "Slice"
+		return "Go$Slice"
 	case *types.Map:
 		return "Go$Map"
 	case *types.Interface:
-		return "Interface"
+		return "Go$Interface"
 	case *types.Chan:
-		return "Channel"
+		return "Go$Channel"
 	case *types.Signature:
 		return "Function"
 	default:
@@ -618,23 +625,6 @@ func createListComposite(elementType types.Type, elements []string) string {
 	return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
 }
 
-func getVariadicInfo(funType types.Type) (bool, int, types.Type) {
-	switch t := funType.(type) {
-	case *types.Signature:
-		if t.IsVariadic() {
-			return true, t.Params().Len(), t.Params().At(t.Params().Len() - 1).Type()
-		}
-	case *types.Builtin:
-		switch t.Name() {
-		case "append":
-			return true, 2, types.NewInterface(nil)
-		case "print", "println":
-			return true, 1, types.NewInterface(nil)
-		}
-	}
-	return false, 0, nil
-}
-
 func isUnderscore(expr ast.Expr) bool {
 	if id, isIdent := expr.(*ast.Ident); isIdent {
 		return id.Name == "_"
@@ -644,6 +634,7 @@ func isUnderscore(expr ast.Expr) bool {
 
 type IsReadyVisitor struct {
 	info           *types.Info
+	functions      map[types.Object]*ast.FuncDecl
 	pendingObjects map[types.Object]bool
 	isReady        bool
 }
@@ -658,6 +649,11 @@ func (v *IsReadyVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		if v.pendingObjects[o] {
 			v.isReady = false
 			return nil
+		}
+		if fun, found := v.functions[o]; found {
+			delete(v.functions, o)
+			ast.Walk(v, fun)
+			v.functions[o] = fun
 		}
 	}
 	return v

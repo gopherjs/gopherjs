@@ -7,10 +7,11 @@ var prelude = `
 "use strict";
 Error.stackTraceLimit = -1;
 
-var _idCounter = 1;
-var Go$Nil = { _id: 0 };
+var Go$obj, Go$tuple;
+var Go$idCounter = 1;
+var Go$nil = { Go$id: 0 };
 
-var Slice = function(data, length, capacity) {
+var Go$Slice = function(data, length, capacity) {
 	capacity = capacity || length || 0;
 	data = data || new Array(capacity);
 	this.array = data;
@@ -21,15 +22,15 @@ var Slice = function(data, length, capacity) {
 	}
 };
 
-Slice.prototype.get = function(index) {
+Go$Slice.prototype.get = function(index) {
 	return this.array[this.offset + index];
 };
 
-Slice.prototype.set = function(index, value) {
+Go$Slice.prototype.set = function(index, value) {
 	this.array[this.offset + index] = value;
 };
 
-Slice.prototype.subslice = function(begin, end) {
+Go$Slice.prototype.subslice = function(begin, end) {
 	var s = new this.constructor(this.array);
 	s.offset = this.offset + begin;
 	s.length = this.length - begin;
@@ -39,7 +40,7 @@ Slice.prototype.subslice = function(begin, end) {
 	return s;
 };
 
-Slice.prototype.toArray = function() {
+Go$Slice.prototype.toArray = function() {
 	if (this.array.constructor !== Array) {
 		return this.array.subarray(this.offset, this.offset + this.length);
 	}
@@ -54,7 +55,7 @@ String.prototype.toSlice = function(terminateWithNull) {
 	if (terminateWithNull) {
 		array[this.length] = 0;
 	}
-	return new Slice(array);
+	return new Go$Slice(array);
 };
 
 var Go$clear = function(array) { for (var i = 0; i < array.length; i++) { array[i] = 0; }; return array; }; // TODO remove when NodeJS is behaving according to spec
@@ -71,13 +72,13 @@ var Go$Map = function(data, capacity) {
 	}
 };
 
-var Interface = function(value) {
+var Go$Interface = function(value) {
 	return value;
 };
 
-var Channel = function() {};
+var Go$Channel = function() {};
 
-var _Pointer = function(getter, setter) { this.get = getter; this.set = setter; };
+var Go$Pointer = function(getter, setter) { this.get = getter; this.set = setter; };
 
 var Go$copy = function(dst, src) {
 	var n = Math.min(src.length, dst.length);
@@ -89,9 +90,9 @@ var Go$copy = function(dst, src) {
 
 // TODO improve performance by increasing capacity in bigger steps
 var Go$append = function(slice, toAppend) {
-	// if (slice === null) {
-	// 	return new 
-	// }
+	if (slice === null) {
+		return toAppend;
+	}
 
 	var newArray = slice.array;
 	var newOffset = slice.offset;
@@ -116,12 +117,9 @@ var Go$append = function(slice, toAppend) {
 };
 
 var GoError = function(value) {
-	this.value = value;
+	this.message = value;
 	Error.captureStackTrace(this, GoError);
 };
-GoError.prototype.toString = function() {
-	return this.value;
-}
 
 var Go$errorStack = [];
 
@@ -130,7 +128,11 @@ var Go$callDeferred = function(deferred) {
 	for (var i = deferred.length - 1; i >= 0; i--) {
 		var call = deferred[i];
 		try {
-			call.fun.apply(call.recv, call.args);
+			if (call.recv !== undefined) {
+				call.recv[call.method].apply(call.recv, call.args);				
+				continue
+			}
+			call.fun.apply(undefined, call.args);
 		} catch (err) {
 			Go$errorStack.push({ frame: Go$getStackDepth(), error: err });
 		}
@@ -148,7 +150,7 @@ var Go$recover = function() {
 		return null;
 	}
 	Go$errorStack.pop();
-	return err.error.value;
+	return err.error.message;
 };
 
 var Go$getStackDepth = function() {
@@ -175,11 +177,8 @@ var _isEqual = function(a, b) {
 	throw new Error("runtime error: comparing uncomparable type " + a.constructor);
 };
 
-var Go$print = function(a) {
-	console.log(a.toArray().join(" "));
-};
-
-var Go$println = Go$print;
+var Go$print = console.log;
+var Go$println = console.log;
 
 var Integer = function() {};
 var Float = function() {};
@@ -248,6 +247,10 @@ packages["reflect"] = {
 `
 
 var natives = map[string]string{
+	"os": `
+	  Args = new Go$Slice(process.argv);
+	`,
+
 	"runtime": `
 		sizeof_C_MStats = 3696;
 		getgoroot = function() { return process.env["GOROOT"] || ""; };

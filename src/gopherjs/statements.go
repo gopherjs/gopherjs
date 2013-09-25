@@ -177,12 +177,19 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		case 1:
 			c.Printf("return %s;", c.translateExpr(results[0]))
 		default:
-			c.Printf("return [%s];", c.translateExprSlice(results))
+			c.Printf("return [%s];", strings.Join(c.translateExprSlice(results), ", "))
 		}
 
 	case *ast.DeferStmt:
-		args := c.translateArgs(s.Call)
-		c.Printf("Go$deferred.push({ fun: %s, recv: %s, args: [%s] });", c.translateExpr(s.Call.Fun), "this", strings.Join(args, ", ")) // TODO fix receiver
+		var args []string
+		if len(s.Call.Args) > 0 { // skip for call to recover()
+			args = c.translateArgs(s.Call)
+		}
+		if sel, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
+			c.Printf(`Go$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, strings.Join(args, ", "))
+			return
+		}
+		c.Printf("Go$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), strings.Join(args, ", "))
 
 	case *ast.ExprStmt:
 		c.Printf("%s;", c.translateExpr(s.X))
@@ -204,17 +211,17 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			for i := range s.Lhs {
-				rhsExprs[i] = fmt.Sprintf("_tuple[%d]", i)
+				rhsExprs[i] = fmt.Sprintf("Go$tuple[%d]", i)
 			}
-			c.Printf("_tuple = %s;", c.translateExpr(s.Rhs[0])) // TODO translateExprToType
+			c.Printf("Go$tuple = %s;", c.translateExpr(s.Rhs[0])) // TODO translateExprToType
 
 		case len(s.Lhs) == len(s.Rhs):
 			parts := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
 				parts[i] = c.translateExprToType(rhs, c.info.Types[s.Lhs[i]])
-				rhsExprs[i] = fmt.Sprintf("_tuple[%d]", i)
+				rhsExprs[i] = fmt.Sprintf("Go$tuple[%d]", i)
 			}
-			c.Printf("_tuple = [%s];", strings.Join(parts, ", "))
+			c.Printf("Go$tuple = [%s];", strings.Join(parts, ", "))
 
 		default:
 			panic("Invalid arity of AssignStmt.")
@@ -249,7 +256,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				case *types.Map:
 					index := c.translateExpr(l.Index)
 					if _, isPointer := t.Key().Underlying().(*types.Pointer); isPointer {
-						index = fmt.Sprintf("(%s || Go$Nil)._id", index)
+						index = fmt.Sprintf("(%s || Go$nil).Go$id", index)
 					}
 					keyVar := c.newVarName("_key")
 					c.Printf("var %s = %s;", keyVar, index)

@@ -192,8 +192,8 @@ var typeOf = function(value) {
 	return type;
 };
 
-var typeAssertionFailed = function() {
-	throw new Error("type assertion failed");
+var typeAssertionFailed = function(obj) {
+	throw new Error("type assertion failed: " + obj + " (" + obj.constructor + ")");
 };
 
 var newNumericArray = function(len) {

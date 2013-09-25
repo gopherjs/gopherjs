@@ -310,16 +310,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	case *ast.SelectorExpr:
 		sel := c.info.Selections[e]
 		switch sel.Kind() {
-		case types.MethodVal:
-			methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
-			_, pointerExpected := methodsRecvType.(*types.Pointer)
-			_, isStruct := sel.Recv().Underlying().(*types.Struct)
-			if pointerExpected && !isStruct && !types.IsIdentical(sel.Recv(), methodsRecvType) {
-				target := c.translateExpr(e.X)
-				return fmt.Sprintf("(new %s(function() { return %s; }, function(v) { %s = v; })).%s", c.typeName(methodsRecvType), target, target, e.Sel.Name)
-			}
-		case types.MethodExpr:
-			return fmt.Sprintf("%s.prototype.%s.call", c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
 		case types.FieldVal:
 			val := c.translateExprToType(e.X, types.NewInterface(nil))
 			t := sel.Recv()
@@ -332,12 +322,50 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				t = field.Type()
 			}
 			return val
+		case types.MethodVal:
+			params := sel.Obj().Type().(*types.Signature).Params()
+			names := make([]string, params.Len())
+			for i := 0; i < params.Len(); i++ {
+				names[i] = params.At(i).Name()
+			}
+			nameList := strings.Join(names, ", ")
+			return fmt.Sprintf("function(%s) { return %s.%s(%s); }", nameList, c.translateExprToType(e.X, types.NewInterface(nil)), e.Sel.Name, nameList)
+		case types.MethodExpr:
+			return fmt.Sprintf("%s.prototype.%s.call", c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
+		case types.PackageObj:
+			return fmt.Sprintf("%s.%s", c.translateExpr(e.X), e.Sel.Name)
 		}
-		return fmt.Sprintf("%s.%s", c.translateExprToType(e.X, types.NewInterface(nil)), e.Sel.Name)
+		panic("")
 
 	case *ast.CallExpr:
 		funType := c.info.Types[e.Fun]
 		switch t := funType.Underlying().(type) {
+		case *types.Signature:
+			var fun string
+			switch f := e.Fun.(type) {
+			case *ast.SelectorExpr:
+				if sel := c.info.Selections[f]; sel.Kind() == types.MethodVal {
+					methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
+					_, pointerExpected := methodsRecvType.(*types.Pointer)
+					_, isStruct := sel.Recv().Underlying().(*types.Struct)
+					if pointerExpected && !isStruct && !types.IsIdentical(sel.Recv(), methodsRecvType) {
+						target := c.translateExpr(f.X)
+						fun = fmt.Sprintf("(new %s(function() { return %s; }, function(v) { %s = v; })).%s", c.typeName(methodsRecvType), target, target, f.Sel.Name)
+						break
+					}
+				}
+				fun = fmt.Sprintf("%s.%s", c.translateExprToType(f.X, types.NewInterface(nil)), f.Sel.Name)
+			default:
+				fun = c.translateExpr(e.Fun)
+			}
+			if t.Params().Len() > 1 && len(e.Args) == 1 {
+				argRefs := make([]string, t.Params().Len())
+				for i := range argRefs {
+					argRefs[i] = fmt.Sprintf("Go$tuple[%d]", i)
+				}
+				return fmt.Sprintf("(Go$tuple = %s, %s(%s))", c.translateExpr(e.Args[0]), fun, strings.Join(argRefs, ", "))
+			}
+			return fmt.Sprintf("%s(%s)", fun, strings.Join(c.translateArgs(e), ", "))
 		case *types.Builtin:
 			switch t.Name() {
 			case "new":
@@ -472,15 +500,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return fmt.Sprintf("%s.toSlice()", c.translateExpr(e.Args[0]))
 		case *types.Chan, *types.Interface, *types.Map, *types.Pointer:
 			return c.translateExpr(e.Args[0])
-		case *types.Signature:
-			if t.Params().Len() > 1 && len(e.Args) == 1 {
-				argRefs := make([]string, t.Params().Len())
-				for i := range argRefs {
-					argRefs[i] = fmt.Sprintf("Go$tuple[%d]", i)
-				}
-				return fmt.Sprintf("(Go$tuple = %s, %s(%s))", c.translateExpr(e.Args[0]), c.translateExpr(e.Fun), strings.Join(argRefs, ", "))
-			}
-			return fmt.Sprintf("%s(%s)", c.translateExpr(e.Fun), strings.Join(c.translateArgs(e), ", "))
 		default:
 			panic(fmt.Sprintf("Unhandled call: %T\n", t))
 		}
@@ -512,7 +531,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		if _, isTuple := c.info.Types[e].(*types.Tuple); isTuple {
 			return fmt.Sprintf("(Go$obj = %s, %s ? [%s, true] : [%s, false])", c.translateExpr(e.X), check, value, c.zeroValue(c.info.Types[e.Type]))
 		}
-		return fmt.Sprintf("(Go$obj = %s, %s ? %s : typeAssertionFailed())", c.translateExpr(e.X), check, value)
+		return fmt.Sprintf("(Go$obj = %s, %s ? %s : typeAssertionFailed(Go$obj))", c.translateExpr(e.X), check, value)
 
 	case *ast.Ident:
 		if e.Name == "_" {

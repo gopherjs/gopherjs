@@ -7,7 +7,7 @@ var prelude = `
 "use strict";
 Error.stackTraceLimit = -1;
 
-var Go$obj, Go$tuple;
+var Go$obj, Go$tuple, Go$x, Go$y;
 var Go$idCounter = 1;
 var Go$nil = { Go$id: 0 };
 
@@ -17,7 +17,78 @@ var Go$copyFields = function(from, to) {
 		var key = keys[i];
 		to[key] = from[key];
 	}
-}
+};
+
+var Go$Uint64 = function(high, low) {
+	this.high = high;
+	this.low = low;
+};
+var Go$addUint64 = function(x, y) {
+	var high = x.high + y.high;
+	var low = x.low + y.low;
+	if (low >= 4294967296) {
+		low -= 4294967296;
+		high += 1;
+	}
+	if (high >= 4294967296) {
+		high -= 4294967296;		
+	}
+	return new Go$Uint64(high, low);
+};
+var Go$subUint64 = function(x, y) {
+	var high = x.high - y.high;
+	var low = x.low - y.low;
+	if (low < 0) {
+		low += 4294967296;
+		high -= 1;
+	}
+	if (high < 0) {
+		high += 4294967296;		
+	}
+	return new Go$Uint64(high, low);
+};
+var Go$shiftUint64 = function(x, y) {
+	var p = Math.pow(2, y);
+	var high = Math.floor((x.high * p % 4294967296) + (x.low  / 4294967296 * p % 4294967296));
+	var low  = Math.floor((x.low  * p % 4294967296) + (x.high * 4294967296 * p % 4294967296));
+	return new Go$Uint64(high, low);
+};
+var Go$mulUint64 = function(x, y) {
+	var r = new Go$Uint64(0, 0);
+	while (y.high !== 0 || y.low !== 0) {
+		if ((y.low & 1) === 1) {
+			r = Go$addUint64(r, x);
+		}
+		y = Go$shiftUint64(y, -1);
+		x = Go$shiftUint64(x,  1);
+	}
+	return r;
+};
+var Go$divUint64 = function(x, y, returnRemainder) {
+	var r = new Go$Uint64(0, 0);
+	var n = 0;
+	while (y.high < 2147483648 && ((x.high > y.high) || (x.high === y.high && x.low > y.low))) {
+		y = Go$shiftUint64(y, 1);
+		n += 1;
+	}
+	var i = 0;
+	while (true) {
+		if ((x.high > y.high) || (x.high === y.high && x.low >= y.low)) {
+			x = Go$subUint64(x, y);
+			r = Go$addUint64(r, new Go$Uint64(0, 1));
+		}
+		if (i === n) {
+			break;
+		}
+		y = Go$shiftUint64(y, -1);
+		r = Go$shiftUint64(r,  1);
+		i += 1;
+	}
+	if (returnRemainder) {
+		return x;
+	}
+	return r;
+};
 
 var Go$Slice = function(data, length, capacity) {
 	capacity = capacity || length || 0;
@@ -29,15 +100,12 @@ var Go$Slice = function(data, length, capacity) {
 		this.length = length;
 	}
 };
-
 Go$Slice.prototype.Go$get = function(index) {
 	return this.array[this.offset + index];
 };
-
 Go$Slice.prototype.Go$set = function(index, value) {
 	this.array[this.offset + index] = value;
 };
-
 Go$Slice.prototype.Go$subslice = function(begin, end) {
 	var s = new this.constructor(this.array);
 	s.offset = this.offset + begin;
@@ -47,7 +115,6 @@ Go$Slice.prototype.Go$subslice = function(begin, end) {
 	}
 	return s;
 };
-
 Go$Slice.prototype.Go$toArray = function() {
 	if (this.array.constructor !== Array) {
 		return this.array.subarray(this.offset, this.offset + this.length);

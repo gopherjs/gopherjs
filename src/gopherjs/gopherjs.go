@@ -271,7 +271,9 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 							var values []ast.Expr
 							if genDecl.Tok == token.CONST {
 								id := ast.NewIdent("")
-								c.info.Values[id] = c.info.Objects[name].(*types.Const).Val()
+								o := c.info.Objects[name].(*types.Const)
+								c.info.Types[id] = o.Type()
+								c.info.Values[id] = o.Val()
 								values = []ast.Expr{id}
 							}
 							if genDecl.Tok == token.VAR && i < len(s.Values) {
@@ -566,6 +568,8 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Basic:
 		switch {
+		case t.Kind() == types.Uint64:
+			return "Go$Uint64"
 		case t.Info()&types.IsInteger != 0:
 			return "Integer"
 		case t.Info()&types.IsFloat != 0:

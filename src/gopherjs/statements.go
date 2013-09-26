@@ -203,6 +203,55 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.translateStmt(s.Stmt, s.Label.Name+": ")
 
 	case *ast.AssignStmt:
+		if s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
+			if basic, isBasic := c.info.Types[s.Lhs[0]].Underlying().(*types.Basic); isBasic && basic.Kind() == types.Uint64 {
+				var op token.Token
+				switch s.Tok {
+				case token.ADD_ASSIGN:
+					op = token.ADD
+				case token.SUB_ASSIGN:
+					op = token.SUB
+				case token.MUL_ASSIGN:
+					op = token.MUL
+				case token.QUO_ASSIGN:
+					op = token.QUO
+				case token.REM_ASSIGN:
+					op = token.REM
+				case token.AND_ASSIGN:
+					op = token.AND
+				case token.OR_ASSIGN:
+					op = token.OR
+				case token.XOR_ASSIGN:
+					op = token.XOR
+				case token.SHL_ASSIGN:
+					op = token.SHL
+				case token.SHR_ASSIGN:
+					op = token.SHR
+				case token.AND_NOT_ASSIGN:
+					op = token.AND_NOT
+				default:
+					panic(s.Tok)
+				}
+				c.translateStmt(&ast.AssignStmt{
+					Lhs: []ast.Expr{s.Lhs[0]},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{&ast.BinaryExpr{
+						X:  s.Lhs[0],
+						Op: op,
+						Y:  s.Rhs[0],
+					}},
+				}, label)
+				return
+			}
+
+			tok := s.Tok.String()
+			if s.Tok == token.AND_NOT_ASSIGN {
+				tok = "&=~"
+			}
+			c.Printf("%s %s %s;", c.translateExpr(s.Lhs[0]), tok, c.translateExpr(s.Rhs[0]))
+			return
+		}
+
 		rhsExprs := make([]string, len(s.Lhs))
 
 		switch {
@@ -265,16 +314,12 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				}
 			}
 
-			tok := s.Tok.String()
-			if s.Tok == token.AND_NOT_ASSIGN {
-				tok = "&=~"
-			}
-			c.Printf("%s %s %s;", c.translateExpr(lhs), tok, rhs)
+			c.Printf("%s = %s;", c.translateExpr(lhs), rhs)
 		}
 
 	case *ast.IncDecStmt:
 		if iExpr, isIExpr := s.X.(*ast.IndexExpr); isIExpr {
-			if _, isMap := c.info.Types[iExpr.X].Underlying().(*types.Map); isMap {
+			if m, isMap := c.info.Types[iExpr.X].Underlying().(*types.Map); isMap {
 				op := token.ADD
 				if s.Tok == token.DEC {
 					op = token.SUB
@@ -283,16 +328,19 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					Kind:  token.INT,
 					Value: "1",
 				}
+				binaryExpr := &ast.BinaryExpr{
+					X:  s.X,
+					Op: op,
+					Y:  one,
+				}
+				c.info.Types[binaryExpr] = m.Elem()
+				c.info.Types[one] = m.Elem()
 				c.info.Values[one] = exact.MakeInt64(1)
 				c.translateStmt(&ast.AssignStmt{
 					Lhs: []ast.Expr{s.X},
 					Tok: token.ASSIGN,
 					Rhs: []ast.Expr{
-						&ast.BinaryExpr{
-							X:  s.X,
-							Op: op,
-							Y:  one,
-						},
+						binaryExpr,
 					},
 				}, label)
 				return

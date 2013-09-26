@@ -105,7 +105,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 		lenVar := c.newVarName("_len")
-		c.Printf("var %s = %s.length;", lenVar, lenTarget)
+		c.Printf("var %s = %s !== null ? %s.length : 0;", lenVar, lenTarget, lenTarget)
 
 		iVar := c.newVarName("_i")
 		c.Printf("var %s = 0;", iVar)
@@ -152,7 +152,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		case token.CONTINUE:
 			c.Printf("continue%s;", label)
 		case token.GOTO:
-			c.Printf(`throw "goto not implemented";`)
+			c.Printf(`throw new GoError("Statement not supported: goto");`)
 		case token.FALLTHROUGH:
 			// handled in CaseClause
 		default:

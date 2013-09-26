@@ -137,7 +137,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 				panic(err)
 			}
 			for _, entry := range list {
-				fmt.Println(entry)
+				fmt.Println(entry.Error())
 			}
 			return
 		}
@@ -269,7 +269,12 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 						s := spec.(*ast.ValueSpec)
 						for i, name := range s.Names {
 							var values []ast.Expr
-							if i < len(s.Values) {
+							if genDecl.Tok == token.CONST {
+								id := ast.NewIdent("")
+								c.info.Values[id] = c.info.Objects[name].(*types.Const).Val()
+								values = []ast.Expr{id}
+							}
+							if genDecl.Tok == token.VAR && i < len(s.Values) {
 								values = []ast.Expr{s.Values[i]}
 							}
 							specs = append(specs, &ast.ValueSpec{
@@ -402,7 +407,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			}
 		case *types.Slice:
 			c.Printf("var %s = function() { Go$Slice.apply(this, arguments); };", nt.Obj().Name())
-			c.Printf("%s.prototype = Go$Slice.prototype;", nt.Obj().Name())
+			c.Printf("Go$copyFields(Go$Slice.prototype, %s.prototype);", nt.Obj().Name())
 		case *types.Map:
 			c.Printf("var %s = function() { Go$Map.apply(this, arguments); };", nt.Obj().Name())
 		case *types.Interface:
@@ -550,6 +555,8 @@ func (c *PkgContext) zeroValue(t types.Type) string {
 			return fmt.Sprintf("new %s(%s)", c.typeName(t), strings.Join(zeros, ", "))
 		case *types.Slice:
 			return fmt.Sprintf("new %s(%s)", c.typeName(t), c.zeroValue(types.NewArray(ut.Elem(), 0)))
+		case *types.Basic:
+			return c.zeroValue(ut)
 		}
 	}
 	return "null"

@@ -11,6 +11,14 @@ var Go$obj, Go$tuple;
 var Go$idCounter = 1;
 var Go$nil = { Go$id: 0 };
 
+var Go$copyFields = function(from, to) {
+	var keys = Object.keys(from);
+	for (var i = 0; i < keys.length; i++) {
+		var key = keys[i];
+		to[key] = from[key];
+	}
+}
+
 var Go$Slice = function(data, length, capacity) {
 	capacity = capacity || length || 0;
 	data = data || new Array(capacity);
@@ -247,8 +255,30 @@ packages["reflect"] = {
 `
 
 var natives = map[string]string{
+	"bytes": `
+		IndexByte = function(s, c) {
+			for (var i = 0; i < s.length; i++) {
+				if (s.Go$get(i) === c) {
+					return i;
+				}
+			}
+			return -1;
+		};
+		Equal = function(a, b) {
+			if (a.length !== b.length) {
+				return false;
+			}
+			for (var i = 0; i < a.length; i++) {
+				if (a.Go$get(i) !== b.Go$get(i)) {
+					return false;
+				}
+			}
+			return true;
+		}
+	`,
+
 	"os": `
-	  Args = new Go$Slice(process.argv.slice(1));
+		Args = new Go$Slice(process.argv.slice(1));
 	`,
 
 	"runtime": `
@@ -292,6 +322,6 @@ var natives = map[string]string{
 	`,
 
 	"time": `
-	  now = Go$now;
+		now = Go$now;
 	`,
 }

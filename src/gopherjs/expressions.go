@@ -170,17 +170,20 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		defer func() { c.usedVarNames = n }()
 		body := c.CatchOutput(func() {
 			c.Indent(func() {
+				t := c.info.Types[e].(*types.Signature)
 				var resultNames []ast.Expr
-				if e.Type.Results != nil && e.Type.Results.List[0].Names != nil {
-					for _, result := range e.Type.Results.List {
-						for _, name := range result.Names {
-							if isUnderscore(name) {
-								name = ast.NewIdent("result")
-								c.info.Objects[name] = types.NewVar(0, nil, "result", c.info.Types[result.Type])
-							}
-							c.Printf("var %s = %s;", c.translateExpr(name), c.zeroValue(c.info.Types[name]))
-							resultNames = append(resultNames, name)
+				if t.Results().Len() != 0 && t.Results().At(0).Name() != "" {
+					resultNames = make([]ast.Expr, t.Results().Len())
+					for i := 0; i < t.Results().Len(); i++ {
+						result := t.Results().At(i)
+						name := result.Name()
+						if result.Name() == "_" {
+							name = "result"
 						}
+						id := ast.NewIdent(name)
+						c.info.Objects[id] = result
+						c.Printf("var %s = %s;", c.translateExpr(id), c.zeroValue(result.Type()))
+						resultNames[i] = id
 					}
 				}
 				r := c.resultNames
@@ -271,7 +274,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Array:
 			return fmt.Sprintf("%s[%s]", x, index)
 		case *types.Slice:
-			return fmt.Sprintf("%s.get(%s)", x, index)
+			return fmt.Sprintf("%s.Go$get(%s)", x, index)
 		case *types.Map:
 			if _, isPointer := t.Key().Underlying().(*types.Pointer); isPointer {
 				index = fmt.Sprintf("(%s || Go$nil).Go$id", index)
@@ -287,7 +290,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 
 	case *ast.SliceExpr:
-		method := "subslice"
+		method := "Go$subslice"
 		if b, ok := c.info.Types[e.X].(*types.Basic); ok && b.Info()&types.IsString != 0 {
 			method = "substring"
 		}
@@ -326,7 +329,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			params := sel.Obj().Type().(*types.Signature).Params()
 			names := make([]string, params.Len())
 			for i := 0; i < params.Len(); i++ {
-				names[i] = params.At(i).Name()
+				if params.At(i).Anonymous() {
+					names[i] = c.newVarName("param")
+					continue
+				}
+				names[i] = c.newVarName(params.At(i).Name())
 			}
 			nameList := strings.Join(names, ", ")
 			return fmt.Sprintf("function(%s) { return %s.%s(%s); }", nameList, c.translateExprToType(e.X, types.NewInterface(nil)), e.Sel.Name, nameList)
@@ -445,7 +452,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					}
 					return src
 				case *types.Slice:
-					return fmt.Sprintf("String.fromCharCode.apply(null, %s.toArray())", src)
+					return fmt.Sprintf("String.fromCharCode.apply(null, %s.Go$toArray())", src)
 				default:
 					panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 				}
@@ -456,7 +463,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case t.Kind() == types.UnsafePointer:
 				if unary, isUnary := e.Args[0].(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
 					if indexExpr, isIndexExpr := unary.X.(*ast.IndexExpr); isIndexExpr {
-						return fmt.Sprintf("%s.toArray()", c.translateExpr(indexExpr.X))
+						return fmt.Sprintf("%s.Go$toArray()", c.translateExpr(indexExpr.X))
 					}
 					if ident, isIdent := unary.X.(*ast.Ident); isIdent && ident.Name == "_zero" {
 						return "new Uint8Array(0)"
@@ -509,7 +516,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		if _, isStruct := t.Underlying().(*types.Struct); isStruct {
 			return fmt.Sprintf("(Go$obj = %s, %s)", c.translateExpr(e.X), c.cloneStruct([]string{"Go$obj"}, t.(*types.Named)))
 		}
-		return c.translateExpr(e.X) + ".get()"
+		return c.translateExpr(e.X) + ".Go$get()"
 
 	case *ast.TypeAssertExpr:
 		if e.Type == nil {

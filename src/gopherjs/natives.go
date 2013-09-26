@@ -22,15 +22,15 @@ var Go$Slice = function(data, length, capacity) {
 	}
 };
 
-Go$Slice.prototype.get = function(index) {
+Go$Slice.prototype.Go$get = function(index) {
 	return this.array[this.offset + index];
 };
 
-Go$Slice.prototype.set = function(index, value) {
+Go$Slice.prototype.Go$set = function(index, value) {
 	this.array[this.offset + index] = value;
 };
 
-Go$Slice.prototype.subslice = function(begin, end) {
+Go$Slice.prototype.Go$subslice = function(begin, end) {
 	var s = new this.constructor(this.array);
 	s.offset = this.offset + begin;
 	s.length = this.length - begin;
@@ -40,7 +40,7 @@ Go$Slice.prototype.subslice = function(begin, end) {
 	return s;
 };
 
-Go$Slice.prototype.toArray = function() {
+Go$Slice.prototype.Go$toArray = function() {
 	if (this.array.constructor !== Array) {
 		return this.array.subarray(this.offset, this.offset + this.length);
 	}
@@ -78,12 +78,12 @@ var Go$Interface = function(value) {
 
 var Go$Channel = function() {};
 
-var Go$Pointer = function(getter, setter) { this.get = getter; this.set = setter; };
+var Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };
 
 var Go$copy = function(dst, src) {
 	var n = Math.min(src.length, dst.length);
 	for (var i = 0; i < n; i++) {
-		dst.set(i, src.get(i));
+		dst.Go$set(i, src.Go$get(i));
 	}
 	return n;
 };
@@ -107,7 +107,7 @@ var Go$append = function(slice, toAppend) {
 	}
 
 	for (var j = 0; j < toAppend.length; j++) {
-		newArray[newOffset + slice.length + j] = toAppend.get(j);
+		newArray[newOffset + slice.length + j] = toAppend.Go$get(j);
 	}
 
 	var newSlice = new slice.constructor(newArray);
@@ -224,7 +224,7 @@ packages["reflect"] = {
 				return false;
 			}
 			for (var i = 0; i < a.length; i++) {
-				if (!this.DeepEqual(a.get(i), b.get(i))) {
+				if (!this.DeepEqual(a.Go$get(i), b.Go$get(i))) {
 					return false;
 				}
 			}
@@ -259,22 +259,22 @@ var natives = map[string]string{
 
 	"sync/atomic": `
 		AddInt32 = AddInt64 = AddUint32 = AddUint64 = AddUintptr = function(addr, delta) {
-			var value = addr.get() + delta;
-			addr.set(value);
+			var value = addr.Go$get() + delta;
+			addr.Go$set(value);
 			return value;
 		};
 		CompareAndSwapInt32 = CompareAndSwapInt64 = CompareAndSwapUint32 = CompareAndSwapUint64 = CompareAndSwapUintptr = function(addr, oldVal, newVal) {
-			if (addr.get() === oldVal) {
-				addr.set(newVal);
+			if (addr.Go$get() === oldVal) {
+				addr.Go$set(newVal);
 				return true;
 			}
 			return false;
 		};
 		StoreInt32 = StoreInt64 = StoreUint32 = StoreUint64 = StoreUintptr = function(addr, val) {
-			addr.set(val);
+			addr.Go$set(val);
 		};
 		LoadInt32 = LoadInt64 = LoadUint32 = LoadUint64 = LoadUintptr = function(addr) {
-			return addr.get();
+			return addr.Go$get();
 		};
 	`,
 

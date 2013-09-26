@@ -225,7 +225,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 						hasPtrType := !isStruct
 						c.translateSpec(spec)
 						if hasPtrType {
-							c.Printf("%s.Go$Pointer = function(getter, setter) { this.get = getter; this.set = setter; };", recvType.Obj().Name())
+							c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", recvType.Obj().Name())
 						}
 						for _, fun := range functionsByType[recvType] {
 							c.translateFunction(fun, hasPtrType)
@@ -245,15 +245,17 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 				c.Printf(`var %s = function() { throw new GoError("Native function not implemented: %s"); };`, fun.Name, fun.Name)
 				continue
 			}
+			funcLit := &ast.FuncLit{
+				Type: fun.Type,
+				Body: &ast.BlockStmt{
+					List: fun.Body.List,
+				},
+			}
+			c.info.Types[funcLit] = c.info.Objects[fun.Name].Type()
 			c.translateStmt(&ast.AssignStmt{
 				Tok: token.DEFINE,
 				Lhs: []ast.Expr{fun.Name},
-				Rhs: []ast.Expr{&ast.FuncLit{
-					Type: fun.Type,
-					Body: &ast.BlockStmt{
-						List: fun.Body.List,
-					},
-				}},
+				Rhs: []ast.Expr{funcLit},
 			}, "")
 		}
 
@@ -456,28 +458,30 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 
 	lhs := ast.NewIdent(c.typeName(recvType) + ".prototype." + fun.Name.Name)
 	c.info.Types[lhs] = c.info.Objects[fun.Name].Type()
+	funcLit := &ast.FuncLit{
+		Type: fun.Type,
+		Body: &ast.BlockStmt{
+			List: append([]ast.Stmt{
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{recv},
+					Tok: token.DEFINE,
+					Rhs: []ast.Expr{this},
+				},
+			}, fun.Body.List...),
+		},
+	}
+	c.info.Types[funcLit] = c.info.Objects[fun.Name].Type()
 	c.translateStmt(&ast.AssignStmt{
 		Tok: token.ASSIGN,
 		Lhs: []ast.Expr{lhs},
-		Rhs: []ast.Expr{&ast.FuncLit{
-			Type: fun.Type,
-			Body: &ast.BlockStmt{
-				List: append([]ast.Stmt{
-					&ast.AssignStmt{
-						Lhs: []ast.Expr{recv},
-						Tok: token.DEFINE,
-						Rhs: []ast.Expr{this},
-					},
-				}, fun.Body.List...),
-			},
-		}},
+		Rhs: []ast.Expr{funcLit},
 	}, "")
 
 	if hasPtrType {
 		params := c.translateParams(fun.Type)
 		if !isPointer {
 			typeName := c.typeName(recvType)
-			value := "this.get()"
+			value := "this.Go$get()"
 			if isUnderlyingBasic {
 				value = fmt.Sprintf("new %s(%s)", typeName, value)
 			}

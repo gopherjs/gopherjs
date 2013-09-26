@@ -128,7 +128,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				case *types.Array:
 					c.Printf("%s%s = %s[%s];", varKeyword, value, refVar, iVar)
 				case *types.Slice:
-					c.Printf("%s%s = %s.get(%s);", varKeyword, value, refVar, iVar)
+					c.Printf("%s%s = %s.Go$get(%s);", varKeyword, value, refVar, iVar)
 				case *types.Map:
 					c.Printf("%s%s = %s.v;", varKeyword, value, entryVar)
 				case *types.Basic:
@@ -245,13 +245,13 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			switch l := lhs.(type) {
 			case *ast.StarExpr:
 				if _, isStruct := c.info.Types[l].(*types.Struct); !isStruct {
-					c.Printf("%s.set(%s);", c.translateExpr(l.X), rhs)
+					c.Printf("%s.Go$set(%s);", c.translateExpr(l.X), rhs)
 					continue
 				}
 			case *ast.IndexExpr:
 				switch t := c.info.Types[l.X].Underlying().(type) {
 				case *types.Slice:
-					c.Printf("%s.set(%s, %s);", c.translateExpr(l.X), c.translateExpr(l.Index), rhs)
+					c.Printf("%s.Go$set(%s, %s);", c.translateExpr(l.X), c.translateExpr(l.Index), rhs)
 					continue
 				case *types.Map:
 					index := c.translateExpr(l.Index)

@@ -182,6 +182,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 							name = "result"
 						}
 						id := ast.NewIdent(name)
+						c.info.Types[id] = result.Type()
 						c.info.Objects[id] = result
 						c.Printf("var %s = %s;", c.translateExpr(id), c.zeroValue(result.Type()))
 						resultNames[i] = id
@@ -396,7 +397,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			var fun string
 			switch f := e.Fun.(type) {
 			case *ast.SelectorExpr:
-				if sel := c.info.Selections[f]; sel.Kind() == types.MethodVal {
+				sel := c.info.Selections[f]
+				if sel.Kind() == types.MethodVal {
 					methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
 					_, pointerExpected := methodsRecvType.(*types.Pointer)
 					_, isStruct := sel.Recv().Underlying().(*types.Struct)
@@ -405,6 +407,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						fun = fmt.Sprintf("(new %s(function() { return %s; }, function(v) { %s = v; })).%s", c.typeName(methodsRecvType), target, target, f.Sel.Name)
 						break
 					}
+				}
+				if sel.Kind() == types.PackageObj {
+					fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), f.Sel.Name)
+					break
 				}
 				fun = fmt.Sprintf("%s.%s", c.translateExprToType(f.X, types.NewInterface(nil)), f.Sel.Name)
 			default:
@@ -500,11 +506,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				switch st := valueType.Underlying().(type) {
 				case *types.Basic:
 					if st.Info()&types.IsNumeric != 0 {
-						return fmt.Sprintf("String.fromCharCode(%s)", value)
+						return fmt.Sprintf("Go$String.fromCharCode(%s)", value)
 					}
 					return value
 				case *types.Slice:
-					return fmt.Sprintf("String.fromCharCode.apply(null, %s.Go$toArray())", value)
+					return fmt.Sprintf("Go$String.fromCharCode.apply(null, %s.Go$toArray())", value)
 				default:
 					panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 				}
@@ -635,27 +641,28 @@ func (c *PkgContext) translateExprSlice(exprs []ast.Expr) []string {
 }
 
 func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) string {
+	if desiredType == nil {
+		return c.translateExpr(expr)
+	}
 	if expr == nil {
 		return c.zeroValue(desiredType)
 	}
 	value := c.translateExpr(expr)
 	exprType := c.info.Types[expr]
-	if exprType != nil && desiredType != nil {
-		switch dt := desiredType.Underlying().(type) {
-		case *types.Basic:
-			basicExprType := exprType.Underlying().(*types.Basic)
-			if dt.Info()&types.IsInteger != 0 && basicExprType.Info()&types.IsFloat != 0 {
-				value = fmt.Sprintf("Math.floor(%s)", value)
-			}
-			if dt.Kind() != types.Uint64 && basicExprType.Kind() == types.Uint64 {
-				value += ".low"
-			}
-		case *types.Interface:
-			named, isNamed := exprType.(*types.Named)
-			_, isUnderlyingBasic := exprType.Underlying().(*types.Basic)
-			if isNamed && isUnderlyingBasic {
-				value = fmt.Sprintf("new %s(%s)", c.typeName(named), value)
-			}
+	switch dt := desiredType.Underlying().(type) {
+	case *types.Basic:
+		basicExprType := exprType.Underlying().(*types.Basic)
+		if dt.Info()&types.IsInteger != 0 && basicExprType.Info()&types.IsFloat != 0 {
+			value = fmt.Sprintf("Math.floor(%s)", value)
+		}
+		if dt.Kind() != types.Uint64 && basicExprType.Kind() == types.Uint64 {
+			value += ".low"
+		}
+	case *types.Interface:
+		named, isNamed := exprType.(*types.Named)
+		_, isUnderlyingBasic := exprType.Underlying().(*types.Basic)
+		if isNamed && isUnderlyingBasic {
+			value = fmt.Sprintf("new %s(%s)", c.typeName(named), value)
 		}
 	}
 	return value

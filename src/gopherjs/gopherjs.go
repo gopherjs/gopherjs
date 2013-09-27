@@ -183,7 +183,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 		info:         info,
 		pkgVars:      make(map[string]string),
 		objectVars:   make(map[types.Object]string),
-		usedVarNames: []string{"class", "delete", "eval", "export", "false", "implements", "in", "new", "static", "this", "true", "try", "packages", "Array", "Boolean", "Float", "Integer", "String"},
+		usedVarNames: []string{"class", "delete", "eval", "export", "false", "implements", "in", "new", "static", "this", "true", "try", "packages"},
 		writer:       t.writer,
 		delayedLines: bytes.NewBuffer(nil),
 	}
@@ -251,7 +251,9 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 					List: fun.Body.List,
 				},
 			}
-			c.info.Types[funcLit] = c.info.Objects[fun.Name].Type()
+			funType := c.info.Objects[fun.Name].Type()
+			c.info.Types[fun.Name] = funType
+			c.info.Types[funcLit] = funType
 			c.translateStmt(&ast.AssignStmt{
 				Tok: token.DEFINE,
 				Lhs: []ast.Expr{fun.Name},
@@ -571,15 +573,15 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		case t.Kind() == types.Uint64:
 			return "Go$Uint64"
 		case t.Info()&types.IsInteger != 0:
-			return "Integer"
+			return "Go$Integer"
 		case t.Info()&types.IsFloat != 0:
-			return "Float"
+			return "Go$Float"
 		case t.Info()&types.IsComplex != 0:
-			return "Complex"
+			return "Go$Complex"
 		case t.Info()&types.IsBoolean != 0:
-			return "Boolean"
+			return "Go$Boolean"
 		case t.Info()&types.IsString != 0:
-			return "String"
+			return "Go$String"
 		case t.Kind() == types.UntypedNil:
 			return "null"
 		default:
@@ -600,7 +602,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		}
 		return "Go$Pointer"
 	case *types.Array:
-		return "Array"
+		return "Go$Array"
 	case *types.Slice:
 		return "Go$Slice"
 	case *types.Map:
@@ -610,7 +612,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	case *types.Chan:
 		return "Go$Channel"
 	case *types.Signature:
-		return "Function"
+		return "Go$Function"
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
@@ -642,7 +644,7 @@ func toTypedArray(t types.Type) string {
 	if basic, isBasic := t.(*types.Basic); isBasic && basic.Info()&types.IsNumeric != 0 {
 		return toJavaScriptType(basic) + "Array"
 	}
-	return "Array"
+	return "Go$Array"
 }
 
 func createListComposite(elementType types.Type, elements []string) string {

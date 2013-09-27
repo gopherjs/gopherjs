@@ -18,6 +18,9 @@ Go$nil.Go$subslice = function(begin, end) {
 	return null;
 };
 
+var Go$Array = Array;
+var Go$Boolean = Boolean;
+var Go$Function = Function;
 var Go$keys = Object.keys;
 
 var Go$copyFields = function(from, to) {
@@ -101,7 +104,7 @@ var Go$divUint64 = function(x, y, returnRemainder) {
 
 var Go$Slice = function(data, length, capacity) {
 	capacity = capacity || length || 0;
-	data = data || new Array(capacity);
+	data = data || new Go$Array(capacity);
 	this.array = data;
 	this.offset = 0;
 	this.length = data.length;
@@ -131,7 +134,8 @@ Go$Slice.prototype.Go$toArray = function() {
 	return this.array.slice(this.offset, this.offset + this.length);
 };
 
-String.prototype.toSlice = function(terminateWithNull) {
+var Go$String = String;
+Go$String.prototype.toSlice = function(terminateWithNull) {
 	var array = new Uint8Array(terminateWithNull ? this.length + 1 : this.length);
 	for (var i = 0; i < this.length; i++) {
 		array[i] = this.charCodeAt(i);
@@ -141,10 +145,9 @@ String.prototype.toSlice = function(terminateWithNull) {
 	}
 	return new Go$Slice(array);
 };
+Go$String.Kind = function() { return 24; };
 
 var Go$clear = function(array) { for (var i = 0; i < array.length; i++) { array[i] = 0; }; return array; }; // TODO remove when NodeJS is behaving according to spec
-
-String.Kind = function() { return 24; };
 
 Number.Kind = function() { return 2; };
 Number.Bits = function() { return 32; };
@@ -264,9 +267,9 @@ var _isEqual = function(a, b) {
 var Go$print = console.log;
 var Go$println = console.log;
 
-var Integer = function() {};
-var Float = function() {};
-var Complex = function() {};
+var Go$Integer = function() {};
+var Go$Float = function() {};
+var Go$Complex = function() {};
 
 var Go$typeOf = function(value) {
 	if (value === null) {
@@ -274,7 +277,7 @@ var Go$typeOf = function(value) {
 	}
 	var type = value.constructor;
 	if (type === Number) {
-		return (Math.floor(value) === value) ? Integer : Float;
+		return (Math.floor(value) === value) ? Go$Integer : Go$Float;
 	}
 	return type;
 };
@@ -284,7 +287,7 @@ var typeAssertionFailed = function(obj) {
 };
 
 var newNumericArray = function(len) {
-	var a = new Array(len);
+	var a = new Go$Array(len);
 	for (var i = 0; i < len; i++) {
 		a[i] = 0;
 	}

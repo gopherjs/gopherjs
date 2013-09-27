@@ -204,7 +204,8 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.AssignStmt:
 		if s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
-			if basic, isBasic := c.info.Types[s.Lhs[0]].Underlying().(*types.Basic); isBasic && basic.Kind() == types.Uint64 {
+			t := c.info.Types[s.Lhs[0]]
+			if basic, isBasic := t.Underlying().(*types.Basic); isBasic && basic.Kind() == types.Uint64 {
 				var op token.Token
 				switch s.Tok {
 				case token.ADD_ASSIGN:
@@ -232,14 +233,16 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				default:
 					panic(s.Tok)
 				}
+				binaryExpr := &ast.BinaryExpr{
+					X:  s.Lhs[0],
+					Op: op,
+					Y:  s.Rhs[0],
+				}
+				c.info.Types[binaryExpr] = t
 				c.translateStmt(&ast.AssignStmt{
 					Lhs: []ast.Expr{s.Lhs[0]},
 					Tok: token.ASSIGN,
-					Rhs: []ast.Expr{&ast.BinaryExpr{
-						X:  s.Lhs[0],
-						Op: op,
-						Y:  s.Rhs[0],
-					}},
+					Rhs: []ast.Expr{binaryExpr},
 				}, label)
 				return
 			}
@@ -252,11 +255,18 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			return
 		}
 
+		typeOf := func(e ast.Expr) types.Type {
+			if s.Tok == token.DEFINE {
+				return c.info.Objects[e.(*ast.Ident)].Type()
+			}
+			return c.info.Types[e]
+		}
+
 		rhsExprs := make([]string, len(s.Lhs))
 
 		switch {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
-			rhsExprs[0] = c.translateExprToType(s.Rhs[0], c.info.Types[s.Lhs[0]])
+			rhsExprs[0] = c.translateExprToType(s.Rhs[0], typeOf(s.Lhs[0]))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			for i := range s.Lhs {
@@ -267,7 +277,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		case len(s.Lhs) == len(s.Rhs):
 			parts := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
-				parts[i] = c.translateExprToType(rhs, c.info.Types[s.Lhs[i]])
+				parts[i] = c.translateExprToType(rhs, typeOf(s.Lhs[i]))
 				rhsExprs[i] = fmt.Sprintf("Go$tuple[%d]", i)
 			}
 			c.Printf("Go$tuple = [%s];", strings.Join(parts, ", "))

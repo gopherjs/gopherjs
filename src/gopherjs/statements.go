@@ -213,7 +213,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 	case *ast.AssignStmt:
 		if s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
 			t := c.info.Types[s.Lhs[0]]
-			if basic, isBasic := t.Underlying().(*types.Basic); isBasic && basic.Kind() == types.Uint64 {
+			if basic, isBasic := t.Underlying().(*types.Basic); isBasic && is64Bit(basic) {
 				var op token.Token
 				switch s.Tok {
 				case token.ADD_ASSIGN:

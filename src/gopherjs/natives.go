@@ -7,7 +7,7 @@ var prelude = `
 "use strict";
 Error.stackTraceLimit = -1;
 
-var Go$obj, Go$tuple, Go$x, Go$y;
+var Go$obj, Go$tuple;
 var Go$idCounter = 1;
 
 var Go$nil = { Go$id: 0 };
@@ -31,69 +31,49 @@ var Go$copyFields = function(from, to) {
 	}
 };
 
+var Go$Int64 = function(high, low) {
+	this.high = (high + Math.floor(low / 4294967296) + 4294967296) | 0;
+	this.low = (low + 4294967296) % 4294967296;
+};
 var Go$Uint64 = function(high, low) {
-	this.high = high;
-	this.low = low;
+	this.high = (high + Math.floor(low / 4294967296) + 4294967296) % 4294967296;
+	this.low = (low + 4294967296) % 4294967296;
 };
-var Go$addUint64 = function(x, y) {
-	var high = x.high + y.high;
-	var low = x.low + y.low;
-	if (low >= 4294967296) {
-		low -= 4294967296;
-		high += 1;
-	}
-	if (high >= 4294967296) {
-		high -= 4294967296;		
-	}
-	return new Go$Uint64(high, low);
-};
-var Go$subUint64 = function(x, y) {
-	var high = x.high - y.high;
-	var low = x.low - y.low;
-	if (low < 0) {
-		low += 4294967296;
-		high -= 1;
-	}
-	if (high < 0) {
-		high += 4294967296;		
-	}
-	return new Go$Uint64(high, low);
-};
-var Go$shiftUint64 = function(x, y) {
+var Go$shift64 = function(x, y) {
 	var p = Math.pow(2, y);
 	var high = Math.floor((x.high * p % 4294967296) + (x.low  / 4294967296 * p % 4294967296));
 	var low  = Math.floor((x.low  * p % 4294967296) + (x.high * 4294967296 * p % 4294967296));
-	return new Go$Uint64(high, low);
+	return new x.constructor(high, low);
 };
-var Go$mulUint64 = function(x, y) {
-	var r = new Go$Uint64(0, 0);
+var Go$mul64 = function(x, y) {
+	var r = new x.constructor(0, 0);
 	while (y.high !== 0 || y.low !== 0) {
 		if ((y.low & 1) === 1) {
-			r = Go$addUint64(r, x);
+			r = new x.constructor(r.high + x.high, r.low + x.low);
 		}
-		y = Go$shiftUint64(y, -1);
-		x = Go$shiftUint64(x,  1);
+		y = Go$shift64(y, -1);
+		x = Go$shift64(x,  1);
 	}
 	return r;
 };
-var Go$divUint64 = function(x, y, returnRemainder) {
-	var r = new Go$Uint64(0, 0);
+var Go$div64 = function(x, y, returnRemainder) {
+	var r = new x.constructor(0, 0);
 	var n = 0;
 	while (y.high < 2147483648 && ((x.high > y.high) || (x.high === y.high && x.low > y.low))) {
-		y = Go$shiftUint64(y, 1);
+		y = Go$shift64(y, 1);
 		n += 1;
 	}
 	var i = 0;
 	while (true) {
 		if ((x.high > y.high) || (x.high === y.high && x.low >= y.low)) {
-			x = Go$subUint64(x, y);
-			r = Go$addUint64(r, new Go$Uint64(0, 1));
+			x = new x.constructor(x.high - y.high, x.low - y.low);
+			r = new x.constructor(r.high, r.low + 1);
 		}
 		if (i === n) {
 			break;
 		}
-		y = Go$shiftUint64(y, -1);
-		r = Go$shiftUint64(r,  1);
+		y = Go$shift64(y, -1);
+		r = Go$shift64(r,  1);
 		i += 1;
 	}
 	if (returnRemainder) {

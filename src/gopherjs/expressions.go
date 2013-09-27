@@ -18,9 +18,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case exact.Bool:
 			return fmt.Sprintf("%t", exact.BoolVal(value))
 		case exact.Int:
-			if c.info.Types[expr].Underlying().(*types.Basic).Kind() == types.Uint64 {
+			t := c.info.Types[expr].Underlying().(*types.Basic)
+			if is64Bit(t) {
 				d, _ := exact.Uint64Val(value)
-				return fmt.Sprintf("new Go$Uint64(%d, %d)", d>>32, d&(1<<32-1))
+				return fmt.Sprintf("new Go$%s(%d, %d)", toJavaScriptType(t), d>>32, d&(1<<32-1))
 			}
 			d, _ := exact.Int64Val(value)
 			return fmt.Sprintf("%d", d)
@@ -235,10 +236,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return target
 		case token.XOR:
 			op = "~"
-			basic := c.info.Types[e.X].Underlying().(*types.Basic)
-			if basic.Kind() == types.Uint64 {
-				return fmt.Sprintf("(Go$x = %s, new Go$Uint64(~Go$x.high, ~Go$x.low))", c.translateExpr(e.X))
-			}
+		}
+		basic := c.info.Types[e.X].Underlying().(*types.Basic)
+		if is64Bit(basic) {
+			x := c.newVarName("x")
+			c.Printf("var %s;", x)
+			return fmt.Sprintf("(%s = %s, new Go$%s(%s%s.high, %s%s.low))", x, c.translateExpr(e.X), toJavaScriptType(basic), op, x, op, x)
 		}
 		return fmt.Sprintf("%s%s", op, c.translateExpr(e.X))
 
@@ -250,41 +253,42 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			op = "&~"
 		}
 
-		if basic, isBasic := c.info.Types[e.X].Underlying().(*types.Basic); isBasic && basic.Kind() == types.Uint64 {
+		if basic, isBasic := c.info.Types[e.X].Underlying().(*types.Basic); isBasic && is64Bit(basic) {
 			var expr string = "0"
 			switch e.Op {
-			case token.ADD:
-				return fmt.Sprintf("Go$addUint64(%s, %s)", ex, ey)
-			case token.SUB:
-				return fmt.Sprintf("Go$subUint64(%s, %s)", ex, ey)
 			case token.MUL:
-				return fmt.Sprintf("Go$mulUint64(%s, %s)", ex, ey)
+				return fmt.Sprintf("Go$mul64(%s, %s)", ex, ey)
 			case token.QUO:
-				return fmt.Sprintf("Go$divUint64(%s, %s, false)", ex, ey)
+				return fmt.Sprintf("Go$div64(%s, %s, false)", ex, ey)
 			case token.REM:
-				return fmt.Sprintf("Go$divUint64(%s, %s, true)", ex, ey)
-			case token.EQL:
-				expr = "Go$x.high === Go$y.high && Go$x.low === Go$y.low"
-			case token.NEQ:
-				expr = "Go$x.high !== Go$y.high || Go$x.low !== Go$y.low"
-			case token.LSS:
-				expr = "Go$x.high < Go$y.high || (Go$x.high === Go$y.high && Go$x.low < Go$y.low)"
-			case token.LEQ:
-				expr = "Go$x.high < Go$y.high || (Go$x.high === Go$y.high && Go$x.low <= Go$y.low)"
-			case token.GTR:
-				expr = "Go$x.high > Go$y.high || (Go$x.high === Go$y.high && Go$x.low > Go$y.low)"
-			case token.GEQ:
-				expr = "Go$x.high > Go$y.high || (Go$x.high === Go$y.high && Go$x.low >= Go$y.low)"
-			case token.AND, token.OR, token.XOR, token.AND_NOT:
-				expr = fmt.Sprintf("new Go$Uint64(((Go$x.high %s Go$y.high) + 4294967296) %% 4294967296, ((Go$x.low %s Go$y.low) + 4294967296) %% 4294967296)", op, op)
+				return fmt.Sprintf("Go$div64(%s, %s, true)", ex, ey)
 			case token.SHL:
-				return fmt.Sprintf("Go$shiftUint64(%s, %s)", ex, ey)
+				return fmt.Sprintf("Go$shift64(%s, %s)", ex, ey)
 			case token.SHR:
-				return fmt.Sprintf("Go$shiftUint64(%s, -%s)", ex, ey)
+				return fmt.Sprintf("Go$shift64(%s, -%s)", ex, ey)
+			case token.EQL:
+				expr = "x.high === y.high && x.low === y.low"
+			case token.NEQ:
+				expr = "x.high !== y.high || x.low !== y.low"
+			case token.LSS:
+				expr = "x.high < y.high || (x.high === y.high && x.low < y.low)"
+			case token.LEQ:
+				expr = "x.high < y.high || (x.high === y.high && x.low <= y.low)"
+			case token.GTR:
+				expr = "x.high > y.high || (x.high === y.high && x.low > y.low)"
+			case token.GEQ:
+				expr = "x.high > y.high || (x.high === y.high && x.low >= y.low)"
+			case token.ADD, token.SUB, token.AND, token.OR, token.XOR, token.AND_NOT:
+				expr = fmt.Sprintf("new Go$%s(x.high %s y.high, x.low %s y.low)", toJavaScriptType(basic), op, op)
 			default:
 				panic(e.Op)
 			}
-			return fmt.Sprintf("(Go$x = %s, Go$y = %s, %s)", ex, ey, expr)
+			x := c.newVarName("x")
+			y := c.newVarName("y")
+			c.Printf("var %s, %s;", x, y)
+			expr = strings.Replace(expr, "x", x, -1)
+			expr = strings.Replace(expr, "y", y, -1)
+			return "(" + x + " = " + ex + ", " + y + " = " + ey + ", " + expr + ")"
 		}
 
 		switch e.Op {
@@ -438,9 +442,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				switch t2 := c.info.Types[e.Args[0]].(type) {
 				case *types.Slice:
 					if len(e.Args) == 3 {
-						return fmt.Sprintf("new %s(Go$clear(new %s(%s)), %s)", c.typeName(c.info.Types[e.Args[0]]), toTypedArray(t2.Elem()), c.translateExpr(e.Args[2]), c.translateExpr(e.Args[1]))
+						return fmt.Sprintf("new %s(Go$clear(new %s(%s)), %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[2]), c.translateExpr(e.Args[1]))
 					}
-					return fmt.Sprintf("new %s(Go$clear(new %s(%s)))", c.typeName(c.info.Types[e.Args[0]]), toTypedArray(t2.Elem()), c.translateExpr(e.Args[1]))
+					return fmt.Sprintf("new %s(Go$clear(new %s(%s)))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[1]))
 				default:
 					args := []string{"undefined"}
 					for _, arg := range e.Args[1:] {
@@ -596,11 +600,14 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			if basicExprType.Info()&types.IsFloat != 0 {
 				value = fmt.Sprintf("Math.floor(%s)", value)
 			}
-			if t.Kind() == types.Uint64 && basicExprType.Kind() != types.Uint64 {
-				value = fmt.Sprintf("new Go$Uint64(0, %s)", value)
+			if !is64Bit(basicExprType) && is64Bit(t) {
+				value = fmt.Sprintf("new Go$%s(0, %s)", toJavaScriptType(t), value)
 			}
-			if t.Kind() != types.Uint64 && basicExprType.Kind() == types.Uint64 {
+			if is64Bit(basicExprType) && !is64Bit(t) {
 				value += ".low"
+			}
+			if is64Bit(basicExprType) && is64Bit(t) && basicExprType.Kind() != t.Kind() {
+				value = fmt.Sprintf("(Go$obj = %s, new Go$%s(Go$obj.high, Go$obj.low))", value, toJavaScriptType(t))
 			}
 		case t.Info()&types.IsString != 0:
 			switch st := exprType.Underlying().(type) {
@@ -717,7 +724,7 @@ func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {
 			}
 			continue
 		case *types.Array:
-			c.Printf("%s = new %s(%s.buffer, %s.byteOffset + %d, %d);", field.Name(), toTypedArray(t.Elem()), array, array, offsets[i], t.Len())
+			c.Printf("%s = new %s(%s.buffer, %s.byteOffset + %d, %d);", field.Name(), toArrayType(t.Elem()), array, array, offsets[i], t.Len())
 			continue
 		}
 		c.Printf("// skipped: %s %s", field.Name(), field.Type().String())

@@ -551,7 +551,7 @@ func (c *PkgContext) zeroValue(t types.Type) string {
 			return `""`
 		}
 	case *types.Array:
-		return fmt.Sprintf("Go$clear(new %s(%d))", toTypedArray(t.Elem()), t.Len())
+		return fmt.Sprintf("Go$clear(new %s(%d))", toArrayType(t.Elem()), t.Len())
 	case *types.Struct:
 		fields := make([]string, t.NumFields())
 		for i := range fields {
@@ -580,6 +580,8 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Basic:
 		switch {
+		case t.Kind() == types.Int64:
+			return "Go$Int64"
 		case t.Kind() == types.Uint64:
 			return "Go$Uint64"
 		case t.Info()&types.IsInteger != 0:
@@ -638,10 +640,14 @@ func toJavaScriptType(t *types.Basic) string {
 		return "Int16"
 	case types.Uint16:
 		return "Uint16"
-	case types.Int32, types.Int64, types.Int:
+	case types.Int32, types.Int:
 		return "Int32"
-	case types.Uint32, types.Uint64, types.Uint, types.Uintptr:
+	case types.Int64:
+		return "Int64"
+	case types.Uint32, types.Uint, types.Uintptr:
 		return "Uint32"
+	case types.Uint64:
+		return "Uint64"
 	case types.Float32:
 		return "Float32"
 	case types.Float64, types.Complex64, types.Complex128:
@@ -650,19 +656,25 @@ func toJavaScriptType(t *types.Basic) string {
 	panic(fmt.Sprintf("Unhandled basic type: %v\n", t))
 }
 
-func toTypedArray(t types.Type) string {
-	if basic, isBasic := t.(*types.Basic); isBasic && basic.Info()&types.IsNumeric != 0 {
-		return toJavaScriptType(basic) + "Array"
+func is64Bit(t *types.Basic) bool {
+	return t.Kind() == types.Int64 || t.Kind() == types.Uint64
+}
+
+func isTypedArray(t types.Type) bool {
+	basic, isBasic := t.(*types.Basic)
+	return isBasic && basic.Info()&types.IsNumeric != 0 && !is64Bit(basic)
+}
+
+func toArrayType(t types.Type) string {
+	if isTypedArray(t) {
+		return toJavaScriptType(t.(*types.Basic)) + "Array"
 	}
 	return "Go$Array"
 }
 
 func createListComposite(elementType types.Type, elements []string) string {
-	switch elt := elementType.(type) {
-	case *types.Basic:
-		if elt.Info()&types.IsNumeric != 0 {
-			return fmt.Sprintf("new %s([%s])", toTypedArray(elt), strings.Join(elements, ", "))
-		}
+	if isTypedArray(elementType) {
+		return fmt.Sprintf("new %s([%s])", toArrayType(elementType), strings.Join(elements, ", "))
 	}
 	return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
 }

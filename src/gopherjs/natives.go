@@ -9,7 +9,16 @@ Error.stackTraceLimit = -1;
 
 var Go$obj, Go$tuple, Go$x, Go$y;
 var Go$idCounter = 1;
+
 var Go$nil = { Go$id: 0 };
+Go$nil.Go$subslice = function(begin, end) {
+	if (begin !== 0 || (end || 0) !== 0) {
+		throw new GoError("runtime error: slice bounds out of range");
+	}
+	return null;
+};
+
+var Go$keys = Object.keys;
 
 var Go$copyFields = function(from, to) {
 	var keys = Object.keys(from);
@@ -259,7 +268,10 @@ var Integer = function() {};
 var Float = function() {};
 var Complex = function() {};
 
-var typeOf = function(value) {
+var Go$typeOf = function(value) {
+	if (value === null) {
+		return null;
+	}
 	var type = value.constructor;
 	if (type === Number) {
 		return (Math.floor(value) === value) ? Integer : Float;

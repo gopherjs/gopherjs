@@ -321,7 +321,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return fmt.Sprintf("%s.Go$get(%s)", x, c.translateExprToType(e.Index, types.Typ[types.Int]))
 		case *types.Map:
 			index := c.translateExpr(e.Index)
-			if _, isPointer := t.Key().Underlying().(*types.Pointer); isPointer {
+			if hasId(t.Key()) {
 				index = fmt.Sprintf("(%s || Go$nil).Go$id", index)
 			}
 			if _, isTuple := c.info.Types[e].(*types.Tuple); isTuple {
@@ -347,13 +347,13 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			if e.Low == nil {
 				return slice
 			}
-			return fmt.Sprintf("%s.%s(%s)", slice, method, c.translateExpr(e.Low))
+			return fmt.Sprintf("(%s || Go$nil).%s(%s)", slice, method, c.translateExpr(e.Low))
 		}
 		low := "0"
 		if e.Low != nil {
 			low = c.translateExpr(e.Low)
 		}
-		return fmt.Sprintf("%s.%s(%s, %s)", slice, method, low, c.translateExpr(e.High))
+		return fmt.Sprintf("(%s || Go$nil).%s(%s, %s)", slice, method, low, c.translateExpr(e.High))
 
 	case *ast.SelectorExpr:
 		sel := c.info.Selections[e]
@@ -445,7 +445,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case *types.Slice:
 					return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.length : 0)", arg)
 				case *types.Map:
-					return fmt.Sprintf("Object.keys(%s).length", arg)
+					return fmt.Sprintf("Go$keys(%s).length", arg)
 				default:
 					panic(fmt.Sprintf("Unhandled len type: %T\n", argt))
 				}
@@ -456,7 +456,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case *types.Array:
 					return fmt.Sprintf("%s.length", arg)
 				case *types.Slice:
-					return fmt.Sprintf("%s.array.length", arg)
+					return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.array.length : 0)", arg)
 				default:
 					panic(fmt.Sprintf("Unhandled cap type: %T\n", argt))
 				}
@@ -575,10 +575,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return c.translateExpr(e.X)
 		}
 		t := c.info.Types[e.Type]
-		check := fmt.Sprintf("typeOf(Go$obj) === %s", c.typeName(t))
+		check := fmt.Sprintf("Go$typeOf(Go$obj) === %s", c.typeName(t))
 		if e.Type != nil {
 			if _, isInterface := t.Underlying().(*types.Interface); isInterface {
-				check = fmt.Sprintf("%s(typeOf(Go$obj))", c.typeName(t))
+				check = fmt.Sprintf("%s(Go$typeOf(Go$obj))", c.typeName(t))
 			}
 		}
 		value := "Go$obj"

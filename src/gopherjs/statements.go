@@ -65,7 +65,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			expr = c.translateExpr(s.Assign.(*ast.ExprStmt).X)
 		}
 		typeVar := c.newVarName("_type")
-		c.Printf("var %s = typeOf(%s);", typeVar, expr)
+		c.Printf("var %s = Go$typeOf(%s);", typeVar, expr)
 		condPrefix := typeVar + " === "
 		c.translateSwitch(s.Body.List, true, condPrefix, label)
 
@@ -100,7 +100,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		var keysVar string
 		if isMap {
 			keysVar = c.newVarName("_keys")
-			c.Printf("var %s = %s !== null ? Object.keys(%s) : [];", keysVar, refVar, refVar)
+			c.Printf("var %s = %s !== null ? Go$keys(%s) : [];", keysVar, refVar, refVar)
 			lenTarget = keysVar
 		}
 
@@ -304,7 +304,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					continue
 				case *types.Map:
 					index := c.translateExpr(l.Index)
-					if _, isPointer := t.Key().Underlying().(*types.Pointer); isPointer {
+					if hasId(t.Key()) {
 						index = fmt.Sprintf("(%s || Go$nil).Go$id", index)
 					}
 					keyVar := c.newVarName("_key")

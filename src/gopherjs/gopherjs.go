@@ -662,6 +662,12 @@ func isUnderscore(expr ast.Expr) bool {
 	return false
 }
 
+func hasId(t types.Type) bool {
+	_, isPointer := t.Underlying().(*types.Pointer)
+	_, isInterface := t.Underlying().(*types.Interface)
+	return isPointer || isInterface
+}
+
 type IsReadyVisitor struct {
 	info           *types.Info
 	functions      map[types.Object]*ast.FuncDecl

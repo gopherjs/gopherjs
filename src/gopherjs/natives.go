@@ -135,7 +135,7 @@ Go$Slice.prototype.Go$toArray = function() {
 };
 
 var Go$String = String;
-Go$String.prototype.toSlice = function(terminateWithNull) {
+Go$String.prototype.Go$toSlice = function(terminateWithNull) {
 	var array = new Uint8Array(terminateWithNull ? this.length + 1 : this.length);
 	for (var i = 0; i < this.length; i++) {
 		array[i] = this.charCodeAt(i);
@@ -393,7 +393,7 @@ var natives = map[string]string{
 	"syscall": `
 		var syscall = require("./node-syscall/build/Release/syscall");
 		Syscall = syscall.Syscall;
-		BytePtrFromString = function(s) { return [s.toSlice(true).array, null]; };
+		BytePtrFromString = function(s) { return [s.Go$toSlice(true).array, null]; };
 		Getenv = function(key) {
 			var value = process.env[key];
 			if (value === undefined) {

@@ -469,14 +469,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case "panic":
 				return fmt.Sprintf("throw new GoError(%s)", c.translateExpr(e.Args[0]))
 			case "append":
-				if e.Ellipsis.IsValid() {
-					return fmt.Sprintf("Go$append(%s, %s)", c.translateExpr(e.Args[0]), c.translateExprToSlice(e.Args[1]))
-				}
 				sliceType := c.info.Types[e]
+				if e.Ellipsis.IsValid() {
+					return fmt.Sprintf("Go$append(%s, %s)", c.translateExpr(e.Args[0]), c.translateExprToType(e.Args[1], sliceType))
+				}
 				toAppend := createListComposite(sliceType.Underlying().(*types.Slice).Elem(), c.translateExprSlice(e.Args[1:]))
 				return fmt.Sprintf("Go$append(%s, new %s(%s))", c.translateExpr(e.Args[0]), c.typeName(sliceType), toAppend)
 			case "copy":
-				return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToSlice(e.Args[0]), c.translateExprToSlice(e.Args[1]))
+				return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(nil)), c.translateExprToType(e.Args[1], types.NewSlice(nil)))
 			case "print", "println":
 				return fmt.Sprintf("Go$%s(%s)", t.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
 			case "delete", "real", "imag", "recover", "complex":
@@ -484,87 +484,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			default:
 				panic(fmt.Sprintf("Unhandled builtin: %s\n", t.Name()))
 			}
-		case *types.Basic:
-			value := c.translateExpr(e.Args[0])
-			valueType := c.info.Types[e.Args[0]]
-			switch {
-			case t.Info()&types.IsInteger != 0:
-				basicValueType := valueType.Underlying().(*types.Basic)
-				if basicValueType.Info()&types.IsFloat != 0 {
-					value = fmt.Sprintf("Math.floor(%s)", value)
-				}
-				if t.Kind() == types.Uint64 && basicValueType.Kind() != types.Uint64 {
-					value = fmt.Sprintf("new Go$Uint64(0, %s)", value)
-				}
-				if t.Kind() != types.Uint64 && basicValueType.Kind() == types.Uint64 {
-					value += ".low"
-				}
-				return value
-			case t.Info()&types.IsFloat != 0:
-				return value
-			case t.Info()&types.IsString != 0:
-				switch st := valueType.Underlying().(type) {
-				case *types.Basic:
-					if st.Info()&types.IsNumeric != 0 {
-						return fmt.Sprintf("Go$String.fromCharCode(%s)", value)
-					}
-					return value
-				case *types.Slice:
-					return fmt.Sprintf("Go$String.fromCharCode.apply(null, %s.Go$toArray())", value)
-				default:
-					panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
-				}
-			case t.Info()&types.IsComplex != 0:
-				return value
-			case t.Info()&types.IsBoolean != 0:
-				return value
-			case t.Kind() == types.UnsafePointer:
-				if unary, isUnary := e.Args[0].(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
-					if indexExpr, isIndexExpr := unary.X.(*ast.IndexExpr); isIndexExpr {
-						return fmt.Sprintf("%s.Go$toArray()", c.translateExpr(indexExpr.X))
-					}
-					if ident, isIdent := unary.X.(*ast.Ident); isIdent && ident.Name == "_zero" {
-						return "new Uint8Array(0)"
-					}
-				}
-				if ptr, isPtr := c.info.Types[e.Args[0]].(*types.Pointer); isPtr {
-					if s, isStruct := ptr.Elem().Underlying().(*types.Struct); isStruct {
-						array := c.newVarName("_array")
-						view := c.newVarName("_view")
-						target := c.newVarName("_struct")
-						c.Printf("var %s = new Uint8Array(%d);", array, types.DefaultSizeof(s))
-						c.PrintfDelayed("var %s = new DataView(%s.buffer);", view, array)
-						c.PrintfDelayed("var %s = %s;", target, c.translateExpr(e.Args[0]))
-						var fields []*types.Var
-						var collectFields func(s *types.Struct, path string)
-						collectFields = func(s *types.Struct, path string) {
-							for i := 0; i < s.NumFields(); i++ {
-								field := s.Field(i)
-								if fs, isStruct := field.Type().Underlying().(*types.Struct); isStruct {
-									collectFields(fs, path+"."+field.Name())
-									continue
-								}
-								fields = append(fields, types.NewVar(0, nil, path+"."+field.Name(), field.Type()))
-							}
-						}
-						collectFields(s, target)
-						offsets := types.DefaultOffsetsof(fields)
-						for i, field := range fields {
-							if basic, isBasic := field.Type().Underlying().(*types.Basic); isBasic && basic.Info()&types.IsNumeric != 0 {
-								c.PrintfDelayed("%s = %s.get%s(%d, true);", field.Name(), view, toJavaScriptType(basic), offsets[i])
-							}
-						}
-						return array
-					}
-				}
-				return value
-			default:
-				panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
-			}
-		case *types.Slice:
-			return fmt.Sprintf("%s.toSlice()", c.translateExpr(e.Args[0]))
-		case *types.Chan, *types.Interface, *types.Map, *types.Pointer:
-			return c.translateExpr(e.Args[0])
+		case *types.Basic, *types.Slice, *types.Chan, *types.Interface, *types.Map, *types.Pointer:
+			return c.translateExprToType(e.Args[0], t)
 		default:
 			panic(fmt.Sprintf("Unhandled call: %T\n", t))
 		}
@@ -647,32 +568,109 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 	if expr == nil {
 		return c.zeroValue(desiredType)
 	}
+
 	value := c.translateExpr(expr)
 	exprType := c.info.Types[expr]
-	switch dt := desiredType.Underlying().(type) {
+	if basicLit, isBasicLit := expr.(*ast.BasicLit); isBasicLit && basicLit.Kind == token.STRING {
+		exprType = types.Typ[types.String]
+	}
+
+	switch t := desiredType.Underlying().(type) {
 	case *types.Basic:
-		basicExprType := exprType.Underlying().(*types.Basic)
-		if dt.Info()&types.IsInteger != 0 && basicExprType.Info()&types.IsFloat != 0 {
-			value = fmt.Sprintf("Math.floor(%s)", value)
+		switch {
+		case t.Info()&types.IsInteger != 0:
+			basicExprType := exprType.Underlying().(*types.Basic)
+			if basicExprType.Info()&types.IsFloat != 0 {
+				value = fmt.Sprintf("Math.floor(%s)", value)
+			}
+			if t.Kind() == types.Uint64 && basicExprType.Kind() != types.Uint64 {
+				value = fmt.Sprintf("new Go$Uint64(0, %s)", value)
+			}
+			if t.Kind() != types.Uint64 && basicExprType.Kind() == types.Uint64 {
+				value += ".low"
+			}
+			return value
+		case t.Info()&types.IsFloat != 0:
+			return value
+		case t.Info()&types.IsString != 0:
+			switch st := exprType.Underlying().(type) {
+			case *types.Basic:
+				if st.Info()&types.IsNumeric != 0 {
+					return fmt.Sprintf("Go$String.fromCharCode(%s)", value)
+				}
+				return value
+			case *types.Slice:
+				return fmt.Sprintf("Go$String.fromCharCode.apply(null, %s.Go$toArray())", value)
+			default:
+				panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
+			}
+		case t.Info()&types.IsComplex != 0:
+			return value
+		case t.Info()&types.IsBoolean != 0:
+			return value
+		case t.Kind() == types.UnsafePointer:
+			if unary, isUnary := expr.(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
+				if indexExpr, isIndexExpr := unary.X.(*ast.IndexExpr); isIndexExpr {
+					return fmt.Sprintf("%s.Go$toArray()", c.translateExpr(indexExpr.X))
+				}
+				if ident, isIdent := unary.X.(*ast.Ident); isIdent && ident.Name == "_zero" {
+					return "new Uint8Array(0)"
+				}
+			}
+			if ptr, isPtr := c.info.Types[expr].(*types.Pointer); isPtr {
+				if s, isStruct := ptr.Elem().Underlying().(*types.Struct); isStruct {
+					array := c.newVarName("_array")
+					view := c.newVarName("_view")
+					target := c.newVarName("_struct")
+					c.Printf("var %s = new Uint8Array(%d);", array, types.DefaultSizeof(s))
+					c.PrintfDelayed("var %s = new DataView(%s.buffer);", view, array)
+					c.PrintfDelayed("var %s = %s;", target, c.translateExpr(expr))
+					var fields []*types.Var
+					var collectFields func(s *types.Struct, path string)
+					collectFields = func(s *types.Struct, path string) {
+						for i := 0; i < s.NumFields(); i++ {
+							field := s.Field(i)
+							if fs, isStruct := field.Type().Underlying().(*types.Struct); isStruct {
+								collectFields(fs, path+"."+field.Name())
+								continue
+							}
+							fields = append(fields, types.NewVar(0, nil, path+"."+field.Name(), field.Type()))
+						}
+					}
+					collectFields(s, target)
+					offsets := types.DefaultOffsetsof(fields)
+					for i, field := range fields {
+						if basic, isBasic := field.Type().Underlying().(*types.Basic); isBasic && basic.Info()&types.IsNumeric != 0 {
+							c.PrintfDelayed("%s = %s.get%s(%d, true);", field.Name(), view, toJavaScriptType(basic), offsets[i])
+						}
+					}
+					return array
+				}
+			}
+		default:
+			panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 		}
-		if dt.Kind() != types.Uint64 && basicExprType.Kind() == types.Uint64 {
-			value += ".low"
-		}
+
 	case *types.Interface:
 		named, isNamed := exprType.(*types.Named)
 		_, isUnderlyingBasic := exprType.Underlying().(*types.Basic)
 		if isNamed && isUnderlyingBasic {
 			value = fmt.Sprintf("new %s(%s)", c.typeName(named), value)
 		}
-	}
-	return value
-}
 
-func (c *PkgContext) translateExprToSlice(expr ast.Expr) string {
-	if t, isBasic := c.info.Types[expr].Underlying().(*types.Basic); isBasic && t.Info()&types.IsString != 0 {
-		return c.translateExpr(expr) + ".toSlice()"
+	case *types.Slice:
+		if basic, isBasic := exprType.Underlying().(*types.Basic); isBasic && basic.Info()&types.IsString != 0 {
+			value = fmt.Sprintf("%s.Go$toSlice()", value)
+		}
+
+	case *types.Array, *types.Struct, *types.Chan, *types.Map, *types.Pointer, *types.Signature:
+		// no converion
+
+	default:
+		panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 	}
-	return c.translateExpr(expr)
+
+	return value
 }
 
 func (c *PkgContext) cloneStruct(srcPath []string, t *types.Named) string {

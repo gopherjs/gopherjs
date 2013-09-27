@@ -525,11 +525,7 @@ func (c *PkgContext) translateArgs(call *ast.CallExpr) []string {
 	funType := c.info.Types[call.Fun].Underlying().(*types.Signature)
 	args := make([]string, funType.Params().Len())
 	for i := range args {
-		if funType.IsVariadic() && i == len(args)-1 {
-			if call.Ellipsis.IsValid() {
-				args[i] = c.translateExprToSlice(call.Args[i])
-				break
-			}
+		if funType.IsVariadic() && i == len(args)-1 && !call.Ellipsis.IsValid() {
 			args[i] = fmt.Sprintf("new Go$Slice(%s)", createListComposite(funType.Params().At(i).Type(), c.translateExprSlice(call.Args[i:])))
 			break
 		}

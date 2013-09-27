@@ -28,6 +28,7 @@ type PkgContext struct {
 	pkgVars      map[string]string
 	objectVars   map[types.Object]string
 	usedVarNames []string
+	functionSig  *types.Signature
 	resultNames  []ast.Expr
 	writer       io.Writer
 	indentation  int
@@ -64,14 +65,10 @@ func (c *PkgContext) Printf(format string, values ...interface{}) {
 	c.Write([]byte(strings.Repeat("\t", c.indentation)))
 	fmt.Fprintf(c, format, values...)
 	c.Write([]byte{'\n'})
-	c.delayedLines.WriteTo(c.writer)
-	c.delayedLines.Reset()
-}
-
-func (c *PkgContext) PrintfDelayed(format string, values ...interface{}) {
-	c.delayedLines.Write([]byte(strings.Repeat("\t", c.indentation)))
-	fmt.Fprintf(c.delayedLines, format, values...)
-	c.delayedLines.Write([]byte{'\n'})
+	if c.delayedLines != nil {
+		c.delayedLines.WriteTo(c.writer)
+		c.delayedLines = nil
+	}
 }
 
 func (c *PkgContext) Indent(f func()) {
@@ -80,13 +77,17 @@ func (c *PkgContext) Indent(f func()) {
 	c.indentation -= 1
 }
 
-func (c *PkgContext) CatchOutput(f func()) string {
+func (c *PkgContext) CatchOutput(f func()) *bytes.Buffer {
 	origWriter := c.writer
 	b := bytes.NewBuffer(nil)
 	c.writer = b
 	f()
 	c.writer = origWriter
-	return b.String()
+	return b
+}
+
+func (c *PkgContext) Delayed(f func()) {
+	c.delayedLines = c.CatchOutput(f)
 }
 
 func main() {
@@ -185,7 +186,6 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 		objectVars:   make(map[types.Object]string),
 		usedVarNames: []string{"class", "delete", "eval", "export", "false", "implements", "in", "new", "static", "this", "true", "try", "packages"},
 		writer:       t.writer,
-		delayedLines: bytes.NewBuffer(nil),
 	}
 	t.packages[pkg.ImportPath] = c
 
@@ -194,9 +194,10 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 	for _, file := range files {
 		for _, decl := range file.Decls {
 			if fun, isFunction := decl.(*ast.FuncDecl); isFunction {
+				sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
 				var recvType types.Type
-				if fun.Recv != nil && len(fun.Recv.List[0].Names) == 1 {
-					recvType = c.info.Objects[fun.Recv.List[0].Names[0]].Type()
+				if sig.Recv() != nil {
+					recvType = sig.Recv().Type()
 					if ptr, isPtr := recvType.(*types.Pointer); isPtr {
 						recvType = ptr.Elem()
 					}
@@ -451,32 +452,38 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 }
 
 func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
-	recv := fun.Recv.List[0].Names[0]
-	recvType := c.info.Objects[recv].Type()
+	sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
+
+	recvType := sig.Recv().Type()
 	ptr, isPointer := recvType.(*types.Pointer)
 	_, isUnderlyingBasic := recvType.Underlying().(*types.Basic)
 
-	var this ast.Expr = ast.NewIdent("this")
-	if isUnderlyingBasic {
-		this = ast.NewIdent("this.v")
+	body := fun.Body.List
+	if fun.Recv.List[0].Names != nil {
+		recv := fun.Recv.List[0].Names[0]
+		var this ast.Expr = ast.NewIdent("this")
+		if isUnderlyingBasic {
+			this = ast.NewIdent("this.v")
+		}
+		if _, isUnderlyingStruct := recvType.Underlying().(*types.Struct); isUnderlyingStruct {
+			this = &ast.StarExpr{X: this}
+		}
+		c.info.Types[this] = recvType
+		body = append([]ast.Stmt{
+			&ast.AssignStmt{
+				Lhs: []ast.Expr{recv},
+				Tok: token.DEFINE,
+				Rhs: []ast.Expr{this},
+			},
+		}, body...)
 	}
-	if _, isUnderlyingStruct := recvType.Underlying().(*types.Struct); isUnderlyingStruct {
-		this = &ast.StarExpr{X: this}
-	}
-	c.info.Types[this] = recvType
 
 	lhs := ast.NewIdent(c.typeName(recvType) + ".prototype." + fun.Name.Name)
 	c.info.Types[lhs] = c.info.Objects[fun.Name].Type()
 	funcLit := &ast.FuncLit{
 		Type: fun.Type,
 		Body: &ast.BlockStmt{
-			List: append([]ast.Stmt{
-				&ast.AssignStmt{
-					Lhs: []ast.Expr{recv},
-					Tok: token.DEFINE,
-					Rhs: []ast.Expr{this},
-				},
-			}, fun.Body.List...),
+			List: body,
 		},
 	}
 	c.info.Types[funcLit] = c.info.Objects[fun.Name].Type()
@@ -545,6 +552,13 @@ func (c *PkgContext) zeroValue(t types.Type) string {
 		}
 	case *types.Array:
 		return fmt.Sprintf("Go$clear(new %s(%d))", toTypedArray(t.Elem()), t.Len())
+	case *types.Struct:
+		fields := make([]string, t.NumFields())
+		for i := range fields {
+			field := t.Field(i)
+			fields[i] = field.Name() + ": " + c.zeroValue(field.Type())
+		}
+		return fmt.Sprintf("{%s}", strings.Join(fields, ", "))
 	case *types.Named:
 		switch ut := t.Underlying().(type) {
 		case *types.Struct:

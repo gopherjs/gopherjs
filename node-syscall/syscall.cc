@@ -30,8 +30,30 @@ void Syscall(const FunctionCallbackInfo<Value>& info) {
   info.GetReturnValue().Set(res);
 }
 
+void Syscall6(const FunctionCallbackInfo<Value>& info) {
+  int r = syscall(
+    info[0]->ToInteger()->Value(),
+    toNative(info[1]),
+    toNative(info[2]),
+    toNative(info[3]),
+    toNative(info[4]),
+    toNative(info[5]),
+    toNative(info[6])
+  );
+  int err = 0;
+  if (r < 0) {
+    err = errno;
+  }
+  Local<Array> res = Array::New(3);
+  res->Set(0, Integer::New(r));
+  res->Set(1, Integer::New(0));
+  res->Set(2, Integer::New(err));
+  info.GetReturnValue().Set(res);
+}
+
 void init(Handle<Object> target) {
   NODE_SET_METHOD(target, "Syscall", Syscall);
+  NODE_SET_METHOD(target, "Syscall6", Syscall6);
 }
 
 NODE_MODULE(syscall, init);

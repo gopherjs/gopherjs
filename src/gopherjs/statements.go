@@ -71,7 +71,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.ForStmt:
 		c.translateStmt(s.Init, "")
-		post := strings.TrimSuffix(strings.TrimSpace(c.CatchOutput(func() { c.translateStmt(s.Post, "") })), ";") // TODO ugly
+		post := strings.TrimSuffix(strings.TrimSpace(c.CatchOutput(func() { c.translateStmt(s.Post, "") }).String()), ";") // TODO ugly
 		c.Printf("%sfor (; %s; %s) {", label, c.translateExpr(s.Cond), post)
 		c.Indent(func() {
 			c.translateStmtList(s.Body.List)
@@ -175,9 +175,17 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		case 0:
 			c.Printf("return;")
 		case 1:
-			c.Printf("return %s;", c.translateExpr(results[0]))
+			if c.functionSig.Results().Len() > 1 {
+				c.Printf("return %s;", c.translateExpr(results[0]))
+				return
+			}
+			c.Printf("return %s;", c.translateExprToType(results[0], c.functionSig.Results().At(0).Type()))
 		default:
-			c.Printf("return [%s];", strings.Join(c.translateExprSlice(results), ", "))
+			values := make([]string, len(results))
+			for i, result := range results {
+				values[i] = c.translateExprToType(result, c.functionSig.Results().At(i).Type())
+			}
+			c.Printf("return [%s];", strings.Join(values, ", "))
 		}
 
 	case *ast.DeferStmt:

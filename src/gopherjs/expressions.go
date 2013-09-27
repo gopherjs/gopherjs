@@ -188,6 +188,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						resultNames[i] = id
 					}
 				}
+
+				s := c.functionSig
+				defer func() { c.functionSig = s }()
+				c.functionSig = t
 				r := c.resultNames
 				defer func() { c.resultNames = r }()
 				c.resultNames = resultNames
@@ -217,7 +221,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				c.translateStmtList(e.Body.List)
 			})
 			c.Printf("")
-		})
+		}).String()
 		return fmt.Sprintf("(function(%s) {\n%s})", c.translateParams(e.Type), body[:len(body)-1])
 
 	case *ast.UnaryExpr:
@@ -340,10 +344,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		if b, ok := c.info.Types[e.X].(*types.Basic); ok && b.Info()&types.IsString != 0 {
 			method = "substring"
 		}
-		slice := c.translateExpr(e.X)
-		if _, ok := c.info.Types[e.X].(*types.Array); ok {
-			slice = fmt.Sprintf("new Go$Slice(%s)", slice)
-		}
+		slice := c.translateExprToType(e.X, c.info.Types[e])
 		if e.High == nil {
 			if e.Low == nil {
 				return slice
@@ -401,8 +402,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				if sel.Kind() == types.MethodVal {
 					methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
 					_, pointerExpected := methodsRecvType.(*types.Pointer)
+					_, isPointer := sel.Recv().Underlying().(*types.Pointer)
 					_, isStruct := sel.Recv().Underlying().(*types.Struct)
-					if pointerExpected && !isStruct && !types.IsIdentical(sel.Recv(), methodsRecvType) {
+					if pointerExpected && !isPointer && !isStruct {
 						target := c.translateExpr(f.X)
 						fun = fmt.Sprintf("(new %s(function() { return %s; }, function(v) { %s = v; })).%s", c.typeName(methodsRecvType), target, target, f.Sel.Name)
 						break
@@ -427,7 +429,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Builtin:
 			switch t.Name() {
 			case "new":
-				return c.zeroValue(c.info.Types[e].(*types.Pointer).Elem())
+				elemType := c.info.Types[e.Args[0]]
+				if types.IsIdentical(elemType, types.Typ[types.Uintptr]) {
+					return "new Uint8Array(8)"
+				}
+				return c.zeroValue(elemType)
 			case "make":
 				switch t2 := c.info.Types[e.Args[0]].(type) {
 				case *types.Slice:
@@ -451,7 +457,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case *types.Slice:
 					return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.length : 0)", arg)
 				case *types.Map:
-					return fmt.Sprintf("Go$keys(%s).length", arg)
+					return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$keys(Go$obj).length : 0)", arg)
 				default:
 					panic(fmt.Sprintf("Unhandled len type: %T\n", argt))
 				}
@@ -475,17 +481,23 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 				toAppend := createListComposite(sliceType.Underlying().(*types.Slice).Elem(), c.translateExprSlice(e.Args[1:]))
 				return fmt.Sprintf("Go$append(%s, new %s(%s))", c.translateExpr(e.Args[0]), c.typeName(sliceType), toAppend)
+			case "delete":
+				index := c.translateExpr(e.Args[1])
+				if hasId(c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()) {
+					index = fmt.Sprintf("(%s || Go$nil).Go$id", index)
+				}
+				return fmt.Sprintf("delete %s[%s]", c.translateExpr(e.Args[0]), index)
 			case "copy":
 				return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(nil)), c.translateExprToType(e.Args[1], types.NewSlice(nil)))
 			case "print", "println":
 				return fmt.Sprintf("Go$%s(%s)", t.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
-			case "delete", "real", "imag", "recover", "complex":
+			case "real", "imag", "recover", "complex":
 				return fmt.Sprintf("Go$%s(%s)", t.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
 			default:
 				panic(fmt.Sprintf("Unhandled builtin: %s\n", t.Name()))
 			}
 		case *types.Basic, *types.Slice, *types.Chan, *types.Interface, *types.Map, *types.Pointer:
-			return c.translateExprToType(e.Args[0], t)
+			return c.translateExprToType(e.Args[0], funType)
 		default:
 			panic(fmt.Sprintf("Unhandled call: %T\n", t))
 		}
@@ -574,12 +586,13 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 	if basicLit, isBasicLit := expr.(*ast.BasicLit); isBasicLit && basicLit.Kind == token.STRING {
 		exprType = types.Typ[types.String]
 	}
+	basicExprType, exprIsBasic := exprType.Underlying().(*types.Basic)
+	namedExprType, exprIsNamed := exprType.(*types.Named)
 
 	switch t := desiredType.Underlying().(type) {
 	case *types.Basic:
 		switch {
 		case t.Info()&types.IsInteger != 0:
-			basicExprType := exprType.Underlying().(*types.Basic)
 			if basicExprType.Info()&types.IsFloat != 0 {
 				value = fmt.Sprintf("Math.floor(%s)", value)
 			}
@@ -589,9 +602,6 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			if t.Kind() != types.Uint64 && basicExprType.Kind() == types.Uint64 {
 				value += ".low"
 			}
-			return value
-		case t.Info()&types.IsFloat != 0:
-			return value
 		case t.Info()&types.IsString != 0:
 			switch st := exprType.Underlying().(type) {
 			case *types.Basic:
@@ -604,14 +614,10 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			default:
 				panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 			}
-		case t.Info()&types.IsComplex != 0:
-			return value
-		case t.Info()&types.IsBoolean != 0:
-			return value
 		case t.Kind() == types.UnsafePointer:
 			if unary, isUnary := expr.(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
 				if indexExpr, isIndexExpr := unary.X.(*ast.IndexExpr); isIndexExpr {
-					return fmt.Sprintf("%s.Go$toArray()", c.translateExpr(indexExpr.X))
+					return fmt.Sprintf("%s.Go$toArray()", c.translateExprToType(indexExpr.X, types.NewSlice(nil)))
 				}
 				if ident, isIdent := unary.X.(*ast.Ident); isIdent && ident.Name == "_zero" {
 					return "new Uint8Array(0)"
@@ -620,50 +626,48 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			if ptr, isPtr := c.info.Types[expr].(*types.Pointer); isPtr {
 				if s, isStruct := ptr.Elem().Underlying().(*types.Struct); isStruct {
 					array := c.newVarName("_array")
-					view := c.newVarName("_view")
 					target := c.newVarName("_struct")
 					c.Printf("var %s = new Uint8Array(%d);", array, types.DefaultSizeof(s))
-					c.PrintfDelayed("var %s = new DataView(%s.buffer);", view, array)
-					c.PrintfDelayed("var %s = %s;", target, c.translateExpr(expr))
-					var fields []*types.Var
-					var collectFields func(s *types.Struct, path string)
-					collectFields = func(s *types.Struct, path string) {
-						for i := 0; i < s.NumFields(); i++ {
-							field := s.Field(i)
-							if fs, isStruct := field.Type().Underlying().(*types.Struct); isStruct {
-								collectFields(fs, path+"."+field.Name())
-								continue
-							}
-							fields = append(fields, types.NewVar(0, nil, path+"."+field.Name(), field.Type()))
-						}
-					}
-					collectFields(s, target)
-					offsets := types.DefaultOffsetsof(fields)
-					for i, field := range fields {
-						if basic, isBasic := field.Type().Underlying().(*types.Basic); isBasic && basic.Info()&types.IsNumeric != 0 {
-							c.PrintfDelayed("%s = %s.get%s(%d, true);", field.Name(), view, toJavaScriptType(basic), offsets[i])
-						}
-					}
+					c.Delayed(func() {
+						c.Printf("var %s = %s;", target, c.translateExpr(expr))
+						c.loadStruct(array, target, s)
+					})
 					return array
 				}
 			}
-		default:
-			panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
-		}
-
-	case *types.Interface:
-		named, isNamed := exprType.(*types.Named)
-		_, isUnderlyingBasic := exprType.Underlying().(*types.Basic)
-		if isNamed && isUnderlyingBasic {
-			value = fmt.Sprintf("new %s(%s)", c.typeName(named), value)
 		}
 
 	case *types.Slice:
-		if basic, isBasic := exprType.Underlying().(*types.Basic); isBasic && basic.Info()&types.IsString != 0 {
-			value = fmt.Sprintf("%s.Go$toSlice()", value)
+		switch t := exprType.Underlying().(type) {
+		case *types.Basic:
+			if t.Info()&types.IsString != 0 {
+				value = fmt.Sprintf("%s.Go$toSlice()", value)
+			}
+		case *types.Array, *types.Pointer:
+			value = fmt.Sprintf("new Go$Slice(%s)", value)
+		}
+		namedDesiredType, desiredIsNamed := desiredType.(*types.Named)
+		if desiredIsNamed && !types.IsIdentical(exprType, desiredType) {
+			value = fmt.Sprintf("(Go$obj = %s, (new %s(Go$obj.array)).Go$subslice(Go$obj.offset, Go$obj.offset + Go$obj.length))", value, c.typeName(namedDesiredType))
 		}
 
-	case *types.Array, *types.Struct, *types.Chan, *types.Map, *types.Pointer, *types.Signature:
+	case *types.Interface:
+		if exprIsNamed && exprIsBasic {
+			value = fmt.Sprintf("new %s(%s)", c.typeName(namedExprType), value)
+		}
+
+	case *types.Pointer:
+		s, isStruct := t.Elem().Underlying().(*types.Struct)
+		if isStruct && types.IsIdentical(exprType, types.Typ[types.UnsafePointer]) {
+			array := c.newVarName("_array")
+			target := c.newVarName("_struct")
+			c.Printf("var %s = %s;", array, value)
+			c.Printf("var %s = %s;", target, c.zeroValue(t.Elem()))
+			c.loadStruct(array, target, s)
+			return target
+		}
+
+	case *types.Array, *types.Struct, *types.Chan, *types.Map, *types.Signature:
 		// no converion
 
 	default:
@@ -686,6 +690,38 @@ func (c *PkgContext) cloneStruct(srcPath []string, t *types.Named) string {
 		fields[i] = strings.Join(fieldPath, ".")
 	}
 	return fmt.Sprintf("new %s(%s)", c.typeName(t), strings.Join(fields, ", "))
+}
+
+func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {
+	view := c.newVarName("_view")
+	c.Printf("var %s = new DataView(%s.buffer, %s.byteOffset);", view, array, array)
+	var fields []*types.Var
+	var collectFields func(s *types.Struct, path string)
+	collectFields = func(s *types.Struct, path string) {
+		for i := 0; i < s.NumFields(); i++ {
+			field := s.Field(i)
+			if fs, isStruct := field.Type().Underlying().(*types.Struct); isStruct {
+				collectFields(fs, path+"."+field.Name())
+				continue
+			}
+			fields = append(fields, types.NewVar(0, nil, path+"."+field.Name(), field.Type()))
+		}
+	}
+	collectFields(s, target)
+	offsets := types.DefaultOffsetsof(fields)
+	for i, field := range fields {
+		switch t := field.Type().Underlying().(type) {
+		case *types.Basic:
+			if t.Info()&types.IsNumeric != 0 {
+				c.Printf("%s = %s.get%s(%d, true);", field.Name(), view, toJavaScriptType(t), offsets[i])
+			}
+			continue
+		case *types.Array:
+			c.Printf("%s = new %s(%s.buffer, %s.byteOffset + %d, %d);", field.Name(), toTypedArray(t.Elem()), array, array, offsets[i], t.Len())
+			continue
+		}
+		c.Printf("// skipped: %s %s", field.Name(), field.Type().String())
+	}
 }
 
 type HasDeferVisitor struct {

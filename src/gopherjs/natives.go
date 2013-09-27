@@ -393,6 +393,7 @@ var natives = map[string]string{
 	"syscall": `
 		var syscall = require("./node-syscall/build/Release/syscall");
 		Syscall = syscall.Syscall;
+		Syscall6 = syscall.Syscall6;
 		BytePtrFromString = function(s) { return [s.Go$toSlice(true).array, null]; };
 		Getenv = function(key) {
 			var value = process.env[key];

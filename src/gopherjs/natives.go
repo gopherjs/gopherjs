@@ -155,7 +155,6 @@ var Go$copy = function(dst, src) {
 	return n;
 };
 
-// TODO improve performance by increasing capacity in bigger steps
 var Go$append = function(slice, toAppend) {
 	if (slice === null) {
 		return toAppend;
@@ -166,7 +165,9 @@ var Go$append = function(slice, toAppend) {
 	var newLength = slice.length + toAppend.length;
 
 	if (slice.offset + newLength > newArray.length) {
-		newArray = new newArray.constructor(newLength);
+		var c = slice.array.length - slice.offset;
+		var newCapacity = Math.max(newLength, c < 1024 ? c * 2 : Math.floor(c * 5 / 4));
+		newArray = new newArray.constructor(newCapacity);
 		for (var i = 0; i < slice.length; i++) {
 			newArray[i] = slice.array[slice.offset + i];
 		}
@@ -313,6 +314,10 @@ packages["reflect"] = {
 	},
 	flag: function() {},
 	Value: function() {}, 
+};
+
+packages["go/doc"] = {
+	Synopsis: function(s) { return ""; }
 };
 `
 

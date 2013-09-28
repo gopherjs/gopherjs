@@ -32,7 +32,7 @@ var Go$copyFields = function(from, to) {
 };
 
 var Go$Int64 = function(high, low) {
-	this.high = (high + Math.floor(low / 4294967296) + 4294967296) | 0;
+	this.high = (high + Math.floor(low / 4294967296)) | 0;
 	this.low = (low + 4294967296) % 4294967296;
 };
 var Go$Uint64 = function(high, low) {
@@ -342,6 +342,21 @@ var natives = map[string]string{
 			}
 			return true;
 		}
+	`,
+
+	"math/big": `
+		mulWW = mulWW_g;
+		divWW = divWW_g;
+		addVV = addVV_g;
+		subVV = subVV_g;
+		addVW = addVW_g;
+		subVW = subVW_g;
+		shlVU = shlVU_g;
+		shrVU = shrVU_g;
+		mulAddVWW = mulAddVWW_g;
+		addMulVVW = addMulVVW_g;
+		divWVW = divWVW_g;
+		bitLen = bitLen_g;
 	`,
 
 	"os": `

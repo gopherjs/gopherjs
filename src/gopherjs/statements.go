@@ -45,29 +45,28 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			c.Printf("var %s = %s;", refVar, c.translateExpr(s.Tag))
 			condPrefix = refVar + " === "
 		}
-		c.translateSwitch(s.Body.List, false, condPrefix, label)
+		c.translateSwitch(s.Body.List, condPrefix, "", "", label)
 
 	case *ast.TypeSwitchStmt:
 		c.translateStmt(s.Init, "")
-		expr := ""
-		if assign, isAssign := s.Assign.(*ast.AssignStmt); isAssign {
-			id := assign.Lhs[0].(*ast.Ident)
-			expr = c.newVarName(id.Name)
-			obj := &types.Var{}
-			c.info.Objects[id] = obj
-			c.objectVars[obj] = expr
-			c.translateStmt(s.Assign, "")
+		var expr ast.Expr
+		var typeSwitchVar string
+		switch a := s.Assign.(type) {
+		case *ast.AssignStmt:
+			expr = a.Rhs[0].(*ast.TypeAssertExpr).X
+			typeSwitchVar = a.Lhs[0].(*ast.Ident).Name
 			for _, caseClause := range s.Body.List {
-				c.objectVars[c.info.Implicits[caseClause]] = expr
+				c.objectVars[c.info.Implicits[caseClause]] = typeSwitchVar
 			}
+		case *ast.ExprStmt:
+			expr = a.X.(*ast.TypeAssertExpr).X
 		}
-		if expr == "" {
-			expr = c.translateExpr(s.Assign.(*ast.ExprStmt).X)
-		}
+		refVar := c.newVarName("_ref")
 		typeVar := c.newVarName("_type")
-		c.Printf("var %s = Go$typeOf(%s);", typeVar, expr)
 		condPrefix := typeVar + " === "
-		c.translateSwitch(s.Body.List, true, condPrefix, label)
+		c.Printf("var %s = %s;", refVar, c.translateExpr(expr))
+		c.Printf("var %s = Go$typeOf(%s);", typeVar, refVar)
+		c.translateSwitch(s.Body.List, condPrefix, refVar, typeSwitchVar, label)
 
 	case *ast.ForStmt:
 		c.translateStmt(s.Init, "")
@@ -212,54 +211,44 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.AssignStmt:
 		if s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
-			t := c.info.Types[s.Lhs[0]]
-			if basic, isBasic := t.Underlying().(*types.Basic); isBasic && is64Bit(basic) {
-				var op token.Token
-				switch s.Tok {
-				case token.ADD_ASSIGN:
-					op = token.ADD
-				case token.SUB_ASSIGN:
-					op = token.SUB
-				case token.MUL_ASSIGN:
-					op = token.MUL
-				case token.QUO_ASSIGN:
-					op = token.QUO
-				case token.REM_ASSIGN:
-					op = token.REM
-				case token.AND_ASSIGN:
-					op = token.AND
-				case token.OR_ASSIGN:
-					op = token.OR
-				case token.XOR_ASSIGN:
-					op = token.XOR
-				case token.SHL_ASSIGN:
-					op = token.SHL
-				case token.SHR_ASSIGN:
-					op = token.SHR
-				case token.AND_NOT_ASSIGN:
-					op = token.AND_NOT
-				default:
-					panic(s.Tok)
-				}
-				binaryExpr := &ast.BinaryExpr{
-					X:  s.Lhs[0],
-					Op: op,
-					Y:  s.Rhs[0],
-				}
-				c.info.Types[binaryExpr] = t
-				c.translateStmt(&ast.AssignStmt{
-					Lhs: []ast.Expr{s.Lhs[0]},
-					Tok: token.ASSIGN,
-					Rhs: []ast.Expr{binaryExpr},
-				}, label)
-				return
+			var op token.Token
+			switch s.Tok {
+			case token.ADD_ASSIGN:
+				op = token.ADD
+			case token.SUB_ASSIGN:
+				op = token.SUB
+			case token.MUL_ASSIGN:
+				op = token.MUL
+			case token.QUO_ASSIGN:
+				op = token.QUO
+			case token.REM_ASSIGN:
+				op = token.REM
+			case token.AND_ASSIGN:
+				op = token.AND
+			case token.OR_ASSIGN:
+				op = token.OR
+			case token.XOR_ASSIGN:
+				op = token.XOR
+			case token.SHL_ASSIGN:
+				op = token.SHL
+			case token.SHR_ASSIGN:
+				op = token.SHR
+			case token.AND_NOT_ASSIGN:
+				op = token.AND_NOT
+			default:
+				panic(s.Tok)
 			}
-
-			tok := s.Tok.String()
-			if s.Tok == token.AND_NOT_ASSIGN {
-				tok = "&=~"
+			binaryExpr := &ast.BinaryExpr{
+				X:  s.Lhs[0],
+				Op: op,
+				Y:  s.Rhs[0],
 			}
-			c.Printf("%s %s %s;", c.translateExpr(s.Lhs[0]), tok, c.translateExpr(s.Rhs[0]))
+			c.info.Types[binaryExpr] = c.info.Types[s.Lhs[0]]
+			c.translateStmt(&ast.AssignStmt{
+				Lhs: []ast.Expr{s.Lhs[0]},
+				Tok: token.ASSIGN,
+				Rhs: []ast.Expr{binaryExpr},
+			}, label)
 			return
 		}
 
@@ -378,7 +367,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 	}
 }
 
-func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, typeSwitch bool, condPrefix string, label string) {
+func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, condPrefix string, typeSwitchValue, typeSwitchVar string, label string) {
 	if len(caseClauses) == 0 {
 		return
 	}
@@ -411,7 +400,7 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, typeSwitch bool, co
 			}
 			conds := make([]string, len(caseClause.List))
 			for i, cond := range caseClause.List {
-				if typeSwitch {
+				if typeSwitchValue != "" {
 					conds[i] = condPrefix + c.typeName(c.info.Types[cond])
 					continue
 				}
@@ -419,6 +408,18 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, typeSwitch bool, co
 			}
 			c.Printf("if (%s) {", strings.Join(conds, " || "))
 			c.Indent(func() {
+				if typeSwitchVar != "" {
+					value := typeSwitchValue
+					if len(caseClause.List) == 1 {
+						t := c.info.Types[caseClause.List[0]]
+						_, isNamed := t.(*types.Named)
+						_, isUnderlyingBasic := t.Underlying().(*types.Basic)
+						if isNamed && isUnderlyingBasic {
+							value += ".v"
+						}
+					}
+					c.Printf("var %s = %s;", typeSwitchVar, value)
+				}
 				c.translateStmtList(clauseStmts[i])
 			})
 			if i < len(caseClauses)-1 || defaultClause != nil {

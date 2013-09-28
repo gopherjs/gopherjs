@@ -128,6 +128,8 @@ func main() {
 }
 
 func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package) {
+	// os.Stderr.WriteString(pkg.ImportPath + "\n")
+
 	files := make([]*ast.File, 0)
 	for _, name := range pkg.GoFiles {
 		fullName := pkg.Dir + "/" + name
@@ -380,7 +382,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				c.Printf("this.Go$id = Go$idCounter++;")
 				for i := 0; i < t.NumFields(); i++ {
 					field := t.Field(i)
-					c.Printf("this.%s = %s_;", field.Name(), field.Name())
+					c.Printf("this.%s = %s_ || %s;", field.Name(), field.Name(), c.zeroValue(field.Type()))
 				}
 			})
 			c.Printf("};")
@@ -562,11 +564,7 @@ func (c *PkgContext) zeroValue(t types.Type) string {
 	case *types.Named:
 		switch ut := t.Underlying().(type) {
 		case *types.Struct:
-			zeros := make([]string, ut.NumFields())
-			for i := range zeros {
-				zeros[i] = c.zeroValue(ut.Field(i).Type())
-			}
-			return fmt.Sprintf("new %s(%s)", c.typeName(t), strings.Join(zeros, ", "))
+			return fmt.Sprintf("new %s()", c.typeName(t))
 		case *types.Slice:
 			return fmt.Sprintf("new %s(%s)", c.typeName(t), c.zeroValue(types.NewArray(ut.Elem(), 0)))
 		case *types.Basic:

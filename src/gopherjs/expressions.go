@@ -23,6 +23,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				d, _ := exact.Uint64Val(value)
 				return fmt.Sprintf("new Go$%s(%d, %d)", toJavaScriptType(t), d>>32, d&(1<<32-1))
 			}
+			if t.Kind() == types.Uint32 || t.Kind() == types.Uintptr {
+				d, _ := exact.Uint64Val(value)
+				return fmt.Sprintf("%d", d)
+			}
 			d, _ := exact.Int64Val(value)
 			return fmt.Sprintf("%d", d)
 		case exact.Float:
@@ -243,17 +247,27 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			c.Printf("var %s;", x)
 			return fmt.Sprintf("(%s = %s, new Go$%s(%s%s.high, %s%s.low))", x, c.translateExpr(e.X), toJavaScriptType(basic), op, x, op, x)
 		}
-		return fmt.Sprintf("%s%s", op, c.translateExpr(e.X))
+		value := fmt.Sprintf("%s%s", op, c.translateExpr(e.X))
+		value = fixNumber(value, basic)
+		return value
 
 	case *ast.BinaryExpr:
 		ex := c.translateExpr(e.X)
 		ey := c.translateExpr(e.Y)
 		op := e.Op.String()
-		if e.Op == token.AND_NOT {
+		switch e.Op {
+		case token.AND_NOT:
 			op = "&~"
+		case token.EQL:
+			op = "==="
+		case token.NEQ:
+			op = "!=="
+		case token.SHR:
+			op = ">>>"
 		}
 
-		if basic, isBasic := c.info.Types[e.X].Underlying().(*types.Basic); isBasic && is64Bit(basic) {
+		basic, isBasic := c.info.Types[e.X].Underlying().(*types.Basic)
+		if isBasic && is64Bit(basic) {
 			var expr string = "0"
 			switch e.Op {
 			case token.MUL:
@@ -291,28 +305,36 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return "(" + x + " = " + ex + ", " + y + " = " + ey + ", " + expr + ")"
 		}
 
+		var value string
 		switch e.Op {
 		case token.QUO:
 			if c.info.Types[e].Underlying().(*types.Basic).Info()&types.IsInteger != 0 {
-				return fmt.Sprintf("Math.floor(%s / %s)", ex, ey)
+				value = fmt.Sprintf("Math.floor(%s / %s)", ex, ey)
+				break
 			}
+			value = ex + " / " + ey
 		case token.EQL:
 			ix, xIsI := c.info.Types[e.X].(*types.Interface)
 			iy, yIsI := c.info.Types[e.Y].(*types.Interface)
 			if xIsI && ix.MethodSet().Len() == 0 && yIsI && iy.MethodSet().Len() == 0 {
-				return fmt.Sprintf("_isEqual(%s, %s)", ex, ey)
+				value = fmt.Sprintf("_isEqual(%s, %s)", ex, ey)
+				break
 			}
-			op = "==="
-		case token.NEQ:
-			op = "!=="
+			value = ex + " === " + ey
+		case token.AND, token.OR, token.XOR, token.AND_NOT, token.SHL, token.SHR:
+			value = "(" + ex + " " + op + " " + ey + ")"
+		default:
+			value = ex + " " + op + " " + ey
 		}
 
-		switch e.Op {
-		case token.AND, token.OR, token.XOR, token.AND_NOT, token.SHL, token.SHR:
-			return fmt.Sprintf("(%s %s %s)", ex, op, ey)
-		default:
-			return fmt.Sprintf("%s %s %s", ex, op, ey)
+		if isBasic {
+			switch e.Op {
+			case token.ADD, token.SUB, token.MUL, token.QUO, token.AND, token.OR, token.XOR, token.AND_NOT, token.SHL, token.SHR:
+				value = fixNumber(value, basic)
+			}
 		}
+
+		return value
 
 	case *ast.ParenExpr:
 		return fmt.Sprintf("(%s)", c.translateExpr(e.X))
@@ -344,22 +366,27 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 
 	case *ast.SliceExpr:
+		b, isBasic := c.info.Types[e.X].(*types.Basic)
+		isString := isBasic && b.Info()&types.IsString != 0
 		method := "Go$subslice"
-		if b, ok := c.info.Types[e.X].(*types.Basic); ok && b.Info()&types.IsString != 0 {
+		if isString {
 			method = "substring"
 		}
 		slice := c.translateExprToType(e.X, c.info.Types[e])
+		if !isString {
+			slice = fmt.Sprintf("(%s || Go$nil)", slice)
+		}
 		if e.High == nil {
 			if e.Low == nil {
 				return slice
 			}
-			return fmt.Sprintf("(%s || Go$nil).%s(%s)", slice, method, c.translateExpr(e.Low))
+			return fmt.Sprintf("%s.%s(%s)", slice, method, c.translateExpr(e.Low))
 		}
 		low := "0"
 		if e.Low != nil {
 			low = c.translateExpr(e.Low)
 		}
-		return fmt.Sprintf("(%s || Go$nil).%s(%s, %s)", slice, method, low, c.translateExpr(e.High))
+		return fmt.Sprintf("%s.%s(%s, %s)", slice, method, low, c.translateExpr(e.High))
 
 	case *ast.SelectorExpr:
 		sel := c.info.Selections[e]
@@ -597,17 +624,19 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 	case *types.Basic:
 		switch {
 		case t.Info()&types.IsInteger != 0:
-			if basicExprType.Info()&types.IsFloat != 0 {
+			switch {
+			case basicExprType.Info()&types.IsFloat != 0:
 				value = fmt.Sprintf("Math.floor(%s)", value)
-			}
-			if !is64Bit(basicExprType) && is64Bit(t) {
+			case !is64Bit(basicExprType) && is64Bit(t):
 				value = fmt.Sprintf("new Go$%s(0, %s)", toJavaScriptType(t), value)
-			}
-			if is64Bit(basicExprType) && !is64Bit(t) {
+			case is64Bit(basicExprType) && is64Bit(t):
+				if basicExprType.Kind() != t.Kind() {
+					value = fmt.Sprintf("(Go$obj = %s, new Go$%s(Go$obj.high, Go$obj.low))", value, toJavaScriptType(t))
+				}
+			case is64Bit(basicExprType) && t.Info()&types.IsUnsigned != 0:
 				value += ".low"
-			}
-			if is64Bit(basicExprType) && is64Bit(t) && basicExprType.Kind() != t.Kind() {
-				value = fmt.Sprintf("(Go$obj = %s, new Go$%s(Go$obj.high, Go$obj.low))", value, toJavaScriptType(t))
+			case is64Bit(basicExprType) && t.Info()&types.IsUnsigned == 0:
+				value = fmt.Sprintf("(%s.low | 0)", value)
 			}
 		case t.Info()&types.IsString != 0:
 			switch st := exprType.Underlying().(type) {
@@ -655,7 +684,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		}
 		namedDesiredType, desiredIsNamed := desiredType.(*types.Named)
 		if desiredIsNamed && !types.IsIdentical(exprType, desiredType) {
-			value = fmt.Sprintf("(Go$obj = %s, (new %s(Go$obj.array)).Go$subslice(Go$obj.offset, Go$obj.offset + Go$obj.length))", value, c.typeName(namedDesiredType))
+			value = fmt.Sprintf("(Go$obj = %s, Go$obj && (new %s(Go$obj.array)).Go$subslice(Go$obj.offset, Go$obj.offset + Go$obj.length))", value, c.typeName(namedDesiredType))
 		}
 
 	case *types.Interface:
@@ -720,6 +749,10 @@ func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {
 		switch t := field.Type().Underlying().(type) {
 		case *types.Basic:
 			if t.Info()&types.IsNumeric != 0 {
+				if is64Bit(t) {
+					c.Printf("%s = new Go$%s(%s.getUint32(%d, true), %s.getUint32(%d, true));", field.Name(), toJavaScriptType(t), view, offsets[i]+4, view, offsets[i])
+					continue
+				}
 				c.Printf("%s = %s.get%s(%d, true);", field.Name(), view, toJavaScriptType(t), offsets[i])
 			}
 			continue
@@ -729,6 +762,16 @@ func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {
 		}
 		c.Printf("// skipped: %s %s", field.Name(), field.Type().String())
 	}
+}
+
+func fixNumber(value string, basic *types.Basic) string {
+	switch basic.Kind() {
+	case types.Int32:
+		return "(" + value + " | 0)"
+	case types.Uint32, types.Uintptr:
+		return "((" + value + " + 4294967296) % 4294967296)"
+	}
+	return value
 }
 
 type HasDeferVisitor struct {

@@ -30,6 +30,7 @@ type PkgContext struct {
 	usedVarNames []string
 	functionSig  *types.Signature
 	resultNames  []ast.Expr
+	postLoopStmt ast.Stmt
 	writer       io.Writer
 	indentation  int
 	delayedLines *bytes.Buffer
@@ -245,7 +246,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 				hasInit = true
 			}
 			if fun.Body == nil {
-				c.Printf(`var %s = function() { throw new GoError("Native function not implemented: %s"); };`, fun.Name, fun.Name)
+				c.Printf(`var %s = function() { throw new GoError("Native function not implemented: %s"); };`, fun.Name.Name, fun.Name.Name)
 				continue
 			}
 			funcLit := &ast.FuncLit{
@@ -369,9 +370,11 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 
 	case *ast.TypeSpec:
 		nt := c.info.Objects[s.Name].Type().(*types.Named)
+		if isWrapped(nt) {
+			c.Printf(`var %s = function(v) { this.v = v; this.Go$id = "%s$" + v; };`, nt.Obj().Name(), nt.Obj().Name())
+			return
+		}
 		switch t := nt.Underlying().(type) {
-		case *types.Basic, *types.Array, *types.Signature:
-			c.Printf("var %s = function(v) { this.v = v; };", nt.Obj().Name())
 		case *types.Struct:
 			params := make([]string, t.NumFields())
 			for i := 0; i < t.NumFields(); i++ {
@@ -386,12 +389,12 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				}
 			})
 			c.Printf("};")
+			c.Printf(`%s.name = "%s";`, nt.Obj().Name(), nt.Obj().Name())
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)
 				if field.Anonymous() {
 					fieldType := field.Type()
 					_, isPointer := fieldType.(*types.Pointer)
-					_, isUnderlyingBasic := fieldType.Underlying().(*types.Basic)
 					_, isUnderlyingInterface := fieldType.Underlying().(*types.Interface)
 					if !isPointer && !isUnderlyingInterface {
 						fieldType = types.NewPointer(fieldType) // strange, seems like a bug in go/types
@@ -405,7 +408,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 							params[k] = sig.Params().At(k).Name()
 						}
 						value := "this." + field.Name()
-						if isUnderlyingBasic {
+						if isWrapped(field.Type()) {
 							value = fmt.Sprintf("new %s(%s)", field.Name(), value)
 						}
 						c.Printf("%s.prototype.%s = function(%s) { return %s.%s(%s); };", nt.Obj().Name(), name, strings.Join(params, ", "), value, name, strings.Join(params, ", "))
@@ -458,13 +461,12 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 
 	recvType := sig.Recv().Type()
 	ptr, isPointer := recvType.(*types.Pointer)
-	_, isUnderlyingBasic := recvType.Underlying().(*types.Basic)
 
 	body := fun.Body.List
 	if fun.Recv.List[0].Names != nil {
 		recv := fun.Recv.List[0].Names[0]
 		var this ast.Expr = ast.NewIdent("this")
-		if isUnderlyingBasic {
+		if isWrapped(recvType) {
 			this = ast.NewIdent("this.v")
 		}
 		if _, isUnderlyingStruct := recvType.Underlying().(*types.Struct); isUnderlyingStruct {
@@ -500,7 +502,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 		if !isPointer {
 			typeName := c.typeName(recvType)
 			value := "this.Go$get()"
-			if isUnderlyingBasic {
+			if isWrapped(recvType) {
 				value = fmt.Sprintf("new %s(%s)", typeName, value)
 			}
 			c.Printf("%s.Go$Pointer.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, params, value, fun.Name.Name, params)
@@ -508,7 +510,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 		if isPointer {
 			typeName := c.typeName(ptr.Elem())
 			value := "this"
-			if _, isUnderlyingBasic := ptr.Elem().Underlying().(*types.Basic); isUnderlyingBasic {
+			if isWrapped(ptr.Elem()) {
 				value = "this.v"
 			}
 			c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new %s.Go$Pointer(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, params, value, typeName, fun.Name.Name, params)
@@ -546,6 +548,9 @@ func (c *PkgContext) translateArgs(call *ast.CallExpr) []string {
 func (c *PkgContext) zeroValue(t types.Type) string {
 	switch t := t.(type) {
 	case *types.Basic:
+		if t.Info()&types.IsBoolean != 0 {
+			return "false"
+		}
 		if t.Info()&types.IsNumeric != 0 {
 			return "0"
 		}
@@ -688,6 +693,17 @@ func hasId(t types.Type) bool {
 	_, isPointer := t.Underlying().(*types.Pointer)
 	_, isInterface := t.Underlying().(*types.Interface)
 	return isPointer || isInterface
+}
+
+func isWrapped(t types.Type) bool {
+	if _, isNamed := t.(*types.Named); !isNamed {
+		return false
+	}
+	switch t.Underlying().(type) {
+	case *types.Basic, *types.Array, *types.Signature:
+		return true
+	}
+	return false
 }
 
 type IsReadyVisitor struct {

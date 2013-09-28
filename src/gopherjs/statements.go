@@ -70,14 +70,25 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.ForStmt:
 		c.translateStmt(s.Init, "")
-		post := strings.TrimSuffix(strings.TrimSpace(c.CatchOutput(func() { c.translateStmt(s.Post, "") }).String()), ";") // TODO ugly
-		c.Printf("%sfor (; %s; %s) {", label, c.translateExpr(s.Cond), post)
+		cond := "true"
+		if s.Cond != nil {
+			cond = c.translateExpr(s.Cond)
+		}
+		p := c.postLoopStmt
+		defer func() { c.postLoopStmt = p }()
+		c.postLoopStmt = s.Post
+		c.Printf("%swhile (%s) {", label, cond)
 		c.Indent(func() {
 			c.translateStmtList(s.Body.List)
+			c.translateStmt(s.Post, "")
 		})
 		c.Printf("}")
 
 	case *ast.RangeStmt:
+		p := c.postLoopStmt
+		defer func() { c.postLoopStmt = p }()
+		c.postLoopStmt = nil
+
 		key := ""
 		if s.Key != nil && !isUnderscore(s.Key) {
 			key = c.translateExpr(s.Key)
@@ -149,6 +160,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		case token.BREAK:
 			c.Printf("break%s;", label)
 		case token.CONTINUE:
+			c.translateStmt(c.postLoopStmt, "")
 			c.Printf("continue%s;", label)
 		case token.GOTO:
 			c.Printf(`throw new GoError("Statement not supported: goto");`)
@@ -310,13 +322,14 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					c.Printf("%s.Go$set(%s, %s);", c.translateExpr(l.X), c.translateExpr(l.Index), rhs)
 					continue
 				case *types.Map:
-					index := c.translateExpr(l.Index)
-					if hasId(t.Key()) {
-						index = fmt.Sprintf("(%s || Go$nil).Go$id", index)
-					}
 					keyVar := c.newVarName("_key")
-					c.Printf("var %s = %s;", keyVar, index)
-					c.Printf("%s[%s] = { k: %s, v: %s };", c.translateExpr(l.X), keyVar, keyVar, rhs)
+					c.Printf("var %s = %s;", keyVar, c.translateExprToType(l.Index, t.Key()))
+					key := keyVar
+					if hasId(t.Key()) {
+						key = fmt.Sprintf("(%s || Go$nil).Go$id", key)
+					}
+					c.Printf("if (%s === undefined) { throw new GoError('undefined key'); };", keyVar)
+					c.Printf("%s[%s] = { k: %s, v: %s };", c.translateExpr(l.X), key, keyVar, rhs)
 					continue
 				}
 			}
@@ -389,7 +402,8 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, condPrefix string, 
 		}
 	}
 
-	c.Printf("%sdo {", label)
+	c.Printf("%sswitch (null) {", label)
+	c.Printf("default:")
 	c.Indent(func() {
 		var defaultClause []ast.Stmt
 		for i, child := range caseClauses {
@@ -411,10 +425,7 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, condPrefix string, 
 				if typeSwitchVar != "" {
 					value := typeSwitchValue
 					if len(caseClause.List) == 1 {
-						t := c.info.Types[caseClause.List[0]]
-						_, isNamed := t.(*types.Named)
-						_, isUnderlyingBasic := t.Underlying().(*types.Basic)
-						if isNamed && isUnderlyingBasic {
+						if isWrapped(c.info.Types[caseClause.List[0]]) {
 							value += ".v"
 						}
 					}

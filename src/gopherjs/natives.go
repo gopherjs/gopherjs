@@ -17,11 +17,15 @@ Go$nil.Go$subslice = function(begin, end) {
 	}
 	return null;
 };
+Go$nil.array = [];
+Go$nil.offset = 0;
+Go$nil.length = 0;
 
 var Go$Array = Array;
 var Go$Boolean = Boolean;
 var Go$Function = Function;
 var Go$keys = Object.keys;
+var Go$min = Math.min;
 
 var Go$copyFields = function(from, to) {
 	var keys = Object.keys(from);
@@ -35,14 +39,20 @@ var Go$Int64 = function(high, low) {
 	this.high = (high + Math.floor(low / 4294967296)) | 0;
 	this.low = (low + 4294967296) % 4294967296;
 };
+Go$Int64.prototype.toString = function() {
+	return this.high + "$" + this.low;
+};
 var Go$Uint64 = function(high, low) {
 	this.high = (high + Math.floor(low / 4294967296) + 4294967296) % 4294967296;
 	this.low = (low + 4294967296) % 4294967296;
 };
+Go$Uint64.prototype.toString = function() {
+	return this.high + "$" + this.low;
+};
 var Go$shift64 = function(x, y) {
 	var p = Math.pow(2, y);
-	var high = Math.floor((x.high * p % 4294967296) + (x.low  / 4294967296 * p % 4294967296));
-	var low  = Math.floor((x.low  * p % 4294967296) + (x.high * 4294967296 * p % 4294967296));
+	var high = Math.floor(x.high * p % 4294967296) + Math.floor(x.low  / 4294967296 * p % 4294967296);
+	var low  = Math.floor(x.low  * p % 4294967296) + Math.floor(x.high * 4294967296 * p % 4294967296);
 	return new x.constructor(high, low);
 };
 var Go$mul64 = function(x, y) {
@@ -156,7 +166,7 @@ var Go$copy = function(dst, src) {
 };
 
 var Go$append = function(slice, toAppend) {
-	if (slice === null) {
+	if (slice === null || slice === 0) { // FIXME
 		return toAppend;
 	}
 
@@ -342,6 +352,14 @@ var natives = map[string]string{
 			}
 			return true;
 		}
+	`,
+
+	"math": `
+	  Abs = Math.abs;
+	  Frexp = frexp;
+	  Ldexp = ldexp;
+	  Log = Math.log;
+	  Log2 = log2;
 	`,
 
 	"math/big": `

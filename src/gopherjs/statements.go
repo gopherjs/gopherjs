@@ -39,13 +39,22 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.SwitchStmt:
 		c.translateStmt(s.Init, "")
-		condPrefix := ""
+		translateCond := func(cond ast.Expr) string {
+			return c.translateExpr(cond)
+		}
 		if s.Tag != nil {
 			refVar := c.newVarName("_ref")
 			c.Printf("var %s = %s;", refVar, c.translateExpr(s.Tag))
-			condPrefix = refVar + " === "
+			tagType := c.info.Types[s.Tag]
+			_, isInterface := tagType.(*types.Interface)
+			translateCond = func(cond ast.Expr) string {
+				if isInterface {
+					return fmt.Sprintf("Go$isEqual(%s, %s)", refVar, c.translateExprToType(cond, tagType))
+				}
+				return refVar + " === " + c.translateExprToType(cond, tagType)
+			}
 		}
-		c.translateSwitch(s.Body.List, condPrefix, "", "", label)
+		c.translateSwitch(s.Body.List, translateCond, "", "", label)
 
 	case *ast.TypeSwitchStmt:
 		c.translateStmt(s.Init, "")
@@ -63,10 +72,12 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 		refVar := c.newVarName("_ref")
 		typeVar := c.newVarName("_type")
-		condPrefix := typeVar + " === "
 		c.Printf("var %s = %s;", refVar, c.translateExpr(expr))
 		c.Printf("var %s = Go$typeOf(%s);", typeVar, refVar)
-		c.translateSwitch(s.Body.List, condPrefix, refVar, typeSwitchVar, label)
+		translateCond := func(cond ast.Expr) string {
+			return typeVar + " === " + c.typeName(c.info.Types[cond])
+		}
+		c.translateSwitch(s.Body.List, translateCond, refVar, typeSwitchVar, label)
 
 	case *ast.ForStmt:
 		c.translateStmt(s.Init, "")
@@ -328,7 +339,6 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					if hasId(t.Key()) {
 						key = fmt.Sprintf("(%s || Go$nil).Go$id", key)
 					}
-					c.Printf("if (%s === undefined) { throw new GoError('undefined key'); };", keyVar)
 					c.Printf("%s[%s] = { k: %s, v: %s };", c.translateExpr(l.X), key, keyVar, rhs)
 					continue
 				}
@@ -380,7 +390,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 	}
 }
 
-func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, condPrefix string, typeSwitchValue, typeSwitchVar string, label string) {
+func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, translateCond func(ast.Expr) string, typeSwitchValue, typeSwitchVar string, label string) {
 	if len(caseClauses) == 0 {
 		return
 	}
@@ -414,11 +424,7 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, condPrefix string, 
 			}
 			conds := make([]string, len(caseClause.List))
 			for i, cond := range caseClause.List {
-				if typeSwitchValue != "" {
-					conds[i] = condPrefix + c.typeName(c.info.Types[cond])
-					continue
-				}
-				conds[i] = condPrefix + c.translateExpr(cond)
+				conds[i] = translateCond(cond)
 			}
 			c.Printf("if (%s) {", strings.Join(conds, " || "))
 			c.Indent(func() {

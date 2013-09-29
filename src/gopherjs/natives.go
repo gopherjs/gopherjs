@@ -21,11 +21,9 @@ Go$nil.array = [];
 Go$nil.offset = 0;
 Go$nil.length = 0;
 
-var Go$Array = Array;
-var Go$Boolean = Boolean;
-var Go$Function = Function;
 var Go$keys = Object.keys;
 var Go$min = Math.min;
+var Go$fromCharCode = String.fromCharCode;
 
 var Go$copyFields = function(from, to) {
 	var keys = Object.keys(from);
@@ -34,6 +32,45 @@ var Go$copyFields = function(from, to) {
 		to[key] = from[key];
 	}
 };
+
+var Go$Uint8      = function(v) { this.v = v; this.Go$id = "Uint8$" + v; };
+var Go$Uint16     = function(v) { this.v = v; this.Go$id = "Uint16$" + v; };
+var Go$Uint32     = function(v) { this.v = v; this.Go$id = "Uint32$" + v; };
+var Go$Int8       = function(v) { this.v = v; this.Go$id = "Int8$" + v; };
+var Go$Int16      = function(v) { this.v = v; this.Go$id = "Int16$" + v; };
+var Go$Int32      = function(v) { this.v = v; this.Go$id = "Int32$" + v; };
+var Go$Float32    = function(v) { this.v = v; this.Go$id = "Float32$" + v; };
+var Go$Float64    = function(v) { this.v = v; this.Go$id = "Float64$" + v; };
+var Go$Complex64  = function(v) { this.v = v; this.Go$id = "Complex64$" + v; };
+var Go$Complex128 = function(v) { this.v = v; this.Go$id = "Complex128$" + v; };
+var Go$Uint       = function(v) { this.v = v; this.Go$id = "Uint$" + v; };
+var Go$Int        = function(v) { this.v = v; this.Go$id = "Int$" + v; };
+var Go$Uintptr    = function(v) { this.v = v; this.Go$id = "Uintptr$" + v; };
+var Go$Byte       = Go$Uint8;
+var Go$Rune       = Go$Int32;
+
+var Go$Bool   = function(v) { this.v = v; this.Go$id = "Bool$" + v; };
+var Go$String = function(v) { this.v = v; this.Go$id = "String$" + v; };
+var Go$Func   = function(v) { this.v = v; this.Go$id = "Func$" + v; };
+
+var Go$Array           = Array;
+var Go$Uint8Array      = Uint8Array;
+var Go$Uint16Array     = Uint16Array;
+var Go$Uint32Array     = Uint32Array;
+var Go$Uint64Array     = Array;
+var Go$Int8Array       = Int8Array;
+var Go$Int16Array      = Int16Array;
+var Go$Int32Array      = Int32Array;
+var Go$Int64Array      = Array;
+var Go$Float32Array    = Float32Array;
+var Go$Float64Array    = Float64Array;
+var Go$Complex64Array  = Array;
+var Go$Complex128Array = Array;
+var Go$UintArray       = Uint32Array;
+var Go$IntArray        = Int32Array;
+var Go$UintptrArray    = Uint32Array;
+var Go$ByteArray       = Go$Uint8Array;
+var Go$RuneArray       = Go$Int32Array;
 
 var Go$Int64 = function(high, low) {
 	this.high = (high + Math.floor(low / 4294967296)) | 0;
@@ -124,8 +161,7 @@ Go$Slice.prototype.Go$toArray = function() {
 	return this.array.slice(this.offset, this.offset + this.length);
 };
 
-var Go$String = String;
-Go$String.prototype.Go$toSlice = function(terminateWithNull) {
+String.prototype.Go$toSlice = function(terminateWithNull) {
 	var array = new Uint8Array(terminateWithNull ? this.length + 1 : this.length);
 	for (var i = 0; i < this.length; i++) {
 		array[i] = this.charCodeAt(i);
@@ -135,12 +171,8 @@ Go$String.prototype.Go$toSlice = function(terminateWithNull) {
 	}
 	return new Go$Slice(array);
 };
-Go$String.Kind = function() { return 24; };
 
 var Go$clear = function(array) { for (var i = 0; i < array.length; i++) { array[i] = 0; }; return array; }; // TODO remove when NodeJS is behaving according to spec
-
-Number.Kind = function() { return 2; };
-Number.Bits = function() { return 32; };
 
 var Go$Map = function(data, capacity) {
 	data = data || [];
@@ -242,39 +274,31 @@ var Go$getStackDepth = function() {
 	return d;
 };
 
-var _isEqual = function(a, b) {
+var Go$isEqual = function(a, b) {
 	if (a === null || b === null) {
 		return a === null && b === null;
 	}
 	if (a.constructor !== b.constructor) {
 		return false;
 	}
-	if (a.constructor === Number || a.constructor === String) {
-		return a === b;
+	if (a.constructor.isNumber || a.constructor === Go$String) {
+		return a.v === b.v;
 	}
-	throw new Error("runtime error: comparing uncomparable type " + a.constructor);
+	throw new GoError("runtime error: comparing uncomparable type " + a.constructor);
 };
 
 var Go$print = console.log;
 var Go$println = console.log;
 
-var Go$Integer = function() {};
-var Go$Float = function() {};
-var Go$Complex = function() {};
-
 var Go$typeOf = function(value) {
 	if (value === null) {
 		return null;
 	}
-	var type = value.constructor;
-	if (type === Number) {
-		return (Math.floor(value) === value) ? Go$Integer : Go$Float;
-	}
-	return type;
+	return value.constructor;
 };
 
 var typeAssertionFailed = function(obj) {
-	throw new Error("type assertion failed: " + obj + " (" + obj.constructor + ")");
+	throw new GoError("type assertion failed: " + obj + " (" + obj.constructor + ")");
 };
 
 var newNumericArray = function(len) {
@@ -288,6 +312,30 @@ var newNumericArray = function(len) {
 var Go$now = function() { var msec = (new Date()).getTime(); return [Math.floor(msec / 1000), (msec % 1000) * 1000000]; };
 
 var packages = {};
+
+// --- fake reflect package ---
+
+Go$Bool.Kind    = function() { return 1; };
+Go$Int.Kind     = function() { return 2; };
+Go$Int8.Kind    = function() { return 3; };
+Go$Int16.Kind   = function() { return 4; };
+Go$Int32.Kind   = function() { return 5; };
+Go$Int64.Kind   = function() { return 6; };
+Go$Uint.Kind    = function() { return 7; };
+Go$Uint8.Kind   = function() { return 8; };
+Go$Uint16.Kind  = function() { return 9; };
+Go$Uint32.Kind  = function() { return 10; };
+Go$Uint64.Kind  = function() { return 11; };
+Go$Uintptr.Kind = function() { return 12; };
+Go$Float32.Kind = function() { return 13; };
+Go$Float64.Kind = function() { return 14; };
+Go$Complex64    = function() { return 15; };
+Go$Complex128   = function() { return 16; };
+Go$String.Kind  = function() { return 24; };
+Go$Uint8.isNumber = Go$Uint16.isNumber = Go$Uint32.isNumber = Go$Int8.isNumber = Go$Int16.isNumber = Go$Int32.isNumber = Go$Float32.isNumber = Go$Float64.isNumber = Go$Complex64.isNumber = Go$Complex128.isNumber = Go$Uint.isNumber = Go$Int.isNumber = Go$Uintptr.isNumber = true;
+Go$Int.Bits = Go$Uintptr.Bits = function() { return 32; };
+Go$Float64.Bits = function() { return 64; };
+Go$Complex128.Bits = function() { return 128; };
 
 packages["reflect"] = {
 	DeepEqual: function(a, b) {

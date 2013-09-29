@@ -537,7 +537,12 @@ func (c *PkgContext) translateArgs(call *ast.CallExpr) []string {
 	args := make([]string, funType.Params().Len())
 	for i := range args {
 		if funType.IsVariadic() && i == len(args)-1 && !call.Ellipsis.IsValid() {
-			args[i] = fmt.Sprintf("new Go$Slice(%s)", createListComposite(funType.Params().At(i).Type(), c.translateExprSlice(call.Args[i:])))
+			varargType := funType.Params().At(i).Type().(*types.Slice).Elem()
+			varargs := make([]string, len(call.Args)-i)
+			for i, vararg := range call.Args[i:] {
+				varargs[i] = c.translateExprToType(vararg, varargType)
+			}
+			args[i] = fmt.Sprintf("new Go$Slice(%s)", createListComposite(varargType, varargs))
 			break
 		}
 		args[i] = c.translateExprToType(call.Args[i], funType.Params().At(i).Type())
@@ -582,26 +587,10 @@ func (c *PkgContext) zeroValue(t types.Type) string {
 func (c *PkgContext) typeName(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Basic:
-		switch {
-		case t.Kind() == types.Int64:
-			return "Go$Int64"
-		case t.Kind() == types.Uint64:
-			return "Go$Uint64"
-		case t.Info()&types.IsInteger != 0:
-			return "Go$Integer"
-		case t.Info()&types.IsFloat != 0:
-			return "Go$Float"
-		case t.Info()&types.IsComplex != 0:
-			return "Go$Complex"
-		case t.Info()&types.IsBoolean != 0:
-			return "Go$Boolean"
-		case t.Info()&types.IsString != 0:
-			return "Go$String"
-		case t.Kind() == types.UntypedNil:
+		if t.Kind() == types.UntypedNil {
 			return "null"
-		default:
-			panic(fmt.Sprintf("Unhandled basic type: %v\n", t))
 		}
+		return "Go$" + toJavaScriptType(t)
 	case *types.Named:
 		objPkg := t.Obj().Pkg()
 		if objPkg != nil && objPkg != c.pkg {
@@ -627,7 +616,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	case *types.Chan:
 		return "Go$Channel"
 	case *types.Signature:
-		return "Go$Function"
+		return "Go$Func"
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
@@ -635,42 +624,30 @@ func (c *PkgContext) typeName(ty types.Type) string {
 
 func toJavaScriptType(t *types.Basic) string {
 	switch t.Kind() {
-	case types.Int8:
-		return "Int8"
-	case types.Uint8:
-		return "Uint8"
-	case types.Int16:
-		return "Int16"
-	case types.Uint16:
-		return "Uint16"
-	case types.Int32, types.Int:
-		return "Int32"
-	case types.Int64:
-		return "Int64"
-	case types.Uint32, types.Uint, types.Uintptr:
-		return "Uint32"
-	case types.Uint64:
-		return "Uint64"
-	case types.Float32:
-		return "Float32"
-	case types.Float64, types.Complex64, types.Complex128:
-		return "Float64"
+	case types.UntypedInt:
+		return "Int"
+	default:
+		name := t.String()
+		return strings.ToUpper(name[:1]) + name[1:]
 	}
-	panic(fmt.Sprintf("Unhandled basic type: %v\n", t))
 }
 
 func is64Bit(t *types.Basic) bool {
 	return t.Kind() == types.Int64 || t.Kind() == types.Uint64
 }
 
+func isComplex(t *types.Basic) bool {
+	return t.Kind() == types.Complex64 || t.Kind() == types.Complex128
+}
+
 func isTypedArray(t types.Type) bool {
 	basic, isBasic := t.(*types.Basic)
-	return isBasic && basic.Info()&types.IsNumeric != 0 && !is64Bit(basic)
+	return isBasic && basic.Info()&types.IsNumeric != 0 && !is64Bit(basic) && !isComplex(basic)
 }
 
 func toArrayType(t types.Type) string {
 	if isTypedArray(t) {
-		return toJavaScriptType(t.(*types.Basic)) + "Array"
+		return "Go$" + toJavaScriptType(t.(*types.Basic)) + "Array"
 	}
 	return "Go$Array"
 }
@@ -695,12 +672,14 @@ func hasId(t types.Type) bool {
 	return isPointer || isInterface
 }
 
-func isWrapped(t types.Type) bool {
-	if _, isNamed := t.(*types.Named); !isNamed {
-		return false
-	}
-	switch t.Underlying().(type) {
-	case *types.Basic, *types.Array, *types.Signature:
+func isWrapped(ty types.Type) bool {
+	switch t := ty.Underlying().(type) {
+	case *types.Basic:
+		if t.Kind() == types.UntypedNil {
+			return false
+		}
+		return true
+	case *types.Array, *types.Signature:
 		return true
 	}
 	return false

@@ -303,22 +303,22 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		var value string
 		switch e.Op {
+		case token.EQL:
+			if _, isInterface := c.info.Types[e.X].(*types.Interface); isInterface {
+				return fmt.Sprintf("Go$isEqual(%s, %s)", ex, ey)
+			}
+			return ex + " === " + ey
+		case token.NEQ:
+			if _, isInterface := c.info.Types[e.X].(*types.Interface); isInterface {
+				return fmt.Sprintf("!Go$isEqual(%s, %s)", ex, ey)
+			}
+			return ex + " !== " + ey
 		case token.QUO:
 			if c.info.Types[e].Underlying().(*types.Basic).Info()&types.IsInteger != 0 {
 				value = fmt.Sprintf("Math.floor(%s / %s)", ex, ey)
 				break
 			}
 			value = ex + " / " + ey
-		case token.EQL:
-			ix, xIsI := c.info.Types[e.X].(*types.Interface)
-			iy, yIsI := c.info.Types[e.Y].(*types.Interface)
-			if xIsI && ix.MethodSet().Len() == 0 && yIsI && iy.MethodSet().Len() == 0 {
-				value = fmt.Sprintf("_isEqual(%s, %s)", ex, ey)
-				break
-			}
-			value = ex + " === " + ey
-		case token.NEQ:
-			value = ex + " !== " + ey
 		case token.SHL, token.SHR:
 			if e.Op == token.SHR {
 				op = ">>>"
@@ -519,7 +519,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					panic(fmt.Sprintf("Unhandled cap type: %T\n", argt))
 				}
 			case "panic":
-				return fmt.Sprintf("throw new GoError(%s)", c.translateExpr(e.Args[0]))
+				return fmt.Sprintf("throw new GoError(%s)", c.translateExprToType(e.Args[0], types.NewInterface(nil)))
 			case "append":
 				sliceType := c.info.Types[e]
 				if e.Ellipsis.IsValid() {
@@ -633,7 +633,6 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 	if _, found := c.info.Values[expr]; found {
 		exprType = exprType.Underlying()
 	}
-	namedExprType, exprIsNamed := exprType.(*types.Named)
 
 	switch t := desiredType.Underlying().(type) {
 	case *types.Basic:
@@ -658,11 +657,11 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			switch st := exprType.Underlying().(type) {
 			case *types.Basic:
 				if st.Info()&types.IsNumeric != 0 {
-					return fmt.Sprintf("Go$String.fromCharCode(%s)", value)
+					return fmt.Sprintf("Go$fromCharCode(%s)", value)
 				}
 				return value
 			case *types.Slice:
-				return fmt.Sprintf("Go$String.fromCharCode.apply(null, %s.Go$toArray())", value)
+				return fmt.Sprintf("Go$fromCharCode.apply(null, %s.Go$toArray())", value)
 			default:
 				panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 			}
@@ -704,8 +703,8 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		}
 
 	case *types.Interface:
-		if exprIsNamed && isWrapped(exprType) {
-			value = fmt.Sprintf("new %s(%s)", c.typeName(namedExprType), value)
+		if isWrapped(exprType) {
+			value = fmt.Sprintf("new %s(%s)", c.typeName(exprType), value)
 		}
 
 	case *types.Pointer:

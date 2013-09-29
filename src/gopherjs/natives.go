@@ -33,44 +33,44 @@ var Go$copyFields = function(from, to) {
 	}
 };
 
-var Go$Uint8      = function(v) { this.v = v; this.Go$id = "Uint8$" + v; };
-var Go$Uint16     = function(v) { this.v = v; this.Go$id = "Uint16$" + v; };
-var Go$Uint32     = function(v) { this.v = v; this.Go$id = "Uint32$" + v; };
-var Go$Int8       = function(v) { this.v = v; this.Go$id = "Int8$" + v; };
-var Go$Int16      = function(v) { this.v = v; this.Go$id = "Int16$" + v; };
-var Go$Int32      = function(v) { this.v = v; this.Go$id = "Int32$" + v; };
-var Go$Float32    = function(v) { this.v = v; this.Go$id = "Float32$" + v; };
-var Go$Float64    = function(v) { this.v = v; this.Go$id = "Float64$" + v; };
-var Go$Complex64  = function(v) { this.v = v; this.Go$id = "Complex64$" + v; };
+var Go$Uint8			= function(v) { this.v = v; this.Go$id = "Uint8$" + v; };
+var Go$Uint16		 = function(v) { this.v = v; this.Go$id = "Uint16$" + v; };
+var Go$Uint32		 = function(v) { this.v = v; this.Go$id = "Uint32$" + v; };
+var Go$Int8			 = function(v) { this.v = v; this.Go$id = "Int8$" + v; };
+var Go$Int16			= function(v) { this.v = v; this.Go$id = "Int16$" + v; };
+var Go$Int32			= function(v) { this.v = v; this.Go$id = "Int32$" + v; };
+var Go$Float32		= function(v) { this.v = v; this.Go$id = "Float32$" + v; };
+var Go$Float64		= function(v) { this.v = v; this.Go$id = "Float64$" + v; };
+var Go$Complex64	= function(v) { this.v = v; this.Go$id = "Complex64$" + v; };
 var Go$Complex128 = function(v) { this.v = v; this.Go$id = "Complex128$" + v; };
-var Go$Uint       = function(v) { this.v = v; this.Go$id = "Uint$" + v; };
-var Go$Int        = function(v) { this.v = v; this.Go$id = "Int$" + v; };
-var Go$Uintptr    = function(v) { this.v = v; this.Go$id = "Uintptr$" + v; };
-var Go$Byte       = Go$Uint8;
-var Go$Rune       = Go$Int32;
+var Go$Uint			 = function(v) { this.v = v; this.Go$id = "Uint$" + v; };
+var Go$Int				= function(v) { this.v = v; this.Go$id = "Int$" + v; };
+var Go$Uintptr		= function(v) { this.v = v; this.Go$id = "Uintptr$" + v; };
+var Go$Byte			 = Go$Uint8;
+var Go$Rune			 = Go$Int32;
 
-var Go$Bool   = function(v) { this.v = v; this.Go$id = "Bool$" + v; };
+var Go$Bool	 = function(v) { this.v = v; this.Go$id = "Bool$" + v; };
 var Go$String = function(v) { this.v = v; this.Go$id = "String$" + v; };
-var Go$Func   = function(v) { this.v = v; this.Go$id = "Func$" + v; };
+var Go$Func	 = function(v) { this.v = v; this.Go$id = "Func$" + v; };
 
-var Go$Array           = Array;
-var Go$Uint8Array      = Uint8Array;
-var Go$Uint16Array     = Uint16Array;
-var Go$Uint32Array     = Uint32Array;
-var Go$Uint64Array     = Array;
-var Go$Int8Array       = Int8Array;
-var Go$Int16Array      = Int16Array;
-var Go$Int32Array      = Int32Array;
-var Go$Int64Array      = Array;
-var Go$Float32Array    = Float32Array;
-var Go$Float64Array    = Float64Array;
-var Go$Complex64Array  = Array;
+var Go$Array					 = Array;
+var Go$Uint8Array			= Uint8Array;
+var Go$Uint16Array		 = Uint16Array;
+var Go$Uint32Array		 = Uint32Array;
+var Go$Uint64Array		 = Array;
+var Go$Int8Array			 = Int8Array;
+var Go$Int16Array			= Int16Array;
+var Go$Int32Array			= Int32Array;
+var Go$Int64Array			= Array;
+var Go$Float32Array		= Float32Array;
+var Go$Float64Array		= Float64Array;
+var Go$Complex64Array	= Array;
 var Go$Complex128Array = Array;
-var Go$UintArray       = Uint32Array;
-var Go$IntArray        = Int32Array;
-var Go$UintptrArray    = Uint32Array;
-var Go$ByteArray       = Go$Uint8Array;
-var Go$RuneArray       = Go$Int32Array;
+var Go$UintArray			 = Uint32Array;
+var Go$IntArray				= Int32Array;
+var Go$UintptrArray		= Uint32Array;
+var Go$ByteArray			 = Go$Uint8Array;
+var Go$RuneArray			 = Go$Int32Array;
 
 var Go$Int64 = function(high, low) {
 	this.high = (high + Math.floor(low / 4294967296)) | 0;
@@ -88,8 +88,8 @@ Go$Uint64.prototype.toString = function() {
 };
 var Go$shift64 = function(x, y) {
 	var p = Math.pow(2, y);
-	var high = Math.floor(x.high * p % 4294967296) + Math.floor(x.low  / 4294967296 * p % 4294967296);
-	var low  = Math.floor(x.low  * p % 4294967296) + Math.floor(x.high * 4294967296 * p % 4294967296);
+	var high = Math.floor(x.high * p % 4294967296) + Math.floor(x.low	/ 4294967296 * p % 4294967296);
+	var low	= Math.floor(x.low	* p % 4294967296) + Math.floor(x.high * 4294967296 * p % 4294967296);
 	return new x.constructor(high, low);
 };
 var Go$mul64 = function(x, y) {
@@ -99,7 +99,7 @@ var Go$mul64 = function(x, y) {
 			r = new x.constructor(r.high + x.high, r.low + x.low);
 		}
 		y = Go$shift64(y, -1);
-		x = Go$shift64(x,  1);
+		x = Go$shift64(x,	1);
 	}
 	return r;
 };
@@ -120,7 +120,7 @@ var Go$div64 = function(x, y, returnRemainder) {
 			break;
 		}
 		y = Go$shift64(y, -1);
-		r = Go$shift64(r,  1);
+		r = Go$shift64(r,	1);
 		i += 1;
 	}
 	if (returnRemainder) {
@@ -315,23 +315,23 @@ var packages = {};
 
 // --- fake reflect package ---
 
-Go$Bool.Kind    = function() { return 1; };
-Go$Int.Kind     = function() { return 2; };
-Go$Int8.Kind    = function() { return 3; };
-Go$Int16.Kind   = function() { return 4; };
-Go$Int32.Kind   = function() { return 5; };
-Go$Int64.Kind   = function() { return 6; };
-Go$Uint.Kind    = function() { return 7; };
-Go$Uint8.Kind   = function() { return 8; };
-Go$Uint16.Kind  = function() { return 9; };
-Go$Uint32.Kind  = function() { return 10; };
-Go$Uint64.Kind  = function() { return 11; };
+Go$Bool.Kind		= function() { return 1; };
+Go$Int.Kind		 = function() { return 2; };
+Go$Int8.Kind		= function() { return 3; };
+Go$Int16.Kind	 = function() { return 4; };
+Go$Int32.Kind	 = function() { return 5; };
+Go$Int64.Kind	 = function() { return 6; };
+Go$Uint.Kind		= function() { return 7; };
+Go$Uint8.Kind	 = function() { return 8; };
+Go$Uint16.Kind	= function() { return 9; };
+Go$Uint32.Kind	= function() { return 10; };
+Go$Uint64.Kind	= function() { return 11; };
 Go$Uintptr.Kind = function() { return 12; };
 Go$Float32.Kind = function() { return 13; };
 Go$Float64.Kind = function() { return 14; };
-Go$Complex64    = function() { return 15; };
-Go$Complex128   = function() { return 16; };
-Go$String.Kind  = function() { return 24; };
+Go$Complex64		= function() { return 15; };
+Go$Complex128	 = function() { return 16; };
+Go$String.Kind	= function() { return 24; };
 Go$Uint8.isNumber = Go$Uint16.isNumber = Go$Uint32.isNumber = Go$Int8.isNumber = Go$Int16.isNumber = Go$Int32.isNumber = Go$Float32.isNumber = Go$Float64.isNumber = Go$Complex64.isNumber = Go$Complex128.isNumber = Go$Uint.isNumber = Go$Int.isNumber = Go$Uintptr.isNumber = true;
 Go$Int.Bits = Go$Uintptr.Bits = function() { return 32; };
 Go$Float64.Bits = function() { return 64; };
@@ -403,11 +403,127 @@ var natives = map[string]string{
 	`,
 
 	"math": `
-	  Abs = Math.abs;
-	  Frexp = frexp;
-	  Ldexp = ldexp;
-	  Log = Math.log;
-	  Log2 = log2;
+		Abs = Math.abs;
+		Exp = Math.exp;
+		var elog2 = Math.log(2);
+		Exp2 = function(x) { return Math.exp(x * elog2); };
+		// Exp2 = exp2; // TODO fix and use for higher precision
+		Frexp = frexp;
+		Ldexp = ldexp;
+		Log = Math.log;
+		Log2 = log2;
+
+		// generated from src/bitcasts/bitcasts.go
+		Float32bits = (function(f) {
+			if (f === 0) {
+				return 0;
+			}
+			if (f !== f) {
+				return 4294967295;
+			}
+			var s = 0;
+			if (f < 0) {
+				s = 2147483648;
+				f = -f;
+			}
+			var e = 150;
+			while (f >= 16777216) {
+				f = f / 2;
+				if (e === 255) {
+					break;
+				}
+				e = ((e + 1 + 4294967296) % 4294967296);
+			}
+			while (f < 8388608) {
+				e = ((e - 1 + 4294967296) % 4294967296);
+				if (e === 0) {
+					break;
+				}
+				f = f * 2;
+			}
+			var y;
+			return ((((((s | (((y = 23, y < 32 ? (e << y) : 0) + 4294967296) % 4294967296)) + 4294967296) % 4294967296) | ((((Math.floor(f) &~ 8388608) + 4294967296) % 4294967296))) + 4294967296) % 4294967296);
+		});
+		Float32frombits = (function(b) {
+			var s = 1;
+			if ((((b & 2147483648) + 4294967296) % 4294967296) !== 0) {
+				s = -1;
+			}
+			var y;
+			var e = (((((y = 23, y < 32 ? (b >>> y) : 0) + 4294967296) % 4294967296) & 255) | 0);
+			var m = (((b & 8388607) + 4294967296) % 4294967296);
+			if (e === 255) {
+				if (m === 0) {
+					return s / 0;
+				}
+				return (s / 0) - (s / 0);
+			}
+			if (e !== 0) {
+				m = ((m + 8388608 + 4294967296) % 4294967296);
+			}
+			if (e === 0) {
+				e = 1;
+			}
+			return m * Exp2(((e - 127 | 0) - 23 | 0)) * s;
+		});
+		Float64bits = (function(f) {
+			if (f === 0) {
+				return new Go$Uint64(0, 0);
+			}
+			if (f !== f) {
+				return new Go$Uint64(4294967295, 4294967295);
+			}
+			var s = new Go$Uint64(0, 0);
+			if (f < 0) {
+				s = new Go$Uint64(2147483648, 0);
+				f = -f;
+			}
+			var e = 1075;
+			while (f >= 9007199254740992) {
+				f = f / 2;
+				if (e === 2047) {
+					break;
+				}
+				e = ((e + 1 + 4294967296) % 4294967296);
+			}
+			while (f < 4503599627370496) {
+				e = ((e - 1 + 4294967296) % 4294967296);
+				if (e === 0) {
+					break;
+				}
+				f = f * 2;
+			}
+			var x, y;
+			var x1, y1;
+			var x2, y2;
+			return (x2 = (x = s, y = Go$shift64(new Go$Uint64(0, e), 52), new Go$Uint64(x.high | y.high, x.low | y.low)), y2 = ((x1 = new Go$Uint64(0, Math.floor(f)), y1 = new Go$Uint64(1048576, 0), new Go$Uint64(x1.high &~ y1.high, x1.low &~ y1.low))), new Go$Uint64(x2.high | y2.high, x2.low | y2.low));
+		});
+		Float64frombits = (function(b) {
+			var s = 1;
+			var x, y;
+			var x1, y1;
+			if ((x1 = (x = b, y = new Go$Uint64(2147483648, 0), new Go$Uint64(x.high & y.high, x.low & y.low)), y1 = new Go$Uint64(0, 0), x1.high !== y1.high || x1.low !== y1.low)) {
+				s = -1;
+			}
+			var e = (((Go$shift64(b, -52).low | 0) & 2047) | 0);
+			var x2, y2;
+			var m = (x2 = b, y2 = new Go$Uint64(1048575, 4294967295), new Go$Uint64(x2.high & y2.high, x2.low & y2.low));
+			if (e === 2047) {
+				var x3, y3;
+				if ((x3 = m, y3 = new Go$Uint64(0, 0), x3.high === y3.high && x3.low === y3.low)) {
+					return s / 0;
+				}
+				return (s / 0) - (s / 0);
+			}
+			if (e !== 0) {
+				var x4, y4;
+				m = (x4 = m, y4 = new Go$Uint64(1048576, 0), new Go$Uint64(x4.high + y4.high, x4.low + y4.low));
+			}
+			if (e === 0) {
+				e = 1;
+			}
+			return (Go$obj = m, Go$obj.high * 4294967296 + Go$obj.low) * Exp2(((e - 1023 | 0) - 52 | 0)) * s;
+		});
 	`,
 
 	"math/big": `

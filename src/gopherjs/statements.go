@@ -261,11 +261,15 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			default:
 				panic(s.Tok)
 			}
+			parenExpr := &ast.ParenExpr{
+				X: s.Rhs[0],
+			}
 			binaryExpr := &ast.BinaryExpr{
 				X:  s.Lhs[0],
 				Op: op,
-				Y:  s.Rhs[0],
+				Y:  parenExpr,
 			}
+			c.info.Types[parenExpr] = c.info.Types[s.Lhs[0]]
 			c.info.Types[binaryExpr] = c.info.Types[s.Lhs[0]]
 			c.translateStmt(&ast.AssignStmt{
 				Lhs: []ast.Expr{s.Lhs[0]},

@@ -415,11 +415,6 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 					}
 				}
 			}
-		case *types.Slice:
-			c.Printf("var %s = function() { Go$Slice.apply(this, arguments); };", nt.Obj().Name())
-			c.Printf("Go$copyFields(Go$Slice.prototype, %s.prototype);", nt.Obj().Name())
-		case *types.Map:
-			c.Printf("var %s = function() { Go$Map.apply(this, arguments); };", nt.Obj().Name())
 		case *types.Interface:
 			if t.MethodSet().Len() == 0 {
 				c.Printf("var %s = function(t) { return true };", nt.Obj().Name())
@@ -444,7 +439,9 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			}
 			c.Printf("var %s = function(t) { return %s };", nt.Obj().Name(), strings.Join(conditions, " || "))
 		default:
-			panic(fmt.Sprintf("Unhandled type: %T\n", t))
+			typeName := c.typeName(t)
+			c.Printf("var %s = function() { %s.apply(this, arguments); };", nt.Obj().Name(), typeName)
+			c.Printf("Go$copyFields(%s.prototype, %s.prototype);", typeName, nt.Obj().Name())
 		}
 
 	case *ast.ImportSpec:
@@ -675,10 +672,7 @@ func hasId(t types.Type) bool {
 func isWrapped(ty types.Type) bool {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
-		if t.Kind() == types.UntypedNil {
-			return false
-		}
-		return true
+		return !is64Bit(t) && t.Kind() != types.UntypedNil
 	case *types.Array, *types.Signature:
 		return true
 	}

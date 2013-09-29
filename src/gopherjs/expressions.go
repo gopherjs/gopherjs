@@ -18,12 +18,13 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case exact.Bool:
 			return fmt.Sprintf("%t", exact.BoolVal(value))
 		case exact.Int:
-			t := c.info.Types[expr].Underlying().(*types.Basic)
-			if is64Bit(t) {
+			t := c.info.Types[expr]
+			basic := t.Underlying().(*types.Basic)
+			if is64Bit(basic) {
 				d, _ := exact.Uint64Val(value)
-				return fmt.Sprintf("new Go$%s(%d, %d)", toJavaScriptType(t), d>>32, d&(1<<32-1))
+				return fmt.Sprintf("new %s(%d, %d)", c.typeName(t), d>>32, d&(1<<32-1))
 			}
-			if t.Kind() == types.Uint32 || t.Kind() == types.Uintptr {
+			if basic.Kind() == types.Uint32 || basic.Kind() == types.Uintptr {
 				d, _ := exact.Uint64Val(value)
 				return fmt.Sprintf("%d", d)
 			}
@@ -314,7 +315,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			return ex + " !== " + ey
 		case token.QUO:
-			if c.info.Types[e].Underlying().(*types.Basic).Info()&types.IsInteger != 0 {
+			if c.info.Types[e.X].Underlying().(*types.Basic).Info()&types.IsInteger != 0 {
 				value = fmt.Sprintf("Math.floor(%s / %s)", ex, ey)
 				break
 			}
@@ -625,7 +626,6 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		return c.zeroValue(desiredType)
 	}
 
-	value := c.translateExpr(expr)
 	exprType := c.info.Types[expr]
 	if basicLit, isBasicLit := expr.(*ast.BasicLit); isBasicLit && basicLit.Kind == token.STRING {
 		exprType = types.Typ[types.String]
@@ -634,24 +634,35 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		exprType = exprType.Underlying()
 	}
 
+	value := c.translateExpr(expr)
 	switch t := desiredType.Underlying().(type) {
 	case *types.Basic:
 		switch {
 		case t.Info()&types.IsInteger != 0:
 			basicExprType := exprType.Underlying().(*types.Basic)
-			switch {
-			case basicExprType.Info()&types.IsFloat != 0:
+			if basicExprType.Info()&types.IsFloat != 0 {
 				value = fmt.Sprintf("Math.floor(%s)", value)
-			case !is64Bit(basicExprType) && is64Bit(t):
-				value = fmt.Sprintf("new Go$%s(0, %s)", toJavaScriptType(t), value)
-			case is64Bit(basicExprType) && is64Bit(t):
-				if basicExprType.Kind() != t.Kind() {
+			}
+
+			switch {
+			case is64Bit(t):
+				switch {
+				case !is64Bit(basicExprType):
+					value = fmt.Sprintf("new Go$%s(0, %s)", toJavaScriptType(t), value)
+				case basicExprType.Kind() != t.Kind():
 					value = fmt.Sprintf("(Go$obj = %s, new Go$%s(Go$obj.high, Go$obj.low))", value, toJavaScriptType(t))
 				}
-			case is64Bit(basicExprType) && t.Info()&types.IsUnsigned != 0:
-				value += ".low"
-			case is64Bit(basicExprType) && t.Info()&types.IsUnsigned == 0:
-				value = fmt.Sprintf("(%s.low | 0)", value)
+			case is64Bit(basicExprType):
+				switch t.Info()&types.IsUnsigned != 0 {
+				case true:
+					value += ".low"
+				case false:
+					value = fmt.Sprintf("(%s.low | 0)", value)
+				}
+			}
+		case t.Info()&types.IsFloat != 0:
+			if is64Bit(exprType.Underlying().(*types.Basic)) {
+				value = fmt.Sprintf("(Go$obj = %s, Go$obj.high * 4294967296 + Go$obj.low)", value)
 			}
 		case t.Info()&types.IsString != 0:
 			switch st := exprType.Underlying().(type) {

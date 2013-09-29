@@ -264,12 +264,12 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			parenExpr := &ast.ParenExpr{
 				X: s.Rhs[0],
 			}
+			c.info.Types[parenExpr] = c.info.Types[s.Rhs[0]]
 			binaryExpr := &ast.BinaryExpr{
 				X:  s.Lhs[0],
 				Op: op,
 				Y:  parenExpr,
 			}
-			c.info.Types[parenExpr] = c.info.Types[s.Lhs[0]]
 			c.info.Types[binaryExpr] = c.info.Types[s.Lhs[0]]
 			c.translateStmt(&ast.AssignStmt{
 				Lhs: []ast.Expr{s.Lhs[0]},
@@ -352,35 +352,33 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.IncDecStmt:
+		t := c.info.Types[s.X]
 		if iExpr, isIExpr := s.X.(*ast.IndexExpr); isIExpr {
-			if m, isMap := c.info.Types[iExpr.X].Underlying().(*types.Map); isMap {
-				op := token.ADD
-				if s.Tok == token.DEC {
-					op = token.SUB
-				}
-				one := &ast.BasicLit{
-					Kind:  token.INT,
-					Value: "1",
-				}
-				binaryExpr := &ast.BinaryExpr{
-					X:  s.X,
-					Op: op,
-					Y:  one,
-				}
-				c.info.Types[binaryExpr] = m.Elem()
-				c.info.Types[one] = m.Elem()
-				c.info.Values[one] = exact.MakeInt64(1)
-				c.translateStmt(&ast.AssignStmt{
-					Lhs: []ast.Expr{s.X},
-					Tok: token.ASSIGN,
-					Rhs: []ast.Expr{
-						binaryExpr,
-					},
-				}, label)
-				return
+			switch u := c.info.Types[iExpr.X].Underlying().(type) {
+			case *types.Array:
+				t = u.Elem()
+			case *types.Slice:
+				t = u.Elem()
+			case *types.Map:
+				t = u.Elem()
 			}
 		}
-		c.Printf("%s%s;", c.translateExpr(s.X), s.Tok)
+
+		tok := token.ADD_ASSIGN
+		if s.Tok == token.DEC {
+			tok = token.SUB_ASSIGN
+		}
+		one := &ast.BasicLit{
+			Kind:  token.INT,
+			Value: "1",
+		}
+		c.info.Types[one] = t
+		c.info.Values[one] = exact.MakeInt64(1)
+		c.translateStmt(&ast.AssignStmt{
+			Lhs: []ast.Expr{s.X},
+			Tok: tok,
+			Rhs: []ast.Expr{one},
+		}, label)
 
 	case *ast.SelectStmt, *ast.GoStmt, *ast.SendStmt:
 		c.Printf(`throw new GoError("Statement not supported: %T");`, s)
@@ -416,7 +414,7 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, translateCond func(
 		}
 	}
 
-	c.Printf("%sswitch (null) {", label)
+	c.Printf("%sswitch (undefined) {", label)
 	c.Printf("default:")
 	c.Indent(func() {
 		var defaultClause []ast.Stmt
@@ -451,6 +449,9 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, translateCond func(
 		}
 		c.Printf("{")
 		c.Indent(func() {
+			if typeSwitchVar != "" {
+				c.Printf("var %s = %s;", typeSwitchVar, typeSwitchValue)
+			}
 			c.translateStmtList(defaultClause)
 		})
 		c.Printf("}")

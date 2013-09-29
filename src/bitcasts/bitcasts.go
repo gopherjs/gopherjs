@@ -49,8 +49,8 @@ func main() {
 	fmt.Println("OK!")
 }
 
-func Exp2(x float64) float64 {
-	return math.Exp2(x)
+func Ldexp(frac float64, exp int) float64 {
+	return math.Ldexp(frac, exp)
 }
 
 func Float32bits(f float32) uint32 {
@@ -91,7 +91,7 @@ func Float32frombits(b uint32) float32 {
 	if b&(1<<31) != 0 {
 		s = -1
 	}
-	e := int32(b>>23) & (1<<8 - 1)
+	e := (b >> 23) & (1<<8 - 1)
 	m := b & (1<<23 - 1)
 
 	if e == (1<<8)-1 {
@@ -107,7 +107,7 @@ func Float32frombits(b uint32) float32 {
 		e = 1
 	}
 
-	return float32(m) * float32(Exp2(float64(e-127-23))) * s
+	return float32(Ldexp(float64(m), int(e)-127-23)) * s
 }
 
 func Float64bits(f float64) uint64 {
@@ -148,7 +148,7 @@ func Float64frombits(b uint64) float64 {
 	if b&(1<<63) != 0 {
 		s = -1
 	}
-	e := int32(b>>52) & (1<<11 - 1)
+	e := (b >> 52) & (1<<11 - 1)
 	m := b & (1<<52 - 1)
 
 	if e == (1<<11)-1 {
@@ -164,5 +164,5 @@ func Float64frombits(b uint64) float64 {
 		e = 1
 	}
 
-	return float64(m) * Exp2(float64(e-1023-52)) * s
+	return Ldexp(float64(m), int(e)-1023-52) * s
 }

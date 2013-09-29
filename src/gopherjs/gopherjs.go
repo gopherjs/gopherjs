@@ -547,9 +547,13 @@ func (c *PkgContext) translateArgs(call *ast.CallExpr) []string {
 	return args
 }
 
-func (c *PkgContext) zeroValue(t types.Type) string {
-	switch t := t.(type) {
+func (c *PkgContext) zeroValue(ty types.Type) string {
+	named, isNamed := ty.(*types.Named)
+	switch t := ty.Underlying().(type) {
 	case *types.Basic:
+		if is64Bit(t) {
+			return fmt.Sprintf("new %s(0, 0)", c.typeName(ty))
+		}
 		if t.Info()&types.IsBoolean != 0 {
 			return "false"
 		}
@@ -561,22 +565,20 @@ func (c *PkgContext) zeroValue(t types.Type) string {
 		}
 	case *types.Array:
 		return fmt.Sprintf("Go$clear(new %s(%d))", toArrayType(t.Elem()), t.Len())
+	case *types.Slice:
+		if isNamed {
+			return fmt.Sprintf("new %s(%s)", c.typeName(named), c.zeroValue(types.NewArray(t.Elem(), 0)))
+		}
 	case *types.Struct:
+		if isNamed {
+			return fmt.Sprintf("new %s()", c.typeName(named))
+		}
 		fields := make([]string, t.NumFields())
 		for i := range fields {
 			field := t.Field(i)
 			fields[i] = field.Name() + ": " + c.zeroValue(field.Type())
 		}
 		return fmt.Sprintf("{%s}", strings.Join(fields, ", "))
-	case *types.Named:
-		switch ut := t.Underlying().(type) {
-		case *types.Struct:
-			return fmt.Sprintf("new %s()", c.typeName(t))
-		case *types.Slice:
-			return fmt.Sprintf("new %s(%s)", c.typeName(t), c.zeroValue(types.NewArray(ut.Elem(), 0)))
-		case *types.Basic:
-			return c.zeroValue(ut)
-		}
 	}
 	return "null"
 }
@@ -663,10 +665,14 @@ func isUnderscore(expr ast.Expr) bool {
 	return false
 }
 
-func hasId(t types.Type) bool {
-	_, isPointer := t.Underlying().(*types.Pointer)
-	_, isInterface := t.Underlying().(*types.Interface)
-	return isPointer || isInterface
+func hasId(ty types.Type) bool {
+	switch t := ty.Underlying().(type) {
+	case *types.Basic:
+		return is64Bit(t)
+	case *types.Pointer, *types.Interface:
+		return true
+	}
+	return false
 }
 
 func isWrapped(ty types.Type) bool {

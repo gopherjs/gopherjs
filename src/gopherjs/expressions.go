@@ -12,66 +12,83 @@ import (
 
 func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	if value, valueFound := c.info.Values[expr]; valueFound {
-		switch value.Kind() {
-		case exact.Nil:
-			return "null"
-		case exact.Bool:
-			return fmt.Sprintf("%t", exact.BoolVal(value))
-		case exact.Int:
-			t := c.info.Types[expr]
-			basic := t.Underlying().(*types.Basic)
-			if is64Bit(basic) {
-				d, _ := exact.Uint64Val(value)
-				return fmt.Sprintf("new %s(%d, %d)", c.typeName(t), d>>32, d&(1<<32-1))
+		// workaround
+		if id, isIdent := expr.(*ast.Ident); isIdent {
+			switch id.Name {
+			case "MaxFloat32":
+				return "3.40282346638528859811704183484516925440e+38"
+			case "SmallestNonzeroFloat32":
+				return "1.401298464324817070923729583289916131280e-45"
+			case "MaxFloat64":
+				return "1.797693134862315708145274237317043567981e+308"
+			case "SmallestNonzeroFloat64":
+				return "4.940656458412465441765687928682213723651e-324"
 			}
-			if basic.Kind() == types.Uint32 || basic.Kind() == types.Uintptr {
-				d, _ := exact.Uint64Val(value)
-				return fmt.Sprintf("%d", d)
-			}
-			d, _ := exact.Int64Val(value)
-			return fmt.Sprintf("%d", d)
-		case exact.Float:
-			f, _ := exact.Float64Val(value)
-			return fmt.Sprintf("%f", f)
-		case exact.Complex:
-			f, _ := exact.Float64Val(exact.Real(value))
-			return fmt.Sprintf("%f", f)
-		case exact.String:
-			buffer := bytes.NewBuffer(nil)
-			for _, r := range exact.StringVal(value) {
-				switch r {
-				case '\b':
-					buffer.WriteString(`\b`)
-				case '\f':
-					buffer.WriteString(`\f`)
-				case '\n':
-					buffer.WriteString(`\n`)
-				case '\r':
-					buffer.WriteString(`\r`)
-				case '\t':
-					buffer.WriteString(`\t`)
-				case '\v':
-					buffer.WriteString(`\v`)
-				case 0:
-					buffer.WriteString(`\0`)
-				case '"':
-					buffer.WriteString(`\"`)
-				case '\\':
-					buffer.WriteString(`\\`)
-				default:
-					if r > 0xFFFF {
-						panic("Too big unicode character in string.")
-					}
-					if r < 0x20 || r > 0x7E {
-						fmt.Fprintf(buffer, `\u%04x`, r)
-						continue
-					}
-					buffer.WriteRune(r)
+		}
+		v := HasEvilConstantVisitor{}
+		ast.Walk(&v, expr)
+		if !v.hasEvilConstant {
+			switch value.Kind() {
+			case exact.Nil:
+				return "null"
+			case exact.Bool:
+				return fmt.Sprintf("%t", exact.BoolVal(value))
+			case exact.Int:
+				t := c.info.Types[expr]
+				basic := t.Underlying().(*types.Basic)
+				if is64Bit(basic) {
+					d, _ := exact.Uint64Val(value)
+					return fmt.Sprintf("new %s(%d, %d)", c.typeName(t), d>>32, d&(1<<32-1))
 				}
+				if basic.Kind() == types.Uint32 || basic.Kind() == types.Uintptr {
+					d, _ := exact.Uint64Val(value)
+					return fmt.Sprintf("%d", d)
+				}
+				d, _ := exact.Int64Val(value)
+				return fmt.Sprintf("%d", d)
+			case exact.Float:
+				f, _ := exact.Float64Val(value)
+				return fmt.Sprintf("%f", f)
+			case exact.Complex:
+				f, _ := exact.Float64Val(exact.Real(value))
+				return fmt.Sprintf("%f", f)
+			case exact.String:
+				buffer := bytes.NewBuffer(nil)
+				for _, r := range exact.StringVal(value) {
+					switch r {
+					case '\b':
+						buffer.WriteString(`\b`)
+					case '\f':
+						buffer.WriteString(`\f`)
+					case '\n':
+						buffer.WriteString(`\n`)
+					case '\r':
+						buffer.WriteString(`\r`)
+					case '\t':
+						buffer.WriteString(`\t`)
+					case '\v':
+						buffer.WriteString(`\v`)
+					case 0:
+						buffer.WriteString(`\0`)
+					case '"':
+						buffer.WriteString(`\"`)
+					case '\\':
+						buffer.WriteString(`\\`)
+					default:
+						if r > 0xFFFF {
+							panic("Too big unicode character in string.")
+						}
+						if r < 0x20 || r > 0x7E {
+							fmt.Fprintf(buffer, `\u%04x`, r)
+							continue
+						}
+						buffer.WriteRune(r)
+					}
+				}
+				return `"` + buffer.String() + `"`
+			default:
+				panic("Unhandled value: " + value.String())
 			}
-			return `"` + buffer.String() + `"`
-		default:
-			panic("Unhandled value: " + value.String())
 		}
 	}
 
@@ -245,11 +262,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case token.XOR:
 			op = "~"
 		}
-		basic := c.info.Types[e.X].Underlying().(*types.Basic)
+		t := c.info.Types[e.X]
+		basic := t.Underlying().(*types.Basic)
 		if is64Bit(basic) {
 			x := c.newVarName("x")
 			c.Printf("var %s;", x)
-			return fmt.Sprintf("(%s = %s, new Go$%s(%s%s.high, %s%s.low))", x, c.translateExpr(e.X), toJavaScriptType(basic), op, x, op, x)
+			return fmt.Sprintf("(%s = %s, new %s(%s%s.high, %s%s.low))", x, c.translateExpr(e.X), c.typeName(t), op, x, op, x)
 		}
 		value := fmt.Sprintf("%s%s", op, c.translateExpr(e.X))
 		value = fixNumber(value, basic)
@@ -263,7 +281,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			op = "&~"
 		}
 
-		basic, isBasic := c.info.Types[e.X].Underlying().(*types.Basic)
+		t := c.info.Types[e.X]
+		basic, isBasic := t.Underlying().(*types.Basic)
 		if isBasic && is64Bit(basic) {
 			var expr string = "0"
 			switch e.Op {
@@ -274,9 +293,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case token.REM:
 				return fmt.Sprintf("Go$div64(%s, %s, true)", ex, ey)
 			case token.SHL:
-				return fmt.Sprintf("Go$shift64(%s, %s)", ex, ey)
+				return fmt.Sprintf("Go$shift64(%s, %s)", ex, c.translateExprToType(e.Y, types.Typ[types.Uint]))
 			case token.SHR:
-				return fmt.Sprintf("Go$shift64(%s, -%s)", ex, ey)
+				return fmt.Sprintf("Go$shift64(%s, -%s)", ex, c.translateExprToType(e.Y, types.Typ[types.Uint]))
 			case token.EQL:
 				expr = "x.high === y.high && x.low === y.low"
 			case token.NEQ:
@@ -289,8 +308,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				expr = "x.high > y.high || (x.high === y.high && x.low > y.low)"
 			case token.GEQ:
 				expr = "x.high > y.high || (x.high === y.high && x.low >= y.low)"
-			case token.ADD, token.SUB, token.AND, token.OR, token.XOR, token.AND_NOT:
-				expr = fmt.Sprintf("new Go$%s(x.high %s y.high, x.low %s y.low)", toJavaScriptType(basic), op, op)
+			case token.ADD, token.SUB:
+				expr = fmt.Sprintf("new %s(x.high %s y.high, x.low %s y.low)", c.typeName(t), op, op)
+			case token.AND, token.OR, token.XOR, token.AND_NOT:
+				expr = fmt.Sprintf("new %s(x.high %s y.high, ((x.low %s y.low) + 4294967296) %% 4294967296)", c.typeName(t), op, op)
 			default:
 				panic(e.Op)
 			}
@@ -328,7 +349,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case types.Int32, types.Uint32, types.Uintptr:
 				y := c.newVarName("y")
 				c.Printf("var %s;", y)
-				value = fmt.Sprintf("(%s = %s, %s < 32 ? (%s %s %s) : 0)", y, ey, y, ex, op, y)
+				value = fmt.Sprintf("(%s = %s, %s < 32 ? (%s %s %s) : 0)", y, c.translateExprToType(e.Y, types.Typ[types.Uint]), y, ex, op, y)
 			default:
 				value = "(" + ex + " " + op + " " + ey + ")"
 			}
@@ -367,9 +388,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				index = fmt.Sprintf("(%s || Go$nil).Go$id", index)
 			}
 			if _, isTuple := c.info.Types[e].(*types.Tuple); isTuple {
-				return fmt.Sprintf("(Go$obj = (%s || Go$nil)[%s], Go$obj !== undefined ? [Go$obj.v, true] : [%s, false])", x, index, c.zeroValue(t.Elem()))
+				return fmt.Sprintf("(Go$obj = (%s || false)[%s], Go$obj !== undefined ? [Go$obj.v, true] : [%s, false])", x, index, c.zeroValue(t.Elem()))
 			}
-			return fmt.Sprintf("(Go$obj = (%s || Go$nil)[%s], Go$obj !== undefined ? Go$obj.v : %s)", x, index, c.zeroValue(t.Elem()))
+			return fmt.Sprintf("(Go$obj = (%s || false)[%s], Go$obj !== undefined ? Go$obj.v : %s)", x, index, c.zeroValue(t.Elem()))
 		case *types.Basic:
 			return fmt.Sprintf("%s.charCodeAt(%s)", x, c.translateExprToType(e.Index, types.Typ[types.Int]))
 		default:
@@ -648,9 +669,9 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			case is64Bit(t):
 				switch {
 				case !is64Bit(basicExprType):
-					value = fmt.Sprintf("new Go$%s(0, %s)", toJavaScriptType(t), value)
-				case basicExprType.Kind() != t.Kind():
-					value = fmt.Sprintf("(Go$obj = %s, new Go$%s(Go$obj.high, Go$obj.low))", value, toJavaScriptType(t))
+					value = fmt.Sprintf("new %s(0, %s)", c.typeName(desiredType), value)
+				case !types.IsIdentical(exprType, desiredType):
+					value = fmt.Sprintf("(Go$obj = %s, new %s(Go$obj.high, Go$obj.low))", value, c.typeName(desiredType))
 				}
 			case is64Bit(basicExprType):
 				switch t.Info()&types.IsUnsigned != 0 {
@@ -672,7 +693,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 				}
 				return value
 			case *types.Slice:
-				return fmt.Sprintf("Go$fromCharCode.apply(null, %s.Go$toArray())", value)
+				return fmt.Sprintf("Go$fromCharCode.apply(null, (%s || Go$nil).Go$toArray())", value)
 			default:
 				panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 			}
@@ -776,7 +797,7 @@ func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {
 		case *types.Basic:
 			if t.Info()&types.IsNumeric != 0 {
 				if is64Bit(t) {
-					c.Printf("%s = new Go$%s(%s.getUint32(%d, true), %s.getUint32(%d, true));", field.Name(), toJavaScriptType(t), view, offsets[i]+4, view, offsets[i])
+					c.Printf("%s = new %s(%s.getUint32(%d, true), %s.getUint32(%d, true));", field.Name(), c.typeName(field.Type()), view, offsets[i]+4, view, offsets[i])
 					continue
 				}
 				c.Printf("%s = %s.get%s(%d, true);", field.Name(), view, toJavaScriptType(t), offsets[i])
@@ -814,6 +835,25 @@ func (v *HasDeferVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		return nil
 	case *ast.FuncLit:
 		return nil
+	}
+	return v
+}
+
+type HasEvilConstantVisitor struct {
+	hasEvilConstant bool
+}
+
+func (v *HasEvilConstantVisitor) Visit(node ast.Node) (w ast.Visitor) {
+	if v.hasEvilConstant {
+		return nil
+	}
+	switch n := node.(type) {
+	case *ast.Ident:
+		switch n.Name {
+		case "MaxFloat32", "SmallestNonzeroFloat32", "MaxFloat64", "SmallestNonzeroFloat64":
+			v.hasEvilConstant = true
+			return nil
+		}
 	}
 	return v
 }

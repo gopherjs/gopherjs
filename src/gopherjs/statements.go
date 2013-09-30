@@ -54,7 +54,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				return refVar + " === " + c.translateExprToType(cond, tagType)
 			}
 		}
-		c.translateSwitch(s.Body.List, translateCond, "", "", label)
+		c.translateSwitch(s.Body, translateCond, "", "", label)
 
 	case *ast.TypeSwitchStmt:
 		c.translateStmt(s.Init, "")
@@ -77,7 +77,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		translateCond := func(cond ast.Expr) string {
 			return typeVar + " === " + c.typeName(c.info.Types[cond])
 		}
-		c.translateSwitch(s.Body.List, translateCond, refVar, typeSwitchVar, label)
+		c.translateSwitch(s.Body, translateCond, refVar, typeSwitchVar, label)
 
 	case *ast.ForStmt:
 		c.translateStmt(s.Init, "")
@@ -398,18 +398,18 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 	}
 }
 
-func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, translateCond func(ast.Expr) string, typeSwitchValue, typeSwitchVar string, label string) {
-	if len(caseClauses) == 0 {
+func (c *PkgContext) translateSwitch(caseClauses *ast.BlockStmt, translateCond func(ast.Expr) string, typeSwitchValue, typeSwitchVar string, label string) {
+	if len(caseClauses.List) == 0 {
 		return
 	}
-	if len(caseClauses) == 1 && caseClauses[0].(*ast.CaseClause).List == nil {
-		c.translateStmtList(caseClauses[0].(*ast.CaseClause).Body)
+	if len(caseClauses.List) == 1 && caseClauses.List[0].(*ast.CaseClause).List == nil {
+		c.translateStmtList(caseClauses.List[0].(*ast.CaseClause).Body)
 		return
 	}
 
-	clauseStmts := make([][]ast.Stmt, len(caseClauses))
+	clauseStmts := make([][]ast.Stmt, len(caseClauses.List))
 	openClauses := make([]int, 0)
-	for i, child := range caseClauses {
+	for i, child := range caseClauses.List {
 		caseClause := child.(*ast.CaseClause)
 		openClauses = append(openClauses, i)
 		for _, j := range openClauses {
@@ -420,11 +420,9 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, translateCond func(
 		}
 	}
 
-	c.Printf("%sswitch (undefined) {", label)
-	c.Printf("default:")
-	c.Indent(func() {
+	printBody := func() {
 		var defaultClause []ast.Stmt
-		for i, child := range caseClauses {
+		for i, child := range caseClauses.List {
 			caseClause := child.(*ast.CaseClause)
 			if len(caseClause.List) == 0 {
 				defaultClause = clauseStmts[i]
@@ -450,7 +448,7 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, translateCond func(
 				}
 				c.translateStmtList(clauseStmts[i])
 			})
-			if i < len(caseClauses)-1 || defaultClause != nil {
+			if i < len(caseClauses.List)-1 || defaultClause != nil {
 				c.Printf("} else")
 				continue
 			}
@@ -466,6 +464,19 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, translateCond func(
 			})
 			c.Printf("}")
 		}
+	}
+
+	v := HasBreakVisitor{}
+	ast.Walk(&v, caseClauses)
+	if !v.hasBreak && label == "" {
+		printBody()
+		return
+	}
+
+	c.Printf("%sswitch (undefined) {", label)
+	c.Printf("default:")
+	c.Indent(func() {
+		printBody()
 	})
 	c.Printf("}")
 }
@@ -476,4 +487,24 @@ func hasFallthrough(caseClause *ast.CaseClause) bool {
 	}
 	b, isBranchStmt := caseClause.Body[len(caseClause.Body)-1].(*ast.BranchStmt)
 	return isBranchStmt && b.Tok == token.FALLTHROUGH
+}
+
+type HasBreakVisitor struct {
+	hasBreak bool
+}
+
+func (v *HasBreakVisitor) Visit(node ast.Node) (w ast.Visitor) {
+	if v.hasBreak {
+		return nil
+	}
+	switch n := node.(type) {
+	case *ast.BranchStmt:
+		if n.Tok == token.BREAK && n.Label == nil {
+			v.hasBreak = true
+			return nil
+		}
+	case *ast.FuncLit, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
+		return nil
+	}
+	return v
 }

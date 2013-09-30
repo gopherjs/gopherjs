@@ -209,6 +209,7 @@ var Go$copy = function(dst, src) {
 	return n;
 };
 
+// TODO fix zero values
 var Go$append = function(slice, toAppend) {
 	if (slice === null || slice === 0) { // FIXME
 		return toAppend;
@@ -221,18 +222,26 @@ var Go$append = function(slice, toAppend) {
 	var newOffset = slice.offset;
 	var newLength = slice.length + toAppend.length;
 
-	if (slice.offset + newLength > newArray.length) {
-		var c = slice.array.length - slice.offset;
+	if (newOffset + newLength > newArray.length) {
+		var c = newArray.length - newOffset;
 		var newCapacity = Math.max(newLength, c < 1024 ? c * 2 : Math.floor(c * 5 / 4));
-		newArray = new newArray.constructor(newCapacity);
-		for (var i = 0; i < slice.length; i++) {
-			newArray[i] = slice.array[slice.offset + i];
+
+		if (newArray.constructor === Array) {
+			if (newOffset !== 0) {
+				newArray = newArray.slice(newOffset);
+			}
+			newArray.push.apply(newArray, new Array(newCapacity - newArray.length))
+		} else {
+			newArray = new newArray.constructor(newCapacity);
+			newArray.set(slice.array.subarray(newOffset))
 		}
 		newOffset = 0;
 	}
 
+	var leftOffset = newOffset + slice.length;
+	var rightOffset = toAppend.offset;
 	for (var j = 0; j < toAppend.length; j++) {
-		newArray[newOffset + slice.length + j] = toAppend.Go$get(j);
+		newArray[leftOffset + j] = toAppend.array[rightOffset + j];
 	}
 
 	var newSlice = new slice.constructor(newArray);

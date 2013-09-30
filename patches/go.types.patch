@@ -1,7 +1,7 @@
-diff -r fb4b392baa03 go/types/expr.go
---- a/go/types/expr.go	Thu Sep 19 11:38:07 2013 +1000
-+++ b/go/types/expr.go	Mon Sep 30 19:50:07 2013 +0200
-@@ -732,9 +732,12 @@
+diff -r a38424bcd78c go/types/expr.go
+--- a/go/types/expr.go	Mon Sep 30 12:39:54 2013 -0400
++++ b/go/types/expr.go	Mon Sep 30 20:21:58 2013 +0200
+@@ -723,9 +723,12 @@
  	}
  
  	if (op == token.QUO || op == token.REM) && y.mode == constant && exact.Sign(y.val) == 0 {
@@ -17,7 +17,7 @@ diff -r fb4b392baa03 go/types/expr.go
  	}
  
  	if x.mode == constant && y.mode == constant {
-@@ -861,7 +864,7 @@
+@@ -866,7 +869,7 @@
  		typ = Typ[Invalid]
  		record = false // nothing to do
  	case novalue:
@@ -26,9 +26,9 @@ diff -r fb4b392baa03 go/types/expr.go
  	case constant:
  		typ = x.typ
  		val = x.val
-diff -r fb4b392baa03 go/types/methodset.go
---- a/go/types/methodset.go	Thu Sep 19 11:38:07 2013 +1000
-+++ b/go/types/methodset.go	Mon Sep 30 19:50:07 2013 +0200
+diff -r a38424bcd78c go/types/methodset.go
+--- a/go/types/methodset.go	Mon Sep 30 12:39:54 2013 -0400
++++ b/go/types/methodset.go	Mon Sep 30 20:21:58 2013 +0200
 @@ -121,8 +121,8 @@
  		var next []embeddedType // embedded types found at current depth
  
@@ -60,9 +60,9 @@ diff -r fb4b392baa03 go/types/methodset.go
  	for i, f := range list {
  		key := f.Id()
  		// if f is not in the set, add it
-diff -r fb4b392baa03 go/types/sizes.go
---- a/go/types/sizes.go	Thu Sep 19 11:38:07 2013 +1000
-+++ b/go/types/sizes.go	Mon Sep 30 19:50:07 2013 +0200
+diff -r a38424bcd78c go/types/sizes.go
+--- a/go/types/sizes.go	Mon Sep 30 12:39:54 2013 -0400
++++ b/go/types/sizes.go	Mon Sep 30 20:21:58 2013 +0200
 @@ -121,7 +121,7 @@
  
  // DefaultPtrSize is the default size of ints, uint, and pointers, in bytes,
@@ -72,9 +72,9 @@ diff -r fb4b392baa03 go/types/sizes.go
  
  // DefaultSizeof implements the default size computation
  // for unsafe.Sizeof. It is used if Config.Sizeof == nil.
-diff -r fb4b392baa03 go/types/typemap/typemap.go
---- a/go/types/typemap/typemap.go	Thu Sep 19 11:38:07 2013 +1000
-+++ b/go/types/typemap/typemap.go	Mon Sep 30 19:50:07 2013 +0200
+diff -r a38424bcd78c go/types/typemap/typemap.go
+--- a/go/types/typemap/typemap.go	Mon Sep 30 12:39:54 2013 -0400
++++ b/go/types/typemap/typemap.go	Mon Sep 30 20:21:58 2013 +0200
 @@ -130,10 +130,7 @@
  
  // Len returns the number of map entries.
@@ -87,9 +87,9 @@ diff -r fb4b392baa03 go/types/typemap/typemap.go
  }
  
  // Iterate calls function f on each entry in the map in unspecified order.
-diff -r fb4b392baa03 go/types/types.go
---- a/go/types/types.go	Thu Sep 19 11:38:07 2013 +1000
-+++ b/go/types/types.go	Mon Sep 30 19:50:07 2013 +0200
+diff -r a38424bcd78c go/types/types.go
+--- a/go/types/types.go	Mon Sep 30 12:39:54 2013 -0400
++++ b/go/types/types.go	Mon Sep 30 20:21:58 2013 +0200
 @@ -174,18 +174,12 @@
  
  // NewTuple returns a new tuple for the given variables.
@@ -111,15 +111,15 @@ diff -r fb4b392baa03 go/types/types.go
  }
  
  // At returns the i'th variable of tuple t.
-diff -r fb4b392baa03 go/types/universe.go
---- a/go/types/universe.go	Thu Sep 19 11:38:07 2013 +1000
-+++ b/go/types/universe.go	Mon Sep 30 19:50:07 2013 +0200
-@@ -102,7 +102,7 @@
- 	{
- 		// Error has a nil package in its qualified name since it is in no package
- 		res := NewVar(token.NoPos, nil, "", Typ[String])
--		sig := &Signature{results: NewTuple(res)}
-+		sig := &Signature{results: NewTuple(res), params: NewTuple()}
- 		err := NewFunc(token.NoPos, nil, "Error", sig)
- 		typ := &Named{underlying: &Interface{methods: []*Func{err}}, complete: true}
- 		sig.recv = NewVar(token.NoPos, nil, "", typ)
+diff -r a38424bcd78c go/types/universe.go
+--- a/go/types/universe.go	Mon Sep 30 12:39:54 2013 -0400
++++ b/go/types/universe.go	Mon Sep 30 20:21:58 2013 +0200
+@@ -65,7 +65,7 @@
+ 
+ 	// Error has a nil package in its qualified name since it is in no package
+ 	res := NewVar(token.NoPos, nil, "", Typ[String])
+-	sig := &Signature{results: NewTuple(res)}
++	sig := &Signature{results: NewTuple(res), params: NewTuple()}
+ 	err := NewFunc(token.NoPos, nil, "Error", sig)
+ 	typ := &Named{underlying: &Interface{methods: []*Func{err}}, complete: true}
+ 	sig.recv = NewVar(token.NoPos, nil, "", typ)

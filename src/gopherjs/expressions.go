@@ -458,120 +458,122 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		panic("")
 
 	case *ast.CallExpr:
-		funType := c.info.Types[e.Fun]
-		switch t := funType.Underlying().(type) {
-		case *types.Signature:
-			var fun string
-			switch f := e.Fun.(type) {
-			case *ast.SelectorExpr:
-				sel := c.info.Selections[f]
-				if sel.Kind() == types.MethodVal {
-					methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
-					_, pointerExpected := methodsRecvType.(*types.Pointer)
-					_, isPointer := sel.Recv().Underlying().(*types.Pointer)
-					_, isStruct := sel.Recv().Underlying().(*types.Struct)
-					if pointerExpected && !isPointer && !isStruct {
-						target := c.translateExpr(f.X)
-						fun = fmt.Sprintf("(new %s(function() { return %s; }, function(v) { %s = v; })).%s", c.typeName(methodsRecvType), target, target, f.Sel.Name)
-						break
+		if id, isIdent := e.Fun.(*ast.Ident); isIdent {
+			if builtin, isBuiltin := c.info.Objects[id].(*types.Builtin); isBuiltin {
+				switch builtin.Name() {
+				case "new":
+					elemType := c.info.Types[e.Args[0]]
+					if types.IsIdentical(elemType, types.Typ[types.Uintptr]) {
+						return "new Uint8Array(8)"
 					}
+					return c.zeroValue(elemType)
+				case "make":
+					switch t2 := c.info.Types[e.Args[0]].Underlying().(type) {
+					case *types.Slice:
+						if len(e.Args) == 3 {
+							return fmt.Sprintf("new %s(Go$clear(new %s(%s)), %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[2]), c.translateExpr(e.Args[1]))
+						}
+						return fmt.Sprintf("new %s(Go$clear(new %s(%s)))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[1]))
+					default:
+						args := []string{"undefined"}
+						for _, arg := range e.Args[1:] {
+							args = append(args, c.translateExpr(arg))
+						}
+						return fmt.Sprintf("new %s(%s)", c.typeName(c.info.Types[e.Args[0]]), strings.Join(args, ", "))
+					}
+				case "len":
+					arg := c.translateExpr(e.Args[0])
+					argType := c.info.Types[e.Args[0]]
+					switch argt := argType.Underlying().(type) {
+					case *types.Basic, *types.Array:
+						return fmt.Sprintf("%s.length", arg)
+					case *types.Slice:
+						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.length : 0)", arg)
+					case *types.Map:
+						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$keys(Go$obj).length : 0)", arg)
+					default:
+						panic(fmt.Sprintf("Unhandled len type: %T\n", argt))
+					}
+				case "cap":
+					arg := c.translateExpr(e.Args[0])
+					argType := c.info.Types[e.Args[0]]
+					switch argt := argType.Underlying().(type) {
+					case *types.Array:
+						return fmt.Sprintf("%s.length", arg)
+					case *types.Slice:
+						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.array.length : 0)", arg)
+					default:
+						panic(fmt.Sprintf("Unhandled cap type: %T\n", argt))
+					}
+				case "panic":
+					return fmt.Sprintf("throw new Go$Panic(%s)", c.translateExprToType(e.Args[0], types.NewInterface(nil)))
+				case "append":
+					sliceType := exprType
+					if e.Ellipsis.IsValid() {
+						return fmt.Sprintf("Go$append(%s, %s)", c.translateExpr(e.Args[0]), c.translateExprToType(e.Args[1], sliceType))
+					}
+					toAppend := createListComposite(sliceType.Underlying().(*types.Slice).Elem(), c.translateExprSlice(e.Args[1:]))
+					return fmt.Sprintf("Go$append(%s, new %s(%s))", c.translateExpr(e.Args[0]), c.typeName(sliceType), toAppend)
+				case "delete":
+					index := c.translateExpr(e.Args[1])
+					if hasId(c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()) {
+						index = fmt.Sprintf("(%s || Go$nil).Go$key()", index)
+					}
+					return fmt.Sprintf(`delete %s["$" + %s]`, c.translateExpr(e.Args[0]), index)
+				case "copy":
+					return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(nil)), c.translateExprToType(e.Args[1], types.NewSlice(nil)))
+				case "print", "println":
+					return fmt.Sprintf("Go$%s(%s)", builtin.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
+				case "real", "imag", "recover", "complex":
+					return fmt.Sprintf("Go$%s(%s)", builtin.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
+				default:
+					panic(fmt.Sprintf("Unhandled builtin: %s\n", builtin.Name()))
 				}
-				if sel.Kind() == types.PackageObj {
-					fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), f.Sel.Name)
+			}
+		}
+
+		funType := c.info.Types[e.Fun]
+		sig, isSig := funType.Underlying().(*types.Signature)
+		if !isSig { // cast
+			return c.translateExprToType(e.Args[0], funType)
+		}
+
+		var fun string
+		switch f := e.Fun.(type) {
+		case *ast.SelectorExpr:
+			sel := c.info.Selections[f]
+			if sel.Kind() == types.MethodVal {
+				methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
+				_, pointerExpected := methodsRecvType.(*types.Pointer)
+				_, isPointer := sel.Recv().Underlying().(*types.Pointer)
+				_, isStruct := sel.Recv().Underlying().(*types.Struct)
+				if pointerExpected && !isPointer && !isStruct {
+					target := c.translateExpr(f.X)
+					fun = fmt.Sprintf("(new %s(function() { return %s; }, function(v) { %s = v; })).%s", c.typeName(methodsRecvType), target, target, f.Sel.Name)
 					break
 				}
-				fun = fmt.Sprintf("%s.%s", c.translateExprToType(f.X, types.NewInterface(nil)), f.Sel.Name)
-			case *ast.Ident:
-				if _, isTypeName := c.info.Objects[f].(*types.TypeName); isTypeName {
-					return c.translateExprToType(e.Args[0], funType)
-				}
-				fun = c.translateExpr(e.Fun)
-			default:
-				fun = c.translateExpr(e.Fun)
 			}
-			if t.Params().Len() > 1 && len(e.Args) == 1 && !t.IsVariadic() {
-				argRefs := make([]string, t.Params().Len())
-				for i := range argRefs {
-					argRefs[i] = fmt.Sprintf("Go$tuple[%d]", i)
-				}
-				return fmt.Sprintf("(Go$tuple = %s, %s(%s))", c.translateExpr(e.Args[0]), fun, strings.Join(argRefs, ", "))
+			if sel.Kind() == types.PackageObj {
+				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), f.Sel.Name)
+				break
 			}
-			return fmt.Sprintf("%s(%s)", fun, strings.Join(c.translateArgs(e), ", "))
-		case *types.Builtin:
-			switch t.Name() {
-			case "new":
-				elemType := c.info.Types[e.Args[0]]
-				if types.IsIdentical(elemType, types.Typ[types.Uintptr]) {
-					return "new Uint8Array(8)"
-				}
-				return c.zeroValue(elemType)
-			case "make":
-				switch t2 := c.info.Types[e.Args[0]].Underlying().(type) {
-				case *types.Slice:
-					if len(e.Args) == 3 {
-						return fmt.Sprintf("new %s(Go$clear(new %s(%s)), %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[2]), c.translateExpr(e.Args[1]))
-					}
-					return fmt.Sprintf("new %s(Go$clear(new %s(%s)))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[1]))
-				default:
-					args := []string{"undefined"}
-					for _, arg := range e.Args[1:] {
-						args = append(args, c.translateExpr(arg))
-					}
-					return fmt.Sprintf("new %s(%s)", c.typeName(c.info.Types[e.Args[0]]), strings.Join(args, ", "))
-				}
-			case "len":
-				arg := c.translateExpr(e.Args[0])
-				argType := c.info.Types[e.Args[0]]
-				switch argt := argType.Underlying().(type) {
-				case *types.Basic, *types.Array:
-					return fmt.Sprintf("%s.length", arg)
-				case *types.Slice:
-					return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.length : 0)", arg)
-				case *types.Map:
-					return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$keys(Go$obj).length : 0)", arg)
-				default:
-					panic(fmt.Sprintf("Unhandled len type: %T\n", argt))
-				}
-			case "cap":
-				arg := c.translateExpr(e.Args[0])
-				argType := c.info.Types[e.Args[0]]
-				switch argt := argType.Underlying().(type) {
-				case *types.Array:
-					return fmt.Sprintf("%s.length", arg)
-				case *types.Slice:
-					return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.array.length : 0)", arg)
-				default:
-					panic(fmt.Sprintf("Unhandled cap type: %T\n", argt))
-				}
-			case "panic":
-				return fmt.Sprintf("throw new Go$Panic(%s)", c.translateExprToType(e.Args[0], types.NewInterface(nil)))
-			case "append":
-				sliceType := exprType
-				if e.Ellipsis.IsValid() {
-					return fmt.Sprintf("Go$append(%s, %s)", c.translateExpr(e.Args[0]), c.translateExprToType(e.Args[1], sliceType))
-				}
-				toAppend := createListComposite(sliceType.Underlying().(*types.Slice).Elem(), c.translateExprSlice(e.Args[1:]))
-				return fmt.Sprintf("Go$append(%s, new %s(%s))", c.translateExpr(e.Args[0]), c.typeName(sliceType), toAppend)
-			case "delete":
-				index := c.translateExpr(e.Args[1])
-				if hasId(c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()) {
-					index = fmt.Sprintf("(%s || Go$nil).Go$key()", index)
-				}
-				return fmt.Sprintf(`delete %s["$" + %s]`, c.translateExpr(e.Args[0]), index)
-			case "copy":
-				return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(nil)), c.translateExprToType(e.Args[1], types.NewSlice(nil)))
-			case "print", "println":
-				return fmt.Sprintf("Go$%s(%s)", t.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
-			case "real", "imag", "recover", "complex":
-				return fmt.Sprintf("Go$%s(%s)", t.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
-			default:
-				panic(fmt.Sprintf("Unhandled builtin: %s\n", t.Name()))
+			fun = fmt.Sprintf("%s.%s", c.translateExprToType(f.X, types.NewInterface(nil)), f.Sel.Name)
+		case *ast.Ident:
+			if _, isTypeName := c.info.Objects[f].(*types.TypeName); isTypeName {
+				return c.translateExprToType(e.Args[0], funType)
 			}
-		case *types.Basic, *types.Slice, *types.Chan, *types.Interface, *types.Map, *types.Pointer:
-			return c.translateExprToType(e.Args[0], funType)
+			fun = c.translateExpr(e.Fun)
 		default:
-			panic(fmt.Sprintf("Unhandled call: %T\n", t))
+			fun = c.translateExpr(e.Fun)
 		}
+		if sig.Params().Len() > 1 && len(e.Args) == 1 && !sig.IsVariadic() {
+			argRefs := make([]string, sig.Params().Len())
+			for i := range argRefs {
+				argRefs[i] = fmt.Sprintf("Go$tuple[%d]", i)
+			}
+			return fmt.Sprintf("(Go$tuple = %s, %s(%s))", c.translateExpr(e.Args[0]), fun, strings.Join(argRefs, ", "))
+		}
+		return fmt.Sprintf("%s(%s)", fun, strings.Join(c.translateArgs(e), ", "))
 
 	case *ast.StarExpr:
 		t := exprType

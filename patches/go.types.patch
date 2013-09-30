@@ -1,0 +1,125 @@
+diff -r fb4b392baa03 go/types/expr.go
+--- a/go/types/expr.go	Thu Sep 19 11:38:07 2013 +1000
++++ b/go/types/expr.go	Mon Sep 30 19:50:07 2013 +0200
+@@ -732,9 +732,12 @@
+ 	}
+ 
+ 	if (op == token.QUO || op == token.REM) && y.mode == constant && exact.Sign(y.val) == 0 {
+-		check.invalidOp(y.pos(), "division by zero")
+-		x.mode = invalid
+-		return
++		if !isFloat(x.typ) {
++			check.invalidOp(y.pos(), "division by zero")
++			x.mode = invalid
++			return
++		}
++		x.mode = value
+ 	}
+ 
+ 	if x.mode == constant && y.mode == constant {
+@@ -861,7 +864,7 @@
+ 		typ = Typ[Invalid]
+ 		record = false // nothing to do
+ 	case novalue:
+-		typ = (*Tuple)(nil)
++		typ = (*Tuple)(NewTuple())
+ 	case constant:
+ 		typ = x.typ
+ 		val = x.val
+diff -r fb4b392baa03 go/types/methodset.go
+--- a/go/types/methodset.go	Thu Sep 19 11:38:07 2013 +1000
++++ b/go/types/methodset.go	Mon Sep 30 19:50:07 2013 +0200
+@@ -121,8 +121,8 @@
+ 		var next []embeddedType // embedded types found at current depth
+ 
+ 		// field and method sets at current depth, allocated lazily
+-		var fset fieldSet
+-		var mset methodSet
++		fset := make(fieldSet)
++		mset := make(methodSet)
+ 
+ 		for _, e := range current {
+ 			// The very first time only, e.typ may be nil.
+@@ -229,9 +229,6 @@
+ // If multiples is set, f appears multiple times
+ // and is treated as a collision.
+ func (s fieldSet) add(f *Var, multiples bool) fieldSet {
+-	if s == nil {
+-		s = make(fieldSet)
+-	}
+ 	key := f.Id()
+ 	// if f is not in the set, add it
+ 	if !multiples {
+@@ -256,9 +253,6 @@
+ 	if len(list) == 0 {
+ 		return s
+ 	}
+-	if s == nil {
+-		s = make(methodSet)
+-	}
+ 	for i, f := range list {
+ 		key := f.Id()
+ 		// if f is not in the set, add it
+diff -r fb4b392baa03 go/types/sizes.go
+--- a/go/types/sizes.go	Thu Sep 19 11:38:07 2013 +1000
++++ b/go/types/sizes.go	Mon Sep 30 19:50:07 2013 +0200
+@@ -121,7 +121,7 @@
+ 
+ // DefaultPtrSize is the default size of ints, uint, and pointers, in bytes,
+ // used by DefaultSizeof.
+-const DefaultPtrSize = 8
++const DefaultPtrSize = 4
+ 
+ // DefaultSizeof implements the default size computation
+ // for unsafe.Sizeof. It is used if Config.Sizeof == nil.
+diff -r fb4b392baa03 go/types/typemap/typemap.go
+--- a/go/types/typemap/typemap.go	Thu Sep 19 11:38:07 2013 +1000
++++ b/go/types/typemap/typemap.go	Mon Sep 30 19:50:07 2013 +0200
+@@ -130,10 +130,7 @@
+ 
+ // Len returns the number of map entries.
+ func (m *M) Len() int {
+-	if m != nil {
+-		return m.length
+-	}
+-	return 0
++	return m.length
+ }
+ 
+ // Iterate calls function f on each entry in the map in unspecified order.
+diff -r fb4b392baa03 go/types/types.go
+--- a/go/types/types.go	Thu Sep 19 11:38:07 2013 +1000
++++ b/go/types/types.go	Mon Sep 30 19:50:07 2013 +0200
+@@ -174,18 +174,12 @@
+ 
+ // NewTuple returns a new tuple for the given variables.
+ func NewTuple(x ...*Var) *Tuple {
+-	if len(x) > 0 {
+-		return &Tuple{x}
+-	}
+-	return nil
++	return &Tuple{x}
+ }
+ 
+ // Len returns the number variables of tuple t.
+ func (t *Tuple) Len() int {
+-	if t != nil {
+-		return len(t.vars)
+-	}
+-	return 0
++	return len(t.vars)
+ }
+ 
+ // At returns the i'th variable of tuple t.
+diff -r fb4b392baa03 go/types/universe.go
+--- a/go/types/universe.go	Thu Sep 19 11:38:07 2013 +1000
++++ b/go/types/universe.go	Mon Sep 30 19:50:07 2013 +0200
+@@ -102,7 +102,7 @@
+ 	{
+ 		// Error has a nil package in its qualified name since it is in no package
+ 		res := NewVar(token.NoPos, nil, "", Typ[String])
+-		sig := &Signature{results: NewTuple(res)}
++		sig := &Signature{results: NewTuple(res), params: NewTuple()}
+ 		err := NewFunc(token.NoPos, nil, "Error", sig)
+ 		typ := &Named{underlying: &Interface{methods: []*Func{err}}, complete: true}
+ 		sig.recv = NewVar(token.NoPos, nil, "", typ)

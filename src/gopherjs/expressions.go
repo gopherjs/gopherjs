@@ -387,7 +387,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Map:
 			index := c.translateExprToType(e.Index, t.Key())
 			if hasId(t.Key()) {
-				index = fmt.Sprintf("(%s || Go$nil).Go$id", index)
+				index = fmt.Sprintf("(%s || Go$nil).Go$key()", index)
 			}
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
 				return fmt.Sprintf(`(Go$obj = (%s || false)["$" + %s], Go$obj !== undefined ? [Go$obj.v, true] : [%s, false])`, x, index, c.zeroValue(t.Elem()))
@@ -554,7 +554,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case "delete":
 				index := c.translateExpr(e.Args[1])
 				if hasId(c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()) {
-					index = fmt.Sprintf("(%s || Go$nil).Go$id", index)
+					index = fmt.Sprintf("(%s || Go$nil).Go$key()", index)
 				}
 				return fmt.Sprintf(`delete %s["$" + %s]`, c.translateExpr(e.Args[0]), index)
 			case "copy":

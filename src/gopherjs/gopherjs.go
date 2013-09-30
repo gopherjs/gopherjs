@@ -371,7 +371,8 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 	case *ast.TypeSpec:
 		nt := c.info.Objects[s.Name].Type().(*types.Named)
 		if isWrapped(nt) {
-			c.Printf(`var %s = function(v) { this.v = v; this.Go$id = "%s$" + v; };`, nt.Obj().Name(), nt.Obj().Name())
+			c.Printf(`var %s = function(v) { this.v = v; };`, nt.Obj().Name())
+			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.v; };`, nt.Obj().Name(), nt.Obj().Name())
 			return
 		}
 		switch t := nt.Underlying().(type) {
@@ -390,6 +391,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			})
 			c.Printf("};")
 			c.Printf(`%s.name = "%s";`, nt.Obj().Name(), nt.Obj().Name())
+			c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, nt.Obj().Name())
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)
 				if field.Anonymous() {

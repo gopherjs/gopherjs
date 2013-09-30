@@ -10,7 +10,8 @@ Error.stackTraceLimit = -1;
 var Go$obj, Go$tuple;
 var Go$idCounter = 1;
 
-var Go$nil = { Go$id: 0 };
+var Go$nil = new Object();
+Go$nil.Go$key = function() { return "nil"; };
 Go$nil.Go$subslice = function(begin, end) {
 	if (begin !== 0 || (end || 0) !== 0) {
 		throw new GoError("runtime error: slice bounds out of range");
@@ -34,25 +35,41 @@ var Go$copyFields = function(from, to) {
 	}
 };
 
-var Go$Uint8      = function(v) { this.v = v; this.Go$id = "Uint8$" + v; };
-var Go$Uint16     = function(v) { this.v = v; this.Go$id = "Uint16$" + v; };
-var Go$Uint32     = function(v) { this.v = v; this.Go$id = "Uint32$" + v; };
-var Go$Int8       = function(v) { this.v = v; this.Go$id = "Int8$" + v; };
-var Go$Int16      = function(v) { this.v = v; this.Go$id = "Int16$" + v; };
-var Go$Int32      = function(v) { this.v = v; this.Go$id = "Int32$" + v; };
-var Go$Float32    = function(v) { this.v = v; this.Go$id = "Float32$" + v; };
-var Go$Float64    = function(v) { this.v = v; this.Go$id = "Float64$" + v; };
-var Go$Complex64  = function(v) { this.v = v; this.Go$id = "Complex64$" + v; };
-var Go$Complex128 = function(v) { this.v = v; this.Go$id = "Complex128$" + v; };
-var Go$Uint       = function(v) { this.v = v; this.Go$id = "Uint$" + v; };
-var Go$Int        = function(v) { this.v = v; this.Go$id = "Int$" + v; };
-var Go$Uintptr    = function(v) { this.v = v; this.Go$id = "Uintptr$" + v; };
+var Go$Uint8      = function(v) { this.v = v; };
+Go$Uint8.prototype.Go$key = function() { return "Uint8$" + this.v; };
+var Go$Uint16     = function(v) { this.v = v; };
+Go$Uint16.prototype.Go$key = function() { return "Uint16$" + this.v; };
+var Go$Uint32     = function(v) { this.v = v; };
+Go$Uint32.prototype.Go$key = function() { return "Uint32$" + this.v; };
+var Go$Int8       = function(v) { this.v = v; };
+Go$Int8.prototype.Go$key = function() { return "Int8$" + this.v; };
+var Go$Int16      = function(v) { this.v = v; };
+Go$Int16.prototype.Go$key = function() { return "Int16$" + this.v; };
+var Go$Int32      = function(v) { this.v = v; };
+Go$Int32.prototype.Go$key = function() { return "Int32$" + this.v; };
+var Go$Float32    = function(v) { this.v = v; };
+Go$Float32.prototype.Go$key = function() { return "Float32$" + this.v; };
+var Go$Float64    = function(v) { this.v = v; };
+Go$Float64.prototype.Go$key = function() { return "Float64$" + this.v; };
+var Go$Complex64  = function(v) { this.v = v; };
+Go$Complex64.prototype.Go$key = function() { return "Complex64$" + this.v; };
+var Go$Complex128 = function(v) { this.v = v; };
+Go$Complex128.prototype.Go$key = function() { return "Complex128$" + this.v; };
+var Go$Uint       = function(v) { this.v = v; };
+Go$Uint.prototype.Go$key = function() { return "Uint$" + this.v; };
+var Go$Int        = function(v) { this.v = v; };
+Go$Int.prototype.Go$key = function() { return "Int$" + this.v; };
+var Go$Uintptr    = function(v) { this.v = v; };
+Go$Uintptr.prototype.Go$key = function() { return "Uintptr$" + this.v; };
 var Go$Byte       = Go$Uint8;
 var Go$Rune       = Go$Int32;
 
-var Go$Bool   = function(v) { this.v = v; this.Go$id = "Bool$" + v; };
-var Go$String = function(v) { this.v = v; this.Go$id = "String$" + v; };
-var Go$Func   = function(v) { this.v = v; this.Go$id = "Func$" + v; };
+var Go$Bool   = function(v) { this.v = v; };
+Go$Bool.prototype.Go$key = function() { return "Bool$" + this.v; };
+var Go$String = function(v) { this.v = v; };
+Go$String.prototype.Go$key = function() { return "String$" + this.v; };
+var Go$Func   = function(v) { this.v = v; };
+Go$Func.prototype.Go$key = function() { return "Func$" + this.v; };
 
 var Go$Array           = Array;
 var Go$Uint8Array      = Uint8Array;
@@ -76,13 +93,15 @@ var Go$RuneArray       = Go$Int32Array;
 var Go$Int64 = function(high, low) {
 	this.high = (high + Math.floor(low / 4294967296)) | 0;
 	this.low = (low + 4294967296) % 4294967296;
-	this.Go$id = "Int64$" + this.high + "$" + this.low;
 };
+Go$Int64.prototype.Go$key = function() { return "Int64$" + this.high + "$" + this.low; };
+
 var Go$Uint64 = function(high, low) {
 	this.high = (high + Math.floor(low / 4294967296) + 4294967296) % 4294967296;
 	this.low = (low + 4294967296) % 4294967296;
-	this.Go$id = "Uint64$" + this.high + "$" + this.low;
 };
+Go$Uint64.prototype.Go$key = function() { return "Uint64$" + this.high + "$" + this.low; };
+
 var Go$shiftLeft64 = function(x, y) {
 	var high = 0;
 	var low = 0;

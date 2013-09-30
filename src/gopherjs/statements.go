@@ -341,7 +341,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					c.Printf("var %s = %s;", keyVar, c.translateExprToType(l.Index, t.Key()))
 					key := keyVar
 					if hasId(t.Key()) {
-						key = fmt.Sprintf("(%s || Go$nil).Go$id", key)
+						key = fmt.Sprintf("(%s || Go$nil).Go$key()", key)
 					}
 					c.Printf(`%s["$" + %s] = { k: %s, v: %s };`, c.translateExpr(l.X), key, keyVar, rhs)
 					continue

@@ -14,7 +14,7 @@ var Go$nil = new Object();
 Go$nil.Go$key = function() { return "nil"; };
 Go$nil.Go$subslice = function(begin, end) {
 	if (begin !== 0 || (end || 0) !== 0) {
-		throw new GoError("runtime error: slice bounds out of range");
+		throw new Go$Panic("runtime error: slice bounds out of range");
 	}
 	return null;
 };
@@ -293,9 +293,9 @@ var Go$append = function(slice, toAppend) {
 	return newSlice;
 };
 
-var GoError = function(value) {
+var Go$Panic = function(value) {
 	this.message = value;
-	Error.captureStackTrace(this, GoError);
+	Error.captureStackTrace(this, Go$Panic);
 };
 
 var Go$errorStack = [];
@@ -351,7 +351,7 @@ var Go$interfaceIsEqual = function(a, b) {
 	if (a.constructor.isNumber || a.constructor === Go$String) {
 		return a.v === b.v;
 	}
-	throw new GoError("runtime error: comparing uncomparable type " + a.constructor);
+	throw new Go$Panic("runtime error: comparing uncomparable type " + a.constructor);
 };
 var Go$sliceIsEqual = function(a, ai, b, bi) {
 	return a.array === b.array && a.offset + ai === b.offset + bi;
@@ -368,7 +368,7 @@ var Go$typeOf = function(value) {
 };
 
 var typeAssertionFailed = function(obj) {
-	throw new GoError("type assertion failed: " + obj + " (" + obj.constructor + ")");
+	throw new Go$Panic("type assertion failed: " + obj + " (" + obj.constructor + ")");
 };
 
 var newNumericArray = function(len) {

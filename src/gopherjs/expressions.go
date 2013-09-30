@@ -223,9 +223,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					c.Indent(func() {
 						c.translateStmtList(e.Body.List)
 					})
-					c.Printf("} catch(err) {")
+					c.Printf("} catch(Go$err) {")
 					c.Indent(func() {
-						c.Printf("Go$errorStack.push({ frame: Go$getStackDepth(), error: err });")
+						c.Printf("if (Go$err.constructor !== Go$Panic) { Go$err = new Go$Panic(Go$err); };") // TODO improve error wrapping
+						c.Printf("Go$errorStack.push({ frame: Go$getStackDepth(), error: Go$err });")
 					})
 					c.Printf("} finally {")
 					c.Indent(func() {
@@ -543,7 +544,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					panic(fmt.Sprintf("Unhandled cap type: %T\n", argt))
 				}
 			case "panic":
-				return fmt.Sprintf("throw new GoError(%s)", c.translateExprToType(e.Args[0], types.NewInterface(nil)))
+				return fmt.Sprintf("throw new Go$Panic(%s)", c.translateExprToType(e.Args[0], types.NewInterface(nil)))
 			case "append":
 				sliceType := exprType
 				if e.Ellipsis.IsValid() {

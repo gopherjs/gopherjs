@@ -246,7 +246,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 				hasInit = true
 			}
 			if fun.Body == nil {
-				c.Printf(`var %s = function() { throw new GoError("Native function not implemented: %s"); };`, fun.Name.Name, fun.Name.Name)
+				c.Printf(`var %s = function() { throw new Go$Panic("Native function not implemented: %s"); };`, fun.Name.Name, fun.Name.Name)
 				continue
 			}
 			funcLit := &ast.FuncLit{
@@ -599,7 +599,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		}
 		return t.Obj().Name()
 	case *types.Pointer:
-		if _, isNamed := t.Elem().(*types.Named); isNamed {
+		if named, isNamed := t.Elem().(*types.Named); isNamed && named.Obj().Name() != "error" {
 			if _, isStruct := t.Elem().Underlying().(*types.Struct); !isStruct {
 				return c.typeName(t.Elem()) + ".Go$Pointer"
 			}

@@ -174,7 +174,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			c.translateStmt(c.postLoopStmt, "")
 			c.Printf("continue%s;", label)
 		case token.GOTO:
-			c.Printf(`throw new GoError("Statement not supported: goto");`)
+			c.Printf(`throw new Go$Panic("Statement not supported: goto");`)
 		case token.FALLTHROUGH:
 			// handled in CaseClause
 		default:
@@ -381,13 +381,13 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}, label)
 
 	case *ast.SelectStmt:
-		c.Printf(`throw new GoError("Statement not supported: select");`)
+		c.Printf(`throw new Go$Panic("Statement not supported: select");`)
 
 	case *ast.GoStmt:
-		c.Printf(`throw new GoError("Statement not supported: go");`)
+		c.Printf(`throw new Go$Panic("Statement not supported: go");`)
 
 	case *ast.SendStmt:
-		c.Printf(`throw new GoError("Statement not supported: send");`)
+		c.Printf(`throw new Go$Panic("Statement not supported: send");`)
 
 	case nil:
 		// skip

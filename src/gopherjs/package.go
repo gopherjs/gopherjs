@@ -6,9 +6,7 @@ import (
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
 	"go/ast"
-	"go/build"
 	"go/parser"
-	"go/scanner"
 	"go/token"
 	"io"
 	"os"
@@ -16,11 +14,6 @@ import (
 	"sort"
 	"strings"
 )
-
-type Translator struct {
-	packages map[string]*PkgContext
-	writer   io.Writer
-}
 
 type PkgContext struct {
 	pkg          *types.Package
@@ -91,63 +84,7 @@ func (c *PkgContext) Delayed(f func()) {
 	c.delayedLines = c.CatchOutput(f)
 }
 
-func main() {
-	fi, err := os.Stat(os.Args[1])
-	if err != nil {
-		panic(err)
-	}
-
-	var pkg *build.Package
-	if !fi.IsDir() {
-		pkg = &build.Package{
-			Name:       "main",
-			ImportPath: "main",
-			Dir:        path.Dir(os.Args[1]),
-			GoFiles:    []string{path.Base(os.Args[1])},
-		}
-	}
-	if fi.IsDir() {
-		var err error
-		pkg, err = build.ImportDir(os.Args[1], 0)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	fileSet := token.NewFileSet()
-	out := os.Stdout
-
-	t := &Translator{
-		writer:   out,
-		packages: make(map[string]*PkgContext),
-	}
-	t.packages["reflect"] = nil
-	t.packages["go/doc"] = nil
-	out.WriteString(strings.TrimSpace(prelude))
-	out.WriteString("\n")
-	t.translatePackage(fileSet, pkg)
-}
-
-func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package) {
-	// os.Stderr.WriteString(pkg.ImportPath + "\n")
-
-	files := make([]*ast.File, 0)
-	for _, name := range pkg.GoFiles {
-		fullName := pkg.Dir + "/" + name
-		file, err := parser.ParseFile(fileSet, fullName, nil, 0)
-		if err != nil {
-			list, isList := err.(scanner.ErrorList)
-			if !isList {
-				panic(err)
-			}
-			for _, entry := range list {
-				fmt.Println(entry.Error())
-			}
-			return
-		}
-		files = append(files, file)
-	}
-
+func (pkg *CompiledPackage) translate(fileSet *token.FileSet, out io.Writer) error {
 	var previousErr string
 	config := &types.Config{
 		Error: func(err error) {
@@ -158,6 +95,16 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 		},
 	}
 
+	files := make([]*ast.File, 0)
+	for _, name := range pkg.GoFiles {
+		fullName := pkg.Dir + "/" + name
+		file, err := parser.ParseFile(fileSet, fullName, nil, 0)
+		if err != nil {
+			return err
+		}
+		files = append(files, file)
+	}
+
 	info := &types.Info{
 		Types:      make(map[ast.Expr]types.Type),
 		Values:     make(map[ast.Expr]exact.Value),
@@ -165,21 +112,63 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 		Implicits:  make(map[ast.Node]types.Object),
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 	}
+
 	typesPkg, err := config.Check(files[0].Name.Name, fileSet, files, info)
 	if err != nil {
-		return
+		return err
 	}
 
-	for _, importedPkg := range typesPkg.Imports() {
-		if _, found := t.packages[importedPkg.Path()]; found {
-			continue
+	if out == nil {
+		if err := os.MkdirAll(path.Dir(pkg.archiveFile), 0777); err != nil {
+			return err
 		}
-
-		otherPkg, err := build.Import(importedPkg.Path(), pkg.Dir, 0)
+		var perm os.FileMode = 0666
+		if pkg.IsCommand() {
+			perm = 0777
+		}
+		file, err := os.OpenFile(pkg.archiveFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, perm)
 		if err != nil {
-			panic(err)
+			return err
 		}
-		t.translatePackage(fileSet, otherPkg)
+		defer file.Close()
+		out = file
+		if pkg.IsCommand() {
+			out.Write([]byte("#!/usr/bin/env node\n"))
+		}
+	}
+
+	if pkg.IsCommand() {
+		out.Write([]byte(strings.TrimSpace(prelude)))
+		out.Write([]byte("\n"))
+
+		loaded := make(map[*CompiledPackage]bool)
+		var loadImports func(*CompiledPackage) error
+		loadImports = func(pkg *CompiledPackage) error {
+			for _, imp := range pkg.importedPackages {
+				if _, alreadyLoaded := loaded[imp]; alreadyLoaded {
+					continue
+				}
+				loaded[imp] = true
+
+				if err := loadImports(imp); err != nil {
+					return err
+				}
+				if imp.archiveFile == "" {
+					continue
+				}
+
+				depFile, err := os.Open(imp.archiveFile)
+				if err != nil {
+					return err
+				}
+				io.Copy(out, depFile)
+				depFile.Close()
+			}
+			return nil
+		}
+		if err := loadImports(pkg); err != nil {
+			return err
+		}
 	}
 
 	c := &PkgContext{
@@ -188,9 +177,8 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 		pkgVars:      make(map[string]string),
 		objectVars:   make(map[types.Object]string),
 		usedVarNames: []string{"class", "delete", "eval", "export", "false", "implements", "in", "new", "static", "this", "true", "try", "packages"},
-		writer:       t.writer,
+		writer:       out,
 	}
-	t.packages[pkg.ImportPath] = c
 
 	functionsByType := make(map[types.Type][]*ast.FuncDecl)
 	functionsByObject := make(map[types.Object]*ast.FuncDecl)
@@ -213,7 +201,7 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 
 	c.Printf(`packages["%s"] = (function() {`, pkg.ImportPath)
 	c.Indent(func() {
-		for _, importedPkg := range c.pkg.Imports() {
+		for _, importedPkg := range typesPkg.Imports() {
 			varName := c.newVarName(importedPkg.Name())
 			c.Printf(`var %s = packages["%s"];`, varName, importedPkg.Path())
 			c.pkgVars[importedPkg.Path()] = varName
@@ -334,6 +322,8 @@ func (t *Translator) translatePackage(fileSet *token.FileSet, pkg *build.Package
 		c.Printf("return { %s };", strings.Join(exports, ", "))
 	})
 	c.Printf("})()")
+
+	return nil
 }
 
 func (c *PkgContext) translateSpec(spec ast.Spec) {

@@ -255,6 +255,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return target
 		case token.XOR:
 			op = "~"
+		case token.ARROW:
+			return "undefined"
 		}
 		t := c.info.Types[e.X]
 		basic := t.Underlying().(*types.Basic)
@@ -458,9 +460,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		panic("")
 
 	case *ast.CallExpr:
-		if id, isIdent := e.Fun.(*ast.Ident); isIdent {
-			if builtin, isBuiltin := c.info.Objects[id].(*types.Builtin); isBuiltin {
-				switch builtin.Name() {
+		switch f := e.Fun.(type) {
+		case *ast.Ident:
+			switch o := c.info.Objects[f].(type) {
+			case *types.Builtin:
+				switch o.Name() {
 				case "new":
 					elemType := c.info.Types[e.Args[0]]
 					if types.IsIdentical(elemType, types.Typ[types.Uintptr]) {
@@ -523,18 +527,20 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case "copy":
 					return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(nil)), c.translateExprToType(e.Args[1], types.NewSlice(nil)))
 				case "print", "println":
-					return fmt.Sprintf("Go$%s(%s)", builtin.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
+					return fmt.Sprintf("Go$%s(%s)", o.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
 				case "real", "imag", "recover", "complex":
-					return fmt.Sprintf("Go$%s(%s)", builtin.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
+					return fmt.Sprintf("Go$%s(%s)", o.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
 				default:
-					panic(fmt.Sprintf("Unhandled builtin: %s\n", builtin.Name()))
+					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))
 				}
+			case *types.TypeName: // conversion
+				return c.translateExprToType(e.Args[0], o.Type())
 			}
 		}
 
 		funType := c.info.Types[e.Fun]
 		sig, isSig := funType.Underlying().(*types.Signature)
-		if !isSig { // cast
+		if !isSig { // conversion
 			return c.translateExprToType(e.Args[0], funType)
 		}
 
@@ -559,12 +565,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			fun = fmt.Sprintf("%s.%s", c.translateExprToType(f.X, types.NewInterface(nil)), f.Sel.Name)
 		case *ast.Ident:
-			if _, isTypeName := c.info.Objects[f].(*types.TypeName); isTypeName {
-				return c.translateExprToType(e.Args[0], funType)
-			}
 			fun = c.translateExpr(e.Fun)
 		default:
-			fun = c.translateExpr(e.Fun)
+			panic(fmt.Sprintf("Unhandled expression: %T\n", f))
 		}
 		if sig.Params().Len() > 1 && len(e.Args) == 1 && !sig.IsVariadic() {
 			argRefs := make([]string, sig.Params().Len())

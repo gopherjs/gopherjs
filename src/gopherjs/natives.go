@@ -2,8 +2,6 @@ package main
 
 // TODO cleanup global names
 var prelude = `
-#!/usr/bin/env node
-
 "use strict";
 Error.stackTraceLimit = -1;
 
@@ -652,9 +650,11 @@ var natives = map[string]string{
 	`,
 
 	"syscall": `
-		var syscall = require("./node-syscall/build/Release/syscall");
+		var syscall = require("syscall");
 		Syscall = syscall.Syscall;
 		Syscall6 = syscall.Syscall6;
+		RawSyscall = syscall.Syscall;
+		RawSyscall6 = syscall.Syscall6;
 		BytePtrFromString = function(s) { return [s.Go$toSlice(true).array, null]; };
 		Getenv = function(key) {
 			var value = process.env[key];

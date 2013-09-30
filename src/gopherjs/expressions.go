@@ -307,7 +307,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case token.ADD, token.SUB:
 				expr = fmt.Sprintf("new %s(x.high %s y.high, x.low %s y.low)", c.typeName(t), op, op)
 			case token.AND, token.OR, token.XOR, token.AND_NOT:
-				expr = fmt.Sprintf("new %s(x.high %s y.high, ((x.low %s y.low) + 4294967296) %% 4294967296)", c.typeName(t), op, op)
+				expr = fmt.Sprintf("new %s(x.high %s y.high, (x.low %s y.low) >>> 0)", c.typeName(t), op, op)
 			default:
 				panic(e.Op)
 			}
@@ -827,7 +827,7 @@ func fixNumber(value string, basic *types.Basic) string {
 	case types.Int32:
 		return "(" + value + " | 0)"
 	case types.Uint32, types.Uintptr:
-		return "((" + value + " + 4294967296) % 4294967296)"
+		return "(" + value + " >>> 0)"
 	}
 	return value
 }

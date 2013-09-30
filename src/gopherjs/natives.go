@@ -90,13 +90,13 @@ var Go$RuneArray       = Go$Int32Array;
 
 var Go$Int64 = function(high, low) {
 	this.high = (high + Math.floor(low / 4294967296)) | 0;
-	this.low = (low + 4294967296) % 4294967296;
+	this.low = low >>> 0;
 };
 Go$Int64.prototype.Go$key = function() { return "Int64$" + this.high + "$" + this.low; };
 
 var Go$Uint64 = function(high, low) {
-	this.high = (high + Math.floor(low / 4294967296) + 4294967296) % 4294967296;
-	this.low = (low + 4294967296) % 4294967296;
+	this.high = (high + Math.floor(low / 4294967296)) >>> 0;
+	this.low = low >>> 0;
 };
 Go$Uint64.prototype.Go$key = function() { return "Uint64$" + this.high + "$" + this.low; };
 
@@ -105,8 +105,7 @@ var Go$shiftLeft64 = function(x, y) {
 	var low = 0;
 	if (y < 32) {
 		high = x.high << y;
-		low = x.low << y;
-		if (low < 0) { low += 4294967296; }
+		low = (x.low << y) >>> 0;
 		if (y < 64) {
 			high |= x.low >>> (32 - y);
 		}
@@ -122,8 +121,7 @@ var Go$shiftRight64 = function(x, y) {
 		high = x.high >>> y;
 		low = x.low >>> y;
 		if (y < 64) {
-			low |= x.high << (32 - y);
-			if (low < 0) { low += 4294967296; }
+			low = (low | x.high << (32 - y)) >>> 0;
 		}
 	} else if (y < 64) {
 		low = x.high >>> (y - 32);
@@ -487,7 +485,7 @@ var natives = map[string]string{
 		Log2 = log2;
 
 		// generated from src/bitcasts/bitcasts.go
-		var Float32bits = (function(f) {
+		Float32bits = (function(f) {
 			if (f === 0) {
 				return 0;
 			}
@@ -505,26 +503,26 @@ var natives = map[string]string{
 				if (e === 255) {
 					break;
 				}
-				e = ((e + (1) + 4294967296) % 4294967296);
+				e = (e + (1) >>> 0);
 			}
 			while (f < 8388608) {
-				e = ((e - (1) + 4294967296) % 4294967296);
+				e = (e - (1) >>> 0);
 				if (e === 0) {
 					break;
 				}
 				f = f * (2);
 			}
 			var y;
-			return ((((((s | (((y = 23, y < 32 ? (e << y) : 0) + 4294967296) % 4294967296)) + 4294967296) % 4294967296) | ((((Math.floor(f) &~ 8388608) + 4294967296) % 4294967296))) + 4294967296) % 4294967296);
+			return ((((s | ((y = 23, y < 32 ? (e << y) : 0) >>> 0)) >>> 0) | (((Math.floor(f) &~ 8388608) >>> 0))) >>> 0);
 		});
-		var Float32frombits = (function(b) {
+		Float32frombits = (function(b) {
 			var s = 1;
-			if ((((b & 2147483648) + 4294967296) % 4294967296) !== 0) {
+			if (((b & 2147483648) >>> 0) !== 0) {
 				s = -1;
 			}
 			var y;
-			var e = (((((((y = 23, y < 32 ? (b >>> y) : 0) + 4294967296) % 4294967296)) & 255) + 4294967296) % 4294967296);
-			var m = (((b & 8388607) + 4294967296) % 4294967296);
+			var e = (((((y = 23, y < 32 ? (b >>> y) : 0) >>> 0)) & 255) >>> 0);
+			var m = ((b & 8388607) >>> 0);
 			if (e === 255) {
 				if (m === 0) {
 					return s / 0;
@@ -532,14 +530,14 @@ var natives = map[string]string{
 				return (s / 0) - (s / 0);
 			}
 			if (e !== 0) {
-				m = ((m + (8388608) + 4294967296) % 4294967296);
+				m = (m + (8388608) >>> 0);
 			}
 			if (e === 0) {
 				e = 1;
 			}
 			return Ldexp(m, e - 127 - 23) * s;
 		});
-		var Float64bits = (function(f) {
+		Float64bits = (function(f) {
 			if (f === 0) {
 				return new Go$Uint64(0, 0);
 			}
@@ -557,10 +555,10 @@ var natives = map[string]string{
 				if (e === 2047) {
 					break;
 				}
-				e = ((e + (1) + 4294967296) % 4294967296);
+				e = (e + (1) >>> 0);
 			}
 			while (f < 4503599627370496) {
-				e = ((e - (1) + 4294967296) % 4294967296);
+				e = (e - (1) >>> 0);
 				if (e === 0) {
 					break;
 				}
@@ -569,19 +567,19 @@ var natives = map[string]string{
 			var x, y;
 			var x1, y1;
 			var x2, y2;
-			return (x2 = (x = s, y = Go$shiftLeft64(new Go$Uint64(0, e), 52), new Go$Uint64(x.high | y.high, x.low | y.low)), y2 = ((x1 = new Go$Uint64(0, Math.floor(f)), y1 = new Go$Uint64(1048576, 0), new Go$Uint64(x1.high &~ y1.high, x1.low &~ y1.low))), new Go$Uint64(x2.high | y2.high, x2.low | y2.low));
+			return (x2 = (x = s, y = Go$shiftLeft64(new Go$Uint64(0, e), 52), new Go$Uint64(x.high | y.high, (x.low | y.low) >>> 0)), y2 = ((x1 = new Go$Uint64(0, Math.floor(f)), y1 = new Go$Uint64(1048576, 0), new Go$Uint64(x1.high &~ y1.high, (x1.low &~ y1.low) >>> 0))), new Go$Uint64(x2.high | y2.high, (x2.low | y2.low) >>> 0));
 		});
-		var Float64frombits = (function(b) {
+		Float64frombits = (function(b) {
 			var s = 1;
 			var x, y;
 			var x1, y1;
-			if ((x1 = (x = b, y = new Go$Uint64(2147483648, 0), new Go$Uint64(x.high & y.high, x.low & y.low)), y1 = new Go$Uint64(0, 0), x1.high !== y1.high || x1.low !== y1.low)) {
+			if ((x1 = (x = b, y = new Go$Uint64(2147483648, 0), new Go$Uint64(x.high & y.high, (x.low & y.low) >>> 0)), y1 = new Go$Uint64(0, 0), x1.high !== y1.high || x1.low !== y1.low)) {
 				s = -1;
 			}
 			var x2, y2;
-			var e = (x2 = (Go$shiftRight64(b, 52)), y2 = new Go$Uint64(0, 2047), new Go$Uint64(x2.high & y2.high, x2.low & y2.low));
+			var e = (x2 = (Go$shiftRight64(b, 52)), y2 = new Go$Uint64(0, 2047), new Go$Uint64(x2.high & y2.high, (x2.low & y2.low) >>> 0));
 			var x3, y3;
-			var m = (x3 = b, y3 = new Go$Uint64(1048575, 4294967295), new Go$Uint64(x3.high & y3.high, x3.low & y3.low));
+			var m = (x3 = b, y3 = new Go$Uint64(1048575, 4294967295), new Go$Uint64(x3.high & y3.high, (x3.low & y3.low) >>> 0));
 			var x4, y4;
 			if ((x4 = e, y4 = new Go$Uint64(0, 2047), x4.high === y4.high && x4.low === y4.low)) {
 				var x5, y5;

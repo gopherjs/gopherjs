@@ -17,7 +17,7 @@ Go$nil.Go$subslice = function(begin, end) {
 	}
 	return null;
 };
-Go$nil.Go$toArray = function() { return []; }
+Go$nil.Go$toArray = function() { return []; };
 Go$nil.array = [];
 Go$nil.offset = 0;
 Go$nil.length = 0;
@@ -90,6 +90,11 @@ var Go$shift64 = function(x, y) {
 	return new x.constructor(high, low);
 };
 var Go$mul64 = function(x, y) {
+	var s = 1;
+	if (y.high < 0) {
+		y = new Go$Uint64(-y.high, -y.low);
+		s = -1;
+	}
 	var r = new x.constructor(0, 0);
 	while (y.high !== 0 || y.low !== 0) {
 		if ((y.low & 1) === 1) {
@@ -98,10 +103,20 @@ var Go$mul64 = function(x, y) {
 		y = Go$shift64(y, -1);
 		x = Go$shift64(x,  1);
 	}
-	return r;
+	return new x.constructor(r.high * s, r.low * s);
 };
 var Go$div64 = function(x, y, returnRemainder) {
-	var r = new x.constructor(0, 0);
+	var typ = x.constructor;
+	var s = 1;
+	if (y.high < 0) {
+		s = -1;
+	}
+	y = new Go$Uint64(y.high * s, y.low * s);
+	if (x.high < 0) {
+		x = new Go$Uint64(-x.high, -x.low);
+		s *= -1;
+	}
+	var r = new Go$Uint64(0, 0);
 	var n = 0;
 	while (y.high < 2147483648 && ((x.high > y.high) || (x.high === y.high && x.low > y.low))) {
 		y = Go$shift64(y, 1);
@@ -110,8 +125,8 @@ var Go$div64 = function(x, y, returnRemainder) {
 	var i = 0;
 	while (true) {
 		if ((x.high > y.high) || (x.high === y.high && x.low >= y.low)) {
-			x = new x.constructor(x.high - y.high, x.low - y.low);
-			r = new x.constructor(r.high, r.low + 1);
+			x = new Go$Uint64(x.high - y.high, x.low - y.low);
+			r = new Go$Uint64(r.high, r.low + 1);
 		}
 		if (i === n) {
 			break;
@@ -123,7 +138,7 @@ var Go$div64 = function(x, y, returnRemainder) {
 	if (returnRemainder) {
 		return x;
 	}
-	return r;
+	return new typ(r.high * s, r.low * s);
 };
 
 var Go$Slice = function(data, length, capacity) {
@@ -169,12 +184,12 @@ String.prototype.Go$toSlice = function(terminateWithNull) {
 	return new Go$Slice(array);
 };
 
-var Go$clear = function(array) { for (var i = 0; i < array.length; i++) { array[i] = 0; }; return array; }; // TODO remove when NodeJS is behaving according to spec
+var Go$clear = function(array) { for (var i = 0; i < array.length; i++) { array[i] = 0; } return array; }; // TODO remove when NodeJS is behaving according to spec
 
 var Go$Map = function(data, capacity) {
 	data = data || [];
 	for (var i = 0; i < data.length; i += 2) {
-		this[data[i]] = { k: data[i], v: data[i + 1] };
+		this["$" + data[i]] = { k: data[i], v: data[i + 1] };
 	}
 };
 
@@ -240,7 +255,7 @@ var Go$callDeferred = function(deferred) {
 		try {
 			if (call.recv !== undefined) {
 				call.recv[call.method].apply(call.recv, call.args);
-				continue
+				continue;
 			}
 			call.fun.apply(undefined, call.args);
 		} catch (err) {
@@ -274,7 +289,7 @@ var Go$getStackDepth = function() {
 	return d;
 };
 
-var Go$isEqual = function(a, b) {
+var Go$interfaceIsEqual = function(a, b) {
 	if (a === null || b === null) {
 		return a === null && b === null;
 	}
@@ -285,6 +300,9 @@ var Go$isEqual = function(a, b) {
 		return a.v === b.v;
 	}
 	throw new GoError("runtime error: comparing uncomparable type " + a.constructor);
+};
+var Go$sliceIsEqual = function(a, ai, b, bi) {
+	return a.array === b.array && a.offset + ai === b.offset + bi;
 };
 
 var Go$print = console.log;
@@ -371,7 +389,7 @@ packages["reflect"] = {
 		return v.constructor;
 	},
 	flag: function() {},
-	Value: function() {}, 
+	Value: function() {}
 };
 
 packages["go/doc"] = {

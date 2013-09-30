@@ -49,7 +49,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			_, isInterface := tagType.(*types.Interface)
 			translateCond = func(cond ast.Expr) string {
 				if isInterface {
-					return fmt.Sprintf("Go$isEqual(%s, %s)", refVar, c.translateExprToType(cond, tagType))
+					return fmt.Sprintf("Go$interfaceIsEqual(%s, %s)", refVar, c.translateExprToType(cond, tagType))
 				}
 				return refVar + " === " + c.translateExprToType(cond, tagType)
 			}
@@ -343,7 +343,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					if hasId(t.Key()) {
 						key = fmt.Sprintf("(%s || Go$nil).Go$id", key)
 					}
-					c.Printf("%s[%s] = { k: %s, v: %s };", c.translateExpr(l.X), key, keyVar, rhs)
+					c.Printf(`%s["$" + %s] = { k: %s, v: %s };`, c.translateExpr(l.X), key, keyVar, rhs)
 					continue
 				}
 			}
@@ -380,8 +380,14 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			Rhs: []ast.Expr{one},
 		}, label)
 
-	case *ast.SelectStmt, *ast.GoStmt, *ast.SendStmt:
-		c.Printf(`throw new GoError("Statement not supported: %T");`, s)
+	case *ast.SelectStmt:
+		c.Printf(`throw new GoError("Statement not supported: select");`)
+
+	case *ast.GoStmt:
+		c.Printf(`throw new GoError("Statement not supported: go");`)
+
+	case *ast.SendStmt:
+		c.Printf(`throw new GoError("Statement not supported: send");`)
 
 	case nil:
 		// skip
@@ -422,6 +428,9 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, translateCond func(
 			caseClause := child.(*ast.CaseClause)
 			if len(caseClause.List) == 0 {
 				defaultClause = clauseStmts[i]
+				if defaultClause == nil {
+					defaultClause = []ast.Stmt{}
+				}
 				continue
 			}
 			conds := make([]string, len(caseClause.List))
@@ -447,16 +456,18 @@ func (c *PkgContext) translateSwitch(caseClauses []ast.Stmt, translateCond func(
 			}
 			c.Printf("}")
 		}
-		c.Printf("{")
-		c.Indent(func() {
-			if typeSwitchVar != "" {
-				c.Printf("var %s = %s;", typeSwitchVar, typeSwitchValue)
-			}
-			c.translateStmtList(defaultClause)
-		})
-		c.Printf("}")
+		if defaultClause != nil {
+			c.Printf("{")
+			c.Indent(func() {
+				if typeSwitchVar != "" {
+					c.Printf("var %s = %s;", typeSwitchVar, typeSwitchValue)
+				}
+				c.translateStmtList(defaultClause)
+			})
+			c.Printf("}")
+		}
 	})
-	c.Printf("} while (false);")
+	c.Printf("}")
 }
 
 func hasFallthrough(caseClause *ast.CaseClause) bool {

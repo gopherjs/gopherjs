@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"go/build"
 	"go/parser"
@@ -30,16 +31,18 @@ func main() {
 
 	fileSet := token.NewFileSet()
 
-	switch os.Args[1] {
+	flag.Parse()
+
+	switch flag.Arg(0) {
 	case "install":
 		var err error
-		pkg, err = build.Import(os.Args[2], "", 0)
+		pkg, err = build.Import(flag.Arg(1), "", 0)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return
 		}
 	case "run":
-		filename := os.Args[2]
+		filename := flag.Arg(1)
 		file, err := parser.ParseFile(fileSet, filename, nil, parser.ImportsOnly)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -69,8 +72,24 @@ func main() {
 		}
 		defer node.Wait()
 		defer pipe.Close()
+
+	case "help", "":
+		os.Stderr.WriteString(`GopherJS is a tool for compiling Go source code to JavaScript.
+
+Usage:
+
+    gopherjs command [arguments]
+
+The commands are:
+
+    install     compile and install packages and dependencies
+    run         compile and run Go program
+
+`)
+		return
+
 	default:
-		fmt.Fprintf(os.Stderr, "gopherjs: unknown subcommand \"%s\"\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "gopherjs: unknown subcommand \"%s\"\nRun 'gopherjs help' for usage.\n", flag.Arg(0))
 		return
 	}
 

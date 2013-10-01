@@ -9,6 +9,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"sort"
@@ -118,23 +119,22 @@ func (pkg *CompiledPackage) translate(fileSet *token.FileSet, out io.Writer) err
 		return err
 	}
 
+	var file *os.File
 	if out == nil {
 		if err := os.MkdirAll(path.Dir(pkg.archiveFile), 0777); err != nil {
 			return err
 		}
-		var perm os.FileMode = 0666
-		if pkg.IsCommand() {
-			perm = 0777
-		}
-		file, err := os.OpenFile(pkg.archiveFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, perm)
+		var err error
+		file, err = ioutil.TempFile("", pkg.Name)
 		if err != nil {
 			return err
 		}
 		defer file.Close()
-		out = file
 		if pkg.IsCommand() {
-			out.Write([]byte("#!/usr/bin/env node\n"))
+			file.Chmod(0755)
+			file.Write([]byte("#!/usr/bin/env node\n"))
 		}
+		out = file
 	}
 
 	if pkg.IsCommand() {
@@ -322,6 +322,13 @@ func (pkg *CompiledPackage) translate(fileSet *token.FileSet, out io.Writer) err
 		c.Printf("return { %s };", strings.Join(exports, ", "))
 	})
 	c.Printf("})()")
+
+	if file != nil {
+		if err := os.Rename(file.Name(), pkg.archiveFile); err != nil {
+			fmt.Println(err)
+			return err
+		}
+	}
 
 	return nil
 }

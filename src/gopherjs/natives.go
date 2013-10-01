@@ -675,13 +675,12 @@ var natives = map[string]string{
 		RawSyscall = syscall.Syscall;
 		RawSyscall6 = syscall.Syscall6;
 		BytePtrFromString = function(s) { return [s.Go$toSlice(true).array, null]; };
-		Getenv = function(key) {
-			var value = process.env[key];
-			if (value === undefined) {
-				return ["", false];
-			}
-			return [value, true];
-		};
+
+		var envkeys = Object.keys(process.env);
+		envs = new Go$Slice(new Array(envkeys.length));
+		for(var i = 0; i < envkeys.length; i++) {
+			envs.Go$set(i, envkeys[i] + "=" + process.env[envkeys[i]]);
+		}
 	`,
 
 	"time": `

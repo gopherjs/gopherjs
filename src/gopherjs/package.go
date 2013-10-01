@@ -176,7 +176,7 @@ func (pkg *CompiledPackage) translate(fileSet *token.FileSet, out io.Writer) err
 		info:         info,
 		pkgVars:      make(map[string]string),
 		objectVars:   make(map[types.Object]string),
-		usedVarNames: []string{"class", "delete", "eval", "export", "false", "implements", "in", "new", "static", "this", "true", "try", "packages"},
+		usedVarNames: []string{"arguments", "class", "delete", "eval", "export", "false", "implements", "in", "new", "static", "this", "true", "try", "packages"},
 		writer:       out,
 	}
 

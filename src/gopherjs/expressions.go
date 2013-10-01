@@ -291,7 +291,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case token.SHL:
 				return fmt.Sprintf("Go$shiftLeft64(%s, %s)", ex, c.translateExprToType(e.Y, types.Typ[types.Uint]))
 			case token.SHR:
-				return fmt.Sprintf("Go$shiftRight64(%s, %s)", ex, c.translateExprToType(e.Y, types.Typ[types.Uint]))
+				return fmt.Sprintf("Go$shiftRight%s(%s, %s)", toJavaScriptType(basic), ex, c.translateExprToType(e.Y, types.Typ[types.Uint]))
 			case token.EQL:
 				expr = "x.high === y.high && x.low === y.low"
 			case token.NEQ:
@@ -347,7 +347,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			value = ex + " / " + ey
 		case token.SHL, token.SHR:
-			if e.Op == token.SHR {
+			if e.Op == token.SHR && basic.Info()&types.IsUnsigned != 0 {
 				op = ">>>"
 			}
 			switch basic.Kind() {

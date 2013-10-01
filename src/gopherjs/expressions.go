@@ -225,7 +225,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					})
 					c.Printf("} catch(Go$err) {")
 					c.Indent(func() {
-						c.Printf("if (Go$err.constructor !== Go$Panic) { Go$err = new Go$Panic(Go$err); };") // TODO improve error wrapping
+						c.Printf("if (Go$err.constructor !== Go$Panic) { Go$err = Go$wrapJavaScriptError(Go$err); };")
 						c.Printf("Go$errorStack.push({ frame: Go$getStackDepth(), error: Go$err });")
 					})
 					c.Printf("} finally {")
@@ -427,6 +427,21 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 	case *ast.SelectorExpr:
 		sel := c.info.Selections[e]
+		parameterName := func(v *types.Var) string {
+			if v.Anonymous() {
+				return c.newVarName("param")
+			}
+			return c.newVarName(v.Name())
+		}
+		makeParametersList := func() []string {
+			params := sel.Obj().Type().(*types.Signature).Params()
+			names := make([]string, params.Len())
+			for i := 0; i < params.Len(); i++ {
+				names[i] = parameterName(params.At(i))
+			}
+			return names
+		}
+
 		switch sel.Kind() {
 		case types.FieldVal:
 			val := c.translateExprToType(e.X, types.NewInterface(nil))
@@ -441,19 +456,13 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			return val
 		case types.MethodVal:
-			params := sel.Obj().Type().(*types.Signature).Params()
-			names := make([]string, params.Len())
-			for i := 0; i < params.Len(); i++ {
-				if params.At(i).Anonymous() {
-					names[i] = c.newVarName("param")
-					continue
-				}
-				names[i] = c.newVarName(params.At(i).Name())
-			}
-			nameList := strings.Join(names, ", ")
-			return fmt.Sprintf("function(%s) { return %s.%s(%s); }", nameList, c.translateExprToType(e.X, types.NewInterface(nil)), e.Sel.Name, nameList)
+			parameters := makeParametersList()
+			recv := c.newVarName("_recv")
+			c.Printf("var %s;", recv)
+			return fmt.Sprintf("(%s = %s, function(%s) { return %s.%s(%s); })", recv, c.translateExprToType(e.X, types.NewInterface(nil)), strings.Join(parameters, ", "), recv, e.Sel.Name, strings.Join(parameters, ", "))
 		case types.MethodExpr:
-			return fmt.Sprintf("%s.prototype.%s.call", c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
+			parameters := append([]string{parameterName(sel.Obj().Type().(*types.Signature).Recv())}, makeParametersList()...)
+			return fmt.Sprintf("(function(%s) { return %s.prototype.%s.call(%s); })", strings.Join(parameters, ", "), c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name(), strings.Join(parameters, ", "))
 		case types.PackageObj:
 			return fmt.Sprintf("%s.%s", c.translateExpr(e.X), e.Sel.Name)
 		}

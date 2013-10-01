@@ -308,6 +308,13 @@ var Go$Panic = function(value) {
 	Error.captureStackTrace(this, Go$Panic);
 };
 
+// TODO improve error wrapping
+var Go$wrapJavaScriptError = function(err) {
+	var panic = new Go$Panic(err);
+	panic.stack = err.stack;
+	return panic;
+};
+
 var Go$errorStack = [];
 
 // TODO inline

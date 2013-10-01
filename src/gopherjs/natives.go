@@ -269,7 +269,7 @@ var Go$append = function(slice, toAppend) {
 			if (newOffset !== 0) {
 				newArray = newArray.slice(newOffset);
 			}
-			newArray.push.apply(newArray, new Array(newCapacity - newArray.length))
+			newArray.length = newCapacity;
 		} else {
 			newArray = new newArray.constructor(newCapacity);
 			newArray.set(slice.array.subarray(newOffset))

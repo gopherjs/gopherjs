@@ -26,16 +26,24 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.IfStmt:
 		c.translateStmt(s.Init, "")
-		c.Printf("if (%s) {", c.translateExpr(s.Cond))
-		c.Indent(func() {
-			c.translateStmtList(s.Body.List)
-		})
-		if s.Else != nil {
-			c.Printf("} else")
-			c.translateStmt(s.Else, "")
-			return
+		var caseClauses []ast.Stmt
+		ifStmt := s
+		for {
+			caseClauses = append(caseClauses, &ast.CaseClause{List: []ast.Expr{ifStmt.Cond}, Body: ifStmt.Body.List})
+			switch elseStmt := ifStmt.Else.(type) {
+			case *ast.IfStmt:
+				ifStmt = elseStmt
+				continue
+			case *ast.BlockStmt:
+				caseClauses = append(caseClauses, &ast.CaseClause{List: nil, Body: elseStmt.List})
+			case nil:
+				// no else clause
+			default:
+				panic(fmt.Sprintf("Unhandled else: %T\n", elseStmt))
+			}
+			break
 		}
-		c.Printf("}")
+		c.translateBranchingStmt(caseClauses, false, c.translateExpr, nil, label)
 
 	case *ast.SwitchStmt:
 		c.translateStmt(s.Init, "")
@@ -54,7 +62,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				return refVar + " === " + c.translateExprToType(cond, tagType)
 			}
 		}
-		c.translateSwitch(s.Body, translateCond, "", "", label)
+		c.translateBranchingStmt(s.Body.List, true, translateCond, nil, label)
 
 	case *ast.TypeSwitchStmt:
 		c.translateStmt(s.Init, "")
@@ -77,7 +85,16 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		translateCond := func(cond ast.Expr) string {
 			return typeVar + " === " + c.typeName(c.info.Types[cond])
 		}
-		c.translateSwitch(s.Body, translateCond, refVar, typeSwitchVar, label)
+		printCaseBodyPrefix := func(conds []ast.Expr) {
+			value := refVar
+			if len(conds) == 1 {
+				if isWrapped(c.info.Types[conds[0]]) {
+					value += ".v"
+				}
+			}
+			c.Printf("var %s = %s;", typeSwitchVar, value)
+		}
+		c.translateBranchingStmt(s.Body.List, true, translateCond, printCaseBodyPrefix, label)
 
 	case *ast.ForStmt:
 		c.translateStmt(s.Init, "")
@@ -398,18 +415,18 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 	}
 }
 
-func (c *PkgContext) translateSwitch(caseClauses *ast.BlockStmt, translateCond func(ast.Expr) string, typeSwitchValue, typeSwitchVar string, label string) {
-	if len(caseClauses.List) == 0 {
+func (c *PkgContext) translateBranchingStmt(caseClauses []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) string, printCaseBodyPrefix func([]ast.Expr), label string) {
+	if len(caseClauses) == 0 {
 		return
 	}
-	if len(caseClauses.List) == 1 && caseClauses.List[0].(*ast.CaseClause).List == nil {
-		c.translateStmtList(caseClauses.List[0].(*ast.CaseClause).Body)
+	if len(caseClauses) == 1 && caseClauses[0].(*ast.CaseClause).List == nil {
+		c.translateStmtList(caseClauses[0].(*ast.CaseClause).Body)
 		return
 	}
 
-	clauseStmts := make([][]ast.Stmt, len(caseClauses.List))
+	clauseStmts := make([][]ast.Stmt, len(caseClauses))
 	openClauses := make([]int, 0)
-	for i, child := range caseClauses.List {
+	for i, child := range caseClauses {
 		caseClause := child.(*ast.CaseClause)
 		openClauses = append(openClauses, i)
 		for _, j := range openClauses {
@@ -422,7 +439,8 @@ func (c *PkgContext) translateSwitch(caseClauses *ast.BlockStmt, translateCond f
 
 	printBody := func() {
 		var defaultClause []ast.Stmt
-		for i, child := range caseClauses.List {
+		elsePrefix := ""
+		for i, child := range caseClauses {
 			caseClause := child.(*ast.CaseClause)
 			if len(caseClause.List) == 0 {
 				defaultClause = clauseStmts[i]
@@ -435,39 +453,36 @@ func (c *PkgContext) translateSwitch(caseClauses *ast.BlockStmt, translateCond f
 			for i, cond := range caseClause.List {
 				conds[i] = translateCond(cond)
 			}
-			c.Printf("if (%s) {", strings.Join(conds, " || "))
+			c.Printf("%sif (%s) {", elsePrefix, strings.Join(conds, " || "))
 			c.Indent(func() {
-				if typeSwitchVar != "" {
-					value := typeSwitchValue
-					if len(caseClause.List) == 1 {
-						if isWrapped(c.info.Types[caseClause.List[0]]) {
-							value += ".v"
-						}
-					}
-					c.Printf("var %s = %s;", typeSwitchVar, value)
+				if printCaseBodyPrefix != nil {
+					printCaseBodyPrefix(caseClause.List)
 				}
 				c.translateStmtList(clauseStmts[i])
 			})
-			if i < len(caseClauses.List)-1 || defaultClause != nil {
-				c.Printf("} else")
-				continue
-			}
-			c.Printf("}")
+			elsePrefix = "} else "
 		}
 		if defaultClause != nil {
-			c.Printf("{")
+			c.Printf("} else {")
 			c.Indent(func() {
-				if typeSwitchVar != "" {
-					c.Printf("var %s = %s;", typeSwitchVar, typeSwitchValue)
+				if printCaseBodyPrefix != nil {
+					printCaseBodyPrefix(nil)
 				}
 				c.translateStmtList(defaultClause)
 			})
-			c.Printf("}")
 		}
+		c.Printf("}")
+	}
+
+	if !isSwitch {
+		printBody()
+		return
 	}
 
 	v := HasBreakVisitor{}
-	ast.Walk(&v, caseClauses)
+	for _, child := range caseClauses {
+		ast.Walk(&v, child)
+	}
 	if !v.hasBreak && label == "" {
 		printBody()
 		return

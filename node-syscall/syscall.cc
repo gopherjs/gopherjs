@@ -11,6 +11,9 @@ using namespace v8;
 const char* ABC = "abc";
 
 size_t toNative(Local<Value> value) {
+  if (value.IsEmpty()) {
+    return 0;
+  }
   if (value->IsArrayBufferView()) {
     Local<ArrayBufferView> view = Local<ArrayBufferView>::Cast(value);
     return (size_t)view->BaseAddress();
@@ -18,10 +21,9 @@ size_t toNative(Local<Value> value) {
   if (value->IsArray()) {
     Local<Array> array = Local<Array>::Cast(value);
     size_t* native = (size_t*)malloc(array->Length() * sizeof(size_t)); // TODO memory leak
-    for (uint32_t i = 0; i < array->Length() - 1; i++) {
+    for (uint32_t i = 0; i < array->Length(); i++) {
       native[i] = toNative(array->CloneElementAt(i));
     }
-    native[array->Length() - 1] = 0;
     return (size_t)native;
   }
   return value->ToInteger()->Value();

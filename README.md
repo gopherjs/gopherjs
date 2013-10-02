@@ -4,7 +4,7 @@ Successful Tests
 - append.go
 - char_lit.go
 - complit.go
-- const.go (without 64 bit values)
+- const.go
 - defer.go
 - empty.go
 - for.go

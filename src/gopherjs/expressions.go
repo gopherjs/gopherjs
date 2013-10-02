@@ -573,7 +573,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				break
 			}
 			fun = fmt.Sprintf("%s.%s", c.translateExprToType(f.X, types.NewInterface(nil)), f.Sel.Name)
-		case *ast.Ident:
+		case *ast.Ident, *ast.FuncLit, *ast.ParenExpr:
 			fun = c.translateExpr(e.Fun)
 		default:
 			panic(fmt.Sprintf("Unhandled expression: %T\n", f))
@@ -633,6 +633,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return name
 		case *types.TypeName:
 			return c.typeName(o.Type())
+		case *types.Builtin:
+			if e.Name == "recover" {
+				return "Go$recover"
+			}
+			panic(fmt.Sprintf("Unhandled object: %T\n", o))
 		case nil:
 			return e.Name
 		default:

@@ -173,5 +173,31 @@ func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, ou
 		}
 	}
 
-	return pkg.translate(fileSet, out)
+	buffer, err := pkg.translate(fileSet)
+	if err != nil {
+		return err
+	}
+
+	if out != nil {
+		buffer.WriteTo(out)
+		return nil
+	}
+
+	if err := os.MkdirAll(path.Dir(pkg.archiveFile), 0777); err != nil {
+		return err
+	}
+	var perm os.FileMode = 0666
+	if pkg.IsCommand() {
+		perm = 0777
+	}
+	file, err := os.OpenFile(pkg.archiveFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
+		return err
+	}
+	if pkg.IsCommand() {
+		file.Write([]byte("#!/usr/bin/env node\n"))
+	}
+	buffer.WriteTo(file)
+	file.Close()
+	return nil
 }

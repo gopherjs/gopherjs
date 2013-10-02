@@ -9,9 +9,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
-	"io/ioutil"
 	"os"
-	"path"
 	"sort"
 	"strings"
 )
@@ -85,7 +83,7 @@ func (c *PkgContext) Delayed(f func()) {
 	c.delayedLines = c.CatchOutput(f)
 }
 
-func (pkg *GopherPackage) translate(fileSet *token.FileSet, out io.Writer) error {
+func (pkg *GopherPackage) translate(fileSet *token.FileSet) (*bytes.Buffer, error) {
 	var previousErr string
 	config := &types.Config{
 		Error: func(err error) {
@@ -101,7 +99,7 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet, out io.Writer) error
 		fullName := pkg.Dir + "/" + name
 		file, err := parser.ParseFile(fileSet, fullName, nil, 0)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		files = append(files, file)
 	}
@@ -116,30 +114,14 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet, out io.Writer) error
 
 	typesPkg, err := config.Check(files[0].Name.Name, fileSet, files, info)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	var file *os.File
-	if out == nil {
-		if err := os.MkdirAll(path.Dir(pkg.archiveFile), 0777); err != nil {
-			return err
-		}
-		var err error
-		file, err = ioutil.TempFile("", pkg.Name)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		if pkg.IsCommand() {
-			file.Chmod(0755)
-			file.Write([]byte("#!/usr/bin/env node\n"))
-		}
-		out = file
-	}
+	buffer := bytes.NewBuffer(nil)
 
 	if pkg.IsCommand() {
-		out.Write([]byte(strings.TrimSpace(prelude)))
-		out.Write([]byte("\n"))
+		buffer.Write([]byte(strings.TrimSpace(prelude)))
+		buffer.Write([]byte("\n"))
 
 		loaded := make(map[*GopherPackage]bool)
 		var loadImports func(*GopherPackage) error
@@ -161,13 +143,13 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet, out io.Writer) error
 				if err != nil {
 					return err
 				}
-				io.Copy(out, depFile)
+				io.Copy(buffer, depFile)
 				depFile.Close()
 			}
 			return nil
 		}
 		if err := loadImports(pkg); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -177,7 +159,7 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet, out io.Writer) error
 		pkgVars:      make(map[string]string),
 		objectVars:   make(map[types.Object]string),
 		usedVarNames: []string{"arguments", "class", "delete", "eval", "export", "false", "implements", "in", "new", "static", "this", "true", "try", "packages"},
-		writer:       out,
+		writer:       buffer,
 	}
 
 	functionsByType := make(map[types.Type][]*ast.FuncDecl)
@@ -323,13 +305,7 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet, out io.Writer) error
 	})
 	c.Printf("})()")
 
-	if file != nil {
-		if err := os.Rename(file.Name(), pkg.archiveFile); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return buffer, nil
 }
 
 func (c *PkgContext) translateSpec(spec ast.Spec) {

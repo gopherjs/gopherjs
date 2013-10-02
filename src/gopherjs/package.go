@@ -85,7 +85,7 @@ func (c *PkgContext) Delayed(f func()) {
 	c.delayedLines = c.CatchOutput(f)
 }
 
-func (pkg *CompiledPackage) translate(fileSet *token.FileSet, out io.Writer) error {
+func (pkg *GopherPackage) translate(fileSet *token.FileSet, out io.Writer) error {
 	var previousErr string
 	config := &types.Config{
 		Error: func(err error) {
@@ -141,9 +141,9 @@ func (pkg *CompiledPackage) translate(fileSet *token.FileSet, out io.Writer) err
 		out.Write([]byte(strings.TrimSpace(prelude)))
 		out.Write([]byte("\n"))
 
-		loaded := make(map[*CompiledPackage]bool)
-		var loadImports func(*CompiledPackage) error
-		loadImports = func(pkg *CompiledPackage) error {
+		loaded := make(map[*GopherPackage]bool)
+		var loadImports func(*GopherPackage) error
+		loadImports = func(pkg *GopherPackage) error {
 			for _, imp := range pkg.importedPackages {
 				if _, alreadyLoaded := loaded[imp]; alreadyLoaded {
 					continue
@@ -325,7 +325,6 @@ func (pkg *CompiledPackage) translate(fileSet *token.FileSet, out io.Writer) err
 
 	if file != nil {
 		if err := os.Rename(file.Name(), pkg.archiveFile); err != nil {
-			fmt.Println(err)
 			return err
 		}
 	}

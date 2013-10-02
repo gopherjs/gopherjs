@@ -86,6 +86,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			return typeVar + " === " + c.typeName(c.info.Types[cond])
 		}
 		printCaseBodyPrefix := func(conds []ast.Expr) {
+			if typeSwitchVar == "" {
+				return
+			}
 			value := refVar
 			if len(conds) == 1 {
 				if isWrapped(c.info.Types[conds[0]]) {

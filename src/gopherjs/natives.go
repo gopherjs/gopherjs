@@ -204,12 +204,6 @@ var Go$Slice = function(data, length, capacity) {
 		this.length = length;
 	}
 };
-Go$Slice.prototype.Go$get = function(index) {
-	return this.array[this.offset + index];
-};
-Go$Slice.prototype.Go$set = function(index, value) {
-	this.array[this.offset + index] = value;
-};
 Go$Slice.prototype.Go$subslice = function(begin, end) {
 	var s = new this.constructor(this.array);
 	s.offset = this.offset + begin;
@@ -447,7 +441,7 @@ packages["reflect"] = {
 				return false;
 			}
 			for (var i = 0; i < a.length; i++) {
-				if (!this.DeepEqual(a.Go$get(i), b.Go$get(i))) {
+				if (!this.DeepEqual(a.array[a.offset + i], b.array[b.offset + i])) {
 					return false;
 				}
 			}
@@ -477,7 +471,7 @@ var natives = map[string]string{
 	"bytes": `
 		IndexByte = function(s, c) {
 			for (var i = 0; i < s.length; i++) {
-				if (s.Go$get(i) === c) {
+				if (s.array[s.offset + i] === c) {
 					return i;
 				}
 			}
@@ -488,7 +482,7 @@ var natives = map[string]string{
 				return false;
 			}
 			for (var i = 0; i < a.length; i++) {
-				if (a.Go$get(i) !== b.Go$get(i)) {
+				if (a.array[a.offset + i] !== b.array[b.offset + i]) {
 					return false;
 				}
 			}
@@ -686,7 +680,7 @@ var natives = map[string]string{
 		var envkeys = Object.keys(process.env);
 		envs = new Go$Slice(new Array(envkeys.length));
 		for(var i = 0; i < envkeys.length; i++) {
-			envs.Go$set(i, envkeys[i] + "=" + process.env[envkeys[i]]);
+			envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
 		}
 	`,
 

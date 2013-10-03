@@ -394,7 +394,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Array:
 			return fmt.Sprintf("%s[%s]", x, c.translateExprToType(e.Index, types.Typ[types.Int]))
 		case *types.Slice:
-			return fmt.Sprintf("%s.Go$get(%s)", x, c.translateExprToType(e.Index, types.Typ[types.Int]))
+			return fmt.Sprintf("(Go$obj = %s, Go$obj.array[Go$obj.offset + %s])", x, c.translateExprToType(e.Index, types.Typ[types.Int]))
 		case *types.Map:
 			index := c.translateExprToType(e.Index, t.Key())
 			if hasId(t.Key()) {

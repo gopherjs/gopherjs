@@ -165,7 +165,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				case *types.Array:
 					c.Printf("%s = %s[%s];", value, refVar, iVar)
 				case *types.Slice:
-					c.Printf("%s = %s.Go$get(%s);", value, refVar, iVar)
+					c.Printf("%s = %s.array[%s.offset + %s];", value, refVar, refVar, iVar)
 				case *types.Map:
 					c.Printf("%s = %s.v;", value, entryVar)
 				case *types.Basic:
@@ -363,7 +363,8 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			case *ast.IndexExpr:
 				switch t := c.info.Types[l.X].Underlying().(type) {
 				case *types.Slice:
-					c.Printf("%s.Go$set(%s, %s);", c.translateExpr(l.X), c.translateExpr(l.Index), rhs)
+					c.Printf("Go$obj = %s;", c.translateExpr(l.X))
+					c.Printf("Go$obj.array[Go$obj.offset + %s] = %s;", c.translateExpr(l.Index), rhs)
 					continue
 				case *types.Map:
 					keyVar := c.newVarName("_key")

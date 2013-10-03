@@ -259,8 +259,12 @@ var Go$copy = function(dst, src) {
 		return 0;
 	}
 	var n = Math.min(src.length, dst.length);
+	if (dst.array.constructor !== Array) {
+		dst.array.set(src.array.subarray(src.offset, src.offset + n), dst.offset);
+		return n;
+	}
 	for (var i = 0; i < n; i++) {
-		dst.Go$set(i, src.Go$get(i));
+		dst.array[dst.offset + i] = src.array[src.offset + i];
 	}
 	return n;
 };

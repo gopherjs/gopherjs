@@ -14,6 +14,8 @@ import (
 	"strings"
 )
 
+var ReservedKeywords = []string{"arguments", "class", "delete", "eval", "export", "false", "implements", "interface", "in", "let", "new", "package", "private", "protected", "public", "static", "this", "true", "try", "yield", "packages"}
+
 type PkgContext struct {
 	pkg          *types.Package
 	info         *types.Info
@@ -23,7 +25,7 @@ type PkgContext struct {
 	functionSig  *types.Signature
 	resultNames  []ast.Expr
 	postLoopStmt ast.Stmt
-	writer       io.Writer
+	buffer       *bytes.Buffer
 	indentation  int
 	delayedLines *bytes.Buffer
 }
@@ -50,8 +52,17 @@ func (c *PkgContext) newVarName(prefix string) string {
 	}
 }
 
+func (c *PkgContext) nameForObject(o types.Object) string {
+	name, found := c.objectVars[o]
+	if !found {
+		name = c.newVarName(o.Name())
+		c.objectVars[o] = name
+	}
+	return name
+}
+
 func (c *PkgContext) Write(b []byte) (int, error) {
-	return c.writer.Write(b)
+	return c.buffer.Write(b)
 }
 
 func (c *PkgContext) Printf(format string, values ...interface{}) {
@@ -59,7 +70,7 @@ func (c *PkgContext) Printf(format string, values ...interface{}) {
 	fmt.Fprintf(c, format, values...)
 	c.Write([]byte{'\n'})
 	if c.delayedLines != nil {
-		c.delayedLines.WriteTo(c.writer)
+		c.delayedLines.WriteTo(c.buffer)
 		c.delayedLines = nil
 	}
 }
@@ -71,11 +82,11 @@ func (c *PkgContext) Indent(f func()) {
 }
 
 func (c *PkgContext) CatchOutput(f func()) *bytes.Buffer {
-	origWriter := c.writer
+	origbuffer := c.buffer
 	b := bytes.NewBuffer(nil)
-	c.writer = b
+	c.buffer = b
 	f()
-	c.writer = origWriter
+	c.buffer = origbuffer
 	return b
 }
 
@@ -83,7 +94,7 @@ func (c *PkgContext) Delayed(f func()) {
 	c.delayedLines = c.CatchOutput(f)
 }
 
-func (pkg *GopherPackage) translate(fileSet *token.FileSet) (*bytes.Buffer, error) {
+func (pkg *GopherPackage) translate(fileSet *token.FileSet) (buffer *bytes.Buffer, translateErr error) {
 	var previousErr string
 	config := &types.Config{
 		Error: func(err error) {
@@ -117,57 +128,24 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet) (*bytes.Buffer, erro
 		return nil, err
 	}
 
-	buffer := bytes.NewBuffer(nil)
-
-	if pkg.IsCommand() {
-		buffer.Write([]byte(strings.TrimSpace(prelude)))
-		buffer.Write([]byte("\n"))
-
-		loaded := make(map[*GopherPackage]bool)
-		var loadImports func(*GopherPackage) error
-		loadImports = func(pkg *GopherPackage) error {
-			for _, imp := range pkg.importedPackages {
-				if _, alreadyLoaded := loaded[imp]; alreadyLoaded {
-					continue
-				}
-				loaded[imp] = true
-
-				if err := loadImports(imp); err != nil {
-					return err
-				}
-				if imp.archiveFile == "" {
-					continue
-				}
-
-				depFile, err := os.Open(imp.archiveFile)
-				if err != nil {
-					return err
-				}
-				io.Copy(buffer, depFile)
-				depFile.Close()
-			}
-			return nil
-		}
-		if err := loadImports(pkg); err != nil {
-			return nil, err
-		}
-	}
-
 	c := &PkgContext{
-		pkg:          typesPkg,
-		info:         info,
-		pkgVars:      make(map[string]string),
-		objectVars:   make(map[types.Object]string),
-		usedVarNames: []string{"arguments", "class", "delete", "eval", "export", "false", "implements", "in", "new", "static", "this", "true", "try", "packages"},
-		writer:       buffer,
+		pkg:        typesPkg,
+		info:       info,
+		pkgVars:    make(map[string]string),
+		objectVars: make(map[types.Object]string),
+
+		usedVarNames: ReservedKeywords,
 	}
 
 	functionsByType := make(map[types.Type][]*ast.FuncDecl)
 	functionsByObject := make(map[types.Object]*ast.FuncDecl)
+	var typeSpecs []*ast.TypeSpec
+	var valueSpecs []*ast.ValueSpec
 	for _, file := range files {
 		for _, decl := range file.Decls {
-			if fun, isFunction := decl.(*ast.FuncDecl); isFunction {
-				sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
+			switch d := decl.(type) {
+			case *ast.FuncDecl:
+				sig := c.info.Objects[d.Name].(*types.Func).Type().(*types.Signature)
 				var recvType types.Type
 				if sig.Recv() != nil {
 					recvType = sig.Recv().Type()
@@ -175,137 +153,188 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet) (*bytes.Buffer, erro
 						recvType = ptr.Elem()
 					}
 				}
-				functionsByType[recvType] = append(functionsByType[recvType], fun)
-				functionsByObject[c.info.Objects[fun.Name]] = fun
+				functionsByType[recvType] = append(functionsByType[recvType], d)
+				o := c.info.Objects[d.Name]
+				functionsByObject[o] = d
+				if sig.Recv() == nil {
+					c.nameForObject(o) // register toplevel name
+				}
+			case *ast.GenDecl:
+				switch d.Tok {
+				case token.TYPE:
+					for _, spec := range d.Specs {
+						s := spec.(*ast.TypeSpec)
+						typeSpecs = append(typeSpecs, s)
+						c.nameForObject(c.info.Objects[s.Name]) // register toplevel name
+					}
+				case token.CONST, token.VAR:
+					for _, spec := range d.Specs {
+						s := spec.(*ast.ValueSpec)
+						valueSpecs = append(valueSpecs, s)
+						for _, name := range s.Names {
+							if !isUnderscore(name) {
+								c.nameForObject(c.info.Objects[name]) // register toplevel name
+							}
+						}
+					}
+				}
 			}
 		}
 	}
 
-	c.Printf(`packages["%s"] = (function() {`, pkg.ImportPath)
-	c.Indent(func() {
-		for _, importedPkg := range typesPkg.Imports() {
-			varName := c.newVarName(importedPkg.Name())
-			c.Printf(`var %s = packages["%s"];`, varName, importedPkg.Path())
-			c.pkgVars[importedPkg.Path()] = varName
-		}
+	buffer = c.CatchOutput(func() {
+		if pkg.IsCommand() {
+			c.Write([]byte(strings.TrimSpace(prelude)))
+			c.Write([]byte("\n"))
 
-		// types and their functions
-		for _, file := range files {
-			for _, decl := range file.Decls {
-				if genDecl, isGenDecl := decl.(*ast.GenDecl); isGenDecl && genDecl.Tok == token.TYPE {
-					for _, spec := range genDecl.Specs {
-						recvType := c.info.Objects[spec.(*ast.TypeSpec).Name].Type().(*types.Named)
-						_, isStruct := recvType.Underlying().(*types.Struct)
-						hasPtrType := !isStruct
-						c.translateSpec(spec)
-						if hasPtrType {
-							c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", recvType.Obj().Name())
-						}
-						for _, fun := range functionsByType[recvType] {
-							c.translateFunction(fun, hasPtrType)
-						}
-					}
-				}
-			}
-		}
-
-		// package functions
-		hasInit := false
-		for _, fun := range functionsByType[nil] {
-			if fun.Name.Name == "init" {
-				hasInit = true
-			}
-			if fun.Body == nil {
-				c.Printf(`var %s = function() { throw new Go$Panic("Native function not implemented: %s"); };`, fun.Name.Name, fun.Name.Name)
-				continue
-			}
-			funcLit := &ast.FuncLit{
-				Type: fun.Type,
-				Body: &ast.BlockStmt{
-					List: fun.Body.List,
-				},
-			}
-			funType := c.info.Objects[fun.Name].Type()
-			c.info.Types[fun.Name] = funType
-			c.info.Types[funcLit] = funType
-			c.translateStmt(&ast.AssignStmt{
-				Tok: token.DEFINE,
-				Lhs: []ast.Expr{fun.Name},
-				Rhs: []ast.Expr{funcLit},
-			}, "")
-		}
-
-		// constants and variables in dependency aware order
-		var specs []*ast.ValueSpec
-		pendingObjects := make(map[types.Object]bool)
-		for _, file := range files {
-			for _, decl := range file.Decls {
-				if genDecl, isGenDecl := decl.(*ast.GenDecl); isGenDecl && (genDecl.Tok == token.CONST || genDecl.Tok == token.VAR) {
-					for _, spec := range genDecl.Specs {
-						s := spec.(*ast.ValueSpec)
-						for i, name := range s.Names {
-							var values []ast.Expr
-							if genDecl.Tok == token.CONST {
-								id := ast.NewIdent("")
-								o := c.info.Objects[name].(*types.Const)
-								c.info.Types[id] = o.Type()
-								c.info.Values[id] = o.Val()
-								values = []ast.Expr{id}
-							}
-							if genDecl.Tok == token.VAR && i < len(s.Values) {
-								values = []ast.Expr{s.Values[i]}
-							}
-							specs = append(specs, &ast.ValueSpec{
-								Names:  []*ast.Ident{name},
-								Type:   s.Type,
-								Values: values,
-							})
-							pendingObjects[c.info.Objects[s.Names[0]]] = true
-						}
-					}
-				}
-			}
-		}
-		complete := false
-		for !complete {
-			complete = true
-			for i, spec := range specs {
-				if spec == nil {
-					continue
-				}
-				if spec.Values != nil {
-					v := IsReadyVisitor{info: c.info, functions: functionsByObject, pendingObjects: pendingObjects, isReady: true}
-					ast.Walk(&v, spec.Values[0])
-					if !v.isReady {
-						complete = false
+			loaded := make(map[*GopherPackage]bool)
+			var loadImports func(*GopherPackage) error
+			loadImports = func(pkg *GopherPackage) error {
+				for _, imp := range pkg.importedPackages {
+					if _, alreadyLoaded := loaded[imp]; alreadyLoaded {
 						continue
 					}
+					loaded[imp] = true
+
+					if err := loadImports(imp); err != nil {
+						return err
+					}
+					if imp.archiveFile == "" {
+						continue
+					}
+
+					depFile, err := os.Open(imp.archiveFile)
+					if err != nil {
+						return err
+					}
+					io.Copy(c, depFile)
+					depFile.Close()
 				}
+				return nil
+			}
+			if err := loadImports(pkg); err != nil {
+				translateErr = err
+				return
+			}
+		}
+
+		c.Printf(`packages["%s"] = (function() {`, pkg.ImportPath)
+		c.Indent(func() {
+			c.Printf("var %s;", strings.Join(c.usedVarNames[len(ReservedKeywords):], ", "))
+
+			for _, importedPkg := range typesPkg.Imports() {
+				varName := c.newVarName(importedPkg.Name())
+				c.Printf(`var %s = packages["%s"];`, varName, importedPkg.Path())
+				c.pkgVars[importedPkg.Path()] = varName
+			}
+
+			// types and their functions
+			for _, spec := range typeSpecs {
+				recvType := c.info.Objects[spec.Name].Type().(*types.Named)
+				_, isStruct := recvType.Underlying().(*types.Struct)
+				hasPtrType := !isStruct
 				c.translateSpec(spec)
-				delete(pendingObjects, c.info.Objects[spec.Names[0]])
-				specs[i] = nil
+				if hasPtrType {
+					c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", recvType.Obj().Name())
+				}
+				for _, fun := range functionsByType[recvType] {
+					c.translateFunction(fun, hasPtrType)
+				}
 			}
-		}
 
-		c.Write([]byte(natives[pkg.ImportPath]))
-
-		if hasInit {
-			c.Printf("init();")
-		}
-		if pkg.IsCommand() {
-			c.Printf("main();")
-		}
-		exports := make([]string, 0)
-		for _, name := range c.pkg.Scope().Names() {
-			if ast.IsExported(name) {
-				exports = append(exports, fmt.Sprintf("%s: %s", name, name))
+			// package functions
+			hasInit := false
+			for _, fun := range functionsByType[nil] {
+				if fun.Name.Name == "init" {
+					hasInit = true
+				}
+				if fun.Body == nil {
+					c.Printf(`var %s = function() { throw new Go$Panic("Native function not implemented: %s"); };`, fun.Name.Name, fun.Name.Name)
+					continue
+				}
+				funcLit := &ast.FuncLit{
+					Type: fun.Type,
+					Body: &ast.BlockStmt{
+						List: fun.Body.List,
+					},
+				}
+				funType := c.info.Objects[fun.Name].Type()
+				c.info.Types[fun.Name] = funType
+				c.info.Types[funcLit] = funType
+				c.translateStmt(&ast.AssignStmt{
+					Tok: token.DEFINE,
+					Lhs: []ast.Expr{fun.Name},
+					Rhs: []ast.Expr{funcLit},
+				}, "")
 			}
-		}
-		c.Printf("return { %s };", strings.Join(exports, ", "))
+
+			// constants and variables in dependency aware order
+			var specs []*ast.ValueSpec
+			pendingObjects := make(map[types.Object]bool)
+			for _, spec := range valueSpecs {
+				for i, name := range spec.Names {
+					var values []ast.Expr
+					switch o := c.info.Objects[name].(type) {
+					case *types.Var:
+						if i < len(spec.Values) {
+							values = []ast.Expr{spec.Values[i]}
+						}
+					case *types.Const:
+						id := ast.NewIdent("")
+						c.info.Types[id] = o.Type()
+						c.info.Values[id] = o.Val()
+						values = []ast.Expr{id}
+					default:
+						panic("")
+					}
+					specs = append(specs, &ast.ValueSpec{
+						Names:  []*ast.Ident{name},
+						Type:   spec.Type,
+						Values: values,
+					})
+					pendingObjects[c.info.Objects[spec.Names[0]]] = true
+				}
+			}
+			complete := false
+			for !complete {
+				complete = true
+				for i, spec := range specs {
+					if spec == nil {
+						continue
+					}
+					if spec.Values != nil {
+						v := IsReadyVisitor{info: c.info, functions: functionsByObject, pendingObjects: pendingObjects, isReady: true}
+						ast.Walk(&v, spec.Values[0])
+						if !v.isReady {
+							complete = false
+							continue
+						}
+					}
+					c.translateSpec(spec)
+					delete(pendingObjects, c.info.Objects[spec.Names[0]])
+					specs[i] = nil
+				}
+			}
+
+			c.Write([]byte(natives[pkg.ImportPath]))
+
+			if hasInit {
+				c.Printf("init();")
+			}
+			if pkg.IsCommand() {
+				c.Printf("main();")
+			}
+			exports := make([]string, 0)
+			for _, name := range c.pkg.Scope().Names() {
+				if ast.IsExported(name) {
+					exports = append(exports, fmt.Sprintf("%s: %s", name, name))
+				}
+			}
+			c.Printf("return { %s };", strings.Join(exports, ", "))
+		})
+		c.Printf("})()")
 	})
-	c.Printf("})()")
-
-	return buffer, nil
+	return
 }
 
 func (c *PkgContext) translateSpec(spec ast.Spec) {
@@ -343,8 +372,8 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 	case *ast.TypeSpec:
 		nt := c.info.Objects[s.Name].Type().(*types.Named)
 		if isWrapped(nt) {
-			c.Printf(`var %s = function(v) { this.v = v; };`, nt.Obj().Name())
-			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.v; };`, nt.Obj().Name(), nt.Obj().Name())
+			c.Printf(`var %s = function(v) { this.v = v; };`, c.typeName(nt))
+			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.v; };`, c.typeName(nt), c.typeName(nt))
 			return
 		}
 		switch t := nt.Underlying().(type) {
@@ -353,7 +382,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			for i := 0; i < t.NumFields(); i++ {
 				params[i] = t.Field(i).Name() + "_"
 			}
-			c.Printf("var %s = function(%s) {", nt.Obj().Name(), strings.Join(params, ", "))
+			c.Printf("%s = function(%s) {", c.typeName(nt), strings.Join(params, ", "))
 			c.Indent(func() {
 				c.Printf("this.Go$id = Go$idCounter++;")
 				for i := 0; i < t.NumFields(); i++ {
@@ -362,8 +391,8 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				}
 			})
 			c.Printf("};")
-			c.Printf(`%s.name = "%s";`, nt.Obj().Name(), nt.Obj().Name())
-			c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, nt.Obj().Name())
+			c.Printf(`%s.name = "%s";`, c.typeName(nt), c.typeName(nt))
+			c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, c.typeName(nt))
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)
 				if field.Anonymous() {
@@ -385,13 +414,13 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 						if isWrapped(field.Type()) {
 							value = fmt.Sprintf("new %s(%s)", field.Name(), value)
 						}
-						c.Printf("%s.prototype.%s = function(%s) { return %s.%s(%s); };", nt.Obj().Name(), name, strings.Join(params, ", "), value, name, strings.Join(params, ", "))
+						c.Printf("%s.prototype.%s = function(%s) { return %s.%s(%s); };", c.typeName(nt), name, strings.Join(params, ", "), value, name, strings.Join(params, ", "))
 					}
 				}
 			}
 		case *types.Interface:
 			if t.MethodSet().Len() == 0 {
-				c.Printf("var %s = function(t) { return true };", nt.Obj().Name())
+				c.Printf("%s = function(t) { return true };", c.typeName(nt))
 				return
 			}
 			implementedBy := make([]string, 0)
@@ -411,11 +440,11 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			if len(conditions) == 0 {
 				conditions = []string{"false"}
 			}
-			c.Printf("var %s = function(t) { return %s };", nt.Obj().Name(), strings.Join(conditions, " || "))
+			c.Printf("%s = function(t) { return %s };", c.typeName(nt), strings.Join(conditions, " || "))
 		default:
 			typeName := c.typeName(t)
-			c.Printf("var %s = function() { %s.apply(this, arguments); };", nt.Obj().Name(), typeName)
-			c.Printf("Go$copyFields(%s.prototype, %s.prototype);", typeName, nt.Obj().Name())
+			c.Printf("%s = function() { %s.apply(this, arguments); };", c.typeName(nt), typeName)
+			c.Printf("Go$copyFields(%s.prototype, %s.prototype);", typeName, c.typeName(nt))
 		}
 
 	case *ast.ImportSpec:
@@ -569,7 +598,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		if objPkg != nil && objPkg != c.pkg {
 			return c.pkgVars[objPkg.Path()] + "." + t.Obj().Name()
 		}
-		return t.Obj().Name()
+		return c.nameForObject(t.Obj())
 	case *types.Pointer:
 		if named, isNamed := t.Elem().(*types.Named); isNamed && named.Obj().Name() != "error" {
 			if _, isStruct := t.Elem().Underlying().(*types.Struct); !isStruct {

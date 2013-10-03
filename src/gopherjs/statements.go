@@ -52,7 +52,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 		if s.Tag != nil {
 			refVar := c.newVarName("_ref")
-			c.Printf("var %s = %s;", refVar, c.translateExpr(s.Tag))
+			c.Printf("%s = %s;", refVar, c.translateExpr(s.Tag))
 			tagType := c.info.Types[s.Tag]
 			_, isInterface := tagType.(*types.Interface)
 			translateCond = func(cond ast.Expr) string {
@@ -71,7 +71,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		switch a := s.Assign.(type) {
 		case *ast.AssignStmt:
 			expr = a.Rhs[0].(*ast.TypeAssertExpr).X
-			typeSwitchVar = a.Lhs[0].(*ast.Ident).Name
+			typeSwitchVar = c.newVarName(a.Lhs[0].(*ast.Ident).Name)
 			for _, caseClause := range s.Body.List {
 				c.objectVars[c.info.Implicits[caseClause]] = typeSwitchVar
 			}
@@ -80,8 +80,8 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 		refVar := c.newVarName("_ref")
 		typeVar := c.newVarName("_type")
-		c.Printf("var %s = %s;", refVar, c.translateExpr(expr))
-		c.Printf("var %s = Go$typeOf(%s);", typeVar, refVar)
+		c.Printf("%s = %s;", refVar, c.translateExpr(expr))
+		c.Printf("%s = Go$typeOf(%s);", typeVar, refVar)
 		translateCond := func(cond ast.Expr) string {
 			return typeVar + " === " + c.typeName(c.info.Types[cond])
 		}
@@ -95,7 +95,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					value += ".v"
 				}
 			}
-			c.Printf("var %s = %s;", typeSwitchVar, value)
+			c.Printf("%s = %s;", typeSwitchVar, value)
 		}
 		c.translateBranchingStmt(s.Body.List, true, translateCond, printCaseBodyPrefix, label)
 
@@ -128,52 +128,48 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		if s.Value != nil && !isUnderscore(s.Value) {
 			value = c.translateExpr(s.Value)
 		}
-		varKeyword := ""
-		if s.Tok == token.DEFINE {
-			varKeyword = "var "
-		}
 
 		refVar := c.newVarName("_ref")
-		c.Printf("var %s = %s;", refVar, c.translateExpr(s.X))
+		c.Printf("%s = %s;", refVar, c.translateExpr(s.X))
 
 		lenTarget := refVar
 		_, isMap := c.info.Types[s.X].Underlying().(*types.Map)
 		var keysVar string
 		if isMap {
 			keysVar = c.newVarName("_keys")
-			c.Printf("var %s = %s !== null ? Go$keys(%s) : [];", keysVar, refVar, refVar)
+			c.Printf("%s = %s !== null ? Go$keys(%s) : [];", keysVar, refVar, refVar)
 			lenTarget = keysVar
 		}
 
 		lenVar := c.newVarName("_len")
-		c.Printf("var %s = %s !== null ? %s.length : 0;", lenVar, lenTarget, lenTarget)
+		c.Printf("%s = %s !== null ? %s.length : 0;", lenVar, lenTarget, lenTarget)
 
 		iVar := c.newVarName("_i")
-		c.Printf("var %s = 0;", iVar)
+		c.Printf("%s = 0;", iVar)
 
 		c.Printf("%sfor (; %s < %s; %s++) {", label, iVar, lenVar, iVar)
 		c.Indent(func() {
 			var entryVar string
 			if isMap {
 				entryVar = c.newVarName("_entry")
-				c.Printf("var %s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
+				c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
 				if key != "" {
-					c.Printf("%s%s = %s.k;", varKeyword, key, entryVar)
+					c.Printf("%s = %s.k;", key, entryVar)
 				}
 			}
 			if !isMap && key != "" {
-				c.Printf("%s%s = %s;", varKeyword, key, iVar)
+				c.Printf("%s = %s;", key, iVar)
 			}
 			if value != "" {
 				switch t := c.info.Types[s.X].Underlying().(type) {
 				case *types.Array:
-					c.Printf("%s%s = %s[%s];", varKeyword, value, refVar, iVar)
+					c.Printf("%s = %s[%s];", value, refVar, iVar)
 				case *types.Slice:
-					c.Printf("%s%s = %s.Go$get(%s);", varKeyword, value, refVar, iVar)
+					c.Printf("%s = %s.Go$get(%s);", value, refVar, iVar)
 				case *types.Map:
-					c.Printf("%s%s = %s.v;", varKeyword, value, entryVar)
+					c.Printf("%s = %s.v;", value, entryVar)
 				case *types.Basic:
-					c.Printf("%s%s = %s.charCodeAt(%s);", varKeyword, value, refVar, iVar)
+					c.Printf("%s = %s.charCodeAt(%s);", value, refVar, iVar)
 				default:
 					panic(fmt.Sprintf("Unhandled range type: %T\n", t))
 				}
@@ -340,11 +336,6 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				continue
 			}
 
-			if s.Tok == token.DEFINE {
-				c.Printf("var %s = %s;", c.translateExpr(lhs), rhs)
-				continue
-			}
-
 			switch l := lhs.(type) {
 			case *ast.StarExpr:
 				if _, isStruct := c.info.Types[l].(*types.Struct); !isStruct {
@@ -358,7 +349,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					continue
 				case *types.Map:
 					keyVar := c.newVarName("_key")
-					c.Printf("var %s = %s;", keyVar, c.translateExprToType(l.Index, t.Key()))
+					c.Printf("%s = %s;", keyVar, c.translateExprToType(l.Index, t.Key()))
 					key := keyVar
 					if hasId(t.Key()) {
 						key = fmt.Sprintf("(%s || Go$nil).Go$key()", key)

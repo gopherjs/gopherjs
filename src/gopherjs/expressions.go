@@ -185,6 +185,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	case *ast.FuncLit:
 		n := c.usedVarNames
 		defer func() { c.usedVarNames = n }()
+
+		params := c.translateParams(e.Type)
+		outerVarNames := c.usedVarNames
+		varDecl := ""
 		body := c.CatchOutput(func() {
 			c.Indent(func() {
 				t := exprType.(*types.Signature)
@@ -200,7 +204,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						id := ast.NewIdent(name)
 						c.info.Types[id] = result.Type()
 						c.info.Objects[id] = result
-						c.Printf("var %s = %s;", c.translateExpr(id), c.zeroValue(result.Type()))
+						c.Printf("%s = %s;", c.translateExpr(id), c.zeroValue(result.Type()))
 						resultNames[i] = id
 					}
 				}
@@ -217,7 +221,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 				v := HasDeferVisitor{}
 				ast.Walk(&v, e.Body)
-				if v.hasDefer {
+				switch v.hasDefer {
+				case true:
 					c.Printf("var Go$deferred = [];")
 					c.Printf("try {")
 					c.Indent(func() {
@@ -236,13 +241,19 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						}
 					})
 					c.Printf("}")
-					return
+				case false:
+					c.translateStmtList(e.Body.List)
 				}
-				c.translateStmtList(e.Body.List)
+
+				innerVarNames := c.usedVarNames[len(outerVarNames):]
+				if len(innerVarNames) != 0 {
+					varDecl = c.CatchOutput(func() { c.Printf("var %s;", strings.Join(innerVarNames, ", ")) }).String()
+				}
 			})
 			c.Printf("")
 		}).String()
-		return fmt.Sprintf("(function(%s) {\n%s})", c.translateParams(e.Type), body[:len(body)-1])
+
+		return "(function(" + params + ") {\n" + varDecl + body[:len(body)-1] + "})"
 
 	case *ast.UnaryExpr:
 		op := e.Op.String()
@@ -262,7 +273,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		basic := t.Underlying().(*types.Basic)
 		if is64Bit(basic) {
 			x := c.newVarName("x")
-			c.Printf("var %s;", x)
 			return fmt.Sprintf("(%s = %s, new %s(%s%s.high, %s%s.low))", x, c.translateExpr(e.X), c.typeName(t), op, x, op, x)
 		}
 		value := fmt.Sprintf("%s%s", op, c.translateExpr(e.X))
@@ -313,7 +323,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			x := c.newVarName("x")
 			y := c.newVarName("y")
-			c.Printf("var %s, %s;", x, y)
 			expr = strings.Replace(expr, "x", x, -1)
 			expr = strings.Replace(expr, "y", y, -1)
 			return "(" + x + " = " + ex + ", " + y + " = " + ey + ", " + expr + ")"
@@ -353,7 +362,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			switch basic.Kind() {
 			case types.Int32, types.Uint32, types.Uintptr:
 				y := c.newVarName("y")
-				c.Printf("var %s;", y)
 				value = fmt.Sprintf("(%s = %s, %s < 32 ? (%s %s %s) : 0)", y, c.translateExprToType(e.Y, types.Typ[types.Uint]), y, ex, op, y)
 			default:
 				value = "(" + ex + " " + op + " " + ey + ")"
@@ -458,7 +466,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case types.MethodVal:
 			parameters := makeParametersList()
 			recv := c.newVarName("_recv")
-			c.Printf("var %s;", recv)
 			return fmt.Sprintf("(%s = %s, function(%s) { return %s.%s(%s); })", recv, c.translateExprToType(e.X, types.NewInterface(nil)), strings.Join(parameters, ", "), recv, e.Sel.Name, strings.Join(parameters, ", "))
 		case types.MethodExpr:
 			parameters := append([]string{parameterName(sel.Obj().Type().(*types.Signature).Recv())}, makeParametersList()...)
@@ -625,12 +632,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			if _, isBuiltin := o.Type().(*types.Builtin); isBuiltin {
 				return "Go$" + e.Name
 			}
-			name, found := c.objectVars[o]
-			if !found {
-				name = c.newVarName(o.Name())
-				c.objectVars[o] = name
-			}
-			return name
+			return c.nameForObject(o)
 		case *types.TypeName:
 			return c.typeName(o.Type())
 		case *types.Builtin:
@@ -735,9 +737,9 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 				if s, isStruct := ptr.Elem().Underlying().(*types.Struct); isStruct {
 					array := c.newVarName("_array")
 					target := c.newVarName("_struct")
-					c.Printf("var %s = new Uint8Array(%d);", array, types.DefaultSizeof(s))
+					c.Printf("%s = new Uint8Array(%d);", array, types.DefaultSizeof(s))
 					c.Delayed(func() {
-						c.Printf("var %s = %s;", target, c.translateExpr(expr))
+						c.Printf("%s = %s;", target, c.translateExpr(expr))
 						c.loadStruct(array, target, s)
 					})
 					return array
@@ -769,8 +771,8 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		if isStruct && types.IsIdentical(exprType, types.Typ[types.UnsafePointer]) {
 			array := c.newVarName("_array")
 			target := c.newVarName("_struct")
-			c.Printf("var %s = %s;", array, value)
-			c.Printf("var %s = %s;", target, c.zeroValue(t.Elem()))
+			c.Printf("%s = %s;", array, value)
+			c.Printf("%s = %s;", target, c.zeroValue(t.Elem()))
 			c.loadStruct(array, target, s)
 			return target
 		}
@@ -802,7 +804,7 @@ func (c *PkgContext) cloneStruct(srcPath []string, t *types.Named) string {
 
 func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {
 	view := c.newVarName("_view")
-	c.Printf("var %s = new DataView(%s.buffer, %s.byteOffset);", view, array, array)
+	c.Printf("%s = new DataView(%s.buffer, %s.byteOffset);", view, array, array)
 	var fields []*types.Var
 	var collectFields func(s *types.Struct, path string)
 	collectFields = func(s *types.Struct, path string) {

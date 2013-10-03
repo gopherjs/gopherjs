@@ -6,15 +6,25 @@ import (
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/token"
 	"io"
 	"os"
 	"sort"
 	"strings"
+	"time"
 )
 
 var ReservedKeywords = []string{"arguments", "class", "delete", "eval", "export", "false", "implements", "interface", "in", "let", "new", "package", "private", "protected", "public", "static", "this", "true", "try", "yield", "packages"}
+
+type GopherPackage struct {
+	*build.Package
+	ImportedPackages []*GopherPackage
+	SrcLastModified  time.Time
+	Types            *types.Package
+	JavaScriptCode   *bytes.Buffer
+}
 
 type PkgContext struct {
 	pkg          *types.Package
@@ -94,7 +104,7 @@ func (c *PkgContext) Delayed(f func()) {
 	c.delayedLines = c.CatchOutput(f)
 }
 
-func (pkg *GopherPackage) translate(fileSet *token.FileSet) (buffer *bytes.Buffer, translateErr error) {
+func (pkg *GopherPackage) translate(fileSet *token.FileSet) (translateErr error) {
 	var previousErr string
 	config := &types.Config{
 		Error: func(err error) {
@@ -110,7 +120,7 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet) (buffer *bytes.Buffe
 		fullName := pkg.Dir + "/" + name
 		file, err := parser.ParseFile(fileSet, fullName, nil, 0)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		files = append(files, file)
 	}
@@ -125,8 +135,9 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet) (buffer *bytes.Buffe
 
 	typesPkg, err := config.Check(files[0].Name.Name, fileSet, files, info)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	pkg.Types = typesPkg
 
 	c := &PkgContext{
 		pkg:        typesPkg,
@@ -182,7 +193,7 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet) (buffer *bytes.Buffe
 		}
 	}
 
-	buffer = c.CatchOutput(func() {
+	pkg.JavaScriptCode = c.CatchOutput(func() {
 		if pkg.IsCommand() {
 			c.Write([]byte(strings.TrimSpace(prelude)))
 			c.Write([]byte("\n"))
@@ -190,7 +201,7 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet) (buffer *bytes.Buffe
 			loaded := make(map[*GopherPackage]bool)
 			var loadImports func(*GopherPackage) error
 			loadImports = func(pkg *GopherPackage) error {
-				for _, imp := range pkg.importedPackages {
+				for _, imp := range pkg.ImportedPackages {
 					if _, alreadyLoaded := loaded[imp]; alreadyLoaded {
 						continue
 					}
@@ -199,11 +210,11 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet) (buffer *bytes.Buffe
 					if err := loadImports(imp); err != nil {
 						return err
 					}
-					if imp.archiveFile == "" {
+					if imp.PkgObj == "" {
 						continue
 					}
 
-					depFile, err := os.Open(imp.archiveFile)
+					depFile, err := os.Open(imp.PkgObj)
 					if err != nil {
 						return err
 					}

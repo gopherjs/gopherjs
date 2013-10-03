@@ -34,8 +34,6 @@ func main() {
 			InstallSuffix: "js",
 		},
 	}
-	t.packages["reflect"] = &GopherPackage{Package: &build.Package{}}
-	t.packages["go/doc"] = &GopherPackage{Package: &build.Package{}}
 
 	flag.Parse()
 

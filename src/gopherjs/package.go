@@ -139,6 +139,11 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet) (translateErr error)
 	}
 	pkg.Types = typesPkg
 
+	if pkg.ImportPath == "reflect" || pkg.ImportPath == "go/doc" {
+		pkg.JavaScriptCode = bytes.NewBuffer(nil)
+		return
+	}
+
 	c := &PkgContext{
 		pkg:        typesPkg,
 		info:       info,
@@ -209,9 +214,6 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet) (translateErr error)
 
 					if err := loadImports(imp); err != nil {
 						return err
-					}
-					if imp.PkgObj == "" {
-						continue
 					}
 
 					depFile, err := os.Open(imp.PkgObj)

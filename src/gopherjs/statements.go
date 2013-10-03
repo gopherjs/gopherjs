@@ -227,15 +227,33 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.DeferStmt:
-		var args []string
-		if len(s.Call.Args) > 0 { // skip for call to recover()
-			args = c.translateArgs(s.Call)
+		if ident, isIdent := s.Call.Fun.(*ast.Ident); isIdent {
+			if builtin, isBuiltin := c.info.Objects[ident].(*types.Builtin); isBuiltin {
+				if builtin.Name() == "recover" {
+					c.Printf("Go$deferred.push({ fun: Go$recover, args: [] });")
+					return
+				}
+				args := make([]ast.Expr, len(s.Call.Args))
+				for i, arg := range s.Call.Args {
+					argIdent := ast.NewIdent(c.newVarName("_arg"))
+					c.info.Types[argIdent] = c.info.Types[arg]
+					args[i] = argIdent
+				}
+				call := c.translateExpr(&ast.CallExpr{
+					Fun:      s.Call.Fun,
+					Args:     args,
+					Ellipsis: s.Call.Ellipsis,
+				})
+				c.Printf("Go$deferred.push({ fun: function(%s) { %s; }, args: [%s] });", strings.Join(c.translateExprSlice(args), ", "), call, strings.Join(c.translateExprSlice(s.Call.Args), ", "))
+				return
+			}
 		}
+		args := strings.Join(c.translateArgs(s.Call), ", ")
 		if sel, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
-			c.Printf(`Go$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, strings.Join(args, ", "))
+			c.Printf(`Go$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, args)
 			return
 		}
-		c.Printf("Go$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), strings.Join(args, ", "))
+		c.Printf("Go$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), args)
 
 	case *ast.ExprStmt:
 		c.Printf("%s;", c.translateExpr(s.X))

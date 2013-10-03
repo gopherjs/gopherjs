@@ -542,9 +542,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					return fmt.Sprintf(`delete %s["$" + %s]`, c.translateExpr(e.Args[0]), index)
 				case "copy":
 					return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(nil)), c.translateExprToType(e.Args[1], types.NewSlice(nil)))
-				case "print", "println":
-					return fmt.Sprintf("Go$%s(%s)", o.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
-				case "real", "imag", "recover", "complex":
+				case "print", "println", "recover", "complex", "real", "imag":
 					return fmt.Sprintf("Go$%s(%s)", o.Name(), strings.Join(c.translateExprSlice(e.Args), ", "))
 				default:
 					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))

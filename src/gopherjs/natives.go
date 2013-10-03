@@ -255,6 +255,9 @@ var Go$Channel = function() {};
 var Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };
 
 var Go$copy = function(dst, src) {
+	if (src === null || dst === null) {
+		return 0;
+	}
 	var n = Math.min(src.length, dst.length);
 	for (var i = 0; i < n; i++) {
 		dst.Go$set(i, src.Go$get(i));

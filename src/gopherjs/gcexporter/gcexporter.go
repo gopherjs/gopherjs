@@ -132,11 +132,7 @@ func (e *exporter) makeType(ty types.Type) string {
 		fields := make([]string, t.NumFields())
 		for i := range fields {
 			field := t.Field(i)
-			name := "?"
-			if !field.Anonymous() {
-				name = field.Name()
-			}
-			fields[i] = name + " " + e.makeType(field.Type())
+			fields[i] = e.makeName(field) + " " + e.makeType(field.Type())
 		}
 		return "struct { " + strings.Join(fields, "; ") + " }"
 	case *types.Interface:

@@ -124,7 +124,7 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet, config *types.Config
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 	}
 
-	typesPkg, err := config.Check(files[0].Name.Name, fileSet, files, info)
+	typesPkg, err := config.Check(pkg.ImportPath, fileSet, files, info)
 	if err != nil {
 		return err
 	}

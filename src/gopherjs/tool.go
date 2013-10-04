@@ -10,7 +10,6 @@ import (
 	"go/scanner"
 	"go/token"
 	"gopherjs/gcexporter"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -25,7 +24,6 @@ type Translator struct {
 
 func main() {
 	var pkg *GopherPackage
-	var out io.Writer
 
 	fileSet := token.NewFileSet()
 	var previousErr string
@@ -58,7 +56,8 @@ func main() {
 
 	flag.Parse()
 
-	switch flag.Arg(0) {
+	cmd := flag.Arg(0)
+	switch cmd {
 	case "install":
 		buildPkg, err := t.buildContext.Import(flag.Arg(1), "", 0)
 		if err != nil {
@@ -93,21 +92,6 @@ func main() {
 			},
 		}
 
-		if flag.Arg(0) == "run" {
-			node := exec.Command("node")
-			pipe, _ := node.StdinPipe()
-			out = pipe
-			node.Stdout = os.Stdout
-			node.Stderr = os.Stderr
-			err = node.Start()
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				return
-			}
-			defer node.Wait()
-			defer pipe.Close()
-		}
-
 	case "help", "":
 		os.Stderr.WriteString(`GopherJS is a tool for compiling Go source code to JavaScript.
 
@@ -125,11 +109,11 @@ The commands are:
 		return
 
 	default:
-		fmt.Fprintf(os.Stderr, "gopherjs: unknown subcommand \"%s\"\nRun 'gopherjs help' for usage.\n", flag.Arg(0))
+		fmt.Fprintf(os.Stderr, "gopherjs: unknown subcommand \"%s\"\nRun 'gopherjs help' for usage.\n", cmd)
 		return
 	}
 
-	err := t.buildPackage(pkg, fileSet, out)
+	err := t.buildPackage(pkg, fileSet, cmd != "run")
 	if err != nil {
 		list, isList := err.(scanner.ErrorList)
 		if !isList {
@@ -139,10 +123,26 @@ The commands are:
 		for _, entry := range list {
 			fmt.Fprintln(os.Stderr, entry)
 		}
+		return
+	}
+
+	if cmd == "run" {
+		node := exec.Command("node")
+		pipe, _ := node.StdinPipe()
+		node.Stdout = os.Stdout
+		node.Stderr = os.Stderr
+		err = node.Start()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return
+		}
+		pipe.Write(pkg.JavaScriptCode)
+		pipe.Close()
+		node.Wait()
 	}
 }
 
-func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, out io.Writer) error {
+func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, writeToDisk bool) error {
 	t.packages[pkg.ImportPath] = pkg
 	if pkg.ImportPath == "unsafe" {
 		return nil
@@ -161,7 +161,7 @@ func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, ou
 			if err != nil {
 				return err
 			}
-			if err := t.buildPackage(&GopherPackage{Package: otherPkg}, fileSet, nil); err != nil {
+			if err := t.buildPackage(&GopherPackage{Package: otherPkg}, fileSet, true); err != nil {
 				return err
 			}
 		}
@@ -184,7 +184,7 @@ func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, ou
 	}
 
 	fileInfo, err = os.Stat(pkg.PkgObj)
-	if err == nil && fileInfo.ModTime().After(pkg.SrcLastModified) {
+	if err == nil && fileInfo.ModTime().After(pkg.SrcLastModified) && writeToDisk {
 		// package object is up to date, load from disk if library
 		if pkg.IsCommand() {
 			return nil
@@ -225,8 +225,7 @@ func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, ou
 		return err
 	}
 
-	if out != nil {
-		out.Write(pkg.JavaScriptCode)
+	if !writeToDisk {
 		return nil
 	}
 

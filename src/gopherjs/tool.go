@@ -96,11 +96,12 @@ func main() {
 		basename := path.Base(filename)
 		pkg = &GopherPackage{
 			Package: &build.Package{
-				Name:    "main",
-				Imports: imports,
-				Dir:     path.Dir(filename),
-				GoFiles: []string{basename},
-				PkgObj:  basename[:len(basename)-3] + ".js",
+				Name:       "main",
+				ImportPath: "main",
+				Imports:    imports,
+				Dir:        path.Dir(filename),
+				GoFiles:    []string{basename},
+				PkgObj:     basename[:len(basename)-3] + ".js",
 			},
 		}
 

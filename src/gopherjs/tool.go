@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bufio"
+	"code.google.com/p/go.tools/go/types"
 	"flag"
 	"fmt"
 	"go/build"
 	"go/parser"
 	"go/scanner"
 	"go/token"
+	"gopherjs/gcexporter"
 	"io"
 	"os"
 	"os/exec"
@@ -15,6 +18,7 @@ import (
 
 type Translator struct {
 	buildContext *build.Context
+	typesConfig  *types.Config
 	packages     map[string]*GopherPackage
 }
 
@@ -23,8 +27,9 @@ func main() {
 	var out io.Writer
 
 	fileSet := token.NewFileSet()
-	t := &Translator{
-		packages: make(map[string]*GopherPackage),
+	var previousErr string
+	var t *Translator
+	t = &Translator{
 		buildContext: &build.Context{
 			GOROOT:        build.Default.GOROOT,
 			GOPATH:        build.Default.GOPATH,
@@ -33,6 +38,34 @@ func main() {
 			Compiler:      "gc",
 			InstallSuffix: "js",
 		},
+		typesConfig: &types.Config{
+			Error: func(err error) {
+				if err.Error() != previousErr {
+					fmt.Println(err.Error())
+				}
+				previousErr = err.Error()
+			},
+			Import: func(imports map[string]*types.Package, path string) (*types.Package, error) {
+				if path == "unsafe" {
+					return types.Unsafe, nil
+				}
+				importedPkg, err := t.buildContext.Import(path, pkg.Dir, 0)
+				if err != nil {
+					return nil, err
+				}
+				if p, found := imports[path]; found {
+					return p, nil
+				}
+				objFile, err := os.Open(importedPkg.PkgObj)
+				if err != nil {
+					return nil, err
+				}
+				defer objFile.Close()
+				r := bufio.NewReader(objFile)
+				return types.GcImportData(imports, importedPkg.PkgObj, path, r)
+			},
+		},
+		packages: make(map[string]*GopherPackage),
 	}
 
 	flag.Parse()
@@ -165,7 +198,7 @@ func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, ou
 		}
 	}
 
-	if err := pkg.translate(fileSet); err != nil {
+	if err := pkg.translate(fileSet, t.typesConfig); err != nil {
 		return err
 	}
 
@@ -187,6 +220,9 @@ func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, ou
 	}
 	if pkg.IsCommand() {
 		file.Write([]byte("#!/usr/bin/env node\n"))
+	}
+	if !pkg.IsCommand() {
+		gcexporter.Write(pkg.Types, file)
 	}
 	pkg.JavaScriptCode.WriteTo(file)
 	file.Close()

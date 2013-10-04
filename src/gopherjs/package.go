@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
@@ -104,17 +105,7 @@ func (c *PkgContext) Delayed(f func()) {
 	c.delayedLines = c.CatchOutput(f)
 }
 
-func (pkg *GopherPackage) translate(fileSet *token.FileSet) (translateErr error) {
-	var previousErr string
-	config := &types.Config{
-		Error: func(err error) {
-			if err.Error() != previousErr {
-				fmt.Println(err.Error())
-			}
-			previousErr = err.Error()
-		},
-	}
-
+func (pkg *GopherPackage) translate(fileSet *token.FileSet, config *types.Config) (translateErr error) {
 	files := make([]*ast.File, 0)
 	for _, name := range pkg.GoFiles {
 		fullName := pkg.Dir + "/" + name
@@ -137,6 +128,7 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet) (translateErr error)
 	if err != nil {
 		return err
 	}
+	config.Packages[pkg.ImportPath] = typesPkg
 	pkg.Types = typesPkg
 
 	if pkg.ImportPath == "reflect" || pkg.ImportPath == "go/doc" {
@@ -145,11 +137,10 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet) (translateErr error)
 	}
 
 	c := &PkgContext{
-		pkg:        typesPkg,
-		info:       info,
-		pkgVars:    make(map[string]string),
-		objectVars: make(map[types.Object]string),
-
+		pkg:          typesPkg,
+		info:         info,
+		pkgVars:      make(map[string]string),
+		objectVars:   make(map[types.Object]string),
 		usedVarNames: ReservedKeywords,
 	}
 
@@ -220,7 +211,17 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet) (translateErr error)
 					if err != nil {
 						return err
 					}
-					io.Copy(c, depFile)
+					r := bufio.NewReader(depFile)
+					for {
+						l, err := r.ReadSlice('\n')
+						if err != nil {
+							return err
+						}
+						if bytes.Equal(l, []byte("$$\n")) {
+							break
+						}
+					}
+					io.Copy(c, r)
 					depFile.Close()
 				}
 				return nil

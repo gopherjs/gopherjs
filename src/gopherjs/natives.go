@@ -399,7 +399,7 @@ var newNumericArray = function(len) {
 
 var Go$now = function() { var msec = (new Date()).getTime(); return [Math.floor(msec / 1000), (msec % 1000) * 1000000]; };
 
-var packages = {};
+var Go$packages = {};
 
 // --- fake reflect package ---
 
@@ -425,7 +425,7 @@ Go$Int.Bits = Go$Uintptr.Bits = function() { return 32; };
 Go$Float64.Bits = function() { return 64; };
 Go$Complex128.Bits = function() { return 128; };
 
-packages["reflect"] = {
+Go$packages["reflect"] = {
 	DeepEqual: function(a, b) {
 		if (a === b) {
 			return true;
@@ -462,7 +462,7 @@ packages["reflect"] = {
 	Value: function() {}
 };
 
-packages["go/doc"] = {
+Go$packages["go/doc"] = {
 	Synopsis: function(s) { return ""; }
 };
 `

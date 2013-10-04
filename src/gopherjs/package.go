@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-var ReservedKeywords = []string{"arguments", "class", "delete", "eval", "export", "false", "implements", "interface", "in", "let", "new", "package", "private", "protected", "public", "static", "this", "true", "try", "yield", "packages"}
+var ReservedKeywords = []string{"arguments", "class", "delete", "eval", "export", "false", "implements", "interface", "in", "let", "new", "package", "private", "protected", "public", "static", "this", "true", "try", "yield"}
 
 type PkgContext struct {
 	pkg          *types.Package
@@ -174,7 +174,7 @@ func translatePackage(importPath string, dir string, goFiles []string, fileSet *
 
 			for _, importedPkg := range typesPkg.Imports() {
 				varName := c.newVarName(importedPkg.Name())
-				c.Printf(`var %s = packages["%s"];`, varName, importedPkg.Path())
+				c.Printf(`var %s = Go$packages["%s"];`, varName, importedPkg.Path())
 				c.pkgVars[importedPkg.Path()] = varName
 			}
 

@@ -251,7 +251,7 @@ func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, wr
 					return err
 				}
 
-				jsCode = append(jsCode, []byte(`packages["`+imp.ImportPath+`"] = (function() {`)...)
+				jsCode = append(jsCode, []byte(`Go$packages["`+imp.ImportPath+`"] = (function() {`)...)
 				jsCode = append(jsCode, imp.JavaScriptCode...)
 				exports := make([]string, 0)
 				for _, name := range t.typesConfig.Packages[imp.ImportPath].Scope().Names() {

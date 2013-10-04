@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
@@ -10,8 +8,6 @@ import (
 	"go/build"
 	"go/parser"
 	"go/token"
-	"io"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -24,7 +20,7 @@ type GopherPackage struct {
 	ImportedPackages []*GopherPackage
 	SrcLastModified  time.Time
 	Types            *types.Package
-	JavaScriptCode   *bytes.Buffer
+	JavaScriptCode   []byte
 }
 
 type PkgContext struct {
@@ -36,9 +32,9 @@ type PkgContext struct {
 	functionSig  *types.Signature
 	resultNames  []ast.Expr
 	postLoopStmt ast.Stmt
-	buffer       *bytes.Buffer
+	output       []byte
 	indentation  int
-	delayedLines *bytes.Buffer
+	delayedLines []byte
 }
 
 func (c *PkgContext) newVarName(prefix string) string {
@@ -73,17 +69,16 @@ func (c *PkgContext) nameForObject(o types.Object) string {
 }
 
 func (c *PkgContext) Write(b []byte) (int, error) {
-	return c.buffer.Write(b)
+	c.output = append(c.output, b...)
+	return len(b), nil
 }
 
 func (c *PkgContext) Printf(format string, values ...interface{}) {
 	c.Write([]byte(strings.Repeat("\t", c.indentation)))
 	fmt.Fprintf(c, format, values...)
 	c.Write([]byte{'\n'})
-	if c.delayedLines != nil {
-		c.delayedLines.WriteTo(c.buffer)
-		c.delayedLines = nil
-	}
+	c.Write(c.delayedLines)
+	c.delayedLines = nil
 }
 
 func (c *PkgContext) Indent(f func()) {
@@ -92,13 +87,13 @@ func (c *PkgContext) Indent(f func()) {
 	c.indentation -= 1
 }
 
-func (c *PkgContext) CatchOutput(f func()) *bytes.Buffer {
-	origbuffer := c.buffer
-	b := bytes.NewBuffer(nil)
-	c.buffer = b
+func (c *PkgContext) CatchOutput(f func()) []byte {
+	origoutput := c.output
+	c.output = nil
 	f()
-	c.buffer = origbuffer
-	return b
+	catched := c.output
+	c.output = origoutput
+	return catched
 }
 
 func (c *PkgContext) Delayed(f func()) {
@@ -132,7 +127,6 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet, config *types.Config
 	pkg.Types = typesPkg
 
 	if pkg.ImportPath == "reflect" || pkg.ImportPath == "go/doc" {
-		pkg.JavaScriptCode = bytes.NewBuffer(nil)
 		return
 	}
 
@@ -207,22 +201,7 @@ func (pkg *GopherPackage) translate(fileSet *token.FileSet, config *types.Config
 						return err
 					}
 
-					depFile, err := os.Open(imp.PkgObj)
-					if err != nil {
-						return err
-					}
-					r := bufio.NewReader(depFile)
-					for {
-						l, err := r.ReadSlice('\n')
-						if err != nil {
-							return err
-						}
-						if bytes.Equal(l, []byte("$$\n")) {
-							break
-						}
-					}
-					io.Copy(c, r)
-					depFile.Close()
+					c.Write(imp.JavaScriptCode)
 				}
 				return nil
 			}

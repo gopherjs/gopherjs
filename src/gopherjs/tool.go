@@ -11,6 +11,7 @@ import (
 	"go/token"
 	"gopherjs/gcexporter"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -39,30 +40,17 @@ func main() {
 			InstallSuffix: "js",
 		},
 		typesConfig: &types.Config{
+			Packages: map[string]*types.Package{
+				"unsafe": types.Unsafe,
+			},
+			Import: func(imports map[string]*types.Package, path string) (*types.Package, error) {
+				return imports[path], nil
+			},
 			Error: func(err error) {
 				if err.Error() != previousErr {
 					fmt.Println(err.Error())
 				}
 				previousErr = err.Error()
-			},
-			Import: func(imports map[string]*types.Package, path string) (*types.Package, error) {
-				if path == "unsafe" {
-					return types.Unsafe, nil
-				}
-				importedPkg, err := t.buildContext.Import(path, pkg.Dir, 0)
-				if err != nil {
-					return nil, err
-				}
-				if p, found := imports[path]; found {
-					return p, nil
-				}
-				objFile, err := os.Open(importedPkg.PkgObj)
-				if err != nil {
-					return nil, err
-				}
-				defer objFile.Close()
-				r := bufio.NewReader(objFile)
-				return types.GcImportData(imports, importedPkg.PkgObj, path, r)
 			},
 		},
 		packages: make(map[string]*GopherPackage),
@@ -155,6 +143,11 @@ The commands are:
 }
 
 func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, out io.Writer) error {
+	t.packages[pkg.ImportPath] = pkg
+	if pkg.ImportPath == "unsafe" {
+		return nil
+	}
+
 	fileInfo, err := os.Stat(os.Args[0]) // gopherjs itself
 	if err != nil {
 		return err
@@ -190,13 +183,42 @@ func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, ou
 		}
 	}
 
-	t.packages[pkg.ImportPath] = pkg
-
 	fileInfo, err = os.Stat(pkg.PkgObj)
-	if err == nil {
-		if fileInfo.ModTime().After(pkg.SrcLastModified) {
+	if err == nil && fileInfo.ModTime().After(pkg.SrcLastModified) {
+		// package object is up to date, load from disk if library
+		if pkg.IsCommand() {
 			return nil
 		}
+
+		objFile, err := os.Open(pkg.PkgObj)
+		if err != nil {
+			return err
+		}
+		defer objFile.Close()
+
+		t.typesConfig.Packages[pkg.ImportPath], err = types.GcImportData(t.typesConfig.Packages, pkg.PkgObj, pkg.ImportPath, bufio.NewReader(objFile))
+		if err != nil {
+			return err
+		}
+
+		// search backwards for $$ line
+		buf := make([]byte, 3)
+		objFile.Read(buf)
+		for string(buf) != "$$\n" {
+			if _, err := objFile.Seek(-4, 1); err != nil {
+				return nil // EOF
+			}
+			if _, err := objFile.Read(buf); err != nil {
+				return err
+			}
+		}
+
+		pkg.JavaScriptCode, err = ioutil.ReadAll(objFile)
+		if err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	if err := pkg.translate(fileSet, t.typesConfig); err != nil {
@@ -204,7 +226,7 @@ func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, ou
 	}
 
 	if out != nil {
-		pkg.JavaScriptCode.WriteTo(out)
+		out.Write(pkg.JavaScriptCode)
 		return nil
 	}
 
@@ -225,7 +247,7 @@ func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, ou
 	if !pkg.IsCommand() {
 		gcexporter.Write(pkg.Types, file)
 	}
-	pkg.JavaScriptCode.WriteTo(file)
+	file.Write(pkg.JavaScriptCode)
 	file.Close()
 	return nil
 }

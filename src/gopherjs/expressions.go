@@ -247,13 +247,13 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 				innerVarNames := c.usedVarNames[len(outerVarNames):]
 				if len(innerVarNames) != 0 {
-					varDecl = c.CatchOutput(func() { c.Printf("var %s;", strings.Join(innerVarNames, ", ")) }).String()
+					varDecl = string(c.CatchOutput(func() { c.Printf("var %s;", strings.Join(innerVarNames, ", ")) }))
 				}
 			})
 			c.Printf("")
-		}).String()
+		})
 
-		return "(function(" + params + ") {\n" + varDecl + body[:len(body)-1] + "})"
+		return "(function(" + params + ") {\n" + varDecl + string(body[:len(body)-1]) + "})"
 
 	case *ast.UnaryExpr:
 		op := e.Op.String()

@@ -5,6 +5,7 @@ import (
 	"code.google.com/p/go.tools/go/types"
 	"flag"
 	"fmt"
+	"go/ast"
 	"go/build"
 	"go/parser"
 	"go/scanner"
@@ -14,12 +15,21 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
+	"time"
 )
 
 type Translator struct {
 	buildContext *build.Context
 	typesConfig  *types.Config
 	packages     map[string]*GopherPackage
+}
+
+type GopherPackage struct {
+	*build.Package
+	ImportedPackages []*GopherPackage
+	SrcLastModified  time.Time
+	JavaScriptCode   []byte
 }
 
 func main() {
@@ -38,9 +48,7 @@ func main() {
 			InstallSuffix: "js",
 		},
 		typesConfig: &types.Config{
-			Packages: map[string]*types.Package{
-				"unsafe": types.Unsafe,
-			},
+			Packages: make(map[string]*types.Package),
 			Import: func(imports map[string]*types.Package, path string) (*types.Package, error) {
 				return imports[path], nil
 			},
@@ -145,6 +153,7 @@ The commands are:
 func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, writeToDisk bool) error {
 	t.packages[pkg.ImportPath] = pkg
 	if pkg.ImportPath == "unsafe" {
+		t.typesConfig.Packages["unsafe"] = types.Unsafe
 		return nil
 	}
 
@@ -221,9 +230,53 @@ func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, wr
 		return nil
 	}
 
-	if err := pkg.translate(fileSet, t.typesConfig); err != nil {
+	var jsCode []byte
+	if pkg.IsCommand() {
+		jsCode = []byte(strings.TrimSpace(prelude))
+		jsCode = append(jsCode, '\n')
+
+		loaded := make(map[*GopherPackage]bool)
+		var loadImports func(*GopherPackage) error
+		loadImports = func(pkg *GopherPackage) error {
+			for _, imp := range pkg.ImportedPackages {
+				if imp.ImportPath == "unsafe" || imp.ImportPath == "reflect" || imp.ImportPath == "go/doc" {
+					continue
+				}
+				if _, alreadyLoaded := loaded[imp]; alreadyLoaded {
+					continue
+				}
+				loaded[imp] = true
+
+				if err := loadImports(imp); err != nil {
+					return err
+				}
+
+				jsCode = append(jsCode, []byte(`packages["`+imp.ImportPath+`"] = (function() {`)...)
+				jsCode = append(jsCode, imp.JavaScriptCode...)
+				exports := make([]string, 0)
+				for _, name := range t.typesConfig.Packages[imp.ImportPath].Scope().Names() {
+					if ast.IsExported(name) {
+						exports = append(exports, fmt.Sprintf("%s: %s", name, name))
+					}
+				}
+				jsCode = append(jsCode, []byte("\treturn { "+strings.Join(exports, ", ")+" };\n")...)
+				jsCode = append(jsCode, []byte("})();\n")...)
+			}
+			return nil
+		}
+		if err := loadImports(pkg); err != nil {
+			return err
+		}
+	}
+	packageCode, err := translatePackage(pkg.ImportPath, pkg.Dir, pkg.GoFiles, fileSet, t.typesConfig)
+	if err != nil {
 		return err
 	}
+	jsCode = append(jsCode, packageCode...)
+	if pkg.IsCommand() {
+		jsCode = append(jsCode, []byte("main();")...)
+	}
+	pkg.JavaScriptCode = jsCode
 
 	if !writeToDisk {
 		return nil
@@ -244,7 +297,7 @@ func (t *Translator) buildPackage(pkg *GopherPackage, fileSet *token.FileSet, wr
 		file.Write([]byte("#!/usr/bin/env node\n"))
 	}
 	if !pkg.IsCommand() {
-		gcexporter.Write(pkg.Types, file)
+		gcexporter.Write(t.typesConfig.Packages[pkg.ImportPath], file)
 	}
 	file.Write(pkg.JavaScriptCode)
 	file.Close()

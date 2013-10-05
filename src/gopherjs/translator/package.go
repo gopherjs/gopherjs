@@ -29,6 +29,12 @@ func (c *PkgContext) newVarName(prefix string) string {
 	n := 0
 	for {
 		name := prefix
+		for _, b := range []byte(name) {
+			if b < '0' || b > 'z' {
+				name = "nonAasciiName"
+				break
+			}
+		}
 		if n != 0 {
 			name += fmt.Sprintf("%d", n)
 		}

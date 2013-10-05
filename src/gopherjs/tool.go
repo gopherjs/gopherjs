@@ -19,6 +19,10 @@ import (
 )
 
 func main() {
+	webMode := false
+	flag.BoolVar(&webMode, "w", false, "")
+	flag.Parse()
+
 	var previousErr string
 	var t *translator.Translator
 	t = &translator.Translator{
@@ -68,8 +72,6 @@ func main() {
 		FileSet:  token.NewFileSet(),
 		Packages: make(map[string]*translator.GopherPackage),
 	}
-
-	flag.Parse()
 
 	var pkg *translator.GopherPackage
 	cmd := flag.Arg(0)
@@ -154,12 +156,18 @@ The commands are:
 			fmt.Fprintln(os.Stderr, err)
 			return
 		}
-		file, err := os.OpenFile(pkg.PkgObj, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0777)
+		var perm os.FileMode = 0666
+		if !webMode {
+			perm = 0777
+		}
+		file, err := os.OpenFile(pkg.PkgObj, os.O_RDWR|os.O_CREATE|os.O_TRUNC, perm)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return
 		}
-		file.Write([]byte("#!/usr/bin/env node\n"))
+		if !webMode {
+			file.Write([]byte("#!/usr/bin/env node\n"))
+		}
 		file.Write(pkg.JavaScriptCode)
 		file.Close()
 	case "run":

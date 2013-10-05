@@ -112,6 +112,13 @@ func (t *Translator) buildPackage(pkg *GopherPackage) error {
 		files = append(files, file)
 	}
 
+	t.typesConfig.Import = func(imports map[string]*types.Package, path string) (*types.Package, error) {
+		_, err := t.getPackage(path, pkg.Dir)
+		if err != nil {
+			return nil, err
+		}
+		return imports[path], nil
+	}
 	packageCode, err := translatePackage(pkg.ImportPath, files, t.fileSet, t.typesConfig)
 	if err != nil {
 		return err
@@ -125,6 +132,7 @@ func (t *Translator) buildPackage(pkg *GopherPackage) error {
 		loaded := make(map[*types.Package]bool)
 		var loadImportsOf func(*types.Package) error
 		loadImportsOf = func(typesPkg *types.Package) error {
+			t.getPackage(typesPkg.Path(), pkg.Dir) // make sure package is fully loaded
 			for _, imp := range typesPkg.Imports() {
 				if imp.Path() == "unsafe" || imp.Path() == "reflect" || imp.Path() == "go/doc" {
 					continue
@@ -162,7 +170,7 @@ func (t *Translator) buildPackage(pkg *GopherPackage) error {
 	}
 	jsCode = append(jsCode, packageCode...)
 	if pkg.IsCommand() {
-		jsCode = append(jsCode, []byte("main();")...)
+		jsCode = append(jsCode, []byte("main();\n")...)
 	}
 	pkg.JavaScriptCode = jsCode
 

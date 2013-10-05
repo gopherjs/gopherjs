@@ -33,9 +33,6 @@ func main() {
 		},
 		typesConfig: &types.Config{
 			Packages: make(map[string]*types.Package),
-			Import: func(imports map[string]*types.Package, path string) (*types.Package, error) {
-				return imports[path], nil
-			},
 			Error: func(err error) {
 				if err.Error() != previousErr {
 					fmt.Println(err.Error())
@@ -47,7 +44,7 @@ func main() {
 			if name == "" {
 				name = os.Args[0] // gopherjs itself
 			}
-			fileInfo, err := os.Stat(os.Args[0])
+			fileInfo, err := os.Stat(name)
 			if err != nil {
 				return time.Unix(0, 0)
 			}
@@ -69,8 +66,8 @@ func main() {
 				file.Write([]byte("#!/usr/bin/env node\n"))
 			}
 			file.Write(pkg.JavaScriptCode)
-			file.WriteString("$$\n")
 			if !pkg.IsCommand() {
+				file.WriteString("$$\n")
 				gcexporter.Write(t.typesConfig.Packages[pkg.ImportPath], file)
 			}
 			file.Close()

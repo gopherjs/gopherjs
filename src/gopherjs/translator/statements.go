@@ -83,7 +83,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Printf("%s = %s;", refVar, c.translateExpr(expr))
 		c.Printf("%s = Go$typeOf(%s);", typeVar, refVar)
 		translateCond := func(cond ast.Expr) string {
-			return typeVar + " === " + c.typeName(c.info.Types[cond])
+			return c.typeCheck(typeVar, c.info.Types[cond])
 		}
 		printCaseBodyPrefix := func(conds []ast.Expr) {
 			if typeSwitchVar == "" {

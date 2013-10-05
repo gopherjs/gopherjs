@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"sort"
 	"strings"
 )
 
@@ -341,28 +340,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				}
 			}
 		case *types.Interface:
-			if t.MethodSet().Len() == 0 {
-				c.Printf("%s = function(t) { return true };", c.typeName(nt))
-				return
-			}
-			implementedBy := make([]string, 0)
-			for _, other := range c.info.Objects {
-				if otherTypeName, isTypeName := other.(*types.TypeName); isTypeName {
-					index := sort.SearchStrings(implementedBy, otherTypeName.Name())
-					if (index == len(implementedBy) || implementedBy[index] != otherTypeName.Name()) && types.IsAssignableTo(otherTypeName.Type(), t) {
-						implementedBy = append(implementedBy, otherTypeName.Name())
-						sort.Strings(implementedBy)
-					}
-				}
-			}
-			conditions := make([]string, len(implementedBy))
-			for i, other := range implementedBy {
-				conditions[i] = "t === " + other
-			}
-			if len(conditions) == 0 {
-				conditions = []string{"false"}
-			}
-			c.Printf("%s = function(t) { return %s };", c.typeName(nt), strings.Join(conditions, " || "))
+			c.Printf("%s = {};", c.typeName(nt))
 		default:
 			typeName := c.typeName(t)
 			c.Printf("%s = function() { %s.apply(this, arguments); };", c.typeName(nt), typeName)

@@ -134,6 +134,7 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 	jsCode = append(jsCode, '\n')
 
 	var initCalls []byte
+	var allTypeNames []*types.TypeName
 	loaded := make(map[*types.Package]bool)
 	var loadPackage func(*GopherPackage) error
 	loadPackage = func(gopherPkg *GopherPackage) error {
@@ -159,9 +160,13 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 		jsCode = append(jsCode, []byte("Go$packages[\""+gopherPkg.ImportPath+"\"] = (function() {\n")...)
 		jsCode = append(jsCode, gopherPkg.JavaScriptCode...)
 		exports := make([]string, 0)
-		for _, name := range t.TypesConfig.Packages[gopherPkg.ImportPath].Scope().Names() {
+		scope := t.TypesConfig.Packages[gopherPkg.ImportPath].Scope()
+		for _, name := range scope.Names() {
 			if ast.IsExported(name) || name == "init" || name == "main" {
 				exports = append(exports, fmt.Sprintf("%s: %s", name, name))
+				if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
+					allTypeNames = append(allTypeNames, typeName)
+				}
 			}
 			if name == "init" {
 				initCalls = append(initCalls, []byte("Go$packages[\""+gopherPkg.ImportPath+"\"].init();\n")...)
@@ -174,6 +179,30 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 	}
 	if err := loadPackage(pkg); err != nil {
 		return err
+	}
+
+	for _, t := range allTypeNames {
+		if in, isInterface := t.Type().Underlying().(*types.Interface); isInterface {
+			if in.MethodSet().Len() == 0 {
+				continue
+			}
+			implementedBy := make(map[string]bool, 0)
+			for _, other := range allTypeNames {
+				_, otherIsInterface := other.Type().Underlying().(*types.Interface)
+				otherType := other.Type()
+				if _, isStruct := otherType.Underlying().(*types.Struct); isStruct {
+					otherType = types.NewPointer(otherType)
+				}
+				if !otherIsInterface && types.IsAssignableTo(otherType, in) {
+					implementedBy[fmt.Sprintf("Go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
+				}
+			}
+			list := make([]string, 0, len(implementedBy))
+			for ref := range implementedBy {
+				list = append(list, ref)
+			}
+			jsCode = append(jsCode, []byte(fmt.Sprintf("Go$packages[\"%s\"].%s.Go$implementedBy = [%s];\n", t.Pkg().Path(), t.Name(), strings.Join(list, ", ")))...)
+		}
 	}
 
 	jsCode = append(jsCode, initCalls...)

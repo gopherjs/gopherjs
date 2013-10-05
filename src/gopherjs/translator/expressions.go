@@ -604,12 +604,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return c.translateExpr(e.X)
 		}
 		t := c.info.Types[e.Type]
-		check := fmt.Sprintf("Go$typeOf(Go$obj) === %s", c.typeName(t))
-		if e.Type != nil {
-			if _, isInterface := t.Underlying().(*types.Interface); isInterface {
-				check = fmt.Sprintf("%s(Go$typeOf(Go$obj))", c.typeName(t))
-			}
-		}
+		check := c.typeCheck("Go$typeOf(Go$obj)", t)
 		value := "Go$obj"
 		if isWrapped(t) {
 			value += ".v"
@@ -834,6 +829,16 @@ func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {
 		}
 		c.Printf("// skipped: %s %s", field.Name(), field.Type().String())
 	}
+}
+
+func (c *PkgContext) typeCheck(of string, to types.Type) string {
+	if in, isInterface := to.Underlying().(*types.Interface); isInterface {
+		if in.MethodSet().Len() == 0 {
+			return "true"
+		}
+		return fmt.Sprintf("%s.Go$implementedBy.indexOf(%s) !== -1", c.typeName(to), of)
+	}
+	return of + " === " + c.typeName(to)
 }
 
 func fixNumber(value string, basic *types.Basic) string {

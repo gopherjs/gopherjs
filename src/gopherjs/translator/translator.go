@@ -206,7 +206,7 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 	}
 
 	jsCode = append(jsCode, initCalls...)
-	jsCode = append(jsCode, []byte("Go$packages[\"main\"].main();\n")...)
+	jsCode = append(jsCode, []byte("Go$packages[\""+pkg.ImportPath+"\"].main();\n")...)
 
 	pkg.JavaScriptCode = jsCode
 

@@ -1,4 +1,4 @@
-package main
+package translator
 
 import (
 	"bufio"
@@ -13,12 +13,12 @@ import (
 )
 
 type Translator struct {
-	buildContext *build.Context
-	typesConfig  *types.Config
-	getModTime   func(string) time.Time
-	storePackage func(*GopherPackage) error
-	fileSet      *token.FileSet
-	packages     map[string]*GopherPackage
+	BuildContext *build.Context
+	TypesConfig  *types.Config
+	GetModTime   func(string) time.Time
+	StorePackage func(*GopherPackage) error
+	FileSet      *token.FileSet
+	Packages     map[string]*GopherPackage
 }
 
 type GopherPackage struct {
@@ -28,29 +28,29 @@ type GopherPackage struct {
 }
 
 func (t *Translator) getPackage(importPath string, srcDir string) (*GopherPackage, error) {
-	if pkg, found := t.packages[importPath]; found {
+	if pkg, found := t.Packages[importPath]; found {
 		return pkg, nil
 	}
 
-	otherPkg, err := t.buildContext.Import(importPath, srcDir, build.AllowBinary)
+	otherPkg, err := t.BuildContext.Import(importPath, srcDir, build.AllowBinary)
 	if err != nil {
 		return nil, err
 	}
 	pkg := &GopherPackage{Package: otherPkg}
-	t.packages[importPath] = pkg
-	if err := t.buildPackage(pkg); err != nil {
+	t.Packages[importPath] = pkg
+	if err := t.BuildPackage(pkg); err != nil {
 		return nil, err
 	}
 	return pkg, nil
 }
 
-func (t *Translator) buildPackage(pkg *GopherPackage) error {
+func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 	if pkg.ImportPath == "unsafe" {
-		t.typesConfig.Packages["unsafe"] = types.Unsafe
+		t.TypesConfig.Packages["unsafe"] = types.Unsafe
 		return nil
 	}
 
-	pkg.SrcModTime = t.getModTime("") // gopherjs itself
+	pkg.SrcModTime = t.GetModTime("") // gopherjs itself
 
 	for _, importedPkgPath := range pkg.Imports {
 		compiledPkg, err := t.getPackage(importedPkgPath, pkg.Dir)
@@ -63,20 +63,20 @@ func (t *Translator) buildPackage(pkg *GopherPackage) error {
 	}
 
 	for _, name := range pkg.GoFiles {
-		fileModTime := t.getModTime(pkg.Dir + "/" + name)
+		fileModTime := t.GetModTime(pkg.Dir + "/" + name)
 		if fileModTime.After(pkg.SrcModTime) {
 			pkg.SrcModTime = fileModTime
 		}
 	}
 
-	pkgObjModTime := t.getModTime(pkg.PkgObj)
+	pkgObjModTime := t.GetModTime(pkg.PkgObj)
 	if pkgObjModTime.Unix() != 0 && !pkg.SrcModTime.After(pkgObjModTime) && pkg.PkgObj != "" {
 		// package object is up to date, load from disk if library
 		if pkg.IsCommand() {
 			return nil
 		}
 
-		objFile, err := t.buildContext.OpenFile(pkg.PkgObj)
+		objFile, err := t.BuildContext.OpenFile(pkg.PkgObj)
 		if err != nil {
 			return err
 		}
@@ -94,32 +94,32 @@ func (t *Translator) buildPackage(pkg *GopherPackage) error {
 			pkg.JavaScriptCode = append(pkg.JavaScriptCode, line...)
 		}
 
-		t.typesConfig.Packages[pkg.ImportPath], err = types.GcImportData(t.typesConfig.Packages, pkg.PkgObj, pkg.ImportPath, r)
+		t.TypesConfig.Packages[pkg.ImportPath], err = types.GcImportData(t.TypesConfig.Packages, pkg.PkgObj, pkg.ImportPath, r)
 		return err
 	}
 
 	files := make([]*ast.File, 0)
 	for _, name := range pkg.GoFiles {
 		fullName := pkg.Dir + "/" + name
-		r, err := t.buildContext.OpenFile(fullName)
+		r, err := t.BuildContext.OpenFile(fullName)
 		if err != nil {
 			return err
 		}
-		file, err := parser.ParseFile(t.fileSet, fullName, r, 0)
+		file, err := parser.ParseFile(t.FileSet, fullName, r, 0)
 		if err != nil {
 			return err
 		}
 		files = append(files, file)
 	}
 
-	t.typesConfig.Import = func(imports map[string]*types.Package, path string) (*types.Package, error) {
+	t.TypesConfig.Import = func(imports map[string]*types.Package, path string) (*types.Package, error) {
 		_, err := t.getPackage(path, pkg.Dir)
 		if err != nil {
 			return nil, err
 		}
 		return imports[path], nil
 	}
-	packageCode, err := translatePackage(pkg.ImportPath, files, t.fileSet, t.typesConfig)
+	packageCode, err := translatePackage(pkg.ImportPath, files, t.FileSet, t.TypesConfig)
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,7 @@ func (t *Translator) buildPackage(pkg *GopherPackage) error {
 			}
 			return nil
 		}
-		if err := loadImportsOf(t.typesConfig.Packages[pkg.ImportPath]); err != nil {
+		if err := loadImportsOf(t.TypesConfig.Packages[pkg.ImportPath]); err != nil {
 			return err
 		}
 	}
@@ -175,7 +175,7 @@ func (t *Translator) buildPackage(pkg *GopherPackage) error {
 	pkg.JavaScriptCode = jsCode
 
 	if pkg.PkgObj != "" {
-		return t.storePackage(pkg)
+		return t.StorePackage(pkg)
 	}
 
 	return nil

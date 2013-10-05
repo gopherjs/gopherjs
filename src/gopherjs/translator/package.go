@@ -1,4 +1,4 @@
-package main
+package translator
 
 import (
 	"code.google.com/p/go.tools/go/exact"

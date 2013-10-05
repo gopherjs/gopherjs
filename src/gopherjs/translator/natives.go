@@ -1,4 +1,4 @@
-package main
+package translator
 
 // TODO cleanup global names
 var prelude = `

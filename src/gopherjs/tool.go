@@ -9,6 +9,7 @@ import (
 	"go/scanner"
 	"go/token"
 	"gopherjs/gcexporter"
+	"gopherjs/translator"
 	"io"
 	"io/ioutil"
 	"os"
@@ -19,9 +20,9 @@ import (
 
 func main() {
 	var previousErr string
-	var t *Translator
-	t = &Translator{
-		buildContext: &build.Context{
+	var t *translator.Translator
+	t = &translator.Translator{
+		BuildContext: &build.Context{
 			GOROOT:        build.Default.GOROOT,
 			GOPATH:        build.Default.GOPATH,
 			GOOS:          build.Default.GOOS,
@@ -31,7 +32,7 @@ func main() {
 			ReadDir:       ioutil.ReadDir,
 			OpenFile:      func(name string) (io.ReadCloser, error) { return os.Open(name) },
 		},
-		typesConfig: &types.Config{
+		TypesConfig: &types.Config{
 			Packages: make(map[string]*types.Package),
 			Error: func(err error) {
 				if err.Error() != previousErr {
@@ -40,7 +41,7 @@ func main() {
 				previousErr = err.Error()
 			},
 		},
-		getModTime: func(name string) time.Time {
+		GetModTime: func(name string) time.Time {
 			if name == "" {
 				name = os.Args[0] // gopherjs itself
 			}
@@ -50,7 +51,7 @@ func main() {
 			}
 			return fileInfo.ModTime()
 		},
-		storePackage: func(pkg *GopherPackage) error {
+		StorePackage: func(pkg *translator.GopherPackage) error {
 			if err := os.MkdirAll(path.Dir(pkg.PkgObj), 0777); err != nil {
 				return err
 			}
@@ -68,32 +69,32 @@ func main() {
 			file.Write(pkg.JavaScriptCode)
 			if !pkg.IsCommand() {
 				file.WriteString("$$\n")
-				gcexporter.Write(t.typesConfig.Packages[pkg.ImportPath], file)
+				gcexporter.Write(t.TypesConfig.Packages[pkg.ImportPath], file)
 			}
 			file.Close()
 			return nil
 		},
-		fileSet:  token.NewFileSet(),
-		packages: make(map[string]*GopherPackage),
+		FileSet:  token.NewFileSet(),
+		Packages: make(map[string]*translator.GopherPackage),
 	}
 
 	flag.Parse()
 
-	var pkg *GopherPackage
+	var pkg *translator.GopherPackage
 	cmd := flag.Arg(0)
 	switch cmd {
 	case "install":
-		buildPkg, err := t.buildContext.Import(flag.Arg(1), "", 0)
+		buildPkg, err := t.BuildContext.Import(flag.Arg(1), "", 0)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return
 		}
-		pkg = &GopherPackage{Package: buildPkg}
+		pkg = &translator.GopherPackage{Package: buildPkg}
 		pkg.PkgObj = pkg.BinDir + "/" + path.Base(pkg.ImportPath) + ".js"
 
 	case "build", "run":
 		filename := flag.Arg(1)
-		file, err := parser.ParseFile(t.fileSet, filename, nil, parser.ImportsOnly)
+		file, err := parser.ParseFile(t.FileSet, filename, nil, parser.ImportsOnly)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return
@@ -109,7 +110,7 @@ func main() {
 		if cmd == "build" {
 			pkgObj = basename[:len(basename)-3] + ".js"
 		}
-		pkg = &GopherPackage{
+		pkg = &translator.GopherPackage{
 			Package: &build.Package{
 				Name:       "main",
 				ImportPath: "main",
@@ -141,7 +142,7 @@ The commands are:
 		return
 	}
 
-	err := t.buildPackage(pkg)
+	err := t.BuildPackage(pkg)
 	if err != nil {
 		list, isList := err.(scanner.ErrorList)
 		if !isList {

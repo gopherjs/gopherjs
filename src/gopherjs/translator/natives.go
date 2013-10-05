@@ -23,7 +23,17 @@ Go$nil.length = 0;
 
 var Go$keys = Object.keys;
 var Go$min = Math.min;
-var Go$fromCharCode = String.fromCharCode;
+var Go$charToString = String.fromCharCode;
+var Go$sliceToString = function(slice) {
+	if (slice === null) {
+		return "";
+	}
+	var s = "";
+	for (var i = 0; i < slice.length; i += 100000) {
+		s += String.fromCharCode.apply(null, slice.array.subarray(slice.offset + i, slice.offset + Math.min(slice.length, i + 100000)));
+	}
+	return s;
+};
 
 var Go$copyFields = function(from, to) {
 	var keys = Object.keys(from);
@@ -265,11 +275,12 @@ var Go$copy = function(dst, src) {
 
 // TODO fix zero values
 var Go$append = function(slice, toAppend) {
-	if (slice === null || slice === 0) { // FIXME
-		return toAppend;
-	}
 	if (toAppend === null) {
 		return slice;
+	}
+	if (slice === null || slice === 0) { // FIXME
+		// this must be a new array, don't just return toAppend
+		slice = new toAppend.constructor(new toAppend.array.constructor(0));
 	}
 
 	var newArray = slice.array;

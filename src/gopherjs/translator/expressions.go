@@ -709,11 +709,11 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 					value += ".low"
 				}
 				if st.Info()&types.IsNumeric != 0 {
-					return fmt.Sprintf("Go$fromCharCode(%s)", value)
+					return fmt.Sprintf("Go$charToString(%s)", value)
 				}
 				return value
 			case *types.Slice:
-				return fmt.Sprintf("Go$fromCharCode.apply(null, (%s || Go$nil).Go$toArray())", value)
+				return fmt.Sprintf("Go$sliceToString(%s)", value)
 			default:
 				panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 			}
@@ -744,7 +744,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		switch t := exprType.Underlying().(type) {
 		case *types.Basic:
 			if t.Info()&types.IsString != 0 {
-				value = fmt.Sprintf("%s.Go$toSlice()", value)
+				value = fmt.Sprintf("(%s).Go$toSlice()", value)
 			}
 		case *types.Array, *types.Pointer:
 			value = fmt.Sprintf("new Go$Slice(%s)", value)

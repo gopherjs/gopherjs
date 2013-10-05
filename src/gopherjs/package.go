@@ -5,7 +5,6 @@ import (
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"sort"
 	"strings"
@@ -90,17 +89,7 @@ func (c *PkgContext) Delayed(f func()) {
 	c.delayedLines = c.CatchOutput(f)
 }
 
-func translatePackage(importPath string, dir string, goFiles []string, fileSet *token.FileSet, config *types.Config) ([]byte, error) {
-	files := make([]*ast.File, 0)
-	for _, name := range goFiles {
-		fullName := dir + "/" + name
-		file, err := parser.ParseFile(fileSet, fullName, nil, 0)
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, file)
-	}
-
+func translatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, config *types.Config) ([]byte, error) {
 	info := &types.Info{
 		Types:      make(map[ast.Expr]types.Type),
 		Values:     make(map[ast.Expr]exact.Value),
@@ -266,7 +255,10 @@ func translatePackage(importPath string, dir string, goFiles []string, fileSet *
 				}
 			}
 
-			c.Write([]byte(natives[importPath]))
+			if native, hasNative := natives[importPath]; hasNative {
+				c.Write([]byte(strings.TrimSpace(native)))
+				c.Write([]byte{'\n'})
+			}
 
 			if hasInit {
 				c.Printf("init();")

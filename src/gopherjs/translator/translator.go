@@ -124,53 +124,65 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 		return err
 	}
 
+	if !pkg.IsCommand() {
+		pkg.JavaScriptCode = packageCode
+		return t.StorePackage(pkg)
+	}
+
 	var jsCode []byte
-	if pkg.IsCommand() {
-		jsCode = []byte(strings.TrimSpace(prelude))
-		jsCode = append(jsCode, '\n')
+	jsCode = []byte(strings.TrimSpace(prelude))
+	jsCode = append(jsCode, '\n')
 
-		loaded := make(map[*types.Package]bool)
-		var loadImportsOf func(*GopherPackage) error
-		loadImportsOf = func(of *GopherPackage) error {
-			for _, imp := range t.TypesConfig.Packages[of.ImportPath].Imports() {
-				if imp.Path() == "unsafe" || imp.Path() == "reflect" || imp.Path() == "go/doc" {
-					continue
-				}
-				if _, alreadyLoaded := loaded[imp]; alreadyLoaded {
-					continue
-				}
-				loaded[imp] = true
-
-				gopherPkg, err := t.getPackage(imp.Path(), pkg.Dir)
-				if err != nil {
-					return err
-				}
-
-				if err := loadImportsOf(gopherPkg); err != nil {
-					return err
-				}
-
-				jsCode = append(jsCode, []byte(`Go$packages["`+imp.Path()+`"] = (function() {`)...)
-				jsCode = append(jsCode, gopherPkg.JavaScriptCode...)
-				exports := make([]string, 0)
-				for _, name := range imp.Scope().Names() {
-					if ast.IsExported(name) {
-						exports = append(exports, fmt.Sprintf("%s: %s", name, name))
-					}
-				}
-				jsCode = append(jsCode, []byte("\treturn { "+strings.Join(exports, ", ")+" };\n")...)
-				jsCode = append(jsCode, []byte("})();\n")...)
+	var initCalls []byte
+	loaded := make(map[*types.Package]bool)
+	var loadImportsOf func(*GopherPackage) error
+	loadImportsOf = func(of *GopherPackage) error {
+		for _, imp := range t.TypesConfig.Packages[of.ImportPath].Imports() {
+			if imp.Path() == "unsafe" || imp.Path() == "reflect" || imp.Path() == "go/doc" {
+				continue
 			}
-			return nil
+			if _, alreadyLoaded := loaded[imp]; alreadyLoaded {
+				continue
+			}
+			loaded[imp] = true
+
+			gopherPkg, err := t.getPackage(imp.Path(), pkg.Dir)
+			if err != nil {
+				return err
+			}
+
+			if err := loadImportsOf(gopherPkg); err != nil {
+				return err
+			}
+
+			jsCode = append(jsCode, []byte("Go$packages[\""+imp.Path()+"\"] = (function() {\n")...)
+			jsCode = append(jsCode, gopherPkg.JavaScriptCode...)
+			exports := make([]string, 0)
+			for _, name := range imp.Scope().Names() {
+				if ast.IsExported(name) || name == "init" {
+					exports = append(exports, fmt.Sprintf("%s: %s", name, name))
+				}
+				if name == "init" {
+					initCalls = append(initCalls, []byte("Go$packages[\""+imp.Path()+"\"].init();\n")...)
+				}
+			}
+			jsCode = append(jsCode, []byte("\treturn { "+strings.Join(exports, ", ")+" };\n")...)
+			jsCode = append(jsCode, []byte("})();\n")...)
 		}
-		if err := loadImportsOf(pkg); err != nil {
-			return err
-		}
+		return nil
 	}
+	if err := loadImportsOf(pkg); err != nil {
+		return err
+	}
+
 	jsCode = append(jsCode, packageCode...)
-	if pkg.IsCommand() {
-		jsCode = append(jsCode, []byte("main();\n")...)
+
+	jsCode = append(jsCode, initCalls...)
+	if t.TypesConfig.Packages["main"].Scope().Lookup("init") != nil {
+		jsCode = append(jsCode, []byte("init();\n")...)
 	}
+	jsCode = append(jsCode, []byte("main();\n")...)
+
 	pkg.JavaScriptCode = jsCode
 
 	if pkg.PkgObj != "" {

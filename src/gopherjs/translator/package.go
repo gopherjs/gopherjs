@@ -182,11 +182,7 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			}
 
 			// package functions
-			hasInit := false
 			for _, fun := range functionsByType[nil] {
-				if fun.Name.Name == "init" {
-					hasInit = true
-				}
 				if fun.Body == nil {
 					c.Printf(`var %s = function() { throw new Go$Panic("Native function not implemented: %s"); };`, fun.Name.Name, fun.Name.Name)
 					continue
@@ -258,10 +254,6 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			if native, hasNative := natives[importPath]; hasNative {
 				c.Write([]byte(strings.TrimSpace(native)))
 				c.Write([]byte{'\n'})
-			}
-
-			if hasInit {
-				c.Printf("init();")
 			}
 		})
 	}), nil

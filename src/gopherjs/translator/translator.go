@@ -210,9 +210,5 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 
 	pkg.JavaScriptCode = jsCode
 
-	if pkg.PkgObj != "" && !pkg.IsCommand() {
-		return t.StoreArchive(pkg)
-	}
-
 	return nil
 }

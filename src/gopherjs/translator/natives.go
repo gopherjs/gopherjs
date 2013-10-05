@@ -2,7 +2,6 @@ package translator
 
 // TODO cleanup global names
 var prelude = `
-"use strict";
 Error.stackTraceLimit = -1;
 
 var Go$obj, Go$tuple;
@@ -655,7 +654,7 @@ var natives = map[string]string{
 
 	"runtime": `
 		sizeof_C_MStats = 3696;
-		getgoroot = function() { return process.env["GOROOT"] || ""; };
+		getgoroot = function() { return Go$webMode ? "/" : (process.env["GOROOT"] || ""); };
 		SetFinalizer = function() {};
 	`,
 
@@ -681,17 +680,26 @@ var natives = map[string]string{
 	`,
 
 	"syscall": `
-		var syscall = require("syscall");
-		Syscall = syscall.Syscall;
-		Syscall6 = syscall.Syscall6;
-		RawSyscall = syscall.Syscall;
-		RawSyscall6 = syscall.Syscall6;
-		BytePtrFromString = function(s) { return [s.Go$toSlice(true).array, null]; };
+		if (!Go$webMode) {
+			var syscall = require("syscall");
+			Syscall = syscall.Syscall;
+			Syscall6 = syscall.Syscall6;
+			RawSyscall = syscall.Syscall;
+			RawSyscall6 = syscall.Syscall6;
+			BytePtrFromString = function(s) { return [s.Go$toSlice(true).array, null]; };
 
-		var envkeys = Object.keys(process.env);
-		envs = new Go$Slice(new Array(envkeys.length));
-		for(var i = 0; i < envkeys.length; i++) {
-			envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
+			var envkeys = Object.keys(process.env);
+			envs = new Go$Slice(new Array(envkeys.length));
+			for(var i = 0; i < envkeys.length; i++) {
+				envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
+			}
+		} else {
+			var notAvailable = function() { throw "Syscalls not available in browser." };
+			Syscall = notAvailable;
+			Syscall6 = notAvailable;
+			RawSyscall = notAvailable;
+			RawSyscall6 = notAvailable;
+			envs = new Go$Slice(new Array(0));
 		}
 	`,
 

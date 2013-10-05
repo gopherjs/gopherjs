@@ -166,8 +166,10 @@ The commands are:
 			return
 		}
 		if !webMode {
-			file.Write([]byte("#!/usr/bin/env node\n"))
+			fmt.Fprintln(file, "#!/usr/bin/env node")
 		}
+		fmt.Fprintln(file, `"use strict";`)
+		fmt.Fprintf(file, "var Go$webMode = %t;\n", webMode)
 		file.Write(pkg.JavaScriptCode)
 		file.Close()
 	case "run":
@@ -180,6 +182,8 @@ The commands are:
 			fmt.Fprintln(os.Stderr, err)
 			return
 		}
+		fmt.Fprintln(pipe, `"use strict";`)
+		fmt.Fprintln(pipe, "var Go$webMode = false;")
 		pipe.Write(pkg.JavaScriptCode)
 		pipe.Close()
 		node.Wait()

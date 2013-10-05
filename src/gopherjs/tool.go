@@ -51,26 +51,17 @@ func main() {
 			}
 			return fileInfo.ModTime()
 		},
-		StorePackage: func(pkg *translator.GopherPackage) error {
+		StoreArchive: func(pkg *translator.GopherPackage) error {
 			if err := os.MkdirAll(path.Dir(pkg.PkgObj), 0777); err != nil {
 				return err
 			}
-			var perm os.FileMode = 0666
-			if pkg.IsCommand() {
-				perm = 0777
-			}
-			file, err := os.OpenFile(pkg.PkgObj, os.O_RDWR|os.O_CREATE|os.O_TRUNC, perm)
+			file, err := os.Create(pkg.PkgObj)
 			if err != nil {
 				return err
 			}
-			if pkg.IsCommand() {
-				file.Write([]byte("#!/usr/bin/env node\n"))
-			}
 			file.Write(pkg.JavaScriptCode)
-			if !pkg.IsCommand() {
-				file.WriteString("$$\n")
-				gcexporter.Write(t.TypesConfig.Packages[pkg.ImportPath], file)
-			}
+			file.WriteString("$$\n")
+			gcexporter.Write(t.TypesConfig.Packages[pkg.ImportPath], file)
 			file.Close()
 			return nil
 		},
@@ -90,7 +81,9 @@ func main() {
 			return
 		}
 		pkg = &translator.GopherPackage{Package: buildPkg}
-		pkg.PkgObj = pkg.BinDir + "/" + path.Base(pkg.ImportPath) + ".js"
+		if pkg.IsCommand() {
+			pkg.PkgObj = pkg.BinDir + "/" + path.Base(pkg.ImportPath) + ".js"
+		}
 
 	case "build", "run":
 		filename := flag.Arg(1)
@@ -106,10 +99,6 @@ func main() {
 		}
 
 		basename := path.Base(filename)
-		pkgObj := ""
-		if cmd == "build" {
-			pkgObj = basename[:len(basename)-3] + ".js"
-		}
 		pkg = &translator.GopherPackage{
 			Package: &build.Package{
 				Name:       "main",
@@ -117,7 +106,7 @@ func main() {
 				Imports:    imports,
 				Dir:        path.Dir(filename),
 				GoFiles:    []string{basename},
-				PkgObj:     pkgObj,
+				PkgObj:     basename[:len(basename)-3] + ".js",
 			},
 		}
 
@@ -155,7 +144,25 @@ The commands are:
 		return
 	}
 
-	if cmd == "run" {
+	switch cmd {
+	case "build", "install":
+		if !pkg.IsCommand() {
+			return // already stored by BuildPackage
+		}
+
+		if err := os.MkdirAll(path.Dir(pkg.PkgObj), 0777); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return
+		}
+		file, err := os.OpenFile(pkg.PkgObj, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0777)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return
+		}
+		file.Write([]byte("#!/usr/bin/env node\n"))
+		file.Write(pkg.JavaScriptCode)
+		file.Close()
+	case "run":
 		node := exec.Command("node")
 		pipe, _ := node.StdinPipe()
 		node.Stdout = os.Stdout

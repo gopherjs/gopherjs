@@ -16,7 +16,7 @@ type Translator struct {
 	BuildContext *build.Context
 	TypesConfig  *types.Config
 	GetModTime   func(string) time.Time
-	StorePackage func(*GopherPackage) error
+	StoreArchive func(*GopherPackage) error
 	FileSet      *token.FileSet
 	Packages     map[string]*GopherPackage
 }
@@ -126,7 +126,7 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 	}
 
 	if !pkg.IsCommand() {
-		return t.StorePackage(pkg)
+		return t.StoreArchive(pkg)
 	}
 
 	var jsCode []byte
@@ -210,8 +210,8 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 
 	pkg.JavaScriptCode = jsCode
 
-	if pkg.PkgObj != "" {
-		return t.StorePackage(pkg)
+	if pkg.PkgObj != "" && !pkg.IsCommand() {
+		return t.StoreArchive(pkg)
 	}
 
 	return nil

@@ -385,9 +385,6 @@ var Go$sliceIsEqual = function(a, ai, b, bi) {
 	return a.array === b.array && a.offset + ai === b.offset + bi;
 };
 
-var Go$print = console.log;
-var Go$println = console.log;
-
 var Go$typeOf = function(value) {
 	if (value === null) {
 		return null;
@@ -649,7 +646,7 @@ var natives = map[string]string{
 	`,
 
 	"os": `
-		Args = new Go$Slice(process.argv.slice(1));
+		Args = new Go$Slice(Go$webMode ? [] : process.argv.slice(1));
 	`,
 
 	"runtime": `

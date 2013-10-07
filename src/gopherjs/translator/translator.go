@@ -162,9 +162,11 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 		exports := make([]string, 0)
 		scope := t.TypesConfig.Packages[gopherPkg.ImportPath].Scope()
 		for _, name := range scope.Names() {
-			if ast.IsExported(name) || name == "init" || name == "main" {
+			obj := scope.Lookup(name)
+			_, isTypeName := obj.(*types.TypeName)
+			if ast.IsExported(name) || isTypeName || name == "init" || name == "main" {
 				exports = append(exports, fmt.Sprintf("%s: %s", name, name))
-				if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
+				if typeName, isTypeName := obj.(*types.TypeName); isTypeName {
 					allTypeNames = append(allTypeNames, typeName)
 				}
 			}

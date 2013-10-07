@@ -28,7 +28,9 @@ func Write(pkg *types.Package, out io.Writer) {
 
 	for _, name := range pkg.Scope().Names() {
 		obj := pkg.Scope().Lookup(name)
-		if obj.IsExported() || name == "init" {
+
+		_, isTypeName := obj.(*types.TypeName)
+		if obj.IsExported() || isTypeName || name == "init" {
 			e.toExport = append(e.toExport, obj)
 		}
 	}

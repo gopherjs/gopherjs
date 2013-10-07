@@ -164,7 +164,7 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 
 	return c.CatchOutput(func() {
 		c.Indent(func() {
-			c.Printf("var %s;", strings.Join(c.usedVarNames[len(ReservedKeywords):], ", "))
+			c.Printf("var Go$pkg = {};")
 
 			for _, importedPkg := range typesPkg.Imports() {
 				varName := c.newVarName(importedPkg.Name())
@@ -177,13 +177,16 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				recvType := c.info.Objects[spec.Name].Type().(*types.Named)
 				_, isStruct := recvType.Underlying().(*types.Struct)
 				hasPtrType := !isStruct
+				name := c.translateExpr(spec.Name)
+				c.Printf("var %s;", name)
 				c.translateSpec(spec)
 				if hasPtrType {
-					c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", recvType.Obj().Name())
+					c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", name)
 				}
 				for _, fun := range functionsByType[recvType] {
 					c.translateFunction(fun, hasPtrType)
 				}
+				c.Printf("Go$pkg.%s = %s;", name, name)
 			}
 
 			// package functions
@@ -201,11 +204,7 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				funType := c.info.Objects[fun.Name].Type()
 				c.info.Types[fun.Name] = funType
 				c.info.Types[funcLit] = funType
-				c.translateStmt(&ast.AssignStmt{
-					Tok: token.DEFINE,
-					Lhs: []ast.Expr{fun.Name},
-					Rhs: []ast.Expr{funcLit},
-				}, "")
+				c.Printf("var %s = %s;", c.translateExpr(fun.Name), c.translateExpr(funcLit))
 			}
 
 			// constants and variables in dependency aware order
@@ -256,10 +255,21 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				}
 			}
 
+			// native implementations
 			if native, hasNative := natives[importPath]; hasNative {
 				c.Write([]byte(strings.TrimSpace(native)))
 				c.Write([]byte{'\n'})
 			}
+
+			// exports for package functions
+			for _, fun := range functionsByType[nil] {
+				name := fun.Name.Name
+				if fun.Name.IsExported() || name == "init" || name == "main" {
+					c.Printf("Go$pkg.%s = %s;", name, name)
+				}
+			}
+
+			c.Printf("return Go$pkg;")
 		})
 	}), nil
 }
@@ -388,8 +398,6 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 		}, body...)
 	}
 
-	lhs := ast.NewIdent(c.typeName(recvType) + ".prototype." + fun.Name.Name)
-	c.info.Types[lhs] = c.info.Objects[fun.Name].Type()
 	funcLit := &ast.FuncLit{
 		Type: fun.Type,
 		Body: &ast.BlockStmt{
@@ -397,11 +405,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, hasPtrType bool) {
 		},
 	}
 	c.info.Types[funcLit] = c.info.Objects[fun.Name].Type()
-	c.translateStmt(&ast.AssignStmt{
-		Tok: token.ASSIGN,
-		Lhs: []ast.Expr{lhs},
-		Rhs: []ast.Expr{funcLit},
-	}, "")
+	c.Printf("%s.prototype.%s = %s;", c.typeName(recvType), fun.Name.Name, c.translateExpr(funcLit))
 
 	if hasPtrType {
 		params := c.translateParams(fun.Type)

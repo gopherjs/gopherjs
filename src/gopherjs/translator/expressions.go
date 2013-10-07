@@ -623,10 +623,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		switch o := c.info.Objects[e].(type) {
 		case *types.PkgName:
 			return c.pkgVars[o.Pkg().Path()]
-		case *types.Var, *types.Const, *types.Func:
-			if _, isBuiltin := o.Type().(*types.Builtin); isBuiltin {
-				return "Go$" + e.Name
+		case *types.Var, *types.Const:
+			if o.Parent() == c.pkg.Scope() {
+				return "Go$pkg." + c.nameForObject(o)
 			}
+			return c.nameForObject(o)
+		case *types.Func:
 			return c.nameForObject(o)
 		case *types.TypeName:
 			return c.typeName(o.Type())

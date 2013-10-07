@@ -159,22 +159,15 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 
 		jsCode = append(jsCode, []byte("Go$packages[\""+gopherPkg.ImportPath+"\"] = (function() {\n")...)
 		jsCode = append(jsCode, gopherPkg.JavaScriptCode...)
-		exports := make([]string, 0)
 		scope := t.TypesConfig.Packages[gopherPkg.ImportPath].Scope()
 		for _, name := range scope.Names() {
-			obj := scope.Lookup(name)
-			_, isTypeName := obj.(*types.TypeName)
-			if ast.IsExported(name) || isTypeName || name == "init" || name == "main" {
-				exports = append(exports, fmt.Sprintf("%s: %s", name, name))
-				if typeName, isTypeName := obj.(*types.TypeName); isTypeName {
-					allTypeNames = append(allTypeNames, typeName)
-				}
+			if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
+				allTypeNames = append(allTypeNames, typeName)
 			}
 			if name == "init" {
 				initCalls = append(initCalls, []byte("Go$packages[\""+gopherPkg.ImportPath+"\"].init();\n")...)
 			}
 		}
-		jsCode = append(jsCode, []byte("\treturn { "+strings.Join(exports, ", ")+" };\n")...)
 		jsCode = append(jsCode, []byte("})();\n")...)
 
 		return nil

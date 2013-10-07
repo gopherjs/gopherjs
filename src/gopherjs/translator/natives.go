@@ -498,10 +498,10 @@ var natives = map[string]string{
 	`,
 
 	"math": `
-		MaxFloat32 = 3.40282346638528859811704183484516925440e+38;
-		SmallestNonzeroFloat32 = 1.401298464324817070923729583289916131280e-45;
-		MaxFloat64 = 1.797693134862315708145274237317043567981e+308;
-		SmallestNonzeroFloat64 = 4.940656458412465441765687928682213723651e-324;
+		Go$pkg.MaxFloat32 = 3.40282346638528859811704183484516925440e+38;
+		Go$pkg.SmallestNonzeroFloat32 = 1.401298464324817070923729583289916131280e-45;
+		Go$pkg.MaxFloat64 = 1.797693134862315708145274237317043567981e+308;
+		Go$pkg.SmallestNonzeroFloat64 = 4.940656458412465441765687928682213723651e-324;
 
 		Abs = Math.abs;
 		Exp = Math.exp;
@@ -646,11 +646,11 @@ var natives = map[string]string{
 	`,
 
 	"os": `
-		Args = new Go$Slice(Go$webMode ? [] : process.argv.slice(1));
+		Go$pkg.Args = new Go$Slice(Go$webMode ? [] : process.argv.slice(1));
 	`,
 
 	"runtime": `
-		sizeof_C_MStats = 3696;
+		Go$pkg.sizeof_C_MStats = 3696;
 		getgoroot = function() { return Go$webMode ? "/" : (process.env["GOROOT"] || ""); };
 		SetFinalizer = function() {};
 	`,
@@ -686,9 +686,9 @@ var natives = map[string]string{
 			BytePtrFromString = function(s) { return [s.Go$toSlice(true).array, null]; };
 
 			var envkeys = Object.keys(process.env);
-			envs = new Go$Slice(new Array(envkeys.length));
+			Go$pkg.envs = new Go$Slice(new Array(envkeys.length));
 			for(var i = 0; i < envkeys.length; i++) {
-				envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
+				Go$pkg.envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
 			}
 		} else {
 			var notAvailable = function() { throw "Syscalls not available in browser." };
@@ -696,7 +696,7 @@ var natives = map[string]string{
 			Syscall6 = notAvailable;
 			RawSyscall = notAvailable;
 			RawSyscall6 = notAvailable;
-			envs = new Go$Slice(new Array(0));
+			Go$pkg.envs = new Go$Slice(new Array(0));
 		}
 	`,
 

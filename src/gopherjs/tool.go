@@ -23,7 +23,8 @@ func main() {
 	flag.BoolVar(&webMode, "w", false, "")
 	flag.Parse()
 
-	var previousErr string
+	var firstError error
+	var previousErr error
 	var t *translator.Translator
 	t = &translator.Translator{
 		BuildContext: &build.Context{
@@ -39,10 +40,13 @@ func main() {
 		TypesConfig: &types.Config{
 			Packages: make(map[string]*types.Package),
 			Error: func(err error) {
-				if err.Error() != previousErr {
+				if firstError == nil {
+					firstError = err
+				}
+				if previousErr == nil || err.Error() != previousErr.Error() {
 					fmt.Println(err.Error())
 				}
-				previousErr = err.Error()
+				previousErr = err
 			},
 		},
 		GetModTime: func(name string) time.Time {
@@ -137,7 +141,9 @@ The commands are:
 	if err != nil {
 		list, isList := err.(scanner.ErrorList)
 		if !isList {
-			fmt.Fprintln(os.Stderr, err)
+			if err != firstError {
+				fmt.Fprintln(os.Stderr, err)
+			}
 			return
 		}
 		for _, entry := range list {

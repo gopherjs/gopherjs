@@ -27,6 +27,8 @@ type GopherPackage struct {
 	JavaScriptCode []byte
 }
 
+var PkgObjUpToDate = fmt.Errorf("Package object already up-to-date.")
+
 func (t *Translator) getPackage(importPath string, srcDir string) (*GopherPackage, error) {
 	if pkg, found := t.Packages[importPath]; found {
 		return pkg, nil
@@ -38,7 +40,7 @@ func (t *Translator) getPackage(importPath string, srcDir string) (*GopherPackag
 	}
 	pkg := &GopherPackage{Package: otherPkg}
 	t.Packages[importPath] = pkg
-	if err := t.BuildPackage(pkg); err != nil {
+	if err := t.BuildPackage(pkg); err != nil && err != PkgObjUpToDate {
 		return nil, err
 	}
 	return pkg, nil
@@ -73,7 +75,7 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 	if pkgObjModTime.Unix() != 0 && !pkg.SrcModTime.After(pkgObjModTime) && pkg.PkgObj != "" {
 		// package object is up to date, load from disk if library
 		if pkg.IsCommand() {
-			return nil
+			return PkgObjUpToDate
 		}
 
 		objFile, err := t.BuildContext.OpenFile(pkg.PkgObj)
@@ -95,7 +97,11 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 		}
 
 		t.TypesConfig.Packages[pkg.ImportPath], err = types.GcImportData(t.TypesConfig.Packages, pkg.PkgObj, pkg.ImportPath, r)
-		return err
+		if err != nil {
+			return err
+		}
+
+		return PkgObjUpToDate
 	}
 
 	files := make([]*ast.File, 0)

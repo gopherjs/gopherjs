@@ -139,6 +139,9 @@ The commands are:
 
 	err := t.BuildPackage(pkg)
 	if err != nil {
+		if err == translator.PkgObjUpToDate {
+			return
+		}
 		list, isList := err.(scanner.ErrorList)
 		if !isList {
 			if err != firstError {

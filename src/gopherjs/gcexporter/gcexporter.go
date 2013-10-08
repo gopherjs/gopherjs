@@ -30,7 +30,7 @@ func Write(pkg *types.Package, out io.Writer) {
 		obj := pkg.Scope().Lookup(name)
 
 		_, isTypeName := obj.(*types.TypeName)
-		if obj.IsExported() || isTypeName || name == "init" {
+		if obj.IsExported() || isTypeName || name == "init" || name == "initJS" {
 			e.toExport = append(e.toExport, obj)
 		}
 	}

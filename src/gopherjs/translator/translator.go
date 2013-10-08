@@ -134,6 +134,7 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 	jsCode = append(jsCode, '\n')
 
 	var initCalls []byte
+	var initJSCalls []byte
 	var allTypeNames []*types.TypeName
 	loaded := make(map[*types.Package]bool)
 	var loadPackage func(*GopherPackage) error
@@ -166,6 +167,9 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 			}
 			if name == "init" {
 				initCalls = append(initCalls, []byte("Go$packages[\""+gopherPkg.ImportPath+"\"].init();\n")...)
+			}
+			if name == "initJS" {
+				initJSCalls = append(initJSCalls, []byte("Go$packages[\""+gopherPkg.ImportPath+"\"].initJS();\n")...)
 			}
 		}
 		jsCode = append(jsCode, []byte("})();\n")...)
@@ -200,6 +204,7 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 		}
 	}
 
+	jsCode = append(jsCode, initJSCalls...)
 	jsCode = append(jsCode, initCalls...)
 	jsCode = append(jsCode, []byte("Go$packages[\""+pkg.ImportPath+"\"].main();\n")...)
 

@@ -452,17 +452,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		switch sel.Kind() {
 		case types.FieldVal:
-			val := c.translateExprToType(e.X, types.NewInterface(nil))
-			t := sel.Recv()
-			for _, index := range sel.Index() {
-				if ptr, isPtr := t.(*types.Pointer); isPtr {
-					t = ptr.Elem()
-				}
-				field := t.Underlying().(*types.Struct).Field(index)
-				val += "." + field.Name()
-				t = field.Type()
-			}
-			return val
+			return c.translateExprToType(e.X, types.NewInterface(nil)) + "." + translateSelection(sel)
 		case types.MethodVal:
 			parameters := makeParametersList()
 			recv := c.newVarName("_recv")
@@ -564,7 +554,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		switch f := e.Fun.(type) {
 		case *ast.SelectorExpr:
 			sel := c.info.Selections[f]
-			if sel.Kind() == types.MethodVal {
+
+			switch sel.Kind() {
+			case types.FieldVal:
+				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), translateSelection(sel))
+			case types.MethodVal:
 				methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
 				_, pointerExpected := methodsRecvType.(*types.Pointer)
 				_, isPointer := sel.Recv().Underlying().(*types.Pointer)
@@ -574,12 +568,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					fun = fmt.Sprintf("(new %s(function() { return %s; }, function(v) { %s = v; })).%s", c.typeName(methodsRecvType), target, target, f.Sel.Name)
 					break
 				}
-			}
-			if sel.Kind() == types.PackageObj {
+				fun = fmt.Sprintf("%s.%s", c.translateExprToType(f.X, types.NewInterface(nil)), f.Sel.Name)
+			case types.PackageObj:
 				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), f.Sel.Name)
-				break
+			default:
+				panic("")
 			}
-			fun = fmt.Sprintf("%s.%s", c.translateExprToType(f.X, types.NewInterface(nil)), f.Sel.Name)
 		case *ast.Ident, *ast.FuncLit, *ast.ParenExpr:
 			fun = c.translateExpr(e.Fun)
 		default:
@@ -843,6 +837,32 @@ func (c *PkgContext) typeCheck(of string, to types.Type) string {
 		return fmt.Sprintf("%s.Go$implementedBy.indexOf(%s) !== -1", c.typeName(to), of)
 	}
 	return of + " === " + c.typeName(to)
+}
+
+func translateSelection(sel *types.Selection) string {
+	var selectors []string
+	t := sel.Recv()
+	for _, index := range sel.Index() {
+		if ptr, isPtr := t.(*types.Pointer); isPtr {
+			t = ptr.Elem()
+		}
+		s := t.Underlying().(*types.Struct)
+		field := s.Field(index)
+		name := field.Name()
+		tag := s.Tag(index)
+		if tag != "" {
+			for _, part := range strings.Split(tag, ",") {
+				part = strings.TrimSpace(part)
+				if strings.HasPrefix(part, `js:"`) {
+					name = part[4 : len(part)-1]
+					break
+				}
+			}
+		}
+		selectors = append(selectors, name)
+		t = field.Type()
+	}
+	return strings.Join(selectors, ".")
 }
 
 func fixNumber(value string, basic *types.Basic) string {

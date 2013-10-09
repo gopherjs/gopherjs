@@ -695,11 +695,10 @@ var natives = map[string]string{
 				Go$pkg.envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
 			}
 		} else {
-			var notAvailable = function() { throw "Syscalls not available in browser." };
-			Syscall = notAvailable;
-			Syscall6 = notAvailable;
-			RawSyscall = notAvailable;
-			RawSyscall6 = notAvailable;
+			Syscall = Go$syscall;
+			Syscall6 = Go$syscall;
+			RawSyscall = Go$syscall;
+			RawSyscall6 = Go$syscall;
 			Go$pkg.envs = new Go$Slice(new Array(0));
 		}
 	`,

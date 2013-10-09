@@ -1,8 +1,8 @@
 package main
 
 import (
+	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
-	"flag"
 	"fmt"
 	"go/build"
 	"go/parser"
@@ -19,10 +19,6 @@ import (
 )
 
 func main() {
-	webMode := false
-	flag.BoolVar(&webMode, "w", false, "")
-	flag.Parse()
-
 	var firstError error
 	var previousErr error
 	var t *translator.Translator
@@ -78,10 +74,13 @@ func main() {
 	}
 
 	var pkg *translator.GopherPackage
-	cmd := flag.Arg(0)
+	cmd := "help"
+	if len(os.Args) >= 2 {
+		cmd = os.Args[1]
+	}
 	switch cmd {
 	case "install":
-		buildPkg, err := t.BuildContext.Import(flag.Arg(1), "", 0)
+		buildPkg, err := t.BuildContext.Import(os.Args[2], "", 0)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return
@@ -92,7 +91,7 @@ func main() {
 		}
 
 	case "build", "run":
-		filename := flag.Arg(1)
+		filename := os.Args[2]
 		file, err := parser.ParseFile(t.FileSet, filename, nil, parser.ImportsOnly)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -116,7 +115,7 @@ func main() {
 			},
 		}
 
-	case "help", "":
+	case "help":
 		os.Stderr.WriteString(`GopherJS is a tool for compiling Go source code to JavaScript.
 
 Usage:
@@ -161,6 +160,12 @@ The commands are:
 			return // already stored by BuildPackage
 		}
 
+		webMode := false
+		webModeConst := t.TypesConfig.Packages[pkg.ImportPath].Scope().Lookup("gopherjsWebMode")
+		if webModeConst != nil {
+			webMode = exact.BoolVal(webModeConst.(*types.Const).Val())
+		}
+
 		if err := os.MkdirAll(path.Dir(pkg.PkgObj), 0777); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return
@@ -179,6 +184,9 @@ The commands are:
 		}
 		fmt.Fprintln(file, `"use strict";`)
 		fmt.Fprintf(file, "var Go$webMode = %t;\n", webMode)
+		if webMode {
+			fmt.Fprintln(file, `var Go$syscall = function() { throw "Syscalls not available in browser." };`)
+		}
 		file.Write(pkg.JavaScriptCode)
 		file.Close()
 	case "run":

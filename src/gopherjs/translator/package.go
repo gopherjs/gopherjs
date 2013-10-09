@@ -238,10 +238,6 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 							values = []ast.Expr{spec.Values[i]}
 						}
 					case *types.Const:
-						if o.Name() == "initJS" {
-							c.Printf("Go$pkg.initJS = function() {\n%s\n}", exact.StringVal(o.Val()))
-							continue
-						}
 						id := ast.NewIdent("")
 						c.info.Types[id] = o.Type()
 						c.info.Values[id] = o.Val()

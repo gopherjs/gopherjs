@@ -401,9 +401,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				index = fmt.Sprintf("(%s || Go$nil).Go$key()", index)
 			}
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
-				return fmt.Sprintf(`(Go$obj = (%s || false)["$" + %s], Go$obj !== undefined ? [Go$obj.v, true] : [%s, false])`, x, index, c.zeroValue(t.Elem()))
+				return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? [Go$obj.v, true] : [%s, false])`, x, index, c.zeroValue(t.Elem()))
 			}
-			return fmt.Sprintf(`(Go$obj = (%s || false)["$" + %s], Go$obj !== undefined ? Go$obj.v : %s)`, x, index, c.zeroValue(t.Elem()))
+			return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? Go$obj.v : %s)`, x, index, c.zeroValue(t.Elem()))
 		case *types.Basic:
 			return fmt.Sprintf("%s.charCodeAt(%s)", x, c.translateExprToType(e.Index, types.Typ[types.Int]))
 		default:
@@ -530,7 +530,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					if hasId(c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()) {
 						index = fmt.Sprintf("(%s || Go$nil).Go$key()", index)
 					}
-					return fmt.Sprintf(`delete %s["$" + %s]`, c.translateExpr(e.Args[0]), index)
+					return fmt.Sprintf(`delete %s[%s]`, c.translateExpr(e.Args[0]), index)
 				case "copy":
 					return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(nil)), c.translateExprToType(e.Args[1], types.NewSlice(nil)))
 				case "print", "println":

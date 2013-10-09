@@ -245,9 +245,13 @@ var Go$clear = function(array) { for (var i = 0; i < array.length; i++) { array[
 var Go$Map = function(data, capacity) {
 	data = data || [];
 	for (var i = 0; i < data.length; i += 2) {
-		this["$" + data[i]] = { k: data[i], v: data[i + 1] };
+		this[data[i]] = { k: data[i], v: data[i + 1] };
 	}
 };
+var Go$objectProperyNames = Object.getOwnPropertyNames(Object.prototype);
+for (var i = 0; i < Go$objectProperyNames.length; i++) {
+	Go$Map.prototype[Go$objectProperyNames[i]] = undefined;
+}
 
 var Go$Interface = function(value) {
 	return value;

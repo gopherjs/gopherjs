@@ -373,7 +373,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					if hasId(t.Key()) {
 						key = fmt.Sprintf("(%s || Go$nil).Go$key()", key)
 					}
-					c.Printf(`%s["$" + %s] = { k: %s, v: %s };`, c.translateExpr(l.X), key, keyVar, rhs)
+					c.Printf(`%s[%s] = { k: %s, v: %s };`, c.translateExpr(l.X), key, keyVar, rhs)
 					continue
 				}
 			}

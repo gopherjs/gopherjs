@@ -449,7 +449,7 @@ func (c *PkgContext) translateParams(t *ast.FuncType) string {
 	return strings.Join(params, ", ")
 }
 
-func (c *PkgContext) translateArgs(call *ast.CallExpr) []string {
+func (c *PkgContext) translateArgs(call *ast.CallExpr, isJavaScriptFunction bool) []string {
 	funType := c.info.Types[call.Fun].Underlying().(*types.Signature)
 	args := make([]string, funType.Params().Len())
 	for i := range args {
@@ -462,7 +462,13 @@ func (c *PkgContext) translateArgs(call *ast.CallExpr) []string {
 			args[i] = fmt.Sprintf("new Go$Slice(%s)", createListComposite(varargType, varargs))
 			break
 		}
-		args[i] = c.translateExprToType(call.Args[i], funType.Params().At(i).Type())
+		argType := funType.Params().At(i).Type()
+		args[i] = c.translateExprToType(call.Args[i], argType)
+		if isJavaScriptFunction {
+			if _, isSlice := argType.Underlying().(*types.Slice); isSlice {
+				args[i] = fmt.Sprintf("(%s || Go$nil).Go$toArray()", args[i])
+			}
+		}
 	}
 	return args
 }

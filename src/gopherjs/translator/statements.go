@@ -248,7 +248,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				return
 			}
 		}
-		args := strings.Join(c.translateArgs(s.Call), ", ")
+		args := strings.Join(c.translateArgs(s.Call, false), ", ")
 		if sel, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
 			c.Printf(`Go$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, args)
 			return

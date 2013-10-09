@@ -452,8 +452,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		switch sel.Kind() {
 		case types.FieldVal:
-			selectors, _ := translateSelection(sel)
-			return c.translateExprToType(e.X, types.NewInterface(nil)) + "." + selectors
+			return c.translateExprToType(e.X, types.NewInterface(nil)) + "." + translateSelection(sel)
 		case types.MethodVal:
 			parameters := makeParametersList()
 			recv := c.newVarName("_recv")
@@ -552,16 +551,13 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 
 		var fun string
-		isJavaScriptFunction := false
 		switch f := e.Fun.(type) {
 		case *ast.SelectorExpr:
 			sel := c.info.Selections[f]
 
 			switch sel.Kind() {
 			case types.FieldVal:
-				var selectors string
-				selectors, isJavaScriptFunction = translateSelection(sel)
-				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), selectors)
+				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), translateSelection(sel))
 			case types.MethodVal:
 				methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
 				_, pointerExpected := methodsRecvType.(*types.Pointer)
@@ -590,7 +586,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			return fmt.Sprintf("(Go$tuple = %s, %s(%s))", c.translateExpr(e.Args[0]), fun, strings.Join(argRefs, ", "))
 		}
-		return fmt.Sprintf("%s(%s)", fun, strings.Join(c.translateArgs(e, isJavaScriptFunction), ", "))
+		return fmt.Sprintf("%s(%s)", fun, strings.Join(c.translateArgs(e), ", "))
 
 	case *ast.StarExpr:
 		t := exprType
@@ -843,9 +839,8 @@ func (c *PkgContext) typeCheck(of string, to types.Type) string {
 	return of + " === " + c.typeName(to)
 }
 
-func translateSelection(sel *types.Selection) (string, bool) {
+func translateSelection(sel *types.Selection) string {
 	var selectors []string
-	isJS := false
 	t := sel.Recv()
 	for _, index := range sel.Index() {
 		if ptr, isPtr := t.(*types.Pointer); isPtr {
@@ -853,22 +848,10 @@ func translateSelection(sel *types.Selection) (string, bool) {
 		}
 		s := t.Underlying().(*types.Struct)
 		field := s.Field(index)
-		name := field.Name()
-		tag := s.Tag(index)
-		if tag != "" {
-			for _, part := range strings.Split(tag, ",") {
-				part = strings.TrimSpace(part)
-				if strings.HasPrefix(part, `js:"`) {
-					name = part[4 : len(part)-1]
-					isJS = true
-					break
-				}
-			}
-		}
-		selectors = append(selectors, name)
+		selectors = append(selectors, field.Name())
 		t = field.Type()
 	}
-	return strings.Join(selectors, "."), isJS
+	return strings.Join(selectors, ".")
 }
 
 func fixNumber(value string, basic *types.Basic) string {

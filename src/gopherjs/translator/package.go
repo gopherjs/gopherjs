@@ -185,7 +185,7 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				}
 				for _, fun := range functionsByType[recvType] {
 					funName := fun.Name.Name
-					jsCode, _ := typesPkg.Scope().Lookup(c.typeName(recvType) + "_" + funName + "_js").(*types.Const)
+					jsCode, _ := typesPkg.Scope().Lookup("js_" + c.typeName(recvType) + "_" + funName).(*types.Const)
 					if jsCode != nil {
 						n := c.usedVarNames
 						c.Printf("%s.prototype.%s = function(%s) {\n%s\n};", recvName, funName, c.translateParams(fun.Type), exact.StringVal(jsCode.Val()))
@@ -200,7 +200,7 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			// package functions
 			for _, fun := range functionsByType[nil] {
 				name := fun.Name.Name
-				jsCode, _ := typesPkg.Scope().Lookup(name + "_js").(*types.Const)
+				jsCode, _ := typesPkg.Scope().Lookup("js_" + name).(*types.Const)
 				if jsCode != nil {
 					n := c.usedVarNames
 					c.Printf("var %s = function(%s) {\n%s\n};", name, c.translateParams(fun.Type), exact.StringVal(jsCode.Val()))
@@ -228,7 +228,7 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			pendingObjects := make(map[types.Object]bool)
 			for _, spec := range valueSpecs {
 				for i, name := range spec.Names {
-					if strings.HasSuffix(name.Name, "_js") {
+					if strings.HasPrefix(name.Name, "js_") {
 						continue
 					}
 					var values []ast.Expr

@@ -138,7 +138,11 @@ func (e *exporter) makeType(ty types.Type) string {
 			if !field.Anonymous() {
 				name = e.makeName(field)
 			}
-			fields[i] = name + " " + e.makeType(field.Type())
+			tag := ""
+			if t.Tag(i) != "" {
+				tag = fmt.Sprintf(" %#v", t.Tag(i))
+			}
+			fields[i] = name + " " + e.makeType(field.Type()) + tag
 		}
 		return "struct { " + strings.Join(fields, "; ") + " }"
 	case *types.Interface:

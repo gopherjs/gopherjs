@@ -177,22 +177,38 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				recvType := c.info.Objects[spec.Name].Type().(*types.Named)
 				_, isStruct := recvType.Underlying().(*types.Struct)
 				hasPtrType := !isStruct
-				name := c.translateExpr(spec.Name)
-				c.Printf("var %s;", name)
+				recvName := c.translateExpr(spec.Name)
+				c.Printf("var %s;", recvName)
 				c.translateSpec(spec)
 				if hasPtrType {
-					c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", name)
+					c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", recvName)
 				}
 				for _, fun := range functionsByType[recvType] {
+					funName := fun.Name.Name
+					jsCode, _ := typesPkg.Scope().Lookup(c.typeName(recvType) + "_" + funName + "_js").(*types.Const)
+					if jsCode != nil {
+						n := c.usedVarNames
+						c.Printf("%s.prototype.%s = function(%s) {\n%s\n};", recvName, funName, c.translateParams(fun.Type), exact.StringVal(jsCode.Val()))
+						c.usedVarNames = n
+						continue
+					}
 					c.translateFunction(fun, hasPtrType)
 				}
-				c.Printf("Go$pkg.%s = %s;", name, name)
+				c.Printf("Go$pkg.%s = %s;", recvName, recvName)
 			}
 
 			// package functions
 			for _, fun := range functionsByType[nil] {
+				name := fun.Name.Name
+				jsCode, _ := typesPkg.Scope().Lookup(name + "_js").(*types.Const)
+				if jsCode != nil {
+					n := c.usedVarNames
+					c.Printf("var %s = function(%s) {\n%s\n};", name, c.translateParams(fun.Type), exact.StringVal(jsCode.Val()))
+					c.usedVarNames = n
+					continue
+				}
 				if fun.Body == nil {
-					c.Printf(`var %s = function() { throw new Go$Panic("Native function not implemented: %s"); };`, fun.Name.Name, fun.Name.Name)
+					c.Printf(`var %s = function() { throw new Go$Panic("Native function not implemented: %s"); };`, name, name)
 					continue
 				}
 				funcLit := &ast.FuncLit{
@@ -212,6 +228,9 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			pendingObjects := make(map[types.Object]bool)
 			for _, spec := range valueSpecs {
 				for i, name := range spec.Names {
+					if strings.HasSuffix(name.Name, "_js") {
+						continue
+					}
 					var values []ast.Expr
 					switch o := c.info.Objects[name].(type) {
 					case *types.Var:
@@ -220,10 +239,7 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						}
 					case *types.Const:
 						if o.Name() == "initJS" {
-							c.Printf("Go$pkg.initJS = function() {")
-							c.Write([]byte(exact.StringVal(o.Val())))
-							c.Write([]byte{'\n'})
-							c.Printf("}")
+							c.Printf("Go$pkg.initJS = function() {\n%s\n}", exact.StringVal(o.Val()))
 							continue
 						}
 						id := ast.NewIdent("")

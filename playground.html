@@ -1,0 +1,125 @@
+<!doctype html>
+<html ng-app="playground">
+  <head>
+    <title>GopherJS Playground</title>
+    <style>
+      html {
+        height: 100%;
+      }
+      body {
+        color: #000;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        width: 100%;
+      }
+      a {
+        color: #009;
+      }
+      #wrap {
+        background: #ffd;
+        bottom: 25%;
+        left: 0;
+        margin: 0;
+        padding: 5px;
+        position: absolute;
+        right: 0;
+        top: 50px;
+      }
+      #code, #output, pre, .lines {
+        font-family: Menlo,Courier\ New,monospace;
+        font-size: 11pt;
+      }
+      #code {
+        background: inherit;
+        border: none;
+        float: right;
+        height: 100%;
+        margin: 0;
+        outline: none;
+        padding: 0;
+        resize: none;
+        width: 100%;
+        wrap: off;
+      }
+      #output {
+        bottom: 0;
+        left: 0;
+        padding: 8px;
+        position: absolute;
+        right: 0;
+        top: 75%;
+      }
+      #output .system,#output .loading {
+        color: #999;
+    M}
+      #output .err {
+        color: #900;
+      }
+      #output pre {
+        margin: 0;
+      }
+      #banner {
+        height: 50px;
+        left: 0;
+        position: absolute;
+        right: 0;
+        top: 0;
+      }
+      #head {
+        float: left;
+        font-family: Georgia,serif;
+        font-size: 30px;
+        padding: 8px;
+      }
+      #controls {
+        float: left;
+        padding: 10px;
+      }
+      input[type="button"] {
+        background: #eee;
+        border: 1px solid #ccc;
+        color: #000;
+        font-size: 20px;
+        height: 30px;
+      }
+      input[type="button"]:hover {
+        background: #666;
+        color: #fff;
+      }
+      .lines {
+        float: left;
+        overflow: hidden;
+        text-align: right;
+      }
+      .lines div {
+        color: #d3d3d3;
+        padding-right: 5px;
+      }
+      .lineerror {
+        background: #fdd;
+        color: red;
+      }
+      .exit {
+        color: #d3d3d3;
+      }
+    </style>
+    <script src="angular.js"></script>
+    <script src="bin/playground.js"></script>
+  </head>
+  <body ng-controller="PlaygroundCtrl">
+    <div id="banner">
+      <div id="head" itemprop="name">GopherJS Playground</div>
+      <div id="controls">
+        <input type="button" value="Run" ng-click="run()">
+        <input type="button" value="Format" ng-click="format()">
+      </div>
+    </div>
+    <div id="wrap">
+      <textarea ng-model="code" id="code" autocorrect="off" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+    </div>
+    <div id="output">
+      <div ng-repeat="line in output" class="{{line.Type}}">{{line.Content}}</div>
+    </div>
+</body>
+</html>

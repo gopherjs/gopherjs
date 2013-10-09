@@ -1,4 +1,5 @@
 /bin
 /pkg
 /src/code.google.com
+/src/playground/files.go
 /node-syscall/build

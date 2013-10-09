@@ -1,6 +1,6 @@
-diff -r a38424bcd78c go/types/expr.go
---- a/go/types/expr.go	Mon Sep 30 12:39:54 2013 -0400
-+++ b/go/types/expr.go	Mon Sep 30 20:21:58 2013 +0200
+diff -r 1d462abd2860 go/types/expr.go
+--- a/go/types/expr.go	Wed Oct 09 16:35:59 2013 -0400
++++ b/go/types/expr.go	Wed Oct 09 22:56:42 2013 +0200
 @@ -723,9 +723,12 @@
  	}
  
@@ -26,9 +26,22 @@ diff -r a38424bcd78c go/types/expr.go
  	case constant:
  		typ = x.typ
  		val = x.val
-diff -r a38424bcd78c go/types/methodset.go
---- a/go/types/methodset.go	Mon Sep 30 12:39:54 2013 -0400
-+++ b/go/types/methodset.go	Mon Sep 30 20:21:58 2013 +0200
+diff -r 1d462abd2860 go/types/gcimporter.go
+--- a/go/types/gcimporter.go	Wed Oct 09 16:35:59 2013 -0400
++++ b/go/types/gcimporter.go	Wed Oct 09 22:56:42 2013 +0200
+@@ -723,7 +723,8 @@
+ func (p *gcParser) parseImportDecl() {
+ 	p.expectKeyword("import")
+ 	name := p.parsePackageName()
+-	p.getPkg(p.parsePackageId(), name)
++	pkg := p.getPkg(p.id, "")
++	pkg.imports = append(pkg.imports, p.getPkg(p.parsePackageId(), name))
+ }
+ 
+ // int_lit = [ "+" | "-" ] { "0" ... "9" } .
+diff -r 1d462abd2860 go/types/methodset.go
+--- a/go/types/methodset.go	Wed Oct 09 16:35:59 2013 -0400
++++ b/go/types/methodset.go	Wed Oct 09 22:56:42 2013 +0200
 @@ -121,8 +121,8 @@
  		var next []embeddedType // embedded types found at current depth
  
@@ -60,9 +73,43 @@ diff -r a38424bcd78c go/types/methodset.go
  	for i, f := range list {
  		key := f.Id()
  		// if f is not in the set, add it
-diff -r a38424bcd78c go/types/sizes.go
---- a/go/types/sizes.go	Mon Sep 30 12:39:54 2013 -0400
-+++ b/go/types/sizes.go	Mon Sep 30 20:21:58 2013 +0200
+diff -r 1d462abd2860 go/types/resolver.go
+--- a/go/types/resolver.go	Wed Oct 09 16:35:59 2013 -0400
++++ b/go/types/resolver.go	Wed Oct 09 22:56:42 2013 +0200
+@@ -316,18 +316,18 @@
+ 				obj := NewFunc(d.Name.Pos(), pkg, name, nil)
+ 				if d.Recv == nil {
+ 					// regular function
+-					if name == "init" {
+-						// don't declare init functions in the package scope - they are invisible
+-						obj.parent = pkg.scope
+-						check.recordObject(d.Name, obj)
+-						// init functions must have a body
+-						if d.Body == nil {
+-							check.errorf(obj.pos, "missing function body")
+-							// ok to continue
+-						}
+-					} else {
+-						check.declareObj(pkg.scope, d.Name, obj)
+-					}
++					// if name == "init" {
++					// 	// don't declare init functions in the package scope - they are invisible
++					// 	obj.parent = pkg.scope
++					// 	check.recordObject(d.Name, obj)
++					// 	// init functions must have a body
++					// 	if d.Body == nil {
++					// 		check.errorf(obj.pos, "missing function body")
++					// 		// ok to continue
++					// 	}
++					// } else {
++					check.declareObj(pkg.scope, d.Name, obj)
++					// }
+ 				} else {
+ 					// Associate method with receiver base type name, if possible.
+ 					// Ignore methods that have an invalid receiver, or a blank _
+diff -r 1d462abd2860 go/types/sizes.go
+--- a/go/types/sizes.go	Wed Oct 09 16:35:59 2013 -0400
++++ b/go/types/sizes.go	Wed Oct 09 22:56:42 2013 +0200
 @@ -121,7 +121,7 @@
  
  // DefaultPtrSize is the default size of ints, uint, and pointers, in bytes,
@@ -72,9 +119,9 @@ diff -r a38424bcd78c go/types/sizes.go
  
  // DefaultSizeof implements the default size computation
  // for unsafe.Sizeof. It is used if Config.Sizeof == nil.
-diff -r a38424bcd78c go/types/typemap/typemap.go
---- a/go/types/typemap/typemap.go	Mon Sep 30 12:39:54 2013 -0400
-+++ b/go/types/typemap/typemap.go	Mon Sep 30 20:21:58 2013 +0200
+diff -r 1d462abd2860 go/types/typemap/typemap.go
+--- a/go/types/typemap/typemap.go	Wed Oct 09 16:35:59 2013 -0400
++++ b/go/types/typemap/typemap.go	Wed Oct 09 22:56:42 2013 +0200
 @@ -130,10 +130,7 @@
  
  // Len returns the number of map entries.
@@ -87,9 +134,9 @@ diff -r a38424bcd78c go/types/typemap/typemap.go
  }
  
  // Iterate calls function f on each entry in the map in unspecified order.
-diff -r a38424bcd78c go/types/types.go
---- a/go/types/types.go	Mon Sep 30 12:39:54 2013 -0400
-+++ b/go/types/types.go	Mon Sep 30 20:21:58 2013 +0200
+diff -r 1d462abd2860 go/types/types.go
+--- a/go/types/types.go	Wed Oct 09 16:35:59 2013 -0400
++++ b/go/types/types.go	Wed Oct 09 22:56:42 2013 +0200
 @@ -174,18 +174,12 @@
  
  // NewTuple returns a new tuple for the given variables.
@@ -111,9 +158,9 @@ diff -r a38424bcd78c go/types/types.go
  }
  
  // At returns the i'th variable of tuple t.
-diff -r a38424bcd78c go/types/universe.go
---- a/go/types/universe.go	Mon Sep 30 12:39:54 2013 -0400
-+++ b/go/types/universe.go	Mon Sep 30 20:21:58 2013 +0200
+diff -r 1d462abd2860 go/types/universe.go
+--- a/go/types/universe.go	Wed Oct 09 16:35:59 2013 -0400
++++ b/go/types/universe.go	Wed Oct 09 22:56:42 2013 +0200
 @@ -65,7 +65,7 @@
  
  	// Error has a nil package in its qualified name since it is in no package

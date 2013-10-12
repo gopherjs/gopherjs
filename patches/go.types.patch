@@ -1,7 +1,7 @@
-diff -r 1d462abd2860 go/types/call.go
---- a/go/types/call.go	Wed Oct 09 16:35:59 2013 -0400
-+++ b/go/types/call.go	Wed Oct 09 23:04:18 2013 +0200
-@@ -241,7 +241,6 @@
+diff -r 181facb811b3 go/types/call.go
+--- a/go/types/call.go	Fri Oct 11 14:27:44 2013 -0700
++++ b/go/types/call.go	Sat Oct 12 19:10:17 2013 +0200
+@@ -246,7 +246,6 @@
  }
  
  func (check *checker) selector(x *operand, e *ast.SelectorExpr) {
@@ -9,7 +9,7 @@ diff -r 1d462abd2860 go/types/call.go
  	var (
  		obj      Object
  		index    []int
-@@ -262,7 +261,9 @@
+@@ -267,7 +266,9 @@
  				if !pkg.pkg.fake {
  					check.errorf(e.Pos(), "%s not declared by package %s", sel, ident)
  				}
@@ -20,7 +20,7 @@ diff -r 1d462abd2860 go/types/call.go
  			}
  			if !exp.IsExported() {
  				check.errorf(e.Pos(), "%s not exported by package %s", sel, ident)
-@@ -301,7 +302,9 @@
+@@ -306,7 +307,9 @@
  
  	check.exprOrType(x, e.X)
  	if x.mode == invalid {
@@ -31,7 +31,7 @@ diff -r 1d462abd2860 go/types/call.go
  	}
  
  	obj, index, indirect = LookupFieldOrMethod(x.typ, check.pkg, sel)
-@@ -312,7 +315,9 @@
+@@ -317,7 +320,9 @@
  		} else {
  			check.invalidOp(e.Pos(), "%s has no field or method %s", x, sel)
  		}
@@ -42,7 +42,7 @@ diff -r 1d462abd2860 go/types/call.go
  	}
  
  	if x.mode == typexpr {
-@@ -320,13 +325,17 @@
+@@ -325,13 +330,17 @@
  		m, _ := obj.(*Func)
  		if m == nil {
  			check.invalidOp(e.Pos(), "%s has no method %s", x, sel)
@@ -62,7 +62,7 @@ diff -r 1d462abd2860 go/types/call.go
  		}
  
  		check.recordSelection(e, MethodExpr, x.typ, m, index, indirect)
-@@ -367,7 +376,9 @@
+@@ -372,7 +381,9 @@
  			//        is shorthand for (&x).m()".
  			if !indirect && x.mode != variable && ptrRecv(obj) {
  				check.invalidOp(e.Pos(), "%s is not in method set of %s", sel, x)
@@ -73,7 +73,7 @@ diff -r 1d462abd2860 go/types/call.go
  			}
  
  			check.recordSelection(e, MethodVal, x.typ, obj, index, indirect)
-@@ -417,9 +428,4 @@
+@@ -420,9 +431,4 @@
  
  	// everything went well
  	x.expr = e
@@ -83,57 +83,10 @@ diff -r 1d462abd2860 go/types/call.go
 -	x.mode = invalid
 -	x.expr = e
  }
-diff -r 1d462abd2860 go/types/expr.go
---- a/go/types/expr.go	Wed Oct 09 16:35:59 2013 -0400
-+++ b/go/types/expr.go	Wed Oct 09 23:04:18 2013 +0200
-@@ -89,7 +89,8 @@
- 		}
- 		if x.mode != variable {
- 			check.invalidOp(x.pos(), "cannot take address of %s", x)
--			goto Error
-+			x.mode = invalid
-+			return
- 		}
- 		x.typ = &Pointer{base: x.typ}
- 		return
-@@ -98,11 +99,13 @@
- 		typ, ok := x.typ.Underlying().(*Chan)
- 		if !ok {
- 			check.invalidOp(x.pos(), "cannot receive from non-channel %s", x)
--			goto Error
-+			x.mode = invalid
-+			return
- 		}
- 		if typ.dir&ast.RECV == 0 {
- 			check.invalidOp(x.pos(), "cannot receive from send-only channel %s", x)
--			goto Error
-+			x.mode = invalid
-+			return
- 		}
- 		x.mode = valueok
- 		x.typ = typ.elt
-@@ -110,7 +113,8 @@
- 	}
- 
- 	if !check.op(unaryOpPredicates, x, op) {
--		goto Error
-+		x.mode = invalid
-+		return
- 	}
- 
- 	if x.mode == constant {
-@@ -128,10 +132,6 @@
- 
- 	x.mode = value
- 	// x.typ remains unchanged
--	return
--
--Error:
--	x.mode = invalid
- }
- 
- func isShift(op token.Token) bool {
-@@ -474,7 +474,9 @@
+diff -r 181facb811b3 go/types/expr.go
+--- a/go/types/expr.go	Fri Oct 11 14:27:44 2013 -0700
++++ b/go/types/expr.go	Sat Oct 12 19:10:17 2013 +0200
+@@ -481,7 +481,9 @@
  				check.updateExprType(x.expr, target, false)
  			}
  		} else if xkind != tkind {
@@ -144,7 +97,39 @@ diff -r 1d462abd2860 go/types/expr.go
  		}
  		return
  	}
-@@ -493,7 +495,9 @@
+@@ -502,11 +504,15 @@
+ 			switch x.typ.(*Basic).kind {
+ 			case UntypedBool:
+ 				if !isBoolean(target) {
+-					goto Error
++					check.errorf(x.pos(), "cannot convert %s to %s", x, target)
++					x.mode = invalid
++					return
+ 				}
+ 			case UntypedInt, UntypedRune, UntypedFloat, UntypedComplex:
+ 				if !isNumeric(target) {
+-					goto Error
++					check.errorf(x.pos(), "cannot convert %s to %s", x, target)
++					x.mode = invalid
++					return
+ 				}
+ 			case UntypedString:
+ 				// Non-constant untyped string values are not
+@@ -515,15 +521,21 @@
+ 			case UntypedNil:
+ 				// Unsafe.Pointer is a basic type that includes nil.
+ 				if !hasNil(target) {
+-					goto Error
++					check.errorf(x.pos(), "cannot convert %s to %s", x, target)
++					x.mode = invalid
++					return
+ 				}
+ 			default:
+-				goto Error
++				check.errorf(x.pos(), "cannot convert %s to %s", x, target)
++				x.mode = invalid
++				return
+ 			}
  		}
  	case *Interface:
  		if !x.isNil() && t.NumMethods() > 0 /* empty interfaces are ok */ {
@@ -155,7 +140,7 @@ diff -r 1d462abd2860 go/types/expr.go
  		}
  		// Update operand types to the default type rather then
  		// the target (interface) type: values must have concrete
-@@ -506,27 +510,28 @@
+@@ -536,27 +548,28 @@
  		} else {
  			// cannot assign untyped values to non-empty interfaces
  			if t.NumMethods() > 0 {
@@ -192,7 +177,7 @@ diff -r 1d462abd2860 go/types/expr.go
  }
  
  func (check *checker) comparison(x, y *operand, op token.Token) {
-@@ -723,9 +728,12 @@
+@@ -753,9 +766,12 @@
  	}
  
  	if (op == token.QUO || op == token.REM) && y.mode == constant && exact.Sign(y.val) == 0 {
@@ -208,7 +193,7 @@ diff -r 1d462abd2860 go/types/expr.go
  	}
  
  	if x.mode == constant && y.mode == constant {
-@@ -866,7 +874,7 @@
+@@ -898,7 +914,7 @@
  		typ = Typ[Invalid]
  		record = false // nothing to do
  	case novalue:
@@ -217,7 +202,7 @@ diff -r 1d462abd2860 go/types/expr.go
  	case constant:
  		typ = x.typ
  		val = x.val
-@@ -905,7 +913,9 @@
+@@ -937,7 +953,9 @@
  
  	switch e := e.(type) {
  	case *ast.BadExpr:
@@ -228,7 +213,7 @@ diff -r 1d462abd2860 go/types/expr.go
  
  	case *ast.Ident:
  		check.ident(x, e, nil, false)
-@@ -914,13 +924,17 @@
+@@ -946,13 +964,17 @@
  		// ellipses are handled explicitly where they are legal
  		// (array composite literals and parameter lists)
  		check.errorf(e.Pos(), "invalid use of '...'")
@@ -248,7 +233,7 @@ diff -r 1d462abd2860 go/types/expr.go
  		}
  
  	case *ast.FuncLit:
-@@ -930,7 +944,9 @@
+@@ -962,7 +984,9 @@
  			check.later(nil, sig, e.Body)
  		} else {
  			check.invalidAST(e.Pos(), "invalid function literal %s", e)
@@ -259,7 +244,7 @@ diff -r 1d462abd2860 go/types/expr.go
  		}
  
  	case *ast.CompositeLit:
-@@ -955,7 +971,9 @@
+@@ -987,7 +1011,9 @@
  		}
  		if typ == nil {
  			check.errorf(e.Pos(), "missing type in composite literal")
@@ -270,7 +255,7 @@ diff -r 1d462abd2860 go/types/expr.go
  		}
  
  		switch typ, _ := deref(typ); utyp := typ.Underlying().(type) {
-@@ -1070,7 +1088,9 @@
+@@ -1102,7 +1128,9 @@
  
  		default:
  			check.errorf(e.Pos(), "invalid composite literal type %s", typ)
@@ -281,7 +266,7 @@ diff -r 1d462abd2860 go/types/expr.go
  		}
  
  		x.mode = value
-@@ -1087,7 +1107,9 @@
+@@ -1119,7 +1147,9 @@
  	case *ast.IndexExpr:
  		check.expr(x, e.X)
  		if x.mode == invalid {
@@ -292,7 +277,7 @@ diff -r 1d462abd2860 go/types/expr.go
  		}
  
  		valid := false
-@@ -1134,7 +1156,9 @@
+@@ -1166,7 +1196,9 @@
  				if key.mode != invalid {
  					check.invalidOp(key.pos(), "cannot use %s as map index of type %s", &key, typ.key)
  				}
@@ -301,9 +286,9 @@ diff -r 1d462abd2860 go/types/expr.go
 +				x.expr = e
 +				return statement
  			}
- 			x.mode = valueok
+ 			x.mode = mapindex
  			x.typ = typ.elt
-@@ -1144,12 +1168,16 @@
+@@ -1176,12 +1208,16 @@
  
  		if !valid {
  			check.invalidOp(x.pos(), "cannot index %s", x)
@@ -322,7 +307,7 @@ diff -r 1d462abd2860 go/types/expr.go
  		}
  
  		check.index(e.Index, length)
-@@ -1158,7 +1186,9 @@
+@@ -1190,7 +1226,9 @@
  	case *ast.SliceExpr:
  		check.expr(x, e.X)
  		if x.mode == invalid {
@@ -333,7 +318,7 @@ diff -r 1d462abd2860 go/types/expr.go
  		}
  
  		valid := false
-@@ -1168,7 +1198,9 @@
+@@ -1200,7 +1238,9 @@
  			if isString(typ) {
  				if slice3(e) {
  					check.invalidOp(x.pos(), "3-index slice of string")
@@ -344,7 +329,7 @@ diff -r 1d462abd2860 go/types/expr.go
  				}
  				valid = true
  				if x.mode == constant {
-@@ -1187,7 +1219,9 @@
+@@ -1219,7 +1259,9 @@
  			length = typ.len
  			if x.mode != variable {
  				check.invalidOp(x.pos(), "cannot slice %s (value not addressable)", x)
@@ -355,7 +340,7 @@ diff -r 1d462abd2860 go/types/expr.go
  			}
  			x.typ = &Slice{elt: typ.elt}
  
-@@ -1207,13 +1241,17 @@
+@@ -1239,13 +1281,17 @@
  
  		if !valid {
  			check.invalidOp(x.pos(), "cannot slice %s", x)
@@ -375,7 +360,7 @@ diff -r 1d462abd2860 go/types/expr.go
  		}
  
  		// check indices
-@@ -1259,21 +1297,29 @@
+@@ -1291,21 +1337,29 @@
  	case *ast.TypeAssertExpr:
  		check.expr(x, e.X)
  		if x.mode == invalid {
@@ -408,8 +393,8 @@ diff -r 1d462abd2860 go/types/expr.go
 +			return statement
  		}
  		check.typeAssertion(x.pos(), x, xtyp, T)
- 		x.mode = valueok
-@@ -1286,7 +1332,9 @@
+ 		x.mode = commaok
+@@ -1318,7 +1372,9 @@
  		check.exprOrType(x, e.X)
  		switch x.mode {
  		case invalid:
@@ -420,7 +405,7 @@ diff -r 1d462abd2860 go/types/expr.go
  		case typexpr:
  			x.typ = &Pointer{base: x.typ}
  		default:
-@@ -1295,18 +1343,24 @@
+@@ -1327,18 +1383,24 @@
  				x.typ = typ.base
  			} else {
  				check.invalidOp(x.pos(), "cannot indirect %s", x)
@@ -448,7 +433,7 @@ diff -r 1d462abd2860 go/types/expr.go
  		}
  		if e.Op == token.ARROW {
  			x.expr = e
-@@ -1316,13 +1370,17 @@
+@@ -1348,13 +1410,17 @@
  	case *ast.BinaryExpr:
  		check.binary(x, e.X, e.Y, e.Op)
  		if x.mode == invalid {
@@ -468,7 +453,7 @@ diff -r 1d462abd2860 go/types/expr.go
  
  	case *ast.ArrayType, *ast.StructType, *ast.FuncType,
  		*ast.InterfaceType, *ast.MapType, *ast.ChanType:
-@@ -1344,11 +1402,6 @@
+@@ -1376,11 +1442,6 @@
  	// everything went well
  	x.expr = e
  	return expression
@@ -480,9 +465,9 @@ diff -r 1d462abd2860 go/types/expr.go
  }
  
  // typeAssertion checks that x.(T) is legal; xtyp must be the type of x.
-diff -r 1d462abd2860 go/types/gcimporter.go
---- a/go/types/gcimporter.go	Wed Oct 09 16:35:59 2013 -0400
-+++ b/go/types/gcimporter.go	Wed Oct 09 23:04:18 2013 +0200
+diff -r 181facb811b3 go/types/gcimporter.go
+--- a/go/types/gcimporter.go	Fri Oct 11 14:27:44 2013 -0700
++++ b/go/types/gcimporter.go	Sat Oct 12 19:10:17 2013 +0200
 @@ -723,7 +723,8 @@
  func (p *gcParser) parseImportDecl() {
  	p.expectKeyword("import")
@@ -493,9 +478,9 @@ diff -r 1d462abd2860 go/types/gcimporter.go
  }
  
  // int_lit = [ "+" | "-" ] { "0" ... "9" } .
-diff -r 1d462abd2860 go/types/methodset.go
---- a/go/types/methodset.go	Wed Oct 09 16:35:59 2013 -0400
-+++ b/go/types/methodset.go	Wed Oct 09 23:04:18 2013 +0200
+diff -r 181facb811b3 go/types/methodset.go
+--- a/go/types/methodset.go	Fri Oct 11 14:27:44 2013 -0700
++++ b/go/types/methodset.go	Sat Oct 12 19:10:17 2013 +0200
 @@ -121,8 +121,8 @@
  		var next []embeddedType // embedded types found at current depth
  
@@ -527,9 +512,9 @@ diff -r 1d462abd2860 go/types/methodset.go
  	for i, f := range list {
  		key := f.Id()
  		// if f is not in the set, add it
-diff -r 1d462abd2860 go/types/resolver.go
---- a/go/types/resolver.go	Wed Oct 09 16:35:59 2013 -0400
-+++ b/go/types/resolver.go	Wed Oct 09 23:04:18 2013 +0200
+diff -r 181facb811b3 go/types/resolver.go
+--- a/go/types/resolver.go	Fri Oct 11 14:27:44 2013 -0700
++++ b/go/types/resolver.go	Sat Oct 12 19:10:17 2013 +0200
 @@ -316,18 +316,18 @@
  				obj := NewFunc(d.Name.Pos(), pkg, name, nil)
  				if d.Recv == nil {
@@ -561,9 +546,9 @@ diff -r 1d462abd2860 go/types/resolver.go
  				} else {
  					// Associate method with receiver base type name, if possible.
  					// Ignore methods that have an invalid receiver, or a blank _
-diff -r 1d462abd2860 go/types/sizes.go
---- a/go/types/sizes.go	Wed Oct 09 16:35:59 2013 -0400
-+++ b/go/types/sizes.go	Wed Oct 09 23:04:18 2013 +0200
+diff -r 181facb811b3 go/types/sizes.go
+--- a/go/types/sizes.go	Fri Oct 11 14:27:44 2013 -0700
++++ b/go/types/sizes.go	Sat Oct 12 19:10:17 2013 +0200
 @@ -121,7 +121,7 @@
  
  // DefaultPtrSize is the default size of ints, uint, and pointers, in bytes,
@@ -573,9 +558,9 @@ diff -r 1d462abd2860 go/types/sizes.go
  
  // DefaultSizeof implements the default size computation
  // for unsafe.Sizeof. It is used if Config.Sizeof == nil.
-diff -r 1d462abd2860 go/types/typemap/typemap.go
---- a/go/types/typemap/typemap.go	Wed Oct 09 16:35:59 2013 -0400
-+++ b/go/types/typemap/typemap.go	Wed Oct 09 23:04:18 2013 +0200
+diff -r 181facb811b3 go/types/typemap/typemap.go
+--- a/go/types/typemap/typemap.go	Fri Oct 11 14:27:44 2013 -0700
++++ b/go/types/typemap/typemap.go	Sat Oct 12 19:10:17 2013 +0200
 @@ -130,10 +130,7 @@
  
  // Len returns the number of map entries.
@@ -588,9 +573,9 @@ diff -r 1d462abd2860 go/types/typemap/typemap.go
  }
  
  // Iterate calls function f on each entry in the map in unspecified order.
-diff -r 1d462abd2860 go/types/types.go
---- a/go/types/types.go	Wed Oct 09 16:35:59 2013 -0400
-+++ b/go/types/types.go	Wed Oct 09 23:04:18 2013 +0200
+diff -r 181facb811b3 go/types/types.go
+--- a/go/types/types.go	Fri Oct 11 14:27:44 2013 -0700
++++ b/go/types/types.go	Sat Oct 12 19:10:17 2013 +0200
 @@ -174,18 +174,12 @@
  
  // NewTuple returns a new tuple for the given variables.
@@ -612,9 +597,9 @@ diff -r 1d462abd2860 go/types/types.go
  }
  
  // At returns the i'th variable of tuple t.
-diff -r 1d462abd2860 go/types/universe.go
---- a/go/types/universe.go	Wed Oct 09 16:35:59 2013 -0400
-+++ b/go/types/universe.go	Wed Oct 09 23:04:18 2013 +0200
+diff -r 181facb811b3 go/types/universe.go
+--- a/go/types/universe.go	Fri Oct 11 14:27:44 2013 -0700
++++ b/go/types/universe.go	Sat Oct 12 19:10:17 2013 +0200
 @@ -65,7 +65,7 @@
  
  	// Error has a nil package in its qualified name since it is in no package

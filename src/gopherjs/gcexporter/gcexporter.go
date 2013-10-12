@@ -62,8 +62,6 @@ func Write(pkg *types.Package, out io.Writer) {
 			}
 			var val string
 			switch o.Val().Kind() {
-			case exact.Nil:
-				val = "nil"
 			case exact.Bool:
 				val = strconv.FormatBool(exact.BoolVal(o.Val()))
 			case exact.Int:

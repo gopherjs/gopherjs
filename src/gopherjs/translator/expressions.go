@@ -31,8 +31,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		ast.Walk(&v, expr)
 		if !v.hasEvilConstant {
 			switch value.Kind() {
-			case exact.Nil:
-				return "null"
 			case exact.Bool:
 				return strconv.FormatBool(exact.BoolVal(value))
 			case exact.Int:
@@ -631,6 +629,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return "Go$recover"
 			}
 			panic(fmt.Sprintf("Unhandled object: %T\n", o))
+		case *types.Nil:
+			return "null"
 		case nil:
 			return e.Name
 		default:

@@ -524,6 +524,9 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		}
 		return "Go$" + toJavaScriptType(t)
 	case *types.Named:
+		if t.Obj().Name() == "error" {
+			return "Go$error"
+		}
 		objPkg := t.Obj().Pkg()
 		if objPkg != nil && objPkg != c.pkg {
 			return c.pkgVars[objPkg.Path()] + "." + t.Obj().Name()

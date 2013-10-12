@@ -140,7 +140,7 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 	jsCode = append(jsCode, '\n')
 
 	var initCalls []byte
-	var allTypeNames []*types.TypeName
+	allTypeNames := []*types.TypeName{types.New("error").(*types.Named).Obj()}
 	loaded := make(map[*types.Package]bool)
 	var loadPackage func(*GopherPackage) error
 	loadPackage = func(gopherPkg *GopherPackage) error {
@@ -201,6 +201,10 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 			list := make([]string, 0, len(implementedBy))
 			for ref := range implementedBy {
 				list = append(list, ref)
+			}
+			if t.Name() == "error" {
+				jsCode = append(jsCode, []byte(fmt.Sprintf("Go$error.Go$implementedBy = [%s];\n", strings.Join(list, ", ")))...)
+				continue
 			}
 			jsCode = append(jsCode, []byte(fmt.Sprintf("Go$packages[\"%s\"].%s.Go$implementedBy = [%s];\n", t.Pkg().Path(), t.Name(), strings.Join(list, ", ")))...)
 		}

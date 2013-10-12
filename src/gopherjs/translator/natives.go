@@ -318,6 +318,7 @@ var Go$append = function(slice, toAppend) {
 	return newSlice;
 };
 
+var Go$error = {};
 var Go$Panic = function(value) {
 	this.message = value;
 	Error.captureStackTrace(this, Go$Panic);

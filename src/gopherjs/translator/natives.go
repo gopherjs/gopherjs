@@ -23,16 +23,6 @@ Go$nil.length = 0;
 var Go$keys = Object.keys;
 var Go$min = Math.min;
 var Go$charToString = String.fromCharCode;
-var Go$sliceToString = function(slice) {
-	if (slice === null) {
-		return "";
-	}
-	var s = "";
-	for (var i = 0; i < slice.length; i += 100000) {
-		s += String.fromCharCode.apply(null, slice.array.subarray(slice.offset + i, slice.offset + Math.min(slice.length, i + 100000)));
-	}
-	return s;
-};
 
 var Go$copyFields = function(from, to) {
 	var keys = Object.keys(from);
@@ -203,15 +193,10 @@ var Go$div64 = function(x, y, returnRemainder) {
 	return new typ(r.high * s, r.low * s);
 };
 
-var Go$Slice = function(data, length, capacity) {
-	capacity = capacity || length || 0;
-	data = data || new Go$Array(capacity);
-	this.array = data;
+var Go$Slice = function(array) {
+	this.array = array;
 	this.offset = 0;
-	this.length = data.length;
-	if (length !== undefined) {
-		this.length = length;
-	}
+	this.length = array && array.length;
 };
 Go$Slice.prototype.Go$subslice = function(begin, end) {
 	var s = new this.constructor(this.array);
@@ -228,6 +213,13 @@ Go$Slice.prototype.Go$toArray = function() {
 	}
 	return this.array.slice(this.offset, this.offset + this.length);
 };
+Go$Slice.prototype.Go$toString = function() {
+	var s = "";
+	for (var i = 0; i < this.length; i += 100000) {
+		s += String.fromCharCode.apply(null, this.array.subarray(this.offset + i, this.offset + Math.min(this.length, i + 100000)));
+	}
+	return s;
+};
 
 String.prototype.Go$toSlice = function(terminateWithNull) {
 	var array = new Uint8Array(terminateWithNull ? this.length + 1 : this.length);
@@ -242,7 +234,7 @@ String.prototype.Go$toSlice = function(terminateWithNull) {
 
 var Go$clear = function(array) { for (var i = 0; i < array.length; i++) { array[i] = 0; } return array; }; // TODO remove when NodeJS is behaving according to spec
 
-var Go$Map = function(data, capacity) {
+var Go$Map = function(data) {
 	data = data || [];
 	for (var i = 0; i < data.length; i += 2) {
 		this[data[i]] = { k: data[i], v: data[i + 1] };

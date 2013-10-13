@@ -491,7 +491,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					switch t2 := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Slice:
 						if len(e.Args) == 3 {
-							return fmt.Sprintf("new %s(Go$clear(new %s(%s)), %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[2]), c.translateExpr(e.Args[1]))
+							return fmt.Sprintf("new %s(Go$clear(new %s(%s))).Go$subslice(0, %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[2]), c.translateExpr(e.Args[1]))
 						}
 						return fmt.Sprintf("new %s(Go$clear(new %s(%s)))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[1]))
 					default:
@@ -723,7 +723,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 				}
 				return value
 			case *types.Slice:
-				return fmt.Sprintf("Go$sliceToString(%s)", value)
+				return fmt.Sprintf("%s.Go$toString()", value)
 			default:
 				panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 			}

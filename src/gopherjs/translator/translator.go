@@ -7,6 +7,7 @@ import (
 	"go/ast"
 	"go/build"
 	"go/parser"
+	"go/scanner"
 	"go/token"
 	"strings"
 	"time"
@@ -25,6 +26,12 @@ type GopherPackage struct {
 	*build.Package
 	SrcModTime     time.Time
 	JavaScriptCode []byte
+}
+
+type ErrorList []error
+
+func (err ErrorList) Error() string {
+	return err[0].Error()
 }
 
 var PkgObjUpToDate = fmt.Errorf("Package object already up-to-date.")
@@ -105,6 +112,7 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 	}
 
 	files := make([]*ast.File, 0)
+	var errList ErrorList
 	for _, name := range pkg.GoFiles {
 		fullName := pkg.Dir + "/" + name
 		r, err := t.BuildContext.OpenFile(fullName)
@@ -113,9 +121,19 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 		}
 		file, err := parser.ParseFile(t.FileSet, fullName, r, 0)
 		if err != nil {
-			return err
+			if list, isList := err.(scanner.ErrorList); isList {
+				for _, entry := range list {
+					errList = append(errList, entry)
+				}
+				continue
+			}
+			errList = append(errList, err)
+			continue
 		}
 		files = append(files, file)
+	}
+	if errList != nil {
+		return errList
 	}
 
 	t.TypesConfig.Import = func(imports map[string]*types.Package, path string) (*types.Package, error) {

@@ -103,7 +103,14 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 	}
 
+	var errList ErrorList
+	config.Error = func(err error) {
+		errList = append(errList, err)
+	}
 	typesPkg, err := config.Check(importPath, fileSet, files, info)
+	if errList != nil {
+		return nil, errList
+	}
 	if err != nil {
 		return nil, err
 	}

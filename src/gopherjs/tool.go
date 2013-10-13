@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go/build"
 	"go/parser"
-	"go/scanner"
 	"go/token"
 	"gopherjs/gcexporter"
 	"gopherjs/translator"
@@ -19,8 +18,6 @@ import (
 )
 
 func main() {
-	var firstError error
-	var previousErr error
 	var t *translator.Translator
 	t = &translator.Translator{
 		BuildContext: &build.Context{
@@ -35,15 +32,6 @@ func main() {
 		},
 		TypesConfig: &types.Config{
 			Packages: make(map[string]*types.Package),
-			Error: func(err error) {
-				if firstError == nil {
-					firstError = err
-				}
-				if previousErr == nil || err.Error() != previousErr.Error() {
-					fmt.Println(err.Error())
-				}
-				previousErr = err
-			},
 		},
 		GetModTime: func(name string) time.Time {
 			if name == "" {
@@ -141,16 +129,13 @@ The commands are:
 		if err == translator.PkgObjUpToDate {
 			return
 		}
-		list, isList := err.(scanner.ErrorList)
-		if !isList {
-			if err != firstError {
-				fmt.Fprintln(os.Stderr, err)
+		if list, isList := err.(translator.ErrorList); isList {
+			for _, entry := range list {
+				fmt.Fprintln(os.Stderr, entry)
 			}
 			return
 		}
-		for _, entry := range list {
-			fmt.Fprintln(os.Stderr, entry)
-		}
+		fmt.Fprintln(os.Stderr, err)
 		return
 	}
 

@@ -5,7 +5,6 @@ import (
 	"code.google.com/p/go.tools/go/types"
 	"go/build"
 	"go/format"
-	"go/scanner"
 	"go/token"
 	"gopherjs/translator"
 	"io"
@@ -28,8 +27,6 @@ func main() {
 	app.NewController("PlaygroundCtrl", func(scope *angularjs.Scope) {
 		scope.Set("code", "package main\n\nimport \"fmt\";\n\nfunc main() {\n\tfmt.Println(\"Hello, playground\")\n}\n")
 
-		var firstError error
-		var previousErr error
 		var t *translator.Translator
 		t = &translator.Translator{
 			BuildContext: &build.Context{
@@ -62,15 +59,6 @@ func main() {
 			},
 			TypesConfig: &types.Config{
 				Packages: make(map[string]*types.Package),
-				Error: func(err error) {
-					if firstError == nil {
-						firstError = err
-					}
-					if previousErr == nil || err.Error() != previousErr.Error() {
-						println(err.Error())
-					}
-					previousErr = err
-				},
 			},
 			GetModTime: func(name string) time.Time {
 				return time.Unix(1, 0)
@@ -93,16 +81,13 @@ func main() {
 		run := func() {
 			err := t.BuildPackage(pkg)
 			if err != nil {
-				list, isList := err.(scanner.ErrorList)
-				if !isList {
-					if err != firstError {
-						println(err.Error())
+				if list, isList := err.(translator.ErrorList); isList {
+					for _, entry := range list {
+						println(entry.Error())
 					}
 					return
 				}
-				for _, entry := range list {
-					println(entry.Error())
-				}
+				println(err.Error())
 				return
 			}
 
@@ -112,7 +97,7 @@ func main() {
 		scope.Set("run", run)
 
 		scope.Set("format", func() {
-			out, err := format.Source(scope.GetString("code"))
+			out, err := format.Source([]byte(scope.GetString("code")))
 			if err != nil {
 				println(err)
 				return

@@ -356,10 +356,19 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 			switch l := lhs.(type) {
 			case *ast.StarExpr:
-				if _, isStruct := c.info.Types[l].(*types.Struct); !isStruct {
-					c.Printf("%s.Go$set(%s);", c.translateExpr(l.X), rhs)
+				if s, isStruct := c.info.Types[l].Underlying().(*types.Struct); isStruct {
+					lVar := c.newVarName("l")
+					rVar := c.newVarName("r")
+					c.Printf("%s = %s;", lVar, c.translateExpr(l.X))
+					c.Printf("%s = %s;", rVar, rhs)
+					for i := 0; i < s.NumFields(); i++ {
+						field := s.Field(i)
+						c.Printf("%s.%s = %s.%s;", lVar, field.Name(), rVar, field.Name())
+					}
 					continue
 				}
+				c.Printf("%s.Go$set(%s);", c.translateExpr(l.X), rhs)
+				continue
 			case *ast.IndexExpr:
 				switch t := c.info.Types[l.X].Underlying().(type) {
 				case *types.Slice:

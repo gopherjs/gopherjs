@@ -347,8 +347,20 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return fmt.Sprintf("!Go$interfaceIsEqual(%s, %s)", ex, ey)
 			}
 			return ex + " !== " + ey
+		case token.MUL:
+			if basic.Kind() == types.Int32 {
+				x := c.newVarName("x")
+				y := c.newVarName("y")
+				return fmt.Sprintf("(%s = %s, %s = %s, (((%s >>> 16 << 16) * %s | 0) + (%s << 16 >>> 16) * %s) | 0)", x, ex, y, ey, x, y, x, y)
+			}
+			if basic.Kind() == types.Uint32 {
+				x := c.newVarName("x")
+				y := c.newVarName("y")
+				return fmt.Sprintf("(%s = %s, %s = %s, (((%s >>> 16 << 16) * %s >>> 0) + (%s << 16 >>> 16) * %s) >>> 0)", x, ex, y, ey, x, y, x, y)
+			}
+			value = ex + " * " + ey
 		case token.QUO:
-			if c.info.Types[e.X].Underlying().(*types.Basic).Info()&types.IsInteger != 0 {
+			if basic.Info()&types.IsInteger != 0 {
 				value = fmt.Sprintf("Math.floor(%s / %s)", ex, ey)
 				break
 			}

@@ -37,7 +37,7 @@ type Scope struct {
 func (s *Scope) GetString(key string) string { return "" }
 
 const js_Scope_GetString = `
-	return String(this.native[key]);
+	return Go$toString(this.native[key]);
 `
 
 func (s *Scope) GetInt(key string) int { return 0 }

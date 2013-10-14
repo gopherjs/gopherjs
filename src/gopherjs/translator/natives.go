@@ -204,16 +204,6 @@ Go$Slice.prototype.Go$toArray = function() {
 	}
 	return this.array.slice(this.offset, this.offset + this.length);
 };
-Go$Slice.prototype.Go$toString = function() {
-	if (this.length === 0) {
-		return "";
-	}
-	var s = "";
-	for (var i = 0; i < this.length; i += 100000) {
-		s += String.fromCharCode.apply(null, this.array.subarray(this.offset + i, this.offset + Math.min(this.length, i + 100000)));
-	}
-	return s;
-};
 
 var Go$nextRune = function(str, pos) {
 	var c0 = str.charCodeAt(pos)
@@ -271,6 +261,25 @@ var Go$nextRune = function(str, pos) {
 	return [0xFFFD, 1];
 }
 
+var Go$encodeRune = function(r) {
+	if (r <= 0x7F) {
+		return String.fromCharCode(r);
+	}
+	if (r <= 0x7FF) {
+		return String.fromCharCode(0xC0 | r >> 6, 0x80 | (r & 0x3F));
+	}
+	if (r > 0x10FFFF) {
+		r = 0xFFFD;
+	}
+	if (0xD800 <= r && r <= 0xDFFF) {
+		r = 0xFFFD;
+	}
+	if (r <= 0xFFFF) {
+		return String.fromCharCode(0xE0 | r >> 12, 0x80 | (r >> 6 & 0x3F), 0x80 | (r & 0x3F));
+	}
+	return String.fromCharCode(0xF0 | r >> 18, 0x80 | (r >> 12 & 0x3F), 0x80 | (r >> 6 & 0x3F), 0x80 | (r & 0x3F));
+};
+
 var Go$stringToBytes = function(str, terminateWithNull) {
 	var array = new Uint8Array(terminateWithNull ? str.length + 1 : str.length);
 	for (var i = 0; i < str.length; i++) {
@@ -280,6 +289,17 @@ var Go$stringToBytes = function(str, terminateWithNull) {
 		array[str.length] = 0;
 	}
 	return array;
+};
+
+var Go$bytesToString = function(slice) {
+	if (slice.length === 0) {
+		return "";
+	}
+	var str = "";
+	for (var i = 0; i < slice.length; i += 100000) {
+		str += String.fromCharCode.apply(null, slice.array.subarray(slice.offset + i, slice.offset + Math.min(slice.length, i + 100000)));
+	}
+	return str;
 };
 
 var Go$stringToRunes = function(str) {
@@ -292,6 +312,17 @@ var Go$stringToRunes = function(str) {
 	}
 	return array.subarray(0, j);
 }
+
+var Go$runesToString = function(slice) {
+	if (slice.length === 0) {
+		return "";
+	}
+	var str = "";
+	for (var i = 0; i < slice.length; i++) {
+		str += Go$encodeRune(slice.array[slice.offset + i]);
+	}
+	return str;
+};
 
 var Go$clear = function(array) { for (var i = 0; i < array.length; i++) { array[i] = 0; } return array; }; // TODO remove when NodeJS is behaving according to spec
 

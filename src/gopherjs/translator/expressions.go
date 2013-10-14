@@ -548,7 +548,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					}
 					return fmt.Sprintf(`delete %s[%s]`, c.translateExpr(e.Args[0]), index)
 				case "copy":
-					return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(nil)), c.translateExprToType(e.Args[1], types.NewSlice(nil)))
+					return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(types.Typ[types.Byte])), c.translateExprToType(e.Args[1], types.NewSlice(types.Typ[types.Byte])))
 				case "print", "println":
 					return fmt.Sprintf("console.log(%s)", strings.Join(c.translateExprSlice(e.Args, nil), ", "))
 				case "recover", "complex", "real", "imag":
@@ -724,17 +724,20 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			}
 		case t.Info()&types.IsString != 0:
 			value := c.translateExpr(expr)
-			switch st := exprType.Underlying().(type) {
+			switch et := exprType.Underlying().(type) {
 			case *types.Basic:
-				if is64Bit(st) {
+				if is64Bit(et) {
 					value += ".low"
 				}
-				if st.Info()&types.IsNumeric != 0 {
+				if et.Info()&types.IsNumeric != 0 {
 					return fmt.Sprintf("Go$charToString(%s)", value)
 				}
 				return value
 			case *types.Slice:
-				return fmt.Sprintf("%s.Go$toString()", value)
+				if types.IsIdentical(et.Elem().Underlying(), types.Typ[types.Rune]) {
+					return fmt.Sprintf("Go$runesToString(%s)", value)
+				}
+				return fmt.Sprintf("Go$bytesToString(%s)", value)
 			default:
 				panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 			}
@@ -765,7 +768,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		switch et := exprType.Underlying().(type) {
 		case *types.Basic:
 			if et.Info()&types.IsString != 0 {
-				if types.IsIdentical(t.Elem(), types.Typ[types.Rune]) {
+				if types.IsIdentical(t.Elem().Underlying(), types.Typ[types.Rune]) {
 					return fmt.Sprintf("new %s(Go$stringToRunes(%s))", c.typeName(desiredType), c.translateExpr(expr))
 				}
 				return fmt.Sprintf("new %s(Go$stringToBytes(%s))", c.typeName(desiredType), c.translateExpr(expr))

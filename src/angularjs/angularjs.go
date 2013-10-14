@@ -37,7 +37,7 @@ type Scope struct {
 func (s *Scope) GetString(key string) string { return "" }
 
 const js_Scope_GetString = `
-	return Go$toString(this.native[key]);
+	return Go$internalizeString(String(this.native[key]));
 `
 
 func (s *Scope) GetInt(key string) int { return 0 }
@@ -61,10 +61,17 @@ const js_Scope_GetSlice = `
 func (s *Scope) Set(key string, value interface{}) {}
 
 const js_Scope_Set = `
-  if (value.constructor === Go$Slice) {
-  	value = value.Go$toArray();
+  switch (value.constructor) {
+  case Go$String:
+    this.native[key] = Go$externalizeString(value.v);
+    break;
+  case Go$Slice:
+  	this.native[key] = value.Go$toArray();
+    break;
+  default:
+    this.native[key] = value.v !== undefined ? value.v : value;
+    break;
   }
-  this.native[key] = value.v !== undefined ? value.v : value;
 `
 
 type SCE struct {

@@ -117,7 +117,7 @@ func evalScript(script string, scope *angularjs.Scope) {}
 const js_evalScript = `
   var Go$webMode = true;
   var console = { log: function() {
-  	var lines = Array.prototype.join.call(arguments, " ").split("\n");
+  	var lines = Go$externalizeString(Array.prototype.join.call(arguments, " ")).split("\n");
   	for (var i = 0; i < lines.length; i++) {
   		scope.native.output.push(new OutputLine("out", lines[i]));
   	}
@@ -125,7 +125,7 @@ const js_evalScript = `
   var Go$syscall = function(trap, arg1, arg2, arg3) {
   	switch (trap) {
   	case 4: // SYS_WRITE
-  	  var lines = String.fromCharCode.apply(null, arg2).split("\n");
+  	  var lines = Go$externalizeString(Go$bytesToString(new Go$Slice(arg2))).split("\n");
   	  if (scope.native.output.length === 0) {
   	  	scope.native.output.push(new OutputLine("out", ""));
   	  }

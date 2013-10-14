@@ -139,7 +139,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			runeVar := c.newVarName("_rune")
 			c.Printf("%sfor (; %s < %s.length; %s += %s[1]) {", label, iVar, refVar, iVar, runeVar)
 			c.Indent(func() {
-				c.Printf("%s = Go$nextRune(%s, %s);", runeVar, refVar, iVar)
+				c.Printf("%s = Go$decodeRune(%s, %s);", runeVar, refVar, iVar)
 				if key != "" {
 					c.Printf("%s = %s;", key, iVar)
 				}

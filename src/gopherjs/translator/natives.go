@@ -205,7 +205,7 @@ Go$Slice.prototype.Go$toArray = function() {
 	return this.array.slice(this.offset, this.offset + this.length);
 };
 
-var Go$nextRune = function(str, pos) {
+var Go$decodeRune = function(str, pos) {
 	var c0 = str.charCodeAt(pos)
 
 	if (c0 < 0x80) {
@@ -307,7 +307,7 @@ var Go$stringToRunes = function(str) {
 	var rune;
 	var j = 0;
 	for (var i = 0; i < str.length; i += rune[1], j++) {
-		rune = Go$nextRune(str, i);
+		rune = Go$decodeRune(str, i);
 		array[j] = rune[0];
 	}
 	return array.subarray(0, j);
@@ -322,6 +322,25 @@ var Go$runesToString = function(slice) {
 		str += Go$encodeRune(slice.array[slice.offset + i]);
 	}
 	return str;
+};
+
+var Go$externalizeString = function(intStr) {
+	var extStr = "";
+	var rune;
+	var j = 0;
+	for (var i = 0; i < intStr.length; i += rune[1], j++) {
+		rune = Go$decodeRune(intStr, i);
+		extStr += String.fromCharCode(rune[0]);
+	}
+	return extStr;
+};
+
+var Go$internalizeString = function(extStr) {
+	var intStr = "";
+	for (var i = 0; i < extStr.length; i++) {
+		intStr += Go$encodeRune(extStr.charCodeAt(i));
+	}
+	return intStr;
 };
 
 var Go$clear = function(array) { for (var i = 0; i < array.length; i++) { array[i] = 0; } return array; }; // TODO remove when NodeJS is behaving according to spec

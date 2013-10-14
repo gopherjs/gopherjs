@@ -46,7 +46,7 @@ func main() {
 					return dirs[name], nil
 				},
 				OpenFile: func(name string) (io.ReadCloser, error) {
-					if name == "/input.go" {
+					if name == "/prog.go" {
 						return ioutil.NopCloser(strings.NewReader(scope.GetString("code"))), nil
 					}
 
@@ -74,7 +74,7 @@ func main() {
 			Package: &build.Package{
 				Name:       "main",
 				ImportPath: "main",
-				GoFiles:    []string{"input.go"},
+				GoFiles:    []string{"prog.go"},
 			},
 		}
 
@@ -82,12 +82,14 @@ func main() {
 			err := t.BuildPackage(pkg)
 			if err != nil {
 				if list, isList := err.(translator.ErrorList); isList {
+					output := make([]interface{}, 0)
 					for _, entry := range list {
-						println(entry.Error())
+						output = append(output, &OutputLine{"err", entry.Error()})
 					}
+					scope.Set("output", output)
 					return
 				}
-				println(err.Error())
+				scope.Set("output", []interface{}{&OutputLine{"err", err.Error()}})
 				return
 			}
 

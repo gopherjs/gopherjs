@@ -132,32 +132,51 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		refVar := c.newVarName("_ref")
 		c.Printf("%s = %s;", refVar, c.translateExpr(s.X))
 
-		lenTarget := refVar
-		_, isMap := c.info.Types[s.X].Underlying().(*types.Map)
-		var keysVar string
-		if isMap {
-			keysVar = c.newVarName("_keys")
-			c.Printf("%s = %s !== null ? Go$keys(%s) : [];", keysVar, refVar, refVar)
-			lenTarget = keysVar
-		}
-
-		lenVar := c.newVarName("_len")
-		c.Printf("%s = %s !== null ? %s.length : 0;", lenVar, lenTarget, lenTarget)
-
 		iVar := c.newVarName("_i")
 		c.Printf("%s = 0;", iVar)
 
-		c.Printf("%sfor (; %s < %s; %s++) {", label, iVar, lenVar, iVar)
-		c.Indent(func() {
-			var entryVar string
-			if isMap {
-				entryVar = c.newVarName("_entry")
+		if _, isString := c.info.Types[s.X].Underlying().(*types.Basic); isString {
+			runeVar := c.newVarName("_rune")
+			c.Printf("%sfor (; %s < %s.length; %s += %s[1]) {", label, iVar, refVar, iVar, runeVar)
+			c.Indent(func() {
+				c.Printf("%s = Go$nextRune(%s, %s);", runeVar, refVar, iVar)
+				if key != "" {
+					c.Printf("%s = %s;", key, iVar)
+				}
+				if value != "" {
+					c.Printf("%s = %s[0];", value, runeVar)
+				}
+				c.translateStmtList(s.Body.List)
+			})
+			c.Printf("}")
+			return
+		}
+
+		if _, isMap := c.info.Types[s.X].Underlying().(*types.Map); isMap {
+			keysVar := c.newVarName("_keys")
+			c.Printf("%s = %s !== null ? Go$keys(%s) : [];", keysVar, refVar, refVar)
+			c.Printf("%sfor (; %s < %s.length; %s++) {", label, iVar, keysVar, iVar)
+			c.Indent(func() {
+				entryVar := c.newVarName("_entry")
 				c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
 				if key != "" {
 					c.Printf("%s = %s.k;", key, entryVar)
 				}
-			}
-			if !isMap && key != "" {
+				if value != "" {
+					c.Printf("%s = %s.v;", value, entryVar)
+				}
+				c.translateStmtList(s.Body.List)
+			})
+			c.Printf("}")
+			return
+		}
+
+		lenVar := c.newVarName("_len")
+		c.Printf("%s = %s !== null ? %s.length : 0;", lenVar, refVar, refVar)
+
+		c.Printf("%sfor (; %s < %s; %s++) {", label, iVar, lenVar, iVar)
+		c.Indent(func() {
+			if key != "" {
 				c.Printf("%s = %s;", key, iVar)
 			}
 			if value != "" {
@@ -166,10 +185,6 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					c.Printf("%s = %s[%s];", value, refVar, iVar)
 				case *types.Slice:
 					c.Printf("%s = %s.array[%s.offset + %s];", value, refVar, refVar, iVar)
-				case *types.Map:
-					c.Printf("%s = %s.v;", value, entryVar)
-				case *types.Basic:
-					c.Printf("%s = %s.charCodeAt(%s);", value, refVar, iVar)
 				default:
 					panic(fmt.Sprintf("Unhandled range type: %T\n", t))
 				}

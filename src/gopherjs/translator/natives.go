@@ -215,7 +215,63 @@ Go$Slice.prototype.Go$toString = function() {
 	return s;
 };
 
-var Go$stringToSlice = function(str, terminateWithNull) {
+var Go$nextRune = function(str, pos) {
+	var c0 = str.charCodeAt(pos)
+
+	if (c0 < 0x80) {
+		return [c0, 1];
+	}
+
+	if (c0 === NaN || c0 < 0xC0) {
+		return [0xFFFD, 1];
+	}
+
+	var c1 = str.charCodeAt(pos + 1)
+	if (c1 === NaN || c1 < 0x80 || 0xC0 <= c1) {
+		return [0xFFFD, 1];
+	}
+
+	if (c0 < 0xE0) {
+		var r = (c0 & 0x1F) << 6 | (c1 & 0x3F);
+	 	if (r <= 0x7F) {
+			return [0xFFFD, 1];
+		}
+		return [r, 2];
+	}
+
+	var c2 = str.charCodeAt(pos + 2)
+	if (c2 === NaN || c2 < 0x80 || 0xC0 <= c2) {
+		return [0xFFFD, 1];
+	}
+
+	if (c0 < 0xF0) {
+		var r = (c0 & 0x0F) << 12 | (c1 & 0x3F) << 6 | (c2 & 0x3F);
+	 	if (r <= 0x7FF) {
+			return [0xFFFD, 1];
+		}
+		if (0xD800 <= r && r <= 0xDFFF) {
+			return [0xFFFD, 1];
+		}
+		return [r, 3];
+	}
+
+	var c3 = str.charCodeAt(pos + 3)
+	if (c3 === NaN || c3 < 0x80 || 0xC0 <= c3) {
+		return [0xFFFD, 1];
+	}
+
+	if (c0 < 0xF8) {
+		var r = (c0 & 0x07) << 18 | (c1 & 0x3F) << 12 | (c2 & 0x3F) << 6 | (c3 & 0x3F);
+	 	if (r <= 0xFFFF || 0x10FFFF < r) {
+			return [0xFFFD, 1];
+		}
+		return [r, 4];
+	}
+
+	return [0xFFFD, 1];
+}
+
+var Go$stringToBytes = function(str, terminateWithNull) {
 	var array = new Uint8Array(terminateWithNull ? str.length + 1 : str.length);
 	for (var i = 0; i < str.length; i++) {
 		array[i] = str.charCodeAt(i);
@@ -223,8 +279,19 @@ var Go$stringToSlice = function(str, terminateWithNull) {
 	if (terminateWithNull) {
 		array[str.length] = 0;
 	}
-	return new Go$Slice(array);
+	return array;
 };
+
+var Go$stringToRunes = function(str) {
+	var array = new Int32Array(str.length);
+	var rune;
+	var j = 0;
+	for (var i = 0; i < str.length; i += rune[1], j++) {
+		rune = Go$nextRune(str, i);
+		array[j] = rune[0];
+	}
+	return array.subarray(0, j);
+}
 
 var Go$clear = function(array) { for (var i = 0; i < array.length; i++) { array[i] = 0; } return array; }; // TODO remove when NodeJS is behaving according to spec
 
@@ -675,7 +742,7 @@ var natives = map[string]string{
 			Syscall6 = syscall.Syscall6;
 			RawSyscall = syscall.Syscall;
 			RawSyscall6 = syscall.Syscall6;
-			BytePtrFromString = function(s) { return [Go$stringToSlice(s, true).array, null]; };
+			BytePtrFromString = function(s) { return [Go$stringToBytes(s, true), null]; };
 
 			var envkeys = Object.keys(process.env);
 			Go$pkg.envs = new Go$Slice(new Array(envkeys.length));

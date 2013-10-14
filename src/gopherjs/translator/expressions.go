@@ -762,20 +762,22 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		}
 
 	case *types.Slice:
-		value := c.translateExpr(expr)
-		switch t := exprType.Underlying().(type) {
+		switch et := exprType.Underlying().(type) {
 		case *types.Basic:
-			if t.Info()&types.IsString != 0 {
-				value = fmt.Sprintf("Go$stringToSlice(%s)", value)
+			if et.Info()&types.IsString != 0 {
+				if types.IsIdentical(t.Elem(), types.Typ[types.Rune]) {
+					return fmt.Sprintf("new %s(Go$stringToRunes(%s))", c.typeName(desiredType), c.translateExpr(expr))
+				}
+				return fmt.Sprintf("new %s(Go$stringToBytes(%s))", c.typeName(desiredType), c.translateExpr(expr))
 			}
 		case *types.Array, *types.Pointer:
-			value = fmt.Sprintf("new Go$Slice(%s)", value)
+			return fmt.Sprintf("new Go$Slice(%s)", c.translateExpr(expr))
 		}
-		namedDesiredType, desiredIsNamed := desiredType.(*types.Named)
+		_, desiredIsNamed := desiredType.(*types.Named)
 		if desiredIsNamed && !types.IsIdentical(exprType, desiredType) {
-			value = fmt.Sprintf("(Go$obj = %s, (new %s(Go$obj.array)).Go$subslice(Go$obj.offset, Go$obj.offset + Go$obj.length))", value, c.typeName(namedDesiredType))
+			return fmt.Sprintf("(Go$obj = %s, (new %s(Go$obj.array)).Go$subslice(Go$obj.offset, Go$obj.offset + Go$obj.length))", c.translateExpr(expr), c.typeName(desiredType))
 		}
-		return value
+		return c.translateExpr(expr)
 
 	case *types.Interface:
 		if isWrapped(exprType) {

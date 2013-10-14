@@ -257,11 +257,18 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		op := e.Op.String()
 		switch e.Op {
 		case token.AND:
-			target := c.translateExpr(e.X)
 			if _, isStruct := c.info.Types[e.X].Underlying().(*types.Struct); !isStruct {
-				return fmt.Sprintf("new %s(function() { return %s; }, function(v) { %s = v; })", c.typeName(exprType), target, target)
+				v := ast.NewIdent("v")
+				c.info.Types[v] = c.info.Types[e.X]
+				assignStmt := &ast.AssignStmt{
+					Lhs: []ast.Expr{e.X},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{v},
+				}
+				assign := strings.TrimSpace(string(c.CatchOutput(func() { c.translateStmt(assignStmt, "") })))
+				return fmt.Sprintf("new %s(function() { return %s; }, function(v) { %s })", c.typeName(exprType), c.translateExpr(e.X), assign)
 			}
-			return target
+			return c.translateExpr(e.X)
 		case token.XOR:
 			op = "~"
 		case token.ARROW:

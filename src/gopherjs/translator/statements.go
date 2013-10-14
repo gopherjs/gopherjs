@@ -244,7 +244,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					Args:     args,
 					Ellipsis: s.Call.Ellipsis,
 				})
-				c.Printf("Go$deferred.push({ fun: function(%s) { %s; }, args: [%s] });", strings.Join(c.translateExprSlice(args), ", "), call, strings.Join(c.translateExprSlice(s.Call.Args), ", "))
+				c.Printf("Go$deferred.push({ fun: function(%s) { %s; }, args: [%s] });", strings.Join(c.translateExprSlice(args, nil), ", "), call, strings.Join(c.translateExprSlice(s.Call.Args, nil), ", "))
 				return
 			}
 		}
@@ -380,7 +380,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					c.Printf("%s = %s;", keyVar, c.translateExprToType(l.Index, t.Key()))
 					key := keyVar
 					if hasId(t.Key()) {
-						key = fmt.Sprintf("(%s || Go$nil).Go$key()", key)
+						key = fmt.Sprintf("(%s || Go$Map.Go$nil).Go$key()", key)
 					}
 					c.Printf(`%s[%s] = { k: %s, v: %s };`, c.translateExpr(l.X), key, keyVar, rhs)
 					continue

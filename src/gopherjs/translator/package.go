@@ -334,9 +334,10 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 
 	case *ast.TypeSpec:
 		nt := c.info.Objects[s.Name].Type().(*types.Named)
+		typeName := c.typeName(nt)
 		if isWrapped(nt) {
-			c.Printf(`var %s = function(v) { this.v = v; };`, c.typeName(nt))
-			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.v; };`, c.typeName(nt), c.typeName(nt))
+			c.Printf(`var %s = function(v) { this.v = v; };`, typeName)
+			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.v; };`, typeName, typeName)
 			return
 		}
 		switch t := nt.Underlying().(type) {
@@ -345,7 +346,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			for i := 0; i < t.NumFields(); i++ {
 				params[i] = t.Field(i).Name() + "_"
 			}
-			c.Printf("%s = function(%s) {", c.typeName(nt), strings.Join(params, ", "))
+			c.Printf("%s = function(%s) {", typeName, strings.Join(params, ", "))
 			c.Indent(func() {
 				c.Printf("this.Go$id = Go$idCounter++;")
 				for i := 0; i < t.NumFields(); i++ {
@@ -354,8 +355,8 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				}
 			})
 			c.Printf("};")
-			c.Printf(`%s.name = "%s";`, c.typeName(nt), c.typeName(nt))
-			c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, c.typeName(nt))
+			c.Printf(`%s.name = "%s";`, typeName, typeName)
+			c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, typeName)
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)
 				if field.Anonymous() {
@@ -377,16 +378,19 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 						if isWrapped(field.Type()) {
 							value = fmt.Sprintf("new %s(%s)", field.Name(), value)
 						}
-						c.Printf("%s.prototype.%s = function(%s) { return %s.%s(%s); };", c.typeName(nt), name, strings.Join(params, ", "), value, name, strings.Join(params, ", "))
+						c.Printf("%s.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, name, strings.Join(params, ", "), value, name, strings.Join(params, ", "))
 					}
 				}
 			}
 		case *types.Interface:
-			c.Printf("%s = {};", c.typeName(nt))
+			c.Printf("%s = {};", typeName)
 		default:
-			typeName := c.typeName(t)
-			c.Printf("%s = function() { %s.apply(this, arguments); };", c.typeName(nt), typeName)
-			c.Printf("Go$copyFields(%s.prototype, %s.prototype);", typeName, c.typeName(nt))
+			underlyingTypeName := c.typeName(t)
+			c.Printf("%s = function() { %s.apply(this, arguments); };", typeName, underlyingTypeName)
+			c.Printf("Go$copyFields(%s.prototype, %s.prototype);", underlyingTypeName, typeName)
+			if _, isSlice := t.(*types.Slice); isSlice {
+				c.Printf("%s.Go$nil = new %s({ isNil: true, length: 0 });", typeName, typeName)
+			}
 		}
 
 	case *ast.ImportSpec:
@@ -503,12 +507,13 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 		if t.Info()&types.IsString != 0 {
 			return `""`
 		}
+		if t.Kind() == types.UntypedNil {
+			panic("Zero value for untyped nil.")
+		}
 	case *types.Array:
 		return fmt.Sprintf("Go$clear(new %s(%d))", toArrayType(t.Elem()), t.Len())
 	case *types.Slice:
-		if isNamed {
-			return fmt.Sprintf("new %s(%s)", c.typeName(named), c.zeroValue(types.NewArray(t.Elem(), 0)))
-		}
+		return fmt.Sprintf("%s.Go$nil", c.typeName(ty))
 	case *types.Struct:
 		if isNamed {
 			return fmt.Sprintf("new %s()", c.typeName(named))

@@ -7,19 +7,6 @@ Error.stackTraceLimit = -1;
 var Go$obj, Go$tuple;
 var Go$idCounter = 1;
 
-var Go$nil = new Object();
-Go$nil.Go$key = function() { return "nil"; };
-Go$nil.Go$subslice = function(begin, end) {
-	if (begin !== 0 || (end || 0) !== 0) {
-		throw new Go$Panic("runtime error: slice bounds out of range");
-	}
-	return null;
-};
-Go$nil.Go$toArray = function() { return []; };
-Go$nil.array = [];
-Go$nil.offset = 0;
-Go$nil.length = 0;
-
 var Go$keys = Object.keys;
 var Go$min = Math.min;
 var Go$charToString = String.fromCharCode;
@@ -198,6 +185,7 @@ var Go$Slice = function(array) {
 	this.offset = 0;
 	this.length = array && array.length;
 };
+Go$Slice.Go$nil = new Go$Slice(Object.freeze({ isNil: true, length: 0 }));
 Go$Slice.prototype.Go$subslice = function(begin, end) {
 	var s = new this.constructor(this.array);
 	s.offset = this.offset + begin;
@@ -208,12 +196,18 @@ Go$Slice.prototype.Go$subslice = function(begin, end) {
 	return s;
 };
 Go$Slice.prototype.Go$toArray = function() {
+	if (this.length === 0) {
+		return [];
+	}
 	if (this.array.constructor !== Array) {
 		return this.array.subarray(this.offset, this.offset + this.length);
 	}
 	return this.array.slice(this.offset, this.offset + this.length);
 };
 Go$Slice.prototype.Go$toString = function() {
+	if (this.length === 0) {
+		return "";
+	}
 	var s = "";
 	for (var i = 0; i < this.length; i += 100000) {
 		s += String.fromCharCode.apply(null, this.array.subarray(this.offset + i, this.offset + Math.min(this.length, i + 100000)));
@@ -240,6 +234,7 @@ var Go$Map = function(data) {
 		this[data[i]] = { k: data[i], v: data[i + 1] };
 	}
 };
+Go$Map.Go$nil = { Go$key: function() { return "nil"; } };
 var Go$objectProperyNames = Object.getOwnPropertyNames(Object.prototype);
 for (var i = 0; i < Go$objectProperyNames.length; i++) {
 	Go$Map.prototype[Go$objectProperyNames[i]] = undefined;
@@ -254,7 +249,7 @@ var Go$Channel = function() {};
 var Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };
 
 var Go$copy = function(dst, src) {
-	if (src === null || dst === null) {
+	if (src.length === 0 || dst.length === 0) {
 		return 0;
 	}
 	var n = Math.min(src.length, dst.length);
@@ -270,10 +265,10 @@ var Go$copy = function(dst, src) {
 
 // TODO fix zero values
 var Go$append = function(slice, toAppend) {
-	if (toAppend === null) {
+	if (toAppend.length === 0) {
 		return slice;
 	}
-	if (slice === null || slice === 0) { // FIXME
+	if (slice === 0 || slice.array.isNil) { // FIXME
 		// this must be a new array, don't just return toAppend
 		slice = new toAppend.constructor(new toAppend.array.constructor(0));
 	}

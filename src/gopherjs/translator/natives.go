@@ -215,13 +215,13 @@ Go$Slice.prototype.Go$toString = function() {
 	return s;
 };
 
-String.prototype.Go$toSlice = function(terminateWithNull) {
-	var array = new Uint8Array(terminateWithNull ? this.length + 1 : this.length);
-	for (var i = 0; i < this.length; i++) {
-		array[i] = this.charCodeAt(i);
+var Go$stringToSlice = function(str, terminateWithNull) {
+	var array = new Uint8Array(terminateWithNull ? str.length + 1 : str.length);
+	for (var i = 0; i < str.length; i++) {
+		array[i] = str.charCodeAt(i);
 	}
 	if (terminateWithNull) {
-		array[this.length] = 0;
+		array[str.length] = 0;
 	}
 	return new Go$Slice(array);
 };
@@ -675,7 +675,7 @@ var natives = map[string]string{
 			Syscall6 = syscall.Syscall6;
 			RawSyscall = syscall.Syscall;
 			RawSyscall6 = syscall.Syscall6;
-			BytePtrFromString = function(s) { return [s.Go$toSlice(true).array, null]; };
+			BytePtrFromString = function(s) { return [Go$stringToSlice(s, true).array, null]; };
 
 			var envkeys = Object.keys(process.env);
 			Go$pkg.envs = new Go$Slice(new Array(envkeys.length));

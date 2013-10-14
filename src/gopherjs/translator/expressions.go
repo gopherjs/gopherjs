@@ -766,7 +766,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		switch t := exprType.Underlying().(type) {
 		case *types.Basic:
 			if t.Info()&types.IsString != 0 {
-				value = fmt.Sprintf("(%s).Go$toSlice()", value)
+				value = fmt.Sprintf("Go$stringToSlice(%s)", value)
 			}
 		case *types.Array, *types.Pointer:
 			value = fmt.Sprintf("new Go$Slice(%s)", value)

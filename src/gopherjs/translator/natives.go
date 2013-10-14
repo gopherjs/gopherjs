@@ -185,7 +185,7 @@ var Go$Slice = function(array) {
 	this.offset = 0;
 	this.length = array && array.length;
 };
-Go$Slice.Go$nil = new Go$Slice(Object.freeze({ isNil: true, length: 0 }));
+Go$Slice.Go$nil = new Go$Slice({ isNil: true, length: 0 });
 Go$Slice.prototype.Go$subslice = function(begin, end) {
 	var s = new this.constructor(this.array);
 	s.offset = this.offset + begin;

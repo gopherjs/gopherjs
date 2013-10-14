@@ -678,9 +678,6 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 	if basicLit, isBasicLit := expr.(*ast.BasicLit); isBasicLit && basicLit.Kind == token.STRING {
 		exprType = types.Typ[types.String]
 	}
-	if _, found := c.info.Values[expr]; found {
-		exprType = exprType.Underlying()
-	}
 	basicExprType, isBasicExpr := exprType.Underlying().(*types.Basic)
 	if isBasicExpr && basicExprType.Kind() == types.UntypedNil {
 		return c.zeroValue(desiredType)

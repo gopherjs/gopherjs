@@ -25,7 +25,7 @@ func main() {
 	app := angularjs.NewModule("playground", nil, nil)
 
 	app.NewController("PlaygroundCtrl", func(scope *angularjs.Scope) {
-		scope.Set("code", "package main\n\nimport \"fmt\";\n\nfunc main() {\n\tfmt.Println(\"Hello, playground\")\n}\n")
+		scope.Set("code", "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"Hello, playground\")\n}\n")
 
 		var t *translator.Translator
 		t = &translator.Translator{
@@ -101,10 +101,11 @@ func main() {
 		scope.Set("format", func() {
 			out, err := format.Source([]byte(scope.GetString("code")))
 			if err != nil {
-				println(err)
+				scope.Set("output", []interface{}{&OutputLine{"err", err.Error()}})
 				return
 			}
-			println(out)
+			scope.Set("code", string(out))
+			scope.Set("output", []interface{}{})
 		})
 
 		run()

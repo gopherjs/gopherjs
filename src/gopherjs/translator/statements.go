@@ -369,6 +369,14 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				continue
 			}
 
+			for {
+				if p, isParenExpr := lhs.(*ast.ParenExpr); isParenExpr {
+					lhs = p.X
+					continue
+				}
+				break
+			}
+
 			switch l := lhs.(type) {
 			case *ast.StarExpr:
 				if s, isStruct := c.info.Types[l].Underlying().(*types.Struct); isStruct {

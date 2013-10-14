@@ -360,7 +360,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				}
 			})
 			c.Printf("};")
-			c.Printf(`%s.name = "%s";`, typeName, typeName)
+			c.Printf(`%s.Go$name = "%s";`, typeName, typeName)
 			c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, typeName)
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)

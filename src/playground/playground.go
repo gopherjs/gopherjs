@@ -138,7 +138,15 @@ const js_evalScript = `
 	  	throw new Go$Panic("Syscall not supported: " + trap);
   	}
   };
-  eval(script);
+  try {
+  	eval(script);
+  } catch (err) {
+  	scope.native.output.push(new OutputLine("err", "panic: " + err.message.v));
+  	var stack = err.stack.split("\n").slice(1, -12);
+  	for (var i = 0; i < stack.length; i++) {
+  		scope.native.output.push(new OutputLine("err", stack[i].split(" (eval at ")[0]));
+  	}
+  }
 `
 
 type FileEntry struct {

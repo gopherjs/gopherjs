@@ -104,8 +104,13 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	}
 
 	var errList ErrorList
+	var previousErr error
 	config.Error = func(err error) {
+		if previousErr != nil && previousErr.Error() == err.Error() {
+			return
+		}
 		errList = append(errList, err)
+		previousErr = err
 	}
 	typesPkg, err := config.Check(importPath, fileSet, files, info)
 	if errList != nil {

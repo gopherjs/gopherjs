@@ -23,11 +23,11 @@ const js_Module_NewController = `
 func (m *Module) NewFilter(name string, fn func(text string, arguments []string) string) {}
 
 const js_Module_NewFilter = `
-  this.native.filter(name, function() {
-  	return function(text) {
-  		return fn(text, new Go$Slice(Array.prototype.slice.call(arguments, 1)));
-  	};
-  });
+	this.native.filter(name, function() {
+		return function(text) {
+			return fn(text, new Go$Slice(Array.prototype.slice.call(arguments, 1)));
+		};
+	});
 `
 
 type Scope struct {
@@ -61,17 +61,17 @@ const js_Scope_GetSlice = `
 func (s *Scope) Set(key string, value interface{}) {}
 
 const js_Scope_Set = `
-  switch (value.constructor) {
-  case Go$String:
-    this.native[key] = Go$externalizeString(value.v);
-    break;
-  case Go$Slice:
-  	this.native[key] = value.Go$toArray();
-    break;
-  default:
-    this.native[key] = value.v !== undefined ? value.v : value;
-    break;
-  }
+	switch (value.constructor) {
+	case Go$String:
+		this.native[key] = Go$externalizeString(value.v);
+		break;
+	case Go$Slice:
+		this.native[key] = value.Go$toArray();
+		break;
+	default:
+		this.native[key] = value.v !== undefined ? value.v : value;
+		break;
+	}
 `
 
 type SCE struct {

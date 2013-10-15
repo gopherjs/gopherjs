@@ -91,7 +91,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			value := refVar
 			if len(conds) == 1 {
-				if isWrapped(c.info.Types[conds[0]]) {
+				t := c.info.Types[conds[0]]
+				_, isStruct := t.Underlying().(*types.Struct)
+				if isWrapped(t) || isStruct {
 					value += ".v"
 				}
 			}

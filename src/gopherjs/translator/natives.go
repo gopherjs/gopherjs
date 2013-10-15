@@ -1,6 +1,5 @@
 package translator
 
-// TODO cleanup global names
 var prelude = `
 Error.stackTraceLimit = -1;
 
@@ -501,16 +500,8 @@ var Go$typeOf = function(value) {
 	return value.constructor;
 };
 
-var typeAssertionFailed = function(obj) {
+var Go$typeAssertionFailed = function(obj) {
 	throw new Go$Panic("type assertion failed: " + obj + " (" + obj.constructor + ")");
-};
-
-var newNumericArray = function(len) {
-	var a = new Go$Array(len);
-	for (var i = 0; i < len; i++) {
-		a[i] = 0;
-	}
-	return a;
 };
 
 var Go$now = function() { var msec = (new Date()).getTime(); return [Math.floor(msec / 1000), (msec % 1000) * 1000000]; };

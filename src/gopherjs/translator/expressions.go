@@ -625,7 +625,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		if _, isTuple := exprType.(*types.Tuple); isTuple {
 			return fmt.Sprintf("(Go$obj = %s, %s ? [%s, true] : [%s, false])", c.translateExpr(e.X), check, value, c.zeroValue(c.info.Types[e.Type]))
 		}
-		return fmt.Sprintf("(Go$obj = %s, %s ? %s : typeAssertionFailed(Go$obj))", c.translateExpr(e.X), check, value)
+		return fmt.Sprintf("(Go$obj = %s, %s ? %s : Go$typeAssertionFailed(Go$obj))", c.translateExpr(e.X), check, value)
 
 	case *ast.Ident:
 		if e.Name == "_" {

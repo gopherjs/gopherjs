@@ -3,7 +3,7 @@ package angularjs
 func NewModule(name string, requires []string, configFn func()) *Module { return nil }
 
 const js_NewModule = `
-	requires = requires ? requires.Go$toArray() : [];
+	requires = requires ? Go$sliceToArray(requires) : [];
 	return new Module(angular.module(name, requires, configFn));
 `
 
@@ -66,7 +66,7 @@ const js_Scope_Set = `
 		this.native[key] = Go$externalizeString(value.v);
 		break;
 	case Go$Slice:
-		this.native[key] = value.Go$toArray();
+		this.native[key] = Go$sliceToArray(value);
 		break;
 	default:
 		this.native[key] = value.v !== undefined ? value.v : value;

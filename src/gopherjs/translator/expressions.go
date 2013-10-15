@@ -433,22 +433,24 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	case *ast.SliceExpr:
 		b, isBasic := c.info.Types[e.X].(*types.Basic)
 		isString := isBasic && b.Info()&types.IsString != 0
-		method := "Go$subslice"
-		if isString {
-			method = "substring"
-		}
 		slice := c.translateExprToType(e.X, exprType)
 		if e.High == nil {
 			if e.Low == nil {
 				return slice
 			}
-			return fmt.Sprintf("%s.%s(%s)", slice, method, c.translateExpr(e.Low))
+			if isString {
+				return fmt.Sprintf("%s.substring(%s)", slice, c.translateExpr(e.Low))
+			}
+			return fmt.Sprintf("Go$subslice(%s, %s)", slice, c.translateExpr(e.Low))
 		}
 		low := "0"
 		if e.Low != nil {
 			low = c.translateExpr(e.Low)
 		}
-		return fmt.Sprintf("%s.%s(%s, %s)", slice, method, low, c.translateExpr(e.High))
+		if isString {
+			return fmt.Sprintf("%s.substring(%s, %s)", slice, low, c.translateExpr(e.High))
+		}
+		return fmt.Sprintf("Go$subslice(%s, %s, %s)", slice, low, c.translateExpr(e.High))
 
 	case *ast.SelectorExpr:
 		sel := c.info.Selections[e]
@@ -498,7 +500,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					switch t2 := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Slice:
 						if len(e.Args) == 3 {
-							return fmt.Sprintf("new %s(Go$clear(new %s(%s))).Go$subslice(0, %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[2]), c.translateExpr(e.Args[1]))
+							return fmt.Sprintf("Go$subslice(new %s(Go$clear(new %s(%s))), 0, %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[2]), c.translateExpr(e.Args[1]))
 						}
 						return fmt.Sprintf("new %s(Go$clear(new %s(%s)))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[1]))
 					default:
@@ -749,7 +751,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		case t.Kind() == types.UnsafePointer:
 			if unary, isUnary := expr.(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
 				if indexExpr, isIndexExpr := unary.X.(*ast.IndexExpr); isIndexExpr {
-					return fmt.Sprintf("%s.Go$toArray()", c.translateExprToType(indexExpr.X, types.NewSlice(nil)))
+					return fmt.Sprintf("Go$sliceToArray(%s)", c.translateExprToType(indexExpr.X, types.NewSlice(nil)))
 				}
 				if ident, isIdent := unary.X.(*ast.Ident); isIdent && ident.Name == "_zero" {
 					return "new Uint8Array(0)"
@@ -783,7 +785,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		}
 		_, desiredIsNamed := desiredType.(*types.Named)
 		if desiredIsNamed && !types.IsIdentical(exprType, desiredType) {
-			return fmt.Sprintf("(Go$obj = %s, (new %s(Go$obj.array)).Go$subslice(Go$obj.offset, Go$obj.offset + Go$obj.length))", c.translateExpr(expr), c.typeName(desiredType))
+			return fmt.Sprintf("(Go$obj = %s, Go$subslice(new %s(Go$obj.array), Go$obj.offset, Go$obj.offset + Go$obj.length))", c.translateExpr(expr), c.typeName(desiredType))
 		}
 		return c.translateExpr(expr)
 

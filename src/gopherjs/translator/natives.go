@@ -10,14 +10,6 @@ var Go$keys = Object.keys;
 var Go$min = Math.min;
 var Go$charToString = String.fromCharCode;
 
-var Go$copyFields = function(from, to) {
-	var keys = Object.keys(from);
-	for (var i = 0; i < keys.length; i++) {
-		var key = keys[i];
-		to[key] = from[key];
-	}
-};
-
 var Go$Uint8      = function(v) { this.v = v; };
 Go$Uint8.prototype.Go$key = function() { return "Uint8$" + this.v; };
 var Go$Uint16     = function(v) { this.v = v; };
@@ -185,23 +177,25 @@ var Go$Slice = function(array) {
 	this.length = array && array.length;
 };
 Go$Slice.Go$nil = new Go$Slice({ isNil: true, length: 0 });
-Go$Slice.prototype.Go$subslice = function(begin, end) {
-	var s = new this.constructor(this.array);
-	s.offset = this.offset + begin;
-	s.length = this.length - begin;
+
+var Go$subslice = function(slice, begin, end) {
+	var s = new slice.constructor(slice.array);
+	s.offset = slice.offset + begin;
+	s.length = slice.length - begin;
 	if (end !== undefined) {
 		s.length = end - begin;
 	}
 	return s;
 };
-Go$Slice.prototype.Go$toArray = function() {
-	if (this.length === 0) {
+
+var Go$sliceToArray = function(slice) {
+	if (slice.length === 0) {
 		return [];
 	}
-	if (this.array.constructor !== Array) {
-		return this.array.subarray(this.offset, this.offset + this.length);
+	if (slice.array.constructor !== Array) {
+		return slice.array.subarray(slice.offset, slice.offset + slice.length);
 	}
-	return this.array.slice(this.offset, this.offset + this.length);
+	return slice.array.slice(slice.offset, slice.offset + slice.length);
 };
 
 var Go$decodeRune = function(str, pos) {

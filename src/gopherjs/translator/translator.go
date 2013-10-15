@@ -207,12 +207,17 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 			}
 			implementedBy := make(map[string]bool, 0)
 			for _, other := range allTypeNames {
-				_, otherIsInterface := other.Type().Underlying().(*types.Interface)
 				otherType := other.Type()
+				if _, otherIsInterface := otherType.Underlying().(*types.Interface); otherIsInterface {
+					continue
+				}
 				if _, isStruct := otherType.Underlying().(*types.Struct); isStruct {
+					if types.IsAssignableTo(otherType, in) {
+						implementedBy[fmt.Sprintf("Go$packages[\"%s\"].%s.Go$NonPointer", other.Pkg().Path(), other.Name())] = true
+					}
 					otherType = types.NewPointer(otherType)
 				}
-				if !otherIsInterface && types.IsAssignableTo(otherType, in) {
+				if types.IsAssignableTo(otherType, in) {
 					implementedBy[fmt.Sprintf("Go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
 				}
 			}

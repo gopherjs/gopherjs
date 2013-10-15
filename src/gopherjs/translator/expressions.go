@@ -172,7 +172,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case *types.Map:
 				return fmt.Sprintf("new %s([%s])", c.typeName(t), strings.Join(elements, ", "))
 			case *types.Struct:
-				return fmt.Sprintf("new %s(%s)", c.typeName(t), strings.Join(elements, ", "))
+				return fmt.Sprintf("new %s(%s)", c.nameForObject(t.Obj()), strings.Join(elements, ", "))
 			default:
 				panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", u))
 			}
@@ -469,11 +469,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		switch sel.Kind() {
 		case types.FieldVal:
-			return c.translateExprToType(e.X, types.NewInterface(nil)) + "." + translateSelection(sel)
+			return c.translateExpr(e.X) + "." + translateSelection(sel)
 		case types.MethodVal:
 			parameters := makeParametersList()
 			recv := c.newVarName("_recv")
-			return fmt.Sprintf("(%s = %s, function(%s) { return %s.%s(%s); })", recv, c.translateExprToType(e.X, types.NewInterface(nil)), strings.Join(parameters, ", "), recv, e.Sel.Name, strings.Join(parameters, ", "))
+			return fmt.Sprintf("(%s = %s, function(%s) { return %s.%s(%s); })", recv, c.translateExpr(e.X), strings.Join(parameters, ", "), recv, e.Sel.Name, strings.Join(parameters, ", "))
 		case types.MethodExpr:
 			parameters := append([]string{parameterName(sel.Obj().Type().(*types.Signature).Recv())}, makeParametersList()...)
 			return fmt.Sprintf("(function(%s) { return %s.prototype.%s.call(%s); })", strings.Join(parameters, ", "), c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name(), strings.Join(parameters, ", "))
@@ -585,7 +585,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					fun = fmt.Sprintf("(new %s(function() { return %s; }, function(v) { %s = v; })).%s", c.typeName(methodsRecvType), target, target, f.Sel.Name)
 					break
 				}
-				fun = fmt.Sprintf("%s.%s", c.translateExprToType(f.X, types.NewInterface(nil)), f.Sel.Name)
+				if isWrapped(sel.Recv()) {
+					fun = fmt.Sprintf("(new %s(%s)).%s", c.typeName(sel.Recv()), c.translateExpr(f.X), f.Sel.Name)
+					break
+				}
+				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), f.Sel.Name)
 			case types.PackageObj:
 				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), f.Sel.Name)
 			default:
@@ -786,6 +790,11 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		if isWrapped(exprType) {
 			return fmt.Sprintf("new %s(%s)", c.typeName(exprType), c.translateExpr(expr))
 		}
+		if named, isNamed := exprType.(*types.Named); isNamed {
+			if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
+				return fmt.Sprintf("new %s.Go$NonPointer(%s)", c.nameForObject(named.Obj()), c.translateExpr(expr))
+			}
+		}
 
 	case *types.Pointer:
 		s, isStruct := t.Elem().Underlying().(*types.Struct)
@@ -820,7 +829,7 @@ func (c *PkgContext) cloneStruct(srcPath []string, t *types.Named) string {
 		}
 		fields[i] = strings.Join(fieldPath, ".")
 	}
-	return fmt.Sprintf("new %s(%s)", c.typeName(t), strings.Join(fields, ", "))
+	return fmt.Sprintf("new %s(%s)", c.nameForObject(t.Obj()), strings.Join(fields, ", "))
 }
 
 func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {

@@ -448,7 +448,9 @@ func (c *PkgContext) translateFunction(typeName string, isStruct bool, fun *ast.
 	}
 	c.info.Types[funcLit] = c.info.Objects[fun.Name].Type()
 
+	n := c.usedVarNames
 	params := c.translateParams(fun.Type)
+	c.usedVarNames = n
 	switch {
 	case isStruct:
 		c.Printf("%s.prototype.%s = %s;", typeName, fun.Name.Name, c.translateExpr(funcLit))

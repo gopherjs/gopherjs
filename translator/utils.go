@@ -27,8 +27,13 @@ func GetAllDependencies(pkg string, config *types.Config) ([]*types.Package, err
 		if err != nil {
 			return err
 		}
+		var imps []string
 		for _, imp := range typesPkg.Imports() {
-			if err := importPkg(imp.Path()); err != nil {
+			imps = append(imps, imp.Path())
+		}
+		sort.Strings(imps)
+		for _, imp := range imps {
+			if err := importPkg(imp); err != nil {
 				return err
 			}
 		}

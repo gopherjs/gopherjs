@@ -795,5 +795,9 @@ var natives = map[string]string{
 
 	"time": `
 		now = Go$now;
+		AfterFunc = function(d, f) {
+			setTimeout(f, Go$div64(d, Go$pkg.Millisecond).low);
+			return null;
+		};
 	`,
 }

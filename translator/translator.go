@@ -9,6 +9,7 @@ import (
 	"go/parser"
 	"go/scanner"
 	"go/token"
+	"sort"
 	"strings"
 	"time"
 )
@@ -225,6 +226,7 @@ func (t *Translator) BuildPackage(pkg *GopherPackage) error {
 			for ref := range implementedBy {
 				list = append(list, ref)
 			}
+			sort.Strings(list)
 			if t.Name() == "error" {
 				jsCode = append(jsCode, []byte(fmt.Sprintf("Go$error.Go$implementedBy = [%s];\n", strings.Join(list, ", ")))...)
 				continue

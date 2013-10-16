@@ -157,19 +157,17 @@ func (b *Builder) BuildPackage(pkg *BuilderPackage) error {
 	jsCode.WriteString(strings.TrimSpace(translator.Prelude))
 	jsCode.WriteRune('\n')
 
-	for _, depPath := range dependencies {
-		gopherPkg := b.Packages[depPath]
-		jsCode.WriteString("Go$packages[\"" + gopherPkg.ImportPath + "\"] = (function() {\n")
-		jsCode.Write(gopherPkg.JavaScriptCode)
+	for _, dep := range dependencies {
+		jsCode.WriteString("Go$packages[\"" + dep.Path() + "\"] = (function() {\n")
+		jsCode.Write(b.Packages[dep.Path()].JavaScriptCode)
 		jsCode.WriteString("})();\n")
 	}
 
-	translator.WriteInterfaces(dependencies, b.TypesConfig, jsCode)
+	translator.WriteInterfaces(dependencies, jsCode)
 
-	for _, depPath := range dependencies {
-		initObj := b.TypesConfig.Packages[depPath].Scope().Lookup("init")
-		if initObj != nil {
-			jsCode.WriteString("Go$packages[\"" + depPath + "\"].init();\n")
+	for _, dep := range dependencies {
+		if dep.Scope().Lookup("init") != nil {
+			jsCode.WriteString("Go$packages[\"" + dep.Path() + "\"].init();\n")
 		}
 	}
 

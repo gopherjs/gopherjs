@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-func GetAllDependencies(pkg string, config *types.Config) ([]string, error) {
-	var dependencies []string // ordered
+func GetAllDependencies(pkg string, config *types.Config) ([]*types.Package, error) {
+	var dependencies []*types.Package // ordered
 	imported := make(map[string]bool)
 	var importPkg func(string) error
 	importPkg = func(importPath string) error {
@@ -33,17 +33,17 @@ func GetAllDependencies(pkg string, config *types.Config) ([]string, error) {
 			}
 		}
 
-		dependencies = append(dependencies, importPath)
+		dependencies = append(dependencies, typesPkg)
 		return nil
 	}
 	err := importPkg(pkg)
 	return dependencies, err
 }
 
-func WriteInterfaces(dependencies []string, config *types.Config, w io.Writer) {
+func WriteInterfaces(dependencies []*types.Package, w io.Writer) {
 	allTypeNames := []*types.TypeName{types.New("error").(*types.Named).Obj()}
-	for _, depPath := range dependencies {
-		scope := config.Packages[depPath].Scope()
+	for _, dep := range dependencies {
+		scope := dep.Scope()
 		for _, name := range scope.Names() {
 			if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
 				allTypeNames = append(allTypeNames, typeName)

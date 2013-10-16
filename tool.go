@@ -138,9 +138,6 @@ The commands are:
 		}
 		fmt.Fprintln(file, `"use strict";`)
 		fmt.Fprintf(file, "var Go$webMode = %t;\n", webMode)
-		if webMode {
-			fmt.Fprintln(file, `var Go$syscall = function() { throw "Syscalls not available in browser." };`)
-		}
 		file.Write(pkg.JavaScriptCode)
 		file.Close()
 	case "run":

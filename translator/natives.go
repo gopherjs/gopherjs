@@ -607,7 +607,7 @@ var natives = map[string]string{
 		Log = Math.log;
 		Log2 = log2;
 
-		// generated from src/bitcasts/bitcasts.go
+		// generated from bitcasts/bitcasts.go
 		Float32bits = (function(f) {
 			if (f === 0) {
 				return 0;
@@ -785,10 +785,10 @@ var natives = map[string]string{
 				Go$pkg.envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
 			}
 		} else {
-			Syscall = Go$syscall;
-			Syscall6 = Go$syscall;
-			RawSyscall = Go$syscall;
-			RawSyscall6 = Go$syscall;
+			Go$pkg.Go$setSyscall = function(f) {
+				Syscall = Syscall6 = RawSyscall = RawSyscall6 = f;
+			}
+			Go$pkg.Go$setSyscall(function() { throw "Syscalls not available in browser." });
 			Go$pkg.envs = new Go$Slice(new Array(0));
 		}
 	`,

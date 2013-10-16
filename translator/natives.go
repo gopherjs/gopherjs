@@ -1,6 +1,6 @@
 package translator
 
-var prelude = `
+var Prelude = `
 Error.stackTraceLimit = -1;
 
 var Go$obj, Go$tuple;

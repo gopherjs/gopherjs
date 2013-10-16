@@ -11,6 +11,12 @@ import (
 
 var ReservedKeywords = []string{"arguments", "class", "delete", "eval", "export", "false", "implements", "interface", "in", "let", "new", "package", "private", "protected", "public", "static", "this", "true", "try", "yield"}
 
+type ErrorList []error
+
+func (err ErrorList) Error() string {
+	return err[0].Error()
+}
+
 type PkgContext struct {
 	pkg          *types.Package
 	info         *types.Info
@@ -57,7 +63,7 @@ func (c *PkgContext) Delayed(f func()) {
 	c.delayedLines = c.CatchOutput(f)
 }
 
-func translatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, config *types.Config) ([]byte, error) {
+func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, config *types.Config) ([]byte, error) {
 	info := &types.Info{
 		Types:      make(map[ast.Expr]types.Type),
 		Values:     make(map[ast.Expr]exact.Value),

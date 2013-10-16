@@ -4,22 +4,17 @@ import (
 	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
-	"github.com/neelance/gopherjs/gcexporter"
 	"github.com/neelance/gopherjs/translator"
 	"go/build"
 	"go/parser"
 	"go/token"
-	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
-	"time"
 )
 
 func main() {
-	var t *translator.Translator
-	t = &translator.Translator{
+	b := &Builder{
 		BuildContext: &build.Context{
 			GOROOT:        build.Default.GOROOT,
 			GOPATH:        build.Default.GOPATH,
@@ -27,60 +22,34 @@ func main() {
 			GOARCH:        build.Default.GOARCH,
 			Compiler:      "gc",
 			InstallSuffix: "js",
-			ReadDir:       ioutil.ReadDir,
-			OpenFile:      func(name string) (io.ReadCloser, error) { return os.Open(name) },
 		},
 		TypesConfig: &types.Config{
 			Packages: make(map[string]*types.Package),
 		},
-		GetModTime: func(name string) time.Time {
-			if name == "" {
-				name = os.Args[0] // gopherjs itself
-			}
-			fileInfo, err := os.Stat(name)
-			if err != nil {
-				return time.Unix(0, 0)
-			}
-			return fileInfo.ModTime()
-		},
-		StoreArchive: func(pkg *translator.GopherPackage) error {
-			if err := os.MkdirAll(path.Dir(pkg.PkgObj), 0777); err != nil {
-				return err
-			}
-			file, err := os.Create(pkg.PkgObj)
-			if err != nil {
-				return err
-			}
-			file.Write(pkg.JavaScriptCode)
-			file.WriteString("$$\n")
-			gcexporter.Write(t.TypesConfig.Packages[pkg.ImportPath], file)
-			file.Close()
-			return nil
-		},
 		FileSet:  token.NewFileSet(),
-		Packages: make(map[string]*translator.GopherPackage),
+		Packages: make(map[string]*BuilderPackage),
 	}
 
-	var pkg *translator.GopherPackage
+	var pkg *BuilderPackage
 	cmd := "help"
 	if len(os.Args) >= 2 {
 		cmd = os.Args[1]
 	}
 	switch cmd {
 	case "install":
-		buildPkg, err := t.BuildContext.Import(os.Args[2], "", 0)
+		buildPkg, err := b.BuildContext.Import(os.Args[2], "", 0)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return
 		}
-		pkg = &translator.GopherPackage{Package: buildPkg}
+		pkg = &BuilderPackage{Package: buildPkg}
 		if pkg.IsCommand() {
 			pkg.PkgObj = pkg.BinDir + "/" + path.Base(pkg.ImportPath) + ".js"
 		}
 
 	case "build", "run":
 		filename := os.Args[2]
-		file, err := parser.ParseFile(t.FileSet, filename, nil, parser.ImportsOnly)
+		file, err := parser.ParseFile(b.FileSet, filename, nil, parser.ImportsOnly)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return
@@ -92,7 +61,7 @@ func main() {
 		}
 
 		basename := path.Base(filename)
-		pkg = &translator.GopherPackage{
+		pkg = &BuilderPackage{
 			Package: &build.Package{
 				Name:       "main",
 				ImportPath: "main",
@@ -124,9 +93,9 @@ The commands are:
 		return
 	}
 
-	err := t.BuildPackage(pkg)
+	err := b.BuildPackage(pkg)
 	if err != nil {
-		if err == translator.PkgObjUpToDate {
+		if err == PkgObjUpToDate {
 			return
 		}
 		if list, isList := err.(translator.ErrorList); isList {
@@ -146,7 +115,7 @@ The commands are:
 		}
 
 		webMode := false
-		webModeConst := t.TypesConfig.Packages[pkg.ImportPath].Scope().Lookup("gopherjsWebMode")
+		webModeConst := b.TypesConfig.Packages[pkg.ImportPath].Scope().Lookup("gopherjsWebMode")
 		if webModeConst != nil {
 			webMode = exact.BoolVal(webModeConst.(*types.Const).Val())
 		}

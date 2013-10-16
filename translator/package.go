@@ -25,50 +25,6 @@ type PkgContext struct {
 	delayedLines []byte
 }
 
-func (c *PkgContext) newVarName(prefix string) string {
-	n := 0
-	for {
-		name := prefix
-		for _, b := range []byte(name) {
-			if b < '0' || b > 'z' {
-				name = "nonAasciiName"
-				break
-			}
-		}
-		if n != 0 {
-			name += fmt.Sprintf("%d", n)
-		}
-		used := false
-		for _, usedName := range c.usedVarNames {
-			if usedName == name {
-				used = true
-				break
-			}
-		}
-		if !used {
-			c.usedVarNames = append(c.usedVarNames, name)
-			return name
-		}
-		n += 1
-	}
-}
-
-func (c *PkgContext) nameForObject(o types.Object) string {
-	if o.Name() == "error" {
-		return "Go$error"
-	}
-	if o.Pkg() != nil && o.Pkg() != c.pkg {
-		return c.pkgVars[o.Pkg().Path()] + "." + o.Name()
-	}
-
-	name, found := c.objectVars[o]
-	if !found {
-		name = c.newVarName(o.Name())
-		c.objectVars[o] = name
-	}
-	return name
-}
-
 func (c *PkgContext) Write(b []byte) (int, error) {
 	c.output = append(c.output, b...)
 	return len(b), nil
@@ -156,7 +112,7 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				o := c.info.Objects[d.Name]
 				functionsByObject[o] = d
 				if sig.Recv() == nil {
-					c.nameForObject(o) // register toplevel name
+					c.objectName(o) // register toplevel name
 				}
 			case *ast.GenDecl:
 				switch d.Tok {
@@ -164,7 +120,7 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					for _, spec := range d.Specs {
 						s := spec.(*ast.TypeSpec)
 						typeSpecs = append(typeSpecs, s)
-						c.nameForObject(c.info.Objects[s.Name]) // register toplevel name
+						c.objectName(c.info.Objects[s.Name]) // register toplevel name
 					}
 				case token.CONST, token.VAR:
 					for _, spec := range d.Specs {
@@ -172,7 +128,7 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						valueSpecs = append(valueSpecs, s)
 						for _, name := range s.Names {
 							if !isUnderscore(name) {
-								c.nameForObject(c.info.Objects[name]) // register toplevel name
+								c.objectName(c.info.Objects[name]) // register toplevel name
 							}
 						}
 					}
@@ -186,7 +142,7 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			c.Printf("var Go$pkg = {};")
 
 			for _, importedPkg := range typesPkg.Imports() {
-				varName := c.newVarName(importedPkg.Name())
+				varName := c.newVariable(importedPkg.Name())
 				c.Printf(`var %s = Go$packages["%s"];`, varName, importedPkg.Path())
 				c.pkgVars[importedPkg.Path()] = varName
 			}
@@ -194,7 +150,7 @@ func translatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			// types and their functions
 			for _, spec := range typeSpecs {
 				obj := c.info.Objects[spec.Name]
-				typeName := c.nameForObject(obj)
+				typeName := c.objectName(obj)
 				c.Printf("var %s;", typeName)
 				c.translateSpec(spec)
 				for _, fun := range functionsByType[obj.Type()] {
@@ -342,7 +298,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 
 	case *ast.TypeSpec:
 		obj := c.info.Objects[s.Name]
-		typeName := c.nameForObject(obj)
+		typeName := c.objectName(obj)
 		if isWrapped(obj.Type()) {
 			c.Printf(`var %s = function(v) { this.v = v; };`, typeName)
 			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.v; };`, typeName, typeName)
@@ -476,7 +432,7 @@ func (c *PkgContext) translateParams(t *ast.FuncType) string {
 	for _, param := range t.Params.List {
 		for _, ident := range param.Names {
 			if isUnderscore(ident) {
-				params = append(params, c.newVarName("param"))
+				params = append(params, c.newVariable("param"))
 				continue
 			}
 			params = append(params, c.translateExpr(ident))
@@ -529,7 +485,7 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 		return fmt.Sprintf("%s.Go$nil", c.typeName(ty))
 	case *types.Struct:
 		if isNamed {
-			return fmt.Sprintf("new %s()", c.nameForObject(named.Obj()))
+			return fmt.Sprintf("new %s()", c.objectName(named.Obj()))
 		}
 		fields := make([]string, t.NumFields())
 		for i := range fields {
@@ -541,6 +497,50 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 	return "null"
 }
 
+func (c *PkgContext) newVariable(prefix string) string {
+	n := 0
+	for {
+		name := prefix
+		for _, b := range []byte(name) {
+			if b < '0' || b > 'z' {
+				name = "nonAasciiName"
+				break
+			}
+		}
+		if n != 0 {
+			name += fmt.Sprintf("%d", n)
+		}
+		used := false
+		for _, usedName := range c.usedVarNames {
+			if usedName == name {
+				used = true
+				break
+			}
+		}
+		if !used {
+			c.usedVarNames = append(c.usedVarNames, name)
+			return name
+		}
+		n += 1
+	}
+}
+
+func (c *PkgContext) objectName(o types.Object) string {
+	if o.Name() == "error" {
+		return "Go$error"
+	}
+	if o.Pkg() != nil && o.Pkg() != c.pkg {
+		return c.pkgVars[o.Pkg().Path()] + "." + o.Name()
+	}
+
+	name, found := c.objectVars[o]
+	if !found {
+		name = c.newVariable(o.Name())
+		c.objectVars[o] = name
+	}
+	return name
+}
+
 func (c *PkgContext) typeName(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Basic:
@@ -550,18 +550,18 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		return "Go$" + toJavaScriptType(t)
 	case *types.Named:
 		if _, isStruct := t.Underlying().(*types.Struct); isStruct {
-			return c.nameForObject(t.Obj()) + ".Go$NonPointer"
+			return c.objectName(t.Obj()) + ".Go$NonPointer"
 		}
-		return c.nameForObject(t.Obj())
+		return c.objectName(t.Obj())
 	case *types.Pointer:
 		if named, isNamed := t.Elem().(*types.Named); isNamed && named.Obj().Name() != "error" {
 			switch t.Elem().Underlying().(type) {
 			case *types.Struct:
-				return c.nameForObject(named.Obj())
+				return c.objectName(named.Obj())
 			case *types.Interface:
 				return "Go$Pointer"
 			default:
-				return c.nameForObject(named.Obj()) + ".Go$Pointer"
+				return c.objectName(named.Obj()) + ".Go$Pointer"
 			}
 		}
 		return "Go$Pointer"

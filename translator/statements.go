@@ -51,7 +51,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			return c.translateExpr(cond)
 		}
 		if s.Tag != nil {
-			refVar := c.newVarName("_ref")
+			refVar := c.newVariable("_ref")
 			c.Printf("%s = %s;", refVar, c.translateExpr(s.Tag))
 			tagType := c.info.Types[s.Tag]
 			_, isInterface := tagType.(*types.Interface)
@@ -71,15 +71,15 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		switch a := s.Assign.(type) {
 		case *ast.AssignStmt:
 			expr = a.Rhs[0].(*ast.TypeAssertExpr).X
-			typeSwitchVar = c.newVarName(a.Lhs[0].(*ast.Ident).Name)
+			typeSwitchVar = c.newVariable(a.Lhs[0].(*ast.Ident).Name)
 			for _, caseClause := range s.Body.List {
 				c.objectVars[c.info.Implicits[caseClause]] = typeSwitchVar
 			}
 		case *ast.ExprStmt:
 			expr = a.X.(*ast.TypeAssertExpr).X
 		}
-		refVar := c.newVarName("_ref")
-		typeVar := c.newVarName("_type")
+		refVar := c.newVariable("_ref")
+		typeVar := c.newVariable("_type")
 		c.Printf("%s = %s;", refVar, c.translateExpr(expr))
 		c.Printf("%s = Go$typeOf(%s);", typeVar, refVar)
 		translateCond := func(cond ast.Expr) string {
@@ -131,14 +131,14 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			value = c.translateExpr(s.Value)
 		}
 
-		refVar := c.newVarName("_ref")
+		refVar := c.newVariable("_ref")
 		c.Printf("%s = %s;", refVar, c.translateExpr(s.X))
 
-		iVar := c.newVarName("_i")
+		iVar := c.newVariable("_i")
 		c.Printf("%s = 0;", iVar)
 
 		if _, isString := c.info.Types[s.X].Underlying().(*types.Basic); isString {
-			runeVar := c.newVarName("_rune")
+			runeVar := c.newVariable("_rune")
 			c.Printf("%sfor (; %s < %s.length; %s += %s[1]) {", label, iVar, refVar, iVar, runeVar)
 			c.Indent(func() {
 				c.Printf("%s = Go$decodeRune(%s, %s);", runeVar, refVar, iVar)
@@ -155,11 +155,11 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 		if _, isMap := c.info.Types[s.X].Underlying().(*types.Map); isMap {
-			keysVar := c.newVarName("_keys")
+			keysVar := c.newVariable("_keys")
 			c.Printf("%s = %s !== null ? Go$keys(%s) : [];", keysVar, refVar, refVar)
 			c.Printf("%sfor (; %s < %s.length; %s++) {", label, iVar, keysVar, iVar)
 			c.Indent(func() {
-				entryVar := c.newVarName("_entry")
+				entryVar := c.newVariable("_entry")
 				c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
 				if key != "" {
 					c.Printf("%s = %s.k;", key, entryVar)
@@ -173,7 +173,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			return
 		}
 
-		lenVar := c.newVarName("_len")
+		lenVar := c.newVariable("_len")
 		c.Printf("%s = %s !== null ? %s.length : 0;", lenVar, refVar, refVar)
 
 		c.Printf("%sfor (; %s < %s; %s++) {", label, iVar, lenVar, iVar)
@@ -252,7 +252,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				}
 				args := make([]ast.Expr, len(s.Call.Args))
 				for i, arg := range s.Call.Args {
-					argIdent := ast.NewIdent(c.newVarName("_arg"))
+					argIdent := ast.NewIdent(c.newVariable("_arg"))
 					c.info.Types[argIdent] = c.info.Types[arg]
 					args[i] = argIdent
 				}
@@ -382,8 +382,8 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			switch l := lhs.(type) {
 			case *ast.StarExpr:
 				if s, isStruct := c.info.Types[l].Underlying().(*types.Struct); isStruct {
-					lVar := c.newVarName("l")
-					rVar := c.newVarName("r")
+					lVar := c.newVariable("l")
+					rVar := c.newVariable("r")
 					c.Printf("%s = %s;", lVar, c.translateExpr(l.X))
 					c.Printf("%s = %s;", rVar, rhs)
 					for i := 0; i < s.NumFields(); i++ {
@@ -401,7 +401,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					c.Printf("Go$obj.array[Go$obj.offset + %s] = %s;", c.translateExpr(l.Index), rhs)
 					continue
 				case *types.Map:
-					keyVar := c.newVarName("_key")
+					keyVar := c.newVariable("_key")
 					c.Printf("%s = %s;", keyVar, c.translateExprToType(l.Index, t.Key()))
 					key := keyVar
 					if hasId(t.Key()) {

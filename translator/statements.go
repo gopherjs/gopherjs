@@ -124,11 +124,11 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 		key := ""
 		if s.Key != nil && !isUnderscore(s.Key) {
-			key = c.translateExpr(s.Key)
+			key = c.objectName(c.info.Objects[s.Key.(*ast.Ident)])
 		}
 		value := ""
 		if s.Value != nil && !isUnderscore(s.Value) {
-			value = c.translateExpr(s.Value)
+			value = c.objectName(c.info.Objects[s.Value.(*ast.Ident)])
 		}
 
 		refVar := c.newVariable("_ref")
@@ -379,9 +379,21 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				break
 			}
 
+			lhsType := c.info.Types[lhs]
+			if lhsType == nil {
+				lhsType = c.info.Objects[lhs.(*ast.Ident)].Type()
+			}
+			if _, isStruct := lhsType.Underlying().(*types.Struct); isStruct { // struct without pointer
+				rhs = fmt.Sprintf("(Go$obj = %s, %s)", rhs, c.cloneStruct([]string{"Go$obj"}, lhsType))
+			}
+
 			switch l := lhs.(type) {
+			case *ast.Ident:
+				c.Printf("%s = %s;", c.objectName(c.info.Objects[l]), rhs)
+			case *ast.SelectorExpr:
+				c.Printf("%s = %s;", c.translateExpr(l), rhs)
 			case *ast.StarExpr:
-				if s, isStruct := c.info.Types[l].Underlying().(*types.Struct); isStruct {
+				if s, isStruct := lhsType.Underlying().(*types.Struct); isStruct {
 					lVar := c.newVariable("l")
 					rVar := c.newVariable("r")
 					c.Printf("%s = %s;", lVar, c.translateExpr(l.X))
@@ -393,13 +405,13 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					continue
 				}
 				c.Printf("%s.Go$set(%s);", c.translateExpr(l.X), rhs)
-				continue
 			case *ast.IndexExpr:
 				switch t := c.info.Types[l.X].Underlying().(type) {
+				case *types.Array, *types.Pointer:
+					c.Printf("%s[%s] = %s;", c.translateExpr(l.X), c.translateExpr(l.Index), rhs)
 				case *types.Slice:
 					c.Printf("Go$obj = %s;", c.translateExpr(l.X))
 					c.Printf("Go$obj.array[Go$obj.offset + %s] = %s;", c.translateExpr(l.Index), rhs)
-					continue
 				case *types.Map:
 					keyVar := c.newVariable("_key")
 					c.Printf("%s = %s;", keyVar, c.translateExprToType(l.Index, t.Key()))
@@ -408,11 +420,12 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 						key = fmt.Sprintf("(%s || Go$Map.Go$nil).Go$key()", key)
 					}
 					c.Printf(`%s[%s] = { k: %s, v: %s };`, c.translateExpr(l.X), key, keyVar, rhs)
-					continue
+				default:
+					panic(fmt.Sprintf("Unhandled lhs type: %T\n", t))
 				}
+			default:
+				panic(fmt.Sprintf("Unhandled lhs type: %T\n", l))
 			}
-
-			c.Printf("%s = %s;", c.translateExpr(lhs), rhs)
 		}
 
 	case *ast.IncDecStmt:

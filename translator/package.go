@@ -391,6 +391,7 @@ func (c *PkgContext) translateFunction(typeName string, isStruct bool, fun *ast.
 		if _, isUnderlyingStruct := recvType.Underlying().(*types.Struct); isUnderlyingStruct {
 			this = &ast.StarExpr{X: this}
 		}
+		c.info.Types[recv] = recvType
 		c.info.Types[this] = recvType
 		body = append([]ast.Stmt{
 			&ast.AssignStmt{
@@ -441,7 +442,7 @@ func (c *PkgContext) translateParams(t *ast.FuncType) string {
 				params = append(params, c.newVariable("param"))
 				continue
 			}
-			params = append(params, c.translateExpr(ident))
+			params = append(params, c.objectName(c.info.Objects[ident]))
 		}
 	}
 	return strings.Join(params, ", ")
@@ -543,6 +544,13 @@ func (c *PkgContext) objectName(o types.Object) string {
 	if !found {
 		name = c.newVariable(o.Name())
 		c.objectVars[o] = name
+	}
+
+	switch o.(type) {
+	case *types.Var, *types.Const:
+		if o.Parent() == c.pkg.Scope() {
+			return "Go$pkg." + name
+		}
 	}
 	return name
 }

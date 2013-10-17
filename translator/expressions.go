@@ -217,6 +217,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				defer func() { c.postLoopStmt = p }()
 				c.postLoopStmt = nil
 
+				for i := 0; i < t.Params().Len(); i++ {
+					param := t.Params().At(i)
+					if _, isStruct := param.Type().Underlying().(*types.Struct); isStruct { // struct without pointer
+						paramName := c.objectName(t.Params().At(i))
+						c.Printf("%s = %s;", paramName, c.cloneStruct([]string{paramName}, param.Type()))
+					}
+				}
+
 				v := HasDeferVisitor{}
 				ast.Walk(&v, e.Body)
 				switch v.hasDefer {
@@ -614,7 +622,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	case *ast.StarExpr:
 		t := exprType
 		if _, isStruct := t.Underlying().(*types.Struct); isStruct {
-			return fmt.Sprintf("(Go$obj = %s, %s)", c.translateExpr(e.X), c.cloneStruct([]string{"Go$obj"}, t.(*types.Named)))
+			return fmt.Sprintf("(Go$obj = %s, %s)", c.translateExpr(e.X), c.cloneStruct([]string{"Go$obj"}, t))
 		}
 		return c.translateExpr(e.X) + ".Go$get()"
 
@@ -642,9 +650,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.PkgName:
 			return c.pkgVars[o.Pkg().Path()]
 		case *types.Var, *types.Const:
-			if o.Parent() == c.pkg.Scope() {
-				return "Go$pkg." + c.objectName(o)
-			}
 			return c.objectName(o)
 		case *types.Func:
 			return c.objectName(o)
@@ -820,19 +825,26 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 	return c.translateExpr(expr)
 }
 
-func (c *PkgContext) cloneStruct(srcPath []string, t *types.Named) string {
+func (c *PkgContext) cloneStruct(srcPath []string, t types.Type) string {
 	s := t.Underlying().(*types.Struct)
+	named, isNamed := t.(*types.Named)
 	fields := make([]string, s.NumFields())
 	for i := range fields {
 		field := s.Field(i)
+		if !isNamed {
+			fields[i] = field.Name() + ": "
+		}
 		fieldPath := append(srcPath, field.Name())
 		if _, isStruct := field.Type().Underlying().(*types.Struct); isStruct {
-			fields[i] = c.cloneStruct(fieldPath, field.Type().(*types.Named))
+			fields[i] += c.cloneStruct(fieldPath, field.Type())
 			continue
 		}
-		fields[i] = strings.Join(fieldPath, ".")
+		fields[i] += strings.Join(fieldPath, ".")
 	}
-	return fmt.Sprintf("new %s(%s)", c.objectName(t.Obj()), strings.Join(fields, ", "))
+	if isNamed {
+		return fmt.Sprintf("new %s(%s)", c.objectName(named.Obj()), strings.Join(fields, ", "))
+	}
+	return fmt.Sprintf("{ %s }", strings.Join(fields, ", "))
 }
 
 func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {

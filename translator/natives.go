@@ -550,7 +550,8 @@ Go$packages["reflect"] = {
 		}
 		var keys = Object.keys(a);
 		for (var j = 0; j < keys.length; j++) {
-			if (!this.DeepEqual(a[keys[j]], b[keys[j]])) {
+			var key = keys[j];
+			if (key !== "Go$id" && !this.DeepEqual(a[key], b[key])) {
 				return false;
 			}
 		}

@@ -357,7 +357,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				}
 			}
 		case *types.Interface:
-			c.Printf("%s = {};", typeName)
+			c.Printf("%s = { Go$implementedBy: [] };", typeName)
 		default:
 			underlyingTypeName := c.typeName(t)
 			c.Printf("%s = function() { %s.apply(this, arguments); };", typeName, underlyingTypeName)

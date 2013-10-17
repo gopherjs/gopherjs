@@ -83,7 +83,7 @@ func (b *Builder) BuildPackage(pkg *BuilderPackage) error {
 	}
 
 	pkgObjFileInfo, err := os.Stat(pkg.PkgObj)
-	if err != nil && !pkg.SrcModTime.After(pkgObjFileInfo.ModTime()) && pkg.PkgObj != "" {
+	if err == nil && !pkg.SrcModTime.After(pkgObjFileInfo.ModTime()) && pkg.PkgObj != "" {
 		// package object is up to date, load from disk if library
 		if pkg.IsCommand() {
 			return PkgObjUpToDate

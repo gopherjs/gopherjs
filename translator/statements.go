@@ -331,28 +331,44 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 		typeOf := func(e ast.Expr) types.Type {
-			if s.Tok == token.DEFINE {
+			if s.Tok == token.DEFINE && !isUnderscore(e) {
 				return c.info.Objects[e.(*ast.Ident)].Type()
 			}
 			return c.info.Types[e]
+		}
+
+		translateRhs := func(rhs ast.Expr, lhsType types.Type) string {
+			value := c.translateExprToType(rhs, lhsType)
+			if lhsType == nil {
+				return value
+			}
+			_, isStruct := lhsType.Underlying().(*types.Struct)
+			_, isCompositeLit := rhs.(*ast.CompositeLit)
+			if isStruct && !isCompositeLit { // struct without pointer
+				value = fmt.Sprintf("(Go$obj = %s, %s)", value, c.cloneStruct([]string{"Go$obj"}, lhsType))
+			}
+			return value
 		}
 
 		rhsExprs := make([]string, len(s.Lhs))
 
 		switch {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
-			rhsExprs[0] = c.translateExprToType(s.Rhs[0], typeOf(s.Lhs[0]))
+			rhsExprs[0] = translateRhs(s.Rhs[0], typeOf(s.Lhs[0]))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
+			tuple := c.info.Types[s.Rhs[0]].(*types.Tuple)
 			for i := range s.Lhs {
-				rhsExprs[i] = fmt.Sprintf("Go$tuple[%d]", i)
+				id := ast.NewIdent(fmt.Sprintf("Go$tuple[%d]", i))
+				c.info.Types[id] = tuple.At(i).Type()
+				rhsExprs[i] = translateRhs(id, typeOf(s.Lhs[i]))
 			}
-			c.Printf("Go$tuple = %s;", c.translateExpr(s.Rhs[0])) // TODO translateExprToType
+			c.Printf("Go$tuple = %s;", c.translateExpr(s.Rhs[0]))
 
 		case len(s.Lhs) == len(s.Rhs):
 			parts := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
-				parts[i] = c.translateExprToType(rhs, typeOf(s.Lhs[i]))
+				parts[i] = translateRhs(rhs, typeOf(s.Lhs[i]))
 				rhsExprs[i] = fmt.Sprintf("Go$tuple[%d]", i)
 			}
 			c.Printf("Go$tuple = [%s];", strings.Join(parts, ", "))
@@ -379,21 +395,13 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				break
 			}
 
-			lhsType := c.info.Types[lhs]
-			if lhsType == nil {
-				lhsType = c.info.Objects[lhs.(*ast.Ident)].Type()
-			}
-			if _, isStruct := lhsType.Underlying().(*types.Struct); isStruct { // struct without pointer
-				rhs = fmt.Sprintf("(Go$obj = %s, %s)", rhs, c.cloneStruct([]string{"Go$obj"}, lhsType))
-			}
-
 			switch l := lhs.(type) {
 			case *ast.Ident:
 				c.Printf("%s = %s;", c.objectName(c.info.Objects[l]), rhs)
 			case *ast.SelectorExpr:
 				c.Printf("%s = %s;", c.translateExpr(l), rhs)
 			case *ast.StarExpr:
-				if s, isStruct := lhsType.Underlying().(*types.Struct); isStruct {
+				if s, isStruct := typeOf(lhs).Underlying().(*types.Struct); isStruct {
 					lVar := c.newVariable("l")
 					rVar := c.newVariable("r")
 					c.Printf("%s = %s;", lVar, c.translateExpr(l.X))

@@ -487,7 +487,7 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 			panic("Zero value for untyped nil.")
 		}
 	case *types.Array:
-		return fmt.Sprintf("Go$clear(new %s(%d))", toArrayType(t.Elem()), t.Len())
+		return fmt.Sprintf("Go$clear(new %s(%d), %s)", toArrayType(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
 	case *types.Slice:
 		return fmt.Sprintf("%s.Go$nil", c.typeName(ty))
 	case *types.Struct:

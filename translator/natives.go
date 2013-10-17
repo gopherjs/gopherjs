@@ -336,7 +336,7 @@ var Go$internalizeString = function(extStr) {
 	return intStr;
 };
 
-var Go$clear = function(array) { for (var i = 0; i < array.length; i++) { array[i] = 0; } return array; }; // TODO remove when NodeJS is behaving according to spec
+var Go$clear = function(array, zero) { for (var i = 0; i < array.length; i++) { array[i] = zero; } return array; }; // TODO do not use for typed arrays when NodeJS is behaving according to spec
 
 var Go$Map = function(data) {
 	data = data || [];
@@ -373,12 +373,11 @@ var Go$copy = function(dst, src) {
 	return n;
 };
 
-// TODO fix zero values
 var Go$append = function(slice, toAppend) {
 	if (toAppend.length === 0) {
 		return slice;
 	}
-	if (slice === 0 || slice.array.isNil) { // FIXME
+	if (slice.array.isNil) {
 		// this must be a new array, don't just return toAppend
 		slice = new toAppend.constructor(new toAppend.array.constructor(0));
 	}

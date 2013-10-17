@@ -508,9 +508,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					switch t2 := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Slice:
 						if len(e.Args) == 3 {
-							return fmt.Sprintf("Go$subslice(new %s(Go$clear(new %s(%s))), 0, %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[2]), c.translateExpr(e.Args[1]))
+							return fmt.Sprintf("Go$subslice(new %s(Go$clear(new %s(%s), %s)), 0, %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[2]), c.zeroValue(t2.Elem()), c.translateExpr(e.Args[1]))
 						}
-						return fmt.Sprintf("new %s(Go$clear(new %s(%s)))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[1]))
+						return fmt.Sprintf("new %s(Go$clear(new %s(%s), %s))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[1]), c.zeroValue(t2.Elem()))
 					default:
 						args := []string{"undefined"}
 						for _, arg := range e.Args[1:] {

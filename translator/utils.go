@@ -45,7 +45,7 @@ func GetAllDependencies(pkg string, config *types.Config) ([]*types.Package, err
 	return dependencies, err
 }
 
-func WriteInterfaces(dependencies []*types.Package, w io.Writer) {
+func WriteInterfaces(dependencies []*types.Package, w io.Writer, merge bool) {
 	allTypeNames := []*types.TypeName{types.New("error").(*types.Named).Obj()}
 	for _, dep := range dependencies {
 		scope := dep.Scope()
@@ -81,11 +81,20 @@ func WriteInterfaces(dependencies []*types.Package, w io.Writer) {
 				list = append(list, ref)
 			}
 			sort.Strings(list)
-			if t.Name() == "error" {
-				fmt.Fprintf(w, "Go$error.Go$implementedBy = [%s];\n", strings.Join(list, ", "))
+			var target string
+			switch t.Name() {
+			case "error":
+				target = "Go$error"
+			default:
+				target = fmt.Sprintf("Go$packages[\"%s\"].%s", t.Pkg().Path(), t.Name())
+			}
+			if merge {
+				for _, entry := range list {
+					fmt.Fprintf(w, "if (%s.Go$implementedBy.indexOf(%s) === -1) { %s.Go$implementedBy.push(%s); }\n", target, entry, target, entry)
+				}
 				continue
 			}
-			fmt.Fprintf(w, "Go$packages[\"%s\"].%s.Go$implementedBy = [%s];\n", t.Pkg().Path(), t.Name(), strings.Join(list, ", "))
+			fmt.Fprintf(w, "%s.Go$implementedBy = [%s];\n", target, strings.Join(list, ", "))
 		}
 	}
 }

@@ -163,7 +163,7 @@ func (b *Builder) BuildPackage(pkg *BuilderPackage) error {
 		jsCode.WriteString("})();\n")
 	}
 
-	translator.WriteInterfaces(dependencies, jsCode)
+	translator.WriteInterfaces(dependencies, jsCode, false)
 
 	for _, dep := range dependencies {
 		if dep.Scope().Lookup("init") != nil {

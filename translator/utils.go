@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}
+
 func GetAllDependencies(pkg string, config *types.Config) ([]*types.Package, error) {
 	var dependencies []*types.Package // ordered
 	imported := make(map[string]bool)
@@ -124,5 +126,5 @@ func ReadArchive(imports map[string]*types.Package, filename, id string, data io
 func WriteArchive(code []byte, pkg *types.Package, w io.Writer) {
 	w.Write(code)
 	w.Write([]byte("$$\n"))
-	gcexporter.Write(pkg, w)
+	gcexporter.Write(pkg, w, sizes32)
 }

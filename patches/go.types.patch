@@ -1,6 +1,6 @@
-diff -r 181facb811b3 go/types/call.go
---- a/go/types/call.go	Fri Oct 11 14:27:44 2013 -0700
-+++ b/go/types/call.go	Sat Oct 12 19:10:17 2013 +0200
+diff -r 9e246fa49449 go/types/call.go
+--- a/go/types/call.go	Fri Oct 18 10:42:41 2013 +0900
++++ b/go/types/call.go	Sun Oct 20 15:23:54 2013 +0200
 @@ -246,7 +246,6 @@
  }
  
@@ -83,9 +83,9 @@ diff -r 181facb811b3 go/types/call.go
 -	x.mode = invalid
 -	x.expr = e
  }
-diff -r 181facb811b3 go/types/expr.go
---- a/go/types/expr.go	Fri Oct 11 14:27:44 2013 -0700
-+++ b/go/types/expr.go	Sat Oct 12 19:10:17 2013 +0200
+diff -r 9e246fa49449 go/types/expr.go
+--- a/go/types/expr.go	Fri Oct 18 10:42:41 2013 +0900
++++ b/go/types/expr.go	Sun Oct 20 15:23:54 2013 +0200
 @@ -481,7 +481,9 @@
  				check.updateExprType(x.expr, target, false)
  			}
@@ -465,9 +465,9 @@ diff -r 181facb811b3 go/types/expr.go
  }
  
  // typeAssertion checks that x.(T) is legal; xtyp must be the type of x.
-diff -r 181facb811b3 go/types/gcimporter.go
---- a/go/types/gcimporter.go	Fri Oct 11 14:27:44 2013 -0700
-+++ b/go/types/gcimporter.go	Sat Oct 12 19:10:17 2013 +0200
+diff -r 9e246fa49449 go/types/gcimporter.go
+--- a/go/types/gcimporter.go	Fri Oct 18 10:42:41 2013 +0900
++++ b/go/types/gcimporter.go	Sun Oct 20 15:23:54 2013 +0200
 @@ -723,7 +723,8 @@
  func (p *gcParser) parseImportDecl() {
  	p.expectKeyword("import")
@@ -478,9 +478,9 @@ diff -r 181facb811b3 go/types/gcimporter.go
  }
  
  // int_lit = [ "+" | "-" ] { "0" ... "9" } .
-diff -r 181facb811b3 go/types/methodset.go
---- a/go/types/methodset.go	Fri Oct 11 14:27:44 2013 -0700
-+++ b/go/types/methodset.go	Sat Oct 12 19:10:17 2013 +0200
+diff -r 9e246fa49449 go/types/methodset.go
+--- a/go/types/methodset.go	Fri Oct 18 10:42:41 2013 +0900
++++ b/go/types/methodset.go	Sun Oct 20 15:23:54 2013 +0200
 @@ -121,8 +121,8 @@
  		var next []embeddedType // embedded types found at current depth
  
@@ -512,9 +512,9 @@ diff -r 181facb811b3 go/types/methodset.go
  	for i, f := range list {
  		key := f.Id()
  		// if f is not in the set, add it
-diff -r 181facb811b3 go/types/resolver.go
---- a/go/types/resolver.go	Fri Oct 11 14:27:44 2013 -0700
-+++ b/go/types/resolver.go	Sat Oct 12 19:10:17 2013 +0200
+diff -r 9e246fa49449 go/types/resolver.go
+--- a/go/types/resolver.go	Fri Oct 18 10:42:41 2013 +0900
++++ b/go/types/resolver.go	Sun Oct 20 15:23:54 2013 +0200
 @@ -316,18 +316,18 @@
  				obj := NewFunc(d.Name.Pos(), pkg, name, nil)
  				if d.Recv == nil {
@@ -546,21 +546,9 @@ diff -r 181facb811b3 go/types/resolver.go
  				} else {
  					// Associate method with receiver base type name, if possible.
  					// Ignore methods that have an invalid receiver, or a blank _
-diff -r 181facb811b3 go/types/sizes.go
---- a/go/types/sizes.go	Fri Oct 11 14:27:44 2013 -0700
-+++ b/go/types/sizes.go	Sat Oct 12 19:10:17 2013 +0200
-@@ -121,7 +121,7 @@
- 
- // DefaultPtrSize is the default size of ints, uint, and pointers, in bytes,
- // used by DefaultSizeof.
--const DefaultPtrSize = 8
-+const DefaultPtrSize = 4
- 
- // DefaultSizeof implements the default size computation
- // for unsafe.Sizeof. It is used if Config.Sizeof == nil.
-diff -r 181facb811b3 go/types/typemap/typemap.go
---- a/go/types/typemap/typemap.go	Fri Oct 11 14:27:44 2013 -0700
-+++ b/go/types/typemap/typemap.go	Sat Oct 12 19:10:17 2013 +0200
+diff -r 9e246fa49449 go/types/typemap/typemap.go
+--- a/go/types/typemap/typemap.go	Fri Oct 18 10:42:41 2013 +0900
++++ b/go/types/typemap/typemap.go	Sun Oct 20 15:23:54 2013 +0200
 @@ -130,10 +130,7 @@
  
  // Len returns the number of map entries.
@@ -573,9 +561,9 @@ diff -r 181facb811b3 go/types/typemap/typemap.go
  }
  
  // Iterate calls function f on each entry in the map in unspecified order.
-diff -r 181facb811b3 go/types/types.go
---- a/go/types/types.go	Fri Oct 11 14:27:44 2013 -0700
-+++ b/go/types/types.go	Sat Oct 12 19:10:17 2013 +0200
+diff -r 9e246fa49449 go/types/types.go
+--- a/go/types/types.go	Fri Oct 18 10:42:41 2013 +0900
++++ b/go/types/types.go	Sun Oct 20 15:23:54 2013 +0200
 @@ -174,18 +174,12 @@
  
  // NewTuple returns a new tuple for the given variables.
@@ -597,9 +585,9 @@ diff -r 181facb811b3 go/types/types.go
  }
  
  // At returns the i'th variable of tuple t.
-diff -r 181facb811b3 go/types/universe.go
---- a/go/types/universe.go	Fri Oct 11 14:27:44 2013 -0700
-+++ b/go/types/universe.go	Sat Oct 12 19:10:17 2013 +0200
+diff -r 9e246fa49449 go/types/universe.go
+--- a/go/types/universe.go	Fri Oct 18 10:42:41 2013 +0900
++++ b/go/types/universe.go	Sun Oct 20 15:23:54 2013 +0200
 @@ -65,7 +65,7 @@
  
  	// Error has a nil package in its qualified name since it is in no package

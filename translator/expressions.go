@@ -43,10 +43,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return strconv.FormatInt(d, 10)
 			case exact.Float:
 				f, _ := exact.Float64Val(value)
-				return strconv.FormatFloat(f, 'g', -1, int(types.DefaultSizeof(exprType))*8)
+				return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(exprType))*8)
 			case exact.Complex:
 				f, _ := exact.Float64Val(exact.Real(value))
-				return strconv.FormatFloat(f, 'g', -1, int(types.DefaultSizeof(exprType))*8/2)
+				return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(exprType))*8/2)
 			case exact.String:
 				buffer := bytes.NewBuffer(nil)
 				for _, r := range []byte(exact.StringVal(value)) {
@@ -766,7 +766,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 				if s, isStruct := ptr.Elem().Underlying().(*types.Struct); isStruct {
 					array := c.newVariable("_array")
 					target := c.newVariable("_struct")
-					c.Printf("%s = new Uint8Array(%d);", array, types.DefaultSizeof(s))
+					c.Printf("%s = new Uint8Array(%d);", array, sizes32.Sizeof(s))
 					c.Delayed(func() {
 						c.Printf("%s = %s;", target, c.translateExpr(expr))
 						c.loadStruct(array, target, s)
@@ -863,7 +863,7 @@ func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {
 		}
 	}
 	collectFields(s, target)
-	offsets := types.DefaultOffsetsof(fields)
+	offsets := sizes32.Offsetsof(fields)
 	for i, field := range fields {
 		switch t := field.Type().Underlying().(type) {
 		case *types.Basic:

@@ -81,6 +81,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		errList = append(errList, err)
 		previousErr = err
 	}
+	config.Sizes = sizes32
 	typesPkg, err := config.Check(importPath, fileSet, files, info)
 	if errList != nil {
 		return nil, errList

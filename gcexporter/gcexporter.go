@@ -17,7 +17,7 @@ type exporter struct {
 	out      io.Writer
 }
 
-func Write(pkg *types.Package, out io.Writer) {
+func Write(pkg *types.Package, out io.Writer, sizes types.Sizes) {
 	fmt.Fprintf(out, "package %s\n", pkg.Name())
 
 	e := &exporter{pkg: pkg, imports: make(map[*types.Package]bool), out: out}
@@ -74,7 +74,7 @@ func Write(pkg *types.Package, out io.Writer) {
 				val = strconv.FormatInt(d, 10)
 			case exact.Float:
 				f, _ := exact.Float64Val(o.Val())
-				val = strconv.FormatFloat(f, 'b', -1, int(types.DefaultSizeof(o.Type()))*8)
+				val = strconv.FormatFloat(f, 'b', -1, int(sizes.Sizeof(o.Type()))*8)
 			// case exact.Complex:
 			// 	f, _ := exact.Float64Val(exact.Real(o.Val()))
 			// 	val = strconv.FormatFloat(f, 'g', -1, int(types.DefaultSizeof(o.Type()))*8/2)

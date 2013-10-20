@@ -166,9 +166,7 @@ func (b *Builder) BuildPackage(pkg *BuilderPackage) error {
 	translator.WriteInterfaces(dependencies, jsCode, false)
 
 	for _, dep := range dependencies {
-		if dep.Scope().Lookup("init") != nil {
-			jsCode.WriteString("Go$packages[\"" + dep.Path() + "\"].init();\n")
-		}
+		jsCode.WriteString("Go$packages[\"" + dep.Path() + "\"].init();\n")
 	}
 
 	jsCode.WriteString("Go$packages[\"" + pkg.ImportPath + "\"].main();\n")

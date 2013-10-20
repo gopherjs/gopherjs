@@ -101,6 +101,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 
 	functionsByType := make(map[types.Type][]*ast.FuncDecl)
 	functionsByObject := make(map[types.Object]*ast.FuncDecl)
+	var initStmts []ast.Stmt
 	var typeSpecs []*ast.TypeSpec
 	var valueSpecs []*ast.ValueSpec
 	for _, file := range files {
@@ -114,6 +115,10 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					if ptr, isPtr := recvType.(*types.Pointer); isPtr {
 						recvType = ptr.Elem()
 					}
+				}
+				if sig.Recv() == nil && d.Name.Name == "init" {
+					initStmts = append(initStmts, d.Body.List...)
+					continue
 				}
 				functionsByType[recvType] = append(functionsByType[recvType], d)
 				o := c.info.Objects[d.Name]
@@ -257,10 +262,20 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			// exports for package functions
 			for _, fun := range functionsByType[nil] {
 				name := fun.Name.Name
-				if fun.Name.IsExported() || name == "init" || name == "main" {
+				if fun.Name.IsExported() || name == "main" {
 					c.Printf("Go$pkg.%s = %s;", name, name)
 				}
 			}
+
+			// init function
+			funcLit := &ast.FuncLit{
+				Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{}},
+				Body: &ast.BlockStmt{
+					List: initStmts,
+				},
+			}
+			c.info.Types[funcLit] = types.NewSignature(c.pkg.Scope(), nil, types.NewTuple(), types.NewTuple(), false)
+			c.Printf("Go$pkg.init = %s;", c.translateExpr(funcLit))
 
 			c.Printf("return Go$pkg;")
 		})

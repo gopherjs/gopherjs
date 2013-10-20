@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-var ReservedKeywords = []string{"arguments", "class", "delete", "eval", "export", "false", "implements", "interface", "in", "let", "new", "package", "private", "protected", "public", "static", "this", "true", "try", "yield"}
+var ReservedKeywords = []string{"arguments", "class", "delete", "eval", "export", "false", "function", "implements", "interface", "in", "let", "new", "package", "private", "protected", "public", "static", "this", "true", "try", "yield"}
 
 type ErrorList []error
 

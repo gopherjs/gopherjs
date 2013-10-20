@@ -477,7 +477,7 @@ var Go$interfaceIsEqual = function(a, b) {
 	if (a.constructor !== b.constructor) {
 		return false;
 	}
-	if (a.constructor.isNumber || a.constructor === Go$String) {
+	if (a.v !== undefined && a.constructor !== Go$Func) {
 		return a.v === b.v;
 	}
 	throw new Go$Panic("runtime error: comparing uncomparable type " + a.constructor);
@@ -520,7 +520,6 @@ Go$Float64.Kind = function() { return 14; };
 Go$Complex64    = function() { return 15; };
 Go$Complex128   = function() { return 16; };
 Go$String.Kind  = function() { return 24; };
-Go$Uint8.isNumber = Go$Uint16.isNumber = Go$Uint32.isNumber = Go$Int8.isNumber = Go$Int16.isNumber = Go$Int32.isNumber = Go$Float32.isNumber = Go$Float64.isNumber = Go$Complex64.isNumber = Go$Complex128.isNumber = Go$Uint.isNumber = Go$Int.isNumber = Go$Uintptr.isNumber = true;
 Go$Int.Bits = Go$Uintptr.Bits = function() { return 32; };
 Go$Float64.Bits = function() { return 64; };
 Go$Complex128.Bits = function() { return 128; };

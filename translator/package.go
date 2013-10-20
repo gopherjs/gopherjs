@@ -358,6 +358,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 		default:
 			underlyingTypeName := c.typeName(t)
 			c.Printf("%s = function() { %s.apply(this, arguments); };", typeName, underlyingTypeName)
+			c.Printf("%s.prototype.Go$key = function() { return \"%s$\" + %s.prototype.Go$key.apply(this); };", typeName, typeName, underlyingTypeName)
 			c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", typeName)
 			if _, isSlice := t.(*types.Slice); isSlice {
 				c.Printf("%s.Go$nil = new %s({ isNil: true, length: 0 });", typeName, typeName)

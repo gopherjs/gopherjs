@@ -164,9 +164,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					funName := fun.Name.Name
 					jsCode, _ := typesPkg.Scope().Lookup("js_" + typeName + "_" + funName).(*types.Const)
 					if jsCode != nil {
-						n := c.usedVarNames
-						c.Printf("%s.prototype.%s = function(%s) {\n%s\n};", typeName, funName, c.translateParams(fun.Type), exact.StringVal(jsCode.Val()))
-						c.usedVarNames = n
+						c.Printf("%s.prototype.%s = function(%s) {\n%s\n};", typeName, funName, strings.Join(c.translateParams(fun.Type), ", "), exact.StringVal(jsCode.Val()))
 						continue
 					}
 					_, isStruct := obj.Type().Underlying().(*types.Struct)
@@ -180,9 +178,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				name := fun.Name.Name
 				jsCode, _ := typesPkg.Scope().Lookup("js_" + name).(*types.Const)
 				if jsCode != nil {
-					n := c.usedVarNames
-					c.Printf("var %s = function(%s) {\n%s\n};", name, c.translateParams(fun.Type), exact.StringVal(jsCode.Val()))
-					c.usedVarNames = n
+					c.Printf("var %s = function(%s) {\n%s\n};", name, strings.Join(c.translateParams(fun.Type), ", "), exact.StringVal(jsCode.Val()))
 					continue
 				}
 				if fun.Body == nil {
@@ -411,9 +407,7 @@ func (c *PkgContext) translateFunction(typeName string, isStruct bool, fun *ast.
 	}
 	c.info.Types[funcLit] = c.info.Objects[fun.Name].Type()
 
-	n := c.usedVarNames
-	params := c.translateParams(fun.Type)
-	c.usedVarNames = n
+	params := strings.Join(c.translateParams(fun.Type), ", ")
 	switch {
 	case isStruct:
 		c.Printf("%s.prototype.%s = %s;", typeName, fun.Name.Name, c.translateExpr(funcLit))
@@ -435,7 +429,8 @@ func (c *PkgContext) translateFunction(typeName string, isStruct bool, fun *ast.
 	}
 }
 
-func (c *PkgContext) translateParams(t *ast.FuncType) string {
+func (c *PkgContext) translateParams(t *ast.FuncType) []string {
+	n := c.usedVarNames
 	params := make([]string, 0)
 	for _, param := range t.Params.List {
 		for _, ident := range param.Names {
@@ -446,7 +441,8 @@ func (c *PkgContext) translateParams(t *ast.FuncType) string {
 			params = append(params, c.objectName(c.info.Objects[ident]))
 		}
 	}
-	return strings.Join(params, ", ")
+	c.usedVarNames = n
+	return params
 }
 
 func (c *PkgContext) translateArgs(call *ast.CallExpr) []string {

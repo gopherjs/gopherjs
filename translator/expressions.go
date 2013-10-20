@@ -181,11 +181,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 
 	case *ast.FuncLit:
-		n := c.usedVarNames
-		defer func() { c.usedVarNames = n }()
-
-		params := c.translateParams(e.Type)
 		outerVarNames := c.usedVarNames
+		params := c.translateParams(e.Type)
+		c.usedVarNames = append(c.usedVarNames, params...)
 		varDecl := ""
 		body := c.CatchOutput(func() {
 			c.Indent(func() {
@@ -251,7 +249,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					c.translateStmtList(e.Body.List)
 				}
 
-				innerVarNames := c.usedVarNames[len(outerVarNames):]
+				innerVarNames := c.usedVarNames[len(outerVarNames)+len(params):]
 				if len(innerVarNames) != 0 {
 					varDecl = string(c.CatchOutput(func() { c.Printf("var %s;", strings.Join(innerVarNames, ", ")) }))
 				}
@@ -259,7 +257,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			c.Printf("")
 		})
 
-		return "(function(" + params + ") {\n" + varDecl + string(body[:len(body)-1]) + "})"
+		c.usedVarNames = outerVarNames
+		return "(function(" + strings.Join(params, ", ") + ") {\n" + varDecl + string(body[:len(body)-1]) + "})"
 
 	case *ast.UnaryExpr:
 		op := e.Op.String()

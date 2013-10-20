@@ -61,6 +61,10 @@ func main() {
 		}
 
 		basename := path.Base(filename)
+		pkgObj := ""
+		if cmd == "build" {
+			pkgObj = basename[:len(basename)-3] + ".js"
+		}
 		pkg = &BuilderPackage{
 			Package: &build.Package{
 				Name:       "main",
@@ -68,7 +72,7 @@ func main() {
 				Imports:    imports,
 				Dir:        path.Dir(filename),
 				GoFiles:    []string{basename},
-				PkgObj:     basename[:len(basename)-3] + ".js",
+				PkgObj:     pkgObj,
 			},
 		}
 

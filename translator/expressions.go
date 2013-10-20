@@ -631,7 +631,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 		t := c.info.Types[e.Type]
 		_, isStruct := t.Underlying().(*types.Struct)
-		check := c.typeCheck("Go$typeOf(Go$obj)", t)
+		check := "Go$obj !== null && " + c.typeCheck("Go$obj.constructor", t)
 		value := "Go$obj"
 		if isWrapped(t) || isStruct {
 			value += ".v"

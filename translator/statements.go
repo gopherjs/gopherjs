@@ -81,7 +81,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		refVar := c.newVariable("_ref")
 		typeVar := c.newVariable("_type")
 		c.Printf("%s = %s;", refVar, c.translateExpr(expr))
-		c.Printf("%s = Go$typeOf(%s);", typeVar, refVar)
+		c.Printf("%s = %s !== null ? %s.constructor : null;", typeVar, refVar, refVar)
 		translateCond := func(cond ast.Expr) string {
 			return c.typeCheck(typeVar, c.info.Types[cond])
 		}

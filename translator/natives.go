@@ -486,13 +486,6 @@ var Go$sliceIsEqual = function(a, ai, b, bi) {
 	return a.array === b.array && a.offset + ai === b.offset + bi;
 };
 
-var Go$typeOf = function(value) {
-	if (value === null) {
-		return null;
-	}
-	return value.constructor;
-};
-
 var Go$typeAssertionFailed = function(obj) {
 	throw new Go$Panic("type assertion failed: " + obj + " (" + obj.constructor + ")");
 };

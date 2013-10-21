@@ -416,7 +416,11 @@ var Go$append = function(slice, toAppend) {
 
 var Go$error = {};
 var Go$Panic = function(value) {
+	this.value = value;
 	this.message = value;
+	if (value.constructor === Go$String) {
+		this.message = value.v;
+	}
 	Error.captureStackTrace(this, Go$Panic);
 };
 
@@ -456,7 +460,7 @@ var Go$recover = function() {
 		return null;
 	}
 	Go$errorStack.pop();
-	return err.error.message;
+	return err.error.value;
 };
 
 var Go$getStackDepth = function() {

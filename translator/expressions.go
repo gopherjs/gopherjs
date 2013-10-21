@@ -215,14 +215,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				defer func() { c.postLoopStmt = p }()
 				c.postLoopStmt = nil
 
-				for i := 0; i < t.Params().Len(); i++ {
-					param := t.Params().At(i)
-					if _, isStruct := param.Type().Underlying().(*types.Struct); isStruct { // struct without pointer
-						paramName := c.objectName(t.Params().At(i))
-						c.Printf("%s = %s;", paramName, c.cloneStruct([]string{paramName}, param.Type()))
-					}
-				}
-
 				v := HasDeferVisitor{}
 				ast.Walk(&v, e.Body)
 				switch v.hasDefer {
@@ -619,9 +611,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s(%s)", fun, strings.Join(c.translateArgs(e), ", "))
 
 	case *ast.StarExpr:
-		t := exprType
-		if _, isStruct := t.Underlying().(*types.Struct); isStruct {
-			return fmt.Sprintf("(Go$obj = %s, %s)", c.translateExpr(e.X), c.cloneStruct([]string{"Go$obj"}, t))
+		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
+			return fmt.Sprintf("(Go$obj = %s, %s)", c.translateExpr(e.X), c.cloneStruct([]string{"Go$obj"}, exprType))
 		}
 		return c.translateExpr(e.X) + ".Go$get()"
 
@@ -814,7 +805,12 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			return target
 		}
 
-	case *types.Array, *types.Struct, *types.Chan, *types.Map, *types.Signature:
+	case *types.Struct:
+		if _, isComposite := expr.(*ast.CompositeLit); !isComposite {
+			return fmt.Sprintf("(Go$obj = %s, %s)", c.translateExpr(expr), c.cloneStruct([]string{"Go$obj"}, desiredType))
+		}
+
+	case *types.Array, *types.Chan, *types.Map, *types.Signature:
 		// no converion
 
 	default:

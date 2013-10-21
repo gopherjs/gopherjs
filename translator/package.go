@@ -691,6 +691,17 @@ func isWrapped(ty types.Type) bool {
 	return false
 }
 
+func elemType(ty types.Type) types.Type {
+	switch t := ty.Underlying().(type) {
+	case *types.Array:
+		return t.Elem()
+	case *types.Slice:
+		return t.Elem()
+	default:
+		panic("")
+	}
+}
+
 type IsReadyVisitor struct {
 	info           *types.Info
 	functions      map[types.Object]*ast.FuncDecl

@@ -353,7 +353,6 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				}
 			})
 			c.Printf("};")
-			c.Printf(`%s.Go$name = "%s";`, typeName, typeName)
 			c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, typeName)
 			c.Printf("%s.Go$NonPointer = function(v) { this.v = v; };", typeName)
 			for i := 0; i < t.NumFields(); i++ {
@@ -415,9 +414,6 @@ func (c *PkgContext) translateFunction(typeName string, isStruct bool, fun *ast.
 		var this ast.Expr = ast.NewIdent("this")
 		if isWrapped(recvType) {
 			this = ast.NewIdent("this.v")
-		}
-		if _, isUnderlyingStruct := recvType.Underlying().(*types.Struct); isUnderlyingStruct {
-			this = &ast.StarExpr{X: this}
 		}
 		c.info.Types[recv] = recvType
 		c.info.Types[this] = recvType

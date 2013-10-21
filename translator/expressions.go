@@ -513,10 +513,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					arg := c.translateExpr(e.Args[0])
 					argType := c.info.Types[e.Args[0]]
 					switch argt := argType.Underlying().(type) {
-					case *types.Basic, *types.Array:
+					case *types.Basic, *types.Array, *types.Slice:
 						return fmt.Sprintf("%s.length", arg)
-					case *types.Slice:
-						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.length : 0)", arg)
 					case *types.Map:
 						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$keys(Go$obj).length : 0)", arg)
 					default:

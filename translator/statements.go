@@ -137,8 +137,8 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		iVar := c.newVariable("_i")
 		c.Printf("%s = 0;", iVar)
 
-		t := c.info.Types[s.X]
-		if _, isString := t.Underlying().(*types.Basic); isString {
+		switch t := c.info.Types[s.X].Underlying().(type) {
+		case *types.Basic:
 			runeVar := c.newVariable("_rune")
 			c.Printf("%sfor (; %s < %s.length; %s += %s[1]) {", label, iVar, refVar, iVar, runeVar)
 			c.Indent(func() {
@@ -152,10 +152,8 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				c.translateStmtList(s.Body.List)
 			})
 			c.Printf("}")
-			return
-		}
 
-		if _, isMap := t.Underlying().(*types.Map); isMap {
+		case *types.Map:
 			keysVar := c.newVariable("_keys")
 			c.Printf("%s = %s !== null ? Go$keys(%s) : [];", keysVar, refVar, refVar)
 			c.Printf("%sfor (; %s < %s.length; %s++) {", label, iVar, keysVar, iVar)
@@ -171,30 +169,30 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				c.translateStmtList(s.Body.List)
 			})
 			c.Printf("}")
-			return
+
+		case *types.Array, *types.Slice:
+			c.Printf("%sfor (; %s < %s.length; %s++) {", label, iVar, refVar, iVar)
+			c.Indent(func() {
+				if key != "" {
+					c.Printf("%s = %s;", key, iVar)
+				}
+				if value != "" {
+					x := ast.NewIdent(refVar)
+					index := ast.NewIdent(iVar)
+					indexExpr := &ast.IndexExpr{X: x, Index: index}
+					c.info.Types[x] = t
+					c.info.Types[index] = types.Typ[types.Int]
+					et := elemType(t)
+					c.info.Types[indexExpr] = et
+					c.Printf("%s = %s;", value, c.translateExprToType(indexExpr, et))
+				}
+				c.translateStmtList(s.Body.List)
+			})
+			c.Printf("}")
+
+		default:
+			panic("")
 		}
-
-		lenVar := c.newVariable("_len")
-		c.Printf("%s = %s !== null ? %s.length : 0;", lenVar, refVar, refVar)
-
-		c.Printf("%sfor (; %s < %s; %s++) {", label, iVar, lenVar, iVar)
-		c.Indent(func() {
-			if key != "" {
-				c.Printf("%s = %s;", key, iVar)
-			}
-			if value != "" {
-				x := ast.NewIdent(refVar)
-				index := ast.NewIdent(iVar)
-				indexExpr := &ast.IndexExpr{X: x, Index: index}
-				c.info.Types[x] = t
-				c.info.Types[index] = types.Typ[types.Int]
-				et := elemType(t)
-				c.info.Types[indexExpr] = et
-				c.Printf("%s = %s;", value, c.translateExprToType(indexExpr, et))
-			}
-			c.translateStmtList(s.Body.List)
-		})
-		c.Printf("}")
 
 	case *ast.BranchStmt:
 		label := ""

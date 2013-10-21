@@ -591,6 +591,17 @@ var natives = map[string]string{
 		}
 	`,
 
+	"strings": `
+		IndexByte = function(s, c) {
+			for (var i = 0; i < s.length; i++) {
+				if (s.charCodeAt(i) === c) {
+					return i;
+				}
+			}
+			return -1;
+		};
+	`,
+
 	"math": `
 		Go$pkg.MaxFloat32 = 3.40282346638528859811704183484516925440e+38;
 		Go$pkg.SmallestNonzeroFloat32 = 1.401298464324817070923729583289916131280e-45;

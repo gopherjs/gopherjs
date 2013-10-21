@@ -349,7 +349,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				c.Printf("this.Go$id = Go$idCounter++;")
 				for i := 0; i < t.NumFields(); i++ {
 					field := t.Field(i)
-					c.Printf("this.%s = %s_ || %s;", field.Name(), field.Name(), c.zeroValue(field.Type()))
+					c.Printf("this.%s = %s_;", field.Name(), field.Name())
 				}
 			})
 			c.Printf("};")
@@ -519,13 +519,16 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 	case *types.Slice:
 		return fmt.Sprintf("%s.Go$nil", c.typeName(ty))
 	case *types.Struct:
-		if isNamed {
-			return fmt.Sprintf("new %s()", c.objectName(named.Obj()))
-		}
 		fields := make([]string, t.NumFields())
 		for i := range fields {
 			field := t.Field(i)
-			fields[i] = field.Name() + ": " + c.zeroValue(field.Type())
+			if !isNamed {
+				fields[i] = field.Name() + ": "
+			}
+			fields[i] += c.zeroValue(field.Type())
+		}
+		if isNamed {
+			return fmt.Sprintf("new %s(%s)", c.objectName(named.Obj()), strings.Join(fields, ", "))
 		}
 		return fmt.Sprintf("{%s}", strings.Join(fields, ", "))
 	}

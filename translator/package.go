@@ -103,7 +103,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	functionsByObject := make(map[types.Object]*ast.FuncDecl)
 	var initStmts []ast.Stmt
 	var typeSpecs []*ast.TypeSpec
-	var valueSpecs []*ast.ValueSpec
+	var constSpecs []*ast.ValueSpec
+	var varSpecs []*ast.ValueSpec
 	for _, file := range files {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
@@ -134,10 +135,20 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						typeSpecs = append(typeSpecs, s)
 						c.objectName(c.info.Objects[s.Name]) // register toplevel name
 					}
-				case token.CONST, token.VAR:
+				case token.CONST:
 					for _, spec := range d.Specs {
 						s := spec.(*ast.ValueSpec)
-						valueSpecs = append(valueSpecs, s)
+						constSpecs = append(constSpecs, s)
+						for _, name := range s.Names {
+							if !isUnderscore(name) {
+								c.objectName(c.info.Objects[name]) // register toplevel name
+							}
+						}
+					}
+				case token.VAR:
+					for _, spec := range d.Specs {
+						s := spec.(*ast.ValueSpec)
+						varSpecs = append(varSpecs, s)
 						for _, name := range s.Names {
 							if !isUnderscore(name) {
 								c.objectName(c.info.Objects[name]) // register toplevel name
@@ -202,27 +213,28 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				c.Printf("var %s = %s;", c.translateExpr(fun.Name), c.translateExpr(funcLit))
 			}
 
-			// constants and variables in dependency aware order
-			var specs []*ast.ValueSpec
-			pendingObjects := make(map[types.Object]bool)
-			for _, spec := range valueSpecs {
-				for i, name := range spec.Names {
+			// constants
+			for _, spec := range constSpecs {
+				for _, name := range spec.Names {
 					if strings.HasPrefix(name.Name, "js_") {
 						continue
 					}
+					o := c.info.Objects[name].(*types.Const)
+					id := ast.NewIdent("")
+					c.info.Types[id] = o.Type()
+					c.info.Values[id] = o.Val()
+					c.Printf("Go$pkg.%s = %s;", name, c.translateExpr(id))
+				}
+			}
+
+			// variables in dependency aware order
+			var specs []*ast.ValueSpec
+			pendingObjects := make(map[types.Object]bool)
+			for _, spec := range varSpecs {
+				for i, name := range spec.Names {
 					var values []ast.Expr
-					switch o := c.info.Objects[name].(type) {
-					case *types.Var:
-						if i < len(spec.Values) {
-							values = []ast.Expr{spec.Values[i]}
-						}
-					case *types.Const:
-						id := ast.NewIdent("")
-						c.info.Types[id] = o.Type()
-						c.info.Values[id] = o.Val()
-						values = []ast.Expr{id}
-					default:
-						panic("")
+					if i < len(spec.Values) {
+						values = []ast.Expr{spec.Values[i]}
 					}
 					specs = append(specs, &ast.ValueSpec{
 						Names:  []*ast.Ident{name},

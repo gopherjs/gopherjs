@@ -584,11 +584,6 @@ var natives = map[string]string{
 	`,
 
 	"math": `
-		Go$pkg.MaxFloat32 = 3.40282346638528859811704183484516925440e+38;
-		Go$pkg.SmallestNonzeroFloat32 = 1.401298464324817070923729583289916131280e-45;
-		Go$pkg.MaxFloat64 = 1.797693134862315708145274237317043567981e+308;
-		Go$pkg.SmallestNonzeroFloat64 = 4.940656458412465441765687928682213723651e-324;
-
 		Abs = Math.abs;
 		Exp = Math.exp;
 		Exp2 = function(x) { return Math.exp(x * Math.log(2)); };

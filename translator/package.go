@@ -216,52 +216,55 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			// constants
 			for _, spec := range constSpecs {
 				for _, name := range spec.Names {
-					if strings.HasPrefix(name.Name, "js_") {
+					if isUnderscore(name) || strings.HasPrefix(name.Name, "js_") {
 						continue
 					}
 					o := c.info.Objects[name].(*types.Const)
-					id := ast.NewIdent("")
-					c.info.Types[id] = o.Type()
-					c.info.Values[id] = o.Val()
-					c.Printf("Go$pkg.%s = %s;", name, c.translateExpr(id))
+					c.info.Types[name] = o.Type()
+					c.info.Values[name] = o.Val()
+					c.Printf("%s = %s;", c.objectName(o), c.translateExpr(name))
 				}
 			}
 
-			// variables in dependency aware order
-			var specs []*ast.ValueSpec
+			// variables
+			var unorderedSingleVarSpecs []*ast.ValueSpec
 			pendingObjects := make(map[types.Object]bool)
 			for _, spec := range varSpecs {
 				for i, name := range spec.Names {
-					var values []ast.Expr
+					o := c.info.Objects[name].(*types.Var)
+					c.Printf("%s = %s;", c.objectName(o), c.zeroValue(o.Type()))
 					if i < len(spec.Values) {
-						values = []ast.Expr{spec.Values[i]}
+						unorderedSingleVarSpecs = append(unorderedSingleVarSpecs, &ast.ValueSpec{
+							Names:  []*ast.Ident{name},
+							Type:   spec.Type,
+							Values: []ast.Expr{spec.Values[i]},
+						})
+						pendingObjects[c.info.Objects[name]] = true
 					}
-					specs = append(specs, &ast.ValueSpec{
-						Names:  []*ast.Ident{name},
-						Type:   spec.Type,
-						Values: values,
-					})
-					pendingObjects[c.info.Objects[spec.Names[0]]] = true
 				}
 			}
+
+			var orderedVarStmts []ast.Stmt
 			complete := false
 			for !complete {
 				complete = true
-				for i, spec := range specs {
+				for i, spec := range unorderedSingleVarSpecs {
 					if spec == nil {
 						continue
 					}
-					if spec.Values != nil {
-						v := IsReadyVisitor{info: c.info, functions: functionsByObject, pendingObjects: pendingObjects, isReady: true}
-						ast.Walk(&v, spec.Values[0])
-						if !v.isReady {
-							complete = false
-							continue
-						}
+					v := IsReadyVisitor{info: c.info, functions: functionsByObject, pendingObjects: pendingObjects, isReady: true}
+					ast.Walk(&v, spec.Values[0])
+					if !v.isReady {
+						complete = false
+						continue
 					}
-					c.translateSpec(spec)
+					orderedVarStmts = append(orderedVarStmts, &ast.AssignStmt{
+						Lhs: []ast.Expr{spec.Names[0]},
+						Tok: token.ASSIGN,
+						Rhs: []ast.Expr{spec.Values[0]},
+					})
 					delete(pendingObjects, c.info.Objects[spec.Names[0]])
-					specs[i] = nil
+					unorderedSingleVarSpecs[i] = nil
 				}
 			}
 
@@ -283,7 +286,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			funcLit := &ast.FuncLit{
 				Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{}},
 				Body: &ast.BlockStmt{
-					List: initStmts,
+					List: append(orderedVarStmts, initStmts...),
 				},
 			}
 			c.info.Types[funcLit] = types.NewSignature(c.pkg.Scope(), nil, types.NewTuple(), types.NewTuple(), false)

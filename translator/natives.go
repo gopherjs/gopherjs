@@ -494,67 +494,6 @@ var Go$now = function() { var msec = (new Date()).getTime(); return [Math.floor(
 
 var Go$packages = {};
 
-// --- fake reflect package ---
-
-Go$Bool.Kind    = function() { return 1; };
-Go$Int.Kind     = function() { return 2; };
-Go$Int8.Kind    = function() { return 3; };
-Go$Int16.Kind   = function() { return 4; };
-Go$Int32.Kind   = function() { return 5; };
-Go$Int64.Kind   = function() { return 6; };
-Go$Uint.Kind    = function() { return 7; };
-Go$Uint8.Kind   = function() { return 8; };
-Go$Uint16.Kind  = function() { return 9; };
-Go$Uint32.Kind  = function() { return 10; };
-Go$Uint64.Kind  = function() { return 11; };
-Go$Uintptr.Kind = function() { return 12; };
-Go$Float32.Kind = function() { return 13; };
-Go$Float64.Kind = function() { return 14; };
-Go$Complex64    = function() { return 15; };
-Go$Complex128   = function() { return 16; };
-Go$String.Kind  = function() { return 24; };
-Go$Int.Bits = Go$Uintptr.Bits = function() { return 32; };
-Go$Float64.Bits = function() { return 64; };
-Go$Complex128.Bits = function() { return 128; };
-
-Go$packages["reflect"] = {
-	DeepEqual: function(a, b) {
-		if (a === b) {
-			return true;
-		}
-		if (a.constructor === Number) {
-			return false;
-		}
-		if (a.constructor !== b.constructor) {
-			return false;
-		}
-		if (a.length !== undefined) {
-			if (a.length !== b.length) {
-				return false;
-			}
-			for (var i = 0; i < a.length; i++) {
-				if (!this.DeepEqual(a.array[a.offset + i], b.array[b.offset + i])) {
-					return false;
-				}
-			}
-			return true;
-		}
-		var keys = Object.keys(a);
-		for (var j = 0; j < keys.length; j++) {
-			var key = keys[j];
-			if (key !== "Go$id" && !this.DeepEqual(a[key], b[key])) {
-				return false;
-			}
-		}
-		return true;
-	},
-	TypeOf: function(v) {
-		return v.constructor;
-	},
-	flag: function() {},
-	Value: function() {}
-};
-
 Go$packages["go/doc"] = {
 	Synopsis: function(s) { return ""; }
 };
@@ -728,6 +667,60 @@ var natives = map[string]string{
 
 	"os": `
 		Go$pkg.Args = new Go$Slice(Go$webMode ? [] : process.argv.slice(1));
+	`,
+
+	"reflect": `
+		Go$Bool.prototype.Go$type       = new rtype(  0, 0, 0, 0, 0, Go$pkg.Bool      , null, null, null, null, null);
+		Go$Int.prototype.Go$type        = new rtype( 32, 0, 0, 0, 0, Go$pkg.Int       , null, null, null, null, null);
+		Go$Int8.prototype.Go$type       = new rtype(  8, 0, 0, 0, 0, Go$pkg.Int8      , null, null, null, null, null);
+		Go$Int16.prototype.Go$type      = new rtype( 16, 0, 0, 0, 0, Go$pkg.Int16     , null, null, null, null, null);
+		Go$Int32.prototype.Go$type      = new rtype( 32, 0, 0, 0, 0, Go$pkg.Int32     , null, null, null, null, null);
+		Go$Int64.prototype.Go$type      = new rtype( 64, 0, 0, 0, 0, Go$pkg.Int64     , null, null, null, null, null);
+		Go$Uint.prototype.Go$type       = new rtype( 32, 0, 0, 0, 0, Go$pkg.Uint      , null, null, null, null, null);
+		Go$Uint8.prototype.Go$type      = new rtype(  8, 0, 0, 0, 0, Go$pkg.Uint8     , null, null, null, null, null);
+		Go$Uint16.prototype.Go$type     = new rtype( 16, 0, 0, 0, 0, Go$pkg.Uint16    , null, null, null, null, null);
+		Go$Uint32.prototype.Go$type     = new rtype( 32, 0, 0, 0, 0, Go$pkg.Uint32    , null, null, null, null, null);
+		Go$Uint64.prototype.Go$type     = new rtype( 64, 0, 0, 0, 0, Go$pkg.Uint64    , null, null, null, null, null);
+		Go$Uintptr.prototype.Go$type    = new rtype( 32, 0, 0, 0, 0, Go$pkg.Uintptr   , null, null, null, null, null);
+		Go$Float32.prototype.Go$type    = new rtype( 32, 0, 0, 0, 0, Go$pkg.Float32   , null, null, null, null, null);
+		Go$Float64.prototype.Go$type    = new rtype( 64, 0, 0, 0, 0, Go$pkg.Float64   , null, null, null, null, null);
+		Go$Complex64.prototype.Go$type  = new rtype( 64, 0, 0, 0, 0, Go$pkg.Complex64 , null, null, null, null, null);
+		Go$Complex128.prototype.Go$type = new rtype(128, 0, 0, 0, 0, Go$pkg.Complex128, null, null, null, null, null);
+		Go$String.prototype.Go$type     = new rtype(  0, 0, 0, 0, 0, Go$pkg.String    , null, null, null, null, null);
+
+		TypeOf = function(v) {
+			return v.Go$type;
+		};
+		DeepEqual = function(a, b) {
+			if (a === b) {
+				return true;
+			}
+			if (a.constructor === Number) {
+				return false;
+			}
+			if (a.constructor !== b.constructor) {
+				return false;
+			}
+			if (a.length !== undefined) {
+				if (a.length !== b.length) {
+					return false;
+				}
+				for (var i = 0; i < a.length; i++) {
+					if (!this.DeepEqual(a.array[a.offset + i], b.array[b.offset + i])) {
+						return false;
+					}
+				}
+				return true;
+			}
+			var keys = Object.keys(a);
+			for (var j = 0; j < keys.length; j++) {
+				var key = keys[j];
+				if (key !== "Go$id" && !this.DeepEqual(a[key], b[key])) {
+					return false;
+				}
+			}
+			return true;
+		};
 	`,
 
 	"runtime": `

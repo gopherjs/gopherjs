@@ -333,8 +333,8 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 		obj := c.info.Objects[s.Name]
 		typeName := c.objectName(obj)
 		if isWrapped(obj.Type()) {
-			c.Printf(`var %s = function(v) { this.v = v; };`, typeName)
-			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.v; };`, typeName, typeName)
+			c.Printf(`var %s = function(v) { this.Go$val = v; };`, typeName)
+			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.Go$val; };`, typeName, typeName)
 			c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", typeName)
 			return
 		}
@@ -347,6 +347,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			c.Printf("%s = function(%s) {", typeName, strings.Join(params, ", "))
 			c.Indent(func() {
 				c.Printf("this.Go$id = Go$idCounter++;")
+				c.Printf("this.Go$val = this;")
 				for i := 0; i < t.NumFields(); i++ {
 					field := t.Field(i)
 					c.Printf("this.%s = %s_ || %s;", field.Name(), field.Name(), c.zeroValue(field.Type()))
@@ -354,7 +355,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			})
 			c.Printf("};")
 			c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, typeName)
-			c.Printf("%s.Go$NonPointer = function(v) { this.v = v; };", typeName)
+			c.Printf("%s.Go$NonPointer = function(v) { this.Go$val = v; };", typeName)
 			fields := make([]string, t.NumFields())
 			for i := range fields {
 				field := t.Field(i)
@@ -388,7 +389,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 						}
 						paramList := strings.Join(params, ", ")
 						c.Printf("%s.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, name, paramList, value, name, paramList)
-						c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.v.%s(%s); };", typeName, name, paramList, name, paramList)
+						c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.Go$val.%s(%s); };", typeName, name, paramList, name, paramList)
 					}
 				}
 			}
@@ -423,7 +424,7 @@ func (c *PkgContext) translateFunction(typeName string, isStruct bool, fun *ast.
 		recv := fun.Recv.List[0].Names[0]
 		var this ast.Expr = ast.NewIdent("this")
 		if isWrapped(recvType) {
-			this = ast.NewIdent("this.v")
+			this = ast.NewIdent("this.Go$val")
 		}
 		c.info.Types[recv] = recvType
 		c.info.Types[this] = recvType
@@ -448,7 +449,7 @@ func (c *PkgContext) translateFunction(typeName string, isStruct bool, fun *ast.
 	switch {
 	case isStruct:
 		c.Printf("%s.prototype.%s = %s;", typeName, fun.Name.Name, c.translateExpr(funcLit))
-		c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.v.%s(%s); };", typeName, fun.Name.Name, params, fun.Name.Name, params)
+		c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.Go$val.%s(%s); };", typeName, fun.Name.Name, params, fun.Name.Name, params)
 	case !isStruct && !isPointer:
 		value := "this.Go$get()"
 		if isWrapped(recvType) {
@@ -459,7 +460,7 @@ func (c *PkgContext) translateFunction(typeName string, isStruct bool, fun *ast.
 	case !isStruct && isPointer:
 		value := "this"
 		if isWrapped(ptr.Elem()) {
-			value = "this.v"
+			value = "this.Go$val"
 		}
 		c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new %s.Go$Pointer(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, params, value, typeName, fun.Name.Name, params)
 		c.Printf("%s.Go$Pointer.prototype.%s = %s;", typeName, fun.Name.Name, c.translateExpr(funcLit))

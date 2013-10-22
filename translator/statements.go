@@ -92,9 +92,8 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			value := refVar
 			if len(conds) == 1 {
 				t := c.info.Types[conds[0]]
-				_, isStruct := t.Underlying().(*types.Struct)
-				if isWrapped(t) || isStruct {
-					value += ".v"
+				if _, isInterface := t.Underlying().(*types.Interface); !isInterface && !types.IsIdentical(t, types.Typ[types.UntypedNil]) {
+					value += ".Go$val"
 				}
 			}
 			c.Printf("%s = %s;", typeSwitchVar, value)

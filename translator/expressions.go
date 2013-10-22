@@ -624,11 +624,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return c.translateExpr(e.X)
 		}
 		t := c.info.Types[e.Type]
-		_, isStruct := t.Underlying().(*types.Struct)
 		check := "Go$obj !== null && " + c.typeCheck("Go$obj.constructor", t)
 		value := "Go$obj"
-		if isWrapped(t) || isStruct {
-			value += ".v"
+		if _, isInterface := t.Underlying().(*types.Interface); !isInterface {
+			value += ".Go$val"
 		}
 		if _, isTuple := exprType.(*types.Tuple); isTuple {
 			return fmt.Sprintf("(Go$obj = %s, %s ? [%s, true] : [%s, false])", c.translateExpr(e.X), check, value, c.zeroValue(c.info.Types[e.Type]))

@@ -10,41 +10,41 @@ var Go$min = Math.min;
 var Go$charToString = String.fromCharCode;
 var Go$reflect;
 
-var Go$Uint8      = function(v) { this.v = v; };
-Go$Uint8.prototype.Go$key = function() { return "Uint8$" + this.v; };
-var Go$Uint16     = function(v) { this.v = v; };
-Go$Uint16.prototype.Go$key = function() { return "Uint16$" + this.v; };
-var Go$Uint32     = function(v) { this.v = v; };
-Go$Uint32.prototype.Go$key = function() { return "Uint32$" + this.v; };
-var Go$Int8       = function(v) { this.v = v; };
-Go$Int8.prototype.Go$key = function() { return "Int8$" + this.v; };
-var Go$Int16      = function(v) { this.v = v; };
-Go$Int16.prototype.Go$key = function() { return "Int16$" + this.v; };
-var Go$Int32      = function(v) { this.v = v; };
-Go$Int32.prototype.Go$key = function() { return "Int32$" + this.v; };
-var Go$Float32    = function(v) { this.v = v; };
-Go$Float32.prototype.Go$key = function() { return "Float32$" + this.v; };
-var Go$Float64    = function(v) { this.v = v; };
-Go$Float64.prototype.Go$key = function() { return "Float64$" + this.v; };
-var Go$Complex64  = function(v) { this.v = v; };
-Go$Complex64.prototype.Go$key = function() { return "Complex64$" + this.v; };
-var Go$Complex128 = function(v) { this.v = v; };
-Go$Complex128.prototype.Go$key = function() { return "Complex128$" + this.v; };
-var Go$Uint       = function(v) { this.v = v; };
-Go$Uint.prototype.Go$key = function() { return "Uint$" + this.v; };
-var Go$Int        = function(v) { this.v = v; };
-Go$Int.prototype.Go$key = function() { return "Int$" + this.v; };
-var Go$Uintptr    = function(v) { this.v = v; };
-Go$Uintptr.prototype.Go$key = function() { return "Uintptr$" + this.v; };
+var Go$Uint8      = function(v) { this.Go$val = v; };
+Go$Uint8.prototype.Go$key = function() { return "Uint8$" + this.Go$val; };
+var Go$Uint16     = function(v) { this.Go$val = v; };
+Go$Uint16.prototype.Go$key = function() { return "Uint16$" + this.Go$val; };
+var Go$Uint32     = function(v) { this.Go$val = v; };
+Go$Uint32.prototype.Go$key = function() { return "Uint32$" + this.Go$val; };
+var Go$Int8       = function(v) { this.Go$val = v; };
+Go$Int8.prototype.Go$key = function() { return "Int8$" + this.Go$val; };
+var Go$Int16      = function(v) { this.Go$val = v; };
+Go$Int16.prototype.Go$key = function() { return "Int16$" + this.Go$val; };
+var Go$Int32      = function(v) { this.Go$val = v; };
+Go$Int32.prototype.Go$key = function() { return "Int32$" + this.Go$val; };
+var Go$Float32    = function(v) { this.Go$val = v; };
+Go$Float32.prototype.Go$key = function() { return "Float32$" + this.Go$val; };
+var Go$Float64    = function(v) { this.Go$val = v; };
+Go$Float64.prototype.Go$key = function() { return "Float64$" + this.Go$val; };
+var Go$Complex64  = function(v) { this.Go$val = v; };
+Go$Complex64.prototype.Go$key = function() { return "Complex64$" + this.Go$val; };
+var Go$Complex128 = function(v) { this.Go$val = v; };
+Go$Complex128.prototype.Go$key = function() { return "Complex128$" + this.Go$val; };
+var Go$Uint       = function(v) { this.Go$val = v; };
+Go$Uint.prototype.Go$key = function() { return "Uint$" + this.Go$val; };
+var Go$Int        = function(v) { this.Go$val = v; };
+Go$Int.prototype.Go$key = function() { return "Int$" + this.Go$val; };
+var Go$Uintptr    = function(v) { this.Go$val = v; };
+Go$Uintptr.prototype.Go$key = function() { return "Uintptr$" + this.Go$val; };
 var Go$Byte       = Go$Uint8;
 var Go$Rune       = Go$Int32;
 
-var Go$Bool   = function(v) { this.v = v; };
-Go$Bool.prototype.Go$key = function() { return "Bool$" + this.v; };
-var Go$String = function(v) { this.v = v; };
-Go$String.prototype.Go$key = function() { return "String$" + this.v; };
-var Go$Func   = function(v) { this.v = v; };
-Go$Func.prototype.Go$key = function() { return "Func$" + this.v; };
+var Go$Bool   = function(v) { this.Go$val = v; };
+Go$Bool.prototype.Go$key = function() { return "Bool$" + this.Go$val; };
+var Go$String = function(v) { this.Go$val = v; };
+Go$String.prototype.Go$key = function() { return "String$" + this.Go$val; };
+var Go$Func   = function(v) { this.Go$val = v; };
+Go$Func.prototype.Go$key = function() { return "Func$" + this.Go$val; };
 
 var Go$Array           = Array;
 var Go$Uint8Array      = Uint8Array;
@@ -68,12 +68,14 @@ var Go$RuneArray       = Go$Int32Array;
 var Go$Int64 = function(high, low) {
 	this.high = (high + Math.floor(low / 4294967296)) | 0;
 	this.low = low >>> 0;
+	this.Go$val = this;
 };
 Go$Int64.prototype.Go$key = function() { return "Int64$" + this.high + "$" + this.low; };
 
 var Go$Uint64 = function(high, low) {
 	this.high = (high + Math.floor(low / 4294967296)) >>> 0;
 	this.low = low >>> 0;
+	this.Go$val = this;
 };
 Go$Uint64.prototype.Go$key = function() { return "Uint64$" + this.high + "$" + this.low; };
 
@@ -175,6 +177,7 @@ var Go$Slice = function(array) {
 	this.array = array;
 	this.offset = 0;
 	this.length = array && array.length;
+	this.Go$val = this;
 };
 Go$Slice.Go$nil = new Go$Slice({ isNil: true, length: 0 });
 
@@ -420,7 +423,7 @@ var Go$Panic = function(value) {
 	this.value = value;
 	this.message = value;
 	if (value.constructor === Go$String) {
-		this.message = value.v;
+		this.message = value.Go$val;
 	}
 	Error.captureStackTrace(this, Go$Panic);
 };
@@ -482,10 +485,10 @@ var Go$interfaceIsEqual = function(a, b) {
 	if (a.constructor !== b.constructor) {
 		return false;
 	}
-	if (a.v !== undefined && a.constructor !== Go$Func) {
-		return a.v === b.v;
+	if (a.Go$val === undefined || a.constructor === Go$Func) {
+		throw new Go$Panic("runtime error: comparing uncomparable type " + a.constructor);
 	}
-	throw new Go$Panic("runtime error: comparing uncomparable type " + a.constructor);
+	return a.Go$val === b.Go$val;
 };
 var Go$sliceIsEqual = function(a, ai, b, bi) {
 	return a.array === b.array && a.offset + ai === b.offset + bi;
@@ -701,7 +704,7 @@ var natives = map[string]string{
 		ValueOf = function(i) {
 			var typ = i.Go$type();
 			var flag = typ.Kind() << Go$pkg.flagKindShift;
-			return new Value(typ, i.v, flag);
+			return new Value(typ, i.Go$val, flag);
 		};
 		Value.prototype.Field = function(i) {
 			this.mustBe(Go$pkg.Struct);
@@ -737,7 +740,7 @@ var natives = map[string]string{
 			var keys = Object.keys(a);
 			for (var j = 0; j < keys.length; j++) {
 				var key = keys[j];
-				if (key !== "Go$id" && !this.DeepEqual(a[key], b[key])) {
+				if (key !== "Go$id" && key !== "Go$val" && !this.DeepEqual(a[key], b[key])) {
 					return false;
 				}
 			}

@@ -722,6 +722,14 @@ var natives = map[string]string{
 			}
 			return new v.typ.alg(v.val);
 		};
+		Value.prototype.String = function() {
+			if (this.kind() === 0) {
+				return "<invalid Value>";
+			} else if (this.kind() === 24) {
+				return this.val;
+			}
+			return "<" + this.typ.String() + " Value>";
+		};
 		DeepEqual = function(a, b) {
 			if (a === b) {
 				return true;

@@ -614,6 +614,13 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("%s(%s)", fun, strings.Join(c.translateArgs(e), ", "))
 
 	case *ast.StarExpr:
+		if c1, isCall := e.X.(*ast.CallExpr); isCall && len(c1.Args) == 1 {
+			if c2, isCall := c1.Args[0].(*ast.CallExpr); isCall && len(c2.Args) == 1 && types.IsIdentical(c.info.Types[c2.Fun], types.Typ[types.UnsafePointer]) {
+				if unary, isUnary := c2.Args[0].(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
+					return c.translateExpr(unary.X) // unsafe conversion
+				}
+			}
+		}
 		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
 			return fmt.Sprintf("(Go$obj = %s, %s)", c.translateExpr(e.X), c.cloneStruct([]string{"Go$obj"}, exprType))
 		}

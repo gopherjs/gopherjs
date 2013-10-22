@@ -201,16 +201,12 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					c.Printf(`var %s = function() { throw new Go$Panic("Native function not implemented: %s"); };`, name, name)
 					continue
 				}
-				funcLit := &ast.FuncLit{
-					Type: fun.Type,
-					Body: &ast.BlockStmt{
-						List: fun.Body.List,
-					},
-				}
-				funType := c.info.Objects[fun.Name].Type()
-				c.info.Types[fun.Name] = funType
-				c.info.Types[funcLit] = funType
-				c.Printf("var %s = %s;", c.translateExpr(fun.Name), c.translateExpr(funcLit))
+				params := c.translateParams(fun.Type)
+				c.Printf("var %s = function(%s) {", c.translateExpr(fun.Name), strings.Join(params, ", "))
+				c.Indent(func() {
+					c.translateFunctionBody(fun.Body.List, c.info.Objects[fun.Name].Type().(*types.Signature), params)
+				})
+				c.Printf("};")
 			}
 
 			// constants
@@ -226,7 +222,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				}
 			}
 
-			// variables
+			// variables (TODO: handle tuples)
 			var unorderedSingleVarSpecs []*ast.ValueSpec
 			pendingObjects := make(map[types.Object]bool)
 			for _, spec := range varSpecs {
@@ -241,30 +237,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						})
 						pendingObjects[c.info.Objects[name]] = true
 					}
-				}
-			}
-
-			var orderedVarStmts []ast.Stmt
-			complete := false
-			for !complete {
-				complete = true
-				for i, spec := range unorderedSingleVarSpecs {
-					if spec == nil {
-						continue
-					}
-					v := IsReadyVisitor{info: c.info, functions: functionsByObject, pendingObjects: pendingObjects, isReady: true}
-					ast.Walk(&v, spec.Values[0])
-					if !v.isReady {
-						complete = false
-						continue
-					}
-					orderedVarStmts = append(orderedVarStmts, &ast.AssignStmt{
-						Lhs: []ast.Expr{spec.Names[0]},
-						Tok: token.ASSIGN,
-						Rhs: []ast.Expr{spec.Values[0]},
-					})
-					delete(pendingObjects, c.info.Objects[spec.Names[0]])
-					unorderedSingleVarSpecs[i] = nil
 				}
 			}
 
@@ -283,14 +255,34 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			}
 
 			// init function
-			funcLit := &ast.FuncLit{
-				Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{}},
-				Body: &ast.BlockStmt{
-					List: append(orderedVarStmts, initStmts...),
-				},
-			}
-			c.info.Types[funcLit] = types.NewSignature(c.pkg.Scope(), nil, types.NewTuple(), types.NewTuple(), false)
-			c.Printf("Go$pkg.init = %s;", c.translateExpr(funcLit))
+			c.Printf("Go$pkg.init = function() {")
+			c.Indent(func() {
+				complete := false
+				for !complete {
+					complete = true
+					for i, spec := range unorderedSingleVarSpecs {
+						if spec == nil {
+							continue
+						}
+						v := IsReadyVisitor{info: c.info, functions: functionsByObject, pendingObjects: pendingObjects, isReady: true}
+						ast.Walk(&v, spec.Values[0])
+						if !v.isReady {
+							complete = false
+							continue
+						}
+						c.translateStmt(&ast.AssignStmt{
+							Lhs: []ast.Expr{spec.Names[0]},
+							Tok: token.ASSIGN,
+							Rhs: []ast.Expr{spec.Values[0]},
+						}, "")
+						delete(pendingObjects, c.info.Objects[spec.Names[0]])
+						unorderedSingleVarSpecs[i] = nil
+					}
+				}
+
+				c.translateFunctionBody(initStmts, types.NewSignature(c.pkg.Scope(), nil, types.NewTuple(), types.NewTuple(), false), nil)
+			})
+			c.Printf("};")
 
 			c.Printf("return Go$pkg;")
 		})
@@ -415,56 +407,118 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 }
 
 func (c *PkgContext) translateFunction(typeName string, isStruct bool, fun *ast.FuncDecl) {
+	outerVarNames := c.usedVarNames
+	defer func() { c.usedVarNames = outerVarNames }()
+
 	sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
 	recvType := sig.Recv().Type()
 	ptr, isPointer := recvType.(*types.Pointer)
 
-	body := fun.Body.List
-	if fun.Recv.List[0].Names != nil {
-		recv := fun.Recv.List[0].Names[0]
-		var this ast.Expr = ast.NewIdent("this")
-		if isWrapped(recvType) {
-			this = ast.NewIdent("this.Go$val")
-		}
-		c.info.Types[recv] = recvType
-		c.info.Types[this] = recvType
-		body = append([]ast.Stmt{
-			&ast.AssignStmt{
-				Lhs: []ast.Expr{recv},
-				Tok: token.DEFINE,
-				Rhs: []ast.Expr{this},
-			},
-		}, body...)
+	params := c.translateParams(fun.Type)
+	joinedParams := strings.Join(params, ", ")
+	printPrimaryFunction := func(lhs string) {
+		c.Printf("%s = function(%s) {", lhs, joinedParams)
+		c.Indent(func() {
+			if fun.Recv.List[0].Names != nil {
+				recv := fun.Recv.List[0].Names[0]
+				this := "this"
+				if isWrapped(recvType) {
+					this = "this.Go$val"
+				}
+				c.Printf("var %s = %s;", c.objectName(c.info.Objects[recv]), this)
+			}
+
+			c.translateFunctionBody(fun.Body.List, sig, params)
+		})
+		c.Printf("};")
 	}
 
-	funcLit := &ast.FuncLit{
-		Type: fun.Type,
-		Body: &ast.BlockStmt{
-			List: body,
-		},
-	}
-	c.info.Types[funcLit] = c.info.Objects[fun.Name].Type()
-
-	params := strings.Join(c.translateParams(fun.Type), ", ")
 	switch {
 	case isStruct:
-		c.Printf("%s.prototype.%s = %s;", typeName, fun.Name.Name, c.translateExpr(funcLit))
-		c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.Go$val.%s(%s); };", typeName, fun.Name.Name, params, fun.Name.Name, params)
+		printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
+		c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.Go$val.%s(%s); };", typeName, fun.Name.Name, joinedParams, fun.Name.Name, joinedParams)
 	case !isStruct && !isPointer:
 		value := "this.Go$get()"
 		if isWrapped(recvType) {
 			value = fmt.Sprintf("new %s(%s)", typeName, value)
 		}
-		c.Printf("%s.prototype.%s = %s;", typeName, fun.Name.Name, c.translateExpr(funcLit))
-		c.Printf("%s.Go$Pointer.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, params, value, fun.Name.Name, params)
+		printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
+		c.Printf("%s.Go$Pointer.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, joinedParams, value, fun.Name.Name, joinedParams)
 	case !isStruct && isPointer:
 		value := "this"
 		if isWrapped(ptr.Elem()) {
 			value = "this.Go$val"
 		}
-		c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new %s.Go$Pointer(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, params, value, typeName, fun.Name.Name, params)
-		c.Printf("%s.Go$Pointer.prototype.%s = %s;", typeName, fun.Name.Name, c.translateExpr(funcLit))
+		c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new %s.Go$Pointer(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, joinedParams, value, typeName, fun.Name.Name, joinedParams)
+		printPrimaryFunction(typeName + ".Go$Pointer.prototype." + fun.Name.Name)
 	}
+}
+
+func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signature, params []string) {
+	outerVarNames := c.usedVarNames
+	defer func() { c.usedVarNames = outerVarNames }()
+	c.usedVarNames = append(c.usedVarNames, params...)
+
+	body := c.CatchOutput(func() {
+		var resultNames []ast.Expr
+		if sig.Results().Len() != 0 && sig.Results().At(0).Name() != "" {
+			resultNames = make([]ast.Expr, sig.Results().Len())
+			for i := 0; i < sig.Results().Len(); i++ {
+				result := sig.Results().At(i)
+				name := result.Name()
+				if result.Name() == "_" {
+					name = "result"
+				}
+				id := ast.NewIdent(name)
+				c.info.Types[id] = result.Type()
+				c.info.Objects[id] = result
+				c.Printf("%s = %s;", c.translateExpr(id), c.zeroValue(result.Type()))
+				resultNames[i] = id
+			}
+		}
+
+		s := c.functionSig
+		defer func() { c.functionSig = s }()
+		c.functionSig = sig
+		r := c.resultNames
+		defer func() { c.resultNames = r }()
+		c.resultNames = resultNames
+		p := c.postLoopStmt
+		defer func() { c.postLoopStmt = p }()
+		c.postLoopStmt = nil
+
+		v := HasDeferVisitor{}
+		ast.Walk(&v, &ast.BlockStmt{List: stmts})
+		switch v.hasDefer {
+		case true:
+			c.Printf("var Go$deferred = [];")
+			c.Printf("try {")
+			c.Indent(func() {
+				c.translateStmtList(stmts)
+			})
+			c.Printf("} catch(Go$err) {")
+			c.Indent(func() {
+				c.Printf("if (Go$err.constructor !== Go$Panic) { Go$err = Go$wrapJavaScriptError(Go$err); };")
+				c.Printf("Go$errorStack.push({ frame: Go$getStackDepth(), error: Go$err });")
+			})
+			c.Printf("} finally {")
+			c.Indent(func() {
+				c.Printf("Go$callDeferred(Go$deferred);")
+				if resultNames != nil {
+					c.translateStmt(&ast.ReturnStmt{}, "")
+				}
+			})
+			c.Printf("}")
+		case false:
+			c.translateStmtList(stmts)
+		}
+	})
+
+	innerVarNames := c.usedVarNames[len(outerVarNames)+len(params):]
+	if len(innerVarNames) != 0 {
+		c.Printf("var %s;", strings.Join(innerVarNames, ", "))
+	}
+	c.Write(body)
 }
 
 func (c *PkgContext) translateParams(t *ast.FuncType) []string {

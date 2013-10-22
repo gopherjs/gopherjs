@@ -181,76 +181,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 
 	case *ast.FuncLit:
-		outerVarNames := c.usedVarNames
-		params := c.translateParams(e.Type)
-		c.usedVarNames = append(c.usedVarNames, params...)
-		varDecl := ""
-		body := c.CatchOutput(func() {
+		return strings.TrimSpace(string(c.CatchOutput(func() {
+			params := c.translateParams(e.Type)
+			c.Printf("(function(%s) {", strings.Join(params, ", "))
 			c.Indent(func() {
-				t := exprType.(*types.Signature)
-				var resultNames []ast.Expr
-				if t.Results().Len() != 0 && t.Results().At(0).Name() != "" {
-					resultNames = make([]ast.Expr, t.Results().Len())
-					for i := 0; i < t.Results().Len(); i++ {
-						result := t.Results().At(i)
-						name := result.Name()
-						if result.Name() == "_" {
-							name = "result"
-						}
-						id := ast.NewIdent(name)
-						c.info.Types[id] = result.Type()
-						c.info.Objects[id] = result
-						c.Printf("%s = %s;", c.translateExpr(id), c.zeroValue(result.Type()))
-						resultNames[i] = id
-					}
-				}
-
-				s := c.functionSig
-				defer func() { c.functionSig = s }()
-				c.functionSig = t
-				r := c.resultNames
-				defer func() { c.resultNames = r }()
-				c.resultNames = resultNames
-				p := c.postLoopStmt
-				defer func() { c.postLoopStmt = p }()
-				c.postLoopStmt = nil
-
-				v := HasDeferVisitor{}
-				ast.Walk(&v, e.Body)
-				switch v.hasDefer {
-				case true:
-					c.Printf("var Go$deferred = [];")
-					c.Printf("try {")
-					c.Indent(func() {
-						c.translateStmtList(e.Body.List)
-					})
-					c.Printf("} catch(Go$err) {")
-					c.Indent(func() {
-						c.Printf("if (Go$err.constructor !== Go$Panic) { Go$err = Go$wrapJavaScriptError(Go$err); };")
-						c.Printf("Go$errorStack.push({ frame: Go$getStackDepth(), error: Go$err });")
-					})
-					c.Printf("} finally {")
-					c.Indent(func() {
-						c.Printf("Go$callDeferred(Go$deferred);")
-						if resultNames != nil {
-							c.translateStmt(&ast.ReturnStmt{}, "")
-						}
-					})
-					c.Printf("}")
-				case false:
-					c.translateStmtList(e.Body.List)
-				}
-
-				innerVarNames := c.usedVarNames[len(outerVarNames)+len(params):]
-				if len(innerVarNames) != 0 {
-					varDecl = string(c.CatchOutput(func() { c.Printf("var %s;", strings.Join(innerVarNames, ", ")) }))
-				}
+				c.translateFunctionBody(e.Body.List, exprType.(*types.Signature), params)
 			})
-			c.Printf("")
-		})
-
-		c.usedVarNames = outerVarNames
-		return "(function(" + strings.Join(params, ", ") + ") {\n" + varDecl + string(body[:len(body)-1]) + "})"
+			c.Printf("})")
+		})))
 
 	case *ast.UnaryExpr:
 		op := e.Op.String()
@@ -750,7 +688,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 				}
 				return fmt.Sprintf("Go$bytesToString(%s)", value)
 			default:
-				panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
+				panic(fmt.Sprintf("Unhandled conversion: %v\n", et))
 			}
 		case t.Kind() == types.UnsafePointer:
 			if unary, isUnary := expr.(*ast.UnaryExpr); isUnary && unary.Op == token.AND {

@@ -319,7 +319,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 		obj := c.info.Objects[s.Name]
 		typeName := c.objectName(obj)
 		if isWrapped(obj.Type()) {
-			c.Printf(`var %s = function(v) { this.Go$val = v; };`, typeName)
+			c.Printf(`%s = function(v) { this.Go$val = v; };`, typeName)
 			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.Go$val; };`, typeName, typeName)
 			c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", typeName)
 			return
@@ -349,9 +349,9 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				if !field.IsExported() {
 					path = field.Pkg().Name() + "." + field.Name()
 				}
-				fields[i] = fmt.Sprintf(`new Go$reflect.structField(Go$dataPtr("%s"), Go$dataPtr("%s"), %s.prototype.Go$type(), Go$dataPtr(%#v), 0)`, field.Name(), path, c.typeName(field.Type()), t.Tag(i))
+				fields[i] = fmt.Sprintf(`new Go$reflect.structField(Go$dataPointer("%s"), Go$dataPointer("%s"), %s.prototype.Go$type(), Go$dataPointer(%#v), 0)`, field.Name(), path, c.typeName(field.Type()), t.Tag(i))
 			}
-			c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, %s, null, Go$dataPtr("%s.%s"), null, null); t.structType = new Go$reflect.structType(null, new Go$Slice([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), strings.Join(fields, ", "))
+			c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, %s, null, Go$dataPointer("%s.%s"), null, null); t.structType = new Go$reflect.structType(null, new Go$Slice([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), strings.Join(fields, ", "))
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)
 				if field.Anonymous() {
@@ -419,16 +419,25 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 				return
 			}
 
+			body := fun.Body.List
 			if fun.Recv.List[0].Names != nil {
+				recv := fun.Recv.List[0].Names[0]
 				this := ast.NewIdent("this")
 				if isWrapped(recvType) {
 					this = ast.NewIdent("this.Go$val")
 				}
-				c.info.Types[this] = sig.Recv().Type()
-				c.Printf("var %s = %s;", c.objectName(sig.Recv()), c.translateExprToType(this, sig.Recv().Type()))
+				c.info.Types[recv] = recvType
+				c.info.Types[this] = recvType
+				body = append([]ast.Stmt{
+					&ast.AssignStmt{
+						Lhs: []ast.Expr{recv},
+						Tok: token.DEFINE,
+						Rhs: []ast.Expr{this},
+					},
+				}, body...)
 			}
 
-			c.translateFunctionBody(fun.Body.List, sig, params)
+			c.translateFunctionBody(body, sig, params)
 		})
 		c.Printf("};")
 	}
@@ -576,7 +585,7 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 			panic("Zero value for untyped nil.")
 		}
 	case *types.Array:
-		return fmt.Sprintf("Go$clear(new %s(%d), %s)", toArrayType(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
+		return fmt.Sprintf("Go$makeArray(%s, %d, function() { return %s; })", toArrayType(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
 	case *types.Slice:
 		return fmt.Sprintf("%s.Go$nil", c.typeName(ty))
 	case *types.Struct:

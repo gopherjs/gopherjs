@@ -339,7 +339,21 @@ var Go$internalizeString = function(extStr) {
 	return intStr;
 };
 
-var Go$clear = function(array, zero) { for (var i = 0; i < array.length; i++) { array[i] = zero; } return array; }; // TODO do not use for typed arrays when NodeJS is behaving according to spec
+var Go$makeArray = function(constructor, length, zero) { // TODO do not use for typed arrays when NodeJS is behaving according to spec
+	var array = new constructor(length);
+	for (var i = 0; i < length; i++) {
+		array[i] = zero();
+	}
+	return array;
+};
+
+var Go$mapArray = function(array, f) {
+	var newArray = new array.constructor(array.length);
+	for (var i = 0; i < array.length; i++) {
+		newArray[i] = f(array[i]);
+	}
+	return newArray;
+};
 
 var Go$Map = function(data) {
 	data = data || [];
@@ -360,7 +374,7 @@ var Go$Interface = function(value) {
 var Go$Channel = function() {};
 
 var Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };
-var Go$dataPtr = function(data) { return new Go$Pointer(function() { return data; }, null) }; 
+var Go$dataPointer = function(data) { return new Go$Pointer(function() { return data; }, null) }; 
 
 var Go$copy = function(dst, src) {
 	if (src.length === 0 || dst.length === 0) {

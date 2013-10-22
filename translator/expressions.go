@@ -437,9 +437,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					switch t2 := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Slice:
 						if len(e.Args) == 3 {
-							return fmt.Sprintf("Go$subslice(new %s(Go$clear(new %s(%s), %s)), 0, %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[2]), c.zeroValue(t2.Elem()), c.translateExpr(e.Args[1]))
+							return fmt.Sprintf("Go$subslice(new %s(Go$makeArray(%s, %s, function() { return %s; })), 0, %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[2]), c.zeroValue(t2.Elem()), c.translateExpr(e.Args[1]))
 						}
-						return fmt.Sprintf("new %s(Go$clear(new %s(%s), %s))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[1]), c.zeroValue(t2.Elem()))
+						return fmt.Sprintf("new %s(Go$makeArray(%s, %s, function() { return %s; }))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[1]), c.zeroValue(t2.Elem()))
 					default:
 						args := []string{"undefined"}
 						for _, arg := range e.Args[1:] {
@@ -559,8 +559,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 			}
 		}
-		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
-			return fmt.Sprintf("(Go$obj = %s, %s)", c.translateExpr(e.X), c.cloneStruct([]string{"Go$obj"}, exprType))
+		switch exprType.Underlying().(type) {
+		case *types.Struct, *types.Array:
+			return c.clone(c.translateExpr(e.X), exprType)
 		}
 		return c.translateExpr(e.X) + ".Go$get()"
 
@@ -752,12 +753,12 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			return target
 		}
 
-	case *types.Struct:
+	case *types.Struct, *types.Array:
 		if _, isComposite := expr.(*ast.CompositeLit); !isComposite {
-			return fmt.Sprintf("(Go$obj = %s, %s)", c.translateExpr(expr), c.cloneStruct([]string{"Go$obj"}, desiredType))
+			return c.clone(c.translateExpr(expr), desiredType)
 		}
 
-	case *types.Array, *types.Chan, *types.Map, *types.Signature:
+	case *types.Chan, *types.Map, *types.Signature:
 		// no converion
 
 	default:
@@ -767,26 +768,28 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 	return c.translateExpr(expr)
 }
 
-func (c *PkgContext) cloneStruct(srcPath []string, t types.Type) string {
-	s := t.Underlying().(*types.Struct)
-	named, isNamed := t.(*types.Named)
-	fields := make([]string, s.NumFields())
-	for i := range fields {
-		field := s.Field(i)
-		if !isNamed {
-			fields[i] = field.Name() + ": "
+func (c *PkgContext) clone(src string, ty types.Type) string {
+	named, isNamed := ty.(*types.Named)
+	switch t := ty.Underlying().(type) {
+	case *types.Struct:
+		structVar := c.newVariable("_struct")
+		fields := make([]string, t.NumFields())
+		for i := range fields {
+			field := t.Field(i)
+			if !isNamed {
+				fields[i] = field.Name() + ": "
+			}
+			fields[i] += c.clone(structVar+"."+field.Name(), field.Type())
 		}
-		fieldPath := append(srcPath, field.Name())
-		if _, isStruct := field.Type().Underlying().(*types.Struct); isStruct {
-			fields[i] += c.cloneStruct(fieldPath, field.Type())
-			continue
+		if isNamed {
+			return fmt.Sprintf("(%s = %s, new %s(%s))", structVar, src, c.objectName(named.Obj()), strings.Join(fields, ", "))
 		}
-		fields[i] += strings.Join(fieldPath, ".")
+		return fmt.Sprintf("(%s = %s, {%s})", structVar, src, strings.Join(fields, ", "))
+	case *types.Array:
+		return fmt.Sprintf("Go$mapArray(%s, function(entry) { return %s; })", src, c.clone("entry", t.Elem()))
+	default:
+		return src
 	}
-	if isNamed {
-		return fmt.Sprintf("new %s(%s)", c.objectName(named.Obj()), strings.Join(fields, ", "))
-	}
-	return fmt.Sprintf("{ %s }", strings.Join(fields, ", "))
 }
 
 func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {

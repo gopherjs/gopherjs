@@ -177,14 +177,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				c.Printf("var %s;", typeName)
 				c.translateSpec(spec)
 				for _, fun := range functionsByType[obj.Type()] {
-					funName := fun.Name.Name
-					jsCode, _ := typesPkg.Scope().Lookup("js_" + typeName + "_" + funName).(*types.Const)
-					if jsCode != nil {
-						c.Printf("%s.prototype.%s = function(%s) {\n%s\n};", typeName, funName, strings.Join(c.translateParams(fun.Type), ", "), exact.StringVal(jsCode.Val()))
-						continue
-					}
 					_, isStruct := obj.Type().Underlying().(*types.Struct)
-					c.translateFunction(typeName, isStruct, fun)
+					c.translateMethod(typeName, isStruct, fun)
 				}
 				c.Printf("Go$pkg.%s = %s;", typeName, typeName)
 			}
@@ -406,7 +400,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 	}
 }
 
-func (c *PkgContext) translateFunction(typeName string, isStruct bool, fun *ast.FuncDecl) {
+func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.FuncDecl) {
 	outerVarNames := c.usedVarNames
 	defer func() { c.usedVarNames = outerVarNames }()
 
@@ -419,6 +413,12 @@ func (c *PkgContext) translateFunction(typeName string, isStruct bool, fun *ast.
 	printPrimaryFunction := func(lhs string) {
 		c.Printf("%s = function(%s) {", lhs, joinedParams)
 		c.Indent(func() {
+			if jsCode, ok := c.pkg.Scope().Lookup("js_" + typeName + "_" + fun.Name.Name).(*types.Const); ok {
+				c.Write([]byte(exact.StringVal(jsCode.Val())))
+				c.Write([]byte{'\n'})
+				return
+			}
+
 			if fun.Recv.List[0].Names != nil {
 				recv := fun.Recv.List[0].Names[0]
 				this := "this"

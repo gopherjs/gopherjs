@@ -512,40 +512,6 @@ diff -r 9e246fa49449 go/types/methodset.go
  	for i, f := range list {
  		key := f.Id()
  		// if f is not in the set, add it
-diff -r 9e246fa49449 go/types/resolver.go
---- a/go/types/resolver.go	Fri Oct 18 10:42:41 2013 +0900
-+++ b/go/types/resolver.go	Sun Oct 20 15:23:54 2013 +0200
-@@ -316,18 +316,18 @@
- 				obj := NewFunc(d.Name.Pos(), pkg, name, nil)
- 				if d.Recv == nil {
- 					// regular function
--					if name == "init" {
--						// don't declare init functions in the package scope - they are invisible
--						obj.parent = pkg.scope
--						check.recordObject(d.Name, obj)
--						// init functions must have a body
--						if d.Body == nil {
--							check.errorf(obj.pos, "missing function body")
--							// ok to continue
--						}
--					} else {
--						check.declareObj(pkg.scope, d.Name, obj)
--					}
-+					// if name == "init" {
-+					// 	// don't declare init functions in the package scope - they are invisible
-+					// 	obj.parent = pkg.scope
-+					// 	check.recordObject(d.Name, obj)
-+					// 	// init functions must have a body
-+					// 	if d.Body == nil {
-+					// 		check.errorf(obj.pos, "missing function body")
-+					// 		// ok to continue
-+					// 	}
-+					// } else {
-+					check.declareObj(pkg.scope, d.Name, obj)
-+					// }
- 				} else {
- 					// Associate method with receiver base type name, if possible.
- 					// Ignore methods that have an invalid receiver, or a blank _
 diff -r 9e246fa49449 go/types/typemap/typemap.go
 --- a/go/types/typemap/typemap.go	Fri Oct 18 10:42:41 2013 +0900
 +++ b/go/types/typemap/typemap.go	Sun Oct 20 15:23:54 2013 +0200

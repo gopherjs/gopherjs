@@ -365,7 +365,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				}
 				fields[i] = fmt.Sprintf(`new Go$reflect.structField(Go$dataPtr("%s"), Go$dataPtr("%s"), %s.prototype.Go$type(), Go$dataPtr(%#v), 0)`, field.Name(), path, c.typeName(field.Type()), t.Tag(i))
 			}
-			c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, null, null, Go$dataPtr("%s.%s"), null, null); t.structType = new Go$reflect.structType(null, new Go$Slice([%s])); return t; };`, typeName, obj.Pkg().Name(), obj.Name(), strings.Join(fields, ", "))
+			c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, %s, null, Go$dataPtr("%s.%s"), null, null); t.structType = new Go$reflect.structType(null, new Go$Slice([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), strings.Join(fields, ", "))
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)
 				if field.Anonymous() {

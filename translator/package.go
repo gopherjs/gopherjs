@@ -420,12 +420,12 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 			}
 
 			if fun.Recv.List[0].Names != nil {
-				recv := fun.Recv.List[0].Names[0]
-				this := "this"
+				this := ast.NewIdent("this")
 				if isWrapped(recvType) {
-					this = "this.Go$val"
+					this = ast.NewIdent("this.Go$val")
 				}
-				c.Printf("var %s = %s;", c.objectName(c.info.Objects[recv]), this)
+				c.info.Types[this] = sig.Recv().Type()
+				c.Printf("var %s = %s;", c.objectName(sig.Recv()), c.translateExprToType(this, sig.Recv().Type()))
 			}
 
 			c.translateFunctionBody(fun.Body.List, sig, params)

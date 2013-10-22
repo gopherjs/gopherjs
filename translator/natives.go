@@ -5,10 +5,10 @@ Error.stackTraceLimit = -1;
 
 var Go$obj, Go$tuple;
 var Go$idCounter = 1;
-
 var Go$keys = Object.keys;
 var Go$min = Math.min;
 var Go$charToString = String.fromCharCode;
+var Go$reflect;
 
 var Go$Uint8      = function(v) { this.v = v; };
 Go$Uint8.prototype.Go$key = function() { return "Uint8$" + this.v; };
@@ -357,6 +357,7 @@ var Go$Interface = function(value) {
 var Go$Channel = function() {};
 
 var Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };
+var Go$dataPtr = function(data) { return new Go$Pointer(function() { return data; }, null) }; 
 
 var Go$copy = function(dst, src) {
 	if (src.length === 0 || dst.length === 0) {
@@ -674,26 +675,43 @@ var natives = map[string]string{
 	`,
 
 	"reflect": `
-		Go$Bool.prototype.Go$type       = new rtype( 0, 0, 0, 0, 0, Go$pkg.Bool      , null, null, { Go$get: function() { return "bool";       } }, null, null);
-		Go$Int.prototype.Go$type        = new rtype( 4, 0, 0, 0, 0, Go$pkg.Int       , null, null, { Go$get: function() { return "int";        } }, null, null);
-		Go$Int8.prototype.Go$type       = new rtype( 1, 0, 0, 0, 0, Go$pkg.Int8      , null, null, { Go$get: function() { return "int8";       } }, null, null);
-		Go$Int16.prototype.Go$type      = new rtype( 2, 0, 0, 0, 0, Go$pkg.Int16     , null, null, { Go$get: function() { return "int16";      } }, null, null);
-		Go$Int32.prototype.Go$type      = new rtype( 4, 0, 0, 0, 0, Go$pkg.Int32     , null, null, { Go$get: function() { return "int32";      } }, null, null);
-		Go$Int64.prototype.Go$type      = new rtype( 8, 0, 0, 0, 0, Go$pkg.Int64     , null, null, { Go$get: function() { return "int64";      } }, null, null);
-		Go$Uint.prototype.Go$type       = new rtype( 4, 0, 0, 0, 0, Go$pkg.Uint      , null, null, { Go$get: function() { return "uint";       } }, null, null);
-		Go$Uint8.prototype.Go$type      = new rtype( 1, 0, 0, 0, 0, Go$pkg.Uint8     , null, null, { Go$get: function() { return "uint8";      } }, null, null);
-		Go$Uint16.prototype.Go$type     = new rtype( 2, 0, 0, 0, 0, Go$pkg.Uint16    , null, null, { Go$get: function() { return "uint16";     } }, null, null);
-		Go$Uint32.prototype.Go$type     = new rtype( 4, 0, 0, 0, 0, Go$pkg.Uint32    , null, null, { Go$get: function() { return "uint32";     } }, null, null);
-		Go$Uint64.prototype.Go$type     = new rtype( 8, 0, 0, 0, 0, Go$pkg.Uint64    , null, null, { Go$get: function() { return "uint64";     } }, null, null);
-		Go$Uintptr.prototype.Go$type    = new rtype( 4, 0, 0, 0, 0, Go$pkg.Uintptr   , null, null, { Go$get: function() { return "uintptr";    } }, null, null);
-		Go$Float32.prototype.Go$type    = new rtype( 4, 0, 0, 0, 0, Go$pkg.Float32   , null, null, { Go$get: function() { return "float32";    } }, null, null);
-		Go$Float64.prototype.Go$type    = new rtype( 8, 0, 0, 0, 0, Go$pkg.Float64   , null, null, { Go$get: function() { return "float64";    } }, null, null);
-		Go$Complex64.prototype.Go$type  = new rtype( 8, 0, 0, 0, 0, Go$pkg.Complex64 , null, null, { Go$get: function() { return "complex64";  } }, null, null);
-		Go$Complex128.prototype.Go$type = new rtype(16, 0, 0, 0, 0, Go$pkg.Complex128, null, null, { Go$get: function() { return "complex128"; } }, null, null);
-		Go$String.prototype.Go$type     = new rtype( 0, 0, 0, 0, 0, Go$pkg.String    , null, null, { Go$get: function() { return "string";     } }, null, null);
+		Go$reflect = { rtype: rtype, structType: structType, structField: structField, Struct: Go$pkg.Struct };
 
-		TypeOf = function(v) {
-			return v.Go$type;
+		Go$Bool.prototype.Go$type       = function() { return new rtype( 0, 0, 0, 0, 0, Go$pkg.Bool      , null, null, { Go$get: function() { return "bool";       } }, null, null); };
+		Go$Int.prototype.Go$type        = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Int       , null, null, { Go$get: function() { return "int";        } }, null, null); };
+		Go$Int8.prototype.Go$type       = function() { return new rtype( 1, 0, 0, 0, 0, Go$pkg.Int8      , null, null, { Go$get: function() { return "int8";       } }, null, null); };
+		Go$Int16.prototype.Go$type      = function() { return new rtype( 2, 0, 0, 0, 0, Go$pkg.Int16     , null, null, { Go$get: function() { return "int16";      } }, null, null); };
+		Go$Int32.prototype.Go$type      = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Int32     , null, null, { Go$get: function() { return "int32";      } }, null, null); };
+		Go$Int64.prototype.Go$type      = function() { return new rtype( 8, 0, 0, 0, 0, Go$pkg.Int64     , null, null, { Go$get: function() { return "int64";      } }, null, null); };
+		Go$Uint.prototype.Go$type       = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Uint      , null, null, { Go$get: function() { return "uint";       } }, null, null); };
+		Go$Uint8.prototype.Go$type      = function() { return new rtype( 1, 0, 0, 0, 0, Go$pkg.Uint8     , null, null, { Go$get: function() { return "uint8";      } }, null, null); };
+		Go$Uint16.prototype.Go$type     = function() { return new rtype( 2, 0, 0, 0, 0, Go$pkg.Uint16    , null, null, { Go$get: function() { return "uint16";     } }, null, null); };
+		Go$Uint32.prototype.Go$type     = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Uint32    , null, null, { Go$get: function() { return "uint32";     } }, null, null); };
+		Go$Uint64.prototype.Go$type     = function() { return new rtype( 8, 0, 0, 0, 0, Go$pkg.Uint64    , null, null, { Go$get: function() { return "uint64";     } }, null, null); };
+		Go$Uintptr.prototype.Go$type    = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Uintptr   , null, null, { Go$get: function() { return "uintptr";    } }, null, null); };
+		Go$Float32.prototype.Go$type    = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Float32   , null, null, { Go$get: function() { return "float32";    } }, null, null); };
+		Go$Float64.prototype.Go$type    = function() { return new rtype( 8, 0, 0, 0, 0, Go$pkg.Float64   , null, null, { Go$get: function() { return "float64";    } }, null, null); };
+		Go$Complex64.prototype.Go$type  = function() { return new rtype( 8, 0, 0, 0, 0, Go$pkg.Complex64 , null, null, { Go$get: function() { return "complex64";  } }, null, null); };
+		Go$Complex128.prototype.Go$type = function() { return new rtype(16, 0, 0, 0, 0, Go$pkg.Complex128, null, null, { Go$get: function() { return "complex128"; } }, null, null); };
+		Go$String.prototype.Go$type     = function() { return new rtype( 0, 0, 0, 0, 0, Go$pkg.String    , null, null, { Go$get: function() { return "string";     } }, null, null); };
+
+		TypeOf = function(i) {
+			return i.Go$type();
+		};
+		ValueOf = function(i) {
+			var typ = i.Go$type();
+			var flag = typ.Kind() << Go$pkg.flagKindShift;
+			return new Value(typ, i.v, flag);
+		};
+		Value.prototype.Field = function(i) {
+			this.mustBe(Go$pkg.Struct);
+			var tt = this.typ.structType;
+			if (i < 0 || i >= tt.fields.length) {
+				throw new Go$Panic("reflect: Field index out of range")
+			}
+			var field = tt.fields.array[i];
+			var flag = field.typ.Kind() << Go$pkg.flagKindShift;
+			return new Value(field.typ, this.val[field.name.Go$get()], flag);
 		};
 		DeepEqual = function(a, b) {
 			if (a === b) {

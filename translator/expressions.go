@@ -563,6 +563,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		funType := c.info.Types[e.Fun]
 		sig, isSig := funType.Underlying().(*types.Signature)
 		if !isSig { // conversion
+			if call, isCall := e.Args[0].(*ast.CallExpr); isCall {
+				if types.IsIdentical(c.info.Types[call.Fun], types.Typ[types.UnsafePointer]) {
+					return c.translateExpr(call.Args[0]) + "." + c.typeName(funType) // unsafe conversion
+				}
+			}
 			return c.translateExprToType(e.Args[0], funType)
 		}
 

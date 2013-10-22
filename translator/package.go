@@ -355,6 +355,16 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			c.Printf("};")
 			c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, typeName)
 			c.Printf("%s.Go$NonPointer = function(v) { this.v = v; };", typeName)
+			fields := make([]string, t.NumFields())
+			for i := range fields {
+				field := t.Field(i)
+				path := ""
+				if !field.IsExported() {
+					path = field.Pkg().Name() + "." + field.Name()
+				}
+				fields[i] = fmt.Sprintf(`new Go$reflect.structField(Go$dataPtr("%s"), Go$dataPtr("%s"), %s.prototype.Go$type(), Go$dataPtr(%#v), 0)`, field.Name(), path, c.typeName(field.Type()), t.Tag(i))
+			}
+			c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, null, null, Go$dataPtr("%s.%s"), null, null); t.structType = new Go$reflect.structType(null, new Go$Slice([%s])); return t; };`, typeName, obj.Pkg().Name(), obj.Name(), strings.Join(fields, ", "))
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)
 				if field.Anonymous() {

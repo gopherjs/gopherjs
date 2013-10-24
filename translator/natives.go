@@ -8,7 +8,7 @@ var Go$idCounter = 1;
 var Go$keys = Object.keys;
 var Go$min = Math.min;
 var Go$charToString = String.fromCharCode;
-var Go$reflect;
+var Go$RuntimeError, Go$reflect;
 
 var Go$Uint8      = function(v) { this.Go$val = v; };
 Go$Uint8.prototype.Go$key = function() { return "Uint8$" + this.Go$val; };
@@ -138,6 +138,9 @@ var Go$mul64 = function(x, y) {
 	return new x.constructor(r.high * s, r.low * s);
 };
 var Go$div64 = function(x, y, returnRemainder) {
+	if (y.high === 0 && y.low === 0) {
+		throw new Go$Panic(new Go$RuntimeError("integer divide by zero"));
+	}
 	var typ = x.constructor;
 	var s = 1;
 	if (y.high < 0) {
@@ -435,9 +438,14 @@ var Go$append = function(slice, toAppend) {
 var Go$error = {};
 var Go$Panic = function(value) {
 	this.value = value;
-	this.message = value;
 	if (value.constructor === Go$String) {
 		this.message = value.Go$val;
+	} else if (value.Error !== undefined) {
+		this.message = value.Error();
+	} else if (value.String !== undefined) {
+		this.message = value.String();
+	} else {
+		this.message = value;
 	}
 	Error.captureStackTrace(this, Go$Panic);
 };
@@ -777,6 +785,7 @@ var natives = map[string]string{
 	`,
 
 	"runtime": `
+	  Go$RuntimeError = errorString;
 		Go$pkg.sizeof_C_MStats = 3696;
 		getgoroot = function() { return Go$webMode ? "/" : (process.env["GOROOT"] || ""); };
 		SetFinalizer = function() {};

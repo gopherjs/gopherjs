@@ -43,6 +43,7 @@ func GetAllDependencies(pkg string, config *types.Config) ([]*types.Package, err
 		dependencies = append(dependencies, typesPkg)
 		return nil
 	}
+	importPkg("runtime") // all packages depend on runtime
 	err := importPkg(pkg)
 	return dependencies, err
 }

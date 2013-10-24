@@ -91,32 +91,25 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 
 		var elements []string
-		collectIndexedElements := func(elementType types.Type, length int64) {
-			elements = make([]string, 0, length)
-			var i int64 = 0
+		collectIndexedElements := func(elementType types.Type) {
+			elements = make([]string, 0)
 			zero := c.zeroValue(elementType)
 			for _, element := range e.Elts {
 				if kve, isKve := element.(*ast.KeyValueExpr); isKve {
 					key, _ := exact.Int64Val(c.info.Values[kve.Key])
-					for i < key {
+					for len(elements) < int(key) {
 						elements = append(elements, zero)
-						i += 1
 					}
 					element = kve.Value
 				}
 				elements = append(elements, c.translateExpr(element))
-				i += 1
-			}
-			for i < length {
-				elements = append(elements, zero)
-				i += 1
 			}
 		}
 		switch t := exprType.Underlying().(type) {
 		case *types.Array:
-			collectIndexedElements(t.Elem(), t.Len())
+			collectIndexedElements(t.Elem())
 		case *types.Slice:
-			collectIndexedElements(t.Elem(), 0)
+			collectIndexedElements(t.Elem())
 		case *types.Map:
 			elements = make([]string, len(e.Elts)*2)
 			for i, element := range e.Elts {
@@ -153,7 +146,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		switch t := exprType.(type) {
 		case *types.Array:
-			return createListComposite(t.Elem(), elements)
+			if len(elements) != 0 {
+				zero := c.zeroValue(t.Elem())
+				for len(elements) < int(t.Len()) {
+					elements = append(elements, zero)
+				}
+				return createListComposite(t.Elem(), elements)
+			}
+			return fmt.Sprintf("Go$makeArray(%s, %d, function() { return %s; })", toArrayType(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
 		case *types.Slice:
 			return fmt.Sprintf("new Go$Slice(%s)", createListComposite(t.Elem(), elements))
 		case *types.Map:

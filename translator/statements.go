@@ -106,9 +106,13 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		if s.Cond != nil {
 			cond = c.translateExpr(s.Cond)
 		}
-		p := c.postLoopStmt
-		defer func() { c.postLoopStmt = p }()
-		c.postLoopStmt = s.Post
+		p := c.postLoopStmt[""]
+		defer func() {
+			delete(c.postLoopStmt, label)
+			c.postLoopStmt[""] = p
+		}()
+		c.postLoopStmt[""] = s.Post
+		c.postLoopStmt[label] = s.Post
 		c.Printf("%swhile (%s) {", label, cond)
 		c.Indent(func() {
 			c.translateStmtList(s.Body.List)
@@ -117,9 +121,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Printf("}")
 
 	case *ast.RangeStmt:
-		p := c.postLoopStmt
-		defer func() { c.postLoopStmt = p }()
-		c.postLoopStmt = nil
+		p := c.postLoopStmt[""]
+		defer func() { c.postLoopStmt[""] = p }()
+		delete(c.postLoopStmt, "")
 
 		key := ""
 		if s.Key != nil && !isUnderscore(s.Key) {
@@ -195,14 +199,16 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.BranchStmt:
 		label := ""
+		postLoopStmt := c.postLoopStmt[""]
 		if s.Label != nil {
 			label = " " + s.Label.Name
+			postLoopStmt = c.postLoopStmt[s.Label.Name+": "]
 		}
 		switch s.Tok {
 		case token.BREAK:
 			c.Printf("break%s;", label)
 		case token.CONTINUE:
-			c.translateStmt(c.postLoopStmt, "")
+			c.translateStmt(postLoopStmt, "")
 			c.Printf("continue%s;", label)
 		case token.GOTO:
 			c.Printf(`throw new Go$Panic("Statement not supported: goto");`)

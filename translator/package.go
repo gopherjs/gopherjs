@@ -25,7 +25,7 @@ type PkgContext struct {
 	usedVarNames []string
 	functionSig  *types.Signature
 	resultNames  []ast.Expr
-	postLoopStmt ast.Stmt
+	postLoopStmt map[string]ast.Stmt
 	output       []byte
 	indentation  int
 	delayedLines []byte
@@ -97,6 +97,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		pkgVars:      make(map[string]string),
 		objectVars:   make(map[types.Object]string),
 		usedVarNames: ReservedKeywords,
+		postLoopStmt: make(map[string]ast.Stmt),
 	}
 
 	functionsByType := make(map[types.Type][]*ast.FuncDecl)
@@ -494,7 +495,7 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 		c.resultNames = resultNames
 		p := c.postLoopStmt
 		defer func() { c.postLoopStmt = p }()
-		c.postLoopStmt = nil
+		c.postLoopStmt = make(map[string]ast.Stmt)
 
 		v := HasDeferVisitor{}
 		ast.Walk(&v, &ast.BlockStmt{List: stmts})

@@ -3,6 +3,7 @@ package main
 import (
 	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
+	"flag"
 	"fmt"
 	"github.com/neelance/gopherjs/translator"
 	"go/build"
@@ -13,70 +14,51 @@ import (
 	"path"
 )
 
+type Mode int
+
+const (
+	Build Mode = iota
+	Run
+	Install
+)
+
 func main() {
-	b := &Builder{
-		BuildContext: &build.Context{
-			GOROOT:        build.Default.GOROOT,
-			GOPATH:        build.Default.GOPATH,
-			GOOS:          build.Default.GOOS,
-			GOARCH:        build.Default.GOARCH,
-			Compiler:      "gc",
-			InstallSuffix: "js",
-		},
-		TypesConfig: &types.Config{
-			Packages: make(map[string]*types.Package),
-		},
-		FileSet:  token.NewFileSet(),
-		Packages: make(map[string]*BuilderPackage),
-	}
+	flag.Parse()
 
-	var pkg *BuilderPackage
-	cmd := "help"
-	if len(os.Args) >= 2 {
-		cmd = os.Args[1]
-	}
+	cmd := flag.Arg(0)
 	switch cmd {
+	case "build":
+		err := Do(Build, flag.Arg(1))
+		HandleError(err)
+		os.Exit(0)
+
 	case "install":
-		buildPkg, err := b.BuildContext.Import(os.Args[2], "", 0)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		pkg = &BuilderPackage{Package: buildPkg}
-		if pkg.IsCommand() {
-			pkg.PkgObj = pkg.BinDir + "/" + path.Base(pkg.ImportPath) + ".js"
-		}
+		err := Do(Install, flag.Arg(1))
+		HandleError(err)
+		os.Exit(0)
 
-	case "build", "run":
-		filename := os.Args[2]
-		file, err := parser.ParseFile(b.FileSet, filename, nil, parser.ImportsOnly)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
+	case "run":
+		err := Do(Run, flag.Arg(1))
+		HandleError(err)
+		os.Exit(0)
 
-		imports := make([]string, len(file.Imports))
-		for i, imp := range file.Imports {
-			imports[i] = imp.Path.Value[1 : len(imp.Path.Value)-1]
+	case "tool":
+		tool := flag.Arg(1)
+		toolFlags := flag.NewFlagSet("tool", flag.ContinueOnError)
+		toolFlags.Bool("e", false, "")
+		toolFlags.Parse(flag.Args()[2:])
+		if len(tool) == 2 {
+			switch tool[1] {
+			case 'g':
+				err := Do(Build, toolFlags.Arg(0))
+				HandleError(err)
+				os.Exit(0)
+			}
 		}
+		fmt.Fprintln(os.Stderr, "Tool not supported: "+tool)
+		os.Exit(1)
 
-		basename := path.Base(filename)
-		pkgObj := ""
-		if cmd == "build" {
-			pkgObj = basename[:len(basename)-3] + ".js"
-		}
-		pkg = &BuilderPackage{
-			Package: &build.Package{
-				Name:       "main",
-				ImportPath: "main",
-				Imports:    imports,
-				Dir:        path.Dir(filename),
-				GoFiles:    []string{basename},
-				PkgObj:     pkgObj,
-			},
-		}
-
-	case "help":
+	case "help", "":
 		os.Stderr.WriteString(`GopherJS is a tool for compiling Go source code to JavaScript.
 
 Usage:
@@ -96,26 +78,91 @@ The commands are:
 		fmt.Fprintf(os.Stderr, "gopherjs: unknown subcommand \"%s\"\nRun 'gopherjs help' for usage.\n", cmd)
 		os.Exit(1)
 	}
+}
+
+func HandleError(err error) {
+	if err == nil {
+		return
+	}
+	if list, isList := err.(translator.ErrorList); isList {
+		for _, entry := range list {
+			fmt.Fprintln(os.Stderr, entry)
+		}
+		os.Exit(1)
+	}
+	fmt.Fprintln(os.Stderr, err.Error())
+	os.Exit(1)
+}
+
+func Do(mode Mode, filename string) error {
+	b := &Builder{
+		BuildContext: &build.Context{
+			GOROOT:        build.Default.GOROOT,
+			GOPATH:        build.Default.GOPATH,
+			GOOS:          build.Default.GOOS,
+			GOARCH:        build.Default.GOARCH,
+			Compiler:      "gc",
+			InstallSuffix: "js",
+		},
+		TypesConfig: &types.Config{
+			Packages: make(map[string]*types.Package),
+		},
+		FileSet:  token.NewFileSet(),
+		Packages: make(map[string]*BuilderPackage),
+	}
+
+	var pkg *BuilderPackage
+	switch mode {
+	case Install:
+		buildPkg, err := b.BuildContext.Import(filename, "", 0)
+		if err != nil {
+			return err
+		}
+		pkg = &BuilderPackage{Package: buildPkg}
+		if pkg.IsCommand() {
+			pkg.PkgObj = pkg.BinDir + "/" + path.Base(pkg.ImportPath) + ".js"
+		}
+
+	case Build, Run:
+		file, err := parser.ParseFile(b.FileSet, filename, nil, parser.ImportsOnly)
+		if err != nil {
+			return err
+		}
+
+		imports := make([]string, len(file.Imports))
+		for i, imp := range file.Imports {
+			imports[i] = imp.Path.Value[1 : len(imp.Path.Value)-1]
+		}
+
+		basename := path.Base(filename)
+		pkgObj := ""
+		if mode == Build {
+			pkgObj = basename[:len(basename)-3] + ".js"
+		}
+		pkg = &BuilderPackage{
+			Package: &build.Package{
+				Name:       "main",
+				ImportPath: "main",
+				Imports:    imports,
+				Dir:        path.Dir(filename),
+				GoFiles:    []string{basename},
+				PkgObj:     pkgObj,
+			},
+		}
+	}
 
 	err := b.BuildPackage(pkg)
 	if err != nil {
 		if err == PkgObjUpToDate {
-			os.Exit(0)
+			return nil
 		}
-		if list, isList := err.(translator.ErrorList); isList {
-			for _, entry := range list {
-				fmt.Fprintln(os.Stderr, entry)
-			}
-			os.Exit(1)
-		}
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 
-	switch cmd {
-	case "build", "install":
+	switch mode {
+	case Build, Install:
 		if !pkg.IsCommand() {
-			os.Exit(0) // already stored by BuildPackage
+			return nil // already stored by BuildPackage
 		}
 
 		webMode := false
@@ -125,8 +172,7 @@ The commands are:
 		}
 
 		if err := os.MkdirAll(path.Dir(pkg.PkgObj), 0777); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 		var perm os.FileMode = 0666
 		if !webMode {
@@ -134,8 +180,7 @@ The commands are:
 		}
 		file, err := os.OpenFile(pkg.PkgObj, os.O_RDWR|os.O_CREATE|os.O_TRUNC, perm)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 		if !webMode {
 			fmt.Fprintln(file, "#!/usr/bin/env node")
@@ -144,15 +189,15 @@ The commands are:
 		fmt.Fprintf(file, "var Go$webMode = %t;\n", webMode)
 		file.Write(pkg.JavaScriptCode)
 		file.Close()
-	case "run":
+
+	case Run:
 		node := exec.Command("node")
 		pipe, _ := node.StdinPipe()
 		node.Stdout = os.Stdout
 		node.Stderr = os.Stderr
 		err = node.Start()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 		fmt.Fprintln(pipe, `"use strict";`)
 		fmt.Fprintln(pipe, "var Go$webMode = false;")
@@ -161,5 +206,5 @@ The commands are:
 		node.Wait()
 	}
 
-	os.Exit(0)
+	return nil
 }

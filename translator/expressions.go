@@ -43,6 +43,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return strconv.FormatInt(d, 10)
 			case exact.Float:
 				f, _ := exact.Float64Val(value)
+				if exprType.(*types.Basic).Info()&types.IsComplex != 0 {
+					return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(exprType))*8/2)
+				}
 				return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(exprType))*8)
 			case exact.Complex:
 				f, _ := exact.Float64Val(exact.Real(value))
@@ -194,7 +197,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		op := e.Op.String()
 		switch e.Op {
 		case token.AND:
-			if _, isStruct := c.info.Types[e.X].Underlying().(*types.Struct); !isStruct {
+			switch c.info.Types[e.X].Underlying().(type) {
+			case *types.Struct, *types.Array:
+				return c.translateExpr(e.X)
+			default:
 				v := ast.NewIdent("v")
 				c.info.Types[v] = c.info.Types[e.X]
 				assignStmt := &ast.AssignStmt{
@@ -205,7 +211,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				assign := strings.TrimSpace(string(c.CatchOutput(func() { c.translateStmt(assignStmt, "") })))
 				return fmt.Sprintf("new %s(function() { return %s; }, function(v) { %s })", c.typeName(exprType), c.translateExpr(e.X), assign)
 			}
-			return c.translateExpr(e.X)
 		case token.XOR:
 			op = "~"
 		case token.ARROW:
@@ -222,9 +227,20 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		return value
 
 	case *ast.BinaryExpr:
+		if e.Op == token.NEQ {
+			return fmt.Sprintf("!(%s)", c.translateExpr(&ast.BinaryExpr{
+				X:  e.X,
+				Op: token.EQL,
+				Y:  e.Y,
+			}))
+		}
+
 		t := c.info.Types[e.X]
-		if basic, isBasic := t.(*types.Basic); isBasic && basic.Kind() == types.UntypedNil {
-			t = c.info.Types[e.Y]
+		t2 := c.info.Types[e.Y]
+		basic, isBasic := t.(*types.Basic)
+		_, isInterface := t2.Underlying().(*types.Interface)
+		if (isBasic && basic.Kind() == types.UntypedNil) || isInterface {
+			t = t2
 		}
 		ex := c.translateExprToType(e.X, t)
 		ey := c.translateExprToType(e.Y, t)
@@ -233,7 +249,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			op = "&~"
 		}
 
-		basic, isBasic := t.Underlying().(*types.Basic)
+		basic, isBasic = t.Underlying().(*types.Basic)
 		if isBasic && is64Bit(basic) {
 			var expr string = "0"
 			switch e.Op {
@@ -294,6 +310,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, ex, y, ey, strings.Join(conds, " && "))
 			case *types.Interface:
 				return fmt.Sprintf("Go$interfaceIsEqual(%s, %s)", ex, ey)
+			case *types.Array:
+				return fmt.Sprintf("Go$arrayIsEqual(%s, %s)", ex, ey)
 			case *types.Pointer:
 				xUnary, xIsUnary := e.X.(*ast.UnaryExpr)
 				yUnary, yIsUnary := e.Y.(*ast.UnaryExpr)
@@ -306,12 +324,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 			}
 			return ex + " === " + ey
-		case token.NEQ:
-			return "!" + c.translateExpr(&ast.BinaryExpr{
-				X:  e.X,
-				Op: token.EQL,
-				Y:  e.Y,
-			})
 		case token.MUL:
 			if basic.Kind() == types.Int32 {
 				x := c.newVariable("x")
@@ -467,25 +479,27 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					}
 				case "len":
 					arg := c.translateExpr(e.Args[0])
-					argType := c.info.Types[e.Args[0]]
-					switch argt := argType.Underlying().(type) {
-					case *types.Basic, *types.Array, *types.Slice:
+					switch argType := c.info.Types[e.Args[0]].Underlying().(type) {
+					case *types.Basic, *types.Slice:
 						return fmt.Sprintf("%s.length", arg)
 					case *types.Map:
 						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$keys(Go$obj).length : 0)", arg)
+					case *types.Chan:
+						return "0"
+					// length of array and *array is constant
 					default:
-						panic(fmt.Sprintf("Unhandled len type: %T\n", argt))
+						panic(fmt.Sprintf("Unhandled len type: %T\n", argType))
 					}
 				case "cap":
 					arg := c.translateExpr(e.Args[0])
-					argType := c.info.Types[e.Args[0]]
-					switch argt := argType.Underlying().(type) {
-					case *types.Array:
-						return fmt.Sprintf("%s.length", arg)
+					switch argType := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Slice:
 						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.array.length : 0)", arg)
+					case *types.Chan:
+						return "0"
+					// capacity of array and *array is constant
 					default:
-						panic(fmt.Sprintf("Unhandled cap type: %T\n", argt))
+						panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))
 					}
 				case "panic":
 					return fmt.Sprintf("throw new Go$Panic(%s)", c.translateExprToType(e.Args[0], types.NewInterface(nil)))
@@ -506,7 +520,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(types.Typ[types.Byte])), c.translateExprToType(e.Args[1], types.NewSlice(types.Typ[types.Byte])))
 				case "print", "println":
 					return fmt.Sprintf("console.log(%s)", strings.Join(c.translateExprSlice(e.Args, nil), ", "))
-				case "recover", "complex", "real", "imag":
+				case "recover", "complex", "real", "imag", "close":
 					return fmt.Sprintf("Go$%s(%s)", o.Name(), strings.Join(c.translateExprSlice(e.Args, nil), ", "))
 				default:
 					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))

@@ -53,13 +53,14 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		if s.Tag != nil {
 			refVar := c.newVariable("_ref")
 			c.Printf("%s = %s;", refVar, c.translateExpr(s.Tag))
-			tagType := c.info.Types[s.Tag]
-			_, isInterface := tagType.(*types.Interface)
 			translateCond = func(cond ast.Expr) string {
-				if isInterface {
-					return fmt.Sprintf("Go$interfaceIsEqual(%s, %s)", refVar, c.translateExprToType(cond, tagType))
-				}
-				return refVar + " === " + c.translateExprToType(cond, tagType)
+				refId := ast.NewIdent(refVar)
+				c.info.Types[refId] = c.info.Types[s.Tag]
+				return c.translateExpr(&ast.BinaryExpr{
+					X:  refId,
+					Op: token.EQL,
+					Y:  cond,
+				})
 			}
 		}
 		c.translateBranchingStmt(s.Body.List, true, translateCond, nil, label)
@@ -401,18 +402,25 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				}
 				c.Printf("%s = %s;", c.translateExpr(l), rhs)
 			case *ast.StarExpr:
-				if s, isStruct := typeOf(l).Underlying().(*types.Struct); isStruct {
+				switch u := typeOf(l).Underlying().(type) {
+				case *types.Struct, *types.Array:
 					lVar := c.newVariable("l")
 					rVar := c.newVariable("r")
 					c.Printf("%s = %s;", lVar, c.translateExpr(l.X))
 					c.Printf("%s = %s;", rVar, rhs)
-					for i := 0; i < s.NumFields(); i++ {
-						field := s.Field(i)
-						c.Printf("%s.%s = %s.%s;", lVar, field.Name(), rVar, field.Name())
+					switch u2 := u.(type) {
+					case *types.Struct:
+						for i := 0; i < u2.NumFields(); i++ {
+							field := u2.Field(i)
+							c.Printf("%s.%s = %s.%s;", lVar, field.Name(), rVar, field.Name())
+						}
+					case *types.Array:
+						iVar := c.newVariable("i")
+						c.Printf("for (%s = 0; %s < %d; %s++) { %s[%s] = %s[%s]; }", iVar, iVar, u2.Len(), iVar, lVar, iVar, rVar, iVar)
 					}
-					continue
+				default:
+					c.Printf("%s.Go$set(%s);", c.translateExpr(l.X), rhs)
 				}
-				c.Printf("%s.Go$set(%s);", c.translateExpr(l.X), rhs)
 			case *ast.IndexExpr:
 				switch t := c.info.Types[l.X].Underlying().(type) {
 				case *types.Array, *types.Pointer:

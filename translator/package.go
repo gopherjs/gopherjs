@@ -224,17 +224,45 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			var unorderedSingleVarSpecs []*ast.ValueSpec
 			pendingObjects := make(map[types.Object]bool)
 			for _, spec := range varSpecs {
-				for i, name := range spec.Names {
+				for _, name := range spec.Names {
 					o := c.info.Objects[name].(*types.Var)
 					c.Printf("%s = %s;", c.objectName(o), c.zeroValue(o.Type()))
-					if i < len(spec.Values) {
-						unorderedSingleVarSpecs = append(unorderedSingleVarSpecs, &ast.ValueSpec{
-							Names:  []*ast.Ident{name},
-							Type:   spec.Type,
-							Values: []ast.Expr{spec.Values[i]},
-						})
+				}
+				for _, singleSpec := range c.splitValueSpec(spec) {
+					if singleSpec.Values[0] == nil {
+						continue
+					}
+					unorderedSingleVarSpecs = append(unorderedSingleVarSpecs, singleSpec)
+					for _, name := range singleSpec.Names {
 						pendingObjects[c.info.Objects[name]] = true
 					}
+				}
+			}
+			complete := false
+			var intVarStmts []ast.Stmt
+			for !complete {
+				complete = true
+				for i, spec := range unorderedSingleVarSpecs {
+					if spec == nil {
+						continue
+					}
+					v := IsReadyVisitor{info: c.info, functions: functionsByObject, pendingObjects: pendingObjects, isReady: true}
+					ast.Walk(&v, spec.Values[0])
+					if !v.isReady {
+						complete = false
+						continue
+					}
+					lhs := make([]ast.Expr, len(spec.Names))
+					for i, name := range spec.Names {
+						lhs[i] = name
+						delete(pendingObjects, c.info.Objects[name])
+					}
+					intVarStmts = append(intVarStmts, &ast.AssignStmt{
+						Lhs: lhs,
+						Tok: token.DEFINE,
+						Rhs: spec.Values,
+					})
+					unorderedSingleVarSpecs[i] = nil
 				}
 			}
 
@@ -255,30 +283,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			// init function
 			c.Printf("Go$pkg.init = function() {")
 			c.Indent(func() {
-				complete := false
-				for !complete {
-					complete = true
-					for i, spec := range unorderedSingleVarSpecs {
-						if spec == nil {
-							continue
-						}
-						v := IsReadyVisitor{info: c.info, functions: functionsByObject, pendingObjects: pendingObjects, isReady: true}
-						ast.Walk(&v, spec.Values[0])
-						if !v.isReady {
-							complete = false
-							continue
-						}
-						c.translateStmt(&ast.AssignStmt{
-							Lhs: []ast.Expr{spec.Names[0]},
-							Tok: token.ASSIGN,
-							Rhs: []ast.Expr{spec.Values[0]},
-						}, "")
-						delete(pendingObjects, c.info.Objects[spec.Names[0]])
-						unorderedSingleVarSpecs[i] = nil
-					}
-				}
-
-				c.translateFunctionBody(initStmts, types.NewSignature(c.pkg.Scope(), nil, types.NewTuple(), types.NewTuple(), false), nil)
+				c.translateFunctionBody(append(intVarStmts, initStmts...), types.NewSignature(c.pkg.Scope(), nil, types.NewTuple(), types.NewTuple(), false), nil)
 			})
 			c.Printf("};")
 
@@ -290,33 +295,16 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 func (c *PkgContext) translateSpec(spec ast.Spec) {
 	switch s := spec.(type) {
 	case *ast.ValueSpec:
-		for _, name := range s.Names {
-			c.info.Types[name] = c.info.Objects[name].Type()
-		}
-		i := 0
-		for i < len(s.Names) {
-			var rhs ast.Expr
-			n := 1
-			if i < len(s.Values) {
-				rhs = s.Values[i]
-				if tuple, isTuple := c.info.Types[rhs].(*types.Tuple); isTuple {
-					n = tuple.Len()
-				}
-			}
-			lhs := make([]ast.Expr, n)
-			for j := range lhs {
-				if j >= len(s.Names) {
-					lhs[j] = ast.NewIdent("_")
-					continue
-				}
-				lhs[j] = s.Names[i+j]
+		for _, singleSpec := range c.splitValueSpec(s) {
+			lhs := make([]ast.Expr, len(singleSpec.Names))
+			for i, name := range singleSpec.Names {
+				lhs[i] = name
 			}
 			c.translateStmt(&ast.AssignStmt{
 				Lhs: lhs,
 				Tok: token.DEFINE,
-				Rhs: []ast.Expr{rhs},
+				Rhs: singleSpec.Values,
 			}, "")
-			i += n
 		}
 
 	case *ast.TypeSpec:
@@ -411,6 +399,35 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 		panic(fmt.Sprintf("Unhandled spec: %T\n", s))
 
 	}
+}
+
+func (c *PkgContext) splitValueSpec(s *ast.ValueSpec) []*ast.ValueSpec {
+	var list []*ast.ValueSpec
+	i := 0
+	for i < len(s.Names) {
+		var value ast.Expr
+		n := 1
+		if i < len(s.Values) {
+			value = s.Values[i]
+			if tuple, isTuple := c.info.Types[value].(*types.Tuple); isTuple {
+				n = tuple.Len()
+			}
+		}
+		names := make([]*ast.Ident, n)
+		for j := range names {
+			if j >= len(s.Names) {
+				names[j] = ast.NewIdent("_")
+				continue
+			}
+			names[j] = s.Names[i+j]
+		}
+		list = append(list, &ast.ValueSpec{
+			Names:  names,
+			Values: []ast.Expr{value},
+		})
+		i += n
+	}
+	return list
 }
 
 func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.FuncDecl) {

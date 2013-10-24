@@ -222,7 +222,7 @@ var Go$decodeRune = function(str, pos) {
 
 	if (c0 < 0xE0) {
 		var r = (c0 & 0x1F) << 6 | (c1 & 0x3F);
-	 	if (r <= 0x7F) {
+		if (r <= 0x7F) {
 			return [0xFFFD, 1];
 		}
 		return [r, 2];
@@ -235,7 +235,7 @@ var Go$decodeRune = function(str, pos) {
 
 	if (c0 < 0xF0) {
 		var r = (c0 & 0x0F) << 12 | (c1 & 0x3F) << 6 | (c2 & 0x3F);
-	 	if (r <= 0x7FF) {
+		if (r <= 0x7FF) {
 			return [0xFFFD, 1];
 		}
 		if (0xD800 <= r && r <= 0xDFFF) {
@@ -251,7 +251,7 @@ var Go$decodeRune = function(str, pos) {
 
 	if (c0 < 0xF8) {
 		var r = (c0 & 0x07) << 18 | (c1 & 0x3F) << 12 | (c2 & 0x3F) << 6 | (c3 & 0x3F);
-	 	if (r <= 0xFFFF || 0x10FFFF < r) {
+		if (r <= 0xFFFF || 0x10FFFF < r) {
 			return [0xFFFD, 1];
 		}
 		return [r, 4];
@@ -511,6 +511,17 @@ var Go$interfaceIsEqual = function(a, b) {
 		throw new Go$Panic("runtime error: comparing uncomparable type " + a.constructor);
 	}
 	return a.Go$val === b.Go$val;
+};
+var Go$arrayIsEqual = function(a, b) {
+	if (a.length != b.length) {
+		return false;
+	}
+	for (var i = 0; i < a.length; ++i) {
+		if (a[i] !== b[i]) {
+			return false;
+		}
+	}
+	return true;
 };
 var Go$sliceIsEqual = function(a, ai, b, bi) {
 	return a.array === b.array && a.offset + ai === b.offset + bi;
@@ -785,7 +796,7 @@ var natives = map[string]string{
 	`,
 
 	"runtime": `
-	  Go$RuntimeError = errorString;
+		Go$RuntimeError = errorString;
 		Go$pkg.sizeof_C_MStats = 3696;
 		getgoroot = function() { return Go$webMode ? "/" : (process.env["GOROOT"] || ""); };
 		SetFinalizer = function() {};

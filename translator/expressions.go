@@ -270,30 +270,48 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			y := c.newVariable("y")
 			expr = strings.Replace(expr, "x", x, -1)
 			expr = strings.Replace(expr, "y", y, -1)
-			return "(" + x + " = " + ex + ", " + y + " = " + ey + ", " + expr + ")"
+			return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, ex, y, ey, expr)
 		}
 
 		var value string
 		switch e.Op {
 		case token.EQL:
-			if _, isInterface := c.info.Types[e.X].(*types.Interface); isInterface {
+			switch u := t.Underlying().(type) {
+			case *types.Struct:
+				x := c.newVariable("x")
+				y := c.newVariable("y")
+				var conds []string
+				for i := 0; i < u.NumFields(); i++ {
+					field := u.Field(i)
+					if field.Name() == "_" {
+						continue
+					}
+					conds = append(conds, fmt.Sprintf("%s.%s === %s.%s", x, field.Name(), y, field.Name()))
+				}
+				if len(conds) == 0 {
+					conds = []string{"true"}
+				}
+				return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, ex, y, ey, strings.Join(conds, " && "))
+			case *types.Interface:
 				return fmt.Sprintf("Go$interfaceIsEqual(%s, %s)", ex, ey)
-			}
-			xUnary, xIsUnary := e.X.(*ast.UnaryExpr)
-			yUnary, yIsUnary := e.Y.(*ast.UnaryExpr)
-			if xIsUnary && xUnary.Op == token.AND && yIsUnary && yUnary.Op == token.AND {
-				xIndex, xIsIndex := xUnary.X.(*ast.IndexExpr)
-				yIndex, yIsIndex := yUnary.X.(*ast.IndexExpr)
-				if xIsIndex && yIsIndex {
-					return fmt.Sprintf("Go$sliceIsEqual(%s, %s, %s, %s)", c.translateExpr(xIndex.X), c.translateExpr(xIndex.Index), c.translateExpr(yIndex.X), c.translateExpr(yIndex.Index))
+			case *types.Pointer:
+				xUnary, xIsUnary := e.X.(*ast.UnaryExpr)
+				yUnary, yIsUnary := e.Y.(*ast.UnaryExpr)
+				if xIsUnary && xUnary.Op == token.AND && yIsUnary && yUnary.Op == token.AND {
+					xIndex, xIsIndex := xUnary.X.(*ast.IndexExpr)
+					yIndex, yIsIndex := yUnary.X.(*ast.IndexExpr)
+					if xIsIndex && yIsIndex {
+						return fmt.Sprintf("Go$sliceIsEqual(%s, %s, %s, %s)", c.translateExpr(xIndex.X), c.translateExpr(xIndex.Index), c.translateExpr(yIndex.X), c.translateExpr(yIndex.Index))
+					}
 				}
 			}
 			return ex + " === " + ey
 		case token.NEQ:
-			if _, isInterface := c.info.Types[e.X].(*types.Interface); isInterface {
-				return fmt.Sprintf("!Go$interfaceIsEqual(%s, %s)", ex, ey)
-			}
-			return ex + " !== " + ey
+			return "!" + c.translateExpr(&ast.BinaryExpr{
+				X:  e.X,
+				Op: token.EQL,
+				Y:  e.Y,
+			})
 		case token.MUL:
 			if basic.Kind() == types.Int32 {
 				x := c.newVariable("x")

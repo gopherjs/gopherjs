@@ -186,6 +186,9 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 
 			// package functions
 			for _, fun := range functionsByType[nil] {
+				if isUnderscore(fun.Name) {
+					continue
+				}
 				name := fun.Name.Name
 				jsCode, _ := typesPkg.Scope().Lookup("js_" + name).(*types.Const)
 				if jsCode != nil {
@@ -329,7 +332,12 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 		case *types.Struct:
 			params := make([]string, t.NumFields())
 			for i := 0; i < t.NumFields(); i++ {
-				params[i] = t.Field(i).Name() + "_"
+				field := t.Field(i)
+				name := field.Name()
+				if field.Name() == "_" {
+					name = fmt.Sprintf("Go$blank%d", i)
+				}
+				params[i] = name + "_"
 			}
 			c.Printf("%s = function(%s) {", typeName, strings.Join(params, ", "))
 			c.Indent(func() {
@@ -337,7 +345,11 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				c.Printf("this.Go$val = this;")
 				for i := 0; i < t.NumFields(); i++ {
 					field := t.Field(i)
-					c.Printf("this.%s = %s_ || %s;", field.Name(), field.Name(), c.zeroValue(field.Type()))
+					name := field.Name()
+					if field.Name() == "_" {
+						name = fmt.Sprintf("Go$blank%d", i)
+					}
+					c.Printf("this.%s = %s_ || %s;", name, name, c.zeroValue(field.Type()))
 				}
 			})
 			c.Printf("};")

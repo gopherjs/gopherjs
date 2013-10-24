@@ -40,7 +40,7 @@ func main() {
 		buildPkg, err := b.BuildContext.Import(os.Args[2], "", 0)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			return
+			os.Exit(1)
 		}
 		pkg = &BuilderPackage{Package: buildPkg}
 		if pkg.IsCommand() {
@@ -52,7 +52,7 @@ func main() {
 		file, err := parser.ParseFile(b.FileSet, filename, nil, parser.ImportsOnly)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			return
+			os.Exit(1)
 		}
 
 		imports := make([]string, len(file.Imports))
@@ -90,32 +90,32 @@ The commands are:
     run         compile and run Go program
 
 `)
-		return
+		os.Exit(0)
 
 	default:
 		fmt.Fprintf(os.Stderr, "gopherjs: unknown subcommand \"%s\"\nRun 'gopherjs help' for usage.\n", cmd)
-		return
+		os.Exit(1)
 	}
 
 	err := b.BuildPackage(pkg)
 	if err != nil {
 		if err == PkgObjUpToDate {
-			return
+			os.Exit(0)
 		}
 		if list, isList := err.(translator.ErrorList); isList {
 			for _, entry := range list {
 				fmt.Fprintln(os.Stderr, entry)
 			}
-			return
+			os.Exit(1)
 		}
 		fmt.Fprintln(os.Stderr, err)
-		return
+		os.Exit(1)
 	}
 
 	switch cmd {
 	case "build", "install":
 		if !pkg.IsCommand() {
-			return // already stored by BuildPackage
+			os.Exit(0) // already stored by BuildPackage
 		}
 
 		webMode := false
@@ -126,7 +126,7 @@ The commands are:
 
 		if err := os.MkdirAll(path.Dir(pkg.PkgObj), 0777); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			return
+			os.Exit(1)
 		}
 		var perm os.FileMode = 0666
 		if !webMode {
@@ -135,7 +135,7 @@ The commands are:
 		file, err := os.OpenFile(pkg.PkgObj, os.O_RDWR|os.O_CREATE|os.O_TRUNC, perm)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			return
+			os.Exit(1)
 		}
 		if !webMode {
 			fmt.Fprintln(file, "#!/usr/bin/env node")
@@ -152,7 +152,7 @@ The commands are:
 		err = node.Start()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			return
+			os.Exit(1)
 		}
 		fmt.Fprintln(pipe, `"use strict";`)
 		fmt.Fprintln(pipe, "var Go$webMode = false;")
@@ -160,4 +160,6 @@ The commands are:
 		pipe.Close()
 		node.Wait()
 	}
+
+	os.Exit(0)
 }

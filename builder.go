@@ -55,11 +55,9 @@ func (b *Builder) BuildPackage(pkg *BuilderPackage) error {
 		return imports[path], nil
 	}
 
-	fileInfo, err := os.Stat(os.Args[0]) // gopherjs itself
-	if err != nil {
-		return err
+	if fileInfo, err := os.Stat(os.Args[0]); err == nil { // gopherjs itself
+		pkg.SrcModTime = fileInfo.ModTime()
 	}
-	pkg.SrcModTime = fileInfo.ModTime()
 
 	for _, importedPkgPath := range pkg.Imports {
 		_, err := b.TypesConfig.Import(b.TypesConfig.Packages, importedPkgPath)

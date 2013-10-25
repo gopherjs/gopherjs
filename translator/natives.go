@@ -3,12 +3,12 @@ package translator
 var Prelude = `
 Error.stackTraceLimit = -1;
 
-var Go$obj, Go$tuple;
+var Go$obj, Go$tuple, Go$index;
 var Go$idCounter = 1;
 var Go$keys = Object.keys;
 var Go$min = Math.min;
 var Go$charToString = String.fromCharCode;
-var Go$RuntimeError, Go$reflect;
+var Go$throwRuntimeError, Go$reflect;
 
 var Go$Uint8      = function(v) { this.Go$val = v; };
 Go$Uint8.prototype.Go$key = function() { return "Uint8$" + this.Go$val; };
@@ -139,7 +139,7 @@ var Go$mul64 = function(x, y) {
 };
 var Go$div64 = function(x, y, returnRemainder) {
 	if (y.high === 0 && y.low === 0) {
-		throw new Go$Panic(new Go$RuntimeError("integer divide by zero"));
+		Go$throwRuntimeError("integer divide by zero");
 	}
 	var typ = x.constructor;
 	var s = 1;
@@ -377,7 +377,7 @@ var Go$Interface = function(value) {
 var Go$Channel = function() {};
 
 var Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };
-var Go$dataPointer = function(data) { return new Go$Pointer(function() { return data; }, function(value) { data = value; }); }; 
+var Go$dataPointer = function(data) { return new Go$Pointer(function() { return data; }, null) }; 
 
 var Go$copy = function(dst, src) {
 	if (src.length === 0 || dst.length === 0) {
@@ -796,7 +796,7 @@ var natives = map[string]string{
 	`,
 
 	"runtime": `
-		Go$RuntimeError = errorString;
+		Go$throwRuntimeError = function(msg) { throw new Go$Panic(new errorString(msg)) };
 		Go$pkg.sizeof_C_MStats = 3696;
 		getgoroot = function() { return Go$webMode ? "/" : (process.env["GOROOT"] || ""); };
 		SetFinalizer = function() {};

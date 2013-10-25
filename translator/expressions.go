@@ -43,7 +43,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return strconv.FormatInt(d, 10)
 			case exact.Float:
 				f, _ := exact.Float64Val(value)
-				if exprType.(*types.Basic).Info()&types.IsComplex != 0 {
+				if exprType.Underlying().(*types.Basic).Info()&types.IsComplex != 0 {
 					return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(exprType))*8/2)
 				}
 				return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(exprType))*8)
@@ -205,18 +205,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return c.translateExpr(e.X)
 			default:
 				if _, isComposite := e.X.(*ast.CompositeLit); isComposite {
-					return fmt.Sprintf("Go$dataPointer(%s)", c.translateExpr(e.X))
+					dataVar := c.newVariable("_data")
+					return fmt.Sprintf("(%s = %s, new %s(function() { return %s; }, function(v) { %s = v; }))", dataVar, c.translateExpr(e.X), c.typeName(c.info.Types[e]), dataVar, dataVar)
 				}
-
-				v := ast.NewIdent("v")
-				c.info.Types[v] = c.info.Types[e.X]
-				assignStmt := &ast.AssignStmt{
-					Lhs: []ast.Expr{e.X},
-					Tok: token.ASSIGN,
-					Rhs: []ast.Expr{v},
-				}
-				assign := strings.TrimSpace(string(c.CatchOutput(func() { c.translateStmt(assignStmt, "") })))
-				return fmt.Sprintf("new %s(function() { return %s; }, function(v) { %s })", c.typeName(exprType), c.translateExpr(e.X), assign)
+				vVar := c.newVariable("v")
+				assign := strings.TrimSpace(string(c.CatchOutput(func() { c.translateAssign(e.X, vVar) })))
+				return fmt.Sprintf("new %s(function() { return %s; }, function(%s) { %s })", c.typeName(exprType), c.translateExpr(e.X), vVar, assign)
 			}
 		case token.XOR:
 			op = "~"
@@ -388,7 +382,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Array:
 			return fmt.Sprintf("%s[%s]", x, c.translateExprToType(e.Index, types.Typ[types.Int]))
 		case *types.Slice:
-			return fmt.Sprintf("(Go$obj = %s, Go$obj.array[Go$obj.offset + %s])", x, c.translateExprToType(e.Index, types.Typ[types.Int]))
+			return fmt.Sprintf(`(Go$obj = %s, Go$index = %s, (Go$index >= 0 && Go$index < Go$obj.length) ? Go$obj.array[Go$obj.offset + Go$index] : Go$throwRuntimeError("index out of range"))`, x, c.translateExprToType(e.Index, types.Typ[types.Int]))
 		case *types.Map:
 			index := c.translateExprToType(e.Index, t.Key())
 			if hasId(t.Key()) {
@@ -429,7 +423,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	case *ast.SelectorExpr:
 		sel := c.info.Selections[e]
 		parameterName := func(v *types.Var) string {
-			if v.Anonymous() {
+			if v.Anonymous() || v.Name() == "" {
 				return c.newVariable("param")
 			}
 			return c.newVariable(v.Name())
@@ -459,7 +453,16 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		panic("")
 
 	case *ast.CallExpr:
-		switch f := e.Fun.(type) {
+		plainFun := e.Fun
+		for {
+			if p, isParen := plainFun.(*ast.ParenExpr); isParen {
+				plainFun = p.X
+				continue
+			}
+			break
+		}
+
+		switch f := plainFun.(type) {
 		case *ast.Ident:
 			switch o := c.info.Objects[f].(type) {
 			case *types.Builtin:
@@ -487,8 +490,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case "len":
 					arg := c.translateExpr(e.Args[0])
 					switch argType := c.info.Types[e.Args[0]].Underlying().(type) {
-					case *types.Basic, *types.Slice, *types.Pointer:
+					case *types.Basic, *types.Slice:
 						return fmt.Sprintf("%s.length", arg)
+					case *types.Pointer:
+						return fmt.Sprintf("(%s, %d)", arg, argType.Elem().(*types.Array).Len())
 					case *types.Map:
 						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$keys(Go$obj).length : 0)", arg)
 					case *types.Chan:
@@ -503,7 +508,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					case *types.Slice:
 						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.array.length : 0)", arg)
 					case *types.Pointer:
-						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.length : 0)", arg)
+						return fmt.Sprintf("(%s, %d)", arg, argType.Elem().(*types.Array).Len())
 					case *types.Chan:
 						return "0"
 					// capacity of array is constant
@@ -524,7 +529,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					if hasId(c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()) {
 						index = fmt.Sprintf("(%s || Go$Map.Go$nil).Go$key()", index)
 					}
-					return fmt.Sprintf(`delete %s[%s]`, c.translateExpr(e.Args[0]), index)
+					return fmt.Sprintf(`delete (%s || Go$Map.Go$nil)[%s]`, c.translateExpr(e.Args[0]), index)
 				case "copy":
 					return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(types.Typ[types.Byte])), c.translateExprToType(e.Args[1], types.NewSlice(types.Typ[types.Byte])))
 				case "print", "println":
@@ -538,10 +543,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return c.translateExprToType(e.Args[0], o.Type())
 			}
 		case *ast.FuncType: // conversion
-			return c.translateExprToType(e.Args[0], c.info.Types[e.Fun])
+			return c.translateExprToType(e.Args[0], c.info.Types[plainFun])
 		}
 
-		funType := c.info.Types[e.Fun]
+		funType := c.info.Types[plainFun]
 		sig, isSig := funType.Underlying().(*types.Signature)
 		if !isSig { // conversion
 			if call, isCall := e.Args[0].(*ast.CallExpr); isCall {
@@ -553,13 +558,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 
 		var fun string
-		switch f := e.Fun.(type) {
+		switch f := plainFun.(type) {
 		case *ast.SelectorExpr:
 			sel := c.info.Selections[f]
 
 			switch sel.Kind() {
-			case types.FieldVal:
-				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), translateSelection(sel))
 			case types.MethodVal:
 				methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
 				_, pointerExpected := methodsRecvType.(*types.Pointer)
@@ -567,7 +570,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				_, isStruct := sel.Recv().Underlying().(*types.Struct)
 				if pointerExpected && !isPointer && !isStruct {
 					target := c.translateExpr(f.X)
-					fun = fmt.Sprintf("(new %s(function() { return %s; }, function(v) { %s = v; })).%s", c.typeName(methodsRecvType), target, target, f.Sel.Name)
+					vVar := c.newVariable("v")
+					fun = fmt.Sprintf("(new %s(function() { return %s; }, function(%s) { %s = %s; })).%s", c.typeName(methodsRecvType), target, vVar, target, vVar, f.Sel.Name)
 					break
 				}
 				if isWrapped(sel.Recv()) {
@@ -575,15 +579,13 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					break
 				}
 				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), f.Sel.Name)
-			case types.PackageObj:
-				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), f.Sel.Name)
+			case types.FieldVal, types.MethodExpr, types.PackageObj:
+				fun = c.translateExpr(f)
 			default:
 				panic("")
 			}
-		case *ast.Ident, *ast.FuncLit, *ast.CallExpr, *ast.ParenExpr:
-			fun = c.translateExpr(e.Fun)
 		default:
-			panic(fmt.Sprintf("Unhandled expression: %T\n", f))
+			fun = c.translateExpr(plainFun)
 		}
 		if sig.Params().Len() > 1 && len(e.Args) == 1 && !sig.IsVariadic() {
 			argRefs := make([]string, sig.Params().Len())

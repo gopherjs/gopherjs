@@ -635,11 +635,21 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 			fields[i] = field.Name() + ": " + c.zeroValue(field.Type())
 		}
 		return fmt.Sprintf("{%s}", strings.Join(fields, ", "))
+	case *types.Pointer:
+		switch t.Elem().Underlying().(type) {
+		case *types.Struct, *types.Array:
+			return "null"
+		default:
+			return fmt.Sprintf("new %s(null, null)", c.typeName(ty))
+		}
 	}
 	return "null"
 }
 
 func (c *PkgContext) newVariable(prefix string) string {
+	if prefix == "" {
+		panic("newVariable: empty prefix")
+	}
 	n := 0
 	for {
 		name := prefix
@@ -726,6 +736,8 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		return "Go$Channel"
 	case *types.Signature:
 		return "Go$Func"
+	case *types.Struct:
+		return "Go$Struct"
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
@@ -801,6 +813,8 @@ func elemType(ty types.Type) types.Type {
 		return t.Elem()
 	case *types.Slice:
 		return t.Elem()
+	case *types.Pointer:
+		return t.Elem().Underlying().(*types.Array).Elem()
 	default:
 		panic("")
 	}

@@ -587,14 +587,18 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		default:
 			fun = c.translateExpr(plainFun)
 		}
-		if sig.Params().Len() > 1 && len(e.Args) == 1 && !sig.IsVariadic() {
-			argRefs := make([]string, sig.Params().Len())
-			for i := range argRefs {
-				argRefs[i] = fmt.Sprintf("Go$tuple[%d]", i)
+		if len(e.Args) == 1 {
+			if tuple, isTuple := c.info.Types[e.Args[0]].(*types.Tuple); isTuple {
+				args := make([]ast.Expr, tuple.Len())
+				for i := range args {
+					id := ast.NewIdent(fmt.Sprintf("Go$tuple[%d]", i))
+					c.info.Types[id] = tuple.At(i).Type()
+					args[i] = id
+				}
+				return fmt.Sprintf("(Go$tuple = %s, %s(%s))", c.translateExpr(e.Args[0]), fun, c.translateArgs(sig, args, false))
 			}
-			return fmt.Sprintf("(Go$tuple = %s, %s(%s))", c.translateExpr(e.Args[0]), fun, strings.Join(argRefs, ", "))
 		}
-		return fmt.Sprintf("%s(%s)", fun, strings.Join(c.translateArgs(e), ", "))
+		return fmt.Sprintf("%s(%s)", fun, c.translateArgs(sig, e.Args, e.Ellipsis.IsValid()))
 
 	case *ast.StarExpr:
 		if c1, isCall := e.X.(*ast.CallExpr); isCall && len(c1.Args) == 1 {

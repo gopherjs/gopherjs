@@ -161,6 +161,59 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 	}
 
+	// resolve var dependencies
+	var unorderedSingleVarSpecs []*ast.ValueSpec
+	pendingObjects := make(map[types.Object]bool)
+	for _, spec := range varSpecs {
+		for _, singleSpec := range c.splitValueSpec(spec) {
+			if singleSpec.Values[0] == nil {
+				continue
+			}
+			unorderedSingleVarSpecs = append(unorderedSingleVarSpecs, singleSpec)
+			for _, name := range singleSpec.Names {
+				pendingObjects[c.info.Objects[name]] = true
+			}
+		}
+	}
+	complete := false
+	var intVarStmts []ast.Stmt
+	for !complete {
+		complete = true
+		for i, spec := range unorderedSingleVarSpecs {
+			if spec == nil {
+				continue
+			}
+			v := DependencyCollector{info: c.info, functions: functionsByObject}
+			ast.Walk(&v, spec.Values[0])
+			currentObjs := make(map[types.Object]bool)
+			for _, name := range spec.Names {
+				currentObjs[c.info.Objects[name]] = true
+			}
+			ready := true
+			for _, dep := range v.dependencies {
+				if currentObjs[dep] {
+					return nil, fmt.Errorf("%s: initialization loop", fileSet.Position(dep.Pos()).String())
+				}
+				ready = ready && !pendingObjects[dep]
+			}
+			if !ready {
+				complete = false
+				continue
+			}
+			lhs := make([]ast.Expr, len(spec.Names))
+			for i, name := range spec.Names {
+				lhs[i] = name
+				delete(pendingObjects, c.info.Objects[name])
+			}
+			intVarStmts = append(intVarStmts, &ast.AssignStmt{
+				Lhs: lhs,
+				Tok: token.DEFINE,
+				Rhs: spec.Values,
+			})
+			unorderedSingleVarSpecs[i] = nil
+		}
+	}
+
 	return c.CatchOutput(func() {
 		c.Indent(func() {
 			c.Printf("var Go$pkg = {};")
@@ -222,49 +275,11 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				}
 			}
 
-			// variables (TODO: handle tuples)
-			var unorderedSingleVarSpecs []*ast.ValueSpec
-			pendingObjects := make(map[types.Object]bool)
+			// variables
 			for _, spec := range varSpecs {
 				for _, name := range spec.Names {
 					o := c.info.Objects[name].(*types.Var)
 					c.Printf("%s = %s;", c.objectName(o), c.zeroValue(o.Type()))
-				}
-				for _, singleSpec := range c.splitValueSpec(spec) {
-					if singleSpec.Values[0] == nil {
-						continue
-					}
-					unorderedSingleVarSpecs = append(unorderedSingleVarSpecs, singleSpec)
-					for _, name := range singleSpec.Names {
-						pendingObjects[c.info.Objects[name]] = true
-					}
-				}
-			}
-			complete := false
-			var intVarStmts []ast.Stmt
-			for !complete {
-				complete = true
-				for i, spec := range unorderedSingleVarSpecs {
-					if spec == nil {
-						continue
-					}
-					v := IsReadyVisitor{info: c.info, functions: functionsByObject, pendingObjects: pendingObjects, isReady: true}
-					ast.Walk(&v, spec.Values[0])
-					if !v.isReady {
-						complete = false
-						continue
-					}
-					lhs := make([]ast.Expr, len(spec.Names))
-					for i, name := range spec.Names {
-						lhs[i] = name
-						delete(pendingObjects, c.info.Objects[name])
-					}
-					intVarStmts = append(intVarStmts, &ast.AssignStmt{
-						Lhs: lhs,
-						Tok: token.DEFINE,
-						Rhs: spec.Values,
-					})
-					unorderedSingleVarSpecs[i] = nil
 				}
 			}
 
@@ -583,23 +598,22 @@ func (c *PkgContext) translateParams(t *ast.FuncType) []string {
 	return params
 }
 
-func (c *PkgContext) translateArgs(call *ast.CallExpr) []string {
-	funType := c.info.Types[call.Fun].Underlying().(*types.Signature)
-	args := make([]string, funType.Params().Len())
-	for i := range args {
-		if funType.IsVariadic() && i == len(args)-1 && !call.Ellipsis.IsValid() {
-			varargType := funType.Params().At(i).Type().(*types.Slice).Elem()
-			varargs := make([]string, len(call.Args)-i)
-			for i, vararg := range call.Args[i:] {
-				varargs[i] = c.translateExprToType(vararg, varargType)
+func (c *PkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis bool) string {
+	params := make([]string, sig.Params().Len())
+	for i := range params {
+		if sig.IsVariadic() && i == len(params)-1 && !ellipsis {
+			varargType := sig.Params().At(i).Type().(*types.Slice).Elem()
+			varargs := make([]string, len(args)-i)
+			for j, arg := range args[i:] {
+				varargs[j] = c.translateExprToType(arg, varargType)
 			}
-			args[i] = fmt.Sprintf("new Go$Slice(%s)", createListComposite(varargType, varargs))
+			params[i] = fmt.Sprintf("new Go$Slice(%s)", createListComposite(varargType, varargs))
 			break
 		}
-		argType := funType.Params().At(i).Type()
-		args[i] = c.translateExprToType(call.Args[i], argType)
+		argType := sig.Params().At(i).Type()
+		params[i] = c.translateExprToType(args[i], argType)
 	}
-	return args
+	return strings.Join(params, ", ")
 }
 
 func (c *PkgContext) zeroValue(ty types.Type) string {
@@ -820,29 +834,23 @@ func elemType(ty types.Type) types.Type {
 	}
 }
 
-type IsReadyVisitor struct {
-	info           *types.Info
-	functions      map[types.Object]*ast.FuncDecl
-	pendingObjects map[types.Object]bool
-	isReady        bool
+type DependencyCollector struct {
+	info         *types.Info
+	functions    map[types.Object]*ast.FuncDecl
+	dependencies []types.Object
 }
 
-func (v *IsReadyVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	if !v.isReady {
-		return nil
-	}
+func (v *DependencyCollector) Visit(node ast.Node) (w ast.Visitor) {
 	switch n := node.(type) {
 	case *ast.Ident:
 		o := v.info.Objects[n]
-		if v.pendingObjects[o] {
-			v.isReady = false
-			return nil
-		}
 		if fun, found := v.functions[o]; found {
 			delete(v.functions, o)
 			ast.Walk(v, fun)
 			v.functions[o] = fun
+			return v
 		}
+		v.dependencies = append(v.dependencies, o)
 	}
 	return v
 }

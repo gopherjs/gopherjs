@@ -263,7 +263,8 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				return
 			}
 		}
-		args := strings.Join(c.translateArgs(s.Call), ", ")
+		sig := c.info.Types[s.Call.Fun].Underlying().(*types.Signature)
+		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
 		if sel, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
 			c.Printf(`Go$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, args)
 			return
@@ -497,6 +498,13 @@ func (c *PkgContext) translateBranchingStmt(caseClauses []ast.Stmt, isSwitch boo
 }
 
 func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) {
+	for {
+		if p, isParen := lhs.(*ast.ParenExpr); isParen {
+			lhs = p.X
+			continue
+		}
+		break
+	}
 	if lhs == nil || isUnderscore(lhs) {
 		return
 	}

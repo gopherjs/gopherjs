@@ -194,6 +194,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			})
 			c.Printf("}")
 
+		case *types.Chan:
+			c.Printf(`throw new Go$Panic("Channels not supported");`)
+
 		default:
 			panic("")
 		}
@@ -482,7 +485,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 	case *ast.SendStmt:
 		c.Printf(`throw new Go$Panic("Statement not supported: send");`)
 
-	case nil:
+	case *ast.EmptyStmt, nil:
 		// skip
 
 	default:

@@ -377,7 +377,7 @@ var Go$Interface = function(value) {
 var Go$Channel = function() {};
 
 var Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };
-var Go$dataPointer = function(data) { return new Go$Pointer(function() { return data; }, null) }; 
+var Go$dataPointer = function(data) { return new Go$Pointer(function() { return data; }, function(value) { data = value; }); }; 
 
 var Go$copy = function(dst, src) {
 	if (src.length === 0 || dst.length === 0) {

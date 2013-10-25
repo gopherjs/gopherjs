@@ -189,19 +189,21 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				if isUnderscore(fun.Name) {
 					continue
 				}
-				name := fun.Name.Name
-				jsCode, _ := typesPkg.Scope().Lookup("js_" + name).(*types.Const)
-				if jsCode != nil {
-					c.Printf("var %s = function(%s) {\n%s\n};", name, strings.Join(c.translateParams(fun.Type), ", "), exact.StringVal(jsCode.Val()))
-					continue
-				}
-				if fun.Body == nil {
-					c.Printf(`var %s = function() { throw new Go$Panic("Native function not implemented: %s"); };`, name, name)
-					continue
-				}
+				name := c.objectName(c.info.Objects[fun.Name])
 				params := c.translateParams(fun.Type)
-				c.Printf("var %s = function(%s) {", c.translateExpr(fun.Name), strings.Join(params, ", "))
+				c.Printf("var %s = function(%s) {", name, strings.Join(params, ", "))
 				c.Indent(func() {
+					jsCode, _ := typesPkg.Scope().Lookup("js_" + name).(*types.Const)
+					if jsCode != nil {
+						c.Write([]byte(exact.StringVal(jsCode.Val())))
+						c.Write([]byte{'\n'})
+						return
+					}
+					if fun.Body == nil {
+						c.Printf(`throw new Go$Panic("Native function not implemented: %s");`, name)
+						return
+					}
+
 					c.translateFunctionBody(fun.Body.List, c.info.Objects[fun.Name].Type().(*types.Signature), params)
 				})
 				c.Printf("};")
@@ -401,6 +403,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 	}
 }
 
+// TODO simplify
 func (c *PkgContext) splitValueSpec(s *ast.ValueSpec) []*ast.ValueSpec {
 	var list []*ast.ValueSpec
 	i := 0
@@ -446,6 +449,10 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 			if jsCode, ok := c.pkg.Scope().Lookup("js_" + typeName + "_" + fun.Name.Name).(*types.Const); ok {
 				c.Write([]byte(exact.StringVal(jsCode.Val())))
 				c.Write([]byte{'\n'})
+				return
+			}
+			if fun.Body == nil {
+				c.Printf(`throw new Go$Panic("Native function not implemented: %s.%s");`, typeName, fun.Name.Name)
 				return
 			}
 

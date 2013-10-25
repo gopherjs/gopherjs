@@ -49,6 +49,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(exprType))*8)
 			case exact.Complex:
 				f, _ := exact.Float64Val(exact.Real(value))
+				if types.IsIdentical(exprType, types.Typ[types.UntypedComplex]) {
+					return strconv.FormatFloat(f, 'g', -1, 64)
+				}
 				return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(exprType))*8/2)
 			case exact.String:
 				buffer := bytes.NewBuffer(nil)
@@ -201,6 +204,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case *types.Struct, *types.Array:
 				return c.translateExpr(e.X)
 			default:
+				if _, isComposite := e.X.(*ast.CompositeLit); isComposite {
+					return fmt.Sprintf("Go$dataPointer(%s)", c.translateExpr(e.X))
+				}
+
 				v := ast.NewIdent("v")
 				c.info.Types[v] = c.info.Types[e.X]
 				assignStmt := &ast.AssignStmt{
@@ -480,13 +487,13 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case "len":
 					arg := c.translateExpr(e.Args[0])
 					switch argType := c.info.Types[e.Args[0]].Underlying().(type) {
-					case *types.Basic, *types.Slice:
+					case *types.Basic, *types.Slice, *types.Pointer:
 						return fmt.Sprintf("%s.length", arg)
 					case *types.Map:
 						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$keys(Go$obj).length : 0)", arg)
 					case *types.Chan:
 						return "0"
-					// length of array and *array is constant
+					// length of array is constant
 					default:
 						panic(fmt.Sprintf("Unhandled len type: %T\n", argType))
 					}
@@ -495,9 +502,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					switch argType := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Slice:
 						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.array.length : 0)", arg)
+					case *types.Pointer:
+						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.length : 0)", arg)
 					case *types.Chan:
 						return "0"
-					// capacity of array and *array is constant
+					// capacity of array is constant
 					default:
 						panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))
 					}
@@ -528,6 +537,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case *types.TypeName: // conversion
 				return c.translateExprToType(e.Args[0], o.Type())
 			}
+		case *ast.FuncType: // conversion
+			return c.translateExprToType(e.Args[0], c.info.Types[e.Fun])
 		}
 
 		funType := c.info.Types[e.Fun]
@@ -569,7 +580,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			default:
 				panic("")
 			}
-		case *ast.Ident, *ast.FuncLit, *ast.ParenExpr:
+		case *ast.Ident, *ast.FuncLit, *ast.CallExpr, *ast.ParenExpr:
 			fun = c.translateExpr(e.Fun)
 		default:
 			panic(fmt.Sprintf("Unhandled expression: %T\n", f))
@@ -593,7 +604,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 		switch exprType.Underlying().(type) {
 		case *types.Struct, *types.Array:
-			return c.clone(c.translateExpr(e.X), exprType)
+			return c.translateExpr(e.X)
 		}
 		return c.translateExpr(e.X) + ".Go$get()"
 

@@ -46,8 +46,11 @@ func main() {
 		tool := flag.Arg(1)
 		toolFlags := flag.NewFlagSet("tool", flag.ContinueOnError)
 		toolFlags.Bool("e", false, "")
+		toolFlags.Bool("l", false, "")
+		toolFlags.Bool("m", false, "")
 		toolFlags.String("o", "", "")
 		toolFlags.String("D", "", "")
+		toolFlags.String("I", "", "")
 		toolFlags.Parse(flag.Args()[2:])
 		if len(tool) == 2 {
 			switch tool[1] {

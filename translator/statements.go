@@ -36,7 +36,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				continue
 			case *ast.BlockStmt:
 				caseClauses = append(caseClauses, &ast.CaseClause{List: nil, Body: elseStmt.List})
-			case nil:
+			case *ast.EmptyStmt, nil:
 				// no else clause
 			default:
 				panic(fmt.Sprintf("Unhandled else: %T\n", elseStmt))

@@ -67,27 +67,29 @@ var Go$RuneArray       = Go$Int32Array;
 
 var Go$Int64 = function(high, low) {
 	this.high = (high + Math.floor(low / 4294967296)) | 0;
-	this.low = low >>> 0;
+	this.low = (low + 0 - 0) >>> 0; // workaround V8 issue
 	this.Go$val = this;
 };
 Go$Int64.prototype.Go$key = function() { return "Int64$" + this.high + "$" + this.low; };
 
 var Go$Uint64 = function(high, low) {
 	this.high = (high + Math.floor(low / 4294967296)) >>> 0;
-	this.low = low >>> 0;
+	this.low = (low + 0 - 0) >>> 0; // workaround V8 issue
 	this.Go$val = this;
 };
 Go$Uint64.prototype.Go$key = function() { return "Uint64$" + this.high + "$" + this.low; };
 
+var Go$flatten64 = function(x) {
+	return x.high * 4294967296 + x.low;
+};
 var Go$shiftLeft64 = function(x, y) {
 	var high = 0;
 	var low = 0;
-	if (y < 32) {
-		high = x.high << y;
+	if (y === 0) {
+		return x;
+	} else if (y < 32) {
+		high = x.high << y | x.low >>> (32 - y);
 		low = (x.low << y) >>> 0;
-		if (y < 64) {
-			high |= x.low >>> (32 - y);
-		}
 	} else if (y < 64) {
 		high = x.low << (y - 32);
 	}
@@ -96,21 +98,26 @@ var Go$shiftLeft64 = function(x, y) {
 var Go$shiftRightInt64 = function(x, y) {
 	var high = 0;
 	var low = 0;
-	if (y < 32) {
+	if (y === 0) {
+		return x;
+	} else if (y < 32) {
 		high = x.high >> y;
-		low = x.low >>> y;
-		if (y < 64) {
-			low = (low | x.high << (32 - y)) >>> 0;
-		}
+		low = (x.low >>> y | x.high << (32 - y)) >>> 0;
 	} else if (y < 64) {
-		low = x.high >> (y - 32);
+		high = x.high >> 31; // sign extend
+		low = (x.high >> (y - 32)) >>> 0;
+	} else if (x.high < 0) {
+		high = -1;
+		low = 4294967295;
 	}
 	return new x.constructor(high, low);
 };
 var Go$shiftRightUint64 = function(x, y) {
 	var high = 0;
 	var low = 0;
-	if (y < 32) {
+	if (y === 0) {
+		return x;
+	} else if (y < 32) {
 		high = x.high >>> y;
 		low = x.low >>> y;
 		if (y < 64) {
@@ -143,6 +150,7 @@ var Go$div64 = function(x, y, returnRemainder) {
 	}
 	var typ = x.constructor;
 	var s = 1;
+	var rs = 1;
 	if (y.high < 0) {
 		s = -1;
 	}
@@ -150,6 +158,7 @@ var Go$div64 = function(x, y, returnRemainder) {
 	if (x.high < 0) {
 		x = new Go$Uint64(-x.high, -x.low);
 		s *= -1;
+		rs = -1;
 	}
 	var r = new Go$Uint64(0, 0);
 	var n = 0;
@@ -158,20 +167,16 @@ var Go$div64 = function(x, y, returnRemainder) {
 		n += 1;
 	}
 	var i = 0;
-	while (true) {
+	for (var i = 0; i <= n; i++) {
+		r = Go$shiftLeft64(r, 1);
 		if ((x.high > y.high) || (x.high === y.high && x.low >= y.low)) {
 			x = new Go$Uint64(x.high - y.high, x.low - y.low);
 			r = new Go$Uint64(r.high, r.low + 1);
 		}
-		if (i === n) {
-			break;
-		}
 		y = Go$shiftRightUint64(y, 1);
-		r = Go$shiftLeft64(r, 1);
-		i += 1;
 	}
 	if (returnRemainder) {
-		return x;
+		return new typ(x.high * rs, x.low * rs);
 	}
 	return new typ(r.high * s, r.low * s);
 };

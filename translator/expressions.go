@@ -197,9 +197,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		})))
 
 	case *ast.UnaryExpr:
-		op := e.Op.String()
-		switch e.Op {
-		case token.AND:
+		if e.Op == token.AND {
 			switch c.info.Types[e.X].Underlying().(type) {
 			case *types.Struct, *types.Array:
 				return c.translateExpr(e.X)
@@ -212,16 +210,27 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				assign := strings.TrimSpace(string(c.CatchOutput(func() { c.translateAssign(e.X, vVar) })))
 				return fmt.Sprintf("new %s(function() { return %s; }, function(%s) { %s })", c.typeName(exprType), c.translateExpr(e.X), vVar, assign)
 			}
+		}
+
+		t := c.info.Types[e.X]
+		basic := t.Underlying().(*types.Basic)
+		op := e.Op.String()
+		switch e.Op {
+		case token.ADD:
+			return c.translateExpr(e.X)
+		case token.SUB:
+			if is64Bit(basic) {
+				x := c.newVariable("x")
+				return fmt.Sprintf("(%s = %s, new %s(-%s.high, -%s.low))", x, c.translateExpr(e.X), c.typeName(t), x, x)
+			}
 		case token.XOR:
+			if is64Bit(basic) {
+				x := c.newVariable("x")
+				return fmt.Sprintf("(%s = %s, new %s(~%s.high, ~%s.low >>> 0))", x, c.translateExpr(e.X), c.typeName(t), x, x)
+			}
 			op = "~"
 		case token.ARROW:
 			return "undefined"
-		}
-		t := c.info.Types[e.X]
-		basic := t.Underlying().(*types.Basic)
-		if is64Bit(basic) {
-			x := c.newVariable("x")
-			return fmt.Sprintf("(%s = %s, new %s(%s%s.high, %s%s.low))", x, c.translateExpr(e.X), c.typeName(t), op, x, op, x)
 		}
 		value := fmt.Sprintf("%s%s", op, c.translateExpr(e.X))
 		value = fixNumber(value, basic)
@@ -261,9 +270,15 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case token.REM:
 				return fmt.Sprintf("Go$div64(%s, %s, true)", ex, ey)
 			case token.SHL:
-				return fmt.Sprintf("Go$shiftLeft64(%s, %s)", ex, c.translateExprToType(e.Y, types.Typ[types.Uint]))
+				if is64Bit(t2.(*types.Basic)) {
+					return fmt.Sprintf("Go$shiftLeft64(%s, Go$flatten64(%s))", ex, c.translateExpr(e.Y))
+				}
+				return fmt.Sprintf("Go$shiftLeft64(%s, %s)", ex, c.translateExpr(e.Y))
 			case token.SHR:
-				return fmt.Sprintf("Go$shiftRight%s(%s, %s)", toJavaScriptType(basic), ex, c.translateExprToType(e.Y, types.Typ[types.Uint]))
+				if is64Bit(t2.(*types.Basic)) {
+					return fmt.Sprintf("Go$shiftRight%s(%s, Go$flatten64(%s))", toJavaScriptType(basic), ex, c.translateExpr(e.Y))
+				}
+				return fmt.Sprintf("Go$shiftRight%s(%s, %s)", toJavaScriptType(basic), ex, c.translateExpr(e.Y))
 			case token.EQL:
 				expr = "x.high === y.high && x.low === y.low"
 			case token.NEQ:
@@ -708,12 +723,14 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 					value = fmt.Sprintf("(Go$obj = %s, new %s(Go$obj.high, Go$obj.low))", value, c.typeName(desiredType))
 				}
 			case is64Bit(basicExprType):
-				switch t.Info()&types.IsUnsigned != 0 {
-				case true:
-					value += ".low"
-				case false:
-					value = fmt.Sprintf("(%s.low | 0)", value)
-				}
+				value += ".low"
+			}
+
+			switch t.Kind() {
+			case types.Int32:
+				value = fmt.Sprintf("(%s | 0)", value)
+			case types.Uint32:
+				value = fmt.Sprintf("(%s >>> 0)", value)
 			}
 
 			return value

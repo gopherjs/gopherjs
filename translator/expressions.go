@@ -176,7 +176,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Named:
 			switch u := t.Underlying().(type) {
 			case *types.Array:
-				return fmt.Sprintf("new %s(%s)", c.typeName(t), createListComposite(u.Elem(), elements))
+				return createListComposite(u.Elem(), elements)
 			case *types.Slice:
 				return fmt.Sprintf("new %s(%s)", c.typeName(t), createListComposite(u.Elem(), elements))
 			case *types.Map:
@@ -343,8 +343,15 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						return fmt.Sprintf("Go$sliceIsEqual(%s, %s, %s, %s)", c.translateExpr(xIndex.X), c.translateExpr(xIndex.Index), c.translateExpr(yIndex.X), c.translateExpr(yIndex.Index))
 					}
 				}
+				switch u.Elem().Underlying().(type) {
+				case *types.Struct, *types.Interface:
+					return ex + " === " + ey
+				default:
+					return fmt.Sprintf("Go$pointerIsEqual(%s, %s)", ex, ey)
+				}
+			default:
+				return ex + " === " + ey
 			}
-			return ex + " === " + ey
 		case token.MUL:
 			if basic.Kind() == types.Int32 {
 				x := c.newVariable("x")

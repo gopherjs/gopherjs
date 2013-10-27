@@ -300,7 +300,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			// init function
 			c.Printf("Go$pkg.init = function() {")
 			c.Indent(func() {
-				c.translateFunctionBody(append(intVarStmts, initStmts...), types.NewSignature(c.pkg.Scope(), nil, types.NewTuple(), types.NewTuple(), false), nil)
+				c.translateFunctionBody(append(intVarStmts, initStmts...), nil, nil)
 			})
 			c.Printf("};")
 
@@ -405,8 +405,12 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			c.Printf("%s = function() { %s.apply(this, arguments); };", typeName, underlyingTypeName)
 			c.Printf("%s.prototype.Go$key = function() { return \"%s$\" + %s.prototype.Go$key.apply(this); };", typeName, typeName, underlyingTypeName)
 			c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", typeName)
-			if _, isSlice := t.(*types.Slice); isSlice {
+			c.Printf("%s.Go$Pointer.Go$nil = new %s.Go$Pointer(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
+			switch t.(type) {
+			case *types.Slice:
 				c.Printf("%s.Go$nil = new %s({ isNil: true, length: 0 });", typeName, typeName)
+			case *types.Pointer:
+				c.Printf("%s.Go$nil = Go$Pointer.Go$nil;", typeName)
 			}
 		}
 
@@ -523,7 +527,7 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 
 	body := c.CatchOutput(func() {
 		var resultNames []ast.Expr
-		if sig.Results().Len() != 0 && sig.Results().At(0).Name() != "" {
+		if sig != nil && sig.Results().Len() != 0 && sig.Results().At(0).Name() != "" {
 			resultNames = make([]ast.Expr, sig.Results().Len())
 			for i := 0; i < sig.Results().Len(); i++ {
 				result := sig.Results().At(i)
@@ -539,9 +543,11 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 			}
 		}
 
-		s := c.functionSig
-		defer func() { c.functionSig = s }()
-		c.functionSig = sig
+		if sig != nil {
+			s := c.functionSig
+			defer func() { c.functionSig = s }()
+			c.functionSig = sig
+		}
 		r := c.resultNames
 		defer func() { c.resultNames = r }()
 		c.resultNames = resultNames
@@ -655,7 +661,7 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 		case *types.Struct, *types.Array:
 			return "null"
 		default:
-			return fmt.Sprintf("new %s(null, null)", c.typeName(ty))
+			return fmt.Sprintf("%s.Go$nil", c.typeName(ty))
 		}
 	}
 	return "null"
@@ -760,6 +766,8 @@ func (c *PkgContext) typeName(ty types.Type) string {
 
 func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	switch t := keyType.Underlying().(type) {
+	case *types.Array:
+		return fmt.Sprintf(`Array.prototype.join.call(%s, "$")`, c.translateExpr(expr))
 	case *types.Struct:
 		parts := make([]string, t.NumFields())
 		for i := range parts {

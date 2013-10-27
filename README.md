@@ -8,8 +8,9 @@ GopherJS is able to turn itself (and all packages it uses) into pure JavaScript 
 These features are not implemented yet, but on the roadmap:
 
 - implicit panics (division by zero, etc.)
+- complex numbers
+- reflection (already partially done)
 - exact runtime type assertions for compound types without a name
-- reflection
 - goroutines, channels, select
 - goto
 - output minification

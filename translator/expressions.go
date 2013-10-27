@@ -165,10 +165,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Map:
 			return fmt.Sprintf("new Go$Map([%s])", strings.Join(elements, ", "))
 		case *types.Struct:
-			for i, element := range elements {
-				elements[i] = fmt.Sprintf("%s: %s", t.Field(i).Name(), element)
-			}
-			return fmt.Sprintf("{ %s }", strings.Join(elements, ", "))
+			obj := types.NewVar(0, c.pkg, "_struct", t)
+			id := ast.NewIdent("")
+			c.info.Objects[id] = obj
+			c.translateSpec(&ast.TypeSpec{
+				Name: id,
+				Type: e.Type,
+			})
+			return fmt.Sprintf("new %s(%s)", c.objectName(obj), strings.Join(elements, ", "))
 		case *types.Named:
 			switch u := t.Underlying().(type) {
 			case *types.Array:
@@ -197,7 +201,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		})))
 
 	case *ast.UnaryExpr:
-		if e.Op == token.AND {
+		switch e.Op {
+		case token.AND:
 			switch c.info.Types[e.X].Underlying().(type) {
 			case *types.Struct, *types.Array:
 				return c.translateExpr(e.X)
@@ -210,6 +215,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				assign := strings.TrimSpace(string(c.CatchOutput(func() { c.translateAssign(e.X, vVar) })))
 				return fmt.Sprintf("new %s(function() { return %s; }, function(%s) { %s })", c.typeName(exprType), c.translateExpr(e.X), vVar, assign)
 			}
+		case token.ARROW:
+			return "undefined"
 		}
 
 		t := c.info.Types[e.X]
@@ -229,8 +236,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return fmt.Sprintf("(%s = %s, new %s(~%s.high, ~%s.low >>> 0))", x, c.translateExpr(e.X), c.typeName(t), x, x)
 			}
 			op = "~"
-		case token.ARROW:
-			return "undefined"
 		}
 		value := fmt.Sprintf("%s%s", op, c.translateExpr(e.X))
 		value = fixNumber(value, basic)
@@ -399,14 +404,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Slice:
 			return fmt.Sprintf(`(Go$obj = %s, Go$index = %s, (Go$index >= 0 && Go$index < Go$obj.length) ? Go$obj.array[Go$obj.offset + Go$index] : Go$throwRuntimeError("index out of range"))`, x, c.translateExprToType(e.Index, types.Typ[types.Int]))
 		case *types.Map:
-			index := c.translateExprToType(e.Index, t.Key())
-			if hasId(t.Key()) {
-				index = fmt.Sprintf("(%s || Go$Map.Go$nil).Go$key()", index)
-			}
+			key := c.makeKey(e.Index, t.Key())
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
-				return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? [Go$obj.v, true] : [%s, false])`, x, index, c.zeroValue(t.Elem()))
+				return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? [Go$obj.v, true] : [%s, false])`, x, key, c.zeroValue(t.Elem()))
 			}
-			return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? Go$obj.v : %s)`, x, index, c.zeroValue(t.Elem()))
+			return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? Go$obj.v : %s)`, x, key, c.zeroValue(t.Elem()))
 		case *types.Basic:
 			return fmt.Sprintf("%s.charCodeAt(%s)", x, c.translateExprToType(e.Index, types.Typ[types.Int]))
 		default:
@@ -483,11 +485,17 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case *types.Builtin:
 				switch o.Name() {
 				case "new":
-					elemType := c.info.Types[e.Args[0]]
-					if types.IsIdentical(elemType, types.Typ[types.Uintptr]) {
+					t := c.info.Types[e].(*types.Pointer)
+					if types.IsIdentical(t.Elem().Underlying(), types.Typ[types.Uintptr]) {
 						return "new Uint8Array(8)"
 					}
-					return c.zeroValue(elemType)
+					switch t.Elem().Underlying().(type) {
+					case *types.Struct, *types.Array:
+						return c.zeroValue(t.Elem())
+					default:
+						dataVar := c.newVariable("_data")
+						return fmt.Sprintf("(%s = %s, new %s(function() { return %s; }, function(v) { %s = v; }))", dataVar, c.zeroValue(t.Elem()), c.typeName(t), dataVar, dataVar)
+					}
 				case "make":
 					switch t2 := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Slice:
@@ -540,11 +548,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					toAppend := createListComposite(sliceType.Elem(), c.translateExprSlice(e.Args[1:], sliceType.Elem()))
 					return fmt.Sprintf("Go$append(%s, new %s(%s))", c.translateExpr(e.Args[0]), c.typeName(exprType), toAppend)
 				case "delete":
-					index := c.translateExpr(e.Args[1])
-					if hasId(c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()) {
-						index = fmt.Sprintf("(%s || Go$Map.Go$nil).Go$key()", index)
-					}
-					return fmt.Sprintf(`delete (%s || Go$Map.Go$nil)[%s]`, c.translateExpr(e.Args[0]), index)
+					return fmt.Sprintf(`delete (%s || Go$Map.Go$nil)[%s]`, c.translateExpr(e.Args[0]), c.makeKey(e.Args[1], c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()))
 				case "copy":
 					return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(types.Typ[types.Byte])), c.translateExprToType(e.Args[1], types.NewSlice(types.Typ[types.Byte])))
 				case "print", "println":
@@ -802,10 +806,8 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		if isWrapped(exprType) {
 			return fmt.Sprintf("new %s(%s)", c.typeName(exprType), c.translateExpr(expr))
 		}
-		if named, isNamed := exprType.(*types.Named); isNamed {
-			if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
-				return fmt.Sprintf("new %s.Go$NonPointer(%s)", c.objectName(named.Obj()), c.translateExpr(expr))
-			}
+		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
+			return fmt.Sprintf("(Go$obj = %s, new Go$obj.constructor.Go$NonPointer(Go$obj))", c.translateExpr(expr))
 		}
 
 	case *types.Pointer:
@@ -842,15 +844,13 @@ func (c *PkgContext) clone(src string, ty types.Type) string {
 		fields := make([]string, t.NumFields())
 		for i := range fields {
 			field := t.Field(i)
-			if !isNamed {
-				fields[i] = field.Name() + ": "
-			}
-			fields[i] += c.clone(structVar+"."+field.Name(), field.Type())
+			fields[i] = c.clone(structVar+"."+field.Name(), field.Type())
 		}
+		constructor := structVar + ".constructor"
 		if isNamed {
-			return fmt.Sprintf("(%s = %s, new %s(%s))", structVar, src, c.objectName(named.Obj()), strings.Join(fields, ", "))
+			constructor = c.objectName(named.Obj())
 		}
-		return fmt.Sprintf("(%s = %s, {%s})", structVar, src, strings.Join(fields, ", "))
+		return fmt.Sprintf("(%s = %s, new %s(%s))", structVar, src, constructor, strings.Join(fields, ", "))
 	case *types.Array:
 		return fmt.Sprintf("Go$mapArray(%s, function(entry) { return %s; })", src, c.clone("entry", t.Elem()))
 	default:

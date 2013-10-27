@@ -360,6 +360,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			c.Printf("};")
 			c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, typeName)
 			c.Printf("%s.Go$NonPointer = function(v) { this.Go$val = v; };", typeName)
+			c.Printf("%s.Go$NonPointer.prototype.Go$uncomparable = true;", typeName)
 			fields := make([]string, t.NumFields())
 			for i := range fields {
 				field := t.Field(i)
@@ -757,6 +758,26 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	}
 }
 
+func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
+	switch t := keyType.Underlying().(type) {
+	case *types.Struct:
+		parts := make([]string, t.NumFields())
+		for i := range parts {
+			parts[i] = "Go$obj." + t.Field(i).Name()
+		}
+		return fmt.Sprintf("(Go$obj = %s, %s)", c.translateExpr(expr), strings.Join(parts, ` + "$" + `))
+	case *types.Basic:
+		if is64Bit(t) {
+			return fmt.Sprintf("%s.Go$key()", c.translateExprToType(expr, keyType))
+		}
+		return c.translateExprToType(expr, keyType)
+	case *types.Pointer, *types.Interface:
+		return fmt.Sprintf("(%s || Go$Map.Go$nil).Go$key()", c.translateExprToType(expr, keyType))
+	default:
+		return c.translateExprToType(expr, keyType)
+	}
+}
+
 func toJavaScriptType(t *types.Basic) string {
 	switch t.Kind() {
 	case types.UntypedInt:
@@ -797,16 +818,6 @@ func createListComposite(elementType types.Type, elements []string) string {
 func isUnderscore(expr ast.Expr) bool {
 	if id, isIdent := expr.(*ast.Ident); isIdent {
 		return id.Name == "_"
-	}
-	return false
-}
-
-func hasId(ty types.Type) bool {
-	switch t := ty.Underlying().(type) {
-	case *types.Basic:
-		return is64Bit(t)
-	case *types.Pointer, *types.Interface:
-		return true
 	}
 	return false
 }

@@ -563,11 +563,9 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) {
 		case *types.Map:
 			keyVar := c.newVariable("_key")
 			c.Printf("%s = %s;", keyVar, c.translateExprToType(l.Index, t.Key()))
-			key := keyVar
-			if hasId(t.Key()) {
-				key = fmt.Sprintf("(%s || Go$Map.Go$nil).Go$key()", key)
-			}
-			c.Printf(`%s[%s] = { k: %s, v: %s };`, c.translateExpr(l.X), key, keyVar, rhs)
+			id := ast.NewIdent(keyVar)
+			c.info.Types[id] = t.Key()
+			c.Printf(`%s[%s] = { k: %s, v: %s };`, c.translateExpr(l.X), c.makeKey(id, t.Key()), keyVar, rhs)
 		default:
 			panic(fmt.Sprintf("Unhandled lhs type: %T\n", t))
 		}

@@ -44,6 +44,7 @@ Go$Bool.prototype.Go$key = function() { return "Bool$" + this.Go$val; };
 var Go$String = function(v) { this.Go$val = v; };
 Go$String.prototype.Go$key = function() { return "String$" + this.Go$val; };
 var Go$Func   = function(v) { this.Go$val = v; };
+Go$Func.prototype.Go$uncomparable = true;
 Go$Func.prototype.Go$key = function() { return "Func$" + this.Go$val; };
 
 var Go$Array           = Array;
@@ -187,6 +188,7 @@ var Go$Slice = function(array) {
 	this.length = array && array.length;
 	this.Go$val = this;
 };
+Go$Slice.prototype.Go$uncomparable = true;
 Go$Slice.Go$nil = new Go$Slice({ isNil: true, length: 0 });
 
 var Go$subslice = function(slice, begin, end) {
@@ -381,7 +383,7 @@ var Go$Interface = function(value) {
 
 var Go$Channel = function() {};
 
-var Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };
+var Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; this.Go$val = this; };
 var Go$dataPointer = function(data) { return new Go$Pointer(function() { return data; }, null) }; 
 
 var Go$copy = function(dst, src) {
@@ -512,7 +514,7 @@ var Go$interfaceIsEqual = function(a, b) {
 	if (a.constructor !== b.constructor) {
 		return false;
 	}
-	if (a.Go$val === undefined || a.constructor === Go$Func) {
+	if (a.Go$uncomparable || a.Go$val === undefined) { // TODO improve interfaces of maps
 		throw new Go$Panic("runtime error: comparing uncomparable type " + a.constructor);
 	}
 	return a.Go$val === b.Go$val;

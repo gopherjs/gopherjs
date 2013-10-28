@@ -26,6 +26,7 @@ type PkgContext struct {
 	functionSig  *types.Signature
 	resultNames  []ast.Expr
 	postLoopStmt map[string]ast.Stmt
+	escapingVars []string
 	output       []byte
 	indentation  int
 	delayedLines []byte
@@ -368,9 +369,9 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 				if !field.IsExported() {
 					path = field.Pkg().Name() + "." + field.Name()
 				}
-				fields[i] = fmt.Sprintf(`new Go$reflect.structField(Go$dataPointer("%s"), Go$dataPointer("%s"), %s.prototype.Go$type(), Go$dataPointer(%#v), 0)`, field.Name(), path, c.typeName(field.Type()), t.Tag(i))
+				fields[i] = fmt.Sprintf(`new Go$reflect.structField(Go$newDataPointer("%s"), Go$newDataPointer("%s"), %s.prototype.Go$type(), Go$newDataPointer(%#v), 0)`, field.Name(), path, c.typeName(field.Type()), t.Tag(i))
 			}
-			c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, %s, null, Go$dataPointer("%s.%s"), null, null); t.structType = new Go$reflect.structType(null, new Go$Slice([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), strings.Join(fields, ", "))
+			c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, %s, null, Go$newDataPointer("%s.%s"), null, null); t.structType = new Go$reflect.structType(null, new Go$Slice([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), strings.Join(fields, ", "))
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)
 				if field.Anonymous() {

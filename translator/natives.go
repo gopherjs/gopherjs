@@ -386,7 +386,10 @@ var Go$Channel = function() {};
 var Go$throwNilPointerError = function() { Go$throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; this.Go$val = this; };
 Go$Pointer.Go$nil = new Go$Pointer(Go$throwNilPointerError, Go$throwNilPointerError);
-var Go$dataPointer = function(data) { return new Go$Pointer(function() { return data; }, Go$throwNilPointerError) }; 
+var Go$newDataPointer = function(data, constructor) {
+	constructor = constructor || Go$Pointer;
+	return new constructor(function() { return data; }, function(v) { data = v; });
+};
 
 var Go$copy = function(dst, src) {
 	if (src.length === 0 || dst.length === 0) {
@@ -536,6 +539,9 @@ var Go$sliceIsEqual = function(a, ai, b, bi) {
 	return a.array === b.array && a.offset + ai === b.offset + bi;
 };
 var Go$pointerIsEqual = function(a, b) {
+	if (a === b) {
+		return true;
+	}
 	if (a.Go$get === Go$throwNilPointerError || b.Go$get === Go$throwNilPointerError) {
 		return a.Go$get === Go$throwNilPointerError && b.Go$get === Go$throwNilPointerError;
 	}

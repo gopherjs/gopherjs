@@ -193,11 +193,18 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	case *ast.FuncLit:
 		return strings.TrimSpace(string(c.CatchOutput(func() {
 			params := c.translateParams(e.Type)
-			c.Printf("(function(%s) {", strings.Join(params, ", "))
+			closurePrefix := "("
+			closureSuffix := ")"
+			if len(c.escapingVars) != 0 {
+				list := strings.Join(c.escapingVars, ", ")
+				closurePrefix = "(function(" + list + ") { return "
+				closureSuffix = "; })(" + list + ")"
+			}
+			c.Printf("%sfunction(%s) {", closurePrefix, strings.Join(params, ", "))
 			c.Indent(func() {
 				c.translateFunctionBody(e.Body.List, exprType.(*types.Signature), params)
 			})
-			c.Printf("})")
+			c.Printf("}%s", closureSuffix)
 		})))
 
 	case *ast.UnaryExpr:
@@ -208,12 +215,18 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return c.translateExpr(e.X)
 			default:
 				if _, isComposite := e.X.(*ast.CompositeLit); isComposite {
-					dataVar := c.newVariable("_data")
-					return fmt.Sprintf("(%s = %s, new %s(function() { return %s; }, function(v) { %s = v; }))", dataVar, c.translateExpr(e.X), c.typeName(c.info.Types[e]), dataVar, dataVar)
+					return fmt.Sprintf("Go$newDataPointer(%s, %s)", c.translateExpr(e.X), c.typeName(c.info.Types[e]))
 				}
 				vVar := c.newVariable("v")
 				assign := strings.TrimSpace(string(c.CatchOutput(func() { c.translateAssign(e.X, vVar) })))
-				return fmt.Sprintf("new %s(function() { return %s; }, function(%s) { %s })", c.typeName(exprType), c.translateExpr(e.X), vVar, assign)
+				closurePrefix := ""
+				closureSuffix := ""
+				if len(c.escapingVars) != 0 {
+					list := strings.Join(c.escapingVars, ", ")
+					closurePrefix = "(function(" + list + ") { return "
+					closureSuffix = "; })(" + list + ")"
+				}
+				return fmt.Sprintf("%snew %s(function() { return %s; }, function(%s) { %s })%s", closurePrefix, c.typeName(exprType), c.translateExpr(e.X), vVar, assign, closureSuffix)
 			}
 		case token.ARROW:
 			return "undefined"
@@ -500,8 +513,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					case *types.Struct, *types.Array:
 						return c.zeroValue(t.Elem())
 					default:
-						dataVar := c.newVariable("_data")
-						return fmt.Sprintf("(%s = %s, new %s(function() { return %s; }, function(v) { %s = v; }))", dataVar, c.zeroValue(t.Elem()), c.typeName(t), dataVar, dataVar)
+						return fmt.Sprintf("Go$newDataPointer(%s, %s)", c.zeroValue(t.Elem()), c.typeName(t))
 					}
 				case "make":
 					switch t2 := c.info.Types[e.Args[0]].Underlying().(type) {

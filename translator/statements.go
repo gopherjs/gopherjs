@@ -114,10 +114,13 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}()
 		c.postLoopStmt[""] = s.Post
 		c.postLoopStmt[label] = s.Post
+
 		c.Printf("%swhile (%s) {", label, cond)
 		c.Indent(func() {
-			c.translateStmtList(s.Body.List)
-			c.translateStmt(s.Post, "")
+			c.handleEscapingVariables(s.Body, func() {
+				c.translateStmtList(s.Body.List)
+				c.translateStmt(s.Post, "")
+			})
 		})
 		c.Printf("}")
 
@@ -137,10 +140,12 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			runeVar := c.newVariable("_rune")
 			c.Printf("%sfor (; %s < %s.length; %s += %s[1]) {", label, iVar, refVar, iVar, runeVar)
 			c.Indent(func() {
-				c.Printf("%s = Go$decodeRune(%s, %s);", runeVar, refVar, iVar)
-				c.translateAssign(s.Value, runeVar+"[0]")
-				c.translateAssign(s.Key, iVar)
-				c.translateStmtList(s.Body.List)
+				c.handleEscapingVariables(s.Body, func() {
+					c.Printf("%s = Go$decodeRune(%s, %s);", runeVar, refVar, iVar)
+					c.translateAssign(s.Value, runeVar+"[0]")
+					c.translateAssign(s.Key, iVar)
+					c.translateStmtList(s.Body.List)
+				})
 			})
 			c.Printf("}")
 
@@ -149,11 +154,13 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			c.Printf("%s = %s !== null ? Go$keys(%s) : [];", keysVar, refVar, refVar)
 			c.Printf("%sfor (; %s < %s.length; %s++) {", label, iVar, keysVar, iVar)
 			c.Indent(func() {
-				entryVar := c.newVariable("_entry")
-				c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
-				c.translateAssign(s.Value, entryVar+".v")
-				c.translateAssign(s.Key, entryVar+".k")
-				c.translateStmtList(s.Body.List)
+				c.handleEscapingVariables(s.Body, func() {
+					entryVar := c.newVariable("_entry")
+					c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
+					c.translateAssign(s.Value, entryVar+".v")
+					c.translateAssign(s.Key, entryVar+".k")
+					c.translateStmtList(s.Body.List)
+				})
 			})
 			c.Printf("}")
 
@@ -169,18 +176,20 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			c.Printf("%sfor (; %s < %s; %s++) {", label, iVar, length, iVar)
 			c.Indent(func() {
-				if s.Value != nil && !isUnderscore(s.Value) {
-					x := ast.NewIdent(refVar)
-					index := ast.NewIdent(iVar)
-					indexExpr := &ast.IndexExpr{X: x, Index: index}
-					c.info.Types[x] = t
-					c.info.Types[index] = types.Typ[types.Int]
-					et := elemType(t)
-					c.info.Types[indexExpr] = et
-					c.translateAssign(s.Value, c.translateExprToType(indexExpr, et))
-				}
-				c.translateAssign(s.Key, iVar)
-				c.translateStmtList(s.Body.List)
+				c.handleEscapingVariables(s.Body, func() {
+					if s.Value != nil && !isUnderscore(s.Value) {
+						x := ast.NewIdent(refVar)
+						index := ast.NewIdent(iVar)
+						indexExpr := &ast.IndexExpr{X: x, Index: index}
+						c.info.Types[x] = t
+						c.info.Types[index] = types.Typ[types.Int]
+						et := elemType(t)
+						c.info.Types[indexExpr] = et
+						c.translateAssign(s.Value, c.translateExprToType(indexExpr, et))
+					}
+					c.translateAssign(s.Key, iVar)
+					c.translateStmtList(s.Body.List)
+				})
 			})
 			c.Printf("}")
 
@@ -574,6 +583,23 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) {
 	}
 }
 
+func (c *PkgContext) handleEscapingVariables(node ast.Node, f func()) {
+	v := &EscapeAnalysis{
+		info:       c.info,
+		candidates: make(map[types.Object]bool),
+		escaping:   make(map[types.Object]bool),
+	}
+	ast.Walk(v, node)
+	ev := c.escapingVars
+	for escaping := range v.escaping {
+		c.Printf("%s = [undefined];", c.objectName(escaping))
+		c.escapingVars = append(c.escapingVars, c.objectVars[escaping])
+		c.objectVars[escaping] += "[0]"
+	}
+	f()
+	c.escapingVars = ev
+}
+
 func hasFallthrough(caseClause *ast.CaseClause) bool {
 	if len(caseClause.Body) == 0 {
 		return false
@@ -598,6 +624,57 @@ func (v *HasBreakVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		}
 	case *ast.FuncLit, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
 		return nil
+	}
+	return v
+}
+
+type EscapeAnalysis struct {
+	info       *types.Info
+	candidates map[types.Object]bool
+	escaping   map[types.Object]bool
+}
+
+// huge overapproximation
+func (v *EscapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
+	switch n := node.(type) {
+	case *ast.ValueSpec:
+		for _, name := range n.Names {
+			v.candidates[v.info.Objects[name]] = true
+		}
+	case *ast.AssignStmt:
+		if n.Tok == token.DEFINE {
+			for _, name := range n.Lhs {
+				v.candidates[v.info.Objects[name.(*ast.Ident)]] = true
+			}
+		}
+	case *ast.UnaryExpr:
+		if n.Op == token.AND {
+			switch v.info.Types[n.X].Underlying().(type) {
+			case *types.Struct, *types.Array:
+				// always by reference
+				return nil
+			default:
+				return &EscapingObjectCollector{v}
+			}
+		}
+	case *ast.FuncLit:
+		return &EscapingObjectCollector{v}
+	case *ast.ForStmt, *ast.RangeStmt:
+		return nil
+	}
+	return v
+}
+
+type EscapingObjectCollector struct {
+	analysis *EscapeAnalysis
+}
+
+func (v *EscapingObjectCollector) Visit(node ast.Node) (w ast.Visitor) {
+	if id, isIdent := node.(*ast.Ident); isIdent {
+		obj := v.analysis.info.Objects[id]
+		if v.analysis.candidates[obj] {
+			v.analysis.escaping[obj] = true
+		}
 	}
 	return v
 }

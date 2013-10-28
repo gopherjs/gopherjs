@@ -30,30 +30,24 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		v := HasEvilConstantVisitor{}
 		ast.Walk(&v, expr)
 		if !v.hasEvilConstant {
-			switch value.Kind() {
-			case exact.Bool:
+			basic := exprType.Underlying().(*types.Basic)
+			switch {
+			case basic.Info()&types.IsBoolean != 0:
 				return strconv.FormatBool(exact.BoolVal(value))
-			case exact.Int:
-				basic := exprType.Underlying().(*types.Basic)
+			case basic.Info()&types.IsInteger != 0:
 				if is64Bit(basic) {
 					d, _ := exact.Uint64Val(value)
 					return fmt.Sprintf("new %s(%d, %d)", c.typeName(exprType), d>>32, d&(1<<32-1))
 				}
 				d, _ := exact.Int64Val(value)
 				return strconv.FormatInt(d, 10)
-			case exact.Float:
+			case basic.Info()&types.IsFloat != 0:
 				f, _ := exact.Float64Val(value)
-				if exprType.Underlying().(*types.Basic).Info()&types.IsComplex != 0 {
-					return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(exprType))*8/2)
-				}
-				return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(exprType))*8)
-			case exact.Complex:
+				return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(basic))*8)
+			case basic.Info()&types.IsComplex != 0:
 				f, _ := exact.Float64Val(exact.Real(value))
-				if types.IsIdentical(exprType, types.Typ[types.UntypedComplex]) {
-					return strconv.FormatFloat(f, 'g', -1, 64)
-				}
-				return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(exprType))*8/2)
-			case exact.String:
+				return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(basic))*8/2)
+			case basic.Info()&types.IsString != 0:
 				buffer := bytes.NewBuffer(nil)
 				for _, r := range []byte(exact.StringVal(value)) {
 					switch r {
@@ -85,7 +79,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 				return `"` + buffer.String() + `"`
 			default:
-				panic("Unhandled value: " + value.String())
+				panic("Unhandled constant type: " + basic.String())
 			}
 		}
 	}
@@ -721,6 +715,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 	exprType := c.info.Types[expr]
 	if basicLit, isBasicLit := expr.(*ast.BasicLit); isBasicLit && basicLit.Kind == token.STRING {
 		exprType = types.Typ[types.String]
+		c.info.Types[expr] = exprType
 	}
 	basicExprType, isBasicExpr := exprType.Underlying().(*types.Basic)
 	if isBasicExpr && basicExprType.Kind() == types.UntypedNil {

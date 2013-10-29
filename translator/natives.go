@@ -826,6 +826,12 @@ var natives = map[string]string{
 		Go$pkg.sizeof_C_MStats = 3696;
 		getgoroot = function() { return Go$webMode ? "/" : (process.env["GOROOT"] || ""); };
 		SetFinalizer = function() {};
+		GOMAXPROCS = function(n) {
+			if (n != 1) {
+				Go$throwRuntimeError("GOMAXPROCS != 1 is not possible in JavaScript.")
+			}
+		};
+		GC = function() {};
 	`,
 
 	"sync/atomic": `

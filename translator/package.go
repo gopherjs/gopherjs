@@ -332,6 +332,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			c.Printf(`%s = function(v) { this.Go$val = v; };`, typeName)
 			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.Go$val; };`, typeName, typeName)
 			c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", typeName)
+			c.Printf("%s.Go$Pointer.Go$nil = new %s.Go$Pointer(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
 			return
 		}
 		switch t := obj.Type().Underlying().(type) {

@@ -282,15 +282,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case token.REM:
 				return fmt.Sprintf("Go$div64(%s, %s, true)", ex, ey)
 			case token.SHL:
-				if is64Bit(t2.(*types.Basic)) {
-					return fmt.Sprintf("Go$shiftLeft64(%s, Go$flatten64(%s))", ex, c.translateExpr(e.Y))
-				}
-				return fmt.Sprintf("Go$shiftLeft64(%s, %s)", ex, c.translateExpr(e.Y))
+				return fmt.Sprintf("Go$shiftLeft64(%s, %s)", ex, c.flatten64(e.Y))
 			case token.SHR:
-				if is64Bit(t2.(*types.Basic)) {
-					return fmt.Sprintf("Go$shiftRight%s(%s, Go$flatten64(%s))", toJavaScriptType(basic), ex, c.translateExpr(e.Y))
-				}
-				return fmt.Sprintf("Go$shiftRight%s(%s, %s)", toJavaScriptType(basic), ex, c.translateExpr(e.Y))
+				return fmt.Sprintf("Go$shiftRight%s(%s, %s)", toJavaScriptType(basic), ex, c.flatten64(e.Y))
 			case token.EQL:
 				expr = "x.high === y.high && x.low === y.low"
 			case token.NEQ:
@@ -414,9 +408,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 		switch t := xType.Underlying().(type) {
 		case *types.Array:
-			return fmt.Sprintf("%s[%s]", x, c.translateExprToType(e.Index, types.Typ[types.Int]))
+			return fmt.Sprintf("%s[%s]", x, c.flatten64(e.Index))
 		case *types.Slice:
-			return fmt.Sprintf(`(Go$obj = %s, Go$index = %s, (Go$index >= 0 && Go$index < Go$obj.length) ? Go$obj.array[Go$obj.offset + Go$index] : Go$throwRuntimeError("index out of range"))`, x, c.translateExprToType(e.Index, types.Typ[types.Int]))
+			return fmt.Sprintf(`(Go$obj = %s, Go$index = %s, (Go$index >= 0 && Go$index < Go$obj.length) ? Go$obj.array[Go$obj.offset + Go$index] : Go$throwRuntimeError("index out of range"))`, x, c.flatten64(e.Index))
 		case *types.Map:
 			key := c.makeKey(e.Index, t.Key())
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
@@ -424,7 +418,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? Go$obj.v : %s)`, x, key, c.zeroValue(t.Elem()))
 		case *types.Basic:
-			return fmt.Sprintf("%s.charCodeAt(%s)", x, c.translateExprToType(e.Index, types.Typ[types.Int]))
+			return fmt.Sprintf("%s.charCodeAt(%s)", x, c.flatten64(e.Index))
 		default:
 			panic(fmt.Sprintf("Unhandled IndexExpr: %T\n", t))
 		}
@@ -513,9 +507,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					switch t2 := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Slice:
 						if len(e.Args) == 3 {
-							return fmt.Sprintf("Go$subslice(new %s(Go$makeArray(%s, %s, function() { return %s; })), 0, %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[2]), c.zeroValue(t2.Elem()), c.translateExpr(e.Args[1]))
+							return fmt.Sprintf("Go$subslice(new %s(Go$makeArray(%s, %s, function() { return %s; })), 0, %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExprToType(e.Args[2], types.Typ[types.Int]), c.zeroValue(t2.Elem()), c.translateExprToType(e.Args[1], types.Typ[types.Int]))
 						}
-						return fmt.Sprintf("new %s(Go$makeArray(%s, %s, function() { return %s; }))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExpr(e.Args[1]), c.zeroValue(t2.Elem()))
+						return fmt.Sprintf("new %s(Go$makeArray(%s, %s, function() { return %s; }))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExprToType(e.Args[1], types.Typ[types.Int]), c.zeroValue(t2.Elem()))
 					default:
 						args := []string{"undefined"}
 						for _, arg := range e.Args[1:] {
@@ -916,6 +910,13 @@ func (c *PkgContext) typeCheck(of string, to types.Type) string {
 		return fmt.Sprintf("%s.Go$implementedBy.indexOf(%s) !== -1", c.typeName(to), of)
 	}
 	return of + " === " + c.typeName(to)
+}
+
+func (c *PkgContext) flatten64(expr ast.Expr) string {
+	if is64Bit(c.info.Types[expr].Underlying().(*types.Basic)) {
+		return fmt.Sprintf("Go$flatten64(%s)", c.translateExpr(expr))
+	}
+	return c.translateExpr(expr)
 }
 
 func translateSelection(sel *types.Selection) string {

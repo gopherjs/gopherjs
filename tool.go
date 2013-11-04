@@ -74,7 +74,7 @@ func main() {
 		if len(tool) == 2 {
 			switch tool[1] {
 			case 'g':
-				basename := path.Base(flag.Arg(1))
+				basename := path.Base(toolFlags.Arg(0))
 				err := Do(Build, toolFlags.Arg(0), basename[:len(basename)-3]+".js")
 				HandleError(err)
 				os.Exit(0)

@@ -7,7 +7,6 @@ var Go$obj, Go$tuple, Go$index;
 var Go$idCounter = 1;
 var Go$keys = Object.keys;
 var Go$min = Math.min;
-var Go$charToString = String.fromCharCode;
 var Go$throwRuntimeError, Go$reflect;
 
 var Go$Uint8      = function(v) { this.Go$val = v; };
@@ -268,17 +267,14 @@ var Go$decodeRune = function(str, pos) {
 }
 
 var Go$encodeRune = function(r) {
+	if (r < 0 || r > 0x10FFFF || (0xD800 <= r && r <= 0xDFFF)) {
+		r = 0xFFFD;
+	}
 	if (r <= 0x7F) {
 		return String.fromCharCode(r);
 	}
 	if (r <= 0x7FF) {
 		return String.fromCharCode(0xC0 | r >> 6, 0x80 | (r & 0x3F));
-	}
-	if (r > 0x10FFFF) {
-		r = 0xFFFD;
-	}
-	if (0xD800 <= r && r <= 0xDFFF) {
-		r = 0xFFFD;
 	}
 	if (r <= 0xFFFF) {
 		return String.fromCharCode(0xE0 | r >> 12, 0x80 | (r >> 6 & 0x3F), 0x80 | (r & 0x3F));
@@ -737,7 +733,7 @@ var natives = map[string]string{
 	`,
 
 	"reflect": `
-		Go$reflect = { rtype: rtype, structType: structType, structField: structField, Struct: Go$pkg.Struct };
+		Go$reflect = { rtype: rtype, uncommonType: uncommonType, structType: structType, structField: structField, Struct: Go$pkg.Struct };
 
 		Go$Bool.prototype.Go$type       = function() { return new rtype( 0, 0, 0, 0, 0, Go$pkg.Bool      , Go$Bool      , null, { Go$get: function() { return "bool";       } }, null, null); };
 		Go$Int.prototype.Go$type        = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Int       , Go$Int       , null, { Go$get: function() { return "int";        } }, null, null); };

@@ -54,8 +54,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			refVar := c.newVariable("_ref")
 			c.Printf("%s = %s;", refVar, c.translateExpr(s.Tag))
 			translateCond = func(cond ast.Expr) string {
-				refId := ast.NewIdent(refVar)
-				c.info.Types[refId] = c.info.Types[s.Tag]
+				refId := c.newIdent(refVar, c.info.Types[s.Tag])
 				return c.translateExpr(&ast.BinaryExpr{
 					X:  refId,
 					Op: token.EQL,
@@ -178,11 +177,10 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			c.Indent(func() {
 				c.handleEscapingVariables(s.Body, func() {
 					if s.Value != nil && !isUnderscore(s.Value) {
-						x := ast.NewIdent(refVar)
-						index := ast.NewIdent(iVar)
-						indexExpr := &ast.IndexExpr{X: x, Index: index}
-						c.info.Types[x] = t
-						c.info.Types[index] = types.Typ[types.Int]
+						indexExpr := &ast.IndexExpr{
+							X:     c.newIdent(refVar, t),
+							Index: c.newIdent(iVar, types.Typ[types.Int]),
+						}
 						et := elemType(t)
 						c.info.Types[indexExpr] = et
 						c.translateAssign(s.Value, c.translateExprToType(indexExpr, et))
@@ -259,9 +257,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				}
 				args := make([]ast.Expr, len(s.Call.Args))
 				for i, arg := range s.Call.Args {
-					argIdent := ast.NewIdent(c.newVariable("_arg"))
-					c.info.Types[argIdent] = c.info.Types[arg]
-					args[i] = argIdent
+					args[i] = c.newIdent(c.newVariable("_arg"), c.info.Types[arg])
 				}
 				call := c.translateExpr(&ast.CallExpr{
 					Fun:      s.Call.Fun,
@@ -320,17 +316,41 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			default:
 				panic(s.Tok)
 			}
+
+			var lhs ast.Expr
+			switch l := s.Lhs[0].(type) {
+			case *ast.IndexExpr:
+				lhsVar := c.newVariable("lhs")
+				indexVar := c.newVariable("index")
+				c.Printf("%s = %s;", lhsVar, c.translateExpr(l.X))
+				c.Printf("%s = %s;", indexVar, c.translateExpr(l.Index))
+				lhs = &ast.IndexExpr{
+					X:     c.newIdent(lhsVar, c.info.Types[l.X]),
+					Index: c.newIdent(indexVar, c.info.Types[l.Index]),
+				}
+				c.info.Types[lhs] = c.info.Types[l]
+			case *ast.StarExpr:
+				lhsVar := c.newVariable("lhs")
+				c.Printf("%s = %s;", lhsVar, c.translateExpr(l.X))
+				lhs = &ast.StarExpr{
+					X: c.newIdent(lhsVar, c.info.Types[l.X]),
+				}
+				c.info.Types[lhs] = c.info.Types[l]
+			default:
+				lhs = l
+			}
+
 			parenExpr := &ast.ParenExpr{
 				X: s.Rhs[0],
 			}
 			c.info.Types[parenExpr] = c.info.Types[s.Rhs[0]]
 			binaryExpr := &ast.BinaryExpr{
-				X:  s.Lhs[0],
+				X:  lhs,
 				Op: op,
 				Y:  parenExpr,
 			}
 			c.info.Types[binaryExpr] = c.info.Types[s.Lhs[0]]
-			c.translateAssign(s.Lhs[0], c.translateExpr(binaryExpr))
+			c.translateAssign(lhs, c.translateExpr(binaryExpr))
 			return
 		}
 
@@ -355,9 +375,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			tuple := c.info.Types[s.Rhs[0]].(*types.Tuple)
 			for i := range s.Lhs {
-				id := ast.NewIdent(fmt.Sprintf("Go$tuple[%d]", i))
-				c.info.Types[id] = tuple.At(i).Type()
-				rhss[i] = c.translateExprToType(id, c.info.Types[s.Lhs[i]])
+				rhss[i] = c.translateExprToType(c.newIdent(fmt.Sprintf("Go$tuple[%d]", i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]])
 			}
 			c.Printf("Go$tuple = %s;", c.translateExpr(s.Rhs[0]))
 
@@ -572,9 +590,7 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) {
 		case *types.Map:
 			keyVar := c.newVariable("_key")
 			c.Printf("%s = %s;", keyVar, c.translateExprToType(l.Index, t.Key()))
-			id := ast.NewIdent(keyVar)
-			c.info.Types[id] = t.Key()
-			c.Printf(`%s[%s] = { k: %s, v: %s };`, c.translateExpr(l.X), c.makeKey(id, t.Key()), keyVar, rhs)
+			c.Printf(`%s[%s] = { k: %s, v: %s };`, c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)
 		default:
 			panic(fmt.Sprintf("Unhandled lhs type: %T\n", t))
 		}

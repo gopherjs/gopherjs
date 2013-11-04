@@ -366,13 +366,22 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 			fields := make([]string, t.NumFields())
 			for i := range fields {
 				field := t.Field(i)
-				path := ""
-				if !field.IsExported() {
-					path = field.Pkg().Name() + "." + field.Name()
+				name := "Go$Pointer.Go$nil"
+				if !field.Anonymous() {
+					name = fmt.Sprintf(`Go$newDataPointer("%s")`, field.Name())
 				}
-				fields[i] = fmt.Sprintf(`new Go$reflect.structField(Go$newDataPointer("%s"), Go$newDataPointer("%s"), %s.prototype.Go$type(), Go$newDataPointer(%#v), 0)`, field.Name(), path, c.typeName(field.Type()), t.Tag(i))
+				path := "Go$Pointer.Go$nil"
+				if !field.IsExported() {
+					path = fmt.Sprintf(`Go$newDataPointer("%s.%s")`, field.Pkg().Name(), field.Name())
+				}
+				tag := "Go$Pointer.Go$nil"
+				if t.Tag(i) != "" {
+					tag = fmt.Sprintf("Go$newDataPointer(%#v)", t.Tag(i))
+				}
+				fields[i] = fmt.Sprintf(`new Go$reflect.structField(%s, %s, %s.prototype.Go$type(), %s, 0)`, name, path, c.typeName(field.Type()), tag)
 			}
-			c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, %s, null, Go$newDataPointer("%s.%s"), null, null); t.structType = new Go$reflect.structType(null, new Go$Slice([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), strings.Join(fields, ", "))
+			uncommonType := fmt.Sprintf(`new Go$reflect.uncommonType(Go$newDataPointer("%s"), Go$newDataPointer("%s.%s"), Go$Slice.Go$nil)`, typeName, obj.Pkg().Name(), typeName)
+			c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, %s, null, Go$newDataPointer("%s.%s"), %s, null); t.structType = new Go$reflect.structType(null, new Go$Slice([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), uncommonType, strings.Join(fields, ", "))
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)
 				if field.Anonymous() {
@@ -481,12 +490,11 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 			body := fun.Body.List
 			if fun.Recv.List[0].Names != nil {
 				recv := fun.Recv.List[0].Names[0]
-				this := ast.NewIdent("this")
-				if isWrapped(recvType) {
-					this = ast.NewIdent("this.Go$val")
-				}
 				c.info.Types[recv] = recvType
-				c.info.Types[this] = recvType
+				this := c.newIdent("this", recvType)
+				if isWrapped(recvType) {
+					this = c.newIdent("this.Go$val", recvType)
+				}
 				body = append([]ast.Stmt{
 					&ast.AssignStmt{
 						Lhs: []ast.Expr{recv},
@@ -698,6 +706,15 @@ func (c *PkgContext) newVariable(prefix string) string {
 		}
 		n += 1
 	}
+}
+
+func (c *PkgContext) newIdent(name string, t types.Type) *ast.Ident {
+	ident := ast.NewIdent(name)
+	c.info.Types[ident] = t
+	obj := types.NewVar(0, c.pkg, name, t)
+	c.info.Objects[ident] = obj
+	c.objectVars[obj] = name
+	return ident
 }
 
 func (c *PkgContext) objectName(o types.Object) string {

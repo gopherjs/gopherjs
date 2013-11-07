@@ -362,38 +362,33 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 		}
 
-		rhss := make([]string, len(s.Lhs))
-
 		switch {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
-			rhss[0] = c.translateExprToType(s.Rhs[0], c.info.Types[s.Lhs[0]])
 			if isUnderscore(s.Lhs[0]) {
-				c.Printf("%s;", rhss[0])
+				c.Printf("%s;", c.translateExpr(s.Rhs[0]))
 				return
 			}
+			c.translateAssign(s.Lhs[0], c.translateExprToType(s.Rhs[0], c.info.Types[s.Lhs[0]]))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
-			tuple := c.info.Types[s.Rhs[0]].(*types.Tuple)
-			for i := range s.Lhs {
-				rhss[i] = c.translateExprToType(c.newIdent(fmt.Sprintf("Go$tuple[%d]", i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]])
-			}
 			c.Printf("Go$tuple = %s;", c.translateExpr(s.Rhs[0]))
-
+			tuple := c.info.Types[s.Rhs[0]].(*types.Tuple)
+			for i, lhs := range s.Lhs {
+				c.translateAssign(lhs, c.translateExprToType(c.newIdent(fmt.Sprintf("Go$tuple[%d]", i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]]))
+			}
 		case len(s.Lhs) == len(s.Rhs):
 			parts := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
 				parts[i] = c.translateExprToType(rhs, c.info.Types[s.Lhs[i]])
-				rhss[i] = fmt.Sprintf("Go$tuple[%d]", i)
 			}
 			c.Printf("Go$tuple = [%s];", strings.Join(parts, ", "))
+			for i, lhs := range s.Lhs {
+				c.translateAssign(lhs, fmt.Sprintf("Go$tuple[%d]", i))
+			}
 
 		default:
 			panic("Invalid arity of AssignStmt.")
 
-		}
-
-		for i, lhs := range s.Lhs {
-			c.translateAssign(lhs, rhss[i])
 		}
 
 	case *ast.IncDecStmt:

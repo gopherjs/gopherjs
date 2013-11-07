@@ -434,32 +434,23 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 	}
 }
 
-// TODO simplify
 func (c *PkgContext) splitValueSpec(s *ast.ValueSpec) []*ast.ValueSpec {
-	var list []*ast.ValueSpec
-	i := 0
-	for i < len(s.Names) {
+	if len(s.Values) == 1 {
+		if _, isTuple := c.info.Types[s.Values[0]].(*types.Tuple); isTuple {
+			return []*ast.ValueSpec{s}
+		}
+	}
+
+	list := make([]*ast.ValueSpec, len(s.Names))
+	for i, name := range s.Names {
 		var value ast.Expr
-		n := 1
 		if i < len(s.Values) {
 			value = s.Values[i]
-			if tuple, isTuple := c.info.Types[value].(*types.Tuple); isTuple {
-				n = tuple.Len()
-			}
 		}
-		names := make([]*ast.Ident, n)
-		for j := range names {
-			if j >= len(s.Names) {
-				names[j] = ast.NewIdent("_")
-				continue
-			}
-			names[j] = s.Names[i+j]
-		}
-		list = append(list, &ast.ValueSpec{
-			Names:  names,
+		list[i] = &ast.ValueSpec{
+			Names:  []*ast.Ident{name},
 			Values: []ast.Expr{value},
-		})
-		i += n
+		}
 	}
 	return list
 }

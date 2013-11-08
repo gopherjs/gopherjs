@@ -954,6 +954,14 @@ func translateSelection(sel *types.Selection) string {
 
 func fixNumber(value string, basic *types.Basic) string {
 	switch basic.Kind() {
+	case types.Int8:
+		return "(" + value + " << 24 >> 24)"
+	case types.Uint8:
+		return "(" + value + " << 24 >>> 24)"
+	case types.Int16:
+		return "(" + value + " << 16 >> 16)"
+	case types.Uint16:
+		return "(" + value + " << 16 >>> 16)"
 	case types.Int32:
 		return "(" + value + " >> 0)"
 	case types.Uint32, types.Uintptr:

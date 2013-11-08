@@ -576,6 +576,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))
 				}
 			case *types.TypeName: // conversion
+				if basic, isBasic := o.Type().Underlying().(*types.Basic); isBasic {
+					return fixNumber(c.translateExprToType(e.Args[0], o.Type()), basic)
+				}
 				return c.translateExprToType(e.Args[0], o.Type())
 			}
 		case *ast.FuncType: // conversion
@@ -760,9 +763,6 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 				value += ".low"
 			}
 
-			if t.Kind() != basicExprType.Kind() {
-				return fixNumber(value, t)
-			}
 			return value
 		case t.Info()&types.IsFloat != 0:
 			if is64Bit(exprType.Underlying().(*types.Basic)) {

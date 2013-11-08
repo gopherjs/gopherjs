@@ -393,8 +393,15 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		if isBasic {
 			switch e.Op {
-			case token.ADD, token.SUB, token.MUL, token.QUO, token.AND, token.OR, token.XOR, token.AND_NOT, token.SHL, token.SHR:
+			case token.ADD, token.SUB, token.MUL, token.AND, token.OR, token.XOR, token.AND_NOT, token.SHL, token.SHR:
 				value = fixNumber(value, basic)
+			case token.QUO:
+				switch basic.Kind() {
+				case types.Int, types.Uint:
+					value = "(" + value + " >> 0)" // cut off decimals
+				default:
+					value = fixNumber(value, basic)
+				}
 			}
 		}
 
@@ -719,12 +726,11 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			exprType = types.Typ[types.String]
 			c.info.Types[expr] = exprType
 		}
-	case *ast.Ident:
-		value := c.info.Values[e]
-		if value != nil && value.Kind() == exact.String {
-			exprType = types.Typ[types.String]
-			c.info.Types[expr] = exprType
-		}
+	}
+	constValue := c.info.Values[expr]
+	if constValue != nil && constValue.Kind() == exact.String {
+		exprType = types.Typ[types.String]
+		c.info.Types[expr] = exprType
 	}
 
 	basicExprType, isBasicExpr := exprType.Underlying().(*types.Basic)
@@ -754,13 +760,9 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 				value += ".low"
 			}
 
-			switch t.Kind() {
-			case types.Int32:
-				value = fmt.Sprintf("(%s >> 0)", value)
-			case types.Uint32:
-				value = fmt.Sprintf("(%s >>> 0)", value)
+			if t.Kind() != basicExprType.Kind() {
+				return fixNumber(value, t)
 			}
-
 			return value
 		case t.Info()&types.IsFloat != 0:
 			if is64Bit(exprType.Underlying().(*types.Basic)) {

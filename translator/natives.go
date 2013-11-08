@@ -585,6 +585,17 @@ var natives = map[string]string{
 		}
 	`,
 
+	"strings": `
+		IndexByte = function(s, c) {
+			for (var i = 0; i < s.length; i++) {
+				if (s.charCodeAt(i) === c) {
+					return i;
+				}
+			}
+			return -1;
+		};
+	`,
+
 	"math": `
 		Abs = Math.abs;
 		Exp = Math.exp;

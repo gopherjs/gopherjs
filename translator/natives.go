@@ -66,7 +66,7 @@ var Go$ByteArray       = Go$Uint8Array;
 var Go$RuneArray       = Go$Int32Array;
 
 var Go$Int64 = function(high, low) {
-	this.high = (high + Math.floor(low / 4294967296)) | 0;
+	this.high = (high + Math.floor(low / 4294967296)) >> 0;
 	this.low = (low + 0 - 0) >>> 0; // workaround V8 issue
 	this.Go$val = this;
 };
@@ -709,7 +709,7 @@ var natives = map[string]string{
 			if ((x8 = e, y8 = new Go$Uint64(0, 0), x8.high === y8.high && x8.low === y8.low)) {
 				e = new Go$Uint64(0, 1);
 			}
-			return Ldexp((Go$obj = m, Go$obj.high * 4294967296 + Go$obj.low), (e.low | 0) - 1023 - 52) * s;
+			return Ldexp((Go$obj = m, Go$obj.high * 4294967296 + Go$obj.low), (e.low >> 0) - 1023 - 52) * s;
 		});
 	`,
 

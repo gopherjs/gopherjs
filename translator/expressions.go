@@ -358,7 +358,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			if basic.Kind() == types.Int32 {
 				x := c.newVariable("x")
 				y := c.newVariable("y")
-				return fmt.Sprintf("(%s = %s, %s = %s, (((%s >>> 16 << 16) * %s | 0) + (%s << 16 >>> 16) * %s) | 0)", x, ex, y, ey, x, y, x, y)
+				return fmt.Sprintf("(%s = %s, %s = %s, (((%s >>> 16 << 16) * %s >> 0) + (%s << 16 >>> 16) * %s) >> 0)", x, ex, y, ey, x, y, x, y)
 			}
 			if basic.Kind() == types.Uint32 {
 				x := c.newVariable("x")
@@ -756,7 +756,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 
 			switch t.Kind() {
 			case types.Int32:
-				value = fmt.Sprintf("(%s | 0)", value)
+				value = fmt.Sprintf("(%s >> 0)", value)
 			case types.Uint32:
 				value = fmt.Sprintf("(%s >>> 0)", value)
 			}
@@ -953,7 +953,7 @@ func translateSelection(sel *types.Selection) string {
 func fixNumber(value string, basic *types.Basic) string {
 	switch basic.Kind() {
 	case types.Int32:
-		return "(" + value + " | 0)"
+		return "(" + value + " >> 0)"
 	case types.Uint32, types.Uintptr:
 		return "(" + value + " >>> 0)"
 	}

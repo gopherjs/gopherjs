@@ -368,10 +368,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			value = ex + " * " + ey
 		case token.QUO:
 			if basic.Info()&types.IsInteger != 0 {
-				value = fmt.Sprintf("Math.floor(%s / %s)", ex, ey)
+				value = fmt.Sprintf(`(Go$obj = %s / %s, (Go$obj === Go$obj && Go$obj !== 1/0 && Go$obj !== -1/0) ? Math.floor(Go$obj) : Go$throwRuntimeError("integer divide by zero"))`, ex, ey)
 				break
 			}
 			value = ex + " / " + ey
+		case token.REM:
+			value = fmt.Sprintf(`(Go$obj = %s %% %s, Go$obj === Go$obj ? Go$obj : Go$throwRuntimeError("integer divide by zero"))`, ex, ey)
 		case token.SHL, token.SHR:
 			if e.Op == token.SHR && basic.Info()&types.IsUnsigned != 0 {
 				op = ">>>"

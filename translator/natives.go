@@ -819,7 +819,7 @@ var natives = map[string]string{
 
 	"runtime": `
 		Go$throwRuntimeError = function(msg) { throw new Go$Panic(new errorString(msg)) };
-		Go$pkg.sizeof_C_MStats = 3696;
+		Go$pkg.sizeof_C_MStats = 3712;
 		getgoroot = function() { return Go$webMode ? "/" : (process.env["GOROOT"] || ""); };
 		SetFinalizer = function() {};
 		GOMAXPROCS = function(n) {
@@ -828,6 +828,14 @@ var natives = map[string]string{
 			}
 		};
 		GC = function() {};
+	`,
+
+	"strings": `
+		IndexByte = function(s, c) { return s.indexOf(String.fromCharCode(c)); };
+	`,
+
+	"sync": `
+		runtime_Syncsemcheck = function() {};
 	`,
 
 	"sync/atomic": `

@@ -356,7 +356,7 @@ func (c *PkgContext) translateSpec(spec ast.Spec) {
 					if field.Name() == "_" {
 						name = fmt.Sprintf("Go$blank%d", i)
 					}
-					c.Printf("this.%s = %s_ || %s;", name, name, c.zeroValue(field.Type()))
+					c.Printf("this.%s = %s_ !== undefined ? %s_ : %s;", name, name, name, c.zeroValue(field.Type()))
 				}
 			})
 			c.Printf("};")

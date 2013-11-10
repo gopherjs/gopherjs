@@ -378,13 +378,16 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			if e.Op == token.SHR && basic.Info()&types.IsUnsigned != 0 {
 				op = ">>>"
 			}
-			switch basic.Kind() {
-			case types.Int32, types.Uint32, types.Uintptr:
-				y := c.newVariable("y")
-				value = fmt.Sprintf("(%s = %s, %s < 32 ? (%s %s %s) : 0)", y, c.translateExprToType(e.Y, types.Typ[types.Uint]), y, ex, op, y)
-			default:
+			if c.info.Values[e.Y] != nil {
 				value = "(" + ex + " " + op + " " + ey + ")"
+				break
 			}
+			if e.Op == token.SHR && basic.Info()&types.IsUnsigned == 0 {
+				value = fmt.Sprintf("(%s >> Go$min(%s, 31))", ex, ey)
+				break
+			}
+			y := c.newVariable("y")
+			value = fmt.Sprintf("(%s = %s, %s < 32 ? (%s %s %s) : 0)", y, c.translateExprToType(e.Y, types.Typ[types.Uint]), y, ex, op, y)
 		case token.AND, token.OR, token.XOR, token.AND_NOT:
 			value = "(" + ex + " " + op + " " + ey + ")"
 		default:

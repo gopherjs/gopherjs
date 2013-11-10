@@ -964,7 +964,7 @@ func fixNumber(value string, basic *types.Basic) string {
 		return "(" + value + " << 16 >>> 16)"
 	case types.Int32:
 		return "(" + value + " >> 0)"
-	case types.Uint32, types.Uintptr:
+	case types.Uint32:
 		return "(" + value + " >>> 0)"
 	}
 	return value

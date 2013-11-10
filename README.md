@@ -19,7 +19,7 @@ These features are not implemented yet, but on the roadmap:
 ### Deviations from Go specification
 Some tradeoffs have to be made in order to avoid huge performance impacts. Please get in contact if those are deal breakers for you.
 
-- int and uint do not overflow
+- int, uint and uintptr do not overflow
 - calls on nil cause a panic except for slice types
 
 ### Interface to external JavaScript

@@ -456,6 +456,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		if isString {
 			return fmt.Sprintf("%s.substring(%s, %s)", slice, low, c.flatten64(e.High))
 		}
+		if e.Max != nil {
+			return fmt.Sprintf("Go$subslice(%s, %s, %s, %s)", slice, low, c.flatten64(e.High), c.flatten64(e.Max))
+		}
 		return fmt.Sprintf("Go$subslice(%s, %s, %s)", slice, low, c.flatten64(e.High))
 
 	case *ast.SelectorExpr:
@@ -534,7 +537,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					arg := c.translateExpr(e.Args[0])
 					switch argType := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Basic, *types.Slice:
-						return fmt.Sprintf("%s.length", arg)
+						return arg + ".length"
 					case *types.Pointer:
 						return fmt.Sprintf("(%s, %d)", arg, argType.Elem().(*types.Array).Len())
 					case *types.Map:
@@ -549,7 +552,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					arg := c.translateExpr(e.Args[0])
 					switch argType := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Slice:
-						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$obj.array.length : 0)", arg)
+						return arg + ".capacity"
 					case *types.Pointer:
 						return fmt.Sprintf("(%s, %d)", arg, argType.Elem().(*types.Array).Len())
 					case *types.Chan:

@@ -185,17 +185,25 @@ var Go$Slice = function(array) {
 	this.array = array;
 	this.offset = 0;
 	this.length = array && array.length;
+	this.capacity = this.length;
 	this.Go$val = this;
 };
 Go$Slice.prototype.Go$uncomparable = true;
 Go$Slice.Go$nil = new Go$Slice({ isNil: true, length: 0 });
 
-var Go$subslice = function(slice, begin, end) {
+var Go$subslice = function(slice, low, high, max) {
+	if (low < 0 || high < low || max < high || high > slice.capacity || max > slice.capacity) {
+		Go$throwRuntimeError("slice bounds out of range");
+	}
 	var s = new slice.constructor(slice.array);
-	s.offset = slice.offset + begin;
-	s.length = slice.length - begin;
-	if (end !== undefined) {
-		s.length = end - begin;
+	s.offset = slice.offset + low;
+	s.length = slice.length - low;
+	s.capacity = slice.capacity - low;
+	if (high !== undefined) {
+		s.length = high - low;
+	}
+	if (max !== undefined) {
+		s.capacity = max - low;
 	}
 	return s;
 };
@@ -414,10 +422,11 @@ var Go$append = function(slice, toAppend) {
 	var newArray = slice.array;
 	var newOffset = slice.offset;
 	var newLength = slice.length + toAppend.length;
+	var newCapacity = slice.capacity;
 
-	if (newOffset + newLength > newArray.length) {
+	if (newLength > newCapacity) {
 		var c = newArray.length - newOffset;
-		var newCapacity = Math.max(newLength, c < 1024 ? c * 2 : Math.floor(c * 5 / 4));
+		newCapacity = Math.max(newLength, c < 1024 ? c * 2 : Math.floor(c * 5 / 4));
 
 		if (newArray.constructor === Array) {
 			if (newOffset !== 0) {
@@ -440,6 +449,7 @@ var Go$append = function(slice, toAppend) {
 	var newSlice = new slice.constructor(newArray);
 	newSlice.offset = newOffset;
 	newSlice.length = newLength;
+	newSlice.capacity = newCapacity;
 	return newSlice;
 };
 

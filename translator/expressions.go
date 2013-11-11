@@ -414,24 +414,25 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("(%s)", c.translateExpr(e.X))
 
 	case *ast.IndexExpr:
-		x := c.translateExpr(e.X)
 		xType := c.info.Types[e.X]
 		if ptr, isPointer := xType.(*types.Pointer); isPointer {
 			xType = ptr.Elem()
 		}
 		switch t := xType.Underlying().(type) {
 		case *types.Array:
-			return fmt.Sprintf("%s[%s]", x, c.flatten64(e.Index))
+			return fmt.Sprintf("%s[%s]", c.translateExpr(e.X), c.flatten64(e.Index))
 		case *types.Slice:
-			return fmt.Sprintf(`(Go$obj = %s, Go$index = %s, (Go$index >= 0 && Go$index < Go$obj.length) ? Go$obj.array[Go$obj.offset + Go$index] : Go$throwRuntimeError("index out of range"))`, x, c.flatten64(e.Index))
+			sliceVar := c.newVariable("_slice")
+			indexVar := c.newVariable("_index")
+			return fmt.Sprintf(`(%s = %s, %s = %s, (%s >= 0 && %s < %s.length) ? %s.array[%s.offset + %s] : Go$throwRuntimeError("index out of range"))`, sliceVar, c.translateExpr(e.X), indexVar, c.flatten64(e.Index), indexVar, indexVar, sliceVar, sliceVar, sliceVar, indexVar)
 		case *types.Map:
 			key := c.makeKey(e.Index, t.Key())
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
-				return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? [Go$obj.v, true] : [%s, false])`, x, key, c.zeroValue(t.Elem()))
+				return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? [Go$obj.v, true] : [%s, false])`, c.translateExpr(e.X), key, c.zeroValue(t.Elem()))
 			}
-			return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? Go$obj.v : %s)`, x, key, c.zeroValue(t.Elem()))
+			return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? Go$obj.v : %s)`, c.translateExpr(e.X), key, c.zeroValue(t.Elem()))
 		case *types.Basic:
-			return fmt.Sprintf("%s.charCodeAt(%s)", x, c.flatten64(e.Index))
+			return fmt.Sprintf("%s.charCodeAt(%s)", c.translateExpr(e.X), c.flatten64(e.Index))
 		default:
 			panic(fmt.Sprintf("Unhandled IndexExpr: %T\n", t))
 		}

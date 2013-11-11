@@ -3,7 +3,7 @@ package translator
 var Prelude = `
 Error.stackTraceLimit = -1;
 
-var Go$obj, Go$tuple, Go$index;
+var Go$obj, Go$tuple;
 var Go$idCounter = 1;
 var Go$keys = Object.keys;
 var Go$min = Math.min;

@@ -578,10 +578,12 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) {
 		case *types.Array, *types.Pointer:
 			c.Printf("%s[%s] = %s;", c.translateExpr(l.X), c.translateExpr(l.Index), rhs)
 		case *types.Slice:
-			c.Printf("Go$obj = %s;", c.translateExpr(l.X))
-			c.Printf("Go$index = %s;", c.translateExpr(l.Index))
-			c.Printf(`if (Go$index < 0 || Go$index >= Go$obj.length) { Go$throwRuntimeError("index out of range"); }`)
-			c.Printf("Go$obj.array[Go$obj.offset + Go$index] = %s;", rhs)
+			sliceVar := c.newVariable("_slice")
+			indexVar := c.newVariable("_index")
+			c.Printf("%s = %s;", sliceVar, c.translateExpr(l.X))
+			c.Printf("%s = %s;", indexVar, c.translateExpr(l.Index))
+			c.Printf(`if (%s < 0 || %s >= %s.length) { Go$throwRuntimeError("index out of range"); }`, indexVar, indexVar, sliceVar)
+			c.Printf("%s.array[%s.offset + %s] = %s;", sliceVar, sliceVar, indexVar, rhs)
 		case *types.Map:
 			keyVar := c.newVariable("_key")
 			c.Printf("%s = %s;", keyVar, c.translateExprToType(l.Index, t.Key()))

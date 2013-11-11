@@ -25,10 +25,6 @@ var Go$Float32    = function(v) { this.Go$val = v; };
 Go$Float32.prototype.Go$key = function() { return "Float32$" + this.Go$val; };
 var Go$Float64    = function(v) { this.Go$val = v; };
 Go$Float64.prototype.Go$key = function() { return "Float64$" + this.Go$val; };
-var Go$Complex64  = function(v) { this.Go$val = v; };
-Go$Complex64.prototype.Go$key = function() { return "Complex64$" + this.Go$val; };
-var Go$Complex128 = function(v) { this.Go$val = v; };
-Go$Complex128.prototype.Go$key = function() { return "Complex128$" + this.Go$val; };
 var Go$Uint       = function(v) { this.Go$val = v; };
 Go$Uint.prototype.Go$key = function() { return "Uint$" + this.Go$val; };
 var Go$Int        = function(v) { this.Go$val = v; };
@@ -180,6 +176,20 @@ var Go$div64 = function(x, y, returnRemainder) {
 	}
 	return new typ(r.high * s, r.low * s);
 };
+
+var Go$Complex64  = function(real, imag) {
+	this.real = real;
+	this.imag = imag;
+	this.Go$val = this;
+};
+Go$Complex64.prototype.Go$key = function() { return "Complex64$" + this.Go$val; };
+
+var Go$Complex128  = function(real, imag) {
+	this.real = real;
+	this.imag = imag;
+	this.Go$val = this;
+};
+Go$Complex128.prototype.Go$key = function() { return "Complex128$" + this.Go$val; };
 
 var Go$Slice = function(array) {
 	this.array = array;

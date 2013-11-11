@@ -843,7 +843,7 @@ func isUnderscore(expr ast.Expr) bool {
 func isWrapped(ty types.Type) bool {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
-		return !is64Bit(t) && t.Kind() != types.UntypedNil
+		return !is64Bit(t) && t.Info()&types.IsComplex == 0 && t.Kind() != types.UntypedNil
 	case *types.Array, *types.Signature:
 		return true
 	}

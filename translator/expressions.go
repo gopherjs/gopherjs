@@ -43,13 +43,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return strconv.FormatInt(d, 10)
 			case basic.Info()&types.IsFloat != 0:
 				f, _ := exact.Float64Val(value)
-				return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(basic))*8)
+				return strconv.FormatFloat(f, 'g', -1, 64)
 			case basic.Info()&types.IsComplex != 0:
-				f, _ := exact.Float64Val(exact.Real(value))
-				if basic.Kind() == types.UntypedComplex { // TODO should be fixed in go/types
-					return strconv.FormatFloat(f, 'g', -1, 64)
+				r, _ := exact.Float64Val(exact.Real(value))
+				i, _ := exact.Float64Val(exact.Imag(value))
+				if basic.Kind() == types.UntypedComplex {
+					exprType = types.Typ[types.Complex128]
 				}
-				return strconv.FormatFloat(f, 'g', -1, int(sizes32.Sizeof(basic))*8/2)
+				return fmt.Sprintf("new %s(%s, %s)", c.typeName(exprType), strconv.FormatFloat(r, 'g', -1, 64), strconv.FormatFloat(i, 'g', -1, 64))
 			case basic.Info()&types.IsString != 0:
 				buffer := bytes.NewBuffer(nil)
 				for _, r := range []byte(exact.StringVal(value)) {
@@ -238,6 +239,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				x := c.newVariable("x")
 				return fmt.Sprintf("(%s = %s, new %s(-%s.high, -%s.low))", x, c.translateExpr(e.X), c.typeName(t), x, x)
 			}
+			if basic.Info()&types.IsComplex != 0 {
+				x := c.newVariable("x")
+				return fmt.Sprintf("(%s = %s, new %s(-%s.real, -%s.imag))", x, c.translateExpr(e.X), c.typeName(t), x, x)
+			}
 		case token.XOR:
 			if is64Bit(basic) {
 				x := c.newVariable("x")
@@ -273,8 +278,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 
 		basic, isBasic = t.Underlying().(*types.Basic)
+
 		if isBasic && is64Bit(basic) {
-			var expr string = "0"
+			var expr string
 			switch e.Op {
 			case token.MUL:
 				return fmt.Sprintf("Go$mul64(%s, %s)", ex, ey)
@@ -288,8 +294,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return fmt.Sprintf("Go$shiftRight%s(%s, %s)", toJavaScriptType(basic), ex, c.flatten64(e.Y))
 			case token.EQL:
 				expr = "x.high === y.high && x.low === y.low"
-			case token.NEQ:
-				expr = "x.high !== y.high || x.low !== y.low"
 			case token.LSS:
 				expr = "x.high < y.high || (x.high === y.high && x.low < y.low)"
 			case token.LEQ:
@@ -307,8 +311,30 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			x := c.newVariable("x")
 			y := c.newVariable("y")
-			expr = strings.Replace(expr, "x", x, -1)
-			expr = strings.Replace(expr, "y", y, -1)
+			expr = strings.Replace(expr, "x.", x+".", -1)
+			expr = strings.Replace(expr, "y.", y+".", -1)
+			return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, ex, y, ey, expr)
+		}
+
+		if isBasic && basic.Info()&types.IsComplex != 0 {
+			var expr string
+			switch e.Op {
+			case token.EQL:
+				expr = "x.real === y.real && x.imag === y.imag"
+			case token.ADD, token.SUB:
+				expr = fmt.Sprintf("new %s(x.real %s y.real, x.imag %s y.imag)", c.typeName(t), op, op)
+			case token.MUL:
+				expr = fmt.Sprintf("new %s(x.real * y.real - x.imag * y.imag, x.real * y.imag + x.imag * y.real)", c.typeName(t))
+			case token.QUO:
+				q := c.newVariable("q")
+				expr = fmt.Sprintf("%s = y.real * y.real + y.imag * y.imag, new %s((x.real * y.real + x.imag * y.imag) / %s, (x.imag * y.real - x.real * y.imag) / %s)", q, c.typeName(t), q, q)
+			default:
+				panic(e.Op)
+			}
+			x := c.newVariable("x")
+			y := c.newVariable("y")
+			expr = strings.Replace(expr, "x.", x+".", -1)
+			expr = strings.Replace(expr, "y.", y+".", -1)
 			return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, ex, y, ey, expr)
 		}
 
@@ -577,8 +603,16 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					return fmt.Sprintf("Go$copy(%s, %s)", c.translateExprToType(e.Args[0], types.NewSlice(types.Typ[types.Byte])), c.translateExprToType(e.Args[1], types.NewSlice(types.Typ[types.Byte])))
 				case "print", "println":
 					return fmt.Sprintf("console.log(%s)", strings.Join(c.translateExprSlice(e.Args, nil), ", "))
-				case "recover", "complex", "real", "imag", "close":
-					return fmt.Sprintf("Go$%s(%s)", o.Name(), strings.Join(c.translateExprSlice(e.Args, nil), ", "))
+				case "complex":
+					return fmt.Sprintf("new %s(%s, %s)", c.typeName(c.info.Types[e]), c.translateExpr(e.Args[0]), c.translateExpr(e.Args[1]))
+				case "real":
+					return c.translateExpr(e.Args[0]) + ".real"
+				case "imag":
+					return c.translateExpr(e.Args[0]) + ".imag"
+				case "recover":
+					return "Go$recover()"
+				case "close":
+					// skip
 				default:
 					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))
 				}

@@ -600,7 +600,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))
 				}
 			case *types.TypeName: // conversion
-				if basic, isBasic := o.Type().Underlying().(*types.Basic); isBasic {
+				if basic, isBasic := o.Type().Underlying().(*types.Basic); isBasic && !types.IsIdentical(c.info.Types[e.Args[0]], types.Typ[types.UnsafePointer]) {
 					return fixNumber(c.translateExprToType(e.Args[0], o.Type()), basic)
 				}
 				return c.translateExprToType(e.Args[0], o.Type())
@@ -784,7 +784,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 					value = fmt.Sprintf("(Go$obj = %s, new %s(Go$obj.high, Go$obj.low))", value, c.typeName(desiredType))
 				}
 			case is64Bit(basicExprType):
-				value += ".low"
+				value = fmt.Sprintf("Go$flatten64(%s)", value)
 			}
 
 			return value
@@ -797,7 +797,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			switch et := exprType.Underlying().(type) {
 			case *types.Basic:
 				if is64Bit(et) {
-					value += ".low"
+					value = fmt.Sprintf("Go$flatten64(%s)", value)
 				}
 				if et.Info()&types.IsNumeric != 0 {
 					return fmt.Sprintf("Go$encodeRune(%s)", value)
@@ -988,7 +988,7 @@ func fixNumber(value string, basic *types.Basic) string {
 		return "(" + value + " << 16 >>> 16)"
 	case types.Int32:
 		return "(" + value + " >> 0)"
-	case types.Uint32:
+	case types.Uint32, types.Uintptr:
 		return "(" + value + " >>> 0)"
 	}
 	return value

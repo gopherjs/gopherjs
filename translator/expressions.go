@@ -14,77 +14,60 @@ import (
 func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	exprType := c.info.Types[expr]
 	if value, valueFound := c.info.Values[expr]; valueFound {
-		// workaround
-		if id, isIdent := expr.(*ast.Ident); isIdent {
-			switch id.Name {
-			case "MaxFloat32":
-				return "3.40282346638528859811704183484516925440e+38"
-			case "SmallestNonzeroFloat32":
-				return "1.401298464324817070923729583289916131280e-45"
-			case "MaxFloat64":
-				return "1.797693134862315708145274237317043567981e+308"
-			case "SmallestNonzeroFloat64":
-				return "4.940656458412465441765687928682213723651e-324"
+		basic := exprType.Underlying().(*types.Basic)
+		switch {
+		case basic.Info()&types.IsBoolean != 0:
+			return strconv.FormatBool(exact.BoolVal(value))
+		case basic.Info()&types.IsInteger != 0:
+			if is64Bit(basic) {
+				d, _ := exact.Uint64Val(value)
+				return fmt.Sprintf("new %s(%d, %d)", c.typeName(exprType), d>>32, d&(1<<32-1))
 			}
-		}
-		v := HasEvilConstantVisitor{}
-		ast.Walk(&v, expr)
-		if !v.hasEvilConstant {
-			basic := exprType.Underlying().(*types.Basic)
-			switch {
-			case basic.Info()&types.IsBoolean != 0:
-				return strconv.FormatBool(exact.BoolVal(value))
-			case basic.Info()&types.IsInteger != 0:
-				if is64Bit(basic) {
-					d, _ := exact.Uint64Val(value)
-					return fmt.Sprintf("new %s(%d, %d)", c.typeName(exprType), d>>32, d&(1<<32-1))
-				}
-				d, _ := exact.Int64Val(value)
-				return strconv.FormatInt(d, 10)
-			case basic.Info()&types.IsFloat != 0:
-				f, _ := exact.Float64Val(value)
-				return strconv.FormatFloat(f, 'g', -1, 64)
-			case basic.Info()&types.IsComplex != 0:
-				r, _ := exact.Float64Val(exact.Real(value))
-				i, _ := exact.Float64Val(exact.Imag(value))
-				if basic.Kind() == types.UntypedComplex {
-					exprType = types.Typ[types.Complex128]
-				}
-				return fmt.Sprintf("new %s(%s, %s)", c.typeName(exprType), strconv.FormatFloat(r, 'g', -1, 64), strconv.FormatFloat(i, 'g', -1, 64))
-			case basic.Info()&types.IsString != 0:
-				buffer := bytes.NewBuffer(nil)
-				for _, r := range []byte(exact.StringVal(value)) {
-					switch r {
-					case '\b':
-						buffer.WriteString(`\b`)
-					case '\f':
-						buffer.WriteString(`\f`)
-					case '\n':
-						buffer.WriteString(`\n`)
-					case '\r':
-						buffer.WriteString(`\r`)
-					case '\t':
-						buffer.WriteString(`\t`)
-					case '\v':
-						buffer.WriteString(`\v`)
-					case 0:
-						buffer.WriteString(`\0`)
-					case '"':
-						buffer.WriteString(`\"`)
-					case '\\':
-						buffer.WriteString(`\\`)
-					default:
-						if r < 0x20 || r > 0x7E {
-							fmt.Fprintf(buffer, `\x%02X`, r)
-							continue
-						}
-						buffer.WriteByte(r)
+			d, _ := exact.Int64Val(value)
+			return strconv.FormatInt(d, 10)
+		case basic.Info()&types.IsFloat != 0:
+			f, _ := exact.Float64Val(value)
+			return strconv.FormatFloat(f, 'g', -1, 64)
+		case basic.Info()&types.IsComplex != 0:
+			r, _ := exact.Float64Val(exact.Real(value))
+			i, _ := exact.Float64Val(exact.Imag(value))
+			if basic.Kind() == types.UntypedComplex {
+				exprType = types.Typ[types.Complex128]
+			}
+			return fmt.Sprintf("new %s(%s, %s)", c.typeName(exprType), strconv.FormatFloat(r, 'g', -1, 64), strconv.FormatFloat(i, 'g', -1, 64))
+		case basic.Info()&types.IsString != 0:
+			buffer := bytes.NewBuffer(nil)
+			for _, r := range []byte(exact.StringVal(value)) {
+				switch r {
+				case '\b':
+					buffer.WriteString(`\b`)
+				case '\f':
+					buffer.WriteString(`\f`)
+				case '\n':
+					buffer.WriteString(`\n`)
+				case '\r':
+					buffer.WriteString(`\r`)
+				case '\t':
+					buffer.WriteString(`\t`)
+				case '\v':
+					buffer.WriteString(`\v`)
+				case 0:
+					buffer.WriteString(`\0`)
+				case '"':
+					buffer.WriteString(`\"`)
+				case '\\':
+					buffer.WriteString(`\\`)
+				default:
+					if r < 0x20 || r > 0x7E {
+						fmt.Fprintf(buffer, `\x%02X`, r)
+						continue
 					}
+					buffer.WriteByte(r)
 				}
-				return `"` + buffer.String() + `"`
-			default:
-				panic("Unhandled constant type: " + basic.String())
 			}
+			return `"` + buffer.String() + `"`
+		default:
+			panic("Unhandled constant type: " + basic.String())
 		}
 	}
 
@@ -1025,25 +1008,6 @@ func (v *HasDeferVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		return nil
 	case *ast.FuncLit:
 		return nil
-	}
-	return v
-}
-
-type HasEvilConstantVisitor struct {
-	hasEvilConstant bool
-}
-
-func (v *HasEvilConstantVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	if v.hasEvilConstant {
-		return nil
-	}
-	switch n := node.(type) {
-	case *ast.Ident:
-		switch n.Name {
-		case "MaxFloat32", "SmallestNonzeroFloat32", "MaxFloat64", "SmallestNonzeroFloat64":
-			v.hasEvilConstant = true
-			return nil
-		}
 	}
 	return v
 }

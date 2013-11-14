@@ -572,7 +572,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))
 					}
 				case "panic":
-					return fmt.Sprintf("throw new Go$Panic(%s)", c.translateExprToType(e.Args[0], types.NewInterface(nil)))
+					return fmt.Sprintf("throw new Go$Panic(%s)", c.translateExprToType(e.Args[0], types.NewInterface(nil, nil)))
 				case "append":
 					if e.Ellipsis.IsValid() {
 						return fmt.Sprintf("Go$append(%s, %s)", c.translateExpr(e.Args[0]), c.translateExprToType(e.Args[1], exprType))

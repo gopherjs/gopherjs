@@ -1,6 +1,18 @@
-diff -r 37455f5e1fae go/types/call.go
---- a/go/types/call.go	Wed Nov 06 13:31:30 2013 -0500
-+++ b/go/types/call.go	Wed Nov 06 20:33:23 2013 +0100
+diff -r 6faa19b38832 go/gcimporter/gcimporter.go
+--- a/go/gcimporter/gcimporter.go	Thu Nov 14 17:33:07 2013 -0500
++++ b/go/gcimporter/gcimporter.go	Thu Nov 14 23:47:10 2013 +0100
+@@ -684,7 +684,7 @@
+ func (p *parser) parseImportDecl() {
+ 	p.expectKeyword("import")
+ 	name := p.parsePackageName()
+-	p.getPkg(p.parsePackageId(), name)
++	p.getPkg(p.id, "").AddImport(p.getPkg(p.parsePackageId(), name))
+ }
+ 
+ // int_lit = [ "+" | "-" ] { "0" ... "9" } .
+diff -r 6faa19b38832 go/types/call.go
+--- a/go/types/call.go	Thu Nov 14 17:33:07 2013 -0500
++++ b/go/types/call.go	Thu Nov 14 23:47:10 2013 +0100
 @@ -246,7 +246,6 @@
  }
  
@@ -83,9 +95,9 @@ diff -r 37455f5e1fae go/types/call.go
 -	x.mode = invalid
 -	x.expr = e
  }
-diff -r 37455f5e1fae go/types/expr.go
---- a/go/types/expr.go	Wed Nov 06 13:31:30 2013 -0500
-+++ b/go/types/expr.go	Wed Nov 06 20:33:23 2013 +0100
+diff -r 6faa19b38832 go/types/expr.go
+--- a/go/types/expr.go	Thu Nov 14 17:33:07 2013 -0500
++++ b/go/types/expr.go	Thu Nov 14 23:47:10 2013 +0100
 @@ -481,7 +481,9 @@
  				check.updateExprType(x.expr, target, false)
  			}
@@ -177,23 +189,7 @@ diff -r 37455f5e1fae go/types/expr.go
  }
  
  func (check *checker) comparison(x, y *operand, op token.Token) {
-@@ -763,9 +776,12 @@
- 	}
- 
- 	if (op == token.QUO || op == token.REM) && y.mode == constant && exact.Sign(y.val) == 0 {
--		check.invalidOp(y.pos(), "division by zero")
--		x.mode = invalid
--		return
-+		if !isFloat(x.typ) {
-+			check.invalidOp(y.pos(), "division by zero")
-+			x.mode = invalid
-+			return
-+		}
-+		x.mode = value
- 	}
- 
- 	if x.mode == constant && y.mode == constant {
-@@ -908,7 +924,7 @@
+@@ -908,7 +921,7 @@
  		typ = Typ[Invalid]
  		record = false // nothing to do
  	case novalue:
@@ -202,7 +198,7 @@ diff -r 37455f5e1fae go/types/expr.go
  	case constant:
  		typ = x.typ
  		val = x.val
-@@ -947,7 +963,9 @@
+@@ -947,7 +960,9 @@
  
  	switch e := e.(type) {
  	case *ast.BadExpr:
@@ -213,7 +209,7 @@ diff -r 37455f5e1fae go/types/expr.go
  
  	case *ast.Ident:
  		check.ident(x, e, nil, false)
-@@ -956,13 +974,17 @@
+@@ -956,13 +971,17 @@
  		// ellipses are handled explicitly where they are legal
  		// (array composite literals and parameter lists)
  		check.errorf(e.Pos(), "invalid use of '...'")
@@ -233,7 +229,7 @@ diff -r 37455f5e1fae go/types/expr.go
  		}
  
  	case *ast.FuncLit:
-@@ -976,7 +998,9 @@
+@@ -976,7 +995,9 @@
  			check.later(nil, check.decl, sig, e.Body)
  		} else {
  			check.invalidAST(e.Pos(), "invalid function literal %s", e)
@@ -244,7 +240,7 @@ diff -r 37455f5e1fae go/types/expr.go
  		}
  
  	case *ast.CompositeLit:
-@@ -1001,7 +1025,9 @@
+@@ -1001,7 +1022,9 @@
  		}
  		if typ == nil {
  			check.errorf(e.Pos(), "missing type in composite literal")
@@ -255,7 +251,7 @@ diff -r 37455f5e1fae go/types/expr.go
  		}
  
  		switch typ, _ := deref(typ); utyp := typ.Underlying().(type) {
-@@ -1116,7 +1142,9 @@
+@@ -1116,7 +1139,9 @@
  
  		default:
  			check.errorf(e.Pos(), "invalid composite literal type %s", typ)
@@ -266,7 +262,7 @@ diff -r 37455f5e1fae go/types/expr.go
  		}
  
  		x.mode = value
-@@ -1133,7 +1161,9 @@
+@@ -1133,7 +1158,9 @@
  	case *ast.IndexExpr:
  		check.expr(x, e.X)
  		if x.mode == invalid {
@@ -277,7 +273,7 @@ diff -r 37455f5e1fae go/types/expr.go
  		}
  
  		valid := false
-@@ -1180,7 +1210,9 @@
+@@ -1180,7 +1207,9 @@
  				if key.mode != invalid {
  					check.invalidOp(key.pos(), "cannot use %s as map index of type %s", &key, typ.key)
  				}
@@ -288,7 +284,7 @@ diff -r 37455f5e1fae go/types/expr.go
  			}
  			x.mode = mapindex
  			x.typ = typ.elem
-@@ -1190,12 +1222,16 @@
+@@ -1190,12 +1219,16 @@
  
  		if !valid {
  			check.invalidOp(x.pos(), "cannot index %s", x)
@@ -307,7 +303,7 @@ diff -r 37455f5e1fae go/types/expr.go
  		}
  
  		check.index(e.Index, length)
-@@ -1204,7 +1240,9 @@
+@@ -1204,7 +1237,9 @@
  	case *ast.SliceExpr:
  		check.expr(x, e.X)
  		if x.mode == invalid {
@@ -318,7 +314,7 @@ diff -r 37455f5e1fae go/types/expr.go
  		}
  
  		valid := false
-@@ -1214,7 +1252,9 @@
+@@ -1214,7 +1249,9 @@
  			if isString(typ) {
  				if slice3(e) {
  					check.invalidOp(x.pos(), "3-index slice of string")
@@ -329,7 +325,7 @@ diff -r 37455f5e1fae go/types/expr.go
  				}
  				valid = true
  				if x.mode == constant {
-@@ -1233,7 +1273,9 @@
+@@ -1233,7 +1270,9 @@
  			length = typ.len
  			if x.mode != variable {
  				check.invalidOp(x.pos(), "cannot slice %s (value not addressable)", x)
@@ -340,7 +336,7 @@ diff -r 37455f5e1fae go/types/expr.go
  			}
  			x.typ = &Slice{elem: typ.elem}
  
-@@ -1253,13 +1295,17 @@
+@@ -1253,13 +1292,17 @@
  
  		if !valid {
  			check.invalidOp(x.pos(), "cannot slice %s", x)
@@ -360,7 +356,7 @@ diff -r 37455f5e1fae go/types/expr.go
  		}
  
  		// check indices
-@@ -1305,21 +1351,29 @@
+@@ -1305,21 +1348,29 @@
  	case *ast.TypeAssertExpr:
  		check.expr(x, e.X)
  		if x.mode == invalid {
@@ -394,7 +390,7 @@ diff -r 37455f5e1fae go/types/expr.go
  		}
  		check.typeAssertion(x.pos(), x, xtyp, T)
  		x.mode = commaok
-@@ -1332,7 +1386,9 @@
+@@ -1332,7 +1383,9 @@
  		check.exprOrType(x, e.X)
  		switch x.mode {
  		case invalid:
@@ -405,7 +401,7 @@ diff -r 37455f5e1fae go/types/expr.go
  		case typexpr:
  			x.typ = &Pointer{base: x.typ}
  		default:
-@@ -1341,18 +1397,24 @@
+@@ -1341,18 +1394,24 @@
  				x.typ = typ.base
  			} else {
  				check.invalidOp(x.pos(), "cannot indirect %s", x)
@@ -433,7 +429,7 @@ diff -r 37455f5e1fae go/types/expr.go
  		}
  		if e.Op == token.ARROW {
  			x.expr = e
-@@ -1362,13 +1424,17 @@
+@@ -1362,13 +1421,17 @@
  	case *ast.BinaryExpr:
  		check.binary(x, e.X, e.Y, e.Op)
  		if x.mode == invalid {
@@ -453,7 +449,7 @@ diff -r 37455f5e1fae go/types/expr.go
  
  	case *ast.ArrayType, *ast.StructType, *ast.FuncType,
  		*ast.InterfaceType, *ast.MapType, *ast.ChanType:
-@@ -1390,11 +1456,6 @@
+@@ -1390,11 +1453,6 @@
  	// everything went well
  	x.expr = e
  	return expression
@@ -465,22 +461,9 @@ diff -r 37455f5e1fae go/types/expr.go
  }
  
  // typeAssertion checks that x.(T) is legal; xtyp must be the type of x.
-diff -r 37455f5e1fae go/types/gcimporter.go
---- a/go/types/gcimporter.go	Wed Nov 06 13:31:30 2013 -0500
-+++ b/go/types/gcimporter.go	Wed Nov 06 20:33:23 2013 +0100
-@@ -728,7 +728,8 @@
- func (p *gcParser) parseImportDecl() {
- 	p.expectKeyword("import")
- 	name := p.parsePackageName()
--	p.getPkg(p.parsePackageId(), name)
-+	pkg := p.getPkg(p.id, "")
-+	pkg.imports = append(pkg.imports, p.getPkg(p.parsePackageId(), name))
- }
- 
- // int_lit = [ "+" | "-" ] { "0" ... "9" } .
-diff -r 37455f5e1fae go/types/methodset.go
---- a/go/types/methodset.go	Wed Nov 06 13:31:30 2013 -0500
-+++ b/go/types/methodset.go	Wed Nov 06 20:33:23 2013 +0100
+diff -r 6faa19b38832 go/types/methodset.go
+--- a/go/types/methodset.go	Thu Nov 14 17:33:07 2013 -0500
++++ b/go/types/methodset.go	Thu Nov 14 23:47:10 2013 +0100
 @@ -121,8 +121,8 @@
  		var next []embeddedType // embedded types found at current depth
  
@@ -512,9 +495,23 @@ diff -r 37455f5e1fae go/types/methodset.go
  	for i, f := range list {
  		key := f.Id()
  		// if f is not in the set, add it
-diff -r 37455f5e1fae go/types/typemap/typemap.go
---- a/go/types/typemap/typemap.go	Wed Nov 06 13:31:30 2013 -0500
-+++ b/go/types/typemap/typemap.go	Wed Nov 06 20:33:23 2013 +0100
+diff -r 6faa19b38832 go/types/package.go
+--- a/go/types/package.go	Thu Nov 14 17:33:07 2013 -0500
++++ b/go/types/package.go	Thu Nov 14 23:47:10 2013 +0100
+@@ -42,6 +42,10 @@
+ // pkg; the list is in source order. Package unsafe is excluded.
+ func (pkg *Package) Imports() []*Package { return pkg.imports }
+ 
++func (pkg *Package) AddImport(imported *Package) {
++	pkg.imports = append(pkg.imports, imported)
++}
++
+ // MarkComplete marks a package as complete.
+ func (pkg *Package) MarkComplete() { pkg.complete = true }
+ 
+diff -r 6faa19b38832 go/types/typemap/typemap.go
+--- a/go/types/typemap/typemap.go	Thu Nov 14 17:33:07 2013 -0500
++++ b/go/types/typemap/typemap.go	Thu Nov 14 23:47:10 2013 +0100
 @@ -130,10 +130,7 @@
  
  // Len returns the number of map entries.
@@ -527,10 +524,10 @@ diff -r 37455f5e1fae go/types/typemap/typemap.go
  }
  
  // Iterate calls function f on each entry in the map in unspecified order.
-diff -r 37455f5e1fae go/types/types.go
---- a/go/types/types.go	Wed Nov 06 13:31:30 2013 -0500
-+++ b/go/types/types.go	Wed Nov 06 20:33:23 2013 +0100
-@@ -177,18 +177,12 @@
+diff -r 6faa19b38832 go/types/types.go
+--- a/go/types/types.go	Thu Nov 14 17:33:07 2013 -0500
++++ b/go/types/types.go	Thu Nov 14 23:47:10 2013 +0100
+@@ -186,18 +186,12 @@
  
  // NewTuple returns a new tuple for the given variables.
  func NewTuple(x ...*Var) *Tuple {
@@ -551,9 +548,9 @@ diff -r 37455f5e1fae go/types/types.go
  }
  
  // At returns the i'th variable of tuple t.
-diff -r 37455f5e1fae go/types/universe.go
---- a/go/types/universe.go	Wed Nov 06 13:31:30 2013 -0500
-+++ b/go/types/universe.go	Wed Nov 06 20:33:23 2013 +0100
+diff -r 6faa19b38832 go/types/universe.go
+--- a/go/types/universe.go	Thu Nov 14 17:33:07 2013 -0500
++++ b/go/types/universe.go	Thu Nov 14 23:47:10 2013 +0100
 @@ -65,7 +65,7 @@
  
  	// Error has a nil package in its qualified name since it is in no package
@@ -561,5 +558,5 @@ diff -r 37455f5e1fae go/types/universe.go
 -	sig := &Signature{results: NewTuple(res)}
 +	sig := &Signature{results: NewTuple(res), params: NewTuple()}
  	err := NewFunc(token.NoPos, nil, "Error", sig)
- 	typ := &Named{underlying: NewInterface([]*Func{err}), complete: true}
+ 	typ := &Named{underlying: NewInterface([]*Func{err}, nil), complete: true}
  	sig.recv = NewVar(token.NoPos, nil, "", typ)

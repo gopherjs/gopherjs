@@ -2,6 +2,7 @@ package translator
 
 import (
 	"bufio"
+	"code.google.com/p/go.tools/go/gcimporter"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
 	"github.com/neelance/gopherjs/gcexporter"
@@ -116,7 +117,7 @@ func ReadArchive(imports map[string]*types.Package, filename, id string, data io
 		code = append(code, line...)
 	}
 
-	pkg, err := types.GcImportData(imports, filename, id, r)
+	pkg, err := gcimporter.ImportData(imports, filename, id, r)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -371,6 +371,12 @@ var Go$makeArray = function(constructor, length, zero) { // TODO do not use for 
 	return array;
 };
 
+var Go$copyArray = function(dst, src) {
+	for (var i = 0; i < src.length; i++) {
+		dst[i] = src[i];
+	}
+};
+
 var Go$mapArray = function(array, f) {
 	var newArray = new array.constructor(array.length);
 	for (var i = 0; i < array.length; i++) {

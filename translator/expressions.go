@@ -196,8 +196,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				if _, isComposite := e.X.(*ast.CompositeLit); isComposite {
 					return fmt.Sprintf("Go$newDataPointer(%s, %s)", c.translateExpr(e.X), c.typeName(c.info.Types[e]))
 				}
-				vVar := c.newVariable("v")
-				assign := strings.TrimSpace(string(c.CatchOutput(func() { c.translateAssign(e.X, vVar) })))
 				closurePrefix := ""
 				closureSuffix := ""
 				if len(c.escapingVars) != 0 {
@@ -205,7 +203,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					closurePrefix = "(function(" + list + ") { return "
 					closureSuffix = "; })(" + list + ")"
 				}
-				return fmt.Sprintf("%snew %s(function() { return %s; }, function(%s) { %s })%s", closurePrefix, c.typeName(exprType), c.translateExpr(e.X), vVar, assign, closureSuffix)
+				vVar := c.newVariable("v")
+				return fmt.Sprintf("%snew %s(function() { return %s; }, function(%s) { %s; })%s", closurePrefix, c.typeName(exprType), c.translateExpr(e.X), vVar, c.translateAssign(e.X, vVar), closureSuffix)
 			}
 		case token.ARROW:
 			return "undefined"

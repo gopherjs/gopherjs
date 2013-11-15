@@ -142,7 +142,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						s := spec.(*ast.ValueSpec)
 						constSpecs = append(constSpecs, s)
 						for _, name := range s.Names {
-							if !isUnderscore(name) {
+							if !isBlank(name) {
 								c.objectName(c.info.Objects[name]) // register toplevel name
 							}
 						}
@@ -152,7 +152,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						s := spec.(*ast.ValueSpec)
 						varSpecs = append(varSpecs, s)
 						for _, name := range s.Names {
-							if !isUnderscore(name) {
+							if !isBlank(name) {
 								c.objectName(c.info.Objects[name]) // register toplevel name
 							}
 						}
@@ -240,7 +240,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 
 			// package functions
 			for _, fun := range functionsByType[nil] {
-				if isUnderscore(fun.Name) {
+				if isBlank(fun.Name) {
 					continue
 				}
 				name := c.objectName(c.info.Objects[fun.Name])
@@ -266,7 +266,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			// constants
 			for _, spec := range constSpecs {
 				for _, name := range spec.Names {
-					if isUnderscore(name) || strings.HasPrefix(name.Name, "js_") {
+					if isBlank(name) || strings.HasPrefix(name.Name, "js_") {
 						continue
 					}
 					o := c.info.Objects[name].(*types.Const)
@@ -595,7 +595,7 @@ func (c *PkgContext) translateParams(t *ast.FuncType) []string {
 	params := make([]string, 0)
 	for _, param := range t.Params.List {
 		for _, ident := range param.Names {
-			if isUnderscore(ident) {
+			if isBlank(ident) {
 				params = append(params, c.newVariable("param"))
 				continue
 			}
@@ -833,7 +833,10 @@ func createListComposite(elementType types.Type, elements []string) string {
 	return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
 }
 
-func isUnderscore(expr ast.Expr) bool {
+func isBlank(expr ast.Expr) bool {
+	if expr == nil {
+		return true
+	}
 	if id, isIdent := expr.(*ast.Ident); isIdent {
 		return id.Name == "_"
 	}

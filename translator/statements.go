@@ -25,11 +25,12 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Printf("}")
 
 	case *ast.IfStmt:
-		c.translateStmt(s.Init, "")
 		var caseClauses []ast.Stmt
+		var initStmts []ast.Stmt
 		ifStmt := s
 		for {
 			caseClauses = append(caseClauses, &ast.CaseClause{List: []ast.Expr{ifStmt.Cond}, Body: ifStmt.Body.List})
+			initStmts = append(initStmts, ifStmt.Init)
 			switch elseStmt := ifStmt.Else.(type) {
 			case *ast.IfStmt:
 				ifStmt = elseStmt
@@ -43,7 +44,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			break
 		}
-		c.translateBranchingStmt(caseClauses, false, c.translateExpr, nil, label)
+		c.translateBranchingStmt(caseClauses, initStmts, false, c.translateExpr, nil, label)
 
 	case *ast.SwitchStmt:
 		c.translateStmt(s.Init, "")
@@ -62,7 +63,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				})
 			}
 		}
-		c.translateBranchingStmt(s.Body.List, true, translateCond, nil, label)
+		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, nil, label)
 
 	case *ast.TypeSwitchStmt:
 		c.translateStmt(s.Init, "")
@@ -98,7 +99,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			c.Printf("%s = %s;", typeSwitchVar, value)
 		}
-		c.translateBranchingStmt(s.Body.List, true, translateCond, printCaseBodyPrefix, label)
+		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, printCaseBodyPrefix, label)
 
 	case *ast.ForStmt:
 		c.translateStmt(s.Init, "")
@@ -296,12 +297,12 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Printf(`throw new Go$Panic("Statement not supported: go");`)
 
 	default:
-		c.Printf("%s;", c.translateSimpleStmt(stmt))
+		c.Printf("%s%s;", label, c.translateSimpleStmt(stmt))
 
 	}
 }
 
-func (c *PkgContext) translateBranchingStmt(caseClauses []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) string, printCaseBodyPrefix func([]ast.Expr), label string) {
+func (c *PkgContext) translateBranchingStmt(caseClauses []ast.Stmt, initStmts []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) string, printCaseBodyPrefix func([]ast.Expr), label string) {
 	if len(caseClauses) == 0 {
 		return
 	}
@@ -339,7 +340,11 @@ func (c *PkgContext) translateBranchingStmt(caseClauses []ast.Stmt, isSwitch boo
 			for i, cond := range caseClause.List {
 				conds[i] = translateCond(cond)
 			}
-			c.Printf("%sif (%s) {", elsePrefix, strings.Join(conds, " || "))
+			initStmt := ""
+			if initStmts != nil && initStmts[i] != nil {
+				initStmt = c.translateSimpleStmt(initStmts[i]) + ", "
+			}
+			c.Printf("%sif (%s%s) {", elsePrefix, initStmt, strings.Join(conds, " || "))
 			c.Indent(func() {
 				if printCaseBodyPrefix != nil {
 					printCaseBodyPrefix(caseClause.List)

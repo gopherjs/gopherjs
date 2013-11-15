@@ -230,7 +230,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				obj := c.info.Objects[spec.Name]
 				typeName := c.objectName(obj)
 				c.Printf("var %s;", typeName)
-				c.translateSpec(spec)
+				c.translateTypeSpec(spec)
 				for _, fun := range functionsByType[obj.Type()] {
 					_, isStruct := obj.Type().Underlying().(*types.Struct)
 					c.translateMethod(typeName, isStruct, fun)
@@ -310,127 +310,104 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	}), nil
 }
 
-func (c *PkgContext) translateSpec(spec ast.Spec) {
-	switch s := spec.(type) {
-	case *ast.ValueSpec:
-		for _, singleSpec := range c.splitValueSpec(s) {
-			lhs := make([]ast.Expr, len(singleSpec.Names))
-			for i, name := range singleSpec.Names {
-				lhs[i] = name
+func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
+	obj := c.info.Objects[s.Name]
+	typeName := c.objectName(obj)
+	if isWrapped(obj.Type()) {
+		c.Printf(`%s = function(v) { this.Go$val = v; };`, typeName)
+		c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.Go$val; };`, typeName, typeName)
+		c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", typeName)
+		c.Printf("%s.Go$Pointer.Go$nil = new %s.Go$Pointer(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
+		return
+	}
+	switch t := obj.Type().Underlying().(type) {
+	case *types.Struct:
+		params := make([]string, t.NumFields())
+		for i := 0; i < t.NumFields(); i++ {
+			field := t.Field(i)
+			name := field.Name()
+			if field.Name() == "_" {
+				name = fmt.Sprintf("Go$blank%d", i)
 			}
-			c.translateStmt(&ast.AssignStmt{
-				Lhs: lhs,
-				Tok: token.DEFINE,
-				Rhs: singleSpec.Values,
-			}, "")
+			params[i] = name + "_"
 		}
-
-	case *ast.TypeSpec:
-		obj := c.info.Objects[s.Name]
-		typeName := c.objectName(obj)
-		if isWrapped(obj.Type()) {
-			c.Printf(`%s = function(v) { this.Go$val = v; };`, typeName)
-			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.Go$val; };`, typeName, typeName)
-			c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", typeName)
-			c.Printf("%s.Go$Pointer.Go$nil = new %s.Go$Pointer(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
-			return
-		}
-		switch t := obj.Type().Underlying().(type) {
-		case *types.Struct:
-			params := make([]string, t.NumFields())
+		c.Printf("%s = function(%s) {", typeName, strings.Join(params, ", "))
+		c.Indent(func() {
+			c.Printf("this.Go$id = Go$idCounter++;")
+			c.Printf("this.Go$val = this;")
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)
 				name := field.Name()
 				if field.Name() == "_" {
 					name = fmt.Sprintf("Go$blank%d", i)
 				}
-				params[i] = name + "_"
+				c.Printf("this.%s = %s_ !== undefined ? %s_ : %s;", name, name, name, c.zeroValue(field.Type()))
 			}
-			c.Printf("%s = function(%s) {", typeName, strings.Join(params, ", "))
-			c.Indent(func() {
-				c.Printf("this.Go$id = Go$idCounter++;")
-				c.Printf("this.Go$val = this;")
-				for i := 0; i < t.NumFields(); i++ {
-					field := t.Field(i)
-					name := field.Name()
-					if field.Name() == "_" {
-						name = fmt.Sprintf("Go$blank%d", i)
-					}
-					c.Printf("this.%s = %s_ !== undefined ? %s_ : %s;", name, name, name, c.zeroValue(field.Type()))
-				}
-			})
-			c.Printf("};")
-			c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, typeName)
-			c.Printf("%s.Go$NonPointer = function(v) { this.Go$val = v; };", typeName)
-			c.Printf("%s.Go$NonPointer.prototype.Go$uncomparable = true;", typeName)
-			fields := make([]string, t.NumFields())
-			for i := range fields {
-				field := t.Field(i)
-				name := "Go$Pointer.Go$nil"
-				if !field.Anonymous() {
-					name = fmt.Sprintf(`Go$newDataPointer("%s")`, field.Name())
-				}
-				path := "Go$Pointer.Go$nil"
-				if !field.IsExported() {
-					path = fmt.Sprintf(`Go$newDataPointer("%s.%s")`, field.Pkg().Name(), field.Name())
-				}
-				tag := "Go$Pointer.Go$nil"
-				if t.Tag(i) != "" {
-					tag = fmt.Sprintf("Go$newDataPointer(%#v)", t.Tag(i))
-				}
-				fields[i] = fmt.Sprintf(`new Go$reflect.structField(%s, %s, %s.prototype.Go$type(), %s, 0)`, name, path, c.typeName(field.Type()), tag)
+		})
+		c.Printf("};")
+		c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, typeName)
+		c.Printf("%s.Go$NonPointer = function(v) { this.Go$val = v; };", typeName)
+		c.Printf("%s.Go$NonPointer.prototype.Go$uncomparable = true;", typeName)
+		fields := make([]string, t.NumFields())
+		for i := range fields {
+			field := t.Field(i)
+			name := "Go$Pointer.Go$nil"
+			if !field.Anonymous() {
+				name = fmt.Sprintf(`Go$newDataPointer("%s")`, field.Name())
 			}
-			uncommonType := fmt.Sprintf(`new Go$reflect.uncommonType(Go$newDataPointer("%s"), Go$newDataPointer("%s.%s"), Go$Slice.Go$nil)`, typeName, obj.Pkg().Name(), typeName)
-			c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, %s, null, Go$newDataPointer("%s.%s"), %s, null); t.structType = new Go$reflect.structType(null, new Go$Slice([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), uncommonType, strings.Join(fields, ", "))
-			for i := 0; i < t.NumFields(); i++ {
-				field := t.Field(i)
-				if field.Anonymous() {
-					fieldType := field.Type()
-					_, isPointer := fieldType.(*types.Pointer)
-					_, isUnderlyingInterface := fieldType.Underlying().(*types.Interface)
-					if !isPointer && !isUnderlyingInterface {
-						fieldType = types.NewPointer(fieldType) // strange, seems like a bug in go/types
-					}
-					methods := fieldType.MethodSet()
-					for j := 0; j < methods.Len(); j++ {
-						name := methods.At(j).Obj().Name()
-						sig := methods.At(j).Type().(*types.Signature)
-						params := make([]string, sig.Params().Len())
-						for k := range params {
-							params[k] = sig.Params().At(k).Name()
-						}
-						value := "this." + field.Name()
-						if isWrapped(field.Type()) {
-							value = fmt.Sprintf("new %s(%s)", field.Name(), value)
-						}
-						paramList := strings.Join(params, ", ")
-						c.Printf("%s.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, name, paramList, value, name, paramList)
-						c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.Go$val.%s(%s); };", typeName, name, paramList, name, paramList)
-					}
-				}
+			path := "Go$Pointer.Go$nil"
+			if !field.IsExported() {
+				path = fmt.Sprintf(`Go$newDataPointer("%s.%s")`, field.Pkg().Name(), field.Name())
 			}
-		case *types.Interface:
-			c.Printf("%s = { Go$implementedBy: [] };", typeName)
-		default:
-			underlyingTypeName := c.typeName(t)
-			c.Printf("%s = function() { %s.apply(this, arguments); };", typeName, underlyingTypeName)
-			c.Printf("%s.prototype.Go$key = function() { return \"%s$\" + %s.prototype.Go$key.apply(this); };", typeName, typeName, underlyingTypeName)
-			c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", typeName)
-			c.Printf("%s.Go$Pointer.Go$nil = new %s.Go$Pointer(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
-			switch t.(type) {
-			case *types.Slice:
-				c.Printf("%s.Go$nil = new %s({ isNil: true, length: 0 });", typeName, typeName)
-			case *types.Pointer:
-				c.Printf("%s.Go$nil = Go$Pointer.Go$nil;", typeName)
+			tag := "Go$Pointer.Go$nil"
+			if t.Tag(i) != "" {
+				tag = fmt.Sprintf("Go$newDataPointer(%#v)", t.Tag(i))
+			}
+			fields[i] = fmt.Sprintf(`new Go$reflect.structField(%s, %s, %s.prototype.Go$type(), %s, 0)`, name, path, c.typeName(field.Type()), tag)
+		}
+		uncommonType := fmt.Sprintf(`new Go$reflect.uncommonType(Go$newDataPointer("%s"), Go$newDataPointer("%s.%s"), Go$Slice.Go$nil)`, typeName, obj.Pkg().Name(), typeName)
+		c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, %s, null, Go$newDataPointer("%s.%s"), %s, null); t.structType = new Go$reflect.structType(null, new Go$Slice([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), uncommonType, strings.Join(fields, ", "))
+		for i := 0; i < t.NumFields(); i++ {
+			field := t.Field(i)
+			if field.Anonymous() {
+				fieldType := field.Type()
+				_, isPointer := fieldType.(*types.Pointer)
+				_, isUnderlyingInterface := fieldType.Underlying().(*types.Interface)
+				if !isPointer && !isUnderlyingInterface {
+					fieldType = types.NewPointer(fieldType) // strange, seems like a bug in go/types
+				}
+				methods := fieldType.MethodSet()
+				for j := 0; j < methods.Len(); j++ {
+					name := methods.At(j).Obj().Name()
+					sig := methods.At(j).Type().(*types.Signature)
+					params := make([]string, sig.Params().Len())
+					for k := range params {
+						params[k] = sig.Params().At(k).Name()
+					}
+					value := "this." + field.Name()
+					if isWrapped(field.Type()) {
+						value = fmt.Sprintf("new %s(%s)", field.Name(), value)
+					}
+					paramList := strings.Join(params, ", ")
+					c.Printf("%s.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, name, paramList, value, name, paramList)
+					c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.Go$val.%s(%s); };", typeName, name, paramList, name, paramList)
+				}
 			}
 		}
-
-	case *ast.ImportSpec:
-		// ignored
-
+	case *types.Interface:
+		c.Printf("%s = { Go$implementedBy: [] };", typeName)
 	default:
-		panic(fmt.Sprintf("Unhandled spec: %T\n", s))
-
+		underlyingTypeName := c.typeName(t)
+		c.Printf("%s = function() { %s.apply(this, arguments); };", typeName, underlyingTypeName)
+		c.Printf("%s.prototype.Go$key = function() { return \"%s$\" + %s.prototype.Go$key.apply(this); };", typeName, typeName, underlyingTypeName)
+		c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", typeName)
+		c.Printf("%s.Go$Pointer.Go$nil = new %s.Go$Pointer(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
+		switch t.(type) {
+		case *types.Slice:
+			c.Printf("%s.Go$nil = new %s({ isNil: true, length: 0 });", typeName, typeName)
+		case *types.Pointer:
+			c.Printf("%s.Go$nil = Go$Pointer.Go$nil;", typeName)
+		}
 	}
 }
 

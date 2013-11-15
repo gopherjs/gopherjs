@@ -147,7 +147,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return fmt.Sprintf("new Go$Map([%s])", strings.Join(elements, ", "))
 		case *types.Struct:
 			structVar := c.newVariable("_struct")
-			c.translateSpec(&ast.TypeSpec{
+			c.translateTypeSpec(&ast.TypeSpec{
 				Name: c.newIdent(structVar, t),
 				Type: e.Type,
 			})

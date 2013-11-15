@@ -287,6 +287,17 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 		c.Printf("Go$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), args)
 
+	case *ast.DeclStmt:
+		decl := s.Decl.(*ast.GenDecl)
+		switch decl.Tok {
+		case token.VAR, token.CONST:
+			c.Printf("%s%s;", label, c.translateSimpleStmt(stmt))
+		case token.TYPE:
+			for _, spec := range decl.Specs {
+				c.translateTypeSpec(spec.(*ast.TypeSpec))
+			}
+		}
+
 	case *ast.LabeledStmt:
 		c.translateStmt(s.Stmt, s.Label.Name+": ")
 
@@ -295,6 +306,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.GoStmt:
 		c.Printf(`throw new Go$Panic("Statement not supported: go");`)
+
+	case *ast.EmptyStmt, nil:
+		// skip
 
 	default:
 		c.Printf("%s%s;", label, c.translateSimpleStmt(stmt))
@@ -529,16 +543,24 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 		return c.translateExpr(s.X)
 
 	case *ast.DeclStmt:
+		var parts []string
 		for _, spec := range s.Decl.(*ast.GenDecl).Specs {
-			c.translateSpec(spec)
+			for _, singleSpec := range c.splitValueSpec(spec.(*ast.ValueSpec)) {
+				lhs := make([]ast.Expr, len(singleSpec.Names))
+				for i, name := range singleSpec.Names {
+					lhs[i] = name
+				}
+				parts = append(parts, c.translateSimpleStmt(&ast.AssignStmt{
+					Lhs: lhs,
+					Tok: token.DEFINE,
+					Rhs: singleSpec.Values,
+				}))
+			}
 		}
-		return ""
+		return strings.Join(parts, ", ")
 
 	case *ast.SendStmt:
 		return `throw new Go$Panic("Statement not supported: send")`
-
-	case *ast.EmptyStmt, nil:
-		return ""
 
 	default:
 		panic(fmt.Sprintf("Unhandled statement: %T\n", s))

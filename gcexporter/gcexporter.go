@@ -77,13 +77,10 @@ func Write(pkg *types.Package, out io.Writer, sizes types.Sizes) {
 			case basic.Info()&types.IsFloat != 0:
 				f, _ := exact.Float64Val(o.Val())
 				val = strconv.FormatFloat(f, 'b', -1, 64)
-			// case basic.Info()&types.IsComplex != 0:
-			// 	r, _ := exact.Float64Val(exact.Real(value))
-			// 	i, _ := exact.Float64Val(exact.Imag(value))
-			// 	if basic.Kind() == types.UntypedComplex {
-			// 		exprType = types.Typ[types.Complex128]
-			// 	}
-			// 	return fmt.Sprintf("new %s(%s, %s)", c.typeName(exprType), strconv.FormatFloat(r, 'g', -1, 64), strconv.FormatFloat(i, 'g', -1, 64))
+			case basic.Info()&types.IsComplex != 0:
+				r, _ := exact.Float64Val(exact.Real(o.Val()))
+				i, _ := exact.Float64Val(exact.Imag(o.Val()))
+				val = fmt.Sprintf("(%s+%si)", strconv.FormatFloat(r, 'b', -1, 64), strconv.FormatFloat(i, 'b', -1, 64))
 			case basic.Info()&types.IsString != 0:
 				val = fmt.Sprintf("%#v", exact.StringVal(o.Val()))
 			default:

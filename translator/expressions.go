@@ -171,21 +171,21 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 	case *ast.FuncLit:
 		return strings.TrimSpace(string(c.CatchOutput(func() {
-			outerVarNames := c.usedVarNames
-			params := c.translateParams(e.Type)
-			closurePrefix := "("
-			closureSuffix := ")"
-			if len(c.escapingVars) != 0 {
-				list := strings.Join(c.escapingVars, ", ")
-				closurePrefix = "(function(" + list + ") { return "
-				closureSuffix = "; })(" + list + ")"
-			}
-			c.Printf("%sfunction(%s) {", closurePrefix, strings.Join(params, ", "))
-			c.Indent(func() {
-				c.translateFunctionBody(e.Body.List, exprType.(*types.Signature))
+			c.newScope(func() {
+				params := c.translateParams(e.Type)
+				closurePrefix := "("
+				closureSuffix := ")"
+				if len(c.escapingVars) != 0 {
+					list := strings.Join(c.escapingVars, ", ")
+					closurePrefix = "(function(" + list + ") { return "
+					closureSuffix = "; })(" + list + ")"
+				}
+				c.Printf("%sfunction(%s) {", closurePrefix, strings.Join(params, ", "))
+				c.Indent(func() {
+					c.translateFunctionBody(e.Body.List, exprType.(*types.Signature))
+				})
+				c.Printf("}%s", closureSuffix)
 			})
-			c.Printf("}%s", closureSuffix)
-			c.usedVarNames = outerVarNames
 		})))
 
 	case *ast.UnaryExpr:

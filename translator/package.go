@@ -665,7 +665,7 @@ func (c *PkgContext) newVariable(name string) string {
 }
 
 func (c *PkgContext) newScope(f func()) {
-	outerVarNames := make(map[string]int)
+	outerVarNames := make(map[string]int, len(c.allVarNames))
 	for k, v := range c.allVarNames {
 		outerVarNames[k] = v
 	}

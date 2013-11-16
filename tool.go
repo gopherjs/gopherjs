@@ -47,8 +47,16 @@ func main() {
 	cmd := flag.Arg(0)
 	switch cmd {
 	case "build":
-		basename := path.Base(flag.Arg(1))
-		err := Build(flag.Args()[1:], basename[:len(basename)-3]+".js")
+		buildFlags := flag.NewFlagSet("build", flag.ContinueOnError)
+		var pkgObj string
+		buildFlags.StringVar(&pkgObj, "o", "", "")
+		buildFlags.Parse(flag.Args()[1:])
+
+		if pkgObj == "" {
+			basename := path.Base(buildFlags.Arg(0))
+			pkgObj = basename[:len(basename)-3] + ".js"
+		}
+		err := Build(buildFlags.Args(), pkgObj)
 		HandleError(err)
 		os.Exit(0)
 
@@ -91,6 +99,7 @@ func main() {
 		toolFlags.String("D", "", "")
 		toolFlags.String("I", "", "")
 		toolFlags.Parse(flag.Args()[2:])
+
 		if len(tool) == 2 {
 			switch tool[1] {
 			case 'g':

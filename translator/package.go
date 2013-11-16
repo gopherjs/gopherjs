@@ -239,6 +239,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			}
 
 			// package functions
+			packageVarNames := c.usedVarNames
 			for _, fun := range functionsByType[nil] {
 				if isBlank(fun.Name) {
 					continue
@@ -258,9 +259,10 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						return
 					}
 
-					c.translateFunctionBody(fun.Body.List, c.info.Objects[fun.Name].Type().(*types.Signature), params)
+					c.translateFunctionBody(fun.Body.List, c.info.Objects[fun.Name].Type().(*types.Signature))
 				})
 				c.Printf("};")
+				c.usedVarNames = packageVarNames
 			}
 
 			// constants
@@ -301,7 +303,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			// init function
 			c.Printf("Go$pkg.init = function() {")
 			c.Indent(func() {
-				c.translateFunctionBody(append(intVarStmts, initStmts...), nil, nil)
+				c.translateFunctionBody(append(intVarStmts, initStmts...), nil)
 			})
 			c.Printf("};")
 
@@ -472,7 +474,7 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 				}, body...)
 			}
 
-			c.translateFunctionBody(body, sig, params)
+			c.translateFunctionBody(body, sig)
 		})
 		c.Printf("};")
 	}
@@ -498,10 +500,8 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 	}
 }
 
-func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signature, params []string) {
+func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signature) {
 	outerVarNames := c.usedVarNames
-	defer func() { c.usedVarNames = outerVarNames }()
-	c.usedVarNames = append(c.usedVarNames, params...)
 
 	body := c.CatchOutput(func() {
 		var resultNames []ast.Expr
@@ -560,7 +560,7 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 		}
 	})
 
-	innerVarNames := c.usedVarNames[len(outerVarNames)+len(params):]
+	innerVarNames := c.usedVarNames[len(outerVarNames):]
 	if len(innerVarNames) != 0 {
 		c.Printf("var %s;", strings.Join(innerVarNames, ", "))
 	}
@@ -568,7 +568,6 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 }
 
 func (c *PkgContext) translateParams(t *ast.FuncType) []string {
-	n := c.usedVarNames
 	params := make([]string, 0)
 	for _, param := range t.Params.List {
 		for _, ident := range param.Names {
@@ -579,7 +578,6 @@ func (c *PkgContext) translateParams(t *ast.FuncType) []string {
 			params = append(params, c.objectName(c.info.Objects[ident]))
 		}
 	}
-	c.usedVarNames = n
 	return params
 }
 

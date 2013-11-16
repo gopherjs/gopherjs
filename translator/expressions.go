@@ -171,6 +171,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 	case *ast.FuncLit:
 		return strings.TrimSpace(string(c.CatchOutput(func() {
+			outerVarNames := c.usedVarNames
 			params := c.translateParams(e.Type)
 			closurePrefix := "("
 			closureSuffix := ")"
@@ -181,9 +182,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			c.Printf("%sfunction(%s) {", closurePrefix, strings.Join(params, ", "))
 			c.Indent(func() {
-				c.translateFunctionBody(e.Body.List, exprType.(*types.Signature), params)
+				c.translateFunctionBody(e.Body.List, exprType.(*types.Signature))
 			})
 			c.Printf("}%s", closureSuffix)
+			c.usedVarNames = outerVarNames
 		})))
 
 	case *ast.UnaryExpr:

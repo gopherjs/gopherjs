@@ -6,22 +6,40 @@ import (
 	"flag"
 	"fmt"
 	"github.com/neelance/gopherjs/translator"
+	"go/ast"
 	"go/build"
 	"go/parser"
+	"go/scanner"
 	"go/token"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 	"syscall"
+	"time"
 )
 
-type Mode int
+type Package struct {
+	*build.Package
+	SrcModTime     time.Time
+	JavaScriptCode []byte
+}
 
-const (
-	Build Mode = iota
-	Install
-)
+var BuildContext = &build.Context{
+	GOROOT:        build.Default.GOROOT,
+	GOPATH:        build.Default.GOPATH,
+	GOOS:          build.Default.GOOS,
+	GOARCH:        build.Default.GOARCH,
+	Compiler:      "gc",
+	InstallSuffix: "js",
+}
+var TypesConfig = &types.Config{
+	Packages: make(map[string]*types.Package),
+}
+var FileSet = token.NewFileSet()
+var Packages = make(map[string]*Package)
+var InstallMode = false
 
 func main() {
 	flag.Parse()
@@ -30,12 +48,12 @@ func main() {
 	switch cmd {
 	case "build":
 		basename := path.Base(flag.Arg(1))
-		err := Do(Build, flag.Arg(1), basename[:len(basename)-3]+".js")
+		err := Build(flag.Arg(1), basename[:len(basename)-3]+".js")
 		HandleError(err)
 		os.Exit(0)
 
 	case "install":
-		err := Do(Install, flag.Arg(1), "")
+		err := Install(flag.Arg(1))
 		HandleError(err)
 		os.Exit(0)
 
@@ -46,7 +64,7 @@ func main() {
 			tempfile.Close()
 			os.Remove(tempfile.Name())
 		}()
-		err = Do(Build, flag.Arg(1), tempfile.Name())
+		err = Build(flag.Arg(1), tempfile.Name())
 		HandleError(err)
 
 		node := exec.Command("node", append([]string{tempfile.Name()}, flag.Args()[2:]...)...)
@@ -75,7 +93,7 @@ func main() {
 			switch tool[1] {
 			case 'g':
 				basename := path.Base(toolFlags.Arg(0))
-				err := Do(Build, toolFlags.Arg(0), basename[:len(basename)-3]+".js")
+				err := Build(toolFlags.Arg(0), basename[:len(basename)-3]+".js")
 				HandleError(err)
 				os.Exit(0)
 			}
@@ -119,94 +137,207 @@ func HandleError(err error) {
 	os.Exit(1)
 }
 
-func Do(mode Mode, filename, pkgObj string) error {
-	b := &Builder{
-		BuildContext: &build.Context{
-			GOROOT:        build.Default.GOROOT,
-			GOPATH:        build.Default.GOPATH,
-			GOOS:          build.Default.GOOS,
-			GOARCH:        build.Default.GOARCH,
-			Compiler:      "gc",
-			InstallSuffix: "js",
-		},
-		TypesConfig: &types.Config{
-			Packages: make(map[string]*types.Package),
-		},
-		FileSet:  token.NewFileSet(),
-		Packages: make(map[string]*BuilderPackage),
-	}
-
-	var pkg *BuilderPackage
-	switch mode {
-	case Install:
-		buildPkg, err := b.BuildContext.Import(filename, "", 0)
-		if err != nil {
-			return err
-		}
-		pkg = &BuilderPackage{Package: buildPkg}
-		pkgObj = pkg.PkgObj
-		if pkg.IsCommand() {
-			pkgObj = pkg.BinDir + "/" + path.Base(pkg.ImportPath) + ".js"
-		}
-
-	case Build:
-		file, err := parser.ParseFile(b.FileSet, filename, nil, parser.ImportsOnly)
-		if err != nil {
-			return err
-		}
-
-		imports := make([]string, len(file.Imports))
-		for i, imp := range file.Imports {
-			imports[i] = imp.Path.Value[1 : len(imp.Path.Value)-1]
-		}
-
-		pkg = &BuilderPackage{
-			Package: &build.Package{
-				Name:       "main",
-				ImportPath: "main",
-				Imports:    imports,
-				Dir:        path.Dir(filename),
-				GoFiles:    []string{path.Base(filename)},
-			},
-		}
-	}
-
-	err := b.BuildPackage(pkg)
+func Build(filename, pkgObj string) error {
+	file, err := parser.ParseFile(FileSet, filename, nil, parser.ImportsOnly)
 	if err != nil {
-		if err == PkgObjUpToDate {
+		return err
+	}
+
+	imports := make([]string, len(file.Imports))
+	for i, imp := range file.Imports {
+		imports[i] = imp.Path.Value[1 : len(imp.Path.Value)-1]
+	}
+
+	pkg := &Package{
+		Package: &build.Package{
+			Name:       "main",
+			ImportPath: "main",
+			Imports:    imports,
+			Dir:        path.Dir(filename),
+			GoFiles:    []string{path.Base(filename)},
+			PkgObj:     pkgObj,
+		},
+	}
+	return BuildPackage(pkg)
+}
+
+func Install(filename string) error {
+	buildPkg, err := BuildContext.Import(filename, "", 0)
+	if err != nil {
+		return err
+	}
+	pkg := &Package{Package: buildPkg}
+	if pkg.IsCommand() {
+		pkg.PkgObj = pkg.BinDir + "/" + path.Base(pkg.ImportPath) + ".js"
+	}
+	InstallMode = true
+	return BuildPackage(pkg)
+}
+
+func BuildPackage(pkg *Package) error {
+	if pkg.ImportPath == "unsafe" {
+		TypesConfig.Packages["unsafe"] = types.Unsafe
+		return nil
+	}
+
+	TypesConfig.Import = func(imports map[string]*types.Package, path string) (*types.Package, error) {
+		if _, found := Packages[path]; found {
+			return imports[path], nil
+		}
+
+		otherPkg, err := BuildContext.Import(path, pkg.Dir, build.AllowBinary)
+		if err != nil {
+			return nil, err
+		}
+		pkg := &Package{Package: otherPkg}
+		Packages[path] = pkg
+		if err := BuildPackage(pkg); err != nil {
+			return nil, err
+		}
+
+		return imports[path], nil
+	}
+
+	if InstallMode {
+		if fileInfo, err := os.Stat(os.Args[0]); err == nil { // gopherjs itself
+			pkg.SrcModTime = fileInfo.ModTime()
+		}
+
+		for _, importedPkgPath := range pkg.Imports {
+			_, err := TypesConfig.Import(TypesConfig.Packages, importedPkgPath)
+			if err != nil {
+				return err
+			}
+			impModeTime := Packages[importedPkgPath].SrcModTime
+			if impModeTime.After(pkg.SrcModTime) {
+				pkg.SrcModTime = impModeTime
+			}
+		}
+
+		for _, name := range pkg.GoFiles {
+			fileInfo, err := os.Stat(pkg.Dir + "/" + name)
+			if err != nil {
+				return err
+			}
+			if fileInfo.ModTime().After(pkg.SrcModTime) {
+				pkg.SrcModTime = fileInfo.ModTime()
+			}
+		}
+
+		pkgObjFileInfo, err := os.Stat(pkg.PkgObj)
+		if err == nil && !pkg.SrcModTime.After(pkgObjFileInfo.ModTime()) {
+			// package object is up to date, load from disk if library
+			if pkg.IsCommand() {
+				return nil
+			}
+
+			objFile, err := os.Open(pkg.PkgObj)
+			if err != nil {
+				return err
+			}
+			defer objFile.Close()
+
+			pkg.JavaScriptCode, _, err = translator.ReadArchive(TypesConfig.Packages, pkg.PkgObj, pkg.ImportPath, objFile)
+			if err != nil {
+				return err
+			}
+
 			return nil
 		}
+	}
+
+	files := make([]*ast.File, 0)
+	var errList translator.ErrorList
+	for _, name := range pkg.GoFiles {
+		fullName := pkg.Dir + "/" + name
+		r, err := os.Open(fullName)
+		if err != nil {
+			return err
+		}
+		file, err := parser.ParseFile(FileSet, fullName, r, 0)
+		r.Close()
+		if err != nil {
+			if list, isList := err.(scanner.ErrorList); isList {
+				for _, entry := range list {
+					errList = append(errList, entry)
+				}
+				continue
+			}
+			errList = append(errList, err)
+			continue
+		}
+		files = append(files, file)
+	}
+	if errList != nil {
+		return errList
+	}
+
+	var err error
+	pkg.JavaScriptCode, err = translator.TranslatePackage(pkg.ImportPath, files, FileSet, TypesConfig)
+	if err != nil {
 		return err
 	}
 
 	if !pkg.IsCommand() {
-		return nil // already stored by BuildPackage
+		if InstallMode {
+			if err := os.MkdirAll(path.Dir(pkg.PkgObj), 0777); err != nil {
+				return err
+			}
+			file, err := os.Create(pkg.PkgObj)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+			translator.WriteArchive(pkg.JavaScriptCode, TypesConfig.Packages[pkg.ImportPath], file)
+		}
+		return nil
 	}
 
 	webMode := false
-	webModeConst := b.TypesConfig.Packages[pkg.ImportPath].Scope().Lookup("gopherjsWebMode")
+	webModeConst := TypesConfig.Packages[pkg.ImportPath].Scope().Lookup("gopherjsWebMode")
 	if webModeConst != nil {
 		webMode = exact.BoolVal(webModeConst.(*types.Const).Val())
 	}
 
-	if err := os.MkdirAll(path.Dir(pkgObj), 0777); err != nil {
+	if err := os.MkdirAll(path.Dir(pkg.PkgObj), 0777); err != nil {
 		return err
 	}
 	var perm os.FileMode = 0666
 	if !webMode {
 		perm = 0777
 	}
-	file, err := os.OpenFile(pkgObj, os.O_RDWR|os.O_CREATE|os.O_TRUNC, perm)
+	file, err := os.OpenFile(pkg.PkgObj, os.O_RDWR|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return err
 	}
+	defer file.Close()
+
 	if !webMode {
 		fmt.Fprintln(file, "#!/usr/bin/env node")
 	}
 	fmt.Fprintln(file, `"use strict";`)
 	fmt.Fprintf(file, "var Go$webMode = %t;\n", webMode)
-	file.Write(pkg.JavaScriptCode)
-	file.Close()
+	file.WriteString(strings.TrimSpace(translator.Prelude))
+	file.WriteString("\n")
+
+	Packages[pkg.ImportPath] = pkg
+	dependencies, err := translator.GetAllDependencies(pkg.ImportPath, TypesConfig)
+	if err != nil {
+		return err
+	}
+
+	for _, dep := range dependencies {
+		file.WriteString("Go$packages[\"" + dep.Path() + "\"] = (function() {\n")
+		file.Write(Packages[dep.Path()].JavaScriptCode)
+		file.WriteString("})();\n")
+	}
+
+	translator.WriteInterfaces(dependencies, file, false)
+
+	for _, dep := range dependencies {
+		file.WriteString("Go$packages[\"" + dep.Path() + "\"].init();\n")
+	}
+	file.WriteString("Go$packages[\"" + pkg.ImportPath + "\"].main();\n")
 
 	return nil
 }

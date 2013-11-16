@@ -48,13 +48,15 @@ func main() {
 	switch cmd {
 	case "build":
 		basename := path.Base(flag.Arg(1))
-		err := Build(flag.Arg(1), basename[:len(basename)-3]+".js")
+		err := Build(flag.Args()[1:], basename[:len(basename)-3]+".js")
 		HandleError(err)
 		os.Exit(0)
 
 	case "install":
-		err := Install(flag.Arg(1))
-		HandleError(err)
+		for _, pkgPath := range flag.Args()[1:] {
+			err := Install(pkgPath)
+			HandleError(err)
+		}
 		os.Exit(0)
 
 	case "run":
@@ -64,7 +66,7 @@ func main() {
 			tempfile.Close()
 			os.Remove(tempfile.Name())
 		}()
-		err = Build(flag.Arg(1), tempfile.Name())
+		err = Build(flag.Args()[1:], tempfile.Name())
 		HandleError(err)
 
 		node := exec.Command("node", append([]string{tempfile.Name()}, flag.Args()[2:]...)...)
@@ -93,7 +95,7 @@ func main() {
 			switch tool[1] {
 			case 'g':
 				basename := path.Base(toolFlags.Arg(0))
-				err := Build(toolFlags.Arg(0), basename[:len(basename)-3]+".js")
+				err := Build([]string{toolFlags.Arg(0)}, basename[:len(basename)-3]+".js")
 				HandleError(err)
 				os.Exit(0)
 			}
@@ -137,32 +139,25 @@ func HandleError(err error) {
 	os.Exit(1)
 }
 
-func Build(filename, pkgObj string) error {
-	file, err := parser.ParseFile(FileSet, filename, nil, parser.ImportsOnly)
+func Build(filenames []string, pkgObj string) error {
+	wd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-
-	imports := make([]string, len(file.Imports))
-	for i, imp := range file.Imports {
-		imports[i] = imp.Path.Value[1 : len(imp.Path.Value)-1]
-	}
-
 	pkg := &Package{
 		Package: &build.Package{
 			Name:       "main",
 			ImportPath: "main",
-			Imports:    imports,
-			Dir:        path.Dir(filename),
-			GoFiles:    []string{path.Base(filename)},
+			Dir:        wd,
+			GoFiles:    filenames,
 			PkgObj:     pkgObj,
 		},
 	}
 	return BuildPackage(pkg)
 }
 
-func Install(filename string) error {
-	buildPkg, err := BuildContext.Import(filename, "", 0)
+func Install(pkgPath string) error {
+	buildPkg, err := BuildContext.Import(pkgPath, "", 0)
 	if err != nil {
 		return err
 	}
@@ -249,12 +244,14 @@ func BuildPackage(pkg *Package) error {
 	files := make([]*ast.File, 0)
 	var errList translator.ErrorList
 	for _, name := range pkg.GoFiles {
-		fullName := pkg.Dir + "/" + name
-		r, err := os.Open(fullName)
+		if !path.IsAbs(name) {
+			name = path.Join(pkg.Dir, name)
+		}
+		r, err := os.Open(name)
 		if err != nil {
 			return err
 		}
-		file, err := parser.ParseFile(FileSet, fullName, r, 0)
+		file, err := parser.ParseFile(FileSet, name, r, 0)
 		r.Close()
 		if err != nil {
 			if list, isList := err.(scanner.ErrorList); isList {

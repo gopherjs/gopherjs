@@ -68,16 +68,29 @@ func main() {
 		os.Exit(0)
 
 	case "run":
+		lastSourceArg := 1
+		for {
+			if !strings.HasSuffix(flag.Arg(lastSourceArg), ".go") {
+				break
+			}
+			lastSourceArg += 1
+		}
+		if lastSourceArg == 1 {
+			fmt.Fprintln(os.Stderr, "gopherjs run: no go files listed")
+			os.Exit(1)
+		}
+
 		tempfile, err := ioutil.TempFile("", path.Base(flag.Arg(1))+".")
 		HandleError(err)
 		defer func() {
 			tempfile.Close()
 			os.Remove(tempfile.Name())
 		}()
-		err = Build(flag.Args()[1:], tempfile.Name())
+
+		err = Build(flag.Args()[1:lastSourceArg], tempfile.Name())
 		HandleError(err)
 
-		node := exec.Command("node", append([]string{tempfile.Name()}, flag.Args()[2:]...)...)
+		node := exec.Command("node", append([]string{tempfile.Name()}, flag.Args()[lastSourceArg:]...)...)
 		node.Stdin = os.Stdin
 		node.Stdout = os.Stdout
 		node.Stderr = os.Stderr

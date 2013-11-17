@@ -203,7 +203,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			c.Printf("}")
 
 		case *types.Chan:
-			c.Printf(`throw new Go$Panic("Channels not supported");`)
+			// skip
 
 		default:
 			panic("")
@@ -223,7 +223,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			c.translateStmt(postLoopStmt, "")
 			c.Printf("continue%s;", label)
 		case token.GOTO:
-			c.Printf(`throw new Go$Panic("Statement not supported: goto");`)
+			c.Printf(`Go$throwRuntimeError("not supported by GopherJS: goto")`)
 		case token.FALLTHROUGH:
 			// handled in CaseClause
 		default:
@@ -302,10 +302,10 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.translateStmt(s.Stmt, s.Label.Name+": ")
 
 	case *ast.SelectStmt:
-		c.Printf(`throw new Go$Panic("Statement not supported: select");`)
+		c.Printf(`Go$throwRuntimeError("not supported by GopherJS: select")`)
 
 	case *ast.GoStmt:
-		c.Printf(`throw new Go$Panic("Statement not supported: go");`)
+		c.Printf(`Go$throwRuntimeError("not supported by GopherJS: go")`)
 
 	case *ast.EmptyStmt, nil:
 		// skip

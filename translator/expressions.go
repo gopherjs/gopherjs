@@ -596,7 +596,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case "recover":
 					return "Go$recover()"
 				case "close":
-					// skip
+					return `Go$throwRuntimeError("not supported by GopherJS: close")`
 				default:
 					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))
 				}
@@ -707,11 +707,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return c.objectName(o)
 		case *types.TypeName:
 			return c.typeName(o.Type())
-		case *types.Builtin:
-			if e.Name == "recover" {
-				return "Go$recover"
-			}
-			panic(fmt.Sprintf("Unhandled object: %T\n", o))
 		case *types.Nil:
 			return c.zeroValue(c.info.Types[e])
 		case nil:

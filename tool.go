@@ -52,17 +52,60 @@ func main() {
 		buildFlags.StringVar(&pkgObj, "o", "", "")
 		buildFlags.Parse(flag.Args()[1:])
 
-		if pkgObj == "" {
-			basename := path.Base(buildFlags.Arg(0))
-			pkgObj = basename[:len(basename)-3] + ".js"
+		if buildFlags.NArg() == 0 {
+			wd, err := os.Getwd()
+			HandleError(err)
+			buildPkg, err := BuildContext.ImportDir(wd, 0)
+			HandleError(err)
+			pkg := &Package{Package: buildPkg}
+			pkg.ImportPath = wd
+			if pkgObj == "" {
+				pkgObj = path.Base(wd) + ".js"
+			}
+			pkg.PkgObj = pkgObj
+			err = BuildPackage(pkg)
+			HandleError(err)
+			os.Exit(0)
 		}
-		err := Build(buildFlags.Args(), pkgObj)
-		HandleError(err)
-		os.Exit(0)
+
+		if strings.HasSuffix(buildFlags.Arg(0), ".go") {
+			for _, arg := range buildFlags.Args() {
+				if !strings.HasSuffix(arg, ".go") {
+					fmt.Fprintln(os.Stderr, "named files must be .go files")
+					os.Exit(1)
+				}
+			}
+			if pkgObj == "" {
+				basename := path.Base(buildFlags.Arg(0))
+				pkgObj = basename[:len(basename)-3] + ".js"
+			}
+			err := Build(buildFlags.Args(), pkgObj)
+			HandleError(err)
+			os.Exit(0)
+		}
+
+		for _, pkgPath := range buildFlags.Args() {
+			buildPkg, err := BuildContext.Import(pkgPath, "", 0)
+			HandleError(err)
+			pkg := &Package{Package: buildPkg}
+			if pkgObj == "" {
+				pkgObj = path.Base(buildFlags.Arg(0)) + ".js"
+			}
+			pkg.PkgObj = pkgObj
+			err = BuildPackage(pkg)
+			HandleError(err)
+		}
 
 	case "install":
+		InstallMode = true
 		for _, pkgPath := range flag.Args()[1:] {
-			err := Install(pkgPath)
+			buildPkg, err := BuildContext.Import(pkgPath, "", 0)
+			HandleError(err)
+			pkg := &Package{Package: buildPkg}
+			if pkg.IsCommand() {
+				pkg.PkgObj = pkg.BinDir + "/" + path.Base(pkg.ImportPath) + ".js"
+			}
+			err = BuildPackage(pkg)
 			HandleError(err)
 		}
 		os.Exit(0)
@@ -175,19 +218,6 @@ func Build(filenames []string, pkgObj string) error {
 			PkgObj:     pkgObj,
 		},
 	}
-	return BuildPackage(pkg)
-}
-
-func Install(pkgPath string) error {
-	buildPkg, err := BuildContext.Import(pkgPath, "", 0)
-	if err != nil {
-		return err
-	}
-	pkg := &Package{Package: buildPkg}
-	if pkg.IsCommand() {
-		pkg.PkgObj = pkg.BinDir + "/" + path.Base(pkg.ImportPath) + ".js"
-	}
-	InstallMode = true
 	return BuildPackage(pkg)
 }
 

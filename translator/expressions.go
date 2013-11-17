@@ -352,7 +352,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					xIndex, xIsIndex := xUnary.X.(*ast.IndexExpr)
 					yIndex, yIsIndex := yUnary.X.(*ast.IndexExpr)
 					if xIsIndex && yIsIndex {
-						return fmt.Sprintf("Go$sliceIsEqual(%s, %s, %s, %s)", c.translateExpr(xIndex.X), c.translateExpr(xIndex.Index), c.translateExpr(yIndex.X), c.translateExpr(yIndex.Index))
+						return fmt.Sprintf("Go$sliceIsEqual(%s, %s, %s, %s)", c.translateExpr(xIndex.X), c.flatten64(xIndex.Index), c.translateExpr(yIndex.X), c.flatten64(yIndex.Index))
 					}
 				}
 				switch u.Elem().Underlying().(type) {

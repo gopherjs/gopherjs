@@ -440,7 +440,7 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 				lhsVar := c.newVariable("lhs")
 				indexVar := c.newVariable("index")
 				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X))
-				parts = append(parts, indexVar+" = "+c.flatten64(l.Index))
+				parts = append(parts, indexVar+" = "+c.translateExpr(l.Index))
 				lhs = &ast.IndexExpr{
 					X:     c.newIdent(lhsVar, c.info.Types[l.X]),
 					Index: c.newIdent(indexVar, c.info.Types[l.Index]),

@@ -553,6 +553,13 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 			c.Indent(func() {
 				c.Printf("if (Go$err.constructor !== Go$Panic) { Go$err = Go$wrapJavaScriptError(Go$err); };")
 				c.Printf("Go$errorStack.push({ frame: Go$getStackDepth(), error: Go$err });")
+				if resultNames == nil {
+					zeros := make([]string, sig.Results().Len())
+					for i := range zeros {
+						zeros[i] = c.zeroValue(sig.Results().At(i).Type())
+					}
+					c.Printf("return %s;", strings.Join(zeros, ", "))
+				}
 			})
 			c.Printf("} finally {")
 			c.Indent(func() {

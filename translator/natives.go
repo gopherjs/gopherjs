@@ -615,12 +615,12 @@ var natives = map[string]string{
 		Abs = Math.abs;
 		Exp = Math.exp;
 		Exp2 = function(x) { return Math.exp(x * Math.log(2)); };
-		// Exp2 = exp2; // TODO fix and use for higher precision
 		Frexp = frexp;
 		Ldexp = function(frac, exp) { return frac * Math.exp(exp * Math.log(2)); };
-		// Ldexp = ldexp; // TODO fix and use for higher precision
 		Log = Math.log;
 		Log2 = log2;
+		Modf = modf;
+		Pow = Math.pow;
 
 		// generated from bitcasts/bitcasts.go
 		Float32bits = (function(f) {

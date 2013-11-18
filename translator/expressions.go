@@ -857,7 +857,9 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		}
 
 	case *types.Pointer:
+		n, isNamed := t.Elem().(*types.Named)
 		s, isStruct := t.Elem().Underlying().(*types.Struct)
+
 		if isStruct && types.IsIdentical(exprType, types.Typ[types.UnsafePointer]) {
 			array := c.newVariable("_array")
 			target := c.newVariable("_struct")
@@ -865,6 +867,10 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			c.Printf("%s = %s;", target, c.zeroValue(t.Elem()))
 			c.loadStruct(array, target, s)
 			return target
+		}
+
+		if !isStruct && isNamed && !types.IsIdentical(exprType, desiredType) {
+			return fmt.Sprintf("(Go$obj = %s, new %s.Go$Pointer(Go$obj.Go$get, Go$obj.Go$set))", c.translateExpr(expr), c.typeName(n))
 		}
 
 	case *types.Struct, *types.Array:

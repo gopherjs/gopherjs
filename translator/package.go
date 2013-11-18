@@ -324,6 +324,10 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 		c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.Go$val; };`, typeName, typeName)
 		c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", typeName)
 		c.Printf("%s.Go$Pointer.Go$nil = new %s.Go$Pointer(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
+		switch t := obj.Type().Underlying().(type) {
+		case *types.Basic:
+			c.Printf(`%s.prototype.Go$type = function() { return new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.%s, %s, null, Go$newDataPointer("%s.%s"), null, null); };`, typeName, toJavaScriptType(t), typeName, obj.Pkg().Name(), obj.Name())
+		}
 		return
 	}
 	switch t := obj.Type().Underlying().(type) {

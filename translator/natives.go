@@ -759,7 +759,10 @@ var natives = map[string]string{
 	`,
 
 	"reflect": `
-		Go$reflect = { rtype: rtype, uncommonType: uncommonType, structType: structType, structField: structField, Struct: Go$pkg.Struct };
+		Go$reflect = {
+			rtype: rtype, uncommonType: uncommonType, structType: structType, structField: structField,
+			Bool: Go$pkg.Bool, Int: Go$pkg.Int, Int8: Go$pkg.Int8, Int16: Go$pkg.Int16, Int32: Go$pkg.Int32, Int64: Go$pkg.Int64, Uint: Go$pkg.Uint, Uint8: Go$pkg.Uint8, Uint16: Go$pkg.Uint16, Uint32: Go$pkg.Uint32, Uint64: Go$pkg.Uint64, Uintptr: Go$pkg.Uintptr, Float32: Go$pkg.Float32, Float64: Go$pkg.Float64, Complex64: Go$pkg.Complex64, Complex128: Go$pkg.Complex128, Array: Go$pkg.Array, Chan: Go$pkg.Chan, Func: Go$pkg.Func, Interface: Go$pkg.Interface, Map: Go$pkg.Map, Ptr: Go$pkg.Ptr, Slice: Go$pkg.Slice, String: Go$pkg.String, Struct: Go$pkg.Struct, UnsafePointer: Go$pkg.UnsafePointer
+		};
 
 		Go$Bool.prototype.Go$type       = function() { return new rtype( 0, 0, 0, 0, 0, Go$pkg.Bool      , Go$Bool      , null, { Go$get: function() { return "bool";       } }, null, null); };
 		Go$Int.prototype.Go$type        = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Int       , Go$Int       , null, { Go$get: function() { return "int";        } }, null, null); };

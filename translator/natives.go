@@ -852,9 +852,10 @@ var natives = map[string]string{
 		getgoroot = function() { return (typeof process !== 'undefined') ? (process.env["GOROOT"] || "") : "/"; };
 		SetFinalizer = function() {};
 		GOMAXPROCS = function(n) {
-			if (n != 1) {
+			if (n > 1) {
 				Go$throwRuntimeError("GOMAXPROCS != 1 is not possible in JavaScript.")
 			}
+			return 1;
 		};
 		GC = function() {};
 	`,

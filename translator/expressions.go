@@ -497,8 +497,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			recv := c.newVariable("_recv")
 			return fmt.Sprintf("(%s = %s, function(%s) { return %s.%s(%s); })", recv, c.translateExpr(e.X), strings.Join(parameters, ", "), recv, e.Sel.Name, strings.Join(parameters, ", "))
 		case types.MethodExpr:
-			parameters := append([]string{parameterName(sel.Obj().Type().(*types.Signature).Recv())}, makeParametersList()...)
-			return fmt.Sprintf("(function(%s) { return %s.prototype.%s.call(%s); })", strings.Join(parameters, ", "), c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name(), strings.Join(parameters, ", "))
+			recv := "recv"
+			if isWrapped(sel.Recv()) {
+				recv = fmt.Sprintf("(new %s(recv))", c.typeName(sel.Recv()))
+			}
+			parameters := makeParametersList()
+			return fmt.Sprintf("(function(%s) { return %s.%s(%s); })", strings.Join(append([]string{"recv"}, parameters...), ", "), recv, sel.Obj().(*types.Func).Name(), strings.Join(parameters, ", "))
 		case types.PackageObj:
 			return fmt.Sprintf("%s.%s", c.translateExpr(e.X), e.Sel.Name)
 		}

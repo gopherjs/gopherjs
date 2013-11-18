@@ -755,7 +755,7 @@ var natives = map[string]string{
 	`,
 
 	"os": `
-		Go$pkg.Args = new Go$Slice(Go$webMode ? [] : process.argv.slice(1));
+		Go$pkg.Args = new Go$Slice((typeof process !== 'undefined') ? process.argv.slice(1) : []);
 	`,
 
 	"reflect": `
@@ -846,7 +846,7 @@ var natives = map[string]string{
 	"runtime": `
 		Go$throwRuntimeError = function(msg) { throw new Go$Panic(new errorString(msg)) };
 		Go$pkg.sizeof_C_MStats = 3712;
-		getgoroot = function() { return Go$webMode ? "/" : (process.env["GOROOT"] || ""); };
+		getgoroot = function() { return (typeof process !== 'undefined') ? (process.env["GOROOT"] || "") : "/"; };
 		SetFinalizer = function() {};
 		GOMAXPROCS = function(n) {
 			if (n != 1) {
@@ -886,7 +886,7 @@ var natives = map[string]string{
 	`,
 
 	"syscall": `
-		if (!Go$webMode) {
+		if (typeof process !== 'undefined') {
 			var syscall = require("syscall");
 			Syscall = syscall.Syscall;
 			Syscall6 = syscall.Syscall6;

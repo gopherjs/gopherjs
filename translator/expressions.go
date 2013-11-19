@@ -101,8 +101,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			elements = make([]string, len(e.Elts)*2)
 			for i, element := range e.Elts {
 				kve := element.(*ast.KeyValueExpr)
-				elements[i*2] = c.translateExpr(kve.Key)
-				elements[i*2+1] = c.translateExpr(kve.Value)
+				elements[i*2] = c.translateExprToType(kve.Key, t.Key())
+				elements[i*2+1] = c.translateExprToType(kve.Value, t.Elem())
 			}
 		case *types.Struct:
 			elements = make([]string, t.NumFields())

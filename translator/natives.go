@@ -191,6 +191,38 @@ var Go$Complex128  = function(real, imag) {
 };
 Go$Complex128.prototype.Go$key = function() { return "Complex128$" + this.Go$val; };
 
+var Go$divComplex = function(n, d) {
+	var ninf = n.real === 1/0 || n.real === -1/0 || n.imag === 1/0 || n.imag === -1/0;
+	var dinf = d.real === 1/0 || d.real === -1/0 || d.imag === 1/0 || d.imag === -1/0;
+	var nnan = !ninf && (n.real !== n.real || n.imag !== n.imag);
+	var dnan = !dinf && (d.real !== d.real || d.imag !== d.imag);
+	if(nnan || dnan) {
+		return new n.constructor(0/0, 0/0);
+	}
+	if (ninf && !dinf) {
+		return new n.constructor(1/0, 1/0);
+	}
+	if (!ninf && dinf) {
+		return new n.constructor(0, 0);
+	}
+	if (d.real === 0 && d.imag === 0) {
+		if (n.real === 0 && n.imag === 0) {
+			return new n.constructor(0/0, 0/0);
+		}
+		return new n.constructor(1/0, 1/0);
+	}
+	var a = Math.abs(d.real);
+	var b = Math.abs(d.imag);
+	if (a <= b) {
+		var ratio = d.real / d.imag;
+		var denom = d.real * ratio + d.imag;
+		return new n.constructor((n.real * ratio + n.imag) / denom, (n.imag * ratio - n.real) / denom);
+	}
+	var ratio = d.imag / d.real;
+	var denom = d.imag * ratio + d.real;
+	return new n.constructor((n.imag * ratio + n.real) / denom, (n.imag - n.real * ratio) / denom);
+};
+
 var Go$Slice = function(array) {
 	this.array = array;
 	this.offset = 0;

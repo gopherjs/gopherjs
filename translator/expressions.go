@@ -310,8 +310,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case token.MUL:
 				expr = fmt.Sprintf("new %s(x.real * y.real - x.imag * y.imag, x.real * y.imag + x.imag * y.real)", c.typeName(t))
 			case token.QUO:
-				q := c.newVariable("q")
-				expr = fmt.Sprintf("%s = y.real * y.real + y.imag * y.imag, new %s((x.real * y.real + x.imag * y.imag) / %s, (x.imag * y.real - x.real * y.imag) / %s)", q, c.typeName(t), q, q)
+				return fmt.Sprintf("Go$divComplex(%s, %s)", ex, ey)
 			default:
 				panic(e.Op)
 			}

@@ -1,6 +1,6 @@
-diff -r 6faa19b38832 go/gcimporter/gcimporter.go
---- a/go/gcimporter/gcimporter.go	Thu Nov 14 17:33:07 2013 -0500
-+++ b/go/gcimporter/gcimporter.go	Fri Nov 15 14:37:53 2013 +0100
+diff -r 2fa151649748 go/gcimporter/gcimporter.go
+--- a/go/gcimporter/gcimporter.go
++++ b/go/gcimporter/gcimporter.go
 @@ -684,7 +684,7 @@
  func (p *parser) parseImportDecl() {
  	p.expectKeyword("import")
@@ -10,9 +10,9 @@ diff -r 6faa19b38832 go/gcimporter/gcimporter.go
  }
  
  // int_lit = [ "+" | "-" ] { "0" ... "9" } .
-diff -r 6faa19b38832 go/gcimporter/gcimporter_test.go
---- a/go/gcimporter/gcimporter_test.go	Thu Nov 14 17:33:07 2013 -0500
-+++ b/go/gcimporter/gcimporter_test.go	Fri Nov 15 14:37:53 2013 +0100
+diff -r 2fa151649748 go/gcimporter/gcimporter_test.go
+--- a/go/gcimporter/gcimporter_test.go
++++ b/go/gcimporter/gcimporter_test.go
 @@ -54,15 +54,15 @@
  // as if all tested packages were imported into a single package.
  var imports = make(map[string]*types.Package)
@@ -64,9 +64,9 @@ diff -r 6faa19b38832 go/gcimporter/gcimporter_test.go
  	}
  	nimports += testDir(t, "", time.Now().Add(maxTime)) // installed packages
  	t.Logf("tested %d imports", nimports)
-diff -r 6faa19b38832 go/types/builtins.go
---- a/go/types/builtins.go	Thu Nov 14 17:33:07 2013 -0500
-+++ b/go/types/builtins.go	Fri Nov 15 14:37:53 2013 +0100
+diff -r 2fa151649748 go/types/builtins.go
+--- a/go/types/builtins.go
++++ b/go/types/builtins.go
 @@ -557,7 +557,7 @@
  		list[i] = NewVar(token.NoPos, nil, "", defaultType(param))
  	}
@@ -76,9 +76,9 @@ diff -r 6faa19b38832 go/types/builtins.go
  	if res != nil {
  		assert(!isUntyped(res))
  		result = NewTuple(NewVar(token.NoPos, nil, "", res))
-diff -r 6faa19b38832 go/types/call.go
---- a/go/types/call.go	Thu Nov 14 17:33:07 2013 -0500
-+++ b/go/types/call.go	Fri Nov 15 14:37:53 2013 +0100
+diff -r 2fa151649748 go/types/call.go
+--- a/go/types/call.go
++++ b/go/types/call.go
 @@ -246,7 +246,6 @@
  }
  
@@ -161,9 +161,9 @@ diff -r 6faa19b38832 go/types/call.go
 -	x.mode = invalid
 -	x.expr = e
  }
-diff -r 6faa19b38832 go/types/expr.go
---- a/go/types/expr.go	Thu Nov 14 17:33:07 2013 -0500
-+++ b/go/types/expr.go	Fri Nov 15 14:37:53 2013 +0100
+diff -r 2fa151649748 go/types/expr.go
+--- a/go/types/expr.go
++++ b/go/types/expr.go
 @@ -481,7 +481,9 @@
  				check.updateExprType(x.expr, target, false)
  			}
@@ -527,9 +527,9 @@ diff -r 6faa19b38832 go/types/expr.go
  }
  
  // typeAssertion checks that x.(T) is legal; xtyp must be the type of x.
-diff -r 6faa19b38832 go/types/methodset.go
---- a/go/types/methodset.go	Thu Nov 14 17:33:07 2013 -0500
-+++ b/go/types/methodset.go	Fri Nov 15 14:37:53 2013 +0100
+diff -r 2fa151649748 go/types/methodset.go
+--- a/go/types/methodset.go
++++ b/go/types/methodset.go
 @@ -121,8 +121,8 @@
  		var next []embeddedType // embedded types found at current depth
  
@@ -561,9 +561,9 @@ diff -r 6faa19b38832 go/types/methodset.go
  	for i, f := range list {
  		key := f.Id()
  		// if f is not in the set, add it
-diff -r 6faa19b38832 go/types/package.go
---- a/go/types/package.go	Thu Nov 14 17:33:07 2013 -0500
-+++ b/go/types/package.go	Fri Nov 15 14:37:53 2013 +0100
+diff -r 2fa151649748 go/types/package.go
+--- a/go/types/package.go
++++ b/go/types/package.go
 @@ -42,6 +42,10 @@
  // pkg; the list is in source order. Package unsafe is excluded.
  func (pkg *Package) Imports() []*Package { return pkg.imports }
@@ -575,9 +575,9 @@ diff -r 6faa19b38832 go/types/package.go
  // MarkComplete marks a package as complete.
  func (pkg *Package) MarkComplete() { pkg.complete = true }
  
-diff -r 6faa19b38832 go/types/typemap/typemap.go
---- a/go/types/typemap/typemap.go	Thu Nov 14 17:33:07 2013 -0500
-+++ b/go/types/typemap/typemap.go	Fri Nov 15 14:37:53 2013 +0100
+diff -r 2fa151649748 go/types/typemap/typemap.go
+--- a/go/types/typemap/typemap.go
++++ b/go/types/typemap/typemap.go
 @@ -130,10 +130,7 @@
  
  // Len returns the number of map entries.
@@ -590,9 +590,9 @@ diff -r 6faa19b38832 go/types/typemap/typemap.go
  }
  
  // Iterate calls function f on each entry in the map in unspecified order.
-diff -r 6faa19b38832 go/types/types.go
---- a/go/types/types.go	Thu Nov 14 17:33:07 2013 -0500
-+++ b/go/types/types.go	Fri Nov 15 14:37:53 2013 +0100
+diff -r 2fa151649748 go/types/types.go
+--- a/go/types/types.go
++++ b/go/types/types.go
 @@ -186,18 +186,12 @@
  
  // NewTuple returns a new tuple for the given variables.
@@ -614,9 +614,9 @@ diff -r 6faa19b38832 go/types/types.go
  }
  
  // At returns the i'th variable of tuple t.
-diff -r 6faa19b38832 go/types/universe.go
---- a/go/types/universe.go	Thu Nov 14 17:33:07 2013 -0500
-+++ b/go/types/universe.go	Fri Nov 15 14:37:53 2013 +0100
+diff -r 2fa151649748 go/types/universe.go
+--- a/go/types/universe.go
++++ b/go/types/universe.go
 @@ -65,7 +65,7 @@
  
  	// Error has a nil package in its qualified name since it is in no package

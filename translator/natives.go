@@ -814,7 +814,7 @@ var natives = map[string]string{
 			}
 			return "<" + this.typ.String() + " Value>";
 		};
-		DeepEqual = function(a, b) {
+		DeepEqual = function(a, b) { // TODO use package version
 			if (a === b) {
 				return true;
 			}
@@ -828,9 +828,17 @@ var natives = map[string]string{
 				if (a.length !== b.length) {
 					return false;
 				}
-				for (var i = 0; i < a.length; i++) {
-					if (!this.DeepEqual(a.array[a.offset + i], b.array[b.offset + i])) {
-						return false;
+				if (a.array !== undefined) {
+					for (var i = 0; i < a.length; i++) {
+						if (!this.DeepEqual(a.array[a.offset + i], b.array[b.offset + i])) {
+							return false;
+						}
+					}
+				} else {
+					for (var i = 0; i < a.length; i++) {
+						if (!this.DeepEqual(a[i], b[i])) {
+							return false;
+						}
 					}
 				}
 				return true;

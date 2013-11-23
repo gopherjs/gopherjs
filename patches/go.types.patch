@@ -1,4 +1,4 @@
-diff -r 2fa151649748 go/gcimporter/gcimporter.go
+diff -r 524cd67de4a1 go/gcimporter/gcimporter.go
 --- a/go/gcimporter/gcimporter.go
 +++ b/go/gcimporter/gcimporter.go
 @@ -684,7 +684,7 @@
@@ -10,7 +10,7 @@ diff -r 2fa151649748 go/gcimporter/gcimporter.go
  }
  
  // int_lit = [ "+" | "-" ] { "0" ... "9" } .
-diff -r 2fa151649748 go/gcimporter/gcimporter_test.go
+diff -r 524cd67de4a1 go/gcimporter/gcimporter_test.go
 --- a/go/gcimporter/gcimporter_test.go
 +++ b/go/gcimporter/gcimporter_test.go
 @@ -54,15 +54,15 @@
@@ -64,7 +64,7 @@ diff -r 2fa151649748 go/gcimporter/gcimporter_test.go
  	}
  	nimports += testDir(t, "", time.Now().Add(maxTime)) // installed packages
  	t.Logf("tested %d imports", nimports)
-diff -r 2fa151649748 go/types/builtins.go
+diff -r 524cd67de4a1 go/types/builtins.go
 --- a/go/types/builtins.go
 +++ b/go/types/builtins.go
 @@ -557,7 +557,7 @@
@@ -76,10 +76,10 @@ diff -r 2fa151649748 go/types/builtins.go
  	if res != nil {
  		assert(!isUntyped(res))
  		result = NewTuple(NewVar(token.NoPos, nil, "", res))
-diff -r 2fa151649748 go/types/call.go
+diff -r 524cd67de4a1 go/types/call.go
 --- a/go/types/call.go
 +++ b/go/types/call.go
-@@ -246,7 +246,6 @@
+@@ -238,7 +238,6 @@
  }
  
  func (check *checker) selector(x *operand, e *ast.SelectorExpr) {
@@ -87,7 +87,7 @@ diff -r 2fa151649748 go/types/call.go
  	var (
  		obj      Object
  		index    []int
-@@ -267,7 +266,9 @@
+@@ -259,7 +258,9 @@
  				if !pkg.pkg.fake {
  					check.errorf(e.Pos(), "%s not declared by package %s", sel, ident)
  				}
@@ -98,7 +98,7 @@ diff -r 2fa151649748 go/types/call.go
  			}
  			if !exp.IsExported() {
  				check.errorf(e.Pos(), "%s not exported by package %s", sel, ident)
-@@ -306,7 +307,9 @@
+@@ -298,7 +299,9 @@
  
  	check.exprOrType(x, e.X)
  	if x.mode == invalid {
@@ -109,7 +109,7 @@ diff -r 2fa151649748 go/types/call.go
  	}
  
  	obj, index, indirect = LookupFieldOrMethod(x.typ, check.pkg, sel)
-@@ -317,7 +320,9 @@
+@@ -309,7 +312,9 @@
  		} else {
  			check.invalidOp(e.Pos(), "%s has no field or method %s", x, sel)
  		}
@@ -120,7 +120,7 @@ diff -r 2fa151649748 go/types/call.go
  	}
  
  	if x.mode == typexpr {
-@@ -325,13 +330,17 @@
+@@ -317,13 +322,17 @@
  		m, _ := obj.(*Func)
  		if m == nil {
  			check.invalidOp(e.Pos(), "%s has no method %s", x, sel)
@@ -140,7 +140,7 @@ diff -r 2fa151649748 go/types/call.go
  		}
  
  		check.recordSelection(e, MethodExpr, x.typ, m, index, indirect)
-@@ -374,7 +383,9 @@
+@@ -366,7 +375,9 @@
  			//        is shorthand for (&x).m()".
  			if !indirect && x.mode != variable && ptrRecv(obj) {
  				check.invalidOp(e.Pos(), "%s is not in method set of %s", sel, x)
@@ -151,7 +151,7 @@ diff -r 2fa151649748 go/types/call.go
  			}
  
  			check.recordSelection(e, MethodVal, x.typ, obj, index, indirect)
-@@ -422,9 +433,4 @@
+@@ -414,9 +425,4 @@
  
  	// everything went well
  	x.expr = e
@@ -161,7 +161,7 @@ diff -r 2fa151649748 go/types/call.go
 -	x.mode = invalid
 -	x.expr = e
  }
-diff -r 2fa151649748 go/types/expr.go
+diff -r 524cd67de4a1 go/types/expr.go
 --- a/go/types/expr.go
 +++ b/go/types/expr.go
 @@ -481,7 +481,9 @@
@@ -527,7 +527,7 @@ diff -r 2fa151649748 go/types/expr.go
  }
  
  // typeAssertion checks that x.(T) is legal; xtyp must be the type of x.
-diff -r 2fa151649748 go/types/methodset.go
+diff -r 524cd67de4a1 go/types/methodset.go
 --- a/go/types/methodset.go
 +++ b/go/types/methodset.go
 @@ -121,8 +121,8 @@
@@ -561,7 +561,7 @@ diff -r 2fa151649748 go/types/methodset.go
  	for i, f := range list {
  		key := f.Id()
  		// if f is not in the set, add it
-diff -r 2fa151649748 go/types/package.go
+diff -r 524cd67de4a1 go/types/package.go
 --- a/go/types/package.go
 +++ b/go/types/package.go
 @@ -42,6 +42,10 @@
@@ -575,7 +575,7 @@ diff -r 2fa151649748 go/types/package.go
  // MarkComplete marks a package as complete.
  func (pkg *Package) MarkComplete() { pkg.complete = true }
  
-diff -r 2fa151649748 go/types/typemap/typemap.go
+diff -r 524cd67de4a1 go/types/typemap/typemap.go
 --- a/go/types/typemap/typemap.go
 +++ b/go/types/typemap/typemap.go
 @@ -130,10 +130,7 @@
@@ -590,7 +590,7 @@ diff -r 2fa151649748 go/types/typemap/typemap.go
  }
  
  // Iterate calls function f on each entry in the map in unspecified order.
-diff -r 2fa151649748 go/types/types.go
+diff -r 524cd67de4a1 go/types/types.go
 --- a/go/types/types.go
 +++ b/go/types/types.go
 @@ -186,18 +186,12 @@
@@ -614,7 +614,7 @@ diff -r 2fa151649748 go/types/types.go
  }
  
  // At returns the i'th variable of tuple t.
-diff -r 2fa151649748 go/types/universe.go
+diff -r 524cd67de4a1 go/types/universe.go
 --- a/go/types/universe.go
 +++ b/go/types/universe.go
 @@ -65,7 +65,7 @@

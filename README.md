@@ -49,7 +49,7 @@ These features are not implemented yet, but on the roadmap:
 ### Deviations from Go specification
 Some tradeoffs had to be made in order to avoid huge performance impacts. Please get in contact if those are deal breakers for you.
 
-- int, uint and uintptr do not overflow, but have a maximum precision of 53 bits, after which rounding errors might occur (all other integer types have simulated overflow)
+- int and uint do not overflow, but have a maximum precision of 53 bits, after which rounding errors might occur (all other integer types have simulated overflow)
 - float32 and complex64 have the same precision as float64 and complex128
 - calls on nil cause a panic except for slice types
 

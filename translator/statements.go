@@ -47,7 +47,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.translateBranchingStmt(caseClauses, initStmts, false, c.translateExpr, nil, label)
 
 	case *ast.SwitchStmt:
-		c.translateStmt(s.Init, "")
+		if s.Init != nil {
+			c.Printf("%s;", c.translateSimpleStmt(s.Init))
+		}
 		translateCond := func(cond ast.Expr) string {
 			return c.translateExpr(cond)
 		}
@@ -66,7 +68,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, nil, label)
 
 	case *ast.TypeSwitchStmt:
-		c.translateStmt(s.Init, "")
+		if s.Init != nil {
+			c.Printf("%s;", c.translateSimpleStmt(s.Init))
+		}
 		var expr ast.Expr
 		var typeSwitchVar string
 		switch a := s.Assign.(type) {
@@ -102,7 +106,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, printCaseBodyPrefix, label)
 
 	case *ast.ForStmt:
-		c.translateStmt(s.Init, "")
+		if s.Init != nil {
+			c.Printf("%s;", c.translateSimpleStmt(s.Init))
+		}
 		cond := "true"
 		if s.Cond != nil {
 			cond = c.translateExpr(s.Cond)
@@ -119,7 +125,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Indent(func() {
 			c.handleEscapingVariables(s.Body, func() {
 				c.translateStmtList(s.Body.List)
-				c.translateStmt(s.Post, "")
+				if s.Post != nil {
+					c.Printf("%s;", c.translateSimpleStmt(s.Post))
+				}
 			})
 		})
 		c.Printf("}")
@@ -220,7 +228,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		case token.BREAK:
 			c.Printf("break%s;", label)
 		case token.CONTINUE:
-			c.translateStmt(postLoopStmt, "")
+			if postLoopStmt != nil {
+				c.Printf("%s;", c.translateSimpleStmt(postLoopStmt))
+			}
 			c.Printf("continue%s;", label)
 		case token.GOTO:
 			c.Printf(`Go$throwRuntimeError("not supported by GopherJS: goto")`)
@@ -307,7 +317,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 	case *ast.GoStmt:
 		c.Printf(`Go$throwRuntimeError("not supported by GopherJS: go")`)
 
-	case *ast.EmptyStmt, nil:
+	case *ast.EmptyStmt:
 		// skip
 
 	default:

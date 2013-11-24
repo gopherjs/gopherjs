@@ -13,11 +13,7 @@ You can take advantage of Go's elegant type system and other compile-time checks
 The transpiler is able to turn itself (and all packages it uses) into pure JavaScript code that runs in all major browsers. It also passes a lot of the tests that are shipped with the Go source. This suggests a quite good coverage of Go's specification. However, there are some known exceptions listed below and some unknown exceptions that I would love to hear about when you find them.
 
 ### Installation and Usage
-Go into the directory where you want to install GopherJS and set GOPATH:
-```
-export GOPATH=$PWD
-```
-Then get GopherJS and dependencies with: 
+Get GopherJS and dependencies with: 
 ```
 go get github.com/neelance/gopherjs
 ```

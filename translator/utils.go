@@ -103,30 +103,63 @@ func WriteInterfaces(dependencies []*types.Package, w io.Writer, merge bool) {
 	}
 }
 
-func ReadArchive(imports map[string]*types.Package, filename, id string, data io.Reader) ([]byte, *types.Package, error) {
+// TODO replace with encoding/gob when reflection is ready
+func ReadArchive(packages map[string]*types.Package, filename, id string, data io.Reader) ([]byte, *types.Package, error) {
 	r := bufio.NewReader(data)
-	code := make([]byte, 0)
-	for {
-		line, err := r.ReadSlice('\n')
-		if err != nil && err != bufio.ErrBufferFull {
-			return nil, nil, err
-		}
-		if len(line) == 3 && string(line) == "$$\n" {
-			break
-		}
-		code = append(code, line...)
-	}
 
-	pkg, err := gcimporter.ImportData(imports, filename, id, r)
+	code, err := readUntilSeparator(r)
+	if err != nil {
+		return nil, nil, err
+	}
+	importList, err := readUntilSeparator(r)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	pkg, err := gcimporter.ImportData(packages, filename, id, r)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var imports []*types.Package
+	for _, path := range strings.Split(string(importList), "\n") {
+		if path == "" {
+			continue
+		}
+		impPkg, found := packages[path]
+		if !found {
+			impPkg = types.NewPackage(path, "", types.NewScope(nil))
+			packages[path] = impPkg
+		}
+		imports = append(imports, impPkg)
+	}
+	pkg.SetImports(imports)
+
 	return code, pkg, nil
+}
+
+func readUntilSeparator(r *bufio.Reader) ([]byte, error) {
+	var content []byte
+	for {
+		line, err := r.ReadSlice('\n')
+		if err != nil && err != bufio.ErrBufferFull {
+			return nil, err
+		}
+		if len(line) == 3 && string(line) == "$$\n" {
+			break
+		}
+		content = append(content, line...)
+	}
+	return content, nil
 }
 
 func WriteArchive(code []byte, pkg *types.Package, w io.Writer) {
 	w.Write(code)
+	w.Write([]byte("$$\n"))
+	for _, impPkg := range pkg.Imports() {
+		w.Write([]byte(impPkg.Path()))
+		w.Write([]byte{'\n'})
+	}
 	w.Write([]byte("$$\n"))
 	gcexporter.Write(pkg, w, sizes32)
 }

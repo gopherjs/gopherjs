@@ -771,7 +771,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			value := c.translateExpr(expr)
 
 			if basicExprType.Info()&types.IsFloat != 0 {
-				value = fmt.Sprintf("Math.floor(%s)", value)
+				value = fmt.Sprintf("(%s >> 0)", value)
 			}
 
 			switch {

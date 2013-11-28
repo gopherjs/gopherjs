@@ -783,7 +783,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 					value = fmt.Sprintf("(Go$obj = %s, new %s(Go$obj.high, Go$obj.low))", value, c.typeName(desiredType))
 				}
 			case is64Bit(basicExprType):
-				value = fmt.Sprintf("Go$flatten64(%s)", value)
+				value = fmt.Sprintf("%s.low", value)
 			}
 
 			return value
@@ -796,7 +796,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			switch et := exprType.Underlying().(type) {
 			case *types.Basic:
 				if is64Bit(et) {
-					value = fmt.Sprintf("Go$flatten64(%s)", value)
+					value = fmt.Sprintf("%s.low", value)
 				}
 				if et.Info()&types.IsNumeric != 0 {
 					return fmt.Sprintf("Go$encodeRune(%s)", value)

@@ -768,25 +768,21 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 	case *types.Basic:
 		switch {
 		case t.Info()&types.IsInteger != 0:
-			value := c.translateExpr(expr)
-
-			if basicExprType.Info()&types.IsFloat != 0 {
-				value = fmt.Sprintf("(%s >> 0)", value)
-			}
-
 			switch {
 			case is64Bit(t):
 				switch {
 				case !is64Bit(basicExprType):
-					value = fmt.Sprintf("new %s(0, %s)", c.typeName(desiredType), value)
+					return fmt.Sprintf("new %s(0, %s)", c.typeName(desiredType), c.translateExpr(expr))
 				case !types.IsIdentical(exprType, desiredType):
-					value = fmt.Sprintf("(Go$obj = %s, new %s(Go$obj.high, Go$obj.low))", value, c.typeName(desiredType))
+					return fmt.Sprintf("(Go$obj = %s, new %s(Go$obj.high, Go$obj.low))", c.translateExpr(expr), c.typeName(desiredType))
 				}
 			case is64Bit(basicExprType):
-				value = fmt.Sprintf("%s.low", value)
+				return fmt.Sprintf("%s.low", c.translateExpr(expr))
+			case basicExprType.Info()&types.IsFloat != 0:
+				return fmt.Sprintf("(%s >> 0)", c.translateExpr(expr))
+			default:
+				return c.translateExpr(expr)
 			}
-
-			return value
 		case t.Info()&types.IsFloat != 0:
 			if is64Bit(exprType.Underlying().(*types.Basic)) {
 				return fmt.Sprintf("(Go$obj = %s, Go$obj.high * 4294967296 + Go$obj.low)", c.translateExpr(expr))
@@ -996,7 +992,7 @@ func fixNumber(value string, basic *types.Basic) string {
 	case types.Uint32, types.Uintptr:
 		return "(" + value + " >>> 0)"
 	}
-	return value
+	return "(" + value + ")"
 }
 
 type HasDeferVisitor struct {

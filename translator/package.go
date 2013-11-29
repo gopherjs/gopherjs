@@ -222,8 +222,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	}
 
 	c.Indent(func() {
-		c.Printf("var Go$pkg = {};")
-
 		for _, importedPkg := range typesPkg.Imports() {
 			varName := c.newVariable(importedPkg.Name())
 			c.Printf(`var %s = Go$packages["%s"];`, varName, importedPkg.Path())
@@ -311,8 +309,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			c.translateFunctionBody(append(intVarStmts, initStmts...), nil)
 		})
 		c.Printf("};")
-
-		c.Printf("return Go$pkg;")
 	})
 
 	return c.output, nil

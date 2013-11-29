@@ -645,130 +645,158 @@ var natives = map[string]string{
 
 	"math": `
 		Abs = Math.abs;
+		Acos = Math.acos;
+		Asin = Math.asin;
+		Atan = Math.atan;
+		Atan2 = Math.atan2;
+		Ceil = Math.ceil;
+		Copysign = function(x, y) { return (x < 0 || 1/x === 1/-0) !== (y < 0 || 1/y === 1/-0) ? -x : x; };
+		Cos = Math.cos;
+		Dim = function(x, y) { return Math.max(x - y, 0); };
 		Exp = Math.exp;
-		Exp2 = function(x) { return Math.exp(x * Math.log(2)); };
+		Exp2 = function(x) { return Math.pow(2, x); };
+		Expm1 = expm1;
+		Floor = Math.floor;
 		Frexp = frexp;
-		Ldexp = function(frac, exp) { return frac * Math.exp(exp * Math.log(2)); };
+		Hypot = hypot;
+		Inf = function(sign) { return sign >= 0 ? 1/0 : -1/0; };
+		IsInf = function(f, sign) { if (f === -1/0) { return sign <= 0; } if (f === 1/0) { return sign >= 0; } return false; };
+		IsNaN = function(f) { return f !== f; };
+		Ldexp = function(frac, exp) {
+			if (frac === 0) { return frac; };
+			if (exp >= 1024) { return frac * Math.pow(2, 1023) * Math.pow(2, exp - 1023); }
+			if (exp <= -1024) { return frac * Math.pow(2, -1023) * Math.pow(2, exp + 1023); }
+			return frac * Math.pow(2, exp);
+		};
 		Log = Math.log;
+		Log1p = log1p;
 		Log2 = log2;
-		Modf = modf;
-		Pow = Math.pow;
+		Log10 = log10;
+		Max = function(x, y) { return (x === 1/0 || y === 1/0) ? 1/0 : Math.max(x, y); };
+		Min = function(x, y) { return (x === -1/0 || y === -1/0) ? -1/0 : Math.min(x, y); };
+		Mod = function(x, y) { return x % y; };
+		Modf = function(f) { if (f === -1/0 || f === 1/0) { return [f, 0/0] } var frac = f % 1; return [f - frac, frac]; };
+		NaN = function() { return 0/0; };
+		Pow = function(x, y) { return ((x === 1) || (x === -1 && (y === -1/0 || y === 1/0))) ? 1 : Math.pow(x, y); };
+		Remainder = remainder;
+		Signbit = function(x) { return x < 0 || 1/x === 1/-0; };
+		Sin = Math.sin;
+		Sincos = function(x) { return [Math.sin(x), Math.cos(x)]; };
+		Sqrt = Math.sqrt;
+		Tan = Math.tan;
+		Trunc = function(x) { return (x === 1/0 || x === -1/0 || x !== x || 1/x === 1/-0) ? x : x >> 0; };
 
 		// generated from bitcasts/bitcasts.go
-		Float32bits = (function(f) {
+		Float32bits = function(f) {
+			var s, e;
 			if (f === 0) {
+				if (f === 0 && 1 / f === 1 / -0) {
+					return 2147483648;
+				}
 				return 0;
 			}
-			if (f !== f) {
-				return 4294967295;
+			if (!(f === f)) {
+				return 2143289344;
 			}
-			var s = 0;
+			s = 0;
 			if (f < 0) {
 				s = 2147483648;
 				f = -f;
 			}
-			var e = 150;
-			while (f >= 16777216) {
+			e = 150;
+			while (f >= 1.6777216e+07) {
 				f = f / (2);
 				if (e === 255) {
 					break;
 				}
 				e = (e + (1) >>> 0);
 			}
-			while (f < 8388608) {
+			while (f < 8.388608e+06) {
 				e = (e - (1) >>> 0);
 				if (e === 0) {
 					break;
 				}
 				f = f * (2);
 			}
-			var y;
-			return ((((s | ((y = 23, y < 32 ? (e << y) : 0) >>> 0)) >>> 0) | (((Math.floor(f) &~ 8388608) >>> 0))) >>> 0);
-		});
-		Float32frombits = (function(b) {
-			var s = 1;
-			if (((b & 2147483648) >>> 0) !== 0) {
+			return ((((s | (((e >>> 0) << 23) >>> 0)) >>> 0) | (((((f >> 0) >>> 0) &~ 8388608) >>> 0))) >>> 0);
+		};
+		Float32frombits = function(b) {
+			var s, e, m;
+			s = 1;
+			if (!(((b & 2147483648) >>> 0) === 0)) {
 				s = -1;
 			}
-			var y;
-			var e = (((((y = 23, y < 32 ? (b >>> y) : 0) >>> 0)) & 255) >>> 0);
-			var m = ((b & 8388607) >>> 0);
+			e = (((((b >>> 23) >>> 0)) & 255) >>> 0);
+			m = ((b & 8388607) >>> 0);
 			if (e === 255) {
 				if (m === 0) {
 					return s / 0;
 				}
-				return (s / 0) - (s / 0);
+				return 0/0;
 			}
-			if (e !== 0) {
+			if (!(e === 0)) {
 				m = (m + (8388608) >>> 0);
 			}
 			if (e === 0) {
 				e = 1;
 			}
 			return Ldexp(m, e - 127 - 23) * s;
-		});
-		Float64bits = (function(f) {
+		};
+		Float64bits = function(f) {
+			var s, e, x, y, x$1, y$1, x$2, y$2;
 			if (f === 0) {
+				if (f === 0 && 1 / f === 1 / -0) {
+					return new Go$Uint64(2147483648, 0);
+				}
 				return new Go$Uint64(0, 0);
 			}
-			if (f !== f) {
-				return new Go$Uint64(4294967295, 4294967295);
+			if (!(f === f)) {
+				return new Go$Uint64(2146959360, 1);
 			}
-			var s = new Go$Uint64(0, 0);
+			s = new Go$Uint64(0, 0);
 			if (f < 0) {
 				s = new Go$Uint64(2147483648, 0);
 				f = -f;
 			}
-			var e = 1075;
-			while (f >= 9007199254740992) {
+			e = 1075;
+			while (f >= 9.007199254740992e+15) {
 				f = f / (2);
 				if (e === 2047) {
 					break;
 				}
 				e = (e + (1) >>> 0);
 			}
-			while (f < 4503599627370496) {
+			while (f < 4.503599627370496e+15) {
 				e = (e - (1) >>> 0);
 				if (e === 0) {
 					break;
 				}
 				f = f * (2);
 			}
-			var x, y;
-			var x1, y1;
-			var x2, y2;
-			return (x2 = (x = s, y = Go$shiftLeft64(new Go$Uint64(0, e), 52), new Go$Uint64(x.high | y.high, (x.low | y.low) >>> 0)), y2 = ((x1 = new Go$Uint64(0, Math.floor(f)), y1 = new Go$Uint64(1048576, 0), new Go$Uint64(x1.high &~ y1.high, (x1.low &~ y1.low) >>> 0))), new Go$Uint64(x2.high | y2.high, (x2.low | y2.low) >>> 0));
-		});
-		Float64frombits = (function(b) {
-			var s = 1;
-			var x, y;
-			var x1, y1;
-			if ((x1 = (x = b, y = new Go$Uint64(2147483648, 0), new Go$Uint64(x.high & y.high, (x.low & y.low) >>> 0)), y1 = new Go$Uint64(0, 0), x1.high !== y1.high || x1.low !== y1.low)) {
+			return (x$2 = (x = s, y = Go$shiftLeft64(new Go$Uint64(0, e), 52), new Go$Uint64(x.high | y.high, (x.low | y.low) >>> 0)), y$2 = ((x$1 = new Go$Uint64(0, f), y$1 = new Go$Uint64(1048576, 0), new Go$Uint64(x$1.high &~ y$1.high, (x$1.low &~ y$1.low) >>> 0))), new Go$Uint64(x$2.high | y$2.high, (x$2.low | y$2.low) >>> 0));
+		};
+		Float64frombits = function(b) {
+			var s, x, y, x$1, y$1, x$2, y$2, e, x$3, y$3, m, x$4, y$4, x$5, y$5, x$6, y$6, x$7, y$7, x$8, y$8;
+			s = 1;
+			if (!((x$1 = (x = b, y = new Go$Uint64(2147483648, 0), new Go$Uint64(x.high & y.high, (x.low & y.low) >>> 0)), y$1 = new Go$Uint64(0, 0), x$1.high === y$1.high && x$1.low === y$1.low))) {
 				s = -1;
 			}
-			var x2, y2;
-			var e = (x2 = (Go$shiftRightUint64(b, 52)), y2 = new Go$Uint64(0, 2047), new Go$Uint64(x2.high & y2.high, (x2.low & y2.low) >>> 0));
-			var x3, y3;
-			var m = (x3 = b, y3 = new Go$Uint64(1048575, 4294967295), new Go$Uint64(x3.high & y3.high, (x3.low & y3.low) >>> 0));
-			var x4, y4;
-			if ((x4 = e, y4 = new Go$Uint64(0, 2047), x4.high === y4.high && x4.low === y4.low)) {
-				var x5, y5;
-				if ((x5 = m, y5 = new Go$Uint64(0, 0), x5.high === y5.high && x5.low === y5.low)) {
+			e = (x$2 = (Go$shiftRightUint64(b, 52)), y$2 = new Go$Uint64(0, 2047), new Go$Uint64(x$2.high & y$2.high, (x$2.low & y$2.low) >>> 0));
+			m = (x$3 = b, y$3 = new Go$Uint64(1048575, 4294967295), new Go$Uint64(x$3.high & y$3.high, (x$3.low & y$3.low) >>> 0));
+			if ((x$4 = e, y$4 = new Go$Uint64(0, 2047), x$4.high === y$4.high && x$4.low === y$4.low)) {
+				if ((x$5 = m, y$5 = new Go$Uint64(0, 0), x$5.high === y$5.high && x$5.low === y$5.low)) {
 					return s / 0;
 				}
-				return (s / 0) - (s / 0);
+				return 0/0;
 			}
-			var x6, y6;
-			if ((x6 = e, y6 = new Go$Uint64(0, 0), x6.high !== y6.high || x6.low !== y6.low)) {
-				var x7, y7;
-				m = (x7 = m, y7 = (new Go$Uint64(1048576, 0)), new Go$Uint64(x7.high + y7.high, x7.low + y7.low));
+			if (!((x$6 = e, y$6 = new Go$Uint64(0, 0), x$6.high === y$6.high && x$6.low === y$6.low))) {
+				m = (x$7 = m, y$7 = (new Go$Uint64(1048576, 0)), new Go$Uint64(x$7.high + y$7.high, x$7.low + y$7.low));
 			}
-			var x8, y8;
-			if ((x8 = e, y8 = new Go$Uint64(0, 0), x8.high === y8.high && x8.low === y8.low)) {
+			if ((x$8 = e, y$8 = new Go$Uint64(0, 0), x$8.high === y$8.high && x$8.low === y$8.low)) {
 				e = new Go$Uint64(0, 1);
 			}
-			return Ldexp((Go$obj = m, Go$obj.high * 4294967296 + Go$obj.low), (e.low >> 0) - 1023 - 52) * s;
-		});
+			return Ldexp((Go$obj = m, Go$obj.high * 4294967296 + Go$obj.low), e.low - 1023 - 52) * s;
+		};
 	`,
 
 	"math/big": `
@@ -950,6 +978,11 @@ var natives = map[string]string{
 			Go$pkg.Go$setSyscall(function() { throw "Syscalls not available in browser." });
 			Go$pkg.envs = new Go$Slice(new Array(0));
 		}
+	`,
+
+	"testing": `
+		decorate = function(s) { return s; };
+		Go$pkg.common = common;
 	`,
 
 	"time": `

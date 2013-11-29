@@ -36,7 +36,8 @@ func main() {
 	test32(2139095039)
 	test32(2139095040)
 	test32(4286578688)
-	test32(math.MaxUint32)
+	test32(1 << 31)
+	test32(2143289344)
 
 	test64(0)
 	test64(1)
@@ -44,7 +45,8 @@ func main() {
 	test64(9218868437227405311)
 	test64(9218868437227405312)
 	test64(18442240474082181120)
-	test64(math.MaxUint64)
+	test64(1 << 63)
+	test64(9221120237041090561)
 
 	fmt.Println("OK!")
 }
@@ -53,12 +55,19 @@ func Ldexp(frac float64, exp int) float64 {
 	return math.Ldexp(frac, exp)
 }
 
+var Zero = 0.0
+var NegZero = -Zero
+var NaN = Zero / Zero
+
 func Float32bits(f float32) uint32 {
 	if f == 0 {
+		if f == 0 && 1/f == float32(1/NegZero) {
+			return 1 << 31
+		}
 		return 0
 	}
 	if f != f { // NaN
-		return 1<<32 - 1
+		return 2143289344
 	}
 
 	s := uint32(0)
@@ -98,7 +107,7 @@ func Float32frombits(b uint32) float32 {
 		if m == 0 {
 			return s / 0 // Inf
 		}
-		return (s / 0) - (s / 0) // NaN
+		return float32(NaN)
 	}
 	if e != 0 {
 		m += 1 << 23
@@ -112,10 +121,13 @@ func Float32frombits(b uint32) float32 {
 
 func Float64bits(f float64) uint64 {
 	if f == 0 {
+		if f == 0 && 1/f == 1/NegZero {
+			return 1 << 63
+		}
 		return 0
 	}
 	if f != f { // NaN
-		return 1<<64 - 1
+		return 9221120237041090561
 	}
 
 	s := uint64(0)
@@ -155,7 +167,7 @@ func Float64frombits(b uint64) float64 {
 		if m == 0 {
 			return s / 0
 		}
-		return (s / 0) - (s / 0) // NaN
+		return NaN
 	}
 	if e != 0 {
 		m += 1 << 52

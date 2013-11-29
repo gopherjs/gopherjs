@@ -555,8 +555,12 @@ var Go$recover = function() {
 	return err.error.value;
 };
 
+var Go$getStack = function() {
+	return (new Error()).stack.split("\n");
+};
+
 var Go$getStackDepth = function() {
-	var s = (new Error()).stack.split("\n");
+	var s = Go$getStack();
 	var d = 0;
 	for (var i = 0; i < s.length; i++) {
 		if (s[i].indexOf("Go$callDeferred") == -1) {
@@ -918,14 +922,22 @@ var natives = map[string]string{
 		Go$throwRuntimeError = function(msg) { throw new Go$Panic(new errorString(msg)) };
 		Go$pkg.sizeof_C_MStats = 3712;
 		getgoroot = function() { return (typeof process !== 'undefined') ? (process.env["GOROOT"] || "") : "/"; };
-		SetFinalizer = function() {};
+		Caller = function(skip) {
+			var line = Go$getStack()[skip + 3];
+			if (line === undefined) {
+				return [0, "", 0, false];
+			}
+			var parts = line.substring(line.indexOf("(") + 1, line.indexOf(")")).split(":");
+			return [0, parts[0], parseInt(parts[1]), true];
+		};
+		GC = function() {};
 		GOMAXPROCS = function(n) {
 			if (n > 1) {
 				Go$throwRuntimeError("GOMAXPROCS != 1 is not possible in JavaScript.")
 			}
 			return 1;
 		};
-		GC = function() {};
+		SetFinalizer = function() {};
 	`,
 
 	"strings": `
@@ -981,7 +993,6 @@ var natives = map[string]string{
 	`,
 
 	"testing": `
-		decorate = function(s) { return s; };
 		Go$pkg.common = common;
 	`,
 

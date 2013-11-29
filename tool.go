@@ -173,7 +173,7 @@ func tool() error {
 		if err := buildFiles(flag.Args()[1:lastSourceArg], tempfile.Name()); err != nil {
 			return err
 		}
-		if err := runNode(tempfile.Name(), flag.Args()[lastSourceArg:]); err != nil {
+		if err := runNode(tempfile.Name(), flag.Args()[lastSourceArg:], ""); err != nil {
 			return err
 		}
 		return nil
@@ -249,10 +249,10 @@ func tool() error {
 				os.Remove(tempfile.Name())
 			}()
 
-			if err := writeCommandPackage(testPkg, "out.js"); err != nil {
+			if err := writeCommandPackage(testPkg, tempfile.Name()); err != nil {
 				return err
 			}
-			if err := runNode("out.js", nil); err != nil {
+			if err := runNode(tempfile.Name(), nil, pkg.Dir); err != nil {
 				return err
 			}
 
@@ -486,8 +486,9 @@ func writeCommandPackage(pkg *Package, pkgObj string) error {
 	return nil
 }
 
-func runNode(script string, args []string) error {
+func runNode(script string, args []string, dir string) error {
 	node := exec.Command("node", append([]string{script}, args...)...)
+	node.Dir = dir
 	node.Stdin = os.Stdin
 	node.Stdout = os.Stdout
 	node.Stderr = os.Stderr

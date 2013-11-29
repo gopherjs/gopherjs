@@ -937,6 +937,7 @@ var natives = map[string]string{
 			}
 			return 1;
 		};
+		ReadMemStats = function() {};
 		SetFinalizer = function() {};
 	`,
 

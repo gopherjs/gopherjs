@@ -180,6 +180,7 @@ func tool() error {
 
 	case "test":
 		testFlags := flag.NewFlagSet("test", flag.ContinueOnError)
+		verbose := testFlags.Bool("v", false, "")
 		testFlags.Parse(flag.Args()[1:])
 
 		for _, pkgPath := range testFlags.Args() {
@@ -211,11 +212,13 @@ func tool() error {
 			}
 			testMain := fmt.Sprintf(`
 				Go$pkg.main = function() {
+					var flag = Go$packages["flag"];
 					var fmt = Go$packages["fmt"];
 					var testing = Go$packages["testing"];
 					var time = Go$packages["time"];
 					var sync = Go$packages["sync"];
-					testing.chatty.Go$set(true);
+
+					flag.Parse();
 					var tests = [%s];
 					var names = ["%s"];
 					for (var i = 0; i < tests.length; i++) {
@@ -252,7 +255,12 @@ func tool() error {
 			if err := writeCommandPackage(testPkg, tempfile.Name()); err != nil {
 				return err
 			}
-			if err := runNode(tempfile.Name(), nil, pkg.Dir); err != nil {
+
+			var args []string
+			if *verbose {
+				args = append(args, "-test.v")
+			}
+			if err := runNode(tempfile.Name(), args, pkg.Dir); err != nil {
 				return err
 			}
 

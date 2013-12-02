@@ -67,17 +67,23 @@ func WriteInterfaces(dependencies []*types.Package, w io.Writer, merge bool) {
 			implementedBy := make(map[string]bool, 0)
 			for _, other := range allTypeNames {
 				otherType := other.Type()
-				if _, otherIsInterface := otherType.Underlying().(*types.Interface); otherIsInterface {
-					continue
-				}
-				if _, isStruct := otherType.Underlying().(*types.Struct); isStruct {
+				switch otherType.Underlying().(type) {
+				case *types.Interface:
+					// skip
+				case *types.Struct:
 					if types.IsAssignableTo(otherType, in) {
 						implementedBy[fmt.Sprintf("Go$packages[\"%s\"].%s.Go$NonPointer", other.Pkg().Path(), other.Name())] = true
 					}
-					otherType = types.NewPointer(otherType)
-				}
-				if types.IsAssignableTo(otherType, in) {
-					implementedBy[fmt.Sprintf("Go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
+					if types.IsAssignableTo(types.NewPointer(otherType), in) {
+						implementedBy[fmt.Sprintf("Go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
+					}
+				default:
+					if types.IsAssignableTo(otherType, in) {
+						implementedBy[fmt.Sprintf("Go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
+					}
+					if types.IsAssignableTo(types.NewPointer(otherType), in) {
+						implementedBy[fmt.Sprintf("Go$packages[\"%s\"].%s.Go$Pointer", other.Pkg().Path(), other.Name())] = true
+					}
 				}
 			}
 			list := make([]string, 0, len(implementedBy))

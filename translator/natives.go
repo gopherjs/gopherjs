@@ -615,7 +615,7 @@ var Go$typeAssertionFailed = function(obj) {
 	throw new Go$Panic("type assertion failed: " + obj + " (" + obj.constructor + ")");
 };
 
-var Go$now = function() { var msec = (new Date()).getTime(); return [Math.floor(msec / 1000), (msec % 1000) * 1000000]; };
+var Go$now = function() { var msec = (new Date()).getTime(); return [new Go$Int64(0, Math.floor(msec / 1000)), (msec % 1000) * 1000000]; };
 
 var Go$packages = {};
 

@@ -626,13 +626,25 @@ Go$packages["go/doc"] = {
 
 var natives = map[string]string{
 	"bytes": `
-		IndexByte = function(s, c) {
-			for (var i = 0; i < s.length; i++) {
-				if (s.array[s.offset + i] === c) {
-					return i;
+		Compare = function(a, b) {
+			var l = Math.min(a.length, b.length);
+			for (var i = 0; i < a.length; i++) {
+				var va = a.array[a.offset + i];
+				var vb = b.array[b.offset + i];
+				if (va < vb) {
+					return -1;
+				}
+				if (va > vb) {
+					return 1;
 				}
 			}
-			return -1;
+			if (a.length < b.length) {
+				return -1;
+			}
+			if (a.length > b.length) {
+				return 1;
+			}
+			return 0;
 		};
 		Equal = function(a, b) {
 			if (a.length !== b.length) {
@@ -644,7 +656,15 @@ var natives = map[string]string{
 				}
 			}
 			return true;
-		}
+		};
+		IndexByte = function(s, c) {
+			for (var i = 0; i < s.length; i++) {
+				if (s.array[s.offset + i] === c) {
+					return i;
+				}
+			}
+			return -1;
+		};
 	`,
 
 	"math": `

@@ -229,7 +229,7 @@ func tool() error {
 				}
 			}
 			mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte(fmt.Sprintf(`Go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]);`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
-			mainPkgTypes.SetImports(append(mainPkgTypes.Imports(), testPkgTypes))
+			mainPkgTypes.SetImports(append(mainPkgTypes.Imports(), pkgTypes, testPkgTypes))
 		}
 		mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte("}; Go$pkg.init = function() {};")...)
 

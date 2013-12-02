@@ -34,9 +34,30 @@ var buildContext = &build.Context{
 	Compiler:      "gc",
 	InstallSuffix: "js",
 }
+
 var typesConfig = &types.Config{
 	Packages: make(map[string]*types.Package),
 }
+
+func init() {
+	typesConfig.Import = func(imports map[string]*types.Package, path string) (*types.Package, error) {
+		if _, found := packages[path]; found {
+			return imports[path], nil
+		}
+
+		otherPkg, err := buildContext.Import(path, "", build.AllowBinary)
+		if err != nil {
+			return nil, err
+		}
+		pkg := &Package{Package: otherPkg}
+		if err := buildPackage(pkg); err != nil {
+			return nil, err
+		}
+
+		return imports[path], nil
+	}
+}
+
 var fileSet = token.NewFileSet()
 var packages = make(map[string]*Package)
 var installMode = false
@@ -188,6 +209,8 @@ func tool() error {
 		}}
 		packages["main"] = mainPkg
 		mainPkgTypes := types.NewPackage("main", "main", types.NewScope(nil))
+		testingPkgTypes, _ := typesConfig.Import(typesConfig.Packages, "testing")
+		mainPkgTypes.SetImports([]*types.Package{testingPkgTypes})
 		typesConfig.Packages["main"] = mainPkgTypes
 		mainPkg.JavaScriptCode = []byte("Go$pkg.main = function() {\nGo$packages[\"flag\"].Parse();\n")
 
@@ -322,23 +345,6 @@ func buildPackage(pkg *Package) error {
 	if pkg.ImportPath == "unsafe" {
 		typesConfig.Packages["unsafe"] = types.Unsafe
 		return nil
-	}
-
-	typesConfig.Import = func(imports map[string]*types.Package, path string) (*types.Package, error) {
-		if _, found := packages[path]; found {
-			return imports[path], nil
-		}
-
-		otherPkg, err := buildContext.Import(path, pkg.Dir, build.AllowBinary)
-		if err != nil {
-			return nil, err
-		}
-		pkg := &Package{Package: otherPkg}
-		if err := buildPackage(pkg); err != nil {
-			return nil, err
-		}
-
-		return imports[path], nil
 	}
 
 	if installMode {

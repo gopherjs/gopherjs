@@ -1016,6 +1016,10 @@ var natives = map[string]string{
 
 	"testing": `
 		Go$pkg.RunTests2 = function(pkgPath, dir, names, tests) {
+			if (tests.length === 0) {
+				console.log("?   \t" + pkgPath + "\t[no test files]");
+				return;
+			}
 			os.Open(dir)[0].Chdir();
 			var start = time.Now();
 			var status = "ok  ";

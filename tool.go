@@ -233,7 +233,7 @@ func tool() error {
 							t.Fail();
 							err = e;
 						}
-						t.duration = time.Now().Sub(t.common.start);
+						t.common.duration = time.Now().Sub(t.common.start);
 						t.report();
 						if (err !== null) {
 							throw err;
@@ -260,11 +260,13 @@ func tool() error {
 			if *verbose {
 				args = append(args, "-test.v")
 			}
+			start := time.Now()
 			if err := runNode(tempfile.Name(), args, pkg.Dir); err != nil {
 				return err
 			}
+			duration := time.Now().Sub(start)
 
-			fmt.Printf("ok  \t%s\t0.0s\n", pkg.ImportPath)
+			fmt.Printf("ok  \t%s\t%.3fs\n", pkg.ImportPath, duration.Seconds())
 		}
 		return nil
 

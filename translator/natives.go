@@ -967,6 +967,7 @@ var natives = map[string]string{
 
 	"sync": `
 		runtime_Syncsemcheck = function() {};
+		copyChecker.Go$Pointer.prototype.check = function() {};
 	`,
 
 	"sync/atomic": `

@@ -1014,7 +1014,34 @@ var natives = map[string]string{
 	`,
 
 	"testing": `
-		Go$pkg.common = common;
+		Go$pkg.RunTests2 = function(pkgPath, dir, names, tests) {
+			os.Open(dir)[0].Chdir();
+			var start = time.Now();
+			var status = "ok  ";
+			for (var i = 0; i < tests.length; i++) {
+				var t = new T(new common(new sync.RWMutex(), Go$Slice.Go$nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
+				var err = null;
+				try {
+					if (Go$pkg.chatty.Go$get()) {
+						console.log("=== RUN " + t.name);
+					}
+					tests[i](t);
+				} catch (e) {
+					t.Fail();
+					err = e;
+				}
+				t.common.duration = time.Now().Sub(t.common.start);
+				t.report();
+				if (err !== null) {
+					throw err;
+				}
+				if (t.common.failed) {
+					status = "FAIL";
+				}
+			}
+			var duration = time.Now().Sub(start);
+			fmt.Printf("%s\t%s\t%.3fs\n", new Go$Slice([new Go$String(status), new Go$String(pkgPath), new Go$Float64(duration.Seconds())]));
+		};
 	`,
 
 	"time": `

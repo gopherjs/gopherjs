@@ -183,6 +183,14 @@ func tool() error {
 		verbose := testFlags.Bool("v", false, "")
 		testFlags.Parse(flag.Args()[1:])
 
+		mainPkg := &Package{Package: &build.Package{
+			ImportPath: "main",
+		}}
+		packages["main"] = mainPkg
+		mainPkgTypes := types.NewPackage("main", "main", types.NewScope(nil))
+		typesConfig.Packages["main"] = mainPkgTypes
+		mainPkg.JavaScriptCode = []byte("Go$pkg.main = function() {\nGo$packages[\"flag\"].Parse();\n")
+
 		for _, pkgPath := range testFlags.Args() {
 			buildPkg, err := buildContext.Import(pkgPath, "", 0)
 			if err != nil {
@@ -203,79 +211,46 @@ func tool() error {
 			if err := buildPackage(testPkg); err != nil {
 				return err
 			}
-			scope := typesConfig.Packages[testPkg.ImportPath].Scope()
+
+			pkgTypes := typesConfig.Packages[pkg.ImportPath]
+			testPkgTypes := typesConfig.Packages[testPkg.ImportPath]
+			var names []string
 			var tests []string
-			for _, name := range scope.Names() {
+			for _, name := range pkgTypes.Scope().Names() {
 				if strings.HasPrefix(name, "Test") {
-					tests = append(tests, name)
+					names = append(names, name)
+					tests = append(tests, fmt.Sprintf(`Go$packages["%s"].%s`, pkg.ImportPath, name))
 				}
 			}
-			testMain := fmt.Sprintf(`
-				Go$pkg.main = function() {
-					var flag = Go$packages["flag"];
-					var fmt = Go$packages["fmt"];
-					var os = Go$packages["os"];
-					var testing = Go$packages["testing"];
-					var time = Go$packages["time"];
-					var sync = Go$packages["sync"];
-
-					flag.Parse();
-					var tests = [%s];
-					var names = ["%s"];
-					var failed = false;
-					for (var i = 0; i < tests.length; i++) {
-						var t = new testing.T(new testing.common(new sync.RWMutex(), Go$Slice.Go$nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
-						var err = null;
-						try {
-							if (testing.chatty.Go$get()) {
-								console.log("=== RUN " + t.name);
-							}
-							tests[i](t);
-						} catch (e) {
-							t.Fail();
-							err = e;
-						}
-						t.common.duration = time.Now().Sub(t.common.start);
-						t.report();
-						if (err !== null) {
-							throw err;
-						}
-						failed = failed || t.common.failed;
-					}
-					if (failed) {
-						console.log("FAIL");
-						os.Exit(1);
-					}
-				};
-			`, strings.Join(tests, ", "), strings.Join(tests, `", "`))
-			testPkg.JavaScriptCode = append(testPkg.JavaScriptCode, []byte(testMain)...)
-
-			tempfile, err := ioutil.TempFile("", path.Base(flag.Arg(1))+".")
-			if err != nil {
-				return err
+			for _, name := range testPkgTypes.Scope().Names() {
+				if strings.HasPrefix(name, "Test") {
+					names = append(names, name)
+					tests = append(tests, fmt.Sprintf(`Go$packages["%s"].%s`, testPkg.ImportPath, name))
+				}
 			}
-			defer func() {
-				tempfile.Close()
-				os.Remove(tempfile.Name())
-			}()
-
-			if err := writeCommandPackage(testPkg, tempfile.Name()); err != nil {
-				return err
-			}
-
-			status := "ok  "
-			var args []string
-			if *verbose {
-				args = append(args, "-test.v")
-			}
-			start := time.Now()
-			if err := runNode(tempfile.Name(), args, pkg.Dir); err != nil {
-				status = "FAIL"
-			}
-			duration := time.Now().Sub(start)
-			fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, duration.Seconds())
+			mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte(fmt.Sprintf(`Go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]);`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
+			mainPkgTypes.SetImports(append(mainPkgTypes.Imports(), testPkgTypes))
 		}
-		return nil
+		mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte("}; Go$pkg.init = function() {};")...)
+
+		tempfile, err := ioutil.TempFile("", path.Base(flag.Arg(1))+".")
+		if err != nil {
+			return err
+		}
+		defer func() {
+			tempfile.Close()
+			os.Remove(tempfile.Name())
+		}()
+
+		if err := writeCommandPackage(mainPkg, tempfile.Name()); err != nil {
+			return err
+		}
+
+		var args []string
+		if *verbose {
+			args = append(args, "-test.v")
+		}
+		return runNode(tempfile.Name(), args, "")
 
 	case "tool":
 		tool := flag.Arg(1)

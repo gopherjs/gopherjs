@@ -214,6 +214,7 @@ func tool() error {
 				Go$pkg.main = function() {
 					var flag = Go$packages["flag"];
 					var fmt = Go$packages["fmt"];
+					var os = Go$packages["os"];
 					var testing = Go$packages["testing"];
 					var time = Go$packages["time"];
 					var sync = Go$packages["sync"];
@@ -221,6 +222,7 @@ func tool() error {
 					flag.Parse();
 					var tests = [%s];
 					var names = ["%s"];
+					var failed = false;
 					for (var i = 0; i < tests.length; i++) {
 						var t = new testing.T(new testing.common(new sync.RWMutex(), Go$Slice.Go$nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
 						var err = null;
@@ -238,6 +240,11 @@ func tool() error {
 						if (err !== null) {
 							throw err;
 						}
+						failed = failed || t.common.failed;
+					}
+					if (failed) {
+						console.log("FAIL");
+						os.Exit(1);
 					}
 				};
 			`, strings.Join(tests, ", "), strings.Join(tests, `", "`))
@@ -256,17 +263,17 @@ func tool() error {
 				return err
 			}
 
+			status := "ok  "
 			var args []string
 			if *verbose {
 				args = append(args, "-test.v")
 			}
 			start := time.Now()
 			if err := runNode(tempfile.Name(), args, pkg.Dir); err != nil {
-				return err
+				status = "FAIL"
 			}
 			duration := time.Now().Sub(start)
-
-			fmt.Printf("ok  \t%s\t%.3fs\n", pkg.ImportPath, duration.Seconds())
+			fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, duration.Seconds())
 		}
 		return nil
 

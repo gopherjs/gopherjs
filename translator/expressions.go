@@ -251,9 +251,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		if isInterface {
 			t = t2
 		}
-		basic, isBasic := t.Underlying().(*types.Basic)
 
-		if isBasic && basic.Info()&types.IsNumeric != 0 {
+		if basic, isBasic := t.Underlying().(*types.Basic); isBasic && basic.Info()&types.IsNumeric != 0 {
 			if is64Bit(basic) {
 				var expr string
 				switch e.Op {
@@ -372,9 +371,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case token.ADD, token.LSS, token.LEQ, token.GTR, token.GEQ, token.LAND, token.LOR:
 			return fmt.Sprintf("%s %s %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
 		case token.EQL:
-			ex := c.translateExprToType(e.X, t)
-			ey := c.translateExprToType(e.Y, t)
-
 			switch u := t.Underlying().(type) {
 			case *types.Struct:
 				x := c.newVariable("x")
@@ -385,16 +381,20 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					if field.Name() == "_" {
 						continue
 					}
-					conds = append(conds, fmt.Sprintf("%s.%s === %s.%s", x, field.Name(), y, field.Name()))
+					conds = append(conds, c.translateExpr(&ast.BinaryExpr{
+						X:  c.newIdent(x+"."+field.Name(), field.Type()),
+						Op: token.EQL,
+						Y:  c.newIdent(y+"."+field.Name(), field.Type()),
+					}))
 				}
 				if len(conds) == 0 {
 					conds = []string{"true"}
 				}
-				return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, ex, y, ey, strings.Join(conds, " && "))
+				return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, c.translateExpr(e.X), y, c.translateExpr(e.Y), strings.Join(conds, " && "))
 			case *types.Interface:
-				return fmt.Sprintf("Go$interfaceIsEqual(%s, %s)", ex, ey)
+				return fmt.Sprintf("Go$interfaceIsEqual(%s, %s)", c.translateExprToType(e.X, t), c.translateExprToType(e.Y, t))
 			case *types.Array:
-				return fmt.Sprintf("Go$arrayIsEqual(%s, %s)", ex, ey)
+				return fmt.Sprintf("Go$arrayIsEqual(%s, %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
 			case *types.Pointer:
 				xUnary, xIsUnary := e.X.(*ast.UnaryExpr)
 				yUnary, yIsUnary := e.Y.(*ast.UnaryExpr)
@@ -407,12 +407,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 				switch u.Elem().Underlying().(type) {
 				case *types.Struct, *types.Interface:
-					return ex + " === " + ey
+					return c.translateExprToType(e.X, t) + " === " + c.translateExprToType(e.Y, t)
 				default:
-					return fmt.Sprintf("Go$pointerIsEqual(%s, %s)", ex, ey)
+					return fmt.Sprintf("Go$pointerIsEqual(%s, %s)", c.translateExprToType(e.X, t), c.translateExprToType(e.Y, t))
 				}
 			default:
-				return ex + " === " + ey
+				return c.translateExprToType(e.X, t) + " === " + c.translateExprToType(e.Y, t)
 			}
 		default:
 			panic(e.Op)

@@ -356,6 +356,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 		c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, typeName)
 		c.Printf("%s.Go$NonPointer = function(v) { this.Go$val = v; };", typeName)
 		c.Printf("%s.Go$NonPointer.prototype.Go$uncomparable = true;", typeName)
+		c.Printf(`%s.prototype.Go$type = function() { return new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Pointer, null, null, Go$newDataPointer("*%s.%s"), null, null); };`, typeName, obj.Pkg().Name(), obj.Name())
 		fields := make([]string, t.NumFields())
 		for i := range fields {
 			field := t.Field(i)

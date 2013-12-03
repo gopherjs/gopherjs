@@ -234,9 +234,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			op = "~"
 		}
-		value := fmt.Sprintf("%s%s", op, c.translateExpr(e.X))
-		value = fixNumber(value, basic)
-		return value
+		return fixNumber(fmt.Sprintf("%s%s", op, c.translateExpr(e.X)), basic)
 
 	case *ast.BinaryExpr:
 		if e.Op == token.NEQ {
@@ -249,81 +247,134 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		t := c.info.Types[e.X]
 		t2 := c.info.Types[e.Y]
-		basic, isBasic := t.(*types.Basic)
 		_, isInterface := t2.Underlying().(*types.Interface)
-		if (isBasic && basic.Kind() == types.UntypedNil) || isInterface {
+		if isInterface {
 			t = t2
 		}
-		ex := c.translateExprToType(e.X, t)
-		ey := c.translateExprToType(e.Y, t)
-		op := e.Op.String()
-		if e.Op == token.AND_NOT {
-			op = "&~"
-		}
+		basic, isBasic := t.Underlying().(*types.Basic)
 
-		basic, isBasic = t.Underlying().(*types.Basic)
+		if isBasic && basic.Info()&types.IsNumeric != 0 {
+			if is64Bit(basic) {
+				var expr string
+				switch e.Op {
+				case token.MUL:
+					return fmt.Sprintf("Go$mul64(%s, %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
+				case token.QUO:
+					return fmt.Sprintf("Go$div64(%s, %s, false)", c.translateExpr(e.X), c.translateExpr(e.Y))
+				case token.REM:
+					return fmt.Sprintf("Go$div64(%s, %s, true)", c.translateExpr(e.X), c.translateExpr(e.Y))
+				case token.SHL:
+					return fmt.Sprintf("Go$shiftLeft64(%s, %s)", c.translateExpr(e.X), c.flatten64(e.Y))
+				case token.SHR:
+					return fmt.Sprintf("Go$shiftRight%s(%s, %s)", toJavaScriptType(basic), c.translateExpr(e.X), c.flatten64(e.Y))
+				case token.EQL:
+					expr = "x.high === y.high && x.low === y.low"
+				case token.LSS:
+					expr = "x.high < y.high || (x.high === y.high && x.low < y.low)"
+				case token.LEQ:
+					expr = "x.high < y.high || (x.high === y.high && x.low <= y.low)"
+				case token.GTR:
+					expr = "x.high > y.high || (x.high === y.high && x.low > y.low)"
+				case token.GEQ:
+					expr = "x.high > y.high || (x.high === y.high && x.low >= y.low)"
+				case token.ADD, token.SUB:
+					expr = fmt.Sprintf("new %s(x.high %s y.high, x.low %s y.low)", c.typeName(t), e.Op, e.Op)
+				case token.AND, token.OR, token.XOR:
+					expr = fmt.Sprintf("new %s(x.high %s y.high, (x.low %s y.low) >>> 0)", c.typeName(t), e.Op, e.Op)
+				case token.AND_NOT:
+					expr = fmt.Sprintf("new %s(x.high &~ y.high, (x.low &~ y.low) >>> 0)", c.typeName(t))
+				default:
+					panic(e.Op)
+				}
+				x := c.newVariable("x")
+				y := c.newVariable("y")
+				expr = strings.Replace(expr, "x.", x+".", -1)
+				expr = strings.Replace(expr, "y.", y+".", -1)
+				return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, c.translateExpr(e.X), y, c.translateExpr(e.Y), expr)
+			}
 
-		if isBasic && is64Bit(basic) {
-			var expr string
+			if basic.Info()&types.IsComplex != 0 {
+				var expr string
+				switch e.Op {
+				case token.EQL:
+					expr = "x.real === y.real && x.imag === y.imag"
+				case token.ADD, token.SUB:
+					expr = fmt.Sprintf("new %s(x.real %s y.real, x.imag %s y.imag)", c.typeName(t), e.Op, e.Op)
+				case token.MUL:
+					expr = fmt.Sprintf("new %s(x.real * y.real - x.imag * y.imag, x.real * y.imag + x.imag * y.real)", c.typeName(t))
+				case token.QUO:
+					return fmt.Sprintf("Go$divComplex(%s, %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
+				default:
+					panic(e.Op)
+				}
+				x := c.newVariable("x")
+				y := c.newVariable("y")
+				expr = strings.Replace(expr, "x.", x+".", -1)
+				expr = strings.Replace(expr, "y.", y+".", -1)
+				return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, c.translateExpr(e.X), y, c.translateExpr(e.Y), expr)
+			}
+
 			switch e.Op {
+			case token.EQL:
+				return fmt.Sprintf("%s === %s", c.translateExpr(e.X), c.translateExpr(e.Y))
+			case token.LSS, token.LEQ, token.GTR, token.GEQ:
+				return fmt.Sprintf("%s %s %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
+			case token.ADD, token.SUB:
+				return fixNumber(fmt.Sprintf("%s %s %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y)), basic)
 			case token.MUL:
-				return fmt.Sprintf("Go$mul64(%s, %s)", ex, ey)
+				if basic.Kind() == types.Int32 {
+					x := c.newVariable("x")
+					y := c.newVariable("y")
+					return fmt.Sprintf("(%s = %s, %s = %s, (((%s >>> 16 << 16) * %s >> 0) + (%s << 16 >>> 16) * %s) >> 0)", x, c.translateExpr(e.X), y, c.translateExpr(e.Y), x, y, x, y)
+				}
+				if basic.Kind() == types.Uint32 {
+					x := c.newVariable("x")
+					y := c.newVariable("y")
+					return fmt.Sprintf("(%s = %s, %s = %s, (((%s >>> 16 << 16) * %s >>> 0) + (%s << 16 >>> 16) * %s) >>> 0)", x, c.translateExpr(e.X), y, c.translateExpr(e.Y), x, y, x, y)
+				}
+				return fixNumber(fmt.Sprintf("%s * %s", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
 			case token.QUO:
-				return fmt.Sprintf("Go$div64(%s, %s, false)", ex, ey)
+				value := fmt.Sprintf("%s / %s", c.translateExpr(e.X), c.translateExpr(e.Y))
+				if basic.Info()&types.IsInteger != 0 {
+					value = "(Go$obj = " + value + `, (Go$obj === Go$obj && Go$obj !== 1/0 && Go$obj !== -1/0) ? Go$obj : Go$throwRuntimeError("integer divide by zero"))`
+				}
+				switch basic.Kind() {
+				case types.Int, types.Uint:
+					return "(" + value + " >> 0)" // cut off decimals
+				default:
+					return fixNumber(value, basic)
+				}
 			case token.REM:
-				return fmt.Sprintf("Go$div64(%s, %s, true)", ex, ey)
-			case token.SHL:
-				return fmt.Sprintf("Go$shiftLeft64(%s, %s)", ex, c.flatten64(e.Y))
-			case token.SHR:
-				return fmt.Sprintf("Go$shiftRight%s(%s, %s)", toJavaScriptType(basic), ex, c.flatten64(e.Y))
-			case token.EQL:
-				expr = "x.high === y.high && x.low === y.low"
-			case token.LSS:
-				expr = "x.high < y.high || (x.high === y.high && x.low < y.low)"
-			case token.LEQ:
-				expr = "x.high < y.high || (x.high === y.high && x.low <= y.low)"
-			case token.GTR:
-				expr = "x.high > y.high || (x.high === y.high && x.low > y.low)"
-			case token.GEQ:
-				expr = "x.high > y.high || (x.high === y.high && x.low >= y.low)"
-			case token.ADD, token.SUB:
-				expr = fmt.Sprintf("new %s(x.high %s y.high, x.low %s y.low)", c.typeName(t), op, op)
-			case token.AND, token.OR, token.XOR, token.AND_NOT:
-				expr = fmt.Sprintf("new %s(x.high %s y.high, (x.low %s y.low) >>> 0)", c.typeName(t), op, op)
+				return fmt.Sprintf(`(Go$obj = %s %% %s, Go$obj === Go$obj ? Go$obj : Go$throwRuntimeError("integer divide by zero"))`, c.translateExpr(e.X), c.translateExpr(e.Y))
+			case token.SHL, token.SHR:
+				op := e.Op.String()
+				if e.Op == token.SHR && basic.Info()&types.IsUnsigned != 0 {
+					op = ">>>"
+				}
+				if c.info.Values[e.Y] != nil {
+					return fixNumber(fmt.Sprintf("%s %s %s", c.translateExpr(e.X), op, c.translateExpr(e.Y)), basic)
+				}
+				if e.Op == token.SHR && basic.Info()&types.IsUnsigned == 0 {
+					return fixNumber(fmt.Sprintf("(%s >> Go$min(%s, 31))", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
+				}
+				y := c.newVariable("y")
+				return fixNumber(fmt.Sprintf("(%s = %s, %s < 32 ? (%s %s %s) : 0)", y, c.translateExprToType(e.Y, types.Typ[types.Uint]), y, c.translateExpr(e.X), op, y), basic)
+			case token.AND, token.OR, token.XOR:
+				return fixNumber(fmt.Sprintf("(%s %s %s)", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y)), basic)
+			case token.AND_NOT:
+				return fixNumber(fmt.Sprintf("(%s &~ %s)", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
 			default:
 				panic(e.Op)
 			}
-			x := c.newVariable("x")
-			y := c.newVariable("y")
-			expr = strings.Replace(expr, "x.", x+".", -1)
-			expr = strings.Replace(expr, "y.", y+".", -1)
-			return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, ex, y, ey, expr)
 		}
 
-		if isBasic && basic.Info()&types.IsComplex != 0 {
-			var expr string
-			switch e.Op {
-			case token.EQL:
-				expr = "x.real === y.real && x.imag === y.imag"
-			case token.ADD, token.SUB:
-				expr = fmt.Sprintf("new %s(x.real %s y.real, x.imag %s y.imag)", c.typeName(t), op, op)
-			case token.MUL:
-				expr = fmt.Sprintf("new %s(x.real * y.real - x.imag * y.imag, x.real * y.imag + x.imag * y.real)", c.typeName(t))
-			case token.QUO:
-				return fmt.Sprintf("Go$divComplex(%s, %s)", ex, ey)
-			default:
-				panic(e.Op)
-			}
-			x := c.newVariable("x")
-			y := c.newVariable("y")
-			expr = strings.Replace(expr, "x.", x+".", -1)
-			expr = strings.Replace(expr, "y.", y+".", -1)
-			return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, ex, y, ey, expr)
-		}
-
-		var value string
 		switch e.Op {
+		case token.ADD, token.LSS, token.LEQ, token.GTR, token.GEQ, token.LAND, token.LOR:
+			return fmt.Sprintf("%s %s %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
 		case token.EQL:
+			ex := c.translateExprToType(e.X, t)
+			ey := c.translateExprToType(e.Y, t)
+
 			switch u := t.Underlying().(type) {
 			case *types.Struct:
 				x := c.newVariable("x")
@@ -363,61 +414,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			default:
 				return ex + " === " + ey
 			}
-		case token.MUL:
-			if basic.Kind() == types.Int32 {
-				x := c.newVariable("x")
-				y := c.newVariable("y")
-				return fmt.Sprintf("(%s = %s, %s = %s, (((%s >>> 16 << 16) * %s >> 0) + (%s << 16 >>> 16) * %s) >> 0)", x, ex, y, ey, x, y, x, y)
-			}
-			if basic.Kind() == types.Uint32 {
-				x := c.newVariable("x")
-				y := c.newVariable("y")
-				return fmt.Sprintf("(%s = %s, %s = %s, (((%s >>> 16 << 16) * %s >>> 0) + (%s << 16 >>> 16) * %s) >>> 0)", x, ex, y, ey, x, y, x, y)
-			}
-			value = ex + " * " + ey
-		case token.QUO:
-			if basic.Info()&types.IsInteger != 0 {
-				value = fmt.Sprintf(`(Go$obj = %s / %s, (Go$obj === Go$obj && Go$obj !== 1/0 && Go$obj !== -1/0) ? Go$obj : Go$throwRuntimeError("integer divide by zero"))`, ex, ey)
-				break
-			}
-			value = ex + " / " + ey
-		case token.REM:
-			value = fmt.Sprintf(`(Go$obj = %s %% %s, Go$obj === Go$obj ? Go$obj : Go$throwRuntimeError("integer divide by zero"))`, ex, ey)
-		case token.SHL, token.SHR:
-			if e.Op == token.SHR && basic.Info()&types.IsUnsigned != 0 {
-				op = ">>>"
-			}
-			if c.info.Values[e.Y] != nil {
-				value = "(" + ex + " " + op + " " + ey + ")"
-				break
-			}
-			if e.Op == token.SHR && basic.Info()&types.IsUnsigned == 0 {
-				value = fmt.Sprintf("(%s >> Go$min(%s, 31))", ex, ey)
-				break
-			}
-			y := c.newVariable("y")
-			value = fmt.Sprintf("(%s = %s, %s < 32 ? (%s %s %s) : 0)", y, c.translateExprToType(e.Y, types.Typ[types.Uint]), y, ex, op, y)
-		case token.AND, token.OR, token.XOR, token.AND_NOT:
-			value = "(" + ex + " " + op + " " + ey + ")"
 		default:
-			value = ex + " " + op + " " + ey
+			panic(e.Op)
 		}
-
-		if isBasic {
-			switch e.Op {
-			case token.ADD, token.SUB, token.MUL, token.AND, token.OR, token.XOR, token.AND_NOT, token.SHL, token.SHR:
-				value = fixNumber(value, basic)
-			case token.QUO:
-				switch basic.Kind() {
-				case types.Int, types.Uint:
-					value = "(" + value + " >> 0)" // cut off decimals
-				default:
-					value = fixNumber(value, basic)
-				}
-			}
-		}
-
-		return value
 
 	case *ast.ParenExpr:
 		return fmt.Sprintf("(%s)", c.translateExpr(e.X))

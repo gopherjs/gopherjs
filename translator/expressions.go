@@ -637,7 +637,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				_, pointerExpected := methodsRecvType.(*types.Pointer)
 				_, isPointer := sel.Recv().Underlying().(*types.Pointer)
 				_, isStruct := sel.Recv().Underlying().(*types.Struct)
-				if pointerExpected && !isPointer && !isStruct {
+				_, isArray := sel.Recv().Underlying().(*types.Array)
+				if pointerExpected && !isPointer && !isStruct && !isArray {
 					target := c.translateExpr(f.X)
 					vVar := c.newVariable("v")
 					fun = fmt.Sprintf("(new %s(function() { return %s; }, function(%s) { %s = %s; })).%s", c.typeName(methodsRecvType), target, vVar, target, vVar, f.Sel.Name)

@@ -317,17 +317,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 	obj := c.info.Objects[s.Name]
 	typeName := c.objectName(obj)
-	if isWrapped(obj.Type()) {
-		c.Printf(`%s = function(v) { this.Go$val = v; };`, typeName)
-		c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.Go$val; };`, typeName, typeName)
-		c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", typeName)
-		c.Printf("%s.Go$Pointer.Go$nil = new %s.Go$Pointer(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
-		switch t := obj.Type().Underlying().(type) {
-		case *types.Basic:
-			c.Printf(`%s.prototype.Go$type = function() { return new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.%s, %s, null, Go$newDataPointer("%s.%s"), null, null); };`, typeName, toJavaScriptType(t), typeName, obj.Pkg().Name(), obj.Name())
-		}
-		return
-	}
 	switch t := obj.Type().Underlying().(type) {
 	case *types.Struct:
 		params := make([]string, t.NumFields())
@@ -405,7 +394,22 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 		}
 	case *types.Interface:
 		c.Printf("%s = { Go$implementedBy: [] };", typeName)
+	case *types.Array:
+		c.Printf(`%s = function(v) { this.Go$val = v; };`, typeName)
+		c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.Go$val; };`, typeName, typeName)
 	default:
+		if isWrapped(t) {
+			c.Printf(`%s = function(v) { this.Go$val = v; };`, typeName)
+			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.Go$val; };`, typeName, typeName)
+			c.Printf("%s.Go$Pointer = function(getter, setter) { this.Go$get = getter; this.Go$set = setter; };", typeName)
+			c.Printf("%s.Go$Pointer.Go$nil = new %s.Go$Pointer(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
+			switch t := obj.Type().Underlying().(type) {
+			case *types.Basic:
+				c.Printf(`%s.prototype.Go$type = function() { return new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.%s, %s, null, Go$newDataPointer("%s.%s"), null, null); };`, typeName, toJavaScriptType(t), typeName, obj.Pkg().Name(), obj.Name())
+			}
+			return
+		}
+
 		underlyingTypeName := c.typeName(t)
 		c.Printf("%s = function() { %s.apply(this, arguments); };", typeName, underlyingTypeName)
 		c.Printf("%s.prototype.Go$key = function() { return \"%s$\" + %s.prototype.Go$key.apply(this); };", typeName, typeName, underlyingTypeName)
@@ -496,6 +500,10 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 			printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
 			c.Printf("%s.Go$Pointer.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, joinedParams, value, fun.Name.Name, joinedParams)
 		case !isStruct && isPointer:
+			if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
+				printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
+				break
+			}
 			value := "this"
 			if isWrapped(ptr.Elem()) {
 				value = "this.Go$val"
@@ -835,6 +843,9 @@ func isWrapped(ty types.Type) bool {
 		return !is64Bit(t) && t.Info()&types.IsComplex == 0 && t.Kind() != types.UntypedNil
 	case *types.Array, *types.Signature:
 		return true
+	case *types.Pointer:
+		_, isArray := t.Elem().Underlying().(*types.Array)
+		return isArray
 	}
 	return false
 }

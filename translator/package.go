@@ -703,9 +703,6 @@ func (c *PkgContext) newIdent(name string, t types.Type) *ast.Ident {
 }
 
 func (c *PkgContext) objectName(o types.Object) string {
-	if o.Name() == "error" {
-		return "Go$error"
-	}
 	if o.Pkg() != nil && o.Pkg() != c.pkg {
 		return c.pkgVars[o.Pkg().Path()] + "." + o.Name()
 	}
@@ -733,6 +730,9 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		}
 		return "Go$" + toJavaScriptType(t)
 	case *types.Named:
+		if t.Obj().Name() == "error" {
+			return "Go$error"
+		}
 		if _, isStruct := t.Underlying().(*types.Struct); isStruct {
 			return c.objectName(t.Obj()) + ".Go$NonPointer"
 		}

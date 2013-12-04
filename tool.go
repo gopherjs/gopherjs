@@ -257,7 +257,7 @@ func tool() error {
 		}
 		mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte("}; Go$pkg.init = function() {};")...)
 
-		tempfile, err := ioutil.TempFile("", path.Base(flag.Arg(1))+".")
+		tempfile, err := ioutil.TempFile("", "test.")
 		if err != nil {
 			return err
 		}

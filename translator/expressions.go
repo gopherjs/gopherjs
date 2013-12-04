@@ -608,12 +608,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		funType := c.info.Types[plainFun]
 		sig, isSig := funType.Underlying().(*types.Signature)
 		if !isSig { // conversion
-			if call, isCall := e.Args[0].(*ast.CallExpr); isCall {
-				if types.IsIdentical(c.info.Types[call.Fun], types.Typ[types.UnsafePointer]) {
+			if c.pkg.Path() == "reflect" {
+				if call, isCall := e.Args[0].(*ast.CallExpr); isCall && types.IsIdentical(c.info.Types[call.Fun], types.Typ[types.UnsafePointer]) {
 					if named, isNamed := funType.(*types.Pointer).Elem().(*types.Named); isNamed {
 						return c.translateExpr(call.Args[0]) + "." + named.Obj().Name() // unsafe conversion
 					}
-					return c.translateExpr(call.Args[0]) // unsafe conversion
 				}
 			}
 			return c.translateExprToType(e.Args[0], funType)

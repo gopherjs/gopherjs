@@ -201,6 +201,7 @@ func tool() error {
 
 	case "test":
 		testFlags := flag.NewFlagSet("test", flag.ContinueOnError)
+		short := testFlags.Bool("short", false, "")
 		verbose := testFlags.Bool("v", false, "")
 		testFlags.Parse(flag.Args()[1:])
 
@@ -270,6 +271,9 @@ func tool() error {
 		}
 
 		var args []string
+		if *short {
+			args = append(args, "-test.short")
+		}
 		if *verbose {
 			args = append(args, "-test.v")
 		}

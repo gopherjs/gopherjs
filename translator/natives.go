@@ -515,6 +515,9 @@ var Go$Panic = function(value) {
 	}
 	Error.captureStackTrace(this, Go$Panic);
 };
+var Go$Exit = function() {
+	Error.captureStackTrace(this, Go$Exit);
+};
 
 // TODO improve error wrapping
 var Go$wrapJavaScriptError = function(err) {
@@ -957,6 +960,7 @@ var natives = map[string]string{
 			}
 			return 1;
 		};
+		Goexit = function() { throw new Go$Exit(); };
 		ReadMemStats = function() {};
 		SetFinalizer = function() {};
 	`,
@@ -1032,8 +1036,10 @@ var natives = map[string]string{
 					}
 					tests[i](t);
 				} catch (e) {
-					t.Fail();
-					err = e;
+					if (e.constructor !== Go$Exit) {
+						t.Fail();
+						err = e;
+					}
 				}
 				t.common.duration = time.Now().Sub(t.common.start);
 				t.report();

@@ -77,35 +77,55 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			exprType = ptrType.Elem()
 		}
 
-		var elements []string
-		collectIndexedElements := func(elementType types.Type) {
-			elements = make([]string, 0)
+		collectIndexedElements := func(elementType types.Type) []string {
+			elements := make([]string, 0)
+			i := 0
 			zero := c.zeroValue(elementType)
 			for _, element := range e.Elts {
 				if kve, isKve := element.(*ast.KeyValueExpr); isKve {
 					key, _ := exact.Int64Val(c.info.Values[kve.Key])
-					for len(elements) < int(key) {
-						elements = append(elements, zero)
-					}
+					i = int(key)
 					element = kve.Value
 				}
-				elements = append(elements, c.translateExprToType(element, elementType))
+				for len(elements) <= i {
+					elements = append(elements, zero)
+				}
+				elements[i] = c.translateExprToType(element, elementType)
+				i++
 			}
+			return elements
 		}
+
 		switch t := exprType.Underlying().(type) {
 		case *types.Array:
-			collectIndexedElements(t.Elem())
+			elements := collectIndexedElements(t.Elem())
+			if len(elements) != 0 {
+				zero := c.zeroValue(t.Elem())
+				for len(elements) < int(t.Len()) {
+					elements = append(elements, zero)
+				}
+				return createListComposite(t.Elem(), elements)
+			}
+			return fmt.Sprintf("Go$makeArray(%s, %d, function() { return %s; })", toArrayType(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
 		case *types.Slice:
-			collectIndexedElements(t.Elem())
+			elements := collectIndexedElements(t.Elem())
+			if named, isNamed := exprType.(*types.Named); isNamed {
+				return fmt.Sprintf("new %s(%s)", c.typeName(named), createListComposite(t.Elem(), elements))
+			}
+			return fmt.Sprintf("new Go$Slice(%s)", createListComposite(t.Elem(), elements))
 		case *types.Map:
-			elements = make([]string, len(e.Elts)*2)
+			elements := make([]string, len(e.Elts)*2)
 			for i, element := range e.Elts {
 				kve := element.(*ast.KeyValueExpr)
 				elements[i*2] = c.translateExprToType(kve.Key, t.Key())
 				elements[i*2+1] = c.translateExprToType(kve.Value, t.Elem())
 			}
+			if named, isNamed := exprType.(*types.Named); isNamed {
+				return fmt.Sprintf("new %s([%s])", c.typeName(named), strings.Join(elements, ", "))
+			}
+			return fmt.Sprintf("new Go$Map([%s])", strings.Join(elements, ", "))
 		case *types.Struct:
-			elements = make([]string, t.NumFields())
+			elements := make([]string, t.NumFields())
 			isKeyValue := true
 			if len(e.Elts) != 0 {
 				_, isKeyValue = e.Elts[0].(*ast.KeyValueExpr)
@@ -129,42 +149,15 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					}
 				}
 			}
-		}
-
-		switch t := exprType.(type) {
-		case *types.Array:
-			if len(elements) != 0 {
-				zero := c.zeroValue(t.Elem())
-				for len(elements) < int(t.Len()) {
-					elements = append(elements, zero)
-				}
-				return createListComposite(t.Elem(), elements)
+			if named, isNamed := exprType.(*types.Named); isNamed {
+				return fmt.Sprintf("new %s(%s)", c.objectName(named.Obj()), strings.Join(elements, ", "))
 			}
-			return fmt.Sprintf("Go$makeArray(%s, %d, function() { return %s; })", toArrayType(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
-		case *types.Slice:
-			return fmt.Sprintf("new Go$Slice(%s)", createListComposite(t.Elem(), elements))
-		case *types.Map:
-			return fmt.Sprintf("new Go$Map([%s])", strings.Join(elements, ", "))
-		case *types.Struct:
 			structVar := c.newVariable("_struct")
 			c.translateTypeSpec(&ast.TypeSpec{
 				Name: c.newIdent(structVar, t),
 				Type: e.Type,
 			})
 			return fmt.Sprintf("new %s(%s)", structVar, strings.Join(elements, ", "))
-		case *types.Named:
-			switch u := t.Underlying().(type) {
-			case *types.Array:
-				return createListComposite(u.Elem(), elements)
-			case *types.Slice:
-				return fmt.Sprintf("new %s(%s)", c.typeName(t), createListComposite(u.Elem(), elements))
-			case *types.Map:
-				return fmt.Sprintf("new %s([%s])", c.typeName(t), strings.Join(elements, ", "))
-			case *types.Struct:
-				return fmt.Sprintf("new %s(%s)", c.objectName(t.Obj()), strings.Join(elements, ", "))
-			default:
-				panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", u))
-			}
 		default:
 			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", t))
 		}

@@ -1,3 +1,5 @@
+// This file is used to generate the functions Float32bits, Float32frombits, Float64bits and Float64frombits for natives.go.
+
 package main
 
 import (

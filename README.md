@@ -9,9 +9,6 @@ GopherJS translates [Go code](http://golang.org/) to pure JavaScript code. Its m
 
 You can take advantage of Go's elegant type system and other compile-time checks that can have a huge impact on bug detection and the ability to refactor, especially for big projects. Just think of how often a JavaScript method has extra handling of some legacy parameter scheme, because you don't know exactly if some other code is still calling it in that old way or not. GopherJS will tell you and if it does not complain, you can be sure that this kind of bug is not present any more.
 
-### What is supported?
-The transpiler is able to turn itself (and all packages it uses) into pure JavaScript code that runs in all major browsers. It also passes a lot of the tests that are shipped with the Go source. This suggests a quite good coverage of Go's specification. However, there are some known exceptions listed below and some unknown exceptions that I would love to hear about when you find them.
-
 ### Installation and Usage
 Get GopherJS and dependencies with: 
 ```
@@ -28,6 +25,30 @@ mkdir -p ~/.node_libraries/
 cp build/Release/syscall.node ~/.node_libraries/syscall.node
 cd ../../../../../
 ```
+
+### What is supported?
+The transpiler is able to turn itself (and all packages it uses) into pure JavaScript code that runs in all major browsers. It also passes a lot of the tests that are shipped with the Go source. This suggests a quite good coverage of Go's specification. However, there are some known exceptions listed below and some unknown exceptions that I would love to hear about when you find them.
+
+Packages with passing test suites:
+
+- bytes
+- container/heap
+- container/list
+- errors
+- hash/adler32
+- hash/fnv
+- io
+- math
+- path
+- regexp
+- sort
+- strconv
+- strings
+- text/scanner
+- text/tabwriter
+- unicode
+- unicode/utf8
+- unicode/utf16
 
 ### Roadmap
 These features are not implemented yet, but on the roadmap:

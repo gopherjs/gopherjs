@@ -1,30 +1,28 @@
 #include <node.h>
 #include <v8.h>
 #include <unistd.h>
-#include <iostream>
+#include <errno.h>
 
 using namespace v8;
 
 #define SYS_FORK 2
 #define SYS_PIPE 42
 
-const char* ABC = "abc";
-
-size_t toNative(Local<Value> value) {
+intptr_t toNative(Local<Value> value) {
   if (value.IsEmpty()) {
     return 0;
   }
   if (value->IsArrayBufferView()) {
     Local<ArrayBufferView> view = Local<ArrayBufferView>::Cast(value);
-    return (size_t)view->BaseAddress();
+    return *reinterpret_cast<intptr_t*>(*reinterpret_cast<char**>(*view->Buffer()) + 23) + view->ByteOffset(); // ugly hack, because of https://codereview.chromium.org/25221002
   }
   if (value->IsArray()) {
     Local<Array> array = Local<Array>::Cast(value);
-    size_t* native = (size_t*)malloc(array->Length() * sizeof(size_t)); // TODO memory leak
+    intptr_t* native = reinterpret_cast<intptr_t*>(malloc(array->Length() * sizeof(intptr_t))); // TODO memory leak
     for (uint32_t i = 0; i < array->Length(); i++) {
       native[i] = toNative(array->CloneElementAt(i));
     }
-    return (size_t)native;
+    return (intptr_t)native;
   }
   return value->ToInteger()->Value();
 }

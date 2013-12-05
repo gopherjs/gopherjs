@@ -13,16 +13,9 @@ You can take advantage of Go's elegant type system and other compile-time checks
 The transpiler is able to turn itself (and all packages it uses) into pure JavaScript code that runs in all major browsers. It also passes a lot of the tests that are shipped with the Go source. This suggests a quite good coverage of Go's specification. However, there are some known exceptions listed below and some unknown exceptions that I would love to hear about when you find them.
 
 ### Installation and Usage
-*Note: You may want to use a separate GOPATH because of the go/types patch below.*
-
 Get GopherJS and dependencies with: 
 ```
 go get github.com/neelance/gopherjs
-```
-Patch go/types and compile GopherJS again (will become optional soon):
-```
-patch -p 1 -d src/code.google.com/p/go.tools/ < src/github.com/neelance/gopherjs/patches/go.types.patch
-go install github.com/neelance/gopherjs
 ```
 Now you can use  `./bin/gopherjs build` and `./bin/gopherjs install` which behave similar to the `go` tool. The generated JavaScript files can be used as usual in a website.
 

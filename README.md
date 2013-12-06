@@ -32,13 +32,26 @@ The transpiler is able to turn itself (and all packages it uses) into pure JavaS
 Packages with passing test suites:
 
 - bytes
+- compress/bzip2
 - container/heap
 - container/list
+- crypto/des
+- crypto/hmac
+- encoding/ascii85
+- encoding/base32
+- encoding/base64
+- encoding/csv
+- encoding/hex
+- encoding/pem
 - errors
 - hash/adler32
 - hash/fnv
+- html
 - io
+- io/ioutil
 - math
+- math/rand
+- mime
 - path
 - regexp
 - sort

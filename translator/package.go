@@ -704,7 +704,11 @@ func (c *PkgContext) newIdent(name string, t types.Type) *ast.Ident {
 
 func (c *PkgContext) objectName(o types.Object) string {
 	if o.Pkg() != nil && o.Pkg() != c.pkg {
-		return c.pkgVars[o.Pkg().Path()] + "." + o.Name()
+		pkgVar, found := c.pkgVars[o.Pkg().Path()]
+		if !found {
+			pkgVar = fmt.Sprintf(`Go$packages["%s"]`, o.Pkg().Path())
+		}
+		return pkgVar + "." + o.Name()
 	}
 
 	name, found := c.objectVars[o]

@@ -35,8 +35,10 @@ Packages with passing test suites:
 - compress/bzip2
 - container/heap
 - container/list
+- crypto/aes
 - crypto/des
 - crypto/hmac
+- crypto/rand
 - encoding/ascii85
 - encoding/base32
 - encoding/base64
@@ -45,8 +47,14 @@ Packages with passing test suites:
 - encoding/pem
 - errors
 - hash/adler32
+- hash/crc32
+- hash/crc64
 - hash/fnv
 - html
+- image
+- image/color
+- image/draw
+- image/gif
 - io
 - io/ioutil
 - math

@@ -16,15 +16,19 @@ var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}
 func GetAllDependencies(pkg string, config *types.Config) ([]*types.Package, error) {
 	var dependencies []*types.Package // ordered
 	imported := make(map[string]bool)
-	var importPkg func(string) error
-	importPkg = func(importPath string) error {
+	var importPkg func(string, []string) error
+	importPkg = func(importPath string, importing []string) error {
 		if importPath == "unsafe" || importPath == "go/doc" {
 			return nil
 		}
 		if _, found := imported[importPath]; found {
 			return nil
 		}
-		imported[importPath] = true
+		for _, path := range importing {
+			if path == importPath {
+				return fmt.Errorf("package import cycle: %s -> %s", strings.Join(importing, " -> "), importPath)
+			}
+		}
 
 		typesPkg, err := config.Import(config.Packages, importPath)
 		if err != nil {
@@ -36,16 +40,17 @@ func GetAllDependencies(pkg string, config *types.Config) ([]*types.Package, err
 		}
 		sort.Strings(imps)
 		for _, imp := range imps {
-			if err := importPkg(imp); err != nil {
+			if err := importPkg(imp, append(importing, importPath)); err != nil {
 				return err
 			}
 		}
 
 		dependencies = append(dependencies, typesPkg)
+		imported[importPath] = true
 		return nil
 	}
-	importPkg("runtime") // all packages depend on runtime
-	err := importPkg(pkg)
+	importPkg("runtime", nil) // all packages depend on runtime
+	err := importPkg(pkg, nil)
 	return dependencies, err
 }
 

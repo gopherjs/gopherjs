@@ -401,6 +401,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				switch u.Elem().Underlying().(type) {
 				case *types.Struct, *types.Interface:
 					return c.translateExprToType(e.X, t) + " === " + c.translateExprToType(e.Y, t)
+				case *types.Array:
+					return fmt.Sprintf("Go$arrayIsEqual(%s, %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
 				default:
 					return fmt.Sprintf("Go$pointerIsEqual(%s, %s)", c.translateExprToType(e.X, t), c.translateExprToType(e.Y, t))
 				}

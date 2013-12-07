@@ -586,6 +586,9 @@ var Go$interfaceIsEqual = function(a, b) {
 	return a.Go$val === b.Go$val;
 };
 var Go$arrayIsEqual = function(a, b) {
+	if (a === null || b === null) {
+		return a === null && b === null;
+	}
 	if (a.length != b.length) {
 		return false;
 	}

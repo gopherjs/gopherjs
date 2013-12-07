@@ -51,8 +51,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					buffer.WriteString(`\t`)
 				case '\v':
 					buffer.WriteString(`\v`)
-				case 0:
-					buffer.WriteString(`\0`)
 				case '"':
 					buffer.WriteString(`\"`)
 				case '\\':

@@ -1,8 +1,9 @@
 GopherJS - A transpiler from Go to JavaScript
 ---------------------------------------------
 
-### Playground
-Try GopherJS here: [GopherJS Playground](http://neelance.github.io/gopherjs-playground/)
+### Useful Links
+- Try GopherJS on the [GopherJS Playground](http://neelance.github.io/gopherjs-playground/)
+- Get help in the [Google Group](https://groups.google.com/d/forum/gopherjs)
 
 ### What is GopherJS?
 GopherJS translates [Go code](http://golang.org/) to pure JavaScript code. Its main purpose is to give you the opportunity to write front-end code in Go which will still run in all browsers.

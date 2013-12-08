@@ -738,17 +738,12 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 	exprType := c.info.Types[expr]
 
 	// TODO should be fixed in go/types
-	switch e := expr.(type) {
-	case *ast.BasicLit:
-		if e.Kind == token.STRING {
+	if _, isSlice := exprType.(*types.Slice); isSlice {
+		constValue := c.info.Values[expr]
+		if constValue != nil && constValue.Kind() == exact.String {
 			exprType = types.Typ[types.String]
 			c.info.Types[expr] = exprType
 		}
-	}
-	constValue := c.info.Values[expr]
-	if constValue != nil && constValue.Kind() == exact.String {
-		exprType = types.Typ[types.String]
-		c.info.Types[expr] = exprType
 	}
 
 	basicExprType, isBasicExpr := exprType.Underlying().(*types.Basic)

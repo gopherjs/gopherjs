@@ -676,6 +676,16 @@ var natives = map[string]string{
 		};
 	`,
 
+	"io/ioutil": `
+		var blackHoles = [];
+		blackHole = function() {
+			return blackHoles.pop() || new Go$Slice(Go$makeArray(Go$ByteArray, 8192, function() { return 0; }));
+		};
+		blackHolePut = function(p) {
+			blackHoles.push(p);
+		};
+	`,
+
 	"math": `
 		Abs = Math.abs;
 		Acos = Math.acos;

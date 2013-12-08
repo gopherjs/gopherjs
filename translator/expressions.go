@@ -317,7 +317,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					y := c.newVariable("y")
 					return fmt.Sprintf("(%s = %s, %s = %s, (((%s >>> 16 << 16) * %s >> 0) + (%s << 16 >>> 16) * %s) >> 0)", x, c.translateExpr(e.X), y, c.translateExpr(e.Y), x, y, x, y)
 				}
-				if basic.Kind() == types.Uint32 {
+				if basic.Kind() == types.Uint32 || basic.Kind() == types.Uintptr {
 					x := c.newVariable("x")
 					y := c.newVariable("y")
 					return fmt.Sprintf("(%s = %s, %s = %s, (((%s >>> 16 << 16) * %s >>> 0) + (%s << 16 >>> 16) * %s) >>> 0)", x, c.translateExpr(e.X), y, c.translateExpr(e.Y), x, y, x, y)

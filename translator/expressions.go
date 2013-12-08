@@ -853,7 +853,10 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			return target
 		}
 
-		if !isStruct && isNamed && !types.IsIdentical(exprType, desiredType) {
+		if isNamed && !types.IsIdentical(exprType, desiredType) {
+			if isStruct {
+				return c.clone(c.translateExpr(expr), t.Elem())
+			}
 			return fmt.Sprintf("(Go$obj = %s, new %s.Go$Pointer(Go$obj.Go$get, Go$obj.Go$set))", c.translateExpr(expr), c.typeName(n))
 		}
 

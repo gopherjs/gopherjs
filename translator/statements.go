@@ -186,7 +186,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			case *types.Array:
 				length = fmt.Sprintf("%d", t2.Len())
 			case *types.Pointer:
-				length = fmt.Sprintf("%d", t2.Elem().(*types.Array).Len())
+				length = fmt.Sprintf("%d", t2.Elem().Underlying().(*types.Array).Len())
 			case *types.Slice:
 				length = refVar + ".length"
 			}

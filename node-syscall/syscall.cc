@@ -22,9 +22,9 @@ intptr_t toNative(Local<Value> value) {
     for (uint32_t i = 0; i < array->Length(); i++) {
       native[i] = toNative(array->CloneElementAt(i));
     }
-    return (intptr_t)native;
+    return reinterpret_cast<intptr_t>(native);
   }
-  return value->ToInteger()->Value();
+  return static_cast<intptr_t>(static_cast<int32_t>(value->ToInteger()->Value()));
 }
 
 void Syscall(const FunctionCallbackInfo<Value>& info) {

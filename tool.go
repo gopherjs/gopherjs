@@ -296,7 +296,7 @@ func tool() error {
 			os.Remove(tempfile.Name())
 		}()
 
-		if err := writeCommandPackage(mainPkg, tempfile.Name()); err != nil {
+		if err := writeCommandPackage(mainPkg, "out.js"); err != nil {
 			return err
 		}
 
@@ -307,7 +307,7 @@ func tool() error {
 		if *verbose {
 			args = append(args, "-test.v")
 		}
-		return runNode(tempfile.Name(), args, "")
+		return runNode("out.js", args, "")
 
 	case "tool":
 		tool := flag.Arg(1)

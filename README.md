@@ -31,6 +31,9 @@ The transpiler is able to turn itself (and all packages it uses) into pure JavaS
 
 Packages with passing test suites:
 
+- archive/tar
+- archive/zip
+- bufio
 - bytes
 - compress/bzip2
 - container/heap

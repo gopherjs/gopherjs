@@ -31,12 +31,20 @@ The transpiler is able to turn itself (and all packages it uses) into pure JavaS
 
 Packages with passing test suites:
 
+- archive/tar
+- archive/zip
+- bufio
 - bytes
 - compress/bzip2
+- compress/gzip
 - container/heap
 - container/list
 - crypto/aes
+- crypto/cipher
 - crypto/des
+- crypto/dsa
+- crypto/ecdsa
+- crypto/elliptic
 - crypto/hmac
 - crypto/rand
 - encoding/ascii85
@@ -55,6 +63,7 @@ Packages with passing test suites:
 - image/color
 - image/draw
 - image/gif
+- image/jpeg
 - io
 - io/ioutil
 - math

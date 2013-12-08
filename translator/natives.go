@@ -521,6 +521,9 @@ var Go$Exit = function() {
 
 // TODO improve error wrapping
 var Go$wrapJavaScriptError = function(err) {
+	if (err.constructor === Go$Exit) {
+		throw err;
+	}
 	var panic = new Go$Panic(err);
 	panic.stack = err.stack;
 	return panic;

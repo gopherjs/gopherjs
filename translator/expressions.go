@@ -400,7 +400,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case *types.Struct, *types.Interface:
 					return c.translateExprToType(e.X, t) + " === " + c.translateExprToType(e.Y, t)
 				case *types.Array:
-					return fmt.Sprintf("Go$arrayIsEqual(%s, %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
+					return fmt.Sprintf("Go$arrayIsEqual(%s, %s)", c.translateExprToType(e.X, t), c.translateExprToType(e.Y, t))
 				default:
 					return fmt.Sprintf("Go$pointerIsEqual(%s, %s)", c.translateExprToType(e.X, t), c.translateExprToType(e.Y, t))
 				}

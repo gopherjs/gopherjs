@@ -1073,9 +1073,13 @@ var natives = map[string]string{
 
 	"time": `
 		now = Go$now;
+		After = function() { Go$throwRuntimeError("not supported by GopherJS: time.After (use time.AfterFunc instead)") };
 		AfterFunc = function(d, f) {
 			setTimeout(f, Go$div64(d, Go$pkg.Millisecond).low);
 			return null;
 		};
+		NewTimer = function() { Go$throwRuntimeError("not supported by GopherJS: time.NewTimer (use time.AfterFunc instead)") };
+		Sleep = function() { Go$throwRuntimeError("not supported by GopherJS: time.Sleep (use time.AfterFunc instead)") };
+		Tick = function() { Go$throwRuntimeError("not supported by GopherJS: time.Tick (use time.AfterFunc instead)") };
 	`,
 }

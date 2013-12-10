@@ -62,14 +62,14 @@ var Go$ByteArray       = Go$Uint8Array;
 var Go$RuneArray       = Go$Int32Array;
 
 var Go$Int64 = function(high, low) {
-	this.high = (high + Math.floor(low / 4294967296)) >> 0;
+	this.high = (high + Math.floor(Math.ceil(low) / 4294967296)) >> 0;
 	this.low = low >>> 0;
 	this.Go$val = this;
 };
 Go$Int64.prototype.Go$key = function() { return "Int64$" + this.high + "$" + this.low; };
 
 var Go$Uint64 = function(high, low) {
-	this.high = (high + Math.floor(low / 4294967296)) >>> 0;
+	this.high = (high + Math.floor(Math.ceil(low) / 4294967296)) >>> 0;
 	this.low = low >>> 0;
 	this.Go$val = this;
 };

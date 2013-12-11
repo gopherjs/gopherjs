@@ -65,6 +65,10 @@ func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 	if path == "hash/crc32" {
 		pkg.GoFiles = []string{"crc32.go", "crc32_generic.go"}
 	}
+	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
+		// fall back to GOPATH
+		pkg.PkgObj = build.Default.GOPATH + pkg.PkgObj[len(build.Default.GOROOT):]
+	}
 	return pkg, err
 }
 
@@ -457,17 +461,31 @@ func buildPackage(pkg *Package) error {
 	}
 
 	if installMode && !pkg.IsCommand() {
-		if err := os.MkdirAll(path.Dir(pkg.PkgObj), 0777); err != nil {
+		if err := writeLibraryPackage(pkg, pkg.PkgObj); err != nil {
+			if strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
+				// fall back to GOPATH
+				if err := writeLibraryPackage(pkg, build.Default.GOPATH+pkg.PkgObj[len(build.Default.GOROOT):]); err != nil {
+					return err
+				}
+				return nil
+			}
 			return err
 		}
-		file, err := os.Create(pkg.PkgObj)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		translator.WriteArchive(pkg.JavaScriptCode, typesConfig.Packages[pkg.ImportPath], file)
 	}
 
+	return nil
+}
+
+func writeLibraryPackage(pkg *Package, pkgObj string) error {
+	if err := os.MkdirAll(path.Dir(pkgObj), 0777); err != nil {
+		return err
+	}
+	file, err := os.Create(pkgObj)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	translator.WriteArchive(pkg.JavaScriptCode, typesConfig.Packages[pkg.ImportPath], file)
 	return nil
 }
 

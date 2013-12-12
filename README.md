@@ -49,7 +49,11 @@ Packages with passing test suites:
 - crypto/ecdsa
 - crypto/elliptic
 - crypto/hmac
+- crypto/md5
 - crypto/rand
+- crypto/sha1
+- crypto/sha256
+- crypto/sha512
 - encoding/ascii85
 - encoding/base32
 - encoding/base64

@@ -17,7 +17,7 @@ go get github.com/neelance/gopherjs
 ```
 Now you can use  `./bin/gopherjs build` and `./bin/gopherjs install` which behave similar to the `go` tool. The generated JavaScript files can be used as usual in a website.
 
-*Note: GopherJS will try to write compiled object files of the core packages to your \$GOROOT/pkg directory. If that fails, it will fall back to \$GOPATH/pkg.*
+*Note: GopherJS will try to write compiled object files of the core packages to your $GOROOT/pkg directory. If that fails, it will fall back to $GOPATH/pkg.*
 
 If you want to run the generated code with Node.js instead, get the latest 0.11 release from [here](http://blog.nodejs.org/release/). Then compile and install a Node module that is required for syscalls (e.g. writing output to terminal):
 ```

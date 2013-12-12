@@ -376,7 +376,19 @@ func buildPackage(pkg *Package) error {
 	}
 
 	if pkg.PkgObj != "" {
-		if fileInfo, err := os.Stat(os.Args[0]); err == nil { // gopherjs itself
+		fileInfo, err := os.Stat(os.Args[0]) // gopherjs itself
+		if err != nil {
+			for _, path := range strings.Split(os.Getenv("PATH"), string(os.PathListSeparator)) {
+				fileInfo, err = os.Stat(path + "/" + os.Args[0])
+				if err == nil {
+					break
+				}
+			}
+			if err != nil {
+				os.Stderr.WriteString("Could not get GopherJS binary's modification timestamp. Please report issue.\n")
+			}
+		}
+		if err == nil {
 			pkg.SrcModTime = fileInfo.ModTime()
 		}
 

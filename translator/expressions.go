@@ -14,7 +14,10 @@ import (
 func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	exprType := c.info.Types[expr]
 	if value, valueFound := c.info.Values[expr]; valueFound {
-		basic := exprType.Underlying().(*types.Basic)
+		basic := types.Typ[types.String]
+		if value.Kind() != exact.String { // workaround for bug in go/types
+			basic = exprType.Underlying().(*types.Basic)
+		}
 		switch {
 		case basic.Info()&types.IsBoolean != 0:
 			return strconv.FormatBool(exact.BoolVal(value))

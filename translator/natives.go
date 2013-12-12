@@ -9,38 +9,48 @@ var Go$keys = Object.keys;
 var Go$min = Math.min;
 var Go$throwRuntimeError, Go$reflect;
 
-var Go$Uint8      = function(v) { this.Go$val = v; };
-Go$Uint8.prototype.Go$key = function() { return "Uint8$" + this.Go$val; };
-var Go$Uint16     = function(v) { this.Go$val = v; };
-Go$Uint16.prototype.Go$key = function() { return "Uint16$" + this.Go$val; };
-var Go$Uint32     = function(v) { this.Go$val = v; };
-Go$Uint32.prototype.Go$key = function() { return "Uint32$" + this.Go$val; };
-var Go$Int8       = function(v) { this.Go$val = v; };
-Go$Int8.prototype.Go$key = function() { return "Int8$" + this.Go$val; };
-var Go$Int16      = function(v) { this.Go$val = v; };
-Go$Int16.prototype.Go$key = function() { return "Int16$" + this.Go$val; };
-var Go$Int32      = function(v) { this.Go$val = v; };
-Go$Int32.prototype.Go$key = function() { return "Int32$" + this.Go$val; };
-var Go$Float32    = function(v) { this.Go$val = v; };
-Go$Float32.prototype.Go$key = function() { return "Float32$" + this.Go$val; };
-var Go$Float64    = function(v) { this.Go$val = v; };
-Go$Float64.prototype.Go$key = function() { return "Float64$" + this.Go$val; };
-var Go$Uint       = function(v) { this.Go$val = v; };
-Go$Uint.prototype.Go$key = function() { return "Uint$" + this.Go$val; };
-var Go$Int        = function(v) { this.Go$val = v; };
-Go$Int.prototype.Go$key = function() { return "Int$" + this.Go$val; };
-var Go$Uintptr    = function(v) { this.Go$val = v; };
-Go$Uintptr.prototype.Go$key = function() { return "Uintptr$" + this.Go$val; };
-var Go$Byte       = Go$Uint8;
-var Go$Rune       = Go$Int32;
+var Go$cache = function(f) {
+	var v = undefined;
+	return function() {
+		if (v === undefined) {
+			v = f();
+		}
+		return v;
+	};
+};
 
-var Go$Bool   = function(v) { this.Go$val = v; };
-Go$Bool.prototype.Go$key = function() { return "Bool$" + this.Go$val; };
-var Go$String = function(v) { this.Go$val = v; };
-Go$String.prototype.Go$key = function() { return "String$" + this.Go$val; };
-var Go$Func   = function(v) { this.Go$val = v; };
+var newWrappedType = function(name, size) {
+	var typ = function(v) { this.Go$val = v; };
+	typ.prototype.Go$key = function() { return name + "$" + this.Go$val; };
+	var rt = null;
+	typ.Go$string = name;
+	typ.Go$type = Go$cache(function() {
+		return new Go$reflect.rtype(size, 0, 0, 0, 0, Go$reflect.kinds[name], typ, null, Go$newDataPointer(name), null, null);
+	});
+	return typ;
+};
+
+var Go$Uint8   = newWrappedType("uint8", 1);
+var Go$Uint16  = newWrappedType("uint16", 2);
+var Go$Uint32  = newWrappedType("uint32", 4);
+var Go$Int8    = newWrappedType("int8", 1);
+var Go$Int16   = newWrappedType("int16", 2);
+var Go$Int32   = newWrappedType("int32", 4);
+var Go$Float32 = newWrappedType("float32", 4);
+var Go$Float64 = newWrappedType("float64", 8);
+var Go$Uint    = newWrappedType("uint", 4);
+var Go$Int     = newWrappedType("int", 4);
+var Go$Uintptr = newWrappedType("uintptr", 4);
+var Go$Byte    = Go$Uint8;
+var Go$Rune    = Go$Int32;
+
+var Go$Bool    = newWrappedType("bool", 0);
+var Go$String  = newWrappedType("string", 0);
+
+var Go$Func    = newWrappedType("func", 0);
 Go$Func.prototype.Go$uncomparable = true;
-Go$Func.prototype.Go$key = function() { return "Func$" + this.Go$val; };
+
+var Go$UnsafePointer = newWrappedType("unsafe.Pointer", 4)
 
 var Go$Array           = Array;
 var Go$Uint8Array      = Uint8Array;
@@ -61,12 +71,30 @@ var Go$UintptrArray    = Uint32Array;
 var Go$ByteArray       = Go$Uint8Array;
 var Go$RuneArray       = Go$Int32Array;
 
+var typeCache = {};
+var Go$arrayType = function(elem, len) {
+	var typeString = "[" + len + "]" + elem.Go$string;
+	var typ = typeCache[typeString];
+	if (typ === undefined) {
+		typ = function(v) { this.Go$val = v; };
+		typ.Go$string = typeString;
+		typ.Go$type = Go$cache(function() {
+			var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.array, null, null, Go$newDataPointer(typ.Go$string), null, null);
+			rt.arrayType = new Go$reflect.arrayType(rt, elem.Go$type(), null, len);
+			return rt;
+		});
+		typeCache[typeString] = typ;
+	}
+	return typ;
+};
+
 var Go$Int64 = function(high, low) {
 	this.high = (high + Math.floor(Math.ceil(low) / 4294967296)) >> 0;
 	this.low = low >>> 0;
 	this.Go$val = this;
 };
 Go$Int64.prototype.Go$key = function() { return "Int64$" + this.high + "$" + this.low; };
+Go$Int64.Go$type = Go$cache(function() { return new Go$reflect.rtype(8, 0, 0, 0, 0, Go$reflect.kinds.int64, Go$Int64, null, Go$newDataPointer("int64"), null, null); });
 
 var Go$Uint64 = function(high, low) {
 	this.high = (high + Math.floor(Math.ceil(low) / 4294967296)) >>> 0;
@@ -74,6 +102,7 @@ var Go$Uint64 = function(high, low) {
 	this.Go$val = this;
 };
 Go$Uint64.prototype.Go$key = function() { return "Uint64$" + this.high + "$" + this.low; };
+Go$Uint64.Go$type = Go$cache(function() { return new Go$reflect.rtype(8, 0, 0, 0, 0, Go$reflect.kinds.uint64, Go$Uint64, null, Go$newDataPointer("int64"), null, null); });
 
 var Go$flatten64 = function(x) {
 	return x.high * 4294967296 + x.low;
@@ -183,6 +212,7 @@ var Go$Complex64  = function(real, imag) {
 	this.Go$val = this;
 };
 Go$Complex64.prototype.Go$key = function() { return "Complex64$" + this.Go$val; };
+Go$Complex64.Go$type = Go$cache(function() { return new Go$reflect.rtype(8, 0, 0, 0, 0, Go$reflect.kinds.complex64, Go$Complex64, null, Go$newDataPointer("complex64"), null, null); });
 
 var Go$Complex128  = function(real, imag) {
 	this.real = real;
@@ -190,6 +220,7 @@ var Go$Complex128  = function(real, imag) {
 	this.Go$val = this;
 };
 Go$Complex128.prototype.Go$key = function() { return "Complex128$" + this.Go$val; };
+Go$Complex128.Go$type = Go$cache(function() { return new Go$reflect.rtype(16, 0, 0, 0, 0, Go$reflect.kinds.complex128, Go$Complex128, null, Go$newDataPointer("complex128"), null, null); });
 
 var Go$divComplex = function(n, d) {
 	var ninf = n.real === 1/0 || n.real === -1/0 || n.imag === 1/0 || n.imag === -1/0;
@@ -863,33 +894,15 @@ var natives = map[string]string{
 
 	"reflect": `
 		Go$reflect = {
-			rtype: rtype, uncommonType: uncommonType, structType: structType, structField: structField,
-			Bool: Go$pkg.Bool, Int: Go$pkg.Int, Int8: Go$pkg.Int8, Int16: Go$pkg.Int16, Int32: Go$pkg.Int32, Int64: Go$pkg.Int64, Uint: Go$pkg.Uint, Uint8: Go$pkg.Uint8, Uint16: Go$pkg.Uint16, Uint32: Go$pkg.Uint32, Uint64: Go$pkg.Uint64, Uintptr: Go$pkg.Uintptr, Float32: Go$pkg.Float32, Float64: Go$pkg.Float64, Complex64: Go$pkg.Complex64, Complex128: Go$pkg.Complex128, Array: Go$pkg.Array, Chan: Go$pkg.Chan, Func: Go$pkg.Func, Interface: Go$pkg.Interface, Map: Go$pkg.Map, Ptr: Go$pkg.Ptr, Slice: Go$pkg.Slice, String: Go$pkg.String, Struct: Go$pkg.Struct, UnsafePointer: Go$pkg.UnsafePointer
+			rtype: rtype, uncommonType: uncommonType, arrayType: arrayType, structType: structType, structField: structField,
+			kinds: {bool: Go$pkg.Bool, int: Go$pkg.Int, int8: Go$pkg.Int8, int16: Go$pkg.Int16, int32: Go$pkg.Int32, int64: Go$pkg.Int64, uint: Go$pkg.Uint, uint8: Go$pkg.Uint8, uint16: Go$pkg.Uint16, uint32: Go$pkg.Uint32, uint64: Go$pkg.Uint64, uintptr: Go$pkg.Uintptr, float32: Go$pkg.Float32, float64: Go$pkg.Float64, complex64: Go$pkg.Complex64, complex128: Go$pkg.Complex128, array: Go$pkg.Array, chan: Go$pkg.Chan, func: Go$pkg.Func, interface: Go$pkg.Interface, map: Go$pkg.Map, ptr: Go$pkg.Ptr, slice: Go$pkg.Slice, string: Go$pkg.String, struct: Go$pkg.Struct, "unsafe.Pointer": Go$pkg.UnsafePointer}
 		};
-
-		Go$Bool.prototype.Go$type       = function() { return new rtype( 0, 0, 0, 0, 0, Go$pkg.Bool      , Go$Bool      , null, Go$newDataPointer("bool")      , null, null); };
-		Go$Int.prototype.Go$type        = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Int       , Go$Int       , null, Go$newDataPointer("int")       , null, null); };
-		Go$Int8.prototype.Go$type       = function() { return new rtype( 1, 0, 0, 0, 0, Go$pkg.Int8      , Go$Int8      , null, Go$newDataPointer("int8")      , null, null); };
-		Go$Int16.prototype.Go$type      = function() { return new rtype( 2, 0, 0, 0, 0, Go$pkg.Int16     , Go$Int16     , null, Go$newDataPointer("int16")     , null, null); };
-		Go$Int32.prototype.Go$type      = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Int32     , Go$Int32     , null, Go$newDataPointer("int32")     , null, null); };
-		Go$Int64.prototype.Go$type      = function() { return new rtype( 8, 0, 0, 0, 0, Go$pkg.Int64     , Go$Int64     , null, Go$newDataPointer("int64")     , null, null); };
-		Go$Uint.prototype.Go$type       = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Uint      , Go$Uint      , null, Go$newDataPointer("uint")      , null, null); };
-		Go$Uint8.prototype.Go$type      = function() { return new rtype( 1, 0, 0, 0, 0, Go$pkg.Uint8     , Go$Uint8     , null, Go$newDataPointer("uint8")     , null, null); };
-		Go$Uint16.prototype.Go$type     = function() { return new rtype( 2, 0, 0, 0, 0, Go$pkg.Uint16    , Go$Uint16    , null, Go$newDataPointer("uint16")    , null, null); };
-		Go$Uint32.prototype.Go$type     = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Uint32    , Go$Uint32    , null, Go$newDataPointer("uint32")    , null, null); };
-		Go$Uint64.prototype.Go$type     = function() { return new rtype( 8, 0, 0, 0, 0, Go$pkg.Uint64    , Go$Uint64    , null, Go$newDataPointer("uint64")    , null, null); };
-		Go$Uintptr.prototype.Go$type    = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Uintptr   , Go$Uintptr   , null, Go$newDataPointer("uintptr")   , null, null); };
-		Go$Float32.prototype.Go$type    = function() { return new rtype( 4, 0, 0, 0, 0, Go$pkg.Float32   , Go$Float32   , null, Go$newDataPointer("float32")   , null, null); };
-		Go$Float64.prototype.Go$type    = function() { return new rtype( 8, 0, 0, 0, 0, Go$pkg.Float64   , Go$Float64   , null, Go$newDataPointer("float64")   , null, null); };
-		Go$Complex64.prototype.Go$type  = function() { return new rtype( 8, 0, 0, 0, 0, Go$pkg.Complex64 , Go$Complex64 , null, Go$newDataPointer("complex64") , null, null); };
-		Go$Complex128.prototype.Go$type = function() { return new rtype(16, 0, 0, 0, 0, Go$pkg.Complex128, Go$Complex128, null, Go$newDataPointer("complex128"), null, null); };
-		Go$String.prototype.Go$type     = function() { return new rtype( 0, 0, 0, 0, 0, Go$pkg.String    , Go$String    , null, Go$newDataPointer("string")    , null, null); };
 
 		TypeOf = function(i) {
-			return i.Go$type();
+			return i.constructor.Go$type();
 		};
 		ValueOf = function(i) {
-			var typ = i.Go$type();
+			var typ = i.constructor.Go$type();
 			var flag = typ.Kind() << Go$pkg.flagKindShift;
 			return new Value(typ, i.Go$val, flag);
 		};
@@ -897,11 +910,22 @@ var natives = map[string]string{
 			this.mustBe(Go$pkg.Struct);
 			var tt = this.typ.structType;
 			if (i < 0 || i >= tt.fields.length) {
-				throw new Go$Panic("reflect: Field index out of range")
+				throw new Go$Panic("reflect: Field index out of range");
 			}
 			var field = tt.fields.array[i];
-			var flag = field.typ.Kind() << Go$pkg.flagKindShift;
-			return new Value(field.typ, this.val[field.name.Go$get()], flag);
+			var fl = field.typ.Kind() << Go$pkg.flagKindShift;
+			return new Value(field.typ, this.val[field.name.Go$get()], fl);
+		};
+		Value.prototype.Index = function(i) {
+			this.mustBe(Go$pkg.Array);
+			var tt = this.typ.arrayType;
+			if (i < 0 || i >= tt.len) {
+				throw new Go$Panic("reflect: array index out of range");
+			}
+			var typ = tt.elem;
+			var fl = this.flag & (Go$pkg.flagRO | Go$pkg.flagIndir | Go$pkg.flagAddr);
+			fl |= typ.Kind() << Go$pkg.flagKindShift;
+			return new Value(typ, this.val[i], fl);
 		};
 		valueInterface = function(v, safe) {
 			if (v.val.constructor === v.typ.alg) {

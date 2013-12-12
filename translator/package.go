@@ -364,7 +364,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 			fields[i] = fmt.Sprintf(`new Go$reflect.structField(%s, %s, %s.prototype.Go$type(), %s, 0)`, name, path, c.typeName(field.Type()), tag)
 		}
 		uncommonType := fmt.Sprintf(`new Go$reflect.uncommonType(Go$newDataPointer("%s"), Go$newDataPointer("%s.%s"), Go$Slice.Go$nil)`, typeName, obj.Pkg().Name(), typeName)
-		c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, %s, null, Go$newDataPointer("%s.%s"), %s, null); t.structType = new Go$reflect.structType(null, new Go$Slice([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), uncommonType, strings.Join(fields, ", "))
+		c.Printf(`%s.Go$NonPointer.prototype.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.Struct, %s, null, Go$newDataPointer("%s.%s"), %s, null); t.structType = new Go$reflect.structType(t, new Go$Slice([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), uncommonType, strings.Join(fields, ", "))
 		for i := 0; i < t.NumFields(); i++ {
 			field := t.Field(i)
 			if field.Anonymous() {

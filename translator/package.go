@@ -277,7 +277,11 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				o := c.info.Objects[name].(*types.Const)
 				c.info.Types[name] = o.Type()
 				c.info.Values[name] = o.Val()
-				c.Printf("%s = %s;", c.objectName(o), c.translateExpr(name))
+				varPrefix := ""
+				if !name.IsExported() {
+					varPrefix = "var "
+				}
+				c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.translateExpr(name))
 			}
 		}
 
@@ -285,7 +289,11 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		for _, spec := range varSpecs {
 			for _, name := range spec.Names {
 				o := c.info.Objects[name].(*types.Var)
-				c.Printf("%s = %s;", c.objectName(o), c.zeroValue(o.Type()))
+				varPrefix := ""
+				if !o.IsExported() {
+					varPrefix = "var "
+				}
+				c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.zeroValue(o.Type()))
 			}
 		}
 
@@ -719,7 +727,7 @@ func (c *PkgContext) objectName(o types.Object) string {
 
 	switch o.(type) {
 	case *types.Var, *types.Const:
-		if o.Parent() == c.pkg.Scope() {
+		if o.IsExported() && o.Parent() == c.pkg.Scope() {
 			return "Go$pkg." + name
 		}
 	}

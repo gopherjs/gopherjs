@@ -232,7 +232,7 @@ var Go$div64 = function(x, y, returnRemainder) {
 		yLow = (yLow >>> 1 | yHigh << (32 - 1)) >>> 0;
 		yHigh = yHigh >>> 1;
 	}
-	
+
 	if (returnRemainder) {
 		return new x.constructor(xHigh * rs, xLow * rs);
 	}
@@ -941,7 +941,7 @@ var natives = map[string]string{
 		};
 		ValueOf = function(i) {
 			var typ = i.constructor.Go$type();
-			var flag = typ.Kind() << Go$pkg.flagKindShift;
+			var flag = typ.Kind() << flagKindShift;
 			return new Value(typ, i.Go$val, flag);
 		};
 		Value.prototype.Field = function(i) {
@@ -951,7 +951,7 @@ var natives = map[string]string{
 				throw new Go$Panic("reflect: Field index out of range");
 			}
 			var field = tt.fields.array[i];
-			var fl = field.typ.Kind() << Go$pkg.flagKindShift;
+			var fl = field.typ.Kind() << flagKindShift;
 			return new Value(field.typ, this.val[field.name.Go$get()], fl);
 		};
 		Value.prototype.Index = function(i) {
@@ -961,8 +961,8 @@ var natives = map[string]string{
 				throw new Go$Panic("reflect: array index out of range");
 			}
 			var typ = tt.elem;
-			var fl = this.flag & (Go$pkg.flagRO | Go$pkg.flagIndir | Go$pkg.flagAddr);
-			fl |= typ.Kind() << Go$pkg.flagKindShift;
+			var fl = this.flag & (flagRO | flagIndir | flagAddr);
+			fl |= typ.Kind() << flagKindShift;
 			return new Value(typ, this.val[i], fl);
 		};
 		valueInterface = function(v, safe) {
@@ -1021,7 +1021,7 @@ var natives = map[string]string{
 
 	"runtime": `
 		Go$throwRuntimeError = function(msg) { throw new Go$Panic(new errorString(msg)) };
-		Go$pkg.sizeof_C_MStats = 3712;
+		sizeof_C_MStats = 3712;
 		getgoroot = function() { return (typeof process !== 'undefined') ? (process.env["GOROOT"] || "") : "/"; };
 		Caller = function(skip) {
 			var line = Go$getStack()[skip + 3];
@@ -1083,16 +1083,16 @@ var natives = map[string]string{
 			BytePtrFromString = function(s) { return [Go$stringToBytes(s, true), null]; };
 
 			var envkeys = Object.keys(process.env);
-			Go$pkg.envs = new Go$Slice(new Array(envkeys.length));
+			envs = new Go$Slice(new Array(envkeys.length));
 			for(var i = 0; i < envkeys.length; i++) {
-				Go$pkg.envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
+				envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
 			}
 		} else {
 			Go$pkg.Go$setSyscall = function(f) {
 				Syscall = Syscall6 = RawSyscall = RawSyscall6 = f;
 			}
 			Go$pkg.Go$setSyscall(function() { throw "Syscalls not available in browser." });
-			Go$pkg.envs = new Go$Slice(new Array(0));
+			envs = new Go$Slice(new Array(0));
 		}
 	`,
 
@@ -1109,7 +1109,7 @@ var natives = map[string]string{
 				var t = new T(new common(new sync.RWMutex(), Go$Slice.Go$nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
 				var err = null;
 				try {
-					if (Go$pkg.chatty.Go$get()) {
+					if (chatty.Go$get()) {
 						console.log("=== RUN " + t.name);
 					}
 					tests[i](t);

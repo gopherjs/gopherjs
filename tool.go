@@ -247,6 +247,7 @@ func tool() error {
 
 			pkg := &Package{Package: buildPkg}
 			pkg.GoFiles = append(pkg.GoFiles, pkg.TestGoFiles...)
+			pkg.PkgObj = "" // do not load from disk
 			if err := buildPackage(pkg); err != nil {
 				return err
 			}

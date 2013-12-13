@@ -605,12 +605,12 @@ func (c *PkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellips
 	params := make([]string, sig.Params().Len())
 	for i := range params {
 		if sig.IsVariadic() && i == len(params)-1 && !ellipsis {
-			varargType := sig.Params().At(i).Type().(*types.Slice).Elem()
+			varargType := sig.Params().At(i).Type().(*types.Slice)
 			varargs := make([]string, len(args)-i)
 			for j, arg := range args[i:] {
-				varargs[j] = c.translateExprToType(arg, varargType)
+				varargs[j] = c.translateExprToType(arg, varargType.Elem())
 			}
-			params[i] = fmt.Sprintf("new Go$Slice(%s)", createListComposite(varargType, varargs))
+			params[i] = fmt.Sprintf("new %s(%s)", c.typeName(varargType), createListComposite(varargType.Elem(), varargs))
 			break
 		}
 		argType := sig.Params().At(i).Type()

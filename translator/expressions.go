@@ -109,11 +109,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			return fmt.Sprintf("Go$makeArray(%s, %d, function() { return %s; })", toArrayType(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
 		case *types.Slice:
-			elements := collectIndexedElements(t.Elem())
-			if named, isNamed := exprType.(*types.Named); isNamed {
-				return fmt.Sprintf("new %s(%s)", c.typeName(named), createListComposite(t.Elem(), elements))
-			}
-			return fmt.Sprintf("new Go$Slice(%s)", createListComposite(t.Elem(), elements))
+			return fmt.Sprintf("new %s(%s)", c.typeName(exprType), createListComposite(t.Elem(), collectIndexedElements(t.Elem())))
 		case *types.Map:
 			elements := make([]string, len(e.Elts)*2)
 			for i, element := range e.Elts {
@@ -121,10 +117,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				elements[i*2] = c.translateExprToType(kve.Key, t.Key())
 				elements[i*2+1] = c.translateExprToType(kve.Value, t.Elem())
 			}
-			if named, isNamed := exprType.(*types.Named); isNamed {
-				return fmt.Sprintf("new %s([%s])", c.typeName(named), strings.Join(elements, ", "))
-			}
-			return fmt.Sprintf("new Go$Map([%s])", strings.Join(elements, ", "))
+			return fmt.Sprintf("new %s([%s])", c.typeName(exprType), strings.Join(elements, ", "))
 		case *types.Struct:
 			elements := make([]string, t.NumFields())
 			isKeyValue := true
@@ -827,7 +820,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 				return fmt.Sprintf("new %s(Go$stringToBytes(%s))", c.typeName(desiredType), c.translateExpr(expr))
 			}
 		case *types.Array, *types.Pointer:
-			return fmt.Sprintf("new Go$Slice(%s)", c.translateExpr(expr))
+			return fmt.Sprintf("new %s(%s)", c.typeName(desiredType), c.translateExpr(expr))
 		}
 		_, desiredIsNamed := desiredType.(*types.Named)
 		if desiredIsNamed && !types.IsIdentical(exprType, desiredType) {

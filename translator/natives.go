@@ -154,56 +154,89 @@ var Go$shiftRightUint64 = function(x, y) {
 	return new x.constructor(high, low);
 };
 var Go$mul64 = function(x, y) {
-	var s = 1;
-	if (y.high < 0) {
-		y = new Go$Uint64(-y.high, -y.low);
-		s = -1;
+	var high = 0;
+	var low = 0;
+	if ((y.low & 1) !== 0) {
+		high = x.high;
+		low = x.low;
 	}
-	var r = new x.constructor(0, 0);
-	while (y.high !== 0 || y.low !== 0) {
-		if ((y.low & 1) === 1) {
-			r = new x.constructor(r.high + x.high, r.low + x.low);
+	for (var i = 1; i < 32; i++) {
+		if ((y.low & 1<<i) !== 0) {
+			high += x.high << i | x.low >>> (32 - i);
+			low += (x.low << i) >>> 0;
 		}
-		y = Go$shiftRightUint64(y, 1);
-		x = Go$shiftLeft64(x, 1);
 	}
-	return new x.constructor(r.high * s, r.low * s);
+	for (var i = 0; i < 32; i++) {
+		if ((y.high & 1<<i) !== 0) {
+			high += x.low << i;
+		}
+	}
+	return new x.constructor(high, low);
 };
 var Go$div64 = function(x, y, returnRemainder) {
 	if (y.high === 0 && y.low === 0) {
 		Go$throwRuntimeError("integer divide by zero");
 	}
-	var typ = x.constructor;
+
 	var s = 1;
 	var rs = 1;
-	if (y.high < 0) {
+
+	var xHigh = x.high;
+	var xLow = x.low;
+	if (xHigh < 0) {
 		s = -1;
-	}
-	y = new Go$Uint64(y.high * s, y.low * s);
-	if (x.high < 0) {
-		x = new Go$Uint64(-x.high, -x.low);
-		s *= -1;
 		rs = -1;
+		xHigh = -xHigh;
+		if (xLow !== 0) {
+			xHigh--;
+			xLow = 4294967296 - xLow;
+		}
 	}
-	var r = new Go$Uint64(0, 0);
+
+	var yHigh = y.high;
+	var yLow = y.low;
+	if (y.high < 0) {
+		s *= -1;
+		yHigh = -yHigh;
+		if (yLow !== 0) {
+			yHigh--;
+			yLow = 4294967296 - yLow;
+		}
+	}
+
+	var low = 0;
+	var high = 0;
 	var n = 0;
-	while (y.high < 2147483648 && ((x.high > y.high) || (x.high === y.high && x.low > y.low))) {
-		y = Go$shiftLeft64(y, 1);
-		n += 1;
+	while (yHigh < 2147483648 && ((xHigh > yHigh) || (xHigh === yHigh && xLow > yLow))) {
+		yHigh = (yHigh << 1 | yLow >>> 31) >>> 0;
+		yLow = (yLow << 1) >>> 0;
+		n++;
 	}
 	var i = 0;
 	for (var i = 0; i <= n; i++) {
-		r = Go$shiftLeft64(r, 1);
-		if ((x.high > y.high) || (x.high === y.high && x.low >= y.low)) {
-			x = new Go$Uint64(x.high - y.high, x.low - y.low);
-			r = new Go$Uint64(r.high, r.low + 1);
+		high = high << 1 | low >>> 31;
+		low = (low << 1) >>> 0;
+		if ((xHigh > yHigh) || (xHigh === yHigh && xLow >= yLow)) {
+			xHigh = xHigh - yHigh;
+			xLow = xLow - yLow;
+			if (xLow < 0) {
+				xHigh--;
+				xLow += 4294967296;
+			}
+			low++;
+			if (low === 4294967296) {
+				high++;
+				low = 0;
+			}
 		}
-		y = Go$shiftRightUint64(y, 1);
+		yLow = (yLow >>> 1 | yHigh << (32 - 1)) >>> 0;
+		yHigh = yHigh >>> 1;
 	}
+	
 	if (returnRemainder) {
-		return new typ(x.high * rs, x.low * rs);
+		return new x.constructor(xHigh * rs, xLow * rs);
 	}
-	return new typ(r.high * s, r.low * s);
+	return new x.constructor(high * s, low * s);
 };
 
 var Go$Complex64  = function(real, imag) {

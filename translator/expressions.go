@@ -763,7 +763,10 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 					return fmt.Sprintf("(Go$obj = %s, new %s(Go$obj.high, Go$obj.low))", c.translateExpr(expr), c.typeName(desiredType))
 				}
 			case is64Bit(basicExprType):
-				return fmt.Sprintf("(Go$obj = %s, Go$obj.low + ((Go$obj.high >> 31) * 4294967296))", c.translateExpr(expr))
+				if t.Info()&types.IsUnsigned == 0 && basicExprType.Info()&types.IsUnsigned == 0 {
+					return fmt.Sprintf("(Go$obj = %s, Go$obj.low + ((Go$obj.high >> 31) * 4294967296))", c.translateExpr(expr))
+				}
+				return fmt.Sprintf("%s.low", c.translateExpr(expr))
 			case basicExprType.Info()&types.IsFloat != 0:
 				return fmt.Sprintf("(%s >> 0)", c.translateExpr(expr))
 			default:

@@ -434,12 +434,6 @@ var Go$makeArray = function(constructor, length, zero) { // TODO do not use for 
 	return array;
 };
 
-var Go$copyArray = function(dst, src) {
-	for (var i = 0; i < src.length; i++) {
-		dst[i] = src[i];
-	}
-};
-
 var Go$mapArray = function(array, f) {
 	var newArray = new array.constructor(array.length);
 	for (var i = 0; i < array.length; i++) {
@@ -474,12 +468,9 @@ var Go$newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });
 };
 
-var Go$copy = function(dst, src) {
-	if (src.length === 0 || dst.length === 0) {
-		return 0;
-	}
+var Go$copySlice = function(dst, src) {
 	var n = Math.min(src.length, dst.length);
-	if (dst.array.constructor !== Array) {
+	if (dst.array.constructor !== Array && n !== 0) {
 		dst.array.set(src.array.subarray(src.offset, src.offset + n), dst.offset);
 		return n;
 	}
@@ -487,6 +478,20 @@ var Go$copy = function(dst, src) {
 		dst.array[dst.offset + i] = src.array[src.offset + i];
 	}
 	return n;
+};
+
+var Go$copyString = function(dst, src) {
+	var n = Math.min(src.length, dst.length);
+	for (var i = 0; i < n; i++) {
+		dst.array[dst.offset + i] = src.charCodeAt(i);
+	}
+	return n;
+};
+
+var Go$copyArray = function(dst, src) {
+	for (var i = 0; i < src.length; i++) {
+		dst[i] = src[i];
+	}
 };
 
 var Go$append = function(slice, toAppend) {

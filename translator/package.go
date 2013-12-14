@@ -240,6 +240,16 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			}
 			c.Printf("Go$pkg.%s = %s;", typeName, typeName)
 		}
+		for _, spec := range typeSpecs {
+			obj := c.info.Objects[spec.Name]
+			typeName := c.objectName(obj)
+			switch obj.Type().Underlying().(type) {
+			case *types.Slice:
+				c.Printf("%s.Go$nil = new %s({ isNil: true, length: 0 });", typeName, typeName)
+			case *types.Pointer:
+				c.Printf("%s.Go$nil = new %s(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
+			}
+		}
 
 		// package functions
 		for _, fun := range functionsByType[nil] {
@@ -425,12 +435,6 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 		c.Printf("%s = function() { %s.apply(this, arguments); };", typeName, underlyingTypeName)
 		c.Printf(`%s.Go$string = "%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
 		c.Printf("%s.prototype.Go$key = function() { return \"%s$\" + %s.prototype.Go$key.apply(this); };", typeName, typeName, underlyingTypeName)
-		switch t.(type) {
-		case *types.Slice:
-			c.Printf("%s.Go$nil = new %s({ isNil: true, length: 0 });", typeName, typeName)
-		case *types.Pointer:
-			c.Printf("%s.Go$nil = new %s(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
-		}
 	}
 }
 

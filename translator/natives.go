@@ -9,11 +9,10 @@ var Go$keys = Object.keys;
 var Go$min = Math.min;
 var Go$throwRuntimeError, Go$reflect;
 
-var Go$cache = function(f) {
-	var v = undefined;
+var Go$cache = function(v) {
 	return function() {
-		if (v === undefined) {
-			v = f();
+		if (v.constructor === Function) {
+			v = v();
 		}
 		return v;
 	};
@@ -21,12 +20,11 @@ var Go$cache = function(f) {
 
 var newWrappedType = function(name, size) {
 	var typ = function(v) { this.Go$val = v; };
-	typ.prototype.Go$key = function() { return name + "$" + this.Go$val; };
-	var rt = null;
 	typ.Go$string = name;
 	typ.Go$type = Go$cache(function() {
 		return new Go$reflect.rtype(size, 0, 0, 0, 0, Go$reflect.kinds[name], typ, null, Go$newDataPointer(name), null, null);
 	});
+	typ.prototype.Go$key = function() { return name + "$" + this.Go$val; };
 	return typ;
 };
 
@@ -71,19 +69,44 @@ var Go$UintptrArray    = Uint32Array;
 var Go$ByteArray       = Go$Uint8Array;
 var Go$RuneArray       = Go$Int32Array;
 
-var typeCache = {};
+var typeRegistry = {};
+
 var Go$arrayType = function(elem, len) {
 	var typeString = "[" + len + "]" + elem.Go$string;
-	var typ = typeCache[typeString];
+	var typ = typeRegistry[typeString];
 	if (typ === undefined) {
 		typ = function(v) { this.Go$val = v; };
 		typ.Go$string = typeString;
 		typ.Go$type = Go$cache(function() {
-			var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.array, null, null, Go$newDataPointer(typ.Go$string), null, null);
+			var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.array, null, null, Go$newDataPointer(typeString), null, null);
 			rt.arrayType = new Go$reflect.arrayType(rt, elem.Go$type(), null, len);
 			return rt;
 		});
-		typeCache[typeString] = typ;
+		typeRegistry[typeString] = typ;
+	}
+	return typ;
+};
+
+var Go$sliceType = function(elem) {
+	var typeString = "[]" + elem.Go$string;
+	var typ = typeRegistry[typeString];
+	if (typ === undefined) {
+		typ = function(array) {
+			this.array = array;
+			this.offset = 0;
+			this.length = array && array.length;
+			this.capacity = this.length;
+			this.Go$val = this;
+		};
+		typ.Go$string = 
+		typ.Go$nil = new typ({ isNil: true, length: 0 });
+		typ.Go$type = Go$cache(function() {
+			var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.slice, null, null, Go$newDataPointer(typeString), null, null);
+			rt.sliceType = new Go$reflect.sliceType(rt, elem.Go$type());
+			return rt;
+		});
+		typ.prototype.Go$uncomparable = true;
+		typeRegistry[typeString] = typ;
 	}
 	return typ;
 };
@@ -287,16 +310,6 @@ var Go$divComplex = function(n, d) {
 	return new n.constructor((n.imag * ratio + n.real) / denom, (n.imag - n.real * ratio) / denom);
 };
 
-var Go$Slice = function(array) {
-	this.array = array;
-	this.offset = 0;
-	this.length = array && array.length;
-	this.capacity = this.length;
-	this.Go$val = this;
-};
-Go$Slice.prototype.Go$uncomparable = true;
-Go$Slice.Go$nil = new Go$Slice({ isNil: true, length: 0 });
-
 var Go$subslice = function(slice, low, high, max) {
 	if (low < 0 || high < low || max < high || high > slice.capacity || max > slice.capacity) {
 		Go$throwRuntimeError("slice bounds out of range");
@@ -487,10 +500,9 @@ for (var i = 0; i < Go$objectProperyNames.length; i++) {
 	Go$Map.prototype[Go$objectProperyNames[i]] = undefined;
 }
 
-var Go$Interface = function(value) {
-	return value;
-};
-
+var Go$Struct = function() {};
+var Go$Interface = function(value) { return value; };
+Go$Interface.Go$string = "interface{}";
 var Go$Channel = function() {};
 
 var Go$throwNilPointerError = function() { Go$throwRuntimeError("invalid memory address or nil pointer dereference"); };
@@ -748,7 +760,7 @@ var natives = map[string]string{
 	"io/ioutil": `
 		var blackHoles = [];
 		blackHole = function() {
-			return blackHoles.pop() || new Go$Slice(Go$makeArray(Go$ByteArray, 8192, function() { return 0; }));
+			return blackHoles.pop() || new (Go$sliceType(Go$Byte))(Go$makeArray(Go$ByteArray, 8192, function() { return 0; }));
 		};
 		blackHolePut = function(p) {
 			blackHoles.push(p);
@@ -927,12 +939,12 @@ var natives = map[string]string{
 	`,
 
 	"os": `
-		Go$pkg.Args = new Go$Slice((typeof process !== 'undefined') ? process.argv.slice(1) : []);
+		Go$pkg.Args = new (Go$sliceType(Go$String))((typeof process !== 'undefined') ? process.argv.slice(1) : []);
 	`,
 
 	"reflect": `
 		Go$reflect = {
-			rtype: rtype, uncommonType: uncommonType, arrayType: arrayType, structType: structType, structField: structField,
+			rtype: rtype, uncommonType: uncommonType, arrayType: arrayType, sliceType: sliceType, structType: structType, structField: structField,
 			kinds: {bool: Go$pkg.Bool, int: Go$pkg.Int, int8: Go$pkg.Int8, int16: Go$pkg.Int16, int32: Go$pkg.Int32, int64: Go$pkg.Int64, uint: Go$pkg.Uint, uint8: Go$pkg.Uint8, uint16: Go$pkg.Uint16, uint32: Go$pkg.Uint32, uint64: Go$pkg.Uint64, uintptr: Go$pkg.Uintptr, float32: Go$pkg.Float32, float64: Go$pkg.Float64, complex64: Go$pkg.Complex64, complex128: Go$pkg.Complex128, array: Go$pkg.Array, chan: Go$pkg.Chan, func: Go$pkg.Func, interface: Go$pkg.Interface, map: Go$pkg.Map, ptr: Go$pkg.Ptr, slice: Go$pkg.Slice, string: Go$pkg.String, struct: Go$pkg.Struct, "unsafe.Pointer": Go$pkg.UnsafePointer}
 		};
 
@@ -943,6 +955,14 @@ var natives = map[string]string{
 			var typ = i.constructor.Go$type();
 			var flag = typ.Kind() << flagKindShift;
 			return new Value(typ, i.Go$val, flag);
+		};
+
+		Value.prototype.Bytes = function() {
+			this.mustBe(Go$pkg.Slice);
+			if (this.typ.Elem().Kind() !== Go$pkg.Uint8) {
+				throw new Go$Panic("reflect.Value.Bytes of non-byte slice");
+			}
+			return this.val;
 		};
 		Value.prototype.Field = function(i) {
 			this.mustBe(Go$pkg.Struct);
@@ -955,15 +975,45 @@ var natives = map[string]string{
 			return new Value(field.typ, this.val[field.name.Go$get()], fl);
 		};
 		Value.prototype.Index = function(i) {
-			this.mustBe(Go$pkg.Array);
-			var tt = this.typ.arrayType;
-			if (i < 0 || i >= tt.len) {
-				throw new Go$Panic("reflect: array index out of range");
+			var k = this.kind();
+			switch (k) {
+			case Go$pkg.Array:
+				var tt = this.typ.arrayType;
+				if (i < 0 || i >= tt.len) {
+					throw new Go$Panic("reflect: array index out of range");
+				}
+				var typ = tt.elem;
+				var fl = this.flag & (flagRO | flagIndir | flagAddr);
+				fl |= typ.Kind() << flagKindShift;
+				return new Value(typ, this.val[i], fl);
+			case Go$pkg.Slice:
+				if (i < 0 || i >= this.val.length) {
+					throw new Go$Panic("reflect: slice index out of range");
+				}
+				var typ = this.typ.sliceType.elem;
+				var fl = flagAddr | flagIndir | (this.flag & flagRO);
+				fl |= typ.Kind() << flagKindShift;
+				i += this.val.offset;
+				var array = this.val.array;
+				return new Value(typ, new Go$Pointer(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
+			case Go$pkg.String:
+				if (i < 0 || i >= this.val.length) {
+					throw new Go$Panic("reflect: string index out of range");
+				}
+				var fl = (this.flag & flagRO) | (Go$pkg.Uint8 << flagKindShift);
+				return new Value(uint8Type, this.val.charCodeAt(i), fl);
 			}
-			var typ = tt.elem;
-			var fl = this.flag & (flagRO | flagIndir | flagAddr);
-			fl |= typ.Kind() << flagKindShift;
-			return new Value(typ, this.val[i], fl);
+			throw new Go$Panic(new ValueError("reflect.Value.Index", k));
+		};
+		Value.prototype.Len = function() {
+			var k = this.kind();
+			switch (k) {
+			case Go$pkg.Array:
+			case Go$pkg.Slice:
+			case Go$pkg.String:
+				return this.val.length;
+			}
+			throw new Go$Panic(new ValueError("reflect.Value.Len", k));
 		};
 		valueInterface = function(v, safe) {
 			if (v.val.constructor === v.typ.alg) {
@@ -972,13 +1022,18 @@ var natives = map[string]string{
 			return new v.typ.alg(v.val);
 		};
 		Value.prototype.String = function() {
-			if (this.kind() === 0) {
+			switch (this.kind()) {
+			case Go$pkg.Invalid:
 				return "<invalid Value>";
-			} else if (this.kind() === 24) {
+			case Go$pkg.String:
+				if ((this.flag & flagIndir) != 0) {
+					return this.val.Go$get();
+				}
 				return this.val;
 			}
 			return "<" + this.typ.String() + " Value>";
 		};
+		
 		DeepEqual = function(a, b) { // TODO use package version
 			if (a === b) {
 				return true;
@@ -1083,7 +1138,7 @@ var natives = map[string]string{
 			BytePtrFromString = function(s) { return [Go$stringToBytes(s, true), null]; };
 
 			var envkeys = Object.keys(process.env);
-			envs = new Go$Slice(new Array(envkeys.length));
+			envs = new (Go$sliceType(Go$String))(new Array(envkeys.length));
 			for(var i = 0; i < envkeys.length; i++) {
 				envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
 			}
@@ -1092,7 +1147,7 @@ var natives = map[string]string{
 				Syscall = Syscall6 = RawSyscall = RawSyscall6 = f;
 			}
 			Go$pkg.Go$setSyscall(function() { throw "Syscalls not available in browser." });
-			envs = new Go$Slice(new Array(0));
+			envs = new (Go$sliceType(Go$String))(new Array(0));
 		}
 	`,
 
@@ -1106,7 +1161,7 @@ var natives = map[string]string{
 			var start = time.Now();
 			var status = "ok  ";
 			for (var i = 0; i < tests.length; i++) {
-				var t = new T(new common(new sync.RWMutex(), Go$Slice.Go$nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
+				var t = new T(new common(new sync.RWMutex(), Go$sliceType(Go$Byte).Go$nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
 				var err = null;
 				try {
 					if (chatty.Go$get()) {
@@ -1129,7 +1184,7 @@ var natives = map[string]string{
 				}
 			}
 			var duration = time.Now().Sub(start);
-			fmt.Printf("%s\t%s\t%.3fs\n", new Go$Slice([new Go$String(status), new Go$String(pkgPath), new Go$Float64(duration.Seconds())]));
+			fmt.Printf("%s\t%s\t%.3fs\n", new (Go$sliceType(Go$Interface))([new Go$String(status), new Go$String(pkgPath), new Go$Float64(duration.Seconds())]));
 		};
 	`,
 

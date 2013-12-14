@@ -69,11 +69,10 @@ var Go$UintptrArray    = Uint32Array;
 var Go$ByteArray       = Go$Uint8Array;
 var Go$RuneArray       = Go$Int32Array;
 
-var typeRegistry = {};
-
+var Go$arrayTypes = {};
 var Go$arrayType = function(elem, len) {
 	var typeString = "[" + len + "]" + elem.Go$string;
-	var typ = typeRegistry[typeString];
+	var typ = Go$arrayTypes[typeString];
 	if (typ === undefined) {
 		typ = function(v) { this.Go$val = v; };
 		typ.Go$string = typeString;
@@ -82,14 +81,13 @@ var Go$arrayType = function(elem, len) {
 			rt.arrayType = new Go$reflect.arrayType(rt, elem.Go$type(), null, len);
 			return rt;
 		});
-		typeRegistry[typeString] = typ;
+		Go$arrayTypes[typeString] = typ;
 	}
 	return typ;
 };
 
 var Go$sliceType = function(elem) {
-	var typeString = "[]" + elem.Go$string;
-	var typ = typeRegistry[typeString];
+	var typ = elem.Go$Slice;
 	if (typ === undefined) {
 		typ = function(array) {
 			this.array = array;
@@ -101,12 +99,12 @@ var Go$sliceType = function(elem) {
 		typ.Go$string = 
 		typ.Go$nil = new typ({ isNil: true, length: 0 });
 		typ.Go$type = Go$cache(function() {
-			var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.slice, null, null, Go$newDataPointer(typeString), null, null);
+			var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.slice, null, null, Go$newDataPointer("[]" + elem.Go$string), null, null);
 			rt.sliceType = new Go$reflect.sliceType(rt, elem.Go$type());
 			return rt;
 		});
 		typ.prototype.Go$uncomparable = true;
-		typeRegistry[typeString] = typ;
+		elem.Go$Slice = typ;
 	}
 	return typ;
 };

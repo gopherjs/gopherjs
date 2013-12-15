@@ -103,7 +103,6 @@ Some tradeoffs had to be made in order to avoid huge performance impacts. Please
 
 - int and uint do not overflow, but have a maximum precision of 53 bits, after which rounding errors might occur (all other integer types have simulated overflow)
 - float32 and complex64 have the same precision as float64 and complex128
-- calls on nil cause a panic except for slice types
 
 ### Interface to external JavaScript
 A function's body can be written in JavaScript by putting the code in a string constant with the name `js_[function name]` for package functions and `js_[type name]_[method name]` for methods. In that case, GopherJS disregards the Go function body and instead generates `function(...) { [constant's value] }`. This allows functions to have a Go signature that the type checker can use while being able to call external JavaScript functions.

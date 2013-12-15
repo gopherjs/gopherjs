@@ -163,7 +163,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 		case *types.Map:
 			keysVar := c.newVariable("_keys")
-			c.Printf("%s = %s !== null ? Go$keys(%s) : [];", keysVar, refVar, refVar)
+			c.Printf("%s = Go$keys(%s);", keysVar, refVar)
 			c.Printf("%sfor (; %s < %s.length; %s += 1) {", label, iVar, keysVar, iVar)
 			c.Indent(func() {
 				c.handleEscapingVariables(s.Body, func() {
@@ -641,7 +641,7 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 				fmt.Sprintf(`, (%s >= 0 && %s < %s.length) ? (%s.array[%s.offset + %s] = %s) : Go$throwRuntimeError("index out of range")`, indexVar, indexVar, sliceVar, sliceVar, sliceVar, indexVar, rhs)
 		case *types.Map:
 			keyVar := c.newVariable("_key")
-			return fmt.Sprintf(`%s = %s, %s[%s] = { k: %s, v: %s }`, keyVar, c.translateExprToType(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)
+			return fmt.Sprintf(`%s = %s, (%s || Go$throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s }`, keyVar, c.translateExprToType(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)
 		default:
 			panic(fmt.Sprintf("Unhandled lhs type: %T\n", t))
 		}

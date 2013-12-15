@@ -5,9 +5,8 @@ Error.stackTraceLimit = -1;
 
 var Go$obj, Go$tuple;
 var Go$idCounter = 1;
-var Go$keys = Object.keys;
+var Go$keys = function(m) { return m ? Object.keys(m) : []; };
 var Go$min = Math.min;
-var Go$nil = { Go$key: function() { return "nil"; } }; // TODO remove
 var Go$throwRuntimeError, Go$reflect, Go$newStringPointer;
 
 var Go$cache = function(v) {
@@ -122,6 +121,7 @@ var Go$mapType = function(key, elem) {
 			rt.mapType = new Go$reflect.mapType(rt, key.Go$type(), elem.Go$type(), null, null);
 			return rt;
 		});
+		typ.prototype.Go$uncomparable = true;
     Go$mapTypes[typeString] = typ;
   }
   return typ;
@@ -162,6 +162,18 @@ Go$newStringPointer = function(str) {
 };
 var Go$newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });
+};
+
+var Go$structNil = function(constructor) {
+	var nil = new constructor();
+	var fields = Object.keys(nil), i;
+	for (i = 0; i < fields.length; i++) {
+		var field = fields[i];
+		if (field !== "Go$id" && field !== "Go$val") {
+			Object.defineProperty(nil, field, { get: Go$throwNilPointerError, set: Go$throwNilPointerError });
+		}
+	}
+	return nil;
 };
 
 var Go$Int64 = function(high, low) {
@@ -530,6 +542,7 @@ var Go$mapArray = function(array, f) {
 var Go$Struct = function() {};
 var Go$Interface = function() {};
 Go$Interface.Go$string = "interface{}";
+Go$Interface.Go$nil = { Go$key: function() { return "nil"; } };
 var Go$Channel = function() {};
 
 var Go$copySlice = function(dst, src) {
@@ -683,15 +696,12 @@ var Go$interfaceIsEqual = function(a, b) {
 	if (a.constructor !== b.constructor) {
 		return false;
 	}
-	if (a.Go$uncomparable || a.Go$val === undefined) { // TODO improve interfaces of maps
+	if (a.Go$uncomparable) {
 		throw new Go$Panic("runtime error: comparing uncomparable type " + a.constructor);
 	}
 	return a.Go$val === b.Go$val;
 };
 var Go$arrayIsEqual = function(a, b) {
-	if (a === null || b === null) {
-		return a === null && b === null;
-	}
 	if (a.length != b.length) {
 		return false;
 	}

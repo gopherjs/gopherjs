@@ -244,10 +244,12 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			obj := c.info.Objects[spec.Name]
 			typeName := c.objectName(obj)
 			switch obj.Type().Underlying().(type) {
-			case *types.Slice:
-				c.Printf("%s.Go$nil = new %s({ isNil: true, length: 0 });", typeName, typeName)
 			case *types.Pointer:
 				c.Printf("%s.Go$nil = new %s(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
+			case *types.Slice:
+				c.Printf("%s.Go$nil = new %s({ isNil: true, length: 0 });", typeName, typeName)
+			case *types.Struct:
+				c.Printf("%s.Go$nil = Go$structNil(%s);", typeName, typeName)
 			}
 		}
 
@@ -667,15 +669,12 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 			fields[i] = field.Name() + ": " + c.zeroValue(field.Type())
 		}
 		return fmt.Sprintf("{%s}", strings.Join(fields, ", "))
-	case *types.Pointer:
-		switch t.Elem().Underlying().(type) {
-		case *types.Struct, *types.Array:
-			return "null"
-		default:
-			return fmt.Sprintf("%s.Go$nil", c.typeName(ty))
-		}
+	case *types.Map:
+		return "false"
+	case *types.Interface:
+		return "null"
 	}
-	return "null"
+	return fmt.Sprintf("%s.Go$nil", c.typeName(ty))
 }
 
 func (c *PkgContext) newVariable(name string) string {
@@ -801,8 +800,10 @@ func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 			return fmt.Sprintf("%s.Go$key()", c.translateExprToType(expr, keyType))
 		}
 		return c.translateExprToType(expr, keyType)
-	case *types.Pointer, *types.Interface:
-		return fmt.Sprintf("(%s || Go$nil).Go$key()", c.translateExprToType(expr, keyType))
+	case *types.Pointer:
+		return fmt.Sprintf("%s.Go$key()", c.translateExprToType(expr, keyType))
+	case *types.Interface:
+		return fmt.Sprintf("(%s || Go$Interface.Go$nil).Go$key()", c.translateExprToType(expr, keyType))
 	default:
 		return c.translateExprToType(expr, keyType)
 	}

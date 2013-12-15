@@ -426,9 +426,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Map:
 			key := c.makeKey(e.Index, t.Key())
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
-				return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? [Go$obj.v, true] : [%s, false])`, c.translateExpr(e.X), key, c.zeroValue(t.Elem()))
+				return fmt.Sprintf(`(Go$obj = %s[%s], Go$obj !== undefined ? [Go$obj.v, true] : [%s, false])`, c.translateExpr(e.X), key, c.zeroValue(t.Elem()))
 			}
-			return fmt.Sprintf(`(Go$obj = (%s || false)[%s], Go$obj !== undefined ? Go$obj.v : %s)`, c.translateExpr(e.X), key, c.zeroValue(t.Elem()))
+			return fmt.Sprintf(`(Go$obj = %s[%s], Go$obj !== undefined ? Go$obj.v : %s)`, c.translateExpr(e.X), key, c.zeroValue(t.Elem()))
 		case *types.Basic:
 			return fmt.Sprintf("%s.charCodeAt(%s)", c.translateExpr(e.X), c.flatten64(e.Index))
 		default:
@@ -544,7 +544,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					case *types.Pointer:
 						return fmt.Sprintf("(%s, %d)", arg, argType.Elem().(*types.Array).Len())
 					case *types.Map:
-						return fmt.Sprintf("(Go$obj = %s, Go$obj !== null ? Go$keys(Go$obj).length : 0)", arg)
+						return fmt.Sprintf("Go$keys(%s).length", arg)
 					case *types.Chan:
 						return "0"
 					// length of array is constant
@@ -574,7 +574,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					toAppend := createListComposite(sliceType.Elem(), c.translateExprSlice(e.Args[1:], sliceType.Elem()))
 					return fmt.Sprintf("Go$append(%s, new %s(%s))", c.translateExpr(e.Args[0]), c.typeName(exprType), toAppend)
 				case "delete":
-					return fmt.Sprintf(`delete (%s || Go$nil)[%s]`, c.translateExpr(e.Args[0]), c.makeKey(e.Args[1], c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()))
+					return fmt.Sprintf(`delete %s[%s]`, c.translateExpr(e.Args[0]), c.makeKey(e.Args[1], c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()))
 				case "copy":
 					if basic, isBasic := c.info.Types[e.Args[1]].Underlying().(*types.Basic); isBasic && basic.Info()&types.IsString != 0 {
 						return fmt.Sprintf("Go$copyString(%s, %s)", c.translateExpr(e.Args[0]), c.translateExpr(e.Args[1]))

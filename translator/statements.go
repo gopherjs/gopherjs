@@ -164,7 +164,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		case *types.Map:
 			keysVar := c.newVariable("_keys")
 			c.Printf("%s = %s !== null ? Go$keys(%s) : [];", keysVar, refVar, refVar)
-			c.Printf("%sfor (; %s < %s.length; %s++) {", label, iVar, keysVar, iVar)
+			c.Printf("%sfor (; %s < %s.length; %s += 1) {", label, iVar, keysVar, iVar)
 			c.Indent(func() {
 				c.handleEscapingVariables(s.Body, func() {
 					entryVar := c.newVariable("_entry")
@@ -190,7 +190,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			case *types.Slice:
 				length = refVar + ".length"
 			}
-			c.Printf("%sfor (; %s < %s; %s++) {", label, iVar, length, iVar)
+			c.Printf("%sfor (; %s < %s; %s += 1) {", label, iVar, length, iVar)
 			c.Indent(func() {
 				c.handleEscapingVariables(s.Body, func() {
 					if !isBlank(s.Value) {

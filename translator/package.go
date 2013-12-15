@@ -348,7 +348,8 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 		}
 		c.Printf("%s = function(%s) {", typeName, strings.Join(params, ", "))
 		c.Indent(func() {
-			c.Printf("this.Go$id = Go$idCounter++;")
+			c.Printf("this.Go$id = Go$idCounter;")
+			c.Printf("Go$idCounter += 1;")
 			c.Printf("this.Go$val = this;")
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)

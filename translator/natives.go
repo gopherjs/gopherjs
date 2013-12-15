@@ -7,7 +7,7 @@ var Go$obj, Go$tuple;
 var Go$idCounter = 1;
 var Go$keys = Object.keys;
 var Go$min = Math.min;
-var Go$throwRuntimeError, Go$reflect;
+var Go$throwRuntimeError, Go$reflect, Go$newStringPointer;
 
 var Go$cache = function(v) {
 	return function() {
@@ -48,7 +48,7 @@ var Go$String  = newWrappedType("string", 0);
 var Go$Func    = newWrappedType("func", 0);
 Go$Func.prototype.Go$uncomparable = true;
 
-var Go$UnsafePointer = newWrappedType("unsafe.Pointer", 4)
+var Go$UnsafePointer = newWrappedType("unsafe.Pointer", 4);
 
 var Go$Array           = Array;
 var Go$Uint8Array      = Uint8Array;
@@ -131,7 +131,7 @@ var Go$pointerType = function(elem) {
 };
 
 var Go$StringPointer = Go$pointerType(Go$String);
-var Go$newStringPointer = function(str) {
+Go$newStringPointer = function(str) {
 	return new Go$StringPointer(function() { return str; }, function(v) { str = v; });
 };
 var Go$newDataPointer = function(data, constructor) {
@@ -158,65 +158,57 @@ var Go$flatten64 = function(x) {
 	return x.high * 4294967296 + x.low;
 };
 var Go$shiftLeft64 = function(x, y) {
-	var high = 0;
-	var low = 0;
 	if (y === 0) {
 		return x;
-	} else if (y < 32) {
-		high = x.high << y | x.low >>> (32 - y);
-		low = (x.low << y) >>> 0;
-	} else if (y < 64) {
-		high = x.low << (y - 32);
 	}
-	return new x.constructor(high, low);
+	if (y < 32) {
+		return new x.constructor(x.high << y | x.low >>> (32 - y), (x.low << y) >>> 0);
+	}
+	if (y < 64) {
+		return new x.constructor(x.low << (y - 32), 0);
+	}
+	return new x.constructor(0, 0);
 };
 var Go$shiftRightInt64 = function(x, y) {
-	var high = 0;
-	var low = 0;
 	if (y === 0) {
 		return x;
-	} else if (y < 32) {
-		high = x.high >> y;
-		low = (x.low >>> y | x.high << (32 - y)) >>> 0;
-	} else if (y < 64) {
-		high = x.high >> 31; // sign extend
-		low = (x.high >> (y - 32)) >>> 0;
-	} else if (x.high < 0) {
-		high = -1;
-		low = 4294967295;
 	}
-	return new x.constructor(high, low);
+	if (y < 32) {
+		return new x.constructor(x.high >> y, (x.low >>> y | x.high << (32 - y)) >>> 0);
+	}
+	if (y < 64) {
+		return new x.constructor(x.high >> 31, (x.high >> (y - 32)) >>> 0);
+	}
+	if (x.high < 0) {
+		return new x.constructor(-1, 4294967295);
+	}
+	return new x.constructor(0, 0);
 };
 var Go$shiftRightUint64 = function(x, y) {
-	var high = 0;
-	var low = 0;
 	if (y === 0) {
 		return x;
-	} else if (y < 32) {
-		high = x.high >>> y;
-		low = x.low >>> y;
-		if (y < 64) {
-			low = (low | x.high << (32 - y)) >>> 0;
-		}
-	} else if (y < 64) {
-		low = x.high >>> (y - 32);
 	}
-	return new x.constructor(high, low);
+	if (y < 32) {
+		return new x.constructor(x.high >>> y, (x.low >>> y | x.high << (32 - y)) >>> 0);
+	}
+	if (y < 64) {
+		return new x.constructor(0, x.high >>> (y - 32));
+	}
+	return new x.constructor(0, 0);
 };
 var Go$mul64 = function(x, y) {
-	var high = 0;
-	var low = 0;
+	var high = 0, low = 0, i;
 	if ((y.low & 1) !== 0) {
 		high = x.high;
 		low = x.low;
 	}
-	for (var i = 1; i < 32; i++) {
+	for (i = 1; i < 32; i += 1) {
 		if ((y.low & 1<<i) !== 0) {
 			high += x.high << i | x.low >>> (32 - i);
 			low += (x.low << i) >>> 0;
 		}
 	}
-	for (var i = 0; i < 32; i++) {
+	for (i = 0; i < 32; i += 1) {
 		if ((y.high & 1<<i) !== 0) {
 			high += x.low << i;
 		}
@@ -238,7 +230,7 @@ var Go$div64 = function(x, y, returnRemainder) {
 		rs = -1;
 		xHigh = -xHigh;
 		if (xLow !== 0) {
-			xHigh--;
+			xHigh -= 1;
 			xLow = 4294967296 - xLow;
 		}
 	}
@@ -249,33 +241,30 @@ var Go$div64 = function(x, y, returnRemainder) {
 		s *= -1;
 		yHigh = -yHigh;
 		if (yLow !== 0) {
-			yHigh--;
+			yHigh -= 1;
 			yLow = 4294967296 - yLow;
 		}
 	}
 
-	var low = 0;
-	var high = 0;
-	var n = 0;
+	var high = 0, low = 0, n = 0, i;
 	while (yHigh < 2147483648 && ((xHigh > yHigh) || (xHigh === yHigh && xLow > yLow))) {
 		yHigh = (yHigh << 1 | yLow >>> 31) >>> 0;
 		yLow = (yLow << 1) >>> 0;
-		n++;
+		n += 1;
 	}
-	var i = 0;
-	for (var i = 0; i <= n; i++) {
+	for (i = 0; i <= n; i += 1) {
 		high = high << 1 | low >>> 31;
 		low = (low << 1) >>> 0;
 		if ((xHigh > yHigh) || (xHigh === yHigh && xLow >= yLow)) {
 			xHigh = xHigh - yHigh;
 			xLow = xLow - yLow;
 			if (xLow < 0) {
-				xHigh--;
+				xHigh -= 1;
 				xLow += 4294967296;
 			}
-			low++;
+			low += 1;
 			if (low === 4294967296) {
-				high++;
+				high += 1;
 				low = 0;
 			}
 		}
@@ -418,7 +407,7 @@ var Go$decodeRune = function(str, pos) {
 	}
 
 	return [0xFFFD, 1];
-}
+};
 
 var Go$encodeRune = function(r) {
 	if (r < 0 || r > 0x10FFFF || (0xD800 <= r && r <= 0xDFFF)) {
@@ -437,8 +426,8 @@ var Go$encodeRune = function(r) {
 };
 
 var Go$stringToBytes = function(str, terminateWithNull) {
-	var array = new Uint8Array(terminateWithNull ? str.length + 1 : str.length);
-	for (var i = 0; i < str.length; i++) {
+	var array = new Uint8Array(terminateWithNull ? str.length + 1 : str.length), i;
+	for (i = 0; i < str.length; i += 1) {
 		array[i] = str.charCodeAt(i);
 	}
 	if (terminateWithNull) {
@@ -451,8 +440,8 @@ var Go$bytesToString = function(slice) {
 	if (slice.length === 0) {
 		return "";
 	}
-	var str = "";
-	for (var i = 0; i < slice.length; i += 10000) {
+	var str = "", i;
+	for (i = 0; i < slice.length; i += 10000) {
 		str += String.fromCharCode.apply(null, slice.array.subarray(slice.offset + i, slice.offset + Math.min(slice.length, i + 10000)));
 	}
 	return str;
@@ -460,31 +449,28 @@ var Go$bytesToString = function(slice) {
 
 var Go$stringToRunes = function(str) {
 	var array = new Int32Array(str.length);
-	var rune;
-	var j = 0;
-	for (var i = 0; i < str.length; i += rune[1], j++) {
+	var rune, i, j = 0;
+	for (i = 0; i < str.length; i += rune[1], j += 1) {
 		rune = Go$decodeRune(str, i);
 		array[j] = rune[0];
 	}
 	return array.subarray(0, j);
-}
+};
 
 var Go$runesToString = function(slice) {
 	if (slice.length === 0) {
 		return "";
 	}
-	var str = "";
-	for (var i = 0; i < slice.length; i++) {
+	var str = "", i;
+	for (i = 0; i < slice.length; i += 1) {
 		str += Go$encodeRune(slice.array[slice.offset + i]);
 	}
 	return str;
 };
 
 var Go$externalizeString = function(intStr) {
-	var extStr = "";
-	var rune;
-	var j = 0;
-	for (var i = 0; i < intStr.length; i += rune[1], j++) {
+	var extStr = "", rune, i, j = 0;
+	for (i = 0; i < intStr.length; i += rune[1], j += 1) {
 		rune = Go$decodeRune(intStr, i);
 		extStr += String.fromCharCode(rune[0]);
 	}
@@ -492,24 +478,24 @@ var Go$externalizeString = function(intStr) {
 };
 
 var Go$internalizeString = function(extStr) {
-	var intStr = "";
-	for (var i = 0; i < extStr.length; i++) {
+	var intStr = "", i;
+	for (i = 0; i < extStr.length; i += 1) {
 		intStr += Go$encodeRune(extStr.charCodeAt(i));
 	}
 	return intStr;
 };
 
 var Go$makeArray = function(constructor, length, zero) { // TODO do not use for typed arrays when NodeJS is behaving according to spec
-	var array = new constructor(length);
-	for (var i = 0; i < length; i++) {
+	var array = new constructor(length), i;
+	for (i = 0; i < length; i += 1) {
 		array[i] = zero();
 	}
 	return array;
 };
 
 var Go$mapArray = function(array, f) {
-	var newArray = new array.constructor(array.length);
-	for (var i = 0; i < array.length; i++) {
+	var newArray = new array.constructor(array.length), i;
+	for (i = 0; i < array.length; i += 1) {
 		newArray[i] = f(array[i]);
 	}
 	return newArray;
@@ -517,15 +503,19 @@ var Go$mapArray = function(array, f) {
 
 var Go$Map = function(data) {
 	data = data || [];
-	for (var i = 0; i < data.length; i += 2) {
+	var i;
+	for (i = 0; i < data.length; i += 2) {
 		this[data[i]] = { k: data[i], v: data[i + 1] };
 	}
 };
 Go$Map.Go$nil = { Go$key: function() { return "nil"; } };
-var Go$objectProperyNames = Object.getOwnPropertyNames(Object.prototype);
-for (var i = 0; i < Go$objectProperyNames.length; i++) {
-	Go$Map.prototype[Go$objectProperyNames[i]] = undefined;
-}
+(function() {
+	var Go$objectProperyNames = Object.getOwnPropertyNames(Object.prototype);
+	var i;
+	for (i = 0; i < Go$objectProperyNames.length; i += 1) {
+		Go$Map.prototype[Go$objectProperyNames[i]] = undefined;
+	}
+})();
 
 var Go$Struct = function() {};
 var Go$Interface = function() {};
@@ -533,27 +523,28 @@ Go$Interface.Go$string = "interface{}";
 var Go$Channel = function() {};
 
 var Go$copySlice = function(dst, src) {
-	var n = Math.min(src.length, dst.length);
+	var n = Math.min(src.length, dst.length), i;
 	if (dst.array.constructor !== Array && n !== 0) {
 		dst.array.set(src.array.subarray(src.offset, src.offset + n), dst.offset);
 		return n;
 	}
-	for (var i = 0; i < n; i++) {
+	for (i = 0; i < n; i += 1) {
 		dst.array[dst.offset + i] = src.array[src.offset + i];
 	}
 	return n;
 };
 
 var Go$copyString = function(dst, src) {
-	var n = Math.min(src.length, dst.length);
-	for (var i = 0; i < n; i++) {
+	var n = Math.min(src.length, dst.length), i;
+	for (i = 0; i < n; i += 1) {
 		dst.array[dst.offset + i] = src.charCodeAt(i);
 	}
 	return n;
 };
 
 var Go$copyArray = function(dst, src) {
-	for (var i = 0; i < src.length; i++) {
+	var i;
+	for (i = 0; i < src.length; i += 1) {
 		dst[i] = src[i];
 	}
 };
@@ -588,10 +579,9 @@ var Go$append = function(slice, toAppend) {
 		newOffset = 0;
 	}
 
-	var leftOffset = newOffset + slice.length;
-	var rightOffset = toAppend.offset;
-	for (var j = 0; j < toAppend.length; j++) {
-		newArray[leftOffset + j] = toAppend.array[rightOffset + j];
+	var leftOffset = newOffset + slice.length, rightOffset = toAppend.offset, i;
+	for (i = 0; i < toAppend.length; i += 1) {
+		newArray[leftOffset + i] = toAppend.array[rightOffset + i];
 	}
 
 	var newSlice = new slice.constructor(newArray);
@@ -633,7 +623,8 @@ var Go$errorStack = [];
 
 // TODO inline
 var Go$callDeferred = function(deferred) {
-	for (var i = deferred.length - 1; i >= 0; i--) {
+	var i;
+	for (i = deferred.length - 1; i >= 0; i -= 1) {
 		var call = deferred[i];
 		try {
 			if (call.recv !== undefined) {
@@ -650,7 +641,7 @@ var Go$callDeferred = function(deferred) {
 		Go$errorStack.pop();
 		throw err.error;
 	}
-}
+};
 
 var Go$recover = function() {
 	var err = Go$errorStack[Go$errorStack.length - 1];
@@ -666,11 +657,10 @@ var Go$getStack = function() {
 };
 
 var Go$getStackDepth = function() {
-	var s = Go$getStack();
-	var d = 0;
-	for (var i = 0; i < s.length; i++) {
+	var s = Go$getStack(), d = 0, i;
+	for (i = 0; i < s.length; i += 1) {
 		if (s[i].indexOf("Go$callDeferred") == -1) {
-			d++;
+			d += 1;
 		}
 	}
 	return d;
@@ -695,7 +685,8 @@ var Go$arrayIsEqual = function(a, b) {
 	if (a.length != b.length) {
 		return false;
 	}
-	for (var i = 0; i < a.length; ++i) {
+	var i;
+	for (i = 0; i < a.length; i += 1) {
 		if (a[i] !== b[i]) {
 			return false;
 		}
@@ -736,8 +727,8 @@ Go$packages["go/doc"] = {
 var natives = map[string]string{
 	"bytes": `
 		Compare = function(a, b) {
-			var l = Math.min(a.length, b.length);
-			for (var i = 0; i < a.length; i++) {
+			var l = Math.min(a.length, b.length), i;
+			for (i = 0; i < a.length; i += 1) {
 				var va = a.array[a.offset + i];
 				var vb = b.array[b.offset + i];
 				if (va < vb) {
@@ -759,7 +750,8 @@ var natives = map[string]string{
 			if (a.length !== b.length) {
 				return false;
 			}
-			for (var i = 0; i < a.length; i++) {
+			var i;
+			for (i = 0; i < a.length; i += 1) {
 				if (a.array[a.offset + i] !== b.array[b.offset + i]) {
 					return false;
 				}
@@ -767,7 +759,8 @@ var natives = map[string]string{
 			return true;
 		};
 		IndexByte = function(s, c) {
-			for (var i = 0; i < s.length; i++) {
+			var i;
+			for (i = 0; i < s.length; i += 1) {
 				if (s.array[s.offset + i] === c) {
 					return i;
 				}
@@ -1054,6 +1047,7 @@ var natives = map[string]string{
 		};
 		
 		DeepEqual = function(a, b) { // TODO use package version
+			var i;
 			if (a === b) {
 				return true;
 			}
@@ -1068,13 +1062,13 @@ var natives = map[string]string{
 					return false;
 				}
 				if (a.array !== undefined) {
-					for (var i = 0; i < a.length; i++) {
+					for (i = 0; i < a.length; i += 1) {
 						if (!this.DeepEqual(a.array[a.offset + i], b.array[b.offset + i])) {
 							return false;
 						}
 					}
 				} else {
-					for (var i = 0; i < a.length; i++) {
+					for (i = 0; i < a.length; i += 1) {
 						if (!this.DeepEqual(a[i], b[i])) {
 							return false;
 						}
@@ -1082,8 +1076,8 @@ var natives = map[string]string{
 				}
 				return true;
 			}
-			var keys = Object.keys(a);
-			for (var j = 0; j < keys.length; j++) {
+			var keys = Object.keys(a), j;
+			for (j = 0; j < keys.length; j += 1) {
 				var key = keys[j];
 				if (key !== "Go$id" && key !== "Go$val" && !this.DeepEqual(a[key], b[key])) {
 					return false;
@@ -1158,7 +1152,8 @@ var natives = map[string]string{
 
 			var envkeys = Object.keys(process.env);
 			envs = new (Go$sliceType(Go$String))(new Array(envkeys.length));
-			for(var i = 0; i < envkeys.length; i++) {
+			var i;
+			for(i = 0; i < envkeys.length; i += 1) {
 				envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
 			}
 		} else {
@@ -1177,9 +1172,8 @@ var natives = map[string]string{
 				return;
 			}
 			os.Open(dir)[0].Chdir();
-			var start = time.Now();
-			var status = "ok  ";
-			for (var i = 0; i < tests.length; i++) {
+			var start = time.Now(), status = "ok  ", i;
+			for (i = 0; i < tests.length; i += 1) {
 				var t = new T(new common(new sync.RWMutex(), Go$sliceType(Go$Byte).Go$nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
 				var err = null;
 				try {

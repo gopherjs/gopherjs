@@ -772,7 +772,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	case *types.Slice:
 		return fmt.Sprintf("(Go$sliceType(%s))", c.typeName(t.Elem()))
 	case *types.Map:
-		return "Go$Map"
+		return fmt.Sprintf("(Go$mapType(%s, %s))", c.typeName(t.Key()), c.typeName(t.Elem()))
 	case *types.Interface:
 		return "Go$Interface"
 	case *types.Chan:
@@ -802,7 +802,7 @@ func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 		}
 		return c.translateExprToType(expr, keyType)
 	case *types.Pointer, *types.Interface:
-		return fmt.Sprintf("(%s || Go$Map.Go$nil).Go$key()", c.translateExprToType(expr, keyType))
+		return fmt.Sprintf("(%s || Go$nil).Go$key()", c.translateExprToType(expr, keyType))
 	default:
 		return c.translateExprToType(expr, keyType)
 	}

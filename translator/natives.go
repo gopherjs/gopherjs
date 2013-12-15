@@ -232,7 +232,7 @@ var natives = map[string]string{
 
 	"reflect": `
 		Go$reflect = {
-			rtype: rtype, uncommonType: uncommonType, arrayType: arrayType, ptrType: ptrType, sliceType: sliceType, structType: structType, structField: structField,
+			rtype: rtype, uncommonType: uncommonType, arrayType: arrayType, mapType: mapType, ptrType: ptrType, sliceType: sliceType, structType: structType, structField: structField,
 			kinds: {bool: Go$pkg.Bool, int: Go$pkg.Int, int8: Go$pkg.Int8, int16: Go$pkg.Int16, int32: Go$pkg.Int32, int64: Go$pkg.Int64, uint: Go$pkg.Uint, uint8: Go$pkg.Uint8, uint16: Go$pkg.Uint16, uint32: Go$pkg.Uint32, uint64: Go$pkg.Uint64, uintptr: Go$pkg.Uintptr, float32: Go$pkg.Float32, float64: Go$pkg.Float64, complex64: Go$pkg.Complex64, complex128: Go$pkg.Complex128, array: Go$pkg.Array, chan: Go$pkg.Chan, func: Go$pkg.Func, interface: Go$pkg.Interface, map: Go$pkg.Map, ptr: Go$pkg.Ptr, slice: Go$pkg.Slice, string: Go$pkg.String, struct: Go$pkg.Struct, "unsafe.Pointer": Go$pkg.UnsafePointer}
 		};
 

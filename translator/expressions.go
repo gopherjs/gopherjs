@@ -118,7 +118,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				kve := element.(*ast.KeyValueExpr)
 				assignments += fmt.Sprintf(`%s = %s, %s[%s] = { k: %s, v: %s }, `, keyVar, c.translateExprToType(kve.Key, t.Key()), mapVar, c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, c.translateExprToType(kve.Value, t.Elem()))
 			}
-			return fmt.Sprintf("(%s = new Go$EmptyObject(), %s%s)", mapVar, assignments, mapVar)
+			return fmt.Sprintf("(%s = new Go$Map(), %s%s)", mapVar, assignments, mapVar)
 		case *types.Struct:
 			elements := make([]string, t.NumFields())
 			isKeyValue := true
@@ -530,7 +530,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						}
 						return fmt.Sprintf("new %s(Go$makeArray(%s, %s, function() { return %s; }))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(argType.Elem()), c.translateExprToType(e.Args[1], types.Typ[types.Int]), c.zeroValue(argType.Elem()))
 					case *types.Map:
-						return "new Go$EmptyObject()"
+						return "new Go$Map()"
 					case *types.Chan:
 						return "new Go$Channel()"
 					default:
@@ -574,7 +574,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					toAppend := createListComposite(sliceType.Elem(), c.translateExprSlice(e.Args[1:], sliceType.Elem()))
 					return fmt.Sprintf("Go$append(%s, new %s(%s))", c.translateExpr(e.Args[0]), c.typeName(exprType), toAppend)
 				case "delete":
-					return fmt.Sprintf(`delete (%s || Go$Map.Go$nil)[%s]`, c.translateExpr(e.Args[0]), c.makeKey(e.Args[1], c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()))
+					return fmt.Sprintf(`delete (%s || Go$nil)[%s]`, c.translateExpr(e.Args[0]), c.makeKey(e.Args[1], c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()))
 				case "copy":
 					if basic, isBasic := c.info.Types[e.Args[1]].Underlying().(*types.Basic); isBasic && basic.Info()&types.IsString != 0 {
 						return fmt.Sprintf("Go$copyString(%s, %s)", c.translateExpr(e.Args[0]), c.translateExpr(e.Args[1]))

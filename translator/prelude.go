@@ -7,6 +7,7 @@ var Go$obj, Go$tuple;
 var Go$idCounter = 1;
 var Go$keys = Object.keys;
 var Go$min = Math.min;
+var Go$nil = { Go$key: function() { return "nil"; } }; // TODO remove
 var Go$throwRuntimeError, Go$reflect, Go$newStringPointer;
 
 var Go$cache = function(v) {
@@ -108,6 +109,31 @@ var Go$sliceType = function(elem) {
 	}
 	return typ;
 };
+
+var Go$mapTypes = {};
+var Go$mapType = function(key, elem) {
+  var typeString = "map[" + key.Go$string + "]" + elem.Go$string;
+  var typ = Go$mapTypes[typeString];
+  if (typ === undefined) {
+    typ = function(v) { this.Go$val = v; };
+		typ.Go$string = typeString;
+		typ.Go$type = Go$cache(function() {
+			var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.map, null, null, Go$newStringPointer(typeString), null, null);
+			rt.mapType = new Go$reflect.mapType(rt, key.Go$type(), elem.Go$type(), null, null);
+			return rt;
+		});
+    Go$mapTypes[typeString] = typ;
+  }
+  return typ;
+};
+
+var Go$Map = function() {};
+(function() {
+	var names = Object.getOwnPropertyNames(Object.prototype), i;
+	for (i = 0; i < names.length; i += 1) {
+		Go$Map.prototype[names[i]] = undefined;
+	}
+})();
 
 var Go$throwNilPointerError = function() { Go$throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var Go$pointerType = function(elem) {
@@ -500,16 +526,6 @@ var Go$mapArray = function(array, f) {
 	}
 	return newArray;
 };
-
-var Go$Map = function(v) { this.Go$val = v; };
-Go$Map.Go$nil = { Go$key: function() { return "nil"; } };
-var Go$EmptyObject = function() {};
-(function() {
-	var names = Object.getOwnPropertyNames(Object.prototype), i;
-	for (i = 0; i < names.length; i += 1) {
-		Go$EmptyObject.prototype[names[i]] = undefined;
-	}
-})();
 
 var Go$Struct = function() {};
 var Go$Interface = function() {};

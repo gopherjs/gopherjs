@@ -501,19 +501,13 @@ var Go$mapArray = function(array, f) {
 	return newArray;
 };
 
-var Go$Map = function(data) {
-	data = data || [];
-	var i;
-	for (i = 0; i < data.length; i += 2) {
-		this[data[i]] = { k: data[i], v: data[i + 1] };
-	}
-};
+var Go$Map = function(v) { this.Go$val = v; };
 Go$Map.Go$nil = { Go$key: function() { return "nil"; } };
+var Go$EmptyObject = function() {};
 (function() {
-	var Go$objectProperyNames = Object.getOwnPropertyNames(Object.prototype);
-	var i;
-	for (i = 0; i < Go$objectProperyNames.length; i += 1) {
-		Go$Map.prototype[Go$objectProperyNames[i]] = undefined;
+	var names = Object.getOwnPropertyNames(Object.prototype), i;
+	for (i = 0; i < names.length; i += 1) {
+		Go$EmptyObject.prototype[names[i]] = undefined;
 	}
 })();
 

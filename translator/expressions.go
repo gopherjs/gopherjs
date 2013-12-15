@@ -111,13 +111,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Slice:
 			return fmt.Sprintf("new %s(%s)", c.typeName(exprType), createListComposite(t.Elem(), collectIndexedElements(t.Elem())))
 		case *types.Map:
-			elements := make([]string, len(e.Elts)*2)
-			for i, element := range e.Elts {
+			mapVar := c.newVariable("_map")
+			keyVar := c.newVariable("_map")
+			assignments := ""
+			for _, element := range e.Elts {
 				kve := element.(*ast.KeyValueExpr)
-				elements[i*2] = c.translateExprToType(kve.Key, t.Key())
-				elements[i*2+1] = c.translateExprToType(kve.Value, t.Elem())
+				assignments += fmt.Sprintf(`%s = %s, %s[%s] = { k: %s, v: %s }, `, keyVar, c.translateExprToType(kve.Key, t.Key()), mapVar, c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, c.translateExprToType(kve.Value, t.Elem()))
 			}
-			return fmt.Sprintf("new %s([%s])", c.typeName(exprType), strings.Join(elements, ", "))
+			return fmt.Sprintf("(%s = new Go$EmptyObject(), %s%s)", mapVar, assignments, mapVar)
 		case *types.Struct:
 			elements := make([]string, t.NumFields())
 			isKeyValue := true
@@ -522,18 +523,18 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						return fmt.Sprintf("Go$newDataPointer(%s, %s)", c.zeroValue(t.Elem()), c.typeName(t))
 					}
 				case "make":
-					switch t2 := c.info.Types[e.Args[0]].Underlying().(type) {
+					switch argType := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Slice:
 						if len(e.Args) == 3 {
-							return fmt.Sprintf("Go$subslice(new %s(Go$makeArray(%s, %s, function() { return %s; })), 0, %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExprToType(e.Args[2], types.Typ[types.Int]), c.zeroValue(t2.Elem()), c.translateExprToType(e.Args[1], types.Typ[types.Int]))
+							return fmt.Sprintf("Go$subslice(new %s(Go$makeArray(%s, %s, function() { return %s; })), 0, %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(argType.Elem()), c.translateExprToType(e.Args[2], types.Typ[types.Int]), c.zeroValue(argType.Elem()), c.translateExprToType(e.Args[1], types.Typ[types.Int]))
 						}
-						return fmt.Sprintf("new %s(Go$makeArray(%s, %s, function() { return %s; }))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(t2.Elem()), c.translateExprToType(e.Args[1], types.Typ[types.Int]), c.zeroValue(t2.Elem()))
+						return fmt.Sprintf("new %s(Go$makeArray(%s, %s, function() { return %s; }))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(argType.Elem()), c.translateExprToType(e.Args[1], types.Typ[types.Int]), c.zeroValue(argType.Elem()))
+					case *types.Map:
+						return "new Go$EmptyObject()"
+					case *types.Chan:
+						return "new Go$Channel()"
 					default:
-						args := []string{"undefined"}
-						for _, arg := range e.Args[1:] {
-							args = append(args, c.translateExpr(arg))
-						}
-						return fmt.Sprintf("new %s(%s)", c.typeName(c.info.Types[e.Args[0]]), strings.Join(args, ", "))
+						panic(fmt.Sprintf("Unhandled make type: %T\n", argType))
 					}
 				case "len":
 					arg := c.translateExpr(e.Args[0])

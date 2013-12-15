@@ -859,7 +859,7 @@ func isWrapped(ty types.Type) bool {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
 		return !is64Bit(t) && t.Info()&types.IsComplex == 0 && t.Kind() != types.UntypedNil
-	case *types.Array, *types.Signature:
+	case *types.Array, *types.Map, *types.Signature:
 		return true
 	case *types.Pointer:
 		_, isArray := t.Elem().Underlying().(*types.Array)

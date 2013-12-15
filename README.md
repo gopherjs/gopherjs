@@ -93,7 +93,6 @@ Packages with passing test suites:
 These features are not implemented yet, but on the roadmap:
 
 - reflection (already partially done)
-- exact runtime type assertions for compound types without a name
 - goroutines, channels, select
 - goto
 - output minification

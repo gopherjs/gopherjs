@@ -42,6 +42,7 @@ Packages with passing test suites:
 - compress/gzip
 - container/heap
 - container/list
+- container/ring
 - crypto/aes
 - crypto/cipher
 - crypto/des

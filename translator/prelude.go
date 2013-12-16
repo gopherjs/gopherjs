@@ -26,34 +26,64 @@ var Go$cache = function(v) {
 	};
 };
 
-var newWrappedType = function(name, size) {
-	var typ = function(v) { this.Go$val = v; };
+var Go$newBasicType = function(name, kind) {
+	var typ;
+	switch(kind) {
+	case "Int64":
+		typ = function(high, low) {
+			this.high = (high + Math.floor(Math.ceil(low) / 4294967296)) >> 0;
+			this.low = low >>> 0;
+			this.Go$val = this;
+		};
+		typ.prototype.Go$key = function() { return name + "$" + this.high + "$" + this.low; };
+		break;
+	case "Uint64":
+		typ = function(high, low) {
+			this.high = (high + Math.floor(Math.ceil(low) / 4294967296)) >>> 0;
+			this.low = low >>> 0;
+			this.Go$val = this;
+		};
+		typ.prototype.Go$key = function() { return name + "$" + this.high + "$" + this.low; };
+		break
+	case "Complex64":
+	case "Complex128":
+		typ = function(real, imag) {
+			this.real = real;
+			this.imag = imag;
+			this.Go$val = this;
+		};
+		typ.prototype.Go$key = function() { return name + "$" + this.real + "$" + this.imag; };
+		break;
+	default:
+		typ = function(v) { this.Go$val = v; };
+		typ.prototype.Go$key = function() { return name + "$" + this.Go$val; };
+	}
 	typ.Go$string = name;
 	typ.Go$type = Go$cache(function() {
-		return new Go$reflect.rtype(size, 0, 0, 0, 0, Go$reflect.kinds[name], typ, undefined, Go$newStringPointer(name), undefined, undefined);
+		var size = ({ Bool: 0, Int: 4, Int8: 1, Int16: 2, Int32: 4, Int64: 8, Uint: 4, Uint8: 1, Uint16: 2, Uint32: 4, Uint64: 8, Uintptr: 4, Float32: 4, Float64: 8, String: 0, UnsafePointer: 4 })[kind];
+		return new Go$reflect.rtype(size, 0, 0, 0, 0, Go$reflect.kinds[kind], typ, undefined, Go$newStringPointer(name), undefined, undefined);
 	});
-	typ.prototype.Go$key = function() { return name + "$" + this.Go$val; };
 	return typ;
 };
 
-var Go$Uint8   = newWrappedType("uint8", 1);
-var Go$Uint16  = newWrappedType("uint16", 2);
-var Go$Uint32  = newWrappedType("uint32", 4);
-var Go$Int8    = newWrappedType("int8", 1);
-var Go$Int16   = newWrappedType("int16", 2);
-var Go$Int32   = newWrappedType("int32", 4);
-var Go$Float32 = newWrappedType("float32", 4);
-var Go$Float64 = newWrappedType("float64", 8);
-var Go$Uint    = newWrappedType("uint", 4);
-var Go$Int     = newWrappedType("int", 4);
-var Go$Uintptr = newWrappedType("uintptr", 4);
-var Go$Byte    = Go$Uint8;
-var Go$Rune    = Go$Int32;
-
-var Go$Bool    = newWrappedType("bool", 0);
-var Go$String  = newWrappedType("string", 0);
-
-var Go$UnsafePointer = newWrappedType("unsafe.Pointer", 4);
+var Go$Bool          = Go$newBasicType("bool",           "Bool");
+var Go$Int           = Go$newBasicType("int",            "Int");
+var Go$Int8          = Go$newBasicType("int8",           "Int8");
+var Go$Int16         = Go$newBasicType("int16",          "Int16");
+var Go$Int32         = Go$newBasicType("int32",          "Int32");
+var Go$Int64         = Go$newBasicType("int64",          "Int64");
+var Go$Uint          = Go$newBasicType("uint",           "Uint");
+var Go$Uint8         = Go$newBasicType("uint8",          "Uint8" );
+var Go$Uint16        = Go$newBasicType("uint16",         "Uint16");
+var Go$Uint32        = Go$newBasicType("uint32",         "Uint32");
+var Go$Uint64        = Go$newBasicType("uint64",         "Uint64");
+var Go$Uintptr       = Go$newBasicType("uintptr",        "Uintptr");
+var Go$Float32       = Go$newBasicType("float32",        "Float32");
+var Go$Float64       = Go$newBasicType("float64",        "Float64");
+var Go$Complex64     = Go$newBasicType("complex64",      "Complex64");
+var Go$Complex128    = Go$newBasicType("complex128",     "Complex128");
+var Go$String        = Go$newBasicType("string",         "String");
+var Go$UnsafePointer = Go$newBasicType("unsafe.Pointer", "UnsafePointer");
 
 var Go$Array           = Array;
 var Go$Uint8Array      = Uint8Array;
@@ -71,48 +101,65 @@ var Go$Complex128Array = Array;
 var Go$UintArray       = Uint32Array;
 var Go$IntArray        = Int32Array;
 var Go$UintptrArray    = Uint32Array;
-var Go$ByteArray       = Go$Uint8Array;
-var Go$RuneArray       = Go$Int32Array;
 
+var Go$newArrayType = function(name, elem, len) {
+	var typ = function(v) { this.Go$val = v; };
+	typ.Go$string = name;
+	typ.Go$type = Go$cache(function() {
+		var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.Array, typ, undefined, Go$newStringPointer(name), undefined, undefined);
+		rt.arrayType = new Go$reflect.arrayType(rt, elem().Go$type(), undefined, len);
+		return rt;
+	});
+	return typ;
+};
 var Go$arrayTypes = {};
 var Go$arrayType = function(elem, len) {
-	var typeString = "[" + len + "]" + elem.Go$string;
-	var typ = Go$arrayTypes[typeString];
+	var name = "[" + len + "]" + elem.Go$string;
+	var typ = Go$arrayTypes[name];
 	if (typ === undefined) {
-		typ = function(v) { this.Go$val = v; };
-		typ.Go$string = typeString;
-		typ.Go$type = Go$cache(function() {
-			var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.array, typ, undefined, Go$newStringPointer(typeString), undefined, undefined);
-			rt.arrayType = new Go$reflect.arrayType(rt, elem.Go$type(), undefined, len);
-			return rt;
-		});
-		Go$arrayTypes[typeString] = typ;
+		typ = Go$newArrayType(name, function() { return elem; }, len);
+		Go$arrayTypes[name] = typ;
 	}
 	return typ;
 };
 
-var Go$sliceType = function(elem) {
-	var typ = elem.Go$Slice;
+var Go$Channel = function() {};
+
+var Go$newFuncType = function(name, params, results, isVariadic) {
+	var typ = function(v) { this.Go$val = v; };
+	typ.Go$string = name;
+	typ.Go$type = Go$cache(function() {
+		var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.Func, typ, undefined, Go$newStringPointer(name), undefined, undefined);
+		var typeSlice = (Go$sliceType(Go$ptrType(Go$reflect.rtype)));
+		rt.funcType = new Go$reflect.funcType(rt, isVariadic, new typeSlice(Go$mapArray(params(), function(p) { return p.Go$type(); })), new typeSlice(Go$mapArray(results(), function(p) { return p.Go$type(); })));
+		return rt;
+	});
+	typ.prototype.Go$uncomparable = true;
+	return typ;
+};
+var Go$funcTypes = {};
+var Go$funcType = function(params, results, isVariadic) {
+	var paramTypes = Go$mapArray(params, function(p) { return p.Go$string; });
+	if (isVariadic) {
+		paramTypes[paramTypes.length - 1] = "..." + paramTypes[paramTypes.length - 1].substr(2);
+	}
+	var name = "func(" + paramTypes.join(", ") + ")";
+	if (results.length === 1) {
+		name += " " + results[0].Go$string;
+	} else if (results.length > 1) {
+		name += " (" + Go$mapArray(results, function(r) { return r.Go$string; }).join(", ") + ")"
+	}
+	var typ = Go$funcTypes[name];
 	if (typ === undefined) {
-		typ = function(array) {
-			this.array = array;
-			this.offset = 0;
-			this.length = array && array.length;
-			this.capacity = this.length;
-			this.Go$val = this;
-		};
-		typ.Go$string = "[]" + elem.Go$string;
-		typ.Go$nil = new typ({ isNil: true, length: 0 });
-		typ.Go$type = Go$cache(function() {
-			var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.slice, typ, undefined, Go$newStringPointer(typ.Go$string), undefined, undefined);
-			rt.sliceType = new Go$reflect.sliceType(rt, elem.Go$type());
-			return rt;
-		});
-		typ.prototype.Go$uncomparable = true;
-		elem.Go$Slice = typ;
+		typ = Go$newFuncType(name, function() { return params; }, function() { return results; }, isVariadic);
+    Go$funcTypes[name] = typ;
 	}
 	return typ;
 };
+
+var Go$Interface = function() {};
+Go$Interface.Go$string = "interface{}";
+Go$Interface.Go$nil = { Go$key: function() { return "nil"; } };
 
 var Go$Map = function() {};
 (function() {
@@ -121,75 +168,83 @@ var Go$Map = function() {};
 		Go$Map.prototype[names[i]] = undefined;
 	}
 })();
-
+var Go$newMapType = function(name, key, elem) {
+	var typ = function(v) { this.Go$val = v; };
+	typ.Go$string = name;
+	typ.Go$type = Go$cache(function() {
+		var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.Map, typ, undefined, Go$newStringPointer(name), undefined, undefined);
+		rt.mapType = new Go$reflect.mapType(rt, key().Go$type(), elem().Go$type(), undefined, undefined);
+		return rt;
+	});
+	typ.prototype.Go$uncomparable = true;
+	return typ;
+};
 var Go$mapTypes = {};
 var Go$mapType = function(key, elem) {
-  var typeString = "map[" + key.Go$string + "]" + elem.Go$string;
-  var typ = Go$mapTypes[typeString];
+  var name = "map[" + key.Go$string + "]" + elem.Go$string;
+  var typ = Go$mapTypes[name];
   if (typ === undefined) {
-    typ = function(v) { this.Go$val = v; };
-		typ.Go$string = typeString;
-		typ.Go$type = Go$cache(function() {
-			var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.map, typ, undefined, Go$newStringPointer(typeString), undefined, undefined);
-			rt.mapType = new Go$reflect.mapType(rt, key.Go$type(), elem.Go$type(), undefined, undefined);
-			return rt;
-		});
-		typ.prototype.Go$uncomparable = true;
-    Go$mapTypes[typeString] = typ;
+  	typ = Go$newMapType(name, function() { return key; }, function() { return elem; });
+    Go$mapTypes[name] = typ;
   }
   return typ;
 };
 
-var Go$funcTypes = {};
-var Go$funcType = function(params, results, isVariadic) {
-	var paramTypes = Go$mapArray(params, function(p) { return p.Go$string; });
-	if (isVariadic) {
-		paramTypes[paramTypes.length - 1] = "..." + paramTypes[paramTypes.length - 1].substr(2);
-	}
-	var typeString = "func(" + paramTypes.join(", ") + ")";
-	if (results.length === 1) {
-		typeString += " " + results[0].Go$string;
-	} else if (results.length > 1) {
-		typeString += " (" + Go$mapArray(results, function(r) { return r.Go$string; }).join(", ") + ")"
-	}
-	var typ = Go$funcTypes[typeString];
-	if (typ === undefined) {
-		typ = function(v) { this.Go$val = v; };
-		typ.Go$string = typeString;
-		typ.Go$type = Go$cache(function() {
-			var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.func, typ, undefined, Go$newStringPointer(typeString), undefined, undefined);
-			var typeSlice = (Go$sliceType(Go$pointerType(Go$reflect.rtype)));
-			rt.funcType = new Go$reflect.funcType(rt, isVariadic, new typeSlice(Go$mapArray(params, function(p) { return p.Go$type(); })), new typeSlice(Go$mapArray(results, function(p) { return p.Go$type(); })));
-			return rt;
-		});
-		typ.prototype.Go$uncomparable = true;
-    Go$funcTypes[typeString] = typ;
-	}
+var Go$throwNilPointerError = function() { Go$throwRuntimeError("invalid memory address or nil pointer dereference"); };
+var Go$newPtrType = function(name, elem) {
+	var typ = function(getter, setter) {
+		this.Go$get = getter;
+		this.Go$set = setter;
+		this.Go$val = this;
+	};
+	typ.Go$string = name;
+	typ.Go$nil = new typ(Go$throwNilPointerError, Go$throwNilPointerError);
+	typ.Go$type = Go$cache(function() {
+		var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.Ptr, typ, undefined, Go$newStringPointer(name), undefined, undefined);
+		rt.ptrType = new Go$reflect.ptrType(rt, elem().Go$type());
+		return rt;
+	});
 	return typ;
 };
-
-var Go$throwNilPointerError = function() { Go$throwRuntimeError("invalid memory address or nil pointer dereference"); };
-var Go$pointerType = function(elem) {
+var Go$ptrType = function(elem) {
 	var typ = elem.Go$Pointer;
 	if (typ === undefined) {
-		typ = function(getter, setter) {
-			this.Go$get = getter;
-			this.Go$set = setter;
-			this.Go$val = this;
-		};
-		typ.Go$string = "*" + elem.Go$string;
-		typ.Go$nil = new typ(Go$throwNilPointerError, Go$throwNilPointerError);
-		typ.Go$type = Go$cache(function() {
-			var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.ptr, typ, undefined, Go$newStringPointer(typ.Go$string), undefined, undefined);
-			rt.ptrType = new Go$reflect.ptrType(rt, elem.Go$type());
-			return rt;
-		});
+		typ = Go$newPtrType("*" + elem.Go$string, function() { return elem; });
 		elem.Go$Pointer = typ;
 	}
 	return typ;
 };
 
-var Go$StringPointer = Go$pointerType(Go$String);
+var Go$newSliceType = function(name, elem) {
+	var typ = function(array) {
+		this.array = array;
+		this.offset = 0;
+		this.length = array && array.length;
+		this.capacity = this.length;
+		this.Go$val = this;
+	};
+	typ.Go$string = name;
+	typ.Go$nil = new typ({ isNil: true, length: 0 });
+	typ.Go$type = Go$cache(function() {
+		var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.Slice, typ, undefined, Go$newStringPointer(name), undefined, undefined);
+		rt.sliceType = new Go$reflect.sliceType(rt, elem().Go$type());
+		return rt;
+	});
+	typ.prototype.Go$uncomparable = true;
+	return typ;
+}
+var Go$sliceType = function(elem) {
+	var typ = elem.Go$Slice;
+	if (typ === undefined) {
+		typ = Go$newSliceType("[]" + elem.Go$string, function() { return elem; });
+		elem.Go$Slice = typ;
+	}
+	return typ;
+};
+
+var Go$Struct = function() {};
+
+var Go$StringPointer = Go$ptrType(Go$String);
 Go$newStringPointer = function(str) {
 	return new Go$StringPointer(function() { return str; }, function(v) { str = v; });
 };
@@ -208,22 +263,6 @@ var Go$structNil = function(constructor) {
 	}
 	return nil;
 };
-
-var Go$Int64 = function(high, low) {
-	this.high = (high + Math.floor(Math.ceil(low) / 4294967296)) >> 0;
-	this.low = low >>> 0;
-	this.Go$val = this;
-};
-Go$Int64.prototype.Go$key = function() { return "Int64$" + this.high + "$" + this.low; };
-Go$Int64.Go$type = Go$cache(function() { return new Go$reflect.rtype(8, 0, 0, 0, 0, Go$reflect.kinds.int64, Go$Int64, undefined, Go$newStringPointer("int64"), undefined, undefined); });
-
-var Go$Uint64 = function(high, low) {
-	this.high = (high + Math.floor(Math.ceil(low) / 4294967296)) >>> 0;
-	this.low = low >>> 0;
-	this.Go$val = this;
-};
-Go$Uint64.prototype.Go$key = function() { return "Uint64$" + this.high + "$" + this.low; };
-Go$Uint64.Go$type = Go$cache(function() { return new Go$reflect.rtype(8, 0, 0, 0, 0, Go$reflect.kinds.uint64, Go$Uint64, undefined, Go$newStringPointer("int64"), undefined, undefined); });
 
 var Go$flatten64 = function(x) {
 	return x.high * 4294967296 + x.low;
@@ -348,22 +387,6 @@ var Go$div64 = function(x, y, returnRemainder) {
 	}
 	return new x.constructor(high * s, low * s);
 };
-
-var Go$Complex64  = function(real, imag) {
-	this.real = real;
-	this.imag = imag;
-	this.Go$val = this;
-};
-Go$Complex64.prototype.Go$key = function() { return "Complex64$" + this.Go$val; };
-Go$Complex64.Go$type = Go$cache(function() { return new Go$reflect.rtype(8, 0, 0, 0, 0, Go$reflect.kinds.complex64, Go$Complex64, undefined, Go$newStringPointer("complex64"), undefined, undefined); });
-
-var Go$Complex128  = function(real, imag) {
-	this.real = real;
-	this.imag = imag;
-	this.Go$val = this;
-};
-Go$Complex128.prototype.Go$key = function() { return "Complex128$" + this.Go$val; };
-Go$Complex128.Go$type = Go$cache(function() { return new Go$reflect.rtype(16, 0, 0, 0, 0, Go$reflect.kinds.complex128, Go$Complex128, undefined, Go$newStringPointer("complex128"), undefined, undefined); });
 
 var Go$divComplex = function(n, d) {
 	var ninf = n.real === 1/0 || n.real === -1/0 || n.imag === 1/0 || n.imag === -1/0;
@@ -563,12 +586,6 @@ var Go$makeArray = function(constructor, length, zero) { // TODO do not use for 
 	}
 	return array;
 };
-
-var Go$Struct = function() {};
-var Go$Interface = function() {};
-Go$Interface.Go$string = "interface{}";
-Go$Interface.Go$nil = { Go$key: function() { return "nil"; } };
-var Go$Channel = function() {};
 
 var Go$copySlice = function(dst, src) {
 	var n = Math.min(src.length, dst.length), i;

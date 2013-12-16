@@ -860,7 +860,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			if isStruct {
 				return c.clone(c.translateExpr(expr), t.Elem())
 			}
-			return fmt.Sprintf("(Go$obj = %s, new (Go$pointerType(%s))(Go$obj.Go$get, Go$obj.Go$set))", c.translateExpr(expr), c.typeName(n))
+			return fmt.Sprintf("(Go$obj = %s, new (Go$ptrType(%s))(Go$obj.Go$get, Go$obj.Go$set))", c.translateExpr(expr), c.typeName(n))
 		}
 
 	case *types.Struct, *types.Array:

@@ -48,7 +48,7 @@ var natives = map[string]string{
 	"io/ioutil": `
 		var blackHoles = [];
 		blackHole = function() {
-			return blackHoles.pop() || new (Go$sliceType(Go$Byte))(Go$makeArray(Go$ByteArray, 8192, function() { return 0; }));
+			return blackHoles.pop() || new (Go$sliceType(Go$Uint8))(Go$makeArray(Go$Uint8Array, 8192, function() { return 0; }));
 		};
 		blackHolePut = function(p) {
 			blackHoles.push(p);
@@ -233,7 +233,7 @@ var natives = map[string]string{
 	"reflect": `
 		Go$reflect = {
 			rtype: rtype, uncommonType: uncommonType, arrayType: arrayType, funcType: funcType, mapType: mapType, ptrType: ptrType, sliceType: sliceType, structType: structType, structField: structField,
-			kinds: {bool: Go$pkg.Bool, int: Go$pkg.Int, int8: Go$pkg.Int8, int16: Go$pkg.Int16, int32: Go$pkg.Int32, int64: Go$pkg.Int64, uint: Go$pkg.Uint, uint8: Go$pkg.Uint8, uint16: Go$pkg.Uint16, uint32: Go$pkg.Uint32, uint64: Go$pkg.Uint64, uintptr: Go$pkg.Uintptr, float32: Go$pkg.Float32, float64: Go$pkg.Float64, complex64: Go$pkg.Complex64, complex128: Go$pkg.Complex128, array: Go$pkg.Array, chan: Go$pkg.Chan, func: Go$pkg.Func, interface: Go$pkg.Interface, map: Go$pkg.Map, ptr: Go$pkg.Ptr, slice: Go$pkg.Slice, string: Go$pkg.String, struct: Go$pkg.Struct, "unsafe.Pointer": Go$pkg.UnsafePointer}
+			kinds: { Bool: Go$pkg.Bool, Int: Go$pkg.Int, Int8: Go$pkg.Int8, Int16: Go$pkg.Int16, Int32: Go$pkg.Int32, Int64: Go$pkg.Int64, Uint: Go$pkg.Uint, Uint8: Go$pkg.Uint8, Uint16: Go$pkg.Uint16, Uint32: Go$pkg.Uint32, Uint64: Go$pkg.Uint64, Uintptr: Go$pkg.Uintptr, Float32: Go$pkg.Float32, Float64: Go$pkg.Float64, Complex64: Go$pkg.Complex64, Complex128: Go$pkg.Complex128, Array: Go$pkg.Array, Chan: Go$pkg.Chan, Func: Go$pkg.Func, Interface: Go$pkg.Interface, Map: Go$pkg.Map, Ptr: Go$pkg.Ptr, Slice: Go$pkg.Slice, String: Go$pkg.String, Struct: Go$pkg.Struct, UnsafePointer: Go$pkg.UnsafePointer }
 		};
 
 		TypeOf = function(i) {
@@ -299,7 +299,7 @@ var natives = map[string]string{
 		};
 
 		rtype.prototype.ptrTo = function() {
-			return Go$pointerType(this.alg).Go$type();
+			return Go$ptrType(this.alg).Go$type();
 		};
 
 		Value.prototype.Bytes = function() {
@@ -399,7 +399,7 @@ var natives = map[string]string{
 				fl |= typ.Kind() << flagKindShift;
 				i += this.val.offset;
 				var array = this.val.array;
-				return new Value(typ, new (Go$pointerType(typ))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
+				return new Value(typ, new (Go$ptrType(typ))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
 			case Go$pkg.String:
 				if (i < 0 || i >= this.val.length) {
 					throw new Go$Panic("reflect: string index out of range");
@@ -519,7 +519,7 @@ var natives = map[string]string{
 
 	"sync": `
 		runtime_Syncsemcheck = function() {};
-		Go$pointerType(copyChecker).prototype.check = function() {};
+		Go$ptrType(copyChecker).prototype.check = function() {};
 	`,
 
 	"sync/atomic": `
@@ -576,7 +576,7 @@ var natives = map[string]string{
 			os.Open(dir)[0].Chdir();
 			var start = time.Now(), status = "ok  ", i;
 			for (i = 0; i < tests.length; i += 1) {
-				var t = new T(new common(new sync.RWMutex(), Go$sliceType(Go$Byte).Go$nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
+				var t = new T(new common(new sync.RWMutex(), Go$sliceType(Go$Uint8).Go$nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
 				var err = null;
 				try {
 					if (chatty.Go$get()) {

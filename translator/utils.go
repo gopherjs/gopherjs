@@ -87,7 +87,7 @@ func WriteInterfaces(dependencies []*types.Package, w io.Writer, merge bool) {
 						implementedBy[fmt.Sprintf("Go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
 					}
 					if types.IsAssignableTo(types.NewPointer(otherType), in) {
-						implementedBy[fmt.Sprintf("Go$pointerType(Go$packages[\"%s\"].%s)", other.Pkg().Path(), other.Name())] = true
+						implementedBy[fmt.Sprintf("Go$ptrType(Go$packages[\"%s\"].%s)", other.Pkg().Path(), other.Name())] = true
 					}
 				}
 			}

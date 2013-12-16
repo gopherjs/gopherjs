@@ -338,6 +338,8 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 	obj := c.info.Objects[s.Name]
 	typeName := c.objectName(obj)
 	switch t := obj.Type().Underlying().(type) {
+	case *types.Basic:
+		c.Printf(`%s = Go$newBasicType("%s.%s", "%s");`, typeName, obj.Pkg().Name(), obj.Name(), c.typeKind(t))
 	case *types.Struct:
 		params := make([]string, t.NumFields())
 		for i := 0; i < t.NumFields(); i++ {
@@ -364,7 +366,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 		})
 		c.Printf("};")
 		c.Printf(`%s.Go$string = "*%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
-		c.Printf(`%s.Go$type = function() { return new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.ptr, %s, undefined, Go$newStringPointer("*%s.%s"), undefined, undefined); };`, typeName, typeName, obj.Pkg().Name(), obj.Name())
+		c.Printf(`%s.Go$type = function() { return new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.Ptr, %s, undefined, Go$newStringPointer("*%s.%s"), undefined, undefined); };`, typeName, typeName, obj.Pkg().Name(), obj.Name())
 		c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, typeName)
 		c.Printf("%s.Go$NonPointer = function(v) { this.Go$val = v; };", typeName)
 		c.Printf(`%s.Go$NonPointer.Go$string = "%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
@@ -387,7 +389,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 			fields[i] = fmt.Sprintf(`new Go$reflect.structField(%s, %s, %s.Go$type(), %s, 0)`, name, path, c.typeName(field.Type()), tag)
 		}
 		uncommonType := fmt.Sprintf(`new Go$reflect.uncommonType(Go$newStringPointer("%s"), Go$newStringPointer("%s.%s"), Go$sliceType(method).Go$nil)`, typeName, obj.Pkg().Name(), typeName)
-		c.Printf(`%s.Go$NonPointer.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.struct, %s, undefined, Go$newStringPointer("%s.%s"), %s, undefined); t.structType = new Go$reflect.structType(t, new (Go$sliceType(Go$reflect.structField))([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), uncommonType, strings.Join(fields, ", "))
+		c.Printf(`%s.Go$NonPointer.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.Struct, %s, undefined, Go$newStringPointer("%s.%s"), %s, undefined); t.structType = new Go$reflect.structType(t, new (Go$sliceType(Go$reflect.structField))([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), uncommonType, strings.Join(fields, ", "))
 		for i := 0; i < t.NumFields(); i++ {
 			field := t.Field(i)
 			if field.Anonymous() {
@@ -415,27 +417,29 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 				}
 			}
 		}
+	case *types.Array:
+		c.Printf(`%s = Go$newArrayType("%s.%s", function() { return %s; }, %d);`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()), t.Len())
 	case *types.Interface:
 		c.Printf("%s = { Go$implementedBy: [] };", typeName)
 		c.Printf(`%s.Go$string = "%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
-	case *types.Array:
-		c.Printf(`%s = function(v) { this.Go$val = v; };`, typeName)
-		c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.Go$val; };`, typeName, typeName)
-		c.Printf(`%s.Go$string = "%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
-	default:
-		if isWrapped(t) {
-			c.Printf(`%s = function(v) { this.Go$val = v; };`, typeName)
-			c.Printf(`%s.Go$string = "%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
-			c.Printf(`%s.Go$type = function() { return new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.%s, %s, undefined, Go$newStringPointer("%s.%s"), undefined, undefined); };`, typeName, c.typeKind(t), typeName, obj.Pkg().Name(), obj.Name())
-			c.Printf(`%s.prototype.Go$key = function() { return "%s$" + this.Go$val; };`, typeName, typeName)
-			return
+	case *types.Map:
+		c.Printf(`%s = Go$newMapType("%s.%s", function() { return %s; }, function() { return %s; });`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Key()), c.typeName(t.Elem()))
+	case *types.Pointer:
+		c.Printf(`%s = Go$newPtrType("%s.%s", function() { return %s; });`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()))
+	case *types.Signature:
+		paramTypes := make([]string, t.Params().Len())
+		for i := range paramTypes {
+			paramTypes[i] = c.typeName(t.Params().At(i).Type())
 		}
-
-		underlyingTypeName := c.typeName(t)
-		c.Printf("%s = function() { %s.apply(this, arguments); };", typeName, underlyingTypeName)
-		c.Printf(`%s.Go$string = "%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
-		c.Printf(`%s.Go$type = function() { return new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.%s, %s, undefined, Go$newStringPointer("%s.%s"), undefined, undefined); };`, typeName, c.typeKind(t), typeName, obj.Pkg().Name(), obj.Name())
-		c.Printf("%s.prototype.Go$key = function() { return \"%s$\" + %s.prototype.Go$key.apply(this); };", typeName, typeName, underlyingTypeName)
+		resultTypes := make([]string, t.Results().Len())
+		for i := range resultTypes {
+			resultTypes[i] = c.typeName(t.Results().At(i).Type())
+		}
+		c.Printf(`%s = Go$newFuncType("%s.%s", function() { return [%s]; }, function() { return [%s]; }, %t);`, typeName, obj.Pkg().Path(), obj.Name(), strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
+	case *types.Slice:
+		c.Printf(`%s = Go$newSliceType("%s.%s", function() { return %s; });`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()))
+	default:
+		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
 }
 
@@ -513,7 +517,7 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 				value = fmt.Sprintf("new %s(%s)", typeName, value)
 			}
 			printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
-			c.Printf("Go$pointerType(%s).prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, joinedParams, value, fun.Name.Name, joinedParams)
+			c.Printf("Go$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, joinedParams, value, fun.Name.Name, joinedParams)
 		case !isStruct && isPointer:
 			if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
 				printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
@@ -523,8 +527,8 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 			if isWrapped(ptr.Elem()) {
 				value = "this.Go$val"
 			}
-			c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new (Go$pointerType(%s))(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, joinedParams, value, typeName, fun.Name.Name, joinedParams)
-			printPrimaryFunction(fmt.Sprintf("Go$pointerType(%s).prototype.%s", typeName, fun.Name.Name))
+			c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new (Go$ptrType(%s))(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, joinedParams, value, typeName, fun.Name.Name, joinedParams)
+			printPrimaryFunction(fmt.Sprintf("Go$ptrType(%s).prototype.%s", typeName, fun.Name.Name))
 		}
 	})
 }
@@ -763,7 +767,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 				return c.objectName(named.Obj())
 			}
 		}
-		return fmt.Sprintf("(Go$pointerType(%s))", c.typeName(t.Elem()))
+		return fmt.Sprintf("(Go$ptrType(%s))", c.typeName(t.Elem()))
 	case *types.Array:
 		return fmt.Sprintf("(Go$arrayType(%s, %d))", c.typeName(t.Elem()), t.Len())
 	case *types.Slice:
@@ -794,15 +798,15 @@ func (c *PkgContext) typeName(ty types.Type) string {
 func (c *PkgContext) typeKind(ty types.Type) string {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
-		return t.String()
+		return toJavaScriptType(t)
 	case *types.Slice:
-		return "slice"
+		return "Slice"
 	case *types.Map:
-		return "map"
+		return "Map"
 	case *types.Signature:
-		return "func"
+		return "Func"
 	case *types.Pointer:
-		return "ptr"
+		return "Ptr"
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
@@ -836,6 +840,10 @@ func toJavaScriptType(t *types.Basic) string {
 	switch t.Kind() {
 	case types.UntypedInt:
 		return "Int"
+	case types.Byte:
+		return "Uint8"
+	case types.Rune:
+		return "Int32"
 	default:
 		name := t.String()
 		return strings.ToUpper(name[:1]) + name[1:]

@@ -232,7 +232,7 @@ var natives = map[string]string{
 
 	"reflect": `
 		Go$reflect = {
-			rtype: rtype, uncommonType: uncommonType, arrayType: arrayType, mapType: mapType, ptrType: ptrType, sliceType: sliceType, structType: structType, structField: structField,
+			rtype: rtype, uncommonType: uncommonType, arrayType: arrayType, funcType: funcType, mapType: mapType, ptrType: ptrType, sliceType: sliceType, structType: structType, structField: structField,
 			kinds: {bool: Go$pkg.Bool, int: Go$pkg.Int, int8: Go$pkg.Int8, int16: Go$pkg.Int16, int32: Go$pkg.Int32, int64: Go$pkg.Int64, uint: Go$pkg.Uint, uint8: Go$pkg.Uint8, uint16: Go$pkg.Uint16, uint32: Go$pkg.Uint32, uint64: Go$pkg.Uint64, uintptr: Go$pkg.Uintptr, float32: Go$pkg.Float32, float64: Go$pkg.Float64, complex64: Go$pkg.Complex64, complex128: Go$pkg.Complex128, array: Go$pkg.Array, chan: Go$pkg.Chan, func: Go$pkg.Func, interface: Go$pkg.Interface, map: Go$pkg.Map, ptr: Go$pkg.Ptr, slice: Go$pkg.Slice, string: Go$pkg.String, struct: Go$pkg.Struct, "unsafe.Pointer": Go$pkg.UnsafePointer}
 		};
 
@@ -241,8 +241,65 @@ var natives = map[string]string{
 		};
 		ValueOf = function(i) {
 			var typ = i.constructor.Go$type();
-			var flag = typ.Kind() << flagKindShift;
-			return new Value(typ, i.Go$val, flag);
+			return new Value(typ, i.Go$val, typ.Kind() << flagKindShift);
+		};
+		Zero = function(typ) {
+			var val;
+			switch (typ.Kind()) {
+			case Go$pkg.Bool:
+				val = false;
+				break;
+			case Go$pkg.Int:
+			case Go$pkg.Int8:
+			case Go$pkg.Int16:
+			case Go$pkg.Int32:
+			case Go$pkg.Int64:
+			case Go$pkg.Uint:
+			case Go$pkg.Uint8:
+			case Go$pkg.Uint16:
+			case Go$pkg.Uint32:
+			case Go$pkg.Uint64:
+			case Go$pkg.Float32:
+			case Go$pkg.Float64:
+				val = 0;
+				break;
+			case Go$pkg.Complex64:
+				val = new Go$Complex64(0, 0);
+				break;
+			case Go$pkg.Complex128:
+				val = new Go$Complex128(0, 0);
+				break;
+			case Go$pkg.String:
+				val = "";
+				break;
+			case Go$pkg.Map:
+				val = false;
+				break;
+			default:
+				throw new Go$Panic("reflect.Zero(" + typ.string.Go$get() + "): type not yet supported");
+			}
+			return new Value(typ, val, typ.Kind() << flagKindShift);
+		};
+		New = function(typ) {
+			var ptrType = typ.common().ptrTo();
+			return new Value(ptrType, Go$newDataPointer(Zero(typ).val, ptrType.alg), Go$pkg.Ptr << flagKindShift);
+		};
+		makemap = function(t) {
+			return new Go$Map();
+		};
+		mapaccess = function(t, m, key) {
+			var entry = m[key];
+			if (entry === undefined) {
+				return [undefined, false];
+			}
+			return [entry.v, true];
+		};
+		mapassign = function(t, m, key, val, ok) {
+			m[key] = { k: key, v: val }; // FIXME key
+		};
+
+		rtype.prototype.ptrTo = function() {
+			return Go$pointerType(this.alg).Go$type();
 		};
 
 		Value.prototype.Bytes = function() {
@@ -251,6 +308,65 @@ var natives = map[string]string{
 				throw new Go$Panic("reflect.Value.Bytes of non-byte slice");
 			}
 			return this.val;
+		};
+		Value.prototype.call = function(op, args) {
+			if (this.val === null) {
+				throw new Go$Panic("reflect.Value.Call: call of nil function");
+			}
+
+			var isSlice = (op === "CallSlice");
+			var t = this.typ;
+			var n = t.NumIn();
+			if (isSlice) {
+				if (!t.IsVariadic()) {
+					throw new Go$Panic("reflect: CallSlice of non-variadic function");
+				}
+				if (args.length < n) {
+					throw new Go$Panic("reflect: CallSlice with too few input arguments");
+				}
+				if (args.length > n) {
+					throw new Go$Panic("reflect: CallSlice with too many input arguments");
+				}
+			} else {
+				if (t.IsVariadic()) {
+					n -= 1;
+				}
+				if (args.length < n) {
+					throw new Go$Panic("reflect: Call with too few input arguments");
+				}
+				if (!t.IsVariadic() && args.length > n) {
+					throw new Go$Panic("reflect: Call with too many input arguments");
+				}
+			}
+			var i;
+			for (i = 0; i < args.length; i += 1) {
+				if (args.array[args.offset + i].Kind() === Go$pkg.Invalid) {
+					throw new Go$Panic("reflect: " + op + " using zero Value argument");
+				}
+			}
+			for (i = 0; i < n; i += 1) {
+				var xt = args.array[args.offset + i].Type(), targ = t.In(i);
+				if (!xt.AssignableTo(targ)) {
+					throw new Go$Panic("reflect: " + op + " using " + xt.String() + " as type " + targ.String());
+				}
+			}
+
+			var argsArray = new Array(n);
+			for (i = 0; i < n; i += 1) {
+				argsArray[i] = args.array[args.offset + i].val;
+			}
+			var results = this.val.apply(null, argsArray);
+			if (t.NumOut() === 0) {
+				results = [];
+			} else if (t.NumOut() === 1) {
+				results = [results];
+			}
+			for (i = 0; i < t.NumOut(); i += 1) {
+				var typ = t.Out(i);
+				var flag = typ.Kind() << flagKindShift;
+				results[i] = new Value(typ, results[i], flag);
+			}
+			return new (Go$sliceType(Value))(results);
 		};
 		Value.prototype.Field = function(i) {
 			this.mustBe(Go$pkg.Struct);
@@ -308,6 +424,16 @@ var natives = map[string]string{
 				return v.val;
 			}
 			return new v.typ.alg(v.val);
+		};
+		Value.prototype.Set = function(x) {
+			switch (this.typ.Kind()) {
+			case Go$pkg.Map:
+				this.val = x.val;
+				this.flag = x.flag;
+				break;
+			default:
+				throw new Go$Panic("reflect.Value.Set(" + this.typ.string.Go$get() + "): type not yet supported");
+			}
 		};
 		Value.prototype.String = function() {
 			switch (this.kind()) {

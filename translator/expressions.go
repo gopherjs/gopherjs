@@ -105,11 +105,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				for len(elements) < int(t.Len()) {
 					elements = append(elements, zero)
 				}
-				return createListComposite(t.Elem(), elements)
+				if isTypedArray(t.Elem()) {
+					return fmt.Sprintf("new %s([%s])", toArrayType(t.Elem()), strings.Join(elements, ", "))
+				}
+				return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
 			}
 			return fmt.Sprintf("Go$makeArray(%s, %d, function() { return %s; })", toArrayType(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
 		case *types.Slice:
-			return fmt.Sprintf("new %s(%s)", c.typeName(exprType), createListComposite(t.Elem(), collectIndexedElements(t.Elem())))
+			return fmt.Sprintf("new %s([%s])", c.typeName(exprType), strings.Join(collectIndexedElements(t.Elem()), ", "))
 		case *types.Map:
 			mapVar := c.newVariable("_map")
 			keyVar := c.newVariable("_map")
@@ -525,10 +528,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case "make":
 					switch argType := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Slice:
+						length := c.translateExprToType(e.Args[1], types.Typ[types.Int])
+						capacity := "0"
 						if len(e.Args) == 3 {
-							return fmt.Sprintf("Go$subslice(new %s(Go$makeArray(%s, %s, function() { return %s; })), 0, %s)", c.typeName(c.info.Types[e.Args[0]]), toArrayType(argType.Elem()), c.translateExprToType(e.Args[2], types.Typ[types.Int]), c.zeroValue(argType.Elem()), c.translateExprToType(e.Args[1], types.Typ[types.Int]))
+							capacity = c.translateExprToType(e.Args[2], types.Typ[types.Int])
 						}
-						return fmt.Sprintf("new %s(Go$makeArray(%s, %s, function() { return %s; }))", c.typeName(c.info.Types[e.Args[0]]), toArrayType(argType.Elem()), c.translateExprToType(e.Args[1], types.Typ[types.Int]), c.zeroValue(argType.Elem()))
+						return fmt.Sprintf("%s.Go$make(%s, %s, function() { return %s; })", c.typeName(c.info.Types[e.Args[0]]), length, capacity, c.zeroValue(argType.Elem()))
 					case *types.Map:
 						return "new Go$Map()"
 					case *types.Chan:
@@ -571,8 +576,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						return fmt.Sprintf("Go$append(%s, %s)", c.translateExpr(e.Args[0]), c.translateExprToType(e.Args[1], exprType))
 					}
 					sliceType := exprType.Underlying().(*types.Slice)
-					toAppend := createListComposite(sliceType.Elem(), c.translateExprSlice(e.Args[1:], sliceType.Elem()))
-					return fmt.Sprintf("Go$append(%s, new %s(%s))", c.translateExpr(e.Args[0]), c.typeName(exprType), toAppend)
+					return fmt.Sprintf("Go$append(%s, new %s([%s]))", c.translateExpr(e.Args[0]), c.typeName(exprType), strings.Join(c.translateExprSlice(e.Args[1:], sliceType.Elem()), ", "))
 				case "delete":
 					return fmt.Sprintf(`delete %s[%s]`, c.translateExpr(e.Args[0]), c.makeKey(e.Args[1], c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()))
 				case "copy":

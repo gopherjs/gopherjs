@@ -264,16 +264,19 @@ var natives = map[string]string{
 				val = 0;
 				break;
 			case Go$pkg.Complex64:
-				val = new Go$Complex64(0, 0);
+				val = new typ.alg(0, 0);
 				break;
 			case Go$pkg.Complex128:
-				val = new Go$Complex128(0, 0);
+				val = new typ.alg(0, 0);
 				break;
 			case Go$pkg.String:
 				val = "";
 				break;
 			case Go$pkg.Map:
 				val = false;
+				break;
+			case Go$pkg.Slice:
+				val = typ.alg.Go$nil;
 				break;
 			default:
 				throw new Go$Panic("reflect.Zero(" + typ.string.Go$get() + "): type not yet supported");
@@ -283,6 +286,20 @@ var natives = map[string]string{
 		New = function(typ) {
 			var ptrType = typ.common().ptrTo();
 			return new Value(ptrType, Go$newDataPointer(Zero(typ).val, ptrType.alg), Go$pkg.Ptr << flagKindShift);
+		};
+		MakeSlice = function(typ, len, cap) {
+			if (typ.Kind() !== Go$pkg.Slice) {
+				throw new Go$Panic("reflect.MakeSlice of non-slice type");
+			}
+			if (len < 0) {
+				throw new Go$Panic("reflect.MakeSlice: negative len");
+			}
+			if (cap < 0) {
+				throw new Go$Panic("reflect.MakeSlice: negative cap");
+			}
+			if (len > cap) {
+				throw new Go$Panic("reflect.MakeSlice: len > cap");
+			}
 		};
 		makemap = function(t) {
 			return new Go$Map();

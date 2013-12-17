@@ -56,6 +56,7 @@ var Go$newBasicType = function(name, kind) {
 		break;
 	default:
 		typ = function(v) { this.Go$val = v; };
+		typ.Go$kind = kind;
 		typ.prototype.Go$key = function() { return name + "$" + this.Go$val; };
 	}
 	typ.Go$string = name;
@@ -215,16 +216,30 @@ var Go$ptrType = function(elem) {
 	return typ;
 };
 
-var Go$newSliceType = function(name, elem) {
+var Go$newSliceType = function(name, elem, elemKind) {
+	var arrayType = ({ Int: Int32Array, Int8: Int8Array, Int16: Int16Array, Int32: Int32Array, Uint: Uint32Array, Uint8: Uint8Array, Uint16: Uint16Array, Uint32: Uint32Array, Uintptr: Uint32Array, Float32: Float32Array, Float64: Float64Array })[elemKind] || Array;
 	var typ = function(array) {
+		if (array.constructor !== arrayType) {
+			array = new arrayType(array);
+		}
 		this.array = array;
 		this.offset = 0;
-		this.length = array && array.length;
-		this.capacity = this.length;
+		this.length = array.length;
+		this.capacity = array.length;
 		this.Go$val = this;
 	};
 	typ.Go$string = name;
-	typ.Go$nil = new typ({ isNil: true, length: 0 });
+	typ.Go$make = function(length, capacity, zero) {
+		capacity = capacity || length;
+		var array = new arrayType(capacity), i;
+		for (i = 0; i < capacity; i += 1) {
+			array[i] = zero();
+		}
+		var slice = new typ(array);
+		slice.length = length;
+		return slice;
+	};
+	typ.Go$nil = new typ([]);
 	typ.Go$type = Go$cache(function() {
 		var rt = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.Slice, typ, undefined, Go$newStringPointer(name), undefined, undefined);
 		rt.sliceType = new Go$reflect.sliceType(rt, elem().Go$type());
@@ -236,7 +251,7 @@ var Go$newSliceType = function(name, elem) {
 var Go$sliceType = function(elem) {
 	var typ = elem.Go$Slice;
 	if (typ === undefined) {
-		typ = Go$newSliceType("[]" + elem.Go$string, function() { return elem; });
+		typ = Go$newSliceType("[]" + elem.Go$string, function() { return elem; }, elem.Go$kind);
 		elem.Go$Slice = typ;
 	}
 	return typ;
@@ -618,10 +633,6 @@ var Go$append = function(slice, toAppend) {
 	if (toAppend.length === 0) {
 		return slice;
 	}
-	if (slice.array.isNil) {
-		// this must be a new array, don't just return toAppend
-		slice = new toAppend.constructor(new toAppend.array.constructor(0));
-	}
 
 	var newArray = slice.array;
 	var newOffset = slice.offset;
@@ -629,11 +640,10 @@ var Go$append = function(slice, toAppend) {
 	var newCapacity = slice.capacity;
 
 	if (newLength > newCapacity) {
-		var c = newArray.length - newOffset;
-		newCapacity = Math.max(newLength, c < 1024 ? c * 2 : Math.floor(c * 5 / 4));
+		newCapacity = Math.max(newLength, newCapacity < 1024 ? newCapacity * 2 : Math.floor(newCapacity * 5 / 4));
 
 		if (newArray.constructor === Array) {
-			if (newOffset !== 0) {
+			if (newOffset !== 0 || newArray.length !== newOffset + slice.capacity) {
 				newArray = newArray.slice(newOffset);
 			}
 			newArray.length = newCapacity;

@@ -242,13 +242,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 		for _, spec := range typeSpecs {
 			obj := c.info.Objects[spec.Name]
-			typeName := c.objectName(obj)
-			switch obj.Type().Underlying().(type) {
-			case *types.Pointer:
-				c.Printf("%s.Go$nil = new %s(Go$throwNilPointerError, Go$throwNilPointerError);", typeName, typeName)
-			case *types.Slice:
-				c.Printf("%s.Go$nil = new %s({ isNil: true, length: 0 });", typeName, typeName)
-			case *types.Struct:
+			if _, isStruct := obj.Type().Underlying().(*types.Struct); isStruct {
+				typeName := c.objectName(obj)
 				c.Printf("%s.Go$nil = Go$structNil(%s);", typeName, typeName)
 			}
 		}
@@ -437,7 +432,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 		}
 		c.Printf(`%s = Go$newFuncType("%s.%s", function() { return [%s]; }, function() { return [%s]; }, %t);`, typeName, obj.Pkg().Path(), obj.Name(), strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
 	case *types.Slice:
-		c.Printf(`%s = Go$newSliceType("%s.%s", function() { return %s; });`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()))
+		c.Printf(`%s = Go$newSliceType("%s.%s", function() { return %s; }, "%s");`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()), c.typeKind(t.Elem()))
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
@@ -629,7 +624,7 @@ func (c *PkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellips
 			for j, arg := range args[i:] {
 				varargs[j] = c.translateExprToType(arg, varargType.Elem())
 			}
-			params[i] = fmt.Sprintf("new %s(%s)", c.typeName(varargType), createListComposite(varargType.Elem(), varargs))
+			params[i] = fmt.Sprintf("new %s([%s])", c.typeName(varargType), strings.Join(varargs, ", "))
 			break
 		}
 		argType := sig.Params().At(i).Type()
@@ -801,12 +796,16 @@ func (c *PkgContext) typeKind(ty types.Type) string {
 		return toJavaScriptType(t)
 	case *types.Slice:
 		return "Slice"
+	case *types.Struct:
+		return "Struct"
 	case *types.Map:
 		return "Map"
 	case *types.Signature:
 		return "Func"
 	case *types.Pointer:
 		return "Ptr"
+	case *types.Interface:
+		return "Interface"
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
@@ -868,13 +867,6 @@ func toArrayType(t types.Type) string {
 		return "Go$" + toJavaScriptType(t.(*types.Basic)) + "Array"
 	}
 	return "Go$Array"
-}
-
-func createListComposite(elementType types.Type, elements []string) string {
-	if isTypedArray(elementType) {
-		return fmt.Sprintf("new %s([%s])", toArrayType(elementType), strings.Join(elements, ", "))
-	}
-	return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
 }
 
 func isBlank(expr ast.Expr) bool {

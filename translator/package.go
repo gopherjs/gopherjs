@@ -334,7 +334,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 	typeName := c.objectName(obj)
 	switch t := obj.Type().Underlying().(type) {
 	case *types.Basic:
-		c.Printf(`%s = Go$newBasicType("%s.%s", "%s");`, typeName, obj.Pkg().Name(), obj.Name(), c.typeKind(t))
+		c.Printf(`%s = Go$newBasicType("%s.%s", "%s");`, typeName, obj.Pkg().Name(), obj.Name(), typeKind(t))
 	case *types.Struct:
 		params := make([]string, t.NumFields())
 		for i := 0; i < t.NumFields(); i++ {
@@ -432,7 +432,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 		}
 		c.Printf(`%s = Go$newFuncType("%s.%s", function() { return [%s]; }, function() { return [%s]; }, %t);`, typeName, obj.Pkg().Path(), obj.Name(), strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
 	case *types.Slice:
-		c.Printf(`%s = Go$newSliceType("%s.%s", function() { return %s; }, "%s");`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()), c.typeKind(t.Elem()))
+		c.Printf(`%s = Go$newSliceType("%s.%s", function() { return %s; }, "%s");`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()), typeKind(t.Elem()))
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
@@ -653,7 +653,7 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 			panic("Zero value for untyped nil.")
 		}
 	case *types.Array:
-		return fmt.Sprintf("Go$makeArray(%s, %d, function() { return %s; })", toArrayType(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
+		return fmt.Sprintf(`Go$makeNativeArray("%s", %d, function() { return %s; })`, typeKind(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
 	case *types.Slice:
 		return fmt.Sprintf("%s.Go$nil", c.typeName(ty))
 	case *types.Struct:
@@ -790,27 +790,6 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	}
 }
 
-func (c *PkgContext) typeKind(ty types.Type) string {
-	switch t := ty.Underlying().(type) {
-	case *types.Basic:
-		return toJavaScriptType(t)
-	case *types.Slice:
-		return "Slice"
-	case *types.Struct:
-		return "Struct"
-	case *types.Map:
-		return "Map"
-	case *types.Signature:
-		return "Func"
-	case *types.Pointer:
-		return "Ptr"
-	case *types.Interface:
-		return "Interface"
-	default:
-		panic(fmt.Sprintf("Unhandled type: %T\n", t))
-	}
-}
-
 func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	switch t := keyType.Underlying().(type) {
 	case *types.Array:
@@ -835,6 +814,29 @@ func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	}
 }
 
+func typeKind(ty types.Type) string {
+	switch t := ty.Underlying().(type) {
+	case *types.Basic:
+		return toJavaScriptType(t)
+	case *types.Array:
+		return "Array"
+	case *types.Slice:
+		return "Slice"
+	case *types.Struct:
+		return "Struct"
+	case *types.Map:
+		return "Map"
+	case *types.Signature:
+		return "Func"
+	case *types.Pointer:
+		return "Ptr"
+	case *types.Interface:
+		return "Interface"
+	default:
+		panic(fmt.Sprintf("Unhandled type: %T\n", t))
+	}
+}
+
 func toJavaScriptType(t *types.Basic) string {
 	switch t.Kind() {
 	case types.UntypedInt:
@@ -855,18 +857,6 @@ func is64Bit(t *types.Basic) bool {
 
 func isComplex(t *types.Basic) bool {
 	return t.Kind() == types.Complex64 || t.Kind() == types.Complex128
-}
-
-func isTypedArray(t types.Type) bool {
-	basic, isBasic := t.(*types.Basic)
-	return isBasic && basic.Info()&types.IsNumeric != 0 && !is64Bit(basic) && !isComplex(basic)
-}
-
-func toArrayType(t types.Type) string {
-	if isTypedArray(t) {
-		return "Go$" + toJavaScriptType(t.(*types.Basic)) + "Array"
-	}
-	return "Go$Array"
 }
 
 func isBlank(expr ast.Expr) bool {

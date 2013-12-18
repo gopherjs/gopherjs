@@ -48,7 +48,7 @@ var natives = map[string]string{
 	"io/ioutil": `
 		var blackHoles = [];
 		blackHole = function() {
-			return blackHoles.pop() || new (Go$sliceType(Go$Uint8))(Go$makeArray(Go$Uint8Array, 8192, function() { return 0; }));
+			return blackHoles.pop() || Go$sliceType(Go$Uint8).Go$make(8192, 0, function() { return 0; });
 		};
 		blackHolePut = function(p) {
 			blackHoles.push(p);

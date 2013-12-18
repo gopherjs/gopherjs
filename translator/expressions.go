@@ -105,12 +105,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				for len(elements) < int(t.Len()) {
 					elements = append(elements, zero)
 				}
-				if isTypedArray(t.Elem()) {
-					return fmt.Sprintf("new %s([%s])", toArrayType(t.Elem()), strings.Join(elements, ", "))
-				}
-				return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
+				return fmt.Sprintf(`Go$toNativeArray("%s", [%s])`, typeKind(t.Elem()), strings.Join(elements, ", "))
 			}
-			return fmt.Sprintf("Go$makeArray(%s, %d, function() { return %s; })", toArrayType(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
+			return fmt.Sprintf(`Go$makeNativeArray("%s", %d, function() { return %s; })`, typeKind(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
 		case *types.Slice:
 			return fmt.Sprintf("new %s([%s])", c.typeName(exprType), strings.Join(collectIndexedElements(t.Elem()), ", "))
 		case *types.Map:
@@ -933,7 +930,7 @@ func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {
 			}
 			continue
 		case *types.Array:
-			c.Printf("%s = new %s(%s.buffer, Go$min(%s.byteOffset + %d, %s.buffer.byteLength));", field.Name(), toArrayType(t.Elem()), array, array, offsets[i], array)
+			c.Printf(`%s = new (Go$nativeArray("%s"))(%s.buffer, Go$min(%s.byteOffset + %d, %s.buffer.byteLength));`, field.Name(), typeKind(t.Elem()), array, array, offsets[i], array)
 			continue
 		}
 		c.Printf("// skipped: %s %s", field.Name(), field.Type().String())

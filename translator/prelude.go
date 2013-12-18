@@ -86,23 +86,23 @@ var Go$Complex128    = Go$newBasicType("complex128",     "Complex128");
 var Go$String        = Go$newBasicType("string",         "String");
 var Go$UnsafePointer = Go$newBasicType("unsafe.Pointer", "UnsafePointer");
 
-var Go$Array           = Array;
-var Go$Uint8Array      = Uint8Array;
-var Go$Uint16Array     = Uint16Array;
-var Go$Uint32Array     = Uint32Array;
-var Go$Uint64Array     = Array;
-var Go$Int8Array       = Int8Array;
-var Go$Int16Array      = Int16Array;
-var Go$Int32Array      = Int32Array;
-var Go$Int64Array      = Array;
-var Go$Float32Array    = Float32Array;
-var Go$Float64Array    = Float64Array;
-var Go$Complex64Array  = Array;
-var Go$Complex128Array = Array;
-var Go$UintArray       = Uint32Array;
-var Go$IntArray        = Int32Array;
-var Go$UintptrArray    = Uint32Array;
-
+var Go$nativeArray = function(elemKind) {
+	return ({ Int: Int32Array, Int8: Int8Array, Int16: Int16Array, Int32: Int32Array, Uint: Uint32Array, Uint8: Uint8Array, Uint16: Uint16Array, Uint32: Uint32Array, Uintptr: Uint32Array, Float32: Float32Array, Float64: Float64Array })[elemKind] || Array;
+};
+var Go$toNativeArray = function(elemKind, array) {
+	var nativeArray = Go$nativeArray(elemKind);
+	if (nativeArray === Array) {
+		return array;
+	}
+	return new nativeArray(array);
+};
+var Go$makeNativeArray = function(elemKind, length, zero) {
+	var array = new (Go$nativeArray(elemKind))(length), i;
+	for (i = 0; i < length; i += 1) {
+		array[i] = zero();
+	}
+	return array;
+};
 var Go$newArrayType = function(name, elem, len) {
 	var typ = function(v) { this.Go$val = v; };
 	typ.Go$string = name;
@@ -217,10 +217,10 @@ var Go$ptrType = function(elem) {
 };
 
 var Go$newSliceType = function(name, elem, elemKind) {
-	var arrayType = ({ Int: Int32Array, Int8: Int8Array, Int16: Int16Array, Int32: Int32Array, Uint: Uint32Array, Uint8: Uint8Array, Uint16: Uint16Array, Uint32: Uint32Array, Uintptr: Uint32Array, Float32: Float32Array, Float64: Float64Array })[elemKind] || Array;
+	var nativeArray = Go$nativeArray(elemKind);
 	var typ = function(array) {
-		if (array.constructor !== arrayType) {
-			array = new arrayType(array);
+		if (array.constructor !== nativeArray) {
+			array = new nativeArray(array);
 		}
 		this.array = array;
 		this.offset = 0;
@@ -231,7 +231,7 @@ var Go$newSliceType = function(name, elem, elemKind) {
 	typ.Go$string = name;
 	typ.Go$make = function(length, capacity, zero) {
 		capacity = capacity || length;
-		var array = new arrayType(capacity), i;
+		var array = new nativeArray(capacity), i;
 		for (i = 0; i < capacity; i += 1) {
 			array[i] = zero();
 		}
@@ -592,14 +592,6 @@ var Go$internalizeString = function(extStr) {
 		intStr += Go$encodeRune(extStr.charCodeAt(i));
 	}
 	return intStr;
-};
-
-var Go$makeArray = function(constructor, length, zero) { // TODO do not use for typed arrays when NodeJS is behaving according to spec
-	var array = new constructor(length), i;
-	for (i = 0; i < length; i += 1) {
-		array[i] = zero();
-	}
-	return array;
 };
 
 var Go$copySlice = function(dst, src) {

@@ -635,7 +635,7 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 		if named, isNamed := ty.(*types.Named); isNamed {
 			return fmt.Sprintf("new %s()", c.objectName(named.Obj()))
 		}
-		return fmt.Sprintf("new %s()", c.typeName(ty))
+		return fmt.Sprintf("new %s.Pointer()", c.typeName(ty))
 	case *types.Map:
 		return "false"
 	case *types.Interface:
@@ -727,8 +727,8 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		}
 		return c.objectName(t.Obj())
 	case *types.Pointer:
-		if named, isNamed := t.Elem().(*types.Named); isNamed && named.Obj().Name() != "error" {
-			if _, isStruct := t.Elem().Underlying().(*types.Struct); isStruct {
+		if _, isStruct := t.Elem().Underlying().(*types.Struct); isStruct {
+			if named, isNamed := t.Elem().(*types.Named); isNamed && named.Obj().Name() != "error" {
 				return c.objectName(named.Obj())
 			}
 		}

@@ -299,6 +299,7 @@ var go$newStructType = function(name, constructor) {
 	typ.prototype.go$key = function() { return this.go$id; };
 	typ.NonPointer = function(v) { this.go$val = v; };
 	typ.NonPointer.string = name;
+	typ.NonPointer.Pointer = typ;
 	typ.NonPointer.prototype.go$uncomparable = true;
 	typ.init = function(fields) {
 		typ.nil = new constructor();
@@ -347,7 +348,7 @@ var go$structType = function(fields) {
 		typ.init(fields);
 		go$structTypes[name] = typ;
 	}
-	return typ;
+	return typ.NonPointer;
 };
 
 var Go$StringPointer = go$ptrType(Go$String);

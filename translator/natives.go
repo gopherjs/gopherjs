@@ -48,7 +48,7 @@ var natives = map[string]string{
 	"io/ioutil": `
 		var blackHoles = [];
 		blackHole = function() {
-			return blackHoles.pop() || Go$sliceType(Go$Uint8).Go$make(8192, 0, function() { return 0; });
+			return blackHoles.pop() || Go$sliceType(Go$Uint8).make(8192, 0, function() { return 0; });
 		};
 		blackHolePut = function(p) {
 			blackHoles.push(p);
@@ -237,10 +237,10 @@ var natives = map[string]string{
 		};
 
 		TypeOf = function(i) {
-			return i.constructor.Go$type();
+			return i.constructor.reflectType();
 		};
 		ValueOf = function(i) {
-			var typ = i.constructor.Go$type();
+			var typ = i.constructor.reflectType();
 			return new Value(typ, i.Go$val, typ.Kind() << flagKindShift);
 		};
 		Zero = function(typ) {
@@ -276,7 +276,7 @@ var natives = map[string]string{
 				val = false;
 				break;
 			case Go$pkg.Slice:
-				val = typ.alg.Go$nil;
+				val = typ.alg.nil;
 				break;
 			default:
 				throw new Go$Panic("reflect.Zero(" + typ.string.Go$get() + "): type not yet supported");
@@ -300,7 +300,7 @@ var natives = map[string]string{
 			if (len > cap) {
 				throw new Go$Panic("reflect.MakeSlice: len > cap");
 			}
-			return new Value(typ.common(), typ.alg.Go$make(len, cap, function() { return 0; }), flagIndir | Go$pkg.Slice << flagKindShift); // FIXME zero value
+			return new Value(typ.common(), typ.alg.make(len, cap, function() { return 0; }), flagIndir | Go$pkg.Slice << flagKindShift); // FIXME zero value
 		};
 		makemap = function(t) {
 			return new Go$Map();
@@ -317,7 +317,7 @@ var natives = map[string]string{
 		};
 
 		rtype.prototype.ptrTo = function() {
-			return Go$ptrType(this.alg).Go$type();
+			return Go$ptrType(this.alg).reflectType();
 		};
 
 		Value.prototype.Bytes = function() {
@@ -588,7 +588,7 @@ var natives = map[string]string{
 			os.Open(dir)[0].Chdir();
 			var start = time.Now(), status = "ok  ", i;
 			for (i = 0; i < tests.length; i += 1) {
-				var t = new T(new common(new sync.RWMutex(), Go$sliceType(Go$Uint8).Go$nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
+				var t = new T(new common(new sync.RWMutex(), Go$sliceType(Go$Uint8).nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
 				var err = null;
 				try {
 					if (chatty.Go$get()) {

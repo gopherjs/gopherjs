@@ -530,7 +530,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						if len(e.Args) == 3 {
 							capacity = c.translateExprToType(e.Args[2], types.Typ[types.Int])
 						}
-						return fmt.Sprintf("%s.Go$make(%s, %s, function() { return %s; })", c.typeName(c.info.Types[e.Args[0]]), length, capacity, c.zeroValue(argType.Elem()))
+						return fmt.Sprintf("%s.make(%s, %s, function() { return %s; })", c.typeName(c.info.Types[e.Args[0]]), length, capacity, c.zeroValue(argType.Elem()))
 					case *types.Map:
 						return "new Go$Map()"
 					case *types.Chan:

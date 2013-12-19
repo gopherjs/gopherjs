@@ -2290,7 +2290,7 @@ diff -r 87dea3f5ebe7 test/deferprint.out
 +42 true false true 1.5 'world' null { array: { isNil: true, length: 0 },
 +  offset: 0,
 +  length: 0,
-+  'Go$val': [Circular] } null null 255
++  'go$val': [Circular] } null null 255
 diff -r 87dea3f5ebe7 test/divide.go
 --- a/test/divide.go
 +++ b/test/divide.go
@@ -3857,10 +3857,10 @@ diff -r 87dea3f5ebe7 test/ken/cplx0.out
 -(+5.000000e+000+6.000000e+000i)
 -(+5.000000e+000+6.000000e+000i)
 -(+5.000000e+000+6.000000e+000i)
-+{ real: 5, imag: 6, 'Go$val': [Circular] }
-+{ real: 5, imag: 6, 'Go$val': [Circular] }
-+{ real: 5, imag: 6, 'Go$val': [Circular] }
-+{ real: 5, imag: 6, 'Go$val': [Circular] }
++{ real: 5, imag: 6, 'go$val': [Circular] }
++{ real: 5, imag: 6, 'go$val': [Circular] }
++{ real: 5, imag: 6, 'go$val': [Circular] }
++{ real: 5, imag: 6, 'go$val': [Circular] }
 diff -r 87dea3f5ebe7 test/ken/cplx2.go
 --- a/test/ken/cplx2.go
 +++ b/test/ken/cplx2.go

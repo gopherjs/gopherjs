@@ -77,17 +77,17 @@ func WriteInterfaces(dependencies []*types.Package, w io.Writer, merge bool) {
 					// skip
 				case *types.Struct:
 					if types.IsAssignableTo(otherType, in) {
-						implementedBy[fmt.Sprintf("Go$packages[\"%s\"].%s.Go$NonPointer", other.Pkg().Path(), other.Name())] = true
+						implementedBy[fmt.Sprintf("go$packages[\"%s\"].%s.Go$NonPointer", other.Pkg().Path(), other.Name())] = true
 					}
 					if types.IsAssignableTo(types.NewPointer(otherType), in) {
-						implementedBy[fmt.Sprintf("Go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
+						implementedBy[fmt.Sprintf("go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
 					}
 				default:
 					if types.IsAssignableTo(otherType, in) {
-						implementedBy[fmt.Sprintf("Go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
+						implementedBy[fmt.Sprintf("go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
 					}
 					if types.IsAssignableTo(types.NewPointer(otherType), in) {
-						implementedBy[fmt.Sprintf("Go$ptrType(Go$packages[\"%s\"].%s)", other.Pkg().Path(), other.Name())] = true
+						implementedBy[fmt.Sprintf("go$ptrType(go$packages[\"%s\"].%s)", other.Pkg().Path(), other.Name())] = true
 					}
 				}
 			}
@@ -99,17 +99,17 @@ func WriteInterfaces(dependencies []*types.Package, w io.Writer, merge bool) {
 			var target string
 			switch t.Name() {
 			case "error":
-				target = "Go$error"
+				target = "go$error"
 			default:
-				target = fmt.Sprintf("Go$packages[\"%s\"].%s", t.Pkg().Path(), t.Name())
+				target = fmt.Sprintf("go$packages[\"%s\"].%s", t.Pkg().Path(), t.Name())
 			}
 			if merge {
 				for _, entry := range list {
-					fmt.Fprintf(w, "if (%s.Go$implementedBy.indexOf(%s) === -1) { %s.Go$implementedBy.push(%s); }\n", target, entry, target, entry)
+					fmt.Fprintf(w, "if (%s.go$implementedBy.indexOf(%s) === -1) { %s.go$implementedBy.push(%s); }\n", target, entry, target, entry)
 				}
 				continue
 			}
-			fmt.Fprintf(w, "%s.Go$implementedBy = [%s];\n", target, strings.Join(list, ", "))
+			fmt.Fprintf(w, "%s.go$implementedBy = [%s];\n", target, strings.Join(list, ", "))
 		}
 	}
 }

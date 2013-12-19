@@ -237,7 +237,7 @@ func tool() error {
 		testingPkgTypes, _ := typesConfig.Import(typesConfig.Packages, "testing")
 		mainPkgTypes.SetImports([]*types.Package{testingPkgTypes})
 		typesConfig.Packages["main"] = mainPkgTypes
-		mainPkg.JavaScriptCode = []byte("Go$pkg.main = function() {\nGo$packages[\"flag\"].Parse();\n")
+		mainPkg.JavaScriptCode = []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\n")
 
 		for _, pkgPath := range testFlags.Args() {
 			buildPkg, err := buildImport(pkgPath, 0)
@@ -268,19 +268,19 @@ func tool() error {
 			for _, name := range pkgTypes.Scope().Names() {
 				if strings.HasPrefix(name, "Test") {
 					names = append(names, name)
-					tests = append(tests, fmt.Sprintf(`Go$packages["%s"].%s`, pkg.ImportPath, name))
+					tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
 				}
 			}
 			for _, name := range testPkgTypes.Scope().Names() {
 				if strings.HasPrefix(name, "Test") {
 					names = append(names, name)
-					tests = append(tests, fmt.Sprintf(`Go$packages["%s"].%s`, testPkg.ImportPath, name))
+					tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, testPkg.ImportPath, name))
 				}
 			}
-			mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte(fmt.Sprintf(`Go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]);`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
+			mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte(fmt.Sprintf(`go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]);`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
 			mainPkgTypes.SetImports(append(mainPkgTypes.Imports(), pkgTypes, testPkgTypes))
 		}
-		mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte("}; Go$pkg.init = function() {};")...)
+		mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte("}; go$pkg.init = function() {};")...)
 
 		tempfile, err := ioutil.TempFile("", "test.")
 		if err != nil {
@@ -529,17 +529,17 @@ func writeCommandPackage(pkg *Package, pkgObj string) error {
 	}
 
 	for _, dep := range dependencies {
-		file.WriteString("Go$packages[\"" + dep.Path() + "\"] = (function() {\n  var Go$pkg = {};\n")
+		file.WriteString("go$packages[\"" + dep.Path() + "\"] = (function() {\n  var go$pkg = {};\n")
 		file.Write(packages[dep.Path()].JavaScriptCode)
-		file.WriteString("  return Go$pkg;\n})();\n")
+		file.WriteString("  return go$pkg;\n})();\n")
 	}
 
 	translator.WriteInterfaces(dependencies, file, false)
 
 	for _, dep := range dependencies {
-		file.WriteString("Go$packages[\"" + dep.Path() + "\"].init();\n")
+		file.WriteString("go$packages[\"" + dep.Path() + "\"].init();\n")
 	}
-	file.WriteString("Go$packages[\"" + pkg.ImportPath + "\"].main();\n")
+	file.WriteString("go$packages[\"" + pkg.ImportPath + "\"].main();\n")
 
 	return nil
 }

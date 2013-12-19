@@ -48,7 +48,7 @@ var natives = map[string]string{
 	"io/ioutil": `
 		var blackHoles = [];
 		blackHole = function() {
-			return blackHoles.pop() || Go$sliceType(Go$Uint8).make(8192, 0, function() { return 0; });
+			return blackHoles.pop() || go$sliceType(Go$Uint8).make(8192, 0, function() { return 0; });
 		};
 		blackHolePut = function(p) {
 			blackHoles.push(p);
@@ -185,7 +185,7 @@ var natives = map[string]string{
 				}
 				f = f * (2);
 			}
-			return (x$2 = (x = s, y = Go$shiftLeft64(new Go$Uint64(0, e), 52), new Go$Uint64(x.high | y.high, (x.low | y.low) >>> 0)), y$2 = ((x$1 = new Go$Uint64(0, f), y$1 = new Go$Uint64(1048576, 0), new Go$Uint64(x$1.high &~ y$1.high, (x$1.low &~ y$1.low) >>> 0))), new Go$Uint64(x$2.high | y$2.high, (x$2.low | y$2.low) >>> 0));
+			return (x$2 = (x = s, y = go$shiftLeft64(new Go$Uint64(0, e), 52), new Go$Uint64(x.high | y.high, (x.low | y.low) >>> 0)), y$2 = ((x$1 = new Go$Uint64(0, f), y$1 = new Go$Uint64(1048576, 0), new Go$Uint64(x$1.high &~ y$1.high, (x$1.low &~ y$1.low) >>> 0))), new Go$Uint64(x$2.high | y$2.high, (x$2.low | y$2.low) >>> 0));
 		};
 		Float64frombits = function(b) {
 			var s, x, y, x$1, y$1, x$2, y$2, e, x$3, y$3, m, x$4, y$4, x$5, y$5, x$6, y$6, x$7, y$7, x$8, y$8;
@@ -193,7 +193,7 @@ var natives = map[string]string{
 			if (!((x$1 = (x = b, y = new Go$Uint64(2147483648, 0), new Go$Uint64(x.high & y.high, (x.low & y.low) >>> 0)), y$1 = new Go$Uint64(0, 0), x$1.high === y$1.high && x$1.low === y$1.low))) {
 				s = -1;
 			}
-			e = (x$2 = (Go$shiftRightUint64(b, 52)), y$2 = new Go$Uint64(0, 2047), new Go$Uint64(x$2.high & y$2.high, (x$2.low & y$2.low) >>> 0));
+			e = (x$2 = (go$shiftRightUint64(b, 52)), y$2 = new Go$Uint64(0, 2047), new Go$Uint64(x$2.high & y$2.high, (x$2.low & y$2.low) >>> 0));
 			m = (x$3 = b, y$3 = new Go$Uint64(1048575, 4294967295), new Go$Uint64(x$3.high & y$3.high, (x$3.low & y$3.low) >>> 0));
 			if ((x$4 = e, y$4 = new Go$Uint64(0, 2047), x$4.high === y$4.high && x$4.low === y$4.low)) {
 				if ((x$5 = m, y$5 = new Go$Uint64(0, 0), x$5.high === y$5.high && x$5.low === y$5.low)) {
@@ -207,7 +207,7 @@ var natives = map[string]string{
 			if ((x$8 = e, y$8 = new Go$Uint64(0, 0), x$8.high === y$8.high && x$8.low === y$8.low)) {
 				e = new Go$Uint64(0, 1);
 			}
-			return Ldexp((Go$obj = m, Go$obj.high * 4294967296 + Go$obj.low), e.low - 1023 - 52) * s;
+			return Ldexp((go$obj = m, go$obj.high * 4294967296 + go$obj.low), e.low - 1023 - 52) * s;
 		};
 	`,
 
@@ -227,13 +227,13 @@ var natives = map[string]string{
 	`,
 
 	"os": `
-		Go$pkg.Args = new (Go$sliceType(Go$String))((typeof process !== 'undefined') ? process.argv.slice(1) : []);
+		go$pkg.Args = new (go$sliceType(Go$String))((typeof process !== 'undefined') ? process.argv.slice(1) : []);
 	`,
 
 	"reflect": `
-		Go$reflect = {
+		go$reflect = {
 			rtype: rtype, uncommonType: uncommonType, method: method, arrayType: arrayType, funcType: funcType, mapType: mapType, ptrType: ptrType, sliceType: sliceType, structType: structType, structField: structField,
-			kinds: { Bool: Go$pkg.Bool, Int: Go$pkg.Int, Int8: Go$pkg.Int8, Int16: Go$pkg.Int16, Int32: Go$pkg.Int32, Int64: Go$pkg.Int64, Uint: Go$pkg.Uint, Uint8: Go$pkg.Uint8, Uint16: Go$pkg.Uint16, Uint32: Go$pkg.Uint32, Uint64: Go$pkg.Uint64, Uintptr: Go$pkg.Uintptr, Float32: Go$pkg.Float32, Float64: Go$pkg.Float64, Complex64: Go$pkg.Complex64, Complex128: Go$pkg.Complex128, Array: Go$pkg.Array, Chan: Go$pkg.Chan, Func: Go$pkg.Func, Interface: Go$pkg.Interface, Map: Go$pkg.Map, Ptr: Go$pkg.Ptr, Slice: Go$pkg.Slice, String: Go$pkg.String, Struct: Go$pkg.Struct, UnsafePointer: Go$pkg.UnsafePointer }
+			kinds: { Bool: go$pkg.Bool, Int: go$pkg.Int, Int8: go$pkg.Int8, Int16: go$pkg.Int16, Int32: go$pkg.Int32, Int64: go$pkg.Int64, Uint: go$pkg.Uint, Uint8: go$pkg.Uint8, Uint16: go$pkg.Uint16, Uint32: go$pkg.Uint32, Uint64: go$pkg.Uint64, Uintptr: go$pkg.Uintptr, Float32: go$pkg.Float32, Float64: go$pkg.Float64, Complex64: go$pkg.Complex64, Complex128: go$pkg.Complex128, Array: go$pkg.Array, Chan: go$pkg.Chan, Func: go$pkg.Func, Interface: go$pkg.Interface, Map: go$pkg.Map, Ptr: go$pkg.Ptr, Slice: go$pkg.Slice, String: go$pkg.String, Struct: go$pkg.Struct, UnsafePointer: go$pkg.UnsafePointer }
 		};
 
 		TypeOf = function(i) {
@@ -241,54 +241,54 @@ var natives = map[string]string{
 		};
 		ValueOf = function(i) {
 			var typ = i.constructor.reflectType();
-			return new Value(typ, i.Go$val, typ.Kind() << flagKindShift);
+			return new Value(typ, i.go$val, typ.Kind() << flagKindShift);
 		};
 		Zero = function(typ) {
 			var val;
 			switch (typ.Kind()) {
-			case Go$pkg.Bool:
+			case go$pkg.Bool:
 				val = false;
 				break;
-			case Go$pkg.Int:
-			case Go$pkg.Int8:
-			case Go$pkg.Int16:
-			case Go$pkg.Int32:
-			case Go$pkg.Int64:
-			case Go$pkg.Uint:
-			case Go$pkg.Uint8:
-			case Go$pkg.Uint16:
-			case Go$pkg.Uint32:
-			case Go$pkg.Uint64:
-			case Go$pkg.Float32:
-			case Go$pkg.Float64:
+			case go$pkg.Int:
+			case go$pkg.Int8:
+			case go$pkg.Int16:
+			case go$pkg.Int32:
+			case go$pkg.Int64:
+			case go$pkg.Uint:
+			case go$pkg.Uint8:
+			case go$pkg.Uint16:
+			case go$pkg.Uint32:
+			case go$pkg.Uint64:
+			case go$pkg.Float32:
+			case go$pkg.Float64:
 				val = 0;
 				break;
-			case Go$pkg.Complex64:
+			case go$pkg.Complex64:
 				val = new typ.alg(0, 0);
 				break;
-			case Go$pkg.Complex128:
+			case go$pkg.Complex128:
 				val = new typ.alg(0, 0);
 				break;
-			case Go$pkg.String:
+			case go$pkg.String:
 				val = "";
 				break;
-			case Go$pkg.Map:
+			case go$pkg.Map:
 				val = false;
 				break;
-			case Go$pkg.Slice:
+			case go$pkg.Slice:
 				val = typ.alg.nil;
 				break;
 			default:
-				throw new Go$Panic("reflect.Zero(" + typ.string.Go$get() + "): type not yet supported");
+				throw new Go$Panic("reflect.Zero(" + typ.string.go$get() + "): type not yet supported");
 			}
 			return new Value(typ, val, typ.Kind() << flagKindShift);
 		};
 		New = function(typ) {
 			var ptrType = typ.common().ptrTo();
-			return new Value(ptrType, Go$newDataPointer(Zero(typ).val, ptrType.alg), Go$pkg.Ptr << flagKindShift);
+			return new Value(ptrType, go$newDataPointer(Zero(typ).val, ptrType.alg), go$pkg.Ptr << flagKindShift);
 		};
 		MakeSlice = function(typ, len, cap) {
-			if (typ.Kind() !== Go$pkg.Slice) {
+			if (typ.Kind() !== go$pkg.Slice) {
 				throw new Go$Panic("reflect.MakeSlice of non-slice type");
 			}
 			if (len < 0) {
@@ -300,7 +300,7 @@ var natives = map[string]string{
 			if (len > cap) {
 				throw new Go$Panic("reflect.MakeSlice: len > cap");
 			}
-			return new Value(typ.common(), typ.alg.make(len, cap, function() { return 0; }), flagIndir | Go$pkg.Slice << flagKindShift); // FIXME zero value
+			return new Value(typ.common(), typ.alg.make(len, cap, function() { return 0; }), flagIndir | go$pkg.Slice << flagKindShift); // FIXME zero value
 		};
 		makemap = function(t) {
 			return new Go$Map();
@@ -317,12 +317,12 @@ var natives = map[string]string{
 		};
 
 		rtype.prototype.ptrTo = function() {
-			return Go$ptrType(this.alg).reflectType();
+			return go$ptrType(this.alg).reflectType();
 		};
 
 		Value.prototype.Bytes = function() {
-			this.mustBe(Go$pkg.Slice);
-			if (this.typ.Elem().Kind() !== Go$pkg.Uint8) {
+			this.mustBe(go$pkg.Slice);
+			if (this.typ.Elem().Kind() !== go$pkg.Uint8) {
 				throw new Go$Panic("reflect.Value.Bytes of non-byte slice");
 			}
 			return this.val;
@@ -358,7 +358,7 @@ var natives = map[string]string{
 			}
 			var i;
 			for (i = 0; i < args.length; i += 1) {
-				if (args.array[args.offset + i].Kind() === Go$pkg.Invalid) {
+				if (args.array[args.offset + i].Kind() === go$pkg.Invalid) {
 					throw new Go$Panic("reflect: " + op + " using zero Value argument");
 				}
 			}
@@ -384,22 +384,22 @@ var natives = map[string]string{
 				var flag = typ.Kind() << flagKindShift;
 				results[i] = new Value(typ, results[i], flag);
 			}
-			return new (Go$sliceType(Value))(results);
+			return new (go$sliceType(Value))(results);
 		};
 		Value.prototype.Field = function(i) {
-			this.mustBe(Go$pkg.Struct);
+			this.mustBe(go$pkg.Struct);
 			var tt = this.typ.structType;
 			if (i < 0 || i >= tt.fields.length) {
 				throw new Go$Panic("reflect: Field index out of range");
 			}
 			var field = tt.fields.array[i];
 			var fl = field.typ.Kind() << flagKindShift;
-			return new Value(field.typ, this.val[field.name.Go$get()], fl);
+			return new Value(field.typ, this.val[field.name.go$get()], fl);
 		};
 		Value.prototype.Index = function(i) {
 			var k = this.kind();
 			switch (k) {
-			case Go$pkg.Array:
+			case go$pkg.Array:
 				var tt = this.typ.arrayType;
 				if (i < 0 || i >= tt.len) {
 					throw new Go$Panic("reflect: array index out of range");
@@ -408,7 +408,7 @@ var natives = map[string]string{
 				var fl = this.flag & (flagRO | flagIndir | flagAddr);
 				fl |= typ.Kind() << flagKindShift;
 				return new Value(typ, this.val[i], fl);
-			case Go$pkg.Slice:
+			case go$pkg.Slice:
 				if (i < 0 || i >= this.val.length) {
 					throw new Go$Panic("reflect: slice index out of range");
 				}
@@ -417,12 +417,12 @@ var natives = map[string]string{
 				fl |= typ.Kind() << flagKindShift;
 				i += this.val.offset;
 				var array = this.val.array;
-				return new Value(typ, new (Go$ptrType(typ))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
-			case Go$pkg.String:
+				return new Value(typ, new (go$ptrType(typ))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
+			case go$pkg.String:
 				if (i < 0 || i >= this.val.length) {
 					throw new Go$Panic("reflect: string index out of range");
 				}
-				var fl = (this.flag & flagRO) | (Go$pkg.Uint8 << flagKindShift);
+				var fl = (this.flag & flagRO) | (go$pkg.Uint8 << flagKindShift);
 				return new Value(uint8Type, this.val.charCodeAt(i), fl);
 			}
 			throw new Go$Panic(new ValueError("reflect.Value.Index", k));
@@ -430,9 +430,9 @@ var natives = map[string]string{
 		Value.prototype.Len = function() {
 			var k = this.kind();
 			switch (k) {
-			case Go$pkg.Array:
-			case Go$pkg.Slice:
-			case Go$pkg.String:
+			case go$pkg.Array:
+			case go$pkg.Slice:
+			case go$pkg.String:
 				return this.val.length;
 			}
 			throw new Go$Panic(new ValueError("reflect.Value.Len", k));
@@ -449,11 +449,11 @@ var natives = map[string]string{
 		};
 		Value.prototype.String = function() {
 			switch (this.kind()) {
-			case Go$pkg.Invalid:
+			case go$pkg.Invalid:
 				return "<invalid Value>";
-			case Go$pkg.String:
+			case go$pkg.String:
 				if ((this.flag & flagIndir) != 0) {
-					return this.val.Go$get();
+					return this.val.go$get();
 				}
 				return this.val;
 			}
@@ -493,7 +493,7 @@ var natives = map[string]string{
 			var keys = Object.keys(a), j;
 			for (j = 0; j < keys.length; j += 1) {
 				var key = keys[j];
-				if (key !== "Go$id" && key !== "Go$val" && !this.DeepEqual(a[key], b[key])) {
+				if (key !== "go$id" && key !== "go$val" && !this.DeepEqual(a[key], b[key])) {
 					return false;
 				}
 			}
@@ -502,11 +502,11 @@ var natives = map[string]string{
 	`,
 
 	"runtime": `
-		Go$throwRuntimeError = function(msg) { throw new Go$Panic(new errorString(msg)) };
+		go$throwRuntimeError = function(msg) { throw new Go$Panic(new errorString(msg)) };
 		sizeof_C_MStats = 3712;
 		getgoroot = function() { return (typeof process !== 'undefined') ? (process.env["GOROOT"] || "") : "/"; };
 		Caller = function(skip) {
-			var line = Go$getStack()[skip + 3];
+			var line = go$getStack()[skip + 3];
 			if (line === undefined) {
 				return [0, "", 0, false];
 			}
@@ -516,7 +516,7 @@ var natives = map[string]string{
 		GC = function() {};
 		GOMAXPROCS = function(n) {
 			if (n > 1) {
-				Go$throwRuntimeError("GOMAXPROCS != 1 is not possible in JavaScript.")
+				go$throwRuntimeError("GOMAXPROCS != 1 is not possible in JavaScript.")
 			}
 			return 1;
 		};
@@ -531,27 +531,27 @@ var natives = map[string]string{
 
 	"sync": `
 		runtime_Syncsemcheck = function() {};
-		Go$ptrType(copyChecker).prototype.check = function() {};
+		go$ptrType(copyChecker).prototype.check = function() {};
 	`,
 
 	"sync/atomic": `
 		AddInt32 = AddInt64 = AddUint32 = AddUint64 = AddUintptr = function(addr, delta) {
-			var value = addr.Go$get() + delta;
-			addr.Go$set(value);
+			var value = addr.go$get() + delta;
+			addr.go$set(value);
 			return value;
 		};
 		CompareAndSwapInt32 = CompareAndSwapInt64 = CompareAndSwapUint32 = CompareAndSwapUint64 = CompareAndSwapUintptr = function(addr, oldVal, newVal) {
-			if (addr.Go$get() === oldVal) {
-				addr.Go$set(newVal);
+			if (addr.go$get() === oldVal) {
+				addr.go$set(newVal);
 				return true;
 			}
 			return false;
 		};
 		StoreInt32 = StoreInt64 = StoreUint32 = StoreUint64 = StoreUintptr = function(addr, val) {
-			addr.Go$set(val);
+			addr.go$set(val);
 		};
 		LoadInt32 = LoadInt64 = LoadUint32 = LoadUint64 = LoadUintptr = function(addr) {
-			return addr.Go$get();
+			return addr.go$get();
 		};
 	`,
 
@@ -562,25 +562,25 @@ var natives = map[string]string{
 			Syscall6 = syscall.Syscall6;
 			RawSyscall = syscall.Syscall;
 			RawSyscall6 = syscall.Syscall6;
-			BytePtrFromString = function(s) { return [Go$stringToBytes(s, true), null]; };
+			BytePtrFromString = function(s) { return [go$stringToBytes(s, true), null]; };
 
 			var envkeys = Object.keys(process.env);
-			envs = new (Go$sliceType(Go$String))(new Array(envkeys.length));
+			envs = new (go$sliceType(Go$String))(new Array(envkeys.length));
 			var i;
 			for(i = 0; i < envkeys.length; i += 1) {
 				envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
 			}
 		} else {
-			Go$pkg.Go$setSyscall = function(f) {
+			go$pkg.go$setSyscall = function(f) {
 				Syscall = Syscall6 = RawSyscall = RawSyscall6 = f;
 			}
-			Go$pkg.Go$setSyscall(function() { throw "Syscalls not available in browser." });
-			envs = new (Go$sliceType(Go$String))(new Array(0));
+			go$pkg.go$setSyscall(function() { throw "Syscalls not available in browser." });
+			envs = new (go$sliceType(Go$String))(new Array(0));
 		}
 	`,
 
 	"testing": `
-		Go$pkg.RunTests2 = function(pkgPath, dir, names, tests) {
+		go$pkg.RunTests2 = function(pkgPath, dir, names, tests) {
 			if (tests.length === 0) {
 				console.log("?   \t" + pkgPath + "\t[no test files]");
 				return;
@@ -588,10 +588,10 @@ var natives = map[string]string{
 			os.Open(dir)[0].Chdir();
 			var start = time.Now(), status = "ok  ", i;
 			for (i = 0; i < tests.length; i += 1) {
-				var t = new T(new common(new sync.RWMutex(), Go$sliceType(Go$Uint8).nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
+				var t = new T(new common(new sync.RWMutex(), go$sliceType(Go$Uint8).nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
 				var err = null;
 				try {
-					if (chatty.Go$get()) {
+					if (chatty.go$get()) {
 						console.log("=== RUN " + t.name);
 					}
 					tests[i](t);
@@ -611,19 +611,19 @@ var natives = map[string]string{
 				}
 			}
 			var duration = time.Now().Sub(start);
-			fmt.Printf("%s\t%s\t%.3fs\n", new (Go$sliceType(Go$Interface))([new Go$String(status), new Go$String(pkgPath), new Go$Float64(duration.Seconds())]));
+			fmt.Printf("%s\t%s\t%.3fs\n", new (go$sliceType(Go$Interface))([new Go$String(status), new Go$String(pkgPath), new Go$Float64(duration.Seconds())]));
 		};
 	`,
 
 	"time": `
-		now = Go$now;
-		After = function() { Go$throwRuntimeError("not supported by GopherJS: time.After (use time.AfterFunc instead)") };
+		now = go$now;
+		After = function() { go$throwRuntimeError("not supported by GopherJS: time.After (use time.AfterFunc instead)") };
 		AfterFunc = function(d, f) {
-			setTimeout(f, Go$div64(d, Go$pkg.Millisecond).low);
+			setTimeout(f, go$div64(d, go$pkg.Millisecond).low);
 			return null;
 		};
-		NewTimer = function() { Go$throwRuntimeError("not supported by GopherJS: time.NewTimer (use time.AfterFunc instead)") };
-		Sleep = function() { Go$throwRuntimeError("not supported by GopherJS: time.Sleep (use time.AfterFunc instead)") };
-		Tick = function() { Go$throwRuntimeError("not supported by GopherJS: time.Tick (use time.AfterFunc instead)") };
+		NewTimer = function() { go$throwRuntimeError("not supported by GopherJS: time.NewTimer (use time.AfterFunc instead)") };
+		Sleep = function() { go$throwRuntimeError("not supported by GopherJS: time.Sleep (use time.AfterFunc instead)") };
+		Tick = function() { go$throwRuntimeError("not supported by GopherJS: time.Tick (use time.AfterFunc instead)") };
 	`,
 }

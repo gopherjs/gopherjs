@@ -224,7 +224,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	c.Indent(func() {
 		for _, importedPkg := range typesPkg.Imports() {
 			varName := c.newVariable(importedPkg.Name())
-			c.Printf(`var %s = Go$packages["%s"];`, varName, importedPkg.Path())
+			c.Printf(`var %s = go$packages["%s"];`, varName, importedPkg.Path())
 			c.pkgVars[importedPkg.Path()] = varName
 		}
 
@@ -238,13 +238,13 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				_, isStruct := obj.Type().Underlying().(*types.Struct)
 				c.translateMethod(typeName, isStruct, fun)
 			}
-			c.Printf("Go$pkg.%s = %s;", typeName, typeName)
+			c.Printf("go$pkg.%s = %s;", typeName, typeName)
 		}
 		for _, spec := range typeSpecs {
 			obj := c.info.Objects[spec.Name]
 			if _, isStruct := obj.Type().Underlying().(*types.Struct); isStruct {
 				typeName := c.objectName(obj)
-				c.Printf("%s.nil = Go$structNil(%s);", typeName, typeName)
+				c.Printf("%s.nil = go$structNil(%s);", typeName, typeName)
 			}
 		}
 
@@ -314,12 +314,12 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		for _, fun := range functionsByType[nil] {
 			name := fun.Name.Name
 			if fun.Name.IsExported() || name == "main" {
-				c.Printf("Go$pkg.%s = %s;", name, name)
+				c.Printf("go$pkg.%s = %s;", name, name)
 			}
 		}
 
 		// init function
-		c.Printf("Go$pkg.init = function() {")
+		c.Printf("go$pkg.init = function() {")
 		c.Indent(func() {
 			c.translateFunctionBody(append(intVarStmts, initStmts...), nil)
 		})
@@ -334,57 +334,57 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 	typeName := c.objectName(obj)
 	switch t := obj.Type().Underlying().(type) {
 	case *types.Basic:
-		c.Printf(`%s = Go$newBasicType("%s.%s", "%s");`, typeName, obj.Pkg().Name(), obj.Name(), typeKind(t))
+		c.Printf(`%s = go$newBasicType("%s.%s", "%s");`, typeName, obj.Pkg().Name(), obj.Name(), typeKind(t))
 	case *types.Struct:
 		params := make([]string, t.NumFields())
 		for i := 0; i < t.NumFields(); i++ {
 			field := t.Field(i)
 			name := field.Name()
 			if field.Name() == "_" {
-				name = fmt.Sprintf("Go$blank%d", i)
+				name = fmt.Sprintf("go$blank%d", i)
 			}
 			params[i] = name + "_"
 		}
 		c.Printf("%s = function(%s) {", typeName, strings.Join(params, ", "))
 		c.Indent(func() {
-			c.Printf("this.Go$id = Go$idCounter;")
-			c.Printf("Go$idCounter += 1;")
-			c.Printf("this.Go$val = this;")
+			c.Printf("this.go$id = go$idCounter;")
+			c.Printf("go$idCounter += 1;")
+			c.Printf("this.go$val = this;")
 			for i := 0; i < t.NumFields(); i++ {
 				field := t.Field(i)
 				name := field.Name()
 				if field.Name() == "_" {
-					name = fmt.Sprintf("Go$blank%d", i)
+					name = fmt.Sprintf("go$blank%d", i)
 				}
 				c.Printf("this.%s = %s_ !== undefined ? %s_ : %s;", name, name, name, c.zeroValue(field.Type()))
 			}
 		})
 		c.Printf("};")
 		c.Printf(`%s.string = "*%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
-		c.Printf(`%s.reflectType = function() { return new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.Ptr, %s, undefined, Go$newStringPointer("*%s.%s"), undefined, undefined); };`, typeName, typeName, obj.Pkg().Name(), obj.Name())
-		c.Printf(`%s.prototype.Go$key = function() { return this.Go$id; };`, typeName)
-		c.Printf("%s.Go$NonPointer = function(v) { this.Go$val = v; };", typeName)
+		c.Printf(`%s.reflectType = function() { return new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Ptr, %s, undefined, go$newStringPointer("*%s.%s"), undefined, undefined); };`, typeName, typeName, obj.Pkg().Name(), obj.Name())
+		c.Printf(`%s.prototype.go$key = function() { return this.go$id; };`, typeName)
+		c.Printf("%s.Go$NonPointer = function(v) { this.go$val = v; };", typeName)
 		c.Printf(`%s.Go$NonPointer.string = "%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
-		c.Printf("%s.Go$NonPointer.prototype.Go$uncomparable = true;", typeName)
+		c.Printf("%s.Go$NonPointer.prototype.go$uncomparable = true;", typeName)
 		fields := make([]string, t.NumFields())
 		for i := range fields {
 			field := t.Field(i)
 			name := "Go$StringPointer.nil"
 			if !field.Anonymous() {
-				name = fmt.Sprintf(`Go$newStringPointer("%s")`, field.Name())
+				name = fmt.Sprintf(`go$newStringPointer("%s")`, field.Name())
 			}
 			path := "Go$StringPointer.nil"
 			if !field.IsExported() {
-				path = fmt.Sprintf(`Go$newStringPointer("%s.%s")`, field.Pkg().Name(), field.Name())
+				path = fmt.Sprintf(`go$newStringPointer("%s.%s")`, field.Pkg().Name(), field.Name())
 			}
 			tag := "Go$StringPointer.nil"
 			if t.Tag(i) != "" {
-				tag = fmt.Sprintf("Go$newStringPointer(%#v)", t.Tag(i))
+				tag = fmt.Sprintf("go$newStringPointer(%#v)", t.Tag(i))
 			}
-			fields[i] = fmt.Sprintf(`new Go$reflect.structField(%s, %s, %s.reflectType(), %s, 0)`, name, path, c.typeName(field.Type()), tag)
+			fields[i] = fmt.Sprintf(`new go$reflect.structField(%s, %s, %s.reflectType(), %s, 0)`, name, path, c.typeName(field.Type()), tag)
 		}
-		uncommonType := fmt.Sprintf(`new Go$reflect.uncommonType(Go$newStringPointer("%s"), Go$newStringPointer("%s.%s"), Go$sliceType(Go$reflect.method).nil)`, typeName, obj.Pkg().Name(), typeName)
-		c.Printf(`%s.Go$NonPointer.reflectType = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.Struct, %s, undefined, Go$newStringPointer("%s.%s"), %s, undefined); t.structType = new Go$reflect.structType(t, new (Go$sliceType(Go$reflect.structField))([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), uncommonType, strings.Join(fields, ", "))
+		uncommonType := fmt.Sprintf(`new go$reflect.uncommonType(go$newStringPointer("%s"), go$newStringPointer("%s.%s"), go$sliceType(go$reflect.method).nil)`, typeName, obj.Pkg().Name(), typeName)
+		c.Printf(`%s.Go$NonPointer.reflectType = function() { var t = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Struct, %s, undefined, go$newStringPointer("%s.%s"), %s, undefined); t.structType = new go$reflect.structType(t, new (go$sliceType(go$reflect.structField))([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), uncommonType, strings.Join(fields, ", "))
 		for i := 0; i < t.NumFields(); i++ {
 			field := t.Field(i)
 			if field.Anonymous() {
@@ -408,19 +408,19 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 					}
 					paramList := strings.Join(params, ", ")
 					c.Printf("%s.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, name, paramList, value, name, paramList)
-					c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.Go$val.%s(%s); };", typeName, name, paramList, name, paramList)
+					c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, name, paramList, name, paramList)
 				}
 			}
 		}
 	case *types.Array:
-		c.Printf(`%s = Go$newArrayType("%s.%s", function() { return %s; }, %d);`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()), t.Len())
+		c.Printf(`%s = go$newArrayType("%s.%s", function() { return %s; }, %d);`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()), t.Len())
 	case *types.Interface:
-		c.Printf("%s = { Go$implementedBy: [] };", typeName)
+		c.Printf("%s = { go$implementedBy: [] };", typeName)
 		c.Printf(`%s.string = "%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
 	case *types.Map:
-		c.Printf(`%s = Go$newMapType("%s.%s", function() { return %s; }, function() { return %s; });`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Key()), c.typeName(t.Elem()))
+		c.Printf(`%s = go$newMapType("%s.%s", function() { return %s; }, function() { return %s; });`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Key()), c.typeName(t.Elem()))
 	case *types.Pointer:
-		c.Printf(`%s = Go$newPtrType("%s.%s", function() { return %s; });`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()))
+		c.Printf(`%s = go$newPtrType("%s.%s", function() { return %s; });`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()))
 	case *types.Signature:
 		paramTypes := make([]string, t.Params().Len())
 		for i := range paramTypes {
@@ -430,9 +430,9 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 		for i := range resultTypes {
 			resultTypes[i] = c.typeName(t.Results().At(i).Type())
 		}
-		c.Printf(`%s = Go$newFuncType("%s.%s", function() { return [%s]; }, function() { return [%s]; }, %t);`, typeName, obj.Pkg().Path(), obj.Name(), strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
+		c.Printf(`%s = go$newFuncType("%s.%s", function() { return [%s]; }, function() { return [%s]; }, %t);`, typeName, obj.Pkg().Path(), obj.Name(), strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
 	case *types.Slice:
-		c.Printf(`%s = Go$newSliceType("%s.%s", function() { return %s; }, "%s");`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()), typeKind(t.Elem()))
+		c.Printf(`%s = go$newSliceType("%s.%s", function() { return %s; }, "%s");`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()), typeKind(t.Elem()))
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
@@ -486,7 +486,7 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 					c.info.Types[recv] = recvType
 					this := c.newIdent("this", recvType)
 					if isWrapped(recvType) {
-						this = c.newIdent("this.Go$val", recvType)
+						this = c.newIdent("this.go$val", recvType)
 					}
 					body = append([]ast.Stmt{
 						&ast.AssignStmt{
@@ -505,14 +505,14 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 		switch {
 		case isStruct:
 			printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
-			c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.Go$val.%s(%s); };", typeName, fun.Name.Name, joinedParams, fun.Name.Name, joinedParams)
+			c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, fun.Name.Name, joinedParams, fun.Name.Name, joinedParams)
 		case !isStruct && !isPointer:
-			value := "this.Go$get()"
+			value := "this.go$get()"
 			if isWrapped(recvType) {
 				value = fmt.Sprintf("new %s(%s)", typeName, value)
 			}
 			printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
-			c.Printf("Go$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, joinedParams, value, fun.Name.Name, joinedParams)
+			c.Printf("go$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, joinedParams, value, fun.Name.Name, joinedParams)
 		case !isStruct && isPointer:
 			if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
 				printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
@@ -520,10 +520,10 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 			}
 			value := "this"
 			if isWrapped(ptr.Elem()) {
-				value = "this.Go$val"
+				value = "this.go$val"
 			}
-			c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new (Go$ptrType(%s))(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, joinedParams, value, typeName, fun.Name.Name, joinedParams)
-			printPrimaryFunction(fmt.Sprintf("Go$ptrType(%s).prototype.%s", typeName, fun.Name.Name))
+			c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new (go$ptrType(%s))(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, joinedParams, value, typeName, fun.Name.Name, joinedParams)
+			printPrimaryFunction(fmt.Sprintf("go$ptrType(%s).prototype.%s", typeName, fun.Name.Name))
 		}
 	})
 }
@@ -565,15 +565,15 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 		ast.Walk(&v, &ast.BlockStmt{List: stmts})
 		switch v.hasDefer {
 		case true:
-			c.Printf("var Go$deferred = [];")
+			c.Printf("var go$deferred = [];")
 			c.Printf("try {")
 			c.Indent(func() {
 				c.translateStmtList(stmts)
 			})
-			c.Printf("} catch(Go$err) {")
+			c.Printf("} catch(go$err) {")
 			c.Indent(func() {
-				c.Printf("if (Go$err.constructor !== Go$Panic) { Go$err = Go$wrapJavaScriptError(Go$err); }")
-				c.Printf("Go$errorStack.push({ frame: Go$getStackDepth(), error: Go$err });")
+				c.Printf("if (go$err.constructor !== Go$Panic) { go$err = go$wrapJavaScriptError(go$err); }")
+				c.Printf("go$errorStack.push({ frame: go$getStackDepth(), error: go$err });")
 				if sig != nil && sig.Results().Len() != 0 && resultNames == nil {
 					zeros := make([]string, sig.Results().Len())
 					for i := range zeros {
@@ -584,7 +584,7 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 			})
 			c.Printf("} finally {")
 			c.Indent(func() {
-				c.Printf("Go$callDeferred(Go$deferred);")
+				c.Printf("go$callDeferred(go$deferred);")
 				if resultNames != nil {
 					c.translateStmt(&ast.ReturnStmt{}, "")
 				}
@@ -653,7 +653,7 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 			panic("Zero value for untyped nil.")
 		}
 	case *types.Array:
-		return fmt.Sprintf(`Go$makeNativeArray("%s", %d, function() { return %s; })`, typeKind(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
+		return fmt.Sprintf(`go$makeNativeArray("%s", %d, function() { return %s; })`, typeKind(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
 	case *types.Slice:
 		return fmt.Sprintf("%s.nil", c.typeName(ty))
 	case *types.Struct:
@@ -717,7 +717,7 @@ func (c *PkgContext) objectName(o types.Object) string {
 	if o.Pkg() != nil && o.Pkg() != c.pkg {
 		pkgVar, found := c.pkgVars[o.Pkg().Path()]
 		if !found {
-			pkgVar = fmt.Sprintf(`Go$packages["%s"]`, o.Pkg().Path())
+			pkgVar = fmt.Sprintf(`go$packages["%s"]`, o.Pkg().Path())
 		}
 		return pkgVar + "." + o.Name()
 	}
@@ -731,7 +731,7 @@ func (c *PkgContext) objectName(o types.Object) string {
 	switch o.(type) {
 	case *types.Var, *types.Const:
 		if o.IsExported() && o.Parent() == c.pkg.Scope() {
-			return "Go$pkg." + name
+			return "go$pkg." + name
 		}
 	}
 	return name
@@ -750,7 +750,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		}
 	case *types.Named:
 		if t.Obj().Name() == "error" {
-			return "Go$error"
+			return "go$error"
 		}
 		if _, isStruct := t.Underlying().(*types.Struct); isStruct {
 			return c.objectName(t.Obj()) + ".Go$NonPointer"
@@ -762,13 +762,13 @@ func (c *PkgContext) typeName(ty types.Type) string {
 				return c.objectName(named.Obj())
 			}
 		}
-		return fmt.Sprintf("(Go$ptrType(%s))", c.typeName(t.Elem()))
+		return fmt.Sprintf("(go$ptrType(%s))", c.typeName(t.Elem()))
 	case *types.Array:
-		return fmt.Sprintf("(Go$arrayType(%s, %d))", c.typeName(t.Elem()), t.Len())
+		return fmt.Sprintf("(go$arrayType(%s, %d))", c.typeName(t.Elem()), t.Len())
 	case *types.Slice:
-		return fmt.Sprintf("(Go$sliceType(%s))", c.typeName(t.Elem()))
+		return fmt.Sprintf("(go$sliceType(%s))", c.typeName(t.Elem()))
 	case *types.Map:
-		return fmt.Sprintf("(Go$mapType(%s, %s))", c.typeName(t.Key()), c.typeName(t.Elem()))
+		return fmt.Sprintf("(go$mapType(%s, %s))", c.typeName(t.Key()), c.typeName(t.Elem()))
 	case *types.Signature:
 		paramTypes := make([]string, t.Params().Len())
 		for i := range paramTypes {
@@ -778,7 +778,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		for i := range resultTypes {
 			resultTypes[i] = c.typeName(t.Results().At(i).Type())
 		}
-		return fmt.Sprintf("(Go$funcType([%s], [%s], %t))", strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
+		return fmt.Sprintf("(go$funcType([%s], [%s], %t))", strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
 	case *types.Interface:
 		return "Go$Interface"
 	case *types.Chan:
@@ -797,18 +797,18 @@ func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	case *types.Struct:
 		parts := make([]string, t.NumFields())
 		for i := range parts {
-			parts[i] = "Go$obj." + t.Field(i).Name()
+			parts[i] = "go$obj." + t.Field(i).Name()
 		}
-		return fmt.Sprintf("(Go$obj = %s, %s)", c.translateExpr(expr), strings.Join(parts, ` + "$" + `))
+		return fmt.Sprintf("(go$obj = %s, %s)", c.translateExpr(expr), strings.Join(parts, ` + "$" + `))
 	case *types.Basic:
 		if is64Bit(t) {
-			return fmt.Sprintf("%s.Go$key()", c.translateExprToType(expr, keyType))
+			return fmt.Sprintf("%s.go$key()", c.translateExprToType(expr, keyType))
 		}
 		return c.translateExprToType(expr, keyType)
 	case *types.Pointer:
-		return fmt.Sprintf("%s.Go$key()", c.translateExprToType(expr, keyType))
+		return fmt.Sprintf("%s.go$key()", c.translateExprToType(expr, keyType))
 	case *types.Interface:
-		return fmt.Sprintf("(%s || Go$Interface.nil).Go$key()", c.translateExprToType(expr, keyType))
+		return fmt.Sprintf("(%s || Go$Interface.nil).go$key()", c.translateExprToType(expr, keyType))
 	default:
 		return c.translateExprToType(expr, keyType)
 	}

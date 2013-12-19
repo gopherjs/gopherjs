@@ -98,7 +98,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			if len(conds) == 1 {
 				t := c.info.Types[conds[0]]
 				if _, isInterface := t.Underlying().(*types.Interface); !isInterface && !types.IsIdentical(t, types.Typ[types.UntypedNil]) {
-					value += ".Go$val"
+					value += ".go$val"
 				}
 			}
 			c.Printf("%s = %s;", typeSwitchVar, value)
@@ -149,7 +149,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			c.Printf("%sfor (; %s < %s.length; %s += %s[1]) {", label, iVar, refVar, iVar, runeVar)
 			c.Indent(func() {
 				c.handleEscapingVariables(s.Body, func() {
-					c.Printf("%s = Go$decodeRune(%s, %s);", runeVar, refVar, iVar)
+					c.Printf("%s = go$decodeRune(%s, %s);", runeVar, refVar, iVar)
 					if !isBlank(s.Value) {
 						c.Printf("%s;", c.translateAssign(s.Value, runeVar+"[0]"))
 					}
@@ -163,7 +163,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 		case *types.Map:
 			keysVar := c.newVariable("_keys")
-			c.Printf("%s = Go$keys(%s);", keysVar, refVar)
+			c.Printf("%s = go$keys(%s);", keysVar, refVar)
 			c.Printf("%sfor (; %s < %s.length; %s += 1) {", label, iVar, keysVar, iVar)
 			c.Indent(func() {
 				c.handleEscapingVariables(s.Body, func() {
@@ -233,7 +233,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			c.Printf("continue%s;", label)
 		case token.GOTO:
-			c.Printf(`Go$throwRuntimeError("not supported by GopherJS: goto")`)
+			c.Printf(`go$throwRuntimeError("not supported by GopherJS: goto")`)
 		case token.FALLTHROUGH:
 			// handled in CaseClause
 		default:
@@ -273,7 +273,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		if ident, isIdent := s.Call.Fun.(*ast.Ident); isIdent {
 			if builtin, isBuiltin := c.info.Objects[ident].(*types.Builtin); isBuiltin {
 				if builtin.Name() == "recover" {
-					c.Printf("Go$deferred.push({ fun: Go$recover, args: [] });")
+					c.Printf("go$deferred.push({ fun: go$recover, args: [] });")
 					return
 				}
 				args := make([]ast.Expr, len(s.Call.Args))
@@ -285,17 +285,17 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 					Args:     args,
 					Ellipsis: s.Call.Ellipsis,
 				})
-				c.Printf("Go$deferred.push({ fun: function(%s) { %s; }, args: [%s] });", strings.Join(c.translateExprSlice(args, nil), ", "), call, strings.Join(c.translateExprSlice(s.Call.Args, nil), ", "))
+				c.Printf("go$deferred.push({ fun: function(%s) { %s; }, args: [%s] });", strings.Join(c.translateExprSlice(args, nil), ", "), call, strings.Join(c.translateExprSlice(s.Call.Args, nil), ", "))
 				return
 			}
 		}
 		sig := c.info.Types[s.Call.Fun].Underlying().(*types.Signature)
 		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
 		if sel, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
-			c.Printf(`Go$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, args)
+			c.Printf(`go$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, args)
 			return
 		}
-		c.Printf("Go$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), args)
+		c.Printf("go$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), args)
 
 	case *ast.DeclStmt:
 		decl := s.Decl.(*ast.GenDecl)
@@ -314,10 +314,10 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.translateStmt(s.Stmt, s.Label.Name+": ")
 
 	case *ast.SelectStmt:
-		c.Printf(`Go$throwRuntimeError("not supported by GopherJS: select")`)
+		c.Printf(`go$throwRuntimeError("not supported by GopherJS: select")`)
 
 	case *ast.GoStmt:
-		c.Printf(`Go$throwRuntimeError("not supported by GopherJS: go")`)
+		c.Printf(`go$throwRuntimeError("not supported by GopherJS: go")`)
 
 	case *ast.EmptyStmt:
 		// skip
@@ -496,11 +496,11 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 			return c.translateAssign(s.Lhs[0], c.translateExprToType(s.Rhs[0], c.info.Types[s.Lhs[0]]))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
-			out := "Go$tuple = " + c.translateExpr(s.Rhs[0])
+			out := "go$tuple = " + c.translateExpr(s.Rhs[0])
 			tuple := c.info.Types[s.Rhs[0]].(*types.Tuple)
 			for i, lhs := range s.Lhs {
 				if !isBlank(lhs) {
-					out += ", " + c.translateAssign(lhs, c.translateExprToType(c.newIdent(fmt.Sprintf("Go$tuple[%d]", i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]]))
+					out += ", " + c.translateAssign(lhs, c.translateExprToType(c.newIdent(fmt.Sprintf("go$tuple[%d]", i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]]))
 				}
 			}
 			return out
@@ -509,10 +509,10 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 			for i, rhs := range s.Rhs {
 				parts[i] = c.translateExprToType(rhs, c.info.Types[s.Lhs[i]])
 			}
-			out := "Go$tuple = [" + strings.Join(parts, ", ") + "]"
+			out := "go$tuple = [" + strings.Join(parts, ", ") + "]"
 			for i, lhs := range s.Lhs {
 				if !isBlank(lhs) {
-					out += ", " + c.translateAssign(lhs, fmt.Sprintf("Go$tuple[%d]", i))
+					out += ", " + c.translateAssign(lhs, fmt.Sprintf("go$tuple[%d]", i))
 				}
 			}
 			return out
@@ -605,11 +605,11 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 		return c.objectName(c.info.Objects[l]) + " = " + rhs
 	case *ast.SelectorExpr:
 		if structLhs, isStruct := c.info.Types[lhs].Underlying().(*types.Struct); isStruct {
-			out := "Go$obj = " + rhs
+			out := "go$obj = " + rhs
 			s := c.translateExpr(l)
 			for i := 0; i < structLhs.NumFields(); i++ {
 				field := structLhs.Field(i)
-				out += fmt.Sprintf(", %s.%s = Go$obj.%s", s, field.Name(), field.Name())
+				out += fmt.Sprintf(", %s.%s = go$obj.%s", s, field.Name(), field.Name())
 			}
 			return out
 		}
@@ -626,9 +626,9 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 			}
 			return out
 		case *types.Array:
-			return fmt.Sprintf("Go$copyArray(%s, %s)", c.translateExpr(l.X), rhs)
+			return fmt.Sprintf("go$copyArray(%s, %s)", c.translateExpr(l.X), rhs)
 		default:
-			return fmt.Sprintf("%s.Go$set(%s)", c.translateExpr(l.X), rhs)
+			return fmt.Sprintf("%s.go$set(%s)", c.translateExpr(l.X), rhs)
 		}
 	case *ast.IndexExpr:
 		switch t := c.info.Types[l.X].Underlying().(type) {
@@ -638,10 +638,10 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 			sliceVar := c.newVariable("_slice")
 			indexVar := c.newVariable("_index")
 			return fmt.Sprintf("%s = %s, %s = %s", sliceVar, c.translateExpr(l.X), indexVar, c.flatten64(l.Index)) +
-				fmt.Sprintf(`, (%s >= 0 && %s < %s.length) ? (%s.array[%s.offset + %s] = %s) : Go$throwRuntimeError("index out of range")`, indexVar, indexVar, sliceVar, sliceVar, sliceVar, indexVar, rhs)
+				fmt.Sprintf(`, (%s >= 0 && %s < %s.length) ? (%s.array[%s.offset + %s] = %s) : go$throwRuntimeError("index out of range")`, indexVar, indexVar, sliceVar, sliceVar, sliceVar, indexVar, rhs)
 		case *types.Map:
 			keyVar := c.newVariable("_key")
-			return fmt.Sprintf(`%s = %s, (%s || Go$throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s }`, keyVar, c.translateExprToType(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)
+			return fmt.Sprintf(`%s = %s, (%s || go$throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s }`, keyVar, c.translateExprToType(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)
 		default:
 			panic(fmt.Sprintf("Unhandled lhs type: %T\n", t))
 		}

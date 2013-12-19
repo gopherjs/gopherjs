@@ -274,21 +274,21 @@ var go$mapType = function(key, elem) {
 
 var go$throwNilPointerError = function() { go$throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var go$ptrType = function(elem) {
-	var typ = elem.Go$Pointer;
+	var typ = elem.Pointer;
 	if (typ === undefined) {
 		typ = go$newType("*" + elem.string, "Ptr");
 		typ.init(elem);
-		elem.Go$Pointer = typ;
+		elem.Pointer = typ;
 	}
 	return typ;
 };
 
 var go$sliceType = function(elem) {
-	var typ = elem.Go$Slice;
+	var typ = elem.Slice;
 	if (typ === undefined) {
 		typ = go$newType("[]" + elem.string, "Slice");
 		typ.init(elem);
-		elem.Go$Slice = typ;
+		elem.Slice = typ;
 	}
 	return typ;
 };
@@ -297,9 +297,9 @@ var go$newStructType = function(name, constructor) {
 	var typ = constructor;
 	typ.string = "*" + name;
 	typ.prototype.go$key = function() { return this.go$id; };
-	typ.Go$NonPointer = function(v) { this.go$val = v; };
-	typ.Go$NonPointer.string = name;
-	typ.Go$NonPointer.prototype.go$uncomparable = true;
+	typ.NonPointer = function(v) { this.go$val = v; };
+	typ.NonPointer.string = name;
+	typ.NonPointer.prototype.go$uncomparable = true;
 	typ.init = function(fields) {
 		typ.nil = new constructor();
 		var i;
@@ -309,7 +309,7 @@ var go$newStructType = function(name, constructor) {
 		typ.reflectType = go$cache(function() {
 			return new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Struct, typ, undefined, go$newStringPointer("*" + name), undefined, undefined);
 		});
-		typ.Go$NonPointer.reflectType = go$cache(function() {
+		typ.NonPointer.reflectType = go$cache(function() {
 			var reflectFields = new Array(fields.length), i;
 			for (i = 0; i < fields.length; i++) {
 				var field = fields[i];

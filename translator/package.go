@@ -405,7 +405,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 					}
 					paramList := strings.Join(params, ", ")
 					c.Printf("%s.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, name, paramList, value, name, paramList)
-					c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, name, paramList, name, paramList)
+					c.Printf("%s.NonPointer.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, name, paramList, name, paramList)
 				}
 			}
 		}
@@ -481,7 +481,7 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 		switch {
 		case isStruct:
 			printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
-			c.Printf("%s.Go$NonPointer.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, fun.Name.Name, joinedParams, fun.Name.Name, joinedParams)
+			c.Printf("%s.NonPointer.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, fun.Name.Name, joinedParams, fun.Name.Name, joinedParams)
 		case !isStruct && !isPointer:
 			value := "this.go$get()"
 			if isWrapped(recvType) {
@@ -723,7 +723,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 			return "go$error"
 		}
 		if _, isStruct := t.Underlying().(*types.Struct); isStruct {
-			return c.objectName(t.Obj()) + ".Go$NonPointer"
+			return c.objectName(t.Obj()) + ".NonPointer"
 		}
 		return c.objectName(t.Obj())
 	case *types.Pointer:

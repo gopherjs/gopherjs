@@ -836,7 +836,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			return fmt.Sprintf("new %s(%s)", c.typeName(exprType), c.translateExpr(expr))
 		}
 		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
-			return fmt.Sprintf("(go$obj = %s, new go$obj.constructor.Go$NonPointer(go$obj))", c.translateExpr(expr))
+			return fmt.Sprintf("(go$obj = %s, new go$obj.constructor.NonPointer(go$obj))", c.translateExpr(expr))
 		}
 
 	case *types.Pointer:

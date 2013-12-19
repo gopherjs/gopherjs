@@ -169,6 +169,7 @@ var go$newType = function(name, kind) {
 	default:
 		throw new Go$Panic("invalid kind: " + kind);
 	}
+
 	typ.string = name;
 	typ.reflectType = go$cache(function() {
 		var size = ({ Int: 4, Int8: 1, Int16: 2, Int32: 4, Int64: 8, Uint: 4, Uint8: 1, Uint16: 2, Uint32: 4, Uint64: 8, Uintptr: 4, Float32: 4, Float64: 8, UnsafePointer: 4 })[kind] || 0;
@@ -292,7 +293,62 @@ var go$sliceType = function(elem) {
 	return typ;
 };
 
-var Go$Struct = function() {};
+var go$newStructType = function(name, constructor) {
+	var typ = constructor;
+	typ.string = "*" + name;
+	typ.prototype.go$key = function() { return this.go$id; };
+	typ.Go$NonPointer = function(v) { this.go$val = v; };
+	typ.Go$NonPointer.string = name;
+	typ.Go$NonPointer.prototype.go$uncomparable = true;
+	typ.init = function(fields) {
+		typ.nil = new constructor();
+		var i;
+		for (i = 0; i < fields.length; i++) {
+			Object.defineProperty(typ.nil, fields[i][0], { get: go$throwNilPointerError, set: go$throwNilPointerError });
+		}
+		typ.reflectType = go$cache(function() {
+			return new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Struct, typ, undefined, go$newStringPointer("*" + name), undefined, undefined);
+		});
+		typ.Go$NonPointer.reflectType = go$cache(function() {
+			var reflectFields = new Array(fields.length), i;
+			for (i = 0; i < fields.length; i++) {
+				var field = fields[i];
+				var fieldName = Go$StringPointer.nil;
+				if (field[0].length !== 0) {
+					fieldName = go$newStringPointer(field[0]);
+				}
+				var fieldPath = Go$StringPointer.nil; // TODO
+				var fieldTag = Go$StringPointer.nil; // TODO
+				reflectFields[i] = new go$reflect.structField(fieldName, fieldPath, field[1].reflectType(), fieldTag, 0);
+			}
+			var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Struct, typ, undefined, go$newStringPointer(name), undefined, undefined)
+			rt.structType = new go$reflect.structType(rt, new (go$sliceType(go$reflect.structField))(reflectFields));
+			return rt;
+		});
+	};
+	return typ;
+};
+var go$structTypes = {};
+var go$structType = function(fields) {
+	var name = "struct { " + go$mapArray(fields, function(f) { return f[0] + " " + f[1].string }).join("; ") + " }";
+	var typ = go$structTypes[name];
+	if (typ === undefined) {
+		typ = go$newStructType(name, function() {
+			this.go$id = go$idCounter;
+			go$idCounter += 1;
+			this.go$val = this;
+			var i;
+			for (i = 0; i < fields.length; i++) {
+				var field = fields[i];
+				var arg = arguments[i];
+				this[field[0]] = arg !== undefined ? arg : field[2]();
+			}
+		});
+		typ.init(fields);
+		go$structTypes[name] = typ;
+	}
+	return typ;
+};
 
 var Go$StringPointer = go$ptrType(Go$String);
 go$newStringPointer = function(str) {
@@ -300,18 +356,6 @@ go$newStringPointer = function(str) {
 };
 var go$newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });
-};
-
-var go$structNil = function(constructor) {
-	var nil = new constructor();
-	var fields = Object.keys(nil), i;
-	for (i = 0; i < fields.length; i++) {
-		var field = fields[i];
-		if (field !== "go$id" && field !== "go$val") {
-			Object.defineProperty(nil, field, { get: go$throwNilPointerError, set: go$throwNilPointerError });
-		}
-	}
-	return nil;
 };
 
 var go$flatten64 = function(x) {

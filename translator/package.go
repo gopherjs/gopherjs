@@ -263,7 +263,12 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				}
 				c.Printf(`%s.init([%s], [%s], %t);`, typeName, strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
 			case *types.Struct:
-				c.Printf("%s.nil = go$structNil(%s);", typeName, typeName)
+				fields := make([]string, t.NumFields())
+				for i := range fields {
+					field := t.Field(i)
+					fields[i] = fmt.Sprintf(`["%s", %s, function() { return %s; }]`, field.Name(), c.typeName(field.Type()), c.zeroValue(field.Type()))
+				}
+				c.Printf("%s.init([%s]);", typeName, strings.Join(fields, ", "))
 			}
 		}
 
@@ -362,7 +367,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 			}
 			params[i] = name + "_"
 		}
-		c.Printf("%s = function(%s) {", typeName, strings.Join(params, ", "))
+		c.Printf(`%s = go$newStructType("%s.%s", function(%s) {`, typeName, obj.Pkg().Name(), obj.Name(), strings.Join(params, ", "))
 		c.Indent(func() {
 			c.Printf("this.go$id = go$idCounter;")
 			c.Printf("go$idCounter += 1;")
@@ -376,32 +381,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 				c.Printf("this.%s = %s_ !== undefined ? %s_ : %s;", name, name, name, c.zeroValue(field.Type()))
 			}
 		})
-		c.Printf("};")
-		c.Printf(`%s.string = "*%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
-		c.Printf(`%s.reflectType = function() { return new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Ptr, %s, undefined, go$newStringPointer("*%s.%s"), undefined, undefined); };`, typeName, typeName, obj.Pkg().Name(), obj.Name())
-		c.Printf(`%s.prototype.go$key = function() { return this.go$id; };`, typeName)
-		c.Printf("%s.Go$NonPointer = function(v) { this.go$val = v; };", typeName)
-		c.Printf(`%s.Go$NonPointer.string = "%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
-		c.Printf("%s.Go$NonPointer.prototype.go$uncomparable = true;", typeName)
-		fields := make([]string, t.NumFields())
-		for i := range fields {
-			field := t.Field(i)
-			name := "Go$StringPointer.nil"
-			if !field.Anonymous() {
-				name = fmt.Sprintf(`go$newStringPointer("%s")`, field.Name())
-			}
-			path := "Go$StringPointer.nil"
-			if !field.IsExported() {
-				path = fmt.Sprintf(`go$newStringPointer("%s.%s")`, field.Pkg().Name(), field.Name())
-			}
-			tag := "Go$StringPointer.nil"
-			if t.Tag(i) != "" {
-				tag = fmt.Sprintf("go$newStringPointer(%#v)", t.Tag(i))
-			}
-			fields[i] = fmt.Sprintf(`new go$reflect.structField(%s, %s, %s.reflectType(), %s, 0)`, name, path, c.typeName(field.Type()), tag)
-		}
-		uncommonType := fmt.Sprintf(`new go$reflect.uncommonType(go$newStringPointer("%s"), go$newStringPointer("%s.%s"), go$sliceType(go$reflect.method).nil)`, typeName, obj.Pkg().Name(), typeName)
-		c.Printf(`%s.Go$NonPointer.reflectType = function() { var t = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Struct, %s, undefined, go$newStringPointer("%s.%s"), %s, undefined); t.structType = new go$reflect.structType(t, new (go$sliceType(go$reflect.structField))([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), uncommonType, strings.Join(fields, ", "))
+		c.Printf("});")
 		for i := 0; i < t.NumFields(); i++ {
 			field := t.Field(i)
 			if field.Anonymous() {
@@ -630,7 +610,6 @@ func (c *PkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellips
 }
 
 func (c *PkgContext) zeroValue(ty types.Type) string {
-	named, isNamed := ty.(*types.Named)
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
 		if is64Bit(t) {
@@ -653,15 +632,10 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 	case *types.Slice:
 		return fmt.Sprintf("%s.nil", c.typeName(ty))
 	case *types.Struct:
-		if isNamed {
+		if named, isNamed := ty.(*types.Named); isNamed {
 			return fmt.Sprintf("new %s()", c.objectName(named.Obj()))
 		}
-		fields := make([]string, t.NumFields())
-		for i := range fields {
-			field := t.Field(i)
-			fields[i] = field.Name() + ": " + c.zeroValue(field.Type())
-		}
-		return fmt.Sprintf("{%s}", strings.Join(fields, ", "))
+		return fmt.Sprintf("new %s()", c.typeName(ty))
 	case *types.Map:
 		return "false"
 	case *types.Interface:
@@ -780,7 +754,12 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	case *types.Chan:
 		return "Go$Channel"
 	case *types.Struct:
-		return "Go$Struct"
+		fields := make([]string, t.NumFields())
+		for i := range fields {
+			field := t.Field(i)
+			fields[i] = fmt.Sprintf(`["%s", %s, function() { return %s; }]`, field.Name(), c.typeName(field.Type()), c.zeroValue(field.Type()))
+		}
+		return fmt.Sprintf("(go$structType([%s]))", strings.Join(fields, ", "))
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}

@@ -147,12 +147,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			if named, isNamed := exprType.(*types.Named); isNamed {
 				return fmt.Sprintf("new %s(%s)", c.objectName(named.Obj()), strings.Join(elements, ", "))
 			}
-			structVar := c.newVariable("_struct")
-			c.translateTypeSpec(&ast.TypeSpec{
-				Name: c.newIdent(structVar, t),
-				Type: e.Type,
-			})
-			return fmt.Sprintf("new %s(%s)", structVar, strings.Join(elements, ", "))
+			return fmt.Sprintf("new %s(%s)", c.typeName(exprType), strings.Join(elements, ", "))
 		default:
 			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", t))
 		}

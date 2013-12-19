@@ -383,7 +383,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 			}
 			fields[i] = fmt.Sprintf(`new Go$reflect.structField(%s, %s, %s.Go$type(), %s, 0)`, name, path, c.typeName(field.Type()), tag)
 		}
-		uncommonType := fmt.Sprintf(`new Go$reflect.uncommonType(Go$newStringPointer("%s"), Go$newStringPointer("%s.%s"), Go$sliceType(method).Go$nil)`, typeName, obj.Pkg().Name(), typeName)
+		uncommonType := fmt.Sprintf(`new Go$reflect.uncommonType(Go$newStringPointer("%s"), Go$newStringPointer("%s.%s"), Go$sliceType(Go$reflect.method).Go$nil)`, typeName, obj.Pkg().Name(), typeName)
 		c.Printf(`%s.Go$NonPointer.Go$type = function() { var t = new Go$reflect.rtype(0, 0, 0, 0, 0, Go$reflect.kinds.Struct, %s, undefined, Go$newStringPointer("%s.%s"), %s, undefined); t.structType = new Go$reflect.structType(t, new (Go$sliceType(Go$reflect.structField))([%s])); return t; };`, typeName, typeName, obj.Pkg().Name(), obj.Name(), uncommonType, strings.Join(fields, ", "))
 		for i := 0; i < t.NumFields(); i++ {
 			field := t.Field(i)

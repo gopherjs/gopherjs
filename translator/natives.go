@@ -232,7 +232,7 @@ var natives = map[string]string{
 
 	"reflect": `
 		Go$reflect = {
-			rtype: rtype, uncommonType: uncommonType, arrayType: arrayType, funcType: funcType, mapType: mapType, ptrType: ptrType, sliceType: sliceType, structType: structType, structField: structField,
+			rtype: rtype, uncommonType: uncommonType, method: method, arrayType: arrayType, funcType: funcType, mapType: mapType, ptrType: ptrType, sliceType: sliceType, structType: structType, structField: structField,
 			kinds: { Bool: Go$pkg.Bool, Int: Go$pkg.Int, Int8: Go$pkg.Int8, Int16: Go$pkg.Int16, Int32: Go$pkg.Int32, Int64: Go$pkg.Int64, Uint: Go$pkg.Uint, Uint8: Go$pkg.Uint8, Uint16: Go$pkg.Uint16, Uint32: Go$pkg.Uint32, Uint64: Go$pkg.Uint64, Uintptr: Go$pkg.Uintptr, Float32: Go$pkg.Float32, Float64: Go$pkg.Float64, Complex64: Go$pkg.Complex64, Complex128: Go$pkg.Complex128, Array: Go$pkg.Array, Chan: Go$pkg.Chan, Func: Go$pkg.Func, Interface: Go$pkg.Interface, Map: Go$pkg.Map, Ptr: Go$pkg.Ptr, Slice: Go$pkg.Slice, String: Go$pkg.String, Struct: Go$pkg.Struct, UnsafePointer: Go$pkg.UnsafePointer }
 		};
 
@@ -300,6 +300,7 @@ var natives = map[string]string{
 			if (len > cap) {
 				throw new Go$Panic("reflect.MakeSlice: len > cap");
 			}
+			return new Value(typ.common(), typ.alg.Go$make(len, cap, function() { return 0; }), flagIndir | Go$pkg.Slice << flagKindShift); // FIXME zero value
 		};
 		makemap = function(t) {
 			return new Go$Map();
@@ -443,14 +444,8 @@ var natives = map[string]string{
 			return new v.typ.alg(v.val);
 		};
 		Value.prototype.Set = function(x) {
-			switch (this.typ.Kind()) {
-			case Go$pkg.Map:
-				this.val = x.val;
-				this.flag = x.flag;
-				break;
-			default:
-				throw new Go$Panic("reflect.Value.Set(" + this.typ.string.Go$get() + "): type not yet supported");
-			}
+			this.val = x.val;
+			this.flag = x.flag;
 		};
 		Value.prototype.String = function() {
 			switch (this.kind()) {

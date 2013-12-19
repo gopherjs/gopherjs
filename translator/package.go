@@ -242,8 +242,27 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 		for _, spec := range typeSpecs {
 			obj := c.info.Objects[spec.Name]
-			if _, isStruct := obj.Type().Underlying().(*types.Struct); isStruct {
-				typeName := c.objectName(obj)
+			typeName := c.objectName(obj)
+			switch t := obj.Type().Underlying().(type) {
+			case *types.Array:
+				c.Printf("%s.init(%s, %d);", typeName, c.typeName(t.Elem()), t.Len())
+			case *types.Map:
+				c.Printf("%s.init(%s, %s);", typeName, c.typeName(t.Key()), c.typeName(t.Elem()))
+			case *types.Pointer:
+				c.Printf("%s.init(%s);", typeName, c.typeName(t.Elem()))
+			case *types.Slice:
+				c.Printf("%s.init(%s);", typeName, c.typeName(t.Elem()))
+			case *types.Signature:
+				paramTypes := make([]string, t.Params().Len())
+				for i := range paramTypes {
+					paramTypes[i] = c.typeName(t.Params().At(i).Type())
+				}
+				resultTypes := make([]string, t.Results().Len())
+				for i := range resultTypes {
+					resultTypes[i] = c.typeName(t.Results().At(i).Type())
+				}
+				c.Printf(`%s.init([%s], [%s], %t);`, typeName, strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
+			case *types.Struct:
 				c.Printf("%s.nil = go$structNil(%s);", typeName, typeName)
 			}
 		}
@@ -333,8 +352,6 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 	obj := c.info.Objects[s.Name]
 	typeName := c.objectName(obj)
 	switch t := obj.Type().Underlying().(type) {
-	case *types.Basic:
-		c.Printf(`%s = go$newBasicType("%s.%s", "%s");`, typeName, obj.Pkg().Name(), obj.Name(), typeKind(t))
 	case *types.Struct:
 		params := make([]string, t.NumFields())
 		for i := 0; i < t.NumFields(); i++ {
@@ -412,29 +429,8 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 				}
 			}
 		}
-	case *types.Array:
-		c.Printf(`%s = go$newArrayType("%s.%s", function() { return %s; }, %d);`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()), t.Len())
-	case *types.Interface:
-		c.Printf("%s = { go$implementedBy: [] };", typeName)
-		c.Printf(`%s.string = "%s.%s";`, typeName, obj.Pkg().Path(), obj.Name())
-	case *types.Map:
-		c.Printf(`%s = go$newMapType("%s.%s", function() { return %s; }, function() { return %s; });`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Key()), c.typeName(t.Elem()))
-	case *types.Pointer:
-		c.Printf(`%s = go$newPtrType("%s.%s", function() { return %s; });`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()))
-	case *types.Signature:
-		paramTypes := make([]string, t.Params().Len())
-		for i := range paramTypes {
-			paramTypes[i] = c.typeName(t.Params().At(i).Type())
-		}
-		resultTypes := make([]string, t.Results().Len())
-		for i := range resultTypes {
-			resultTypes[i] = c.typeName(t.Results().At(i).Type())
-		}
-		c.Printf(`%s = go$newFuncType("%s.%s", function() { return [%s]; }, function() { return [%s]; }, %t);`, typeName, obj.Pkg().Path(), obj.Name(), strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
-	case *types.Slice:
-		c.Printf(`%s = go$newSliceType("%s.%s", function() { return %s; }, "%s");`, typeName, obj.Pkg().Path(), obj.Name(), c.typeName(t.Elem()), typeKind(t.Elem()))
 	default:
-		panic(fmt.Sprintf("Unhandled type: %T\n", t))
+		c.Printf(`%s = go$newType("%s.%s", "%s");`, typeName, obj.Pkg().Name(), obj.Name(), typeKind(t))
 	}
 }
 
@@ -845,6 +841,8 @@ func toJavaScriptType(t *types.Basic) string {
 		return "Uint8"
 	case types.Rune:
 		return "Int32"
+	case types.UnsafePointer:
+		return "UnsafePointer"
 	default:
 		name := t.String()
 		return strings.ToUpper(name[:1]) + name[1:]

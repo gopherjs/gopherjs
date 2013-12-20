@@ -592,7 +592,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))
 				}
 			case *types.TypeName: // conversion
-				if basic, isBasic := o.Type().Underlying().(*types.Basic); isBasic && !types.IsIdentical(c.info.Types[e.Args[0]], types.Typ[types.UnsafePointer]) {
+				argType := c.info.Types[e.Args[0]]
+				if basic, isBasic := o.Type().Underlying().(*types.Basic); isBasic && !types.IsIdentical(argType, types.Typ[types.UnsafePointer]) {
+					if basic.Kind() == types.Uint {
+						return "(" + c.translateExprToType(e.Args[0], o.Type()) + " >>> 0)"
+					}
 					return fixNumber(c.translateExprToType(e.Args[0], o.Type()), basic)
 				}
 				return c.translateExprToType(e.Args[0], o.Type())

@@ -78,6 +78,7 @@ Packages with passing test suites:
 - io/ioutil
 - math
 - math/cmplx
+- math/big
 - math/rand
 - mime
 - path

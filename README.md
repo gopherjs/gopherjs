@@ -58,6 +58,7 @@ Packages with passing test suites:
 - crypto/sha256
 - crypto/sha512
 - crypto/subtle
+- debug/gosym
 - encoding/ascii85
 - encoding/base32
 - encoding/base64

@@ -529,7 +529,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					case *types.Map:
 						return "new Go$Map()"
 					case *types.Chan:
-						return "new Go$Channel()"
+						return fmt.Sprintf("new %s()", c.typeName(c.info.Types[e.Args[0]]))
 					default:
 						panic(fmt.Sprintf("Unhandled make type: %T\n", argType))
 					}
@@ -738,7 +738,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 	exprType := c.info.Types[expr]
 
 	// TODO should be fixed in go/types
-	if _, isSlice := exprType.(*types.Slice); isSlice {
+	if _, isSlice := exprType.Underlying().(*types.Slice); isSlice {
 		constValue := c.info.Values[expr]
 		if constValue != nil && constValue.Kind() == exact.String {
 			exprType = types.Typ[types.String]

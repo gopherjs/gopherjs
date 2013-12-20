@@ -246,6 +246,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			switch t := obj.Type().Underlying().(type) {
 			case *types.Array:
 				c.Printf("%s.init(%s, %d);", typeName, c.typeName(t.Elem()), t.Len())
+			case *types.Chan:
+				c.Printf("%s.init(%s, %t, %t))", typeName, c.typeName(t.Elem()), t.Dir()&types.SendOnly != 0, t.Dir()&types.RecvOnly != 0)
 			case *types.Map:
 				c.Printf("%s.init(%s, %s);", typeName, c.typeName(t.Key()), c.typeName(t.Elem()))
 			case *types.Pointer:
@@ -266,7 +268,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				fields := make([]string, t.NumFields())
 				for i := range fields {
 					field := t.Field(i)
-					fields[i] = fmt.Sprintf(`["%s", %s, function() { return %s; }]`, field.Name(), c.typeName(field.Type()), c.zeroValue(field.Type()))
+					fields[i] = fmt.Sprintf(`["%s", %s]`, field.Name(), c.typeName(field.Type()))
 				}
 				c.Printf("%s.init([%s]);", typeName, strings.Join(fields, ", "))
 			}
@@ -635,7 +637,11 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 		if named, isNamed := ty.(*types.Named); isNamed {
 			return fmt.Sprintf("new %s()", c.objectName(named.Obj()))
 		}
-		return fmt.Sprintf("new %s.Pointer()", c.typeName(ty))
+		fields := make([]string, t.NumFields())
+		for i := range fields {
+			fields[i] = c.zeroValue(t.Field(i).Type())
+		}
+		return fmt.Sprintf("new %s.Pointer(%s)", c.typeName(ty), strings.Join(fields, ", "))
 	case *types.Map:
 		return "false"
 	case *types.Interface:
@@ -735,6 +741,8 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		return fmt.Sprintf("(go$ptrType(%s))", c.typeName(t.Elem()))
 	case *types.Array:
 		return fmt.Sprintf("(go$arrayType(%s, %d))", c.typeName(t.Elem()), t.Len())
+	case *types.Chan:
+		return fmt.Sprintf("(go$chanType(%s, %t, %t))", c.typeName(t.Elem()), t.Dir()&types.SendOnly != 0, t.Dir()&types.RecvOnly != 0)
 	case *types.Slice:
 		return fmt.Sprintf("(go$sliceType(%s))", c.typeName(t.Elem()))
 	case *types.Map:
@@ -751,8 +759,6 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		return fmt.Sprintf("(go$funcType([%s], [%s], %t))", strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
 	case *types.Interface:
 		return "Go$Interface"
-	case *types.Chan:
-		return "Go$Channel"
 	case *types.Struct:
 		fields := make([]string, t.NumFields())
 		for i := range fields {

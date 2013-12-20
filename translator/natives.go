@@ -232,8 +232,9 @@ var natives = map[string]string{
 
 	"reflect": `
 		go$reflect = {
-			rtype: rtype, uncommonType: uncommonType, method: method, arrayType: arrayType, funcType: funcType, mapType: mapType, ptrType: ptrType, sliceType: sliceType, structType: structType, structField: structField,
-			kinds: { Bool: go$pkg.Bool, Int: go$pkg.Int, Int8: go$pkg.Int8, Int16: go$pkg.Int16, Int32: go$pkg.Int32, Int64: go$pkg.Int64, Uint: go$pkg.Uint, Uint8: go$pkg.Uint8, Uint16: go$pkg.Uint16, Uint32: go$pkg.Uint32, Uint64: go$pkg.Uint64, Uintptr: go$pkg.Uintptr, Float32: go$pkg.Float32, Float64: go$pkg.Float64, Complex64: go$pkg.Complex64, Complex128: go$pkg.Complex128, Array: go$pkg.Array, Chan: go$pkg.Chan, Func: go$pkg.Func, Interface: go$pkg.Interface, Map: go$pkg.Map, Ptr: go$pkg.Ptr, Slice: go$pkg.Slice, String: go$pkg.String, Struct: go$pkg.Struct, UnsafePointer: go$pkg.UnsafePointer }
+			rtype: rtype, uncommonType: uncommonType, method: method, arrayType: arrayType, chanType: chanType, funcType: funcType, mapType: mapType, ptrType: ptrType, sliceType: sliceType, structType: structType, structField: structField,
+			kinds: { Bool: go$pkg.Bool, Int: go$pkg.Int, Int8: go$pkg.Int8, Int16: go$pkg.Int16, Int32: go$pkg.Int32, Int64: go$pkg.Int64, Uint: go$pkg.Uint, Uint8: go$pkg.Uint8, Uint16: go$pkg.Uint16, Uint32: go$pkg.Uint32, Uint64: go$pkg.Uint64, Uintptr: go$pkg.Uintptr, Float32: go$pkg.Float32, Float64: go$pkg.Float64, Complex64: go$pkg.Complex64, Complex128: go$pkg.Complex128, Array: go$pkg.Array, Chan: go$pkg.Chan, Func: go$pkg.Func, Interface: go$pkg.Interface, Map: go$pkg.Map, Ptr: go$pkg.Ptr, Slice: go$pkg.Slice, String: go$pkg.String, Struct: go$pkg.Struct, UnsafePointer: go$pkg.UnsafePointer },
+			RecvDir: go$pkg.RecvDir, SendDir: go$pkg.SendDir, BothDir: go$pkg.BothDir
 		};
 
 		TypeOf = function(i) {
@@ -253,17 +254,17 @@ var natives = map[string]string{
 			case go$pkg.Int8:
 			case go$pkg.Int16:
 			case go$pkg.Int32:
-			case go$pkg.Int64:
 			case go$pkg.Uint:
 			case go$pkg.Uint8:
 			case go$pkg.Uint16:
 			case go$pkg.Uint32:
-			case go$pkg.Uint64:
 			case go$pkg.Uintptr:
 			case go$pkg.Float32:
 			case go$pkg.Float64:
 				val = 0;
 				break;
+			case go$pkg.Int64:
+			case go$pkg.Uint64:
 			case go$pkg.Complex64:
 			case go$pkg.Complex128:
 				val = new typ.alg(0, 0);

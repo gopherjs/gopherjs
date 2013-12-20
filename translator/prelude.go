@@ -26,7 +26,7 @@ var go$cache = function(v) {
 	};
 };
 
-var go$newType = function(name, kind) {
+var go$newType = function(name, kind, constructor) {
 	var typ;
 	switch(kind) {
 	case "Bool":
@@ -166,6 +166,48 @@ var go$newType = function(name, kind) {
 		typ.prototype.go$uncomparable = true;
 		break;
 
+	case "Struct":
+		typ = constructor;
+		typ.string = "*" + name;
+		typ.prototype.go$key = function() { return this.go$id; };
+		typ.NonPointer = function(v) { this.go$val = v; };
+		typ.NonPointer.string = name;
+		typ.NonPointer.Pointer = typ;
+		typ.NonPointer.prototype.go$uncomparable = true;
+		typ.init = function(fields) {
+			typ.nil = new constructor();
+			var i;
+			for (i = 0; i < fields.length; i++) {
+				Object.defineProperty(typ.nil, fields[i][0], { get: go$throwNilPointerError, set: go$throwNilPointerError });
+			}
+			typ.reflectType = go$cache(function() {
+				var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Ptr, typ, undefined, go$newStringPointer("*" + name), undefined, undefined);
+				rt.ptrType = new go$reflect.ptrType(rt, typ.NonPointer.reflectType());
+				return rt;
+			});
+			var structRType; // manual caching to avoid infinite recursion
+			typ.NonPointer.reflectType = function() {
+				if (structRType !== undefined) {
+					return structRType;
+				}
+				structRType = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Struct, typ.NonPointer, undefined, go$newStringPointer(name), undefined, undefined)
+				var reflectFields = new Array(fields.length), i;
+				for (i = 0; i < fields.length; i++) {
+					var field = fields[i];
+					var fieldName = Go$StringPointer.nil;
+					if (field[0].length !== 0) {
+						fieldName = go$newStringPointer(field[0]);
+					}
+					var fieldPath = Go$StringPointer.nil; // TODO
+					var fieldTag = Go$StringPointer.nil; // TODO
+					reflectFields[i] = new go$reflect.structField(fieldName, fieldPath, field[1].reflectType(), fieldTag, 0);
+				}
+				structRType.structType = new go$reflect.structType(structRType, new (go$sliceType(go$reflect.structField))(reflectFields));
+				return structRType;
+			};
+		};
+		return typ; // no break
+
 	default:
 		throw new Go$Panic("invalid kind: " + kind);
 	}
@@ -244,7 +286,7 @@ var go$funcType = function(params, results, isVariadic) {
 	if (typ === undefined) {
 		typ = go$newType(name, "Func");
 		typ.init(params, results, isVariadic);
-    go$funcTypes[name] = typ;
+		go$funcTypes[name] = typ;
 	}
 	return typ;
 };
@@ -262,14 +304,14 @@ var Go$Map = function() {};
 })();
 var go$mapTypes = {};
 var go$mapType = function(key, elem) {
-  var name = "map[" + key.string + "]" + elem.string;
-  var typ = go$mapTypes[name];
-  if (typ === undefined) {
-  	typ = go$newType(name, "Map");
-  	typ.init(key, elem);
-    go$mapTypes[name] = typ;
-  }
-  return typ;
+	var name = "map[" + key.string + "]" + elem.string;
+	var typ = go$mapTypes[name];
+	if (typ === undefined) {
+		typ = go$newType(name, "Map");
+		typ.init(key, elem);
+		go$mapTypes[name] = typ;
+	}
+	return typ;
 };
 
 var go$throwNilPointerError = function() { go$throwRuntimeError("invalid memory address or nil pointer dereference"); };
@@ -293,48 +335,12 @@ var go$sliceType = function(elem) {
 	return typ;
 };
 
-var go$newStructType = function(name, constructor) {
-	var typ = constructor;
-	typ.string = "*" + name;
-	typ.prototype.go$key = function() { return this.go$id; };
-	typ.NonPointer = function(v) { this.go$val = v; };
-	typ.NonPointer.string = name;
-	typ.NonPointer.Pointer = typ;
-	typ.NonPointer.prototype.go$uncomparable = true;
-	typ.init = function(fields) {
-		typ.nil = new constructor();
-		var i;
-		for (i = 0; i < fields.length; i++) {
-			Object.defineProperty(typ.nil, fields[i][0], { get: go$throwNilPointerError, set: go$throwNilPointerError });
-		}
-		typ.reflectType = go$cache(function() {
-			return new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Struct, typ, undefined, go$newStringPointer("*" + name), undefined, undefined);
-		});
-		typ.NonPointer.reflectType = go$cache(function() {
-			var reflectFields = new Array(fields.length), i;
-			for (i = 0; i < fields.length; i++) {
-				var field = fields[i];
-				var fieldName = Go$StringPointer.nil;
-				if (field[0].length !== 0) {
-					fieldName = go$newStringPointer(field[0]);
-				}
-				var fieldPath = Go$StringPointer.nil; // TODO
-				var fieldTag = Go$StringPointer.nil; // TODO
-				reflectFields[i] = new go$reflect.structField(fieldName, fieldPath, field[1].reflectType(), fieldTag, 0);
-			}
-			var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Struct, typ, undefined, go$newStringPointer(name), undefined, undefined)
-			rt.structType = new go$reflect.structType(rt, new (go$sliceType(go$reflect.structField))(reflectFields));
-			return rt;
-		});
-	};
-	return typ;
-};
 var go$structTypes = {};
 var go$structType = function(fields) {
 	var name = "struct { " + go$mapArray(fields, function(f) { return f[0] + " " + f[1].string }).join("; ") + " }";
 	var typ = go$structTypes[name];
 	if (typ === undefined) {
-		typ = go$newStructType(name, function() {
+		typ = go$newType(name, "Struct", function() {
 			this.go$id = go$idCounter;
 			go$idCounter += 1;
 			this.go$val = this;

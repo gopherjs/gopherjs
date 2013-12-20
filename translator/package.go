@@ -367,7 +367,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 			}
 			params[i] = name + "_"
 		}
-		c.Printf(`%s = go$newStructType("%s.%s", function(%s) {`, typeName, obj.Pkg().Name(), obj.Name(), strings.Join(params, ", "))
+		c.Printf(`%s = go$newType("%s.%s", "Struct", function(%s) {`, typeName, obj.Pkg().Name(), obj.Name(), strings.Join(params, ", "))
 		c.Indent(func() {
 			c.Printf("this.go$id = go$idCounter;")
 			c.Printf("go$idCounter += 1;")

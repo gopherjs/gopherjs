@@ -56,6 +56,7 @@ Packages with passing test suites:
 - crypto/sha1
 - crypto/sha256
 - crypto/sha512
+- crypto/subtle
 - encoding/ascii85
 - encoding/base32
 - encoding/base64
@@ -84,6 +85,7 @@ Packages with passing test suites:
 - sort
 - strconv
 - strings
+- testing/quick
 - text/scanner
 - text/tabwriter
 - unicode

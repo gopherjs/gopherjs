@@ -4,7 +4,6 @@ import (
 	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
-	"go/ast"
 	"io"
 	"strconv"
 	"strings"
@@ -156,14 +155,15 @@ func (e *exporter) makeType(ty types.Type) string {
 	case *types.Signature:
 		return "func " + e.makeSignature(t)
 	case *types.Chan:
-		dir := ""
 		switch t.Dir() {
-		case ast.SEND:
-			return dir + "chan<- " + e.makeType(t.Elem())
-		case ast.RECV:
-			return dir + "<-chan " + e.makeType(t.Elem())
+		case types.SendRecv:
+			return "chan " + e.makeType(t.Elem())
+		case types.SendOnly:
+			return "chan<- " + e.makeType(t.Elem())
+		case types.RecvOnly:
+			return "<-chan " + e.makeType(t.Elem())
 		default:
-			return dir + "chan " + e.makeType(t.Elem())
+			panic("invalid channel direction")
 		}
 	case *types.Named:
 		if t.Obj().Pkg() == nil {

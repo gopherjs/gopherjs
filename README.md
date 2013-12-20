@@ -53,6 +53,7 @@ Packages with passing test suites:
 - crypto/md5
 - crypto/rand
 - crypto/rc4
+- crypto/rsa
 - crypto/sha1
 - crypto/sha256
 - crypto/sha512

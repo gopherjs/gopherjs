@@ -268,7 +268,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				fields := make([]string, t.NumFields())
 				for i := range fields {
 					field := t.Field(i)
-					fields[i] = fmt.Sprintf(`["%s", %s]`, field.Name(), c.typeName(field.Type()))
+					fields[i] = fmt.Sprintf(`["%s", %s, %t]`, field.Name(), c.typeName(field.Type()), field.IsExported())
 				}
 				c.Printf("%s.init([%s]);", typeName, strings.Join(fields, ", "))
 			}
@@ -763,7 +763,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		fields := make([]string, t.NumFields())
 		for i := range fields {
 			field := t.Field(i)
-			fields[i] = fmt.Sprintf(`["%s", %s, function() { return %s; }]`, field.Name(), c.typeName(field.Type()), c.zeroValue(field.Type()))
+			fields[i] = fmt.Sprintf(`["%s", %s, %t]`, field.Name(), c.typeName(field.Type()), field.Anonymous())
 		}
 		return fmt.Sprintf("(go$structType([%s]))", strings.Join(fields, ", "))
 	default:

@@ -190,7 +190,8 @@ var go$newType = function(name, kind, constructor) {
 			typ.nil = new constructor();
 			var i;
 			for (i = 0; i < fields.length; i++) {
-				Object.defineProperty(typ.nil, fields[i][0], { get: go$throwNilPointerError, set: go$throwNilPointerError });
+				var field = fields[i];
+				Object.defineProperty(typ.nil, field[0], { get: go$throwNilPointerError, set: go$throwNilPointerError });
 			}
 			typ.reflectType = go$cache(function() {
 				var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Ptr, typ, undefined, go$newStringPointer("*" + name), undefined, undefined);
@@ -375,6 +376,23 @@ var go$structType = function(fields) {
 			}
 		});
 		typ.init(fields);
+		var i, j;
+		for (i = 0; i < fields.length; i++) {
+			var field = fields[i];
+			if (field[2] && field[1].prototype !== undefined) {
+				var methods = Object.keys(field[1].prototype);
+				for (j = 0; j < methods.length; j += 1) {
+					(function(fieldName, methodName, method) {
+						typ.prototype[methodName] = function() {
+							return method.apply(this[fieldName], arguments);
+						};
+						typ.NonPointer.prototype[methodName] = function() {
+							return method.apply(this.go$val[fieldName], arguments);
+						};
+					})(field[0], methods[j], field[1].prototype[methods[j]]);
+				}
+			}
+		}
 		go$structTypes[name] = typ;
 	}
 	return typ.NonPointer;

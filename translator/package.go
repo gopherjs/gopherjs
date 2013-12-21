@@ -241,37 +241,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			c.Printf("go$pkg.%s = %s;", typeName, typeName)
 		}
 		for _, spec := range typeSpecs {
-			obj := c.info.Objects[spec.Name]
-			typeName := c.objectName(obj)
-			switch t := obj.Type().Underlying().(type) {
-			case *types.Array:
-				c.Printf("%s.init(%s, %d);", typeName, c.typeName(t.Elem()), t.Len())
-			case *types.Chan:
-				c.Printf("%s.init(%s, %t, %t))", typeName, c.typeName(t.Elem()), t.Dir()&types.SendOnly != 0, t.Dir()&types.RecvOnly != 0)
-			case *types.Map:
-				c.Printf("%s.init(%s, %s);", typeName, c.typeName(t.Key()), c.typeName(t.Elem()))
-			case *types.Pointer:
-				c.Printf("%s.init(%s);", typeName, c.typeName(t.Elem()))
-			case *types.Slice:
-				c.Printf("%s.init(%s);", typeName, c.typeName(t.Elem()))
-			case *types.Signature:
-				paramTypes := make([]string, t.Params().Len())
-				for i := range paramTypes {
-					paramTypes[i] = c.typeName(t.Params().At(i).Type())
-				}
-				resultTypes := make([]string, t.Results().Len())
-				for i := range resultTypes {
-					resultTypes[i] = c.typeName(t.Results().At(i).Type())
-				}
-				c.Printf(`%s.init([%s], [%s], %t);`, typeName, strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
-			case *types.Struct:
-				fields := make([]string, t.NumFields())
-				for i := range fields {
-					field := t.Field(i)
-					fields[i] = fmt.Sprintf(`["%s", %s, %t]`, field.Name(), c.typeName(field.Type()), field.IsExported())
-				}
-				c.Printf("%s.init([%s]);", typeName, strings.Join(fields, ", "))
-			}
+			c.initType(spec)
 		}
 
 		// package functions
@@ -413,6 +383,40 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 		}
 	default:
 		c.Printf(`%s = go$newType("%s.%s", "%s");`, typeName, obj.Pkg().Name(), obj.Name(), typeKind(t))
+	}
+}
+
+func (c *PkgContext) initType(spec *ast.TypeSpec) {
+	obj := c.info.Objects[spec.Name]
+	typeName := c.objectName(obj)
+	switch t := obj.Type().Underlying().(type) {
+	case *types.Array:
+		c.Printf("%s.init(%s, %d);", typeName, c.typeName(t.Elem()), t.Len())
+	case *types.Chan:
+		c.Printf("%s.init(%s, %t, %t))", typeName, c.typeName(t.Elem()), t.Dir()&types.SendOnly != 0, t.Dir()&types.RecvOnly != 0)
+	case *types.Map:
+		c.Printf("%s.init(%s, %s);", typeName, c.typeName(t.Key()), c.typeName(t.Elem()))
+	case *types.Pointer:
+		c.Printf("%s.init(%s);", typeName, c.typeName(t.Elem()))
+	case *types.Slice:
+		c.Printf("%s.init(%s);", typeName, c.typeName(t.Elem()))
+	case *types.Signature:
+		paramTypes := make([]string, t.Params().Len())
+		for i := range paramTypes {
+			paramTypes[i] = c.typeName(t.Params().At(i).Type())
+		}
+		resultTypes := make([]string, t.Results().Len())
+		for i := range resultTypes {
+			resultTypes[i] = c.typeName(t.Results().At(i).Type())
+		}
+		c.Printf(`%s.init([%s], [%s], %t);`, typeName, strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
+	case *types.Struct:
+		fields := make([]string, t.NumFields())
+		for i := range fields {
+			field := t.Field(i)
+			fields[i] = fmt.Sprintf(`["%s", %s, %t]`, field.Name(), c.typeName(field.Type()), field.IsExported())
+		}
+		c.Printf("%s.init([%s]);", typeName, strings.Join(fields, ", "))
 	}
 }
 

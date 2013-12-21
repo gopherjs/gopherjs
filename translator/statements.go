@@ -304,7 +304,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			c.Printf("%s%s;", label, c.translateSimpleStmt(stmt))
 		case token.TYPE:
 			for _, spec := range decl.Specs {
-				c.translateTypeSpec(spec.(*ast.TypeSpec))
+				ts := spec.(*ast.TypeSpec)
+				c.translateTypeSpec(ts)
+				c.initType(ts)
 			}
 		case token.CONST:
 			// skip, constants are inlined

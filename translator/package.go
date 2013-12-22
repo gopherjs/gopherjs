@@ -388,25 +388,31 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 
 func (c *PkgContext) initType(spec *ast.TypeSpec) {
 	obj := c.info.Objects[spec.Name]
-	typeName := c.objectName(obj)
 	switch t := obj.Type().Underlying().(type) {
+	case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
+		c.Printf("%s.init(%s);", c.objectName(obj), c.initArgs(t))
+	}
+}
+
+func (c *PkgContext) initArgs(ty types.Type) string {
+	switch t := ty.(type) {
 	case *types.Array:
-		c.Printf("%s.init(%s, %d);", typeName, c.typeName(t.Elem()), t.Len())
+		return fmt.Sprintf("%s, %d", c.typeName(t.Elem()), t.Len())
 	case *types.Chan:
-		c.Printf("%s.init(%s, %t, %t))", typeName, c.typeName(t.Elem()), t.Dir()&types.SendOnly != 0, t.Dir()&types.RecvOnly != 0)
+		return fmt.Sprintf("%s, %t, %t", c.typeName(t.Elem()), t.Dir()&types.SendOnly != 0, t.Dir()&types.RecvOnly != 0)
 	case *types.Interface:
 		methods := make([]string, t.NumMethods())
 		for i := range methods {
 			method := t.Method(i)
 			methods[i] = fmt.Sprintf(`["%s", %s]`, method.Name(), c.typeName(method.Type()))
 		}
-		c.Printf("%s.init([%s])", typeName, strings.Join(methods, ", "))
+		return fmt.Sprintf("[%s]", strings.Join(methods, ", "))
 	case *types.Map:
-		c.Printf("%s.init(%s, %s);", typeName, c.typeName(t.Key()), c.typeName(t.Elem()))
+		return fmt.Sprintf("%s, %s", c.typeName(t.Key()), c.typeName(t.Elem()))
 	case *types.Pointer:
-		c.Printf("%s.init(%s);", typeName, c.typeName(t.Elem()))
+		return fmt.Sprintf("%s", c.typeName(t.Elem()))
 	case *types.Slice:
-		c.Printf("%s.init(%s);", typeName, c.typeName(t.Elem()))
+		return fmt.Sprintf("%s", c.typeName(t.Elem()))
 	case *types.Signature:
 		paramTypes := make([]string, t.Params().Len())
 		for i := range paramTypes {
@@ -416,14 +422,16 @@ func (c *PkgContext) initType(spec *ast.TypeSpec) {
 		for i := range resultTypes {
 			resultTypes[i] = c.typeName(t.Results().At(i).Type())
 		}
-		c.Printf(`%s.init([%s], [%s], %t);`, typeName, strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
+		return fmt.Sprintf("[%s], [%s], %t", strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
 	case *types.Struct:
 		fields := make([]string, t.NumFields())
 		for i := range fields {
 			field := t.Field(i)
 			fields[i] = fmt.Sprintf(`["%s", %s, %t]`, field.Name(), c.typeName(field.Type()), field.IsExported())
 		}
-		c.Printf("%s.init([%s]);", typeName, strings.Join(fields, ", "))
+		return fmt.Sprintf("[%s]", strings.Join(fields, ", "))
+	default:
+		panic("invalid type")
 	}
 }
 
@@ -749,39 +757,9 @@ func (c *PkgContext) typeName(ty types.Type) string {
 				return c.objectName(named.Obj())
 			}
 		}
-		return fmt.Sprintf("(go$ptrType(%s))", c.typeName(t.Elem()))
-	case *types.Array:
-		return fmt.Sprintf("(go$arrayType(%s, %d))", c.typeName(t.Elem()), t.Len())
-	case *types.Chan:
-		return fmt.Sprintf("(go$chanType(%s, %t, %t))", c.typeName(t.Elem()), t.Dir()&types.SendOnly != 0, t.Dir()&types.RecvOnly != 0)
-	case *types.Slice:
-		return fmt.Sprintf("(go$sliceType(%s))", c.typeName(t.Elem()))
-	case *types.Map:
-		return fmt.Sprintf("(go$mapType(%s, %s))", c.typeName(t.Key()), c.typeName(t.Elem()))
-	case *types.Signature:
-		paramTypes := make([]string, t.Params().Len())
-		for i := range paramTypes {
-			paramTypes[i] = c.typeName(t.Params().At(i).Type())
-		}
-		resultTypes := make([]string, t.Results().Len())
-		for i := range resultTypes {
-			resultTypes[i] = c.typeName(t.Results().At(i).Type())
-		}
-		return fmt.Sprintf("(go$funcType([%s], [%s], %t))", strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
-	case *types.Interface:
-		methods := make([]string, t.NumMethods())
-		for i := range methods {
-			method := t.Method(i)
-			methods[i] = fmt.Sprintf(`["%s", %s]`, method.Name(), c.typeName(method.Type()))
-		}
-		return fmt.Sprintf("(go$interfaceType([%s]))", strings.Join(methods, ", "))
-	case *types.Struct:
-		fields := make([]string, t.NumFields())
-		for i := range fields {
-			field := t.Field(i)
-			fields[i] = fmt.Sprintf(`["%s", %s, %t]`, field.Name(), c.typeName(field.Type()), field.Anonymous())
-		}
-		return fmt.Sprintf("(go$structType([%s]))", strings.Join(fields, ", "))
+		return fmt.Sprintf("(go$ptrType(%s))", c.initArgs(t))
+	case *types.Array, *types.Chan, *types.Slice, *types.Map, *types.Signature, *types.Interface, *types.Struct:
+		return fmt.Sprintf("(go$%sType(%s))", strings.ToLower(typeKind(t)), c.initArgs(t))
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
@@ -817,18 +795,20 @@ func typeKind(ty types.Type) string {
 		return toJavaScriptType(t)
 	case *types.Array:
 		return "Array"
-	case *types.Slice:
-		return "Slice"
-	case *types.Struct:
-		return "Struct"
+	case *types.Chan:
+		return "Chan"
+	case *types.Interface:
+		return "Interface"
 	case *types.Map:
 		return "Map"
 	case *types.Signature:
 		return "Func"
+	case *types.Slice:
+		return "Slice"
+	case *types.Struct:
+		return "Struct"
 	case *types.Pointer:
 		return "Ptr"
-	case *types.Interface:
-		return "Interface"
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}

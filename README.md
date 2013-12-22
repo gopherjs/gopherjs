@@ -30,70 +30,8 @@ cd ../../../../../
 ```
 
 ### What is supported?
-The transpiler is able to turn itself (and all packages it uses) into pure JavaScript code that runs in all major browsers. It also passes a lot of the tests that are shipped with the Go source. This suggests a quite good coverage of Go's specification. However, there are some known exceptions listed below and some unknown exceptions that I would love to hear about when you find them.
-
-Packages with passing test suites:
-
-- archive/tar
-- archive/zip
-- bufio
-- bytes
-- compress/bzip2
-- compress/gzip
-- container/heap
-- container/list
-- container/ring
-- crypto/aes
-- crypto/cipher
-- crypto/des
-- crypto/dsa
-- crypto/ecdsa
-- crypto/elliptic
-- crypto/hmac
-- crypto/md5
-- crypto/rand
-- crypto/rc4
-- crypto/rsa
-- crypto/sha1
-- crypto/sha256
-- crypto/sha512
-- crypto/subtle
-- debug/gosym
-- encoding/ascii85
-- encoding/base32
-- encoding/base64
-- encoding/csv
-- encoding/hex
-- encoding/pem
-- errors
-- hash/adler32
-- hash/crc32
-- hash/crc64
-- hash/fnv
-- html
-- image
-- image/color
-- image/draw
-- image/gif
-- image/jpeg
-- io
-- io/ioutil
-- math
-- math/cmplx
-- math/big
-- math/rand
-- mime
-- path
-- regexp
-- sort
-- strconv
-- strings
-- testing/quick
-- text/scanner
-- text/tabwriter
-- unicode
-- unicode/utf8
-- unicode/utf16
+- many package tests, see [compatibility table](doc/packages.md)
+- the transpiler can turn itself into pure JavaScript that runs in all major browsers
 
 ### Roadmap
 These features are not implemented yet, but on the roadmap:

@@ -394,6 +394,13 @@ func (c *PkgContext) initType(spec *ast.TypeSpec) {
 		c.Printf("%s.init(%s, %d);", typeName, c.typeName(t.Elem()), t.Len())
 	case *types.Chan:
 		c.Printf("%s.init(%s, %t, %t))", typeName, c.typeName(t.Elem()), t.Dir()&types.SendOnly != 0, t.Dir()&types.RecvOnly != 0)
+	case *types.Interface:
+		methods := make([]string, t.NumMethods())
+		for i := range methods {
+			method := t.Method(i)
+			methods[i] = fmt.Sprintf(`["%s", %s]`, method.Name(), c.typeName(method.Type()))
+		}
+		c.Printf("%s.init([%s])", typeName, strings.Join(methods, ", "))
 	case *types.Map:
 		c.Printf("%s.init(%s, %s);", typeName, c.typeName(t.Key()), c.typeName(t.Elem()))
 	case *types.Pointer:
@@ -762,7 +769,12 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		}
 		return fmt.Sprintf("(go$funcType([%s], [%s], %t))", strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
 	case *types.Interface:
-		return "Go$Interface"
+		methods := make([]string, t.NumMethods())
+		for i := range methods {
+			method := t.Method(i)
+			methods[i] = fmt.Sprintf(`["%s", %s]`, method.Name(), c.typeName(method.Type()))
+		}
+		return fmt.Sprintf("(go$interfaceType([%s]))", strings.Join(methods, ", "))
 	case *types.Struct:
 		fields := make([]string, t.NumFields())
 		for i := range fields {
@@ -793,7 +805,7 @@ func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	case *types.Pointer:
 		return fmt.Sprintf("%s.go$key()", c.translateExprToType(expr, keyType))
 	case *types.Interface:
-		return fmt.Sprintf("(%s || Go$Interface.nil).go$key()", c.translateExprToType(expr, keyType))
+		return fmt.Sprintf("(%s || go$interfaceNil).go$key()", c.translateExprToType(expr, keyType))
 	default:
 		return c.translateExprToType(expr, keyType)
 	}

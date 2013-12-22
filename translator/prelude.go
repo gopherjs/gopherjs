@@ -114,6 +114,14 @@ var go$newType = function(name, kind, constructor) {
 
 	case "Interface":
 		typ = { go$implementedBy: [] };
+		typ.init = function(methods) {
+			typ.reflectType = go$cache(function() {
+				var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Interface, typ, undefined, go$newStringPointer(name), undefined, undefined);
+				var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod)));
+				rt.interfaceType = new go$reflect.interfaceType(rt, new methodSlice(go$mapArray(methods, function(m) { return new go$reflect.imethod(go$newStringPointer(m[0]), undefined, m[1].reflectType()); })));
+				return rt;
+			});
+		};
 		break;
 
 	case "Map":
@@ -314,12 +322,21 @@ var go$funcType = function(params, results, isVariadic) {
 	return typ;
 };
 
-var Go$Interface = function() {};
-Go$Interface.string = "interface{}";
-Go$Interface.nil = { go$key: function() { return "nil"; } };
-Go$Interface.reflectType = go$cache(function() {
-	return new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Interface, Go$Interface, undefined, go$newStringPointer("interface{}"), undefined, undefined);
-});
+var go$interfaceTypes = {};
+var go$interfaceType = function(methods) {
+	var name = "interface {}";
+	if (methods.length !== 0) {
+		name = "interface { " + go$mapArray(methods, function(m) { return m[0] + m[1].string.substr(4); }).join("; ") + " }";
+	}
+	var typ = go$interfaceTypes[name];
+	if (typ === undefined) {
+		typ = go$newType(name, "Interface");
+		typ.init(methods);
+		go$interfaceTypes[name] = typ;
+	}
+	return typ;
+};
+var go$interfaceNil = { go$key: function() { return "nil"; } };
 
 var Go$Map = function() {};
 (function() {

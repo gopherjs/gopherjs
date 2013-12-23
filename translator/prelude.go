@@ -26,6 +26,21 @@ var go$cache = function(v) {
 	};
 };
 
+var go$makeRType = function(typ) {
+	var methodNames = Object.keys(typ.prototype).sort(), methods = [], i;
+	for (i = 0; i < methodNames.length; i++) {
+		var name = methodNames[i];
+		if (name.substr(0, 3) === "go$") {
+			continue;
+		}
+		methods.push(new go$reflect.imethod(go$newStringPointer(name), undefined, undefined, undefined, undefined, undefined));
+	}
+	var size = ({ Int: 4, Int8: 1, Int16: 2, Int32: 4, Int64: 8, Uint: 4, Uint8: 1, Uint16: 2, Uint32: 4, Uint64: 8, Uintptr: 4, Float32: 4, Float64: 8, UnsafePointer: 4 })[typ.kind] || 0;
+	var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod)));
+	var ut = new go$reflect.uncommonType(go$newStringPointer(typ.string), undefined, new methodSlice(methods));
+	return new go$reflect.rtype(size, 0, 0, 0, 0, go$reflect.kinds[typ.kind], typ, undefined, go$newStringPointer(typ.string), ut, undefined);
+}
+
 var go$newType = function(name, kind, constructor) {
 	var typ;
 	switch(kind) {
@@ -44,7 +59,6 @@ var go$newType = function(name, kind, constructor) {
 	case "String":
 	case "UnsafePointer":
 		typ = function(v) { this.go$val = v; };
-		typ.kind = kind;
 		typ.prototype.go$key = function() { return name + "$" + this.go$val; };
 		break;
 
@@ -80,7 +94,7 @@ var go$newType = function(name, kind, constructor) {
 		typ = function(v) { this.go$val = v; };
 		typ.init = function(elem, len) {
 			typ.reflectType = go$cache(function() {
-				var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Array, typ, undefined, go$newStringPointer(name), undefined, undefined);
+				var rt = go$makeRType(typ);
 				rt.arrayType = new go$reflect.arrayType(rt, elem.reflectType(), undefined, len);
 				return rt;
 			});
@@ -92,7 +106,7 @@ var go$newType = function(name, kind, constructor) {
 		typ.init = function(elem, sendOnly, recvOnly) {
 			typ.nil = new typ();
 			typ.reflectType = go$cache(function() {
-				var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Chan, typ, undefined, go$newStringPointer(name), undefined, undefined);
+				var rt = go$makeRType(typ);
 				rt.chanType = new go$reflect.chanType(rt, elem.reflectType(), sendOnly ? go$reflect.SendDir : (recvOnly ? go$reflect.RecvDir : go$reflect.BothDir));
 				return rt;
 			});
@@ -103,7 +117,7 @@ var go$newType = function(name, kind, constructor) {
 		typ = function(v) { this.go$val = v; };
 		typ.init = function(params, results, isVariadic) {
 			typ.reflectType = go$cache(function() {
-				var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Func, typ, undefined, go$newStringPointer(name), undefined, undefined);
+				var rt = go$makeRType(typ);
 				var typeSlice = (go$sliceType(go$ptrType(go$reflect.rtype)));
 				rt.funcType = new go$reflect.funcType(rt, isVariadic, new typeSlice(go$mapArray(params, function(p) { return p.reflectType(); })), new typeSlice(go$mapArray(results, function(p) { return p.reflectType(); })));
 				return rt;
@@ -116,7 +130,7 @@ var go$newType = function(name, kind, constructor) {
 		typ = { go$implementedBy: [] };
 		typ.init = function(methods) {
 			typ.reflectType = go$cache(function() {
-				var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Interface, typ, undefined, go$newStringPointer(name), undefined, undefined);
+				var rt = go$makeRType(typ);
 				var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod)));
 				rt.interfaceType = new go$reflect.interfaceType(rt, new methodSlice(go$mapArray(methods, function(m) { return new go$reflect.imethod(go$newStringPointer(m[0]), undefined, m[1].reflectType()); })));
 				return rt;
@@ -128,7 +142,7 @@ var go$newType = function(name, kind, constructor) {
 		typ = function(v) { this.go$val = v; };
 		typ.init = function(key, elem) {
 			typ.reflectType = go$cache(function() {
-				var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Map, typ, undefined, go$newStringPointer(name), undefined, undefined);
+				var rt = go$makeRType(typ);
 				rt.mapType = new go$reflect.mapType(rt, key.reflectType(), elem.reflectType(), undefined, undefined);
 				return rt;
 			});
@@ -145,7 +159,7 @@ var go$newType = function(name, kind, constructor) {
 		typ.init = function(elem) {
 			typ.nil = new typ(go$throwNilPointerError, go$throwNilPointerError);
 			typ.reflectType = go$cache(function() {
-				var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Ptr, typ, undefined, go$newStringPointer(name), undefined, undefined);
+				var rt = go$makeRType(typ);
 				rt.ptrType = new go$reflect.ptrType(rt, elem.reflectType());
 				return rt;
 			});
@@ -178,7 +192,7 @@ var go$newType = function(name, kind, constructor) {
 			nativeArray = go$nativeArray(elem.kind);
 			typ.nil = new typ([]);
 			typ.reflectType = go$cache(function() {
-				var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Slice, typ, undefined, go$newStringPointer(name), undefined, undefined);
+				var rt = go$makeRType(typ);
 				rt.sliceType = new go$reflect.sliceType(rt, elem.reflectType());
 				return rt;
 			});
@@ -188,9 +202,11 @@ var go$newType = function(name, kind, constructor) {
 
 	case "Struct":
 		typ = constructor;
+		typ.kind = "Ptr";
 		typ.string = "*" + name;
 		typ.prototype.go$key = function() { return this.go$id; };
 		typ.NonPointer = function(v) { this.go$val = v; };
+		typ.NonPointer.kind = "Struct";
 		typ.NonPointer.string = name;
 		typ.NonPointer.Pointer = typ;
 		typ.NonPointer.prototype.go$uncomparable = true;
@@ -202,7 +218,7 @@ var go$newType = function(name, kind, constructor) {
 				Object.defineProperty(typ.nil, field[0], { get: go$throwNilPointerError, set: go$throwNilPointerError });
 			}
 			typ.reflectType = go$cache(function() {
-				var rt = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Ptr, typ, undefined, go$newStringPointer("*" + name), undefined, undefined);
+				var rt = go$makeRType(typ);
 				rt.ptrType = new go$reflect.ptrType(rt, typ.NonPointer.reflectType());
 				return rt;
 			});
@@ -211,7 +227,7 @@ var go$newType = function(name, kind, constructor) {
 				if (structRType !== undefined) {
 					return structRType;
 				}
-				structRType = new go$reflect.rtype(0, 0, 0, 0, 0, go$reflect.kinds.Struct, typ.NonPointer, undefined, go$newStringPointer(name), undefined, undefined)
+				structRType = go$makeRType(typ.NonPointer);
 				var reflectFields = new Array(fields.length), i;
 				for (i = 0; i < fields.length; i++) {
 					var field = fields[i];
@@ -233,10 +249,10 @@ var go$newType = function(name, kind, constructor) {
 		throw new Go$Panic("invalid kind: " + kind);
 	}
 
+	typ.kind = kind;
 	typ.string = name;
 	typ.reflectType = go$cache(function() {
-		var size = ({ Int: 4, Int8: 1, Int16: 2, Int32: 4, Int64: 8, Uint: 4, Uint8: 1, Uint16: 2, Uint32: 4, Uint64: 8, Uintptr: 4, Float32: 4, Float64: 8, UnsafePointer: 4 })[kind] || 0;
-		return new go$reflect.rtype(size, 0, 0, 0, 0, go$reflect.kinds[kind], typ, undefined, go$newStringPointer(name), undefined, undefined);
+		return go$makeRType(typ);
 	});
 	return typ;
 };

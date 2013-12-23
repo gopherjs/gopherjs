@@ -296,12 +296,7 @@ var natives = map[string]string{
 		};
 		New = function(typ) {
 			var ptrType = typ.common().ptrTo();
-			// switch (typ.Kind()) {
-			// case go$pkg.Struct:
-			// 	return new Value.Ptr(ptrType, new typ.alg(), go$pkg.Ptr << flagKindShift);
-			// default:
 			return new Value.Ptr(ptrType, go$newDataPointer(Zero(typ).val, ptrType.alg), go$pkg.Ptr << flagKindShift);
-			// }
 		};
 		MakeSlice = function(typ, len, cap) {
 			if (typ.Kind() !== go$pkg.Slice) {

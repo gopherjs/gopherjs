@@ -226,12 +226,15 @@ var go$newType = function(name, kind, constructor) {
 				for (i = 0; i < fields.length; i++) {
 					var field = fields[i];
 					var fieldName = Go$StringPointer.nil;
-					if (field[0].length !== 0) {
+					if (field[0] !== "") {
 						fieldName = go$newStringPointer(field[0]);
 					}
 					var fieldPath = Go$StringPointer.nil; // TODO
-					var fieldTag = Go$StringPointer.nil; // TODO
-					reflectFields[i] = new go$reflect.structField(fieldName, fieldPath, field[1].reflectType(), fieldTag, 0);
+					var fieldTag = Go$StringPointer.nil;
+					if (field[2] !== "") {
+						fieldTag = go$newStringPointer(field[2]);
+					}
+					reflectFields[i] = new go$reflect.structField(fieldName, fieldPath, field[1].reflectType(), fieldTag, i);
 				}
 				structRType.structType = new go$reflect.structType(structRType, new (go$sliceType(go$reflect.structField))(reflectFields));
 				return structRType;
@@ -397,7 +400,9 @@ var go$sliceType = function(elem) {
 
 var go$structTypes = {};
 var go$structType = function(fields) {
-	var name = "struct { " + go$mapArray(fields, function(f) { return f[0] + " " + f[1].string }).join("; ") + " }";
+	var name = "struct { " + go$mapArray(fields, function(f) {
+		return f[0] + " " + f[1].string + (f[2] !== "" ? (' "' + f[2].replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"') : "");
+	}).join("; ") + " }";
 	var typ = go$structTypes[name];
 	if (typ === undefined) {
 		typ = go$newType(name, "Struct", function() {
@@ -413,7 +418,7 @@ var go$structType = function(fields) {
 		var i, j;
 		for (i = 0; i < fields.length; i++) {
 			var field = fields[i];
-			if (field[2] && field[1].prototype !== undefined) {
+			if (field[3] && field[1].prototype !== undefined) {
 				var methods = Object.keys(field[1].prototype);
 				for (j = 0; j < methods.length; j += 1) {
 					(function(fieldName, methodName, method) {

@@ -428,7 +428,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 
 	case *ast.SliceExpr:
-		b, isBasic := c.info.Types[e.X].(*types.Basic)
+		b, isBasic := c.info.Types[e.X].Underlying().(*types.Basic)
 		isString := isBasic && b.Info()&types.IsString != 0
 		slice := c.translateExprToType(e.X, exprType)
 		if e.High == nil {

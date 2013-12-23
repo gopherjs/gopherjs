@@ -427,7 +427,7 @@ func (c *PkgContext) initArgs(ty types.Type) string {
 		fields := make([]string, t.NumFields())
 		for i := range fields {
 			field := t.Field(i)
-			fields[i] = fmt.Sprintf(`["%s", %s, %t]`, field.Name(), c.typeName(field.Type()), field.IsExported())
+			fields[i] = fmt.Sprintf(`["%s", %s, %q, %t]`, field.Name(), c.typeName(field.Type()), t.Tag(i), field.Anonymous())
 		}
 		return fmt.Sprintf("[%s]", strings.Join(fields, ", "))
 	default:

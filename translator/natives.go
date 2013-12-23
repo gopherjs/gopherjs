@@ -45,6 +45,16 @@ var natives = map[string]string{
 		};
 	`,
 
+	"encoding/json": `
+		var encodeStates = [];
+		newEncodeState = function() {
+			return encodeStates.pop() || new encodeState.Ptr();
+		};
+		putEncodeState = function(e) {
+			encodeStates.push(e);
+		};
+	`,
+
 	"io/ioutil": `
 		var blackHoles = [];
 		blackHole = function() {
@@ -276,8 +286,12 @@ var natives = map[string]string{
 			case go$pkg.Complex128:
 				val = new typ.alg(0, 0);
 				break;
-			case go$pkg.String:
-				val = "";
+			case go$pkg.Array:
+				var elemType = typ.Elem();
+				val = go$makeNativeArray(elemType.alg.kind, typ.Len(), function() { return Zero(elemType).val; });
+				break;
+			case go$pkg.Interface:
+				val = null;
 				break;
 			case go$pkg.Map:
 				val = false;
@@ -285,6 +299,9 @@ var natives = map[string]string{
 			case go$pkg.Ptr:
 			case go$pkg.Slice:
 				val = typ.alg.nil;
+				break;
+			case go$pkg.String:
+				val = "";
 				break;
 			case go$pkg.Struct:
 				val = new typ.alg.Ptr();
@@ -296,6 +313,9 @@ var natives = map[string]string{
 		};
 		New = function(typ) {
 			var ptrType = typ.common().ptrTo();
+			if (typ.Kind() === go$pkg.Struct) {
+				return new Value.Ptr(ptrType, new typ.alg.Ptr(), go$pkg.Ptr << flagKindShift);
+			}
 			return new Value.Ptr(ptrType, go$newDataPointer(Zero(typ).val, ptrType.alg), go$pkg.Ptr << flagKindShift);
 		};
 		MakeSlice = function(typ, len, cap) {
@@ -340,6 +360,12 @@ var natives = map[string]string{
 			it[2] += 1;
 		};
 		valueInterface = function(v, safe) {
+			if (v.flag === 0) {
+				throw new Go$Panic(new ValueError.Ptr("reflect.Value.Interface", 0));
+			}
+			if (safe && (v.flag & flagRO) !== 0) {
+			  throw new Go$Panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")
+			}
 			var val = v.iword();
 			if (v.typ.Kind() === go$pkg.Interface || val.constructor === v.typ.alg) {
 				return val;
@@ -355,10 +381,7 @@ var natives = map[string]string{
 		};
 
 		Value.Ptr.prototype.iword = function() {
-			if ((this.flag & flagIndir) !== 0) {
-				if (this.typ.Kind() === go$pkg.Struct) {
-					return this.val;
-				}
+			if ((this.flag & flagIndir) !== 0 && this.typ.Kind() !== go$pkg.Struct) {
 				return this.val.go$get();
 			}
 			return this.val;
@@ -429,10 +452,21 @@ var natives = map[string]string{
 			}
 			return new (go$sliceType(Value))(results);
 		};
+		Value.Ptr.prototype.Cap = function() {
+			var k = this.kind();
+			switch (k) {
+			case go$pkg.Slice:
+				return this.val.capacity;
+			}
+			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Cap", k));
+		};
 		Value.Ptr.prototype.Elem = function() {
 			switch (this.kind()) {
 			case go$pkg.Interface:
 				var val = this.iword();
+				if (val === null) {
+					return new Value.Ptr();
+				}
 				var typ = val.constructor.reflectType();
 				var fl = this.flag & flagRO;
 				fl |= typ.Kind() << flagKindShift;
@@ -440,7 +474,7 @@ var natives = map[string]string{
 
 			case go$pkg.Ptr:
 				var val = this.iword();
-				if (val === null) {
+				if (this.IsNil()) {
 					return new Value.Ptr();
 				}
 				var tt = this.typ.ptrType;
@@ -466,6 +500,9 @@ var natives = map[string]string{
 			fl |= typ.Kind() << flagKindShift;
 			if ((this.flag & flagIndir) !== 0) {
 				var struct = this.val;
+				if (typ.Kind() === go$pkg.Struct) {
+					return new Value.Ptr(typ, struct[name], fl);
+				}
 				return new Value.Ptr(typ, new (go$ptrType(typ))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl);
 			}
 			return new Value.Ptr(typ, this.val[name], fl);
@@ -491,6 +528,9 @@ var natives = map[string]string{
 				fl |= typ.Kind() << flagKindShift;
 				i += this.iword().offset;
 				var array = this.iword().array;
+				if (typ.Kind() === go$pkg.Struct) {
+					return new Value.Ptr(typ, array[i], fl);
+				}
 				return new Value.Ptr(typ, new (go$ptrType(typ))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
 			case go$pkg.String:
 				if (i < 0 || i >= this.val.length) {
@@ -531,12 +571,23 @@ var natives = map[string]string{
 			this.mustBeAssignable()
 			x.mustBeExported()
 			if ((this.flag & flagIndir) !== 0) {
-				if (this.typ.Kind() === go$pkg.Interface) {
+				switch (this.typ.Kind()) {
+				case go$pkg.Interface:
 					this.val.go$set(valueInterface(x));
 					return;
+				case go$pkg.Struct:
+					var fields = Object.keys(this.val), i;
+					for (i = 0; i < fields.length; i += 1) {
+						var field = fields[i];
+						if (field.substr(0, 3) !== "go$") {
+							this.val[field] = x.val[field];
+						}
+					}
+					return;
+				default:
+					this.val.go$set(x.iword());
+					return;
 				}
-				this.val.go$set(x.iword());
-				return;
 			}
 			this.val = x.val;
 		};
@@ -583,7 +634,7 @@ var natives = map[string]string{
 				}
 				return true;
 			}
-			var keys = Object.keys(a), j;
+			var keys = go$keys(a), j;
 			for (j = 0; j < keys.length; j += 1) {
 				var key = keys[j];
 				if (key !== "go$id" && key !== "go$val" && !this.DeepEqual(a[key], b[key])) {

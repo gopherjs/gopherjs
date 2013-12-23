@@ -144,10 +144,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					}
 				}
 			}
-			if named, isNamed := exprType.(*types.Named); isNamed {
-				return fmt.Sprintf("new %s(%s)", c.objectName(named.Obj()), strings.Join(elements, ", "))
-			}
-			return fmt.Sprintf("new %s.Pointer(%s)", c.typeName(exprType), strings.Join(elements, ", "))
+			return fmt.Sprintf("new %s.Ptr(%s)", c.typeName(exprType), strings.Join(elements, ", "))
 		default:
 			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", t))
 		}
@@ -840,7 +837,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			return fmt.Sprintf("new %s(%s)", c.typeName(exprType), c.translateExpr(expr))
 		}
 		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
-			return fmt.Sprintf("(go$obj = %s, new go$obj.constructor.NonPointer(go$obj))", c.translateExpr(expr))
+			return fmt.Sprintf("(go$obj = %s, new go$obj.constructor.Struct(go$obj))", c.translateExpr(expr))
 		}
 
 	case *types.Pointer:
@@ -879,7 +876,6 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 }
 
 func (c *PkgContext) clone(src string, ty types.Type) string {
-	named, isNamed := ty.(*types.Named)
 	switch t := ty.Underlying().(type) {
 	case *types.Struct:
 		structVar := c.newVariable("_struct")
@@ -889,8 +885,8 @@ func (c *PkgContext) clone(src string, ty types.Type) string {
 			fields[i] = c.clone(structVar+"."+field.Name(), field.Type())
 		}
 		constructor := structVar + ".constructor"
-		if isNamed {
-			constructor = c.objectName(named.Obj())
+		if named, isNamed := ty.(*types.Named); isNamed {
+			constructor = c.objectName(named.Obj()) + ".Ptr"
 		}
 		return fmt.Sprintf("(%s = %s, new %s(%s))", structVar, src, constructor, strings.Join(fields, ", "))
 	case *types.Array:

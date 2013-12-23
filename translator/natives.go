@@ -232,8 +232,8 @@ var natives = map[string]string{
 
 	"reflect": `
 		go$reflect = {
-			rtype: rtype, uncommonType: uncommonType, method: method, arrayType: arrayType, chanType: chanType, funcType: funcType, interfaceType: interfaceType, mapType: mapType, ptrType: ptrType, sliceType: sliceType, structType: structType,
-			imethod: imethod, structField: structField,
+			rtype: rtype.Ptr, uncommonType: uncommonType.Ptr, method: method.Ptr, arrayType: arrayType.Ptr, chanType: chanType.Ptr, funcType: funcType.Ptr, interfaceType: interfaceType.Ptr, mapType: mapType.Ptr, ptrType: ptrType.Ptr, sliceType: sliceType.Ptr, structType: structType.Ptr,
+			imethod: imethod.Ptr, structField: structField.Ptr,
 			kinds: { Bool: go$pkg.Bool, Int: go$pkg.Int, Int8: go$pkg.Int8, Int16: go$pkg.Int16, Int32: go$pkg.Int32, Int64: go$pkg.Int64, Uint: go$pkg.Uint, Uint8: go$pkg.Uint8, Uint16: go$pkg.Uint16, Uint32: go$pkg.Uint32, Uint64: go$pkg.Uint64, Uintptr: go$pkg.Uintptr, Float32: go$pkg.Float32, Float64: go$pkg.Float64, Complex64: go$pkg.Complex64, Complex128: go$pkg.Complex128, Array: go$pkg.Array, Chan: go$pkg.Chan, Func: go$pkg.Func, Interface: go$pkg.Interface, Map: go$pkg.Map, Ptr: go$pkg.Ptr, Slice: go$pkg.Slice, String: go$pkg.String, Struct: go$pkg.Struct, UnsafePointer: go$pkg.UnsafePointer },
 			RecvDir: go$pkg.RecvDir, SendDir: go$pkg.SendDir, BothDir: go$pkg.BothDir
 		};
@@ -246,10 +246,10 @@ var natives = map[string]string{
 		};
 		ValueOf = function(i) {
 			if (i === null) {
-				return new Value();
+				return new Value.Ptr();
 			}
 			var typ = i.constructor.reflectType();
-			return new Value(typ, i.go$val, typ.Kind() << flagKindShift);
+			return new Value.Ptr(typ, i.go$val, typ.Kind() << flagKindShift);
 		};
 		Zero = function(typ) {
 			var val;
@@ -287,20 +287,20 @@ var natives = map[string]string{
 				val = typ.alg.nil;
 				break;
 			case go$pkg.Struct:
-				val = new typ.alg.Pointer();
+				val = new typ.alg.Ptr();
 				break;
 			default:
 				throw new Go$Panic("reflect.Zero(" + typ.string.go$get() + "): type not yet supported");
 			}
-			return new Value(typ, val, typ.Kind() << flagKindShift);
+			return new Value.Ptr(typ, val, typ.Kind() << flagKindShift);
 		};
 		New = function(typ) {
 			var ptrType = typ.common().ptrTo();
 			// switch (typ.Kind()) {
 			// case go$pkg.Struct:
-			// 	return new Value(ptrType, new typ.alg(), go$pkg.Ptr << flagKindShift);
+			// 	return new Value.Ptr(ptrType, new typ.alg(), go$pkg.Ptr << flagKindShift);
 			// default:
-			return new Value(ptrType, go$newDataPointer(Zero(typ).val, ptrType.alg), go$pkg.Ptr << flagKindShift);
+			return new Value.Ptr(ptrType, go$newDataPointer(Zero(typ).val, ptrType.alg), go$pkg.Ptr << flagKindShift);
 			// }
 		};
 		MakeSlice = function(typ, len, cap) {
@@ -316,7 +316,7 @@ var natives = map[string]string{
 			if (len > cap) {
 				throw new Go$Panic("reflect.MakeSlice: len > cap");
 			}
-			return new Value(typ.common(), typ.alg.make(len, cap, function() { return 0; }), go$pkg.Slice << flagKindShift); // FIXME zero value
+			return new Value.Ptr(typ.common(), typ.alg.make(len, cap, function() { return 0; }), go$pkg.Slice << flagKindShift); // FIXME zero value
 		};
 		makemap = function(t) {
 			return new Go$Map();
@@ -342,11 +342,11 @@ var natives = map[string]string{
 			return "?FIXME?";
 		};
 
-		rtype.prototype.ptrTo = function() {
+		rtype.Ptr.prototype.ptrTo = function() {
 			return go$ptrType(this.alg).reflectType();
 		};
 
-		Value.prototype.iword = function() {
+		Value.Ptr.prototype.iword = function() {
 			if ((this.flag & flagIndir) !== 0) {
 				if (this.typ.Kind() === go$pkg.Struct) {
 					return this.val;
@@ -355,14 +355,14 @@ var natives = map[string]string{
 			}
 			return this.val;
 		};
-		Value.prototype.Bytes = function() {
+		Value.Ptr.prototype.Bytes = function() {
 			this.mustBe(go$pkg.Slice);
 			if (this.typ.Elem().Kind() !== go$pkg.Uint8) {
 				throw new Go$Panic("reflect.Value.Bytes of non-byte slice");
 			}
 			return this.val;
 		};
-		Value.prototype.call = function(op, args) {
+		Value.Ptr.prototype.call = function(op, args) {
 			if (this.val === null) {
 				throw new Go$Panic("reflect.Value.Call: call of nil function");
 			}
@@ -417,11 +417,11 @@ var natives = map[string]string{
 			for (i = 0; i < t.NumOut(); i += 1) {
 				var typ = t.Out(i);
 				var flag = typ.Kind() << flagKindShift;
-				results[i] = new Value(typ, results[i], flag);
+				results[i] = new Value.Ptr(typ, results[i], flag);
 			}
 			return new (go$sliceType(Value))(results);
 		};
-		Value.prototype.Field = function(i) {
+		Value.Ptr.prototype.Field = function(i) {
 			this.mustBe(go$pkg.Struct);
 			var tt = this.typ.structType;
 			if (i < 0 || i >= tt.fields.length) {
@@ -437,11 +437,11 @@ var natives = map[string]string{
 			fl |= typ.Kind() << flagKindShift;
 			if ((this.flag & flagIndir) !== 0) {
 				var struct = this.val;
-				return new Value(typ, new (go$ptrType(typ))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl);
+				return new Value.Ptr(typ, new (go$ptrType(typ))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl);
 			}
-			return new Value(typ, this.val[name], fl);
+			return new Value.Ptr(typ, this.val[name], fl);
 		};
-		Value.prototype.Index = function(i) {
+		Value.Ptr.prototype.Index = function(i) {
 			var k = this.kind();
 			switch (k) {
 			case go$pkg.Array:
@@ -452,7 +452,7 @@ var natives = map[string]string{
 				var typ = tt.elem;
 				var fl = this.flag & (flagRO | flagIndir | flagAddr);
 				fl |= typ.Kind() << flagKindShift;
-				return new Value(typ, this.val[i], fl);
+				return new Value.Ptr(typ, this.val[i], fl);
 			case go$pkg.Slice:
 				if (i < 0 || i >= this.val.length) {
 					throw new Go$Panic("reflect: slice index out of range");
@@ -462,17 +462,17 @@ var natives = map[string]string{
 				fl |= typ.Kind() << flagKindShift;
 				i += this.iword().offset;
 				var array = this.iword().array;
-				return new Value(typ, new (go$ptrType(typ))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
+				return new Value.Ptr(typ, new (go$ptrType(typ))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
 			case go$pkg.String:
 				if (i < 0 || i >= this.val.length) {
 					throw new Go$Panic("reflect: string index out of range");
 				}
 				var fl = (this.flag & flagRO) | (go$pkg.Uint8 << flagKindShift);
-				return new Value(uint8Type, this.val.charCodeAt(i), fl);
+				return new Value.Ptr(uint8Type, this.val.charCodeAt(i), fl);
 			}
 			throw new Go$Panic(new ValueError("reflect.Value.Index", k));
 		};
-		Value.prototype.Len = function() {
+		Value.Ptr.prototype.Len = function() {
 			var k = this.kind();
 			switch (k) {
 			case go$pkg.Array:
@@ -482,7 +482,7 @@ var natives = map[string]string{
 			}
 			throw new Go$Panic(new ValueError("reflect.Value.Len", k));
 		};
-		Value.prototype.Set = function(x) {
+		Value.Ptr.prototype.Set = function(x) {
 			this.mustBeAssignable()
 			x.mustBeExported()
 			if ((this.flag & flagIndir) !== 0) {
@@ -491,7 +491,7 @@ var natives = map[string]string{
 			}
 			this.val = x.val;
 		};
-		Value.prototype.String = function() {
+		Value.Ptr.prototype.String = function() {
 			switch (this.kind()) {
 			case go$pkg.Invalid:
 				return "<invalid Value>";
@@ -632,7 +632,7 @@ var natives = map[string]string{
 			os.Open(dir)[0].Chdir();
 			var start = time.Now(), status = "ok  ", i;
 			for (i = 0; i < tests.length; i += 1) {
-				var t = new T(new common(new sync.RWMutex(), go$sliceType(Go$Uint8).nil, false, false, time.Now(), new time.Duration(0, 0), null, null), names[i], null);
+				var t = new T.Ptr(new common.Ptr(undefined, undefined, undefined, undefined, time.Now(), undefined, undefined, undefined), names[i], null);
 				var err = null;
 				try {
 					if (chatty.go$get()) {

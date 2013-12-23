@@ -201,33 +201,26 @@ var go$newType = function(name, kind, constructor) {
 		break;
 
 	case "Struct":
-		typ = constructor;
-		typ.kind = "Ptr";
-		typ.string = "*" + name;
-		typ.prototype.go$key = function() { return this.go$id; };
-		typ.NonPointer = function(v) { this.go$val = v; };
-		typ.NonPointer.kind = "Struct";
-		typ.NonPointer.string = name;
-		typ.NonPointer.Pointer = typ;
-		typ.NonPointer.prototype.go$uncomparable = true;
+		typ = function(v) { this.go$val = v; };
+		typ.prototype.go$uncomparable = true;
+		typ.Ptr = constructor;
+		typ.Ptr.kind = "Ptr";
+		typ.Ptr.string = "*" + name;
+		typ.Ptr.prototype.go$key = function() { return this.go$id; };
+		typ.Ptr.Struct = typ;
 		typ.init = function(fields) {
-			typ.nil = new constructor();
+			typ.Ptr.nil = new constructor();
 			var i;
 			for (i = 0; i < fields.length; i++) {
 				var field = fields[i];
-				Object.defineProperty(typ.nil, field[0], { get: go$throwNilPointerError, set: go$throwNilPointerError });
+				Object.defineProperty(typ.Ptr.nil, field[0], { get: go$throwNilPointerError, set: go$throwNilPointerError });
 			}
-			typ.reflectType = go$cache(function() {
-				var rt = go$makeRType(typ);
-				rt.ptrType = new go$reflect.ptrType(rt, typ.NonPointer.reflectType());
-				return rt;
-			});
 			var structRType; // manual caching to avoid infinite recursion
-			typ.NonPointer.reflectType = function() {
+			typ.reflectType = function() {
 				if (structRType !== undefined) {
 					return structRType;
 				}
-				structRType = go$makeRType(typ.NonPointer);
+				structRType = go$makeRType(typ);
 				var reflectFields = new Array(fields.length), i;
 				for (i = 0; i < fields.length; i++) {
 					var field = fields[i];
@@ -242,8 +235,13 @@ var go$newType = function(name, kind, constructor) {
 				structRType.structType = new go$reflect.structType(structRType, new (go$sliceType(go$reflect.structField))(reflectFields));
 				return structRType;
 			};
+			typ.Ptr.reflectType = go$cache(function() {
+				var rt = go$makeRType(typ.Ptr);
+				rt.ptrType = new go$reflect.ptrType(rt, typ.reflectType());
+				return rt;
+			});
 		};
-		return typ; // no break
+		break;
 
 	default:
 		throw new Go$Panic("invalid kind: " + kind);
@@ -274,7 +272,7 @@ var Go$Float64       = go$newType("float64",        "Float64");
 var Go$Complex64     = go$newType("complex64",      "Complex64");
 var Go$Complex128    = go$newType("complex128",     "Complex128");
 var Go$String        = go$newType("string",         "String");
-var Go$UnsafePointer = go$newType("unsafe.Pointer", "UnsafePointer");
+var Go$UnsafePointer = go$newType("unsafe.Ptr", "UnsafePointer");
 
 var go$nativeArray = function(elemKind) {
 	return ({ Int: Int32Array, Int8: Int8Array, Int16: Int16Array, Int32: Int32Array, Uint: Uint32Array, Uint8: Uint8Array, Uint16: Uint16Array, Uint32: Uint32Array, Uintptr: Uint32Array, Float32: Float32Array, Float64: Float64Array })[elemKind] || Array;
@@ -375,11 +373,11 @@ var go$mapType = function(key, elem) {
 
 var go$throwNilPointerError = function() { go$throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var go$ptrType = function(elem) {
-	var typ = elem.Pointer;
+	var typ = elem.Ptr;
 	if (typ === undefined) {
 		typ = go$newType("*" + elem.string, "Ptr");
 		typ.init(elem);
-		elem.Pointer = typ;
+		elem.Ptr = typ;
 	}
 	return typ;
 };
@@ -417,10 +415,10 @@ var go$structType = function(fields) {
 				for (j = 0; j < methods.length; j += 1) {
 					(function(fieldName, methodName, method) {
 						typ.prototype[methodName] = function() {
-							return method.apply(this[fieldName], arguments);
-						};
-						typ.NonPointer.prototype[methodName] = function() {
 							return method.apply(this.go$val[fieldName], arguments);
+						};
+						typ.Ptr.prototype[methodName] = function() {
+							return method.apply(this[fieldName], arguments);
 						};
 					})(field[0], methods[j], field[1].prototype[methods[j]]);
 				}
@@ -428,7 +426,7 @@ var go$structType = function(fields) {
 		}
 		go$structTypes[name] = typ;
 	}
-	return typ.NonPointer;
+	return typ;
 };
 
 var Go$StringPointer = go$ptrType(Go$String);

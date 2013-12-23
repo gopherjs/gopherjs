@@ -376,8 +376,8 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 						value = fmt.Sprintf("new %s(%s)", field.Name(), value)
 					}
 					paramList := strings.Join(params, ", ")
-					c.Printf("%s.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, name, paramList, value, name, paramList)
-					c.Printf("%s.NonPointer.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, name, paramList, name, paramList)
+					c.Printf("%s.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, name, paramList, name, paramList)
+					c.Printf("%s.Ptr.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, name, paramList, value, name, paramList)
 				}
 			}
 		}
@@ -501,8 +501,8 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 
 		switch {
 		case isStruct:
-			printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
-			c.Printf("%s.NonPointer.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, fun.Name.Name, joinedParams, fun.Name.Name, joinedParams)
+			c.Printf("%s.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, fun.Name.Name, joinedParams, fun.Name.Name, joinedParams)
+			printPrimaryFunction(typeName + ".Ptr.prototype." + fun.Name.Name)
 		case !isStruct && !isPointer:
 			value := "this.go$get()"
 			if isWrapped(recvType) {
@@ -654,13 +654,13 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 		return fmt.Sprintf("%s.nil", c.typeName(ty))
 	case *types.Struct:
 		if named, isNamed := ty.(*types.Named); isNamed {
-			return fmt.Sprintf("new %s()", c.objectName(named.Obj()))
+			return fmt.Sprintf("new %s.Ptr()", c.objectName(named.Obj()))
 		}
 		fields := make([]string, t.NumFields())
 		for i := range fields {
 			fields[i] = c.zeroValue(t.Field(i).Type())
 		}
-		return fmt.Sprintf("new %s.Pointer(%s)", c.typeName(ty), strings.Join(fields, ", "))
+		return fmt.Sprintf("new %s.Ptr(%s)", c.typeName(ty), strings.Join(fields, ", "))
 	case *types.Map:
 		return "false"
 	case *types.Interface:
@@ -747,16 +747,8 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		if t.Obj().Name() == "error" {
 			return "go$error"
 		}
-		if _, isStruct := t.Underlying().(*types.Struct); isStruct {
-			return c.objectName(t.Obj()) + ".NonPointer"
-		}
 		return c.objectName(t.Obj())
 	case *types.Pointer:
-		if _, isStruct := t.Elem().Underlying().(*types.Struct); isStruct {
-			if named, isNamed := t.Elem().(*types.Named); isNamed && named.Obj().Name() != "error" {
-				return c.objectName(named.Obj())
-			}
-		}
 		return fmt.Sprintf("(go$ptrType(%s))", c.initArgs(t))
 	case *types.Array, *types.Chan, *types.Slice, *types.Map, *types.Signature, *types.Interface, *types.Struct:
 		return fmt.Sprintf("(go$%sType(%s))", strings.ToLower(typeKind(t)), c.initArgs(t))

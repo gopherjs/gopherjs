@@ -474,8 +474,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return c.translateExpr(e.X) + "." + translateSelection(sel)
 		case types.MethodVal:
 			parameters := makeParametersList()
+			target := c.translateExpr(e.X)
+			if isWrapped(sel.Recv()) {
+				target = fmt.Sprintf("(new %s(%s))", c.typeName(sel.Recv()), target)
+			}
 			recv := c.newVariable("_recv")
-			return fmt.Sprintf("(%s = %s, function(%s) { return %s.%s(%s); })", recv, c.translateExpr(e.X), strings.Join(parameters, ", "), recv, e.Sel.Name, strings.Join(parameters, ", "))
+			return fmt.Sprintf("(%s = %s, function(%s) { return %s.%s(%s); })", recv, target, strings.Join(parameters, ", "), recv, e.Sel.Name, strings.Join(parameters, ", "))
 		case types.MethodExpr:
 			recv := "recv"
 			if isWrapped(sel.Recv()) {
@@ -684,7 +688,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		if _, isTuple := exprType.(*types.Tuple); isTuple {
 			return fmt.Sprintf("(go$obj = %s, %s ? [%s, true] : [%s, false])", c.translateExpr(e.X), check, value, c.zeroValue(c.info.Types[e.Type]))
 		}
-		return fmt.Sprintf("(go$obj = %s, %s ? %s : go$typeAssertionFailed(go$obj))", c.translateExpr(e.X), check, value)
+		return fmt.Sprintf(`(go$obj = %s, %s ? %s : go$typeAssertionFailed(go$obj, %s))`, c.translateExpr(e.X), check, value, c.typeName(t))
 
 	case *ast.Ident:
 		if e.Name == "_" {
@@ -937,7 +941,7 @@ func (c *PkgContext) typeCheck(of string, to types.Type) string {
 		if in.MethodSet().Len() == 0 {
 			return "true"
 		}
-		return fmt.Sprintf("%s.go$implementedBy.indexOf(%s) !== -1", c.typeName(to), of)
+		return fmt.Sprintf("%s.implementedBy.indexOf(%s) !== -1", c.typeName(to), of)
 	}
 	return of + " === " + c.typeName(to)
 }

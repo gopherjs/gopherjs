@@ -27,14 +27,15 @@ var go$cache = function(v) {
 };
 
 var go$makeRType = function(typ) {
-	var methodNames = Object.keys(typ.prototype).sort(), methods = [], i;
-	for (i = 0; i < methodNames.length; i++) {
-		var name = methodNames[i];
-		if (name.substr(0, 3) === "go$") {
-			continue;
-		}
-		methods.push(new go$reflect.imethod(go$newStringPointer(name), undefined, undefined, undefined, undefined, undefined));
-	}
+	var methods = [];
+	// var methodNames = Object.keys(typ.prototype).sort(), methods = [], i;
+	// for (i = 0; i < methodNames.length; i++) {
+	// 	var name = methodNames[i];
+	// 	if (name.substr(0, 3) === "go$") {
+	// 		continue;
+	// 	}
+	// 	methods.push(new go$reflect.imethod(go$newStringPointer(name), undefined, undefined, undefined, undefined, undefined));
+	// }
 	var size = ({ Int: 4, Int8: 1, Int16: 2, Int32: 4, Int64: 8, Uint: 4, Uint8: 1, Uint16: 2, Uint32: 4, Uint64: 8, Uintptr: 4, Float32: 4, Float64: 8, UnsafePointer: 4 })[typ.kind] || 0;
 	var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod)));
 	var ut = new go$reflect.uncommonType(go$newStringPointer(typ.string), undefined, new methodSlice(methods));
@@ -127,7 +128,7 @@ var go$newType = function(name, kind, constructor) {
 		break;
 
 	case "Interface":
-		typ = { go$implementedBy: [] };
+		typ = { implementedBy: [] };
 		typ.init = function(methods) {
 			typ.reflectType = go$cache(function() {
 				var rt = go$makeRType(typ);
@@ -351,6 +352,8 @@ var go$interfaceType = function(methods) {
 	return typ;
 };
 var go$interfaceNil = { go$key: function() { return "nil"; } };
+var go$error = go$newType("error", "Interface");
+go$error.init([]);
 
 var Go$Map = function() {};
 (function() {
@@ -816,7 +819,6 @@ var go$append = function(slice, toAppend) {
 	return newSlice;
 };
 
-var go$error = {};
 var Go$Panic = function(value) {
 	this.value = value;
 	if (value.constructor === Go$String) {
@@ -933,8 +935,12 @@ var go$pointerIsEqual = function(a, b) {
 	return equal;
 };
 
-var go$typeAssertionFailed = function(obj) {
-	throw new Go$Panic("type assertion failed: " + obj + " (" + obj.constructor + ")");
+var go$typeAssertionFailed = function(obj, expected) {
+	var got = "nil";
+	if (obj !== null) {
+		got = obj.constructor.string;
+	}
+	throw new Go$Panic("interface conversion: interface is " + got + ", not " + expected.string);
 };
 
 var go$now = function() { var msec = (new Date()).getTime(); return [new Go$Int64(0, Math.floor(msec / 1000)), (msec % 1000) * 1000000]; };

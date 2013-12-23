@@ -331,9 +331,22 @@ var natives = map[string]string{
 		mapassign = function(t, m, key, val, ok) {
 			m[key] = { k: key, v: val }; // FIXME key
 		};
+		maplen = function(m) {
+			return go$keys(m).length;
+		};
+		mapiterinit = function(t, m) {
+			return [m, go$keys(m), 0];
+		};
+		mapiterkey = function(it) {
+			var key = it[1][it[2]];
+			return [it[0][key].k, true];
+		};
+		mapiternext = function(it) {
+			it[2] += 1;
+		};
 		valueInterface = function(v, safe) {
 			var val = v.iword();
-			if (val.constructor === v.typ.alg) {
+			if (v.typ.Kind() === go$pkg.Interface || val.constructor === v.typ.alg) {
 				return val;
 			}
 			return new v.typ.alg(val);
@@ -421,6 +434,27 @@ var natives = map[string]string{
 			}
 			return new (go$sliceType(Value))(results);
 		};
+		Value.Ptr.prototype.Elem = function() {
+			switch (this.kind()) {
+			case go$pkg.Interface:
+				var val = this.iword();
+				var typ = val.constructor.reflectType();
+				var fl = this.flag & flagRO;
+				fl |= typ.Kind() << flagKindShift;
+				return new Value.Ptr(typ, val.go$val, fl);
+
+			case go$pkg.Ptr:
+				var val = this.iword();
+				if (val === null) {
+					return new Value.Ptr();
+				}
+				var tt = this.typ.ptrType;
+				var fl = (this.flag & flagRO) | flagIndir | flagAddr;
+				fl |= tt.elem.Kind() << flagKindShift;
+				return new Value.Ptr(tt.elem, val, fl);
+			}
+			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Elem", this.kind()));
+		};
 		Value.Ptr.prototype.Field = function(i) {
 			this.mustBe(go$pkg.Struct);
 			var tt = this.typ.structType;
@@ -470,7 +504,21 @@ var natives = map[string]string{
 				var fl = (this.flag & flagRO) | (go$pkg.Uint8 << flagKindShift);
 				return new Value.Ptr(uint8Type, this.val.charCodeAt(i), fl);
 			}
-			throw new Go$Panic(new ValueError("reflect.Value.Index", k));
+			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Index", k));
+		};
+		Value.Ptr.prototype.IsNil = function() {
+			switch (this.kind()) {
+			case go$pkg.Chan:
+			case go$pkg.Func:
+			case go$pkg.Ptr:
+			case go$pkg.Slice:
+				return this.iword() === this.typ.alg.nil;
+			case go$pkg.Map:
+				return this.iword() === false;
+			case go$pkg.Interface:
+				return this.iword() === null;
+			}
+			throw new Go$Panic(new ValueError.Ptr("reflect.Value.IsNil", this.kind()));
 		};
 		Value.Ptr.prototype.Len = function() {
 			var k = this.kind();
@@ -479,13 +527,19 @@ var natives = map[string]string{
 			case go$pkg.Slice:
 			case go$pkg.String:
 				return this.val.length;
+			case go$pkg.Map:
+				return go$keys(this.val).length;
 			}
-			throw new Go$Panic(new ValueError("reflect.Value.Len", k));
+			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Len", k));
 		};
 		Value.Ptr.prototype.Set = function(x) {
 			this.mustBeAssignable()
 			x.mustBeExported()
 			if ((this.flag & flagIndir) !== 0) {
+				if (this.typ.Kind() === go$pkg.Interface) {
+					this.val.go$set(valueInterface(x));
+					return;
+				}
 				this.val.go$set(x.iword());
 				return;
 			}

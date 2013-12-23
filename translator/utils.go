@@ -105,11 +105,11 @@ func WriteInterfaces(dependencies []*types.Package, w io.Writer, merge bool) {
 			}
 			if merge {
 				for _, entry := range list {
-					fmt.Fprintf(w, "if (%s.go$implementedBy.indexOf(%s) === -1) { %s.go$implementedBy.push(%s); }\n", target, entry, target, entry)
+					fmt.Fprintf(w, "if (%s.implementedBy.indexOf(%s) === -1) { %s.implementedBy.push(%s); }\n", target, entry, target, entry)
 				}
 				continue
 			}
-			fmt.Fprintf(w, "%s.go$implementedBy = [%s];\n", target, strings.Join(list, ", "))
+			fmt.Fprintf(w, "%s.implementedBy = [%s];\n", target, strings.Join(list, ", "))
 		}
 	}
 }

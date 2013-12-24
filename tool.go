@@ -261,24 +261,24 @@ func tool() error {
 				return err
 			}
 
-			pkgTypes := typesConfig.Packages[pkg.ImportPath]
-			testPkgTypes := typesConfig.Packages[testPkg.ImportPath]
 			var names []string
 			var tests []string
-			for _, name := range pkgTypes.Scope().Names() {
-				if strings.HasPrefix(name, "Test") {
-					names = append(names, name)
-					tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
+			imports := mainPkgTypes.Imports()
+			collectTests := func(pkg *Package) {
+				pkgTypes := typesConfig.Packages[pkg.ImportPath]
+				for _, name := range pkgTypes.Scope().Names() {
+					_, isFunction := pkgTypes.Scope().Lookup(name).Type().(*types.Signature)
+					if isFunction && strings.HasPrefix(name, "Test") {
+						names = append(names, name)
+						tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
+					}
 				}
+				imports = append(imports, pkgTypes)
 			}
-			for _, name := range testPkgTypes.Scope().Names() {
-				if strings.HasPrefix(name, "Test") {
-					names = append(names, name)
-					tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, testPkg.ImportPath, name))
-				}
-			}
+			collectTests(pkg)
+			collectTests(testPkg)
 			mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte(fmt.Sprintf(`go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]);`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
-			mainPkgTypes.SetImports(append(mainPkgTypes.Imports(), pkgTypes, testPkgTypes))
+			mainPkgTypes.SetImports(imports)
 		}
 		mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte("}; go$pkg.init = function() {};")...)
 

@@ -851,7 +851,9 @@ var go$throwRuntimeError; // set by package "runtime"
 
 // TODO improve error wrapping
 var go$wrapJavaScriptError = function(err) {
-	if (err.constructor === Go$Exit) {
+	switch (err.constructor) {
+	case Go$Exit:
+	case Go$NotSupportedError:
 		throw err;
 	}
 	var panic = new Go$Panic(err);

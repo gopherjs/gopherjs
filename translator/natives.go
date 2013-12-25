@@ -519,8 +519,17 @@ var natives = map[string]string{
 				throw new Go$Panic("reflect: Field index out of range");
 			}
 			var field = tt.fields.array[i];
-			var name = field.name.go$get();
 			var typ = field.typ;
+			var name;
+			if (field.name !== Go$StringPointer.nil) {
+				name = field.name.go$get();
+			} else {
+				var ntyp = typ;
+				if (ntyp.Kind() === go$pkg.Ptr) {
+					ntyp = ntyp.Elem().common();
+				}
+				name = ntyp.Name();
+			}
 			var fl = this.flag & (flagRO | flagIndir | flagAddr);
 			// if (field.pkgPath !== nil) {
 			// 	fl |= flagRO

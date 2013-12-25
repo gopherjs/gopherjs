@@ -339,7 +339,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 			}
 			params[i] = name + "_"
 		}
-		c.Printf(`%s = go$newType("%s.%s", "Struct", function(%s) {`, typeName, obj.Pkg().Name(), obj.Name(), strings.Join(params, ", "))
+		c.Printf(`%s = go$newType("%s.%s", "Struct", "%s", function(%s) {`, typeName, obj.Pkg().Name(), obj.Name(), obj.Name(), strings.Join(params, ", "))
 		c.Indent(func() {
 			c.Printf("this.go$id = go$idCounter;")
 			c.Printf("go$idCounter += 1;")
@@ -382,7 +382,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 			}
 		}
 	default:
-		c.Printf(`%s = go$newType("%s.%s", "%s");`, typeName, obj.Pkg().Name(), obj.Name(), typeKind(t))
+		c.Printf(`%s = go$newType("%s.%s", "%s", "%s");`, typeName, obj.Pkg().Name(), obj.Name(), typeKind(t), obj.Name())
 	}
 }
 
@@ -427,7 +427,11 @@ func (c *PkgContext) initArgs(ty types.Type) string {
 		fields := make([]string, t.NumFields())
 		for i := range fields {
 			field := t.Field(i)
-			fields[i] = fmt.Sprintf(`["%s", %s, %q, %t]`, field.Name(), c.typeName(field.Type()), t.Tag(i), field.Anonymous())
+			name := ""
+			if !field.Anonymous() {
+				name = field.Name()
+			}
+			fields[i] = fmt.Sprintf(`["%s", %s, %q]`, name, c.typeName(field.Type()), t.Tag(i))
 		}
 		return fmt.Sprintf("[%s]", strings.Join(fields, ", "))
 	default:

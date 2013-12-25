@@ -7,7 +7,7 @@ var go$obj, go$tuple;
 var go$idCounter = 1;
 var go$keys = function(m) { return m ? Object.keys(m) : []; };
 var go$min = Math.min;
-var go$throwRuntimeError, go$reflect, go$newStringPointer;
+var go$reflect, go$newStringPointer;
 
 var go$mapArray = function(array, f) {
 	var newArray = new array.constructor(array.length), i;
@@ -840,6 +840,14 @@ var Go$Panic = function(value) {
 var Go$Exit = function() {
 	Error.captureStackTrace(this, Go$Exit);
 };
+var Go$NotSupportedError = function(feature) {
+	this.message = "not supported by GopherJS: " + feature;
+	Error.captureStackTrace(this, Go$Exit);
+};
+var go$notSupported = function(feature) {
+	throw new Go$NotSupportedError(feature);
+};
+var go$throwRuntimeError; // set by package "runtime"
 
 // TODO improve error wrapping
 var go$wrapJavaScriptError = function(err) {

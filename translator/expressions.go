@@ -584,7 +584,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case "recover":
 					return "go$recover()"
 				case "close":
-					return `go$throwRuntimeError("not supported by GopherJS: close")`
+					return `go$notSupported("close")`
 				default:
 					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))
 				}

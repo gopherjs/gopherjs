@@ -806,7 +806,15 @@ var natives = map[string]string{
 					}
 					tests[i](t);
 				} catch (e) {
-					if (e.constructor !== Go$Exit) {
+					switch (e.constructor) {
+					case Go$Exit:
+						// test failed or skipped
+						break;
+					case Go$NotSupportedError:
+						t.log(e.message);
+						t.skip();
+						break;
+					default:
 						t.Fail();
 						err = e;
 					}
@@ -827,13 +835,13 @@ var natives = map[string]string{
 
 	"time": `
 		now = go$now;
-		After = function() { go$throwRuntimeError("not supported by GopherJS: time.After (use time.AfterFunc instead)") };
+		After = function() { go$notSupported("time.After (use time.AfterFunc instead)") };
 		AfterFunc = function(d, f) {
 			setTimeout(f, go$div64(d, go$pkg.Millisecond).low);
 			return null;
 		};
-		NewTimer = function() { go$throwRuntimeError("not supported by GopherJS: time.NewTimer (use time.AfterFunc instead)") };
-		Sleep = function() { go$throwRuntimeError("not supported by GopherJS: time.Sleep (use time.AfterFunc instead)") };
-		Tick = function() { go$throwRuntimeError("not supported by GopherJS: time.Tick (use time.AfterFunc instead)") };
+		NewTimer = function() { go$notSupported("time.NewTimer (use time.AfterFunc instead)") };
+		Sleep = function() { go$notSupported("time.Sleep (use time.AfterFunc instead)") };
+		Tick = function() { go$notSupported("time.Tick (use time.AfterFunc instead)") };
 	`,
 }

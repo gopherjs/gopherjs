@@ -331,7 +331,7 @@ var natives = map[string]string{
 			if (len > cap) {
 				throw new Go$Panic("reflect.MakeSlice: len > cap");
 			}
-			return new Value.Ptr(typ.common(), typ.alg.make(len, cap, function() { return 0; }), go$pkg.Slice << flagKindShift); // FIXME zero value
+			return new Value.Ptr(typ.common(), typ.alg.make(len, cap, function() { return Zero(typ.Elem()).val; }), go$pkg.Slice << flagKindShift);
 		};
 		makemap = function(t) {
 			return new Go$Map();
@@ -364,16 +364,44 @@ var natives = map[string]string{
 				throw new Go$Panic(new ValueError.Ptr("reflect.Value.Interface", 0));
 			}
 			if (safe && (v.flag & flagRO) !== 0) {
-			  throw new Go$Panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")
+				throw new Go$Panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")
 			}
 			var val = v.iword();
 			if (v.typ.Kind() === go$pkg.Interface || val.constructor === v.typ.alg) {
 				return val;
 			}
+			if (v.typ.Kind() === go$pkg.Ptr) {
+				return new v.typ.alg(val.go$get, val.go$set);
+			}
 			return new v.typ.alg(val);
 		};
 		methodName = function() {
 			return "?FIXME?";
+		};
+		Copy = function(dst, src) {
+			var dk = dst.kind();
+			if (dk !== go$pkg.Array && dk !== go$pkg.Slice) {
+				throw new Go$Panic(new ValueError.Ptr("reflect.Copy", dk));
+			}
+			if (dk === go$pkg.Array) {
+				dst.mustBeAssignable();
+			}
+			dst.mustBeExported();
+
+			var sk = src.kind();
+			if (sk !== go$pkg.Array && sk != go$pkg.Slice) {
+				throw new Go$Panic(new ValueError.Ptr("reflect.Copy", sk));
+			}
+			src.mustBeExported();
+
+			typesMustMatch("reflect.Copy", dst.typ.Elem(), src.typ.Elem());
+
+			var n = Math.min(src.Len(), dst.Len());
+			var i;
+			for(i = 0; i < n; i += 1) {
+				dst.Index(i).Set(src.Index(i));
+			}
+			return n;
 		};
 
 		rtype.Ptr.prototype.ptrTo = function() {
@@ -456,7 +484,7 @@ var natives = map[string]string{
 			var k = this.kind();
 			switch (k) {
 			case go$pkg.Slice:
-				return this.val.capacity;
+				return this.iword().capacity;
 			}
 			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Cap", k));
 		};
@@ -498,11 +526,8 @@ var natives = map[string]string{
 			// 	fl |= flagRO
 			// }
 			fl |= typ.Kind() << flagKindShift;
-			if ((this.flag & flagIndir) !== 0) {
+			if ((this.flag & flagIndir) !== 0 && typ.Kind() !== go$pkg.Struct) {
 				var struct = this.val;
-				if (typ.Kind() === go$pkg.Struct) {
-					return new Value.Ptr(typ, struct[name], fl);
-				}
 				return new Value.Ptr(typ, new (go$ptrType(typ))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl);
 			}
 			return new Value.Ptr(typ, this.val[name], fl);
@@ -518,9 +543,13 @@ var natives = map[string]string{
 				var typ = tt.elem;
 				var fl = this.flag & (flagRO | flagIndir | flagAddr);
 				fl |= typ.Kind() << flagKindShift;
-				return new Value.Ptr(typ, this.val[i], fl);
+				if ((this.flag & flagIndir) !== 0 && typ.Kind() !== go$pkg.Struct) {
+					var array = this.val.go$get();
+					return new Value.Ptr(typ, new (go$ptrType(typ))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
+				}
+				return new Value.Ptr(typ, this.iword()[i], fl);
 			case go$pkg.Slice:
-				if (i < 0 || i >= this.val.length) {
+				if (i < 0 || i >= this.iword().length) {
 					throw new Go$Panic("reflect: slice index out of range");
 				}
 				var typ = this.typ.sliceType.elem;
@@ -533,11 +562,12 @@ var natives = map[string]string{
 				}
 				return new Value.Ptr(typ, new (go$ptrType(typ))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
 			case go$pkg.String:
-				if (i < 0 || i >= this.val.length) {
+				var string = this.iword();
+				if (i < 0 || i >= string.length) {
 					throw new Go$Panic("reflect: string index out of range");
 				}
 				var fl = (this.flag & flagRO) | (go$pkg.Uint8 << flagKindShift);
-				return new Value.Ptr(uint8Type, this.val.charCodeAt(i), fl);
+				return new Value.Ptr(uint8Type, string.charCodeAt(i), fl);
 			}
 			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Index", k));
 		};
@@ -561,9 +591,9 @@ var natives = map[string]string{
 			case go$pkg.Array:
 			case go$pkg.Slice:
 			case go$pkg.String:
-				return this.val.length;
+				return this.iword().length;
 			case go$pkg.Map:
-				return go$keys(this.val).length;
+				return go$keys(this.iword()).length;
 			}
 			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Len", k));
 		};
@@ -591,23 +621,49 @@ var natives = map[string]string{
 			}
 			this.val = x.val;
 		};
+		Value.Ptr.prototype.SetCap = function(n) {
+			this.mustBeAssignable();
+			this.mustBe(go$pkg.Slice);
+			var s = this.val.go$get();
+			if (n < s.length || n > s.capacity) {
+				throw new Go$Panic("reflect: slice capacity out of range in SetCap");
+			}
+			var newSlice = new this.typ.alg(s.array);
+			newSlice.offset = s.offset;
+			newSlice.length = s.length;
+			newSlice.capacity = n;
+			this.val.go$set(newSlice);
+		};
+		Value.Ptr.prototype.SetLen = function(n) {
+			this.mustBeAssignable();
+			this.mustBe(go$pkg.Slice);
+			var s = this.val.go$get();
+			if (n < 0 || n > s.capacity) {
+				throw new Go$Panic("reflect: slice length out of range in SetLen");
+			}
+			var newSlice = new this.typ.alg(s.array);
+			newSlice.offset = s.offset;
+			newSlice.length = n;
+			newSlice.capacity = s.capacity;
+			this.val.go$set(newSlice);
+		};
 		Value.Ptr.prototype.String = function() {
 			switch (this.kind()) {
 			case go$pkg.Invalid:
 				return "<invalid Value>";
 			case go$pkg.String:
-				if ((this.flag & flagIndir) != 0) {
-					return this.val.go$get();
-				}
-				return this.val;
+				return this.iword();
 			}
 			return "<" + this.typ.String() + " Value>";
 		};
 		
-		DeepEqual = function(a, b) { // TODO use package version
+		var deepValueEqual = function(a, b, visited) {
 			var i;
 			if (a === b) {
 				return true;
+			}
+			if (a === null || b === null) {
+				return false;
 			}
 			if (a.constructor === Number) {
 				return false;
@@ -615,19 +671,26 @@ var natives = map[string]string{
 			if (a.constructor !== b.constructor) {
 				return false;
 			}
+			for (i = 0; i < visited.length; i += 1) {
+				var entry = visited[i];
+				if (a === entry[0] && b === entry[1]) {
+					return true;
+				}
+			}
+			visited.push([a, b]);
 			if (a.length !== undefined) {
 				if (a.length !== b.length) {
 					return false;
 				}
 				if (a.array !== undefined) {
 					for (i = 0; i < a.length; i += 1) {
-						if (!this.DeepEqual(a.array[a.offset + i], b.array[b.offset + i])) {
+						if (!deepValueEqual(a.array[a.offset + i], b.array[b.offset + i], visited)) {
 							return false;
 						}
 					}
 				} else {
 					for (i = 0; i < a.length; i += 1) {
-						if (!this.DeepEqual(a[i], b[i])) {
+						if (!deepValueEqual(a[i], b[i], visited)) {
 							return false;
 						}
 					}
@@ -637,11 +700,14 @@ var natives = map[string]string{
 			var keys = go$keys(a), j;
 			for (j = 0; j < keys.length; j += 1) {
 				var key = keys[j];
-				if (key !== "go$id" && key !== "go$val" && !this.DeepEqual(a[key], b[key])) {
+				if (key !== "go$id" && key !== "go$val" && !deepValueEqual(a[key], b[key], visited)) {
 					return false;
 				}
 			}
 			return true;
+		};
+		var DeepEqual = function(a, b) {
+			return deepValueEqual(a, b, []);
 		};
 	`,
 

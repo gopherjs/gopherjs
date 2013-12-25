@@ -93,12 +93,18 @@ var go$newType = function(name, kind, constructor) {
 
 	case "Array":
 		typ = function(v) { this.go$val = v; };
+		typ.Ptr = go$newType("*" + name, "Ptr", function(array) {
+			this.go$get = function() { return array; };
+			this.go$set = function() { throw new Go$Panic("not implemented"); }; // TODO required?
+			this.go$val = this;
+		});
 		typ.init = function(elem, len) {
 			typ.reflectType = go$cache(function() {
 				var rt = go$makeRType(typ);
 				rt.arrayType = new go$reflect.arrayType(rt, elem.reflectType(), undefined, len);
 				return rt;
 			});
+			typ.Ptr.init(typ);
 		};
 		break;
 
@@ -152,7 +158,7 @@ var go$newType = function(name, kind, constructor) {
 		break;
 
 	case "Ptr":
-		typ = function(getter, setter) {
+		typ = constructor || function(getter, setter) {
 			this.go$get = getter;
 			this.go$set = setter;
 			this.go$val = this;
@@ -204,11 +210,9 @@ var go$newType = function(name, kind, constructor) {
 	case "Struct":
 		typ = function(v) { this.go$val = v; };
 		typ.prototype.go$uncomparable = true;
-		typ.Ptr = constructor;
-		typ.Ptr.kind = "Ptr";
-		typ.Ptr.string = "*" + name;
-		typ.Ptr.prototype.go$key = function() { return this.go$id; };
+		typ.Ptr = go$newType("*" + name, "Ptr", constructor);
 		typ.Ptr.Struct = typ;
+		typ.Ptr.prototype.go$key = function() { return this.go$id; };
 		typ.init = function(fields) {
 			typ.Ptr.nil = new constructor();
 			var i;
@@ -239,11 +243,7 @@ var go$newType = function(name, kind, constructor) {
 				structRType.structType = new go$reflect.structType(structRType, new (go$sliceType(go$reflect.structField))(reflectFields));
 				return structRType;
 			};
-			typ.Ptr.reflectType = go$cache(function() {
-				var rt = go$makeRType(typ.Ptr);
-				rt.ptrType = new go$reflect.ptrType(rt, typ.reflectType());
-				return rt;
-			});
+			typ.Ptr.init(typ);
 		};
 		break;
 

@@ -404,12 +404,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		return fmt.Sprintf("(%s)", c.translateExpr(e.X))
 
 	case *ast.IndexExpr:
-		xType := c.info.Types[e.X]
-		if ptr, isPointer := xType.(*types.Pointer); isPointer {
-			xType = ptr.Elem()
-		}
-		switch t := xType.Underlying().(type) {
-		case *types.Array:
+		switch t := c.info.Types[e.X].Underlying().(type) {
+		case *types.Array, *types.Pointer:
 			return fmt.Sprintf("%s[%s]", c.translateExpr(e.X), c.flatten64(e.Index))
 		case *types.Slice:
 			sliceVar := c.newVariable("_slice")

@@ -248,6 +248,28 @@ var natives = map[string]string{
 			RecvDir: go$pkg.RecvDir, SendDir: go$pkg.SendDir, BothDir: go$pkg.BothDir
 		};
 
+		var fieldName = function(field) {
+			if (field.name === Go$StringPointer.nil) {
+				var ntyp = field.typ;
+				if (ntyp.Kind() === go$pkg.Ptr) {
+					ntyp = ntyp.Elem().common();
+				}
+				return ntyp.Name();
+			}
+			return field.name.go$get();
+		};
+		var copyStruct = function(dst, src, typ) {
+			var fields = typ.structType.fields.array, i;
+			for (i = 0; i < fields.length; i += 1) {
+				var field = fields[i];
+				var name = fieldName(field);
+				if (field.typ.Kind() === go$pkg.Struct) {
+					console.log("ARG");
+				}
+				dst[name] = src[name];
+			}
+		};
+
 		TypeOf = function(i) {
 			if (i === null) {
 				return null;
@@ -344,6 +366,11 @@ var natives = map[string]string{
 			return [entry.v, true];
 		};
 		mapassign = function(t, m, key, val, ok) {
+			if (t.Elem().kind === go$pkg.Struct) {
+				var newVal = {};
+				copyStruct(newVal, val, t.Elem());
+				val = newVal;
+			}
 			m[key] = { k: key, v: val }; // FIXME key
 		};
 		maplen = function(m) {
@@ -519,17 +546,8 @@ var natives = map[string]string{
 				throw new Go$Panic("reflect: Field index out of range");
 			}
 			var field = tt.fields.array[i];
+			var name = fieldName(field);
 			var typ = field.typ;
-			var name;
-			if (field.name !== Go$StringPointer.nil) {
-				name = field.name.go$get();
-			} else {
-				var ntyp = typ;
-				if (ntyp.Kind() === go$pkg.Ptr) {
-					ntyp = ntyp.Elem().common();
-				}
-				name = ntyp.Name();
-			}
 			var fl = this.flag & (flagRO | flagIndir | flagAddr);
 			// if (field.pkgPath !== nil) {
 			// 	fl |= flagRO
@@ -607,21 +625,15 @@ var natives = map[string]string{
 			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Len", k));
 		};
 		Value.Ptr.prototype.Set = function(x) {
-			this.mustBeAssignable()
-			x.mustBeExported()
+			this.mustBeAssignable();
+			x.mustBeExported();
 			if ((this.flag & flagIndir) !== 0) {
 				switch (this.typ.Kind()) {
 				case go$pkg.Interface:
 					this.val.go$set(valueInterface(x));
 					return;
 				case go$pkg.Struct:
-					var fields = Object.keys(this.val), i;
-					for (i = 0; i < fields.length; i += 1) {
-						var field = fields[i];
-						if (field.substr(0, 3) !== "go$") {
-							this.val[field] = x.val[field];
-						}
-					}
+					copyStruct(this.val, x.val, this.typ);
 					return;
 				default:
 					this.val.go$set(x.iword());

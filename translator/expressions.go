@@ -1,7 +1,6 @@
 package translator
 
 import (
-	"bytes"
 	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
@@ -39,34 +38,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			return fmt.Sprintf("new %s(%s, %s)", c.typeName(exprType), strconv.FormatFloat(r, 'g', -1, 64), strconv.FormatFloat(i, 'g', -1, 64))
 		case basic.Info()&types.IsString != 0:
-			buffer := bytes.NewBuffer(nil)
-			for _, r := range []byte(exact.StringVal(value)) {
-				switch r {
-				case '\b':
-					buffer.WriteString(`\b`)
-				case '\f':
-					buffer.WriteString(`\f`)
-				case '\n':
-					buffer.WriteString(`\n`)
-				case '\r':
-					buffer.WriteString(`\r`)
-				case '\t':
-					buffer.WriteString(`\t`)
-				case '\v':
-					buffer.WriteString(`\v`)
-				case '"':
-					buffer.WriteString(`\"`)
-				case '\\':
-					buffer.WriteString(`\\`)
-				default:
-					if r < 0x20 || r > 0x7E {
-						fmt.Fprintf(buffer, `\x%02X`, r)
-						continue
-					}
-					buffer.WriteByte(r)
-				}
-			}
-			return `"` + buffer.String() + `"`
+			return encodeString(exact.StringVal(value))
 		default:
 			panic("Unhandled constant type: " + basic.String())
 		}

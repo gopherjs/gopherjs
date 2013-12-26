@@ -1,6 +1,7 @@
 package translator
 
 import (
+	"bytes"
 	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
@@ -435,7 +436,7 @@ func (c *PkgContext) initArgs(ty types.Type) string {
 			if !field.IsExported() {
 				pkgPath = field.Pkg().Path()
 			}
-			fields[i] = fmt.Sprintf(`["%s", "%s", %s, %q]`, name, pkgPath, c.typeName(field.Type()), t.Tag(i))
+			fields[i] = fmt.Sprintf(`["%s", "%s", %s, %s]`, name, pkgPath, c.typeName(field.Type()), encodeString(t.Tag(i)))
 		}
 		return fmt.Sprintf("[%s]", strings.Join(fields, ", "))
 	default:
@@ -872,6 +873,37 @@ func elemType(ty types.Type) types.Type {
 	default:
 		panic("")
 	}
+}
+
+func encodeString(s string) string {
+	buffer := bytes.NewBuffer(nil)
+	for _, r := range []byte(s) {
+		switch r {
+		case '\b':
+			buffer.WriteString(`\b`)
+		case '\f':
+			buffer.WriteString(`\f`)
+		case '\n':
+			buffer.WriteString(`\n`)
+		case '\r':
+			buffer.WriteString(`\r`)
+		case '\t':
+			buffer.WriteString(`\t`)
+		case '\v':
+			buffer.WriteString(`\v`)
+		case '"':
+			buffer.WriteString(`\"`)
+		case '\\':
+			buffer.WriteString(`\\`)
+		default:
+			if r < 0x20 || r > 0x7E {
+				fmt.Fprintf(buffer, `\x%02X`, r)
+				continue
+			}
+			buffer.WriteByte(r)
+		}
+	}
+	return `"` + buffer.String() + `"`
 }
 
 type DependencyCollector struct {

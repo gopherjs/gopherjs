@@ -39,7 +39,7 @@ var go$makeRType = function(typ) {
 	var size = ({ Int: 4, Int8: 1, Int16: 2, Int32: 4, Int64: 8, Uint: 4, Uint8: 1, Uint16: 2, Uint32: 4, Uint64: 8, Uintptr: 4, Float32: 4, Float64: 8, UnsafePointer: 4 })[typ.kind] || 0;
 	var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod)));
 	var ut = undefined;
-	if (typ.name !== undefined) {
+	if (typ.typName !== undefined) {
 		ut = new go$reflect.uncommonType(go$newStringPointer(typ.typName), undefined, new methodSlice(methods));
 	}
 	return new go$reflect.rtype(size, 0, 0, 0, 0, go$reflect.kinds[typ.kind], typ, undefined, go$newStringPointer(typ.string), ut, undefined);
@@ -350,8 +350,8 @@ var go$interfaceType = function(methods) {
 	return typ;
 };
 var go$interfaceNil = { go$key: function() { return "nil"; } };
-var go$error = go$newType("error", "Interface");
-go$error.init([]);
+var go$error = go$newType("error", "Interface", "error");
+go$error.init([["Error", go$funcType([], [Go$String], false)]]);
 
 var Go$Map = function() {};
 (function() {

@@ -10,7 +10,7 @@ func init() {
     };
 
     var fieldName = function(field) {
-      if (field.name === Go$StringPointer.nil) {
+      if (field.name.go$get === go$throwNilPointerError) {
         var ntyp = field.typ;
         if (ntyp.Kind() === go$pkg.Ptr) {
           ntyp = ntyp.Elem().common();
@@ -24,9 +24,6 @@ func init() {
       for (i = 0; i < fields.length; i += 1) {
         var field = fields[i];
         var name = fieldName(field);
-        if (field.typ.Kind() === go$pkg.Struct) {
-          console.log("ARG");
-        }
         dst[name] = src[name];
       }
     };

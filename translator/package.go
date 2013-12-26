@@ -431,7 +431,11 @@ func (c *PkgContext) initArgs(ty types.Type) string {
 			if !field.Anonymous() {
 				name = field.Name()
 			}
-			fields[i] = fmt.Sprintf(`["%s", %s, %q]`, name, c.typeName(field.Type()), t.Tag(i))
+			pkgPath := ""
+			if !field.IsExported() {
+				pkgPath = field.Pkg().Path()
+			}
+			fields[i] = fmt.Sprintf(`["%s", "%s", %s, %q]`, name, pkgPath, c.typeName(field.Type()), t.Tag(i))
 		}
 		return fmt.Sprintf("[%s]", strings.Join(fields, ", "))
 	default:

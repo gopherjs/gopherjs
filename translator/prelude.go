@@ -232,16 +232,7 @@ var go$newType = function(string, kind, name, constructor) {
 				var reflectFields = new Array(fields.length), i;
 				for (i = 0; i < fields.length; i++) {
 					var field = fields[i];
-					var fieldName = Go$StringPointer.nil;
-					if (field[0] !== "") {
-						fieldName = go$newStringPointer(field[0]);
-					}
-					var fieldPath = Go$StringPointer.nil; // TODO
-					var fieldTag = Go$StringPointer.nil;
-					if (field[2] !== "") {
-						fieldTag = go$newStringPointer(field[2]);
-					}
-					reflectFields[i] = new go$reflect.structField(fieldName, fieldPath, field[1].reflectType(), fieldTag, i);
+					reflectFields[i] = new go$reflect.structField(go$newStringPointer(field[0]), go$newStringPointer(field[1]), field[2].reflectType(), go$newStringPointer(field[3]), i);
 				}
 				structRType.structType = new go$reflect.structType(structRType, new (go$sliceType(go$reflect.structField))(reflectFields));
 				return structRType;
@@ -405,7 +396,7 @@ var go$sliceType = function(elem) {
 var go$structTypes = {};
 var go$structType = function(fields) {
 	var string = "struct { " + go$mapArray(fields, function(f) {
-		return f[0] + " " + f[1].string + (f[2] !== "" ? (' "' + f[2].replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"') : "");
+		return f[0] + " " + f[2].string + (f[3] !== "" ? (' "' + f[3].replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"') : "");
 	}).join("; ") + " }";
 	var typ = go$structTypes[string];
 	if (typ === undefined) {
@@ -422,8 +413,8 @@ var go$structType = function(fields) {
 		var i, j;
 		for (i = 0; i < fields.length; i++) {
 			var field = fields[i];
-			if (field[0] === "" && field[1].prototype !== undefined) {
-				var methods = Object.keys(field[1].prototype);
+			if (field[0] === "" && field[2].prototype !== undefined) {
+				var methods = Object.keys(field[2].prototype);
 				for (j = 0; j < methods.length; j += 1) {
 					(function(fieldName, methodName, method) {
 						typ.prototype[methodName] = function() {
@@ -432,7 +423,7 @@ var go$structType = function(fields) {
 						typ.Ptr.prototype[methodName] = function() {
 							return method.apply(this[fieldName], arguments);
 						};
-					})(field[0], methods[j], field[1].prototype[methods[j]]);
+					})(field[0], methods[j], field[2].prototype[methods[j]]);
 				}
 			}
 		}
@@ -441,9 +432,11 @@ var go$structType = function(fields) {
 	return typ;
 };
 
-var Go$StringPointer = go$ptrType(Go$String);
 go$newStringPointer = function(str) {
-	return new Go$StringPointer(function() { return str; }, function(v) { str = v; });
+	if (str === "") {
+		return go$ptrType(Go$String).nil;
+	}
+	return new (go$ptrType(Go$String))(function() { return str; }, function(v) { str = v; });
 };
 var go$newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });

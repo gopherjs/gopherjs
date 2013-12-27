@@ -901,6 +901,9 @@ var go$interfaceIsEqual = function(a, b) {
 	case "Array":
 		return go$arrayIsEqual(a.go$val, b.go$val);
 	case "Ptr":
+		if (a.constructor.Struct) {
+			return a === b;
+		}
 		return go$pointerIsEqual(a, b);
 	case "Func":
 	case "Map":

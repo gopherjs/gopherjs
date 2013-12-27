@@ -353,7 +353,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 			field := t.Field(i)
 			name := field.Name()
 			if field.Name() == "_" {
-				name = fmt.Sprintf("go$blank%d", i)
+				name = fmt.Sprintf("blank$%d", i)
 			}
 			params[i] = name + "_"
 		}
@@ -366,7 +366,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 				field := t.Field(i)
 				name := field.Name()
 				if field.Name() == "_" {
-					name = fmt.Sprintf("go$blank%d", i)
+					name = fmt.Sprintf("blank$%d", i)
 				}
 				c.Printf("this.%s = %s_ !== undefined ? %s_ : %s;", name, name, name, c.zeroValue(field.Type()))
 			}
@@ -658,20 +658,19 @@ func (c *PkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellips
 func (c *PkgContext) zeroValue(ty types.Type) string {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
-		if is64Bit(t) {
+		switch {
+		case is64Bit(t):
 			return fmt.Sprintf("new %s(0, 0)", c.typeName(ty))
-		}
-		if t.Info()&types.IsBoolean != 0 {
+		case t.Info()&types.IsBoolean != 0:
 			return "false"
-		}
-		if t.Info()&types.IsNumeric != 0 {
+		case t.Info()&types.IsNumeric != 0, t.Kind() == types.UnsafePointer:
 			return "0"
-		}
-		if t.Info()&types.IsString != 0 {
+		case t.Info()&types.IsString != 0:
 			return `""`
-		}
-		if t.Kind() == types.UntypedNil {
+		case t.Kind() == types.UntypedNil:
 			panic("Zero value for untyped nil.")
+		default:
+			panic("Unhandled type")
 		}
 	case *types.Array:
 		return fmt.Sprintf(`go$makeNativeArray("%s", %d, function() { return %s; })`, typeKind(t.Elem()), t.Len(), c.zeroValue(t.Elem()))

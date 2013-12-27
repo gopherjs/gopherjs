@@ -48,7 +48,12 @@ var natives = map[string]string{
 	"encoding/json": `
 		var encodeStates = [];
 		newEncodeState = function() {
-			return encodeStates.pop() || new encodeState.Ptr();
+			var e = encodeStates.pop();
+			if (e !== undefined) {
+				e.Reset();
+				return e;
+			}
+			return new encodeState.Ptr();
 		};
 		putEncodeState = function(e) {
 			encodeStates.push(e);
@@ -109,39 +114,7 @@ var natives = map[string]string{
 		Trunc = function(x) { return (x === 1/0 || x === -1/0 || x !== x || 1/x === 1/-0) ? x : x >> 0; };
 
 		// generated from bitcasts/bitcasts.go
-		Float32bits = function(f) {
-			var s, e;
-			if (f === 0) {
-				if (f === 0 && 1 / f === 1 / -0) {
-					return 2147483648;
-				}
-				return 0;
-			}
-			if (!(f === f)) {
-				return 2143289344;
-			}
-			s = 0;
-			if (f < 0) {
-				s = 2147483648;
-				f = -f;
-			}
-			e = 150;
-			while (f >= 1.6777216e+07) {
-				f = f / (2);
-				if (e === 255) {
-					break;
-				}
-				e = (e + (1) >>> 0);
-			}
-			while (f < 8.388608e+06) {
-				e = (e - (1) >>> 0);
-				if (e === 0) {
-					break;
-				}
-				f = f * (2);
-			}
-			return ((((s | (((e >>> 0) << 23) >>> 0)) >>> 0) | ((((((f + 0.5) >> 0) >>> 0) &~ 8388608) >>> 0))) >>> 0);
-		};
+		Float32bits = go$float32bits;
 		Float32frombits = function(b) {
 			var s, e, m;
 			s = 1;

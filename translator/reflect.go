@@ -9,7 +9,7 @@ func init() {
       RecvDir: go$pkg.RecvDir, SendDir: go$pkg.SendDir, BothDir: go$pkg.BothDir
     };
 
-    var fieldName = function(field) {
+    var fieldName = function(field, i) {
       if (field.name.go$get === go$throwNilPointerError) {
         var ntyp = field.typ;
         if (ntyp.Kind() === go$pkg.Ptr) {
@@ -17,13 +17,17 @@ func init() {
         }
         return ntyp.Name();
       }
-      return field.name.go$get();
+      var name = field.name.go$get();
+      if (name === "_") {
+        return "blank$" + i;
+      }
+      return name;
     };
     var copyStruct = function(dst, src, typ) {
       var fields = typ.structType.fields.array, i;
       for (i = 0; i < fields.length; i += 1) {
         var field = fields[i];
-        var name = fieldName(field);
+        var name = fieldName(field, i);
         dst[name] = src[name];
       }
     };
@@ -64,11 +68,11 @@ func init() {
       case go$pkg.Uint64:
       case go$pkg.Complex64:
       case go$pkg.Complex128:
-        val = new typ.alg(0, 0);
+        val = new typ.jsType(0, 0);
         break;
       case go$pkg.Array:
         var elemType = typ.Elem();
-        val = go$makeNativeArray(elemType.alg.kind, typ.Len(), function() { return Zero(elemType).val; });
+        val = go$makeNativeArray(elemType.jsType.kind, typ.Len(), function() { return Zero(elemType).val; });
         break;
       case go$pkg.Interface:
         val = null;
@@ -78,13 +82,13 @@ func init() {
         break;
       case go$pkg.Ptr:
       case go$pkg.Slice:
-        val = typ.alg.nil;
+        val = typ.jsType.nil;
         break;
       case go$pkg.String:
         val = "";
         break;
       case go$pkg.Struct:
-        val = new typ.alg.Ptr();
+        val = new typ.jsType.Ptr();
         break;
       default:
         throw new Go$Panic("reflect.Zero(" + typ.string.go$get() + "): type not yet supported");
@@ -93,10 +97,14 @@ func init() {
     };
     New = function(typ) {
       var ptrType = typ.common().ptrTo();
-      if (typ.Kind() === go$pkg.Struct) {
-        return new Value.Ptr(ptrType, new typ.alg.Ptr(), go$pkg.Ptr << flagKindShift);
+      switch (typ.Kind()) {
+      case go$pkg.Struct:
+        return new Value.Ptr(ptrType, new typ.jsType.Ptr(), go$pkg.Ptr << flagKindShift);
+      case go$pkg.Array:
+        return new Value.Ptr(ptrType, new ptrType.jsType(Zero(typ).val), go$pkg.Ptr << flagKindShift);
+      default:
+        return new Value.Ptr(ptrType, go$newDataPointer(Zero(typ).val, ptrType.jsType), go$pkg.Ptr << flagKindShift);
       }
-      return new Value.Ptr(ptrType, go$newDataPointer(Zero(typ).val, ptrType.alg), go$pkg.Ptr << flagKindShift);
     };
     MakeSlice = function(typ, len, cap) {
       if (typ.Kind() !== go$pkg.Slice) {
@@ -111,7 +119,7 @@ func init() {
       if (len > cap) {
         throw new Go$Panic("reflect.MakeSlice: len > cap");
       }
-      return new Value.Ptr(typ.common(), typ.alg.make(len, cap, function() { return Zero(typ.Elem()).val; }), go$pkg.Slice << flagKindShift);
+      return new Value.Ptr(typ.common(), typ.jsType.make(len, cap, function() { return Zero(typ.Elem()).val; }), go$pkg.Slice << flagKindShift);
     };
     makemap = function(t) {
       return new Go$Map();
@@ -152,13 +160,13 @@ func init() {
         throw new Go$Panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")
       }
       var val = v.iword();
-      if (v.typ.Kind() === go$pkg.Interface || val.constructor === v.typ.alg) {
+      if (v.typ.Kind() === go$pkg.Interface || val.constructor === v.typ.jsType) {
         return val;
       }
       if (v.typ.Kind() === go$pkg.Ptr) {
-        return new v.typ.alg(val.go$get, val.go$set);
+        return new v.typ.jsType(val.go$get, val.go$set);
       }
-      return new v.typ.alg(val);
+      return new v.typ.jsType(val);
     };
     methodName = function() {
       return "?FIXME?";
@@ -190,7 +198,7 @@ func init() {
     };
 
     rtype.Ptr.prototype.ptrTo = function() {
-      return go$ptrType(this.alg).reflectType();
+      return go$ptrType(this.jsType).reflectType();
     };
 
     Value.Ptr.prototype.iword = function() {
@@ -204,7 +212,7 @@ func init() {
       if (this.typ.Elem().Kind() !== go$pkg.Uint8) {
         throw new Go$Panic("reflect.Value.Bytes of non-byte slice");
       }
-      return this.val;
+      return this.iword();
     };
     Value.Ptr.prototype.call = function(op, args) {
       if (this.val === null) {
@@ -304,7 +312,7 @@ func init() {
         throw new Go$Panic("reflect: Field index out of range");
       }
       var field = tt.fields.array[i];
-      var name = fieldName(field);
+      var name = fieldName(field, i);
       var typ = field.typ;
       var fl = this.flag & (flagRO | flagIndir | flagAddr);
       // if (field.pkgPath !== nil) {
@@ -362,7 +370,7 @@ func init() {
       case go$pkg.Func:
       case go$pkg.Ptr:
       case go$pkg.Slice:
-        return this.iword() === this.typ.alg.nil;
+        return this.iword() === this.typ.jsType.nil;
       case go$pkg.Map:
         return this.iword() === false;
       case go$pkg.Interface:
@@ -382,13 +390,29 @@ func init() {
       }
       throw new Go$Panic(new ValueError.Ptr("reflect.Value.Len", k));
     };
+    Value.Ptr.prototype.Pointer = function() {
+      var k = this.kind();
+      switch (k) {
+      case go$pkg.Chan:
+      case go$pkg.Func:
+      case go$pkg.Map:
+      case go$pkg.Ptr:
+      case go$pkg.Slice:
+      case go$pkg.UnsafePointer:
+        if (this.IsNil()) {
+          return 0;
+        }
+        return 42;
+      }
+      throw new Go$Panic(new ValueError.Ptr("reflect.Value.Pointer", k));
+    };
     Value.Ptr.prototype.Set = function(x) {
       this.mustBeAssignable();
       x.mustBeExported();
       if ((this.flag & flagIndir) !== 0) {
         switch (this.typ.Kind()) {
         case go$pkg.Interface:
-          this.val.go$set(valueInterface(x));
+          this.val.go$set(valueInterface(x, false));
           return;
         case go$pkg.Struct:
           copyStruct(this.val, x.val, this.typ);
@@ -407,7 +431,7 @@ func init() {
       if (n < s.length || n > s.capacity) {
         throw new Go$Panic("reflect: slice capacity out of range in SetCap");
       }
-      var newSlice = new this.typ.alg(s.array);
+      var newSlice = new this.typ.jsType(s.array);
       newSlice.offset = s.offset;
       newSlice.length = s.length;
       newSlice.capacity = n;
@@ -420,7 +444,7 @@ func init() {
       if (n < 0 || n > s.capacity) {
         throw new Go$Panic("reflect: slice length out of range in SetLen");
       }
-      var newSlice = new this.typ.alg(s.array);
+      var newSlice = new this.typ.jsType(s.array);
       newSlice.offset = s.offset;
       newSlice.length = n;
       newSlice.capacity = s.capacity;
@@ -436,57 +460,97 @@ func init() {
       return "<" + this.typ.String() + " Value>";
     };
     
-    var deepValueEqual = function(a, b, visited) {
+    var deepValueEqual = function(v1, v2, visited) {
+      if (!v1.IsValid() || !v2.IsValid()) {
+        return !v1.IsValid() && !v2.IsValid();
+      }
+      if (v1.Type() !== v2.Type()) {
+        return false;
+      }
+
       var i;
-      if (a === b) {
+      switch(v1.Kind()) {
+      case go$pkg.Array:
+      case go$pkg.Map:
+      case go$pkg.Slice:
+      case go$pkg.Struct:
+        for (i = 0; i < visited.length; i += 1) {
+          var entry = visited[i];
+          if (v1 === entry[0] && v2 === entry[1]) {
+            return true;
+          }
+        }
+        visited.push([v1, v2]);
+      }
+
+      switch(v1.Kind()) {
+      case go$pkg.Array:
+      case go$pkg.Slice:
+        if (v1.Kind() === go$pkg.Slice) {
+          if (v1.IsNil() !== v2.IsNil()) {
+            return false;
+          }
+          if (v1.iword() === v2.iword()) {
+            return true;
+          }
+        }
+        var n = v1.Len();
+        if (n !== v2.Len()) {
+          return false;
+        }
+        for (i = 0; i < n; i += 1) {
+          if (!deepValueEqual(v1.Index(i), v2.Index(i), visited)) {
+            return false;
+          }
+        }
         return true;
-      }
-      if (a === null || b === null) {
-        return false;
-      }
-      if (a.constructor === Number) {
-        return false;
-      }
-      if (a.constructor !== b.constructor) {
-        return false;
-      }
-      for (i = 0; i < visited.length; i += 1) {
-        var entry = visited[i];
-        if (a === entry[0] && b === entry[1]) {
+      case go$pkg.Interface:
+        if (v1.IsNil() || v2.IsNil()) {
+          return v1.IsNil() && v2.IsNil();
+        }
+        return deepValueEqual(v1.Elem(), v2.Elem(), visited);
+      case go$pkg.Ptr:
+        return deepValueEqual(v1.Elem(), v2.Elem(), visited);
+      case go$pkg.Struct:
+        var n = v1.NumField();
+        for (i = 0; i < n; i += 1) {
+          if (!deepValueEqual(v1.Field(i), v2.Field(i), visited)) {
+            return false;
+          }
+        }
+        return true;
+      case go$pkg.Map:
+        if (v1.IsNil() !== v2.IsNil()) {
+          return false;
+        }
+        if (v1.iword() === v2.iword()) {
           return true;
         }
-      }
-      visited.push([a, b]);
-      if (a.length !== undefined) {
-        if (a.length !== b.length) {
+        var keys = v1.MapKeys();
+        if (keys.length !== v2.Len()) {
           return false;
         }
-        if (a.array !== undefined) {
-          for (i = 0; i < a.length; i += 1) {
-            if (!deepValueEqual(a.array[a.offset + i], b.array[b.offset + i], visited)) {
-              return false;
-            }
-          }
-        } else {
-          for (i = 0; i < a.length; i += 1) {
-            if (!deepValueEqual(a[i], b[i], visited)) {
-              return false;
-            }
+        for (i = 0; i < keys.length; i++) {
+          var k = keys.array[i];
+          if (!deepValueEqual(v1.MapIndex(k), v2.MapIndex(k), visited)) {
+            return false;
           }
         }
         return true;
+      case go$pkg.Func:
+        return v1.IsNil() && v2.IsNil();
       }
-      var keys = go$keys(a), j;
-      for (j = 0; j < keys.length; j += 1) {
-        var key = keys[j];
-        if (key !== "go$id" && key !== "go$val" && !deepValueEqual(a[key], b[key], visited)) {
-          return false;
-        }
-      }
-      return true;
+
+      return go$interfaceIsEqual(valueInterface(v1, false), valueInterface(v2, false));
     };
-    var DeepEqual = function(a, b) {
-      return deepValueEqual(a, b, []);
+    var DeepEqual = function(a1, a2) {
+      if (a1 === a2) {
+        return true;
+      }
+      if (a1 === null || a2 === null || a1.constructor !== a2.constructor) {
+        return false;
+      }
+      return deepValueEqual(ValueOf(a1), ValueOf(a2), []);
     };
   `
 }

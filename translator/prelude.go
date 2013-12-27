@@ -203,7 +203,8 @@ var go$newType = function(string, kind, name, constructor) {
 	typ.reflectType = function() {
 		if (rt === null) {
 			var size = ({ Int: 4, Int8: 1, Int16: 2, Int32: 4, Int64: 8, Uint: 4, Uint8: 1, Uint16: 2, Uint32: 4, Uint64: 8, Uintptr: 4, Float32: 4, Float64: 8, UnsafePointer: 4 })[typ.kind] || 0;
-			rt = new go$reflect.rtype(size, 0, 0, 0, 0, go$reflect.kinds[typ.kind], typ, undefined, go$newStringPtr(typ.string), undefined, undefined);
+			rt = new go$reflect.rtype(size, 0, 0, 0, 0, go$reflect.kinds[typ.kind], undefined, undefined, go$newStringPtr(typ.string), undefined, undefined);
+			rt.jsType = typ;
 
 			var methods = [];
 			if (typ.methods !== undefined) {
@@ -227,24 +228,24 @@ var go$newType = function(string, kind, name, constructor) {
 	return typ;
 };
 
-var Go$Bool          = go$newType("bool",       "Bool");
-var Go$Int           = go$newType("int",        "Int");
-var Go$Int8          = go$newType("int8",       "Int8");
-var Go$Int16         = go$newType("int16",      "Int16");
-var Go$Int32         = go$newType("int32",      "Int32");
-var Go$Int64         = go$newType("int64",      "Int64");
-var Go$Uint          = go$newType("uint",       "Uint");
-var Go$Uint8         = go$newType("uint8",      "Uint8");
-var Go$Uint16        = go$newType("uint16",     "Uint16");
-var Go$Uint32        = go$newType("uint32",     "Uint32");
-var Go$Uint64        = go$newType("uint64",     "Uint64");
-var Go$Uintptr       = go$newType("uintptr",    "Uintptr");
-var Go$Float32       = go$newType("float32",    "Float32");
-var Go$Float64       = go$newType("float64",    "Float64");
-var Go$Complex64     = go$newType("complex64",  "Complex64");
-var Go$Complex128    = go$newType("complex128", "Complex128");
-var Go$String        = go$newType("string",     "String");
-var Go$UnsafePointer = go$newType("unsafe.Ptr", "UnsafePointer");
+var Go$Bool          = go$newType("bool",           "Bool",          "bool");
+var Go$Int           = go$newType("int",            "Int",           "int");
+var Go$Int8          = go$newType("int8",           "Int8",          "int8");
+var Go$Int16         = go$newType("int16",          "Int16",         "int16");
+var Go$Int32         = go$newType("int32",          "Int32",         "int32");
+var Go$Int64         = go$newType("int64",          "Int64",         "int64");
+var Go$Uint          = go$newType("uint",           "Uint",          "uint");
+var Go$Uint8         = go$newType("uint8",          "Uint8",         "uint8");
+var Go$Uint16        = go$newType("uint16",         "Uint16",        "uint16");
+var Go$Uint32        = go$newType("uint32",         "Uint32",        "uint32");
+var Go$Uint64        = go$newType("uint64",         "Uint64",        "uint64");
+var Go$Uintptr       = go$newType("uintptr",        "Uintptr",       "uintptr");
+var Go$Float32       = go$newType("float32",        "Float32",       "float32");
+var Go$Float64       = go$newType("float64",        "Float64",       "float64");
+var Go$Complex64     = go$newType("complex64",      "Complex64",     "complex64");
+var Go$Complex128    = go$newType("complex128",     "Complex128",    "complex128");
+var Go$String        = go$newType("string",         "String",        "string");
+var Go$UnsafePointer = go$newType("unsafe.Pointer", "UnsafePointer", "Pointer");
 
 var go$nativeArray = function(elemKind) {
 	return ({ Int: Int32Array, Int8: Int8Array, Int16: Int16Array, Int32: Int32Array, Uint: Uint32Array, Uint8: Uint8Array, Uint16: Uint16Array, Uint32: Uint32Array, Uintptr: Uint32Array, Float32: Float32Array, Float64: Float64Array })[elemKind] || Array;
@@ -419,6 +420,40 @@ go$newStringPtr = function(str) {
 };
 var go$newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });
+};
+
+var go$float32bits = function(f) {
+	var s, e;
+	if (f === 0) {
+		if (f === 0 && 1 / f === 1 / -0) {
+			return 2147483648;
+		}
+		return 0;
+	}
+	if (!(f === f)) {
+		return 2143289344;
+	}
+	s = 0;
+	if (f < 0) {
+		s = 2147483648;
+		f = -f;
+	}
+	e = 150;
+	while (f >= 1.6777216e+07) {
+		f = f / (2);
+		if (e === 255) {
+			break;
+		}
+		e = (e + (1) >>> 0);
+	}
+	while (f < 8.388608e+06) {
+		e = (e - (1) >>> 0);
+		if (e === 0) {
+			break;
+		}
+		f = f * (2);
+	}
+	return ((((s | (((e >>> 0) << 23) >>> 0)) >>> 0) | ((((((f + 0.5) >> 0) >>> 0) &~ 8388608) >>> 0))) >>> 0);
 };
 
 var go$flatten64 = function(x) {
@@ -892,6 +927,8 @@ var go$interfaceIsEqual = function(a, b) {
 		return false;
 	}
 	switch (a.constructor.kind) {
+	case "Float32":
+		return go$float32bits(a.go$val) === go$float32bits(b.go$val);
 	case "Complex64":
 	case "Complex128":
 		return a.go$val.real === b.go$val.real && a.go$val.imag === b.go$val.imag;

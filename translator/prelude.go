@@ -99,7 +99,6 @@ var go$newType = function(string, kind, name, constructor) {
 				rt.funcType = new go$reflect.funcType(rt, isVariadic, new typeSlice(go$mapArray(params, function(p) { return p.reflectType(); })), new typeSlice(go$mapArray(results, function(p) { return p.reflectType(); })));
 			};
 		};
-		typ.prototype.go$uncomparable = true;
 		break;
 
 	case "Interface":
@@ -122,7 +121,6 @@ var go$newType = function(string, kind, name, constructor) {
 				rt.mapType = new go$reflect.mapType(rt, key.reflectType(), elem.reflectType(), undefined, undefined);
 			};
 		};
-		typ.prototype.go$uncomparable = true;
 		break;
 
 	case "Ptr":
@@ -168,12 +166,10 @@ var go$newType = function(string, kind, name, constructor) {
 				rt.sliceType = new go$reflect.sliceType(rt, elem.reflectType());
 			};
 		};
-		typ.prototype.go$uncomparable = true;
 		break;
 
 	case "Struct":
 		typ = function(v) { this.go$val = v; };
-		typ.prototype.go$uncomparable = true;
 		typ.Ptr = go$newType("*" + string, "Ptr", undefined, constructor);
 		typ.Ptr.Struct = typ;
 		typ.Ptr.prototype.go$key = function() { return this.go$id; };
@@ -895,10 +891,25 @@ var go$interfaceIsEqual = function(a, b) {
 	if (a.constructor !== b.constructor) {
 		return false;
 	}
-	if (a.go$uncomparable) {
-		throw new Go$Panic("runtime error: comparing uncomparable type " + a.constructor);
+	switch (a.constructor.kind) {
+	case "Complex64":
+	case "Complex128":
+		return a.go$val.real === b.go$val.real && a.go$val.imag === b.go$val.imag;
+	case "Int64":
+	case "Uint64":
+		return a.go$val.high === b.go$val.high && a.go$val.low === b.go$val.low;
+	case "Array":
+		return go$arrayIsEqual(a.go$val, b.go$val);
+	case "Ptr":
+		return go$pointerIsEqual(a, b);
+	case "Func":
+	case "Map":
+	case "Slice":
+	case "Struct":
+		go$throwRuntimeError("comparing uncomparable type " + a.constructor);
+	default:
+		return a.go$val === b.go$val;
 	}
-	return a.go$val === b.go$val;
 };
 var go$arrayIsEqual = function(a, b) {
 	if (a.length != b.length) {

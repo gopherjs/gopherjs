@@ -46,16 +46,16 @@
 | -- pe           | not yet               |                                   |
 | encoding        | (no tests)            |                                   |
 | -- ascii85      | yes                   |                                   |
-| -- asn1         | not yet               | needs reflection                  |
+| -- asn1         | yes                   |                                   |
 | -- base32       | yes                   |                                   |
 | -- base64       | yes                   |                                   |
 | -- binary       | not yet               |                                   |
 | -- csv          | yes                   |                                   |
-| -- gob          | not yet               | needs reflection                  |
+| -- gob          | not yet               |                                   |
 | -- hex          | yes                   |                                   |
-| -- json         | not yet               | needs reflection                  |
+| -- json         | yes                   |                                   |
 | -- pem          | yes                   |                                   |
-| -- xml          | not yet               | needs reflection                  |
+| -- xml          | yes                   |                                   |
 | errors          | yes                   |                                   |
 | expvar          | not yet               |                                   |
 | flag            | not yet               |                                   |

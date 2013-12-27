@@ -306,7 +306,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			for _, spec := range decl.Specs {
 				ts := spec.(*ast.TypeSpec)
 				c.translateTypeSpec(ts)
-				c.initType(ts)
+				c.initType(c.info.Objects[ts.Name])
 			}
 		case token.CONST:
 			// skip, constants are inlined

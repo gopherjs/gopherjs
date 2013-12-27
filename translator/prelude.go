@@ -7,7 +7,7 @@ var go$obj, go$tuple;
 var go$idCounter = 1;
 var go$keys = function(m) { return m ? Object.keys(m) : []; };
 var go$min = Math.min;
-var go$reflect, go$newStringPointer;
+var go$reflect, go$newStringPtr;
 
 var go$mapArray = function(array, f) {
 	var newArray = new array.constructor(array.length), i;
@@ -16,34 +16,6 @@ var go$mapArray = function(array, f) {
 	}
 	return newArray;
 };
-
-var go$cache = function(v) {
-	return function() {
-		if (v.constructor === Function) {
-			v = v();
-		}
-		return v;
-	};
-};
-
-var go$makeRType = function(typ) {
-	var methods = [];
-	// var methodNames = Object.keys(typ.prototype).sort(), methods = [], i;
-	// for (i = 0; i < methodNames.length; i++) {
-	// 	var name = methodNames[i];
-	// 	if (name.substr(0, 3) === "go$") {
-	// 		continue;
-	// 	}
-	// 	methods.push(new go$reflect.imethod(go$newStringPointer(name), undefined, undefined, undefined, undefined, undefined));
-	// }
-	var size = ({ Int: 4, Int8: 1, Int16: 2, Int32: 4, Int64: 8, Uint: 4, Uint8: 1, Uint16: 2, Uint32: 4, Uint64: 8, Uintptr: 4, Float32: 4, Float64: 8, UnsafePointer: 4 })[typ.kind] || 0;
-	var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod)));
-	var ut = undefined;
-	if (typ.typName !== undefined) {
-		ut = new go$reflect.uncommonType(go$newStringPointer(typ.typName), undefined, new methodSlice(methods));
-	}
-	return new go$reflect.rtype(size, 0, 0, 0, 0, go$reflect.kinds[typ.kind], typ, undefined, go$newStringPointer(typ.string), ut, undefined);
-}
 
 var go$newType = function(string, kind, name, constructor) {
 	var typ;
@@ -102,11 +74,9 @@ var go$newType = function(string, kind, name, constructor) {
 			this.go$val = this;
 		});
 		typ.init = function(elem, len) {
-			typ.reflectType = go$cache(function() {
-				var rt = go$makeRType(typ);
+			typ.extendReflectType = function(rt) {
 				rt.arrayType = new go$reflect.arrayType(rt, elem.reflectType(), undefined, len);
-				return rt;
-			});
+			};
 			typ.Ptr.init(typ);
 		};
 		break;
@@ -115,23 +85,19 @@ var go$newType = function(string, kind, name, constructor) {
 		typ = function() {};
 		typ.init = function(elem, sendOnly, recvOnly) {
 			typ.nil = new typ();
-			typ.reflectType = go$cache(function() {
-				var rt = go$makeRType(typ);
+			typ.extendReflectType = function(rt) {
 				rt.chanType = new go$reflect.chanType(rt, elem.reflectType(), sendOnly ? go$reflect.SendDir : (recvOnly ? go$reflect.RecvDir : go$reflect.BothDir));
-				return rt;
-			});
+			};
 		};
 		break;
 
 	case "Func":
 		typ = function(v) { this.go$val = v; };
 		typ.init = function(params, results, isVariadic) {
-			typ.reflectType = go$cache(function() {
-				var rt = go$makeRType(typ);
+			typ.extendReflectType = function(rt) {
 				var typeSlice = (go$sliceType(go$ptrType(go$reflect.rtype)));
 				rt.funcType = new go$reflect.funcType(rt, isVariadic, new typeSlice(go$mapArray(params, function(p) { return p.reflectType(); })), new typeSlice(go$mapArray(results, function(p) { return p.reflectType(); })));
-				return rt;
-			});
+			};
 		};
 		typ.prototype.go$uncomparable = true;
 		break;
@@ -139,23 +105,22 @@ var go$newType = function(string, kind, name, constructor) {
 	case "Interface":
 		typ = { implementedBy: [] };
 		typ.init = function(methods) {
-			typ.reflectType = go$cache(function() {
-				var rt = go$makeRType(typ);
+			typ.extendReflectType = function(rt) {
+				var imethods = go$mapArray(methods, function(m) {
+					return new go$reflect.imethod(go$newStringPtr(m[0]), undefined, m[1].reflectType());
+				});
 				var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod)));
-				rt.interfaceType = new go$reflect.interfaceType(rt, new methodSlice(go$mapArray(methods, function(m) { return new go$reflect.imethod(go$newStringPointer(m[0]), undefined, m[1].reflectType()); })));
-				return rt;
-			});
+				rt.interfaceType = new go$reflect.interfaceType(rt, new methodSlice(imethods));
+			};
 		};
 		break;
 
 	case "Map":
 		typ = function(v) { this.go$val = v; };
 		typ.init = function(key, elem) {
-			typ.reflectType = go$cache(function() {
-				var rt = go$makeRType(typ);
+			typ.extendReflectType = function(rt) {
 				rt.mapType = new go$reflect.mapType(rt, key.reflectType(), elem.reflectType(), undefined, undefined);
-				return rt;
-			});
+			};
 		};
 		typ.prototype.go$uncomparable = true;
 		break;
@@ -168,11 +133,9 @@ var go$newType = function(string, kind, name, constructor) {
 		};
 		typ.init = function(elem) {
 			typ.nil = new typ(go$throwNilPointerError, go$throwNilPointerError);
-			typ.reflectType = go$cache(function() {
-				var rt = go$makeRType(typ);
+			typ.extendReflectType = function(rt) {
 				rt.ptrType = new go$reflect.ptrType(rt, elem.reflectType());
-				return rt;
-			});
+			};
 		}
 		break;
 
@@ -201,11 +164,9 @@ var go$newType = function(string, kind, name, constructor) {
 		typ.init = function(elem) {
 			nativeArray = go$nativeArray(elem.kind);
 			typ.nil = new typ([]);
-			typ.reflectType = go$cache(function() {
-				var rt = go$makeRType(typ);
+			typ.extendReflectType = function(rt) {
 				rt.sliceType = new go$reflect.sliceType(rt, elem.reflectType());
-				return rt;
-			});
+			};
 		};
 		typ.prototype.go$uncomparable = true;
 		break;
@@ -223,19 +184,13 @@ var go$newType = function(string, kind, name, constructor) {
 				var field = fields[i];
 				Object.defineProperty(typ.Ptr.nil, field[0], { get: go$throwNilPointerError, set: go$throwNilPointerError });
 			}
-			var structRType; // manual caching to avoid infinite recursion
-			typ.reflectType = function() {
-				if (structRType !== undefined) {
-					return structRType;
-				}
-				structRType = go$makeRType(typ);
+			typ.extendReflectType = function(rt) {
 				var reflectFields = new Array(fields.length), i;
 				for (i = 0; i < fields.length; i++) {
 					var field = fields[i];
-					reflectFields[i] = new go$reflect.structField(go$newStringPointer(field[0]), go$newStringPointer(field[1]), field[2].reflectType(), go$newStringPointer(field[3]), i);
+					reflectFields[i] = new go$reflect.structField(go$newStringPtr(field[0]), go$newStringPtr(field[1]), field[2].reflectType(), go$newStringPtr(field[3]), i);
 				}
-				structRType.structType = new go$reflect.structType(structRType, new (go$sliceType(go$reflect.structField))(reflectFields));
-				return structRType;
+				rt.structType = new go$reflect.structType(rt, new (go$sliceType(go$reflect.structField))(reflectFields));
 			};
 			typ.Ptr.init(typ);
 		};
@@ -248,9 +203,31 @@ var go$newType = function(string, kind, name, constructor) {
 	typ.kind = kind;
 	typ.string = string;
 	typ.typName = name; // property "name" does not work
-	typ.reflectType = go$cache(function() {
-		return go$makeRType(typ);
-	});
+	var rt = null;
+	typ.reflectType = function() {
+		if (rt === null) {
+			var size = ({ Int: 4, Int8: 1, Int16: 2, Int32: 4, Int64: 8, Uint: 4, Uint8: 1, Uint16: 2, Uint32: 4, Uint64: 8, Uintptr: 4, Float32: 4, Float64: 8, UnsafePointer: 4 })[typ.kind] || 0;
+			rt = new go$reflect.rtype(size, 0, 0, 0, 0, go$reflect.kinds[typ.kind], typ, undefined, go$newStringPtr(typ.string), undefined, undefined);
+
+			var methods = [];
+			if (typ.methods !== undefined) {
+				var i;
+				for (i = 0; i < typ.methods.length; i++) {
+					var m = typ.methods[i];
+					methods.push(new go$reflect.method(go$newStringPtr(m[0]), undefined, go$funcType(m[1], m[2], m[3]).reflectType(), go$funcType([typ].concat(m[1]), m[2], m[3]).reflectType(), undefined, undefined));
+				}
+			}
+			if (typ.typName !== undefined || methods.length !== 0) {
+				var methodSlice = (go$sliceType(go$ptrType(go$reflect.method)));
+				rt.uncommonType = new go$reflect.uncommonType(go$newStringPtr(typ.typName), undefined, new methodSlice(methods));
+			}
+
+			if (typ.extendReflectType !== undefined) {
+				typ.extendReflectType(rt);
+			}
+		}
+		return rt;
+	};
 	return typ;
 };
 
@@ -432,11 +409,17 @@ var go$structType = function(fields) {
 	return typ;
 };
 
-go$newStringPointer = function(str) {
-	if (str === "") {
+var go$stringPtrMap = new Go$Map();
+go$newStringPtr = function(str) {
+	if (str === undefined || str === "") {
 		return go$ptrType(Go$String).nil;
 	}
-	return new (go$ptrType(Go$String))(function() { return str; }, function(v) { str = v; });
+	var ptr = go$stringPtrMap[str];
+	if (ptr === undefined) {
+		ptr = new (go$ptrType(Go$String))(function() { return str; }, function(v) { str = v; });
+		go$stringPtrMap[str] = ptr;
+	}
+	return ptr;
 };
 var go$newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });

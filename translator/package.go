@@ -235,14 +235,31 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			typeName := c.objectName(obj)
 			c.Printf("var %s;", typeName)
 			c.translateTypeSpec(spec)
+			c.Printf("go$pkg.%s = %s;", typeName, typeName)
 			for _, fun := range functionsByType[obj.Type()] {
 				_, isStruct := obj.Type().Underlying().(*types.Struct)
 				c.translateMethod(typeName, isStruct, fun)
 			}
-			c.Printf("go$pkg.%s = %s;", typeName, typeName)
 		}
 		for _, spec := range typeSpecs {
-			c.initType(spec)
+			obj := c.info.Objects[spec.Name]
+			c.initType(obj)
+			if _, isInterface := obj.Type().Underlying().(*types.Interface); !isInterface {
+				writeMethodSet := func(t types.Type) {
+					methodSet := t.MethodSet()
+					if methodSet.Len() == 0 {
+						return
+					}
+					methods := make([]string, methodSet.Len())
+					for i := range methods {
+						method := methodSet.At(i)
+						methods[i] = fmt.Sprintf(`["%s", %s]`, method.Obj().Name(), c.initArgs(method.Type()))
+					}
+					c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
+				}
+				writeMethodSet(obj.Type())
+				writeMethodSet(types.NewPointer(obj.Type()))
+			}
 		}
 
 		// package functions
@@ -387,8 +404,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 	}
 }
 
-func (c *PkgContext) initType(spec *ast.TypeSpec) {
-	obj := c.info.Objects[spec.Name]
+func (c *PkgContext) initType(obj types.Object) {
 	switch t := obj.Type().Underlying().(type) {
 	case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
 		c.Printf("%s.init(%s);", c.objectName(obj), c.initArgs(t))

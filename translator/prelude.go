@@ -172,7 +172,13 @@ var go$newType = function(string, kind, name, constructor) {
 		typ = function(v) { this.go$val = v; };
 		typ.Ptr = go$newType("*" + string, "Ptr", undefined, constructor);
 		typ.Ptr.Struct = typ;
-		typ.Ptr.prototype.go$key = function() { return this.go$id; };
+		typ.Ptr.prototype.go$key = function() {
+			if (this.go$id === undefined) {
+				this.go$id = go$idCounter;
+				go$idCounter += 1;
+			}
+			return this.go$id;
+		};
 		typ.init = function(fields) {
 			typ.Ptr.nil = new constructor();
 			var i;
@@ -375,8 +381,6 @@ var go$structType = function(fields) {
 	var typ = go$structTypes[string];
 	if (typ === undefined) {
 		typ = go$newType(string, "Struct", undefined, function() {
-			this.go$id = go$idCounter;
-			go$idCounter += 1;
 			this.go$val = this;
 			var i;
 			for (i = 0; i < fields.length; i++) {

@@ -108,7 +108,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		c.allVarNames[name] = 1
 	}
 
-	functionsByType := make(map[types.Type][]*ast.FuncDecl)
+	var functions []*ast.FuncDecl
 	functionsByObject := make(map[types.Object]*ast.FuncDecl)
 	var initStmts []ast.Stmt
 	var typeSpecs []*ast.TypeSpec
@@ -126,11 +126,14 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						recvType = ptr.Elem()
 					}
 				}
+				if isBlank(d.Name) {
+					continue
+				}
 				if sig.Recv() == nil && d.Name.Name == "init" {
 					initStmts = append(initStmts, d.Body.List...)
 					continue
 				}
-				functionsByType[recvType] = append(functionsByType[recvType], d)
+				functions = append(functions, d)
 				o := c.info.Objects[d.Name]
 				functionsByObject[o] = d
 				if sig.Recv() == nil {
@@ -229,17 +232,13 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			c.pkgVars[importedPkg.Path()] = varName
 		}
 
-		// types and their functions
+		// types
 		for _, spec := range typeSpecs {
 			obj := c.info.Objects[spec.Name]
 			typeName := c.objectName(obj)
 			c.Printf("var %s;", typeName)
 			c.translateTypeSpec(spec)
 			c.Printf("go$pkg.%s = %s;", typeName, typeName)
-			for _, fun := range functionsByType[obj.Type()] {
-				_, isStruct := obj.Type().Underlying().(*types.Struct)
-				c.translateMethod(typeName, isStruct, fun)
-			}
 		}
 		for _, spec := range typeSpecs {
 			obj := c.info.Objects[spec.Name]
@@ -262,31 +261,9 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			}
 		}
 
-		// package functions
-		for _, fun := range functionsByType[nil] {
-			if isBlank(fun.Name) {
-				continue
-			}
-			c.newScope(func() {
-				name := c.objectName(c.info.Objects[fun.Name])
-				params := c.translateParams(fun.Type)
-				c.Printf("var %s = function(%s) {", name, strings.Join(params, ", "))
-				c.Indent(func() {
-					jsCode, _ := typesPkg.Scope().Lookup("js_" + name).(*types.Const)
-					if jsCode != nil {
-						c.Write([]byte(exact.StringVal(jsCode.Val())))
-						c.Write([]byte{'\n'})
-						return
-					}
-					if fun.Body == nil {
-						c.Printf(`throw new Go$Panic("Native function not implemented: %s");`, name)
-						return
-					}
-
-					c.translateFunctionBody(fun.Body.List, c.info.Objects[fun.Name].Type().(*types.Signature))
-				})
-				c.Printf("};")
-			})
+		// functions
+		for _, fun := range functions {
+			c.translateFunction(fun)
 		}
 
 		// constants
@@ -325,9 +302,9 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 
 		// exports for package functions
-		for _, fun := range functionsByType[nil] {
+		for _, fun := range functions {
 			name := fun.Name.Name
-			if fun.Name.IsExported() || name == "main" {
+			if fun.Recv == nil && (fun.Name.IsExported() || name == "main") {
 				c.Printf("go$pkg.%s = %s;", name, name)
 			}
 		}
@@ -481,30 +458,30 @@ func (c *PkgContext) splitValueSpec(s *ast.ValueSpec) []*ast.ValueSpec {
 	return list
 }
 
-func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.FuncDecl) {
+func (c *PkgContext) translateFunction(fun *ast.FuncDecl) {
 	c.newScope(func() {
 		sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
-		recvType := sig.Recv().Type()
-		ptr, isPointer := recvType.(*types.Pointer)
 
 		params := c.translateParams(fun.Type)
 		joinedParams := strings.Join(params, ", ")
-		printPrimaryFunction := func(lhs string) {
+
+		printPrimaryFunction := func(lhs string, fullName string) {
 			c.Printf("%s = function(%s) {", lhs, joinedParams)
 			c.Indent(func() {
-				if jsCode, ok := c.pkg.Scope().Lookup("js_" + typeName + "_" + fun.Name.Name).(*types.Const); ok {
+				if jsCode, ok := c.pkg.Scope().Lookup("js_" + strings.Replace(fullName, ".", "_", 1)).(*types.Const); ok {
 					c.Write([]byte(exact.StringVal(jsCode.Val())))
 					c.Write([]byte{'\n'})
 					return
 				}
 				if fun.Body == nil {
-					c.Printf(`throw new Go$Panic("Native function not implemented: %s.%s");`, typeName, fun.Name.Name)
+					c.Printf(`throw new Go$Panic("Native function not implemented: %s");`, fullName)
 					return
 				}
 
 				body := fun.Body.List
-				if fun.Recv.List[0].Names != nil {
+				if fun.Recv != nil && fun.Recv.List[0].Names != nil {
 					recv := fun.Recv.List[0].Names[0]
+					recvType := sig.Recv().Type()
 					c.info.Types[recv] = recvType
 					this := c.newIdent("this", recvType)
 					if isWrapped(recvType) {
@@ -518,35 +495,52 @@ func (c *PkgContext) translateMethod(typeName string, isStruct bool, fun *ast.Fu
 						},
 					}, body...)
 				}
-
 				c.translateFunctionBody(body, sig)
 			})
 			c.Printf("};")
 		}
 
-		switch {
-		case isStruct:
-			c.Printf("%s.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, fun.Name.Name, joinedParams, fun.Name.Name, joinedParams)
-			printPrimaryFunction(typeName + ".Ptr.prototype." + fun.Name.Name)
-		case !isStruct && !isPointer:
-			value := "this.go$get()"
-			if isWrapped(recvType) {
-				value = fmt.Sprintf("new %s(%s)", typeName, value)
-			}
-			printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
-			c.Printf("go$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };", typeName, fun.Name.Name, joinedParams, value, fun.Name.Name, joinedParams)
-		case !isStruct && isPointer:
+		if fun.Recv == nil {
+			funName := c.objectName(c.info.Objects[fun.Name])
+			printPrimaryFunction("var "+funName, funName)
+			return
+		}
+
+		recvType := sig.Recv().Type()
+		ptr, isPointer := recvType.(*types.Pointer)
+		namedRecvType, _ := recvType.(*types.Named)
+		if isPointer {
+			namedRecvType = ptr.Elem().(*types.Named)
+		}
+		typeName := c.objectName(namedRecvType.Obj())
+		funName := fun.Name.Name
+
+		if _, isStruct := namedRecvType.Underlying().(*types.Struct); isStruct {
+			c.Printf("%s.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, funName, joinedParams, funName, joinedParams)
+			printPrimaryFunction(typeName+".Ptr.prototype."+funName, typeName+"."+funName)
+			return
+		}
+
+		if isPointer {
 			if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
-				printPrimaryFunction(typeName + ".prototype." + fun.Name.Name)
-				break
+				printPrimaryFunction(typeName+".prototype."+funName, typeName+"."+funName)
+				return
 			}
 			value := "this"
 			if isWrapped(ptr.Elem()) {
 				value = "this.go$val"
 			}
-			c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new (go$ptrType(%s))(function() { return obj; }, null)).%s(%s); };", typeName, fun.Name.Name, joinedParams, value, typeName, fun.Name.Name, joinedParams)
-			printPrimaryFunction(fmt.Sprintf("go$ptrType(%s).prototype.%s", typeName, fun.Name.Name))
+			c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new (go$ptrType(%s))(function() { return obj; }, null)).%s(%s); };", typeName, funName, joinedParams, value, typeName, funName, joinedParams)
+			printPrimaryFunction(fmt.Sprintf("go$ptrType(%s).prototype.%s", typeName, funName), typeName+"."+funName)
+			return
 		}
+
+		value := "this.go$get()"
+		if isWrapped(recvType) {
+			value = fmt.Sprintf("new %s(%s)", typeName, value)
+		}
+		printPrimaryFunction(typeName+".prototype."+funName, typeName+"."+funName)
+		c.Printf("go$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };", typeName, funName, joinedParams, value, funName, joinedParams)
 	})
 }
 

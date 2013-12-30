@@ -111,8 +111,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	var functions []*ast.FuncDecl
 	functionsByObject := make(map[types.Object]*ast.FuncDecl)
 	var initStmts []ast.Stmt
-	var typeSpecs []*ast.TypeSpec
-	var constSpecs []*ast.ValueSpec
+	var toplevelTypes []*types.TypeName
+	var constants []*types.Const
 	var varSpecs []*ast.ValueSpec
 	for _, file := range files {
 		for _, decl := range file.Decls {
@@ -143,17 +143,21 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				switch d.Tok {
 				case token.TYPE:
 					for _, spec := range d.Specs {
-						s := spec.(*ast.TypeSpec)
-						typeSpecs = append(typeSpecs, s)
-						c.objectName(c.info.Objects[s.Name]) // register toplevel name
+						o := c.info.Objects[spec.(*ast.TypeSpec).Name].(*types.TypeName)
+						toplevelTypes = append(toplevelTypes, o)
+						c.objectName(o) // register toplevel name
 					}
 				case token.CONST:
 					for _, spec := range d.Specs {
 						s := spec.(*ast.ValueSpec)
-						constSpecs = append(constSpecs, s)
 						for _, name := range s.Names {
+							if strings.HasPrefix(name.Name, "js_") {
+								continue
+							}
 							if !isBlank(name) {
-								c.objectName(c.info.Objects[name]) // register toplevel name
+								o := c.info.Objects[name].(*types.Const)
+								constants = append(constants, o)
+								c.objectName(o) // register toplevel name
 							}
 						}
 					}
@@ -233,17 +237,15 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 
 		// types
-		for _, spec := range typeSpecs {
-			obj := c.info.Objects[spec.Name]
-			typeName := c.objectName(obj)
+		for _, o := range toplevelTypes {
+			typeName := c.objectName(o)
 			c.Printf("var %s;", typeName)
-			c.translateTypeSpec(spec)
+			c.translateType(o)
 			c.Printf("go$pkg.%s = %s;", typeName, typeName)
 		}
-		for _, spec := range typeSpecs {
-			obj := c.info.Objects[spec.Name]
-			c.initType(obj)
-			if _, isInterface := obj.Type().Underlying().(*types.Interface); !isInterface {
+		for _, o := range toplevelTypes {
+			c.initType(o)
+			if _, isInterface := o.Type().Underlying().(*types.Interface); !isInterface {
 				writeMethodSet := func(t types.Type) {
 					methodSet := t.MethodSet()
 					if methodSet.Len() == 0 {
@@ -256,8 +258,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					}
 					c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
 				}
-				writeMethodSet(obj.Type())
-				writeMethodSet(types.NewPointer(obj.Type()))
+				writeMethodSet(o.Type())
+				writeMethodSet(types.NewPointer(o.Type()))
 			}
 		}
 
@@ -267,20 +269,14 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 
 		// constants
-		for _, spec := range constSpecs {
-			for _, name := range spec.Names {
-				if isBlank(name) || strings.HasPrefix(name.Name, "js_") {
-					continue
-				}
-				o := c.info.Objects[name].(*types.Const)
-				c.info.Types[name] = o.Type()
-				c.info.Values[name] = o.Val()
-				varPrefix := ""
-				if !name.IsExported() {
-					varPrefix = "var "
-				}
-				c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.translateExpr(name))
+		for _, o := range constants {
+			varPrefix := ""
+			if !o.IsExported() {
+				varPrefix = "var "
 			}
+			v := c.newIdent(o.Name(), o.Type())
+			c.info.Values[v] = o.Val()
+			c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.translateExpr(v))
 		}
 
 		// variables
@@ -320,10 +316,9 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	return c.output, nil
 }
 
-func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
-	obj := c.info.Objects[s.Name]
-	typeName := c.objectName(obj)
-	switch t := obj.Type().Underlying().(type) {
+func (c *PkgContext) translateType(o *types.TypeName) {
+	typeName := c.objectName(o)
+	switch t := o.Type().Underlying().(type) {
 	case *types.Struct:
 		params := make([]string, t.NumFields())
 		for i := 0; i < t.NumFields(); i++ {
@@ -334,7 +329,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 			}
 			params[i] = name + "_"
 		}
-		c.Printf(`%s = go$newType("%s.%s", "Struct", "%s", function(%s) {`, typeName, obj.Pkg().Name(), obj.Name(), obj.Name(), strings.Join(params, ", "))
+		c.Printf(`%s = go$newType("%s.%s", "Struct", "%s", function(%s) {`, typeName, o.Pkg().Name(), o.Name(), o.Name(), strings.Join(params, ", "))
 		c.Indent(func() {
 			c.Printf("this.go$val = this;")
 			for i := 0; i < t.NumFields(); i++ {
@@ -375,7 +370,7 @@ func (c *PkgContext) translateTypeSpec(s *ast.TypeSpec) {
 			}
 		}
 	default:
-		c.Printf(`%s = go$newType("%s.%s", "%s", "%s");`, typeName, obj.Pkg().Name(), obj.Name(), typeKind(t), obj.Name())
+		c.Printf(`%s = go$newType("%s.%s", "%s", "%s");`, typeName, o.Pkg().Name(), o.Name(), typeKind(t), o.Name())
 	}
 }
 

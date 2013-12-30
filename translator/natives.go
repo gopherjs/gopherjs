@@ -1,6 +1,6 @@
 package translator
 
-var natives = map[string]string{
+var pkgNatives = map[string]string{
 	"bytes": `
 		Compare = function(a, b) {
 			var l = Math.min(a.length, b.length), i;

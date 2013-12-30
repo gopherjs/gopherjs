@@ -114,6 +114,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	var toplevelTypes []*types.TypeName
 	var constants []*types.Const
 	var varSpecs []*ast.ValueSpec
+	natives := make(map[string]*types.Const)
 	for _, file := range files {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
@@ -151,11 +152,12 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					for _, spec := range d.Specs {
 						s := spec.(*ast.ValueSpec)
 						for _, name := range s.Names {
+							o := c.info.Objects[name].(*types.Const)
 							if strings.HasPrefix(name.Name, "js_") {
+								natives[name.Name] = o
 								continue
 							}
 							if !isBlank(name) {
-								o := c.info.Objects[name].(*types.Const)
 								constants = append(constants, o)
 								c.objectName(o) // register toplevel name
 							}
@@ -265,7 +267,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 
 		// functions
 		for _, fun := range functions {
-			c.translateFunction(fun)
+			c.translateFunction(fun, natives)
 		}
 
 		// constants
@@ -291,8 +293,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			}
 		}
 
-		// native implementations
-		if native, hasNative := natives[importPath]; hasNative {
+		// builtin native implementations
+		if native, hasNative := pkgNatives[importPath]; hasNative {
 			c.Write([]byte(strings.TrimSpace(native)))
 			c.Write([]byte{'\n'})
 		}
@@ -313,6 +315,13 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		c.Printf("};")
 	})
 
+	if len(natives) != 0 {
+		var list ErrorList
+		for name, o := range natives {
+			list = append(list, fmt.Errorf("%s: JavaScript code constant %s has no corresponding Go function stub", fileSet.Position(o.Pos()), name))
+		}
+		return nil, list
+	}
 	return c.output, nil
 }
 
@@ -451,19 +460,66 @@ func (c *PkgContext) splitValueSpec(s *ast.ValueSpec) []*ast.ValueSpec {
 	return list
 }
 
-func (c *PkgContext) translateFunction(fun *ast.FuncDecl) {
+func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]*types.Const) {
 	c.newScope(func() {
 		sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
-
+		var recv *ast.Ident
+		if fun.Recv != nil && fun.Recv.List[0].Names != nil {
+			recv = fun.Recv.List[0].Names[0]
+		}
 		params := c.translateParams(fun.Type)
 		joinedParams := strings.Join(params, ", ")
 
 		printPrimaryFunction := func(lhs string, fullName string) {
+			jsName := "js_" + strings.Replace(fullName, ".", "_", 1)
+			jsCode, isNative := natives[jsName]
+
 			c.Printf("%s = function(%s) {", lhs, joinedParams)
 			c.Indent(func() {
-				if jsCode, ok := c.pkg.Scope().Lookup("js_" + strings.Replace(fullName, ".", "_", 1)).(*types.Const); ok {
-					c.Write([]byte(exact.StringVal(jsCode.Val())))
-					c.Write([]byte{'\n'})
+				if isNative {
+					var p []string
+					if recv != nil {
+						this := "this"
+						if isWrapped(sig.Recv().Type()) {
+							this = "this.go$val"
+						}
+						p = []string{this}
+					}
+					for i, v := range params {
+						p = append(p, "go$externalize("+c.translateExprToType(c.newIdent(v, sig.Params().At(i).Type()), types.NewInterface(nil, nil))+")")
+					}
+					internalize := func(v string, t types.Type) string {
+						switch t := t.Underlying().(type) {
+						case *types.Basic:
+							switch {
+							case t.Info()&types.IsInteger != 0:
+								return fixNumber("go$parseInt("+v+")", t)
+							case t.Info()&types.IsFloat != 0:
+								return "go$parseFloat(" + v + ")"
+							case t.Info()&types.IsString != 0:
+								return "go$internalizeString(" + v + ")"
+							}
+						case *types.Interface:
+							if t.Empty() {
+								return "go$internalizeInterface(" + v + ")"
+							}
+						}
+						return v
+					}
+					call := fmt.Sprintf("%s(%s)", jsName, strings.Join(p, ", "))
+					switch sig.Results().Len() {
+					case 0:
+						c.Printf("%s;", call)
+					case 1:
+						c.Printf("return %s;", internalize(call, sig.Results().At(0).Type()))
+					default:
+						c.Printf("var results = %s;", call)
+						results := make([]string, sig.Results().Len())
+						for i := range results {
+							results[i] = internalize(fmt.Sprintf("results[%d]", i), sig.Results().At(i).Type())
+						}
+						c.Printf("return [%s];", strings.Join(results, ", "))
+					}
 					return
 				}
 				if fun.Body == nil {
@@ -472,8 +528,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl) {
 				}
 
 				body := fun.Body.List
-				if fun.Recv != nil && fun.Recv.List[0].Names != nil {
-					recv := fun.Recv.List[0].Names[0]
+				if recv != nil {
 					recvType := sig.Recv().Type()
 					c.info.Types[recv] = recvType
 					this := c.newIdent("this", recvType)
@@ -491,6 +546,19 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl) {
 				c.translateFunctionBody(body, sig)
 			})
 			c.Printf("};")
+
+			if isNative {
+				var p []string
+				if recv != nil {
+					p = []string{recv.String()}
+				}
+				p = append(p, params...)
+				c.Printf("var %s = function(%s) {", jsName, strings.Join(p, ", "))
+				c.Write([]byte(strings.Trim(exact.StringVal(jsCode.Val()), "\n")))
+				c.Write([]byte{'\n'})
+				c.Printf("};")
+				delete(natives, jsName)
+			}
 		}
 
 		if fun.Recv == nil {
@@ -581,7 +649,7 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 			})
 			c.Printf("} catch(go$err) {")
 			c.Indent(func() {
-				c.Printf("if (go$err.constructor !== Go$Panic) { go$err = go$wrapJavaScriptError(go$err); }")
+				c.Printf("if (go$err.constructor !== Go$Panic) { throw go$err; }")
 				c.Printf("go$errorStack.push({ frame: go$getStackDepth(), error: go$err });")
 				if sig != nil && sig.Results().Len() != 0 && resultNames == nil {
 					zeros := make([]string, sig.Results().Len())

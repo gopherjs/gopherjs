@@ -7,6 +7,8 @@ var go$obj, go$tuple;
 var go$idCounter = 1;
 var go$keys = function(m) { return m ? Object.keys(m) : []; };
 var go$min = Math.min;
+var go$parseInt = parseInt;
+var go$parseFloat = parseFloat;
 var go$reflect, go$newStringPtr;
 
 var go$mapArray = function(array, f) {
@@ -758,21 +760,52 @@ var go$runesToString = function(slice) {
 	return str;
 };
 
-var go$externalizeString = function(intStr) {
-	var extStr = "", rune, i, j = 0;
-	for (i = 0; i < intStr.length; i += rune[1], j += 1) {
-		rune = go$decodeRune(intStr, i);
-		extStr += String.fromCharCode(rune[0]);
+var go$externalize = function(v) {
+	switch (v.constructor.kind) {
+	case "Int64":
+	case "Uint64":
+		return go$flatten64(v);
+	case "String":
+		var s = v.go$val, e = "", r, i, j = 0;
+		for (i = 0; i < s.length; i += r[1], j += 1) {
+			r = go$decodeRune(s, i);
+			e += String.fromCharCode(r[0]);
+		}
+		return e;
+	case "Slice":
+		return go$mapArray(go$sliceToArray(v), function(e) { return go$externalize(e); });
+	default:
+		return v.go$val;
 	}
-	return extStr;
 };
 
-var go$internalizeString = function(extStr) {
-	var intStr = "", i;
-	for (i = 0; i < extStr.length; i += 1) {
-		intStr += go$encodeRune(extStr.charCodeAt(i));
+var go$internalizeInterface = function(v) {
+	switch (v.constructor) {
+	case Number:
+		return new Go$Float64(parseFloat(v));
+	case String:
+		return new Go$String(go$internalizeString(v));
+	case Array:
+		return new (go$sliceType(go$interfaceType([])))(v);
 	}
-	return intStr;
+};
+
+var go$externalizeString = function(s) {
+	var e = "", r, i, j = 0;
+	for (i = 0; i < s.length; i += r[1], j += 1) {
+		r = go$decodeRune(s, i);
+		e += String.fromCharCode(r[0]);
+	}
+	return e;
+};
+
+var go$internalizeString = function(e) {
+	e = String(e);
+	var s = "", i;
+	for (i = 0; i < e.length; i += 1) {
+		s += go$encodeRune(e.charCodeAt(i));
+	}
+	return s;
 };
 
 var go$copySlice = function(dst, src) {
@@ -863,18 +896,6 @@ var go$notSupported = function(feature) {
 	throw new Go$NotSupportedError(feature);
 };
 var go$throwRuntimeError; // set by package "runtime"
-
-// TODO improve error wrapping
-var go$wrapJavaScriptError = function(err) {
-	switch (err.constructor) {
-	case Go$Exit:
-	case Go$NotSupportedError:
-		throw err;
-	}
-	var panic = new Go$Panic(err);
-	panic.stack = err.stack;
-	return panic;
-};
 
 var go$errorStack = [];
 

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -437,6 +438,7 @@ func buildPackage(pkg *Package) error {
 		}
 	}
 
+	wd, _ := os.Getwd()
 	files := make([]*ast.File, 0)
 	var errList translator.ErrorList
 	for _, name := range pkg.GoFiles {
@@ -451,6 +453,12 @@ func buildPackage(pkg *Package) error {
 		r, err := os.Open(name)
 		if err != nil {
 			return err
+		}
+		if relname, err := filepath.Rel(wd, name); err == nil {
+			name = relname
+			if name[0] != '.' {
+				name = "./" + name
+			}
 		}
 		file, err := parser.ParseFile(fileSet, name, r, 0)
 		r.Close()

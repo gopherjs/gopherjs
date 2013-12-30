@@ -1,7 +1,7 @@
 package translator
 
 func init() {
-	natives["reflect"] = `
+	pkgNatives["reflect"] = `
 		go$reflect = {
 			rtype: rtype.Ptr, uncommonType: uncommonType.Ptr, method: method.Ptr, arrayType: arrayType.Ptr, chanType: chanType.Ptr, funcType: funcType.Ptr, interfaceType: interfaceType.Ptr, mapType: mapType.Ptr, ptrType: ptrType.Ptr, sliceType: sliceType.Ptr, structType: structType.Ptr,
 			imethod: imethod.Ptr, structField: structField.Ptr,

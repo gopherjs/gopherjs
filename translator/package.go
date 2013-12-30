@@ -729,6 +729,8 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 		}
 	case *types.Array:
 		return fmt.Sprintf(`go$makeNativeArray("%s", %d, function() { return %s; })`, typeKind(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
+	case *types.Signature:
+		return "go$throwNilPointerError"
 	case *types.Slice:
 		return fmt.Sprintf("%s.nil", c.typeName(ty))
 	case *types.Struct:

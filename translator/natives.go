@@ -317,8 +317,9 @@ var pkgNatives = map[string]string{
 						t.skip();
 						break;
 					default:
+						t.log(e.message);
 						t.Fail();
-						err = e;
+						//err = e;
 					}
 				}
 				t.common.duration = time.Now().Sub(t.common.start);

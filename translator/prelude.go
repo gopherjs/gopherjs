@@ -765,6 +765,11 @@ var go$externalize = function(v) {
 	case "Int64":
 	case "Uint64":
 		return go$flatten64(v);
+	case "Func":
+		if (v.go$val === go$throwNilPointerError) {
+			return null;
+		}
+		return v.go$val;
 	case "String":
 		var s = v.go$val, e = "", r, i, j = 0;
 		for (i = 0; i < s.length; i += r[1], j += 1) {

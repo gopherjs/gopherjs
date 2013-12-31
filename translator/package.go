@@ -523,7 +523,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]*ty
 					return
 				}
 				if fun.Body == nil {
-					c.Printf(`throw new Go$Panic("Native function not implemented: %s");`, fullName)
+					c.Printf(`throw go$panic("Native function not implemented: %s");`, fullName)
 					return
 				}
 
@@ -649,8 +649,7 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 			})
 			c.Printf("} catch(go$err) {")
 			c.Indent(func() {
-				c.Printf("if (go$err.constructor !== Go$Panic) { throw go$err; }")
-				c.Printf("go$errorStack.push({ frame: go$getStackDepth(), error: go$err });")
+				c.Printf("go$pushErr(go$err);")
 				if sig != nil && sig.Results().Len() != 0 && resultNames == nil {
 					zeros := make([]string, sig.Results().Len())
 					for i := range zeros {

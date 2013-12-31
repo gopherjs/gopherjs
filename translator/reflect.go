@@ -101,7 +101,7 @@ func init() {
 				val = new typ.jsType.Ptr();
 				break;
 			default:
-				throw new Go$Panic("reflect.Zero(" + typ.string.go$get() + "): type not yet supported");
+				throw go$panic("reflect.Zero(" + typ.string.go$get() + "): type not yet supported");
 			}
 			return new Value.Ptr(typ, val, typ.Kind() << flagKindShift);
 		};
@@ -118,16 +118,16 @@ func init() {
 		};
 		MakeSlice = function(typ, len, cap) {
 			if (typ.Kind() !== go$pkg.Slice) {
-				throw new Go$Panic("reflect.MakeSlice of non-slice type");
+				throw go$panic("reflect.MakeSlice of non-slice type");
 			}
 			if (len < 0) {
-				throw new Go$Panic("reflect.MakeSlice: negative len");
+				throw go$panic("reflect.MakeSlice: negative len");
 			}
 			if (cap < 0) {
-				throw new Go$Panic("reflect.MakeSlice: negative cap");
+				throw go$panic("reflect.MakeSlice: negative cap");
 			}
 			if (len > cap) {
-				throw new Go$Panic("reflect.MakeSlice: len > cap");
+				throw go$panic("reflect.MakeSlice: len > cap");
 			}
 			return new Value.Ptr(typ.common(), typ.jsType.make(len, cap, function() { return Zero(typ.Elem()).val; }), go$pkg.Slice << flagKindShift);
 		};
@@ -164,10 +164,10 @@ func init() {
 		};
 		valueInterface = function(v, safe) {
 			if (v.flag === 0) {
-				throw new Go$Panic(new ValueError.Ptr("reflect.Value.Interface", 0));
+				throw go$panic(new ValueError.Ptr("reflect.Value.Interface", 0));
 			}
 			if (safe && (v.flag & flagRO) !== 0) {
-				throw new Go$Panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")
+				throw go$panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")
 			}
 			var val = v.iword();
 			if (v.typ.Kind() === go$pkg.Interface || val.constructor === v.typ.jsType) {
@@ -184,7 +184,7 @@ func init() {
 		Copy = function(dst, src) {
 			var dk = dst.kind();
 			if (dk !== go$pkg.Array && dk !== go$pkg.Slice) {
-				throw new Go$Panic(new ValueError.Ptr("reflect.Copy", dk));
+				throw go$panic(new ValueError.Ptr("reflect.Copy", dk));
 			}
 			if (dk === go$pkg.Array) {
 				dst.mustBeAssignable();
@@ -193,7 +193,7 @@ func init() {
 
 			var sk = src.kind();
 			if (sk !== go$pkg.Array && sk != go$pkg.Slice) {
-				throw new Go$Panic(new ValueError.Ptr("reflect.Copy", sk));
+				throw go$panic(new ValueError.Ptr("reflect.Copy", sk));
 			}
 			src.mustBeExported();
 
@@ -220,13 +220,13 @@ func init() {
 		Value.Ptr.prototype.Bytes = function() {
 			this.mustBe(go$pkg.Slice);
 			if (this.typ.Elem().Kind() !== go$pkg.Uint8) {
-				throw new Go$Panic("reflect.Value.Bytes of non-byte slice");
+				throw go$panic("reflect.Value.Bytes of non-byte slice");
 			}
 			return this.iword();
 		};
 		Value.Ptr.prototype.call = function(op, args) {
 			if (this.val === null) {
-				throw new Go$Panic("reflect.Value.Call: call of nil function");
+				throw go$panic("reflect.Value.Call: call of nil function");
 			}
 
 			var isSlice = (op === "CallSlice");
@@ -234,35 +234,35 @@ func init() {
 			var n = t.NumIn();
 			if (isSlice) {
 				if (!t.IsVariadic()) {
-					throw new Go$Panic("reflect: CallSlice of non-variadic function");
+					throw go$panic("reflect: CallSlice of non-variadic function");
 				}
 				if (args.length < n) {
-					throw new Go$Panic("reflect: CallSlice with too few input arguments");
+					throw go$panic("reflect: CallSlice with too few input arguments");
 				}
 				if (args.length > n) {
-					throw new Go$Panic("reflect: CallSlice with too many input arguments");
+					throw go$panic("reflect: CallSlice with too many input arguments");
 				}
 			} else {
 				if (t.IsVariadic()) {
 					n -= 1;
 				}
 				if (args.length < n) {
-					throw new Go$Panic("reflect: Call with too few input arguments");
+					throw go$panic("reflect: Call with too few input arguments");
 				}
 				if (!t.IsVariadic() && args.length > n) {
-					throw new Go$Panic("reflect: Call with too many input arguments");
+					throw go$panic("reflect: Call with too many input arguments");
 				}
 			}
 			var i;
 			for (i = 0; i < args.length; i += 1) {
 				if (args.array[args.offset + i].Kind() === go$pkg.Invalid) {
-					throw new Go$Panic("reflect: " + op + " using zero Value argument");
+					throw go$panic("reflect: " + op + " using zero Value argument");
 				}
 			}
 			for (i = 0; i < n; i += 1) {
 				var xt = args.array[args.offset + i].Type(), targ = t.In(i);
 				if (!xt.AssignableTo(targ)) {
-					throw new Go$Panic("reflect: " + op + " using " + xt.String() + " as type " + targ.String());
+					throw go$panic("reflect: " + op + " using " + xt.String() + " as type " + targ.String());
 				}
 			}
 			if (!isSlice && t.IsVariadic()) {
@@ -273,7 +273,7 @@ func init() {
 					var x = args.array[args.offset + n + i];
 					var xt = x.Type();
 					if (!xt.AssignableTo(elem)) {
-						throw new Go$Panic("reflect: cannot use " + xt.String() + " as type " + elem.String() + " in " + op);
+						throw go$panic("reflect: cannot use " + xt.String() + " as type " + elem.String() + " in " + op);
 					}
 					slice.Index(i).Set(x);
 				}
@@ -281,7 +281,7 @@ func init() {
 			}
 
 			if (args.length !== t.NumIn()) {
-				throw new Go$Panic("reflect.Value.Call: wrong argument count");
+				throw go$panic("reflect.Value.Call: wrong argument count");
 			}
 
 			var argsArray = new Array(t.NumIn());
@@ -307,7 +307,7 @@ func init() {
 			case go$pkg.Slice:
 				return this.iword().capacity;
 			}
-			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Cap", k));
+			throw go$panic(new ValueError.Ptr("reflect.Value.Cap", k));
 		};
 		Value.Ptr.prototype.Elem = function() {
 			switch (this.kind()) {
@@ -331,13 +331,13 @@ func init() {
 				fl |= tt.elem.Kind() << flagKindShift;
 				return new Value.Ptr(tt.elem, val, fl);
 			}
-			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Elem", this.kind()));
+			throw go$panic(new ValueError.Ptr("reflect.Value.Elem", this.kind()));
 		};
 		Value.Ptr.prototype.Field = function(i) {
 			this.mustBe(go$pkg.Struct);
 			var tt = this.typ.structType;
 			if (i < 0 || i >= tt.fields.length) {
-				throw new Go$Panic("reflect: Field index out of range");
+				throw go$panic("reflect: Field index out of range");
 			}
 			var field = tt.fields.array[i];
 			var name = fieldName(field, i);
@@ -359,7 +359,7 @@ func init() {
 			case go$pkg.Array:
 				var tt = this.typ.arrayType;
 				if (i < 0 || i >= tt.len) {
-					throw new Go$Panic("reflect: array index out of range");
+					throw go$panic("reflect: array index out of range");
 				}
 				var typ = tt.elem;
 				var fl = this.flag & (flagRO | flagIndir | flagAddr);
@@ -371,7 +371,7 @@ func init() {
 				return new Value.Ptr(typ, this.iword()[i], fl);
 			case go$pkg.Slice:
 				if (i < 0 || i >= this.iword().length) {
-					throw new Go$Panic("reflect: slice index out of range");
+					throw go$panic("reflect: slice index out of range");
 				}
 				var typ = this.typ.sliceType.elem;
 				var fl = flagAddr | flagIndir | (this.flag & flagRO);
@@ -385,12 +385,12 @@ func init() {
 			case go$pkg.String:
 				var string = this.iword();
 				if (i < 0 || i >= string.length) {
-					throw new Go$Panic("reflect: string index out of range");
+					throw go$panic("reflect: string index out of range");
 				}
 				var fl = (this.flag & flagRO) | (go$pkg.Uint8 << flagKindShift);
 				return new Value.Ptr(uint8Type, string.charCodeAt(i), fl);
 			}
-			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Index", k));
+			throw go$panic(new ValueError.Ptr("reflect.Value.Index", k));
 		};
 		Value.Ptr.prototype.IsNil = function() {
 			switch (this.kind()) {
@@ -405,7 +405,7 @@ func init() {
 			case go$pkg.Interface:
 				return this.iword() === null;
 			}
-			throw new Go$Panic(new ValueError.Ptr("reflect.Value.IsNil", this.kind()));
+			throw go$panic(new ValueError.Ptr("reflect.Value.IsNil", this.kind()));
 		};
 		Value.Ptr.prototype.Len = function() {
 			var k = this.kind();
@@ -417,7 +417,7 @@ func init() {
 			case go$pkg.Map:
 				return go$keys(this.iword()).length;
 			}
-			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Len", k));
+			throw go$panic(new ValueError.Ptr("reflect.Value.Len", k));
 		};
 		Value.Ptr.prototype.Pointer = function() {
 			var k = this.kind();
@@ -433,7 +433,7 @@ func init() {
 				}
 				return 42;
 			}
-			throw new Go$Panic(new ValueError.Ptr("reflect.Value.Pointer", k));
+			throw go$panic(new ValueError.Ptr("reflect.Value.Pointer", k));
 		};
 		Value.Ptr.prototype.Set = function(x) {
 			this.mustBeAssignable();
@@ -458,7 +458,7 @@ func init() {
 			this.mustBe(go$pkg.Slice);
 			var s = this.val.go$get();
 			if (n < s.length || n > s.capacity) {
-				throw new Go$Panic("reflect: slice capacity out of range in SetCap");
+				throw go$panic("reflect: slice capacity out of range in SetCap");
 			}
 			var newSlice = new this.typ.jsType(s.array);
 			newSlice.offset = s.offset;
@@ -471,7 +471,7 @@ func init() {
 			this.mustBe(go$pkg.Slice);
 			var s = this.val.go$get();
 			if (n < 0 || n > s.capacity) {
-				throw new Go$Panic("reflect: slice length out of range in SetLen");
+				throw go$panic("reflect: slice length out of range in SetLen");
 			}
 			var newSlice = new this.typ.jsType(s.array);
 			newSlice.offset = s.offset;
@@ -485,7 +485,7 @@ func init() {
 			switch (kind) {
 			case go$pkg.Array:
 				if ((this.flag & flagAddr) === 0) {
-					throw new Go$Panic("reflect.Value.Slice: slice of unaddressable array");
+					throw go$panic("reflect.Value.Slice: slice of unaddressable array");
 				}
 				var tt = this.typ.arrayType;
 				cap = tt.len;
@@ -500,15 +500,15 @@ func init() {
 			case go$pkg.String:
 				s = this.iword();
 				if (i < 0 || j < i || j > s.length) {
-					throw new Go$Panic("reflect.Value.Slice: string slice index out of bounds");
+					throw go$panic("reflect.Value.Slice: string slice index out of bounds");
 				}
 				return new Value.Ptr(this.typ, s.substring(i, j), this.flag);
 			default:
-				throw new Go$Panic(new ValueError.Ptr("reflect.Value.Slice", kind));
+				throw go$panic(new ValueError.Ptr("reflect.Value.Slice", kind));
 			}
 
 			if (i < 0 || j < i || j > cap) {
-				throw new Go$Panic("reflect.Value.Slice: slice index out of bounds");
+				throw go$panic("reflect.Value.Slice: slice index out of bounds");
 			}
 
 			var fl = (this.flag & flagRO) | (go$pkg.Slice << flagKindShift);
@@ -520,7 +520,7 @@ func init() {
 			switch (kind) {
 			case go$pkg.Array:
 				if ((this.flag & flagAddr) === 0) {
-					throw new Go$Panic("reflect.Value.Slice3: slice of unaddressable array");
+					throw go$panic("reflect.Value.Slice3: slice of unaddressable array");
 				}
 				var tt = this.typ.arrayType;
 				cap = tt.len;
@@ -533,11 +533,11 @@ func init() {
 				cap = s.capacity;
 				break;
 			default:
-				throw new Go$Panic(new ValueError.Ptr("reflect.Value.Slice3", kind));
+				throw go$panic(new ValueError.Ptr("reflect.Value.Slice3", kind));
 			}
 
 			if (i < 0 || j < i || k < j || k > cap) {
-				throw new Go$Panic("reflect.Value.Slice3: slice index out of bounds");
+				throw go$panic("reflect.Value.Slice3: slice index out of bounds");
 			}
 
 			var fl = (this.flag & flagRO) | (go$pkg.Slice << flagKindShift);

@@ -214,7 +214,7 @@ var pkgNatives = map[string]string{
 	`,
 
 	"runtime": `
-		go$throwRuntimeError = function(msg) { throw new Go$Panic(new errorString(msg)) };
+		go$throwRuntimeError = function(msg) { throw go$panic(new errorString(msg)) };
 		sizeof_C_MStats = 3712;
 		getgoroot = function() { return (typeof process !== 'undefined') ? (process.env["GOROOT"] || "") : "/"; };
 		Caller = function(skip) {
@@ -232,7 +232,11 @@ var pkgNatives = map[string]string{
 			}
 			return 1;
 		};
-		Goexit = function() { throw new Go$Exit(); };
+		Goexit = function() {
+			var err = new Go$Error();
+			err.go$exit = true;
+			throw err;
+		};
 		ReadMemStats = function() {};
 		SetFinalizer = function() {};
 	`,
@@ -308,18 +312,16 @@ var pkgNatives = map[string]string{
 					}
 					tests[i](t);
 				} catch (e) {
-					switch (e.constructor) {
-					case Go$Exit:
+					if (e.go$exit) {
 						// test failed or skipped
 						break;
-					case Go$NotSupportedError:
+					} else if (e.go$notSupported) {
 						t.log(e.message);
 						t.skip();
-						break;
-					default:
+					} else {
 						t.log(e.message);
 						t.Fail();
-						//err = e;
+						// err = e;
 					}
 				}
 				t.common.duration = time.Now().Sub(t.common.start);

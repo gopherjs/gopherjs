@@ -10,6 +10,7 @@ var go$min = Math.min;
 var go$parseInt = parseInt;
 var go$parseFloat = parseFloat;
 var go$reflect, go$newStringPtr;
+var Go$Error = Error;
 
 var go$mapArray = function(array, f) {
 	var newArray = new array.constructor(array.length), i;
@@ -72,7 +73,7 @@ var go$newType = function(string, kind, name, constructor) {
 		typ = function(v) { this.go$val = v; };
 		typ.Ptr = go$newType("*" + string, "Ptr", undefined, function(array) {
 			this.go$get = function() { return array; };
-			this.go$set = function() { throw new Go$Panic("not implemented"); }; // TODO required?
+			this.go$set = function() { throw go$panic("not implemented"); }; // TODO required?
 			this.go$val = this;
 		});
 		typ.init = function(elem, len) {
@@ -201,7 +202,7 @@ var go$newType = function(string, kind, name, constructor) {
 		break;
 
 	default:
-		throw new Go$Panic("invalid kind: " + kind);
+		throw go$panic("invalid kind: " + kind);
 	}
 
 	typ.kind = kind;
@@ -877,34 +878,37 @@ var go$append = function(slice, toAppend) {
 	return newSlice;
 };
 
-var Go$Panic = function(value) {
-	this.value = value;
+var go$panic = function(value) {
+	var message;
 	if (value.constructor === Go$String) {
-		this.message = value.go$val;
+		message = value.go$val;
 	} else if (value.Error !== undefined) {
-		this.message = value.Error();
+		message = value.Error();
 	} else if (value.String !== undefined) {
-		this.message = value.String();
+		message = value.String();
 	} else {
-		this.message = value;
+		message = value;
 	}
-	Error.captureStackTrace(this, Go$Panic);
-};
-var Go$Exit = function() {
-	Error.captureStackTrace(this, Go$Exit);
-};
-var Go$NotSupportedError = function(feature) {
-	this.message = "not supported by GopherJS: " + feature;
-	Error.captureStackTrace(this, Go$Exit);
+	var err = new Error(message);
+	err.go$panicValue = value;
+	return err;
 };
 var go$notSupported = function(feature) {
-	throw new Go$NotSupportedError(feature);
+	var err = new Error("not supported by GopherJS: " + feature);
+	err.go$notSupported = feature;
+	throw err;
 };
 var go$throwRuntimeError; // set by package "runtime"
 
 var go$errorStack = [];
 
-// TODO inline
+var go$pushErr = function(err) {
+	if (err.go$panicValue === undefined) {
+		throw err;
+	}
+	go$errorStack.push({ frame: go$getStackDepth() - 1, error: err });
+};
+
 var go$callDeferred = function(deferred) {
 	var i;
 	for (i = deferred.length - 1; i >= 0; i -= 1) {
@@ -932,7 +936,7 @@ var go$recover = function() {
 		return null;
 	}
 	go$errorStack.pop();
-	return err.error.value;
+	return err.error.go$panicValue;
 };
 
 var go$getStack = function() {
@@ -1016,7 +1020,7 @@ var go$typeAssertionFailed = function(obj, expected) {
 	if (obj !== null) {
 		got = obj.constructor.string;
 	}
-	throw new Go$Panic("interface conversion: interface is " + got + ", not " + expected.string);
+	throw go$panic("interface conversion: interface is " + got + ", not " + expected.string);
 };
 
 var go$now = function() { var msec = (new Date()).getTime(); return [new Go$Int64(0, Math.floor(msec / 1000)), (msec % 1000) * 1000000]; };

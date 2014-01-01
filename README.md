@@ -58,3 +58,5 @@ A function's body can be written in JavaScript by putting the code in a string c
 
 ### Libraries
 [go-angularjs](https://github.com/neelance/go-angularjs) - a wrapper for [AngularJS](http://angularjs.org)
+
+[![Analytics](https://ga-beacon.appspot.com/UA-46799660-1/gopherjs/README.md)](https://github.com/igrigorik/ga-beacon)

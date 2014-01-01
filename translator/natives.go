@@ -314,7 +314,7 @@ var pkgNatives = map[string]string{
 				} catch (e) {
 					if (e.go$exit) {
 						// test failed or skipped
-						break;
+						continue;
 					} else if (e.go$notSupported) {
 						t.log(e.message);
 						t.skip();

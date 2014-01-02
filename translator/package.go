@@ -338,7 +338,7 @@ func (c *PkgContext) translateType(o *types.TypeName) {
 			}
 			params[i] = name + "_"
 		}
-		c.Printf(`%s = go$newType("%s.%s", "Struct", "%s", function(%s) {`, typeName, o.Pkg().Name(), o.Name(), o.Name(), strings.Join(params, ", "))
+		c.Printf(`%s = go$newType(0, "Struct", "%s.%s", "%s", "%s", function(%s) {`, typeName, o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), strings.Join(params, ", "))
 		c.Indent(func() {
 			c.Printf("this.go$val = this;")
 			for i := 0; i < t.NumFields(); i++ {
@@ -379,7 +379,7 @@ func (c *PkgContext) translateType(o *types.TypeName) {
 			}
 		}
 	default:
-		c.Printf(`%s = go$newType("%s.%s", "%s", "%s");`, typeName, o.Pkg().Name(), o.Name(), typeKind(t), o.Name())
+		c.Printf(`%s = go$newType(0, "%s", "%s.%s", "%s", "%s", null);`, typeName, typeKind(t), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path())
 	}
 }
 

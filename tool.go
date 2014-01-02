@@ -13,7 +13,6 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -130,7 +129,7 @@ func tool() error {
 				return err
 			}
 			if pkgObj == "" {
-				pkgObj = path.Base(wd) + ".js"
+				pkgObj = filepath.Base(wd) + ".js"
 			}
 			if err := writeCommandPackage(pkg, pkgObj); err != nil {
 				return err
@@ -145,7 +144,7 @@ func tool() error {
 				}
 			}
 			if pkgObj == "" {
-				basename := path.Base(buildFlags.Arg(0))
+				basename := filepath.Base(buildFlags.Arg(0))
 				pkgObj = basename[:len(basename)-3] + ".js"
 			}
 			if err := buildFiles(buildFlags.Args(), pkgObj); err != nil {
@@ -164,7 +163,7 @@ func tool() error {
 				return err
 			}
 			if pkgObj == "" {
-				pkgObj = path.Base(buildFlags.Arg(0)) + ".js"
+				pkgObj = filepath.Base(buildFlags.Arg(0)) + ".js"
 			}
 			if err := writeCommandPackage(pkg, pkgObj); err != nil {
 				return err
@@ -184,7 +183,7 @@ func tool() error {
 			}
 			pkg := &Package{Package: buildPkg}
 			if pkg.IsCommand() {
-				pkg.PkgObj = pkg.BinDir + "/" + path.Base(pkg.ImportPath) + ".js"
+				pkg.PkgObj = filepath.Join(pkg.BinDir, filepath.Base(pkg.ImportPath)+".js")
 			}
 			if err := buildPackage(pkg); err != nil {
 				return err
@@ -207,7 +206,7 @@ func tool() error {
 			return fmt.Errorf("gopherjs run: no go files listed")
 		}
 
-		tempfile, err := ioutil.TempFile("", path.Base(flag.Arg(1))+".")
+		tempfile, err := ioutil.TempFile("", filepath.Base(flag.Arg(1))+".")
 		if err != nil {
 			return err
 		}
@@ -319,7 +318,7 @@ func tool() error {
 		if len(tool) == 2 {
 			switch tool[1] {
 			case 'g':
-				basename := path.Base(toolFlags.Arg(0))
+				basename := filepath.Base(toolFlags.Arg(0))
 				if err := buildFiles([]string{toolFlags.Arg(0)}, basename[:len(basename)-3]+".js"); err != nil {
 					return err
 				}
@@ -381,7 +380,7 @@ func buildPackage(pkg *Package) error {
 		fileInfo, err := os.Stat(os.Args[0]) // gopherjs itself
 		if err != nil {
 			for _, path := range strings.Split(os.Getenv("PATH"), string(os.PathListSeparator)) {
-				fileInfo, err = os.Stat(path + "/" + os.Args[0])
+				fileInfo, err = os.Stat(filepath.Join(path, os.Args[0]))
 				if err == nil {
 					break
 				}
@@ -406,7 +405,7 @@ func buildPackage(pkg *Package) error {
 		}
 
 		for _, name := range pkg.GoFiles {
-			fileInfo, err := os.Stat(pkg.Dir + "/" + name)
+			fileInfo, err := os.Stat(filepath.Join(pkg.Dir, name))
 			if err != nil {
 				return err
 			}
@@ -445,8 +444,8 @@ func buildPackage(pkg *Package) error {
 		if pkg.ImportPath == "runtime" && strings.HasPrefix(name, "zgo") {
 			continue
 		}
-		if !path.IsAbs(name) {
-			name = path.Join(pkg.Dir, name)
+		if !filepath.IsAbs(name) {
+			name = filepath.Join(pkg.Dir, name)
 		}
 		r, err := os.Open(name)
 		if err != nil {
@@ -455,7 +454,7 @@ func buildPackage(pkg *Package) error {
 		if relname, err := filepath.Rel(wd, name); err == nil {
 			name = relname
 			if name[0] != '.' {
-				name = "./" + name
+				name = "." + string(filepath.Separator) + name
 			}
 		}
 		file, err := parser.ParseFile(fileSet, name, r, 0)
@@ -504,7 +503,7 @@ func buildPackage(pkg *Package) error {
 }
 
 func writeLibraryPackage(pkg *Package, pkgObj string) error {
-	if err := os.MkdirAll(path.Dir(pkgObj), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
 		return err
 	}
 	file, err := os.Create(pkgObj)
@@ -521,7 +520,7 @@ func writeCommandPackage(pkg *Package, pkgObj string) error {
 		return nil
 	}
 
-	if err := os.MkdirAll(path.Dir(pkgObj), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
 		return err
 	}
 	file, err := os.Create(pkgObj)

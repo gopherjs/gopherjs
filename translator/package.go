@@ -713,7 +713,7 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
 		switch {
-		case is64Bit(t):
+		case is64Bit(t) || t.Info()&types.IsComplex != 0:
 			return fmt.Sprintf("new %s(0, 0)", c.typeName(ty))
 		case t.Info()&types.IsBoolean != 0:
 			return "false"

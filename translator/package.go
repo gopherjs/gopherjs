@@ -199,7 +199,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 	}
 	complete := false
-	var intVarStmts []ast.Stmt
+	var initVarStmts []ast.Stmt
 	for !complete {
 		complete = true
 		for i, spec := range unorderedSingleVarSpecs {
@@ -228,7 +228,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				lhs[i] = name
 				delete(pendingObjects, c.info.Objects[name])
 			}
-			intVarStmts = append(intVarStmts, &ast.AssignStmt{
+			initVarStmts = append(initVarStmts, &ast.AssignStmt{
 				Lhs: lhs,
 				Tok: token.DEFINE,
 				Rhs: spec.Values,
@@ -316,7 +316,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		// init function
 		c.Printf("go$pkg.init = function() {")
 		c.Indent(func() {
-			c.translateFunctionBody(append(intVarStmts, initStmts...), nil)
+			c.translateFunctionBody(append(initVarStmts, initStmts...), nil)
 		})
 		c.Printf("};")
 	})

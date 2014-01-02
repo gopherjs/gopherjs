@@ -326,8 +326,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		// skip
 
 	default:
-		c.Printf("%s%s;", label, c.translateSimpleStmt(stmt))
-
+		if r := c.translateSimpleStmt(stmt); r != "" {
+			c.Printf("%s%s;", label, r)
+		}
 	}
 }
 
@@ -518,14 +519,35 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 			}
 		}
 
+		removeParens := func(e ast.Expr) ast.Expr {
+			for {
+				if p, isParen := e.(*ast.ParenExpr); isParen {
+					e = p.X
+					continue
+				}
+				break
+			}
+			return e
+		}
+
 		switch {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
-			return c.translateAssign(s.Lhs[0], c.translateExprToType(s.Rhs[0], c.info.Types[s.Lhs[0]]))
+			lhs := removeParens(s.Lhs[0])
+			if isBlank(lhs) {
+				v := HasCallVisitor{c.info, false}
+				ast.Walk(&v, s.Rhs[0])
+				if v.hasCall {
+					return c.translateExpr(s.Rhs[0])
+				}
+				return ""
+			}
+			return c.translateAssign(lhs, c.translateExprToType(s.Rhs[0], c.info.Types[s.Lhs[0]]))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			out := "go$tuple = " + c.translateExpr(s.Rhs[0])
 			tuple := c.info.Types[s.Rhs[0]].(*types.Tuple)
 			for i, lhs := range s.Lhs {
+				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
 					out += ", " + c.translateAssign(lhs, c.translateExprToType(c.newIdent(fmt.Sprintf("go$tuple[%d]", i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]]))
 				}
@@ -538,6 +560,7 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 			}
 			out := "go$tuple = [" + strings.Join(parts, ", ") + "]"
 			for i, lhs := range s.Lhs {
+				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
 					out += ", " + c.translateAssign(lhs, fmt.Sprintf("go$tuple[%d]", i))
 				}
@@ -608,15 +631,8 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 }
 
 func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
-	for {
-		if p, isParen := lhs.(*ast.ParenExpr); isParen {
-			lhs = p.X
-			continue
-		}
-		break
-	}
 	if isBlank(lhs) {
-		return rhs
+		panic("translateAssign with blank lhs")
 	}
 
 	for {
@@ -718,6 +734,24 @@ func (v *HasBreakVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		}
 	case *ast.FuncLit, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
 		return nil
+	}
+	return v
+}
+
+type HasCallVisitor struct {
+	info    *types.Info
+	hasCall bool
+}
+
+func (v *HasCallVisitor) Visit(node ast.Node) (w ast.Visitor) {
+	if v.hasCall {
+		return nil
+	}
+	if call, isCall := node.(*ast.CallExpr); isCall {
+		if _, isSig := v.info.Types[call.Fun].(*types.Signature); isSig { // skip conversions
+			v.hasCall = true
+			return nil
+		}
 	}
 	return v
 }

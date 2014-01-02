@@ -635,8 +635,8 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 			out := "go$obj = " + rhs
 			s := c.translateExpr(l)
 			for i := 0; i < structLhs.NumFields(); i++ {
-				field := structLhs.Field(i)
-				out += fmt.Sprintf(", %s.%s = go$obj.%s", s, field.Name(), field.Name())
+				name := fieldName(structLhs, i)
+				out += fmt.Sprintf(", %s.%s = go$obj.%s", s, name, name)
 			}
 			return out
 		}
@@ -648,8 +648,8 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 			rVar := c.newVariable("r")
 			out := fmt.Sprintf("%s = %s, %s = %s", lVar, c.translateExpr(l.X), rVar, rhs)
 			for i := 0; i < u.NumFields(); i++ {
-				field := u.Field(i)
-				out += fmt.Sprintf(", %s.%s = %s.%s", lVar, field.Name(), rVar, field.Name())
+				name := fieldName(u, i)
+				out += fmt.Sprintf(", %s.%s = %s.%s", lVar, name, rVar, name)
 			}
 			return out
 		case *types.Array:

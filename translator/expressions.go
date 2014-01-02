@@ -357,9 +357,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						continue
 					}
 					conds = append(conds, c.translateExpr(&ast.BinaryExpr{
-						X:  c.newIdent(x+"."+field.Name(), field.Type()),
+						X:  c.newIdent(x+"."+fieldName(u, i), field.Type()),
 						Op: token.EQL,
-						Y:  c.newIdent(y+"."+field.Name(), field.Type()),
+						Y:  c.newIdent(y+"."+fieldName(u, i), field.Type()),
 					}))
 				}
 				if len(conds) == 0 {
@@ -880,8 +880,7 @@ func (c *PkgContext) clone(src string, ty types.Type) string {
 		structVar := c.newVariable("_struct")
 		fields := make([]string, t.NumFields())
 		for i := range fields {
-			field := t.Field(i)
-			fields[i] = c.clone(structVar+"."+field.Name(), field.Type())
+			fields[i] = c.clone(structVar+"."+fieldName(t, i), t.Field(i).Type())
 		}
 		constructor := structVar + ".constructor"
 		if named, isNamed := ty.(*types.Named); isNamed {
@@ -904,10 +903,10 @@ func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {
 		for i := 0; i < s.NumFields(); i++ {
 			field := s.Field(i)
 			if fs, isStruct := field.Type().Underlying().(*types.Struct); isStruct {
-				collectFields(fs, path+"."+field.Name())
+				collectFields(fs, path+"."+fieldName(s, i))
 				continue
 			}
-			fields = append(fields, types.NewVar(0, nil, path+"."+field.Name(), field.Type()))
+			fields = append(fields, types.NewVar(0, nil, path+"."+fieldName(s, i), field.Type()))
 		}
 	}
 	collectFields(s, target)
@@ -956,9 +955,8 @@ func translateSelection(sel *types.Selection) string {
 			t = ptr.Elem()
 		}
 		s := t.Underlying().(*types.Struct)
-		field := s.Field(index)
-		selectors = append(selectors, field.Name())
-		t = field.Type()
+		selectors = append(selectors, fieldName(s, index))
+		t = s.Field(index).Type()
 	}
 	return strings.Join(selectors, ".")
 }

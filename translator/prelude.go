@@ -3,6 +3,8 @@ package translator
 var Prelude = `
 Error.stackTraceLimit = -1;
 
+var go$reservedKeywords = ["abstract", "arguments", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", "long", "native", "new", "package", "private", "protected", "public", "return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof", "var", "void", "volatile", "while", "with", "yield"];
+
 var go$obj, go$tuple;
 var go$idCounter = 1;
 var go$keys = function(m) { return m ? Object.keys(m) : []; };
@@ -385,7 +387,11 @@ var go$structType = function(fields) {
 			this.go$val = this;
 			var i;
 			for (i = 0; i < fields.length; i++) {
-				this[fields[i][0]] = arguments[i];
+				var name = fields[i][0];
+				if (name === "_" || go$reservedKeywords.indexOf(name) != -1) {
+					name = name + "$" + i;
+				}
+				this[name] = arguments[i];
 			}
 		});
 		typ.init(fields);

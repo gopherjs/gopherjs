@@ -10,7 +10,13 @@ import (
 	"strings"
 )
 
-var ReservedKeywords = []string{"abstract", "arguments", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", "long", "native", "new", "package", "private", "protected", "public", "return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof", "var", "void", "volatile", "while", "with", "yield"}
+var ReservedKeywords = make(map[string]bool)
+
+func init() {
+	for _, keyword := range []string{"abstract", "arguments", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", "long", "native", "new", "package", "private", "protected", "public", "return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof", "var", "void", "volatile", "while", "with", "yield"} {
+		ReservedKeywords[keyword] = true
+	}
+}
 
 type ErrorList []error
 
@@ -104,7 +110,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		postLoopStmt: make(map[string]ast.Stmt),
 		positions:    make(map[int]token.Pos),
 	}
-	for _, name := range ReservedKeywords {
+	for name := range ReservedKeywords {
 		c.allVarNames[name] = 1
 	}
 
@@ -331,23 +337,14 @@ func (c *PkgContext) translateType(o *types.TypeName) {
 	case *types.Struct:
 		params := make([]string, t.NumFields())
 		for i := 0; i < t.NumFields(); i++ {
-			field := t.Field(i)
-			name := field.Name()
-			if field.Name() == "_" {
-				name = fmt.Sprintf("blank$%d", i)
-			}
-			params[i] = name + "_"
+			params[i] = fieldName(t, i) + "_"
 		}
 		c.Printf(`%s = go$newType(0, "Struct", "%s.%s", "%s", "%s", function(%s) {`, typeName, o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), strings.Join(params, ", "))
 		c.Indent(func() {
 			c.Printf("this.go$val = this;")
 			for i := 0; i < t.NumFields(); i++ {
-				field := t.Field(i)
-				name := field.Name()
-				if field.Name() == "_" {
-					name = fmt.Sprintf("blank$%d", i)
-				}
-				c.Printf("this.%s = %s_ !== undefined ? %s_ : %s;", name, name, name, c.zeroValue(field.Type()))
+				name := fieldName(t, i)
+				c.Printf("this.%s = %s_ !== undefined ? %s_ : %s;", name, name, name, c.zeroValue(t.Field(i).Type()))
 			}
 		})
 		c.Printf("});")
@@ -368,9 +365,9 @@ func (c *PkgContext) translateType(o *types.TypeName) {
 					for k := range params {
 						params[k] = sig.Params().At(k).Name()
 					}
-					value := "this." + field.Name()
+					value := "this." + fieldName(t, i)
 					if isWrapped(field.Type()) {
-						value = fmt.Sprintf("new %s(%s)", field.Name(), value)
+						value = fmt.Sprintf("new %s(%s)", c.typeName(field.Type()), value)
 					}
 					paramList := strings.Join(params, ", ")
 					c.Printf("%s.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, name, paramList, name, paramList)
@@ -851,7 +848,7 @@ func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	case *types.Struct:
 		parts := make([]string, t.NumFields())
 		for i := range parts {
-			parts[i] = "go$obj." + t.Field(i).Name()
+			parts[i] = "go$obj." + fieldName(t, i)
 		}
 		return fmt.Sprintf("(go$obj = %s, %s)", c.translateExpr(expr), strings.Join(parts, ` + "$" + `))
 	case *types.Basic:
@@ -866,6 +863,14 @@ func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	default:
 		return c.translateExprToType(expr, keyType)
 	}
+}
+
+func fieldName(t *types.Struct, i int) string {
+	name := t.Field(i).Name()
+	if name == "_" || ReservedKeywords[name] {
+		return fmt.Sprintf("%s$%d", name, i)
+	}
+	return name
 }
 
 func typeKind(ty types.Type) string {

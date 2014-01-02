@@ -18,8 +18,8 @@ func init() {
 				return ntyp.Name();
 			}
 			var name = field.name.go$get();
-			if (name === "_") {
-				return "blank$" + i;
+			if (name === "_" || go$reservedKeywords.indexOf(name) != -1) {
+				return name + "$" + i;
 			}
 			return name;
 		};

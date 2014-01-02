@@ -650,12 +650,19 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 			c.Printf("} catch(go$err) {")
 			c.Indent(func() {
 				c.Printf("go$pushErr(go$err);")
-				if sig != nil && sig.Results().Len() != 0 && resultNames == nil {
-					zeros := make([]string, sig.Results().Len())
-					for i := range zeros {
-						zeros[i] = c.zeroValue(sig.Results().At(i).Type())
+				if sig != nil && resultNames == nil {
+					switch sig.Results().Len() {
+					case 0:
+						// nothing
+					case 1:
+						c.Printf("return %s;", c.zeroValue(sig.Results().At(0).Type()))
+					default:
+						zeros := make([]string, sig.Results().Len())
+						for i := range zeros {
+							zeros[i] = c.zeroValue(sig.Results().At(i).Type())
+						}
+						c.Printf("return [%s];", strings.Join(zeros, ", "))
 					}
-					c.Printf("return %s;", strings.Join(zeros, ", "))
 				}
 			})
 			c.Printf("} finally {")

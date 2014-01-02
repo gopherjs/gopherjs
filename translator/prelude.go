@@ -651,12 +651,12 @@ var go$decodeRune = function(str, pos) {
 		return [c0, 1];
 	}
 
-	if (c0 === NaN || c0 < 0xC0) {
+	if (c0 !== c0 || c0 < 0xC0) {
 		return [0xFFFD, 1];
 	}
 
 	var c1 = str.charCodeAt(pos + 1)
-	if (c1 === NaN || c1 < 0x80 || 0xC0 <= c1) {
+	if (c1 !== c1 || c1 < 0x80 || 0xC0 <= c1) {
 		return [0xFFFD, 1];
 	}
 
@@ -669,7 +669,7 @@ var go$decodeRune = function(str, pos) {
 	}
 
 	var c2 = str.charCodeAt(pos + 2)
-	if (c2 === NaN || c2 < 0x80 || 0xC0 <= c2) {
+	if (c2 !== c2 || c2 < 0x80 || 0xC0 <= c2) {
 		return [0xFFFD, 1];
 	}
 
@@ -685,7 +685,7 @@ var go$decodeRune = function(str, pos) {
 	}
 
 	var c3 = str.charCodeAt(pos + 3)
-	if (c3 === NaN || c3 < 0x80 || 0xC0 <= c3) {
+	if (c3 !== c3 || c3 < 0x80 || 0xC0 <= c3) {
 		return [0xFFFD, 1];
 	}
 

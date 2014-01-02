@@ -38,17 +38,29 @@ func init() {
 			}
 			return i.constructor.reflectType();
 		};
-		SliceOf = function(t) {
-			return go$sliceType(t.jsType).reflectType();
-		};
 		arrayOf = function(n, t) {
 			return go$arrayType(t.jsType, n).reflectType();
+		};
+		ChanOf = function(dir, t) {
+			return go$chanType(t.jsType, dir === go$pkg.SendDir, dir === go$pkg.RecvDir).reflectType();
+		};
+		MapOf = function(key, elem) {
+			return go$mapType(key.jsType, elem.jsType).reflectType();
+		};
+		rtype.Ptr.prototype.ptrTo = function() {
+			return go$ptrType(this.jsType).reflectType();
+		};
+		SliceOf = function(t) {
+			return go$sliceType(t.jsType).reflectType();
 		};
 		ValueOf = function(i) {
 			if (i === null) {
 				return new Value.Ptr();
 			}
 			var typ = i.constructor.reflectType();
+			if (typ.size > 8) { // flagIndir is assumed
+				return new Value.Ptr(typ, go$newDataPointer(i.go$val, typ.ptrTo().jsType), (typ.Kind() << flagKindShift) | flagIndir);
+			}
 			return new Value.Ptr(typ, i.go$val, typ.Kind() << flagKindShift);
 		};
 		Zero = function(typ) {
@@ -105,16 +117,52 @@ func init() {
 			}
 			return new Value.Ptr(typ, val, typ.Kind() << flagKindShift);
 		};
-		New = function(typ) {
-			var ptrType = typ.common().ptrTo();
+		unsafe_New = function(typ) {
 			switch (typ.Kind()) {
 			case go$pkg.Struct:
-				return new Value.Ptr(ptrType, new typ.jsType.Ptr(), go$pkg.Ptr << flagKindShift);
+				return new typ.jsType.Ptr();
 			case go$pkg.Array:
-				return new Value.Ptr(ptrType, new ptrType.jsType(Zero(typ).val), go$pkg.Ptr << flagKindShift);
+				return new (typ.ptrTo()).jsType(Zero(typ).val);
 			default:
-				return new Value.Ptr(ptrType, go$newDataPointer(Zero(typ).val, ptrType.jsType), go$pkg.Ptr << flagKindShift);
+				return go$newDataPointer(Zero(typ).val, typ.ptrTo().jsType);
 			}
+		};
+		makechan = function(typ, size) {
+			return new typ.jsType();
+		};
+		makeComplex = function(f, v, typ) {
+			return new Value.Ptr(typ, new typ.jsType(v.real, v.imag), f | (typ.Kind() << flagKindShift));
+		};
+		makeInt = function(f, bits, typ) {
+			var val;
+			switch (typ.Kind()) {
+			case go$pkg.Int8:
+				val = bits.low << 24 >> 24;
+				break;
+			case go$pkg.Int16:
+				val = bits.low << 16 >> 16;
+				break;
+			case go$pkg.Int:
+			case go$pkg.Int32:
+				val = bits.low >> 0;
+				break;
+			case go$pkg.Int64:
+				return new Value.Ptr(typ, go$newDataPointer(new Go$Int64(bits.high, bits.low), typ.ptrTo().jsType), f | flagIndir | (go$pkg.Int64 << flagKindShift));
+			case go$pkg.Uint8:
+				val = bits.low << 24 >>> 24;
+				break;
+			case go$pkg.Uint16:
+				val = bits.low << 16 >>> 16;
+				break;
+			case go$pkg.Uint64:
+				return new Value.Ptr(typ, go$newDataPointer(bits, typ.ptrTo().jsType), f | flagIndir | (go$pkg.Int64 << flagKindShift));
+			case go$pkg.Uint:
+			case go$pkg.Uint32:
+			case go$pkg.Uintptr:
+				val = bits.low >>> 0;
+				break;
+			}
+			return new Value.Ptr(typ, val, f | (typ.Kind() << flagKindShift));
 		};
 		MakeSlice = function(typ, len, cap) {
 			if (typ.Kind() !== go$pkg.Slice) {
@@ -162,6 +210,11 @@ func init() {
 		mapiternext = function(it) {
 			it[2] += 1;
 		};
+		chancap = function(ch) { go$notSupported("channels"); };
+		chanclose = function(ch) { go$notSupported("channels"); };
+		chanlen = function(ch) { go$notSupported("channels"); };
+		chanrecv = function(t, ch, nb) { go$notSupported("channels"); };
+		chansend = function(t, ch, val, nb) { go$notSupported("channels"); };
 		valueInterface = function(v, safe) {
 			if (v.flag === 0) {
 				throw go$panic(new ValueError.Ptr("reflect.Value.Interface", 0));
@@ -205,10 +258,6 @@ func init() {
 				dst.Index(i).Set(src.Index(i));
 			}
 			return n;
-		};
-
-		rtype.Ptr.prototype.ptrTo = function() {
-			return go$ptrType(this.jsType).reflectType();
 		};
 
 		Value.Ptr.prototype.iword = function() {
@@ -569,11 +618,11 @@ func init() {
 			case go$pkg.Struct:
 				for (i = 0; i < visited.length; i += 1) {
 					var entry = visited[i];
-					if (v1 === entry[0] && v2 === entry[1]) {
+					if (v1.val === entry[0] && v2.val === entry[1]) {
 						return true;
 					}
 				}
-				visited.push([v1, v2]);
+				visited.push([v1.val, v2.val]);
 			}
 
 			switch(v1.Kind()) {

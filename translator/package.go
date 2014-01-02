@@ -572,6 +572,9 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]*ty
 		}
 		typeName := c.objectName(namedRecvType.Obj())
 		funName := fun.Name.Name
+		if ReservedKeywords[funName] {
+			funName += "$"
+		}
 
 		if _, isStruct := namedRecvType.Underlying().(*types.Struct); isStruct {
 			c.Printf("%s.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, funName, joinedParams, funName, joinedParams)

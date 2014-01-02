@@ -621,6 +621,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 			switch sel.Kind() {
 			case types.MethodVal:
+				methodName := f.Sel.Name
+				if ReservedKeywords[methodName] {
+					methodName += "$"
+				}
 				methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
 				_, pointerExpected := methodsRecvType.(*types.Pointer)
 				_, isPointer := sel.Recv().Underlying().(*types.Pointer)
@@ -629,14 +633,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				if pointerExpected && !isPointer && !isStruct && !isArray {
 					target := c.translateExpr(f.X)
 					vVar := c.newVariable("v")
-					fun = fmt.Sprintf("(new %s(function() { return %s; }, function(%s) { %s = %s; })).%s", c.typeName(methodsRecvType), target, vVar, target, vVar, f.Sel.Name)
+					fun = fmt.Sprintf("(new %s(function() { return %s; }, function(%s) { %s = %s; })).%s", c.typeName(methodsRecvType), target, vVar, target, vVar, methodName)
 					break
 				}
 				if isWrapped(sel.Recv()) {
-					fun = fmt.Sprintf("(new %s(%s)).%s", c.typeName(sel.Recv()), c.translateExpr(f.X), f.Sel.Name)
+					fun = fmt.Sprintf("(new %s(%s)).%s", c.typeName(sel.Recv()), c.translateExpr(f.X), methodName)
 					break
 				}
-				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), f.Sel.Name)
+				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), methodName)
 			case types.FieldVal, types.MethodExpr, types.PackageObj:
 				fun = c.translateExpr(f)
 			default:

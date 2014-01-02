@@ -37,6 +37,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				continue
 			case *ast.BlockStmt:
 				caseClauses = append(caseClauses, &ast.CaseClause{List: nil, Body: elseStmt.List})
+				initStmts = append(initStmts, nil)
 			case *ast.EmptyStmt, nil:
 				// no else clause
 			default:
@@ -330,64 +331,88 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 	}
 }
 
+type branch struct {
+	clause    *ast.CaseClause
+	initStmt  ast.Stmt
+	condition string
+	body      []ast.Stmt
+}
+
 func (c *PkgContext) translateBranchingStmt(caseClauses []ast.Stmt, initStmts []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) string, printCaseBodyPrefix func([]ast.Expr), label string) {
-	if len(caseClauses) == 0 {
-		return
-	}
-	if len(caseClauses) == 1 && caseClauses[0].(*ast.CaseClause).List == nil {
-		c.translateStmtList(caseClauses[0].(*ast.CaseClause).Body)
-		return
+	var branches []*branch
+	var defaultBranch *branch
+	var openBranches []*branch
+clauseLoop:
+	for i, cc := range caseClauses {
+		clause := cc.(*ast.CaseClause)
+
+		var initStmt ast.Stmt
+		if initStmts != nil {
+			initStmt = initStmts[i]
+		}
+		branch := &branch{clause, initStmt, "", nil}
+		openBranches = append(openBranches, branch)
+		for _, openBranch := range openBranches {
+			openBranch.body = append(openBranch.body, clause.Body...)
+		}
+		if !hasFallthrough(clause) {
+			openBranches = nil
+		}
+
+		if len(clause.List) == 0 {
+			defaultBranch = branch
+			continue
+		}
+
+		var conds []string
+		for _, cond := range clause.List {
+			x := translateCond(cond)
+			if x == "true" {
+				defaultBranch = branch
+				break clauseLoop
+			}
+			if x != "false" {
+				conds = append(conds, x)
+			}
+		}
+		if len(conds) == 0 {
+			continue
+		}
+		branch.condition = strings.Join(conds, " || ")
+		branches = append(branches, branch)
 	}
 
-	clauseStmts := make([][]ast.Stmt, len(caseClauses))
-	openClauses := make([]int, 0)
-	for i, child := range caseClauses {
-		caseClause := child.(*ast.CaseClause)
-		openClauses = append(openClauses, i)
-		for _, j := range openClauses {
-			clauseStmts[j] = append(clauseStmts[j], caseClause.Body...)
+	if len(branches) == 0 {
+		if defaultBranch != nil {
+			c.translateStmtList(defaultBranch.body)
+			return
 		}
-		if !hasFallthrough(caseClause) {
-			openClauses = nil
-		}
+		return
 	}
 
 	printBody := func() {
-		var defaultClause []ast.Stmt
 		elsePrefix := ""
-		for i, child := range caseClauses {
-			caseClause := child.(*ast.CaseClause)
-			if len(caseClause.List) == 0 {
-				defaultClause = clauseStmts[i]
-				if defaultClause == nil {
-					defaultClause = []ast.Stmt{}
-				}
-				continue
-			}
-			conds := make([]string, len(caseClause.List))
-			for i, cond := range caseClause.List {
-				conds[i] = translateCond(cond)
-			}
+		for _, branch := range branches {
 			initStmt := ""
-			if initStmts != nil && initStmts[i] != nil {
-				initStmt = c.translateSimpleStmt(initStmts[i]) + ", "
+			if branch.initStmt != nil {
+				initStmt = c.translateSimpleStmt(branch.initStmt) + ", "
 			}
-			c.Printf("%sif (%s%s) {", elsePrefix, initStmt, strings.Join(conds, " || "))
+			c.Printf("%sif (%s%s) {", elsePrefix, initStmt, branch.condition)
 			c.Indent(func() {
 				if printCaseBodyPrefix != nil {
-					printCaseBodyPrefix(caseClause.List)
+					printCaseBodyPrefix(branch.clause.List)
 				}
-				c.translateStmtList(clauseStmts[i])
+				c.translateStmtList(branch.body)
 			})
 			elsePrefix = "} else "
 		}
-		if defaultClause != nil {
+		if defaultBranch != nil {
 			c.Printf("} else {")
 			c.Indent(func() {
 				if printCaseBodyPrefix != nil {
 					printCaseBodyPrefix(nil)
 				}
-				c.translateStmtList(defaultClause)
+				c.translateStmtList(defaultBranch.body)
 			})
 		}
 		c.Printf("}")

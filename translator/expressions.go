@@ -185,6 +185,15 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return fmt.Sprintf("(%s = %s, new %s(~%s.high, ~%s.low >>> 0))", x, c.translateExpr(e.X), c.typeName(t), x, x)
 			}
 			op = "~"
+		case token.NOT:
+			x := c.translateExpr(e.X)
+			if x == "true" {
+				return "false"
+			}
+			if x == "false" {
+				return "true"
+			}
+			return "!" + x
 		}
 		return fixNumber(fmt.Sprintf("%s%s", op, c.translateExpr(e.X)), basic)
 
@@ -320,8 +329,22 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 
 		switch e.Op {
-		case token.ADD, token.LSS, token.LEQ, token.GTR, token.GEQ, token.LAND, token.LOR:
+		case token.ADD, token.LSS, token.LEQ, token.GTR, token.GEQ:
 			return fmt.Sprintf("%s %s %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
+		case token.LAND:
+			x := c.translateExpr(e.X)
+			y := c.translateExpr(e.Y)
+			if x == "false" {
+				return "false"
+			}
+			return x + " && " + y
+		case token.LOR:
+			x := c.translateExpr(e.X)
+			y := c.translateExpr(e.Y)
+			if x == "true" {
+				return "true"
+			}
+			return x + " || " + y
 		case token.EQL:
 			switch u := t.Underlying().(type) {
 			case *types.Struct:
@@ -373,7 +396,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 
 	case *ast.ParenExpr:
-		return fmt.Sprintf("(%s)", c.translateExpr(e.X))
+		x := c.translateExpr(e.X)
+		if x == "true" || x == "false" {
+			return x
+		}
+		return "(" + x + ")"
 
 	case *ast.IndexExpr:
 		switch t := c.info.Types[e.X].Underlying().(type) {

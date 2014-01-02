@@ -383,6 +383,10 @@ clauseLoop:
 		branches = append(branches, branch)
 	}
 
+	for defaultBranch == nil && len(branches) != 0 && len(branches[len(branches)-1].body) == 0 {
+		branches = branches[:len(branches)-1]
+	}
+
 	if len(branches) == 0 {
 		if defaultBranch != nil {
 			c.translateStmtList(defaultBranch.body)

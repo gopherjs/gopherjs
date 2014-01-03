@@ -127,6 +127,12 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			c.handleEscapingVariables(s.Body, func() {
 				c.translateStmtList(s.Body.List)
 				if s.Post != nil {
+					if len(s.Body.List) != 0 {
+						switch s.Body.List[len(s.Body.List)-1].(type) {
+						case *ast.ReturnStmt, *ast.BranchStmt:
+							return
+						}
+					}
 					c.Printf("%s;", c.translateSimpleStmt(s.Post))
 				}
 			})

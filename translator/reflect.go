@@ -45,6 +45,12 @@ func init() {
 			return go$chanType(t.jsType, dir === go$pkg.SendDir, dir === go$pkg.RecvDir).reflectType();
 		};
 		MapOf = function(key, elem) {
+			switch (key.Kind()) {
+			case go$pkg.Func:
+			case go$pkg.Map:
+			case go$pkg.Slice:
+				throw go$panic("reflect.MapOf: invalid key type " + key.String());
+			}
 			return go$mapType(key.jsType, elem.jsType).reflectType();
 		};
 		rtype.Ptr.prototype.ptrTo = function() {
@@ -58,9 +64,9 @@ func init() {
 				return new Value.Ptr();
 			}
 			var typ = i.constructor.reflectType();
-			if (typ.size > 8) { // flagIndir is assumed
-				return new Value.Ptr(typ, go$newDataPointer(i.go$val, typ.ptrTo().jsType), (typ.Kind() << flagKindShift) | flagIndir);
-			}
+			// if (typ.size > 8) { // flagIndir is assumed
+			// 	return new Value.Ptr(typ, go$newDataPointer(i.go$val, typ.ptrTo().jsType), (typ.Kind() << flagKindShift) | flagIndir);
+			// }
 			return new Value.Ptr(typ, i.go$val, typ.Kind() << flagKindShift);
 		};
 		Zero = function(typ) {
@@ -260,6 +266,28 @@ func init() {
 			return n;
 		};
 
+		uncommonType.Ptr.prototype.Method = function(i) {
+			if (this === uncommonType.Ptr.nil || i < 0 || i >= this.methods.length) {
+				throw go$panic("reflect: Method index out of range");
+			}
+			var p = this.methods.array[i];
+			var fl = go$pkg.Func << flagKindShift;
+			var pkgPath = "";
+			if (p.pkgPath.go$get !== go$throwNilPointerError) {
+				pkgPath = p.pkgPath.go$get();
+				fl |= flagRO;
+			}
+			var mt = p.typ;
+			var name = p.name.go$get();
+			if (go$reservedKeywords.indexOf(name) !== -1) {
+				name += "$";
+			}
+			var fn = function(rcvr) {
+				return rcvr[name].apply(rcvr, Array.prototype.slice.apply(arguments, [1]));
+			};
+			return new Method.Ptr(p.name.go$get(), pkgPath, mt, new Value.Ptr(mt, fn, fl), i);
+		};
+
 		Value.Ptr.prototype.iword = function() {
 			if ((this.flag & flagIndir) !== 0 && this.typ.Kind() !== go$pkg.Struct) {
 				return this.val.go$get();
@@ -274,12 +302,46 @@ func init() {
 			return this.iword();
 		};
 		Value.Ptr.prototype.call = function(op, args) {
-			if (this.val === null) {
+			var t = this.typ, fn, rcvr;
+
+			if ((this.flag & flagMethod) !== 0) {
+				var i = this.flag >> flagMethodShift, m;
+				if (this.typ.Kind() === go$pkg.Interface) {
+					var tt = this.typ.interfaceType;
+					if (i < 0 || i >= tt.methods.length) {
+						throw go$panic("reflect: internal error: invalid method index");
+					}
+					if (this.IsNil()) {
+						throw go$panic("reflect: " + op + " of method on nil interface value");
+					}
+					m = tt.methods.array[i];
+					t = m.typ;
+				} else {
+					var ut = this.typ.uncommon();
+					if (ut === uncommonType.Ptr.nil || i < 0 || i >= ut.methods.length) {
+						throw go$panic("reflect: internal error: invalid method index");
+					}
+					m = ut.methods.array[i];
+					t = m.mtyp;
+				}
+				if (m.pkgPath.go$get !== go$throwNilPointerError) {
+					throw go$panic("reflect: " + op + " of unexported method");
+				}
+				var name = m.name.go$get()
+				if (go$reservedKeywords.indexOf(name) !== -1) {
+					name += "$";
+				}
+				rcvr = this.iword();
+				fn = rcvr[name];
+			} else {
+				fn = this.iword();
+			}
+
+			if (fn === go$throwNilPointerError) {
 				throw go$panic("reflect.Value.Call: call of nil function");
 			}
 
 			var isSlice = (op === "CallSlice");
-			var t = this.typ;
 			var n = t.NumIn();
 			if (isSlice) {
 				if (!t.IsVariadic()) {
@@ -337,7 +399,7 @@ func init() {
 			for (i = 0; i < t.NumIn(); i += 1) {
 				argsArray[i] = args.array[args.offset + i].iword();
 			}
-			var results = this.val.apply(null, argsArray);
+			var results = fn.apply(rcvr, argsArray);
 			if (t.NumOut() === 0) {
 				results = [];
 			} else if (t.NumOut() === 1) {
@@ -392,9 +454,9 @@ func init() {
 			var name = fieldName(field, i);
 			var typ = field.typ;
 			var fl = this.flag & (flagRO | flagIndir | flagAddr);
-			// if (field.pkgPath !== nil) {
-			//  fl |= flagRO
-			// }
+			if (field.pkgPath.go$get !== go$throwNilPointerError) {
+				fl |= flagRO;
+			}
 			fl |= typ.Kind() << flagKindShift;
 			if ((this.flag & flagIndir) !== 0 && typ.Kind() !== go$pkg.Struct) {
 				var struct = this.val;

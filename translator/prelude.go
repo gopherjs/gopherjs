@@ -111,7 +111,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ.init = function(methods) {
 			typ.extendReflectType = function(rt) {
 				var imethods = go$mapArray(methods, function(m) {
-					return new go$reflect.imethod(go$newStringPtr(m[0]), undefined, m[1].reflectType());
+					return new go$reflect.imethod(go$newStringPtr(m[0]), go$newStringPtr(m[1]), m[2].reflectType());
 				});
 				var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod)));
 				rt.interfaceType = new go$reflect.interfaceType(rt, new methodSlice(imethods));
@@ -220,7 +220,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 				var i;
 				for (i = 0; i < typ.methods.length; i++) {
 					var m = typ.methods[i];
-					methods.push(new go$reflect.method(go$newStringPtr(m[0]), undefined, go$funcType(m[1], m[2], m[3]).reflectType(), go$funcType([typ].concat(m[1]), m[2], m[3]).reflectType(), undefined, undefined));
+					methods.push(new go$reflect.method(go$newStringPtr(m[0]), go$newStringPtr(m[1]), go$funcType(m[2], m[3], m[4]).reflectType(), go$funcType([typ].concat(m[2]), m[3], m[4]).reflectType(), undefined, undefined));
 				}
 			}
 			if (name !== "" || methods.length !== 0) {
@@ -322,7 +322,9 @@ var go$interfaceTypes = {};
 var go$interfaceType = function(methods) {
 	var string = "interface {}";
 	if (methods.length !== 0) {
-		string = "interface { " + go$mapArray(methods, function(m) { return m[0] + m[1].string.substr(4); }).join("; ") + " }";
+		string = "interface { " + go$mapArray(methods, function(m) {
+			return (m[1] !== "" ? m[1] + "." : "") + m[0] + m[2].string.substr(4);
+		}).join("; ") + " }";
 	}
 	var typ = go$interfaceTypes[string];
 	if (typ === undefined) {
@@ -334,7 +336,7 @@ var go$interfaceType = function(methods) {
 };
 var go$interfaceNil = { go$key: function() { return "nil"; } };
 var go$error = go$newType(8, "Interface", "error", "error", "", null);
-go$error.init([["Error", go$funcType([], [Go$String], false)]]);
+go$error.init([["Error", "", go$funcType([], [Go$String], false)]]);
 
 var Go$Map = function() {};
 (function() {

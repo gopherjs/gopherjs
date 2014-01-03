@@ -261,8 +261,12 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					}
 					methods := make([]string, methodSet.Len())
 					for i := range methods {
-						method := methodSet.At(i)
-						methods[i] = fmt.Sprintf(`["%s", %s]`, method.Obj().Name(), c.initArgs(method.Type()))
+						method := methodSet.At(i).Obj()
+						pkgPath := ""
+						if !method.IsExported() {
+							pkgPath = method.Pkg().Path()
+						}
+						methods[i] = fmt.Sprintf(`["%s", "%s", %s]`, method.Name(), pkgPath, c.initArgs(method.Type()))
 					}
 					c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
 				}
@@ -397,7 +401,11 @@ func (c *PkgContext) initArgs(ty types.Type) string {
 		methods := make([]string, t.NumMethods())
 		for i := range methods {
 			method := t.Method(i)
-			methods[i] = fmt.Sprintf(`["%s", %s]`, method.Name(), c.typeName(method.Type()))
+			pkgPath := ""
+			if !method.IsExported() {
+				pkgPath = method.Pkg().Path()
+			}
+			methods[i] = fmt.Sprintf(`["%s", "%s", %s]`, method.Name(), pkgPath, c.typeName(method.Type()))
 		}
 		return fmt.Sprintf("[%s]", strings.Join(methods, ", "))
 	case *types.Map:

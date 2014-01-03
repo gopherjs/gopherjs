@@ -504,7 +504,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				switch o.Name() {
 				case "new":
 					t := c.info.Types[e].(*types.Pointer)
-					if types.IsIdentical(t.Elem().Underlying(), types.Typ[types.Uintptr]) {
+					if c.pkg.Path() == "syscall" && types.IsIdentical(t.Elem().Underlying(), types.Typ[types.Uintptr]) {
 						return "new Uint8Array(8)"
 					}
 					switch t.Elem().Underlying().(type) {

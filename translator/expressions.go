@@ -809,8 +809,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 					target := c.newVariable("_struct")
 					c.Printf("%s = new Uint8Array(%d);", array, sizes32.Sizeof(s))
 					c.Delayed(func() {
-						c.Printf("%s = %s;", target, c.translateExpr(expr))
-						c.loadStruct(array, target, s)
+						c.Printf("%s = %s, %s;", target, c.translateExpr(expr), c.loadStruct(array, target, s))
 					})
 					return array
 				}
@@ -850,10 +849,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		if isStruct && types.IsIdentical(exprType, types.Typ[types.UnsafePointer]) {
 			array := c.newVariable("_array")
 			target := c.newVariable("_struct")
-			c.Printf("%s = %s;", array, c.translateExpr(expr))
-			c.Printf("%s = %s;", target, c.zeroValue(t.Elem()))
-			c.loadStruct(array, target, s)
-			return target
+			return fmt.Sprintf("(%s = %s, %s = %s, %s, %s)", array, c.translateExpr(expr), target, c.zeroValue(t.Elem()), c.loadStruct(array, target, s), target)
 		}
 
 		if isNamed && !types.IsIdentical(exprType, desiredType) {
@@ -869,7 +865,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		}
 
 	case *types.Chan, *types.Map, *types.Signature:
-		// no converion
+		// no conversion
 
 	default:
 		panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
@@ -898,9 +894,9 @@ func (c *PkgContext) clone(src string, ty types.Type) string {
 	}
 }
 
-func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {
+func (c *PkgContext) loadStruct(array, target string, s *types.Struct) string {
 	view := c.newVariable("_view")
-	c.Printf("%s = new DataView(%s.buffer, %s.byteOffset);", view, array, array)
+	code := fmt.Sprintf("%s = new DataView(%s.buffer, %s.byteOffset)", view, array, array)
 	var fields []*types.Var
 	var collectFields func(s *types.Struct, path string)
 	collectFields = func(s *types.Struct, path string) {
@@ -920,18 +916,16 @@ func (c *PkgContext) loadStruct(array, target string, s *types.Struct) {
 		case *types.Basic:
 			if t.Info()&types.IsNumeric != 0 {
 				if is64Bit(t) {
-					c.Printf("%s = new %s(%s.getUint32(%d, true), %s.getUint32(%d, true));", field.Name(), c.typeName(field.Type()), view, offsets[i]+4, view, offsets[i])
-					continue
+					code += fmt.Sprintf(", %s = new %s(%s.getUint32(%d, true), %s.getUint32(%d, true))", field.Name(), c.typeName(field.Type()), view, offsets[i]+4, view, offsets[i])
+					break
 				}
-				c.Printf("%s = %s.get%s(%d, true);", field.Name(), view, toJavaScriptType(t), offsets[i])
+				code += fmt.Sprintf(", %s = %s.get%s(%d, true)", field.Name(), view, toJavaScriptType(t), offsets[i])
 			}
-			continue
 		case *types.Array:
-			c.Printf(`%s = new (go$nativeArray("%s"))(%s.buffer, go$min(%s.byteOffset + %d, %s.buffer.byteLength));`, field.Name(), typeKind(t.Elem()), array, array, offsets[i], array)
-			continue
+			code += fmt.Sprintf(`, %s = new (go$nativeArray("%s"))(%s.buffer, go$min(%s.byteOffset + %d, %s.buffer.byteLength))`, field.Name(), typeKind(t.Elem()), array, array, offsets[i], array)
 		}
-		c.Printf("// skipped: %s %s", field.Name(), field.Type().String())
 	}
+	return code
 }
 
 func (c *PkgContext) typeCheck(of string, to types.Type) string {

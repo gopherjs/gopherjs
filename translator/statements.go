@@ -265,14 +265,17 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		case 1:
 			if c.functionSig.Results().Len() > 1 {
 				c.Printf("return %s;", c.translateExpr(results[0]))
-				return
+				break
 			}
-			c.Printf("return %s;", c.translateExprToType(results[0], c.functionSig.Results().At(0).Type()))
+			v := c.translateExprToType(results[0], c.functionSig.Results().At(0).Type())
+			c.delayedOutput = nil
+			c.Printf("return %s;", v)
 		default:
 			values := make([]string, len(results))
 			for i, result := range results {
 				values[i] = c.translateExprToType(result, c.functionSig.Results().At(i).Type())
 			}
+			c.delayedOutput = nil
 			c.Printf("return [%s];", strings.Join(values, ", "))
 		}
 

@@ -228,6 +228,9 @@ func init() {
 			if (safe && (v.flag & flagRO) !== 0) {
 				throw go$panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")
 			}
+			if ((v.flag & flagMethod) !== 0) {
+				v = makeMethodValue("Interface", v);
+			}
 			var val = v.iword();
 			if (v.typ.Kind() === go$pkg.Interface || val.constructor === v.typ.jsType) {
 				return val;
@@ -237,6 +240,47 @@ func init() {
 			}
 			return new v.typ.jsType(val);
 		};
+		makeMethodValue = function(op, v) {
+			if ((v.flag & flagMethod) === 0) {
+				throw go$panic("reflect: internal error: invalid use of makePartialFunc");
+			}
+
+			var tuple = methodReceiver(op, v, v.flag >> flagMethodShift);
+			var fn = tuple[1];
+			var rcvr = tuple[2];
+			var fv = function() { fn.apply(rcvr, arguments); };
+			return new Value.Ptr(v.Type(), fv, (v.flag & flagRO) | (go$pkg.Func << flagKindShift));
+		};
+		methodReceiver = function(op, v, i) {
+			var m, t;
+			if (v.typ.Kind() === go$pkg.Interface) {
+				var tt = v.typ.interfaceType;
+				if (i < 0 || i >= tt.methods.length) {
+					throw go$panic("reflect: internal error: invalid method index");
+				}
+				if (v.IsNil()) {
+					throw go$panic("reflect: " + op + " of method on nil interface value");
+				}
+				m = tt.methods.array[i];
+				t = m.typ;
+			} else {
+				var ut = v.typ.uncommon();
+				if (ut === uncommonType.Ptr.nil || i < 0 || i >= ut.methods.length) {
+					throw go$panic("reflect: internal error: invalid method index");
+				}
+				m = ut.methods.array[i];
+				t = m.mtyp;
+			}
+			if (m.pkgPath.go$get !== go$throwNilPointerError) {
+				throw go$panic("reflect: " + op + " of unexported method");
+			}
+			var name = m.name.go$get()
+			if (go$reservedKeywords.indexOf(name) !== -1) {
+				name += "$";
+			}
+			var rcvr = v.iword();
+			return [t, rcvr[name], rcvr];
+		}
 		methodName = function() {
 			return "?FIXME?";
 		};
@@ -305,34 +349,10 @@ func init() {
 			var t = this.typ, fn, rcvr;
 
 			if ((this.flag & flagMethod) !== 0) {
-				var i = this.flag >> flagMethodShift, m;
-				if (this.typ.Kind() === go$pkg.Interface) {
-					var tt = this.typ.interfaceType;
-					if (i < 0 || i >= tt.methods.length) {
-						throw go$panic("reflect: internal error: invalid method index");
-					}
-					if (this.IsNil()) {
-						throw go$panic("reflect: " + op + " of method on nil interface value");
-					}
-					m = tt.methods.array[i];
-					t = m.typ;
-				} else {
-					var ut = this.typ.uncommon();
-					if (ut === uncommonType.Ptr.nil || i < 0 || i >= ut.methods.length) {
-						throw go$panic("reflect: internal error: invalid method index");
-					}
-					m = ut.methods.array[i];
-					t = m.mtyp;
-				}
-				if (m.pkgPath.go$get !== go$throwNilPointerError) {
-					throw go$panic("reflect: " + op + " of unexported method");
-				}
-				var name = m.name.go$get()
-				if (go$reservedKeywords.indexOf(name) !== -1) {
-					name += "$";
-				}
-				rcvr = this.iword();
-				fn = rcvr[name];
+				var tuple = methodReceiver(op, this, this.flag >> flagMethodShift);
+				t = tuple[0];
+				fn = tuple[1];
+				rcvr = tuple[2];
 			} else {
 				fn = this.iword();
 			}
@@ -419,6 +439,9 @@ func init() {
 				return this.iword().capacity;
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.Cap", k));
+		};
+		Value.Ptr.prototype.Complex = function() {
+			return this.iword();
 		};
 		Value.Ptr.prototype.Elem = function() {
 			switch (this.kind()) {
@@ -529,6 +552,13 @@ func init() {
 				return go$keys(this.iword()).length;
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.Len", k));
+		};
+		Value.Ptr.prototype.runes = function() {
+			this.mustBe(go$pkg.Slice);
+			if (this.typ.Elem().Kind() !== go$pkg.Int32) {
+				throw new go$panic("reflect.Value.Bytes of non-rune slice");
+			}
+			return this.iword();
 		};
 		Value.Ptr.prototype.Pointer = function() {
 			var k = this.kind();

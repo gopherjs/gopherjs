@@ -75,7 +75,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ = function(v) { this.go$val = v; };
 		typ.Ptr = go$newType(4, "Ptr", "*" + string, "", "", function(array) {
 			this.go$get = function() { return array; };
-			this.go$set = function() { throw go$panic("not implemented"); }; // TODO required?
+			this.go$set = function(v) { go$copyArray(array, v); };
 			this.go$val = this;
 		});
 		typ.init = function(elem, len) {
@@ -87,7 +87,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		break;
 
 	case "Chan":
-		typ = function() {};
+		typ = function() { this.go$val = this; };
 		typ.init = function(elem, sendOnly, recvOnly) {
 			typ.nil = new typ();
 			typ.extendReflectType = function(rt) {

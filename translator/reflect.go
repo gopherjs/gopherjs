@@ -9,6 +9,29 @@ func init() {
 			RecvDir: go$pkg.RecvDir, SendDir: go$pkg.SendDir, BothDir: go$pkg.BothDir
 		};
 
+		var isWrapped = function(typ) {
+			switch (typ.Kind()) {
+			case go$pkg.Bool:
+			case go$pkg.Int:
+			case go$pkg.Int8:
+			case go$pkg.Int16:
+			case go$pkg.Int32:
+			case go$pkg.Uint:
+			case go$pkg.Uint8:
+			case go$pkg.Uint16:
+			case go$pkg.Uint32:
+			case go$pkg.Uintptr:
+			case go$pkg.Float32:
+			case go$pkg.Float64:
+			case go$pkg.Array:
+			case go$pkg.Map:
+			case go$pkg.Func:
+			case go$pkg.String:
+			case go$pkg.Struct:
+				return true;
+			}
+			return false;
+		};
 		var fieldName = function(field, i) {
 			if (field.name.go$get === go$throwNilPointerError) {
 				var ntyp = field.typ;
@@ -64,9 +87,6 @@ func init() {
 				return new Value.Ptr();
 			}
 			var typ = i.constructor.reflectType();
-			// if (typ.size > 8) { // flagIndir is assumed
-			// 	return new Value.Ptr(typ, go$newDataPointer(i.go$val, typ.ptrTo().jsType), (typ.Kind() << flagKindShift) | flagIndir);
-			// }
 			return new Value.Ptr(typ, i.go$val, typ.Kind() << flagKindShift);
 		};
 		Zero = function(typ) {
@@ -119,7 +139,7 @@ func init() {
 				val = new typ.jsType.Ptr();
 				break;
 			default:
-				throw go$panic("reflect.Zero(" + typ.string.go$get() + "): type not yet supported");
+				throw go$panic(new ValueError.Ptr("reflect.Zero", this.kind()));
 			}
 			return new Value.Ptr(typ, val, typ.Kind() << flagKindShift);
 		};
@@ -185,6 +205,50 @@ func init() {
 			}
 			return new Value.Ptr(typ.common(), typ.jsType.make(len, cap, function() { return Zero(typ.Elem()).val; }), go$pkg.Slice << flagKindShift);
 		};
+		cvtDirect = function(v, typ) {
+			var srcVal = v.iword();
+			var val;
+			switch (typ.Kind()) {
+			case go$pkg.Chan:
+				if (srcVal === v.typ.jsType.nil) {
+					val = typ.jsType.nil;
+					break;
+				}
+				val = new typ.jsType();
+				break;
+			case go$pkg.Slice:
+				val = new typ.jsType(srcVal.array);
+				val.length = srcVal.length;
+				val.cap = srcVal.cap;
+				break;
+			case go$pkg.Ptr:
+				if (srcVal === v.typ.jsType.nil) {
+					val = typ.jsType.nil;
+					break;
+				}
+				val = new typ.jsType(srcVal.go$get, srcVal.go$set);
+				break;
+			case go$pkg.Struct:
+				val = new typ.jsType.Ptr();
+				copyStruct(val, srcVal, typ);
+				break;
+			case go$pkg.Array:
+			case go$pkg.Func:
+			case go$pkg.Map:
+			case go$pkg.String:
+				val = srcVal;
+				break;
+			default:
+				throw go$panic(new ValueError.Ptr("reflect.Convert", typ.Kind()));
+			}
+			return new Value.Ptr(typ, val, v.flag);
+		};
+		cvtStringBytes = function(v, typ) {
+			return new Value.Ptr(typ, new typ.jsType(go$stringToBytes(v.iword())), (v.flag & flagRO) | (go$pkg.Slice << flagKindShift));
+		};
+		cvtStringRunes = function(v, typ) {
+			return new Value.Ptr(typ, new typ.jsType(go$stringToRunes(v.iword())), (v.flag & flagRO) | (go$pkg.Slice << flagKindShift));
+		};
 		makemap = function(t) {
 			return new Go$Map();
 		};
@@ -231,14 +295,10 @@ func init() {
 			if ((v.flag & flagMethod) !== 0) {
 				v = makeMethodValue("Interface", v);
 			}
-			var val = v.iword();
-			if (v.typ.Kind() === go$pkg.Interface || val.constructor === v.typ.jsType) {
-				return val;
+			if (isWrapped(v.typ)) {
+				return new v.typ.jsType(v.iword());
 			}
-			if (v.typ.Kind() === go$pkg.Ptr) {
-				return new v.typ.jsType(val.go$get, val.go$set);
-			}
-			return new v.typ.jsType(val);
+			return v.iword();
 		};
 		makeMethodValue = function(op, v) {
 			if ((v.flag & flagMethod) === 0) {
@@ -248,7 +308,7 @@ func init() {
 			var tuple = methodReceiver(op, v, v.flag >> flagMethodShift);
 			var fn = tuple[1];
 			var rcvr = tuple[2];
-			var fv = function() { fn.apply(rcvr, arguments); };
+			var fv = function() { return fn.apply(rcvr, arguments); };
 			return new Value.Ptr(v.Type(), fv, (v.flag & flagRO) | (go$pkg.Func << flagKindShift));
 		};
 		methodReceiver = function(op, v, i) {
@@ -279,6 +339,9 @@ func init() {
 				name += "$";
 			}
 			var rcvr = v.iword();
+			if (isWrapped(v.typ)) {
+				rcvr = new v.typ.jsType(rcvr);
+			}
 			return [t, rcvr[name], rcvr];
 		}
 		methodName = function() {
@@ -483,7 +546,7 @@ func init() {
 			fl |= typ.Kind() << flagKindShift;
 			if ((this.flag & flagIndir) !== 0 && typ.Kind() !== go$pkg.Struct) {
 				var struct = this.val;
-				return new Value.Ptr(typ, new (go$ptrType(typ))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl);
+				return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl);
 			}
 			return new Value.Ptr(typ, this.val[name], fl);
 		};
@@ -500,7 +563,7 @@ func init() {
 				fl |= typ.Kind() << flagKindShift;
 				if ((this.flag & flagIndir) !== 0 && typ.Kind() !== go$pkg.Struct) {
 					var array = this.val.go$get();
-					return new Value.Ptr(typ, new (go$ptrType(typ))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
+					return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
 				}
 				return new Value.Ptr(typ, this.iword()[i], fl);
 			case go$pkg.Slice:
@@ -515,7 +578,7 @@ func init() {
 				if (typ.Kind() === go$pkg.Struct) {
 					return new Value.Ptr(typ, array[i], fl);
 				}
-				return new Value.Ptr(typ, new (go$ptrType(typ))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
+				return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
 			case go$pkg.String:
 				var string = this.iword();
 				if (i < 0 || i >= string.length) {

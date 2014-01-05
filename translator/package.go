@@ -593,6 +593,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]*ty
 		if isPointer {
 			if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
 				printPrimaryFunction(typeName+".prototype."+funName, typeName+"."+funName)
+				c.Printf("go$ptrType(%s).prototype.%s = function(%s) { return (new %s(this.go$get())).%s(%s); };", typeName, funName, joinedParams, typeName, funName, joinedParams)
 				return
 			}
 			value := "this"

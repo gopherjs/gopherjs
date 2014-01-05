@@ -855,14 +855,8 @@ func (c *PkgContext) typeName(ty types.Type) string {
 
 func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	switch t := keyType.Underlying().(type) {
-	case *types.Array:
-		return fmt.Sprintf(`Array.prototype.join.call(%s, "$")`, c.translateExpr(expr))
-	case *types.Struct:
-		parts := make([]string, t.NumFields())
-		for i := range parts {
-			parts[i] = "go$obj." + fieldName(t, i)
-		}
-		return fmt.Sprintf("(go$obj = %s, %s)", c.translateExpr(expr), strings.Join(parts, ` + "$" + `))
+	case *types.Array, *types.Struct:
+		return fmt.Sprintf("(new %s(%s)).go$key()", c.typeName(keyType), c.translateExpr(expr))
 	case *types.Basic:
 		if is64Bit(t) {
 			return fmt.Sprintf("%s.go$key()", c.translateExprToType(expr, keyType))

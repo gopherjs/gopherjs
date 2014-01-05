@@ -79,6 +79,9 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			this.go$val = this;
 		});
 		typ.init = function(elem, len) {
+			typ.prototype.go$key = function() {
+				return go$mapArray(this.go$val, function(e) { return e.go$key ? e.go$key() : e; }).join("$");
+			};
 			typ.extendReflectType = function(rt) {
 				rt.arrayType = new go$reflect.arrayType(rt, elem.reflectType(), undefined, len);
 			};
@@ -191,6 +194,18 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 				var field = fields[i];
 				Object.defineProperty(typ.Ptr.nil, field[0], { get: go$throwNilPointerError, set: go$throwNilPointerError });
 			}
+			typ.prototype.go$key = function() {
+				var keys = new Array(fields.length);
+				for (i = 0; i < fields.length; i++) {
+					var name = fields[i][0];
+					if (name === "_" || go$reservedKeywords.indexOf(name) != -1) {
+						name = name + "$" + i;
+					}
+					var v = this.go$val[name];
+					keys[i] = v.go$key ? v.go$key() : v;
+				}
+				return keys.join("$");
+			};
 			typ.extendReflectType = function(rt) {
 				var reflectFields = new Array(fields.length), i;
 				for (i = 0; i < fields.length; i++) {

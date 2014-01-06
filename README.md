@@ -35,13 +35,13 @@ cd ../../../../../
 - all basic types, including 64-bit integers and complex numbers
 - arrays, slices, maps and structures
 - full type system with support for interfaces and type assertions
+- reflection for all types
 - many packages have been successfully tested, see [compatibility table](doc/packages.md)
 - the transpiler can turn itself into pure JavaScript that runs in all major browsers
 
 ### Roadmap
 These features are not implemented yet, but on the roadmap:
 
-- reflection (already partially done)
 - goroutines, channels, select
 - goto
 - output minification

@@ -115,7 +115,7 @@
 | -- user         | partially             | node.js only                      |
 | path            | yes                   |                                   |
 | -- filepath     | not yet               |                                   |
-| reflect         | partially             |                                   |
+| reflect         | yes                   |                                   |
 | regexp          | yes                   |                                   |
 | -- syntax       | not yet               |                                   |
 | runtime         | partially             |                                   |

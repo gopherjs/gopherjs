@@ -159,6 +159,29 @@ func init() {
 		makeComplex = function(f, v, typ) {
 			return new Value.Ptr(typ, new typ.jsType(v.real, v.imag), f | (typ.Kind() << flagKindShift));
 		};
+		MakeFunc = function(typ, fn) {
+			var fv = function() {
+				var args = new Array(typ.NumIn()), i;
+				for (i = 0; i < typ.NumIn(); i += 1) {
+					var t = typ.In(i);
+					args[i] = new Value.Ptr(t, arguments[i], t.Kind() << flagKindShift);
+				}
+				var resultsSlice = fn(new (go$sliceType(Value.Ptr))(args));
+				switch (typ.NumOut()) {
+				case 0:
+					return;
+				case 1:
+					return resultsSlice.array[resultsSlice.offset].iword();
+				default:
+					var results = new Array(typ.NumOut());
+					for (i = 0; i < typ.NumOut(); i += 1) {
+						results[i] = resultsSlice.array[resultsSlice.offset + i].iword();
+					}
+					return results;
+				}
+			};
+			return new Value.Ptr(typ, fv, go$pkg.Func << flagKindShift);
+		};
 		makeInt = function(f, bits, typ) {
 			var val;
 			switch (typ.Kind()) {
@@ -207,13 +230,13 @@ func init() {
 		};
 		cvtDirect = function(v, typ) {
 			var srcVal = v.iword();
+			if (srcVal === v.typ.jsType.nil) {
+				return new Value.Ptr(typ, typ.jsType.nil, v.flag);
+			}
+
 			var val;
 			switch (typ.Kind()) {
 			case go$pkg.Chan:
-				if (srcVal === v.typ.jsType.nil) {
-					val = typ.jsType.nil;
-					break;
-				}
 				val = new typ.jsType();
 				break;
 			case go$pkg.Slice:
@@ -222,8 +245,12 @@ func init() {
 				val.cap = srcVal.cap;
 				break;
 			case go$pkg.Ptr:
-				if (srcVal === v.typ.jsType.nil) {
-					val = typ.jsType.nil;
+				if (typ.Elem().Kind() === go$pkg.Struct) {
+					if (typ.Elem() === v.typ.Elem()) {
+						val = srcVal;
+					}
+					val = new typ.jsType();
+					copyStruct(val, srcVal, typ.Elem());
 					break;
 				}
 				val = new typ.jsType(srcVal.go$get, srcVal.go$set);
@@ -234,6 +261,7 @@ func init() {
 				break;
 			case go$pkg.Array:
 			case go$pkg.Func:
+			case go$pkg.Interface:
 			case go$pkg.Map:
 			case go$pkg.String:
 				val = srcVal;
@@ -241,7 +269,7 @@ func init() {
 			default:
 				throw go$panic(new ValueError.Ptr("reflect.Convert", typ.Kind()));
 			}
-			return new Value.Ptr(typ, val, v.flag);
+			return new Value.Ptr(typ, val, (v.flag & flagRO) | (typ.Kind() << flagKindShift));
 		};
 		cvtStringBytes = function(v, typ) {
 			return new Value.Ptr(typ, new typ.jsType(go$stringToBytes(v.iword())), (v.flag & flagRO) | (go$pkg.Slice << flagKindShift));
@@ -344,6 +372,9 @@ func init() {
 			}
 			return [t, rcvr[name], rcvr];
 		}
+		ifaceE2I = function(t, src, dst) {
+			dst.go$set(src);
+		};
 		methodName = function() {
 			return "?FIXME?";
 		};

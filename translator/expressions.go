@@ -803,7 +803,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 					return "new Uint8Array(0)"
 				}
 			}
-			if ptr, isPtr := c.info.Types[expr].(*types.Pointer); isPtr {
+			if ptr, isPtr := c.info.Types[expr].(*types.Pointer); c.pkg.Path() == "syscall" && isPtr {
 				if s, isStruct := ptr.Elem().Underlying().(*types.Struct); isStruct {
 					array := c.newVariable("_array")
 					target := c.newVariable("_struct")
@@ -846,7 +846,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		n, isNamed := t.Elem().(*types.Named)
 		s, isStruct := t.Elem().Underlying().(*types.Struct)
 
-		if isStruct && types.IsIdentical(exprType, types.Typ[types.UnsafePointer]) {
+		if c.pkg.Path() == "syscall" && isStruct && types.IsIdentical(exprType, types.Typ[types.UnsafePointer]) {
 			array := c.newVariable("_array")
 			target := c.newVariable("_struct")
 			return fmt.Sprintf("(%s = %s, %s = %s, %s, %s)", array, c.translateExpr(expr), target, c.zeroValue(t.Elem()), c.loadStruct(array, target, s), target)

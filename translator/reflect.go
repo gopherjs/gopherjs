@@ -281,19 +281,23 @@ func init() {
 			return new Go$Map();
 		};
 		mapaccess = function(t, m, key) {
-			var entry = m[key];
+			var entry = m[key.go$key ? key.go$key() : key];
 			if (entry === undefined) {
 				return [undefined, false];
 			}
 			return [entry.v, true];
 		};
 		mapassign = function(t, m, key, val, ok) {
+			if (!ok) {
+				delete m[key.go$key ? key.go$key() : key];
+				return;
+			}
 			if (t.Elem().kind === go$pkg.Struct) {
 				var newVal = {};
 				copyStruct(newVal, val, t.Elem());
 				val = newVal;
 			}
-			m[key] = { k: key, v: val }; // FIXME key
+			m[key.go$key ? key.go$key() : key] = { k: key, v: val };
 		};
 		maplen = function(m) {
 			return go$keys(m).length;
@@ -658,7 +662,6 @@ func init() {
 			var k = this.kind();
 			switch (k) {
 			case go$pkg.Chan:
-			case go$pkg.Func:
 			case go$pkg.Map:
 			case go$pkg.Ptr:
 			case go$pkg.Slice:
@@ -666,7 +669,12 @@ func init() {
 				if (this.IsNil()) {
 					return 0;
 				}
-				return 42;
+				return this.iword();
+			case go$pkg.Func:
+				if (this.IsNil()) {
+					return 0;
+				}
+				return 1;
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.Pointer", k));
 		};

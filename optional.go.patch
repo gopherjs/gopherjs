@@ -1047,15 +1047,6 @@ diff -r 87dea3f5ebe7 src/pkg/reflect/all_test.go
  	type T1inner struct {
  		a int
  	}
-@@ -2864,7 +2865,7 @@
- 	{V(complex128(3i)), V(complex64(3i))},
- 	{V(complex128(4i)), V(complex128(4i))},
- 
--	// string
-+	// // string
- 	{V(string("hello")), V(string("hello"))},
- 	{V(string("bytes1")), V([]byte("bytes1"))},
- 	{V([]byte("bytes2")), V(string("bytes2"))},
 @@ -3168,6 +3169,7 @@
  }
  

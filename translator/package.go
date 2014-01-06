@@ -862,7 +862,7 @@ func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 			return fmt.Sprintf("%s.go$key()", c.translateExprToType(expr, keyType))
 		}
 		return c.translateExprToType(expr, keyType)
-	case *types.Pointer:
+	case *types.Chan, *types.Pointer:
 		return fmt.Sprintf("%s.go$key()", c.translateExprToType(expr, keyType))
 	case *types.Interface:
 		return fmt.Sprintf("(%s || go$interfaceNil).go$key()", c.translateExprToType(expr, keyType))

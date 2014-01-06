@@ -80,7 +80,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		});
 		typ.init = function(elem, len) {
 			typ.prototype.go$key = function() {
-				return go$mapArray(this.go$val, function(e) { return e.go$key ? e.go$key() : e; }).join("$");
+				return string + "$" + go$mapArray(this.go$val, function(e) { return e.go$key ? e.go$key() : e; }).join("$");
 			};
 			typ.extendReflectType = function(rt) {
 				rt.arrayType = new go$reflect.arrayType(rt, elem.reflectType(), undefined, len);
@@ -91,6 +91,13 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 
 	case "Chan":
 		typ = function() { this.go$val = this; };
+		typ.prototype.go$key = function() {
+			if (this.go$id === undefined) {
+				this.go$id = go$idCounter;
+				go$idCounter += 1;
+			}
+			return this.go$id;
+		};
 		typ.init = function(elem, sendOnly, recvOnly) {
 			typ.nil = new typ();
 			typ.extendReflectType = function(rt) {
@@ -137,6 +144,13 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			this.go$set = setter;
 			this.go$val = this;
 		};
+		typ.prototype.go$key = function() {
+			if (this.go$id === undefined) {
+				this.go$id = go$idCounter;
+				go$idCounter += 1;
+			}
+			return this.go$id;
+		};
 		typ.init = function(elem) {
 			typ.nil = new typ(go$throwNilPointerError, go$throwNilPointerError);
 			typ.extendReflectType = function(rt) {
@@ -180,13 +194,6 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ = function(v) { this.go$val = v; };
 		typ.Ptr = go$newType(4, "Ptr", "*" + string, "", "", constructor);
 		typ.Ptr.Struct = typ;
-		typ.Ptr.prototype.go$key = function() {
-			if (this.go$id === undefined) {
-				this.go$id = go$idCounter;
-				go$idCounter += 1;
-			}
-			return this.go$id;
-		};
 		typ.init = function(fields) {
 			typ.Ptr.nil = new constructor();
 			var i;
@@ -204,7 +211,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 					var v = this.go$val[name];
 					keys[i] = v.go$key ? v.go$key() : v;
 				}
-				return keys.join("$");
+				return string + "$" + keys.join("$");
 			};
 			typ.extendReflectType = function(rt) {
 				var reflectFields = new Array(fields.length), i;

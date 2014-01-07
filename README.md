@@ -21,7 +21,7 @@ Now you can use  `./bin/gopherjs build` and `./bin/gopherjs install` which behav
 
 If you want to run the generated code with Node.js instead, get the latest 0.11 release from [here](http://blog.nodejs.org/release/). Then compile and install a Node module that is required for syscalls (e.g. writing output to terminal):
 ```
-npm install node-gyp
+npm install --global node-gyp
 cd src/github.com/neelance/gopherjs/node-syscall/
 node-gyp rebuild
 mkdir -p ~/.node_libraries/

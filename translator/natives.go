@@ -211,6 +211,9 @@ var pkgNatives = map[string]string{
 
 	"os": `
 		go$pkg.Args = new (go$sliceType(Go$String))((typeof process !== 'undefined') ? process.argv.slice(1) : []);
+		if (go$packages["runtime"].GOOS === "windows") {
+			NewFile = function() { return new File.Ptr(); };
+		}
 	`,
 
 	"runtime": `
@@ -284,7 +287,18 @@ var pkgNatives = map[string]string{
 	`,
 
 	"syscall": `
-		if (typeof process !== 'undefined') {
+		if (go$packages["runtime"].GOOS === "windows") {
+			Syscall = Syscall6 = Syscall9 = Syscall12 = Syscall15 = loadlibrary = getprocaddress = function() { throw "Syscalls not available." };
+			getStdHandle = GetCommandLine = function() {};
+			CommandLineToArgv = function() { return [null, {}]; };
+			Getenv = function(key) { return ["", false]; };
+		} else if (typeof process === "undefined") {
+			go$pkg.go$setSyscall = function(f) {
+				Syscall = Syscall6 = RawSyscall = RawSyscall6 = f;
+			}
+			go$pkg.go$setSyscall(function() { throw "Syscalls not available." });
+			envs = new (go$sliceType(Go$String))(new Array(0));
+		} else {
 			var syscall = require("syscall");
 			Syscall = syscall.Syscall;
 			Syscall6 = syscall.Syscall6;
@@ -298,12 +312,6 @@ var pkgNatives = map[string]string{
 			for(i = 0; i < envkeys.length; i += 1) {
 				envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
 			}
-		} else {
-			go$pkg.go$setSyscall = function(f) {
-				Syscall = Syscall6 = RawSyscall = RawSyscall6 = f;
-			}
-			go$pkg.go$setSyscall(function() { throw "Syscalls not available in browser." });
-			envs = new (go$sliceType(Go$String))(new Array(0));
 		}
 	`,
 

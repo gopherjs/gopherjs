@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <node.h>
 #include <v8.h>
 #include <unistd.h>
@@ -27,7 +28,7 @@ intptr_t toNative(Local<Value> value) {
   return static_cast<intptr_t>(static_cast<int32_t>(value->ToInteger()->Value()));
 }
 
-void Syscall(const FunctionCallbackInfo<Value>& info) {
+void Syscall(const v8::FunctionCallbackInfo<Value>& info) {
   int trap = info[0]->ToInteger()->Value();
   int r1 = 0, r2 = 0;
   switch (trap) {
@@ -62,7 +63,7 @@ void Syscall(const FunctionCallbackInfo<Value>& info) {
   info.GetReturnValue().Set(res);
 }
 
-void Syscall6(const FunctionCallbackInfo<Value>& info) {
+void Syscall6(const v8::FunctionCallbackInfo<Value>& info) {
   int r = syscall(
     info[0]->ToInteger()->Value(),
     toNative(info[1]),

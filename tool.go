@@ -53,7 +53,7 @@ func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 	buildContext := &build.Context{
 		GOROOT:   build.Default.GOROOT,
 		GOPATH:   build.Default.GOPATH,
-		GOOS:     "darwin",
+		GOOS:     build.Default.GOOS,
 		GOARCH:   "js",
 		Compiler: "gc",
 	}
@@ -115,7 +115,7 @@ func tool() error {
 			buildContext := &build.Context{
 				GOROOT:   build.Default.GOROOT,
 				GOPATH:   build.Default.GOPATH,
-				GOOS:     "darwin",
+				GOOS:     build.Default.GOOS,
 				GOARCH:   "js",
 				Compiler: "gc",
 			}
@@ -441,7 +441,9 @@ func buildPackage(pkg *Package) error {
 	files := make([]*ast.File, 0)
 	var errList translator.ErrorList
 	for _, name := range pkg.GoFiles {
-		if pkg.ImportPath == "runtime" && strings.HasPrefix(name, "zgo") {
+		if pkg.ImportPath == "runtime" && strings.HasPrefix(name, "zgoarch_") {
+			file, _ := parser.ParseFile(fileSet, name, "package runtime\nconst theGoarch = `js`\n", 0)
+			files = append(files, file)
 			continue
 		}
 		if !filepath.IsAbs(name) {
@@ -470,11 +472,6 @@ func buildPackage(pkg *Package) error {
 			continue
 		}
 		files = append(files, file)
-	}
-	if pkg.ImportPath == "runtime" {
-		goosFile, _ := parser.ParseFile(fileSet, "zgoos_darwin.go", "package runtime\nconst theGoos = `darwin`\n", 0)
-		goarchFile, _ := parser.ParseFile(fileSet, "zgoarch_js.go", "package runtime\nconst theGoarch = `js`\n", 0)
-		files = append(files, goosFile, goarchFile)
 	}
 	if errList != nil {
 		return errList

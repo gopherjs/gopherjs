@@ -19,7 +19,8 @@ Now you can use  `./bin/gopherjs build` and `./bin/gopherjs install` which behav
 
 *Note: GopherJS will try to write compiled object files of the core packages to your $GOROOT/pkg directory. If that fails, it will fall back to $GOPATH/pkg.*
 
-If you want to run the generated code with Node.js instead, get the latest 0.11 release from [here](http://blog.nodejs.org/release/). Then compile and install a Node module that is required for syscalls (e.g. writing output to terminal):
+### Node.js
+Running the generated code with Node.js instead of a browser is currently supported on OS X only. Please tell me if you would like to have support for other operating systems. On OS X, get the latest Node.js 0.11 release from [here](http://blog.nodejs.org/release/). Then compile and install a Node module that is required for syscalls (e.g. writing output to terminal):
 ```
 npm install --global node-gyp
 cd src/github.com/neelance/gopherjs/node-syscall/

@@ -42,6 +42,7 @@ cd ../../../../../
 ### Roadmap
 These features are not implemented yet, but on the roadmap:
 
+- optimizations of generated JavaScript code for improved output size and performance
 - goroutines, channels, select
 - goto
 - output minification

@@ -10,6 +10,14 @@ GopherJS translates [Go code](http://golang.org/) to pure JavaScript code. Its m
 
 You can take advantage of Go's elegant type system and other compile-time checks that can have a huge impact on bug detection and the ability to refactor, especially for big projects. Just think of how often a JavaScript method has extra handling of some legacy parameter scheme, because you don't know exactly if some other code is still calling it in that old way or not. GopherJS will tell you and if it does not complain, you can be sure that this kind of bug is not present any more.
 
+### What is supported?
+- all basic types, including 64-bit integers and complex numbers
+- arrays, slices, maps and structures
+- full type system with support for interfaces and type assertions
+- reflection for all types
+- many packages have been successfully tested, see [compatibility table](doc/packages.md)
+- the transpiler can turn itself into pure JavaScript that runs in all major browsers
+
 ### Installation and Usage
 Get GopherJS and dependencies with: 
 ```
@@ -30,14 +38,6 @@ mkdir -p ~/.node_libraries/
 cp build/Release/syscall.node ~/.node_libraries/syscall.node
 cd ../../../../../
 ```
-
-### What is supported?
-- all basic types, including 64-bit integers and complex numbers
-- arrays, slices, maps and structures
-- full type system with support for interfaces and type assertions
-- reflection for all types
-- many packages have been successfully tested, see [compatibility table](doc/packages.md)
-- the transpiler can turn itself into pure JavaScript that runs in all major browsers
 
 ### Roadmap
 These features are not implemented yet, but on the roadmap:

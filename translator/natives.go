@@ -228,7 +228,7 @@ var pkgNatives = map[string]string{
 		GC = function() {};
 		GOMAXPROCS = function(n) {
 			if (n > 1) {
-				go$throwRuntimeError("GOMAXPROCS != 1 is not possible in JavaScript.")
+				go$notSupported("GOMAXPROCS != 1")
 			}
 			return 1;
 		};
@@ -237,6 +237,7 @@ var pkgNatives = map[string]string{
 			err.go$exit = true;
 			throw err;
 		};
+		NumCPU = function() { return 1; };
 		ReadMemStats = function() {};
 		SetFinalizer = function() {};
 	`,
@@ -251,23 +252,34 @@ var pkgNatives = map[string]string{
 	`,
 
 	"sync/atomic": `
-		AddInt32 = AddInt64 = AddUint32 = AddUint64 = AddUintptr = function(addr, delta) {
+		AddInt32 = AddUint32 = AddUintptr = function(addr, delta) {
 			var value = addr.go$get() + delta;
 			addr.go$set(value);
 			return value;
 		};
-		CompareAndSwapInt32 = CompareAndSwapInt64 = CompareAndSwapUint32 = CompareAndSwapUint64 = CompareAndSwapUintptr = function(addr, oldVal, newVal) {
+		AddInt64 = AddUint64 = function(addr, delta) {
+			var value = addr.go$get();
+			value = new value.constructor(value.high + delta.high, value.low + delta.low);
+			addr.go$set(value);
+			return value;
+		};
+		CompareAndSwapInt32 = CompareAndSwapInt64 = CompareAndSwapPointer = CompareAndSwapUint32 = CompareAndSwapUint64 = CompareAndSwapUintptr = function(addr, oldVal, newVal) {
 			if (addr.go$get() === oldVal) {
 				addr.go$set(newVal);
 				return true;
 			}
 			return false;
 		};
-		StoreInt32 = StoreInt64 = StoreUint32 = StoreUint64 = StoreUintptr = function(addr, val) {
+		LoadInt32 = LoadInt64 = LoadPointer = LoadUint32 = LoadUint64 = LoadUintptr = function(addr) {
+			return addr.go$get();
+		};
+		StoreInt32 = StoreInt64 = StorePointer = StoreUint32 = StoreUint64 = StoreUintptr = function(addr, val) {
 			addr.go$set(val);
 		};
-		LoadInt32 = LoadInt64 = LoadUint32 = LoadUint64 = LoadUintptr = function(addr) {
-			return addr.go$get();
+		SwapInt32 = SwapInt64 = SwapPointer = SwapUint32 = SwapUint64 = SwapUintptr = function(addr, newVal) {
+			var value = addr.go$get();
+			addr.go$set(newVal);
+			return value;
 		};
 	`,
 

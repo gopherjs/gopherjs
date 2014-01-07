@@ -127,7 +127,7 @@
 | strconv         | yes                   |                                   |
 | strings         | yes                   |                                   |
 | sync            | partially             | stubs                             |
-| -- atomic       | partially             | stubs                             |
+| -- atomic       | yes                   |                                   |
 | syscall         | partially             | node.js only                      |
 | testing         | yes                   |                                   |
 | -- iotest       | not yet               |                                   |

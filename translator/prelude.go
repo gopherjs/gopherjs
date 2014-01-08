@@ -79,6 +79,8 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			this.go$val = this;
 		});
 		typ.init = function(elem, len) {
+			typ.elem = elem;
+			typ.len = len;
 			typ.prototype.go$key = function() {
 				return string + "$" + go$mapArray(this.go$val, function(e) { return e.go$key ? e.go$key() : e; }).join("$");
 			};
@@ -109,6 +111,9 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 	case "Func":
 		typ = function(v) { this.go$val = v; };
 		typ.init = function(params, results, isVariadic) {
+			typ.params = params;
+			typ.results = results;
+			typ.isVariadic = isVariadic;
 			typ.extendReflectType = function(rt) {
 				var typeSlice = (go$sliceType(go$ptrType(go$reflect.rtype)));
 				rt.funcType = new go$reflect.funcType(rt, isVariadic, new typeSlice(go$mapArray(params, function(p) { return p.reflectType(); })), new typeSlice(go$mapArray(results, function(p) { return p.reflectType(); })));
@@ -132,6 +137,8 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 	case "Map":
 		typ = function(v) { this.go$val = v; };
 		typ.init = function(key, elem) {
+			typ.key = key;
+			typ.elem = elem;
 			typ.extendReflectType = function(rt) {
 				rt.mapType = new go$reflect.mapType(rt, key.reflectType(), elem.reflectType(), undefined, undefined);
 			};
@@ -182,6 +189,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			return slice;
 		};
 		typ.init = function(elem) {
+			typ.elem = elem;
 			nativeArray = go$nativeArray(elem.kind);
 			typ.nil = new typ([]);
 			typ.extendReflectType = function(rt) {
@@ -789,77 +797,88 @@ var go$runesToString = function(slice) {
 	return str;
 };
 
-var go$externalize = function(v) {
-	switch (v.constructor.kind) {
+var go$externalize = function(v, t) {
+	switch (t.kind) {
 	case "Int64":
 	case "Uint64":
 		return go$flatten64(v);
 	case "Func":
-		if (v.go$val === go$throwNilPointerError) {
+		if (v === go$throwNilPointerError) {
 			return null;
 		}
-		return v.go$val;
-	case "String":
-		var s = v.go$val, e = "", r, i, j = 0;
-		for (i = 0; i < s.length; i += r[1], j += 1) {
-			r = go$decodeRune(s, i);
-			e += String.fromCharCode(r[0]);
-		}
-		return e;
+		return v;
+	case "Interface":
+		return go$externalize(v.go$val, v.constructor);
 	case "Slice":
-		return go$mapArray(go$sliceToArray(v), function(e) { return go$externalize(e); });
+		return go$mapArray(go$sliceToArray(v), function(e) { return go$externalize(e, t.elem); });
+	case "String":
+		var s = "", r, i, j = 0;
+		for (i = 0; i < v.length; i += r[1], j += 1) {
+			r = go$decodeRune(v, i);
+			s += String.fromCharCode(r[0]);
+		}
+		return s;
 	case "Map":
 		var m = {};
-		var keys = go$keys(v.go$val), i;
+		var keys = go$keys(v), i;
 		for (i = 0; i < keys.length; i += 1) {
-			var entry = v.go$val[keys[i]];
-			m[go$externalizeString(entry.k)] = go$externalize(entry.v);
+			var entry = v[keys[i]];
+			m[go$externalize(entry.k, t.key)] = go$externalize(entry.v, t.elem);
 		}
 		return m;
 	default:
-		return v.go$val;
+		return v;
 	}
 };
 
-var go$internalizeInterface = function(v) {
-	switch (v.constructor) {
-	case Array:
-		return new (go$sliceType(go$interfaceType([])))(v);
-	case Object:
-		return new (go$mapType(Go$String, go$interfaceType([])))(go$internalizeMap(v));
-	case Number:
-		return new Go$Float64(parseFloat(v));
-	case String:
-		return new Go$String(go$internalizeString(v));
+var go$internalize = function(v, t) {
+	switch (t.kind) {
+	case "Bool":
+		return !!v;
+	case "Int":
+	case "Int8":
+	case "Int16":
+	case "Int32":
+	case "Uint":
+	case "Uint8" :
+	case "Uint16":
+	case "Uint32":
+	case "Uintptr":
+		return parseInt(v);
+	case "Float32":
+	case "Float64":
+		return parseFloat(v);
+	case "String":
+		v = String(v);
+		var s = "", i;
+		for (i = 0; i < v.length; i += 1) {
+			s += go$encodeRune(v.charCodeAt(i));
+		}
+		return s;
+	case "Interface":
+		var vt = null;
+		switch (v.constructor) {
+		case Array:
+			return new (go$sliceType(go$interfaceType([])))(v);
+		case Number:
+			return new Go$Float64(parseFloat(v));
+		case Object:
+			var mapType = go$mapType(Go$String, go$interfaceType([]));
+			return new mapType(go$internalize(v, mapType));
+		case String:
+			return new Go$String(go$internalize(v, Go$String));
+		}
+	case "Map":
+		var m = new Go$Map();
+		var keys = go$keys(v), i;
+		for (i = 0; i < keys.length; i += 1) {
+			var key = go$internalize(keys[i], t.key);
+			m[key.go$key ? key.go$key() : key] = { k: key, v: go$internalize(v[keys[i]], t.elem) };
+		}
+		return m;
+	default:
+		return v;
 	}
-};
-
-var go$internalizeMap = function(v) {
-  var m = new Go$Map();
-	var keys = go$keys(v), i;
-	for (i = 0; i < keys.length; i += 1) {
-		var key = go$internalizeString(keys[i]);
-		m[key] = { k: key, v: go$internalizeInterface(v[keys[i]]) };
-	}
-  return m;
-};
-
-var go$externalizeString = function(s) {
-	var e = "", r, i, j = 0;
-	for (i = 0; i < s.length; i += r[1], j += 1) {
-		r = go$decodeRune(s, i);
-		e += String.fromCharCode(r[0]);
-	}
-	return e;
-};
-
-var go$internalizeString = function(e) {
-	e = String(e);
-	var s = "", i;
-	for (i = 0; i < e.length; i += 1) {
-		s += go$encodeRune(e.charCodeAt(i));
-	}
-	return s;
 };
 
 var go$copySlice = function(dst, src) {

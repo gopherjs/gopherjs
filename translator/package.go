@@ -491,39 +491,19 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]*ty
 						p = []string{this}
 					}
 					for i, v := range params {
-						p = append(p, "go$externalize("+c.translateExprToType(c.newIdent(v, sig.Params().At(i).Type()), types.NewInterface(nil, nil))+")")
-					}
-					internalize := func(v string, t types.Type) string {
-						switch t := t.Underlying().(type) {
-						case *types.Basic:
-							switch {
-							case t.Info()&types.IsInteger != 0:
-								return fixNumber("go$parseInt("+v+")", t)
-							case t.Info()&types.IsFloat != 0:
-								return "go$parseFloat(" + v + ")"
-							case t.Info()&types.IsString != 0:
-								return "go$internalizeString(" + v + ")"
-							}
-						case *types.Interface:
-							if t.Empty() {
-								return "go$internalizeInterface(" + v + ")"
-							}
-						case *types.Map:
-							return "go$internalizeMap(" + v + ")"
-						}
-						return v
+						p = append(p, fmt.Sprintf("go$externalize(%s, %s)", v, c.typeName(sig.Params().At(i).Type())))
 					}
 					call := fmt.Sprintf("%s(%s)", jsName, strings.Join(p, ", "))
 					switch sig.Results().Len() {
 					case 0:
 						c.Printf("%s;", call)
 					case 1:
-						c.Printf("return %s;", internalize(call, sig.Results().At(0).Type()))
+						c.Printf("return go$internalize(%s, %s);", call, c.typeName(sig.Results().At(0).Type()))
 					default:
 						c.Printf("var results = %s;", call)
 						results := make([]string, sig.Results().Len())
 						for i := range results {
-							results[i] = internalize(fmt.Sprintf("results[%d]", i), sig.Results().At(i).Type())
+							results[i] = fmt.Sprintf("go$internalize(results[%d], %s)", i, c.typeName(sig.Results().At(i).Type()))
 						}
 						c.Printf("return [%s];", strings.Join(results, ", "))
 					}

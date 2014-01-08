@@ -508,6 +508,8 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]*ty
 							if t.Empty() {
 								return "go$internalizeInterface(" + v + ")"
 							}
+						case *types.Map:
+							return "go$internalizeMap(" + v + ")"
 						}
 						return v
 					}

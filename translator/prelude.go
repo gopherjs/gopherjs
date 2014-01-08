@@ -808,6 +808,14 @@ var go$externalize = function(v) {
 		return e;
 	case "Slice":
 		return go$mapArray(go$sliceToArray(v), function(e) { return go$externalize(e); });
+	case "Map":
+		var m = {};
+		var keys = go$keys(v.go$val), i;
+		for (i = 0; i < keys.length; i += 1) {
+			var entry = v.go$val[keys[i]];
+			m[go$externalizeString(entry.k)] = go$externalize(entry.v);
+		}
+		return m;
 	default:
 		return v.go$val;
 	}
@@ -815,13 +823,25 @@ var go$externalize = function(v) {
 
 var go$internalizeInterface = function(v) {
 	switch (v.constructor) {
+	case Array:
+		return new (go$sliceType(go$interfaceType([])))(v);
+	case Object:
+		return new (go$mapType(Go$String, go$interfaceType([])))(go$internalizeMap(v));
 	case Number:
 		return new Go$Float64(parseFloat(v));
 	case String:
 		return new Go$String(go$internalizeString(v));
-	case Array:
-		return new (go$sliceType(go$interfaceType([])))(v);
 	}
+};
+
+var go$internalizeMap = function(v) {
+  var m = new Go$Map();
+	var keys = go$keys(v), i;
+	for (i = 0; i < keys.length; i += 1) {
+		var key = go$internalizeString(keys[i]);
+		m[key] = { k: key, v: go$internalizeInterface(v[keys[i]]) };
+	}
+  return m;
 };
 
 var go$externalizeString = function(s) {

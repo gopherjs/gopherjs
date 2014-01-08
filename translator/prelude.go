@@ -826,6 +826,8 @@ var go$externalize = function(v, t) {
 	case "Int64":
 	case "Uint64":
 		return go$flatten64(v);
+	case "Array":
+		return go$mapArray(v, function(e) { return go$externalize(e, t.elem); });
 	case "Func":
 		if (v === go$throwNilPointerError) {
 			return null;
@@ -860,25 +862,32 @@ var go$internalize = function(v, t) {
 	case "Bool":
 		return !!v;
 	case "Int":
+		return parseInt(v);
 	case "Int8":
+		return parseInt(v) << 24 >> 24;
 	case "Int16":
+		return parseInt(v) << 16 >> 16;
 	case "Int32":
+		return parseInt(v) >> 0;
 	case "Uint":
+		return parseInt(v);
 	case "Uint8" :
+		return parseInt(v) << 24 >>> 24;
 	case "Uint16":
+		return parseInt(v) << 16 >>> 16;
 	case "Uint32":
 	case "Uintptr":
-		return parseInt(v);
+		return parseInt(v) >>> 0;
+	case "Int64", "Uint64":
+		return new t(0, v);
 	case "Float32":
 	case "Float64":
 		return parseFloat(v);
-	case "String":
-		v = String(v);
-		var s = "", i;
-		for (i = 0; i < v.length; i += 1) {
-			s += go$encodeRune(v.charCodeAt(i));
+	case "Array":
+		if (v.length !== t.len) {
+			throw go$panic("got array with wrong size from JavaScript native");
 		}
-		return s;
+		return go$mapArray(v, function(e) { return go$internalize(e, t.elem); });
 	case "Interface":
 		var vt = null;
 		switch (v.constructor) {
@@ -891,6 +900,8 @@ var go$internalize = function(v, t) {
 			return new mapType(go$internalize(v, mapType));
 		case String:
 			return new Go$String(go$internalize(v, Go$String));
+		default:
+			return v;
 		}
 	case "Map":
 		var m = new Go$Map();
@@ -900,6 +911,13 @@ var go$internalize = function(v, t) {
 			m[key.go$key ? key.go$key() : key] = { k: key, v: go$internalize(v[keys[i]], t.elem) };
 		}
 		return m;
+	case "String":
+		v = String(v);
+		var s = "", i;
+		for (i = 0; i < v.length; i += 1) {
+			s += go$encodeRune(v.charCodeAt(i));
+		}
+		return s;
 	default:
 		return v;
 	}

@@ -266,7 +266,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						if !method.IsExported() {
 							pkgPath = method.Pkg().Path()
 						}
-						methods[i] = fmt.Sprintf(`["%s", "%s", %s]`, method.Name(), pkgPath, c.initArgs(method.Type()))
+						t := method.Type().(*types.Signature)
+						methods[i] = fmt.Sprintf(`["%s", "%s", %s, %s, %t]`, method.Name(), pkgPath, c.typeArray(t.Params()), c.typeArray(t.Results()), t.IsVariadic())
 					}
 					c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
 				}
@@ -415,15 +416,7 @@ func (c *PkgContext) initArgs(ty types.Type) string {
 	case *types.Slice:
 		return fmt.Sprintf("%s", c.typeName(t.Elem()))
 	case *types.Signature:
-		paramTypes := make([]string, t.Params().Len())
-		for i := range paramTypes {
-			paramTypes[i] = c.typeName(t.Params().At(i).Type())
-		}
-		resultTypes := make([]string, t.Results().Len())
-		for i := range resultTypes {
-			resultTypes[i] = c.typeName(t.Results().At(i).Type())
-		}
-		return fmt.Sprintf("[%s], [%s], %t", strings.Join(paramTypes, ", "), strings.Join(resultTypes, ", "), t.IsVariadic())
+		return fmt.Sprintf("%s, %s, %t", c.typeArray(t.Params()), c.typeArray(t.Results()), t.IsVariadic())
 	case *types.Struct:
 		fields := make([]string, t.NumFields())
 		for i := range fields {
@@ -478,37 +471,23 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]*ty
 		printPrimaryFunction := func(lhs string, fullName string) {
 			jsName := "js_" + strings.Replace(fullName, ".", "_", 1)
 			jsCode, isNative := natives[jsName]
+			delete(natives, jsName)
+
+			if isNative {
+				var nativeParams []string
+				if recv != nil {
+					nativeParams = []string{recv.String()}
+				}
+				nativeParams = append(nativeParams, params...)
+				c.Printf("%s = go$nativeFunction(%t, %s, %s, function(%s) {", lhs, recv != nil, c.typeArray(sig.Params()), c.typeArray(sig.Results()), strings.Join(nativeParams, ", "))
+				c.Write([]byte(strings.Trim(exact.StringVal(jsCode.Val()), "\n")))
+				c.Write([]byte{'\n'})
+				c.Printf("});")
+				return
+			}
 
 			c.Printf("%s = function(%s) {", lhs, joinedParams)
 			c.Indent(func() {
-				if isNative {
-					var p []string
-					if recv != nil {
-						this := "this"
-						if isWrapped(sig.Recv().Type()) {
-							this = "this.go$val"
-						}
-						p = []string{this}
-					}
-					for i, v := range params {
-						p = append(p, fmt.Sprintf("go$externalize(%s, %s)", v, c.typeName(sig.Params().At(i).Type())))
-					}
-					call := fmt.Sprintf("%s(%s)", jsName, strings.Join(p, ", "))
-					switch sig.Results().Len() {
-					case 0:
-						c.Printf("%s;", call)
-					case 1:
-						c.Printf("return go$internalize(%s, %s);", call, c.typeName(sig.Results().At(0).Type()))
-					default:
-						c.Printf("var results = %s;", call)
-						results := make([]string, sig.Results().Len())
-						for i := range results {
-							results[i] = fmt.Sprintf("go$internalize(results[%d], %s)", i, c.typeName(sig.Results().At(i).Type()))
-						}
-						c.Printf("return [%s];", strings.Join(results, ", "))
-					}
-					return
-				}
 				if fun.Body == nil {
 					c.Printf(`throw go$panic("Native function not implemented: %s");`, fullName)
 					return
@@ -533,19 +512,6 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]*ty
 				c.translateFunctionBody(body, sig)
 			})
 			c.Printf("};")
-
-			if isNative {
-				var p []string
-				if recv != nil {
-					p = []string{recv.String()}
-				}
-				p = append(p, params...)
-				c.Printf("var %s = function(%s) {", jsName, strings.Join(p, ", "))
-				c.Write([]byte(strings.Trim(exact.StringVal(jsCode.Val()), "\n")))
-				c.Write([]byte{'\n'})
-				c.Printf("};")
-				delete(natives, jsName)
-			}
 		}
 
 		if fun.Recv == nil {
@@ -851,6 +817,14 @@ func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	default:
 		return c.translateExprToType(expr, keyType)
 	}
+}
+
+func (c *PkgContext) typeArray(t *types.Tuple) string {
+	s := make([]string, t.Len())
+	for i := range s {
+		s[i] = c.typeName(t.At(i).Type())
+	}
+	return "[" + strings.Join(s, ", ") + "]"
 }
 
 func fieldName(t *types.Struct, i int) string {

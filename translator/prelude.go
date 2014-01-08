@@ -797,6 +797,30 @@ var go$runesToString = function(slice) {
 	return str;
 };
 
+var go$nativeFunction = function(isMethod, paramTypes, resultTypes, fn) {
+	return function() {
+		var args = [], i;
+		if (isMethod) {
+			args.push(go$externalize(this, go$interfaceType([])));
+		}
+		for (i = 0; i < paramTypes.length; i += 1) {
+			args.push(go$externalize(arguments[i], paramTypes[i]));
+		}
+		var results = fn.apply(null, args);
+		switch (resultTypes.length) {
+		case 0:
+			return;
+		case 1:
+			return go$internalize(results, resultTypes[0]);
+		default:
+			for (i = 0; i < resultTypes.length; i++) {
+				results[i] = go$internalize(results[i]);
+			}
+			return results;
+		}
+	};
+};
+
 var go$externalize = function(v, t) {
 	switch (t.kind) {
 	case "Int64":

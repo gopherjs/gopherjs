@@ -479,10 +479,11 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]*ty
 					nativeParams = []string{recv.String()}
 				}
 				nativeParams = append(nativeParams, params...)
-				c.Printf("%s = go$nativeFunction(%t, %s, %s, function(%s) {", lhs, recv != nil, c.typeArray(sig.Params()), c.typeArray(sig.Results()), strings.Join(nativeParams, ", "))
+				c.Printf("var %s = function(%s) {", jsName, strings.Join(nativeParams, ", "))
 				c.Write([]byte(strings.Trim(exact.StringVal(jsCode.Val()), "\n")))
 				c.Write([]byte{'\n'})
-				c.Printf("});")
+				c.Printf("}")
+				c.Printf("%s = go$nativeFunction(%t, %s, %s, %s);", lhs, recv != nil, c.typeArray(sig.Params()), c.typeArray(sig.Results()), jsName)
 				return
 			}
 

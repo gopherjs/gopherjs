@@ -513,7 +513,7 @@ func writeLibraryPackage(pkg *Package, pkgObj string) error {
 }
 
 func writeCommandPackage(pkg *Package, pkgObj string) error {
-	if pkg.UpToDate {
+	if !pkg.IsCommand() || pkg.UpToDate {
 		return nil
 	}
 

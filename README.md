@@ -54,8 +54,19 @@ Some tradeoffs had to be made in order to avoid huge performance impacts. Please
 - int and uint do not overflow, but have a maximum precision of 53 bits, after which rounding errors might occur (all other integer types have simulated overflow)
 - float32 and complex64 have the same precision as float64 and complex128
 
-### Interface to external JavaScript
-A function's body can be written in JavaScript by putting the code in a string constant with the name `js_[function name]` for package functions and `js_[type name]_[method name]` for methods. In that case, GopherJS disregards the Go function body and instead generates `function(...) { [constant's value] }`. This allows functions to have a Go signature that the type checker can use while being able to call external JavaScript functions.
+### Interface to native JavaScript
+A function's body can be written in JavaScript by putting the code in a string constant with the name `js_[function name]` for package functions and `js_[type name]_[method name]` for methods. In that case, GopherJS disregards the Go function body and instead generates `function(...) { [constant's value] }`. This allows functions to have a Go signature that the type checker can use while being able to call native JavaScript functions.
+When calling such a native function from Go, the arguments and return values are converted between Go types and JavaScript types according to the table below. The second column denotes the types that are used when converting to `interface{}`. Multiple values can be returned by using an array.
+
+| Go types            | Go interface type      | JavaScript type |
+| ------------------- | ---------------------- | --------------- |
+| bool                | bool                   | Boolean         |
+| int*, uint*, float* | float64                | Number          |
+| string              | string                 | String          |
+| slices, arrays      | []interface{}          | Array           |
+| maps                | map[string]interface{} | Object          |
+
+Types not listed are passed through. Please note that this interface is subject to change. Suggestions are always welcome.
 
 ### Libraries
 [go-angularjs](https://github.com/neelance/go-angularjs) - a wrapper for [AngularJS](http://angularjs.org)

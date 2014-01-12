@@ -686,12 +686,26 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						return fmt.Sprintf("%s[%s]", fun, c.translateExprToType(e.Args[0], types.Typ[types.Int]))
 					case "Call":
 						if val, ok := c.info.Values[e.Args[0]]; ok {
+							if e.Ellipsis.IsValid() {
+								objVar := c.newVariable("obj")
+								return fmt.Sprintf("(%s = %s, %s.%s.apply(%s, %s))", objVar, fun, objVar, exact.StringVal(val), objVar, externalize(e.Args[1]))
+							}
 							return fmt.Sprintf("%s.%s(%s)", fun, exact.StringVal(val), externalizeArgs(e.Args[1:]))
+						}
+						if e.Ellipsis.IsValid() {
+							objVar := c.newVariable("obj")
+							return fmt.Sprintf("(%s = %s, %s[go$externalize(%s, Go$String)].apply(%s, %s))", objVar, fun, objVar, c.translateExpr(e.Args[0]), objVar, externalize(e.Args[1]))
 						}
 						return fmt.Sprintf("%s[go$externalize(%s, Go$String)](%s)", fun, c.translateExpr(e.Args[0]), externalizeArgs(e.Args[1:]))
 					case "Invoke":
+						if e.Ellipsis.IsValid() {
+							return fmt.Sprintf("%s.apply(undefined, %s)", fun, externalize(e.Args[0]))
+						}
 						return fmt.Sprintf("%s(%s)", fun, externalizeArgs(e.Args))
 					case "New":
+						if e.Ellipsis.IsValid() {
+							return fmt.Sprintf("new (go$global.Function.prototype.bind.apply(%s, [undefined].concat(%s)))", fun, externalize(e.Args[0]))
+						}
 						return fmt.Sprintf("new %s(%s)", fun, externalizeArgs(e.Args))
 					case "Bool":
 						return fmt.Sprintf("!!(%s)", fun)
@@ -734,7 +748,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					switch o.Name() {
 					case "Global":
 						if val, ok := c.info.Values[e.Args[0]]; ok {
-							return exact.StringVal(val)
+							return fmt.Sprintf("go$global.%s", exact.StringVal(val))
 						}
 						return fmt.Sprintf("go$global[go$externalize(%s, Go$String)]", c.translateExpr(e.Args[0]))
 					default:

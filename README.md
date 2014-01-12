@@ -55,7 +55,7 @@ Some tradeoffs had to be made in order to avoid huge performance impacts. Please
 - float32 and complex64 have the same precision as float64 and complex128
 
 ### Interface to native JavaScript
-The package `github.com/neelance/gopherjs/js` provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their JavaScript syntax. Type conversions between Go types and JavaScript types are performed automatically according to the table below. The second column denotes the types that are used when converting to `interface{}`.
+The package `github.com/neelance/gopherjs/js` ([documentation](js/js.go)) provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their JavaScript syntax. Type conversions between Go types and JavaScript types are performed automatically according to the table below. The second column denotes the types that are used when converting to `interface{}`.
 
 | Go types            | Go interface type      | JavaScript type |
 | ------------------- | ---------------------- | --------------- |

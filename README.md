@@ -55,8 +55,7 @@ Some tradeoffs had to be made in order to avoid huge performance impacts. Please
 - float32 and complex64 have the same precision as float64 and complex128
 
 ### Interface to native JavaScript
-A function's body can be written in JavaScript by putting the code in a string constant with the name `js_[function name]` for package functions and `js_[type name]_[method name]` for methods. In that case, GopherJS disregards the Go function body and instead generates `function(...) { [constant's value] }`. This allows functions to have a Go signature that the type checker can use while being able to call native JavaScript functions.
-When calling such a native function from Go, the arguments and return values are converted between Go types and JavaScript types according to the table below. The second column denotes the types that are used when converting to `interface{}`. Multiple values can be returned by using an array.
+The package `github.com/neelance/gopherjs/js` provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their JavaScript syntax. Type conversions between Go types and JavaScript types are performed automatically according to the table below. The second column denotes the types that are used when converting to `interface{}`.
 
 | Go types            | Go interface type      | JavaScript type |
 | ------------------- | ---------------------- | --------------- |

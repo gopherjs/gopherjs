@@ -120,7 +120,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	var toplevelTypes []*types.TypeName
 	var constants []*types.Const
 	var varSpecs []*ast.ValueSpec
-	natives := make(map[string]*types.Const)
 	for _, file := range files {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
@@ -158,12 +157,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					for _, spec := range d.Specs {
 						s := spec.(*ast.ValueSpec)
 						for _, name := range s.Names {
-							o := c.info.Objects[name].(*types.Const)
-							if strings.HasPrefix(name.Name, "js_") {
-								natives[name.Name] = o
-								continue
-							}
 							if !isBlank(name) {
+								o := c.info.Objects[name].(*types.Const)
 								constants = append(constants, o)
 								c.objectName(o) // register toplevel name
 							}
@@ -278,7 +273,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 
 		// functions
 		for _, fun := range functions {
-			c.translateFunction(fun, natives)
+			c.translateFunction(fun)
 		}
 
 		// constants
@@ -326,13 +321,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		c.Printf("};")
 	})
 
-	if len(natives) != 0 {
-		var list ErrorList
-		for name, o := range natives {
-			list = append(list, fmt.Errorf("%s: JavaScript code constant %s has no corresponding Go function stub", fileSet.Position(o.Pos()), name))
-		}
-		return nil, list
-	}
 	return c.output, nil
 }
 
@@ -458,7 +446,7 @@ func (c *PkgContext) splitValueSpec(s *ast.ValueSpec) []*ast.ValueSpec {
 	return list
 }
 
-func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]*types.Const) {
+func (c *PkgContext) translateFunction(fun *ast.FuncDecl) {
 	c.newScope(func() {
 		sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
 		var recv *ast.Ident
@@ -469,24 +457,6 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]*ty
 		joinedParams := strings.Join(params, ", ")
 
 		printPrimaryFunction := func(lhs string, fullName string) {
-			jsName := "js_" + strings.Replace(fullName, ".", "_", 1)
-			jsCode, isNative := natives[jsName]
-			delete(natives, jsName)
-
-			if isNative {
-				var nativeParams []string
-				if recv != nil {
-					nativeParams = []string{recv.String()}
-				}
-				nativeParams = append(nativeParams, params...)
-				c.Printf("var %s = function(%s) {", jsName, strings.Join(nativeParams, ", "))
-				c.Write([]byte(strings.Trim(exact.StringVal(jsCode.Val()), "\n")))
-				c.Write([]byte{'\n'})
-				c.Printf("}")
-				c.Printf("%s = go$nativeFunction(%t, %s, %s, %s);", lhs, recv != nil, c.typeArray(sig.Params()), c.typeArray(sig.Results()), jsName)
-				return
-			}
-
 			c.Printf("%s = function(%s) {", lhs, joinedParams)
 			c.Indent(func() {
 				if fun.Body == nil {
@@ -720,9 +690,12 @@ func (c *PkgContext) newVariable(name string) string {
 	}
 	for _, b := range []byte(name) {
 		if b < '0' || b > 'z' {
-			name = "nonAasciiName"
+			name = "nonAsciiName"
 			break
 		}
+	}
+	if strings.HasPrefix(name, "dollar_") {
+		name = "$" + name[7:]
 	}
 	n := c.allVarNames[name]
 	c.allVarNames[name] = n + 1

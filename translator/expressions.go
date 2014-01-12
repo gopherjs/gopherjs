@@ -466,7 +466,17 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		switch sel.Kind() {
 		case types.FieldVal:
-			return c.translateExpr(e.X) + "." + translateSelection(sel)
+			str := c.translateExpr(e.X)
+			t := sel.Recv()
+			for _, index := range sel.Index() {
+				if ptr, isPtr := t.(*types.Pointer); isPtr {
+					t = ptr.Elem()
+				}
+				s := t.Underlying().(*types.Struct)
+				str += "." + fieldName(s, index)
+				t = s.Field(index).Type()
+			}
+			return str
 		case types.MethodVal:
 			parameters := makeParametersList()
 			target := c.translateExpr(e.X)
@@ -618,31 +628,122 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		switch f := plainFun.(type) {
 		case *ast.SelectorExpr:
 			sel := c.info.Selections[f]
+			o := sel.Obj()
 
 			switch sel.Kind() {
 			case types.MethodVal:
-				methodName := f.Sel.Name
+				methodName := o.Name()
 				if ReservedKeywords[methodName] {
 					methodName += "$"
 				}
-				methodsRecvType := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
+
+				fun = c.translateExpr(f.X)
+				t := sel.Recv()
+				for _, index := range sel.Index()[:len(sel.Index())-1] {
+					if ptr, isPtr := t.(*types.Pointer); isPtr {
+						t = ptr.Elem()
+					}
+					s := t.Underlying().(*types.Struct)
+					fun += "." + fieldName(s, index)
+					t = s.Field(index).Type()
+				}
+
+				if o.Pkg() != nil && o.Pkg().Path() == "github.com/neelance/gopherjs/js" {
+					externalize := func(e ast.Expr) string {
+						if named, isNamed := c.info.Types[e].(*types.Named); isNamed && named.Obj().Pkg().Path() == "github.com/neelance/gopherjs/js" && named.Obj().Name() == "Object" {
+							return c.translateExpr(e)
+						}
+						switch t := c.info.Types[e].Underlying().(type) {
+						case *types.Basic:
+							if t.Info()&types.IsNumeric != 0 && !is64Bit(t) && t.Info()&types.IsComplex == 0 {
+								return c.translateExpr(e)
+							}
+						}
+						return fmt.Sprintf("go$externalize(%s, %s)", c.translateExpr(e), c.typeName(c.info.Types[e]))
+					}
+					externalizeArgs := func(args []ast.Expr) string {
+						s := make([]string, len(args))
+						for i, arg := range args {
+							s[i] = externalize(arg)
+						}
+						return strings.Join(s, ", ")
+					}
+
+					switch o.Name() {
+					case "Get":
+						if val, ok := c.info.Values[e.Args[0]]; ok {
+							return fmt.Sprintf("%s.%s", fun, exact.StringVal(val))
+						}
+						return fmt.Sprintf("%s[go$externalize(%s, Go$String)]", fun, c.translateExpr(e.Args[0]))
+					case "Set":
+						if val, ok := c.info.Values[e.Args[0]]; ok {
+							return fmt.Sprintf("%s.%s = %s", fun, exact.StringVal(val), externalize(e.Args[1]))
+						}
+						return fmt.Sprintf("%s[go$externalize(%s, Go$String)] = %s", fun, c.translateExpr(e.Args[0]), externalize(e.Args[1]))
+					case "Index":
+						return fmt.Sprintf("%s[%s]", fun, c.translateExprToType(e.Args[0], types.Typ[types.Int]))
+					case "Call":
+						if val, ok := c.info.Values[e.Args[0]]; ok {
+							return fmt.Sprintf("%s.%s(%s)", fun, exact.StringVal(val), externalizeArgs(e.Args[1:]))
+						}
+						return fmt.Sprintf("%s[go$externalize(%s, Go$String)](%s)", fun, c.translateExpr(e.Args[0]), externalizeArgs(e.Args[1:]))
+					case "Invoke":
+						return fmt.Sprintf("%s(%s)", fun, externalizeArgs(e.Args))
+					case "New":
+						return fmt.Sprintf("new %s(%s)", fun, externalizeArgs(e.Args))
+					case "Bool":
+						return fmt.Sprintf("!!(%s)", fun)
+					case "String":
+						return fmt.Sprintf("go$internalize(%s, Go$String)", fun)
+					case "Int":
+						return fmt.Sprintf("go$parseInt(%s)", fun)
+					case "Float":
+						return fmt.Sprintf("go$parseFloat(%s)", fun)
+					case "Interface":
+						return fmt.Sprintf("go$internalize(%s, go$interfaceType([]))", fun)
+					case "IsUndefined":
+						return fmt.Sprintf("(%s === undefined)", fun)
+					case "IsNull":
+						return fmt.Sprintf("(%s === null)", fun)
+					default:
+						panic("Invalid js package method: " + o.Name())
+					}
+				}
+
+				methodsRecvType := o.Type().(*types.Signature).Recv().Type()
 				_, pointerExpected := methodsRecvType.(*types.Pointer)
-				_, isPointer := sel.Recv().Underlying().(*types.Pointer)
-				_, isStruct := sel.Recv().Underlying().(*types.Struct)
-				_, isArray := sel.Recv().Underlying().(*types.Array)
+				_, isPointer := t.Underlying().(*types.Pointer)
+				_, isStruct := t.Underlying().(*types.Struct)
+				_, isArray := t.Underlying().(*types.Array)
 				if pointerExpected && !isPointer && !isStruct && !isArray {
-					target := c.translateExpr(f.X)
 					vVar := c.newVariable("v")
-					fun = fmt.Sprintf("(new %s(function() { return %s; }, function(%s) { %s = %s; })).%s", c.typeName(methodsRecvType), target, vVar, target, vVar, methodName)
+					fun = fmt.Sprintf("(new %s(function() { return %s; }, function(%s) { %s = %s; })).%s", c.typeName(methodsRecvType), fun, vVar, fun, vVar, methodName)
 					break
 				}
-				if isWrapped(sel.Recv()) {
-					fun = fmt.Sprintf("(new %s(%s)).%s", c.typeName(sel.Recv()), c.translateExpr(f.X), methodName)
+
+				if isWrapped(t) {
+					fun = fmt.Sprintf("(new %s(%s)).%s", c.typeName(t), fun, methodName)
 					break
 				}
-				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), methodName)
-			case types.FieldVal, types.MethodExpr, types.PackageObj:
+				fun += "." + methodName
+
+			case types.PackageObj:
+				if o.Pkg() != nil && o.Pkg().Path() == "github.com/neelance/gopherjs/js" {
+					switch o.Name() {
+					case "Global":
+						if val, ok := c.info.Values[e.Args[0]]; ok {
+							return exact.StringVal(val)
+						}
+						return fmt.Sprintf("go$global[go$externalize(%s, Go$String)]", c.translateExpr(e.Args[0]))
+					default:
+						panic("Invalid js package method: " + o.Name())
+					}
+				}
 				fun = c.translateExpr(f)
+
+			case types.FieldVal, types.MethodExpr:
+				fun = c.translateExpr(f)
+
 			default:
 				panic("")
 			}
@@ -943,20 +1044,6 @@ func (c *PkgContext) flatten64(expr ast.Expr) string {
 		return fmt.Sprintf("go$flatten64(%s)", c.translateExpr(expr))
 	}
 	return c.translateExpr(expr)
-}
-
-func translateSelection(sel *types.Selection) string {
-	var selectors []string
-	t := sel.Recv()
-	for _, index := range sel.Index() {
-		if ptr, isPtr := t.(*types.Pointer); isPtr {
-			t = ptr.Elem()
-		}
-		s := t.Underlying().(*types.Struct)
-		selectors = append(selectors, fieldName(s, index))
-		t = s.Field(index).Type()
-	}
-	return strings.Join(selectors, ".")
 }
 
 func fixNumber(value string, basic *types.Basic) string {

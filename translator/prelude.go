@@ -5,6 +5,13 @@ Error.stackTraceLimit = -1;
 
 var go$reservedKeywords = ["abstract", "arguments", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", "long", "native", "new", "package", "private", "protected", "public", "return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof", "var", "void", "volatile", "while", "with", "yield"];
 
+var go$global;
+if (typeof window !== "undefined") {
+	go$global = window;
+} else if (typeof GLOBAL !== "undefined") {
+	go$global = GLOBAL;
+}
+
 var go$obj, go$tuple;
 var go$idCounter = 1;
 var go$keys = function(m) { return m ? Object.keys(m) : []; };
@@ -212,11 +219,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			typ.prototype.go$key = function() {
 				var keys = new Array(fields.length);
 				for (i = 0; i < fields.length; i++) {
-					var name = fields[i][0];
-					if (name === "_" || go$reservedKeywords.indexOf(name) != -1) {
-						name = name + "$" + i;
-					}
-					var v = this.go$val[name];
+					var v = this.go$val[go$fieldName(fields, i)];
 					keys[i] = v.go$key ? v.go$key() : v;
 				}
 				return string + "$" + keys.join("$");
@@ -239,6 +242,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 
 	typ.kind = kind;
 	typ.string = string;
+	typ.typeName = name;
 	var rt = null;
 	typ.reflectType = function() {
 		if (rt === null) {
@@ -408,6 +412,22 @@ var go$sliceType = function(elem) {
 	return typ;
 };
 
+var go$fieldName = function(fields, i) {
+	var field = fields[i];
+	var name = field[0];
+	if (name === "") {
+		var ntyp = field[2];
+		if (ntyp.kind === "Ptr") {
+			ntyp = ntyp.elem;
+		}
+		return ntyp.typeName;
+	}
+	if (name === "_" || go$reservedKeywords.indexOf(name) != -1) {
+		return name + "$" + i;
+	}
+	return name;
+};
+
 var go$structTypes = {};
 var go$structType = function(fields) {
 	var string = "struct { " + go$mapArray(fields, function(f) {
@@ -419,11 +439,7 @@ var go$structType = function(fields) {
 			this.go$val = this;
 			var i;
 			for (i = 0; i < fields.length; i++) {
-				var name = fields[i][0];
-				if (name === "_" || go$reservedKeywords.indexOf(name) != -1) {
-					name = name + "$" + i;
-				}
-				this[name] = arguments[i];
+				this[go$fieldName(fields, i)] = arguments[i];
 			}
 		});
 		typ.init(fields);
@@ -797,29 +813,29 @@ var go$runesToString = function(slice) {
 	return str;
 };
 
-var go$nativeFunction = function(isMethod, paramTypes, resultTypes, fn) {
-	return function() {
-		var args = [], i;
-		if (isMethod) {
-			args.push(go$externalize(this, go$interfaceType([])));
-		}
-		for (i = 0; i < paramTypes.length; i += 1) {
-			args.push(go$externalize(arguments[i], paramTypes[i]));
-		}
-		var results = fn.apply(null, args);
-		switch (resultTypes.length) {
-		case 0:
-			return;
-		case 1:
-			return go$internalize(results, resultTypes[0]);
-		default:
-			for (i = 0; i < resultTypes.length; i++) {
-				results[i] = go$internalize(results[i]);
-			}
-			return results;
-		}
-	};
-};
+// var go$nativeFunction = function(isMethod, paramTypes, resultTypes, fn) {
+// 	return function() {
+// 		var args = [], i;
+// 		if (isMethod) {
+// 			args.push(go$externalize(this, go$interfaceType([])));
+// 		}
+// 		for (i = 0; i < paramTypes.length; i += 1) {
+// 			args.push(go$externalize(arguments[i], paramTypes[i]));
+// 		}
+// 		var results = fn.apply(null, args);
+// 		switch (resultTypes.length) {
+// 		case 0:
+// 			return;
+// 		case 1:
+// 			return go$internalize(results, resultTypes[0]);
+// 		default:
+// 			for (i = 0; i < resultTypes.length; i++) {
+// 				results[i] = go$internalize(results[i]);
+// 			}
+// 			return results;
+// 		}
+// 	};
+// };
 
 var go$externalize = function(v, t) {
 	switch (t.kind) {

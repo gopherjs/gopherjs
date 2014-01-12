@@ -3,6 +3,7 @@ package js
 type Object interface {
 	Get(key string) Object
 	Set(key string, value interface{})
+	Length() int
 	Index(i int) Object
 	Call(name string, args ...interface{}) Object
 	Invoke(args ...interface{}) Object

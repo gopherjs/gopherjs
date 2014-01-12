@@ -680,6 +680,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 							return fmt.Sprintf("%s.%s = %s", fun, exact.StringVal(val), externalize(e.Args[1]))
 						}
 						return fmt.Sprintf("%s[go$externalize(%s, Go$String)] = %s", fun, c.translateExpr(e.Args[0]), externalize(e.Args[1]))
+					case "Length":
+						return fmt.Sprintf("go$parseInt(%s.length)", fun)
 					case "Index":
 						return fmt.Sprintf("%s[%s]", fun, c.translateExprToType(e.Args[0], types.Typ[types.Int]))
 					case "Call":

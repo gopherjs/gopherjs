@@ -230,6 +230,7 @@ func tool() error {
 		testFlags.Parse(flag.Args()[1:])
 
 		mainPkg := &Package{Package: &build.Package{
+			Name:       "main",
 			ImportPath: "main",
 		}}
 		packages["main"] = mainPkg

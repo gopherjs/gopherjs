@@ -84,7 +84,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return fmt.Sprintf("new %s([%s])", c.typeName(exprType), strings.Join(collectIndexedElements(t.Elem()), ", "))
 		case *types.Map:
 			mapVar := c.newVariable("_map")
-			keyVar := c.newVariable("_map")
+			keyVar := c.newVariable("_key")
 			assignments := ""
 			for _, element := range e.Elts {
 				kve := element.(*ast.KeyValueExpr)
@@ -172,17 +172,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return c.translateExpr(e.X)
 		case token.SUB:
 			if is64Bit(basic) {
-				x := c.newVariable("x")
-				return fmt.Sprintf("(%s = %s, new %s(-%s.high, -%s.low))", x, c.translateExpr(e.X), c.typeName(t), x, x)
+				return c.makeExpr("new %s(-%[2]s.high, -%[2]s.low)", c.typeName(t), e.X)
 			}
 			if basic.Info()&types.IsComplex != 0 {
-				x := c.newVariable("x")
-				return fmt.Sprintf("(%s = %s, new %s(-%s.real, -%s.imag))", x, c.translateExpr(e.X), c.typeName(t), x, x)
+				return c.makeExpr("new %s(-%[2]s.real, -%[2]s.imag)", c.typeName(t), e.X)
 			}
 		case token.XOR:
 			if is64Bit(basic) {
-				x := c.newVariable("x")
-				return fmt.Sprintf("(%s = %s, new %s(~%s.high, ~%s.low >>> 0))", x, c.translateExpr(e.X), c.typeName(t), x, x)
+				return c.makeExpr("new %s(~%[2]s.high, ~%[2]s.low >>> 0)", c.typeName(t), e.X)
 			}
 			op = "~"
 		case token.NOT:
@@ -215,7 +212,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		if basic, isBasic := t.Underlying().(*types.Basic); isBasic && basic.Info()&types.IsNumeric != 0 {
 			if is64Bit(basic) {
-				var expr string
 				switch e.Op {
 				case token.MUL:
 					return fmt.Sprintf("go$mul64(%s, %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
@@ -228,50 +224,39 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case token.SHR:
 					return fmt.Sprintf("go$shiftRight%s(%s, %s)", toJavaScriptType(basic), c.translateExpr(e.X), c.flatten64(e.Y))
 				case token.EQL:
-					expr = "x.high === y.high && x.low === y.low"
+					return c.makeExpr("(%[1]s.high === %[2]s.high && %[1]s.low === %[2]s.low)", e.X, e.Y)
 				case token.LSS:
-					expr = "x.high < y.high || (x.high === y.high && x.low < y.low)"
+					return c.makeExpr("(%[1]s.high < %[2]s.high || (%[1]s.high === %[2]s.high && %[1]s.low < %[2]s.low))", e.X, e.Y)
 				case token.LEQ:
-					expr = "x.high < y.high || (x.high === y.high && x.low <= y.low)"
+					return c.makeExpr("(%[1]s.high < %[2]s.high || (%[1]s.high === %[2]s.high && %[1]s.low <= %[2]s.low))", e.X, e.Y)
 				case token.GTR:
-					expr = "x.high > y.high || (x.high === y.high && x.low > y.low)"
+					return c.makeExpr("(%[1]s.high > %[2]s.high || (%[1]s.high === %[2]s.high && %[1]s.low > %[2]s.low))", e.X, e.Y)
 				case token.GEQ:
-					expr = "x.high > y.high || (x.high === y.high && x.low >= y.low)"
+					return c.makeExpr("(%[1]s.high > %[2]s.high || (%[1]s.high === %[2]s.high && %[1]s.low >= %[2]s.low))", e.X, e.Y)
 				case token.ADD, token.SUB:
-					expr = fmt.Sprintf("new %s(x.high %s y.high, x.low %s y.low)", c.typeName(t), e.Op, e.Op)
+					return c.makeExpr("new %[3]s(%[1]s.high %[4]s %[2]s.high, %[1]s.low %[4]s %[2]s.low)", e.X, e.Y, c.typeName(t), e.Op)
 				case token.AND, token.OR, token.XOR:
-					expr = fmt.Sprintf("new %s(x.high %s y.high, (x.low %s y.low) >>> 0)", c.typeName(t), e.Op, e.Op)
+					return c.makeExpr("new %[3]s(%[1]s.high %[4]s %[2]s.high, (%[1]s.low %[4]s %[2]s.low) >>> 0)", e.X, e.Y, c.typeName(t), e.Op)
 				case token.AND_NOT:
-					expr = fmt.Sprintf("new %s(x.high &~ y.high, (x.low &~ y.low) >>> 0)", c.typeName(t))
+					return c.makeExpr("new %[3]s(%[1]s.high &~ %[2]s.high, (%[1]s.low &~ %[2]s.low) >>> 0)", e.X, e.Y, c.typeName(t))
 				default:
 					panic(e.Op)
 				}
-				x := c.newVariable("x")
-				y := c.newVariable("y")
-				expr = strings.Replace(expr, "x.", x+".", -1)
-				expr = strings.Replace(expr, "y.", y+".", -1)
-				return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, c.translateExpr(e.X), y, c.translateExpr(e.Y), expr)
 			}
 
 			if basic.Info()&types.IsComplex != 0 {
-				var expr string
 				switch e.Op {
 				case token.EQL:
-					expr = "x.real === y.real && x.imag === y.imag"
+					return c.makeExpr("(%[1]s.real === %[2]s.real && %[1]s.imag === %[2]s.imag)", e.X, e.Y)
 				case token.ADD, token.SUB:
-					expr = fmt.Sprintf("new %s(x.real %s y.real, x.imag %s y.imag)", c.typeName(t), e.Op, e.Op)
+					return c.makeExpr("new %[3]s(%[1]s.real %[4]s %[2]s.real, %[1]s.imag %[4]s %[2]s.imag)", e.X, e.Y, c.typeName(t), e.Op)
 				case token.MUL:
-					expr = fmt.Sprintf("new %s(x.real * y.real - x.imag * y.imag, x.real * y.imag + x.imag * y.real)", c.typeName(t))
+					return c.makeExpr("new %[3]s(%[1]s.real * %[2]s.real - %[1]s.imag * %[2]s.imag, %[1]s.real * %[2]s.imag + %[1]s.imag * %[2]s.real)", e.X, e.Y, c.typeName(t))
 				case token.QUO:
 					return fmt.Sprintf("go$divComplex(%s, %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
 				default:
 					panic(e.Op)
 				}
-				x := c.newVariable("x")
-				y := c.newVariable("y")
-				expr = strings.Replace(expr, "x.", x+".", -1)
-				expr = strings.Replace(expr, "y.", y+".", -1)
-				return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, c.translateExpr(e.X), y, c.translateExpr(e.Y), expr)
 			}
 
 			switch e.Op {
@@ -283,14 +268,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return fixNumber(fmt.Sprintf("%s %s %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y)), basic)
 			case token.MUL:
 				if basic.Kind() == types.Int32 {
-					x := c.newVariable("x")
-					y := c.newVariable("y")
-					return fmt.Sprintf("(%s = %s, %s = %s, (((%s >>> 16 << 16) * %s >> 0) + (%s << 16 >>> 16) * %s) >> 0)", x, c.translateExpr(e.X), y, c.translateExpr(e.Y), x, y, x, y)
+					return c.makeExpr("((((%[1]s >>> 16 << 16) * %[2]s >> 0) + (%[1]s << 16 >>> 16) * %[2]s) >> 0)", e.X, e.Y)
 				}
 				if basic.Kind() == types.Uint32 || basic.Kind() == types.Uintptr {
-					x := c.newVariable("x")
-					y := c.newVariable("y")
-					return fmt.Sprintf("(%s = %s, %s = %s, (((%s >>> 16 << 16) * %s >>> 0) + (%s << 16 >>> 16) * %s) >>> 0)", x, c.translateExpr(e.X), y, c.translateExpr(e.Y), x, y, x, y)
+					return c.makeExpr("((((%[1]s >>> 16 << 16) * %[2]s >>> 0) + (%[1]s << 16 >>> 16) * %[2]s) >>> 0)", e.X, e.Y)
 				}
 				return fixNumber(fmt.Sprintf("%s * %s", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
 			case token.QUO:
@@ -834,6 +815,25 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		panic(fmt.Sprintf("Unhandled expression: %T\n", e))
 
 	}
+}
+
+func (c *PkgContext) makeExpr(format string, a ...interface{}) string {
+	var assignments []string
+	for i, x := range a {
+		if expr, isExpr := x.(ast.Expr); isExpr {
+			if ident, isIdent := expr.(*ast.Ident); isIdent {
+				a[i] = c.translateExpr(ident)
+				continue
+			}
+			xVar := c.newVariable("x")
+			assignments = append(assignments, xVar+" = "+c.translateExpr(expr))
+			a[i] = xVar
+		}
+	}
+	if len(assignments) == 0 {
+		return fmt.Sprintf(format, a...)
+	}
+	return "(" + strings.Join(assignments, ", ") + ", " + fmt.Sprintf(format, a...) + ")"
 }
 
 func (c *PkgContext) identifierConstant(expr ast.Expr) (string, bool) {

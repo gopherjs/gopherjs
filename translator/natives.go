@@ -190,7 +190,7 @@ var pkgNatives = map[string]string{
 			if ((x$8 = e, y$8 = new Go$Uint64(0, 0), x$8.high === y$8.high && x$8.low === y$8.low)) {
 				e = new Go$Uint64(0, 1);
 			}
-			return Ldexp((go$obj = m, go$obj.high * 4294967296 + go$obj.low), e.low - 1023 - 52) * s;
+			return Ldexp((m.high * 4294967296 + m.low), e.low - 1023 - 52) * s;
 		};
 	`,
 

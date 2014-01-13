@@ -671,13 +671,13 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 					switch o.Name() {
 					case "Get":
-						if val, ok := c.info.Values[e.Args[0]]; ok {
-							return fmt.Sprintf("%s.%s", fun, exact.StringVal(val))
+						if id, ok := c.identifierConstant(e.Args[0]); ok {
+							return fmt.Sprintf("%s.%s", fun, id)
 						}
 						return fmt.Sprintf("%s[go$externalize(%s, Go$String)]", fun, c.translateExpr(e.Args[0]))
 					case "Set":
-						if val, ok := c.info.Values[e.Args[0]]; ok {
-							return fmt.Sprintf("%s.%s = %s", fun, exact.StringVal(val), externalize(e.Args[1]))
+						if id, ok := c.identifierConstant(e.Args[0]); ok {
+							return fmt.Sprintf("%s.%s = %s", fun, id, externalize(e.Args[1]))
 						}
 						return fmt.Sprintf("%s[go$externalize(%s, Go$String)] = %s", fun, c.translateExpr(e.Args[0]), externalize(e.Args[1]))
 					case "Length":
@@ -685,12 +685,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					case "Index":
 						return fmt.Sprintf("%s[%s]", fun, c.translateExprToType(e.Args[0], types.Typ[types.Int]))
 					case "Call":
-						if val, ok := c.info.Values[e.Args[0]]; ok {
+						if id, ok := c.identifierConstant(e.Args[0]); ok {
 							if e.Ellipsis.IsValid() {
 								objVar := c.newVariable("obj")
-								return fmt.Sprintf("(%s = %s, %s.%s.apply(%s, %s))", objVar, fun, objVar, exact.StringVal(val), objVar, externalize(e.Args[1]))
+								return fmt.Sprintf("(%s = %s, %s.%s.apply(%s, %s))", objVar, fun, objVar, id, objVar, externalize(e.Args[1]))
 							}
-							return fmt.Sprintf("%s.%s(%s)", fun, exact.StringVal(val), externalizeArgs(e.Args[1:]))
+							return fmt.Sprintf("%s.%s(%s)", fun, id, externalizeArgs(e.Args[1:]))
 						}
 						if e.Ellipsis.IsValid() {
 							objVar := c.newVariable("obj")
@@ -747,8 +747,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				if o.Pkg() != nil && o.Pkg().Path() == "github.com/neelance/gopherjs/js" {
 					switch o.Name() {
 					case "Global":
-						if val, ok := c.info.Values[e.Args[0]]; ok {
-							return fmt.Sprintf("go$global.%s", exact.StringVal(val))
+						if id, ok := c.identifierConstant(e.Args[0]); ok {
+							return fmt.Sprintf("go$global.%s", id)
 						}
 						return fmt.Sprintf("go$global[go$externalize(%s, Go$String)]", c.translateExpr(e.Args[0]))
 					default:
@@ -834,6 +834,23 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		panic(fmt.Sprintf("Unhandled expression: %T\n", e))
 
 	}
+}
+
+func (c *PkgContext) identifierConstant(expr ast.Expr) (string, bool) {
+	val, ok := c.info.Values[expr]
+	if !ok {
+		return "", false
+	}
+	s := exact.StringVal(val)
+	if len(s) == 0 {
+		return "", false
+	}
+	for i, c := range s {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (i > 0 && c >= '0' && c <= '9') || c == '_' || c == '$') {
+			return "", false
+		}
+	}
+	return s, true
 }
 
 func (c *PkgContext) translateExprSlice(exprs []ast.Expr, desiredType types.Type) []string {

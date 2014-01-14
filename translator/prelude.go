@@ -853,6 +853,9 @@ var go$externalize = function(v, t) {
 		if (v === null) {
 			return null;
 		}
+		if (v.constructor.kind === undefined) {
+			return v; // js.Object
+		}
 		return go$externalize(v.go$val, v.constructor);
 	case "Slice":
 		return go$mapArray(go$sliceToArray(v), function(e) { return go$externalize(e, t.elem); });

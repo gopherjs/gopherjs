@@ -24,6 +24,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case basic.Info()&types.IsInteger != 0:
 			if is64Bit(basic) {
 				d, _ := exact.Uint64Val(value)
+				if basic.Kind() == types.Int64 {
+					return fmt.Sprintf("new %s(%d, %d)", c.typeName(exprType), int64(d)>>32, d&(1<<32-1))
+				}
 				return fmt.Sprintf("new %s(%d, %d)", c.typeName(exprType), d>>32, d&(1<<32-1))
 			}
 			d, _ := exact.Int64Val(value)

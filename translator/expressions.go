@@ -283,18 +283,17 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 				return fixNumber(fmt.Sprintf("%s * %s", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
 			case token.QUO:
-				value := fmt.Sprintf("%s / %s", c.translateExpr(e.X), c.translateExpr(e.Y))
 				if basic.Info()&types.IsInteger != 0 {
-					value = "(go$obj = " + value + `, (go$obj === go$obj && go$obj !== 1/0 && go$obj !== -1/0) ? go$obj : go$throwRuntimeError("integer divide by zero"))`
+					// cut off decimals
+					shift := ">>"
+					if basic.Info()&types.IsUnsigned != 0 {
+						shift = ">>>"
+					}
+					return fmt.Sprintf(`(%[1]s = %[2]s / %[3]s, (%[1]s === %[1]s && %[1]s !== 1/0 && %[1]s !== -1/0) ? %[1]s %[4]s 0 : go$throwRuntimeError("integer divide by zero"))`, c.newVariable("_q"), c.translateExpr(e.X), c.translateExpr(e.Y), shift)
 				}
-				switch basic.Kind() {
-				case types.Int, types.Uint:
-					return "(" + value + " >> 0)" // cut off decimals
-				default:
-					return fixNumber(value, basic)
-				}
+				return fmt.Sprintf("%s / %s", c.translateExpr(e.X), c.translateExpr(e.Y))
 			case token.REM:
-				return fmt.Sprintf(`(go$obj = %s %% %s, go$obj === go$obj ? go$obj : go$throwRuntimeError("integer divide by zero"))`, c.translateExpr(e.X), c.translateExpr(e.Y))
+				return fmt.Sprintf(`(%[1]s = %[2]s %% %[3]s, %[1]s === %[1]s ? %[1]s : go$throwRuntimeError("integer divide by zero"))`, c.newVariable("_r"), c.translateExpr(e.X), c.translateExpr(e.Y))
 			case token.SHL, token.SHR:
 				op := e.Op.String()
 				if e.Op == token.SHR && basic.Info()&types.IsUnsigned != 0 {

@@ -850,6 +850,9 @@ var go$externalize = function(v, t) {
 		}
 		return v;
 	case "Interface":
+		if (v === null) {
+			return null;
+		}
 		return go$externalize(v.go$val, v.constructor);
 	case "Slice":
 		return go$mapArray(go$sliceToArray(v), function(e) { return go$externalize(e, t.elem); });

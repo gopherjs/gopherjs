@@ -643,6 +643,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 							if t.Info()&types.IsNumeric != 0 && !is64Bit(t) && t.Info()&types.IsComplex == 0 {
 								return c.translateExpr(e)
 							}
+							if t.Kind() == types.UntypedNil {
+								return "null"
+							}
 						}
 						return fmt.Sprintf("go$externalize(%s, %s)", c.translateExpr(e), c.typeName(c.info.Types[e]))
 					}

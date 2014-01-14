@@ -555,11 +555,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case "panic":
 					return fmt.Sprintf("throw go$panic(%s)", c.translateExprToType(e.Args[0], types.NewInterface(nil, nil)))
 				case "append":
+					if len(e.Args) == 1 {
+						return c.translateExpr(e.Args[0])
+					}
 					if e.Ellipsis.IsValid() {
-						return fmt.Sprintf("go$append(%s, %s)", c.translateExpr(e.Args[0]), c.translateExprToType(e.Args[1], exprType))
+						return fmt.Sprintf("go$appendSlice(%s, %s)", c.translateExpr(e.Args[0]), c.translateExprToType(e.Args[1], exprType))
 					}
 					sliceType := exprType.Underlying().(*types.Slice)
-					return fmt.Sprintf("go$append(%s, new %s([%s]))", c.translateExpr(e.Args[0]), c.typeName(exprType), strings.Join(c.translateExprSlice(e.Args[1:], sliceType.Elem()), ", "))
+					return fmt.Sprintf("go$append(%s, %s)", c.translateExpr(e.Args[0]), strings.Join(c.translateExprSlice(e.Args[1:], sliceType.Elem()), ", "))
 				case "delete":
 					return fmt.Sprintf(`delete %s[%s]`, c.translateExpr(e.Args[0]), c.makeKey(e.Args[1], c.info.Types[e.Args[0]].Underlying().(*types.Map).Key()))
 				case "copy":

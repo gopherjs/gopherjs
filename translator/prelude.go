@@ -969,40 +969,70 @@ var go$copyArray = function(dst, src) {
 	}
 };
 
-var go$append = function(slice, toAppend) {
+var go$growSlice = function(slice, length) {
+	var newCapacity = Math.max(length, slice.capacity < 1024 ? slice.capacity * 2 : Math.floor(slice.capacity * 5 / 4));
+
+	var newArray;
+	if (slice.array.constructor === Array) {
+		newArray = slice.array;
+		if (slice.offset !== 0 || newArray.length !== slice.offset + slice.capacity) {
+			newArray = newArray.slice(slice.offset);
+		}
+		newArray.length = newCapacity;
+	} else {
+		newArray = new slice.array.constructor(newCapacity);
+		newArray.set(slice.array.subarray(slice.offset))
+	}
+
+	var newSlice = new slice.constructor(newArray);
+	newSlice.length = slice.length;
+	newSlice.capacity = newCapacity;
+	return newSlice;
+};
+
+var go$append = function(slice) {
+	if (arguments.length === 1) {
+		return slice;
+	}
+
+	var newLength = slice.length + arguments.length - 1;
+	if (newLength > slice.capacity) {
+		slice = go$growSlice(slice, newLength);
+	}
+
+	var array = slice.array;
+	var leftOffset = slice.offset + slice.length - 1, i;
+	for (i = 1; i < arguments.length; i += 1) {
+		array[leftOffset + i] = arguments[i];
+	}
+
+	var newSlice = new slice.constructor(array);
+	newSlice.offset = slice.offset;
+	newSlice.length = newLength;
+	newSlice.capacity = slice.capacity;
+	return newSlice;
+};
+
+var go$appendSlice = function(slice, toAppend) {
 	if (toAppend.length === 0) {
 		return slice;
 	}
 
-	var newArray = slice.array;
-	var newOffset = slice.offset;
 	var newLength = slice.length + toAppend.length;
-	var newCapacity = slice.capacity;
-
-	if (newLength > newCapacity) {
-		newCapacity = Math.max(newLength, newCapacity < 1024 ? newCapacity * 2 : Math.floor(newCapacity * 5 / 4));
-
-		if (newArray.constructor === Array) {
-			if (newOffset !== 0 || newArray.length !== newOffset + slice.capacity) {
-				newArray = newArray.slice(newOffset);
-			}
-			newArray.length = newCapacity;
-		} else {
-			newArray = new newArray.constructor(newCapacity);
-			newArray.set(slice.array.subarray(newOffset))
-		}
-		newOffset = 0;
+	if (newLength > slice.capacity) {
+		slice = go$growSlice(slice, newLength);
 	}
 
-	var leftOffset = newOffset + slice.length, rightOffset = toAppend.offset, i;
+	var array = slice.array;
+	var leftOffset = slice.offset + slice.length, rightOffset = toAppend.offset, i;
 	for (i = 0; i < toAppend.length; i += 1) {
-		newArray[leftOffset + i] = toAppend.array[rightOffset + i];
+		array[leftOffset + i] = toAppend.array[rightOffset + i];
 	}
 
-	var newSlice = new slice.constructor(newArray);
-	newSlice.offset = newOffset;
+	var newSlice = new slice.constructor(array);
+	newSlice.offset = slice.offset;
 	newSlice.length = newLength;
-	newSlice.capacity = newCapacity;
+	newSlice.capacity = slice.capacity;
 	return newSlice;
 };
 

@@ -170,22 +170,25 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		t := c.info.Types[e.X]
 		basic := t.Underlying().(*types.Basic)
-		op := e.Op.String()
 		switch e.Op {
 		case token.ADD:
 			return c.translateExpr(e.X)
 		case token.SUB:
-			if is64Bit(basic) {
+			switch {
+			case is64Bit(basic):
 				return c.formatExpr("new %1s(-%2h, -%2l)", c.typeName(t), e.X)
-			}
-			if basic.Info()&types.IsComplex != 0 {
+			case basic.Info()&types.IsComplex != 0:
 				return c.formatExpr("new %1s(-%2r, -%2i)", c.typeName(t), e.X)
+			case basic.Info()&types.IsUnsigned != 0:
+				return fixNumber(fmt.Sprintf("-%s", c.translateExpr(e.X)), basic)
+			default:
+				return fmt.Sprintf("-%s", c.translateExpr(e.X))
 			}
 		case token.XOR:
 			if is64Bit(basic) {
 				return c.formatExpr("new %1s(~%2h, ~%2l >>> 0)", c.typeName(t), e.X)
 			}
-			op = "~"
+			return fixNumber(fmt.Sprintf("~%s", c.translateExpr(e.X)), basic)
 		case token.NOT:
 			x := c.translateExpr(e.X)
 			if x == "true" {
@@ -195,8 +198,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return "true"
 			}
 			return "!" + x
+		default:
+			panic(e.Op)
 		}
-		return fixNumber(fmt.Sprintf("%s%s", op, c.translateExpr(e.X)), basic)
 
 	case *ast.BinaryExpr:
 		if e.Op == token.NEQ {
@@ -304,10 +308,15 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 				y := c.newVariable("y")
 				return fixNumber(fmt.Sprintf("(%s = %s, %s < 32 ? (%s %s %s) : 0)", y, c.translateExprToType(e.Y, types.Typ[types.Uint]), y, c.translateExpr(e.X), op, y), basic)
-			case token.AND, token.OR, token.XOR:
-				return fixNumber(fmt.Sprintf("(%s %s %s)", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y)), basic)
+			case token.AND, token.OR:
+				if basic.Info()&types.IsUnsigned != 0 {
+					return fmt.Sprintf("((%s %s %s) >>> 0)", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
+				}
+				return fmt.Sprintf("(%s %s %s)", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
 			case token.AND_NOT:
-				return fixNumber(fmt.Sprintf("(%s &~ %s)", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
+				return fmt.Sprintf("(%s & ~%s)", c.translateExpr(e.X), c.translateExpr(e.Y))
+			case token.XOR:
+				return fixNumber(fmt.Sprintf("(%s ^ %s)", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
 			default:
 				panic(e.Op)
 			}

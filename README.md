@@ -40,7 +40,7 @@ cd ../../../../../
 ```
 
 ### Interface to native JavaScript
-The package `github.com/neelance/gopherjs/js` ([documentation](js/js.go)) provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their JavaScript syntax. Type conversions between Go types and JavaScript types are performed automatically according to the table below. The second column denotes the types that are used when converting to `interface{}`.
+The package `github.com/neelance/gopherjs/js` ([documentation](js/js.go)) provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their JavaScript syntax. Type conversions between Go types and JavaScript types are performed automatically according to the table below. Types not listed are passed through. The second column denotes the types that are used when converting to `interface{}`.
 
 | Go types            | Go interface type      | JavaScript type |
 | ------------------- | ---------------------- | --------------- |
@@ -49,8 +49,6 @@ The package `github.com/neelance/gopherjs/js` ([documentation](js/js.go)) provid
 | string              | string                 | String          |
 | slices, arrays      | []interface{}          | Array           |
 | maps                | map[string]interface{} | Object          |
-
-Types not listed are passed through. Please note that this interface is subject to change. Suggestions are always welcome.
 
 ### Roadmap
 These features are not implemented yet, but on the roadmap:

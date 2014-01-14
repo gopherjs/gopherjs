@@ -510,10 +510,11 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 				lhs = l
 			}
 
-			parenExpr := &ast.ParenExpr{
-				X: s.Rhs[0],
-			}
+			parenExpr := &ast.ParenExpr{X: s.Rhs[0]}
 			c.info.Types[parenExpr] = c.info.Types[s.Rhs[0]]
+			if val, ok := c.info.Values[s.Rhs[0]]; ok {
+				c.info.Values[parenExpr] = val
+			}
 			binaryExpr := &ast.BinaryExpr{
 				X:  lhs,
 				Op: op,

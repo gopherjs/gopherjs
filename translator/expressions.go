@@ -777,15 +777,15 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return c.translateExpr(e.X)
 		}
 		t := c.info.Types[e.Type]
-		check := "go$obj !== null && " + c.typeCheck("go$obj.constructor", t)
-		value := "go$obj"
+		check := "%[1]s !== null && " + c.typeCheck("%[1]s.constructor", t)
+		valueSuffix := ""
 		if _, isInterface := t.Underlying().(*types.Interface); !isInterface {
-			value += ".go$val"
+			valueSuffix = ".go$val"
 		}
 		if _, isTuple := exprType.(*types.Tuple); isTuple {
-			return fmt.Sprintf("(go$obj = %s, %s ? [%s, true] : [%s, false])", c.translateExpr(e.X), check, value, c.zeroValue(c.info.Types[e.Type]))
+			return c.makeExpr("("+check+" ? [%[1]s%[2]s, true] : [%[3]s, false])", e.X, valueSuffix, c.zeroValue(c.info.Types[e.Type]))
 		}
-		return fmt.Sprintf(`(go$obj = %s, %s ? %s : go$typeAssertionFailed(go$obj, %s))`, c.translateExpr(e.X), check, value, c.typeName(t))
+		return c.makeExpr("("+check+" ? %[1]s%[2]s : go$typeAssertionFailed(go$obj, %[3]s))", e.X, valueSuffix, c.typeName(t))
 
 	case *ast.Ident:
 		if e.Name == "_" {
@@ -895,11 +895,11 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 				case !is64Bit(basicExprType):
 					return fmt.Sprintf("new %s(0, %s)", c.typeName(desiredType), c.translateExpr(expr))
 				case !types.IsIdentical(exprType, desiredType):
-					return fmt.Sprintf("(go$obj = %s, new %s(go$obj.high, go$obj.low))", c.translateExpr(expr), c.typeName(desiredType))
+					return c.makeExpr("new %s(%[2]s.high, %[2]s.low)", c.typeName(desiredType), expr)
 				}
 			case is64Bit(basicExprType):
 				if t.Info()&types.IsUnsigned == 0 && basicExprType.Info()&types.IsUnsigned == 0 {
-					return fmt.Sprintf("(go$obj = %s, go$obj.low + ((go$obj.high >> 31) * 4294967296))", c.translateExpr(expr))
+					return c.makeExpr("(%[1]s.low + ((%[1]s.high >> 31) * 4294967296))", expr)
 				}
 				return fmt.Sprintf("%s.low", c.translateExpr(expr))
 			case basicExprType.Info()&types.IsFloat != 0:
@@ -964,7 +964,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		}
 		_, desiredIsNamed := desiredType.(*types.Named)
 		if desiredIsNamed && !types.IsIdentical(exprType, desiredType) {
-			return fmt.Sprintf("(go$obj = %s, go$subslice(new %s(go$obj.array), go$obj.offset, go$obj.offset + go$obj.length))", c.translateExpr(expr), c.typeName(desiredType))
+			return c.makeExpr("go$subslice(new %s(%[2]s.array), %[2]s.offset, %[2]s.offset + %[2]s.length)", c.typeName(desiredType), expr)
 		}
 		return c.translateExpr(expr)
 
@@ -973,7 +973,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			return fmt.Sprintf("new %s(%s)", c.typeName(exprType), c.translateExpr(expr))
 		}
 		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
-			return fmt.Sprintf("(go$obj = %s, new go$obj.constructor.Struct(go$obj))", c.translateExpr(expr))
+			return c.makeExpr("new %[1]s.constructor.Struct(%[1]s)", expr)
 		}
 
 	case *types.Pointer:
@@ -990,7 +990,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			if isStruct {
 				return c.clone(c.translateExpr(expr), t.Elem())
 			}
-			return fmt.Sprintf("(go$obj = %s, new (go$ptrType(%s))(go$obj.go$get, go$obj.go$set))", c.translateExpr(expr), c.typeName(n))
+			return c.makeExpr("new (go$ptrType(%s))(%[2]s.go$get, %[2]s.go$set)", c.typeName(n), expr)
 		}
 
 	case *types.Struct, *types.Array:

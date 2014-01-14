@@ -59,10 +59,10 @@ These features are not implemented yet, but on the roadmap:
 - output minification
 - source maps
 
-### Deviations from Go specification
-Some tradeoffs had to be made in order to avoid huge performance impacts. Please get in contact if those are deal breakers for you.
+### Caveats
+Tradeoffs had to be made in order to avoid huge performance impacts, but they have no effect on most programs:
 
-- int and uint do not overflow, but have a maximum precision of 53 bits, after which rounding errors might occur (all other integer types have simulated overflow)
+- int and uint do not overflow, use them in 32-bit range only (all other integer types have simulated overflow)
 - float32 and complex64 have the same precision as float64 and complex128
 
 ### Libraries

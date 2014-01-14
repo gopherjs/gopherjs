@@ -11,12 +11,12 @@ GopherJS translates [Go code](http://golang.org/) to pure JavaScript code. Its m
 You can take advantage of Go's elegant type system and other compile-time checks that can have a huge impact on bug detection and the ability to refactor, especially for big projects. Just think of how often a JavaScript method has extra handling of some legacy parameter scheme, because you don't know exactly if some other code is still calling it in that old way or not. GopherJS will tell you and if it does not complain, you can be sure that this kind of bug is not present any more.
 
 ### What is supported?
+- interface to native JavaScript code ([see below](#interface-to-native-javascript))
 - all basic types, including 64-bit integers and complex numbers
 - arrays, slices, maps and structures
 - full type system with support for interfaces and type assertions
 - reflection for all types
 - many packages have been successfully tested, see [compatibility table](doc/packages.md)
-- the transpiler can turn itself into pure JavaScript that runs in all major browsers
 
 ### Installation and Usage
 Get GopherJS and dependencies with: 
@@ -39,6 +39,19 @@ cp build/Release/syscall.node ~/.node_libraries/syscall.node
 cd ../../../../../
 ```
 
+### Interface to native JavaScript
+The package `github.com/neelance/gopherjs/js` ([documentation](js/js.go)) provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their JavaScript syntax. Type conversions between Go types and JavaScript types are performed automatically according to the table below. The second column denotes the types that are used when converting to `interface{}`.
+
+| Go types            | Go interface type      | JavaScript type |
+| ------------------- | ---------------------- | --------------- |
+| bool                | bool                   | Boolean         |
+| int*, uint*, float* | float64                | Number          |
+| string              | string                 | String          |
+| slices, arrays      | []interface{}          | Array           |
+| maps                | map[string]interface{} | Object          |
+
+Types not listed are passed through. Please note that this interface is subject to change. Suggestions are always welcome.
+
 ### Roadmap
 These features are not implemented yet, but on the roadmap:
 
@@ -53,19 +66,6 @@ Some tradeoffs had to be made in order to avoid huge performance impacts. Please
 
 - int and uint do not overflow, but have a maximum precision of 53 bits, after which rounding errors might occur (all other integer types have simulated overflow)
 - float32 and complex64 have the same precision as float64 and complex128
-
-### Interface to native JavaScript
-The package `github.com/neelance/gopherjs/js` ([documentation](js/js.go)) provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their JavaScript syntax. Type conversions between Go types and JavaScript types are performed automatically according to the table below. The second column denotes the types that are used when converting to `interface{}`.
-
-| Go types            | Go interface type      | JavaScript type |
-| ------------------- | ---------------------- | --------------- |
-| bool                | bool                   | Boolean         |
-| int*, uint*, float* | float64                | Number          |
-| string              | string                 | String          |
-| slices, arrays      | []interface{}          | Array           |
-| maps                | map[string]interface{} | Object          |
-
-Types not listed are passed through. Please note that this interface is subject to change. Suggestions are always welcome.
 
 ### Libraries
 [go-angularjs](https://github.com/neelance/go-angularjs) - a wrapper for [AngularJS](http://angularjs.org)

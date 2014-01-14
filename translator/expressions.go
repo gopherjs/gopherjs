@@ -172,14 +172,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			return c.translateExpr(e.X)
 		case token.SUB:
 			if is64Bit(basic) {
-				return c.makeExpr("new %s(-%[2]s.high, -%[2]s.low)", c.typeName(t), e.X)
+				return c.formatExpr("new %s(-%[2]s.high, -%[2]s.low)", c.typeName(t), e.X)
 			}
 			if basic.Info()&types.IsComplex != 0 {
-				return c.makeExpr("new %s(-%[2]s.real, -%[2]s.imag)", c.typeName(t), e.X)
+				return c.formatExpr("new %s(-%[2]s.real, -%[2]s.imag)", c.typeName(t), e.X)
 			}
 		case token.XOR:
 			if is64Bit(basic) {
-				return c.makeExpr("new %s(~%[2]s.high, ~%[2]s.low >>> 0)", c.typeName(t), e.X)
+				return c.formatExpr("new %s(~%[2]s.high, ~%[2]s.low >>> 0)", c.typeName(t), e.X)
 			}
 			op = "~"
 		case token.NOT:
@@ -224,21 +224,21 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case token.SHR:
 					return fmt.Sprintf("go$shiftRight%s(%s, %s)", toJavaScriptType(basic), c.translateExpr(e.X), c.flatten64(e.Y))
 				case token.EQL:
-					return c.makeExpr("(%[1]s.high === %[2]s.high && %[1]s.low === %[2]s.low)", e.X, e.Y)
+					return c.formatExpr("(%[1]s.high === %[2]s.high && %[1]s.low === %[2]s.low)", e.X, e.Y)
 				case token.LSS:
-					return c.makeExpr("(%[1]s.high < %[2]s.high || (%[1]s.high === %[2]s.high && %[1]s.low < %[2]s.low))", e.X, e.Y)
+					return c.formatExpr("(%[1]s.high < %[2]s.high || (%[1]s.high === %[2]s.high && %[1]s.low < %[2]s.low))", e.X, e.Y)
 				case token.LEQ:
-					return c.makeExpr("(%[1]s.high < %[2]s.high || (%[1]s.high === %[2]s.high && %[1]s.low <= %[2]s.low))", e.X, e.Y)
+					return c.formatExpr("(%[1]s.high < %[2]s.high || (%[1]s.high === %[2]s.high && %[1]s.low <= %[2]s.low))", e.X, e.Y)
 				case token.GTR:
-					return c.makeExpr("(%[1]s.high > %[2]s.high || (%[1]s.high === %[2]s.high && %[1]s.low > %[2]s.low))", e.X, e.Y)
+					return c.formatExpr("(%[1]s.high > %[2]s.high || (%[1]s.high === %[2]s.high && %[1]s.low > %[2]s.low))", e.X, e.Y)
 				case token.GEQ:
-					return c.makeExpr("(%[1]s.high > %[2]s.high || (%[1]s.high === %[2]s.high && %[1]s.low >= %[2]s.low))", e.X, e.Y)
+					return c.formatExpr("(%[1]s.high > %[2]s.high || (%[1]s.high === %[2]s.high && %[1]s.low >= %[2]s.low))", e.X, e.Y)
 				case token.ADD, token.SUB:
-					return c.makeExpr("new %[3]s(%[1]s.high %[4]s %[2]s.high, %[1]s.low %[4]s %[2]s.low)", e.X, e.Y, c.typeName(t), e.Op)
+					return c.formatExpr("new %[3]s(%[1]s.high %[4]s %[2]s.high, %[1]s.low %[4]s %[2]s.low)", e.X, e.Y, c.typeName(t), e.Op)
 				case token.AND, token.OR, token.XOR:
-					return c.makeExpr("new %[3]s(%[1]s.high %[4]s %[2]s.high, (%[1]s.low %[4]s %[2]s.low) >>> 0)", e.X, e.Y, c.typeName(t), e.Op)
+					return c.formatExpr("new %[3]s(%[1]s.high %[4]s %[2]s.high, (%[1]s.low %[4]s %[2]s.low) >>> 0)", e.X, e.Y, c.typeName(t), e.Op)
 				case token.AND_NOT:
-					return c.makeExpr("new %[3]s(%[1]s.high &~ %[2]s.high, (%[1]s.low &~ %[2]s.low) >>> 0)", e.X, e.Y, c.typeName(t))
+					return c.formatExpr("new %[3]s(%[1]s.high &~ %[2]s.high, (%[1]s.low &~ %[2]s.low) >>> 0)", e.X, e.Y, c.typeName(t))
 				default:
 					panic(e.Op)
 				}
@@ -247,11 +247,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			if basic.Info()&types.IsComplex != 0 {
 				switch e.Op {
 				case token.EQL:
-					return c.makeExpr("(%[1]s.real === %[2]s.real && %[1]s.imag === %[2]s.imag)", e.X, e.Y)
+					return c.formatExpr("(%[1]s.real === %[2]s.real && %[1]s.imag === %[2]s.imag)", e.X, e.Y)
 				case token.ADD, token.SUB:
-					return c.makeExpr("new %[3]s(%[1]s.real %[4]s %[2]s.real, %[1]s.imag %[4]s %[2]s.imag)", e.X, e.Y, c.typeName(t), e.Op)
+					return c.formatExpr("new %[3]s(%[1]s.real %[4]s %[2]s.real, %[1]s.imag %[4]s %[2]s.imag)", e.X, e.Y, c.typeName(t), e.Op)
 				case token.MUL:
-					return c.makeExpr("new %[3]s(%[1]s.real * %[2]s.real - %[1]s.imag * %[2]s.imag, %[1]s.real * %[2]s.imag + %[1]s.imag * %[2]s.real)", e.X, e.Y, c.typeName(t))
+					return c.formatExpr("new %[3]s(%[1]s.real * %[2]s.real - %[1]s.imag * %[2]s.imag, %[1]s.real * %[2]s.imag + %[1]s.imag * %[2]s.real)", e.X, e.Y, c.typeName(t))
 				case token.QUO:
 					return fmt.Sprintf("go$divComplex(%s, %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
 				default:
@@ -268,10 +268,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				return fixNumber(fmt.Sprintf("%s %s %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y)), basic)
 			case token.MUL:
 				if basic.Kind() == types.Int32 {
-					return c.makeExpr("((((%[1]s >>> 16 << 16) * %[2]s >> 0) + (%[1]s << 16 >>> 16) * %[2]s) >> 0)", e.X, e.Y)
+					return c.formatExpr("((((%[1]s >>> 16 << 16) * %[2]s >> 0) + (%[1]s << 16 >>> 16) * %[2]s) >> 0)", e.X, e.Y)
 				}
 				if basic.Kind() == types.Uint32 || basic.Kind() == types.Uintptr {
-					return c.makeExpr("((((%[1]s >>> 16 << 16) * %[2]s >>> 0) + (%[1]s << 16 >>> 16) * %[2]s) >>> 0)", e.X, e.Y)
+					return c.formatExpr("((((%[1]s >>> 16 << 16) * %[2]s >>> 0) + (%[1]s << 16 >>> 16) * %[2]s) >>> 0)", e.X, e.Y)
 				}
 				return fixNumber(fmt.Sprintf("%s * %s", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
 			case token.QUO:
@@ -783,9 +783,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			valueSuffix = ".go$val"
 		}
 		if _, isTuple := exprType.(*types.Tuple); isTuple {
-			return c.makeExpr("("+check+" ? [%[1]s%[2]s, true] : [%[3]s, false])", e.X, valueSuffix, c.zeroValue(c.info.Types[e.Type]))
+			return c.formatExpr("("+check+" ? [%[1]s%[2]s, true] : [%[3]s, false])", e.X, valueSuffix, c.zeroValue(c.info.Types[e.Type]))
 		}
-		return c.makeExpr("("+check+" ? %[1]s%[2]s : go$typeAssertionFailed(go$obj, %[3]s))", e.X, valueSuffix, c.typeName(t))
+		return c.formatExpr("("+check+" ? %[1]s%[2]s : go$typeAssertionFailed(go$obj, %[3]s))", e.X, valueSuffix, c.typeName(t))
 
 	case *ast.Ident:
 		if e.Name == "_" {
@@ -817,7 +817,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	}
 }
 
-func (c *PkgContext) makeExpr(format string, a ...interface{}) string {
+func (c *PkgContext) formatExpr(format string, a ...interface{}) string {
 	var assignments []string
 	for i, x := range a {
 		if expr, isExpr := x.(ast.Expr); isExpr {
@@ -895,11 +895,11 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 				case !is64Bit(basicExprType):
 					return fmt.Sprintf("new %s(0, %s)", c.typeName(desiredType), c.translateExpr(expr))
 				case !types.IsIdentical(exprType, desiredType):
-					return c.makeExpr("new %s(%[2]s.high, %[2]s.low)", c.typeName(desiredType), expr)
+					return c.formatExpr("new %s(%[2]s.high, %[2]s.low)", c.typeName(desiredType), expr)
 				}
 			case is64Bit(basicExprType):
 				if t.Info()&types.IsUnsigned == 0 && basicExprType.Info()&types.IsUnsigned == 0 {
-					return c.makeExpr("(%[1]s.low + ((%[1]s.high >> 31) * 4294967296))", expr)
+					return c.formatExpr("(%[1]s.low + ((%[1]s.high >> 31) * 4294967296))", expr)
 				}
 				return fmt.Sprintf("%s.low", c.translateExpr(expr))
 			case basicExprType.Info()&types.IsFloat != 0:
@@ -964,7 +964,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		}
 		_, desiredIsNamed := desiredType.(*types.Named)
 		if desiredIsNamed && !types.IsIdentical(exprType, desiredType) {
-			return c.makeExpr("go$subslice(new %s(%[2]s.array), %[2]s.offset, %[2]s.offset + %[2]s.length)", c.typeName(desiredType), expr)
+			return c.formatExpr("go$subslice(new %s(%[2]s.array), %[2]s.offset, %[2]s.offset + %[2]s.length)", c.typeName(desiredType), expr)
 		}
 		return c.translateExpr(expr)
 
@@ -973,7 +973,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			return fmt.Sprintf("new %s(%s)", c.typeName(exprType), c.translateExpr(expr))
 		}
 		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
-			return c.makeExpr("new %[1]s.constructor.Struct(%[1]s)", expr)
+			return c.formatExpr("new %[1]s.constructor.Struct(%[1]s)", expr)
 		}
 
 	case *types.Pointer:
@@ -990,7 +990,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			if isStruct {
 				return c.clone(c.translateExpr(expr), t.Elem())
 			}
-			return c.makeExpr("new (go$ptrType(%s))(%[2]s.go$get, %[2]s.go$set)", c.typeName(n), expr)
+			return c.formatExpr("new (go$ptrType(%s))(%[2]s.go$get, %[2]s.go$set)", c.typeName(n), expr)
 		}
 
 	case *types.Struct, *types.Array:

@@ -273,15 +273,21 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			case token.LSS, token.LEQ, token.GTR, token.GEQ:
 				return fmt.Sprintf("%s %s %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
 			case token.ADD, token.SUB:
-				return fixNumber(fmt.Sprintf("%s %s %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y)), basic)
+				if basic.Info()&types.IsInteger != 0 {
+					return fixNumber(fmt.Sprintf("%s %s %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y)), basic)
+				}
+				return fmt.Sprintf("%s %s %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
 			case token.MUL:
-				if basic.Kind() == types.Int32 {
+				switch basic.Kind() {
+				case types.Int32, types.Int:
 					return c.formatExpr("((((%1e >>> 16 << 16) * %2e >> 0) + (%1e << 16 >>> 16) * %2e) >> 0)", e.X, e.Y)
-				}
-				if basic.Kind() == types.Uint32 || basic.Kind() == types.Uintptr {
+				case types.Uint32, types.Uint, types.Uintptr:
 					return c.formatExpr("((((%1e >>> 16 << 16) * %2e >>> 0) + (%1e << 16 >>> 16) * %2e) >>> 0)", e.X, e.Y)
+				case types.Float32, types.Float64:
+					return fmt.Sprintf("%s * %s", c.translateExpr(e.X), c.translateExpr(e.Y))
+				default:
+					return fixNumber(fmt.Sprintf("%s * %s", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
 				}
-				return fixNumber(fmt.Sprintf("%s * %s", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
 			case token.QUO:
 				if basic.Info()&types.IsInteger != 0 {
 					// cut off decimals
@@ -595,7 +601,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 			case *types.TypeName: // conversion
 				argType := c.info.Types[e.Args[0]]
-				if basic, isBasic := o.Type().Underlying().(*types.Basic); isBasic && !types.IsIdentical(argType, types.Typ[types.UnsafePointer]) {
+				if basic, isBasic := o.Type().Underlying().(*types.Basic); isBasic && basic.Info()&types.IsInteger != 0 && !is64Bit(basic) && !types.IsIdentical(argType, types.Typ[types.UnsafePointer]) {
 					if basic.Kind() == types.Uint {
 						return "(" + c.translateExprToType(e.Args[0], o.Type()) + " >>> 0)"
 					}
@@ -1164,12 +1170,13 @@ func fixNumber(value string, basic *types.Basic) string {
 		return "(" + value + " << 16 >> 16)"
 	case types.Uint16:
 		return "(" + value + " << 16 >>> 16)"
-	case types.Int32:
+	case types.Int32, types.Int:
 		return "(" + value + " >> 0)"
-	case types.Uint32, types.Uintptr:
+	case types.Uint32, types.Uint, types.Uintptr:
 		return "(" + value + " >>> 0)"
+	default:
+		panic(int(basic.Kind()))
 	}
-	return "(" + value + ")"
 }
 
 type HasDeferVisitor struct {

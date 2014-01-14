@@ -58,12 +58,7 @@ These features are not implemented yet, but on the roadmap:
 - goto
 - output minification
 - source maps
-
-### Caveats
-Tradeoffs had to be made in order to avoid huge performance impacts, but they have no effect on most programs:
-
-- int and uint do not overflow, use them in 32-bit range only (all other integer types have simulated overflow)
-- float32 and complex64 have the same precision as float64 and complex128
+- float32 and complex64 currently have the same precision as float64 and complex128
 
 ### Libraries
 [go-angularjs](https://github.com/neelance/go-angularjs) - a wrapper for [AngularJS](http://angularjs.org)

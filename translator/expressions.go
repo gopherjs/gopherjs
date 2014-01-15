@@ -465,29 +465,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		switch sel.Kind() {
 		case types.FieldVal:
-			str := c.translateExpr(e.X)
-			t := sel.Recv()
-			for _, index := range sel.Index() {
-				if ptr, isPtr := t.(*types.Pointer); isPtr {
-					t = ptr.Elem()
-				}
-				s := t.Underlying().(*types.Struct)
-				if tag := getJsTag(s.Tag(index)); tag != "" {
-					for i := 0; i < s.NumFields(); i++ {
-						if isJsObject(s.Field(i).Type()) {
-							fieldType := s.Field(index).Type()
-							str += "." + fieldName(s, i) + "." + tag
-							if isJsObject(fieldType) {
-								return str
-							}
-							return fmt.Sprintf("go$internalize(%s, %s)", str, c.typeName(fieldType))
-						}
-					}
-				}
-				str += "." + fieldName(s, index)
-				t = s.Field(index).Type()
+			fields, isExt := c.translateSelection(sel)
+			if isExt {
+				return fmt.Sprintf("go$internalize(%s%s, %s)", c.translateExpr(e.X), fields, c.typeName(sel.Type()))
 			}
-			return str
+			return c.translateExpr(e.X) + fields
 		case types.MethodVal:
 			parameters := makeParametersList()
 			target := c.translateExpr(e.X)
@@ -504,7 +486,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			parameters := makeParametersList()
 			return fmt.Sprintf("(function(%s) { return %s.%s(%s); })", strings.Join(append([]string{"recv"}, parameters...), ", "), recv, sel.Obj().(*types.Func).Name(), strings.Join(parameters, ", "))
 		case types.PackageObj:
-			return fmt.Sprintf("%s.%s", c.translateExpr(e.X), e.Sel.Name)
+			return c.translateExpr(e.X) + "." + e.Sel.Name
 		}
 		panic("")
 

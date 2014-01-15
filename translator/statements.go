@@ -663,7 +663,19 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 	case *ast.Ident:
 		return c.objectName(c.info.Objects[l]) + " = " + rhs
 	case *ast.SelectorExpr:
-		return c.translateExpr(l) + " = " + rhs
+		sel := c.info.Selections[l]
+		switch sel.Kind() {
+		case types.FieldVal:
+			fields, isExt := c.translateSelection(sel)
+			if isExt {
+				return fmt.Sprintf("%s%s = go$externalize(%s, %s)", c.translateExpr(l.X), fields, rhs, c.typeName(sel.Type()))
+			}
+			return c.translateExpr(l.X) + fields + " = " + rhs
+		case types.PackageObj:
+			return c.translateExpr(l.X) + "." + l.Sel.Name + " = " + rhs
+		default:
+			panic(int(sel.Kind()))
+		}
 	case *ast.StarExpr:
 		switch u := c.info.Types[lhs].Underlying().(type) {
 		case *types.Struct:

@@ -12,7 +12,6 @@ if (typeof window !== "undefined") {
 	go$global = GLOBAL;
 }
 
-var go$obj, go$tuple;
 var go$idCounter = 1;
 var go$keys = function(m) { return m ? Object.keys(m) : []; };
 var go$min = Math.min;

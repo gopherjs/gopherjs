@@ -558,12 +558,13 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 			return c.translateAssign(lhs, c.translateExprToType(s.Rhs[0], c.info.Types[s.Lhs[0]]))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
-			out := "go$tuple = " + c.translateExpr(s.Rhs[0])
+			tupleVar := c.newVariable("_tuple")
+			out := tupleVar + " = " + c.translateExpr(s.Rhs[0])
 			tuple := c.info.Types[s.Rhs[0]].(*types.Tuple)
 			for i, lhs := range s.Lhs {
 				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
-					out += ", " + c.translateAssign(lhs, c.translateExprToType(c.newIdent(fmt.Sprintf("go$tuple[%d]", i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]]))
+					out += ", " + c.translateAssign(lhs, c.translateExprToType(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]]))
 				}
 			}
 			return out
@@ -572,11 +573,12 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 			for i, rhs := range s.Rhs {
 				parts[i] = c.translateExprToType(rhs, c.info.Types[s.Lhs[i]])
 			}
-			out := "go$tuple = [" + strings.Join(parts, ", ") + "]"
+			tupleVar := c.newVariable("_tuple")
+			out := tupleVar + " = [" + strings.Join(parts, ", ") + "]"
 			for i, lhs := range s.Lhs {
 				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
-					out += ", " + c.translateAssign(lhs, fmt.Sprintf("go$tuple[%d]", i))
+					out += ", " + c.translateAssign(lhs, fmt.Sprintf("%s[%d]", tupleVar, i))
 				}
 			}
 			return out
@@ -661,15 +663,6 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 	case *ast.Ident:
 		return c.objectName(c.info.Objects[l]) + " = " + rhs
 	case *ast.SelectorExpr:
-		if structLhs, isStruct := c.info.Types[lhs].Underlying().(*types.Struct); isStruct {
-			out := "go$obj = " + rhs
-			s := c.translateExpr(l)
-			for i := 0; i < structLhs.NumFields(); i++ {
-				name := fieldName(structLhs, i)
-				out += fmt.Sprintf(", %s.%s = go$obj.%s", s, name, name)
-			}
-			return out
-		}
 		return c.translateExpr(l) + " = " + rhs
 	case *ast.StarExpr:
 		switch u := c.info.Types[lhs].Underlying().(type) {

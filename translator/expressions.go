@@ -412,9 +412,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		case *types.Map:
 			key := c.makeKey(e.Index, t.Key())
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
-				return fmt.Sprintf(`(go$obj = %s[%s], go$obj !== undefined ? [go$obj.v, true] : [%s, false])`, c.translateExpr(e.X), key, c.zeroValue(t.Elem()))
+				return fmt.Sprintf(`(%[1]s = %[2]s[%[3]s], %[1]s !== undefined ? [%[1]s.v, true] : [%[4]s, false])`, c.newVariable("_entry"), c.translateExpr(e.X), key, c.zeroValue(t.Elem()))
 			}
-			return fmt.Sprintf(`(go$obj = %s[%s], go$obj !== undefined ? go$obj.v : %s)`, c.translateExpr(e.X), key, c.zeroValue(t.Elem()))
+			return fmt.Sprintf(`(%[1]s = %[2]s[%[3]s], %[1]s !== undefined ? %[1]s.v : %[4]s)`, c.newVariable("_entry"), c.translateExpr(e.X), key, c.zeroValue(t.Elem()))
 		case *types.Basic:
 			return fmt.Sprintf("%s.charCodeAt(%s)", c.translateExpr(e.X), c.flatten64(e.Index))
 		default:
@@ -773,11 +773,12 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 		if len(e.Args) == 1 {
 			if tuple, isTuple := c.info.Types[e.Args[0]].(*types.Tuple); isTuple {
+				tupleVar := c.newVariable("_tuple")
 				args := make([]ast.Expr, tuple.Len())
 				for i := range args {
-					args[i] = c.newIdent(fmt.Sprintf("go$tuple[%d]", i), tuple.At(i).Type())
+					args[i] = c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type())
 				}
-				return fmt.Sprintf("(go$tuple = %s, %s(%s))", c.translateExpr(e.Args[0]), fun, c.translateArgs(sig, args, false))
+				return fmt.Sprintf("(%s = %s, %s(%s))", tupleVar, c.translateExpr(e.Args[0]), fun, c.translateArgs(sig, args, false))
 			}
 		}
 		return fmt.Sprintf("%s(%s)", fun, c.translateArgs(sig, e.Args, e.Ellipsis.IsValid()))
@@ -809,7 +810,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		if _, isTuple := exprType.(*types.Tuple); isTuple {
 			return c.formatExpr("("+check+" ? [%1e%2s, true] : [%3s, false])", e.X, valueSuffix, c.zeroValue(c.info.Types[e.Type]))
 		}
-		return c.formatExpr("("+check+" ? %1e%2s : go$typeAssertionFailed(go$obj, %3s))", e.X, valueSuffix, c.typeName(t))
+		return c.formatExpr("("+check+" ? %1e%2s : go$typeAssertionFailed(%1e, %3s))", e.X, valueSuffix, c.typeName(t))
 
 	case *ast.Ident:
 		if e.Name == "_" {

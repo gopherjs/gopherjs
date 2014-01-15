@@ -59,7 +59,20 @@ func init() {
 			if (i === null) {
 				return null;
 			}
+			if (i.constructor.kind === undefined) { // js.Object
+				return Go$String.reflectType();
+			}
 			return i.constructor.reflectType();
+		};
+		ValueOf = function(i) {
+			if (i === null) {
+				return new Value.Ptr();
+			}
+			if (i.constructor.kind === undefined) { // js.Object
+				return new Value.Ptr(Go$String.reflectType(), String(i), go$pkg.String << flagKindShift);
+			}
+			var typ = i.constructor.reflectType();
+			return new Value.Ptr(typ, i.go$val, typ.Kind() << flagKindShift);
 		};
 		arrayOf = function(n, t) {
 			return go$arrayType(t.jsType, n).reflectType();
@@ -81,13 +94,6 @@ func init() {
 		};
 		SliceOf = function(t) {
 			return go$sliceType(t.jsType).reflectType();
-		};
-		ValueOf = function(i) {
-			if (i === null) {
-				return new Value.Ptr();
-			}
-			var typ = i.constructor.reflectType();
-			return new Value.Ptr(typ, i.go$val, typ.Kind() << flagKindShift);
 		};
 		Zero = function(typ) {
 			var val;
@@ -547,6 +553,9 @@ func init() {
 				var val = this.iword();
 				if (val === null) {
 					return new Value.Ptr();
+				}
+				if (val.constructor.kind === undefined) { // js.Object
+					return new Value.Ptr(Go$String.reflectType(), String(val), go$pkg.String << flagKindShift);
 				}
 				var typ = val.constructor.reflectType();
 				var fl = this.flag & flagRO;

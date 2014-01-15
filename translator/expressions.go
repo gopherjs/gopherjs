@@ -472,6 +472,18 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					t = ptr.Elem()
 				}
 				s := t.Underlying().(*types.Struct)
+				if tag := getJsTag(s.Tag(index)); tag != "" {
+					for i := 0; i < s.NumFields(); i++ {
+						if isJsObject(s.Field(i).Type()) {
+							fieldType := s.Field(index).Type()
+							str += "." + fieldName(s, i) + "." + tag
+							if isJsObject(fieldType) {
+								return str
+							}
+							return fmt.Sprintf("go$internalize(%s, %s)", str, c.typeName(fieldType))
+						}
+					}
+				}
 				str += "." + fieldName(s, index)
 				t = s.Field(index).Type()
 			}
@@ -652,7 +664,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 				if o.Pkg() != nil && o.Pkg().Path() == "github.com/neelance/gopherjs/js" {
 					externalize := func(e ast.Expr) string {
-						if named, isNamed := c.info.Types[e].(*types.Named); isNamed && named.Obj().Pkg().Path() == "github.com/neelance/gopherjs/js" && named.Obj().Name() == "Object" {
+						if isJsObject(c.info.Types[e]) {
 							return c.translateExpr(e)
 						}
 						switch t := c.info.Types[e].Underlying().(type) {

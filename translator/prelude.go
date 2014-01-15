@@ -242,6 +242,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 	typ.kind = kind;
 	typ.string = string;
 	typ.typeName = name;
+	typ.pkgPath = pkgPath;
 	var rt = null;
 	typ.reflectType = function() {
 		if (rt === null) {
@@ -910,6 +911,9 @@ var go$internalize = function(v, t) {
 		}
 		return go$mapArray(v, function(e) { return go$internalize(e, t.elem); });
 	case "Interface":
+		if (t.pkgPath === "github.com/neelance/gopherjs/js" && t.typeName === "Object") {
+			return v;
+		}
 		var vt = null;
 		switch (v.constructor) {
 		case Array:

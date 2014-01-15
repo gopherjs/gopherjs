@@ -861,6 +861,14 @@ var go$externalize = function(v, t) {
 			return v; // js.Object
 		}
 		return go$externalize(v.go$val, v.constructor);
+	case "Map":
+		var m = {};
+		var keys = go$keys(v), i;
+		for (i = 0; i < keys.length; i += 1) {
+			var entry = v[keys[i]];
+			m[go$externalize(entry.k, t.key)] = go$externalize(entry.v, t.elem);
+		}
+		return m;
 	case "Slice":
 		return go$mapArray(go$sliceToArray(v), function(e) { return go$externalize(e, t.elem); });
 	case "String":
@@ -870,14 +878,6 @@ var go$externalize = function(v, t) {
 			s += String.fromCharCode(r[0]);
 		}
 		return s;
-	case "Map":
-		var m = {};
-		var keys = go$keys(v), i;
-		for (i = 0; i < keys.length; i += 1) {
-			var entry = v[keys[i]];
-			m[go$externalize(entry.k, t.key)] = go$externalize(entry.v, t.elem);
-		}
-		return m;
 	default:
 		return v;
 	}
@@ -921,7 +921,7 @@ var go$internalize = function(v, t) {
 		var vt = null;
 		switch (v.constructor) {
 		case Array:
-			return new (go$sliceType(go$interfaceType([])))(v);
+			return go$internalize(v, go$sliceType(go$interfaceType([])));
 		case Number:
 			return new Go$Float64(parseFloat(v));
 		case Object:
@@ -940,6 +940,8 @@ var go$internalize = function(v, t) {
 			m[key.go$key ? key.go$key() : key] = { k: key, v: go$internalize(v[keys[i]], t.elem) };
 		}
 		return m;
+	case "Slice":
+		return new t(go$mapArray(v, function(e) { return go$internalize(e, t.elem); }));
 	case "String":
 		v = String(v);
 		var s = "", i;

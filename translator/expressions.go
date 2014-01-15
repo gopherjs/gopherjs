@@ -466,10 +466,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		switch sel.Kind() {
 		case types.FieldVal:
 			fields, isExt := c.translateSelection(sel)
+			str := c.translateExpr(e.X) + fields
 			if isExt {
-				return fmt.Sprintf("go$internalize(%s%s, %s)", c.translateExpr(e.X), fields, c.typeName(sel.Type()))
+				str = c.internalize(str, sel.Type())
 			}
-			return c.translateExpr(e.X) + fields
+			return str
 		case types.MethodVal:
 			parameters := makeParametersList()
 			target := c.translateExpr(e.X)
@@ -645,25 +646,13 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 
 				if o.Pkg() != nil && o.Pkg().Path() == "github.com/neelance/gopherjs/js" {
-					externalize := func(e ast.Expr) string {
-						if isJsObject(c.info.Types[e]) {
-							return c.translateExpr(e)
-						}
-						switch t := c.info.Types[e].Underlying().(type) {
-						case *types.Basic:
-							if t.Info()&types.IsNumeric != 0 && !is64Bit(t) && t.Info()&types.IsComplex == 0 {
-								return c.translateExpr(e)
-							}
-							if t.Kind() == types.UntypedNil {
-								return "null"
-							}
-						}
-						return fmt.Sprintf("go$externalize(%s, %s)", c.translateExpr(e), c.typeName(c.info.Types[e]))
+					externalizeExpr := func(e ast.Expr) string {
+						return c.externalize(c.translateExpr(e), c.info.Types[e])
 					}
 					externalizeArgs := func(args []ast.Expr) string {
 						s := make([]string, len(args))
 						for i, arg := range args {
-							s[i] = externalize(arg)
+							s[i] = externalizeExpr(arg)
 						}
 						return strings.Join(s, ", ")
 					}
@@ -676,9 +665,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						return fmt.Sprintf("%s[go$externalize(%s, Go$String)]", fun, c.translateExpr(e.Args[0]))
 					case "Set":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
-							return fmt.Sprintf("%s.%s = %s", fun, id, externalize(e.Args[1]))
+							return fmt.Sprintf("%s.%s = %s", fun, id, externalizeExpr(e.Args[1]))
 						}
-						return fmt.Sprintf("%s[go$externalize(%s, Go$String)] = %s", fun, c.translateExpr(e.Args[0]), externalize(e.Args[1]))
+						return fmt.Sprintf("%s[go$externalize(%s, Go$String)] = %s", fun, c.translateExpr(e.Args[0]), externalizeExpr(e.Args[1]))
 					case "Length":
 						return fmt.Sprintf("go$parseInt(%s.length)", fun)
 					case "Index":
@@ -687,35 +676,35 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
 							if e.Ellipsis.IsValid() {
 								objVar := c.newVariable("obj")
-								return fmt.Sprintf("(%s = %s, %s.%s.apply(%s, %s))", objVar, fun, objVar, id, objVar, externalize(e.Args[1]))
+								return fmt.Sprintf("(%s = %s, %s.%s.apply(%s, %s))", objVar, fun, objVar, id, objVar, externalizeExpr(e.Args[1]))
 							}
 							return fmt.Sprintf("%s.%s(%s)", fun, id, externalizeArgs(e.Args[1:]))
 						}
 						if e.Ellipsis.IsValid() {
 							objVar := c.newVariable("obj")
-							return fmt.Sprintf("(%s = %s, %s[go$externalize(%s, Go$String)].apply(%s, %s))", objVar, fun, objVar, c.translateExpr(e.Args[0]), objVar, externalize(e.Args[1]))
+							return fmt.Sprintf("(%s = %s, %s[go$externalize(%s, Go$String)].apply(%s, %s))", objVar, fun, objVar, c.translateExpr(e.Args[0]), objVar, externalizeExpr(e.Args[1]))
 						}
 						return fmt.Sprintf("%s[go$externalize(%s, Go$String)](%s)", fun, c.translateExpr(e.Args[0]), externalizeArgs(e.Args[1:]))
 					case "Invoke":
 						if e.Ellipsis.IsValid() {
-							return fmt.Sprintf("%s.apply(undefined, %s)", fun, externalize(e.Args[0]))
+							return fmt.Sprintf("%s.apply(undefined, %s)", fun, externalizeExpr(e.Args[0]))
 						}
 						return fmt.Sprintf("%s(%s)", fun, externalizeArgs(e.Args))
 					case "New":
 						if e.Ellipsis.IsValid() {
-							return fmt.Sprintf("new (go$global.Function.prototype.bind.apply(%s, [undefined].concat(%s)))", fun, externalize(e.Args[0]))
+							return fmt.Sprintf("new (go$global.Function.prototype.bind.apply(%s, [undefined].concat(%s)))", fun, externalizeExpr(e.Args[0]))
 						}
 						return fmt.Sprintf("new %s(%s)", fun, externalizeArgs(e.Args))
 					case "Bool":
-						return fmt.Sprintf("!!(%s)", fun)
+						return c.internalize(fun, types.Typ[types.Bool])
 					case "String":
-						return fmt.Sprintf("go$internalize(%s, Go$String)", fun)
+						return c.internalize(fun, types.Typ[types.String])
 					case "Int":
-						return fmt.Sprintf("go$parseInt(%s)", fun)
+						return c.internalize(fun, types.Typ[types.Int])
 					case "Float":
-						return fmt.Sprintf("go$parseFloat(%s)", fun)
+						return c.internalize(fun, types.Typ[types.Float64])
 					case "Interface":
-						return fmt.Sprintf("go$internalize(%s, go$interfaceType([]))", fun)
+						return c.internalize(fun, types.NewInterface(nil, nil))
 					case "IsUndefined":
 						return fmt.Sprintf("(%s === undefined)", fun)
 					case "IsNull":

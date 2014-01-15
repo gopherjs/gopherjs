@@ -668,7 +668,7 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 		case types.FieldVal:
 			fields, isExt := c.translateSelection(sel)
 			if isExt {
-				return fmt.Sprintf("%s%s = go$externalize(%s, %s)", c.translateExpr(l.X), fields, rhs, c.typeName(sel.Type()))
+				rhs = c.externalize(rhs, sel.Type())
 			}
 			return c.translateExpr(l.X) + fields + " = " + rhs
 		case types.PackageObj:

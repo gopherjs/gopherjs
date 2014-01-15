@@ -656,11 +656,7 @@ func (c *PkgContext) translateSelection(sel *types.Selection) (string, bool) {
 		if tag := getJsTag(s.Tag(index)); tag != "" {
 			for i := 0; i < s.NumFields(); i++ {
 				if isJsObject(s.Field(i).Type()) {
-					fieldType := s.Field(index).Type()
 					fields += "." + fieldName(s, i) + "." + tag
-					if isJsObject(fieldType) {
-						return fields, false
-					}
 					return fields, true
 				}
 			}
@@ -826,6 +822,40 @@ func (c *PkgContext) typeArray(t *types.Tuple) string {
 		s[i] = c.typeName(t.At(i).Type())
 	}
 	return "[" + strings.Join(s, ", ") + "]"
+}
+
+func (c *PkgContext) externalize(s string, t types.Type) string {
+	if isJsObject(t) {
+		return s
+	}
+	switch u := t.Underlying().(type) {
+	case *types.Basic:
+		if u.Info()&types.IsNumeric != 0 && !is64Bit(u) && u.Info()&types.IsComplex == 0 {
+			return s
+		}
+		if u.Kind() == types.UntypedNil {
+			return "null"
+		}
+	}
+	return fmt.Sprintf("go$externalize(%s, %s)", s, c.typeName(t))
+}
+
+func (c *PkgContext) internalize(s string, t types.Type) string {
+	if isJsObject(t) {
+		return s
+	}
+	switch u := t.Underlying().(type) {
+	case *types.Basic:
+		switch {
+		case u.Info()&types.IsBoolean != 0:
+			return fmt.Sprintf("!!(%s)", s)
+		case u.Info()&types.IsInteger != 0:
+			return fixNumber(fmt.Sprintf("go$parseInt(%s)", s), u)
+		case u.Info()&types.IsFloat != 0:
+			return fmt.Sprintf("go$parseFloat(%s)", s)
+		}
+	}
+	return fmt.Sprintf("go$internalize(%s, %s)", s, c.typeName(t))
 }
 
 func fieldName(t *types.Struct, i int) string {

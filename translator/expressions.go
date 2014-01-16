@@ -962,6 +962,9 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			case is64Bit(t):
 				switch {
 				case !is64Bit(basicExprType):
+					if basicExprType.Kind() == types.Uintptr { // this might be an Object returned from reflect.Value.Pointer()
+						return c.formatExpr("new %1s(0, %2e.constructor === Number ? %2e : 1)", c.typeName(desiredType), expr)
+					}
 					return fmt.Sprintf("new %s(0, %s)", c.typeName(desiredType), c.translateExpr(expr))
 				case !types.IsIdentical(exprType, desiredType):
 					return c.formatExpr("new %1s(%2h, %2l)", c.typeName(desiredType), expr)

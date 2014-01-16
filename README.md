@@ -61,6 +61,7 @@ These features are not implemented yet, but on the roadmap:
 - float32 and complex64 currently have the same precision as float64 and complex128
 
 ### Libraries
-[go-angularjs](https://github.com/neelance/go-angularjs) - a wrapper for [AngularJS](http://angularjs.org)
+[github.com/neelance/go-angularjs](https://github.com/neelance/go-angularjs) - wrapper for [AngularJS](http://angularjs.org)
+[honnef.co/go/js/console](http://honnef.co/go/js/console) - wrapper for the JS console
 
 [![Analytics](https://ga-beacon.appspot.com/UA-46799660-1/gopherjs/README.md)](https://github.com/igrigorik/ga-beacon)

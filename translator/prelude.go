@@ -1133,6 +1133,7 @@ var go$interfaceIsEqual = function(a, b) {
 	case "Float32":
 		return go$float32bits(a.go$val) === go$float32bits(b.go$val);
 	case "Complex64":
+		return go$float32bits(a.go$val.real) === go$float32bits(b.go$val.real) && go$float32bits(a.go$val.imag) === go$float32bits(b.go$val.imag);
 	case "Complex128":
 		return a.go$val.real === b.go$val.real && a.go$val.imag === b.go$val.imag;
 	case "Int64":

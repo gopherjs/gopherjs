@@ -59,7 +59,7 @@
 | errors          | yes                   |                                   |
 | expvar          | not yet               |                                   |
 | flag            | not yet               |                                   |
-| fmt             | not yet               |                                   |
+| fmt             | yes                   |                                   |
 | go              |                       |                                   |
 | -- ast          | not yet               |                                   |
 | -- build        | not yet               |                                   |

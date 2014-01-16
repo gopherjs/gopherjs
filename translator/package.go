@@ -327,6 +327,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 
 func (c *PkgContext) translateType(o *types.TypeName) {
 	typeName := c.objectName(o)
+	size := int64(0)
 	switch t := o.Type().Underlying().(type) {
 	case *types.Struct:
 		params := make([]string, t.NumFields())
@@ -369,9 +370,13 @@ func (c *PkgContext) translateType(o *types.TypeName) {
 				}
 			}
 		}
-	default:
-		c.Printf(`%s = go$newType(0, "%s", "%s.%s", "%s", "%s", null);`, typeName, typeKind(t), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path())
+		return
+	case *types.Basic:
+		if t.Info()&types.IsInteger != 0 {
+			size = sizes32.Sizeof(t)
+		}
 	}
+	c.Printf(`%s = go$newType(%d, "%s", "%s.%s", "%s", "%s", null);`, typeName, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path())
 }
 
 func (c *PkgContext) initType(obj types.Object) {

@@ -710,6 +710,50 @@ func init() {
 			}
 			this.val = x.val;
 		};
+		Value.Ptr.prototype.SetInt = function(x) {
+			this.mustBeAssignable();
+			var k = this.kind();
+			switch (k) {
+			case go$pkg.Int:
+			case go$pkg.Int8:
+			case go$pkg.Int16:
+			case go$pkg.Int32:
+				this.val.go$set(go$flatten64(x));
+				return;
+			case go$pkg.Int64:
+				this.val.go$set(new this.typ.jsType(x.high, x.low));
+				return;
+			}
+			throw go$panic(new ValueError.Ptr("reflect.Value.SetInt", k));
+		}
+		Value.Ptr.prototype.SetUint = function(x) {
+			this.mustBeAssignable();
+			var k = this.kind();
+			switch (k) {
+			case go$pkg.Uint:
+			case go$pkg.Uint8:
+			case go$pkg.Uint16:
+			case go$pkg.Uint32:
+			case go$pkg.Uintptr:
+				this.val.go$set(x.low);
+				return;
+			case go$pkg.Uint64:
+				this.val.go$set(new this.typ.jsType(x.high, x.low));
+				return;
+			}
+			throw go$panic(new ValueError.Ptr("reflect.Value.SetUint", k));
+		}
+		Value.Ptr.prototype.SetComplex = function(x) {
+			this.mustBeAssignable();
+			var k = this.kind();
+			switch (k) {
+			case go$pkg.Complex64:
+			case go$pkg.Complex128:
+				this.val.go$set(new this.typ.jsType(x.real, x.imag));
+				return;
+			}
+			throw go$panic(new ValueError.Ptr("reflect.Value.SetComplex", k));
+		}
 		Value.Ptr.prototype.SetCap = function(n) {
 			this.mustBeAssignable();
 			this.mustBe(go$pkg.Slice);

@@ -846,7 +846,19 @@ var go$externalize = function(v, t) {
 	case "Uint64":
 		return go$flatten64(v);
 	case "Array":
-		return go$mapArray(v, function(e) { return go$externalize(e, t.elem); });
+		switch (t.elem.kind) {
+		case "Int64":
+		case "Uint64":
+		case "Array":
+		case "Func":
+		case "Interface":
+		case "Map":
+		case "Slice":
+		case "String":
+			return go$mapArray(v, function(e) { return go$externalize(e, t.elem); });
+		default:
+			return v;
+		}
 	case "Func":
 		if (v === go$throwNilPointerError) {
 			return null;
@@ -869,7 +881,19 @@ var go$externalize = function(v, t) {
 		}
 		return m;
 	case "Slice":
-		return go$mapArray(go$sliceToArray(v), function(e) { return go$externalize(e, t.elem); });
+		switch (t.elem.kind) {
+		case "Int64":
+		case "Uint64":
+		case "Array":
+		case "Func":
+		case "Interface":
+		case "Map":
+		case "Slice":
+		case "String":
+			return go$mapArray(go$sliceToArray(v), function(e) { return go$externalize(e, t.elem); });
+		default:
+			return go$sliceToArray(v);
+		}
 	case "String":
 		var s = "", r, i, j = 0;
 		for (i = 0; i < v.length; i += r[1], j += 1) {

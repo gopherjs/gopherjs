@@ -49,7 +49,7 @@
 | -- asn1         | yes                   |                                   |
 | -- base32       | yes                   |                                   |
 | -- base64       | yes                   |                                   |
-| -- binary       | not yet               |                                   |
+| -- binary       | yes                   |                                   |
 | -- csv          | yes                   |                                   |
 | -- gob          | no                    | uses "unsafe" heavily             |
 | -- hex          | yes                   |                                   |

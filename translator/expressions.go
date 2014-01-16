@@ -647,7 +647,11 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 				if o.Pkg() != nil && o.Pkg().Path() == "github.com/neelance/gopherjs/js" {
 					externalizeExpr := func(e ast.Expr) string {
-						return c.externalize(c.translateExpr(e), c.info.Types[e])
+						t := c.info.Types[e]
+						if types.IsIdentical(t, types.Typ[types.UntypedNil]) {
+							return "null"
+						}
+						return c.externalize(c.translateExpr(e), t)
 					}
 					externalizeArgs := func(args []ast.Expr) string {
 						s := make([]string, len(args))

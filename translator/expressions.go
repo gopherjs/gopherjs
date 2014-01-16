@@ -978,6 +978,8 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 			}
 		case t.Info()&types.IsFloat != 0:
 			return c.flatten64(expr)
+		case t.Info()&types.IsComplex != 0 && !types.IsIdentical(exprType, desiredType):
+			return c.formatExpr("new %1s(%2r, %2i)", c.typeName(desiredType), expr)
 		case t.Info()&types.IsString != 0:
 			value := c.translateExpr(expr)
 			switch et := exprType.Underlying().(type) {

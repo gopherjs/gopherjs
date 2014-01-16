@@ -51,7 +51,7 @@
 | -- base64       | yes                   |                                   |
 | -- binary       | not yet               |                                   |
 | -- csv          | yes                   |                                   |
-| -- gob          | not yet               |                                   |
+| -- gob          | no                    | uses "unsafe" heavily             |
 | -- hex          | yes                   |                                   |
 | -- json         | yes                   |                                   |
 | -- pem          | yes                   |                                   |

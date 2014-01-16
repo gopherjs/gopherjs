@@ -81,8 +81,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ = function(v) { this.go$val = v; };
 		typ.Ptr = go$newType(4, "Ptr", "*" + string, "", "", function(array) {
 			this.go$get = function() { return array; };
-			this.go$set = function(v) { go$copyArray(array, v); };
-			this.go$val = this;
+			this.go$val = array;
 		});
 		typ.init = function(elem, len) {
 			typ.elem = elem;

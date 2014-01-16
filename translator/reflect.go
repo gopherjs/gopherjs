@@ -29,6 +29,8 @@ func init() {
 			case go$pkg.String:
 			case go$pkg.Struct:
 				return true;
+			case go$pkg.Ptr:
+				return typ.Elem().Kind() === go$pkg.Array;
 			}
 			return false;
 		};
@@ -154,7 +156,7 @@ func init() {
 			case go$pkg.Struct:
 				return new typ.jsType.Ptr();
 			case go$pkg.Array:
-				return new (typ.ptrTo()).jsType(Zero(typ).val);
+				return Zero(typ).val;
 			default:
 				return go$newDataPointer(Zero(typ).val, typ.ptrTo().jsType);
 			}
@@ -437,7 +439,7 @@ func init() {
 		};
 
 		Value.Ptr.prototype.iword = function() {
-			if ((this.flag & flagIndir) !== 0 && this.typ.Kind() !== go$pkg.Struct) {
+			if ((this.flag & flagIndir) !== 0 && this.typ.Kind() !== go$pkg.Array && this.typ.Kind() !== go$pkg.Struct) {
 				return this.val.go$get();
 			}
 			return this.val;
@@ -588,7 +590,7 @@ func init() {
 				fl |= flagRO;
 			}
 			fl |= typ.Kind() << flagKindShift;
-			if ((this.flag & flagIndir) !== 0 && typ.Kind() !== go$pkg.Struct) {
+			if ((this.flag & flagIndir) !== 0 && typ.Kind() !== go$pkg.Array && typ.Kind() !== go$pkg.Struct) {
 				var struct = this.val;
 				return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl);
 			}
@@ -605,8 +607,8 @@ func init() {
 				var typ = tt.elem;
 				var fl = this.flag & (flagRO | flagIndir | flagAddr);
 				fl |= typ.Kind() << flagKindShift;
-				if ((this.flag & flagIndir) !== 0 && typ.Kind() !== go$pkg.Struct) {
-					var array = this.val.go$get();
+				if ((this.flag & flagIndir) !== 0 && typ.Kind() !== go$pkg.Array && typ.Kind() !== go$pkg.Struct) {
+					var array = this.val;
 					return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
 				}
 				return new Value.Ptr(typ, this.iword()[i], fl);
@@ -692,6 +694,9 @@ func init() {
 			x.mustBeExported();
 			if ((this.flag & flagIndir) !== 0) {
 				switch (this.typ.Kind()) {
+				case go$pkg.Array:
+					go$copyArray(this.val, x.val);
+					return;
 				case go$pkg.Interface:
 					this.val.go$set(valueInterface(x, false));
 					return;

@@ -676,6 +676,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						return fmt.Sprintf("go$parseInt(%s.length)", fun)
 					case "Index":
 						return fmt.Sprintf("%s[%s]", fun, c.translateExprToType(e.Args[0], types.Typ[types.Int]))
+					case "SetIndex":
+						return fmt.Sprintf("%s[%s] = %s", fun, c.translateExprToType(e.Args[0], types.Typ[types.Int]), externalizeExpr(e.Args[1]))
 					case "Call":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
 							if e.Ellipsis.IsValid() {

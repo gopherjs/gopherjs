@@ -12,8 +12,11 @@ type Object interface {
 	// Get returns the object's "length" property, converted to int.
 	Length() int
 
-	// Index returns the the i'th element of an array.
+	// Index returns the i'th element of an array.
 	Index(i int) Object
+
+	// SetIndex sets the i'th element of an array.
+	SetIndex(i int, value interface{})
 
 	// Call calls the object's method with the given name.
 	Call(name string, args ...interface{}) Object

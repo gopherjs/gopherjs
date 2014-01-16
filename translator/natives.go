@@ -45,6 +45,10 @@ var pkgNatives = map[string]string{
 		};
 	`,
 
+	"encoding/gob": `
+		NewDecoder = NewEncoder = function() { go$notSupported("encoding/gob"); };
+	`,
+
 	"encoding/json": `
 		var encodeStates = [];
 		newEncodeState = function() {

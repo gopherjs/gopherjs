@@ -135,8 +135,8 @@
 | text            |                       |                                   |
 | -- scanner      | yes                   |                                   |
 | -- tabwriter    | yes                   |                                   |
-| -- template     | not yet               |                                   |
-| -- -- parse     | not yet               |                                   |
+| -- template     | yes                   |                                   |
+| -- -- parse     | yes                   |                                   |
 | time            | partially             | AfterFunc only                    |
 | unicode         | yes                   |                                   |
 | -- utf16        | yes                   |                                   |

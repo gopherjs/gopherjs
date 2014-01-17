@@ -74,11 +74,14 @@ func Write(pkg *types.Package, out io.Writer, sizes types.Sizes) {
 				}
 				d, _ := exact.Int64Val(o.Val())
 				if basic.Kind() == types.UntypedRune {
-					if d < 0 || d > unicode.MaxRune {
+					switch {
+					case d < 0 || d > unicode.MaxRune:
 						val = fmt.Sprintf("('\\x00' + %d)", d)
-						break
+					case d > 0xffff:
+						val = fmt.Sprintf("'\\U%08x'", d)
+					default:
+						val = fmt.Sprintf("'\\u%04x'", d)
 					}
-					val = fmt.Sprintf("%q", rune(d))
 					break
 				}
 				val = fmt.Sprintf("%#x", d)

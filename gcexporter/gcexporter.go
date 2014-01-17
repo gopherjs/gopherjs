@@ -7,6 +7,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 type exporter struct {
@@ -68,11 +69,19 @@ func Write(pkg *types.Package, out io.Writer, sizes types.Sizes) {
 			case basic.Info()&types.IsInteger != 0:
 				if basic.Kind() == types.Uint64 {
 					d, _ := exact.Uint64Val(o.Val())
-					val = strconv.FormatUint(d, 10)
+					val = fmt.Sprintf("%#x", d)
 					break
 				}
 				d, _ := exact.Int64Val(o.Val())
-				val = strconv.FormatInt(d, 10)
+				if basic.Kind() == types.UntypedRune {
+					if d < 0 || d > unicode.MaxRune {
+						val = fmt.Sprintf("('\\x00' + %d)", d)
+						break
+					}
+					val = fmt.Sprintf("%q", rune(d))
+					break
+				}
+				val = fmt.Sprintf("%#x", d)
 			case basic.Info()&types.IsFloat != 0:
 				f, _ := exact.Float64Val(o.Val())
 				val = strconv.FormatFloat(f, 'b', -1, 64)

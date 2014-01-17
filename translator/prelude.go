@@ -941,10 +941,11 @@ var go$internalize = function(v, t) {
 		if (t.pkgPath === "github.com/neelance/gopherjs/js" && t.typeName === "Object") {
 			return v;
 		}
-		var vt = null;
 		switch (v.constructor) {
 		case Array:
 			return go$internalize(v, go$sliceType(go$interfaceType([])));
+		case Boolean:
+			return new Go$Bool(!!v);
 		case Number:
 			return new Go$Float64(parseFloat(v));
 		case Object:

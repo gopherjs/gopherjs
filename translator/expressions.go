@@ -742,7 +742,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					switch o.Name() {
 					case "Global":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
-							return fmt.Sprintf("go$global.%s", id)
+							if _, used := c.allVarNames[id]; used {
+								return fmt.Sprintf("go$global.%s", id)
+							}
+							return id
 						}
 						return fmt.Sprintf("go$global[go$externalize(%s, Go$String)]", c.translateExpr(e.Args[0]))
 					default:

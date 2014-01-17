@@ -8,10 +8,10 @@
 | bytes           | yes                   |                                   |
 | compress        |                       |                                   |
 | -- bzip2        | yes                   |                                   |
-| -- flate        | maybe                 | tests need goroutines             |
+| -- flate        | yes                   |                                   |
 | -- gzip         | yes                   |                                   |
-| -- lzw          | maybe                 | tests need goroutines             |
-| -- zlib         | maybe                 | tests need goroutines             |
+| -- lzw          | yes                   |                                   |
+| -- zlib         | yes                   |                                   |
 | container       |                       |                                   |
 | -- heap         | yes                   |                                   |
 | -- list         | yes                   |                                   |
@@ -82,7 +82,7 @@
 | -- draw         | yes                   |                                   |
 | -- gif          | yes                   |                                   |
 | -- jpeg         | yes                   |                                   |
-| -- png          | maybe                 | tests need goroutines             |
+| -- png          | yes                   |                                   |
 | index           |                       |                                   |
 | -- suffixarray  | not yet               |                                   |
 | io              | yes                   |                                   |

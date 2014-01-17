@@ -36,14 +36,14 @@
 | -- x509         | no                    | needs C code                      |
 | -- -- pkix      | no                    | needs C code                      |
 | database        |                       |                                   |
-| -- sql          | not yet               |                                   |
-| -- -- driver    | not yet               |                                   |
+| -- sql          | no                    | uses goroutines                   |
+| -- -- driver    | yes                   |                                   |
 | debug           |                       |                                   |
 | -- dwarf        | not yet               |                                   |
-| -- elf          | not yet               |                                   |
+| -- elf          | no                    |                                   |
 | -- gosym        | yes                   |                                   |
 | -- macho        | not yet               |                                   |
-| -- pe           | not yet               |                                   |
+| -- pe           | yes                   |                                   |
 | encoding        | (no tests)            |                                   |
 | -- ascii85      | yes                   |                                   |
 | -- asn1         | yes                   |                                   |
@@ -57,7 +57,7 @@
 | -- pem          | yes                   |                                   |
 | -- xml          | yes                   |                                   |
 | errors          | yes                   |                                   |
-| expvar          | not yet               |                                   |
+| expvar          | no                    |                                   |
 | flag            | not yet               |                                   |
 | fmt             | yes                   |                                   |
 | go              |                       |                                   |
@@ -66,35 +66,35 @@
 | -- doc          | not yet               |                                   |
 | -- format       | yes                   | needs go/scanner/scanner.go patch |
 | -- parser       | not yet               |                                   |
-| -- printer      | not yet               |                                   |
+| -- printer      | yes                   |                                   |
 | -- scanner      | not yet               |                                   |
-| -- token        | not yet               |                                   |
+| -- token        | yes                   |                                   |
 | hash            | (no tests)            |                                   |
 | -- adler32      | yes                   |                                   |
 | -- crc32        | yes                   |                                   |
 | -- crc64        | yes                   |                                   |
 | -- fnv          | yes                   |                                   |
 | html            | yes                   |                                   |
-| -- template     | not yet               |                                   |
+| -- template     | yes                   |                                   |
 | image           | yes                   |                                   |
 | -- color        | yes                   |                                   |
-| -- -- palette   | not yet               |                                   |
+| -- -- palette   | (no tests)            |                                   |
 | -- draw         | yes                   |                                   |
 | -- gif          | yes                   |                                   |
 | -- jpeg         | yes                   |                                   |
 | -- png          | yes                   |                                   |
 | index           |                       |                                   |
-| -- suffixarray  | not yet               |                                   |
+| -- suffixarray  | yes                   |                                   |
 | io              | yes                   |                                   |
 | -- ioutil       | yes                   |                                   |
 | log             | not yet               |                                   |
-| -- syslog       | not yet               |                                   |
+| -- syslog       | no                    |                                   |
 | math            | yes                   |                                   |
 | -- big          | yes                   |                                   |
 | -- cmplx        | yes                   |                                   |
 | -- rand         | yes                   |                                   |
 | mime            | yes                   |                                   |
-| -- multipart    | not yet               |                                   |
+| -- multipart    | no                    |                                   |
 | net             | no                    | needs C code                      |
 | -- http         | no                    |                                   |
 | -- -- cgi       | no                    |                                   |
@@ -108,21 +108,21 @@
 | -- -- jsonrpc   | no                    |                                   |
 | -- smtp         | no                    |                                   |
 | -- textproto    | no                    |                                   |
-| -- url          | not yet               |                                   |
+| -- url          | yes                   |                                   |
 | os              | partially             | node.js only                      |
 | -- exec         | partially             | node.js only                      |
 | -- signal       | partially             | node.js only                      |
 | -- user         | partially             | node.js only                      |
 | path            | yes                   |                                   |
-| -- filepath     | not yet               |                                   |
+| -- filepath     | yes                   |                                   |
 | reflect         | yes                   |                                   |
 | regexp          | yes                   |                                   |
 | -- syntax       | yes                   |                                   |
 | runtime         | partially             |                                   |
-| -- cgo          | not yet               |                                   |
-| -- debug        | not yet               |                                   |
-| -- pprof        | not yet               |                                   |
-| -- race         | not yet               |                                   |
+| -- cgo          | no                    |                                   |
+| -- debug        | no                    |                                   |
+| -- pprof        | no                    |                                   |
+| -- race         | no                    |                                   |
 | sort            | yes                   |                                   |
 | strconv         | yes                   |                                   |
 | strings         | yes                   |                                   |
@@ -130,7 +130,7 @@
 | -- atomic       | yes                   |                                   |
 | syscall         | partially             | node.js only                      |
 | testing         | yes                   |                                   |
-| -- iotest       | not yet               |                                   |
+| -- iotest       | (no tests)            |                                   |
 | -- quick        | yes                   |                                   |
 | text            |                       |                                   |
 | -- scanner      | yes                   |                                   |

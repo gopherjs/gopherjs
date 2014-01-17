@@ -29,7 +29,7 @@ func TestBool(t *testing.T) {
 	}
 }
 
-func TestSting(t *testing.T) {
+func TestString(t *testing.T) {
 	e := "abc"
 	pkg.Set("test", e)
 	o := pkg.Get("test")

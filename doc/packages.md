@@ -117,7 +117,7 @@
 | -- filepath     | not yet               |                                   |
 | reflect         | yes                   |                                   |
 | regexp          | yes                   |                                   |
-| -- syntax       | not yet               |                                   |
+| -- syntax       | yes                   |                                   |
 | runtime         | partially             |                                   |
 | -- cgo          | not yet               |                                   |
 | -- debug        | not yet               |                                   |

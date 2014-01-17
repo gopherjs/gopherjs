@@ -244,6 +244,18 @@ diff -r 87dea3f5ebe7 src/pkg/encoding/xml/xml.go
  			}
  		}
  		return Directive(d.buf.Bytes()), nil
+diff -r 87dea3f5ebe7 src/pkg/fmt/fmt_test.go
+--- a/src/pkg/fmt/fmt_test.go
++++ b/src/pkg/fmt/fmt_test.go
+@@ -492,7 +492,7 @@
+ 	// be fetched directly, the lookup fails and returns a
+ 	// zero reflect.Value, which formats as <nil>.
+ 	// This test is just to check that it shows the two NaNs at all.
+-	{"%v", map[float64]int{math.NaN(): 1, math.NaN(): 2}, "map[NaN:<nil> NaN:<nil>]"},
++	// {"%v", map[float64]int{math.NaN(): 1, math.NaN(): 2}, "map[NaN:<nil> NaN:<nil>]"},
+ 
+ 	// Used to crash because nByte didn't allow for a sign.
+ 	{"%b", int64(-1 << 63), "-1000000000000000000000000000000000000000000000000000000000000000"},
 diff -r 87dea3f5ebe7 src/pkg/go/build/build.go
 --- a/src/pkg/go/build/build.go
 +++ b/src/pkg/go/build/build.go
@@ -1363,3 +1375,96 @@ diff -r 87dea3f5ebe7 src/pkg/text/scanner/scanner.go
  }
  
  // Pos returns the position of the character immediately after
+diff -r 87dea3f5ebe7 src/pkg/text/template/parse/lex.go
+--- a/src/pkg/text/template/parse/lex.go
++++ b/src/pkg/text/template/parse/lex.go
+@@ -5,6 +5,7 @@
+ package parse
+ 
+ import (
++	"container/list"
+ 	"fmt"
+ 	"strings"
+ 	"unicode"
+@@ -88,17 +89,17 @@
+ 
+ // lexer holds the state of the scanner.
+ type lexer struct {
+-	name       string    // the name of the input; used only for error reports
+-	input      string    // the string being scanned
+-	leftDelim  string    // start of action
+-	rightDelim string    // end of action
+-	state      stateFn   // the next lexing function to enter
+-	pos        Pos       // current position in the input
+-	start      Pos       // start position of this item
+-	width      Pos       // width of last rune read from input
+-	lastPos    Pos       // position of most recent item returned by nextItem
+-	items      chan item // channel of scanned items
+-	parenDepth int       // nesting depth of ( ) exprs
++	name       string     // the name of the input; used only for error reports
++	input      string     // the string being scanned
++	leftDelim  string     // start of action
++	rightDelim string     // end of action
++	state      stateFn    // the next lexing function to enter
++	pos        Pos        // current position in the input
++	start      Pos        // start position of this item
++	width      Pos        // width of last rune read from input
++	lastPos    Pos        // position of most recent item returned by nextItem
++	items      *list.List // scanned items
++	parenDepth int        // nesting depth of ( ) exprs
+ }
+ 
+ // next returns the next rune in the input.
+@@ -127,7 +128,7 @@
+ 
+ // emit passes an item back to the client.
+ func (l *lexer) emit(t itemType) {
+-	l.items <- item{t, l.start, l.input[l.start:l.pos]}
++	l.items.PushBack(item{t, l.start, l.input[l.start:l.pos]})
+ 	l.start = l.pos
+ }
+ 
+@@ -162,13 +163,19 @@
+ // errorf returns an error token and terminates the scan by passing
+ // back a nil pointer that will be the next state, terminating l.nextItem.
+ func (l *lexer) errorf(format string, args ...interface{}) stateFn {
+-	l.items <- item{itemError, l.start, fmt.Sprintf(format, args...)}
++	l.items.PushBack(item{itemError, l.start, fmt.Sprintf(format, args...)})
+ 	return nil
+ }
+ 
+ // nextItem returns the next item from the input.
+ func (l *lexer) nextItem() item {
+-	item := <-l.items
++	element := l.items.Front()
++	for element == nil {
++		l.state = l.state(l)
++		element = l.items.Front()
++	}
++	l.items.Remove(element)
++	item := element.Value.(item)
+ 	l.lastPos = item.pos
+ 	return item
+ }
+@@ -186,19 +193,12 @@
+ 		input:      input,
+ 		leftDelim:  left,
+ 		rightDelim: right,
+-		items:      make(chan item),
++		items:      list.New(),
+ 	}
+-	go l.run()
++	l.state = lexText
+ 	return l
+ }
+ 
+-// run runs the state machine for the lexer.
+-func (l *lexer) run() {
+-	for l.state = lexText; l.state != nil; {
+-		l.state = l.state(l)
+-	}
+-}
+-
+ // state functions
+ 
+ const (

@@ -114,3 +114,32 @@ func TestNew(t *testing.T) {
 		t.Fail()
 	}
 }
+
+type StructWithJsField struct {
+	js.Object
+	Length int `js:"length"`
+}
+
+type StructWithJsField2 struct {
+	object js.Object // to hide members from public API
+	Length int       `js:"length"`
+}
+
+func TestReadingJsField(t *testing.T) {
+	a := &StructWithJsField{Object: js.Global("Array").New(42)}
+	b := &StructWithJsField2{object: js.Global("Array").New(42)}
+	if a.Length != 42 || b.Length != 42 {
+		t.Fail()
+	}
+}
+
+func TestWritingJsField(t *testing.T) {
+	a := &StructWithJsField{Object: js.Global("Object").New()}
+	b := &StructWithJsField2{object: js.Global("Object").New()}
+	a.Length = 42
+	b.Length = 42
+	if a.Get("length").Int() != 42 || b.object.Get("length").Int() != 42 {
+		t.Fail()
+	}
+
+}

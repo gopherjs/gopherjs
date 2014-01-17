@@ -1087,7 +1087,7 @@ var go$panic = function(value) {
 	return err;
 };
 var go$notSupported = function(feature) {
-	var err = new Error("not supported by GopherJS: " + feature);
+	var err = new Error("not supported by GopherJS: " + feature + " (hint: the file optional.go.patch contains patches for core packages)");
 	err.go$notSupported = feature;
 	throw err;
 };

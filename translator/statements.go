@@ -487,11 +487,11 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 			}
 
 			var parts []string
-			var lhs ast.Expr
-			switch l := s.Lhs[0].(type) {
+			lhs := s.Lhs[0]
+			switch l := lhs.(type) {
 			case *ast.IndexExpr:
-				lhsVar := c.newVariable("lhs")
-				indexVar := c.newVariable("index")
+				lhsVar := c.newVariable("_lhs")
+				indexVar := c.newVariable("_index")
 				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X))
 				parts = append(parts, indexVar+" = "+c.translateExpr(l.Index))
 				lhs = &ast.IndexExpr{
@@ -500,14 +500,25 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 				}
 				c.info.Types[lhs] = c.info.Types[l]
 			case *ast.StarExpr:
-				lhsVar := c.newVariable("lhs")
+				lhsVar := c.newVariable("_lhs")
 				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X))
 				lhs = &ast.StarExpr{
 					X: c.newIdent(lhsVar, c.info.Types[l.X]),
 				}
 				c.info.Types[lhs] = c.info.Types[l]
-			default:
-				lhs = l
+			case *ast.SelectorExpr:
+				v := HasCallVisitor{c.info, false}
+				ast.Walk(&v, l.X)
+				if v.hasCall {
+					lhsVar := c.newVariable("_lhs")
+					parts = append(parts, lhsVar+" = "+c.translateExpr(l.X))
+					lhs = &ast.SelectorExpr{
+						X:   c.newIdent(lhsVar, c.info.Types[l.X]),
+						Sel: l.Sel,
+					}
+					c.info.Types[lhs] = c.info.Types[l]
+					c.info.Selections[lhs.(*ast.SelectorExpr)] = c.info.Selections[l]
+				}
 			}
 
 			parenExpr := &ast.ParenExpr{X: s.Rhs[0]}

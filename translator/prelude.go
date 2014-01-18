@@ -1220,7 +1220,7 @@ var go$typeAssertionFailed = function(obj, expected) {
 
 var go$now = function() { var msec = (new Date()).getTime(); return [new Go$Int64(0, Math.floor(msec / 1000)), (msec % 1000) * 1000000]; };
 
-var go$packages = {};
+go$global.go$packages = {};
 
 go$packages["go/doc"] = {
 	Synopsis: function(s) { return ""; }

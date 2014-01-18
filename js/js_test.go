@@ -8,7 +8,7 @@ import (
 var IntVar int = 0
 var ArrayVar = [3]int{41, 42, 43}
 
-var pkg = js.Global("go$pkg")
+var pkg = js.Global("go$packages").Get("github.com/neelance/gopherjs/js_test")
 
 func TestSet(t *testing.T) {
 	pkg.Set("IntVar", 42)
@@ -98,7 +98,7 @@ func TestSetIndex(t *testing.T) {
 }
 
 func TestCall(t *testing.T) {
-	if js.Global("go$global").Call("parseInt", "42").Interface().(float64) != 42 {
+	if js.Global("String").New("test").Call("substr", 1, 3).String() == "es" {
 		t.Fail()
 	}
 }

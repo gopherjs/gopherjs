@@ -58,6 +58,7 @@ The package `github.com/neelance/gopherjs/js` ([documentation](js/js.go)) provid
 | all other slices and arrays    | []interface{}                  | Array           |
 | maps                           | map[string]interface{}         | Object          |
 | functions                      | func(...interface{}) js.Object | Function        |
+| time.Time                      | time.Time                      | Date            |
 
 ### Roadmap
 These features are not implemented yet, but on the roadmap:

@@ -384,6 +384,9 @@ var pkgNatives = map[string]string{
 				return a + b;
 			},
 			mapArray: go$mapArray,
+			toUnixTimestamp: function(d) {
+				return d.getTime();
+			},
 		};
 	`,
 }

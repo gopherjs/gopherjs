@@ -911,6 +911,13 @@ var go$externalize = function(v, t) {
 			s += String.fromCharCode(r[0]);
 		}
 		return s;
+	case "Struct":
+		var timePkg = go$packages["time"];
+		if (timePkg && v.constructor === timePkg.Time.Ptr) {
+			var milli = go$div64(v.UnixNano(), new Go$Int64(0, 1000000000));
+			return new Date(go$flatten64(milli));
+		}
+		return v;
 	default:
 		return v;
 	}
@@ -979,8 +986,6 @@ var go$internalize = function(v, t) {
 			return v;
 		}
 		switch (v.constructor) {
-		case Array:
-			return go$internalize(v, go$sliceType(go$interfaceType([])));
 		case Int8Array:
 			return new (go$sliceType(Go$Int8))(v);
 		case Int16Array:
@@ -997,8 +1002,15 @@ var go$internalize = function(v, t) {
 			return new (go$sliceType(Go$Float32))(v);
 		case Float64Array:
 			return new (go$sliceType(Go$Float64))(v);
+		case Array:
+			return go$internalize(v, go$sliceType(go$interfaceType([])));
 		case Boolean:
 			return new Go$Bool(!!v);
+		case Date:
+			var timePkg = go$packages["time"];
+			if (timePkg) {
+				return new timePkg.Time(timePkg.Unix(new Go$Int64(0, 0), new Go$Int64(0, v.getTime() * 1000000000)));
+			}
 		case Function:
 			return go$internalize(v, go$funcType([go$sliceType(go$interfaceType([]))], [go$packages["github.com/neelance/gopherjs/js"].Object], true));
 		case Number:
@@ -1008,9 +1020,8 @@ var go$internalize = function(v, t) {
 			return new mapType(go$internalize(v, mapType));
 		case String:
 			return new Go$String(go$internalize(v, Go$String));
-		default:
-			return v;
 		}
+		return v;
 	case "Map":
 		var m = new Go$Map();
 		var keys = go$keys(v), i;

@@ -3,6 +3,7 @@ package js_test
 import (
 	"github.com/neelance/gopherjs/js"
 	"testing"
+	"time"
 )
 
 var dummys js.Object
@@ -143,18 +144,28 @@ func TestWritingJsField(t *testing.T) {
 	}
 }
 
-func TestExternalizingOfFunc(t *testing.T) {
+func TestFunc(t *testing.T) {
 	a := dummys.Call("mapArray", []int{1, 2, 3}, func(e int64) int64 { return e + 40 })
 	b := dummys.Call("mapArray", []int{1, 2, 3}, func(e ...int64) int64 { return e[0] + 40 })
 	if a.Index(1).Int() != 42 || b.Index(1).Int() != 42 {
 		t.Fail()
 	}
-}
 
-func TestInternalizingOfFunc(t *testing.T) {
 	add := dummys.Get("add").Interface().(func(...interface{}) js.Object)
 	var i int64 = 40
 	if add(i, 2).Int() != 42 {
+		t.Fail()
+	}
+}
+
+func TestDate(t *testing.T) {
+	d := time.Date(2013, time.August, 27, 22, 25, 11, 0, time.UTC)
+	if dummys.Call("toUnixTimestamp", d).Int() != int(d.Unix()) {
+		t.Fail()
+	}
+
+	d2 := js.Global("Date").New(d.UnixNano() / 1000000000).Interface().(time.Time)
+	if !d2.Equal(d) {
 		t.Fail()
 	}
 }

@@ -21,7 +21,7 @@ func GetAllDependencies(pkg string, config *types.Config) ([]*types.Package, err
 	imported := make(map[string]bool)
 	var importPkg func(string, []string) error
 	importPkg = func(importPath string, importing []string) error {
-		if importPath == "unsafe" || importPath == "go/doc" {
+		if importPath == "unsafe" {
 			return nil
 		}
 		if _, found := imported[importPath]; found {

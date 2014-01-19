@@ -382,7 +382,8 @@ var pkgNatives = map[string]string{
 			someArray: [41, 42, 43],
 			add: function(a, b) {
 				return a + b;
-			}
+			},
+			mapArray: go$mapArray,
 		};
 	`,
 }

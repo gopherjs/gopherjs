@@ -816,37 +816,8 @@ var go$runesToString = function(slice) {
 	return str;
 };
 
-// var go$nativeFunction = function(isMethod, paramTypes, resultTypes, fn) {
-// 	return function() {
-// 		var args = [], i;
-// 		if (isMethod) {
-// 			args.push(go$externalize(this, go$interfaceType([])));
-// 		}
-// 		for (i = 0; i < paramTypes.length; i += 1) {
-// 			args.push(go$externalize(arguments[i], paramTypes[i]));
-// 		}
-// 		var results = fn.apply(null, args);
-// 		switch (resultTypes.length) {
-// 		case 0:
-// 			return;
-// 		case 1:
-// 			return go$internalize(results, resultTypes[0]);
-// 		default:
-// 			for (i = 0; i < resultTypes.length; i++) {
-// 				results[i] = go$internalize(results[i]);
-// 			}
-// 			return results;
-// 		}
-// 	};
-// };
-
-var go$externalize = function(v, t) {
+var go$needsExternalization = function(t) {
 	switch (t.kind) {
-	case "Int64":
-	case "Uint64":
-		return go$flatten64(v);
-	case "Array":
-		switch (t.elem.kind) {
 		case "Int64":
 		case "Uint64":
 		case "Array":
@@ -855,15 +826,63 @@ var go$externalize = function(v, t) {
 		case "Map":
 		case "Slice":
 		case "String":
-			return go$mapArray(v, function(e) { return go$externalize(e, t.elem); });
+			return true;
 		default:
-			return v;
+			return false;
+	}
+};
+
+var go$externalize = function(v, t) {
+	switch (t.kind) {
+	case "Int64":
+	case "Uint64":
+		return go$flatten64(v);
+	case "Array":
+		if (go$needsExternalization(t.elem)) {
+			return go$mapArray(v, function(e) { return go$externalize(e, t.elem); });
 		}
+		return v;
 	case "Func":
 		if (v === go$throwNilPointerError) {
 			return null;
 		}
-		return v;
+		var convert = false;
+		var i;
+		for (i = 0; i < t.params.length; i += 1) {
+			convert = convert || (t.params[i] !== go$packages["github.com/neelance/gopherjs/js"].Object);
+		}
+		for (i = 0; i < t.results.length; i += 1) {
+			convert = convert || go$needsExternalization(t.results[i]);
+		}
+		if (!convert) {
+			return v;
+		}
+		return function() {
+			var args = [], i;
+			for (i = 0; i < t.params.length; i += 1) {
+				if (t.isVariadic && i === t.params.length - 1) {
+					var vt = t.params[i].elem, varargs = [], j;
+					for (j = i; j < arguments.length; j += 1) {
+						varargs.push(go$internalize(arguments[j], vt));
+					}
+					args.push(new (t.params[i])(varargs));
+					break;
+				}
+				args.push(go$internalize(arguments[i], t.params[i]));
+			}
+			var result = v.apply(undefined, args);
+			switch (t.results.length) {
+			case 0:
+				return;
+			case 1:
+				return go$externalize(result, t.results[0]);
+			default:
+				for (i = 0; i < t.results.length; i++) {
+					result[i] = go$externalize(result[i], t.results[i]);
+				}
+				return result;
+			}
+		};
 	case "Interface":
 		if (v === null) {
 			return null;
@@ -881,19 +900,10 @@ var go$externalize = function(v, t) {
 		}
 		return m;
 	case "Slice":
-		switch (t.elem.kind) {
-		case "Int64":
-		case "Uint64":
-		case "Array":
-		case "Func":
-		case "Interface":
-		case "Map":
-		case "Slice":
-		case "String":
+		if (go$needsExternalization(t.elem)) {
 			return go$mapArray(go$sliceToArray(v), function(e) { return go$externalize(e, t.elem); });
-		default:
-			return go$sliceToArray(v);
 		}
+		return go$sliceToArray(v);
 	case "String":
 		var s = "", r, i, j = 0;
 		for (i = 0; i < v.length; i += r[1], j += 1) {
@@ -927,7 +937,8 @@ var go$internalize = function(v, t) {
 	case "Uint32":
 	case "Uintptr":
 		return parseInt(v) >>> 0;
-	case "Int64", "Uint64":
+	case "Int64":
+	case "Uint64":
 		return new t(0, v);
 	case "Float32":
 	case "Float64":
@@ -937,15 +948,59 @@ var go$internalize = function(v, t) {
 			throw go$panic("got array with wrong size from JavaScript native");
 		}
 		return go$mapArray(v, function(e) { return go$internalize(e, t.elem); });
+	case "Func":
+		return new t(function() {
+			var args = [], i;
+			for (i = 0; i < t.params.length; i += 1) {
+				if (t.isVariadic && i === t.params.length - 1) {
+					var vt = t.params[i].elem, varargs = arguments[i], j;
+					for (j = 0; j < varargs.length; j += 1) {
+						args.push(go$externalize(varargs.array[varargs.offset + j], vt));
+					}
+					break;
+				}
+				args.push(go$externalize(arguments[i], t.params[i]));
+			}
+			var result = v.apply(undefined, args);
+			switch (t.results.length) {
+			case 0:
+				return;
+			case 1:
+				return go$internalize(result, t.results[0]);
+			default:
+				for (i = 0; i < t.results.length; i++) {
+					result[i] = go$internalize(result[i], t.results[i]);
+				}
+				return result;
+			}
+		});
 	case "Interface":
-		if (t.pkgPath === "github.com/neelance/gopherjs/js" && t.typeName === "Object") {
+		if (t === go$packages["github.com/neelance/gopherjs/js"].Object) {
 			return v;
 		}
 		switch (v.constructor) {
 		case Array:
 			return go$internalize(v, go$sliceType(go$interfaceType([])));
+		case Int8Array:
+			return new (go$sliceType(Go$Int8))(v);
+		case Int16Array:
+			return new (go$sliceType(Go$Int16))(v);
+		case Int32Array:
+			return new (go$sliceType(Go$Int))(v);
+		case Uint8Array:
+			return new (go$sliceType(Go$Uint8))(v);
+		case Uint16Array:
+			return new (go$sliceType(Go$Uint16))(v);
+		case Uint32Array:
+			return new (go$sliceType(Go$Uint))(v);
+		case Float32Array:
+			return new (go$sliceType(Go$Float32))(v);
+		case Float64Array:
+			return new (go$sliceType(Go$Float64))(v);
 		case Boolean:
 			return new Go$Bool(!!v);
+		case Function:
+			return go$internalize(v, go$funcType([go$sliceType(go$interfaceType([]))], [go$packages["github.com/neelance/gopherjs/js"].Object], true));
 		case Number:
 			return new Go$Float64(parseFloat(v));
 		case Object:

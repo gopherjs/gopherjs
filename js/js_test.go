@@ -141,5 +141,20 @@ func TestWritingJsField(t *testing.T) {
 	if a.Get("length").Int() != 42 || b.object.Get("length").Int() != 42 {
 		t.Fail()
 	}
+}
 
+func TestExternalizingOfFunc(t *testing.T) {
+	a := dummys.Call("mapArray", []int{1, 2, 3}, func(e int64) int64 { return e + 40 })
+	b := dummys.Call("mapArray", []int{1, 2, 3}, func(e ...int64) int64 { return e[0] + 40 })
+	if a.Index(1).Int() != 42 || b.Index(1).Int() != 42 {
+		t.Fail()
+	}
+}
+
+func TestInternalizingOfFunc(t *testing.T) {
+	add := dummys.Get("add").Interface().(func(...interface{}) js.Object)
+	var i int64 = 40
+	if add(i, 2).Int() != 42 {
+		t.Fail()
+	}
 }

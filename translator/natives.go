@@ -372,4 +372,17 @@ var pkgNatives = map[string]string{
 		Sleep = function() { go$notSupported("time.Sleep (use time.AfterFunc instead)") };
 		Tick = function() { go$notSupported("time.Tick (use time.AfterFunc instead)") };
 	`,
+
+	"github.com/neelance/gopherjs/js_test": `
+		dummys = {
+			someBool: true,
+			someString: "abc\u1234",
+			someInt: 42,
+			someFloat: 42.123,
+			someArray: [41, 42, 43],
+			add: function(a, b) {
+				return a + b;
+			}
+		};
+	`,
 }

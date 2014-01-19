@@ -5,106 +5,106 @@ import (
 	"testing"
 )
 
-var IntVar int = 0
-var ArrayVar = [3]int{41, 42, 43}
-
-var pkg = js.Global("go$packages").Get("github.com/neelance/gopherjs/js_test")
-
-func TestSet(t *testing.T) {
-	pkg.Set("IntVar", 42)
-	if IntVar != 42 {
-		t.Errorf("expected %#v, got %#v", 42, IntVar)
-	}
-}
+var dummys js.Object
 
 func TestBool(t *testing.T) {
 	e := true
-	pkg.Set("test", e)
-	o := pkg.Get("test")
+	o := dummys.Get("someBool")
 	if v := o.Bool(); v != e {
 		t.Errorf("expected %#v, got %#v", e, v)
 	}
 	if i := o.Interface().(bool); i != e {
 		t.Errorf("expected %#v, got %#v", e, i)
 	}
+	if dummys.Set("otherBool", e); dummys.Get("otherBool").Bool() != e {
+		t.Fail()
+	}
 }
 
 func TestString(t *testing.T) {
-	e := "abc"
-	pkg.Set("test", e)
-	o := pkg.Get("test")
+	e := "abc\u1234"
+	o := dummys.Get("someString")
 	if v := o.String(); v != e {
 		t.Errorf("expected %#v, got %#v", e, v)
 	}
 	if i := o.Interface().(string); i != e {
 		t.Errorf("expected %#v, got %#v", e, i)
 	}
+	if dummys.Set("otherString", e); dummys.Get("otherString").String() != e {
+		t.Fail()
+	}
 }
 
 func TestInt(t *testing.T) {
 	e := 42
-	pkg.Set("test", e)
-	o := pkg.Get("test")
+	o := dummys.Get("someInt")
 	if v := o.Int(); v != e {
 		t.Errorf("expected %#v, got %#v", e, v)
 	}
 	if i := int(o.Interface().(float64)); i != e {
 		t.Errorf("expected %#v, got %#v", e, i)
 	}
+	if dummys.Set("otherInt", e); dummys.Get("otherInt").Int() != e {
+		t.Fail()
+	}
 }
 
 func TestFloat(t *testing.T) {
 	e := 42.123
-	pkg.Set("test", e)
-	o := pkg.Get("test")
+	o := dummys.Get("someFloat")
 	if v := o.Float(); v != e {
 		t.Errorf("expected %#v, got %#v", e, v)
 	}
 	if i := o.Interface().(float64); i != e {
 		t.Errorf("expected %#v, got %#v", e, i)
 	}
+	if dummys.Set("otherFloat", e); dummys.Get("otherFloat").Float() != e {
+		t.Fail()
+	}
 }
 
 func TestIsUndefined(t *testing.T) {
-	if pkg.IsUndefined() || !pkg.Get("xyz").IsUndefined() {
+	if dummys.IsUndefined() || !dummys.Get("xyz").IsUndefined() {
 		t.Fail()
 	}
 }
 
 func TestIsNull(t *testing.T) {
-	pkg.Set("test", nil)
-	if pkg.IsNull() || !pkg.Get("test").IsNull() {
+	dummys.Set("test", nil)
+	if dummys.IsNull() || !dummys.Get("test").IsNull() {
 		t.Fail()
 	}
 }
 
 func TestLength(t *testing.T) {
-	if pkg.Get("ArrayVar").Length() != 3 {
+	if dummys.Get("someArray").Length() != 3 {
 		t.Fail()
 	}
 }
 
 func TestIndex(t *testing.T) {
-	if pkg.Get("ArrayVar").Index(1).Int() != 42 {
+	if dummys.Get("someArray").Index(1).Int() != 42 {
 		t.Fail()
 	}
 }
 
 func TestSetIndex(t *testing.T) {
-	pkg.Get("ArrayVar").SetIndex(2, 99)
-	if pkg.Get("ArrayVar").Index(2).Int() != 99 {
+	dummys.Get("someArray").SetIndex(2, 99)
+	if dummys.Get("someArray").Index(2).Int() != 99 {
 		t.Fail()
 	}
 }
 
 func TestCall(t *testing.T) {
-	if js.Global("String").New("test").Call("substr", 1, 3).String() == "es" {
+	var i int64 = 40
+	if dummys.Call("add", i, 2).Int() != 42 {
 		t.Fail()
 	}
 }
 
 func TestInvoke(t *testing.T) {
-	if js.Global("parseInt").Invoke("42").Interface().(float64) != 42 {
+	var i int64 = 40
+	if dummys.Get("add").Invoke(i, 2).Int() != 42 {
 		t.Fail()
 	}
 }

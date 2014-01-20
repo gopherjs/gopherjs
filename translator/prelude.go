@@ -1242,6 +1242,8 @@ var go$interfaceIsEqual = function(a, b) {
 	case "Slice":
 	case "Struct":
 		go$throwRuntimeError("comparing uncomparable type " + a.constructor);
+	case undefined: // js.Object
+		return a === b;
 	default:
 		return a.go$val === b.go$val;
 	}

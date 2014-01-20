@@ -169,3 +169,9 @@ func TestDate(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestEquality(t *testing.T) {
+	if js.Global("Array") != js.Global("Array") || js.Global("Array") == js.Global("String") {
+		t.Fail()
+	}
+}

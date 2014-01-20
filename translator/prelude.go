@@ -1160,16 +1160,20 @@ var go$notSupported = function(feature) {
 };
 var go$throwRuntimeError; // set by package "runtime"
 
-var go$errorStack = [];
+var go$errorStack = [], go$jsErr = null;
 
 var go$pushErr = function(err) {
 	if (err.go$panicValue === undefined) {
-		throw err;
+		go$jsErr = err;
+		return;
 	}
 	go$errorStack.push({ frame: go$getStackDepth() - 1, error: err });
 };
 
 var go$callDeferred = function(deferred) {
+	if (go$jsErr !== null) {
+		throw go$jsErr; // JavaScript errors can not be rescued
+	}
 	var i;
 	for (i = deferred.length - 1; i >= 0; i -= 1) {
 		var call = deferred[i];

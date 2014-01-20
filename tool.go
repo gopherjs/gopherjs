@@ -423,11 +423,10 @@ func buildPackage(pkg *Package) error {
 				return nil
 			}
 
-			objFile, err := os.Open(pkg.PkgObj)
+			objFile, err := ioutil.ReadFile(pkg.PkgObj)
 			if err != nil {
 				return err
 			}
-			defer objFile.Close()
 
 			pkg.JavaScriptCode, _, err = translator.ReadArchive(typesConfig.Packages, pkg.PkgObj, pkg.ImportPath, objFile)
 			if err != nil {
@@ -504,13 +503,13 @@ func writeLibraryPackage(pkg *Package, pkgObj string) error {
 	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
 		return err
 	}
-	file, err := os.Create(pkgObj)
+
+	data, err := translator.WriteArchive(pkg.JavaScriptCode, typesConfig.Packages[pkg.ImportPath])
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	translator.WriteArchive(pkg.JavaScriptCode, typesConfig.Packages[pkg.ImportPath], file)
-	return nil
+
+	return ioutil.WriteFile(pkgObj, data, 0666)
 }
 
 func writeCommandPackage(pkg *Package, pkgObj string) error {

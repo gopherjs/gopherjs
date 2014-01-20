@@ -1,10 +1,10 @@
 package translator
 
 import (
-	"bufio"
 	"bytes"
 	"code.google.com/p/go.tools/go/gcimporter"
 	"code.google.com/p/go.tools/go/types"
+	"encoding/asn1"
 	"fmt"
 	"github.com/neelance/gopherjs/gcexporter"
 	"go/ast"
@@ -117,29 +117,26 @@ func WriteInterfaces(dependencies []*types.Package, w io.Writer, merge bool) {
 	}
 }
 
-// TODO replace with encoding/gob when reflection is ready
-func ReadArchive(packages map[string]*types.Package, filename, id string, data io.Reader) ([]byte, *types.Package, error) {
-	r := bufio.NewReader(data)
+type Archive struct {
+	GcData  []byte
+	Imports []string
+	Code    []byte
+}
 
-	code, err := readUntilSeparator(r)
+func ReadArchive(packages map[string]*types.Package, filename, id string, data []byte) ([]byte, *types.Package, error) {
+	var a Archive
+	_, err := asn1.Unmarshal(data, &a)
 	if err != nil {
 		return nil, nil, err
 	}
-	importList, err := readUntilSeparator(r)
-	if err != nil {
-		return nil, nil, err
-	}
 
-	pkg, err := gcimporter.ImportData(packages, filename, id, r)
+	pkg, err := gcimporter.ImportData(packages, filename, id, bytes.NewReader(a.GcData))
 	if err != nil {
 		return nil, nil, err
 	}
 
 	var imports []*types.Package
-	for _, path := range strings.Split(string(importList), "\n") {
-		if path == "" {
-			continue
-		}
+	for _, path := range a.Imports {
 		impPkg, found := packages[path]
 		if !found {
 			impPkg = types.NewPackage(path, "", types.NewScope(nil))
@@ -149,33 +146,17 @@ func ReadArchive(packages map[string]*types.Package, filename, id string, data i
 	}
 	pkg.SetImports(imports)
 
-	return code, pkg, nil
+	return a.Code, pkg, nil
 }
 
-func readUntilSeparator(r *bufio.Reader) ([]byte, error) {
-	var content []byte
-	for {
-		line, err := r.ReadSlice('\n')
-		if err != nil && err != bufio.ErrBufferFull {
-			return nil, err
-		}
-		if len(line) == 3 && string(line) == "$$\n" {
-			break
-		}
-		content = append(content, line...)
+func WriteArchive(code []byte, pkg *types.Package) ([]byte, error) {
+	gcData := bytes.NewBuffer(nil)
+	gcexporter.Write(pkg, gcData, sizes32)
+	imports := make([]string, len(pkg.Imports()))
+	for i, impPkg := range pkg.Imports() {
+		imports[i] = impPkg.Path()
 	}
-	return content, nil
-}
-
-func WriteArchive(code []byte, pkg *types.Package, w io.Writer) {
-	w.Write(code)
-	w.Write([]byte("$$\n"))
-	for _, impPkg := range pkg.Imports() {
-		w.Write([]byte(impPkg.Path()))
-		w.Write([]byte{'\n'})
-	}
-	w.Write([]byte("$$\n"))
-	gcexporter.Write(pkg, w, sizes32)
+	return asn1.Marshal(Archive{gcData.Bytes(), imports, code})
 }
 
 func (c *PkgContext) translateParams(t *ast.FuncType) []string {

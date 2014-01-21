@@ -30,6 +30,8 @@ var typesConfig = &types.Config{
 	Packages: make(map[string]*types.Package),
 }
 
+var currentDirectory, goRoot, goPath string
+
 func init() {
 	typesConfig.Import = func(imports map[string]*types.Package, path string) (*types.Package, error) {
 		if _, found := packages[path]; found {
@@ -46,6 +48,18 @@ func init() {
 		}
 
 		return imports[path], nil
+	}
+
+	var err error
+	currentDirectory, err = os.Getwd()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	currentDirectory, err = filepath.EvalSymlinks(currentDirectory)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 }
 
@@ -65,7 +79,7 @@ func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 	if path == "hash/crc32" {
 		pkg.GoFiles = []string{"crc32.go", "crc32_generic.go"}
 	}
-	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && filepath.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
+	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
 		// fall back to GOPATH
 		gopathPkgObj := build.Default.GOPATH + pkg.PkgObj[len(build.Default.GOROOT):]
 		if _, err := os.Stat(gopathPkgObj); err == nil {
@@ -108,10 +122,6 @@ func tool() error {
 		buildFlags.Parse(flag.Args()[1:])
 
 		if buildFlags.NArg() == 0 {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			buildContext := &build.Context{
 				GOROOT:   build.Default.GOROOT,
 				GOPATH:   build.Default.GOPATH,
@@ -119,17 +129,17 @@ func tool() error {
 				GOARCH:   "js",
 				Compiler: "gc",
 			}
-			buildPkg, err := buildContext.ImportDir(wd, 0)
+			buildPkg, err := buildContext.ImportDir(currentDirectory, 0)
 			if err != nil {
 				return err
 			}
 			pkg := &Package{Package: buildPkg}
-			pkg.ImportPath = wd
+			pkg.ImportPath = currentDirectory
 			if err := buildPackage(pkg); err != nil {
 				return err
 			}
 			if pkgObj == "" {
-				pkgObj = filepath.Base(wd) + ".js"
+				pkgObj = filepath.Base(currentDirectory) + ".js"
 			}
 			if err := writeCommandPackage(pkg, pkgObj); err != nil {
 				return err
@@ -178,15 +188,14 @@ func tool() error {
 		installMode = true
 		pkgs := installFlags.Args()
 		if len(pkgs) == 0 {
-			wd, err := os.Getwd()
+			srcDir, err := filepath.EvalSymlinks(filepath.Join(build.Default.GOPATH, "src"))
 			if err != nil {
 				return err
 			}
-			srcDir := filepath.Join(build.Default.GOPATH, "src")
-			if !filepath.HasPrefix(wd, srcDir) {
-				return fmt.Errorf("gopherjs install: no install location for directory %s outside GOPATH", wd)
+			if !strings.HasPrefix(currentDirectory, srcDir) {
+				return fmt.Errorf("gopherjs install: no install location for directory %s outside GOPATH", currentDirectory)
 			}
-			pkgPath, err := filepath.Rel(srcDir, wd)
+			pkgPath, err := filepath.Rel(srcDir, currentDirectory)
 			if err != nil {
 				return err
 			}
@@ -367,15 +376,11 @@ The commands are:
 }
 
 func buildFiles(filenames []string, pkgObj string) error {
-	wd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
 	pkg := &Package{
 		Package: &build.Package{
 			Name:       "main",
 			ImportPath: "main",
-			Dir:        wd,
+			Dir:        currentDirectory,
 			GoFiles:    filenames,
 		},
 	}
@@ -453,7 +458,6 @@ func buildPackage(pkg *Package) error {
 		}
 	}
 
-	wd, _ := os.Getwd()
 	files := make([]*ast.File, 0)
 	var errList translator.ErrorList
 	for _, name := range pkg.GoFiles {
@@ -469,7 +473,7 @@ func buildPackage(pkg *Package) error {
 		if err != nil {
 			return err
 		}
-		if relname, err := filepath.Rel(wd, name); err == nil {
+		if relname, err := filepath.Rel(currentDirectory, name); err == nil {
 			name = relname
 			if name[0] != '.' {
 				name = "." + string(filepath.Separator) + name

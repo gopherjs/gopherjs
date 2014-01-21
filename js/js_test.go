@@ -164,7 +164,7 @@ func TestDate(t *testing.T) {
 		t.Fail()
 	}
 
-	d2 := js.Global("Date").New(d.UnixNano() / 1000000000).Interface().(time.Time)
+	d2 := js.Global("Date").New(d.UnixNano() / 1000000).Interface().(time.Time)
 	if !d2.Equal(d) {
 		t.Fail()
 	}

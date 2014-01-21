@@ -914,7 +914,7 @@ var go$externalize = function(v, t) {
 	case "Struct":
 		var timePkg = go$packages["time"];
 		if (timePkg && v.constructor === timePkg.Time.Ptr) {
-			var milli = go$div64(v.UnixNano(), new Go$Int64(0, 1000000000));
+			var milli = go$div64(v.UnixNano(), new Go$Int64(0, 1000000));
 			return new Date(go$flatten64(milli));
 		}
 		return v;
@@ -1009,7 +1009,7 @@ var go$internalize = function(v, t) {
 		case Date:
 			var timePkg = go$packages["time"];
 			if (timePkg) {
-				return new timePkg.Time(timePkg.Unix(new Go$Int64(0, 0), new Go$Int64(0, v.getTime() * 1000000000)));
+				return new timePkg.Time(timePkg.Unix(new Go$Int64(0, 0), new Go$Int64(0, v.getTime() * 1000000)));
 			}
 		case Function:
 			return go$internalize(v, go$funcType([go$sliceType(go$interfaceType([]))], [go$packages["github.com/neelance/gopherjs/js"].Object], true));

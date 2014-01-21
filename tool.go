@@ -65,7 +65,7 @@ func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 	if path == "hash/crc32" {
 		pkg.GoFiles = []string{"crc32.go", "crc32_generic.go"}
 	}
-	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
+	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && filepath.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
 		// fall back to GOPATH
 		gopathPkgObj := build.Default.GOPATH + pkg.PkgObj[len(build.Default.GOROOT):]
 		if _, err := os.Stat(gopathPkgObj); err == nil {
@@ -176,7 +176,23 @@ func tool() error {
 		installFlags.Parse(flag.Args()[1:])
 
 		installMode = true
-		for _, pkgPath := range installFlags.Args() {
+		pkgs := installFlags.Args()
+		if len(pkgs) == 0 {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			srcDir := filepath.Join(build.Default.GOPATH, "src")
+			if !filepath.HasPrefix(wd, srcDir) {
+				return fmt.Errorf("gopherjs install: no install location for directory %s outside GOPATH", wd)
+			}
+			pkgPath, err := filepath.Rel(srcDir, wd)
+			if err != nil {
+				return err
+			}
+			pkgs = []string{pkgPath}
+		}
+		for _, pkgPath := range pkgs {
 			buildPkg, err := buildImport(pkgPath, 0)
 			if err != nil {
 				return err

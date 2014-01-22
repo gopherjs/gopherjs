@@ -336,6 +336,7 @@ var pkgNatives = map[string]string{
 					}
 					tests[i](t);
 				} catch (e) {
+					go$jsErr = null;
 					if (e.go$exit) {
 						// test failed or skipped
 					} else if (e.go$notSupported) {

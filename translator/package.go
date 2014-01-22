@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"sort"
 	"strings"
 )
 
@@ -72,7 +73,7 @@ func (c *PkgContext) Delayed(f func()) {
 	c.delayedOutput = c.CatchOutput(f)
 }
 
-func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, config *types.Config) ([]byte, error) {
+func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Output, error)) (*Output, error) {
 	info := &types.Info{
 		Types:      make(map[ast.Expr]types.Type),
 		Values:     make(map[ast.Expr]exact.Value),
@@ -83,14 +84,24 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 
 	var errList ErrorList
 	var previousErr error
-	config.Error = func(err error) {
-		if previousErr != nil && previousErr.Error() == err.Error() {
-			return
-		}
-		errList = append(errList, err)
-		previousErr = err
+	config := &types.Config{
+		Packages: typesPackages,
+		Import: func(_ map[string]*types.Package, path string) (*types.Package, error) {
+			output, err := importPkg(path)
+			if err != nil {
+				return nil, err
+			}
+			return output.Types, nil
+		},
+		Sizes: sizes32,
+		Error: func(err error) {
+			if previousErr != nil && previousErr.Error() == err.Error() {
+				return
+			}
+			errList = append(errList, err)
+			previousErr = err
+		},
 	}
-	config.Sizes = sizes32
 	typesPkg, err := config.Check(importPath, fileSet, files, info)
 	if errList != nil {
 		return nil, errList
@@ -98,7 +109,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	if err != nil {
 		return nil, err
 	}
-	config.Packages[importPath] = typesPkg
+	typesPackages[importPath] = typesPkg
 
 	c := &PkgContext{
 		pkg:          typesPkg,
@@ -320,7 +331,23 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		c.Printf("};")
 	})
 
-	return c.output, nil
+	output := &Output{typesPkg, []string{"runtime"}, c.output} // all packages depend on runtime
+
+	var importedPaths []string
+	for _, imp := range typesPkg.Imports() {
+		importedPaths = append(importedPaths, imp.Path())
+	}
+	sort.Strings(importedPaths)
+	for _, impPath := range importedPaths {
+		impOutput, err := importPkg(impPath)
+		if err != nil {
+			return nil, err
+		}
+		output.AddDependenciesOf(impOutput)
+	}
+	output.AddDependency(importPath)
+
+	return output, nil
 }
 
 func (c *PkgContext) translateType(o *types.TypeName) {

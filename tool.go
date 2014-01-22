@@ -21,35 +21,14 @@ import (
 
 type Package struct {
 	*build.Package
-	SrcModTime     time.Time
-	UpToDate       bool
-	JavaScriptCode []byte
-}
-
-var typesConfig = &types.Config{
-	Packages: make(map[string]*types.Package),
+	SrcModTime time.Time
+	UpToDate   bool
+	Output     *translator.Output
 }
 
 var currentDirectory, goRoot, goPath string
 
 func init() {
-	typesConfig.Import = func(imports map[string]*types.Package, path string) (*types.Package, error) {
-		if _, found := packages[path]; found {
-			return imports[path], nil
-		}
-
-		otherPkg, err := buildImport(path, build.AllowBinary)
-		if err != nil {
-			return nil, err
-		}
-		pkg := &Package{Package: otherPkg}
-		if err := buildPackage(pkg); err != nil {
-			return nil, err
-		}
-
-		return imports[path], nil
-	}
-
 	var err error
 	currentDirectory, err = os.Getwd()
 	if err != nil {
@@ -92,6 +71,7 @@ func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 var fileSet = token.NewFileSet()
 var packages = make(map[string]*Package)
 var installMode = false
+var packagesToTest = make(map[string]bool)
 
 func main() {
 	switch err := tool().(type) {
@@ -254,59 +234,64 @@ func tool() error {
 		verbose := testFlags.Bool("v", false, "")
 		testFlags.Parse(flag.Args()[1:])
 
-		mainPkg := &Package{Package: &build.Package{
-			Name:       "main",
-			ImportPath: "main",
-		}}
+		mainPkg := &Package{
+			Package: &build.Package{
+				Name:       "main",
+				ImportPath: "main",
+			},
+			Output: &translator.Output{
+				Types: translator.NewEmptyTypesPackage("main"),
+				Code:  []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\n"),
+			},
+		}
 		packages["main"] = mainPkg
-		mainPkgTypes := types.NewPackage("main", "main", types.NewScope(nil))
-		testingPkgTypes, _ := typesConfig.Import(typesConfig.Packages, "testing")
-		mainPkgTypes.SetImports([]*types.Package{testingPkgTypes})
-		typesConfig.Packages["main"] = mainPkgTypes
-		mainPkg.JavaScriptCode = []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\n")
+		testingOutput, _ := importPackage("testing")
+		mainPkg.Output.AddDependenciesOf(testingOutput)
 
 		for _, pkgPath := range testFlags.Args() {
-			buildPkg, err := buildImport(pkgPath, 0)
-			if err != nil {
-				return err
-			}
+			packagesToTest[pkgPath] = true
+		}
 
-			pkg := &Package{Package: buildPkg}
-			pkg.GoFiles = append(pkg.GoFiles, pkg.TestGoFiles...)
-			pkg.PkgObj = "" // do not load from disk
-			if err := buildPackage(pkg); err != nil {
-				return err
-			}
-
-			testPkg := &Package{Package: &build.Package{
-				ImportPath: pkg.ImportPath + "_test",
-				Dir:        pkg.Dir,
-				GoFiles:    pkg.XTestGoFiles,
-			}}
-			if err := buildPackage(testPkg); err != nil {
-				return err
-			}
-
+		for _, pkgPath := range testFlags.Args() {
 			var names []string
 			var tests []string
-			imports := mainPkgTypes.Imports()
 			collectTests := func(pkg *Package) {
-				pkgTypes := typesConfig.Packages[pkg.ImportPath]
-				for _, name := range pkgTypes.Scope().Names() {
-					_, isFunction := pkgTypes.Scope().Lookup(name).Type().(*types.Signature)
+				for _, name := range pkg.Output.Types.Scope().Names() {
+					_, isFunction := pkg.Output.Types.Scope().Lookup(name).Type().(*types.Signature)
 					if isFunction && strings.HasPrefix(name, "Test") {
 						names = append(names, name)
 						tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
 					}
 				}
-				imports = append(imports, pkgTypes)
+				mainPkg.Output.AddDependenciesOf(pkg.Output)
+			}
+
+			buildPkg, err := buildImport(pkgPath, 0)
+			if err != nil {
+				return err
+			}
+			pkg := &Package{Package: buildPkg}
+			if err := buildPackage(pkg); err != nil {
+				return err
 			}
 			collectTests(pkg)
-			collectTests(testPkg)
-			mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte(fmt.Sprintf(`go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]);`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
-			mainPkgTypes.SetImports(imports)
+
+			if len(pkg.XTestGoFiles) != 0 {
+				testPkg := &Package{Package: &build.Package{
+					ImportPath: pkg.ImportPath + "_test",
+					Dir:        pkg.Dir,
+					GoFiles:    pkg.XTestGoFiles,
+				}}
+				if err := buildPackage(testPkg); err != nil {
+					return err
+				}
+				collectTests(testPkg)
+			}
+
+			mainPkg.Output.Code = append(mainPkg.Output.Code, []byte(fmt.Sprintf(`go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]);`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
 		}
-		mainPkg.JavaScriptCode = append(mainPkg.JavaScriptCode, []byte("}; go$pkg.init = function() {};")...)
+		mainPkg.Output.Code = append(mainPkg.Output.Code, []byte("}; go$pkg.init = function() {};")...)
+		mainPkg.Output.AddDependency("main")
 
 		tempfile, err := ioutil.TempFile("", "test.")
 		if err != nil {
@@ -391,14 +376,31 @@ func buildFiles(filenames []string, pkgObj string) error {
 	return writeCommandPackage(pkg, pkgObj)
 }
 
+func importPackage(path string) (*translator.Output, error) {
+	if pkg, found := packages[path]; found {
+		return pkg.Output, nil
+	}
+
+	otherPkg, err := buildImport(path, build.AllowBinary)
+	if err != nil {
+		return nil, err
+	}
+	pkg := &Package{Package: otherPkg}
+	if err := buildPackage(pkg); err != nil {
+		return nil, err
+	}
+
+	return pkg.Output, nil
+}
+
 func buildPackage(pkg *Package) error {
 	packages[pkg.ImportPath] = pkg
 	if pkg.ImportPath == "unsafe" {
-		typesConfig.Packages["unsafe"] = types.Unsafe
+		pkg.Output = &translator.Output{Types: types.Unsafe}
 		return nil
 	}
 
-	if pkg.PkgObj != "" {
+	if pkg.PkgObj != "" && !packagesToTest[pkg.ImportPath] {
 		fileInfo, err := os.Stat(os.Args[0]) // gopherjs itself
 		if err != nil {
 			for _, path := range strings.Split(os.Getenv("PATH"), string(os.PathListSeparator)) {
@@ -416,7 +418,7 @@ func buildPackage(pkg *Package) error {
 		}
 
 		for _, importedPkgPath := range pkg.Imports {
-			_, err := typesConfig.Import(typesConfig.Packages, importedPkgPath)
+			_, err := importPackage(importedPkgPath)
 			if err != nil {
 				return err
 			}
@@ -449,7 +451,7 @@ func buildPackage(pkg *Package) error {
 				return err
 			}
 
-			pkg.JavaScriptCode, _, err = translator.ReadArchive(typesConfig.Packages, pkg.PkgObj, pkg.ImportPath, objFile)
+			pkg.Output, err = translator.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile)
 			if err != nil {
 				return err
 			}
@@ -458,9 +460,13 @@ func buildPackage(pkg *Package) error {
 		}
 	}
 
-	files := make([]*ast.File, 0)
+	var files []*ast.File
 	var errList translator.ErrorList
-	for _, name := range pkg.GoFiles {
+	names := pkg.GoFiles
+	if packagesToTest[pkg.ImportPath] {
+		names = append(names, pkg.TestGoFiles...)
+	}
+	for _, name := range names {
 		if pkg.ImportPath == "runtime" && strings.HasPrefix(name, "zgoarch_") {
 			file, _ := parser.ParseFile(fileSet, name, "package runtime\nconst theGoarch = `js`\n", 0)
 			files = append(files, file)
@@ -498,7 +504,7 @@ func buildPackage(pkg *Package) error {
 	}
 
 	var err error
-	pkg.JavaScriptCode, err = translator.TranslatePackage(pkg.ImportPath, files, fileSet, typesConfig)
+	pkg.Output, err = translator.TranslatePackage(pkg.ImportPath, files, fileSet, importPackage)
 	if err != nil {
 		return err
 	}
@@ -524,7 +530,7 @@ func writeLibraryPackage(pkg *Package, pkgObj string) error {
 		return err
 	}
 
-	data, err := translator.WriteArchive(pkg.JavaScriptCode, typesConfig.Packages[pkg.ImportPath])
+	data, err := translator.WriteArchive(pkg.Output)
 	if err != nil {
 		return err
 	}
@@ -550,21 +556,16 @@ func writeCommandPackage(pkg *Package, pkgObj string) error {
 	file.WriteString(strings.TrimSpace(translator.Prelude))
 	file.WriteString("\n")
 
-	dependencies, err := translator.GetAllDependencies(pkg.ImportPath, typesConfig)
-	if err != nil {
-		return err
-	}
-
-	for _, dep := range dependencies {
-		file.WriteString("go$packages[\"" + dep.Path() + "\"] = (function() {\n  var go$pkg = {};\n")
-		file.Write(packages[dep.Path()].JavaScriptCode)
+	for _, depPath := range pkg.Output.Dependencies {
+		file.WriteString("go$packages[\"" + depPath + "\"] = (function() {\n  var go$pkg = {};\n")
+		file.Write(packages[depPath].Output.Code)
 		file.WriteString("  return go$pkg;\n})();\n")
 	}
 
-	translator.WriteInterfaces(dependencies, file, false)
+	translator.WriteInterfaces(pkg.Output.Dependencies, file, false)
 
-	for _, dep := range dependencies {
-		file.WriteString("go$packages[\"" + dep.Path() + "\"].init();\n")
+	for _, depPath := range pkg.Output.Dependencies {
+		file.WriteString("go$packages[\"" + depPath + "\"].init();\n")
 	}
 	file.WriteString("go$packages[\"" + pkg.ImportPath + "\"].main();\n")
 

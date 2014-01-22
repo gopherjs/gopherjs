@@ -15,52 +15,39 @@ import (
 )
 
 var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}
+var typesPackages = make(map[string]*types.Package)
 
-func GetAllDependencies(pkg string, config *types.Config) ([]*types.Package, error) {
-	var dependencies []*types.Package // ordered
-	imported := make(map[string]bool)
-	var importPkg func(string, []string) error
-	importPkg = func(importPath string, importing []string) error {
-		if importPath == "unsafe" {
-			return nil
-		}
-		if _, found := imported[importPath]; found {
-			return nil
-		}
-		for _, path := range importing {
-			if path == importPath {
-				return fmt.Errorf("package import cycle: %s -> %s", strings.Join(importing, " -> "), importPath)
-			}
-		}
-
-		typesPkg, err := config.Import(config.Packages, importPath)
-		if err != nil {
-			return err
-		}
-		var imps []string
-		for _, imp := range typesPkg.Imports() {
-			imps = append(imps, imp.Path())
-		}
-		sort.Strings(imps)
-		for _, imp := range imps {
-			if err := importPkg(imp, append(importing, importPath)); err != nil {
-				return err
-			}
-		}
-
-		dependencies = append(dependencies, typesPkg)
-		imported[importPath] = true
-		return nil
-	}
-	importPkg("runtime", nil) // all packages depend on runtime
-	err := importPkg(pkg, nil)
-	return dependencies, err
+type Output struct {
+	Types        *types.Package
+	Dependencies []string
+	Code         []byte
 }
 
-func WriteInterfaces(dependencies []*types.Package, w io.Writer, merge bool) {
+func (o *Output) AddDependency(path string) {
+	for _, dep := range o.Dependencies {
+		if dep == path {
+			return
+		}
+	}
+	o.Dependencies = append(o.Dependencies, path)
+}
+
+func (o *Output) AddDependenciesOf(other *Output) {
+	for _, path := range other.Dependencies {
+		o.AddDependency(path)
+	}
+}
+
+func NewEmptyTypesPackage(path string) *types.Package {
+	pkg := types.NewPackage(path, path, types.NewScope(nil))
+	typesPackages[path] = pkg
+	return pkg
+}
+
+func WriteInterfaces(dependencies []string, w io.Writer, merge bool) {
 	allTypeNames := []*types.TypeName{types.New("error").(*types.Named).Obj()}
-	for _, dep := range dependencies {
-		scope := dep.Scope()
+	for _, depPath := range dependencies {
+		scope := typesPackages[depPath].Scope()
 		for _, name := range scope.Names() {
 			if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
 				allTypeNames = append(allTypeNames, typeName)
@@ -118,45 +105,30 @@ func WriteInterfaces(dependencies []*types.Package, w io.Writer, merge bool) {
 }
 
 type Archive struct {
-	GcData  []byte
-	Imports []string
-	Code    []byte
+	GcData       []byte
+	Dependencies []string
+	Code         []byte
 }
 
-func ReadArchive(packages map[string]*types.Package, filename, id string, data []byte) ([]byte, *types.Package, error) {
+func ReadArchive(filename, id string, data []byte) (*Output, error) {
 	var a Archive
 	_, err := asn1.Unmarshal(data, &a)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	pkg, err := gcimporter.ImportData(packages, filename, id, bytes.NewReader(a.GcData))
+	pkg, err := gcimporter.ImportData(typesPackages, filename, id, bytes.NewReader(a.GcData))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	var imports []*types.Package
-	for _, path := range a.Imports {
-		impPkg, found := packages[path]
-		if !found {
-			impPkg = types.NewPackage(path, "", types.NewScope(nil))
-			packages[path] = impPkg
-		}
-		imports = append(imports, impPkg)
-	}
-	pkg.SetImports(imports)
-
-	return a.Code, pkg, nil
+	return &Output{pkg, a.Dependencies, a.Code}, nil
 }
 
-func WriteArchive(code []byte, pkg *types.Package) ([]byte, error) {
+func WriteArchive(o *Output) ([]byte, error) {
 	gcData := bytes.NewBuffer(nil)
-	gcexporter.Write(pkg, gcData, sizes32)
-	imports := make([]string, len(pkg.Imports()))
-	for i, impPkg := range pkg.Imports() {
-		imports[i] = impPkg.Path()
-	}
-	return asn1.Marshal(Archive{gcData.Bytes(), imports, code})
+	gcexporter.Write(o.Types, gcData, sizes32)
+	return asn1.Marshal(Archive{gcData.Bytes(), o.Dependencies, o.Code})
 }
 
 func (c *PkgContext) translateParams(t *ast.FuncType) []string {

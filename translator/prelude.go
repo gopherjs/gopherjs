@@ -211,6 +211,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ.Ptr = go$newType(4, "Ptr", "*" + string, "", "", constructor);
 		typ.Ptr.Struct = typ;
 		typ.init = function(fields) {
+			typ.Ptr.init(typ);
 			typ.Ptr.nil = new constructor();
 			var i;
 			for (i = 0; i < fields.length; i++) {
@@ -234,7 +235,6 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 				}
 				rt.structType = new go$reflect.structType(rt, new (go$sliceType(go$reflect.structField))(reflectFields));
 			};
-			typ.Ptr.init(typ);
 		};
 		break;
 

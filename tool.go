@@ -557,8 +557,12 @@ func writeCommandPackage(pkg *Package, pkgObj string) error {
 	file.WriteString("\n")
 
 	for _, depPath := range pkg.Output.Dependencies {
+		dep, err := importPackage(depPath)
+		if err != nil {
+			return err
+		}
 		file.WriteString("go$packages[\"" + depPath + "\"] = (function() {\n  var go$pkg = {};\n")
-		file.Write(packages[depPath].Output.Code)
+		file.Write(dep.Code)
 		file.WriteString("  return go$pkg;\n})();\n")
 	}
 

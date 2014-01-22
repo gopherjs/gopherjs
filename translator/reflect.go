@@ -97,12 +97,10 @@ func init() {
 		SliceOf = function(t) {
 			return go$sliceType(t.jsType).reflectType();
 		};
-		Zero = function(typ) {
-			var val;
+		var zeroVal = function(typ) {
 			switch (typ.Kind()) {
 			case go$pkg.Bool:
-				val = false;
-				break;
+				return false;
 			case go$pkg.Int:
 			case go$pkg.Int8:
 			case go$pkg.Int16:
@@ -114,51 +112,44 @@ func init() {
 			case go$pkg.Uintptr:
 			case go$pkg.Float32:
 			case go$pkg.Float64:
-				val = 0;
-				break;
+				return 0;
 			case go$pkg.Int64:
 			case go$pkg.Uint64:
 			case go$pkg.Complex64:
 			case go$pkg.Complex128:
-				val = new typ.jsType(0, 0);
-				break;
+				return new typ.jsType(0, 0);
 			case go$pkg.Array:
 				var elemType = typ.Elem();
-				val = go$makeNativeArray(elemType.jsType.kind, typ.Len(), function() { return Zero(elemType).val; });
-				break;
+				return go$makeNativeArray(elemType.jsType.kind, typ.Len(), function() { return zeroVal(elemType); });
 			case go$pkg.Func:
-				val = go$throwNilPointerError;
-				break;
+				return go$throwNilPointerError;
 			case go$pkg.Interface:
-				val = null;
-				break;
+				return null;
 			case go$pkg.Map:
-				val = false;
-				break;
+				return false;
 			case go$pkg.Chan:
 			case go$pkg.Ptr:
 			case go$pkg.Slice:
-				val = typ.jsType.nil;
-				break;
+				return typ.jsType.nil;
 			case go$pkg.String:
-				val = "";
-				break;
+				return "";
 			case go$pkg.Struct:
-				val = new typ.jsType.Ptr();
-				break;
+				return new typ.jsType.Ptr();
 			default:
 				throw go$panic(new ValueError.Ptr("reflect.Zero", this.kind()));
 			}
-			return new Value.Ptr(typ, val, typ.Kind() << flagKindShift);
+		};
+		Zero = function(typ) {
+			return new Value.Ptr(typ, zeroVal(typ), typ.Kind() << flagKindShift);
 		};
 		unsafe_New = function(typ) {
 			switch (typ.Kind()) {
 			case go$pkg.Struct:
 				return new typ.jsType.Ptr();
 			case go$pkg.Array:
-				return Zero(typ).val;
+				return zeroVal(typ);
 			default:
-				return go$newDataPointer(Zero(typ).val, typ.ptrTo().jsType);
+				return go$newDataPointer(zeroVal(typ), typ.ptrTo().jsType);
 			}
 		};
 		makechan = function(typ, size) {
@@ -234,7 +225,7 @@ func init() {
 			if (len > cap) {
 				throw go$panic("reflect.MakeSlice: len > cap");
 			}
-			return new Value.Ptr(typ.common(), typ.jsType.make(len, cap, function() { return Zero(typ.Elem()).val; }), go$pkg.Slice << flagKindShift);
+			return new Value.Ptr(typ.common(), typ.jsType.make(len, cap, function() { return zeroVal(typ.Elem()); }), go$pkg.Slice << flagKindShift);
 		};
 		cvtDirect = function(v, typ) {
 			var srcVal = v.iword();

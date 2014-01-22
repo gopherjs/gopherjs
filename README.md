@@ -3,7 +3,7 @@ GopherJS - A transpiler from Go to JavaScript
 
 ### Useful Links
 - Try GopherJS on the [GopherJS Playground](http://neelance.github.io/gopherjs-playground/)
-- Enjoy the speed of the [HTML5 game engine demo](http://ajhager.github.io/enj/) (by Joseph Hager)
+- Enjoy the speed of the [HTML5 game engine benchmark](http://ajhager.github.io/enj/) (by Joseph Hager)
 - Get help in the [Google Group](https://groups.google.com/d/forum/gopherjs)
 
 ### What is GopherJS?

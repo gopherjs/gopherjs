@@ -408,12 +408,15 @@ func init() {
 
 			typesMustMatch("reflect.Copy", dst.typ.Elem(), src.typ.Elem());
 
-			var n = Math.min(src.Len(), dst.Len());
-			var i;
-			for(i = 0; i < n; i += 1) {
-				dst.Index(i).Set(src.Index(i));
+			var dstVal = dst.iword();
+			if (dk === go$pkg.Array) {
+				dstVal = new (go$sliceType(dst.typ.Elem().jsType))(dstVal);
 			}
-			return n;
+			var srcVal = src.iword();
+			if (sk === go$pkg.Array) {
+				srcVal = new (go$sliceType(src.typ.Elem().jsType))(srcVal);
+			}
+			return go$copySlice(dstVal, srcVal);
 		};
 
 		uncommonType.Ptr.prototype.Method = function(i) {

@@ -1,63 +1,190 @@
 package translator
 
 func init() {
-	pkgNatives["reflect"] = `
-		go$reflect = {
-			rtype: rtype.Ptr, uncommonType: uncommonType.Ptr, method: method.Ptr, arrayType: arrayType.Ptr, chanType: chanType.Ptr, funcType: funcType.Ptr, interfaceType: interfaceType.Ptr, mapType: mapType.Ptr, ptrType: ptrType.Ptr, sliceType: sliceType.Ptr, structType: structType.Ptr,
-			imethod: imethod.Ptr, structField: structField.Ptr,
-			kinds: { Bool: go$pkg.Bool, Int: go$pkg.Int, Int8: go$pkg.Int8, Int16: go$pkg.Int16, Int32: go$pkg.Int32, Int64: go$pkg.Int64, Uint: go$pkg.Uint, Uint8: go$pkg.Uint8, Uint16: go$pkg.Uint16, Uint32: go$pkg.Uint32, Uint64: go$pkg.Uint64, Uintptr: go$pkg.Uintptr, Float32: go$pkg.Float32, Float64: go$pkg.Float64, Complex64: go$pkg.Complex64, Complex128: go$pkg.Complex128, Array: go$pkg.Array, Chan: go$pkg.Chan, Func: go$pkg.Func, Interface: go$pkg.Interface, Map: go$pkg.Map, Ptr: go$pkg.Ptr, Slice: go$pkg.Slice, String: go$pkg.String, Struct: go$pkg.Struct, UnsafePointer: go$pkg.UnsafePointer },
-			RecvDir: go$pkg.RecvDir, SendDir: go$pkg.SendDir, BothDir: go$pkg.BothDir
-		};
+	pkgNatives["reflect"] = map[string]string{
+		"init": `
+			go$reflect = {
+				rtype: rtype.Ptr, uncommonType: uncommonType.Ptr, method: method.Ptr, arrayType: arrayType.Ptr, chanType: chanType.Ptr, funcType: funcType.Ptr, interfaceType: interfaceType.Ptr, mapType: mapType.Ptr, ptrType: ptrType.Ptr, sliceType: sliceType.Ptr, structType: structType.Ptr,
+				imethod: imethod.Ptr, structField: structField.Ptr,
+				kinds: { Bool: go$pkg.Bool, Int: go$pkg.Int, Int8: go$pkg.Int8, Int16: go$pkg.Int16, Int32: go$pkg.Int32, Int64: go$pkg.Int64, Uint: go$pkg.Uint, Uint8: go$pkg.Uint8, Uint16: go$pkg.Uint16, Uint32: go$pkg.Uint32, Uint64: go$pkg.Uint64, Uintptr: go$pkg.Uintptr, Float32: go$pkg.Float32, Float64: go$pkg.Float64, Complex64: go$pkg.Complex64, Complex128: go$pkg.Complex128, Array: go$pkg.Array, Chan: go$pkg.Chan, Func: go$pkg.Func, Interface: go$pkg.Interface, Map: go$pkg.Map, Ptr: go$pkg.Ptr, Slice: go$pkg.Slice, String: go$pkg.String, Struct: go$pkg.Struct, UnsafePointer: go$pkg.UnsafePointer },
+				RecvDir: go$pkg.RecvDir, SendDir: go$pkg.SendDir, BothDir: go$pkg.BothDir
+			};
 
-		var isWrapped = function(typ) {
-			switch (typ.Kind()) {
-			case go$pkg.Bool:
-			case go$pkg.Int:
-			case go$pkg.Int8:
-			case go$pkg.Int16:
-			case go$pkg.Int32:
-			case go$pkg.Uint:
-			case go$pkg.Uint8:
-			case go$pkg.Uint16:
-			case go$pkg.Uint32:
-			case go$pkg.Uintptr:
-			case go$pkg.Float32:
-			case go$pkg.Float64:
-			case go$pkg.Array:
-			case go$pkg.Map:
-			case go$pkg.Func:
-			case go$pkg.String:
-			case go$pkg.Struct:
-				return true;
-			case go$pkg.Ptr:
-				return typ.Elem().Kind() === go$pkg.Array;
-			}
-			return false;
-		};
-		var fieldName = function(field, i) {
-			if (field.name.go$get === go$throwNilPointerError) {
-				var ntyp = field.typ;
-				if (ntyp.Kind() === go$pkg.Ptr) {
-					ntyp = ntyp.Elem().common();
+			var isWrapped = function(typ) {
+				switch (typ.Kind()) {
+				case go$pkg.Bool:
+				case go$pkg.Int:
+				case go$pkg.Int8:
+				case go$pkg.Int16:
+				case go$pkg.Int32:
+				case go$pkg.Uint:
+				case go$pkg.Uint8:
+				case go$pkg.Uint16:
+				case go$pkg.Uint32:
+				case go$pkg.Uintptr:
+				case go$pkg.Float32:
+				case go$pkg.Float64:
+				case go$pkg.Array:
+				case go$pkg.Map:
+				case go$pkg.Func:
+				case go$pkg.String:
+				case go$pkg.Struct:
+					return true;
+				case go$pkg.Ptr:
+					return typ.Elem().Kind() === go$pkg.Array;
 				}
-				return ntyp.Name();
-			}
-			var name = field.name.go$get();
-			if (name === "_" || go$reservedKeywords.indexOf(name) != -1) {
-				return name + "$" + i;
-			}
-			return name;
-		};
-		var copyStruct = function(dst, src, typ) {
-			var fields = typ.structType.fields.array, i;
-			for (i = 0; i < fields.length; i += 1) {
-				var field = fields[i];
-				var name = fieldName(field, i);
-				dst[name] = src[name];
-			}
-		};
+				return false;
+			};
+			var fieldName = function(field, i) {
+				if (field.name.go$get === go$throwNilPointerError) {
+					var ntyp = field.typ;
+					if (ntyp.Kind() === go$pkg.Ptr) {
+						ntyp = ntyp.Elem().common();
+					}
+					return ntyp.Name();
+				}
+				var name = field.name.go$get();
+				if (name === "_" || go$reservedKeywords.indexOf(name) != -1) {
+					return name + "$" + i;
+				}
+				return name;
+			};
+			var copyStruct = function(dst, src, typ) {
+				var fields = typ.structType.fields.array, i;
+				for (i = 0; i < fields.length; i += 1) {
+					var field = fields[i];
+					var name = fieldName(field, i);
+					dst[name] = src[name];
+				}
+			};
+			var deepValueEqual = function(v1, v2, visited) {
+				if (!v1.IsValid() || !v2.IsValid()) {
+					return !v1.IsValid() && !v2.IsValid();
+				}
+				if (v1.Type() !== v2.Type()) {
+					return false;
+				}
 
-		TypeOf = function(i) {
+				var i;
+				switch(v1.Kind()) {
+				case go$pkg.Array:
+				case go$pkg.Map:
+				case go$pkg.Slice:
+				case go$pkg.Struct:
+					for (i = 0; i < visited.length; i += 1) {
+						var entry = visited[i];
+						if (v1.val === entry[0] && v2.val === entry[1]) {
+							return true;
+						}
+					}
+					visited.push([v1.val, v2.val]);
+				}
+
+				switch(v1.Kind()) {
+				case go$pkg.Array:
+				case go$pkg.Slice:
+					if (v1.Kind() === go$pkg.Slice) {
+						if (v1.IsNil() !== v2.IsNil()) {
+							return false;
+						}
+						if (v1.iword() === v2.iword()) {
+							return true;
+						}
+					}
+					var n = v1.Len();
+					if (n !== v2.Len()) {
+						return false;
+					}
+					for (i = 0; i < n; i += 1) {
+						if (!deepValueEqual(v1.Index(i), v2.Index(i), visited)) {
+							return false;
+						}
+					}
+					return true;
+				case go$pkg.Interface:
+					if (v1.IsNil() || v2.IsNil()) {
+						return v1.IsNil() && v2.IsNil();
+					}
+					return deepValueEqual(v1.Elem(), v2.Elem(), visited);
+				case go$pkg.Ptr:
+					return deepValueEqual(v1.Elem(), v2.Elem(), visited);
+				case go$pkg.Struct:
+					var n = v1.NumField();
+					for (i = 0; i < n; i += 1) {
+						if (!deepValueEqual(v1.Field(i), v2.Field(i), visited)) {
+							return false;
+						}
+					}
+					return true;
+				case go$pkg.Map:
+					if (v1.IsNil() !== v2.IsNil()) {
+						return false;
+					}
+					if (v1.iword() === v2.iword()) {
+						return true;
+					}
+					var keys = v1.MapKeys();
+					if (keys.length !== v2.Len()) {
+						return false;
+					}
+					for (i = 0; i < keys.length; i++) {
+						var k = keys.array[i];
+						if (!deepValueEqual(v1.MapIndex(k), v2.MapIndex(k), visited)) {
+							return false;
+						}
+					}
+					return true;
+				case go$pkg.Func:
+					return v1.IsNil() && v2.IsNil();
+				}
+
+				return go$interfaceIsEqual(valueInterface(v1, false), valueInterface(v2, false));
+			};
+			var zeroVal = function(typ) {
+				switch (typ.Kind()) {
+				case go$pkg.Bool:
+					return false;
+				case go$pkg.Int:
+				case go$pkg.Int8:
+				case go$pkg.Int16:
+				case go$pkg.Int32:
+				case go$pkg.Uint:
+				case go$pkg.Uint8:
+				case go$pkg.Uint16:
+				case go$pkg.Uint32:
+				case go$pkg.Uintptr:
+				case go$pkg.Float32:
+				case go$pkg.Float64:
+					return 0;
+				case go$pkg.Int64:
+				case go$pkg.Uint64:
+				case go$pkg.Complex64:
+				case go$pkg.Complex128:
+					return new typ.jsType(0, 0);
+				case go$pkg.Array:
+					var elemType = typ.Elem();
+					return go$makeNativeArray(elemType.jsType.kind, typ.Len(), function() { return zeroVal(elemType); });
+				case go$pkg.Func:
+					return go$throwNilPointerError;
+				case go$pkg.Interface:
+					return null;
+				case go$pkg.Map:
+					return false;
+				case go$pkg.Chan:
+				case go$pkg.Ptr:
+				case go$pkg.Slice:
+					return typ.jsType.nil;
+				case go$pkg.String:
+					return "";
+				case go$pkg.Struct:
+					return new typ.jsType.Ptr();
+				default:
+					throw go$panic(new ValueError.Ptr("reflect.Zero", this.kind()));
+				}
+			};
+		`,
+
+		"TypeOf": `function(i) {
 			if (i === null) {
 				return null;
 			}
@@ -65,8 +192,8 @@ func init() {
 				return Go$String.reflectType();
 			}
 			return i.constructor.reflectType();
-		};
-		ValueOf = function(i) {
+		}`,
+		"ValueOf": `function(i) {
 			if (i === null) {
 				return new Value.Ptr();
 			}
@@ -75,14 +202,14 @@ func init() {
 			}
 			var typ = i.constructor.reflectType();
 			return new Value.Ptr(typ, i.go$val, typ.Kind() << flagKindShift);
-		};
-		arrayOf = function(n, t) {
+		}`,
+		"arrayOf": `function(n, t) {
 			return go$arrayType(t.jsType, n).reflectType();
-		};
-		ChanOf = function(dir, t) {
+		}`,
+		"ChanOf": `function(dir, t) {
 			return go$chanType(t.jsType, dir === go$pkg.SendDir, dir === go$pkg.RecvDir).reflectType();
-		};
-		MapOf = function(key, elem) {
+		}`,
+		"MapOf": `function(key, elem) {
 			switch (key.Kind()) {
 			case go$pkg.Func:
 			case go$pkg.Map:
@@ -90,59 +217,17 @@ func init() {
 				throw go$panic("reflect.MapOf: invalid key type " + key.String());
 			}
 			return go$mapType(key.jsType, elem.jsType).reflectType();
-		};
-		rtype.Ptr.prototype.ptrTo = function() {
+		}`,
+		"rtype.ptrTo": `function() {
 			return go$ptrType(this.jsType).reflectType();
-		};
-		SliceOf = function(t) {
+		}`,
+		"SliceOf": `function(t) {
 			return go$sliceType(t.jsType).reflectType();
-		};
-		var zeroVal = function(typ) {
-			switch (typ.Kind()) {
-			case go$pkg.Bool:
-				return false;
-			case go$pkg.Int:
-			case go$pkg.Int8:
-			case go$pkg.Int16:
-			case go$pkg.Int32:
-			case go$pkg.Uint:
-			case go$pkg.Uint8:
-			case go$pkg.Uint16:
-			case go$pkg.Uint32:
-			case go$pkg.Uintptr:
-			case go$pkg.Float32:
-			case go$pkg.Float64:
-				return 0;
-			case go$pkg.Int64:
-			case go$pkg.Uint64:
-			case go$pkg.Complex64:
-			case go$pkg.Complex128:
-				return new typ.jsType(0, 0);
-			case go$pkg.Array:
-				var elemType = typ.Elem();
-				return go$makeNativeArray(elemType.jsType.kind, typ.Len(), function() { return zeroVal(elemType); });
-			case go$pkg.Func:
-				return go$throwNilPointerError;
-			case go$pkg.Interface:
-				return null;
-			case go$pkg.Map:
-				return false;
-			case go$pkg.Chan:
-			case go$pkg.Ptr:
-			case go$pkg.Slice:
-				return typ.jsType.nil;
-			case go$pkg.String:
-				return "";
-			case go$pkg.Struct:
-				return new typ.jsType.Ptr();
-			default:
-				throw go$panic(new ValueError.Ptr("reflect.Zero", this.kind()));
-			}
-		};
-		Zero = function(typ) {
+		}`,
+		"Zero": `function(typ) {
 			return new Value.Ptr(typ, zeroVal(typ), typ.Kind() << flagKindShift);
-		};
-		unsafe_New = function(typ) {
+		}`,
+		"unsafe_New": `function(typ) {
 			switch (typ.Kind()) {
 			case go$pkg.Struct:
 				return new typ.jsType.Ptr();
@@ -151,14 +236,14 @@ func init() {
 			default:
 				return go$newDataPointer(zeroVal(typ), typ.ptrTo().jsType);
 			}
-		};
-		makechan = function(typ, size) {
+		}`,
+		"makechan": `function(typ, size) {
 			return new typ.jsType();
-		};
-		makeComplex = function(f, v, typ) {
+		}`,
+		"makeComplex": `function(f, v, typ) {
 			return new Value.Ptr(typ, new typ.jsType(v.real, v.imag), f | (typ.Kind() << flagKindShift));
-		};
-		MakeFunc = function(typ, fn) {
+		}`,
+		"MakeFunc": `function(typ, fn) {
 			var fv = function() {
 				var args = new Array(typ.NumIn()), i;
 				for (i = 0; i < typ.NumIn(); i += 1) {
@@ -178,10 +263,10 @@ func init() {
 					}
 					return results;
 				}
-			};
-			return new Value.Ptr(typ, fv, go$pkg.Func << flagKindShift);
-		};
-		makeInt = function(f, bits, typ) {
+			}
+		  return new Value.Ptr(typ, fv, go$pkg.Func << flagKindShift);
+		}`,
+		"makeInt": `function(f, bits, typ) {
 			var val;
 			switch (typ.Kind()) {
 			case go$pkg.Int8:
@@ -211,8 +296,8 @@ func init() {
 				break;
 			}
 			return new Value.Ptr(typ, val, f | (typ.Kind() << flagKindShift));
-		};
-		MakeSlice = function(typ, len, cap) {
+		}`,
+		"MakeSlice": `function(typ, len, cap) {
 			if (typ.Kind() !== go$pkg.Slice) {
 				throw go$panic("reflect.MakeSlice of non-slice type");
 			}
@@ -226,8 +311,8 @@ func init() {
 				throw go$panic("reflect.MakeSlice: len > cap");
 			}
 			return new Value.Ptr(typ.common(), typ.jsType.make(len, cap, function() { return zeroVal(typ.Elem()); }), go$pkg.Slice << flagKindShift);
-		};
-		cvtDirect = function(v, typ) {
+		}`,
+		"cvtDirect": `function(v, typ) {
 			var srcVal = v.iword();
 			if (srcVal === v.typ.jsType.nil) {
 				return new Value.Ptr(typ, typ.jsType.nil, v.flag);
@@ -269,24 +354,24 @@ func init() {
 				throw go$panic(new ValueError.Ptr("reflect.Convert", typ.Kind()));
 			}
 			return new Value.Ptr(typ, val, (v.flag & flagRO) | (typ.Kind() << flagKindShift));
-		};
-		cvtStringBytes = function(v, typ) {
+		}`,
+		"cvtStringBytes": `function(v, typ) {
 			return new Value.Ptr(typ, new typ.jsType(go$stringToBytes(v.iword())), (v.flag & flagRO) | (go$pkg.Slice << flagKindShift));
-		};
-		cvtStringRunes = function(v, typ) {
+		}`,
+		"cvtStringRunes": `function(v, typ) {
 			return new Value.Ptr(typ, new typ.jsType(go$stringToRunes(v.iword())), (v.flag & flagRO) | (go$pkg.Slice << flagKindShift));
-		};
-		makemap = function(t) {
+		}`,
+		"makemap": `function(t) {
 			return new Go$Map();
-		};
-		mapaccess = function(t, m, key) {
+		}`,
+		"mapaccess": `function(t, m, key) {
 			var entry = m[key.go$key ? key.go$key() : key];
 			if (entry === undefined) {
 				return [undefined, false];
 			}
 			return [entry.v, true];
-		};
-		mapassign = function(t, m, key, val, ok) {
+		}`,
+		"mapassign": `function(t, m, key, val, ok) {
 			if (!ok) {
 				delete m[key.go$key ? key.go$key() : key];
 				return;
@@ -297,26 +382,26 @@ func init() {
 				val = newVal;
 			}
 			m[key.go$key ? key.go$key() : key] = { k: key, v: val };
-		};
-		maplen = function(m) {
+		}`,
+		"maplen": `function(m) {
 			return go$keys(m).length;
-		};
-		mapiterinit = function(t, m) {
+		}`,
+		"mapiterinit": `function(t, m) {
 			return [m, go$keys(m), 0];
-		};
-		mapiterkey = function(it) {
+		}`,
+		"mapiterkey": `function(it) {
 			var key = it[1][it[2]];
 			return [it[0][key].k, true];
-		};
-		mapiternext = function(it) {
+		}`,
+		"mapiternext": `function(it) {
 			it[2] += 1;
-		};
-		chancap = function(ch) { go$notSupported("channels"); };
-		chanclose = function(ch) { go$notSupported("channels"); };
-		chanlen = function(ch) { go$notSupported("channels"); };
-		chanrecv = function(t, ch, nb) { go$notSupported("channels"); };
-		chansend = function(t, ch, val, nb) { go$notSupported("channels"); };
-		valueInterface = function(v, safe) {
+		}`,
+		"chancap":   `function(ch) { go$notSupported("channels"); }`,
+		"chanclose": `function(ch) { go$notSupported("channels"); }`,
+		"chanlen":   `function(ch) { go$notSupported("channels"); }`,
+		"chanrecv":  `function(t, ch, nb) { go$notSupported("channels"); }`,
+		"chansend":  `function(t, ch, val, nb) { go$notSupported("channels"); }`,
+		"valueInterface": `function(v, safe) {
 			if (v.flag === 0) {
 				throw go$panic(new ValueError.Ptr("reflect.Value.Interface", 0));
 			}
@@ -330,8 +415,8 @@ func init() {
 				return new v.typ.jsType(v.iword());
 			}
 			return v.iword();
-		};
-		makeMethodValue = function(op, v) {
+		}`,
+		"makeMethodValue": `function(op, v) {
 			if ((v.flag & flagMethod) === 0) {
 				throw go$panic("reflect: internal error: invalid use of makePartialFunc");
 			}
@@ -341,8 +426,8 @@ func init() {
 			var rcvr = tuple[2];
 			var fv = function() { return fn.apply(rcvr, arguments); };
 			return new Value.Ptr(v.Type(), fv, (v.flag & flagRO) | (go$pkg.Func << flagKindShift));
-		};
-		methodReceiver = function(op, v, i) {
+		}`,
+		"methodReceiver": `function(op, v, i) {
 			var m, t;
 			if (v.typ.Kind() === go$pkg.Interface) {
 				var tt = v.typ.interfaceType;
@@ -377,11 +462,11 @@ func init() {
 		}
 		ifaceE2I = function(t, src, dst) {
 			dst.go$set(src);
-		};
-		methodName = function() {
+		}`,
+		"methodName": `function() {
 			return "?FIXME?";
-		};
-		Copy = function(dst, src) {
+		}`,
+		"Copy": `function(dst, src) {
 			var dk = dst.kind();
 			if (dk !== go$pkg.Array && dk !== go$pkg.Slice) {
 				throw go$panic(new ValueError.Ptr("reflect.Copy", dk));
@@ -408,9 +493,9 @@ func init() {
 				srcVal = new (go$sliceType(src.typ.Elem().jsType))(srcVal);
 			}
 			return go$copySlice(dstVal, srcVal);
-		};
+		}`,
 
-		uncommonType.Ptr.prototype.Method = function(i) {
+		"uncommonType.Method": `function(i) {
 			if (this === uncommonType.Ptr.nil || i < 0 || i >= this.methods.length) {
 				throw go$panic("reflect: Method index out of range");
 			}
@@ -428,24 +513,24 @@ func init() {
 			}
 			var fn = function(rcvr) {
 				return rcvr[name].apply(rcvr, Array.prototype.slice.apply(arguments, [1]));
-			};
+			}
 			return new Method.Ptr(p.name.go$get(), pkgPath, mt, new Value.Ptr(mt, fn, fl), i);
-		};
+		}`,
 
-		Value.Ptr.prototype.iword = function() {
+		"Value.iword": `function() {
 			if ((this.flag & flagIndir) !== 0 && this.typ.Kind() !== go$pkg.Array && this.typ.Kind() !== go$pkg.Struct) {
 				return this.val.go$get();
 			}
 			return this.val;
-		};
-		Value.Ptr.prototype.Bytes = function() {
+		}`,
+		"Value.Bytes": `function() {
 			this.mustBe(go$pkg.Slice);
 			if (this.typ.Elem().Kind() !== go$pkg.Uint8) {
 				throw go$panic("reflect.Value.Bytes of non-byte slice");
 			}
 			return this.iword();
-		};
-		Value.Ptr.prototype.call = function(op, args) {
+		}`,
+		"Value.call": `function(op, args) {
 			var t = this.typ, fn, rcvr;
 
 			if ((this.flag & flagMethod) !== 0) {
@@ -531,19 +616,19 @@ func init() {
 				results[i] = new Value.Ptr(typ, results[i], flag);
 			}
 			return new (go$sliceType(Value))(results);
-		};
-		Value.Ptr.prototype.Cap = function() {
+		}`,
+		"Value.Cap": `function() {
 			var k = this.kind();
 			switch (k) {
 			case go$pkg.Slice:
 				return this.iword().capacity;
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.Cap", k));
-		};
-		Value.Ptr.prototype.Complex = function() {
+		}`,
+		"Value.Complex": `function() {
 			return this.iword();
-		};
-		Value.Ptr.prototype.Elem = function() {
+		}`,
+		"Value.Elem": `function() {
 			switch (this.kind()) {
 			case go$pkg.Interface:
 				var val = this.iword();
@@ -569,8 +654,8 @@ func init() {
 				return new Value.Ptr(tt.elem, val, fl);
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.Elem", this.kind()));
-		};
-		Value.Ptr.prototype.Field = function(i) {
+		}`,
+		"Value.Field": `function(i) {
 			this.mustBe(go$pkg.Struct);
 			var tt = this.typ.structType;
 			if (i < 0 || i >= tt.fields.length) {
@@ -589,8 +674,8 @@ func init() {
 				return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl);
 			}
 			return new Value.Ptr(typ, this.val[name], fl);
-		};
-		Value.Ptr.prototype.Index = function(i) {
+		}`,
+		"Value.Index": `function(i) {
 			var k = this.kind();
 			switch (k) {
 			case go$pkg.Array:
@@ -628,8 +713,8 @@ func init() {
 				return new Value.Ptr(uint8Type, string.charCodeAt(i), fl);
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.Index", k));
-		};
-		Value.Ptr.prototype.IsNil = function() {
+		}`,
+		"Value.IsNil": `function() {
 			switch (this.kind()) {
 			case go$pkg.Chan:
 			case go$pkg.Ptr:
@@ -643,8 +728,8 @@ func init() {
 				return this.iword() === null;
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.IsNil", this.kind()));
-		};
-		Value.Ptr.prototype.Len = function() {
+		}`,
+		"Value.Len": `function() {
 			var k = this.kind();
 			switch (k) {
 			case go$pkg.Array:
@@ -655,15 +740,15 @@ func init() {
 				return go$keys(this.iword()).length;
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.Len", k));
-		};
-		Value.Ptr.prototype.runes = function() {
+		}`,
+		"Value.runes": `function() {
 			this.mustBe(go$pkg.Slice);
 			if (this.typ.Elem().Kind() !== go$pkg.Int32) {
 				throw new go$panic("reflect.Value.Bytes of non-rune slice");
 			}
 			return this.iword();
-		};
-		Value.Ptr.prototype.Pointer = function() {
+		}`,
+		"Value.Pointer": `function() {
 			var k = this.kind();
 			switch (k) {
 			case go$pkg.Chan:
@@ -682,8 +767,8 @@ func init() {
 				return 1;
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.Pointer", k));
-		};
-		Value.Ptr.prototype.Set = function(x) {
+		}`,
+		"Value.Set": `function(x) {
 			this.mustBeAssignable();
 			x.mustBeExported();
 			if ((this.flag & flagIndir) !== 0) {
@@ -703,8 +788,8 @@ func init() {
 				}
 			}
 			this.val = x.val;
-		};
-		Value.Ptr.prototype.SetInt = function(x) {
+		}`,
+		"Value.SetInt": `function(x) {
 			this.mustBeAssignable();
 			var k = this.kind();
 			switch (k) {
@@ -719,8 +804,8 @@ func init() {
 				return;
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.SetInt", k));
-		}
-		Value.Ptr.prototype.SetUint = function(x) {
+		}`,
+		"Value.SetUint": `function(x) {
 			this.mustBeAssignable();
 			var k = this.kind();
 			switch (k) {
@@ -736,8 +821,8 @@ func init() {
 				return;
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.SetUint", k));
-		}
-		Value.Ptr.prototype.SetComplex = function(x) {
+		}`,
+		"Value.SetComplex": `function(x) {
 			this.mustBeAssignable();
 			var k = this.kind();
 			switch (k) {
@@ -747,8 +832,8 @@ func init() {
 				return;
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.SetComplex", k));
-		}
-		Value.Ptr.prototype.SetCap = function(n) {
+		}`,
+		"Value.SetCap": `function(n) {
 			this.mustBeAssignable();
 			this.mustBe(go$pkg.Slice);
 			var s = this.val.go$get();
@@ -760,8 +845,8 @@ func init() {
 			newSlice.length = s.length;
 			newSlice.capacity = n;
 			this.val.go$set(newSlice);
-		};
-		Value.Ptr.prototype.SetLen = function(n) {
+		}`,
+		"Value.SetLen": `function(n) {
 			this.mustBeAssignable();
 			this.mustBe(go$pkg.Slice);
 			var s = this.val.go$get();
@@ -773,8 +858,8 @@ func init() {
 			newSlice.length = n;
 			newSlice.capacity = s.capacity;
 			this.val.go$set(newSlice);
-		};
-		Value.Ptr.prototype.Slice = function(i, j) {
+		}`,
+		"Value.Slice": `function(i, j) {
 			var typ, s, cap;
 			var kind = this.kind();
 			switch (kind) {
@@ -808,8 +893,8 @@ func init() {
 
 			var fl = (this.flag & flagRO) | (go$pkg.Slice << flagKindShift);
 			return new Value.Ptr(typ.common(), go$subslice(s, i, j), fl);
-		};
-		Value.Ptr.prototype.Slice3 = function(i, j, k) {
+		}`,
+		"Value.Slice3": `function(i, j, k) {
 			var typ, s, cap;
 			var kind = this.kind();
 			switch (kind) {
@@ -837,8 +922,8 @@ func init() {
 
 			var fl = (this.flag & flagRO) | (go$pkg.Slice << flagKindShift);
 			return new Value.Ptr(typ.common(), go$subslice(s, i, j, k), fl);
-		};
-		Value.Ptr.prototype.String = function() {
+		}`,
+		"Value.String": `function() {
 			switch (this.kind()) {
 			case go$pkg.Invalid:
 				return "<invalid Value>";
@@ -846,92 +931,8 @@ func init() {
 				return this.iword();
 			}
 			return "<" + this.typ.String() + " Value>";
-		};
-		
-		var deepValueEqual = function(v1, v2, visited) {
-			if (!v1.IsValid() || !v2.IsValid()) {
-				return !v1.IsValid() && !v2.IsValid();
-			}
-			if (v1.Type() !== v2.Type()) {
-				return false;
-			}
-
-			var i;
-			switch(v1.Kind()) {
-			case go$pkg.Array:
-			case go$pkg.Map:
-			case go$pkg.Slice:
-			case go$pkg.Struct:
-				for (i = 0; i < visited.length; i += 1) {
-					var entry = visited[i];
-					if (v1.val === entry[0] && v2.val === entry[1]) {
-						return true;
-					}
-				}
-				visited.push([v1.val, v2.val]);
-			}
-
-			switch(v1.Kind()) {
-			case go$pkg.Array:
-			case go$pkg.Slice:
-				if (v1.Kind() === go$pkg.Slice) {
-					if (v1.IsNil() !== v2.IsNil()) {
-						return false;
-					}
-					if (v1.iword() === v2.iword()) {
-						return true;
-					}
-				}
-				var n = v1.Len();
-				if (n !== v2.Len()) {
-					return false;
-				}
-				for (i = 0; i < n; i += 1) {
-					if (!deepValueEqual(v1.Index(i), v2.Index(i), visited)) {
-						return false;
-					}
-				}
-				return true;
-			case go$pkg.Interface:
-				if (v1.IsNil() || v2.IsNil()) {
-					return v1.IsNil() && v2.IsNil();
-				}
-				return deepValueEqual(v1.Elem(), v2.Elem(), visited);
-			case go$pkg.Ptr:
-				return deepValueEqual(v1.Elem(), v2.Elem(), visited);
-			case go$pkg.Struct:
-				var n = v1.NumField();
-				for (i = 0; i < n; i += 1) {
-					if (!deepValueEqual(v1.Field(i), v2.Field(i), visited)) {
-						return false;
-					}
-				}
-				return true;
-			case go$pkg.Map:
-				if (v1.IsNil() !== v2.IsNil()) {
-					return false;
-				}
-				if (v1.iword() === v2.iword()) {
-					return true;
-				}
-				var keys = v1.MapKeys();
-				if (keys.length !== v2.Len()) {
-					return false;
-				}
-				for (i = 0; i < keys.length; i++) {
-					var k = keys.array[i];
-					if (!deepValueEqual(v1.MapIndex(k), v2.MapIndex(k), visited)) {
-						return false;
-					}
-				}
-				return true;
-			case go$pkg.Func:
-				return v1.IsNil() && v2.IsNil();
-			}
-
-			return go$interfaceIsEqual(valueInterface(v1, false), valueInterface(v2, false));
-		};
-		var DeepEqual = function(a1, a2) {
+		}`,
+		"DeepEqual": `function(a1, a2) {
 			if (a1 === a2) {
 				return true;
 			}
@@ -939,6 +940,6 @@ func init() {
 				return false;
 			}
 			return deepValueEqual(ValueOf(a1), ValueOf(a2), []);
-		};
-	`
+		}`,
+	}
 }

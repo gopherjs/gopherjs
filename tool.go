@@ -234,6 +234,10 @@ func tool() error {
 		verbose := testFlags.Bool("v", false, "")
 		testFlags.Parse(flag.Args()[1:])
 
+		for _, pkgPath := range testFlags.Args() {
+			packagesToTest[pkgPath] = true
+		}
+
 		mainPkg := &Package{
 			Package: &build.Package{
 				Name:       "main",
@@ -249,10 +253,6 @@ func tool() error {
 		mainPkg.Output.AddDependenciesOf(testingOutput)
 
 		for _, pkgPath := range testFlags.Args() {
-			packagesToTest[pkgPath] = true
-		}
-
-		for _, pkgPath := range testFlags.Args() {
 			var names []string
 			var tests []string
 			collectTests := func(pkg *Package) {
@@ -266,14 +266,10 @@ func tool() error {
 				mainPkg.Output.AddDependenciesOf(pkg.Output)
 			}
 
-			buildPkg, err := buildImport(pkgPath, 0)
-			if err != nil {
+			if _, err := importPackage(pkgPath); err != nil {
 				return err
 			}
-			pkg := &Package{Package: buildPkg}
-			if err := buildPackage(pkg); err != nil {
-				return err
-			}
+			pkg := packages[pkgPath]
 			collectTests(pkg)
 
 			if len(pkg.XTestGoFiles) != 0 {

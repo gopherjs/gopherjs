@@ -26,6 +26,12 @@ type Package struct {
 	Output     *translator.Output
 }
 
+type ImportCError struct{}
+
+func (e *ImportCError) Error() string {
+	return `importing "C" is not supported by GopherJS`
+}
+
 var currentDirectory, goRoot, goPath string
 
 func init() {
@@ -43,6 +49,10 @@ func init() {
 }
 
 func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
+	if path == "C" {
+		return nil, &ImportCError{}
+	}
+
 	buildContext := &build.Context{
 		GOROOT:   build.Default.GOROOT,
 		GOPATH:   build.Default.GOPATH,

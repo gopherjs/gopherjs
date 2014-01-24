@@ -240,7 +240,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			c.Printf("continue%s;", label)
 		case token.GOTO:
-			c.Printf(`go$notSupported("goto")`)
+			c.Printf(`go$notSupported("goto");`)
 		case token.FALLTHROUGH:
 			// handled in CaseClause
 		default:

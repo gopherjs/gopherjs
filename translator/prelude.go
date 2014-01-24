@@ -65,7 +65,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			this.go$val = this;
 		};
 		typ.prototype.go$key = function() { return string + "$" + this.high + "$" + this.low; };
-		break
+		break;
 
 	case "Complex64":
 	case "Complex128":
@@ -171,7 +171,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			typ.extendReflectType = function(rt) {
 				rt.ptrType = new go$reflect.ptrType(rt, elem.reflectType());
 			};
-		}
+		};
 		break;
 
 	case "Slice":
@@ -344,7 +344,7 @@ var go$funcType = function(params, results, isVariadic) {
 	if (results.length === 1) {
 		string += " " + results[0].string;
 	} else if (results.length > 1) {
-		string += " (" + go$mapArray(results, function(r) { return r.string; }).join(", ") + ")"
+		string += " (" + go$mapArray(results, function(r) { return r.string; }).join(", ") + ")";
 	}
 	var typ = go$funcTypes[string];
 	if (typ === undefined) {
@@ -702,7 +702,7 @@ var go$sliceToArray = function(slice) {
 };
 
 var go$decodeRune = function(str, pos) {
-	var c0 = str.charCodeAt(pos)
+	var c0 = str.charCodeAt(pos);
 
 	if (c0 < 0x80) {
 		return [c0, 1];
@@ -712,7 +712,7 @@ var go$decodeRune = function(str, pos) {
 		return [0xFFFD, 1];
 	}
 
-	var c1 = str.charCodeAt(pos + 1)
+	var c1 = str.charCodeAt(pos + 1);
 	if (c1 !== c1 || c1 < 0x80 || 0xC0 <= c1) {
 		return [0xFFFD, 1];
 	}
@@ -725,7 +725,7 @@ var go$decodeRune = function(str, pos) {
 		return [r, 2];
 	}
 
-	var c2 = str.charCodeAt(pos + 2)
+	var c2 = str.charCodeAt(pos + 2);
 	if (c2 !== c2 || c2 < 0x80 || 0xC0 <= c2) {
 		return [0xFFFD, 1];
 	}
@@ -741,7 +741,7 @@ var go$decodeRune = function(str, pos) {
 		return [r, 3];
 	}
 
-	var c3 = str.charCodeAt(pos + 3)
+	var c3 = str.charCodeAt(pos + 3);
 	if (c3 !== c3 || c3 < 0x80 || 0xC0 <= c3) {
 		return [0xFFFD, 1];
 	}
@@ -1083,7 +1083,7 @@ var go$growSlice = function(slice, length) {
 		newArray.length = newCapacity;
 	} else {
 		newArray = new slice.array.constructor(newCapacity);
-		newArray.set(slice.array.subarray(slice.offset))
+		newArray.set(slice.array.subarray(slice.offset));
 	}
 
 	var newSlice = new slice.constructor(newArray);

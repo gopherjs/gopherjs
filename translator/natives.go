@@ -101,7 +101,7 @@ func init() {
 		"IsInf":    `function(f, sign) { if (f === -1/0) { return sign <= 0; } if (f === 1/0) { return sign >= 0; } return false; }`,
 		"IsNaN":    `function(f) { return f !== f; }`,
 		"Ldexp": `function(frac, exp) {
-			if (frac === 0) { return frac; };
+			if (frac === 0) { return frac; }
 			if (exp >= 1024) { return frac * Math.pow(2, 1023) * Math.pow(2, exp - 1023); }
 			if (exp <= -1024) { return frac * Math.pow(2, -1023) * Math.pow(2, exp + 1023); }
 			return frac * Math.pow(2, exp);
@@ -113,7 +113,7 @@ func init() {
 		"Max":       `function(x, y) { return (x === 1/0 || y === 1/0) ? 1/0 : Math.max(x, y); }`,
 		"Min":       `function(x, y) { return (x === -1/0 || y === -1/0) ? -1/0 : Math.min(x, y); }`,
 		"Mod":       `function(x, y) { return x % y; }`,
-		"Modf":      `function(f) { if (f === -1/0 || f === 1/0) { return [f, 0/0] } var frac = f % 1; return [f - frac, frac]; }`,
+		"Modf":      `function(f) { if (f === -1/0 || f === 1/0) { return [f, 0/0]; } var frac = f % 1; return [f - frac, frac]; }`,
 		"NaN":       `function() { return 0/0; }`,
 		"Pow":       `function(x, y) { return ((x === 1) || (x === -1 && (y === -1/0 || y === 1/0))) ? 1 : Math.pow(x, y); }`,
 		"Remainder": `remainder`,
@@ -231,7 +231,7 @@ func init() {
 
 	pkgNatives["runtime"] = map[string]string{
 		"init": `
-			go$throwRuntimeError = function(msg) { throw go$panic(new errorString(msg)) };
+			go$throwRuntimeError = function(msg) { throw go$panic(new errorString(msg)); };
 			sizeof_C_MStats = 3712;
 		`,
 		"getgoroot": `function() {
@@ -248,7 +248,7 @@ func init() {
 		"GC": `function() {}`,
 		"GOMAXPROCS": `function(n) {
 			if (n > 1) {
-				go$notSupported("GOMAXPROCS != 1")
+				go$notSupported("GOMAXPROCS != 1");
 			}
 			return 1;
 		}`,

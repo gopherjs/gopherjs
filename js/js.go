@@ -53,3 +53,8 @@ type Object interface {
 func Global(name string) Object {
 	return nil
 }
+
+// This returns the value of JavaScript's "this" keyword. It can be used when passing Go functions to JavaScript as callbacks.
+func This() Object {
+	return nil
+}

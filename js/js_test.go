@@ -175,3 +175,12 @@ func TestEquality(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestThis(t *testing.T) {
+	dummys.Set("testThis", func() {
+		if js.This() != dummys {
+			t.Fail()
+		}
+	})
+	dummys.Call("testThis")
+}

@@ -745,6 +745,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 							return fmt.Sprintf("go$global.%s", id)
 						}
 						return fmt.Sprintf("go$global[go$externalize(%s, Go$String)]", c.translateExpr(e.Args[0]))
+					case "This":
+						return "this"
 					default:
 						panic("Invalid js package method: " + o.Name())
 					}

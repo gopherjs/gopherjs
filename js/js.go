@@ -51,10 +51,10 @@ type Object interface {
 
 // Global returns the JavaScript global with the given name.
 func Global(name string) Object {
-	return nil
+	return nil // GopherJS will not use this function body
 }
 
 // This returns the value of JavaScript's "this" keyword. It can be used when passing Go functions to JavaScript as callbacks.
 func This() Object {
-	return nil
+	return nil // GopherJS will not use this function body
 }

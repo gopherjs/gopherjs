@@ -68,6 +68,9 @@ func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 	if path == "hash/crc32" {
 		pkg.GoFiles = []string{"crc32.go", "crc32_generic.go"}
 	}
+	if pkg.IsCommand() {
+		pkg.PkgObj = filepath.Join(pkg.BinDir, filepath.Base(pkg.ImportPath)+".js")
+	}
 	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
 		// fall back to GOPATH
 		gopathPkgObj := build.Default.GOPATH + pkg.PkgObj[len(build.Default.GOROOT):]
@@ -80,6 +83,7 @@ func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 
 var fileSet = token.NewFileSet()
 var packages = make(map[string]*Package)
+var verbose = false
 var installMode = false
 var packagesToTest = make(map[string]bool)
 
@@ -173,10 +177,32 @@ func tool() error {
 
 	case "install":
 		installFlags := flag.NewFlagSet("install", flag.ContinueOnError)
+		installFlags.BoolVar(&verbose, "v", false, "verbose")
+		all := installFlags.Bool("all", false, "install all packages in GOROOT")
 		installFlags.Parse(flag.Args()[1:])
 
 		installMode = true
 		pkgs := installFlags.Args()
+		if *all {
+			dir := filepath.Join(build.Default.GOROOT, "src", "pkg")
+			err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if info.IsDir() && path != dir {
+					pkgPath := path[len(dir)+1:]
+					if info.Name()[0] == '.' || info.Name() == "testdata" || pkgPath == "builtin" {
+						return filepath.SkipDir
+					}
+					pkgs = append(pkgs, pkgPath)
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+
 		if len(pkgs) == 0 {
 			srcDir, err := filepath.EvalSymlinks(filepath.Join(build.Default.GOPATH, "src"))
 			if err != nil {
@@ -192,18 +218,13 @@ func tool() error {
 			pkgs = []string{pkgPath}
 		}
 		for _, pkgPath := range pkgs {
-			buildPkg, err := buildImport(pkgPath, 0)
-			if err != nil {
-				return err
-			}
-			pkg := &Package{Package: buildPkg}
-			if pkg.IsCommand() {
-				pkg.PkgObj = filepath.Join(pkg.BinDir, filepath.Base(pkg.ImportPath)+".js")
-			}
-			if err := buildPackage(pkg); err != nil {
-				return err
-			}
-			if err := writeCommandPackage(pkg, pkg.PkgObj); err != nil {
+			if _, err := importPackage(pkgPath); err != nil {
+				switch err.(type) {
+				case *build.NoGoError, *ImportCError:
+					if *all {
+						continue
+					}
+				}
 				return err
 			}
 		}
@@ -240,8 +261,8 @@ func tool() error {
 
 	case "test":
 		testFlags := flag.NewFlagSet("test", flag.ContinueOnError)
-		short := testFlags.Bool("short", false, "")
-		verbose := testFlags.Bool("v", false, "")
+		testFlags.BoolVar(&verbose, "v", false, "verbose")
+		short := testFlags.Bool("short", false, "short")
 		testFlags.Parse(flag.Args()[1:])
 
 		for _, pkgPath := range testFlags.Args() {
@@ -313,11 +334,11 @@ func tool() error {
 		}
 
 		var args []string
+		if verbose {
+			args = append(args, "-test.v")
+		}
 		if *short {
 			args = append(args, "-test.short")
-		}
-		if *verbose {
-			args = append(args, "-test.v")
 		}
 		return runNode(tempfile.Name(), args, "")
 
@@ -400,9 +421,9 @@ func importPackage(path string) (*translator.Output, error) {
 }
 
 func buildPackage(pkg *Package) error {
-	packages[pkg.ImportPath] = pkg
 	if pkg.ImportPath == "unsafe" {
 		pkg.Output = &translator.Output{Types: types.Unsafe}
+		packages[pkg.ImportPath] = pkg
 		return nil
 	}
 
@@ -461,9 +482,14 @@ func buildPackage(pkg *Package) error {
 			if err != nil {
 				return err
 			}
+			packages[pkg.ImportPath] = pkg
 
 			return nil
 		}
+	}
+
+	if verbose {
+		fmt.Println(pkg.ImportPath)
 	}
 
 	var files []*ast.File
@@ -514,8 +540,13 @@ func buildPackage(pkg *Package) error {
 	if err != nil {
 		return err
 	}
+	packages[pkg.ImportPath] = pkg
 
-	if installMode && !pkg.IsCommand() {
+	if installMode {
+		if pkg.IsCommand() {
+			return writeCommandPackage(pkg, pkg.PkgObj)
+		}
+
 		if err := writeLibraryPackage(pkg, pkg.PkgObj); err != nil {
 			if strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
 				// fall back to GOPATH
@@ -526,6 +557,11 @@ func buildPackage(pkg *Package) error {
 			}
 			return err
 		}
+		return nil
+	}
+
+	if pkg.ImportPath == "runtime" {
+		fmt.Println(`note: run "gopherjs install -all -v" once to speed up builds`)
 	}
 
 	return nil

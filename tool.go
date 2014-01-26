@@ -83,8 +83,8 @@ func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 
 var fileSet = token.NewFileSet()
 var packages = make(map[string]*Package)
-var verbose = false
 var installMode = false
+var verboseInstall = false
 var packagesToTest = make(map[string]bool)
 
 func main() {
@@ -177,7 +177,7 @@ func tool() error {
 
 	case "install":
 		installFlags := flag.NewFlagSet("install", flag.ContinueOnError)
-		installFlags.BoolVar(&verbose, "v", false, "verbose")
+		installFlags.BoolVar(&verboseInstall, "v", false, "verbose")
 		all := installFlags.Bool("all", false, "install all packages in GOROOT")
 		installFlags.Parse(flag.Args()[1:])
 
@@ -261,7 +261,7 @@ func tool() error {
 
 	case "test":
 		testFlags := flag.NewFlagSet("test", flag.ContinueOnError)
-		testFlags.BoolVar(&verbose, "v", false, "verbose")
+		verbose := testFlags.Bool("v", false, "verbose")
 		short := testFlags.Bool("short", false, "short")
 		testFlags.Parse(flag.Args()[1:])
 
@@ -334,7 +334,7 @@ func tool() error {
 		}
 
 		var args []string
-		if verbose {
+		if *verbose {
 			args = append(args, "-test.v")
 		}
 		if *short {
@@ -488,7 +488,7 @@ func buildPackage(pkg *Package) error {
 		}
 	}
 
-	if verbose {
+	if verboseInstall {
 		fmt.Println(pkg.ImportPath)
 	}
 

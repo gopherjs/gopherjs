@@ -367,7 +367,7 @@ func (c *PkgContext) internalize(s string, t types.Type) string {
 		switch {
 		case u.Info()&types.IsBoolean != 0:
 			return fmt.Sprintf("!!(%s)", s)
-		case u.Info()&types.IsInteger != 0:
+		case u.Info()&types.IsInteger != 0 && !is64Bit(u):
 			return fixNumber(fmt.Sprintf("go$parseInt(%s)", s), u)
 		case u.Info()&types.IsFloat != 0:
 			return fmt.Sprintf("go$parseFloat(%s)", s)

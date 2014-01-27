@@ -118,12 +118,12 @@ func TestNew(t *testing.T) {
 
 type StructWithJsField struct {
 	js.Object
-	Length int `js:"length"`
+	Length int64 `js:"length"`
 }
 
 type StructWithJsField2 struct {
 	object js.Object // to hide members from public API
-	Length int       `js:"length"`
+	Length int64     `js:"length"`
 }
 
 func TestReadingJsField(t *testing.T) {

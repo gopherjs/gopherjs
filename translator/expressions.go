@@ -931,11 +931,6 @@ func (c *PkgContext) translateConversion(expr ast.Expr, desiredType types.Type) 
 		return c.translateExpr(expr)
 	}
 
-	basicExprType, isBasicExpr := exprType.Underlying().(*types.Basic)
-	if isBasicExpr && basicExprType.Kind() == types.UntypedNil {
-		return c.zeroValue(desiredType)
-	}
-
 	if c.pkg.Path() == "reflect" {
 		if call, isCall := expr.(*ast.CallExpr); isCall && types.IsIdentical(c.info.Types[call.Fun], types.Typ[types.UnsafePointer]) {
 			if ptr, isPtr := desiredType.(*types.Pointer); isPtr {
@@ -1029,15 +1024,6 @@ func (c *PkgContext) translateConversion(expr ast.Expr, desiredType types.Type) 
 		case *types.Array, *types.Pointer:
 			return fmt.Sprintf("new %s(%s)", c.typeName(desiredType), c.translateExpr(expr))
 		}
-		return c.formatExpr("go$subslice(new %1s(%2e.array), %2e.offset, %2e.offset + %2e.length)", c.typeName(desiredType), expr)
-
-	case *types.Interface:
-		if isWrapped(exprType) {
-			return fmt.Sprintf("new %s(%s)", c.typeName(exprType), c.translateExpr(expr))
-		}
-		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
-			return c.formatExpr("new %1e.constructor.Struct(%1e)", expr)
-		}
 
 	case *types.Pointer:
 		if s, isStruct := t.Elem().Underlying().(*types.Struct); isStruct {
@@ -1054,17 +1040,7 @@ func (c *PkgContext) translateConversion(expr ast.Expr, desiredType types.Type) 
 		}
 	}
 
-	return c.translateExpr(expr)
-}
-
-func (c *PkgContext) translateConversionToSlice(expr ast.Expr, desiredType types.Type) string {
-	switch c.info.Types[expr].Underlying().(type) {
-	case *types.Basic:
-		return fmt.Sprintf("new %s(go$stringToBytes(%s))", c.typeName(desiredType), c.translateExpr(expr))
-	case *types.Array, *types.Pointer:
-		return fmt.Sprintf("new %s(%s)", c.typeName(desiredType), c.translateExpr(expr))
-	}
-	return c.translateExpr(expr)
+	return c.translateImplicitConversion(expr, desiredType)
 }
 
 func (c *PkgContext) translateImplicitConversion(expr ast.Expr, desiredType types.Type) string {
@@ -1075,10 +1051,17 @@ func (c *PkgContext) translateImplicitConversion(expr ast.Expr, desiredType type
 		return c.zeroValue(desiredType)
 	}
 
+	switch desiredType.Underlying().(type) {
+	case *types.Struct, *types.Array:
+		if _, isComposite := expr.(*ast.CompositeLit); !isComposite {
+			return c.clone(c.translateExpr(expr), desiredType)
+		}
+	}
+
 	exprType := c.info.Types[expr]
-	// if types.IsIdentical(exprType, desiredType) {
-	// 	return c.translateExpr(expr)
-	// }
+	if types.IsIdentical(exprType, desiredType) {
+		return c.translateExpr(expr)
+	}
 
 	basicExprType, isBasicExpr := exprType.Underlying().(*types.Basic)
 	if isBasicExpr && basicExprType.Kind() == types.UntypedNil {
@@ -1087,10 +1070,7 @@ func (c *PkgContext) translateImplicitConversion(expr ast.Expr, desiredType type
 
 	switch desiredType.Underlying().(type) {
 	case *types.Slice:
-		_, desiredIsNamed := desiredType.(*types.Named)
-		if desiredIsNamed && !types.IsIdentical(exprType, desiredType) {
-			return c.formatExpr("go$subslice(new %1s(%2e.array), %2e.offset, %2e.offset + %2e.length)", c.typeName(desiredType), expr)
-		}
+		return c.formatExpr("go$subslice(new %1s(%2e.array), %2e.offset, %2e.offset + %2e.length)", c.typeName(desiredType), expr)
 
 	case *types.Interface:
 		if isWrapped(exprType) {
@@ -1099,13 +1079,18 @@ func (c *PkgContext) translateImplicitConversion(expr ast.Expr, desiredType type
 		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
 			return c.formatExpr("new %1e.constructor.Struct(%1e)", expr)
 		}
-
-	case *types.Struct, *types.Array:
-		if _, isComposite := expr.(*ast.CompositeLit); !isComposite {
-			return c.clone(c.translateExpr(expr), desiredType)
-		}
 	}
 
+	return c.translateExpr(expr)
+}
+
+func (c *PkgContext) translateConversionToSlice(expr ast.Expr, desiredType types.Type) string {
+	switch c.info.Types[expr].Underlying().(type) {
+	case *types.Basic:
+		return fmt.Sprintf("new %s(go$stringToBytes(%s))", c.typeName(desiredType), c.translateExpr(expr))
+	case *types.Array, *types.Pointer:
+		return fmt.Sprintf("new %s(%s)", c.typeName(desiredType), c.translateExpr(expr))
+	}
 	return c.translateExpr(expr)
 }
 

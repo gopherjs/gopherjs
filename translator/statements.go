@@ -207,7 +207,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 						}
 						et := elemType(t)
 						c.info.Types[indexExpr] = et
-						c.Printf("%s;", c.translateAssign(s.Value, c.translateExprToType(indexExpr, et)))
+						c.Printf("%s;", c.translateAssign(s.Value, c.translateImplicitConversion(indexExpr, et)))
 					}
 					if !isBlank(s.Key) {
 						c.Printf("%s;", c.translateAssign(s.Key, iVar))
@@ -267,13 +267,13 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				c.Printf("return %s;", c.translateExpr(results[0]))
 				break
 			}
-			v := c.translateExprToType(results[0], c.functionSig.Results().At(0).Type())
+			v := c.translateImplicitConversion(results[0], c.functionSig.Results().At(0).Type())
 			c.delayedOutput = nil
 			c.Printf("return %s;", v)
 		default:
 			values := make([]string, len(results))
 			for i, result := range results {
-				values[i] = c.translateExprToType(result, c.functionSig.Results().At(i).Type())
+				values[i] = c.translateImplicitConversion(result, c.functionSig.Results().At(i).Type())
 			}
 			c.delayedOutput = nil
 			c.Printf("return [%s];", strings.Join(values, ", "))
@@ -566,7 +566,7 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 				}
 				return ""
 			}
-			return c.translateAssign(lhs, c.translateExprToType(s.Rhs[0], c.info.Types[s.Lhs[0]]))
+			return c.translateAssign(lhs, c.translateImplicitConversion(s.Rhs[0], c.info.Types[s.Lhs[0]]))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			tupleVar := c.newVariable("_tuple")
@@ -575,14 +575,14 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 			for i, lhs := range s.Lhs {
 				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
-					out += ", " + c.translateAssign(lhs, c.translateExprToType(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]]))
+					out += ", " + c.translateAssign(lhs, c.translateImplicitConversion(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]]))
 				}
 			}
 			return out
 		case len(s.Lhs) == len(s.Rhs):
 			parts := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
-				parts[i] = c.translateExprToType(rhs, c.info.Types[s.Lhs[i]])
+				parts[i] = c.translateImplicitConversion(rhs, c.info.Types[s.Lhs[i]])
 			}
 			tupleVar := c.newVariable("_tuple")
 			out := tupleVar + " = [" + strings.Join(parts, ", ") + "]"
@@ -714,7 +714,7 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 				fmt.Sprintf(`, (%s >= 0 && %s < %s.length) ? (%s.array[%s.offset + %s] = %s) : go$throwRuntimeError("index out of range")`, indexVar, indexVar, sliceVar, sliceVar, sliceVar, indexVar, rhs)
 		case *types.Map:
 			keyVar := c.newVariable("_key")
-			return fmt.Sprintf(`%s = %s, (%s || go$throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s }`, keyVar, c.translateExprToType(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)
+			return fmt.Sprintf(`%s = %s, (%s || go$throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s }`, keyVar, c.translateImplicitConversion(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)
 		default:
 			panic(fmt.Sprintf("Unhandled lhs type: %T\n", t))
 		}

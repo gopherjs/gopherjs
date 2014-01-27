@@ -152,13 +152,13 @@ func (c *PkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellips
 			varargType := sig.Params().At(i).Type().(*types.Slice)
 			varargs := make([]string, len(args)-i)
 			for j, arg := range args[i:] {
-				varargs[j] = c.translateExprToType(arg, varargType.Elem())
+				varargs[j] = c.translateImplicitConversion(arg, varargType.Elem())
 			}
 			params[i] = fmt.Sprintf("new %s([%s])", c.typeName(varargType), strings.Join(varargs, ", "))
 			break
 		}
 		argType := sig.Params().At(i).Type()
-		params[i] = c.translateExprToType(args[i], argType)
+		params[i] = c.translateImplicitConversion(args[i], argType)
 	}
 	return strings.Join(params, ", ")
 }
@@ -322,15 +322,15 @@ func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 		return fmt.Sprintf("(new %s(%s)).go$key()", c.typeName(keyType), c.translateExpr(expr))
 	case *types.Basic:
 		if is64Bit(t) {
-			return fmt.Sprintf("%s.go$key()", c.translateExprToType(expr, keyType))
+			return fmt.Sprintf("%s.go$key()", c.translateImplicitConversion(expr, keyType))
 		}
-		return c.translateExprToType(expr, keyType)
+		return c.translateImplicitConversion(expr, keyType)
 	case *types.Chan, *types.Pointer:
-		return fmt.Sprintf("%s.go$key()", c.translateExprToType(expr, keyType))
+		return fmt.Sprintf("%s.go$key()", c.translateImplicitConversion(expr, keyType))
 	case *types.Interface:
-		return fmt.Sprintf("(%s || go$interfaceNil).go$key()", c.translateExprToType(expr, keyType))
+		return fmt.Sprintf("(%s || go$interfaceNil).go$key()", c.translateImplicitConversion(expr, keyType))
 	default:
-		return c.translateExprToType(expr, keyType)
+		return c.translateImplicitConversion(expr, keyType)
 	}
 }
 

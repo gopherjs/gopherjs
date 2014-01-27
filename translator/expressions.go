@@ -67,7 +67,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				for len(elements) <= i {
 					elements = append(elements, zero)
 				}
-				elements[i] = c.translateExprToType(element, elementType)
+				elements[i] = c.translateImplicitConversion(element, elementType)
 				i++
 			}
 			return elements
@@ -92,7 +92,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			assignments := ""
 			for _, element := range e.Elts {
 				kve := element.(*ast.KeyValueExpr)
-				assignments += fmt.Sprintf(`%s = %s, %s[%s] = { k: %s, v: %s }, `, keyVar, c.translateExprToType(kve.Key, t.Key()), mapVar, c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, c.translateExprToType(kve.Value, t.Elem()))
+				assignments += fmt.Sprintf(`%s = %s, %s[%s] = { k: %s, v: %s }, `, keyVar, c.translateImplicitConversion(kve.Key, t.Key()), mapVar, c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, c.translateImplicitConversion(kve.Value, t.Elem()))
 			}
 			return fmt.Sprintf("(%s = new Go$Map(), %s%s)", mapVar, assignments, mapVar)
 		case *types.Struct:
@@ -103,7 +103,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			}
 			if !isKeyValue {
 				for i, element := range e.Elts {
-					elements[i] = c.translateExprToType(element, t.Field(i).Type())
+					elements[i] = c.translateImplicitConversion(element, t.Field(i).Type())
 				}
 			}
 			if isKeyValue {
@@ -114,7 +114,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					kve := element.(*ast.KeyValueExpr)
 					for j := range elements {
 						if kve.Key.(*ast.Ident).Name == t.Field(j).Name() {
-							elements[j] = c.translateExprToType(kve.Value, t.Field(j).Type())
+							elements[j] = c.translateImplicitConversion(kve.Value, t.Field(j).Type())
 							break
 						}
 					}
@@ -312,7 +312,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					return fixNumber(fmt.Sprintf("(%s >> go$min(%s, 31))", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
 				}
 				y := c.newVariable("y")
-				return fixNumber(fmt.Sprintf("(%s = %s, %s < 32 ? (%s %s %s) : 0)", y, c.translateExprToType(e.Y, types.Typ[types.Uint]), y, c.translateExpr(e.X), op, y), basic)
+				return fixNumber(fmt.Sprintf("(%s = %s, %s < 32 ? (%s %s %s) : 0)", y, c.translateImplicitConversion(e.Y, types.Typ[types.Uint]), y, c.translateExpr(e.X), op, y), basic)
 			case token.AND, token.OR:
 				if basic.Info()&types.IsUnsigned != 0 {
 					return fmt.Sprintf("((%s %s %s) >>> 0)", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
@@ -366,7 +366,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 				return fmt.Sprintf("(%s = %s, %s = %s, %s)", x, c.translateExpr(e.X), y, c.translateExpr(e.Y), strings.Join(conds, " && "))
 			case *types.Interface:
-				return fmt.Sprintf("go$interfaceIsEqual(%s, %s)", c.translateExprToType(e.X, t), c.translateExprToType(e.Y, t))
+				return fmt.Sprintf("go$interfaceIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 			case *types.Array:
 				return fmt.Sprintf("go$arrayIsEqual(%s, %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
 			case *types.Pointer:
@@ -381,14 +381,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 				switch u.Elem().Underlying().(type) {
 				case *types.Struct, *types.Interface:
-					return c.translateExprToType(e.X, t) + " === " + c.translateExprToType(e.Y, t)
+					return c.translateImplicitConversion(e.X, t) + " === " + c.translateImplicitConversion(e.Y, t)
 				case *types.Array:
-					return fmt.Sprintf("go$arrayIsEqual(%s, %s)", c.translateExprToType(e.X, t), c.translateExprToType(e.Y, t))
+					return fmt.Sprintf("go$arrayIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 				default:
-					return fmt.Sprintf("go$pointerIsEqual(%s, %s)", c.translateExprToType(e.X, t), c.translateExprToType(e.Y, t))
+					return fmt.Sprintf("go$pointerIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 				}
 			default:
-				return c.translateExprToType(e.X, t) + " === " + c.translateExprToType(e.Y, t)
+				return c.translateImplicitConversion(e.X, t) + " === " + c.translateImplicitConversion(e.Y, t)
 			}
 		default:
 			panic(e.Op)
@@ -422,24 +422,29 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		}
 
 	case *ast.SliceExpr:
-		b, isBasic := c.info.Types[e.X].Underlying().(*types.Basic)
-		isString := isBasic && b.Info()&types.IsString != 0
-		slice := c.translateExprToType(e.X, exprType)
+		if b, isBasic := c.info.Types[e.X].Underlying().(*types.Basic); isBasic && b.Info()&types.IsString != 0 {
+			if e.High == nil {
+				if e.Low == nil {
+					return c.translateExpr(e.X)
+				}
+				return fmt.Sprintf("%s.substring(%s)", c.translateExpr(e.X), c.flatten64(e.Low))
+			}
+			low := "0"
+			if e.Low != nil {
+				low = c.flatten64(e.Low)
+			}
+			return fmt.Sprintf("%s.substring(%s, %s)", c.translateExpr(e.X), low, c.flatten64(e.High))
+		}
+		slice := c.translateConversionToSlice(e.X, exprType)
 		if e.High == nil {
 			if e.Low == nil {
 				return slice
-			}
-			if isString {
-				return fmt.Sprintf("%s.substring(%s)", slice, c.flatten64(e.Low))
 			}
 			return fmt.Sprintf("go$subslice(%s, %s)", slice, c.flatten64(e.Low))
 		}
 		low := "0"
 		if e.Low != nil {
 			low = c.flatten64(e.Low)
-		}
-		if isString {
-			return fmt.Sprintf("%s.substring(%s, %s)", slice, low, c.flatten64(e.High))
 		}
 		if e.Max != nil {
 			return fmt.Sprintf("go$subslice(%s, %s, %s, %s)", slice, low, c.flatten64(e.High), c.flatten64(e.Max))
@@ -520,10 +525,10 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				case "make":
 					switch argType := c.info.Types[e.Args[0]].Underlying().(type) {
 					case *types.Slice:
-						length := c.translateExprToType(e.Args[1], types.Typ[types.Int])
+						length := c.flatten64(e.Args[1])
 						capacity := "0"
 						if len(e.Args) == 3 {
-							capacity = c.translateExprToType(e.Args[2], types.Typ[types.Int])
+							capacity = c.flatten64(e.Args[2])
 						}
 						return fmt.Sprintf("%s.make(%s, %s, function() { return %s; })", c.typeName(c.info.Types[e.Args[0]]), length, capacity, c.zeroValue(argType.Elem()))
 					case *types.Map:
@@ -562,13 +567,13 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 						panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))
 					}
 				case "panic":
-					return fmt.Sprintf("throw go$panic(%s)", c.translateExprToType(e.Args[0], types.NewInterface(nil, nil)))
+					return fmt.Sprintf("throw go$panic(%s)", c.translateImplicitConversion(e.Args[0], types.NewInterface(nil, nil)))
 				case "append":
 					if len(e.Args) == 1 {
 						return c.translateExpr(e.Args[0])
 					}
 					if e.Ellipsis.IsValid() {
-						return fmt.Sprintf("go$appendSlice(%s, %s)", c.translateExpr(e.Args[0]), c.translateExprToType(e.Args[1], exprType))
+						return fmt.Sprintf("go$appendSlice(%s, %s)", c.translateExpr(e.Args[0]), c.translateConversionToSlice(e.Args[1], exprType))
 					}
 					sliceType := exprType.Underlying().(*types.Slice)
 					return fmt.Sprintf("go$append(%s, %s)", c.translateExpr(e.Args[0]), strings.Join(c.translateExprSlice(e.Args[1:], sliceType.Elem()), ", "))
@@ -595,30 +600,16 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))
 				}
 			case *types.TypeName: // conversion
-				argType := c.info.Types[e.Args[0]]
-				if basic, isBasic := o.Type().Underlying().(*types.Basic); isBasic && basic.Info()&types.IsInteger != 0 && !is64Bit(basic) && !types.IsIdentical(argType, types.Typ[types.UnsafePointer]) {
-					if basic.Kind() == types.Uint {
-						return "(" + c.translateExprToType(e.Args[0], o.Type()) + " >>> 0)"
-					}
-					return fixNumber(c.translateExprToType(e.Args[0], o.Type()), basic)
-				}
-				return c.translateExprToType(e.Args[0], o.Type())
+				return c.translateConversion(e.Args[0], o.Type())
 			}
 		case *ast.FuncType: // conversion
-			return c.translateExprToType(e.Args[0], c.info.Types[plainFun])
+			return c.translateConversion(e.Args[0], c.info.Types[plainFun])
 		}
 
 		funType := c.info.Types[plainFun]
 		sig, isSig := funType.Underlying().(*types.Signature)
 		if !isSig { // conversion
-			if c.pkg.Path() == "reflect" {
-				if call, isCall := e.Args[0].(*ast.CallExpr); isCall && types.IsIdentical(c.info.Types[call.Fun], types.Typ[types.UnsafePointer]) {
-					if named, isNamed := funType.(*types.Pointer).Elem().(*types.Named); isNamed {
-						return c.translateExpr(call.Args[0]) + "." + named.Obj().Name() // unsafe conversion
-					}
-				}
-			}
-			return c.translateExprToType(e.Args[0], funType)
+			return c.translateConversion(e.Args[0], funType)
 		}
 
 		var fun string
@@ -675,9 +666,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 					case "Length":
 						return fmt.Sprintf("go$parseInt(%s.length)", fun)
 					case "Index":
-						return fmt.Sprintf("%s[%s]", fun, c.translateExprToType(e.Args[0], types.Typ[types.Int]))
+						return fmt.Sprintf("%s[%s]", fun, c.translateExpr(e.Args[0]))
 					case "SetIndex":
-						return fmt.Sprintf("%s[%s] = %s", fun, c.translateExprToType(e.Args[0], types.Typ[types.Int]), externalizeExpr(e.Args[1]))
+						return fmt.Sprintf("%s[%s] = %s", fun, c.translateExpr(e.Args[0]), externalizeExpr(e.Args[1]))
 					case "Call":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
 							if e.Ellipsis.IsValid() {
@@ -929,28 +920,15 @@ func (c *PkgContext) identifierConstant(expr ast.Expr) (string, bool) {
 func (c *PkgContext) translateExprSlice(exprs []ast.Expr, desiredType types.Type) []string {
 	parts := make([]string, len(exprs))
 	for i, expr := range exprs {
-		parts[i] = c.translateExprToType(expr, desiredType)
+		parts[i] = c.translateImplicitConversion(expr, desiredType)
 	}
 	return parts
 }
 
-func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) string {
-	if desiredType == nil {
-		return c.translateExpr(expr)
-	}
-	if expr == nil {
-		return c.zeroValue(desiredType)
-	}
-
+func (c *PkgContext) translateConversion(expr ast.Expr, desiredType types.Type) string {
 	exprType := c.info.Types[expr]
-
-	// TODO should be fixed in go/types
-	if _, isSlice := exprType.Underlying().(*types.Slice); isSlice {
-		constValue := c.info.Values[expr]
-		if constValue != nil && constValue.Kind() == exact.String {
-			exprType = types.Typ[types.String]
-			c.info.Types[expr] = exprType
-		}
+	if types.IsIdentical(exprType, desiredType) {
+		return c.translateExpr(expr)
 	}
 
 	basicExprType, isBasicExpr := exprType.Underlying().(*types.Basic)
@@ -958,34 +936,45 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		return c.zeroValue(desiredType)
 	}
 
+	if c.pkg.Path() == "reflect" {
+		if call, isCall := expr.(*ast.CallExpr); isCall && types.IsIdentical(c.info.Types[call.Fun], types.Typ[types.UnsafePointer]) {
+			if ptr, isPtr := desiredType.(*types.Pointer); isPtr {
+				if named, isNamed := ptr.Elem().(*types.Named); isNamed {
+					return c.translateExpr(call.Args[0]) + "." + named.Obj().Name() // unsafe conversion
+				}
+			}
+		}
+	}
+
 	switch t := desiredType.Underlying().(type) {
 	case *types.Basic:
 		switch {
 		case t.Info()&types.IsInteger != 0:
+			basicExprType := exprType.Underlying().(*types.Basic)
 			switch {
 			case is64Bit(t):
-				switch {
-				case !is64Bit(basicExprType):
+				if !is64Bit(basicExprType) {
 					if basicExprType.Kind() == types.Uintptr { // this might be an Object returned from reflect.Value.Pointer()
 						return c.formatExpr("new %1s(0, %2e.constructor === Number ? %2e : 1)", c.typeName(desiredType), expr)
 					}
 					return fmt.Sprintf("new %s(0, %s)", c.typeName(desiredType), c.translateExpr(expr))
-				case !types.IsIdentical(exprType, desiredType):
-					return c.formatExpr("new %1s(%2h, %2l)", c.typeName(desiredType), expr)
 				}
+				return c.formatExpr("new %1s(%2h, %2l)", c.typeName(desiredType), expr)
 			case is64Bit(basicExprType):
 				if t.Info()&types.IsUnsigned == 0 && basicExprType.Info()&types.IsUnsigned == 0 {
-					return c.formatExpr("(%1l + ((%1h >> 31) * 4294967296))", expr)
+					return fixNumber(c.formatExpr("(%1l + ((%1h >> 31) * 4294967296))", expr), t)
 				}
-				return fmt.Sprintf("%s.low", c.translateExpr(expr))
+				return fixNumber(fmt.Sprintf("%s.low", c.translateExpr(expr)), t)
 			case basicExprType.Info()&types.IsFloat != 0:
 				return fmt.Sprintf("(%s >> 0)", c.translateExpr(expr))
-			default:
+			case types.IsIdentical(exprType, types.Typ[types.UnsafePointer]):
 				return c.translateExpr(expr)
+			default:
+				return fixNumber(c.translateExpr(expr), t)
 			}
 		case t.Info()&types.IsFloat != 0:
 			return c.flatten64(expr)
-		case t.Info()&types.IsComplex != 0 && !types.IsIdentical(exprType, desiredType):
+		case t.Info()&types.IsComplex != 0:
 			return c.formatExpr("new %1s(%2r, %2i)", c.typeName(desiredType), expr)
 		case t.Info()&types.IsString != 0:
 			value := c.translateExpr(expr)
@@ -1009,7 +998,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		case t.Kind() == types.UnsafePointer:
 			if unary, isUnary := expr.(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
 				if indexExpr, isIndexExpr := unary.X.(*ast.IndexExpr); isIndexExpr {
-					return fmt.Sprintf("go$sliceToArray(%s)", c.translateExprToType(indexExpr.X, types.NewSlice(types.Typ[types.Uint8])))
+					return fmt.Sprintf("go$sliceToArray(%s)", c.translateConversionToSlice(indexExpr.X, types.NewSlice(types.Typ[types.Uint8])))
 				}
 				if ident, isIdent := unary.X.(*ast.Ident); isIdent && ident.Name == "_zero" {
 					return "new Uint8Array(0)"
@@ -1040,11 +1029,7 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		case *types.Array, *types.Pointer:
 			return fmt.Sprintf("new %s(%s)", c.typeName(desiredType), c.translateExpr(expr))
 		}
-		_, desiredIsNamed := desiredType.(*types.Named)
-		if desiredIsNamed && !types.IsIdentical(exprType, desiredType) {
-			return c.formatExpr("go$subslice(new %1s(%2e.array), %2e.offset, %2e.offset + %2e.length)", c.typeName(desiredType), expr)
-		}
-		return c.translateExpr(expr)
+		return c.formatExpr("go$subslice(new %1s(%2e.array), %2e.offset, %2e.offset + %2e.length)", c.typeName(desiredType), expr)
 
 	case *types.Interface:
 		if isWrapped(exprType) {
@@ -1055,32 +1040,70 @@ func (c *PkgContext) translateExprToType(expr ast.Expr, desiredType types.Type) 
 		}
 
 	case *types.Pointer:
-		n, isNamed := t.Elem().(*types.Named)
-		s, isStruct := t.Elem().Underlying().(*types.Struct)
-
-		if c.pkg.Path() == "syscall" && isStruct && types.IsIdentical(exprType, types.Typ[types.UnsafePointer]) {
-			array := c.newVariable("_array")
-			target := c.newVariable("_struct")
-			return fmt.Sprintf("(%s = %s, %s = %s, %s, %s)", array, c.translateExpr(expr), target, c.zeroValue(t.Elem()), c.loadStruct(array, target, s), target)
+		if s, isStruct := t.Elem().Underlying().(*types.Struct); isStruct {
+			if c.pkg.Path() == "syscall" && types.IsIdentical(exprType, types.Typ[types.UnsafePointer]) {
+				array := c.newVariable("_array")
+				target := c.newVariable("_struct")
+				return fmt.Sprintf("(%s = %s, %s = %s, %s, %s)", array, c.translateExpr(expr), target, c.zeroValue(t.Elem()), c.loadStruct(array, target, s), target)
+			}
+			return c.clone(c.translateExpr(expr), t.Elem())
 		}
 
-		if isNamed && !types.IsIdentical(exprType, desiredType) {
-			if isStruct {
-				return c.clone(c.translateExpr(expr), t.Elem())
-			}
-			return c.formatExpr("new (go$ptrType(%1s))(%2e.go$get, %2e.go$set)", c.typeName(n), expr)
+		if !types.IsIdentical(exprType, types.Typ[types.UnsafePointer]) {
+			return c.formatExpr("new %1s(%2e.go$get, %2e.go$set)", c.typeName(desiredType), expr)
+		}
+	}
+
+	return c.translateExpr(expr)
+}
+
+func (c *PkgContext) translateConversionToSlice(expr ast.Expr, desiredType types.Type) string {
+	switch c.info.Types[expr].Underlying().(type) {
+	case *types.Basic:
+		return fmt.Sprintf("new %s(go$stringToBytes(%s))", c.typeName(desiredType), c.translateExpr(expr))
+	case *types.Array, *types.Pointer:
+		return fmt.Sprintf("new %s(%s)", c.typeName(desiredType), c.translateExpr(expr))
+	}
+	return c.translateExpr(expr)
+}
+
+func (c *PkgContext) translateImplicitConversion(expr ast.Expr, desiredType types.Type) string {
+	if desiredType == nil {
+		return c.translateExpr(expr)
+	}
+	if expr == nil {
+		return c.zeroValue(desiredType)
+	}
+
+	exprType := c.info.Types[expr]
+	// if types.IsIdentical(exprType, desiredType) {
+	// 	return c.translateExpr(expr)
+	// }
+
+	basicExprType, isBasicExpr := exprType.Underlying().(*types.Basic)
+	if isBasicExpr && basicExprType.Kind() == types.UntypedNil {
+		return c.zeroValue(desiredType)
+	}
+
+	switch desiredType.Underlying().(type) {
+	case *types.Slice:
+		_, desiredIsNamed := desiredType.(*types.Named)
+		if desiredIsNamed && !types.IsIdentical(exprType, desiredType) {
+			return c.formatExpr("go$subslice(new %1s(%2e.array), %2e.offset, %2e.offset + %2e.length)", c.typeName(desiredType), expr)
+		}
+
+	case *types.Interface:
+		if isWrapped(exprType) {
+			return fmt.Sprintf("new %s(%s)", c.typeName(exprType), c.translateExpr(expr))
+		}
+		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
+			return c.formatExpr("new %1e.constructor.Struct(%1e)", expr)
 		}
 
 	case *types.Struct, *types.Array:
 		if _, isComposite := expr.(*ast.CompositeLit); !isComposite {
 			return c.clone(c.translateExpr(expr), desiredType)
 		}
-
-	case *types.Chan, *types.Map, *types.Signature:
-		// no conversion
-
-	default:
-		panic(fmt.Sprintf("Unhandled conversion: %v\n", t))
 	}
 
 	return c.translateExpr(expr)

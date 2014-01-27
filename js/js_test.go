@@ -118,12 +118,14 @@ func TestNew(t *testing.T) {
 
 type StructWithJsField struct {
 	js.Object
-	Length int64 `js:"length"`
+	Length int                  `js:"length"`
+	Slice  func(int, int) []int `js:"slice"`
 }
 
 type StructWithJsField2 struct {
-	object js.Object // to hide members from public API
-	Length int64     `js:"length"`
+	object js.Object            // to hide members from public API
+	Length int                  `js:"length"`
+	Slice  func(int, int) []int `js:"slice"`
 }
 
 func TestReadingJsField(t *testing.T) {
@@ -140,6 +142,20 @@ func TestWritingJsField(t *testing.T) {
 	a.Length = 42
 	b.Length = 42
 	if a.Get("length").Int() != 42 || b.object.Get("length").Int() != 42 {
+		t.Fail()
+	}
+}
+
+func TestCallingJsField(t *testing.T) {
+	a := &StructWithJsField{Object: js.Global("Array").New(100)}
+	b := &StructWithJsField2{object: js.Global("Array").New(100)}
+	a.SetIndex(3, 123)
+	b.object.SetIndex(3, 123)
+	f := a.Slice
+	a2 := a.Slice(2, 44)
+	b2 := b.Slice(2, 44)
+	c2 := f(2, 44)
+	if len(a2) != 42 || len(b2) != 42 || len(c2) != 42 || a2[1] != 123 || b2[1] != 123 || c2[1] != 123 {
 		t.Fail()
 	}
 }

@@ -470,12 +470,14 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 
 		switch sel.Kind() {
 		case types.FieldVal:
-			fields, isExt := c.translateSelection(sel)
-			str := c.translateExpr(e.X) + fields
-			if isExt {
-				str = c.internalize(str, sel.Type())
+			fields, jsTag := c.translateSelection(sel)
+			if jsTag != "" {
+				if _, ok := sel.Type().(*types.Signature); ok {
+					return c.formatExpr("go$internalize(%1e.%2s.%3s, %4s, %1e.%2s)", e.X, strings.Join(fields, "."), jsTag, c.typeName(sel.Type()))
+				}
+				return c.internalize(fmt.Sprintf("%s.%s.%s", c.translateExpr(e.X), strings.Join(fields, "."), jsTag), sel.Type())
 			}
-			return str
+			return fmt.Sprintf("%s.%s", c.translateExpr(e.X), strings.Join(fields, "."))
 		case types.MethodVal:
 			parameters := makeParametersList()
 			target := c.translateExpr(e.X)
@@ -618,6 +620,21 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			sel := c.info.Selections[f]
 			o := sel.Obj()
 
+			externalizeExpr := func(e ast.Expr) string {
+				t := c.info.Types[e]
+				if types.IsIdentical(t, types.Typ[types.UntypedNil]) {
+					return "null"
+				}
+				return c.externalize(c.translateExpr(e), t)
+			}
+			externalizeArgs := func(args []ast.Expr) string {
+				s := make([]string, len(args))
+				for i, arg := range args {
+					s[i] = externalizeExpr(arg)
+				}
+				return strings.Join(s, ", ")
+			}
+
 			switch sel.Kind() {
 			case types.MethodVal:
 				methodName := o.Name()
@@ -637,21 +654,6 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 
 				if o.Pkg() != nil && o.Pkg().Path() == "github.com/neelance/gopherjs/js" {
-					externalizeExpr := func(e ast.Expr) string {
-						t := c.info.Types[e]
-						if types.IsIdentical(t, types.Typ[types.UntypedNil]) {
-							return "null"
-						}
-						return c.externalize(c.translateExpr(e), t)
-					}
-					externalizeArgs := func(args []ast.Expr) string {
-						s := make([]string, len(args))
-						for i, arg := range args {
-							s[i] = externalizeExpr(arg)
-						}
-						return strings.Join(s, ", ")
-					}
-
 					switch o.Name() {
 					case "Get":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
@@ -744,7 +746,15 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				}
 				fun = c.translateExpr(f)
 
-			case types.FieldVal, types.MethodExpr:
+			case types.FieldVal:
+				fields, jsTag := c.translateSelection(sel)
+				if jsTag != "" {
+					sig := sel.Type().(*types.Signature)
+					return c.internalize(fmt.Sprintf("%s.%s.%s(%s)", c.translateExpr(f.X), strings.Join(fields, "."), jsTag, externalizeArgs(e.Args)), sig.Results().At(0).Type())
+				}
+				fun = fmt.Sprintf("%s.%s", c.translateExpr(f.X), strings.Join(fields, "."))
+
+			case types.MethodExpr:
 				fun = c.translateExpr(f)
 
 			default:

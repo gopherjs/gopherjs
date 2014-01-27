@@ -163,26 +163,25 @@ func (c *PkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellips
 	return strings.Join(params, ", ")
 }
 
-func (c *PkgContext) translateSelection(sel *types.Selection) (string, bool) {
-	fields := ""
+func (c *PkgContext) translateSelection(sel *types.Selection) (fields []string, jsTag string) {
 	t := sel.Recv()
 	for _, index := range sel.Index() {
 		if ptr, isPtr := t.(*types.Pointer); isPtr {
 			t = ptr.Elem()
 		}
 		s := t.Underlying().(*types.Struct)
-		if tag := getJsTag(s.Tag(index)); tag != "" {
+		if jsTag = getJsTag(s.Tag(index)); jsTag != "" {
 			for i := 0; i < s.NumFields(); i++ {
 				if isJsObject(s.Field(i).Type()) {
-					fields += "." + fieldName(s, i) + "." + tag
-					return fields, true
+					fields = append(fields, fieldName(s, i))
+					return
 				}
 			}
 		}
-		fields += "." + fieldName(s, index)
+		fields = append(fields, fieldName(s, index))
 		t = s.Field(index).Type()
 	}
-	return fields, false
+	return
 }
 
 func (c *PkgContext) zeroValue(ty types.Type) string {

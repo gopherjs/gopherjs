@@ -677,11 +677,11 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 		sel := c.info.Selections[l]
 		switch sel.Kind() {
 		case types.FieldVal:
-			fields, isExt := c.translateSelection(sel)
-			if isExt {
-				rhs = c.externalize(rhs, sel.Type())
+			fields, jsTag := c.translateSelection(sel)
+			if jsTag != "" {
+				return fmt.Sprintf("%s.%s.%s = %s", c.translateExpr(l.X), strings.Join(fields, "."), jsTag, c.externalize(rhs, sel.Type()))
 			}
-			return c.translateExpr(l.X) + fields + " = " + rhs
+			return fmt.Sprintf("%s.%s = %s", c.translateExpr(l.X), strings.Join(fields, "."), rhs)
 		case types.PackageObj:
 			return c.translateExpr(l.X) + "." + l.Sel.Name + " = " + rhs
 		default:

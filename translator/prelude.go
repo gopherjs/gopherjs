@@ -923,7 +923,7 @@ var go$externalize = function(v, t) {
 	}
 };
 
-var go$internalize = function(v, t) {
+var go$internalize = function(v, t, recv) {
 	switch (t.kind) {
 	case "Bool":
 		return !!v;
@@ -956,7 +956,7 @@ var go$internalize = function(v, t) {
 		}
 		return go$mapArray(v, function(e) { return go$internalize(e, t.elem); });
 	case "Func":
-		return new t(function() {
+		return function() {
 			var args = [], i;
 			for (i = 0; i < t.params.length; i += 1) {
 				if (t.isVariadic && i === t.params.length - 1) {
@@ -968,7 +968,7 @@ var go$internalize = function(v, t) {
 				}
 				args.push(go$externalize(arguments[i], t.params[i]));
 			}
-			var result = v.apply(undefined, args);
+			var result = v.apply(recv, args);
 			switch (t.results.length) {
 			case 0:
 				return;
@@ -980,7 +980,7 @@ var go$internalize = function(v, t) {
 				}
 				return result;
 			}
-		});
+		};
 	case "Interface":
 		if (t === go$packages["github.com/neelance/gopherjs/js"].Object) {
 			return v;
@@ -1012,7 +1012,8 @@ var go$internalize = function(v, t) {
 				return new timePkg.Time(timePkg.Unix(new Go$Int64(0, 0), new Go$Int64(0, v.getTime() * 1000000)));
 			}
 		case Function:
-			return go$internalize(v, go$funcType([go$sliceType(go$interfaceType([]))], [go$packages["github.com/neelance/gopherjs/js"].Object], true));
+			var funcType = go$funcType([go$sliceType(go$interfaceType([]))], [go$packages["github.com/neelance/gopherjs/js"].Object], true);
+			return new funcType(go$internalize(v, funcType));
 		case Number:
 			return new Go$Float64(parseFloat(v));
 		case Object:

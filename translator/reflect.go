@@ -602,7 +602,7 @@ func init() {
 
 			var argsArray = new Array(t.NumIn());
 			for (i = 0; i < t.NumIn(); i += 1) {
-				argsArray[i] = args.array[args.offset + i].assignTo("reflect.Value.Call", t.In(i), go$ptrType(go$interfaceType([])).nil).iword();
+				argsArray[i] = args.array[args.offset + i].assignTo("reflect.Value.Call", t.In(i), go$ptrType(go$emptyInterface).nil).iword();
 			}
 			var results = fn.apply(rcvr, argsArray);
 			if (t.NumOut() === 0) {

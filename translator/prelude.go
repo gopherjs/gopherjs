@@ -371,6 +371,7 @@ var go$interfaceType = function(methods) {
 	}
 	return typ;
 };
+var go$emptyInterface = go$interfaceType([]);
 var go$interfaceNil = { go$key: function() { return "nil"; } };
 var go$error = go$newType(8, "Interface", "error", "error", "", null);
 go$error.init([["Error", "", go$funcType([], [Go$String], false)]]);
@@ -1003,7 +1004,7 @@ var go$internalize = function(v, t, recv) {
 		case Float64Array:
 			return new (go$sliceType(Go$Float64))(v);
 		case Array:
-			return go$internalize(v, go$sliceType(go$interfaceType([])));
+			return go$internalize(v, go$sliceType(go$emptyInterface));
 		case Boolean:
 			return new Go$Bool(!!v);
 		case Date:
@@ -1012,12 +1013,12 @@ var go$internalize = function(v, t, recv) {
 				return new timePkg.Time(timePkg.Unix(new Go$Int64(0, 0), new Go$Int64(0, v.getTime() * 1000000)));
 			}
 		case Function:
-			var funcType = go$funcType([go$sliceType(go$interfaceType([]))], [go$packages["github.com/neelance/gopherjs/js"].Object], true);
+			var funcType = go$funcType([go$sliceType(go$emptyInterface)], [go$packages["github.com/neelance/gopherjs/js"].Object], true);
 			return new funcType(go$internalize(v, funcType));
 		case Number:
 			return new Go$Float64(parseFloat(v));
 		case Object:
-			var mapType = go$mapType(Go$String, go$interfaceType([]));
+			var mapType = go$mapType(Go$String, go$emptyInterface);
 			return new mapType(go$internalize(v, mapType));
 		case String:
 			return new Go$String(go$internalize(v, Go$String));

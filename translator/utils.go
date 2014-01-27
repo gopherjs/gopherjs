@@ -308,7 +308,12 @@ func (c *PkgContext) typeName(ty types.Type) string {
 		return c.objectName(t.Obj())
 	case *types.Pointer:
 		return fmt.Sprintf("(go$ptrType(%s))", c.initArgs(t))
-	case *types.Array, *types.Chan, *types.Slice, *types.Map, *types.Signature, *types.Interface, *types.Struct:
+	case *types.Interface:
+		if t.Empty() {
+			return "go$emptyInterface"
+		}
+		return fmt.Sprintf("(go$interfaceType(%s))", c.initArgs(t))
+	case *types.Array, *types.Chan, *types.Slice, *types.Map, *types.Signature, *types.Struct:
 		return fmt.Sprintf("(go$%sType(%s))", strings.ToLower(typeKind(t)), c.initArgs(t))
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))

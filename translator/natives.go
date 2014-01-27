@@ -403,7 +403,7 @@ func init() {
 					}
 				}
 				var duration = time.Now().Sub(start);
-				fmt.Printf("%s\t%s\t%.3fs\n", new (go$sliceType(go$interfaceType([])))([new Go$String(status), new Go$String(pkgPath), new Go$Float64(duration.Seconds())]));
+				fmt.Printf("%s\t%s\t%.3fs\n", new (go$sliceType(go$emptyInterface))([new Go$String(status), new Go$String(pkgPath), new Go$Float64(duration.Seconds())]));
 			};
 		`,
 	}

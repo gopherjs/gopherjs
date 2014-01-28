@@ -117,14 +117,19 @@ func (e *exporter) addImport(pkg *types.Package) {
 }
 
 func (e *exporter) makeName(o types.Object) string {
-	if o.Name() == "" || o.Name() == "_" {
+	switch o.Name() {
+	case "":
 		return "?"
+	case "_":
+		return "_"
+	default:
+		pkgPath := ""
+		if o.Pkg() != nil && o.Pkg() != e.pkg {
+			e.addImport(o.Pkg())
+			pkgPath = o.Pkg().Path()
+		}
+		return `@"` + pkgPath + `".` + o.Name()
 	}
-	if o.Pkg() == nil || o.Pkg() == e.pkg {
-		return `@"".` + o.Name()
-	}
-	e.addImport(o.Pkg())
-	return `@"` + o.Pkg().Path() + `".` + o.Name()
 }
 
 func (e *exporter) makeType(ty types.Type) string {

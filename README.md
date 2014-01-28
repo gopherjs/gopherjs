@@ -65,9 +65,8 @@ The package `github.com/neelance/gopherjs/js` ([documentation](js/js.go)) provid
 ### Roadmap
 These features are not implemented yet, but on the roadmap:
 
-- optimizations of generated JavaScript code for improved output size and performance
-- goroutines, channels, select
 - goto
+- goroutines, channels, select
 - output minification
 - source maps
 - float32 and complex64 currently have the same precision as float64 and complex128

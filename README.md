@@ -73,6 +73,7 @@ These features are not implemented yet, but on the roadmap:
 
 ### Bindings
 - AngularJS: [github.com/neelance/go-angularjs](https://github.com/neelance/go-angularjs)
+- DOM: [dominik.honnef.co/go/js/dom](http://dominik.honnef.co/go/js/dom)
 - JS console: [honnef.co/go/js/console](http://honnef.co/go/js/console)
 - WebGL: [github.com/ajhager/webgl](https://github.com/ajhager/webgl)
 

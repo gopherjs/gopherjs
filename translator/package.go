@@ -321,14 +321,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		// builtin native implementations
 		c.Write([]byte(nativeInit))
 
-		// exports for package functions
-		for _, fun := range functions {
-			name := fun.Name.Name
-			if fun.Recv == nil && (fun.Name.IsExported() || name == "main") {
-				c.Printf("go$pkg.%s = %s;", name, name)
-			}
-		}
-
 		// init function
 		c.Printf("go$pkg.init = function() {")
 		c.Indent(func() {
@@ -535,7 +527,11 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]str
 
 		if fun.Recv == nil {
 			funName := c.objectName(c.info.Objects[fun.Name])
-			printPrimaryFunction("var "+funName, funName)
+			lhs := "var " + funName
+			if fun.Name.IsExported() || fun.Name.Name == "main" {
+				lhs += " = go$pkg." + funName
+			}
+			printPrimaryFunction(lhs, funName)
 			return
 		}
 

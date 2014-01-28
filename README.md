@@ -5,6 +5,7 @@ GopherJS - A transpiler from Go to JavaScript
 - Try GopherJS on the [GopherJS Playground](http://neelance.github.io/gopherjs-playground/)
 - Enjoy the speed of the [HTML5 game engine benchmark](http://ajhager.github.io/enj/) (by Joseph Hager)
 - Get help in the [Google Group](https://groups.google.com/d/forum/gopherjs)
+- See the list of [bindings to JavaScript APIs and libraries](https://github.com/neelance/gopherjs/wiki/bindings)
 
 ### What is GopherJS?
 GopherJS translates [Go code](http://golang.org/) to pure JavaScript code. Its main purpose is to give you the opportunity to write front-end code in Go which will still run in all browsers.
@@ -70,11 +71,5 @@ These features are not implemented yet, but on the roadmap:
 - output minification
 - source maps
 - float32 and complex64 currently have the same precision as float64 and complex128
-
-### Bindings
-- AngularJS: [github.com/neelance/go-angularjs](https://github.com/neelance/go-angularjs)
-- DOM: [dominik.honnef.co/go/js/dom](http://dominik.honnef.co/go/js/dom)
-- JS console: [honnef.co/go/js/console](http://honnef.co/go/js/console)
-- WebGL: [github.com/ajhager/webgl](https://github.com/ajhager/webgl)
 
 [![Analytics](https://ga-beacon.appspot.com/UA-46799660-1/gopherjs/README.md)](https://github.com/igrigorik/ga-beacon)

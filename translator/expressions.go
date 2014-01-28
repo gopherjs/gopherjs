@@ -508,10 +508,34 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			break
 		}
 
+		var isType func(ast.Expr) bool
+		isType = func(expr ast.Expr) bool {
+			switch e := expr.(type) {
+			case *ast.ArrayType, *ast.ChanType, *ast.FuncType, *ast.InterfaceType, *ast.MapType, *ast.StructType:
+				return true
+			case *ast.StarExpr:
+				return isType(e.X)
+			case *ast.Ident:
+				_, ok := c.info.Objects[e].(*types.TypeName)
+				return ok
+			case *ast.SelectorExpr:
+				_, ok := c.info.Objects[e.Sel].(*types.TypeName)
+				return ok
+			case *ast.ParenExpr:
+				return isType(e.X)
+			default:
+				return false
+			}
+		}
+
+		if isType(plainFun) {
+			return c.translateConversion(e.Args[0], c.info.Types[plainFun])
+		}
+
+		var fun string
 		switch f := plainFun.(type) {
 		case *ast.Ident:
-			switch o := c.info.Objects[f].(type) {
-			case *types.Builtin:
+			if o, ok := c.info.Objects[f].(*types.Builtin); ok {
 				switch o.Name() {
 				case "new":
 					t := c.info.Types[e].(*types.Pointer)
@@ -601,21 +625,9 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 				default:
 					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))
 				}
-			case *types.TypeName: // conversion
-				return c.translateConversion(e.Args[0], o.Type())
 			}
-		case *ast.FuncType: // conversion
-			return c.translateConversion(e.Args[0], c.info.Types[plainFun])
-		}
+			fun = c.translateExpr(plainFun)
 
-		funType := c.info.Types[plainFun]
-		sig, isSig := funType.Underlying().(*types.Signature)
-		if !isSig { // conversion
-			return c.translateConversion(e.Args[0], funType)
-		}
-
-		var fun string
-		switch f := plainFun.(type) {
 		case *ast.SelectorExpr:
 			sel := c.info.Selections[f]
 			o := sel.Obj()
@@ -763,6 +775,8 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 		default:
 			fun = c.translateExpr(plainFun)
 		}
+
+		sig := c.info.Types[plainFun].Underlying().(*types.Signature)
 		if len(e.Args) == 1 {
 			if tuple, isTuple := c.info.Types[e.Args[0]].(*types.Tuple); isTuple {
 				tupleVar := c.newVariable("_tuple")

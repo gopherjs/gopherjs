@@ -504,6 +504,11 @@ func buildPackage(pkg *Package) error {
 			files = append(files, file)
 			continue
 		}
+		if pkg.ImportPath == "crypto/rc4" && name == "rc4_ref.go" { // apply patch https://codereview.appspot.com/40540049/
+			file, _ := parser.ParseFile(fileSet, name, "package rc4\nfunc (c *Cipher) XORKeyStream(dst, src []byte) {\ni, j := c.i, c.j\nfor k, v := range src {\ni += 1\nj += uint8(c.s[i])\nc.s[i], c.s[j] = c.s[j], c.s[i]\ndst[k] = v ^ uint8(c.s[uint8(c.s[i]+c.s[j])])\n}\nc.i, c.j = i, j\n}\n", 0)
+			files = append(files, file)
+			continue
+		}
 		if !filepath.IsAbs(name) {
 			name = filepath.Join(pkg.Dir, name)
 		}

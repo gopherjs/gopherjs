@@ -158,7 +158,7 @@ func tool() error {
 		}
 
 		for _, pkgPath := range buildFlags.Args() {
-			buildPkg, err := buildImport(pkgPath, 0)
+			buildPkg, err := buildImport(filepath.ToSlash(pkgPath), 0)
 			if err != nil {
 				return err
 			}
@@ -218,7 +218,7 @@ func tool() error {
 			pkgs = []string{pkgPath}
 		}
 		for _, pkgPath := range pkgs {
-			if _, err := importPackage(pkgPath); err != nil {
+			if _, err := importPackage(filepath.ToSlash(pkgPath)); err != nil {
 				switch err.(type) {
 				case *build.NoGoError, *ImportCError:
 					if *all {
@@ -266,7 +266,7 @@ func tool() error {
 		testFlags.Parse(flag.Args()[1:])
 
 		for _, pkgPath := range testFlags.Args() {
-			packagesToTest[pkgPath] = true
+			packagesToTest[filepath.ToSlash(pkgPath)] = true
 		}
 
 		mainPkg := &Package{
@@ -284,6 +284,8 @@ func tool() error {
 		mainPkg.Output.AddDependenciesOf(testingOutput)
 
 		for _, pkgPath := range testFlags.Args() {
+			pkgPath = filepath.ToSlash(pkgPath)
+
 			var names []string
 			var tests []string
 			collectTests := func(pkg *Package) {

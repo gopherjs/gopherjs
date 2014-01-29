@@ -339,6 +339,7 @@ func init() {
 				getStdHandle = GetCommandLine = go$pkg.GetCommandLine = function() {};
 				CommandLineToArgv = go$pkg.CommandLineToArgv = function() { return [null, {}]; };
 				Getenv = go$pkg.Getenv = function(key) { return ["", false]; };
+				GetTimeZoneInformation = go$pkg.GetTimeZoneInformation = function() { return [undefined, true]; };
 			} else if (typeof process === "undefined") {
 				go$pkg.go$setSyscall = function(f) {
 					Syscall = Syscall6 = RawSyscall = RawSyscall6 = go$pkg.Syscall = go$pkg.Syscall6 = go$pkg.RawSyscall = go$pkg.RawSyscall6 = f;

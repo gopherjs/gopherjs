@@ -224,7 +224,7 @@ func init() {
 		"init": `
 			go$pkg.Args = new (go$sliceType(Go$String))((typeof process !== 'undefined') ? process.argv.slice(1) : []);
 			if (go$packages["runtime"].GOOS === "windows") {
-				NewFile = function() { return new File.Ptr(); };
+				NewFile = go$pkg.NewFile = function() { return new File.Ptr(); };
 			}
 		`,
 	}
@@ -335,23 +335,23 @@ func init() {
 	pkgNatives["syscall"] = map[string]string{
 		"init": `
 			if (go$packages["runtime"].GOOS === "windows") {
-				Syscall = Syscall6 = Syscall9 = Syscall12 = Syscall15 = loadlibrary = getprocaddress = function() { throw "Syscalls not available." };
-				getStdHandle = GetCommandLine = function() {};
-				CommandLineToArgv = function() { return [null, {}]; };
-				Getenv = function(key) { return ["", false]; };
+				Syscall = Syscall6 = Syscall9 = Syscall12 = Syscall15 = go$pkg.Syscall = go$pkg.Syscall6 = go$pkg.Syscall9 = go$pkg.Syscall12 = go$pkg.Syscall15 = loadlibrary = getprocaddress = function() { throw "Syscalls not available." };
+				getStdHandle = GetCommandLine = go$pkg.GetCommandLine = function() {};
+				CommandLineToArgv = go$pkg.CommandLineToArgv = function() { return [null, {}]; };
+				Getenv = go$pkg.Getenv = function(key) { return ["", false]; };
 			} else if (typeof process === "undefined") {
 				go$pkg.go$setSyscall = function(f) {
-					Syscall = Syscall6 = RawSyscall = RawSyscall6 = f;
+					Syscall = Syscall6 = RawSyscall = RawSyscall6 = go$pkg.Syscall = go$pkg.Syscall6 = go$pkg.RawSyscall = go$pkg.RawSyscall6 = f;
 				}
 				go$pkg.go$setSyscall(function() { throw "Syscalls not available." });
 				envs = new (go$sliceType(Go$String))(new Array(0));
 			} else {
 				var syscall = require("syscall");
-				Syscall = syscall.Syscall;
-				Syscall6 = syscall.Syscall6;
-				RawSyscall = syscall.Syscall;
-				RawSyscall6 = syscall.Syscall6;
-				BytePtrFromString = function(s) { return [go$stringToBytes(s, true), null]; };
+				Syscall = go$pkg.Syscall = syscall.Syscall;
+				Syscall6 = go$pkg.Syscall6 = syscall.Syscall6;
+				RawSyscall = go$pkg.RawSyscall = syscall.Syscall;
+				RawSyscall6 = go$pkg.RawSyscall6 = syscall.Syscall6;
+				BytePtrFromString = go$pkg.BytePtrFromString = function(s) { return [go$stringToBytes(s, true), null]; };
 
 				var envkeys = Object.keys(process.env);
 				envs = new (go$sliceType(Go$String))(new Array(envkeys.length));

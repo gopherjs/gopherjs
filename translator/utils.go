@@ -66,17 +66,17 @@ func WriteInterfaces(dependencies []string, w io.Writer, merge bool) {
 				case *types.Interface:
 					// skip
 				case *types.Struct:
-					if types.IsAssignableTo(otherType, in) {
+					if types.AssignableTo(otherType, in) {
 						implementedBy[fmt.Sprintf("go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
 					}
-					if types.IsAssignableTo(types.NewPointer(otherType), in) {
+					if types.AssignableTo(types.NewPointer(otherType), in) {
 						implementedBy[fmt.Sprintf("go$packages[\"%s\"].%s.Ptr", other.Pkg().Path(), other.Name())] = true
 					}
 				default:
-					if types.IsAssignableTo(otherType, in) {
+					if types.AssignableTo(otherType, in) {
 						implementedBy[fmt.Sprintf("go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
 					}
-					if types.IsAssignableTo(types.NewPointer(otherType), in) {
+					if types.AssignableTo(types.NewPointer(otherType), in) {
 						implementedBy[fmt.Sprintf("go$ptrType(go$packages[\"%s\"].%s)", other.Pkg().Path(), other.Name())] = true
 					}
 				}
@@ -148,7 +148,7 @@ func (c *PkgContext) translateParams(t *ast.FuncType) []string {
 func (c *PkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis bool) string {
 	params := make([]string, sig.Params().Len())
 	for i := range params {
-		if sig.IsVariadic() && i == len(params)-1 && !ellipsis {
+		if sig.Variadic() && i == len(params)-1 && !ellipsis {
 			varargType := sig.Params().At(i).Type().(*types.Slice)
 			varargs := make([]string, len(args)-i)
 			for j, arg := range args[i:] {
@@ -259,7 +259,7 @@ func (c *PkgContext) newScope(f func()) {
 
 func (c *PkgContext) newIdent(name string, t types.Type) *ast.Ident {
 	ident := ast.NewIdent(name)
-	c.info.Types[ident] = t
+	c.info.Types[ident] = types.TypeAndValue{Type: t}
 	obj := types.NewVar(0, c.pkg, name, t)
 	c.info.Objects[ident] = obj
 	c.objectVars[obj] = name
@@ -283,7 +283,7 @@ func (c *PkgContext) objectName(o types.Object) string {
 
 	switch o.(type) {
 	case *types.Var, *types.Const:
-		if o.IsExported() && o.Parent() == c.pkg.Scope() {
+		if o.Exported() && o.Parent() == c.pkg.Scope() {
 			return "go$pkg." + name
 		}
 	}

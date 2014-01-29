@@ -1,7 +1,6 @@
 package translator
 
 import (
-	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
 	"go/ast"
@@ -75,8 +74,7 @@ func (c *PkgContext) Delayed(f func()) {
 
 func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Output, error)) (*Output, error) {
 	info := &types.Info{
-		Types:      make(map[ast.Expr]types.Type),
-		Values:     make(map[ast.Expr]exact.Value),
+		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Objects:    make(map[*ast.Ident]types.Object),
 		Implicits:  make(map[ast.Node]types.Object),
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
@@ -268,11 +266,11 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					for i := range methods {
 						method := methodSet.At(i).Obj()
 						pkgPath := ""
-						if !method.IsExported() {
+						if !method.Exported() {
 							pkgPath = method.Pkg().Path()
 						}
 						t := method.Type().(*types.Signature)
-						methods[i] = fmt.Sprintf(`["%s", "%s", %s, %s, %t]`, method.Name(), pkgPath, c.typeArray(t.Params()), c.typeArray(t.Results()), t.IsVariadic())
+						methods[i] = fmt.Sprintf(`["%s", "%s", %s, %s, %t]`, method.Name(), pkgPath, c.typeArray(t.Params()), c.typeArray(t.Results()), t.Variadic())
 					}
 					c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
 				}
@@ -298,11 +296,11 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		// constants
 		for _, o := range constants {
 			varPrefix := ""
-			if !o.IsExported() {
+			if !o.Exported() {
 				varPrefix = "var "
 			}
 			v := c.newIdent(o.Name(), o.Type())
-			c.info.Values[v] = o.Val()
+			c.info.Types[v] = types.TypeAndValue{Type: o.Type(), Value: o.Val()}
 			c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.translateExpr(v))
 		}
 
@@ -311,7 +309,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			for _, name := range spec.Names {
 				o := c.info.Objects[name].(*types.Var)
 				varPrefix := ""
-				if !o.IsExported() {
+				if !o.Exported() {
 					varPrefix = "var "
 				}
 				c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.zeroValue(o.Type()))
@@ -420,7 +418,7 @@ func (c *PkgContext) initArgs(ty types.Type) string {
 		for i := range methods {
 			method := t.Method(i)
 			pkgPath := ""
-			if !method.IsExported() {
+			if !method.Exported() {
 				pkgPath = method.Pkg().Path()
 			}
 			methods[i] = fmt.Sprintf(`["%s", "%s", %s]`, method.Name(), pkgPath, c.typeName(method.Type()))
@@ -433,7 +431,7 @@ func (c *PkgContext) initArgs(ty types.Type) string {
 	case *types.Slice:
 		return fmt.Sprintf("%s", c.typeName(t.Elem()))
 	case *types.Signature:
-		return fmt.Sprintf("%s, %s, %t", c.typeArray(t.Params()), c.typeArray(t.Results()), t.IsVariadic())
+		return fmt.Sprintf("%s, %s, %t", c.typeArray(t.Params()), c.typeArray(t.Results()), t.Variadic())
 	case *types.Struct:
 		fields := make([]string, t.NumFields())
 		for i := range fields {
@@ -443,7 +441,7 @@ func (c *PkgContext) initArgs(ty types.Type) string {
 				name = field.Name()
 			}
 			pkgPath := ""
-			if !field.IsExported() {
+			if !field.Exported() {
 				pkgPath = field.Pkg().Path()
 			}
 			fields[i] = fmt.Sprintf(`["%s", "%s", %s, %s]`, name, pkgPath, c.typeName(field.Type()), encodeString(t.Tag(i)))
@@ -456,7 +454,7 @@ func (c *PkgContext) initArgs(ty types.Type) string {
 
 func (c *PkgContext) splitValueSpec(s *ast.ValueSpec) []*ast.ValueSpec {
 	if len(s.Values) == 1 {
-		if _, isTuple := c.info.Types[s.Values[0]].(*types.Tuple); isTuple {
+		if _, isTuple := c.info.Types[s.Values[0]].Type.(*types.Tuple); isTuple {
 			return []*ast.ValueSpec{s}
 		}
 	}
@@ -506,7 +504,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]str
 				body := fun.Body.List
 				if recv != nil {
 					recvType := sig.Recv().Type()
-					c.info.Types[recv] = recvType
+					c.info.Types[recv] = types.TypeAndValue{Type: recvType}
 					this := c.newIdent("this", recvType)
 					if isWrapped(recvType) {
 						this = c.newIdent("this.go$val", recvType)
@@ -595,7 +593,7 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 					name = "result"
 				}
 				id := ast.NewIdent(name)
-				c.info.Types[id] = result.Type()
+				c.info.Types[id] = types.TypeAndValue{Type: result.Type()}
 				c.info.Objects[id] = result
 				c.Printf("%s = %s;", c.translateExpr(id), c.zeroValue(result.Type()))
 				resultNames[i] = id

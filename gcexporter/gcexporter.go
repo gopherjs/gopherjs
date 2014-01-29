@@ -30,7 +30,7 @@ func Write(pkg *types.Package, out io.Writer, sizes types.Sizes) {
 		obj := pkg.Scope().Lookup(name)
 
 		_, isTypeName := obj.(*types.TypeName)
-		if obj.IsExported() || isTypeName {
+		if obj.Exported() || isTypeName {
 			e.toExport = append(e.toExport, obj)
 		}
 	}
@@ -204,16 +204,16 @@ func (e *exporter) makeType(ty types.Type) string {
 
 func (e *exporter) makeSignature(t types.Type) string {
 	sig := t.(*types.Signature)
-	return "(" + e.makeParameters(sig.Params(), sig.IsVariadic()) + ") (" + e.makeParameters(sig.Results(), false) + ")"
+	return "(" + e.makeParameters(sig.Params(), sig.Variadic()) + ") (" + e.makeParameters(sig.Results(), false) + ")"
 }
 
-func (e *exporter) makeParameters(tuple *types.Tuple, isVariadic bool) string {
+func (e *exporter) makeParameters(tuple *types.Tuple, variadic bool) string {
 	params := make([]string, tuple.Len())
 	for i := range params {
 		param := tuple.At(i)
 		paramType := param.Type()
 		dots := ""
-		if isVariadic && i == tuple.Len()-1 {
+		if variadic && i == tuple.Len()-1 {
 			dots = "..."
 			paramType = paramType.(*types.Slice).Elem()
 		}

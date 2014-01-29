@@ -58,7 +58,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			refVar := c.newVariable("_ref")
 			c.Printf("%s = %s;", refVar, c.translateExpr(s.Tag))
 			translateCond = func(cond ast.Expr) string {
-				refId := c.newIdent(refVar, c.info.Types[s.Tag])
+				refId := c.newIdent(refVar, c.info.Types[s.Tag].Type)
 				return c.translateExpr(&ast.BinaryExpr{
 					X:  refId,
 					Op: token.EQL,
@@ -89,7 +89,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Printf("%s = %s;", refVar, c.translateExpr(expr))
 		c.Printf("%s = %s !== null ? %s.constructor : null;", typeVar, refVar, refVar)
 		translateCond := func(cond ast.Expr) string {
-			return c.typeCheck(typeVar, c.info.Types[cond])
+			return c.typeCheck(typeVar, c.info.Types[cond].Type)
 		}
 		printCaseBodyPrefix := func(conds []ast.Expr) {
 			if typeSwitchVar == "" {
@@ -97,8 +97,8 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			value := refVar
 			if len(conds) == 1 {
-				t := c.info.Types[conds[0]]
-				if _, isInterface := t.Underlying().(*types.Interface); !isInterface && !types.IsIdentical(t, types.Typ[types.UntypedNil]) {
+				t := c.info.Types[conds[0]].Type
+				if _, isInterface := t.Underlying().(*types.Interface); !isInterface && !types.Identical(t, types.Typ[types.UntypedNil]) {
 					value += ".go$val"
 				}
 			}
@@ -150,7 +150,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 		iVar := c.newVariable("_i")
 		c.Printf("%s = 0;", iVar)
 
-		switch t := c.info.Types[s.X].Underlying().(type) {
+		switch t := c.info.Types[s.X].Type.Underlying().(type) {
 		case *types.Basic:
 			runeVar := c.newVariable("_rune")
 			c.Printf("%sfor (; %s < %s.length; %s += %s[1]) {", label, iVar, refVar, iVar, runeVar)
@@ -206,7 +206,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 							Index: c.newIdent(iVar, types.Typ[types.Int]),
 						}
 						et := elemType(t)
-						c.info.Types[indexExpr] = et
+						c.info.Types[indexExpr] = types.TypeAndValue{Type: et}
 						c.Printf("%s;", c.translateAssign(s.Value, c.translateImplicitConversion(indexExpr, et)))
 					}
 					if !isBlank(s.Key) {
@@ -288,7 +288,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				}
 				args := make([]ast.Expr, len(s.Call.Args))
 				for i, arg := range s.Call.Args {
-					args[i] = c.newIdent(c.newVariable("_arg"), c.info.Types[arg])
+					args[i] = c.newIdent(c.newVariable("_arg"), c.info.Types[arg].Type)
 				}
 				call := c.translateExpr(&ast.CallExpr{
 					Fun:      s.Call.Fun,
@@ -299,7 +299,7 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 				return
 			}
 		}
-		sig := c.info.Types[s.Call.Fun].Underlying().(*types.Signature)
+		sig := c.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
 		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
 		if sel, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
 			c.Printf(`go$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, args)
@@ -495,15 +495,15 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X))
 				parts = append(parts, indexVar+" = "+c.translateExpr(l.Index))
 				lhs = &ast.IndexExpr{
-					X:     c.newIdent(lhsVar, c.info.Types[l.X]),
-					Index: c.newIdent(indexVar, c.info.Types[l.Index]),
+					X:     c.newIdent(lhsVar, c.info.Types[l.X].Type),
+					Index: c.newIdent(indexVar, c.info.Types[l.Index].Type),
 				}
 				c.info.Types[lhs] = c.info.Types[l]
 			case *ast.StarExpr:
 				lhsVar := c.newVariable("_lhs")
 				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X))
 				lhs = &ast.StarExpr{
-					X: c.newIdent(lhsVar, c.info.Types[l.X]),
+					X: c.newIdent(lhsVar, c.info.Types[l.X].Type),
 				}
 				c.info.Types[lhs] = c.info.Types[l]
 			case *ast.SelectorExpr:
@@ -513,7 +513,7 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 					lhsVar := c.newVariable("_lhs")
 					parts = append(parts, lhsVar+" = "+c.translateExpr(l.X))
 					lhs = &ast.SelectorExpr{
-						X:   c.newIdent(lhsVar, c.info.Types[l.X]),
+						X:   c.newIdent(lhsVar, c.info.Types[l.X].Type),
 						Sel: l.Sel,
 					}
 					c.info.Types[lhs] = c.info.Types[l]
@@ -523,9 +523,6 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 
 			parenExpr := &ast.ParenExpr{X: s.Rhs[0]}
 			c.info.Types[parenExpr] = c.info.Types[s.Rhs[0]]
-			if val, ok := c.info.Values[s.Rhs[0]]; ok {
-				c.info.Values[parenExpr] = val
-			}
 			binaryExpr := &ast.BinaryExpr{
 				X:  lhs,
 				Op: op,
@@ -539,7 +536,7 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 		if s.Tok == token.DEFINE {
 			for _, lhs := range s.Lhs {
 				if !isBlank(lhs) {
-					c.info.Types[lhs] = c.info.Objects[lhs.(*ast.Ident)].Type()
+					c.info.Types[lhs] = types.TypeAndValue{Type: c.info.Objects[lhs.(*ast.Ident)].Type()}
 				}
 			}
 		}
@@ -566,23 +563,23 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 				}
 				return ""
 			}
-			return c.translateAssign(lhs, c.translateImplicitConversion(s.Rhs[0], c.info.Types[s.Lhs[0]]))
+			return c.translateAssign(lhs, c.translateImplicitConversion(s.Rhs[0], c.info.Types[s.Lhs[0]].Type))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			tupleVar := c.newVariable("_tuple")
 			out := tupleVar + " = " + c.translateExpr(s.Rhs[0])
-			tuple := c.info.Types[s.Rhs[0]].(*types.Tuple)
+			tuple := c.info.Types[s.Rhs[0]].Type.(*types.Tuple)
 			for i, lhs := range s.Lhs {
 				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
-					out += ", " + c.translateAssign(lhs, c.translateImplicitConversion(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]]))
+					out += ", " + c.translateAssign(lhs, c.translateImplicitConversion(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]].Type))
 				}
 			}
 			return out
 		case len(s.Lhs) == len(s.Rhs):
 			parts := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
-				parts[i] = c.translateImplicitConversion(rhs, c.info.Types[s.Lhs[i]])
+				parts[i] = c.translateImplicitConversion(rhs, c.info.Types[s.Lhs[i]].Type)
 			}
 			tupleVar := c.newVariable("_tuple")
 			out := tupleVar + " = [" + strings.Join(parts, ", ") + "]"
@@ -600,9 +597,9 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 		}
 
 	case *ast.IncDecStmt:
-		t := c.info.Types[s.X]
+		t := c.info.Types[s.X].Type
 		if iExpr, isIExpr := s.X.(*ast.IndexExpr); isIExpr {
-			switch u := c.info.Types[iExpr.X].Underlying().(type) {
+			switch u := c.info.Types[iExpr.X].Type.Underlying().(type) {
 			case *types.Array:
 				t = u.Elem()
 			case *types.Slice:
@@ -620,8 +617,7 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 			Kind:  token.INT,
 			Value: "1",
 		}
-		c.info.Types[one] = t
-		c.info.Values[one] = exact.MakeInt64(1)
+		c.info.Types[one] = types.TypeAndValue{Type: t, Value: exact.MakeInt64(1)}
 		return c.translateSimpleStmt(&ast.AssignStmt{
 			Lhs: []ast.Expr{s.X},
 			Tok: tok,
@@ -688,7 +684,7 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 			panic(int(sel.Kind()))
 		}
 	case *ast.StarExpr:
-		switch u := c.info.Types[lhs].Underlying().(type) {
+		switch u := c.info.Types[lhs].Type.Underlying().(type) {
 		case *types.Struct:
 			lVar := c.newVariable("l")
 			rVar := c.newVariable("r")
@@ -704,7 +700,7 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 			return fmt.Sprintf("%s.go$set(%s)", c.translateExpr(l.X), rhs)
 		}
 	case *ast.IndexExpr:
-		switch t := c.info.Types[l.X].Underlying().(type) {
+		switch t := c.info.Types[l.X].Type.Underlying().(type) {
 		case *types.Array, *types.Pointer:
 			return fmt.Sprintf("%s[%s] = %s", c.translateExpr(l.X), c.flatten64(l.Index), rhs)
 		case *types.Slice:
@@ -778,7 +774,7 @@ func (v *HasCallVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		return nil
 	}
 	if call, isCall := node.(*ast.CallExpr); isCall {
-		if _, isSig := v.info.Types[call.Fun].(*types.Signature); isSig { // skip conversions
+		if _, isSig := v.info.Types[call.Fun].Type.(*types.Signature); isSig { // skip conversions
 			v.hasCall = true
 			return nil
 		}
@@ -807,7 +803,7 @@ func (v *EscapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
 		}
 	case *ast.UnaryExpr:
 		if n.Op == token.AND {
-			switch v.info.Types[n.X].Underlying().(type) {
+			switch v.info.Types[n.X].Type.Underlying().(type) {
 			case *types.Struct, *types.Array:
 				// always by reference
 				return nil

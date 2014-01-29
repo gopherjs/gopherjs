@@ -118,13 +118,13 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 
 	case "Func":
 		typ = function(v) { this.go$val = v; };
-		typ.init = function(params, results, isVariadic) {
+		typ.init = function(params, results, variadic) {
 			typ.params = params;
 			typ.results = results;
-			typ.isVariadic = isVariadic;
+			typ.variadic = variadic;
 			typ.extendReflectType = function(rt) {
 				var typeSlice = (go$sliceType(go$ptrType(go$reflect.rtype)));
-				rt.funcType = new go$reflect.funcType(rt, isVariadic, new typeSlice(go$mapArray(params, function(p) { return p.reflectType(); })), new typeSlice(go$mapArray(results, function(p) { return p.reflectType(); })));
+				rt.funcType = new go$reflect.funcType(rt, variadic, new typeSlice(go$mapArray(params, function(p) { return p.reflectType(); })), new typeSlice(go$mapArray(results, function(p) { return p.reflectType(); })));
 			};
 		};
 		break;
@@ -335,9 +335,9 @@ var go$chanType = function(elem, sendOnly, recvOnly) {
 };
 
 var go$funcTypes = {};
-var go$funcType = function(params, results, isVariadic) {
+var go$funcType = function(params, results, variadic) {
 	var paramTypes = go$mapArray(params, function(p) { return p.string; });
-	if (isVariadic) {
+	if (variadic) {
 		paramTypes[paramTypes.length - 1] = "..." + paramTypes[paramTypes.length - 1].substr(2);
 	}
 	var string = "func(" + paramTypes.join(", ") + ")";
@@ -349,7 +349,7 @@ var go$funcType = function(params, results, isVariadic) {
 	var typ = go$funcTypes[string];
 	if (typ === undefined) {
 		typ = go$newType(0, "Func", string, "", "", null);
-		typ.init(params, results, isVariadic);
+		typ.init(params, results, variadic);
 		go$funcTypes[string] = typ;
 	}
 	return typ;
@@ -861,7 +861,7 @@ var go$externalize = function(v, t) {
 		return function() {
 			var args = [], i;
 			for (i = 0; i < t.params.length; i += 1) {
-				if (t.isVariadic && i === t.params.length - 1) {
+				if (t.variadic && i === t.params.length - 1) {
 					var vt = t.params[i].elem, varargs = [], j;
 					for (j = i; j < arguments.length; j += 1) {
 						varargs.push(go$internalize(arguments[j], vt));
@@ -960,7 +960,7 @@ var go$internalize = function(v, t, recv) {
 		return function() {
 			var args = [], i;
 			for (i = 0; i < t.params.length; i += 1) {
-				if (t.isVariadic && i === t.params.length - 1) {
+				if (t.variadic && i === t.params.length - 1) {
 					var vt = t.params[i].elem, varargs = arguments[i], j;
 					for (j = 0; j < varargs.length; j += 1) {
 						args.push(go$externalize(varargs.array[varargs.offset + j], vt));

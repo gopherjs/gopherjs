@@ -42,25 +42,7 @@ cd ../../../../../
 ```
 
 ### Interface to native JavaScript
-The package `github.com/neelance/gopherjs/js` ([documentation](js/js.go)) provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their JavaScript syntax. Type conversions between Go types and JavaScript types are performed automatically according to the table below. Types not listed are passed through. The second column denotes the types that are used when converting to `interface{}`.
-
-| Go types                       | Go interface type              | JavaScript type |
-| ------------------------------ | ------------------------------ | --------------- |
-| bool                           | bool                           | Boolean         |
-| int?, uint?, float?            | float64                        | Number          |
-| string                         | string                         | String          |
-| [?]int8                        | []int8                         | Int8Array       |
-| [?]int16                       | []int16                        | Int16Array      |
-| [?]int32, [?]int               | []int                          | Int32Array      |
-| [?]uint8                       | []uint8                        | Int8Array       |
-| [?]uint16                      | []uint16                       | Int16Array      |
-| [?]uint32, [?]uint, [?]uintptr | []uint                         | Int32Array      |
-| [?]float32                     | []float32                      | Float32Array    |
-| [?]float64                     | []float64                      | Float64Array    |
-| all other slices and arrays    | []interface{}                  | Array           |
-| maps                           | map[string]interface{}         | Object          |
-| functions                      | func(...interface{}) js.Object | Function        |
-| time.Time                      | time.Time                      | Date            |
+The package `github.com/neelance/gopherjs/js` provides functions for interacting with native JavaScript APIs. Please see its [documentation](http://godoc.org/github.com/neelance/gopherjs/js) for further details.
 
 ### Roadmap
 These features are not implemented yet, but on the roadmap:

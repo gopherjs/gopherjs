@@ -1178,7 +1178,7 @@ var go$pushErr = function(err) {
 
 var go$callDeferred = function(deferred) {
 	if (go$jsErr !== null) {
-		throw go$jsErr; // JavaScript errors can not be rescued
+		throw go$jsErr;
 	}
 	var i;
 	for (i = deferred.length - 1; i >= 0; i -= 1) {

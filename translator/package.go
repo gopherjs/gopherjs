@@ -54,9 +54,9 @@ func (c *PkgContext) Printf(format string, values ...interface{}) {
 }
 
 func (c *PkgContext) Indent(f func()) {
-	c.indentation += 1
+	c.indentation++
 	f()
-	c.indentation -= 1
+	c.indentation--
 }
 
 func (c *PkgContext) CatchOutput(f func()) []byte {

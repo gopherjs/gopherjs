@@ -84,10 +84,10 @@ func Float32bits(f float32) uint32 {
 		if e == (1<<8)-1 {
 			break
 		}
-		e += 1
+		e++
 	}
 	for f < 1<<23 {
-		e -= 1
+		e--
 		if e == 0 {
 			break
 		}
@@ -144,10 +144,10 @@ func Float64bits(f float64) uint64 {
 		if e == (1<<11)-1 {
 			break
 		}
-		e += 1
+		e++
 	}
 	for f < 1<<52 {
-		e -= 1
+		e--
 		if e == 0 {
 			break
 		}

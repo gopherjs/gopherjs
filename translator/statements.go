@@ -58,9 +58,9 @@ func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
 			refVar := c.newVariable("_ref")
 			c.Printf("%s = %s;", refVar, c.translateExpr(s.Tag))
 			translateCond = func(cond ast.Expr) string {
-				refId := c.newIdent(refVar, c.info.Types[s.Tag].Type)
+				refIdent := c.newIdent(refVar, c.info.Types[s.Tag].Type)
 				return c.translateExpr(&ast.BinaryExpr{
-					X:  refId,
+					X:  refIdent,
 					Op: token.EQL,
 					Y:  cond,
 				})
@@ -795,8 +795,8 @@ type EscapeAnalysis struct {
 	escaping   map[types.Object]bool
 }
 
-// huge overapproximation
 func (v *EscapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
+	// huge overapproximation
 	switch n := node.(type) {
 	case *ast.ValueSpec:
 		for _, name := range n.Names {

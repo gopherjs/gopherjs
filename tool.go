@@ -236,7 +236,7 @@ func tool() error {
 			if !strings.HasSuffix(flag.Arg(lastSourceArg), ".go") {
 				break
 			}
-			lastSourceArg += 1
+			lastSourceArg++
 		}
 		if lastSourceArg == 1 {
 			return fmt.Errorf("gopherjs run: no go files listed")
@@ -384,7 +384,8 @@ The commands are:
 		return nil
 
 	default:
-		return fmt.Errorf("gopherjs: unknown subcommand \"%s\"\nRun 'gopherjs help' for usage.", cmd)
+		fmt.Fprintf(os.Stderr, "gopherjs: unknown subcommand \"%s\"\nRun 'gopherjs help' for usage.\n", cmd)
+		return nil
 
 	}
 }

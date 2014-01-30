@@ -70,10 +70,12 @@ type Object interface {
 	IsNull() bool
 }
 
+// Error encapsulates JavaScript errors. Those are turned into a Go panic and may be rescued, giving an *Error that holds the JavaScript error object.
 type Error struct {
 	Object
 }
 
+// Error returns the message of the encapsulated JavaScript error object.
 func (err *Error) Error() string {
 	return "JavaScript error: " + err.Get("message").String()
 }

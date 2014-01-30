@@ -123,7 +123,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	}
 
 	var functions []*ast.FuncDecl
-	functionsByObject := make(map[types.Object]*ast.FuncDecl)
 	var initStmts []ast.Stmt
 	var toplevelTypes []*types.TypeName
 	var constants []*types.Const
@@ -148,10 +147,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					continue
 				}
 				functions = append(functions, d)
-				o := c.info.Objects[d.Name]
-				functionsByObject[o] = d
 				if sig.Recv() == nil {
-					c.objectName(o) // register toplevel name
+					c.objectName(c.info.Objects[d.Name]) // register toplevel name
 				}
 			case *ast.GenDecl:
 				switch d.Tok {
@@ -184,59 +181,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					}
 				}
 			}
-		}
-	}
-
-	// resolve var dependencies
-	var unorderedSingleVarSpecs []*ast.ValueSpec
-	pendingObjects := make(map[types.Object]bool)
-	for _, spec := range varSpecs {
-		for _, singleSpec := range c.splitValueSpec(spec) {
-			if singleSpec.Values[0] == nil {
-				continue
-			}
-			unorderedSingleVarSpecs = append(unorderedSingleVarSpecs, singleSpec)
-			for _, name := range singleSpec.Names {
-				pendingObjects[c.info.Objects[name]] = true
-			}
-		}
-	}
-	complete := false
-	var initVarStmts []ast.Stmt
-	for !complete {
-		complete = true
-		for i, spec := range unorderedSingleVarSpecs {
-			if spec == nil {
-				continue
-			}
-			v := VarDependencyCollector{info: c.info, functions: functionsByObject}
-			ast.Walk(&v, spec.Values[0])
-			currentObjs := make(map[types.Object]bool)
-			for _, name := range spec.Names {
-				currentObjs[c.info.Objects[name]] = true
-			}
-			ready := true
-			for _, dep := range v.dependencies {
-				if currentObjs[dep] {
-					return nil, fmt.Errorf("%s: initialization loop", fileSet.Position(dep.Pos()).String())
-				}
-				ready = ready && !pendingObjects[dep]
-			}
-			if !ready {
-				complete = false
-				continue
-			}
-			lhs := make([]ast.Expr, len(spec.Names))
-			for i, name := range spec.Names {
-				lhs[i] = name
-				delete(pendingObjects, c.info.Objects[name])
-			}
-			initVarStmts = append(initVarStmts, &ast.AssignStmt{
-				Lhs: lhs,
-				Tok: token.DEFINE,
-				Rhs: spec.Values,
-			})
-			unorderedSingleVarSpecs[i] = nil
 		}
 	}
 
@@ -322,6 +266,21 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		// init function
 		c.Printf("go$pkg.init = function() {")
 		c.Indent(func() {
+			var initVarStmts []ast.Stmt
+			for _, init := range c.info.InitOrder {
+				lhs := make([]ast.Expr, len(init.Lhs))
+				for i, obj := range init.Lhs {
+					ident := ast.NewIdent(obj.Name())
+					c.info.Types[ident] = types.TypeAndValue{Type: obj.Type()}
+					c.info.Objects[ident] = obj
+					lhs[i] = ident
+				}
+				initVarStmts = append(initVarStmts, &ast.AssignStmt{
+					Lhs: lhs,
+					Tok: token.DEFINE,
+					Rhs: []ast.Expr{init.Rhs},
+				})
+			}
 			c.translateFunctionBody(append(initVarStmts, initStmts...), nil)
 		})
 		c.Printf("};")
@@ -450,27 +409,6 @@ func (c *PkgContext) initArgs(ty types.Type) string {
 	default:
 		panic("invalid type")
 	}
-}
-
-func (c *PkgContext) splitValueSpec(s *ast.ValueSpec) []*ast.ValueSpec {
-	if len(s.Values) == 1 {
-		if _, isTuple := c.info.Types[s.Values[0]].Type.(*types.Tuple); isTuple {
-			return []*ast.ValueSpec{s}
-		}
-	}
-
-	list := make([]*ast.ValueSpec, len(s.Names))
-	for i, name := range s.Names {
-		var value ast.Expr
-		if i < len(s.Values) {
-			value = s.Values[i]
-		}
-		list[i] = &ast.ValueSpec{
-			Names:  []*ast.Ident{name},
-			Values: []ast.Expr{value},
-		}
-	}
-	return list
 }
 
 func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]string, translateNatives bool) {
@@ -656,27 +594,6 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 		c.Printf("var %s;", strings.Join(c.funcVarNames, ", "))
 	}
 	c.Write(body)
-}
-
-type VarDependencyCollector struct {
-	info         *types.Info
-	functions    map[types.Object]*ast.FuncDecl
-	dependencies []types.Object
-}
-
-func (v *VarDependencyCollector) Visit(node ast.Node) (w ast.Visitor) {
-	switch n := node.(type) {
-	case *ast.Ident:
-		o := v.info.Objects[n]
-		if fun, found := v.functions[o]; found {
-			delete(v.functions, o)
-			ast.Walk(v, fun)
-			v.functions[o] = fun
-			return v
-		}
-		v.dependencies = append(v.dependencies, o)
-	}
-	return v
 }
 
 // type DependencyAnalysis struct {

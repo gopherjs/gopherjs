@@ -630,17 +630,24 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 	case *ast.DeclStmt:
 		var parts []string
 		for _, spec := range s.Decl.(*ast.GenDecl).Specs {
-			for _, singleSpec := range c.splitValueSpec(spec.(*ast.ValueSpec)) {
-				lhs := make([]ast.Expr, len(singleSpec.Names))
-				for i, name := range singleSpec.Names {
-					lhs[i] = name
-				}
-				parts = append(parts, c.translateSimpleStmt(&ast.AssignStmt{
-					Lhs: lhs,
-					Tok: token.DEFINE,
-					Rhs: singleSpec.Values,
-				}))
+			valueSpec := spec.(*ast.ValueSpec)
+			lhs := make([]ast.Expr, len(valueSpec.Names))
+			for i, name := range valueSpec.Names {
+				lhs[i] = name
 			}
+			rhs := valueSpec.Values
+			isTuple := false
+			if len(rhs) == 1 {
+				_, isTuple = c.info.Types[rhs[0]].Type.(*types.Tuple)
+			}
+			for len(rhs) < len(lhs) && !isTuple {
+				rhs = append(rhs, nil)
+			}
+			parts = append(parts, c.translateSimpleStmt(&ast.AssignStmt{
+				Lhs: lhs,
+				Tok: token.DEFINE,
+				Rhs: rhs,
+			}))
 		}
 		return strings.Join(parts, ", ")
 

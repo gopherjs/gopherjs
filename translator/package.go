@@ -595,13 +595,3 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 	}
 	c.Write(body)
 }
-
-// type DependencyAnalysis struct {
-// }
-
-// func (v *DependencyAnalysis) Visit(node ast.Node) (w ast.Visitor) {
-// 	switch n := node.(type) {
-
-// 	}
-// 	return v
-// }

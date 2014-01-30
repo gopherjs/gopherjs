@@ -200,3 +200,20 @@ func TestThis(t *testing.T) {
 	})
 	dummys.Call("testThis")
 }
+
+func TestError(t *testing.T) {
+	defer func() {
+		err := recover()
+		if err == nil {
+			t.Fail()
+		}
+		if _, ok := err.(error); !ok {
+			t.Fail()
+		}
+		jsErr, ok := err.(*js.Error)
+		if !ok || jsErr.Get("stack").IsUndefined() {
+			t.Fail()
+		}
+	}()
+	js.Global("notExisting").Call("throwsError")
+}

@@ -1166,8 +1166,12 @@ var go$errorStack = [], go$jsErr = null;
 
 var go$pushErr = function(err) {
 	if (err.go$panicValue === undefined) {
-		go$jsErr = err;
-		return;
+		var jsPkg = go$packages["github.com/neelance/gopherjs/js"];
+		if (err.go$notSupported !== undefined || jsPkg === undefined) {
+			go$jsErr = err;
+			return;
+		}
+		err.go$panicValue = new jsPkg.Error.Ptr(err);
 	}
 	go$errorStack.push({ frame: go$getStackDepth() - 1, error: err });
 };

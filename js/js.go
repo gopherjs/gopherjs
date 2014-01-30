@@ -49,6 +49,14 @@ type Object interface {
 	IsNull() bool
 }
 
+type Error struct {
+	Object
+}
+
+func (err *Error) Error() string {
+	return "JavaScript error: " + err.Get("message").String()
+}
+
 // Global returns the JavaScript global with the given name.
 func Global(name string) Object {
 	return nil // GopherJS will not use this function body

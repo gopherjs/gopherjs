@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-var ReservedKeywords = make(map[string]bool)
+var reservedKeywords = make(map[string]bool)
 
 func init() {
 	for _, keyword := range []string{"abstract", "arguments", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", "long", "native", "new", "package", "private", "protected", "public", "return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof", "var", "void", "volatile", "while", "with", "yield"} {
-		ReservedKeywords[keyword] = true
+		reservedKeywords[keyword] = true
 	}
 }
 
@@ -23,7 +23,7 @@ func (err ErrorList) Error() string {
 	return err[0].Error()
 }
 
-type PkgContext struct {
+type pkgContext struct {
 	pkg           *types.Package
 	info          *types.Info
 	pkgVars       map[string]string
@@ -40,12 +40,12 @@ type PkgContext struct {
 	positions     map[int]token.Pos
 }
 
-func (c *PkgContext) Write(b []byte) (int, error) {
+func (c *pkgContext) Write(b []byte) (int, error) {
 	c.output = append(c.output, b...)
 	return len(b), nil
 }
 
-func (c *PkgContext) Printf(format string, values ...interface{}) {
+func (c *pkgContext) Printf(format string, values ...interface{}) {
 	c.Write([]byte(strings.Repeat("\t", c.indentation)))
 	fmt.Fprintf(c, format, values...)
 	c.Write([]byte{'\n'})
@@ -53,13 +53,13 @@ func (c *PkgContext) Printf(format string, values ...interface{}) {
 	c.delayedOutput = nil
 }
 
-func (c *PkgContext) Indent(f func()) {
+func (c *pkgContext) Indent(f func()) {
 	c.indentation++
 	f()
 	c.indentation--
 }
 
-func (c *PkgContext) CatchOutput(f func()) []byte {
+func (c *pkgContext) CatchOutput(f func()) []byte {
 	origoutput := c.output
 	c.output = nil
 	f()
@@ -68,7 +68,7 @@ func (c *PkgContext) CatchOutput(f func()) []byte {
 	return catched
 }
 
-func (c *PkgContext) Delayed(f func()) {
+func (c *pkgContext) Delayed(f func()) {
 	c.delayedOutput = c.CatchOutput(f)
 }
 
@@ -109,7 +109,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	}
 	typesPackages[importPath] = typesPkg
 
-	c := &PkgContext{
+	c := &pkgContext{
 		pkg:          typesPkg,
 		info:         info,
 		pkgVars:      make(map[string]string),
@@ -118,7 +118,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		postLoopStmt: make(map[string]ast.Stmt),
 		positions:    make(map[int]token.Pos),
 	}
-	for name := range ReservedKeywords {
+	for name := range reservedKeywords {
 		c.allVarNames[name] = 1
 	}
 
@@ -305,7 +305,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	return output, nil
 }
 
-func (c *PkgContext) translateType(o *types.TypeName) {
+func (c *pkgContext) translateType(o *types.TypeName) {
 	typeName := c.objectName(o)
 	size := int64(0)
 	switch t := o.Type().Underlying().(type) {
@@ -359,14 +359,14 @@ func (c *PkgContext) translateType(o *types.TypeName) {
 	c.Printf(`%s = go$newType(%d, "%s", "%s.%s", "%s", "%s", null);`, typeName, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path())
 }
 
-func (c *PkgContext) initType(obj types.Object) {
+func (c *pkgContext) initType(obj types.Object) {
 	switch t := obj.Type().Underlying().(type) {
 	case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
 		c.Printf("%s.init(%s);", c.objectName(obj), c.initArgs(t))
 	}
 }
 
-func (c *PkgContext) initArgs(ty types.Type) string {
+func (c *pkgContext) initArgs(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Array:
 		return fmt.Sprintf("%s, %d", c.typeName(t.Elem()), t.Len())
@@ -411,7 +411,7 @@ func (c *PkgContext) initArgs(ty types.Type) string {
 	}
 }
 
-func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]string, translateNatives bool) {
+func (c *pkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]string, translateNatives bool) {
 	c.newScope(func() {
 		sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
 		var recv *ast.Ident
@@ -479,7 +479,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]str
 		}
 		typeName := c.objectName(namedRecvType.Obj())
 		funName := fun.Name.Name
-		if ReservedKeywords[funName] {
+		if reservedKeywords[funName] {
 			funName += "$"
 		}
 
@@ -517,7 +517,7 @@ func (c *PkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]str
 	})
 }
 
-func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signature) {
+func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signature) {
 	c.funcVarNames = nil
 
 	body := c.CatchOutput(func() {
@@ -550,7 +550,7 @@ func (c *PkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 		defer func() { c.postLoopStmt = p }()
 		c.postLoopStmt = make(map[string]ast.Stmt)
 
-		v := HasDeferVisitor{}
+		v := hasDeferVisitor{}
 		ast.Walk(&v, &ast.BlockStmt{List: stmts})
 		switch v.hasDefer {
 		case true:

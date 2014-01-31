@@ -9,13 +9,13 @@ import (
 	"strings"
 )
 
-func (c *PkgContext) translateStmtList(stmts []ast.Stmt) {
+func (c *pkgContext) translateStmtList(stmts []ast.Stmt) {
 	for _, stmt := range stmts {
 		c.translateStmt(stmt, "")
 	}
 }
 
-func (c *PkgContext) translateStmt(stmt ast.Stmt, label string) {
+func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 	switch s := stmt.(type) {
 	case *ast.BlockStmt:
 		c.Printf("{")
@@ -348,7 +348,7 @@ type branch struct {
 	body      []ast.Stmt
 }
 
-func (c *PkgContext) translateBranchingStmt(caseClauses []ast.Stmt, initStmts []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) string, printCaseBodyPrefix func([]ast.Expr), label string) {
+func (c *pkgContext) translateBranchingStmt(caseClauses []ast.Stmt, initStmts []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) string, printCaseBodyPrefix func([]ast.Expr), label string) {
 	var branches []*branch
 	var defaultBranch *branch
 	var openBranches []*branch
@@ -437,7 +437,7 @@ clauseLoop:
 		return
 	}
 
-	v := HasBreakVisitor{}
+	v := hasBreakVisitor{}
 	for _, child := range caseClauses {
 		ast.Walk(&v, child)
 	}
@@ -454,7 +454,7 @@ clauseLoop:
 	c.Printf("}")
 }
 
-func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
+func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 	switch s := stmt.(type) {
 	case *ast.AssignStmt:
 		if s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
@@ -507,7 +507,7 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 				}
 				c.info.Types[lhs] = c.info.Types[l]
 			case *ast.SelectorExpr:
-				v := HasCallVisitor{c.info, false}
+				v := hasCallVisitor{c.info, false}
 				ast.Walk(&v, l.X)
 				if v.hasCall {
 					lhsVar := c.newVariable("_lhs")
@@ -556,7 +556,7 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
 			lhs := removeParens(s.Lhs[0])
 			if isBlank(lhs) {
-				v := HasCallVisitor{c.info, false}
+				v := hasCallVisitor{c.info, false}
 				ast.Walk(&v, s.Rhs[0])
 				if v.hasCall {
 					return c.translateExpr(s.Rhs[0])
@@ -660,7 +660,7 @@ func (c *PkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 	}
 }
 
-func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
+func (c *pkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 	if isBlank(lhs) {
 		panic("translateAssign with blank lhs")
 	}
@@ -726,8 +726,8 @@ func (c *PkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 	}
 }
 
-func (c *PkgContext) handleEscapingVariables(node ast.Node, f func()) {
-	v := &EscapeAnalysis{
+func (c *pkgContext) handleEscapingVariables(node ast.Node, f func()) {
+	v := &escapeAnalysis{
 		info:       c.info,
 		candidates: make(map[types.Object]bool),
 		escaping:   make(map[types.Object]bool),
@@ -751,11 +751,11 @@ func hasFallthrough(caseClause *ast.CaseClause) bool {
 	return isBranchStmt && b.Tok == token.FALLTHROUGH
 }
 
-type HasBreakVisitor struct {
+type hasBreakVisitor struct {
 	hasBreak bool
 }
 
-func (v *HasBreakVisitor) Visit(node ast.Node) (w ast.Visitor) {
+func (v *hasBreakVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	if v.hasBreak {
 		return nil
 	}
@@ -771,12 +771,12 @@ func (v *HasBreakVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	return v
 }
 
-type HasCallVisitor struct {
+type hasCallVisitor struct {
 	info    *types.Info
 	hasCall bool
 }
 
-func (v *HasCallVisitor) Visit(node ast.Node) (w ast.Visitor) {
+func (v *hasCallVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	if v.hasCall {
 		return nil
 	}
@@ -789,13 +789,13 @@ func (v *HasCallVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	return v
 }
 
-type EscapeAnalysis struct {
+type escapeAnalysis struct {
 	info       *types.Info
 	candidates map[types.Object]bool
 	escaping   map[types.Object]bool
 }
 
-func (v *EscapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
+func (v *escapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
 	// huge overapproximation
 	switch n := node.(type) {
 	case *ast.ValueSpec:
@@ -815,22 +815,22 @@ func (v *EscapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
 				// always by reference
 				return nil
 			default:
-				return &EscapingObjectCollector{v}
+				return &escapingObjectCollector{v}
 			}
 		}
 	case *ast.FuncLit:
-		return &EscapingObjectCollector{v}
+		return &escapingObjectCollector{v}
 	case *ast.ForStmt, *ast.RangeStmt:
 		return nil
 	}
 	return v
 }
 
-type EscapingObjectCollector struct {
-	analysis *EscapeAnalysis
+type escapingObjectCollector struct {
+	analysis *escapeAnalysis
 }
 
-func (v *EscapingObjectCollector) Visit(node ast.Node) (w ast.Visitor) {
+func (v *escapingObjectCollector) Visit(node ast.Node) (w ast.Visitor) {
 	if id, isIdent := node.(*ast.Ident); isIdent {
 		obj := v.analysis.info.Objects[id]
 		if v.analysis.candidates[obj] {

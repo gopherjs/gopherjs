@@ -104,14 +104,14 @@ func WriteInterfaces(dependencies []string, w io.Writer, merge bool) {
 	}
 }
 
-type Archive struct {
+type archive struct {
 	GcData       []byte
 	Dependencies []string
 	Code         []byte
 }
 
 func ReadArchive(filename, id string, data []byte) (*Output, error) {
-	var a Archive
+	var a archive
 	_, err := asn1.Unmarshal(data, &a)
 	if err != nil {
 		return nil, err
@@ -128,10 +128,10 @@ func ReadArchive(filename, id string, data []byte) (*Output, error) {
 func WriteArchive(o *Output) ([]byte, error) {
 	gcData := bytes.NewBuffer(nil)
 	gcexporter.Write(o.Types, gcData, sizes32)
-	return asn1.Marshal(Archive{gcData.Bytes(), o.Dependencies, o.Code})
+	return asn1.Marshal(archive{gcData.Bytes(), o.Dependencies, o.Code})
 }
 
-func (c *PkgContext) translateParams(t *ast.FuncType) []string {
+func (c *pkgContext) translateParams(t *ast.FuncType) []string {
 	params := make([]string, 0)
 	for _, param := range t.Params.List {
 		for _, ident := range param.Names {
@@ -145,7 +145,7 @@ func (c *PkgContext) translateParams(t *ast.FuncType) []string {
 	return params
 }
 
-func (c *PkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis bool) string {
+func (c *pkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis bool) string {
 	params := make([]string, sig.Params().Len())
 	for i := range params {
 		if sig.Variadic() && i == len(params)-1 && !ellipsis {
@@ -163,7 +163,7 @@ func (c *PkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellips
 	return strings.Join(params, ", ")
 }
 
-func (c *PkgContext) translateSelection(sel *types.Selection) (fields []string, jsTag string) {
+func (c *pkgContext) translateSelection(sel *types.Selection) (fields []string, jsTag string) {
 	t := sel.Recv()
 	for _, index := range sel.Index() {
 		if ptr, isPtr := t.(*types.Pointer); isPtr {
@@ -184,7 +184,7 @@ func (c *PkgContext) translateSelection(sel *types.Selection) (fields []string, 
 	return
 }
 
-func (c *PkgContext) zeroValue(ty types.Type) string {
+func (c *pkgContext) zeroValue(ty types.Type) string {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
 		switch {
@@ -224,7 +224,7 @@ func (c *PkgContext) zeroValue(ty types.Type) string {
 	return fmt.Sprintf("%s.nil", c.typeName(ty))
 }
 
-func (c *PkgContext) newVariable(name string) string {
+func (c *pkgContext) newVariable(name string) string {
 	if name == "" {
 		panic("newVariable: empty name")
 	}
@@ -246,7 +246,7 @@ func (c *PkgContext) newVariable(name string) string {
 	return name
 }
 
-func (c *PkgContext) newScope(f func()) {
+func (c *pkgContext) newScope(f func()) {
 	outerVarNames := make(map[string]int, len(c.allVarNames))
 	for k, v := range c.allVarNames {
 		outerVarNames[k] = v
@@ -257,7 +257,7 @@ func (c *PkgContext) newScope(f func()) {
 	c.funcVarNames = outerFuncVarNames
 }
 
-func (c *PkgContext) newIdent(name string, t types.Type) *ast.Ident {
+func (c *pkgContext) newIdent(name string, t types.Type) *ast.Ident {
 	ident := ast.NewIdent(name)
 	c.info.Types[ident] = types.TypeAndValue{Type: t}
 	obj := types.NewVar(0, c.pkg, name, t)
@@ -266,7 +266,7 @@ func (c *PkgContext) newIdent(name string, t types.Type) *ast.Ident {
 	return ident
 }
 
-func (c *PkgContext) objectName(o types.Object) string {
+func (c *pkgContext) objectName(o types.Object) string {
 	if o.Pkg() != nil && o.Pkg() != c.pkg {
 		pkgVar, found := c.pkgVars[o.Pkg().Path()]
 		if !found {
@@ -290,7 +290,7 @@ func (c *PkgContext) objectName(o types.Object) string {
 	return name
 }
 
-func (c *PkgContext) typeName(ty types.Type) string {
+func (c *pkgContext) typeName(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Basic:
 		switch t.Kind() {
@@ -320,7 +320,7 @@ func (c *PkgContext) typeName(ty types.Type) string {
 	}
 }
 
-func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
+func (c *pkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	switch t := keyType.Underlying().(type) {
 	case *types.Array, *types.Struct:
 		return fmt.Sprintf("(new %s(%s)).go$key()", c.typeName(keyType), c.translateExpr(expr))
@@ -338,7 +338,7 @@ func (c *PkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	}
 }
 
-func (c *PkgContext) typeArray(t *types.Tuple) string {
+func (c *pkgContext) typeArray(t *types.Tuple) string {
 	s := make([]string, t.Len())
 	for i := range s {
 		s[i] = c.typeName(t.At(i).Type())
@@ -346,7 +346,7 @@ func (c *PkgContext) typeArray(t *types.Tuple) string {
 	return "[" + strings.Join(s, ", ") + "]"
 }
 
-func (c *PkgContext) externalize(s string, t types.Type) string {
+func (c *pkgContext) externalize(s string, t types.Type) string {
 	if isJsObject(t) {
 		return s
 	}
@@ -362,7 +362,7 @@ func (c *PkgContext) externalize(s string, t types.Type) string {
 	return fmt.Sprintf("go$externalize(%s, %s)", s, c.typeName(t))
 }
 
-func (c *PkgContext) internalize(s string, t types.Type) string {
+func (c *pkgContext) internalize(s string, t types.Type) string {
 	if isJsObject(t) {
 		return s
 	}
@@ -382,7 +382,7 @@ func (c *PkgContext) internalize(s string, t types.Type) string {
 
 func fieldName(t *types.Struct, i int) string {
 	name := t.Field(i).Name()
-	if name == "_" || ReservedKeywords[name] {
+	if name == "_" || reservedKeywords[name] {
 		return fmt.Sprintf("%s$%d", name, i)
 	}
 	return name

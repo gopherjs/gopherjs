@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-func (c *PkgContext) translateExpr(expr ast.Expr) string {
+func (c *pkgContext) translateExpr(expr ast.Expr) string {
 	exprType := c.info.Types[expr].Type
 	if value := c.info.Types[expr].Value; value != nil {
 		basic := types.Typ[types.String]
@@ -650,7 +650,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 			switch sel.Kind() {
 			case types.MethodVal:
 				methodName := o.Name()
-				if ReservedKeywords[methodName] {
+				if reservedKeywords[methodName] {
 					methodName += "$"
 				}
 
@@ -848,7 +848,7 @@ func (c *PkgContext) translateExpr(expr ast.Expr) string {
 	}
 }
 
-func (c *PkgContext) formatExpr(format string, a ...interface{}) string {
+func (c *pkgContext) formatExpr(format string, a ...interface{}) string {
 	var vars = make([]string, len(a))
 	var assignments []string
 	varFor := func(i int) string {
@@ -924,7 +924,7 @@ func (c *PkgContext) formatExpr(format string, a ...interface{}) string {
 	return "(" + strings.Join(assignments, ", ") + ", " + out.String() + ")"
 }
 
-func (c *PkgContext) identifierConstant(expr ast.Expr) (string, bool) {
+func (c *pkgContext) identifierConstant(expr ast.Expr) (string, bool) {
 	val := c.info.Types[expr].Value
 	if val == nil {
 		return "", false
@@ -941,7 +941,7 @@ func (c *PkgContext) identifierConstant(expr ast.Expr) (string, bool) {
 	return s, true
 }
 
-func (c *PkgContext) translateExprSlice(exprs []ast.Expr, desiredType types.Type) []string {
+func (c *pkgContext) translateExprSlice(exprs []ast.Expr, desiredType types.Type) []string {
 	parts := make([]string, len(exprs))
 	for i, expr := range exprs {
 		parts[i] = c.translateImplicitConversion(expr, desiredType)
@@ -949,7 +949,7 @@ func (c *PkgContext) translateExprSlice(exprs []ast.Expr, desiredType types.Type
 	return parts
 }
 
-func (c *PkgContext) translateConversion(expr ast.Expr, desiredType types.Type) string {
+func (c *pkgContext) translateConversion(expr ast.Expr, desiredType types.Type) string {
 	exprType := c.info.Types[expr].Type
 	if types.Identical(exprType, desiredType) {
 		return c.translateExpr(expr)
@@ -1067,7 +1067,7 @@ func (c *PkgContext) translateConversion(expr ast.Expr, desiredType types.Type) 
 	return c.translateImplicitConversion(expr, desiredType)
 }
 
-func (c *PkgContext) translateImplicitConversion(expr ast.Expr, desiredType types.Type) string {
+func (c *pkgContext) translateImplicitConversion(expr ast.Expr, desiredType types.Type) string {
 	if desiredType == nil {
 		return c.translateExpr(expr)
 	}
@@ -1108,7 +1108,7 @@ func (c *PkgContext) translateImplicitConversion(expr ast.Expr, desiredType type
 	return c.translateExpr(expr)
 }
 
-func (c *PkgContext) translateConversionToSlice(expr ast.Expr, desiredType types.Type) string {
+func (c *pkgContext) translateConversionToSlice(expr ast.Expr, desiredType types.Type) string {
 	switch c.info.Types[expr].Type.Underlying().(type) {
 	case *types.Basic:
 		return fmt.Sprintf("new %s(go$stringToBytes(%s))", c.typeName(desiredType), c.translateExpr(expr))
@@ -1118,7 +1118,7 @@ func (c *PkgContext) translateConversionToSlice(expr ast.Expr, desiredType types
 	return c.translateExpr(expr)
 }
 
-func (c *PkgContext) clone(src string, ty types.Type) string {
+func (c *pkgContext) clone(src string, ty types.Type) string {
 	switch t := ty.Underlying().(type) {
 	case *types.Struct:
 		structVar := c.newVariable("_struct")
@@ -1138,7 +1138,7 @@ func (c *PkgContext) clone(src string, ty types.Type) string {
 	}
 }
 
-func (c *PkgContext) loadStruct(array, target string, s *types.Struct) string {
+func (c *pkgContext) loadStruct(array, target string, s *types.Struct) string {
 	view := c.newVariable("_view")
 	code := fmt.Sprintf("%s = new DataView(%s.buffer, %s.byteOffset)", view, array, array)
 	var fields []*types.Var
@@ -1172,7 +1172,7 @@ func (c *PkgContext) loadStruct(array, target string, s *types.Struct) string {
 	return code
 }
 
-func (c *PkgContext) typeCheck(of string, to types.Type) string {
+func (c *pkgContext) typeCheck(of string, to types.Type) string {
 	if in, isInterface := to.Underlying().(*types.Interface); isInterface {
 		if in.MethodSet().Len() == 0 {
 			return "true"
@@ -1182,7 +1182,7 @@ func (c *PkgContext) typeCheck(of string, to types.Type) string {
 	return of + " === " + c.typeName(to)
 }
 
-func (c *PkgContext) flatten64(expr ast.Expr) string {
+func (c *pkgContext) flatten64(expr ast.Expr) string {
 	if is64Bit(c.info.Types[expr].Type.Underlying().(*types.Basic)) {
 		return fmt.Sprintf("go$flatten64(%s)", c.translateExpr(expr))
 	}
@@ -1208,11 +1208,11 @@ func fixNumber(value string, basic *types.Basic) string {
 	}
 }
 
-type HasDeferVisitor struct {
+type hasDeferVisitor struct {
 	hasDefer bool
 }
 
-func (v *HasDeferVisitor) Visit(node ast.Node) (w ast.Visitor) {
+func (v *hasDeferVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	if v.hasDefer {
 		return nil
 	}

@@ -19,16 +19,16 @@ import (
 	"time"
 )
 
-type Package struct {
+type packageData struct {
 	*build.Package
 	SrcModTime time.Time
 	UpToDate   bool
 	Output     *translator.Output
 }
 
-type ImportCError struct{}
+type importCError struct{}
 
-func (e *ImportCError) Error() string {
+func (e *importCError) Error() string {
 	return `importing "C" is not supported by GopherJS`
 }
 
@@ -50,7 +50,7 @@ func init() {
 
 func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 	if path == "C" {
-		return nil, &ImportCError{}
+		return nil, &importCError{}
 	}
 
 	buildContext := &build.Context{
@@ -82,7 +82,7 @@ func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 }
 
 var fileSet = token.NewFileSet()
-var packages = make(map[string]*Package)
+var packages = make(map[string]*packageData)
 var installMode = false
 var verboseInstall = false
 var packagesToTest = make(map[string]bool)
@@ -127,7 +127,7 @@ func tool() error {
 			if err != nil {
 				return err
 			}
-			pkg := &Package{Package: buildPkg}
+			pkg := &packageData{Package: buildPkg}
 			pkg.ImportPath = currentDirectory
 			if err := buildPackage(pkg); err != nil {
 				return err
@@ -162,7 +162,7 @@ func tool() error {
 			if err != nil {
 				return err
 			}
-			pkg := &Package{Package: buildPkg}
+			pkg := &packageData{Package: buildPkg}
 			if err := buildPackage(pkg); err != nil {
 				return err
 			}
@@ -220,7 +220,7 @@ func tool() error {
 		for _, pkgPath := range pkgs {
 			if _, err := importPackage(filepath.ToSlash(pkgPath)); err != nil {
 				switch err.(type) {
-				case *build.NoGoError, *ImportCError:
+				case *build.NoGoError, *importCError:
 					if *all {
 						continue
 					}
@@ -269,7 +269,7 @@ func tool() error {
 			packagesToTest[filepath.ToSlash(pkgPath)] = true
 		}
 
-		mainPkg := &Package{
+		mainPkg := &packageData{
 			Package: &build.Package{
 				Name:       "main",
 				ImportPath: "main",
@@ -288,7 +288,7 @@ func tool() error {
 
 			var names []string
 			var tests []string
-			collectTests := func(pkg *Package) {
+			collectTests := func(pkg *packageData) {
 				for _, name := range pkg.Output.Types.Scope().Names() {
 					_, isFunction := pkg.Output.Types.Scope().Lookup(name).Type().(*types.Signature)
 					if isFunction && strings.HasPrefix(name, "Test") {
@@ -306,7 +306,7 @@ func tool() error {
 			collectTests(pkg)
 
 			if len(pkg.XTestGoFiles) != 0 {
-				testPkg := &Package{Package: &build.Package{
+				testPkg := &packageData{Package: &build.Package{
 					ImportPath: pkg.ImportPath + "_test",
 					Dir:        pkg.Dir,
 					GoFiles:    pkg.XTestGoFiles,
@@ -391,7 +391,7 @@ The commands are:
 }
 
 func buildFiles(filenames []string, pkgObj string) error {
-	pkg := &Package{
+	pkg := &packageData{
 		Package: &build.Package{
 			Name:       "main",
 			ImportPath: "main",
@@ -415,7 +415,7 @@ func importPackage(path string) (*translator.Output, error) {
 	if err != nil {
 		return nil, err
 	}
-	pkg := &Package{Package: otherPkg}
+	pkg := &packageData{Package: otherPkg}
 	if err := buildPackage(pkg); err != nil {
 		return nil, err
 	}
@@ -423,7 +423,7 @@ func importPackage(path string) (*translator.Output, error) {
 	return pkg.Output, nil
 }
 
-func buildPackage(pkg *Package) error {
+func buildPackage(pkg *packageData) error {
 	if pkg.ImportPath == "unsafe" {
 		pkg.Output = &translator.Output{Types: types.Unsafe}
 		packages[pkg.ImportPath] = pkg
@@ -575,7 +575,7 @@ func buildPackage(pkg *Package) error {
 	return nil
 }
 
-func writeLibraryPackage(pkg *Package, pkgObj string) error {
+func writeLibraryPackage(pkg *packageData, pkgObj string) error {
 	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
 		return err
 	}
@@ -588,7 +588,7 @@ func writeLibraryPackage(pkg *Package, pkgObj string) error {
 	return ioutil.WriteFile(pkgObj, data, 0666)
 }
 
-func writeCommandPackage(pkg *Package, pkgObj string) error {
+func writeCommandPackage(pkg *packageData, pkgObj string) error {
 	if !pkg.IsCommand() || pkg.UpToDate {
 		return nil
 	}

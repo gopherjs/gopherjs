@@ -269,7 +269,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) string {
 
 			switch e.Op {
 			case token.EQL:
-				return fmt.Sprintf("%s === %s", c.translateExpr(e.X), c.translateExpr(e.Y))
+				return fmt.Sprintf("(%s === %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
 			case token.LSS, token.LEQ, token.GTR, token.GEQ:
 				return fmt.Sprintf("%s %s %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
 			case token.ADD, token.SUB:

@@ -17,6 +17,10 @@ type expression struct {
 }
 
 func (e *expression) String() string {
+	return e.str
+}
+
+func (e *expression) StringWithParens() string {
 	if e.parens {
 		return "(" + e.str + ")"
 	}
@@ -1204,7 +1208,7 @@ func (c *pkgContext) formatExprInternal(format string, a []interface{}, parens b
 			switch k {
 			case 's':
 				if e, ok := a[n].(*expression); ok {
-					out.WriteString(e.String())
+					out.WriteString(e.StringWithParens())
 					break
 				}
 				out.WriteString(a[n].(string))

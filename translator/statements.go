@@ -51,13 +51,13 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		if s.Init != nil {
 			c.Printf("%s;", c.translateSimpleStmt(s.Init))
 		}
-		translateCond := func(cond ast.Expr) string {
+		translateCond := func(cond ast.Expr) *expression {
 			return c.translateExpr(cond)
 		}
 		if s.Tag != nil {
 			refVar := c.newVariable("_ref")
 			c.Printf("%s = %s;", refVar, c.translateExpr(s.Tag))
-			translateCond = func(cond ast.Expr) string {
+			translateCond = func(cond ast.Expr) *expression {
 				refIdent := c.newIdent(refVar, c.info.Types[s.Tag].Type)
 				return c.translateExpr(&ast.BinaryExpr{
 					X:  refIdent,
@@ -88,8 +88,8 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		typeVar := c.newVariable("_type")
 		c.Printf("%s = %s;", refVar, c.translateExpr(expr))
 		c.Printf("%s = %s !== null ? %s.constructor : null;", typeVar, refVar, refVar)
-		translateCond := func(cond ast.Expr) string {
-			return c.typeCheck(typeVar, c.info.Types[cond].Type)
+		translateCond := func(cond ast.Expr) *expression {
+			return c.formatExpr("%s", c.typeCheck(typeVar, c.info.Types[cond].Type))
 		}
 		printCaseBodyPrefix := func(conds []ast.Expr) {
 			if typeSwitchVar == "" {
@@ -112,7 +112,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 		cond := "true"
 		if s.Cond != nil {
-			cond = c.translateExpr(s.Cond)
+			cond = c.translateExpr(s.Cond).String()
 		}
 		p := c.postLoopStmt[""]
 		defer func() {
@@ -207,7 +207,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 						}
 						et := elemType(t)
 						c.info.Types[indexExpr] = types.TypeAndValue{Type: et}
-						c.Printf("%s;", c.translateAssign(s.Value, c.translateImplicitConversion(indexExpr, et)))
+						c.Printf("%s;", c.translateAssign(s.Value, c.translateImplicitConversion(indexExpr, et).String()))
 					}
 					if !isBlank(s.Key) {
 						c.Printf("%s;", c.translateAssign(s.Key, iVar))
@@ -273,7 +273,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		default:
 			values := make([]string, len(results))
 			for i, result := range results {
-				values[i] = c.translateImplicitConversion(result, c.functionSig.Results().At(i).Type())
+				values[i] = c.translateImplicitConversion(result, c.functionSig.Results().At(i).Type()).String()
 			}
 			c.delayedOutput = nil
 			c.Printf("return [%s];", strings.Join(values, ", "))
@@ -348,7 +348,7 @@ type branch struct {
 	body      []ast.Stmt
 }
 
-func (c *pkgContext) translateBranchingStmt(caseClauses []ast.Stmt, initStmts []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) string, printCaseBodyPrefix func([]ast.Expr), label string) {
+func (c *pkgContext) translateBranchingStmt(caseClauses []ast.Stmt, initStmts []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) *expression, printCaseBodyPrefix func([]ast.Expr), label string) {
 	var branches []*branch
 	var defaultBranch *branch
 	var openBranches []*branch
@@ -376,7 +376,7 @@ clauseLoop:
 
 		var conds []string
 		for _, cond := range clause.List {
-			x := translateCond(cond)
+			x := translateCond(cond).String()
 			if x == "true" {
 				defaultBranch = branch
 				break clauseLoop
@@ -492,8 +492,8 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 			case *ast.IndexExpr:
 				lhsVar := c.newVariable("_lhs")
 				indexVar := c.newVariable("_index")
-				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X))
-				parts = append(parts, indexVar+" = "+c.translateExpr(l.Index))
+				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String())
+				parts = append(parts, indexVar+" = "+c.translateExpr(l.Index).String())
 				lhs = &ast.IndexExpr{
 					X:     c.newIdent(lhsVar, c.info.Types[l.X].Type),
 					Index: c.newIdent(indexVar, c.info.Types[l.Index].Type),
@@ -501,7 +501,7 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 				c.info.Types[lhs] = c.info.Types[l]
 			case *ast.StarExpr:
 				lhsVar := c.newVariable("_lhs")
-				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X))
+				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String())
 				lhs = &ast.StarExpr{
 					X: c.newIdent(lhsVar, c.info.Types[l.X].Type),
 				}
@@ -511,7 +511,7 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 				ast.Walk(&v, l.X)
 				if v.hasCall {
 					lhsVar := c.newVariable("_lhs")
-					parts = append(parts, lhsVar+" = "+c.translateExpr(l.X))
+					parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String())
 					lhs = &ast.SelectorExpr{
 						X:   c.newIdent(lhsVar, c.info.Types[l.X].Type),
 						Sel: l.Sel,
@@ -529,7 +529,7 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 				Y:  parenExpr,
 			}
 			c.info.Types[binaryExpr] = c.info.Types[s.Lhs[0]]
-			parts = append(parts, c.translateAssign(lhs, c.translateExpr(binaryExpr)))
+			parts = append(parts, c.translateAssign(lhs, c.translateExpr(binaryExpr).String()))
 			return strings.Join(parts, ", ")
 		}
 
@@ -559,27 +559,27 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 				v := hasCallVisitor{c.info, false}
 				ast.Walk(&v, s.Rhs[0])
 				if v.hasCall {
-					return c.translateExpr(s.Rhs[0])
+					return c.translateExpr(s.Rhs[0]).String()
 				}
 				return ""
 			}
-			return c.translateAssign(lhs, c.translateImplicitConversion(s.Rhs[0], c.info.Types[s.Lhs[0]].Type))
+			return c.translateAssign(lhs, c.translateImplicitConversion(s.Rhs[0], c.info.Types[s.Lhs[0]].Type).String())
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			tupleVar := c.newVariable("_tuple")
-			out := tupleVar + " = " + c.translateExpr(s.Rhs[0])
+			out := tupleVar + " = " + c.translateExpr(s.Rhs[0]).String()
 			tuple := c.info.Types[s.Rhs[0]].Type.(*types.Tuple)
 			for i, lhs := range s.Lhs {
 				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
-					out += ", " + c.translateAssign(lhs, c.translateImplicitConversion(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]].Type))
+					out += ", " + c.translateAssign(lhs, c.translateImplicitConversion(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]].Type).String())
 				}
 			}
 			return out
 		case len(s.Lhs) == len(s.Rhs):
 			parts := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
-				parts[i] = c.translateImplicitConversion(rhs, c.info.Types[s.Lhs[i]].Type)
+				parts[i] = c.translateImplicitConversion(rhs, c.info.Types[s.Lhs[i]].Type).String()
 			}
 			tupleVar := c.newVariable("_tuple")
 			out := tupleVar + " = [" + strings.Join(parts, ", ") + "]"
@@ -625,7 +625,7 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 		})
 
 	case *ast.ExprStmt:
-		return c.translateExpr(s.X)
+		return c.translateExpr(s.X).String()
 
 	case *ast.DeclStmt:
 		var parts []string
@@ -686,7 +686,7 @@ func (c *pkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 			}
 			return fmt.Sprintf("%s.%s = %s", c.translateExpr(l.X), strings.Join(fields, "."), rhs)
 		case types.PackageObj:
-			return c.translateExpr(l.X) + "." + l.Sel.Name + " = " + rhs
+			return c.translateExpr(l.X).String() + "." + l.Sel.Name + " = " + rhs
 		default:
 			panic(int(sel.Kind()))
 		}

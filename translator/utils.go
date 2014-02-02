@@ -152,13 +152,13 @@ func (c *pkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellips
 			varargType := sig.Params().At(i).Type().(*types.Slice)
 			varargs := make([]string, len(args)-i)
 			for j, arg := range args[i:] {
-				varargs[j] = c.translateImplicitConversion(arg, varargType.Elem())
+				varargs[j] = c.translateImplicitConversion(arg, varargType.Elem()).String()
 			}
 			params[i] = fmt.Sprintf("new %s([%s])", c.typeName(varargType), strings.Join(varargs, ", "))
 			break
 		}
 		argType := sig.Params().At(i).Type()
-		params[i] = c.translateImplicitConversion(args[i], argType)
+		params[i] = c.translateImplicitConversion(args[i], argType).String()
 	}
 	return strings.Join(params, ", ")
 }
@@ -328,13 +328,13 @@ func (c *pkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 		if is64Bit(t) {
 			return fmt.Sprintf("%s.go$key()", c.translateImplicitConversion(expr, keyType))
 		}
-		return c.translateImplicitConversion(expr, keyType)
+		return c.translateImplicitConversion(expr, keyType).String()
 	case *types.Chan, *types.Pointer:
 		return fmt.Sprintf("%s.go$key()", c.translateImplicitConversion(expr, keyType))
 	case *types.Interface:
 		return fmt.Sprintf("(%s || go$interfaceNil).go$key()", c.translateImplicitConversion(expr, keyType))
 	default:
-		return c.translateImplicitConversion(expr, keyType)
+		return c.translateImplicitConversion(expr, keyType).String()
 	}
 }
 
@@ -360,24 +360,6 @@ func (c *pkgContext) externalize(s string, t types.Type) string {
 		}
 	}
 	return fmt.Sprintf("go$externalize(%s, %s)", s, c.typeName(t))
-}
-
-func (c *pkgContext) internalize(s string, t types.Type) string {
-	if isJsObject(t) {
-		return s
-	}
-	switch u := t.Underlying().(type) {
-	case *types.Basic:
-		switch {
-		case u.Info()&types.IsBoolean != 0:
-			return fmt.Sprintf("!!(%s)", s)
-		case u.Info()&types.IsInteger != 0 && !is64Bit(u):
-			return fixNumber(fmt.Sprintf("go$parseInt(%s)", s), u)
-		case u.Info()&types.IsFloat != 0:
-			return fmt.Sprintf("go$parseFloat(%s)", s)
-		}
-	}
-	return fmt.Sprintf("go$internalize(%s, %s)", s, c.typeName(t))
 }
 
 func fieldName(t *types.Struct, i int) string {

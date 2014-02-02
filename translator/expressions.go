@@ -12,10 +12,14 @@ import (
 )
 
 type expression struct {
-	str string
+	str    string
+	parens bool
 }
 
 func (e *expression) String() string {
+	if e.parens {
+		return "(" + e.str + ")"
+	}
 	return e.str
 }
 
@@ -277,7 +281,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 
 			switch e.Op {
 			case token.EQL:
-				return c.formatExpr("(%s === %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
+				return c.formatParenExpr("%s === %s", c.translateExpr(e.X), c.translateExpr(e.Y))
 			case token.LSS, token.LEQ, token.GTR, token.GEQ:
 				return c.formatExpr("%s %t %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
 			case token.ADD, token.SUB:
@@ -288,9 +292,9 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 			case token.MUL:
 				switch basic.Kind() {
 				case types.Int32, types.Int:
-					return c.formatExpr("((((%1e >>> 16 << 16) * %2e >> 0) + (%1e << 16 >>> 16) * %2e) >> 0)", e.X, e.Y)
+					return c.formatParenExpr("(((%1e >>> 16 << 16) * %2e >> 0) + (%1e << 16 >>> 16) * %2e) >> 0", e.X, e.Y)
 				case types.Uint32, types.Uint, types.Uintptr:
-					return c.formatExpr("((((%1e >>> 16 << 16) * %2e >>> 0) + (%1e << 16 >>> 16) * %2e) >>> 0)", e.X, e.Y)
+					return c.formatParenExpr("(((%1e >>> 16 << 16) * %2e >>> 0) + (%1e << 16 >>> 16) * %2e) >>> 0", e.X, e.Y)
 				case types.Float32, types.Float64:
 					return c.formatExpr("%s * %s", c.translateExpr(e.X), c.translateExpr(e.Y))
 				default:
@@ -317,19 +321,19 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 					return c.fixNumber(c.formatExpr("%s %s %s", c.translateExpr(e.X), op, c.translateExpr(e.Y)), basic)
 				}
 				if e.Op == token.SHR && basic.Info()&types.IsUnsigned == 0 {
-					return c.fixNumber(c.formatExpr("(%s >> go$min(%s, 31))", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
+					return c.fixNumber(c.formatParenExpr("%s >> go$min(%s, 31)", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
 				}
 				y := c.newVariable("y")
 				return c.fixNumber(c.formatExpr("(%s = %s, %s < 32 ? (%s %s %s) : 0)", y, c.translateImplicitConversion(e.Y, types.Typ[types.Uint]), y, c.translateExpr(e.X), op, y), basic)
 			case token.AND, token.OR:
 				if basic.Info()&types.IsUnsigned != 0 {
-					return c.formatExpr("((%s %t %s) >>> 0)", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
+					return c.formatParenExpr("(%s %t %s) >>> 0", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
 				}
-				return c.formatExpr("(%s %t %s)", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
+				return c.formatParenExpr("%s %t %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))
 			case token.AND_NOT:
-				return c.formatExpr("(%s & ~%s)", c.translateExpr(e.X), c.translateExpr(e.Y))
+				return c.formatParenExpr("%s & ~%s", c.translateExpr(e.X), c.translateExpr(e.Y))
 			case token.XOR:
-				return c.fixNumber(c.formatExpr("(%s ^ %s)", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
+				return c.fixNumber(c.formatParenExpr("%s ^ %s", c.translateExpr(e.X), c.translateExpr(e.Y)), basic)
 			default:
 				panic(e.Op)
 			}
@@ -407,7 +411,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 		if x.String() == "true" || x.String() == "false" {
 			return x
 		}
-		return c.formatExpr("(%s)", x)
+		return c.formatParenExpr("%s", x)
 
 	case *ast.IndexExpr:
 		switch t := c.info.Types[e.X].Type.Underlying().(type) {
@@ -490,14 +494,14 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 			parameters := makeParametersList()
 			target := c.translateExpr(e.X)
 			if isWrapped(sel.Recv()) {
-				target = c.formatExpr("(new %s(%s))", c.typeName(sel.Recv()), target)
+				target = c.formatParenExpr("new %s(%s)", c.typeName(sel.Recv()), target)
 			}
 			recv := c.newVariable("_recv")
 			return c.formatExpr("(%s = %s, function(%s) { return %s.%s(%s); })", recv, target, strings.Join(parameters, ", "), recv, e.Sel.Name, strings.Join(parameters, ", "))
 		case types.MethodExpr:
 			recv := "recv"
 			if isWrapped(sel.Recv()) {
-				recv = c.formatExpr("(new %s(recv))", c.typeName(sel.Recv())).String()
+				recv = fmt.Sprintf("(new %s(recv))", c.typeName(sel.Recv()))
 			}
 			parameters := makeParametersList()
 			return c.formatExpr("(function(%s) { return %s.%s(%s); })", strings.Join(append([]string{"recv"}, parameters...), ", "), recv, sel.Obj().(*types.Func).Name(), strings.Join(parameters, ", "))
@@ -725,9 +729,9 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 					case "Interface":
 						return c.internalize(fun, types.NewInterface(nil, nil))
 					case "IsUndefined":
-						return c.formatExpr("(%s === undefined)", fun)
+						return c.formatParenExpr("%s === undefined", fun)
 					case "IsNull":
-						return c.formatExpr("(%s === null)", fun)
+						return c.formatParenExpr("%s === null", fun)
 					default:
 						panic("Invalid js package method: " + o.Name())
 					}
@@ -913,11 +917,11 @@ func (c *pkgContext) translateConversion(expr ast.Expr, desiredType types.Type) 
 				return c.formatExpr("new %1s(%2h, %2l)", c.typeName(desiredType), expr)
 			case is64Bit(basicExprType):
 				if t.Info()&types.IsUnsigned == 0 && basicExprType.Info()&types.IsUnsigned == 0 {
-					return c.fixNumber(c.formatExpr("(%1l + ((%1h >> 31) * 4294967296))", expr), t)
+					return c.fixNumber(c.formatParenExpr("%1l + ((%1h >> 31) * 4294967296)", expr), t)
 				}
 				return c.fixNumber(c.formatExpr("%s.low", c.translateExpr(expr)), t)
 			case basicExprType.Info()&types.IsFloat != 0:
-				return c.formatExpr("(%s >> 0)", c.translateExpr(expr))
+				return c.formatParenExpr("%s >> 0", c.translateExpr(expr))
 			case types.Identical(exprType, types.Typ[types.UnsafePointer]):
 				return c.translateExpr(expr)
 			default:
@@ -1124,17 +1128,17 @@ func (c *pkgContext) flatten64(expr ast.Expr) *expression {
 func (c *pkgContext) fixNumber(value *expression, basic *types.Basic) *expression {
 	switch basic.Kind() {
 	case types.Int8:
-		return c.formatExpr("(%s << 24 >> 24)", value)
+		return c.formatParenExpr("%s << 24 >> 24", value)
 	case types.Uint8:
-		return c.formatExpr("(%s << 24 >>> 24)", value)
+		return c.formatParenExpr("%s << 24 >>> 24", value)
 	case types.Int16:
-		return c.formatExpr("(%s << 16 >> 16)", value)
+		return c.formatParenExpr("%s << 16 >> 16", value)
 	case types.Uint16:
-		return c.formatExpr("(%s << 16 >>> 16)", value)
+		return c.formatParenExpr("%s << 16 >>> 16", value)
 	case types.Int32, types.Int:
-		return c.formatExpr("(%s >> 0)", value)
+		return c.formatParenExpr("%s >> 0", value)
 	case types.Uint32, types.Uint, types.Uintptr:
-		return c.formatExpr("(%s >>> 0)", value)
+		return c.formatParenExpr("%s >>> 0", value)
 	default:
 		panic(int(basic.Kind()))
 	}
@@ -1159,6 +1163,14 @@ func (c *pkgContext) internalize(s *expression, t types.Type) *expression {
 }
 
 func (c *pkgContext) formatExpr(format string, a ...interface{}) *expression {
+	return c.formatExprInternal(format, a, false)
+}
+
+func (c *pkgContext) formatParenExpr(format string, a ...interface{}) *expression {
+	return c.formatExprInternal(format, a, true)
+}
+
+func (c *pkgContext) formatExprInternal(format string, a []interface{}, parens bool) *expression {
 	var vars = make([]string, len(a))
 	var assignments []string
 	varFor := func(i int) string {
@@ -1245,9 +1257,9 @@ func (c *pkgContext) formatExpr(format string, a ...interface{}) *expression {
 		out.WriteByte(b)
 	}
 	if len(assignments) == 0 {
-		return &expression{out.String()}
+		return &expression{str: out.String(), parens: parens}
 	}
-	return &expression{"(" + strings.Join(assignments, ", ") + ", " + out.String() + ")"}
+	return &expression{str: "(" + strings.Join(assignments, ", ") + ", " + out.String() + ")", parens: false}
 }
 
 type hasDeferVisitor struct {

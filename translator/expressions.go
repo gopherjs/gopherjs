@@ -849,8 +849,6 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 			return c.formatExpr("%s", c.typeName(o.Type()))
 		case *types.Nil:
 			return c.formatExpr("%s", c.zeroValue(c.info.Types[e].Type))
-		case nil:
-			return c.formatExpr("%s", e.Name)
 		default:
 			panic(c.formatExpr("Unhandled object: %T\n", o))
 		}

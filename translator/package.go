@@ -37,7 +37,6 @@ type pkgContext struct {
 	output        []byte
 	delayedOutput []byte
 	indentation   int
-	positions     map[int]token.Pos
 }
 
 func (c *pkgContext) Write(b []byte) (int, error) {
@@ -116,7 +115,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		objectVars:   make(map[types.Object]string),
 		allVarNames:  make(map[string]int),
 		postLoopStmt: make(map[string]ast.Stmt),
-		positions:    make(map[int]token.Pos),
 	}
 	for name := range reservedKeywords {
 		c.allVarNames[name] = 1

@@ -198,27 +198,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 		for _, o := range toplevelTypes {
 			c.initType(o)
-			if _, isInterface := o.Type().Underlying().(*types.Interface); !isInterface {
-				writeMethodSet := func(t types.Type) {
-					methodSet := t.MethodSet()
-					if methodSet.Len() == 0 {
-						return
-					}
-					methods := make([]string, methodSet.Len())
-					for i := range methods {
-						method := methodSet.At(i).Obj()
-						pkgPath := ""
-						if !method.Exported() {
-							pkgPath = method.Pkg().Path()
-						}
-						t := method.Type().(*types.Signature)
-						methods[i] = fmt.Sprintf(`["%s", "%s", %s, %s, %t]`, method.Name(), pkgPath, c.typeArray(t.Params()), c.typeArray(t.Results()), t.Variadic())
-					}
-					c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
-				}
-				writeMethodSet(o.Type())
-				writeMethodSet(types.NewPointer(o.Type()))
-			}
 		}
 
 		// functions
@@ -357,10 +336,31 @@ func (c *pkgContext) translateType(o *types.TypeName) {
 	c.Printf(`%s = go$newType(%d, "%s", "%s.%s", "%s", "%s", null);`, typeName, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path())
 }
 
-func (c *pkgContext) initType(obj types.Object) {
-	switch t := obj.Type().Underlying().(type) {
+func (c *pkgContext) initType(o types.Object) {
+	switch t := o.Type().Underlying().(type) {
 	case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
-		c.Printf("%s.init(%s);", c.objectName(obj), c.initArgs(t))
+		c.Printf("%s.init(%s);", c.objectName(o), c.initArgs(t))
+	}
+	if _, isInterface := o.Type().Underlying().(*types.Interface); !isInterface {
+		writeMethodSet := func(t types.Type) {
+			methodSet := t.MethodSet()
+			if methodSet.Len() == 0 {
+				return
+			}
+			methods := make([]string, methodSet.Len())
+			for i := range methods {
+				method := methodSet.At(i).Obj()
+				pkgPath := ""
+				if !method.Exported() {
+					pkgPath = method.Pkg().Path()
+				}
+				t := method.Type().(*types.Signature)
+				methods[i] = fmt.Sprintf(`["%s", "%s", %s, %s, %t]`, method.Name(), pkgPath, c.typeArray(t.Params()), c.typeArray(t.Results()), t.Variadic())
+			}
+			c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
+		}
+		writeMethodSet(o.Type())
+		writeMethodSet(types.NewPointer(o.Type()))
 	}
 }
 

@@ -13,11 +13,7 @@ You can take advantage of Go's elegant type system and other compile-time checks
 - small size of generated code
 
 ### What is supported?
-- all basic types, including 64-bit integers and complex numbers
-- arrays, slices, maps and structures
-- full type system with support for interfaces and type assertions
-- reflection for all types
-- many packages have been successfully tested, see [compatibility table](doc/packages.md)
+In one sentence: Everything except the goto statement and goroutines. Yes, I know that you want those features and I am working heavily on them. But hey, it is still better to write Go with callbacks than JavaScript with callbacks, right? A lot of Go's packages do already work, see the [compatibility table](doc/packages.md). If you want those still missing features, please consider to support this project with a star to show your interest.
 
 ### Installation and Usage
 Get GopherJS and dependencies with: 

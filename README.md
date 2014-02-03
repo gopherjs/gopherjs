@@ -27,6 +27,10 @@ Now you can use  `./bin/gopherjs build` and `./bin/gopherjs install` which behav
 ### Interface to native JavaScript
 The package `github.com/neelance/gopherjs/js` provides functions for interacting with native JavaScript APIs. Please see its [documentation](http://godoc.org/github.com/neelance/gopherjs/js) for further details.
 
+### Community
+- Get help in the [Google Group](https://groups.google.com/d/forum/gopherjs)
+- See the list of [bindings to JavaScript APIs and libraries](https://github.com/neelance/gopherjs/wiki/bindings) by community members
+
 ### Roadmap
 These features are not implemented yet, but on the roadmap:
 

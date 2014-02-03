@@ -1,7 +1,6 @@
 package main
 
 import (
-	"code.google.com/p/go.tools/go/types"
 	"flag"
 	"fmt"
 	"github.com/neelance/gopherjs/translator"
@@ -23,7 +22,7 @@ type packageData struct {
 	*build.Package
 	SrcModTime time.Time
 	UpToDate   bool
-	Output     *translator.Output
+	Archive    *translator.Archive
 }
 
 type importCError struct{}
@@ -274,14 +273,14 @@ func tool() error {
 				Name:       "main",
 				ImportPath: "main",
 			},
-			Output: &translator.Output{
-				Types: translator.NewEmptyTypesPackage("main"),
-				Code:  []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\n"),
+			Archive: &translator.Archive{
+				Code: []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\n"),
 			},
 		}
 		packages["main"] = mainPkg
+		translator.NewEmptyTypesPackage("main")
 		testingOutput, _ := importPackage("testing")
-		mainPkg.Output.AddDependenciesOf(testingOutput)
+		mainPkg.Archive.AddDependenciesOf(testingOutput)
 
 		for _, pkgPath := range testFlags.Args() {
 			pkgPath = filepath.ToSlash(pkgPath)
@@ -289,14 +288,13 @@ func tool() error {
 			var names []string
 			var tests []string
 			collectTests := func(pkg *packageData) {
-				for _, name := range pkg.Output.Types.Scope().Names() {
-					_, isFunction := pkg.Output.Types.Scope().Lookup(name).Type().(*types.Signature)
-					if isFunction && strings.HasPrefix(name, "Test") {
-						names = append(names, name)
-						tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
+				for _, f := range pkg.Archive.Functions {
+					if strings.HasPrefix(f.Name, "Test") {
+						names = append(names, f.Name)
+						tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, f.Name))
 					}
 				}
-				mainPkg.Output.AddDependenciesOf(pkg.Output)
+				mainPkg.Archive.AddDependenciesOf(pkg.Archive)
 			}
 
 			if _, err := importPackage(pkgPath); err != nil {
@@ -317,10 +315,10 @@ func tool() error {
 				collectTests(testPkg)
 			}
 
-			mainPkg.Output.Code = append(mainPkg.Output.Code, []byte(fmt.Sprintf(`go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]);`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
+			mainPkg.Archive.Code = append(mainPkg.Archive.Code, []byte(fmt.Sprintf(`go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]);`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
 		}
-		mainPkg.Output.Code = append(mainPkg.Output.Code, []byte("}; go$pkg.init = function() {};")...)
-		mainPkg.Output.AddDependency("main")
+		mainPkg.Archive.Code = append(mainPkg.Archive.Code, []byte("}; go$pkg.init = function() {};")...)
+		mainPkg.Archive.AddDependency("main")
 
 		tempfile, err := ioutil.TempFile("", "test.")
 		if err != nil {
@@ -406,9 +404,9 @@ func buildFiles(filenames []string, pkgObj string) error {
 	return writeCommandPackage(pkg, pkgObj)
 }
 
-func importPackage(path string) (*translator.Output, error) {
+func importPackage(path string) (*translator.Archive, error) {
 	if pkg, found := packages[path]; found {
-		return pkg.Output, nil
+		return pkg.Archive, nil
 	}
 
 	otherPkg, err := buildImport(path, build.AllowBinary)
@@ -420,13 +418,11 @@ func importPackage(path string) (*translator.Output, error) {
 		return nil, err
 	}
 
-	return pkg.Output, nil
+	return pkg.Archive, nil
 }
 
 func buildPackage(pkg *packageData) error {
 	if pkg.ImportPath == "unsafe" {
-		pkg.Output = &translator.Output{Types: types.Unsafe}
-		packages[pkg.ImportPath] = pkg
 		return nil
 	}
 
@@ -448,6 +444,9 @@ func buildPackage(pkg *packageData) error {
 		}
 
 		for _, importedPkgPath := range pkg.Imports {
+			if importedPkgPath == "unsafe" {
+				continue
+			}
 			_, err := importPackage(importedPkgPath)
 			if err != nil {
 				return err
@@ -481,7 +480,7 @@ func buildPackage(pkg *packageData) error {
 				return err
 			}
 
-			pkg.Output, err = translator.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile)
+			pkg.Archive, err = translator.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile)
 			if err != nil {
 				return err
 			}
@@ -544,7 +543,7 @@ func buildPackage(pkg *packageData) error {
 	}
 
 	var err error
-	pkg.Output, err = translator.TranslatePackage(pkg.ImportPath, files, fileSet, importPackage)
+	pkg.Archive, err = translator.TranslatePackage(pkg.ImportPath, files, fileSet, importPackage)
 	if err != nil {
 		return err
 	}
@@ -580,7 +579,7 @@ func writeLibraryPackage(pkg *packageData, pkgObj string) error {
 		return err
 	}
 
-	data, err := translator.WriteArchive(pkg.Output)
+	data, err := translator.WriteArchive(pkg.Archive)
 	if err != nil {
 		return err
 	}
@@ -606,7 +605,7 @@ func writeCommandPackage(pkg *packageData, pkgObj string) error {
 	file.WriteString(strings.TrimSpace(translator.Prelude))
 	file.WriteString("\n")
 
-	for _, depPath := range pkg.Output.Dependencies {
+	for _, depPath := range pkg.Archive.Dependencies {
 		dep, err := importPackage(depPath)
 		if err != nil {
 			return err
@@ -616,9 +615,9 @@ func writeCommandPackage(pkg *packageData, pkgObj string) error {
 		file.WriteString("  return go$pkg;\n})();\n")
 	}
 
-	translator.WriteInterfaces(pkg.Output.Dependencies, file, false)
+	translator.WriteInterfaces(pkg.Archive.Dependencies, file, false)
 
-	for _, depPath := range pkg.Output.Dependencies {
+	for _, depPath := range pkg.Archive.Dependencies {
 		file.WriteString("go$packages[\"" + depPath + "\"].init();\n")
 	}
 	file.WriteString("go$packages[\"" + pkg.ImportPath + "\"].main();\n")

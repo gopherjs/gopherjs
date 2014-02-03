@@ -6,7 +6,6 @@ import (
 	"code.google.com/p/go.tools/go/types"
 	"encoding/asn1"
 	"fmt"
-	"github.com/neelance/gopherjs/gcexporter"
 	"go/ast"
 	"io"
 	"sort"
@@ -15,38 +14,44 @@ import (
 )
 
 var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}
-var typesPackages = make(map[string]*types.Package)
+var typesPackages = map[string]*types.Package{"unsafe": types.Unsafe}
 
-type Output struct {
-	Types        *types.Package
+type Archive struct {
+	GcData       []byte
 	Dependencies []string
+	Functions    []Function
 	Code         []byte
 }
 
-func (o *Output) AddDependency(path string) {
-	for _, dep := range o.Dependencies {
+type Function struct {
+	Name string
+}
+
+func (a *Archive) AddDependency(path string) {
+	for _, dep := range a.Dependencies {
 		if dep == path {
 			return
 		}
 	}
-	o.Dependencies = append(o.Dependencies, path)
+	a.Dependencies = append(a.Dependencies, path)
 }
 
-func (o *Output) AddDependenciesOf(other *Output) {
+func (a *Archive) AddDependenciesOf(other *Archive) {
 	for _, path := range other.Dependencies {
-		o.AddDependency(path)
+		a.AddDependency(path)
 	}
 }
 
-func NewEmptyTypesPackage(path string) *types.Package {
-	pkg := types.NewPackage(path, path, types.NewScope(nil))
-	typesPackages[path] = pkg
-	return pkg
+func NewEmptyTypesPackage(path string) {
+	typesPackages[path] = types.NewPackage(path, path, types.NewScope(nil))
 }
 
 func WriteInterfaces(dependencies []string, w io.Writer, merge bool) {
 	allTypeNames := []*types.TypeName{types.New("error").(*types.Named).Obj()}
 	for _, depPath := range dependencies {
+		if depPath == "unsafe" {
+			continue
+		}
 		scope := typesPackages[depPath].Scope()
 		for _, name := range scope.Names() {
 			if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
@@ -104,14 +109,8 @@ func WriteInterfaces(dependencies []string, w io.Writer, merge bool) {
 	}
 }
 
-type archive struct {
-	GcData       []byte
-	Dependencies []string
-	Code         []byte
-}
-
-func ReadArchive(filename, id string, data []byte) (*Output, error) {
-	var a archive
+func ReadArchive(filename, id string, data []byte) (*Archive, error) {
+	var a Archive
 	_, err := asn1.Unmarshal(data, &a)
 	if err != nil {
 		return nil, err
@@ -121,14 +120,13 @@ func ReadArchive(filename, id string, data []byte) (*Output, error) {
 	if err != nil {
 		return nil, err
 	}
+	typesPackages[pkg.Path()] = pkg
 
-	return &Output{pkg, a.Dependencies, a.Code}, nil
+	return &a, nil
 }
 
-func WriteArchive(o *Output) ([]byte, error) {
-	gcData := bytes.NewBuffer(nil)
-	gcexporter.Write(o.Types, gcData, sizes32)
-	return asn1.Marshal(archive{gcData.Bytes(), o.Dependencies, o.Code})
+func WriteArchive(a *Archive) ([]byte, error) {
+	return asn1.Marshal(*a)
 }
 
 func (c *pkgContext) translateParams(t *ast.FuncType) []string {

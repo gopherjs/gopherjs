@@ -1,8 +1,10 @@
 package translator
 
 import (
+	"bytes"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
+	"github.com/neelance/gopherjs/gcexporter"
 	"go/ast"
 	"go/token"
 	"sort"
@@ -71,7 +73,7 @@ func (c *pkgContext) Delayed(f func()) {
 	c.delayedOutput = c.CatchOutput(f)
 }
 
-func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Output, error)) (*Output, error) {
+func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error)) (*Archive, error) {
 	info := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Objects:    make(map[*ast.Ident]types.Object),
@@ -84,11 +86,10 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	config := &types.Config{
 		Packages: typesPackages,
 		Import: func(_ map[string]*types.Package, path string) (*types.Package, error) {
-			output, err := importPkg(path)
-			if err != nil {
+			if _, err := importPkg(path); err != nil {
 				return nil, err
 			}
-			return output.Types, nil
+			return typesPackages[path], nil
 		},
 		Sizes: sizes32,
 		Error: func(err error) {
@@ -182,6 +183,13 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 	}
 
+	gcData := bytes.NewBuffer(nil)
+	gcexporter.Write(typesPkg, gcData, sizes32)
+	archive := &Archive{
+		GcData:       gcData.Bytes(),
+		Dependencies: []string{"runtime"}, // all packages depend on runtime
+	}
+
 	c.Indent(func() {
 		for _, importedPkg := range typesPkg.Imports() {
 			varName := c.newVariable(importedPkg.Name())
@@ -206,6 +214,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		delete(natives, "init")
 		for _, fun := range functions {
 			c.translateFunction(fun, natives, false)
+			archive.Functions = append(archive.Functions, Function{Name: fun.Name.Name})
 		}
 		for _, fun := range functions {
 			c.translateFunction(fun, natives, true)
@@ -263,7 +272,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		c.Printf("};")
 	})
 
-	output := &Output{typesPkg, []string{"runtime"}, c.output} // all packages depend on runtime
+	archive.Code = c.output
 
 	var importedPaths []string
 	for _, imp := range typesPkg.Imports() {
@@ -275,11 +284,11 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		if err != nil {
 			return nil, err
 		}
-		output.AddDependenciesOf(impOutput)
+		archive.AddDependenciesOf(impOutput)
 	}
-	output.AddDependency(importPath)
+	archive.AddDependency(importPath)
 
-	return output, nil
+	return archive, nil
 }
 
 func (c *pkgContext) translateType(o *types.TypeName) {

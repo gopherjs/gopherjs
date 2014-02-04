@@ -200,6 +200,20 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			}
 		})
 
+		// variables
+		archive.Variables = c.CatchOutput(func() {
+			for _, spec := range varSpecs {
+				for _, name := range spec.Names {
+					o := c.info.Objects[name].(*types.Var)
+					varPrefix := ""
+					if !o.Exported() {
+						varPrefix = "var "
+					}
+					c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.zeroValue(o.Type()))
+				}
+			}
+		})
+
 		// functions
 		natives := pkgNatives[importPath]
 		nativeInit := natives["init"]
@@ -235,22 +249,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			panic("not all natives used: " + importPath)
 		}
 
-		// variables
-		archive.Variables = c.CatchOutput(func() {
-			for _, spec := range varSpecs {
-				for _, name := range spec.Names {
-					o := c.info.Objects[name].(*types.Var)
-					varPrefix := ""
-					if !o.Exported() {
-						varPrefix = "var "
-					}
-					c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.zeroValue(o.Type()))
-				}
-			}
-		})
-
 		// init function
-		archive.Init = c.CatchOutput(func() {
+		initCode := c.CatchOutput(func() {
 			c.Write([]byte(nativeInit))
 
 			c.Printf("go$pkg.init = function() {")
@@ -274,6 +274,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			})
 			c.Printf("};")
 		})
+		archive.Functions = append(archive.Functions, Function{Name: "init", Code: initCode})
 	})
 
 	var importedPaths []string

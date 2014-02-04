@@ -22,10 +22,8 @@ type Archive struct {
 	Dependencies []string
 	Imports      []Import
 	Types        []byte
-	Functions    []Function
-	Constants    []byte
 	Variables    []byte
-	Init         []byte
+	Functions    []Function
 }
 
 type Import struct {
@@ -59,11 +57,10 @@ func (a *Archive) WriteCode(w io.Writer) {
 		fmt.Fprintf(w, "\tvar %s = go$packages[\"%s\"];\n", imp.VarName, imp.Path)
 	}
 	w.Write(a.Types)
+	w.Write(a.Variables)
 	for _, f := range a.Functions {
 		w.Write(f.Code)
 	}
-	w.Write(a.Variables)
-	w.Write(a.Init)
 	w.Write([]byte("\treturn go$pkg;\n})();\n"))
 }
 

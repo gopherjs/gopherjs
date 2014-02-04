@@ -212,15 +212,37 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		natives := pkgNatives[importPath]
 		nativeInit := natives["init"]
 		delete(natives, "init")
+		var functionsWithNative []Function
 		for _, fun := range functions {
-			c.translateFunction(fun, natives, false)
-			archive.Functions = append(archive.Functions, Function{Name: fun.Name.Name})
+			funName := fun.Name.Name
+			if fun.Recv != nil {
+				recvType := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature).Recv().Type()
+				ptr, isPointer := recvType.(*types.Pointer)
+				namedRecvType, _ := recvType.(*types.Named)
+				if isPointer {
+					namedRecvType = ptr.Elem().(*types.Named)
+				}
+				funName = namedRecvType.Obj().Name() + "." + funName
+			}
+
+			native := natives[funName]
+			delete(natives, funName)
+
+			f := Function{
+				Name: fun.Name.Name,
+				Code: c.CatchOutput(func() { c.translateFunction(fun, native) }),
+			}
+			if native != "" {
+				functionsWithNative = append(functionsWithNative, f)
+			}
+			archive.Functions = append(archive.Functions, f)
 		}
-		for _, fun := range functions {
-			c.translateFunction(fun, natives, true)
-		}
+		archive.Functions = append(archive.Functions, functionsWithNative...)
 		if len(natives) != 0 {
 			panic("not all natives used: " + importPath)
+		}
+		for _, f := range archive.Functions {
+			c.Write(f.Code)
 		}
 
 		// constants
@@ -418,7 +440,7 @@ func (c *pkgContext) initArgs(ty types.Type) string {
 	}
 }
 
-func (c *pkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]string, translateNatives bool) {
+func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) {
 	c.newScope(func() {
 		sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
 		var recv *ast.Ident
@@ -428,15 +450,10 @@ func (c *pkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]str
 		params := c.translateParams(fun.Type)
 		joinedParams := strings.Join(params, ", ")
 
-		printPrimaryFunction := func(lhs string, fullName string) bool {
-			native, hasNative := natives[fullName]
-			if translateNatives != hasNative {
-				return false
-			}
-			if hasNative {
+		printPrimaryFunction := func(lhs string, fullName string) {
+			if native != "" {
 				c.Printf("%s = %s;", lhs, native)
-				delete(natives, fullName)
-				return true
+				return
 			}
 
 			c.Printf("%s = function(%s) {", lhs, joinedParams)
@@ -465,7 +482,6 @@ func (c *pkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]str
 				c.translateFunctionBody(body, sig)
 			})
 			c.Printf("};")
-			return true
 		}
 
 		if fun.Recv == nil {
@@ -491,26 +507,23 @@ func (c *pkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]str
 		}
 
 		if _, isStruct := namedRecvType.Underlying().(*types.Struct); isStruct {
-			if printPrimaryFunction(typeName+".Ptr.prototype."+funName, typeName+"."+funName) {
-				c.Printf("%s.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, funName, joinedParams, funName, joinedParams)
-			}
+			printPrimaryFunction(typeName+".Ptr.prototype."+funName, typeName+"."+funName)
+			c.Printf("%s.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, funName, joinedParams, funName, joinedParams)
 			return
 		}
 
 		if isPointer {
 			if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
-				if printPrimaryFunction(typeName+".prototype."+funName, typeName+"."+funName) {
-					c.Printf("go$ptrType(%s).prototype.%s = function(%s) { return (new %s(this.go$get())).%s(%s); };", typeName, funName, joinedParams, typeName, funName, joinedParams)
-				}
+				printPrimaryFunction(typeName+".prototype."+funName, typeName+"."+funName)
+				c.Printf("go$ptrType(%s).prototype.%s = function(%s) { return (new %s(this.go$get())).%s(%s); };", typeName, funName, joinedParams, typeName, funName, joinedParams)
 				return
 			}
 			value := "this"
 			if isWrapped(ptr.Elem()) {
 				value = "this.go$val"
 			}
-			if printPrimaryFunction(fmt.Sprintf("go$ptrType(%s).prototype.%s", typeName, funName), typeName+"."+funName) {
-				c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new (go$ptrType(%s))(function() { return obj; }, null)).%s(%s); };", typeName, funName, joinedParams, value, typeName, funName, joinedParams)
-			}
+			printPrimaryFunction(fmt.Sprintf("go$ptrType(%s).prototype.%s", typeName, funName), typeName+"."+funName)
+			c.Printf("%s.prototype.%s = function(%s) { var obj = %s; return (new (go$ptrType(%s))(function() { return obj; }, null)).%s(%s); };", typeName, funName, joinedParams, value, typeName, funName, joinedParams)
 			return
 		}
 
@@ -518,9 +531,8 @@ func (c *pkgContext) translateFunction(fun *ast.FuncDecl, natives map[string]str
 		if isWrapped(recvType) {
 			value = fmt.Sprintf("new %s(%s)", typeName, value)
 		}
-		if printPrimaryFunction(typeName+".prototype."+funName, typeName+"."+funName) {
-			c.Printf("go$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };", typeName, funName, joinedParams, value, funName, joinedParams)
-		}
+		printPrimaryFunction(typeName+".prototype."+funName, typeName+"."+funName)
+		c.Printf("go$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };", typeName, funName, joinedParams, value, funName, joinedParams)
 	})
 }
 

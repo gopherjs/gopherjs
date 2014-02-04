@@ -25,6 +25,7 @@ type Archive struct {
 
 type Function struct {
 	Name string
+	Code []byte
 }
 
 func (a *Archive) AddDependency(path string) {

@@ -274,7 +274,8 @@ func tool() error {
 				ImportPath: "main",
 			},
 			Archive: &translator.Archive{
-				Code: []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\n"),
+				ImportPath: "main",
+				Init:       []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\n"),
 			},
 		}
 		packages["main"] = mainPkg
@@ -315,9 +316,9 @@ func tool() error {
 				collectTests(testPkg)
 			}
 
-			mainPkg.Archive.Code = append(mainPkg.Archive.Code, []byte(fmt.Sprintf(`go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]);`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
+			mainPkg.Archive.Init = append(mainPkg.Archive.Init, []byte(fmt.Sprintf(`go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]);`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
 		}
-		mainPkg.Archive.Code = append(mainPkg.Archive.Code, []byte("}; go$pkg.init = function() {};")...)
+		mainPkg.Archive.Init = append(mainPkg.Archive.Init, []byte("}; go$pkg.init = function() {};")...)
 		mainPkg.Archive.AddDependency("main")
 
 		tempfile, err := ioutil.TempFile("", "test.")
@@ -610,9 +611,7 @@ func writeCommandPackage(pkg *packageData, pkgObj string) error {
 		if err != nil {
 			return err
 		}
-		file.WriteString("go$packages[\"" + depPath + "\"] = (function() {\n  var go$pkg = {};\n")
-		file.Write(dep.Code)
-		file.WriteString("  return go$pkg;\n})();\n")
+		dep.WriteCode(file)
 	}
 
 	translator.WriteInterfaces(pkg.Archive.Dependencies, file, false)

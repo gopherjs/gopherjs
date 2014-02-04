@@ -186,27 +186,31 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	gcData := bytes.NewBuffer(nil)
 	gcexporter.Write(typesPkg, gcData, sizes32)
 	archive := &Archive{
+		ImportPath:   importPath,
 		GcData:       gcData.Bytes(),
 		Dependencies: []string{"runtime"}, // all packages depend on runtime
 	}
 
 	c.Indent(func() {
+		// imports
 		for _, importedPkg := range typesPkg.Imports() {
 			varName := c.newVariable(importedPkg.Name())
-			c.Printf(`var %s = go$packages["%s"];`, varName, importedPkg.Path())
 			c.pkgVars[importedPkg.Path()] = varName
+			archive.Imports = append(archive.Imports, Import{Path: importedPkg.Path(), VarName: varName})
 		}
 
 		// types
-		for _, o := range toplevelTypes {
-			typeName := c.objectName(o)
-			c.Printf("var %s;", typeName)
-			c.translateType(o)
-			c.Printf("go$pkg.%s = %s;", typeName, typeName)
-		}
-		for _, o := range toplevelTypes {
-			c.initType(o)
-		}
+		archive.Types = c.CatchOutput(func() {
+			for _, o := range toplevelTypes {
+				typeName := c.objectName(o)
+				c.Printf("var %s;", typeName)
+				c.translateType(o)
+				c.Printf("go$pkg.%s = %s;", typeName, typeName)
+			}
+			for _, o := range toplevelTypes {
+				c.initType(o)
+			}
+		})
 
 		// functions
 		natives := pkgNatives[importPath]
@@ -234,6 +238,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			}
 			if native != "" {
 				functionsWithNative = append(functionsWithNative, f)
+				continue
 			}
 			archive.Functions = append(archive.Functions, f)
 		}
@@ -241,60 +246,60 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		if len(natives) != 0 {
 			panic("not all natives used: " + importPath)
 		}
-		for _, f := range archive.Functions {
-			c.Write(f.Code)
-		}
 
 		// constants
-		for _, o := range constants {
-			varPrefix := ""
-			if !o.Exported() {
-				varPrefix = "var "
-			}
-			v := c.newIdent(o.Name(), o.Type())
-			c.info.Types[v] = types.TypeAndValue{Type: o.Type(), Value: o.Val()}
-			c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.translateExpr(v))
-		}
-
-		// variables
-		for _, spec := range varSpecs {
-			for _, name := range spec.Names {
-				o := c.info.Objects[name].(*types.Var)
+		archive.Constants = c.CatchOutput(func() {
+			for _, o := range constants {
 				varPrefix := ""
 				if !o.Exported() {
 					varPrefix = "var "
 				}
-				c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.zeroValue(o.Type()))
+				v := c.newIdent(o.Name(), o.Type())
+				c.info.Types[v] = types.TypeAndValue{Type: o.Type(), Value: o.Val()}
+				c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.translateExpr(v))
 			}
-		}
+		})
 
-		// builtin native implementations
-		c.Write([]byte(nativeInit))
+		// variables
+		archive.Variables = c.CatchOutput(func() {
+			for _, spec := range varSpecs {
+				for _, name := range spec.Names {
+					o := c.info.Objects[name].(*types.Var)
+					varPrefix := ""
+					if !o.Exported() {
+						varPrefix = "var "
+					}
+					c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.zeroValue(o.Type()))
+				}
+			}
+		})
 
 		// init function
-		c.Printf("go$pkg.init = function() {")
-		c.Indent(func() {
-			var initVarStmts []ast.Stmt
-			for _, init := range c.info.InitOrder {
-				lhs := make([]ast.Expr, len(init.Lhs))
-				for i, obj := range init.Lhs {
-					ident := ast.NewIdent(obj.Name())
-					c.info.Types[ident] = types.TypeAndValue{Type: obj.Type()}
-					c.info.Objects[ident] = obj
-					lhs[i] = ident
-				}
-				initVarStmts = append(initVarStmts, &ast.AssignStmt{
-					Lhs: lhs,
-					Tok: token.DEFINE,
-					Rhs: []ast.Expr{init.Rhs},
-				})
-			}
-			c.translateFunctionBody(append(initVarStmts, initStmts...), nil)
-		})
-		c.Printf("};")
-	})
+		archive.Init = c.CatchOutput(func() {
+			c.Write([]byte(nativeInit))
 
-	archive.Code = c.output
+			c.Printf("go$pkg.init = function() {")
+			c.Indent(func() {
+				var initVarStmts []ast.Stmt
+				for _, init := range c.info.InitOrder {
+					lhs := make([]ast.Expr, len(init.Lhs))
+					for i, obj := range init.Lhs {
+						ident := ast.NewIdent(obj.Name())
+						c.info.Types[ident] = types.TypeAndValue{Type: obj.Type()}
+						c.info.Objects[ident] = obj
+						lhs[i] = ident
+					}
+					initVarStmts = append(initVarStmts, &ast.AssignStmt{
+						Lhs: lhs,
+						Tok: token.DEFINE,
+						Rhs: []ast.Expr{init.Rhs},
+					})
+				}
+				c.translateFunctionBody(append(initVarStmts, initStmts...), nil)
+			})
+			c.Printf("};")
+		})
+	})
 
 	var importedPaths []string
 	for _, imp := range typesPkg.Imports() {

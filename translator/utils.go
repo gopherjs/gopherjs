@@ -17,10 +17,20 @@ var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}
 var typesPackages = map[string]*types.Package{"unsafe": types.Unsafe}
 
 type Archive struct {
+	ImportPath   string
 	GcData       []byte
 	Dependencies []string
+	Imports      []Import
+	Types        []byte
 	Functions    []Function
-	Code         []byte
+	Constants    []byte
+	Variables    []byte
+	Init         []byte
+}
+
+type Import struct {
+	Path    string
+	VarName string
 }
 
 type Function struct {
@@ -41,6 +51,21 @@ func (a *Archive) AddDependenciesOf(other *Archive) {
 	for _, path := range other.Dependencies {
 		a.AddDependency(path)
 	}
+}
+
+func (a *Archive) WriteCode(w io.Writer) {
+	fmt.Fprintf(w, "go$packages[\"%s\"] = (function() {\n\tvar go$pkg = {};\n", a.ImportPath)
+	for _, imp := range a.Imports {
+		fmt.Fprintf(w, "\tvar %s = go$packages[\"%s\"];\n", imp.VarName, imp.Path)
+	}
+	w.Write(a.Types)
+	for _, f := range a.Functions {
+		w.Write(f.Code)
+	}
+	w.Write(a.Constants)
+	w.Write(a.Variables)
+	w.Write(a.Init)
+	w.Write([]byte("\treturn go$pkg;\n})();\n"))
 }
 
 func NewEmptyTypesPackage(path string) {

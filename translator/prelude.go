@@ -18,6 +18,7 @@ var go$min = Math.min;
 var go$parseInt = parseInt;
 var go$parseFloat = parseFloat;
 var go$reflect, go$newStringPtr;
+var Go$Array = Array;
 var Go$Error = Error;
 
 var go$mapArray = function(array, f) {

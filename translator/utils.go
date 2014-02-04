@@ -62,7 +62,6 @@ func (a *Archive) WriteCode(w io.Writer) {
 	for _, f := range a.Functions {
 		w.Write(f.Code)
 	}
-	w.Write(a.Constants)
 	w.Write(a.Variables)
 	w.Write(a.Init)
 	w.Write([]byte("\treturn go$pkg;\n})();\n"))

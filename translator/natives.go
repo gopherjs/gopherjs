@@ -413,7 +413,7 @@ func init() {
 		"now":   `go$now`,
 		"After": `function() { go$notSupported("time.After (use time.AfterFunc instead)") }`,
 		"AfterFunc": `function(d, f) {
-			setTimeout(f, go$div64(d, go$pkg.Millisecond).low);
+			setTimeout(f, go$div64(d, new Duration(0, 1000000)).low);
 			return null;
 		}`,
 		"NewTimer": `function() { go$notSupported("time.NewTimer (use time.AfterFunc instead)") }`,

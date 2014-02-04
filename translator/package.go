@@ -124,7 +124,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	var functions []*ast.FuncDecl
 	var initStmts []ast.Stmt
 	var toplevelTypes []*types.TypeName
-	var constants []*types.Const
 	var varSpecs []*ast.ValueSpec
 	for _, file := range files {
 		for _, decl := range file.Decls {
@@ -156,17 +155,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						o := c.info.Objects[spec.(*ast.TypeSpec).Name].(*types.TypeName)
 						toplevelTypes = append(toplevelTypes, o)
 						c.objectName(o) // register toplevel name
-					}
-				case token.CONST:
-					for _, spec := range d.Specs {
-						s := spec.(*ast.ValueSpec)
-						for _, name := range s.Names {
-							if !isBlank(name) {
-								o := c.info.Objects[name].(*types.Const)
-								constants = append(constants, o)
-								c.objectName(o) // register toplevel name
-							}
-						}
 					}
 				case token.VAR:
 					for _, spec := range d.Specs {
@@ -246,19 +234,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		if len(natives) != 0 {
 			panic("not all natives used: " + importPath)
 		}
-
-		// constants
-		archive.Constants = c.CatchOutput(func() {
-			for _, o := range constants {
-				varPrefix := ""
-				if !o.Exported() {
-					varPrefix = "var "
-				}
-				v := c.newIdent(o.Name(), o.Type())
-				c.info.Types[v] = types.TypeAndValue{Type: o.Type(), Value: o.Val()}
-				c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.translateExpr(v))
-			}
-		})
 
 		// variables
 		archive.Variables = c.CatchOutput(func() {

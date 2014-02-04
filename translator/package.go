@@ -218,7 +218,6 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		natives := pkgNatives[importPath]
 		nativeInit := natives["init"]
 		delete(natives, "init")
-		var functionsWithNative []Function
 		for _, fun := range functions {
 			funName := fun.Name.Name
 			if fun.Recv != nil {
@@ -238,13 +237,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				Name: fun.Name.Name,
 				Code: c.CatchOutput(func() { c.translateFunction(fun, native) }),
 			}
-			if native != "" {
-				functionsWithNative = append(functionsWithNative, f)
-				continue
-			}
 			archive.Functions = append(archive.Functions, f)
 		}
-		archive.Functions = append(archive.Functions, functionsWithNative...)
 		if len(natives) != 0 {
 			panic("not all natives used: " + importPath)
 		}

@@ -500,8 +500,8 @@ func init() {
 				rcvr = new v.typ.jsType(rcvr);
 			}
 			return [t, rcvr[name], rcvr];
-		}
-		ifaceE2I = function(t, src, dst) {
+		}`,
+		"ifaceE2I": `function(t, src, dst) {
 			dst.go$set(src);
 		}`,
 		"methodName": `function() {

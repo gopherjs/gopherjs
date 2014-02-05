@@ -124,7 +124,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	var functions []*ast.FuncDecl
 	var initStmts []ast.Stmt
 	var toplevelTypes []*types.TypeName
-	vars := make(map[*types.Var]bool)
+	var vars []*types.Var
 	for _, file := range files {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
@@ -161,7 +161,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						for _, name := range spec.(*ast.ValueSpec).Names {
 							if !isBlank(name) {
 								o := c.info.Objects[name].(*types.Var)
-								vars[o] = true
+								vars = append(vars, o)
 								c.objectName(o) // register toplevel name
 							}
 						}
@@ -201,7 +201,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		})
 
 		// variables
-		for o := range vars {
+		for _, o := range vars {
 			var d Decl
 			if !o.Exported() {
 				d.Var = c.objectName(o)
@@ -260,6 +260,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			c.Printf("go$pkg.init = function() {")
 			c.Indent(func() {
 				var initVarStmts []ast.Stmt
+				varsWithInit := make(map[*types.Var]bool)
 				for _, init := range initOrder {
 					lhs := make([]ast.Expr, len(init.Lhs))
 					for i, o := range init.Lhs {
@@ -267,7 +268,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						c.info.Types[ident] = types.TypeAndValue{Type: o.Type()}
 						c.info.Objects[ident] = o
 						lhs[i] = ident
-						delete(vars, o)
+						varsWithInit[o] = true
 					}
 					initVarStmts = append(initVarStmts, &ast.AssignStmt{
 						Lhs: lhs,
@@ -276,8 +277,10 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					})
 				}
 
-				for o := range vars {
-					c.Printf("%s = %s;", c.objectName(o), c.zeroValue(o.Type()))
+				for _, o := range vars {
+					if _, ok := varsWithInit[o]; !ok {
+						c.Printf("%s = %s;", c.objectName(o), c.zeroValue(o.Type()))
+					}
 				}
 
 				c.Write([]byte(natives["init"]))

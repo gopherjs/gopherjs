@@ -421,33 +421,46 @@ clauseLoop:
 }
 
 func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt, bodyPrefix func(), label string) {
-	p := c.postLoopStmt[""]
-	defer func() {
-		delete(c.postLoopStmt, label)
-		c.postLoopStmt[""] = p
-	}()
+	prevPost := c.postLoopStmt[""]
 	c.postLoopStmt[""] = post
 	c.postLoopStmt[label] = post
 
 	c.Printf("%swhile (%s) {", label, cond)
 	c.Indent(func() {
-		c.handleEscapingVariables(body, func() {
-			if bodyPrefix != nil {
-				bodyPrefix()
+		v := &escapeAnalysis{
+			info:       c.info,
+			candidates: make(map[types.Object]bool),
+			escaping:   make(map[types.Object]bool),
+		}
+		ast.Walk(v, body)
+		prevEV := c.escapingVars
+		for escaping := range v.escaping {
+			c.Printf("%s = [undefined];", c.objectName(escaping))
+			c.escapingVars = append(c.escapingVars, c.objectVars[escaping])
+			c.objectVars[escaping] += "[0]"
+		}
+
+		if bodyPrefix != nil {
+			bodyPrefix()
+		}
+		c.translateStmtList(body.List)
+		isTerminated := false
+		if len(body.List) != 0 {
+			switch body.List[len(body.List)-1].(type) {
+			case *ast.ReturnStmt, *ast.BranchStmt:
+				isTerminated = true
 			}
-			c.translateStmtList(body.List)
-			if post != "" {
-				if len(body.List) != 0 {
-					switch body.List[len(body.List)-1].(type) {
-					case *ast.ReturnStmt, *ast.BranchStmt:
-						return
-					}
-				}
-				c.Printf("%s;", post)
-			}
-		})
+		}
+		if post != "" && !isTerminated {
+			c.Printf("%s;", post)
+		}
+
+		c.escapingVars = prevEV
 	})
 	c.Printf("}")
+
+	delete(c.postLoopStmt, label)
+	c.postLoopStmt[""] = prevPost
 }
 
 func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
@@ -720,23 +733,6 @@ func (c *pkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 	default:
 		panic(fmt.Sprintf("Unhandled lhs type: %T\n", l))
 	}
-}
-
-func (c *pkgContext) handleEscapingVariables(node ast.Node, f func()) {
-	v := &escapeAnalysis{
-		info:       c.info,
-		candidates: make(map[types.Object]bool),
-		escaping:   make(map[types.Object]bool),
-	}
-	ast.Walk(v, node)
-	ev := c.escapingVars
-	for escaping := range v.escaping {
-		c.Printf("%s = [undefined];", c.objectName(escaping))
-		c.escapingVars = append(c.escapingVars, c.objectVars[escaping])
-		c.objectVars[escaping] += "[0]"
-	}
-	f()
-	c.escapingVars = ev
 }
 
 func hasFallthrough(caseClause *ast.CaseClause) bool {

@@ -274,7 +274,7 @@ func (c *pkgContext) newVariable(name string) string {
 	if n > 0 {
 		name = fmt.Sprintf("%s$%d", name, n)
 	}
-	c.funcVarNames = append(c.funcVarNames, name)
+	c.f.varNames = append(c.f.varNames, name)
 	return name
 }
 
@@ -283,10 +283,10 @@ func (c *pkgContext) newScope(f func()) {
 	for k, v := range c.allVarNames {
 		outerVarNames[k] = v
 	}
-	outerFuncVarNames := c.funcVarNames
+	outerFuncVarNames := c.f.varNames
 	f()
 	c.allVarNames = outerVarNames
-	c.funcVarNames = outerFuncVarNames
+	c.f.varNames = outerFuncVarNames
 }
 
 func (c *pkgContext) newIdent(name string, t types.Type) *ast.Ident {

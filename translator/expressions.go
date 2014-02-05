@@ -147,8 +147,8 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 				params := c.translateParams(e.Type)
 				closurePrefix := "("
 				closureSuffix := ")"
-				if len(c.escapingVars) != 0 {
-					list := strings.Join(c.escapingVars, ", ")
+				if len(c.f.escapingVars) != 0 {
+					list := strings.Join(c.f.escapingVars, ", ")
 					closurePrefix = "(function(" + list + ") { return "
 					closureSuffix = "; })(" + list + ")"
 				}
@@ -172,8 +172,8 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 				}
 				closurePrefix := ""
 				closureSuffix := ""
-				if len(c.escapingVars) != 0 {
-					list := strings.Join(c.escapingVars, ", ")
+				if len(c.f.escapingVars) != 0 {
+					list := strings.Join(c.f.escapingVars, ", ")
 					closurePrefix = "(function(" + list + ") { return "
 					closureSuffix = "; })(" + list + ")"
 				}

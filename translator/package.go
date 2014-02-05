@@ -31,14 +31,18 @@ type pkgContext struct {
 	pkgVars       map[string]string
 	objectVars    map[types.Object]string
 	allVarNames   map[string]int
-	funcVarNames  []string
-	functionSig   *types.Signature
-	resultNames   []ast.Expr
-	postLoopStmt  map[string]string
-	escapingVars  []string
 	output        []byte
 	delayedOutput []byte
 	indentation   int
+	f             *funcContext
+}
+
+type funcContext struct {
+	sig          *types.Signature
+	varNames     []string
+	resultNames  []ast.Expr
+	postLoopStmt map[string]string
+	escapingVars []string
 }
 
 func (c *pkgContext) Write(b []byte) (int, error) {
@@ -110,12 +114,12 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	typesPackages[importPath] = typesPkg
 
 	c := &pkgContext{
-		pkg:          typesPkg,
-		info:         info,
-		pkgVars:      make(map[string]string),
-		objectVars:   make(map[types.Object]string),
-		allVarNames:  make(map[string]int),
-		postLoopStmt: make(map[string]string),
+		pkg:         typesPkg,
+		info:        info,
+		pkgVars:     make(map[string]string),
+		objectVars:  make(map[types.Object]string),
+		allVarNames: make(map[string]int),
+		f:           &funcContext{},
 	}
 	for name := range reservedKeywords {
 		c.allVarNames[name] = 1
@@ -540,12 +544,12 @@ func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) {
 }
 
 func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signature) {
-	c.funcVarNames = nil
+	prevFuncContext := c.f
+	c.f = &funcContext{sig: sig, postLoopStmt: make(map[string]string)}
 
 	body := c.CatchOutput(func() {
-		var resultNames []ast.Expr
 		if sig != nil && sig.Results().Len() != 0 && sig.Results().At(0).Name() != "" {
-			resultNames = make([]ast.Expr, sig.Results().Len())
+			c.f.resultNames = make([]ast.Expr, sig.Results().Len())
 			for i := 0; i < sig.Results().Len(); i++ {
 				result := sig.Results().At(i)
 				name := result.Name()
@@ -556,21 +560,9 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 				c.info.Types[id] = types.TypeAndValue{Type: result.Type()}
 				c.info.Objects[id] = result
 				c.Printf("%s = %s;", c.translateExpr(id), c.zeroValue(result.Type()))
-				resultNames[i] = id
+				c.f.resultNames[i] = id
 			}
 		}
-
-		if sig != nil {
-			s := c.functionSig
-			defer func() { c.functionSig = s }()
-			c.functionSig = sig
-		}
-		r := c.resultNames
-		defer func() { c.resultNames = r }()
-		c.resultNames = resultNames
-		p := c.postLoopStmt
-		defer func() { c.postLoopStmt = p }()
-		c.postLoopStmt = make(map[string]string)
 
 		v := hasDeferVisitor{}
 		ast.Walk(&v, &ast.BlockStmt{List: stmts})
@@ -584,7 +576,7 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 			c.Printf("} catch(go$err) {")
 			c.Indent(func() {
 				c.Printf("go$pushErr(go$err);")
-				if sig != nil && resultNames == nil {
+				if sig != nil && c.f.resultNames == nil {
 					switch sig.Results().Len() {
 					case 0:
 						// nothing
@@ -602,7 +594,7 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 			c.Printf("} finally {")
 			c.Indent(func() {
 				c.Printf("go$callDeferred(go$deferred);")
-				if resultNames != nil {
+				if c.f.resultNames != nil {
 					c.translateStmt(&ast.ReturnStmt{}, "")
 				}
 			})
@@ -612,8 +604,9 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 		}
 	})
 
-	if len(c.funcVarNames) != 0 {
-		c.Printf("var %s;", strings.Join(c.funcVarNames, ", "))
+	if len(c.f.varNames) != 0 {
+		c.Printf("var %s;", strings.Join(c.f.varNames, ", "))
 	}
 	c.Write(body)
+	c.f = prevFuncContext
 }

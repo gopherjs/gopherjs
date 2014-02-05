@@ -121,9 +121,9 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.translateLoopingStmt(cond, post, s.Body, nil, label)
 
 	case *ast.RangeStmt:
-		p := c.postLoopStmt[""]
-		defer func() { c.postLoopStmt[""] = p }()
-		delete(c.postLoopStmt, "")
+		p := c.f.postLoopStmt[""]
+		defer func() { c.f.postLoopStmt[""] = p }()
+		delete(c.f.postLoopStmt, "")
 
 		refVar := c.newVariable("_ref")
 		c.Printf("%s = %s;", refVar, c.translateExpr(s.X))
@@ -192,10 +192,10 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.BranchStmt:
 		label := ""
-		postLoopStmt := c.postLoopStmt[""]
+		postLoopStmt := c.f.postLoopStmt[""]
 		if s.Label != nil {
 			label = " " + s.Label.Name
-			postLoopStmt = c.postLoopStmt[s.Label.Name+": "]
+			postLoopStmt = c.f.postLoopStmt[s.Label.Name+": "]
 		}
 		switch s.Tok {
 		case token.BREAK:
@@ -215,31 +215,31 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.ReturnStmt:
 		results := s.Results
-		if c.resultNames != nil {
+		if c.f.resultNames != nil {
 			if len(s.Results) != 0 {
 				c.translateStmt(&ast.AssignStmt{
-					Lhs: c.resultNames,
+					Lhs: c.f.resultNames,
 					Tok: token.ASSIGN,
 					Rhs: s.Results,
 				}, label)
 			}
-			results = c.resultNames
+			results = c.f.resultNames
 		}
 		switch len(results) {
 		case 0:
 			c.Printf("return;")
 		case 1:
-			if c.functionSig.Results().Len() > 1 {
+			if c.f.sig.Results().Len() > 1 {
 				c.Printf("return %s;", c.translateExpr(results[0]))
 				break
 			}
-			v := c.translateImplicitConversion(results[0], c.functionSig.Results().At(0).Type())
+			v := c.translateImplicitConversion(results[0], c.f.sig.Results().At(0).Type())
 			c.delayedOutput = nil
 			c.Printf("return %s;", v)
 		default:
 			values := make([]string, len(results))
 			for i, result := range results {
-				values[i] = c.translateImplicitConversion(result, c.functionSig.Results().At(i).Type()).String()
+				values[i] = c.translateImplicitConversion(result, c.f.sig.Results().At(i).Type()).String()
 			}
 			c.delayedOutput = nil
 			c.Printf("return [%s];", strings.Join(values, ", "))
@@ -414,9 +414,9 @@ clauseLoop:
 }
 
 func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt, bodyPrefix func(), label string) {
-	prevPost := c.postLoopStmt[""]
-	c.postLoopStmt[""] = post
-	c.postLoopStmt[label] = post
+	prevPost := c.f.postLoopStmt[""]
+	c.f.postLoopStmt[""] = post
+	c.f.postLoopStmt[label] = post
 
 	c.Printf("%swhile (%s) {", label, cond)
 	c.Indent(func() {
@@ -426,10 +426,10 @@ func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt
 			escaping:   make(map[types.Object]bool),
 		}
 		ast.Walk(v, body)
-		prevEV := c.escapingVars
+		prevEV := c.f.escapingVars
 		for escaping := range v.escaping {
 			c.Printf("%s = [undefined];", c.objectName(escaping))
-			c.escapingVars = append(c.escapingVars, c.objectVars[escaping])
+			c.f.escapingVars = append(c.f.escapingVars, c.objectVars[escaping])
 			c.objectVars[escaping] += "[0]"
 		}
 
@@ -448,12 +448,12 @@ func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt
 			c.Printf("%s;", post)
 		}
 
-		c.escapingVars = prevEV
+		c.f.escapingVars = prevEV
 	})
 	c.Printf("}")
 
-	delete(c.postLoopStmt, label)
-	c.postLoopStmt[""] = prevPost
+	delete(c.f.postLoopStmt, label)
+	c.f.postLoopStmt[""] = prevPost
 }
 
 func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {

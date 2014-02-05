@@ -114,30 +114,11 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		if s.Cond != nil {
 			cond = c.translateExpr(s.Cond).String()
 		}
-		p := c.postLoopStmt[""]
-		defer func() {
-			delete(c.postLoopStmt, label)
-			c.postLoopStmt[""] = p
-		}()
-		c.postLoopStmt[""] = s.Post
-		c.postLoopStmt[label] = s.Post
-
-		c.Printf("%swhile (%s) {", label, cond)
-		c.Indent(func() {
-			c.handleEscapingVariables(s.Body, func() {
-				c.translateStmtList(s.Body.List)
-				if s.Post != nil {
-					if len(s.Body.List) != 0 {
-						switch s.Body.List[len(s.Body.List)-1].(type) {
-						case *ast.ReturnStmt, *ast.BranchStmt:
-							return
-						}
-					}
-					c.Printf("%s;", c.translateSimpleStmt(s.Post))
-				}
-			})
-		})
-		c.Printf("}")
+		post := ""
+		if s.Post != nil {
+			post = c.translateSimpleStmt(s.Post)
+		}
+		c.translateLoopingStmt(cond, post, s.Body, nil, label)
 
 	case *ast.RangeStmt:
 		p := c.postLoopStmt[""]
@@ -153,39 +134,29 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		switch t := c.info.Types[s.X].Type.Underlying().(type) {
 		case *types.Basic:
 			runeVar := c.newVariable("_rune")
-			c.Printf("%sfor (; %s < %s.length; %s += %s[1]) {", label, iVar, refVar, iVar, runeVar)
-			c.Indent(func() {
-				c.handleEscapingVariables(s.Body, func() {
-					c.Printf("%s = go$decodeRune(%s, %s);", runeVar, refVar, iVar)
-					if !isBlank(s.Value) {
-						c.Printf("%s;", c.translateAssign(s.Value, runeVar+"[0]"))
-					}
-					if !isBlank(s.Key) {
-						c.Printf("%s;", c.translateAssign(s.Key, iVar))
-					}
-					c.translateStmtList(s.Body.List)
-				})
-			})
-			c.Printf("}")
+			c.translateLoopingStmt(iVar+" < "+refVar+".length", iVar+" += "+runeVar+"[1]", s.Body, func() {
+				c.Printf("%s = go$decodeRune(%s, %s);", runeVar, refVar, iVar)
+				if !isBlank(s.Value) {
+					c.Printf("%s;", c.translateAssign(s.Value, runeVar+"[0]"))
+				}
+				if !isBlank(s.Key) {
+					c.Printf("%s;", c.translateAssign(s.Key, iVar))
+				}
+			}, label)
 
 		case *types.Map:
 			keysVar := c.newVariable("_keys")
 			c.Printf("%s = go$keys(%s);", keysVar, refVar)
-			c.Printf("%sfor (; %s < %s.length; %s += 1) {", label, iVar, keysVar, iVar)
-			c.Indent(func() {
-				c.handleEscapingVariables(s.Body, func() {
-					entryVar := c.newVariable("_entry")
-					c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
-					if !isBlank(s.Value) {
-						c.Printf("%s;", c.translateAssign(s.Value, entryVar+".v"))
-					}
-					if !isBlank(s.Key) {
-						c.Printf("%s;", c.translateAssign(s.Key, entryVar+".k"))
-					}
-					c.translateStmtList(s.Body.List)
-				})
-			})
-			c.Printf("}")
+			c.translateLoopingStmt(iVar+" < "+keysVar+".length", iVar+" += 1", s.Body, func() {
+				entryVar := c.newVariable("_entry")
+				c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
+				if !isBlank(s.Value) {
+					c.Printf("%s;", c.translateAssign(s.Value, entryVar+".v"))
+				}
+				if !isBlank(s.Key) {
+					c.Printf("%s;", c.translateAssign(s.Key, entryVar+".k"))
+				}
+			}, label)
 
 		case *types.Array, *types.Pointer, *types.Slice:
 			var length string
@@ -197,25 +168,20 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			case *types.Slice:
 				length = refVar + ".length"
 			}
-			c.Printf("%sfor (; %s < %s; %s += 1) {", label, iVar, length, iVar)
-			c.Indent(func() {
-				c.handleEscapingVariables(s.Body, func() {
-					if !isBlank(s.Value) {
-						indexExpr := &ast.IndexExpr{
-							X:     c.newIdent(refVar, t),
-							Index: c.newIdent(iVar, types.Typ[types.Int]),
-						}
-						et := elemType(t)
-						c.info.Types[indexExpr] = types.TypeAndValue{Type: et}
-						c.Printf("%s;", c.translateAssign(s.Value, c.translateImplicitConversion(indexExpr, et).String()))
+			c.translateLoopingStmt(iVar+" < "+length, iVar+" += 1", s.Body, func() {
+				if !isBlank(s.Value) {
+					indexExpr := &ast.IndexExpr{
+						X:     c.newIdent(refVar, t),
+						Index: c.newIdent(iVar, types.Typ[types.Int]),
 					}
-					if !isBlank(s.Key) {
-						c.Printf("%s;", c.translateAssign(s.Key, iVar))
-					}
-					c.translateStmtList(s.Body.List)
-				})
-			})
-			c.Printf("}")
+					et := elemType(t)
+					c.info.Types[indexExpr] = types.TypeAndValue{Type: et}
+					c.Printf("%s;", c.translateAssign(s.Value, c.translateImplicitConversion(indexExpr, et).String()))
+				}
+				if !isBlank(s.Key) {
+					c.Printf("%s;", c.translateAssign(s.Key, iVar))
+				}
+			}, label)
 
 		case *types.Chan:
 			// skip
@@ -235,8 +201,8 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		case token.BREAK:
 			c.Printf("break%s;", label)
 		case token.CONTINUE:
-			if postLoopStmt != nil {
-				c.Printf("%s;", c.translateSimpleStmt(postLoopStmt))
+			if postLoopStmt != "" {
+				c.Printf("%s;", postLoopStmt)
 			}
 			c.Printf("continue%s;", label)
 		case token.GOTO:
@@ -450,6 +416,36 @@ clauseLoop:
 	c.Printf("default:")
 	c.Indent(func() {
 		printBody()
+	})
+	c.Printf("}")
+}
+
+func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt, bodyPrefix func(), label string) {
+	p := c.postLoopStmt[""]
+	defer func() {
+		delete(c.postLoopStmt, label)
+		c.postLoopStmt[""] = p
+	}()
+	c.postLoopStmt[""] = post
+	c.postLoopStmt[label] = post
+
+	c.Printf("%swhile (%s) {", label, cond)
+	c.Indent(func() {
+		c.handleEscapingVariables(body, func() {
+			if bodyPrefix != nil {
+				bodyPrefix()
+			}
+			c.translateStmtList(body.List)
+			if post != "" {
+				if len(body.List) != 0 {
+					switch body.List[len(body.List)-1].(type) {
+					case *ast.ReturnStmt, *ast.BranchStmt:
+						return
+					}
+				}
+				c.Printf("%s;", post)
+			}
+		})
 	})
 	c.Printf("}")
 }

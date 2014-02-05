@@ -166,6 +166,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 							}
 						}
 					}
+				case token.CONST:
+					// skip, constants are inlined
 				}
 			}
 		}

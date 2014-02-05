@@ -223,7 +223,7 @@ func init() {
 	pkgNatives["os"] = map[string]string{
 		"init": `
 			go$pkg.Args = new (go$sliceType(Go$String))((typeof process !== 'undefined') ? process.argv.slice(1) : []);
-			if (go$packages["runtime"].GOOS === "windows") {
+			if (go$packages["syscall"].Syscall15 !== undefined) { // windows
 				NewFile = go$pkg.NewFile = function() { return new File.Ptr(); };
 			}
 		`,
@@ -334,7 +334,7 @@ func init() {
 
 	pkgNatives["syscall"] = map[string]string{
 		"init": `
-			if (go$packages["runtime"].GOOS === "windows") {
+			if (go$pkg.Syscall15 !== undefined) { // windows
 				Syscall = Syscall6 = Syscall9 = Syscall12 = Syscall15 = go$pkg.Syscall = go$pkg.Syscall6 = go$pkg.Syscall9 = go$pkg.Syscall12 = go$pkg.Syscall15 = loadlibrary = getprocaddress = function() { throw "Syscalls not available." };
 				getStdHandle = GetCommandLine = go$pkg.GetCommandLine = function() {};
 				CommandLineToArgv = go$pkg.CommandLineToArgv = function() { return [null, {}]; };

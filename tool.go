@@ -442,6 +442,7 @@ func buildPackage(pkg *packageData) error {
 			}
 			if err != nil {
 				os.Stderr.WriteString("Could not get GopherJS binary's modification timestamp. Please report issue.\n")
+				pkg.SrcModTime = time.Now()
 			}
 		}
 		if err == nil {

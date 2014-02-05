@@ -6,7 +6,7 @@ func init() {
 	pkgNatives["bytes"] = map[string]string{
 		"Compare": `function(a, b) {
 			var l = Math.min(a.length, b.length), i;
-			for (i = 0; i < a.length; i += 1) {
+			for (i = 0; i < a.length; i++) {
 				var va = a.array[a.offset + i];
 				var vb = b.array[b.offset + i];
 				if (va < vb) {
@@ -29,7 +29,7 @@ func init() {
 				return false;
 			}
 			var i;
-			for (i = 0; i < a.length; i += 1) {
+			for (i = 0; i < a.length; i++) {
 				if (a.array[a.offset + i] !== b.array[b.offset + i]) {
 					return false;
 				}
@@ -38,7 +38,7 @@ func init() {
 		}`,
 		"IndexByte": `function(s, c) {
 			var i;
-			for (i = 0; i < s.length; i += 1) {
+			for (i = 0; i < s.length; i++) {
 				if (s.array[s.offset + i] === c) {
 					return i;
 				}
@@ -357,7 +357,7 @@ func init() {
 				var envkeys = Object.keys(process.env);
 				envs = new (go$sliceType(Go$String))(new Array(envkeys.length));
 				var i;
-				for(i = 0; i < envkeys.length; i += 1) {
+				for(i = 0; i < envkeys.length; i++) {
 					envs.array[i] = envkeys[i] + "=" + process.env[envkeys[i]];
 				}
 			}
@@ -373,7 +373,7 @@ func init() {
 				}
 				os.Open(dir)[0].Chdir();
 				var start = time.Now(), status = "ok  ", i;
-				for (i = 0; i < tests.length; i += 1) {
+				for (i = 0; i < tests.length; i++) {
 					var t = new T.Ptr(new common.Ptr(undefined, undefined, undefined, undefined, time.Now(), undefined, undefined, undefined), names[i], null);
 					var err = null;
 					try {

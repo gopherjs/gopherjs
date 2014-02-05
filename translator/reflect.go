@@ -92,7 +92,7 @@ func init() {
 			};
 			var copyStruct = function(dst, src, typ) {
 				var fields = typ.structType.fields.array, i;
-				for (i = 0; i < fields.length; i += 1) {
+				for (i = 0; i < fields.length; i++) {
 					var field = fields[i];
 					var name = fieldName(field, i);
 					dst[name] = src[name];
@@ -112,7 +112,7 @@ func init() {
 				case Map:
 				case Slice:
 				case Struct:
-					for (i = 0; i < visited.length; i += 1) {
+					for (i = 0; i < visited.length; i++) {
 						var entry = visited[i];
 						if (v1.val === entry[0] && v2.val === entry[1]) {
 							return true;
@@ -136,7 +136,7 @@ func init() {
 					if (n !== v2.Len()) {
 						return false;
 					}
-					for (i = 0; i < n; i += 1) {
+					for (i = 0; i < n; i++) {
 						if (!deepValueEqual(v1.Index(i), v2.Index(i), visited)) {
 							return false;
 						}
@@ -151,7 +151,7 @@ func init() {
 					return deepValueEqual(v1.Elem(), v2.Elem(), visited);
 				case Struct:
 					var n = v1.NumField();
-					for (i = 0; i < n; i += 1) {
+					for (i = 0; i < n; i++) {
 						if (!deepValueEqual(v1.Field(i), v2.Field(i), visited)) {
 							return false;
 						}
@@ -287,7 +287,7 @@ func init() {
 		"MakeFunc": `function(typ, fn) {
 			var fv = function() {
 				var args = new Go$Array(typ.NumIn()), i;
-				for (i = 0; i < typ.NumIn(); i += 1) {
+				for (i = 0; i < typ.NumIn(); i++) {
 					var t = typ.In(i);
 					args[i] = new Value.Ptr(t, arguments[i], t.Kind() << flagKindShift);
 				}
@@ -299,7 +299,7 @@ func init() {
 					return resultsSlice.array[resultsSlice.offset].iword();
 				default:
 					var results = new Go$Array(typ.NumOut());
-					for (i = 0; i < typ.NumOut(); i += 1) {
+					for (i = 0; i < typ.NumOut(); i++) {
 						results[i] = resultsSlice.array[resultsSlice.offset + i].iword();
 					}
 					return results;
@@ -435,7 +435,7 @@ func init() {
 			return [it[0][key].k, true];
 		}`,
 		"mapiternext": `function(it) {
-			it[2] += 1;
+			it[2]++;
 		}`,
 		"chancap":   `function(ch) { go$notSupported("channels"); }`,
 		"chanclose": `function(ch) { go$notSupported("channels"); }`,
@@ -601,7 +601,7 @@ func init() {
 				}
 			} else {
 				if (t.IsVariadic()) {
-					n -= 1;
+					n--;
 				}
 				if (args.length < n) {
 					throw go$panic("reflect: Call with too few input arguments");
@@ -611,12 +611,12 @@ func init() {
 				}
 			}
 			var i;
-			for (i = 0; i < args.length; i += 1) {
+			for (i = 0; i < args.length; i++) {
 				if (args.array[args.offset + i].Kind() === Invalid) {
 					throw go$panic("reflect: " + op + " using zero Value argument");
 				}
 			}
-			for (i = 0; i < n; i += 1) {
+			for (i = 0; i < n; i++) {
 				var xt = args.array[args.offset + i].Type(), targ = t.In(i);
 				if (!xt.AssignableTo(targ)) {
 					throw go$panic("reflect: " + op + " using " + xt.String() + " as type " + targ.String());
@@ -626,7 +626,7 @@ func init() {
 				var m = args.length - n;
 				var slice = MakeSlice(t.In(n), m, m);
 				var elem = t.In(n).Elem();
-				for (i = 0; i < m; i += 1) {
+				for (i = 0; i < m; i++) {
 					var x = args.array[args.offset + n + i];
 					var xt = x.Type();
 					if (!xt.AssignableTo(elem)) {
@@ -642,7 +642,7 @@ func init() {
 			}
 
 			var argsArray = new Go$Array(t.NumIn());
-			for (i = 0; i < t.NumIn(); i += 1) {
+			for (i = 0; i < t.NumIn(); i++) {
 				argsArray[i] = args.array[args.offset + i].assignTo("reflect.Value.Call", t.In(i), go$ptrType(go$emptyInterface).nil).iword();
 			}
 			var results = fn.apply(rcvr, argsArray);
@@ -651,7 +651,7 @@ func init() {
 			} else if (t.NumOut() === 1) {
 				results = [results];
 			}
-			for (i = 0; i < t.NumOut(); i += 1) {
+			for (i = 0; i < t.NumOut(); i++) {
 				var typ = t.Out(i);
 				var flag = typ.Kind() << flagKindShift;
 				results[i] = new Value.Ptr(typ, results[i], flag);

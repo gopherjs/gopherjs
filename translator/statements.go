@@ -147,7 +147,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		case *types.Map:
 			keysVar := c.newVariable("_keys")
 			c.Printf("%s = go$keys(%s);", keysVar, refVar)
-			c.translateLoopingStmt(iVar+" < "+keysVar+".length", iVar+" += 1", s.Body, func() {
+			c.translateLoopingStmt(iVar+" < "+keysVar+".length", iVar+"++", s.Body, func() {
 				entryVar := c.newVariable("_entry")
 				c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
 				if !isBlank(s.Value) {
@@ -168,7 +168,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			case *types.Slice:
 				length = refVar + ".length"
 			}
-			c.translateLoopingStmt(iVar+" < "+length, iVar+" += 1", s.Body, func() {
+			c.translateLoopingStmt(iVar+" < "+length, iVar+"++", s.Body, func() {
 				if !isBlank(s.Value) {
 					indexExpr := &ast.IndexExpr{
 						X:     c.newIdent(refVar, t),

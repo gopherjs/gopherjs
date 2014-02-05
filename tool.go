@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bitbucket.org/kardianos/osext"
 	"flag"
 	"fmt"
 	"github.com/neelance/gopherjs/translator"
@@ -432,21 +433,17 @@ func buildPackage(pkg *packageData) error {
 	}
 
 	if pkg.PkgObj != "" && !packagesToTest[pkg.ImportPath] {
-		fileInfo, err := os.Stat(os.Args[0]) // gopherjs itself
-		if err != nil {
-			for _, path := range strings.Split(os.Getenv("PATH"), string(os.PathListSeparator)) {
-				fileInfo, err = os.Stat(filepath.Join(path, os.Args[0]))
-				if err == nil {
-					break
-				}
-			}
-			if err != nil {
-				os.Stderr.WriteString("Could not get GopherJS binary's modification timestamp. Please report issue.\n")
-				pkg.SrcModTime = time.Now()
+		var fileInfo os.FileInfo
+		gopherjsBinary, err := osext.Executable()
+		if err == nil {
+			fileInfo, err = os.Stat(gopherjsBinary)
+			if err == nil {
+				pkg.SrcModTime = fileInfo.ModTime()
 			}
 		}
-		if err == nil {
-			pkg.SrcModTime = fileInfo.ModTime()
+		if err != nil {
+			os.Stderr.WriteString("Could not get GopherJS binary's modification timestamp. Please report issue.\n")
+			pkg.SrcModTime = time.Now()
 		}
 
 		for _, importedPkgPath := range pkg.Imports {

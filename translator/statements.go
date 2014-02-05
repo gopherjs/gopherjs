@@ -370,53 +370,46 @@ clauseLoop:
 		return
 	}
 
-	printBody := func() {
-		elsePrefix := ""
-		for _, branch := range branches {
-			initStmt := ""
-			if branch.initStmt != nil {
-				initStmt = c.translateSimpleStmt(branch.initStmt) + ", "
+	hasBreak := label != "" // always assume break if label is given
+	if isSwitch && label == "" {
+		v := hasBreakVisitor{}
+		for _, child := range caseClauses {
+			ast.Walk(&v, child)
+		}
+		hasBreak = v.hasBreak
+	}
+
+	prefix := ""
+	if hasBreak {
+		prefix = label + "switch (0) { default: "
+	}
+	for _, branch := range branches {
+		initStmt := ""
+		if branch.initStmt != nil {
+			initStmt = c.translateSimpleStmt(branch.initStmt) + ", "
+		}
+		c.Printf("%sif (%s%s) {", prefix, initStmt, branch.condition)
+		c.Indent(func() {
+			if printCaseBodyPrefix != nil {
+				printCaseBodyPrefix(branch.clause.List)
 			}
-			c.Printf("%sif (%s%s) {", elsePrefix, initStmt, branch.condition)
-			c.Indent(func() {
-				if printCaseBodyPrefix != nil {
-					printCaseBodyPrefix(branch.clause.List)
-				}
-				c.translateStmtList(branch.body)
-			})
-			elsePrefix = "} else "
-		}
-		if defaultBranch != nil {
-			c.Printf("} else {")
-			c.Indent(func() {
-				if printCaseBodyPrefix != nil {
-					printCaseBodyPrefix(nil)
-				}
-				c.translateStmtList(defaultBranch.body)
-			})
-		}
-		c.Printf("}")
+			c.translateStmtList(branch.body)
+		})
+		prefix = "} else "
 	}
-
-	if !isSwitch {
-		printBody()
+	if defaultBranch != nil {
+		c.Printf("} else {")
+		c.Indent(func() {
+			if printCaseBodyPrefix != nil {
+				printCaseBodyPrefix(nil)
+			}
+			c.translateStmtList(defaultBranch.body)
+		})
+	}
+	if hasBreak {
+		c.Printf("} }")
 		return
 	}
-
-	v := hasBreakVisitor{}
-	for _, child := range caseClauses {
-		ast.Walk(&v, child)
-	}
-	if !v.hasBreak && label == "" {
-		printBody()
-		return
-	}
-
-	c.Printf("%sswitch (undefined) {", label)
-	c.Printf("default:")
-	c.Indent(func() {
-		printBody()
-	})
 	c.Printf("}")
 }
 

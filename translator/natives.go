@@ -53,7 +53,7 @@ func init() {
 	}
 
 	pkgNatives["encoding/json"] = map[string]string{
-		"init": `
+		"toplevel": `
 		  var encodeStates = [];
 		`,
 		"newEncodeState": `function() {
@@ -70,7 +70,7 @@ func init() {
 	}
 
 	pkgNatives["io/ioutil"] = map[string]string{
-		"init": `
+		"toplevel": `
 			var blackHoles = [];
 		`,
 		"blackHole": `function() {

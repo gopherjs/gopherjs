@@ -2,7 +2,7 @@ package translator
 
 func init() {
 	pkgNatives["reflect"] = map[string]string{
-		"init": `
+		"toplevel": `
 			var Invalid = 0;
 			var Bool = 1;
 			var Int = 2;

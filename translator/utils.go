@@ -22,13 +22,17 @@ type Archive struct {
 	Dependencies []string
 	Imports      []Import
 	Types        []byte
-	Variables    []byte
+	Variables    []Decl
 	Functions    []Function
 }
 
 type Import struct {
 	Path    string
 	VarName string
+}
+
+type Decl struct {
+	Var string
 }
 
 type Function struct {
@@ -57,7 +61,15 @@ func (a *Archive) WriteCode(w io.Writer) {
 		fmt.Fprintf(w, "\tvar %s = go$packages[\"%s\"];\n", imp.VarName, imp.Path)
 	}
 	w.Write(a.Types)
-	w.Write(a.Variables)
+	var vars []string
+	for _, d := range a.Variables {
+		if d.Var != "" {
+			vars = append(vars, d.Var)
+		}
+	}
+	if len(vars) != 0 {
+		fmt.Fprintf(w, "\tvar %s;\n", strings.Join(vars, ", "))
+	}
 	for _, f := range a.Functions {
 		w.Write(f.Code)
 	}

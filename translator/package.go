@@ -124,7 +124,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	var functions []*ast.FuncDecl
 	var initStmts []ast.Stmt
 	var toplevelTypes []*types.TypeName
-	var varSpecs []*ast.ValueSpec
+	vars := make(map[*types.Var]bool)
 	for _, file := range files {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
@@ -158,11 +158,11 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					}
 				case token.VAR:
 					for _, spec := range d.Specs {
-						s := spec.(*ast.ValueSpec)
-						varSpecs = append(varSpecs, s)
-						for _, name := range s.Names {
+						for _, name := range spec.(*ast.ValueSpec).Names {
 							if !isBlank(name) {
-								c.objectName(c.info.Objects[name]) // register toplevel name
+								o := c.info.Objects[name].(*types.Var)
+								vars[o] = true
+								c.objectName(o) // register toplevel name
 							}
 						}
 					}
@@ -201,23 +201,16 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		})
 
 		// variables
-		archive.Variables = c.CatchOutput(func() {
-			for _, spec := range varSpecs {
-				for _, name := range spec.Names {
-					o := c.info.Objects[name].(*types.Var)
-					varPrefix := ""
-					if !o.Exported() {
-						varPrefix = "var "
-					}
-					c.Printf("%s%s = %s;", varPrefix, c.objectName(o), c.zeroValue(o.Type()))
-				}
+		for o := range vars {
+			var d Decl
+			if !o.Exported() {
+				d.Var = c.objectName(o)
 			}
-		})
+			archive.Variables = append(archive.Variables, d)
+		}
 
 		// functions
 		natives := pkgNatives[importPath]
-		nativeInit := natives["init"]
-		delete(natives, "init")
 		for _, fun := range functions {
 			funName := fun.Name.Name
 			if fun.Recv != nil {
@@ -239,24 +232,42 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			}
 			archive.Functions = append(archive.Functions, f)
 		}
-		if len(natives) != 0 {
-			panic("not all natives used: " + importPath)
-		}
 
 		// init function
 		initCode := c.CatchOutput(func() {
-			c.Write([]byte(nativeInit))
+			c.Write([]byte(natives["toplevel"]))
+			delete(natives, "toplevel")
+
+			initOrder := c.info.InitOrder
+
+			// workaround for https://code.google.com/p/go/issues/detail?id=6703#c6
+			if importPath == "math/rand" {
+				findInit := func(name string) int {
+					for i, init := range initOrder {
+						if init.Lhs[0].Name() == name {
+							return i
+						}
+					}
+					panic("init not found")
+				}
+				i := findInit("rng_cooked")
+				j := findInit("globalRand")
+				if i > j {
+					initOrder[i], initOrder[j] = initOrder[j], initOrder[i]
+				}
+			}
 
 			c.Printf("go$pkg.init = function() {")
 			c.Indent(func() {
 				var initVarStmts []ast.Stmt
-				for _, init := range c.info.InitOrder {
+				for _, init := range initOrder {
 					lhs := make([]ast.Expr, len(init.Lhs))
-					for i, obj := range init.Lhs {
-						ident := ast.NewIdent(obj.Name())
-						c.info.Types[ident] = types.TypeAndValue{Type: obj.Type()}
-						c.info.Objects[ident] = obj
+					for i, o := range init.Lhs {
+						ident := ast.NewIdent(o.Name())
+						c.info.Types[ident] = types.TypeAndValue{Type: o.Type()}
+						c.info.Objects[ident] = o
 						lhs[i] = ident
+						delete(vars, o)
 					}
 					initVarStmts = append(initVarStmts, &ast.AssignStmt{
 						Lhs: lhs,
@@ -264,11 +275,23 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 						Rhs: []ast.Expr{init.Rhs},
 					})
 				}
+
+				for o := range vars {
+					c.Printf("%s = %s;", c.objectName(o), c.zeroValue(o.Type()))
+				}
+
+				c.Write([]byte(natives["init"]))
+				delete(natives, "init")
+
 				c.translateFunctionBody(append(initVarStmts, initStmts...), nil)
 			})
 			c.Printf("};")
 		})
 		archive.Functions = append(archive.Functions, Function{Name: "init", Code: initCode})
+
+		if len(natives) != 0 {
+			panic("not all natives used: " + importPath)
+		}
 	})
 
 	var importedPaths []string

@@ -369,13 +369,18 @@ clauseLoop:
 		return
 	}
 
-	hasBreak := label != "" // always assume break if label is given
-	if isSwitch && label == "" {
-		v := hasBreakVisitor{}
-		for _, child := range caseClauses {
-			ast.Walk(&v, child)
+	hasBreak := false
+	if isSwitch {
+		switch label {
+		case "":
+			v := hasBreakVisitor{}
+			for _, child := range caseClauses {
+				ast.Walk(&v, child)
+			}
+			hasBreak = v.hasBreak
+		default:
+			hasBreak = true // always assume break if label is given
 		}
-		hasBreak = v.hasBreak
 	}
 
 	caseOffset := c.f.caseCounter

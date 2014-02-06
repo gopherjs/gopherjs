@@ -45,7 +45,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			break
 		}
-		c.translateBranchingStmt(caseClauses, initStmts, false, c.translateExpr, nil, label)
+		c.translateBranchingStmt(caseClauses, initStmts, false, c.translateExpr, nil, label, c.f.hasGoto[s])
 
 	case *ast.SwitchStmt:
 		if s.Init != nil {
@@ -66,7 +66,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 				})
 			}
 		}
-		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, nil, label)
+		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, nil, label, c.f.hasGoto[s])
 
 	case *ast.TypeSwitchStmt:
 		if s.Init != nil {
@@ -104,7 +104,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			c.Printf("%s = %s;", typeSwitchVar, value)
 		}
-		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, printCaseBodyPrefix, label)
+		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, printCaseBodyPrefix, label, c.f.hasGoto[s])
 
 	case *ast.ForStmt:
 		if s.Init != nil {
@@ -118,7 +118,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		if s.Post != nil {
 			post = c.translateSimpleStmt(s.Post)
 		}
-		c.translateLoopingStmt(cond, post, s.Body, nil, label)
+		c.translateLoopingStmt(cond, post, s.Body, nil, label, c.f.hasGoto[s])
 
 	case *ast.RangeStmt:
 		refVar := c.newVariable("_ref")
@@ -138,7 +138,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 				if !isBlank(s.Key) {
 					c.Printf("%s;", c.translateAssign(s.Key, iVar))
 				}
-			}, label)
+			}, label, c.f.hasGoto[s])
 
 		case *types.Map:
 			keysVar := c.newVariable("_keys")
@@ -152,7 +152,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 				if !isBlank(s.Key) {
 					c.Printf("%s;", c.translateAssign(s.Key, entryVar+".k"))
 				}
-			}, label)
+			}, label, c.f.hasGoto[s])
 
 		case *types.Array, *types.Pointer, *types.Slice:
 			var length string
@@ -177,7 +177,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 				if !isBlank(s.Key) {
 					c.Printf("%s;", c.translateAssign(s.Key, iVar))
 				}
-			}, label)
+			}, label, c.f.hasGoto[s])
 
 		case *types.Chan:
 			c.printLabel(label)
@@ -204,7 +204,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			c.PrintCond(data.beginCase == 0, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("go$s = %d; continue;", data.beginCase))
 		case token.GOTO:
-			c.Printf(`go$notSupported("goto");`)
+			c.PrintCond(false, "goto "+s.Label.Name, fmt.Sprintf("go$s = %d; continue;", c.f.labelCases[s.Label.Name]))
 		case token.FALLTHROUGH:
 			// handled in CaseClause
 		default:
@@ -318,7 +318,7 @@ type branch struct {
 	body      []ast.Stmt
 }
 
-func (c *pkgContext) translateBranchingStmt(caseClauses []ast.Stmt, initStmts []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) *expression, printCaseBodyPrefix func([]ast.Expr), label string) {
+func (c *pkgContext) translateBranchingStmt(caseClauses []ast.Stmt, initStmts []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) *expression, printCaseBodyPrefix func([]ast.Expr), label string, flatten bool) {
 	var branches []*branch
 	var defaultBranch *branch
 	var openBranches []*branch
@@ -388,6 +388,9 @@ clauseLoop:
 	}
 
 	var caseOffset, endCase int
+	if _, ok := c.f.labelCases[label]; ok {
+		flatten = true // always flatten if label is referenced by goto
+	}
 	if flatten {
 		caseOffset = c.f.caseCounter
 		endCase = caseOffset + len(branches) - 1
@@ -459,10 +462,13 @@ clauseLoop:
 	}
 }
 
-func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt, bodyPrefix func(), label string) {
+func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt, bodyPrefix func(), label string, flatten bool) {
 	prevFlowData := c.f.flowDatas[""]
 	data := &flowData{
 		postStmt: post,
+	}
+	if _, ok := c.f.labelCases[label]; ok {
+		flatten = true // always flatten if label is referenced by goto
 	}
 	if flatten {
 		data.beginCase = c.f.caseCounter
@@ -785,7 +791,8 @@ func (c *pkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 
 func (c *pkgContext) printLabel(label string) {
 	if label != "" {
-		c.PrintCond(!flatten, label+":", "")
+		labelCase, ok := c.f.labelCases[label]
+		c.PrintCond(!ok, label+":", fmt.Sprintf("case %d:", labelCase))
 	}
 }
 

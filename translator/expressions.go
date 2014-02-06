@@ -767,7 +767,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 						}
 						return c.formatExpr("go$global[go$externalize(%s, Go$String)]", c.translateExpr(e.Args[0]))
 					case "This":
-						if flatten {
+						if c.f.flattened {
 							return c.formatExpr("go$this")
 						}
 						return c.formatExpr("this")
@@ -858,7 +858,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 
 	case *This:
 		this := "this"
-		if flatten {
+		if c.f.flattened {
 			this = "go$this"
 		}
 		if isWrapped(c.info.Types[e].Type) {

@@ -12,7 +12,7 @@ You can take advantage of Go's elegant type system and other compile-time checks
 - small size of generated code
 
 ### What is supported?
-In one sentence: Everything except the goto statement and goroutines. Yes, I know that you want those features and I am working heavily on them. But hey, it is still better to write Go with callbacks than JavaScript with callbacks, right? A lot of Go's packages do already work, see the [compatibility table](doc/packages.md). If you want those still missing features, please consider to support this project with a star to show your interest.
+In one sentence: Everything except goroutines. Yes, I know that you want goroutines and I am working heavily on them. But hey, it is still better to write Go with callbacks than JavaScript with callbacks, right? A lot of Go's packages do already work, see the [compatibility table](doc/packages.md). If you want those still missing features, please consider to support this project with a star to show your interest.
 
 ### Installation and Usage
 Get GopherJS and dependencies with: 
@@ -33,7 +33,6 @@ The package `github.com/neelance/gopherjs/js` provides functions for interacting
 ### Roadmap
 These features are not implemented yet, but on the roadmap:
 
-- goto
 - goroutines, channels, select
 - output minification
 - source maps

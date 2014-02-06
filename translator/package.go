@@ -43,7 +43,10 @@ type funcContext struct {
 	resultNames  []ast.Expr
 	flowDatas    map[string]*flowData
 	escapingVars []string
+	flattened    bool
 	caseCounter  int
+	labelCases   map[string]int
+	hasGoto      map[ast.Node]bool
 }
 
 type flowData struct {
@@ -91,8 +94,6 @@ func (c *pkgContext) CatchOutput(f func()) []byte {
 func (c *pkgContext) Delayed(f func()) {
 	c.delayedOutput = c.CatchOutput(f)
 }
-
-var flatten = false
 
 func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error)) (*Archive, error) {
 	info := &types.Info{
@@ -562,8 +563,15 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 		sig:         sig,
 		flowDatas:   map[string]*flowData{"": &flowData{}},
 		caseCounter: 1,
+		labelCases:  make(map[string]int),
+		hasGoto:     make(map[ast.Node]bool),
 	}
-	if flatten {
+
+	v := gotoVisitor{f: c.f}
+	for _, stmt := range stmts {
+		ast.Walk(&v, stmt)
+	}
+	if c.f.flattened {
 		c.f.varNames = append(c.f.varNames, "go$this = this")
 	}
 
@@ -585,7 +593,7 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 		}
 
 		printBody := func() {
-			if flatten {
+			if c.f.flattened {
 				c.Printf("/* */ var go$s = 0, go$f = function() { while (true) { switch (go$s) { case 0:")
 				c.translateStmtList(stmts)
 				c.Printf("/* */ } break; } }; return go$f();")
@@ -655,5 +663,35 @@ func (v *hasDeferVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	case ast.Expr:
 		return nil
 	}
+	return v
+}
+
+type gotoVisitor struct {
+	f     *funcContext
+	stack []ast.Node
+}
+
+func (v *gotoVisitor) Visit(node ast.Node) (w ast.Visitor) {
+	if node == nil {
+		v.stack = v.stack[:len(v.stack)-1]
+		return
+	}
+	switch n := node.(type) {
+	case *ast.BranchStmt:
+		if n.Tok == token.GOTO {
+			v.f.flattened = true
+			for _, n2 := range v.stack {
+				v.f.hasGoto[n2] = true
+			}
+			if _, ok := v.f.labelCases[n.Label.String()]; !ok {
+				v.f.labelCases[n.Label.String()] = v.f.caseCounter
+				v.f.caseCounter++
+			}
+			return nil
+		}
+	case ast.Expr:
+		return nil
+	}
+	v.stack = append(v.stack, node)
 	return v
 }

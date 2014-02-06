@@ -64,7 +64,7 @@
 | -- ast          | not yet               |                                   |
 | -- build        | not yet               |                                   |
 | -- doc          | not yet               |                                   |
-| -- format       | yes                   | needs go/scanner/scanner.go patch |
+| -- format       | yes                   |                                   |
 | -- parser       | not yet               |                                   |
 | -- printer      | yes                   |                                   |
 | -- scanner      | not yet               |                                   |
@@ -90,7 +90,7 @@
 | log             | not yet               |                                   |
 | -- syslog       | no                    |                                   |
 | math            | yes                   |                                   |
-| -- big          | yes                   |                                   |
+| -- big          | yes                   | use math.big.patch for speed      |
 | -- cmplx        | yes                   |                                   |
 | -- rand         | yes                   |                                   |
 | mime            | yes                   |                                   |
@@ -135,7 +135,7 @@
 | text            |                       |                                   |
 | -- scanner      | yes                   |                                   |
 | -- tabwriter    | yes                   |                                   |
-| -- template     | yes                   |                                   |
+| -- template     | yes                   | requires text.template.patch      |
 | -- -- parse     | yes                   |                                   |
 | time            | partially             | AfterFunc only                    |
 | unicode         | yes                   |                                   |

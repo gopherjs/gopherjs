@@ -117,10 +117,6 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.translateLoopingStmt(cond, post, s.Body, nil, label)
 
 	case *ast.RangeStmt:
-		p := c.f.postLoopStmt[""]
-		defer func() { c.f.postLoopStmt[""] = p }()
-		delete(c.f.postLoopStmt, "")
-
 		refVar := c.newVariable("_ref")
 		c.Printf("%s = %s;", refVar, c.translateExpr(s.X))
 
@@ -188,19 +184,19 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.BranchStmt:
 		label := ""
-		postLoopStmt := c.f.postLoopStmt[""]
+		data := c.f.flowDatas[""]
 		if s.Label != nil {
 			label = " " + s.Label.Name
-			postLoopStmt = c.f.postLoopStmt[s.Label.Name+": "]
+			data = c.f.flowDatas[s.Label.Name+": "]
 		}
 		switch s.Tok {
 		case token.BREAK:
-			c.Printf("break%s;", label)
+			c.PrintCond(!flatten, fmt.Sprintf("break%s;", label), fmt.Sprintf("go$s =  %d; continue;", data.endCase))
 		case token.CONTINUE:
-			if postLoopStmt != "" {
-				c.Printf("%s;", postLoopStmt)
+			if data.postStmt != "" {
+				c.Printf("%s;", data.postStmt)
 			}
-			c.Printf("continue%s;", label)
+			c.PrintCond(!flatten, fmt.Sprintf("continue%s;", label), fmt.Sprintf("go$s =  %d; continue;", data.beginCase))
 		case token.GOTO:
 			c.Printf(`go$notSupported("goto");`)
 		case token.FALLTHROUGH:
@@ -305,7 +301,6 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 
 type branch struct {
 	clause    *ast.CaseClause
-	initStmt  ast.Stmt
 	condition string
 	body      []ast.Stmt
 }
@@ -318,11 +313,7 @@ clauseLoop:
 	for i, cc := range caseClauses {
 		clause := cc.(*ast.CaseClause)
 
-		var initStmt ast.Stmt
-		if initStmts != nil {
-			initStmt = initStmts[i]
-		}
-		branch := &branch{clause, initStmt, "", nil}
+		branch := &branch{clause, "", nil}
 		openBranches = append(openBranches, branch)
 		for _, openBranch := range openBranches {
 			openBranch.body = append(openBranch.body, clause.Body...)
@@ -351,6 +342,9 @@ clauseLoop:
 			continue
 		}
 		branch.condition = strings.Join(conds, " || ")
+		if initStmts != nil && initStmts[i] != nil {
+			branch.condition = c.translateSimpleStmt(initStmts[i]) + ", " + branch.condition
+		}
 		branches = append(branches, branch)
 	}
 
@@ -375,16 +369,44 @@ clauseLoop:
 		hasBreak = v.hasBreak
 	}
 
+	caseOffset := c.f.caseCounter
+	endCase := caseOffset + len(branches) - 1
+	if defaultBranch != nil {
+		endCase++
+	}
+	c.f.caseCounter = endCase + 1
+
+	var prevFlowData *flowData
+	if isSwitch {
+		prevFlowData = c.f.flowDatas[""]
+		data := &flowData{
+			postStmt:  prevFlowData.postStmt,  // for "continue" of outer loop
+			beginCase: prevFlowData.beginCase, // same
+			endCase:   endCase,
+		}
+		c.f.flowDatas[""] = data
+		c.f.flowDatas[label] = data
+	}
+
 	prefix := ""
 	if hasBreak {
 		prefix = label + "switch (0) { default: "
 	}
-	for _, branch := range branches {
-		initStmt := ""
-		if branch.initStmt != nil {
-			initStmt = c.translateSimpleStmt(branch.initStmt) + ", "
+	jump := ""
+	if flatten {
+		var jumpList []string
+		for i, branch := range branches {
+			if i == 0 {
+				jumpList = append(jumpList, fmt.Sprintf("if (%s) {}", branch.condition))
+				continue
+			}
+			jumpList = append(jumpList, fmt.Sprintf("if (%s) { go$s =  %d; continue; }", branch.condition, caseOffset+i-1))
 		}
-		c.Printf("%sif (%s%s) {", prefix, initStmt, branch.condition)
+		jumpList = append(jumpList, fmt.Sprintf("{ go$s =  %d; continue; }", caseOffset+len(branches)-1))
+		jump = strings.Join(jumpList, " else ")
+	}
+	for i, branch := range branches {
+		c.PrintCond(!flatten, fmt.Sprintf("%sif (%s) {", prefix, branch.condition), jump)
 		c.Indent(func() {
 			if printCaseBodyPrefix != nil {
 				printCaseBodyPrefix(branch.clause.List)
@@ -392,9 +414,10 @@ clauseLoop:
 			c.translateStmtList(branch.body)
 		})
 		prefix = "} else "
+		jump = fmt.Sprintf("go$s =  %d; continue; case %d: ", endCase, caseOffset+i)
 	}
 	if defaultBranch != nil {
-		c.Printf("} else {")
+		c.PrintCond(!flatten, "} else {", jump)
 		c.Indent(func() {
 			if printCaseBodyPrefix != nil {
 				printCaseBodyPrefix(nil)
@@ -403,18 +426,29 @@ clauseLoop:
 		})
 	}
 	if hasBreak {
-		c.Printf("} }")
+		c.PrintCond(!flatten, "} }", fmt.Sprintf("case %d:", endCase))
 		return
 	}
-	c.Printf("}")
+	c.PrintCond(!flatten, "}", fmt.Sprintf("case %d:", endCase))
+
+	if isSwitch {
+		delete(c.f.flowDatas, label)
+		c.f.flowDatas[""] = prevFlowData
+	}
 }
 
 func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt, bodyPrefix func(), label string) {
-	prevPost := c.f.postLoopStmt[""]
-	c.f.postLoopStmt[""] = post
-	c.f.postLoopStmt[label] = post
+	prevFlowData := c.f.flowDatas[""]
+	data := &flowData{
+		postStmt:  post,
+		beginCase: c.f.caseCounter,
+		endCase:   c.f.caseCounter + 1,
+	}
+	c.f.flowDatas[""] = data
+	c.f.flowDatas[label] = data
+	c.f.caseCounter += 2
 
-	c.Printf("%swhile (%s) {", label, cond)
+	c.PrintCond(!flatten, fmt.Sprintf("%swhile (%s) {", label, cond), fmt.Sprintf("case %d: if(!(%s)) { go$s =  %d; continue; }", data.beginCase, cond, data.endCase))
 	c.Indent(func() {
 		v := &escapeAnalysis{
 			info:       c.info,
@@ -446,10 +480,10 @@ func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt
 
 		c.f.escapingVars = prevEV
 	})
-	c.Printf("}")
+	c.PrintCond(!flatten, "}", fmt.Sprintf("go$s =  %d; continue; case %d:", data.beginCase, data.endCase))
 
-	delete(c.f.postLoopStmt, label)
-	c.f.postLoopStmt[""] = prevPost
+	delete(c.f.flowDatas, label)
+	c.f.flowDatas[""] = prevFlowData
 }
 
 func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {

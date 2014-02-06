@@ -767,6 +767,9 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 						}
 						return c.formatExpr("go$global[go$externalize(%s, Go$String)]", c.translateExpr(e.Args[0]))
 					case "This":
+						if flatten {
+							return c.formatExpr("go$this")
+						}
 						return c.formatExpr("this")
 					default:
 						panic("Invalid js package method: " + o.Name())

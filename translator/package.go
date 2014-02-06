@@ -41,8 +41,15 @@ type funcContext struct {
 	sig          *types.Signature
 	varNames     []string
 	resultNames  []ast.Expr
-	postLoopStmt map[string]string
+	flowDatas    map[string]*flowData
 	escapingVars []string
+	caseCounter  int
+}
+
+type flowData struct {
+	postStmt  string
+	beginCase int
+	endCase   int
 }
 
 func (c *pkgContext) Write(b []byte) (int, error) {
@@ -56,6 +63,14 @@ func (c *pkgContext) Printf(format string, values ...interface{}) {
 	c.Write([]byte{'\n'})
 	c.Write(c.delayedOutput)
 	c.delayedOutput = nil
+}
+
+func (c *pkgContext) PrintCond(cond bool, onTrue, onFalse string) {
+	if !cond {
+		c.Printf("/* %s */ %s", strings.Replace("onTrue", "*/", "<star>/", -1), onFalse)
+		return
+	}
+	c.Printf("%s", onTrue)
 }
 
 func (c *pkgContext) Indent(f func()) {
@@ -76,6 +91,8 @@ func (c *pkgContext) CatchOutput(f func()) []byte {
 func (c *pkgContext) Delayed(f func()) {
 	c.delayedOutput = c.CatchOutput(f)
 }
+
+var flatten = false
 
 func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error)) (*Archive, error) {
 	info := &types.Info{
@@ -470,19 +487,21 @@ func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) {
 					return
 				}
 
+				this := "this"
+				if flatten {
+					this = "go$this"
+				}
 				body := fun.Body.List
 				if recv != nil {
 					recvType := sig.Recv().Type()
-					c.info.Types[recv] = types.TypeAndValue{Type: recvType}
-					this := c.newIdent("this", recvType)
 					if isWrapped(recvType) {
-						this = c.newIdent("this.go$val", recvType)
+						this += ".go$val"
 					}
 					body = append([]ast.Stmt{
 						&ast.AssignStmt{
 							Lhs: []ast.Expr{recv},
 							Tok: token.DEFINE,
-							Rhs: []ast.Expr{this},
+							Rhs: []ast.Expr{c.newIdent(this, recvType)},
 						},
 					}, body...)
 				}
@@ -545,7 +564,14 @@ func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) {
 
 func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signature) {
 	prevFuncContext := c.f
-	c.f = &funcContext{sig: sig, postLoopStmt: make(map[string]string)}
+	c.f = &funcContext{
+		sig:         sig,
+		flowDatas:   map[string]*flowData{"": &flowData{}},
+		caseCounter: 1,
+	}
+	if flatten {
+		c.f.varNames = append(c.f.varNames, "go$this = this")
+	}
 
 	body := c.CatchOutput(func() {
 		if sig != nil && sig.Results().Len() != 0 && sig.Results().At(0).Name() != "" {
@@ -564,14 +590,23 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 			}
 		}
 
+		printBody := func() {
+			if flatten {
+				c.Printf("/* */ var go$s = 0, go$f = function() { while (true) { switch (go$s) { case 0:")
+				c.translateStmtList(stmts)
+				c.Printf("/* */ } break; } }; return go$f();")
+				return
+			}
+			c.translateStmtList(stmts)
+		}
+
 		v := hasDeferVisitor{}
 		ast.Walk(&v, &ast.BlockStmt{List: stmts})
-		switch v.hasDefer {
-		case true:
+		if v.hasDefer {
 			c.Printf("var go$deferred = [];")
 			c.Printf("try {")
 			c.Indent(func() {
-				c.translateStmtList(stmts)
+				printBody()
 			})
 			c.Printf("} catch(go$err) {")
 			c.Indent(func() {
@@ -599,9 +634,9 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 				}
 			})
 			c.Printf("}")
-		case false:
-			c.translateStmtList(stmts)
+			return
 		}
+		printBody()
 	})
 
 	if len(c.f.varNames) != 0 {

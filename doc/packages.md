@@ -75,7 +75,7 @@
 | -- crc64        | yes                   |                                   |
 | -- fnv          | yes                   |                                   |
 | html            | yes                   |                                   |
-| -- template     | yes                   |                                   |
+| -- template     | yes                   | requires text.template.patch      |
 | image           | yes                   |                                   |
 | -- color        | yes                   |                                   |
 | -- -- palette   | (no tests)            |                                   |

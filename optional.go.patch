@@ -701,22 +701,6 @@ diff -r 87dea3f5ebe7 src/pkg/math/big/arith.go
  		}
  	}
  
-diff -r 87dea3f5ebe7 src/pkg/math/big/rat.go
---- a/src/pkg/math/big/rat.go
-+++ b/src/pkg/math/big/rat.go
-@@ -129,9 +129,9 @@
- 		mantissa >>= 1
- 		exp++
- 	}
--	if mantissa>>53 != 1 {
--		panic("expected exactly 54 bits of result")
--	}
-+	// if mantissa>>53 != 1 {
-+	// 	panic("expected exactly 54 bits of result")
-+	// }
- 
- 	// 4. Rounding.
- 	if -1022-52 <= exp && exp <= -1022 {
 diff -r 87dea3f5ebe7 src/pkg/math/gamma.go
 --- a/src/pkg/math/gamma.go
 +++ b/src/pkg/math/gamma.go

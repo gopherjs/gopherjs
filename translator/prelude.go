@@ -1217,7 +1217,7 @@ var go$getStack = function() {
 var go$getStackDepth = function() {
 	var s = go$getStack(), d = 0, i;
 	for (i = 0; i < s.length; i++) {
-		if (s[i].indexOf("go$") == -1) {
+		if (s[i].indexOf("go$") === -1) {
 			d++;
 		}
 	}

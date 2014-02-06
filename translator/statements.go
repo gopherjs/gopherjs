@@ -176,6 +176,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}, label)
 
 		case *types.Chan:
+			c.printLabel(label)
 			// skip
 
 		default:
@@ -183,20 +184,21 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.BranchStmt:
-		label := ""
+		c.printLabel(label)
+		labelSuffix := ""
 		data := c.f.flowDatas[""]
 		if s.Label != nil {
-			label = " " + s.Label.Name
-			data = c.f.flowDatas[s.Label.Name+": "]
+			labelSuffix = " " + s.Label.Name
+			data = c.f.flowDatas[s.Label.Name]
 		}
 		switch s.Tok {
 		case token.BREAK:
-			c.PrintCond(!flatten, fmt.Sprintf("break%s;", label), fmt.Sprintf("go$s =  %d; continue;", data.endCase))
+			c.PrintCond(!flatten, fmt.Sprintf("break%s;", labelSuffix), fmt.Sprintf("go$s =  %d; continue;", data.endCase))
 		case token.CONTINUE:
 			if data.postStmt != "" {
 				c.Printf("%s;", data.postStmt)
 			}
-			c.PrintCond(!flatten, fmt.Sprintf("continue%s;", label), fmt.Sprintf("go$s =  %d; continue;", data.beginCase))
+			c.PrintCond(!flatten, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("go$s =  %d; continue;", data.beginCase))
 		case token.GOTO:
 			c.Printf(`go$notSupported("goto");`)
 		case token.FALLTHROUGH:
@@ -206,6 +208,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.ReturnStmt:
+		c.printLabel(label)
 		results := s.Results
 		if c.f.resultNames != nil {
 			if len(s.Results) != 0 {
@@ -213,7 +216,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 					Lhs: c.f.resultNames,
 					Tok: token.ASSIGN,
 					Rhs: s.Results,
-				}, label)
+				}, "")
 			}
 			results = c.f.resultNames
 		}
@@ -238,6 +241,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.DeferStmt:
+		c.printLabel(label)
 		if ident, isIdent := s.Call.Fun.(*ast.Ident); isIdent {
 			if builtin, isBuiltin := c.info.Objects[ident].(*types.Builtin); isBuiltin {
 				if builtin.Name() == "recover" {
@@ -266,10 +270,11 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Printf("go$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), args)
 
 	case *ast.DeclStmt:
+		c.printLabel(label)
 		decl := s.Decl.(*ast.GenDecl)
 		switch decl.Tok {
 		case token.VAR:
-			c.Printf("%s%s;", label, c.translateSimpleStmt(stmt))
+			c.Printf("%s;", c.translateSimpleStmt(stmt))
 		case token.TYPE:
 			for _, spec := range decl.Specs {
 				o := c.info.Objects[spec.(*ast.TypeSpec).Name].(*types.TypeName)
@@ -281,20 +286,24 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.LabeledStmt:
-		c.translateStmt(s.Stmt, s.Label.Name+": ")
+		c.printLabel(label)
+		c.translateStmt(s.Stmt, s.Label.Name)
 
 	case *ast.SelectStmt:
+		c.printLabel(label)
 		c.Printf(`go$notSupported("select")`)
 
 	case *ast.GoStmt:
+		c.printLabel(label)
 		c.Printf(`go$notSupported("go")`)
 
 	case *ast.EmptyStmt:
 		// skip
 
 	default:
+		c.printLabel(label)
 		if r := c.translateSimpleStmt(stmt); r != "" {
-			c.Printf("%s%s;", label, r)
+			c.Printf("%s;", r)
 		}
 	}
 }
@@ -388,9 +397,10 @@ clauseLoop:
 		c.f.flowDatas[label] = data
 	}
 
+	c.printLabel(label)
 	prefix := ""
 	if hasBreak {
-		prefix = label + "switch (0) { default: "
+		prefix = "switch (0) { default: "
 	}
 	jump := ""
 	if flatten {
@@ -448,7 +458,8 @@ func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt
 	c.f.flowDatas[label] = data
 	c.f.caseCounter += 2
 
-	c.PrintCond(!flatten, fmt.Sprintf("%swhile (%s) {", label, cond), fmt.Sprintf("case %d: if(!(%s)) { go$s =  %d; continue; }", data.beginCase, cond, data.endCase))
+	c.printLabel(label)
+	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { go$s =  %d; continue; }", data.beginCase, cond, data.endCase))
 	c.Indent(func() {
 		v := &escapeAnalysis{
 			info:       c.info,
@@ -755,6 +766,12 @@ func (c *pkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 		}
 	default:
 		panic(fmt.Sprintf("Unhandled lhs type: %T\n", l))
+	}
+}
+
+func (c *pkgContext) printLabel(label string) {
+	if label != "" {
+		c.Printf("%s:", label)
 	}
 }
 

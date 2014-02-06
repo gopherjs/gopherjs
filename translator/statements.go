@@ -18,11 +18,7 @@ func (c *pkgContext) translateStmtList(stmts []ast.Stmt) {
 func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 	switch s := stmt.(type) {
 	case *ast.BlockStmt:
-		c.Printf("{")
-		c.Indent(func() {
-			c.translateStmtList(s.List)
-		})
-		c.Printf("}")
+		c.translateStmtList(s.List)
 
 	case *ast.IfStmt:
 		var caseClauses []ast.Stmt

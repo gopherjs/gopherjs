@@ -387,23 +387,23 @@ clauseLoop:
 		}
 	}
 
-	var prevFlowData *flowData
 	var caseOffset, endCase int
+	if flatten {
+		caseOffset = c.f.caseCounter
+		endCase = caseOffset + len(branches) - 1
+		if defaultBranch != nil {
+			endCase++
+		}
+		c.f.caseCounter = endCase + 1
+	}
+
+	var prevFlowData *flowData
 	if isSwitch {
 		prevFlowData = c.f.flowDatas[""]
 		data := &flowData{
 			postStmt:  prevFlowData.postStmt,  // for "continue" of outer loop
 			beginCase: prevFlowData.beginCase, // same
 			endCase:   endCase,
-		}
-		if flatten {
-			caseOffset = c.f.caseCounter
-			endCase = caseOffset + len(branches) - 1
-			if defaultBranch != nil {
-				endCase++
-			}
-			data.endCase = endCase
-			c.f.caseCounter = endCase + 1
 		}
 		c.f.flowDatas[""] = data
 		c.f.flowDatas[label] = data

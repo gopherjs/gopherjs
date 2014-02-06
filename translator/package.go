@@ -92,7 +92,7 @@ func (c *pkgContext) Delayed(f func()) {
 	c.delayedOutput = c.CatchOutput(f)
 }
 
-var flatten = false
+var flatten = true
 
 func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error)) (*Archive, error) {
 	info := &types.Info{

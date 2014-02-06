@@ -797,7 +797,7 @@ func (v *hasBreakVisitor) Visit(node ast.Node) (w ast.Visitor) {
 			v.hasBreak = true
 			return nil
 		}
-	case *ast.FuncLit, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
+	case *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt, ast.Expr:
 		return nil
 	}
 	return v

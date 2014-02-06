@@ -1174,7 +1174,7 @@ var go$pushErr = function(err) {
 		}
 		err.go$panicValue = new jsPkg.Error.Ptr(err);
 	}
-	go$errorStack.push({ frame: go$getStackDepth() - 1, error: err });
+	go$errorStack.push({ frame: go$getStackDepth(), error: err });
 };
 
 var go$callDeferred = function(deferred) {
@@ -1203,7 +1203,7 @@ var go$callDeferred = function(deferred) {
 
 var go$recover = function() {
 	var err = go$errorStack[go$errorStack.length - 1];
-	if (err === undefined || err.frame !== go$getStackDepth() - 2) {
+	if (err === undefined || err.frame !== go$getStackDepth()) {
 		return null;
 	}
 	go$errorStack.pop();
@@ -1217,7 +1217,7 @@ var go$getStack = function() {
 var go$getStackDepth = function() {
 	var s = go$getStack(), d = 0, i;
 	for (i = 0; i < s.length; i++) {
-		if (s[i].indexOf("go$callDeferred") == -1) {
+		if (s[i].indexOf("go$") == -1) {
 			d++;
 		}
 	}

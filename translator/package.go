@@ -67,7 +67,7 @@ func (c *pkgContext) Printf(format string, values ...interface{}) {
 
 func (c *pkgContext) PrintCond(cond bool, onTrue, onFalse string) {
 	if !cond {
-		c.Printf("/* %s */ %s", strings.Replace("onTrue", "*/", "<star>/", -1), onFalse)
+		c.Printf("/* %s */ %s", strings.Replace(onTrue, "*/", "<star>/", -1), onFalse)
 		return
 	}
 	c.Printf("%s", onTrue)
@@ -487,21 +487,15 @@ func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) {
 					return
 				}
 
-				this := "this"
-				if flatten {
-					this = "go$this"
-				}
 				body := fun.Body.List
 				if recv != nil {
-					recvType := sig.Recv().Type()
-					if isWrapped(recvType) {
-						this += ".go$val"
-					}
+					this := &This{}
+					c.info.Types[this] = types.TypeAndValue{Type: sig.Recv().Type()}
 					body = append([]ast.Stmt{
 						&ast.AssignStmt{
 							Lhs: []ast.Expr{recv},
 							Tok: token.DEFINE,
-							Rhs: []ast.Expr{c.newIdent(this, recvType)},
+							Rhs: []ast.Expr{this},
 						},
 					}, body...)
 				}
@@ -644,4 +638,22 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 	}
 	c.Write(body)
 	c.f = prevFuncContext
+}
+
+type hasDeferVisitor struct {
+	hasDefer bool
+}
+
+func (v *hasDeferVisitor) Visit(node ast.Node) (w ast.Visitor) {
+	if v.hasDefer {
+		return nil
+	}
+	switch node.(type) {
+	case *ast.DeferStmt:
+		v.hasDefer = true
+		return nil
+	case ast.Expr:
+		return nil
+	}
+	return v
 }

@@ -138,7 +138,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 			}
 			return c.formatExpr("new %s.Ptr(%s)", c.typeName(exprType), strings.Join(elements, ", "))
 		default:
-			panic(c.formatExpr("Unhandled CompositeLit type: %T\n", t))
+			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", t))
 		}
 
 	case *ast.FuncLit:
@@ -434,7 +434,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Basic:
 			return c.formatExpr("%s.charCodeAt(%s)", c.translateExpr(e.X), c.flatten64(e.Index))
 		default:
-			panic(c.formatExpr("Unhandled IndexExpr: %T\n", t))
+			panic(fmt.Sprintf("Unhandled IndexExpr: %T\n", t))
 		}
 
 	case *ast.SliceExpr:
@@ -578,7 +578,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 					case *types.Chan:
 						return c.formatExpr("new %s()", c.typeName(c.info.Types[e.Args[0]].Type))
 					default:
-						panic(c.formatExpr("Unhandled make type: %T\n", argType))
+						panic(fmt.Sprintf("Unhandled make type: %T\n", argType))
 					}
 				case "len":
 					arg := c.translateExpr(e.Args[0])
@@ -593,7 +593,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 						return c.formatExpr("0")
 					// length of array is constant
 					default:
-						panic(c.formatExpr("Unhandled len type: %T\n", argType))
+						panic(fmt.Sprintf("Unhandled len type: %T\n", argType))
 					}
 				case "cap":
 					arg := c.translateExpr(e.Args[0])
@@ -606,7 +606,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 						return c.formatExpr("0")
 					// capacity of array is constant
 					default:
-						panic(c.formatExpr("Unhandled cap type: %T\n", argType))
+						panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))
 					}
 				case "panic":
 					return c.formatExpr("throw go$panic(%s)", c.translateImplicitConversion(e.Args[0], types.NewInterface(nil, nil)))
@@ -639,7 +639,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 				case "close":
 					return c.formatExpr(`go$notSupported("close")`)
 				default:
-					panic(c.formatExpr("Unhandled builtin: %s\n", o.Name()))
+					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))
 				}
 			}
 			fun = c.translateExpr(plainFun)
@@ -853,14 +853,24 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Nil:
 			return c.formatExpr("%s", c.zeroValue(c.info.Types[e].Type))
 		default:
-			panic(c.formatExpr("Unhandled object: %T\n", o))
+			panic(fmt.Sprintf("Unhandled object: %T\n", o))
 		}
+
+	case *This:
+		this := "this"
+		if flatten {
+			this = "go$this"
+		}
+		if isWrapped(c.info.Types[e].Type) {
+			this += ".go$val"
+		}
+		return c.formatExpr(this)
 
 	case nil:
 		return c.formatExpr("")
 
 	default:
-		panic(c.formatExpr("Unhandled expression: %T\n", e))
+		panic(fmt.Sprintf("Unhandled expression: %T\n", e))
 
 	}
 }
@@ -953,7 +963,7 @@ func (c *pkgContext) translateConversion(expr ast.Expr, desiredType types.Type) 
 				}
 				return c.formatExpr("go$bytesToString(%s)", value)
 			default:
-				panic(c.formatExpr("Unhandled conversion: %v\n", et))
+				panic(fmt.Sprintf("Unhandled conversion: %v\n", et))
 			}
 		case t.Kind() == types.UnsafePointer:
 			if unary, isUnary := expr.(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
@@ -1265,22 +1275,4 @@ func (c *pkgContext) formatExprInternal(format string, a []interface{}, parens b
 		return &expression{str: out.String(), parens: parens}
 	}
 	return &expression{str: "(" + strings.Join(assignments, ", ") + ", " + out.String() + ")", parens: false}
-}
-
-type hasDeferVisitor struct {
-	hasDefer bool
-}
-
-func (v *hasDeferVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	if v.hasDefer {
-		return nil
-	}
-	switch node.(type) {
-	case *ast.DeferStmt:
-		v.hasDefer = true
-		return nil
-	case *ast.FuncLit:
-		return nil
-	}
-	return v
 }

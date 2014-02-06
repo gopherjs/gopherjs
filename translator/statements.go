@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+type This struct {
+	ast.Ident
+}
+
 func (c *pkgContext) translateStmtList(stmts []ast.Stmt) {
 	for _, stmt := range stmts {
 		c.translateStmt(stmt, "")
@@ -193,12 +197,12 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 		switch s.Tok {
 		case token.BREAK:
-			c.PrintCond(!flatten, fmt.Sprintf("break%s;", labelSuffix), fmt.Sprintf("go$s =  %d; continue;", data.endCase))
+			c.PrintCond(!flatten, fmt.Sprintf("break%s;", labelSuffix), fmt.Sprintf("go$s = %d; continue;", data.endCase))
 		case token.CONTINUE:
 			if data.postStmt != "" {
 				c.Printf("%s;", data.postStmt)
 			}
-			c.PrintCond(!flatten, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("go$s =  %d; continue;", data.beginCase))
+			c.PrintCond(!flatten, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("go$s = %d; continue;", data.beginCase))
 		case token.GOTO:
 			c.Printf(`go$notSupported("goto");`)
 		case token.FALLTHROUGH:
@@ -415,9 +419,9 @@ clauseLoop:
 				jumpList = append(jumpList, fmt.Sprintf("if (%s) {}", branch.condition))
 				continue
 			}
-			jumpList = append(jumpList, fmt.Sprintf("if (%s) { go$s =  %d; continue; }", branch.condition, caseOffset+i-1))
+			jumpList = append(jumpList, fmt.Sprintf("if (%s) { go$s = %d; continue; }", branch.condition, caseOffset+i-1))
 		}
-		jumpList = append(jumpList, fmt.Sprintf("{ go$s =  %d; continue; }", caseOffset+len(branches)-1))
+		jumpList = append(jumpList, fmt.Sprintf("{ go$s = %d; continue; }", caseOffset+len(branches)-1))
 		jump = strings.Join(jumpList, " else ")
 	}
 	for i, branch := range branches {
@@ -429,7 +433,7 @@ clauseLoop:
 			c.translateStmtList(branch.body)
 		})
 		prefix = "} else "
-		jump = fmt.Sprintf("go$s =  %d; continue; case %d: ", endCase, caseOffset+i)
+		jump = fmt.Sprintf("go$s = %d; continue; case %d: ", endCase, caseOffset+i)
 	}
 	if defaultBranch != nil {
 		c.PrintCond(!flatten, "} else {", jump)
@@ -464,7 +468,7 @@ func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt
 	c.f.caseCounter += 2
 
 	c.printLabel(label)
-	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { go$s =  %d; continue; }", data.beginCase, cond, data.endCase))
+	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { go$s = %d; continue; }", data.beginCase, cond, data.endCase))
 	c.Indent(func() {
 		v := &escapeAnalysis{
 			info:       c.info,
@@ -496,7 +500,7 @@ func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt
 
 		c.f.escapingVars = prevEV
 	})
-	c.PrintCond(!flatten, "}", fmt.Sprintf("go$s =  %d; continue; case %d:", data.beginCase, data.endCase))
+	c.PrintCond(!flatten, "}", fmt.Sprintf("go$s = %d; continue; case %d:", data.beginCase, data.endCase))
 
 	delete(c.f.flowDatas, label)
 	c.f.flowDatas[""] = prevFlowData
@@ -776,7 +780,7 @@ func (c *pkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 
 func (c *pkgContext) printLabel(label string) {
 	if label != "" {
-		c.Printf("%s:", label)
+		c.PrintCond(!flatten, label+":", "")
 	}
 }
 

@@ -197,12 +197,12 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 		switch s.Tok {
 		case token.BREAK:
-			c.PrintCond(!flatten, fmt.Sprintf("break%s;", labelSuffix), fmt.Sprintf("go$s = %d; continue;", data.endCase))
+			c.PrintCond(data.endCase == 0, fmt.Sprintf("break%s;", labelSuffix), fmt.Sprintf("go$s = %d; continue;", data.endCase))
 		case token.CONTINUE:
 			if data.postStmt != "" {
 				c.Printf("%s;", data.postStmt)
 			}
-			c.PrintCond(!flatten, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("go$s = %d; continue;", data.beginCase))
+			c.PrintCond(data.beginCase == 0, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("go$s = %d; continue;", data.beginCase))
 		case token.GOTO:
 			c.Printf(`go$notSupported("goto");`)
 		case token.FALLTHROUGH:
@@ -387,20 +387,23 @@ clauseLoop:
 		}
 	}
 
-	caseOffset := c.f.caseCounter
-	endCase := caseOffset + len(branches) - 1
-	if defaultBranch != nil {
-		endCase++
-	}
-	c.f.caseCounter = endCase + 1
-
 	var prevFlowData *flowData
+	var caseOffset, endCase int
 	if isSwitch {
 		prevFlowData = c.f.flowDatas[""]
 		data := &flowData{
 			postStmt:  prevFlowData.postStmt,  // for "continue" of outer loop
 			beginCase: prevFlowData.beginCase, // same
 			endCase:   endCase,
+		}
+		if flatten {
+			caseOffset = c.f.caseCounter
+			endCase = caseOffset + len(branches) - 1
+			if defaultBranch != nil {
+				endCase++
+			}
+			data.endCase = endCase
+			c.f.caseCounter = endCase + 1
 		}
 		c.f.flowDatas[""] = data
 		c.f.flowDatas[label] = data
@@ -459,13 +462,15 @@ clauseLoop:
 func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt, bodyPrefix func(), label string) {
 	prevFlowData := c.f.flowDatas[""]
 	data := &flowData{
-		postStmt:  post,
-		beginCase: c.f.caseCounter,
-		endCase:   c.f.caseCounter + 1,
+		postStmt: post,
+	}
+	if flatten {
+		data.beginCase = c.f.caseCounter
+		data.endCase = c.f.caseCounter + 1
+		c.f.caseCounter += 2
 	}
 	c.f.flowDatas[""] = data
 	c.f.flowDatas[label] = data
-	c.f.caseCounter += 2
 
 	c.printLabel(label)
 	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { go$s = %d; continue; }", data.beginCase, cond, data.endCase))

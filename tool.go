@@ -4,7 +4,7 @@ import (
 	"bitbucket.org/kardianos/osext"
 	"flag"
 	"fmt"
-	"github.com/neelance/gopherjs/translator"
+	"github.com/gopherjs/gopherjs/translator"
 	"go/ast"
 	"go/build"
 	"go/parser"

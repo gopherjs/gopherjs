@@ -681,7 +681,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 					t = s.Field(index).Type()
 				}
 
-				if o.Pkg() != nil && o.Pkg().Path() == "github.com/neelance/gopherjs/js" {
+				if o.Pkg() != nil && o.Pkg().Path() == "github.com/gopherjs/gopherjs/js" {
 					switch o.Name() {
 					case "Get":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
@@ -759,7 +759,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 				fun = c.formatExpr("%s.%s", fun, methodName)
 
 			case types.PackageObj:
-				if o.Pkg() != nil && o.Pkg().Path() == "github.com/neelance/gopherjs/js" {
+				if o.Pkg() != nil && o.Pkg().Path() == "github.com/gopherjs/gopherjs/js" {
 					switch o.Name() {
 					case "Global":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {

@@ -851,7 +851,7 @@ var go$externalize = function(v, t) {
 		var convert = false;
 		var i;
 		for (i = 0; i < t.params.length; i++) {
-			convert = convert || (t.params[i] !== go$packages["github.com/neelance/gopherjs/js"].Object);
+			convert = convert || (t.params[i] !== go$packages["github.com/gopherjs/gopherjs/js"].Object);
 		}
 		for (i = 0; i < t.results.length; i++) {
 			convert = convert || go$needsExternalization(t.results[i]);
@@ -984,7 +984,7 @@ var go$internalize = function(v, t, recv) {
 			}
 		};
 	case "Interface":
-		if (t === go$packages["github.com/neelance/gopherjs/js"].Object) {
+		if (t === go$packages["github.com/gopherjs/gopherjs/js"].Object) {
 			return v;
 		}
 		switch (v.constructor) {
@@ -1014,7 +1014,7 @@ var go$internalize = function(v, t, recv) {
 				return new timePkg.Time(timePkg.Unix(new Go$Int64(0, 0), new Go$Int64(0, v.getTime() * 1000000)));
 			}
 		case Function:
-			var funcType = go$funcType([go$sliceType(go$emptyInterface)], [go$packages["github.com/neelance/gopherjs/js"].Object], true);
+			var funcType = go$funcType([go$sliceType(go$emptyInterface)], [go$packages["github.com/gopherjs/gopherjs/js"].Object], true);
 			return new funcType(go$internalize(v, funcType));
 		case Number:
 			return new Go$Float64(parseFloat(v));
@@ -1167,7 +1167,7 @@ var go$errorStack = [], go$jsErr = null;
 
 var go$pushErr = function(err) {
 	if (err.go$panicValue === undefined) {
-		var jsPkg = go$packages["github.com/neelance/gopherjs/js"];
+		var jsPkg = go$packages["github.com/gopherjs/gopherjs/js"];
 		if (err.go$notSupported !== undefined || jsPkg === undefined) {
 			go$jsErr = err;
 			return;

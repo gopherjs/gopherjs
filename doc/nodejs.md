@@ -5,7 +5,7 @@ You can run the generated code with Node.js instead of a browser. However, syste
 The syscall module currently only supports OS X. Please tell me if you would like to have support for other operating systems. On OS X, get the latest Node.js 0.11 release from [here](http://blog.nodejs.org/release/) or via `brew install node --devel`. Then compile and install the module:
 ```
 npm install --global node-gyp
-cd src/github.com/neelance/gopherjs/node-syscall/
+cd src/github.com/gopherjs/gopherjs/node-syscall/
 node-gyp rebuild
 mkdir -p ~/.node_libraries/
 cp build/Release/syscall.node ~/.node_libraries/syscall.node

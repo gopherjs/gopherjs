@@ -520,7 +520,7 @@ func encodeString(s string) string {
 
 func isJsObject(t types.Type) bool {
 	named, isNamed := t.(*types.Named)
-	return isNamed && named.Obj().Pkg().Path() == "github.com/neelance/gopherjs/js" && named.Obj().Name() == "Object"
+	return isNamed && named.Obj().Pkg().Path() == "github.com/gopherjs/gopherjs/js" && named.Obj().Name() == "Object"
 }
 
 func getJsTag(tag string) string {

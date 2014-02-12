@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
-	"github.com/neelance/gopherjs/gcexporter"
+	"github.com/gopherjs/gopherjs/gcexporter"
 	"go/ast"
 	"go/token"
 	"sort"

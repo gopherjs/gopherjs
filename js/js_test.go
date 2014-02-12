@@ -1,7 +1,7 @@
 package js_test
 
 import (
-	"github.com/neelance/gopherjs/js"
+	"github.com/gopherjs/gopherjs/js"
 	"testing"
 	"time"
 )

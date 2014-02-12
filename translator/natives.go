@@ -421,7 +421,7 @@ func init() {
 		"Tick":     `function() { go$notSupported("time.Tick (use time.AfterFunc instead)") }`,
 	}
 
-	pkgNatives["github.com/neelance/gopherjs/js_test"] = map[string]string{
+	pkgNatives["github.com/gopherjs/gopherjs/js_test"] = map[string]string{
 		"init": `
 			dummys = {
 				someBool: true,

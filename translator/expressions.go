@@ -1125,7 +1125,7 @@ func (c *pkgContext) loadStruct(array, target string, s *types.Struct) string {
 
 func (c *pkgContext) typeCheck(of string, to types.Type) string {
 	if in, isInterface := to.Underlying().(*types.Interface); isInterface {
-		if in.MethodSet().Len() == 0 {
+		if in.Empty() {
 			return "true"
 		}
 		return fmt.Sprintf("%s.implementedBy.indexOf(%s) !== -1", c.typeName(to), of)

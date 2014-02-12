@@ -40,7 +40,8 @@ func Write(pkg *types.Package, out io.Writer, sizes types.Sizes) {
 		case *types.TypeName:
 			fmt.Fprintf(out, "type %s %s\n", e.makeName(o), e.makeType(o.Type().Underlying()))
 			if _, isInterface := o.Type().Underlying().(*types.Interface); !isInterface {
-				writeMethods := func(methods *types.MethodSet) {
+				writeMethods := func(t types.Type) {
+					methods := types.NewMethodSet(t)
 					for i := 0; i < methods.Len(); i++ {
 						m := methods.At(i)
 						if len(m.Index()) > 1 {
@@ -49,8 +50,8 @@ func Write(pkg *types.Package, out io.Writer, sizes types.Sizes) {
 						out.Write([]byte("func (? " + e.makeType(m.Recv()) + ") " + e.makeName(m.Obj()) + e.makeSignature(m.Type()) + "\n"))
 					}
 				}
-				writeMethods(o.Type().MethodSet())
-				writeMethods(types.NewPointer(o.Type()).MethodSet())
+				writeMethods(o.Type())
+				writeMethods(types.NewPointer(o.Type()))
 			}
 		case *types.Func:
 			out.Write([]byte("func " + e.makeName(o) + e.makeSignature(o.Type()) + "\n"))

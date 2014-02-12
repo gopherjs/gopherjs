@@ -95,7 +95,7 @@ func WriteInterfaces(dependencies []string, w io.Writer, merge bool) {
 	}
 	for _, t := range allTypeNames {
 		if in, isInterface := t.Type().Underlying().(*types.Interface); isInterface {
-			if in.MethodSet().Len() == 0 {
+			if in.Empty() {
 				continue
 			}
 			implementedBy := make(map[string]bool, 0)

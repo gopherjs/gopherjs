@@ -365,7 +365,7 @@ func (c *pkgContext) translateType(o *types.TypeName) {
 				if !isPointer && !isUnderlyingInterface {
 					fieldType = types.NewPointer(fieldType) // strange, seems like a bug in go/types
 				}
-				methods := fieldType.MethodSet()
+				methods := types.NewMethodSet(fieldType)
 				for j := 0; j < methods.Len(); j++ {
 					name := methods.At(j).Obj().Name()
 					sig := methods.At(j).Type().(*types.Signature)
@@ -399,7 +399,7 @@ func (c *pkgContext) initType(o types.Object) {
 	}
 	if _, isInterface := o.Type().Underlying().(*types.Interface); !isInterface {
 		writeMethodSet := func(t types.Type) {
-			methodSet := t.MethodSet()
+			methodSet := types.NewMethodSet(t)
 			if methodSet.Len() == 0 {
 				return
 			}

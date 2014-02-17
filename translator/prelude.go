@@ -12,7 +12,7 @@ if (typeof window !== "undefined") {
 	go$global = GLOBAL;
 }
 
-var go$idCounter = 1;
+var go$idCounter = 0;
 var go$keys = function(m) { return m ? Object.keys(m) : []; };
 var go$min = Math.min;
 var go$parseInt = parseInt;
@@ -20,6 +20,14 @@ var go$parseFloat = parseFloat;
 var go$reflect, go$newStringPtr;
 var Go$Array = Array;
 var Go$Error = Error;
+
+var go$floatKey = function(f) {
+	if (f !== f) {
+		go$idCounter++;
+		return "NaN$" + go$idCounter;
+	}
+	return String(f);
+};
 
 var go$mapArray = function(array, f) {
 	var newArray = new array.constructor(array.length), i;
@@ -42,12 +50,16 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 	case "Uint16":
 	case "Uint32":
 	case "Uintptr":
-	case "Float32":
-	case "Float64":
 	case "String":
 	case "UnsafePointer":
 		typ = function(v) { this.go$val = v; };
 		typ.prototype.go$key = function() { return string + "$" + this.go$val; };
+		break;
+
+	case "Float32":
+	case "Float64":
+		typ = function(v) { this.go$val = v; };
+		typ.prototype.go$key = function() { return string + "$" + go$floatKey(this.go$val); };
 		break;
 
 	case "Int64":
@@ -104,8 +116,8 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ = function() { this.go$val = this; };
 		typ.prototype.go$key = function() {
 			if (this.go$id === undefined) {
-				this.go$id = go$idCounter;
 				go$idCounter++;
+				this.go$id = go$idCounter;
 			}
 			return String(this.go$id);
 		};
@@ -162,8 +174,8 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		};
 		typ.prototype.go$key = function() {
 			if (this.go$id === undefined) {
-				this.go$id = go$idCounter;
 				go$idCounter++;
+				this.go$id = go$idCounter;
 			}
 			return String(this.go$id);
 		};

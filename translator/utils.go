@@ -358,7 +358,10 @@ func (c *pkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 		return fmt.Sprintf("(new %s(%s)).go$key()", c.typeName(keyType), c.translateExpr(expr))
 	case *types.Basic:
 		if is64Bit(t) {
-			return fmt.Sprintf("%s.go$key()", c.translateImplicitConversion(expr, keyType))
+			return fmt.Sprintf("%s.go$key()", c.translateExpr(expr))
+		}
+		if t.Info()&types.IsFloat != 0 {
+			return fmt.Sprintf("go$floatKey(%s)", c.translateExpr(expr))
 		}
 		return c.translateImplicitConversion(expr, keyType).String()
 	case *types.Chan, *types.Pointer:

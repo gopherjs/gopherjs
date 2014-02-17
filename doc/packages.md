@@ -75,7 +75,7 @@
 | -- crc64        | yes                   |                                   |
 | -- fnv          | yes                   |                                   |
 | html            | yes                   |                                   |
-| -- template     | yes                   | requires text.template.patch      |
+| -- template     | yes                   |                                   |
 | image           | yes                   |                                   |
 | -- color        | yes                   |                                   |
 | -- -- palette   | (no tests)            |                                   |
@@ -90,7 +90,7 @@
 | log             | not yet               |                                   |
 | -- syslog       | no                    |                                   |
 | math            | yes                   |                                   |
-| -- big          | yes                   | use math.big.patch for speed      |
+| -- big          | yes                   |                                   |
 | -- cmplx        | yes                   |                                   |
 | -- rand         | yes                   |                                   |
 | mime            | yes                   |                                   |
@@ -135,7 +135,7 @@
 | text            |                       |                                   |
 | -- scanner      | yes                   |                                   |
 | -- tabwriter    | yes                   |                                   |
-| -- template     | yes                   | requires text.template.patch      |
+| -- template     | yes                   |                                   |
 | -- -- parse     | yes                   |                                   |
 | time            | partially             | AfterFunc only                    |
 | unicode         | yes                   |                                   |

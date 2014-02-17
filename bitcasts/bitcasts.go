@@ -94,6 +94,11 @@ func Float32bits(f float32) uint32 {
 		f *= 2
 	}
 
+	r := math.Mod(float64(f), 2)
+	if (r > 0.5 && r < 1) || r >= 1.5 { // round to nearest even
+		f++
+	}
+
 	return s | uint32(e)<<23 | (uint32(f) &^ (1 << 23))
 }
 

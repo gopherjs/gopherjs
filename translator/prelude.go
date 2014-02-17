@@ -486,6 +486,12 @@ var go$newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });
 };
 
+var go$ldexp = function(frac, exp) {
+	if (frac === 0) { return frac; }
+	if (exp >= 1024) { return frac * Math.pow(2, 1023) * Math.pow(2, exp - 1023); }
+	if (exp <= -1024) { return frac * Math.pow(2, -1023) * Math.pow(2, exp + 1023); }
+	return frac * Math.pow(2, exp);
+};
 var go$float32bits = function(f) {
 	var s, e, r;
 	if (f === 0) {
@@ -522,6 +528,28 @@ var go$float32bits = function(f) {
 		f++;
 	}
 	return (((s | (e << 23 >>> 0)) >>> 0) | (((f >> 0) & ~8388608))) >>> 0;
+};
+var go$float32frombits = function(b) {
+	var s, e, m;
+	s = 1;
+	if (((b & 2147483648) >>> 0) !== 0) {
+		s = -1;
+	}
+	e = (((b >>> 23 >>> 0)) & 255) >>> 0;
+	m = (b & 8388607) >>> 0;
+	if (e === 255) {
+		if (m === 0) {
+			return s / 0;
+		}
+		return 0/0;
+	}
+	if (e !== 0) {
+		m = m + 8388608 >>> 0;
+	}
+	if (e === 0) {
+		e = 1;
+	}
+	return go$ldexp(m, e - 127 - 23) * s;
 };
 
 var go$flatten64 = function(x) {

@@ -82,30 +82,25 @@ func init() {
 	}
 
 	pkgNatives["math"] = map[string]string{
-		"Abs":      `Math.abs`,
-		"Acos":     `Math.acos`,
-		"Asin":     `Math.asin`,
-		"Atan":     `Math.atan`,
-		"Atan2":    `Math.atan2`,
-		"Ceil":     `Math.ceil`,
-		"Copysign": `function(x, y) { return (x < 0 || 1/x === 1/-0) !== (y < 0 || 1/y === 1/-0) ? -x : x; }`,
-		"Cos":      `Math.cos`,
-		"Dim":      `function(x, y) { return Math.max(x - y, 0); }`,
-		"Exp":      `Math.exp`,
-		"Exp2":     `function(x) { return Math.pow(2, x); }`,
-		"Expm1":    `function(x) { return expm1(x); }`,
-		"Floor":    `Math.floor`,
-		"Frexp":    `function(f) { return frexp(f); }`,
-		"Hypot":    `function(p, q) { return hypot(p, q); }`,
-		"Inf":      `function(sign) { return sign >= 0 ? 1/0 : -1/0; }`,
-		"IsInf":    `function(f, sign) { if (f === -1/0) { return sign <= 0; } if (f === 1/0) { return sign >= 0; } return false; }`,
-		"IsNaN":    `function(f) { return f !== f; }`,
-		"Ldexp": `function(frac, exp) {
-			if (frac === 0) { return frac; }
-			if (exp >= 1024) { return frac * Math.pow(2, 1023) * Math.pow(2, exp - 1023); }
-			if (exp <= -1024) { return frac * Math.pow(2, -1023) * Math.pow(2, exp + 1023); }
-			return frac * Math.pow(2, exp);
-		}`,
+		"Abs":       `Math.abs`,
+		"Acos":      `Math.acos`,
+		"Asin":      `Math.asin`,
+		"Atan":      `Math.atan`,
+		"Atan2":     `Math.atan2`,
+		"Ceil":      `Math.ceil`,
+		"Copysign":  `function(x, y) { return (x < 0 || 1/x === 1/-0) !== (y < 0 || 1/y === 1/-0) ? -x : x; }`,
+		"Cos":       `Math.cos`,
+		"Dim":       `function(x, y) { return Math.max(x - y, 0); }`,
+		"Exp":       `Math.exp`,
+		"Exp2":      `function(x) { return Math.pow(2, x); }`,
+		"Expm1":     `function(x) { return expm1(x); }`,
+		"Floor":     `Math.floor`,
+		"Frexp":     `function(f) { return frexp(f); }`,
+		"Hypot":     `function(p, q) { return hypot(p, q); }`,
+		"Inf":       `function(sign) { return sign >= 0 ? 1/0 : -1/0; }`,
+		"IsInf":     `function(f, sign) { if (f === -1/0) { return sign <= 0; } if (f === 1/0) { return sign >= 0; } return false; }`,
+		"IsNaN":     `function(f) { return f !== f; }`,
+		"Ldexp":     `go$ldexp`,
 		"Log":       `Math.log`,
 		"Log10":     `function(x) { return log10(x); }`,
 		"Log1p":     `function(x) { return log1p(x); }`,
@@ -125,29 +120,8 @@ func init() {
 		"Trunc":     `function(x) { return (x === 1/0 || x === -1/0 || x !== x || 1/x === 1/-0) ? x : x >> 0; }`,
 
 		// generated from bitcasts/bitcasts.go
-		"Float32bits": `go$float32bits`,
-		"Float32frombits": `function(b) {
-			var s, e, m;
-			s = 1;
-			if (((b & 2147483648) >>> 0) !== 0) {
-				s = -1;
-			}
-			e = (((b >>> 23 >>> 0)) & 255) >>> 0;
-			m = (b & 8388607) >>> 0;
-			if (e === 255) {
-				if (m === 0) {
-					return s / 0;
-				}
-				return 0/0;
-			}
-			if (e !== 0) {
-				m = m + 8388608 >>> 0;
-			}
-			if (e === 0) {
-				e = 1;
-			}
-			return Ldexp(m, e - 127 - 23) * s;
-		}`,
+		"Float32bits":     `go$float32bits`,
+		"Float32frombits": `go$float32frombits`,
 		"Float64bits": `function(f) {
 			var s, e, x, x$1, x$2, x$3;
 			if (f === 0) {
@@ -201,7 +175,7 @@ func init() {
 			if ((e.high === 0 && e.low === 0)) {
 				e = new Go$Uint64(0, 1);
 			}
-			return Ldexp(go$flatten64(m), ((e.low >> 0) - 1023 >> 0) - 52 >> 0) * s;
+			return go$ldexp(go$flatten64(m), ((e.low >> 0) - 1023 >> 0) - 52 >> 0) * s;
 		}`,
 	}
 

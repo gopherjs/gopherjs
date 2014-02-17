@@ -949,6 +949,9 @@ func (c *pkgContext) translateConversion(expr ast.Expr, desiredType types.Type) 
 				return c.fixNumber(c.translateExpr(expr), t)
 			}
 		case t.Info()&types.IsFloat != 0:
+			if t.Kind() == types.Float64 && exprType.Underlying().(*types.Basic).Kind() == types.Float32 {
+				return c.formatExpr("go$float32frombits(go$float32bits(%s))", c.flatten64(expr))
+			}
 			return c.flatten64(expr)
 		case t.Info()&types.IsComplex != 0:
 			return c.formatExpr("new %1s(%2r, %2i)", c.typeName(desiredType), expr)

@@ -1237,9 +1237,9 @@ var go$interfaceIsEqual = function(a, b) {
 	}
 	switch (a.constructor.kind) {
 	case "Float32":
-		return go$float32bits(a.go$val) === go$float32bits(b.go$val);
+		return go$float32IsEqual(a.go$val, b.go$val);
 	case "Complex64":
-		return go$float32bits(a.go$val.real) === go$float32bits(b.go$val.real) && go$float32bits(a.go$val.imag) === go$float32bits(b.go$val.imag);
+		return go$float32IsEqual(a.go$val.real, b.go$val.real) && go$float32IsEqual(a.go$val.imag, b.go$val.imag);
 	case "Complex128":
 		return a.go$val.real === b.go$val.real && a.go$val.imag === b.go$val.imag;
 	case "Int64":
@@ -1263,6 +1263,9 @@ var go$interfaceIsEqual = function(a, b) {
 		return a.go$val === b.go$val;
 	}
 };
+var go$float32IsEqual = function(a, b) {
+	return a === a && b === b && go$float32bits(a) === go$float32bits(b);
+}
 var go$arrayIsEqual = function(a, b) {
 	if (a.length != b.length) {
 		return false;

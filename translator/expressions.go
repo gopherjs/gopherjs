@@ -271,6 +271,9 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 			if basic.Info()&types.IsComplex != 0 {
 				switch e.Op {
 				case token.EQL:
+					if basic.Kind() == types.Complex64 {
+						return c.formatExpr("(go$float32IsEqual(%1r, %2r) && go$float32IsEqual(%1i, %2i))", e.X, e.Y)
+					}
 					return c.formatExpr("(%1r === %2r && %1i === %2i)", e.X, e.Y)
 				case token.ADD, token.SUB:
 					return c.formatExpr("new %3s(%1r %4t %2r, %1i %4t %2i)", e.X, e.Y, c.typeName(t), e.Op)
@@ -286,7 +289,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 			switch e.Op {
 			case token.EQL:
 				if basic.Kind() == types.Float32 {
-					return c.formatParenExpr("go$float32bits(%s) === go$float32bits(%s)", c.translateExpr(e.X), c.translateExpr(e.Y))
+					return c.formatParenExpr("go$float32IsEqual(%s, %s)", c.translateExpr(e.X), c.translateExpr(e.Y))
 				}
 				return c.formatParenExpr("%s === %s", c.translateExpr(e.X), c.translateExpr(e.Y))
 			case token.LSS, token.LEQ, token.GTR, token.GEQ:

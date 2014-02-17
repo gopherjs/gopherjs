@@ -223,6 +223,12 @@ func init() {
 					throw go$panic(new ValueError.Ptr("reflect.Zero", this.kind()));
 				}
 			};
+			var makeIndir = function(t, v) {
+				if (t.size > 4) {
+					return go$newDataPointer(v, t.ptrTo().jsType);
+				}
+				return v;
+			};
 		`,
 
 		"TypeOf": `function(i) {
@@ -410,7 +416,7 @@ func init() {
 			if (entry === undefined) {
 				return [undefined, false];
 			}
-			return [entry.v, true];
+			return [makeIndir(t.Elem(), entry.v), true];
 		}`,
 		"mapassign": `function(t, m, key, val, ok) {
 			if (!ok) {
@@ -428,14 +434,14 @@ func init() {
 			return go$keys(m).length;
 		}`,
 		"mapiterinit": `function(t, m) {
-			return [m, go$keys(m), 0];
+			return {t: t, m: m, keys: go$keys(m), i: 0};
 		}`,
 		"mapiterkey": `function(it) {
-			var key = it[1][it[2]];
-			return [it[0][key].k, true];
+			var key = it.keys[it.i];
+			return [makeIndir(it.t.Key(), it.m[key].k), true];
 		}`,
 		"mapiternext": `function(it) {
-			it[2]++;
+			it.i++;
 		}`,
 		"chancap":   `function(ch) { go$notSupported("channels"); }`,
 		"chanclose": `function(ch) { go$notSupported("channels"); }`,

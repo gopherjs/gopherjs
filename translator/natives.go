@@ -129,19 +129,19 @@ func init() {
 		"Float32frombits": `function(b) {
 			var s, e, m;
 			s = 1;
-			if (!(((b & 2147483648) >>> 0) === 0)) {
+			if (((b & 2147483648) >>> 0) !== 0) {
 				s = -1;
 			}
-			e = (((((b >>> 23) >>> 0)) & 255) >>> 0);
-			m = ((b & 8388607) >>> 0);
+			e = (((b >>> 23 >>> 0)) & 255) >>> 0;
+			m = (b & 8388607) >>> 0;
 			if (e === 255) {
 				if (m === 0) {
 					return s / 0;
 				}
 				return 0/0;
 			}
-			if (!(e === 0)) {
-				m = (m + (8388608) >>> 0);
+			if (e !== 0) {
+				m = m + 8388608 >>> 0;
 			}
 			if (e === 0) {
 				e = 1;
@@ -149,14 +149,14 @@ func init() {
 			return Ldexp(m, e - 127 - 23) * s;
 		}`,
 		"Float64bits": `function(f) {
-			var s, e, x, y, x$1, y$1, x$2, y$2;
+			var s, e, x, x$1, x$2, x$3;
 			if (f === 0) {
 				if (f === 0 && 1 / f === 1 / -0) {
 					return new Go$Uint64(2147483648, 0);
 				}
 				return new Go$Uint64(0, 0);
 			}
-			if (!(f === f)) {
+			if (f !== f) {
 				return new Go$Uint64(2146959360, 1);
 			}
 			s = new Go$Uint64(0, 0);
@@ -166,42 +166,42 @@ func init() {
 			}
 			e = 1075;
 			while (f >= 9.007199254740992e+15) {
-				f = f / (2);
+				f = f / 2;
 				if (e === 2047) {
 					break;
 				}
-				e = (e + (1) >>> 0);
+				e = e + 1 >>> 0;
 			}
 			while (f < 4.503599627370496e+15) {
-				e = (e - (1) >>> 0);
+				e = e - 1 >>> 0;
 				if (e === 0) {
 					break;
 				}
-				f = f * (2);
+				f = f * 2;
 			}
-			return (x$2 = (x = s, y = go$shiftLeft64(new Go$Uint64(0, e), 52), new Go$Uint64(x.high | y.high, (x.low | y.low) >>> 0)), y$2 = ((x$1 = new Go$Uint64(0, f), y$1 = new Go$Uint64(1048576, 0), new Go$Uint64(x$1.high &~ y$1.high, (x$1.low &~ y$1.low) >>> 0))), new Go$Uint64(x$2.high | y$2.high, (x$2.low | y$2.low) >>> 0));
+			return (x = (x$1 = go$shiftLeft64(new Go$Uint64(0, e), 52), new Go$Uint64(s.high | x$1.high, (s.low | x$1.low) >>> 0)), x$2 = (x$3 = new Go$Uint64(0, f), new Go$Uint64(x$3.high &~ 1048576, (x$3.low &~ 0) >>> 0)), new Go$Uint64(x.high | x$2.high, (x.low | x$2.low) >>> 0));
 		}`,
 		"Float64frombits": `function(b) {
-			var s, x, y, x$1, y$1, x$2, y$2, e, x$3, y$3, m, x$4, y$4, x$5, y$5, x$6, y$6, x$7, y$7, x$8, y$8;
+			var s, x, x$1, e, m;
 			s = 1;
-			if (!((x$1 = (x = b, y = new Go$Uint64(2147483648, 0), new Go$Uint64(x.high & y.high, (x.low & y.low) >>> 0)), y$1 = new Go$Uint64(0, 0), x$1.high === y$1.high && x$1.low === y$1.low))) {
+			if (!((x = new Go$Uint64(b.high & 2147483648, (b.low & 0) >>> 0), (x.high === 0 && x.low === 0)))) {
 				s = -1;
 			}
-			e = (x$2 = (go$shiftRightUint64(b, 52)), y$2 = new Go$Uint64(0, 2047), new Go$Uint64(x$2.high & y$2.high, (x$2.low & y$2.low) >>> 0));
-			m = (x$3 = b, y$3 = new Go$Uint64(1048575, 4294967295), new Go$Uint64(x$3.high & y$3.high, (x$3.low & y$3.low) >>> 0));
-			if ((x$4 = e, y$4 = new Go$Uint64(0, 2047), x$4.high === y$4.high && x$4.low === y$4.low)) {
-				if ((x$5 = m, y$5 = new Go$Uint64(0, 0), x$5.high === y$5.high && x$5.low === y$5.low)) {
+			e = (x$1 = go$shiftRightUint64(b, 52), new Go$Uint64(x$1.high & 0, (x$1.low & 2047) >>> 0));
+			m = new Go$Uint64(b.high & 1048575, (b.low & 4294967295) >>> 0);
+			if ((e.high === 0 && e.low === 2047)) {
+				if ((m.high === 0 && m.low === 0)) {
 					return s / 0;
 				}
 				return 0/0;
 			}
-			if (!((x$6 = e, y$6 = new Go$Uint64(0, 0), x$6.high === y$6.high && x$6.low === y$6.low))) {
-				m = (x$7 = m, y$7 = (new Go$Uint64(1048576, 0)), new Go$Uint64(x$7.high + y$7.high, x$7.low + y$7.low));
+			if (!((e.high === 0 && e.low === 0))) {
+				m = new Go$Uint64(m.high + 1048576, m.low + 0);
 			}
-			if ((x$8 = e, y$8 = new Go$Uint64(0, 0), x$8.high === y$8.high && x$8.low === y$8.low)) {
+			if ((e.high === 0 && e.low === 0)) {
 				e = new Go$Uint64(0, 1);
 			}
-			return Ldexp((m.high * 4294967296 + m.low), e.low - 1023 - 52) * s;
+			return Ldexp(go$flatten64(m), ((e.low >> 0) - 1023 >> 0) - 52 >> 0) * s;
 		}`,
 	}
 

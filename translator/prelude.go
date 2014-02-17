@@ -494,7 +494,7 @@ var go$float32bits = function(f) {
 		}
 		return 0;
 	}
-	if (!(f === f)) {
+	if (f !== f) {
 		return 2143289344;
 	}
 	s = 0;
@@ -504,24 +504,24 @@ var go$float32bits = function(f) {
 	}
 	e = 150;
 	while (f >= 1.6777216e+07) {
-		f = f / (2);
+		f = f / 2;
 		if (e === 255) {
 			break;
 		}
-		e = (e + (1) >>> 0);
+		e = e + 1 >>> 0;
 	}
 	while (f < 8.388608e+06) {
-		e = (e - (1) >>> 0);
+		e = e - 1 >>> 0;
 		if (e === 0) {
 			break;
 		}
-		f = f * (2);
+		f = f * 2;
 	}
 	r = f % 2;
 	if ((r > 0.5 && r < 1) || r >= 1.5) {
 		f++;
 	}
-	return ((((s | (((e >>> 0) << 23) >>> 0)) >>> 0) | (((((f >> 0) >>> 0) &~ 8388608) >>> 0))) >>> 0);
+	return (((s | (e << 23 >>> 0)) >>> 0) | (((f >> 0) & ~8388608))) >>> 0;
 };
 
 var go$flatten64 = function(x) {

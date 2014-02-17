@@ -309,7 +309,7 @@ func init() {
 	pkgNatives["syscall"] = map[string]string{
 		"init": `
 			if (go$pkg.Syscall15 !== undefined) { // windows
-				Syscall = Syscall6 = Syscall9 = Syscall12 = Syscall15 = go$pkg.Syscall = go$pkg.Syscall6 = go$pkg.Syscall9 = go$pkg.Syscall12 = go$pkg.Syscall15 = loadlibrary = getprocaddress = function() { throw "Syscalls not available." };
+				Syscall = Syscall6 = Syscall9 = Syscall12 = Syscall15 = go$pkg.Syscall = go$pkg.Syscall6 = go$pkg.Syscall9 = go$pkg.Syscall12 = go$pkg.Syscall15 = loadlibrary = getprocaddress = function() { throw new Error("Syscalls not available."); };
 				getStdHandle = GetCommandLine = go$pkg.GetCommandLine = function() {};
 				CommandLineToArgv = go$pkg.CommandLineToArgv = function() { return [null, {}]; };
 				Getenv = go$pkg.Getenv = function(key) { return ["", false]; };
@@ -318,7 +318,7 @@ func init() {
 				go$pkg.go$setSyscall = function(f) {
 					Syscall = Syscall6 = RawSyscall = RawSyscall6 = go$pkg.Syscall = go$pkg.Syscall6 = go$pkg.RawSyscall = go$pkg.RawSyscall6 = f;
 				}
-				go$pkg.go$setSyscall(function() { throw "Syscalls not available." });
+				go$pkg.go$setSyscall(function() { throw new Error("Syscalls not available."); });
 				envs = new (go$sliceType(Go$String))(new Array(0));
 			} else {
 				var syscall = require("syscall");

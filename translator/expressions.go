@@ -285,6 +285,9 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 
 			switch e.Op {
 			case token.EQL:
+				if basic.Kind() == types.Float32 {
+					return c.formatParenExpr("go$float32bits(%s) === go$float32bits(%s)", c.translateExpr(e.X), c.translateExpr(e.Y))
+				}
 				return c.formatParenExpr("%s === %s", c.translateExpr(e.X), c.translateExpr(e.Y))
 			case token.LSS, token.LEQ, token.GTR, token.GEQ:
 				return c.formatExpr("%s %t %s", c.translateExpr(e.X), e.Op, c.translateExpr(e.Y))

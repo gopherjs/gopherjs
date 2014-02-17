@@ -487,7 +487,7 @@ var go$newDataPointer = function(data, constructor) {
 };
 
 var go$float32bits = function(f) {
-	var s, e;
+	var s, e, r;
 	if (f === 0) {
 		if (f === 0 && 1 / f === 1 / -0) {
 			return 2147483648;
@@ -517,7 +517,11 @@ var go$float32bits = function(f) {
 		}
 		f = f * (2);
 	}
-	return ((((s | (((e >>> 0) << 23) >>> 0)) >>> 0) | ((((((f + 0.5) >> 0) >>> 0) &~ 8388608) >>> 0))) >>> 0);
+	r = f % 2;
+	if ((r > 0.5 && r < 1) || r >= 1.5) {
+		f++;
+	}
+	return ((((s | (((e >>> 0) << 23) >>> 0)) >>> 0) | (((((f >> 0) >>> 0) &~ 8388608) >>> 0))) >>> 0);
 };
 
 var go$flatten64 = function(x) {

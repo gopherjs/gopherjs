@@ -504,16 +504,6 @@ func buildPackage(pkg *packageData) error {
 		names = append(names, pkg.TestGoFiles...)
 	}
 	for _, name := range names {
-		if pkg.ImportPath == "runtime" && strings.HasPrefix(name, "zgoarch_") {
-			file, _ := parser.ParseFile(fileSet, name, "package runtime\nconst theGoarch = `js`\n", 0)
-			files = append(files, file)
-			continue
-		}
-		if pkg.ImportPath == "crypto/rc4" && name == "rc4_ref.go" { // apply patch https://codereview.appspot.com/40540049/
-			file, _ := parser.ParseFile(fileSet, name, "package rc4\nfunc (c *Cipher) XORKeyStream(dst, src []byte) {\ni, j := c.i, c.j\nfor k, v := range src {\ni += 1\nj += uint8(c.s[i])\nc.s[i], c.s[j] = c.s[j], c.s[i]\ndst[k] = v ^ uint8(c.s[uint8(c.s[i]+c.s[j])])\n}\nc.i, c.j = i, j\n}\n", 0)
-			files = append(files, file)
-			continue
-		}
 		if !filepath.IsAbs(name) {
 			name = filepath.Join(pkg.Dir, name)
 		}
@@ -527,6 +517,7 @@ func buildPackage(pkg *packageData) error {
 				name = "." + string(filepath.Separator) + name
 			}
 		}
+
 		file, err := parser.ParseFile(fileSet, name, r, 0)
 		r.Close()
 		if err != nil {
@@ -539,7 +530,8 @@ func buildPackage(pkg *packageData) error {
 			errList = append(errList, err)
 			continue
 		}
-		files = append(files, file)
+
+		files = append(files, applyPatches(file, pkg.ImportPath, filepath.Base(name)))
 	}
 	if errList != nil {
 		return errList
@@ -575,6 +567,42 @@ func buildPackage(pkg *packageData) error {
 	}
 
 	return nil
+}
+
+func applyPatches(file *ast.File, importPath, basename string) *ast.File {
+	if importPath == "runtime" && strings.HasPrefix(basename, "zgoarch_") {
+		newFile, _ := parser.ParseFile(fileSet, basename, "package runtime\nconst theGoarch = `js`\n", 0)
+		return newFile
+	}
+
+	if importPath == "crypto/rc4" && basename == "rc4_ref.go" { // apply patch https://codereview.appspot.com/40540049/
+		newFile, _ := parser.ParseFile(fileSet, basename, "package rc4\nfunc (c *Cipher) XORKeyStream(dst, src []byte) {\ni, j := c.i, c.j\nfor k, v := range src {\ni += 1\nj += uint8(c.s[i])\nc.s[i], c.s[j] = c.s[j], c.s[i]\ndst[k] = v ^ uint8(c.s[uint8(c.s[i]+c.s[j])])\n}\nc.i, c.j = i, j\n}\n", 0)
+		return newFile
+	}
+
+	if importPath == "encoding/json" && basename == "stream_test.go" {
+		for i, decl := range file.Decls {
+			switch d := decl.(type) {
+			case *ast.GenDecl:
+				if d.Tok == token.IMPORT {
+					for j, spec := range d.Specs {
+						if spec.(*ast.ImportSpec).Path.Value == `"net"` {
+							d.Specs[j] = d.Specs[len(d.Specs)-1]
+							d.Specs = d.Specs[:len(d.Specs)-1]
+							break
+						}
+					}
+				}
+			case *ast.FuncDecl:
+				if d.Name.String() == "TestBlocking" {
+					file.Decls[i] = file.Decls[len(file.Decls)-1]
+					file.Decls = file.Decls[:len(file.Decls)-1]
+				}
+			}
+		}
+	}
+
+	return file
 }
 
 func writeLibraryPackage(pkg *packageData, pkgObj string) error {

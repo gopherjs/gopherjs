@@ -1,3 +1,5 @@
 language: go
 go: 1.2
 script: ./travis-test.sh
+node_js:
+  - "0.11"

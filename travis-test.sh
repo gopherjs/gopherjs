@@ -5,12 +5,11 @@ set -e
 # wget https://launchpad.net/~rwky/+archive/nodejs-unstable/+files/nodejs_0.11.11-rwky1~precise_amd64.deb
 # sudo dpkg -i nodejs_0.11.11-rwky1~precise_amd64.deb
 
-echo "running nvm"
-
-ls $HOME/.nvm/
-
+echo "loading nvm"
 . $HOME/.nvm/nvm.sh
+echo "installing node"
 nvm install 0.11
+echo "using node"
 nvm use 0.11
 
 which node

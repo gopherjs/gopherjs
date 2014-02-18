@@ -1,17 +1,23 @@
 #! /bin/bash
 set -e
 
+echo -en 'travis_fold:start:nvm\\r'
 curl https://raw.github.com/creationix/nvm/master/install-gitless.sh | bash
 . $HOME/.nvm/nvm.sh
 nvm install 0.11
 nvm use 0.11
+echo -en 'travis_fold:end:nvm\\r'
 
-npm install --silent --global node-gyp
+echo -en 'travis_fold:start:node-gyp\\r'
+npm install --global node-gyp
+echo -en 'travis_fold:end:node-gyp\\r'
 
+echo -en 'travis_fold:start:syscall.node\\r'
 cd node-syscall
 node-gyp rebuild
 mkdir -p ~/.node_libraries/
 cp build/Release/syscall.node ~/.node_libraries/syscall.node
+echo -en 'travis_fold:end:syscall.node\\r'
 
 $HOME/gopath/bin/gopherjs install -all
 $HOME/gopath/bin/gopherjs test github.com/gopherjs/gopherjs/js

@@ -1,5 +1,5 @@
 #! /bin/bash
-set -xe
+set -e
 
 curl https://raw.github.com/creationix/nvm/master/install-gitless.sh | bash
 . $HOME/.nvm/nvm.sh

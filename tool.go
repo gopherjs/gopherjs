@@ -283,7 +283,7 @@ func tool() error {
 		testingOutput, _ := importPackage("testing")
 		mainPkg.Archive.AddDependenciesOf(testingOutput)
 
-		mainFunc := []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\n")
+		mainFunc := []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\nvar ok = true;\n")
 		for _, pkgPath := range testFlags.Args() {
 			pkgPath = filepath.ToSlash(pkgPath)
 
@@ -317,9 +317,9 @@ func tool() error {
 				collectTests(testPkg)
 			}
 
-			mainFunc = append(mainFunc, []byte(fmt.Sprintf(`go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]);`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
+			mainFunc = append(mainFunc, []byte(fmt.Sprintf(`ok = go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]) && ok;`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
 		}
-		mainFunc = append(mainFunc, []byte("};\n")...)
+		mainFunc = append(mainFunc, []byte("process.exit(ok ? 0 : 1);\n};\n")...)
 		mainPkg.Archive.Functions = []translator.Function{
 			translator.Function{Name: "main", Code: mainFunc},
 			translator.Function{Name: "init", Code: []byte("go$pkg.init = function() {};\n")},

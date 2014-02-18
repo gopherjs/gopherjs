@@ -347,10 +347,10 @@ func init() {
 			go$pkg.RunTests2 = function(pkgPath, dir, names, tests) {
 				if (tests.length === 0) {
 					console.log("?   \t" + pkgPath + "\t[no test files]");
-					return;
+					return true;
 				}
 				os.Open(dir)[0].Chdir();
-				var start = time.Now(), status = "ok  ", i;
+				var start = time.Now(), ok = true, i;
 				for (i = 0; i < tests.length; i++) {
 					var t = new T.Ptr(new common.Ptr(undefined, undefined, undefined, undefined, time.Now(), undefined, undefined, undefined), names[i], null);
 					var err = null;
@@ -377,12 +377,11 @@ func init() {
 					if (err !== null) {
 						throw err;
 					}
-					if (t.common.failed) {
-						status = "FAIL";
-					}
+					ok = ok && !t.common.failed;
 				}
 				var duration = time.Now().Sub(start);
-				fmt.Printf("%s\t%s\t%.3fs\n", new (go$sliceType(go$emptyInterface))([new Go$String(status), new Go$String(pkgPath), new Go$Float64(duration.Seconds())]));
+				fmt.Printf("%s\t%s\t%.3fs\n", new (go$sliceType(go$emptyInterface))([new Go$String(ok ? "ok  " : "FAIL"), new Go$String(pkgPath), new Go$Float64(duration.Seconds())]));
+				return ok;
 			};
 		`,
 	}

@@ -598,7 +598,7 @@ func applyPatches(file *ast.File, importPath, basename string) *ast.File {
 	}
 
 	switch {
-	case importPath == "bytes" && basename == "equal_test.go":
+	case importPath == "bytes_test" && basename == "equal_test.go":
 		file, _ = parser.ParseFile(fileSet, basename, "package bytes_test", 0)
 
 	case importPath == "crypto/rc4" && basename == "rc4_ref.go": // see https://codereview.appspot.com/40540049/

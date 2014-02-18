@@ -2,12 +2,10 @@
 #include <node.h>
 #include <v8.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 #include <errno.h>
 
 using namespace v8;
-
-#define SYS_FORK 2
-#define SYS_PIPE 42
 
 intptr_t toNative(Local<Value> value) {
   if (value.IsEmpty()) {
@@ -32,10 +30,10 @@ void Syscall(const v8::FunctionCallbackInfo<Value>& info) {
   int trap = info[0]->ToInteger()->Value();
   int r1 = 0, r2 = 0;
   switch (trap) {
-  case SYS_FORK:
+  case SYS_fork:
     r1 = fork();
     break;
-  case SYS_PIPE:
+  case SYS_pipe:
     int fd[2];
     r1 = pipe(fd);
     if (r1 == 0) {

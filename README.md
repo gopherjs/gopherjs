@@ -39,5 +39,3 @@ These features are not implemented yet, but on the roadmap:
 - output minification
 - source maps
 - float32 and complex64 currently have the same precision as float64 and complex128
-
-[![Analytics](https://ga-beacon.appspot.com/UA-46799660-1/gopherjs/README.md)](https://github.com/igrigorik/ga-beacon)

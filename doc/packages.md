@@ -142,5 +142,3 @@
 | -- utf16        | yes                   |                                   |
 | -- utf8         | yes                   |                                   |
 | unsafe          | (no tests)            |                                   |
-
-[![Analytics](https://ga-beacon.appspot.com/UA-46799660-1/gopherjs/doc/packages.md)](https://github.com/igrigorik/ga-beacon)

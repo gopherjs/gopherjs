@@ -321,11 +321,15 @@ func init() {
 				go$pkg.go$setSyscall(function() { throw new Error("Syscalls not available."); });
 				envs = new (go$sliceType(Go$String))(new Array(0));
 			} else {
-				var syscall = require("syscall");
-				Syscall = go$pkg.Syscall = syscall.Syscall;
-				Syscall6 = go$pkg.Syscall6 = syscall.Syscall6;
-				RawSyscall = go$pkg.RawSyscall = syscall.Syscall;
-				RawSyscall6 = go$pkg.RawSyscall6 = syscall.Syscall6;
+				try {
+					var syscall = require("syscall");
+					Syscall = go$pkg.Syscall = syscall.Syscall;
+					Syscall6 = go$pkg.Syscall6 = syscall.Syscall6;
+					RawSyscall = go$pkg.RawSyscall = syscall.Syscall;
+					RawSyscall6 = go$pkg.RawSyscall6 = syscall.Syscall6;
+				} catch (e) {
+					Syscall = Syscall6 = RawSyscall = RawSyscall6 = go$pkg.Syscall = go$pkg.Syscall6 = go$pkg.RawSyscall = go$pkg.RawSyscall6 = function() { throw e; };
+				}
 				BytePtrFromString = go$pkg.BytePtrFromString = function(s) { return [go$stringToBytes(s, true), null]; };
 
 				var envkeys = Object.keys(process.env);

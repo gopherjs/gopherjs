@@ -1,8 +1,20 @@
 Using GopherJS with Node.js
 ---------------------------
 
-You can run the generated code with Node.js instead of a browser. However, system calls (e.g. writing to the console via the `fmt` package or most of the `os` functions) will not work until you compile and install the syscall module. If you just need console output, you can use `println` instead.
-The syscall module currently only supports OS X. Please tell me if you would like to have support for other operating systems. On OS X, get the latest Node.js 0.11 release from [here](http://blog.nodejs.org/release/) or via `brew install node --devel`. Then compile and install the module:
+You can run the generated code with Node.js instead of a browser. However, system calls (e.g. writing to the console via the `fmt` package or most of the `os` functions) will not work until you compile and install the syscall module. If you just need console output, you can use `println` instead. The syscall module works on Linux and OS X.
+
+Install Node.js 0.11 with the Node Version Manager...
+```
+curl https://raw.github.com/creationix/nvm/master/install.sh | bash
+. $HOME/.nvm/nvm.sh
+nvm install 0.11
+nvm use 0.11
+```
+... or Homebrew.
+```
+brew install node --devel
+```
+Then compile and install the module:
 ```
 npm install --global node-gyp
 cd src/github.com/gopherjs/gopherjs/node-syscall/

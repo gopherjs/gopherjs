@@ -21,9 +21,8 @@ type Archive struct {
 	GcData       []byte
 	Dependencies []string
 	Imports      []Import
-	Types        []byte
-	Variables    []Decl
-	Functions    []Function
+	Declarations []Decl
+	Tests        []string
 }
 
 type Import struct {
@@ -32,12 +31,9 @@ type Import struct {
 }
 
 type Decl struct {
-	Var string
-}
-
-type Function struct {
-	Name string
-	Code []byte
+	ToplevelName string
+	Var          string
+	BodyCode     []byte
 }
 
 func (a *Archive) AddDependency(path string) {
@@ -56,13 +52,12 @@ func (a *Archive) AddDependenciesOf(other *Archive) {
 }
 
 func (a *Archive) WriteCode(w io.Writer) {
-	fmt.Fprintf(w, "go$packages[\"%s\"] = (function() {\n\tvar go$pkg = {};\n", a.ImportPath)
+	fmt.Fprintf(w, "go$packages[\"%s\"] = (function() {\n", a.ImportPath)
+	vars := []string{"go$pkg = {}"}
 	for _, imp := range a.Imports {
-		fmt.Fprintf(w, "\tvar %s = go$packages[\"%s\"];\n", imp.VarName, imp.Path)
+		vars = append(vars, fmt.Sprintf("%s = go$packages[\"%s\"]", imp.VarName, imp.Path))
 	}
-	w.Write(a.Types)
-	var vars []string
-	for _, d := range a.Variables {
+	for _, d := range a.Declarations {
 		if d.Var != "" {
 			vars = append(vars, d.Var)
 		}
@@ -70,8 +65,8 @@ func (a *Archive) WriteCode(w io.Writer) {
 	if len(vars) != 0 {
 		fmt.Fprintf(w, "\tvar %s;\n", strings.Join(vars, ", "))
 	}
-	for _, f := range a.Functions {
-		w.Write(f.Code)
+	for _, d := range a.Declarations {
+		w.Write(d.BodyCode)
 	}
 	w.Write([]byte("\treturn go$pkg;\n})();\n"))
 }

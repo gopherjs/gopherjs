@@ -212,17 +212,13 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 
 		// types
-		archive.Types = c.CatchOutput(func() {
-			for _, o := range toplevelTypes {
-				typeName := c.objectName(o)
-				c.Printf("var %s;", typeName)
-				c.translateType(o)
-				c.Printf("go$pkg.%s = %s;", typeName, typeName)
-			}
-			for _, o := range toplevelTypes {
-				c.initType(o)
-			}
-		})
+		for _, o := range toplevelTypes {
+			typeName := c.objectName(o)
+			archive.Declarations = append(archive.Declarations, Decl{
+				Var:      typeName,
+				BodyCode: c.CatchOutput(func() { c.translateType(o, true) }),
+			})
+		}
 
 		// variables
 		for _, o := range vars {
@@ -230,31 +226,36 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			if !o.Exported() {
 				d.Var = c.objectName(o)
 			}
-			archive.Variables = append(archive.Variables, d)
+			archive.Declarations = append(archive.Declarations, d)
 		}
 
 		// functions
 		natives := pkgNatives[importPath]
 		for _, fun := range functions {
+			o := c.info.Objects[fun.Name].(*types.Func)
 			funName := fun.Name.Name
+			declVar := c.objectName(o)
 			if fun.Recv != nil {
-				recvType := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature).Recv().Type()
+				recvType := o.Type().(*types.Signature).Recv().Type()
 				ptr, isPointer := recvType.(*types.Pointer)
 				namedRecvType, _ := recvType.(*types.Named)
 				if isPointer {
 					namedRecvType = ptr.Elem().(*types.Named)
 				}
 				funName = namedRecvType.Obj().Name() + "." + funName
+				declVar = ""
 			}
 
 			native := natives[funName]
 			delete(natives, funName)
 
-			f := Function{
-				Name: fun.Name.Name,
-				Code: c.CatchOutput(func() { c.translateFunction(fun, native) }),
+			archive.Declarations = append(archive.Declarations, Decl{
+				Var:      declVar,
+				BodyCode: c.CatchOutput(func() { c.translateFunction(fun, native) }),
+			})
+			if strings.HasPrefix(fun.Name.String(), "Test") {
+				archive.Tests = append(archive.Tests, fun.Name.String())
 			}
-			archive.Functions = append(archive.Functions, f)
 		}
 
 		// init function
@@ -283,6 +284,10 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 
 			c.Printf("go$pkg.init = function() {")
 			c.Indent(func() {
+				for _, o := range toplevelTypes {
+					c.initType(o)
+				}
+
 				var initVarStmts []ast.Stmt
 				varsWithInit := make(map[*types.Var]bool)
 				for _, init := range initOrder {
@@ -314,7 +319,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			})
 			c.Printf("};")
 		})
-		archive.Functions = append(archive.Functions, Function{Name: "init", Code: initCode})
+		archive.Declarations = append(archive.Declarations, Decl{BodyCode: initCode})
 
 		if len(natives) != 0 {
 			panic("not all natives used: " + importPath)
@@ -338,8 +343,12 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	return archive, nil
 }
 
-func (c *pkgContext) translateType(o *types.TypeName) {
+func (c *pkgContext) translateType(o *types.TypeName, toplevel bool) {
 	typeName := c.objectName(o)
+	lhs := typeName
+	if toplevel {
+		lhs += " = go$pkg." + typeName
+	}
 	size := int64(0)
 	switch t := o.Type().Underlying().(type) {
 	case *types.Struct:
@@ -347,7 +356,7 @@ func (c *pkgContext) translateType(o *types.TypeName) {
 		for i := 0; i < t.NumFields(); i++ {
 			params[i] = fieldName(t, i) + "_"
 		}
-		c.Printf(`%s = go$newType(0, "Struct", "%s.%s", "%s", "%s", function(%s) {`, typeName, o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), strings.Join(params, ", "))
+		c.Printf(`%s = go$newType(0, "Struct", "%s.%s", "%s", "%s", function(%s) {`, lhs, o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), strings.Join(params, ", "))
 		c.Indent(func() {
 			c.Printf("this.go$val = this;")
 			for i := 0; i < t.NumFields(); i++ {
@@ -389,7 +398,7 @@ func (c *pkgContext) translateType(o *types.TypeName) {
 			size = sizes32.Sizeof(t)
 		}
 	}
-	c.Printf(`%s = go$newType(%d, "%s", "%s.%s", "%s", "%s", null);`, typeName, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path())
+	c.Printf(`%s = go$newType(%d, "%s", "%s.%s", "%s", "%s", null);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path())
 }
 
 func (c *pkgContext) initType(o types.Object) {
@@ -507,7 +516,7 @@ func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) {
 
 		if fun.Recv == nil {
 			funName := c.objectName(c.info.Objects[fun.Name])
-			lhs := "var " + funName
+			lhs := funName
 			if fun.Name.IsExported() || fun.Name.Name == "main" {
 				lhs += " = go$pkg." + funName
 			}

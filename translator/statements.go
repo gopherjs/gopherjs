@@ -282,7 +282,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		case token.TYPE:
 			for _, spec := range decl.Specs {
 				o := c.info.Objects[spec.(*ast.TypeSpec).Name].(*types.TypeName)
-				c.translateType(o)
+				c.translateType(o, false)
 				c.initType(o)
 			}
 		case token.CONST:

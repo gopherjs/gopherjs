@@ -290,11 +290,9 @@ func tool() error {
 			var names []string
 			var tests []string
 			collectTests := func(pkg *packageData) {
-				for _, f := range pkg.Archive.Functions {
-					if strings.HasPrefix(f.Name, "Test") {
-						names = append(names, f.Name)
-						tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, f.Name))
-					}
+				for _, name := range pkg.Archive.Tests {
+					names = append(names, name)
+					tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
 				}
 				mainPkg.Archive.AddDependenciesOf(pkg.Archive)
 			}
@@ -320,9 +318,9 @@ func tool() error {
 			mainFunc = append(mainFunc, []byte(fmt.Sprintf(`ok = go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]) && ok;`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
 		}
 		mainFunc = append(mainFunc, []byte("process.exit(ok ? 0 : 1);\n};\n")...)
-		mainPkg.Archive.Functions = []translator.Function{
-			translator.Function{Name: "main", Code: mainFunc},
-			translator.Function{Name: "init", Code: []byte("go$pkg.init = function() {};\n")},
+		mainPkg.Archive.Declarations = []translator.Decl{
+			translator.Decl{ToplevelName: "main", BodyCode: mainFunc},
+			translator.Decl{ToplevelName: "init", BodyCode: []byte("go$pkg.init = function() {};\n")},
 		}
 		mainPkg.Archive.AddDependency("main")
 

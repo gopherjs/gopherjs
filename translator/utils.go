@@ -72,7 +72,7 @@ func (a *Archive) WriteCode(w io.Writer) {
 }
 
 func NewEmptyTypesPackage(path string) {
-	typesPackages[path] = types.NewPackage(path, path, types.NewScope(nil))
+	typesPackages[path] = types.NewPackage(path, path)
 }
 
 func WriteInterfaces(dependencies []string, w io.Writer, merge bool) {

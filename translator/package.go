@@ -157,7 +157,11 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		pkgVars:    make(map[string]string),
 		objectVars: make(map[types.Object]string),
 		f: &funcContext{
-			allVars: make(map[string]int),
+			allVars:     make(map[string]int),
+			flowDatas:   map[string]*flowData{"": &flowData{}},
+			caseCounter: 1,
+			labelCases:  make(map[string]int),
+			hasGoto:     make(map[ast.Node]bool),
 		},
 	}
 	for name := range reservedKeywords {
@@ -273,7 +277,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			d.Var = c.objectName(o)
 		}
 		if _, ok := varsWithInit[o]; !ok {
-			d.InitCode = []byte(fmt.Sprintf("%s = %s;", c.objectName(o), c.zeroValue(o.Type())))
+			d.InitCode = []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), c.zeroValue(o.Type())))
 		}
 		archive.Declarations = append(archive.Declarations, d)
 	}
@@ -288,15 +292,14 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 		var d Decl
 		d.InitCode = c.CatchOutput(2, func() {
-			c.newFuncContext(nil, func() {
-				c.translateFunctionBody([]ast.Stmt{
-					&ast.AssignStmt{
-						Lhs: lhs,
-						Tok: token.DEFINE,
-						Rhs: []ast.Expr{init.Rhs},
-					},
-				}, nil)
-			})
+			c.f.localVars = nil
+			c.translateFunctionBody([]ast.Stmt{
+				&ast.AssignStmt{
+					Lhs: lhs,
+					Tok: token.DEFINE,
+					Rhs: []ast.Expr{init.Rhs},
+				},
+			}, nil)
 		})
 		archive.Declarations = append(archive.Declarations, d)
 	}
@@ -341,9 +344,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	// init functions
 	archive.Declarations = append(archive.Declarations, Decl{
 		InitCode: c.CatchOutput(2, func() {
-			c.newFuncContext(nil, func() {
-				c.translateFunctionBody(initStmts, nil)
-			})
+			c.f.localVars = nil
+			c.translateFunctionBody(initStmts, nil)
 		}),
 	})
 

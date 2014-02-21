@@ -30,7 +30,6 @@ type pkgContext struct {
 	info          *types.Info
 	pkgVars       map[string]string
 	objectVars    map[types.Object]string
-	allVarNames   map[string]int
 	output        []byte
 	delayedOutput []byte
 	indentation   int
@@ -39,7 +38,8 @@ type pkgContext struct {
 
 type funcContext struct {
 	sig          *types.Signature
-	varNames     []string
+	allVars      map[string]int
+	localVars    []string
 	resultNames  []ast.Expr
 	flowDatas    map[string]*flowData
 	escapingVars []string
@@ -53,6 +53,24 @@ type flowData struct {
 	postStmt  string
 	beginCase int
 	endCase   int
+}
+
+func (c *pkgContext) newFuncContext(sig *types.Signature, f func()) {
+	outerFuncContext := c.f
+	vars := make(map[string]int, len(c.f.allVars))
+	for k, v := range c.f.allVars {
+		vars[k] = v
+	}
+	c.f = &funcContext{
+		sig:         sig,
+		allVars:     vars,
+		flowDatas:   map[string]*flowData{"": &flowData{}},
+		caseCounter: 1,
+		labelCases:  make(map[string]int),
+		hasGoto:     make(map[ast.Node]bool),
+	}
+	f()
+	c.f = outerFuncContext
 }
 
 func (c *pkgContext) Write(b []byte) (int, error) {
@@ -134,15 +152,16 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	typesPackages[importPath] = typesPkg
 
 	c := &pkgContext{
-		pkg:         typesPkg,
-		info:        info,
-		pkgVars:     make(map[string]string),
-		objectVars:  make(map[types.Object]string),
-		allVarNames: make(map[string]int),
-		f:           &funcContext{},
+		pkg:        typesPkg,
+		info:       info,
+		pkgVars:    make(map[string]string),
+		objectVars: make(map[types.Object]string),
+		f: &funcContext{
+			allVars: make(map[string]int),
+		},
 	}
 	for name := range reservedKeywords {
-		c.allVarNames[name] = 1
+		c.f.allVars[name] = 1
 	}
 
 	var functions []*ast.FuncDecl
@@ -269,13 +288,15 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 		var d Decl
 		d.InitCode = c.CatchOutput(2, func() {
-			c.translateFunctionBody([]ast.Stmt{
-				&ast.AssignStmt{
-					Lhs: lhs,
-					Tok: token.DEFINE,
-					Rhs: []ast.Expr{init.Rhs},
-				},
-			}, nil)
+			c.newFuncContext(nil, func() {
+				c.translateFunctionBody([]ast.Stmt{
+					&ast.AssignStmt{
+						Lhs: lhs,
+						Tok: token.DEFINE,
+						Rhs: []ast.Expr{init.Rhs},
+					},
+				}, nil)
+			})
 		})
 		archive.Declarations = append(archive.Declarations, d)
 	}
@@ -319,7 +340,11 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 
 	// init functions
 	archive.Declarations = append(archive.Declarations, Decl{
-		InitCode: c.CatchOutput(2, func() { c.translateFunctionBody(initStmts, nil) }),
+		InitCode: c.CatchOutput(2, func() {
+			c.newFuncContext(nil, func() {
+				c.translateFunctionBody(initStmts, nil)
+			})
+		}),
 	})
 
 	if len(natives) != 0 {
@@ -475,8 +500,8 @@ func (c *pkgContext) initArgs(ty types.Type) string {
 }
 
 func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) {
-	c.newScope(func() {
-		sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
+	sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
+	c.newFuncContext(sig, func() {
 		var recv *ast.Ident
 		if fun.Recv != nil && fun.Recv.List[0].Names != nil {
 			recv = fun.Recv.List[0].Names[0]
@@ -567,21 +592,12 @@ func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) {
 }
 
 func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signature) {
-	prevFuncContext := c.f
-	c.f = &funcContext{
-		sig:         sig,
-		flowDatas:   map[string]*flowData{"": &flowData{}},
-		caseCounter: 1,
-		labelCases:  make(map[string]int),
-		hasGoto:     make(map[ast.Node]bool),
-	}
-
 	v := gotoVisitor{f: c.f}
 	for _, stmt := range stmts {
 		ast.Walk(&v, stmt)
 	}
 	if c.f.flattened {
-		c.f.varNames = append(c.f.varNames, "go$this = this")
+		c.f.localVars = append(c.f.localVars, "go$this = this")
 	}
 
 	body := c.CatchOutput(0, func() {
@@ -650,11 +666,10 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 		printBody()
 	})
 
-	if len(c.f.varNames) != 0 {
-		c.Printf("var %s;", strings.Join(c.f.varNames, ", "))
+	if len(c.f.localVars) != 0 {
+		c.Printf("var %s;", strings.Join(c.f.localVars, ", "))
 	}
 	c.Write(body)
-	c.f = prevFuncContext
 }
 
 type hasDeferVisitor struct {

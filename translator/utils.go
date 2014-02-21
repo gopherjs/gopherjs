@@ -164,6 +164,8 @@ func WriteArchive(a *Archive) ([]byte, error) {
 }
 
 func (c *pkgContext) translateParams(t *ast.FuncType) []string {
+	outerFuncVarNames := c.f.localVars
+
 	params := make([]string, 0)
 	for _, param := range t.Params.List {
 		for _, ident := range param.Names {
@@ -174,6 +176,9 @@ func (c *pkgContext) translateParams(t *ast.FuncType) []string {
 			params = append(params, c.objectName(c.info.Objects[ident]))
 		}
 	}
+
+	c.f.localVars = outerFuncVarNames
+
 	return params
 }
 
@@ -269,24 +274,13 @@ func (c *pkgContext) newVariable(name string) string {
 	if strings.HasPrefix(name, "dollar_") {
 		name = "$" + name[7:]
 	}
-	n := c.allVarNames[name]
-	c.allVarNames[name] = n + 1
+	n := c.f.allVars[name]
+	c.f.allVars[name] = n + 1
 	if n > 0 {
 		name = fmt.Sprintf("%s$%d", name, n)
 	}
-	c.f.varNames = append(c.f.varNames, name)
+	c.f.localVars = append(c.f.localVars, name)
 	return name
-}
-
-func (c *pkgContext) newScope(f func()) {
-	outerVarNames := make(map[string]int, len(c.allVarNames))
-	for k, v := range c.allVarNames {
-		outerVarNames[k] = v
-	}
-	outerFuncVarNames := c.f.varNames
-	f()
-	c.allVarNames = outerVarNames
-	c.f.varNames = outerFuncVarNames
 }
 
 func (c *pkgContext) newIdent(name string, t types.Type) *ast.Ident {

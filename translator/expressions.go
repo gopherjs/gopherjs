@@ -143,7 +143,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 
 	case *ast.FuncLit:
 		return c.formatExpr("%s", strings.TrimSpace(string(c.CatchOutput(0, func() {
-			c.newScope(func() {
+			c.newFuncContext(exprType.(*types.Signature), func() {
 				params := c.translateParams(e.Type)
 				closurePrefix := "("
 				closureSuffix := ")"

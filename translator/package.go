@@ -82,17 +82,19 @@ func (c *pkgContext) Indent(f func()) {
 	c.indentation--
 }
 
-func (c *pkgContext) CatchOutput(f func()) []byte {
+func (c *pkgContext) CatchOutput(indent int, f func()) []byte {
 	origoutput := c.output
 	c.output = nil
+	c.indentation += indent
 	f()
 	catched := c.output
 	c.output = origoutput
+	c.indentation -= indent
 	return catched
 }
 
 func (c *pkgContext) Delayed(f func()) {
-	c.delayedOutput = c.CatchOutput(f)
+	c.delayedOutput = c.CatchOutput(0, f)
 }
 
 func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error)) (*Archive, error) {
@@ -203,128 +205,126 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		Dependencies: []string{"runtime"}, // all packages depend on runtime
 	}
 
-	c.Indent(func() {
-		// imports
-		for _, importedPkg := range typesPkg.Imports() {
-			varName := c.newVariable(importedPkg.Name())
-			c.pkgVars[importedPkg.Path()] = varName
-			archive.Imports = append(archive.Imports, Import{Path: importedPkg.Path(), VarName: varName})
-		}
+	// imports
+	for _, importedPkg := range typesPkg.Imports() {
+		varName := c.newVariable(importedPkg.Name())
+		c.pkgVars[importedPkg.Path()] = varName
+		archive.Imports = append(archive.Imports, Import{Path: importedPkg.Path(), VarName: varName})
+	}
 
-		// types
-		for _, o := range toplevelTypes {
-			typeName := c.objectName(o)
-			archive.Declarations = append(archive.Declarations, Decl{
-				Var:      typeName,
-				BodyCode: c.CatchOutput(func() { c.translateType(o, true) }),
-			})
-		}
-
-		// variables
-		for _, o := range vars {
-			var d Decl
-			if !o.Exported() {
-				d.Var = c.objectName(o)
-			}
-			archive.Declarations = append(archive.Declarations, d)
-		}
-
-		// functions
-		natives := pkgNatives[importPath]
-		for _, fun := range functions {
-			o := c.info.Objects[fun.Name].(*types.Func)
-			funName := fun.Name.Name
-			declVar := c.objectName(o)
-			if fun.Recv != nil {
-				recvType := o.Type().(*types.Signature).Recv().Type()
-				ptr, isPointer := recvType.(*types.Pointer)
-				namedRecvType, _ := recvType.(*types.Named)
-				if isPointer {
-					namedRecvType = ptr.Elem().(*types.Named)
-				}
-				funName = namedRecvType.Obj().Name() + "." + funName
-				declVar = ""
-			}
-
-			native := natives[funName]
-			delete(natives, funName)
-
-			archive.Declarations = append(archive.Declarations, Decl{
-				Var:      declVar,
-				BodyCode: c.CatchOutput(func() { c.translateFunction(fun, native) }),
-			})
-			if strings.HasPrefix(fun.Name.String(), "Test") {
-				archive.Tests = append(archive.Tests, fun.Name.String())
-			}
-		}
-
-		// init function
-		initCode := c.CatchOutput(func() {
-			c.Write([]byte(natives["toplevel"]))
-			delete(natives, "toplevel")
-
-			initOrder := c.info.InitOrder
-
-			// workaround for https://code.google.com/p/go/issues/detail?id=6703#c6
-			if importPath == "math/rand" {
-				findInit := func(name string) int {
-					for i, init := range initOrder {
-						if init.Lhs[0].Name() == name {
-							return i
-						}
-					}
-					panic("init not found")
-				}
-				i := findInit("rng_cooked")
-				j := findInit("globalRand")
-				if i > j {
-					initOrder[i], initOrder[j] = initOrder[j], initOrder[i]
-				}
-			}
-
-			c.Printf("go$pkg.init = function() {")
-			c.Indent(func() {
-				for _, o := range toplevelTypes {
-					c.initType(o)
-				}
-
-				var initVarStmts []ast.Stmt
-				varsWithInit := make(map[*types.Var]bool)
-				for _, init := range initOrder {
-					lhs := make([]ast.Expr, len(init.Lhs))
-					for i, o := range init.Lhs {
-						ident := ast.NewIdent(o.Name())
-						c.info.Types[ident] = types.TypeAndValue{Type: o.Type()}
-						c.info.Objects[ident] = o
-						lhs[i] = ident
-						varsWithInit[o] = true
-					}
-					initVarStmts = append(initVarStmts, &ast.AssignStmt{
-						Lhs: lhs,
-						Tok: token.DEFINE,
-						Rhs: []ast.Expr{init.Rhs},
-					})
-				}
-
-				for _, o := range vars {
-					if _, ok := varsWithInit[o]; !ok {
-						c.Printf("%s = %s;", c.objectName(o), c.zeroValue(o.Type()))
-					}
-				}
-
-				c.Write([]byte(natives["init"]))
-				delete(natives, "init")
-
-				c.translateFunctionBody(append(initVarStmts, initStmts...), nil)
-			})
-			c.Printf("};")
+	// types
+	for _, o := range toplevelTypes {
+		typeName := c.objectName(o)
+		archive.Declarations = append(archive.Declarations, Decl{
+			Var:      typeName,
+			BodyCode: c.CatchOutput(1, func() { c.translateType(o, true) }),
+			InitCode: c.CatchOutput(2, func() { c.initType(o) }),
 		})
-		archive.Declarations = append(archive.Declarations, Decl{BodyCode: initCode})
+	}
 
-		if len(natives) != 0 {
-			panic("not all natives used: " + importPath)
+	// variables
+	initOrder := c.info.InitOrder
+
+	// workaround for https://code.google.com/p/go/issues/detail?id=6703#c6
+	if importPath == "math/rand" {
+		findInit := func(name string) int {
+			for i, init := range initOrder {
+				if init.Lhs[0].Name() == name {
+					return i
+				}
+			}
+			panic("init not found")
 		}
+		i := findInit("rng_cooked")
+		j := findInit("globalRand")
+		if i > j {
+			initOrder[i], initOrder[j] = initOrder[j], initOrder[i]
+		}
+	}
+
+	varsWithInit := make(map[*types.Var]bool)
+	for _, init := range initOrder {
+		for _, o := range init.Lhs {
+			varsWithInit[o] = true
+		}
+	}
+	for _, o := range vars {
+		var d Decl
+		if !o.Exported() {
+			d.Var = c.objectName(o)
+		}
+		if _, ok := varsWithInit[o]; !ok {
+			d.InitCode = []byte(fmt.Sprintf("%s = %s;", c.objectName(o), c.zeroValue(o.Type())))
+		}
+		archive.Declarations = append(archive.Declarations, d)
+	}
+	for _, init := range initOrder {
+		lhs := make([]ast.Expr, len(init.Lhs))
+		for i, o := range init.Lhs {
+			ident := ast.NewIdent(o.Name())
+			c.info.Types[ident] = types.TypeAndValue{Type: o.Type()}
+			c.info.Objects[ident] = o
+			lhs[i] = ident
+			varsWithInit[o] = true
+		}
+		var d Decl
+		d.InitCode = c.CatchOutput(2, func() {
+			c.translateFunctionBody([]ast.Stmt{
+				&ast.AssignStmt{
+					Lhs: lhs,
+					Tok: token.DEFINE,
+					Rhs: []ast.Expr{init.Rhs},
+				},
+			}, nil)
+		})
+		archive.Declarations = append(archive.Declarations, d)
+	}
+
+	// functions
+	natives := pkgNatives[importPath]
+	for _, fun := range functions {
+		var d Decl
+		o := c.info.Objects[fun.Name].(*types.Func)
+		funName := fun.Name.Name
+		if fun.Recv == nil {
+			d.Var = c.objectName(o)
+		}
+		if fun.Recv != nil {
+			recvType := o.Type().(*types.Signature).Recv().Type()
+			ptr, isPointer := recvType.(*types.Pointer)
+			namedRecvType, _ := recvType.(*types.Named)
+			if isPointer {
+				namedRecvType = ptr.Elem().(*types.Named)
+			}
+			funName = namedRecvType.Obj().Name() + "." + funName
+		}
+
+		native := natives[funName]
+		delete(natives, funName)
+
+		d.BodyCode = c.CatchOutput(1, func() { c.translateFunction(fun, native) })
+		archive.Declarations = append(archive.Declarations, d)
+		if strings.HasPrefix(fun.Name.String(), "Test") {
+			archive.Tests = append(archive.Tests, fun.Name.String())
+		}
+	}
+
+	// natives
+	archive.Declarations = append(archive.Declarations, Decl{
+		BodyCode: []byte(natives["toplevel"]),
+		InitCode: []byte(natives["init"]),
 	})
+	delete(natives, "toplevel")
+	delete(natives, "init")
+
+	// init functions
+	archive.Declarations = append(archive.Declarations, Decl{
+		InitCode: c.CatchOutput(2, func() { c.translateFunctionBody(initStmts, nil) }),
+	})
+
+	if len(natives) != 0 {
+		panic("not all natives used: " + importPath)
+	}
 
 	var importedPaths []string
 	for _, imp := range typesPkg.Imports() {
@@ -584,7 +584,7 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 		c.f.varNames = append(c.f.varNames, "go$this = this")
 	}
 
-	body := c.CatchOutput(func() {
+	body := c.CatchOutput(0, func() {
 		if sig != nil && sig.Results().Len() != 0 && sig.Results().At(0).Name() != "" {
 			c.f.resultNames = make([]ast.Expr, sig.Results().Len())
 			for i := 0; i < sig.Results().Len(); i++ {

@@ -320,7 +320,6 @@ func tool() error {
 		mainFunc = append(mainFunc, []byte("process.exit(ok ? 0 : 1);\n};\n")...)
 		mainPkg.Archive.Declarations = []translator.Decl{
 			translator.Decl{ToplevelName: "main", BodyCode: mainFunc},
-			translator.Decl{ToplevelName: "init", BodyCode: []byte("go$pkg.init = function() {};\n")},
 		}
 		mainPkg.Archive.AddDependency("main")
 

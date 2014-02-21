@@ -34,6 +34,7 @@ type Decl struct {
 	ToplevelName string
 	Var          string
 	BodyCode     []byte
+	InitCode     []byte
 }
 
 func (a *Archive) AddDependency(path string) {
@@ -68,7 +69,11 @@ func (a *Archive) WriteCode(w io.Writer) {
 	for _, d := range a.Declarations {
 		w.Write(d.BodyCode)
 	}
-	w.Write([]byte("\treturn go$pkg;\n})();\n"))
+	w.Write([]byte("\tgo$pkg.init = function() {\n"))
+	for _, d := range a.Declarations {
+		w.Write(d.InitCode)
+	}
+	w.Write([]byte("\t}\n\treturn go$pkg;\n})();\n"))
 }
 
 func NewEmptyTypesPackage(path string) {

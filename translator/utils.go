@@ -163,25 +163,6 @@ func WriteArchive(a *Archive) ([]byte, error) {
 	return asn1.Marshal(*a)
 }
 
-func (c *pkgContext) translateParams(t *ast.FuncType) []string {
-	outerFuncVarNames := c.f.localVars
-
-	params := make([]string, 0)
-	for _, param := range t.Params.List {
-		for _, ident := range param.Names {
-			if isBlank(ident) {
-				params = append(params, c.newVariable("param"))
-				continue
-			}
-			params = append(params, c.objectName(c.info.Objects[ident]))
-		}
-	}
-
-	c.f.localVars = outerFuncVarNames
-
-	return params
-}
-
 func (c *pkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis bool) string {
 	params := make([]string, sig.Params().Len())
 	for i := range params {

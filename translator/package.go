@@ -38,6 +38,7 @@ type pkgContext struct {
 
 type funcContext struct {
 	sig          *types.Signature
+	params       []string
 	allVars      map[string]int
 	localVars    []string
 	resultNames  []ast.Expr
@@ -55,7 +56,7 @@ type flowData struct {
 	endCase   int
 }
 
-func (c *pkgContext) newFuncContext(sig *types.Signature, f func()) {
+func (c *pkgContext) newFuncContext(t *ast.FuncType, sig *types.Signature, f func()) {
 	outerFuncContext := c.f
 	vars := make(map[string]int, len(c.f.allVars))
 	for k, v := range c.f.allVars {
@@ -69,7 +70,20 @@ func (c *pkgContext) newFuncContext(sig *types.Signature, f func()) {
 		labelCases:  make(map[string]int),
 		hasGoto:     make(map[ast.Node]bool),
 	}
+
+	for _, param := range t.Params.List {
+		for _, ident := range param.Names {
+			if isBlank(ident) {
+				c.f.params = append(c.f.params, c.newVariable("param"))
+				continue
+			}
+			c.f.params = append(c.f.params, c.objectName(c.info.Objects[ident]))
+		}
+	}
+	c.f.localVars = nil
+
 	f()
+
 	c.f = outerFuncContext
 }
 
@@ -299,7 +313,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					Tok: token.DEFINE,
 					Rhs: []ast.Expr{init.Rhs},
 				},
-			}, nil)
+			})
 		})
 		archive.Declarations = append(archive.Declarations, d)
 	}
@@ -345,7 +359,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	archive.Declarations = append(archive.Declarations, Decl{
 		InitCode: c.CatchOutput(2, func() {
 			c.f.localVars = nil
-			c.translateFunctionBody(initStmts, nil)
+			c.translateFunctionBody(initStmts)
 		}),
 	})
 
@@ -503,13 +517,12 @@ func (c *pkgContext) initArgs(ty types.Type) string {
 
 func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) {
 	sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
-	c.newFuncContext(sig, func() {
+	c.newFuncContext(fun.Type, sig, func() {
 		var recv *ast.Ident
 		if fun.Recv != nil && fun.Recv.List[0].Names != nil {
 			recv = fun.Recv.List[0].Names[0]
 		}
-		params := c.translateParams(fun.Type)
-		joinedParams := strings.Join(params, ", ")
+		joinedParams := strings.Join(c.f.params, ", ")
 
 		printPrimaryFunction := func(lhs string, fullName string) {
 			if native != "" {
@@ -536,7 +549,7 @@ func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) {
 						},
 					}, body...)
 				}
-				c.translateFunctionBody(body, sig)
+				c.translateFunctionBody(body)
 			})
 			c.Printf("};")
 		}
@@ -593,7 +606,7 @@ func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) {
 	})
 }
 
-func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signature) {
+func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt) {
 	v := gotoVisitor{f: c.f}
 	for _, stmt := range stmts {
 		ast.Walk(&v, stmt)
@@ -603,10 +616,10 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 	}
 
 	body := c.CatchOutput(0, func() {
-		if sig != nil && sig.Results().Len() != 0 && sig.Results().At(0).Name() != "" {
-			c.f.resultNames = make([]ast.Expr, sig.Results().Len())
-			for i := 0; i < sig.Results().Len(); i++ {
-				result := sig.Results().At(i)
+		if c.f.sig != nil && c.f.sig.Results().Len() != 0 && c.f.sig.Results().At(0).Name() != "" {
+			c.f.resultNames = make([]ast.Expr, c.f.sig.Results().Len())
+			for i := 0; i < c.f.sig.Results().Len(); i++ {
+				result := c.f.sig.Results().At(i)
 				name := result.Name()
 				if result.Name() == "_" {
 					name = "result"
@@ -640,16 +653,16 @@ func (c *pkgContext) translateFunctionBody(stmts []ast.Stmt, sig *types.Signatur
 			c.Printf("} catch(go$err) {")
 			c.Indent(func() {
 				c.Printf("go$pushErr(go$err);")
-				if sig != nil && c.f.resultNames == nil {
-					switch sig.Results().Len() {
+				if c.f.sig != nil && c.f.resultNames == nil {
+					switch c.f.sig.Results().Len() {
 					case 0:
 						// nothing
 					case 1:
-						c.Printf("return %s;", c.zeroValue(sig.Results().At(0).Type()))
+						c.Printf("return %s;", c.zeroValue(c.f.sig.Results().At(0).Type()))
 					default:
-						zeros := make([]string, sig.Results().Len())
+						zeros := make([]string, c.f.sig.Results().Len())
 						for i := range zeros {
-							zeros[i] = c.zeroValue(sig.Results().At(i).Type())
+							zeros[i] = c.zeroValue(c.f.sig.Results().At(i).Type())
 						}
 						c.Printf("return [%s];", strings.Join(zeros, ", "))
 					}

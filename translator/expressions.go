@@ -143,8 +143,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 
 	case *ast.FuncLit:
 		return c.formatExpr("%s", strings.TrimSpace(string(c.CatchOutput(0, func() {
-			c.newFuncContext(exprType.(*types.Signature), func() {
-				params := c.translateParams(e.Type)
+			c.newFuncContext(e.Type, exprType.(*types.Signature), func() {
 				closurePrefix := "("
 				closureSuffix := ")"
 				if len(c.f.escapingVars) != 0 {
@@ -152,9 +151,9 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 					closurePrefix = "(function(" + list + ") { return "
 					closureSuffix = "; })(" + list + ")"
 				}
-				c.Printf("%sfunction(%s) {", closurePrefix, strings.Join(params, ", "))
+				c.Printf("%sfunction(%s) {", closurePrefix, strings.Join(c.f.params, ", "))
 				c.Indent(func() {
-					c.translateFunctionBody(e.Body.List, exprType.(*types.Signature))
+					c.translateFunctionBody(e.Body.List)
 				})
 				c.Printf("}%s", closureSuffix)
 			})

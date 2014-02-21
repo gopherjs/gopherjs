@@ -56,7 +56,7 @@ type flowData struct {
 	endCase   int
 }
 
-func (c *pkgContext) newFuncContext(t *ast.FuncType, sig *types.Signature, f func()) {
+func (c *pkgContext) newFunction(t *ast.FuncType, sig *types.Signature, f func()) []byte {
 	outerFuncContext := c.f
 	vars := make(map[string]int, len(c.f.allVars))
 	for k, v := range c.f.allVars {
@@ -82,9 +82,9 @@ func (c *pkgContext) newFuncContext(t *ast.FuncType, sig *types.Signature, f fun
 	}
 	c.f.localVars = nil
 
-	f()
-
+	output := c.CatchOutput(0, f)
 	c.f = outerFuncContext
+	return output
 }
 
 func (c *pkgContext) Write(b []byte) (int, error) {
@@ -340,7 +340,9 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		native := natives[funName]
 		delete(natives, funName)
 
-		d.BodyCode = c.CatchOutput(1, func() { c.translateFunction(fun, native) })
+		c.Indent(func() {
+			d.BodyCode = c.translateFunction(fun, native)
+		})
 		archive.Declarations = append(archive.Declarations, d)
 		if strings.HasPrefix(fun.Name.String(), "Test") {
 			archive.Tests = append(archive.Tests, fun.Name.String())
@@ -515,9 +517,9 @@ func (c *pkgContext) initArgs(ty types.Type) string {
 	}
 }
 
-func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) {
+func (c *pkgContext) translateFunction(fun *ast.FuncDecl, native string) []byte {
 	sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
-	c.newFuncContext(fun.Type, sig, func() {
+	return c.newFunction(fun.Type, sig, func() {
 		var recv *ast.Ident
 		if fun.Recv != nil && fun.Recv.List[0].Names != nil {
 			recv = fun.Recv.List[0].Names[0]

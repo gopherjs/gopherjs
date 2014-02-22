@@ -259,6 +259,37 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		})
 	}
 
+	// functions
+	natives := pkgNatives[importPath]
+	for _, fun := range functions {
+		var d Decl
+		o := c.info.Objects[fun.Name].(*types.Func)
+		funName := fun.Name.Name
+		if fun.Recv == nil {
+			d.Var = c.objectName(o)
+		}
+		if fun.Recv != nil {
+			recvType := o.Type().(*types.Signature).Recv().Type()
+			ptr, isPointer := recvType.(*types.Pointer)
+			namedRecvType, _ := recvType.(*types.Named)
+			if isPointer {
+				namedRecvType = ptr.Elem().(*types.Named)
+			}
+			funName = namedRecvType.Obj().Name() + "." + funName
+		}
+
+		native := natives[funName]
+		delete(natives, funName)
+
+		c.Indent(func() {
+			d.BodyCode = c.translateFunction(fun, native)
+		})
+		archive.Declarations = append(archive.Declarations, d)
+		if strings.HasPrefix(fun.Name.String(), "Test") {
+			archive.Tests = append(archive.Tests, fun.Name.String())
+		}
+	}
+
 	// variables
 	initOrder := c.info.InitOrder
 
@@ -291,7 +322,12 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			d.Var = c.objectName(o)
 		}
 		if _, ok := varsWithInit[o]; !ok {
-			d.InitCode = []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), c.zeroValue(o.Type())))
+			value := c.zeroValue(o.Type())
+			if native, ok := natives[o.Name()]; ok {
+				value = native
+				delete(natives, o.Name())
+			}
+			d.InitCode = []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value))
 		}
 		archive.Declarations = append(archive.Declarations, d)
 	}
@@ -318,44 +354,11 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		archive.Declarations = append(archive.Declarations, d)
 	}
 
-	// functions
-	natives := pkgNatives[importPath]
-	for _, fun := range functions {
-		var d Decl
-		o := c.info.Objects[fun.Name].(*types.Func)
-		funName := fun.Name.Name
-		if fun.Recv == nil {
-			d.Var = c.objectName(o)
-		}
-		if fun.Recv != nil {
-			recvType := o.Type().(*types.Signature).Recv().Type()
-			ptr, isPointer := recvType.(*types.Pointer)
-			namedRecvType, _ := recvType.(*types.Named)
-			if isPointer {
-				namedRecvType = ptr.Elem().(*types.Named)
-			}
-			funName = namedRecvType.Obj().Name() + "." + funName
-		}
-
-		native := natives[funName]
-		delete(natives, funName)
-
-		c.Indent(func() {
-			d.BodyCode = c.translateFunction(fun, native)
-		})
-		archive.Declarations = append(archive.Declarations, d)
-		if strings.HasPrefix(fun.Name.String(), "Test") {
-			archive.Tests = append(archive.Tests, fun.Name.String())
-		}
-	}
-
 	// natives
 	archive.Declarations = append(archive.Declarations, Decl{
 		BodyCode: []byte(natives["toplevel"]),
-		InitCode: []byte(natives["init"]),
 	})
 	delete(natives, "toplevel")
-	delete(natives, "init")
 
 	// init functions
 	archive.Declarations = append(archive.Declarations, Decl{

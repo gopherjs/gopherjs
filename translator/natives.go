@@ -195,22 +195,22 @@ func init() {
 	}
 
 	pkgNatives["os"] = map[string]string{
-		"init": `
-			go$pkg.Args = new (go$sliceType(Go$String))((typeof process !== 'undefined') ? process.argv.slice(1) : []);
+		"toplevel": `
 			if (go$packages["syscall"].Syscall15 !== undefined) { // windows
 				NewFile = go$pkg.NewFile = function() { return new File.Ptr(); };
 			}
 		`,
+		"Args": `new (go$sliceType(Go$String))((typeof process !== 'undefined') ? process.argv.slice(1) : [])`,
 	}
 
 	pkgNatives["runtime"] = map[string]string{
-		"init": `
+		"toplevel": `
 			go$throwRuntimeError = function(msg) { throw go$panic(new errorString(msg)); };
-			sizeof_C_MStats = 3712;
 		`,
 		"getgoroot": `function() {
 			return (typeof process !== 'undefined') ? (process.env["GOROOT"] || "") : "/";
 		}`,
+		"sizeof_C_MStats": `3712`,
 		"Caller": `function(skip) {
 			var line = go$getStack()[skip + 3];
 			if (line === undefined) {
@@ -307,7 +307,7 @@ func init() {
 	}
 
 	pkgNatives["syscall"] = map[string]string{
-		"init": `
+		"toplevel": `
 			if (go$pkg.Syscall15 !== undefined) { // windows
 				Syscall = Syscall6 = Syscall9 = Syscall12 = Syscall15 = go$pkg.Syscall = go$pkg.Syscall6 = go$pkg.Syscall9 = go$pkg.Syscall12 = go$pkg.Syscall15 = loadlibrary = getprocaddress = function() { throw new Error("Syscalls not available."); };
 				getStdHandle = GetCommandLine = go$pkg.GetCommandLine = function() {};
@@ -343,7 +343,7 @@ func init() {
 	}
 
 	pkgNatives["testing"] = map[string]string{
-		"init": `
+		"toplevel": `
 			go$pkg.RunTests2 = function(pkgPath, dir, names, tests) {
 				if (tests.length === 0) {
 					console.log("?   \t" + pkgPath + "\t[no test files]");
@@ -399,21 +399,19 @@ func init() {
 	}
 
 	pkgNatives["github.com/gopherjs/gopherjs/js_test"] = map[string]string{
-		"init": `
-			dummys = {
-				someBool: true,
-				someString: "abc\u1234",
-				someInt: 42,
-				someFloat: 42.123,
-				someArray: [41, 42, 43],
-				add: function(a, b) {
-					return a + b;
-				},
-				mapArray: go$mapArray,
-				toUnixTimestamp: function(d) {
-					return d.getTime() / 1000;
-				},
-			};
-		`,
+		"dummys": `{
+			someBool: true,
+			someString: "abc\u1234",
+			someInt: 42,
+			someFloat: 42.123,
+			someArray: [41, 42, 43],
+			add: function(a, b) {
+				return a + b;
+			},
+			mapArray: go$mapArray,
+			toUnixTimestamp: function(d) {
+				return d.getTime() / 1000;
+			},
+		}`,
 	}
 }

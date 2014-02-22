@@ -142,14 +142,14 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
+		closurePrefix := "("
+		closureSuffix := ")"
+		if len(c.f.escapingVars) != 0 {
+			list := strings.Join(c.f.escapingVars, ", ")
+			closurePrefix = "(function(" + list + ") { return "
+			closureSuffix = "; })(" + list + ")"
+		}
 		return c.formatExpr("%s", strings.TrimSpace(string(c.newFunction(e.Type, exprType.(*types.Signature), func() {
-			closurePrefix := "("
-			closureSuffix := ")"
-			if len(c.f.escapingVars) != 0 {
-				list := strings.Join(c.f.escapingVars, ", ")
-				closurePrefix = "(function(" + list + ") { return "
-				closureSuffix = "; })(" + list + ")"
-			}
 			c.Printf("%sfunction(%s) {", closurePrefix, strings.Join(c.f.params, ", "))
 			c.Indent(func() {
 				c.translateFunctionBody(e.Body.List)

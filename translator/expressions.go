@@ -142,20 +142,12 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
-		closurePrefix := "("
-		closureSuffix := ")"
+		params, body := c.translateFunction(e.Type, exprType.(*types.Signature), e.Body.List)
 		if len(c.f.escapingVars) != 0 {
 			list := strings.Join(c.f.escapingVars, ", ")
-			closurePrefix = "(function(" + list + ") { return "
-			closureSuffix = "; })(" + list + ")"
+			return c.formatExpr("(function(%s) { return function(%s) {\n%s%s}; })(%s)", list, strings.Join(params, ", "), string(body), strings.Repeat("\t", c.indentation), list)
 		}
-		return c.formatExpr("%s", strings.TrimSpace(string(c.newFunction(e.Type, exprType.(*types.Signature), func() {
-			c.Printf("%sfunction(%s) {", closurePrefix, strings.Join(c.f.params, ", "))
-			c.Indent(func() {
-				c.translateFunctionBody(e.Body.List)
-			})
-			c.Printf("}%s", closureSuffix)
-		}))))
+		return c.formatExpr("(function(%s) {\n%s%s})", strings.Join(params, ", "), string(body), strings.Repeat("\t", c.indentation))
 
 	case *ast.UnaryExpr:
 		switch e.Op {

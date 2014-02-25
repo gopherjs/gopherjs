@@ -134,10 +134,11 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	typesPackages[importPath] = typesPkg
 
 	c := &pkgContext{
-		pkg:        typesPkg,
-		info:       info,
-		pkgVars:    make(map[string]string),
-		objectVars: make(map[types.Object]string),
+		pkg:         typesPkg,
+		info:        info,
+		pkgVars:     make(map[string]string),
+		objectVars:  make(map[types.Object]string),
+		indentation: 1,
 		f: &funcContext{
 			allVars:     make(map[string]int),
 			flowDatas:   map[string]*flowData{"": &flowData{}},
@@ -222,8 +223,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		typeName := c.objectName(o)
 		archive.Declarations = append(archive.Declarations, Decl{
 			Var:      typeName,
-			BodyCode: c.CatchOutput(1, func() { c.translateType(o, true) }),
-			InitCode: c.CatchOutput(2, func() { c.initType(o) }),
+			BodyCode: c.CatchOutput(0, func() { c.translateType(o, true) }),
+			InitCode: c.CatchOutput(1, func() { c.initType(o) }),
 		})
 	}
 
@@ -249,9 +250,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		native := natives[funName]
 		delete(natives, funName)
 
-		c.Indent(func() {
-			d.BodyCode = c.translateToplevelFunction(fun, native)
-		})
+		d.BodyCode = c.translateToplevelFunction(fun, native)
 		archive.Declarations = append(archive.Declarations, d)
 		if strings.HasPrefix(fun.Name.String(), "Test") {
 			archive.Tests = append(archive.Tests, fun.Name.String())
@@ -309,7 +308,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			varsWithInit[o] = true
 		}
 		var d Decl
-		d.InitCode = c.translateFunctionBody(2, []ast.Stmt{
+		d.InitCode = c.translateFunctionBody(1, []ast.Stmt{
 			&ast.AssignStmt{
 				Lhs: lhs,
 				Tok: token.DEFINE,
@@ -327,7 +326,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 
 	// init functions
 	archive.Declarations = append(archive.Declarations, Decl{
-		InitCode: c.translateFunctionBody(2, initStmts),
+		InitCode: c.translateFunctionBody(1, initStmts),
 	})
 
 	if len(natives) != 0 {

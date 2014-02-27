@@ -230,6 +230,7 @@ func init() {
 				return v;
 			};
 		`,
+		"toplevelDependencies": `rtype uncommonType method arrayType chanType funcType interfaceType mapType ptrType sliceType structType imethod structField`,
 
 		"TypeOf": `function(i) {
 			if (i === null) {

@@ -33,6 +33,7 @@ type pkgContext struct {
 	output        []byte
 	delayedOutput []byte
 	indentation   int
+	dependencies  map[types.Object]bool
 	f             *funcContext
 }
 
@@ -135,11 +136,12 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	typesPackages[importPath] = typesPkg
 
 	c := &pkgContext{
-		pkg:         typesPkg,
-		info:        info,
-		pkgVars:     make(map[string]string),
-		objectVars:  make(map[types.Object]string),
-		indentation: 1,
+		pkg:          typesPkg,
+		info:         info,
+		pkgVars:      make(map[string]string),
+		objectVars:   make(map[types.Object]string),
+		indentation:  1,
+		dependencies: make(map[types.Object]bool),
 		f: &funcContext{
 			allVars:     make(map[string]int),
 			flowDatas:   map[string]*flowData{"": &flowData{}},
@@ -204,6 +206,18 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		}
 	}
 
+	collectDependencies := func(self types.Object, f func()) []Object {
+		c.dependencies = make(map[types.Object]bool)
+		f()
+		var deps []Object
+		for dep := range c.dependencies {
+			if dep != self {
+				deps = append(deps, Object{dep.Pkg().Path(), dep.Name()})
+			}
+		}
+		return deps
+	}
+
 	gcData := bytes.NewBuffer(nil)
 	gcexporter.Write(typesPkg, gcData, sizes32)
 	archive := &Archive{
@@ -222,11 +236,14 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	// types
 	for _, o := range toplevelTypes {
 		typeName := c.objectName(o)
-		archive.Declarations = append(archive.Declarations, Decl{
-			Var:      typeName,
-			BodyCode: c.CatchOutput(0, func() { c.translateType(o, true) }),
-			InitCode: c.CatchOutput(1, func() { c.initType(o) }),
+		var d Decl
+		d.Var = typeName
+		d.ToplevelName = o.Name()
+		d.Dependencies = collectDependencies(o, func() {
+			d.BodyCode = c.CatchOutput(0, func() { c.translateType(o, true) })
+			d.InitCode = c.CatchOutput(1, func() { c.initType(o) })
 		})
+		archive.Declarations = append(archive.Declarations, d)
 	}
 
 	// functions
@@ -237,6 +254,9 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		funName := fun.Name.Name
 		if fun.Recv == nil {
 			d.Var = c.objectName(o)
+			if o.Name() != "main" {
+				d.ToplevelName = o.Name()
+			}
 		}
 		if fun.Recv != nil {
 			recvType := o.Type().(*types.Signature).Recv().Type()
@@ -246,12 +266,15 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				namedRecvType = ptr.Elem().(*types.Named)
 			}
 			funName = namedRecvType.Obj().Name() + "." + funName
+			d.ToplevelName = namedRecvType.Obj().Name()
 		}
 
 		native := natives[funName]
 		delete(natives, funName)
 
-		d.BodyCode = c.translateToplevelFunction(fun, native)
+		d.Dependencies = collectDependencies(o, func() {
+			d.BodyCode = c.translateToplevelFunction(fun, native)
+		})
 		archive.Declarations = append(archive.Declarations, d)
 		if strings.HasPrefix(fun.Name.String(), "Test") {
 			archive.Tests = append(archive.Tests, fun.Name.String())
@@ -290,12 +313,14 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			d.Var = c.objectName(o)
 		}
 		if _, ok := varsWithInit[o]; !ok {
-			value := c.zeroValue(o.Type())
-			if native, ok := natives[o.Name()]; ok {
-				value = native
-				delete(natives, o.Name())
-			}
-			d.InitCode = []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value))
+			d.Dependencies = collectDependencies(nil, func() {
+				value := c.zeroValue(o.Type())
+				if native, ok := natives[o.Name()]; ok {
+					value = native
+					delete(natives, o.Name())
+				}
+				d.InitCode = []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value))
+			})
 		}
 		archive.Declarations = append(archive.Declarations, d)
 	}
@@ -309,26 +334,34 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			varsWithInit[o] = true
 		}
 		var d Decl
-		d.InitCode = c.translateFunctionBody(1, []ast.Stmt{
-			&ast.AssignStmt{
-				Lhs: lhs,
-				Tok: token.DEFINE,
-				Rhs: []ast.Expr{init.Rhs},
-			},
+		d.Dependencies = collectDependencies(nil, func() {
+			d.InitCode = c.translateFunctionBody(1, []ast.Stmt{
+				&ast.AssignStmt{
+					Lhs: lhs,
+					Tok: token.DEFINE,
+					Rhs: []ast.Expr{init.Rhs},
+				},
+			})
 		})
 		archive.Declarations = append(archive.Declarations, d)
 	}
 
 	// natives
-	archive.Declarations = append(archive.Declarations, Decl{
-		BodyCode: []byte(natives["toplevel"]),
-	})
+	var toplevel Decl
+	toplevel.BodyCode = []byte(natives["toplevel"])
 	delete(natives, "toplevel")
+	for _, dep := range strings.Split(natives["toplevelDependencies"], " ") {
+		toplevel.Dependencies = append(toplevel.Dependencies, Object{importPath, dep})
+	}
+	delete(natives, "toplevelDependencies")
+	archive.Declarations = append(archive.Declarations, toplevel)
 
 	// init functions
-	archive.Declarations = append(archive.Declarations, Decl{
-		InitCode: c.translateFunctionBody(1, initStmts),
+	var init Decl
+	init.Dependencies = collectDependencies(nil, func() {
+		init.InitCode = c.translateFunctionBody(1, initStmts)
 	})
+	archive.Declarations = append(archive.Declarations, init)
 
 	if len(natives) != 0 {
 		panic("not all natives used: " + importPath)
@@ -483,7 +516,8 @@ func (c *pkgContext) initArgs(ty types.Type) string {
 }
 
 func (c *pkgContext) translateToplevelFunction(fun *ast.FuncDecl, native string) []byte {
-	sig := c.info.Defs[fun.Name].(*types.Func).Type().(*types.Signature)
+	o := c.info.Defs[fun.Name].(*types.Func)
+	sig := o.Type().(*types.Signature)
 	var recv *ast.Ident
 	if fun.Recv != nil && fun.Recv.List[0].Names != nil {
 		recv = fun.Recv.List[0].Names[0]
@@ -517,7 +551,7 @@ func (c *pkgContext) translateToplevelFunction(fun *ast.FuncDecl, native string)
 	}
 
 	if fun.Recv == nil {
-		funName := c.objectName(c.info.Defs[fun.Name])
+		funName := c.objectName(o)
 		lhs := funName
 		if fun.Name.IsExported() || fun.Name.Name == "main" {
 			lhs += " = go$pkg." + funName

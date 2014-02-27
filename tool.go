@@ -319,7 +319,7 @@ func tool() error {
 		}
 		mainFunc = append(mainFunc, []byte("process.exit(ok ? 0 : 1);\n};\n")...)
 		mainPkg.Archive.Declarations = []translator.Decl{
-			translator.Decl{ToplevelName: "main", BodyCode: mainFunc},
+			translator.Decl{BodyCode: mainFunc},
 		}
 		mainPkg.Archive.AddDependency("main")
 
@@ -654,24 +654,17 @@ func writeCommandPackage(pkg *packageData, pkgObj string) error {
 	}
 	defer file.Close()
 
-	file.WriteString("\"use strict\";\n(function() {\n\n")
-	file.WriteString(strings.TrimSpace(translator.Prelude))
-	file.WriteString("\n")
-
+	var allPkgs []*translator.Archive
 	for _, depPath := range pkg.Archive.Dependencies {
 		dep, err := importPackage(depPath)
 		if err != nil {
 			return err
 		}
-		dep.WriteCode(file)
+		allPkgs = append(allPkgs, dep)
 	}
 
-	translator.WriteInterfaces(pkg.Archive.Dependencies, file, false)
-
-	for _, depPath := range pkg.Archive.Dependencies {
-		file.WriteString("go$packages[\"" + depPath + "\"].init();\n")
-	}
-	file.WriteString("go$packages[\"" + pkg.ImportPath + "\"].main();\n\n})();")
+	translator.WriteProgramCode(allPkgs, file)
+	file.Write([]byte("go$packages[\"" + pkg.ImportPath + "\"].main();\n\n})();"))
 
 	return nil
 }

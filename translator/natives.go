@@ -341,6 +341,7 @@ func init() {
 				}
 			}
 		`,
+		"toplevelDependencies": `Syscall Syscall6 Syscall9 Syscall12 Syscall15 loadlibrary getprocaddress getStdHandle GetCommandLine CommandLineToArgv Getenv GetTimeZoneInformation RawSyscall RawSyscall6 BytePtrFromString`,
 	}
 
 	pkgNatives["testing"] = map[string]string{

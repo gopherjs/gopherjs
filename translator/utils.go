@@ -31,11 +31,14 @@ type Import struct {
 }
 
 type Decl struct {
-	ToplevelName string
 	Var          string
 	BodyCode     []byte
 	InitCode     []byte
+	ToplevelName string
+	Dependencies []Object
 }
+
+type Object [2]string
 
 func (a *Archive) AddDependency(path string) {
 	for _, dep := range a.Dependencies {
@@ -52,44 +55,79 @@ func (a *Archive) AddDependenciesOf(other *Archive) {
 	}
 }
 
-func (a *Archive) WriteCode(w io.Writer) {
-	fmt.Fprintf(w, "go$packages[\"%s\"] = (function() {\n", a.ImportPath)
-	vars := []string{"go$pkg = {}"}
-	for _, imp := range a.Imports {
-		vars = append(vars, fmt.Sprintf("%s = go$packages[\"%s\"]", imp.VarName, imp.Path))
-	}
-	for _, d := range a.Declarations {
-		if d.Var != "" {
-			vars = append(vars, d.Var)
-		}
-	}
-	if len(vars) != 0 {
-		fmt.Fprintf(w, "\tvar %s;\n", strings.Join(vars, ", "))
-	}
-	for _, d := range a.Declarations {
-		w.Write(d.BodyCode)
-	}
-	w.Write([]byte("\tgo$pkg.init = function() {\n"))
-	for _, d := range a.Declarations {
-		w.Write(d.InitCode)
-	}
-	w.Write([]byte("\t}\n\treturn go$pkg;\n})();\n"))
-}
-
 func NewEmptyTypesPackage(path string) {
 	typesPackages[path] = types.NewPackage(path, path)
 }
 
-func WriteInterfaces(dependencies []string, w io.Writer, merge bool) {
-	allTypeNames := []*types.TypeName{types.New("error").(*types.Named).Obj()}
-	for _, depPath := range dependencies {
-		if depPath == "unsafe" {
-			continue
+func WriteProgramCode(pkgs []*Archive, w io.Writer) {
+	w.Write([]byte("\"use strict\";\n(function() {\n\n"))
+	w.Write([]byte(strings.TrimSpace(Prelude)))
+	w.Write([]byte("\n"))
+
+	notUsedDecls := make(map[Object][]*Decl)
+	var pendingDecls []*Decl
+	for _, pkg := range pkgs {
+		for i := range pkg.Declarations {
+			d := &pkg.Declarations[i]
+			if d.ToplevelName == "" {
+				pendingDecls = append(pendingDecls, d)
+				continue
+			}
+			o := Object{pkg.ImportPath, d.ToplevelName}
+			notUsedDecls[o] = append(notUsedDecls[o], d)
 		}
-		scope := typesPackages[depPath].Scope()
+	}
+
+	for len(pendingDecls) != 0 {
+		d := pendingDecls[len(pendingDecls)-1]
+		pendingDecls = pendingDecls[:len(pendingDecls)-1]
+		for _, o := range d.Dependencies {
+			if decls, ok := notUsedDecls[o]; ok {
+				pendingDecls = append(pendingDecls, decls...)
+				delete(notUsedDecls, o)
+			}
+		}
+	}
+
+	// write packages
+	for _, pkg := range pkgs {
+		fmt.Fprintf(w, "go$packages[\"%s\"] = (function() {\n", pkg.ImportPath)
+		vars := []string{"go$pkg = {}"}
+		for _, imp := range pkg.Imports {
+			vars = append(vars, fmt.Sprintf("%s = go$packages[\"%s\"]", imp.VarName, imp.Path))
+		}
+		for _, d := range pkg.Declarations {
+			if _, notUsed := notUsedDecls[Object{pkg.ImportPath, d.ToplevelName}]; !notUsed && d.Var != "" {
+				vars = append(vars, d.Var)
+			}
+		}
+		if len(vars) != 0 {
+			fmt.Fprintf(w, "\tvar %s;\n", strings.Join(vars, ", "))
+		}
+		for _, d := range pkg.Declarations {
+			if _, notUsed := notUsedDecls[Object{pkg.ImportPath, d.ToplevelName}]; !notUsed {
+				w.Write(d.BodyCode)
+			}
+		}
+		w.Write([]byte("\tgo$pkg.init = function() {\n"))
+		for _, d := range pkg.Declarations {
+			if _, notUsed := notUsedDecls[Object{pkg.ImportPath, d.ToplevelName}]; !notUsed {
+				w.Write(d.InitCode)
+			}
+		}
+		w.Write([]byte("\t}\n\treturn go$pkg;\n})();\n"))
+	}
+
+	// write interfaces
+	merge := false
+	allTypeNames := []*types.TypeName{types.New("error").(*types.Named).Obj()}
+	for _, pkg := range pkgs {
+		scope := typesPackages[pkg.ImportPath].Scope()
 		for _, name := range scope.Names() {
 			if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
-				allTypeNames = append(allTypeNames, typeName)
+				if _, notUsed := notUsedDecls[Object{pkg.ImportPath, name}]; !notUsed {
+					allTypeNames = append(allTypeNames, typeName)
+				}
 			}
 		}
 	}
@@ -140,6 +178,10 @@ func WriteInterfaces(dependencies []string, w io.Writer, merge bool) {
 			}
 			fmt.Fprintf(w, "%s.implementedBy = [%s];\n", target, strings.Join(list, ", "))
 		}
+	}
+
+	for _, pkg := range pkgs {
+		w.Write([]byte("go$packages[\"" + pkg.ImportPath + "\"].init();\n"))
 	}
 }
 
@@ -274,7 +316,11 @@ func (c *pkgContext) newIdent(name string, t types.Type) *ast.Ident {
 }
 
 func (c *pkgContext) objectName(o types.Object) string {
-	if o.Pkg() != nil && o.Pkg() != c.pkg {
+	if o.Parent() == o.Pkg().Scope() {
+		c.dependencies[o] = true
+	}
+
+	if o.Pkg() != c.pkg {
 		pkgVar, found := c.pkgVars[o.Pkg().Path()]
 		if !found {
 			pkgVar = fmt.Sprintf(`go$packages["%s"]`, o.Pkg().Path())

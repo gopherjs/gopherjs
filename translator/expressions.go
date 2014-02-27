@@ -518,7 +518,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 					panic("Invalid js package object: " + sel.Obj().Name())
 				}
 			}
-			return c.formatExpr("%s.%s", c.translateExpr(e.X), e.Sel.Name)
+			return c.formatExpr("%s", c.objectName(sel.Obj()))
 		}
 		panic("")
 

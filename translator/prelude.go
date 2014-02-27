@@ -1338,11 +1338,11 @@ var go$pointerIsEqual = function(a, b) {
 };
 
 var go$typeAssertionFailed = function(obj, expected) {
-	var got = "nil";
+	var got = "";
 	if (obj !== null) {
 		got = obj.constructor.string;
 	}
-	go$throwRuntimeError("interface conversion: interface is " + got + ", not " + expected.string);
+	throw go$panic(new go$packages["runtime"].TypeAssertionError.Ptr("", got, expected.string, ""));
 };
 
 var go$now = function() { var msec = (new Date()).getTime(); return [new Go$Int64(0, Math.floor(msec / 1000)), (msec % 1000) * 1000000]; };

@@ -245,7 +245,7 @@ func init() {
 				return new Value.Ptr();
 			}
 			if (i.constructor.kind === undefined) { // js.Object
-				return new Value.Ptr(Go$String.reflectType(), String(i), String << flagKindShift);
+				return new Value.Ptr(Go$String.reflectType(), go$toString(i), String << flagKindShift);
 			}
 			var typ = i.constructor.reflectType();
 			return new Value.Ptr(typ, i.go$val, typ.Kind() << flagKindShift);
@@ -683,7 +683,7 @@ func init() {
 					return new Value.Ptr();
 				}
 				if (val.constructor.kind === undefined) { // js.Object
-					return new Value.Ptr(Go$String.reflectType(), String(val), String << flagKindShift);
+					return new Value.Ptr(Go$String.reflectType(), go$toString(val), String << flagKindShift);
 				}
 				var typ = val.constructor.reflectType();
 				var fl = this.flag & flagRO;

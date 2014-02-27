@@ -17,6 +17,7 @@ var go$keys = function(m) { return m ? Object.keys(m) : []; };
 var go$min = Math.min;
 var go$parseInt = parseInt;
 var go$parseFloat = parseFloat;
+var go$toString = String;
 var go$reflect, go$newStringPtr;
 var Go$Array = Array;
 var Go$Error = Error;

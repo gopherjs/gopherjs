@@ -100,7 +100,8 @@ func (c *pkgContext) Delayed(f func()) {
 func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error)) (*Archive, error) {
 	info := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
-		Objects:    make(map[*ast.Ident]types.Object),
+		Defs:       make(map[*ast.Ident]types.Object),
+		Uses:       make(map[*ast.Ident]types.Object),
 		Implicits:  make(map[ast.Node]types.Object),
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 	}
@@ -159,7 +160,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
-				sig := c.info.Objects[d.Name].(*types.Func).Type().(*types.Signature)
+				sig := c.info.Defs[d.Name].(*types.Func).Type().(*types.Signature)
 				var recvType types.Type
 				if sig.Recv() != nil {
 					recvType = sig.Recv().Type()
@@ -176,13 +177,13 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				}
 				functions = append(functions, d)
 				if sig.Recv() == nil {
-					c.objectName(c.info.Objects[d.Name]) // register toplevel name
+					c.objectName(c.info.Defs[d.Name]) // register toplevel name
 				}
 			case *ast.GenDecl:
 				switch d.Tok {
 				case token.TYPE:
 					for _, spec := range d.Specs {
-						o := c.info.Objects[spec.(*ast.TypeSpec).Name].(*types.TypeName)
+						o := c.info.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
 						toplevelTypes = append(toplevelTypes, o)
 						c.objectName(o) // register toplevel name
 					}
@@ -190,7 +191,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 					for _, spec := range d.Specs {
 						for _, name := range spec.(*ast.ValueSpec).Names {
 							if !isBlank(name) {
-								o := c.info.Objects[name].(*types.Var)
+								o := c.info.Defs[name].(*types.Var)
 								vars = append(vars, o)
 								c.objectName(o) // register toplevel name
 							}
@@ -232,7 +233,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	natives := pkgNatives[importPath]
 	for _, fun := range functions {
 		var d Decl
-		o := c.info.Objects[fun.Name].(*types.Func)
+		o := c.info.Defs[fun.Name].(*types.Func)
 		funName := fun.Name.Name
 		if fun.Recv == nil {
 			d.Var = c.objectName(o)
@@ -303,7 +304,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		for i, o := range init.Lhs {
 			ident := ast.NewIdent(o.Name())
 			c.info.Types[ident] = types.TypeAndValue{Type: o.Type()}
-			c.info.Objects[ident] = o
+			c.info.Defs[ident] = o
 			lhs[i] = ident
 			varsWithInit[o] = true
 		}
@@ -482,7 +483,7 @@ func (c *pkgContext) initArgs(ty types.Type) string {
 }
 
 func (c *pkgContext) translateToplevelFunction(fun *ast.FuncDecl, native string) []byte {
-	sig := c.info.Objects[fun.Name].(*types.Func).Type().(*types.Signature)
+	sig := c.info.Defs[fun.Name].(*types.Func).Type().(*types.Signature)
 	var recv *ast.Ident
 	if fun.Recv != nil && fun.Recv.List[0].Names != nil {
 		recv = fun.Recv.List[0].Names[0]
@@ -516,7 +517,7 @@ func (c *pkgContext) translateToplevelFunction(fun *ast.FuncDecl, native string)
 	}
 
 	if fun.Recv == nil {
-		funName := c.objectName(c.info.Objects[fun.Name])
+		funName := c.objectName(c.info.Defs[fun.Name])
 		lhs := funName
 		if fun.Name.IsExported() || fun.Name.Name == "main" {
 			lhs += " = go$pkg." + funName
@@ -589,7 +590,7 @@ func (c *pkgContext) translateFunction(t *ast.FuncType, sig *types.Signature, st
 				params = append(params, c.newVariable("param"))
 				continue
 			}
-			params = append(params, c.objectName(c.info.Objects[ident]))
+			params = append(params, c.objectName(c.info.Defs[ident]))
 		}
 	}
 
@@ -618,10 +619,10 @@ func (c *pkgContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte 
 				if result.Name() == "_" {
 					name = "result"
 				}
+				c.Printf("%s = %s;", c.objectName(result), c.zeroValue(result.Type()))
 				id := ast.NewIdent(name)
 				c.info.Types[id] = types.TypeAndValue{Type: result.Type()}
-				c.info.Objects[id] = result
-				c.Printf("%s = %s;", c.translateExpr(id), c.zeroValue(result.Type()))
+				c.info.Uses[id] = result
 				c.f.resultNames[i] = id
 			}
 		}

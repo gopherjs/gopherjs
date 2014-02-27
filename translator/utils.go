@@ -268,7 +268,7 @@ func (c *pkgContext) newIdent(name string, t types.Type) *ast.Ident {
 	ident := ast.NewIdent(name)
 	c.info.Types[ident] = types.TypeAndValue{Type: t}
 	obj := types.NewVar(0, c.pkg, name, t)
-	c.info.Objects[ident] = obj
+	c.info.Uses[ident] = obj
 	c.objectVars[obj] = name
 	return ident
 }

@@ -527,10 +527,10 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 			case *ast.StarExpr:
 				return isType(e.X)
 			case *ast.Ident:
-				_, ok := c.info.Objects[e].(*types.TypeName)
+				_, ok := c.info.Uses[e].(*types.TypeName)
 				return ok
 			case *ast.SelectorExpr:
-				_, ok := c.info.Objects[e.Sel].(*types.TypeName)
+				_, ok := c.info.Uses[e.Sel].(*types.TypeName)
 				return ok
 			case *ast.ParenExpr:
 				return isType(e.X)
@@ -546,7 +546,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 		var fun *expression
 		switch f := plainFun.(type) {
 		case *ast.Ident:
-			if o, ok := c.info.Objects[f].(*types.Builtin); ok {
+			if o, ok := c.info.Uses[f].(*types.Builtin); ok {
 				switch o.Name() {
 				case "new":
 					t := c.info.Types[e].Type.(*types.Pointer)
@@ -836,7 +836,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 		if e.Name == "_" {
 			panic("Tried to translate underscore identifier.")
 		}
-		switch o := c.info.Objects[e].(type) {
+		switch o := c.info.Uses[e].(type) {
 		case *types.PkgName:
 			return c.formatExpr("%s", c.pkgVars[o.Pkg().Path()])
 		case *types.Var, *types.Const:

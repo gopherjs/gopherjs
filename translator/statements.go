@@ -247,7 +247,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 	case *ast.DeferStmt:
 		c.printLabel(label)
 		if ident, isIdent := s.Call.Fun.(*ast.Ident); isIdent {
-			if builtin, isBuiltin := c.info.Objects[ident].(*types.Builtin); isBuiltin {
+			if builtin, isBuiltin := c.info.Uses[ident].(*types.Builtin); isBuiltin {
 				if builtin.Name() == "recover" {
 					c.Printf("go$deferred.push({ fun: go$recover, args: [] });")
 					return
@@ -281,7 +281,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			c.Printf("%s;", c.translateSimpleStmt(stmt))
 		case token.TYPE:
 			for _, spec := range decl.Specs {
-				o := c.info.Objects[spec.(*ast.TypeSpec).Name].(*types.TypeName)
+				o := c.info.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
 				c.translateType(o, false)
 				c.initType(o)
 			}
@@ -599,7 +599,7 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 		if s.Tok == token.DEFINE {
 			for _, lhs := range s.Lhs {
 				if !isBlank(lhs) {
-					c.info.Types[lhs] = types.TypeAndValue{Type: c.info.Objects[lhs.(*ast.Ident)].Type()}
+					c.info.Types[lhs] = types.TypeAndValue{Type: c.info.Defs[lhs.(*ast.Ident)].Type()}
 				}
 			}
 		}
@@ -738,7 +738,11 @@ func (c *pkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 
 	switch l := lhs.(type) {
 	case *ast.Ident:
-		return c.objectName(c.info.Objects[l]) + " = " + rhs
+		o := c.info.Defs[l]
+		if o == nil {
+			o = c.info.Uses[l]
+		}
+		return c.objectName(o) + " = " + rhs
 	case *ast.SelectorExpr:
 		sel := c.info.Selections[l]
 		switch sel.Kind() {
@@ -853,12 +857,15 @@ func (v *escapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
 	switch n := node.(type) {
 	case *ast.ValueSpec:
 		for _, name := range n.Names {
-			v.candidates[v.info.Objects[name]] = true
+			v.candidates[v.info.Defs[name]] = true
 		}
 	case *ast.AssignStmt:
 		if n.Tok == token.DEFINE {
 			for _, name := range n.Lhs {
-				v.candidates[v.info.Objects[name.(*ast.Ident)]] = true
+				def := v.info.Defs[name.(*ast.Ident)]
+				if def != nil {
+					v.candidates[def] = true
+				}
 			}
 		}
 	case *ast.UnaryExpr:
@@ -885,7 +892,7 @@ type escapingObjectCollector struct {
 
 func (v *escapingObjectCollector) Visit(node ast.Node) (w ast.Visitor) {
 	if id, isIdent := node.(*ast.Ident); isIdent {
-		obj := v.analysis.info.Objects[id]
+		obj := v.analysis.info.Uses[id]
 		if v.analysis.candidates[obj] {
 			v.analysis.escaping[obj] = true
 		}

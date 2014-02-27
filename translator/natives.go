@@ -82,6 +82,7 @@ func init() {
 	}
 
 	pkgNatives["math"] = map[string]string{
+		"toplevelDependencies": `math.expm1 math.frexp math.hypot math.log10 math.log1p math.log2 math.remainder`,
 		"Abs":       `Math.abs`,
 		"Acos":      `Math.acos`,
 		"Asin":      `Math.asin`,
@@ -180,18 +181,19 @@ func init() {
 	}
 
 	pkgNatives["math/big"] = map[string]string{
-		"mulWW":     `function(x, y) { return mulWW_g(x, y); }`,
-		"divWW":     `function(x1, x0, y) { return divWW_g(x1, x0, y); }`,
-		"addVV":     `function(z, x, y) { return addVV_g(z, x, y); }`,
-		"subVV":     `function(z, x, y) { return subVV_g(z, x, y); }`,
-		"addVW":     `function(z, x, y) { return addVW_g(z, x, y); }`,
-		"subVW":     `function(z, x, y) { return subVW_g(z, x, y); }`,
-		"shlVU":     `function(z, x, s) { return shlVU_g(z, x, s); }`,
-		"shrVU":     `function(z, x, s) { return shrVU_g(z, x, s); }`,
-		"mulAddVWW": `function(z, x, y, r) { return mulAddVWW_g(z, x, y, r); }`,
-		"addMulVVW": `function(z, x, y) { return addMulVVW_g(z, x, y); }`,
-		"divWVW":    `function(z, xn, x, y) { return divWVW_g(z, xn, x, y); }`,
-		"bitLen":    `function(x) { return bitLen_g(x); }`,
+		"toplevelDependencies": `math/big.mulWW_g math/big.divWW_g math/big.addVV_g math/big.subVV_g math/big.addVW_g math/big.subVW_g math/big.shlVU_g math/big.shrVU_g math/big.mulAddVWW_g math/big.addMulVVW_g math/big.divWVW_g math/big.bitLen_g`,
+		"mulWW":                `function(x, y) { return mulWW_g(x, y); }`,
+		"divWW":                `function(x1, x0, y) { return divWW_g(x1, x0, y); }`,
+		"addVV":                `function(z, x, y) { return addVV_g(z, x, y); }`,
+		"subVV":                `function(z, x, y) { return subVV_g(z, x, y); }`,
+		"addVW":                `function(z, x, y) { return addVW_g(z, x, y); }`,
+		"subVW":                `function(z, x, y) { return subVW_g(z, x, y); }`,
+		"shlVU":                `function(z, x, s) { return shlVU_g(z, x, s); }`,
+		"shrVU":                `function(z, x, s) { return shrVU_g(z, x, s); }`,
+		"mulAddVWW":            `function(z, x, y, r) { return mulAddVWW_g(z, x, y, r); }`,
+		"addMulVVW":            `function(z, x, y) { return addMulVVW_g(z, x, y); }`,
+		"divWVW":               `function(z, xn, x, y) { return divWVW_g(z, xn, x, y); }`,
+		"bitLen":               `function(x) { return bitLen_g(x); }`,
 	}
 
 	pkgNatives["os"] = map[string]string{
@@ -200,13 +202,15 @@ func init() {
 				NewFile = go$pkg.NewFile = function() { return new File.Ptr(); };
 			}
 		`,
-		"Args": `new (go$sliceType(Go$String))((typeof process !== 'undefined') ? process.argv.slice(1) : [])`,
+		"toplevelDependencies": `syscall.Syscall15 os.NewFile`,
+		"Args":                 `new (go$sliceType(Go$String))((typeof process !== 'undefined') ? process.argv.slice(1) : [])`,
 	}
 
 	pkgNatives["runtime"] = map[string]string{
 		"toplevel": `
 			go$throwRuntimeError = function(msg) { throw go$panic(new errorString(msg)); };
 		`,
+		"toplevelDependencies": `runtime.errorString`,
 		"getgoroot": `function() {
 			return (typeof process !== 'undefined') ? (process.env["GOROOT"] || "") : "/";
 		}`,
@@ -341,7 +345,7 @@ func init() {
 				}
 			}
 		`,
-		"toplevelDependencies": `Syscall Syscall6 Syscall9 Syscall12 Syscall15 loadlibrary getprocaddress getStdHandle GetCommandLine CommandLineToArgv Getenv GetTimeZoneInformation RawSyscall RawSyscall6 BytePtrFromString`,
+		"toplevelDependencies": `syscall.Syscall syscall.Syscall6 syscall.Syscall9 syscall.Syscall12 syscall.Syscall15 syscall.loadlibrary syscall.getprocaddress syscall.getStdHandle syscall.GetCommandLine syscall.CommandLineToArgv syscall.Getenv syscall.GetTimeZoneInformation syscall.RawSyscall syscall.RawSyscall6 syscall.BytePtrFromString`,
 	}
 
 	pkgNatives["testing"] = map[string]string{
@@ -386,6 +390,7 @@ func init() {
 				return ok;
 			};
 		`,
+		"toplevelDependencies": `os.Open time.Now testing.T testing.common`,
 	}
 
 	pkgNatives["time"] = map[string]string{

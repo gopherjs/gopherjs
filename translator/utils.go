@@ -319,7 +319,7 @@ func (c *pkgContext) newIdent(name string, t types.Type) *ast.Ident {
 }
 
 func (c *pkgContext) objectName(o types.Object) string {
-	if o.Parent() == o.Pkg().Scope() {
+	if o.Pkg() != c.pkg || o.Parent() == c.pkg.Scope() {
 		c.dependencies[o] = true
 	}
 

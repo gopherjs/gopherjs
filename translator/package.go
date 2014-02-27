@@ -350,10 +350,13 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	var toplevel Decl
 	toplevel.BodyCode = []byte(natives["toplevel"])
 	delete(natives, "toplevel")
-	for _, dep := range strings.Split(natives["toplevelDependencies"], " ") {
-		toplevel.Dependencies = append(toplevel.Dependencies, Object{importPath, dep})
+	if toplevelDependencies, ok := natives["toplevelDependencies"]; ok {
+		for _, dep := range strings.Split(toplevelDependencies, " ") {
+			parts := strings.Split(dep, ".")
+			toplevel.Dependencies = append(toplevel.Dependencies, Object{parts[0], parts[1]})
+		}
+		delete(natives, "toplevelDependencies")
 	}
-	delete(natives, "toplevelDependencies")
 	archive.Declarations = append(archive.Declarations, toplevel)
 
 	// init functions

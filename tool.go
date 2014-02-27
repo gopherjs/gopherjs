@@ -283,7 +283,9 @@ func tool() error {
 		testingOutput, _ := importPackage("testing")
 		mainPkg.Archive.AddDependenciesOf(testingOutput)
 
-		mainFunc := []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\nvar ok = true;\n")
+		var mainFunc translator.Decl
+		mainFunc.BodyCode = []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\nvar ok = true;\n")
+		mainFunc.Dependencies = []translator.Object{translator.Object{"flag", "Parse"}}
 		for _, pkgPath := range testFlags.Args() {
 			pkgPath = filepath.ToSlash(pkgPath)
 
@@ -293,6 +295,7 @@ func tool() error {
 				for _, name := range pkg.Archive.Tests {
 					names = append(names, name)
 					tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
+					mainFunc.Dependencies = append(mainFunc.Dependencies, translator.Object{pkg.ImportPath, name})
 				}
 				mainPkg.Archive.AddDependenciesOf(pkg.Archive)
 			}
@@ -315,12 +318,10 @@ func tool() error {
 				collectTests(testPkg)
 			}
 
-			mainFunc = append(mainFunc, []byte(fmt.Sprintf(`ok = go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]) && ok;`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
+			mainFunc.BodyCode = append(mainFunc.BodyCode, []byte(fmt.Sprintf(`ok = go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]) && ok;`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
 		}
-		mainFunc = append(mainFunc, []byte("process.exit(ok ? 0 : 1);\n};\n")...)
-		mainPkg.Archive.Declarations = []translator.Decl{
-			translator.Decl{BodyCode: mainFunc},
-		}
+		mainFunc.BodyCode = append(mainFunc.BodyCode, []byte("process.exit(ok ? 0 : 1);\n};\n")...)
+		mainPkg.Archive.Declarations = []translator.Decl{mainFunc}
 		mainPkg.Archive.AddDependency("main")
 
 		tempfile, err := ioutil.TempFile("", "test.")

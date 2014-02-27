@@ -230,7 +230,7 @@ func init() {
 				return v;
 			};
 		`,
-		"toplevelDependencies": `rtype uncommonType method arrayType chanType funcType interfaceType mapType ptrType sliceType structType imethod structField`,
+		"toplevelDependencies": `reflect.rtype reflect.uncommonType reflect.method reflect.arrayType reflect.chanType reflect.funcType reflect.interfaceType reflect.mapType reflect.ptrType reflect.sliceType reflect.structType reflect.imethod reflect.structField reflect.methodReceiver reflect.ValueOf reflect.SliceOf reflect.MakeSlice reflect.valueInterface reflect.makeMethodValue reflect.methodReceiver reflect.typesMustMatch`,
 
 		"TypeOf": `function(i) {
 			if (i === null) {

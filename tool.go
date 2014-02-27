@@ -380,6 +380,7 @@ The commands are:
     build       compile packages and dependencies
     install     compile and install packages and dependencies
     run         compile and run Go program
+    test        test packages
 
 `)
 		return nil

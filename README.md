@@ -31,6 +31,7 @@ The package `github.com/gopherjs/gopherjs/js` provides functions for interacting
 ### Community
 - Get help in the [Google Group](https://groups.google.com/d/forum/gopherjs)
 - See the list of [bindings to JavaScript APIs and libraries](https://github.com/gopherjs/gopherjs/wiki/bindings) by community members
+- Follow [GopherJS on Twitter](https://twitter.com/GopherJS)
 
 ### Roadmap
 These features are not implemented yet, but on the roadmap:

@@ -38,7 +38,10 @@ type Decl struct {
 	Dependencies []Object
 }
 
-type Object [2]string
+type Object struct {
+	PkgPath string
+	Name    string
+}
 
 func (a *Archive) AddDependency(path string) {
 	for _, dep := range a.Dependencies {

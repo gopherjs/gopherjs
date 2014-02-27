@@ -322,6 +322,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				d.InitCode = []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value))
 			})
 		}
+		d.ToplevelName = o.Name()
 		archive.Declarations = append(archive.Declarations, d)
 	}
 	for _, init := range initOrder {
@@ -343,6 +344,13 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				},
 			})
 		})
+		if len(init.Lhs) == 1 {
+			v := hasCallVisitor{c.info, false}
+			ast.Walk(&v, init.Rhs)
+			if !v.hasCall {
+				d.ToplevelName = init.Lhs[0].Name()
+			}
+		}
 		archive.Declarations = append(archive.Declarations, d)
 	}
 

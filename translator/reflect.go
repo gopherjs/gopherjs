@@ -261,7 +261,7 @@ func init() {
 			case Func:
 			case Map:
 			case Slice:
-				throw go$panic("reflect.MapOf: invalid key type " + key.String());
+				throw go$panic(new Go$String("reflect.MapOf: invalid key type " + key.String()));
 			}
 			return go$mapType(key.jsType, elem.jsType).reflectType();
 		}`,
@@ -346,16 +346,16 @@ func init() {
 		}`,
 		"MakeSlice": `function(typ, len, cap) {
 			if (typ.Kind() !== Slice) {
-				throw go$panic("reflect.MakeSlice of non-slice type");
+				throw go$panic(new Go$String("reflect.MakeSlice of non-slice type"));
 			}
 			if (len < 0) {
-				throw go$panic("reflect.MakeSlice: negative len");
+				throw go$panic(new Go$String("reflect.MakeSlice: negative len"));
 			}
 			if (cap < 0) {
-				throw go$panic("reflect.MakeSlice: negative cap");
+				throw go$panic(new Go$String("reflect.MakeSlice: negative cap"));
 			}
 			if (len > cap) {
-				throw go$panic("reflect.MakeSlice: len > cap");
+				throw go$panic(new Go$String("reflect.MakeSlice: len > cap"));
 			}
 			return new Value.Ptr(typ.common(), typ.jsType.make(len, cap, function() { return zeroVal(typ.Elem()); }), Slice << flagKindShift);
 		}`,
@@ -453,7 +453,7 @@ func init() {
 				throw go$panic(new ValueError.Ptr("reflect.Value.Interface", 0));
 			}
 			if (safe && (v.flag & flagRO) !== 0) {
-				throw go$panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")
+				throw go$panic(new Go$String("reflect.Value.Interface: cannot return value obtained from unexported field or method"))
 			}
 			if ((v.flag & flagMethod) !== 0) {
 				v = makeMethodValue("Interface", v);
@@ -465,7 +465,7 @@ func init() {
 		}`,
 		"makeMethodValue": `function(op, v) {
 			if ((v.flag & flagMethod) === 0) {
-				throw go$panic("reflect: internal error: invalid use of makePartialFunc");
+				throw go$panic(new Go$String("reflect: internal error: invalid use of makePartialFunc"));
 			}
 
 			var tuple = methodReceiver(op, v, v.flag >> flagMethodShift);
@@ -479,23 +479,23 @@ func init() {
 			if (v.typ.Kind() === Interface) {
 				var tt = v.typ.interfaceType;
 				if (i < 0 || i >= tt.methods.length) {
-					throw go$panic("reflect: internal error: invalid method index");
+					throw go$panic(new Go$String("reflect: internal error: invalid method index"));
 				}
 				if (v.IsNil()) {
-					throw go$panic("reflect: " + op + " of method on nil interface value");
+					throw go$panic(new Go$String("reflect: " + op + " of method on nil interface value"));
 				}
 				m = tt.methods.array[i];
 				t = m.typ;
 			} else {
 				var ut = v.typ.uncommon();
 				if (ut === uncommonType.Ptr.nil || i < 0 || i >= ut.methods.length) {
-					throw go$panic("reflect: internal error: invalid method index");
+					throw go$panic(new Go$String("reflect: internal error: invalid method index"));
 				}
 				m = ut.methods.array[i];
 				t = m.mtyp;
 			}
 			if (m.pkgPath.go$get !== go$throwNilPointerError) {
-				throw go$panic("reflect: " + op + " of unexported method");
+				throw go$panic(new Go$String("reflect: " + op + " of unexported method"));
 			}
 			var name = m.name.go$get()
 			if (go$reservedKeywords.indexOf(name) !== -1) {
@@ -544,7 +544,7 @@ func init() {
 
 		"uncommonType.Method": `function(i) {
 			if (this === uncommonType.Ptr.nil || i < 0 || i >= this.methods.length) {
-				throw go$panic("reflect: Method index out of range");
+				throw go$panic(new Go$String("reflect: Method index out of range"));
 			}
 			var p = this.methods.array[i];
 			var fl = Func << flagKindShift;
@@ -573,7 +573,7 @@ func init() {
 		"Value.Bytes": `function() {
 			this.mustBe(Slice);
 			if (this.typ.Elem().Kind() !== Uint8) {
-				throw go$panic("reflect.Value.Bytes of non-byte slice");
+				throw go$panic(new Go$String("reflect.Value.Bytes of non-byte slice"));
 			}
 			return this.iword();
 		}`,
@@ -590,42 +590,42 @@ func init() {
 			}
 
 			if (fn === go$throwNilPointerError) {
-				throw go$panic("reflect.Value.Call: call of nil function");
+				throw go$panic(new Go$String("reflect.Value.Call: call of nil function"));
 			}
 
 			var isSlice = (op === "CallSlice");
 			var n = t.NumIn();
 			if (isSlice) {
 				if (!t.IsVariadic()) {
-					throw go$panic("reflect: CallSlice of non-variadic function");
+					throw go$panic(new Go$String("reflect: CallSlice of non-variadic function"));
 				}
 				if (args.length < n) {
-					throw go$panic("reflect: CallSlice with too few input arguments");
+					throw go$panic(new Go$String("reflect: CallSlice with too few input arguments"));
 				}
 				if (args.length > n) {
-					throw go$panic("reflect: CallSlice with too many input arguments");
+					throw go$panic(new Go$String("reflect: CallSlice with too many input arguments"));
 				}
 			} else {
 				if (t.IsVariadic()) {
 					n--;
 				}
 				if (args.length < n) {
-					throw go$panic("reflect: Call with too few input arguments");
+					throw go$panic(new Go$String("reflect: Call with too few input arguments"));
 				}
 				if (!t.IsVariadic() && args.length > n) {
-					throw go$panic("reflect: Call with too many input arguments");
+					throw go$panic(new Go$String("reflect: Call with too many input arguments"));
 				}
 			}
 			var i;
 			for (i = 0; i < args.length; i++) {
 				if (args.array[args.offset + i].Kind() === Invalid) {
-					throw go$panic("reflect: " + op + " using zero Value argument");
+					throw go$panic(new Go$String("reflect: " + op + " using zero Value argument"));
 				}
 			}
 			for (i = 0; i < n; i++) {
 				var xt = args.array[args.offset + i].Type(), targ = t.In(i);
 				if (!xt.AssignableTo(targ)) {
-					throw go$panic("reflect: " + op + " using " + xt.String() + " as type " + targ.String());
+					throw go$panic(new Go$String("reflect: " + op + " using " + xt.String() + " as type " + targ.String()));
 				}
 			}
 			if (!isSlice && t.IsVariadic()) {
@@ -636,7 +636,7 @@ func init() {
 					var x = args.array[args.offset + n + i];
 					var xt = x.Type();
 					if (!xt.AssignableTo(elem)) {
-						throw go$panic("reflect: cannot use " + xt.String() + " as type " + elem.String() + " in " + op);
+						throw go$panic(new Go$String("reflect: cannot use " + xt.String() + " as type " + elem.String() + " in " + op));
 					}
 					slice.Index(i).Set(x);
 				}
@@ -644,7 +644,7 @@ func init() {
 			}
 
 			if (args.length !== t.NumIn()) {
-				throw go$panic("reflect.Value.Call: wrong argument count");
+				throw go$panic(new Go$String("reflect.Value.Call: wrong argument count"));
 			}
 
 			var argsArray = new Go$Array(t.NumIn());
@@ -706,7 +706,7 @@ func init() {
 			this.mustBe(Struct);
 			var tt = this.typ.structType;
 			if (i < 0 || i >= tt.fields.length) {
-				throw go$panic("reflect: Field index out of range");
+				throw go$panic(new Go$String("reflect: Field index out of range"));
 			}
 			var field = tt.fields.array[i];
 			var name = fieldName(field, i);
@@ -728,7 +728,7 @@ func init() {
 			case Array:
 				var tt = this.typ.arrayType;
 				if (i < 0 || i >= tt.len) {
-					throw go$panic("reflect: array index out of range");
+					throw go$panic(new Go$String("reflect: array index out of range"));
 				}
 				var typ = tt.elem;
 				var fl = this.flag & (flagRO | flagIndir | flagAddr);
@@ -740,7 +740,7 @@ func init() {
 				return new Value.Ptr(typ, this.iword()[i], fl);
 			case Slice:
 				if (i < 0 || i >= this.iword().length) {
-					throw go$panic("reflect: slice index out of range");
+					throw go$panic(new Go$String("reflect: slice index out of range"));
 				}
 				var typ = this.typ.sliceType.elem;
 				var fl = flagAddr | flagIndir | (this.flag & flagRO);
@@ -754,7 +754,7 @@ func init() {
 			case String:
 				var string = this.iword();
 				if (i < 0 || i >= string.length) {
-					throw go$panic("reflect: string index out of range");
+					throw go$panic(new Go$String("reflect: string index out of range"));
 				}
 				var fl = (this.flag & flagRO) | (Uint8 << flagKindShift);
 				return new Value.Ptr(uint8Type, string.charCodeAt(i), fl);
@@ -791,7 +791,7 @@ func init() {
 		"Value.runes": `function() {
 			this.mustBe(Slice);
 			if (this.typ.Elem().Kind() !== Int32) {
-				throw new go$panic("reflect.Value.Bytes of non-rune slice");
+				throw new go$panic(new Go$String("reflect.Value.Bytes of non-rune slice"));
 			}
 			return this.iword();
 		}`,
@@ -885,7 +885,7 @@ func init() {
 			this.mustBe(Slice);
 			var s = this.val.go$get();
 			if (n < s.length || n > s.capacity) {
-				throw go$panic("reflect: slice capacity out of range in SetCap");
+				throw go$panic(new Go$String("reflect: slice capacity out of range in SetCap"));
 			}
 			var newSlice = new this.typ.jsType(s.array);
 			newSlice.offset = s.offset;
@@ -898,7 +898,7 @@ func init() {
 			this.mustBe(Slice);
 			var s = this.val.go$get();
 			if (n < 0 || n > s.capacity) {
-				throw go$panic("reflect: slice length out of range in SetLen");
+				throw go$panic(new Go$String("reflect: slice length out of range in SetLen"));
 			}
 			var newSlice = new this.typ.jsType(s.array);
 			newSlice.offset = s.offset;
@@ -912,7 +912,7 @@ func init() {
 			switch (kind) {
 			case Array:
 				if ((this.flag & flagAddr) === 0) {
-					throw go$panic("reflect.Value.Slice: slice of unaddressable array");
+					throw go$panic(new Go$String("reflect.Value.Slice: slice of unaddressable array"));
 				}
 				var tt = this.typ.arrayType;
 				cap = tt.len;
@@ -927,7 +927,7 @@ func init() {
 			case String:
 				s = this.iword();
 				if (i < 0 || j < i || j > s.length) {
-					throw go$panic("reflect.Value.Slice: string slice index out of bounds");
+					throw go$panic(new Go$String("reflect.Value.Slice: string slice index out of bounds"));
 				}
 				return new Value.Ptr(this.typ, s.substring(i, j), this.flag);
 			default:
@@ -935,7 +935,7 @@ func init() {
 			}
 
 			if (i < 0 || j < i || j > cap) {
-				throw go$panic("reflect.Value.Slice: slice index out of bounds");
+				throw go$panic(new Go$String("reflect.Value.Slice: slice index out of bounds"));
 			}
 
 			var fl = (this.flag & flagRO) | (Slice << flagKindShift);
@@ -947,7 +947,7 @@ func init() {
 			switch (kind) {
 			case Array:
 				if ((this.flag & flagAddr) === 0) {
-					throw go$panic("reflect.Value.Slice3: slice of unaddressable array");
+					throw go$panic(new Go$String("reflect.Value.Slice3: slice of unaddressable array"));
 				}
 				var tt = this.typ.arrayType;
 				cap = tt.len;
@@ -964,7 +964,7 @@ func init() {
 			}
 
 			if (i < 0 || j < i || k < j || k > cap) {
-				throw go$panic("reflect.Value.Slice3: slice index out of bounds");
+				throw go$panic(new Go$String("reflect.Value.Slice3: slice index out of bounds"));
 			}
 
 			var fl = (this.flag & flagRO) | (Slice << flagKindShift);

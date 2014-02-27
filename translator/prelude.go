@@ -253,7 +253,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		break;
 
 	default:
-		throw go$panic("invalid kind: " + kind);
+		throw go$panic(new Go$String("invalid kind: " + kind));
 	}
 
 	typ.kind = kind;
@@ -999,7 +999,7 @@ var go$internalize = function(v, t, recv) {
 		return parseFloat(v);
 	case "Array":
 		if (v.length !== t.len) {
-			throw go$panic("got array with wrong size from JavaScript native");
+			go$throwRuntimeError("got array with wrong size from JavaScript native");
 		}
 		return go$mapArray(v, function(e) { return go$internalize(e, t.elem); });
 	case "Func":
@@ -1342,7 +1342,7 @@ var go$typeAssertionFailed = function(obj, expected) {
 	if (obj !== null) {
 		got = obj.constructor.string;
 	}
-	throw go$panic("interface conversion: interface is " + got + ", not " + expected.string);
+	go$throwRuntimeError("interface conversion: interface is " + got + ", not " + expected.string);
 };
 
 var go$now = function() { var msec = (new Date()).getTime(); return [new Go$Int64(0, Math.floor(msec / 1000)), (msec % 1000) * 1000000]; };

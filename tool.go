@@ -654,7 +654,7 @@ func writeCommandPackage(pkg *packageData, pkgObj string) error {
 	}
 	defer file.Close()
 
-	fmt.Fprintln(file, `"use strict";`)
+	file.WriteString("\"use strict\";\n(function() {\n\n")
 	file.WriteString(strings.TrimSpace(translator.Prelude))
 	file.WriteString("\n")
 
@@ -671,7 +671,7 @@ func writeCommandPackage(pkg *packageData, pkgObj string) error {
 	for _, depPath := range pkg.Archive.Dependencies {
 		file.WriteString("go$packages[\"" + depPath + "\"].init();\n")
 	}
-	file.WriteString("go$packages[\"" + pkg.ImportPath + "\"].main();\n")
+	file.WriteString("go$packages[\"" + pkg.ImportPath + "\"].main();\n\n})();")
 
 	return nil
 }

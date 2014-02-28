@@ -111,7 +111,6 @@ func WriteProgramCode(pkgs []*Archive, mainPkgPath string, w io.Writer) {
 	}
 
 	// write interfaces
-	merge := false
 	allTypeNames := []*types.TypeName{types.New("error").(*types.Named).Obj()}
 	for _, pkg := range pkgs {
 		scope := typesPackages[pkg.ImportPath].Scope()
@@ -161,12 +160,6 @@ func WriteProgramCode(pkgs []*Archive, mainPkgPath string, w io.Writer) {
 				target = "go$error"
 			default:
 				target = fmt.Sprintf("go$packages[\"%s\"].%s", t.Pkg().Path(), t.Name())
-			}
-			if merge {
-				for _, entry := range list {
-					fmt.Fprintf(w, "if (%s.implementedBy.indexOf(%s) === -1) { %s.implementedBy.push(%s); }\n", target, entry, target, entry)
-				}
-				continue
 			}
 			fmt.Fprintf(w, "%s.implementedBy = [%s];\n", target, strings.Join(list, ", "))
 		}

@@ -107,31 +107,7 @@ func WriteProgramCode(pkgs []*Archive, mainPkgPath string, w io.Writer) {
 
 	// write packages
 	for _, pkg := range pkgs {
-		fmt.Fprintf(w, "go$packages[\"%s\"] = (function() {\n", pkg.ImportPath)
-		vars := []string{"go$pkg = {}"}
-		for _, imp := range pkg.Imports {
-			vars = append(vars, fmt.Sprintf("%s = go$packages[\"%s\"]", imp.VarName, imp.Path))
-		}
-		for _, d := range pkg.Declarations {
-			if len(d.DceFilters) == 0 && d.Var != "" {
-				vars = append(vars, d.Var)
-			}
-		}
-		if len(vars) != 0 {
-			fmt.Fprintf(w, "\tvar %s;\n", strings.Join(vars, ", "))
-		}
-		for _, d := range pkg.Declarations {
-			if len(d.DceFilters) == 0 {
-				w.Write(d.BodyCode)
-			}
-		}
-		w.Write([]byte("\tgo$pkg.init = function() {\n"))
-		for _, d := range pkg.Declarations {
-			if len(d.DceFilters) == 0 {
-				w.Write(d.InitCode)
-			}
-		}
-		w.Write([]byte("\t}\n\treturn go$pkg;\n})();\n"))
+		WritePkgCode(pkg, w)
 	}
 
 	// write interfaces
@@ -201,6 +177,34 @@ func WriteProgramCode(pkgs []*Archive, mainPkgPath string, w io.Writer) {
 	}
 
 	w.Write([]byte("go$packages[\"" + mainPkgPath + "\"].main();\n\n})();"))
+}
+
+func WritePkgCode(pkg *Archive, w io.Writer) {
+	fmt.Fprintf(w, "go$packages[\"%s\"] = (function() {\n", pkg.ImportPath)
+	vars := []string{"go$pkg = {}"}
+	for _, imp := range pkg.Imports {
+		vars = append(vars, fmt.Sprintf("%s = go$packages[\"%s\"]", imp.VarName, imp.Path))
+	}
+	for _, d := range pkg.Declarations {
+		if len(d.DceFilters) == 0 && d.Var != "" {
+			vars = append(vars, d.Var)
+		}
+	}
+	if len(vars) != 0 {
+		fmt.Fprintf(w, "\tvar %s;\n", strings.Join(vars, ", "))
+	}
+	for _, d := range pkg.Declarations {
+		if len(d.DceFilters) == 0 {
+			w.Write(d.BodyCode)
+		}
+	}
+	w.Write([]byte("\tgo$pkg.init = function() {\n"))
+	for _, d := range pkg.Declarations {
+		if len(d.DceFilters) == 0 {
+			w.Write(d.InitCode)
+		}
+	}
+	w.Write([]byte("\t}\n\treturn go$pkg;\n})();\n"))
 }
 
 func ReadArchive(filename, id string, data []byte) (*Archive, error) {

@@ -210,7 +210,7 @@ func init() {
 		"toplevel": `
 			go$throwRuntimeError = function(msg) { throw go$panic(new errorString(msg)); };
 		`,
-		"toplevelDependencies": `runtime.errorString`,
+		"toplevelDependencies": `runtime.errorString runtime.TypeAssertionError`,
 		"getgoroot": `function() {
 			return (typeof process !== 'undefined') ? (process.env["GOROOT"] || "") : "/";
 		}`,
@@ -390,7 +390,7 @@ func init() {
 				return ok;
 			};
 		`,
-		"toplevelDependencies": `os.Open time.Now testing.T testing.common`,
+		"toplevelDependencies": `os.Open time.Now testing.T testing.common testing.report`,
 	}
 
 	pkgNatives["time"] = map[string]string{
@@ -403,6 +403,10 @@ func init() {
 		"NewTimer": `function() { go$notSupported("time.NewTimer (use time.AfterFunc instead)") }`,
 		"Sleep":    `function() { go$notSupported("time.Sleep (use time.AfterFunc instead)") }`,
 		"Tick":     `function() { go$notSupported("time.Tick (use time.AfterFunc instead)") }`,
+	}
+
+	pkgNatives["github.com/gopherjs/gopherjs/js"] = map[string]string{
+		"toplevelDependencies": `github.com/gopherjs/gopherjs/js.Error`,
 	}
 
 	pkgNatives["github.com/gopherjs/gopherjs/js_test"] = map[string]string{

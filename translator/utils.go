@@ -31,11 +31,11 @@ type Import struct {
 }
 
 type Decl struct {
-	Var          string
-	BodyCode     []byte
-	InitCode     []byte
-	ToplevelName string
-	Dependencies []Object
+	Var        string
+	BodyCode   []byte
+	InitCode   []byte
+	DceFilters []string
+	DceDeps    []Object
 }
 
 type Object struct {
@@ -62,35 +62,48 @@ func NewEmptyTypesPackage(path string) {
 	typesPackages[path] = types.NewPackage(path, path)
 }
 
-func WriteProgramCode(pkgs []*Archive, w io.Writer) {
-	w.Write([]byte("\"use strict\";\n(function() {\n\n"))
-	w.Write([]byte(strings.TrimSpace(Prelude)))
-	w.Write([]byte("\n"))
-
-	notUsedDecls := make(map[Object][]*Decl)
+func WriteProgramCode(pkgs []*Archive, mainPkgPath string, w io.Writer) {
+	declsByObject := make(map[Object][]*Decl)
 	var pendingDecls []*Decl
 	for _, pkg := range pkgs {
 		for i := range pkg.Declarations {
 			d := &pkg.Declarations[i]
-			if d.ToplevelName == "" {
+			if len(d.DceFilters) == 0 {
 				pendingDecls = append(pendingDecls, d)
 				continue
 			}
-			o := Object{pkg.ImportPath, d.ToplevelName}
-			notUsedDecls[o] = append(notUsedDecls[o], d)
+			for _, f := range d.DceFilters {
+				o := Object{pkg.ImportPath, f}
+				declsByObject[o] = append(declsByObject[o], d)
+			}
 		}
 	}
 
 	for len(pendingDecls) != 0 {
 		d := pendingDecls[len(pendingDecls)-1]
 		pendingDecls = pendingDecls[:len(pendingDecls)-1]
-		for _, o := range d.Dependencies {
-			if decls, ok := notUsedDecls[o]; ok {
-				pendingDecls = append(pendingDecls, decls...)
-				delete(notUsedDecls, o)
+		for _, o := range d.DceDeps {
+			if decls, ok := declsByObject[o]; ok {
+				delete(declsByObject, o)
+				for _, d := range decls {
+					for i, f := range d.DceFilters {
+						if f == o.Name {
+							d.DceFilters[i] = d.DceFilters[len(d.DceFilters)-1]
+							d.DceFilters = d.DceFilters[:len(d.DceFilters)-1]
+							break
+						}
+					}
+					if len(d.DceFilters) == 0 {
+						pendingDecls = append(pendingDecls, d)
+					}
+				}
 			}
 		}
 	}
+
+	w.Write([]byte("\"use strict\";\n(function() {\n\n"))
+	w.Write([]byte(strings.TrimSpace(prelude)))
+	w.Write([]byte("\n"))
 
 	// write packages
 	for _, pkg := range pkgs {
@@ -100,7 +113,7 @@ func WriteProgramCode(pkgs []*Archive, w io.Writer) {
 			vars = append(vars, fmt.Sprintf("%s = go$packages[\"%s\"]", imp.VarName, imp.Path))
 		}
 		for _, d := range pkg.Declarations {
-			if _, notUsed := notUsedDecls[Object{pkg.ImportPath, d.ToplevelName}]; !notUsed && d.Var != "" {
+			if len(d.DceFilters) == 0 && d.Var != "" {
 				vars = append(vars, d.Var)
 			}
 		}
@@ -108,13 +121,13 @@ func WriteProgramCode(pkgs []*Archive, w io.Writer) {
 			fmt.Fprintf(w, "\tvar %s;\n", strings.Join(vars, ", "))
 		}
 		for _, d := range pkg.Declarations {
-			if _, notUsed := notUsedDecls[Object{pkg.ImportPath, d.ToplevelName}]; !notUsed {
+			if len(d.DceFilters) == 0 {
 				w.Write(d.BodyCode)
 			}
 		}
 		w.Write([]byte("\tgo$pkg.init = function() {\n"))
 		for _, d := range pkg.Declarations {
-			if _, notUsed := notUsedDecls[Object{pkg.ImportPath, d.ToplevelName}]; !notUsed {
+			if len(d.DceFilters) == 0 {
 				w.Write(d.InitCode)
 			}
 		}
@@ -128,7 +141,7 @@ func WriteProgramCode(pkgs []*Archive, w io.Writer) {
 		scope := typesPackages[pkg.ImportPath].Scope()
 		for _, name := range scope.Names() {
 			if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
-				if _, notUsed := notUsedDecls[Object{pkg.ImportPath, name}]; !notUsed {
+				if _, notUsed := declsByObject[Object{pkg.ImportPath, name}]; !notUsed {
 					allTypeNames = append(allTypeNames, typeName)
 				}
 			}
@@ -186,6 +199,8 @@ func WriteProgramCode(pkgs []*Archive, w io.Writer) {
 	for _, pkg := range pkgs {
 		w.Write([]byte("go$packages[\"" + pkg.ImportPath + "\"].init();\n"))
 	}
+
+	w.Write([]byte("go$packages[\"" + mainPkgPath + "\"].main();\n\n})();"))
 }
 
 func ReadArchive(filename, id string, data []byte) (*Archive, error) {

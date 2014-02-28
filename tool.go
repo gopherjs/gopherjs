@@ -285,7 +285,7 @@ func tool() error {
 
 		var mainFunc translator.Decl
 		mainFunc.BodyCode = []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\nvar ok = true;\n")
-		mainFunc.Dependencies = []translator.Object{translator.Object{"flag", "Parse"}}
+		mainFunc.DceDeps = []translator.Object{translator.Object{"flag", "Parse"}}
 		for _, pkgPath := range testFlags.Args() {
 			pkgPath = filepath.ToSlash(pkgPath)
 
@@ -295,7 +295,7 @@ func tool() error {
 				for _, name := range pkg.Archive.Tests {
 					names = append(names, name)
 					tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
-					mainFunc.Dependencies = append(mainFunc.Dependencies, translator.Object{pkg.ImportPath, name})
+					mainFunc.DceDeps = append(mainFunc.DceDeps, translator.Object{pkg.ImportPath, name})
 				}
 				mainPkg.Archive.AddDependenciesOf(pkg.Archive)
 			}
@@ -664,8 +664,7 @@ func writeCommandPackage(pkg *packageData, pkgObj string) error {
 		allPkgs = append(allPkgs, dep)
 	}
 
-	translator.WriteProgramCode(allPkgs, file)
-	file.Write([]byte("go$packages[\"" + pkg.ImportPath + "\"].main();\n\n})();"))
+	translator.WriteProgramCode(allPkgs, pkg.ImportPath, file)
 
 	return nil
 }

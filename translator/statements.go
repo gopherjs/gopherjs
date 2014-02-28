@@ -268,6 +268,10 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		sig := c.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
 		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
 		if sel, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
+			obj := c.info.Selections[sel].Obj()
+			if !obj.Exported() {
+				c.dependencies[obj] = true
+			}
 			c.Printf(`go$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, args)
 			return
 		}

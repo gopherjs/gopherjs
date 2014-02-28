@@ -212,7 +212,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		var deps []Object
 		for dep := range c.dependencies {
 			if dep != self {
-				deps = append(deps, Object{dep.Pkg().Path(), dep.Name()})
+				deps = append(deps, Object{dep.Pkg().Path(), strings.Replace(dep.Name(), "_", "-", -1)})
 			}
 		}
 		return deps
@@ -238,8 +238,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		typeName := c.objectName(o)
 		var d Decl
 		d.Var = typeName
-		d.ToplevelName = o.Name()
-		d.Dependencies = collectDependencies(o, func() {
+		d.DceFilters = []string{strings.Replace(o.Name(), "_", "-", -1)}
+		d.DceDeps = collectDependencies(o, func() {
 			d.BodyCode = c.CatchOutput(0, func() { c.translateType(o, true) })
 			d.InitCode = c.CatchOutput(1, func() { c.initType(o) })
 		})
@@ -255,7 +255,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 		if fun.Recv == nil {
 			d.Var = c.objectName(o)
 			if o.Name() != "main" {
-				d.ToplevelName = o.Name()
+				d.DceFilters = []string{strings.Replace(o.Name(), "_", "-", -1)}
 			}
 		}
 		if fun.Recv != nil {
@@ -266,13 +266,16 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				namedRecvType = ptr.Elem().(*types.Named)
 			}
 			funName = namedRecvType.Obj().Name() + "." + funName
-			d.ToplevelName = namedRecvType.Obj().Name()
+			d.DceFilters = []string{strings.Replace(namedRecvType.Obj().Name(), "_", "-", -1)}
+			if !fun.Name.IsExported() {
+				d.DceFilters = append(d.DceFilters, strings.Replace(fun.Name.Name, "_", "-", -1))
+			}
 		}
 
 		native := natives[funName]
 		delete(natives, funName)
 
-		d.Dependencies = collectDependencies(o, func() {
+		d.DceDeps = collectDependencies(o, func() {
 			d.BodyCode = c.translateToplevelFunction(fun, native)
 		})
 		archive.Declarations = append(archive.Declarations, d)
@@ -313,7 +316,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			d.Var = c.objectName(o)
 		}
 		if _, ok := varsWithInit[o]; !ok {
-			d.Dependencies = collectDependencies(nil, func() {
+			d.DceDeps = collectDependencies(nil, func() {
 				value := c.zeroValue(o.Type())
 				if native, ok := natives[o.Name()]; ok {
 					value = native
@@ -322,7 +325,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 				d.InitCode = []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value))
 			})
 		}
-		d.ToplevelName = o.Name()
+		d.DceFilters = []string{strings.Replace(o.Name(), "_", "-", -1)}
 		archive.Declarations = append(archive.Declarations, d)
 	}
 	for _, init := range initOrder {
@@ -335,7 +338,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			varsWithInit[o] = true
 		}
 		var d Decl
-		d.Dependencies = collectDependencies(nil, func() {
+		d.DceDeps = collectDependencies(nil, func() {
 			d.InitCode = c.translateFunctionBody(1, []ast.Stmt{
 				&ast.AssignStmt{
 					Lhs: lhs,
@@ -348,7 +351,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 			v := hasCallVisitor{c.info, false}
 			ast.Walk(&v, init.Rhs)
 			if !v.hasCall {
-				d.ToplevelName = init.Lhs[0].Name()
+				d.DceFilters = []string{strings.Replace(init.Lhs[0].Name(), "_", "-", -1)}
 			}
 		}
 		archive.Declarations = append(archive.Declarations, d)
@@ -360,8 +363,8 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	delete(natives, "toplevel")
 	if toplevelDependencies, ok := natives["toplevelDependencies"]; ok {
 		for _, dep := range strings.Split(toplevelDependencies, " ") {
-			parts := strings.Split(dep, ".")
-			toplevel.Dependencies = append(toplevel.Dependencies, Object{parts[0], parts[1]})
+			dot := strings.LastIndex(dep, ".")
+			toplevel.DceDeps = append(toplevel.DceDeps, Object{dep[:dot], strings.Replace(dep[dot+1:], "_", "-", -1)})
 		}
 		delete(natives, "toplevelDependencies")
 	}
@@ -369,7 +372,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 
 	// init functions
 	var init Decl
-	init.Dependencies = collectDependencies(nil, func() {
+	init.DceDeps = collectDependencies(nil, func() {
 		init.InitCode = c.translateFunctionBody(1, initStmts)
 	})
 	archive.Declarations = append(archive.Declarations, init)

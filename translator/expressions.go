@@ -490,6 +490,9 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 			}
 			return c.formatExpr("%s.%s", c.translateExpr(e.X), strings.Join(fields, "."))
 		case types.MethodVal:
+			if !sel.Obj().Exported() {
+				c.dependencies[sel.Obj()] = true
+			}
 			parameters := makeParametersList()
 			target := c.translateExpr(e.X)
 			if isWrapped(sel.Recv()) {
@@ -498,6 +501,9 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 			recv := c.newVariable("_recv")
 			return c.formatExpr("(%s = %s, function(%s) { return %s.%s(%s); })", recv, target, strings.Join(parameters, ", "), recv, e.Sel.Name, strings.Join(parameters, ", "))
 		case types.MethodExpr:
+			if !sel.Obj().Exported() {
+				c.dependencies[sel.Obj()] = true
+			}
 			recv := "recv"
 			if isWrapped(sel.Recv()) {
 				recv = fmt.Sprintf("(new %s(recv))", c.typeName(sel.Recv()))
@@ -673,6 +679,10 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 
 			switch sel.Kind() {
 			case types.MethodVal:
+				if !sel.Obj().Exported() {
+					c.dependencies[sel.Obj()] = true
+				}
+
 				methodName := o.Name()
 				if reservedKeywords[methodName] {
 					methodName += "$"

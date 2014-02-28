@@ -111,7 +111,7 @@ func TestInvoke(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	if js.Global("Array").New(42).Length() != 42 {
+	if js.Global.Get("Array").New(42).Length() != 42 {
 		t.Fail()
 	}
 }
@@ -129,16 +129,16 @@ type StructWithJsField2 struct {
 }
 
 func TestReadingJsField(t *testing.T) {
-	a := &StructWithJsField{Object: js.Global("Array").New(42)}
-	b := &StructWithJsField2{object: js.Global("Array").New(42)}
+	a := &StructWithJsField{Object: js.Global.Get("Array").New(42)}
+	b := &StructWithJsField2{object: js.Global.Get("Array").New(42)}
 	if a.Length != 42 || b.Length != 42 {
 		t.Fail()
 	}
 }
 
 func TestWritingJsField(t *testing.T) {
-	a := &StructWithJsField{Object: js.Global("Object").New()}
-	b := &StructWithJsField2{object: js.Global("Object").New()}
+	a := &StructWithJsField{Object: js.Global.Get("Object").New()}
+	b := &StructWithJsField2{object: js.Global.Get("Object").New()}
 	a.Length = 42
 	b.Length = 42
 	if a.Get("length").Int() != 42 || b.object.Get("length").Int() != 42 {
@@ -147,8 +147,8 @@ func TestWritingJsField(t *testing.T) {
 }
 
 func TestCallingJsField(t *testing.T) {
-	a := &StructWithJsField{Object: js.Global("Array").New(100)}
-	b := &StructWithJsField2{object: js.Global("Array").New(100)}
+	a := &StructWithJsField{Object: js.Global.Get("Array").New(100)}
+	b := &StructWithJsField2{object: js.Global.Get("Array").New(100)}
 	a.SetIndex(3, 123)
 	b.object.SetIndex(3, 123)
 	f := a.Slice
@@ -180,21 +180,21 @@ func TestDate(t *testing.T) {
 		t.Fail()
 	}
 
-	d2 := js.Global("Date").New(d.UnixNano() / 1000000).Interface().(time.Time)
+	d2 := js.Global.Get("Date").New(d.UnixNano() / 1000000).Interface().(time.Time)
 	if !d2.Equal(d) {
 		t.Fail()
 	}
 }
 
 func TestEquality(t *testing.T) {
-	if js.Global("Array") != js.Global("Array") || js.Global("Array") == js.Global("String") {
+	if js.Global.Get("Array") != js.Global.Get("Array") || js.Global.Get("Array") == js.Global.Get("String") {
 		t.Fail()
 	}
 }
 
 func TestThis(t *testing.T) {
 	dummys.Set("testThis", func() {
-		if js.This() != dummys {
+		if js.This != dummys {
 			t.Fail()
 		}
 	})
@@ -215,5 +215,5 @@ func TestError(t *testing.T) {
 			t.Fail()
 		}
 	}()
-	js.Global("notExisting").Call("throwsError")
+	js.Global.Get("notExisting").Call("throwsError")
 }

@@ -80,12 +80,8 @@ func (err *Error) Error() string {
 	return "JavaScript error: " + err.Get("message").String()
 }
 
-// Global returns the JavaScript global with the given name.
-func Global(name string) Object {
-	return nil // GopherJS will not use this function body
-}
+// Global gives JavaScript's global object ("window" for browsers and "GLOBAL" for Node.js). Set this to a mock for testing with pure Go.
+var Global Object
 
-// This returns the value of JavaScript's "this" keyword. It can be used when passing Go functions to JavaScript as callbacks.
-func This() Object {
-	return nil // GopherJS will not use this function body
-}
+// This gives the value of JavaScript's "this" keyword. It can be used when passing Go functions to JavaScript as callbacks. Set this to a mock for testing with pure Go.
+var This Object

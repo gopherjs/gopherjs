@@ -505,6 +505,19 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 			parameters := makeParametersList()
 			return c.formatExpr("(function(%s) { return %s.%s(%s); })", strings.Join(append([]string{"recv"}, parameters...), ", "), recv, sel.Obj().(*types.Func).Name(), strings.Join(parameters, ", "))
 		case types.PackageObj:
+			if sel.Obj().Pkg() != nil && sel.Obj().Pkg().Path() == "github.com/gopherjs/gopherjs/js" {
+				switch sel.Obj().Name() {
+				case "Global":
+					return c.formatExpr("go$global")
+				case "This":
+					if c.f.flattened {
+						return c.formatExpr("go$this")
+					}
+					return c.formatExpr("this")
+				default:
+					panic("Invalid js package object: " + sel.Obj().Name())
+				}
+			}
 			return c.formatExpr("%s.%s", c.translateExpr(e.X), e.Sel.Name)
 		}
 		panic("")
@@ -732,7 +745,7 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 					case "IsNull":
 						return c.formatParenExpr("%s === null", fun)
 					default:
-						panic("Invalid js package method: " + o.Name())
+						panic("Invalid js package object: " + o.Name())
 					}
 				}
 
@@ -754,22 +767,6 @@ func (c *pkgContext) translateExpr(expr ast.Expr) *expression {
 				fun = c.formatExpr("%s.%s", fun, methodName)
 
 			case types.PackageObj:
-				if o.Pkg() != nil && o.Pkg().Path() == "github.com/gopherjs/gopherjs/js" {
-					switch o.Name() {
-					case "Global":
-						if id, ok := c.identifierConstant(e.Args[0]); ok {
-							return c.formatExpr("go$global.%s", id)
-						}
-						return c.formatExpr("go$global[go$externalize(%s, Go$String)]", c.translateExpr(e.Args[0]))
-					case "This":
-						if c.f.flattened {
-							return c.formatExpr("go$this")
-						}
-						return c.formatExpr("this")
-					default:
-						panic("Invalid js package method: " + o.Name())
-					}
-				}
 				fun = c.translateExpr(f)
 
 			case types.FieldVal:

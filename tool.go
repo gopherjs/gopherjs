@@ -295,7 +295,7 @@ func tool() error {
 				for _, name := range pkg.Archive.Tests {
 					names = append(names, name)
 					tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
-					mainFunc.DceDeps = append(mainFunc.DceDeps, translator.Object{pkg.ImportPath, name})
+					mainFunc.DceDeps = append(mainFunc.DceDeps, translator.Object{pkg.ImportPath, strings.Replace(name, "_", "-", -1)})
 				}
 				mainPkg.Archive.AddDependenciesOf(pkg.Archive)
 			}

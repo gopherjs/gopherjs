@@ -315,10 +315,11 @@ func init() {
 				Getenv = go$pkg.Getenv = function(key) { return ["", false]; };
 				GetTimeZoneInformation = go$pkg.GetTimeZoneInformation = function() { return [undefined, true]; };
 			} else if (typeof process === "undefined") {
-				go$pkg.go$setSyscall = function(f) {
-					Syscall = Syscall6 = RawSyscall = RawSyscall6 = go$pkg.Syscall = go$pkg.Syscall6 = go$pkg.RawSyscall = go$pkg.RawSyscall6 = f;
+				var syscall = function() { throw new Error("Syscalls not available."); };
+				if (typeof go$syscall !== "undefined") {
+					syscall = go$syscall;
 				}
-				go$pkg.go$setSyscall(function() { throw new Error("Syscalls not available."); });
+				Syscall = Syscall6 = RawSyscall = RawSyscall6 = go$pkg.Syscall = go$pkg.Syscall6 = go$pkg.RawSyscall = go$pkg.RawSyscall6 = syscall;
 				envs = new (go$sliceType(Go$String))(new Array(0));
 			} else {
 				try {

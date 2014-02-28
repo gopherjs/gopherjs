@@ -116,7 +116,7 @@ func WriteProgramCode(pkgs []*Archive, mainPkgPath string, w io.Writer) {
 		scope := typesPackages[pkg.ImportPath].Scope()
 		for _, name := range scope.Names() {
 			if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
-				if _, notUsed := declsByObject[Object{pkg.ImportPath, name}]; !notUsed {
+				if _, notUsed := declsByObject[Object{pkg.ImportPath, strings.Replace(name, "_", "-", -1)}]; !notUsed {
 					allTypeNames = append(allTypeNames, typeName)
 				}
 			}

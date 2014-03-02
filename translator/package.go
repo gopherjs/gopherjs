@@ -11,20 +11,6 @@ import (
 	"strings"
 )
 
-var reservedKeywords = make(map[string]bool)
-
-func init() {
-	for _, keyword := range []string{"abstract", "arguments", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", "long", "native", "new", "package", "private", "protected", "public", "return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof", "var", "void", "volatile", "while", "with", "yield"} {
-		reservedKeywords[keyword] = true
-	}
-}
-
-type ErrorList []error
-
-func (err ErrorList) Error() string {
-	return err[0].Error()
-}
-
 type pkgContext struct {
 	pkg           *types.Package
 	info          *types.Info
@@ -56,49 +42,7 @@ type flowData struct {
 	endCase   int
 }
 
-func (c *pkgContext) Write(b []byte) (int, error) {
-	c.output = append(c.output, b...)
-	return len(b), nil
-}
-
-func (c *pkgContext) Printf(format string, values ...interface{}) {
-	c.Write([]byte(strings.Repeat("\t", c.indentation)))
-	fmt.Fprintf(c, format, values...)
-	c.Write([]byte{'\n'})
-	c.Write(c.delayedOutput)
-	c.delayedOutput = nil
-}
-
-func (c *pkgContext) PrintCond(cond bool, onTrue, onFalse string) {
-	if !cond {
-		c.Printf("/* %s */ %s", strings.Replace(onTrue, "*/", "<star>/", -1), onFalse)
-		return
-	}
-	c.Printf("%s", onTrue)
-}
-
-func (c *pkgContext) Indent(f func()) {
-	c.indentation++
-	f()
-	c.indentation--
-}
-
-func (c *pkgContext) CatchOutput(indent int, f func()) []byte {
-	origoutput := c.output
-	c.output = nil
-	c.indentation += indent
-	f()
-	catched := c.output
-	c.output = origoutput
-	c.indentation -= indent
-	return catched
-}
-
-func (c *pkgContext) Delayed(f func()) {
-	c.delayedOutput = c.CatchOutput(0, f)
-}
-
-func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error)) (*Archive, error) {
+func (t *Translator) TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error)) (*Archive, error) {
 	info := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),
@@ -110,12 +54,12 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	var errList ErrorList
 	var previousErr error
 	config := &types.Config{
-		Packages: typesPackages,
+		Packages: t.typesPackages,
 		Import: func(_ map[string]*types.Package, path string) (*types.Package, error) {
 			if _, err := importPkg(path); err != nil {
 				return nil, err
 			}
-			return typesPackages[path], nil
+			return t.typesPackages[path], nil
 		},
 		Sizes: sizes32,
 		Error: func(err error) {
@@ -133,7 +77,7 @@ func TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileS
 	if err != nil {
 		return nil, err
 	}
-	typesPackages[importPath] = typesPkg
+	t.typesPackages[importPath] = typesPkg
 
 	c := &pkgContext{
 		pkg:          typesPkg,

@@ -2,261 +2,53 @@ package translator
 
 import (
 	"bytes"
-	"code.google.com/p/go.tools/go/gcimporter"
 	"code.google.com/p/go.tools/go/types"
-	"encoding/asn1"
 	"fmt"
 	"go/ast"
-	"io"
-	"sort"
 	"strconv"
 	"strings"
 )
 
-var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}
-var typesPackages = map[string]*types.Package{"unsafe": types.Unsafe}
-
-type Archive struct {
-	ImportPath   string
-	GcData       []byte
-	Dependencies []string
-	Imports      []Import
-	Declarations []Decl
-	Tests        []string
+func (c *pkgContext) Write(b []byte) (int, error) {
+	c.output = append(c.output, b...)
+	return len(b), nil
 }
 
-type Import struct {
-	Path    string
-	VarName string
+func (c *pkgContext) Printf(format string, values ...interface{}) {
+	c.Write([]byte(strings.Repeat("\t", c.indentation)))
+	fmt.Fprintf(c, format, values...)
+	c.Write([]byte{'\n'})
+	c.Write(c.delayedOutput)
+	c.delayedOutput = nil
 }
 
-type Decl struct {
-	Var        string
-	BodyCode   []byte
-	InitCode   []byte
-	DceFilters []string
-	DceDeps    []Object
+func (c *pkgContext) PrintCond(cond bool, onTrue, onFalse string) {
+	if !cond {
+		c.Printf("/* %s */ %s", strings.Replace(onTrue, "*/", "<star>/", -1), onFalse)
+		return
+	}
+	c.Printf("%s", onTrue)
 }
 
-type Object struct {
-	PkgPath string
-	Name    string
+func (c *pkgContext) Indent(f func()) {
+	c.indentation++
+	f()
+	c.indentation--
 }
 
-func (a *Archive) AddDependency(path string) {
-	for _, dep := range a.Dependencies {
-		if dep == path {
-			return
-		}
-	}
-	a.Dependencies = append(a.Dependencies, path)
+func (c *pkgContext) CatchOutput(indent int, f func()) []byte {
+	origoutput := c.output
+	c.output = nil
+	c.indentation += indent
+	f()
+	catched := c.output
+	c.output = origoutput
+	c.indentation -= indent
+	return catched
 }
 
-func (a *Archive) AddDependenciesOf(other *Archive) {
-	for _, path := range other.Dependencies {
-		a.AddDependency(path)
-	}
-}
-
-func NewEmptyTypesPackage(path string) {
-	typesPackages[path] = types.NewPackage(path, path)
-}
-
-func WriteProgramCode(pkgs []*Archive, mainPkgPath string, w io.Writer) {
-	declsByObject := make(map[Object][]*Decl)
-	var pendingDecls []*Decl
-	for _, pkg := range pkgs {
-		for i := range pkg.Declarations {
-			d := &pkg.Declarations[i]
-			if len(d.DceFilters) == 0 {
-				pendingDecls = append(pendingDecls, d)
-				continue
-			}
-			for _, f := range d.DceFilters {
-				o := Object{pkg.ImportPath, f}
-				declsByObject[o] = append(declsByObject[o], d)
-			}
-		}
-	}
-
-	for len(pendingDecls) != 0 {
-		d := pendingDecls[len(pendingDecls)-1]
-		pendingDecls = pendingDecls[:len(pendingDecls)-1]
-		for _, o := range d.DceDeps {
-			if decls, ok := declsByObject[o]; ok {
-				delete(declsByObject, o)
-				for _, d := range decls {
-					for i, f := range d.DceFilters {
-						if f == o.Name {
-							d.DceFilters[i] = d.DceFilters[len(d.DceFilters)-1]
-							d.DceFilters = d.DceFilters[:len(d.DceFilters)-1]
-							break
-						}
-					}
-					if len(d.DceFilters) == 0 {
-						pendingDecls = append(pendingDecls, d)
-					}
-				}
-			}
-		}
-	}
-
-	w.Write([]byte("\"use strict\";\n(function() {\n\n"))
-	w.Write([]byte(strings.TrimSpace(prelude)))
-	w.Write([]byte("\n"))
-
-	// write packages
-	for _, pkg := range pkgs {
-		WritePkgCode(pkg, w)
-	}
-
-	// write interfaces
-	allTypeNames := []*types.TypeName{types.New("error").(*types.Named).Obj()}
-	for _, pkg := range pkgs {
-		scope := typesPackages[pkg.ImportPath].Scope()
-		for _, name := range scope.Names() {
-			if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
-				if _, notUsed := declsByObject[Object{pkg.ImportPath, strings.Replace(name, "_", "-", -1)}]; !notUsed {
-					allTypeNames = append(allTypeNames, typeName)
-				}
-			}
-		}
-	}
-	for _, t := range allTypeNames {
-		if in, isInterface := t.Type().Underlying().(*types.Interface); isInterface {
-			if in.Empty() {
-				continue
-			}
-			implementedBy := make(map[string]bool, 0)
-			for _, other := range allTypeNames {
-				otherType := other.Type()
-				switch otherType.Underlying().(type) {
-				case *types.Interface:
-					// skip
-				case *types.Struct:
-					if types.AssignableTo(otherType, in) {
-						implementedBy[fmt.Sprintf("go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
-					}
-					if types.AssignableTo(types.NewPointer(otherType), in) {
-						implementedBy[fmt.Sprintf("go$packages[\"%s\"].%s.Ptr", other.Pkg().Path(), other.Name())] = true
-					}
-				default:
-					if types.AssignableTo(otherType, in) {
-						implementedBy[fmt.Sprintf("go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
-					}
-					if types.AssignableTo(types.NewPointer(otherType), in) {
-						implementedBy[fmt.Sprintf("go$ptrType(go$packages[\"%s\"].%s)", other.Pkg().Path(), other.Name())] = true
-					}
-				}
-			}
-			list := make([]string, 0, len(implementedBy))
-			for ref := range implementedBy {
-				list = append(list, ref)
-			}
-			sort.Strings(list)
-			var target string
-			switch t.Name() {
-			case "error":
-				target = "go$error"
-			default:
-				target = fmt.Sprintf("go$packages[\"%s\"].%s", t.Pkg().Path(), t.Name())
-			}
-			fmt.Fprintf(w, "%s.implementedBy = [%s];\n", target, strings.Join(list, ", "))
-		}
-	}
-
-	for _, pkg := range pkgs {
-		w.Write([]byte("go$packages[\"" + pkg.ImportPath + "\"].init();\n"))
-	}
-
-	w.Write([]byte("go$packages[\"" + mainPkgPath + "\"].main();\n\n})();"))
-}
-
-func WritePkgCode(pkg *Archive, w io.Writer) {
-	fmt.Fprintf(w, "go$packages[\"%s\"] = (function() {\n", pkg.ImportPath)
-	vars := []string{"go$pkg = {}"}
-	for _, imp := range pkg.Imports {
-		vars = append(vars, fmt.Sprintf("%s = go$packages[\"%s\"]", imp.VarName, imp.Path))
-	}
-	for _, d := range pkg.Declarations {
-		if len(d.DceFilters) == 0 && d.Var != "" {
-			vars = append(vars, d.Var)
-		}
-	}
-	if len(vars) != 0 {
-		fmt.Fprintf(w, "\tvar %s;\n", strings.Join(vars, ", "))
-	}
-	for _, d := range pkg.Declarations {
-		if len(d.DceFilters) == 0 {
-			w.Write(d.BodyCode)
-		}
-	}
-	w.Write([]byte("\tgo$pkg.init = function() {\n"))
-	for _, d := range pkg.Declarations {
-		if len(d.DceFilters) == 0 {
-			w.Write(d.InitCode)
-		}
-	}
-	w.Write([]byte("\t}\n\treturn go$pkg;\n})();\n"))
-}
-
-func ReadArchive(filename, id string, data []byte) (*Archive, error) {
-	var a Archive
-	_, err := asn1.Unmarshal(data, &a)
-	if err != nil {
-		return nil, err
-	}
-
-	pkg, err := gcimporter.ImportData(typesPackages, filename, id, bytes.NewReader(a.GcData))
-	if err != nil {
-		return nil, err
-	}
-	typesPackages[pkg.Path()] = pkg
-
-	return &a, nil
-}
-
-func WriteArchive(a *Archive) ([]byte, error) {
-	return asn1.Marshal(*a)
-}
-
-func (c *pkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis bool) string {
-	params := make([]string, sig.Params().Len())
-	for i := range params {
-		if sig.Variadic() && i == len(params)-1 && !ellipsis {
-			varargType := sig.Params().At(i).Type().(*types.Slice)
-			varargs := make([]string, len(args)-i)
-			for j, arg := range args[i:] {
-				varargs[j] = c.translateImplicitConversion(arg, varargType.Elem()).String()
-			}
-			params[i] = fmt.Sprintf("new %s([%s])", c.typeName(varargType), strings.Join(varargs, ", "))
-			break
-		}
-		argType := sig.Params().At(i).Type()
-		params[i] = c.translateImplicitConversion(args[i], argType).String()
-	}
-	return strings.Join(params, ", ")
-}
-
-func (c *pkgContext) translateSelection(sel *types.Selection) (fields []string, jsTag string) {
-	t := sel.Recv()
-	for _, index := range sel.Index() {
-		if ptr, isPtr := t.(*types.Pointer); isPtr {
-			t = ptr.Elem()
-		}
-		s := t.Underlying().(*types.Struct)
-		if jsTag = getJsTag(s.Tag(index)); jsTag != "" {
-			for i := 0; i < s.NumFields(); i++ {
-				if isJsObject(s.Field(i).Type()) {
-					fields = append(fields, fieldName(s, i))
-					return
-				}
-			}
-		}
-		fields = append(fields, fieldName(s, index))
-		t = s.Field(index).Type()
-	}
-	return
+func (c *pkgContext) Delayed(f func()) {
+	c.delayedOutput = c.CatchOutput(0, f)
 }
 
 func (c *pkgContext) zeroValue(ty types.Type) string {

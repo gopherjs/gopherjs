@@ -191,7 +191,11 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 	}
 
 	// functions
-	natives := pkgNatives[importPath]
+	nativesOrig := pkgNatives[importPath]
+	natives := make(map[string]string, len(nativesOrig))
+	for k, v := range nativesOrig {
+		natives[k] = v
+	}
 	for _, fun := range functions {
 		var d Decl
 		o := c.info.Defs[fun.Name].(*types.Func)

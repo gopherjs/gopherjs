@@ -32,7 +32,7 @@ func (e *importCError) Error() string {
 	return `importing "C" is not supported by GopherJS`
 }
 
-var currentDirectory, goRoot, goPath string
+var currentDirectory string
 
 func init() {
 	var err error
@@ -85,17 +85,15 @@ type session struct {
 	t              *translator.Translator
 	installMode    bool
 	verboseInstall bool
-	packagesToTest map[string]bool
 	fileSet        *token.FileSet
 	packages       map[string]*packageData
 }
 
-func NewSession(installMode, verboseInstall bool, packagesToTest map[string]bool) *session {
+func NewSession(installMode, verboseInstall bool) *session {
 	return &session{
 		t:              translator.New(),
 		installMode:    installMode,
 		verboseInstall: verboseInstall,
-		packagesToTest: packagesToTest,
 		fileSet:        token.NewFileSet(),
 		packages:       make(map[string]*packageData),
 	}
@@ -129,7 +127,7 @@ func tool() error {
 		buildFlags.StringVar(&pkgObj, "o", "", "")
 		buildFlags.Parse(flag.Args()[1:])
 
-		s := NewSession(false, false, nil)
+		s := NewSession(false, false)
 
 		if buildFlags.NArg() == 0 {
 			buildContext := &build.Context{
@@ -197,7 +195,7 @@ func tool() error {
 		all := installFlags.Bool("all", false, "install all packages in GOROOT")
 		installFlags.Parse(flag.Args()[1:])
 
-		s := NewSession(true, *verbose, nil)
+		s := NewSession(true, *verbose)
 
 		pkgs := installFlags.Args()
 		if *all {
@@ -268,7 +266,7 @@ func tool() error {
 			os.Remove(tempfile.Name())
 		}()
 
-		s := NewSession(false, false, nil)
+		s := NewSession(false, false)
 		if err := s.buildFiles(flag.Args()[1:lastSourceArg], tempfile.Name()); err != nil {
 			return err
 		}
@@ -283,32 +281,38 @@ func tool() error {
 		short := testFlags.Bool("short", false, "short")
 		testFlags.Parse(flag.Args()[1:])
 
-		packagesToTest := make(map[string]bool)
-		for _, pkgPath := range testFlags.Args() {
-			packagesToTest[filepath.ToSlash(pkgPath)] = true
-		}
-
-		s := NewSession(false, false, packagesToTest)
-		mainPkg := &packageData{
-			Package: &build.Package{
-				Name:       "main",
-				ImportPath: "main",
-			},
-			Archive: &translator.Archive{
-				ImportPath: "main",
-			},
-		}
-		s.packages["main"] = mainPkg
-		s.t.NewEmptyTypesPackage("main")
-		testingOutput, _ := s.importPackage("testing")
-		mainPkg.Archive.AddDependenciesOf(testingOutput)
-
-		var mainFunc translator.Decl
-		mainFunc.BodyCode = []byte("go$pkg.main = function() {\ngo$packages[\"flag\"].Parse();\nvar ok = true;\n")
-		mainFunc.DceDeps = []translator.Object{translator.Object{"flag", "Parse"}}
+		var exitErr error
 		for _, pkgPath := range testFlags.Args() {
 			pkgPath = filepath.ToSlash(pkgPath)
 
+			s := NewSession(false, false)
+
+			buildPkg, err := buildImport(pkgPath, 0)
+			if err != nil {
+				return err
+			}
+			buildPkg.PkgObj = ""
+			buildPkg.GoFiles = append(buildPkg.GoFiles, buildPkg.TestGoFiles...)
+			pkg := &packageData{Package: buildPkg}
+			if err := s.buildPackage(pkg); err != nil {
+				return err
+			}
+
+			mainPkg := &packageData{
+				Package: &build.Package{
+					Name:       "main",
+					ImportPath: "main",
+				},
+				Archive: &translator.Archive{
+					ImportPath: "main",
+				},
+			}
+			s.packages["main"] = mainPkg
+			s.t.NewEmptyTypesPackage("main")
+			testingOutput, _ := s.importPackage("testing")
+			mainPkg.Archive.AddDependenciesOf(testingOutput)
+
+			var mainFunc translator.Decl
 			var names []string
 			var tests []string
 			collectTests := func(pkg *packageData) {
@@ -320,12 +324,7 @@ func tool() error {
 				mainPkg.Archive.AddDependenciesOf(pkg.Archive)
 			}
 
-			if _, err := s.importPackage(pkgPath); err != nil {
-				return err
-			}
-			pkg := s.packages[pkgPath]
 			collectTests(pkg)
-
 			if len(pkg.XTestGoFiles) != 0 {
 				testPkg := &packageData{Package: &build.Package{
 					ImportPath: pkg.ImportPath + "_test",
@@ -338,33 +337,44 @@ func tool() error {
 				collectTests(testPkg)
 			}
 
-			mainFunc.BodyCode = append(mainFunc.BodyCode, []byte(fmt.Sprintf(`ok = go$packages["testing"].RunTests2("%s", "%s", ["%s"], [%s]) && ok;`+"\n", pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))...)
-		}
-		mainFunc.BodyCode = append(mainFunc.BodyCode, []byte("process.exit(ok ? 0 : 1);\n};\n")...)
-		mainPkg.Archive.Declarations = []translator.Decl{mainFunc}
-		mainPkg.Archive.AddDependency("main")
+			mainFunc.DceDeps = append(mainFunc.DceDeps, translator.Object{"flag", "Parse"})
+			mainFunc.BodyCode = []byte(fmt.Sprintf(`
+				go$pkg.main = function() {
+					go$packages["testing"].Main2("%s", "%s", ["%s"], [%s]);
+				};
+			`, pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))
 
-		tempfile, err := ioutil.TempFile("", "test.")
-		if err != nil {
-			return err
-		}
-		defer func() {
-			tempfile.Close()
-			os.Remove(tempfile.Name())
-		}()
+			mainPkg.Archive.Declarations = []translator.Decl{mainFunc}
+			mainPkg.Archive.AddDependency("main")
 
-		if err := s.writeCommandPackage(mainPkg, tempfile.Name()); err != nil {
-			return err
-		}
+			tempfile, err := ioutil.TempFile("", "test.")
+			if err != nil {
+				return err
+			}
+			defer func() {
+				tempfile.Close()
+				os.Remove(tempfile.Name())
+			}()
 
-		var args []string
-		if *verbose {
-			args = append(args, "-test.v")
+			if err := s.writeCommandPackage(mainPkg, tempfile.Name()); err != nil {
+				return err
+			}
+
+			var args []string
+			if *verbose {
+				args = append(args, "-test.v")
+			}
+			if *short {
+				args = append(args, "-test.short")
+			}
+			if err := runNode(tempfile.Name(), args, ""); err != nil {
+				if _, ok := err.(*exec.ExitError); !ok {
+					return err
+				}
+				exitErr = err
+			}
 		}
-		if *short {
-			args = append(args, "-test.short")
-		}
-		return runNode(tempfile.Name(), args, "")
+		return exitErr
 
 	case "tool":
 		tool := flag.Arg(1)
@@ -381,7 +391,7 @@ func tool() error {
 			switch tool[1] {
 			case 'g':
 				basename := filepath.Base(toolFlags.Arg(0))
-				s := NewSession(false, false, nil)
+				s := NewSession(false, false)
 				if err := s.buildFiles([]string{toolFlags.Arg(0)}, basename[:len(basename)-3]+".js"); err != nil {
 					return err
 				}
@@ -435,11 +445,11 @@ func (s *session) importPackage(path string) (*translator.Archive, error) {
 		return pkg.Archive, nil
 	}
 
-	otherPkg, err := buildImport(path, build.AllowBinary)
+	buildPkg, err := buildImport(path, build.AllowBinary)
 	if err != nil {
 		return nil, err
 	}
-	pkg := &packageData{Package: otherPkg}
+	pkg := &packageData{Package: buildPkg}
 	if err := s.buildPackage(pkg); err != nil {
 		return nil, err
 	}
@@ -452,7 +462,7 @@ func (s *session) buildPackage(pkg *packageData) error {
 		return nil
 	}
 
-	if pkg.PkgObj != "" && !s.packagesToTest[pkg.ImportPath] {
+	if pkg.PkgObj != "" {
 		var fileInfo os.FileInfo
 		gopherjsBinary, err := osext.Executable()
 		if err == nil {
@@ -519,11 +529,7 @@ func (s *session) buildPackage(pkg *packageData) error {
 
 	var files []*ast.File
 	var errList translator.ErrorList
-	names := pkg.GoFiles
-	if s.packagesToTest[pkg.ImportPath] {
-		names = append(names, pkg.TestGoFiles...)
-	}
-	for _, name := range names {
+	for _, name := range pkg.GoFiles {
 		if !filepath.IsAbs(name) {
 			name = filepath.Join(pkg.Dir, name)
 		}

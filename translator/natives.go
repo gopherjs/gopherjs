@@ -350,7 +350,8 @@ func init() {
 
 	pkgNatives["testing"] = map[string]string{
 		"toplevel": `
-			go$pkg.RunTests2 = function(pkgPath, dir, names, tests) {
+			go$pkg.Main2 = function(pkgPath, dir, names, tests) {
+				flag.Parse();
 				if (tests.length === 0) {
 					console.log("?   \t" + pkgPath + "\t[no test files]");
 					return true;
@@ -387,7 +388,7 @@ func init() {
 				}
 				var duration = time.Now().Sub(start);
 				fmt.Printf("%s\t%s\t%.3fs\n", new (go$sliceType(go$emptyInterface))([new Go$String(ok ? "ok  " : "FAIL"), new Go$String(pkgPath), new Go$Float64(duration.Seconds())]));
-				return ok;
+				process.exit(ok ? 0 : 1);
 			};
 		`,
 		"toplevelDependencies": `os.Open time.Now testing.T testing.common testing.report`,

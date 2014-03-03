@@ -225,14 +225,42 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ.Ptr = go$newType(4, "Ptr", "*" + string, "", "", constructor);
 		typ.Ptr.Struct = typ;
 		typ.init = function(fields) {
+			var i;
 			typ.fields = fields;
 			typ.Ptr.init(typ);
+			// nil value
 			typ.Ptr.nil = new constructor();
-			var i;
 			for (i = 0; i < fields.length; i++) {
 				var field = fields[i];
 				Object.defineProperty(typ.Ptr.nil, field[1], { get: go$throwNilPointerError, set: go$throwNilPointerError });
 			}
+			// methods for embedded fields
+			for (i = 0; i < typ.methods.length; i++) {
+				var method = typ.methods[i];
+				if (method[5] != -1) {
+					(function(field, methodName) {
+						typ.prototype[methodName] = function() {
+							var v = this.go$val[field[0]];
+							return v[methodName].apply(v, arguments);
+						};
+					})(fields[method[5]], method[0]);
+				}
+			}
+			for (i = 0; i < typ.Ptr.methods.length; i++) {
+				var method = typ.Ptr.methods[i];
+				if (method[5] != -1) {
+					(function(field, methodName) {
+						typ.Ptr.prototype[methodName] = function() {
+							var v = this[field[0]];
+							if (v.go$val === undefined) {
+								v = new field[3](v);
+							}
+							return v[methodName].apply(v, arguments);
+						};
+					})(fields[method[5]], method[0]);
+				}
+			}
+			// map key
 			typ.prototype.go$key = function() {
 				var keys = new Array(fields.length);
 				for (i = 0; i < fields.length; i++) {
@@ -242,6 +270,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 				}
 				return string + "$" + keys.join("$");
 			};
+			// reflect type
 			typ.extendReflectType = function(rt) {
 				var reflectFields = new Array(fields.length), i;
 				for (i = 0; i < fields.length; i++) {
@@ -261,6 +290,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 	typ.string = string;
 	typ.typeName = name;
 	typ.pkgPath = pkgPath;
+	typ.methods = [];
 	var rt = null;
 	typ.reflectType = function() {
 		if (rt === null) {
@@ -446,23 +476,6 @@ var go$structType = function(fields) {
 			}
 		});
 		typ.init(fields);
-		var i, j;
-		for (i = 0; i < fields.length; i++) {
-			var field = fields[i];
-			if (field[1] === "" && field[3].prototype !== undefined) {
-				var methods = Object.keys(field[3].prototype);
-				for (j = 0; j < methods.length; j++) {
-					(function(fieldName, methodName, method) {
-						typ.prototype[methodName] = function() {
-							return method.apply(this.go$val[fieldName], arguments);
-						};
-						typ.Ptr.prototype[methodName] = function() {
-							return method.apply(this[fieldName], arguments);
-						};
-					})(field[1], methods[j], field[3].prototype[methods[j]]);
-				}
-			}
-		}
 		go$structTypes[string] = typ;
 	}
 	return typ;

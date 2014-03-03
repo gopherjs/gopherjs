@@ -353,62 +353,28 @@ func (c *pkgContext) translateType(o *types.TypeName, toplevel bool) {
 		lhs += " = go$pkg." + typeName
 	}
 	size := int64(0)
+	constructor := "null"
 	switch t := o.Type().Underlying().(type) {
 	case *types.Struct:
 		params := make([]string, t.NumFields())
 		for i := 0; i < t.NumFields(); i++ {
 			params[i] = fieldName(t, i) + "_"
 		}
-		c.Printf(`%s = go$newType(0, "Struct", "%s.%s", "%s", "%s", function(%s) {`, lhs, o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), strings.Join(params, ", "))
-		c.Indent(func() {
-			c.Printf("this.go$val = this;")
-			for i := 0; i < t.NumFields(); i++ {
-				name := fieldName(t, i)
-				c.Printf("this.%s = %s_ !== undefined ? %s_ : %s;", name, name, name, c.zeroValue(t.Field(i).Type()))
-			}
-		})
-		c.Printf("});")
+		constructor = fmt.Sprintf("function(%s) {\n%sthis.go$val = this;\n", strings.Join(params, ", "), strings.Repeat("\t", c.indentation+1))
 		for i := 0; i < t.NumFields(); i++ {
-			field := t.Field(i)
-			if field.Anonymous() {
-				fieldType := field.Type()
-				_, isPointer := fieldType.(*types.Pointer)
-				_, isUnderlyingInterface := fieldType.Underlying().(*types.Interface)
-				if !isPointer && !isUnderlyingInterface {
-					fieldType = types.NewPointer(fieldType) // strange, seems like a bug in go/types
-				}
-				methods := types.NewMethodSet(fieldType)
-				for j := 0; j < methods.Len(); j++ {
-					name := methods.At(j).Obj().Name()
-					sig := methods.At(j).Type().(*types.Signature)
-					params := make([]string, sig.Params().Len())
-					for k := range params {
-						params[k] = sig.Params().At(k).Name()
-					}
-					value := "this." + fieldName(t, i)
-					if isWrapped(field.Type()) {
-						value = fmt.Sprintf("new %s(%s)", c.typeName(field.Type()), value)
-					}
-					paramList := strings.Join(params, ", ")
-					c.Printf("%s.prototype.%s = function(%s) { return this.go$val.%s(%s); };", typeName, name, paramList, name, paramList)
-					c.Printf("%s.Ptr.prototype.%s = function(%s) { return %s.%s(%s); };", typeName, name, paramList, value, name, paramList)
-				}
-			}
+			name := fieldName(t, i)
+			constructor += fmt.Sprintf("%sthis.%s = %s_ !== undefined ? %s_ : %s;\n", strings.Repeat("\t", c.indentation+1), name, name, name, c.zeroValue(t.Field(i).Type()))
 		}
-		return
+		constructor += strings.Repeat("\t", c.indentation) + "}"
 	case *types.Basic:
 		if t.Info()&types.IsInteger != 0 {
 			size = sizes32.Sizeof(t)
 		}
 	}
-	c.Printf(`%s = go$newType(%d, "%s", "%s.%s", "%s", "%s", null);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path())
+	c.Printf(`%s = go$newType(%d, "%s", "%s.%s", "%s", "%s", %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), constructor)
 }
 
 func (c *pkgContext) initType(o types.Object) {
-	switch t := o.Type().Underlying().(type) {
-	case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
-		c.Printf("%s.init(%s);", c.objectName(o), c.initArgs(t))
-	}
 	if _, isInterface := o.Type().Underlying().(*types.Interface); !isInterface {
 		writeMethodSet := func(t types.Type) {
 			methodSet := types.NewMethodSet(t)
@@ -417,18 +383,26 @@ func (c *pkgContext) initType(o types.Object) {
 			}
 			methods := make([]string, methodSet.Len())
 			for i := range methods {
-				method := methodSet.At(i).Obj()
+				method := methodSet.At(i)
 				pkgPath := ""
-				if !method.Exported() {
-					pkgPath = method.Pkg().Path()
+				if !method.Obj().Exported() {
+					pkgPath = method.Obj().Pkg().Path()
 				}
 				t := method.Type().(*types.Signature)
-				methods[i] = fmt.Sprintf(`["%s", "%s", %s, %s, %t]`, method.Name(), pkgPath, c.typeArray(t.Params()), c.typeArray(t.Results()), t.Variadic())
+				embeddedIndex := -1
+				if len(method.Index()) > 1 {
+					embeddedIndex = method.Index()[0]
+				}
+				methods[i] = fmt.Sprintf(`["%s", "%s", %s, %s, %t, %d]`, method.Obj().Name(), pkgPath, c.typeArray(t.Params()), c.typeArray(t.Results()), t.Variadic(), embeddedIndex)
 			}
 			c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
 		}
 		writeMethodSet(o.Type())
 		writeMethodSet(types.NewPointer(o.Type()))
+	}
+	switch t := o.Type().Underlying().(type) {
+	case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
+		c.Printf("%s.init(%s);", c.objectName(o), c.initArgs(t))
 	}
 }
 

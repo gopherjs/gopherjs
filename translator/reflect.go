@@ -76,25 +76,10 @@ func init() {
 				}
 				return false;
 			};
-			var fieldName = function(field, i) {
-				if (field.name.go$get === go$throwNilPointerError) {
-					var ntyp = field.typ;
-					if (ntyp.Kind() === Ptr) {
-						ntyp = ntyp.Elem().common();
-					}
-					return ntyp.Name();
-				}
-				var name = field.name.go$get();
-				if (name === "_" || go$reservedKeywords.indexOf(name) != -1) {
-					return name + "$" + i;
-				}
-				return name;
-			};
 			var copyStruct = function(dst, src, typ) {
 				var fields = typ.structType.fields.array, i;
 				for (i = 0; i < fields.length; i++) {
-					var field = fields[i];
-					var name = fieldName(field, i);
+					var name = typ.jsType.fields[i][0];
 					dst[name] = src[name];
 				}
 			};
@@ -710,7 +695,7 @@ func init() {
 				throw go$panic(new Go$String("reflect: Field index out of range"));
 			}
 			var field = tt.fields.array[i];
-			var name = fieldName(field, i);
+			var name = this.typ.jsType.fields[i][0];
 			var typ = field.typ;
 			var fl = this.flag & (flagRO | flagIndir | flagAddr);
 			if (field.pkgPath.go$get !== go$throwNilPointerError) {

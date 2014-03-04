@@ -84,7 +84,7 @@ func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w io.
 
 	// write packages
 	for _, pkg := range pkgs {
-		WritePkgCode(pkg, w)
+		t.WritePkgCode(pkg, w)
 	}
 
 	// write interfaces
@@ -149,7 +149,7 @@ func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w io.
 	w.Write([]byte("go$packages[\"" + mainPkgPath + "\"].main();\n\n})();"))
 }
 
-func WritePkgCode(pkg *Archive, w io.Writer) {
+func (t *Translator) WritePkgCode(pkg *Archive, w io.Writer) {
 	fmt.Fprintf(w, "go$packages[\"%s\"] = (function() {\n", pkg.ImportPath)
 	vars := []string{"go$pkg = {}"}
 	for _, imp := range pkg.Imports {

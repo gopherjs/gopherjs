@@ -82,7 +82,7 @@ func init() {
 	}
 
 	pkgNatives["math"] = map[string]string{
-		"toplevelDependencies": `math.expm1 math.frexp math.hypot math.log10 math.log1p math.log2 math.remainder`,
+		"toplevelDependencies": `math:expm1 math:frexp math:hypot math:log10 math:log1p math:log2 math:remainder`,
 		"Abs":       `Math.abs`,
 		"Acos":      `Math.acos`,
 		"Asin":      `Math.asin`,
@@ -181,7 +181,7 @@ func init() {
 	}
 
 	pkgNatives["math/big"] = map[string]string{
-		"toplevelDependencies": `math/big.mulWW_g math/big.divWW_g math/big.addVV_g math/big.subVV_g math/big.addVW_g math/big.subVW_g math/big.shlVU_g math/big.shrVU_g math/big.mulAddVWW_g math/big.addMulVVW_g math/big.divWVW_g math/big.bitLen_g`,
+		"toplevelDependencies": `math/big:mulWW-g math/big:divWW-g math/big:addVV-g math/big:subVV-g math/big:addVW-g math/big:subVW-g math/big:shlVU-g math/big:shrVU-g math/big:mulAddVWW-g math/big:addMulVVW-g math/big:divWVW-g math/big:bitLen-g`,
 		"mulWW":                `function(x, y) { return mulWW_g(x, y); }`,
 		"divWW":                `function(x1, x0, y) { return divWW_g(x1, x0, y); }`,
 		"addVV":                `function(z, x, y) { return addVV_g(z, x, y); }`,
@@ -202,7 +202,7 @@ func init() {
 				NewFile = go$pkg.NewFile = function() { return new File.Ptr(); };
 			}
 		`,
-		"toplevelDependencies": `syscall.Syscall15 os.NewFile`,
+		"toplevelDependencies": `syscall:Syscall15 os:NewFile`,
 		"Args":                 `new (go$sliceType(Go$String))((typeof process !== 'undefined') ? process.argv.slice(1) : [])`,
 	}
 
@@ -210,7 +210,7 @@ func init() {
 		"toplevel": `
 			go$throwRuntimeError = function(msg) { throw go$panic(new errorString(msg)); };
 		`,
-		"toplevelDependencies": `runtime.errorString runtime.TypeAssertionError`,
+		"toplevelDependencies": `runtime:errorString runtime:TypeAssertionError`,
 		"getgoroot": `function() {
 			return (typeof process !== 'undefined') ? (process.env["GOROOT"] || "") : "/";
 		}`,
@@ -345,7 +345,7 @@ func init() {
 				}
 			}
 		`,
-		"toplevelDependencies": `syscall.Syscall syscall.Syscall6 syscall.Syscall9 syscall.Syscall12 syscall.Syscall15 syscall.loadlibrary syscall.getprocaddress syscall.getStdHandle syscall.GetCommandLine syscall.CommandLineToArgv syscall.Getenv syscall.GetTimeZoneInformation syscall.RawSyscall syscall.RawSyscall6 syscall.BytePtrFromString`,
+		"toplevelDependencies": `syscall:Syscall syscall:Syscall6 syscall:Syscall9 syscall:Syscall12 syscall:Syscall15 syscall:loadlibrary syscall:getprocaddress syscall:getStdHandle syscall:GetCommandLine syscall:CommandLineToArgv syscall:Getenv syscall:GetTimeZoneInformation syscall:RawSyscall syscall:RawSyscall6 syscall:BytePtrFromString`,
 	}
 
 	pkgNatives["testing"] = map[string]string{
@@ -391,7 +391,7 @@ func init() {
 				process.exit(ok ? 0 : 1);
 			};
 		`,
-		"toplevelDependencies": `os.Open time.Now testing.T testing.common testing.report`,
+		"toplevelDependencies": `os:Open time:Now testing:T testing:common testing:report`,
 	}
 
 	pkgNatives["time"] = map[string]string{
@@ -407,7 +407,7 @@ func init() {
 	}
 
 	pkgNatives["github.com/gopherjs/gopherjs/js"] = map[string]string{
-		"toplevelDependencies": `github.com/gopherjs/gopherjs/js.Error`,
+		"toplevelDependencies": `github.com/gopherjs/gopherjs/js:Error`,
 	}
 
 	pkgNatives["github.com/gopherjs/gopherjs/js_test"] = map[string]string{

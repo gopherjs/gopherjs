@@ -150,13 +150,13 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 		}
 	}
 
-	collectDependencies := func(self types.Object, f func()) []Object {
+	collectDependencies := func(self types.Object, f func()) []string {
 		c.dependencies = make(map[types.Object]bool)
 		f()
-		var deps []Object
+		var deps []string
 		for dep := range c.dependencies {
 			if dep != self {
-				deps = append(deps, Object{dep.Pkg().Path(), strings.Replace(dep.Name(), "_", "-", -1)})
+				deps = append(deps, dep.Pkg().Path()+":"+strings.Replace(dep.Name(), "_", "-", -1))
 			}
 		}
 		return deps
@@ -310,10 +310,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 	toplevel.BodyCode = []byte(natives["toplevel"])
 	delete(natives, "toplevel")
 	if toplevelDependencies, ok := natives["toplevelDependencies"]; ok {
-		for _, dep := range strings.Split(toplevelDependencies, " ") {
-			dot := strings.LastIndex(dep, ".")
-			toplevel.DceDeps = append(toplevel.DceDeps, Object{dep[:dot], strings.Replace(dep[dot+1:], "_", "-", -1)})
-		}
+		toplevel.DceDeps = strings.Split(toplevelDependencies, " ")
 		delete(natives, "toplevelDependencies")
 	}
 	archive.Declarations = append(archive.Declarations, toplevel)

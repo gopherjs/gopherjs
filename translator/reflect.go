@@ -215,7 +215,7 @@ func init() {
 				return v;
 			};
 		`,
-		"toplevelDependencies": `reflect.rtype reflect.uncommonType reflect.method reflect.arrayType reflect.chanType reflect.funcType reflect.interfaceType reflect.mapType reflect.ptrType reflect.sliceType reflect.structType reflect.imethod reflect.structField reflect.methodReceiver reflect.ValueOf reflect.SliceOf reflect.MakeSlice reflect.valueInterface reflect.makeMethodValue reflect.methodReceiver reflect.typesMustMatch reflect.mustBeAssignable reflect.mustBeExported reflect.mustBe reflect.assignTo`,
+		"toplevelDependencies": `reflect:rtype reflect:uncommonType reflect:method reflect:arrayType reflect:chanType reflect:funcType reflect:interfaceType reflect:mapType reflect:ptrType reflect:sliceType reflect:structType reflect:imethod reflect:structField reflect:methodReceiver reflect:ValueOf reflect:SliceOf reflect:MakeSlice reflect:valueInterface reflect:makeMethodValue reflect:methodReceiver reflect:typesMustMatch reflect:mustBeAssignable reflect:mustBeExported reflect:mustBe reflect:assignTo`,
 
 		"TypeOf": `function(i) {
 			if (i === null) {

@@ -13,13 +13,13 @@ type This struct {
 	ast.Ident
 }
 
-func (c *pkgContext) translateStmtList(stmts []ast.Stmt) {
+func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 	for _, stmt := range stmts {
 		c.translateStmt(stmt, "")
 	}
 }
 
-func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
+func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 	switch s := stmt.(type) {
 	case *ast.BlockStmt:
 		c.translateStmtList(s.List)
@@ -45,7 +45,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			break
 		}
-		c.translateBranchingStmt(caseClauses, initStmts, false, c.translateExpr, nil, label, c.f.hasGoto[s])
+		c.translateBranchingStmt(caseClauses, initStmts, false, c.translateExpr, nil, label, c.hasGoto[s])
 
 	case *ast.SwitchStmt:
 		if s.Init != nil {
@@ -58,7 +58,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			refVar := c.newVariable("_ref")
 			c.Printf("%s = %s;", refVar, c.translateExpr(s.Tag))
 			translateCond = func(cond ast.Expr) *expression {
-				refIdent := c.newIdent(refVar, c.info.Types[s.Tag].Type)
+				refIdent := c.newIdent(refVar, c.p.info.Types[s.Tag].Type)
 				return c.translateExpr(&ast.BinaryExpr{
 					X:  refIdent,
 					Op: token.EQL,
@@ -66,7 +66,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 				})
 			}
 		}
-		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, nil, label, c.f.hasGoto[s])
+		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, nil, label, c.hasGoto[s])
 
 	case *ast.TypeSwitchStmt:
 		if s.Init != nil {
@@ -79,7 +79,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			expr = a.Rhs[0].(*ast.TypeAssertExpr).X
 			typeSwitchVar = c.newVariable(a.Lhs[0].(*ast.Ident).Name)
 			for _, caseClause := range s.Body.List {
-				c.objectVars[c.info.Implicits[caseClause]] = typeSwitchVar
+				c.p.objectVars[c.p.info.Implicits[caseClause]] = typeSwitchVar
 			}
 		case *ast.ExprStmt:
 			expr = a.X.(*ast.TypeAssertExpr).X
@@ -89,7 +89,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Printf("%s = %s;", refVar, c.translateExpr(expr))
 		c.Printf("%s = %s !== null ? %s.constructor : null;", typeVar, refVar, refVar)
 		translateCond := func(cond ast.Expr) *expression {
-			return c.formatExpr("%s", c.typeCheck(typeVar, c.info.Types[cond].Type))
+			return c.formatExpr("%s", c.typeCheck(typeVar, c.p.info.Types[cond].Type))
 		}
 		printCaseBodyPrefix := func(conds []ast.Expr) {
 			if typeSwitchVar == "" {
@@ -97,14 +97,14 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			value := refVar
 			if len(conds) == 1 {
-				t := c.info.Types[conds[0]].Type
+				t := c.p.info.Types[conds[0]].Type
 				if _, isInterface := t.Underlying().(*types.Interface); !isInterface && !types.Identical(t, types.Typ[types.UntypedNil]) {
 					value += ".go$val"
 				}
 			}
 			c.Printf("%s = %s;", typeSwitchVar, value)
 		}
-		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, printCaseBodyPrefix, label, c.f.hasGoto[s])
+		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, printCaseBodyPrefix, label, c.hasGoto[s])
 
 	case *ast.ForStmt:
 		if s.Init != nil {
@@ -118,7 +118,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		if s.Post != nil {
 			post = c.translateSimpleStmt(s.Post)
 		}
-		c.translateLoopingStmt(cond, post, s.Body, nil, label, c.f.hasGoto[s])
+		c.translateLoopingStmt(cond, post, s.Body, nil, label, c.hasGoto[s])
 
 	case *ast.RangeStmt:
 		refVar := c.newVariable("_ref")
@@ -127,7 +127,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 		iVar := c.newVariable("_i")
 		c.Printf("%s = 0;", iVar)
 
-		switch t := c.info.Types[s.X].Type.Underlying().(type) {
+		switch t := c.p.info.Types[s.X].Type.Underlying().(type) {
 		case *types.Basic:
 			runeVar := c.newVariable("_rune")
 			c.translateLoopingStmt(iVar+" < "+refVar+".length", iVar+" += "+runeVar+"[1]", s.Body, func() {
@@ -138,7 +138,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 				if !isBlank(s.Key) {
 					c.Printf("%s;", c.translateAssign(s.Key, iVar))
 				}
-			}, label, c.f.hasGoto[s])
+			}, label, c.hasGoto[s])
 
 		case *types.Map:
 			keysVar := c.newVariable("_keys")
@@ -152,7 +152,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 				if !isBlank(s.Key) {
 					c.Printf("%s;", c.translateAssign(s.Key, entryVar+".k"))
 				}
-			}, label, c.f.hasGoto[s])
+			}, label, c.hasGoto[s])
 
 		case *types.Array, *types.Pointer, *types.Slice:
 			var length string
@@ -171,13 +171,13 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 						Index: c.newIdent(iVar, types.Typ[types.Int]),
 					}
 					et := elemType(t)
-					c.info.Types[indexExpr] = types.TypeAndValue{Type: et}
+					c.p.info.Types[indexExpr] = types.TypeAndValue{Type: et}
 					c.Printf("%s;", c.translateAssign(s.Value, c.translateImplicitConversion(indexExpr, et).String()))
 				}
 				if !isBlank(s.Key) {
 					c.Printf("%s;", c.translateAssign(s.Key, iVar))
 				}
-			}, label, c.f.hasGoto[s])
+			}, label, c.hasGoto[s])
 
 		case *types.Chan:
 			c.printLabel(label)
@@ -190,10 +190,10 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 	case *ast.BranchStmt:
 		c.printLabel(label)
 		labelSuffix := ""
-		data := c.f.flowDatas[""]
+		data := c.flowDatas[""]
 		if s.Label != nil {
 			labelSuffix = " " + s.Label.Name
-			data = c.f.flowDatas[s.Label.Name]
+			data = c.flowDatas[s.Label.Name]
 		}
 		switch s.Tok {
 		case token.BREAK:
@@ -204,7 +204,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			c.PrintCond(data.beginCase == 0, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("go$s = %d; continue;", data.beginCase))
 		case token.GOTO:
-			c.PrintCond(false, "goto "+s.Label.Name, fmt.Sprintf("go$s = %d; continue;", c.f.labelCases[s.Label.Name]))
+			c.PrintCond(false, "goto "+s.Label.Name, fmt.Sprintf("go$s = %d; continue;", c.labelCases[s.Label.Name]))
 		case token.FALLTHROUGH:
 			// handled in CaseClause
 		default:
@@ -214,31 +214,31 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 	case *ast.ReturnStmt:
 		c.printLabel(label)
 		results := s.Results
-		if c.f.resultNames != nil {
+		if c.resultNames != nil {
 			if len(s.Results) != 0 {
 				c.translateStmt(&ast.AssignStmt{
-					Lhs: c.f.resultNames,
+					Lhs: c.resultNames,
 					Tok: token.ASSIGN,
 					Rhs: s.Results,
 				}, "")
 			}
-			results = c.f.resultNames
+			results = c.resultNames
 		}
 		switch len(results) {
 		case 0:
 			c.Printf("return;")
 		case 1:
-			if c.f.sig.Results().Len() > 1 {
+			if c.sig.Results().Len() > 1 {
 				c.Printf("return %s;", c.translateExpr(results[0]))
 				break
 			}
-			v := c.translateImplicitConversion(results[0], c.f.sig.Results().At(0).Type())
+			v := c.translateImplicitConversion(results[0], c.sig.Results().At(0).Type())
 			c.delayedOutput = nil
 			c.Printf("return %s;", v)
 		default:
 			values := make([]string, len(results))
 			for i, result := range results {
-				values[i] = c.translateImplicitConversion(result, c.f.sig.Results().At(i).Type()).String()
+				values[i] = c.translateImplicitConversion(result, c.sig.Results().At(i).Type()).String()
 			}
 			c.delayedOutput = nil
 			c.Printf("return [%s];", strings.Join(values, ", "))
@@ -247,14 +247,14 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 	case *ast.DeferStmt:
 		c.printLabel(label)
 		if ident, isIdent := s.Call.Fun.(*ast.Ident); isIdent {
-			if builtin, isBuiltin := c.info.Uses[ident].(*types.Builtin); isBuiltin {
+			if builtin, isBuiltin := c.p.info.Uses[ident].(*types.Builtin); isBuiltin {
 				if builtin.Name() == "recover" {
 					c.Printf("go$deferred.push({ fun: go$recover, args: [] });")
 					return
 				}
 				args := make([]ast.Expr, len(s.Call.Args))
 				for i, arg := range s.Call.Args {
-					args[i] = c.newIdent(c.newVariable("_arg"), c.info.Types[arg].Type)
+					args[i] = c.newIdent(c.newVariable("_arg"), c.p.info.Types[arg].Type)
 				}
 				call := c.translateExpr(&ast.CallExpr{
 					Fun:      s.Call.Fun,
@@ -265,12 +265,12 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 				return
 			}
 		}
-		sig := c.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
+		sig := c.p.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
 		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
 		if sel, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
-			obj := c.info.Selections[sel].Obj()
+			obj := c.p.info.Selections[sel].Obj()
 			if !obj.Exported() {
-				c.dependencies[obj] = true
+				c.p.dependencies[obj] = true
 			}
 			c.Printf(`go$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, args)
 			return
@@ -285,7 +285,7 @@ func (c *pkgContext) translateStmt(stmt ast.Stmt, label string) {
 			c.Printf("%s;", c.translateSimpleStmt(stmt))
 		case token.TYPE:
 			for _, spec := range decl.Specs {
-				o := c.info.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
+				o := c.p.info.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
 				c.translateType(o, false)
 				c.initType(o)
 			}
@@ -322,7 +322,7 @@ type branch struct {
 	body      []ast.Stmt
 }
 
-func (c *pkgContext) translateBranchingStmt(caseClauses []ast.Stmt, initStmts []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) *expression, printCaseBodyPrefix func([]ast.Expr), label string, flatten bool) {
+func (c *funcContext) translateBranchingStmt(caseClauses []ast.Stmt, initStmts []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) *expression, printCaseBodyPrefix func([]ast.Expr), label string, flatten bool) {
 	var branches []*branch
 	var defaultBranch *branch
 	var openBranches []*branch
@@ -392,28 +392,28 @@ clauseLoop:
 	}
 
 	var caseOffset, endCase int
-	if _, ok := c.f.labelCases[label]; ok {
+	if _, ok := c.labelCases[label]; ok {
 		flatten = true // always flatten if label is referenced by goto
 	}
 	if flatten {
-		caseOffset = c.f.caseCounter
+		caseOffset = c.caseCounter
 		endCase = caseOffset + len(branches) - 1
 		if defaultBranch != nil {
 			endCase++
 		}
-		c.f.caseCounter = endCase + 1
+		c.caseCounter = endCase + 1
 	}
 
 	var prevFlowData *flowData
 	if isSwitch {
-		prevFlowData = c.f.flowDatas[""]
+		prevFlowData = c.flowDatas[""]
 		data := &flowData{
 			postStmt:  prevFlowData.postStmt,  // for "continue" of outer loop
 			beginCase: prevFlowData.beginCase, // same
 			endCase:   endCase,
 		}
-		c.f.flowDatas[""] = data
-		c.f.flowDatas[label] = data
+		c.flowDatas[""] = data
+		c.flowDatas[label] = data
 	}
 
 	c.printLabel(label)
@@ -461,41 +461,41 @@ clauseLoop:
 	c.PrintCond(!flatten, "}", fmt.Sprintf("case %d:", endCase))
 
 	if isSwitch {
-		delete(c.f.flowDatas, label)
-		c.f.flowDatas[""] = prevFlowData
+		delete(c.flowDatas, label)
+		c.flowDatas[""] = prevFlowData
 	}
 }
 
-func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt, bodyPrefix func(), label string, flatten bool) {
-	prevFlowData := c.f.flowDatas[""]
+func (c *funcContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt, bodyPrefix func(), label string, flatten bool) {
+	prevFlowData := c.flowDatas[""]
 	data := &flowData{
 		postStmt: post,
 	}
-	if _, ok := c.f.labelCases[label]; ok {
+	if _, ok := c.labelCases[label]; ok {
 		flatten = true // always flatten if label is referenced by goto
 	}
 	if flatten {
-		data.beginCase = c.f.caseCounter
-		data.endCase = c.f.caseCounter + 1
-		c.f.caseCounter += 2
+		data.beginCase = c.caseCounter
+		data.endCase = c.caseCounter + 1
+		c.caseCounter += 2
 	}
-	c.f.flowDatas[""] = data
-	c.f.flowDatas[label] = data
+	c.flowDatas[""] = data
+	c.flowDatas[label] = data
 
 	c.printLabel(label)
 	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { go$s = %d; continue; }", data.beginCase, cond, data.endCase))
 	c.Indent(func() {
 		v := &escapeAnalysis{
-			info:       c.info,
+			info:       c.p.info,
 			candidates: make(map[types.Object]bool),
 			escaping:   make(map[types.Object]bool),
 		}
 		ast.Walk(v, body)
-		prevEV := c.f.escapingVars
+		prevEV := c.escapingVars
 		for escaping := range v.escaping {
 			c.Printf("%s = [undefined];", c.objectName(escaping))
-			c.f.escapingVars = append(c.f.escapingVars, c.objectVars[escaping])
-			c.objectVars[escaping] += "[0]"
+			c.escapingVars = append(c.escapingVars, c.p.objectVars[escaping])
+			c.p.objectVars[escaping] += "[0]"
 		}
 
 		if bodyPrefix != nil {
@@ -513,15 +513,15 @@ func (c *pkgContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt
 			c.Printf("%s;", post)
 		}
 
-		c.f.escapingVars = prevEV
+		c.escapingVars = prevEV
 	})
 	c.PrintCond(!flatten, "}", fmt.Sprintf("go$s = %d; continue; case %d:", data.beginCase, data.endCase))
 
-	delete(c.f.flowDatas, label)
-	c.f.flowDatas[""] = prevFlowData
+	delete(c.flowDatas, label)
+	c.flowDatas[""] = prevFlowData
 }
 
-func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
+func (c *funcContext) translateSimpleStmt(stmt ast.Stmt) string {
 	switch s := stmt.(type) {
 	case *ast.AssignStmt:
 		if s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
@@ -562,40 +562,40 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String())
 				parts = append(parts, indexVar+" = "+c.translateExpr(l.Index).String())
 				lhs = &ast.IndexExpr{
-					X:     c.newIdent(lhsVar, c.info.Types[l.X].Type),
-					Index: c.newIdent(indexVar, c.info.Types[l.Index].Type),
+					X:     c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
+					Index: c.newIdent(indexVar, c.p.info.Types[l.Index].Type),
 				}
-				c.info.Types[lhs] = c.info.Types[l]
+				c.p.info.Types[lhs] = c.p.info.Types[l]
 			case *ast.StarExpr:
 				lhsVar := c.newVariable("_lhs")
 				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String())
 				lhs = &ast.StarExpr{
-					X: c.newIdent(lhsVar, c.info.Types[l.X].Type),
+					X: c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
 				}
-				c.info.Types[lhs] = c.info.Types[l]
+				c.p.info.Types[lhs] = c.p.info.Types[l]
 			case *ast.SelectorExpr:
-				v := hasCallVisitor{c.info, false}
+				v := hasCallVisitor{c.p.info, false}
 				ast.Walk(&v, l.X)
 				if v.hasCall {
 					lhsVar := c.newVariable("_lhs")
 					parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String())
 					lhs = &ast.SelectorExpr{
-						X:   c.newIdent(lhsVar, c.info.Types[l.X].Type),
+						X:   c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
 						Sel: l.Sel,
 					}
-					c.info.Types[lhs] = c.info.Types[l]
-					c.info.Selections[lhs.(*ast.SelectorExpr)] = c.info.Selections[l]
+					c.p.info.Types[lhs] = c.p.info.Types[l]
+					c.p.info.Selections[lhs.(*ast.SelectorExpr)] = c.p.info.Selections[l]
 				}
 			}
 
 			parenExpr := &ast.ParenExpr{X: s.Rhs[0]}
-			c.info.Types[parenExpr] = c.info.Types[s.Rhs[0]]
+			c.p.info.Types[parenExpr] = c.p.info.Types[s.Rhs[0]]
 			binaryExpr := &ast.BinaryExpr{
 				X:  lhs,
 				Op: op,
 				Y:  parenExpr,
 			}
-			c.info.Types[binaryExpr] = c.info.Types[s.Lhs[0]]
+			c.p.info.Types[binaryExpr] = c.p.info.Types[s.Lhs[0]]
 			parts = append(parts, c.translateAssign(lhs, c.translateExpr(binaryExpr).String()))
 			return strings.Join(parts, ", ")
 		}
@@ -603,7 +603,7 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 		if s.Tok == token.DEFINE {
 			for _, lhs := range s.Lhs {
 				if !isBlank(lhs) {
-					c.info.Types[lhs] = types.TypeAndValue{Type: c.info.Defs[lhs.(*ast.Ident)].Type()}
+					c.p.info.Types[lhs] = types.TypeAndValue{Type: c.p.info.Defs[lhs.(*ast.Ident)].Type()}
 				}
 			}
 		}
@@ -623,30 +623,30 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
 			lhs := removeParens(s.Lhs[0])
 			if isBlank(lhs) {
-				v := hasCallVisitor{c.info, false}
+				v := hasCallVisitor{c.p.info, false}
 				ast.Walk(&v, s.Rhs[0])
 				if v.hasCall {
 					return c.translateExpr(s.Rhs[0]).String()
 				}
 				return ""
 			}
-			return c.translateAssign(lhs, c.translateImplicitConversion(s.Rhs[0], c.info.Types[s.Lhs[0]].Type).String())
+			return c.translateAssign(lhs, c.translateImplicitConversion(s.Rhs[0], c.p.info.Types[s.Lhs[0]].Type).String())
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			tupleVar := c.newVariable("_tuple")
 			out := tupleVar + " = " + c.translateExpr(s.Rhs[0]).String()
-			tuple := c.info.Types[s.Rhs[0]].Type.(*types.Tuple)
+			tuple := c.p.info.Types[s.Rhs[0]].Type.(*types.Tuple)
 			for i, lhs := range s.Lhs {
 				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
-					out += ", " + c.translateAssign(lhs, c.translateImplicitConversion(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), c.info.Types[s.Lhs[i]].Type).String())
+					out += ", " + c.translateAssign(lhs, c.translateImplicitConversion(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), c.p.info.Types[s.Lhs[i]].Type).String())
 				}
 			}
 			return out
 		case len(s.Lhs) == len(s.Rhs):
 			parts := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
-				parts[i] = c.translateImplicitConversion(rhs, c.info.Types[s.Lhs[i]].Type).String()
+				parts[i] = c.translateImplicitConversion(rhs, c.p.info.Types[s.Lhs[i]].Type).String()
 			}
 			tupleVar := c.newVariable("_tuple")
 			out := tupleVar + " = [" + strings.Join(parts, ", ") + "]"
@@ -664,9 +664,9 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 		}
 
 	case *ast.IncDecStmt:
-		t := c.info.Types[s.X].Type
+		t := c.p.info.Types[s.X].Type
 		if iExpr, isIExpr := s.X.(*ast.IndexExpr); isIExpr {
-			switch u := c.info.Types[iExpr.X].Type.Underlying().(type) {
+			switch u := c.p.info.Types[iExpr.X].Type.Underlying().(type) {
 			case *types.Array:
 				t = u.Elem()
 			case *types.Slice:
@@ -684,7 +684,7 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 			Kind:  token.INT,
 			Value: "1",
 		}
-		c.info.Types[one] = types.TypeAndValue{Type: t, Value: exact.MakeInt64(1)}
+		c.p.info.Types[one] = types.TypeAndValue{Type: t, Value: exact.MakeInt64(1)}
 		return c.translateSimpleStmt(&ast.AssignStmt{
 			Lhs: []ast.Expr{s.X},
 			Tok: tok,
@@ -705,7 +705,7 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 			rhs := valueSpec.Values
 			isTuple := false
 			if len(rhs) == 1 {
-				_, isTuple = c.info.Types[rhs[0]].Type.(*types.Tuple)
+				_, isTuple = c.p.info.Types[rhs[0]].Type.(*types.Tuple)
 			}
 			for len(rhs) < len(lhs) && !isTuple {
 				rhs = append(rhs, nil)
@@ -727,7 +727,7 @@ func (c *pkgContext) translateSimpleStmt(stmt ast.Stmt) string {
 	}
 }
 
-func (c *pkgContext) translateAssign(lhs ast.Expr, rhs string) string {
+func (c *funcContext) translateAssign(lhs ast.Expr, rhs string) string {
 	if isBlank(lhs) {
 		panic("translateAssign with blank lhs")
 	}
@@ -742,13 +742,13 @@ func (c *pkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 
 	switch l := lhs.(type) {
 	case *ast.Ident:
-		o := c.info.Defs[l]
+		o := c.p.info.Defs[l]
 		if o == nil {
-			o = c.info.Uses[l]
+			o = c.p.info.Uses[l]
 		}
 		return c.objectName(o) + " = " + rhs
 	case *ast.SelectorExpr:
-		sel := c.info.Selections[l]
+		sel := c.p.info.Selections[l]
 		switch sel.Kind() {
 		case types.FieldVal:
 			fields, jsTag := c.translateSelection(sel)
@@ -762,7 +762,7 @@ func (c *pkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 			panic(int(sel.Kind()))
 		}
 	case *ast.StarExpr:
-		switch u := c.info.Types[lhs].Type.Underlying().(type) {
+		switch u := c.p.info.Types[lhs].Type.Underlying().(type) {
 		case *types.Struct:
 			lVar := c.newVariable("l")
 			rVar := c.newVariable("r")
@@ -778,7 +778,7 @@ func (c *pkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 			return fmt.Sprintf("%s.go$set(%s)", c.translateExpr(l.X), rhs)
 		}
 	case *ast.IndexExpr:
-		switch t := c.info.Types[l.X].Type.Underlying().(type) {
+		switch t := c.p.info.Types[l.X].Type.Underlying().(type) {
 		case *types.Array, *types.Pointer:
 			return fmt.Sprintf("%s[%s] = %s", c.translateExpr(l.X), c.flatten64(l.Index), rhs)
 		case *types.Slice:
@@ -797,9 +797,9 @@ func (c *pkgContext) translateAssign(lhs ast.Expr, rhs string) string {
 	}
 }
 
-func (c *pkgContext) printLabel(label string) {
+func (c *funcContext) printLabel(label string) {
 	if label != "" {
-		labelCase, ok := c.f.labelCases[label]
+		labelCase, ok := c.labelCases[label]
 		c.PrintCond(!ok, label+":", fmt.Sprintf("case %d:", labelCase))
 	}
 }

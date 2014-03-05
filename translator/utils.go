@@ -9,20 +9,20 @@ import (
 	"strings"
 )
 
-func (c *pkgContext) Write(b []byte) (int, error) {
+func (c *funcContext) Write(b []byte) (int, error) {
 	c.output = append(c.output, b...)
 	return len(b), nil
 }
 
-func (c *pkgContext) Printf(format string, values ...interface{}) {
-	c.Write([]byte(strings.Repeat("\t", c.indentation)))
+func (c *funcContext) Printf(format string, values ...interface{}) {
+	c.Write([]byte(strings.Repeat("\t", c.p.indentation)))
 	fmt.Fprintf(c, format, values...)
 	c.Write([]byte{'\n'})
 	c.Write(c.delayedOutput)
 	c.delayedOutput = nil
 }
 
-func (c *pkgContext) PrintCond(cond bool, onTrue, onFalse string) {
+func (c *funcContext) PrintCond(cond bool, onTrue, onFalse string) {
 	if !cond {
 		c.Printf("/* %s */ %s", strings.Replace(onTrue, "*/", "<star>/", -1), onFalse)
 		return
@@ -30,28 +30,28 @@ func (c *pkgContext) PrintCond(cond bool, onTrue, onFalse string) {
 	c.Printf("%s", onTrue)
 }
 
-func (c *pkgContext) Indent(f func()) {
-	c.indentation++
+func (c *funcContext) Indent(f func()) {
+	c.p.indentation++
 	f()
-	c.indentation--
+	c.p.indentation--
 }
 
-func (c *pkgContext) CatchOutput(indent int, f func()) []byte {
+func (c *funcContext) CatchOutput(indent int, f func()) []byte {
 	origoutput := c.output
 	c.output = nil
-	c.indentation += indent
+	c.p.indentation += indent
 	f()
 	catched := c.output
 	c.output = origoutput
-	c.indentation -= indent
+	c.p.indentation -= indent
 	return catched
 }
 
-func (c *pkgContext) Delayed(f func()) {
+func (c *funcContext) Delayed(f func()) {
 	c.delayedOutput = c.CatchOutput(0, f)
 }
 
-func (c *pkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis bool) string {
+func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis bool) string {
 	params := make([]string, sig.Params().Len())
 	for i := range params {
 		if sig.Variadic() && i == len(params)-1 && !ellipsis {
@@ -69,7 +69,7 @@ func (c *pkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellips
 	return strings.Join(params, ", ")
 }
 
-func (c *pkgContext) translateSelection(sel *types.Selection) (fields []string, jsTag string) {
+func (c *funcContext) translateSelection(sel *types.Selection) (fields []string, jsTag string) {
 	t := sel.Recv()
 	for _, index := range sel.Index() {
 		if ptr, isPtr := t.(*types.Pointer); isPtr {
@@ -90,7 +90,7 @@ func (c *pkgContext) translateSelection(sel *types.Selection) (fields []string, 
 	return
 }
 
-func (c *pkgContext) zeroValue(ty types.Type) string {
+func (c *funcContext) zeroValue(ty types.Type) string {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
 		switch {
@@ -130,7 +130,7 @@ func (c *pkgContext) zeroValue(ty types.Type) string {
 	return fmt.Sprintf("%s.nil", c.typeName(ty))
 }
 
-func (c *pkgContext) newVariable(name string) string {
+func (c *funcContext) newVariable(name string) string {
 	if name == "" {
 		panic("newVariable: empty name")
 	}
@@ -143,53 +143,53 @@ func (c *pkgContext) newVariable(name string) string {
 	if strings.HasPrefix(name, "dollar_") {
 		name = "$" + name[7:]
 	}
-	n := c.f.allVars[name]
-	c.f.allVars[name] = n + 1
+	n := c.allVars[name]
+	c.allVars[name] = n + 1
 	if n > 0 {
 		name = fmt.Sprintf("%s$%d", name, n)
 	}
-	c.f.localVars = append(c.f.localVars, name)
+	c.localVars = append(c.localVars, name)
 	return name
 }
 
-func (c *pkgContext) newIdent(name string, t types.Type) *ast.Ident {
+func (c *funcContext) newIdent(name string, t types.Type) *ast.Ident {
 	ident := ast.NewIdent(name)
-	c.info.Types[ident] = types.TypeAndValue{Type: t}
-	obj := types.NewVar(0, c.pkg, name, t)
-	c.info.Uses[ident] = obj
-	c.objectVars[obj] = name
+	c.p.info.Types[ident] = types.TypeAndValue{Type: t}
+	obj := types.NewVar(0, c.p.pkg, name, t)
+	c.p.info.Uses[ident] = obj
+	c.p.objectVars[obj] = name
 	return ident
 }
 
-func (c *pkgContext) objectName(o types.Object) string {
-	if o.Pkg() != c.pkg || o.Parent() == c.pkg.Scope() {
-		c.dependencies[o] = true
+func (c *funcContext) objectName(o types.Object) string {
+	if o.Pkg() != c.p.pkg || o.Parent() == c.p.pkg.Scope() {
+		c.p.dependencies[o] = true
 	}
 
-	if o.Pkg() != c.pkg {
-		pkgVar, found := c.pkgVars[o.Pkg().Path()]
+	if o.Pkg() != c.p.pkg {
+		pkgVar, found := c.p.pkgVars[o.Pkg().Path()]
 		if !found {
 			pkgVar = fmt.Sprintf(`go$packages["%s"]`, o.Pkg().Path())
 		}
 		return pkgVar + "." + o.Name()
 	}
 
-	name, found := c.objectVars[o]
+	name, found := c.p.objectVars[o]
 	if !found {
 		name = c.newVariable(o.Name())
-		c.objectVars[o] = name
+		c.p.objectVars[o] = name
 	}
 
 	switch o.(type) {
 	case *types.Var, *types.Const:
-		if o.Exported() && o.Parent() == c.pkg.Scope() {
+		if o.Exported() && o.Parent() == c.p.pkg.Scope() {
 			return "go$pkg." + name
 		}
 	}
 	return name
 }
 
-func (c *pkgContext) typeName(ty types.Type) string {
+func (c *funcContext) typeName(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Basic:
 		switch t.Kind() {
@@ -219,7 +219,7 @@ func (c *pkgContext) typeName(ty types.Type) string {
 	}
 }
 
-func (c *pkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
+func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	switch t := keyType.Underlying().(type) {
 	case *types.Array, *types.Struct:
 		return fmt.Sprintf("(new %s(%s)).go$key()", c.typeName(keyType), c.translateExpr(expr))
@@ -240,7 +240,7 @@ func (c *pkgContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	}
 }
 
-func (c *pkgContext) typeArray(t *types.Tuple) string {
+func (c *funcContext) typeArray(t *types.Tuple) string {
 	s := make([]string, t.Len())
 	for i := range s {
 		s[i] = c.typeName(t.At(i).Type())
@@ -248,7 +248,7 @@ func (c *pkgContext) typeArray(t *types.Tuple) string {
 	return "[" + strings.Join(s, ", ") + "]"
 }
 
-func (c *pkgContext) externalize(s string, t types.Type) string {
+func (c *funcContext) externalize(s string, t types.Type) string {
 	if isJsObject(t) {
 		return s
 	}

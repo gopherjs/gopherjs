@@ -11,29 +11,29 @@ import (
 	"strings"
 )
 
-type pkgContext struct {
-	pkg           *types.Package
-	info          *types.Info
-	pkgVars       map[string]string
-	objectVars    map[types.Object]string
+type funcContext struct {
+	p             *pkgContext
+	sig           *types.Signature
+	allVars       map[string]int
+	localVars     []string
+	resultNames   []ast.Expr
+	flowDatas     map[string]*flowData
+	escapingVars  []string
+	flattened     bool
+	caseCounter   int
+	labelCases    map[string]int
+	hasGoto       map[ast.Node]bool
 	output        []byte
 	delayedOutput []byte
-	indentation   int
-	dependencies  map[types.Object]bool
-	f             *funcContext
 }
 
-type funcContext struct {
-	sig          *types.Signature
-	allVars      map[string]int
-	localVars    []string
-	resultNames  []ast.Expr
-	flowDatas    map[string]*flowData
-	escapingVars []string
-	flattened    bool
-	caseCounter  int
-	labelCases   map[string]int
-	hasGoto      map[ast.Node]bool
+type pkgContext struct {
+	pkg          *types.Package
+	info         *types.Info
+	pkgVars      map[string]string
+	objectVars   map[types.Object]string
+	indentation  int
+	dependencies map[types.Object]bool
 }
 
 type flowData struct {
@@ -79,23 +79,23 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 	}
 	t.typesPackages[importPath] = typesPkg
 
-	c := &pkgContext{
-		pkg:          typesPkg,
-		info:         info,
-		pkgVars:      make(map[string]string),
-		objectVars:   make(map[types.Object]string),
-		indentation:  1,
-		dependencies: make(map[types.Object]bool),
-		f: &funcContext{
-			allVars:     make(map[string]int),
-			flowDatas:   map[string]*flowData{"": &flowData{}},
-			caseCounter: 1,
-			labelCases:  make(map[string]int),
-			hasGoto:     make(map[ast.Node]bool),
+	c := &funcContext{
+		p: &pkgContext{
+			pkg:          typesPkg,
+			info:         info,
+			pkgVars:      make(map[string]string),
+			objectVars:   make(map[types.Object]string),
+			indentation:  1,
+			dependencies: make(map[types.Object]bool),
 		},
+		allVars:     make(map[string]int),
+		flowDatas:   map[string]*flowData{"": &flowData{}},
+		caseCounter: 1,
+		labelCases:  make(map[string]int),
+		hasGoto:     make(map[ast.Node]bool),
 	}
 	for name := range reservedKeywords {
-		c.f.allVars[name] = 1
+		c.allVars[name] = 1
 	}
 
 	var functions []*ast.FuncDecl
@@ -106,7 +106,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
-				sig := c.info.Defs[d.Name].(*types.Func).Type().(*types.Signature)
+				sig := c.p.info.Defs[d.Name].(*types.Func).Type().(*types.Signature)
 				var recvType types.Type
 				if sig.Recv() != nil {
 					recvType = sig.Recv().Type()
@@ -123,13 +123,13 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 				}
 				functions = append(functions, d)
 				if sig.Recv() == nil {
-					c.objectName(c.info.Defs[d.Name]) // register toplevel name
+					c.objectName(c.p.info.Defs[d.Name]) // register toplevel name
 				}
 			case *ast.GenDecl:
 				switch d.Tok {
 				case token.TYPE:
 					for _, spec := range d.Specs {
-						o := c.info.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
+						o := c.p.info.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
 						toplevelTypes = append(toplevelTypes, o)
 						c.objectName(o) // register toplevel name
 					}
@@ -137,7 +137,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 					for _, spec := range d.Specs {
 						for _, name := range spec.(*ast.ValueSpec).Names {
 							if !isBlank(name) {
-								o := c.info.Defs[name].(*types.Var)
+								o := c.p.info.Defs[name].(*types.Var)
 								vars = append(vars, o)
 								c.objectName(o) // register toplevel name
 							}
@@ -151,10 +151,10 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 	}
 
 	collectDependencies := func(self types.Object, f func()) []string {
-		c.dependencies = make(map[types.Object]bool)
+		c.p.dependencies = make(map[types.Object]bool)
 		f()
 		var deps []string
-		for dep := range c.dependencies {
+		for dep := range c.p.dependencies {
 			if dep != self {
 				deps = append(deps, dep.Pkg().Path()+":"+strings.Replace(dep.Name(), "_", "-", -1))
 			}
@@ -174,7 +174,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 	// imports
 	for _, importedPkg := range typesPkg.Imports() {
 		varName := c.newVariable(importedPkg.Name())
-		c.pkgVars[importedPkg.Path()] = varName
+		c.p.pkgVars[importedPkg.Path()] = varName
 		archive.Imports = append(archive.Imports, Import{Path: importedPkg.Path(), VarName: varName})
 	}
 
@@ -199,7 +199,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 	}
 	for _, fun := range functions {
 		var d Decl
-		o := c.info.Defs[fun.Name].(*types.Func)
+		o := c.p.info.Defs[fun.Name].(*types.Func)
 		funName := fun.Name.Name
 		if fun.Recv == nil {
 			d.Var = c.objectName(o)
@@ -234,7 +234,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 	}
 
 	// variables
-	initOrder := c.info.InitOrder
+	initOrder := c.p.info.InitOrder
 
 	// workaround for https://code.google.com/p/go/issues/detail?id=6703#c6
 	if importPath == "math/rand" {
@@ -281,8 +281,8 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 		lhs := make([]ast.Expr, len(init.Lhs))
 		for i, o := range init.Lhs {
 			ident := ast.NewIdent(o.Name())
-			c.info.Types[ident] = types.TypeAndValue{Type: o.Type()}
-			c.info.Defs[ident] = o
+			c.p.info.Types[ident] = types.TypeAndValue{Type: o.Type()}
+			c.p.info.Defs[ident] = o
 			lhs[i] = ident
 			varsWithInit[o] = true
 		}
@@ -297,7 +297,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 			})
 		})
 		if len(init.Lhs) == 1 {
-			v := hasCallVisitor{c.info, false}
+			v := hasCallVisitor{c.p.info, false}
 			ast.Walk(&v, init.Rhs)
 			if !v.hasCall {
 				d.DceFilters = []string{strings.Replace(init.Lhs[0].Name(), "_", "-", -1)}
@@ -344,7 +344,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 	return archive, nil
 }
 
-func (c *pkgContext) translateType(o *types.TypeName, toplevel bool) {
+func (c *funcContext) translateType(o *types.TypeName, toplevel bool) {
 	typeName := c.objectName(o)
 	lhs := typeName
 	if toplevel {
@@ -358,12 +358,12 @@ func (c *pkgContext) translateType(o *types.TypeName, toplevel bool) {
 		for i := 0; i < t.NumFields(); i++ {
 			params[i] = fieldName(t, i) + "_"
 		}
-		constructor = fmt.Sprintf("function(%s) {\n%sthis.go$val = this;\n", strings.Join(params, ", "), strings.Repeat("\t", c.indentation+1))
+		constructor = fmt.Sprintf("function(%s) {\n%sthis.go$val = this;\n", strings.Join(params, ", "), strings.Repeat("\t", c.p.indentation+1))
 		for i := 0; i < t.NumFields(); i++ {
 			name := fieldName(t, i)
-			constructor += fmt.Sprintf("%sthis.%s = %s_ !== undefined ? %s_ : %s;\n", strings.Repeat("\t", c.indentation+1), name, name, name, c.zeroValue(t.Field(i).Type()))
+			constructor += fmt.Sprintf("%sthis.%s = %s_ !== undefined ? %s_ : %s;\n", strings.Repeat("\t", c.p.indentation+1), name, name, name, c.zeroValue(t.Field(i).Type()))
 		}
-		constructor += strings.Repeat("\t", c.indentation) + "}"
+		constructor += strings.Repeat("\t", c.p.indentation) + "}"
 	case *types.Basic:
 		if t.Info()&types.IsInteger != 0 {
 			size = sizes32.Sizeof(t)
@@ -372,7 +372,7 @@ func (c *pkgContext) translateType(o *types.TypeName, toplevel bool) {
 	c.Printf(`%s = go$newType(%d, "%s", "%s.%s", "%s", "%s", %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), constructor)
 }
 
-func (c *pkgContext) initType(o types.Object) {
+func (c *funcContext) initType(o types.Object) {
 	if _, isInterface := o.Type().Underlying().(*types.Interface); !isInterface {
 		writeMethodSet := func(t types.Type) {
 			methodSet := types.NewMethodSet(t)
@@ -404,7 +404,7 @@ func (c *pkgContext) initType(o types.Object) {
 	}
 }
 
-func (c *pkgContext) initArgs(ty types.Type) string {
+func (c *funcContext) initArgs(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Array:
 		return fmt.Sprintf("%s, %d", c.typeName(t.Elem()), t.Len())
@@ -449,8 +449,8 @@ func (c *pkgContext) initArgs(ty types.Type) string {
 	}
 }
 
-func (c *pkgContext) translateToplevelFunction(fun *ast.FuncDecl, native string) []byte {
-	o := c.info.Defs[fun.Name].(*types.Func)
+func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, native string) []byte {
+	o := c.p.info.Defs[fun.Name].(*types.Func)
 	sig := o.Type().(*types.Signature)
 	var recv *ast.Ident
 	if fun.Recv != nil && fun.Recv.List[0].Names != nil {
@@ -470,7 +470,7 @@ func (c *pkgContext) translateToplevelFunction(fun *ast.FuncDecl, native string)
 		stmts := fun.Body.List
 		if recv != nil {
 			this := &This{}
-			c.info.Types[this] = types.TypeAndValue{Type: sig.Recv().Type()}
+			c.p.info.Types[this] = types.TypeAndValue{Type: sig.Recv().Type()}
 			stmts = append([]ast.Stmt{
 				&ast.AssignStmt{
 					Lhs: []ast.Expr{recv},
@@ -537,13 +537,13 @@ func (c *pkgContext) translateToplevelFunction(fun *ast.FuncDecl, native string)
 	return code.Bytes()
 }
 
-func (c *pkgContext) translateFunction(t *ast.FuncType, sig *types.Signature, stmts []ast.Stmt) (params []string, body []byte) {
-	vars := make(map[string]int, len(c.f.allVars))
-	for k, v := range c.f.allVars {
+func (c *funcContext) translateFunction(t *ast.FuncType, sig *types.Signature, stmts []ast.Stmt) (params []string, body []byte) {
+	vars := make(map[string]int, len(c.allVars))
+	for k, v := range c.allVars {
 		vars[k] = v
 	}
-	outerFuncContext := c.f
-	c.f = &funcContext{
+	newFuncContext := &funcContext{
+		p:           c.p,
 		sig:         sig,
 		allVars:     vars,
 		flowDatas:   map[string]*flowData{"": &flowData{}},
@@ -555,48 +555,46 @@ func (c *pkgContext) translateFunction(t *ast.FuncType, sig *types.Signature, st
 	for _, param := range t.Params.List {
 		for _, ident := range param.Names {
 			if isBlank(ident) {
-				params = append(params, c.newVariable("param"))
+				params = append(params, newFuncContext.newVariable("param"))
 				continue
 			}
-			params = append(params, c.objectName(c.info.Defs[ident]))
+			params = append(params, newFuncContext.objectName(newFuncContext.p.info.Defs[ident]))
 		}
 	}
 
-	body = c.translateFunctionBody(1, stmts)
-
-	c.f = outerFuncContext
+	body = newFuncContext.translateFunctionBody(1, stmts)
 	return
 }
 
-func (c *pkgContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte {
-	v := gotoVisitor{f: c.f}
+func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte {
+	v := gotoVisitor{c: c}
 	for _, stmt := range stmts {
 		ast.Walk(&v, stmt)
 	}
-	c.f.localVars = nil
-	if c.f.flattened {
-		c.f.localVars = append(c.f.localVars, "go$this = this")
+	c.localVars = nil
+	if c.flattened {
+		c.localVars = append(c.localVars, "go$this = this")
 	}
 
 	body := c.CatchOutput(indent, func() {
-		if c.f.sig != nil && c.f.sig.Results().Len() != 0 && c.f.sig.Results().At(0).Name() != "" {
-			c.f.resultNames = make([]ast.Expr, c.f.sig.Results().Len())
-			for i := 0; i < c.f.sig.Results().Len(); i++ {
-				result := c.f.sig.Results().At(i)
+		if c.sig != nil && c.sig.Results().Len() != 0 && c.sig.Results().At(0).Name() != "" {
+			c.resultNames = make([]ast.Expr, c.sig.Results().Len())
+			for i := 0; i < c.sig.Results().Len(); i++ {
+				result := c.sig.Results().At(i)
 				name := result.Name()
 				if result.Name() == "_" {
 					name = "result"
 				}
 				c.Printf("%s = %s;", c.objectName(result), c.zeroValue(result.Type()))
 				id := ast.NewIdent(name)
-				c.info.Types[id] = types.TypeAndValue{Type: result.Type()}
-				c.info.Uses[id] = result
-				c.f.resultNames[i] = id
+				c.p.info.Types[id] = types.TypeAndValue{Type: result.Type()}
+				c.p.info.Uses[id] = result
+				c.resultNames[i] = id
 			}
 		}
 
 		printBody := func() {
-			if c.f.flattened {
+			if c.flattened {
 				c.Printf("/* */ var go$s = 0, go$f = function() { while (true) { switch (go$s) { case 0:")
 				c.translateStmtList(stmts)
 				c.Printf("/* */ } break; } }; return go$f();")
@@ -616,16 +614,16 @@ func (c *pkgContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte 
 			c.Printf("} catch(go$err) {")
 			c.Indent(func() {
 				c.Printf("go$pushErr(go$err);")
-				if c.f.sig != nil && c.f.resultNames == nil {
-					switch c.f.sig.Results().Len() {
+				if c.sig != nil && c.resultNames == nil {
+					switch c.sig.Results().Len() {
 					case 0:
 						// nothing
 					case 1:
-						c.Printf("return %s;", c.zeroValue(c.f.sig.Results().At(0).Type()))
+						c.Printf("return %s;", c.zeroValue(c.sig.Results().At(0).Type()))
 					default:
-						zeros := make([]string, c.f.sig.Results().Len())
+						zeros := make([]string, c.sig.Results().Len())
 						for i := range zeros {
-							zeros[i] = c.zeroValue(c.f.sig.Results().At(i).Type())
+							zeros[i] = c.zeroValue(c.sig.Results().At(i).Type())
 						}
 						c.Printf("return [%s];", strings.Join(zeros, ", "))
 					}
@@ -634,7 +632,7 @@ func (c *pkgContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte 
 			c.Printf("} finally {")
 			c.Indent(func() {
 				c.Printf("go$callDeferred(go$deferred);")
-				if c.f.resultNames != nil {
+				if c.resultNames != nil {
 					c.translateStmt(&ast.ReturnStmt{}, "")
 				}
 			})
@@ -644,8 +642,8 @@ func (c *pkgContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte 
 		printBody()
 	})
 
-	if len(c.f.localVars) != 0 {
-		body = append([]byte(fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.indentation+indent), strings.Join(c.f.localVars, ", "))), body...)
+	if len(c.localVars) != 0 {
+		body = append([]byte(fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.p.indentation+indent), strings.Join(c.localVars, ", "))), body...)
 	}
 	return body
 }
@@ -669,7 +667,7 @@ func (v *hasDeferVisitor) Visit(node ast.Node) (w ast.Visitor) {
 }
 
 type gotoVisitor struct {
-	f     *funcContext
+	c     *funcContext
 	stack []ast.Node
 }
 
@@ -681,13 +679,13 @@ func (v *gotoVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	switch n := node.(type) {
 	case *ast.BranchStmt:
 		if n.Tok == token.GOTO {
-			v.f.flattened = true
+			v.c.flattened = true
 			for _, n2 := range v.stack {
-				v.f.hasGoto[n2] = true
+				v.c.hasGoto[n2] = true
 			}
-			if _, ok := v.f.labelCases[n.Label.String()]; !ok {
-				v.f.labelCases[n.Label.String()] = v.f.caseCounter
-				v.f.caseCounter++
+			if _, ok := v.c.labelCases[n.Label.String()]; !ok {
+				v.c.labelCases[n.Label.String()] = v.c.caseCounter
+				v.c.caseCounter++
 			}
 			return nil
 		}

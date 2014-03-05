@@ -538,11 +538,11 @@ func (c *pkgContext) translateToplevelFunction(fun *ast.FuncDecl, native string)
 }
 
 func (c *pkgContext) translateFunction(t *ast.FuncType, sig *types.Signature, stmts []ast.Stmt) (params []string, body []byte) {
-	outerFuncContext := c.f
 	vars := make(map[string]int, len(c.f.allVars))
 	for k, v := range c.f.allVars {
 		vars[k] = v
 	}
+	outerFuncContext := c.f
 	c.f = &funcContext{
 		sig:         sig,
 		allVars:     vars,

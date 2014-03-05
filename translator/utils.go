@@ -51,6 +51,45 @@ func (c *pkgContext) Delayed(f func()) {
 	c.delayedOutput = c.CatchOutput(0, f)
 }
 
+func (c *pkgContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis bool) string {
+	params := make([]string, sig.Params().Len())
+	for i := range params {
+		if sig.Variadic() && i == len(params)-1 && !ellipsis {
+			varargType := sig.Params().At(i).Type().(*types.Slice)
+			varargs := make([]string, len(args)-i)
+			for j, arg := range args[i:] {
+				varargs[j] = c.translateImplicitConversion(arg, varargType.Elem()).String()
+			}
+			params[i] = fmt.Sprintf("new %s([%s])", c.typeName(varargType), strings.Join(varargs, ", "))
+			break
+		}
+		argType := sig.Params().At(i).Type()
+		params[i] = c.translateImplicitConversion(args[i], argType).String()
+	}
+	return strings.Join(params, ", ")
+}
+
+func (c *pkgContext) translateSelection(sel *types.Selection) (fields []string, jsTag string) {
+	t := sel.Recv()
+	for _, index := range sel.Index() {
+		if ptr, isPtr := t.(*types.Pointer); isPtr {
+			t = ptr.Elem()
+		}
+		s := t.Underlying().(*types.Struct)
+		if jsTag = getJsTag(s.Tag(index)); jsTag != "" {
+			for i := 0; i < s.NumFields(); i++ {
+				if isJsObject(s.Field(i).Type()) {
+					fields = append(fields, fieldName(s, i))
+					return
+				}
+			}
+		}
+		fields = append(fields, fieldName(s, index))
+		t = s.Field(index).Type()
+	}
+	return
+}
+
 func (c *pkgContext) zeroValue(ty types.Type) string {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:

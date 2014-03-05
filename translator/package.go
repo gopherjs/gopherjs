@@ -159,6 +159,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 				deps = append(deps, dep.Pkg().Path()+":"+strings.Replace(dep.Name(), "_", "-", -1))
 			}
 		}
+		sort.Strings(deps)
 		return deps
 	}
 

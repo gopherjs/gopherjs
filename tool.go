@@ -83,16 +83,14 @@ func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 
 type session struct {
 	t              *translator.Translator
-	installMode    bool
 	verboseInstall bool
 	fileSet        *token.FileSet
 	packages       map[string]*packageData
 }
 
-func NewSession(installMode, verboseInstall bool) *session {
+func NewSession(verboseInstall bool) *session {
 	return &session{
 		t:              translator.New(),
-		installMode:    installMode,
 		verboseInstall: verboseInstall,
 		fileSet:        token.NewFileSet(),
 		packages:       make(map[string]*packageData),
@@ -127,7 +125,7 @@ func tool() error {
 		buildFlags.StringVar(&pkgObj, "o", "", "")
 		buildFlags.Parse(flag.Args()[1:])
 
-		s := NewSession(false, false)
+		s := NewSession(false)
 
 		if buildFlags.NArg() == 0 {
 			buildContext := &build.Context{
@@ -192,32 +190,11 @@ func tool() error {
 	case "install":
 		installFlags := flag.NewFlagSet("install", flag.ContinueOnError)
 		verbose := installFlags.Bool("v", false, "verbose")
-		all := installFlags.Bool("all", false, "install all packages in GOROOT")
 		installFlags.Parse(flag.Args()[1:])
 
-		s := NewSession(true, *verbose)
+		s := NewSession(*verbose)
 
 		pkgs := installFlags.Args()
-		if *all {
-			dir := filepath.Join(build.Default.GOROOT, "src", "pkg")
-			err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-				if err != nil {
-					return err
-				}
-				if info.IsDir() && path != dir {
-					pkgPath := path[len(dir)+1:]
-					if info.Name()[0] == '.' || info.Name() == "testdata" || pkgPath == "builtin" {
-						return filepath.SkipDir
-					}
-					pkgs = append(pkgs, pkgPath)
-				}
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-		}
-
 		if len(pkgs) == 0 {
 			srcDir, err := filepath.EvalSymlinks(filepath.Join(build.Default.GOPATH, "src"))
 			if err != nil {
@@ -233,13 +210,12 @@ func tool() error {
 			pkgs = []string{pkgPath}
 		}
 		for _, pkgPath := range pkgs {
-			if _, err := s.importPackage(filepath.ToSlash(pkgPath)); err != nil {
-				switch err.(type) {
-				case *build.NoGoError, *importCError:
-					if *all {
-						continue
-					}
-				}
+			pkgPath = filepath.ToSlash(pkgPath)
+			if _, err := s.importPackage(pkgPath); err != nil {
+				return err
+			}
+			pkg := s.packages[pkgPath]
+			if err := s.writeCommandPackage(pkg, pkg.PkgObj); err != nil {
 				return err
 			}
 		}
@@ -266,7 +242,7 @@ func tool() error {
 			os.Remove(tempfile.Name())
 		}()
 
-		s := NewSession(false, false)
+		s := NewSession(false)
 		if err := s.buildFiles(flag.Args()[1:lastSourceArg], tempfile.Name()); err != nil {
 			return err
 		}
@@ -285,7 +261,7 @@ func tool() error {
 		for _, pkgPath := range testFlags.Args() {
 			pkgPath = filepath.ToSlash(pkgPath)
 
-			s := NewSession(false, false)
+			s := NewSession(false)
 
 			buildPkg, err := buildImport(pkgPath, 0)
 			if err != nil {
@@ -391,7 +367,7 @@ func tool() error {
 			switch tool[1] {
 			case 'g':
 				basename := filepath.Base(toolFlags.Arg(0))
-				s := NewSession(false, false)
+				s := NewSession(false)
 				if err := s.buildFiles([]string{toolFlags.Arg(0)}, basename[:len(basename)-3]+".js"); err != nil {
 					return err
 				}
@@ -570,26 +546,19 @@ func (s *session) buildPackage(pkg *packageData) error {
 	}
 	s.packages[pkg.ImportPath] = pkg
 
-	if s.installMode {
-		if pkg.IsCommand() {
-			return s.writeCommandPackage(pkg, pkg.PkgObj)
-		}
-
-		if err := s.writeLibraryPackage(pkg, pkg.PkgObj); err != nil {
-			if strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
-				// fall back to GOPATH
-				if err := s.writeLibraryPackage(pkg, build.Default.GOPATH+pkg.PkgObj[len(build.Default.GOROOT):]); err != nil {
-					return err
-				}
-				return nil
-			}
-			return err
-		}
+	if pkg.PkgObj == "" || pkg.IsCommand() {
 		return nil
 	}
 
-	if pkg.ImportPath == "runtime" {
-		fmt.Println(`note: run "gopherjs install -all -v" once to speed up builds`)
+	if err := s.writeLibraryPackage(pkg, pkg.PkgObj); err != nil {
+		if strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
+			// fall back to GOPATH
+			if err := s.writeLibraryPackage(pkg, build.Default.GOPATH+pkg.PkgObj[len(build.Default.GOROOT):]); err != nil {
+				return err
+			}
+			return nil
+		}
+		return err
 	}
 
 	return nil

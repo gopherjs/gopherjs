@@ -25,6 +25,9 @@ Now you can use  `./bin/gopherjs build` and `./bin/gopherjs install` which behav
 
 *Note: GopherJS will try to write compiled object files of the core packages to your $GOROOT/pkg directory. If that fails, it will fall back to $GOPATH/pkg.*
 
+### Getting started
+Take a look at [Jason Stone's blog post](http://legacytotheedge.blogspot.de/2014/03/gopherjs-go-to-javascript-transpiler.html) about GopherJS. 
+
 ### Interface to native JavaScript
 The package `github.com/gopherjs/gopherjs/js` provides functions for interacting with native JavaScript APIs. Please see its [documentation](http://godoc.org/github.com/gopherjs/gopherjs/js) for further details.
 

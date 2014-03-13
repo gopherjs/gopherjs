@@ -25,19 +25,24 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		c.translateStmtList(s.List)
 
 	case *ast.IfStmt:
+		c.printLabel(label)
+		if s.Init != nil {
+			c.translateStmt(s.Init, "")
+		}
 		var caseClauses []ast.Stmt
-		var initStmts []ast.Stmt
 		ifStmt := s
 		for {
 			caseClauses = append(caseClauses, &ast.CaseClause{List: []ast.Expr{ifStmt.Cond}, Body: ifStmt.Body.List})
-			initStmts = append(initStmts, ifStmt.Init)
 			switch elseStmt := ifStmt.Else.(type) {
 			case *ast.IfStmt:
+				if elseStmt.Init != nil {
+					caseClauses = append(caseClauses, &ast.CaseClause{List: nil, Body: []ast.Stmt{elseStmt}})
+					break
+				}
 				ifStmt = elseStmt
 				continue
 			case *ast.BlockStmt:
 				caseClauses = append(caseClauses, &ast.CaseClause{List: nil, Body: elseStmt.List})
-				initStmts = append(initStmts, nil)
 			case *ast.EmptyStmt, nil:
 				// no else clause
 			default:
@@ -45,7 +50,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			break
 		}
-		c.translateBranchingStmt(caseClauses, initStmts, false, c.translateExpr, nil, label, c.hasGoto[s])
+		c.translateBranchingStmt(caseClauses, false, c.translateExpr, nil, "", c.hasGoto[s])
 
 	case *ast.SwitchStmt:
 		if s.Init != nil {
@@ -66,7 +71,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				})
 			}
 		}
-		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, nil, label, c.hasGoto[s])
+		c.translateBranchingStmt(s.Body.List, true, translateCond, nil, label, c.hasGoto[s])
 
 	case *ast.TypeSwitchStmt:
 		if s.Init != nil {
@@ -104,7 +109,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			c.Printf("%s = %s;", typeSwitchVar, value)
 		}
-		c.translateBranchingStmt(s.Body.List, nil, true, translateCond, printCaseBodyPrefix, label, c.hasGoto[s])
+		c.translateBranchingStmt(s.Body.List, true, translateCond, printCaseBodyPrefix, label, c.hasGoto[s])
 
 	case *ast.ForStmt:
 		if s.Init != nil {
@@ -326,12 +331,12 @@ type branch struct {
 	body      []ast.Stmt
 }
 
-func (c *funcContext) translateBranchingStmt(caseClauses []ast.Stmt, initStmts []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) *expression, printCaseBodyPrefix func([]ast.Expr), label string, flatten bool) {
+func (c *funcContext) translateBranchingStmt(caseClauses []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) *expression, printCaseBodyPrefix func([]ast.Expr), label string, flatten bool) {
 	var branches []*branch
 	var defaultBranch *branch
 	var openBranches []*branch
 clauseLoop:
-	for i, cc := range caseClauses {
+	for _, cc := range caseClauses {
 		clause := cc.(*ast.CaseClause)
 
 		branch := &branch{clause, "", nil}
@@ -363,9 +368,7 @@ clauseLoop:
 			continue
 		}
 		branch.condition = strings.Join(conds, " || ")
-		if initStmts != nil && initStmts[i] != nil {
-			branch.condition = c.translateSimpleStmt(initStmts[i]) + ", " + branch.condition
-		}
+
 		branches = append(branches, branch)
 	}
 

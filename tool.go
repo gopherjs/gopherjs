@@ -434,6 +434,7 @@ func (s *session) importPackage(path string) (*translator.Archive, error) {
 }
 
 func (s *session) buildPackage(pkg *packageData) error {
+	s.packages[pkg.ImportPath] = pkg
 	if pkg.ImportPath == "unsafe" {
 		return nil
 	}
@@ -493,7 +494,6 @@ func (s *session) buildPackage(pkg *packageData) error {
 			if err != nil {
 				return err
 			}
-			s.packages[pkg.ImportPath] = pkg
 
 			return nil
 		}
@@ -544,7 +544,6 @@ func (s *session) buildPackage(pkg *packageData) error {
 	if err != nil {
 		return err
 	}
-	s.packages[pkg.ImportPath] = pkg
 
 	if pkg.PkgObj == "" || pkg.IsCommand() {
 		return nil

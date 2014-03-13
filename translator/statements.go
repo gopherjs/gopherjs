@@ -114,11 +114,11 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		if s.Cond != nil {
 			cond = c.translateExpr(s.Cond).String()
 		}
-		post := ""
-		if s.Post != nil {
-			post = c.translateSimpleStmt(s.Post)
-		}
-		c.translateLoopingStmt(cond, post, s.Body, nil, label, c.hasGoto[s])
+		c.translateLoopingStmt(cond, s.Body, nil, func() {
+			if s.Post != nil {
+				c.translateStmt(s.Post, "")
+			}
+		}, label, c.hasGoto[s])
 
 	case *ast.RangeStmt:
 		refVar := c.newVariable("_ref")
@@ -130,7 +130,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		switch t := c.p.info.Types[s.X].Type.Underlying().(type) {
 		case *types.Basic:
 			runeVar := c.newVariable("_rune")
-			c.translateLoopingStmt(iVar+" < "+refVar+".length", iVar+" += "+runeVar+"[1]", s.Body, func() {
+			c.translateLoopingStmt(iVar+" < "+refVar+".length", s.Body, func() {
 				c.Printf("%s = go$decodeRune(%s, %s);", runeVar, refVar, iVar)
 				if !isBlank(s.Value) {
 					c.Printf("%s;", c.translateAssign(s.Value, runeVar+"[0]"))
@@ -138,12 +138,14 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				if !isBlank(s.Key) {
 					c.Printf("%s;", c.translateAssign(s.Key, iVar))
 				}
+			}, func() {
+				c.Printf("%s += %s[1];", iVar, runeVar)
 			}, label, c.hasGoto[s])
 
 		case *types.Map:
 			keysVar := c.newVariable("_keys")
 			c.Printf("%s = go$keys(%s);", keysVar, refVar)
-			c.translateLoopingStmt(iVar+" < "+keysVar+".length", iVar+"++", s.Body, func() {
+			c.translateLoopingStmt(iVar+" < "+keysVar+".length", s.Body, func() {
 				entryVar := c.newVariable("_entry")
 				c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
 				if !isBlank(s.Value) {
@@ -152,6 +154,8 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				if !isBlank(s.Key) {
 					c.Printf("%s;", c.translateAssign(s.Key, entryVar+".k"))
 				}
+			}, func() {
+				c.Printf("%s++;", iVar)
 			}, label, c.hasGoto[s])
 
 		case *types.Array, *types.Pointer, *types.Slice:
@@ -164,7 +168,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			case *types.Slice:
 				length = refVar + ".length"
 			}
-			c.translateLoopingStmt(iVar+" < "+length, iVar+"++", s.Body, func() {
+			c.translateLoopingStmt(iVar+" < "+length, s.Body, func() {
 				if !isBlank(s.Value) {
 					indexExpr := &ast.IndexExpr{
 						X:     c.newIdent(refVar, t),
@@ -177,6 +181,8 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				if !isBlank(s.Key) {
 					c.Printf("%s;", c.translateAssign(s.Key, iVar))
 				}
+			}, func() {
+				c.Printf("%s++;", iVar)
 			}, label, c.hasGoto[s])
 
 		case *types.Chan:
@@ -199,9 +205,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		case token.BREAK:
 			c.PrintCond(data.endCase == 0, fmt.Sprintf("break%s;", labelSuffix), fmt.Sprintf("go$s = %d; continue;", data.endCase))
 		case token.CONTINUE:
-			if data.postStmt != "" {
-				c.Printf("%s;", data.postStmt)
-			}
+			data.postStmt()
 			c.PrintCond(data.beginCase == 0, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("go$s = %d; continue;", data.beginCase))
 		case token.GOTO:
 			c.PrintCond(false, "goto "+s.Label.Name, fmt.Sprintf("go$s = %d; continue;", c.labelCases[s.Label.Name]))
@@ -466,7 +470,7 @@ clauseLoop:
 	}
 }
 
-func (c *funcContext) translateLoopingStmt(cond, post string, body *ast.BlockStmt, bodyPrefix func(), label string, flatten bool) {
+func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bodyPrefix, post func(), label string, flatten bool) {
 	prevFlowData := c.flowDatas[""]
 	data := &flowData{
 		postStmt: post,
@@ -509,8 +513,8 @@ func (c *funcContext) translateLoopingStmt(cond, post string, body *ast.BlockStm
 				isTerminated = true
 			}
 		}
-		if post != "" && !isTerminated {
-			c.Printf("%s;", post)
+		if !isTerminated {
+			post()
 		}
 
 		c.escapingVars = prevEV

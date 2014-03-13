@@ -37,7 +37,7 @@ type pkgContext struct {
 }
 
 type flowData struct {
-	postStmt  string
+	postStmt  func()
 	beginCase int
 	endCase   int
 }

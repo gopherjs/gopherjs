@@ -54,7 +54,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.SwitchStmt:
 		if s.Init != nil {
-			c.Printf("%s;", c.translateSimpleStmt(s.Init))
+			c.translateStmt(s.Init, "")
 		}
 		translateCond := func(cond ast.Expr) *expression {
 			return c.translateExpr(cond)
@@ -75,7 +75,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.TypeSwitchStmt:
 		if s.Init != nil {
-			c.Printf("%s;", c.translateSimpleStmt(s.Init))
+			c.translateStmt(s.Init, "")
 		}
 		var expr ast.Expr
 		var typeSwitchVar string
@@ -113,7 +113,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.ForStmt:
 		if s.Init != nil {
-			c.Printf("%s;", c.translateSimpleStmt(s.Init))
+			c.translateStmt(s.Init, "")
 		}
 		cond := "true"
 		if s.Cond != nil {
@@ -286,12 +286,205 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 		c.Printf("go$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), args)
 
+	case *ast.AssignStmt:
+		c.printLabel(label)
+		if s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
+			var op token.Token
+			switch s.Tok {
+			case token.ADD_ASSIGN:
+				op = token.ADD
+			case token.SUB_ASSIGN:
+				op = token.SUB
+			case token.MUL_ASSIGN:
+				op = token.MUL
+			case token.QUO_ASSIGN:
+				op = token.QUO
+			case token.REM_ASSIGN:
+				op = token.REM
+			case token.AND_ASSIGN:
+				op = token.AND
+			case token.OR_ASSIGN:
+				op = token.OR
+			case token.XOR_ASSIGN:
+				op = token.XOR
+			case token.SHL_ASSIGN:
+				op = token.SHL
+			case token.SHR_ASSIGN:
+				op = token.SHR
+			case token.AND_NOT_ASSIGN:
+				op = token.AND_NOT
+			default:
+				panic(s.Tok)
+			}
+
+			var parts []string
+			lhs := s.Lhs[0]
+			switch l := lhs.(type) {
+			case *ast.IndexExpr:
+				lhsVar := c.newVariable("_lhs")
+				indexVar := c.newVariable("_index")
+				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String())
+				parts = append(parts, indexVar+" = "+c.translateExpr(l.Index).String())
+				lhs = &ast.IndexExpr{
+					X:     c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
+					Index: c.newIdent(indexVar, c.p.info.Types[l.Index].Type),
+				}
+				c.p.info.Types[lhs] = c.p.info.Types[l]
+			case *ast.StarExpr:
+				lhsVar := c.newVariable("_lhs")
+				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String())
+				lhs = &ast.StarExpr{
+					X: c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
+				}
+				c.p.info.Types[lhs] = c.p.info.Types[l]
+			case *ast.SelectorExpr:
+				v := hasCallVisitor{c.p.info, false}
+				ast.Walk(&v, l.X)
+				if v.hasCall {
+					lhsVar := c.newVariable("_lhs")
+					parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String())
+					lhs = &ast.SelectorExpr{
+						X:   c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
+						Sel: l.Sel,
+					}
+					c.p.info.Types[lhs] = c.p.info.Types[l]
+					c.p.info.Selections[lhs.(*ast.SelectorExpr)] = c.p.info.Selections[l]
+				}
+			}
+
+			parenExpr := &ast.ParenExpr{X: s.Rhs[0]}
+			c.p.info.Types[parenExpr] = c.p.info.Types[s.Rhs[0]]
+			binaryExpr := &ast.BinaryExpr{
+				X:  lhs,
+				Op: op,
+				Y:  parenExpr,
+			}
+			c.p.info.Types[binaryExpr] = c.p.info.Types[s.Lhs[0]]
+			parts = append(parts, c.translateAssign(lhs, c.translateExpr(binaryExpr).String()))
+			c.Printf("%s;", strings.Join(parts, ", "))
+			return
+		}
+
+		if s.Tok == token.DEFINE {
+			for _, lhs := range s.Lhs {
+				if !isBlank(lhs) {
+					c.p.info.Types[lhs] = types.TypeAndValue{Type: c.p.info.Defs[lhs.(*ast.Ident)].Type()}
+				}
+			}
+		}
+
+		removeParens := func(e ast.Expr) ast.Expr {
+			for {
+				if p, isParen := e.(*ast.ParenExpr); isParen {
+					e = p.X
+					continue
+				}
+				break
+			}
+			return e
+		}
+
+		switch {
+		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
+			lhs := removeParens(s.Lhs[0])
+			if isBlank(lhs) {
+				v := hasCallVisitor{c.p.info, false}
+				ast.Walk(&v, s.Rhs[0])
+				if v.hasCall {
+					c.Printf("%s;", c.translateExpr(s.Rhs[0]).String())
+				}
+				return
+			}
+			c.Printf("%s;", c.translateAssign(lhs, c.translateImplicitConversion(s.Rhs[0], c.p.info.Types[s.Lhs[0]].Type).String()))
+
+		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
+			tupleVar := c.newVariable("_tuple")
+			out := tupleVar + " = " + c.translateExpr(s.Rhs[0]).String()
+			tuple := c.p.info.Types[s.Rhs[0]].Type.(*types.Tuple)
+			for i, lhs := range s.Lhs {
+				lhs = removeParens(lhs)
+				if !isBlank(lhs) {
+					out += ", " + c.translateAssign(lhs, c.translateImplicitConversion(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), c.p.info.Types[s.Lhs[i]].Type).String())
+				}
+			}
+			c.Printf("%s;", out)
+		case len(s.Lhs) == len(s.Rhs):
+			parts := make([]string, len(s.Rhs))
+			for i, rhs := range s.Rhs {
+				parts[i] = c.translateImplicitConversion(rhs, c.p.info.Types[s.Lhs[i]].Type).String()
+			}
+			tupleVar := c.newVariable("_tuple")
+			out := tupleVar + " = [" + strings.Join(parts, ", ") + "]"
+			for i, lhs := range s.Lhs {
+				lhs = removeParens(lhs)
+				if !isBlank(lhs) {
+					out += ", " + c.translateAssign(lhs, fmt.Sprintf("%s[%d]", tupleVar, i))
+				}
+			}
+			c.Printf("%s;", out)
+
+		default:
+			panic("Invalid arity of AssignStmt.")
+
+		}
+
+	case *ast.IncDecStmt:
+		t := c.p.info.Types[s.X].Type
+		if iExpr, isIExpr := s.X.(*ast.IndexExpr); isIExpr {
+			switch u := c.p.info.Types[iExpr.X].Type.Underlying().(type) {
+			case *types.Array:
+				t = u.Elem()
+			case *types.Slice:
+				t = u.Elem()
+			case *types.Map:
+				t = u.Elem()
+			}
+		}
+
+		tok := token.ADD_ASSIGN
+		if s.Tok == token.DEC {
+			tok = token.SUB_ASSIGN
+		}
+		one := &ast.BasicLit{
+			Kind:  token.INT,
+			Value: "1",
+		}
+		c.p.info.Types[one] = types.TypeAndValue{Type: t, Value: exact.MakeInt64(1)}
+		c.translateStmt(&ast.AssignStmt{
+			Lhs: []ast.Expr{s.X},
+			Tok: tok,
+			Rhs: []ast.Expr{one},
+		}, label)
+
+	case *ast.ExprStmt:
+		c.printLabel(label)
+		c.Printf("%s;", c.translateExpr(s.X).String())
+
 	case *ast.DeclStmt:
 		c.printLabel(label)
 		decl := s.Decl.(*ast.GenDecl)
 		switch decl.Tok {
 		case token.VAR:
-			c.Printf("%s;", c.translateSimpleStmt(stmt))
+			for _, spec := range s.Decl.(*ast.GenDecl).Specs {
+				valueSpec := spec.(*ast.ValueSpec)
+				lhs := make([]ast.Expr, len(valueSpec.Names))
+				for i, name := range valueSpec.Names {
+					lhs[i] = name
+				}
+				rhs := valueSpec.Values
+				isTuple := false
+				if len(rhs) == 1 {
+					_, isTuple = c.p.info.Types[rhs[0]].Type.(*types.Tuple)
+				}
+				for len(rhs) < len(lhs) && !isTuple {
+					rhs = append(rhs, nil)
+				}
+				c.translateStmt(&ast.AssignStmt{
+					Lhs: lhs,
+					Tok: token.DEFINE,
+					Rhs: rhs,
+				}, "")
+			}
 		case token.TYPE:
 			for _, spec := range decl.Specs {
 				o := c.p.info.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
@@ -308,20 +501,22 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.SelectStmt:
 		c.printLabel(label)
-		c.Printf(`go$notSupported("select")`)
+		c.Printf(`go$notSupported("select");`)
 
 	case *ast.GoStmt:
 		c.printLabel(label)
-		c.Printf(`go$notSupported("go")`)
+		c.Printf(`go$notSupported("go");`)
+
+	case *ast.SendStmt:
+		c.printLabel(label)
+		c.Printf(`go$notSupported("send");`)
 
 	case *ast.EmptyStmt:
 		// skip
 
 	default:
-		c.printLabel(label)
-		if r := c.translateSimpleStmt(stmt); r != "" {
-			c.Printf("%s;", r)
-		}
+		panic(fmt.Sprintf("Unhandled statement: %T\n", s))
+
 	}
 }
 
@@ -526,212 +721,6 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 
 	delete(c.flowDatas, label)
 	c.flowDatas[""] = prevFlowData
-}
-
-func (c *funcContext) translateSimpleStmt(stmt ast.Stmt) string {
-	switch s := stmt.(type) {
-	case *ast.AssignStmt:
-		if s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
-			var op token.Token
-			switch s.Tok {
-			case token.ADD_ASSIGN:
-				op = token.ADD
-			case token.SUB_ASSIGN:
-				op = token.SUB
-			case token.MUL_ASSIGN:
-				op = token.MUL
-			case token.QUO_ASSIGN:
-				op = token.QUO
-			case token.REM_ASSIGN:
-				op = token.REM
-			case token.AND_ASSIGN:
-				op = token.AND
-			case token.OR_ASSIGN:
-				op = token.OR
-			case token.XOR_ASSIGN:
-				op = token.XOR
-			case token.SHL_ASSIGN:
-				op = token.SHL
-			case token.SHR_ASSIGN:
-				op = token.SHR
-			case token.AND_NOT_ASSIGN:
-				op = token.AND_NOT
-			default:
-				panic(s.Tok)
-			}
-
-			var parts []string
-			lhs := s.Lhs[0]
-			switch l := lhs.(type) {
-			case *ast.IndexExpr:
-				lhsVar := c.newVariable("_lhs")
-				indexVar := c.newVariable("_index")
-				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String())
-				parts = append(parts, indexVar+" = "+c.translateExpr(l.Index).String())
-				lhs = &ast.IndexExpr{
-					X:     c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
-					Index: c.newIdent(indexVar, c.p.info.Types[l.Index].Type),
-				}
-				c.p.info.Types[lhs] = c.p.info.Types[l]
-			case *ast.StarExpr:
-				lhsVar := c.newVariable("_lhs")
-				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String())
-				lhs = &ast.StarExpr{
-					X: c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
-				}
-				c.p.info.Types[lhs] = c.p.info.Types[l]
-			case *ast.SelectorExpr:
-				v := hasCallVisitor{c.p.info, false}
-				ast.Walk(&v, l.X)
-				if v.hasCall {
-					lhsVar := c.newVariable("_lhs")
-					parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String())
-					lhs = &ast.SelectorExpr{
-						X:   c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
-						Sel: l.Sel,
-					}
-					c.p.info.Types[lhs] = c.p.info.Types[l]
-					c.p.info.Selections[lhs.(*ast.SelectorExpr)] = c.p.info.Selections[l]
-				}
-			}
-
-			parenExpr := &ast.ParenExpr{X: s.Rhs[0]}
-			c.p.info.Types[parenExpr] = c.p.info.Types[s.Rhs[0]]
-			binaryExpr := &ast.BinaryExpr{
-				X:  lhs,
-				Op: op,
-				Y:  parenExpr,
-			}
-			c.p.info.Types[binaryExpr] = c.p.info.Types[s.Lhs[0]]
-			parts = append(parts, c.translateAssign(lhs, c.translateExpr(binaryExpr).String()))
-			return strings.Join(parts, ", ")
-		}
-
-		if s.Tok == token.DEFINE {
-			for _, lhs := range s.Lhs {
-				if !isBlank(lhs) {
-					c.p.info.Types[lhs] = types.TypeAndValue{Type: c.p.info.Defs[lhs.(*ast.Ident)].Type()}
-				}
-			}
-		}
-
-		removeParens := func(e ast.Expr) ast.Expr {
-			for {
-				if p, isParen := e.(*ast.ParenExpr); isParen {
-					e = p.X
-					continue
-				}
-				break
-			}
-			return e
-		}
-
-		switch {
-		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
-			lhs := removeParens(s.Lhs[0])
-			if isBlank(lhs) {
-				v := hasCallVisitor{c.p.info, false}
-				ast.Walk(&v, s.Rhs[0])
-				if v.hasCall {
-					return c.translateExpr(s.Rhs[0]).String()
-				}
-				return ""
-			}
-			return c.translateAssign(lhs, c.translateImplicitConversion(s.Rhs[0], c.p.info.Types[s.Lhs[0]].Type).String())
-
-		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
-			tupleVar := c.newVariable("_tuple")
-			out := tupleVar + " = " + c.translateExpr(s.Rhs[0]).String()
-			tuple := c.p.info.Types[s.Rhs[0]].Type.(*types.Tuple)
-			for i, lhs := range s.Lhs {
-				lhs = removeParens(lhs)
-				if !isBlank(lhs) {
-					out += ", " + c.translateAssign(lhs, c.translateImplicitConversion(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), c.p.info.Types[s.Lhs[i]].Type).String())
-				}
-			}
-			return out
-		case len(s.Lhs) == len(s.Rhs):
-			parts := make([]string, len(s.Rhs))
-			for i, rhs := range s.Rhs {
-				parts[i] = c.translateImplicitConversion(rhs, c.p.info.Types[s.Lhs[i]].Type).String()
-			}
-			tupleVar := c.newVariable("_tuple")
-			out := tupleVar + " = [" + strings.Join(parts, ", ") + "]"
-			for i, lhs := range s.Lhs {
-				lhs = removeParens(lhs)
-				if !isBlank(lhs) {
-					out += ", " + c.translateAssign(lhs, fmt.Sprintf("%s[%d]", tupleVar, i))
-				}
-			}
-			return out
-
-		default:
-			panic("Invalid arity of AssignStmt.")
-
-		}
-
-	case *ast.IncDecStmt:
-		t := c.p.info.Types[s.X].Type
-		if iExpr, isIExpr := s.X.(*ast.IndexExpr); isIExpr {
-			switch u := c.p.info.Types[iExpr.X].Type.Underlying().(type) {
-			case *types.Array:
-				t = u.Elem()
-			case *types.Slice:
-				t = u.Elem()
-			case *types.Map:
-				t = u.Elem()
-			}
-		}
-
-		tok := token.ADD_ASSIGN
-		if s.Tok == token.DEC {
-			tok = token.SUB_ASSIGN
-		}
-		one := &ast.BasicLit{
-			Kind:  token.INT,
-			Value: "1",
-		}
-		c.p.info.Types[one] = types.TypeAndValue{Type: t, Value: exact.MakeInt64(1)}
-		return c.translateSimpleStmt(&ast.AssignStmt{
-			Lhs: []ast.Expr{s.X},
-			Tok: tok,
-			Rhs: []ast.Expr{one},
-		})
-
-	case *ast.ExprStmt:
-		return c.translateExpr(s.X).String()
-
-	case *ast.DeclStmt:
-		var parts []string
-		for _, spec := range s.Decl.(*ast.GenDecl).Specs {
-			valueSpec := spec.(*ast.ValueSpec)
-			lhs := make([]ast.Expr, len(valueSpec.Names))
-			for i, name := range valueSpec.Names {
-				lhs[i] = name
-			}
-			rhs := valueSpec.Values
-			isTuple := false
-			if len(rhs) == 1 {
-				_, isTuple = c.p.info.Types[rhs[0]].Type.(*types.Tuple)
-			}
-			for len(rhs) < len(lhs) && !isTuple {
-				rhs = append(rhs, nil)
-			}
-			parts = append(parts, c.translateSimpleStmt(&ast.AssignStmt{
-				Lhs: lhs,
-				Tok: token.DEFINE,
-				Rhs: rhs,
-			}))
-		}
-		return strings.Join(parts, ", ")
-
-	case *ast.SendStmt:
-		return `go$notSupported("send")`
-
-	default:
-		panic(fmt.Sprintf("Unhandled statement: %T\n", s))
-
-	}
 }
 
 func (c *funcContext) translateAssign(lhs ast.Expr, rhs string) string {

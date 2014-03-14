@@ -51,7 +51,7 @@ func (c *funcContext) Delayed(f func()) {
 	c.delayedOutput = c.CatchOutput(0, f)
 }
 
-func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis bool) string {
+func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis bool) []string {
 	params := make([]string, sig.Params().Len())
 	for i := range params {
 		if sig.Variadic() && i == len(params)-1 && !ellipsis {
@@ -66,7 +66,7 @@ func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellip
 		argType := sig.Params().At(i).Type()
 		params[i] = c.translateImplicitConversion(args[i], argType).String()
 	}
-	return strings.Join(params, ", ")
+	return params
 }
 
 func (c *funcContext) translateSelection(sel *types.Selection) (fields []string, jsTag string) {

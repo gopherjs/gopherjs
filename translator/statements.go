@@ -275,7 +275,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 		}
 		sig := c.p.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
-		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
+		args := strings.Join(c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid()), ", ")
 		if sel, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
 			obj := c.p.info.Selections[sel].Obj()
 			if !obj.Exported() {

@@ -805,10 +805,10 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				for i := range args {
 					args[i] = c.newIdent(c.formatExpr("%s[%d]", tupleVar, i).String(), tuple.At(i).Type())
 				}
-				return c.formatExpr("(%s = %s, %s(%s))", tupleVar, c.translateExpr(e.Args[0]), fun, c.translateArgs(sig, args, false))
+				return c.formatExpr("(%s = %s, %s(%s))", tupleVar, c.translateExpr(e.Args[0]), fun, strings.Join(c.translateArgs(sig, args, false), ", "))
 			}
 		}
-		return c.formatExpr("%s(%s)", fun, c.translateArgs(sig, e.Args, e.Ellipsis.IsValid()))
+		return c.formatExpr("%s(%s)", fun, strings.Join(c.translateArgs(sig, e.Args, e.Ellipsis.IsValid()), ", "))
 
 	case *ast.StarExpr:
 		if c1, isCall := e.X.(*ast.CallExpr); isCall && len(c1.Args) == 1 {

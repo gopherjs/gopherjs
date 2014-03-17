@@ -10,16 +10,15 @@ import (
 )
 
 func (c *funcContext) Write(b []byte) (int, error) {
-	c.output = append(c.output, b...)
-	return len(b), nil
+	return c.output.Write(b)
 }
 
 func (c *funcContext) Printf(format string, values ...interface{}) {
-	c.Write([]byte(strings.Repeat("\t", c.p.indentation)))
+	c.output.WriteString(strings.Repeat("\t", c.p.indentation))
 	fmt.Fprintf(c, format, values...)
-	c.Write([]byte{'\n'})
-	c.Write(c.delayedOutput)
-	c.delayedOutput = nil
+	c.output.WriteString("\n")
+	c.output.AppendOutput(c.delayedOutput)
+	c.delayedOutput = OutputWithSourceMap{}
 }
 
 func (c *funcContext) PrintCond(cond bool, onTrue, onFalse string) {
@@ -36,13 +35,13 @@ func (c *funcContext) Indent(f func()) {
 	c.p.indentation--
 }
 
-func (c *funcContext) CatchOutput(indent int, f func()) []byte {
-	origoutput := c.output
-	c.output = nil
+func (c *funcContext) CatchOutput(indent int, f func()) OutputWithSourceMap {
+	origOutput := c.output
+	c.output = OutputWithSourceMap{}
 	c.p.indentation += indent
 	f()
 	catched := c.output
-	c.output = origoutput
+	c.output = origOutput
 	c.p.indentation -= indent
 	return catched
 }

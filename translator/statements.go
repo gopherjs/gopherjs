@@ -20,6 +20,11 @@ func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 }
 
 func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
+	pos := c.p.fileSet.Position(stmt.Pos())
+	if pos.IsValid() {
+		c.output.SourceMap = append(c.output.SourceMap, SourceMapEntry{len(c.output.Code), pos.Line, pos.Column})
+	}
+
 	switch s := stmt.(type) {
 	case *ast.BlockStmt:
 		c.translateStmtList(s.List)
@@ -242,14 +247,14 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				break
 			}
 			v := c.translateImplicitConversion(results[0], c.sig.Results().At(0).Type())
-			c.delayedOutput = nil
+			c.delayedOutput = OutputWithSourceMap{}
 			c.Printf("return %s;", v)
 		default:
 			values := make([]string, len(results))
 			for i, result := range results {
 				values[i] = c.translateImplicitConversion(result, c.sig.Results().At(i).Type()).String()
 			}
-			c.delayedOutput = nil
+			c.delayedOutput = OutputWithSourceMap{}
 			c.Printf("return [%s];", strings.Join(values, ", "))
 		}
 

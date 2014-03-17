@@ -314,11 +314,11 @@ func tool() error {
 			}
 
 			mainFunc.DceDeps = append(mainFunc.DceDeps, "flag:Parse")
-			mainFunc.BodyCode = []byte(fmt.Sprintf(`
+			mainFunc.BodyCode = translator.OutputWithSourceMap{Code: []byte(fmt.Sprintf(`
 				go$pkg.main = function() {
 					go$packages["testing"].Main2("%s", "%s", ["%s"], [%s]);
 				};
-			`, pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))
+			`, pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))}
 
 			mainPkg.Archive.Declarations = []translator.Decl{mainFunc}
 			mainPkg.Archive.AddDependency("main")
@@ -659,7 +659,9 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 		allPkgs = append(allPkgs, dep)
 	}
 
-	s.t.WriteProgramCode(allPkgs, pkg.ImportPath, file)
+	output := translator.OutputWithSourceMap{}
+	s.t.WriteProgramCode(allPkgs, pkg.ImportPath, &output)
+	file.Write(output.Code)
 
 	return nil
 }

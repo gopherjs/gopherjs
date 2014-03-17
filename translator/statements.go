@@ -753,7 +753,7 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string) string {
 			}
 			return fmt.Sprintf("%s.%s = %s", c.translateExpr(l.X), strings.Join(fields, "."), rhs)
 		case types.PackageObj:
-			return c.translateExpr(l.X).String() + "." + l.Sel.Name + " = " + rhs
+			return fmt.Sprintf("%s.%s = %s", c.translateExpr(l.X), l.Sel.Name, rhs)
 		default:
 			panic(int(sel.Kind()))
 		}

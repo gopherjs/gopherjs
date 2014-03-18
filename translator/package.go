@@ -152,17 +152,21 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 		}
 	}
 
-	collectDependencies := func(self types.Object, f func()) []string {
+	collectDependencies := func(self types.Object, f func()) []DepId {
 		c.p.dependencies = make(map[types.Object]bool)
 		f()
 		var deps []string
 		for dep := range c.p.dependencies {
 			if dep != self {
-				deps = append(deps, dep.Pkg().Path()+":"+strings.Replace(dep.Name(), "_", "-", -1))
+				deps = append(deps, dep.Pkg().Path()+":"+dep.Name())
 			}
 		}
 		sort.Strings(deps)
-		return deps
+		depIds := make([]DepId, len(deps))
+		for i, dep := range deps {
+			depIds[i] = DepId(dep)
+		}
+		return depIds
 	}
 
 	gcData := bytes.NewBuffer(nil)
@@ -185,7 +189,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 		typeName := c.objectName(o)
 		var d Decl
 		d.Var = typeName
-		d.DceFilters = []string{strings.Replace(o.Name(), "_", "-", -1)}
+		d.DceFilters = []DepId{DepId(o.Name())}
 		d.DceDeps = collectDependencies(o, func() {
 			d.BodyCode = c.CatchOutput(0, func() { c.translateType(o, true) })
 			d.InitCode = c.CatchOutput(1, func() { c.initType(o) })
@@ -206,7 +210,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 		if fun.Recv == nil {
 			d.Var = c.objectName(o)
 			if o.Name() != "main" {
-				d.DceFilters = []string{strings.Replace(o.Name(), "_", "-", -1)}
+				d.DceFilters = []DepId{DepId(o.Name())}
 			}
 		}
 		if fun.Recv != nil {
@@ -217,9 +221,9 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 				namedRecvType = ptr.Elem().(*types.Named)
 			}
 			funName = namedRecvType.Obj().Name() + "." + funName
-			d.DceFilters = []string{strings.Replace(namedRecvType.Obj().Name(), "_", "-", -1)}
+			d.DceFilters = []DepId{DepId(namedRecvType.Obj().Name())}
 			if !fun.Name.IsExported() {
-				d.DceFilters = append(d.DceFilters, strings.Replace(fun.Name.Name, "_", "-", -1))
+				d.DceFilters = append(d.DceFilters, DepId(fun.Name.Name))
 			}
 		}
 
@@ -276,7 +280,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 				d.InitCode = OutputWithSourceMap{Code: []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value))}
 			})
 		}
-		d.DceFilters = []string{strings.Replace(o.Name(), "_", "-", -1)}
+		d.DceFilters = []DepId{DepId(o.Name())}
 		archive.Declarations = append(archive.Declarations, d)
 	}
 	for _, init := range initOrder {
@@ -302,7 +306,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 			v := hasCallVisitor{c.p.info, false}
 			ast.Walk(&v, init.Rhs)
 			if !v.hasCall {
-				d.DceFilters = []string{strings.Replace(init.Lhs[0].Name(), "_", "-", -1)}
+				d.DceFilters = []DepId{DepId(init.Lhs[0].Name())}
 			}
 		}
 		archive.Declarations = append(archive.Declarations, d)
@@ -313,7 +317,9 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 	toplevel.BodyCode = OutputWithSourceMap{Code: []byte(natives["toplevel"])}
 	delete(natives, "toplevel")
 	if toplevelDependencies, ok := natives["toplevelDependencies"]; ok {
-		toplevel.DceDeps = strings.Split(toplevelDependencies, " ")
+		for _, dep := range strings.Split(toplevelDependencies, " ") {
+			toplevel.DceDeps = append(toplevel.DceDeps, DepId(dep))
+		}
 		delete(natives, "toplevelDependencies")
 	}
 	archive.Declarations = append(archive.Declarations, toplevel)

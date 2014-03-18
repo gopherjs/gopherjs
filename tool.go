@@ -293,7 +293,7 @@ func tool() error {
 				for _, name := range pkg.Archive.Tests {
 					names = append(names, name)
 					tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
-					mainFunc.DceDeps = append(mainFunc.DceDeps, pkg.ImportPath+":"+strings.Replace(name, "_", "-", -1))
+					mainFunc.DceDeps = append(mainFunc.DceDeps, translator.DepId(pkg.ImportPath+":"+name))
 				}
 				mainPkg.Archive.AddDependenciesOf(pkg.Archive)
 			}
@@ -311,7 +311,7 @@ func tool() error {
 				collectTests(testPkg)
 			}
 
-			mainFunc.DceDeps = append(mainFunc.DceDeps, "flag:Parse")
+			mainFunc.DceDeps = append(mainFunc.DceDeps, translator.DepId("flag:Parse"))
 			mainFunc.BodyCode = translator.OutputWithSourceMap{Code: []byte(fmt.Sprintf(`
 				go$pkg.main = function() {
 					go$packages["testing"].Main2("%s", "%s", ["%s"], [%s]);

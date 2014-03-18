@@ -181,7 +181,7 @@ func init() {
 	}
 
 	pkgNatives["math/big"] = map[string]string{
-		"toplevelDependencies": `math/big:mulWW-g math/big:divWW-g math/big:addVV-g math/big:subVV-g math/big:addVW-g math/big:subVW-g math/big:shlVU-g math/big:shrVU-g math/big:mulAddVWW-g math/big:addMulVVW-g math/big:divWVW-g math/big:bitLen-g`,
+		"toplevelDependencies": `math/big:mulWW_g math/big:divWW_g math/big:addVV_g math/big:subVV_g math/big:addVW_g math/big:subVW_g math/big:shlVU_g math/big:shrVU_g math/big:mulAddVWW_g math/big:addMulVVW_g math/big:divWVW_g math/big:bitLen_g`,
 		"mulWW":                `function(x, y) { return mulWW_g(x, y); }`,
 		"divWW":                `function(x1, x0, y) { return divWW_g(x1, x0, y); }`,
 		"addVV":                `function(z, x, y) { return addVV_g(z, x, y); }`,

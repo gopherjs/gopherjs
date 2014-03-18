@@ -48,7 +48,7 @@ func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, outpu
 				continue
 			}
 			for _, f := range d.DceFilters {
-				o := pkg.ImportPath + ":" + f
+				o := pkg.ImportPath + ":" + string(f)
 				declsByObject[o] = append(declsByObject[o], d)
 			}
 		}
@@ -57,13 +57,14 @@ func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, outpu
 	for len(pendingDecls) != 0 {
 		d := pendingDecls[len(pendingDecls)-1]
 		pendingDecls = pendingDecls[:len(pendingDecls)-1]
-		for _, o := range d.DceDeps {
+		for _, dep := range d.DceDeps {
+			o := string(dep)
 			if decls, ok := declsByObject[o]; ok {
 				delete(declsByObject, o)
 				name := strings.Split(o, ":")[1]
 				for _, d := range decls {
 					for i, f := range d.DceFilters {
-						if f == name {
+						if string(f) == name {
 							d.DceFilters[i] = d.DceFilters[len(d.DceFilters)-1]
 							d.DceFilters = d.DceFilters[:len(d.DceFilters)-1]
 							break
@@ -92,7 +93,7 @@ func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, outpu
 		scope := t.typesPackages[pkg.ImportPath].Scope()
 		for _, name := range scope.Names() {
 			if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
-				if _, notUsed := declsByObject[pkg.ImportPath+":"+strings.Replace(name, "_", "-", -1)]; !notUsed {
+				if _, notUsed := declsByObject[pkg.ImportPath+":"+name]; !notUsed {
 					allTypeNames = append(allTypeNames, typeName)
 				}
 			}
@@ -229,9 +230,11 @@ type Decl struct {
 	Var        string
 	BodyCode   OutputWithSourceMap
 	InitCode   OutputWithSourceMap
-	DceFilters []string
-	DceDeps    []string
+	DceFilters []DepId
+	DceDeps    []DepId
 }
+
+type DepId []byte
 
 type OutputWithSourceMap struct {
 	Code      []byte

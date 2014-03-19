@@ -3,6 +3,7 @@ package translator
 import (
 	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
+	"encoding/binary"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -20,6 +21,9 @@ func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 }
 
 func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
+	c.Write([]byte{'\b'})
+	binary.Write(c, binary.BigEndian, uint32(stmt.Pos()))
+
 	switch s := stmt.(type) {
 	case *ast.BlockStmt:
 		c.translateStmtList(s.List)

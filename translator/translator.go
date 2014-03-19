@@ -237,3 +237,27 @@ type Decl struct {
 }
 
 type DepId []byte
+
+type SourceMapFilter struct {
+	Writer io.Writer
+}
+
+func (f *SourceMapFilter) Write(p []byte) (n int, err error) {
+	var n2 int
+	for {
+		i := bytes.IndexByte(p, '\b')
+		if i == -1 {
+			break
+		}
+		n2, err = f.Writer.Write(p[:i])
+		n += n2
+		if err != nil {
+			return
+		}
+		p = p[i+5:]
+		n += 5
+	}
+	n2, err = f.Writer.Write(p)
+	n += n2
+	return
+}

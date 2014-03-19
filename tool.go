@@ -658,7 +658,7 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 		allPkgs = append(allPkgs, dep)
 	}
 
-	s.t.WriteProgramCode(allPkgs, pkg.ImportPath, file)
+	s.t.WriteProgramCode(allPkgs, pkg.ImportPath, &translator.SourceMapFilter{Writer: file})
 
 	return nil
 }

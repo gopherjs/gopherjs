@@ -20,9 +20,8 @@ func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 }
 
 func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
-	pos := c.p.fileSet.Position(stmt.Pos())
-	if pos.IsValid() {
-		c.output.SourceMap = append(c.output.SourceMap, SourceMapEntry{len(c.output.Code), pos.Line, pos.Column})
+	if stmt.Pos() != token.NoPos {
+		c.output.SourceMap = append(c.output.SourceMap, SourceMapEntry{len(c.output.Code), stmt.Pos()})
 	}
 
 	switch s := stmt.(type) {

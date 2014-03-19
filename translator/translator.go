@@ -6,6 +6,7 @@ import (
 	"code.google.com/p/go.tools/go/types"
 	"encoding/asn1"
 	"fmt"
+	"go/token"
 	"sort"
 	"strings"
 )
@@ -204,6 +205,7 @@ type Archive struct {
 	Imports      []Import
 	Declarations []Decl
 	Tests        []string
+	FileSet      []byte
 }
 
 func (a *Archive) AddDependency(path string) {
@@ -253,13 +255,12 @@ func (o *OutputWithSourceMap) WriteString(s string) (int, error) {
 
 func (o *OutputWithSourceMap) AppendOutput(other OutputWithSourceMap) {
 	for _, e := range other.SourceMap {
-		o.SourceMap = append(o.SourceMap, SourceMapEntry{len(o.Code) + e.Offset, e.SourceLine, e.SouceColumn})
+		o.SourceMap = append(o.SourceMap, SourceMapEntry{len(o.Code) + e.Offset, e.OriginalPos})
 	}
 	o.Write(other.Code)
 }
 
 type SourceMapEntry struct {
 	Offset      int
-	SourceLine  int
-	SouceColumn int
+	OriginalPos token.Pos
 }

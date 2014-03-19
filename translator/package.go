@@ -3,6 +3,7 @@ package translator
 import (
 	"bytes"
 	"code.google.com/p/go.tools/go/types"
+	"encoding/json"
 	"fmt"
 	"github.com/gopherjs/gopherjs/gcexporter"
 	"go/ast"
@@ -30,7 +31,6 @@ type funcContext struct {
 type pkgContext struct {
 	pkg          *types.Package
 	info         *types.Info
-	fileSet      *token.FileSet
 	pkgVars      map[string]string
 	objectVars   map[types.Object]string
 	indentation  int
@@ -85,7 +85,6 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 			pkg:          typesPkg,
 			info:         info,
 			pkgVars:      make(map[string]string),
-			fileSet:      fileSet,
 			objectVars:   make(map[types.Object]string),
 			indentation:  1,
 			dependencies: make(map[types.Object]bool),
@@ -171,10 +170,15 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 
 	gcData := bytes.NewBuffer(nil)
 	gcexporter.Write(typesPkg, gcData, sizes32)
+	encodedFileSet := bytes.NewBuffer(nil)
+	if err := fileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
+		return nil, err
+	}
 	archive := &Archive{
 		ImportPath:   importPath,
 		GcData:       gcData.Bytes(),
 		Dependencies: []string{"runtime"}, // all packages depend on runtime
+		FileSet:      encodedFileSet.Bytes(),
 	}
 
 	// imports

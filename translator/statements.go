@@ -20,10 +20,6 @@ func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 }
 
 func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
-	if stmt.Pos() != token.NoPos {
-		c.output.SourceMap = append(c.output.SourceMap, SourceMapEntry{len(c.output.Code), stmt.Pos()})
-	}
-
 	switch s := stmt.(type) {
 	case *ast.BlockStmt:
 		c.translateStmtList(s.List)
@@ -246,14 +242,14 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				break
 			}
 			v := c.translateImplicitConversion(results[0], c.sig.Results().At(0).Type())
-			c.delayedOutput = OutputWithSourceMap{}
+			c.delayedOutput = nil
 			c.Printf("return %s;", v)
 		default:
 			values := make([]string, len(results))
 			for i, result := range results {
 				values[i] = c.translateImplicitConversion(result, c.sig.Results().At(i).Type()).String()
 			}
-			c.delayedOutput = OutputWithSourceMap{}
+			c.delayedOutput = nil
 			c.Printf("return [%s];", strings.Join(values, ", "))
 		}
 

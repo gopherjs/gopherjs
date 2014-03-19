@@ -24,8 +24,8 @@ type funcContext struct {
 	caseCounter   int
 	labelCases    map[string]int
 	hasGoto       map[ast.Node]bool
-	output        OutputWithSourceMap
-	delayedOutput OutputWithSourceMap
+	output        []byte
+	delayedOutput []byte
 }
 
 type pkgContext struct {
@@ -281,7 +281,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 					value = native
 					delete(natives, o.Name())
 				}
-				d.InitCode = OutputWithSourceMap{Code: []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value))}
+				d.InitCode = []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value))
 			})
 		}
 		d.DceFilters = []DepId{DepId(o.Name())}
@@ -318,7 +318,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 
 	// natives
 	var toplevel Decl
-	toplevel.BodyCode = OutputWithSourceMap{Code: []byte(natives["toplevel"])}
+	toplevel.BodyCode = []byte(natives["toplevel"])
 	delete(natives, "toplevel")
 	if toplevelDependencies, ok := natives["toplevelDependencies"]; ok {
 		for _, dep := range strings.Split(toplevelDependencies, " ") {
@@ -461,7 +461,7 @@ func (c *funcContext) initArgs(ty types.Type) string {
 	}
 }
 
-func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, native string) (output OutputWithSourceMap) {
+func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, native string) []byte {
 	o := c.p.info.Defs[fun.Name].(*types.Func)
 	sig := o.Type().(*types.Signature)
 	var recv *ast.Ident
@@ -470,15 +470,13 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, native string
 	}
 
 	var joinedParams string
-	writePrimaryFunction := func(lhs string, fullName string) {
+	primaryFunction := func(lhs string, fullName string) []byte {
 		if native != "" {
-			output.WriteString(fmt.Sprintf("\t%s = %s;\n", lhs, native))
-			return
+			return []byte(fmt.Sprintf("\t%s = %s;\n", lhs, native))
 		}
 
 		if fun.Body == nil {
-			output.WriteString(fmt.Sprintf("\t%s = function() {\n\t\tthrow go$panic(\"Native function not implemented: %s\");\n\t};\n", lhs, fullName))
-			return
+			return []byte(fmt.Sprintf("\t%s = function() {\n\t\tthrow go$panic(\"Native function not implemented: %s\");\n\t};\n", lhs, fullName))
 		}
 
 		stmts := fun.Body.List
@@ -495,9 +493,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, native string
 		}
 		params, body := c.translateFunction(fun.Type, sig, stmts)
 		joinedParams = strings.Join(params, ", ")
-		output.WriteString(fmt.Sprintf("\t%s = function(%s) {\n", lhs, joinedParams))
-		output.AppendOutput(body)
-		output.WriteString(fmt.Sprintf("\t};\n"))
+		return []byte(fmt.Sprintf("\t%s = function(%s) {\n%s\t};\n", lhs, joinedParams, string(body)))
 	}
 
 	if fun.Recv == nil {
@@ -506,8 +502,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, native string
 		if fun.Name.IsExported() || fun.Name.Name == "main" {
 			lhs += " = go$pkg." + funName
 		}
-		writePrimaryFunction(lhs, funName)
-		return
+		return primaryFunction(lhs, funName)
 	}
 
 	recvType := sig.Recv().Type()
@@ -522,37 +517,39 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, native string
 		funName += "$"
 	}
 
+	code := bytes.NewBuffer(nil)
+
 	if _, isStruct := namedRecvType.Underlying().(*types.Struct); isStruct {
-		writePrimaryFunction(typeName+".Ptr.prototype."+funName, typeName+"."+funName)
-		output.WriteString(fmt.Sprintf("\t%s.prototype.%s = function(%s) { return this.go$val.%s(%s); };\n", typeName, funName, joinedParams, funName, joinedParams))
-		return
+		code.Write(primaryFunction(typeName+".Ptr.prototype."+funName, typeName+"."+funName))
+		fmt.Fprintf(code, "\t%s.prototype.%s = function(%s) { return this.go$val.%s(%s); };\n", typeName, funName, joinedParams, funName, joinedParams)
+		return code.Bytes()
 	}
 
 	if isPointer {
 		if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
-			writePrimaryFunction(typeName+".prototype."+funName, typeName+"."+funName)
-			output.WriteString(fmt.Sprintf("\tgo$ptrType(%s).prototype.%s = function(%s) { return (new %s(this.go$get())).%s(%s); };\n", typeName, funName, joinedParams, typeName, funName, joinedParams))
-			return
+			code.Write(primaryFunction(typeName+".prototype."+funName, typeName+"."+funName))
+			fmt.Fprintf(code, "\tgo$ptrType(%s).prototype.%s = function(%s) { return (new %s(this.go$get())).%s(%s); };\n", typeName, funName, joinedParams, typeName, funName, joinedParams)
+			return code.Bytes()
 		}
 		value := "this"
 		if isWrapped(ptr.Elem()) {
 			value = "this.go$val"
 		}
-		writePrimaryFunction(fmt.Sprintf("go$ptrType(%s).prototype.%s", typeName, funName), typeName+"."+funName)
-		output.WriteString(fmt.Sprintf("\t%s.prototype.%s = function(%s) { var obj = %s; return (new (go$ptrType(%s))(function() { return obj; }, null)).%s(%s); };\n", typeName, funName, joinedParams, value, typeName, funName, joinedParams))
-		return
+		code.Write(primaryFunction(fmt.Sprintf("go$ptrType(%s).prototype.%s", typeName, funName), typeName+"."+funName))
+		fmt.Fprintf(code, "\t%s.prototype.%s = function(%s) { var obj = %s; return (new (go$ptrType(%s))(function() { return obj; }, null)).%s(%s); };\n", typeName, funName, joinedParams, value, typeName, funName, joinedParams)
+		return code.Bytes()
 	}
 
 	value := "this.go$get()"
 	if isWrapped(recvType) {
 		value = fmt.Sprintf("new %s(%s)", typeName, value)
 	}
-	writePrimaryFunction(typeName+".prototype."+funName, typeName+"."+funName)
-	output.WriteString(fmt.Sprintf("\tgo$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };\n", typeName, funName, joinedParams, value, funName, joinedParams))
-	return
+	code.Write(primaryFunction(typeName+".prototype."+funName, typeName+"."+funName))
+	fmt.Fprintf(code, "\tgo$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };\n", typeName, funName, joinedParams, value, funName, joinedParams)
+	return code.Bytes()
 }
 
-func (c *funcContext) translateFunction(t *ast.FuncType, sig *types.Signature, stmts []ast.Stmt) (params []string, body OutputWithSourceMap) {
+func (c *funcContext) translateFunction(t *ast.FuncType, sig *types.Signature, stmts []ast.Stmt) (params []string, body []byte) {
 	vars := make(map[string]int, len(c.allVars))
 	for k, v := range c.allVars {
 		vars[k] = v
@@ -581,7 +578,7 @@ func (c *funcContext) translateFunction(t *ast.FuncType, sig *types.Signature, s
 	return
 }
 
-func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) (output OutputWithSourceMap) {
+func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte {
 	v := gotoVisitor{c: c}
 	for _, stmt := range stmts {
 		ast.Walk(&v, stmt)
@@ -658,10 +655,9 @@ func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) (outpu
 	})
 
 	if len(c.localVars) != 0 {
-		output.Code = []byte(fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.p.indentation+indent), strings.Join(c.localVars, ", ")))
+		body = append([]byte(fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.p.indentation+indent), strings.Join(c.localVars, ", "))), body...)
 	}
-	output.AppendOutput(body)
-	return
+	return body
 }
 
 type hasDeferVisitor struct {

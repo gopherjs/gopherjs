@@ -145,9 +145,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		params, body := c.translateFunction(e.Type, exprType.(*types.Signature), e.Body.List)
 		if len(c.escapingVars) != 0 {
 			list := strings.Join(c.escapingVars, ", ")
-			return c.formatExpr("(function(%s) { return function(%s) {\n%s%s}; })(%s)", list, strings.Join(params, ", "), string(body.Code), strings.Repeat("\t", c.p.indentation), list)
+			return c.formatExpr("(function(%s) { return function(%s) {\n%s%s}; })(%s)", list, strings.Join(params, ", "), string(body), strings.Repeat("\t", c.p.indentation), list)
 		}
-		return c.formatExpr("(function(%s) {\n%s%s})", strings.Join(params, ", "), string(body.Code), strings.Repeat("\t", c.p.indentation))
+		return c.formatExpr("(function(%s) {\n%s%s})", strings.Join(params, ", "), string(body), strings.Repeat("\t", c.p.indentation))
 
 	case *ast.UnaryExpr:
 		switch e.Op {

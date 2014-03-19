@@ -6,7 +6,7 @@ import (
 	"code.google.com/p/go.tools/go/types"
 	"encoding/asn1"
 	"fmt"
-	"go/token"
+	"io"
 	"sort"
 	"strings"
 )
@@ -38,7 +38,7 @@ func (t *Translator) NewEmptyTypesPackage(path string) {
 	t.typesPackages[path] = types.NewPackage(path, path)
 }
 
-func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, output *OutputWithSourceMap) {
+func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w io.Writer) {
 	declsByObject := make(map[string][]*Decl)
 	var pendingDecls []*Decl
 	for _, pkg := range pkgs {
@@ -79,13 +79,13 @@ func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, outpu
 		}
 	}
 
-	output.WriteString("\"use strict\";\n(function() {\n\n")
-	output.WriteString(strings.TrimSpace(prelude))
-	output.WriteString("\n")
+	w.Write([]byte("\"use strict\";\n(function() {\n\n"))
+	w.Write([]byte(strings.TrimSpace(prelude)))
+	w.Write([]byte("\n"))
 
 	// write packages
 	for _, pkg := range pkgs {
-		t.WritePkgCode(pkg, output)
+		t.WritePkgCode(pkg, w)
 	}
 
 	// write interfaces
@@ -139,19 +139,19 @@ func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, outpu
 			default:
 				target = fmt.Sprintf("go$packages[\"%s\"].%s", t.Pkg().Path(), t.Name())
 			}
-			fmt.Fprintf(output, "%s.implementedBy = [%s];\n", target, strings.Join(list, ", "))
+			fmt.Fprintf(w, "%s.implementedBy = [%s];\n", target, strings.Join(list, ", "))
 		}
 	}
 
 	for _, pkg := range pkgs {
-		output.WriteString("go$packages[\"" + pkg.ImportPath + "\"].init();\n")
+		w.Write([]byte("go$packages[\"" + pkg.ImportPath + "\"].init();\n"))
 	}
 
-	output.WriteString("go$packages[\"" + mainPkgPath + "\"].main();\n\n})();")
+	w.Write([]byte("go$packages[\"" + mainPkgPath + "\"].main();\n\n})();"))
 }
 
-func (t *Translator) WritePkgCode(pkg *Archive, output *OutputWithSourceMap) {
-	fmt.Fprintf(output, "go$packages[\"%s\"] = (function() {\n", pkg.ImportPath)
+func (t *Translator) WritePkgCode(pkg *Archive, w io.Writer) {
+	fmt.Fprintf(w, "go$packages[\"%s\"] = (function() {\n", pkg.ImportPath)
 	vars := []string{"go$pkg = {}"}
 	for _, imp := range pkg.Imports {
 		vars = append(vars, fmt.Sprintf("%s = go$packages[\"%s\"]", imp.VarName, imp.Path))
@@ -162,20 +162,20 @@ func (t *Translator) WritePkgCode(pkg *Archive, output *OutputWithSourceMap) {
 		}
 	}
 	if len(vars) != 0 {
-		fmt.Fprintf(output, "\tvar %s;\n", strings.Join(vars, ", "))
+		fmt.Fprintf(w, "\tvar %s;\n", strings.Join(vars, ", "))
 	}
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 {
-			output.AppendOutput(d.BodyCode)
+			w.Write(d.BodyCode)
 		}
 	}
-	output.WriteString("\tgo$pkg.init = function() {\n")
+	w.Write([]byte("\tgo$pkg.init = function() {\n"))
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 {
-			output.AppendOutput(d.InitCode)
+			w.Write(d.InitCode)
 		}
 	}
-	output.WriteString("\t}\n\treturn go$pkg;\n})();\n")
+	w.Write([]byte("\t}\n\treturn go$pkg;\n})();\n"))
 }
 
 func (t *Translator) ReadArchive(filename, id string, data []byte) (*Archive, error) {
@@ -230,37 +230,10 @@ type Import struct {
 
 type Decl struct {
 	Var        string
-	BodyCode   OutputWithSourceMap
-	InitCode   OutputWithSourceMap
+	BodyCode   []byte
+	InitCode   []byte
 	DceFilters []DepId
 	DceDeps    []DepId
 }
 
 type DepId []byte
-
-type OutputWithSourceMap struct {
-	Code      []byte
-	SourceMap []SourceMapEntry
-}
-
-func (o *OutputWithSourceMap) Write(b []byte) (int, error) {
-	o.Code = append(o.Code, b...)
-	return len(b), nil
-}
-
-func (o *OutputWithSourceMap) WriteString(s string) (int, error) {
-	o.Code = append(o.Code, s...)
-	return len(s), nil
-}
-
-func (o *OutputWithSourceMap) AppendOutput(other OutputWithSourceMap) {
-	for _, e := range other.SourceMap {
-		o.SourceMap = append(o.SourceMap, SourceMapEntry{len(o.Code) + e.Offset, e.OriginalPos})
-	}
-	o.Write(other.Code)
-}
-
-type SourceMapEntry struct {
-	Offset      int
-	OriginalPos token.Pos
-}

@@ -680,10 +680,10 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 		pos := fileSet.Position(originalPos)
 		file := pos.Filename
 		if strings.HasPrefix(file, build.Default.GOPATH) {
-			file = "gopath" + file[len(build.Default.GOPATH):]
+			file = filepath.ToSlash(filepath.Join("gopath", file[len(build.Default.GOPATH):]))
 		}
 		if strings.HasPrefix(file, build.Default.GOROOT) {
-			file = "goroot" + file[len(build.Default.GOROOT):]
+			file = filepath.ToSlash(filepath.Join("goroot", file[len(build.Default.GOROOT):]))
 		}
 		m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: pos.Line, OriginalColumn: pos.Column})
 	}})

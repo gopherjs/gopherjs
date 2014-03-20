@@ -17,11 +17,11 @@ You can take advantage of Go's elegant type system and other compile-time checks
 In one sentence: Everything except goroutines. Yes, I know that you want goroutines and I am working heavily on them. But hey, it is still better to write Go with callbacks than JavaScript with callbacks, right? A lot of Go's packages do already work, see the [compatibility table](doc/packages.md). If you want this still missing feature, please consider to support this project with a star to show your interest.
 
 ### Installation and Usage
-Get GopherJS and dependencies with:
+Get or update GopherJS and dependencies with:
 ```
-go get github.com/gopherjs/gopherjs
+go get -u github.com/gopherjs/gopherjs
 ```
-Now you can use  `./bin/gopherjs build` and `./bin/gopherjs install` which behave similar to the `go` tool. The generated JavaScript files can be used as usual in a website. Go's `println` builtin prints to the JavaScript console via `console.log`. If you want to run the generated code with Node.js, see [this page](doc/nodejs.md).
+Now you can use  `./bin/gopherjs build [files]` or `./bin/gopherjs install [package]` which behave similar to the `go` tool. For `main` packages, these commands create a `.js` file and `.js.map` source map in the current directory or in `$GOPATH/bin`. The generated JavaScript file can be used as usual in a website. Go's `println` builtin prints to the JavaScript console via `console.log`. If you want to run the generated code with Node.js, see [this page](doc/nodejs.md).
 
 *Note: GopherJS will try to write compiled object files of the core packages to your $GOROOT/pkg directory. If that fails, it will fall back to $GOPATH/pkg.*
 

@@ -5,7 +5,10 @@ import (
 	"code.google.com/p/go.tools/go/gcimporter"
 	"code.google.com/p/go.tools/go/types"
 	"encoding/asn1"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"go/token"
 	"io"
 	"sort"
 	"strings"
@@ -38,7 +41,7 @@ func (t *Translator) NewEmptyTypesPackage(path string) {
 	t.typesPackages[path] = types.NewPackage(path, path)
 }
 
-func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w io.Writer) {
+func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *SourceMapFilter) {
 	declsByObject := make(map[string][]*Decl)
 	var pendingDecls []*Decl
 	for _, pkg := range pkgs {
@@ -147,10 +150,16 @@ func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w io.
 		w.Write([]byte("go$packages[\"" + pkg.ImportPath + "\"].init();\n"))
 	}
 
-	w.Write([]byte("go$packages[\"" + mainPkgPath + "\"].main();\n\n})();"))
+	w.Write([]byte("go$packages[\"" + mainPkgPath + "\"].main();\n\n})();\n"))
 }
 
-func (t *Translator) WritePkgCode(pkg *Archive, w io.Writer) {
+func (t *Translator) WritePkgCode(pkg *Archive, w *SourceMapFilter) {
+	if w.MappingCallback != nil && pkg.FileSet != nil {
+		w.fileSet = token.NewFileSet()
+		if err := w.fileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
+			panic(err)
+		}
+	}
 	fmt.Fprintf(w, "go$packages[\"%s\"] = (function() {\n", pkg.ImportPath)
 	vars := []string{"go$pkg = {}"}
 	for _, imp := range pkg.Imports {
@@ -239,25 +248,42 @@ type Decl struct {
 type DepId []byte
 
 type SourceMapFilter struct {
-	Writer io.Writer
+	Writer          io.Writer
+	MappingCallback func(generatedLine, generatedColumn int, fileSet *token.FileSet, originalPos token.Pos)
+	line            int
+	column          int
+	fileSet         *token.FileSet
 }
 
 func (f *SourceMapFilter) Write(p []byte) (n int, err error) {
 	var n2 int
 	for {
 		i := bytes.IndexByte(p, '\b')
-		if i == -1 {
-			break
+		w := p
+		if i != -1 {
+			w = p[:i]
 		}
-		n2, err = f.Writer.Write(p[:i])
+
+		n2, err = f.Writer.Write(w)
 		n += n2
-		if err != nil {
+		for {
+			i := bytes.IndexByte(w, '\n')
+			if i == -1 {
+				f.column += len(w)
+				break
+			}
+			f.line++
+			f.column = 0
+			w = w[i+1:]
+		}
+
+		if err != nil || i == -1 {
 			return
+		}
+		if f.MappingCallback != nil {
+			f.MappingCallback(f.line+1, f.column, f.fileSet, token.Pos(binary.BigEndian.Uint32(p[i+1:i+5])))
 		}
 		p = p[i+5:]
 		n += 5
 	}
-	n2, err = f.Writer.Write(p)
-	n += n2
-	return
 }

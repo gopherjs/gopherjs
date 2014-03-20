@@ -2,9 +2,11 @@ package main
 
 import (
 	"bitbucket.org/kardianos/osext"
+	"code.google.com/p/go.tools/go/types"
 	"flag"
 	"fmt"
 	"github.com/gopherjs/gopherjs/translator"
+	"github.com/neelance/sourcemap"
 	"go/ast"
 	"go/build"
 	"go/parser"
@@ -100,8 +102,25 @@ func main() {
 	case nil:
 		os.Exit(0)
 	case translator.ErrorList:
+		makeRel := func(name string) string {
+			if relname, err := filepath.Rel(currentDirectory, name); err == nil {
+				if relname[0] != '.' {
+					return "." + string(filepath.Separator) + relname
+				}
+				return relname
+			}
+			return name
+		}
 		for _, entry := range err {
-			fmt.Fprintln(os.Stderr, entry)
+			switch e := entry.(type) {
+			case *scanner.Error:
+				fmt.Fprintf(os.Stderr, "%s:%d:%d: %s\n", makeRel(e.Pos.Filename), e.Pos.Line, e.Pos.Column, e.Msg)
+			case types.Error:
+				pos := e.Fset.Position(e.Pos)
+				fmt.Fprintf(os.Stderr, "%s:%d:%d: %s\n", makeRel(pos.Filename), pos.Line, pos.Column, e.Msg)
+			default:
+				fmt.Fprintln(os.Stderr, entry)
+			}
 		}
 		os.Exit(1)
 	case *exec.ExitError:
@@ -512,13 +531,6 @@ func (s *session) buildPackage(pkg *packageData) error {
 		if err != nil {
 			return err
 		}
-		if relname, err := filepath.Rel(currentDirectory, name); err == nil {
-			name = relname
-			if name[0] != '.' {
-				name = "." + string(filepath.Separator) + name
-			}
-		}
-
 		file, err := parser.ParseFile(fileSet, name, r, 0)
 		r.Close()
 		if err != nil {
@@ -643,11 +655,16 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
 		return err
 	}
-	file, err := os.Create(pkgObj)
+	codeFile, err := os.Create(pkgObj)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer codeFile.Close()
+	mapFile, err := os.Create(pkgObj + ".map")
+	if err != nil {
+		return err
+	}
+	defer mapFile.Close()
 
 	var allPkgs []*translator.Archive
 	for _, depPath := range pkg.Archive.Dependencies {
@@ -658,7 +675,20 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 		allPkgs = append(allPkgs, dep)
 	}
 
-	s.t.WriteProgramCode(allPkgs, pkg.ImportPath, &translator.SourceMapFilter{Writer: file})
+	m := sourcemap.Map{File: filepath.Base(pkgObj)}
+	s.t.WriteProgramCode(allPkgs, pkg.ImportPath, &translator.SourceMapFilter{Writer: codeFile, MappingCallback: func(generatedLine, generatedColumn int, fileSet *token.FileSet, originalPos token.Pos) {
+		pos := fileSet.Position(originalPos)
+		file := pos.Filename
+		if strings.HasPrefix(file, build.Default.GOPATH) {
+			file = "gopath" + file[len(build.Default.GOPATH):]
+		}
+		if strings.HasPrefix(file, build.Default.GOROOT) {
+			file = "goroot" + file[len(build.Default.GOROOT):]
+		}
+		m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: pos.Line, OriginalColumn: pos.Column})
+	}})
+	fmt.Fprintf(codeFile, "//# sourceMappingURL=%s.map\n", filepath.Base(pkgObj))
+	m.WriteTo(mapFile)
 
 	return nil
 }

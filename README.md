@@ -41,5 +41,4 @@ These features are not implemented yet, but on the roadmap:
 
 - goroutines, channels, select
 - output minification
-- source maps
 - float32 and complex64 currently have the same precision as float64 and complex128

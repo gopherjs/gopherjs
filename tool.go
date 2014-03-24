@@ -274,16 +274,43 @@ func tool() error {
 		short := testFlags.Bool("short", false, "short")
 		testFlags.Parse(flag.Args()[1:])
 
-		var exitErr error
-		for _, pkgPath := range testFlags.Args() {
+		pkgs := make([]*build.Package, testFlags.NArg())
+		for i, pkgPath := range testFlags.Args() {
 			pkgPath = filepath.ToSlash(pkgPath)
-
-			s := NewSession(false)
-
-			buildPkg, err := buildImport(pkgPath, 0)
+			var err error
+			pkgs[i], err = buildImport(pkgPath, 0)
 			if err != nil {
 				return err
 			}
+		}
+		if len(pkgs) == 0 {
+			srcDir, err := filepath.EvalSymlinks(filepath.Join(build.Default.GOPATH, "src"))
+			if err != nil {
+				return err
+			}
+			var pkg *build.Package
+			if strings.HasPrefix(currentDirectory, srcDir) {
+				pkgPath, err := filepath.Rel(srcDir, currentDirectory)
+				if err != nil {
+					return err
+				}
+				if pkg, err = buildImport(pkgPath, 0); err != nil {
+					return err
+				}
+			}
+			if pkg == nil {
+				if pkg, err = build.ImportDir(currentDirectory, 0); err != nil {
+					return err
+				}
+				pkg.ImportPath = "_" + currentDirectory
+			}
+			pkgs = []*build.Package{pkg}
+		}
+
+		var exitErr error
+		for _, buildPkg := range pkgs {
+			s := NewSession(false)
+
 			buildPkg.PkgObj = ""
 			buildPkg.GoFiles = append(buildPkg.GoFiles, buildPkg.TestGoFiles...)
 			pkg := &packageData{Package: buildPkg}

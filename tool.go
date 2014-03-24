@@ -679,11 +679,13 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 	s.t.WriteProgramCode(allPkgs, pkg.ImportPath, &translator.SourceMapFilter{Writer: codeFile, MappingCallback: func(generatedLine, generatedColumn int, fileSet *token.FileSet, originalPos token.Pos) {
 		pos := fileSet.Position(originalPos)
 		file := pos.Filename
-		if strings.HasPrefix(file, build.Default.GOPATH) {
+		switch {
+		case strings.HasPrefix(file, build.Default.GOPATH):
 			file = filepath.ToSlash(filepath.Join("gopath", file[len(build.Default.GOPATH):]))
-		}
-		if strings.HasPrefix(file, build.Default.GOROOT) {
+		case strings.HasPrefix(file, build.Default.GOROOT):
 			file = filepath.ToSlash(filepath.Join("goroot", file[len(build.Default.GOROOT):]))
+		default:
+			file = filepath.Base(file)
 		}
 		m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: pos.Line, OriginalColumn: pos.Column})
 	}})

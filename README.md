@@ -63,7 +63,7 @@ package main
  
 import (
   "github.com/gopherjs/gopherjs/js"
-  "github.com/rolaveric/gopherjs/user"
+  "github.com/rolaveric/user"
 )
  
 func main() {

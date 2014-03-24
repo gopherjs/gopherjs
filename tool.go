@@ -309,11 +309,15 @@ func tool() error {
 
 		var exitErr error
 		for _, buildPkg := range pkgs {
-			s := NewSession(false)
+			if len(buildPkg.TestGoFiles) == 0 && len(buildPkg.XTestGoFiles) == 0 {
+				fmt.Printf("?   \t%s\t[no test files]\n", buildPkg.ImportPath)
+				continue
+			}
 
 			buildPkg.PkgObj = ""
 			buildPkg.GoFiles = append(buildPkg.GoFiles, buildPkg.TestGoFiles...)
 			pkg := &packageData{Package: buildPkg}
+			s := NewSession(false)
 			if err := s.buildPackage(pkg); err != nil {
 				return err
 			}

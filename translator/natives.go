@@ -353,8 +353,7 @@ func init() {
 			go$pkg.Main2 = function(pkgPath, dir, names, tests) {
 				flag.Parse();
 				if (tests.length === 0) {
-					console.log("?   \t" + pkgPath + "\t[no test files]");
-					return true;
+					console.log("testing: warning: no tests to run");
 				}
 				os.Open(dir)[0].Chdir();
 				var start = time.Now(), ok = true, i;

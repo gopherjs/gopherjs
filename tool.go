@@ -435,8 +435,8 @@ The commands are:
 
     build       compile packages and dependencies
     install     compile and install packages and dependencies
-    run         compile and run Go program
-    test        test packages
+    run         compile and run Go program (requires Node.js)
+    test        test packages (requires Node.js)
 
 `)
 		return nil
@@ -732,5 +732,8 @@ func runNode(script string, args []string, dir string) error {
 	node.Stdin = os.Stdin
 	node.Stdout = os.Stdout
 	node.Stderr = os.Stderr
-	return node.Run()
+	if err := node.Run(); err != nil {
+		return fmt.Errorf("could not run Node.js: %s", err.Error())
+	}
+	return nil
 }

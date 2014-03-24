@@ -26,7 +26,56 @@ Now you can use  `./bin/gopherjs build [files]` or `./bin/gopherjs install [pack
 *Note: GopherJS will try to write compiled object files of the core packages to your $GOROOT/pkg directory. If that fails, it will fall back to $GOPATH/pkg.*
 
 ### Getting started
-Take a look at [Jason Stone's blog post](http://legacytotheedge.blogspot.de/2014/03/gopherjs-go-to-javascript-transpiler.html) about GopherJS. 
+#### 1. Interacting directly with the DOM
+Attach listeners in the `main` method by using the `js` package:
+```go
+package main
+
+import (
+  "github.com/gopherjs/gopherjs/js"
+)
+
+func main() {
+  nameElement := js.Global.Get("document").Call("getElementById", "name")
+  greetingElement := js.Global.Get("document").Call("getElementById", "greeting")
+  nameElement.Call("addEventListener", "input", func() {
+    greetingElement.Set("innerText", "Hello "+nameElement.Get("value").String()+"!")
+  })
+}
+```
+The HTML code looks like this:
+```html
+<html>
+  <head>
+    <meta charset="utf-8">
+  </head>
+  <body>
+    Your name: <input type="text" id="name"></input>
+    <h1 id="greeting"></h1>
+    <script src="test.js"></script>
+  </body>
+</html>
+```
+#### 2. Providing library functions for use in other JavaScript code
+Set a global variable to a map that contains the functions:
+```go
+package main
+ 
+import (
+  "github.com/gopherjs/gopherjs/js"
+  "github.com/rolaveric/gopherjs/user"
+)
+ 
+func main() {
+  js.Global.Set("user", map[string]interface{}{
+    "registerDB": user.RegisterDB,
+    "new":        user.New,
+    "get":        user.Get,
+    "all":        user.All,
+  })
+}
+```
+This example if from [Jason Stone's blog post](http://legacytotheedge.blogspot.de/2014/03/gopherjs-go-to-javascript-transpiler.html) about GopherJS. Take a look for further details.
 
 ### Interface to native JavaScript
 The package `github.com/gopherjs/gopherjs/js` provides functions for interacting with native JavaScript APIs. Please see its [documentation](http://godoc.org/github.com/gopherjs/gopherjs/js) for further details.

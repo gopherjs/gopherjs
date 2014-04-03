@@ -1,3 +1,5 @@
+// +build js
+
 package json
 
 var pool []*encodeState

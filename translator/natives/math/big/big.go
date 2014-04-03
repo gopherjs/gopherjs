@@ -1,3 +1,5 @@
+// +build js
+
 package big
 
 func mulWW(x, y Word) (z1, z0 Word) {

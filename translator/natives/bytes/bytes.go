@@ -1,3 +1,5 @@
+// +build js
+
 package bytes
 
 func IndexByte(s []byte, c byte) int {

@@ -1,1 +1,3 @@
+// +build js
+
 package runtime

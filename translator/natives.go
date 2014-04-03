@@ -3,82 +3,9 @@ package translator
 var pkgNatives = make(map[string]map[string]string)
 
 func init() {
-	pkgNatives["bytes"] = map[string]string{
-		"Compare": `function(a, b) {
-			var l = Math.min(a.length, b.length), i;
-			for (i = 0; i < a.length; i++) {
-				var va = a.array[a.offset + i];
-				var vb = b.array[b.offset + i];
-				if (va < vb) {
-					return -1;
-				}
-				if (va > vb) {
-					return 1;
-				}
-			}
-			if (a.length < b.length) {
-				return -1;
-			}
-			if (a.length > b.length) {
-				return 1;
-			}
-			return 0;
-		}`,
-		"Equal": `function(a, b) {
-			if (a.length !== b.length) {
-				return false;
-			}
-			var i;
-			for (i = 0; i < a.length; i++) {
-				if (a.array[a.offset + i] !== b.array[b.offset + i]) {
-					return false;
-				}
-			}
-			return true;
-		}`,
-		"IndexByte": `function(s, c) {
-			var i;
-			for (i = 0; i < s.length; i++) {
-				if (s.array[s.offset + i] === c) {
-					return i;
-				}
-			}
-			return -1;
-		}`,
-	}
-
 	pkgNatives["encoding/gob"] = map[string]string{
 		"NewDecoder": `function() { go$notSupported("encoding/gob"); }`,
 		"NewEncoder": `function() { go$notSupported("encoding/gob"); }`,
-	}
-
-	pkgNatives["encoding/json"] = map[string]string{
-		"toplevel": `
-		  var encodeStates = [];
-		`,
-		"newEncodeState": `function() {
-			var e = encodeStates.pop();
-			if (e !== undefined) {
-				e.Reset();
-				return e;
-			}
-			return new encodeState.Ptr();
-		}`,
-		"putEncodeState": `function(e) {
-			encodeStates.push(e);
-		}`,
-	}
-
-	pkgNatives["io/ioutil"] = map[string]string{
-		"toplevel": `
-			var blackHoles = [];
-		`,
-		"blackHole": `function() {
-			return blackHoles.pop() || go$sliceType(Go$Uint8).make(8192, 0, function() { return 0; });
-		}`,
-		"blackHolePut": `function(p) {
-			blackHoles.push(p);
-		}`,
 	}
 
 	pkgNatives["math"] = map[string]string{
@@ -180,22 +107,6 @@ func init() {
 		}`,
 	}
 
-	pkgNatives["math/big"] = map[string]string{
-		"toplevelDependencies": `math/big:mulWW_g math/big:divWW_g math/big:addVV_g math/big:subVV_g math/big:addVW_g math/big:subVW_g math/big:shlVU_g math/big:shrVU_g math/big:mulAddVWW_g math/big:addMulVVW_g math/big:divWVW_g math/big:bitLen_g`,
-		"mulWW":                `function(x, y) { return mulWW_g(x, y); }`,
-		"divWW":                `function(x1, x0, y) { return divWW_g(x1, x0, y); }`,
-		"addVV":                `function(z, x, y) { return addVV_g(z, x, y); }`,
-		"subVV":                `function(z, x, y) { return subVV_g(z, x, y); }`,
-		"addVW":                `function(z, x, y) { return addVW_g(z, x, y); }`,
-		"subVW":                `function(z, x, y) { return subVW_g(z, x, y); }`,
-		"shlVU":                `function(z, x, s) { return shlVU_g(z, x, s); }`,
-		"shrVU":                `function(z, x, s) { return shrVU_g(z, x, s); }`,
-		"mulAddVWW":            `function(z, x, y, r) { return mulAddVWW_g(z, x, y, r); }`,
-		"addMulVVW":            `function(z, x, y) { return addMulVVW_g(z, x, y); }`,
-		"divWVW":               `function(z, xn, x, y) { return divWVW_g(z, xn, x, y); }`,
-		"bitLen":               `function(x) { return bitLen_g(x); }`,
-	}
-
 	pkgNatives["os"] = map[string]string{
 		"toplevel": `
 			if (go$packages["syscall"].Syscall15 !== undefined) { // windows
@@ -240,74 +151,9 @@ func init() {
 		"SetFinalizer": `function() {}`,
 	}
 
-	pkgNatives["strings"] = map[string]string{
-		"IndexByte": `function(s, c) { return s.indexOf(String.fromCharCode(c)); }`,
-	}
-
 	pkgNatives["sync"] = map[string]string{
 		"copyChecker.check":    `function() {}`,
 		"runtime_Syncsemcheck": `function() {}`,
-	}
-
-	atomicAdd32 := `function(addr, delta) {
-		var value = addr.go$get() + delta;
-		addr.go$set(value);
-		return value;
-	}`
-	atomicAdd64 := `function(addr, delta) {
-		var value = addr.go$get();
-		value = new value.constructor(value.high + delta.high, value.low + delta.low);
-		addr.go$set(value);
-		return value;
-	}`
-	atomicCompareAndSwap := `function(addr, oldVal, newVal) {
-		if (addr.go$get() === oldVal) {
-			addr.go$set(newVal);
-			return true;
-		}
-		return false;
-	}`
-	atomicLoad := `function(addr) {
-		return addr.go$get();
-	}`
-	atomicStore := `function(addr, val) {
-		addr.go$set(val);
-	}`
-	atomicSwap := `function(addr, newVal) {
-		var value = addr.go$get();
-		addr.go$set(newVal);
-		return value;
-	}`
-	pkgNatives["sync/atomic"] = map[string]string{
-		"AddInt32":              atomicAdd32,
-		"AddUint32":             atomicAdd32,
-		"AddUintptr":            atomicAdd32,
-		"AddInt64":              atomicAdd64,
-		"AddUint64":             atomicAdd64,
-		"CompareAndSwapInt32":   atomicCompareAndSwap,
-		"CompareAndSwapInt64":   atomicCompareAndSwap,
-		"CompareAndSwapPointer": atomicCompareAndSwap,
-		"CompareAndSwapUint32":  atomicCompareAndSwap,
-		"CompareAndSwapUint64":  atomicCompareAndSwap,
-		"CompareAndSwapUintptr": atomicCompareAndSwap,
-		"LoadInt32":             atomicLoad,
-		"LoadInt64":             atomicLoad,
-		"LoadPointer":           atomicLoad,
-		"LoadUint32":            atomicLoad,
-		"LoadUint64":            atomicLoad,
-		"LoadUintptr":           atomicLoad,
-		"StoreInt32":            atomicStore,
-		"StoreInt64":            atomicStore,
-		"StorePointer":          atomicStore,
-		"StoreUint32":           atomicStore,
-		"StoreUint64":           atomicStore,
-		"StoreUintptr":          atomicStore,
-		"SwapInt32":             atomicSwap,
-		"SwapInt64":             atomicSwap,
-		"SwapPointer":           atomicSwap,
-		"SwapUint32":            atomicSwap,
-		"SwapUint64":            atomicSwap,
-		"SwapUintptr":           atomicSwap,
 	}
 
 	pkgNatives["syscall"] = map[string]string{
@@ -349,48 +195,15 @@ func init() {
 	}
 
 	pkgNatives["testing"] = map[string]string{
-		"toplevel": `
-			go$pkg.Main2 = function(pkgPath, dir, names, tests) {
-				flag.Parse();
-				if (tests.length === 0) {
-					console.log("testing: warning: no tests to run");
-				}
-				os.Open(dir)[0].Chdir();
-				var start = time.Now(), ok = true, i;
-				for (i = 0; i < tests.length; i++) {
-					var t = new T.Ptr(new common.Ptr(undefined, undefined, undefined, undefined, time.Now(), undefined, undefined, undefined), names[i], null);
-					var err = null;
-					try {
-						if (chatty.go$get()) {
-							console.log("=== RUN " + t.name);
-						}
-						tests[i](t);
-					} catch (e) {
-						go$jsErr = null;
-						if (e.go$exit) {
-							// test failed or skipped
-						} else if (e.go$notSupported) {
-							t.log(e.message);
-							t.skip();
-						} else {
-							t.Fail();
-							// t.log(e.message);
-							err = e;
-						}
-					}
-					t.common.duration = time.Now().Sub(t.common.start);
-					t.report();
-					if (err !== null) {
-						throw err;
-					}
-					ok = ok && !t.common.failed;
-				}
-				var duration = time.Now().Sub(start);
-				fmt.Printf("%s\t%s\t%.3fs\n", new (go$sliceType(go$emptyInterface))([new Go$String(ok ? "ok  " : "FAIL"), new Go$String(pkgPath), new Go$Float64(duration.Seconds())]));
-				process.exit(ok ? 0 : 1);
-			};
-		`,
-		"toplevelDependencies": `os:Open time:Now testing:T testing:common testing:report`,
+		"runTest": `function(f, t) {
+			try {
+				f(t);
+				return null;
+			} catch (e) {
+				go$jsErr = null;
+				return e;
+			}
+		}`,
 	}
 
 	pkgNatives["time"] = map[string]string{

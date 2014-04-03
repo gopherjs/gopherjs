@@ -1211,7 +1211,7 @@ var go$errorStack = [], go$jsErr = null;
 var go$pushErr = function(err) {
 	if (err.go$panicValue === undefined) {
 		var jsPkg = go$packages["github.com/gopherjs/gopherjs/js"];
-		if (err.go$notSupported !== undefined || jsPkg === undefined) {
+		if (err.go$exit || err.go$notSupported || jsPkg === undefined) {
 			go$jsErr = err;
 			return;
 		}

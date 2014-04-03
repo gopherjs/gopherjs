@@ -388,9 +388,13 @@ func encodeString(s string) string {
 	return `"` + buffer.String() + `"`
 }
 
+func isJsPackage(pkg *types.Package) bool {
+	return pkg != nil && pkg.Path() == "github.com/gopherjs/gopherjs/js"
+}
+
 func isJsObject(t types.Type) bool {
 	named, isNamed := t.(*types.Named)
-	return isNamed && named.Obj().Pkg().Path() == "github.com/gopherjs/gopherjs/js" && named.Obj().Name() == "Object"
+	return isNamed && isJsPackage(named.Obj().Pkg()) && named.Obj().Name() == "Object"
 }
 
 func getJsTag(tag string) string {

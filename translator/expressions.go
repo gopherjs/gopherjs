@@ -511,7 +511,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			parameters := makeParametersList()
 			return c.formatExpr("(function(%s) { return %s.%s(%s); })", strings.Join(append([]string{"recv"}, parameters...), ", "), recv, sel.Obj().(*types.Func).Name(), strings.Join(parameters, ", "))
 		case types.PackageObj:
-			if sel.Obj().Pkg() != nil && sel.Obj().Pkg().Path() == "github.com/gopherjs/gopherjs/js" {
+			if isJsPackage(sel.Obj().Pkg()) {
 				switch sel.Obj().Name() {
 				case "Global":
 					return c.formatExpr("go$global")
@@ -699,7 +699,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					t = s.Field(index).Type()
 				}
 
-				if o.Pkg() != nil && o.Pkg().Path() == "github.com/gopherjs/gopherjs/js" {
+				if isJsPackage(o.Pkg()) {
 					switch o.Name() {
 					case "Get":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
@@ -777,6 +777,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				fun = c.formatExpr("%s.%s", fun, methodName)
 
 			case types.PackageObj:
+				if isJsPackage(o.Pkg()) && o.Name() == "InternalObject" {
+					return c.translateExpr(e.Args[0])
+				}
 				fun = c.translateExpr(f)
 
 			case types.FieldVal:

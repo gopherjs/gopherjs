@@ -333,7 +333,10 @@ func tool() error {
 			}
 			s.packages["main"] = mainPkg
 			s.t.NewEmptyTypesPackage("main")
-			testingOutput, _ := s.importPackage("testing")
+			testingOutput, err := s.importPackage("testing")
+			if err != nil {
+				panic(err)
+			}
 			mainPkg.Archive.AddDependenciesOf(testingOutput)
 
 			var mainFunc translator.Decl
@@ -364,7 +367,8 @@ func tool() error {
 			mainFunc.DceDeps = append(mainFunc.DceDeps, translator.DepId("flag:Parse"))
 			mainFunc.BodyCode = []byte(fmt.Sprintf(`
 				go$pkg.main = function() {
-					go$packages["testing"].Main2("%s", "%s", ["%s"], [%s]);
+					var testing = go$packages["testing"];
+					testing.Main2("%s", "%s", new (go$sliceType(Go$String))(["%s"]), new (go$sliceType(go$funcType([testing.T.Ptr], [], false)))([%s]));
 				};
 			`, pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))
 
@@ -554,6 +558,23 @@ func (s *session) buildPackage(pkg *packageData) error {
 	fileSet := token.NewFileSet()
 	var files []*ast.File
 	var errList translator.ErrorList
+
+	replacedDeclNames := make(map[string]bool)
+	if nativesPkg, err := buildImport("github.com/gopherjs/gopherjs/translator/natives/"+pkg.ImportPath, 0); err == nil {
+		for _, name := range nativesPkg.GoFiles {
+			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
+			if err != nil {
+				panic(err)
+			}
+			for _, decl := range file.Decls {
+				if d, ok := decl.(*ast.FuncDecl); ok {
+					replacedDeclNames[d.Name.Name] = true
+				}
+			}
+			files = append(files, file)
+		}
+	}
+
 	for _, name := range pkg.GoFiles {
 		if !filepath.IsAbs(name) {
 			name = filepath.Join(pkg.Dir, name)
@@ -573,6 +594,12 @@ func (s *session) buildPackage(pkg *packageData) error {
 			}
 			errList = append(errList, err)
 			continue
+		}
+
+		for _, decl := range file.Decls {
+			if d, ok := decl.(*ast.FuncDecl); ok && d.Recv == nil && replacedDeclNames[d.Name.Name] {
+				d.Name = ast.NewIdent("_")
+			}
 		}
 
 		files = append(files, s.applyPatches(file, fileSet, pkg.ImportPath, filepath.Base(name)))

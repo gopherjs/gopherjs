@@ -3,7 +3,7 @@ set -e
 
 echo -en "travis_fold:start:nvm\r"
 echo "--- installing node.js 0.11 ---"
-curl https://raw.github.com/creationix/nvm/v0.4.0/install.sh | bash
+curl https://raw.github.com/creationix/nvm/v0.4.0/install.sh | METHOD=script bash
 . $HOME/.nvm/nvm.sh
 nvm install 0.11
 nvm use 0.11

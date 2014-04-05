@@ -22,13 +22,15 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 	if len(tests) == 0 {
 		fmt.Println("testing: warning: no tests to run")
 	}
+
 	d, err := os.Open(dir)
 	if err != nil {
 		panic(err)
 	}
 	d.Chdir()
+
+	ok := true
 	start := time.Now()
-	status := "ok  "
 	for i := 0; i < len(tests); i++ {
 		t := &T{
 			common: common{
@@ -59,12 +61,18 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 		if err != nil {
 			panic(err)
 		}
-		if t.common.failed {
-			status = "FAIL"
-		}
+		ok = ok && !t.common.failed
 	}
 	duration := time.Now().Sub(start)
+
+	status := "ok  "
+	exitCode := 0
+	if !ok {
+		status = "FAIL"
+		exitCode = 1
+	}
 	fmt.Printf("%s\t%s\t%.3fs\n", status, pkgPath, duration.Seconds())
+	os.Exit(exitCode)
 }
 
 func runTest(func(*T), *T) js.Object

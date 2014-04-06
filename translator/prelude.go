@@ -16,7 +16,13 @@ var go$idCounter = 0;
 var go$keys = function(m) { return m ? Object.keys(m) : []; };
 var go$min = Math.min;
 var go$parseInt = parseInt;
-var go$parseFloat = parseFloat;
+var go$parseFloat = function(f) {
+	if (f.constructor === Number) {
+		return f;
+	}
+	return parseFloat(f);
+};
+var go$mod = function(x, y) { return x % y; };
 var go$toString = String;
 var go$reflect, go$newStringPtr;
 var Go$Array = Array;

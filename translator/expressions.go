@@ -1132,6 +1132,9 @@ func (c *funcContext) loadStruct(array, target string, s *types.Struct) string {
 }
 
 func (c *funcContext) typeCheck(of string, to types.Type) string {
+	if isJsObject(to) {
+		return "true"
+	}
 	if in, isInterface := to.Underlying().(*types.Interface); isInterface {
 		if in.Empty() {
 			return "true"

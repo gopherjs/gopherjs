@@ -214,6 +214,9 @@ func init() {
 				}
 				return v;
 			};
+			var jsObject = function() {
+				return go$packages["github.com/gopherjs/gopherjs/js"].Object.reflectType();
+			};
 		`,
 		"toplevelDependencies": `reflect:rtype reflect:uncommonType reflect:method reflect:arrayType reflect:chanType reflect:funcType reflect:interfaceType reflect:mapType reflect:ptrType reflect:sliceType reflect:structType reflect:imethod reflect:structField reflect:methodReceiver reflect:ValueOf reflect:SliceOf reflect:MakeSlice reflect:valueInterface reflect:makeMethodValue reflect:methodReceiver reflect:typesMustMatch reflect:mustBeAssignable reflect:mustBeExported reflect:mustBe reflect:assignTo`,
 
@@ -222,7 +225,7 @@ func init() {
 				return null;
 			}
 			if (i.constructor.kind === undefined) { // js.Object
-				return Go$String.reflectType();
+				return jsObject();
 			}
 			return i.constructor.reflectType();
 		}`,
@@ -231,7 +234,7 @@ func init() {
 				return new Value.Ptr();
 			}
 			if (i.constructor.kind === undefined) { // js.Object
-				return new Value.Ptr(Go$String.reflectType(), go$toString(i), String << flagKindShift);
+				return new Value.Ptr(jsObject(), i, Interface << flagKindShift);
 			}
 			var typ = i.constructor.reflectType();
 			return new Value.Ptr(typ, i.go$val, typ.Kind() << flagKindShift);

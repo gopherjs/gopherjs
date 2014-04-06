@@ -103,6 +103,9 @@ func Ldexp(frac float64, exp int) float64 {
 }
 
 func Log(x float64) float64 {
+	if x != x { // workaround for optimizer bug in V8, remove at some point
+		return nan
+	}
 	return math.Call("log", x).Float()
 }
 

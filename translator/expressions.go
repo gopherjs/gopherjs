@@ -752,6 +752,10 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						return c.internalize(fun, types.Typ[types.String])
 					case "Int":
 						return c.internalize(fun, types.Typ[types.Int])
+					case "Int64":
+						return c.internalize(fun, types.Typ[types.Int64])
+					case "Uint64":
+						return c.internalize(fun, types.Typ[types.Uint64])
 					case "Float":
 						return c.internalize(fun, types.Typ[types.Float64])
 					case "Interface":

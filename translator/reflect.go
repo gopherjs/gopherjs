@@ -51,38 +51,6 @@ func init() {
 				RecvDir: RecvDir, SendDir: SendDir, BothDir: BothDir
 			};
 
-			var isWrapped = function(typ) {
-				switch (typ.Kind()) {
-				case Bool:
-				case Int:
-				case Int8:
-				case Int16:
-				case Int32:
-				case Uint:
-				case Uint8:
-				case Uint16:
-				case Uint32:
-				case Uintptr:
-				case Float32:
-				case Float64:
-				case Array:
-				case Map:
-				case Func:
-				case String:
-				case Struct:
-					return true;
-				case Ptr:
-					return typ.Elem().Kind() === Array;
-				}
-				return false;
-			};
-			var copyStruct = function(dst, src, typ) {
-				var fields = typ.structType.fields.array, i;
-				for (i = 0; i < fields.length; i++) {
-					var name = typ.jsType.fields[i][0];
-					dst[name] = src[name];
-				}
-			};
 			var deepValueEqual = function(v1, v2, visited) {
 				if (!v1.IsValid() || !v2.IsValid()) {
 					return !v1.IsValid() && !v2.IsValid();
@@ -166,69 +134,9 @@ func init() {
 
 				return go$interfaceIsEqual(valueInterface(v1, false), valueInterface(v2, false));
 			};
-			var zeroVal = function(typ) {
-				switch (typ.Kind()) {
-				case Bool:
-					return false;
-				case Int:
-				case Int8:
-				case Int16:
-				case Int32:
-				case Uint:
-				case Uint8:
-				case Uint16:
-				case Uint32:
-				case Uintptr:
-				case Float32:
-				case Float64:
-					return 0;
-				case Int64:
-				case Uint64:
-				case Complex64:
-				case Complex128:
-					return new typ.jsType(0, 0);
-				case Array:
-					var elemType = typ.Elem();
-					return go$makeNativeArray(elemType.jsType.kind, typ.Len(), function() { return zeroVal(elemType); });
-				case Func:
-					return go$throwNilPointerError;
-				case Interface:
-					return null;
-				case Map:
-					return false;
-				case Chan:
-				case Ptr:
-				case Slice:
-					return typ.jsType.nil;
-				case String:
-					return "";
-				case Struct:
-					return new typ.jsType.Ptr();
-				default:
-					throw go$panic(new ValueError.Ptr("reflect.Zero", this.kind()));
-				}
-			};
-			var makeIndir = function(t, v) {
-				if (t.size > 4) {
-					return go$newDataPointer(v, t.ptrTo().jsType);
-				}
-				return v;
-			};
-			var jsObject = function() {
-				return go$packages["github.com/gopherjs/gopherjs/js"].Object.reflectType();
-			};
 		`,
 		"toplevelDependencies": `reflect:rtype reflect:uncommonType reflect:method reflect:arrayType reflect:chanType reflect:funcType reflect:interfaceType reflect:mapType reflect:ptrType reflect:sliceType reflect:structType reflect:imethod reflect:structField reflect:methodReceiver reflect:ValueOf reflect:SliceOf reflect:MakeSlice reflect:valueInterface reflect:makeMethodValue reflect:methodReceiver reflect:typesMustMatch reflect:mustBeAssignable reflect:mustBeExported reflect:mustBe reflect:assignTo`,
 
-		"TypeOf": `function(i) {
-			if (i === null) {
-				return null;
-			}
-			if (i.constructor.kind === undefined) { // js.Object
-				return jsObject();
-			}
-			return i.constructor.reflectType();
-		}`,
 		"ValueOf": `function(i) {
 			if (i === null) {
 				return new Value.Ptr();

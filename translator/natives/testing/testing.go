@@ -49,7 +49,7 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 				// test failed or skipped
 				err = nil
 			case !err.Get("go$notSupported").IsUndefined():
-				t.log(err.Get("message").String())
+				t.log(err.Get("message").Str())
 				t.skip()
 				err = nil
 			default:

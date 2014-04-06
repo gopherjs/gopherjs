@@ -182,7 +182,7 @@ func Trunc(x float64) float64 {
 
 func Float32bits(f float32) uint32 {
 	if f == 0 {
-		if f == 0 && 1/f == float32(negInf) {
+		if 1/f == float32(negInf) {
 			return 1 << 31
 		}
 		return 0
@@ -247,7 +247,7 @@ func Float32frombits(b uint32) float32 {
 
 func Float64bits(f float64) uint64 {
 	if f == 0 {
-		if f == 0 && 1/f == negInf {
+		if 1/f == negInf {
 			return 1 << 63
 		}
 		return 0

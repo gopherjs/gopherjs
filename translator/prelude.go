@@ -1309,7 +1309,7 @@ var go$interfaceIsEqual = function(a, b) {
 	}
 };
 var go$float32IsEqual = function(a, b) {
-	return a === a && b === b && go$float32bits(a) === go$float32bits(b);
+	return a === b || (a === a && b === b && go$float32bits(a) === go$float32bits(b));
 }
 var go$arrayIsEqual = function(a, b) {
 	if (a.length != b.length) {

@@ -1274,10 +1274,10 @@ var go$getStackDepth = function() {
 };
 
 var go$interfaceIsEqual = function(a, b) {
-	if (a === null || b === null) {
-		return a === null && b === null;
+	if (a === b) {
+		return true;
 	}
-	if (a.constructor !== b.constructor) {
+	if (a === null || b === null || a === undefined || b === undefined || a.constructor !== b.constructor) {
 		return false;
 	}
 	switch (a.constructor.kind) {
@@ -1294,7 +1294,7 @@ var go$interfaceIsEqual = function(a, b) {
 		return go$arrayIsEqual(a.go$val, b.go$val);
 	case "Ptr":
 		if (a.constructor.Struct) {
-			return a === b;
+			return false;
 		}
 		return go$pointerIsEqual(a, b);
 	case "Func":
@@ -1303,7 +1303,7 @@ var go$interfaceIsEqual = function(a, b) {
 	case "Struct":
 		go$throwRuntimeError("comparing uncomparable type " + a.constructor);
 	case undefined: // js.Object
-		return a === b;
+		return false;
 	default:
 		return a.go$val === b.go$val;
 	}

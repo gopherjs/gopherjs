@@ -26,56 +26,27 @@ Now you can use  `./bin/gopherjs build [files]` or `./bin/gopherjs install [pack
 *Note: GopherJS will try to write compiled object files of the core packages to your $GOROOT/pkg directory. If that fails, it will fall back to $GOPATH/pkg.*
 
 ### Getting started
-#### 1. Interacting directly with the DOM
-Attach listeners in the `main` method by using the `js` package:
-```go
-package main
+#### 1. Interacting with the DOM
+Accessing the DOM directly via the `js` package (see below) is possible, but using a JavaScript framework is more elegant. Take a look at the [TodoMVC Example](https://github.com/gopherjs/todomvc) which is using the [jQuery bindings](https://github.com/gopherjs/jquery) or alternatively the [AngularJS bindings](https://github.com/gopherjs/go-angularjs). Additionally, there is a list of [bindings to JavaScript APIs and libraries](https://github.com/gopherjs/gopherjs/wiki/bindings) by community members.
 
-import (
-  "github.com/gopherjs/gopherjs/js"
-)
-
-func main() {
-  nameElement := js.Global.Get("document").Call("getElementById", "name")
-  greetingElement := js.Global.Get("document").Call("getElementById", "greeting")
-  nameElement.Call("addEventListener", "input", func() {
-    greetingElement.Set("innerText", "Hello "+nameElement.Get("value").String()+"!")
-  })
-}
-```
-The HTML code looks like this:
-```html
-<html>
-  <head>
-    <meta charset="utf-8">
-  </head>
-  <body>
-    Your name: <input type="text" id="name"></input>
-    <h1 id="greeting"></h1>
-    <script src="test.js"></script>
-  </body>
-</html>
-```
 #### 2. Providing library functions for use in other JavaScript code
 Set a global variable to a map that contains the functions:
 ```go
 package main
- 
-import (
-  "github.com/gopherjs/gopherjs/js"
-  "github.com/rolaveric/user"
-)
- 
+
+import "github.com/gopherjs/gopherjs/js"
+
 func main() {
-  js.Global.Set("user", map[string]interface{}{
-    "registerDB": user.RegisterDB,
-    "new":        user.New,
-    "get":        user.Get,
-    "all":        user.All,
+  js.Global.Set("myLibrary", map[string]interface{}{
+    "someFunction": someFunction,
   })
 }
+
+func someFunction() {
+  [...]
+}
 ```
-This example if from [Jason Stone's blog post](http://legacytotheedge.blogspot.de/2014/03/gopherjs-go-to-javascript-transpiler.html) about GopherJS. Take a look for further details.
+For more details see [Jason Stone's blog post](http://legacytotheedge.blogspot.de/2014/03/gopherjs-go-to-javascript-transpiler.html) about GopherJS.
 
 ### Interface to native JavaScript
 The package `github.com/gopherjs/gopherjs/js` provides functions for interacting with native JavaScript APIs. Please see its [documentation](http://godoc.org/github.com/gopherjs/gopherjs/js) for further details.

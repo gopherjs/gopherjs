@@ -574,6 +574,7 @@ func (s *session) buildPackage(pkg *packageData) error {
 			files = append(files, file)
 		}
 	}
+	delete(replacedDeclNames, "init")
 
 	for _, name := range pkg.GoFiles {
 		if !filepath.IsAbs(name) {

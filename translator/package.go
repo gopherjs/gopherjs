@@ -281,6 +281,9 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 					value = native
 					delete(natives, o.Name())
 				}
+				if importPath == "runtime" && o.Name() == "sizeof_C_MStats" {
+					value = "3712"
+				}
 				d.InitCode = []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value))
 			})
 		}

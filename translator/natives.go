@@ -3,25 +3,11 @@ package translator
 var pkgNatives = make(map[string]map[string]string)
 
 func init() {
-	pkgNatives["os"] = map[string]string{
-		"toplevel": `
-			if (go$packages["syscall"].Syscall15 !== undefined) { // windows
-				NewFile = go$pkg.NewFile = function() { return new File.Ptr(); };
-			}
-		`,
-		"toplevelDependencies": `syscall:Syscall15 os:NewFile`,
-		"Args":                 `new (go$sliceType(Go$String))((typeof process !== 'undefined') ? process.argv.slice(1) : [])`,
-	}
-
 	pkgNatives["runtime"] = map[string]string{
 		"toplevel": `
 			go$throwRuntimeError = function(msg) { throw go$panic(new errorString(msg)); };
 		`,
 		"toplevelDependencies": `runtime:errorString runtime:TypeAssertionError`,
-		"getgoroot": `function() {
-			return (typeof process !== 'undefined') ? (process.env["GOROOT"] || "") : "/";
-		}`,
-		"sizeof_C_MStats": `3712`,
 		"Caller": `function(skip) {
 			var line = go$getStack()[skip + 3];
 			if (line === undefined) {
@@ -30,26 +16,15 @@ func init() {
 			var parts = line.substring(line.indexOf("(") + 1, line.indexOf(")")).split(":");
 			return [0, parts[0], parseInt(parts[1]), true];
 		}`,
-		"GC": `function() {}`,
-		"GOMAXPROCS": `function(n) {
-			if (n > 1) {
-				go$notSupported("GOMAXPROCS != 1");
-			}
-			return 1;
-		}`,
 		"Goexit": `function() {
 			var err = new Go$Error();
 			err.go$exit = true;
 			throw err;
 		}`,
-		"NumCPU":       `function() { return 1; }`,
-		"ReadMemStats": `function() {}`,
-		"SetFinalizer": `function() {}`,
 	}
 
 	pkgNatives["sync"] = map[string]string{
-		"copyChecker.check":    `function() {}`,
-		"runtime_Syncsemcheck": `function() {}`,
+		"copyChecker.check": `function() {}`,
 	}
 
 	pkgNatives["syscall"] = map[string]string{
@@ -100,18 +75,6 @@ func init() {
 				return e;
 			}
 		}`,
-	}
-
-	pkgNatives["time"] = map[string]string{
-		"now":   `go$now`,
-		"After": `function() { go$notSupported("time.After (use time.AfterFunc instead)") }`,
-		"AfterFunc": `function(d, f) {
-			setTimeout(f, go$div64(d, new Duration(0, 1000000)).low);
-			return null;
-		}`,
-		"NewTimer": `function() { go$notSupported("time.NewTimer (use time.AfterFunc instead)") }`,
-		"Sleep":    `function() { go$notSupported("time.Sleep (use time.AfterFunc instead)") }`,
-		"Tick":     `function() { go$notSupported("time.Tick (use time.AfterFunc instead)") }`,
 	}
 
 	pkgNatives["github.com/gopherjs/gopherjs/js"] = map[string]string{

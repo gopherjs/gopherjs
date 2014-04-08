@@ -740,9 +740,9 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 		file := pos.Filename
 		switch {
 		case strings.HasPrefix(file, build.Default.GOPATH):
-			file = filepath.ToSlash(filepath.Join("gopath", file[len(build.Default.GOPATH):]))
+			file = filepath.ToSlash(filepath.Join("/gopath", file[len(build.Default.GOPATH):]))
 		case strings.HasPrefix(file, build.Default.GOROOT):
-			file = filepath.ToSlash(filepath.Join("goroot", file[len(build.Default.GOROOT):]))
+			file = filepath.ToSlash(filepath.Join("/goroot", file[len(build.Default.GOROOT):]))
 		default:
 			file = filepath.Base(file)
 		}

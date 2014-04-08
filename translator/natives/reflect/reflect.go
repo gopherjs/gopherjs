@@ -230,13 +230,3 @@ func (v Value) Len() int {
 	}
 	panic(&ValueError{"reflect.Value.Len", k})
 }
-
-func (v Value) String() string {
-	switch k := v.kind(); k {
-	case Invalid:
-		return "<invalid Value>"
-	case String:
-		return js.InternalObject(v.iword()).Str()
-	}
-	return "<" + v.typ.String() + " Value>"
-}

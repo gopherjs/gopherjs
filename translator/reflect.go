@@ -790,6 +790,15 @@ func init() {
 			var fl = (this.flag & flagRO) | (Slice << flagKindShift);
 			return new Value.Ptr(typ.common(), go$subslice(s, i, j, k), fl);
 		}`,
+		"Value.String": `function() {
+			switch (this.kind()) {
+			case Invalid:
+				return "<invalid Value>";
+			case String:
+				return this.iword();
+			}
+			return "<" + this.typ.String() + " Value>";
+		}`,
 		"DeepEqual": `function(a1, a2) {
 			if (a1 === a2) {
 				return true;

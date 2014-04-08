@@ -49,7 +49,7 @@ func CommandLineToArgv(cmd *uint16, argc *int32) (argv *[8192]*[8192]uint16, err
 }
 
 func Getenv(key string) (value string, found bool) {
-	return "", falsde
+	return "", false
 }
 
 func GetTimeZoneInformation(tzi *Timezoneinformation) (rc uint32, err error) {

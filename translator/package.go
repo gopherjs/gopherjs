@@ -612,10 +612,12 @@ func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte
 			if c.flattened {
 				c.Printf("/* */ var go$s = 0, go$f = function() { while (true) { switch (go$s) { case 0:")
 				c.translateStmtList(stmts)
+				c.WritePos(token.NoPos)
 				c.Printf("/* */ } break; } }; return go$f();")
 				return
 			}
 			c.translateStmtList(stmts)
+			c.WritePos(token.NoPos)
 		}
 
 		v := hasDeferVisitor{}

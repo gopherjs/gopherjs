@@ -3,8 +3,10 @@ package translator
 import (
 	"bytes"
 	"code.google.com/p/go.tools/go/types"
+	"encoding/binary"
 	"fmt"
 	"go/ast"
+	"go/token"
 	"strconv"
 	"strings"
 )
@@ -28,6 +30,11 @@ func (c *funcContext) PrintCond(cond bool, onTrue, onFalse string) {
 		return
 	}
 	c.Printf("%s", onTrue)
+}
+
+func (c *funcContext) WritePos(pos token.Pos) {
+	c.Write([]byte{'\b'})
+	binary.Write(c, binary.BigEndian, uint32(pos))
 }
 
 func (c *funcContext) Indent(f func()) {

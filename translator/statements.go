@@ -3,7 +3,6 @@ package translator
 import (
 	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
-	"encoding/binary"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -21,8 +20,7 @@ func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 }
 
 func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
-	c.Write([]byte{'\b'})
-	binary.Write(c, binary.BigEndian, uint32(stmt.Pos()))
+	c.WritePos(stmt.Pos())
 
 	switch s := stmt.(type) {
 	case *ast.BlockStmt:
@@ -641,6 +639,7 @@ clauseLoop:
 		jump = strings.Join(jumpList, " else ")
 	}
 	for i, branch := range branches {
+		c.WritePos(branch.clause.Pos())
 		c.PrintCond(!flatten, fmt.Sprintf("%sif (%s) {", prefix, branch.condition), jump)
 		c.Indent(func() {
 			if printCaseBodyPrefix != nil {

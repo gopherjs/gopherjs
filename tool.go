@@ -736,6 +736,10 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 
 	m := sourcemap.Map{File: filepath.Base(pkgObj)}
 	s.t.WriteProgramCode(allPkgs, pkg.ImportPath, &translator.SourceMapFilter{Writer: codeFile, MappingCallback: func(generatedLine, generatedColumn int, fileSet *token.FileSet, originalPos token.Pos) {
+		if !originalPos.IsValid() {
+			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn})
+			return
+		}
 		pos := fileSet.Position(originalPos)
 		file := pos.Filename
 		switch {

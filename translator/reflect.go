@@ -139,16 +139,6 @@ func init() {
 		`,
 		"toplevelDependencies": `reflect:rtype reflect:uncommonType reflect:method reflect:arrayType reflect:chanType reflect:funcType reflect:interfaceType reflect:mapType reflect:ptrType reflect:sliceType reflect:structType reflect:imethod reflect:structField reflect:methodReceiver reflect:ValueOf reflect:SliceOf reflect:MakeSlice reflect:valueInterface reflect:makeMethodValue reflect:methodReceiver reflect:typesMustMatch reflect:mustBeAssignable reflect:mustBeExported reflect:mustBe reflect:assignTo`,
 
-		"ValueOf": `function(i) {
-			if (i === null) {
-				return new Value.Ptr();
-			}
-			if (i.constructor.kind === undefined) { // js.Object
-				return new Value.Ptr(jsObject(), i, Interface << flagKindShift);
-			}
-			var typ = i.constructor.reflectType();
-			return new Value.Ptr(typ, i.go$val, typ.Kind() << flagKindShift);
-		}`,
 		"arrayOf": `function(n, t) {
 			return go$arrayType(t.jsType, n).reflectType();
 		}`,
@@ -182,9 +172,6 @@ func init() {
 			default:
 				return go$newDataPointer(zeroVal(typ), typ.ptrTo().jsType);
 			}
-		}`,
-		"makechan": `function(typ, size) {
-			return new typ.jsType();
 		}`,
 		"makeComplex": `function(f, v, typ) {
 			return new Value.Ptr(typ, new typ.jsType(v.real, v.imag), f | (typ.Kind() << flagKindShift));
@@ -307,46 +294,6 @@ func init() {
 		"cvtStringRunes": `function(v, typ) {
 			return new Value.Ptr(typ, new typ.jsType(go$stringToRunes(v.iword())), (v.flag & flagRO) | (Slice << flagKindShift));
 		}`,
-		"makemap": `function(t) {
-			return new Go$Map();
-		}`,
-		"mapaccess": `function(t, m, key) {
-			var entry = m[key.go$key ? key.go$key() : key];
-			if (entry === undefined) {
-				return [undefined, false];
-			}
-			return [makeIndir(t.Elem(), entry.v), true];
-		}`,
-		"mapassign": `function(t, m, key, val, ok) {
-			if (!ok) {
-				delete m[key.go$key ? key.go$key() : key];
-				return;
-			}
-			if (t.Elem().kind === Struct) {
-				var newVal = {};
-				copyStruct(newVal, val, t.Elem());
-				val = newVal;
-			}
-			m[key.go$key ? key.go$key() : key] = { k: key, v: val };
-		}`,
-		"maplen": `function(m) {
-			return go$keys(m).length;
-		}`,
-		"mapiterinit": `function(t, m) {
-			return {t: t, m: m, keys: go$keys(m), i: 0};
-		}`,
-		"mapiterkey": `function(it) {
-			var key = it.keys[it.i];
-			return [makeIndir(it.t.Key(), it.m[key].k), true];
-		}`,
-		"mapiternext": `function(it) {
-			it.i++;
-		}`,
-		"chancap":   `function(ch) { go$notSupported("channels"); }`,
-		"chanclose": `function(ch) { go$notSupported("channels"); }`,
-		"chanlen":   `function(ch) { go$notSupported("channels"); }`,
-		"chanrecv":  `function(t, ch, nb) { go$notSupported("channels"); }`,
-		"chansend":  `function(t, ch, val, nb) { go$notSupported("channels"); }`,
 		"valueInterface": `function(v, safe) {
 			if (v.flag === 0) {
 				throw go$panic(new ValueError.Ptr("reflect.Value.Interface", 0));
@@ -463,12 +410,6 @@ func init() {
 			return new Method.Ptr(p.name.go$get(), pkgPath, mt, new Value.Ptr(mt, fn, fl), i);
 		}`,
 
-		"Value.iword": `function() {
-			if ((this.flag & flagIndir) !== 0 && this.typ.Kind() !== Array && this.typ.Kind() !== Struct) {
-				return this.val.go$get();
-			}
-			return this.val;
-		}`,
 		"Value.Bytes": `function() {
 			this.mustBe(Slice);
 			if (this.typ.Elem().Kind() !== Uint8) {
@@ -562,14 +503,6 @@ func init() {
 				results[i] = new Value.Ptr(typ, results[i], flag);
 			}
 			return new (go$sliceType(Value))(results);
-		}`,
-		"Value.Cap": `function() {
-			var k = this.kind();
-			switch (k) {
-			case Slice:
-				return this.iword().capacity;
-			}
-			throw go$panic(new ValueError.Ptr("reflect.Value.Cap", k));
 		}`,
 		"Value.Complex": `function() {
 			return this.iword();
@@ -674,18 +607,6 @@ func init() {
 				return this.iword() === null;
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.IsNil", this.kind()));
-		}`,
-		"Value.Len": `function() {
-			var k = this.kind();
-			switch (k) {
-			case Array:
-			case Slice:
-			case String:
-				return this.iword().length;
-			case Map:
-				return go$keys(this.iword()).length;
-			}
-			throw go$panic(new ValueError.Ptr("reflect.Value.Len", k));
 		}`,
 		"Value.runes": `function() {
 			this.mustBe(Slice);
@@ -868,15 +789,6 @@ func init() {
 
 			var fl = (this.flag & flagRO) | (Slice << flagKindShift);
 			return new Value.Ptr(typ.common(), go$subslice(s, i, j, k), fl);
-		}`,
-		"Value.String": `function() {
-			switch (this.kind()) {
-			case Invalid:
-				return "<invalid Value>";
-			case String:
-				return this.iword();
-			}
-			return "<" + this.typ.String() + " Value>";
 		}`,
 		"DeepEqual": `function(a1, a2) {
 			if (a1 === a2) {

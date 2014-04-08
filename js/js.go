@@ -30,6 +30,9 @@ type Object interface {
 	// Set assigns the value to the object's property with the given name.
 	Set(name string, value interface{})
 
+	// Delete removes the object's property with the given name.
+	Delete(name string)
+
 	// Get returns the object's "length" property, converted to int.
 	Length() int
 

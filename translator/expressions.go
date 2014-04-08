@@ -701,7 +701,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 
 				if isJsPackage(o.Pkg()) {
 					globalRef := func(id string) string {
-						if fun.String() == "go$global" && strings.HasPrefix(id, "go$") {
+						if fun.String() == "go$global" && len(id) > 3 && strings.EqualFold(id[:3], "go$") {
 							return id
 						}
 						return fun.String() + "." + id
@@ -717,6 +717,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 							return c.formatExpr("%s = %s", globalRef(id), externalizeExpr(e.Args[1]))
 						}
 						return c.formatExpr("%s[go$externalize(%e, Go$String)] = %s", fun, e.Args[0], externalizeExpr(e.Args[1]))
+					case "Delete":
+						return c.formatExpr("delete %s[go$externalize(%e, Go$String)]", fun, e.Args[0])
 					case "Length":
 						return c.formatExpr("go$parseInt(%s.length)", fun)
 					case "Index":

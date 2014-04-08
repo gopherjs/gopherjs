@@ -96,3 +96,9 @@ var This Object
 func InternalObject(i interface{}) Object {
 	return nil
 }
+
+func init() {
+	// avoid dead code elimination of Error
+	e := Error{}
+	_ = e
+}

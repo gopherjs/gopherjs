@@ -76,25 +76,4 @@ func init() {
 			}
 		}`,
 	}
-
-	pkgNatives["github.com/gopherjs/gopherjs/js"] = map[string]string{
-		"toplevelDependencies": `github.com/gopherjs/gopherjs/js:Error`,
-	}
-
-	pkgNatives["github.com/gopherjs/gopherjs/js_test"] = map[string]string{
-		"dummys": `{
-			someBool: true,
-			someString: "abc\u1234",
-			someInt: 42,
-			someFloat: 42.123,
-			someArray: [41, 42, 43],
-			add: function(a, b) {
-				return a + b;
-			},
-			mapArray: go$mapArray,
-			toUnixTimestamp: function(d) {
-				return d.getTime() / 1000;
-			},
-		}`,
-	}
 }

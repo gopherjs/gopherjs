@@ -503,72 +503,13 @@ var go$newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });
 };
 
-var go$ldexp = function(frac, exp) {
-	if (frac === 0) { return frac; }
-	if (exp >= 1024) { return frac * Math.pow(2, 1023) * Math.pow(2, exp - 1023); }
-	if (exp <= -1024) { return frac * Math.pow(2, -1023) * Math.pow(2, exp + 1023); }
-	return frac * Math.pow(2, exp);
+var go$coerceFloat32 = function(f) {
+	var math = go$packages["math"];
+	if (math === undefined) {
+		return f;
+	}
+	return math.Float32frombits(math.Float32bits(f));
 };
-var go$float32bits = function(f) {
-	var s, e, r;
-	if (f === 0) {
-		if (f === 0 && 1 / f === 1 / -0) {
-			return 2147483648;
-		}
-		return 0;
-	}
-	if (f !== f) {
-		return 2143289344;
-	}
-	s = 0;
-	if (f < 0) {
-		s = 2147483648;
-		f = -f;
-	}
-	e = 150;
-	while (f >= 1.6777216e+07) {
-		f = f / 2;
-		if (e === 255) {
-			break;
-		}
-		e = e + 1 >>> 0;
-	}
-	while (f < 8.388608e+06) {
-		e = e - 1 >>> 0;
-		if (e === 0) {
-			break;
-		}
-		f = f * 2;
-	}
-	r = f % 2;
-	if ((r > 0.5 && r < 1) || r >= 1.5) {
-		f++;
-	}
-	return (((s | (e << 23 >>> 0)) >>> 0) | (((f >> 0) & ~8388608))) >>> 0;
-};
-var go$float32frombits = function(b) {
-	var s, e, m;
-	s = 1;
-	if (((b & 2147483648) >>> 0) !== 0) {
-		s = -1;
-	}
-	e = (((b >>> 23 >>> 0)) & 255) >>> 0;
-	m = (b & 8388607) >>> 0;
-	if (e === 255) {
-		if (m === 0) {
-			return s / 0;
-		}
-		return 0/0;
-	}
-	if (e !== 0) {
-		m = m + 8388608 >>> 0;
-	}
-	if (e === 0) {
-		e = 1;
-	}
-	return go$ldexp(m, e - 127 - 23) * s;
-};
-
 var go$flatten64 = function(x) {
 	return x.high * 4294967296 + x.low;
 };
@@ -1309,7 +1250,14 @@ var go$interfaceIsEqual = function(a, b) {
 	}
 };
 var go$float32IsEqual = function(a, b) {
-	return a === b || (a === a && b === b && go$float32bits(a) === go$float32bits(b));
+	if (a === b) {
+		return true;
+	}
+	if (a === 0 || b === 0 || a === 1/0 || b === 1/0 || a === -1/0 || b === -1/0 || a !== a || b !== b) {
+		return false;
+	}
+	var math = go$packages["math"];
+	return math !== undefined && math.Float32bits(a) === math.Float32bits(b);
 }
 var go$arrayIsEqual = function(a, b) {
 	if (a.length != b.length) {

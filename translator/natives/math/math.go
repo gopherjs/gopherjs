@@ -12,6 +12,12 @@ var posInf = 1 / zero
 var negInf = -1 / zero
 var nan = 0 / zero
 
+func init() {
+	// avoid dead code elimination
+	Float32bits(0)
+	Float32frombits(0)
+}
+
 func Abs(x float64) float64 {
 	return abs(x)
 }
@@ -99,7 +105,16 @@ func IsNaN(f float64) (is bool) {
 }
 
 func Ldexp(frac float64, exp int) float64 {
-	return js.Global.Call("go$ldexp", frac, exp).Float()
+	if frac == 0 {
+		return frac
+	}
+	if exp >= 1024 {
+		return frac * math.Call("pow", 2, 1023).Float() * math.Call("pow", 2, exp-1023).Float()
+	}
+	if exp <= -1024 {
+		return frac * math.Call("pow", 2, -1023).Float() * math.Call("pow", 2, exp+1023).Float()
+	}
+	return frac * math.Call("pow", 2, exp).Float()
 }
 
 func Log(x float64) float64 {
@@ -216,7 +231,7 @@ func Float32bits(f float32) uint32 {
 		f *= 2
 	}
 
-	r := Mod(float64(f), 2)
+	r := js.Global.Call("go$mod", f, 2).Float()
 	if (r > 0.5 && r < 1) || r >= 1.5 { // round to nearest even
 		f++
 	}

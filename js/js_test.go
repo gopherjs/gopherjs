@@ -7,7 +7,26 @@ import (
 	"time"
 )
 
-var dummys js.Object
+var dummys = js.Global.Call("eval", `({
+	someBool: true,
+	someString: "abc\u1234",
+	someInt: 42,
+	someFloat: 42.123,
+	someArray: [41, 42, 43],
+	add: function(a, b) {
+		return a + b;
+	},
+	mapArray: function(array, f) {
+		var newArray = new Array(array.length), i;
+		for (i = 0; i < array.length; i++) {
+			newArray[i] = f(array[i]);
+		}
+		return newArray;
+	},
+	toUnixTimestamp: function(d) {
+		return d.getTime() / 1000;
+	},
+})`)
 
 func TestBool(t *testing.T) {
 	e := true

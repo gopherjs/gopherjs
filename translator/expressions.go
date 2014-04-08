@@ -959,7 +959,7 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 			}
 		case t.Info()&types.IsFloat != 0:
 			if t.Kind() == types.Float64 && exprType.Underlying().(*types.Basic).Kind() == types.Float32 {
-				return c.formatExpr("go$float32frombits(go$float32bits(%s))", c.flatten64(expr))
+				return c.formatExpr("go$coerceFloat32(%s)", c.flatten64(expr))
 			}
 			return c.flatten64(expr)
 		case t.Info()&types.IsComplex != 0:

@@ -700,18 +700,21 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				}
 
 				if isJsPackage(o.Pkg()) {
+					globalRef := func(id string) string {
+						if fun.String() == "go$global" && strings.HasPrefix(id, "go$") {
+							return id
+						}
+						return fun.String() + "." + id
+					}
 					switch o.Name() {
 					case "Get":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
-							if fun.String() == "go$global" && strings.HasPrefix(id, "go$") {
-								return c.formatExpr("%s", id)
-							}
-							return c.formatExpr("%s.%s", fun, id)
+							return c.formatExpr("%s", globalRef(id))
 						}
 						return c.formatExpr("%s[go$externalize(%e, Go$String)]", fun, e.Args[0])
 					case "Set":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
-							return c.formatExpr("%s.%s = %s", fun, id, externalizeExpr(e.Args[1]))
+							return c.formatExpr("%s = %s", globalRef(id), externalizeExpr(e.Args[1]))
 						}
 						return c.formatExpr("%s[go$externalize(%e, Go$String)] = %s", fun, e.Args[0], externalizeExpr(e.Args[1]))
 					case "Length":
@@ -722,14 +725,11 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						return c.formatExpr("%s[%e] = %s", fun, e.Args[0], externalizeExpr(e.Args[1]))
 					case "Call":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
-							if fun.String() == "go$global" && strings.HasPrefix(id, "go$") {
-								return c.formatExpr("%s(%s)", id, externalizeArgs(e.Args[1:]))
-							}
 							if e.Ellipsis.IsValid() {
 								objVar := c.newVariable("obj")
 								return c.formatExpr("(%s = %s, %s.%s.apply(%s, %s))", objVar, fun, objVar, id, objVar, externalizeExpr(e.Args[1]))
 							}
-							return c.formatExpr("%s.%s(%s)", fun, id, externalizeArgs(e.Args[1:]))
+							return c.formatExpr("%s(%s)", globalRef(id), externalizeArgs(e.Args[1:]))
 						}
 						if e.Ellipsis.IsValid() {
 							objVar := c.newVariable("obj")
@@ -760,6 +760,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						return c.internalize(fun, types.Typ[types.Float64])
 					case "Interface":
 						return c.internalize(fun, types.NewInterface(nil, nil))
+					case "Unsafe":
+						return fun
 					case "IsUndefined":
 						return c.formatParenExpr("%s === undefined", fun)
 					case "IsNull":

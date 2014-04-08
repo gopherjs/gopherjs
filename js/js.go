@@ -69,6 +69,9 @@ type Object interface {
 	// Interface returns the object converted to interface{}. See GopherJS' README for details.
 	Interface() interface{}
 
+	// Unsafe returns the object as an uintptr, which can be converted via unsafe.Pointer. Not intended for public use.
+	Unsafe() uintptr
+
 	// IsUndefined returns true if the object is the JavaScript value "undefine".
 	IsUndefined() bool
 

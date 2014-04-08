@@ -1,5 +1,7 @@
 package translator
 
+var pkgNatives = make(map[string]map[string]string)
+
 func init() {
 	pkgNatives["reflect"] = map[string]string{
 		"toplevel": `

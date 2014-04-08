@@ -42,7 +42,8 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 		if *chatty {
 			fmt.Printf("=== RUN %s\n", t.name)
 		}
-		err := runTest(tests[i], t)
+		err := runTest.Invoke(tests[i], t)
+		js.Global.Set("go$jsErr", nil)
 		if err != nil {
 			switch {
 			case !err.Get("go$exit").IsUndefined():
@@ -75,4 +76,11 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 	os.Exit(exitCode)
 }
 
-func runTest(func(*T), *T) js.Object
+var runTest = js.Global.Call("eval", `(function(f, t) {
+	try {
+		f(t);
+		return null;
+	} catch (e) {
+		return e;
+	}
+})`)

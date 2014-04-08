@@ -10,6 +10,7 @@ if (typeof window !== "undefined") {
 	go$global = window;
 } else if (typeof GLOBAL !== "undefined") {
 	go$global = GLOBAL;
+	go$global.require = require;
 }
 
 var go$idCounter = 0;
@@ -26,7 +27,6 @@ var go$mod = function(x, y) { return x % y; };
 var go$toString = String;
 var go$reflect, go$newStringPtr;
 var Go$Array = Array;
-var Go$Error = Error;
 
 var go$floatKey = function(f) {
 	if (f !== f) {

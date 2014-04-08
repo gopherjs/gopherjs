@@ -560,6 +560,16 @@ func (s *session) buildPackage(pkg *packageData) error {
 	var errList translator.ErrorList
 
 	replacedDeclNames := make(map[string]bool)
+	funcName := func(d *ast.FuncDecl) string {
+		if d.Recv == nil {
+			return d.Name.Name
+		}
+		recv := d.Recv.List[0].Type
+		if star, ok := recv.(*ast.StarExpr); ok {
+			recv = star.X
+		}
+		return recv.(*ast.Ident).Name + "." + d.Name.Name
+	}
 	if nativesPkg, err := buildImport("github.com/gopherjs/gopherjs/translator/natives/"+pkg.ImportPath, 0); err == nil {
 		for _, name := range nativesPkg.GoFiles {
 			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
@@ -568,7 +578,7 @@ func (s *session) buildPackage(pkg *packageData) error {
 			}
 			for _, decl := range file.Decls {
 				if d, ok := decl.(*ast.FuncDecl); ok {
-					replacedDeclNames[d.Name.Name] = true
+					replacedDeclNames[funcName(d)] = true
 				}
 			}
 			files = append(files, file)
@@ -598,7 +608,7 @@ func (s *session) buildPackage(pkg *packageData) error {
 		}
 
 		for _, decl := range file.Decls {
-			if d, ok := decl.(*ast.FuncDecl); ok && d.Recv == nil && replacedDeclNames[d.Name.Name] {
+			if d, ok := decl.(*ast.FuncDecl); ok && replacedDeclNames[funcName(d)] {
 				d.Name = ast.NewIdent("_")
 			}
 		}

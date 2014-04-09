@@ -383,6 +383,8 @@ func (c *funcContext) translateType(o *types.TypeName, toplevel bool) {
 		if t.Info()&types.IsInteger != 0 || t.Kind() == types.String { // TODO remove condition
 			size = sizes32.Sizeof(t)
 		}
+	case *types.Slice:
+		size = sizes32.Sizeof(t)
 	}
 	c.Printf(`%s = go$newType(%d, "%s", "%s.%s", "%s", "%s", %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), constructor)
 }

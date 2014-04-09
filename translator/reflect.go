@@ -248,6 +248,9 @@ func init() {
 		"cvtDirect": `function(v, typ) {
 			var srcVal = v.iword();
 			if (srcVal === v.typ.jsType.nil) {
+				if (typ.Kind() === Slice) {
+					return new Value.Ptr(typ, go$newDataPointer(typ.jsType.nil, typ.ptrTo().jsType), v.flag);
+				}
 				return new Value.Ptr(typ, typ.jsType.nil, v.flag);
 			}
 
@@ -257,9 +260,10 @@ func init() {
 				val = new typ.jsType();
 				break;
 			case Slice:
-				val = new typ.jsType(srcVal.array);
-				val.length = srcVal.length;
-				val.cap = srcVal.cap;
+				var slice = new typ.jsType(srcVal.array);
+				slice.length = srcVal.length;
+				slice.cap = srcVal.cap;
+				val = go$newDataPointer(slice, typ.ptrTo().jsType);
 				break;
 			case Ptr:
 				if (typ.Elem().Kind() === Struct) {
@@ -281,12 +285,12 @@ func init() {
 			case Interface:
 			case Map:
 			case String:
-				val = srcVal;
+				val = v.val;
 				break;
 			default:
 				throw go$panic(new ValueError.Ptr("reflect.Convert", typ.Kind()));
 			}
-			return new Value.Ptr(typ, val, (v.flag & flagRO) | (typ.Kind() << flagKindShift));
+			return new Value.Ptr(typ, val, (v.flag & (flagRO | flagIndir)) | (typ.Kind() << flagKindShift));
 		}`,
 		"cvtStringBytes": `function(v, typ) {
 			return new Value.Ptr(typ, new typ.jsType(go$stringToBytes(v.iword())), (v.flag & flagRO) | (Slice << flagKindShift));
@@ -410,13 +414,6 @@ func init() {
 			return new Method.Ptr(p.name.go$get(), pkgPath, mt, new Value.Ptr(mt, fn, fl), i);
 		}`,
 
-		"Value.Bytes": `function() {
-			this.mustBe(Slice);
-			if (this.typ.Elem().Kind() !== Uint8) {
-				throw go$panic(new Go$String("reflect.Value.Bytes of non-byte slice"));
-			}
-			return this.iword();
-		}`,
 		"Value.call": `function(op, args) {
 			var t = this.typ, fn, rcvr;
 
@@ -520,7 +517,7 @@ func init() {
 				var typ = val.constructor.reflectType();
 				var fl = this.flag & flagRO;
 				fl |= typ.Kind() << flagKindShift;
-				if (typ.Kind() === String) {
+				if (typ.Kind() === String || typ.Kind() === Slice) {
 					return new Value.Ptr(typ, go$newDataPointer(val.go$val, Go$String.Ptr), fl | flagIndir);
 				}
 				return new Value.Ptr(typ, val.go$val, fl);
@@ -551,7 +548,7 @@ func init() {
 				fl |= flagRO;
 			}
 			fl |= typ.Kind() << flagKindShift;
-			if (((this.flag & flagIndir) !== 0 && typ.Kind() !== Array && typ.Kind() !== Struct) || typ.Kind() === String) {
+			if (((this.flag & flagIndir) !== 0 && typ.Kind() !== Array && typ.Kind() !== Struct) || typ.Kind() === String || typ.Kind() === Slice) {
 				var struct = this.val;
 				return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl | flagIndir);
 			}
@@ -568,7 +565,7 @@ func init() {
 				var typ = tt.elem;
 				var fl = this.flag & (flagRO | flagIndir | flagAddr);
 				fl |= typ.Kind() << flagKindShift;
-				if (((this.flag & flagIndir) !== 0 && typ.Kind() !== Array && typ.Kind() !== Struct) || typ.Kind() === String) {
+				if (((this.flag & flagIndir) !== 0 && typ.Kind() !== Array && typ.Kind() !== Struct) || typ.Kind() === String || typ.Kind() === Slice) {
 					var array = this.val;
 					return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return array[i]; }, function(v) { array[i] = v; }), fl | flagIndir);
 				}
@@ -761,8 +758,8 @@ func init() {
 				throw go$panic(new Go$String("reflect.Value.Slice: slice index out of bounds"));
 			}
 
-			var fl = (this.flag & flagRO) | (Slice << flagKindShift);
-			return new Value.Ptr(typ.common(), go$subslice(s, i, j), fl);
+			var fl = (this.flag & flagRO) | flagIndir | (Slice << flagKindShift);
+			return new Value.Ptr(typ.common(), go$newDataPointer(go$subslice(s, i, j), typ.ptrTo().jsType), fl);
 		}`,
 		"Value.Slice3": `function(i, j, k) {
 			var typ, s, cap;
@@ -790,8 +787,8 @@ func init() {
 				throw go$panic(new Go$String("reflect.Value.Slice3: slice index out of bounds"));
 			}
 
-			var fl = (this.flag & flagRO) | (Slice << flagKindShift);
-			return new Value.Ptr(typ.common(), go$subslice(s, i, j, k), fl);
+			var fl = (this.flag & flagRO) | flagIndir | (Slice << flagKindShift);
+			return new Value.Ptr(typ.common(), go$newDataPointer(go$subslice(s, i, j, k), typ.ptrTo().jsType), fl);
 		}`,
 		"DeepEqual": `function(a1, a2) {
 			if (a1 === a2) {

@@ -101,7 +101,7 @@ func ValueOf(i interface{}) Value {
 		return Value{jsObject(), unsafe.Pointer(js.InternalObject(i).Unsafe()), flag(Interface) << flagKindShift}
 	}
 	typ := c.Call("reflectType").Interface().(*rtype)
-	if typ.Kind() == String {
+	if typ.Kind() == String || typ.Kind() == Slice {
 		return Value{typ, unsafe.Pointer(js.Global.Call("go$newDataPointer", js.InternalObject(i).Get("go$val"), jsType(typ.ptrTo())).Unsafe()), flag(typ.Kind())<<flagKindShift | flagIndir}
 	}
 	return Value{typ, unsafe.Pointer(js.InternalObject(i).Get("go$val").Unsafe()), flag(typ.Kind()) << flagKindShift}

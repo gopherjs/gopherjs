@@ -341,7 +341,7 @@ var Go$Float32       = go$newType( 4, "Float32",       "float32",        "float3
 var Go$Float64       = go$newType( 8, "Float64",       "float64",        "float64",    "", null);
 var Go$Complex64     = go$newType( 8, "Complex64",     "complex64",      "complex64",  "", null);
 var Go$Complex128    = go$newType(16, "Complex128",    "complex128",     "complex128", "", null);
-var Go$String        = go$newType( 0, "String",        "string",         "string",     "", null);
+var Go$String        = go$newType(16, "String",        "string",         "string",     "", null);
 var Go$UnsafePointer = go$newType( 4, "UnsafePointer", "unsafe.Pointer", "Pointer",    "", null);
 
 var go$nativeArray = function(elemKind) {

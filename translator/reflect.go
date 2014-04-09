@@ -292,6 +292,7 @@ func init() {
 			return new Value.Ptr(typ, new typ.jsType(go$stringToBytes(v.iword())), (v.flag & flagRO) | (Slice << flagKindShift));
 		}`,
 		"cvtStringRunes": `function(v, typ) {
+			console.log(v.iword(), go$stringToRunes(v.iword()));
 			return new Value.Ptr(typ, new typ.jsType(go$stringToRunes(v.iword())), (v.flag & flagRO) | (Slice << flagKindShift));
 		}`,
 		"valueInterface": `function(v, safe) {
@@ -548,9 +549,9 @@ func init() {
 				fl |= flagRO;
 			}
 			fl |= typ.Kind() << flagKindShift;
-			if ((this.flag & flagIndir) !== 0 && typ.Kind() !== Array && typ.Kind() !== Struct) {
+			if (((this.flag & flagIndir) !== 0 && typ.Kind() !== Array && typ.Kind() !== Struct) || typ.Kind() === String) {
 				var struct = this.val;
-				return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl);
+				return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl | flagIndir);
 			}
 			return new Value.Ptr(typ, this.val[name], fl);
 		}`,
@@ -565,9 +566,9 @@ func init() {
 				var typ = tt.elem;
 				var fl = this.flag & (flagRO | flagIndir | flagAddr);
 				fl |= typ.Kind() << flagKindShift;
-				if ((this.flag & flagIndir) !== 0 && typ.Kind() !== Array && typ.Kind() !== Struct) {
+				if (((this.flag & flagIndir) !== 0 && typ.Kind() !== Array && typ.Kind() !== Struct) || typ.Kind() === String) {
 					var array = this.val;
-					return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
+					return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return array[i]; }, function(v) { array[i] = v; }), fl | flagIndir);
 				}
 				return new Value.Ptr(typ, this.iword()[i], fl);
 			case Slice:
@@ -749,7 +750,7 @@ func init() {
 				if (i < 0 || j < i || j > s.length) {
 					throw go$panic(new Go$String("reflect.Value.Slice: string slice index out of bounds"));
 				}
-				return new Value.Ptr(this.typ, s.substring(i, j), this.flag);
+				return new Value.Ptr(this.typ, go$newDataPointer(s.substring(i, j), Go$String.Ptr), this.flag);
 			default:
 				throw go$panic(new ValueError.Ptr("reflect.Value.Slice", kind));
 			}
@@ -789,15 +790,6 @@ func init() {
 
 			var fl = (this.flag & flagRO) | (Slice << flagKindShift);
 			return new Value.Ptr(typ.common(), go$subslice(s, i, j, k), fl);
-		}`,
-		"Value.String": `function() {
-			switch (this.kind()) {
-			case Invalid:
-				return "<invalid Value>";
-			case String:
-				return this.iword();
-			}
-			return "<" + this.typ.String() + " Value>";
 		}`,
 		"DeepEqual": `function(a1, a2) {
 			if (a1 === a2) {

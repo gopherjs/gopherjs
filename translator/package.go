@@ -380,7 +380,7 @@ func (c *funcContext) translateType(o *types.TypeName, toplevel bool) {
 		}
 		constructor += strings.Repeat("\t", c.p.indentation) + "}"
 	case *types.Basic:
-		if t.Info()&types.IsInteger != 0 {
+		if t.Info()&types.IsInteger != 0 || t.Kind() == types.String { // TODO remove condition
 			size = sizes32.Sizeof(t)
 		}
 	}

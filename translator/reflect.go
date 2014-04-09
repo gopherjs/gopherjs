@@ -292,7 +292,6 @@ func init() {
 			return new Value.Ptr(typ, new typ.jsType(go$stringToBytes(v.iword())), (v.flag & flagRO) | (Slice << flagKindShift));
 		}`,
 		"cvtStringRunes": `function(v, typ) {
-			console.log(v.iword(), go$stringToRunes(v.iword()));
 			return new Value.Ptr(typ, new typ.jsType(go$stringToRunes(v.iword())), (v.flag & flagRO) | (Slice << flagKindShift));
 		}`,
 		"valueInterface": `function(v, safe) {
@@ -521,6 +520,9 @@ func init() {
 				var typ = val.constructor.reflectType();
 				var fl = this.flag & flagRO;
 				fl |= typ.Kind() << flagKindShift;
+				if (typ.Kind() === String) {
+					return new Value.Ptr(typ, go$newDataPointer(val.go$val, Go$String.Ptr), fl | flagIndir);
+				}
 				return new Value.Ptr(typ, val.go$val, fl);
 
 			case Ptr:

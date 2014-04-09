@@ -11,7 +11,7 @@ echo -en "travis_fold:end:nvm\r"
 
 echo -en "travis_fold:start:node-gyp\r"
 echo "--- installing node-gyp ---"
-npm install --global node-gyp --registry http://registry.nodejitsu.com
+npm install --global node-gyp
 echo -en "travis_fold:end:node-gyp\r"
 
 echo -en "travis_fold:start:syscall.node\r"

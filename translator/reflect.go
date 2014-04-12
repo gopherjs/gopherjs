@@ -139,40 +139,6 @@ func init() {
 		`,
 		"toplevelDependencies": `reflect:rtype reflect:uncommonType reflect:method reflect:arrayType reflect:chanType reflect:funcType reflect:interfaceType reflect:mapType reflect:ptrType reflect:sliceType reflect:structType reflect:imethod reflect:structField reflect:methodReceiver reflect:ValueOf reflect:SliceOf reflect:MakeSlice reflect:valueInterface reflect:makeMethodValue reflect:methodReceiver reflect:typesMustMatch reflect:mustBeAssignable reflect:mustBeExported reflect:mustBe reflect:assignTo`,
 
-		"arrayOf": `function(n, t) {
-			return go$arrayType(t.jsType, n).reflectType();
-		}`,
-		"ChanOf": `function(dir, t) {
-			return go$chanType(t.jsType, dir === SendDir, dir === RecvDir).reflectType();
-		}`,
-		"MapOf": `function(key, elem) {
-			switch (key.Kind()) {
-			case Func:
-			case Map:
-			case Slice:
-				throw go$panic(new Go$String("reflect.MapOf: invalid key type " + key.String()));
-			}
-			return go$mapType(key.jsType, elem.jsType).reflectType();
-		}`,
-		"rtype.ptrTo": `function() {
-			return go$ptrType(this.jsType).reflectType();
-		}`,
-		"SliceOf": `function(t) {
-			return go$sliceType(t.jsType).reflectType();
-		}`,
-		"Zero": `function(typ) {
-			return new Value.Ptr(typ, zeroVal(typ), typ.Kind() << flagKindShift);
-		}`,
-		"unsafe_New": `function(typ) {
-			switch (typ.Kind()) {
-			case Struct:
-				return new typ.jsType.Ptr();
-			case Array:
-				return zeroVal(typ);
-			default:
-				return go$newDataPointer(zeroVal(typ), typ.ptrTo().jsType);
-			}
-		}`,
 		"makeComplex": `function(f, v, typ) {
 			return new Value.Ptr(typ, new typ.jsType(v.real, v.imag), f | (typ.Kind() << flagKindShift));
 		}`,

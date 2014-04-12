@@ -23,6 +23,10 @@ func jsType(typ Type) js.Object {
 	return js.InternalObject(typ).Get("jsType")
 }
 
+func reflectType(typ js.Object) *rtype {
+	return typ.Call("reflectType").Interface().(*rtype)
+}
+
 func isWrapped(typ Type) bool {
 	switch typ.Kind() {
 	case Bool, Int, Int8, Int16, Int32, Uint, Uint8, Uint16, Uint32, Uintptr, Float32, Float64, Array, Map, Func, String, Struct:
@@ -78,7 +82,7 @@ func makeIndir(t Type, v js.Object) iword {
 }
 
 func jsObject() *rtype {
-	return js.Global.Get("go$packages").Get("github.com/gopherjs/gopherjs/js").Get("Object").Call("reflectType").Interface().(*rtype)
+	return reflectType(js.Global.Get("go$packages").Get("github.com/gopherjs/gopherjs/js").Get("Object"))
 }
 
 func TypeOf(i interface{}) Type {
@@ -89,7 +93,7 @@ func TypeOf(i interface{}) Type {
 	if c.Get("kind").IsUndefined() { // js.Object
 		return jsObject()
 	}
-	return c.Call("reflectType").Interface().(*rtype)
+	return reflectType(c)
 }
 
 func ValueOf(i interface{}) Value {
@@ -100,11 +104,51 @@ func ValueOf(i interface{}) Value {
 	if c.Get("kind").IsUndefined() { // js.Object
 		return Value{jsObject(), unsafe.Pointer(js.InternalObject(i).Unsafe()), flag(Interface) << flagKindShift}
 	}
-	typ := c.Call("reflectType").Interface().(*rtype)
+	typ := reflectType(c)
 	if typ.Kind() == String || typ.Kind() == Slice {
 		return Value{typ, unsafe.Pointer(js.Global.Call("go$newDataPointer", js.InternalObject(i).Get("go$val"), jsType(typ.ptrTo())).Unsafe()), flag(typ.Kind())<<flagKindShift | flagIndir}
 	}
 	return Value{typ, unsafe.Pointer(js.InternalObject(i).Get("go$val").Unsafe()), flag(typ.Kind()) << flagKindShift}
+}
+
+func arrayOf(count int, elem Type) Type {
+	return reflectType(js.Global.Call("go$arrayType", jsType(elem), count))
+}
+
+func ChanOf(dir ChanDir, t Type) Type {
+	return reflectType(js.Global.Call("go$chanType", jsType(t), dir == SendDir, dir == RecvDir))
+}
+
+func MapOf(key, elem Type) Type {
+	switch key.Kind() {
+	case Func, Map, Slice:
+		panic("reflect.MapOf: invalid key type " + key.String())
+	}
+	return reflectType(js.Global.Call("go$mapType", jsType(key), jsType(elem)))
+
+}
+
+func (t *rtype) ptrTo() *rtype {
+	return reflectType(js.Global.Call("go$ptrType", jsType(t)))
+}
+
+func SliceOf(t Type) Type {
+	return reflectType(js.Global.Call("go$sliceType", jsType(t)))
+}
+
+func Zero(typ Type) Value {
+	return Value{typ.(*rtype), unsafe.Pointer(zeroVal(typ).Unsafe()), flag(typ.Kind()) << flagKindShift}
+}
+
+func unsafe_New(typ *rtype) unsafe.Pointer {
+	switch typ.Kind() {
+	case Struct:
+		return unsafe.Pointer(jsType(typ).Get("Ptr").New().Unsafe())
+	case Array:
+		return unsafe.Pointer(zeroVal(typ).Unsafe())
+	default:
+		return unsafe.Pointer(js.Global.Call("go$newDataPointer", zeroVal(typ), jsType(typ.ptrTo())).Unsafe())
+	}
 }
 
 func makechan(typ *rtype, size uint64) (ch iword) {

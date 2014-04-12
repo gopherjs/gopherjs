@@ -543,48 +543,6 @@ func init() {
 			}
 			throw go$panic(new ValueError.Ptr("reflect.Value.Index", k));
 		}`,
-		"Value.IsNil": `function() {
-			switch (this.kind()) {
-			case Chan:
-			case Ptr:
-			case Slice:
-				return this.iword() === this.typ.jsType.nil;
-			case Func:
-				return this.iword() === go$throwNilPointerError;
-			case Map:
-				return this.iword() === false;
-			case Interface:
-				return this.iword() === null;
-			}
-			throw go$panic(new ValueError.Ptr("reflect.Value.IsNil", this.kind()));
-		}`,
-		"Value.runes": `function() {
-			this.mustBe(Slice);
-			if (this.typ.Elem().Kind() !== Int32) {
-				throw new go$panic(new Go$String("reflect.Value.Bytes of non-rune slice"));
-			}
-			return this.iword();
-		}`,
-		"Value.Pointer": `function() {
-			var k = this.kind();
-			switch (k) {
-			case Chan:
-			case Map:
-			case Ptr:
-			case Slice:
-			case UnsafePointer:
-				if (this.IsNil()) {
-					return 0;
-				}
-				return this.iword();
-			case Func:
-				if (this.IsNil()) {
-					return 0;
-				}
-				return 1;
-			}
-			throw go$panic(new ValueError.Ptr("reflect.Value.Pointer", k));
-		}`,
 		"Value.Set": `function(x) {
 			this.mustBeAssignable();
 			x.mustBeExported();
@@ -605,50 +563,6 @@ func init() {
 				}
 			}
 			this.val = x.val;
-		}`,
-		"Value.SetInt": `function(x) {
-			this.mustBeAssignable();
-			var k = this.kind();
-			switch (k) {
-			case Int:
-			case Int8:
-			case Int16:
-			case Int32:
-				this.val.go$set(go$flatten64(x));
-				return;
-			case Int64:
-				this.val.go$set(new this.typ.jsType(x.high, x.low));
-				return;
-			}
-			throw go$panic(new ValueError.Ptr("reflect.Value.SetInt", k));
-		}`,
-		"Value.SetUint": `function(x) {
-			this.mustBeAssignable();
-			var k = this.kind();
-			switch (k) {
-			case Uint:
-			case Uint8:
-			case Uint16:
-			case Uint32:
-			case Uintptr:
-				this.val.go$set(x.low);
-				return;
-			case Uint64:
-				this.val.go$set(new this.typ.jsType(x.high, x.low));
-				return;
-			}
-			throw go$panic(new ValueError.Ptr("reflect.Value.SetUint", k));
-		}`,
-		"Value.SetComplex": `function(x) {
-			this.mustBeAssignable();
-			var k = this.kind();
-			switch (k) {
-			case Complex64:
-			case Complex128:
-				this.val.go$set(new this.typ.jsType(x.real, x.imag));
-				return;
-			}
-			throw go$panic(new ValueError.Ptr("reflect.Value.SetComplex", k));
 		}`,
 		"Value.SetCap": `function(n) {
 			this.mustBeAssignable();

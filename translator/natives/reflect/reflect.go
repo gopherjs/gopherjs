@@ -13,8 +13,6 @@ func init() {
 	if a {
 		isWrapped(nil)
 		copyStruct(nil, nil, nil)
-		makeIndir(nil, nil)
-		jsObject()
 	}
 }
 
@@ -268,7 +266,14 @@ func maplen(m iword) int {
 
 func (v Value) iword() iword {
 	if v.flag&flagIndir != 0 && v.typ.Kind() != Array && v.typ.Kind() != Struct {
-		return iword(js.InternalObject(v.val).Call("go$get").Unsafe())
+		val := js.InternalObject(v.val).Call("go$get")
+		if v.typ.Kind() == Uint64 || v.typ.Kind() == Int64 {
+			val = jsType(v.typ).New(val.Get("high"), val.Get("low"))
+		}
+		if v.typ.Kind() == Complex64 || v.typ.Kind() == Complex128 {
+			val = jsType(v.typ).New(val.Get("real"), val.Get("imag"))
+		}
+		return iword(val.Unsafe())
 	}
 	return iword(v.val)
 }
@@ -286,15 +291,47 @@ func (v Value) Cap() int {
 	panic(&ValueError{"reflect.Value.Cap", k})
 }
 
+func (v Value) IsNil() bool {
+	switch k := v.kind(); k {
+	case Chan, Ptr, Slice:
+		return v.iword() == iword(jsType(v.typ).Get("nil").Unsafe())
+	case Func:
+		return v.iword() == iword(js.Global.Get("go$throwNilPointerError").Unsafe())
+	case Map:
+		return v.iword() == iword(js.InternalObject(false).Unsafe())
+	case Interface:
+		return js.InternalObject(v.iword()).IsNull()
+	default:
+		panic(&ValueError{"reflect.Value.IsNil", k})
+	}
+}
+
 func (v Value) Len() int {
-	k := v.kind()
-	switch k {
+	switch k := v.kind(); k {
 	case Array, Slice, String:
 		return js.InternalObject(v.iword()).Length()
 	// case Chan:
 	// 	return chanlen(v.iword())
 	case Map:
 		return js.Global.Call("go$keys", v.iword()).Length()
+	default:
+		panic(&ValueError{"reflect.Value.Len", k})
 	}
-	panic(&ValueError{"reflect.Value.Len", k})
+}
+
+func (v Value) Pointer() uintptr {
+	switch k := v.kind(); k {
+	case Chan, Map, Ptr, Slice, UnsafePointer:
+		if v.IsNil() {
+			return 0
+		}
+		return uintptr(unsafe.Pointer(v.iword()))
+	case Func:
+		if v.IsNil() {
+			return 0
+		}
+		return 1
+	default:
+		panic(&ValueError{"reflect.Value.Pointer", k})
+	}
 }

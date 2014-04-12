@@ -13,7 +13,6 @@ func init() {
 	if a {
 		isWrapped(nil)
 		copyStruct(nil, nil, nil)
-		zeroVal(nil)
 		makeIndir(nil, nil)
 		jsObject()
 	}
@@ -81,6 +80,28 @@ func makeIndir(t Type, v js.Object) iword {
 	return iword(v.Unsafe())
 }
 
+func makeIndirValue(t Type, v js.Object) Value {
+	rt := t.(*rtype)
+	return Value{rt, unsafe.Pointer(js.Global.Call("go$newDataPointer", v, jsType(rt.ptrTo())).Unsafe()), flagIndir | flag(t.Kind())<<flagKindShift}
+}
+
+func MakeSlice(typ Type, len, cap int) Value {
+	if typ.Kind() != Slice {
+		panic("reflect.MakeSlice of non-slice type")
+	}
+	if len < 0 {
+		panic("reflect.MakeSlice: negative len")
+	}
+	if cap < 0 {
+		panic("reflect.MakeSlice: negative cap")
+	}
+	if len > cap {
+		panic("reflect.MakeSlice: len > cap")
+	}
+
+	return makeIndirValue(typ, jsType(typ).Call("make", len, cap, func() js.Object { return zeroVal(typ.Elem()) }))
+}
+
 func jsObject() *rtype {
 	return reflectType(js.Global.Get("go$packages").Get("github.com/gopherjs/gopherjs/js").Get("Object"))
 }
@@ -105,8 +126,8 @@ func ValueOf(i interface{}) Value {
 		return Value{jsObject(), unsafe.Pointer(js.InternalObject(i).Unsafe()), flag(Interface) << flagKindShift}
 	}
 	typ := reflectType(c)
-	if typ.Kind() == String || typ.Kind() == Slice {
-		return Value{typ, unsafe.Pointer(js.Global.Call("go$newDataPointer", js.InternalObject(i).Get("go$val"), jsType(typ.ptrTo())).Unsafe()), flag(typ.Kind())<<flagKindShift | flagIndir}
+	if typ.Size() > ptrSize {
+		return makeIndirValue(typ, js.InternalObject(i).Get("go$val"))
 	}
 	return Value{typ, unsafe.Pointer(js.InternalObject(i).Get("go$val").Unsafe()), flag(typ.Kind()) << flagKindShift}
 }
@@ -124,8 +145,8 @@ func MapOf(key, elem Type) Type {
 	case Func, Map, Slice:
 		panic("reflect.MapOf: invalid key type " + key.String())
 	}
-	return reflectType(js.Global.Call("go$mapType", jsType(key), jsType(elem)))
 
+	return reflectType(js.Global.Call("go$mapType", jsType(key), jsType(elem)))
 }
 
 func (t *rtype) ptrTo() *rtype {

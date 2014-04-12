@@ -46,6 +46,8 @@ func init() {
 			var flagKindMask = 31;
 			var flagMethodShift = 9;
 
+			var ptrSize = 4;
+
 			go$reflect = {
 				rtype: rtype.Ptr, uncommonType: uncommonType.Ptr, method: method.Ptr, arrayType: arrayType.Ptr, chanType: chanType.Ptr, funcType: funcType.Ptr, interfaceType: interfaceType.Ptr, mapType: mapType.Ptr, ptrType: ptrType.Ptr, sliceType: sliceType.Ptr, structType: structType.Ptr,
 				imethod: imethod.Ptr, structField: structField.Ptr,
@@ -195,21 +197,6 @@ func init() {
 				break;
 			}
 			return new Value.Ptr(typ, val, f | (typ.Kind() << flagKindShift));
-		}`,
-		"MakeSlice": `function(typ, len, cap) {
-			if (typ.Kind() !== Slice) {
-				throw go$panic(new Go$String("reflect.MakeSlice of non-slice type"));
-			}
-			if (len < 0) {
-				throw go$panic(new Go$String("reflect.MakeSlice: negative len"));
-			}
-			if (cap < 0) {
-				throw go$panic(new Go$String("reflect.MakeSlice: negative cap"));
-			}
-			if (len > cap) {
-				throw go$panic(new Go$String("reflect.MakeSlice: len > cap"));
-			}
-			return new Value.Ptr(typ.common(), typ.jsType.make(len, cap, function() { return zeroVal(typ.Elem()); }), Slice << flagKindShift);
 		}`,
 		"cvtDirect": `function(v, typ) {
 			var srcVal = v.iword();
@@ -483,7 +470,7 @@ func init() {
 				var typ = val.constructor.reflectType();
 				var fl = this.flag & flagRO;
 				fl |= typ.Kind() << flagKindShift;
-				if (typ.Kind() === String || typ.Kind() === Slice) {
+				if (typ.Size() > ptrSize && typ.Kind() !== Array && typ.Kind() !== Struct) {
 					return new Value.Ptr(typ, go$newDataPointer(val.go$val, Go$String.Ptr), fl | flagIndir);
 				}
 				return new Value.Ptr(typ, val.go$val, fl);
@@ -514,7 +501,7 @@ func init() {
 				fl |= flagRO;
 			}
 			fl |= typ.Kind() << flagKindShift;
-			if (((this.flag & flagIndir) !== 0 && typ.Kind() !== Array && typ.Kind() !== Struct) || typ.Kind() === String || typ.Kind() === Slice) {
+			if (((this.flag & flagIndir) !== 0 || typ.Size() > ptrSize) && typ.Kind() !== Array && typ.Kind() !== Struct) {
 				var struct = this.val;
 				return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl | flagIndir);
 			}
@@ -531,7 +518,7 @@ func init() {
 				var typ = tt.elem;
 				var fl = this.flag & (flagRO | flagIndir | flagAddr);
 				fl |= typ.Kind() << flagKindShift;
-				if (((this.flag & flagIndir) !== 0 && typ.Kind() !== Array && typ.Kind() !== Struct) || typ.Kind() === String || typ.Kind() === Slice) {
+				if (((this.flag & flagIndir) !== 0 || typ.Size() > ptrSize) && typ.Kind() !== Array && typ.Kind() !== Struct) {
 					var array = this.val;
 					return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return array[i]; }, function(v) { array[i] = v; }), fl | flagIndir);
 				}

@@ -126,7 +126,7 @@ func ValueOf(i interface{}) Value {
 		return Value{jsObject(), unsafe.Pointer(js.InternalObject(i).Unsafe()), flag(Interface) << flagKindShift}
 	}
 	typ := reflectType(c)
-	if typ.Size() > ptrSize {
+	if typ.Kind() != Array && typ.Kind() != Struct && typ.Size() > ptrSize {
 		return makeIndirValue(typ, js.InternalObject(i).Get("go$val"))
 	}
 	return Value{typ, unsafe.Pointer(js.InternalObject(i).Get("go$val").Unsafe()), flag(typ.Kind()) << flagKindShift}

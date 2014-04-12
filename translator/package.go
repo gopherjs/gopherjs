@@ -379,11 +379,7 @@ func (c *funcContext) translateType(o *types.TypeName, toplevel bool) {
 			constructor += fmt.Sprintf("%sthis.%s = %s_ !== undefined ? %s_ : %s;\n", strings.Repeat("\t", c.p.indentation+1), name, name, name, c.zeroValue(t.Field(i).Type()))
 		}
 		constructor += strings.Repeat("\t", c.p.indentation) + "}"
-	case *types.Basic:
-		if t.Info()&types.IsInteger != 0 || t.Kind() == types.String { // TODO remove condition
-			size = sizes32.Sizeof(t)
-		}
-	case *types.Slice:
+	case *types.Basic, *types.Array, *types.Slice, *types.Chan, *types.Signature, *types.Interface, *types.Pointer, *types.Map:
 		size = sizes32.Sizeof(t)
 	}
 	c.Printf(`%s = go$newType(%d, "%s", "%s.%s", "%s", "%s", %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), constructor)

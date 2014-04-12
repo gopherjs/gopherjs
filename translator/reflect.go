@@ -454,9 +454,6 @@ func init() {
 			}
 			return new (go$sliceType(Value))(results);
 		}`,
-		"Value.Complex": `function() {
-			return this.iword();
-		}`,
 		"Value.Elem": `function() {
 			switch (this.kind()) {
 			case Interface:

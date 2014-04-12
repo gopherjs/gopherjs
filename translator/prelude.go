@@ -366,7 +366,7 @@ var go$arrayType = function(elem, len) {
 	var string = "[" + len + "]" + elem.string;
 	var typ = go$arrayTypes[string];
 	if (typ === undefined) {
-		typ = go$newType(0, "Array", string, "", "", null);
+		typ = go$newType(12, "Array", string, "", "", null);
 		typ.init(elem, len);
 		go$arrayTypes[string] = typ;
 	}
@@ -378,7 +378,7 @@ var go$chanType = function(elem, sendOnly, recvOnly) {
 	var field = sendOnly ? "SendChan" : (recvOnly ? "RecvChan" : "Chan");
 	var typ = elem[field];
 	if (typ === undefined) {
-		typ = go$newType(0, "Chan", string, "", "", null);
+		typ = go$newType(4, "Chan", string, "", "", null);
 		typ.init(elem, sendOnly, recvOnly);
 		elem[field] = typ;
 	}
@@ -399,7 +399,7 @@ var go$funcType = function(params, results, variadic) {
 	}
 	var typ = go$funcTypes[string];
 	if (typ === undefined) {
-		typ = go$newType(0, "Func", string, "", "", null);
+		typ = go$newType(4, "Func", string, "", "", null);
 		typ.init(params, results, variadic);
 		go$funcTypes[string] = typ;
 	}
@@ -416,7 +416,7 @@ var go$interfaceType = function(methods) {
 	}
 	var typ = go$interfaceTypes[string];
 	if (typ === undefined) {
-		typ = go$newType(0, "Interface", string, "", "", null);
+		typ = go$newType(8, "Interface", string, "", "", null);
 		typ.init(methods);
 		go$interfaceTypes[string] = typ;
 	}
@@ -439,7 +439,7 @@ var go$mapType = function(key, elem) {
 	var string = "map[" + key.string + "]" + elem.string;
 	var typ = go$mapTypes[string];
 	if (typ === undefined) {
-		typ = go$newType(0, "Map", string, "", "", null);
+		typ = go$newType(4, "Map", string, "", "", null);
 		typ.init(key, elem);
 		go$mapTypes[string] = typ;
 	}
@@ -450,7 +450,7 @@ var go$throwNilPointerError = function() { go$throwRuntimeError("invalid memory 
 var go$ptrType = function(elem) {
 	var typ = elem.Ptr;
 	if (typ === undefined) {
-		typ = go$newType(0, "Ptr", "*" + elem.string, "", "", null);
+		typ = go$newType(4, "Ptr", "*" + elem.string, "", "", null);
 		typ.init(elem);
 		elem.Ptr = typ;
 	}

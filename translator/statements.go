@@ -779,11 +779,11 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string) string {
 	case *ast.IndexExpr:
 		switch t := c.p.info.Types[l.X].Type.Underlying().(type) {
 		case *types.Array, *types.Pointer:
-			return fmt.Sprintf("%s[%s] = %s;", c.translateExpr(l.X), c.flatten64(l.Index), rhs)
+			return fmt.Sprintf("%s[%s] = %s;", c.translateExpr(l.X), c.formatExpr("%f", l.Index).String(), rhs)
 		case *types.Slice:
 			sliceVar := c.newVariable("_slice")
 			indexVar := c.newVariable("_index")
-			return fmt.Sprintf("%s = %s; %s = %s;", sliceVar, c.translateExpr(l.X), indexVar, c.flatten64(l.Index)) +
+			return fmt.Sprintf("%s = %s; %s = %s;", sliceVar, c.translateExpr(l.X), indexVar, c.formatExpr("%f", l.Index).String()) +
 				fmt.Sprintf(`(%s >= 0 && %s < %s.length) ? (%s.array[%s.offset + %s] = %s) : go$throwRuntimeError("index out of range");`, indexVar, indexVar, sliceVar, sliceVar, sliceVar, indexVar, rhs)
 		case *types.Map:
 			keyVar := c.newVariable("_key")

@@ -781,10 +781,7 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string) string {
 		case *types.Array, *types.Pointer:
 			return fmt.Sprintf("%s[%s] = %s;", c.translateExpr(l.X), c.formatExpr("%f", l.Index).String(), rhs)
 		case *types.Slice:
-			sliceVar := c.newVariable("_slice")
-			indexVar := c.newVariable("_index")
-			return fmt.Sprintf("%s = %s; %s = %s;", sliceVar, c.translateExpr(l.X), indexVar, c.formatExpr("%f", l.Index).String()) +
-				fmt.Sprintf(`(%s >= 0 && %s < %s.length) ? (%s.array[%s.offset + %s] = %s) : go$throwRuntimeError("index out of range");`, indexVar, indexVar, sliceVar, sliceVar, sliceVar, indexVar, rhs)
+			return c.formatExpr(`(%2f >= 0 && %2f < %1e.length) ? %1e.array[%1e.offset + %2f] = %3s : go$throwRuntimeError("index out of range")`, l.X, l.Index, rhs).String() + ";"
 		case *types.Map:
 			keyVar := c.newVariable("_key")
 			return fmt.Sprintf(`%s = %s; (%s || go$throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s };`, keyVar, c.translateImplicitConversion(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)

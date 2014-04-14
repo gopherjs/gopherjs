@@ -417,9 +417,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Array, *types.Pointer:
 			return c.formatExpr("%e[%f]", e.X, e.Index)
 		case *types.Slice:
-			sliceVar := c.newVariable("_slice")
-			indexVar := c.newVariable("_index")
-			return c.formatExpr(`(%s = %e, %s = %f, (%s >= 0 && %s < %s.length) ? %s.array[%s.offset + %s] : go$throwRuntimeError("index out of range"))`, sliceVar, e.X, indexVar, e.Index, indexVar, indexVar, sliceVar, sliceVar, sliceVar, indexVar)
+			return c.formatExpr(`((%2f >= 0 && %2f < %1e.length) ? %1e.array[%1e.offset + %2f] : go$throwRuntimeError("index out of range"))`, e.X, e.Index)
 		case *types.Map:
 			key := c.makeKey(e.Index, t.Key())
 			if _, isTuple := exprType.(*types.Tuple); isTuple {

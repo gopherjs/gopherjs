@@ -1157,12 +1157,11 @@ var go$errorStack = [], go$jsErr = null;
 
 var go$pushErr = function(err) {
 	if (err.go$panicValue === undefined) {
-		var jsPkg = go$packages["github.com/gopherjs/gopherjs/js"];
-		if (err.go$exit || err.go$notSupported || jsPkg === undefined) {
+		if (err.go$exit || err.go$notSupported) {
 			go$jsErr = err;
 			return;
 		}
-		err.go$panicValue = new jsPkg.Error.Ptr(err);
+		err.go$panicValue = new go$packages["github.com/gopherjs/gopherjs/js"].Error.Ptr(err);
 	}
 	go$errorStack.push({ frame: go$getStackDepth(), error: err });
 };

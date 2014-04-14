@@ -177,7 +177,7 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 	archive := &Archive{
 		ImportPath:   importPath,
 		GcData:       gcData.Bytes(),
-		Dependencies: []string{"runtime"}, // all packages depend on runtime
+		Dependencies: []string{"github.com/gopherjs/gopherjs/js", "runtime"}, // all packages depend on those
 		FileSet:      encodedFileSet.Bytes(),
 	}
 

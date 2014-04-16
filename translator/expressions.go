@@ -417,7 +417,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Array, *types.Pointer:
 			return c.formatExpr("%e[%f]", e.X, e.Index)
 		case *types.Slice:
-			return c.formatExpr(`((%2f >= 0 && %2f < %1e.length) ? %1e.array[%1e.offset + %2f] : go$throwRuntimeError("index out of range"))`, e.X, e.Index)
+			return c.formatExpr(`((%2f < 0 || %2f >= %1e.length) ? go$throwRuntimeError("index out of range") : %1e.array[%1e.offset + %2f])`, e.X, e.Index)
 		case *types.Map:
 			key := c.makeKey(e.Index, t.Key())
 			if _, isTuple := exprType.(*types.Tuple); isTuple {

@@ -411,19 +411,19 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			c.Printf("%s", out)
 		case len(s.Lhs) == len(s.Rhs):
-			parts := make([]string, len(s.Rhs))
+			tmpVars := make([]string, len(s.Rhs))
+			var parts []string
 			for i, rhs := range s.Rhs {
-				parts[i] = c.translateImplicitConversion(rhs, c.p.info.Types[s.Lhs[i]].Type).String()
+				tmpVars[i] = c.newVariable("_tmp")
+				parts = append(parts, fmt.Sprintf("%s = %s;", tmpVars[i], c.translateImplicitConversion(rhs, c.p.info.Types[s.Lhs[i]].Type).String()))
 			}
-			tupleVar := c.newVariable("_tuple")
-			out := tupleVar + " = [" + strings.Join(parts, ", ") + "];"
 			for i, lhs := range s.Lhs {
 				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
-					out += " " + c.translateAssign(lhs, fmt.Sprintf("%s[%d]", tupleVar, i))
+					parts = append(parts, c.translateAssign(lhs, tmpVars[i]))
 				}
 			}
-			c.Printf("%s", out)
+			c.Printf("%s", strings.Join(parts, " "))
 
 		default:
 			panic("Invalid arity of AssignStmt.")

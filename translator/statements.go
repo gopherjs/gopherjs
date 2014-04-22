@@ -370,7 +370,11 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		if s.Tok == token.DEFINE {
 			for _, lhs := range s.Lhs {
 				if !isBlank(lhs) {
-					c.p.info.Types[lhs] = types.TypeAndValue{Type: c.p.info.Defs[lhs.(*ast.Ident)].Type()}
+					obj := c.p.info.Defs[lhs.(*ast.Ident)]
+					if obj == nil {
+						obj = c.p.info.Uses[lhs.(*ast.Ident)]
+					}
+					c.p.info.Types[lhs] = types.TypeAndValue{Type: obj.Type()}
 				}
 			}
 		}

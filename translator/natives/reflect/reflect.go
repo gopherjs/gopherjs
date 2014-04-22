@@ -70,17 +70,19 @@ func zeroVal(typ Type) js.Object {
 	}
 }
 
-func makeIndir(t Type, v js.Object) iword {
-	rt := t.(*rtype)
-	if rt.size > 4 {
-		return iword(js.Global.Call("go$newDataPointer", v, jsType(rt.ptrTo())).Unsafe())
+func makeIword(t Type, v js.Object) iword {
+	if t.Size() > ptrSize && t.Kind() != Array && t.Kind() != Struct {
+		return iword(js.Global.Call("go$newDataPointer", v, jsType(PtrTo(t))).Unsafe())
 	}
 	return iword(v.Unsafe())
 }
 
-func makeIndirValue(t Type, v js.Object) Value {
+func makeValue(t Type, v js.Object, fl flag) Value {
 	rt := t.(*rtype)
-	return Value{rt, unsafe.Pointer(js.Global.Call("go$newDataPointer", v, jsType(rt.ptrTo())).Unsafe()), flagIndir | flag(t.Kind())<<flagKindShift}
+	if t.Size() > ptrSize && t.Kind() != Array && t.Kind() != Struct {
+		return Value{rt, unsafe.Pointer(js.Global.Call("go$newDataPointer", v, jsType(rt.ptrTo())).Unsafe()), fl | flag(t.Kind())<<flagKindShift | flagIndir}
+	}
+	return Value{rt, unsafe.Pointer(v.Unsafe()), fl | flag(t.Kind())<<flagKindShift}
 }
 
 func MakeSlice(typ Type, len, cap int) Value {
@@ -97,7 +99,7 @@ func MakeSlice(typ Type, len, cap int) Value {
 		panic("reflect.MakeSlice: len > cap")
 	}
 
-	return makeIndirValue(typ, jsType(typ).Call("make", len, cap, func() js.Object { return zeroVal(typ.Elem()) }))
+	return makeValue(typ, jsType(typ).Call("make", len, cap, func() js.Object { return zeroVal(typ.Elem()) }), 0)
 }
 
 func jsObject() *rtype {
@@ -123,11 +125,7 @@ func ValueOf(i interface{}) Value {
 	if c.Get("kind").IsUndefined() { // js.Object
 		return Value{jsObject(), unsafe.Pointer(js.InternalObject(i).Unsafe()), flag(Interface) << flagKindShift}
 	}
-	typ := reflectType(c)
-	if typ.Kind() != Array && typ.Kind() != Struct && typ.Size() > ptrSize {
-		return makeIndirValue(typ, js.InternalObject(i).Get("go$val"))
-	}
-	return Value{typ, unsafe.Pointer(js.InternalObject(i).Get("go$val").Unsafe()), flag(typ.Kind()) << flagKindShift}
+	return makeValue(reflectType(c), js.InternalObject(i).Get("go$val"), 0)
 }
 
 func arrayOf(count int, elem Type) Type {
@@ -212,7 +210,7 @@ func mapaccess(t *rtype, m iword, key iword) (val iword, ok bool) {
 	if entry.IsUndefined() {
 		return nil, false
 	}
-	return makeIndir(t.Elem(), entry.Get("v")), true
+	return makeIword(t.Elem(), entry.Get("v")), true
 }
 
 func mapassign(t *rtype, m iword, key, val iword, ok bool) {
@@ -250,9 +248,9 @@ func mapiterinit(t *rtype, m iword) *byte {
 func mapiterkey(it *byte) (key iword, ok bool) {
 	iter := js.InternalObject(it)
 	k := iter.Get("keys").Index(iter.Get("i").Int())
-	return makeIndir(iter.Get("t").Interface().(*rtype).Key(), iter.Get("m").Get(k.Str()).Get("k")), true
+	return makeIword(iter.Get("t").Interface().(*rtype).Key(), iter.Get("m").Get(k.Str()).Get("k")), true
 	// k := iter.keys.Index(iter.i)
-	// return makeIndir(iter.t.Key(), iter.m.G
+	// return makeIword(iter.t.Key(), iter.m.G
 }
 
 func mapiternext(it *byte) {
@@ -289,6 +287,31 @@ func (v Value) Cap() int {
 		return js.InternalObject(v.iword()).Get("capacity").Int()
 	}
 	panic(&ValueError{"reflect.Value.Cap", k})
+}
+
+func (v Value) Elem() Value {
+	switch k := v.kind(); k {
+	case Interface:
+		val := js.InternalObject(v.iword())
+		if val.IsNull() {
+			return Value{}
+		}
+		typ := reflectType(val.Get("constructor"))
+		return makeValue(typ, val.Get("go$val"), v.flag&flagRO)
+
+	case Ptr:
+		if v.IsNil() {
+			return Value{}
+		}
+		val := v.iword()
+		tt := (*ptrType)(unsafe.Pointer(v.typ))
+		fl := v.flag&flagRO | flagIndir | flagAddr
+		fl |= flag(tt.elem.Kind()) << flagKindShift
+		return Value{tt.elem, unsafe.Pointer(val), fl}
+
+	default:
+		panic(&ValueError{"reflect.Value.Elem", k})
+	}
 }
 
 func (v Value) IsNil() bool {
@@ -334,4 +357,75 @@ func (v Value) Pointer() uintptr {
 	default:
 		panic(&ValueError{"reflect.Value.Pointer", k})
 	}
+}
+
+func (v Value) Slice(i, j int) Value {
+	var (
+		cap int
+		typ Type
+		s   js.Object
+	)
+	switch kind := v.kind(); kind {
+	case Array:
+		if v.flag&flagAddr == 0 {
+			panic("reflect.Value.Slice: slice of unaddressable array")
+		}
+		tt := (*arrayType)(unsafe.Pointer(v.typ))
+		cap = int(tt.len)
+		typ = SliceOf(tt.elem)
+		s = jsType(typ).New(v.iword())
+
+	case Slice:
+		typ = v.typ
+		s = js.InternalObject(v.iword())
+		cap = s.Get("capacity").Int()
+
+	case String:
+		str := *(*string)(v.val)
+		if i < 0 || j < i || j > len(str) {
+			panic("reflect.Value.Slice: string slice index out of bounds")
+		}
+		return ValueOf(str[i:j])
+
+	default:
+		panic(&ValueError{"reflect.Value.Slice", kind})
+	}
+
+	if i < 0 || j < i || j > cap {
+		panic("reflect.Value.Slice: slice index out of bounds")
+	}
+
+	return makeValue(typ, js.Global.Call("go$subslice", s, i, j), v.flag&flagRO)
+}
+
+func (v Value) Slice3(i, j, k int) Value {
+	var (
+		cap int
+		typ Type
+		s   js.Object
+	)
+	switch kind := v.kind(); kind {
+	case Array:
+		if v.flag&flagAddr == 0 {
+			panic("reflect.Value.Slice: slice of unaddressable array")
+		}
+		tt := (*arrayType)(unsafe.Pointer(v.typ))
+		cap = int(tt.len)
+		typ = SliceOf(tt.elem)
+		s = jsType(typ).New(v.iword())
+
+	case Slice:
+		typ = v.typ
+		s = js.InternalObject(v.iword())
+		cap = s.Get("capacity").Int()
+
+	default:
+		panic(&ValueError{"reflect.Value.Slice3", kind})
+	}
+
+	if i < 0 || j < i || k < j || k > cap {
+		panic("reflect.Value.Slice3: slice index out of bounds")
+	}
+
+	return makeValue(typ, js.Global.Call("go$subslice", s, i, j, k), v.flag&flagRO)
 }

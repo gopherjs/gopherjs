@@ -262,6 +262,37 @@ func maplen(m iword) int {
 	return js.Global.Call("go$keys", m).Length()
 }
 
+func Copy(dst, src Value) int {
+	dk := dst.kind()
+	if dk != Array && dk != Slice {
+		panic(&ValueError{"reflect.Copy", dk})
+	}
+	if dk == Array {
+		dst.mustBeAssignable()
+	}
+	dst.mustBeExported()
+
+	sk := src.kind()
+	if sk != Array && sk != Slice {
+		panic(&ValueError{"reflect.Copy", sk})
+	}
+	src.mustBeExported()
+
+	typesMustMatch("reflect.Copy", dst.typ.Elem(), src.typ.Elem())
+
+	dstVal := js.InternalObject(dst.iword())
+	if dk == Array {
+		dstVal = jsType(SliceOf(dst.typ.Elem())).New(dstVal)
+	}
+
+	srcVal := js.InternalObject(src.iword())
+	if sk == Array {
+		srcVal = jsType(SliceOf(src.typ.Elem())).New(srcVal)
+	}
+
+	return js.Global.Call("go$copySlice", dstVal, srcVal).Int()
+}
+
 func (v Value) iword() iword {
 	if v.flag&flagIndir != 0 && v.typ.Kind() != Array && v.typ.Kind() != Struct {
 		val := js.InternalObject(v.val).Call("go$get")
@@ -357,6 +388,34 @@ func (v Value) Pointer() uintptr {
 	default:
 		panic(&ValueError{"reflect.Value.Pointer", k})
 	}
+}
+
+func (v Value) SetCap(n int) {
+	v.mustBeAssignable()
+	v.mustBe(Slice)
+	s := js.InternalObject(v.val).Call("go$get")
+	if n < s.Length() || n > s.Get("capacity").Int() {
+		panic("reflect: slice capacity out of range in SetCap")
+	}
+	newSlice := jsType(v.typ).New(s.Get("array"))
+	newSlice.Set("offset", s.Get("offset"))
+	newSlice.Set("length", s.Get("length"))
+	newSlice.Set("capacity", n)
+	js.InternalObject(v.val).Call("go$set", newSlice)
+}
+
+func (v Value) SetLen(n int) {
+	v.mustBeAssignable()
+	v.mustBe(Slice)
+	s := js.InternalObject(v.val).Call("go$get")
+	if n < 0 || n > s.Get("capacity").Int() {
+		panic("reflect: slice length out of range in SetLen")
+	}
+	newSlice := jsType(v.typ).New(s.Get("array"))
+	newSlice.Set("offset", s.Get("offset"))
+	newSlice.Set("length", n)
+	newSlice.Set("capacity", s.Get("capacity"))
+	js.InternalObject(v.val).Call("go$set", newSlice)
 }
 
 func (v Value) Slice(i, j int) Value {

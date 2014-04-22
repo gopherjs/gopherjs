@@ -316,34 +316,6 @@ func init() {
 		"methodName": `function() {
 			return "?FIXME?";
 		}`,
-		"Copy": `function(dst, src) {
-			var dk = dst.kind();
-			if (dk !== Array && dk !== Slice) {
-				throw go$panic(new ValueError.Ptr("reflect.Copy", dk));
-			}
-			if (dk === Array) {
-				dst.mustBeAssignable();
-			}
-			dst.mustBeExported();
-
-			var sk = src.kind();
-			if (sk !== Array && sk != Slice) {
-				throw go$panic(new ValueError.Ptr("reflect.Copy", sk));
-			}
-			src.mustBeExported();
-
-			typesMustMatch("reflect.Copy", dst.typ.Elem(), src.typ.Elem());
-
-			var dstVal = dst.iword();
-			if (dk === Array) {
-				dstVal = new (go$sliceType(dst.typ.Elem().jsType))(dstVal);
-			}
-			var srcVal = src.iword();
-			if (sk === Array) {
-				srcVal = new (go$sliceType(src.typ.Elem().jsType))(srcVal);
-			}
-			return go$copySlice(dstVal, srcVal);
-		}`,
 
 		"uncommonType.Method": `function(i) {
 			if (this === uncommonType.Ptr.nil || i < 0 || i >= this.methods.length) {
@@ -533,32 +505,6 @@ func init() {
 				}
 			}
 			this.val = x.val;
-		}`,
-		"Value.SetCap": `function(n) {
-			this.mustBeAssignable();
-			this.mustBe(Slice);
-			var s = this.val.go$get();
-			if (n < s.length || n > s.capacity) {
-				throw go$panic(new Go$String("reflect: slice capacity out of range in SetCap"));
-			}
-			var newSlice = new this.typ.jsType(s.array);
-			newSlice.offset = s.offset;
-			newSlice.length = s.length;
-			newSlice.capacity = n;
-			this.val.go$set(newSlice);
-		}`,
-		"Value.SetLen": `function(n) {
-			this.mustBeAssignable();
-			this.mustBe(Slice);
-			var s = this.val.go$get();
-			if (n < 0 || n > s.capacity) {
-				throw go$panic(new Go$String("reflect: slice length out of range in SetLen"));
-			}
-			var newSlice = new this.typ.jsType(s.array);
-			newSlice.offset = s.offset;
-			newSlice.length = n;
-			newSlice.capacity = s.capacity;
-			this.val.go$set(newSlice);
 		}`,
 		"DeepEqual": `function(a1, a2) {
 			if (a1 === a2) {

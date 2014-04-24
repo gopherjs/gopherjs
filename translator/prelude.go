@@ -814,11 +814,12 @@ var go$needsExternalization = function(t) {
 		case "Uint64":
 		case "Array":
 		case "Func":
-		case "Interface":
 		case "Map":
 		case "Slice":
 		case "String":
 			return true;
+		case "Interface":
+			return t !== go$packages["github.com/gopherjs/gopherjs/js"].Object;
 		default:
 			return false;
 	}
@@ -879,8 +880,8 @@ var go$externalize = function(v, t) {
 		if (v === null) {
 			return null;
 		}
-		if (v.constructor.kind === undefined) {
-			return v; // js.Object
+		if (t === go$packages["github.com/gopherjs/gopherjs/js"].Object || v.constructor.kind === undefined) {
+			return v;
 		}
 		return go$externalize(v.go$val, v.constructor);
 	case "Map":

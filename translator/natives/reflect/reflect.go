@@ -345,6 +345,77 @@ func (v Value) Elem() Value {
 	}
 }
 
+func (v Value) Field(i int) Value {
+	v.mustBe(Struct)
+	tt := (*structType)(unsafe.Pointer(v.typ))
+	if i < 0 || i >= len(tt.fields) {
+		panic("reflect: Field index out of range")
+	}
+
+	field := &tt.fields[i]
+	name := jsType(v.typ).Get("fields").Index(i).Index(0).Str()
+	typ := field.typ
+
+	fl := v.flag & (flagRO | flagIndir | flagAddr)
+	if field.pkgPath != nil {
+		fl |= flagRO
+	}
+	fl |= flag(typ.Kind()) << flagKindShift
+
+	s := js.InternalObject(v.val)
+	if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
+		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return s.Get(name) }, func(v js.Object) { s.Set(name, v) }).Unsafe()), fl}
+	}
+	return makeValue(typ, s.Get(name), fl)
+}
+
+func (v Value) Index(i int) Value {
+	switch k := v.kind(); k {
+	case Array:
+		tt := (*arrayType)(unsafe.Pointer(v.typ))
+		if i < 0 || i > int(tt.len) {
+			panic("reflect: array index out of range")
+		}
+		typ := tt.elem
+		fl := v.flag & (flagRO | flagIndir | flagAddr)
+		fl |= flag(typ.Kind()) << flagKindShift
+
+		a := js.InternalObject(v.val)
+		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
+			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return a.Index(i) }, func(v js.Object) { a.SetIndex(i, v) }).Unsafe()), fl}
+		}
+		return makeValue(typ, a.Index(i), fl)
+
+	case Slice:
+		s := js.InternalObject(v.iword())
+		if i < 0 || i >= s.Length() {
+			panic("reflect: slice index out of range")
+		}
+		tt := (*sliceType)(unsafe.Pointer(v.typ))
+		typ := tt.elem
+		fl := flagAddr | flagIndir | v.flag&flagRO
+		fl |= flag(typ.Kind()) << flagKindShift
+
+		i += s.Get("offset").Int()
+		a := s.Get("array")
+		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
+			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return a.Index(i) }, func(v js.Object) { a.SetIndex(i, v) }).Unsafe()), fl}
+		}
+		return makeValue(typ, a.Index(i), fl)
+
+	case String:
+		str := *(*string)(v.val)
+		if i < 0 || i >= len(str) {
+			panic("reflect: string index out of range")
+		}
+		fl := v.flag&flagRO | flag(Uint8<<flagKindShift)
+		return Value{uint8Type, unsafe.Pointer(uintptr(str[i])), fl}
+
+	default:
+		panic(&ValueError{"reflect.Value.Index", k})
+	}
+}
+
 func (v Value) IsNil() bool {
 	switch k := v.kind(); k {
 	case Chan, Ptr, Slice:

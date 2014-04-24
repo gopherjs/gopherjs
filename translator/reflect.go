@@ -426,65 +426,6 @@ func init() {
 			}
 			return new (go$sliceType(Value))(results);
 		}`,
-		"Value.Field": `function(i) {
-			this.mustBe(Struct);
-			var tt = this.typ.structType;
-			if (i < 0 || i >= tt.fields.length) {
-				throw go$panic(new Go$String("reflect: Field index out of range"));
-			}
-			var field = tt.fields.array[i];
-			var name = this.typ.jsType.fields[i][0];
-			var typ = field.typ;
-			var fl = this.flag & (flagRO | flagIndir | flagAddr);
-			if (field.pkgPath.go$get !== go$throwNilPointerError) {
-				fl |= flagRO;
-			}
-			fl |= typ.Kind() << flagKindShift;
-			if (((this.flag & flagIndir) !== 0 || typ.Size() > ptrSize) && typ.Kind() !== Array && typ.Kind() !== Struct) {
-				var struct = this.val;
-				return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return struct[name]; }, function(v) { struct[name] = v; }), fl | flagIndir);
-			}
-			return new Value.Ptr(typ, this.val[name], fl);
-		}`,
-		"Value.Index": `function(i) {
-			var k = this.kind();
-			switch (k) {
-			case Array:
-				var tt = this.typ.arrayType;
-				if (i < 0 || i >= tt.len) {
-					throw go$panic(new Go$String("reflect: array index out of range"));
-				}
-				var typ = tt.elem;
-				var fl = this.flag & (flagRO | flagIndir | flagAddr);
-				fl |= typ.Kind() << flagKindShift;
-				if (((this.flag & flagIndir) !== 0 || typ.Size() > ptrSize) && typ.Kind() !== Array && typ.Kind() !== Struct) {
-					var array = this.val;
-					return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return array[i]; }, function(v) { array[i] = v; }), fl | flagIndir);
-				}
-				return new Value.Ptr(typ, this.iword()[i], fl);
-			case Slice:
-				if (i < 0 || i >= this.iword().length) {
-					throw go$panic(new Go$String("reflect: slice index out of range"));
-				}
-				var typ = this.typ.sliceType.elem;
-				var fl = flagAddr | flagIndir | (this.flag & flagRO);
-				fl |= typ.Kind() << flagKindShift;
-				i += this.iword().offset;
-				var array = this.iword().array;
-				if (typ.Kind() === Struct) {
-					return new Value.Ptr(typ, array[i], fl);
-				}
-				return new Value.Ptr(typ, new (go$ptrType(typ.jsType))(function() { return array[i]; }, function(v) { array[i] = v; }), fl);
-			case String:
-				var string = this.iword();
-				if (i < 0 || i >= string.length) {
-					throw go$panic(new Go$String("reflect: string index out of range"));
-				}
-				var fl = (this.flag & flagRO) | (Uint8 << flagKindShift);
-				return new Value.Ptr(uint8Type, string.charCodeAt(i), fl);
-			}
-			throw go$panic(new ValueError.Ptr("reflect.Value.Index", k));
-		}`,
 		"Value.Set": `function(x) {
 			this.mustBeAssignable();
 			x.mustBeExported();

@@ -519,6 +519,11 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						return c.formatExpr("go$this")
 					}
 					return c.formatExpr("this")
+				case "Arguments":
+					if c.flattened {
+						return c.formatExpr("go$args")
+					}
+					return c.formatExpr("arguments")
 				default:
 					panic("Invalid js package object: " + sel.Obj().Name())
 				}

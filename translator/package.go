@@ -586,7 +586,7 @@ func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte
 	}
 	c.localVars = nil
 	if c.flattened {
-		c.localVars = append(c.localVars, "go$this = this")
+		c.localVars = append(c.localVars, "go$this = this", "go$args = arguments")
 	}
 
 	body := c.CatchOutput(indent, func() {

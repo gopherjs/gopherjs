@@ -98,6 +98,9 @@ var Global Object
 // This gives the value of JavaScript's "this" keyword. It can be used when passing Go functions to JavaScript as callbacks. Set this to a mock for testing with pure Go.
 var This Object
 
+// This gives the value of JavaScript's "arguments" keyword. It can be used when passing Go functions to JavaScript as callbacks. Set this to a mock for testing with pure Go.
+var Arguments Object
+
 // Returns the internal JavaScript object that represents i. Not intended for public use.
 func InternalObject(i interface{}) Object {
 	return nil

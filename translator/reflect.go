@@ -141,63 +141,6 @@ func init() {
 		`,
 		"toplevelDependencies": `reflect:rtype reflect:uncommonType reflect:method reflect:arrayType reflect:chanType reflect:funcType reflect:interfaceType reflect:mapType reflect:ptrType reflect:sliceType reflect:structType reflect:imethod reflect:structField reflect:methodReceiver reflect:ValueOf reflect:SliceOf reflect:MakeSlice reflect:valueInterface reflect:makeMethodValue reflect:methodReceiver reflect:typesMustMatch reflect:mustBeAssignable reflect:mustBeExported reflect:mustBe reflect:assignTo`,
 
-		"makeComplex": `function(f, v, typ) {
-			return new Value.Ptr(typ, new typ.jsType(v.real, v.imag), f | (typ.Kind() << flagKindShift));
-		}`,
-		"MakeFunc": `function(typ, fn) {
-			var fv = function() {
-				var args = new Go$Array(typ.NumIn()), i;
-				for (i = 0; i < typ.NumIn(); i++) {
-					var t = typ.In(i);
-					args[i] = new Value.Ptr(t, arguments[i], t.Kind() << flagKindShift);
-				}
-				var resultsSlice = fn(new (go$sliceType(Value.Ptr))(args));
-				switch (typ.NumOut()) {
-				case 0:
-					return;
-				case 1:
-					return resultsSlice.array[resultsSlice.offset].iword();
-				default:
-					var results = new Go$Array(typ.NumOut());
-					for (i = 0; i < typ.NumOut(); i++) {
-						results[i] = resultsSlice.array[resultsSlice.offset + i].iword();
-					}
-					return results;
-				}
-			}
-		  return new Value.Ptr(typ, fv, Func << flagKindShift);
-		}`,
-		"makeInt": `function(f, bits, typ) {
-			var val;
-			switch (typ.Kind()) {
-			case Int8:
-				val = bits.low << 24 >> 24;
-				break;
-			case Int16:
-				val = bits.low << 16 >> 16;
-				break;
-			case Int:
-			case Int32:
-				val = bits.low >> 0;
-				break;
-			case Int64:
-				return new Value.Ptr(typ, go$newDataPointer(new Go$Int64(bits.high, bits.low), typ.ptrTo().jsType), f | flagIndir | (Int64 << flagKindShift));
-			case Uint8:
-				val = bits.low << 24 >>> 24;
-				break;
-			case Uint16:
-				val = bits.low << 16 >>> 16;
-				break;
-			case Uint64:
-				return new Value.Ptr(typ, go$newDataPointer(bits, typ.ptrTo().jsType), f | flagIndir | (Int64 << flagKindShift));
-			case Uint:
-			case Uint32:
-			case Uintptr:
-				val = bits.low >>> 0;
-				break;
-			}
-			return new Value.Ptr(typ, val, f | (typ.Kind() << flagKindShift));
-		}`,
 		"cvtDirect": `function(v, typ) {
 			var srcVal = v.iword();
 			if (srcVal === v.typ.jsType.nil) {
@@ -425,27 +368,6 @@ func init() {
 				results[i] = new Value.Ptr(typ, results[i], flag);
 			}
 			return new (go$sliceType(Value))(results);
-		}`,
-		"Value.Set": `function(x) {
-			this.mustBeAssignable();
-			x.mustBeExported();
-			if ((this.flag & flagIndir) !== 0) {
-				switch (this.typ.Kind()) {
-				case Array:
-					go$copyArray(this.val, x.val);
-					return;
-				case Interface:
-					this.val.go$set(valueInterface(x, false));
-					return;
-				case Struct:
-					copyStruct(this.val, x.val, this.typ);
-					return;
-				default:
-					this.val.go$set(x.iword());
-					return;
-				}
-			}
-			this.val = x.val;
 		}`,
 		"DeepEqual": `function(a1, a2) {
 			if (a1 === a2) {

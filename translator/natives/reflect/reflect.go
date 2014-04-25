@@ -168,6 +168,64 @@ func unsafe_New(typ *rtype) unsafe.Pointer {
 	}
 }
 
+func makeInt(f flag, bits uint64, t Type) Value {
+	typ := t.common()
+	if typ.size > ptrSize {
+		// Assume ptrSize >= 4, so this must be uint64.
+		ptr := unsafe_New(typ)
+		*(*uint64)(unsafe.Pointer(ptr)) = bits
+		return Value{typ, ptr, f | flagIndir | flag(typ.Kind())<<flagKindShift}
+	}
+	var w iword
+	switch typ.Kind() {
+	case Int8:
+		*(*int8)(unsafe.Pointer(&w)) = int8(bits)
+	case Int16:
+		*(*int16)(unsafe.Pointer(&w)) = int16(bits)
+	case Int, Int32:
+		*(*int32)(unsafe.Pointer(&w)) = int32(bits)
+	case Uint8:
+		*(*uint8)(unsafe.Pointer(&w)) = uint8(bits)
+	case Uint16:
+		*(*uint16)(unsafe.Pointer(&w)) = uint16(bits)
+	case Uint, Uint32, Uintptr:
+		*(*uint32)(unsafe.Pointer(&w)) = uint32(bits)
+	}
+	return Value{typ, unsafe.Pointer(w), f | flag(typ.Kind())<<flagKindShift}
+}
+
+func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
+	if typ.Kind() != Func {
+		panic("reflect: call of MakeFunc with non-Func type")
+	}
+
+	t := typ.common()
+	ftyp := (*funcType)(unsafe.Pointer(t))
+
+	fv := func() js.Object {
+		args := make([]Value, ftyp.NumIn())
+		for i := range args {
+			argType := ftyp.In(i).common()
+			args[i] = Value{argType, unsafe.Pointer(js.Arguments.Index(i).Unsafe()), flag(argType.Kind()) << flagKindShift}
+		}
+		resultsSlice := fn(args)
+		switch ftyp.NumOut() {
+		case 0:
+			return nil
+		case 1:
+			return js.InternalObject(resultsSlice[0].iword())
+		default:
+			results := js.Global.Get("Array").New(ftyp.NumOut())
+			for i, r := range resultsSlice {
+				results.SetIndex(i, js.InternalObject(r.iword()))
+			}
+			return results
+		}
+	}
+
+	return Value{t, unsafe.Pointer(js.InternalObject(fv).Unsafe()), flag(Func) << flagKindShift}
+}
+
 func makechan(typ *rtype, size uint64) (ch iword) {
 	return iword(jsType(typ).New().Unsafe())
 }
@@ -459,6 +517,25 @@ func (v Value) Pointer() uintptr {
 	default:
 		panic(&ValueError{"reflect.Value.Pointer", k})
 	}
+}
+
+func (v Value) Set(x Value) {
+	v.mustBeAssignable()
+	x.mustBeExported()
+	if v.flag&flagIndir != 0 {
+		switch v.typ.Kind() {
+		case Array:
+			js.Global.Call("go$copyArray", v.val, x.val)
+		case Interface:
+			js.InternalObject(v.val).Call("go$set", js.InternalObject(valueInterface(x, false)))
+		case Struct:
+			copyStruct(js.InternalObject(v.val), js.InternalObject(x.val), v.typ)
+		default:
+			js.InternalObject(v.val).Call("go$set", x.iword())
+		}
+		return
+	}
+	v.val = x.val
 }
 
 func (v Value) SetCap(n int) {

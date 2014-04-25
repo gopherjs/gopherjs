@@ -60,7 +60,7 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 		t.common.duration = time.Now().Sub(t.common.start)
 		t.report()
 		if err != nil {
-			panic(err)
+			throw.Invoke(err)
 		}
 		ok = ok && !t.common.failed
 	}
@@ -83,4 +83,8 @@ var runTest = js.Global.Call("eval", `(function(f, t) {
 	} catch (e) {
 		return e;
 	}
+})`)
+
+var throw = js.Global.Call("eval", `(function(err) {
+	throw err;
 })`)

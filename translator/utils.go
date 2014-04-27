@@ -76,25 +76,26 @@ func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellip
 	return params
 }
 
-func (c *funcContext) translateSelection(sel *types.Selection) (fields []string, jsTag string) {
+func (c *funcContext) translateSelection(sel *types.Selection) ([]string, string) {
+	var fields []string
 	t := sel.Recv()
 	for _, index := range sel.Index() {
 		if ptr, isPtr := t.(*types.Pointer); isPtr {
 			t = ptr.Elem()
 		}
 		s := t.Underlying().(*types.Struct)
-		if jsTag = getJsTag(s.Tag(index)); jsTag != "" {
+		if jsTag := getJsTag(s.Tag(index)); jsTag != "" {
 			for i := 0; i < s.NumFields(); i++ {
 				if isJsObject(s.Field(i).Type()) {
 					fields = append(fields, fieldName(s, i))
-					return
+					return fields, jsTag
 				}
 			}
 		}
 		fields = append(fields, fieldName(s, index))
 		t = s.Field(index).Type()
 	}
-	return
+	return fields, ""
 }
 
 func (c *funcContext) zeroValue(ty types.Type) string {

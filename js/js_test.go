@@ -221,6 +221,15 @@ func TestThis(t *testing.T) {
 	dummys.Call("testThis")
 }
 
+func TestArguments(t *testing.T) {
+	dummys.Set("testArguments", func() {
+		if js.Arguments.Length() != 3 || js.Arguments.Index(1).Int() != 1 {
+			t.Fail()
+		}
+	})
+	dummys.Call("testArguments", 0, 1, 2)
+}
+
 func TestError(t *testing.T) {
 	defer func() {
 		err := recover()

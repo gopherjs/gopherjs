@@ -520,10 +520,12 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					}
 					return c.formatExpr("this")
 				case "Arguments":
+					args := "arguments"
 					if c.flattened {
-						return c.formatExpr("go$args")
+						args = "go$args"
 					}
-					return c.formatExpr("arguments")
+
+					return c.formatExpr(`new (go$sliceType(%s.Object))(go$global.Array.prototype.slice.call(%s))`, c.p.pkgVars["github.com/gopherjs/gopherjs/js"], args)
 				default:
 					panic("Invalid js package object: " + sel.Obj().Name())
 				}

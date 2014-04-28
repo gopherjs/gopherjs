@@ -223,7 +223,7 @@ func TestThis(t *testing.T) {
 
 func TestArguments(t *testing.T) {
 	dummys.Set("testArguments", func() {
-		if js.Arguments.Length() != 3 || js.Arguments.Index(1).Int() != 1 {
+		if len(js.Arguments) != 3 || js.Arguments[1].Int() != 1 {
 			t.Fail()
 		}
 	})

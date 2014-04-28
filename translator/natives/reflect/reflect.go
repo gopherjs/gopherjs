@@ -206,7 +206,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 		args := make([]Value, ftyp.NumIn())
 		for i := range args {
 			argType := ftyp.In(i).common()
-			args[i] = Value{argType, unsafe.Pointer(js.Arguments.Index(i).Unsafe()), flag(argType.Kind()) << flagKindShift}
+			args[i] = Value{argType, unsafe.Pointer(js.Arguments[i].Unsafe()), flag(argType.Kind()) << flagKindShift}
 		}
 		resultsSlice := fn(args)
 		switch ftyp.NumOut() {

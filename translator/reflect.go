@@ -188,12 +188,6 @@ func init() {
 			}
 			return new Value.Ptr(typ, val, (v.flag & (flagRO | flagIndir)) | (typ.Kind() << flagKindShift));
 		}`,
-		"cvtStringBytes": `function(v, typ) {
-			return new Value.Ptr(typ, new typ.jsType(go$stringToBytes(v.iword())), (v.flag & flagRO) | (Slice << flagKindShift));
-		}`,
-		"cvtStringRunes": `function(v, typ) {
-			return new Value.Ptr(typ, new typ.jsType(go$stringToRunes(v.iword())), (v.flag & flagRO) | (Slice << flagKindShift));
-		}`,
 		"valueInterface": `function(v, safe) {
 			if (v.flag === 0) {
 				throw go$panic(new ValueError.Ptr("reflect.Value.Interface", 0));
@@ -219,62 +213,6 @@ func init() {
 			var rcvr = tuple[2];
 			var fv = function() { return fn.apply(rcvr, arguments); };
 			return new Value.Ptr(v.Type(), fv, (v.flag & flagRO) | (Func << flagKindShift));
-		}`,
-		"methodReceiver": `function(op, v, i) {
-			var m, t, name;
-			if (v.typ.Kind() === Interface) {
-				var tt = v.typ.interfaceType;
-				if (i < 0 || i >= tt.methods.length) {
-					throw go$panic(new Go$String("reflect: internal error: invalid method index"));
-				}
-				if (v.IsNil()) {
-					throw go$panic(new Go$String("reflect: " + op + " of method on nil interface value"));
-				}
-				m = tt.methods.array[i];
-				t = m.typ;
-				name = m.name.go$get();
-			} else {
-				var ut = v.typ.uncommon();
-				if (ut === uncommonType.Ptr.nil || i < 0 || i >= ut.methods.length) {
-					throw go$panic(new Go$String("reflect: internal error: invalid method index"));
-				}
-				m = ut.methods.array[i];
-				t = m.mtyp;
-				name = v.typ.jsType.methods[i][0];
-			}
-			if (m.pkgPath.go$get !== go$throwNilPointerError) {
-				throw go$panic(new Go$String("reflect: " + op + " of unexported method"));
-			}
-			var rcvr = v.iword();
-			if (isWrapped(v.typ)) {
-				rcvr = new v.typ.jsType(rcvr);
-			}
-			return [t, rcvr[name], rcvr];
-		}`,
-		"ifaceE2I": `function(t, src, dst) {
-			dst.go$set(src);
-		}`,
-		"methodName": `function() {
-			return "?FIXME?";
-		}`,
-
-		"uncommonType.Method": `function(i) {
-			if (this === uncommonType.Ptr.nil || i < 0 || i >= this.methods.length) {
-				throw go$panic(new Go$String("reflect: Method index out of range"));
-			}
-			var p = this.methods.array[i];
-			var fl = Func << flagKindShift;
-			var pkgPath = "";
-			if (p.pkgPath.go$get !== go$throwNilPointerError) {
-				pkgPath = p.pkgPath.go$get();
-				fl |= flagRO;
-			}
-			var mt = p.typ;
-			var name = this.jsType.methods[i][0];
-			var fn = function(rcvr) {
-				return rcvr[name].apply(rcvr, Go$Array.prototype.slice.apply(arguments, [1]));
-			}
-			return new Method.Ptr(p.name.go$get(), pkgPath, mt, new Value.Ptr(mt, fn, fl), i);
 		}`,
 
 		"Value.call": `function(op, args) {

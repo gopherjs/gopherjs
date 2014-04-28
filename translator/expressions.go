@@ -377,6 +377,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				}
 				return c.formatExpr("(%s = %e, %s = %e, %s)", x, e.X, y, e.Y, strings.Join(conds, " && "))
 			case *types.Interface:
+				if isJsObject(t) {
+					return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
+				}
 				return c.formatExpr("go$interfaceIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 			case *types.Array:
 				return c.formatExpr("go$arrayIsEqual(%e, %e)", e.X, e.Y)

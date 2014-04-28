@@ -351,14 +351,94 @@ func Copy(dst, src Value) int {
 	return js.Global.Call("go$copySlice", dstVal, srcVal).Int()
 }
 
+func methodReceiver(op string, v Value, i int) (*rtype, unsafe.Pointer, iword) {
+	var t *rtype
+	var name string
+	if v.typ.Kind() == Interface {
+		tt := (*interfaceType)(unsafe.Pointer(v.typ))
+		if i < 0 || i >= len(tt.methods) {
+			panic("reflect: internal error: invalid method index")
+		}
+		if v.IsNil() {
+			panic("reflect: " + op + " of method on nil interface value")
+		}
+		m := &tt.methods[i]
+		if m.pkgPath != nil {
+			panic("reflect: " + op + " of unexported method")
+		}
+		t = m.typ
+		name = *m.name
+	} else {
+		ut := v.typ.uncommon()
+		if ut == nil || i < 0 || i >= len(ut.methods) {
+			panic("reflect: internal error: invalid method index")
+		}
+		m := &ut.methods[i]
+		if m.pkgPath != nil {
+			panic("reflect: " + op + " of unexported method")
+		}
+		t = m.mtyp
+		name = jsType(v.typ).Get("methods").Index(i).Index(0).Str()
+	}
+	rcvr := js.InternalObject(v.iword())
+	if isWrapped(v.typ) {
+		rcvr = jsType(v.typ).New(rcvr)
+	}
+	return t, unsafe.Pointer(rcvr.Get(name).Unsafe()), iword(rcvr.Unsafe())
+}
+
+func ifaceE2I(t *rtype, src interface{}, dst unsafe.Pointer) {
+	js.InternalObject(dst).Call("go$set", js.InternalObject(src))
+}
+
+func methodName() string {
+	return "?FIXME?"
+}
+
+func (t *uncommonType) Method(i int) (m Method) {
+	if t == nil || i < 0 || i >= len(t.methods) {
+		panic("reflect: Method index out of range")
+	}
+	p := &t.methods[i]
+	if p.name != nil {
+		m.Name = *p.name
+	}
+	fl := flag(Func) << flagKindShift
+	if p.pkgPath != nil {
+		m.PkgPath = *p.pkgPath
+		fl |= flagRO
+	}
+	mt := p.typ
+	m.Type = mt
+	name := js.InternalObject(t).Get("jsType").Get("methods").Index(i).Index(0).Str()
+	fn := func(rcvr js.Object) js.Object {
+		return rcvr.Get(name).Call("apply", rcvr, js.Arguments[1:])
+	}
+	m.Func = Value{mt, unsafe.Pointer(js.InternalObject(fn).Unsafe()), fl}
+	m.Index = i
+	return
+}
+
 func (v Value) iword() iword {
 	if v.flag&flagIndir != 0 && v.typ.Kind() != Array && v.typ.Kind() != Struct {
 		val := js.InternalObject(v.val).Call("go$get")
-		if v.typ.Kind() == Uint64 || v.typ.Kind() == Int64 {
-			val = jsType(v.typ).New(val.Get("high"), val.Get("low"))
-		}
-		if v.typ.Kind() == Complex64 || v.typ.Kind() == Complex128 {
-			val = jsType(v.typ).New(val.Get("real"), val.Get("imag"))
+		if !val.IsNull() && val.Get("constructor") != jsType(v.typ) {
+			switch v.typ.Kind() {
+			case Uint64, Int64:
+				val = jsType(v.typ).New(val.Get("high"), val.Get("low"))
+			case Complex64, Complex128:
+				val = jsType(v.typ).New(val.Get("real"), val.Get("imag"))
+			case Slice:
+				if val == val.Get("constructor").Get("nil") {
+					val = jsType(v.typ).Get("nil")
+					break
+				}
+				newVal := jsType(v.typ).New(val.Get("array"))
+				newVal.Set("offset", val.Get("offset"))
+				newVal.Set("length", val.Get("length"))
+				newVal.Set("capacity", val.Get("capacity"))
+				val = newVal
+			}
 		}
 		return iword(val.Unsafe())
 	}

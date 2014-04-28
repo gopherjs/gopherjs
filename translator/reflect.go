@@ -221,7 +221,7 @@ func init() {
 			return new Value.Ptr(v.Type(), fv, (v.flag & flagRO) | (Func << flagKindShift));
 		}`,
 		"methodReceiver": `function(op, v, i) {
-			var m, t;
+			var m, t, name;
 			if (v.typ.Kind() === Interface) {
 				var tt = v.typ.interfaceType;
 				if (i < 0 || i >= tt.methods.length) {
@@ -232,6 +232,7 @@ func init() {
 				}
 				m = tt.methods.array[i];
 				t = m.typ;
+				name = m.name.go$get();
 			} else {
 				var ut = v.typ.uncommon();
 				if (ut === uncommonType.Ptr.nil || i < 0 || i >= ut.methods.length) {
@@ -239,13 +240,10 @@ func init() {
 				}
 				m = ut.methods.array[i];
 				t = m.mtyp;
+				name = v.typ.jsType.methods[i][0];
 			}
 			if (m.pkgPath.go$get !== go$throwNilPointerError) {
 				throw go$panic(new Go$String("reflect: " + op + " of unexported method"));
-			}
-			var name = m.name.go$get()
-			if (go$reservedKeywords.indexOf(name) !== -1) {
-				name += "$";
 			}
 			var rcvr = v.iword();
 			if (isWrapped(v.typ)) {
@@ -272,10 +270,7 @@ func init() {
 				fl |= flagRO;
 			}
 			var mt = p.typ;
-			var name = p.name.go$get();
-			if (go$reservedKeywords.indexOf(name) !== -1) {
-				name += "$";
-			}
+			var name = this.jsType.methods[i][0];
 			var fn = function(rcvr) {
 				return rcvr[name].apply(rcvr, Go$Array.prototype.slice.apply(arguments, [1]));
 			}

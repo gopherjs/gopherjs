@@ -404,7 +404,11 @@ func (c *funcContext) initType(o types.Object) {
 				if len(method.Index()) > 1 {
 					embeddedIndex = method.Index()[0]
 				}
-				methods[i] = fmt.Sprintf(`["%s", "%s", %s, %s, %t, %d]`, method.Obj().Name(), pkgPath, c.typeArray(t.Params()), c.typeArray(t.Results()), t.Variadic(), embeddedIndex)
+				name := method.Obj().Name()
+				if reservedKeywords[name] {
+					name += "$"
+				}
+				methods[i] = fmt.Sprintf(`["%s", "%s", "%s", %s, %s, %t, %d]`, name, method.Obj().Name(), pkgPath, c.typeArray(t.Params()), c.typeArray(t.Results()), t.Variadic(), embeddedIndex)
 			}
 			c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
 		}

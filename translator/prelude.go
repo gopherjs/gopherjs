@@ -3,8 +3,6 @@ package translator
 var prelude = `
 Error.stackTraceLimit = -1;
 
-var go$reservedKeywords = ["abstract", "arguments", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", "long", "native", "new", "package", "private", "protected", "public", "return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof", "var", "void", "volatile", "while", "with", "yield"];
-
 var go$global;
 if (typeof window !== "undefined") {
 	go$global = window;
@@ -243,18 +241,18 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			// methods for embedded fields
 			for (i = 0; i < typ.methods.length; i++) {
 				var method = typ.methods[i];
-				if (method[5] != -1) {
+				if (method[6] != -1) {
 					(function(field, methodName) {
 						typ.prototype[methodName] = function() {
 							var v = this.go$val[field[0]];
 							return v[methodName].apply(v, arguments);
 						};
-					})(fields[method[5]], method[0]);
+					})(fields[method[6]], method[0]);
 				}
 			}
 			for (i = 0; i < typ.Ptr.methods.length; i++) {
 				var method = typ.Ptr.methods[i];
-				if (method[5] != -1) {
+				if (method[6] != -1) {
 					(function(field, methodName) {
 						typ.Ptr.prototype[methodName] = function() {
 							var v = this[field[0]];
@@ -263,7 +261,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 							}
 							return v[methodName].apply(v, arguments);
 						};
-					})(fields[method[5]], method[0]);
+					})(fields[method[6]], method[0]);
 				}
 			}
 			// map key
@@ -308,12 +306,13 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 				var i;
 				for (i = 0; i < typ.methods.length; i++) {
 					var m = typ.methods[i];
-					methods.push(new go$reflect.method(go$newStringPtr(m[0]), go$newStringPtr(m[1]), go$funcType(m[2], m[3], m[4]).reflectType(), go$funcType([typ].concat(m[2]), m[3], m[4]).reflectType(), undefined, undefined));
+					methods.push(new go$reflect.method(go$newStringPtr(m[1]), go$newStringPtr(m[2]), go$funcType(m[3], m[4], m[5]).reflectType(), go$funcType([typ].concat(m[3]), m[4], m[5]).reflectType(), undefined, undefined));
 				}
 			}
 			if (name !== "" || methods.length !== 0) {
 				var methodSlice = (go$sliceType(go$ptrType(go$reflect.method)));
 				rt.uncommonType = new go$reflect.uncommonType(go$newStringPtr(name), go$newStringPtr(pkgPath), new methodSlice(methods));
+				rt.uncommonType.jsType = typ;
 			}
 
 			if (typ.extendReflectType !== undefined) {

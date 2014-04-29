@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	flags "github.com/jessevdk/go-flags"
 	"go/ast"
 	"go/build"
 	"go/parser"
@@ -20,6 +19,7 @@ import (
 	"bitbucket.org/kardianos/osext"
 	"code.google.com/p/go.tools/go/types"
 	"github.com/gopherjs/gopherjs/translator"
+	flags "github.com/jessevdk/go-flags"
 	"github.com/neelance/sourcemap"
 )
 
@@ -131,6 +131,37 @@ func main() {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
+}
+
+func tool() error {
+	flagParser := flags.NewParser(nil, flags.HelpFlag)
+	var buildOpts buildCommand
+	flagParser.AddCommand("build", "compile", "compile packages and dependencies in the current directory", &buildOpts)
+	var installOpts installCommand
+	flagParser.AddCommand("install", "compile and install", "compile and install packages and dependencies in the current directory", &installOpts)
+	var runOpts runCommand
+	flagParser.AddCommand("run", "compile and run", "compile the Go program to javascript and run (requires Node.js)", &runOpts)
+	var testOpts testCommand
+	flagParser.AddCommand("test", "run tests", "test the packages (requires Node.js)", &testOpts)
+	var toolOpts toolCommand
+	flagParser.AddCommand("tool", "run a go tool", "run a specific go tool", &toolOpts)
+	_, err := flagParser.Parse()
+	if err != nil {
+		//if it's an actual error
+		if e, ok := err.(*flags.Error); ok {
+			if e.Type != flags.ErrUnknown {
+				var er error = nil
+				if e.Type != flags.ErrHelp {
+					er = fmt.Errorf("Invalid command line syntax.")
+				}
+				fmt.Println(err.Error())
+				fmt.Println("You can use \"gopherjs <command> -h\" to see the help message for the specific command.")
+				return er
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 type buildCommand struct {
@@ -465,30 +496,6 @@ func (o *toolCommand) Execute(args []string) error {
 		}
 	}
 	return fmt.Errorf("Tool not supported: " + tool)
-}
-
-func tool() error {
-	flagParser := flags.NewParser(nil, flags.HelpFlag)
-	var buildOpts buildCommand
-	flagParser.AddCommand("build", "compile", "compile packages and dependencies in the current directory", &buildOpts)
-	var installOpts installCommand
-	flagParser.AddCommand("install", "compile and install", "compile and install packages and dependencies in the current directory", &installOpts)
-	var runOpts runCommand
-	flagParser.AddCommand("run", "compile and run", "compile the Go program to javascript and run (requires Node.js)", &runOpts)
-	var testOpts testCommand
-	flagParser.AddCommand("test", "run tests", "test the packages (requires Node.js)", &testOpts)
-	var toolOpts toolCommand
-	flagParser.AddCommand("tool", "run a go tool", "run a specific go tool", &toolOpts)
-	_, err := flagParser.Parse()
-	if err != nil {
-		fmt.Println(err.Error())
-		fmt.Println("You can use \"gopherjs <command> -h\" to see the help message for the specific command.")
-		//if it's an actual error
-		if err.(*flags.Error).Type != flags.ErrHelp {
-			return fmt.Errorf("Invalid command line syntax.")
-		}
-	}
-	return nil
 }
 
 func (s *session) buildFiles(filenames []string, pkgObj string) error {

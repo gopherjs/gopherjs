@@ -974,7 +974,7 @@ var go$internalize = function(v, t, recv) {
 			}
 		};
 	case "Interface":
-		if (t === go$packages["github.com/gopherjs/gopherjs/js"].Object) {
+		if (v === null || t === go$packages["github.com/gopherjs/gopherjs/js"].Object) {
 			return v;
 		}
 		switch (v.constructor) {

@@ -7,15 +7,6 @@ import (
 	"unsafe"
 )
 
-// temporary
-func init() {
-	a := false
-	if a {
-		isWrapped(nil)
-		copyStruct(nil, nil, nil)
-	}
-}
-
 func jsType(typ Type) js.Object {
 	return js.InternalObject(typ).Get("jsType")
 }
@@ -78,7 +69,7 @@ func makeIword(t Type, v js.Object) iword {
 }
 
 func makeValue(t Type, v js.Object, fl flag) Value {
-	rt := t.(*rtype)
+	rt := t.common()
 	if t.Size() > ptrSize && t.Kind() != Array && t.Kind() != Struct {
 		return Value{rt, unsafe.Pointer(js.Global.Call("go$newDataPointer", v, jsType(rt.ptrTo())).Unsafe()), fl | flag(t.Kind())<<flagKindShift | flagIndir}
 	}
@@ -154,7 +145,7 @@ func SliceOf(t Type) Type {
 }
 
 func Zero(typ Type) Value {
-	return Value{typ.(*rtype), unsafe.Pointer(zeroVal(typ).Unsafe()), flag(typ.Kind()) << flagKindShift}
+	return Value{typ.common(), unsafe.Pointer(zeroVal(typ).Unsafe()), flag(typ.Kind()) << flagKindShift}
 }
 
 func unsafe_New(typ *rtype) unsafe.Pointer {
@@ -320,6 +311,44 @@ func maplen(m iword) int {
 	return js.Global.Call("go$keys", m).Length()
 }
 
+func cvtDirect(v Value, typ Type) Value {
+	var srcVal = js.InternalObject(v.iword())
+	if srcVal == jsType(v.typ).Get("nil") {
+		return makeValue(typ, jsType(typ).Get("nil"), v.flag)
+	}
+
+	var val js.Object
+	switch k := typ.Kind(); k {
+	case Chan:
+		val = jsType(typ).New()
+	case Slice:
+		slice := jsType(typ).New(srcVal.Get("array"))
+		slice.Set("offset", srcVal.Get("offset"))
+		slice.Set("length", srcVal.Get("length"))
+		slice.Set("capacity", srcVal.Get("capacity"))
+		val = js.Global.Call("go$newDataPointer", slice, jsType(PtrTo(typ)))
+	case Ptr:
+		if typ.Elem().Kind() == Struct {
+			if typ.Elem() == v.typ.Elem() {
+				val = srcVal
+				break
+			}
+			val = jsType(typ).New()
+			copyStruct(val, srcVal, typ.Elem())
+			break
+		}
+		val = jsType(typ).New(srcVal.Get("go$get"), srcVal.Get("go$set"))
+	case Struct:
+		val = jsType(typ).Get("Ptr").New()
+		copyStruct(val, srcVal, typ)
+	case Array, Func, Interface, Map, String:
+		val = js.InternalObject(v.val)
+	default:
+		panic(&ValueError{"reflect.Convert", k})
+	}
+	return Value{typ.common(), unsafe.Pointer(val.Unsafe()), v.flag&(flagRO|flagIndir) | flag(typ.Kind())<<flagKindShift}
+}
+
 func Copy(dst, src Value) int {
 	dk := dst.kind()
 	if dk != Array && dk != Slice {
@@ -387,12 +416,41 @@ func methodReceiver(op string, v Value, i int) (*rtype, unsafe.Pointer, iword) {
 	return t, unsafe.Pointer(rcvr.Get(name).Unsafe()), iword(rcvr.Unsafe())
 }
 
+func valueInterface(v Value, safe bool) interface{} {
+	if v.flag == 0 {
+		panic(&ValueError{"reflect.Value.Interface", 0})
+	}
+	if safe && v.flag&flagRO != 0 {
+		panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")
+	}
+	if v.flag&flagMethod != 0 {
+		v = makeMethodValue("Interface", v)
+	}
+
+	if isWrapped(v.typ) {
+		return interface{}(unsafe.Pointer(jsType(v.typ).New(js.InternalObject(v.iword())).Unsafe()))
+	}
+	return interface{}(unsafe.Pointer(js.InternalObject(v.iword()).Unsafe()))
+}
+
 func ifaceE2I(t *rtype, src interface{}, dst unsafe.Pointer) {
 	js.InternalObject(dst).Call("go$set", js.InternalObject(src))
 }
 
 func methodName() string {
 	return "?FIXME?"
+}
+
+func makeMethodValue(op string, v Value) Value {
+	if v.flag&flagMethod == 0 {
+		panic("reflect: internal error: invalid use of makePartialFunc")
+	}
+
+	_, fn, rcvr := methodReceiver(op, v, int(v.flag)>>flagMethodShift)
+	fv := func() js.Object {
+		return js.InternalObject(fn).Call("apply", rcvr, js.Arguments)
+	}
+	return Value{v.Type().common(), unsafe.Pointer(js.InternalObject(fv).Unsafe()), v.flag&flagRO | flag(Func)<<flagKindShift}
 }
 
 func (t *uncommonType) Method(i int) (m Method) {

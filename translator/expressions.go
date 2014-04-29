@@ -1043,6 +1043,11 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 		if !types.Identical(exprType, types.Typ[types.UnsafePointer]) {
 			return c.formatExpr("new %1s(%2e.go$get, %2e.go$set)", c.typeName(desiredType), expr)
 		}
+
+	case *types.Interface:
+		if types.Identical(exprType, types.Typ[types.UnsafePointer]) {
+			return c.translateExpr(expr)
+		}
 	}
 
 	return c.translateImplicitConversion(expr, desiredType)

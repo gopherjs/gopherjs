@@ -111,7 +111,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 				}).join("$");
 			};
 			typ.extendReflectType = function(rt) {
-				rt.arrayType = new go$reflect.arrayType(rt, elem.reflectType(), undefined, len);
+				rt.arrayType = new go$reflect.arrayType.Ptr(rt, elem.reflectType(), undefined, len);
 			};
 			typ.Ptr.init(typ);
 		};
@@ -129,7 +129,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ.init = function(elem, sendOnly, recvOnly) {
 			typ.nil = new typ();
 			typ.extendReflectType = function(rt) {
-				rt.chanType = new go$reflect.chanType(rt, elem.reflectType(), sendOnly ? go$reflect.SendDir : (recvOnly ? go$reflect.RecvDir : go$reflect.BothDir));
+				rt.chanType = new go$reflect.chanType.Ptr(rt, elem.reflectType(), sendOnly ? go$reflect.SendDir : (recvOnly ? go$reflect.RecvDir : go$reflect.BothDir));
 			};
 		};
 		break;
@@ -141,8 +141,8 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			typ.results = results;
 			typ.variadic = variadic;
 			typ.extendReflectType = function(rt) {
-				var typeSlice = (go$sliceType(go$ptrType(go$reflect.rtype)));
-				rt.funcType = new go$reflect.funcType(rt, variadic, new typeSlice(go$mapArray(params, function(p) { return p.reflectType(); })), new typeSlice(go$mapArray(results, function(p) { return p.reflectType(); })));
+				var typeSlice = (go$sliceType(go$ptrType(go$reflect.rtype.Ptr)));
+				rt.funcType = new go$reflect.funcType.Ptr(rt, variadic, new typeSlice(go$mapArray(params, function(p) { return p.reflectType(); })), new typeSlice(go$mapArray(results, function(p) { return p.reflectType(); })));
 			};
 		};
 		break;
@@ -152,10 +152,10 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ.init = function(methods) {
 			typ.extendReflectType = function(rt) {
 				var imethods = go$mapArray(methods, function(m) {
-					return new go$reflect.imethod(go$newStringPtr(m[0]), go$newStringPtr(m[1]), m[2].reflectType());
+					return new go$reflect.imethod.Ptr(go$newStringPtr(m[0]), go$newStringPtr(m[1]), m[2].reflectType());
 				});
-				var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod)));
-				rt.interfaceType = new go$reflect.interfaceType(rt, new methodSlice(imethods));
+				var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod.Ptr)));
+				rt.interfaceType = new go$reflect.interfaceType.Ptr(rt, new methodSlice(imethods));
 			};
 		};
 		break;
@@ -166,7 +166,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			typ.key = key;
 			typ.elem = elem;
 			typ.extendReflectType = function(rt) {
-				rt.mapType = new go$reflect.mapType(rt, key.reflectType(), elem.reflectType(), undefined, undefined);
+				rt.mapType = new go$reflect.mapType.Ptr(rt, key.reflectType(), elem.reflectType(), undefined, undefined);
 			};
 		};
 		break;
@@ -187,7 +187,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ.init = function(elem) {
 			typ.nil = new typ(go$throwNilPointerError, go$throwNilPointerError);
 			typ.extendReflectType = function(rt) {
-				rt.ptrType = new go$reflect.ptrType(rt, elem.reflectType());
+				rt.ptrType = new go$reflect.ptrType.Ptr(rt, elem.reflectType());
 			};
 		};
 		break;
@@ -219,7 +219,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			nativeArray = go$nativeArray(elem.kind);
 			typ.nil = new typ([]);
 			typ.extendReflectType = function(rt) {
-				rt.sliceType = new go$reflect.sliceType(rt, elem.reflectType());
+				rt.sliceType = new go$reflect.sliceType.Ptr(rt, elem.reflectType());
 			};
 		};
 		break;
@@ -279,9 +279,9 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 				var reflectFields = new Array(fields.length), i;
 				for (i = 0; i < fields.length; i++) {
 					var field = fields[i];
-					reflectFields[i] = new go$reflect.structField(go$newStringPtr(field[1]), go$newStringPtr(field[2]), field[3].reflectType(), go$newStringPtr(field[4]), i);
+					reflectFields[i] = new go$reflect.structField.Ptr(go$newStringPtr(field[1]), go$newStringPtr(field[2]), field[3].reflectType(), go$newStringPtr(field[4]), i);
 				}
-				rt.structType = new go$reflect.structType(rt, new (go$sliceType(go$reflect.structField))(reflectFields));
+				rt.structType = new go$reflect.structType.Ptr(rt, new (go$sliceType(go$reflect.structField.Ptr))(reflectFields));
 			};
 		};
 		break;
@@ -298,7 +298,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 	var rt = null;
 	typ.reflectType = function() {
 		if (rt === null) {
-			rt = new go$reflect.rtype(size, 0, 0, 0, 0, go$reflect.kinds[kind], undefined, undefined, go$newStringPtr(string), undefined, undefined);
+			rt = new go$reflect.rtype.Ptr(size, 0, 0, 0, 0, go$reflect.kinds[kind], undefined, undefined, go$newStringPtr(string), undefined, undefined);
 			rt.jsType = typ;
 
 			var methods = [];
@@ -306,12 +306,12 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 				var i;
 				for (i = 0; i < typ.methods.length; i++) {
 					var m = typ.methods[i];
-					methods.push(new go$reflect.method(go$newStringPtr(m[1]), go$newStringPtr(m[2]), go$funcType(m[3], m[4], m[5]).reflectType(), go$funcType([typ].concat(m[3]), m[4], m[5]).reflectType(), undefined, undefined));
+					methods.push(new go$reflect.method.Ptr(go$newStringPtr(m[1]), go$newStringPtr(m[2]), go$funcType(m[3], m[4], m[5]).reflectType(), go$funcType([typ].concat(m[3]), m[4], m[5]).reflectType(), undefined, undefined));
 				}
 			}
 			if (name !== "" || methods.length !== 0) {
-				var methodSlice = (go$sliceType(go$ptrType(go$reflect.method)));
-				rt.uncommonType = new go$reflect.uncommonType(go$newStringPtr(name), go$newStringPtr(pkgPath), new methodSlice(methods));
+				var methodSlice = (go$sliceType(go$ptrType(go$reflect.method.Ptr)));
+				rt.uncommonType = new go$reflect.uncommonType.Ptr(go$newStringPtr(name), go$newStringPtr(pkgPath), new methodSlice(methods));
 				rt.uncommonType.jsType = typ;
 			}
 

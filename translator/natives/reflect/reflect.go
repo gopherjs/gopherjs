@@ -7,6 +7,66 @@ import (
 	"unsafe"
 )
 
+var initialized = false
+
+func init() {
+	// avoid dead code elimination
+	used := func(i interface{}) {}
+	used(rtype{})
+	used(uncommonType{})
+	used(method{})
+	used(arrayType{})
+	used(chanType{})
+	used(funcType{})
+	used(interfaceType{})
+	used(mapType{})
+	used(ptrType{})
+	used(sliceType{})
+	used(structType{})
+	used(imethod{})
+	used(structField{})
+
+	pkg := js.Global.Get("go$pkg")
+	pkg.Set("kinds", map[string]Kind{
+		"Bool":          Bool,
+		"Int":           Int,
+		"Int8":          Int8,
+		"Int16":         Int16,
+		"Int32":         Int32,
+		"Int64":         Int64,
+		"Uint":          Uint,
+		"Uint8":         Uint8,
+		"Uint16":        Uint16,
+		"Uint32":        Uint32,
+		"Uint64":        Uint64,
+		"Uintptr":       Uintptr,
+		"Float32":       Float32,
+		"Float64":       Float64,
+		"Complex64":     Complex64,
+		"Complex128":    Complex128,
+		"Array":         Array,
+		"Chan":          Chan,
+		"Func":          Func,
+		"Interface":     Interface,
+		"Map":           Map,
+		"Ptr":           Ptr,
+		"Slice":         Slice,
+		"String":        String,
+		"Struct":        Struct,
+		"UnsafePointer": UnsafePointer,
+	})
+	pkg.Set("RecvDir", RecvDir)
+	pkg.Set("SendDir", SendDir)
+	pkg.Set("BothDir", BothDir)
+	js.Global.Set("go$reflect", pkg)
+	// 	go$reflect = {
+	// 	rtype: rtype.Ptr, uncommonType: uncommonType.Ptr, method: method.Ptr, arrayType: arrayType.Ptr, chanType: chanType.Ptr, funcType: funcType.Ptr, interfaceType: interfaceType.Ptr, mapType: mapType.Ptr, ptrType: ptrType.Ptr, sliceType: sliceType.Ptr, structType: structType.Ptr,
+	// 	imethod: imethod.Ptr, structField: structField.Ptr,
+	// };
+	initialized = true
+	uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
+}
+
 func jsType(typ Type) js.Object {
 	return js.InternalObject(typ).Get("jsType")
 }
@@ -98,6 +158,9 @@ func jsObject() *rtype {
 }
 
 func TypeOf(i interface{}) Type {
+	if !initialized { // avoid error of uint8Type
+		return &rtype{}
+	}
 	if i == nil {
 		return nil
 	}
@@ -866,4 +929,93 @@ func (v Value) Slice3(i, j, k int) Value {
 	}
 
 	return makeValue(typ, js.Global.Call("go$subslice", s, i, j, k), v.flag&flagRO)
+}
+
+func DeepEqual(a1, a2 interface{}) bool {
+	i1 := js.InternalObject(a1)
+	i2 := js.InternalObject(a2)
+	if i1 == i2 {
+		return true
+	}
+	if i1 == nil || i2 == nil || i1.Get("constructor") != i2.Get("constructor") {
+		return false
+	}
+	return deepValueEqualJs(ValueOf(a1), ValueOf(a2), nil)
+}
+
+func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
+	if !v1.IsValid() || !v2.IsValid() {
+		return !v1.IsValid() && !v2.IsValid()
+	}
+	if v1.Type() != v2.Type() {
+		return false
+	}
+
+	switch v1.Kind() {
+	case Array, Map, Slice, Struct:
+		for _, entry := range visited {
+			if v1.val == entry[0] && v2.val == entry[1] {
+				return true
+			}
+		}
+		visited = append(visited, [2]unsafe.Pointer{v1.val, v2.val})
+	}
+
+	switch v1.Kind() {
+	case Array, Slice:
+		if v1.Kind() == Slice {
+			if v1.IsNil() != v2.IsNil() {
+				return false
+			}
+			if v1.iword() == v2.iword() {
+				return true
+			}
+		}
+		var n = v1.Len()
+		if n != v2.Len() {
+			return false
+		}
+		for i := 0; i < n; i++ {
+			if !deepValueEqualJs(v1.Index(i), v2.Index(i), visited) {
+				return false
+			}
+		}
+		return true
+	case Interface:
+		if v1.IsNil() || v2.IsNil() {
+			return v1.IsNil() && v2.IsNil()
+		}
+		return deepValueEqualJs(v1.Elem(), v2.Elem(), visited)
+	case Ptr:
+		return deepValueEqualJs(v1.Elem(), v2.Elem(), visited)
+	case Struct:
+		var n = v1.NumField()
+		for i := 0; i < n; i++ {
+			if !deepValueEqualJs(v1.Field(i), v2.Field(i), visited) {
+				return false
+			}
+		}
+		return true
+	case Map:
+		if v1.IsNil() != v2.IsNil() {
+			return false
+		}
+		if v1.iword() == v2.iword() {
+			return true
+		}
+		var keys = v1.MapKeys()
+		if len(keys) != v2.Len() {
+			return false
+		}
+		for _, k := range keys {
+			if !deepValueEqualJs(v1.MapIndex(k), v2.MapIndex(k), visited) {
+				return false
+			}
+		}
+		return true
+	case Func:
+		return v1.IsNil() && v2.IsNil()
+	}
+
+	return js.Global.Call("go$interfaceIsEqual", js.InternalObject(valueInterface(v1, false)), js.InternalObject(valueInterface(v2, false))).Bool()
 }

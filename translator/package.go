@@ -202,11 +202,6 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 	}
 
 	// functions
-	nativesOrig := pkgNatives[importPath]
-	natives := make(map[string]string, len(nativesOrig))
-	for k, v := range nativesOrig {
-		natives[k] = v
-	}
 	for _, fun := range functions {
 		var d Decl
 		o := c.p.info.Defs[fun.Name].(*types.Func)
@@ -231,11 +226,8 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 			}
 		}
 
-		native := natives[funName]
-		delete(natives, funName)
-
 		d.DceDeps = collectDependencies(o, func() {
-			d.BodyCode = c.translateToplevelFunction(fun, native)
+			d.BodyCode = c.translateToplevelFunction(fun)
 		})
 		archive.Declarations = append(archive.Declarations, d)
 		if strings.HasPrefix(fun.Name.String(), "Test") {
@@ -277,10 +269,6 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 		if _, ok := varsWithInit[o]; !ok {
 			d.DceDeps = collectDependencies(nil, func() {
 				value := c.zeroValue(o.Type())
-				if native, ok := natives[o.Name()]; ok {
-					value = native
-					delete(natives, o.Name())
-				}
 				if importPath == "runtime" && o.Name() == "sizeof_C_MStats" {
 					value = "3712"
 				}
@@ -319,28 +307,12 @@ func (t *Translator) TranslatePackage(importPath string, files []*ast.File, file
 		archive.Declarations = append(archive.Declarations, d)
 	}
 
-	// natives
-	var toplevel Decl
-	toplevel.BodyCode = []byte(natives["toplevel"])
-	delete(natives, "toplevel")
-	if toplevelDependencies, ok := natives["toplevelDependencies"]; ok {
-		for _, dep := range strings.Split(toplevelDependencies, " ") {
-			toplevel.DceDeps = append(toplevel.DceDeps, DepId(dep))
-		}
-		delete(natives, "toplevelDependencies")
-	}
-	archive.Declarations = append(archive.Declarations, toplevel)
-
 	// init functions
 	var init Decl
 	init.DceDeps = collectDependencies(nil, func() {
 		init.InitCode = c.translateFunctionBody(1, initStmts)
 	})
 	archive.Declarations = append(archive.Declarations, init)
-
-	if len(natives) != 0 {
-		panic("not all natives used: " + importPath)
-	}
 
 	var importedPaths []string
 	for _, imp := range typesPkg.Imports() {
@@ -466,7 +438,7 @@ func (c *funcContext) initArgs(ty types.Type) string {
 	}
 }
 
-func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, native string) []byte {
+func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl) []byte {
 	o := c.p.info.Defs[fun.Name].(*types.Func)
 	sig := o.Type().(*types.Signature)
 	var recv *ast.Ident
@@ -476,10 +448,6 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, native string
 
 	var joinedParams string
 	primaryFunction := func(lhs string, fullName string) []byte {
-		if native != "" {
-			return []byte(fmt.Sprintf("\t%s = %s;\n", lhs, native))
-		}
-
 		if fun.Body == nil {
 			return []byte(fmt.Sprintf("\t%s = function() {\n\t\tthrow go$panic(\"Native function not implemented: %s\");\n\t};\n", lhs, fullName))
 		}

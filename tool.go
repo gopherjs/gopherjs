@@ -1,12 +1,9 @@
 package main
 
 import (
-	"bitbucket.org/kardianos/osext"
-	"code.google.com/p/go.tools/go/types"
 	"flag"
 	"fmt"
-	"github.com/gopherjs/gopherjs/translator"
-	"github.com/neelance/sourcemap"
+	flags "github.com/jessevdk/go-flags"
 	"go/ast"
 	"go/build"
 	"go/parser"
@@ -19,6 +16,11 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"bitbucket.org/kardianos/osext"
+	"code.google.com/p/go.tools/go/types"
+	"github.com/gopherjs/gopherjs/translator"
+	"github.com/neelance/sourcemap"
 )
 
 type packageData struct {
@@ -131,126 +133,282 @@ func main() {
 	}
 }
 
-func tool() error {
-	flag.Parse()
+type buildCommand struct {
+	flags.Commander
+	Output string `short:"o" long:"output" description:"Set the resulting javascript file."`
+}
 
-	cmd := flag.Arg(0)
-	switch cmd {
-	case "build":
-		buildFlags := flag.NewFlagSet("build", flag.ContinueOnError)
-		var pkgObj string
-		buildFlags.StringVar(&pkgObj, "o", "", "")
-		buildFlags.Parse(flag.Args()[1:])
+func (o *buildCommand) Usage() string {
+	return "[build flags] [packages]"
+}
 
-		s := NewSession(false)
+func (o *buildCommand) Execute(args []string) error {
+	pkgObj := o.Output
+	buildFlags := flag.NewFlagSet("build", flag.ContinueOnError)
+	buildFlags.Parse(args)
 
-		if buildFlags.NArg() == 0 {
-			buildContext := &build.Context{
-				GOROOT:   build.Default.GOROOT,
-				GOPATH:   build.Default.GOPATH,
-				GOOS:     build.Default.GOOS,
-				GOARCH:   "js",
-				Compiler: "gc",
-			}
-			buildPkg, err := buildContext.ImportDir(currentDirectory, 0)
-			if err != nil {
-				return err
-			}
-			pkg := &packageData{Package: buildPkg}
-			pkg.ImportPath = currentDirectory
-			if err := s.buildPackage(pkg); err != nil {
-				return err
-			}
-			if pkgObj == "" {
-				pkgObj = filepath.Base(currentDirectory) + ".js"
-			}
-			if err := s.writeCommandPackage(pkg, pkgObj); err != nil {
-				return err
-			}
-			return nil
+	s := NewSession(false)
+
+	if buildFlags.NArg() == 0 {
+		buildContext := &build.Context{
+			GOROOT:   build.Default.GOROOT,
+			GOPATH:   build.Default.GOPATH,
+			GOOS:     build.Default.GOOS,
+			GOARCH:   "js",
+			Compiler: "gc",
 		}
-
-		if strings.HasSuffix(buildFlags.Arg(0), ".go") {
-			for _, arg := range buildFlags.Args() {
-				if !strings.HasSuffix(arg, ".go") {
-					return fmt.Errorf("named files must be .go files")
-				}
-			}
-			if pkgObj == "" {
-				basename := filepath.Base(buildFlags.Arg(0))
-				pkgObj = basename[:len(basename)-3] + ".js"
-			}
-			if err := s.buildFiles(buildFlags.Args(), pkgObj); err != nil {
-				return err
-			}
-			return nil
+		buildPkg, err := buildContext.ImportDir(currentDirectory, 0)
+		if err != nil {
+			return err
 		}
-
-		for _, pkgPath := range buildFlags.Args() {
-			buildPkg, err := buildImport(filepath.ToSlash(pkgPath), 0)
-			if err != nil {
-				return err
-			}
-			pkg := &packageData{Package: buildPkg}
-			if err := s.buildPackage(pkg); err != nil {
-				return err
-			}
-			if pkgObj == "" {
-				pkgObj = filepath.Base(buildFlags.Arg(0)) + ".js"
-			}
-			if err := s.writeCommandPackage(pkg, pkgObj); err != nil {
-				return err
-			}
+		pkg := &packageData{Package: buildPkg}
+		pkg.ImportPath = currentDirectory
+		if err := s.buildPackage(pkg); err != nil {
+			return err
+		}
+		if pkgObj == "" {
+			pkgObj = filepath.Base(currentDirectory) + ".js"
+		}
+		if err := s.writeCommandPackage(pkg, pkgObj); err != nil {
+			return err
 		}
 		return nil
+	}
 
-	case "install":
-		installFlags := flag.NewFlagSet("install", flag.ContinueOnError)
-		verbose := installFlags.Bool("v", false, "verbose")
-		installFlags.Parse(flag.Args()[1:])
-
-		s := NewSession(*verbose)
-
-		pkgs := installFlags.Args()
-		if len(pkgs) == 0 {
-			srcDir, err := filepath.EvalSymlinks(filepath.Join(build.Default.GOPATH, "src"))
-			if err != nil {
-				return err
+	if strings.HasSuffix(buildFlags.Arg(0), ".go") {
+		for _, arg := range buildFlags.Args() {
+			if !strings.HasSuffix(arg, ".go") {
+				return fmt.Errorf("named files must be .go files")
 			}
-			if !strings.HasPrefix(currentDirectory, srcDir) {
-				return fmt.Errorf("gopherjs install: no install location for directory %s outside GOPATH", currentDirectory)
-			}
+		}
+		if pkgObj == "" {
+			basename := filepath.Base(buildFlags.Arg(0))
+			pkgObj = basename[:len(basename)-3] + ".js"
+		}
+		if err := s.buildFiles(buildFlags.Args(), pkgObj); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	for _, pkgPath := range buildFlags.Args() {
+		buildPkg, err := buildImport(filepath.ToSlash(pkgPath), 0)
+		if err != nil {
+			return err
+		}
+		pkg := &packageData{Package: buildPkg}
+		if err := s.buildPackage(pkg); err != nil {
+			return err
+		}
+		if pkgObj == "" {
+			pkgObj = filepath.Base(buildFlags.Arg(0)) + ".js"
+		}
+		if err := s.writeCommandPackage(pkg, pkgObj); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type installCommand struct {
+	Verbose bool `short:"v" long:"verbose" description:"Show verbose information."`
+}
+
+func (o *installCommand) Usage() string {
+	return "[packages]"
+}
+
+func (o *installCommand) Execute(args []string) error {
+	installFlags := flag.NewFlagSet("install", flag.ContinueOnError)
+	installFlags.Parse(args)
+
+	s := NewSession(o.Verbose)
+
+	pkgs := installFlags.Args()
+	if len(pkgs) == 0 {
+		srcDir, err := filepath.EvalSymlinks(filepath.Join(build.Default.GOPATH, "src"))
+		if err != nil {
+			return err
+		}
+		if !strings.HasPrefix(currentDirectory, srcDir) {
+			return fmt.Errorf("gopherjs install: no install location for directory %s outside GOPATH", currentDirectory)
+		}
+		pkgPath, err := filepath.Rel(srcDir, currentDirectory)
+		if err != nil {
+			return err
+		}
+		pkgs = []string{pkgPath}
+	}
+	for _, pkgPath := range pkgs {
+		pkgPath = filepath.ToSlash(pkgPath)
+		if _, err := s.importPackage(pkgPath); err != nil {
+			return err
+		}
+		pkg := s.packages[pkgPath]
+		if err := s.writeCommandPackage(pkg, pkg.PkgObj); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type runCommand struct{}
+
+func (o *runCommand) Usage() string {
+	return "gofiles..."
+}
+
+func (o *runCommand) Execute(args []string) error {
+	gflist := flag.NewFlagSet("run", flag.ContinueOnError)
+	gflist.Parse(args)
+	lastSourceArg := 0
+	for {
+		if !strings.HasSuffix(gflist.Arg(lastSourceArg), ".go") {
+			break
+		}
+		lastSourceArg++
+	}
+	if lastSourceArg == 0 {
+		return fmt.Errorf("gopherjs run: no go files listed")
+	}
+
+	tempfile, err := ioutil.TempFile("", filepath.Base(gflist.Arg(0))+".")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		tempfile.Close()
+		os.Remove(tempfile.Name())
+	}()
+
+	s := NewSession(false)
+	if err := s.buildFiles(gflist.Args()[0:lastSourceArg], tempfile.Name()); err != nil {
+		return err
+	}
+	if err := runNode(tempfile.Name(), gflist.Args()[lastSourceArg:], ""); err != nil {
+		return err
+	}
+	return nil
+}
+
+type testCommand struct {
+	Short   bool `short:"s" long:"short"`
+	Verbose bool `short:"v" long:"verbose"`
+}
+
+func (o *testCommand) Usage() string {
+	return "[packages]"
+}
+
+func (o *testCommand) Execute(args []string) error {
+	verbose := o.Verbose
+	short := o.Short
+	testFlags := flag.NewFlagSet("test", flag.ContinueOnError)
+	testFlags.Parse(args)
+
+	pkgs := make([]*build.Package, testFlags.NArg())
+	for i, pkgPath := range testFlags.Args() {
+		pkgPath = filepath.ToSlash(pkgPath)
+		var err error
+		pkgs[i], err = buildImport(pkgPath, 0)
+		if err != nil {
+			return err
+		}
+	}
+	if len(pkgs) == 0 {
+		srcDir, err := filepath.EvalSymlinks(filepath.Join(build.Default.GOPATH, "src"))
+		if err != nil {
+			return err
+		}
+		var pkg *build.Package
+		if strings.HasPrefix(currentDirectory, srcDir) {
 			pkgPath, err := filepath.Rel(srcDir, currentDirectory)
 			if err != nil {
 				return err
 			}
-			pkgs = []string{pkgPath}
-		}
-		for _, pkgPath := range pkgs {
-			pkgPath = filepath.ToSlash(pkgPath)
-			if _, err := s.importPackage(pkgPath); err != nil {
-				return err
-			}
-			pkg := s.packages[pkgPath]
-			if err := s.writeCommandPackage(pkg, pkg.PkgObj); err != nil {
+			if pkg, err = buildImport(pkgPath, 0); err != nil {
 				return err
 			}
 		}
-		return nil
-
-	case "run":
-		lastSourceArg := 1
-		for {
-			if !strings.HasSuffix(flag.Arg(lastSourceArg), ".go") {
-				break
+		if pkg == nil {
+			if pkg, err = build.ImportDir(currentDirectory, 0); err != nil {
+				return err
 			}
-			lastSourceArg++
+			pkg.ImportPath = "_" + currentDirectory
 		}
-		if lastSourceArg == 1 {
-			return fmt.Errorf("gopherjs run: no go files listed")
+		pkgs = []*build.Package{pkg}
+	}
+
+	var exitErr error
+	for _, buildPkg := range pkgs {
+		if len(buildPkg.TestGoFiles) == 0 && len(buildPkg.XTestGoFiles) == 0 {
+			fmt.Printf("?   \t%s\t[no test files]\n", buildPkg.ImportPath)
+			continue
 		}
 
-		tempfile, err := ioutil.TempFile("", filepath.Base(flag.Arg(1))+".")
+		buildPkg.PkgObj = ""
+		buildPkg.GoFiles = append(buildPkg.GoFiles, buildPkg.TestGoFiles...)
+		pkg := &packageData{Package: buildPkg}
+		s := NewSession(false)
+		if err := s.buildPackage(pkg); err != nil {
+			return err
+		}
+
+		mainPkg := &packageData{
+			Package: &build.Package{
+				Name:       "main",
+				ImportPath: "main",
+			},
+			Archive: &translator.Archive{
+				ImportPath: "main",
+			},
+		}
+		s.packages["main"] = mainPkg
+		s.t.NewEmptyTypesPackage("main")
+		testingOutput, _ := s.importPackage("testing")
+		testingOutput, err := s.importPackage("testing")
+		if err != nil {
+			panic(err)
+		}
+		mainPkg.Archive.AddDependenciesOf(testingOutput)
+
+		var mainFunc translator.Decl
+		var names []string
+		var tests []string
+		collectTests := func(pkg *packageData) {
+			for _, name := range pkg.Archive.Tests {
+				names = append(names, name)
+				tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
+				mainFunc.DceDeps = append(mainFunc.DceDeps, translator.DepId(pkg.ImportPath+":"+name))
+			}
+			mainPkg.Archive.AddDependenciesOf(pkg.Archive)
+		}
+
+		collectTests(pkg)
+		if len(pkg.XTestGoFiles) != 0 {
+			testPkg := &packageData{Package: &build.Package{
+				ImportPath: pkg.ImportPath + "_test",
+				Dir:        pkg.Dir,
+				GoFiles:    pkg.XTestGoFiles,
+			}}
+			if err := s.buildPackage(testPkg); err != nil {
+				return err
+			}
+			collectTests(testPkg)
+		}
+
+		mainFunc.DceDeps = append(mainFunc.DceDeps, translator.DepId("flag:Parse"))
+		mainFunc.BodyCode = []byte(fmt.Sprintf(`
+			go$pkg.main = function() {
+				var testing = go$packages["testing"];
+				testing.Main2("%s", "%s", new (go$sliceType(Go$String))(["%s"]), new (go$sliceType(go$funcType([testing.T.Ptr], [], false)))([%s]));
+			};
+		`, pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))
+
+		mainPkg.Archive.Declarations = []translator.Decl{mainFunc}
+		mainPkg.Archive.AddDependency("main")
+
+		tempfile, err := ioutil.TempFile("", "test.")
 		if err != nil {
 			return err
 		}
@@ -259,197 +417,78 @@ func tool() error {
 			os.Remove(tempfile.Name())
 		}()
 
-		s := NewSession(false)
-		if err := s.buildFiles(flag.Args()[1:lastSourceArg], tempfile.Name()); err != nil {
+		if err := s.writeCommandPackage(mainPkg, tempfile.Name()); err != nil {
 			return err
 		}
-		if err := runNode(tempfile.Name(), flag.Args()[lastSourceArg:], ""); err != nil {
-			return err
+
+		var args []string
+		if verbose {
+			args = append(args, "-test.v")
 		}
-		return nil
-
-	case "test":
-		testFlags := flag.NewFlagSet("test", flag.ContinueOnError)
-		verbose := testFlags.Bool("v", false, "verbose")
-		short := testFlags.Bool("short", false, "short")
-		testFlags.Parse(flag.Args()[1:])
-
-		pkgs := make([]*build.Package, testFlags.NArg())
-		for i, pkgPath := range testFlags.Args() {
-			pkgPath = filepath.ToSlash(pkgPath)
-			var err error
-			pkgs[i], err = buildImport(pkgPath, 0)
-			if err != nil {
+		if short {
+			args = append(args, "-test.short")
+		}
+		if err := runNode(tempfile.Name(), args, ""); err != nil {
+			if _, ok := err.(*exec.ExitError); !ok {
 				return err
 			}
+			exitErr = err
 		}
-		if len(pkgs) == 0 {
-			srcDir, err := filepath.EvalSymlinks(filepath.Join(build.Default.GOPATH, "src"))
-			if err != nil {
-				return err
-			}
-			var pkg *build.Package
-			if strings.HasPrefix(currentDirectory, srcDir) {
-				pkgPath, err := filepath.Rel(srcDir, currentDirectory)
-				if err != nil {
-					return err
-				}
-				if pkg, err = buildImport(pkgPath, 0); err != nil {
-					return err
-				}
-			}
-			if pkg == nil {
-				if pkg, err = build.ImportDir(currentDirectory, 0); err != nil {
-					return err
-				}
-				pkg.ImportPath = "_" + currentDirectory
-			}
-			pkgs = []*build.Package{pkg}
-		}
-
-		var exitErr error
-		for _, buildPkg := range pkgs {
-			if len(buildPkg.TestGoFiles) == 0 && len(buildPkg.XTestGoFiles) == 0 {
-				fmt.Printf("?   \t%s\t[no test files]\n", buildPkg.ImportPath)
-				continue
-			}
-
-			buildPkg.PkgObj = ""
-			buildPkg.GoFiles = append(buildPkg.GoFiles, buildPkg.TestGoFiles...)
-			pkg := &packageData{Package: buildPkg}
-			s := NewSession(false)
-			if err := s.buildPackage(pkg); err != nil {
-				return err
-			}
-
-			mainPkg := &packageData{
-				Package: &build.Package{
-					Name:       "main",
-					ImportPath: "main",
-				},
-				Archive: &translator.Archive{
-					ImportPath: "main",
-				},
-			}
-			s.packages["main"] = mainPkg
-			s.t.NewEmptyTypesPackage("main")
-			testingOutput, err := s.importPackage("testing")
-			if err != nil {
-				panic(err)
-			}
-			mainPkg.Archive.AddDependenciesOf(testingOutput)
-
-			var mainFunc translator.Decl
-			var names []string
-			var tests []string
-			collectTests := func(pkg *packageData) {
-				for _, name := range pkg.Archive.Tests {
-					names = append(names, name)
-					tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
-					mainFunc.DceDeps = append(mainFunc.DceDeps, translator.DepId(pkg.ImportPath+":"+name))
-				}
-				mainPkg.Archive.AddDependenciesOf(pkg.Archive)
-			}
-
-			collectTests(pkg)
-			if len(pkg.XTestGoFiles) != 0 {
-				testPkg := &packageData{Package: &build.Package{
-					ImportPath: pkg.ImportPath + "_test",
-					Dir:        pkg.Dir,
-					GoFiles:    pkg.XTestGoFiles,
-				}}
-				if err := s.buildPackage(testPkg); err != nil {
-					return err
-				}
-				collectTests(testPkg)
-			}
-
-			mainFunc.DceDeps = append(mainFunc.DceDeps, translator.DepId("flag:Parse"))
-			mainFunc.BodyCode = []byte(fmt.Sprintf(`
-				go$pkg.main = function() {
-					var testing = go$packages["testing"];
-					testing.Main2("%s", "%s", new (go$sliceType(Go$String))(["%s"]), new (go$sliceType(go$funcType([testing.T.Ptr], [], false)))([%s]));
-				};
-			`, pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))
-
-			mainPkg.Archive.Declarations = []translator.Decl{mainFunc}
-			mainPkg.Archive.AddDependency("main")
-
-			tempfile, err := ioutil.TempFile("", "test.")
-			if err != nil {
-				return err
-			}
-			defer func() {
-				tempfile.Close()
-				os.Remove(tempfile.Name())
-			}()
-
-			if err := s.writeCommandPackage(mainPkg, tempfile.Name()); err != nil {
-				return err
-			}
-
-			var args []string
-			if *verbose {
-				args = append(args, "-test.v")
-			}
-			if *short {
-				args = append(args, "-test.short")
-			}
-			if err := runNode(tempfile.Name(), args, ""); err != nil {
-				if _, ok := err.(*exec.ExitError); !ok {
-					return err
-				}
-				exitErr = err
-			}
-		}
-		return exitErr
-
-	case "tool":
-		tool := flag.Arg(1)
-		toolFlags := flag.NewFlagSet("tool", flag.ContinueOnError)
-		toolFlags.Bool("e", false, "")
-		toolFlags.Bool("l", false, "")
-		toolFlags.Bool("m", false, "")
-		toolFlags.String("o", "", "")
-		toolFlags.String("D", "", "")
-		toolFlags.String("I", "", "")
-		toolFlags.Parse(flag.Args()[2:])
-
-		if len(tool) == 2 {
-			switch tool[1] {
-			case 'g':
-				basename := filepath.Base(toolFlags.Arg(0))
-				s := NewSession(false)
-				if err := s.buildFiles([]string{toolFlags.Arg(0)}, basename[:len(basename)-3]+".js"); err != nil {
-					return err
-				}
-				return nil
-			}
-		}
-		return fmt.Errorf("Tool not supported: " + tool)
-
-	case "help", "":
-		os.Stderr.WriteString(`GopherJS is a tool for compiling Go source code to JavaScript.
-
-Usage:
-
-    gopherjs command [arguments]
-
-The commands are:
-
-    build       compile packages and dependencies
-    install     compile and install packages and dependencies
-    run         compile and run Go program (requires Node.js)
-    test        test packages (requires Node.js)
-
-`)
-		return nil
-
-	default:
-		fmt.Fprintf(os.Stderr, "gopherjs: unknown subcommand \"%s\"\nRun 'gopherjs help' for usage.\n", cmd)
-		return nil
-
 	}
+	return exitErr
+}
+
+type toolCommand struct {
+}
+
+func (o *toolCommand) Execute(args []string) error {
+	toolFlags := flag.NewFlagSet("tool", flag.ContinueOnError)
+	toolFlags.Bool("e", false, "")
+	toolFlags.Bool("l", false, "")
+	toolFlags.Bool("m", false, "")
+	toolFlags.String("o", "", "")
+	toolFlags.String("D", "", "")
+	toolFlags.String("I", "", "")
+	toolFlags.Parse(args)
+
+	tool := toolFlags.Arg(0)
+
+	if len(tool) == 2 {
+		switch tool[1] {
+		case 'g':
+			basename := filepath.Base(toolFlags.Arg(0))
+			s := NewSession(false)
+			if err := s.buildFiles([]string{toolFlags.Arg(0)}, basename[:len(basename)-3]+".js"); err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("Tool not supported: " + tool)
+}
+
+func tool() error {
+	flagParser := flags.NewParser(nil, flags.HelpFlag)
+	var buildOpts buildCommand
+	flagParser.AddCommand("build", "compile", "compile packages and dependencies in the current directory", &buildOpts)
+	var installOpts installCommand
+	flagParser.AddCommand("install", "compile and install", "compile and install packages and dependencies in the current directory", &installOpts)
+	var runOpts runCommand
+	flagParser.AddCommand("run", "compile and run", "compile the Go program to javascript and run (requires Node.js)", &runOpts)
+	var testOpts testCommand
+	flagParser.AddCommand("test", "run tests", "test the packages (requires Node.js)", &testOpts)
+	var toolOpts toolCommand
+	flagParser.AddCommand("tool", "run a go tool", "run a specific go tool", &toolOpts)
+	_, err := flagParser.Parse()
+	if err != nil {
+		fmt.Println(err.Error())
+		fmt.Println("You can use \"gopherjs <command> -h\" to see the help message for the specific command.")
+		//if it's an actual error
+		if err.(*flags.Error).Type != flags.ErrHelp {
+			return fmt.Errorf("Invalid command line syntax.")
+		}
+	}
+	return nil
 }
 
 func (s *session) buildFiles(filenames []string, pkgObj string) error {

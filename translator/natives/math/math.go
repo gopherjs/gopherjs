@@ -50,7 +50,8 @@ func Copysign(x, y float64) float64 {
 }
 
 func Cos(x float64) float64 {
-	return math.Call("cos", x).Float()
+	// return math.Call("cos", x).Float()
+	return cos(x)
 }
 
 func Dim(x, y float64) float64 {
@@ -176,11 +177,13 @@ func Signbit(x float64) bool {
 }
 
 func Sin(x float64) float64 {
-	return math.Call("sin", x).Float()
+	// return math.Call("sin", x).Float()
+	return sin(x)
 }
 
 func Sincos(x float64) (sin, cos float64) {
-	return Sin(x), Cos(x)
+	// return Sin(x), Cos(x)
+	return sincos(x)
 }
 
 func Sqrt(x float64) float64 {
@@ -188,7 +191,8 @@ func Sqrt(x float64) float64 {
 }
 
 func Tan(x float64) float64 {
-	return math.Call("tan", x).Float()
+	// return math.Call("tan", x).Float()
+	return tan(x)
 }
 
 func Trunc(x float64) float64 {

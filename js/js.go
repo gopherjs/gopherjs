@@ -60,10 +60,10 @@ type Object interface {
 	// Int returns the object converted to int according to JavaScript type conversions (parseInt).
 	Int() int
 
-	// Int returns the object converted to int64 according to JavaScript type conversions (parseInt).
+	// Int64 returns the object converted to int64 according to JavaScript type conversions (parseInt).
 	Int64() int64
 
-	// Int returns the object converted to uint64 according to JavaScript type conversions (parseInt).
+	// Uint64 returns the object converted to uint64 according to JavaScript type conversions (parseInt).
 	Uint64() uint64
 
 	// Float returns the object converted to float64 according to JavaScript type conversions (parseFloat).

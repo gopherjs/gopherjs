@@ -23,6 +23,11 @@ func init() {
 var syscallModule js.Object
 
 func syscall(name string) js.Object {
+	defer func() {
+		if err := recover(); err != nil {
+			panic("system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
+		}
+	}()
 	if syscallModule == nil {
 		require := js.Global.Get("require")
 		if require.IsUndefined() {
@@ -30,7 +35,7 @@ func syscall(name string) js.Object {
 			if !syscallHandler.IsUndefined() {
 				return syscallHandler
 			}
-			panic("syscalls not available")
+			panic("")
 		}
 		syscallModule = require.Invoke("syscall")
 	}

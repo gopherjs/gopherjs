@@ -5,7 +5,7 @@ System calls are the bridge between your application and your operating system. 
 
 ### No fmt.Println?
 
-If system calls are not available in your environment (see below), keep in mind that instead of using `fmt.Println` you can still use Go's `println` built-in to write to your browser's JavaScript console or your system console.
+If system calls are not available in your environment (see below), keep in mind that instead of using `fmt.Println` you can still use Go's `println` built-in to write to your browser's JavaScript console or your system console. In combination with `fmt.Sprintf` you can keep the full power of the `fmt` package: `println(fmt.Sprintf(...))`.
 
 ### In Browser
 

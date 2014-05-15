@@ -21,14 +21,19 @@ func init() {
 }
 
 var syscallModule js.Object
+var alreadyTriedToLoad = false
 
 func syscall(name string) js.Object {
 	defer func() {
 		if err := recover(); err != nil {
-			panic("system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
+			println("warning: system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
 		}
 	}()
 	if syscallModule == nil {
+		if alreadyTriedToLoad {
+			return nil
+		}
+		alreadyTriedToLoad = true
 		require := js.Global.Get("require")
 		if require.IsUndefined() {
 			syscallHandler := js.Global.Get("$syscall")
@@ -43,23 +48,35 @@ func syscall(name string) js.Object {
 }
 
 func Syscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
-	r := syscall("Syscall").Invoke(trap, a1, a2, a3)
-	return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
+	if f := syscall("Syscall"); f != nil {
+		r := f.Invoke(trap, a1, a2, a3)
+		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
+	}
+	return 0, 0, EACCES
 }
 
 func Syscall6(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errno) {
-	r := syscall("Syscall6").Invoke(trap, a1, a2, a3, a4, a5, a6)
-	return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
+	if f := syscall("Syscall6"); f != nil {
+		r := f.Invoke(trap, a1, a2, a3, a4, a5, a6)
+		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
+	}
+	return 0, 0, EACCES
 }
 
 func RawSyscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
-	r := syscall("Syscall").Invoke(trap, a1, a2, a3)
-	return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
+	if f := syscall("Syscall"); f != nil {
+		r := f.Invoke(trap, a1, a2, a3)
+		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
+	}
+	return 0, 0, EACCES
 }
 
 func RawSyscall6(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errno) {
-	r := syscall("Syscall6").Invoke(trap, a1, a2, a3, a4, a5, a6)
-	return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
+	if f := syscall("Syscall6"); f != nil {
+		r := f.Invoke(trap, a1, a2, a3, a4, a5, a6)
+		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
+	}
+	return 0, 0, EACCES
 }
 
 func BytePtrFromString(s string) (*byte, error) {

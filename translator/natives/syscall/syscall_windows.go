@@ -2,32 +2,48 @@
 
 package syscall
 
+var warningPrinted = false
+
+func printWarning() {
+	if !warningPrinted {
+		println("warning: system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
+	}
+	warningPrinted = true
+}
+
 func Syscall(trap, nargs, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
-	panic("system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
+	printWarning()
+	return 0, 0, EACCES
 }
 
 func Syscall6(trap, nargs, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errno) {
-	panic("system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
+	printWarning()
+	return 0, 0, EACCES
 }
 
 func Syscall9(trap, nargs, a1, a2, a3, a4, a5, a6, a7, a8, a9 uintptr) (r1, r2 uintptr, err Errno) {
-	panic("system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
+	printWarning()
+	return 0, 0, EACCES
 }
 
 func Syscall12(trap, nargs, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12 uintptr) (r1, r2 uintptr, err Errno) {
-	panic("system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
+	printWarning()
+	return 0, 0, EACCES
 }
 
 func Syscall15(trap, nargs, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15 uintptr) (r1, r2 uintptr, err Errno) {
-	panic("system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
+	printWarning()
+	return 0, 0, EACCES
 }
 
 func loadlibrary(filename *uint16) (handle uintptr, err Errno) {
-	panic("system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
+	printWarning()
+	return 0, EACCES
 }
 
 func getprocaddress(handle uintptr, procname *uint8) (proc uintptr, err Errno) {
-	panic("system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
+	printWarning()
+	return 0, EACCES
 }
 
 func getStdHandle(h int) (fd Handle) {

@@ -3,9 +3,9 @@ System Calls
 
 System calls are the bridge between your application and your operating system. They are used whenever you access something outside of your application's memory, for example when you write to the console, when you read or write files or when you access the network. In Go, system calls are mostly used by the `os` package, hence the name. When using GopherJS you need to consider if system calls are available or not.
 
-### No fmt.Println?
+### Output redirection to console
 
-If system calls are not available in your environment (see below), keep in mind that instead of using `fmt.Println` you can still use Go's `println` built-in to write to your browser's JavaScript console or your system console. In combination with `fmt.Sprintf` you can keep the full power of the `fmt` package: `println(fmt.Sprintf(...))`.
+If system calls are not available in your environment (see below), then a special redirection of `os.Stdout` and `os.Stderr` is applied. It buffers a line until it is terminated by a line break and then prints it via JavaScript's `console.log` to your browser's JavaScript console or your system console. That way, `fmt.Println` etc. work as expected, even if system calls are not available.
 
 ### In Browser
 

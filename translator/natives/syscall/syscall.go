@@ -5,6 +5,7 @@ import (
 )
 
 var warningPrinted = false
+var lineBuffer []byte
 
 func printWarning() {
 	if !warningPrinted {

@@ -23,7 +23,6 @@ func init() {
 var syscallModule js.Object
 var alreadyTriedToLoad = false
 var minusOne = -1
-var lineBuffer []byte
 
 func syscall(name string) js.Object {
 	defer recover() // return nil

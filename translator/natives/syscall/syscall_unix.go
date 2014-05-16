@@ -23,13 +23,10 @@ func init() {
 var syscallModule js.Object
 var alreadyTriedToLoad = false
 var minusOne = -1
+var lineBuffer []byte
 
 func syscall(name string) js.Object {
-	defer func() {
-		if err := recover(); err != nil {
-			println("warning: system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
-		}
-	}()
+	defer recover() // return nil
 	if syscallModule == nil {
 		if alreadyTriedToLoad {
 			return nil
@@ -53,6 +50,12 @@ func Syscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
 		r := f.Invoke(trap, a1, a2, a3)
 		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
 	}
+	if trap == SYS_WRITE && (a1 == 1 || a1 == 2) {
+		b := js.Global.Call("go$sliceType", js.Global.Get("Go$Uint8")).New(js.InternalObject(a2)).Interface().([]byte)
+		printToConsole(b)
+		return uintptr(len(b)), 0, 0
+	}
+	printWarning()
 	return uintptr(minusOne), 0, EACCES
 }
 
@@ -61,6 +64,7 @@ func Syscall6(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errno) 
 		r := f.Invoke(trap, a1, a2, a3, a4, a5, a6)
 		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
 	}
+	printWarning()
 	return uintptr(minusOne), 0, EACCES
 }
 
@@ -69,6 +73,7 @@ func RawSyscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
 		r := f.Invoke(trap, a1, a2, a3)
 		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
 	}
+	printWarning()
 	return uintptr(minusOne), 0, EACCES
 }
 
@@ -77,6 +82,7 @@ func RawSyscall6(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errn
 		r := f.Invoke(trap, a1, a2, a3, a4, a5, a6)
 		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
 	}
+	printWarning()
 	return uintptr(minusOne), 0, EACCES
 }
 

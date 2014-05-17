@@ -105,10 +105,10 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			typ.elem = elem;
 			typ.len = len;
 			typ.prototype.go$key = function() {
-				return string + "$" + go$mapArray(this.go$val, function(e) {
+				return string + "$" + Array.prototype.join.call(go$mapArray(this.go$val, function(e) {
 					var key = e.go$key ? e.go$key() : String(e);
 					return key.replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
-				}).join("$");
+				}), "$");
 			};
 			typ.extendReflectType = function(rt) {
 				rt.arrayType = new go$reflect.arrayType.Ptr(rt, elem.reflectType(), undefined, len);

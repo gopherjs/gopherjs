@@ -52,6 +52,11 @@ func (t *Translator) Compile(importPath string, files []*ast.File, fileSet *toke
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 	}
 
+	patchedFiles := make([]*ast.File, len(files))
+	for i, file := range files {
+		patchedFiles[i] = applyPatches(file, fileSet, importPath)
+	}
+
 	var errList ErrorList
 	var previousErr error
 	config := &types.Config{
@@ -71,7 +76,7 @@ func (t *Translator) Compile(importPath string, files []*ast.File, fileSet *toke
 			previousErr = err
 		},
 	}
-	typesPkg, err := config.Check(importPath, fileSet, files, info)
+	typesPkg, err := config.Check(importPath, fileSet, patchedFiles, info)
 	if errList != nil {
 		return nil, errList
 	}
@@ -103,9 +108,7 @@ func (t *Translator) Compile(importPath string, files []*ast.File, fileSet *toke
 	var initStmts []ast.Stmt
 	var toplevelTypes []*types.TypeName
 	var vars []*types.Var
-	for _, file := range files {
-		file = applyPatches(file, fileSet, importPath)
-
+	for _, file := range patchedFiles {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:

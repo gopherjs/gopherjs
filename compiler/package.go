@@ -43,7 +43,7 @@ type flowData struct {
 	endCase   int
 }
 
-func (t *Translator) TranslatePackage(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error)) (*Archive, error) {
+func (t *Translator) Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error)) (*Archive, error) {
 	info := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),

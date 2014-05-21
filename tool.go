@@ -670,7 +670,7 @@ func (s *session) buildPackage(pkg *packageData) error {
 	}
 
 	var err error
-	pkg.Archive, err = s.t.TranslatePackage(pkg.ImportPath, files, fileSet, s.importPackage)
+	pkg.Archive, err = s.t.Compile(pkg.ImportPath, files, fileSet, s.importPackage)
 	if err != nil {
 		return err
 	}

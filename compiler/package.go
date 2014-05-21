@@ -104,6 +104,8 @@ func (t *Translator) Compile(importPath string, files []*ast.File, fileSet *toke
 	var toplevelTypes []*types.TypeName
 	var vars []*types.Var
 	for _, file := range files {
+		file = applyPatches(file, fileSet, importPath)
+
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:

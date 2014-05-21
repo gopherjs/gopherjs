@@ -596,7 +596,7 @@ func (s *session) buildPackage(pkg *packageData) error {
 				return err
 			}
 
-			pkg.Archive, err = s.t.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile)
+			pkg.Archive, err = s.t.UnmarshalArchive(pkg.PkgObj, pkg.ImportPath, objFile)
 			if err != nil {
 				return err
 			}
@@ -702,7 +702,7 @@ func (s *session) writeLibraryPackage(pkg *packageData, pkgObj string) error {
 		return err
 	}
 
-	data, err := s.t.WriteArchive(pkg.Archive)
+	data, err := s.t.MarshalArchive(pkg.Archive)
 	if err != nil {
 		return err
 	}

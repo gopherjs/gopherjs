@@ -187,7 +187,7 @@ func (t *Compiler) WritePkgCode(pkg *Archive, w *SourceMapFilter) {
 	w.Write([]byte("\t}\n\treturn go$pkg;\n})();\n"))
 }
 
-func (t *Compiler) ReadArchive(filename, id string, data []byte) (*Archive, error) {
+func (t *Compiler) UnmarshalArchive(filename, id string, data []byte) (*Archive, error) {
 	var a Archive
 	_, err := asn1.Unmarshal(data, &a)
 	if err != nil {
@@ -203,7 +203,7 @@ func (t *Compiler) ReadArchive(filename, id string, data []byte) (*Archive, erro
 	return &a, nil
 }
 
-func (t *Compiler) WriteArchive(a *Archive) ([]byte, error) {
+func (t *Compiler) MarshalArchive(a *Archive) ([]byte, error) {
 	return asn1.Marshal(*a)
 }
 

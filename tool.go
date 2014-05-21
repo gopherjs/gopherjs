@@ -6,7 +6,7 @@ import (
 	"code.google.com/p/go.tools/go/types"
 	"flag"
 	"fmt"
-	"github.com/gopherjs/gopherjs/translator"
+	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/neelance/sourcemap"
 	"go/ast"
 	"go/build"
@@ -620,7 +620,7 @@ func (s *session) buildPackage(pkg *packageData) error {
 		}
 		return recv.(*ast.Ident).Name + "." + d.Name.Name
 	}
-	if nativesPkg, err := buildImport("github.com/gopherjs/gopherjs/translator/natives/"+pkg.ImportPath, 0); err == nil {
+	if nativesPkg, err := buildImport("github.com/gopherjs/gopherjs/compiler/natives/"+pkg.ImportPath, 0); err == nil {
 		for _, name := range nativesPkg.GoFiles {
 			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
 			if err != nil {

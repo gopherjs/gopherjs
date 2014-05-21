@@ -26,7 +26,7 @@ type packageData struct {
 	*build.Package
 	SrcModTime time.Time
 	UpToDate   bool
-	Archive    *translator.Archive
+	Archive    *compiler.Archive
 }
 
 type importCError struct{}
@@ -85,7 +85,7 @@ func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 }
 
 type session struct {
-	t        *translator.Compiler
+	t        *compiler.Compiler
 	packages map[string]*packageData
 	verbose  bool
 	watcher  *fsnotify.Watcher
@@ -93,7 +93,7 @@ type session struct {
 
 func NewSession(verbose bool, watch bool) *session {
 	s := &session{
-		t:        translator.New(),
+		t:        compiler.New(),
 		verbose:  verbose || watch,
 		packages: make(map[string]*packageData),
 	}
@@ -342,7 +342,7 @@ func main() {
 						Name:       "main",
 						ImportPath: "main",
 					},
-					Archive: &translator.Archive{
+					Archive: &compiler.Archive{
 						ImportPath: "main",
 					},
 				}
@@ -354,14 +354,14 @@ func main() {
 				}
 				mainPkg.Archive.AddDependenciesOf(testingOutput)
 
-				var mainFunc translator.Decl
+				var mainFunc compiler.Decl
 				var names []string
 				var tests []string
 				collectTests := func(pkg *packageData) {
 					for _, name := range pkg.Archive.Tests {
 						names = append(names, name)
 						tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
-						mainFunc.DceDeps = append(mainFunc.DceDeps, translator.DepId(pkg.ImportPath+":"+name))
+						mainFunc.DceDeps = append(mainFunc.DceDeps, compiler.DepId(pkg.ImportPath+":"+name))
 					}
 					mainPkg.Archive.AddDependenciesOf(pkg.Archive)
 				}
@@ -379,7 +379,7 @@ func main() {
 					collectTests(testPkg)
 				}
 
-				mainFunc.DceDeps = append(mainFunc.DceDeps, translator.DepId("flag:Parse"))
+				mainFunc.DceDeps = append(mainFunc.DceDeps, compiler.DepId("flag:Parse"))
 				mainFunc.BodyCode = []byte(fmt.Sprintf(`
 				go$pkg.main = function() {
 					var testing = go$packages["testing"];
@@ -387,7 +387,7 @@ func main() {
 				};
 			`, pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))
 
-				mainPkg.Archive.Declarations = []translator.Decl{mainFunc}
+				mainPkg.Archive.Declarations = []compiler.Decl{mainFunc}
 				mainPkg.Archive.AddDependency("main")
 
 				tempfile, err := ioutil.TempFile("", "test.")
@@ -472,7 +472,7 @@ func handleError(f func() error) int {
 	switch err := f().(type) {
 	case nil:
 		return 0
-	case translator.ErrorList:
+	case compiler.ErrorList:
 		makeRel := func(name string) string {
 			if relname, err := filepath.Rel(currentDirectory, name); err == nil {
 				if relname[0] != '.' {
@@ -518,7 +518,7 @@ func (s *session) buildFiles(filenames []string, pkgObj string) error {
 	return s.writeCommandPackage(pkg, pkgObj)
 }
 
-func (s *session) importPackage(path string) (*translator.Archive, error) {
+func (s *session) importPackage(path string) (*compiler.Archive, error) {
 	if pkg, found := s.packages[path]; found {
 		return pkg.Archive, nil
 	}
@@ -607,7 +607,7 @@ func (s *session) buildPackage(pkg *packageData) error {
 
 	fileSet := token.NewFileSet()
 	var files []*ast.File
-	var errList translator.ErrorList
+	var errList compiler.ErrorList
 
 	replacedDeclNames := make(map[string]bool)
 	funcName := func(d *ast.FuncDecl) string {
@@ -729,7 +729,7 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 	}
 	defer mapFile.Close()
 
-	var allPkgs []*translator.Archive
+	var allPkgs []*compiler.Archive
 	for _, depPath := range pkg.Archive.Dependencies {
 		dep, err := s.importPackage(depPath)
 		if err != nil {
@@ -739,7 +739,7 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 	}
 
 	m := sourcemap.Map{File: filepath.Base(pkgObj)}
-	s.t.WriteProgramCode(allPkgs, pkg.ImportPath, &translator.SourceMapFilter{Writer: codeFile, MappingCallback: func(generatedLine, generatedColumn int, fileSet *token.FileSet, originalPos token.Pos) {
+	s.t.WriteProgramCode(allPkgs, pkg.ImportPath, &compiler.SourceMapFilter{Writer: codeFile, MappingCallback: func(generatedLine, generatedColumn int, fileSet *token.FileSet, originalPos token.Pos) {
 		if !originalPos.IsValid() {
 			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn})
 			return

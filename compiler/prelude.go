@@ -1,4 +1,4 @@
-package translator
+package compiler
 
 var prelude = `
 Error.stackTraceLimit = -1;

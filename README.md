@@ -1,4 +1,4 @@
-GopherJS - A transpiler from Go to JavaScript
+GopherJS - A compiler from Go to JavaScript
 ---------------------------------------------
 
 [![Build Status](https://travis-ci.org/gopherjs/gopherjs.png?branch=master)](https://travis-ci.org/gopherjs/gopherjs)

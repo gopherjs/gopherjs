@@ -85,7 +85,7 @@ func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
 }
 
 type session struct {
-	t        *translator.Translator
+	t        *translator.Compiler
 	packages map[string]*packageData
 	verbose  bool
 	watcher  *fsnotify.Watcher

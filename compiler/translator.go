@@ -29,19 +29,19 @@ func (err ErrorList) Error() string {
 	return err[0].Error()
 }
 
-type Translator struct {
+type Compiler struct {
 	typesPackages map[string]*types.Package
 }
 
-func New() *Translator {
-	return &Translator{map[string]*types.Package{"unsafe": types.Unsafe}}
+func New() *Compiler {
+	return &Compiler{map[string]*types.Package{"unsafe": types.Unsafe}}
 }
 
-func (t *Translator) NewEmptyTypesPackage(path string) {
+func (t *Compiler) NewEmptyTypesPackage(path string) {
 	t.typesPackages[path] = types.NewPackage(path, path)
 }
 
-func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *SourceMapFilter) {
+func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *SourceMapFilter) {
 	declsByObject := make(map[string][]*Decl)
 	var pendingDecls []*Decl
 	for _, pkg := range pkgs {
@@ -153,7 +153,7 @@ func (t *Translator) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *So
 	w.Write([]byte("go$packages[\"" + mainPkgPath + "\"].main();\n\n})();\n"))
 }
 
-func (t *Translator) WritePkgCode(pkg *Archive, w *SourceMapFilter) {
+func (t *Compiler) WritePkgCode(pkg *Archive, w *SourceMapFilter) {
 	if w.MappingCallback != nil && pkg.FileSet != nil {
 		w.fileSet = token.NewFileSet()
 		if err := w.fileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
@@ -187,7 +187,7 @@ func (t *Translator) WritePkgCode(pkg *Archive, w *SourceMapFilter) {
 	w.Write([]byte("\t}\n\treturn go$pkg;\n})();\n"))
 }
 
-func (t *Translator) ReadArchive(filename, id string, data []byte) (*Archive, error) {
+func (t *Compiler) ReadArchive(filename, id string, data []byte) (*Archive, error) {
 	var a Archive
 	_, err := asn1.Unmarshal(data, &a)
 	if err != nil {
@@ -203,7 +203,7 @@ func (t *Translator) ReadArchive(filename, id string, data []byte) (*Archive, er
 	return &a, nil
 }
 
-func (t *Translator) WriteArchive(a *Archive) ([]byte, error) {
+func (t *Compiler) WriteArchive(a *Archive) ([]byte, error) {
 	return asn1.Marshal(*a)
 }
 

@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"github.com/gopherjs/gopherjs/gcexporter"
 	"go/ast"
+	"go/build"
+	"go/parser"
 	"go/token"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -52,9 +55,47 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 	}
 
-	patchedFiles := make([]*ast.File, len(files))
-	for i, file := range files {
-		patchedFiles[i] = applyPatches(file, fileSet, importPath)
+	var patchedFiles []*ast.File
+	replacedDeclNames := make(map[string]bool)
+	funcName := func(d *ast.FuncDecl) string {
+		if d.Recv == nil {
+			return d.Name.Name
+		}
+		recv := d.Recv.List[0].Type
+		if star, ok := recv.(*ast.StarExpr); ok {
+			recv = star.X
+		}
+		return recv.(*ast.Ident).Name + "." + d.Name.Name
+	}
+	buildContext := &build.Context{
+		GOROOT:   build.Default.GOROOT,
+		GOPATH:   build.Default.GOPATH,
+		GOOS:     build.Default.GOOS,
+		GOARCH:   "js",
+		Compiler: "gc",
+	}
+	if nativesPkg, err := buildContext.Import("github.com/gopherjs/gopherjs/compiler/natives/"+importPath, "", 0); err == nil {
+		for _, name := range nativesPkg.GoFiles {
+			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
+			if err != nil {
+				panic(err)
+			}
+			for _, decl := range file.Decls {
+				if d, ok := decl.(*ast.FuncDecl); ok {
+					replacedDeclNames[funcName(d)] = true
+				}
+			}
+			patchedFiles = append(patchedFiles, file)
+		}
+	}
+	delete(replacedDeclNames, "init")
+	for _, file := range files {
+		for _, decl := range file.Decls {
+			if d, ok := decl.(*ast.FuncDecl); ok && replacedDeclNames[funcName(d)] {
+				d.Name = ast.NewIdent("_")
+			}
+		}
+		patchedFiles = append(patchedFiles, applyPatches(file, fileSet, importPath))
 	}
 
 	var errList ErrorList

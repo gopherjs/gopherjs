@@ -609,33 +609,6 @@ func (s *session) buildPackage(pkg *packageData) error {
 	var files []*ast.File
 	var errList compiler.ErrorList
 
-	replacedDeclNames := make(map[string]bool)
-	funcName := func(d *ast.FuncDecl) string {
-		if d.Recv == nil {
-			return d.Name.Name
-		}
-		recv := d.Recv.List[0].Type
-		if star, ok := recv.(*ast.StarExpr); ok {
-			recv = star.X
-		}
-		return recv.(*ast.Ident).Name + "." + d.Name.Name
-	}
-	if nativesPkg, err := buildImport("github.com/gopherjs/gopherjs/compiler/natives/"+pkg.ImportPath, 0); err == nil {
-		for _, name := range nativesPkg.GoFiles {
-			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
-			if err != nil {
-				panic(err)
-			}
-			for _, decl := range file.Decls {
-				if d, ok := decl.(*ast.FuncDecl); ok {
-					replacedDeclNames[funcName(d)] = true
-				}
-			}
-			files = append(files, file)
-		}
-	}
-	delete(replacedDeclNames, "init")
-
 	for _, name := range pkg.GoFiles {
 		if !filepath.IsAbs(name) {
 			name = filepath.Join(pkg.Dir, name)
@@ -655,12 +628,6 @@ func (s *session) buildPackage(pkg *packageData) error {
 			}
 			errList = append(errList, err)
 			continue
-		}
-
-		for _, decl := range file.Decls {
-			if d, ok := decl.(*ast.FuncDecl); ok && replacedDeclNames[funcName(d)] {
-				d.Name = ast.NewIdent("_")
-			}
 		}
 
 		files = append(files, file)

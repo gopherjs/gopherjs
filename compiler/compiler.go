@@ -8,8 +8,11 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"go/build"
 	"go/token"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -27,6 +30,45 @@ type ErrorList []error
 
 func (err ErrorList) Error() string {
 	return err[0].Error()
+}
+
+type ImportCError struct{}
+
+func (e *ImportCError) Error() string {
+	return `importing "C" is not supported by GopherJS`
+}
+
+func Import(path string, mode build.ImportMode) (*build.Package, error) {
+	if path == "C" {
+		return nil, &ImportCError{}
+	}
+
+	buildContext := &build.Context{
+		GOROOT:   build.Default.GOROOT,
+		GOPATH:   build.Default.GOPATH,
+		GOOS:     build.Default.GOOS,
+		GOARCH:   "js",
+		Compiler: "gc",
+	}
+	if path == "runtime" || path == "syscall" {
+		buildContext.GOARCH = build.Default.GOARCH
+		buildContext.InstallSuffix = "js"
+	}
+	pkg, err := buildContext.Import(path, "", mode)
+	if path == "hash/crc32" {
+		pkg.GoFiles = []string{"crc32.go", "crc32_generic.go"}
+	}
+	if pkg.IsCommand() {
+		pkg.PkgObj = filepath.Join(pkg.BinDir, filepath.Base(pkg.ImportPath)+".js")
+	}
+	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
+		// fall back to GOPATH
+		gopathPkgObj := build.Default.GOPATH + pkg.PkgObj[len(build.Default.GOROOT):]
+		if _, err := os.Stat(gopathPkgObj); err == nil {
+			pkg.PkgObj = gopathPkgObj
+		}
+	}
+	return pkg, err
 }
 
 type Compiler struct {
@@ -211,7 +253,7 @@ type Archive struct {
 	ImportPath   PkgPath
 	GcData       []byte
 	Dependencies []PkgPath
-	Imports      []Import
+	Imports      []PkgImport
 	Declarations []Decl
 	Tests        []string
 	FileSet      []byte
@@ -234,7 +276,7 @@ func (a *Archive) AddDependenciesOf(other *Archive) {
 	}
 }
 
-type Import struct {
+type PkgImport struct {
 	Path    PkgPath
 	VarName string
 }

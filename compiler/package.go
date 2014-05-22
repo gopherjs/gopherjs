@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/gopherjs/gopherjs/gcexporter"
 	"go/ast"
-	"go/build"
 	"go/parser"
 	"go/token"
 	"path/filepath"
@@ -67,14 +66,7 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 		}
 		return recv.(*ast.Ident).Name + "." + d.Name.Name
 	}
-	buildContext := &build.Context{
-		GOROOT:   build.Default.GOROOT,
-		GOPATH:   build.Default.GOPATH,
-		GOOS:     build.Default.GOOS,
-		GOARCH:   "js",
-		Compiler: "gc",
-	}
-	if nativesPkg, err := buildContext.Import("github.com/gopherjs/gopherjs/compiler/natives/"+importPath, "", 0); err == nil {
+	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+importPath, 0); err == nil {
 		for _, name := range nativesPkg.GoFiles {
 			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
 			if err != nil {
@@ -231,7 +223,7 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 	for _, importedPkg := range typesPkg.Imports() {
 		varName := c.newVariable(importedPkg.Name())
 		c.p.pkgVars[importedPkg.Path()] = varName
-		archive.Imports = append(archive.Imports, Import{Path: PkgPath(importedPkg.Path()), VarName: varName})
+		archive.Imports = append(archive.Imports, PkgImport{Path: PkgPath(importedPkg.Path()), VarName: varName})
 	}
 
 	// types

@@ -29,12 +29,6 @@ type packageData struct {
 	Archive    *compiler.Archive
 }
 
-type importCError struct{}
-
-func (e *importCError) Error() string {
-	return `importing "C" is not supported by GopherJS`
-}
-
 var currentDirectory string
 
 func init() {
@@ -49,39 +43,6 @@ func init() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-}
-
-func buildImport(path string, mode build.ImportMode) (*build.Package, error) {
-	if path == "C" {
-		return nil, &importCError{}
-	}
-
-	buildContext := &build.Context{
-		GOROOT:   build.Default.GOROOT,
-		GOPATH:   build.Default.GOPATH,
-		GOOS:     build.Default.GOOS,
-		GOARCH:   "js",
-		Compiler: "gc",
-	}
-	if path == "runtime" || path == "syscall" {
-		buildContext.GOARCH = build.Default.GOARCH
-		buildContext.InstallSuffix = "js"
-	}
-	pkg, err := buildContext.Import(path, "", mode)
-	if path == "hash/crc32" {
-		pkg.GoFiles = []string{"crc32.go", "crc32_generic.go"}
-	}
-	if pkg.IsCommand() {
-		pkg.PkgObj = filepath.Join(pkg.BinDir, filepath.Base(pkg.ImportPath)+".js")
-	}
-	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
-		// fall back to GOPATH
-		gopathPkgObj := build.Default.GOPATH + pkg.PkgObj[len(build.Default.GOROOT):]
-		if _, err := os.Stat(gopathPkgObj); err == nil {
-			pkg.PkgObj = gopathPkgObj
-		}
-	}
-	return pkg, err
 }
 
 type session struct {
@@ -182,7 +143,7 @@ func main() {
 					if s.watcher != nil {
 						s.watcher.Watch(pkgPath)
 					}
-					buildPkg, err := buildImport(pkgPath, 0)
+					buildPkg, err := compiler.Import(pkgPath, 0)
 					if err != nil {
 						return err
 					}
@@ -293,7 +254,7 @@ func main() {
 			for i, pkgPath := range testFlags.Args() {
 				pkgPath = filepath.ToSlash(pkgPath)
 				var err error
-				pkgs[i], err = buildImport(pkgPath, 0)
+				pkgs[i], err = compiler.Import(pkgPath, 0)
 				if err != nil {
 					return err
 				}
@@ -309,7 +270,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					if pkg, err = buildImport(pkgPath, 0); err != nil {
+					if pkg, err = compiler.Import(pkgPath, 0); err != nil {
 						return err
 					}
 				}
@@ -523,7 +484,7 @@ func (s *session) importPackage(path string) (*compiler.Archive, error) {
 		return pkg.Archive, nil
 	}
 
-	buildPkg, err := buildImport(path, build.AllowBinary)
+	buildPkg, err := compiler.Import(path, build.AllowBinary)
 	if s.watcher != nil && buildPkg != nil { // add watch even on error
 		if err := s.watcher.Watch(buildPkg.Dir); err != nil {
 			return nil, err

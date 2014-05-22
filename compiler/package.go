@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"github.com/gopherjs/gopherjs/gcexporter"
 	"go/ast"
-	"go/parser"
 	"go/token"
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -54,42 +52,6 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 	}
 
-	var patchedFiles []*ast.File
-	replacedDeclNames := make(map[string]bool)
-	funcName := func(d *ast.FuncDecl) string {
-		if d.Recv == nil {
-			return d.Name.Name
-		}
-		recv := d.Recv.List[0].Type
-		if star, ok := recv.(*ast.StarExpr); ok {
-			recv = star.X
-		}
-		return recv.(*ast.Ident).Name + "." + d.Name.Name
-	}
-	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+importPath, 0); err == nil {
-		for _, name := range nativesPkg.GoFiles {
-			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
-			if err != nil {
-				panic(err)
-			}
-			for _, decl := range file.Decls {
-				if d, ok := decl.(*ast.FuncDecl); ok {
-					replacedDeclNames[funcName(d)] = true
-				}
-			}
-			patchedFiles = append(patchedFiles, file)
-		}
-	}
-	delete(replacedDeclNames, "init")
-	for _, file := range files {
-		for _, decl := range file.Decls {
-			if d, ok := decl.(*ast.FuncDecl); ok && replacedDeclNames[funcName(d)] {
-				d.Name = ast.NewIdent("_")
-			}
-		}
-		patchedFiles = append(patchedFiles, applyPatches(file, fileSet, importPath))
-	}
-
 	var errList ErrorList
 	var previousErr error
 	config := &types.Config{
@@ -109,7 +71,7 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 			previousErr = err
 		},
 	}
-	typesPkg, err := config.Check(importPath, fileSet, patchedFiles, info)
+	typesPkg, err := config.Check(importPath, fileSet, files, info)
 	if errList != nil {
 		return nil, errList
 	}
@@ -141,7 +103,7 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 	var initStmts []ast.Stmt
 	var toplevelTypes []*types.TypeName
 	var vars []*types.Var
-	for _, file := range patchedFiles {
+	for _, file := range files {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:

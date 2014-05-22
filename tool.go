@@ -8,9 +8,7 @@ import (
 	"fmt"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/neelance/sourcemap"
-	"go/ast"
 	"go/build"
-	"go/parser"
 	"go/scanner"
 	"go/token"
 	"io/ioutil"
@@ -567,37 +565,10 @@ func (s *session) buildPackage(pkg *packageData) error {
 	}
 
 	fileSet := token.NewFileSet()
-	var files []*ast.File
-	var errList compiler.ErrorList
-
-	for _, name := range pkg.GoFiles {
-		if !filepath.IsAbs(name) {
-			name = filepath.Join(pkg.Dir, name)
-		}
-		r, err := os.Open(name)
-		if err != nil {
-			return err
-		}
-		file, err := parser.ParseFile(fileSet, name, r, 0)
-		r.Close()
-		if err != nil {
-			if list, isList := err.(scanner.ErrorList); isList {
-				for _, entry := range list {
-					errList = append(errList, entry)
-				}
-				continue
-			}
-			errList = append(errList, err)
-			continue
-		}
-
-		files = append(files, file)
+	files, err := compiler.Parse(pkg.Package, fileSet)
+	if err != nil {
+		return err
 	}
-	if errList != nil {
-		return errList
-	}
-
-	var err error
 	pkg.Archive, err = s.t.Compile(pkg.ImportPath, files, fileSet, s.importPackage)
 	if err != nil {
 		return err

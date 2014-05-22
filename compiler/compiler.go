@@ -8,7 +8,10 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"go/ast"
 	"go/build"
+	"go/parser"
+	"go/scanner"
 	"go/token"
 	"io"
 	"os"
@@ -69,6 +72,70 @@ func Import(path string, mode build.ImportMode) (*build.Package, error) {
 		}
 	}
 	return pkg, err
+}
+
+func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
+	var files []*ast.File
+	replacedDeclNames := make(map[string]bool)
+	funcName := func(d *ast.FuncDecl) string {
+		if d.Recv == nil {
+			return d.Name.Name
+		}
+		recv := d.Recv.List[0].Type
+		if star, ok := recv.(*ast.StarExpr); ok {
+			recv = star.X
+		}
+		return recv.(*ast.Ident).Name + "." + d.Name.Name
+	}
+	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+pkg.ImportPath, 0); err == nil {
+		for _, name := range nativesPkg.GoFiles {
+			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
+			if err != nil {
+				panic(err)
+			}
+			for _, decl := range file.Decls {
+				if d, ok := decl.(*ast.FuncDecl); ok {
+					replacedDeclNames[funcName(d)] = true
+				}
+			}
+			files = append(files, file)
+		}
+	}
+	delete(replacedDeclNames, "init")
+
+	var errList ErrorList
+	for _, name := range pkg.GoFiles {
+		if !filepath.IsAbs(name) {
+			name = filepath.Join(pkg.Dir, name)
+		}
+		r, err := os.Open(name)
+		if err != nil {
+			return nil, err
+		}
+		file, err := parser.ParseFile(fileSet, name, r, 0)
+		r.Close()
+		if err != nil {
+			if list, isList := err.(scanner.ErrorList); isList {
+				for _, entry := range list {
+					errList = append(errList, entry)
+				}
+				continue
+			}
+			errList = append(errList, err)
+			continue
+		}
+
+		for _, decl := range file.Decls {
+			if d, ok := decl.(*ast.FuncDecl); ok && replacedDeclNames[funcName(d)] {
+				d.Name = ast.NewIdent("_")
+			}
+		}
+		files = append(files, applyPatches(file, fileSet, pkg.ImportPath))
+	}
+	if errList != nil {
+		return nil, errList
+	}
+	return files, nil
 }
 
 type Compiler struct {

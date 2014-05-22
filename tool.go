@@ -343,7 +343,7 @@ func main() {
 						ImportPath: "main",
 					},
 					Archive: &compiler.Archive{
-						ImportPath: "main",
+						ImportPath: compiler.PkgPath("main"),
 					},
 				}
 				s.packages["main"] = mainPkg
@@ -698,7 +698,7 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 
 	var allPkgs []*compiler.Archive
 	for _, depPath := range pkg.Archive.Dependencies {
-		dep, err := s.importPackage(depPath)
+		dep, err := s.importPackage(string(depPath))
 		if err != nil {
 			return err
 		}

@@ -52,7 +52,7 @@ func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *Sour
 				continue
 			}
 			for _, f := range d.DceFilters {
-				o := pkg.ImportPath + ":" + string(f)
+				o := string(pkg.ImportPath) + ":" + string(f)
 				declsByObject[o] = append(declsByObject[o], d)
 			}
 		}
@@ -94,10 +94,10 @@ func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *Sour
 	// write interfaces
 	allTypeNames := []*types.TypeName{types.New("error").(*types.Named).Obj()}
 	for _, pkg := range pkgs {
-		scope := t.typesPackages[pkg.ImportPath].Scope()
+		scope := t.typesPackages[string(pkg.ImportPath)].Scope()
 		for _, name := range scope.Names() {
 			if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
-				if _, notUsed := declsByObject[pkg.ImportPath+":"+name]; !notUsed {
+				if _, notUsed := declsByObject[string(pkg.ImportPath)+":"+name]; !notUsed {
 					allTypeNames = append(allTypeNames, typeName)
 				}
 			}
@@ -147,7 +147,7 @@ func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *Sour
 	}
 
 	for _, pkg := range pkgs {
-		w.Write([]byte("go$packages[\"" + pkg.ImportPath + "\"].init();\n"))
+		w.Write([]byte("go$packages[\"" + string(pkg.ImportPath) + "\"].init();\n"))
 	}
 
 	w.Write([]byte("go$packages[\"" + mainPkgPath + "\"].main();\n\n})();\n"))
@@ -208,32 +208,34 @@ func (t *Compiler) MarshalArchive(a *Archive) ([]byte, error) {
 }
 
 type Archive struct {
-	ImportPath   string
+	ImportPath   PkgPath
 	GcData       []byte
-	Dependencies []string
+	Dependencies []PkgPath
 	Imports      []Import
 	Declarations []Decl
 	Tests        []string
 	FileSet      []byte
 }
 
+type PkgPath []byte // make asn1 happy
+
 func (a *Archive) AddDependency(path string) {
 	for _, dep := range a.Dependencies {
-		if dep == path {
+		if string(dep) == path {
 			return
 		}
 	}
-	a.Dependencies = append(a.Dependencies, path)
+	a.Dependencies = append(a.Dependencies, PkgPath(path))
 }
 
 func (a *Archive) AddDependenciesOf(other *Archive) {
 	for _, path := range other.Dependencies {
-		a.AddDependency(path)
+		a.AddDependency(string(path))
 	}
 }
 
 type Import struct {
-	Path    string
+	Path    PkgPath
 	VarName string
 }
 
@@ -245,7 +247,7 @@ type Decl struct {
 	DceDeps    []DepId
 }
 
-type DepId []byte
+type DepId []byte // make asn1 happy
 
 type SourceMapFilter struct {
 	Writer          io.Writer

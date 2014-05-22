@@ -221,9 +221,9 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 		return nil, err
 	}
 	archive := &Archive{
-		ImportPath:   importPath,
+		ImportPath:   PkgPath(importPath),
 		GcData:       gcData.Bytes(),
-		Dependencies: []string{"github.com/gopherjs/gopherjs/js", "runtime"}, // all packages depend on those
+		Dependencies: []PkgPath{PkgPath("github.com/gopherjs/gopherjs/js"), PkgPath("runtime")}, // all packages depend on those
 		FileSet:      encodedFileSet.Bytes(),
 	}
 
@@ -231,7 +231,7 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 	for _, importedPkg := range typesPkg.Imports() {
 		varName := c.newVariable(importedPkg.Name())
 		c.p.pkgVars[importedPkg.Path()] = varName
-		archive.Imports = append(archive.Imports, Import{Path: importedPkg.Path(), VarName: varName})
+		archive.Imports = append(archive.Imports, Import{Path: PkgPath(importedPkg.Path()), VarName: varName})
 	}
 
 	// types

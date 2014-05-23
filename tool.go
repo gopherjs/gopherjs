@@ -687,10 +687,10 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 			pos := fileSet.Position(originalPos)
 			file := pos.Filename
 			switch {
-			case strings.HasPrefix(file, build.Default.GOPATH):
-				file = filepath.ToSlash(filepath.Join("/gopath", file[len(build.Default.GOPATH):]))
-			case strings.HasPrefix(file, build.Default.GOROOT):
-				file = filepath.ToSlash(filepath.Join("/goroot", file[len(build.Default.GOROOT):]))
+			case strings.HasPrefix(file, s.options.GOPATH):
+				file = filepath.ToSlash(filepath.Join("/gopath", file[len(s.options.GOPATH):]))
+			case strings.HasPrefix(file, s.options.GOROOT):
+				file = filepath.ToSlash(filepath.Join("/goroot", file[len(s.options.GOROOT):]))
 			default:
 				file = filepath.Base(file)
 			}

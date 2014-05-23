@@ -613,9 +613,9 @@ func (s *session) buildPackage(pkg *packageData) error {
 	}
 
 	if err := s.writeLibraryPackage(pkg, pkg.PkgObj); err != nil {
-		if strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
+		if strings.HasPrefix(pkg.PkgObj, s.options.GOROOT) {
 			// fall back to GOPATH
-			if err := s.writeLibraryPackage(pkg, build.Default.GOPATH+pkg.PkgObj[len(build.Default.GOROOT):]); err != nil {
+			if err := s.writeLibraryPackage(pkg, s.options.GOPATH+pkg.PkgObj[len(s.options.GOROOT):]); err != nil {
 				return err
 			}
 			return nil

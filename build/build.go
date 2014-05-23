@@ -5,16 +5,38 @@ import (
 	"code.google.com/p/go.exp/fsnotify"
 	"fmt"
 	"github.com/gopherjs/gopherjs/compiler"
-	"github.com/metakeule/gopherjs/jslib"
 	"github.com/neelance/sourcemap"
 	"go/build"
 	"go/token"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
+
+type Options struct {
+	GOROOT        string
+	GOPATH        string
+	Target        io.Writer // here the js is written to
+	SourceMap     io.Writer // here the source map is written to (optional)
+	Verbose       bool
+	Watch         bool
+	CreateMapFile bool
+}
+
+func (o *Options) Normalize() {
+	if o.GOROOT == "" {
+		o.GOROOT = build.Default.GOROOT
+	}
+
+	if o.GOPATH == "" {
+		o.GOPATH = build.Default.GOPATH
+	}
+
+	o.Verbose = o.Verbose || o.Watch
+}
 
 type PackageData struct {
 	*build.Package
@@ -26,11 +48,11 @@ type PackageData struct {
 type session struct {
 	T        *compiler.Compiler
 	Packages map[string]*PackageData
-	options  *jslib.Options
+	options  *Options
 	Watcher  *fsnotify.Watcher
 }
 
-func NewSession(options *jslib.Options) *session {
+func NewSession(options *Options) *session {
 	s := &session{
 		T:        compiler.New(),
 		options:  options,

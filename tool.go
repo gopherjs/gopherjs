@@ -1,25 +1,19 @@
 package main
 
 import (
-	gbuild "github.com/metakeule/gopherjs/build"
-	// "bitbucket.org/kardianos/osext"
-	// "code.google.com/p/go.exp/fsnotify"
 	"code.google.com/p/go.tools/go/types"
 	"flag"
 	"fmt"
 	"github.com/gopherjs/gopherjs/compiler"
-	"github.com/metakeule/gopherjs/jslib"
-	// "github.com/neelance/sourcemap"
+	gbuild "github.com/metakeule/gopherjs/build"
 	"go/build"
 	"go/scanner"
-	// "go/token"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
-	// "time"
 )
 
 var currentDirectory string
@@ -40,7 +34,7 @@ func init() {
 
 func main() {
 	flag.Parse()
-	options := &jslib.Options{CreateMapFile: true}
+	options := &gbuild.Options{CreateMapFile: true}
 	cmd := flag.Arg(0)
 	switch cmd {
 	case "build":

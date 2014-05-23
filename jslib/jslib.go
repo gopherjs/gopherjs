@@ -1,6 +1,7 @@
 package jslib
 
 import (
+	"fmt"
 	"github.com/metakeule/gopherjs/build"
 	"io"
 	"io/ioutil"
@@ -8,23 +9,52 @@ import (
 	"path/filepath"
 )
 
+// some kind of duplicate of build.Options, but we don't want to bother the user
+// with including build just to set the options and we can't use the options here
+// from build, because it would trigger an import loop.
+// TODO Maybe find a better solution
+// The nice thing about this solution is, that we can strip out some options, that
+// are not relevant for library usage, i.e. Verbose, Watch and CreateMapFile.
+// The creation of a sourcemap is triggered here if SourceMap is not <nil> which is
+// a nicer API than in build.Options
+type Options struct {
+	GOROOT    string    // defaults to build.Default.GOROOT
+	GOPATH    string    // defaults to build.Default.GOPATH
+	Target    io.Writer // here the js is written to (mandatory)
+	SourceMap io.Writer // here the source map is written to (optional)
+}
+
+// toBuildOptions converts to the real build options in build
+func (o *Options) toBuildOptions() *build.Options {
+	b := &build.Options{}
+	b.GOROOT = o.GOROOT
+	b.GOPATH = o.GOPATH
+	b.Target = o.Target
+	b.SourceMap = o.SourceMap
+	b.Normalize()
+	return b
+}
+
 // BuildDir builds a package to Options.Target based on a directory
 // packagePath is the import path relative to options.GOPATH/src
-func BuildDir(packagePath string, options *build.Options) error {
-	options.Normalize()
-	s := build.NewSession(options)
-	return s.BuildDir(filepath.Join(options.GOPATH, "src", packagePath), "main", "")
+func BuildDir(packagePath string, options *Options) error {
+	if options.Target == nil {
+		return fmt.Errorf("no target writer given")
+	}
+	bo := options.toBuildOptions()
+	s := build.NewSession(bo)
+	return s.BuildDir(filepath.Join(bo.GOPATH, "src", packagePath), "main", "")
 }
 
 type packageBuilder struct {
 	files      map[string][]byte
-	options    *build.Options
+	options    *Options
 	packageDir string
 }
 
 // BuildFile builds a package to Option.Target based on a single file
-func BuildFile(r io.Reader, bo *build.Options) error {
-	pb := NewBuilder(bo)
+func BuildFile(r io.Reader, options *Options) error {
+	pb := NewBuilder(options)
 	err := pb.AddFile("main.go", r)
 	if err != nil {
 		return err
@@ -32,14 +62,12 @@ func BuildFile(r io.Reader, bo *build.Options) error {
 	return pb.Build()
 }
 
-// New creates a new package builder. use it to add several files to
+// NewBuilder creates a new package builder. use it to add several files to
 // a package before building it
-func NewBuilder(bo *build.Options) *packageBuilder {
-	bo.Normalize()
-
+func NewBuilder(options *Options) *packageBuilder {
 	return &packageBuilder{
 		files:   map[string][]byte{},
-		options: bo,
+		options: options,
 	}
 }
 

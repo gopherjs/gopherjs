@@ -89,7 +89,7 @@ func newSession(options *Options) *session {
 	return s
 }
 
-func (s *session) buildDir(packagePath string, pkgObj string) error {
+func (s *session) buildDir(packagePath string, importPath string, pkgObj string) error {
 	buildContext := &build.Context{
 		GOROOT:   s.options.GOROOT,
 		GOPATH:   s.options.GOPATH,
@@ -105,7 +105,7 @@ func (s *session) buildDir(packagePath string, pkgObj string) error {
 		return err
 	}
 	pkg := &packageData{Package: buildPkg}
-	pkg.ImportPath = packagePath
+	pkg.ImportPath = importPath
 	if err := s.buildPackage(pkg); err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func main() {
 
 			exitCode := handleError(func() error {
 				if buildFlags.NArg() == 0 {
-					return s.buildDir(currentDirectory, pkgObj)
+					return s.buildDir(currentDirectory, currentDirectory, pkgObj)
 				}
 
 				if strings.HasSuffix(buildFlags.Arg(0), ".go") {

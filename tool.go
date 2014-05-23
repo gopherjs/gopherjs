@@ -89,6 +89,35 @@ func newSession(options *Options) *session {
 	return s
 }
 
+func (s *session) buildDir(packagePath string, pkgObj string) error {
+	buildContext := &build.Context{
+		GOROOT:   s.options.GOROOT,
+		GOPATH:   s.options.GOPATH,
+		GOOS:     build.Default.GOOS,
+		GOARCH:   "js",
+		Compiler: "gc",
+	}
+	if s.watcher != nil {
+		s.watcher.Watch(packagePath)
+	}
+	buildPkg, err := buildContext.ImportDir(packagePath, 0)
+	if err != nil {
+		return err
+	}
+	pkg := &packageData{Package: buildPkg}
+	pkg.ImportPath = packagePath
+	if err := s.buildPackage(pkg); err != nil {
+		return err
+	}
+	if pkgObj == "" {
+		pkgObj = filepath.Base(packagePath) + ".js"
+	}
+	if err := s.writeCommandPackage(pkg, pkgObj); err != nil {
+		return err
+	}
+	return nil
+}
+
 func main() {
 	flag.Parse()
 	options := &Options{createMapFile: true}
@@ -110,32 +139,7 @@ func main() {
 
 			exitCode := handleError(func() error {
 				if buildFlags.NArg() == 0 {
-					buildContext := &build.Context{
-						GOROOT:   build.Default.GOROOT,
-						GOPATH:   build.Default.GOPATH,
-						GOOS:     build.Default.GOOS,
-						GOARCH:   "js",
-						Compiler: "gc",
-					}
-					if s.watcher != nil {
-						s.watcher.Watch(currentDirectory)
-					}
-					buildPkg, err := buildContext.ImportDir(currentDirectory, 0)
-					if err != nil {
-						return err
-					}
-					pkg := &packageData{Package: buildPkg}
-					pkg.ImportPath = currentDirectory
-					if err := s.buildPackage(pkg); err != nil {
-						return err
-					}
-					if pkgObj == "" {
-						pkgObj = filepath.Base(currentDirectory) + ".js"
-					}
-					if err := s.writeCommandPackage(pkg, pkgObj); err != nil {
-						return err
-					}
-					return nil
+					return s.buildDir(currentDirectory, pkgObj)
 				}
 
 				if strings.HasSuffix(buildFlags.Arg(0), ".go") {

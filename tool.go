@@ -29,12 +29,13 @@ type packageData struct {
 }
 
 type Options struct {
-	GOROOT    string
-	GOPATH    string
-	Target    io.Writer // here the js is written to
-	SourceMap io.Writer // here the source map is written to (optional)
-	Verbose   bool
-	Watch     bool
+	GOROOT        string
+	GOPATH        string
+	Target        io.Writer // here the js is written to
+	SourceMap     io.Writer // here the source map is written to (optional)
+	Verbose       bool
+	Watch         bool
+	createMapFile bool
 }
 
 func (o *Options) normalize() {
@@ -90,7 +91,7 @@ func newSession(options *Options) *session {
 
 func main() {
 	flag.Parse()
-	options := &Options{}
+	options := &Options{createMapFile: true}
 	cmd := flag.Arg(0)
 	switch cmd {
 	case "build":
@@ -644,19 +645,26 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 		return nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
-		return err
+	if s.options.Target == nil {
+		if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
+			return err
+		}
+		codeFile, err := os.Create(pkgObj)
+		if err != nil {
+			return err
+		}
+		defer codeFile.Close()
+		s.options.Target = codeFile
 	}
-	codeFile, err := os.Create(pkgObj)
-	if err != nil {
-		return err
+
+	if s.options.createMapFile {
+		mapFile, err := os.Create(pkgObj + ".map")
+		if err != nil {
+			return err
+		}
+		defer mapFile.Close()
+		s.options.SourceMap = mapFile
 	}
-	defer codeFile.Close()
-	mapFile, err := os.Create(pkgObj + ".map")
-	if err != nil {
-		return err
-	}
-	defer mapFile.Close()
 
 	var allPkgs []*compiler.Archive
 	for _, depPath := range pkg.Archive.Dependencies {
@@ -667,26 +675,34 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 		allPkgs = append(allPkgs, dep)
 	}
 
+	sfilter := &compiler.SourceMapFilter{Writer: s.options.Target}
 	m := sourcemap.Map{File: filepath.Base(pkgObj)}
-	s.t.WriteProgramCode(allPkgs, pkg.ImportPath, &compiler.SourceMapFilter{Writer: codeFile, MappingCallback: func(generatedLine, generatedColumn int, fileSet *token.FileSet, originalPos token.Pos) {
-		if !originalPos.IsValid() {
-			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn})
-			return
+
+	if s.options.SourceMap != nil {
+		sfilter.MappingCallback = func(generatedLine, generatedColumn int, fileSet *token.FileSet, originalPos token.Pos) {
+			if !originalPos.IsValid() {
+				m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn})
+				return
+			}
+			pos := fileSet.Position(originalPos)
+			file := pos.Filename
+			switch {
+			case strings.HasPrefix(file, build.Default.GOPATH):
+				file = filepath.ToSlash(filepath.Join("/gopath", file[len(build.Default.GOPATH):]))
+			case strings.HasPrefix(file, build.Default.GOROOT):
+				file = filepath.ToSlash(filepath.Join("/goroot", file[len(build.Default.GOROOT):]))
+			default:
+				file = filepath.Base(file)
+			}
+			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: pos.Line, OriginalColumn: pos.Column})
 		}
-		pos := fileSet.Position(originalPos)
-		file := pos.Filename
-		switch {
-		case strings.HasPrefix(file, build.Default.GOPATH):
-			file = filepath.ToSlash(filepath.Join("/gopath", file[len(build.Default.GOPATH):]))
-		case strings.HasPrefix(file, build.Default.GOROOT):
-			file = filepath.ToSlash(filepath.Join("/goroot", file[len(build.Default.GOROOT):]))
-		default:
-			file = filepath.Base(file)
-		}
-		m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: pos.Line, OriginalColumn: pos.Column})
-	}})
-	fmt.Fprintf(codeFile, "//# sourceMappingURL=%s.map\n", filepath.Base(pkgObj))
-	m.WriteTo(mapFile)
+	}
+
+	s.t.WriteProgramCode(allPkgs, pkg.ImportPath, sfilter)
+	if s.options.SourceMap != nil {
+		fmt.Fprintf(s.options.Target, "//# sourceMappingURL=%s.map\n", filepath.Base(pkgObj))
+		m.WriteTo(s.options.SourceMap)
+	}
 
 	return nil
 }

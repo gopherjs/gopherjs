@@ -11,6 +11,7 @@ import (
 	"go/build"
 	"go/scanner"
 	"go/token"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -25,6 +26,27 @@ type packageData struct {
 	SrcModTime time.Time
 	UpToDate   bool
 	Archive    *compiler.Archive
+}
+
+type Options struct {
+	GOROOT    string
+	GOPATH    string
+	Target    io.Writer // here the js is written to
+	SourceMap io.Writer // here the source map is written to (optional)
+	Verbose   bool
+	Watch     bool
+}
+
+func (o *Options) normalize() {
+	if o.GOROOT == "" {
+		o.GOROOT = build.Default.GOROOT
+	}
+
+	if o.GOPATH == "" {
+		o.GOPATH = build.Default.GOPATH
+	}
+
+	o.Verbose = o.Verbose || o.Watch
 }
 
 var currentDirectory string
@@ -46,17 +68,17 @@ func init() {
 type session struct {
 	t        *compiler.Compiler
 	packages map[string]*packageData
-	verbose  bool
+	options  *Options
 	watcher  *fsnotify.Watcher
 }
 
-func NewSession(verbose bool, watch bool) *session {
+func newSession(options *Options) *session {
 	s := &session{
 		t:        compiler.New(),
-		verbose:  verbose || watch,
+		options:  options,
 		packages: make(map[string]*packageData),
 	}
-	if watch {
+	if options.Watch {
 		var err error
 		s.watcher, err = fsnotify.NewWatcher()
 		if err != nil {
@@ -68,7 +90,7 @@ func NewSession(verbose bool, watch bool) *session {
 
 func main() {
 	flag.Parse()
-
+	options := &Options{}
 	cmd := flag.Arg(0)
 	switch cmd {
 	case "build":
@@ -77,10 +99,13 @@ func main() {
 		buildFlags.StringVar(&pkgObj, "o", "", "")
 		verbose := buildFlags.Bool("v", false, "print the names of packages as they are compiled")
 		watch := buildFlags.Bool("w", false, "watch for changes to the source files")
+		options.Verbose = *verbose
+		options.Watch = *watch
+		options.normalize()
 		buildFlags.Parse(flag.Args()[1:])
 
 		for {
-			s := NewSession(*verbose, *watch)
+			s := newSession(options)
 
 			exitCode := handleError(func() error {
 				if buildFlags.NArg() == 0 {
@@ -169,10 +194,13 @@ func main() {
 		installFlags := flag.NewFlagSet("install", flag.ContinueOnError)
 		verbose := installFlags.Bool("v", false, "print the names of packages as they are compiled")
 		watch := installFlags.Bool("w", false, "watch for changes to the source files")
+		options.Verbose = *verbose
+		options.Watch = *watch
+		options.normalize()
 		installFlags.Parse(flag.Args()[1:])
 
 		for {
-			s := NewSession(*verbose, *watch)
+			s := newSession(options)
 
 			exitCode := handleError(func() error {
 				pkgs := installFlags.Args()
@@ -230,8 +258,8 @@ func main() {
 				tempfile.Close()
 				os.Remove(tempfile.Name())
 			}()
-
-			s := NewSession(false, false)
+			options.normalize()
+			s := newSession(options)
 			if err := s.buildFiles(flag.Args()[1:lastSourceArg], tempfile.Name()); err != nil {
 				return err
 			}
@@ -291,7 +319,8 @@ func main() {
 				buildPkg.PkgObj = ""
 				buildPkg.GoFiles = append(buildPkg.GoFiles, buildPkg.TestGoFiles...)
 				pkg := &packageData{Package: buildPkg}
-				s := NewSession(false, false)
+				options.normalize()
+				s := newSession(options)
 				if err := s.buildPackage(pkg); err != nil {
 					return err
 				}
@@ -395,7 +424,8 @@ func main() {
 				switch tool[1] {
 				case 'g':
 					basename := filepath.Base(toolFlags.Arg(0))
-					s := NewSession(false, false)
+					options.normalize()
+					s := newSession(options)
 					if err := s.buildFiles([]string{toolFlags.Arg(0)}, basename[:len(basename)-3]+".js"); err != nil {
 						return err
 					}
@@ -574,7 +604,7 @@ func (s *session) buildPackage(pkg *packageData) error {
 		return err
 	}
 
-	if s.verbose {
+	if s.options.Verbose {
 		fmt.Println(pkg.ImportPath)
 	}
 

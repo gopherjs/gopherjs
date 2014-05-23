@@ -2,7 +2,7 @@ package jslib
 
 import (
 	"fmt"
-	"github.com/metakeule/gopherjs/build"
+	"github.com/gopherjs/gopherjs/build"
 	"io"
 	"io/ioutil"
 	"os"

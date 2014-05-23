@@ -7,11 +7,11 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/metakeule/gopherjs/jslib"
 	"github.com/neelance/sourcemap"
 	"go/build"
 	"go/scanner"
 	"go/token"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -26,28 +26,6 @@ type packageData struct {
 	SrcModTime time.Time
 	UpToDate   bool
 	Archive    *compiler.Archive
-}
-
-type Options struct {
-	GOROOT        string
-	GOPATH        string
-	Target        io.Writer // here the js is written to
-	SourceMap     io.Writer // here the source map is written to (optional)
-	Verbose       bool
-	Watch         bool
-	createMapFile bool
-}
-
-func (o *Options) normalize() {
-	if o.GOROOT == "" {
-		o.GOROOT = build.Default.GOROOT
-	}
-
-	if o.GOPATH == "" {
-		o.GOPATH = build.Default.GOPATH
-	}
-
-	o.Verbose = o.Verbose || o.Watch
 }
 
 var currentDirectory string
@@ -69,11 +47,11 @@ func init() {
 type session struct {
 	t        *compiler.Compiler
 	packages map[string]*packageData
-	options  *Options
+	options  *jslib.Options
 	watcher  *fsnotify.Watcher
 }
 
-func newSession(options *Options) *session {
+func newSession(options *jslib.Options) *session {
 	s := &session{
 		t:        compiler.New(),
 		options:  options,
@@ -120,7 +98,7 @@ func (s *session) buildDir(packagePath string, importPath string, pkgObj string)
 
 func main() {
 	flag.Parse()
-	options := &Options{createMapFile: true}
+	options := &jslib.Options{CreateMapFile: true}
 	cmd := flag.Arg(0)
 	switch cmd {
 	case "build":
@@ -131,7 +109,7 @@ func main() {
 		watch := buildFlags.Bool("w", false, "watch for changes to the source files")
 		options.Verbose = *verbose
 		options.Watch = *watch
-		options.normalize()
+		options.Normalize()
 		buildFlags.Parse(flag.Args()[1:])
 
 		for {
@@ -201,7 +179,7 @@ func main() {
 		watch := installFlags.Bool("w", false, "watch for changes to the source files")
 		options.Verbose = *verbose
 		options.Watch = *watch
-		options.normalize()
+		options.Normalize()
 		installFlags.Parse(flag.Args()[1:])
 
 		for {
@@ -263,7 +241,7 @@ func main() {
 				tempfile.Close()
 				os.Remove(tempfile.Name())
 			}()
-			options.normalize()
+			options.Normalize()
 			s := newSession(options)
 			if err := s.buildFiles(flag.Args()[1:lastSourceArg], tempfile.Name()); err != nil {
 				return err
@@ -324,7 +302,7 @@ func main() {
 				buildPkg.PkgObj = ""
 				buildPkg.GoFiles = append(buildPkg.GoFiles, buildPkg.TestGoFiles...)
 				pkg := &packageData{Package: buildPkg}
-				options.normalize()
+				options.Normalize()
 				s := newSession(options)
 				if err := s.buildPackage(pkg); err != nil {
 					return err
@@ -429,7 +407,7 @@ func main() {
 				switch tool[1] {
 				case 'g':
 					basename := filepath.Base(toolFlags.Arg(0))
-					options.normalize()
+					options.Normalize()
 					s := newSession(options)
 					if err := s.buildFiles([]string{toolFlags.Arg(0)}, basename[:len(basename)-3]+".js"); err != nil {
 						return err
@@ -661,7 +639,7 @@ func (s *session) writeCommandPackage(pkg *packageData, pkgObj string) error {
 		s.options.Target = codeFile
 	}
 
-	if s.options.createMapFile {
+	if s.options.CreateMapFile {
 		mapFile, err := os.Create(pkgObj + ".map")
 		if err != nil {
 			return err

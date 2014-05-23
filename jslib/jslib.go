@@ -42,20 +42,29 @@ func BuildDir(packagePath string, options *Options) error {
 		return fmt.Errorf("no target writer given")
 	}
 	bo := options.toBuildOptions()
+	return buildDir(filepath.Join(bo.GOPATH, "src", packagePath), bo)
+}
+
+// buildDir builds a package to Options.Target based on a directory
+// packageDir is the complete path
+func buildDir(packageDir string, bo *build.Options) error {
 	s := build.NewSession(bo)
-	return s.BuildDir(filepath.Join(bo.GOPATH, "src", packagePath), "main", "")
+	return s.BuildDir(packageDir, "main", "")
 }
 
 type packageBuilder struct {
 	files      map[string][]byte
-	options    *Options
+	options    *build.Options
 	packageDir string
 }
 
 // BuildFile builds a package to Option.Target based on a single file
 func BuildFile(r io.Reader, options *Options) error {
-	pb := NewBuilder(options)
-	err := pb.AddFile("main.go", r)
+	pb, err := NewBuilder(options)
+	if err != nil {
+		return err
+	}
+	err = pb.AddFile("main.go", r)
 	if err != nil {
 		return err
 	}
@@ -64,11 +73,14 @@ func BuildFile(r io.Reader, options *Options) error {
 
 // NewBuilder creates a new package builder. use it to add several files to
 // a package before building it
-func NewBuilder(options *Options) *packageBuilder {
+func NewBuilder(options *Options) (*packageBuilder, error) {
+	if options.Target == nil {
+		return nil, fmt.Errorf("no target writer given")
+	}
 	return &packageBuilder{
 		files:   map[string][]byte{},
-		options: options,
-	}
+		options: options.toBuildOptions(),
+	}, nil
 }
 
 // AddFile adds a file with the given filename and the content of r to the packageBuilder
@@ -90,7 +102,7 @@ func (b *packageBuilder) Build() error {
 		return err
 	}
 
-	return BuildDir(b.packageDir, b.options)
+	return buildDir(b.packageDir, b.options)
 }
 
 // mkTempPkg creates a physical package for the given files

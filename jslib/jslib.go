@@ -1,3 +1,57 @@
+/*
+Package jslib provides functions for compilation without resorting to the shell.
+
+All of them take the optional *Options argument. It can be
+used to set a different GOROOT or GOPATH directory or	to provide
+an io.Writer to which the sourcemap will be written to.
+
+Example compiling a single file:
+
+  import "github.com/gopherjs/gopherjs/jslib"
+
+  ...
+
+  file := strings.NewReader(`
+    package main
+    import "github.com/gopherjs/gopherjs/js"
+    func main() { println(js.Global.Get("window")) }
+  `)
+
+  var out bytes.Buffer
+
+  err := jslib.BuildFile(file, &out, nil) // <- default options
+
+Example compiling multiple files:
+
+  var out bytes.Buffer
+
+  builder, err := jslib.NewBuilder(&out, nil)
+
+  // error handling...
+
+  file := strings.NewReader(`
+    package main
+    import "github.com/gopherjs/gopherjs/js"
+    func a() { println(js.Global.Get("window")) }
+  `)
+
+  err = builder.AddFile("a.go", file1)
+
+  // and so on for each file,then
+
+  err = builder.Build()
+
+Example compiling a package directory:
+
+	var out, sourcemap bytes.Buffer
+
+	options := jslib.Options{
+	  GOPATH: "/tmp/gopherjs/gopath",
+	  SourceMap: sourcemap,
+	}
+
+	err := jslib.BuildDir("github.com/some/path", &out, &options)
+*/
 package jslib
 
 import (

@@ -9,39 +9,37 @@ import (
 	"path/filepath"
 )
 
-// some kind of duplicate of build.Options, but we don't want to bother the user
-// with including build just to set the options and we can't use the options here
-// from build, because it would trigger an import loop.
-// TODO Maybe find a better solution
-// The nice thing about this solution is, that we can strip out some options, that
-// are not relevant for library usage, i.e. Verbose, Watch and CreateMapFile.
-// The creation of a sourcemap is triggered here if SourceMap is not <nil> which is
-// a nicer API than in build.Options
+// Options is the subset of build.Options, that is exposed to the user of jslib
+// and is totally optional.
+// The creation of a sourcemap is triggered here if SourceMap is not <nil>.
 type Options struct {
 	GOROOT    string    // defaults to build.Default.GOROOT
 	GOPATH    string    // defaults to build.Default.GOPATH
-	Target    io.Writer // here the js is written to (mandatory)
-	SourceMap io.Writer // here the source map is written to (optional)
+	SourceMap io.Writer // here the source map is written to
 }
 
 // toBuildOptions converts to the real build options in build
-func (o *Options) toBuildOptions() *build.Options {
+func (o *Options) toBuildOptions(target io.Writer) *build.Options {
 	b := &build.Options{}
-	b.GOROOT = o.GOROOT
-	b.GOPATH = o.GOPATH
-	b.Target = o.Target
-	b.SourceMap = o.SourceMap
+	b.Target = target
+	if o != nil {
+		b.GOROOT = o.GOROOT
+		b.GOPATH = o.GOPATH
+		b.SourceMap = o.SourceMap
+	}
 	b.Normalize()
 	return b
 }
 
-// BuildDir builds a package to Options.Target based on a directory
+// BuildDir builds a package based on a directory and writes the result to target
 // packagePath is the import path relative to options.GOPATH/src
-func BuildDir(packagePath string, options *Options) error {
-	if options.Target == nil {
+// target must not be nil
+// options may be nil (defaults)
+func BuildDir(packagePath string, target io.Writer, options *Options) error {
+	if target == nil {
 		return fmt.Errorf("no target writer given")
 	}
-	bo := options.toBuildOptions()
+	bo := options.toBuildOptions(target)
 	return buildDir(filepath.Join(bo.GOPATH, "src", packagePath), bo)
 }
 
@@ -58,9 +56,11 @@ type packageBuilder struct {
 	packageDir string
 }
 
-// BuildFile builds a package to Option.Target based on a single file
-func BuildFile(r io.Reader, options *Options) error {
-	pb, err := NewBuilder(options)
+// BuildFile builds a package based on a single file and writes the result to target
+// target must not be nil
+// options may be nil (defaults)
+func BuildFile(r io.Reader, target io.Writer, options *Options) error {
+	pb, err := NewBuilder(target, options)
 	if err != nil {
 		return err
 	}
@@ -73,13 +73,15 @@ func BuildFile(r io.Reader, options *Options) error {
 
 // NewBuilder creates a new package builder. use it to add several files to
 // a package before building it
-func NewBuilder(options *Options) (*packageBuilder, error) {
-	if options.Target == nil {
+// target must not be nil
+// options may be nil (defaults)
+func NewBuilder(target io.Writer, options *Options) (*packageBuilder, error) {
+	if target == nil {
 		return nil, fmt.Errorf("no target writer given")
 	}
 	return &packageBuilder{
 		files:   map[string][]byte{},
-		options: options.toBuildOptions(),
+		options: options.toBuildOptions(target),
 	}, nil
 }
 

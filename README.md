@@ -51,6 +51,10 @@ For more details see [Jason Stone's blog post](http://legacytotheedge.blogspot.d
 ### Interface to native JavaScript
 The package `github.com/gopherjs/gopherjs/js` provides functions for interacting with native JavaScript APIs. Please see its [documentation](http://godoc.org/github.com/gopherjs/gopherjs/js) for further details.
 
+### Using the builder as a libary
+
+The package `github.com/gopherjs/gopherjs/jslib` provides functions for compilation without resorting to the shell. Please see its [documentation](http://godoc.org/github.com/gopherjs/gopherjs/jslib) for further details.
+
 ### Community
 - Get help in the [Google Group](https://groups.google.com/d/forum/gopherjs)
 - See the list of [bindings to JavaScript APIs and libraries](https://github.com/gopherjs/gopherjs/wiki/bindings) by community members

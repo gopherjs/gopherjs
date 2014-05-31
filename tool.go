@@ -41,12 +41,10 @@ func main() {
 		buildFlags := flag.NewFlagSet("build", flag.ContinueOnError)
 		var pkgObj string
 		buildFlags.StringVar(&pkgObj, "o", "", "")
-		verbose := buildFlags.Bool("v", false, "print the names of packages as they are compiled")
-		watch := buildFlags.Bool("w", false, "watch for changes to the source files")
-		options.Verbose = *verbose
-		options.Watch = *watch
-		options.Normalize()
+		buildFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
+		buildFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
 		buildFlags.Parse(flag.Args()[1:])
+		options.Normalize()
 
 		for {
 			s := gbuild.NewSession(options)
@@ -111,12 +109,10 @@ func main() {
 
 	case "install":
 		installFlags := flag.NewFlagSet("install", flag.ContinueOnError)
-		verbose := installFlags.Bool("v", false, "print the names of packages as they are compiled")
-		watch := installFlags.Bool("w", false, "watch for changes to the source files")
-		options.Verbose = *verbose
-		options.Watch = *watch
-		options.Normalize()
+		installFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
+		installFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
 		installFlags.Parse(flag.Args()[1:])
+		options.Normalize()
 
 		for {
 			s := gbuild.NewSession(options)

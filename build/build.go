@@ -8,7 +8,6 @@ import (
 	"github.com/neelance/sourcemap"
 	"go/build"
 	"go/token"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -19,8 +18,6 @@ import (
 type Options struct {
 	GOROOT        string
 	GOPATH        string
-	Target        io.Writer // here the js is written to
-	SourceMap     io.Writer // here the source map is written to (optional)
 	Verbose       bool
 	Watch         bool
 	CreateMapFile bool
@@ -258,26 +255,14 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 		return nil
 	}
 
-	if s.options.Target == nil {
-		if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
-			return err
-		}
-		codeFile, err := os.Create(pkgObj)
-		if err != nil {
-			return err
-		}
-		defer codeFile.Close()
-		s.options.Target = codeFile
+	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
+		return err
 	}
-
-	if s.options.CreateMapFile {
-		mapFile, err := os.Create(pkgObj + ".map")
-		if err != nil {
-			return err
-		}
-		defer mapFile.Close()
-		s.options.SourceMap = mapFile
+	codeFile, err := os.Create(pkgObj)
+	if err != nil {
+		return err
 	}
+	defer codeFile.Close()
 
 	var allPkgs []*compiler.Archive
 	for _, depPath := range pkg.Archive.Dependencies {
@@ -288,11 +273,21 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 		allPkgs = append(allPkgs, dep)
 	}
 
-	sfilter := &compiler.SourceMapFilter{Writer: s.options.Target}
-	m := sourcemap.Map{File: filepath.Base(pkgObj)}
+	sourceMapFilter := &compiler.SourceMapFilter{Writer: codeFile}
+	if s.options.CreateMapFile {
+		m := sourcemap.Map{File: filepath.Base(pkgObj)}
+		mapFile, err := os.Create(pkgObj + ".map")
+		if err != nil {
+			return err
+		}
 
-	if s.options.SourceMap != nil {
-		sfilter.MappingCallback = func(generatedLine, generatedColumn int, fileSet *token.FileSet, originalPos token.Pos) {
+		defer func() {
+			m.WriteTo(mapFile)
+			mapFile.Close()
+			fmt.Fprintf(codeFile, "//# sourceMappingURL=%s.map\n", filepath.Base(pkgObj))
+		}()
+
+		sourceMapFilter.MappingCallback = func(generatedLine, generatedColumn int, fileSet *token.FileSet, originalPos token.Pos) {
 			if !originalPos.IsValid() {
 				m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn})
 				return
@@ -311,11 +306,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 		}
 	}
 
-	s.T.WriteProgramCode(allPkgs, pkg.ImportPath, sfilter)
-	if s.options.SourceMap != nil {
-		fmt.Fprintf(s.options.Target, "//# sourceMappingURL=%s.map\n", filepath.Base(pkgObj))
-		m.WriteTo(s.options.SourceMap)
-	}
+	s.T.WriteProgramCode(allPkgs, pkg.ImportPath, sourceMapFilter)
 
 	return nil
 }

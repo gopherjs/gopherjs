@@ -139,6 +139,18 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 	return pkg.Archive, nil
 }
 
+func (s *Session) ImportDependencies(pkg *PackageData) ([]*compiler.Archive, error) {
+	var deps []*compiler.Archive
+	for _, depPath := range pkg.Archive.Dependencies {
+		dep, err := s.ImportPackage(string(depPath))
+		if err != nil {
+			return nil, err
+		}
+		deps = append(deps, dep)
+	}
+	return deps, nil
+}
+
 func (s *Session) BuildPackage(pkg *PackageData) error {
 	s.Packages[pkg.ImportPath] = pkg
 	if pkg.ImportPath == "unsafe" {
@@ -264,15 +276,6 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 	}
 	defer codeFile.Close()
 
-	var allPkgs []*compiler.Archive
-	for _, depPath := range pkg.Archive.Dependencies {
-		dep, err := s.ImportPackage(string(depPath))
-		if err != nil {
-			return err
-		}
-		allPkgs = append(allPkgs, dep)
-	}
-
 	sourceMapFilter := &compiler.SourceMapFilter{Writer: codeFile}
 	if s.options.CreateMapFile {
 		m := sourcemap.Map{File: filepath.Base(pkgObj)}
@@ -306,7 +309,11 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 		}
 	}
 
-	s.T.WriteProgramCode(allPkgs, pkg.ImportPath, sourceMapFilter)
+	deps, err := s.ImportDependencies(pkg)
+	if err != nil {
+		return err
+	}
+	s.T.WriteProgramCode(deps, pkg.ImportPath, sourceMapFilter)
 
 	return nil
 }

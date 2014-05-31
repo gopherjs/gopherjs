@@ -43,6 +43,7 @@ func main() {
 		buildFlags.StringVar(&pkgObj, "o", "", "")
 		buildFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
 		buildFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
+		buildFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
 		buildFlags.Parse(flag.Args()[1:])
 		options.Normalize()
 
@@ -83,7 +84,7 @@ func main() {
 					if s.Watcher != nil {
 						s.Watcher.Watch(pkgPath)
 					}
-					buildPkg, err := compiler.Import(pkgPath, 0)
+					buildPkg, err := compiler.Import(pkgPath, 0, s.ArchSuffix())
 					if err != nil {
 						return err
 					}
@@ -195,7 +196,7 @@ func main() {
 			for i, pkgPath := range testFlags.Args() {
 				pkgPath = filepath.ToSlash(pkgPath)
 				var err error
-				pkgs[i], err = compiler.Import(pkgPath, 0)
+				pkgs[i], err = compiler.Import(pkgPath, 0, "js")
 				if err != nil {
 					return err
 				}
@@ -211,7 +212,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					if pkg, err = compiler.Import(pkgPath, 0); err != nil {
+					if pkg, err = compiler.Import(pkgPath, 0, "js"); err != nil {
 						return err
 					}
 				}

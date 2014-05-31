@@ -41,7 +41,7 @@ func (e *ImportCError) Error() string {
 	return `importing "C" is not supported by GopherJS`
 }
 
-func Import(path string, mode build.ImportMode) (*build.Package, error) {
+func Import(path string, mode build.ImportMode, archSuffix string) (*build.Package, error) {
 	if path == "C" {
 		return nil, &ImportCError{}
 	}
@@ -50,12 +50,12 @@ func Import(path string, mode build.ImportMode) (*build.Package, error) {
 		GOROOT:   build.Default.GOROOT,
 		GOPATH:   build.Default.GOPATH,
 		GOOS:     build.Default.GOOS,
-		GOARCH:   "js",
+		GOARCH:   archSuffix,
 		Compiler: "gc",
 	}
 	if path == "runtime" || path == "syscall" {
 		buildContext.GOARCH = build.Default.GOARCH
-		buildContext.InstallSuffix = "js"
+		buildContext.InstallSuffix = archSuffix
 	}
 	pkg, err := buildContext.Import(path, "", mode)
 	if path == "hash/crc32" {
@@ -87,7 +87,7 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 		}
 		return recv.(*ast.Ident).Name + "." + d.Name.Name
 	}
-	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+pkg.ImportPath, 0); err == nil {
+	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+pkg.ImportPath, 0, ""); err == nil {
 		for _, name := range nativesPkg.GoFiles {
 			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
 			if err != nil {

@@ -24,6 +24,7 @@ type Options struct {
 	Verbose       bool
 	Watch         bool
 	CreateMapFile bool
+	Minify        bool
 }
 
 func (o *Options) Normalize() {
@@ -68,12 +69,19 @@ func NewSession(options *Options) *Session {
 	return s
 }
 
+func (s *Session) ArchSuffix() string {
+	if s.options.Minify {
+		return "js-min"
+	}
+	return "js"
+}
+
 func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string) error {
 	buildContext := &build.Context{
 		GOROOT:   s.options.GOROOT,
 		GOPATH:   s.options.GOPATH,
 		GOOS:     build.Default.GOOS,
-		GOARCH:   "js",
+		GOARCH:   s.ArchSuffix(),
 		Compiler: "gc",
 	}
 	if s.Watcher != nil {
@@ -118,7 +126,7 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 		return pkg.Archive, nil
 	}
 
-	buildPkg, err := compiler.Import(path, build.AllowBinary)
+	buildPkg, err := compiler.Import(path, build.AllowBinary, s.ArchSuffix())
 	if s.Watcher != nil && buildPkg != nil { // add watch even on error
 		if err := s.Watcher.Watch(buildPkg.Dir); err != nil {
 			return nil, err

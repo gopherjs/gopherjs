@@ -4,11 +4,15 @@ var prelude = `
 Error.stackTraceLimit = -1;
 
 var go$global;
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined") { // web page
 	go$global = window;
-} else if (typeof GLOBAL !== "undefined") {
-	go$global = GLOBAL;
+} else if (typeof self !== "undefined") { // web worker
+	go$global = self;
+} else if (typeof global !== "undefined") { // Node.js
+	go$global = global;
 	go$global.require = require;
+} else {
+	console.log("warning: no global object found")
 }
 
 var go$idCounter = 0;

@@ -87,7 +87,7 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 		}
 		return recv.(*ast.Ident).Name + "." + d.Name.Name
 	}
-	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+pkg.ImportPath, 0, ""); err == nil {
+	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+pkg.ImportPath, 0, "js"); err == nil {
 		for _, name := range nativesPkg.GoFiles {
 			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
 			if err != nil {

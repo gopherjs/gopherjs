@@ -45,15 +45,15 @@ type PackageData struct {
 	Archive    *compiler.Archive
 }
 
-type session struct {
+type Session struct {
 	T        *compiler.Compiler
 	Packages map[string]*PackageData
 	options  *Options
 	Watcher  *fsnotify.Watcher
 }
 
-func NewSession(options *Options) *session {
-	s := &session{
+func NewSession(options *Options) *Session {
+	s := &Session{
 		T:        compiler.New(),
 		options:  options,
 		Packages: make(map[string]*PackageData),
@@ -68,7 +68,7 @@ func NewSession(options *Options) *session {
 	return s
 }
 
-func (s *session) BuildDir(packagePath string, importPath string, pkgObj string) error {
+func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string) error {
 	buildContext := &build.Context{
 		GOROOT:   s.options.GOROOT,
 		GOPATH:   s.options.GOPATH,
@@ -97,7 +97,7 @@ func (s *session) BuildDir(packagePath string, importPath string, pkgObj string)
 	return nil
 }
 
-func (s *session) BuildFiles(filenames []string, pkgObj string, packagePath string) error {
+func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath string) error {
 	pkg := &PackageData{
 		Package: &build.Package{
 			Name:       "main",
@@ -113,7 +113,7 @@ func (s *session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 	return s.WriteCommandPackage(pkg, pkgObj)
 }
 
-func (s *session) ImportPackage(path string) (*compiler.Archive, error) {
+func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 	if pkg, found := s.Packages[path]; found {
 		return pkg.Archive, nil
 	}
@@ -134,7 +134,7 @@ func (s *session) ImportPackage(path string) (*compiler.Archive, error) {
 	return pkg.Archive, nil
 }
 
-func (s *session) BuildPackage(pkg *PackageData) error {
+func (s *Session) BuildPackage(pkg *PackageData) error {
 	s.Packages[pkg.ImportPath] = pkg
 	if pkg.ImportPath == "unsafe" {
 		return nil
@@ -232,7 +232,7 @@ func (s *session) BuildPackage(pkg *PackageData) error {
 	return nil
 }
 
-func (s *session) writeLibraryPackage(pkg *PackageData, pkgObj string) error {
+func (s *Session) writeLibraryPackage(pkg *PackageData, pkgObj string) error {
 	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
 		return err
 	}
@@ -245,7 +245,7 @@ func (s *session) writeLibraryPackage(pkg *PackageData, pkgObj string) error {
 	return ioutil.WriteFile(pkgObj, data, 0666)
 }
 
-func (s *session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
+func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 	if !pkg.IsCommand() || pkg.UpToDate {
 		return nil
 	}
@@ -312,7 +312,7 @@ func (s *session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 	return nil
 }
 
-func (s *session) WaitForChange() {
+func (s *Session) WaitForChange() {
 	fmt.Println("\x1B[32mwatching for changes...\x1B[39m")
 	select {
 	case ev := <-s.Watcher.Event:

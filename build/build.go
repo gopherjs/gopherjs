@@ -173,7 +173,20 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 		}
 
 		for _, importedPkgPath := range pkg.Imports {
-			if importedPkgPath == "unsafe" {
+			ignored := true
+			for _, pos := range pkg.ImportPos[importedPkgPath] {
+				importFile := filepath.Base(pos.Filename)
+				for _, file := range pkg.GoFiles {
+					if importFile == file {
+						ignored = false
+						break
+					}
+				}
+				if !ignored {
+					break
+				}
+			}
+			if importedPkgPath == "unsafe" || ignored {
 				continue
 			}
 			_, err := s.ImportPackage(importedPkgPath)

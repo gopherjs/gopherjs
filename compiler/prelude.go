@@ -388,18 +388,23 @@ var go$chanType = function(elem, sendOnly, recvOnly) {
 	return typ;
 };
 
-var go$funcTypes = {};
-var go$funcType = function(params, results, variadic) {
+var go$funcSig = function(params, results, variadic) {
 	var paramTypes = go$mapArray(params, function(p) { return p.string; });
 	if (variadic) {
 		paramTypes[paramTypes.length - 1] = "..." + paramTypes[paramTypes.length - 1].substr(2);
 	}
-	var string = "func(" + paramTypes.join(", ") + ")";
+	var string = "(" + paramTypes.join(", ") + ")";
 	if (results.length === 1) {
 		string += " " + results[0].string;
 	} else if (results.length > 1) {
 		string += " (" + go$mapArray(results, function(r) { return r.string; }).join(", ") + ")";
 	}
+	return string;
+};
+
+var go$funcTypes = {};
+var go$funcType = function(params, results, variadic) {
+	var string = "func" + go$funcSig(params, results, variadic);
 	var typ = go$funcTypes[string];
 	if (typ === undefined) {
 		typ = go$newType(4, "Func", string, "", "", null);
@@ -414,7 +419,7 @@ var go$interfaceType = function(methods) {
 	var string = "interface {}";
 	if (methods.length !== 0) {
 		string = "interface { " + go$mapArray(methods, function(m) {
-			return (m[1] !== "" ? m[1] + "." : "") + m[0] + m[2].string.substr(4);
+			return (m[1] !== "" ? m[1] + "." : "") + m[0] + go$funcSig(m[2], m[3], m[4]);
 		}).join("; ") + " }";
 	}
 	var typ = go$interfaceTypes[string];

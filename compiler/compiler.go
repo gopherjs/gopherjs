@@ -47,11 +47,12 @@ func Import(path string, mode build.ImportMode, archSuffix string) (*build.Packa
 	}
 
 	buildContext := &build.Context{
-		GOROOT:   build.Default.GOROOT,
-		GOPATH:   build.Default.GOPATH,
-		GOOS:     build.Default.GOOS,
-		GOARCH:   archSuffix,
-		Compiler: "gc",
+		GOROOT:    build.Default.GOROOT,
+		GOPATH:    build.Default.GOPATH,
+		GOOS:      build.Default.GOOS,
+		GOARCH:    archSuffix,
+		Compiler:  "gc",
+		BuildTags: []string{"netgo"},
 	}
 	if path == "runtime" || path == "syscall" {
 		buildContext.GOARCH = build.Default.GOARCH

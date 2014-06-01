@@ -75,11 +75,12 @@ func (s *Session) ArchSuffix() string {
 
 func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string) error {
 	buildContext := &build.Context{
-		GOROOT:   s.options.GOROOT,
-		GOPATH:   s.options.GOPATH,
-		GOOS:     build.Default.GOOS,
-		GOARCH:   s.ArchSuffix(),
-		Compiler: "gc",
+		GOROOT:    s.options.GOROOT,
+		GOPATH:    s.options.GOPATH,
+		GOOS:      build.Default.GOOS,
+		GOARCH:    s.ArchSuffix(),
+		Compiler:  "gc",
+		BuildTags: []string{"netgo"},
 	}
 	if s.Watcher != nil {
 		s.Watcher.Watch(packagePath)

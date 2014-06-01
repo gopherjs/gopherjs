@@ -39,9 +39,9 @@ All packages marked as supported are automatically transpiled and tested by Trav
 | -- sha256       | yes                   |                                   |
 | -- sha512       | yes                   |                                   |
 | -- subtle       | yes                   |                                   |
-| -- tls          | no                    | needs C code                      |
-| -- x509         | no                    | needs C code                      |
-| -- -- pkix      | no                    | needs C code                      |
+| -- tls          | not yet               |                                   |
+| -- x509         | not yet               |                                   |
+| -- -- pkix      | (no tests)            |                                   |
 | database        |                       |                                   |
 | -- sql          | no                    | uses goroutines                   |
 | -- -- driver    | yes                   |                                   |
@@ -102,24 +102,24 @@ All packages marked as supported are automatically transpiled and tested by Trav
 | -- rand         | yes                   |                                   |
 | mime            | yes                   |                                   |
 | -- multipart    | no                    |                                   |
-| net             | no                    | needs C code                      |
-| -- http         | no                    |                                   |
-| -- -- cgi       | no                    |                                   |
-| -- -- cookiejar | no                    |                                   |
-| -- -- fcgi      | no                    |                                   |
-| -- -- httptest  | no                    |                                   |
-| -- -- httputil  | no                    |                                   |
-| -- -- pprof     | no                    |                                   |
-| -- mail         | no                    |                                   |
-| -- rpc          | no                    |                                   |
-| -- -- jsonrpc   | no                    |                                   |
-| -- smtp         | no                    |                                   |
-| -- textproto    | no                    |                                   |
+| net             | not yet               |                                   |
+| -- http         | not yet               | actual requests in node.js only   |
+| -- -- cgi       | not yet               |                                   |
+| -- -- cookiejar | yes                   |                                   |
+| -- -- fcgi      | yes                   |                                   |
+| -- -- httptest  | not yet               |                                   |
+| -- -- httputil  | not yet               |                                   |
+| -- -- pprof     | (no tests)            |                                   |
+| -- mail         | yes                   |                                   |
+| -- rpc          | not yet               |                                   |
+| -- -- jsonrpc   | not yet               |                                   |
+| -- smtp         | not yet               |                                   |
+| -- textproto    | yes                   |                                   |
 | -- url          | yes                   |                                   |
-| os              | partially             | node.js only                      |
-| -- exec         | partially             | node.js only                      |
-| -- signal       | partially             | node.js only                      |
-| -- user         | partially             | node.js only                      |
+| os              | yes                   | node.js only                      |
+| -- exec         | yes                   | node.js only                      |
+| -- signal       | yes                   | node.js only                      |
+| -- user         | yes                   | node.js only                      |
 | path            | yes                   |                                   |
 | -- filepath     | yes                   |                                   |
 | reflect         | yes                   |                                   |

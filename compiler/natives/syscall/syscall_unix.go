@@ -20,6 +20,13 @@ func init() {
 	}
 }
 
+func setenv_c(k, v string) {
+	process := js.Global.Get("process")
+	if !process.IsUndefined() {
+		process.Get("env").Set(k, v)
+	}
+}
+
 var syscallModule js.Object
 var alreadyTriedToLoad = false
 var minusOne = -1

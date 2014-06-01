@@ -490,6 +490,25 @@ var go$structType = function(fields) {
 				this[fields[i][0]] = arguments[i];
 			}
 		});
+		// collect methods for anonymous fields
+		var i, j;
+		for (i = 0; i < fields.length; i++) {
+			var field = fields[i];
+			if (field[1] === "") {
+				var methods = field[3].methods;
+				for (j = 0; j < methods.length; j++) {
+					var m = methods[j].slice(0, 6).concat([i]);
+					typ.methods.push(m);
+					typ.Ptr.methods.push(m);
+				}
+				if (field[3].kind === "Struct") {
+					var methods = field[3].Ptr.methods;
+					for (j = 0; j < methods.length; j++) {
+						typ.Ptr.methods.push(methods[j].slice(0, 6).concat([i]));
+					}
+				}
+			}
+		}
 		typ.init(fields);
 		go$structTypes[string] = typ;
 	}

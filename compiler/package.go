@@ -380,7 +380,7 @@ func (c *funcContext) initType(o types.Object) {
 				if reservedKeywords[name] {
 					name += "$"
 				}
-				methods[i] = fmt.Sprintf(`["%s", "%s", "%s", %s, %s, %t, %d]`, name, method.Obj().Name(), pkgPath, c.typeArray(t.Params()), c.typeArray(t.Results()), t.Variadic(), embeddedIndex)
+				methods[i] = fmt.Sprintf(`["%s", "%s", "%s", %s, %d]`, name, method.Obj().Name(), pkgPath, c.initArgs(t), embeddedIndex)
 			}
 			c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
 		}
@@ -407,7 +407,7 @@ func (c *funcContext) initArgs(ty types.Type) string {
 			if !method.Exported() {
 				pkgPath = method.Pkg().Path()
 			}
-			methods[i] = fmt.Sprintf(`["%s", "%s", %s]`, method.Name(), pkgPath, c.typeName(method.Type()))
+			methods[i] = fmt.Sprintf(`["%s", "%s", %s]`, method.Name(), pkgPath, c.initArgs(method.Type()))
 		}
 		return fmt.Sprintf("[%s]", strings.Join(methods, ", "))
 	case *types.Map:
@@ -417,7 +417,15 @@ func (c *funcContext) initArgs(ty types.Type) string {
 	case *types.Slice:
 		return fmt.Sprintf("%s", c.typeName(t.Elem()))
 	case *types.Signature:
-		return fmt.Sprintf("%s, %s, %t", c.typeArray(t.Params()), c.typeArray(t.Results()), t.Variadic())
+		params := make([]string, t.Params().Len())
+		for i := range params {
+			params[i] = c.typeName(t.Params().At(i).Type())
+		}
+		results := make([]string, t.Results().Len())
+		for i := range results {
+			results[i] = c.typeName(t.Results().At(i).Type())
+		}
+		return fmt.Sprintf("[%s], [%s], %t", strings.Join(params, ", "), strings.Join(results, ", "), t.Variadic())
 	case *types.Struct:
 		fields := make([]string, t.NumFields())
 		for i := range fields {

@@ -250,14 +250,6 @@ func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	}
 }
 
-func (c *funcContext) typeArray(t *types.Tuple) string {
-	s := make([]string, t.Len())
-	for i := range s {
-		s[i] = c.typeName(t.At(i).Type())
-	}
-	return "[" + strings.Join(s, ", ") + "]"
-}
-
 func (c *funcContext) externalize(s string, t types.Type) string {
 	if isJsObject(t) {
 		return s

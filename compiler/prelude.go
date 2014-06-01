@@ -156,7 +156,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ.init = function(methods) {
 			typ.extendReflectType = function(rt) {
 				var imethods = go$mapArray(methods, function(m) {
-					return new go$reflect.imethod.Ptr(go$newStringPtr(m[0]), go$newStringPtr(m[1]), m[2].reflectType());
+					return new go$reflect.imethod.Ptr(go$newStringPtr(m[0]), go$newStringPtr(m[1]), go$funcType(m[2], m[3], m[4]).reflectType());
 				});
 				var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod.Ptr)));
 				rt.interfaceType = new go$reflect.interfaceType.Ptr(rt, new methodSlice(imethods));
@@ -428,7 +428,7 @@ var go$interfaceType = function(methods) {
 var go$emptyInterface = go$interfaceType([]);
 var go$interfaceNil = { go$key: function() { return "nil"; } };
 var go$error = go$newType(8, "Interface", "error", "error", "", null);
-go$error.init([["Error", "", go$funcType([], [Go$String], false)]]);
+go$error.init([["Error", "", [], [Go$String], false]]);
 
 var Go$Map = function() {};
 (function() {

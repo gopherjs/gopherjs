@@ -154,9 +154,10 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 	case "Interface":
 		typ = { implementedBy: [] };
 		typ.init = function(methods) {
+			typ.methods = methods;
 			typ.extendReflectType = function(rt) {
 				var imethods = go$mapArray(methods, function(m) {
-					return new go$reflect.imethod.Ptr(go$newStringPtr(m[0]), go$newStringPtr(m[1]), go$funcType(m[2], m[3], m[4]).reflectType());
+					return new go$reflect.imethod.Ptr(go$newStringPtr(m[1]), go$newStringPtr(m[2]), go$funcType(m[3], m[4], m[5]).reflectType());
 				});
 				var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod.Ptr)));
 				rt.interfaceType = new go$reflect.interfaceType.Ptr(rt, new methodSlice(imethods));
@@ -419,7 +420,7 @@ var go$interfaceType = function(methods) {
 	var string = "interface {}";
 	if (methods.length !== 0) {
 		string = "interface { " + go$mapArray(methods, function(m) {
-			return (m[1] !== "" ? m[1] + "." : "") + m[0] + go$funcSig(m[2], m[3], m[4]);
+			return (m[2] !== "" ? m[2] + "." : "") + m[1] + go$funcSig(m[3], m[4], m[5]);
 		}).join("; ") + " }";
 	}
 	var typ = go$interfaceTypes[string];
@@ -433,7 +434,7 @@ var go$interfaceType = function(methods) {
 var go$emptyInterface = go$interfaceType([]);
 var go$interfaceNil = { go$key: function() { return "nil"; } };
 var go$error = go$newType(8, "Interface", "error", "error", "", null);
-go$error.init([["Error", "", [], [Go$String], false]]);
+go$error.init([["Error", "Error", "", [], [Go$String], false]]);
 
 var Go$Map = function() {};
 (function() {

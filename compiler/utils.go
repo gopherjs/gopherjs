@@ -118,9 +118,9 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 			panic("Unhandled type")
 		}
 	case *types.Array:
-		return fmt.Sprintf(`go$makeNativeArray("%s", %d, function() { return %s; })`, typeKind(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
+		return fmt.Sprintf(`$makeNativeArray("%s", %d, function() { return %s; })`, typeKind(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
 	case *types.Signature:
-		return "go$throwNilPointerError"
+		return "$throwNilPointerError"
 	case *types.Slice:
 		return fmt.Sprintf("%s.nil", c.typeName(ty))
 	case *types.Struct:
@@ -179,7 +179,7 @@ func (c *funcContext) objectName(o types.Object) string {
 	if o.Pkg() != c.p.pkg {
 		pkgVar, found := c.p.pkgVars[o.Pkg().Path()]
 		if !found {
-			pkgVar = fmt.Sprintf(`go$packages["%s"]`, o.Pkg().Path())
+			pkgVar = fmt.Sprintf(`$packages["%s"]`, o.Pkg().Path())
 		}
 		return pkgVar + "." + o.Name()
 	}
@@ -193,7 +193,7 @@ func (c *funcContext) objectName(o types.Object) string {
 	switch o.(type) {
 	case *types.Var, *types.Const:
 		if o.Exported() && o.Parent() == c.p.pkg.Scope() {
-			return "go$pkg." + name
+			return "$pkg." + name
 		}
 	}
 	return name
@@ -206,24 +206,24 @@ func (c *funcContext) typeName(ty types.Type) string {
 		case types.UntypedNil:
 			return "null"
 		case types.UnsafePointer:
-			return "Go$UnsafePointer"
+			return "$UnsafePointer"
 		default:
-			return "Go$" + toJavaScriptType(t)
+			return "$" + toJavaScriptType(t)
 		}
 	case *types.Named:
 		if t.Obj().Name() == "error" {
-			return "go$error"
+			return "$error"
 		}
 		return c.objectName(t.Obj())
 	case *types.Pointer:
-		return fmt.Sprintf("(go$ptrType(%s))", c.initArgs(t))
+		return fmt.Sprintf("($ptrType(%s))", c.initArgs(t))
 	case *types.Interface:
 		if t.Empty() {
-			return "go$emptyInterface"
+			return "$emptyInterface"
 		}
-		return fmt.Sprintf("(go$interfaceType(%s))", c.initArgs(t))
+		return fmt.Sprintf("($interfaceType(%s))", c.initArgs(t))
 	case *types.Array, *types.Chan, *types.Slice, *types.Map, *types.Signature, *types.Struct:
-		return fmt.Sprintf("(go$%sType(%s))", strings.ToLower(typeKind(t)), c.initArgs(t))
+		return fmt.Sprintf("($%sType(%s))", strings.ToLower(typeKind(t)), c.initArgs(t))
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
@@ -232,19 +232,19 @@ func (c *funcContext) typeName(ty types.Type) string {
 func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	switch t := keyType.Underlying().(type) {
 	case *types.Array, *types.Struct:
-		return fmt.Sprintf("(new %s(%s)).go$key()", c.typeName(keyType), c.translateExpr(expr))
+		return fmt.Sprintf("(new %s(%s)).$key()", c.typeName(keyType), c.translateExpr(expr))
 	case *types.Basic:
 		if is64Bit(t) {
-			return fmt.Sprintf("%s.go$key()", c.translateExpr(expr))
+			return fmt.Sprintf("%s.$key()", c.translateExpr(expr))
 		}
 		if t.Info()&types.IsFloat != 0 {
-			return fmt.Sprintf("go$floatKey(%s)", c.translateExpr(expr))
+			return fmt.Sprintf("$floatKey(%s)", c.translateExpr(expr))
 		}
 		return c.translateImplicitConversion(expr, keyType).String()
 	case *types.Chan, *types.Pointer:
-		return fmt.Sprintf("%s.go$key()", c.translateImplicitConversion(expr, keyType))
+		return fmt.Sprintf("%s.$key()", c.translateImplicitConversion(expr, keyType))
 	case *types.Interface:
-		return fmt.Sprintf("(%s || go$interfaceNil).go$key()", c.translateImplicitConversion(expr, keyType))
+		return fmt.Sprintf("(%s || $interfaceNil).$key()", c.translateImplicitConversion(expr, keyType))
 	default:
 		return c.translateImplicitConversion(expr, keyType).String()
 	}
@@ -263,7 +263,7 @@ func (c *funcContext) externalize(s string, t types.Type) string {
 			return "null"
 		}
 	}
-	return fmt.Sprintf("go$externalize(%s, %s)", s, c.typeName(t))
+	return fmt.Sprintf("$externalize(%s, %s)", s, c.typeName(t))
 }
 
 func fieldName(t *types.Struct, i int) string {

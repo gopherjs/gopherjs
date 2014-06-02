@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	js.Global.Set("go$throwRuntimeError", func(msg string) {
+	js.Global.Set("$throwRuntimeError", func(msg string) {
 		panic(errorString(msg))
 	})
 	// avoid dead code elimination
@@ -28,7 +28,7 @@ func getgoroot() string {
 }
 
 func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
-	info := js.Global.Call("go$getStack").Index(skip + 3)
+	info := js.Global.Call("$getStack").Index(skip + 3)
 	if info.IsUndefined() {
 		return 0, "", 0, false
 	}
@@ -41,7 +41,7 @@ func GC() {
 
 var goexit = js.Global.Call("eval", `(function() {
 	var err = new Error();
-	err.go$exit = true;
+	err.$exit = true;
 	throw err;
 })`)
 
@@ -51,7 +51,7 @@ func Goexit() {
 
 func GOMAXPROCS(n int) int {
 	if n > 1 {
-		js.Global.Call("go$notSupported", "GOMAXPROCS > 1")
+		js.Global.Call("$notSupported", "GOMAXPROCS > 1")
 	}
 	return 1
 }

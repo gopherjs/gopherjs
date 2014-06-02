@@ -335,7 +335,7 @@ func (c *funcContext) translateType(o *types.TypeName, toplevel bool) {
 	typeName := c.objectName(o)
 	lhs := typeName
 	if toplevel {
-		lhs += " = go$pkg." + typeName
+		lhs += " = $pkg." + typeName
 	}
 	size := int64(0)
 	constructor := "null"
@@ -345,7 +345,7 @@ func (c *funcContext) translateType(o *types.TypeName, toplevel bool) {
 		for i := 0; i < t.NumFields(); i++ {
 			params[i] = fieldName(t, i) + "_"
 		}
-		constructor = fmt.Sprintf("function(%s) {\n%sthis.go$val = this;\n", strings.Join(params, ", "), strings.Repeat("\t", c.p.indentation+1))
+		constructor = fmt.Sprintf("function(%s) {\n%sthis.$val = this;\n", strings.Join(params, ", "), strings.Repeat("\t", c.p.indentation+1))
 		for i := 0; i < t.NumFields(); i++ {
 			name := fieldName(t, i)
 			constructor += fmt.Sprintf("%sthis.%s = %s_ !== undefined ? %s_ : %s;\n", strings.Repeat("\t", c.p.indentation+1), name, name, name, c.zeroValue(t.Field(i).Type()))
@@ -354,7 +354,7 @@ func (c *funcContext) translateType(o *types.TypeName, toplevel bool) {
 	case *types.Basic, *types.Array, *types.Slice, *types.Chan, *types.Signature, *types.Interface, *types.Pointer, *types.Map:
 		size = sizes32.Sizeof(t)
 	}
-	c.Printf(`%s = go$newType(%d, "%s", "%s.%s", "%s", "%s", %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), constructor)
+	c.Printf(`%s = $newType(%d, "%s", "%s.%s", "%s", "%s", %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), constructor)
 }
 
 func (c *funcContext) initType(o types.Object) {
@@ -457,7 +457,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl) []byte {
 	var joinedParams string
 	primaryFunction := func(lhs string, fullName string) []byte {
 		if fun.Body == nil {
-			return []byte(fmt.Sprintf("\t%s = function() {\n\t\tthrow go$panic(\"Native function not implemented: %s\");\n\t};\n", lhs, fullName))
+			return []byte(fmt.Sprintf("\t%s = function() {\n\t\tthrow $panic(\"Native function not implemented: %s\");\n\t};\n", lhs, fullName))
 		}
 
 		stmts := fun.Body.List
@@ -481,7 +481,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl) []byte {
 		funName := c.objectName(o)
 		lhs := funName
 		if fun.Name.IsExported() || fun.Name.Name == "main" {
-			lhs += " = go$pkg." + funName
+			lhs += " = $pkg." + funName
 		}
 		return primaryFunction(lhs, funName)
 	}
@@ -502,31 +502,31 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl) []byte {
 
 	if _, isStruct := namedRecvType.Underlying().(*types.Struct); isStruct {
 		code.Write(primaryFunction(typeName+".Ptr.prototype."+funName, typeName+"."+funName))
-		fmt.Fprintf(code, "\t%s.prototype.%s = function(%s) { return this.go$val.%s(%s); };\n", typeName, funName, joinedParams, funName, joinedParams)
+		fmt.Fprintf(code, "\t%s.prototype.%s = function(%s) { return this.$val.%s(%s); };\n", typeName, funName, joinedParams, funName, joinedParams)
 		return code.Bytes()
 	}
 
 	if isPointer {
 		if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
 			code.Write(primaryFunction(typeName+".prototype."+funName, typeName+"."+funName))
-			fmt.Fprintf(code, "\tgo$ptrType(%s).prototype.%s = function(%s) { return (new %s(this.go$get())).%s(%s); };\n", typeName, funName, joinedParams, typeName, funName, joinedParams)
+			fmt.Fprintf(code, "\t$ptrType(%s).prototype.%s = function(%s) { return (new %s(this.$get())).%s(%s); };\n", typeName, funName, joinedParams, typeName, funName, joinedParams)
 			return code.Bytes()
 		}
 		value := "this"
 		if isWrapped(ptr.Elem()) {
-			value = "this.go$val"
+			value = "this.$val"
 		}
-		code.Write(primaryFunction(fmt.Sprintf("go$ptrType(%s).prototype.%s", typeName, funName), typeName+"."+funName))
-		fmt.Fprintf(code, "\t%s.prototype.%s = function(%s) { var obj = %s; return (new (go$ptrType(%s))(function() { return obj; }, null)).%s(%s); };\n", typeName, funName, joinedParams, value, typeName, funName, joinedParams)
+		code.Write(primaryFunction(fmt.Sprintf("$ptrType(%s).prototype.%s", typeName, funName), typeName+"."+funName))
+		fmt.Fprintf(code, "\t%s.prototype.%s = function(%s) { var obj = %s; return (new ($ptrType(%s))(function() { return obj; }, null)).%s(%s); };\n", typeName, funName, joinedParams, value, typeName, funName, joinedParams)
 		return code.Bytes()
 	}
 
-	value := "this.go$get()"
+	value := "this.$get()"
 	if isWrapped(recvType) {
 		value = fmt.Sprintf("new %s(%s)", typeName, value)
 	}
 	code.Write(primaryFunction(typeName+".prototype."+funName, typeName+"."+funName))
-	fmt.Fprintf(code, "\tgo$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };\n", typeName, funName, joinedParams, value, funName, joinedParams)
+	fmt.Fprintf(code, "\t$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };\n", typeName, funName, joinedParams, value, funName, joinedParams)
 	return code.Bytes()
 }
 
@@ -566,7 +566,7 @@ func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte
 	}
 	c.localVars = nil
 	if c.flattened {
-		c.localVars = append(c.localVars, "go$this = this", "go$args = arguments")
+		c.localVars = append(c.localVars, "$this = this", "$args = arguments")
 	}
 
 	body := c.CatchOutput(indent, func() {
@@ -588,10 +588,10 @@ func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte
 
 		printBody := func() {
 			if c.flattened {
-				c.Printf("/* */ var go$s = 0, go$f = function() { while (true) { switch (go$s) { case 0:")
+				c.Printf("/* */ var $s = 0, $f = function() { while (true) { switch ($s) { case 0:")
 				c.translateStmtList(stmts)
 				c.WritePos(token.NoPos)
-				c.Printf("/* */ } break; } }; return go$f();")
+				c.Printf("/* */ } break; } }; return $f();")
 				return
 			}
 			c.translateStmtList(stmts)
@@ -601,14 +601,14 @@ func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte
 		v := hasDeferVisitor{}
 		ast.Walk(&v, &ast.BlockStmt{List: stmts})
 		if v.hasDefer {
-			c.Printf("var go$deferred = [];")
+			c.Printf("var $deferred = [];")
 			c.Printf("try {")
 			c.Indent(func() {
 				printBody()
 			})
-			c.Printf("} catch(go$err) {")
+			c.Printf("} catch($err) {")
 			c.Indent(func() {
-				c.Printf("go$pushErr(go$err);")
+				c.Printf("$pushErr($err);")
 				if c.sig != nil && c.resultNames == nil {
 					switch c.sig.Results().Len() {
 					case 0:
@@ -626,7 +626,7 @@ func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte
 			})
 			c.Printf("} finally {")
 			c.Indent(func() {
-				c.Printf("go$callDeferred(go$deferred);")
+				c.Printf("$callDeferred($deferred);")
 				if c.resultNames != nil {
 					c.translateStmt(&ast.ReturnStmt{}, "")
 				}

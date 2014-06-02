@@ -57,7 +57,7 @@ func Syscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
 		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
 	}
 	if trap == SYS_WRITE && (a1 == 1 || a1 == 2) {
-		b := js.Global.Call("go$sliceType", js.Global.Get("Go$Uint8")).New(js.InternalObject(a2)).Interface().([]byte)
+		b := js.Global.Call("$sliceType", js.Global.Get("$Uint8")).New(js.InternalObject(a2)).Interface().([]byte)
 		printToConsole(b)
 		return uintptr(len(b)), 0, 0
 	}
@@ -93,5 +93,5 @@ func RawSyscall6(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errn
 }
 
 func BytePtrFromString(s string) (*byte, error) {
-	return (*byte)(unsafe.Pointer(js.Global.Call("go$stringToBytes", s, true).Unsafe())), nil
+	return (*byte)(unsafe.Pointer(js.Global.Call("$stringToBytes", s, true).Unsafe())), nil
 }

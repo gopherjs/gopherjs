@@ -8,11 +8,11 @@ import (
 )
 
 func NewEncoder(w io.Writer) *Encoder {
-	js.Global.Call("go$notSupported", "encoding/gob")
+	js.Global.Call("$notSupported", "encoding/gob")
 	panic("unreachable")
 }
 
 func NewDecoder(r io.Reader) *Decoder {
-	js.Global.Call("go$notSupported", "encoding/gob")
+	js.Global.Call("$notSupported", "encoding/gob")
 	panic("unreachable")
 }

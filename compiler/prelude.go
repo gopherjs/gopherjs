@@ -3,42 +3,42 @@ package compiler
 var prelude = `
 Error.stackTraceLimit = -1;
 
-var go$global;
+var $global;
 if (typeof window !== "undefined") { // web page
-	go$global = window;
+	$global = window;
 } else if (typeof self !== "undefined") { // web worker
-	go$global = self;
+	$global = self;
 } else if (typeof global !== "undefined") { // Node.js
-	go$global = global;
-	go$global.require = require;
+	$global = global;
+	$global.require = require;
 } else {
 	console.log("warning: no global object found")
 }
 
-var go$idCounter = 0;
-var go$keys = function(m) { return m ? Object.keys(m) : []; };
-var go$min = Math.min;
-var go$parseInt = parseInt;
-var go$parseFloat = function(f) {
+var $idCounter = 0;
+var $keys = function(m) { return m ? Object.keys(m) : []; };
+var $min = Math.min;
+var $parseInt = parseInt;
+var $parseFloat = function(f) {
 	if (f.constructor === Number) {
 		return f;
 	}
 	return parseFloat(f);
 };
-var go$mod = function(x, y) { return x % y; };
-var go$toString = String;
-var go$reflect, go$newStringPtr;
-var Go$Array = Array;
+var $mod = function(x, y) { return x % y; };
+var $toString = String;
+var $reflect, $newStringPtr;
+var $Array = Array;
 
-var go$floatKey = function(f) {
+var $floatKey = function(f) {
 	if (f !== f) {
-		go$idCounter++;
-		return "NaN$" + go$idCounter;
+		$idCounter++;
+		return "NaN$" + $idCounter;
 	}
 	return String(f);
 };
 
-var go$mapArray = function(array, f) {
+var $mapArray = function(array, f) {
 	var newArray = new array.constructor(array.length), i;
 	for (i = 0; i < array.length; i++) {
 		newArray[i] = f(array[i]);
@@ -46,7 +46,7 @@ var go$mapArray = function(array, f) {
 	return newArray;
 };
 
-var go$newType = function(size, kind, string, name, pkgPath, constructor) {
+var $newType = function(size, kind, string, name, pkgPath, constructor) {
 	var typ;
 	switch(kind) {
 	case "Bool":
@@ -61,32 +61,32 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 	case "Uintptr":
 	case "String":
 	case "UnsafePointer":
-		typ = function(v) { this.go$val = v; };
-		typ.prototype.go$key = function() { return string + "$" + this.go$val; };
+		typ = function(v) { this.$val = v; };
+		typ.prototype.$key = function() { return string + "$" + this.$val; };
 		break;
 
 	case "Float32":
 	case "Float64":
-		typ = function(v) { this.go$val = v; };
-		typ.prototype.go$key = function() { return string + "$" + go$floatKey(this.go$val); };
+		typ = function(v) { this.$val = v; };
+		typ.prototype.$key = function() { return string + "$" + $floatKey(this.$val); };
 		break;
 
 	case "Int64":
 		typ = function(high, low) {
 			this.high = (high + Math.floor(Math.ceil(low) / 4294967296)) >> 0;
 			this.low = low >>> 0;
-			this.go$val = this;
+			this.$val = this;
 		};
-		typ.prototype.go$key = function() { return string + "$" + this.high + "$" + this.low; };
+		typ.prototype.$key = function() { return string + "$" + this.high + "$" + this.low; };
 		break;
 
 	case "Uint64":
 		typ = function(high, low) {
 			this.high = (high + Math.floor(Math.ceil(low) / 4294967296)) >>> 0;
 			this.low = low >>> 0;
-			this.go$val = this;
+			this.$val = this;
 		};
-		typ.prototype.go$key = function() { return string + "$" + this.high + "$" + this.low; };
+		typ.prototype.$key = function() { return string + "$" + this.high + "$" + this.low; };
 		break;
 
 	case "Complex64":
@@ -94,59 +94,59 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ = function(real, imag) {
 			this.real = real;
 			this.imag = imag;
-			this.go$val = this;
+			this.$val = this;
 		};
-		typ.prototype.go$key = function() { return string + "$" + this.real + "$" + this.imag; };
+		typ.prototype.$key = function() { return string + "$" + this.real + "$" + this.imag; };
 		break;
 
 	case "Array":
-		typ = function(v) { this.go$val = v; };
-		typ.Ptr = go$newType(4, "Ptr", "*" + string, "", "", function(array) {
-			this.go$get = function() { return array; };
-			this.go$val = array;
+		typ = function(v) { this.$val = v; };
+		typ.Ptr = $newType(4, "Ptr", "*" + string, "", "", function(array) {
+			this.$get = function() { return array; };
+			this.$val = array;
 		});
 		typ.init = function(elem, len) {
 			typ.elem = elem;
 			typ.len = len;
-			typ.prototype.go$key = function() {
-				return string + "$" + Array.prototype.join.call(go$mapArray(this.go$val, function(e) {
-					var key = e.go$key ? e.go$key() : String(e);
+			typ.prototype.$key = function() {
+				return string + "$" + Array.prototype.join.call($mapArray(this.$val, function(e) {
+					var key = e.$key ? e.$key() : String(e);
 					return key.replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
 				}), "$");
 			};
 			typ.extendReflectType = function(rt) {
-				rt.arrayType = new go$reflect.arrayType.Ptr(rt, elem.reflectType(), undefined, len);
+				rt.arrayType = new $reflect.arrayType.Ptr(rt, elem.reflectType(), undefined, len);
 			};
 			typ.Ptr.init(typ);
 		};
 		break;
 
 	case "Chan":
-		typ = function() { this.go$val = this; };
-		typ.prototype.go$key = function() {
-			if (this.go$id === undefined) {
-				go$idCounter++;
-				this.go$id = go$idCounter;
+		typ = function() { this.$val = this; };
+		typ.prototype.$key = function() {
+			if (this.$id === undefined) {
+				$idCounter++;
+				this.$id = $idCounter;
 			}
-			return String(this.go$id);
+			return String(this.$id);
 		};
 		typ.init = function(elem, sendOnly, recvOnly) {
 			typ.nil = new typ();
 			typ.extendReflectType = function(rt) {
-				rt.chanType = new go$reflect.chanType.Ptr(rt, elem.reflectType(), sendOnly ? go$reflect.SendDir : (recvOnly ? go$reflect.RecvDir : go$reflect.BothDir));
+				rt.chanType = new $reflect.chanType.Ptr(rt, elem.reflectType(), sendOnly ? $reflect.SendDir : (recvOnly ? $reflect.RecvDir : $reflect.BothDir));
 			};
 		};
 		break;
 
 	case "Func":
-		typ = function(v) { this.go$val = v; };
+		typ = function(v) { this.$val = v; };
 		typ.init = function(params, results, variadic) {
 			typ.params = params;
 			typ.results = results;
 			typ.variadic = variadic;
 			typ.extendReflectType = function(rt) {
-				var typeSlice = (go$sliceType(go$ptrType(go$reflect.rtype.Ptr)));
-				rt.funcType = new go$reflect.funcType.Ptr(rt, variadic, new typeSlice(go$mapArray(params, function(p) { return p.reflectType(); })), new typeSlice(go$mapArray(results, function(p) { return p.reflectType(); })));
+				var typeSlice = ($sliceType($ptrType($reflect.rtype.Ptr)));
+				rt.funcType = new $reflect.funcType.Ptr(rt, variadic, new typeSlice($mapArray(params, function(p) { return p.reflectType(); })), new typeSlice($mapArray(results, function(p) { return p.reflectType(); })));
 			};
 		};
 		break;
@@ -156,43 +156,43 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ.init = function(methods) {
 			typ.methods = methods;
 			typ.extendReflectType = function(rt) {
-				var imethods = go$mapArray(methods, function(m) {
-					return new go$reflect.imethod.Ptr(go$newStringPtr(m[1]), go$newStringPtr(m[2]), go$funcType(m[3], m[4], m[5]).reflectType());
+				var imethods = $mapArray(methods, function(m) {
+					return new $reflect.imethod.Ptr($newStringPtr(m[1]), $newStringPtr(m[2]), $funcType(m[3], m[4], m[5]).reflectType());
 				});
-				var methodSlice = (go$sliceType(go$ptrType(go$reflect.imethod.Ptr)));
-				rt.interfaceType = new go$reflect.interfaceType.Ptr(rt, new methodSlice(imethods));
+				var methodSlice = ($sliceType($ptrType($reflect.imethod.Ptr)));
+				rt.interfaceType = new $reflect.interfaceType.Ptr(rt, new methodSlice(imethods));
 			};
 		};
 		break;
 
 	case "Map":
-		typ = function(v) { this.go$val = v; };
+		typ = function(v) { this.$val = v; };
 		typ.init = function(key, elem) {
 			typ.key = key;
 			typ.elem = elem;
 			typ.extendReflectType = function(rt) {
-				rt.mapType = new go$reflect.mapType.Ptr(rt, key.reflectType(), elem.reflectType(), undefined, undefined);
+				rt.mapType = new $reflect.mapType.Ptr(rt, key.reflectType(), elem.reflectType(), undefined, undefined);
 			};
 		};
 		break;
 
 	case "Ptr":
 		typ = constructor || function(getter, setter) {
-			this.go$get = getter;
-			this.go$set = setter;
-			this.go$val = this;
+			this.$get = getter;
+			this.$set = setter;
+			this.$val = this;
 		};
-		typ.prototype.go$key = function() {
-			if (this.go$id === undefined) {
-				go$idCounter++;
-				this.go$id = go$idCounter;
+		typ.prototype.$key = function() {
+			if (this.$id === undefined) {
+				$idCounter++;
+				this.$id = $idCounter;
 			}
-			return String(this.go$id);
+			return String(this.$id);
 		};
 		typ.init = function(elem) {
-			typ.nil = new typ(go$throwNilPointerError, go$throwNilPointerError);
+			typ.nil = new typ($throwNilPointerError, $throwNilPointerError);
 			typ.extendReflectType = function(rt) {
-				rt.ptrType = new go$reflect.ptrType.Ptr(rt, elem.reflectType());
+				rt.ptrType = new $reflect.ptrType.Ptr(rt, elem.reflectType());
 			};
 		};
 		break;
@@ -207,7 +207,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			this.offset = 0;
 			this.length = array.length;
 			this.capacity = array.length;
-			this.go$val = this;
+			this.$val = this;
 		};
 		typ.make = function(length, capacity, zero) {
 			capacity = capacity || length;
@@ -221,17 +221,17 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 		};
 		typ.init = function(elem) {
 			typ.elem = elem;
-			nativeArray = go$nativeArray(elem.kind);
+			nativeArray = $nativeArray(elem.kind);
 			typ.nil = new typ([]);
 			typ.extendReflectType = function(rt) {
-				rt.sliceType = new go$reflect.sliceType.Ptr(rt, elem.reflectType());
+				rt.sliceType = new $reflect.sliceType.Ptr(rt, elem.reflectType());
 			};
 		};
 		break;
 
 	case "Struct":
-		typ = function(v) { this.go$val = v; };
-		typ.Ptr = go$newType(4, "Ptr", "*" + string, "", "", constructor);
+		typ = function(v) { this.$val = v; };
+		typ.Ptr = $newType(4, "Ptr", "*" + string, "", "", constructor);
 		typ.Ptr.Struct = typ;
 		typ.init = function(fields) {
 			var i;
@@ -241,7 +241,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 			typ.Ptr.nil = new constructor();
 			for (i = 0; i < fields.length; i++) {
 				var field = fields[i];
-				Object.defineProperty(typ.Ptr.nil, field[1], { get: go$throwNilPointerError, set: go$throwNilPointerError });
+				Object.defineProperty(typ.Ptr.nil, field[1], { get: $throwNilPointerError, set: $throwNilPointerError });
 			}
 			// methods for embedded fields
 			for (i = 0; i < typ.methods.length; i++) {
@@ -249,7 +249,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 				if (method[6] != -1) {
 					(function(field, methodName) {
 						typ.prototype[methodName] = function() {
-							var v = this.go$val[field[0]];
+							var v = this.$val[field[0]];
 							return v[methodName].apply(v, arguments);
 						};
 					})(fields[method[6]], method[0]);
@@ -261,7 +261,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 					(function(field, methodName) {
 						typ.Ptr.prototype[methodName] = function() {
 							var v = this[field[0]];
-							if (v.go$val === undefined) {
+							if (v.$val === undefined) {
 								v = new field[3](v);
 							}
 							return v[methodName].apply(v, arguments);
@@ -270,11 +270,11 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 				}
 			}
 			// map key
-			typ.prototype.go$key = function() {
+			typ.prototype.$key = function() {
 				var keys = new Array(fields.length);
 				for (i = 0; i < fields.length; i++) {
-					var v = this.go$val[fields[i][0]];
-					var key = v.go$key ? v.go$key() : String(v);
+					var v = this.$val[fields[i][0]];
+					var key = v.$key ? v.$key() : String(v);
 					keys[i] = key.replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
 				}
 				return string + "$" + keys.join("$");
@@ -284,15 +284,15 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 				var reflectFields = new Array(fields.length), i;
 				for (i = 0; i < fields.length; i++) {
 					var field = fields[i];
-					reflectFields[i] = new go$reflect.structField.Ptr(go$newStringPtr(field[1]), go$newStringPtr(field[2]), field[3].reflectType(), go$newStringPtr(field[4]), i);
+					reflectFields[i] = new $reflect.structField.Ptr($newStringPtr(field[1]), $newStringPtr(field[2]), field[3].reflectType(), $newStringPtr(field[4]), i);
 				}
-				rt.structType = new go$reflect.structType.Ptr(rt, new (go$sliceType(go$reflect.structField.Ptr))(reflectFields));
+				rt.structType = new $reflect.structType.Ptr(rt, new ($sliceType($reflect.structField.Ptr))(reflectFields));
 			};
 		};
 		break;
 
 	default:
-		throw go$panic(new Go$String("invalid kind: " + kind));
+		throw $panic(new $String("invalid kind: " + kind));
 	}
 
 	typ.kind = kind;
@@ -303,7 +303,7 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 	var rt = null;
 	typ.reflectType = function() {
 		if (rt === null) {
-			rt = new go$reflect.rtype.Ptr(size, 0, 0, 0, 0, go$reflect.kinds[kind], undefined, undefined, go$newStringPtr(string), undefined, undefined);
+			rt = new $reflect.rtype.Ptr(size, 0, 0, 0, 0, $reflect.kinds[kind], undefined, undefined, $newStringPtr(string), undefined, undefined);
 			rt.jsType = typ;
 
 			var methods = [];
@@ -311,12 +311,12 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 				var i;
 				for (i = 0; i < typ.methods.length; i++) {
 					var m = typ.methods[i];
-					methods.push(new go$reflect.method.Ptr(go$newStringPtr(m[1]), go$newStringPtr(m[2]), go$funcType(m[3], m[4], m[5]).reflectType(), go$funcType([typ].concat(m[3]), m[4], m[5]).reflectType(), undefined, undefined));
+					methods.push(new $reflect.method.Ptr($newStringPtr(m[1]), $newStringPtr(m[2]), $funcType(m[3], m[4], m[5]).reflectType(), $funcType([typ].concat(m[3]), m[4], m[5]).reflectType(), undefined, undefined));
 				}
 			}
 			if (name !== "" || methods.length !== 0) {
-				var methodSlice = (go$sliceType(go$ptrType(go$reflect.method.Ptr)));
-				rt.uncommonType = new go$reflect.uncommonType.Ptr(go$newStringPtr(name), go$newStringPtr(pkgPath), new methodSlice(methods));
+				var methodSlice = ($sliceType($ptrType($reflect.method.Ptr)));
+				rt.uncommonType = new $reflect.uncommonType.Ptr($newStringPtr(name), $newStringPtr(pkgPath), new methodSlice(methods));
 				rt.uncommonType.jsType = typ;
 			}
 
@@ -329,68 +329,68 @@ var go$newType = function(size, kind, string, name, pkgPath, constructor) {
 	return typ;
 };
 
-var Go$Bool          = go$newType( 1, "Bool",          "bool",           "bool",       "", null);
-var Go$Int           = go$newType( 4, "Int",           "int",            "int",        "", null);
-var Go$Int8          = go$newType( 1, "Int8",          "int8",           "int8",       "", null);
-var Go$Int16         = go$newType( 2, "Int16",         "int16",          "int16",      "", null);
-var Go$Int32         = go$newType( 4, "Int32",         "int32",          "int32",      "", null);
-var Go$Int64         = go$newType( 8, "Int64",         "int64",          "int64",      "", null);
-var Go$Uint          = go$newType( 4, "Uint",          "uint",           "uint",       "", null);
-var Go$Uint8         = go$newType( 1, "Uint8",         "uint8",          "uint8",      "", null);
-var Go$Uint16        = go$newType( 2, "Uint16",        "uint16",         "uint16",     "", null);
-var Go$Uint32        = go$newType( 4, "Uint32",        "uint32",         "uint32",     "", null);
-var Go$Uint64        = go$newType( 8, "Uint64",        "uint64",         "uint64",     "", null);
-var Go$Uintptr       = go$newType( 4, "Uintptr",       "uintptr",        "uintptr",    "", null);
-var Go$Float32       = go$newType( 4, "Float32",       "float32",        "float32",    "", null);
-var Go$Float64       = go$newType( 8, "Float64",       "float64",        "float64",    "", null);
-var Go$Complex64     = go$newType( 8, "Complex64",     "complex64",      "complex64",  "", null);
-var Go$Complex128    = go$newType(16, "Complex128",    "complex128",     "complex128", "", null);
-var Go$String        = go$newType( 8, "String",        "string",         "string",     "", null);
-var Go$UnsafePointer = go$newType( 4, "UnsafePointer", "unsafe.Pointer", "Pointer",    "", null);
+var $Bool          = $newType( 1, "Bool",          "bool",           "bool",       "", null);
+var $Int           = $newType( 4, "Int",           "int",            "int",        "", null);
+var $Int8          = $newType( 1, "Int8",          "int8",           "int8",       "", null);
+var $Int16         = $newType( 2, "Int16",         "int16",          "int16",      "", null);
+var $Int32         = $newType( 4, "Int32",         "int32",          "int32",      "", null);
+var $Int64         = $newType( 8, "Int64",         "int64",          "int64",      "", null);
+var $Uint          = $newType( 4, "Uint",          "uint",           "uint",       "", null);
+var $Uint8         = $newType( 1, "Uint8",         "uint8",          "uint8",      "", null);
+var $Uint16        = $newType( 2, "Uint16",        "uint16",         "uint16",     "", null);
+var $Uint32        = $newType( 4, "Uint32",        "uint32",         "uint32",     "", null);
+var $Uint64        = $newType( 8, "Uint64",        "uint64",         "uint64",     "", null);
+var $Uintptr       = $newType( 4, "Uintptr",       "uintptr",        "uintptr",    "", null);
+var $Float32       = $newType( 4, "Float32",       "float32",        "float32",    "", null);
+var $Float64       = $newType( 8, "Float64",       "float64",        "float64",    "", null);
+var $Complex64     = $newType( 8, "Complex64",     "complex64",      "complex64",  "", null);
+var $Complex128    = $newType(16, "Complex128",    "complex128",     "complex128", "", null);
+var $String        = $newType( 8, "String",        "string",         "string",     "", null);
+var $UnsafePointer = $newType( 4, "UnsafePointer", "unsafe.Pointer", "Pointer",    "", null);
 
-var go$nativeArray = function(elemKind) {
+var $nativeArray = function(elemKind) {
 	return ({ Int: Int32Array, Int8: Int8Array, Int16: Int16Array, Int32: Int32Array, Uint: Uint32Array, Uint8: Uint8Array, Uint16: Uint16Array, Uint32: Uint32Array, Uintptr: Uint32Array, Float32: Float32Array, Float64: Float64Array })[elemKind] || Array;
 };
-var go$toNativeArray = function(elemKind, array) {
-	var nativeArray = go$nativeArray(elemKind);
+var $toNativeArray = function(elemKind, array) {
+	var nativeArray = $nativeArray(elemKind);
 	if (nativeArray === Array) {
 		return array;
 	}
 	return new nativeArray(array);
 };
-var go$makeNativeArray = function(elemKind, length, zero) {
-	var array = new (go$nativeArray(elemKind))(length), i;
+var $makeNativeArray = function(elemKind, length, zero) {
+	var array = new ($nativeArray(elemKind))(length), i;
 	for (i = 0; i < length; i++) {
 		array[i] = zero();
 	}
 	return array;
 };
-var go$arrayTypes = {};
-var go$arrayType = function(elem, len) {
+var $arrayTypes = {};
+var $arrayType = function(elem, len) {
 	var string = "[" + len + "]" + elem.string;
-	var typ = go$arrayTypes[string];
+	var typ = $arrayTypes[string];
 	if (typ === undefined) {
-		typ = go$newType(12, "Array", string, "", "", null);
+		typ = $newType(12, "Array", string, "", "", null);
 		typ.init(elem, len);
-		go$arrayTypes[string] = typ;
+		$arrayTypes[string] = typ;
 	}
 	return typ;
 };
 
-var go$chanType = function(elem, sendOnly, recvOnly) {
+var $chanType = function(elem, sendOnly, recvOnly) {
 	var string = (recvOnly ? "<-" : "") + "chan" + (sendOnly ? "<- " : " ") + elem.string;
 	var field = sendOnly ? "SendChan" : (recvOnly ? "RecvChan" : "Chan");
 	var typ = elem[field];
 	if (typ === undefined) {
-		typ = go$newType(4, "Chan", string, "", "", null);
+		typ = $newType(4, "Chan", string, "", "", null);
 		typ.init(elem, sendOnly, recvOnly);
 		elem[field] = typ;
 	}
 	return typ;
 };
 
-var go$funcSig = function(params, results, variadic) {
-	var paramTypes = go$mapArray(params, function(p) { return p.string; });
+var $funcSig = function(params, results, variadic) {
+	var paramTypes = $mapArray(params, function(p) { return p.string; });
 	if (variadic) {
 		paramTypes[paramTypes.length - 1] = "..." + paramTypes[paramTypes.length - 1].substr(2);
 	}
@@ -398,93 +398,93 @@ var go$funcSig = function(params, results, variadic) {
 	if (results.length === 1) {
 		string += " " + results[0].string;
 	} else if (results.length > 1) {
-		string += " (" + go$mapArray(results, function(r) { return r.string; }).join(", ") + ")";
+		string += " (" + $mapArray(results, function(r) { return r.string; }).join(", ") + ")";
 	}
 	return string;
 };
 
-var go$funcTypes = {};
-var go$funcType = function(params, results, variadic) {
-	var string = "func" + go$funcSig(params, results, variadic);
-	var typ = go$funcTypes[string];
+var $funcTypes = {};
+var $funcType = function(params, results, variadic) {
+	var string = "func" + $funcSig(params, results, variadic);
+	var typ = $funcTypes[string];
 	if (typ === undefined) {
-		typ = go$newType(4, "Func", string, "", "", null);
+		typ = $newType(4, "Func", string, "", "", null);
 		typ.init(params, results, variadic);
-		go$funcTypes[string] = typ;
+		$funcTypes[string] = typ;
 	}
 	return typ;
 };
 
-var go$interfaceTypes = {};
-var go$interfaceType = function(methods) {
+var $interfaceTypes = {};
+var $interfaceType = function(methods) {
 	var string = "interface {}";
 	if (methods.length !== 0) {
-		string = "interface { " + go$mapArray(methods, function(m) {
-			return (m[2] !== "" ? m[2] + "." : "") + m[1] + go$funcSig(m[3], m[4], m[5]);
+		string = "interface { " + $mapArray(methods, function(m) {
+			return (m[2] !== "" ? m[2] + "." : "") + m[1] + $funcSig(m[3], m[4], m[5]);
 		}).join("; ") + " }";
 	}
-	var typ = go$interfaceTypes[string];
+	var typ = $interfaceTypes[string];
 	if (typ === undefined) {
-		typ = go$newType(8, "Interface", string, "", "", null);
+		typ = $newType(8, "Interface", string, "", "", null);
 		typ.init(methods);
-		go$interfaceTypes[string] = typ;
+		$interfaceTypes[string] = typ;
 	}
 	return typ;
 };
-var go$emptyInterface = go$interfaceType([]);
-var go$interfaceNil = { go$key: function() { return "nil"; } };
-var go$error = go$newType(8, "Interface", "error", "error", "", null);
-go$error.init([["Error", "Error", "", [], [Go$String], false]]);
+var $emptyInterface = $interfaceType([]);
+var $interfaceNil = { $key: function() { return "nil"; } };
+var $error = $newType(8, "Interface", "error", "error", "", null);
+$error.init([["Error", "Error", "", [], [$String], false]]);
 
-var Go$Map = function() {};
+var $Map = function() {};
 (function() {
 	var names = Object.getOwnPropertyNames(Object.prototype), i;
 	for (i = 0; i < names.length; i++) {
-		Go$Map.prototype[names[i]] = undefined;
+		$Map.prototype[names[i]] = undefined;
 	}
 })();
-var go$mapTypes = {};
-var go$mapType = function(key, elem) {
+var $mapTypes = {};
+var $mapType = function(key, elem) {
 	var string = "map[" + key.string + "]" + elem.string;
-	var typ = go$mapTypes[string];
+	var typ = $mapTypes[string];
 	if (typ === undefined) {
-		typ = go$newType(4, "Map", string, "", "", null);
+		typ = $newType(4, "Map", string, "", "", null);
 		typ.init(key, elem);
-		go$mapTypes[string] = typ;
+		$mapTypes[string] = typ;
 	}
 	return typ;
 };
 
-var go$throwNilPointerError = function() { go$throwRuntimeError("invalid memory address or nil pointer dereference"); };
-var go$ptrType = function(elem) {
+var $throwNilPointerError = function() { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
+var $ptrType = function(elem) {
 	var typ = elem.Ptr;
 	if (typ === undefined) {
-		typ = go$newType(4, "Ptr", "*" + elem.string, "", "", null);
+		typ = $newType(4, "Ptr", "*" + elem.string, "", "", null);
 		typ.init(elem);
 		elem.Ptr = typ;
 	}
 	return typ;
 };
 
-var go$sliceType = function(elem) {
+var $sliceType = function(elem) {
 	var typ = elem.Slice;
 	if (typ === undefined) {
-		typ = go$newType(12, "Slice", "[]" + elem.string, "", "", null);
+		typ = $newType(12, "Slice", "[]" + elem.string, "", "", null);
 		typ.init(elem);
 		elem.Slice = typ;
 	}
 	return typ;
 };
 
-var go$structTypes = {};
-var go$structType = function(fields) {
-	var string = "struct { " + go$mapArray(fields, function(f) {
+var $structTypes = {};
+var $structType = function(fields) {
+	var string = "struct { " + $mapArray(fields, function(f) {
 		return f[1] + " " + f[3].string + (f[4] !== "" ? (' "' + f[4].replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"') : "");
 	}).join("; ") + " }";
-	var typ = go$structTypes[string];
+	var typ = $structTypes[string];
 	if (typ === undefined) {
-		typ = go$newType(0, "Struct", string, "", "", function() {
-			this.go$val = this;
+		typ = $newType(0, "Struct", string, "", "", function() {
+			this.$val = this;
 			var i;
 			for (i = 0; i < fields.length; i++) {
 				this[fields[i][0]] = arguments[i];
@@ -510,38 +510,38 @@ var go$structType = function(fields) {
 			}
 		}
 		typ.init(fields);
-		go$structTypes[string] = typ;
+		$structTypes[string] = typ;
 	}
 	return typ;
 };
 
-var go$stringPtrMap = new Go$Map();
-go$newStringPtr = function(str) {
+var $stringPtrMap = new $Map();
+$newStringPtr = function(str) {
 	if (str === undefined || str === "") {
-		return go$ptrType(Go$String).nil;
+		return $ptrType($String).nil;
 	}
-	var ptr = go$stringPtrMap[str];
+	var ptr = $stringPtrMap[str];
 	if (ptr === undefined) {
-		ptr = new (go$ptrType(Go$String))(function() { return str; }, function(v) { str = v; });
-		go$stringPtrMap[str] = ptr;
+		ptr = new ($ptrType($String))(function() { return str; }, function(v) { str = v; });
+		$stringPtrMap[str] = ptr;
 	}
 	return ptr;
 };
-var go$newDataPointer = function(data, constructor) {
+var $newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });
 };
 
-var go$coerceFloat32 = function(f) {
-	var math = go$packages["math"];
+var $coerceFloat32 = function(f) {
+	var math = $packages["math"];
 	if (math === undefined) {
 		return f;
 	}
 	return math.Float32frombits(math.Float32bits(f));
 };
-var go$flatten64 = function(x) {
+var $flatten64 = function(x) {
 	return x.high * 4294967296 + x.low;
 };
-var go$shiftLeft64 = function(x, y) {
+var $shiftLeft64 = function(x, y) {
 	if (y === 0) {
 		return x;
 	}
@@ -553,7 +553,7 @@ var go$shiftLeft64 = function(x, y) {
 	}
 	return new x.constructor(0, 0);
 };
-var go$shiftRightInt64 = function(x, y) {
+var $shiftRightInt64 = function(x, y) {
 	if (y === 0) {
 		return x;
 	}
@@ -568,7 +568,7 @@ var go$shiftRightInt64 = function(x, y) {
 	}
 	return new x.constructor(0, 0);
 };
-var go$shiftRightUint64 = function(x, y) {
+var $shiftRightUint64 = function(x, y) {
 	if (y === 0) {
 		return x;
 	}
@@ -580,7 +580,7 @@ var go$shiftRightUint64 = function(x, y) {
 	}
 	return new x.constructor(0, 0);
 };
-var go$mul64 = function(x, y) {
+var $mul64 = function(x, y) {
 	var high = 0, low = 0, i;
 	if ((y.low & 1) !== 0) {
 		high = x.high;
@@ -599,9 +599,9 @@ var go$mul64 = function(x, y) {
 	}
 	return new x.constructor(high, low);
 };
-var go$div64 = function(x, y, returnRemainder) {
+var $div64 = function(x, y, returnRemainder) {
 	if (y.high === 0 && y.low === 0) {
-		go$throwRuntimeError("integer divide by zero");
+		$throwRuntimeError("integer divide by zero");
 	}
 
 	var s = 1;
@@ -662,7 +662,7 @@ var go$div64 = function(x, y, returnRemainder) {
 	return new x.constructor(high * s, low * s);
 };
 
-var go$divComplex = function(n, d) {
+var $divComplex = function(n, d) {
 	var ninf = n.real === 1/0 || n.real === -1/0 || n.imag === 1/0 || n.imag === -1/0;
 	var dinf = d.real === 1/0 || d.real === -1/0 || d.imag === 1/0 || d.imag === -1/0;
 	var nnan = !ninf && (n.real !== n.real || n.imag !== n.imag);
@@ -694,9 +694,9 @@ var go$divComplex = function(n, d) {
 	return new n.constructor((n.imag * ratio + n.real) / denom, (n.imag - n.real * ratio) / denom);
 };
 
-var go$subslice = function(slice, low, high, max) {
+var $subslice = function(slice, low, high, max) {
 	if (low < 0 || high < low || max < high || high > slice.capacity || max > slice.capacity) {
-		go$throwRuntimeError("slice bounds out of range");
+		$throwRuntimeError("slice bounds out of range");
 	}
 	var s = new slice.constructor(slice.array);
 	s.offset = slice.offset + low;
@@ -711,7 +711,7 @@ var go$subslice = function(slice, low, high, max) {
 	return s;
 };
 
-var go$sliceToArray = function(slice) {
+var $sliceToArray = function(slice) {
 	if (slice.length === 0) {
 		return [];
 	}
@@ -721,7 +721,7 @@ var go$sliceToArray = function(slice) {
 	return slice.array.slice(slice.offset, slice.offset + slice.length);
 };
 
-var go$decodeRune = function(str, pos) {
+var $decodeRune = function(str, pos) {
 	var c0 = str.charCodeAt(pos);
 
 	if (c0 < 0x80) {
@@ -777,7 +777,7 @@ var go$decodeRune = function(str, pos) {
 	return [0xFFFD, 1];
 };
 
-var go$encodeRune = function(r) {
+var $encodeRune = function(r) {
 	if (r < 0 || r > 0x10FFFF || (0xD800 <= r && r <= 0xDFFF)) {
 		r = 0xFFFD;
 	}
@@ -793,7 +793,7 @@ var go$encodeRune = function(r) {
 	return String.fromCharCode(0xF0 | r >> 18, 0x80 | (r >> 12 & 0x3F), 0x80 | (r >> 6 & 0x3F), 0x80 | (r & 0x3F));
 };
 
-var go$stringToBytes = function(str, terminateWithNull) {
+var $stringToBytes = function(str, terminateWithNull) {
 	var array = new Uint8Array(terminateWithNull ? str.length + 1 : str.length), i;
 	for (i = 0; i < str.length; i++) {
 		array[i] = str.charCodeAt(i);
@@ -804,7 +804,7 @@ var go$stringToBytes = function(str, terminateWithNull) {
 	return array;
 };
 
-var go$bytesToString = function(slice) {
+var $bytesToString = function(slice) {
 	if (slice.length === 0) {
 		return "";
 	}
@@ -815,28 +815,28 @@ var go$bytesToString = function(slice) {
 	return str;
 };
 
-var go$stringToRunes = function(str) {
+var $stringToRunes = function(str) {
 	var array = new Int32Array(str.length);
 	var rune, i, j = 0;
 	for (i = 0; i < str.length; i += rune[1], j++) {
-		rune = go$decodeRune(str, i);
+		rune = $decodeRune(str, i);
 		array[j] = rune[0];
 	}
 	return array.subarray(0, j);
 };
 
-var go$runesToString = function(slice) {
+var $runesToString = function(slice) {
 	if (slice.length === 0) {
 		return "";
 	}
 	var str = "", i;
 	for (i = 0; i < slice.length; i++) {
-		str += go$encodeRune(slice.array[slice.offset + i]);
+		str += $encodeRune(slice.array[slice.offset + i]);
 	}
 	return str;
 };
 
-var go$needsExternalization = function(t) {
+var $needsExternalization = function(t) {
 	switch (t.kind) {
 		case "Int64":
 		case "Uint64":
@@ -847,33 +847,33 @@ var go$needsExternalization = function(t) {
 		case "String":
 			return true;
 		case "Interface":
-			return t !== go$packages["github.com/gopherjs/gopherjs/js"].Object;
+			return t !== $packages["github.com/gopherjs/gopherjs/js"].Object;
 		default:
 			return false;
 	}
 };
 
-var go$externalize = function(v, t) {
+var $externalize = function(v, t) {
 	switch (t.kind) {
 	case "Int64":
 	case "Uint64":
-		return go$flatten64(v);
+		return $flatten64(v);
 	case "Array":
-		if (go$needsExternalization(t.elem)) {
-			return go$mapArray(v, function(e) { return go$externalize(e, t.elem); });
+		if ($needsExternalization(t.elem)) {
+			return $mapArray(v, function(e) { return $externalize(e, t.elem); });
 		}
 		return v;
 	case "Func":
-		if (v === go$throwNilPointerError) {
+		if (v === $throwNilPointerError) {
 			return null;
 		}
 		var convert = false;
 		var i;
 		for (i = 0; i < t.params.length; i++) {
-			convert = convert || (t.params[i] !== go$packages["github.com/gopherjs/gopherjs/js"].Object);
+			convert = convert || (t.params[i] !== $packages["github.com/gopherjs/gopherjs/js"].Object);
 		}
 		for (i = 0; i < t.results.length; i++) {
-			convert = convert || go$needsExternalization(t.results[i]);
+			convert = convert || $needsExternalization(t.results[i]);
 		}
 		if (!convert) {
 			return v;
@@ -884,22 +884,22 @@ var go$externalize = function(v, t) {
 				if (t.variadic && i === t.params.length - 1) {
 					var vt = t.params[i].elem, varargs = [], j;
 					for (j = i; j < arguments.length; j++) {
-						varargs.push(go$internalize(arguments[j], vt));
+						varargs.push($internalize(arguments[j], vt));
 					}
 					args.push(new (t.params[i])(varargs));
 					break;
 				}
-				args.push(go$internalize(arguments[i], t.params[i]));
+				args.push($internalize(arguments[i], t.params[i]));
 			}
 			var result = v.apply(undefined, args);
 			switch (t.results.length) {
 			case 0:
 				return;
 			case 1:
-				return go$externalize(result, t.results[0]);
+				return $externalize(result, t.results[0]);
 			default:
 				for (i = 0; i < t.results.length; i++) {
-					result[i] = go$externalize(result[i], t.results[i]);
+					result[i] = $externalize(result[i], t.results[i]);
 				}
 				return result;
 			}
@@ -908,35 +908,35 @@ var go$externalize = function(v, t) {
 		if (v === null) {
 			return null;
 		}
-		if (t === go$packages["github.com/gopherjs/gopherjs/js"].Object || v.constructor.kind === undefined) {
+		if (t === $packages["github.com/gopherjs/gopherjs/js"].Object || v.constructor.kind === undefined) {
 			return v;
 		}
-		return go$externalize(v.go$val, v.constructor);
+		return $externalize(v.$val, v.constructor);
 	case "Map":
 		var m = {};
-		var keys = go$keys(v), i;
+		var keys = $keys(v), i;
 		for (i = 0; i < keys.length; i++) {
 			var entry = v[keys[i]];
-			m[go$externalize(entry.k, t.key)] = go$externalize(entry.v, t.elem);
+			m[$externalize(entry.k, t.key)] = $externalize(entry.v, t.elem);
 		}
 		return m;
 	case "Slice":
-		if (go$needsExternalization(t.elem)) {
-			return go$mapArray(go$sliceToArray(v), function(e) { return go$externalize(e, t.elem); });
+		if ($needsExternalization(t.elem)) {
+			return $mapArray($sliceToArray(v), function(e) { return $externalize(e, t.elem); });
 		}
-		return go$sliceToArray(v);
+		return $sliceToArray(v);
 	case "String":
 		var s = "", r, i, j = 0;
 		for (i = 0; i < v.length; i += r[1], j++) {
-			r = go$decodeRune(v, i);
+			r = $decodeRune(v, i);
 			s += String.fromCharCode(r[0]);
 		}
 		return s;
 	case "Struct":
-		var timePkg = go$packages["time"];
+		var timePkg = $packages["time"];
 		if (timePkg && v.constructor === timePkg.Time.Ptr) {
-			var milli = go$div64(v.UnixNano(), new Go$Int64(0, 1000000));
-			return new Date(go$flatten64(milli));
+			var milli = $div64(v.UnixNano(), new $Int64(0, 1000000));
+			return new Date($flatten64(milli));
 		}
 		return v;
 	default:
@@ -944,7 +944,7 @@ var go$externalize = function(v, t) {
 	}
 };
 
-var go$internalize = function(v, t, recv) {
+var $internalize = function(v, t, recv) {
 	switch (t.kind) {
 	case "Bool":
 		return !!v;
@@ -973,9 +973,9 @@ var go$internalize = function(v, t, recv) {
 		return parseFloat(v);
 	case "Array":
 		if (v.length !== t.len) {
-			go$throwRuntimeError("got array with wrong size from JavaScript native");
+			$throwRuntimeError("got array with wrong size from JavaScript native");
 		}
-		return go$mapArray(v, function(e) { return go$internalize(e, t.elem); });
+		return $mapArray(v, function(e) { return $internalize(e, t.elem); });
 	case "Func":
 		return function() {
 			var args = [], i;
@@ -983,82 +983,82 @@ var go$internalize = function(v, t, recv) {
 				if (t.variadic && i === t.params.length - 1) {
 					var vt = t.params[i].elem, varargs = arguments[i], j;
 					for (j = 0; j < varargs.length; j++) {
-						args.push(go$externalize(varargs.array[varargs.offset + j], vt));
+						args.push($externalize(varargs.array[varargs.offset + j], vt));
 					}
 					break;
 				}
-				args.push(go$externalize(arguments[i], t.params[i]));
+				args.push($externalize(arguments[i], t.params[i]));
 			}
 			var result = v.apply(recv, args);
 			switch (t.results.length) {
 			case 0:
 				return;
 			case 1:
-				return go$internalize(result, t.results[0]);
+				return $internalize(result, t.results[0]);
 			default:
 				for (i = 0; i < t.results.length; i++) {
-					result[i] = go$internalize(result[i], t.results[i]);
+					result[i] = $internalize(result[i], t.results[i]);
 				}
 				return result;
 			}
 		};
 	case "Interface":
-		if (v === null || t === go$packages["github.com/gopherjs/gopherjs/js"].Object) {
+		if (v === null || t === $packages["github.com/gopherjs/gopherjs/js"].Object) {
 			return v;
 		}
 		switch (v.constructor) {
 		case Int8Array:
-			return new (go$sliceType(Go$Int8))(v);
+			return new ($sliceType($Int8))(v);
 		case Int16Array:
-			return new (go$sliceType(Go$Int16))(v);
+			return new ($sliceType($Int16))(v);
 		case Int32Array:
-			return new (go$sliceType(Go$Int))(v);
+			return new ($sliceType($Int))(v);
 		case Uint8Array:
-			return new (go$sliceType(Go$Uint8))(v);
+			return new ($sliceType($Uint8))(v);
 		case Uint16Array:
-			return new (go$sliceType(Go$Uint16))(v);
+			return new ($sliceType($Uint16))(v);
 		case Uint32Array:
-			return new (go$sliceType(Go$Uint))(v);
+			return new ($sliceType($Uint))(v);
 		case Float32Array:
-			return new (go$sliceType(Go$Float32))(v);
+			return new ($sliceType($Float32))(v);
 		case Float64Array:
-			return new (go$sliceType(Go$Float64))(v);
+			return new ($sliceType($Float64))(v);
 		case Array:
-			return go$internalize(v, go$sliceType(go$emptyInterface));
+			return $internalize(v, $sliceType($emptyInterface));
 		case Boolean:
-			return new Go$Bool(!!v);
+			return new $Bool(!!v);
 		case Date:
-			var timePkg = go$packages["time"];
+			var timePkg = $packages["time"];
 			if (timePkg) {
-				return new timePkg.Time(timePkg.Unix(new Go$Int64(0, 0), new Go$Int64(0, v.getTime() * 1000000)));
+				return new timePkg.Time(timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000)));
 			}
 		case Function:
-			var funcType = go$funcType([go$sliceType(go$emptyInterface)], [go$packages["github.com/gopherjs/gopherjs/js"].Object], true);
-			return new funcType(go$internalize(v, funcType));
+			var funcType = $funcType([$sliceType($emptyInterface)], [$packages["github.com/gopherjs/gopherjs/js"].Object], true);
+			return new funcType($internalize(v, funcType));
 		case Number:
-			return new Go$Float64(parseFloat(v));
+			return new $Float64(parseFloat(v));
 		case Object:
-			var mapType = go$mapType(Go$String, go$emptyInterface);
-			return new mapType(go$internalize(v, mapType));
+			var mapType = $mapType($String, $emptyInterface);
+			return new mapType($internalize(v, mapType));
 		case String:
-			return new Go$String(go$internalize(v, Go$String));
+			return new $String($internalize(v, $String));
 		}
 		return v;
 	case "Map":
-		var m = new Go$Map();
-		var keys = go$keys(v), i;
+		var m = new $Map();
+		var keys = $keys(v), i;
 		for (i = 0; i < keys.length; i++) {
-			var key = go$internalize(keys[i], t.key);
-			m[key.go$key ? key.go$key() : key] = { k: key, v: go$internalize(v[keys[i]], t.elem) };
+			var key = $internalize(keys[i], t.key);
+			m[key.$key ? key.$key() : key] = { k: key, v: $internalize(v[keys[i]], t.elem) };
 		}
 		return m;
 	case "Slice":
-		return new t(go$mapArray(v, function(e) { return go$internalize(e, t.elem); }));
+		return new t($mapArray(v, function(e) { return $internalize(e, t.elem); }));
 	case "String":
 		v = String(v);
 		var s = "", i;
 		for (i = 0; i < v.length; i++) {
-			s += go$encodeRune(v.charCodeAt(i));
+			s += $encodeRune(v.charCodeAt(i));
 		}
 		return s;
 	default:
@@ -1066,7 +1066,7 @@ var go$internalize = function(v, t, recv) {
 	}
 };
 
-var go$copySlice = function(dst, src) {
+var $copySlice = function(dst, src) {
 	var n = Math.min(src.length, dst.length), i;
 	if (dst.array.constructor !== Array && n !== 0) {
 		dst.array.set(src.array.subarray(src.offset, src.offset + n), dst.offset);
@@ -1078,7 +1078,7 @@ var go$copySlice = function(dst, src) {
 	return n;
 };
 
-var go$copyString = function(dst, src) {
+var $copyString = function(dst, src) {
 	var n = Math.min(src.length, dst.length), i;
 	for (i = 0; i < n; i++) {
 		dst.array[dst.offset + i] = src.charCodeAt(i);
@@ -1086,14 +1086,14 @@ var go$copyString = function(dst, src) {
 	return n;
 };
 
-var go$copyArray = function(dst, src) {
+var $copyArray = function(dst, src) {
 	var i;
 	for (i = 0; i < src.length; i++) {
 		dst[i] = src[i];
 	}
 };
 
-var go$growSlice = function(slice, length) {
+var $growSlice = function(slice, length) {
 	var newCapacity = Math.max(length, slice.capacity < 1024 ? slice.capacity * 2 : Math.floor(slice.capacity * 5 / 4));
 
 	var newArray;
@@ -1114,14 +1114,14 @@ var go$growSlice = function(slice, length) {
 	return newSlice;
 };
 
-var go$append = function(slice) {
+var $append = function(slice) {
 	if (arguments.length === 1) {
 		return slice;
 	}
 
 	var newLength = slice.length + arguments.length - 1;
 	if (newLength > slice.capacity) {
-		slice = go$growSlice(slice, newLength);
+		slice = $growSlice(slice, newLength);
 	}
 
 	var array = slice.array;
@@ -1137,14 +1137,14 @@ var go$append = function(slice) {
 	return newSlice;
 };
 
-var go$appendSlice = function(slice, toAppend) {
+var $appendSlice = function(slice, toAppend) {
 	if (toAppend.length === 0) {
 		return slice;
 	}
 
 	var newLength = slice.length + toAppend.length;
 	if (newLength > slice.capacity) {
-		slice = go$growSlice(slice, newLength);
+		slice = $growSlice(slice, newLength);
 	}
 
 	var array = slice.array;
@@ -1160,10 +1160,10 @@ var go$appendSlice = function(slice, toAppend) {
 	return newSlice;
 };
 
-var go$panic = function(value) {
+var $panic = function(value) {
 	var message;
-	if (value.constructor === Go$String) {
-		message = value.go$val;
+	if (value.constructor === $String) {
+		message = value.$val;
 	} else if (value.Error !== undefined) {
 		message = value.Error();
 	} else if (value.String !== undefined) {
@@ -1172,32 +1172,32 @@ var go$panic = function(value) {
 		message = value;
 	}
 	var err = new Error(message);
-	err.go$panicValue = value;
+	err.$panicValue = value;
 	return err;
 };
-var go$notSupported = function(feature) {
+var $notSupported = function(feature) {
 	var err = new Error("not supported by GopherJS: " + feature);
-	err.go$notSupported = feature;
+	err.$notSupported = feature;
 	throw err;
 };
-var go$throwRuntimeError; // set by package "runtime"
+var $throwRuntimeError; // set by package "runtime"
 
-var go$errorStack = [], go$jsErr = null;
+var $errorStack = [], $jsErr = null;
 
-var go$pushErr = function(err) {
-	if (err.go$panicValue === undefined) {
-		if (err.go$exit || err.go$notSupported) {
-			go$jsErr = err;
+var $pushErr = function(err) {
+	if (err.$panicValue === undefined) {
+		if (err.$exit || err.$notSupported) {
+			$jsErr = err;
 			return;
 		}
-		err.go$panicValue = new go$packages["github.com/gopherjs/gopherjs/js"].Error.Ptr(err);
+		err.$panicValue = new $packages["github.com/gopherjs/gopherjs/js"].Error.Ptr(err);
 	}
-	go$errorStack.push({ frame: go$getStackDepth(), error: err });
+	$errorStack.push({ frame: $getStackDepth(), error: err });
 };
 
-var go$callDeferred = function(deferred) {
-	if (go$jsErr !== null) {
-		throw go$jsErr;
+var $callDeferred = function(deferred) {
+	if ($jsErr !== null) {
+		throw $jsErr;
 	}
 	var i;
 	for (i = deferred.length - 1; i >= 0; i--) {
@@ -1209,40 +1209,40 @@ var go$callDeferred = function(deferred) {
 			}
 			call.fun.apply(undefined, call.args);
 		} catch (err) {
-			go$errorStack.push({ frame: go$getStackDepth(), error: err });
+			$errorStack.push({ frame: $getStackDepth(), error: err });
 		}
 	}
-	var err = go$errorStack[go$errorStack.length - 1];
-	if (err !== undefined && err.frame === go$getStackDepth()) {
-		go$errorStack.pop();
+	var err = $errorStack[$errorStack.length - 1];
+	if (err !== undefined && err.frame === $getStackDepth()) {
+		$errorStack.pop();
 		throw err.error;
 	}
 };
 
-var go$recover = function() {
-	var err = go$errorStack[go$errorStack.length - 1];
-	if (err === undefined || err.frame !== go$getStackDepth()) {
+var $recover = function() {
+	var err = $errorStack[$errorStack.length - 1];
+	if (err === undefined || err.frame !== $getStackDepth()) {
 		return null;
 	}
-	go$errorStack.pop();
-	return err.error.go$panicValue;
+	$errorStack.pop();
+	return err.error.$panicValue;
 };
 
-var go$getStack = function() {
+var $getStack = function() {
 	return (new Error()).stack.split("\n");
 };
 
-var go$getStackDepth = function() {
-	var s = go$getStack(), d = 0, i;
+var $getStackDepth = function() {
+	var s = $getStack(), d = 0, i;
 	for (i = 0; i < s.length; i++) {
-		if (s[i].indexOf("go$") === -1) {
+		if (s[i].indexOf("$") === -1) {
 			d++;
 		}
 	}
 	return d;
 };
 
-var go$interfaceIsEqual = function(a, b) {
+var $interfaceIsEqual = function(a, b) {
 	if (a === b) {
 		return true;
 	}
@@ -1251,43 +1251,43 @@ var go$interfaceIsEqual = function(a, b) {
 	}
 	switch (a.constructor.kind) {
 	case "Float32":
-		return go$float32IsEqual(a.go$val, b.go$val);
+		return $float32IsEqual(a.$val, b.$val);
 	case "Complex64":
-		return go$float32IsEqual(a.go$val.real, b.go$val.real) && go$float32IsEqual(a.go$val.imag, b.go$val.imag);
+		return $float32IsEqual(a.$val.real, b.$val.real) && $float32IsEqual(a.$val.imag, b.$val.imag);
 	case "Complex128":
-		return a.go$val.real === b.go$val.real && a.go$val.imag === b.go$val.imag;
+		return a.$val.real === b.$val.real && a.$val.imag === b.$val.imag;
 	case "Int64":
 	case "Uint64":
-		return a.go$val.high === b.go$val.high && a.go$val.low === b.go$val.low;
+		return a.$val.high === b.$val.high && a.$val.low === b.$val.low;
 	case "Array":
-		return go$arrayIsEqual(a.go$val, b.go$val);
+		return $arrayIsEqual(a.$val, b.$val);
 	case "Ptr":
 		if (a.constructor.Struct) {
 			return false;
 		}
-		return go$pointerIsEqual(a, b);
+		return $pointerIsEqual(a, b);
 	case "Func":
 	case "Map":
 	case "Slice":
 	case "Struct":
-		go$throwRuntimeError("comparing uncomparable type " + a.constructor);
+		$throwRuntimeError("comparing uncomparable type " + a.constructor);
 	case undefined: // js.Object
 		return false;
 	default:
-		return a.go$val === b.go$val;
+		return a.$val === b.$val;
 	}
 };
-var go$float32IsEqual = function(a, b) {
+var $float32IsEqual = function(a, b) {
 	if (a === b) {
 		return true;
 	}
 	if (a === 0 || b === 0 || a === 1/0 || b === 1/0 || a === -1/0 || b === -1/0 || a !== a || b !== b) {
 		return false;
 	}
-	var math = go$packages["math"];
+	var math = $packages["math"];
 	return math !== undefined && math.Float32bits(a) === math.Float32bits(b);
 }
-var go$arrayIsEqual = function(a, b) {
+var $arrayIsEqual = function(a, b) {
 	if (a.length != b.length) {
 		return false;
 	}
@@ -1299,33 +1299,33 @@ var go$arrayIsEqual = function(a, b) {
 	}
 	return true;
 };
-var go$sliceIsEqual = function(a, ai, b, bi) {
+var $sliceIsEqual = function(a, ai, b, bi) {
 	return a.array === b.array && a.offset + ai === b.offset + bi;
 };
-var go$pointerIsEqual = function(a, b) {
+var $pointerIsEqual = function(a, b) {
 	if (a === b) {
 		return true;
 	}
-	if (a.go$get === go$throwNilPointerError || b.go$get === go$throwNilPointerError) {
-		return a.go$get === go$throwNilPointerError && b.go$get === go$throwNilPointerError;
+	if (a.$get === $throwNilPointerError || b.$get === $throwNilPointerError) {
+		return a.$get === $throwNilPointerError && b.$get === $throwNilPointerError;
 	}
-	var old = a.go$get();
+	var old = a.$get();
 	var dummy = new Object();
-	a.go$set(dummy);
-	var equal = b.go$get() === dummy;
-	a.go$set(old);
+	a.$set(dummy);
+	var equal = b.$get() === dummy;
+	a.$set(old);
 	return equal;
 };
 
-var go$typeAssertionFailed = function(obj, expected) {
+var $typeAssertionFailed = function(obj, expected) {
 	var got = "";
 	if (obj !== null) {
 		got = obj.constructor.string;
 	}
-	throw go$panic(new go$packages["runtime"].TypeAssertionError.Ptr("", got, expected.string, ""));
+	throw $panic(new $packages["runtime"].TypeAssertionError.Ptr("", got, expected.string, ""));
 };
 
-var go$now = function() { var msec = (new Date()).getTime(); return [new Go$Int64(0, Math.floor(msec / 1000)), (msec % 1000) * 1000000]; };
+var $now = function() { var msec = (new Date()).getTime(); return [new $Int64(0, Math.floor(msec / 1000)), (msec % 1000) * 1000000]; };
 
-var go$packages = {};
+var $packages = {};
 `

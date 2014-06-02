@@ -264,7 +264,7 @@ func main() {
 				collectTests := func(pkg *gbuild.PackageData) {
 					for _, name := range pkg.Archive.Tests {
 						names = append(names, name)
-						tests = append(tests, fmt.Sprintf(`go$packages["%s"].%s`, pkg.ImportPath, name))
+						tests = append(tests, fmt.Sprintf(`$packages["%s"].%s`, pkg.ImportPath, name))
 						mainFunc.DceDeps = append(mainFunc.DceDeps, compiler.DepId(pkg.ImportPath+":"+name))
 					}
 					mainPkg.Archive.AddDependenciesOf(pkg.Archive)
@@ -285,9 +285,9 @@ func main() {
 
 				mainFunc.DceDeps = append(mainFunc.DceDeps, compiler.DepId("flag:Parse"))
 				mainFunc.BodyCode = []byte(fmt.Sprintf(`
-				go$pkg.main = function() {
-					var testing = go$packages["testing"];
-					testing.Main2("%s", "%s", new (go$sliceType(Go$String))(["%s"]), new (go$sliceType(go$funcType([testing.T.Ptr], [], false)))([%s]));
+				$pkg.main = function() {
+					var testing = $packages["testing"];
+					testing.Main2("%s", "%s", new ($sliceType($String))(["%s"]), new ($sliceType($funcType([testing.T.Ptr], [], false)))([%s]));
 				};
 			`, pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))
 
@@ -303,7 +303,7 @@ func main() {
 					os.Remove(tempfile.Name())
 				}()
 
-				if err := s.WriteCommandPackage(mainPkg, tempfile.Name()); err != nil {
+				if err := s.WriteCommandPackage(mainPkg, "test.js"); err != nil {
 					return err
 				}
 
@@ -314,7 +314,7 @@ func main() {
 				if *short {
 					args = append(args, "-test.short")
 				}
-				if err := runNode(tempfile.Name(), args, ""); err != nil {
+				if err := runNode("test.js", args, ""); err != nil {
 					if _, ok := err.(*exec.ExitError); !ok {
 						return err
 					}

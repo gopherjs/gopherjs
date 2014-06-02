@@ -226,17 +226,17 @@ func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *Sour
 					// skip
 				case *types.Struct:
 					if types.AssignableTo(otherType, in) {
-						implementedBy[fmt.Sprintf("go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
+						implementedBy[fmt.Sprintf("$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
 					}
 					if types.AssignableTo(types.NewPointer(otherType), in) {
-						implementedBy[fmt.Sprintf("go$packages[\"%s\"].%s.Ptr", other.Pkg().Path(), other.Name())] = true
+						implementedBy[fmt.Sprintf("$packages[\"%s\"].%s.Ptr", other.Pkg().Path(), other.Name())] = true
 					}
 				default:
 					if types.AssignableTo(otherType, in) {
-						implementedBy[fmt.Sprintf("go$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
+						implementedBy[fmt.Sprintf("$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
 					}
 					if types.AssignableTo(types.NewPointer(otherType), in) {
-						implementedBy[fmt.Sprintf("go$ptrType(go$packages[\"%s\"].%s)", other.Pkg().Path(), other.Name())] = true
+						implementedBy[fmt.Sprintf("$ptrType($packages[\"%s\"].%s)", other.Pkg().Path(), other.Name())] = true
 					}
 				}
 			}
@@ -248,19 +248,19 @@ func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *Sour
 			var target string
 			switch t.Name() {
 			case "error":
-				target = "go$error"
+				target = "$error"
 			default:
-				target = fmt.Sprintf("go$packages[\"%s\"].%s", t.Pkg().Path(), t.Name())
+				target = fmt.Sprintf("$packages[\"%s\"].%s", t.Pkg().Path(), t.Name())
 			}
 			fmt.Fprintf(w, "%s.implementedBy = [%s];\n", target, strings.Join(list, ", "))
 		}
 	}
 
 	for _, pkg := range pkgs {
-		w.Write([]byte("go$packages[\"" + string(pkg.ImportPath) + "\"].init();\n"))
+		w.Write([]byte("$packages[\"" + string(pkg.ImportPath) + "\"].init();\n"))
 	}
 
-	w.Write([]byte("go$packages[\"" + mainPkgPath + "\"].main();\n\n})();\n"))
+	w.Write([]byte("$packages[\"" + mainPkgPath + "\"].main();\n\n})();\n"))
 }
 
 func (t *Compiler) WritePkgCode(pkg *Archive, w *SourceMapFilter) {
@@ -270,10 +270,10 @@ func (t *Compiler) WritePkgCode(pkg *Archive, w *SourceMapFilter) {
 			panic(err)
 		}
 	}
-	fmt.Fprintf(w, "go$packages[\"%s\"] = (function() {\n", pkg.ImportPath)
-	vars := []string{"go$pkg = {}"}
+	fmt.Fprintf(w, "$packages[\"%s\"] = (function() {\n", pkg.ImportPath)
+	vars := []string{"$pkg = {}"}
 	for _, imp := range pkg.Imports {
-		vars = append(vars, fmt.Sprintf("%s = go$packages[\"%s\"]", imp.VarName, imp.Path))
+		vars = append(vars, fmt.Sprintf("%s = $packages[\"%s\"]", imp.VarName, imp.Path))
 	}
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 && d.Var != "" {
@@ -288,13 +288,13 @@ func (t *Compiler) WritePkgCode(pkg *Archive, w *SourceMapFilter) {
 			w.Write(d.BodyCode)
 		}
 	}
-	w.Write([]byte("\tgo$pkg.init = function() {\n"))
+	w.Write([]byte("\t$pkg.init = function() {\n"))
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 {
 			w.Write(d.InitCode)
 		}
 	}
-	w.Write([]byte("\t}\n\treturn go$pkg;\n})();\n"))
+	w.Write([]byte("\t}\n\treturn $pkg;\n})();\n"))
 }
 
 func (t *Compiler) UnmarshalArchive(filename, id string, data []byte) (*Archive, error) {

@@ -17,21 +17,21 @@ func AfterFunc(d Duration, f func()) *Timer {
 }
 
 func After(d Duration) <-chan Time {
-	js.Global.Call("go$notSupported", "time.After (use time.AfterFunc instead)")
+	js.Global.Call("$notSupported", "time.After (use time.AfterFunc instead)")
 	panic("unreachable")
 }
 
 func Sleep(d Duration) {
-	js.Global.Call("go$notSupported", "time.Sleep (use time.AfterFunc instead)")
+	js.Global.Call("$notSupported", "time.Sleep (use time.AfterFunc instead)")
 	panic("unreachable")
 }
 
 func Tick(d Duration) <-chan Time {
-	js.Global.Call("go$notSupported", "time.Tick (use time.AfterFunc instead)")
+	js.Global.Call("$notSupported", "time.Tick (use time.AfterFunc instead)")
 	panic("unreachable")
 }
 
 func NewTimer(d Duration) *Timer {
-	js.Global.Call("go$notSupported", "time.NewTimer (use time.AfterFunc instead)")
+	js.Global.Call("$notSupported", "time.NewTimer (use time.AfterFunc instead)")
 	panic("unreachable")
 }

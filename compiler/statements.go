@@ -106,7 +106,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			if len(conds) == 1 {
 				t := c.p.info.Types[conds[0]].Type
 				if _, isInterface := t.Underlying().(*types.Interface); !isInterface && !types.Identical(t, types.Typ[types.UntypedNil]) {
-					value += ".go$val"
+					value += ".$val"
 				}
 			}
 			c.Printf("%s = %s;", typeSwitchVar, value)
@@ -138,7 +138,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		case *types.Basic:
 			runeVar := c.newVariable("_rune")
 			c.translateLoopingStmt(iVar+" < "+refVar+".length", s.Body, func() {
-				c.Printf("%s = go$decodeRune(%s, %s);", runeVar, refVar, iVar)
+				c.Printf("%s = $decodeRune(%s, %s);", runeVar, refVar, iVar)
 				if !isBlank(s.Value) {
 					c.Printf("%s", c.translateAssign(s.Value, runeVar+"[0]"))
 				}
@@ -151,7 +151,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 		case *types.Map:
 			keysVar := c.newVariable("_keys")
-			c.Printf("%s = go$keys(%s);", keysVar, refVar)
+			c.Printf("%s = $keys(%s);", keysVar, refVar)
 			c.translateLoopingStmt(iVar+" < "+keysVar+".length", s.Body, func() {
 				entryVar := c.newVariable("_entry")
 				c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
@@ -210,12 +210,12 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 		switch s.Tok {
 		case token.BREAK:
-			c.PrintCond(data.endCase == 0, fmt.Sprintf("break%s;", labelSuffix), fmt.Sprintf("go$s = %d; continue;", data.endCase))
+			c.PrintCond(data.endCase == 0, fmt.Sprintf("break%s;", labelSuffix), fmt.Sprintf("$s = %d; continue;", data.endCase))
 		case token.CONTINUE:
 			data.postStmt()
-			c.PrintCond(data.beginCase == 0, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("go$s = %d; continue;", data.beginCase))
+			c.PrintCond(data.beginCase == 0, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("$s = %d; continue;", data.beginCase))
 		case token.GOTO:
-			c.PrintCond(false, "goto "+s.Label.Name, fmt.Sprintf("go$s = %d; continue;", c.labelCases[s.Label.Name]))
+			c.PrintCond(false, "goto "+s.Label.Name, fmt.Sprintf("$s = %d; continue;", c.labelCases[s.Label.Name]))
 		case token.FALLTHROUGH:
 			// handled in CaseClause
 		default:
@@ -260,7 +260,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		if ident, isIdent := s.Call.Fun.(*ast.Ident); isIdent {
 			if builtin, isBuiltin := c.p.info.Uses[ident].(*types.Builtin); isBuiltin {
 				if builtin.Name() == "recover" {
-					c.Printf("go$deferred.push({ fun: go$recover, args: [] });")
+					c.Printf("$deferred.push({ fun: $recover, args: [] });")
 					return
 				}
 				args := make([]ast.Expr, len(s.Call.Args))
@@ -272,7 +272,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 					Args:     args,
 					Ellipsis: s.Call.Ellipsis,
 				})
-				c.Printf("go$deferred.push({ fun: function(%s) { %s; }, args: [%s] });", strings.Join(c.translateExprSlice(args, nil), ", "), call, strings.Join(c.translateExprSlice(s.Call.Args, nil), ", "))
+				c.Printf("$deferred.push({ fun: function(%s) { %s; }, args: [%s] });", strings.Join(c.translateExprSlice(args, nil), ", "), call, strings.Join(c.translateExprSlice(s.Call.Args, nil), ", "))
 				return
 			}
 		}
@@ -283,10 +283,10 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			if !obj.Exported() {
 				c.p.dependencies[obj] = true
 			}
-			c.Printf(`go$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, args)
+			c.Printf(`$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, args)
 			return
 		}
-		c.Printf("go$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), args)
+		c.Printf("$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), args)
 
 	case *ast.AssignStmt:
 		c.printLabel(label)
@@ -507,15 +507,15 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.SelectStmt:
 		c.printLabel(label)
-		c.Printf(`go$notSupported("select");`)
+		c.Printf(`$notSupported("select");`)
 
 	case *ast.GoStmt:
 		c.printLabel(label)
-		c.Printf(`go$notSupported("go");`)
+		c.Printf(`$notSupported("go");`)
 
 	case *ast.SendStmt:
 		c.printLabel(label)
-		c.Printf(`go$notSupported("send");`)
+		c.Printf(`$notSupported("send");`)
 
 	case *ast.EmptyStmt:
 		// skip
@@ -637,9 +637,9 @@ clauseLoop:
 				jumpList = append(jumpList, fmt.Sprintf("if (%s) {}", branch.condition))
 				continue
 			}
-			jumpList = append(jumpList, fmt.Sprintf("if (%s) { go$s = %d; continue; }", branch.condition, caseOffset+i-1))
+			jumpList = append(jumpList, fmt.Sprintf("if (%s) { $s = %d; continue; }", branch.condition, caseOffset+i-1))
 		}
-		jumpList = append(jumpList, fmt.Sprintf("{ go$s = %d; continue; }", caseOffset+len(branches)-1))
+		jumpList = append(jumpList, fmt.Sprintf("{ $s = %d; continue; }", caseOffset+len(branches)-1))
 		jump = strings.Join(jumpList, " else ")
 	}
 	for i, branch := range branches {
@@ -652,7 +652,7 @@ clauseLoop:
 			c.translateStmtList(branch.body)
 		})
 		prefix = "} else "
-		jump = fmt.Sprintf("go$s = %d; continue; case %d: ", endCase, caseOffset+i)
+		jump = fmt.Sprintf("$s = %d; continue; case %d: ", endCase, caseOffset+i)
 	}
 	if defaultBranch != nil {
 		c.PrintCond(!flatten, "} else {", jump)
@@ -692,7 +692,7 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 	c.flowDatas[label] = data
 
 	c.printLabel(label)
-	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { go$s = %d; continue; }", data.beginCase, cond, data.endCase))
+	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { $s = %d; continue; }", data.beginCase, cond, data.endCase))
 	c.Indent(func() {
 		v := &escapeAnalysis{
 			info:       c.p.info,
@@ -724,7 +724,7 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 
 		c.escapingVars = prevEV
 	})
-	c.PrintCond(!flatten, "}", fmt.Sprintf("go$s = %d; continue; case %d:", data.beginCase, data.endCase))
+	c.PrintCond(!flatten, "}", fmt.Sprintf("$s = %d; continue; case %d:", data.beginCase, data.endCase))
 
 	delete(c.flowDatas, label)
 	c.flowDatas[""] = prevFlowData
@@ -776,19 +776,19 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string) string {
 			}
 			return out
 		case *types.Array:
-			return fmt.Sprintf("go$copyArray(%s, %s);", c.translateExpr(l.X), rhs)
+			return fmt.Sprintf("$copyArray(%s, %s);", c.translateExpr(l.X), rhs)
 		default:
-			return fmt.Sprintf("%s.go$set(%s);", c.translateExpr(l.X), rhs)
+			return fmt.Sprintf("%s.$set(%s);", c.translateExpr(l.X), rhs)
 		}
 	case *ast.IndexExpr:
 		switch t := c.p.info.Types[l.X].Type.Underlying().(type) {
 		case *types.Array, *types.Pointer:
 			return fmt.Sprintf("%s[%s] = %s;", c.translateExpr(l.X), c.formatExpr("%f", l.Index).String(), rhs)
 		case *types.Slice:
-			return c.formatExpr(`(%2f < 0 || %2f >= %1e.length) ? go$throwRuntimeError("index out of range") : %1e.array[%1e.offset + %2f] = %3s`, l.X, l.Index, rhs).String() + ";"
+			return c.formatExpr(`(%2f < 0 || %2f >= %1e.length) ? $throwRuntimeError("index out of range") : %1e.array[%1e.offset + %2f] = %3s`, l.X, l.Index, rhs).String() + ";"
 		case *types.Map:
 			keyVar := c.newVariable("_key")
-			return fmt.Sprintf(`%s = %s; (%s || go$throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s };`, keyVar, c.translateImplicitConversion(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)
+			return fmt.Sprintf(`%s = %s; (%s || $throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s };`, keyVar, c.translateImplicitConversion(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)
 		default:
 			panic(fmt.Sprintf("Unhandled lhs type: %T\n", t))
 		}

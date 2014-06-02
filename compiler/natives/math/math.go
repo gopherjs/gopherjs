@@ -146,7 +146,7 @@ func Min(x, y float64) float64 {
 }
 
 func Mod(x, y float64) float64 {
-	return js.Global.Call("go$mod", x, y).Float()
+	return js.Global.Call("$mod", x, y).Float()
 }
 
 func Modf(f float64) (float64, float64) {
@@ -235,7 +235,7 @@ func Float32bits(f float32) uint32 {
 		f *= 2
 	}
 
-	r := js.Global.Call("go$mod", f, 2).Float()
+	r := js.Global.Call("$mod", f, 2).Float()
 	if (r > 0.5 && r < 1) || r >= 1.5 { // round to nearest even
 		f++
 	}

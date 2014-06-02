@@ -43,13 +43,13 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 			fmt.Printf("=== RUN %s\n", t.name)
 		}
 		err := runTest.Invoke(tests[i], t)
-		js.Global.Set("go$jsErr", nil)
+		js.Global.Set("$jsErr", nil)
 		if err != nil {
 			switch {
-			case !err.Get("go$exit").IsUndefined():
+			case !err.Get("$exit").IsUndefined():
 				// test failed or skipped
 				err = nil
-			case !err.Get("go$notSupported").IsUndefined():
+			case !err.Get("$notSupported").IsUndefined():
 				t.log(err.Get("message").Str())
 				t.skip()
 				err = nil

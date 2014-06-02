@@ -26,7 +26,7 @@ func init() {
 	used(imethod{})
 	used(structField{})
 
-	pkg := js.Global.Get("go$pkg")
+	pkg := js.Global.Get("$pkg")
 	pkg.Set("kinds", map[string]Kind{
 		"Bool":          Bool,
 		"Int":           Int,
@@ -58,8 +58,8 @@ func init() {
 	pkg.Set("RecvDir", RecvDir)
 	pkg.Set("SendDir", SendDir)
 	pkg.Set("BothDir", BothDir)
-	js.Global.Set("go$reflect", pkg)
-	// 	go$reflect = {
+	js.Global.Set("$reflect", pkg)
+	// 	$reflect = {
 	// 	rtype: rtype.Ptr, uncommonType: uncommonType.Ptr, method: method.Ptr, arrayType: arrayType.Ptr, chanType: chanType.Ptr, funcType: funcType.Ptr, interfaceType: interfaceType.Ptr, mapType: mapType.Ptr, ptrType: ptrType.Ptr, sliceType: sliceType.Ptr, structType: structType.Ptr,
 	// 	imethod: imethod.Ptr, structField: structField.Ptr,
 	// };
@@ -103,9 +103,9 @@ func zeroVal(typ Type) js.Object {
 		return jsType(typ).New(0, 0)
 	case Array:
 		elemType := typ.Elem()
-		return js.Global.Call("go$makeNativeArray", jsType(elemType).Get("kind"), typ.Len(), func() js.Object { return zeroVal(elemType) })
+		return js.Global.Call("$makeNativeArray", jsType(elemType).Get("kind"), typ.Len(), func() js.Object { return zeroVal(elemType) })
 	case Func:
-		return js.Global.Get("go$throwNilPointerError")
+		return js.Global.Get("$throwNilPointerError")
 	case Interface:
 		return nil
 	case Map:
@@ -123,7 +123,7 @@ func zeroVal(typ Type) js.Object {
 
 func makeIword(t Type, v js.Object) iword {
 	if t.Size() > ptrSize && t.Kind() != Array && t.Kind() != Struct {
-		return iword(js.Global.Call("go$newDataPointer", v, jsType(PtrTo(t))).Unsafe())
+		return iword(js.Global.Call("$newDataPointer", v, jsType(PtrTo(t))).Unsafe())
 	}
 	return iword(v.Unsafe())
 }
@@ -131,7 +131,7 @@ func makeIword(t Type, v js.Object) iword {
 func makeValue(t Type, v js.Object, fl flag) Value {
 	rt := t.common()
 	if t.Size() > ptrSize && t.Kind() != Array && t.Kind() != Struct {
-		return Value{rt, unsafe.Pointer(js.Global.Call("go$newDataPointer", v, jsType(rt.ptrTo())).Unsafe()), fl | flag(t.Kind())<<flagKindShift | flagIndir}
+		return Value{rt, unsafe.Pointer(js.Global.Call("$newDataPointer", v, jsType(rt.ptrTo())).Unsafe()), fl | flag(t.Kind())<<flagKindShift | flagIndir}
 	}
 	return Value{rt, unsafe.Pointer(v.Unsafe()), fl | flag(t.Kind())<<flagKindShift}
 }
@@ -154,7 +154,7 @@ func MakeSlice(typ Type, len, cap int) Value {
 }
 
 func jsObject() *rtype {
-	return reflectType(js.Global.Get("go$packages").Get("github.com/gopherjs/gopherjs/js").Get("Object"))
+	return reflectType(js.Global.Get("$packages").Get("github.com/gopherjs/gopherjs/js").Get("Object"))
 }
 
 func TypeOf(i interface{}) Type {
@@ -179,15 +179,15 @@ func ValueOf(i interface{}) Value {
 	if c.Get("kind").IsUndefined() { // js.Object
 		return Value{jsObject(), unsafe.Pointer(js.InternalObject(i).Unsafe()), flag(Interface) << flagKindShift}
 	}
-	return makeValue(reflectType(c), js.InternalObject(i).Get("go$val"), 0)
+	return makeValue(reflectType(c), js.InternalObject(i).Get("$val"), 0)
 }
 
 func arrayOf(count int, elem Type) Type {
-	return reflectType(js.Global.Call("go$arrayType", jsType(elem), count))
+	return reflectType(js.Global.Call("$arrayType", jsType(elem), count))
 }
 
 func ChanOf(dir ChanDir, t Type) Type {
-	return reflectType(js.Global.Call("go$chanType", jsType(t), dir == SendDir, dir == RecvDir))
+	return reflectType(js.Global.Call("$chanType", jsType(t), dir == SendDir, dir == RecvDir))
 }
 
 func MapOf(key, elem Type) Type {
@@ -196,15 +196,15 @@ func MapOf(key, elem Type) Type {
 		panic("reflect.MapOf: invalid key type " + key.String())
 	}
 
-	return reflectType(js.Global.Call("go$mapType", jsType(key), jsType(elem)))
+	return reflectType(js.Global.Call("$mapType", jsType(key), jsType(elem)))
 }
 
 func (t *rtype) ptrTo() *rtype {
-	return reflectType(js.Global.Call("go$ptrType", jsType(t)))
+	return reflectType(js.Global.Call("$ptrType", jsType(t)))
 }
 
 func SliceOf(t Type) Type {
-	return reflectType(js.Global.Call("go$sliceType", jsType(t)))
+	return reflectType(js.Global.Call("$sliceType", jsType(t)))
 }
 
 func Zero(typ Type) Value {
@@ -218,7 +218,7 @@ func unsafe_New(typ *rtype) unsafe.Pointer {
 	case Array:
 		return unsafe.Pointer(zeroVal(typ).Unsafe())
 	default:
-		return unsafe.Pointer(js.Global.Call("go$newDataPointer", zeroVal(typ), jsType(typ.ptrTo())).Unsafe())
+		return unsafe.Pointer(js.Global.Call("$newDataPointer", zeroVal(typ), jsType(typ.ptrTo())).Unsafe())
 	}
 }
 
@@ -285,38 +285,38 @@ func makechan(typ *rtype, size uint64) (ch iword) {
 }
 
 func chancap(ch iword) int {
-	js.Global.Call("go$notSupported", "channels")
+	js.Global.Call("$notSupported", "channels")
 	panic("unreachable")
 }
 
 func chanclose(ch iword) {
-	js.Global.Call("go$notSupported", "channels")
+	js.Global.Call("$notSupported", "channels")
 	panic("unreachable")
 }
 
 func chanlen(ch iword) int {
-	js.Global.Call("go$notSupported", "channels")
+	js.Global.Call("$notSupported", "channels")
 	panic("unreachable")
 }
 
 func chanrecv(t *rtype, ch iword, nb bool) (val iword, selected, received bool) {
-	js.Global.Call("go$notSupported", "channels")
+	js.Global.Call("$notSupported", "channels")
 	panic("unreachable")
 }
 
 func chansend(t *rtype, ch iword, val iword, nb bool) bool {
-	js.Global.Call("go$notSupported", "channels")
+	js.Global.Call("$notSupported", "channels")
 	panic("unreachable")
 }
 
 func makemap(t *rtype) (m iword) {
-	return iword(js.Global.Get("Go$Map").New().Unsafe())
+	return iword(js.Global.Get("$Map").New().Unsafe())
 }
 
 func mapaccess(t *rtype, m iword, key iword) (val iword, ok bool) {
 	k := js.InternalObject(key)
-	if !k.Get("go$key").IsUndefined() {
-		k = k.Call("go$key")
+	if !k.Get("$key").IsUndefined() {
+		k = k.Call("$key")
 	}
 	entry := js.InternalObject(m).Get(k.Str())
 	if entry.IsUndefined() {
@@ -327,8 +327,8 @@ func mapaccess(t *rtype, m iword, key iword) (val iword, ok bool) {
 
 func mapassign(t *rtype, m iword, key, val iword, ok bool) {
 	k := js.InternalObject(key)
-	if !k.Get("go$key").IsUndefined() {
-		k = k.Call("go$key")
+	if !k.Get("$key").IsUndefined() {
+		k = k.Call("$key")
 	}
 	if !ok {
 		js.InternalObject(m).Delete(k.Str())
@@ -354,7 +354,7 @@ type mapIter struct {
 }
 
 func mapiterinit(t *rtype, m iword) *byte {
-	return (*byte)(unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Call("go$keys", m), 0}))
+	return (*byte)(unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Call("$keys", m), 0}))
 }
 
 func mapiterkey(it *byte) (key iword, ok bool) {
@@ -371,7 +371,7 @@ func mapiternext(it *byte) {
 }
 
 func maplen(m iword) int {
-	return js.Global.Call("go$keys", m).Length()
+	return js.Global.Call("$keys", m).Length()
 }
 
 func cvtDirect(v Value, typ Type) Value {
@@ -389,7 +389,7 @@ func cvtDirect(v Value, typ Type) Value {
 		slice.Set("offset", srcVal.Get("offset"))
 		slice.Set("length", srcVal.Get("length"))
 		slice.Set("capacity", srcVal.Get("capacity"))
-		val = js.Global.Call("go$newDataPointer", slice, jsType(PtrTo(typ)))
+		val = js.Global.Call("$newDataPointer", slice, jsType(PtrTo(typ)))
 	case Ptr:
 		if typ.Elem().Kind() == Struct {
 			if typ.Elem() == v.typ.Elem() {
@@ -400,7 +400,7 @@ func cvtDirect(v Value, typ Type) Value {
 			copyStruct(val, srcVal, typ.Elem())
 			break
 		}
-		val = jsType(typ).New(srcVal.Get("go$get"), srcVal.Get("go$set"))
+		val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"))
 	case Struct:
 		val = jsType(typ).Get("Ptr").New()
 		copyStruct(val, srcVal, typ)
@@ -440,7 +440,7 @@ func Copy(dst, src Value) int {
 		srcVal = jsType(SliceOf(src.typ.Elem())).New(srcVal)
 	}
 
-	return js.Global.Call("go$copySlice", dstVal, srcVal).Int()
+	return js.Global.Call("$copySlice", dstVal, srcVal).Int()
 }
 
 func methodReceiver(op string, v Value, i int) (*rtype, unsafe.Pointer, iword) {
@@ -497,7 +497,7 @@ func valueInterface(v Value, safe bool) interface{} {
 }
 
 func ifaceE2I(t *rtype, src interface{}, dst unsafe.Pointer) {
-	js.InternalObject(dst).Call("go$set", js.InternalObject(src))
+	js.InternalObject(dst).Call("$set", js.InternalObject(src))
 }
 
 func methodName() string {
@@ -542,7 +542,7 @@ func (t *uncommonType) Method(i int) (m Method) {
 
 func (v Value) iword() iword {
 	if v.flag&flagIndir != 0 && v.typ.Kind() != Array && v.typ.Kind() != Struct {
-		val := js.InternalObject(v.val).Call("go$get")
+		val := js.InternalObject(v.val).Call("$get")
 		if !val.IsNull() && val.Get("constructor") != jsType(v.typ) {
 			switch v.typ.Kind() {
 			case Uint64, Int64:
@@ -680,7 +680,7 @@ func (v Value) Elem() Value {
 			return Value{}
 		}
 		typ := reflectType(val.Get("constructor"))
-		return makeValue(typ, val.Get("go$val"), v.flag&flagRO)
+		return makeValue(typ, val.Get("$val"), v.flag&flagRO)
 
 	case Ptr:
 		if v.IsNil() {
@@ -773,7 +773,7 @@ func (v Value) IsNil() bool {
 	case Chan, Ptr, Slice:
 		return v.iword() == iword(jsType(v.typ).Get("nil").Unsafe())
 	case Func:
-		return v.iword() == iword(js.Global.Get("go$throwNilPointerError").Unsafe())
+		return v.iword() == iword(js.Global.Get("$throwNilPointerError").Unsafe())
 	case Map:
 		return v.iword() == iword(js.InternalObject(false).Unsafe())
 	case Interface:
@@ -790,7 +790,7 @@ func (v Value) Len() int {
 	// case Chan:
 	// 	return chanlen(v.iword())
 	case Map:
-		return js.Global.Call("go$keys", v.iword()).Length()
+		return js.Global.Call("$keys", v.iword()).Length()
 	default:
 		panic(&ValueError{"reflect.Value.Len", k})
 	}
@@ -819,13 +819,13 @@ func (v Value) Set(x Value) {
 	if v.flag&flagIndir != 0 {
 		switch v.typ.Kind() {
 		case Array:
-			js.Global.Call("go$copyArray", v.val, x.val)
+			js.Global.Call("$copyArray", v.val, x.val)
 		case Interface:
-			js.InternalObject(v.val).Call("go$set", js.InternalObject(valueInterface(x, false)))
+			js.InternalObject(v.val).Call("$set", js.InternalObject(valueInterface(x, false)))
 		case Struct:
 			copyStruct(js.InternalObject(v.val), js.InternalObject(x.val), v.typ)
 		default:
-			js.InternalObject(v.val).Call("go$set", x.iword())
+			js.InternalObject(v.val).Call("$set", x.iword())
 		}
 		return
 	}
@@ -835,7 +835,7 @@ func (v Value) Set(x Value) {
 func (v Value) SetCap(n int) {
 	v.mustBeAssignable()
 	v.mustBe(Slice)
-	s := js.InternalObject(v.val).Call("go$get")
+	s := js.InternalObject(v.val).Call("$get")
 	if n < s.Length() || n > s.Get("capacity").Int() {
 		panic("reflect: slice capacity out of range in SetCap")
 	}
@@ -843,13 +843,13 @@ func (v Value) SetCap(n int) {
 	newSlice.Set("offset", s.Get("offset"))
 	newSlice.Set("length", s.Get("length"))
 	newSlice.Set("capacity", n)
-	js.InternalObject(v.val).Call("go$set", newSlice)
+	js.InternalObject(v.val).Call("$set", newSlice)
 }
 
 func (v Value) SetLen(n int) {
 	v.mustBeAssignable()
 	v.mustBe(Slice)
-	s := js.InternalObject(v.val).Call("go$get")
+	s := js.InternalObject(v.val).Call("$get")
 	if n < 0 || n > s.Get("capacity").Int() {
 		panic("reflect: slice length out of range in SetLen")
 	}
@@ -857,7 +857,7 @@ func (v Value) SetLen(n int) {
 	newSlice.Set("offset", s.Get("offset"))
 	newSlice.Set("length", n)
 	newSlice.Set("capacity", s.Get("capacity"))
-	js.InternalObject(v.val).Call("go$set", newSlice)
+	js.InternalObject(v.val).Call("$set", newSlice)
 }
 
 func (v Value) Slice(i, j int) Value {
@@ -896,7 +896,7 @@ func (v Value) Slice(i, j int) Value {
 		panic("reflect.Value.Slice: slice index out of bounds")
 	}
 
-	return makeValue(typ, js.Global.Call("go$subslice", s, i, j), v.flag&flagRO)
+	return makeValue(typ, js.Global.Call("$subslice", s, i, j), v.flag&flagRO)
 }
 
 func (v Value) Slice3(i, j, k int) Value {
@@ -928,7 +928,7 @@ func (v Value) Slice3(i, j, k int) Value {
 		panic("reflect.Value.Slice3: slice index out of bounds")
 	}
 
-	return makeValue(typ, js.Global.Call("go$subslice", s, i, j, k), v.flag&flagRO)
+	return makeValue(typ, js.Global.Call("$subslice", s, i, j, k), v.flag&flagRO)
 }
 
 func DeepEqual(a1, a2 interface{}) bool {
@@ -1017,5 +1017,5 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 		return v1.IsNil() && v2.IsNil()
 	}
 
-	return js.Global.Call("go$interfaceIsEqual", js.InternalObject(valueInterface(v1, false)), js.InternalObject(valueInterface(v2, false))).Bool()
+	return js.Global.Call("$interfaceIsEqual", js.InternalObject(valueInterface(v1, false)), js.InternalObject(valueInterface(v2, false))).Bool()
 }

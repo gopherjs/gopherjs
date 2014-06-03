@@ -141,6 +141,10 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 }
 
 func (c *funcContext) newVariable(name string) string {
+	return c.newVariableWithLevel(name, false)
+}
+
+func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
 	if name == "" {
 		panic("newVariable: empty name")
 	}
@@ -151,7 +155,29 @@ func (c *funcContext) newVariable(name string) string {
 		}
 	}
 	if strings.HasPrefix(name, "dollar_") {
-		name = "$" + name[7:]
+		return "$" + name[7:]
+	}
+	if c.p.minify {
+		i := 0
+		for {
+			offset := int('a')
+			if pkgLevel {
+				offset = int('A')
+			}
+			j := i
+			name = ""
+			for {
+				name = string(offset+(j%26)) + name
+				j = j/26 - 1
+				if j == -1 {
+					break
+				}
+			}
+			if c.allVars[name] == 0 {
+				break
+			}
+			i++
+		}
 	}
 	n := c.allVars[name]
 	c.allVars[name] = n + 1
@@ -184,18 +210,19 @@ func (c *funcContext) objectName(o types.Object) string {
 		return pkgVar + "." + o.Name()
 	}
 
-	name, found := c.p.objectVars[o]
-	if !found {
-		name = c.newVariable(o.Name())
-		c.p.objectVars[o] = name
-	}
-
 	switch o.(type) {
 	case *types.Var, *types.Const:
 		if o.Exported() && o.Parent() == c.p.pkg.Scope() {
-			return "$pkg." + name
+			return "$pkg." + o.Name()
 		}
 	}
+
+	name, found := c.p.objectVars[o]
+	if !found {
+		name = c.newVariableWithLevel(o.Name(), o.Parent() == c.p.pkg.Scope())
+		c.p.objectVars[o] = name
+	}
+
 	return name
 }
 

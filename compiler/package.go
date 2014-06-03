@@ -81,6 +81,19 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 	}
 	t.typesPackages[importPath] = typesPkg
 
+	gcData := bytes.NewBuffer(nil)
+	gcexporter.Write(typesPkg, gcData, sizes32)
+	encodedFileSet := bytes.NewBuffer(nil)
+	if err := fileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
+		return nil, err
+	}
+	archive := &Archive{
+		ImportPath:   PkgPath(importPath),
+		GcData:       gcData.Bytes(),
+		Dependencies: []PkgPath{PkgPath("github.com/gopherjs/gopherjs/js"), PkgPath("runtime")}, // all packages depend on those
+		FileSet:      encodedFileSet.Bytes(),
+	}
+
 	c := &funcContext{
 		p: &pkgContext{
 			pkg:          typesPkg,
@@ -99,6 +112,13 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 	}
 	for name := range reservedKeywords {
 		c.allVars[name] = 1
+	}
+
+	// imports
+	for _, importedPkg := range typesPkg.Imports() {
+		varName := c.newVariableWithLevel(importedPkg.Name(), true)
+		c.p.pkgVars[importedPkg.Path()] = varName
+		archive.Imports = append(archive.Imports, PkgImport{Path: PkgPath(importedPkg.Path()), VarName: varName})
 	}
 
 	var functions []*ast.FuncDecl
@@ -168,26 +188,6 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 			depIds[i] = DepId(dep)
 		}
 		return depIds
-	}
-
-	gcData := bytes.NewBuffer(nil)
-	gcexporter.Write(typesPkg, gcData, sizes32)
-	encodedFileSet := bytes.NewBuffer(nil)
-	if err := fileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
-		return nil, err
-	}
-	archive := &Archive{
-		ImportPath:   PkgPath(importPath),
-		GcData:       gcData.Bytes(),
-		Dependencies: []PkgPath{PkgPath("github.com/gopherjs/gopherjs/js"), PkgPath("runtime")}, // all packages depend on those
-		FileSet:      encodedFileSet.Bytes(),
-	}
-
-	// imports
-	for _, importedPkg := range typesPkg.Imports() {
-		varName := c.newVariable(importedPkg.Name())
-		c.p.pkgVars[importedPkg.Path()] = varName
-		archive.Imports = append(archive.Imports, PkgImport{Path: PkgPath(importedPkg.Path()), VarName: varName})
 	}
 
 	// types
@@ -337,7 +337,7 @@ func (c *funcContext) translateType(o *types.TypeName, toplevel bool) {
 	typeName := c.objectName(o)
 	lhs := typeName
 	if toplevel {
-		lhs += " = $pkg." + typeName
+		lhs += " = $pkg." + o.Name()
 	}
 	size := int64(0)
 	constructor := "null"
@@ -483,7 +483,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl) []byte {
 		funName := c.objectName(o)
 		lhs := funName
 		if fun.Name.IsExported() || fun.Name.Name == "main" {
-			lhs += " = $pkg." + funName
+			lhs += " = $pkg." + fun.Name.Name
 		}
 		return primaryFunction(lhs, funName)
 	}

@@ -160,7 +160,7 @@ func (t *Compiler) NewEmptyTypesPackage(path string) {
 	t.typesPackages[path] = types.NewPackage(path, path)
 }
 
-func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *SourceMapFilter) {
+func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, minify bool, w *SourceMapFilter) {
 	declsByObject := make(map[string][]*Decl)
 	var pendingDecls []*Decl
 	for _, pkg := range pkgs {
@@ -202,12 +202,12 @@ func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *Sour
 	}
 
 	w.Write([]byte("\"use strict\";\n(function() {\n\n"))
-	w.Write([]byte(strings.TrimSpace(prelude)))
+	w.Write(removeWhitespace([]byte(strings.TrimSpace(prelude)), minify))
 	w.Write([]byte("\n"))
 
 	// write packages
 	for _, pkg := range pkgs {
-		t.WritePkgCode(pkg, w)
+		t.WritePkgCode(pkg, minify, w)
 	}
 
 	// write interfaces
@@ -261,7 +261,7 @@ func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *Sour
 			default:
 				target = fmt.Sprintf("$packages[\"%s\"].%s", t.Pkg().Path(), t.Name())
 			}
-			fmt.Fprintf(w, "%s.implementedBy = [%s];\n", target, strings.Join(list, ", "))
+			w.Write(removeWhitespace([]byte(fmt.Sprintf("%s.implementedBy = [%s];\n", target, strings.Join(list, ", "))), minify))
 		}
 	}
 
@@ -272,14 +272,14 @@ func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, w *Sour
 	w.Write([]byte("$packages[\"" + mainPkgPath + "\"].main();\n\n})();\n"))
 }
 
-func (t *Compiler) WritePkgCode(pkg *Archive, w *SourceMapFilter) {
+func (t *Compiler) WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) {
 	if w.MappingCallback != nil && pkg.FileSet != nil {
 		w.fileSet = token.NewFileSet()
 		if err := w.fileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
 			panic(err)
 		}
 	}
-	fmt.Fprintf(w, "$packages[\"%s\"] = (function() {\n", pkg.ImportPath)
+	w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify))
 	vars := []string{"$pkg = {}"}
 	for _, imp := range pkg.Imports {
 		vars = append(vars, fmt.Sprintf("%s = $packages[\"%s\"]", imp.VarName, imp.Path))
@@ -290,20 +290,21 @@ func (t *Compiler) WritePkgCode(pkg *Archive, w *SourceMapFilter) {
 		}
 	}
 	if len(vars) != 0 {
-		fmt.Fprintf(w, "\tvar %s;\n", strings.Join(vars, ", "))
+		w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify))
 	}
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 {
 			w.Write(d.BodyCode)
 		}
 	}
-	w.Write([]byte("\t$pkg.init = function() {\n"))
+	w.Write(removeWhitespace([]byte("\t$pkg.init = function() {\n"), minify))
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 {
 			w.Write(d.InitCode)
 		}
 	}
-	w.Write([]byte("\t}\n\treturn $pkg;\n})();\n"))
+	w.Write(removeWhitespace([]byte("\t};\n\treturn $pkg;\n})();"), minify))
+	w.Write([]byte("\n")) // keep this \n even when minified
 }
 
 func (t *Compiler) UnmarshalArchive(filename, id string, data []byte) (*Archive, error) {

@@ -4,11 +4,11 @@ var prelude = `
 Error.stackTraceLimit = -1;
 
 var $global;
-if (typeof window !== "undefined") { // web page
+if (typeof window !== "undefined") { /* web page */
 	$global = window;
-} else if (typeof self !== "undefined") { // web worker
+} else if (typeof self !== "undefined") { /* web worker */
 	$global = self;
-} else if (typeof global !== "undefined") { // Node.js
+} else if (typeof global !== "undefined") { /* Node.js */
 	$global = global;
 	$global.require = require;
 } else {
@@ -237,13 +237,13 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 			var i;
 			typ.fields = fields;
 			typ.Ptr.init(typ);
-			// nil value
+			/* nil value */
 			typ.Ptr.nil = new constructor();
 			for (i = 0; i < fields.length; i++) {
 				var field = fields[i];
 				Object.defineProperty(typ.Ptr.nil, field[1], { get: $throwNilPointerError, set: $throwNilPointerError });
 			}
-			// methods for embedded fields
+			/* methods for embedded fields */
 			for (i = 0; i < typ.methods.length; i++) {
 				var method = typ.methods[i];
 				if (method[6] != -1) {
@@ -269,7 +269,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 					})(fields[method[6]], method[0]);
 				}
 			}
-			// map key
+			/* map key */
 			typ.prototype.$key = function() {
 				var keys = new Array(fields.length);
 				for (i = 0; i < fields.length; i++) {
@@ -279,7 +279,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 				}
 				return string + "$" + keys.join("$");
 			};
-			// reflect type
+			/* reflect type */
 			typ.extendReflectType = function(rt) {
 				var reflectFields = new Array(fields.length), i;
 				for (i = 0; i < fields.length; i++) {
@@ -479,7 +479,7 @@ var $sliceType = function(elem) {
 var $structTypes = {};
 var $structType = function(fields) {
 	var string = "struct { " + $mapArray(fields, function(f) {
-		return f[1] + " " + f[3].string + (f[4] !== "" ? (' "' + f[4].replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"') : "");
+		return f[1] + " " + f[3].string + (f[4] !== "" ? (" \"" + f[4].replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"") : "");
 	}).join("; ") + " }";
 	var typ = $structTypes[string];
 	if (typ === undefined) {
@@ -490,7 +490,7 @@ var $structType = function(fields) {
 				this[fields[i][0]] = arguments[i];
 			}
 		});
-		// collect methods for anonymous fields
+		/* collect methods for anonymous fields */
 		var i, j;
 		for (i = 0; i < fields.length; i++) {
 			var field = fields[i];
@@ -1180,7 +1180,7 @@ var $notSupported = function(feature) {
 	err.$notSupported = feature;
 	throw err;
 };
-var $throwRuntimeError; // set by package "runtime"
+var $throwRuntimeError; /* set by package "runtime" */
 
 var $errorStack = [], $jsErr = null;
 
@@ -1271,7 +1271,7 @@ var $interfaceIsEqual = function(a, b) {
 	case "Slice":
 	case "Struct":
 		$throwRuntimeError("comparing uncomparable type " + a.constructor);
-	case undefined: // js.Object
+	case undefined: /* js.Object */
 		return false;
 	default:
 		return a.$val === b.$val;
@@ -1286,7 +1286,7 @@ var $float32IsEqual = function(a, b) {
 	}
 	var math = $packages["math"];
 	return math !== undefined && math.Float32bits(a) === math.Float32bits(b);
-}
+};
 var $arrayIsEqual = function(a, b) {
 	if (a.length != b.length) {
 		return false;

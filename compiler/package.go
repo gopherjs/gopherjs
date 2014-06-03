@@ -35,6 +35,7 @@ type pkgContext struct {
 	objectVars   map[types.Object]string
 	indentation  int
 	dependencies map[types.Object]bool
+	minify       bool
 }
 
 type flowData struct {
@@ -43,7 +44,7 @@ type flowData struct {
 	endCase   int
 }
 
-func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error)) (*Archive, error) {
+func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error), minify bool) (*Archive, error) {
 	info := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),
@@ -88,6 +89,7 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 			objectVars:   make(map[types.Object]string),
 			indentation:  1,
 			dependencies: make(map[types.Object]bool),
+			minify:       minify,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[string]*flowData{"": &flowData{}},
@@ -195,8 +197,8 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 		d.Var = typeName
 		d.DceFilters = []DepId{DepId(o.Name())}
 		d.DceDeps = collectDependencies(o, func() {
-			d.BodyCode = c.CatchOutput(0, func() { c.translateType(o, true) })
-			d.InitCode = c.CatchOutput(1, func() { c.initType(o) })
+			d.BodyCode = removeWhitespace(c.CatchOutput(0, func() { c.translateType(o, true) }), minify)
+			d.InitCode = removeWhitespace(c.CatchOutput(1, func() { c.initType(o) }), minify)
 		})
 		archive.Declarations = append(archive.Declarations, d)
 	}
@@ -227,7 +229,7 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 		}
 
 		d.DceDeps = collectDependencies(o, func() {
-			d.BodyCode = c.translateToplevelFunction(fun)
+			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun), minify)
 		})
 		archive.Declarations = append(archive.Declarations, d)
 		if strings.HasPrefix(fun.Name.String(), "Test") {
@@ -272,7 +274,7 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 				if importPath == "runtime" && o.Name() == "sizeof_C_MStats" {
 					value = "3712"
 				}
-				d.InitCode = []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value))
+				d.InitCode = removeWhitespace([]byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value)), minify)
 			})
 		}
 		d.DceFilters = []DepId{DepId(o.Name())}
@@ -289,13 +291,13 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 		}
 		var d Decl
 		d.DceDeps = collectDependencies(nil, func() {
-			d.InitCode = c.translateFunctionBody(1, []ast.Stmt{
+			d.InitCode = removeWhitespace(c.translateFunctionBody(1, []ast.Stmt{
 				&ast.AssignStmt{
 					Lhs: lhs,
 					Tok: token.DEFINE,
 					Rhs: []ast.Expr{init.Rhs},
 				},
-			})
+			}), minify)
 		})
 		if len(init.Lhs) == 1 {
 			v := hasCallVisitor{c.p.info, false}
@@ -310,7 +312,7 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 	// init functions
 	var init Decl
 	init.DceDeps = collectDependencies(nil, func() {
-		init.InitCode = c.translateFunctionBody(1, initStmts)
+		init.InitCode = removeWhitespace(c.translateFunctionBody(1, initStmts), minify)
 	})
 	archive.Declarations = append(archive.Declarations, init)
 

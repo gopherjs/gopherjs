@@ -236,7 +236,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 	if err != nil {
 		return err
 	}
-	pkg.Archive, err = s.T.Compile(pkg.ImportPath, files, fileSet, s.ImportPackage)
+	pkg.Archive, err = s.T.Compile(pkg.ImportPath, files, fileSet, s.ImportPackage, s.options.Minify)
 	if err != nil {
 		return err
 	}
@@ -327,7 +327,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 	if err != nil {
 		return err
 	}
-	s.T.WriteProgramCode(deps, pkg.ImportPath, sourceMapFilter)
+	s.T.WriteProgramCode(deps, pkg.ImportPath, s.options.Minify, sourceMapFilter)
 
 	return nil
 }

@@ -88,8 +88,17 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 		}
 		return recv.(*ast.Ident).Name + "." + d.Name.Name
 	}
-	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+pkg.ImportPath, 0, "js"); err == nil {
-		for _, name := range nativesPkg.GoFiles {
+	isTestPkg := strings.HasSuffix(pkg.ImportPath, "_test")
+	importPath := pkg.ImportPath
+	if isTestPkg {
+		importPath = importPath[:len(importPath)-5]
+	}
+	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+importPath, 0, "js"); err == nil {
+		names := nativesPkg.GoFiles
+		if isTestPkg {
+			names = nativesPkg.XTestGoFiles
+		}
+		for _, name := range names {
 			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
 			if err != nil {
 				panic(err)

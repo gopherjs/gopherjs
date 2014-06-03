@@ -39,7 +39,7 @@ All packages marked as supported are automatically transpiled and tested by Trav
 | -- sha256       | yes                   |                                   |
 | -- sha512       | yes                   |                                   |
 | -- subtle       | yes                   |                                   |
-| -- tls          | not yet               |                                   |
+| -- tls          | no                    |                                   |
 | -- x509         | not yet               |                                   |
 | -- -- pkix      | (no tests)            |                                   |
 | database        |                       |                                   |
@@ -102,18 +102,18 @@ All packages marked as supported are automatically transpiled and tested by Trav
 | -- rand         | yes                   |                                   |
 | mime            | yes                   |                                   |
 | -- multipart    | no                    |                                   |
-| net             | not yet               |                                   |
-| -- http         | not yet               | actual requests in node.js only   |
+| net             | no                    |                                   |
+| -- http         | partially             | data structures only (no net)     |
 | -- -- cgi       | not yet               |                                   |
 | -- -- cookiejar | yes                   |                                   |
 | -- -- fcgi      | yes                   |                                   |
-| -- -- httptest  | not yet               |                                   |
-| -- -- httputil  | not yet               |                                   |
+| -- -- httptest  | partially             |                                   |
+| -- -- httputil  | partially             |                                   |
 | -- -- pprof     | (no tests)            |                                   |
 | -- mail         | yes                   |                                   |
 | -- rpc          | not yet               |                                   |
 | -- -- jsonrpc   | not yet               |                                   |
-| -- smtp         | not yet               |                                   |
+| -- smtp         | partially             | data structures only (no net)     |
 | -- textproto    | yes                   |                                   |
 | -- url          | yes                   |                                   |
 | os              | yes                   | node.js only                      |

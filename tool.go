@@ -166,18 +166,18 @@ func main() {
 
 	case "run":
 		os.Exit(handleError(func() error {
-			lastSourceArg := 1
+			lastSourceArg := 0
 			for {
-				if !strings.HasSuffix(flag.Arg(lastSourceArg), ".go") {
+				if lastSourceArg == len(cmdArgs) || !strings.HasSuffix(cmdArgs[lastSourceArg], ".go") {
 					break
 				}
 				lastSourceArg++
 			}
-			if lastSourceArg == 1 {
+			if lastSourceArg == 0 {
 				return fmt.Errorf("gopherjs run: no go files listed")
 			}
 
-			tempfile, err := ioutil.TempFile("", filepath.Base(flag.Arg(1))+".")
+			tempfile, err := ioutil.TempFile("", filepath.Base(cmdArgs[0])+".")
 			if err != nil {
 				return err
 			}
@@ -187,10 +187,10 @@ func main() {
 			}()
 			options.Normalize()
 			s := gbuild.NewSession(options)
-			if err := s.BuildFiles(flags.Args()[1:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
+			if err := s.BuildFiles(cmdArgs[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
 				return err
 			}
-			if err := runNode(tempfile.Name(), flags.Args()[lastSourceArg:], ""); err != nil {
+			if err := runNode(tempfile.Name(), cmdArgs[lastSourceArg:], ""); err != nil {
 				return err
 			}
 			return nil
@@ -336,7 +336,7 @@ func main() {
 		}))
 
 	case "tool":
-		tool := flag.Arg(1)
+		tool := cmdArgs[0]
 		toolFlags := flag.NewFlagSet("tool command", flag.ExitOnError)
 		toolFlags.Bool("e", false, "")
 		toolFlags.Bool("l", false, "")

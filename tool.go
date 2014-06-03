@@ -33,18 +33,28 @@ func init() {
 }
 
 func main() {
-	flag.Parse()
+	flags := flag.NewFlagSet("", flag.ContinueOnError)
+	cmd := "help"
+	var cmdArgs []string
+	if err := flags.Parse(os.Args[1:]); err == nil && flags.NArg() != 0 {
+		cmd = flags.Arg(0)
+		cmdArgs = flags.Args()[1:]
+		if cmd == "help" && flags.NArg() == 2 {
+			cmd = flags.Arg(1)
+			cmdArgs = []string{"--help"}
+		}
+	}
+
 	options := &gbuild.Options{CreateMapFile: true}
-	cmd := flag.Arg(0)
 	switch cmd {
 	case "build":
-		buildFlags := flag.NewFlagSet("build", flag.ContinueOnError)
+		buildFlags := flag.NewFlagSet("build command", flag.ExitOnError)
 		var pkgObj string
-		buildFlags.StringVar(&pkgObj, "o", "", "")
+		buildFlags.StringVar(&pkgObj, "o", "", "output file")
 		buildFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
 		buildFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
 		buildFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
-		buildFlags.Parse(flag.Args()[1:])
+		buildFlags.Parse(cmdArgs)
 		options.Normalize()
 
 		for {
@@ -109,11 +119,11 @@ func main() {
 		}
 
 	case "install":
-		installFlags := flag.NewFlagSet("install", flag.ContinueOnError)
+		installFlags := flag.NewFlagSet("install command", flag.ExitOnError)
 		installFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
 		installFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
 		installFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
-		installFlags.Parse(flag.Args()[1:])
+		installFlags.Parse(cmdArgs)
 		options.Normalize()
 
 		for {
@@ -177,20 +187,20 @@ func main() {
 			}()
 			options.Normalize()
 			s := gbuild.NewSession(options)
-			if err := s.BuildFiles(flag.Args()[1:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
+			if err := s.BuildFiles(flags.Args()[1:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
 				return err
 			}
-			if err := runNode(tempfile.Name(), flag.Args()[lastSourceArg:], ""); err != nil {
+			if err := runNode(tempfile.Name(), flags.Args()[lastSourceArg:], ""); err != nil {
 				return err
 			}
 			return nil
 		}))
 
 	case "test":
-		testFlags := flag.NewFlagSet("test", flag.ContinueOnError)
+		testFlags := flag.NewFlagSet("test command", flag.ExitOnError)
 		verbose := testFlags.Bool("v", false, "verbose")
 		short := testFlags.Bool("short", false, "short")
-		testFlags.Parse(flag.Args()[1:])
+		testFlags.Parse(cmdArgs)
 
 		os.Exit(handleError(func() error {
 			pkgs := make([]*build.Package, testFlags.NArg())
@@ -327,14 +337,14 @@ func main() {
 
 	case "tool":
 		tool := flag.Arg(1)
-		toolFlags := flag.NewFlagSet("tool", flag.ContinueOnError)
+		toolFlags := flag.NewFlagSet("tool command", flag.ExitOnError)
 		toolFlags.Bool("e", false, "")
 		toolFlags.Bool("l", false, "")
 		toolFlags.Bool("m", false, "")
 		toolFlags.String("o", "", "")
 		toolFlags.String("D", "", "")
 		toolFlags.String("I", "", "")
-		toolFlags.Parse(flag.Args()[2:])
+		toolFlags.Parse(flags.Args()[2:])
 
 		os.Exit(handleError(func() error {
 			if len(tool) == 2 {
@@ -365,6 +375,8 @@ The commands are:
     install     compile and install packages and dependencies
     run         compile and run Go program (requires Node.js)
     test        test packages (requires Node.js)
+
+Use "go help [command]" for more information about a command.
 
 `)
 

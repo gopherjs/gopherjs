@@ -112,6 +112,7 @@ func main() {
 		installFlags := flag.NewFlagSet("install", flag.ContinueOnError)
 		installFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
 		installFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
+		installFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
 		installFlags.Parse(flag.Args()[1:])
 		options.Normalize()
 

@@ -1,7 +1,7 @@
 Supported Packages
 ------------------
 
-All packages marked as supported are automatically transpiled and tested by Travis CI on each commit:
+On each commit, Travis CI automatically compiles all supported packages with GopherJS and runs their tests:
 
 [![Build Status](https://travis-ci.org/gopherjs/gopherjs.png?branch=master)](https://travis-ci.org/gopherjs/gopherjs)
 

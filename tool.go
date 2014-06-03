@@ -303,7 +303,7 @@ func main() {
 					os.Remove(tempfile.Name())
 				}()
 
-				if err := s.WriteCommandPackage(mainPkg, "test.js"); err != nil {
+				if err := s.WriteCommandPackage(mainPkg, tempfile.Name()); err != nil {
 					return err
 				}
 
@@ -314,7 +314,7 @@ func main() {
 				if *short {
 					args = append(args, "-test.short")
 				}
-				if err := runNode("test.js", args, ""); err != nil {
+				if err := runNode(tempfile.Name(), args, ""); err != nil {
 					if _, ok := err.(*exec.ExitError); !ok {
 						return err
 					}

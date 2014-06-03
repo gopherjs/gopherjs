@@ -285,11 +285,11 @@ func main() {
 
 				mainFunc.DceDeps = append(mainFunc.DceDeps, compiler.DepId("flag:Parse"))
 				mainFunc.BodyCode = []byte(fmt.Sprintf(`
-				$pkg.main = function() {
-					var testing = $packages["testing"];
-					testing.Main2("%s", "%s", new ($sliceType($String))(["%s"]), new ($sliceType($funcType([testing.T.Ptr], [], false)))([%s]));
-				};
-			`, pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))
+					$pkg.main = function() {
+						var testing = $packages["testing"];
+						testing.Main2("%s", "%s", new ($sliceType($String))(["%s"]), new ($sliceType($funcType([testing.T.Ptr], [], false)))([%s]));
+					};
+				`, pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))
 
 				mainPkg.Archive.Declarations = []compiler.Decl{mainFunc}
 				mainPkg.Archive.AddDependency("main")

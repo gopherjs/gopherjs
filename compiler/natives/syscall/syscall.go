@@ -4,6 +4,7 @@ package syscall
 
 import (
 	"bytes"
+	"github.com/gopherjs/gopherjs/js"
 )
 
 var warningPrinted = false
@@ -23,7 +24,7 @@ func printToConsole(b []byte) {
 		if i == -1 {
 			break
 		}
-		println(string(lineBuffer[:i]))
+		js.Global.Get("console").Call("log", string(lineBuffer[:i])) // don't use println, since it does not externalize multibyte characters
 		lineBuffer = lineBuffer[i+1:]
 	}
 }

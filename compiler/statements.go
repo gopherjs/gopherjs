@@ -257,24 +257,31 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.DeferStmt:
 		c.printLabel(label)
-		if ident, isIdent := s.Call.Fun.(*ast.Ident); isIdent {
-			if builtin, isBuiltin := c.p.info.Uses[ident].(*types.Builtin); isBuiltin {
-				if builtin.Name() == "recover" {
-					c.Printf("$deferred.push({ fun: $recover, args: [] });")
-					return
-				}
-				args := make([]ast.Expr, len(s.Call.Args))
-				for i, arg := range s.Call.Args {
-					args[i] = c.newIdent(c.newVariable("_arg"), c.p.info.Types[arg].Type)
-				}
-				call := c.translateExpr(&ast.CallExpr{
-					Fun:      s.Call.Fun,
-					Args:     args,
-					Ellipsis: s.Call.Ellipsis,
-				})
-				c.Printf("$deferred.push({ fun: function(%s) { %s; }, args: [%s] });", strings.Join(c.translateExprSlice(args, nil), ", "), call, strings.Join(c.translateExprSlice(s.Call.Args, nil), ", "))
+		isBuiltin := false
+		isJs := false
+		switch fun := s.Call.Fun.(type) {
+		case *ast.Ident:
+			var builtin *types.Builtin
+			builtin, isBuiltin = c.p.info.Uses[fun].(*types.Builtin)
+			if isBuiltin && builtin.Name() == "recover" {
+				c.Printf("$deferred.push({ fun: $recover, args: [] });")
 				return
 			}
+		case *ast.SelectorExpr:
+			isJs = isJsPackage(c.p.info.Selections[fun].Obj().Pkg())
+		}
+		if isBuiltin || isJs {
+			args := make([]ast.Expr, len(s.Call.Args))
+			for i, arg := range s.Call.Args {
+				args[i] = c.newIdent(c.newVariable("_arg"), c.p.info.Types[arg].Type)
+			}
+			call := c.translateExpr(&ast.CallExpr{
+				Fun:      s.Call.Fun,
+				Args:     args,
+				Ellipsis: s.Call.Ellipsis,
+			})
+			c.Printf("$deferred.push({ fun: function(%s) { %s; }, args: [%s] });", strings.Join(c.translateExprSlice(args, nil), ", "), call, strings.Join(c.translateExprSlice(s.Call.Args, nil), ", "))
+			return
 		}
 		sig := c.p.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
 		args := strings.Join(c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid()), ", ")

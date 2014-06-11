@@ -19,7 +19,6 @@ type funcContext struct {
 	localVars     []string
 	resultNames   []ast.Expr
 	flowDatas     map[string]*flowData
-	escapingVars  []string
 	flattened     bool
 	caseCounter   int
 	labelCases    map[string]int
@@ -33,6 +32,7 @@ type pkgContext struct {
 	info         *types.Info
 	pkgVars      map[string]string
 	objectVars   map[types.Object]string
+	escapingVars map[types.Object]bool
 	indentation  int
 	dependencies map[types.Object]bool
 	minify       bool
@@ -100,6 +100,7 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 			info:         info,
 			pkgVars:      make(map[string]string),
 			objectVars:   make(map[types.Object]string),
+			escapingVars: make(map[types.Object]bool),
 			indentation:  1,
 			dependencies: make(map[types.Object]bool),
 			minify:       minify,

@@ -143,8 +143,12 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 
 	case *ast.FuncLit:
 		params, body := c.translateFunction(e.Type, exprType.(*types.Signature), e.Body.List)
-		if len(c.escapingVars) != 0 {
-			list := strings.Join(c.escapingVars, ", ")
+		if len(c.p.escapingVars) != 0 {
+			names := make([]string, 0, len(c.p.escapingVars))
+			for obj := range c.p.escapingVars {
+				names = append(names, c.p.objectVars[obj])
+			}
+			list := strings.Join(names, ", ")
 			return c.formatExpr("(function(%s) { return function(%s) {\n%s%s}; })(%s)", list, strings.Join(params, ", "), string(body), strings.Repeat("\t", c.p.indentation), list)
 		}
 		return c.formatExpr("(function(%s) {\n%s%s})", strings.Join(params, ", "), string(body), strings.Repeat("\t", c.p.indentation))
@@ -162,9 +166,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				return c.formatExpr("$newDataPointer(%e, %s)", x, c.typeName(c.p.info.Types[e].Type))
 			case *ast.Ident:
 				vVar := c.newVariable("_v")
-				if len(c.escapingVars) != 0 {
-					list := strings.Join(c.escapingVars, ", ")
-					return c.formatExpr("(function(%s) { return new %s(function() { return %e; }, function(%s) { %s }); })(%s)", list, c.typeName(exprType), x, vVar, c.translateAssign(x, vVar), list)
+				if obj := c.p.info.Uses[x]; c.p.escapingVars[obj] {
+					return c.formatExpr("(function(%s) { return new %s(function() { return %e; }, function(%s) { %s }); })(%s)", c.p.objectVars[obj], c.typeName(exprType), x, vVar, c.translateAssign(x, vVar), c.p.objectVars[obj])
 				}
 				return c.formatExpr("new %s(function() { return %e; }, function(%s) { %s })", c.typeName(exprType), x, vVar, c.translateAssign(x, vVar))
 			case *ast.SelectorExpr:

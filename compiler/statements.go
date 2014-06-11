@@ -707,11 +707,14 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 			escaping:   make(map[types.Object]bool),
 		}
 		ast.Walk(v, body)
-		prevEV := c.escapingVars
+		prevEV := c.p.escapingVars
+		c.p.escapingVars = make(map[types.Object]bool)
+		for escaping := range prevEV {
+			c.p.escapingVars[escaping] = true
+		}
 		for escaping := range v.escaping {
 			c.Printf("%s = [undefined];", c.objectName(escaping))
-			c.escapingVars = append(c.escapingVars, c.p.objectVars[escaping])
-			c.p.objectVars[escaping] += "[0]"
+			c.p.escapingVars[escaping] = true
 		}
 
 		if bodyPrefix != nil {
@@ -729,7 +732,7 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 			post()
 		}
 
-		c.escapingVars = prevEV
+		c.p.escapingVars = prevEV
 	})
 	c.PrintCond(!flatten, "}", fmt.Sprintf("$s = %d; continue; case %d:", data.beginCase, data.endCase))
 

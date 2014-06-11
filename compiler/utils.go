@@ -223,6 +223,9 @@ func (c *funcContext) objectName(o types.Object) string {
 		c.p.objectVars[o] = name
 	}
 
+	if c.p.escapingVars[o] {
+		return name + "[0]"
+	}
 	return name
 }
 

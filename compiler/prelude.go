@@ -177,9 +177,10 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 		break;
 
 	case "Ptr":
-		typ = constructor || function(getter, setter) {
+		typ = constructor || function(getter, setter, target) {
 			this.$get = getter;
 			this.$set = setter;
+			this.$target = target;
 			this.$val = this;
 		};
 		typ.prototype.$key = function() {

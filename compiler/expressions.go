@@ -155,20 +155,33 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			switch c.p.info.Types[e.X].Type.Underlying().(type) {
 			case *types.Struct, *types.Array:
 				return c.translateExpr(e.X)
-			default:
-				if _, isComposite := e.X.(*ast.CompositeLit); isComposite {
-					return c.formatExpr("$newDataPointer(%e, %s)", e.X, c.typeName(c.p.info.Types[e].Type))
-				}
-				closurePrefix := ""
-				closureSuffix := ""
+			}
+
+			switch x := e.X.(type) {
+			case *ast.CompositeLit:
+				return c.formatExpr("$newDataPointer(%e, %s)", x, c.typeName(c.p.info.Types[e].Type))
+			case *ast.Ident:
+				vVar := c.newVariable("_v")
 				if len(c.escapingVars) != 0 {
 					list := strings.Join(c.escapingVars, ", ")
-					closurePrefix = "(function(" + list + ") { return "
-					closureSuffix = "; })(" + list + ")"
+					return c.formatExpr("(function(%s) { return new %s(function() { return %e; }, function(%s) { %s }); })(%s)", list, c.typeName(exprType), x, vVar, c.translateAssign(x, vVar), list)
 				}
-				vVar := c.newVariable("v")
-				return c.formatExpr("%snew %s(function() { return %e; }, function(%s) { %s; })%s", closurePrefix, c.typeName(exprType), e.X, vVar, c.translateAssign(e.X, vVar), closureSuffix)
+				return c.formatExpr("new %s(function() { return %e; }, function(%s) { %s })", c.typeName(exprType), x, vVar, c.translateAssign(x, vVar))
+			case *ast.SelectorExpr:
+				xId := c.newIdent(c.newVariable("_x"), c.p.info.Types[x.X].Type)
+				newSel := &ast.SelectorExpr{X: xId, Sel: x.Sel}
+				c.p.info.Selections[newSel] = c.p.info.Selections[x]
+				vVar := c.newVariable("_v")
+				return c.formatExpr("(%e = %e, new %s(function() { return %e; }, function(%s) { %s }))", xId, x.X, c.typeName(exprType), newSel, vVar, c.translateAssign(newSel, vVar))
+			case *ast.IndexExpr:
+				xId := c.newIdent(c.newVariable("_x"), c.p.info.Types[x.X].Type)
+				newIndex := &ast.IndexExpr{X: xId, Index: x.Index}
+				vVar := c.newVariable("_v")
+				return c.formatExpr("(%e = %e, new %s(function() { return %e; }, function(%s) { %s }))", xId, x.X, c.typeName(exprType), newIndex, vVar, c.translateAssign(newIndex, vVar))
+			default:
+				panic(fmt.Sprintf("Unhandled: %T\n", x))
 			}
+
 		case token.ARROW:
 			return c.formatExpr("undefined")
 		}

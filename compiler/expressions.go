@@ -165,22 +165,19 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			case *ast.CompositeLit:
 				return c.formatExpr("$newDataPointer(%e, %s)", x, c.typeName(c.p.info.Types[e].Type))
 			case *ast.Ident:
-				vVar := c.newVariable("_v")
 				if obj := c.p.info.Uses[x]; c.p.escapingVars[obj] {
-					return c.formatExpr("(function(%s) { return new %s(function() { return %e; }, function(%s) { %s }); })(%s)", c.p.objectVars[obj], c.typeName(exprType), x, vVar, c.translateAssign(x, vVar), c.p.objectVars[obj])
+					return c.formatExpr("new %s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %s)", c.typeName(exprType), c.p.objectVars[obj])
 				}
-				return c.formatExpr("new %s(function() { return %e; }, function(%s) { %s })", c.typeName(exprType), x, vVar, c.translateAssign(x, vVar))
+				return c.formatExpr("new %s(function() { return %e; }, function($v) { %s })", c.typeName(exprType), x, c.translateAssign(x, "$v"))
 			case *ast.SelectorExpr:
 				xId := c.newIdent(c.newVariable("_x"), c.p.info.Types[x.X].Type)
 				newSel := &ast.SelectorExpr{X: xId, Sel: x.Sel}
 				c.p.info.Selections[newSel] = c.p.info.Selections[x]
-				vVar := c.newVariable("_v")
-				return c.formatExpr("(%e = %e, new %s(function() { return %e; }, function(%s) { %s }))", xId, x.X, c.typeName(exprType), newSel, vVar, c.translateAssign(newSel, vVar))
+				return c.formatExpr("(%e = %e, new %s(function() { return %e; }, function($v) { %s }))", xId, x.X, c.typeName(exprType), newSel, c.translateAssign(newSel, "$v"))
 			case *ast.IndexExpr:
 				xId := c.newIdent(c.newVariable("_x"), c.p.info.Types[x.X].Type)
 				newIndex := &ast.IndexExpr{X: xId, Index: x.Index}
-				vVar := c.newVariable("_v")
-				return c.formatExpr("(%e = %e, new %s(function() { return %e; }, function(%s) { %s }))", xId, x.X, c.typeName(exprType), newIndex, vVar, c.translateAssign(newIndex, vVar))
+				return c.formatExpr("(%e = %e, new %s(function() { return %e; }, function($v) { %s }))", xId, x.X, c.typeName(exprType), newIndex, c.translateAssign(newIndex, "$v"))
 			default:
 				panic(fmt.Sprintf("Unhandled: %T\n", x))
 			}

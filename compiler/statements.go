@@ -139,11 +139,11 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			runeVar := c.newVariable("_rune")
 			c.translateLoopingStmt(iVar+" < "+refVar+".length", s.Body, func() {
 				c.Printf("%s = $decodeRune(%s, %s);", runeVar, refVar, iVar)
-				if !isBlank(s.Value) {
-					c.Printf("%s", c.translateAssign(s.Value, runeVar+"[0]", types.Typ[types.Rune], s.Tok == token.DEFINE))
-				}
 				if !isBlank(s.Key) {
 					c.Printf("%s", c.translateAssign(s.Key, iVar, types.Typ[types.Int], s.Tok == token.DEFINE))
+				}
+				if !isBlank(s.Value) {
+					c.Printf("%s", c.translateAssign(s.Value, runeVar+"[0]", types.Typ[types.Rune], s.Tok == token.DEFINE))
 				}
 			}, func() {
 				c.Printf("%s += %s[1];", iVar, runeVar)
@@ -155,11 +155,11 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			c.translateLoopingStmt(iVar+" < "+keysVar+".length", s.Body, func() {
 				entryVar := c.newVariable("_entry")
 				c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
-				if !isBlank(s.Value) {
-					c.Printf("%s", c.translateAssign(s.Value, entryVar+".v", t.Elem(), s.Tok == token.DEFINE))
-				}
 				if !isBlank(s.Key) {
 					c.Printf("%s", c.translateAssign(s.Key, entryVar+".k", t.Key(), s.Tok == token.DEFINE))
+				}
+				if !isBlank(s.Value) {
+					c.Printf("%s", c.translateAssign(s.Value, entryVar+".v", t.Elem(), s.Tok == token.DEFINE))
 				}
 			}, func() {
 				c.Printf("%s++;", iVar)
@@ -180,6 +180,9 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				elemType = t2.Elem()
 			}
 			c.translateLoopingStmt(iVar+" < "+length, s.Body, func() {
+				if !isBlank(s.Key) {
+					c.Printf("%s", c.translateAssign(s.Key, iVar, types.Typ[types.Int], s.Tok == token.DEFINE))
+				}
 				if !isBlank(s.Value) {
 					indexExpr := &ast.IndexExpr{
 						X:     c.newIdent(refVar, t),
@@ -187,9 +190,6 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 					}
 					c.p.info.Types[indexExpr] = types.TypeAndValue{Type: elemType}
 					c.Printf("%s", c.translateAssign(s.Value, c.translateImplicitConversion(indexExpr, elemType).String(), elemType, s.Tok == token.DEFINE))
-				}
-				if !isBlank(s.Key) {
-					c.Printf("%s", c.translateAssign(s.Key, iVar, types.Typ[types.Int], s.Tok == token.DEFINE))
 				}
 			}, func() {
 				c.Printf("%s++;", iVar)

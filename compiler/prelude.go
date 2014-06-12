@@ -177,11 +177,14 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 		break;
 
 	case "Ptr":
-		typ = constructor || function(getter, setter, target) {
+		typ = constructor || function(getter, setter) {
 			this.$get = getter;
 			this.$set = setter;
-			this.$target = target;
 			this.$val = this;
+		};
+		typ.prototype.$prop = function(name) {
+			var t = this;
+			return new typ(function() { return t.$get()[name]; }, function(v) { t.$get()[name] = v; });
 		};
 		typ.prototype.$key = function() {
 			if (this.$id === undefined) {
@@ -530,6 +533,11 @@ $newStringPtr = function(str) {
 };
 var $newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });
+};
+var $newSliceIndexPointer = function(slice, index, constructor) {
+	var array = slice.array;
+	index += slice.offset;
+	return new constructor(function() { return array[index]; }, function(v) { array[index] = v; });
 };
 
 var $coerceFloat32 = function(f) {

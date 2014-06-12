@@ -736,27 +736,31 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 }
 
 func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, define bool) string {
+	lhs = removeParens(lhs)
 	if isBlank(lhs) {
 		panic("translateAssign with blank lhs")
 	}
 
-	switch l := removeParens(lhs).(type) {
+	if l, ok := lhs.(*ast.IndexExpr); ok {
+		if t, ok := c.p.info.Types[l.X].Type.Underlying().(*types.Map); ok {
+			keyVar := c.newVariable("_key")
+			return fmt.Sprintf(`%s = %s; (%s || $throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s };`, keyVar, c.translateImplicitConversion(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)
+		}
+	}
+
+	switch typ.Underlying().(type) {
+	case *types.Array, *types.Struct:
+		if define {
+			return fmt.Sprintf("%[1]s = %[2]s; $copy(%[1]s, %[3]s, %[4]s);", c.translateExpr(lhs), c.zeroValue(typ), rhs, c.typeName(typ))
+		}
+		return fmt.Sprintf("$copy(%s, %s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
+	}
+
+	switch l := lhs.(type) {
 	case *ast.Ident:
 		o := c.p.info.Defs[l]
 		if o == nil {
 			o = c.p.info.Uses[l]
-		}
-		switch typ.Underlying().(type) {
-		case *types.Array:
-			if define {
-				return fmt.Sprintf("%[1]s = %[2]s; $copyArray(%[1]s, %[3]s);", c.translateExpr(l), c.zeroValue(typ), rhs)
-			}
-			return fmt.Sprintf("$copyArray(%s, %s);", c.translateExpr(l), rhs)
-		case *types.Struct:
-			if define {
-				return fmt.Sprintf("%[1]s = %[2]s; $copyStruct(%[1]s, %[3]s);", c.translateExpr(l), c.zeroValue(typ), rhs)
-			}
-			return fmt.Sprintf("$copyStruct(%s, %s);", c.translateExpr(l), rhs)
 		}
 		return fmt.Sprintf("%s = %s;", c.objectName(o), rhs)
 	case *ast.SelectorExpr:
@@ -774,12 +778,6 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 			panic(int(sel.Kind()))
 		}
 	case *ast.StarExpr:
-		switch typ.Underlying().(type) {
-		case *types.Array:
-			return fmt.Sprintf("$copyArray(%s, %s);", c.translateExpr(l.X), rhs)
-		case *types.Struct:
-			return fmt.Sprintf("$copyStruct(%s, %s);", c.translateExpr(l.X), rhs)
-		}
 		return fmt.Sprintf("%s.$set(%s);", c.translateExpr(l.X), rhs)
 	case *ast.IndexExpr:
 		switch t := c.p.info.Types[l.X].Type.Underlying().(type) {
@@ -787,9 +785,6 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 			return fmt.Sprintf("%s[%s] = %s;", c.translateExpr(l.X), c.formatExpr("%f", l.Index).String(), rhs)
 		case *types.Slice:
 			return c.formatExpr(`(%2f < 0 || %2f >= %1e.length) ? $throwRuntimeError("index out of range") : %1e.array[%1e.offset + %2f] = %3s`, l.X, l.Index, rhs).String() + ";"
-		case *types.Map:
-			keyVar := c.newVariable("_key")
-			return fmt.Sprintf(`%s = %s; (%s || $throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s };`, keyVar, c.translateImplicitConversion(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)
 		default:
 			panic(fmt.Sprintf("Unhandled lhs type: %T\n", t))
 		}

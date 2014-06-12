@@ -161,36 +161,24 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				return c.translateExpr(e.X)
 			}
 
-			var makePtr func(ast.Expr) *expression
-			makePtr = func(expr ast.Expr) *expression {
-				switch e := expr.(type) {
-				case *ast.Ident:
-					obj := c.p.info.Uses[e]
-					if c.p.escapingVars[obj] {
-						return c.formatExpr("$newDataPointer(%s, %s).$prop(0)", c.p.objectVars[obj], c.typeName(exprType))
-					}
-					return c.formatExpr("new %s(function() { return %e; }, function($v) { %s })", c.typeName(exprType), e, c.translateAssign(e, "$v", obj.Type(), false))
-				case *ast.SelectorExpr:
-					out := makePtr(e.X)
-					fields, _ := c.translateSelection(c.p.info.Selections[e])
-					for _, f := range fields {
-						out = c.formatExpr(`%s.$prop("%s")`, out, f)
-					}
-					return out
-				case *ast.IndexExpr:
-					switch c.p.info.Types[e.X].Type.Underlying().(type) {
-					case *types.Array:
-						return c.formatExpr("%s.$prop(%e)", makePtr(e.X), e.Index)
-					case *types.Slice:
-						return c.formatExpr("$newSliceIndexPointer(%e, %e, %s)", e.X, e.Index, c.typeName(exprType))
-					default:
-						panic("not reachable")
-					}
-				default:
-					return c.formatExpr("$newDataPointer(%e, %s)", expr, c.typeName(exprType))
+			switch x := e.X.(type) {
+			case *ast.CompositeLit:
+				return c.formatExpr("$newDataPointer(%e, %s)", x, c.typeName(c.p.info.Types[e].Type))
+			case *ast.Ident:
+				if obj := c.p.info.Uses[x]; c.p.escapingVars[obj] {
+					return c.formatExpr("new %s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %s)", c.typeName(exprType), c.p.objectVars[obj])
 				}
+				return c.formatExpr("new %s(function() { return %e; }, function($v) { %s })", c.typeName(exprType), x, c.translateAssign(x, "$v", exprType, false))
+			case *ast.SelectorExpr:
+				newSel := &ast.SelectorExpr{X: c.newIdent("this.$target", c.p.info.Types[x.X].Type), Sel: x.Sel}
+				c.p.info.Selections[newSel] = c.p.info.Selections[x]
+				return c.formatExpr("new %s(function() { return %e; }, function($v) { %s }, %e)", c.typeName(exprType), newSel, c.translateAssign(newSel, "$v", exprType, false), x.X)
+			case *ast.IndexExpr:
+				newIndex := &ast.IndexExpr{X: c.newIdent("this.$target", c.p.info.Types[x.X].Type), Index: x.Index}
+				return c.formatExpr("new %s(function() { return %e; }, function($v) { %s }, %e)", c.typeName(exprType), newIndex, c.translateAssign(newIndex, "$v", exprType, false), x.X)
+			default:
+				panic(fmt.Sprintf("Unhandled: %T\n", x))
 			}
-			return makePtr(e.X)
 
 		case token.ARROW:
 			return c.formatExpr("undefined")

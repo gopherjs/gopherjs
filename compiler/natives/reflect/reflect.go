@@ -819,7 +819,7 @@ func (v Value) Set(x Value) {
 	if v.flag&flagIndir != 0 {
 		switch v.typ.Kind() {
 		case Array:
-			js.Global.Call("$copyArray", v.val, x.val)
+			js.Global.Call("$copy", v.val, x.val, jsType(v.typ))
 		case Interface:
 			js.InternalObject(v.val).Call("$set", js.InternalObject(valueInterface(x, false)))
 		case Struct:

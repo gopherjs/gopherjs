@@ -177,14 +177,11 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 		break;
 
 	case "Ptr":
-		typ = constructor || function(getter, setter) {
+		typ = constructor || function(getter, setter, target) {
 			this.$get = getter;
 			this.$set = setter;
+			this.$target = target;
 			this.$val = this;
-		};
-		typ.prototype.$prop = function(name) {
-			var t = this;
-			return new typ(function() { return t.$get()[name]; }, function(v) { t.$get()[name] = v; });
 		};
 		typ.prototype.$key = function() {
 			if (this.$id === undefined) {
@@ -533,11 +530,6 @@ $newStringPtr = function(str) {
 };
 var $newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });
-};
-var $newSliceIndexPointer = function(slice, index, constructor) {
-	var array = slice.array;
-	index += slice.offset;
-	return new constructor(function() { return array[index]; }, function(v) { array[index] = v; });
 };
 
 var $coerceFloat32 = function(f) {
@@ -1075,18 +1067,6 @@ var $internalize = function(v, t, recv) {
 	}
 };
 
-var $copySlice = function(dst, src) {
-	var n = Math.min(src.length, dst.length), i;
-	if (dst.array.constructor !== Array && n !== 0) {
-		dst.array.set(src.array.subarray(src.offset, src.offset + n), dst.offset);
-		return n;
-	}
-	for (i = 0; i < n; i++) {
-		dst.array[dst.offset + i] = src.array[src.offset + i];
-	}
-	return n;
-};
-
 var $copyString = function(dst, src) {
 	var n = Math.min(src.length, dst.length), i;
 	for (i = 0; i < n; i++) {
@@ -1095,43 +1075,50 @@ var $copyString = function(dst, src) {
 	return n;
 };
 
-var $copyArray = function(dst, src, type) {
-	var i;
-	switch (type && type.elem.kind) {
-	case "Array":
-		for (i = 0; i < src.length; i++) {
-			$copyArray(dst[i], src[i]);
-		}
-		break;
-	case "Struct":
-		for (i = 0; i < src.length; i++) {
-			$copyStruct(dst[i], src[i]);
-		}
-		break;
-	default:
-		for (i = 0; i < src.length; i++) {
-			dst[i] = src[i];
-		}
-		break;
+var $copySlice = function(dst, src) {
+	var n = Math.min(src.length, dst.length), i;
+
+	if (dst.array.constructor !== Array && n !== 0) {
+		dst.array.set(src.array.subarray(src.offset, src.offset + n), dst.offset);
+		return n;
 	}
+
+	switch (dst.constructor.elem.kind) {
+	case "Array":
+	case "Struct":
+		for (i = 0; i < n; i++) {
+			$copy(dst.array[dst.offset + i], src.array[src.offset + i], dst.constructor.elem);
+		}
+		return n;
+	}
+
+	for (i = 0; i < n; i++) {
+		dst.array[dst.offset + i] = src.array[src.offset + i];
+	}
+	return n;
 };
 
-var $copyStruct = function(dst, src) {
-	var fields = src.constructor.Struct.fields, i;
-	for (i = 0; i < fields.length; i++) {
-		var field = fields[i];
-		var name = field[0];
-		switch (field[3].kind) {
-		case "Array":
-			$copyArray(dst[name], src[name]);
-			break;
-		case "Struct":
-			$copyStruct(dst[name], src[name]);
-			break;
-		default:
-			dst[name] = src[name];
-			break;
+var $copy = function(dst, src, type) {
+	var i;
+	switch (type.kind) {
+	case "Array":
+		for (i = 0; i < src.length; i++) {
+			if (!$copy(dst[i], src[i], type.elem)) {
+				dst[i] = src[i];
+			}
 		}
+		return true;
+	case "Struct":
+		for (i = 0; i < type.fields.length; i++) {
+			var field = type.fields[i];
+			var name = field[0];
+			if (!$copy(dst[name], src[name], field[3])) {
+				dst[name] = src[name];
+			}
+		}
+		return true;
+	default:
+		return false;
 	}
 };
 

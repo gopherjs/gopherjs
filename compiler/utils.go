@@ -376,6 +376,16 @@ func isWrapped(ty types.Type) bool {
 	return false
 }
 
+func removeParens(e ast.Expr) ast.Expr {
+	for {
+		p, isParen := e.(*ast.ParenExpr)
+		if !isParen {
+			return e
+		}
+		e = p.X
+	}
+}
+
 func encodeString(s string) string {
 	buffer := bytes.NewBuffer(nil)
 	for _, r := range []byte(s) {

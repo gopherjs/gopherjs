@@ -390,17 +390,6 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 		}
 
-		removeParens := func(e ast.Expr) ast.Expr {
-			for {
-				if p, isParen := e.(*ast.ParenExpr); isParen {
-					e = p.X
-					continue
-				}
-				break
-			}
-			return e
-		}
-
 		switch {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
 			lhs := removeParens(s.Lhs[0])
@@ -751,15 +740,7 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 		panic("translateAssign with blank lhs")
 	}
 
-	for {
-		if p, isParenExpr := lhs.(*ast.ParenExpr); isParenExpr {
-			lhs = p.X
-			continue
-		}
-		break
-	}
-
-	switch l := lhs.(type) {
+	switch l := removeParens(lhs).(type) {
 	case *ast.Ident:
 		o := c.p.info.Defs[l]
 		if o == nil {

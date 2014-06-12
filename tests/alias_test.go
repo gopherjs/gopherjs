@@ -2,46 +2,52 @@ package tests
 
 import (
 	"fmt"
+	"testing"
 )
 
 type foo struct {
 	a int
 }
 
-func bar() *foo {
-	fmt.Println("bar() called")
-	return &foo{ 42 }
-}
-
-func Example1() {
+func Test1(t *testing.T) {
+	calls := 0
+	bar := func() *foo {
+		calls++
+		return &foo{ 42 }
+	}
 	q := &bar().a
-	fmt.Println("pointer created")
+	if calls != 1 {
+		t.Error("Should've been a call")
+	}
 	*q = 40
-	fmt.Println(*q)
-	// Output:
-	// bar() called
-	// pointer created
-	// 40
+	if calls != 1 {
+		t.Error("Wrong number of calls: ", calls, ", should be 1")
+	}
+	if *q != 40 {
+		t.Error("*q != 40")
+	}
 }
 
-func Example2() {
+func Test2(t *testing.T) {
 	f := foo{}
 	p := &f.a
 	f = foo{}
 	f.a = 4
-	fmt.Println(*p)
-	// Output: 4
+	if *p != 4 {
+		t.Error("*p != 4")
+	}
 }
 
-func Example3() {
+func Test3(t *testing.T) {
 	f := foo{}
 	p := &f
 	f = foo{ 4 }
-	fmt.Println(p.a)
-	// Output: 4
+	if p.a != 4 {
+		t.Error("p.a != 4")
+	}
 }
 
-func Example4() {
+func Test4(t *testing.T) {
 	f := struct{
 		a struct{
 			b int
@@ -52,20 +58,22 @@ func Example4() {
 	r := &(*p).b
 	*r = 4
 	p = nil
-	fmt.Println(*r)
-	fmt.Println(*q)
-	// Output:
-	// 4
-	// 4
+	if *r != 4 {
+		t.Error("*r != 4")
+	}
+	if *q != 4 {
+		t.Error("*q != 4")
+	}
 }
 
-func Example5() {
+func Test5(t *testing.T) {
 	f := struct{
 		a [3]int
 	}{ [3]int{6, 6, 6} }
 	s := f.a[:]
 	f.a = [3]int{4, 4, 4}
 	fmt.Println(s[1])
-	// Output:
-	// 4
+	if s[1] != 4 {
+		t.Error("s[1] != 4")
+	}
 }

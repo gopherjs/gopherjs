@@ -1095,10 +1095,43 @@ var $copyString = function(dst, src) {
 	return n;
 };
 
-var $copyArray = function(dst, src) {
+var $copyArray = function(dst, src, type) {
 	var i;
-	for (i = 0; i < src.length; i++) {
-		dst[i] = src[i];
+	switch (type && type.elem.kind) {
+	case "Array":
+		for (i = 0; i < src.length; i++) {
+			$copyArray(dst[i], src[i]);
+		}
+		break;
+	case "Struct":
+		for (i = 0; i < src.length; i++) {
+			$copyStruct(dst[i], src[i]);
+		}
+		break;
+	default:
+		for (i = 0; i < src.length; i++) {
+			dst[i] = src[i];
+		}
+		break;
+	}
+};
+
+var $copyStruct = function(dst, src) {
+	var fields = src.constructor.Struct.fields, i;
+	for (i = 0; i < fields.length; i++) {
+		var field = fields[i];
+		var name = field[0];
+		switch (field[3].kind) {
+		case "Array":
+			$copyArray(dst[name], src[name]);
+			break;
+		case "Struct":
+			$copyStruct(dst[name], src[name]);
+			break;
+		default:
+			dst[name] = src[name];
+			break;
+		}
 	}
 };
 

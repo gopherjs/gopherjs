@@ -376,19 +376,6 @@ func isWrapped(ty types.Type) bool {
 	return false
 }
 
-func elemType(ty types.Type) types.Type {
-	switch t := ty.Underlying().(type) {
-	case *types.Array:
-		return t.Elem()
-	case *types.Slice:
-		return t.Elem()
-	case *types.Pointer:
-		return t.Elem().Underlying().(*types.Array).Elem()
-	default:
-		panic("")
-	}
-}
-
 func encodeString(s string) string {
 	buffer := bytes.NewBuffer(nil)
 	for _, r := range []byte(s) {

@@ -140,10 +140,10 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			c.translateLoopingStmt(iVar+" < "+refVar+".length", s.Body, func() {
 				c.Printf("%s = $decodeRune(%s, %s);", runeVar, refVar, iVar)
 				if !isBlank(s.Value) {
-					c.Printf("%s", c.translateAssign(s.Value, runeVar+"[0]"))
+					c.Printf("%s", c.translateAssign(s.Value, runeVar+"[0]", types.Typ[types.Rune], s.Tok == token.DEFINE))
 				}
 				if !isBlank(s.Key) {
-					c.Printf("%s", c.translateAssign(s.Key, iVar))
+					c.Printf("%s", c.translateAssign(s.Key, iVar, types.Typ[types.Int], s.Tok == token.DEFINE))
 				}
 			}, func() {
 				c.Printf("%s += %s[1];", iVar, runeVar)
@@ -156,10 +156,10 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				entryVar := c.newVariable("_entry")
 				c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
 				if !isBlank(s.Value) {
-					c.Printf("%s", c.translateAssign(s.Value, entryVar+".v"))
+					c.Printf("%s", c.translateAssign(s.Value, entryVar+".v", t.Elem(), s.Tok == token.DEFINE))
 				}
 				if !isBlank(s.Key) {
-					c.Printf("%s", c.translateAssign(s.Key, entryVar+".k"))
+					c.Printf("%s", c.translateAssign(s.Key, entryVar+".k", t.Key(), s.Tok == token.DEFINE))
 				}
 			}, func() {
 				c.Printf("%s++;", iVar)
@@ -167,13 +167,17 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 		case *types.Array, *types.Pointer, *types.Slice:
 			var length string
+			var elemType types.Type
 			switch t2 := t.(type) {
 			case *types.Array:
 				length = fmt.Sprintf("%d", t2.Len())
+				elemType = t2.Elem()
 			case *types.Pointer:
 				length = fmt.Sprintf("%d", t2.Elem().Underlying().(*types.Array).Len())
+				elemType = t2.Elem().Underlying().(*types.Array).Elem()
 			case *types.Slice:
 				length = refVar + ".length"
+				elemType = t2.Elem()
 			}
 			c.translateLoopingStmt(iVar+" < "+length, s.Body, func() {
 				if !isBlank(s.Value) {
@@ -181,12 +185,11 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 						X:     c.newIdent(refVar, t),
 						Index: c.newIdent(iVar, types.Typ[types.Int]),
 					}
-					et := elemType(t)
-					c.p.info.Types[indexExpr] = types.TypeAndValue{Type: et}
-					c.Printf("%s", c.translateAssign(s.Value, c.translateImplicitConversion(indexExpr, et).String()))
+					c.p.info.Types[indexExpr] = types.TypeAndValue{Type: elemType}
+					c.Printf("%s", c.translateAssign(s.Value, c.translateImplicitConversion(indexExpr, elemType).String(), elemType, s.Tok == token.DEFINE))
 				}
 				if !isBlank(s.Key) {
-					c.Printf("%s", c.translateAssign(s.Key, iVar))
+					c.Printf("%s", c.translateAssign(s.Key, iVar, types.Typ[types.Int], s.Tok == token.DEFINE))
 				}
 			}, func() {
 				c.Printf("%s++;", iVar)
@@ -368,8 +371,9 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				Op: op,
 				Y:  parenExpr,
 			}
-			c.p.info.Types[binaryExpr] = c.p.info.Types[s.Lhs[0]]
-			parts = append(parts, c.translateAssign(lhs, c.translateExpr(binaryExpr).String()))
+			lhsType := c.p.info.Types[s.Lhs[0]]
+			c.p.info.Types[binaryExpr] = lhsType
+			parts = append(parts, c.translateAssign(lhs, c.translateExpr(binaryExpr).String(), lhsType.Type, s.Tok == token.DEFINE))
 			c.Printf("%s", strings.Join(parts, " "))
 			return
 		}
@@ -408,7 +412,8 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				}
 				return
 			}
-			c.Printf("%s", c.translateAssign(lhs, c.translateImplicitConversion(s.Rhs[0], c.p.info.Types[s.Lhs[0]].Type).String()))
+			lhsType := c.p.info.Types[s.Lhs[0]].Type
+			c.Printf("%s", c.translateAssign(lhs, c.translateImplicitConversion(s.Rhs[0], lhsType).String(), lhsType, s.Tok == token.DEFINE))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			tupleVar := c.newVariable("_tuple")
@@ -417,7 +422,8 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			for i, lhs := range s.Lhs {
 				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
-					out += " " + c.translateAssign(lhs, c.translateImplicitConversion(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), c.p.info.Types[s.Lhs[i]].Type).String())
+					lhsType := c.p.info.Types[s.Lhs[i]].Type
+					out += " " + c.translateAssign(lhs, c.translateImplicitConversion(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), lhsType).String(), lhsType, s.Tok == token.DEFINE)
 				}
 			}
 			c.Printf("%s", out)
@@ -431,7 +437,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			for i, lhs := range s.Lhs {
 				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
-					parts = append(parts, c.translateAssign(lhs, tmpVars[i]))
+					parts = append(parts, c.translateAssign(lhs, tmpVars[i], c.p.info.Types[s.Lhs[i]].Type, s.Tok == token.DEFINE))
 				}
 			}
 			c.Printf("%s", strings.Join(parts, " "))
@@ -740,7 +746,7 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 	c.flowDatas[""] = prevFlowData
 }
 
-func (c *funcContext) translateAssign(lhs ast.Expr, rhs string) string {
+func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, define bool) string {
 	if isBlank(lhs) {
 		panic("translateAssign with blank lhs")
 	}
@@ -759,6 +765,18 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string) string {
 		if o == nil {
 			o = c.p.info.Uses[l]
 		}
+		switch typ.Underlying().(type) {
+		case *types.Array:
+			if define {
+				return fmt.Sprintf("%[1]s = %[2]s; $copyArray(%[1]s, %[3]s);", c.translateExpr(l), c.zeroValue(typ), rhs)
+			}
+			return fmt.Sprintf("$copyArray(%s, %s);", c.translateExpr(l), rhs)
+		case *types.Struct:
+			if define {
+				return fmt.Sprintf("%[1]s = %[2]s; $copyStruct(%[1]s, %[3]s);", c.translateExpr(l), c.zeroValue(typ), rhs)
+			}
+			return fmt.Sprintf("$copyStruct(%s, %s);", c.translateExpr(l), rhs)
+		}
 		return fmt.Sprintf("%s = %s;", c.objectName(o), rhs)
 	case *ast.SelectorExpr:
 		sel := c.p.info.Selections[l]
@@ -775,21 +793,13 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string) string {
 			panic(int(sel.Kind()))
 		}
 	case *ast.StarExpr:
-		switch u := c.p.info.Types[lhs].Type.Underlying().(type) {
-		case *types.Struct:
-			lVar := c.newVariable("l")
-			rVar := c.newVariable("r")
-			out := fmt.Sprintf("%s = %s; %s = %s;", lVar, c.translateExpr(l.X), rVar, rhs)
-			for i := 0; i < u.NumFields(); i++ {
-				name := fieldName(u, i)
-				out += fmt.Sprintf(" %s.%s = %s.%s;", lVar, name, rVar, name)
-			}
-			return out
+		switch typ.Underlying().(type) {
 		case *types.Array:
 			return fmt.Sprintf("$copyArray(%s, %s);", c.translateExpr(l.X), rhs)
-		default:
-			return fmt.Sprintf("%s.$set(%s);", c.translateExpr(l.X), rhs)
+		case *types.Struct:
+			return fmt.Sprintf("$copyStruct(%s, %s);", c.translateExpr(l.X), rhs)
 		}
+		return fmt.Sprintf("%s.$set(%s);", c.translateExpr(l.X), rhs)
 	case *ast.IndexExpr:
 		switch t := c.p.info.Types[l.X].Type.Underlying().(type) {
 		case *types.Array, *types.Pointer:

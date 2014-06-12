@@ -165,10 +165,11 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			makePtr = func(expr ast.Expr) *expression {
 				switch e := expr.(type) {
 				case *ast.Ident:
-					if obj := c.p.info.Uses[e]; c.p.escapingVars[obj] {
+					obj := c.p.info.Uses[e]
+					if c.p.escapingVars[obj] {
 						return c.formatExpr("$newDataPointer(%s, %s).$prop(0)", c.p.objectVars[obj], c.typeName(exprType))
 					}
-					return c.formatExpr("new %s(function() { return %e; }, function($v) { %s })", c.typeName(exprType), e, c.translateAssign(e, "$v"))
+					return c.formatExpr("new %s(function() { return %e; }, function($v) { %s })", c.typeName(exprType), e, c.translateAssign(e, "$v", obj.Type(), false))
 				case *ast.SelectorExpr:
 					out := makePtr(e.X)
 					fields, _ := c.translateSelection(c.p.info.Selections[e])
@@ -890,7 +891,11 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		if e.Name == "_" {
 			panic("Tried to translate underscore identifier.")
 		}
-		switch o := c.p.info.Uses[e].(type) {
+		obj := c.p.info.Defs[e]
+		if obj == nil {
+			obj = c.p.info.Uses[e]
+		}
+		switch o := obj.(type) {
 		case *types.PkgName:
 			return c.formatExpr("%s", c.p.pkgVars[o.Pkg().Path()])
 		case *types.Var, *types.Const:

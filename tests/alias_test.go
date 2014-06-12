@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -13,7 +12,7 @@ func Test1(t *testing.T) {
 	calls := 0
 	bar := func() *foo {
 		calls++
-		return &foo{ 42 }
+		return &foo{42}
 	}
 	q := &bar().a
 	if calls != 1 {
@@ -41,15 +40,15 @@ func Test2(t *testing.T) {
 func Test3(t *testing.T) {
 	f := foo{}
 	p := &f
-	f = foo{ 4 }
+	f = foo{4}
 	if p.a != 4 {
 		t.Error("p.a != 4")
 	}
 }
 
 func Test4(t *testing.T) {
-	f := struct{
-		a struct{
+	f := struct {
+		a struct {
 			b int
 		}
 	}{}
@@ -67,12 +66,11 @@ func Test4(t *testing.T) {
 }
 
 func Test5(t *testing.T) {
-	f := struct{
+	f := struct {
 		a [3]int
-	}{ [3]int{6, 6, 6} }
+	}{[3]int{6, 6, 6}}
 	s := f.a[:]
 	f.a = [3]int{4, 4, 4}
-	fmt.Println(s[1])
 	if s[1] != 4 {
 		t.Error("s[1] != 4")
 	}

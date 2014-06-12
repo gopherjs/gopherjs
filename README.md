@@ -1,7 +1,27 @@
 GopherJS - A compiler from Go to JavaScript
 ---------------------------------------------
 
-### Building GopherJS currently fails because of a change in the go.tools repository that is affecting a lot of Go projects. There is a discussion about it at https://groups.google.com/forum/#!topic/golang-dev/feZN4c1eyfA. I can not work around this issue. :-( Thank you for your interest in GopherJS. Please come back soon.
+### Building GopherJS currently fails because of a change in the go.tools repository that is affecting a lot of Go projects: 
+The relevant issue is https://code.google.com/p/go/issues/detail?id=8191 (give it a star if you like to see it resolved soon). An easy workaround is to replace the `Float32Val` function in `src/code.google.com/p/go.tools/go/exact/exact.go` with the following code:
+
+```go
+func Float32Val(x Value) (float32, bool) {
+	switch x := x.(type) {
+	case int64Val:
+		f := float32(x)
+		return f, int64Val(f) == x
+	case intVal:
+		f, exact := new(big.Rat).SetFrac(x.val, int1).Float64()
+		return float32(f), exact
+	case floatVal:
+		f, exact := x.val.Float64()
+		return float32(f), exact
+	case unknownVal:
+		return 0, false
+	}
+	panic(fmt.Sprintf("%v not a Float", x))
+}
+```
 
 [![Build Status](https://travis-ci.org/gopherjs/gopherjs.png?branch=master)](https://travis-ci.org/gopherjs/gopherjs)
 

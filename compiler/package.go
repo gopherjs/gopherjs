@@ -515,13 +515,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl) []byte {
 			fmt.Fprintf(code, "\t$ptrType(%s).prototype.%s = function(%s) { return (new %s(this.$get())).%s(%s); };\n", typeName, funName, joinedParams, typeName, funName, joinedParams)
 			return code.Bytes()
 		}
-		value := "this"
-		if isWrapped(ptr.Elem()) {
-			value = "this.$val"
-		}
-		code.Write(primaryFunction(fmt.Sprintf("$ptrType(%s).prototype.%s", typeName, funName), typeName+"."+funName))
-		fmt.Fprintf(code, "\t%s.prototype.%s = function(%s) { var obj = %s; return (new ($ptrType(%s))(function() { return obj; }, null)).%s(%s); };\n", typeName, funName, joinedParams, value, typeName, funName, joinedParams)
-		return code.Bytes()
+		return primaryFunction(fmt.Sprintf("$ptrType(%s).prototype.%s", typeName, funName), typeName+"."+funName)
 	}
 
 	value := "this.$get()"

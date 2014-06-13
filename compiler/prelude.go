@@ -1144,50 +1144,35 @@ var $growSlice = function(slice, length) {
 };
 
 var $append = function(slice) {
-	if (arguments.length === 1) {
-		return slice;
-	}
-
-	var newLength = slice.length + arguments.length - 1;
-	if (newLength > slice.capacity) {
-		slice = $growSlice(slice, newLength);
-	}
-
-	var array = slice.array;
-	var leftOffset = slice.offset + slice.length - 1, i;
-	for (i = 1; i < arguments.length; i++) {
-		array[leftOffset + i] = arguments[i];
-	}
-
-	var newSlice = new slice.constructor(array);
-	newSlice.offset = slice.offset;
-	newSlice.length = newLength;
-	newSlice.capacity = slice.capacity;
-	return newSlice;
+	return $internalAppend(slice, arguments, 1, arguments.length - 1);
 };
 
 var $appendSlice = function(slice, toAppend) {
-	if (toAppend.length === 0) {
+	return $internalAppend(slice, toAppend.array, toAppend.offset, toAppend.length);
+};
+
+var $internalAppend = function(slice, array, offset, length) {
+	if (length === 0) {
 		return slice;
 	}
 
-	var newLength = slice.length + toAppend.length;
+	var newLength = slice.length + length;
 	if (newLength > slice.capacity) {
 		slice = $growSlice(slice, newLength);
 	}
 
-	var array = slice.array;
-	var leftOffset = slice.offset + slice.length, rightOffset = toAppend.offset, i;
-	for (i = 0; i < toAppend.length; i++) {
-		array[leftOffset + i] = toAppend.array[rightOffset + i];
+	var newArray = slice.array;
+	var sliceOffset = slice.offset + slice.length, i;
+	for (i = 0; i < length; i++) {
+		newArray[sliceOffset + i] = array[offset + i];
 	}
 
-	var newSlice = new slice.constructor(array);
+	var newSlice = new slice.constructor(newArray);
 	newSlice.offset = slice.offset;
 	newSlice.length = newLength;
 	newSlice.capacity = slice.capacity;
 	return newSlice;
-};
+}
 
 var $panic = function(value) {
 	var message;

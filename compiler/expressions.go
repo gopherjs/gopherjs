@@ -476,7 +476,33 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.SelectorExpr:
-		sel := c.p.info.Selections[e]
+		sel, ok := c.p.info.Selections[e]
+		if !ok {
+			// qualified identifier
+			obj := c.p.info.Uses[e.Sel]
+			if isJsPackage(obj.Pkg()) {
+				switch obj.Name() {
+				case "Global":
+					return c.formatExpr("$global")
+				case "This":
+					if c.flattened {
+						return c.formatExpr("$this")
+					}
+					return c.formatExpr("this")
+				case "Arguments":
+					args := "arguments"
+					if c.flattened {
+						args = "$args"
+					}
+
+					return c.formatExpr(`new ($sliceType(%s.Object))($global.Array.prototype.slice.call(%s))`, c.p.pkgVars["github.com/gopherjs/gopherjs/js"], args)
+				default:
+					panic("Invalid js package object: " + obj.Name())
+				}
+			}
+			return c.formatExpr("%s", c.objectName(obj))
+		}
+
 		parameterName := func(v *types.Var) string {
 			if v.Anonymous() || v.Name() == "" {
 				return c.newVariable("param")
@@ -523,28 +549,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			parameters := makeParametersList()
 			return c.formatExpr("(function(%s) { return %s.%s(%s); })", strings.Join(append([]string{"recv"}, parameters...), ", "), recv, sel.Obj().(*types.Func).Name(), strings.Join(parameters, ", "))
-		case types.PackageObj:
-			if isJsPackage(sel.Obj().Pkg()) {
-				switch sel.Obj().Name() {
-				case "Global":
-					return c.formatExpr("$global")
-				case "This":
-					if c.flattened {
-						return c.formatExpr("$this")
-					}
-					return c.formatExpr("this")
-				case "Arguments":
-					args := "arguments"
-					if c.flattened {
-						args = "$args"
-					}
-
-					return c.formatExpr(`new ($sliceType(%s.Object))($global.Array.prototype.slice.call(%s))`, c.p.pkgVars["github.com/gopherjs/gopherjs/js"], args)
-				default:
-					panic("Invalid js package object: " + sel.Obj().Name())
-				}
-			}
-			return c.formatExpr("%s", c.objectName(sel.Obj()))
 		}
 		panic("")
 
@@ -678,8 +682,16 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			fun = c.translateExpr(plainFun)
 
 		case *ast.SelectorExpr:
-			sel := c.p.info.Selections[f]
-			o := sel.Obj()
+			sel, ok := c.p.info.Selections[f]
+			if !ok {
+				// qualified identifier
+				obj := c.p.info.Uses[f.Sel]
+				if isJsPackage(obj.Pkg()) && obj.Name() == "InternalObject" {
+					return c.translateExpr(e.Args[0])
+				}
+				fun = c.translateExpr(f)
+				break
+			}
 
 			externalizeExpr := func(e ast.Expr) string {
 				t := c.p.info.Types[e].Type
@@ -702,7 +714,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					c.p.dependencies[sel.Obj()] = true
 				}
 
-				methodName := o.Name()
+				methodName := sel.Obj().Name()
 				if reservedKeywords[methodName] {
 					methodName += "$"
 				}
@@ -718,14 +730,14 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					t = s.Field(index).Type()
 				}
 
-				if isJsPackage(o.Pkg()) {
+				if isJsPackage(sel.Obj().Pkg()) {
 					globalRef := func(id string) string {
 						if fun.String() == "$global" && id[0] == '$' {
 							return id
 						}
 						return fun.String() + "." + id
 					}
-					switch o.Name() {
+					switch sel.Obj().Name() {
 					case "Get":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
 							return c.formatExpr("%s", globalRef(id))
@@ -788,11 +800,11 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					case "IsNull":
 						return c.formatParenExpr("%s === null", fun)
 					default:
-						panic("Invalid js package object: " + o.Name())
+						panic("Invalid js package object: " + sel.Obj().Name())
 					}
 				}
 
-				methodsRecvType := o.Type().(*types.Signature).Recv().Type()
+				methodsRecvType := sel.Obj().Type().(*types.Signature).Recv().Type()
 				_, pointerExpected := methodsRecvType.(*types.Pointer)
 				_, isPointer := t.Underlying().(*types.Pointer)
 				_, isStruct := t.Underlying().(*types.Struct)
@@ -808,12 +820,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					break
 				}
 				fun = c.formatExpr("%s.%s", fun, methodName)
-
-			case types.PackageObj:
-				if isJsPackage(o.Pkg()) && o.Name() == "InternalObject" {
-					return c.translateExpr(e.Args[0])
-				}
-				fun = c.translateExpr(f)
 
 			case types.FieldVal:
 				fields, jsTag := c.translateSelection(sel)

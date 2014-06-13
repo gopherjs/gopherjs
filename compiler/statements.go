@@ -271,7 +271,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				return
 			}
 		case *ast.SelectorExpr:
-			isJs = isJsPackage(c.p.info.Selections[fun].Obj().Pkg())
+			isJs = isJsPackage(c.p.info.Uses[fun.Sel].Pkg())
 		}
 		if isBuiltin || isJs {
 			args := make([]ast.Expr, len(s.Call.Args))
@@ -289,7 +289,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		sig := c.p.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
 		args := strings.Join(c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid()), ", ")
 		if sel, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
-			obj := c.p.info.Selections[sel].Obj()
+			obj := c.p.info.Uses[sel.Sel]
 			if !obj.Exported() {
 				c.p.dependencies[obj] = true
 			}
@@ -764,19 +764,16 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 		}
 		return fmt.Sprintf("%s = %s;", c.objectName(o), rhs)
 	case *ast.SelectorExpr:
-		sel := c.p.info.Selections[l]
-		switch sel.Kind() {
-		case types.FieldVal:
-			fields, jsTag := c.translateSelection(sel)
-			if jsTag != "" {
-				return fmt.Sprintf("%s.%s.%s = %s;", c.translateExpr(l.X), strings.Join(fields, "."), jsTag, c.externalize(rhs, sel.Type()))
-			}
-			return fmt.Sprintf("%s.%s = %s;", c.translateExpr(l.X), strings.Join(fields, "."), rhs)
-		case types.PackageObj:
+		sel, ok := c.p.info.Selections[l]
+		if !ok {
+			// qualified identifier
 			return fmt.Sprintf("%s.%s = %s;", c.translateExpr(l.X), l.Sel.Name, rhs)
-		default:
-			panic(int(sel.Kind()))
 		}
+		fields, jsTag := c.translateSelection(sel)
+		if jsTag != "" {
+			return fmt.Sprintf("%s.%s.%s = %s;", c.translateExpr(l.X), strings.Join(fields, "."), jsTag, c.externalize(rhs, sel.Type()))
+		}
+		return fmt.Sprintf("%s.%s = %s;", c.translateExpr(l.X), strings.Join(fields, "."), rhs)
 	case *ast.StarExpr:
 		return fmt.Sprintf("%s.$set(%s);", c.translateExpr(l.X), rhs)
 	case *ast.IndexExpr:

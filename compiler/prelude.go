@@ -237,12 +237,15 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ.init = function(fields) {
 			var i;
 			typ.fields = fields;
-			typ.Ptr.init(typ);
+			typ.Ptr.extendReflectType = function(rt) {
+				rt.ptrType = new $reflect.ptrType.Ptr(rt, typ.reflectType());
+			};
 			/* nil value */
-			typ.Ptr.nil = new constructor();
+			typ.Ptr.nil = Object.create(constructor.prototype);
+			typ.Ptr.nil.$val = typ.Ptr.nil;
 			for (i = 0; i < fields.length; i++) {
 				var field = fields[i];
-				Object.defineProperty(typ.Ptr.nil, field[1], { get: $throwNilPointerError, set: $throwNilPointerError });
+				Object.defineProperty(typ.Ptr.nil, field[0], { get: $throwNilPointerError, set: $throwNilPointerError });
 			}
 			/* methods for embedded fields */
 			for (i = 0; i < typ.methods.length; i++) {
@@ -290,6 +293,71 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 				rt.structType = new $reflect.structType.Ptr(rt, new ($sliceType($reflect.structField.Ptr))(reflectFields));
 			};
 		};
+		break;
+
+	default:
+		throw $panic(new $String("invalid kind: " + kind));
+	}
+
+	switch(kind) {
+	case "Bool":
+	case "Map":
+		typ.zero = function() { return false; };
+		break;
+
+	case "Int":
+	case "Int8":
+	case "Int16":
+	case "Int32":
+	case "Uint":
+	case "Uint8" :
+	case "Uint16":
+	case "Uint32":
+	case "Uintptr":
+	case "UnsafePointer":
+	case "Float32":
+	case "Float64":
+		typ.zero = function() { return 0; };
+		break;
+
+	case "String":
+		typ.zero = function() { return ""; };
+		break;
+
+	case "Int64":
+	case "Uint64":
+	case "Complex64":
+	case "Complex128":
+		var zero = new typ(0, 0);
+		typ.zero = function() { return zero; };
+		break;
+
+	case "Chan":
+	case "Ptr":
+	case "Slice":
+		typ.zero = function() { return typ.nil; };
+		break;
+
+	case "Func":
+		typ.zero = function() { return $throwNilPointerError; };
+		break;
+
+	case "Interface":
+		typ.zero = function() { return null; };
+		break;
+
+	case "Array":
+		typ.zero = function() {
+			var array = new ($nativeArray(typ.elem.kind))(typ.len), i;
+			for (i = 0; i < typ.len; i++) {
+				array[i] = typ.elem.zero();
+			}
+			return array;
+		};
+		break;
+
+	case "Struct":
+		typ.zero = function() { return new typ.Ptr(); };
 		break;
 
 	default:
@@ -358,13 +426,6 @@ var $toNativeArray = function(elemKind, array) {
 		return array;
 	}
 	return new nativeArray(array);
-};
-var $makeNativeArray = function(elemKind, length, zero) {
-	var array = new ($nativeArray(elemKind))(length), i;
-	for (i = 0; i < length; i++) {
-		array[i] = zero();
-	}
-	return array;
 };
 var $arrayTypes = {};
 var $arrayType = function(elem, len) {
@@ -488,7 +549,9 @@ var $structType = function(fields) {
 			this.$val = this;
 			var i;
 			for (i = 0; i < fields.length; i++) {
-				this[fields[i][0]] = arguments[i];
+				var field = fields[i];
+				var arg = arguments[i];
+				this[field[0]] = arg !== undefined ? arg : field[3].zero();
 			}
 		});
 		/* collect methods for anonymous fields */

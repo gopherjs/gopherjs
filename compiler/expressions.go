@@ -92,14 +92,14 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		switch t := exprType.Underlying().(type) {
 		case *types.Array:
 			elements := collectIndexedElements(t.Elem())
-			if len(elements) != 0 {
-				zero := c.zeroValue(t.Elem())
-				for len(elements) < int(t.Len()) {
-					elements = append(elements, zero)
-				}
-				return c.formatExpr(`$toNativeArray("%s", [%s])`, typeKind(t.Elem()), strings.Join(elements, ", "))
+			if len(elements) == 0 {
+				return c.formatExpr("%s", c.zeroValue(t))
 			}
-			return c.formatExpr(`$makeNativeArray("%s", %d, function() { return %s; })`, typeKind(t.Elem()), int(t.Len()), c.zeroValue(t.Elem()))
+			zero := c.zeroValue(t.Elem())
+			for len(elements) < int(t.Len()) {
+				elements = append(elements, zero)
+			}
+			return c.formatExpr(`$toNativeArray("%s", [%s])`, typeKind(t.Elem()), strings.Join(elements, ", "))
 		case *types.Slice:
 			return c.formatExpr("new %s([%s])", c.typeName(exprType), strings.Join(collectIndexedElements(t.Elem()), ", "))
 		case *types.Map:

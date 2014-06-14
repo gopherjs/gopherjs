@@ -59,10 +59,6 @@ func init() {
 	pkg.Set("SendDir", SendDir)
 	pkg.Set("BothDir", BothDir)
 	js.Global.Set("$reflect", pkg)
-	// 	$reflect = {
-	// 	rtype: rtype.Ptr, uncommonType: uncommonType.Ptr, method: method.Ptr, arrayType: arrayType.Ptr, chanType: chanType.Ptr, funcType: funcType.Ptr, interfaceType: interfaceType.Ptr, mapType: mapType.Ptr, ptrType: ptrType.Ptr, sliceType: sliceType.Ptr, structType: structType.Ptr,
-	// 	imethod: imethod.Ptr, structField: structField.Ptr,
-	// };
 	initialized = true
 	uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
 }
@@ -90,34 +86,6 @@ func copyStruct(dst, src js.Object, typ Type) {
 	for i := 0; i < fields.Length(); i++ {
 		name := fields.Index(i).Index(0).Str()
 		dst.Set(name, src.Get(name))
-	}
-}
-
-func zeroVal(typ Type) js.Object {
-	switch typ.Kind() {
-	case Bool:
-		return js.InternalObject(false)
-	case Int, Int8, Int16, Int32, Uint, Uint8, Uint16, Uint32, Uintptr, Float32, Float64:
-		return js.InternalObject(0)
-	case Int64, Uint64, Complex64, Complex128:
-		return jsType(typ).New(0, 0)
-	case Array:
-		elemType := typ.Elem()
-		return js.Global.Call("$makeNativeArray", jsType(elemType).Get("kind"), typ.Len(), func() js.Object { return zeroVal(elemType) })
-	case Func:
-		return js.Global.Get("$throwNilPointerError")
-	case Interface:
-		return nil
-	case Map:
-		return js.InternalObject(false)
-	case Chan, Ptr, Slice:
-		return jsType(typ).Get("nil")
-	case String:
-		return js.InternalObject("")
-	case Struct:
-		return jsType(typ).Get("Ptr").New()
-	default:
-		panic(&ValueError{"reflect.Zero", typ.Kind()})
 	}
 }
 
@@ -150,7 +118,7 @@ func MakeSlice(typ Type, len, cap int) Value {
 		panic("reflect.MakeSlice: len > cap")
 	}
 
-	return makeValue(typ, jsType(typ).Call("make", len, cap, func() js.Object { return zeroVal(typ.Elem()) }), 0)
+	return makeValue(typ, jsType(typ).Call("make", len, cap, func() js.Object { return jsType(typ.Elem()).Call("zero") }), 0)
 }
 
 func jsObject() *rtype {
@@ -208,7 +176,7 @@ func SliceOf(t Type) Type {
 }
 
 func Zero(typ Type) Value {
-	return Value{typ.common(), unsafe.Pointer(zeroVal(typ).Unsafe()), flag(typ.Kind()) << flagKindShift}
+	return Value{typ.common(), unsafe.Pointer(jsType(typ).Call("zero").Unsafe()), flag(typ.Kind()) << flagKindShift}
 }
 
 func unsafe_New(typ *rtype) unsafe.Pointer {
@@ -216,9 +184,9 @@ func unsafe_New(typ *rtype) unsafe.Pointer {
 	case Struct:
 		return unsafe.Pointer(jsType(typ).Get("Ptr").New().Unsafe())
 	case Array:
-		return unsafe.Pointer(zeroVal(typ).Unsafe())
+		return unsafe.Pointer(jsType(typ).Call("zero").Unsafe())
 	default:
-		return unsafe.Pointer(js.Global.Call("$newDataPointer", zeroVal(typ), jsType(typ.ptrTo())).Unsafe())
+		return unsafe.Pointer(js.Global.Call("$newDataPointer", jsType(typ).Call("zero"), jsType(typ.ptrTo())).Unsafe())
 	}
 }
 

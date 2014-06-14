@@ -118,20 +118,13 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 			panic("Unhandled type")
 		}
 	case *types.Array:
-		return fmt.Sprintf(`$makeNativeArray("%s", %d, function() { return %s; })`, typeKind(t.Elem()), t.Len(), c.zeroValue(t.Elem()))
+		return fmt.Sprintf("%s.zero()", c.typeName(ty))
 	case *types.Signature:
 		return "$throwNilPointerError"
 	case *types.Slice:
 		return fmt.Sprintf("%s.nil", c.typeName(ty))
 	case *types.Struct:
-		if named, isNamed := ty.(*types.Named); isNamed {
-			return fmt.Sprintf("new %s.Ptr()", c.objectName(named.Obj()))
-		}
-		fields := make([]string, t.NumFields())
-		for i := range fields {
-			fields[i] = c.zeroValue(t.Field(i).Type())
-		}
-		return fmt.Sprintf("new %s.Ptr(%s)", c.typeName(ty), strings.Join(fields, ", "))
+		return fmt.Sprintf("new %s.Ptr()", c.typeName(ty))
 	case *types.Map:
 		return "false"
 	case *types.Interface:

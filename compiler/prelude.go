@@ -1077,24 +1077,7 @@ var $copyString = function(dst, src) {
 
 var $copySlice = function(dst, src) {
 	var n = Math.min(src.length, dst.length), i;
-
-	if (dst.array.constructor !== Array && n !== 0) {
-		dst.array.set(src.array.subarray(src.offset, src.offset + n), dst.offset);
-		return n;
-	}
-
-	switch (dst.constructor.elem.kind) {
-	case "Array":
-	case "Struct":
-		for (i = 0; i < n; i++) {
-			$copy(dst.array[dst.offset + i], src.array[src.offset + i], dst.constructor.elem);
-		}
-		return n;
-	}
-
-	for (i = 0; i < n; i++) {
-		dst.array[dst.offset + i] = src.array[src.offset + i];
-	}
+	$internalCopy(dst.array, src.array, dst.offset, src.offset, n, dst.constructor.elem);
 	return n;
 };
 
@@ -1102,11 +1085,7 @@ var $copy = function(dst, src, type) {
 	var i;
 	switch (type.kind) {
 	case "Array":
-		for (i = 0; i < src.length; i++) {
-			if (!$copy(dst[i], src[i], type.elem)) {
-				dst[i] = src[i];
-			}
-		}
+		$internalCopy(dst, src, 0, 0, src.length, type.elem);
 		return true;
 	case "Struct":
 		for (i = 0; i < type.fields.length; i++) {
@@ -1120,6 +1099,39 @@ var $copy = function(dst, src, type) {
 	default:
 		return false;
 	}
+};
+
+var $internalCopy = function(dst, src, dstOffset, srcOffset, n, elem) {
+	var i;
+	if (n === 0) {
+		return;
+	}
+
+	if (src.subarray) {
+		dst.set(src.subarray(srcOffset, srcOffset + n), dstOffset);
+		return;
+	}
+
+	switch (elem.kind) {
+	case "Array":
+	case "Struct":
+		for (i = 0; i < n; i++) {
+			$copy(dst[dstOffset + i], src[srcOffset + i], elem);
+		}
+		return;
+	}
+
+	for (i = 0; i < n; i++) {
+		dst[dstOffset + i] = src[srcOffset + i];
+	}
+};
+
+var $append = function(slice) {
+	return $internalAppend(slice, arguments, 1, arguments.length - 1);
+};
+
+var $appendSlice = function(slice, toAppend) {
+	return $internalAppend(slice, toAppend.array, toAppend.offset, toAppend.length);
 };
 
 var $growSlice = function(slice, length) {
@@ -1141,14 +1153,6 @@ var $growSlice = function(slice, length) {
 	newSlice.length = slice.length;
 	newSlice.capacity = newCapacity;
 	return newSlice;
-};
-
-var $append = function(slice) {
-	return $internalAppend(slice, arguments, 1, arguments.length - 1);
-};
-
-var $appendSlice = function(slice, toAppend) {
-	return $internalAppend(slice, toAppend.array, toAppend.offset, toAppend.length);
 };
 
 var $internalAppend = function(slice, array, offset, length) {

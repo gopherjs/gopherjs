@@ -955,7 +955,7 @@ var $externalize = function(v, t) {
 				}
 				args.push($internalize(arguments[i], t.params[i]));
 			}
-			var result = v.apply(undefined, args);
+			var result = v.apply(this, args);
 			switch (t.results.length) {
 			case 0:
 				return;

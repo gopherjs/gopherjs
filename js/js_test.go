@@ -213,12 +213,12 @@ func TestEquality(t *testing.T) {
 }
 
 func TestThis(t *testing.T) {
-	dummys.Set("testThis", func() {
+	dummys.Set("testThis", func(_ string) { // string argument to force wrapping
 		if js.This != dummys {
 			t.Fail()
 		}
 	})
-	dummys.Call("testThis")
+	dummys.Call("testThis", "")
 }
 
 func TestArguments(t *testing.T) {

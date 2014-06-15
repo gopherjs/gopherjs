@@ -93,14 +93,22 @@ func TestComposite(t *testing.T) {
 	}
 }
 
-// func TestAppend(t *testing.T) {
-// 	{
-// 		a := S{1}
-// 		b := []S{S{2}}
-// 		s := append([]S{}, b...)
-// 		s[0].x = 0
-// 		if a.x != 1 || b[0].x != 2 {
-// 			t.Fail()
-// 		}
-// 	}
-// }
+func TestAppend(t *testing.T) {
+	{
+		s := append(make([]S, 3), S{}) // cap(s) == 6
+		s = s[:6]
+		if s[5].x != 0 {
+			t.Fail()
+		}
+	}
+
+	// 	{
+	// 		a := S{1}
+	// 		b := []S{S{2}}
+	// 		s := append([]S{}, b...)
+	// 		s[0].x = 0
+	// 		if a.x != 1 || b[0].x != 2 {
+	// 			t.Fail()
+	// 		}
+	// 	}
+}

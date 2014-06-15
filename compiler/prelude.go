@@ -1200,7 +1200,7 @@ var $appendSlice = function(slice, toAppend) {
 var $growSlice = function(slice, length) {
 	var newCapacity = Math.max(length, slice.capacity < 1024 ? slice.capacity * 2 : Math.floor(slice.capacity * 5 / 4));
 
-	var newArray;
+	var newArray, i;
 	if (slice.array.constructor === Array) {
 		newArray = slice.array;
 		if (slice.offset !== 0 || newArray.length !== slice.offset + slice.capacity) {
@@ -1210,6 +1210,10 @@ var $growSlice = function(slice, length) {
 	} else {
 		newArray = new slice.array.constructor(newCapacity);
 		newArray.set(slice.array.subarray(slice.offset));
+	}
+	var zero = slice.constructor.elem.zero;
+	for (i = length; i < newCapacity; i++) {
+		newArray[i] = zero();
 	}
 
 	var newSlice = new slice.constructor(newArray);

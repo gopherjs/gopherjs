@@ -288,12 +288,17 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 		sig := c.p.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
 		args := strings.Join(c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid()), ", ")
-		if sel, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
-			obj := c.p.info.Uses[sel.Sel]
+		if s, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
+			obj := c.p.info.Uses[s.Sel]
 			if !obj.Exported() {
 				c.p.dependencies[obj] = true
 			}
-			c.Printf(`$deferred.push({ recv: %s, method: "%s", args: [%s] });`, c.translateExpr(sel.X), sel.Sel.Name, args)
+			recv := c.translateExpr(s.X)
+			sel, ok := c.p.info.Selections[s]
+			if ok && sel.Kind() == types.MethodVal && isWrapped(sel.Recv()) {
+				recv = c.formatParenExpr("new %s(%s)", c.typeName(sel.Recv()), recv)
+			}
+			c.Printf(`$deferred.push({ recv: %s, method: "%s", args: [%s] });`, recv, s.Sel.Name, args)
 			return
 		}
 		c.Printf("$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), args)

@@ -435,7 +435,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 					continue
 				}
 				lhsType := c.p.info.Types[s.Lhs[i]].Type
-				parts = append(parts, c.translateAssign(c.newIdent(tmpVars[i], c.p.info.Types[s.Lhs[i]].Type), c.translateImplicitConversionWithCloning(rhs, lhsType).String(), lhsType, true))
+				parts = append(parts, c.translateAssign(c.newIdent(tmpVars[i], c.p.info.Types[s.Lhs[i]].Type), c.translateImplicitConversion(rhs, lhsType).String(), lhsType, true))
 			}
 			for i, lhs := range s.Lhs {
 				lhs = removeParens(lhs)

@@ -906,23 +906,41 @@ var $runesToString = function(slice) {
 
 var $needsExternalization = function(t) {
 	switch (t.kind) {
-		case "Int64":
-		case "Uint64":
-		case "Array":
-		case "Func":
-		case "Map":
-		case "Slice":
-		case "String":
-			return true;
+		case "Bool":
+		case "Int":
+		case "Int8":
+		case "Int16":
+		case "Int32":
+		case "Uint":
+		case "Uint8":
+		case "Uint16":
+		case "Uint32":
+		case "Uintptr":
+		case "Float32":
+		case "Float64":
+			return false;
 		case "Interface":
 			return t !== $packages["github.com/gopherjs/gopherjs/js"].Object;
 		default:
-			return false;
+			return true;
 	}
 };
 
 var $externalize = function(v, t) {
 	switch (t.kind) {
+	case "Bool":
+	case "Int":
+	case "Int8":
+	case "Int16":
+	case "Int32":
+	case "Uint":
+	case "Uint8":
+	case "Uint16":
+	case "Uint32":
+	case "Uintptr":
+	case "Float32":
+	case "Float64":
+		return v;
 	case "Int64":
 	case "Uint64":
 		return $flatten64(v);
@@ -1006,10 +1024,8 @@ var $externalize = function(v, t) {
 			var milli = $div64(v.UnixNano(), new $Int64(0, 1000000));
 			return new Date($flatten64(milli));
 		}
-		return v;
-	default:
-		return v;
 	}
+	throw $panic(new $String("can not externalize " + t.string));
 };
 
 var $internalize = function(v, t, recv) {
@@ -1026,7 +1042,7 @@ var $internalize = function(v, t, recv) {
 		return parseInt(v) >> 0;
 	case "Uint":
 		return parseInt(v);
-	case "Uint8" :
+	case "Uint8":
 		return parseInt(v) << 24 >>> 24;
 	case "Uint16":
 		return parseInt(v) << 16 >>> 16;
@@ -1105,13 +1121,12 @@ var $internalize = function(v, t, recv) {
 			return new funcType($internalize(v, funcType));
 		case Number:
 			return new $Float64(parseFloat(v));
-		case Object:
-			var mapType = $mapType($String, $emptyInterface);
-			return new mapType($internalize(v, mapType));
 		case String:
 			return new $String($internalize(v, $String));
+		default:
+			var mapType = $mapType($String, $emptyInterface);
+			return new mapType($internalize(v, mapType));
 		}
-		return v;
 	case "Map":
 		var m = new $Map();
 		var keys = $keys(v), i;
@@ -1130,7 +1145,7 @@ var $internalize = function(v, t, recv) {
 		}
 		return s;
 	default:
-		return v;
+		throw $panic(new $String("can not internalize " + t.string));
 	}
 };
 

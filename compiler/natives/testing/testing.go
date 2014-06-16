@@ -42,7 +42,7 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 		if *chatty {
 			fmt.Printf("=== RUN %s\n", t.name)
 		}
-		err := runTest.Invoke(tests[i], t)
+		err := runTest.Invoke(js.InternalObject(tests[i]), js.InternalObject(t))
 		js.Global.Set("$jsErr", nil)
 		if err != nil {
 			switch {
@@ -60,7 +60,7 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 		t.common.duration = time.Now().Sub(t.common.start)
 		t.report()
 		if err != nil {
-			throw.Invoke(err)
+			throw.Invoke(js.InternalObject(err))
 		}
 		ok = ok && !t.common.failed
 	}

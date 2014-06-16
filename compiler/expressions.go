@@ -958,7 +958,12 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 		if call, isCall := expr.(*ast.CallExpr); isCall && types.Identical(c.p.info.Types[call.Fun].Type, types.Typ[types.UnsafePointer]) {
 			if ptr, isPtr := desiredType.(*types.Pointer); isPtr {
 				if named, isNamed := ptr.Elem().(*types.Named); isNamed {
-					return c.formatExpr("%e.%s", call.Args[0], named.Obj().Name()) // unsafe conversion
+					switch named.Obj().Name() {
+					case "arrayType", "chanType", "funcType", "interfaceType", "mapType", "ptrType", "sliceType", "structType":
+						return c.formatExpr("%e.%s", call.Args[0], named.Obj().Name()) // unsafe conversion
+					default:
+						return c.translateExpr(expr)
+					}
 				}
 			}
 		}

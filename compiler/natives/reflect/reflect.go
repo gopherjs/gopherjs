@@ -68,7 +68,7 @@ func jsType(typ Type) js.Object {
 }
 
 func reflectType(typ js.Object) *rtype {
-	return typ.Call("reflectType").Interface().(*rtype)
+	return (*rtype)(unsafe.Pointer(typ.Call("reflectType").Unsafe()))
 }
 
 func isWrapped(typ Type) bool {
@@ -309,7 +309,7 @@ func mapassign(t *rtype, m iword, key, val iword, ok bool) {
 		jsVal = newVal
 	}
 	entry := js.Global.Get("Object").New()
-	entry.Set("k", key)
+	entry.Set("k", js.InternalObject(key))
 	entry.Set("v", jsVal)
 	js.InternalObject(m).Set(k.Str(), entry)
 }
@@ -322,24 +322,22 @@ type mapIter struct {
 }
 
 func mapiterinit(t *rtype, m iword) *byte {
-	return (*byte)(unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Call("$keys", m), 0}))
+	return (*byte)(unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Call("$keys", js.InternalObject(m)), 0}))
 }
 
 func mapiterkey(it *byte) (key iword, ok bool) {
-	iter := js.InternalObject(it)
-	k := iter.Get("keys").Index(iter.Get("i").Int())
-	return makeIword(iter.Get("t").Interface().(*rtype).Key(), iter.Get("m").Get(k.Str()).Get("k")), true
-	// k := iter.keys.Index(iter.i)
-	// return makeIword(iter.t.Key(), iter.m.G
+	iter := (*mapIter)(unsafe.Pointer(it))
+	k := iter.keys.Index(iter.i)
+	return makeIword(iter.t.Key(), iter.m.Get(k.Str()).Get("k")), true
 }
 
 func mapiternext(it *byte) {
-	iter := js.InternalObject(it)
-	iter.Set("i", iter.Get("i").Int()+1)
+	iter := (*mapIter)(unsafe.Pointer(it))
+	iter.i++
 }
 
 func maplen(m iword) int {
-	return js.Global.Call("$keys", m).Length()
+	return js.Global.Call("$keys", js.InternalObject(m)).Length()
 }
 
 func cvtDirect(v Value, typ Type) Value {
@@ -479,7 +477,7 @@ func makeMethodValue(op string, v Value) Value {
 
 	_, fn, rcvr := methodReceiver(op, v, int(v.flag)>>flagMethodShift)
 	fv := func() js.Object {
-		return js.InternalObject(fn).Call("apply", rcvr, js.Arguments)
+		return js.InternalObject(fn).Call("apply", js.InternalObject(rcvr), js.Arguments)
 	}
 	return Value{v.Type().common(), unsafe.Pointer(js.InternalObject(fv).Unsafe()), v.flag&flagRO | flag(Func)<<flagKindShift}
 }
@@ -609,9 +607,9 @@ func (v Value) call(op string, in []Value) []Value {
 
 	argsArray := js.Global.Get("Array").New(t.NumIn())
 	for i, arg := range in {
-		argsArray.SetIndex(i, arg.assignTo("reflect.Value.Call", t.In(i).common(), nil).iword())
+		argsArray.SetIndex(i, js.InternalObject(arg.assignTo("reflect.Value.Call", t.In(i).common(), nil).iword()))
 	}
-	results := js.InternalObject(fn).Call("apply", rcvr, argsArray)
+	results := js.InternalObject(fn).Call("apply", js.InternalObject(rcvr), argsArray)
 
 	switch nout {
 	case 0:
@@ -758,7 +756,7 @@ func (v Value) Len() int {
 	// case Chan:
 	// 	return chanlen(v.iword())
 	case Map:
-		return js.Global.Call("$keys", v.iword()).Length()
+		return js.Global.Call("$keys", js.InternalObject(v.iword())).Length()
 	default:
 		panic(&ValueError{"reflect.Value.Len", k})
 	}
@@ -787,13 +785,13 @@ func (v Value) Set(x Value) {
 	if v.flag&flagIndir != 0 {
 		switch v.typ.Kind() {
 		case Array:
-			js.Global.Call("$copy", v.val, x.val, jsType(v.typ))
+			js.Global.Call("$copy", js.InternalObject(v.val), js.InternalObject(x.val), jsType(v.typ))
 		case Interface:
 			js.InternalObject(v.val).Call("$set", js.InternalObject(valueInterface(x, false)))
 		case Struct:
 			copyStruct(js.InternalObject(v.val), js.InternalObject(x.val), v.typ)
 		default:
-			js.InternalObject(v.val).Call("$set", x.iword())
+			js.InternalObject(v.val).Call("$set", js.InternalObject(x.iword()))
 		}
 		return
 	}
@@ -842,7 +840,7 @@ func (v Value) Slice(i, j int) Value {
 		tt := (*arrayType)(unsafe.Pointer(v.typ))
 		cap = int(tt.len)
 		typ = SliceOf(tt.elem)
-		s = jsType(typ).New(v.iword())
+		s = jsType(typ).New(js.InternalObject(v.iword()))
 
 	case Slice:
 		typ = v.typ
@@ -881,7 +879,7 @@ func (v Value) Slice3(i, j, k int) Value {
 		tt := (*arrayType)(unsafe.Pointer(v.typ))
 		cap = int(tt.len)
 		typ = SliceOf(tt.elem)
-		s = jsType(typ).New(v.iword())
+		s = jsType(typ).New(js.InternalObject(v.iword()))
 
 	case Slice:
 		typ = v.typ

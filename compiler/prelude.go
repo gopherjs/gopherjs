@@ -348,7 +348,11 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 
 	case "Array":
 		typ.zero = function() {
-			var array = new ($nativeArray(typ.elem.kind))(typ.len), i;
+			var arrayClass = $nativeArray(typ.elem.kind);
+			if (arrayClass !== Array) {
+				return new arrayClass(typ.len);
+			}
+			var array = new Array(typ.len), i;
 			for (i = 0; i < typ.len; i++) {
 				array[i] = typ.elem.zero();
 			}

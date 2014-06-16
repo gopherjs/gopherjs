@@ -1006,6 +1006,20 @@ var $externalize = function(v, t) {
 			m[$externalize(entry.k, t.key)] = $externalize(entry.v, t.elem);
 		}
 		return m;
+	case "Ptr":
+		var o = {}, i;
+		for (i = 0; i < t.methods.length; i++) {
+			var m = t.methods[i];
+			if (m[2] !== "") { // not exported
+				continue;
+			}
+			(function(m) {
+				o[m[1]] = $externalize(function() {
+					return v[m[0]].apply(v, arguments);
+				}, $funcType(m[3], m[4], m[5]));
+			})(m);
+		}
+		return o;
 	case "Slice":
 		if ($needsExternalization(t.elem)) {
 			return $mapArray($sliceToArray(v), function(e) { return $externalize(e, t.elem); });

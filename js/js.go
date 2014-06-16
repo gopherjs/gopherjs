@@ -1,6 +1,6 @@
 // Package js provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their JavaScript syntax.
 //
-// Type conversions between Go types and JavaScript types are performed automatically according to the table below. Types not listed are passed through. The second column denotes the types that are used when converting to `interface{}`.
+// Type conversions between Go types and JavaScript types are performed automatically according to the following table:
 //
 //  | Go types                       | Go interface type              | JavaScript type |
 //  | ------------------------------ | ------------------------------ | --------------- |
@@ -19,6 +19,8 @@
 //  | maps                           | map[string]interface{}         | Object          |
 //  | functions                      | func(...interface{}) js.Object | Function        |
 //  | time.Time                      | time.Time                      | Date            |
+//
+// The second column denotes the types that are used when converting to `interface{}`. Additionally, a pointer to a named type is passed to JavaScript as an object which has wrappers for the type's exported methods. This can be used to provide getter and setter methods for Go fields to JavaScript.
 package js
 
 // Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax.

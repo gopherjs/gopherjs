@@ -26,6 +26,9 @@ var dummys = js.Global.Call("eval", `({
 	toUnixTimestamp: function(d) {
 		return d.getTime() / 1000;
 	},
+	testMethod: function(m) {
+		return m.Method(42);
+	}
 })`)
 
 func TestBool(t *testing.T) {
@@ -262,6 +265,22 @@ func TestReflection(t *testing.T) {
 	var s S
 	reflect.ValueOf(&s).Elem().Field(0).Set(v)
 	if s.Object != dummys {
+		t.Fail()
+	}
+}
+
+type M struct {
+	x int
+}
+
+func (m *M) Method(x int) {
+	m.x = x
+}
+
+func TestExternaliseNamed(t *testing.T) {
+	m := &M{}
+	dummys.Call("testMethod", m)
+	if m.x != 42 {
 		t.Fail()
 	}
 }

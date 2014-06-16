@@ -102,13 +102,13 @@ func TestAppend(t *testing.T) {
 		}
 	}
 
-	// 	{
-	// 		a := S{1}
-	// 		b := []S{S{2}}
-	// 		s := append([]S{}, b...)
-	// 		s[0].x = 0
-	// 		if a.x != 1 || b[0].x != 2 {
-	// 			t.Fail()
-	// 		}
-	// 	}
+	{
+		a := S{1}
+		b := []S{S{2}}
+		s := append([]S{}, b...)
+		s[0].x = 0
+		if a.x != 1 || b[0].x != 2 {
+			t.Fail()
+		}
+	}
 }

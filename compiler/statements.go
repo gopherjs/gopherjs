@@ -426,12 +426,21 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			var parts []string
 			for i, rhs := range s.Rhs {
 				tmpVars[i] = c.newVariable("_tmp")
-				parts = append(parts, fmt.Sprintf("%s = %s;", tmpVars[i], c.translateImplicitConversion(rhs, c.p.info.Types[s.Lhs[i]].Type).String()))
+				if isBlank(removeParens(s.Lhs[i])) {
+					v := hasCallVisitor{c.p.info, false}
+					ast.Walk(&v, rhs)
+					if v.hasCall {
+						c.Printf("%s;", c.translateExpr(rhs).String())
+					}
+					continue
+				}
+				lhsType := c.p.info.Types[s.Lhs[i]].Type
+				parts = append(parts, c.translateAssign(c.newIdent(tmpVars[i], c.p.info.Types[s.Lhs[i]].Type), c.translateImplicitConversionWithCloning(rhs, lhsType).String(), lhsType, true))
 			}
 			for i, lhs := range s.Lhs {
 				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
-					parts = append(parts, c.translateAssign(lhs, tmpVars[i], c.p.info.Types[s.Lhs[i]].Type, s.Tok == token.DEFINE))
+					parts = append(parts, c.translateAssign(lhs, tmpVars[i], c.p.info.Types[lhs].Type, s.Tok == token.DEFINE))
 				}
 			}
 			c.Printf("%s", strings.Join(parts, " "))

@@ -83,7 +83,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				for len(elements) <= i {
 					elements = append(elements, zero)
 				}
-				elements[i] = c.translateImplicitConversion(element, elementType).String()
+				elements[i] = c.translateImplicitConversionWithCloning(element, elementType).String()
 				i++
 			}
 			return elements
@@ -1058,7 +1058,7 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 				target := c.newVariable("_struct")
 				return c.formatExpr("(%s = %e, %s = %s, %s, %s)", array, expr, target, c.zeroValue(t.Elem()), c.loadStruct(array, target, s), target)
 			}
-			return c.clone(c.translateExpr(expr), t.Elem())
+			return c.formatExpr("$clone(%e, %s)", expr, c.typeName(t.Elem()))
 		}
 
 		if !types.Identical(exprType, types.Typ[types.UnsafePointer]) {
@@ -1074,19 +1074,26 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 	return c.translateImplicitConversion(expr, desiredType)
 }
 
+func (c *funcContext) translateImplicitConversionWithCloning(expr ast.Expr, desiredType types.Type) *expression {
+	switch desiredType.Underlying().(type) {
+	case *types.Struct, *types.Array:
+		switch expr.(type) {
+		case nil, *ast.CompositeLit:
+			// nothing
+		default:
+			return c.formatExpr("$clone(%e, %s)", expr, c.typeName(desiredType))
+		}
+	}
+
+	return c.translateImplicitConversion(expr, desiredType)
+}
+
 func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType types.Type) *expression {
 	if desiredType == nil {
 		return c.translateExpr(expr)
 	}
 	if expr == nil {
 		return c.formatExpr("%s", c.zeroValue(desiredType))
-	}
-
-	switch desiredType.Underlying().(type) {
-	case *types.Struct, *types.Array:
-		if _, isComposite := expr.(*ast.CompositeLit); !isComposite {
-			return c.clone(c.translateExpr(expr), desiredType)
-		}
 	}
 
 	exprType := c.p.info.Types[expr].Type
@@ -1123,26 +1130,6 @@ func (c *funcContext) translateConversionToSlice(expr ast.Expr, desiredType type
 		return c.formatExpr("new %s(%e)", c.typeName(desiredType), expr)
 	}
 	return c.translateExpr(expr)
-}
-
-func (c *funcContext) clone(src *expression, ty types.Type) *expression {
-	switch t := ty.Underlying().(type) {
-	case *types.Struct:
-		structVar := c.newVariable("_struct")
-		fields := make([]string, t.NumFields())
-		for i := range fields {
-			fields[i] = c.clone(c.formatExpr("%s.%s", structVar, fieldName(t, i)), t.Field(i).Type()).String()
-		}
-		constructor := structVar + ".constructor"
-		if named, isNamed := ty.(*types.Named); isNamed {
-			constructor = c.objectName(named.Obj()) + ".Ptr"
-		}
-		return c.formatExpr("(%s = %s, new %s(%s))", structVar, src, constructor, strings.Join(fields, ", "))
-	case *types.Array:
-		return c.formatExpr("$mapArray(%s, function(entry) { return %s; })", src, c.clone(c.formatExpr("entry"), t.Elem()))
-	default:
-		return src
-	}
 }
 
 func (c *funcContext) loadStruct(array, target string, s *types.Struct) string {

@@ -1189,6 +1189,12 @@ var $internalCopy = function(dst, src, dstOffset, srcOffset, n, elem) {
 	}
 };
 
+var $clone = function(src, type) {
+	var clone = type.zero();
+	$copy(clone, src, type);
+	return clone;
+};
+
 var $append = function(slice) {
 	return $internalAppend(slice, arguments, 1, arguments.length - 1);
 };
@@ -1197,51 +1203,39 @@ var $appendSlice = function(slice, toAppend) {
 	return $internalAppend(slice, toAppend.array, toAppend.offset, toAppend.length);
 };
 
-var $growSlice = function(slice, length) {
-	var newCapacity = Math.max(length, slice.capacity < 1024 ? slice.capacity * 2 : Math.floor(slice.capacity * 5 / 4));
-
-	var newArray, i;
-	if (slice.array.constructor === Array) {
-		newArray = slice.array;
-		if (slice.offset !== 0 || newArray.length !== slice.offset + slice.capacity) {
-			newArray = newArray.slice(slice.offset);
-		}
-		newArray.length = newCapacity;
-	} else {
-		newArray = new slice.array.constructor(newCapacity);
-		newArray.set(slice.array.subarray(slice.offset));
-	}
-	var zero = slice.constructor.elem.zero;
-	for (i = length; i < newCapacity; i++) {
-		newArray[i] = zero();
-	}
-
-	var newSlice = new slice.constructor(newArray);
-	newSlice.length = slice.length;
-	newSlice.capacity = newCapacity;
-	return newSlice;
-};
-
 var $internalAppend = function(slice, array, offset, length) {
 	if (length === 0) {
 		return slice;
 	}
 
+	var newArray = slice.array;
+	var newOffset = slice.offset;
 	var newLength = slice.length + length;
-	if (newLength > slice.capacity) {
-		slice = $growSlice(slice, newLength);
+	var newCapacity = slice.capacity;
+
+	if (newLength > newCapacity) {
+		newOffset = 0;
+		newCapacity = Math.max(newLength, slice.capacity < 1024 ? slice.capacity * 2 : Math.floor(slice.capacity * 5 / 4));
+
+		if (slice.array.constructor === Array) {
+			newArray = slice.array.slice(slice.offset, slice.offset + slice.length);
+			newArray.length = newCapacity;
+		} else {
+			newArray = new slice.array.constructor(newCapacity);
+			newArray.set(slice.array.subarray(slice.offset, slice.offset + slice.length));
+		}
+		var zero = slice.constructor.elem.zero, i;
+		for (i = slice.length; i < newCapacity; i++) {
+			newArray[i] = zero();
+		}
 	}
 
-	var newArray = slice.array;
-	var sliceOffset = slice.offset + slice.length, i;
-	for (i = 0; i < length; i++) {
-		newArray[sliceOffset + i] = array[offset + i];
-	}
+	$internalCopy(newArray, array, newOffset + slice.length, offset, length, slice.constructor.elem);
 
 	var newSlice = new slice.constructor(newArray);
-	newSlice.offset = slice.offset;
+	newSlice.offset = newOffset;
 	newSlice.length = newLength;
-	newSlice.capacity = slice.capacity;
+	newSlice.capacity = newCapacity;
 	return newSlice;
 }
 

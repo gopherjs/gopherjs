@@ -67,13 +67,13 @@ func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellip
 			varargType := sig.Params().At(i).Type().(*types.Slice)
 			varargs := make([]string, len(args)-i)
 			for j, arg := range args[i:] {
-				varargs[j] = c.translateImplicitConversion(arg, varargType.Elem()).String()
+				varargs[j] = c.translateImplicitConversionWithCloning(arg, varargType.Elem()).String()
 			}
 			params[i] = fmt.Sprintf("new %s([%s])", c.typeName(varargType), strings.Join(varargs, ", "))
 			break
 		}
 		argType := sig.Params().At(i).Type()
-		params[i] = c.translateImplicitConversion(args[i], argType).String()
+		params[i] = c.translateImplicitConversionWithCloning(args[i], argType).String()
 	}
 	return params
 }

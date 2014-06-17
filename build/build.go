@@ -140,18 +140,6 @@ type Options struct {
 	Minify        bool
 }
 
-func (o *Options) Normalize() {
-	if o.GOROOT == "" {
-		o.GOROOT = build.Default.GOROOT
-	}
-
-	if o.GOPATH == "" {
-		o.GOPATH = build.Default.GOPATH
-	}
-
-	o.Verbose = o.Verbose || o.Watch
-}
-
 type PackageData struct {
 	*build.Package
 	SrcModTime time.Time
@@ -167,6 +155,14 @@ type Session struct {
 }
 
 func NewSession(options *Options) *Session {
+	if options.GOROOT == "" {
+		options.GOROOT = build.Default.GOROOT
+	}
+	if options.GOPATH == "" {
+		options.GOPATH = build.Default.GOPATH
+	}
+	options.Verbose = options.Verbose || options.Watch
+
 	s := &Session{
 		options:  options,
 		Packages: make(map[string]*PackageData),

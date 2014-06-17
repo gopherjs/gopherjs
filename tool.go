@@ -55,7 +55,6 @@ func main() {
 		buildFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
 		buildFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
 		buildFlags.Parse(cmdArgs)
-		options.Normalize()
 
 		for {
 			s := gbuild.NewSession(options)
@@ -124,7 +123,6 @@ func main() {
 		installFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
 		installFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
 		installFlags.Parse(cmdArgs)
-		options.Normalize()
 
 		for {
 			s := gbuild.NewSession(options)
@@ -185,7 +183,6 @@ func main() {
 				tempfile.Close()
 				os.Remove(tempfile.Name())
 			}()
-			options.Normalize()
 			s := gbuild.NewSession(options)
 			if err := s.BuildFiles(cmdArgs[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
 				return err
@@ -246,7 +243,6 @@ func main() {
 				buildPkg.PkgObj = ""
 				buildPkg.GoFiles = append(buildPkg.GoFiles, buildPkg.TestGoFiles...)
 				pkg := &gbuild.PackageData{Package: buildPkg}
-				options.Normalize()
 				s := gbuild.NewSession(options)
 				if err := s.BuildPackage(pkg); err != nil {
 					return err
@@ -351,7 +347,6 @@ func main() {
 				switch tool[1] {
 				case 'g':
 					basename := filepath.Base(toolFlags.Arg(0))
-					options.Normalize()
 					s := gbuild.NewSession(options)
 					if err := s.BuildFiles([]string{toolFlags.Arg(0)}, basename[:len(basename)-3]+".js", currentDirectory); err != nil {
 						return err

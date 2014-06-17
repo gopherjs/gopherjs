@@ -94,7 +94,7 @@ func main() {
 					if s.Watcher != nil {
 						s.Watcher.Watch(pkgPath)
 					}
-					buildPkg, err := compiler.Import(pkgPath, 0, s.ArchSuffix())
+					buildPkg, err := gbuild.Import(pkgPath, 0, s.ArchSuffix())
 					if err != nil {
 						return err
 					}
@@ -207,7 +207,7 @@ func main() {
 			for i, pkgPath := range testFlags.Args() {
 				pkgPath = filepath.ToSlash(pkgPath)
 				var err error
-				pkgs[i], err = compiler.Import(pkgPath, 0, "js")
+				pkgs[i], err = gbuild.Import(pkgPath, 0, "js")
 				if err != nil {
 					return err
 				}
@@ -223,7 +223,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					if pkg, err = compiler.Import(pkgPath, 0, "js"); err != nil {
+					if pkg, err = gbuild.Import(pkgPath, 0, "js"); err != nil {
 						return err
 					}
 				}

@@ -8,14 +8,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"go/ast"
-	"go/build"
-	"go/parser"
-	"go/scanner"
 	"go/token"
 	"io"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -33,119 +27,6 @@ type ErrorList []error
 
 func (err ErrorList) Error() string {
 	return err[0].Error()
-}
-
-type ImportCError struct{}
-
-func (e *ImportCError) Error() string {
-	return `importing "C" is not supported by GopherJS`
-}
-
-func Import(path string, mode build.ImportMode, archSuffix string) (*build.Package, error) {
-	if path == "C" {
-		return nil, &ImportCError{}
-	}
-
-	buildContext := &build.Context{
-		GOROOT:    build.Default.GOROOT,
-		GOPATH:    build.Default.GOPATH,
-		GOOS:      build.Default.GOOS,
-		GOARCH:    archSuffix,
-		Compiler:  "gc",
-		BuildTags: []string{"netgo"},
-	}
-	if path == "runtime" || path == "syscall" {
-		buildContext.GOARCH = build.Default.GOARCH
-		buildContext.InstallSuffix = archSuffix
-	}
-	pkg, err := buildContext.Import(path, "", mode)
-	if path == "hash/crc32" {
-		pkg.GoFiles = []string{"crc32.go", "crc32_generic.go"}
-	}
-	if pkg.IsCommand() {
-		pkg.PkgObj = filepath.Join(pkg.BinDir, filepath.Base(pkg.ImportPath)+".js")
-	}
-	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
-		// fall back to GOPATH
-		gopathPkgObj := build.Default.GOPATH + pkg.PkgObj[len(build.Default.GOROOT):]
-		if _, err := os.Stat(gopathPkgObj); err == nil {
-			pkg.PkgObj = gopathPkgObj
-		}
-	}
-	return pkg, err
-}
-
-func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
-	var files []*ast.File
-	replacedDeclNames := make(map[string]bool)
-	funcName := func(d *ast.FuncDecl) string {
-		if d.Recv == nil {
-			return d.Name.Name
-		}
-		recv := d.Recv.List[0].Type
-		if star, ok := recv.(*ast.StarExpr); ok {
-			recv = star.X
-		}
-		return recv.(*ast.Ident).Name + "." + d.Name.Name
-	}
-	isTestPkg := strings.HasSuffix(pkg.ImportPath, "_test")
-	importPath := pkg.ImportPath
-	if isTestPkg {
-		importPath = importPath[:len(importPath)-5]
-	}
-	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+importPath, 0, "js"); err == nil {
-		names := nativesPkg.GoFiles
-		if isTestPkg {
-			names = nativesPkg.XTestGoFiles
-		}
-		for _, name := range names {
-			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
-			if err != nil {
-				panic(err)
-			}
-			for _, decl := range file.Decls {
-				if d, ok := decl.(*ast.FuncDecl); ok {
-					replacedDeclNames[funcName(d)] = true
-				}
-			}
-			files = append(files, file)
-		}
-	}
-	delete(replacedDeclNames, "init")
-
-	var errList ErrorList
-	for _, name := range pkg.GoFiles {
-		if !filepath.IsAbs(name) {
-			name = filepath.Join(pkg.Dir, name)
-		}
-		r, err := os.Open(name)
-		if err != nil {
-			return nil, err
-		}
-		file, err := parser.ParseFile(fileSet, name, r, 0)
-		r.Close()
-		if err != nil {
-			if list, isList := err.(scanner.ErrorList); isList {
-				for _, entry := range list {
-					errList = append(errList, entry)
-				}
-				continue
-			}
-			errList = append(errList, err)
-			continue
-		}
-
-		for _, decl := range file.Decls {
-			if d, ok := decl.(*ast.FuncDecl); ok && replacedDeclNames[funcName(d)] {
-				d.Name = ast.NewIdent("_")
-			}
-		}
-		files = append(files, applyPatches(file, fileSet, pkg.ImportPath))
-	}
-	if errList != nil {
-		return nil, errList
-	}
-	return files, nil
 }
 
 type Compiler struct {

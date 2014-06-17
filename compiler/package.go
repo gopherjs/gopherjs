@@ -329,7 +329,6 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 		}
 		archive.AddDependenciesOf(impOutput)
 	}
-	archive.AddDependency(importPath)
 
 	return archive, nil
 }

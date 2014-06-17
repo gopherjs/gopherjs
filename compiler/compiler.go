@@ -352,6 +352,7 @@ func (a *Archive) AddDependenciesOf(other *Archive) {
 	for _, path := range other.Dependencies {
 		a.AddDependency(string(path))
 	}
+	a.AddDependency(string(other.ImportPath))
 }
 
 type PkgImport struct {

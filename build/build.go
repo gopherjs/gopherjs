@@ -44,7 +44,7 @@ type PackageData struct {
 }
 
 type Session struct {
-	T        *compiler.Compiler
+	Compiler *compiler.Compiler
 	Packages map[string]*PackageData
 	options  *Options
 	Watcher  *fsnotify.Watcher
@@ -52,7 +52,7 @@ type Session struct {
 
 func NewSession(options *Options) *Session {
 	s := &Session{
-		T:        compiler.New(),
+		Compiler: compiler.New(),
 		options:  options,
 		Packages: make(map[string]*PackageData),
 	}
@@ -140,15 +140,16 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 	return pkg.Archive, nil
 }
 
-func (s *Session) ImportDependencies(pkg *PackageData) ([]*compiler.Archive, error) {
+func (s *Session) ImportDependencies(archive *compiler.Archive) ([]*compiler.Archive, error) {
 	var deps []*compiler.Archive
-	for _, depPath := range pkg.Archive.Dependencies {
+	for _, depPath := range archive.Dependencies {
 		dep, err := s.ImportPackage(string(depPath))
 		if err != nil {
 			return nil, err
 		}
 		deps = append(deps, dep)
 	}
+	deps = append(deps, archive)
 	return deps, nil
 }
 
@@ -222,7 +223,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 				return err
 			}
 
-			pkg.Archive, err = s.T.UnmarshalArchive(pkg.PkgObj, pkg.ImportPath, objFile)
+			pkg.Archive, err = s.Compiler.UnmarshalArchive(pkg.PkgObj, pkg.ImportPath, objFile)
 			if err != nil {
 				return err
 			}
@@ -236,7 +237,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 	if err != nil {
 		return err
 	}
-	pkg.Archive, err = s.T.Compile(pkg.ImportPath, files, fileSet, s.ImportPackage, s.options.Minify)
+	pkg.Archive, err = s.Compiler.Compile(pkg.ImportPath, files, fileSet, s.ImportPackage, s.options.Minify)
 	if err != nil {
 		return err
 	}
@@ -268,7 +269,7 @@ func (s *Session) writeLibraryPackage(pkg *PackageData, pkgObj string) error {
 		return err
 	}
 
-	data, err := s.T.MarshalArchive(pkg.Archive)
+	data, err := s.Compiler.MarshalArchive(pkg.Archive)
 	if err != nil {
 		return err
 	}
@@ -323,11 +324,11 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 		}
 	}
 
-	deps, err := s.ImportDependencies(pkg)
+	deps, err := s.ImportDependencies(pkg.Archive)
 	if err != nil {
 		return err
 	}
-	s.T.WriteProgramCode(deps, pkg.ImportPath, s.options.Minify, sourceMapFilter)
+	s.Compiler.WriteProgramCode(deps, pkg.ImportPath, s.options.Minify, sourceMapFilter)
 
 	return nil
 }

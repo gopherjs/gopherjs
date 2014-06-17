@@ -44,7 +44,7 @@ type flowData struct {
 	endCase   int
 }
 
-func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importPkg func(string) (*Archive, error), minify bool) (*Archive, error) {
+func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {
 	info := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),
@@ -56,12 +56,12 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 	var errList ErrorList
 	var previousErr error
 	config := &types.Config{
-		Packages: t.typesPackages,
+		Packages: importContext.Packages,
 		Import: func(_ map[string]*types.Package, path string) (*types.Package, error) {
-			if _, err := importPkg(path); err != nil {
+			if _, err := importContext.Import(path); err != nil {
 				return nil, err
 			}
-			return t.typesPackages[path], nil
+			return importContext.Packages[path], nil
 		},
 		Sizes: sizes32,
 		Error: func(err error) {
@@ -79,7 +79,7 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 	if err != nil {
 		return nil, err
 	}
-	t.typesPackages[importPath] = typesPkg
+	importContext.Packages[importPath] = typesPkg
 
 	gcData := bytes.NewBuffer(nil)
 	gcexporter.Write(typesPkg, gcData, sizes32)
@@ -323,7 +323,7 @@ func (t *Compiler) Compile(importPath string, files []*ast.File, fileSet *token.
 	}
 	sort.Strings(importedPaths)
 	for _, impPath := range importedPaths {
-		impOutput, err := importPkg(impPath)
+		impOutput, err := importContext.Import(impPath)
 		if err != nil {
 			return nil, err
 		}

@@ -160,18 +160,18 @@ type PackageData struct {
 }
 
 type Session struct {
-	Compiler *compiler.Compiler
-	Packages map[string]*PackageData
-	options  *Options
-	Watcher  *fsnotify.Watcher
+	options       *Options
+	Packages      map[string]*PackageData
+	ImportContext *compiler.ImportContext
+	Watcher       *fsnotify.Watcher
 }
 
 func NewSession(options *Options) *Session {
 	s := &Session{
-		Compiler: compiler.New(),
 		options:  options,
 		Packages: make(map[string]*PackageData),
 	}
+	s.ImportContext = compiler.NewImportContext(s.ImportPackage)
 	if options.Watch {
 		var err error
 		s.Watcher, err = fsnotify.NewWatcher()
@@ -339,7 +339,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 				return err
 			}
 
-			pkg.Archive, err = s.Compiler.UnmarshalArchive(pkg.PkgObj, pkg.ImportPath, objFile)
+			pkg.Archive, err = compiler.UnmarshalArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.ImportContext)
 			if err != nil {
 				return err
 			}
@@ -353,7 +353,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 	if err != nil {
 		return err
 	}
-	pkg.Archive, err = s.Compiler.Compile(pkg.ImportPath, files, fileSet, s.ImportPackage, s.options.Minify)
+	pkg.Archive, err = compiler.Compile(pkg.ImportPath, files, fileSet, s.ImportContext, s.options.Minify)
 	if err != nil {
 		return err
 	}
@@ -385,7 +385,7 @@ func (s *Session) writeLibraryPackage(pkg *PackageData, pkgObj string) error {
 		return err
 	}
 
-	data, err := s.Compiler.MarshalArchive(pkg.Archive)
+	data, err := compiler.MarshalArchive(pkg.Archive)
 	if err != nil {
 		return err
 	}
@@ -444,7 +444,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 	if err != nil {
 		return err
 	}
-	s.Compiler.WriteProgramCode(deps, pkg.ImportPath, s.options.Minify, sourceMapFilter)
+	compiler.WriteProgramCode(deps, pkg.ImportPath, s.ImportContext, s.options.Minify, sourceMapFilter)
 
 	return nil
 }

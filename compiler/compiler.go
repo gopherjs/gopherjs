@@ -29,19 +29,19 @@ func (err ErrorList) Error() string {
 	return err[0].Error()
 }
 
-type Compiler struct {
-	typesPackages map[string]*types.Package
+type ImportContext struct {
+	Packages map[string]*types.Package
+	Import   func(string) (*Archive, error)
 }
 
-func New() *Compiler {
-	return &Compiler{map[string]*types.Package{"unsafe": types.Unsafe}}
+func NewImportContext(importFunc func(string) (*Archive, error)) *ImportContext {
+	return &ImportContext{
+		Packages: map[string]*types.Package{"unsafe": types.Unsafe},
+		Import:   importFunc,
+	}
 }
 
-func (t *Compiler) NewEmptyTypesPackage(path string) {
-	t.typesPackages[path] = types.NewPackage(path, path)
-}
-
-func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, minify bool, w *SourceMapFilter) {
+func WriteProgramCode(pkgs []*Archive, mainPkgPath string, importContext *ImportContext, minify bool, w *SourceMapFilter) {
 	declsByObject := make(map[string][]*Decl)
 	var pendingDecls []*Decl
 	for _, pkg := range pkgs {
@@ -88,13 +88,13 @@ func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, minify 
 
 	// write packages
 	for _, pkg := range pkgs {
-		t.WritePkgCode(pkg, minify, w)
+		WritePkgCode(pkg, minify, w)
 	}
 
 	// write interfaces
 	allTypeNames := []*types.TypeName{types.New("error").(*types.Named).Obj()}
 	for _, pkg := range pkgs {
-		scope := t.typesPackages[string(pkg.ImportPath)].Scope()
+		scope := importContext.Packages[string(pkg.ImportPath)].Scope()
 		for _, name := range scope.Names() {
 			if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
 				if _, notUsed := declsByObject[string(pkg.ImportPath)+":"+name]; !notUsed {
@@ -153,7 +153,7 @@ func (t *Compiler) WriteProgramCode(pkgs []*Archive, mainPkgPath string, minify 
 	w.Write([]byte("$packages[\"" + mainPkgPath + "\"].main();\n\n})();\n"))
 }
 
-func (t *Compiler) WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) {
+func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) {
 	if w.MappingCallback != nil && pkg.FileSet != nil {
 		w.fileSet = token.NewFileSet()
 		if err := w.fileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
@@ -188,23 +188,23 @@ func (t *Compiler) WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) {
 	w.Write([]byte("\n")) // keep this \n even when minified
 }
 
-func (t *Compiler) UnmarshalArchive(filename, id string, data []byte) (*Archive, error) {
+func UnmarshalArchive(filename, id string, data []byte, importContext *ImportContext) (*Archive, error) {
 	var a Archive
 	_, err := asn1.Unmarshal(data, &a)
 	if err != nil {
 		return nil, err
 	}
 
-	pkg, err := gcimporter.ImportData(t.typesPackages, filename, id, bytes.NewReader(a.GcData))
+	pkg, err := gcimporter.ImportData(importContext.Packages, filename, id, bytes.NewReader(a.GcData))
 	if err != nil {
 		return nil, err
 	}
-	t.typesPackages[pkg.Path()] = pkg
+	importContext.Packages[pkg.Path()] = pkg
 
 	return &a, nil
 }
 
-func (t *Compiler) MarshalArchive(a *Archive) ([]byte, error) {
+func MarshalArchive(a *Archive) ([]byte, error) {
 	return asn1.Marshal(*a)
 }
 

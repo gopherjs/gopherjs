@@ -262,7 +262,7 @@ func main() {
 					},
 				}
 				s.Packages["main"] = mainPkg
-				s.Compiler.NewEmptyTypesPackage("main")
+				s.ImportContext.Packages["main"] = types.NewPackage("main", "main")
 				testingOutput, err := s.ImportPackage("testing")
 				if err != nil {
 					panic(err)

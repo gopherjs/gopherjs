@@ -41,7 +41,10 @@ func NewImportContext(importFunc func(string) (*Archive, error)) *ImportContext 
 	}
 }
 
-func WriteProgramCode(pkgs []*Archive, mainPkgPath string, importContext *ImportContext, minify bool, w *SourceMapFilter) {
+func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMapFilter) {
+	mainPkg := pkgs[len(pkgs)-1]
+	minify := mainPkg.Minified
+
 	declsByObject := make(map[string][]*Decl)
 	var pendingDecls []*Decl
 	for _, pkg := range pkgs {
@@ -150,7 +153,7 @@ func WriteProgramCode(pkgs []*Archive, mainPkgPath string, importContext *Import
 		w.Write([]byte("$packages[\"" + string(pkg.ImportPath) + "\"].init();\n"))
 	}
 
-	w.Write([]byte("$packages[\"" + mainPkgPath + "\"].main();\n\n})();\n"))
+	w.Write([]byte("$packages[\"" + string(mainPkg.ImportPath) + "\"].main();\n\n})();\n"))
 }
 
 func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) {
@@ -216,6 +219,7 @@ type Archive struct {
 	Declarations []Decl
 	Tests        []string
 	FileSet      []byte
+	Minified     bool
 }
 
 type PkgPath []byte // make asn1 happy

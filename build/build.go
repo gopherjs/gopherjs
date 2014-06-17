@@ -444,7 +444,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 	if err != nil {
 		return err
 	}
-	compiler.WriteProgramCode(deps, pkg.ImportPath, s.ImportContext, s.options.Minify, sourceMapFilter)
+	compiler.WriteProgramCode(deps, s.ImportContext, sourceMapFilter)
 
 	return nil
 }

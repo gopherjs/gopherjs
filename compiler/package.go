@@ -92,6 +92,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		GcData:       gcData.Bytes(),
 		Dependencies: []PkgPath{PkgPath("github.com/gopherjs/gopherjs/js"), PkgPath("runtime")}, // all packages depend on those
 		FileSet:      encodedFileSet.Bytes(),
+		Minified:     minify,
 	}
 
 	c := &funcContext{

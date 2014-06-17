@@ -371,7 +371,7 @@ func cvtDirect(v Value, typ Type) Value {
 		val = jsType(typ).Get("Ptr").New()
 		copyStruct(val, srcVal, typ)
 	case Array, Func, Interface, Map, String:
-		val = js.InternalObject(v.val)
+		val = js.InternalObject(v.ptr)
 	default:
 		panic(&ValueError{"reflect.Convert", k})
 	}
@@ -501,14 +501,14 @@ func (t *uncommonType) Method(i int) (m Method) {
 	fn := func(rcvr js.Object) js.Object {
 		return rcvr.Get(name).Call("apply", rcvr, js.Arguments[1:])
 	}
-	m.Func = Value{mt, unsafe.Pointer(js.InternalObject(fn).Unsafe()), fl}
+	m.Func = Value{typ: mt, ptr: unsafe.Pointer(js.InternalObject(fn).Unsafe()), flag: fl}
 	m.Index = i
 	return
 }
 
 func (v Value) iword() iword {
 	if v.flag&flagIndir != 0 && v.typ.Kind() != Array && v.typ.Kind() != Struct {
-		val := js.InternalObject(v.val).Call("$get")
+		val := js.InternalObject(v.ptr).Call("$get")
 		if !val.IsNull() && val.Get("constructor") != jsType(v.typ) {
 			switch v.typ.Kind() {
 			case Uint64, Int64:
@@ -529,7 +529,7 @@ func (v Value) iword() iword {
 		}
 		return iword(val.Unsafe())
 	}
-	return iword(v.val)
+	return iword(v.ptr)
 }
 
 func (v Value) call(op string, in []Value) []Value {
@@ -656,7 +656,7 @@ func (v Value) Elem() Value {
 		tt := (*ptrType)(unsafe.Pointer(v.typ))
 		fl := v.flag&flagRO | flagIndir | flagAddr
 		fl |= flag(tt.elem.Kind()) << flagKindShift
-		return Value{tt.elem, unsafe.Pointer(val), fl}
+		return Value{typ: tt.elem, ptr: unsafe.Pointer(val), flag: fl}
 
 	default:
 		panic(&ValueError{"reflect.Value.Elem", k})
@@ -680,9 +680,9 @@ func (v Value) Field(i int) Value {
 	}
 	fl |= flag(typ.Kind()) << flagKindShift
 
-	s := js.InternalObject(v.val)
+	s := js.InternalObject(v.ptr)
 	if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return s.Get(name) }, func(v js.Object) { s.Set(name, v) }).Unsafe()), fl}
+		return Value{typ: typ, ptr: unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return s.Get(name) }, func(v js.Object) { s.Set(name, v) }).Unsafe()), flag: fl}
 	}
 	return makeValue(typ, s.Get(name), fl)
 }
@@ -698,9 +698,9 @@ func (v Value) Index(i int) Value {
 		fl := v.flag & (flagRO | flagIndir | flagAddr)
 		fl |= flag(typ.Kind()) << flagKindShift
 
-		a := js.InternalObject(v.val)
+		a := js.InternalObject(v.ptr)
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return a.Index(i) }, func(v js.Object) { a.SetIndex(i, v) }).Unsafe()), fl}
+			return Value{typ: typ, ptr: unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return a.Index(i) }, func(v js.Object) { a.SetIndex(i, v) }).Unsafe()), flag: fl}
 		}
 		return makeValue(typ, a.Index(i), fl)
 
@@ -717,17 +717,17 @@ func (v Value) Index(i int) Value {
 		i += s.Get("offset").Int()
 		a := s.Get("array")
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return a.Index(i) }, func(v js.Object) { a.SetIndex(i, v) }).Unsafe()), fl}
+			return Value{typ: typ, ptr: unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return a.Index(i) }, func(v js.Object) { a.SetIndex(i, v) }).Unsafe()), flag: fl}
 		}
 		return makeValue(typ, a.Index(i), fl)
 
 	case String:
-		str := *(*string)(v.val)
+		str := *(*string)(v.ptr)
 		if i < 0 || i >= len(str) {
 			panic("reflect: string index out of range")
 		}
 		fl := v.flag&flagRO | flag(Uint8<<flagKindShift)
-		return Value{uint8Type, unsafe.Pointer(uintptr(str[i])), fl}
+		return Value{typ: uint8Type, ptr: unsafe.Pointer(uintptr(str[i])), flag: fl}
 
 	default:
 		panic(&ValueError{"reflect.Value.Index", k})
@@ -785,23 +785,23 @@ func (v Value) Set(x Value) {
 	if v.flag&flagIndir != 0 {
 		switch v.typ.Kind() {
 		case Array:
-			js.Global.Call("$copy", js.InternalObject(v.val), js.InternalObject(x.val), jsType(v.typ))
+			js.Global.Call("$copy", js.InternalObject(v.ptr), js.InternalObject(x.ptr), jsType(v.typ))
 		case Interface:
-			js.InternalObject(v.val).Call("$set", js.InternalObject(valueInterface(x, false)))
+			js.InternalObject(v.ptr).Call("$set", js.InternalObject(valueInterface(x, false)))
 		case Struct:
-			copyStruct(js.InternalObject(v.val), js.InternalObject(x.val), v.typ)
+			copyStruct(js.InternalObject(v.ptr), js.InternalObject(x.ptr), v.typ)
 		default:
-			js.InternalObject(v.val).Call("$set", js.InternalObject(x.iword()))
+			js.InternalObject(v.ptr).Call("$set", js.InternalObject(x.iword()))
 		}
 		return
 	}
-	v.val = x.val
+	v.ptr = x.ptr
 }
 
 func (v Value) SetCap(n int) {
 	v.mustBeAssignable()
 	v.mustBe(Slice)
-	s := js.InternalObject(v.val).Call("$get")
+	s := js.InternalObject(v.ptr).Call("$get")
 	if n < s.Length() || n > s.Get("capacity").Int() {
 		panic("reflect: slice capacity out of range in SetCap")
 	}
@@ -809,13 +809,13 @@ func (v Value) SetCap(n int) {
 	newSlice.Set("offset", s.Get("offset"))
 	newSlice.Set("length", s.Get("length"))
 	newSlice.Set("capacity", n)
-	js.InternalObject(v.val).Call("$set", newSlice)
+	js.InternalObject(v.ptr).Call("$set", newSlice)
 }
 
 func (v Value) SetLen(n int) {
 	v.mustBeAssignable()
 	v.mustBe(Slice)
-	s := js.InternalObject(v.val).Call("$get")
+	s := js.InternalObject(v.ptr).Call("$get")
 	if n < 0 || n > s.Get("capacity").Int() {
 		panic("reflect: slice length out of range in SetLen")
 	}
@@ -823,7 +823,7 @@ func (v Value) SetLen(n int) {
 	newSlice.Set("offset", s.Get("offset"))
 	newSlice.Set("length", n)
 	newSlice.Set("capacity", s.Get("capacity"))
-	js.InternalObject(v.val).Call("$set", newSlice)
+	js.InternalObject(v.ptr).Call("$set", newSlice)
 }
 
 func (v Value) Slice(i, j int) Value {
@@ -848,7 +848,7 @@ func (v Value) Slice(i, j int) Value {
 		cap = s.Get("capacity").Int()
 
 	case String:
-		str := *(*string)(v.val)
+		str := *(*string)(v.ptr)
 		if i < 0 || j < i || j > len(str) {
 			panic("reflect.Value.Slice: string slice index out of bounds")
 		}

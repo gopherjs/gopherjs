@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -24,19 +25,23 @@ func (e *ImportCError) Error() string {
 	return `importing "C" is not supported by GopherJS`
 }
 
-func Import(path string, mode build.ImportMode, archSuffix string) (*build.Package, error) {
-	if path == "C" {
-		return nil, &ImportCError{}
-	}
-
-	buildContext := &build.Context{
+func NewBuildContext(archSuffix string) *build.Context {
+	return &build.Context{
 		GOROOT:    build.Default.GOROOT,
 		GOPATH:    build.Default.GOPATH,
 		GOOS:      build.Default.GOOS,
 		GOARCH:    archSuffix,
 		Compiler:  "gc",
-		BuildTags: []string{"netgo"},
+		BuildTags: []string{"netgo", runtime.Version()[:5]},
 	}
+}
+
+func Import(path string, mode build.ImportMode, archSuffix string) (*build.Package, error) {
+	if path == "C" {
+		return nil, &ImportCError{}
+	}
+
+	buildContext := NewBuildContext(archSuffix)
 	if path == "runtime" || path == "syscall" {
 		buildContext.GOARCH = build.Default.GOARCH
 		buildContext.InstallSuffix = archSuffix
@@ -186,18 +191,10 @@ func (s *Session) ArchSuffix() string {
 }
 
 func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string) error {
-	buildContext := &build.Context{
-		GOROOT:    s.options.GOROOT,
-		GOPATH:    s.options.GOPATH,
-		GOOS:      build.Default.GOOS,
-		GOARCH:    s.ArchSuffix(),
-		Compiler:  "gc",
-		BuildTags: []string{"netgo"},
-	}
 	if s.Watcher != nil {
 		s.Watcher.Watch(packagePath)
 	}
-	buildPkg, err := buildContext.ImportDir(packagePath, 0)
+	buildPkg, err := NewBuildContext(s.ArchSuffix()).ImportDir(packagePath, 0)
 	if err != nil {
 		return err
 	}

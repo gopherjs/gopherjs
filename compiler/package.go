@@ -464,7 +464,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl) []byte {
 		}
 
 		stmts := fun.Body.List
-		if recv != nil {
+		if recv != nil && !isBlank(recv) {
 			this := &This{}
 			c.p.info.Types[this] = types.TypeAndValue{Type: sig.Recv().Type()}
 			stmts = append([]ast.Stmt{

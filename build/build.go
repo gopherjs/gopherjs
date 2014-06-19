@@ -481,6 +481,34 @@ func applyPatches(file *ast.File, fileSet *token.FileSet, importPath string) *as
 		}
 	}
 
+	removeType := func(name string) {
+		for i, decl := range file.Decls {
+			switch d := decl.(type) {
+			case *ast.GenDecl:
+				if d.Tok == token.TYPE {
+					for j, s := range d.Specs {
+						if s.(*ast.TypeSpec).Name.String() == name {
+							d.Specs[j] = d.Specs[len(d.Specs)-1]
+							d.Specs = d.Specs[:len(d.Specs)-1]
+							break
+						}
+					}
+				}
+			case *ast.FuncDecl:
+				if d.Recv != nil {
+					recv := d.Recv.List[0].Type
+					if s, ok := recv.(*ast.StarExpr); ok {
+						recv = s.X
+					}
+					if recv.(*ast.Ident).Name == name {
+						file.Decls[i] = file.Decls[len(file.Decls)-1]
+						file.Decls = file.Decls[:len(file.Decls)-1]
+					}
+				}
+			}
+		}
+	}
+
 	basename := filepath.Base(fileSet.Position(file.Pos()).Filename)
 	switch {
 	case importPath == "bytes_test" && basename == "equal_test.go":
@@ -500,6 +528,9 @@ func applyPatches(file *ast.File, fileSet *token.FileSet, importPath string) *as
 		removeImport("unsafe")
 		removeFunction("TestAlignment")
 		removeFunction("TestSliceOverflow")
+		removeFunction("TestCallMethodJump")
+		removeType("Inner")
+		removeType("Outer")
 
 	case importPath == "runtime" && strings.HasPrefix(basename, "zgoarch_"):
 		file, _ = parser.ParseFile(fileSet, basename, "package runtime\nconst theGoarch = `js`\n", 0)

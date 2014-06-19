@@ -98,10 +98,13 @@ func makePointer(t Type, v js.Object) unsafe.Pointer {
 
 func makeValue(t Type, v js.Object, fl flag) Value {
 	rt := t.common()
-	if t.Size() > ptrSize && t.Kind() != Array && t.Kind() != Struct {
+	if t.Kind() == Array || t.Kind() == Struct {
+		return Value{rt, unsafe.Pointer(v.Unsafe()), 0, fl | flag(t.Kind())<<flagKindShift}
+	}
+	if t.Size() > ptrSize || t.Kind() == String {
 		return Value{rt, unsafe.Pointer(js.Global.Call("$newDataPointer", v, jsType(rt.ptrTo())).Unsafe()), 0, fl | flag(t.Kind())<<flagKindShift | flagIndir}
 	}
-	return Value{rt, unsafe.Pointer(v.Unsafe()), 0, fl | flag(t.Kind())<<flagKindShift}
+	return Value{rt, nil, uintptr(unsafe.Pointer(v.Unsafe())), fl | flag(t.Kind())<<flagKindShift}
 }
 
 func MakeSlice(typ Type, len, cap int) Value {
@@ -176,7 +179,7 @@ func SliceOf(t Type) Type {
 }
 
 func Zero(typ Type) Value {
-	return Value{typ.common(), unsafe.Pointer(jsType(typ).Call("zero").Unsafe()), 0, flag(typ.Kind()) << flagKindShift}
+	return makeValue(typ, jsType(typ).Call("zero"), 0)
 }
 
 func unsafe_New(typ *rtype) unsafe.Pointer {
@@ -510,8 +513,11 @@ func (t *uncommonType) Method(i int) (m Method) {
 }
 
 func (v Value) iword() iword {
-	if v.flag&flagIndir != 0 && v.typ.Kind() != Array && v.typ.Kind() != Struct {
-		val := js.InternalObject(v.pointer).Call("$get")
+	if v.typ.Kind() == Array || v.typ.Kind() == Struct {
+		return iword(v.ptr)
+	}
+	if v.flag&flagIndir != 0 {
+		val := js.InternalObject(v.ptr).Call("$get")
 		if !val.IsNull() && val.Get("constructor") != jsType(v.typ) {
 			switch v.typ.Kind() {
 			case Uint64, Int64:
@@ -684,7 +690,7 @@ func (v Value) Field(i int) Value {
 	}
 	fl |= flag(typ.Kind()) << flagKindShift
 
-	s := js.InternalObject(v.pointer)
+	s := js.InternalObject(v.ptr)
 	if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
 		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return s.Get(name) }, func(v js.Object) { s.Set(name, v) }).Unsafe()), 0, fl}
 	}
@@ -731,7 +737,7 @@ func (v Value) Index(i int) Value {
 			panic("reflect: string index out of range")
 		}
 		fl := v.flag&flagRO | flag(Uint8<<flagKindShift)
-		return Value{uint8Type, unsafe.Pointer(uintptr(str[i])), 0, fl}
+		return Value{uint8Type, nil, uintptr(str[i]), fl}
 
 	default:
 		panic(&ValueError{"reflect.Value.Index", k})

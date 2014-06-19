@@ -59,9 +59,9 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 		}
 		t.common.duration = time.Now().Sub(t.common.start)
 		t.report()
-		if err != nil {
-			throw.Invoke(js.InternalObject(err))
-		}
+		// if err != nil {
+		// 	throw.Invoke(js.InternalObject(err))
+		// }
 		ok = ok && !t.common.failed
 	}
 	duration := time.Now().Sub(start)

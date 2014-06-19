@@ -368,32 +368,13 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			return c.formatExpr("%s || %s", x, y)
 		case token.EQL:
 			switch u := t.Underlying().(type) {
-			case *types.Struct:
-				x := c.newVariable("x")
-				y := c.newVariable("y")
-				var conds []string
-				for i := 0; i < u.NumFields(); i++ {
-					field := u.Field(i)
-					if field.Name() == "_" {
-						continue
-					}
-					conds = append(conds, c.translateExpr(&ast.BinaryExpr{
-						X:  c.newIdent(x+"."+fieldName(u, i), field.Type()),
-						Op: token.EQL,
-						Y:  c.newIdent(y+"."+fieldName(u, i), field.Type()),
-					}).String())
-				}
-				if len(conds) == 0 {
-					conds = []string{"true"}
-				}
-				return c.formatExpr("(%s = %e, %s = %e, %s)", x, e.X, y, e.Y, strings.Join(conds, " && "))
+			case *types.Array, *types.Struct:
+				return c.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, c.typeName(t))
 			case *types.Interface:
 				if isJsObject(t) {
 					return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 				}
 				return c.formatExpr("$interfaceIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
-			case *types.Array:
-				return c.formatExpr("$arrayIsEqual(%e, %e)", e.X, e.Y)
 			case *types.Pointer:
 				xUnary, xIsUnary := e.X.(*ast.UnaryExpr)
 				yUnary, yIsUnary := e.Y.(*ast.UnaryExpr)
@@ -408,7 +389,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				case *types.Struct, *types.Interface:
 					return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 				case *types.Array:
-					return c.formatExpr("$arrayIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
+					return c.formatExpr("$equal(%s, %s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t), c.typeName(u.Elem()))
 				default:
 					return c.formatExpr("$pointerIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 				}

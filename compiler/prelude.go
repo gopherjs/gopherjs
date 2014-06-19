@@ -1354,6 +1354,50 @@ var $getStackDepth = function() {
 	return d;
 };
 
+var $equal = function(a, b, type) {
+	if (a === b) {
+		return true;
+	}
+	var i;
+	switch (type.kind) {
+	case "Float32":
+		return $float32IsEqual(a, b);
+	case "Complex64":
+		return $float32IsEqual(a.real, b.real) && $float32IsEqual(a.imag, b.imag);
+	case "Complex128":
+		return a.real === b.real && a.imag === b.imag;
+	case "Int64":
+	case "Uint64":
+		return a.high === b.high && a.low === b.low;
+	case "Ptr":
+		if (a.constructor.Struct) {
+			return false;
+		}
+		return $pointerIsEqual(a, b);
+	case "Array":
+		if (a.length != b.length) {
+			return false;
+		}
+		var i;
+		for (i = 0; i < a.length; i++) {
+			if (!$equal(a[i], b[i], type.elem)) {
+				return false;
+			}
+		}
+		return true;
+	case "Struct":
+		for (i = 0; i < type.fields.length; i++) {
+			var field = type.fields[i];
+			var name = field[0];
+			if (!$equal(a[name], b[name], field[3])) {
+				return false;
+			}
+		}
+		return true;
+	default:
+		return false;
+	}
+};
 var $interfaceIsEqual = function(a, b) {
 	if (a === b) {
 		return true;
@@ -1362,31 +1406,14 @@ var $interfaceIsEqual = function(a, b) {
 		return false;
 	}
 	switch (a.constructor.kind) {
-	case "Float32":
-		return $float32IsEqual(a.$val, b.$val);
-	case "Complex64":
-		return $float32IsEqual(a.$val.real, b.$val.real) && $float32IsEqual(a.$val.imag, b.$val.imag);
-	case "Complex128":
-		return a.$val.real === b.$val.real && a.$val.imag === b.$val.imag;
-	case "Int64":
-	case "Uint64":
-		return a.$val.high === b.$val.high && a.$val.low === b.$val.low;
-	case "Array":
-		return $arrayIsEqual(a.$val, b.$val);
-	case "Ptr":
-		if (a.constructor.Struct) {
-			return false;
-		}
-		return $pointerIsEqual(a, b);
 	case "Func":
 	case "Map":
 	case "Slice":
-	case "Struct":
 		$throwRuntimeError("comparing uncomparable type " + a.constructor);
 	case undefined: /* js.Object */
 		return false;
 	default:
-		return a.$val === b.$val;
+		return $equal(a.$val, b.$val, a.constructor);
 	}
 };
 var $float32IsEqual = function(a, b) {
@@ -1398,18 +1425,6 @@ var $float32IsEqual = function(a, b) {
 	}
 	var math = $packages["math"];
 	return math !== undefined && math.Float32bits(a) === math.Float32bits(b);
-};
-var $arrayIsEqual = function(a, b) {
-	if (a.length != b.length) {
-		return false;
-	}
-	var i;
-	for (i = 0; i < a.length; i++) {
-		if (a[i] !== b[i]) {
-			return false;
-		}
-	}
-	return true;
 };
 var $sliceIsEqual = function(a, ai, b, bi) {
 	return a.array === b.array && a.offset + ai === b.offset + bi;

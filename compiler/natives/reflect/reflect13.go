@@ -91,7 +91,7 @@ func copyStruct(dst, src js.Object, typ Type) {
 
 func makeValue(t Type, v js.Object, fl flag) Value {
 	rt := t.common()
-	if t.Kind() == Array || t.Kind() == Struct || t.Kind() == Ptr || t.Kind() == Map || t.Kind() == Chan {
+	if t.Kind() == Array || t.Kind() == Struct || rt.pointers() {
 		return Value{rt, unsafe.Pointer(v.Unsafe()), 0, fl | flag(t.Kind())<<flagKindShift}
 	}
 	if t.Size() > ptrSize || t.Kind() == String {
@@ -224,7 +224,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 		args := make([]Value, ftyp.NumIn())
 		for i := range args {
 			argType := ftyp.In(i).common()
-			args[i] = Value{argType, unsafe.Pointer(js.Arguments[i].Unsafe()), 0, flag(argType.Kind()) << flagKindShift}
+			args[i] = makeValue(argType, js.Arguments[i], 0)
 		}
 		resultsSlice := fn(args)
 		switch ftyp.NumOut() {
@@ -418,7 +418,7 @@ func Copy(dst, src Value) int {
 	return js.Global.Call("$copySlice", dstVal, srcVal).Int()
 }
 
-func methodReceiver(op string, v Value, i int) (rcvrtype, t *rtype, fn unsafe.Pointer) {
+func methodReceiver(op string, v Value, i int) (rcvrtype, t *rtype, fn unsafe.Pointer) { // TODO cleanup
 	var name string
 	if v.typ.Kind() == Interface {
 		tt := (*interfaceType)(unsafe.Pointer(v.typ))
@@ -433,11 +433,11 @@ func methodReceiver(op string, v Value, i int) (rcvrtype, t *rtype, fn unsafe.Po
 		if iface.itab == nil {
 			panic("reflect: " + op + " of method on nil interface value")
 		}
-		rcvrtype = iface.itab.typ
+		// rcvrtype = iface.itab.typ
 		t = m.typ
 		name = *m.name
 	} else {
-		rcvrtype = v.typ
+		// rcvrtype = v.typ
 		ut := v.typ.uncommon()
 		if ut == nil || i < 0 || i >= len(ut.methods) {
 			panic("reflect: internal error: invalid method index")
@@ -487,15 +487,24 @@ func makeMethodValue(op string, v Value) Value {
 		panic("reflect: internal error: invalid use of makePartialFunc")
 	}
 
-	_, fn, rcvr := methodReceiver(op, v, int(v.flag)>>flagMethodShift)
+	_, _, fn := methodReceiver(op, v, int(v.flag)>>flagMethodShift)
+	rcvr := js.InternalObject(v.iword())
+	if isWrapped(v.typ) {
+		rcvr = jsType(v.typ).New(rcvr)
+	}
 	fv := func() js.Object {
-		return js.InternalObject(fn).Call("apply", js.InternalObject(rcvr), js.Arguments)
+		return js.InternalObject(fn).Call("apply", rcvr, js.Arguments)
 	}
 	return Value{v.Type().common(), unsafe.Pointer(js.InternalObject(fv).Unsafe()), 0, v.flag&flagRO | flag(Func)<<flagKindShift}
 }
 
 func (t *rtype) pointers() bool {
-	return t.Kind() == Map || t.Kind() == Chan || t.size > ptrSize
+	switch t.Kind() {
+	case Ptr, Map, Chan, Func:
+		return true
+	default:
+		return false
+	}
 }
 
 func (t *uncommonType) Method(i int) (m Method) {
@@ -548,7 +557,7 @@ func (v Value) iword() iword {
 		}
 		return iword(val.Unsafe())
 	}
-	if v.typ.Kind() == Ptr || v.typ.Kind() == Map || v.typ.Kind() == Chan {
+	if v.typ.pointers() {
 		return iword(v.ptr)
 	}
 	return iword(v.scalar)
@@ -558,11 +567,14 @@ func (v Value) call(op string, in []Value) []Value {
 	t := v.typ
 	var (
 		fn   unsafe.Pointer
-		rcvr iword
+		rcvr js.Object
 	)
 	if v.flag&flagMethod != 0 {
-		rcvr = v.iword()
 		_, t, fn = methodReceiver(op, v, int(v.flag)>>flagMethodShift)
+		rcvr = js.InternalObject(v.iword())
+		if isWrapped(v.typ) {
+			rcvr = jsType(v.typ).New(rcvr)
+		}
 	} else {
 		fn = unsafe.Pointer(v.iword())
 	}
@@ -632,7 +644,7 @@ func (v Value) call(op string, in []Value) []Value {
 	for i, arg := range in {
 		argsArray.SetIndex(i, js.InternalObject(arg.assignTo("reflect.Value.Call", t.In(i).common(), nil).iword()))
 	}
-	results := js.InternalObject(fn).Call("apply", js.InternalObject(rcvr), argsArray)
+	results := js.InternalObject(fn).Call("apply", rcvr, argsArray)
 
 	switch nout {
 	case 0:

@@ -504,6 +504,9 @@ func applyPatches(file *ast.File, fileSet *token.FileSet, importPath string) *as
 	case importPath == "runtime" && strings.HasPrefix(basename, "zgoarch_"):
 		file, _ = parser.ParseFile(fileSet, basename, "package runtime\nconst theGoarch = `js`\n", 0)
 
+	case importPath == "sync" && basename == "pool.go":
+		file, _ = parser.ParseFile(fileSet, basename, "package sync", 0)
+
 	case importPath == "sync/atomic_test" && basename == "atomic_test.go":
 		removeFunction("TestUnaligned64")
 

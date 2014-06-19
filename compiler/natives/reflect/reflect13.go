@@ -89,16 +89,9 @@ func copyStruct(dst, src js.Object, typ Type) {
 	}
 }
 
-func makePointer(t Type, v js.Object) unsafe.Pointer {
-	if t.Size() > ptrSize && t.Kind() != Array && t.Kind() != Struct {
-		return unsafe.Pointer(js.Global.Call("$newDataPointer", v, jsType(PtrTo(t))).Unsafe())
-	}
-	return unsafe.Pointer(v.Unsafe())
-}
-
 func makeValue(t Type, v js.Object, fl flag) Value {
 	rt := t.common()
-	if t.Kind() == Array || t.Kind() == Struct {
+	if t.Kind() == Array || t.Kind() == Struct || t.Kind() == Ptr || t.Kind() == Map || t.Kind() == Chan {
 		return Value{rt, unsafe.Pointer(v.Unsafe()), 0, fl | flag(t.Kind())<<flagKindShift}
 	}
 	if t.Size() > ptrSize || t.Kind() == String {
@@ -148,7 +141,7 @@ func ValueOf(i interface{}) Value {
 	}
 	c := js.InternalObject(i).Get("constructor")
 	if c.Get("kind").IsUndefined() { // js.Object
-		return Value{jsObject(), unsafe.Pointer(js.InternalObject(i).Unsafe()), 0, flag(Interface) << flagKindShift}
+		return Value{jsObject(), nil, js.InternalObject(i).Unsafe(), flag(Interface) << flagKindShift}
 	}
 	return makeValue(reflectType(c), js.InternalObject(i).Get("$val"), 0)
 }
@@ -201,22 +194,22 @@ func makeInt(f flag, bits uint64, t Type) Value {
 		*(*uint64)(unsafe.Pointer(ptr)) = bits
 		return Value{typ, ptr, 0, f | flagIndir | flag(typ.Kind())<<flagKindShift}
 	}
-	var w iword
+	var s uintptr
 	switch typ.Kind() {
 	case Int8:
-		*(*int8)(unsafe.Pointer(&w)) = int8(bits)
+		*(*int8)(unsafe.Pointer(&s)) = int8(bits)
 	case Int16:
-		*(*int16)(unsafe.Pointer(&w)) = int16(bits)
+		*(*int16)(unsafe.Pointer(&s)) = int16(bits)
 	case Int, Int32:
-		*(*int32)(unsafe.Pointer(&w)) = int32(bits)
+		*(*int32)(unsafe.Pointer(&s)) = int32(bits)
 	case Uint8:
-		*(*uint8)(unsafe.Pointer(&w)) = uint8(bits)
+		*(*uint8)(unsafe.Pointer(&s)) = uint8(bits)
 	case Uint16:
-		*(*uint16)(unsafe.Pointer(&w)) = uint16(bits)
+		*(*uint16)(unsafe.Pointer(&s)) = uint16(bits)
 	case Uint, Uint32, Uintptr:
-		*(*uint32)(unsafe.Pointer(&w)) = uint32(bits)
+		*(*uint32)(unsafe.Pointer(&s)) = uint32(bits)
 	}
-	return Value{typ, unsafe.Pointer(w), 0, f | flag(typ.Kind())<<flagKindShift}
+	return Value{typ, nil, s, f | flag(typ.Kind())<<flagKindShift}
 }
 
 func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
@@ -249,6 +242,14 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	}
 
 	return Value{t, unsafe.Pointer(js.InternalObject(fv).Unsafe()), 0, flag(Func) << flagKindShift}
+}
+
+func memmove(adst, asrc unsafe.Pointer, n uintptr) {
+	js.InternalObject(adst).Call("$set", js.InternalObject(asrc).Call("$get"))
+}
+
+func loadScalar(p unsafe.Pointer, n uintptr) uintptr {
+	return js.InternalObject(p).Call("$get").Unsafe()
 }
 
 func makechan(typ *rtype, size uint64) (ch unsafe.Pointer) {
@@ -285,7 +286,7 @@ func makemap(t *rtype) (m unsafe.Pointer) {
 }
 
 func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
-	k := js.InternalObject(key)
+	k := js.InternalObject(key).Call("$get")
 	if !k.Get("$key").IsUndefined() {
 		k = k.Call("$key")
 	}
@@ -293,28 +294,33 @@ func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
 	if entry.IsUndefined() {
 		return nil
 	}
-	return makePointer(t.Elem(), entry.Get("v"))
+	return unsafe.Pointer(js.Global.Call("$newDataPointer", entry.Get("v"), jsType(PtrTo(t.Elem()))).Unsafe())
 }
 
 func mapassign(t *rtype, m, key, val unsafe.Pointer) {
-	k := js.InternalObject(key)
+	kv := js.InternalObject(key).Call("$get")
+	k := kv
 	if !k.Get("$key").IsUndefined() {
 		k = k.Call("$key")
 	}
-	if val == nil {
-		js.InternalObject(m).Delete(k.Str())
-		return
-	}
-	jsVal := js.InternalObject(val)
+	jsVal := js.InternalObject(val).Call("$get")
 	if t.Elem().Kind() == Struct {
 		newVal := js.Global.Get("Object").New()
 		copyStruct(newVal, jsVal, t.Elem())
 		jsVal = newVal
 	}
 	entry := js.Global.Get("Object").New()
-	entry.Set("k", js.InternalObject(key))
+	entry.Set("k", kv)
 	entry.Set("v", jsVal)
 	js.InternalObject(m).Set(k.Str(), entry)
+}
+
+func mapdelete(t *rtype, m unsafe.Pointer, key unsafe.Pointer) {
+	k := js.InternalObject(key).Call("$get")
+	if !k.Get("$key").IsUndefined() {
+		k = k.Call("$key")
+	}
+	js.InternalObject(m).Delete(k.Str())
 }
 
 type mapIter struct {
@@ -331,7 +337,7 @@ func mapiterinit(t *rtype, m unsafe.Pointer) *byte {
 func mapiterkey(it *byte) unsafe.Pointer {
 	iter := (*mapIter)(unsafe.Pointer(it))
 	k := iter.keys.Index(iter.i)
-	return makePointer(iter.t.Key(), iter.m.Get(k.Str()).Get("k"))
+	return unsafe.Pointer(js.Global.Call("$newDataPointer", iter.m.Get(k.Str()).Get("k"), jsType(PtrTo(iter.t.Key()))).Unsafe())
 }
 
 func mapiternext(it *byte) {
@@ -488,6 +494,10 @@ func makeMethodValue(op string, v Value) Value {
 	return Value{v.Type().common(), unsafe.Pointer(js.InternalObject(fv).Unsafe()), 0, v.flag&flagRO | flag(Func)<<flagKindShift}
 }
 
+func (t *rtype) pointers() bool {
+	return t.Kind() == Map || t.Kind() == Chan || t.size > ptrSize
+}
+
 func (t *uncommonType) Method(i int) (m Method) {
 	if t == nil || i < 0 || i >= len(t.methods) {
 		panic("reflect: Method index out of range")
@@ -537,6 +547,9 @@ func (v Value) iword() iword {
 			}
 		}
 		return iword(val.Unsafe())
+	}
+	if v.typ.Kind() == Ptr || v.typ.Kind() == Map || v.typ.Kind() == Chan {
+		return iword(v.ptr)
 	}
 	return iword(v.scalar)
 }

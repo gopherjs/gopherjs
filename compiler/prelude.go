@@ -1038,8 +1038,9 @@ var $externalize = function(v, t) {
 			var milli = $div64(v.UnixNano(), new $Int64(0, 1000000));
 			return new Date($flatten64(milli));
 		}
+		return v;
 	}
-	throw $panic(new $String("can not externalize " + t.string));
+	throw $panic(new $String("cannot externalize " + t.string));
 };
 
 var $internalize = function(v, t, recv) {

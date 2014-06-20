@@ -234,6 +234,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 		typ = function(v) { this.$val = v; };
 		typ.Ptr = $newType(4, "Ptr", "*" + string, "", "", constructor);
 		typ.Ptr.Struct = typ;
+		typ.Ptr.prototype.$get = function() { return this; };
 		typ.init = function(fields) {
 			var i;
 			typ.fields = fields;
@@ -547,6 +548,9 @@ var $structType = function(fields) {
 	var string = "struct { " + $mapArray(fields, function(f) {
 		return f[1] + " " + f[3].string + (f[4] !== "" ? (" \"" + f[4].replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"") : "");
 	}).join("; ") + " }";
+  if (fields.length === 0) {
+  	string = "struct {}";
+  }
 	var typ = $structTypes[string];
 	if (typ === undefined) {
 		typ = $newType(0, "Struct", string, "", "", function() {
@@ -596,6 +600,9 @@ $newStringPtr = function(str) {
 	return ptr;
 };
 var $newDataPointer = function(data, constructor) {
+	if (constructor.Struct) {
+		return data;
+	}
 	return new constructor(function() { return data; }, function(v) { data = v; });
 };
 
@@ -1409,7 +1416,7 @@ var $interfaceIsEqual = function(a, b) {
 	case "Func":
 	case "Map":
 	case "Slice":
-		$throwRuntimeError("comparing uncomparable type " + a.constructor);
+		$throwRuntimeError("comparing uncomparable type " + a.constructor.string);
 	case undefined: /* js.Object */
 		return false;
 	default:

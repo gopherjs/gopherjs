@@ -304,9 +304,10 @@ func mapassign(t *rtype, m, key, val unsafe.Pointer) {
 		k = k.Call("$key")
 	}
 	jsVal := js.InternalObject(val).Call("$get")
-	if t.Elem().Kind() == Struct {
-		newVal := js.Global.Get("Object").New()
-		copyStruct(newVal, jsVal, t.Elem())
+	et := t.Elem()
+	if et.Kind() == Struct {
+		newVal := jsType(et).Call("zero")
+		copyStruct(newVal, jsVal, et)
 		jsVal = newVal
 	}
 	entry := js.Global.Get("Object").New()
@@ -500,7 +501,7 @@ func makeMethodValue(op string, v Value) Value {
 
 func (t *rtype) pointers() bool {
 	switch t.Kind() {
-	case Ptr, Map, Chan, Func:
+	case Ptr, Map, Chan, Func, Struct, Array:
 		return true
 	default:
 		return false

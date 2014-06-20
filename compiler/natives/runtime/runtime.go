@@ -60,6 +60,10 @@ func NumCPU() int {
 	return 1
 }
 
+func NumGoroutine() int {
+	return 1
+}
+
 func ReadMemStats(m *MemStats) {
 }
 

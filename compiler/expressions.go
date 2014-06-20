@@ -1022,6 +1022,11 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 					return c.formatExpr("%s", array)
 				}
 			}
+			if call, ok := expr.(*ast.CallExpr); ok {
+				if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "new" {
+					return c.formatExpr("new Uint8Array(%d)", int(sizes32.Sizeof(c.p.info.Types[call.Args[0]].Type)))
+				}
+			}
 		}
 
 	case *types.Slice:

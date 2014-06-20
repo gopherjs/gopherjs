@@ -868,13 +868,10 @@ var $encodeRune = function(r) {
 	return String.fromCharCode(0xF0 | r >> 18, 0x80 | (r >> 12 & 0x3F), 0x80 | (r >> 6 & 0x3F), 0x80 | (r & 0x3F));
 };
 
-var $stringToBytes = function(str, terminateWithNull) {
-	var array = new Uint8Array(terminateWithNull ? str.length + 1 : str.length), i;
+var $stringToBytes = function(str) {
+	var array = new Uint8Array(str.length), i;
 	for (i = 0; i < str.length; i++) {
 		array[i] = str.charCodeAt(i);
-	}
-	if (terminateWithNull) {
-		array[str.length] = 0;
 	}
 	return array;
 };

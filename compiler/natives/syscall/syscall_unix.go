@@ -93,5 +93,13 @@ func RawSyscall6(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errn
 }
 
 func BytePtrFromString(s string) (*byte, error) {
-	return (*byte)(unsafe.Pointer(js.Global.Call("$stringToBytes", s, true).Unsafe())), nil
+	array := js.Global.Get("Uint8Array").New(len(s) + 1)
+	for i, b := range []byte(s) {
+		if b == 0 {
+			return nil, EINVAL
+		}
+		array.SetIndex(i, b)
+	}
+	array.SetIndex(len(s), 0)
+	return (*byte)(unsafe.Pointer(array.Unsafe())), nil
 }

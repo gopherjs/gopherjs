@@ -116,10 +116,10 @@ On each commit, Travis CI automatically compiles all supported packages with Gop
 | -- smtp         | partially             | data structures only (no net)     |
 | -- textproto    | yes                   |                                   |
 | -- url          | yes                   |                                   |
-| os              | yes                   | node.js only                      |
-| -- exec         | yes                   | node.js only                      |
-| -- signal       | yes                   | node.js only                      |
-| -- user         | yes                   | node.js only                      |
+| os              | partially             | node.js only                      |
+| -- exec         | partially             | node.js only                      |
+| -- signal       | partially             | node.js only                      |
+| -- user         | partially             | node.js only                      |
 | path            | yes                   |                                   |
 | -- filepath     | yes                   |                                   |
 | reflect         | yes                   |                                   |

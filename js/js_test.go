@@ -26,8 +26,11 @@ var dummys = js.Global.Call("eval", `({
 	toUnixTimestamp: function(d) {
 		return d.getTime() / 1000;
 	},
-	testMethod: function(m) {
-		return m.Method(42);
+	testField: function(o) {
+		return o.Field;
+	},
+	testMethod: function(o) {
+		return o.Method(42);
 	}
 })`)
 
@@ -269,6 +272,19 @@ func TestReflection(t *testing.T) {
 	}
 }
 
+type F struct {
+	Field int
+}
+
+func TestExternalizeField(t *testing.T) {
+	if dummys.Call("testField", map[string]int{"Field": 42}).Int() != 42 {
+		t.Fail()
+	}
+	if dummys.Call("testField", F{42}).Int() != 42 {
+		t.Fail()
+	}
+}
+
 type M struct {
 	x int
 }
@@ -277,7 +293,7 @@ func (m *M) Method(x int) {
 	m.x = x
 }
 
-func TestExternaliseNamed(t *testing.T) {
+func TestExternalizeNamed(t *testing.T) {
 	m := &M{}
 	dummys.Call("testMethod", m)
 	if m.x != 42 {

@@ -1042,8 +1042,17 @@ var $externalize = function(v, t) {
 			var milli = $div64(v.UnixNano(), new $Int64(0, 1000000));
 			return new Date($flatten64(milli));
 		}
+		var o = {}, i;
+		for (i = 0; i < t.fields.length; i++) {
+			var f = t.fields[i];
+			if (f[2] !== "") { // not exported
+				continue;
+			}
+			o[f[1]] = $externalize(v[f[0]], f[3]);
+		}
+		return o;
 	}
-	throw $panic(new $String("can not externalize " + t.string));
+	throw $panic(new $String("cannot externalize " + t.string));
 };
 
 var $internalize = function(v, t, recv) {
@@ -1163,7 +1172,7 @@ var $internalize = function(v, t, recv) {
 		}
 		return s;
 	default:
-		throw $panic(new $String("can not internalize " + t.string));
+		throw $panic(new $String("cannot internalize " + t.string));
 	}
 };
 

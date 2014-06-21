@@ -16,7 +16,7 @@
 //  | [?]float32                     | []float32                      | Float32Array    |
 //  | [?]float64                     | []float64                      | Float64Array    |
 //  | all other slices and arrays    | []interface{}                  | Array           |
-//  | maps                           | map[string]interface{}         | Object          |
+//  | maps, structs                  | map[string]interface{}         | Object          |
 //  | functions                      | func(...interface{}) js.Object | Function        |
 //  | time.Time                      | time.Time                      | Date            |
 //

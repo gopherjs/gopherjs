@@ -3,7 +3,7 @@ package compiler
 var prelude = `
 Error.stackTraceLimit = -1;
 
-var $global;
+var $global, $module;
 if (typeof window !== "undefined") { /* web page */
 	$global = window;
 } else if (typeof self !== "undefined") { /* web worker */
@@ -13,6 +13,9 @@ if (typeof window !== "undefined") { /* web page */
 	$global.require = require;
 } else {
 	console.log("warning: no global object found")
+}
+if (typeof module !== "undefined") {
+	$module = module;
 }
 
 var $idCounter = 0;

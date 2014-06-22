@@ -140,7 +140,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 						recvType = ptr.Elem()
 					}
 				}
-				if isBlank(d.Name) || d.Body == nil {
+				if isBlank(d.Name) {
 					continue
 				}
 				functions = append(functions, d)
@@ -434,6 +434,10 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 
 	var joinedParams string
 	primaryFunction := func(lhs string, fullName string) []byte {
+		if fun.Body == nil {
+			return []byte(fmt.Sprintf("\t%s = function() {\n\t\tthrow $panic(\"Native function not implemented: %s\");\n\t};\n", lhs, fullName))
+		}
+
 		stmts := fun.Body.List
 		if recv != nil && !isBlank(recv) {
 			this := &This{}

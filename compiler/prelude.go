@@ -20,6 +20,7 @@ if (typeof module !== "undefined") {
 
 var $idCounter = 0;
 var $keys = function(m) { return m ? Object.keys(m) : []; };
+var $BLK = {};
 var $min = Math.min;
 var $parseInt = parseInt;
 var $parseFloat = function(f) {

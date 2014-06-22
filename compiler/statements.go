@@ -241,7 +241,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		value := ""
 		switch len(results) {
 		case 0:
-			c.Printf("return;")
+			c.PrintCond(len(c.blocking) == 0, "return;", "$c(); return;")
 			return
 		case 1:
 			if c.sig.Results().Len() > 1 {
@@ -258,7 +258,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			value = "[" + strings.Join(values, ", ") + "]"
 			c.delayedOutput = nil
 		}
-		c.Printf("return %s;", value)
+		c.PrintCond(len(c.blocking) == 0, fmt.Sprintf("return %s;", value), fmt.Sprintf("$c(%s); return;", value))
 
 	case *ast.DeferStmt:
 		c.printLabel(label)

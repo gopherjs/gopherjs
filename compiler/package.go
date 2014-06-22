@@ -21,11 +21,13 @@ type funcContext struct {
 	flowDatas     map[string]*flowData
 	hasDefer      bool
 	flattened     map[ast.Node]bool
+	blocking      map[ast.Node]bool
 	caseCounter   int
 	labelCases    map[string]int
 	output        []byte
 	delayedOutput []byte
 	analyzeStack  []ast.Node
+	localCalls    map[*types.Func][][]ast.Node
 }
 
 type pkgContext struct {
@@ -110,8 +112,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		allVars:     make(map[string]int),
 		flowDatas:   map[string]*flowData{"": &flowData{}},
 		flattened:   make(map[ast.Node]bool),
+		blocking:    make(map[ast.Node]bool),
 		caseCounter: 1,
 		labelCases:  make(map[string]int),
+		localCalls:  make(map[*types.Func][][]ast.Node),
 	}
 	for name := range reservedKeywords {
 		c.allVars[name] = 1
@@ -125,7 +129,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 
 	var functions []*ast.FuncDecl
-	funcContexts := make(map[*ast.FuncDecl]*funcContext)
+	funcContexts := make(map[*types.Func]*funcContext)
 	var toplevelTypes []*types.TypeName
 	var vars []*types.Var
 	for _, file := range files {
@@ -140,14 +144,14 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 						recvType = ptr.Elem()
 					}
 				}
-				if isBlank(d.Name) {
-					continue
-				}
-				functions = append(functions, d)
+				o := c.p.info.Defs[d.Name].(*types.Func)
+				funcContexts[o] = c.p.analyzeFunction(sig, d.Body)
 				if sig.Recv() == nil {
-					c.objectName(c.p.info.Defs[d.Name]) // register toplevel name
+					c.objectName(o) // register toplevel name
 				}
-				funcContexts[d] = c.p.analyzeFunction(sig, d.Body.List)
+				if !isBlank(d.Name) {
+					functions = append(functions, d)
+				}
 			case *ast.GenDecl:
 				switch d.Tok {
 				case token.TYPE:
@@ -170,6 +174,24 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					// skip, constants are inlined
 				}
 			}
+		}
+	}
+
+	for {
+		done := true
+		for _, context := range funcContexts {
+			for obj, calls := range context.localCalls {
+				if len(funcContexts[obj].blocking) != 0 {
+					for _, call := range calls {
+						context.markBlocking(call)
+					}
+					delete(context.localCalls, obj)
+					done = false
+				}
+			}
+		}
+		if done {
+			break
 		}
 	}
 
@@ -238,6 +260,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		var d Decl
 		d.DceDeps = collectDependencies(nil, func() {
+			ast.Walk(c, init.Rhs)
 			d.InitCode = removeWhitespace(c.translateFunctionBody([]ast.Stmt{
 				&ast.AssignStmt{
 					Lhs: lhs,
@@ -285,7 +308,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 
 		d.DceDeps = collectDependencies(o, func() {
-			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun, funcContexts[fun]), minify)
+			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun, funcContexts[o]), minify)
 		})
 		archive.Declarations = append(archive.Declarations, d)
 		if strings.HasPrefix(fun.Name.String(), "Test") {
@@ -502,17 +525,19 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 	return code.Bytes()
 }
 
-func (c *pkgContext) analyzeFunction(sig *types.Signature, stmts []ast.Stmt) *funcContext {
+func (c *pkgContext) analyzeFunction(sig *types.Signature, body *ast.BlockStmt) *funcContext {
 	newFuncContext := &funcContext{
 		p:           c,
 		sig:         sig,
 		flowDatas:   map[string]*flowData{"": &flowData{}},
 		flattened:   make(map[ast.Node]bool),
+		blocking:    make(map[ast.Node]bool),
 		caseCounter: 1,
 		labelCases:  make(map[string]int),
+		localCalls:  make(map[*types.Func][][]ast.Node),
 	}
-	for _, s := range stmts {
-		ast.Walk(newFuncContext, s)
+	if body != nil {
+		ast.Walk(newFuncContext, body)
 	}
 	return newFuncContext
 }
@@ -535,12 +560,35 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 				c.caseCounter++
 			}
 		}
+	case *ast.CallExpr:
+		switch f := n.Fun.(type) {
+		case *ast.Ident:
+			if o, ok := c.p.info.Uses[f].(*types.Func); ok {
+				if o.Pkg() == c.p.pkg {
+					stack := make([]ast.Node, len(c.analyzeStack))
+					copy(stack, c.analyzeStack)
+					c.localCalls[o] = append(c.localCalls[o], stack)
+				}
+			}
+		case *ast.SelectorExpr:
+			o := c.p.info.Uses[f.Sel]
+			if isJsPackage(o.Pkg()) && o.Name() == "ReturnAndBlock" {
+				c.markBlocking(c.analyzeStack)
+			}
+		}
 	case *ast.DeferStmt:
 		c.hasDefer = true
 	case *ast.FuncLit:
 		return nil
 	}
 	return c
+}
+
+func (c *funcContext) markBlocking(stack []ast.Node) {
+	c.blocking[stack[len(stack)-1]] = true
+	for _, n := range stack {
+		c.flattened[n] = true
+	}
 }
 
 func (c *funcContext) translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerVars map[string]int) ([]string, []byte) {
@@ -558,6 +606,9 @@ func (c *funcContext) translateFunction(typ *ast.FuncType, stmts []ast.Stmt, out
 			}
 			params = append(params, c.objectName(c.p.info.Defs[ident]))
 		}
+	}
+	if len(c.blocking) != 0 {
+		params = append(params, "$c")
 	}
 
 	return params, c.translateFunctionBody(stmts)
@@ -588,10 +639,14 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 
 		printBody := func() {
 			if len(c.flattened) != 0 {
-				c.Printf("/* */ var $s = 0, $f = function() { while (true) { switch ($s) { case 0:")
+				c.Printf("/* */ var $s = 0, $f = function($r) { while (true) { switch ($s) { case 0:")
 				c.translateStmtList(stmts)
 				c.WritePos(token.NoPos)
-				c.Printf("/* */ } break; } }; return $f();")
+				if len(c.blocking) != 0 {
+					c.Printf("/* */ } $c(); return; } }; $f(); return $BLK;")
+					return
+				}
+				c.Printf("/* */ } return; } }; return $f();")
 				return
 			}
 			c.translateStmtList(stmts)

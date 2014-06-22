@@ -142,7 +142,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
-		innerContext := c.p.analyzeFunction(exprType.(*types.Signature), e.Body.List)
+		innerContext := c.p.analyzeFunction(exprType.(*types.Signature), e.Body)
 		params, body := innerContext.translateFunction(e.Type, e.Body.List, c.allVars)
 		if len(c.p.escapingVars) != 0 {
 			names := make([]string, 0, len(c.p.escapingVars))
@@ -479,6 +479,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					return c.formatExpr(`new ($sliceType(%s.Object))($global.Array.prototype.slice.call(%s))`, c.p.pkgVars["github.com/gopherjs/gopherjs/js"], args)
 				case "Module":
 					return c.formatExpr("$module")
+				case "Callback":
+					return c.formatExpr("$c")
 				default:
 					panic("Invalid js package object: " + obj.Name())
 				}
@@ -673,6 +675,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					switch obj.Name() {
 					case "InternalObject":
 						return c.translateExpr(e.Args[0])
+					case "ReturnAndBlock":
+						return c.formatExpr("return")
 					}
 				}
 				fun = c.translateExpr(f)
@@ -836,7 +840,20 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				return c.formatExpr("(%s = %e, %s(%s))", tupleVar, e.Args[0], fun, strings.Join(c.translateArgs(sig, args, false), ", "))
 			}
 		}
-		return c.formatExpr("%s(%s)", fun, strings.Join(c.translateArgs(sig, e.Args, e.Ellipsis.IsValid()), ", "))
+		args := c.translateArgs(sig, e.Args, e.Ellipsis.IsValid())
+		if c.blocking[e] {
+			callbackCase := c.caseCounter
+			c.caseCounter++
+			returnVar := ""
+			assign := ""
+			if sig.Results().Len() != 0 {
+				returnVar = c.newVariable("r")
+				assign = " " + returnVar + " = $r;"
+			}
+			c.PrintCond(false, fmt.Sprintf("%s(%s);", fun, strings.Join(args, ", ")), fmt.Sprintf("$s = %d; $r = %s(%s); if($r === $BLK) return; case %d:%s", callbackCase, fun, strings.Join(append(args, "$f"), ", "), callbackCase, assign))
+			return c.formatExpr("%s", returnVar)
+		}
+		return c.formatExpr("%s(%s)", fun, strings.Join(args, ", "))
 
 	case *ast.StarExpr:
 		if c1, isCall := e.X.(*ast.CallExpr); isCall && len(c1.Args) == 1 {

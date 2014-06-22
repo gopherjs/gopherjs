@@ -39,14 +39,10 @@ func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
 func GC() {
 }
 
-var goexit = js.Global.Call("eval", `(function() {
-	var err = new Error();
-	err.$exit = true;
-	throw err;
-})`)
-
 func Goexit() {
-	goexit.Invoke()
+	err := js.Global.Get("Error").New()
+	err.Set("$exit", true)
+	js.Global.Call("$throw", err)
 }
 
 func GOMAXPROCS(n int) int {

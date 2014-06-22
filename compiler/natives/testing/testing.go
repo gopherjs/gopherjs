@@ -42,7 +42,9 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 		if *chatty {
 			fmt.Printf("=== RUN %s\n", t.name)
 		}
-		err := runTest.Invoke(js.InternalObject(tests[i]), js.InternalObject(t))
+		err := js.Global.Call("$catch", func() {
+			tests[i](t)
+		})
 		js.Global.Set("$jsErr", nil)
 		if err != nil {
 			switch {
@@ -60,7 +62,7 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 		t.common.duration = time.Now().Sub(t.common.start)
 		t.report()
 		if err != nil {
-			throw.Invoke(js.InternalObject(err))
+			js.Global.Call("$throw", js.InternalObject(err))
 		}
 		ok = ok && !t.common.failed
 	}
@@ -75,16 +77,3 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 	fmt.Printf("%s\t%s\t%.3fs\n", status, pkgPath, duration.Seconds())
 	os.Exit(exitCode)
 }
-
-var runTest = js.Global.Call("eval", `(function(f, t) {
-	try {
-		f(t);
-		return null;
-	} catch (e) {
-		return e;
-	}
-})`)
-
-var throw = js.Global.Call("eval", `(function(err) {
-	throw err;
-})`)

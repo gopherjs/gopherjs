@@ -1305,6 +1305,8 @@ var $notSupported = function(feature) {
 	err.$notSupported = feature;
 	throw err;
 };
+var $throw = function(err) { throw err; };
+var $catch = function(f) { try { f(); return null; } catch (e) { return e; } };
 var $throwRuntimeError; /* set by package "runtime" */
 
 var $errorStack = [], $jsErr = null;

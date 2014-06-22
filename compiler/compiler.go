@@ -150,7 +150,7 @@ func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMa
 	}
 
 	for _, pkg := range pkgs {
-		w.Write([]byte("$packages[\"" + string(pkg.ImportPath) + "\"].init();\n"))
+		w.Write([]byte("$packages[\"" + string(pkg.ImportPath) + "\"].$init();\n"))
 	}
 
 	w.Write([]byte("$packages[\"" + string(mainPkg.ImportPath) + "\"].main();\n\n})();\n"))
@@ -181,7 +181,7 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) {
 			w.Write(d.BodyCode)
 		}
 	}
-	w.Write(removeWhitespace([]byte("\t$pkg.init = function() {\n"), minify))
+	w.Write(removeWhitespace([]byte("\t$pkg.$init = function() {\n"), minify))
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 {
 			w.Write(d.InitCode)

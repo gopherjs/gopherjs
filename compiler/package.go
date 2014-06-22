@@ -124,7 +124,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 
 	var functions []*ast.FuncDecl
-	var initStmts []ast.Stmt
 	var toplevelTypes []*types.TypeName
 	var vars []*types.Var
 	for _, file := range files {
@@ -140,10 +139,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					}
 				}
 				if isBlank(d.Name) {
-					continue
-				}
-				if sig.Recv() == nil && d.Name.Name == "init" {
-					initStmts = append(initStmts, d.Body.List...)
 					continue
 				}
 				functions = append(functions, d)
@@ -205,40 +200,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		archive.Declarations = append(archive.Declarations, d)
 	}
 
-	// functions
-	for _, fun := range functions {
-		var d Decl
-		o := c.p.info.Defs[fun.Name].(*types.Func)
-		funName := fun.Name.Name
-		if fun.Recv == nil {
-			d.Var = c.objectName(o)
-			if o.Name() != "main" {
-				d.DceFilters = []DepId{DepId(o.Name())}
-			}
-		}
-		if fun.Recv != nil {
-			recvType := o.Type().(*types.Signature).Recv().Type()
-			ptr, isPointer := recvType.(*types.Pointer)
-			namedRecvType, _ := recvType.(*types.Named)
-			if isPointer {
-				namedRecvType = ptr.Elem().(*types.Named)
-			}
-			funName = namedRecvType.Obj().Name() + "." + funName
-			d.DceFilters = []DepId{DepId(namedRecvType.Obj().Name())}
-			if !fun.Name.IsExported() {
-				d.DceFilters = append(d.DceFilters, DepId(fun.Name.Name))
-			}
-		}
-
-		d.DceDeps = collectDependencies(o, func() {
-			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun), minify)
-		})
-		archive.Declarations = append(archive.Declarations, d)
-		if strings.HasPrefix(fun.Name.String(), "Test") {
-			archive.Tests = append(archive.Tests, fun.Name.String())
-		}
-	}
-
 	// variables
 	initOrder := c.p.info.InitOrder
 
@@ -293,7 +254,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		var d Decl
 		d.DceDeps = collectDependencies(nil, func() {
-			d.InitCode = removeWhitespace(c.translateFunctionBody(1, []ast.Stmt{
+			d.InitCode = removeWhitespace(c.translateFunctionBody([]ast.Stmt{
 				&ast.AssignStmt{
 					Lhs: lhs,
 					Tok: token.DEFINE,
@@ -311,12 +272,42 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		archive.Declarations = append(archive.Declarations, d)
 	}
 
-	// init functions
-	var init Decl
-	init.DceDeps = collectDependencies(nil, func() {
-		init.InitCode = removeWhitespace(c.translateFunctionBody(1, initStmts), minify)
-	})
-	archive.Declarations = append(archive.Declarations, init)
+	// functions
+	for _, fun := range functions {
+		var d Decl
+		o := c.p.info.Defs[fun.Name].(*types.Func)
+		funName := fun.Name.Name
+		if fun.Recv == nil {
+			d.Var = c.objectName(o)
+			if o.Name() != "main" && o.Name() != "init" {
+				d.DceFilters = []DepId{DepId(o.Name())}
+			}
+			if o.Name() == "init" {
+				d.InitCode = removeWhitespace([]byte(fmt.Sprintf("\t\t%s();\n", d.Var)), minify)
+			}
+		}
+		if fun.Recv != nil {
+			recvType := o.Type().(*types.Signature).Recv().Type()
+			ptr, isPointer := recvType.(*types.Pointer)
+			namedRecvType, _ := recvType.(*types.Named)
+			if isPointer {
+				namedRecvType = ptr.Elem().(*types.Named)
+			}
+			funName = namedRecvType.Obj().Name() + "." + funName
+			d.DceFilters = []DepId{DepId(namedRecvType.Obj().Name())}
+			if !fun.Name.IsExported() {
+				d.DceFilters = append(d.DceFilters, DepId(fun.Name.Name))
+			}
+		}
+
+		d.DceDeps = collectDependencies(o, func() {
+			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun), minify)
+		})
+		archive.Declarations = append(archive.Declarations, d)
+		if strings.HasPrefix(fun.Name.String(), "Test") {
+			archive.Tests = append(archive.Tests, fun.Name.String())
+		}
+	}
 
 	var importedPaths []string
 	for _, imp := range typesPkg.Imports() {
@@ -552,11 +543,11 @@ func (c *funcContext) translateFunction(t *ast.FuncType, sig *types.Signature, s
 		}
 	}
 
-	body = newFuncContext.translateFunctionBody(1, stmts)
+	body = newFuncContext.translateFunctionBody(stmts)
 	return
 }
 
-func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte {
+func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 	v := gotoVisitor{c: c}
 	for _, stmt := range stmts {
 		ast.Walk(&v, stmt)
@@ -566,7 +557,7 @@ func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte
 		c.localVars = append(c.localVars, "$this = this", "$args = arguments")
 	}
 
-	body := c.CatchOutput(indent, func() {
+	body := c.CatchOutput(1, func() {
 		if c.sig != nil && c.sig.Results().Len() != 0 && c.sig.Results().At(0).Name() != "" {
 			c.resultNames = make([]ast.Expr, c.sig.Results().Len())
 			for i := 0; i < c.sig.Results().Len(); i++ {
@@ -635,7 +626,7 @@ func (c *funcContext) translateFunctionBody(indent int, stmts []ast.Stmt) []byte
 	})
 
 	if len(c.localVars) != 0 {
-		body = append([]byte(fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.p.indentation+indent), strings.Join(c.localVars, ", "))), body...)
+		body = append([]byte(fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.p.indentation+1), strings.Join(c.localVars, ", "))), body...)
 	}
 	return body
 }

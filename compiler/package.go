@@ -463,18 +463,13 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 
 		stmts := fun.Body.List
 		if recv != nil && !isBlank(recv) {
-			this := "this"
-			if len(c.flattened) != 0 {
-				this = "$this"
-			}
-			if isWrapped(sig.Recv().Type()) {
-				this += ".$val"
-			}
+			this := &This{}
+			c.p.info.Types[this] = types.TypeAndValue{Type: sig.Recv().Type()}
 			stmts = append([]ast.Stmt{
 				&ast.AssignStmt{
 					Lhs: []ast.Expr{recv},
 					Tok: token.DEFINE,
-					Rhs: []ast.Expr{c.newIdent(this, sig.Recv().Type())},
+					Rhs: []ast.Expr{this},
 				},
 			}, stmts...)
 		}

@@ -907,6 +907,16 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			panic(fmt.Sprintf("Unhandled object: %T\n", o))
 		}
 
+	case *This:
+		this := "this"
+		if len(c.flattened) != 0 {
+			this = "$this"
+		}
+		if isWrapped(c.p.info.Types[e].Type) {
+			this += ".$val"
+		}
+		return c.formatExpr(this)
+
 	case nil:
 		return c.formatExpr("")
 

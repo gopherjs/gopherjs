@@ -19,11 +19,13 @@ type funcContext struct {
 	localVars     []string
 	resultNames   []ast.Expr
 	flowDatas     map[string]*flowData
+	hasDefer      bool
 	flattened     map[ast.Node]bool
 	caseCounter   int
 	labelCases    map[string]int
 	output        []byte
 	delayedOutput []byte
+	analyzeStack  []ast.Node
 }
 
 type pkgContext struct {
@@ -123,6 +125,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 
 	var functions []*ast.FuncDecl
+	funcContexts := make(map[*ast.FuncDecl]*funcContext)
 	var toplevelTypes []*types.TypeName
 	var vars []*types.Var
 	for _, file := range files {
@@ -144,6 +147,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				if sig.Recv() == nil {
 					c.objectName(c.p.info.Defs[d.Name]) // register toplevel name
 				}
+				funcContexts[d] = c.p.analyzeFunction(sig, d.Body.List)
 			case *ast.GenDecl:
 				switch d.Tok {
 				case token.TYPE:
@@ -281,7 +285,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 
 		d.DceDeps = collectDependencies(o, func() {
-			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun), minify)
+			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun, funcContexts[fun]), minify)
 		})
 		archive.Declarations = append(archive.Declarations, d)
 		if strings.HasPrefix(fun.Name.String(), "Test") {
@@ -420,7 +424,7 @@ func (c *funcContext) initArgs(ty types.Type) string {
 	}
 }
 
-func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl) []byte {
+func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *funcContext) []byte {
 	o := c.p.info.Defs[fun.Name].(*types.Func)
 	sig := o.Type().(*types.Signature)
 	var recv *ast.Ident
@@ -442,7 +446,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl) []byte {
 				},
 			}, stmts...)
 		}
-		params, body := c.translateFunction(fun.Type, sig, stmts)
+		params, body := context.translateFunction(fun.Type, stmts, c.allVars)
 		joinedParams = strings.Join(params, ", ")
 		return []byte(fmt.Sprintf("\t%s = function(%s) {\n%s\t};\n", lhs, joinedParams, string(body)))
 	}
@@ -494,40 +498,68 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl) []byte {
 	return code.Bytes()
 }
 
-func (c *funcContext) translateFunction(t *ast.FuncType, sig *types.Signature, stmts []ast.Stmt) (params []string, body []byte) {
-	vars := make(map[string]int, len(c.allVars))
-	for k, v := range c.allVars {
-		vars[k] = v
-	}
+func (c *pkgContext) analyzeFunction(sig *types.Signature, stmts []ast.Stmt) *funcContext {
 	newFuncContext := &funcContext{
-		p:           c.p,
+		p:           c,
 		sig:         sig,
-		allVars:     vars,
 		flowDatas:   map[string]*flowData{"": &flowData{}},
 		flattened:   make(map[ast.Node]bool),
 		caseCounter: 1,
 		labelCases:  make(map[string]int),
 	}
+	for _, s := range stmts {
+		ast.Walk(newFuncContext, s)
+	}
+	return newFuncContext
+}
 
-	for _, param := range t.Params.List {
+func (c *funcContext) Visit(node ast.Node) ast.Visitor {
+	if node == nil {
+		c.analyzeStack = c.analyzeStack[:len(c.analyzeStack)-1]
+		return nil
+	}
+	c.analyzeStack = append(c.analyzeStack, node)
+
+	switch n := node.(type) {
+	case *ast.BranchStmt:
+		if n.Tok == token.GOTO {
+			for _, n2 := range c.analyzeStack {
+				c.flattened[n2] = true
+			}
+			if _, ok := c.labelCases[n.Label.String()]; !ok {
+				c.labelCases[n.Label.String()] = c.caseCounter
+				c.caseCounter++
+			}
+		}
+	case *ast.DeferStmt:
+		c.hasDefer = true
+	case *ast.FuncLit:
+		return nil
+	}
+	return c
+}
+
+func (c *funcContext) translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerVars map[string]int) ([]string, []byte) {
+	c.allVars = make(map[string]int, len(outerVars))
+	for k, v := range outerVars {
+		c.allVars[k] = v
+	}
+
+	var params []string
+	for _, param := range typ.Params.List {
 		for _, ident := range param.Names {
 			if isBlank(ident) {
-				params = append(params, newFuncContext.newVariable("param"))
+				params = append(params, c.newVariable("param"))
 				continue
 			}
-			params = append(params, newFuncContext.objectName(newFuncContext.p.info.Defs[ident]))
+			params = append(params, c.objectName(c.p.info.Defs[ident]))
 		}
 	}
 
-	body = newFuncContext.translateFunctionBody(stmts)
-	return
+	return params, c.translateFunctionBody(stmts)
 }
 
 func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
-	v := gotoVisitor{c: c}
-	for _, stmt := range stmts {
-		ast.Walk(&v, stmt)
-	}
 	c.localVars = nil
 	if len(c.flattened) != 0 {
 		c.localVars = append(c.localVars, "$this = this", "$args = arguments")
@@ -562,9 +594,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 			c.WritePos(token.NoPos)
 		}
 
-		v := hasDeferVisitor{}
-		ast.Walk(&v, &ast.BlockStmt{List: stmts})
-		if v.hasDefer {
+		if c.hasDefer {
 			c.Printf("var $deferred = [];")
 			c.Printf("try {")
 			c.Indent(func() {
@@ -605,52 +635,4 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 		body = append([]byte(fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.p.indentation+1), strings.Join(c.localVars, ", "))), body...)
 	}
 	return body
-}
-
-type hasDeferVisitor struct {
-	hasDefer bool
-}
-
-func (v *hasDeferVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	if v.hasDefer {
-		return nil
-	}
-	switch node.(type) {
-	case *ast.DeferStmt:
-		v.hasDefer = true
-		return nil
-	case ast.Expr:
-		return nil
-	}
-	return v
-}
-
-type gotoVisitor struct {
-	c     *funcContext
-	stack []ast.Node
-}
-
-func (v *gotoVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	if node == nil {
-		v.stack = v.stack[:len(v.stack)-1]
-		return
-	}
-	v.stack = append(v.stack, node)
-
-	switch n := node.(type) {
-	case *ast.BranchStmt:
-		if n.Tok == token.GOTO {
-			for _, n2 := range v.stack {
-				v.c.flattened[n2] = true
-			}
-			if _, ok := v.c.labelCases[n.Label.String()]; !ok {
-				v.c.labelCases[n.Label.String()] = v.c.caseCounter
-				v.c.caseCounter++
-			}
-			return nil
-		}
-	case ast.Expr:
-		return nil
-	}
-	return v
 }

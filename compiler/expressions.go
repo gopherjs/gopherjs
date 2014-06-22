@@ -142,7 +142,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
-		params, body := c.translateFunction(e.Type, exprType.(*types.Signature), e.Body.List)
+		innerContext := c.p.analyzeFunction(exprType.(*types.Signature), e.Body.List)
+		params, body := innerContext.translateFunction(e.Type, e.Body.List, c.allVars)
 		if len(c.p.escapingVars) != 0 {
 			names := make([]string, 0, len(c.p.escapingVars))
 			for obj := range c.p.escapingVars {
@@ -668,8 +669,11 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if !ok {
 				// qualified identifier
 				obj := c.p.info.Uses[f.Sel]
-				if isJsPackage(obj.Pkg()) && obj.Name() == "InternalObject" {
-					return c.translateExpr(e.Args[0])
+				if isJsPackage(obj.Pkg()) {
+					switch obj.Name() {
+					case "InternalObject":
+						return c.translateExpr(e.Args[0])
+					}
 				}
 				fun = c.translateExpr(f)
 				break

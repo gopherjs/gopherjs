@@ -9,10 +9,6 @@ import (
 	"strings"
 )
 
-type This struct {
-	ast.Ident
-}
-
 func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 	for _, stmt := range stmts {
 		c.translateStmt(stmt, "")

@@ -201,27 +201,8 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 
 	// variables
-	initOrder := c.p.info.InitOrder
-
-	// workaround for https://code.google.com/p/go/issues/detail?id=6703#c6
-	if importPath == "math/rand" {
-		findInit := func(name string) int {
-			for i, init := range initOrder {
-				if init.Lhs[0].Name() == name {
-					return i
-				}
-			}
-			panic("init not found")
-		}
-		i := findInit("rng_cooked")
-		j := findInit("globalRand")
-		if i > j {
-			initOrder[i], initOrder[j] = initOrder[j], initOrder[i]
-		}
-	}
-
 	varsWithInit := make(map[*types.Var]bool)
-	for _, init := range initOrder {
+	for _, init := range c.p.info.InitOrder {
 		for _, o := range init.Lhs {
 			varsWithInit[o] = true
 		}
@@ -243,7 +224,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		d.DceFilters = []DepId{DepId(o.Name())}
 		archive.Declarations = append(archive.Declarations, d)
 	}
-	for _, init := range initOrder {
+	for _, init := range c.p.info.InitOrder {
 		lhs := make([]ast.Expr, len(init.Lhs))
 		for i, o := range init.Lhs {
 			ident := ast.NewIdent(o.Name())

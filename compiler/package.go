@@ -19,10 +19,9 @@ type funcContext struct {
 	localVars     []string
 	resultNames   []ast.Expr
 	flowDatas     map[string]*flowData
-	flattened     bool
+	flattened     map[ast.Node]bool
 	caseCounter   int
 	labelCases    map[string]int
-	hasGoto       map[ast.Node]bool
 	output        []byte
 	delayedOutput []byte
 }
@@ -108,9 +107,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[string]*flowData{"": &flowData{}},
+		flattened:   make(map[ast.Node]bool),
 		caseCounter: 1,
 		labelCases:  make(map[string]int),
-		hasGoto:     make(map[ast.Node]bool),
 	}
 	for name := range reservedKeywords {
 		c.allVars[name] = 1
@@ -509,9 +508,9 @@ func (c *funcContext) translateFunction(t *ast.FuncType, sig *types.Signature, s
 		sig:         sig,
 		allVars:     vars,
 		flowDatas:   map[string]*flowData{"": &flowData{}},
+		flattened:   make(map[ast.Node]bool),
 		caseCounter: 1,
 		labelCases:  make(map[string]int),
-		hasGoto:     make(map[ast.Node]bool),
 	}
 
 	for _, param := range t.Params.List {
@@ -534,7 +533,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 		ast.Walk(&v, stmt)
 	}
 	c.localVars = nil
-	if c.flattened {
+	if len(c.flattened) != 0 {
 		c.localVars = append(c.localVars, "$this = this", "$args = arguments")
 	}
 
@@ -556,7 +555,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 		}
 
 		printBody := func() {
-			if c.flattened {
+			if len(c.flattened) != 0 {
 				c.Printf("/* */ var $s = 0, $f = function() { while (true) { switch ($s) { case 0:")
 				c.translateStmtList(stmts)
 				c.WritePos(token.NoPos)
@@ -640,12 +639,13 @@ func (v *gotoVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		v.stack = v.stack[:len(v.stack)-1]
 		return
 	}
+	v.stack = append(v.stack, node)
+
 	switch n := node.(type) {
 	case *ast.BranchStmt:
 		if n.Tok == token.GOTO {
-			v.c.flattened = true
 			for _, n2 := range v.stack {
-				v.c.hasGoto[n2] = true
+				v.c.flattened[n2] = true
 			}
 			if _, ok := v.c.labelCases[n.Label.String()]; !ok {
 				v.c.labelCases[n.Label.String()] = v.c.caseCounter
@@ -656,6 +656,5 @@ func (v *gotoVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	case ast.Expr:
 		return nil
 	}
-	v.stack = append(v.stack, node)
 	return v
 }

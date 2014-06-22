@@ -466,13 +466,13 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				case "Global":
 					return c.formatExpr("$global")
 				case "This":
-					if c.flattened {
+					if len(c.flattened) != 0 {
 						return c.formatExpr("$this")
 					}
 					return c.formatExpr("this")
 				case "Arguments":
 					args := "arguments"
-					if c.flattened {
+					if len(c.flattened) != 0 {
 						args = "$args"
 					}
 
@@ -887,7 +887,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 
 	case *This:
 		this := "this"
-		if c.flattened {
+		if len(c.flattened) != 0 {
 			this = "$this"
 		}
 		if isWrapped(c.p.info.Types[e].Type) {

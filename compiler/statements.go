@@ -52,7 +52,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			break
 		}
-		c.translateBranchingStmt(caseClauses, false, c.translateExpr, nil, "", c.hasGoto[s])
+		c.translateBranchingStmt(caseClauses, false, c.translateExpr, nil, "", c.flattened[s])
 
 	case *ast.SwitchStmt:
 		if s.Init != nil {
@@ -73,7 +73,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				})
 			}
 		}
-		c.translateBranchingStmt(s.Body.List, true, translateCond, nil, label, c.hasGoto[s])
+		c.translateBranchingStmt(s.Body.List, true, translateCond, nil, label, c.flattened[s])
 
 	case *ast.TypeSwitchStmt:
 		if s.Init != nil {
@@ -111,7 +111,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 			c.Printf("%s = %s;", typeSwitchVar, value)
 		}
-		c.translateBranchingStmt(s.Body.List, true, translateCond, printCaseBodyPrefix, label, c.hasGoto[s])
+		c.translateBranchingStmt(s.Body.List, true, translateCond, printCaseBodyPrefix, label, c.flattened[s])
 
 	case *ast.ForStmt:
 		if s.Init != nil {
@@ -125,7 +125,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			if s.Post != nil {
 				c.translateStmt(s.Post, "")
 			}
-		}, label, c.hasGoto[s])
+		}, label, c.flattened[s])
 
 	case *ast.RangeStmt:
 		refVar := c.newVariable("_ref")
@@ -147,7 +147,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				}
 			}, func() {
 				c.Printf("%s += %s[1];", iVar, runeVar)
-			}, label, c.hasGoto[s])
+			}, label, c.flattened[s])
 
 		case *types.Map:
 			keysVar := c.newVariable("_keys")
@@ -163,7 +163,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				}
 			}, func() {
 				c.Printf("%s++;", iVar)
-			}, label, c.hasGoto[s])
+			}, label, c.flattened[s])
 
 		case *types.Array, *types.Pointer, *types.Slice:
 			var length string
@@ -193,7 +193,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				}
 			}, func() {
 				c.Printf("%s++;", iVar)
-			}, label, c.hasGoto[s])
+			}, label, c.flattened[s])
 
 		case *types.Chan:
 			c.printLabel(label)

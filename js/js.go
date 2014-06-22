@@ -110,7 +110,8 @@ var Module Object
 var Callback func(...interface{})
 
 // WIP
-func ReturnAndBlock()
+func ReturnAndBlock() {
+}
 
 // Returns the internal JavaScript object that represents i. Not intended for public use.
 func InternalObject(i interface{}) Object {

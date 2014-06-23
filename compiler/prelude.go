@@ -126,7 +126,11 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 		break;
 
 	case "Chan":
-		typ = function() { this.$val = this; };
+		typ = function() {
+			this.$val = this;
+			this.$buffer = [];
+			this.$queue = [];
+		};
 		typ.prototype.$key = function() {
 			if (this.$id === undefined) {
 				$idCounter++;
@@ -1380,6 +1384,29 @@ var $go = function(fun, args) {
 		args.push(function() { $numGoroutine--; });
 		if (fun.apply(undefined, args) !== $BLK) { $numGoroutine--; }
 	}, 0);
+};
+
+var $send = function(chan, value, callback) {
+	var queuedRecv = chan.$queue.shift();
+	if (queuedRecv !== undefined) {
+		setTimeout(function() { queuedRecv(value); }, 0);
+		return;
+	}
+	chan.$buffer.push(value);
+	chan.$queue.push(callback);
+	return $BLK;
+};
+var $recv = function(chan, callback) {
+	var bufferedValue = chan.$buffer.shift();
+	if (bufferedValue !== undefined) {
+		var queuedSend = chan.$queue.shift();
+		if (queuedSend !== undefined) {
+			setTimeout(queuedSend, 0);
+		}
+		return bufferedValue;
+	}
+	chan.$queue.push(callback);
+	return $BLK;
 };
 
 var $equal = function(a, b, type) {

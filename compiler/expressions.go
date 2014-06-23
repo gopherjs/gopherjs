@@ -183,7 +183,15 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 
 		case token.ARROW:
-			return c.formatExpr("undefined")
+			if !GOROUTINES {
+				return c.formatExpr("undefined")
+			}
+			call := &ast.CallExpr{
+				Fun:  c.newIdent("$recv", types.NewSignature(nil, nil, types.NewTuple(types.NewVar(0, nil, "", t)), types.NewTuple(types.NewVar(0, nil, "", exprType)), false)),
+				Args: []ast.Expr{e.X},
+			}
+			c.blocking[call] = true
+			return c.translateExpr(call)
 		}
 
 		basic := t.Underlying().(*types.Basic)
@@ -847,7 +855,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			returnVar := ""
 			assign := ""
 			if sig.Results().Len() != 0 {
-				returnVar = c.newVariable("r")
+				returnVar = c.newVariable("_r")
 				assign = " " + returnVar + " = $r;"
 			}
 			c.PrintCond(false, fmt.Sprintf("%s(%s);", fun, strings.Join(args, ", ")), fmt.Sprintf("$s = %d; $r = %s(%s); if($r === $BLK) return; case %d:%s", callbackCase, fun, strings.Join(append(args, "$f"), ", "), callbackCase, assign))

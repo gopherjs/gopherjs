@@ -539,8 +539,17 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.info.Types[s.Call.Fun].Type.(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid()), ", "))
 
 	case *ast.SendStmt:
-		c.printLabel(label)
-		c.Printf(`$notSupported("send");`)
+		if !GOROUTINES {
+			c.printLabel(label)
+			c.Printf(`$notSupported("send");`)
+			return
+		}
+		call := &ast.CallExpr{
+			Fun:  c.newIdent("$send", types.NewSignature(nil, nil, types.NewTuple(types.NewVar(0, nil, "", c.p.info.Types[s.Chan].Type), types.NewVar(0, nil, "", c.p.info.Types[s.Value].Type)), nil, false)),
+			Args: []ast.Expr{s.Chan, s.Value},
+		}
+		c.blocking[call] = true
+		c.translateStmt(&ast.ExprStmt{call}, label)
 
 	case *ast.EmptyStmt:
 		// skip

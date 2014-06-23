@@ -581,6 +581,12 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 				c.markBlocking(c.analyzeStack)
 			}
 		}
+	case *ast.UnaryExpr:
+		if n.Op == token.ARROW {
+			c.markBlocking(c.analyzeStack)
+		}
+	case *ast.SendStmt:
+		c.markBlocking(c.analyzeStack)
 	case *ast.DeferStmt:
 		c.hasDefer = true
 	case *ast.FuncLit:
@@ -590,6 +596,9 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 }
 
 func (c *funcContext) markBlocking(stack []ast.Node) {
+	if !GOROUTINES {
+		return
+	}
 	c.blocking[stack[len(stack)-1]] = true
 	for _, n := range stack {
 		c.flattened[n] = true

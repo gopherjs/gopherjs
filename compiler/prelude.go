@@ -77,30 +77,30 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 
 	case "Int64":
 		typ = function(high, low) {
-			this.high = (high + Math.floor(Math.ceil(low) / 4294967296)) >> 0;
-			this.low = low >>> 0;
+			this.$high = (high + Math.floor(Math.ceil(low) / 4294967296)) >> 0;
+			this.$low = low >>> 0;
 			this.$val = this;
 		};
-		typ.prototype.$key = function() { return string + "$" + this.high + "$" + this.low; };
+		typ.prototype.$key = function() { return string + "$" + this.$high + "$" + this.$low; };
 		break;
 
 	case "Uint64":
 		typ = function(high, low) {
-			this.high = (high + Math.floor(Math.ceil(low) / 4294967296)) >>> 0;
-			this.low = low >>> 0;
+			this.$high = (high + Math.floor(Math.ceil(low) / 4294967296)) >>> 0;
+			this.$low = low >>> 0;
 			this.$val = this;
 		};
-		typ.prototype.$key = function() { return string + "$" + this.high + "$" + this.low; };
+		typ.prototype.$key = function() { return string + "$" + this.$high + "$" + this.$low; };
 		break;
 
 	case "Complex64":
 	case "Complex128":
 		typ = function(real, imag) {
-			this.real = real;
-			this.imag = imag;
+			this.$real = real;
+			this.$imag = imag;
 			this.$val = this;
 		};
-		typ.prototype.$key = function() { return string + "$" + this.real + "$" + this.imag; };
+		typ.prototype.$key = function() { return string + "$" + this.$real + "$" + this.$imag; };
 		break;
 
 	case "Array":
@@ -623,17 +623,17 @@ var $coerceFloat32 = function(f) {
 	return math.Float32frombits(math.Float32bits(f));
 };
 var $flatten64 = function(x) {
-	return x.high * 4294967296 + x.low;
+	return x.$high * 4294967296 + x.$low;
 };
 var $shiftLeft64 = function(x, y) {
 	if (y === 0) {
 		return x;
 	}
 	if (y < 32) {
-		return new x.constructor(x.high << y | x.low >>> (32 - y), (x.low << y) >>> 0);
+		return new x.constructor(x.$high << y | x.$low >>> (32 - y), (x.$low << y) >>> 0);
 	}
 	if (y < 64) {
-		return new x.constructor(x.low << (y - 32), 0);
+		return new x.constructor(x.$low << (y - 32), 0);
 	}
 	return new x.constructor(0, 0);
 };
@@ -642,12 +642,12 @@ var $shiftRightInt64 = function(x, y) {
 		return x;
 	}
 	if (y < 32) {
-		return new x.constructor(x.high >> y, (x.low >>> y | x.high << (32 - y)) >>> 0);
+		return new x.constructor(x.$high >> y, (x.$low >>> y | x.$high << (32 - y)) >>> 0);
 	}
 	if (y < 64) {
-		return new x.constructor(x.high >> 31, (x.high >> (y - 32)) >>> 0);
+		return new x.constructor(x.$high >> 31, (x.$high >> (y - 32)) >>> 0);
 	}
-	if (x.high < 0) {
+	if (x.$high < 0) {
 		return new x.constructor(-1, 4294967295);
 	}
 	return new x.constructor(0, 0);
@@ -657,42 +657,42 @@ var $shiftRightUint64 = function(x, y) {
 		return x;
 	}
 	if (y < 32) {
-		return new x.constructor(x.high >>> y, (x.low >>> y | x.high << (32 - y)) >>> 0);
+		return new x.constructor(x.$high >>> y, (x.$low >>> y | x.$high << (32 - y)) >>> 0);
 	}
 	if (y < 64) {
-		return new x.constructor(0, x.high >>> (y - 32));
+		return new x.constructor(0, x.$high >>> (y - 32));
 	}
 	return new x.constructor(0, 0);
 };
 var $mul64 = function(x, y) {
 	var high = 0, low = 0, i;
-	if ((y.low & 1) !== 0) {
-		high = x.high;
-		low = x.low;
+	if ((y.$low & 1) !== 0) {
+		high = x.$high;
+		low = x.$low;
 	}
 	for (i = 1; i < 32; i++) {
-		if ((y.low & 1<<i) !== 0) {
-			high += x.high << i | x.low >>> (32 - i);
-			low += (x.low << i) >>> 0;
+		if ((y.$low & 1<<i) !== 0) {
+			high += x.$high << i | x.$low >>> (32 - i);
+			low += (x.$low << i) >>> 0;
 		}
 	}
 	for (i = 0; i < 32; i++) {
-		if ((y.high & 1<<i) !== 0) {
-			high += x.low << i;
+		if ((y.$high & 1<<i) !== 0) {
+			high += x.$low << i;
 		}
 	}
 	return new x.constructor(high, low);
 };
 var $div64 = function(x, y, returnRemainder) {
-	if (y.high === 0 && y.low === 0) {
+	if (y.$high === 0 && y.$low === 0) {
 		$throwRuntimeError("integer divide by zero");
 	}
 
 	var s = 1;
 	var rs = 1;
 
-	var xHigh = x.high;
-	var xLow = x.low;
+	var xHigh = x.$high;
+	var xLow = x.$low;
 	if (xHigh < 0) {
 		s = -1;
 		rs = -1;
@@ -703,9 +703,9 @@ var $div64 = function(x, y, returnRemainder) {
 		}
 	}
 
-	var yHigh = y.high;
-	var yLow = y.low;
-	if (y.high < 0) {
+	var yHigh = y.$high;
+	var yLow = y.$low;
+	if (y.$high < 0) {
 		s *= -1;
 		yHigh = -yHigh;
 		if (yLow !== 0) {
@@ -747,10 +747,10 @@ var $div64 = function(x, y, returnRemainder) {
 };
 
 var $divComplex = function(n, d) {
-	var ninf = n.real === 1/0 || n.real === -1/0 || n.imag === 1/0 || n.imag === -1/0;
-	var dinf = d.real === 1/0 || d.real === -1/0 || d.imag === 1/0 || d.imag === -1/0;
-	var nnan = !ninf && (n.real !== n.real || n.imag !== n.imag);
-	var dnan = !dinf && (d.real !== d.real || d.imag !== d.imag);
+	var ninf = n.$real === 1/0 || n.$real === -1/0 || n.$imag === 1/0 || n.$imag === -1/0;
+	var dinf = d.$real === 1/0 || d.$real === -1/0 || d.$imag === 1/0 || d.$imag === -1/0;
+	var nnan = !ninf && (n.$real !== n.$real || n.$imag !== n.$imag);
+	var dnan = !dinf && (d.$real !== d.$real || d.$imag !== d.$imag);
 	if(nnan || dnan) {
 		return new n.constructor(0/0, 0/0);
 	}
@@ -760,22 +760,22 @@ var $divComplex = function(n, d) {
 	if (!ninf && dinf) {
 		return new n.constructor(0, 0);
 	}
-	if (d.real === 0 && d.imag === 0) {
-		if (n.real === 0 && n.imag === 0) {
+	if (d.$real === 0 && d.$imag === 0) {
+		if (n.$real === 0 && n.$imag === 0) {
 			return new n.constructor(0/0, 0/0);
 		}
 		return new n.constructor(1/0, 1/0);
 	}
-	var a = Math.abs(d.real);
-	var b = Math.abs(d.imag);
+	var a = Math.abs(d.$real);
+	var b = Math.abs(d.$imag);
 	if (a <= b) {
-		var ratio = d.real / d.imag;
-		var denom = d.real * ratio + d.imag;
-		return new n.constructor((n.real * ratio + n.imag) / denom, (n.imag * ratio - n.real) / denom);
+		var ratio = d.$real / d.$imag;
+		var denom = d.$real * ratio + d.$imag;
+		return new n.constructor((n.$real * ratio + n.$imag) / denom, (n.$imag * ratio - n.$real) / denom);
 	}
-	var ratio = d.imag / d.real;
-	var denom = d.imag * ratio + d.real;
-	return new n.constructor((n.imag * ratio + n.real) / denom, (n.imag - n.real * ratio) / denom);
+	var ratio = d.$imag / d.$real;
+	var denom = d.$imag * ratio + d.$real;
+	return new n.constructor((n.$imag * ratio + n.$real) / denom, (n.$imag - n.$real * ratio) / denom);
 };
 
 var $subslice = function(slice, low, high, max) {
@@ -1444,12 +1444,12 @@ var $equal = function(a, b, type) {
 	case "Float32":
 		return $float32IsEqual(a, b);
 	case "Complex64":
-		return $float32IsEqual(a.real, b.real) && $float32IsEqual(a.imag, b.imag);
+		return $float32IsEqual(a.$real, b.$real) && $float32IsEqual(a.$imag, b.$imag);
 	case "Complex128":
-		return a.real === b.real && a.imag === b.imag;
+		return a.$real === b.$real && a.$imag === b.$imag;
 	case "Int64":
 	case "Uint64":
-		return a.high === b.high && a.low === b.low;
+		return a.$high === b.$high && a.$low === b.$low;
 	case "Ptr":
 		if (a.constructor.Struct) {
 			return false;

@@ -665,9 +665,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				case "complex":
 					return c.formatExpr("new %s(%e, %e)", c.typeName(c.p.info.Types[e].Type), e.Args[0], e.Args[1])
 				case "real":
-					return c.formatExpr("%e.real", e.Args[0])
+					return c.formatExpr("%e.$real", e.Args[0])
 				case "imag":
-					return c.formatExpr("%e.imag", e.Args[0])
+					return c.formatExpr("%e.$imag", e.Args[0])
 				case "recover":
 					return c.formatExpr("$recover()")
 				case "close":
@@ -1002,7 +1002,7 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 				if t.Info()&types.IsUnsigned == 0 && basicExprType.Info()&types.IsUnsigned == 0 {
 					return c.fixNumber(c.formatParenExpr("%1l + ((%1h >> 31) * 4294967296)", expr), t)
 				}
-				return c.fixNumber(c.formatExpr("%s.low", c.translateExpr(expr)), t)
+				return c.fixNumber(c.formatExpr("%s.$low", c.translateExpr(expr)), t)
 			case basicExprType.Info()&types.IsFloat != 0:
 				return c.formatParenExpr("%e >> 0", expr)
 			case types.Identical(exprType, types.Typ[types.UnsafePointer]):
@@ -1022,7 +1022,7 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 			switch et := exprType.Underlying().(type) {
 			case *types.Basic:
 				if is64Bit(et) {
-					value = c.formatExpr("%s.low", value)
+					value = c.formatExpr("%s.$low", value)
 				}
 				if et.Info()&types.IsNumeric != 0 {
 					return c.formatExpr("$encodeRune(%s)", value)
@@ -1354,28 +1354,28 @@ func (c *funcContext) formatExprInternal(format string, a []interface{}, parens 
 				out.WriteString(strconv.FormatUint(d>>32, 10))
 				return
 			}
-			writeExpr(".high")
+			writeExpr(".$high")
 		case 'l':
 			if val := c.p.info.Types[a[n].(ast.Expr)].Value; val != nil {
 				d, _ := exact.Uint64Val(val)
 				out.WriteString(strconv.FormatUint(d&(1<<32-1), 10))
 				return
 			}
-			writeExpr(".low")
+			writeExpr(".$low")
 		case 'r':
 			if val := c.p.info.Types[a[n].(ast.Expr)].Value; val != nil {
 				r, _ := exact.Float64Val(exact.Real(val))
 				out.WriteString(strconv.FormatFloat(r, 'g', -1, 64))
 				return
 			}
-			writeExpr(".real")
+			writeExpr(".$real")
 		case 'i':
 			if val := c.p.info.Types[a[n].(ast.Expr)].Value; val != nil {
 				i, _ := exact.Float64Val(exact.Imag(val))
 				out.WriteString(strconv.FormatFloat(i, 'g', -1, 64))
 				return
 			}
-			writeExpr(".imag")
+			writeExpr(".$imag")
 		case '%':
 			out.WriteRune('%')
 		default:

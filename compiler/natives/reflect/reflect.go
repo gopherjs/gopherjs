@@ -512,9 +512,9 @@ func (v Value) iword() iword {
 		if !val.IsNull() && val.Get("constructor") != jsType(v.typ) {
 			switch v.typ.Kind() {
 			case Uint64, Int64:
-				val = jsType(v.typ).New(val.Get("high"), val.Get("low"))
+				val = jsType(v.typ).New(val.Get("$high"), val.Get("$low"))
 			case Complex64, Complex128:
-				val = jsType(v.typ).New(val.Get("real"), val.Get("imag"))
+				val = jsType(v.typ).New(val.Get("$real"), val.Get("$imag"))
 			case Slice:
 				if val == val.Get("constructor").Get("nil") {
 					val = jsType(v.typ).Get("nil")

@@ -606,7 +606,11 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					case *types.Map:
 						return c.formatExpr("new $Map()")
 					case *types.Chan:
-						return c.formatExpr("new %s()", c.typeName(c.p.info.Types[e.Args[0]].Type))
+						length := "0"
+						if len(e.Args) == 2 {
+							length = c.translateExpr(e.Args[1]).String()
+						}
+						return c.formatExpr("new %s(%s)", c.typeName(c.p.info.Types[e.Args[0]].Type), length)
 					default:
 						panic(fmt.Sprintf("Unhandled make type: %T\n", argType))
 					}

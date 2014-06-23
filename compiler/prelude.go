@@ -126,8 +126,9 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 		break;
 
 	case "Chan":
-		typ = function() {
+		typ = function(capacity) {
 			this.$val = this;
+			this.$capacity = capacity;
 			this.$buffer = [];
 			this.$queue = [];
 		};
@@ -1393,8 +1394,11 @@ var $send = function(chan, value, callback) {
 		return;
 	}
 	chan.$buffer.push(value);
-	chan.$queue.push(callback);
-	return $BLK;
+	if (chan.$buffer.length > chan.$capacity) {
+		chan.$queue.push(callback);
+		return $BLK;
+	}
+	return;
 };
 var $recv = function(chan, callback) {
 	var bufferedValue = chan.$buffer.shift();

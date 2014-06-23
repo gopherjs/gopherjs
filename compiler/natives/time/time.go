@@ -22,8 +22,8 @@ func After(d Duration) <-chan Time {
 }
 
 func Sleep(d Duration) {
-	js.Global.Call("setTimeout", js.Callback, int(d/Millisecond))
-	js.ReturnAndBlock()
+	js.Global.Call("$notSupported", "time.Sleep (use time.AfterFunc instead)")
+	panic("unreachable")
 }
 
 func Tick(d Duration) <-chan Time {

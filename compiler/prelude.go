@@ -1431,6 +1431,9 @@ var $recv = function(chan, callback) {
 	chan.$queue.push(callback);
 	return $BLK;
 };
+var $chanLen = function(chan) {
+	return Math.min(chan.$buffer.length, chan.$capacity);
+};
 
 var $equal = function(a, b, type) {
 	if (a === b) {

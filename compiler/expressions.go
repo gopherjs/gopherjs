@@ -615,29 +615,27 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						panic(fmt.Sprintf("Unhandled make type: %T\n", argType))
 					}
 				case "len":
-					arg := c.translateExpr(e.Args[0])
 					switch argType := c.p.info.Types[e.Args[0]].Type.Underlying().(type) {
 					case *types.Basic, *types.Slice:
-						return c.formatExpr("%s.length", arg)
+						return c.formatExpr("%e.length", e.Args[0])
 					case *types.Pointer:
-						return c.formatExpr("(%s, %d)", arg, argType.Elem().(*types.Array).Len())
+						return c.formatExpr("(%e, %d)", e.Args[0], argType.Elem().(*types.Array).Len())
 					case *types.Map:
-						return c.formatExpr("$keys(%s).length", arg)
+						return c.formatExpr("$keys(%e).length", e.Args[0])
 					case *types.Chan:
-						return c.formatExpr("0")
+						return c.formatExpr("$chanLen(%e)", e.Args[0])
 					// length of array is constant
 					default:
 						panic(fmt.Sprintf("Unhandled len type: %T\n", argType))
 					}
 				case "cap":
-					arg := c.translateExpr(e.Args[0])
 					switch argType := c.p.info.Types[e.Args[0]].Type.Underlying().(type) {
 					case *types.Slice:
-						return c.formatExpr("%s.capacity", arg)
+						return c.formatExpr("%e.capacity", e.Args[0])
 					case *types.Pointer:
-						return c.formatExpr("(%s, %d)", arg, argType.Elem().(*types.Array).Len())
+						return c.formatExpr("(%e, %d)", e.Args[0], argType.Elem().(*types.Array).Len())
 					case *types.Chan:
-						return c.formatExpr("0")
+						return c.formatExpr("%e.$capacity", e.Args[0])
 					// capacity of array is constant
 					default:
 						panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))

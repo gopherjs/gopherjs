@@ -155,14 +155,15 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		return c.formatExpr("(function(%s) {\n%s%s})", strings.Join(params, ", "), string(body), strings.Repeat("\t", c.p.indentation))
 
 	case *ast.UnaryExpr:
+		t := c.p.info.Types[e.X].Type
 		switch e.Op {
 		case token.AND:
-			switch c.p.info.Types[e.X].Type.Underlying().(type) {
+			switch t.Underlying().(type) {
 			case *types.Struct, *types.Array:
 				return c.translateExpr(e.X)
 			}
 
-			switch x := e.X.(type) {
+			switch x := removeParens(e.X).(type) {
 			case *ast.CompositeLit:
 				return c.formatExpr("$newDataPointer(%e, %s)", x, c.typeName(c.p.info.Types[e].Type))
 			case *ast.Ident:
@@ -185,7 +186,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			return c.formatExpr("undefined")
 		}
 
-		t := c.p.info.Types[e.X].Type
 		basic := t.Underlying().(*types.Basic)
 		switch e.Op {
 		case token.ADD:

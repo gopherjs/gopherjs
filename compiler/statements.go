@@ -532,7 +532,11 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.GoStmt:
 		c.printLabel(label)
-		c.Printf(`$notSupported("go");`)
+		if !GOROUTINES {
+			c.Printf(`$notSupported("go");`)
+			return
+		}
+		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.info.Types[s.Call.Fun].Type.(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid()), ", "))
 
 	case *ast.SendStmt:
 		c.printLabel(label)

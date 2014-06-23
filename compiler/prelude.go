@@ -1373,6 +1373,15 @@ var $getStackDepth = function() {
 	return d;
 };
 
+var $numGoroutine = 1;
+var $go = function(fun, args) {
+	$numGoroutine++;
+	setTimeout(function() {
+		args.push(function() { $numGoroutine--; });
+		if (fun.apply(undefined, args) !== $BLK) { $numGoroutine--; }
+	}, 0);
+};
+
 var $equal = function(a, b, type) {
 	if (a === b) {
 		return true;

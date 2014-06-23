@@ -33,6 +33,7 @@ type funcContext struct {
 type pkgContext struct {
 	pkg          *types.Package
 	info         *types.Info
+	funcContexts map[*types.Func]*funcContext
 	pkgVars      map[string]string
 	objectVars   map[types.Object]string
 	escapingVars map[types.Object]bool
@@ -102,6 +103,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		p: &pkgContext{
 			pkg:          typesPkg,
 			info:         info,
+			funcContexts: make(map[*types.Func]*funcContext),
 			pkgVars:      make(map[string]string),
 			objectVars:   make(map[types.Object]string),
 			escapingVars: make(map[types.Object]bool),
@@ -129,7 +131,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 
 	var functions []*ast.FuncDecl
-	funcContexts := make(map[*types.Func]*funcContext)
 	var toplevelTypes []*types.TypeName
 	var vars []*types.Var
 	for _, file := range files {
@@ -145,7 +146,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					}
 				}
 				o := c.p.info.Defs[d.Name].(*types.Func)
-				funcContexts[o] = c.p.analyzeFunction(sig, d.Body)
+				c.p.funcContexts[o] = c.p.analyzeFunction(sig, d.Body)
 				if sig.Recv() == nil {
 					c.objectName(o) // register toplevel name
 				}
@@ -179,9 +180,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	for {
 		done := true
-		for _, context := range funcContexts {
+		for _, context := range c.p.funcContexts {
 			for obj, calls := range context.localCalls {
-				if len(funcContexts[obj].blocking) != 0 {
+				if len(c.p.funcContexts[obj].blocking) != 0 {
 					for _, call := range calls {
 						context.markBlocking(call)
 					}
@@ -308,7 +309,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 
 		d.DceDeps = collectDependencies(o, func() {
-			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun, funcContexts[o]), minify)
+			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun, c.p.funcContexts[o]), minify)
 		})
 		archive.Declarations = append(archive.Declarations, d)
 		if strings.HasPrefix(fun.Name.String(), "Test") {
@@ -565,6 +566,10 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 		case *ast.Ident:
 			if o, ok := c.p.info.Uses[f].(*types.Func); ok {
 				if o.Pkg() == c.p.pkg {
+					if context, ok := c.p.funcContexts[o]; ok && len(context.blocking) != 0 {
+						c.markBlocking(c.analyzeStack)
+						break
+					}
 					stack := make([]ast.Node, len(c.analyzeStack))
 					copy(stack, c.analyzeStack)
 					c.localCalls[o] = append(c.localCalls[o], stack)

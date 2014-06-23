@@ -14,6 +14,8 @@ import (
 	"strings"
 )
 
+const GOROUTINES = false
+
 var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}
 var reservedKeywords = make(map[string]bool)
 

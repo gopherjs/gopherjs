@@ -176,7 +176,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				length = fmt.Sprintf("%d", t2.Elem().Underlying().(*types.Array).Len())
 				elemType = t2.Elem().Underlying().(*types.Array).Elem()
 			case *types.Slice:
-				length = refVar + ".length"
+				length = refVar + ".$length"
 				elemType = t2.Elem()
 			}
 			c.translateLoopingStmt(iVar+" < "+length, s.Body, func() {
@@ -813,7 +813,7 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 		case *types.Array, *types.Pointer:
 			return fmt.Sprintf("%s[%s] = %s;", c.translateExpr(l.X), c.formatExpr("%f", l.Index).String(), rhs)
 		case *types.Slice:
-			return c.formatExpr(`(%2f < 0 || %2f >= %1e.length) ? $throwRuntimeError("index out of range") : %1e.array[%1e.offset + %2f] = %3s`, l.X, l.Index, rhs).String() + ";"
+			return c.formatExpr(`(%2f < 0 || %2f >= %1e.$length) ? $throwRuntimeError("index out of range") : %1e.$array[%1e.$offset + %2f] = %3s`, l.X, l.Index, rhs).String() + ";"
 		default:
 			panic(fmt.Sprintf("Unhandled lhs type: %T\n", t))
 		}

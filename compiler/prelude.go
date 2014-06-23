@@ -213,10 +213,10 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 			if (array.constructor !== nativeArray) {
 				array = new nativeArray(array);
 			}
-			this.array = array;
-			this.offset = 0;
-			this.length = array.length;
-			this.capacity = array.length;
+			this.$array = array;
+			this.$offset = 0;
+			this.$length = array.length;
+			this.$capacity = array.length;
 			this.$val = this;
 		};
 		typ.make = function(length, capacity, zero) {
@@ -226,7 +226,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 				array[i] = zero();
 			}
 			var slice = new typ(array);
-			slice.length = length;
+			slice.$length = length;
 			return slice;
 		};
 		typ.init = function(elem) {
@@ -779,30 +779,30 @@ var $divComplex = function(n, d) {
 };
 
 var $subslice = function(slice, low, high, max) {
-	if (low < 0 || high < low || max < high || high > slice.capacity || max > slice.capacity) {
+	if (low < 0 || high < low || max < high || high > slice.$capacity || max > slice.$capacity) {
 		$throwRuntimeError("slice bounds out of range");
 	}
-	var s = new slice.constructor(slice.array);
-	s.offset = slice.offset + low;
-	s.length = slice.length - low;
-	s.capacity = slice.capacity - low;
+	var s = new slice.constructor(slice.$array);
+	s.$offset = slice.$offset + low;
+	s.$length = slice.$length - low;
+	s.$capacity = slice.$capacity - low;
 	if (high !== undefined) {
-		s.length = high - low;
+		s.$length = high - low;
 	}
 	if (max !== undefined) {
-		s.capacity = max - low;
+		s.$capacity = max - low;
 	}
 	return s;
 };
 
 var $sliceToArray = function(slice) {
-	if (slice.length === 0) {
+	if (slice.$length === 0) {
 		return [];
 	}
-	if (slice.array.constructor !== Array) {
-		return slice.array.subarray(slice.offset, slice.offset + slice.length);
+	if (slice.$array.constructor !== Array) {
+		return slice.$array.subarray(slice.$offset, slice.$offset + slice.$length);
 	}
-	return slice.array.slice(slice.offset, slice.offset + slice.length);
+	return slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
 };
 
 var $decodeRune = function(str, pos) {
@@ -886,12 +886,12 @@ var $stringToBytes = function(str) {
 };
 
 var $bytesToString = function(slice) {
-	if (slice.length === 0) {
+	if (slice.$length === 0) {
 		return "";
 	}
 	var str = "", i;
-	for (i = 0; i < slice.length; i += 10000) {
-		str += String.fromCharCode.apply(null, slice.array.subarray(slice.offset + i, slice.offset + Math.min(slice.length, i + 10000)));
+	for (i = 0; i < slice.$length; i += 10000) {
+		str += String.fromCharCode.apply(null, slice.$array.subarray(slice.$offset + i, slice.$offset + Math.min(slice.$length, i + 10000)));
 	}
 	return str;
 };
@@ -907,12 +907,12 @@ var $stringToRunes = function(str) {
 };
 
 var $runesToString = function(slice) {
-	if (slice.length === 0) {
+	if (slice.$length === 0) {
 		return "";
 	}
 	var str = "", i;
-	for (i = 0; i < slice.length; i++) {
-		str += $encodeRune(slice.array[slice.offset + i]);
+	for (i = 0; i < slice.$length; i++) {
+		str += $encodeRune(slice.$array[slice.$offset + i]);
 	}
 	return str;
 };
@@ -1102,8 +1102,8 @@ var $internalize = function(v, t, recv) {
 			for (i = 0; i < t.params.length; i++) {
 				if (t.variadic && i === t.params.length - 1) {
 					var vt = t.params[i].elem, varargs = arguments[i], j;
-					for (j = 0; j < varargs.length; j++) {
-						args.push($externalize(varargs.array[varargs.offset + j], vt));
+					for (j = 0; j < varargs.$length; j++) {
+						args.push($externalize(varargs.$array[varargs.$offset + j], vt));
 					}
 					break;
 				}
@@ -1186,16 +1186,16 @@ var $internalize = function(v, t, recv) {
 };
 
 var $copyString = function(dst, src) {
-	var n = Math.min(src.length, dst.length), i;
+	var n = Math.min(src.length, dst.$length), i;
 	for (i = 0; i < n; i++) {
-		dst.array[dst.offset + i] = src.charCodeAt(i);
+		dst.$array[dst.$offset + i] = src.charCodeAt(i);
 	}
 	return n;
 };
 
 var $copySlice = function(dst, src) {
-	var n = Math.min(src.length, dst.length), i;
-	$internalCopy(dst.array, src.array, dst.offset, src.offset, n, dst.constructor.elem);
+	var n = Math.min(src.$length, dst.$length), i;
+	$internalCopy(dst.$array, src.$array, dst.$offset, src.$offset, n, dst.constructor.elem);
 	return n;
 };
 
@@ -1255,7 +1255,7 @@ var $append = function(slice) {
 };
 
 var $appendSlice = function(slice, toAppend) {
-	return $internalAppend(slice, toAppend.array, toAppend.offset, toAppend.length);
+	return $internalAppend(slice, toAppend.$array, toAppend.$offset, toAppend.$length);
 };
 
 var $internalAppend = function(slice, array, offset, length) {
@@ -1263,34 +1263,34 @@ var $internalAppend = function(slice, array, offset, length) {
 		return slice;
 	}
 
-	var newArray = slice.array;
-	var newOffset = slice.offset;
-	var newLength = slice.length + length;
-	var newCapacity = slice.capacity;
+	var newArray = slice.$array;
+	var newOffset = slice.$offset;
+	var newLength = slice.$length + length;
+	var newCapacity = slice.$capacity;
 
 	if (newLength > newCapacity) {
 		newOffset = 0;
-		newCapacity = Math.max(newLength, slice.capacity < 1024 ? slice.capacity * 2 : Math.floor(slice.capacity * 5 / 4));
+		newCapacity = Math.max(newLength, slice.$capacity < 1024 ? slice.$capacity * 2 : Math.floor(slice.$capacity * 5 / 4));
 
-		if (slice.array.constructor === Array) {
-			newArray = slice.array.slice(slice.offset, slice.offset + slice.length);
+		if (slice.$array.constructor === Array) {
+			newArray = slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
 			newArray.length = newCapacity;
 		} else {
-			newArray = new slice.array.constructor(newCapacity);
-			newArray.set(slice.array.subarray(slice.offset, slice.offset + slice.length));
+			newArray = new slice.$array.constructor(newCapacity);
+			newArray.set(slice.$array.subarray(slice.$offset, slice.$offset + slice.$length));
 		}
 		var zero = slice.constructor.elem.zero, i;
-		for (i = slice.length; i < newCapacity; i++) {
+		for (i = slice.$length; i < newCapacity; i++) {
 			newArray[i] = zero();
 		}
 	}
 
-	$internalCopy(newArray, array, newOffset + slice.length, offset, length, slice.constructor.elem);
+	$internalCopy(newArray, array, newOffset + slice.$length, offset, length, slice.constructor.elem);
 
 	var newSlice = new slice.constructor(newArray);
-	newSlice.offset = newOffset;
-	newSlice.length = newLength;
-	newSlice.capacity = newCapacity;
+	newSlice.$offset = newOffset;
+	newSlice.$length = newLength;
+	newSlice.$capacity = newCapacity;
 	return newSlice;
 };
 
@@ -1508,7 +1508,7 @@ var $float32IsEqual = function(a, b) {
 	return math !== undefined && math.Float32bits(a) === math.Float32bits(b);
 };
 var $sliceIsEqual = function(a, ai, b, bi) {
-	return a.array === b.array && a.offset + ai === b.offset + bi;
+	return a.$array === b.$array && a.$offset + ai === b.$offset + bi;
 };
 var $pointerIsEqual = function(a, b) {
 	if (a === b) {

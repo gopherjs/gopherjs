@@ -361,10 +361,10 @@ func cvtDirect(v Value, typ Type) Value {
 	case Chan:
 		val = jsType(typ).New()
 	case Slice:
-		slice := jsType(typ).New(srcVal.Get("array"))
-		slice.Set("offset", srcVal.Get("offset"))
-		slice.Set("length", srcVal.Get("length"))
-		slice.Set("capacity", srcVal.Get("capacity"))
+		slice := jsType(typ).New(srcVal.Get("$array"))
+		slice.Set("$offset", srcVal.Get("$offset"))
+		slice.Set("$length", srcVal.Get("$length"))
+		slice.Set("$capacity", srcVal.Get("$capacity"))
 		val = js.Global.Call("$newDataPointer", slice, jsType(PtrTo(typ)))
 	case Ptr:
 		if typ.Elem().Kind() == Struct {
@@ -549,10 +549,10 @@ func (v Value) iword() iword {
 					val = jsType(v.typ).Get("nil")
 					break
 				}
-				newVal := jsType(v.typ).New(val.Get("array"))
-				newVal.Set("offset", val.Get("offset"))
-				newVal.Set("length", val.Get("length"))
-				newVal.Set("capacity", val.Get("capacity"))
+				newVal := jsType(v.typ).New(val.Get("$array"))
+				newVal.Set("$offset", val.Get("$offset"))
+				newVal.Set("$length", val.Get("$length"))
+				newVal.Set("$capacity", val.Get("$capacity"))
 				val = newVal
 			}
 		}
@@ -669,7 +669,7 @@ func (v Value) Cap() int {
 	// case Chan:
 	// 	return int(chancap(v.iword()))
 	case Slice:
-		return js.InternalObject(v.iword()).Get("capacity").Int()
+		return js.InternalObject(v.iword()).Get("$capacity").Int()
 	}
 	panic(&ValueError{"reflect.Value.Cap", k})
 }
@@ -742,7 +742,7 @@ func (v Value) Index(i int) Value {
 
 	case Slice:
 		s := js.InternalObject(v.iword())
-		if i < 0 || i >= s.Length() {
+		if i < 0 || i >= s.Get("$length").Int() {
 			panic("reflect: slice index out of range")
 		}
 		tt := (*sliceType)(unsafe.Pointer(v.typ))
@@ -750,8 +750,8 @@ func (v Value) Index(i int) Value {
 		fl := flagAddr | flagIndir | v.flag&flagRO
 		fl |= flag(typ.Kind()) << flagKindShift
 
-		i += s.Get("offset").Int()
-		a := s.Get("array")
+		i += s.Get("$offset").Int()
+		a := s.Get("$array")
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
 			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return a.Index(i) }, func(v js.Object) { a.SetIndex(i, v) }).Unsafe()), 0, fl}
 		}
@@ -787,8 +787,10 @@ func (v Value) IsNil() bool {
 
 func (v Value) Len() int {
 	switch k := v.kind(); k {
-	case Array, Slice, String:
+	case Array, String:
 		return js.InternalObject(v.iword()).Length()
+	case Slice:
+		return js.InternalObject(v.iword()).Get("$length").Int()
 	// case Chan:
 	// 	return chanlen(v.iword())
 	case Map:
@@ -838,13 +840,13 @@ func (v Value) SetCap(n int) {
 	v.mustBeAssignable()
 	v.mustBe(Slice)
 	s := js.InternalObject(v.ptr).Call("$get")
-	if n < s.Length() || n > s.Get("capacity").Int() {
+	if n < s.Get("$length").Int() || n > s.Get("$capacity").Int() {
 		panic("reflect: slice capacity out of range in SetCap")
 	}
-	newSlice := jsType(v.typ).New(s.Get("array"))
-	newSlice.Set("offset", s.Get("offset"))
-	newSlice.Set("length", s.Get("length"))
-	newSlice.Set("capacity", n)
+	newSlice := jsType(v.typ).New(s.Get("$array"))
+	newSlice.Set("$offset", s.Get("$offset"))
+	newSlice.Set("$length", s.Get("$length"))
+	newSlice.Set("$capacity", n)
 	js.InternalObject(v.ptr).Call("$set", newSlice)
 }
 
@@ -852,13 +854,13 @@ func (v Value) SetLen(n int) {
 	v.mustBeAssignable()
 	v.mustBe(Slice)
 	s := js.InternalObject(v.ptr).Call("$get")
-	if n < 0 || n > s.Get("capacity").Int() {
+	if n < 0 || n > s.Get("$capacity").Int() {
 		panic("reflect: slice length out of range in SetLen")
 	}
-	newSlice := jsType(v.typ).New(s.Get("array"))
-	newSlice.Set("offset", s.Get("offset"))
-	newSlice.Set("length", n)
-	newSlice.Set("capacity", s.Get("capacity"))
+	newSlice := jsType(v.typ).New(s.Get("$array"))
+	newSlice.Set("$offset", s.Get("$offset"))
+	newSlice.Set("$length", n)
+	newSlice.Set("$capacity", s.Get("$capacity"))
 	js.InternalObject(v.ptr).Call("$set", newSlice)
 }
 
@@ -881,7 +883,7 @@ func (v Value) Slice(i, j int) Value {
 	case Slice:
 		typ = v.typ
 		s = js.InternalObject(v.iword())
-		cap = s.Get("capacity").Int()
+		cap = s.Get("$capacity").Int()
 
 	case String:
 		str := *(*string)(v.ptr)
@@ -920,7 +922,7 @@ func (v Value) Slice3(i, j, k int) Value {
 	case Slice:
 		typ = v.typ
 		s = js.InternalObject(v.iword())
-		cap = s.Get("capacity").Int()
+		cap = s.Get("$capacity").Int()
 
 	default:
 		panic(&ValueError{"reflect.Value.Slice3", kind})

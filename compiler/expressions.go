@@ -421,7 +421,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Array, *types.Pointer:
 			return c.formatExpr("%e[%f]", e.X, e.Index)
 		case *types.Slice:
-			return c.formatExpr(`((%2f < 0 || %2f >= %1e.length) ? $throwRuntimeError("index out of range") : %1e.array[%1e.offset + %2f])`, e.X, e.Index)
+			return c.formatExpr(`((%2f < 0 || %2f >= %1e.$length) ? $throwRuntimeError("index out of range") : %1e.$array[%1e.$offset + %2f])`, e.X, e.Index)
 		case *types.Map:
 			key := c.makeKey(e.Index, t.Key())
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
@@ -616,8 +616,10 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					}
 				case "len":
 					switch argType := c.p.info.Types[e.Args[0]].Type.Underlying().(type) {
-					case *types.Basic, *types.Slice:
+					case *types.Basic:
 						return c.formatExpr("%e.length", e.Args[0])
+					case *types.Slice:
+						return c.formatExpr("%e.$length", e.Args[0])
 					case *types.Pointer:
 						return c.formatExpr("(%e, %d)", e.Args[0], argType.Elem().(*types.Array).Len())
 					case *types.Map:
@@ -631,7 +633,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				case "cap":
 					switch argType := c.p.info.Types[e.Args[0]].Type.Underlying().(type) {
 					case *types.Slice:
-						return c.formatExpr("%e.capacity", e.Args[0])
+						return c.formatExpr("%e.$capacity", e.Args[0])
 					case *types.Pointer:
 						return c.formatExpr("(%e, %d)", e.Args[0], argType.Elem().(*types.Array).Len())
 					case *types.Chan:
@@ -1131,7 +1133,7 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 
 	switch desiredType.Underlying().(type) {
 	case *types.Slice:
-		return c.formatExpr("$subslice(new %1s(%2e.array), %2e.offset, %2e.offset + %2e.length)", c.typeName(desiredType), expr)
+		return c.formatExpr("$subslice(new %1s(%2e.$array), %2e.$offset, %2e.$offset + %2e.$length)", c.typeName(desiredType), expr)
 
 	case *types.Interface:
 		if isWrapped(exprType) {

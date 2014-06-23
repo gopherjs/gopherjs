@@ -1378,19 +1378,38 @@ var $getStackDepth = function() {
 	return d;
 };
 
+var $asyncQueue = [];
+var $runningAsync = false;
+var $runAsync = function(f) {
+	$asyncQueue.push(f);
+	if (!$runningAsync) {
+		$runningAsync = true;
+		setTimeout(function() {
+			while (true) {
+				var f = $asyncQueue.shift();
+				if (f === undefined) {
+					$runningAsync = false;
+					break;
+				}
+				f();
+			};
+		}, 0);
+	}
+};
+
 var $numGoroutine = 1;
 var $go = function(fun, args) {
 	$numGoroutine++;
-	setTimeout(function() {
+	$runAsync(function() {
 		args.push(function() { $numGoroutine--; });
 		if (fun.apply(undefined, args) !== $BLK) { $numGoroutine--; }
-	}, 0);
+	});
 };
 
 var $send = function(chan, value, callback) {
 	var queuedRecv = chan.$queue.shift();
 	if (queuedRecv !== undefined) {
-		setTimeout(function() { queuedRecv(value); }, 0);
+		$runAsync(function() { queuedRecv(value); });
 		return;
 	}
 	chan.$buffer.push(value);
@@ -1405,7 +1424,7 @@ var $recv = function(chan, callback) {
 	if (bufferedValue !== undefined) {
 		var queuedSend = chan.$queue.shift();
 		if (queuedSend !== undefined) {
-			setTimeout(queuedSend, 0);
+			$runAsync(queuedSend);
 		}
 		return bufferedValue;
 	}

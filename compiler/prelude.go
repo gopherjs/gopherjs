@@ -12,7 +12,7 @@ if (typeof window !== "undefined") { /* web page */
 	$global = global;
 	$global.require = require;
 } else {
-	console.log("warning: no global object found")
+	console.log("warning: no global object found");
 }
 if (typeof module !== "undefined") {
 	$module = module;
@@ -1018,7 +1018,7 @@ var $externalize = function(v, t) {
 		var o = {}, i;
 		for (i = 0; i < t.methods.length; i++) {
 			var m = t.methods[i];
-			if (m[2] !== "") { // not exported
+			if (m[2] !== "") { /* not exported */
 				continue;
 			}
 			(function(m) {
@@ -1049,7 +1049,7 @@ var $externalize = function(v, t) {
 		var o = {}, i;
 		for (i = 0; i < t.fields.length; i++) {
 			var f = t.fields[i];
-			if (f[2] !== "") { // not exported
+			if (f[2] !== "") { /* not exported */
 				continue;
 			}
 			o[f[1]] = $externalize(v[f[0]], f[3]);
@@ -1287,7 +1287,7 @@ var $internalAppend = function(slice, array, offset, length) {
 	newSlice.length = newLength;
 	newSlice.capacity = newCapacity;
 	return newSlice;
-}
+};
 
 var $panic = function(value) {
 	var message;

@@ -197,6 +197,7 @@ func main() {
 		testFlags := flag.NewFlagSet("test command", flag.ExitOnError)
 		verbose := testFlags.Bool("v", false, "verbose")
 		short := testFlags.Bool("short", false, "short")
+		testFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
 		testFlags.Parse(cmdArgs)
 
 		os.Exit(handleError(func() error {
@@ -255,6 +256,7 @@ func main() {
 					},
 					Archive: &compiler.Archive{
 						ImportPath: compiler.PkgPath("main"),
+						Minified:   options.Minify,
 					},
 				}
 				s.Packages["main"] = mainPkg

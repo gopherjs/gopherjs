@@ -57,7 +57,7 @@ func NumCPU() int {
 }
 
 func NumGoroutine() int {
-	return js.Global.Get("$numGoroutine").Int()
+	return js.Global.Get("$totalGoroutines").Int()
 }
 
 func ReadMemStats(m *MemStats) {

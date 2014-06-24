@@ -1396,42 +1396,61 @@ var $runAsync = function(f) {
 	}
 };
 
-var $numGoroutine = 1;
+var $totalGoroutines = 1;
+var $awakeGoroutines = 1;
 var $go = function(fun, args) {
-	$numGoroutine++;
+	$totalGoroutines++;
+	$awakeGoroutines++;
 	$runAsync(function() {
-		args.push(function() { $numGoroutine--; });
-		if (fun.apply(undefined, args) !== $BLK) { $numGoroutine--; }
+		args.push(function() {
+			$totalGoroutines--;
+			$awakeGoroutines--;
+			if ($awakeGoroutines == 0) { $deadlock(); }
+		});
+		if (fun.apply(undefined, args) !== $BLK) {
+			$totalGoroutines--;
+			$awakeGoroutines--;
+			if ($awakeGoroutines == 0) { $deadlock(); }
+		}
 	});
 };
 
 var $send = function(chan, value, callback) {
 	var queuedRecv = chan.$queue.shift();
 	if (queuedRecv !== undefined) {
+		$awakeGoroutines++;
 		$runAsync(function() { queuedRecv(value); });
 		return;
 	}
 	chan.$buffer.push(value);
-	if (chan.$buffer.length > chan.$capacity) {
-		chan.$queue.push(callback);
-		return $BLK;
+	if (chan.$buffer.length <= chan.$capacity) {
+		return;
 	}
-	return;
+	chan.$queue.push(callback);
+	$awakeGoroutines--;
+	if ($awakeGoroutines == 0) { $deadlock(); }
+	return $BLK;
 };
 var $recv = function(chan, callback) {
 	var bufferedValue = chan.$buffer.shift();
 	if (bufferedValue !== undefined) {
 		var queuedSend = chan.$queue.shift();
 		if (queuedSend !== undefined) {
+			$awakeGoroutines++;
 			$runAsync(queuedSend);
 		}
 		return bufferedValue;
 	}
 	chan.$queue.push(callback);
+	$awakeGoroutines--;
+	if ($awakeGoroutines == 0) { $deadlock(); }
 	return $BLK;
 };
 var $chanLen = function(chan) {
 	return Math.min(chan.$buffer.length, chan.$capacity);
+};
+var $deadlock = function() {
+	throw $panic(new $String("fatal error: all goroutines are asleep - deadlock!"));
 };
 
 var $equal = function(a, b, type) {

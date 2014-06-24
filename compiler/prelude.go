@@ -130,6 +130,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 			this.$capacity = capacity;
 			this.$buffer = [];
 			this.$queue = [];
+			this.$closed = false;
 		};
 		typ.prototype.$key = function() {
 			if (this.$id === undefined) {
@@ -139,6 +140,9 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 			return String(this.$id);
 		};
 		typ.init = function(elem, sendOnly, recvOnly) {
+			typ.elem = elem;
+			typ.sendOnly = sendOnly;
+			typ.recvOnly = recvOnly;
 			typ.nil = new typ();
 			typ.extendReflectType = function(rt) {
 				rt.chanType = new $reflect.chanType.Ptr(rt, elem.reflectType(), sendOnly ? $reflect.SendDir : (recvOnly ? $reflect.RecvDir : $reflect.BothDir));
@@ -1416,6 +1420,9 @@ var $go = function(fun, args) {
 };
 
 var $send = function(chan, value, callback) {
+	if (chan.$closed) {
+		$throwRuntimeError("send on closed channel");
+	}
 	var queuedRecv = chan.$queue.shift();
 	if (queuedRecv !== undefined) {
 		$awakeGoroutines++;
@@ -1441,10 +1448,22 @@ var $recv = function(chan, callback) {
 		}
 		return bufferedValue;
 	}
+	if (chan.$closed) {
+		return chan.constructor.elem.zero();
+	}
 	chan.$queue.push(callback);
 	$awakeGoroutines--;
 	if ($awakeGoroutines == 0) { $deadlock(); }
 	return $BLK;
+};
+var $close = function(chan) {
+	if (chan.$closed) {
+		$throwRuntimeError("close of closed channel");
+	}
+	while (chan.$queue.length !== 0) {
+		$send(chan, chan.constructor.elem.zero());
+	}
+	chan.$closed = true;
 };
 var $chanLen = function(chan) {
 	return Math.min(chan.$buffer.length, chan.$capacity);

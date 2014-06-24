@@ -671,7 +671,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				case "recover":
 					return c.formatExpr("$recover()")
 				case "close":
-					return c.formatExpr(`$notSupported("close")`)
+					return c.formatExpr(`$close(%e)`, e.Args[0])
 				default:
 					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))
 				}

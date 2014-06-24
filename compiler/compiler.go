@@ -43,7 +43,7 @@ func NewImportContext(importFunc func(string) (*Archive, error)) *ImportContext 
 	}
 }
 
-func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMapFilter) {
+func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMapFilter) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified
 
@@ -87,13 +87,21 @@ func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMa
 		}
 	}
 
-	w.Write([]byte("\"use strict\";\n(function() {\n\n"))
-	w.Write(removeWhitespace([]byte(strings.TrimSpace(prelude)), minify))
-	w.Write([]byte("\n"))
+	if _, err := w.Write([]byte("\"use strict\";\n(function() {\n\n")); err != nil {
+		return err
+	}
+	if _, err := w.Write(removeWhitespace(prelude, minify)); err != nil {
+		return err
+	}
+	if _, err := w.Write([]byte("\n")); err != nil {
+		return err
+	}
 
 	// write packages
 	for _, pkg := range pkgs {
-		WritePkgCode(pkg, minify, w)
+		if err := WritePkgCode(pkg, minify, w); err != nil {
+			return err
+		}
 	}
 
 	// write interfaces
@@ -147,25 +155,35 @@ func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMa
 			default:
 				target = fmt.Sprintf("$packages[\"%s\"].%s", t.Pkg().Path(), t.Name())
 			}
-			w.Write(removeWhitespace([]byte(fmt.Sprintf("%s.implementedBy = [%s];\n", target, strings.Join(list, ", "))), minify))
+			if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("%s.implementedBy = [%s];\n", target, strings.Join(list, ", "))), minify)); err != nil {
+				return err
+			}
 		}
 	}
 
 	for _, pkg := range pkgs {
-		w.Write([]byte("$packages[\"" + string(pkg.ImportPath) + "\"].$init();\n"))
+		if _, err := w.Write([]byte("$packages[\"" + string(pkg.ImportPath) + "\"].$init();\n")); err != nil {
+			return err
+		}
 	}
 
-	w.Write([]byte("$packages[\"" + string(mainPkg.ImportPath) + "\"].main(function() {});\n\n})();\n"))
+	if _, err := w.Write([]byte("$packages[\"" + string(mainPkg.ImportPath) + "\"].main(function() {});\n\n})();\n")); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) {
+func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 	if w.MappingCallback != nil && pkg.FileSet != nil {
 		w.fileSet = token.NewFileSet()
 		if err := w.fileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
 			panic(err)
 		}
 	}
-	w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify))
+	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify)); err != nil {
+		return err
+	}
 	vars := []string{"$pkg = {}"}
 	for _, imp := range pkg.Imports {
 		vars = append(vars, fmt.Sprintf("%s = $packages[\"%s\"]", imp.VarName, imp.Path))
@@ -176,21 +194,34 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) {
 		}
 	}
 	if len(vars) != 0 {
-		w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify))
+		if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
+			return err
+		}
 	}
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 {
-			w.Write(d.BodyCode)
+			if _, err := w.Write(d.BodyCode); err != nil {
+				return err
+			}
 		}
 	}
-	w.Write(removeWhitespace([]byte("\t$pkg.$init = function() {\n"), minify))
+	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$init = function() {\n"), minify)); err != nil {
+		return err
+	}
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 {
-			w.Write(d.InitCode)
+			if _, err := w.Write(d.InitCode); err != nil {
+				return err
+			}
 		}
 	}
-	w.Write(removeWhitespace([]byte("\t};\n\treturn $pkg;\n})();"), minify))
-	w.Write([]byte("\n")) // keep this \n even when minified
+	if _, err := w.Write(removeWhitespace([]byte("\t};\n\treturn $pkg;\n})();"), minify)); err != nil {
+		return err
+	}
+	if _, err := w.Write([]byte("\n")); err != nil { // keep this \n even when minified
+		return err
+	}
+	return nil
 }
 
 func UnmarshalArchive(filename, id string, data []byte, importContext *ImportContext) (*Archive, error) {

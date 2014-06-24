@@ -437,9 +437,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 	if err != nil {
 		return err
 	}
-	compiler.WriteProgramCode(deps, s.ImportContext, sourceMapFilter)
-
-	return nil
+	return compiler.WriteProgramCode(deps, s.ImportContext, sourceMapFilter)
 }
 
 func (s *Session) WaitForChange() {

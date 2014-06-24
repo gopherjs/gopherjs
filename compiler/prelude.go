@@ -1,7 +1,6 @@
 package compiler
 
-var prelude = `
-Error.stackTraceLimit = -1;
+var prelude = []byte(`Error.stackTraceLimit = -1;
 
 var $global, $module;
 if (typeof window !== "undefined") { /* web page */
@@ -1535,5 +1534,4 @@ var $typeAssertionFailed = function(obj, expected) {
 
 var $now = function() { var msec = (new Date()).getTime(); return [new $Int64(0, Math.floor(msec / 1000)), (msec % 1000) * 1000000]; };
 
-var $packages = {};
-`
+var $packages = {};`)

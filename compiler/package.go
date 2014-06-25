@@ -574,7 +574,7 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 			}
 		case *ast.SelectorExpr:
 			o := c.p.info.Uses[f.Sel]
-			if isJsPackage(o.Pkg()) && o.Name() == "ReturnAndBlock" {
+			if isJsPackage(o.Pkg()) && o.Name() == "BlockAfter" {
 				c.markBlocking(c.analyzeStack)
 			}
 		}
@@ -622,9 +622,6 @@ func (c *funcContext) translateFunction(typ *ast.FuncType, stmts []ast.Stmt, out
 			params = append(params, c.objectName(c.p.info.Defs[ident]))
 		}
 	}
-	if len(c.blocking) != 0 {
-		params = append(params, "$c")
-	}
 
 	return params, c.translateFunctionBody(stmts)
 }
@@ -653,18 +650,17 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 
 		printBody := func() {
 			if len(c.flattened) != 0 {
-				c.Printf("/* */ var $s = 0, $f = function($r) { while (true) { switch ($s) { case 0:")
-				c.translateStmtList(stmts)
-				c.WritePos(token.NoPos)
+				var prefix, suffix string
 				if len(c.blocking) != 0 {
-					c.Printf("/* */ } $c(); return; } }; $f(); return $BLK;")
-					return
+					prefix = "return function() { "
+					suffix = " };"
 				}
-				c.Printf("/* */ } return; } }; return $f();")
+				c.Printf("/* */ var $s = 0, $r; %swhile (true) { switch ($s) { case 0:", prefix)
+				c.translateStmtList(stmts)
+				c.Printf("/* */ } return; }%s", suffix)
 				return
 			}
 			c.translateStmtList(stmts)
-			c.WritePos(token.NoPos)
 		}
 
 		if c.hasDefer {

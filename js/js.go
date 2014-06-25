@@ -107,10 +107,7 @@ var Arguments []Object
 var Module Object
 
 // WIP
-var Callback func(...interface{})
-
-// WIP
-func ReturnAndBlock() {
+func BlockAfter(f func(unblock func())) {
 }
 
 // Returns the internal JavaScript object that represents i. Not intended for public use.

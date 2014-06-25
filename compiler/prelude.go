@@ -19,7 +19,6 @@ if (typeof module !== "undefined") {
 
 var $idCounter = 0;
 var $keys = function(m) { return m ? Object.keys(m) : []; };
-var $BLK = {};
 var $min = Math.min;
 var $parseInt = parseInt;
 var $parseFloat = function(f) {
@@ -1381,99 +1380,127 @@ var $getStackDepth = function() {
 	return d;
 };
 
-var $asyncQueue = [];
-var $runningAsync = false;
-var $runAsync = function(f) {
-	$asyncQueue.push(f);
-	if (!$runningAsync) {
-		$runningAsync = true;
+var $curGoroutine, $blockNow = {}, $totalGoroutines = 0, $awakeGoroutines = 0;
+var $go = function(fun, args) {
+	$totalGoroutines++;
+	$awakeGoroutines++;
+	$schedule(function() {
+	  var goroutine = function() {
+		  try {
+				var r = fun.apply(undefined, args);
+				if (r !== undefined) {
+					fun = r;
+					args = [];
+					$schedule(goroutine);
+					return;
+				}
+				$totalGoroutines--;
+				$curGoroutine.asleep = true;
+			} catch (err) {
+			  if (err !== $blockNow) {
+					throw err;
+			  }
+			}
+			if ($curGoroutine.asleep) {
+				$awakeGoroutines--;
+				if ($awakeGoroutines === 0 && $totalGoroutines !== 0) { $deadlock(); }
+			}
+		};
+		$schedule(goroutine);
+	}, []);
+};
+var $deadlock = function() { throw $panic(new $String("fatal error: all goroutines are asleep - deadlock!")); };
+
+var $scheduled = [], $schedulerLoopActive = false;
+var $schedule = function(goroutine) {
+	if (goroutine.asleep) {
+		goroutine.asleep = false;
+		$awakeGoroutines++;
+	}
+
+	$scheduled.push(goroutine);
+	if (!$schedulerLoopActive) {
+		$schedulerLoopActive = true;
 		setTimeout(function() {
 			while (true) {
-				var f = $asyncQueue.shift();
-				if (f === undefined) {
-					$runningAsync = false;
+				var r = $scheduled.shift();
+				if (r === undefined) {
+					$schedulerLoopActive = false;
 					break;
 				}
-				f();
+				$curGoroutine = r;
+				r();
 			};
 		}, 0);
 	}
 };
 
-var $totalGoroutines = 1;
-var $awakeGoroutines = 1;
-var $go = function(fun, args) {
-	$totalGoroutines++;
-	$awakeGoroutines++;
-	$runAsync(function() {
-		args.push(function() {
-			$totalGoroutines--;
-			$awakeGoroutines--;
-			if ($awakeGoroutines == 0) { $deadlock(); }
-		});
-		if (fun.apply(undefined, args) !== $BLK) {
-			$totalGoroutines--;
-			$awakeGoroutines--;
-			if ($awakeGoroutines == 0) { $deadlock(); }
-		}
-	});
-};
-
-var $send = function(chan, value, callback) {
+var $send = function(chan, value) {
 	if (chan.$closed) {
 		$throwRuntimeError("send on closed channel");
 	}
+	chan.$buffer.push(value);
 	var queuedRecv = chan.$queue.shift();
 	if (queuedRecv !== undefined) {
-		$awakeGoroutines++;
-		$runAsync(function() { queuedRecv([value, true]); });
+		$schedule(queuedRecv);
 		return;
 	}
-	chan.$buffer.push(value);
 	if (chan.$buffer.length <= chan.$capacity) {
 		return;
 	}
-	chan.$queue.push(callback);
-	$awakeGoroutines--;
-	if ($awakeGoroutines == 0) { $deadlock(); }
-	return $BLK;
+
+	chan.$queue.push($curGoroutine);
+	var $blocked = false;
+	return function() {
+		if ($blocked) { return; };
+		$blocked = true;
+		$curGoroutine.asleep = true;
+		throw $blockNow;
+	};
 };
-var $recv = function(chan, callback) {
+var $recv = function(chan) {
 	var bufferedValue = chan.$buffer.shift();
 	if (bufferedValue !== undefined) {
 		var queuedSend = chan.$queue.shift();
 		if (queuedSend !== undefined) {
-			$awakeGoroutines++;
-			$runAsync(queuedSend);
+			$schedule(queuedSend);
 		}
 		return [bufferedValue, true];
 	}
 	if (chan.$closed) {
 		return [chan.constructor.elem.zero(), false];
 	}
-	chan.$queue.push(callback);
-	$awakeGoroutines--;
-	if ($awakeGoroutines == 0) { $deadlock(); }
-	return $BLK;
+
+	chan.$queue.push($curGoroutine);
+	var $blocked = false;
+	return function() {
+		if ($blocked) {
+			var bufferedValue = chan.$buffer.shift();
+			if (bufferedValue !== undefined) {
+				return [bufferedValue, true];
+			}
+			return [chan.constructor.elem.zero(), false];
+		};
+		$blocked = true;
+		$curGoroutine.asleep = true;
+		throw $blockNow;
+	};
 };
 var $close = function(chan) {
 	if (chan.$closed) {
 		$throwRuntimeError("close of closed channel");
 	}
 	chan.$closed = true;
-	while (chan.$queue.length !== 0) {
-		(function() {
-			var queuedRecv = chan.$queue.shift();
-			$awakeGoroutines++;
-			$runAsync(function() { queuedRecv([chan.constructor.elem.zero(), false]); });
-		})();
+	while (true) {
+		var queuedRecv = chan.$queue.shift();
+		if (queuedRecv === undefined) {
+			break;
+		}
+		$schedule(queuedRecv);
 	}
 };
 var $chanLen = function(chan) {
 	return Math.min(chan.$buffer.length, chan.$capacity);
-};
-var $deadlock = function() {
-	throw $panic(new $String("fatal error: all goroutines are asleep - deadlock!"));
 };
 
 var $equal = function(a, b, type) {

@@ -487,11 +487,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					if len(c.flattened) != 0 {
 						args = "$args"
 					}
-					return c.formatExpr(`new ($sliceType(%s.Object))($global.Array.prototype.slice.call(%s))`, c.p.pkgVars["github.com/gopherjs/gopherjs/js"], args)
+					return c.formatExpr(`new ($sliceType(%s.Object))($global.Array.prototype.slice.call(%s, []))`, c.p.pkgVars["github.com/gopherjs/gopherjs/js"], args)
 				case "Module":
 					return c.formatExpr("$module")
-				case "Callback":
-					return c.formatExpr("$c")
 				default:
 					panic("Invalid js package object: " + obj.Name())
 				}
@@ -599,8 +597,11 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					switch obj.Name() {
 					case "InternalObject":
 						return c.translateExpr(e.Args[0])
-					case "ReturnAndBlock":
-						return c.formatExpr("return")
+					case "BlockAfter":
+						resumeCase := c.caseCounter
+						c.caseCounter++
+						c.Printf("%s($curGoroutine); $s = %d; throw $blockNow; case %d:", c.translateExpr(e.Args[0]), resumeCase, resumeCase)
+						return nil
 					}
 				}
 				fun = c.translateExpr(f)
@@ -766,16 +767,17 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 		args := c.translateArgs(sig, e.Args, e.Ellipsis.IsValid())
 		if c.blocking[e] {
-			callbackCase := c.caseCounter
+			resumeCase := c.caseCounter
 			c.caseCounter++
-			returnVar := ""
-			assign := ""
+			returnVar := "$r"
 			if sig.Results().Len() != 0 {
 				returnVar = c.newVariable("_r")
-				assign = " " + returnVar + " = $r;"
 			}
-			c.PrintCond(false, fmt.Sprintf("%s(%s);", fun, strings.Join(args, ", ")), fmt.Sprintf("$s = %d; $r = %s(%s); if($r === $BLK) return; case %d:%s", callbackCase, fun, strings.Join(append(args, "$f"), ", "), callbackCase, assign))
-			return c.formatExpr("%s", returnVar)
+			c.Printf("%[1]s = %[2]s(%[3]s); $s = %[4]d; case %[4]d: if (%[1]s && %[1]s.constructor === Function) { %[1]s = %[1]s(); }", returnVar, fun, strings.Join(args, ", "), resumeCase)
+			if sig.Results().Len() != 0 {
+				return c.formatExpr("%s", returnVar)
+			}
+			return nil
 		}
 		return c.formatExpr("%s(%s)", fun, strings.Join(args, ", "))
 

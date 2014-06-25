@@ -187,11 +187,14 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				return c.formatExpr("undefined")
 			}
 			call := &ast.CallExpr{
-				Fun:  c.newIdent("$recv", types.NewSignature(nil, nil, types.NewTuple(types.NewVar(0, nil, "", t)), types.NewTuple(types.NewVar(0, nil, "", exprType)), false)),
+				Fun:  c.newIdent("$recv", types.NewSignature(nil, nil, types.NewTuple(types.NewVar(0, nil, "", t)), types.NewTuple(types.NewVar(0, nil, "", exprType), types.NewVar(0, nil, "", types.Typ[types.Bool])), false)),
 				Args: []ast.Expr{e.X},
 			}
 			c.blocking[call] = true
-			return c.translateExpr(call)
+			if _, isTuple := exprType.(*types.Tuple); isTuple {
+				return c.formatExpr("%e", call)
+			}
+			return c.formatExpr("%e[0]", call)
 		}
 
 		basic := t.Underlying().(*types.Basic)

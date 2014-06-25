@@ -1426,7 +1426,7 @@ var $send = function(chan, value, callback) {
 	var queuedRecv = chan.$queue.shift();
 	if (queuedRecv !== undefined) {
 		$awakeGoroutines++;
-		$runAsync(function() { queuedRecv(value); });
+		$runAsync(function() { queuedRecv([value, true]); });
 		return;
 	}
 	chan.$buffer.push(value);
@@ -1446,10 +1446,10 @@ var $recv = function(chan, callback) {
 			$awakeGoroutines++;
 			$runAsync(queuedSend);
 		}
-		return bufferedValue;
+		return [bufferedValue, true];
 	}
 	if (chan.$closed) {
-		return chan.constructor.elem.zero();
+		return [chan.constructor.elem.zero(), false];
 	}
 	chan.$queue.push(callback);
 	$awakeGoroutines--;
@@ -1460,10 +1460,14 @@ var $close = function(chan) {
 	if (chan.$closed) {
 		$throwRuntimeError("close of closed channel");
 	}
-	while (chan.$queue.length !== 0) {
-		$send(chan, chan.constructor.elem.zero());
-	}
 	chan.$closed = true;
+	while (chan.$queue.length !== 0) {
+		(function() {
+			var queuedRecv = chan.$queue.shift();
+			$awakeGoroutines++;
+			$runAsync(function() { queuedRecv([chan.constructor.elem.zero(), false]); });
+		})();
+	}
 };
 var $chanLen = function(chan) {
 	return Math.min(chan.$buffer.length, chan.$capacity);

@@ -648,56 +648,62 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 			}
 		}
 
-		printBody := func() {
-			if len(c.flattened) != 0 {
-				var prefix, suffix string
-				if len(c.blocking) != 0 {
-					prefix = "return function() { "
-					suffix = " };"
-				}
-				c.Printf("/* */ var $s = 0, $r; %swhile (true) { switch ($s) { case 0:", prefix)
-				c.translateStmtList(stmts)
-				c.Printf("/* */ } return; }%s", suffix)
-				return
-			}
-			c.translateStmtList(stmts)
+		var prefix, suffix string
+
+		if len(c.blocking) != 0 {
+			c.localVars = append(c.localVars, "$r")
+			prefix = prefix + " return function() {"
+			suffix = " };" + suffix
 		}
 
 		if c.hasDefer {
-			c.Printf("var $deferred = [];")
-			c.Printf("try {")
-			c.Indent(func() {
-				printBody()
-			})
-			c.Printf("} catch($err) {")
-			c.Indent(func() {
-				c.Printf("$pushErr($err);")
-				if c.sig != nil && c.resultNames == nil {
-					switch c.sig.Results().Len() {
-					case 0:
-						// nothing
-					case 1:
-						c.Printf("return %s;", c.zeroValue(c.sig.Results().At(0).Type()))
-					default:
-						zeros := make([]string, c.sig.Results().Len())
-						for i := range zeros {
-							zeros[i] = c.zeroValue(c.sig.Results().At(i).Type())
-						}
-						c.Printf("return [%s];", strings.Join(zeros, ", "))
+			c.localVars = append(c.localVars, "$deferred = []")
+			prefix = prefix + " try {"
+			deferSuffix := " } catch($err) { $pushErr($err);"
+			if c.sig != nil && c.resultNames == nil {
+				switch c.sig.Results().Len() {
+				case 0:
+					// nothing
+				case 1:
+					deferSuffix += fmt.Sprintf(" return %s;", c.zeroValue(c.sig.Results().At(0).Type()))
+				default:
+					zeros := make([]string, c.sig.Results().Len())
+					for i := range zeros {
+						zeros[i] = c.zeroValue(c.sig.Results().At(i).Type())
 					}
+					deferSuffix += fmt.Sprintf(" return [%s];", strings.Join(zeros, ", "))
 				}
-			})
-			c.Printf("} finally {")
-			c.Indent(func() {
-				c.Printf("$callDeferred($deferred);")
-				if c.resultNames != nil {
-					c.translateStmt(&ast.ReturnStmt{}, "")
+			}
+			deferSuffix += " } finally { $callDeferred($deferred);"
+			if c.resultNames != nil {
+				switch len(c.resultNames) {
+				case 1:
+					deferSuffix += fmt.Sprintf(" return %s;", c.translateExpr(c.resultNames[0]))
+				default:
+					values := make([]string, len(c.resultNames))
+					for i, result := range c.resultNames {
+						values[i] = c.translateExpr(result).String()
+					}
+					deferSuffix += fmt.Sprintf(" return [%s];", strings.Join(values, ", "))
 				}
-			})
-			c.Printf("}")
-			return
+			}
+			deferSuffix += " }"
+			suffix = deferSuffix + suffix
 		}
-		printBody()
+
+		if len(c.flattened) != 0 {
+			c.localVars = append(c.localVars, "$s = 0")
+			prefix = prefix + " while (true) { switch ($s) { case 0:"
+			suffix = " } return; }" + suffix
+		}
+
+		if prefix != "" {
+			c.Printf("/* */%s", prefix)
+		}
+		c.translateStmtList(stmts)
+		if suffix != "" {
+			c.Printf("/* */%s", suffix)
+		}
 	})
 
 	if len(c.localVars) != 0 {

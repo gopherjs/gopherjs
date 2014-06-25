@@ -1323,7 +1323,7 @@ var $throwRuntimeError; /* set by package "runtime" */
 var $errorStack = [], $jsErr = null;
 
 var $pushErr = function(err) {
-	if (err.$panicValue === undefined) {
+	if (err !== $blockNow && err.$panicValue === undefined) {
 		if (err.$exit || err.$notSupported) {
 			$jsErr = err;
 			return;
@@ -1336,6 +1336,11 @@ var $pushErr = function(err) {
 var $callDeferred = function(deferred) {
 	if ($jsErr !== null) {
 		throw $jsErr;
+	}
+	var err = $errorStack[$errorStack.length - 1];
+	if (err !== undefined && err.error === $blockNow) {
+		$errorStack.pop();
+		throw $blockNow;
 	}
 	var i;
 	for (i = deferred.length - 1; i >= 0; i--) {
@@ -1350,7 +1355,7 @@ var $callDeferred = function(deferred) {
 			$errorStack.push({ frame: $getStackDepth(), error: err });
 		}
 	}
-	var err = $errorStack[$errorStack.length - 1];
+	err = $errorStack[$errorStack.length - 1];
 	if (err !== undefined && err.frame === $getStackDepth()) {
 		$errorStack.pop();
 		throw err.error;

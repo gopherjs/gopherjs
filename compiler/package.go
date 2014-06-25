@@ -578,12 +578,16 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 				c.markBlocking(c.analyzeStack)
 			}
 		}
+	case *ast.SendStmt:
+		c.markBlocking(c.analyzeStack)
 	case *ast.UnaryExpr:
 		if n.Op == token.ARROW {
 			c.markBlocking(c.analyzeStack)
 		}
-	case *ast.SendStmt:
-		c.markBlocking(c.analyzeStack)
+	case *ast.RangeStmt:
+		if _, ok := c.p.info.Types[n.X].Type.Underlying().(*types.Chan); ok {
+			c.markBlocking(c.analyzeStack)
+		}
 	case *ast.DeferStmt:
 		c.hasDefer = true
 	case *ast.FuncLit:

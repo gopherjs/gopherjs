@@ -194,8 +194,34 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			}, label, c.flattened[s])
 
 		case *types.Chan:
-			c.printLabel(label)
-			// skip
+			if !GOROUTINES {
+				return
+			}
+
+			okVar := c.newIdent(c.newVariable("_ok"), types.Typ[types.Bool])
+			forStmt := &ast.ForStmt{
+				Body: &ast.BlockStmt{
+					List: []ast.Stmt{
+						&ast.AssignStmt{
+							Lhs: []ast.Expr{
+								s.Key,
+								okVar,
+							},
+							Rhs: []ast.Expr{
+								c.setType(&ast.UnaryExpr{X: s.X, Op: token.ARROW}, types.NewTuple(types.NewVar(0, nil, "", t.Elem()), types.NewVar(0, nil, "", types.Typ[types.Bool]))),
+							},
+							Tok: s.Tok,
+						},
+						&ast.IfStmt{
+							Cond: &ast.UnaryExpr{X: okVar, Op: token.NOT},
+							Body: &ast.BlockStmt{List: []ast.Stmt{&ast.BranchStmt{Tok: token.BREAK}}},
+						},
+						s.Body,
+					},
+				},
+			}
+			c.flattened[forStmt] = true
+			c.translateStmt(forStmt, label)
 
 		default:
 			panic("")

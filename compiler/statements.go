@@ -195,7 +195,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			}, label, c.flattened[s])
 
 		case *types.Chan:
-			if !GOROUTINES {
+			if !GoroutinesSupport {
 				return
 			}
 
@@ -548,14 +548,14 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.GoStmt:
 		c.printLabel(label)
-		if !GOROUTINES {
+		if !GoroutinesSupport {
 			c.Printf(`$notSupported("go");`)
 			return
 		}
 		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.info.Types[s.Call.Fun].Type.(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid()), ", "))
 
 	case *ast.SendStmt:
-		if !GOROUTINES {
+		if !GoroutinesSupport {
 			c.printLabel(label)
 			c.Printf(`$notSupported("send");`)
 			return

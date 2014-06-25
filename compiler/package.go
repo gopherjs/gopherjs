@@ -597,7 +597,7 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 }
 
 func (c *funcContext) markBlocking(stack []ast.Node) {
-	if !GOROUTINES {
+	if !GoroutinesSupport {
 		return
 	}
 	c.blocking[stack[len(stack)-1]] = true

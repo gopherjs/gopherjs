@@ -54,6 +54,7 @@ func main() {
 		buildFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
 		buildFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
 		buildFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
+		buildFlags.BoolVar(&compiler.GoroutinesSupport, "goroutines", false, "experimental support for goroutines")
 		buildFlags.Parse(cmdArgs)
 
 		for {
@@ -122,6 +123,7 @@ func main() {
 		installFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
 		installFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
 		installFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
+		installFlags.BoolVar(&compiler.GoroutinesSupport, "goroutines", false, "experimental support for goroutines")
 		installFlags.Parse(cmdArgs)
 
 		for {
@@ -163,10 +165,14 @@ func main() {
 		}
 
 	case "run":
+		runFlags := flag.NewFlagSet("run command", flag.ExitOnError)
+		runFlags.BoolVar(&compiler.GoroutinesSupport, "goroutines", false, "experimental support for goroutines")
+		runFlags.Parse(cmdArgs)
+
 		os.Exit(handleError(func() error {
 			lastSourceArg := 0
 			for {
-				if lastSourceArg == len(cmdArgs) || !strings.HasSuffix(cmdArgs[lastSourceArg], ".go") {
+				if !strings.HasSuffix(runFlags.Arg(lastSourceArg), ".go") {
 					break
 				}
 				lastSourceArg++
@@ -175,7 +181,7 @@ func main() {
 				return fmt.Errorf("gopherjs run: no go files listed")
 			}
 
-			tempfile, err := ioutil.TempFile("", filepath.Base(cmdArgs[0])+".")
+			tempfile, err := ioutil.TempFile("", filepath.Base(runFlags.Arg(0))+".")
 			if err != nil {
 				return err
 			}
@@ -184,10 +190,10 @@ func main() {
 				os.Remove(tempfile.Name())
 			}()
 			s := gbuild.NewSession(options)
-			if err := s.BuildFiles(cmdArgs[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
+			if err := s.BuildFiles(runFlags.Args()[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
 				return err
 			}
-			if err := runNode(tempfile.Name(), cmdArgs[lastSourceArg:], ""); err != nil {
+			if err := runNode(tempfile.Name(), runFlags.Args()[lastSourceArg:], ""); err != nil {
 				return err
 			}
 			return nil
@@ -198,6 +204,7 @@ func main() {
 		verbose := testFlags.Bool("v", false, "verbose")
 		short := testFlags.Bool("short", false, "short")
 		testFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
+		testFlags.BoolVar(&compiler.GoroutinesSupport, "goroutines", false, "experimental support for goroutines")
 		testFlags.Parse(cmdArgs)
 
 		os.Exit(handleError(func() error {

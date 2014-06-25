@@ -183,7 +183,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 
 		case token.ARROW:
-			if !GOROUTINES {
+			if !GoroutinesSupport {
 				return c.formatExpr("undefined")
 			}
 			call := &ast.CallExpr{

@@ -184,12 +184,10 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 					c.Printf("%s", c.translateAssign(s.Key, iVar, types.Typ[types.Int], s.Tok == token.DEFINE))
 				}
 				if !isBlank(s.Value) {
-					indexExpr := &ast.IndexExpr{
+					c.Printf("%s", c.translateAssign(s.Value, c.translateImplicitConversion(c.setType(&ast.IndexExpr{
 						X:     c.newIdent(refVar, t),
 						Index: c.newIdent(iVar, types.Typ[types.Int]),
-					}
-					c.p.info.Types[indexExpr] = types.TypeAndValue{Type: elemType}
-					c.Printf("%s", c.translateAssign(s.Value, c.translateImplicitConversion(indexExpr, elemType).String(), elemType, s.Tok == token.DEFINE))
+					}, elemType), elemType).String(), elemType, s.Tok == token.DEFINE))
 				}
 			}, func() {
 				c.Printf("%s++;", iVar)
@@ -344,43 +342,36 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				indexVar := c.newVariable("_index")
 				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String()+";")
 				parts = append(parts, indexVar+" = "+c.translateExpr(l.Index).String()+";")
-				lhs = &ast.IndexExpr{
+				lhs = c.setType(&ast.IndexExpr{
 					X:     c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
 					Index: c.newIdent(indexVar, c.p.info.Types[l.Index].Type),
-				}
-				c.p.info.Types[lhs] = c.p.info.Types[l]
+				}, c.p.info.Types[l].Type)
 			case *ast.StarExpr:
 				lhsVar := c.newVariable("_lhs")
 				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String()+";")
-				lhs = &ast.StarExpr{
+				lhs = c.setType(&ast.StarExpr{
 					X: c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
-				}
-				c.p.info.Types[lhs] = c.p.info.Types[l]
+				}, c.p.info.Types[l].Type)
 			case *ast.SelectorExpr:
 				v := hasCallVisitor{c.p.info, false}
 				ast.Walk(&v, l.X)
 				if v.hasCall {
 					lhsVar := c.newVariable("_lhs")
 					parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String()+";")
-					lhs = &ast.SelectorExpr{
+					lhs = c.setType(&ast.SelectorExpr{
 						X:   c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
 						Sel: l.Sel,
-					}
-					c.p.info.Types[lhs] = c.p.info.Types[l]
+					}, c.p.info.Types[l].Type)
 					c.p.info.Selections[lhs.(*ast.SelectorExpr)] = c.p.info.Selections[l]
 				}
 			}
 
-			parenExpr := &ast.ParenExpr{X: s.Rhs[0]}
-			c.p.info.Types[parenExpr] = c.p.info.Types[s.Rhs[0]]
-			binaryExpr := &ast.BinaryExpr{
+			lhsType := c.p.info.Types[s.Lhs[0]].Type
+			parts = append(parts, c.translateAssign(lhs, c.translateExpr(c.setType(&ast.BinaryExpr{
 				X:  lhs,
 				Op: op,
-				Y:  parenExpr,
-			}
-			lhsType := c.p.info.Types[s.Lhs[0]]
-			c.p.info.Types[binaryExpr] = lhsType
-			parts = append(parts, c.translateAssign(lhs, c.translateExpr(binaryExpr).String(), lhsType.Type, s.Tok == token.DEFINE))
+				Y:  c.setType(&ast.ParenExpr{X: s.Rhs[0]}, c.p.info.Types[s.Rhs[0]].Type),
+			}, lhsType)).String(), lhsType, s.Tok == token.DEFINE))
 			c.Printf("%s", strings.Join(parts, " "))
 			return
 		}
@@ -392,7 +383,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 					if obj == nil {
 						obj = c.p.info.Uses[lhs.(*ast.Ident)]
 					}
-					c.p.info.Types[lhs] = types.TypeAndValue{Type: obj.Type()}
+					c.setType(lhs, obj.Type())
 				}
 			}
 		}

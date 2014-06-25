@@ -181,11 +181,16 @@ func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
 
 func (c *funcContext) newIdent(name string, t types.Type) *ast.Ident {
 	ident := ast.NewIdent(name)
-	c.p.info.Types[ident] = types.TypeAndValue{Type: t}
+	c.setType(ident, t)
 	obj := types.NewVar(0, c.p.pkg, name, t)
 	c.p.info.Uses[ident] = obj
 	c.p.objectVars[obj] = name
 	return ident
+}
+
+func (c *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
+	c.p.info.Types[e] = types.TypeAndValue{Type: t}
+	return e
 }
 
 func (c *funcContext) objectName(o types.Object) string {

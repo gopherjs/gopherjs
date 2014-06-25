@@ -254,9 +254,8 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		lhs := make([]ast.Expr, len(init.Lhs))
 		for i, o := range init.Lhs {
 			ident := ast.NewIdent(o.Name())
-			c.p.info.Types[ident] = types.TypeAndValue{Type: o.Type()}
 			c.p.info.Defs[ident] = o
-			lhs[i] = ident
+			lhs[i] = c.setType(ident, o.Type())
 			varsWithInit[o] = true
 		}
 		var d Decl
@@ -464,13 +463,11 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 
 		stmts := fun.Body.List
 		if recv != nil && !isBlank(recv) {
-			this := &This{}
-			c.p.info.Types[this] = types.TypeAndValue{Type: sig.Recv().Type()}
 			stmts = append([]ast.Stmt{
 				&ast.AssignStmt{
 					Lhs: []ast.Expr{recv},
 					Tok: token.DEFINE,
-					Rhs: []ast.Expr{this},
+					Rhs: []ast.Expr{c.setType(&This{}, sig.Recv().Type())},
 				},
 			}, stmts...)
 		}
@@ -645,9 +642,8 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 				}
 				c.Printf("%s = %s;", c.objectName(result), c.zeroValue(result.Type()))
 				id := ast.NewIdent(name)
-				c.p.info.Types[id] = types.TypeAndValue{Type: result.Type()}
 				c.p.info.Uses[id] = result
-				c.resultNames[i] = id
+				c.resultNames[i] = c.setType(id, result.Type())
 			}
 		}
 

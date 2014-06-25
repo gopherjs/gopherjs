@@ -586,98 +586,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		switch f := plainFun.(type) {
 		case *ast.Ident:
 			if o, ok := c.p.info.Uses[f].(*types.Builtin); ok {
-				switch o.Name() {
-				case "new":
-					t := c.p.info.Types[e].Type.(*types.Pointer)
-					if c.p.pkg.Path() == "syscall" && types.Identical(t.Elem().Underlying(), types.Typ[types.Uintptr]) {
-						return c.formatExpr("new Uint8Array(8)")
-					}
-					switch t.Elem().Underlying().(type) {
-					case *types.Struct, *types.Array:
-						return c.formatExpr("%s", c.zeroValue(t.Elem()))
-					default:
-						return c.formatExpr("$newDataPointer(%s, %s)", c.zeroValue(t.Elem()), c.typeName(t))
-					}
-				case "make":
-					switch argType := c.p.info.Types[e.Args[0]].Type.Underlying().(type) {
-					case *types.Slice:
-						t := c.typeName(c.p.info.Types[e.Args[0]].Type)
-						if len(e.Args) == 3 {
-							return c.formatExpr("%s.make(%f, %f, function() { return %s; })", t, e.Args[1], e.Args[2], c.zeroValue(argType.Elem()))
-						}
-						return c.formatExpr("%s.make(%f, 0, function() { return %s; })", t, e.Args[1], c.zeroValue(argType.Elem()))
-					case *types.Map:
-						return c.formatExpr("new $Map()")
-					case *types.Chan:
-						length := "0"
-						if len(e.Args) == 2 {
-							length = c.translateExpr(e.Args[1]).String()
-						}
-						return c.formatExpr("new %s(%s)", c.typeName(c.p.info.Types[e.Args[0]].Type), length)
-					default:
-						panic(fmt.Sprintf("Unhandled make type: %T\n", argType))
-					}
-				case "len":
-					switch argType := c.p.info.Types[e.Args[0]].Type.Underlying().(type) {
-					case *types.Basic:
-						return c.formatExpr("%e.length", e.Args[0])
-					case *types.Slice:
-						return c.formatExpr("%e.$length", e.Args[0])
-					case *types.Pointer:
-						return c.formatExpr("(%e, %d)", e.Args[0], argType.Elem().(*types.Array).Len())
-					case *types.Map:
-						return c.formatExpr("$keys(%e).length", e.Args[0])
-					case *types.Chan:
-						return c.formatExpr("$chanLen(%e)", e.Args[0])
-					// length of array is constant
-					default:
-						panic(fmt.Sprintf("Unhandled len type: %T\n", argType))
-					}
-				case "cap":
-					switch argType := c.p.info.Types[e.Args[0]].Type.Underlying().(type) {
-					case *types.Slice:
-						return c.formatExpr("%e.$capacity", e.Args[0])
-					case *types.Pointer:
-						return c.formatExpr("(%e, %d)", e.Args[0], argType.Elem().(*types.Array).Len())
-					case *types.Chan:
-						return c.formatExpr("%e.$capacity", e.Args[0])
-					// capacity of array is constant
-					default:
-						panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))
-					}
-				case "panic":
-					return c.formatExpr("throw $panic(%s)", c.translateImplicitConversion(e.Args[0], types.NewInterface(nil, nil)))
-				case "append":
-					if len(e.Args) == 1 {
-						return c.translateExpr(e.Args[0])
-					}
-					if e.Ellipsis.IsValid() {
-						return c.formatExpr("$appendSlice(%e, %s)", e.Args[0], c.translateConversionToSlice(e.Args[1], exprType))
-					}
-					sliceType := exprType.Underlying().(*types.Slice)
-					return c.formatExpr("$append(%e, %s)", e.Args[0], strings.Join(c.translateExprSlice(e.Args[1:], sliceType.Elem()), ", "))
-				case "delete":
-					return c.formatExpr(`delete %e[%s]`, e.Args[0], c.makeKey(e.Args[1], c.p.info.Types[e.Args[0]].Type.Underlying().(*types.Map).Key()))
-				case "copy":
-					if basic, isBasic := c.p.info.Types[e.Args[1]].Type.Underlying().(*types.Basic); isBasic && basic.Info()&types.IsString != 0 {
-						return c.formatExpr("$copyString(%e, %e)", e.Args[0], e.Args[1])
-					}
-					return c.formatExpr("$copySlice(%e, %e)", e.Args[0], e.Args[1])
-				case "print", "println":
-					return c.formatExpr("console.log(%s)", strings.Join(c.translateExprSlice(e.Args, nil), ", "))
-				case "complex":
-					return c.formatExpr("new %s(%e, %e)", c.typeName(c.p.info.Types[e].Type), e.Args[0], e.Args[1])
-				case "real":
-					return c.formatExpr("%e.$real", e.Args[0])
-				case "imag":
-					return c.formatExpr("%e.$imag", e.Args[0])
-				case "recover":
-					return c.formatExpr("$recover()")
-				case "close":
-					return c.formatExpr(`$close(%e)`, e.Args[0])
-				default:
-					panic(fmt.Sprintf("Unhandled builtin: %s\n", o.Name()))
-				}
+				return c.translateBuiltin(o.Name(), e.Args, e.Ellipsis.IsValid(), exprType)
 			}
 			fun = c.translateExpr(plainFun)
 
@@ -938,6 +847,101 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 	default:
 		panic(fmt.Sprintf("Unhandled expression: %T\n", e))
 
+	}
+}
+
+func (c *funcContext) translateBuiltin(name string, args []ast.Expr, ellipsis bool, typ types.Type) *expression {
+	switch name {
+	case "new":
+		t := typ.(*types.Pointer)
+		if c.p.pkg.Path() == "syscall" && types.Identical(t.Elem().Underlying(), types.Typ[types.Uintptr]) {
+			return c.formatExpr("new Uint8Array(8)")
+		}
+		switch t.Elem().Underlying().(type) {
+		case *types.Struct, *types.Array:
+			return c.formatExpr("%s", c.zeroValue(t.Elem()))
+		default:
+			return c.formatExpr("$newDataPointer(%s, %s)", c.zeroValue(t.Elem()), c.typeName(t))
+		}
+	case "make":
+		switch argType := c.p.info.Types[args[0]].Type.Underlying().(type) {
+		case *types.Slice:
+			t := c.typeName(c.p.info.Types[args[0]].Type)
+			if len(args) == 3 {
+				return c.formatExpr("%s.make(%f, %f, function() { return %s; })", t, args[1], args[2], c.zeroValue(argType.Elem()))
+			}
+			return c.formatExpr("%s.make(%f, 0, function() { return %s; })", t, args[1], c.zeroValue(argType.Elem()))
+		case *types.Map:
+			return c.formatExpr("new $Map()")
+		case *types.Chan:
+			length := "0"
+			if len(args) == 2 {
+				length = c.translateExpr(args[1]).String()
+			}
+			return c.formatExpr("new %s(%s)", c.typeName(c.p.info.Types[args[0]].Type), length)
+		default:
+			panic(fmt.Sprintf("Unhandled make type: %T\n", argType))
+		}
+	case "len":
+		switch argType := c.p.info.Types[args[0]].Type.Underlying().(type) {
+		case *types.Basic:
+			return c.formatExpr("%e.length", args[0])
+		case *types.Slice:
+			return c.formatExpr("%e.$length", args[0])
+		case *types.Pointer:
+			return c.formatExpr("(%e, %d)", args[0], argType.Elem().(*types.Array).Len())
+		case *types.Map:
+			return c.formatExpr("$keys(%e).length", args[0])
+		case *types.Chan:
+			return c.formatExpr("$chanLen(%e)", args[0])
+		// length of array is constant
+		default:
+			panic(fmt.Sprintf("Unhandled len type: %T\n", argType))
+		}
+	case "cap":
+		switch argType := c.p.info.Types[args[0]].Type.Underlying().(type) {
+		case *types.Slice:
+			return c.formatExpr("%e.$capacity", args[0])
+		case *types.Pointer:
+			return c.formatExpr("(%e, %d)", args[0], argType.Elem().(*types.Array).Len())
+		case *types.Chan:
+			return c.formatExpr("%e.$capacity", args[0])
+		// capacity of array is constant
+		default:
+			panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))
+		}
+	case "panic":
+		return c.formatExpr("throw $panic(%s)", c.translateImplicitConversion(args[0], types.NewInterface(nil, nil)))
+	case "append":
+		if len(args) == 1 {
+			return c.translateExpr(args[0])
+		}
+		if ellipsis {
+			return c.formatExpr("$appendSlice(%e, %s)", args[0], c.translateConversionToSlice(args[1], typ))
+		}
+		sliceType := typ.Underlying().(*types.Slice)
+		return c.formatExpr("$append(%e, %s)", args[0], strings.Join(c.translateExprSlice(args[1:], sliceType.Elem()), ", "))
+	case "delete":
+		return c.formatExpr(`delete %e[%s]`, args[0], c.makeKey(args[1], c.p.info.Types[args[0]].Type.Underlying().(*types.Map).Key()))
+	case "copy":
+		if basic, isBasic := c.p.info.Types[args[1]].Type.Underlying().(*types.Basic); isBasic && basic.Info()&types.IsString != 0 {
+			return c.formatExpr("$copyString(%e, %e)", args[0], args[1])
+		}
+		return c.formatExpr("$copySlice(%e, %e)", args[0], args[1])
+	case "print", "println":
+		return c.formatExpr("console.log(%s)", strings.Join(c.translateExprSlice(args, nil), ", "))
+	case "complex":
+		return c.formatExpr("new %s(%e, %e)", c.typeName(typ), args[0], args[1])
+	case "real":
+		return c.formatExpr("%e.$real", args[0])
+	case "imag":
+		return c.formatExpr("%e.$imag", args[0])
+	case "recover":
+		return c.formatExpr("$recover()")
+	case "close":
+		return c.formatExpr(`$close(%e)`, args[0])
+	default:
+		panic(fmt.Sprintf("Unhandled builtin: %s\n", name))
 	}
 }
 

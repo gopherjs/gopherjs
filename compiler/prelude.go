@@ -128,7 +128,8 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 			this.$val = this;
 			this.$capacity = capacity;
 			this.$buffer = [];
-			this.$queue = [];
+			this.$sendQueue = [];
+			this.$recvQueue = [];
 			this.$closed = false;
 		};
 		typ.prototype.$key = function() {
@@ -1445,7 +1446,7 @@ var $send = function(chan, value) {
 		$throwRuntimeError("send on closed channel");
 	}
 	chan.$buffer.push(value);
-	var queuedRecv = chan.$queue.shift();
+	var queuedRecv = chan.$recvQueue.shift();
 	if (queuedRecv !== undefined) {
 		$schedule(queuedRecv);
 		return;
@@ -1454,7 +1455,7 @@ var $send = function(chan, value) {
 		return;
 	}
 
-	chan.$queue.push($curGoroutine);
+	chan.$sendQueue.push($curGoroutine);
 	var $blocked = false;
 	return function() {
 		if ($blocked) { return; };
@@ -1466,7 +1467,7 @@ var $send = function(chan, value) {
 var $recv = function(chan) {
 	var bufferedValue = chan.$buffer.shift();
 	if (bufferedValue !== undefined) {
-		var queuedSend = chan.$queue.shift();
+		var queuedSend = chan.$sendQueue.shift();
 		if (queuedSend !== undefined) {
 			$schedule(queuedSend);
 		}
@@ -1476,7 +1477,7 @@ var $recv = function(chan) {
 		return [chan.constructor.elem.zero(), false];
 	}
 
-	chan.$queue.push($curGoroutine);
+	chan.$recvQueue.push($curGoroutine);
 	var $blocked = false;
 	return function() {
 		if ($blocked) {
@@ -1497,7 +1498,7 @@ var $close = function(chan) {
 	}
 	chan.$closed = true;
 	while (true) {
-		var queuedRecv = chan.$queue.shift();
+		var queuedRecv = chan.$recvQueue.shift();
 		if (queuedRecv === undefined) {
 			break;
 		}

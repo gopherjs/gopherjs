@@ -1508,7 +1508,7 @@ var $close = function(chan) {
 		if (queuedSend === undefined) {
 			break;
 		}
-		$schedule(queuedSend[0]); // will panic because of closed channel
+		$schedule(queuedSend[0]); /* will panic because of closed channel */
 	}
 	while (true) {
 		var queuedRecv = chan.$recvQueue.shift();
@@ -1526,15 +1526,15 @@ var $select = function(comms) {
 		var comm = comms[i];
 		var chan = comm[0];
 		switch (comm.length) {
-		case 0: // default
+		case 0: /* default */
 			selection = i;
 			break;
-		case 1: // recv
+		case 1: /* recv */
 			if (chan.$sendQueue.length !== 0 || chan.$buffer.length !== 0 || chan.$closed) {
 				ready.push(i);
 			}
 			break;
-		case 2: // send
+		case 2: /* send */
 			if (chan.$closed) {
 				$throwRuntimeError("send on closed channel");
 			}
@@ -1551,11 +1551,11 @@ var $select = function(comms) {
 	if (selection !== -1) {
 		var comm = comms[selection];
 		switch (comm.length) {
-		case 0: // default
+		case 0: /* default */
 			return [selection];
-		case 1: // recv
+		case 1: /* recv */
 			return [selection, $recv(comm[0])];
-		case 2: // send
+		case 2: /* send */
 			$send(comm[0], comm[1]);
 			return [selection];
 		}
@@ -1564,10 +1564,10 @@ var $select = function(comms) {
 	for (i = 0; i < comms.length; i++) {
 		var comm = comms[i];
 		switch (comm.length) {
-		case 1: // recv
+		case 1: /* recv */
 			comm[0].$recvQueue.push($curGoroutine);
 			break;
-		case 2: // send
+		case 2: /* send */
 			var queueEntry = [$curGoroutine, comm[1]];
 			comm.push(queueEntry);
 			comm[0].$sendQueue.push(queueEntry);
@@ -1581,7 +1581,7 @@ var $select = function(comms) {
 			for (i = 0; i < comms.length; i++) {
 				var comm = comms[i];
 				switch (comm.length) {
-				case 1: // recv
+				case 1: /* recv */
 					var queue = comm[0].$recvQueue;
 					var index = queue.indexOf($curGoroutine);
 					if (index !== -1) {
@@ -1595,7 +1595,7 @@ var $select = function(comms) {
 					}
 					selection = [i, [comm[0].constructor.elem.zero(), false]];
 					break;
-				case 3: // send
+				case 3: /* send */
 					var queue = comm[0].$sendQueue;
 					var index = queue.indexOf(comm[2]);
 					if (index !== -1) {

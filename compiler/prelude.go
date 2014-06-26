@@ -143,7 +143,8 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 			typ.elem = elem;
 			typ.sendOnly = sendOnly;
 			typ.recvOnly = recvOnly;
-			typ.nil = new typ();
+			typ.nil = new typ(0);
+			typ.nil.$sendQueue = typ.nil.$recvQueue = { length: 0, push: function() {}, shift: function() { return undefined; } };
 			typ.extendReflectType = function(rt) {
 				rt.chanType = new $reflect.chanType.Ptr(rt, elem.reflectType(), sendOnly ? $reflect.SendDir : (recvOnly ? $reflect.RecvDir : $reflect.BothDir));
 			};
@@ -1445,32 +1446,39 @@ var $send = function(chan, value) {
 	if (chan.$closed) {
 		$throwRuntimeError("send on closed channel");
 	}
-	chan.$buffer.push(value);
 	var queuedRecv = chan.$recvQueue.shift();
 	if (queuedRecv !== undefined) {
+		queuedRecv.chanValue = [value, true];
 		$schedule(queuedRecv);
 		return;
 	}
-	if (chan.$buffer.length <= chan.$capacity) {
+	if (chan.$buffer.length < chan.$capacity) {
+		chan.$buffer.push(value);
 		return;
 	}
 
-	chan.$sendQueue.push($curGoroutine);
-	var $blocked = false;
+	chan.$sendQueue.push([$curGoroutine, value]);
+	var blocked = false;
 	return function() {
-		if ($blocked) { return; };
-		$blocked = true;
+		if (blocked) {
+			if (chan.$closed) {
+				$throwRuntimeError("send on closed channel");
+			}
+			return;
+		};
+		blocked = true;
 		$curGoroutine.asleep = true;
 		throw $blockNow;
 	};
 };
 var $recv = function(chan) {
+	var queuedSend = chan.$sendQueue.shift();
+	if (queuedSend !== undefined) {
+		$schedule(queuedSend[0]);
+		chan.$buffer.push(queuedSend[1]);
+	}
 	var bufferedValue = chan.$buffer.shift();
 	if (bufferedValue !== undefined) {
-		var queuedSend = chan.$sendQueue.shift();
-		if (queuedSend !== undefined) {
-			$schedule(queuedSend);
-		}
 		return [bufferedValue, true];
 	}
 	if (chan.$closed) {
@@ -1478,16 +1486,14 @@ var $recv = function(chan) {
 	}
 
 	chan.$recvQueue.push($curGoroutine);
-	var $blocked = false;
+	var blocked = false;
 	return function() {
-		if ($blocked) {
-			var bufferedValue = chan.$buffer.shift();
-			if (bufferedValue !== undefined) {
-				return [bufferedValue, true];
-			}
-			return [chan.constructor.elem.zero(), false];
+		if (blocked) {
+			var value = $curGoroutine.chanValue;
+			$curGoroutine.chanValue = undefined;
+			return value;
 		};
-		$blocked = true;
+		blocked = true;
 		$curGoroutine.asleep = true;
 		throw $blockNow;
 	};
@@ -1498,15 +1504,117 @@ var $close = function(chan) {
 	}
 	chan.$closed = true;
 	while (true) {
+		var queuedSend = chan.$sendQueue.shift();
+		if (queuedSend === undefined) {
+			break;
+		}
+		$schedule(queuedSend[0]); // will panic because of closed channel
+	}
+	while (true) {
 		var queuedRecv = chan.$recvQueue.shift();
 		if (queuedRecv === undefined) {
 			break;
 		}
+		queuedRecv.chanValue = [chan.constructor.elem.zero(), false];
 		$schedule(queuedRecv);
 	}
 };
-var $chanLen = function(chan) {
-	return Math.min(chan.$buffer.length, chan.$capacity);
+var $select = function(comms) {
+	var ready = [], i;
+	var selection = -1;
+	for (i = 0; i < comms.length; i++) {
+		var comm = comms[i];
+		var chan = comm[0];
+		switch (comm.length) {
+		case 0: // default
+			selection = i;
+			break;
+		case 1: // recv
+			if (chan.$sendQueue.length !== 0 || chan.$buffer.length !== 0 || chan.$closed) {
+				ready.push(i);
+			}
+			break;
+		case 2: // send
+			if (chan.$closed) {
+				$throwRuntimeError("send on closed channel");
+			}
+			if (chan.$recvQueue.length !== 0 || chan.$buffer.length < chan.$capacity) {
+				ready.push(i);
+			}
+			break;
+		}
+	}
+
+	if (ready.length !== 0) {
+		selection = ready[Math.floor(Math.random() * ready.length)];
+	}
+	if (selection !== -1) {
+		var comm = comms[selection];
+		switch (comm.length) {
+		case 0: // default
+			return [selection];
+		case 1: // recv
+			return [selection, $recv(comm[0])];
+		case 2: // send
+			$send(comm[0], comm[1]);
+			return [selection];
+		}
+	}
+
+	for (i = 0; i < comms.length; i++) {
+		var comm = comms[i];
+		switch (comm.length) {
+		case 1: // recv
+			comm[0].$recvQueue.push($curGoroutine);
+			break;
+		case 2: // send
+			var queueEntry = [$curGoroutine, comm[1]];
+			comm.push(queueEntry);
+			comm[0].$sendQueue.push(queueEntry);
+			break;
+		}
+	}
+	var blocked = false;
+	return function() {
+		if (blocked) {
+			var selection;
+			for (i = 0; i < comms.length; i++) {
+				var comm = comms[i];
+				switch (comm.length) {
+				case 1: // recv
+					var queue = comm[0].$recvQueue;
+					var index = queue.indexOf($curGoroutine);
+					if (index !== -1) {
+						queue.splice(index, 1);
+						break;
+					}
+					var bufferedValue = comm[0].$buffer.shift();
+					if (bufferedValue !== undefined) {
+						selection = [i, [bufferedValue, true]];
+						break;
+					}
+					selection = [i, [comm[0].constructor.elem.zero(), false]];
+					break;
+				case 3: // send
+					var queue = comm[0].$sendQueue;
+					var index = queue.indexOf(comm[2]);
+					if (index !== -1) {
+						queue.splice(index, 1);
+						break;
+					}
+					if (comm[0].$closed) {
+						$throwRuntimeError("send on closed channel");
+					}
+					selection = [i];
+					break;
+				}
+			}
+			return selection;
+		};
+		blocked = true;
+		$curGoroutine.asleep = true;
+		throw $blockNow;
+	};
 };
 
 var $equal = function(a, b, type) {

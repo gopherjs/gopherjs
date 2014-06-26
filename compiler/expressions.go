@@ -895,7 +895,7 @@ func (c *funcContext) translateBuiltin(name string, args []ast.Expr, ellipsis bo
 		case *types.Map:
 			return c.formatExpr("$keys(%e).length", args[0])
 		case *types.Chan:
-			return c.formatExpr("$chanLen(%e)", args[0])
+			return c.formatExpr("%e.$buffer.length", args[0])
 		// length of array is constant
 		default:
 			panic(fmt.Sprintf("Unhandled len type: %T\n", argType))

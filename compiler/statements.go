@@ -1,7 +1,6 @@
 package compiler
 
 import (
-	"code.google.com/p/go.tools/go/exact"
 	"code.google.com/p/go.tools/go/types"
 	"fmt"
 	"go/ast"
@@ -66,9 +65,8 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			refVar := c.newVariable("_ref")
 			c.Printf("%s = %s;", refVar, c.translateExpr(s.Tag))
 			translateCond = func(cond ast.Expr) *expression {
-				refIdent := c.newIdent(refVar, c.p.info.Types[s.Tag].Type)
 				return c.translateExpr(&ast.BinaryExpr{
-					X:  refIdent,
+					X:  c.newIdent(refVar, c.p.info.Types[s.Tag].Type),
 					Op: token.EQL,
 					Y:  cond,
 				})
@@ -99,12 +97,12 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		translateCond := func(cond ast.Expr) *expression {
 			return c.formatExpr("%s", c.typeCheck(typeVar, c.p.info.Types[cond].Type))
 		}
-		printCaseBodyPrefix := func(conds []ast.Expr) {
+		printCaseBodyPrefix := func(index int) {
 			if typeSwitchVar == "" {
 				return
 			}
 			value := refVar
-			if len(conds) == 1 {
+			if conds := s.Body.List[index].(*ast.CaseClause).List; len(conds) == 1 {
 				t := c.p.info.Types[conds[0]].Type
 				if _, isInterface := t.Underlying().(*types.Interface); !isInterface && !types.Identical(t, types.Typ[types.UntypedNil]) {
 					value += ".$val"
@@ -485,15 +483,10 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		if s.Tok == token.DEC {
 			tok = token.SUB_ASSIGN
 		}
-		one := &ast.BasicLit{
-			Kind:  token.INT,
-			Value: "1",
-		}
-		c.p.info.Types[one] = types.TypeAndValue{Type: t, Value: exact.MakeInt64(1)}
 		c.translateStmt(&ast.AssignStmt{
 			Lhs: []ast.Expr{s.X},
 			Tok: tok,
-			Rhs: []ast.Expr{one},
+			Rhs: []ast.Expr{c.newInt(1, t)},
 		}, label)
 
 	case *ast.DeclStmt:
@@ -542,10 +535,6 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		c.printLabel(label)
 		c.translateStmt(s.Stmt, s.Label.Name)
 
-	case *ast.SelectStmt:
-		c.printLabel(label)
-		c.Printf(`$notSupported("select");`)
-
 	case *ast.GoStmt:
 		c.printLabel(label)
 		if !GoroutinesSupport {
@@ -567,6 +556,58 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		c.blocking[call] = true
 		c.translateStmt(&ast.ExprStmt{call}, label)
 
+	case *ast.SelectStmt:
+		if !GoroutinesSupport {
+			c.Printf(`$notSupported("select");`)
+			return
+		}
+		var channels []string
+		var caseClauses []ast.Stmt
+		flattened := false
+		for i, s := range s.Body.List {
+			clause := s.(*ast.CommClause)
+			switch comm := clause.Comm.(type) {
+			case nil:
+				channels = append(channels, "[]")
+			case *ast.ExprStmt:
+				channels = append(channels, c.formatExpr("[%e]", removeParens(comm.X).(*ast.UnaryExpr).X).String())
+			case *ast.AssignStmt:
+				channels = append(channels, c.formatExpr("[%e]", removeParens(comm.Rhs[0]).(*ast.UnaryExpr).X).String())
+			case *ast.SendStmt:
+				channels = append(channels, c.formatExpr("[%e, %e]", comm.Chan, comm.Value).String())
+			default:
+				panic(fmt.Sprintf("unhandled: %T", comm))
+			}
+			caseClauses = append(caseClauses, &ast.CaseClause{
+				List: []ast.Expr{c.newInt(i, types.Typ[types.Int])},
+				Body: clause.Body,
+			})
+			flattened = flattened || c.flattened[clause]
+		}
+
+		selectCall := c.setType(&ast.CallExpr{
+			Fun:  c.newIdent("$select", types.NewSignature(nil, nil, types.NewTuple(types.NewVar(0, nil, "", types.NewInterface(nil, nil))), types.NewTuple(types.NewVar(0, nil, "", types.Typ[types.Int])), false)),
+			Args: []ast.Expr{c.newIdent(fmt.Sprintf("[%s]", strings.Join(channels, ", ")), types.NewInterface(nil, nil))},
+		}, types.Typ[types.Int])
+		c.blocking[selectCall] = true
+		selectionVar := c.newVariable("_selection")
+		c.Printf("%s = %s;", selectionVar, c.translateExpr(selectCall))
+
+		translateCond := func(cond ast.Expr) *expression {
+			return c.formatExpr("%s[0] === %e", selectionVar, cond)
+		}
+		printCaseBodyPrefix := func(index int) {
+			if assign, ok := s.Body.List[index].(*ast.CommClause).Comm.(*ast.AssignStmt); ok {
+				switch rhsType := c.p.info.Types[assign.Rhs[0]].Type.(type) {
+				case *types.Tuple:
+					c.translateStmt(&ast.AssignStmt{Lhs: assign.Lhs, Rhs: []ast.Expr{c.newIdent(selectionVar+"[1]", rhsType)}, Tok: assign.Tok}, "")
+				default:
+					c.translateStmt(&ast.AssignStmt{Lhs: assign.Lhs, Rhs: []ast.Expr{c.newIdent(selectionVar+"[1][0]", rhsType)}, Tok: assign.Tok}, "")
+				}
+			}
+		}
+		c.translateBranchingStmt(caseClauses, true, translateCond, printCaseBodyPrefix, label, flattened)
+
 	case *ast.EmptyStmt:
 		// skip
 
@@ -577,20 +618,21 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 }
 
 type branch struct {
+	index     int
 	clause    *ast.CaseClause
 	condition string
 	body      []ast.Stmt
 }
 
-func (c *funcContext) translateBranchingStmt(caseClauses []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) *expression, printCaseBodyPrefix func([]ast.Expr), label string, flatten bool) {
+func (c *funcContext) translateBranchingStmt(caseClauses []ast.Stmt, isSwitch bool, translateCond func(ast.Expr) *expression, printCaseBodyPrefix func(int), label string, flatten bool) {
 	var branches []*branch
 	var defaultBranch *branch
 	var openBranches []*branch
 clauseLoop:
-	for _, cc := range caseClauses {
+	for i, cc := range caseClauses {
 		clause := cc.(*ast.CaseClause)
 
-		branch := &branch{clause, "", nil}
+		branch := &branch{i, clause, "", nil}
 		openBranches = append(openBranches, branch)
 		for _, openBranch := range openBranches {
 			openBranch.body = append(openBranch.body, clause.Body...)
@@ -675,6 +717,9 @@ clauseLoop:
 	}
 
 	c.printLabel(label)
+	if isSwitch && !flatten && label != "" {
+		c.Printf("%s:", label)
+	}
 	prefix := ""
 	if hasBreak {
 		prefix = "switch (0) { default: "
@@ -697,7 +742,7 @@ clauseLoop:
 		c.PrintCond(!flatten, fmt.Sprintf("%sif (%s) {", prefix, branch.condition), jump)
 		c.Indent(func() {
 			if printCaseBodyPrefix != nil {
-				printCaseBodyPrefix(branch.clause.List)
+				printCaseBodyPrefix(branch.index)
 			}
 			c.translateStmtList(branch.body)
 		})
@@ -708,7 +753,7 @@ clauseLoop:
 		c.PrintCond(!flatten, "} else {", jump)
 		c.Indent(func() {
 			if printCaseBodyPrefix != nil {
-				printCaseBodyPrefix(nil)
+				printCaseBodyPrefix(defaultBranch.index)
 			}
 			c.translateStmtList(defaultBranch.body)
 		})
@@ -742,6 +787,9 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 	c.flowDatas[label] = data
 
 	c.printLabel(label)
+	if !flatten && label != "" {
+		c.Printf("%s:", label)
+	}
 	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { $s = %d; continue; }", data.beginCase, cond, data.endCase))
 	c.Indent(func() {
 		v := &escapeAnalysis{
@@ -840,8 +888,9 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 
 func (c *funcContext) printLabel(label string) {
 	if label != "" {
-		labelCase, ok := c.labelCases[label]
-		c.PrintCond(!ok, label+":", fmt.Sprintf("case %d:", labelCase))
+		if labelCase, ok := c.labelCases[label]; ok {
+			c.PrintCond(false, label+":", fmt.Sprintf("case %d:", labelCase))
+		}
 	}
 }
 

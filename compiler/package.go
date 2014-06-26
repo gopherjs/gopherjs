@@ -588,6 +588,13 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 		if _, ok := c.p.info.Types[n.X].Type.Underlying().(*types.Chan); ok {
 			c.markBlocking(c.analyzeStack)
 		}
+	case *ast.SelectStmt:
+		c.markBlocking(c.analyzeStack)
+	case *ast.CommClause:
+		for _, s := range n.Body {
+			ast.Walk(c, s)
+		}
+		return nil
 	case *ast.DeferStmt:
 		c.hasDefer = true
 	case *ast.FuncLit:

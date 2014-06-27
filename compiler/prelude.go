@@ -1318,6 +1318,7 @@ var $notSupported = function(feature) {
 	err.$notSupported = feature;
 	throw err;
 };
+var $nonblockingCall = "non-blocking call to blocking function";
 var $throw = function(err) { throw err; };
 var $catch = function(f) { try { f(); return null; } catch (e) { return e; } };
 var $throwRuntimeError; /* set by package "runtime" */
@@ -1391,6 +1392,7 @@ var $curGoroutine, $blockNow = {}, $totalGoroutines = 0, $awakeGoroutines = 0;
 var $go = function(fun, args) {
 	$totalGoroutines++;
 	$awakeGoroutines++;
+	args.push(true);
 	$schedule(function() {
 	  var goroutine = function() {
 		  try {

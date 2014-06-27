@@ -773,7 +773,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if sig.Results().Len() != 0 {
 				returnVar = c.newVariable("_r")
 			}
-			c.Printf("%[1]s = %[2]s(%[3]s); $s = %[4]d; case %[4]d: if (%[1]s && %[1]s.constructor === Function) { %[1]s = %[1]s(); }", returnVar, fun, strings.Join(args, ", "), resumeCase)
+			c.Printf("%[1]s = %[2]s(%[3]s); $s = %[4]d; case %[4]d: if (%[1]s && %[1]s.constructor === Function) { %[1]s = %[1]s(); }", returnVar, fun, strings.Join(append(args, "true"), ", "), resumeCase)
 			if sig.Results().Len() != 0 {
 				return c.formatExpr("%s", returnVar)
 			}

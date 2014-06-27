@@ -559,23 +559,34 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 			}
 		}
 	case *ast.CallExpr:
+		callTo := func(o *types.Func) {
+			if recv := o.Type().(*types.Signature).Recv(); recv != nil {
+				if _, ok := recv.Type().Underlying().(*types.Interface); ok {
+					return
+				}
+			}
+			if o.Pkg() != c.p.pkg {
+				return
+			}
+			if context, ok := c.p.funcContexts[o]; ok && len(context.blocking) != 0 {
+				c.markBlocking(c.analyzeStack)
+				return
+			}
+			stack := make([]ast.Node, len(c.analyzeStack))
+			copy(stack, c.analyzeStack)
+			c.localCalls[o] = append(c.localCalls[o], stack)
+		}
 		switch f := n.Fun.(type) {
 		case *ast.Ident:
 			if o, ok := c.p.info.Uses[f].(*types.Func); ok {
-				if o.Pkg() == c.p.pkg {
-					if context, ok := c.p.funcContexts[o]; ok && len(context.blocking) != 0 {
-						c.markBlocking(c.analyzeStack)
-						break
-					}
-					stack := make([]ast.Node, len(c.analyzeStack))
-					copy(stack, c.analyzeStack)
-					c.localCalls[o] = append(c.localCalls[o], stack)
-				}
+				callTo(o)
 			}
 		case *ast.SelectorExpr:
-			o := c.p.info.Uses[f.Sel]
-			if isJsPackage(o.Pkg()) && o.Name() == "BlockAfter" {
-				c.markBlocking(c.analyzeStack)
+			if o, ok := c.p.info.Uses[f.Sel].(*types.Func); ok {
+				if isJsPackage(o.Pkg()) && o.Name() == "BlockAfter" {
+					c.markBlocking(c.analyzeStack)
+				}
+				callTo(o)
 			}
 		}
 	case *ast.SendStmt:
@@ -629,6 +640,9 @@ func (c *funcContext) translateFunction(typ *ast.FuncType, stmts []ast.Stmt, out
 			params = append(params, c.objectName(c.p.info.Defs[ident]))
 		}
 	}
+	if len(c.blocking) != 0 {
+		params = append(params, "$b")
+	}
 
 	return params, c.translateFunctionBody(stmts)
 }
@@ -659,7 +673,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 
 		if len(c.blocking) != 0 {
 			c.localVars = append(c.localVars, "$r")
-			prefix = prefix + " return function() {"
+			prefix = prefix + "if(!$b) { $notSupported($nonblockingCall); }; return function() {"
 			suffix = " };" + suffix
 		}
 

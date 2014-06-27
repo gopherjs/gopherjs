@@ -317,7 +317,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun, c.p.funcContexts[o]), minify)
 		})
 		archive.Declarations = append(archive.Declarations, d)
-		if strings.HasPrefix(fun.Name.String(), "Test") {
+		if fun.Recv == nil && strings.HasPrefix(fun.Name.String(), "Test") {
 			archive.Tests = append(archive.Tests, fun.Name.String())
 		}
 	}
@@ -565,49 +565,54 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 			}
 		}
 	case *ast.CallExpr:
-		callTo := func(o *types.Func) {
-			if recv := o.Type().(*types.Signature).Recv(); recv != nil {
-				if _, ok := recv.Type().Underlying().(*types.Interface); ok {
-					for i := len(c.analyzeStack) - 1; i >= 0; i-- {
-						n2 := c.analyzeStack[i]
-						for _, group := range c.p.comments[n2] {
-							for _, comment := range group.List {
-								if comment.Text == "//go:blocking" {
-									c.markBlocking(c.analyzeStack)
-									return
-								}
-							}
-						}
-						if _, ok := n2.(ast.Stmt); ok {
-							break
+		lookForComment := func() {
+			for i := len(c.analyzeStack) - 1; i >= 0; i-- {
+				n2 := c.analyzeStack[i]
+				for _, group := range c.p.comments[n2] {
+					for _, comment := range group.List {
+						if comment.Text == "//go:blocking" {
+							c.markBlocking(c.analyzeStack)
+							return
 						}
 					}
-					return
+				}
+				if _, ok := n2.(ast.Stmt); ok {
+					break
 				}
 			}
-			if o.Pkg() != c.p.pkg {
-				return
+		}
+		callTo := func(obj types.Object) {
+			switch o := obj.(type) {
+			case *types.Func:
+				if recv := o.Type().(*types.Signature).Recv(); recv != nil {
+					if _, ok := recv.Type().Underlying().(*types.Interface); ok {
+						lookForComment()
+						return
+					}
+				}
+				if o.Pkg() != c.p.pkg {
+					return
+				}
+				if context, ok := c.p.funcContexts[o]; ok && len(context.blocking) != 0 {
+					c.markBlocking(c.analyzeStack)
+					return
+				}
+				stack := make([]ast.Node, len(c.analyzeStack))
+				copy(stack, c.analyzeStack)
+				c.localCalls[o] = append(c.localCalls[o], stack)
+			case *types.Var:
+				lookForComment()
 			}
-			if context, ok := c.p.funcContexts[o]; ok && len(context.blocking) != 0 {
-				c.markBlocking(c.analyzeStack)
-				return
-			}
-			stack := make([]ast.Node, len(c.analyzeStack))
-			copy(stack, c.analyzeStack)
-			c.localCalls[o] = append(c.localCalls[o], stack)
 		}
 		switch f := n.Fun.(type) {
 		case *ast.Ident:
-			if o, ok := c.p.info.Uses[f].(*types.Func); ok {
-				callTo(o)
-			}
+			callTo(c.p.info.Uses[f])
 		case *ast.SelectorExpr:
-			if o, ok := c.p.info.Uses[f.Sel].(*types.Func); ok {
-				if isJsPackage(o.Pkg()) && o.Name() == "BlockAfter" {
-					c.markBlocking(c.analyzeStack)
-				}
-				callTo(o)
+			o := c.p.info.Uses[f.Sel]
+			if isJsPackage(o.Pkg()) && o.Name() == "BlockAfter" {
+				c.markBlocking(c.analyzeStack)
 			}
+			callTo(o)
 		}
 	case *ast.SendStmt:
 		c.markBlocking(c.analyzeStack)

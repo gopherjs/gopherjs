@@ -308,7 +308,6 @@ func main() {
 				`, pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))
 
 				mainPkg.Archive.Declarations = []compiler.Decl{mainFunc}
-				mainPkg.Archive.AddDependency("main")
 
 				tempfile, err := ioutil.TempFile("", "test.")
 				if err != nil {

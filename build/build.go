@@ -529,6 +529,7 @@ func applyPatches(file *ast.File, fileSet *token.FileSet, importPath string) *as
 		removeFunction("TestCallMethodJump")
 		removeType("Inner")
 		removeType("Outer")
+		file.Comments = nil
 
 	case importPath == "runtime" && strings.HasPrefix(basename, "zgoarch_"):
 		file, _ = parser.ParseFile(fileSet, basename, "package runtime\nconst theGoarch = `js`\n", 0)

@@ -278,11 +278,13 @@ type PkgImport struct {
 }
 
 type Decl struct {
+	FullName   []byte
 	Var        string
 	BodyCode   []byte
 	InitCode   []byte
 	DceFilters []DepId
 	DceDeps    []DepId
+	Blocking   bool
 }
 
 type DepId []byte // make asn1 happy

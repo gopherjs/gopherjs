@@ -31,16 +31,17 @@ type funcContext struct {
 }
 
 type pkgContext struct {
-	pkg          *types.Package
-	info         *types.Info
-	comments     ast.CommentMap
-	funcContexts map[*types.Func]*funcContext
-	pkgVars      map[string]string
-	objectVars   map[types.Object]string
-	escapingVars map[types.Object]bool
-	indentation  int
-	dependencies map[types.Object]bool
-	minify       bool
+	pkg           *types.Package
+	info          *types.Info
+	importContext *ImportContext
+	comments      ast.CommentMap
+	funcContexts  map[*types.Func]*funcContext
+	pkgVars       map[string]string
+	objectVars    map[types.Object]string
+	escapingVars  map[types.Object]bool
+	indentation   int
+	dependencies  map[types.Object]bool
+	minify        bool
 }
 
 type flowData struct {
@@ -102,16 +103,17 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	c := &funcContext{
 		p: &pkgContext{
-			pkg:          typesPkg,
-			info:         info,
-			comments:     make(ast.CommentMap),
-			funcContexts: make(map[*types.Func]*funcContext),
-			pkgVars:      make(map[string]string),
-			objectVars:   make(map[types.Object]string),
-			escapingVars: make(map[types.Object]bool),
-			indentation:  1,
-			dependencies: make(map[types.Object]bool),
-			minify:       minify,
+			pkg:           typesPkg,
+			info:          info,
+			importContext: importContext,
+			comments:      make(ast.CommentMap),
+			funcContexts:  make(map[*types.Func]*funcContext),
+			pkgVars:       make(map[string]string),
+			objectVars:    make(map[types.Object]string),
+			escapingVars:  make(map[types.Object]bool),
+			indentation:   1,
+			dependencies:  make(map[types.Object]bool),
+			minify:        minify,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[string]*flowData{"": &flowData{}},
@@ -287,9 +289,12 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	// functions
 	for _, fun := range functions {
-		var d Decl
 		o := c.p.info.Defs[fun.Name].(*types.Func)
-		funName := fun.Name.Name
+		context := c.p.funcContexts[o]
+		d := Decl{
+			FullName: []byte(o.FullName()),
+			Blocking: len(context.blocking) != 0,
+		}
 		if fun.Recv == nil {
 			d.Var = c.objectName(o)
 			if o.Name() != "main" && o.Name() != "init" {
@@ -306,7 +311,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			if isPointer {
 				namedRecvType = ptr.Elem().(*types.Named)
 			}
-			funName = namedRecvType.Obj().Name() + "." + funName
 			d.DceFilters = []DepId{DepId(namedRecvType.Obj().Name())}
 			if !fun.Name.IsExported() {
 				d.DceFilters = append(d.DceFilters, DepId(fun.Name.Name))
@@ -314,7 +318,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 
 		d.DceDeps = collectDependencies(o, func() {
-			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun, c.p.funcContexts[o]), minify)
+			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun, context), minify)
 		})
 		archive.Declarations = append(archive.Declarations, d)
 		if fun.Recv == nil && strings.HasPrefix(fun.Name.String(), "Test") {
@@ -462,9 +466,9 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 	}
 
 	var joinedParams string
-	primaryFunction := func(lhs string, fullName string) []byte {
+	primaryFunction := func(lhs string) []byte {
 		if fun.Body == nil {
-			return []byte(fmt.Sprintf("\t%s = function() {\n\t\tthrow $panic(\"Native function not implemented: %s\");\n\t};\n", lhs, fullName))
+			return []byte(fmt.Sprintf("\t%s = function() {\n\t\tthrow $panic(\"Native function not implemented: %s\");\n\t};\n", lhs, o.FullName()))
 		}
 
 		stmts := fun.Body.List
@@ -483,12 +487,11 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 	}
 
 	if fun.Recv == nil {
-		funName := c.objectName(o)
-		lhs := funName
+		lhs := c.objectName(o)
 		if fun.Name.IsExported() || fun.Name.Name == "main" {
 			lhs += " = $pkg." + fun.Name.Name
 		}
-		return primaryFunction(lhs, funName)
+		return primaryFunction(lhs)
 	}
 
 	recvType := sig.Recv().Type()
@@ -506,25 +509,25 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 	code := bytes.NewBuffer(nil)
 
 	if _, isStruct := namedRecvType.Underlying().(*types.Struct); isStruct {
-		code.Write(primaryFunction(typeName+".Ptr.prototype."+funName, typeName+"."+funName))
+		code.Write(primaryFunction(typeName + ".Ptr.prototype." + funName))
 		fmt.Fprintf(code, "\t%s.prototype.%s = function(%s) { return this.$val.%s(%s); };\n", typeName, funName, joinedParams, funName, joinedParams)
 		return code.Bytes()
 	}
 
 	if isPointer {
 		if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
-			code.Write(primaryFunction(typeName+".prototype."+funName, typeName+"."+funName))
+			code.Write(primaryFunction(typeName + ".prototype." + funName))
 			fmt.Fprintf(code, "\t$ptrType(%s).prototype.%s = function(%s) { return (new %s(this.$get())).%s(%s); };\n", typeName, funName, joinedParams, typeName, funName, joinedParams)
 			return code.Bytes()
 		}
-		return primaryFunction(fmt.Sprintf("$ptrType(%s).prototype.%s", typeName, funName), typeName+"."+funName)
+		return primaryFunction(fmt.Sprintf("$ptrType(%s).prototype.%s", typeName, funName))
 	}
 
 	value := "this.$get()"
 	if isWrapped(recvType) {
 		value = fmt.Sprintf("new %s(%s)", typeName, value)
 	}
-	code.Write(primaryFunction(typeName+".prototype."+funName, typeName+"."+funName))
+	code.Write(primaryFunction(typeName + ".prototype." + funName))
 	fmt.Fprintf(code, "\t$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };\n", typeName, funName, joinedParams, value, funName, joinedParams)
 	return code.Bytes()
 }
@@ -591,6 +594,19 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 					}
 				}
 				if o.Pkg() != c.p.pkg {
+					fullName := o.FullName()
+					archive, err := c.p.importContext.Import(o.Pkg().Path())
+					if err != nil {
+						panic(err)
+					}
+					for _, d := range archive.Declarations {
+						if string(d.FullName) == fullName {
+							if d.Blocking {
+								c.markBlocking(c.analyzeStack)
+							}
+							return
+						}
+					}
 					return
 				}
 				if context, ok := c.p.funcContexts[o]; ok && len(context.blocking) != 0 {

@@ -1318,7 +1318,7 @@ var $notSupported = function(feature) {
 	err.$notSupported = feature;
 	throw err;
 };
-var $nonblockingCall = "non-blocking call to blocking function";
+var $nonblockingCall = "non-blocking call to blocking function (mark call with \"//go:blocking\" to fix)";
 var $throw = function(err) { throw err; };
 var $catch = function(f) { try { f(); return null; } catch (e) { return e; } };
 var $throwRuntimeError; /* set by package "runtime" */

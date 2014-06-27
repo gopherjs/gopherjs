@@ -87,7 +87,7 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 			names = nativesPkg.XTestGoFiles
 		}
 		for _, name := range names {
-			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, 0)
+			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, parser.ParseComments)
 			if err != nil {
 				panic(err)
 			}
@@ -110,7 +110,7 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 		if err != nil {
 			return nil, err
 		}
-		file, err := parser.ParseFile(fileSet, name, r, 0)
+		file, err := parser.ParseFile(fileSet, name, r, parser.ParseComments)
 		r.Close()
 		if err != nil {
 			if list, isList := err.(scanner.ErrorList); isList {

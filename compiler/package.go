@@ -33,6 +33,7 @@ type funcContext struct {
 type pkgContext struct {
 	pkg          *types.Package
 	info         *types.Info
+	comments     ast.CommentMap
 	funcContexts map[*types.Func]*funcContext
 	pkgVars      map[string]string
 	objectVars   map[types.Object]string
@@ -103,6 +104,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		p: &pkgContext{
 			pkg:          typesPkg,
 			info:         info,
+			comments:     make(ast.CommentMap),
 			funcContexts: make(map[*types.Func]*funcContext),
 			pkgVars:      make(map[string]string),
 			objectVars:   make(map[types.Object]string),
@@ -134,6 +136,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var toplevelTypes []*types.TypeName
 	var vars []*types.Var
 	for _, file := range files {
+		for k, v := range ast.NewCommentMap(fileSet, file, file.Comments) {
+			c.p.comments[k] = v
+		}
+
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
@@ -562,6 +568,20 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 		callTo := func(o *types.Func) {
 			if recv := o.Type().(*types.Signature).Recv(); recv != nil {
 				if _, ok := recv.Type().Underlying().(*types.Interface); ok {
+					for i := len(c.analyzeStack) - 1; i >= 0; i-- {
+						n2 := c.analyzeStack[i]
+						for _, group := range c.p.comments[n2] {
+							for _, comment := range group.List {
+								if comment.Text == "//go:blocking" {
+									c.markBlocking(c.analyzeStack)
+									return
+								}
+							}
+						}
+						if _, ok := n2.(ast.Stmt); ok {
+							break
+						}
+					}
 					return
 				}
 			}

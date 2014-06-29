@@ -970,6 +970,7 @@ var $externalize = function(v, t) {
 		if (v === $throwNilPointerError) {
 			return null;
 		}
+		$checkForDeadlock = false;
 		var convert = false;
 		var i;
 		for (i = 0; i < t.params.length; i++) {
@@ -1313,48 +1314,50 @@ var $panic = function(value) {
 	err.$panicValue = value;
 	return err;
 };
-var $notSupported = function(feature) {
-	var err = new Error("not supported by GopherJS: " + feature);
-	err.$notSupported = feature;
-	throw err;
+var $nonblockingCall = function() {
+	throw $panic(new $packages["runtime"].NotSupportedError.Ptr("non-blocking call to blocking function (mark call with \"//go:blocking\" to fix)"));
 };
-var $nonblockingCall = "non-blocking call to blocking function (mark call with \"//go:blocking\" to fix)";
 var $throw = function(err) { throw err; };
-var $catch = function(f) { try { f(); return null; } catch (e) { return e; } };
 var $throwRuntimeError; /* set by package "runtime" */
 
-var $errorStack = [], $jsErr = null;
+var $errorStack = [];
 
 var $pushErr = function(err) {
-	if (err !== $blockNow && err.$panicValue === undefined) {
-		if (err.$exit || err.$notSupported) {
-			$jsErr = err;
-			return;
-		}
+	if (err === $unwind) {
+		throw $unwind;
+	}
+	if (err.$panicValue === undefined) {
 		err.$panicValue = new $packages["github.com/gopherjs/gopherjs/js"].Error.Ptr(err);
 	}
 	$errorStack.push({ frame: $getStackDepth(), error: err });
 };
 
 var $callDeferred = function(deferred) {
-	if ($jsErr !== null) {
-		throw $jsErr;
+	if ($curGoroutine && $curGoroutine.asleep) {
+		return;
 	}
 	var err = $errorStack[$errorStack.length - 1];
-	if (err !== undefined && err.error === $blockNow) {
+	if (err !== undefined && err.error === $unwind) {
 		$errorStack.pop();
-		throw $blockNow;
+		throw $unwind;
 	}
-	var i;
-	for (i = deferred.length - 1; i >= 0; i--) {
-		var call = deferred[i];
+	while (deferred.length !== 0) {
+		var call = deferred.pop();
 		try {
+			var r;
 			if (call.recv !== undefined) {
-				call.recv[call.method].apply(call.recv, call.args);
-				continue;
+				r = call.recv[call.method].apply(call.recv, call.args);
+			} else {
+			  r = call.fun.apply(undefined, call.args);
 			}
-			call.fun.apply(undefined, call.args);
+		  if (r && r.constructor === Function) {
+				deferred.push({ fun: r, args: [] });
+			}
 		} catch (err) {
+			if (err === $unwind) {
+				deferred.push(call);
+				throw $unwind;
+			}
 			$errorStack.push({ frame: $getStackDepth(), error: err });
 		}
 	}
@@ -1388,7 +1391,7 @@ var $getStackDepth = function() {
 	return d;
 };
 
-var $curGoroutine, $blockNow = {}, $totalGoroutines = 0, $awakeGoroutines = 0;
+var $curGoroutine, $unwind = {}, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
 var $go = function(fun, args) {
 	$totalGoroutines++;
 	$awakeGoroutines++;
@@ -1403,22 +1406,26 @@ var $go = function(fun, args) {
 					$schedule(goroutine);
 					return;
 				}
-				$totalGoroutines--;
-				$curGoroutine.asleep = true;
+				$curGoroutine.exit = true;
 			} catch (err) {
-			  if (err !== $blockNow) {
+			  if (err !== $unwind) {
 					throw err;
 			  }
 			}
+			if ($curGoroutine.exit) { /* also set by runtime.Goexit() */
+				$totalGoroutines--;
+				$curGoroutine.asleep = true;
+			}
 			if ($curGoroutine.asleep) {
 				$awakeGoroutines--;
-				if ($awakeGoroutines === 0 && $totalGoroutines !== 0) { $deadlock(); }
+				if ($awakeGoroutines === 0 && $totalGoroutines !== 0 && $checkForDeadlock) {
+					throw $panic(new $String("fatal error: all goroutines are asleep - deadlock!"));
+				}
 			}
 		};
 		$schedule(goroutine);
 	}, []);
 };
-var $deadlock = function() { throw $panic(new $String("fatal error: all goroutines are asleep - deadlock!")); };
 
 var $scheduled = [], $schedulerLoopActive = false;
 var $schedule = function(goroutine) {
@@ -1470,7 +1477,7 @@ var $send = function(chan, value) {
 		};
 		blocked = true;
 		$curGoroutine.asleep = true;
-		throw $blockNow;
+		throw $unwind;
 	};
 };
 var $recv = function(chan) {
@@ -1497,7 +1504,7 @@ var $recv = function(chan) {
 		};
 		blocked = true;
 		$curGoroutine.asleep = true;
-		throw $blockNow;
+		throw $unwind;
 	};
 };
 var $close = function(chan) {
@@ -1590,12 +1597,9 @@ var $select = function(comms) {
 						queue.splice(index, 1);
 						break;
 					}
-					var bufferedValue = comm[0].$buffer.shift();
-					if (bufferedValue !== undefined) {
-						selection = [i, [bufferedValue, true]];
-						break;
-					}
-					selection = [i, [comm[0].constructor.elem.zero(), false]];
+					var value = $curGoroutine.chanValue;
+					$curGoroutine.chanValue = undefined;
+					selection = [i, value];
 					break;
 				case 3: /* send */
 					var queue = comm[0].$sendQueue;
@@ -1615,7 +1619,7 @@ var $select = function(comms) {
 		};
 		blocked = true;
 		$curGoroutine.asleep = true;
-		throw $blockNow;
+		throw $unwind;
 	};
 };
 
@@ -1716,7 +1720,5 @@ var $typeAssertionFailed = function(obj, expected) {
 	}
 	throw $panic(new $packages["runtime"].TypeAssertionError.Ptr("", got, expected.string, ""));
 };
-
-var $now = function() { var msec = (new Date()).getTime(); return [new $Int64(0, Math.floor(msec / 1000)), (msec % 1000) * 1000000]; };
 
 var $packages = {};`)

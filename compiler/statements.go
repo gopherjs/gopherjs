@@ -130,11 +130,10 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		refVar := c.newVariable("_ref")
 		c.Printf("%s = %s;", refVar, c.translateExpr(s.X))
 
-		iVar := c.newVariable("_i")
-		c.Printf("%s = 0;", iVar)
-
 		switch t := c.p.info.Types[s.X].Type.Underlying().(type) {
 		case *types.Basic:
+			iVar := c.newVariable("_i")
+			c.Printf("%s = 0;", iVar)
 			runeVar := c.newVariable("_rune")
 			c.translateLoopingStmt(iVar+" < "+refVar+".length", s.Body, func() {
 				c.Printf("%s = $decodeRune(%s, %s);", runeVar, refVar, iVar)
@@ -149,6 +148,8 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			}, label, c.flattened[s])
 
 		case *types.Map:
+			iVar := c.newVariable("_i")
+			c.Printf("%s = 0;", iVar)
 			keysVar := c.newVariable("_keys")
 			c.Printf("%s = $keys(%s);", keysVar, refVar)
 			c.translateLoopingStmt(iVar+" < "+keysVar+".length", s.Body, func() {
@@ -178,6 +179,8 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				length = refVar + ".$length"
 				elemType = t2.Elem()
 			}
+			iVar := c.newVariable("_i")
+			c.Printf("%s = 0;", iVar)
 			c.translateLoopingStmt(iVar+" < "+length, s.Body, func() {
 				if !isBlank(s.Key) {
 					c.Printf("%s", c.translateAssign(s.Key, iVar, types.Typ[types.Int], s.Tok == token.DEFINE))
@@ -193,10 +196,6 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			}, label, c.flattened[s])
 
 		case *types.Chan:
-			if !GoroutinesSupport {
-				return
-			}
-
 			okVar := c.newIdent(c.newVariable("_ok"), types.Typ[types.Bool])
 			forStmt := &ast.ForStmt{
 				Body: &ast.BlockStmt{
@@ -207,7 +206,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 								okVar,
 							},
 							Rhs: []ast.Expr{
-								c.setType(&ast.UnaryExpr{X: s.X, Op: token.ARROW}, types.NewTuple(types.NewVar(0, nil, "", t.Elem()), types.NewVar(0, nil, "", types.Typ[types.Bool]))),
+								c.setType(&ast.UnaryExpr{X: c.newIdent(refVar, t), Op: token.ARROW}, types.NewTuple(types.NewVar(0, nil, "", t.Elem()), types.NewVar(0, nil, "", types.Typ[types.Bool]))),
 							},
 							Tok: s.Tok,
 						},
@@ -310,7 +309,10 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			return
 		}
 		sig := c.p.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
-		args := strings.Join(c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid()), ", ")
+		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
+		if len(c.blocking) != 0 {
+			args = append(args, "true")
+		}
 		if s, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
 			obj := c.p.info.Uses[s.Sel]
 			if !obj.Exported() {
@@ -321,10 +323,10 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			if ok && sel.Kind() == types.MethodVal && isWrapped(sel.Recv()) {
 				recv = c.formatParenExpr("new %s(%s)", c.typeName(sel.Recv()), recv)
 			}
-			c.Printf(`$deferred.push({ recv: %s, method: "%s", args: [%s] });`, recv, s.Sel.Name, args)
+			c.Printf(`$deferred.push({ recv: %s, method: "%s", args: [%s] });`, recv, s.Sel.Name, strings.Join(args, ", "))
 			return
 		}
-		c.Printf("$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), args)
+		c.Printf("$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), strings.Join(args, ", "))
 
 	case *ast.AssignStmt:
 		c.printLabel(label)
@@ -537,18 +539,9 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.GoStmt:
 		c.printLabel(label)
-		if !GoroutinesSupport {
-			c.Printf(`$notSupported("go");`)
-			return
-		}
 		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.info.Types[s.Call.Fun].Type.(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid()), ", "))
 
 	case *ast.SendStmt:
-		if !GoroutinesSupport {
-			c.printLabel(label)
-			c.Printf(`$notSupported("send");`)
-			return
-		}
 		call := &ast.CallExpr{
 			Fun:  c.newIdent("$send", types.NewSignature(nil, nil, types.NewTuple(types.NewVar(0, nil, "", c.p.info.Types[s.Chan].Type), types.NewVar(0, nil, "", c.p.info.Types[s.Value].Type)), nil, false)),
 			Args: []ast.Expr{s.Chan, s.Value},
@@ -557,18 +550,16 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		c.translateStmt(&ast.ExprStmt{call}, label)
 
 	case *ast.SelectStmt:
-		if !GoroutinesSupport {
-			c.Printf(`$notSupported("select");`)
-			return
-		}
 		var channels []string
 		var caseClauses []ast.Stmt
 		flattened := false
+		hasDefault := false
 		for i, s := range s.Body.List {
 			clause := s.(*ast.CommClause)
 			switch comm := clause.Comm.(type) {
 			case nil:
 				channels = append(channels, "[]")
+				hasDefault = true
 			case *ast.ExprStmt:
 				channels = append(channels, c.formatExpr("[%e]", removeParens(comm.X).(*ast.UnaryExpr).X).String())
 			case *ast.AssignStmt:
@@ -589,7 +580,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			Fun:  c.newIdent("$select", types.NewSignature(nil, nil, types.NewTuple(types.NewVar(0, nil, "", types.NewInterface(nil, nil))), types.NewTuple(types.NewVar(0, nil, "", types.Typ[types.Int])), false)),
 			Args: []ast.Expr{c.newIdent(fmt.Sprintf("[%s]", strings.Join(channels, ", ")), types.NewInterface(nil, nil))},
 		}, types.Typ[types.Int])
-		c.blocking[selectCall] = true
+		c.blocking[selectCall] = !hasDefault
 		selectionVar := c.newVariable("_selection")
 		c.Printf("%s = %s;", selectionVar, c.translateExpr(selectCall))
 

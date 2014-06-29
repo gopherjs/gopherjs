@@ -674,11 +674,7 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 		case *ast.Ident:
 			callTo(c.p.info.Uses[f])
 		case *ast.SelectorExpr:
-			o := c.p.info.Uses[f.Sel]
-			if isJsPackage(o.Pkg()) && o.Name() == "BlockAfter" {
-				c.markBlocking(c.analyzeStack)
-			}
-			callTo(o)
+			callTo(c.p.info.Uses[f.Sel])
 		}
 	case *ast.SendStmt:
 		c.markBlocking(c.analyzeStack)
@@ -691,6 +687,11 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 			c.markBlocking(c.analyzeStack)
 		}
 	case *ast.SelectStmt:
+		for _, s := range n.Body.List {
+			if s.(*ast.CommClause).Comm == nil { // default clause
+				return c
+			}
+		}
 		c.markBlocking(c.analyzeStack)
 	case *ast.CommClause:
 		for _, s := range n.Body {
@@ -699,16 +700,16 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 		return nil
 	case *ast.DeferStmt:
 		c.hasDefer = true
-	case *ast.FuncLit:
+		if funcLit, ok := n.Call.Fun.(*ast.FuncLit); ok {
+			ast.Walk(c, funcLit.Body)
+		}
+	case *ast.FuncLit, *ast.GoStmt:
 		return nil
 	}
 	return c
 }
 
 func (c *funcContext) markBlocking(stack []ast.Node) {
-	if !GoroutinesSupport {
-		return
-	}
 	c.blocking[stack[len(stack)-1]] = true
 	for _, n := range stack {
 		c.flattened[n] = true
@@ -764,7 +765,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 
 		if len(c.blocking) != 0 {
 			c.localVars = append(c.localVars, "$r")
-			prefix = prefix + " if(!$b) { $notSupported($nonblockingCall); }; return function() {"
+			prefix = prefix + " if(!$b) { $nonblockingCall(); }; return function() {"
 			suffix = " };" + suffix
 		}
 
@@ -772,6 +773,9 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 			c.localVars = append(c.localVars, "$deferred = []")
 			prefix = prefix + " try {"
 			deferSuffix := " } catch($err) { $pushErr($err);"
+			if len(c.blocking) != 0 {
+				deferSuffix += " $s = -1;"
+			}
 			if c.sig != nil && c.resultNames == nil {
 				switch c.sig.Results().Len() {
 				case 0:
@@ -806,7 +810,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 		if len(c.flattened) != 0 {
 			c.localVars = append(c.localVars, "$s = 0")
 			prefix = prefix + " while (true) { switch ($s) { case 0:"
-			suffix = " } return; }" + suffix
+			suffix = " $s = -1; case -1: } return; }" + suffix
 		}
 
 		if prefix != "" {

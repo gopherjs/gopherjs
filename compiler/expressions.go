@@ -183,9 +183,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 
 		case token.ARROW:
-			if !GoroutinesSupport {
-				return c.formatExpr("undefined")
-			}
 			call := &ast.CallExpr{
 				Fun:  c.newIdent("$recv", types.NewSignature(nil, nil, types.NewTuple(types.NewVar(0, nil, "", t)), types.NewTuple(types.NewVar(0, nil, "", exprType), types.NewVar(0, nil, "", types.Typ[types.Bool])), false)),
 				Args: []ast.Expr{e.X},
@@ -597,11 +594,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					switch obj.Name() {
 					case "InternalObject":
 						return c.translateExpr(e.Args[0])
-					case "BlockAfter":
-						resumeCase := c.caseCounter
-						c.caseCounter++
-						c.Printf("%s($curGoroutine); $s = %d; throw $blockNow; case %d:", c.translateExpr(e.Args[0]), resumeCase, resumeCase)
-						return nil
 					}
 				}
 				fun = c.translateExpr(f)
@@ -773,7 +765,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if sig.Results().Len() != 0 {
 				returnVar = c.newVariable("_r")
 			}
-			c.Printf("%[1]s = %[2]s(%[3]s); $s = %[4]d; case %[4]d: if (%[1]s && %[1]s.constructor === Function) { %[1]s = %[1]s(); }", returnVar, fun, strings.Join(append(args, "true"), ", "), resumeCase)
+			c.Printf("%[1]s = %[2]s(%[3]s); /* */ $s = %[4]d; case %[4]d: if (%[1]s && %[1]s.constructor === Function) { %[1]s = %[1]s(); }", returnVar, fun, strings.Join(append(args, "true"), ", "), resumeCase)
 			if sig.Results().Len() != 0 {
 				return c.formatExpr("%s", returnVar)
 			}

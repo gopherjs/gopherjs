@@ -106,10 +106,6 @@ var Arguments []Object
 // Module gives the value of the "module" variable set by Node.js.
 var Module Object
 
-// WIP
-func BlockAfter(f func(unblock func())) {
-}
-
 // Returns the internal JavaScript object that represents i. Not intended for public use.
 func InternalObject(i interface{}) Object {
 	return nil

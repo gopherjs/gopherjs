@@ -4,6 +4,7 @@ package reflect
 
 import (
 	"github.com/gopherjs/gopherjs/js"
+	"runtime"
 	"unsafe"
 )
 
@@ -253,28 +254,23 @@ func makechan(typ *rtype, size uint64) (ch iword) {
 }
 
 func chancap(ch iword) int {
-	js.Global.Call("$notSupported", "channels")
-	panic("unreachable")
+	panic(&runtime.NotSupportedError{"channels"})
 }
 
 func chanclose(ch iword) {
-	js.Global.Call("$notSupported", "channels")
-	panic("unreachable")
+	panic(&runtime.NotSupportedError{"channels"})
 }
 
 func chanlen(ch iword) int {
-	js.Global.Call("$notSupported", "channels")
-	panic("unreachable")
+	panic(&runtime.NotSupportedError{"channels"})
 }
 
 func chanrecv(t *rtype, ch iword, nb bool) (val iword, selected, received bool) {
-	js.Global.Call("$notSupported", "channels")
-	panic("unreachable")
+	panic(&runtime.NotSupportedError{"channels"})
 }
 
 func chansend(t *rtype, ch iword, val iword, nb bool) bool {
-	js.Global.Call("$notSupported", "channels")
-	panic("unreachable")
+	panic(&runtime.NotSupportedError{"channels"})
 }
 
 func makemap(t *rtype) (m iword) {

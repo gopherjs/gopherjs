@@ -6,12 +6,22 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+type NotSupportedError struct {
+	Feature string
+}
+
+func (err *NotSupportedError) Error() string {
+	return "not supported by GopherJS: " + err.Feature
+}
+
 func init() {
 	js.Global.Set("$throwRuntimeError", func(msg string) {
 		panic(errorString(msg))
 	})
 	// avoid dead code elimination
-	e := TypeAssertionError{}
+	var e error
+	e = &TypeAssertionError{}
+	e = &NotSupportedError{}
 	_ = e
 }
 
@@ -40,14 +50,13 @@ func GC() {
 }
 
 func Goexit() {
-	err := js.Global.Get("Error").New()
-	err.Set("$exit", true)
-	js.Global.Call("$throw", err)
+	js.Global.Get("$curGoroutine").Set("exit", true)
+	js.Global.Call("$throw", js.Global.Get("$unwind"))
 }
 
 func GOMAXPROCS(n int) int {
 	if n > 1 {
-		js.Global.Call("$notSupported", "GOMAXPROCS > 1")
+		panic(&NotSupportedError{"GOMAXPROCS > 1"})
 	}
 	return 1
 }

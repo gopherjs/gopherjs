@@ -14,7 +14,7 @@ You can take advantage of Go's elegant type system and other compile-time checks
 - small size of generated code
 
 ### What is supported?
-In one sentence: Everything except goroutines. Yes, I know that you want goroutines and I am working heavily on them. But hey, it is still better to write Go with callbacks than JavaScript with callbacks, right? A lot of Go's packages do already work, see the [compatibility table](doc/packages.md). If you want this still missing feature, please consider to support this project with a star to show your interest.
+Nearly everything, including Goroutines. See the [compatibility table](doc/packages.md) for details.
 
 ### Installation and Usage
 Get or update GopherJS and dependencies with:
@@ -55,9 +55,3 @@ The package `github.com/gopherjs/gopherjs/js` provides functions for interacting
 - Get help in the [Google Group](https://groups.google.com/d/forum/gopherjs)
 - See the list of [bindings to JavaScript APIs and libraries](https://github.com/gopherjs/gopherjs/wiki/bindings) by community members
 - Follow [GopherJS on Twitter](https://twitter.com/GopherJS)
-
-### Roadmap
-These features are not implemented yet, but on the roadmap:
-
-- goroutines, channels, select
-- float32 and complex64 currently have the same precision as float64 and complex128

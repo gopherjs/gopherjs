@@ -5,8 +5,8 @@ package testing
 import (
 	"flag"
 	"fmt"
-	"github.com/gopherjs/gopherjs/js"
 	"os"
+	"runtime"
 	"time"
 )
 
@@ -35,27 +35,32 @@ func Main(matchString func(pat, str string) (bool, error), tests []InternalTest,
 		if *chatty {
 			fmt.Printf("=== RUN %s\n", t.name)
 		}
-		err := js.Global.Call("$catch", func() {
-			test.F(t)
-		})
-		js.Global.Set("$jsErr", nil)
-		if err != nil {
-			switch {
-			case !err.Get("$exit").IsUndefined():
-				// test failed or skipped
-				err = nil
-			case !err.Get("$notSupported").IsUndefined():
-				t.log(err.Get("message").Str())
-				t.skip()
-				err = nil
-			default:
-				t.Fail()
-			}
-		}
+
+		done := make(chan struct{})
+		var err interface{}
+		go func() {
+			defer func() {
+				err = recover()
+				close(done)
+			}()
+
+			test := test.F
+			test(t) //go:blocking
+		}()
+		<-done
+
 		t.common.duration = time.Now().Sub(t.common.start)
+		if e, ok := err.(*runtime.NotSupportedError); ok {
+			t.log(e.Error())
+			t.skip()
+			err = nil
+		}
+		if err != nil {
+			t.Fail()
+		}
 		t.report()
 		if err != nil {
-			js.Global.Call("$throw", js.InternalObject(err))
+			panic(err)
 		}
 		failed = failed || t.common.failed
 	}

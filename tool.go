@@ -60,7 +60,6 @@ func main() {
 		buildFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
 		buildFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
 		buildFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
-		buildFlags.BoolVar(&compiler.GoroutinesSupport, "goroutines", false, "experimental support for goroutines")
 		buildFlags.Parse(cmdArgs)
 
 		for {
@@ -129,7 +128,6 @@ func main() {
 		installFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
 		installFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
 		installFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
-		installFlags.BoolVar(&compiler.GoroutinesSupport, "goroutines", false, "experimental support for goroutines")
 		installFlags.Parse(cmdArgs)
 
 		for {
@@ -172,7 +170,6 @@ func main() {
 
 	case "run":
 		runFlags := flag.NewFlagSet("run command", flag.ExitOnError)
-		runFlags.BoolVar(&compiler.GoroutinesSupport, "goroutines", false, "experimental support for goroutines")
 		runFlags.Parse(cmdArgs)
 
 		os.Exit(handleError(func() error {
@@ -210,7 +207,6 @@ func main() {
 		verbose := testFlags.Bool("v", false, "verbose")
 		short := testFlags.Bool("short", false, "short")
 		testFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
-		testFlags.BoolVar(&compiler.GoroutinesSupport, "goroutines", false, "experimental support for goroutines")
 		testFlags.Parse(cmdArgs)
 
 		os.Exit(handleError(func() error {
@@ -431,10 +427,11 @@ func runNode(script string, args []string, dir string) error {
 	node.Stdin = os.Stdin
 	node.Stdout = os.Stdout
 	node.Stderr = os.Stderr
-	if err := node.Run(); err != nil {
-		return fmt.Errorf("could not run Node.js: %s", err.Error())
+	err := node.Run()
+	if _, ok := err.(*exec.ExitError); err != nil && !ok {
+		err = fmt.Errorf("could not run Node.js: %s", err.Error())
 	}
-	return nil
+	return err
 }
 
 type testFuncs struct {

@@ -29,6 +29,25 @@ func (p *Pool) Put(x interface{}) {
 func runtime_registerPoolCleanup(cleanup func()) {
 }
 
+// var sems []chan struct{} = []chan struct{}{nil}
+
+// func getSem(s *uint32) chan struct{} {
+// 	sem := sems[*s]
+// 	if sem == nil {
+// 		*s = uint32(len(sems))
+// 		sems = append(sems, make(chan struct{}))
+// 	}
+// 	return sem
+// }
+
+// func runtime_Semacquire(s *uint32) {
+// 	<-getSem(s)
+// }
+
+// func runtime_Semrelease(s *uint32) {
+// 	getSem(s) <- struct{}{}
+// }
+
 func runtime_Syncsemcheck(size uintptr) {
 }
 

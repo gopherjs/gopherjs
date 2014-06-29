@@ -3,10 +3,9 @@
 package net
 
 import (
-	"github.com/gopherjs/gopherjs/js"
+	"runtime"
 )
 
 func Listen(net, laddr string) (Listener, error) {
-	js.Global.Call("$notSupported", "net")
-	panic("unreachable")
+	panic(&runtime.NotSupportedError{"net"})
 }

@@ -11,27 +11,28 @@ func now() (sec int64, nsec int32) {
 	return msec / 1000, int32(msec%1000) * 1000000
 }
 
-func AfterFunc(d Duration, f func()) *Timer {
-	js.Global.Call("setTimeout", f, d/Millisecond)
-	return nil
-}
-
-func After(d Duration) <-chan Time {
-	js.Global.Call("$notSupported", "time.After (use time.AfterFunc instead)")
-	panic("unreachable")
+func runtimeNano() int64 {
+	msec := js.Global.Get("Date").New().Call("getTime").Int64()
+	return msec * 1000000
 }
 
 func Sleep(d Duration) {
-	js.Global.Call("$notSupported", "time.Sleep (use time.AfterFunc instead)")
-	panic("unreachable")
+	c := make(chan struct{})
+	js.Global.Call("setTimeout", func() { close(c) }, int(d/Millisecond))
+	<-c
 }
 
-func Tick(d Duration) <-chan Time {
-	js.Global.Call("$notSupported", "time.Tick (use time.AfterFunc instead)")
-	panic("unreachable")
+func startTimer(t *runtimeTimer) {
+	diff := int((t.when - runtimeNano()) / 1000000)
+	js.Global.Call("setTimeout", func() {
+		t.f(runtimeNano(), t.arg)
+		if t.period != 0 {
+			t.when += t.period
+			startTimer(t)
+		}
+	}, diff)
 }
 
-func NewTimer(d Duration) *Timer {
-	js.Global.Call("$notSupported", "time.NewTimer (use time.AfterFunc instead)")
-	panic("unreachable")
+func stopTimer(t *runtimeTimer) bool {
+	return false
 }

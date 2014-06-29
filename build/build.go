@@ -1,11 +1,7 @@
 package build
 
 import (
-	"bitbucket.org/kardianos/osext"
-	"code.google.com/p/go.exp/fsnotify"
 	"fmt"
-	"github.com/gopherjs/gopherjs/compiler"
-	"github.com/neelance/sourcemap"
 	"go/ast"
 	"go/build"
 	"go/parser"
@@ -17,6 +13,11 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"bitbucket.org/kardianos/osext"
+	"code.google.com/p/go.exp/fsnotify"
+	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/neelance/sourcemap"
 )
 
 type ImportCError struct{}
@@ -55,7 +56,11 @@ func Import(path string, mode build.ImportMode, archSuffix string) (*build.Packa
 	}
 	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
 		// fall back to GOPATH
-		gopathPkgObj := build.Default.GOPATH + pkg.PkgObj[len(build.Default.GOROOT):]
+		// TODO: Instead of always using the first GOPATH workspace, perhaps one should be chosen more intelligently?
+		//       In this case, I think all GOPATH workspaces should be consulted, so one would need to iterate over
+		//       each one, until there's a match (or no matches at all).
+		firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0]
+		gopathPkgObj := filepath.Join(firstGopathWorkspace, pkg.PkgObj[len(build.Default.GOROOT):])
 		if _, err := os.Stat(gopathPkgObj); err == nil {
 			pkg.PkgObj = gopathPkgObj
 		}
@@ -361,8 +366,9 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 
 	if err := s.writeLibraryPackage(pkg, pkg.PkgObj); err != nil {
 		if strings.HasPrefix(pkg.PkgObj, s.options.GOROOT) {
-			// fall back to GOPATH
-			if err := s.writeLibraryPackage(pkg, s.options.GOPATH+pkg.PkgObj[len(s.options.GOROOT):]); err != nil {
+			// fall back to first GOPATH workspace
+			firstGopathWorkspace := filepath.SplitList(s.options.GOPATH)[0]
+			if err := s.writeLibraryPackage(pkg, filepath.Join(firstGopathWorkspace, pkg.PkgObj[len(s.options.GOROOT):])); err != nil {
 				return err
 			}
 			return nil
@@ -421,9 +427,9 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 			}
 			pos := fileSet.Position(originalPos)
 			file := pos.Filename
-			switch {
-			case strings.HasPrefix(file, s.options.GOPATH):
-				file = filepath.ToSlash(filepath.Join("/gopath", file[len(s.options.GOPATH):]))
+			switch hasGopathPrefix, prefixLen := hasGopathPrefix(file, s.options.GOPATH); {
+			case hasGopathPrefix:
+				file = filepath.ToSlash(filepath.Join("/gopath", file[prefixLen:]))
 			case strings.HasPrefix(file, s.options.GOROOT):
 				file = filepath.ToSlash(filepath.Join("/goroot", file[len(s.options.GOROOT):]))
 			default:
@@ -438,6 +444,18 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 		return err
 	}
 	return compiler.WriteProgramCode(deps, s.ImportContext, sourceMapFilter)
+}
+
+// hasGopathPrefix returns true and the length of the matched GOPATH workspace,
+// iff file has a prefix that matches one of the GOPATH workspaces.
+func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) {
+	gopathWorkspaces := filepath.SplitList(gopath)
+	for _, gopathWorkspace := range gopathWorkspaces {
+		if strings.HasPrefix(file, gopathWorkspace) {
+			return true, len(gopathWorkspace)
+		}
+	}
+	return false, 0
 }
 
 func (s *Session) WaitForChange() {

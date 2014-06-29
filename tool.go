@@ -136,7 +136,8 @@ func main() {
 			exitCode := handleError(func() error {
 				pkgs := installFlags.Args()
 				if len(pkgs) == 0 {
-					srcDir, err := filepath.EvalSymlinks(filepath.Join(build.Default.GOPATH, "src"))
+					firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: The GOPATH workspace that contains the package source should be chosen.
+					srcDir, err := filepath.EvalSymlinks(filepath.Join(firstGopathWorkspace, "src"))
 					if err != nil {
 						return err
 					}
@@ -220,7 +221,8 @@ func main() {
 				}
 			}
 			if len(pkgs) == 0 {
-				srcDir, err := filepath.EvalSymlinks(filepath.Join(build.Default.GOPATH, "src"))
+				firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: Not sure if always picking first GOPATH workspace here is the right thing.
+				srcDir, err := filepath.EvalSymlinks(filepath.Join(firstGopathWorkspace, "src"))
 				if err != nil {
 					return err
 				}

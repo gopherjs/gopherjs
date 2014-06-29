@@ -160,13 +160,7 @@ func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMa
 		}
 	}
 
-	for _, pkg := range pkgs {
-		if _, err := w.Write([]byte("$packages[\"" + string(pkg.ImportPath) + "\"].$init();\n")); err != nil {
-			return err
-		}
-	}
-
-	if _, err := w.Write([]byte("$go($packages[\"" + string(mainPkg.ImportPath) + "\"].main, []);\n\n})();\n")); err != nil {
+	if _, err := w.Write([]byte("$go($packages[\"" + string(mainPkg.ImportPath) + "\"].$run, []);\n\n})();\n")); err != nil {
 		return err
 	}
 
@@ -188,8 +182,8 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 		vars = append(vars, fmt.Sprintf("%s = $packages[\"%s\"]", imp.VarName, imp.Path))
 	}
 	for _, d := range pkg.Declarations {
-		if len(d.DceFilters) == 0 && d.Var != "" {
-			vars = append(vars, d.Var)
+		if len(d.DceFilters) == 0 {
+			vars = append(vars, d.Vars...)
 		}
 	}
 	if len(vars) != 0 {
@@ -204,8 +198,14 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 			}
 		}
 	}
+
 	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$init = function() {\n"), minify)); err != nil {
 		return err
+	}
+	if pkg.BlockingInit {
+		if _, err := w.Write(removeWhitespace([]byte("\t\t/* */ var $r, $s = 0; return function() { while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
+			return err
+		}
 	}
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 {
@@ -214,6 +214,12 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 			}
 		}
 	}
+	if pkg.BlockingInit {
+		if _, err := w.Write(removeWhitespace([]byte("\t\t/* */ } return; } };\n"), minify)); err != nil {
+			return err
+		}
+	}
+
 	if _, err := w.Write(removeWhitespace([]byte("\t};\n\treturn $pkg;\n})();"), minify)); err != nil {
 		return err
 	}
@@ -251,6 +257,7 @@ type Archive struct {
 	Declarations []Decl
 	Tests        []string
 	FileSet      []byte
+	BlockingInit bool
 	Minified     bool
 }
 
@@ -279,7 +286,7 @@ type PkgImport struct {
 
 type Decl struct {
 	FullName   []byte
-	Var        string
+	Vars       []string
 	BodyCode   []byte
 	InitCode   []byte
 	DceFilters []DepId

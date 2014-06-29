@@ -128,10 +128,20 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 
 	// imports
+	var importedPaths []string
 	for _, importedPkg := range typesPkg.Imports() {
 		varName := c.newVariableWithLevel(importedPkg.Name(), true)
 		c.p.pkgVars[importedPkg.Path()] = varName
 		archive.Imports = append(archive.Imports, PkgImport{Path: PkgPath(importedPkg.Path()), VarName: varName})
+		importedPaths = append(importedPaths, importedPkg.Path())
+	}
+	sort.Strings(importedPaths)
+	for _, impPath := range importedPaths {
+		impOutput, err := importContext.Import(impPath)
+		if err != nil {
+			return nil, err
+		}
+		archive.AddDependenciesOf(impOutput)
 	}
 
 	var functions []*ast.FuncDecl
@@ -225,7 +235,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	for _, o := range toplevelTypes {
 		typeName := c.objectName(o)
 		var d Decl
-		d.Var = typeName
+		d.Vars = []string{typeName}
 		d.DceFilters = []DepId{DepId(o.Name())}
 		d.DceDeps = collectDependencies(o, func() {
 			d.BodyCode = removeWhitespace(c.CatchOutput(0, func() { c.translateType(o, true) }), minify)
@@ -244,7 +254,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	for _, o := range vars {
 		var d Decl
 		if !o.Exported() {
-			d.Var = c.objectName(o)
+			d.Vars = []string{c.objectName(o)}
 		}
 		if _, ok := varsWithInit[o]; !ok {
 			d.DceDeps = collectDependencies(nil, func() {
@@ -268,14 +278,16 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		var d Decl
 		d.DceDeps = collectDependencies(nil, func() {
-			ast.Walk(c, init.Rhs)
-			d.InitCode = removeWhitespace(c.translateFunctionBody([]ast.Stmt{
-				&ast.AssignStmt{
+			c.localVars = nil
+			d.InitCode = removeWhitespace(c.CatchOutput(1, func() {
+				ast.Walk(c, init.Rhs)
+				c.translateStmt(&ast.AssignStmt{
 					Lhs: lhs,
 					Tok: token.DEFINE,
 					Rhs: []ast.Expr{init.Rhs},
-				},
+				}, "")
 			}), minify)
+			d.Vars = append(d.Vars, c.localVars...)
 		})
 		if len(init.Lhs) == 1 {
 			v := hasCallVisitor{c.p.info, false}
@@ -288,6 +300,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 
 	// functions
+	var mainFunc *types.Func
 	for _, fun := range functions {
 		o := c.p.info.Defs[fun.Name].(*types.Func)
 		context := c.p.funcContexts[o]
@@ -296,12 +309,20 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			Blocking: len(context.blocking) != 0,
 		}
 		if fun.Recv == nil {
-			d.Var = c.objectName(o)
-			if o.Name() != "main" && o.Name() != "init" {
+			d.Vars = []string{c.objectName(o)}
+			switch o.Name() {
+			case "main":
+				mainFunc = o
+			case "init":
+				d.InitCode = removeWhitespace(c.CatchOutput(1, func() {
+					id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
+					c.p.info.Uses[id] = o
+					call := &ast.CallExpr{Fun: id}
+					c.Visit(call)
+					c.translateStmt(&ast.ExprStmt{X: call}, "")
+				}), minify)
+			default:
 				d.DceFilters = []DepId{DepId(o.Name())}
-			}
-			if o.Name() == "init" {
-				d.InitCode = removeWhitespace([]byte(fmt.Sprintf("\t\t%s();\n", d.Var)), minify)
 			}
 		}
 		if fun.Recv != nil {
@@ -326,17 +347,46 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 	}
 
-	var importedPaths []string
-	for _, imp := range typesPkg.Imports() {
-		importedPaths = append(importedPaths, imp.Path())
-	}
-	sort.Strings(importedPaths)
-	for _, impPath := range importedPaths {
-		impOutput, err := importContext.Import(impPath)
-		if err != nil {
-			return nil, err
+	archive.BlockingInit = len(c.blocking) != 0
+
+	// $run function
+	if typesPkg.Name() == "main" {
+		var stmts []ast.Stmt
+		for _, dep := range archive.Dependencies {
+			id := c.newIdent(fmt.Sprintf(`$packages["%s"].$init`, dep), types.NewSignature(nil, nil, nil, nil, false))
+			call := &ast.CallExpr{Fun: id}
+			depArchive, err := importContext.Import(string(dep))
+			if err != nil {
+				panic(err)
+			}
+			if depArchive.BlockingInit {
+				c.blocking[call] = true
+				c.flattened[call] = true
+			}
+			stmts = append(stmts, &ast.ExprStmt{X: call})
 		}
-		archive.AddDependenciesOf(impOutput)
+
+		{
+			id := c.newIdent("$pkg.$init", types.NewSignature(nil, nil, nil, nil, false))
+			call := &ast.CallExpr{Fun: id}
+			if archive.BlockingInit {
+				c.blocking[call] = true
+				c.flattened[call] = true
+			}
+			stmts = append(stmts, &ast.ExprStmt{X: call})
+		}
+
+		{
+			id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
+			c.p.info.Uses[id] = mainFunc
+			call := &ast.CallExpr{Fun: id}
+			c.Visit(call)
+			stmts = append(stmts, &ast.ExprStmt{X: call})
+		}
+
+		archive.Declarations = append(archive.Declarations, Decl{
+			BodyCode: removeWhitespace(append(append([]byte("\t$pkg.$run = function($b) {\n"), c.translateFunctionBody(stmts)...), []byte("\t};\n")...), minify),
+		})
 	}
 
 	return archive, nil
@@ -488,7 +538,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 
 	if fun.Recv == nil {
 		lhs := c.objectName(o)
-		if fun.Name.IsExported() || fun.Name.Name == "main" {
+		if fun.Name.IsExported() {
 			lhs += " = $pkg." + fun.Name.Name
 		}
 		return primaryFunction(lhs)
@@ -714,7 +764,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 
 		if len(c.blocking) != 0 {
 			c.localVars = append(c.localVars, "$r")
-			prefix = prefix + "if(!$b) { $notSupported($nonblockingCall); }; return function() {"
+			prefix = prefix + " if(!$b) { $notSupported($nonblockingCall); }; return function() {"
 			suffix = " };" + suffix
 		}
 

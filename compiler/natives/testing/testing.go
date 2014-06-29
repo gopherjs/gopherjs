@@ -13,37 +13,30 @@ import (
 func init() {
 	x := false
 	if x { // avoid dead code elimination
-		Main2("", "", nil, nil)
+		Main(nil, nil, nil, nil)
 	}
 }
 
-func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
+func Main(matchString func(pat, str string) (bool, error), tests []InternalTest, benchmarks []InternalBenchmark, examples []InternalExample) {
 	flag.Parse()
 	if len(tests) == 0 {
 		fmt.Println("testing: warning: no tests to run")
 	}
 
-	d, err := os.Open(dir)
-	if err != nil {
-		panic(err)
-	}
-	d.Chdir()
-
-	ok := true
-	start := time.Now()
-	for i := 0; i < len(tests); i++ {
+	failed := false
+	for _, test := range tests {
 		t := &T{
 			common: common{
 				start: time.Now(),
 			},
-			name: names[i],
+			name: test.Name,
 		}
 		t.self = t
 		if *chatty {
 			fmt.Printf("=== RUN %s\n", t.name)
 		}
 		err := js.Global.Call("$catch", func() {
-			tests[i](t)
+			test.F(t)
 		})
 		js.Global.Set("$jsErr", nil)
 		if err != nil {
@@ -64,16 +57,11 @@ func Main2(pkgPath string, dir string, names []string, tests []func(*T)) {
 		if err != nil {
 			js.Global.Call("$throw", js.InternalObject(err))
 		}
-		ok = ok && !t.common.failed
+		failed = failed || t.common.failed
 	}
-	duration := time.Now().Sub(start)
 
-	status := "ok  "
-	exitCode := 0
-	if !ok {
-		status = "FAIL"
-		exitCode = 1
+	if failed {
+		os.Exit(1)
 	}
-	fmt.Printf("%s\t%s\t%.3fs\n", status, pkgPath, duration.Seconds())
-	os.Exit(exitCode)
+	os.Exit(0)
 }

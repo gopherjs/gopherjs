@@ -1,19 +1,25 @@
 package main
 
 import (
+	"bytes"
 	"code.google.com/p/go.tools/go/types"
 	"flag"
 	"fmt"
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/compiler"
+	"go/ast"
 	"go/build"
+	"go/parser"
 	"go/scanner"
+	"go/token"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"text/template"
+	"time"
 )
 
 var currentDirectory string
@@ -251,42 +257,21 @@ func main() {
 				buildPkg.PkgObj = ""
 				buildPkg.GoFiles = append(buildPkg.GoFiles, buildPkg.TestGoFiles...)
 				pkg := &gbuild.PackageData{Package: buildPkg}
+
 				s := gbuild.NewSession(options)
 				if err := s.BuildPackage(pkg); err != nil {
 					return err
 				}
 
-				mainPkg := &gbuild.PackageData{
-					Package: &build.Package{
-						Name:       "main",
-						ImportPath: "main",
-					},
-					Archive: &compiler.Archive{
-						ImportPath: compiler.PkgPath("main"),
-						Minified:   options.Minify,
-					},
-				}
-				s.Packages["main"] = mainPkg
-				s.ImportContext.Packages["main"] = types.NewPackage("main", "main")
-				testingOutput, err := s.ImportPackage("testing")
-				if err != nil {
-					panic(err)
-				}
-				mainPkg.Archive.AddDependenciesOf(testingOutput)
-
-				var mainFunc compiler.Decl
-				var names []string
-				var tests []string
-				collectTests := func(pkg *gbuild.PackageData) {
+				tests := &testFuncs{Package: buildPkg}
+				collectTests := func(pkg *gbuild.PackageData, testPkg string) bool {
 					for _, name := range pkg.Archive.Tests {
-						names = append(names, name)
-						tests = append(tests, fmt.Sprintf(`$packages["%s"].%s`, pkg.ImportPath, name))
-						mainFunc.DceDeps = append(mainFunc.DceDeps, compiler.DepId(pkg.ImportPath+":"+name))
+						tests.Tests = append(tests.Tests, testFunc{Package: testPkg, Name: name})
 					}
-					mainPkg.Archive.AddDependenciesOf(pkg.Archive)
+					return len(pkg.Archive.Tests) != 0
 				}
 
-				collectTests(pkg)
+				tests.NeedTest = collectTests(pkg, "_test")
 				if len(pkg.XTestGoFiles) != 0 {
 					testPkg := &gbuild.PackageData{Package: &build.Package{
 						ImportPath: pkg.ImportPath + "_test",
@@ -296,18 +281,31 @@ func main() {
 					if err := s.BuildPackage(testPkg); err != nil {
 						return err
 					}
-					collectTests(testPkg)
+					tests.NeedXtest = collectTests(testPkg, "_xtest")
 				}
 
-				mainFunc.DceDeps = append(mainFunc.DceDeps, compiler.DepId("flag:Parse"))
-				mainFunc.BodyCode = []byte(fmt.Sprintf(`
-					$pkg.main = function() {
-						var testing = $packages["testing"];
-						testing.Main2("%s", "%s", new ($sliceType($String))(["%s"]), new ($sliceType($funcType([testing.T.Ptr], [], false)))([%s]));
-					};
-				`, pkg.ImportPath, pkg.Dir, strings.Join(names, `", "`), strings.Join(tests, ", ")))
+				buf := bytes.NewBuffer(nil)
+				err := testmainTmpl.Execute(buf, tests)
+				if err != nil {
+					return err
+				}
 
-				mainPkg.Archive.Declarations = []compiler.Decl{mainFunc}
+				fset := token.NewFileSet()
+				mainFile, err := parser.ParseFile(fset, "_testmain.go", buf, 0)
+				if err != nil {
+					return err
+				}
+
+				mainPkg := &gbuild.PackageData{
+					Package: &build.Package{
+						Name:       "main",
+						ImportPath: "main",
+					},
+				}
+				mainPkg.Archive, err = compiler.Compile("main", []*ast.File{mainFile}, fset, s.ImportContext, options.Minify)
+				if err != nil {
+					return err
+				}
 
 				tempfile, err := ioutil.TempFile("", "test.")
 				if err != nil {
@@ -329,12 +327,16 @@ func main() {
 				if *short {
 					args = append(args, "-test.short")
 				}
-				if err := runNode(tempfile.Name(), args, ""); err != nil {
+				status := "ok  "
+				start := time.Now()
+				if err := runNode(tempfile.Name(), args, buildPkg.Dir); err != nil {
 					if _, ok := err.(*exec.ExitError); !ok {
 						return err
 					}
 					exitErr = err
+					status = "FAIL"
 				}
+				fmt.Printf("%s\t%s\t%.3fs\n", status, buildPkg.ImportPath, time.Now().Sub(start).Seconds())
 			}
 			return exitErr
 		}))
@@ -434,3 +436,56 @@ func runNode(script string, args []string, dir string) error {
 	}
 	return nil
 }
+
+type testFuncs struct {
+	Tests      []testFunc
+	Benchmarks []testFunc
+	Examples   []testFunc
+	Package    *build.Package
+	NeedTest   bool
+	NeedXtest  bool
+}
+
+type testFunc struct {
+	Package string // imported package name (_test or _xtest)
+	Name    string // function name
+	Output  string // output, for examples
+}
+
+var testmainTmpl = template.Must(template.New("main").Parse(`
+package main
+
+import (
+	"testing"
+
+{{if .NeedTest}}
+	_test {{.Package.ImportPath | printf "%q"}}
+{{end}}
+{{if .NeedXtest}}
+	_xtest {{.Package.ImportPath | printf "%s_test" | printf "%q"}}
+{{end}}
+)
+
+var tests = []testing.InternalTest{
+{{range .Tests}}
+	{"{{.Name}}", {{.Package}}.{{.Name}}},
+{{end}}
+}
+
+var benchmarks = []testing.InternalBenchmark{
+{{range .Benchmarks}}
+	{"{{.Name}}", {{.Package}}.{{.Name}}},
+{{end}}
+}
+
+var examples = []testing.InternalExample{
+{{range .Examples}}
+	{"{{.Name}}", {{.Package}}.{{.Name}}, {{.Output | printf "%q"}}},
+{{end}}
+}
+
+func main() {
+	testing.Main(nil, tests, benchmarks, examples)
+}
+
+`))

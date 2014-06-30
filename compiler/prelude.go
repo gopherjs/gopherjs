@@ -1396,35 +1396,37 @@ var $go = function(fun, args) {
 	$totalGoroutines++;
 	$awakeGoroutines++;
 	args.push(true);
-	$schedule(function() {
-	  var goroutine = function() {
-		  try {
-				var r = fun.apply(undefined, args);
-				if (r !== undefined) {
-					fun = r;
-					args = [];
-					$schedule(goroutine);
-					return;
-				}
-				$curGoroutine.exit = true;
-			} catch (err) {
-			  if (err !== $unwind) {
-					throw err;
-			  }
+  var goroutine = function() {
+	  try {
+			$curGoroutine = goroutine;
+			var r = fun.apply(undefined, args);
+			if (r !== undefined) {
+				fun = r;
+				args = [];
+				$schedule(goroutine);
+				return;
 			}
-			if ($curGoroutine.exit) { /* also set by runtime.Goexit() */
+			goroutine.exit = true;
+		} catch (err) {
+		  if (err !== $unwind) {
+				goroutine.exit = true;
+				throw err;
+		  }
+		} finally {
+			$curGoroutine = null;
+			if (goroutine.exit) { /* also set by runtime.Goexit() */
 				$totalGoroutines--;
-				$curGoroutine.asleep = true;
+				goroutine.asleep = true;
 			}
-			if ($curGoroutine.asleep) {
+			if (goroutine.asleep) {
 				$awakeGoroutines--;
 				if ($awakeGoroutines === 0 && $totalGoroutines !== 0 && $checkForDeadlock) {
 					throw $panic(new $String("fatal error: all goroutines are asleep - deadlock!"));
 				}
 			}
-		};
-		$schedule(goroutine);
-	}, []);
+		}
+	};
+	$schedule(goroutine);
 };
 
 var $scheduled = [], $schedulerLoopActive = false;
@@ -1444,7 +1446,6 @@ var $schedule = function(goroutine) {
 					$schedulerLoopActive = false;
 					break;
 				}
-				$curGoroutine = r;
 				r();
 			};
 		}, 0);

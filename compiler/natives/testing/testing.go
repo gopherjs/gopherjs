@@ -43,9 +43,7 @@ func Main(matchString func(pat, str string) (bool, error), tests []InternalTest,
 				err = recover()
 				close(done)
 			}()
-
-			test := test.F
-			test(t) //go:blocking
+			test.F(t) //go:blocking
 		}()
 		<-done
 

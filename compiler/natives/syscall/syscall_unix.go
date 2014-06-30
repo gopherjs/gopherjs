@@ -40,7 +40,7 @@ func syscall(name string) js.Object {
 		alreadyTriedToLoad = true
 		require := js.Global.Get("require")
 		if require.IsUndefined() {
-			syscallHandler := js.Global.Get("$syscall")
+			syscallHandler := js.Global.Get("goSyscall")
 			if !syscallHandler.IsUndefined() {
 				return syscallHandler
 			}

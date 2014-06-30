@@ -1392,7 +1392,7 @@ var $getStackDepth = function() {
 };
 
 var $curGoroutine, $unwind = {}, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
-var $go = function(fun, args) {
+var $go = function(fun, args, direct) {
 	$totalGoroutines++;
 	$awakeGoroutines++;
 	args.push(true);
@@ -1403,7 +1403,7 @@ var $go = function(fun, args) {
 			if (r !== undefined) {
 				fun = r;
 				args = [];
-				$schedule(goroutine);
+				$schedule(goroutine, direct);
 				return;
 			}
 			goroutine.exit = true;
@@ -1426,14 +1426,19 @@ var $go = function(fun, args) {
 			}
 		}
 	};
-	$schedule(goroutine);
+	$schedule(goroutine, direct);
 };
 
 var $scheduled = [], $schedulerLoopActive = false;
-var $schedule = function(goroutine) {
+var $schedule = function(goroutine, direct) {
 	if (goroutine.asleep) {
 		goroutine.asleep = false;
 		$awakeGoroutines++;
+	}
+
+	if (direct) {
+		goroutine();
+		return;
 	}
 
 	$scheduled.push(goroutine);

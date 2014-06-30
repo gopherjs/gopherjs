@@ -159,7 +159,7 @@ func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMa
 		}
 	}
 
-	if _, err := w.Write([]byte("$go($packages[\"" + string(mainPkg.ImportPath) + "\"].$run, []);\n\n})();\n")); err != nil {
+	if _, err := w.Write([]byte("$go($packages[\"" + string(mainPkg.ImportPath) + "\"].$run, [], true);\n\n})();\n")); err != nil {
 		return err
 	}
 

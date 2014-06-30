@@ -223,11 +223,13 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 			this.$capacity = array.length;
 			this.$val = this;
 		};
-		typ.make = function(length, capacity, zero) {
+		typ.make = function(length, capacity) {
 			capacity = capacity || length;
 			var array = new nativeArray(capacity), i;
-			for (i = 0; i < capacity; i++) {
-				array[i] = zero();
+			if (nativeArray === Array) {
+				for (i = 0; i < capacity; i++) {
+					array[i] = typ.elem.zero();
+				}
 			}
 			var slice = new typ(array);
 			slice.$length = length;
@@ -1280,13 +1282,13 @@ var $internalAppend = function(slice, array, offset, length) {
 		if (slice.$array.constructor === Array) {
 			newArray = slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
 			newArray.length = newCapacity;
+			var zero = slice.constructor.elem.zero, i;
+			for (i = slice.$length; i < newCapacity; i++) {
+				newArray[i] = zero();
+			}
 		} else {
 			newArray = new slice.$array.constructor(newCapacity);
 			newArray.set(slice.$array.subarray(slice.$offset, slice.$offset + slice.$length));
-		}
-		var zero = slice.constructor.elem.zero, i;
-		for (i = slice.$length; i < newCapacity; i++) {
-			newArray[i] = zero();
 		}
 	}
 

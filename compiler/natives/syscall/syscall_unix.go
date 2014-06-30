@@ -40,10 +40,6 @@ func syscall(name string) js.Object {
 		alreadyTriedToLoad = true
 		require := js.Global.Get("require")
 		if require.IsUndefined() {
-			syscallHandler := js.Global.Get("goSyscall")
-			if !syscallHandler.IsUndefined() {
-				return syscallHandler
-			}
 			panic("")
 		}
 		syscallModule = require.Invoke("syscall")
@@ -57,9 +53,11 @@ func Syscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
 		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
 	}
 	if trap == SYS_WRITE && (a1 == 1 || a1 == 2) {
-		b := js.Global.Call("$sliceType", js.Global.Get("$Uint8")).New(js.InternalObject(a2)).Interface().([]byte)
-		printToConsole(b)
-		return uintptr(len(b)), 0, 0
+		array := js.InternalObject(a2)
+		slice := make([]byte, array.Length())
+		js.InternalObject(slice).Set("$array", array)
+		printToConsole(slice)
+		return uintptr(array.Length()), 0, 0
 	}
 	printWarning()
 	return uintptr(minusOne), 0, EACCES
@@ -70,7 +68,9 @@ func Syscall6(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errno) 
 		r := f.Invoke(trap, a1, a2, a3, a4, a5, a6)
 		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
 	}
-	printWarning()
+	if trap != 202 { // kern.osrelease on OS X, happens in init of "os" package
+		printWarning()
+	}
 	return uintptr(minusOne), 0, EACCES
 }
 

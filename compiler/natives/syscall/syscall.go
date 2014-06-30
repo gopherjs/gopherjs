@@ -18,6 +18,12 @@ func printWarning() {
 }
 
 func printToConsole(b []byte) {
+	goPrintToConsole := js.Global.Get("goPrintToConsole")
+	if !goPrintToConsole.IsUndefined() {
+		goPrintToConsole.Invoke(js.InternalObject(b))
+		return
+	}
+
 	lineBuffer = append(lineBuffer, b...)
 	for {
 		i := bytes.IndexByte(lineBuffer, '\n')

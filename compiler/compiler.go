@@ -177,12 +177,12 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 		return err
 	}
 	vars := []string{"$pkg = {}"}
-	for _, imp := range pkg.Imports {
-		vars = append(vars, fmt.Sprintf("%s = $packages[\"%s\"]", imp.VarName, imp.Path))
+	for i := range pkg.Imports {
+		vars = append(vars, fmt.Sprintf("%s = $packages[\"%s\"]", pkg.Imports[i].VarName, pkg.Imports[i].Path))
 	}
-	for _, d := range pkg.Declarations {
-		if len(d.DceFilters) == 0 {
-			vars = append(vars, d.Vars...)
+	for i := range pkg.Declarations {
+		if len(pkg.Declarations[i].DceFilters) == 0 {
+			vars = append(vars, pkg.Declarations[i].Vars...)
 		}
 	}
 	if len(vars) != 0 {
@@ -190,9 +190,9 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 			return err
 		}
 	}
-	for _, d := range pkg.Declarations {
-		if len(d.DceFilters) == 0 {
-			if _, err := w.Write(d.BodyCode); err != nil {
+	for i := range pkg.Declarations {
+		if len(pkg.Declarations[i].DceFilters) == 0 {
+			if _, err := w.Write(pkg.Declarations[i].BodyCode); err != nil {
 				return err
 			}
 		}
@@ -206,9 +206,9 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 			return err
 		}
 	}
-	for _, d := range pkg.Declarations {
-		if len(d.DceFilters) == 0 {
-			if _, err := w.Write(d.InitCode); err != nil {
+	for i := range pkg.Declarations {
+		if len(pkg.Declarations[i].DceFilters) == 0 {
+			if _, err := w.Write(pkg.Declarations[i].InitCode); err != nil {
 				return err
 			}
 		}

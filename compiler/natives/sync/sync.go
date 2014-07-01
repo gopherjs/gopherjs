@@ -2,7 +2,14 @@
 
 package sync
 
+import (
+	"unsafe"
+)
+
 type Pool struct {
+	local     unsafe.Pointer
+	localSize uintptr
+
 	store []interface{}
 	New   func() interface{}
 }

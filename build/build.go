@@ -100,9 +100,16 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 				case *ast.FuncDecl:
 					replacedDeclNames[funcName(d)] = true
 				case *ast.GenDecl:
-					if d.Tok == token.TYPE {
+					switch d.Tok {
+					case token.TYPE:
 						for _, spec := range d.Specs {
 							replacedDeclNames[spec.(*ast.TypeSpec).Name.Name] = true
+						}
+					case token.VAR, token.CONST:
+						for _, spec := range d.Specs {
+							for _, name := range spec.(*ast.ValueSpec).Names {
+								replacedDeclNames[name.Name] = true
+							}
 						}
 					}
 				}
@@ -141,17 +148,27 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 					d.Name = ast.NewIdent("_")
 				}
 			case *ast.GenDecl:
-				if d.Tok == token.TYPE {
+				switch d.Tok {
+				case token.TYPE:
 					for _, spec := range d.Specs {
 						s := spec.(*ast.TypeSpec)
 						if replacedDeclNames[s.Name.Name] {
 							s.Name = ast.NewIdent("_")
 						}
 					}
+				case token.VAR, token.CONST:
+					for _, spec := range d.Specs {
+						s := spec.(*ast.ValueSpec)
+						for i, name := range s.Names {
+							if replacedDeclNames[name.Name] {
+								s.Names[i] = ast.NewIdent("_")
+							}
+						}
+					}
 				}
 			}
 		}
-		files = append(files, applyPatches(file, fileSet, pkg.ImportPath))
+		files = append(files, file)
 	}
 	if errList != nil {
 		return nil, errList
@@ -472,94 +489,4 @@ func (s *Session) WaitForChange() {
 		fmt.Println("\x1B[32mwatcher error: " + err.Error() + "\x1B[39m")
 	}
 	s.Watcher.Close()
-}
-
-func applyPatches(file *ast.File, fileSet *token.FileSet, importPath string) *ast.File {
-	removeImport := func(path string) {
-		for _, decl := range file.Decls {
-			if d, ok := decl.(*ast.GenDecl); ok && d.Tok == token.IMPORT {
-				for j, spec := range d.Specs {
-					value := spec.(*ast.ImportSpec).Path.Value
-					if value[1:len(value)-1] == path {
-						d.Specs[j] = d.Specs[len(d.Specs)-1]
-						d.Specs = d.Specs[:len(d.Specs)-1]
-						return
-					}
-				}
-			}
-		}
-	}
-
-	removeFunction := func(name string) {
-		for i, decl := range file.Decls {
-			if d, ok := decl.(*ast.FuncDecl); ok {
-				if d.Name.String() == name {
-					file.Decls[i] = file.Decls[len(file.Decls)-1]
-					file.Decls = file.Decls[:len(file.Decls)-1]
-					return
-				}
-			}
-		}
-	}
-
-	removeType := func(name string) {
-		for i, decl := range file.Decls {
-			switch d := decl.(type) {
-			case *ast.GenDecl:
-				if d.Tok == token.TYPE {
-					for j, s := range d.Specs {
-						if s.(*ast.TypeSpec).Name.String() == name {
-							d.Specs[j] = d.Specs[len(d.Specs)-1]
-							d.Specs = d.Specs[:len(d.Specs)-1]
-							break
-						}
-					}
-				}
-			case *ast.FuncDecl:
-				if d.Recv != nil {
-					recv := d.Recv.List[0].Type
-					if s, ok := recv.(*ast.StarExpr); ok {
-						recv = s.X
-					}
-					if recv.(*ast.Ident).Name == name {
-						file.Decls[i] = file.Decls[len(file.Decls)-1]
-						file.Decls = file.Decls[:len(file.Decls)-1]
-					}
-				}
-			}
-		}
-	}
-
-	basename := filepath.Base(fileSet.Position(file.Pos()).Filename)
-	switch {
-	case importPath == "bytes_test" && basename == "equal_test.go":
-		file, _ = parser.ParseFile(fileSet, basename, "package bytes_test", 0)
-
-	case importPath == "encoding/json" && basename == "stream_test.go":
-		removeImport("net")
-		removeFunction("TestBlocking")
-
-	case importPath == "reflect_test" && basename == "all_test.go":
-		removeImport("unsafe")
-		removeFunction("TestAlignment")
-		removeFunction("TestSliceOverflow")
-		removeFunction("TestCallMethodJump")
-		removeType("Inner")
-		removeType("Outer")
-		file.Comments = nil
-
-	case importPath == "runtime" && strings.HasPrefix(basename, "zgoarch_"):
-		file, _ = parser.ParseFile(fileSet, basename, "package runtime\nconst theGoarch = `js`\n", 0)
-
-	case importPath == "sync" && basename == "pool.go":
-		file, _ = parser.ParseFile(fileSet, basename, "package sync", 0)
-
-	case importPath == "sync/atomic_test" && basename == "atomic_test.go":
-		removeFunction("TestUnaligned64")
-
-	case importPath == "text/template/parse" && basename == "lex.go":
-		file, _ = parser.ParseFile(fileSet, basename, "// Copyright 2011 The Go Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\npackage parse\nimport (\n	\"container/list\"\n	\"fmt\"\n	\"strings\"\n	\"unicode\"\n	\"unicode/utf8\"\n)\n// item represents a token or text string returned from the scanner.\ntype item struct {\n	typ itemType // The type of this item.\n	pos Pos      // The starting position, in bytes, of this item in the input string.\n	val string   // The value of this item.\n}\nfunc (i item) String() string {\n	switch {\n	case i.typ == itemEOF:\n		return \"EOF\"\n	case i.typ == itemError:\n		return i.val\n	case i.typ > itemKeyword:\n		return fmt.Sprintf(\"<%s>\", i.val)\n	case len(i.val) > 10:\n		return fmt.Sprintf(\"%.10q...\", i.val)\n	}\n	return fmt.Sprintf(\"%q\", i.val)\n}\n// itemType identifies the type of lex items.\ntype itemType int\nconst (\n	itemError        itemType = iota // error occurred; value is text of error\n	itemBool                         // boolean constant\n	itemChar                         // printable ASCII character; grab bag for comma etc.\n	itemCharConstant                 // character constant\n	itemComplex                      // complex constant (1+2i); imaginary is just a number\n	itemColonEquals                  // colon-equals (':=') introducing a declaration\n	itemEOF\n	itemField      // alphanumeric identifier starting with '.'\n	itemIdentifier // alphanumeric identifier not starting with '.'\n	itemLeftDelim  // left action delimiter\n	itemLeftParen  // '(' inside action\n	itemNumber     // simple number, including imaginary\n	itemPipe       // pipe symbol\n	itemRawString  // raw quoted string (includes quotes)\n	itemRightDelim // right action delimiter\n	itemRightParen // ')' inside action\n	itemSpace      // run of spaces separating arguments\n	itemString     // quoted string (includes quotes)\n	itemText       // plain text\n	itemVariable   // variable starting with '$', such as '$' or  '$1' or '$hello'\n	// Keywords appear after all the rest.\n	itemKeyword  // used only to delimit the keywords\n	itemDot      // the cursor, spelled '.'\n	itemDefine   // define keyword\n	itemElse     // else keyword\n	itemEnd      // end keyword\n	itemIf       // if keyword\n	itemNil      // the untyped nil constant, easiest to treat as a keyword\n	itemRange    // range keyword\n	itemTemplate // template keyword\n	itemWith     // with keyword\n)\nvar key = map[string]itemType{\n	\".\":        itemDot,\n	\"define\":   itemDefine,\n	\"else\":     itemElse,\n	\"end\":      itemEnd,\n	\"if\":       itemIf,\n	\"range\":    itemRange,\n	\"nil\":      itemNil,\n	\"template\": itemTemplate,\n	\"with\":     itemWith,\n}\nconst eof = -1\n// stateFn represents the state of the scanner as a function that returns the next state.\ntype stateFn func(*lexer) stateFn\n// lexer holds the state of the scanner.\ntype lexer struct {\n	name       string     // the name of the input; used only for error reports\n	input      string     // the string being scanned\n	leftDelim  string     // start of action\n	rightDelim string     // end of action\n	state      stateFn    // the next lexing function to enter\n	pos        Pos        // current position in the input\n	start      Pos        // start position of this item\n	width      Pos        // width of last rune read from input\n	lastPos    Pos        // position of most recent item returned by nextItem\n	items      *list.List // scanned items\n	parenDepth int        // nesting depth of ( ) exprs\n}\n// next returns the next rune in the input.\nfunc (l *lexer) next() rune {\n	if int(l.pos) >= len(l.input) {\n		l.width = 0\n		return eof\n	}\n	r, w := utf8.DecodeRuneInString(l.input[l.pos:])\n	l.width = Pos(w)\n	l.pos += l.width\n	return r\n}\n// peek returns but does not consume the next rune in the input.\nfunc (l *lexer) peek() rune {\n	r := l.next()\n	l.backup()\n	return r\n}\n// backup steps back one rune. Can only be called once per call of next.\nfunc (l *lexer) backup() {\n	l.pos -= l.width\n}\n// emit passes an item back to the client.\nfunc (l *lexer) emit(t itemType) {\n	l.items.PushBack(item{t, l.start, l.input[l.start:l.pos]})\n	l.start = l.pos\n}\n// ignore skips over the pending input before this point.\nfunc (l *lexer) ignore() {\n	l.start = l.pos\n}\n// accept consumes the next rune if it's from the valid set.\nfunc (l *lexer) accept(valid string) bool {\n	if strings.IndexRune(valid, l.next()) >= 0 {\n		return true\n	}\n	l.backup()\n	return false\n}\n// acceptRun consumes a run of runes from the valid set.\nfunc (l *lexer) acceptRun(valid string) {\n	for strings.IndexRune(valid, l.next()) >= 0 {\n	}\n	l.backup()\n}\n// lineNumber reports which line we're on, based on the position of\n// the previous item returned by nextItem. Doing it this way\n// means we don't have to worry about peek double counting.\nfunc (l *lexer) lineNumber() int {\n	return 1 + strings.Count(l.input[:l.lastPos], \"\\n\")\n}\n// errorf returns an error token and terminates the scan by passing\n// back a nil pointer that will be the next state, terminating l.nextItem.\nfunc (l *lexer) errorf(format string, args ...interface{}) stateFn {\n	l.items.PushBack(item{itemError, l.start, fmt.Sprintf(format, args...)})\n	return nil\n}\n// nextItem returns the next item from the input.\nfunc (l *lexer) nextItem() item {\n	element := l.items.Front()\n	for element == nil {\n		l.state = l.state(l)\n		element = l.items.Front()\n	}\n	l.items.Remove(element)\n	item := element.Value.(item)\n	l.lastPos = item.pos\n	return item\n}\n// lex creates a new scanner for the input string.\nfunc lex(name, input, left, right string) *lexer {\n	if left == \"\" {\n		left = leftDelim\n	}\n	if right == \"\" {\n		right = rightDelim\n	}\n	l := &lexer{\n		name:       name,\n		input:      input,\n		leftDelim:  left,\n		rightDelim: right,\n		items:      list.New(),\n	}\n	l.state = lexText\n	return l\n}\n// state functions\nconst (\n	leftDelim    = \"{{\"\n	rightDelim   = \"}}\"\n	leftComment  = \"/*\"\n	rightComment = \"*/\"\n)\n// lexText scans until an opening action delimiter, \"{{\".\nfunc lexText(l *lexer) stateFn {\n	for {\n		if strings.HasPrefix(l.input[l.pos:], l.leftDelim) {\n			if l.pos > l.start {\n				l.emit(itemText)\n			}\n			return lexLeftDelim\n		}\n		if l.next() == eof {\n			break\n		}\n	}\n	// Correctly reached EOF.\n	if l.pos > l.start {\n		l.emit(itemText)\n	}\n	l.emit(itemEOF)\n	return nil\n}\n// lexLeftDelim scans the left delimiter, which is known to be present.\nfunc lexLeftDelim(l *lexer) stateFn {\n	l.pos += Pos(len(l.leftDelim))\n	if strings.HasPrefix(l.input[l.pos:], leftComment) {\n		return lexComment\n	}\n	l.emit(itemLeftDelim)\n	l.parenDepth = 0\n	return lexInsideAction\n}\n// lexComment scans a comment. The left comment marker is known to be present.\nfunc lexComment(l *lexer) stateFn {\n	l.pos += Pos(len(leftComment))\n	i := strings.Index(l.input[l.pos:], rightComment)\n	if i < 0 {\n		return l.errorf(\"unclosed comment\")\n	}\n	l.pos += Pos(i + len(rightComment))\n	if !strings.HasPrefix(l.input[l.pos:], l.rightDelim) {\n		return l.errorf(\"comment ends before closing delimiter\")\n	}\n	l.pos += Pos(len(l.rightDelim))\n	l.ignore()\n	return lexText\n}\n// lexRightDelim scans the right delimiter, which is known to be present.\nfunc lexRightDelim(l *lexer) stateFn {\n	l.pos += Pos(len(l.rightDelim))\n	l.emit(itemRightDelim)\n	return lexText\n}\n// lexInsideAction scans the elements inside action delimiters.\nfunc lexInsideAction(l *lexer) stateFn {\n	// Either number, quoted string, or identifier.\n	// Spaces separate arguments; runs of spaces turn into itemSpace.\n	// Pipe symbols separate and are emitted.\n	if strings.HasPrefix(l.input[l.pos:], l.rightDelim) {\n		if l.parenDepth == 0 {\n			return lexRightDelim\n		}\n		return l.errorf(\"unclosed left paren\")\n	}\n	switch r := l.next(); {\n	case r == eof || isEndOfLine(r):\n		return l.errorf(\"unclosed action\")\n	case isSpace(r):\n		return lexSpace\n	case r == ':':\n		if l.next() != '=' {\n			return l.errorf(\"expected :=\")\n		}\n		l.emit(itemColonEquals)\n	case r == '|':\n		l.emit(itemPipe)\n	case r == '\"':\n		return lexQuote\n	case r == '`':\n		return lexRawQuote\n	case r == '$':\n		return lexVariable\n	case r == '\\'':\n		return lexChar\n	case r == '.':\n		// special look-ahead for \".field\" so we don't break l.backup().\n		if l.pos < Pos(len(l.input)) {\n			r := l.input[l.pos]\n			if r < '0' || '9' < r {\n				return lexField\n			}\n		}\n		fallthrough // '.' can start a number.\n	case r == '+' || r == '-' || ('0' <= r && r <= '9'):\n		l.backup()\n		return lexNumber\n	case isAlphaNumeric(r):\n		l.backup()\n		return lexIdentifier\n	case r == '(':\n		l.emit(itemLeftParen)\n		l.parenDepth++\n		return lexInsideAction\n	case r == ')':\n		l.emit(itemRightParen)\n		l.parenDepth--\n		if l.parenDepth < 0 {\n			return l.errorf(\"unexpected right paren %#U\", r)\n		}\n		return lexInsideAction\n	case r <= unicode.MaxASCII && unicode.IsPrint(r):\n		l.emit(itemChar)\n		return lexInsideAction\n	default:\n		return l.errorf(\"unrecognized character in action: %#U\", r)\n	}\n	return lexInsideAction\n}\n// lexSpace scans a run of space characters.\n// One space has already been seen.\nfunc lexSpace(l *lexer) stateFn {\n	for isSpace(l.peek()) {\n		l.next()\n	}\n	l.emit(itemSpace)\n	return lexInsideAction\n}\n// lexIdentifier scans an alphanumeric.\nfunc lexIdentifier(l *lexer) stateFn {\nLoop:\n	for {\n		switch r := l.next(); {\n		case isAlphaNumeric(r):\n			// absorb.\n		default:\n			l.backup()\n			word := l.input[l.start:l.pos]\n			if !l.atTerminator() {\n				return l.errorf(\"bad character %#U\", r)\n			}\n			switch {\n			case key[word] > itemKeyword:\n				l.emit(key[word])\n			case word[0] == '.':\n				l.emit(itemField)\n			case word == \"true\", word == \"false\":\n				l.emit(itemBool)\n			default:\n				l.emit(itemIdentifier)\n			}\n			break Loop\n		}\n	}\n	return lexInsideAction\n}\n// lexField scans a field: .Alphanumeric.\n// The . has been scanned.\nfunc lexField(l *lexer) stateFn {\n	return lexFieldOrVariable(l, itemField)\n}\n// lexVariable scans a Variable: $Alphanumeric.\n// The $ has been scanned.\nfunc lexVariable(l *lexer) stateFn {\n	if l.atTerminator() { // Nothing interesting follows -> \"$\".\n		l.emit(itemVariable)\n		return lexInsideAction\n	}\n	return lexFieldOrVariable(l, itemVariable)\n}\n// lexVariable scans a field or variable: [.$]Alphanumeric.\n// The . or $ has been scanned.\nfunc lexFieldOrVariable(l *lexer, typ itemType) stateFn {\n	if l.atTerminator() { // Nothing interesting follows -> \".\" or \"$\".\n		if typ == itemVariable {\n			l.emit(itemVariable)\n		} else {\n			l.emit(itemDot)\n		}\n		return lexInsideAction\n	}\n	var r rune\n	for {\n		r = l.next()\n		if !isAlphaNumeric(r) {\n			l.backup()\n			break\n		}\n	}\n	if !l.atTerminator() {\n		return l.errorf(\"bad character %#U\", r)\n	}\n	l.emit(typ)\n	return lexInsideAction\n}\n// atTerminator reports whether the input is at valid termination character to\n// appear after an identifier. Breaks .X.Y into two pieces. Also catches cases\n// like \"$x+2\" not being acceptable without a space, in case we decide one\n// day to implement arithmetic.\nfunc (l *lexer) atTerminator() bool {\n	r := l.peek()\n	if isSpace(r) || isEndOfLine(r) {\n		return true\n	}\n	switch r {\n	case eof, '.', ',', '|', ':', ')', '(':\n		return true\n	}\n	// Does r start the delimiter? This can be ambiguous (with delim==\"//\", $x/2 will\n	// succeed but should fail) but only in extremely rare cases caused by willfully\n	// bad choice of delimiter.\n	if rd, _ := utf8.DecodeRuneInString(l.rightDelim); rd == r {\n		return true\n	}\n	return false\n}\n// lexChar scans a character constant. The initial quote is already\n// scanned. Syntax checking is done by the parser.\nfunc lexChar(l *lexer) stateFn {\nLoop:\n	for {\n		switch l.next() {\n		case '\\\\':\n			if r := l.next(); r != eof && r != '\\n' {\n				break\n			}\n			fallthrough\n		case eof, '\\n':\n			return l.errorf(\"unterminated character constant\")\n		case '\\'':\n			break Loop\n		}\n	}\n	l.emit(itemCharConstant)\n	return lexInsideAction\n}\n// lexNumber scans a number: decimal, octal, hex, float, or imaginary. This\n// isn't a perfect number scanner - for instance it accepts \".\" and \"0x0.2\"\n// and \"089\" - but when it's wrong the input is invalid and the parser (via\n// strconv) will notice.\nfunc lexNumber(l *lexer) stateFn {\n	if !l.scanNumber() {\n		return l.errorf(\"bad number syntax: %q\", l.input[l.start:l.pos])\n	}\n	if sign := l.peek(); sign == '+' || sign == '-' {\n		// Complex: 1+2i. No spaces, must end in 'i'.\n		if !l.scanNumber() || l.input[l.pos-1] != 'i' {\n			return l.errorf(\"bad number syntax: %q\", l.input[l.start:l.pos])\n		}\n		l.emit(itemComplex)\n	} else {\n		l.emit(itemNumber)\n	}\n	return lexInsideAction\n}\nfunc (l *lexer) scanNumber() bool {\n	// Optional leading sign.\n	l.accept(\"+-\")\n	// Is it hex?\n	digits := \"0123456789\"\n	if l.accept(\"0\") && l.accept(\"xX\") {\n		digits = \"0123456789abcdefABCDEF\"\n	}\n	l.acceptRun(digits)\n	if l.accept(\".\") {\n		l.acceptRun(digits)\n	}\n	if l.accept(\"eE\") {\n		l.accept(\"+-\")\n		l.acceptRun(\"0123456789\")\n	}\n	// Is it imaginary?\n	l.accept(\"i\")\n	// Next thing mustn't be alphanumeric.\n	if isAlphaNumeric(l.peek()) {\n		l.next()\n		return false\n	}\n	return true\n}\n// lexQuote scans a quoted string.\nfunc lexQuote(l *lexer) stateFn {\nLoop:\n	for {\n		switch l.next() {\n		case '\\\\':\n			if r := l.next(); r != eof && r != '\\n' {\n				break\n			}\n			fallthrough\n		case eof, '\\n':\n			return l.errorf(\"unterminated quoted string\")\n		case '\"':\n			break Loop\n		}\n	}\n	l.emit(itemString)\n	return lexInsideAction\n}\n// lexRawQuote scans a raw quoted string.\nfunc lexRawQuote(l *lexer) stateFn {\nLoop:\n	for {\n		switch l.next() {\n		case eof, '\\n':\n			return l.errorf(\"unterminated raw quoted string\")\n		case '`':\n			break Loop\n		}\n	}\n	l.emit(itemRawString)\n	return lexInsideAction\n}\n// isSpace reports whether r is a space character.\nfunc isSpace(r rune) bool {\n	return r == ' ' || r == '\\t'\n}\n// isEndOfLine reports whether r is an end-of-line character.\nfunc isEndOfLine(r rune) bool {\n	return r == '\\r' || r == '\\n'\n}\n// isAlphaNumeric reports whether r is an alphabetic, digit, or underscore.\nfunc isAlphaNumeric(r rune) bool {\n	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)\n}", 0)
-	}
-
-	return file
 }

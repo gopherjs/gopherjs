@@ -6,6 +6,8 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+const theGoarch = "js"
+
 type NotSupportedError struct {
 	Feature string
 }

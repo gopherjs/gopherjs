@@ -37,6 +37,9 @@ func startTimer(t *runtimeTimer) {
 	if diff > 1<<31-1 { // math.MaxInt32
 		return
 	}
+	if diff < 0 {
+		diff = 0
+	}
 	t.timeout = js.Global.Call("setTimeout", func() {
 		t.active = false
 		t.f(runtimeNano(), t.arg)

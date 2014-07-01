@@ -43,7 +43,7 @@ On each commit, Travis CI automatically compiles all supported packages with Gop
 | -- x509         | not yet               |                                   |
 | -- -- pkix      | (no tests)            |                                   |
 | database        |                       |                                   |
-| -- sql          | no                    | uses goroutines                   |
+| -- sql          | no                    |                                   |
 | -- -- driver    | yes                   |                                   |
 | debug           |                       |                                   |
 | -- dwarf        | not yet               |                                   |

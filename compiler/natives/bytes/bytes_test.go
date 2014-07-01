@@ -13,3 +13,7 @@ func TestReaderAtConcurrent(t *testing.T) {
 func TestEmptyReaderConcurrent(t *testing.T) {
 	t.Skip()
 }
+
+func TestEqualNearPageBoundary(t *testing.T) {
+	t.Skip()
+}

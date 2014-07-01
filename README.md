@@ -27,7 +27,15 @@ Now you can use  `./bin/gopherjs build [files]` or `./bin/gopherjs install [pack
 
 ### Getting started
 #### 1. Interacting with the DOM
-Accessing the DOM directly via the `js` package (see below) is possible, but using a JavaScript framework is more elegant. Take a look at the [TodoMVC Example](https://github.com/gopherjs/todomvc) which is using the [jQuery bindings](https://github.com/gopherjs/jquery) or alternatively the [AngularJS bindings](https://github.com/gopherjs/go-angularjs). Additionally, there is a list of [bindings to JavaScript APIs and libraries](https://github.com/gopherjs/gopherjs/wiki/bindings) by community members.
+The package `github.com/gopherjs/gopherjs/js` (see [documentation](http://godoc.org/github.com/gopherjs/gopherjs/js)) provides functions for interacting with native JavaScript APIs. For example the line
+```js
+document.write("Hello world!");
+```
+would look like this in Go:
+```go
+js.Global.Get("document").Call("write", "Hello world!")
+```
+You may also want use the [DOM bindings](http://dominik.honnef.co/go/js/dom), the [jQuery bindings](https://github.com/gopherjs/jquery) (see [TodoMVC Example](https://github.com/gopherjs/todomvc)) or the [AngularJS bindings](https://github.com/gopherjs/go-angularjs). Those are some of the [bindings to JavaScript APIs and libraries](https://github.com/gopherjs/gopherjs/wiki/bindings) by community members.
 
 #### 2. Providing library functions for use in other JavaScript code
 Set a global variable to a map that contains the functions:
@@ -47,9 +55,6 @@ func someFunction() {
 }
 ```
 For more details see [Jason Stone's blog post](http://legacytotheedge.blogspot.de/2014/03/gopherjs-go-to-javascript-transpiler.html) about GopherJS.
-
-### Interface to native JavaScript
-The package `github.com/gopherjs/gopherjs/js` provides functions for interacting with native JavaScript APIs. Please see its [documentation](http://godoc.org/github.com/gopherjs/gopherjs/js) for further details.
 
 ### Community
 - Get help in the [Google Group](https://groups.google.com/d/forum/gopherjs)

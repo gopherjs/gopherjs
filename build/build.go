@@ -92,8 +92,15 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 				panic(err)
 			}
 			for _, decl := range file.Decls {
-				if d, ok := decl.(*ast.FuncDecl); ok {
+				switch d := decl.(type) {
+				case *ast.FuncDecl:
 					replacedDeclNames[funcName(d)] = true
+				case *ast.GenDecl:
+					if d.Tok == token.TYPE {
+						for _, spec := range d.Specs {
+							replacedDeclNames[spec.(*ast.TypeSpec).Name.Name] = true
+						}
+					}
 				}
 			}
 			files = append(files, file)
@@ -124,8 +131,20 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 		}
 
 		for _, decl := range file.Decls {
-			if d, ok := decl.(*ast.FuncDecl); ok && replacedDeclNames[funcName(d)] {
-				d.Name = ast.NewIdent("_")
+			switch d := decl.(type) {
+			case *ast.FuncDecl:
+				if replacedDeclNames[funcName(d)] {
+					d.Name = ast.NewIdent("_")
+				}
+			case *ast.GenDecl:
+				if d.Tok == token.TYPE {
+					for _, spec := range d.Specs {
+						s := spec.(*ast.TypeSpec)
+						if replacedDeclNames[s.Name.Name] {
+							s.Name = ast.NewIdent("_")
+						}
+					}
+				}
 			}
 		}
 		files = append(files, applyPatches(file, fileSet, pkg.ImportPath))

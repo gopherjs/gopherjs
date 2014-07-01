@@ -144,7 +144,7 @@ On each commit, Travis CI automatically compiles all supported packages with Gop
 | -- tabwriter    | yes                   |                                   |
 | -- template     | yes                   |                                   |
 | -- -- parse     | yes                   |                                   |
-| time            | partially             | AfterFunc only                    |
+| time            | yes                   |                                   |
 | unicode         | yes                   |                                   |
 | -- utf16        | yes                   |                                   |
 | -- utf8         | yes                   |                                   |

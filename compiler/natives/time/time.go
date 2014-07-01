@@ -6,14 +6,23 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-func now() (sec int64, nsec int32) {
-	msec := js.Global.Get("Date").New().Call("getTime").Int64()
-	return msec / 1000, int32(msec%1000) * 1000000
+type runtimeTimer struct {
+	i       int32
+	when    int64
+	period  int64
+	f       func(int64, interface{})
+	arg     interface{}
+	timeout js.Object
+	active  bool
 }
 
 func runtimeNano() int64 {
-	msec := js.Global.Get("Date").New().Call("getTime").Int64()
-	return msec * 1000000
+	return js.Global.Get("Date").New().Call("getTime").Int64() * int64(Millisecond)
+}
+
+func now() (sec int64, nsec int32) {
+	n := runtimeNano()
+	return n / int64(Second), int32(n % int64(Second))
 }
 
 func Sleep(d Duration) {
@@ -23,8 +32,13 @@ func Sleep(d Duration) {
 }
 
 func startTimer(t *runtimeTimer) {
-	diff := int((t.when - runtimeNano()) / 1000000)
-	js.Global.Call("setTimeout", func() {
+	t.active = true
+	diff := (t.when - runtimeNano()) / int64(Millisecond)
+	if diff > 1<<31-1 { // math.MaxInt32
+		return
+	}
+	t.timeout = js.Global.Call("setTimeout", func() {
+		t.active = false
 		t.f(runtimeNano(), t.arg)
 		if t.period != 0 {
 			t.when += t.period
@@ -34,5 +48,8 @@ func startTimer(t *runtimeTimer) {
 }
 
 func stopTimer(t *runtimeTimer) bool {
-	return false
+	js.Global.Call("clearTimeout", t.timeout)
+	wasActive := t.active
+	t.active = false
+	return wasActive
 }

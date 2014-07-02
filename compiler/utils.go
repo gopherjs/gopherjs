@@ -133,10 +133,10 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 }
 
 func (c *funcContext) newVariable(name string) string {
-	return c.newVariableWithLevel(name, false)
+	return c.newVariableWithLevel(name, false, "")
 }
 
-func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
+func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool, initializer string) string {
 	if name == "" {
 		panic("newVariable: empty name")
 	}
@@ -175,6 +175,10 @@ func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
 	c.allVars[name] = n + 1
 	if n > 0 {
 		name = fmt.Sprintf("%s$%d", name, n)
+	}
+	if initializer != "" {
+		c.localVars = append(c.localVars, name+" = "+initializer)
+		return name
 	}
 	c.localVars = append(c.localVars, name)
 	return name
@@ -222,7 +226,7 @@ func (c *funcContext) objectName(o types.Object) string {
 
 	name, found := c.p.objectVars[o]
 	if !found {
-		name = c.newVariableWithLevel(o.Name(), o.Parent() == c.p.pkg.Scope())
+		name = c.newVariableWithLevel(o.Name(), o.Parent() == c.p.pkg.Scope(), "")
 		c.p.objectVars[o] = name
 	}
 

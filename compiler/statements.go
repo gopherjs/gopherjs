@@ -425,7 +425,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				return
 			}
 			lhsType := c.p.info.Types[s.Lhs[0]].Type
-			c.Printf("%s", c.translateAssign(lhs, c.translateImplicitConversion(s.Rhs[0], lhsType).String(), lhsType, s.Tok == token.DEFINE))
+			c.Printf("%s", c.translateAssignOfExpr(lhs, s.Rhs[0], lhsType, s.Tok == token.DEFINE))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			tupleVar := c.newVariable("_tuple")
@@ -435,7 +435,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				lhs = removeParens(lhs)
 				if !isBlank(lhs) {
 					lhsType := c.p.info.Types[s.Lhs[i]].Type
-					out += " " + c.translateAssign(lhs, c.translateImplicitConversion(c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), lhsType).String(), lhsType, s.Tok == token.DEFINE)
+					out += " " + c.translateAssignOfExpr(lhs, c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), lhsType, s.Tok == token.DEFINE)
 				}
 			}
 			c.Printf("%s", out)
@@ -453,7 +453,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 					continue
 				}
 				lhsType := c.p.info.Types[s.Lhs[i]].Type
-				parts = append(parts, c.translateAssign(c.newIdent(tmpVars[i], c.p.info.Types[s.Lhs[i]].Type), c.translateImplicitConversion(rhs, lhsType).String(), lhsType, true))
+				parts = append(parts, c.translateAssignOfExpr(c.newIdent(tmpVars[i], c.p.info.Types[s.Lhs[i]].Type), rhs, lhsType, true))
 			}
 			for i, lhs := range s.Lhs {
 				lhs = removeParens(lhs)
@@ -822,6 +822,13 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 	c.flowDatas[""] = prevFlowData
 }
 
+func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, typ types.Type, define bool) string {
+	if _, ok := rhs.(*ast.CompositeLit); ok && define {
+		typ = nil // skip $copy
+	}
+	return c.translateAssign(lhs, c.translateImplicitConversion(rhs, typ).String(), typ, define)
+}
+
 func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, define bool) string {
 	lhs = removeParens(lhs)
 	if isBlank(lhs) {
@@ -835,12 +842,14 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 		}
 	}
 
-	switch typ.Underlying().(type) {
-	case *types.Array, *types.Struct:
-		if define {
-			return fmt.Sprintf("%[1]s = %[2]s; $copy(%[1]s, %[3]s, %[4]s);", c.translateExpr(lhs), c.zeroValue(typ), rhs, c.typeName(typ))
+	if typ != nil {
+		switch typ.Underlying().(type) {
+		case *types.Array, *types.Struct:
+			if define {
+				return fmt.Sprintf("%[1]s = %[2]s; $copy(%[1]s, %[3]s, %[4]s);", c.translateExpr(lhs), c.zeroValue(typ), rhs, c.typeName(typ))
+			}
+			return fmt.Sprintf("$copy(%s, %s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
 		}
-		return fmt.Sprintf("$copy(%s, %s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
 	}
 
 	switch l := lhs.(type) {

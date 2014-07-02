@@ -824,7 +824,7 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 
 func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, typ types.Type, define bool) string {
 	if _, ok := rhs.(*ast.CompositeLit); ok && define {
-		typ = nil // skip $copy
+		return fmt.Sprintf("%s = %s;", c.translateExpr(lhs), c.translateImplicitConversion(rhs, typ)) // skip $copy
 	}
 	return c.translateAssign(lhs, c.translateImplicitConversion(rhs, typ).String(), typ, define)
 }
@@ -842,14 +842,12 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 		}
 	}
 
-	if typ != nil {
-		switch typ.Underlying().(type) {
-		case *types.Array, *types.Struct:
-			if define {
-				return fmt.Sprintf("%[1]s = %[2]s; $copy(%[1]s, %[3]s, %[4]s);", c.translateExpr(lhs), c.zeroValue(typ), rhs, c.typeName(typ))
-			}
-			return fmt.Sprintf("$copy(%s, %s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
+	switch typ.Underlying().(type) {
+	case *types.Array, *types.Struct:
+		if define {
+			return fmt.Sprintf("%[1]s = %[2]s; $copy(%[1]s, %[3]s, %[4]s);", c.translateExpr(lhs), c.zeroValue(typ), rhs, c.typeName(typ))
 		}
+		return fmt.Sprintf("$copy(%s, %s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
 	}
 
 	switch l := lhs.(type) {

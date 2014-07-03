@@ -518,7 +518,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 	var joinedParams string
 	primaryFunction := func(lhs string) []byte {
 		if fun.Body == nil {
-			return []byte(fmt.Sprintf("\t%s = function() {\n\t\tthrow $panic(\"Native function not implemented: %s\");\n\t};\n", lhs, o.FullName()))
+			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$panic(\"Native function not implemented: %s\");\n\t};\n", lhs, o.FullName()))
 		}
 
 		stmts := fun.Body.List
@@ -763,6 +763,10 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 
 		var prefix, suffix string
 
+		if c.hasDefer {
+			prefix = prefix + " $deferred.push(null);"
+		}
+
 		if len(c.blocking) != 0 {
 			c.localVars = append(c.localVars, "$r")
 			prefix = prefix + " if(!$b) { $nonblockingCall(); }; return function() {"
@@ -770,9 +774,9 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 		}
 
 		if c.hasDefer {
-			c.localVars = append(c.localVars, "$deferred = []")
+			c.localVars = append(c.localVars, "$err")
 			prefix = prefix + " try {"
-			deferSuffix := " } catch($err) { $pushErr($err);"
+			deferSuffix := " } catch(err) { $err = err;"
 			if len(c.blocking) != 0 {
 				deferSuffix += " $s = -1;"
 			}
@@ -790,7 +794,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 					deferSuffix += fmt.Sprintf(" return [%s];", strings.Join(zeros, ", "))
 				}
 			}
-			deferSuffix += " } finally { $callDeferred($deferred);"
+			deferSuffix += " } finally { $callDeferred($err);"
 			if c.resultNames != nil {
 				switch len(c.resultNames) {
 				case 1:

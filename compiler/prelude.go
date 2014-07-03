@@ -312,7 +312,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 		break;
 
 	default:
-		throw $panic(new $String("invalid kind: " + kind));
+		$panic(new $String("invalid kind: " + kind));
 	}
 
 	switch(kind) {
@@ -381,7 +381,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 		break;
 
 	default:
-		throw $panic(new $String("invalid kind: " + kind));
+		$panic(new $String("invalid kind: " + kind));
 	}
 
 	typ.kind = kind;
@@ -1068,7 +1068,7 @@ var $externalize = function(v, t) {
 		}
 		return o;
 	}
-	throw $panic(new $String("cannot externalize " + t.string));
+	$panic(new $String("cannot externalize " + t.string));
 };
 
 var $internalize = function(v, t, recv) {
@@ -1188,7 +1188,7 @@ var $internalize = function(v, t, recv) {
 		}
 		return s;
 	default:
-		throw $panic(new $String("cannot internalize " + t.string));
+		$panic(new $String("cannot internalize " + t.string));
 	}
 };
 
@@ -1301,6 +1301,48 @@ var $internalAppend = function(slice, array, offset, length) {
 	return newSlice;
 };
 
+var $getStack = function() {
+	return (new Error()).stack.split("\n");
+};
+var $stackDepthOffset = 0;
+var $getStackDepth = function() {
+	return $stackDepthOffset + $getStack().length;
+};
+
+var $deferred = [], $skippedDeferFrames = 0;
+var $defer = function(fun, args) {
+	$deferred.push([fun, args]);
+};
+var $callDeferred = function(err) {
+	if ($skippedDeferFrames !== 0) {
+		$skippedDeferFrames--;
+		throw err;
+	}
+	if (err && err !== $unwind) {
+		$panic(new $packages["github.com/gopherjs/gopherjs/js"].Error.Ptr(err));
+	}
+	if ($curGoroutine && $curGoroutine.asleep) {
+		return;
+	}
+
+	$stackDepthOffset--;
+	try {
+		while (true) {
+			var call = $deferred.pop();
+			if (call === null) { /* defer frame boundary */
+				return;
+			}
+			var r = call[0].apply(undefined, call[1]);
+		  if (r && r.constructor === Function) {
+				$deferred.push([r, []]);
+			}
+		}
+	} finally {
+		$stackDepthOffset++;
+	}
+};
+
+var $panicValues = {};
 var $panic = function(value) {
 	var message;
 	if (value.constructor === $String) {
@@ -1312,86 +1354,41 @@ var $panic = function(value) {
 	} else {
 		message = value;
 	}
-	var err = new Error(message);
-	err.$panicValue = value;
+
+	var stackDepth = $getStackDepth();
+	$panicValues[stackDepth] = value;
+	while (true) {
+		var call = $deferred.pop();
+		if (call === undefined) { /* no defer any more */
+			throw new Error(message);
+		}
+		if (call === null) { /* defer frame boundary */
+			$skippedDeferFrames++;
+			continue;
+		}
+		var r = call[0].apply(undefined, call[1]);
+	  if (r && r.constructor === Function) {
+			$deferred.push([r, []]);
+		}
+		if ($panicValues[stackDepth] === undefined) {
+			throw $unwind; // error was recovered
+		}
+	}
+};
+var $recover = function() {
+	var stackDepth = $getStackDepth() - 2;
+	var err = $panicValues[stackDepth];
+	if (err === undefined) {
+		return null;
+	}
+	delete $panicValues[stackDepth];
 	return err;
 };
 var $nonblockingCall = function() {
-	throw $panic(new $packages["runtime"].NotSupportedError.Ptr("non-blocking call to blocking function (mark call with \"//gopherjs:blocking\" to fix)"));
+	$panic(new $packages["runtime"].NotSupportedError.Ptr("non-blocking call to blocking function (mark call with \"//gopherjs:blocking\" to fix)"));
 };
 var $throw = function(err) { throw err; };
 var $throwRuntimeError; /* set by package "runtime" */
-
-var $errorStack = [];
-
-var $pushErr = function(err) {
-	if (err === $unwind) {
-		throw $unwind;
-	}
-	if (err.$panicValue === undefined) {
-		err.$panicValue = new $packages["github.com/gopherjs/gopherjs/js"].Error.Ptr(err);
-	}
-	$errorStack.push({ frame: $getStackDepth(), error: err });
-};
-
-var $callDeferred = function(deferred) {
-	if ($curGoroutine && $curGoroutine.asleep) {
-		return;
-	}
-	var err = $errorStack[$errorStack.length - 1];
-	if (err !== undefined && err.error === $unwind) {
-		$errorStack.pop();
-		throw $unwind;
-	}
-	while (deferred.length !== 0) {
-		var call = deferred.pop();
-		try {
-			var r;
-			if (call.recv !== undefined) {
-				r = call.recv[call.method].apply(call.recv, call.args);
-			} else {
-			  r = call.fun.apply(undefined, call.args);
-			}
-		  if (r && r.constructor === Function) {
-				deferred.push({ fun: r, args: [] });
-			}
-		} catch (err) {
-			if (err === $unwind) {
-				deferred.push(call);
-				throw $unwind;
-			}
-			$errorStack.push({ frame: $getStackDepth(), error: err });
-		}
-	}
-	err = $errorStack[$errorStack.length - 1];
-	if (err !== undefined && err.frame === $getStackDepth()) {
-		$errorStack.pop();
-		throw err.error;
-	}
-};
-
-var $recover = function() {
-	var err = $errorStack[$errorStack.length - 1];
-	if (err === undefined || err.frame !== $getStackDepth()) {
-		return null;
-	}
-	$errorStack.pop();
-	return err.error.$panicValue;
-};
-
-var $getStack = function() {
-	return (new Error()).stack.split("\n");
-};
-
-var $getStackDepth = function() {
-	var s = $getStack(), d = 0, i;
-	for (i = 0; i < s.length; i++) {
-		if (s[i].indexOf("$") === -1) {
-			d++;
-		}
-	}
-	return d;
-};
 
 var $curGoroutine, $unwind = {}, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
 var $go = function(fun, args, direct) {
@@ -1423,7 +1420,7 @@ var $go = function(fun, args, direct) {
 			if (goroutine.asleep) {
 				$awakeGoroutines--;
 				if ($awakeGoroutines === 0 && $totalGoroutines !== 0 && $checkForDeadlock) {
-					throw $panic(new $String("fatal error: all goroutines are asleep - deadlock!"));
+					$panic(new $String("fatal error: all goroutines are asleep - deadlock!"));
 				}
 			}
 		}
@@ -1726,7 +1723,7 @@ var $typeAssertionFailed = function(obj, expected) {
 	if (obj !== null) {
 		got = obj.constructor.string;
 	}
-	throw $panic(new $packages["runtime"].TypeAssertionError.Ptr("", got, expected.string, ""));
+	$panic(new $packages["runtime"].TypeAssertionError.Ptr("", got, expected.string, ""));
 };
 
 var $packages = {};`)

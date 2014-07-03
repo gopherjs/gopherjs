@@ -1367,7 +1367,7 @@ var $panic = function(value) {
 			$curGoroutine.deferred.push([r, []]);
 		}
 		if ($curGoroutine.panicValues[stackDepth] === undefined) {
-			throw null; // error was recovered
+			throw null; /* error was recovered */
 		}
 	}
 };

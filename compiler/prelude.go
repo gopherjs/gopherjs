@@ -1309,9 +1309,9 @@ var $getStackDepth = function() {
 	return $stackDepthOffset + $getStack().length;
 };
 
-var $deferred = [], $skippedDeferFrames = 0;
+var $skippedDeferFrames = 0;
 var $defer = function(fun, args) {
-	$deferred.push([fun, args]);
+	$curGoroutine.deferred.push([fun, args]);
 };
 var $callDeferred = function(err) {
 	if ($skippedDeferFrames !== 0) {
@@ -1325,13 +1325,13 @@ var $callDeferred = function(err) {
 	$stackDepthOffset--;
 	try {
 		while (true) {
-			var call = $deferred.pop();
+			var call = $curGoroutine.deferred.pop();
 			if (call === null) { /* defer frame boundary */
 				return;
 			}
 			var r = call[0].apply(undefined, call[1]);
 		  if (r && r.constructor === Function) {
-				$deferred.push([r, []]);
+				$curGoroutine.deferred.push([r, []]);
 			}
 		}
 	} finally {
@@ -1339,7 +1339,6 @@ var $callDeferred = function(err) {
 	}
 };
 
-var $panicValues = {};
 var $panic = function(value) {
 	var message;
 	if (value.constructor === $String) {
@@ -1353,9 +1352,9 @@ var $panic = function(value) {
 	}
 
 	var stackDepth = $getStackDepth();
-	$panicValues[stackDepth] = value;
+	$curGoroutine.panicValues[stackDepth] = value;
 	while (true) {
-		var call = $deferred.pop();
+		var call = $curGoroutine.deferred.pop();
 		if (call === undefined) { /* no defer any more */
 			throw new Error(message);
 		}
@@ -1365,20 +1364,20 @@ var $panic = function(value) {
 		}
 		var r = call[0].apply(undefined, call[1]);
 	  if (r && r.constructor === Function) {
-			$deferred.push([r, []]);
+			$curGoroutine.deferred.push([r, []]);
 		}
-		if ($panicValues[stackDepth] === undefined) {
+		if ($curGoroutine.panicValues[stackDepth] === undefined) {
 			throw null; // error was recovered
 		}
 	}
 };
 var $recover = function() {
 	var stackDepth = $getStackDepth() - 2;
-	var err = $panicValues[stackDepth];
+	var err = $curGoroutine.panicValues[stackDepth];
 	if (err === undefined) {
 		return null;
 	}
-	delete $panicValues[stackDepth];
+	delete $curGoroutine.panicValues[stackDepth];
 	return err;
 };
 var $nonblockingCall = function() {
@@ -1387,7 +1386,8 @@ var $nonblockingCall = function() {
 var $throw = function(err) { throw err; };
 var $throwRuntimeError; /* set by package "runtime" */
 
-var $dummyGoroutine = {}, $curGoroutine = $dummyGoroutine, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
+var $dummyGoroutine = { deferred: [], panicValues: [] };
+var $curGoroutine = $dummyGoroutine, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
 var $go = function(fun, args, direct) {
 	$totalGoroutines++;
 	$awakeGoroutines++;
@@ -1422,6 +1422,8 @@ var $go = function(fun, args, direct) {
 			}
 		}
 	};
+	goroutine.deferred = [];
+	goroutine.panicValues = [];
 	$schedule(goroutine, direct);
 };
 

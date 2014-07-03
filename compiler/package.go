@@ -764,7 +764,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 		var prefix, suffix string
 
 		if c.hasDefer {
-			prefix = prefix + " $deferred.push(null);"
+			prefix = prefix + " $curGoroutine.deferred.push(null);"
 		}
 
 		if len(c.blocking) != 0 {

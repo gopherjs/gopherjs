@@ -43,7 +43,7 @@ func Main(matchString func(pat, str string) (bool, error), tests []InternalTest,
 				err = recover()
 				close(done)
 			}()
-			test.F(t) //go:blocking
+			test.F(t) //gopherjs:blocking
 		}()
 		<-done
 

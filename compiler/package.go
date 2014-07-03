@@ -623,7 +623,7 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 				n2 := c.analyzeStack[i]
 				for _, group := range c.p.comments[n2] {
 					for _, comment := range group.List {
-						if comment.Text == "//go:blocking" {
+						if comment.Text == "//gopherjs:blocking" {
 							c.markBlocking(c.analyzeStack)
 							return
 						}

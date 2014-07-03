@@ -1317,7 +1317,7 @@ var $panic = function(value) {
 	return err;
 };
 var $nonblockingCall = function() {
-	throw $panic(new $packages["runtime"].NotSupportedError.Ptr("non-blocking call to blocking function (mark call with \"//go:blocking\" to fix)"));
+	throw $panic(new $packages["runtime"].NotSupportedError.Ptr("non-blocking call to blocking function (mark call with \"//gopherjs:blocking\" to fix)"));
 };
 var $throw = function(err) { throw err; };
 var $throwRuntimeError; /* set by package "runtime" */

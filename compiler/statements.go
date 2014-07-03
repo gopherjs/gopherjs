@@ -289,7 +289,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			var builtin *types.Builtin
 			builtin, isBuiltin = c.p.info.Uses[fun].(*types.Builtin)
 			if isBuiltin && builtin.Name() == "recover" {
-				c.Printf("$defer($recover, []);")
+				c.Printf("$deferred.push({ fun: $recover, args: [] });")
 				return
 			}
 		case *ast.SelectorExpr:
@@ -305,7 +305,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				Args:     args,
 				Ellipsis: s.Call.Ellipsis,
 			})
-			c.Printf("$defer(function(%s) { %s; }, [%s]);", strings.Join(c.translateExprSlice(args, nil), ", "), call, strings.Join(c.translateExprSlice(s.Call.Args, nil), ", "))
+			c.Printf("$deferred.push({ fun: function(%s) { %s; }, args: [%s] });", strings.Join(c.translateExprSlice(args, nil), ", "), call, strings.Join(c.translateExprSlice(s.Call.Args, nil), ", "))
 			return
 		}
 		sig := c.p.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
@@ -313,7 +313,20 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		if len(c.blocking) != 0 {
 			args = append(args, "true")
 		}
-		c.Printf("$defer(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(args, ", "))
+		if s, isSelector := s.Call.Fun.(*ast.SelectorExpr); isSelector {
+			obj := c.p.info.Uses[s.Sel]
+			if !obj.Exported() {
+				c.p.dependencies[obj] = true
+			}
+			recv := c.translateExpr(s.X)
+			sel, ok := c.p.info.Selections[s]
+			if ok && sel.Kind() == types.MethodVal && isWrapped(sel.Recv()) {
+				recv = c.formatParenExpr("new %s(%s)", c.typeName(sel.Recv()), recv)
+			}
+			c.Printf(`$deferred.push({ recv: %s, method: "%s", args: [%s] });`, recv, s.Sel.Name, strings.Join(args, ", "))
+			return
+		}
+		c.Printf("$deferred.push({ fun: %s, args: [%s] });", c.translateExpr(s.Call.Fun), strings.Join(args, ", "))
 
 	case *ast.AssignStmt:
 		c.printLabel(label)

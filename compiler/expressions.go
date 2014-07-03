@@ -529,7 +529,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				target = c.formatParenExpr("new %s(%s)", c.typeName(sel.Recv()), target)
 			}
 			recv := c.newVariable("_recv")
-			return c.formatExpr("(%s = %s, function(%s) { $stackDepthOffset--; try { return %s.%s(%s); } finally { $stackDepthOffset++; } })", recv, target, strings.Join(parameters, ", "), recv, e.Sel.Name, strings.Join(parameters, ", "))
+			return c.formatExpr("(%s = %s, function(%s) { return %s.%s(%s); })", recv, target, strings.Join(parameters, ", "), recv, e.Sel.Name, strings.Join(parameters, ", "))
 		case types.MethodExpr:
 			if !sel.Obj().Exported() {
 				c.p.dependencies[sel.Obj()] = true
@@ -539,7 +539,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				recv = fmt.Sprintf("(new %s(recv))", c.typeName(sel.Recv()))
 			}
 			parameters := makeParametersList()
-			return c.formatExpr("(function(%s) { $stackDepthOffset--; try { return %s.%s(%s); } finally { $stackDepthOffset++; } })", strings.Join(append([]string{"recv"}, parameters...), ", "), recv, sel.Obj().(*types.Func).Name(), strings.Join(parameters, ", "))
+			return c.formatExpr("(function(%s) { return %s.%s(%s); })", strings.Join(append([]string{"recv"}, parameters...), ", "), recv, sel.Obj().(*types.Func).Name(), strings.Join(parameters, ", "))
 		}
 		panic("")
 
@@ -905,7 +905,7 @@ func (c *funcContext) translateBuiltin(name string, args []ast.Expr, ellipsis bo
 			panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))
 		}
 	case "panic":
-		return c.formatExpr("$panic(%s)", c.translateImplicitConversion(args[0], types.NewInterface(nil, nil)))
+		return c.formatExpr("throw $panic(%s)", c.translateImplicitConversion(args[0], types.NewInterface(nil, nil)))
 	case "append":
 		if len(args) == 1 {
 			return c.translateExpr(args[0])

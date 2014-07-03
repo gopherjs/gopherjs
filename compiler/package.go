@@ -518,7 +518,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 	var joinedParams string
 	primaryFunction := func(lhs string) []byte {
 		if fun.Body == nil {
-			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$panic(\"Native function not implemented: %s\");\n\t};\n", lhs, o.FullName()))
+			return []byte(fmt.Sprintf("\t%s = function() {\n\t\tthrow $panic(\"Native function not implemented: %s\");\n\t};\n", lhs, o.FullName()))
 		}
 
 		stmts := fun.Body.List
@@ -763,10 +763,6 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 
 		var prefix, suffix string
 
-		if c.hasDefer {
-			prefix = prefix + " $curGoroutine.deferred.push(null);"
-		}
-
 		if len(c.blocking) != 0 {
 			c.localVars = append(c.localVars, "$r")
 			prefix = prefix + " if(!$b) { $nonblockingCall(); }; return function() {"
@@ -774,9 +770,12 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 		}
 
 		if c.hasDefer {
-			c.localVars = append(c.localVars, "$err = null")
+			c.localVars = append(c.localVars, "$deferred = []")
 			prefix = prefix + " try {"
-			deferSuffix := " } catch(err) { $err = err;"
+			deferSuffix := " } catch($err) { $pushErr($err);"
+			if len(c.blocking) != 0 {
+				deferSuffix += " $s = -1;"
+			}
 			if c.sig != nil && c.resultNames == nil {
 				switch c.sig.Results().Len() {
 				case 0:
@@ -791,11 +790,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 					deferSuffix += fmt.Sprintf(" return [%s];", strings.Join(zeros, ", "))
 				}
 			}
-			deferSuffix += " } finally {"
-			if len(c.blocking) != 0 {
-				deferSuffix += " if ($curGoroutine.asleep) { throw null; } $s = -1;"
-			}
-			deferSuffix += " $callDeferred($err);"
+			deferSuffix += " } finally { $callDeferred($deferred);"
 			if c.resultNames != nil {
 				switch len(c.resultNames) {
 				case 1:
@@ -815,7 +810,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 		if len(c.flattened) != 0 {
 			c.localVars = append(c.localVars, "$s = 0")
 			prefix = prefix + " while (true) { switch ($s) { case 0:"
-			suffix = " case -1: } return; }" + suffix
+			suffix = " $s = -1; case -1: } return; }" + suffix
 		}
 
 		if prefix != "" {

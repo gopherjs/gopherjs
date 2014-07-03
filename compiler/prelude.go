@@ -1318,11 +1318,8 @@ var $callDeferred = function(err) {
 		$skippedDeferFrames--;
 		throw err;
 	}
-	if (err && err !== $unwind) {
+	if (err) {
 		$panic(new $packages["github.com/gopherjs/gopherjs/js"].Error.Ptr(err));
-	}
-	if ($curGoroutine && $curGoroutine.asleep) {
-		return;
 	}
 
 	$stackDepthOffset--;
@@ -1371,7 +1368,7 @@ var $panic = function(value) {
 			$deferred.push([r, []]);
 		}
 		if ($panicValues[stackDepth] === undefined) {
-			throw $unwind; // error was recovered
+			throw null; // error was recovered
 		}
 	}
 };
@@ -1390,7 +1387,7 @@ var $nonblockingCall = function() {
 var $throw = function(err) { throw err; };
 var $throwRuntimeError; /* set by package "runtime" */
 
-var $curGoroutine, $unwind = {}, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
+var $dummyGoroutine = {}, $curGoroutine = $dummyGoroutine, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
 var $go = function(fun, args, direct) {
 	$totalGoroutines++;
 	$awakeGoroutines++;
@@ -1407,12 +1404,12 @@ var $go = function(fun, args, direct) {
 			}
 			goroutine.exit = true;
 		} catch (err) {
-		  if (err !== $unwind) {
+			if (!$curGoroutine.asleep) {
 				goroutine.exit = true;
 				throw err;
-		  }
+			}
 		} finally {
-			$curGoroutine = null;
+			$curGoroutine = $dummyGoroutine;
 			if (goroutine.exit) { /* also set by runtime.Goexit() */
 				$totalGoroutines--;
 				goroutine.asleep = true;
@@ -1482,7 +1479,7 @@ var $send = function(chan, value) {
 		};
 		blocked = true;
 		$curGoroutine.asleep = true;
-		throw $unwind;
+		throw null;
 	};
 };
 var $recv = function(chan) {
@@ -1509,7 +1506,7 @@ var $recv = function(chan) {
 		};
 		blocked = true;
 		$curGoroutine.asleep = true;
-		throw $unwind;
+		throw null;
 	};
 };
 var $close = function(chan) {
@@ -1624,7 +1621,7 @@ var $select = function(comms) {
 		};
 		blocked = true;
 		$curGoroutine.asleep = true;
-		throw $unwind;
+		throw null;
 	};
 };
 

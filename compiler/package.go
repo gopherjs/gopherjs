@@ -774,12 +774,9 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 		}
 
 		if c.hasDefer {
-			c.localVars = append(c.localVars, "$err")
+			c.localVars = append(c.localVars, "$err = null")
 			prefix = prefix + " try {"
 			deferSuffix := " } catch(err) { $err = err;"
-			if len(c.blocking) != 0 {
-				deferSuffix += " $s = -1;"
-			}
 			if c.sig != nil && c.resultNames == nil {
 				switch c.sig.Results().Len() {
 				case 0:
@@ -794,7 +791,11 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 					deferSuffix += fmt.Sprintf(" return [%s];", strings.Join(zeros, ", "))
 				}
 			}
-			deferSuffix += " } finally { $callDeferred($err);"
+			deferSuffix += " } finally {"
+			if len(c.blocking) != 0 {
+				deferSuffix += " if ($curGoroutine.asleep) { throw null; } $s = -1;"
+			}
+			deferSuffix += " $callDeferred($err);"
 			if c.resultNames != nil {
 				switch len(c.resultNames) {
 				case 1:
@@ -814,7 +815,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 		if len(c.flattened) != 0 {
 			c.localVars = append(c.localVars, "$s = 0")
 			prefix = prefix + " while (true) { switch ($s) { case 0:"
-			suffix = " $s = -1; case -1: } return; }" + suffix
+			suffix = " case -1: } return; }" + suffix
 		}
 
 		if prefix != "" {

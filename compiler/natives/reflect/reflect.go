@@ -816,6 +816,7 @@ func (v Value) Pointer() uintptr {
 func (v Value) Set(x Value) {
 	v.mustBeAssignable()
 	x.mustBeExported()
+	x = x.assignTo("reflect.Set", v.typ, nil)
 	if v.flag&flagIndir != 0 {
 		switch v.typ.Kind() {
 		case Array:

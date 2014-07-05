@@ -4,6 +4,7 @@ package time
 
 import (
 	"github.com/gopherjs/gopherjs/js"
+	"strings"
 )
 
 type runtimeTimer struct {
@@ -14,6 +15,19 @@ type runtimeTimer struct {
 	arg     interface{}
 	timeout js.Object
 	active  bool
+}
+
+func initLocal() {
+	d := js.Global.Get("Date").New()
+	s := d.Str()
+	i := strings.IndexByte(s, '(')
+	j := strings.IndexByte(s, ')')
+	if i == -1 || j == -1 {
+		localLoc.name = "UTC"
+		return
+	}
+	localLoc.name = s[i+1 : j]
+	localLoc.zone = []zone{{localLoc.name, d.Call("getTimezoneOffset").Int() * -60, false}}
 }
 
 func runtimeNano() int64 {

@@ -144,7 +144,7 @@ On each commit, Travis CI automatically compiles all supported packages with Gop
 | -- tabwriter    | yes                   |                                   |
 | -- template     | yes                   |                                   |
 | -- -- parse     | yes                   |                                   |
-| time            | yes                   |                                   |
+| time            | yes                   | UTC and Local only (see [issue](https://github.com/gopherjs/gopherjs/issues/64)) |
 | unicode         | yes                   |                                   |
 | -- utf16        | yes                   |                                   |
 | -- utf8         | yes                   |                                   |

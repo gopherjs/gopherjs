@@ -860,7 +860,10 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 	case *ast.IndexExpr:
 		switch t := c.p.info.Types[l.X].Type.Underlying().(type) {
 		case *types.Array, *types.Pointer:
-			return fmt.Sprintf("%s[%s] = %s;", c.translateExpr(l.X), c.formatExpr("%f", l.Index).String(), rhs)
+			if c.p.info.Types[l.Index].Value != nil {
+				return c.formatExpr("%e[%f] = %s;", l.X, l.Index, rhs).String()
+			}
+			return c.formatExpr(`(%2f < 0 || %2f >= %1e.length) ? $throwRuntimeError("index out of range") : %1e[%2f] = %3s`, l.X, l.Index, rhs).String() + ";"
 		case *types.Slice:
 			return c.formatExpr(`(%2f < 0 || %2f >= %1e.$length) ? $throwRuntimeError("index out of range") : %1e.$array[%1e.$offset + %2f] = %3s`, l.X, l.Index, rhs).String() + ";"
 		default:

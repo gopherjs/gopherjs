@@ -1,7 +1,11 @@
 package build
 
 import (
+	"bitbucket.org/kardianos/osext"
+	"code.google.com/p/go.exp/fsnotify"
 	"fmt"
+	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/neelance/sourcemap"
 	"go/ast"
 	"go/build"
 	"go/parser"
@@ -13,11 +17,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	"bitbucket.org/kardianos/osext"
-	"code.google.com/p/go.exp/fsnotify"
-	"github.com/gopherjs/gopherjs/compiler"
-	"github.com/neelance/sourcemap"
 )
 
 type ImportCError struct{}
@@ -56,10 +55,7 @@ func Import(path string, mode build.ImportMode, archSuffix string) (*build.Packa
 	}
 	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
 		// fall back to GOPATH
-		// TODO: Instead of always using the first GOPATH workspace, perhaps one should be chosen more intelligently?
-		//       In this case, I think all GOPATH workspaces should be consulted, so one would need to iterate over
-		//       each one, until there's a match (or no matches at all).
-		firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0]
+		firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: Need to check inside all GOPATH workspaces.
 		gopathPkgObj := filepath.Join(firstGopathWorkspace, pkg.PkgObj[len(build.Default.GOROOT):])
 		if _, err := os.Stat(gopathPkgObj); err == nil {
 			pkg.PkgObj = gopathPkgObj

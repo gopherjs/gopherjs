@@ -2,8 +2,11 @@ package main
 
 import (
 	"bytes"
+	"code.google.com/p/go.tools/go/types"
 	"flag"
 	"fmt"
+	gbuild "github.com/gopherjs/gopherjs/build"
+	"github.com/gopherjs/gopherjs/compiler"
 	"go/ast"
 	"go/build"
 	"go/parser"
@@ -17,10 +20,6 @@ import (
 	"syscall"
 	"text/template"
 	"time"
-
-	"code.google.com/p/go.tools/go/types"
-	gbuild "github.com/gopherjs/gopherjs/build"
-	"github.com/gopherjs/gopherjs/compiler"
 )
 
 var currentDirectory string
@@ -137,9 +136,7 @@ func main() {
 			exitCode := handleError(func() error {
 				pkgs := installFlags.Args()
 				if len(pkgs) == 0 {
-					// TODO: Instead of always using the first GOPATH workspace, perhaps one should be chosen more intelligently?
-					//       In this case, the GOPATH workspace that contains the package source should be chosen.
-					firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0]
+					firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: The GOPATH workspace that contains the package source should be chosen.
 					srcDir, err := filepath.EvalSymlinks(filepath.Join(firstGopathWorkspace, "src"))
 					if err != nil {
 						return err
@@ -224,9 +221,7 @@ func main() {
 				}
 			}
 			if len(pkgs) == 0 {
-				// TODO: Instead of always using the first GOPATH workspace, perhaps one should be chosen more intelligently?
-				//       Not sure which GOPATH workspace should be chosen for this...
-				firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0]
+				firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: Not sure if always picking first GOPATH workspace here is the right thing.
 				srcDir, err := filepath.EvalSymlinks(filepath.Join(firstGopathWorkspace, "src"))
 				if err != nil {
 					return err

@@ -247,6 +247,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 
 	case "Struct":
 		typ = function(v) { this.$val = v; };
+		typ.prototype.$key = function() { $throwRuntimeError("hash of unhashable type " + string); };
 		typ.Ptr = $newType(4, "Ptr", "*" + string, "", "", constructor);
 		typ.Ptr.Struct = typ;
 		typ.Ptr.prototype.$get = function() { return this; };
@@ -289,16 +290,6 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 					})(fields[method[6]], method[0]);
 				}
 			}
-			/* map key */
-			typ.prototype.$key = function() {
-				var keys = new Array(fields.length);
-				for (i = 0; i < fields.length; i++) {
-					var v = this.$val[fields[i][0]];
-					var key = v.$key ? v.$key() : String(v);
-					keys[i] = key.replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
-				}
-				return string + "$" + keys.join("$");
-			};
 			/* reflect type */
 			typ.extendReflectType = function(rt) {
 				var reflectFields = new Array(fields.length), i;
@@ -1690,19 +1681,17 @@ var $equal = function(a, b, type) {
 	}
 };
 var $interfaceIsEqual = function(a, b) {
-	if (a === b) {
-		return true;
-	}
 	if (a === null || b === null || a === undefined || b === undefined || a.constructor !== b.constructor) {
-		return false;
+		return a === b;
 	}
 	switch (a.constructor.kind) {
 	case "Func":
 	case "Map":
 	case "Slice":
+	case "Struct":
 		$throwRuntimeError("comparing uncomparable type " + a.constructor.string);
 	case undefined: /* js.Object */
-		return false;
+		return a === b;
 	default:
 		return $equal(a.$val, b.$val, a.constructor);
 	}

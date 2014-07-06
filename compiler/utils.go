@@ -268,7 +268,7 @@ func (c *funcContext) typeName(ty types.Type) string {
 
 func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	switch t := keyType.Underlying().(type) {
-	case *types.Array, *types.Struct:
+	case *types.Array:
 		return fmt.Sprintf("(new %s(%s)).$key()", c.typeName(keyType), c.translateExpr(expr))
 	case *types.Basic:
 		if is64Bit(t) {

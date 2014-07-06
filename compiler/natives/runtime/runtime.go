@@ -53,7 +53,7 @@ func GC() {
 
 func Goexit() {
 	js.Global.Get("$curGoroutine").Set("exit", true)
-	js.Global.Call("$throw", js.Global.Get("$unwind"))
+	js.Global.Call("$throw", nil)
 }
 
 func GOMAXPROCS(n int) int {

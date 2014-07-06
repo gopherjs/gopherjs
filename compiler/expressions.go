@@ -419,10 +419,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 	case *ast.IndexExpr:
 		switch t := c.p.info.Types[e.X].Type.Underlying().(type) {
 		case *types.Array, *types.Pointer:
-			if c.p.info.Types[e.Index].Value != nil {
-				return c.formatExpr("%e[%f]", e.X, e.Index)
-			}
-			return c.formatExpr(`((%2f < 0 || %2f >= %1e.length) ? $throwRuntimeError("index out of range") : %1e[%2f])`, e.X, e.Index)
+			return c.formatExpr("%e[%f]", e.X, e.Index)
 		case *types.Slice:
 			return c.formatExpr(`((%2f < 0 || %2f >= %1e.$length) ? $throwRuntimeError("index out of range") : %1e.$array[%1e.$offset + %2f])`, e.X, e.Index)
 		case *types.Map:

@@ -2,11 +2,11 @@
 set -e
 
 echo -en "travis_fold:start:nvm\r"
-echo "--- installing node.js 0.11 ---"
+echo "--- installing node.js 0.11.12 ---"
 curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | METHOD=script bash
 . $HOME/.nvm/nvm.sh
-nvm install 0.11
-nvm use 0.11
+nvm install 0.11.12
+nvm use 0.11.12
 echo -en "travis_fold:end:nvm\r"
 
 echo -en "travis_fold:start:node-gyp\r"

@@ -626,107 +626,106 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					methodName += "$"
 				}
 
-				fun = c.translateExpr(f.X)
-				t := sel.Recv()
+				recvType := sel.Recv()
+				_, isPointer := recvType.Underlying().(*types.Pointer)
+				methodsRecvType := sel.Obj().Type().(*types.Signature).Recv().Type()
+				_, pointerExpected := methodsRecvType.(*types.Pointer)
+				var recv *expression
+				switch {
+				case !isPointer && pointerExpected:
+					recv = c.translateExpr(c.setType(&ast.UnaryExpr{Op: token.AND, X: f.X}, methodsRecvType))
+				default:
+					recv = c.translateExpr(f.X)
+				}
+
 				for _, index := range sel.Index()[:len(sel.Index())-1] {
-					if ptr, isPtr := t.(*types.Pointer); isPtr {
-						t = ptr.Elem()
+					if ptr, isPtr := recvType.(*types.Pointer); isPtr {
+						recvType = ptr.Elem()
 					}
-					s := t.Underlying().(*types.Struct)
-					fun = c.formatExpr("%s.%s", fun, fieldName(s, index))
-					t = s.Field(index).Type()
+					s := recvType.Underlying().(*types.Struct)
+					recv = c.formatExpr("%s.%s", recv, fieldName(s, index))
+					recvType = s.Field(index).Type()
 				}
 
 				if isJsPackage(sel.Obj().Pkg()) {
 					globalRef := func(id string) string {
-						if fun.String() == "$global" && id[0] == '$' {
+						if recv.String() == "$global" && id[0] == '$' {
 							return id
 						}
-						return fun.String() + "." + id
+						return recv.String() + "." + id
 					}
 					switch sel.Obj().Name() {
 					case "Get":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
 							return c.formatExpr("%s", globalRef(id))
 						}
-						return c.formatExpr("%s[$externalize(%e, $String)]", fun, e.Args[0])
+						return c.formatExpr("%s[$externalize(%e, $String)]", recv, e.Args[0])
 					case "Set":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
 							return c.formatExpr("%s = %s", globalRef(id), externalizeExpr(e.Args[1]))
 						}
-						return c.formatExpr("%s[$externalize(%e, $String)] = %s", fun, e.Args[0], externalizeExpr(e.Args[1]))
+						return c.formatExpr("%s[$externalize(%e, $String)] = %s", recv, e.Args[0], externalizeExpr(e.Args[1]))
 					case "Delete":
-						return c.formatExpr("delete %s[$externalize(%e, $String)]", fun, e.Args[0])
+						return c.formatExpr("delete %s[$externalize(%e, $String)]", recv, e.Args[0])
 					case "Length":
-						return c.formatExpr("$parseInt(%s.length)", fun)
+						return c.formatExpr("$parseInt(%s.length)", recv)
 					case "Index":
-						return c.formatExpr("%s[%e]", fun, e.Args[0])
+						return c.formatExpr("%s[%e]", recv, e.Args[0])
 					case "SetIndex":
-						return c.formatExpr("%s[%e] = %s", fun, e.Args[0], externalizeExpr(e.Args[1]))
+						return c.formatExpr("%s[%e] = %s", recv, e.Args[0], externalizeExpr(e.Args[1]))
 					case "Call":
 						if id, ok := c.identifierConstant(e.Args[0]); ok {
 							if e.Ellipsis.IsValid() {
 								objVar := c.newVariable("obj")
-								return c.formatExpr("(%s = %s, %s.%s.apply(%s, %s))", objVar, fun, objVar, id, objVar, externalizeExpr(e.Args[1]))
+								return c.formatExpr("(%s = %s, %s.%s.apply(%s, %s))", objVar, recv, objVar, id, objVar, externalizeExpr(e.Args[1]))
 							}
 							return c.formatExpr("%s(%s)", globalRef(id), externalizeArgs(e.Args[1:]))
 						}
 						if e.Ellipsis.IsValid() {
 							objVar := c.newVariable("obj")
-							return c.formatExpr("(%s = %s, %s[$externalize(%e, $String)].apply(%s, %s))", objVar, fun, objVar, e.Args[0], objVar, externalizeExpr(e.Args[1]))
+							return c.formatExpr("(%s = %s, %s[$externalize(%e, $String)].apply(%s, %s))", objVar, recv, objVar, e.Args[0], objVar, externalizeExpr(e.Args[1]))
 						}
-						return c.formatExpr("%s[$externalize(%e, $String)](%s)", fun, e.Args[0], externalizeArgs(e.Args[1:]))
+						return c.formatExpr("%s[$externalize(%e, $String)](%s)", recv, e.Args[0], externalizeArgs(e.Args[1:]))
 					case "Invoke":
 						if e.Ellipsis.IsValid() {
-							return c.formatExpr("%s.apply(undefined, %s)", fun, externalizeExpr(e.Args[0]))
+							return c.formatExpr("%s.apply(undefined, %s)", recv, externalizeExpr(e.Args[0]))
 						}
-						return c.formatExpr("%s(%s)", fun, externalizeArgs(e.Args))
+						return c.formatExpr("%s(%s)", recv, externalizeArgs(e.Args))
 					case "New":
 						if e.Ellipsis.IsValid() {
-							return c.formatExpr("new ($global.Function.prototype.bind.apply(%s, [undefined].concat(%s)))", fun, externalizeExpr(e.Args[0]))
+							return c.formatExpr("new ($global.Function.prototype.bind.apply(%s, [undefined].concat(%s)))", recv, externalizeExpr(e.Args[0]))
 						}
-						return c.formatExpr("new (%s)(%s)", fun, externalizeArgs(e.Args))
+						return c.formatExpr("new (%s)(%s)", recv, externalizeArgs(e.Args))
 					case "Bool":
-						return c.internalize(fun, types.Typ[types.Bool])
+						return c.internalize(recv, types.Typ[types.Bool])
 					case "Str":
-						return c.internalize(fun, types.Typ[types.String])
+						return c.internalize(recv, types.Typ[types.String])
 					case "Int":
-						return c.internalize(fun, types.Typ[types.Int])
+						return c.internalize(recv, types.Typ[types.Int])
 					case "Int64":
-						return c.internalize(fun, types.Typ[types.Int64])
+						return c.internalize(recv, types.Typ[types.Int64])
 					case "Uint64":
-						return c.internalize(fun, types.Typ[types.Uint64])
+						return c.internalize(recv, types.Typ[types.Uint64])
 					case "Float":
-						return c.internalize(fun, types.Typ[types.Float64])
+						return c.internalize(recv, types.Typ[types.Float64])
 					case "Interface":
-						return c.internalize(fun, types.NewInterface(nil, nil))
+						return c.internalize(recv, types.NewInterface(nil, nil))
 					case "Unsafe":
-						return fun
+						return recv
 					case "IsUndefined":
-						return c.formatParenExpr("%s === undefined", fun)
+						return c.formatParenExpr("%s === undefined", recv)
 					case "IsNull":
-						return c.formatParenExpr("%s === null", fun)
+						return c.formatParenExpr("%s === null", recv)
 					default:
 						panic("Invalid js package object: " + sel.Obj().Name())
 					}
 				}
 
-				methodsRecvType := sel.Obj().Type().(*types.Signature).Recv().Type()
-				_, pointerExpected := methodsRecvType.(*types.Pointer)
-				_, isPointer := t.Underlying().(*types.Pointer)
-				_, isStruct := t.Underlying().(*types.Struct)
-				_, isArray := t.Underlying().(*types.Array)
-				if pointerExpected && !isPointer && !isStruct && !isArray {
-					vVar := c.newVariable("v")
-					fun = c.formatExpr("(new %s(function() { return %s; }, function(%s) { %s = %s; })).%s", c.typeName(methodsRecvType), fun, vVar, fun, vVar, methodName)
+				if isWrapped(recvType) {
+					fun = c.formatExpr("(new %s(%s)).%s", c.typeName(recvType), recv, methodName)
 					break
 				}
-
-				if isWrapped(t) {
-					fun = c.formatExpr("(new %s(%s)).%s", c.typeName(t), fun, methodName)
-					break
-				}
-				fun = c.formatExpr("%s.%s", fun, methodName)
+				fun = c.formatExpr("%s.%s", recv, methodName)
 
 			case types.FieldVal:
 				fields, jsTag := c.translateSelection(sel)

@@ -675,6 +675,8 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 			callTo(c.p.info.Uses[f])
 		case *ast.SelectorExpr:
 			callTo(c.p.info.Uses[f.Sel])
+		default:
+			lookForComment()
 		}
 	case *ast.SendStmt:
 		c.markBlocking(c.analyzeStack)

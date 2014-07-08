@@ -32,7 +32,10 @@ var alreadyTriedToLoad = false
 var minusOne = -1
 
 func syscall(name string) js.Object {
-	defer recover() // return nil
+	defer func() {
+		recover()
+		// return nil if recovered
+	}()
 	if syscallModule == nil {
 		if alreadyTriedToLoad {
 			return nil

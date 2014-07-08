@@ -724,8 +724,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					}
 				}
 
-				if isWrapped(recvType) {
-					fun = c.formatExpr("(new %s(%s)).%s", c.typeName(recvType), recv, methodName)
+				if isWrapped(methodsRecvType) {
+					fun = c.formatExpr("(new %s(%s)).%s", c.typeName(methodsRecvType), recv, methodName)
 					break
 				}
 				fun = c.formatExpr("%s.%s", recv, methodName)

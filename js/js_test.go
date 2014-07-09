@@ -142,7 +142,7 @@ func TestNew(t *testing.T) {
 	}
 }
 
-type StructWithJsField struct {
+type StructWithJsField1 struct {
 	js.Object
 	Length int                  `js:"length"`
 	Slice  func(int, int) []int `js:"slice"`
@@ -154,16 +154,28 @@ type StructWithJsField2 struct {
 	Slice  func(int, int) []int `js:"slice"`
 }
 
+type Wrapper1 struct {
+	StructWithJsField1
+	WrapperLength int `js:"length"`
+}
+
+type Wrapper2 struct {
+	innerStruct   *StructWithJsField2
+	WrapperLength int `js:"length"`
+}
+
 func TestReadingJsField(t *testing.T) {
-	a := &StructWithJsField{Object: js.Global.Get("Array").New(42)}
+	a := StructWithJsField1{Object: js.Global.Get("Array").New(42)}
 	b := &StructWithJsField2{object: js.Global.Get("Array").New(42)}
-	if a.Length != 42 || b.Length != 42 {
+	wa := Wrapper1{StructWithJsField1: a}
+	wb := Wrapper2{innerStruct: b}
+	if a.Length != 42 || b.Length != 42 || wa.Length != 42 || wa.WrapperLength != 42 || wb.WrapperLength != 42 {
 		t.Fail()
 	}
 }
 
 func TestWritingJsField(t *testing.T) {
-	a := &StructWithJsField{Object: js.Global.Get("Object").New()}
+	a := StructWithJsField1{Object: js.Global.Get("Object").New()}
 	b := &StructWithJsField2{object: js.Global.Get("Object").New()}
 	a.Length = 42
 	b.Length = 42
@@ -173,7 +185,7 @@ func TestWritingJsField(t *testing.T) {
 }
 
 func TestCallingJsField(t *testing.T) {
-	a := &StructWithJsField{Object: js.Global.Get("Array").New(100)}
+	a := &StructWithJsField1{Object: js.Global.Get("Array").New(100)}
 	b := &StructWithJsField2{object: js.Global.Get("Array").New(100)}
 	a.SetIndex(3, 123)
 	b.object.SetIndex(3, 123)

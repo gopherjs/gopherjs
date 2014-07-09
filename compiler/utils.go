@@ -86,11 +86,27 @@ func (c *funcContext) translateSelection(sel *types.Selection) ([]string, string
 		}
 		s := t.Underlying().(*types.Struct)
 		if jsTag := getJsTag(s.Tag(index)); jsTag != "" {
-			for i := 0; i < s.NumFields(); i++ {
-				if isJsObject(s.Field(i).Type()) {
-					fields = append(fields, fieldName(s, i))
-					return fields, jsTag
+			var searchJsObject func(*types.Struct) []string
+			searchJsObject = func(s *types.Struct) []string {
+				for i := 0; i < s.NumFields(); i++ {
+					ft := s.Field(i).Type()
+					if isJsObject(ft) {
+						return []string{fieldName(s, i)}
+					}
+					ft = ft.Underlying()
+					if ptr, ok := ft.(*types.Pointer); ok {
+						ft = ptr.Elem().Underlying()
+					}
+					if s2, ok := ft.(*types.Struct); ok {
+						if f := searchJsObject(s2); f != nil {
+							return append([]string{fieldName(s, i)}, f...)
+						}
+					}
 				}
+				return nil
+			}
+			if jsObjectFields := searchJsObject(s); jsObjectFields != nil {
+				return append(fields, jsObjectFields...), jsTag
 			}
 		}
 		fields = append(fields, fieldName(s, index))

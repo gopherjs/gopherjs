@@ -24,6 +24,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	switch s := stmt.(type) {
 	case *ast.BlockStmt:
+		c.printLabel(label)
 		c.translateStmtList(s.List)
 
 	case *ast.IfStmt:

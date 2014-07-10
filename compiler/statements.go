@@ -684,9 +684,8 @@ clauseLoop:
 		c.caseCounter = endCase + 1
 	}
 
-	var prevFlowData *flowData
 	if isSwitch {
-		prevFlowData = c.flowDatas[""]
+		prevFlowData := c.flowDatas[""]
 		data := &flowData{
 			postStmt:  prevFlowData.postStmt,  // for "continue" of outer loop
 			beginCase: prevFlowData.beginCase, // same
@@ -694,6 +693,10 @@ clauseLoop:
 		}
 		c.flowDatas[""] = data
 		c.flowDatas[label] = data
+		defer func() {
+			delete(c.flowDatas, label)
+			c.flowDatas[""] = prevFlowData
+		}()
 	}
 
 	c.printLabel(label)
@@ -743,11 +746,6 @@ clauseLoop:
 		return
 	}
 	c.PrintCond(!flatten, "}", fmt.Sprintf("case %d:", endCase))
-
-	if isSwitch {
-		delete(c.flowDatas, label)
-		c.flowDatas[""] = prevFlowData
-	}
 }
 
 func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bodyPrefix, post func(), label string, flatten bool) {

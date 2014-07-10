@@ -763,6 +763,10 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 	}
 	c.flowDatas[""] = data
 	c.flowDatas[label] = data
+	defer func() {
+		delete(c.flowDatas, label)
+		c.flowDatas[""] = prevFlowData
+	}()
 
 	c.printLabel(label)
 	if !flatten && label != "" {
@@ -804,9 +808,6 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 		c.p.escapingVars = prevEV
 	})
 	c.PrintCond(!flatten, "}", fmt.Sprintf("$s = %d; continue; case %d:", data.beginCase, data.endCase))
-
-	delete(c.flowDatas, label)
-	c.flowDatas[""] = prevFlowData
 }
 
 func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, typ types.Type, define bool) string {

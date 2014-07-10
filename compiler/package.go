@@ -377,6 +377,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 
 		{
+			if mainFunc == nil {
+				return nil, fmt.Errorf("missing main function")
+			}
 			id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
 			c.p.info.Uses[id] = mainFunc
 			call := &ast.CallExpr{Fun: id}

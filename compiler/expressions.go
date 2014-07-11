@@ -537,12 +537,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if !sel.Obj().Exported() {
 				c.p.dependencies[sel.Obj()] = true
 			}
-			recv := "recv"
-			if isWrapped(sel.Recv()) {
-				recv = fmt.Sprintf("(new %s(recv))", c.typeName(sel.Recv()))
-			}
-			parameters := makeParametersList()
-			return c.formatExpr("(function(%s) { $stackDepthOffset--; try { return %s.%s(%s); } finally { $stackDepthOffset++; } })", strings.Join(append([]string{"recv"}, parameters...), ", "), recv, sel.Obj().(*types.Func).Name(), strings.Join(parameters, ", "))
+			return c.formatExpr("$methodExpr(%s.prototype.%s)", c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
 		}
 		panic("")
 
@@ -833,9 +828,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			this = "$this"
 		}
 		if isWrapped(c.p.info.Types[e].Type) {
-			this += ".$val"
+			return c.formatExpr("%1s.$val !== undefined ? %1s.$val : %1s", this)
 		}
-		return c.formatExpr(this)
+		return c.formatExpr("%s", this)
 
 	case nil:
 		return c.formatExpr("")

@@ -615,6 +615,20 @@ var $newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });
 };
 
+var $methodExpr = function(method) {
+	if (method.$expr === undefined) {
+		method.$expr = function() {
+			$stackDepthOffset--;
+			try {
+				return Function.call.apply(method, arguments);
+			} finally {
+				$stackDepthOffset++;
+			}
+		};
+	}
+	return method.$expr;
+};
+
 var $coerceFloat32 = function(f) {
 	var math = $packages["math"];
 	if (math === undefined) {

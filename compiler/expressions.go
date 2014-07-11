@@ -497,21 +497,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			return c.formatExpr("%s", c.objectName(obj))
 		}
 
-		parameterName := func(v *types.Var) string {
-			if v.Anonymous() || v.Name() == "" {
-				return c.newVariable("param")
-			}
-			return c.newVariable(v.Name())
-		}
-		makeParametersList := func() []string {
-			params := sel.Obj().Type().(*types.Signature).Params()
-			names := make([]string, params.Len())
-			for i := 0; i < params.Len(); i++ {
-				names[i] = parameterName(params.At(i))
-			}
-			return names
-		}
-
 		switch sel.Kind() {
 		case types.FieldVal:
 			fields, jsTag := c.translateSelection(sel)
@@ -526,13 +511,11 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if !sel.Obj().Exported() {
 				c.p.dependencies[sel.Obj()] = true
 			}
-			parameters := makeParametersList()
-			target := c.translateExpr(e.X)
+			recv := c.translateExpr(e.X)
 			if isWrapped(sel.Recv()) {
-				target = c.formatParenExpr("new %s(%s)", c.typeName(sel.Recv()), target)
+				recv = c.formatParenExpr("new %s(%s)", c.typeName(sel.Recv()), recv)
 			}
-			recv := c.newVariable("_recv")
-			return c.formatExpr("(%s = %s, function(%s) { $stackDepthOffset--; try { return %s.%s(%s); } finally { $stackDepthOffset++; } })", recv, target, strings.Join(parameters, ", "), recv, e.Sel.Name, strings.Join(parameters, ", "))
+			return c.formatExpr(`$methodVal(%s, "%s")`, recv, sel.Obj().(*types.Func).Name())
 		case types.MethodExpr:
 			if !sel.Obj().Exported() {
 				c.p.dependencies[sel.Obj()] = true

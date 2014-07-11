@@ -260,7 +260,12 @@ func TestSameFuncWrapper(t *testing.T) {
 	if !dummys.Call("isEqual", somePackageFunction, somePackageFunction).Bool() {
 		t.Fail()
 	}
-	if !dummys.Call("isEqual", T.someMethod, T.someMethod).Bool() {
+	if !dummys.Call("isEqual", (*T).someMethod, (*T).someMethod).Bool() {
+		t.Fail()
+	}
+	t1 := &T{}
+	t2 := &T{}
+	if !dummys.Call("isEqual", t1.someMethod, t1.someMethod).Bool() || dummys.Call("isEqual", t1.someMethod, t2.someMethod).Bool() {
 		t.Fail()
 	}
 }
@@ -270,7 +275,7 @@ func somePackageFunction(_ string) {
 
 type T struct{}
 
-func (t T) someMethod() {
+func (t *T) someMethod() {
 	println(42)
 }
 

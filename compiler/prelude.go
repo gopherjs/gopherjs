@@ -615,6 +615,25 @@ var $newDataPointer = function(data, constructor) {
 	return new constructor(function() { return data; }, function(v) { data = v; });
 };
 
+var $methodVal = function(recv, name) {
+	var vals = recv.$methodVals || {};
+	recv.$methodVals = vals; /* noop for primitives */
+	var f = vals[name];
+	if (f !== undefined) {
+		return f;
+	}
+	var method = recv[name];
+	f = function() {
+		$stackDepthOffset--;
+		try {
+			return method.apply(recv, arguments);
+		} finally {
+			$stackDepthOffset++;
+		}
+	};
+	vals[name] = f;
+	return f;
+};
 var $methodExpr = function(method) {
 	if (method.$expr === undefined) {
 		method.$expr = function() {

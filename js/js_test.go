@@ -31,6 +31,9 @@ var dummys = js.Global.Call("eval", `({
 	},
 	testMethod: function(o) {
 		return o.Method(42);
+	},
+	isEqual: function(a, b) {
+		return a === b;
 	}
 })`)
 
@@ -246,6 +249,14 @@ func TestArguments(t *testing.T) {
 		}
 	})
 	dummys.Call("testArguments", 0, 1, 2)
+}
+
+func TestSameFuncWrapper(t *testing.T) {
+	a := func(_ string) {} // string argument to force wrapping
+	b := func(_ string) {} // string argument to force wrapping
+	if !dummys.Call("isEqual", a, a).Bool() || dummys.Call("isEqual", a, b).Bool() {
+		t.Fail()
+	}
 }
 
 func TestError(t *testing.T) {

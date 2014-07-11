@@ -966,44 +966,47 @@ var $externalize = function(v, t) {
 		if (v === $throwNilPointerError) {
 			return null;
 		}
-		$checkForDeadlock = false;
-		var convert = false;
-		var i;
-		for (i = 0; i < t.params.length; i++) {
-			convert = convert || (t.params[i] !== $packages["github.com/gopherjs/gopherjs/js"].Object);
-		}
-		for (i = 0; i < t.results.length; i++) {
-			convert = convert || $needsExternalization(t.results[i]);
-		}
-		if (!convert) {
-			return v;
-		}
-		return function() {
-			var args = [], i;
+		if (v.$externalizeWrapper === undefined) {
+			$checkForDeadlock = false;
+			var convert = false;
+			var i;
 			for (i = 0; i < t.params.length; i++) {
-				if (t.variadic && i === t.params.length - 1) {
-					var vt = t.params[i].elem, varargs = [], j;
-					for (j = i; j < arguments.length; j++) {
-						varargs.push($internalize(arguments[j], vt));
+				convert = convert || (t.params[i] !== $packages["github.com/gopherjs/gopherjs/js"].Object);
+			}
+			for (i = 0; i < t.results.length; i++) {
+				convert = convert || $needsExternalization(t.results[i]);
+			}
+			if (!convert) {
+				return v;
+			}
+			v.$externalizeWrapper = function() {
+				var args = [], i;
+				for (i = 0; i < t.params.length; i++) {
+					if (t.variadic && i === t.params.length - 1) {
+						var vt = t.params[i].elem, varargs = [], j;
+						for (j = i; j < arguments.length; j++) {
+							varargs.push($internalize(arguments[j], vt));
+						}
+						args.push(new (t.params[i])(varargs));
+						break;
 					}
-					args.push(new (t.params[i])(varargs));
-					break;
+					args.push($internalize(arguments[i], t.params[i]));
 				}
-				args.push($internalize(arguments[i], t.params[i]));
-			}
-			var result = v.apply(this, args);
-			switch (t.results.length) {
-			case 0:
-				return;
-			case 1:
-				return $externalize(result, t.results[0]);
-			default:
-				for (i = 0; i < t.results.length; i++) {
-					result[i] = $externalize(result[i], t.results[i]);
+				var result = v.apply(this, args);
+				switch (t.results.length) {
+				case 0:
+					return;
+				case 1:
+					return $externalize(result, t.results[0]);
+				default:
+					for (i = 0; i < t.results.length; i++) {
+						result[i] = $externalize(result[i], t.results[i]);
+					}
+					return result;
 				}
-				return result;
-			}
-		};
+			};
+		}
+		return v.$externalizeWrapper;
 	case "Interface":
 		if (v === null) {
 			return null;

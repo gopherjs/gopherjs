@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"github.com/gopherjs/gopherjs/compiler/prelude"
 	"go/token"
 	"io"
 	"sort"
@@ -88,7 +89,7 @@ func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMa
 	if _, err := w.Write([]byte("\"use strict\";\n(function() {\n\n")); err != nil {
 		return err
 	}
-	if _, err := w.Write(removeWhitespace(prelude, minify)); err != nil {
+	if _, err := w.Write(removeWhitespace([]byte(prelude.Prelude), minify)); err != nil {
 		return err
 	}
 	if _, err := w.Write([]byte("\n")); err != nil {

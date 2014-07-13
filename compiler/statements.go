@@ -861,10 +861,14 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 	case *ast.IndexExpr:
 		switch t := c.p.info.Types[l.X].Type.Underlying().(type) {
 		case *types.Array, *types.Pointer:
-			if c.p.info.Types[l.Index].Value != nil {
-				return c.formatExpr("%e[%f] = %s;", l.X, l.Index, rhs).String()
+			pattern := "%1e[%2f] = %3s"
+			if c.p.info.Types[l.Index].Value == nil { // add range check if not constant
+				pattern = `(%2f < 0 || %2f >= %1e.length) ? $throwRuntimeError("index out of range") : ` + pattern
 			}
-			return c.formatExpr(`(%2f < 0 || %2f >= %1e.length) ? $throwRuntimeError("index out of range") : %1e[%2f] = %3s`, l.X, l.Index, rhs).String() + ";"
+			if _, ok := t.(*types.Pointer); ok { // check pointer for nix (attribute getter causes a panic)
+				pattern = `%1e.nilCheck, ` + pattern
+			}
+			return c.formatExpr(pattern, l.X, l.Index, rhs).String() + ";"
 		case *types.Slice:
 			return c.formatExpr(`(%2f < 0 || %2f >= %1e.$length) ? $throwRuntimeError("index out of range") : %1e.$array[%1e.$offset + %2f] = %3s`, l.X, l.Index, rhs).String() + ";"
 		default:

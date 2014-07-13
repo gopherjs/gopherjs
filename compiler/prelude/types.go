@@ -73,9 +73,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
         rt.arrayType = new $reflect.arrayType.Ptr(rt, elem.reflectType(), undefined, len);
       };
       typ.Ptr.init(typ);
-      for (var i = 0; i < len; i++) {
-        Object.defineProperty(typ.Ptr.nil, i, { get: $throwNilPointerError, set: $throwNilPointerError });
-      }
+      Object.defineProperty(typ.Ptr.nil, "nilCheck", { get: $throwNilPointerError });
     };
     break;
 

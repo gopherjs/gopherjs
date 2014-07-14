@@ -26,8 +26,7 @@ func (e *ImportCError) Error() string {
 }
 
 func NewBuildContext(archSuffix string) *build.Context {
-	version := runtime.Version()[:5]
-	if version != "go1.3" {
+	if runtime.Version()[:5] != "go1.3" {
 		panic("GopherJS requires Go 1.3. Please upgrade.")
 	}
 	return &build.Context{
@@ -36,7 +35,7 @@ func NewBuildContext(archSuffix string) *build.Context {
 		GOOS:      build.Default.GOOS,
 		GOARCH:    archSuffix,
 		Compiler:  "gc",
-		BuildTags: []string{"netgo", version},
+		BuildTags: []string{"go1.1", "go1.2", "go1.3", "netgo"},
 	}
 }
 

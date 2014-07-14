@@ -26,7 +26,7 @@ func (e *ImportCError) Error() string {
 }
 
 func NewBuildContext(archSuffix string) *build.Context {
-	if runtime.Version()[:5] != "go1.3" {
+	if strings.HasPrefix(runtime.Version(), "go1.") && runtime.Version()[4] != '3' {
 		panic("GopherJS requires Go 1.3. Please upgrade.")
 	}
 	return &build.Context{

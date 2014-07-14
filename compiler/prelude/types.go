@@ -124,7 +124,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       typ.methods = methods;
       typ.extendReflectType = function(rt) {
         var imethods = $mapArray(methods, function(m) {
-          return new $reflect.imethod.Ptr($newStringPtr(m[1]), $newStringPtr(m[2]), $funcType(m[3], m[4], m[5]).reflectType());
+          return new $reflect.imethod.Ptr($newStringPtr(m[1]), $newStringPtr(m[2]), m[3].reflectType());
         });
         var methodSlice = ($sliceType($ptrType($reflect.imethod.Ptr)));
         rt.interfaceType = new $reflect.interfaceType.Ptr(rt, new methodSlice(imethods));
@@ -220,19 +220,19 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       }
       /* methods for embedded fields */
       for (i = 0; i < typ.methods.length; i++) {
-        var method = typ.methods[i];
-        if (method[6] != -1) {
+        var m = typ.methods[i];
+        if (m[4] != -1) {
           (function(field, methodName) {
             typ.prototype[methodName] = function() {
               var v = this.$val[field[0]];
               return v[methodName].apply(v, arguments);
             };
-          })(fields[method[6]], method[0]);
+          })(fields[m[4]], m[0]);
         }
       }
       for (i = 0; i < typ.Ptr.methods.length; i++) {
-        var method = typ.Ptr.methods[i];
-        if (method[6] != -1) {
+        var m = typ.Ptr.methods[i];
+        if (m[4] != -1) {
           (function(field, methodName) {
             typ.Ptr.prototype[methodName] = function() {
               var v = this[field[0]];
@@ -241,7 +241,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
               }
               return v[methodName].apply(v, arguments);
             };
-          })(fields[method[6]], method[0]);
+          })(fields[m[4]], m[0]);
         }
       }
       /* reflect type */
@@ -345,7 +345,8 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
         var i;
         for (i = 0; i < typ.methods.length; i++) {
           var m = typ.methods[i];
-          methods.push(new $reflect.method.Ptr($newStringPtr(m[1]), $newStringPtr(m[2]), $funcType(m[3], m[4], m[5]).reflectType(), $funcType([typ].concat(m[3]), m[4], m[5]).reflectType(), undefined, undefined));
+          var t = m[3];
+          methods.push(new $reflect.method.Ptr($newStringPtr(m[1]), $newStringPtr(m[2]), t.reflectType(), $funcType([typ].concat(t.params), t.results, t.variadic).reflectType(), undefined, undefined));
         }
       }
       if (name !== "" || methods.length !== 0) {
@@ -416,23 +417,18 @@ var $chanType = function(elem, sendOnly, recvOnly) {
   return typ;
 };
 
-var $funcSig = function(params, results, variadic) {
+var $funcTypes = {};
+var $funcType = function(params, results, variadic) {
   var paramTypes = $mapArray(params, function(p) { return p.string; });
   if (variadic) {
     paramTypes[paramTypes.length - 1] = "..." + paramTypes[paramTypes.length - 1].substr(2);
   }
-  var string = "(" + paramTypes.join(", ") + ")";
+  var string = "func(" + paramTypes.join(", ") + ")";
   if (results.length === 1) {
     string += " " + results[0].string;
   } else if (results.length > 1) {
     string += " (" + $mapArray(results, function(r) { return r.string; }).join(", ") + ")";
   }
-  return string;
-};
-
-var $funcTypes = {};
-var $funcType = function(params, results, variadic) {
-  var string = "func" + $funcSig(params, results, variadic);
   var typ = $funcTypes[string];
   if (typ === undefined) {
     typ = $newType(4, "Func", string, "", "", null);
@@ -447,7 +443,7 @@ var $interfaceType = function(methods) {
   var string = "interface {}";
   if (methods.length !== 0) {
     string = "interface { " + $mapArray(methods, function(m) {
-      return (m[2] !== "" ? m[2] + "." : "") + m[1] + $funcSig(m[3], m[4], m[5]);
+      return (m[2] !== "" ? m[2] + "." : "") + m[1] + m[3].string.substr(4);
     }).join("; ") + " }";
   }
   var typ = $interfaceTypes[string];
@@ -461,7 +457,7 @@ var $interfaceType = function(methods) {
 var $emptyInterface = $interfaceType([]);
 var $interfaceNil = { $key: function() { return "nil"; } };
 var $error = $newType(8, "Interface", "error", "error", "", null);
-$error.init([["Error", "Error", "", [], [$String], false]]);
+$error.init([["Error", "Error", "", $funcType([], [$String], false)]]);
 
 var $Map = function() {};
 (function() {

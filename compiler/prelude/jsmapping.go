@@ -117,7 +117,7 @@ var $externalize = function(v, t) {
       (function(m) {
         o[m[1]] = $externalize(function() {
           return v[m[0]].apply(v, arguments);
-        }, $funcType(m[3], m[4], m[5]));
+        }, m[3]);
       })(m);
     }
     return o;

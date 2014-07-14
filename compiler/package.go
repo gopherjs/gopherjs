@@ -444,7 +444,7 @@ func (c *funcContext) initType(o types.Object) {
 				if reservedKeywords[name] {
 					name += "$"
 				}
-				methods[i] = fmt.Sprintf(`["%s", "%s", "%s", %s, %d]`, name, method.Obj().Name(), pkgPath, c.initArgs(t), embeddedIndex)
+				methods[i] = fmt.Sprintf(`["%s", "%s", "%s", $funcType(%s), %d]`, name, method.Obj().Name(), pkgPath, c.initArgs(t), embeddedIndex)
 			}
 			c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
 		}
@@ -471,7 +471,7 @@ func (c *funcContext) initArgs(ty types.Type) string {
 			if !method.Exported() {
 				pkgPath = method.Pkg().Path()
 			}
-			methods[i] = fmt.Sprintf(`["%s", "%s", "%s", %s]`, method.Name(), method.Name(), pkgPath, c.initArgs(method.Type()))
+			methods[i] = fmt.Sprintf(`["%s", "%s", "%s", $funcType(%s)]`, method.Name(), method.Name(), pkgPath, c.initArgs(method.Type()))
 		}
 		return fmt.Sprintf("[%s]", strings.Join(methods, ", "))
 	case *types.Map:

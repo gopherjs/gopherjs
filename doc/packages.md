@@ -58,7 +58,7 @@ On each commit, Travis CI automatically compiles all supported packages with Gop
 | -- base64       | yes                   |                                   |
 | -- binary       | yes                   |                                   |
 | -- csv          | yes                   |                                   |
-| -- gob          | no                    | uses "unsafe" heavily             |
+| -- gob          | soon                  | will become supported with Go 1.4 |
 | -- hex          | yes                   |                                   |
 | -- json         | yes                   |                                   |
 | -- pem          | yes                   |                                   |

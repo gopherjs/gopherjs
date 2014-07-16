@@ -1184,7 +1184,7 @@ func (c *funcContext) typeCheck(of string, to types.Type) string {
 		if in.Empty() {
 			return "true"
 		}
-		return fmt.Sprintf("%s.implementedBy.indexOf(%s) !== -1", c.typeName(to), of)
+		return fmt.Sprintf("$implements(%s, %s)", of, c.typeName(to))
 	}
 	return of + " === " + c.typeName(to)
 }

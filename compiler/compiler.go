@@ -11,7 +11,6 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/prelude"
 	"go/token"
 	"io"
-	"sort"
 	"strings"
 )
 
@@ -100,63 +99,6 @@ func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMa
 	for _, pkg := range pkgs {
 		if err := WritePkgCode(pkg, minify, w); err != nil {
 			return err
-		}
-	}
-
-	// write interfaces
-	allTypeNames := []*types.TypeName{types.New("error").(*types.Named).Obj()}
-	for _, pkg := range pkgs {
-		scope := importContext.Packages[string(pkg.ImportPath)].Scope()
-		for _, name := range scope.Names() {
-			if typeName, isTypeName := scope.Lookup(name).(*types.TypeName); isTypeName {
-				if _, notUsed := declsByObject[string(pkg.ImportPath)+":"+name]; !notUsed {
-					allTypeNames = append(allTypeNames, typeName)
-				}
-			}
-		}
-	}
-	for _, t := range allTypeNames {
-		if in, isInterface := t.Type().Underlying().(*types.Interface); isInterface {
-			if in.Empty() {
-				continue
-			}
-			implementedBy := make(map[string]bool, 0)
-			for _, other := range allTypeNames {
-				otherType := other.Type()
-				switch otherType.Underlying().(type) {
-				case *types.Interface:
-					// skip
-				case *types.Struct:
-					if types.AssignableTo(otherType, in) {
-						implementedBy[fmt.Sprintf("$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
-					}
-					if types.AssignableTo(types.NewPointer(otherType), in) {
-						implementedBy[fmt.Sprintf("$packages[\"%s\"].%s.Ptr", other.Pkg().Path(), other.Name())] = true
-					}
-				default:
-					if types.AssignableTo(otherType, in) {
-						implementedBy[fmt.Sprintf("$packages[\"%s\"].%s", other.Pkg().Path(), other.Name())] = true
-					}
-					if types.AssignableTo(types.NewPointer(otherType), in) {
-						implementedBy[fmt.Sprintf("$ptrType($packages[\"%s\"].%s)", other.Pkg().Path(), other.Name())] = true
-					}
-				}
-			}
-			list := make([]string, 0, len(implementedBy))
-			for ref := range implementedBy {
-				list = append(list, ref)
-			}
-			sort.Strings(list)
-			var target string
-			switch t.Name() {
-			case "error":
-				target = "$error"
-			default:
-				target = fmt.Sprintf("$packages[\"%s\"].%s", t.Pkg().Path(), t.Name())
-			}
-			if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("%s.implementedBy = [%s];\n", target, strings.Join(list, ", "))), minify)); err != nil {
-				return err
-			}
 		}
 	}
 

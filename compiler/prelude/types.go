@@ -119,7 +119,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     break;
 
   case "Interface":
-    typ = { implementedBy: [] };
+    typ = { implementedBy: {} };
     typ.init = function(methods) {
       typ.methods = methods;
       typ.extendReflectType = function(rt) {
@@ -562,5 +562,43 @@ var $structType = function(fields) {
     $structTypes[string] = typ;
   }
   return typ;
+};
+
+var $implements = function(type, iface) {
+  if (type === null) {
+    return false;
+  }
+
+  var cached = iface.implementedBy[type.string];
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  var result = true;
+  for (var i = 0; i < iface.methods.length; i++) {
+    var tm = iface.methods[i];
+    var found = false;
+    for (var j = 0; j < type.methods.length; j++) {
+      var vm = type.methods[j];
+      if (vm[1] === tm[1] && vm[2] === tm[2] && vm[3] === tm[3]) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      result = false;
+      break;
+    }
+  }
+  iface.implementedBy[type.string] = result;
+  return result;
+};
+
+var $typeAssertionFailed = function(obj, expected) {
+  var got = "";
+  if (obj !== null) {
+    got = obj.constructor.string;
+  }
+  $panic(new $packages["runtime"].TypeAssertionError.Ptr("", got, expected.string, ""));
 };
 `

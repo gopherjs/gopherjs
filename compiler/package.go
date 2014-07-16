@@ -770,8 +770,8 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 
 		if len(c.blocking) != 0 {
 			c.localVars = append(c.localVars, "$r")
-			prefix = prefix + " if(!$b) { $nonblockingCall(); }; return function() {"
-			suffix = " };" + suffix
+			prefix = prefix + " if(!$b) { $nonblockingCall(); }; var $f = function() {"
+			suffix = " }; $f.$blocking = true; return $f;" + suffix
 		}
 
 		if c.hasDefer {

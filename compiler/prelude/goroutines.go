@@ -60,7 +60,7 @@ var $callDeferred = function(deferred, jsErr) {
         return;
       }
       var r = call[0].apply(undefined, call[1]);
-      if (r && r.constructor === Function) {
+      if (r && r.$blocking) {
         deferred.push([r, []]);
       }
 
@@ -190,7 +190,7 @@ var $send = function(chan, value) {
 
   chan.$sendQueue.push([$curGoroutine, value]);
   var blocked = false;
-  return function() {
+  var f = function() {
     if (blocked) {
       if (chan.$closed) {
         $throwRuntimeError("send on closed channel");
@@ -201,6 +201,8 @@ var $send = function(chan, value) {
     $curGoroutine.asleep = true;
     throw null;
   };
+  f.$blocking = true;
+  return f;
 };
 var $recv = function(chan) {
   var queuedSend = chan.$sendQueue.shift();
@@ -218,7 +220,7 @@ var $recv = function(chan) {
 
   chan.$recvQueue.push($curGoroutine);
   var blocked = false;
-  return function() {
+  var f = function() {
     if (blocked) {
       var value = $curGoroutine.chanValue;
       $curGoroutine.chanValue = undefined;
@@ -228,6 +230,8 @@ var $recv = function(chan) {
     $curGoroutine.asleep = true;
     throw null;
   };
+  f.$blocking = true;
+  return f;
 };
 var $close = function(chan) {
   if (chan.$closed) {
@@ -306,7 +310,7 @@ var $select = function(comms) {
     }
   }
   var blocked = false;
-  return function() {
+  var f = function() {
     if (blocked) {
       var selection;
       for (i = 0; i < comms.length; i++) {
@@ -343,5 +347,7 @@ var $select = function(comms) {
     $curGoroutine.asleep = true;
     throw null;
   };
+  f.$blocking = true;
+  return f;
 };
 `

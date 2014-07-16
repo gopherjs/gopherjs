@@ -92,7 +92,7 @@ var $externalize = function(v, t) {
     }
     return v.$externalizeWrapper;
   case "Interface":
-    if (v === null) {
+    if (v === $ifaceNil) {
       return null;
     }
     if (t === $packages["github.com/gopherjs/gopherjs/js"].Object || v.constructor.kind === undefined) {
@@ -211,8 +211,11 @@ var $internalize = function(v, t, recv) {
       }
     };
   case "Interface":
-    if (v === null || t === $packages["github.com/gopherjs/gopherjs/js"].Object) {
+    if (t === $packages["github.com/gopherjs/gopherjs/js"].Object) {
       return v;
+    }
+    if (v === null) {
+      return $ifaceNil;
     }
     switch (v.constructor) {
     case Int8Array:

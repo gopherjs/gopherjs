@@ -534,7 +534,7 @@ func (v Value) iword() iword {
 	}
 	if v.flag&flagIndir != 0 {
 		val := js.InternalObject(v.ptr).Call("$get")
-		if !val.IsNull() && val.Get("constructor") != jsType(v.typ) {
+		if val != js.Global.Get("$ifaceNil") && val.Get("constructor") != jsType(v.typ) {
 			switch v.typ.Kind() {
 			case Uint64, Int64:
 				val = jsType(v.typ).New(val.Get("$high"), val.Get("$low"))
@@ -674,7 +674,7 @@ func (v Value) Elem() Value {
 	switch k := v.kind(); k {
 	case Interface:
 		val := js.InternalObject(v.iword())
-		if val.IsNull() {
+		if val == js.Global.Get("$ifaceNil") {
 			return Value{}
 		}
 		typ := reflectType(val.Get("constructor"))
@@ -775,7 +775,7 @@ func (v Value) IsNil() bool {
 	case Map:
 		return v.iword() == iword(js.InternalObject(false).Unsafe())
 	case Interface:
-		return js.InternalObject(v.iword()).IsNull()
+		return js.InternalObject(v.iword()) == js.Global.Get("$ifaceNil")
 	default:
 		panic(&ValueError{"reflect.Value.IsNil", k})
 	}

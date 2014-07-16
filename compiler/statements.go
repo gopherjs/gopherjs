@@ -95,7 +95,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Printf("%s = %s;", refVar, c.translateExpr(expr))
 		translateCond := func(cond ast.Expr) *expression {
 			if types.Identical(c.p.info.Types[cond].Type, types.Typ[types.UntypedNil]) {
-				return c.formatExpr("%s === null", refVar)
+				return c.formatExpr("%s === $ifaceNil", refVar)
 			}
 			return c.formatExpr("$assertType(%s, %s, true)[1]", refVar, c.typeName(c.p.info.Types[cond].Type))
 		}

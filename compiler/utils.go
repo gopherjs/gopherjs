@@ -143,7 +143,7 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 	case *types.Map:
 		return "false"
 	case *types.Interface:
-		return "null"
+		return "$ifaceNil"
 	}
 	return fmt.Sprintf("%s.nil", c.typeName(ty))
 }
@@ -256,8 +256,6 @@ func (c *funcContext) typeName(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Basic:
 		switch t.Kind() {
-		case types.UntypedNil:
-			return "null"
 		case types.UnsafePointer:
 			return "$UnsafePointer"
 		default:
@@ -294,10 +292,8 @@ func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
 			return fmt.Sprintf("$floatKey(%s)", c.translateExpr(expr))
 		}
 		return c.translateImplicitConversion(expr, keyType).String()
-	case *types.Chan, *types.Pointer:
+	case *types.Chan, *types.Pointer, *types.Interface:
 		return fmt.Sprintf("%s.$key()", c.translateImplicitConversion(expr, keyType))
-	case *types.Interface:
-		return fmt.Sprintf("(%s || $interfaceNil).$key()", c.translateImplicitConversion(expr, keyType))
 	default:
 		return c.translateImplicitConversion(expr, keyType).String()
 	}

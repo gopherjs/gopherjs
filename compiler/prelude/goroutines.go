@@ -90,7 +90,7 @@ var $panic = function(value) {
 };
 var $recover = function() {
   if ($panicStackDepth === null || $panicStackDepth !== $getStackDepth() - 2) {
-    return null;
+    return $ifaceNil;
   }
   $panicStackDepth = null;
   return $panicValue;

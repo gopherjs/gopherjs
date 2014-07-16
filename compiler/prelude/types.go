@@ -304,7 +304,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     break;
 
   case "Interface":
-    typ.zero = function() { return null; };
+    typ.zero = function() { return $ifaceNil; };
     break;
 
   case "Array":
@@ -455,7 +455,7 @@ var $interfaceType = function(methods) {
   return typ;
 };
 var $emptyInterface = $interfaceType([]);
-var $interfaceNil = { $key: function() { return "nil"; } };
+var $ifaceNil = { $key: function() { return "nil"; } };
 var $error = $newType(8, "Interface", "error", "error", "", null);
 $error.init([["Error", "Error", "", $funcType([], [$String], false)]]);
 
@@ -566,7 +566,7 @@ var $structType = function(fields) {
 
 var $assertType = function(value, type, returnTuple) {
   var isInterface = (type.kind === "Interface"), ok, missingMethod = "";
-  if (value === null) {
+  if (value === $ifaceNil) {
     ok = false;
   } else if (!isInterface) {
     ok = value.constructor === type;
@@ -606,7 +606,7 @@ var $assertType = function(value, type, returnTuple) {
     if (returnTuple) {
       return [type.zero(), false];
     }
-    $panic(new $packages["runtime"].TypeAssertionError.Ptr("", (value === null ? "" : value.constructor.string), type.string, missingMethod));
+    $panic(new $packages["runtime"].TypeAssertionError.Ptr("", (value === $ifaceNil ? "" : value.constructor.string), type.string, missingMethod));
   }
 
   if (!isInterface) {

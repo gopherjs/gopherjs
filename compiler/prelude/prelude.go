@@ -412,12 +412,4 @@ var $pointerIsEqual = function(a, b) {
   a.$set(old);
   return equal;
 };
-
-var $typeAssertionFailed = function(obj, expected) {
-  var got = "";
-  if (obj !== null) {
-    got = obj.constructor.string;
-  }
-  $panic(new $packages["runtime"].TypeAssertionError.Ptr("", got, expected.string, ""));
-};
 `

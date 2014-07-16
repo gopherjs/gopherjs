@@ -776,15 +776,10 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			return c.translateExpr(e.X)
 		}
 		t := c.p.info.Types[e.Type].Type
-		check := "%1e !== null && " + c.typeCheck("%1e.constructor", t)
-		valueSuffix := ""
-		if _, isInterface := t.Underlying().(*types.Interface); !isInterface {
-			valueSuffix = ".$val"
-		}
 		if _, isTuple := exprType.(*types.Tuple); isTuple {
-			return c.formatExpr("("+check+" ? [%1e%2s, true] : [%3s, false])", e.X, valueSuffix, c.zeroValue(c.p.info.Types[e.Type].Type))
+			return c.formatExpr("$assertType(%e, %s, true)", e.X, c.typeName(t))
 		}
-		return c.formatExpr("("+check+" ? %1e%2s : $typeAssertionFailed(%1e, %3s))", e.X, valueSuffix, c.typeName(t))
+		return c.formatExpr("$assertType(%e, %s)", e.X, c.typeName(t))
 
 	case *ast.Ident:
 		if e.Name == "_" {
@@ -1174,19 +1169,6 @@ func (c *funcContext) loadStruct(array, target string, s *types.Struct) string {
 		}
 	}
 	return code
-}
-
-func (c *funcContext) typeCheck(of string, to types.Type) string {
-	if isJsObject(to) {
-		return "true"
-	}
-	if in, isInterface := to.Underlying().(*types.Interface); isInterface {
-		if in.Empty() {
-			return "true"
-		}
-		return fmt.Sprintf("$implements(%s, %s)", of, c.typeName(to))
-	}
-	return of + " === " + c.typeName(to)
 }
 
 func (c *funcContext) fixNumber(value *expression, basic *types.Basic) *expression {

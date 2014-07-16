@@ -119,7 +119,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     break;
 
   case "Interface":
-    typ = { implementedBy: {} };
+    typ = { implementedBy: {}, missingMethodFor: {} };
     typ.init = function(methods) {
       typ.methods = methods;
       typ.extendReflectType = function(rt) {
@@ -564,41 +564,54 @@ var $structType = function(fields) {
   return typ;
 };
 
-var $implements = function(type, iface) {
-  if (type === null) {
-    return false;
-  }
-
-  var cached = iface.implementedBy[type.string];
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  var result = true;
-  for (var i = 0; i < iface.methods.length; i++) {
-    var tm = iface.methods[i];
-    var found = false;
-    for (var j = 0; j < type.methods.length; j++) {
-      var vm = type.methods[j];
-      if (vm[1] === tm[1] && vm[2] === tm[2] && vm[3] === tm[3]) {
-        found = true;
-        break;
+var $assertType = function(value, type, returnTuple) {
+  var isInterface = (type.kind === "Interface"), ok, missingMethod = "";
+  if (value === null) {
+    ok = false;
+  } else if (!isInterface) {
+    ok = value.constructor === type;
+  } else if (type.string === "js.Object") {
+    ok = true;
+  } else {
+    var valueTypeString = value.constructor.string;
+    ok = type.implementedBy[valueTypeString];
+    if (ok === undefined) {
+      ok = true;
+      var valueMethods = value.constructor.methods;
+      var typeMethods = type.methods;
+      for (var i = 0; i < typeMethods.length; i++) {
+        var tm = typeMethods[i];
+        var found = false;
+        for (var j = 0; j < valueMethods.length; j++) {
+          var vm = valueMethods[j];
+          if (vm[1] === tm[1] && vm[2] === tm[2] && vm[3] === tm[3]) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          ok = false;
+          type.missingMethodFor[valueTypeString] = tm[1];
+          break;
+        }
       }
+      type.implementedBy[valueTypeString] = ok;
     }
-    if (!found) {
-      result = false;
-      break;
+    if (!ok) {
+      missingMethod = type.missingMethodFor[valueTypeString];
     }
   }
-  iface.implementedBy[type.string] = result;
-  return result;
-};
 
-var $typeAssertionFailed = function(obj, expected) {
-  var got = "";
-  if (obj !== null) {
-    got = obj.constructor.string;
+  if (!ok) {
+    if (returnTuple) {
+      return [type.zero(), false];
+    }
+    $panic(new $packages["runtime"].TypeAssertionError.Ptr("", (value === null ? "" : value.constructor.string), type.string, missingMethod));
   }
-  $panic(new $packages["runtime"].TypeAssertionError.Ptr("", got, expected.string, ""));
+
+  if (!isInterface) {
+    value = value.$val;
+  }
+  return returnTuple ? [value, true] : value;
 };
 `

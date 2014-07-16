@@ -92,11 +92,12 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			expr = a.X.(*ast.TypeAssertExpr).X
 		}
 		refVar := c.newVariable("_ref")
-		typeVar := c.newVariable("_type")
 		c.Printf("%s = %s;", refVar, c.translateExpr(expr))
-		c.Printf("%s = %s !== null ? %s.constructor : null;", typeVar, refVar, refVar)
 		translateCond := func(cond ast.Expr) *expression {
-			return c.formatExpr("%s", c.typeCheck(typeVar, c.p.info.Types[cond].Type))
+			if types.Identical(c.p.info.Types[cond].Type, types.Typ[types.UntypedNil]) {
+				return c.formatExpr("%s === null", refVar)
+			}
+			return c.formatExpr("$assertType(%s, %s, true)[1]", refVar, c.typeName(c.p.info.Types[cond].Type))
 		}
 		printCaseBodyPrefix := func(index int) {
 			if typeSwitchVar == "" {

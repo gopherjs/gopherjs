@@ -1,12 +1,13 @@
 package prelude
 
 const goroutines = `
-var $getStack = function() {
-  return (new Error()).stack.split("\n");
-};
 var $stackDepthOffset = 0;
 var $getStackDepth = function() {
-  return $stackDepthOffset + $getStack().length;
+  var err = new Error();
+  if (err.stack === undefined) {
+    return undefined;
+  }
+  return $stackDepthOffset + err.stack.split("\n").length;
 };
 
 var $deferFrames = [], $skippedDeferFrames = 0, $jumpToDefer = false, $panicStackDepth = null, $panicValue;
@@ -89,7 +90,7 @@ var $panic = function(value) {
   $callDeferred(null, null);
 };
 var $recover = function() {
-  if ($panicStackDepth === null || $panicStackDepth !== $getStackDepth() - 2) {
+  if ($panicStackDepth === null || ($panicStackDepth !== undefined && $panicStackDepth !== $getStackDepth() - 2)) {
     return $ifaceNil;
   }
   $panicStackDepth = null;

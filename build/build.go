@@ -266,6 +266,9 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 	if err := s.BuildPackage(pkg); err != nil {
 		return err
 	}
+	if s.ImportContext.Packages["main"].Name() != "main" {
+		return fmt.Errorf("cannot build/run non-main package")
+	}
 	return s.WriteCommandPackage(pkg, pkgObj)
 }
 

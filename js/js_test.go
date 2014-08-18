@@ -1,3 +1,5 @@
+// +build js
+
 package js_test
 
 import (

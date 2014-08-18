@@ -1,11 +1,7 @@
 package build
 
 import (
-	"bitbucket.org/kardianos/osext"
-	"code.google.com/p/go.exp/fsnotify"
 	"fmt"
-	"github.com/gopherjs/gopherjs/compiler"
-	"github.com/neelance/sourcemap"
 	"go/ast"
 	"go/build"
 	"go/parser"
@@ -17,6 +13,11 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"bitbucket.org/kardianos/osext"
+	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/neelance/sourcemap"
+	"gopkg.in/fsnotify.v0"
 )
 
 type ImportCError struct{}

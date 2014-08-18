@@ -122,7 +122,7 @@ On each commit, Travis CI automatically compiles all supported packages with Gop
 | -- user         | partially             | node.js only                      |
 | path            | yes                   |                                   |
 | -- filepath     | yes                   |                                   |
-| reflect         | yes                   |                                   |
+| reflect         | yes                   | except blocking Call, Send and Recv |
 | regexp          | yes                   |                                   |
 | -- syntax       | yes                   |                                   |
 | runtime         | partially             |                                   |

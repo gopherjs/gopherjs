@@ -257,26 +257,6 @@ func makechan(typ *rtype, size uint64) (ch unsafe.Pointer) {
 	return unsafe.Pointer(jsType(typ).New().Unsafe())
 }
 
-func chancap(ch unsafe.Pointer) int {
-	panic(&runtime.NotSupportedError{"channels"})
-}
-
-func chanclose(ch unsafe.Pointer) {
-	panic(&runtime.NotSupportedError{"channels"})
-}
-
-func chanlen(ch unsafe.Pointer) int {
-	panic(&runtime.NotSupportedError{"channels"})
-}
-
-func chanrecv(t *rtype, ch unsafe.Pointer, nb bool, val unsafe.Pointer) (selected, received bool) {
-	panic(&runtime.NotSupportedError{"channels"})
-}
-
-func chansend(t *rtype, ch unsafe.Pointer, val unsafe.Pointer, nb bool) bool {
-	panic(&runtime.NotSupportedError{"channels"})
-}
-
 func makemap(t *rtype) (m unsafe.Pointer) {
 	return unsafe.Pointer(js.Global.Get("$Map").New().Unsafe())
 }
@@ -662,9 +642,7 @@ func (v Value) Cap() int {
 	switch k {
 	case Array:
 		return v.typ.Len()
-	// case Chan:
-	// 	return int(chancap(v.iword()))
-	case Slice:
+	case Chan, Slice:
 		return js.InternalObject(v.iword()).Get("$capacity").Int()
 	}
 	panic(&ValueError{"reflect.Value.Cap", k})
@@ -787,8 +765,8 @@ func (v Value) Len() int {
 		return js.InternalObject(v.iword()).Length()
 	case Slice:
 		return js.InternalObject(v.iword()).Get("$length").Int()
-	// case Chan:
-	// 	return chanlen(v.iword())
+	case Chan:
+		return js.InternalObject(v.iword()).Get("$buffer").Get("length").Int()
 	case Map:
 		return js.Global.Call("$keys", js.InternalObject(v.iword())).Length()
 	default:
@@ -930,6 +908,53 @@ func (v Value) Slice3(i, j, k int) Value {
 	}
 
 	return makeValue(typ, js.Global.Call("$subslice", s, i, j, k), v.flag&flagRO)
+}
+
+func (v Value) Close() {
+	v.mustBe(Chan)
+	v.mustBeExported()
+	js.Global.Call("$close", js.InternalObject(v.iword()))
+}
+
+func (v Value) TrySend(x Value) bool {
+	v.mustBe(Chan)
+	v.mustBeExported()
+	tt := (*chanType)(unsafe.Pointer(v.typ))
+	if ChanDir(tt.dir)&SendDir == 0 {
+		panic("reflect: send on recv-only channel")
+	}
+	x.mustBeExported()
+
+	c := js.InternalObject(v.iword())
+	if !c.Get("$closed").Bool() && c.Get("$recvQueue").Length() == 0 && c.Get("$buffer").Length() == c.Get("$capacity").Int() {
+		return false
+	}
+	x = x.assignTo("reflect.Value.Send", tt.elem, nil)
+	js.Global.Call("$send", c, js.InternalObject(x.iword()))
+	return true
+}
+
+func (v Value) Send(x Value) {
+	panic(&runtime.NotSupportedError{"reflect.Value.Send, use reflect.Value.TrySend is possible"})
+}
+
+func (v Value) TryRecv() (x Value, ok bool) {
+	v.mustBe(Chan)
+	v.mustBeExported()
+	tt := (*chanType)(unsafe.Pointer(v.typ))
+	if ChanDir(tt.dir)&RecvDir == 0 {
+		panic("reflect: recv on send-only channel")
+	}
+
+	res := js.Global.Call("$recv", js.InternalObject(v.iword()))
+	if res.Get("constructor") == js.Global.Get("Function") {
+		return Value{}, false
+	}
+	return makeValue(tt.elem, res.Index(0), 0), res.Index(1).Bool()
+}
+
+func (v Value) Recv() (x Value, ok bool) {
+	panic(&runtime.NotSupportedError{"reflect.Value.Recv, use reflect.Value.TryRecv is possible"})
 }
 
 func DeepEqual(a1, a2 interface{}) bool {

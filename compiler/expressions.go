@@ -873,12 +873,10 @@ func (c *funcContext) translateBuiltin(name string, args []ast.Expr, ellipsis bo
 		}
 	case "cap":
 		switch argType := c.p.info.Types[args[0]].Type.Underlying().(type) {
-		case *types.Slice:
+		case *types.Slice, *types.Chan:
 			return c.formatExpr("%e.$capacity", args[0])
 		case *types.Pointer:
 			return c.formatExpr("(%e, %d)", args[0], argType.Elem().(*types.Array).Len())
-		case *types.Chan:
-			return c.formatExpr("%e.$capacity", args[0])
 		// capacity of array is constant
 		default:
 			panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))

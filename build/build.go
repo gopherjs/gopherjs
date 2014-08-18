@@ -9,8 +9,10 @@ import (
 	"go/token"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -216,6 +218,12 @@ func NewSession(options *Options) *Session {
 	}
 	s.ImportContext = compiler.NewImportContext(s.ImportPackage)
 	if options.Watch {
+		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
+			if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n < 1024 {
+				fmt.Printf("Warning: The maximum number of open file descriptors is very low (%d). Change it with 'ulimit -n 8192'.\n", n)
+			}
+		}
+
 		var err error
 		s.Watcher, err = fsnotify.NewWatcher()
 		if err != nil {

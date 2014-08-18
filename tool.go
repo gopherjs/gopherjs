@@ -85,7 +85,7 @@ func main() {
 						name = filepath.ToSlash(name)
 						names[i] = name
 						if s.Watcher != nil {
-							s.Watcher.Watch(filepath.ToSlash(name))
+							s.Watcher.Add(filepath.ToSlash(name))
 						}
 					}
 					if err := s.BuildFiles(buildFlags.Args(), pkgObj, currentDirectory); err != nil {
@@ -97,7 +97,7 @@ func main() {
 				for _, pkgPath := range buildFlags.Args() {
 					pkgPath = filepath.ToSlash(pkgPath)
 					if s.Watcher != nil {
-						s.Watcher.Watch(pkgPath)
+						s.Watcher.Add(pkgPath)
 					}
 					buildPkg, err := gbuild.Import(pkgPath, 0, s.ArchSuffix())
 					if err != nil {

@@ -17,7 +17,7 @@ import (
 	"bitbucket.org/kardianos/osext"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/neelance/sourcemap"
-	"gopkg.in/fsnotify.v0"
+	"gopkg.in/fsnotify.v1"
 )
 
 type ImportCError struct{}
@@ -234,7 +234,7 @@ func (s *Session) ArchSuffix() string {
 
 func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string) error {
 	if s.Watcher != nil {
-		s.Watcher.Watch(packagePath)
+		s.Watcher.Add(packagePath)
 	}
 	buildPkg, err := NewBuildContext(s.ArchSuffix()).ImportDir(packagePath, 0)
 	if err != nil {
@@ -280,9 +280,7 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 
 	buildPkg, err := Import(path, build.AllowBinary, s.ArchSuffix())
 	if s.Watcher != nil && buildPkg != nil { // add watch even on error
-		if err := s.Watcher.Watch(buildPkg.Dir); err != nil {
-			return nil, err
-		}
+		s.Watcher.Add(buildPkg.Dir)
 	}
 	if err != nil {
 		return nil, err
@@ -501,9 +499,9 @@ func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) 
 func (s *Session) WaitForChange() {
 	fmt.Println("\x1B[32mwatching for changes...\x1B[39m")
 	select {
-	case ev := <-s.Watcher.Event:
+	case ev := <-s.Watcher.Events:
 		fmt.Println("\x1B[32mchange detected: " + ev.Name + "\x1B[39m")
-	case err := <-s.Watcher.Error:
+	case err := <-s.Watcher.Errors:
 		fmt.Println("\x1B[32mwatcher error: " + err.Error() + "\x1B[39m")
 	}
 	s.Watcher.Close()

@@ -47,7 +47,7 @@ type Object interface {
 	// Call calls the object's method with the given name.
 	Call(name string, args ...interface{}) Object
 
-	// Invoce calls the object itself. This will fail if it is not a function.
+	// Invoke calls the object itself. This will fail if it is not a function.
 	Invoke(args ...interface{}) Object
 
 	// New creates a new instance of this type object. This will fail if it not a function (constructor).
@@ -77,7 +77,7 @@ type Object interface {
 	// Unsafe returns the object as an uintptr, which can be converted via unsafe.Pointer. Not intended for public use.
 	Unsafe() uintptr
 
-	// IsUndefined returns true if the object is the JavaScript value "undefine".
+	// IsUndefined returns true if the object is the JavaScript value "undefined".
 	IsUndefined() bool
 
 	// IsNull returns true if the object is the JavaScript value "null".

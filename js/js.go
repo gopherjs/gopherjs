@@ -20,7 +20,7 @@
 //  | functions                      | func(...interface{}) js.Object | Function        |
 //  | time.Time                      | time.Time                      | Date            |
 //
-// The second column denotes the types that are used when converting to `interface{}`. Additionally, a pointer to a named type is passed to JavaScript as an object which has wrappers for the type's exported methods. This can be used to provide getter and setter methods for Go fields to JavaScript.
+// The second column denotes the types that are used when converting to `interface{}`. An exception are DOM elements, those are kept with the js.Object type. Additionally, a pointer to a named type is passed to JavaScript as an object which has wrappers for the type's exported methods. This can be used to provide getter and setter methods for Go fields to JavaScript.
 package js
 
 // Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax.

@@ -251,6 +251,9 @@ var $internalize = function(v, t, recv) {
     case String:
       return new $String($internalize(v, $String));
     default:
+      if ($global.Node && v instanceof $global.Node) {
+        return v;
+      }
       var mapType = $mapType($String, $emptyInterface);
       return new mapType($internalize(v, mapType));
     }

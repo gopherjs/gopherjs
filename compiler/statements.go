@@ -1,11 +1,12 @@
 package compiler
 
 import (
-	"code.google.com/p/go.tools/go/types"
 	"fmt"
 	"go/ast"
 	"go/token"
 	"strings"
+
+	"code.google.com/p/go.tools/go/types"
 )
 
 type This struct {
@@ -157,6 +158,10 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			c.translateLoopingStmt(iVar+" < "+keysVar+".length", s.Body, func() {
 				entryVar := c.newVariable("_entry")
 				c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
+				c.translateStmt(&ast.IfStmt{
+					Cond: c.newIdent(entryVar+" === undefined", types.Typ[types.Bool]),
+					Body: &ast.BlockStmt{List: []ast.Stmt{&ast.BranchStmt{Tok: token.CONTINUE}}},
+				}, "")
 				if !isBlank(s.Key) {
 					c.Printf("%s", c.translateAssign(s.Key, entryVar+".k", t.Key(), s.Tok == token.DEFINE))
 				}

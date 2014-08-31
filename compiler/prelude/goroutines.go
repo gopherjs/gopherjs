@@ -20,15 +20,24 @@ var $callDeferred = function(deferred, jsErr) {
     $jumpToDefer = false;
     throw jsErr;
   }
+  if (jsErr) {
+    var newErr = null;
+    try {
+      $deferFrames.push(deferred);
+      $panic(new $packages["github.com/gopherjs/gopherjs/js"].Error.Ptr(jsErr));
+    } catch (err) {
+      newErr = err;
+    }
+    $deferFrames.pop();
+    $callDeferred(deferred, newErr);
+    return;
+  }
 
   $stackDepthOffset--;
   var outerPanicStackDepth = $panicStackDepth;
   var outerPanicValue = $panicValue;
 
   var localPanicValue = $curGoroutine.panicStack.pop();
-  if (jsErr) {
-    localPanicValue = new $packages["github.com/gopherjs/gopherjs/js"].Error.Ptr(jsErr);
-  }
   if (localPanicValue !== undefined) {
     $panicStackDepth = $getStackDepth();
     $panicValue = localPanicValue;

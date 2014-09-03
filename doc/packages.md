@@ -92,7 +92,7 @@ On each commit, Travis CI automatically compiles all supported packages with Gop
 | -- png          | yes                   |                                   |
 | index           |                       |                                   |
 | -- suffixarray  | yes                   |                                   |
-| io              | yes                   |                                   |
+| io              | yes                   | except Pipe                       |
 | -- ioutil       | yes                   |                                   |
 | log             | not yet               |                                   |
 | -- syslog       | no                    |                                   |

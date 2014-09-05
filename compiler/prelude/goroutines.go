@@ -189,8 +189,7 @@ var $send = function(chan, value) {
   }
   var queuedRecv = chan.$recvQueue.shift();
   if (queuedRecv !== undefined) {
-    queuedRecv.chanValue = [value, true];
-    $schedule(queuedRecv);
+    queuedRecv([value, true]);
     return;
   }
   if (chan.$buffer.length < chan.$capacity) {
@@ -198,7 +197,11 @@ var $send = function(chan, value) {
     return;
   }
 
-  chan.$sendQueue.push([$curGoroutine, value]);
+  var thisGoroutine = $curGoroutine;
+  chan.$sendQueue.push(function() {
+    $schedule(thisGoroutine);
+    return value;
+  });
   var blocked = false;
   var f = function() {
     if (blocked) {
@@ -217,8 +220,7 @@ var $send = function(chan, value) {
 var $recv = function(chan) {
   var queuedSend = chan.$sendQueue.shift();
   if (queuedSend !== undefined) {
-    $schedule(queuedSend[0]);
-    chan.$buffer.push(queuedSend[1]);
+    chan.$buffer.push(queuedSend());
   }
   var bufferedValue = chan.$buffer.shift();
   if (bufferedValue !== undefined) {
@@ -228,12 +230,15 @@ var $recv = function(chan) {
     return [chan.constructor.elem.zero(), false];
   }
 
-  chan.$recvQueue.push($curGoroutine);
+  var thisGoroutine = $curGoroutine, value;
+  var queueEntry = function(v) {
+    value = v;
+    $schedule(thisGoroutine);
+  };
+  chan.$recvQueue.push(queueEntry);
   var blocked = false;
   var f = function() {
     if (blocked) {
-      var value = $curGoroutine.chanValue;
-      $curGoroutine.chanValue = undefined;
       return value;
     };
     blocked = true;
@@ -253,15 +258,14 @@ var $close = function(chan) {
     if (queuedSend === undefined) {
       break;
     }
-    $schedule(queuedSend[0]); /* will panic because of closed channel */
+    queuedSend(); /* will panic because of closed channel */
   }
   while (true) {
     var queuedRecv = chan.$recvQueue.shift();
     if (queuedRecv === undefined) {
       break;
     }
-    queuedRecv.chanValue = [chan.constructor.elem.zero(), false];
-    $schedule(queuedRecv);
+    queuedRecv([chan.constructor.elem.zero(), false]);
   }
 };
 var $select = function(comms) {
@@ -306,51 +310,50 @@ var $select = function(comms) {
     }
   }
 
-  for (i = 0; i < comms.length; i++) {
-    var comm = comms[i];
-    switch (comm.length) {
-    case 1: /* recv */
-      comm[0].$recvQueue.push($curGoroutine);
-      break;
-    case 2: /* send */
-      var queueEntry = [$curGoroutine, comm[1]];
-      comm.push(queueEntry);
-      comm[0].$sendQueue.push(queueEntry);
-      break;
+  var entries = [];
+  var thisGoroutine = $curGoroutine;
+  var removeFromQueues = function() {
+    for (i = 0; i < entries.length; i++) {
+      var entry = entries[i];
+      var queue = entry[0];
+      var index = queue.indexOf(entry[1]);
+      if (index !== -1) {
+        queue.splice(index, 1);
+      }
     }
-  }
-  var blocked = false;
-  var f = function() {
-    if (blocked) {
-      var selection;
-      for (i = 0; i < comms.length; i++) {
-        var comm = comms[i];
-        switch (comm.length) {
-        case 1: /* recv */
-          var queue = comm[0].$recvQueue;
-          var index = queue.indexOf($curGoroutine);
-          if (index !== -1) {
-            queue.splice(index, 1);
-            break;
-          }
-          var value = $curGoroutine.chanValue;
-          $curGoroutine.chanValue = undefined;
+  };
+  for (i = 0; i < comms.length; i++) {
+    (function(i) {
+      var comm = comms[i];
+      switch (comm.length) {
+      case 1: /* recv */
+        var queueEntry = function(value) {
           selection = [i, value];
-          break;
-        case 3: /* send */
-          var queue = comm[0].$sendQueue;
-          var index = queue.indexOf(comm[2]);
-          if (index !== -1) {
-            queue.splice(index, 1);
-            break;
-          }
+          removeFromQueues();
+          $schedule(thisGoroutine);
+        };
+        entries.push([comm[0].$recvQueue, queueEntry]);
+        comm[0].$recvQueue.push(queueEntry);
+        break;
+      case 2: /* send */
+        var queueEntry = function() {
           if (comm[0].$closed) {
             $throwRuntimeError("send on closed channel");
           }
           selection = [i];
-          break;
-        }
+          removeFromQueues();
+          $schedule(thisGoroutine);
+          return comm[1];
+        };
+        entries.push([comm[0].$sendQueue, queueEntry]);
+        comm[0].$sendQueue.push(queueEntry);
+        break;
       }
+    })(i);
+  }
+  var blocked = false;
+  var f = function() {
+    if (blocked) {
       return selection;
     };
     blocked = true;

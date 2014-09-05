@@ -69,3 +69,29 @@ func testPanic2(t *testing.T) {
 	panic(7)
 	checkI(t, -3)
 }
+
+func TestSelect(t *testing.T) {
+	expectedI = 1
+	a := make(chan int)
+	b := make(chan int)
+	c := make(chan int)
+	go func() {
+		select {
+		case <-a:
+		case <-b:
+		}
+	}()
+	go func() {
+		checkI(t, 1)
+		a <- 1
+		select {
+		case b <- 1:
+			checkI(t, -1)
+		default:
+			checkI(t, 2)
+		}
+		c <- 1
+	}()
+	<-c
+	checkI(t, 3)
+}

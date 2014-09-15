@@ -2,11 +2,8 @@ package main
 
 import (
 	"bytes"
-	"code.google.com/p/go.tools/go/types"
 	"flag"
 	"fmt"
-	gbuild "github.com/gopherjs/gopherjs/build"
-	"github.com/gopherjs/gopherjs/compiler"
 	"go/ast"
 	"go/build"
 	"go/parser"
@@ -20,6 +17,10 @@ import (
 	"syscall"
 	"text/template"
 	"time"
+
+	"code.google.com/p/go.tools/go/types"
+	gbuild "github.com/gopherjs/gopherjs/build"
+	"github.com/gopherjs/gopherjs/compiler"
 )
 
 var currentDirectory string
@@ -123,7 +124,7 @@ func main() {
 			s.WaitForChange()
 		}
 
-	case "install":
+	case "install", "get":
 		installFlags := flag.NewFlagSet("install command", flag.ExitOnError)
 		installFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
 		installFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
@@ -149,6 +150,11 @@ func main() {
 						return err
 					}
 					pkgs = []string{pkgPath}
+				}
+				if cmd == "get" {
+					if err := exec.Command("go", append([]string{"get", "-d"}, pkgs...)...).Run(); err != nil {
+						return err
+					}
 				}
 				for _, pkgPath := range pkgs {
 					pkgPath = filepath.ToSlash(pkgPath)

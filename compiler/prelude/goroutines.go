@@ -123,7 +123,7 @@ var $go = function(fun, args, direct) {
       $skippedDeferFrames = 0;
       $jumpToDefer = false;
       var r = fun.apply(undefined, args);
-      if (r !== undefined) {
+      if (r && r.$blocking) {
         fun = r;
         args = [];
         $schedule(goroutine, direct);

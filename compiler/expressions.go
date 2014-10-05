@@ -794,7 +794,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 		switch o := obj.(type) {
 		case *types.PkgName:
-			return c.formatExpr("%s", c.p.pkgVars[o.Pkg().Path()])
+			return c.formatExpr("%s", c.p.pkgVars[o.Imported().Path()])
 		case *types.Var, *types.Const:
 			return c.formatExpr("%s", c.objectName(o))
 		case *types.Func:

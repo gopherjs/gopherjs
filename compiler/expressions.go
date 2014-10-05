@@ -2,13 +2,15 @@ package compiler
 
 import (
 	"bytes"
-	"code.google.com/p/go.tools/go/exact"
-	"code.google.com/p/go.tools/go/types"
 	"fmt"
 	"go/ast"
 	"go/token"
+	"sort"
 	"strconv"
 	"strings"
+
+	"code.google.com/p/go.tools/go/exact"
+	"code.google.com/p/go.tools/go/types"
 )
 
 type expression struct {
@@ -149,6 +151,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			for obj := range c.p.escapingVars {
 				names = append(names, c.p.objectVars[obj])
 			}
+			sort.Strings(names)
 			list := strings.Join(names, ", ")
 			return c.formatExpr("(function(%s) { return function(%s) {\n%s%s}; })(%s)", list, strings.Join(params, ", "), string(body), strings.Repeat("\t", c.p.indentation), list)
 		}

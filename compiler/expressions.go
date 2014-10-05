@@ -1077,7 +1077,7 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 		}
 	}
 
-	return c.translateImplicitConversion(expr, desiredType)
+	return c.translateImplicitConversionWithCloning(expr, desiredType)
 }
 
 func (c *funcContext) translateImplicitConversionWithCloning(expr ast.Expr, desiredType types.Type) *expression {

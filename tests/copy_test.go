@@ -112,3 +112,22 @@ func TestAppend(t *testing.T) {
 		}
 	}
 }
+
+type I interface {
+	M() int
+}
+
+type T S
+
+func (t T) M() int {
+	return t.x
+}
+
+func TestExplicitConversion(t *testing.T) {
+	var coolGuy = S{x: 42}
+	var i I
+	i = T(coolGuy)
+	if i.M() != 42 {
+		t.Fail()
+	}
+}

@@ -2,7 +2,7 @@ package prelude
 
 const Prelude = prelude + types + numeric + goroutines + jsmapping
 
-const prelude = `Error.stackTraceLimit = -1;
+const prelude = `Error.stackTraceLimit = Infinity;
 
 var $global, $module;
 if (typeof window !== "undefined") { /* web page */

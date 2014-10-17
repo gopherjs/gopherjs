@@ -1,6 +1,6 @@
 machine:
   node:
-    version: 0.11.12
+    version: 0.11.14
 
 dependencies:
   post:

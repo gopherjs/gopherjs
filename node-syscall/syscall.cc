@@ -26,7 +26,7 @@ intptr_t toNative(Local<Value> value) {
   return static_cast<intptr_t>(static_cast<int32_t>(value->ToInteger()->Value()));
 }
 
-void Syscall(const v8::FunctionCallbackInfo<Value>& info) {
+void Syscall(const FunctionCallbackInfo<Value>& info) {
   int trap = info[0]->ToInteger()->Value();
   int r1 = 0, r2 = 0;
   switch (trap) {
@@ -54,14 +54,15 @@ void Syscall(const v8::FunctionCallbackInfo<Value>& info) {
   if (r1 < 0) {
     err = errno;
   }
-  Local<Array> res = Array::New(3);
-  res->Set(0, Integer::New(r1));
-  res->Set(1, Integer::New(r2));
-  res->Set(2, Integer::New(err));
+  Isolate* isolate = info.GetIsolate();
+  Local<Array> res = Array::New(isolate, 3);
+  res->Set(0, Integer::New(isolate, r1));
+  res->Set(1, Integer::New(isolate, r2));
+  res->Set(2, Integer::New(isolate, err));
   info.GetReturnValue().Set(res);
 }
 
-void Syscall6(const v8::FunctionCallbackInfo<Value>& info) {
+void Syscall6(const FunctionCallbackInfo<Value>& info) {
   int r = syscall(
     info[0]->ToInteger()->Value(),
     toNative(info[1]),
@@ -75,10 +76,11 @@ void Syscall6(const v8::FunctionCallbackInfo<Value>& info) {
   if (r < 0) {
     err = errno;
   }
-  Local<Array> res = Array::New(3);
-  res->Set(0, Integer::New(r));
-  res->Set(1, Integer::New(0));
-  res->Set(2, Integer::New(err));
+  Isolate* isolate = info.GetIsolate();
+  Local<Array> res = Array::New(isolate, 3);
+  res->Set(0, Integer::New(isolate, r));
+  res->Set(1, Integer::New(isolate, 0));
+  res->Set(2, Integer::New(isolate, err));
   info.GetReturnValue().Set(res);
 }
 

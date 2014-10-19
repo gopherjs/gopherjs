@@ -181,6 +181,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			case *ast.IndexExpr:
 				newIndex := &ast.IndexExpr{X: c.newIdent("this.$target", c.p.info.Types[x.X].Type), Index: x.Index}
 				return c.formatExpr("new %s(function() { return %e; }, function($v) { %s }, %e)", c.typeName(exprType), newIndex, c.translateAssign(newIndex, "$v", exprType, false), x.X)
+			case *ast.StarExpr:
+				return c.translateExpr(x.X)
 			default:
 				panic(fmt.Sprintf("Unhandled: %T\n", x))
 			}

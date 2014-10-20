@@ -2,14 +2,15 @@ package compiler
 
 import (
 	"bytes"
-	"code.google.com/p/go.tools/go/exact"
-	"code.google.com/p/go.tools/go/types"
 	"encoding/binary"
 	"fmt"
 	"go/ast"
 	"go/token"
 	"strconv"
 	"strings"
+
+	"code.google.com/p/go.tools/go/exact"
+	"code.google.com/p/go.tools/go/types"
 )
 
 func (c *funcContext) Write(b []byte) (int, error) {
@@ -282,7 +283,7 @@ func (c *funcContext) typeName(ty types.Type) string {
 
 func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	switch t := keyType.Underlying().(type) {
-	case *types.Array:
+	case *types.Array, *types.Struct:
 		return fmt.Sprintf("(new %s(%s)).$key()", c.typeName(keyType), c.translateExpr(expr))
 	case *types.Basic:
 		if is64Bit(t) {

@@ -201,13 +201,20 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 
   case "Struct":
     typ = function(v) { this.$val = v; };
-    typ.prototype.$key = function() { $throwRuntimeError("hash of unhashable type " + string); };
     typ.Ptr = $newType(4, "Ptr", "*" + string, "", "", constructor);
     typ.Ptr.Struct = typ;
     typ.Ptr.prototype.$get = function() { return this; };
     typ.init = function(fields) {
       var i;
       typ.fields = fields;
+      typ.prototype.$key = function() {
+        var val = this.$val;
+        return string + "$" + $mapArray(fields, function(field) {
+          var e = val[field[0]];
+          var key = e.$key ? e.$key() : String(e);
+          return key.replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
+        }).join("$");
+      };
       typ.Ptr.extendReflectType = function(rt) {
         rt.ptrType = new $reflect.ptrType.Ptr(rt, typ.reflectType());
       };

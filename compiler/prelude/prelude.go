@@ -394,10 +394,6 @@ var $float32IsEqual = function(a, b) {
   return math !== undefined && math.Float32bits(a) === math.Float32bits(b);
 };
 
-var $sliceIsEqual = function(a, ai, b, bi) {
-  return a.$array === b.$array && a.$offset + ai === b.$offset + bi;
-};
-
 var $pointerIsEqual = function(a, b) {
   if (a === b) {
     return true;
@@ -405,11 +401,15 @@ var $pointerIsEqual = function(a, b) {
   if (a.$get === $throwNilPointerError || b.$get === $throwNilPointerError) {
     return a.$get === $throwNilPointerError && b.$get === $throwNilPointerError;
   }
-  var old = a.$get();
-  var dummy = new Object();
+  var va = a.$get();
+  var vb = b.$get();
+  if (va !== vb) {
+    return false;
+  }
+  var dummy = va + 1;
   a.$set(dummy);
   var equal = b.$get() === dummy;
-  a.$set(old);
+  a.$set(va);
   return equal;
 };
 `

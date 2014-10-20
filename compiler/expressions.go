@@ -390,15 +390,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				}
 				return c.formatExpr("$interfaceIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 			case *types.Pointer:
-				xUnary, xIsUnary := e.X.(*ast.UnaryExpr)
-				yUnary, yIsUnary := e.Y.(*ast.UnaryExpr)
-				if xIsUnary && xUnary.Op == token.AND && yIsUnary && yUnary.Op == token.AND {
-					xIndex, xIsIndex := xUnary.X.(*ast.IndexExpr)
-					yIndex, yIsIndex := yUnary.X.(*ast.IndexExpr)
-					if xIsIndex && yIsIndex {
-						return c.formatExpr("$sliceIsEqual(%e, %f, %e, %f)", xIndex.X, xIndex.Index, yIndex.X, yIndex.Index)
-					}
-				}
 				switch u.Elem().Underlying().(type) {
 				case *types.Struct, *types.Interface:
 					return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))

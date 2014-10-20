@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -21,6 +20,8 @@ import (
 	"code.google.com/p/go.tools/go/types"
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var currentDirectory string
@@ -40,62 +41,58 @@ func init() {
 }
 
 func main() {
-	flags := flag.NewFlagSet("", flag.ContinueOnError)
-	cmd := "help"
-	var cmdArgs []string
-	if err := flags.Parse(os.Args[1:]); err == nil && flags.NArg() != 0 {
-		cmd = flags.Arg(0)
-		cmdArgs = flags.Args()[1:]
-		if cmd == "help" && flags.NArg() == 2 {
-			cmd = flags.Arg(1)
-			cmdArgs = []string{"--help"}
-		}
-	}
-
 	options := &gbuild.Options{CreateMapFile: true}
-	switch cmd {
-	case "build":
-		buildFlags := flag.NewFlagSet("build command", flag.ExitOnError)
-		var pkgObj string
-		buildFlags.StringVar(&pkgObj, "o", "", "output file")
-		buildFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
-		buildFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
-		buildFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
-		buildFlags.Parse(cmdArgs)
+	var pkgObj string
 
+	pflag.BoolVarP(&options.Verbose, "verbose", "v", false, "print the names of packages as they are compiled")
+	flagVerbose := pflag.Lookup("verbose")
+	pflag.BoolVarP(&options.Watch, "watch", "w", false, "watch for changes to the source files")
+	flagWatch := pflag.Lookup("watch")
+	pflag.BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
+	flagMinify := pflag.Lookup("minify")
+
+	cmdBuild := &cobra.Command{
+		Use:   "build [packages]",
+		Short: "compile packages and dependencies",
+	}
+	cmdBuild.Flags().StringVarP(&pkgObj, "output", "o", "", "output file")
+	cmdBuild.Flags().AddFlag(flagVerbose)
+	cmdBuild.Flags().AddFlag(flagWatch)
+	cmdBuild.Flags().AddFlag(flagMinify)
+	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
 		for {
 			s := gbuild.NewSession(options)
 
 			exitCode := handleError(func() error {
-				if buildFlags.NArg() == 0 {
+				if len(args) == 0 {
 					return s.BuildDir(currentDirectory, currentDirectory, pkgObj)
 				}
 
-				if strings.HasSuffix(buildFlags.Arg(0), ".go") {
-					for _, arg := range buildFlags.Args() {
+				if strings.HasSuffix(args[0], ".go") {
+					for _, arg := range args {
 						if !strings.HasSuffix(arg, ".go") {
 							return fmt.Errorf("named files must be .go files")
 						}
 					}
 					if pkgObj == "" {
-						basename := filepath.Base(buildFlags.Arg(0))
+						basename := filepath.Base(args[0])
 						pkgObj = basename[:len(basename)-3] + ".js"
 					}
-					names := make([]string, buildFlags.NArg())
-					for i, name := range buildFlags.Args() {
+					names := make([]string, len(args))
+					for i, name := range args {
 						name = filepath.ToSlash(name)
 						names[i] = name
 						if s.Watcher != nil {
 							s.Watcher.Add(filepath.ToSlash(name))
 						}
 					}
-					if err := s.BuildFiles(buildFlags.Args(), pkgObj, currentDirectory); err != nil {
+					if err := s.BuildFiles(args, pkgObj, currentDirectory); err != nil {
 						return err
 					}
 					return nil
 				}
 
-				for _, pkgPath := range buildFlags.Args() {
+				for _, pkgPath := range args {
 					pkgPath = filepath.ToSlash(pkgPath)
 					if s.Watcher != nil {
 						s.Watcher.Add(pkgPath)
@@ -109,7 +106,7 @@ func main() {
 						return err
 					}
 					if pkgObj == "" {
-						pkgObj = filepath.Base(buildFlags.Arg(0)) + ".js"
+						pkgObj = filepath.Base(args[0]) + ".js"
 					}
 					if err := s.WriteCommandPackage(pkg, pkgObj); err != nil {
 						return err
@@ -123,19 +120,21 @@ func main() {
 			}
 			s.WaitForChange()
 		}
+	}
 
-	case "install", "get":
-		installFlags := flag.NewFlagSet("install command", flag.ExitOnError)
-		installFlags.BoolVar(&options.Verbose, "v", false, "print the names of packages as they are compiled")
-		installFlags.BoolVar(&options.Watch, "w", false, "watch for changes to the source files")
-		installFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
-		installFlags.Parse(cmdArgs)
-
+	cmdInstall := &cobra.Command{
+		Use:   "install [packages]",
+		Short: "compile and install packages and dependencies",
+	}
+	cmdInstall.Flags().AddFlag(flagVerbose)
+	cmdInstall.Flags().AddFlag(flagWatch)
+	cmdInstall.Flags().AddFlag(flagMinify)
+	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
 		for {
 			s := gbuild.NewSession(options)
 
 			exitCode := handleError(func() error {
-				pkgs := installFlags.Args()
+				pkgs := args
 				if len(pkgs) == 0 {
 					firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: The GOPATH workspace that contains the package source should be chosen.
 					srcDir, err := filepath.EvalSymlinks(filepath.Join(firstGopathWorkspace, "src"))
@@ -151,8 +150,11 @@ func main() {
 					}
 					pkgs = []string{pkgPath}
 				}
-				if cmd == "get" {
-					if err := exec.Command("go", append([]string{"get", "-d"}, pkgs...)...).Run(); err != nil {
+				if cmd.Name() == "get" {
+					goGet := exec.Command("go", append([]string{"get", "-d"}, pkgs...)...)
+					goGet.Stdout = os.Stdout
+					goGet.Stderr = os.Stderr
+					if err := goGet.Run(); err != nil {
 						return err
 					}
 				}
@@ -174,15 +176,26 @@ func main() {
 			}
 			s.WaitForChange()
 		}
+	}
 
-	case "run":
-		runFlags := flag.NewFlagSet("run command", flag.ExitOnError)
-		runFlags.Parse(cmdArgs)
+	cmdGet := &cobra.Command{
+		Use:   "get [packages]",
+		Short: "download and install packages and dependencies",
+	}
+	cmdGet.Flags().AddFlag(flagVerbose)
+	cmdGet.Flags().AddFlag(flagWatch)
+	cmdGet.Flags().AddFlag(flagMinify)
+	cmdGet.Run = cmdInstall.Run
 
+	cmdRun := &cobra.Command{
+		Use:   "run [gofiles...] [arguments...]",
+		Short: "compile and run Go program",
+	}
+	cmdRun.Run = func(cmd *cobra.Command, args []string) {
 		os.Exit(handleError(func() error {
 			lastSourceArg := 0
 			for {
-				if !strings.HasSuffix(runFlags.Arg(lastSourceArg), ".go") {
+				if lastSourceArg == len(args) || !strings.HasSuffix(args[lastSourceArg], ".go") {
 					break
 				}
 				lastSourceArg++
@@ -191,7 +204,7 @@ func main() {
 				return fmt.Errorf("gopherjs run: no go files listed")
 			}
 
-			tempfile, err := ioutil.TempFile("", filepath.Base(runFlags.Arg(0))+".")
+			tempfile, err := ioutil.TempFile("", filepath.Base(args[0])+".")
 			if err != nil {
 				return err
 			}
@@ -200,25 +213,27 @@ func main() {
 				os.Remove(tempfile.Name())
 			}()
 			s := gbuild.NewSession(options)
-			if err := s.BuildFiles(runFlags.Args()[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
+			if err := s.BuildFiles(args[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
 				return err
 			}
-			if err := runNode(tempfile.Name(), runFlags.Args()[lastSourceArg:], ""); err != nil {
+			if err := runNode(tempfile.Name(), args[lastSourceArg:], ""); err != nil {
 				return err
 			}
 			return nil
 		}))
+	}
 
-	case "test":
-		testFlags := flag.NewFlagSet("test command", flag.ExitOnError)
-		verbose := testFlags.Bool("v", false, "verbose")
-		short := testFlags.Bool("short", false, "short")
-		testFlags.BoolVar(&options.Minify, "m", false, "minify generated code")
-		testFlags.Parse(cmdArgs)
-
+	cmdTest := &cobra.Command{
+		Use:   "test [packages]",
+		Short: "test packages",
+	}
+	verbose := cmdTest.Flags().BoolP("verbose", "v", false, "verbose")
+	short := cmdTest.Flags().Bool("short", false, "short")
+	cmdTest.Flags().AddFlag(flagMinify)
+	cmdTest.Run = func(cmd *cobra.Command, args []string) {
 		os.Exit(handleError(func() error {
-			pkgs := make([]*build.Package, testFlags.NArg())
-			for i, pkgPath := range testFlags.Args() {
+			pkgs := make([]*build.Package, len(args))
+			for i, pkgPath := range args {
 				pkgPath = filepath.ToSlash(pkgPath)
 				var err error
 				pkgs[i], err = gbuild.Import(pkgPath, 0, "js")
@@ -227,7 +242,7 @@ func main() {
 				}
 			}
 			if len(pkgs) == 0 {
-				firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: Not sure if always picking first GOPATH workspace here is the right thing.
+				firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0]
 				srcDir, err := filepath.EvalSymlinks(filepath.Join(firstGopathWorkspace, "src"))
 				if err != nil {
 					return err
@@ -344,55 +359,42 @@ func main() {
 			}
 			return exitErr
 		}))
+	}
 
-	case "tool":
-		tool := cmdArgs[0]
-		toolFlags := flag.NewFlagSet("tool command", flag.ExitOnError)
-		toolFlags.Bool("e", false, "")
-		toolFlags.Bool("l", false, "")
-		toolFlags.Bool("m", false, "")
-		toolFlags.String("o", "", "")
-		toolFlags.String("D", "", "")
-		toolFlags.String("I", "", "")
-		toolFlags.Parse(flags.Args()[2:])
-
+	cmdTool := &cobra.Command{
+		Use:   "tool [command] [args...]",
+		Short: "run specified go tool",
+	}
+	cmdTool.Flags().BoolP("e", "e", false, "")
+	cmdTool.Flags().BoolP("l", "l", false, "")
+	cmdTool.Flags().BoolP("m", "m", false, "")
+	cmdTool.Flags().StringP("o", "o", "", "")
+	cmdTool.Flags().StringP("D", "D", "", "")
+	cmdTool.Flags().StringP("I", "I", "", "")
+	cmdTool.Run = func(cmd *cobra.Command, args []string) {
 		os.Exit(handleError(func() error {
-			if len(tool) == 2 {
-				switch tool[1] {
+			if len(args) == 2 {
+				switch args[0][1] {
 				case 'g':
-					basename := filepath.Base(toolFlags.Arg(0))
+					basename := filepath.Base(args[1])
 					s := gbuild.NewSession(options)
-					if err := s.BuildFiles([]string{toolFlags.Arg(0)}, basename[:len(basename)-3]+".js", currentDirectory); err != nil {
+					if err := s.BuildFiles([]string{args[1]}, basename[:len(basename)-3]+".js", currentDirectory); err != nil {
 						return err
 					}
 					return nil
 				}
 			}
-			return fmt.Errorf("Tool not supported: " + tool)
+			cmdTool.Help()
+			return nil
 		}))
-
-	case "help", "":
-		os.Stderr.WriteString(`GopherJS is a tool for compiling Go source code to JavaScript.
-
-Usage:
-
-    gopherjs command [arguments]
-
-The commands are:
-
-    build       compile packages and dependencies
-    install     compile and install packages and dependencies
-    run         compile and run Go program (requires Node.js)
-    test        test packages (requires Node.js)
-
-Use "go help [command]" for more information about a command.
-
-`)
-
-	default:
-		fmt.Fprintf(os.Stderr, "gopherjs: unknown subcommand \"%s\"\nRun 'gopherjs help' for usage.\n", cmd)
-
 	}
+
+	rootCmd := &cobra.Command{
+		Use:  "gopherjs",
+		Long: "GopherJS is a tool for compiling Go source code to JavaScript.",
+	}
+	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdTool)
+	rootCmd.Execute()
 }
 
 func handleError(f func() error) int {

@@ -17,9 +17,9 @@ func (err *NotSupportedError) Error() string {
 }
 
 func init() {
-	js.Global.Set("$throwRuntimeError", func(msg string) {
+	js.Global.Set("$throwRuntimeError", js.InternalObject(func(msg string) {
 		panic(errorString(msg))
-	})
+	}))
 	// avoid dead code elimination
 	var e error
 	e = &TypeAssertionError{}

@@ -144,7 +144,7 @@ var $go = function(fun, args, direct) {
       if (goroutine.asleep) {
         $awakeGoroutines--;
         if ($awakeGoroutines === 0 && $totalGoroutines !== 0 && $checkForDeadlock) {
-          $panic(new $String("fatal error: all goroutines are asleep - deadlock!"));
+          console.error("fatal error: all goroutines are asleep - deadlock!");
         }
       }
     }

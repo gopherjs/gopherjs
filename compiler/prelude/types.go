@@ -98,7 +98,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       typ.sendOnly = sendOnly;
       typ.recvOnly = recvOnly;
       typ.nil = new typ(0);
-      typ.nil.$sendQueue = typ.nil.$recvQueue = { length: 0, push: function() {}, shift: function() { return undefined; } };
+      typ.nil.$sendQueue = typ.nil.$recvQueue = { length: 0, push: function() {}, shift: function() { return undefined; }, indexOf: function() { return -1; } };
       typ.extendReflectType = function(rt) {
         rt.chanType = new $reflect.chanType.Ptr(rt, elem.reflectType(), sendOnly ? $reflect.SendDir : (recvOnly ? $reflect.RecvDir : $reflect.BothDir));
       };

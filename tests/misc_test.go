@@ -40,3 +40,19 @@ func TestStructKey(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestSelectOnNilChan(t *testing.T) {
+	var c1 chan bool
+	c2 := make(chan bool)
+
+	go func() {
+		close(c2)
+	}()
+
+	select {
+	case <-c1:
+		t.Fail()
+	case <-c2:
+		// ok
+	}
+}

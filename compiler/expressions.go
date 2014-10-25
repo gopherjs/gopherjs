@@ -577,6 +577,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						return c.translateExpr(e.Args[0])
 					}
 				}
+				if obj.Pkg().Path() == "runtime" && obj.Name() == "Breakpoint" {
+					return c.formatExpr("debugger")
+				}
 				fun = c.translateExpr(f)
 				break
 			}

@@ -187,6 +187,21 @@ type Options struct {
 	Watch         bool
 	CreateMapFile bool
 	Minify        bool
+	Color         bool
+}
+
+func (o *Options) PrintError(format string, a ...interface{}) {
+	if o.Color {
+		format = "\x1B[31m" + format + "\x1B[39m"
+	}
+	fmt.Fprintf(os.Stderr, format, a...)
+}
+
+func (o *Options) PrintSuccess(format string, a ...interface{}) {
+	if o.Color {
+		format = "\x1B[32m" + format + "\x1B[39m"
+	}
+	fmt.Fprintf(os.Stderr, format, a...)
 }
 
 type PackageData struct {
@@ -505,12 +520,12 @@ func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) 
 }
 
 func (s *Session) WaitForChange() {
-	fmt.Println("\x1B[32mwatching for changes...\x1B[39m")
+	s.options.PrintSuccess("watching for changes...\n")
 	select {
 	case ev := <-s.Watcher.Events:
-		fmt.Println("\x1B[32mchange detected: " + ev.Name + "\x1B[39m")
+		s.options.PrintSuccess("change detected: %s\n", ev.Name)
 	case err := <-s.Watcher.Errors:
-		fmt.Println("\x1B[32mwatcher error: " + err.Error() + "\x1B[39m")
+		s.options.PrintError("watcher error: %s\n", err.Error())
 	}
 	s.Watcher.Close()
 }

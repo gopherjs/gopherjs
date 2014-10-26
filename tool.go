@@ -17,6 +17,7 @@ import (
 	"text/template"
 	"time"
 
+	"code.google.com/p/go.crypto/ssh/terminal"
 	"code.google.com/p/go.tools/go/types"
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/compiler"
@@ -50,6 +51,8 @@ func main() {
 	flagWatch := pflag.Lookup("watch")
 	pflag.BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
 	flagMinify := pflag.Lookup("minify")
+	pflag.BoolVar(&options.Color, "color", terminal.IsTerminal(2) && os.Getenv("TERM") != "dumb", "colored output")
+	flagColor := pflag.Lookup("color")
 
 	cmdBuild := &cobra.Command{
 		Use:   "build [packages]",
@@ -59,6 +62,7 @@ func main() {
 	cmdBuild.Flags().AddFlag(flagVerbose)
 	cmdBuild.Flags().AddFlag(flagWatch)
 	cmdBuild.Flags().AddFlag(flagMinify)
+	cmdBuild.Flags().AddFlag(flagColor)
 	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
 		for {
 			s := gbuild.NewSession(options)
@@ -113,7 +117,7 @@ func main() {
 					}
 				}
 				return nil
-			})
+			}, options)
 
 			if s.Watcher == nil {
 				os.Exit(exitCode)
@@ -129,6 +133,7 @@ func main() {
 	cmdInstall.Flags().AddFlag(flagVerbose)
 	cmdInstall.Flags().AddFlag(flagWatch)
 	cmdInstall.Flags().AddFlag(flagMinify)
+	cmdInstall.Flags().AddFlag(flagColor)
 	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
 		for {
 			s := gbuild.NewSession(options)
@@ -169,7 +174,7 @@ func main() {
 					}
 				}
 				return nil
-			})
+			}, options)
 
 			if s.Watcher == nil {
 				os.Exit(exitCode)
@@ -185,6 +190,7 @@ func main() {
 	cmdGet.Flags().AddFlag(flagVerbose)
 	cmdGet.Flags().AddFlag(flagWatch)
 	cmdGet.Flags().AddFlag(flagMinify)
+	cmdGet.Flags().AddFlag(flagColor)
 	cmdGet.Run = cmdInstall.Run
 
 	cmdRun := &cobra.Command{
@@ -220,7 +226,7 @@ func main() {
 				return err
 			}
 			return nil
-		}))
+		}, options))
 	}
 
 	cmdTest := &cobra.Command{
@@ -230,6 +236,7 @@ func main() {
 	verbose := cmdTest.Flags().BoolP("verbose", "v", false, "verbose")
 	short := cmdTest.Flags().Bool("short", false, "short")
 	cmdTest.Flags().AddFlag(flagMinify)
+	cmdTest.Flags().AddFlag(flagColor)
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
 		os.Exit(handleError(func() error {
 			pkgs := make([]*build.Package, len(args))
@@ -358,7 +365,7 @@ func main() {
 				fmt.Printf("%s\t%s\t%.3fs\n", status, buildPkg.ImportPath, time.Now().Sub(start).Seconds())
 			}
 			return exitErr
-		}))
+		}, options))
 	}
 
 	cmdTool := &cobra.Command{
@@ -386,7 +393,7 @@ func main() {
 			}
 			cmdTool.Help()
 			return nil
-		}))
+		}, options))
 	}
 
 	rootCmd := &cobra.Command{
@@ -397,7 +404,7 @@ func main() {
 	rootCmd.Execute()
 }
 
-func handleError(f func() error) int {
+func handleError(f func() error, options *gbuild.Options) int {
 	switch err := f().(type) {
 	case nil:
 		return 0
@@ -414,19 +421,19 @@ func handleError(f func() error) int {
 		for _, entry := range err {
 			switch e := entry.(type) {
 			case *scanner.Error:
-				fmt.Fprintf(os.Stderr, "\x1B[31m%s:%d:%d: %s\x1B[39m\n", makeRel(e.Pos.Filename), e.Pos.Line, e.Pos.Column, e.Msg)
+				options.PrintError("%s:%d:%d: %s\n", makeRel(e.Pos.Filename), e.Pos.Line, e.Pos.Column, e.Msg)
 			case types.Error:
 				pos := e.Fset.Position(e.Pos)
-				fmt.Fprintf(os.Stderr, "\x1B[31m%s:%d:%d: %s\x1B[39m\n", makeRel(pos.Filename), pos.Line, pos.Column, e.Msg)
+				options.PrintError("%s:%d:%d: %s\n", makeRel(pos.Filename), pos.Line, pos.Column, e.Msg)
 			default:
-				fmt.Fprintf(os.Stderr, "\x1B[31m%s\x1B[39m\n", entry)
+				options.PrintError("%s\n", entry)
 			}
 		}
 		return 1
 	case *exec.ExitError:
 		return err.Sys().(syscall.WaitStatus).ExitStatus()
 	default:
-		fmt.Fprintf(os.Stderr, "\x1B[31m%s\x1B[39m\n", err)
+		options.PrintError("%s\n", err)
 		return 1
 	}
 }

@@ -127,6 +127,12 @@ func Keys(o Object) []string {
 	return s
 }
 
+// M is a simple map type. It is intended as a shorthand for JavaScript objects (before conversion).
+type M map[string]interface{}
+
+// S is a simple slice type. It is intended as a shorthand for JavaScript arrays (before conversion).
+type S []interface{}
+
 func init() {
 	// avoid dead code elimination of Error
 	e := Error{}

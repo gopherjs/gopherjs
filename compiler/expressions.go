@@ -66,6 +66,37 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 	}
 
+	var obj types.Object
+	switch e := expr.(type) {
+	case *ast.SelectorExpr:
+		obj = c.p.info.Uses[e.Sel]
+	case *ast.Ident:
+		obj = c.p.info.Defs[e]
+		if obj == nil {
+			obj = c.p.info.Uses[e]
+		}
+	}
+
+	if obj != nil && isJsPackage(obj.Pkg()) {
+		switch obj.Name() {
+		case "Global":
+			return c.formatExpr("$global")
+		case "This":
+			if len(c.flattened) != 0 {
+				return c.formatExpr("$this")
+			}
+			return c.formatExpr("this")
+		case "Arguments":
+			args := "arguments"
+			if len(c.flattened) != 0 {
+				args = "$args"
+			}
+			return c.formatExpr(`new ($sliceType(%s.Object))($global.Array.prototype.slice.call(%s, []))`, c.p.pkgVars["github.com/gopherjs/gopherjs/js"], args)
+		case "Module":
+			return c.formatExpr("$module")
+		}
+	}
+
 	switch e := expr.(type) {
 	case *ast.CompositeLit:
 		if ptrType, isPointer := exprType.(*types.Pointer); isPointer {
@@ -472,28 +503,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		sel, ok := c.p.info.Selections[e]
 		if !ok {
 			// qualified identifier
-			obj := c.p.info.Uses[e.Sel]
-			if isJsPackage(obj.Pkg()) {
-				switch obj.Name() {
-				case "Global":
-					return c.formatExpr("$global")
-				case "This":
-					if len(c.flattened) != 0 {
-						return c.formatExpr("$this")
-					}
-					return c.formatExpr("this")
-				case "Arguments":
-					args := "arguments"
-					if len(c.flattened) != 0 {
-						args = "$args"
-					}
-					return c.formatExpr(`new ($sliceType(%s.Object))($global.Array.prototype.slice.call(%s, []))`, c.p.pkgVars["github.com/gopherjs/gopherjs/js"], args)
-				case "Module":
-					return c.formatExpr("$module")
-				default:
-					panic("Invalid js package object: " + obj.Name())
-				}
-			}
 			return c.formatExpr("%s", c.objectName(obj))
 		}
 
@@ -782,10 +791,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 	case *ast.Ident:
 		if e.Name == "_" {
 			panic("Tried to translate underscore identifier.")
-		}
-		obj := c.p.info.Defs[e]
-		if obj == nil {
-			obj = c.p.info.Uses[e]
 		}
 		switch o := obj.(type) {
 		case *types.PkgName:

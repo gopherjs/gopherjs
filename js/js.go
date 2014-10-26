@@ -114,6 +114,19 @@ func InternalObject(i interface{}) Object {
 	return nil
 }
 
+// Keys returns the keys of the given JavaScript object.
+func Keys(o Object) []string {
+	if o.IsUndefined() || o.IsNull() {
+		return nil
+	}
+	a := Global.Get("Object").Call("keys", o)
+	s := make([]string, a.Length())
+	for i := 0; i < a.Length(); i++ {
+		s[i] = a.Index(i).Str()
+	}
+	return s
+}
+
 func init() {
 	// avoid dead code elimination of Error
 	e := Error{}

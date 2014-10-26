@@ -39,6 +39,10 @@ func getgoroot() string {
 	return goroot.Str()
 }
 
+func Breakpoint() {
+	js.Debugger()
+}
+
 func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
 	info := js.Global.Get("Error").New().Get("stack").Call("split", "\n").Index(skip + 2)
 	if info.IsUndefined() {

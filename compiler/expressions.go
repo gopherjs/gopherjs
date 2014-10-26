@@ -573,12 +573,11 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				obj := c.p.info.Uses[f.Sel]
 				if isJsPackage(obj.Pkg()) {
 					switch obj.Name() {
+					case "Debugger":
+						return c.formatExpr("debugger")
 					case "InternalObject":
 						return c.translateExpr(e.Args[0])
 					}
-				}
-				if obj.Pkg().Path() == "runtime" && obj.Name() == "Breakpoint" {
-					return c.formatExpr("debugger")
 				}
 				fun = c.translateExpr(f)
 				break

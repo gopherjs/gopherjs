@@ -26,14 +26,14 @@ package js
 // Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax.
 type Object interface {
 
-	// Get returns the object's property with the given name.
-	Get(name string) Object
+	// Get returns the object's property with the given key.
+	Get(key string) Object
 
-	// Set assigns the value to the object's property with the given name.
-	Set(name string, value interface{})
+	// Set assigns the value to the object's property with the given key.
+	Set(key string, value interface{})
 
-	// Delete removes the object's property with the given name.
-	Delete(name string)
+	// Delete removes the object's property with the given key.
+	Delete(key string)
 
 	// Get returns the object's "length" property, converted to int.
 	Length() int

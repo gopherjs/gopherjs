@@ -386,11 +386,11 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			}
 
 			lhsType := c.p.info.Types[s.Lhs[0]].Type
-			parts = append(parts, c.translateAssign(lhs, c.translateExpr(c.setType(&ast.BinaryExpr{
+			parts = append(parts, c.translateAssignOfExpr(lhs, c.setType(&ast.BinaryExpr{
 				X:  lhs,
 				Op: op,
 				Y:  c.setType(&ast.ParenExpr{X: s.Rhs[0]}, c.p.info.Types[s.Rhs[0]].Type),
-			}, lhsType)).String(), lhsType, s.Tok == token.DEFINE))
+			}, lhsType), lhsType, s.Tok == token.DEFINE))
 			c.Printf("%s", strings.Join(parts, " "))
 			return
 		}
@@ -817,6 +817,13 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 }
 
 func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, typ types.Type, define bool) string {
+	if l, ok := lhs.(*ast.IndexExpr); ok {
+		if t, ok := c.p.info.Types[l.X].Type.Underlying().(*types.Map); ok {
+			keyVar := c.newVariable("_key")
+			return fmt.Sprintf(`%s = %s; (%s || $throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s };`, keyVar, c.translateImplicitConversionWithCloning(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, c.translateImplicitConversionWithCloning(rhs, t.Elem()))
+		}
+	}
+
 	if _, ok := rhs.(*ast.CompositeLit); ok && define {
 		return fmt.Sprintf("%s = %s;", c.translateExpr(lhs), c.translateImplicitConversion(rhs, typ)) // skip $copy
 	}
@@ -827,13 +834,6 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 	lhs = removeParens(lhs)
 	if isBlank(lhs) {
 		panic("translateAssign with blank lhs")
-	}
-
-	if l, ok := lhs.(*ast.IndexExpr); ok {
-		if t, ok := c.p.info.Types[l.X].Type.Underlying().(*types.Map); ok {
-			keyVar := c.newVariable("_key")
-			return fmt.Sprintf(`%s = %s; (%s || $throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s };`, keyVar, c.translateImplicitConversion(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, rhs)
-		}
 	}
 
 	switch typ.Underlying().(type) {

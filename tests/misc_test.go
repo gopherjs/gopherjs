@@ -56,3 +56,38 @@ func TestSelectOnNilChan(t *testing.T) {
 		// ok
 	}
 }
+
+type StructA struct {
+	x int
+}
+
+type StructB struct {
+	StructA
+}
+
+func TestEmbeddedStruct(t *testing.T) {
+	a := StructA{
+		42,
+	}
+	b := StructB{
+		StructA: a,
+	}
+	b.x = 0
+	if a.x != 42 {
+		t.Fail()
+	}
+}
+
+func TestMapStruct(t *testing.T) {
+	a := StructA{
+		42,
+	}
+	m := map[int]StructA{
+		1: a,
+	}
+	m[2] = a
+	a.x = 0
+	if m[1].x != 42 || m[2].x != 42 {
+		t.Fail()
+	}
+}

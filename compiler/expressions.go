@@ -141,7 +141,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			assignments := ""
 			for _, element := range e.Elts {
 				kve := element.(*ast.KeyValueExpr)
-				assignments += c.formatExpr(`%s = %s, %s[%s] = { k: %s, v: %s }, `, keyVar, c.translateImplicitConversion(kve.Key, t.Key()), mapVar, c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, c.translateImplicitConversion(kve.Value, t.Elem())).String()
+				assignments += c.formatExpr(`%s = %s, %s[%s] = { k: %s, v: %s }, `, keyVar, c.translateImplicitConversionWithCloning(kve.Key, t.Key()), mapVar, c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, c.translateImplicitConversionWithCloning(kve.Value, t.Elem())).String()
 			}
 			return c.formatExpr("(%s = new $Map(), %s%s)", mapVar, assignments, mapVar)
 		case *types.Struct:
@@ -152,7 +152,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			if !isKeyValue {
 				for i, element := range e.Elts {
-					elements[i] = c.translateImplicitConversion(element, t.Field(i).Type()).String()
+					elements[i] = c.translateImplicitConversionWithCloning(element, t.Field(i).Type()).String()
 				}
 			}
 			if isKeyValue {
@@ -163,7 +163,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					kve := element.(*ast.KeyValueExpr)
 					for j := range elements {
 						if kve.Key.(*ast.Ident).Name == t.Field(j).Name() {
-							elements[j] = c.translateImplicitConversion(kve.Value, t.Field(j).Type()).String()
+							elements[j] = c.translateImplicitConversionWithCloning(kve.Value, t.Field(j).Type()).String()
 							break
 						}
 					}

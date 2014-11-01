@@ -3,7 +3,7 @@ Supported Packages
 
 On each commit, Travis CI automatically compiles all supported packages with GopherJS and runs their tests:
 
-[![Build Status](https://travis-ci.org/gopherjs/gopherjs.png?branch=master)](https://travis-ci.org/gopherjs/gopherjs)
+[![Circle CI](https://circleci.com/gh/gopherjs/gopherjs.png?style=badge)](https://circleci.com/gh/gopherjs/gopherjs)
 
 | Name            | Supported (Tests OK?) | Comment                           |
 | --------------- | --------------------- | --------------------------------- |

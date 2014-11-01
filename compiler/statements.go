@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"sort"
 	"strings"
 
 	"code.google.com/p/go.tools/go/types"
@@ -780,20 +781,26 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 	}
 	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { $s = %d; continue; }", data.beginCase, cond, data.endCase))
 	c.Indent(func() {
+		prevEV := c.p.escapingVars
+		c.p.escapingVars = make(map[types.Object]bool)
+		for escaping := range prevEV {
+			c.p.escapingVars[escaping] = true
+		}
+
 		v := &escapeAnalysis{
 			info:       c.p.info,
 			candidates: make(map[types.Object]bool),
 			escaping:   make(map[types.Object]bool),
 		}
 		ast.Walk(v, body)
-		prevEV := c.p.escapingVars
-		c.p.escapingVars = make(map[types.Object]bool)
-		for escaping := range prevEV {
-			c.p.escapingVars[escaping] = true
+		names := make([]string, 0, len(c.p.escapingVars))
+		for obj := range v.escaping {
+			names = append(names, c.objectName(obj))
+			c.p.escapingVars[obj] = true
 		}
-		for escaping := range v.escaping {
-			c.Printf("%s = [undefined];", c.objectName(escaping))
-			c.p.escapingVars[escaping] = true
+		sort.Strings(names)
+		for _, name := range names {
+			c.Printf("%s = [undefined];", name)
 		}
 
 		if bodyPrefix != nil {

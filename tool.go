@@ -75,7 +75,7 @@ func main() {
 				if strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".js") {
 					for _, arg := range args {
 						if !strings.HasSuffix(arg, ".go") && !strings.HasSuffix(arg, ".js") {
-							return fmt.Errorf("named files must be .go files")
+							return fmt.Errorf("named files must be .go or .js files")
 						}
 					}
 					if pkgObj == "" {

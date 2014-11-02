@@ -4,6 +4,7 @@ package syscall
 
 import (
 	"bytes"
+
 	"github.com/gopherjs/gopherjs/js"
 )
 

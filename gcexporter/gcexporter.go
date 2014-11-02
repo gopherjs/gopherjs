@@ -1,13 +1,14 @@
 package gcexporter
 
 import (
-	"code.google.com/p/go.tools/go/exact"
-	"code.google.com/p/go.tools/go/types"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
 	"unicode"
+
+	"code.google.com/p/go.tools/go/exact"
+	"code.google.com/p/go.tools/go/types"
 )
 
 type exporter struct {

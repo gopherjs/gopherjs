@@ -3,10 +3,11 @@
 package js_test
 
 import (
-	"github.com/gopherjs/gopherjs/js"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/gopherjs/gopherjs/js"
 )
 
 var dummys = js.Global.Call("eval", `({

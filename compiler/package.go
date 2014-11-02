@@ -2,14 +2,15 @@ package compiler
 
 import (
 	"bytes"
-	"code.google.com/p/go.tools/go/types"
 	"encoding/json"
 	"fmt"
-	"github.com/gopherjs/gopherjs/gcexporter"
 	"go/ast"
 	"go/token"
 	"sort"
 	"strings"
+
+	"code.google.com/p/go.tools/go/types"
+	"github.com/gopherjs/gopherjs/gcexporter"
 )
 
 type funcContext struct {

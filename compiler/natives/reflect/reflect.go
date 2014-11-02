@@ -3,9 +3,10 @@
 package reflect
 
 import (
-	"github.com/gopherjs/gopherjs/js"
 	"runtime"
 	"unsafe"
+
+	"github.com/gopherjs/gopherjs/js"
 )
 
 var initialized = false

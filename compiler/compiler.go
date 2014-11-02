@@ -2,16 +2,17 @@ package compiler
 
 import (
 	"bytes"
-	"code.google.com/p/go.tools/go/gcimporter"
-	"code.google.com/p/go.tools/go/types"
 	"encoding/asn1"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"github.com/gopherjs/gopherjs/compiler/prelude"
 	"go/token"
 	"io"
 	"strings"
+
+	"code.google.com/p/go.tools/go/gcimporter"
+	"code.google.com/p/go.tools/go/types"
+	"github.com/gopherjs/gopherjs/compiler/prelude"
 )
 
 var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}

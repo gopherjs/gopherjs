@@ -3,8 +3,9 @@
 package syscall
 
 import (
-	"github.com/gopherjs/gopherjs/js"
 	"unsafe"
+
+	"github.com/gopherjs/gopherjs/js"
 )
 
 func init() {

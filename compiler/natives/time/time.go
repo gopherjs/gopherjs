@@ -3,8 +3,9 @@
 package time
 
 import (
-	"github.com/gopherjs/gopherjs/js"
 	"strings"
+
+	"github.com/gopherjs/gopherjs/js"
 )
 
 type runtimeTimer struct {

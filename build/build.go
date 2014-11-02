@@ -324,7 +324,7 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 	}
 	for _, file := range files {
 		if strings.HasSuffix(file.Name(), ".inc.js") && file.Name()[0] != '_' {
-			pkg.JsFiles = append(pkg.JsFiles, filepath.Join(pkg.Dir, file.Name()))
+			pkg.JsFiles = append(pkg.JsFiles, file.Name())
 		}
 	}
 
@@ -394,7 +394,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			}
 		}
 
-		for _, name := range pkg.GoFiles {
+		for _, name := range append(pkg.GoFiles, pkg.JsFiles...) {
 			fileInfo, err := os.Stat(filepath.Join(pkg.Dir, name))
 			if err != nil {
 				return err
@@ -438,7 +438,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 
 	var jsDecls []compiler.Decl
 	for _, jsFile := range pkg.JsFiles {
-		code, err := ioutil.ReadFile(jsFile)
+		code, err := ioutil.ReadFile(filepath.Join(pkg.Dir, jsFile))
 		if err != nil {
 			return err
 		}

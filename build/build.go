@@ -206,6 +206,7 @@ func (o *Options) PrintSuccess(format string, a ...interface{}) {
 
 type PackageData struct {
 	*build.Package
+	JsFiles    []string
 	SrcModTime time.Time
 	UpToDate   bool
 	Archive    *compiler.Archive
@@ -283,8 +284,15 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 			Name:       "main",
 			ImportPath: "main",
 			Dir:        packagePath,
-			GoFiles:    filenames,
 		},
+	}
+
+	for _, file := range filenames {
+		if strings.HasSuffix(file, ".js") {
+			pkg.JsFiles = append(pkg.JsFiles, file)
+			continue
+		}
+		pkg.GoFiles = append(pkg.GoFiles, file)
 	}
 
 	if err := s.BuildPackage(pkg); err != nil {
@@ -309,6 +317,17 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 		return nil, err
 	}
 	pkg := &PackageData{Package: buildPkg}
+
+	files, err := ioutil.ReadDir(pkg.Dir)
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), ".js") {
+			pkg.JsFiles = append(pkg.JsFiles, filepath.Join(pkg.Dir, file.Name()))
+		}
+	}
+
 	if err := s.BuildPackage(pkg); err != nil {
 		return nil, err
 	}
@@ -416,6 +435,18 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 	if err != nil {
 		return err
 	}
+
+	var jsDecls []compiler.Decl
+	for _, jsFile := range pkg.JsFiles {
+		code, err := ioutil.ReadFile(jsFile)
+		if err != nil {
+			return err
+		}
+		jsDecls = append(jsDecls, compiler.Decl{
+			BodyCode: append(code, '\n'),
+		})
+	}
+	pkg.Archive.Declarations = append(jsDecls, pkg.Archive.Declarations...)
 
 	if s.options.Verbose {
 		fmt.Println(pkg.ImportPath)

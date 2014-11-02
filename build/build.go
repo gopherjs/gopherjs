@@ -288,7 +288,7 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 	}
 
 	for _, file := range filenames {
-		if strings.HasSuffix(file, ".js") {
+		if strings.HasSuffix(file, ".inc.js") {
 			pkg.JsFiles = append(pkg.JsFiles, file)
 			continue
 		}

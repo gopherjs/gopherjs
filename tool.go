@@ -72,10 +72,10 @@ func main() {
 					return s.BuildDir(currentDirectory, currentDirectory, pkgObj)
 				}
 
-				if strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".js") {
+				if strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".inc.js") {
 					for _, arg := range args {
-						if !strings.HasSuffix(arg, ".go") && !strings.HasSuffix(arg, ".js") {
-							return fmt.Errorf("named files must be .go or .js files")
+						if !strings.HasSuffix(arg, ".go") && !strings.HasSuffix(arg, ".inc.js") {
+							return fmt.Errorf("named files must be .go or .inc.js files")
 						}
 					}
 					if pkgObj == "" {
@@ -201,7 +201,7 @@ func main() {
 		os.Exit(handleError(func() error {
 			lastSourceArg := 0
 			for {
-				if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".js")) {
+				if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {
 					break
 				}
 				lastSourceArg++

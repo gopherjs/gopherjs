@@ -323,7 +323,7 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 		return nil, err
 	}
 	for _, file := range files {
-		if strings.HasSuffix(file.Name(), ".js") {
+		if strings.HasSuffix(file.Name(), ".inc.js") && file.Name()[0] != '_' {
 			pkg.JsFiles = append(pkg.JsFiles, filepath.Join(pkg.Dir, file.Name()))
 		}
 	}

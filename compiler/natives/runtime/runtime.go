@@ -2,11 +2,17 @@
 
 package runtime
 
-import (
-	"github.com/gopherjs/gopherjs/js"
-)
+import "github.com/gopherjs/gopherjs/js"
 
-const theGoarch = "js"
+const GOOS = theGoos
+const GOARCH = "js"
+
+// fake for error.go
+type eface struct {
+	_type *struct {
+		_string *string
+	}
+}
 
 type NotSupportedError struct {
 	Feature string
@@ -79,6 +85,55 @@ func NumCPU() int {
 
 func NumGoroutine() int {
 	return js.Global.Get("$totalGoroutines").Int()
+}
+
+type MemStats struct {
+	// General statistics.
+	Alloc      uint64 // bytes allocated and still in use
+	TotalAlloc uint64 // bytes allocated (even if freed)
+	Sys        uint64 // bytes obtained from system (sum of XxxSys below)
+	Lookups    uint64 // number of pointer lookups
+	Mallocs    uint64 // number of mallocs
+	Frees      uint64 // number of frees
+
+	// Main allocation heap statistics.
+	HeapAlloc    uint64 // bytes allocated and still in use
+	HeapSys      uint64 // bytes obtained from system
+	HeapIdle     uint64 // bytes in idle spans
+	HeapInuse    uint64 // bytes in non-idle span
+	HeapReleased uint64 // bytes released to the OS
+	HeapObjects  uint64 // total number of allocated objects
+
+	// Low-level fixed-size structure allocator statistics.
+	//	Inuse is bytes used now.
+	//	Sys is bytes obtained from system.
+	StackInuse  uint64 // bytes used by stack allocator
+	StackSys    uint64
+	MSpanInuse  uint64 // mspan structures
+	MSpanSys    uint64
+	MCacheInuse uint64 // mcache structures
+	MCacheSys   uint64
+	BuckHashSys uint64 // profiling bucket hash table
+	GCSys       uint64 // GC metadata
+	OtherSys    uint64 // other system allocations
+
+	// Garbage collector statistics.
+	NextGC       uint64 // next collection will happen when HeapAlloc ≥ this amount
+	LastGC       uint64 // end time of last collection (nanoseconds since 1970)
+	PauseTotalNs uint64
+	PauseNs      [256]uint64 // circular buffer of recent GC pause durations, most recent at [(NumGC+255)%256]
+	PauseEnd     [256]uint64 // circular buffer of recent GC pause end times
+	NumGC        uint32
+	EnableGC     bool
+	DebugGC      bool
+
+	// Per-size allocation statistics.
+	// 61 is NumSizeClasses in the C code.
+	BySize [61]struct {
+		Size    uint32
+		Mallocs uint64
+		Frees   uint64
+	}
 }
 
 func ReadMemStats(m *MemStats) {

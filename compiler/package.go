@@ -60,12 +60,16 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 	}
 
+	var importError error
 	var errList ErrorList
 	var previousErr error
 	config := &types.Config{
 		Packages: importContext.Packages,
 		Import: func(_ map[string]*types.Package, path string) (*types.Package, error) {
 			if _, err := importContext.Import(path); err != nil {
+				if importError == nil {
+					importError = err
+				}
 				return nil, err
 			}
 			return importContext.Packages[path], nil
@@ -80,6 +84,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		},
 	}
 	typesPkg, err := config.Check(importPath, fileSet, files, info)
+	if importError != nil {
+		return nil, importError
+	}
 	if errList != nil {
 		return nil, errList
 	}

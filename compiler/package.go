@@ -273,11 +273,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		if _, ok := varsWithInit[o]; !ok {
 			d.DceDeps = collectDependencies(nil, func() {
-				value := c.zeroValue(o.Type())
-				if importPath == "runtime" && o.Name() == "sizeof_C_MStats" {
-					value = "3712"
-				}
-				d.InitCode = removeWhitespace([]byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value)), minify)
+				d.InitCode = removeWhitespace([]byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), c.zeroValue(o.Type()))), minify)
 			})
 		}
 		d.DceFilters = []DepId{DepId(o.Name())}

@@ -136,6 +136,9 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 		r.Close()
 		if err != nil {
 			if list, isList := err.(scanner.ErrorList); isList {
+				if len(list) > 10 {
+					list = append(list[:10], &scanner.Error{Pos: list[9].Pos, Msg: "too many errors"})
+				}
 				for _, entry := range list {
 					errList = append(errList, entry)
 				}

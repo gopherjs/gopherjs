@@ -88,6 +88,13 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		return nil, importError
 	}
 	if errList != nil {
+		if len(errList) > 10 {
+			pos := token.NoPos
+			if last, ok := errList[9].(types.Error); ok {
+				pos = last.Pos
+			}
+			errList = append(errList[:10], types.Error{Fset: fileSet, Pos: pos, Msg: "too many errors"})
+		}
 		return nil, errList
 	}
 	if err != nil {

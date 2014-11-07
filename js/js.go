@@ -94,6 +94,11 @@ func (err *Error) Error() string {
 	return "JavaScript error: " + err.Get("message").Str()
 }
 
+// Stack returns the stack property of the encapsulated JavaScript error object.
+func (err *Error) Stack() string {
+	return err.Get("stack").Str()
+}
+
 // Global gives JavaScript's global object ("window" for browsers and "GLOBAL" for Node.js). Set this to a mock for testing with pure Go.
 var Global Object
 

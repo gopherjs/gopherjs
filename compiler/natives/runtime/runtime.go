@@ -147,3 +147,8 @@ func (f *Func) Name() string {
 func FuncForPC(pc uintptr) *Func {
 	return nil
 }
+
+var MemProfileRate int = 512 * 1024
+
+func SetBlockProfileRate(rate int) {
+}

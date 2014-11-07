@@ -54,6 +54,9 @@ func Import(path string, mode build.ImportMode, archSuffix string) (*build.Packa
 		buildContext.InstallSuffix = archSuffix
 	}
 	pkg, err := buildContext.Import(path, "", mode)
+	if err != nil {
+		return nil, err
+	}
 	if path == "hash/crc32" {
 		pkg.GoFiles = []string{"crc32.go", "crc32_generic.go"}
 	}
@@ -68,7 +71,7 @@ func Import(path string, mode build.ImportMode, archSuffix string) (*build.Packa
 			pkg.PkgObj = gopathPkgObj
 		}
 	}
-	return pkg, err
+	return pkg, nil
 }
 
 func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
@@ -312,7 +315,7 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 		return pkg.Archive, nil
 	}
 
-	buildPkg, err := Import(path, build.AllowBinary, s.ArchSuffix())
+	buildPkg, err := Import(path, 0, s.ArchSuffix())
 	if s.Watcher != nil && buildPkg != nil { // add watch even on error
 		s.Watcher.Add(buildPkg.Dir)
 	}
@@ -389,7 +392,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			}
 			_, err := s.ImportPackage(importedPkgPath)
 			if err != nil {
-				return err
+				return &scanner.Error{Pos: pkg.ImportPos[importedPkgPath][0], Msg: err.Error()}
 			}
 			impModeTime := s.Packages[importedPkgPath].SrcModTime
 			if impModeTime.After(pkg.SrcModTime) {

@@ -409,32 +409,34 @@ func handleError(f func() error, options *gbuild.Options) int {
 	case nil:
 		return 0
 	case compiler.ErrorList:
-		makeRel := func(name string) string {
-			if relname, err := filepath.Rel(currentDirectory, name); err == nil {
-				if relname[0] != '.' {
-					return "." + string(filepath.Separator) + relname
-				}
-				return relname
-			}
-			return name
-		}
 		for _, entry := range err {
-			switch e := entry.(type) {
-			case *scanner.Error:
-				options.PrintError("%s:%d:%d: %s\n", makeRel(e.Pos.Filename), e.Pos.Line, e.Pos.Column, e.Msg)
-			case types.Error:
-				pos := e.Fset.Position(e.Pos)
-				options.PrintError("%s:%d:%d: %s\n", makeRel(pos.Filename), pos.Line, pos.Column, e.Msg)
-			default:
-				options.PrintError("%s\n", entry)
-			}
+			printError(entry, options)
 		}
 		return 1
 	case *exec.ExitError:
 		return err.Sys().(syscall.WaitStatus).ExitStatus()
 	default:
-		options.PrintError("%s\n", err)
+		printError(err, options)
 		return 1
+	}
+}
+
+func printError(err error, options *gbuild.Options) {
+	makeRel := func(name string) string {
+		if relname, err := filepath.Rel(currentDirectory, name); err == nil {
+			return relname
+		}
+		return name
+	}
+
+	switch e := err.(type) {
+	case *scanner.Error:
+		options.PrintError("%s:%d:%d: %s\n", makeRel(e.Pos.Filename), e.Pos.Line, e.Pos.Column, e.Msg)
+	case types.Error:
+		pos := e.Fset.Position(e.Pos)
+		options.PrintError("%s:%d:%d: %s\n", makeRel(pos.Filename), pos.Line, pos.Column, e.Msg)
+	default:
+		options.PrintError("%s\n", e)
 	}
 }
 

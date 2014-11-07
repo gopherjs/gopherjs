@@ -738,16 +738,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 		sig := c.p.info.Types[plainFun].Type.Underlying().(*types.Signature)
-		if len(e.Args) == 1 {
-			if tuple, isTuple := c.p.info.Types[e.Args[0]].Type.(*types.Tuple); isTuple {
-				tupleVar := c.newVariable("_tuple")
-				args := make([]ast.Expr, tuple.Len())
-				for i := range args {
-					args[i] = c.newIdent(c.formatExpr("%s[%d]", tupleVar, i).String(), tuple.At(i).Type())
-				}
-				return c.formatExpr("(%s = %e, %s(%s))", tupleVar, e.Args[0], fun, strings.Join(c.translateArgs(sig, args, false), ", "))
-			}
-		}
 		args := c.translateArgs(sig, e.Args, e.Ellipsis.IsValid())
 		if c.blocking[e] {
 			resumeCase := c.caseCounter

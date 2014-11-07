@@ -33,16 +33,16 @@ func init() {
 	_ = e
 }
 
-func getgoroot() string {
+func GOROOT() string {
 	process := js.Global.Get("process")
 	if process.IsUndefined() {
 		return "/"
 	}
 	goroot := process.Get("env").Get("GOROOT")
-	if goroot.IsUndefined() {
-		return ""
+	if !goroot.IsUndefined() {
+		return goroot.Str()
 	}
-	return goroot.Str()
+	return defaultGoroot
 }
 
 func Breakpoint() {
@@ -134,4 +134,16 @@ func ReadMemStats(m *MemStats) {
 }
 
 func SetFinalizer(x, f interface{}) {
+}
+
+type Func struct {
+	opaque struct{} // unexported field to disallow conversions
+}
+
+func (f *Func) Name() string {
+	return ""
+}
+
+func FuncForPC(pc uintptr) *Func {
+	return nil
 }

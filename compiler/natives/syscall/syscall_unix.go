@@ -8,17 +8,19 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-func init() {
+func runtime_envs() []string {
 	process := js.Global.Get("process")
-	if !process.IsUndefined() {
-		jsEnv := process.Get("env")
-		envkeys := js.Global.Get("Object").Call("keys", jsEnv)
-		envs = make([]string, envkeys.Length())
-		for i := 0; i < envkeys.Length(); i++ {
-			key := envkeys.Index(i).Str()
-			envs[i] = key + "=" + jsEnv.Get(key).Str()
-		}
+	if process.IsUndefined() {
+		return nil
 	}
+	jsEnv := process.Get("env")
+	envkeys := js.Global.Get("Object").Call("keys", jsEnv)
+	envs := make([]string, envkeys.Length())
+	for i := 0; i < envkeys.Length(); i++ {
+		key := envkeys.Index(i).Str()
+		envs[i] = key + "=" + jsEnv.Get(key).Str()
+	}
+	return envs
 }
 
 func setenv_c(k, v string) {

@@ -64,7 +64,7 @@ func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellip
 	if len(args) == 1 {
 		if tuple, isTuple := c.p.info.Types[args[0]].Type.(*types.Tuple); isTuple {
 			tupleVar := c.newVariable("_tuple")
-			c.Printf("%s = %s", tupleVar, c.translateExpr(args[0]))
+			c.Printf("%s = %s;", tupleVar, c.translateExpr(args[0]))
 			args = make([]ast.Expr, tuple.Len())
 			for i := range args {
 				args[i] = c.newIdent(c.formatExpr("%s[%d]", tupleVar, i).String(), tuple.At(i).Type())

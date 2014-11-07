@@ -60,6 +60,9 @@ func Import(path string, mode build.ImportMode, archSuffix string) (*build.Packa
 	if path == "runtime" {
 		pkg.GoFiles = []string{"error.go", fmt.Sprintf("zgoos_%s.go", runtime.GOOS), "zversion.go"}
 	}
+	if path == "runtime/pprof" {
+		pkg.GoFiles = nil
+	}
 	if path == "hash/crc32" {
 		pkg.GoFiles = []string{"crc32.go", "crc32_generic.go"}
 	}

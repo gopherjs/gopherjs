@@ -25,7 +25,7 @@ var $min = Math.min;
 var $mod = function(x, y) { return x % y; };
 var $parseInt = parseInt;
 var $parseFloat = function(f) {
-  if (f.constructor === Number) {
+  if (f !== undefined && f !== null && f.constructor === Number) {
     return f;
   }
   return parseFloat(f);

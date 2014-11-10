@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"code.google.com/p/go.tools/go/exact"
-	"code.google.com/p/go.tools/go/types"
+	"golang.org/x/tools/go/exact"
+	"golang.org/x/tools/go/types"
 )
 
 func (c *funcContext) Write(b []byte) (int, error) {

@@ -17,8 +17,8 @@ import (
 	"text/template"
 	"time"
 
-	"code.google.com/p/go.crypto/ssh/terminal"
-	"code.google.com/p/go.tools/go/types"
+	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/tools/go/types"
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/spf13/cobra"

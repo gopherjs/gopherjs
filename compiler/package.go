@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"code.google.com/p/go.tools/go/types"
 	"github.com/gopherjs/gopherjs/gcexporter"
+	"golang.org/x/tools/go/types"
 )
 
 type funcContext struct {

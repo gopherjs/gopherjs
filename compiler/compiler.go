@@ -10,9 +10,9 @@ import (
 	"io"
 	"strings"
 
-	"code.google.com/p/go.tools/go/gcimporter"
-	"code.google.com/p/go.tools/go/types"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
+	"golang.org/x/tools/go/gcimporter"
+	"golang.org/x/tools/go/types"
 )
 
 var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}

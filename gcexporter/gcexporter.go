@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode"
 
-	"code.google.com/p/go.tools/go/exact"
-	"code.google.com/p/go.tools/go/types"
+	"golang.org/x/tools/go/exact"
+	"golang.org/x/tools/go/types"
 )
 
 type exporter struct {

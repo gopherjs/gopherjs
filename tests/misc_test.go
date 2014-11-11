@@ -91,3 +91,19 @@ func TestMapStruct(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestUnnamedParameters(t *testing.T) {
+	ok := false
+	defer func() {
+		if !ok {
+			t.Fail()
+		}
+	}()
+	blockingWithUnnamedParameter(false) // used to cause non-blocking call error, which is ignored by testing
+	ok = true
+}
+
+func blockingWithUnnamedParameter(bool) {
+	c := make(chan int, 1)
+	c <- 42
+}

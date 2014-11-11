@@ -744,6 +744,10 @@ func (c *funcContext) translateFunction(typ *ast.FuncType, stmts []ast.Stmt, out
 
 	var params []string
 	for _, param := range typ.Params.List {
+		if len(param.Names) == 0 {
+			params = append(params, c.newVariable("param"))
+			continue
+		}
 		for _, ident := range param.Names {
 			if isBlank(ident) {
 				params = append(params, c.newVariable("param"))

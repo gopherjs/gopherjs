@@ -830,7 +830,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 
 		if len(c.flattened) != 0 {
 			c.localVars = append(c.localVars, "$s = 0")
-			prefix = prefix + " while (true) { switch ($s) { case 0:"
+			prefix = prefix + " $blockingState: while (true) { switch ($s) { case 0:"
 			suffix = " case -1: } return; }" + suffix
 		}
 

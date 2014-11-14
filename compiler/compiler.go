@@ -146,7 +146,7 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 		return err
 	}
 	if pkg.BlockingInit {
-		if _, err := w.Write(removeWhitespace([]byte("\t\t/* */ var $r, $s = 0; var $f = function() { while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
+		if _, err := w.Write(removeWhitespace([]byte("\t\t/* */ var $r, $s = 0; var $f = function() { $blockingState: while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
 			return err
 		}
 	}

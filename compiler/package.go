@@ -15,6 +15,7 @@ import (
 
 type funcContext struct {
 	p             *pkgContext
+	name          string
 	sig           *types.Signature
 	allVars       map[string]int
 	localVars     []string
@@ -179,7 +180,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					}
 				}
 				o := c.p.info.Defs[d.Name].(*types.Func)
-				c.p.funcContexts[o] = c.p.analyzeFunction(sig, d.Body)
+				context := c.p.analyzeFunction(sig, d.Body)
+				context.name = d.Name.Name
+				c.p.funcContexts[o] = context
 				if sig.Recv() == nil {
 					c.objectName(o) // register toplevel name
 				}
@@ -789,8 +792,12 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 
 		if len(c.blocking) != 0 {
 			c.localVars = append(c.localVars, "$r")
-			prefix = prefix + " if(!$b) { $nonblockingCall(); }; var $f = function() {"
-			suffix = " }; $f.$blocking = true; return $f;" + suffix
+			f := "$f"
+			if c.name != "" && !c.p.minify {
+				f = "$blocking_" + c.name
+			}
+			prefix = prefix + fmt.Sprintf(" if(!$b) { $nonblockingCall(); }; var %s = function() {", f)
+			suffix = fmt.Sprintf(" }; %s.$blocking = true; return %s;", f, f) + suffix
 		}
 
 		if c.hasDefer {

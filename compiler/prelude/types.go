@@ -58,6 +58,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     typ = function(v) { this.$val = v; };
     typ.Ptr = $newType(4, "Ptr", "*" + string, "", "", function(array) {
       this.$get = function() { return array; };
+      this.$set = function(v) { $copy(this, v, typ); };
       this.$val = array;
     });
     typ.init = function(elem, len) {
@@ -204,6 +205,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     typ.Ptr = $newType(4, "Ptr", "*" + string, "", "", constructor);
     typ.Ptr.Struct = typ;
     typ.Ptr.prototype.$get = function() { return this; };
+    typ.Ptr.prototype.$set = function(v) { $copy(this, v, typ); };
     typ.init = function(fields) {
       var i;
       typ.fields = fields;

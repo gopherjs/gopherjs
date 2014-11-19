@@ -158,3 +158,11 @@ var MemProfileRate int = 512 * 1024
 
 func SetBlockProfileRate(rate int) {
 }
+
+func Stack(buf []byte, all bool) int {
+	s := js.Global.Get("Error").New().Get("stack")
+	if s.IsUndefined() {
+		return 0
+	}
+	return copy(buf, s.Call("substr", s.Call("indexOf", "\n").Int()+1).Str())
+}

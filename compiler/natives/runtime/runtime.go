@@ -67,6 +67,12 @@ func GOMAXPROCS(n int) int {
 	return 1
 }
 
+func Gosched() {
+	c := make(chan struct{})
+	js.Global.Call("setTimeout", func() { close(c) }, 0)
+	<-c
+}
+
 func NumCPU() int {
 	return 1
 }

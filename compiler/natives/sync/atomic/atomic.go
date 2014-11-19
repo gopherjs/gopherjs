@@ -4,6 +4,8 @@ package atomic
 
 import (
 	"unsafe"
+
+	"github.com/gopherjs/gopherjs/js"
 )
 
 func SwapInt32(addr *int32, new int32) int32 {
@@ -166,4 +168,18 @@ func StoreUintptr(addr *uintptr, val uintptr) {
 
 func StorePointer(addr *unsafe.Pointer, val unsafe.Pointer) {
 	*addr = val
+}
+
+func (v *Value) Load() (x interface{}) {
+	return v.v
+}
+
+func (v *Value) Store(x interface{}) {
+	if x == nil {
+		panic("sync/atomic: store of nil value into Value")
+	}
+	if v.v != nil && js.InternalObject(x).Get("constructor") != js.InternalObject(v.v).Get("constructor") {
+		panic("sync/atomic: store of inconsistently typed value into Value")
+	}
+	v.v = x
 }

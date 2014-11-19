@@ -37,10 +37,19 @@ func Main(matchString func(pat, str string) (bool, error), tests []InternalTest,
 		}
 
 		done := make(chan struct{})
-		var err interface{}
 		go func() {
 			defer func() {
-				err = recover()
+				err := recover()
+				if e, ok := err.(*runtime.NotSupportedError); ok {
+					t.log(e.Error())
+					t.skip()
+					err = nil
+				}
+				if err != nil {
+					t.Fail()
+					t.report()
+					panic(err)
+				}
 				close(done)
 			}()
 			test.F(t) //gopherjs:blocking
@@ -48,18 +57,7 @@ func Main(matchString func(pat, str string) (bool, error), tests []InternalTest,
 		<-done
 
 		t.common.duration = time.Now().Sub(t.common.start)
-		if e, ok := err.(*runtime.NotSupportedError); ok {
-			t.log(e.Error())
-			t.skip()
-			err = nil
-		}
-		if err != nil {
-			t.Fail()
-		}
 		t.report()
-		if err != nil {
-			panic(err)
-		}
 		failed = failed || t.common.failed
 	}
 

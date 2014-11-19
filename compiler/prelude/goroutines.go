@@ -43,11 +43,11 @@ var $callDeferred = function(deferred, jsErr) {
     $panicValue = localPanicValue;
   }
 
-  var call;
+  var call, localSkippedDeferFrames = 0;
   try {
     while (true) {
       if (deferred === null) {
-        deferred = $deferFrames[$deferFrames.length - 1 - $skippedDeferFrames];
+        deferred = $deferFrames[$deferFrames.length - 1 - localSkippedDeferFrames];
         if (deferred === undefined) {
           var msg;
           if (localPanicValue.constructor === $String) {
@@ -70,7 +70,7 @@ var $callDeferred = function(deferred, jsErr) {
       var call = deferred.pop();
       if (call === undefined) {
         if (localPanicValue !== undefined) {
-          $skippedDeferFrames++;
+          localSkippedDeferFrames++;
           deferred = null;
           continue;
         }
@@ -86,6 +86,7 @@ var $callDeferred = function(deferred, jsErr) {
       }
     }
   } finally {
+    $skippedDeferFrames = localSkippedDeferFrames;
     if ($curGoroutine.asleep) {
       deferred.push(call);
       $jumpToDefer = true;

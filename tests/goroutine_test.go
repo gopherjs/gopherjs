@@ -70,6 +70,33 @@ func testPanic2(t *testing.T) {
 	checkI(t, -3)
 }
 
+func TestPanicAdvanced(t *testing.T) {
+	expectedI = 1
+	defer func() {
+		recover()
+		checkI(t, 3)
+		testPanicAdvanced2(t)
+		checkI(t, 6)
+	}()
+	testPanicAdvanced1(t)
+	checkI(t, -1)
+}
+
+func testPanicAdvanced1(t *testing.T) {
+	defer func() {
+		checkI(t, 2)
+	}()
+	checkI(t, 1)
+	panic("")
+}
+
+func testPanicAdvanced2(t *testing.T) {
+	defer func() {
+		checkI(t, 5)
+	}()
+	checkI(t, 4)
+}
+
 func TestSelect(t *testing.T) {
 	expectedI = 1
 	a := make(chan int)

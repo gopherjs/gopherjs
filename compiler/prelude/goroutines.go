@@ -86,7 +86,7 @@ var $callDeferred = function(deferred, jsErr) {
       }
     }
   } finally {
-    $skippedDeferFrames = localSkippedDeferFrames;
+    $skippedDeferFrames += localSkippedDeferFrames;
     if ($curGoroutine.asleep) {
       deferred.push(call);
       $jumpToDefer = true;

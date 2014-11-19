@@ -235,18 +235,20 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.BranchStmt:
 		c.printLabel(label)
-		labelSuffix := ""
+		normalLabel := ""
+		blockingLabel := ""
 		data := c.flowDatas[""]
 		if s.Label != nil {
-			labelSuffix = " " + s.Label.Name
+			normalLabel = " " + s.Label.Name
+			blockingLabel = " s" // use explicit label "s", because surrounding loop may not be flattened
 			data = c.flowDatas[s.Label.Name]
 		}
 		switch s.Tok {
 		case token.BREAK:
-			c.PrintCond(data.endCase == 0, fmt.Sprintf("break%s;", labelSuffix), fmt.Sprintf("$s = %d; continue;", data.endCase))
+			c.PrintCond(data.endCase == 0, fmt.Sprintf("break%s;", normalLabel), fmt.Sprintf("$s = %d; continue%s;", data.endCase, blockingLabel))
 		case token.CONTINUE:
 			data.postStmt()
-			c.PrintCond(data.beginCase == 0, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("$s = %d; continue;", data.beginCase))
+			c.PrintCond(data.beginCase == 0, fmt.Sprintf("continue%s;", normalLabel), fmt.Sprintf("$s = %d; continue%s;", data.beginCase, blockingLabel))
 		case token.GOTO:
 			c.PrintCond(false, "goto "+s.Label.Name, fmt.Sprintf("$s = %d; continue;", c.labelCases[s.Label.Name]))
 		case token.FALLTHROUGH:

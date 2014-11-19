@@ -4,6 +4,7 @@ package syscall
 
 import (
 	"bytes"
+	"unsafe"
 
 	"github.com/gopherjs/gopherjs/js"
 )
@@ -43,4 +44,8 @@ func printToConsole(b []byte) {
 		js.Global.Get("console").Call("log", string(lineBuffer[:i])) // don't use println, since it does not externalize multibyte characters
 		lineBuffer = lineBuffer[i+1:]
 	}
+}
+
+func use(p unsafe.Pointer) {
+	// no-op
 }

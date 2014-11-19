@@ -243,12 +243,12 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 		switch s.Tok {
 		case token.BREAK:
-			c.PrintCond(data.endCase == 0, fmt.Sprintf("break%s;", labelSuffix), fmt.Sprintf("$s = %d; continue;", data.endCase))
+			c.PrintCond(data.endCase == 0, fmt.Sprintf("break%s;", labelSuffix), fmt.Sprintf("$s = %d; continue $blockingState;", data.endCase))
 		case token.CONTINUE:
 			data.postStmt()
-			c.PrintCond(data.beginCase == 0, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("$s = %d; continue;", data.beginCase))
+			c.PrintCond(data.beginCase == 0, fmt.Sprintf("continue%s;", labelSuffix), fmt.Sprintf("$s = %d; continue $blockingState;", data.beginCase))
 		case token.GOTO:
-			c.PrintCond(false, "goto "+s.Label.Name, fmt.Sprintf("$s = %d; continue;", c.labelCases[s.Label.Name]))
+			c.PrintCond(false, "goto "+s.Label.Name, fmt.Sprintf("$s = %d; continue $blockingState;", c.labelCases[s.Label.Name]))
 		case token.FALLTHROUGH:
 			// handled in CaseClause
 		default:
@@ -722,9 +722,9 @@ clauseLoop:
 				jumpList = append(jumpList, fmt.Sprintf("if (%s) {}", branch.condition))
 				continue
 			}
-			jumpList = append(jumpList, fmt.Sprintf("if (%s) { $s = %d; continue; }", branch.condition, caseOffset+i-1))
+			jumpList = append(jumpList, fmt.Sprintf("if (%s) { $s = %d; continue $blockingState; }", branch.condition, caseOffset+i-1))
 		}
-		jumpList = append(jumpList, fmt.Sprintf("{ $s = %d; continue; }", caseOffset+len(branches)-1))
+		jumpList = append(jumpList, fmt.Sprintf("{ $s = %d; continue $blockingState; }", caseOffset+len(branches)-1))
 		jump = strings.Join(jumpList, " else ")
 	}
 	for i, branch := range branches {
@@ -737,7 +737,7 @@ clauseLoop:
 			c.translateStmtList(branch.body)
 		})
 		prefix = "} else "
-		jump = fmt.Sprintf("$s = %d; continue; case %d: ", endCase, caseOffset+i)
+		jump = fmt.Sprintf("$s = %d; continue $blockingState; case %d: ", endCase, caseOffset+i)
 	}
 	if defaultBranch != nil {
 		c.PrintCond(!flatten, "} else {", jump)
@@ -779,7 +779,7 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 	if !flatten && label != "" {
 		c.Printf("%s:", label)
 	}
-	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { $s = %d; continue; }", data.beginCase, cond, data.endCase))
+	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { $s = %d; continue $blockingState; }", data.beginCase, cond, data.endCase))
 	c.Indent(func() {
 		prevEV := c.p.escapingVars
 		c.p.escapingVars = make(map[types.Object]bool)
@@ -820,7 +820,7 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 
 		c.p.escapingVars = prevEV
 	})
-	c.PrintCond(!flatten, "}", fmt.Sprintf("$s = %d; continue; case %d:", data.beginCase, data.endCase))
+	c.PrintCond(!flatten, "}", fmt.Sprintf("$s = %d; continue $blockingState; case %d:", data.beginCase, data.endCase))
 }
 
 func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, typ types.Type, define bool) string {

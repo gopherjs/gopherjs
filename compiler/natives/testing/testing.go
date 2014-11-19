@@ -41,8 +41,8 @@ func Main(matchString func(pat, str string) (bool, error), tests []InternalTest,
 			defer func() {
 				err := recover()
 				if e, ok := err.(*runtime.NotSupportedError); ok {
-					t.output = append(t.output, decorate(e.Error())...)
-					t.skipped = true
+					t.log(e.Error())
+					t.skip()
 					err = nil
 				}
 				if err != nil {

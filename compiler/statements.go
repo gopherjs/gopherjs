@@ -10,7 +10,7 @@ import (
 	"golang.org/x/tools/go/types"
 )
 
-type This struct {
+type this struct {
 	ast.Ident
 }
 
@@ -543,7 +543,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			Args: []ast.Expr{s.Chan, s.Value},
 		}
 		c.blocking[call] = true
-		c.translateStmt(&ast.ExprStmt{call}, label)
+		c.translateStmt(&ast.ExprStmt{X: call}, label)
 
 	case *ast.SelectStmt:
 		var channels []string

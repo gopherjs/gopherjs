@@ -232,12 +232,12 @@ type Decl struct {
 	Vars       []string
 	BodyCode   []byte
 	InitCode   []byte
-	DceFilters []DepId
-	DceDeps    []DepId
+	DceFilters []DepID
+	DceDeps    []DepID
 	Blocking   bool
 }
 
-type DepId []byte // make asn1 happy
+type DepID []byte // make asn1 happy
 
 type SourceMapFilter struct {
 	Writer          io.Writer

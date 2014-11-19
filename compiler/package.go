@@ -229,7 +229,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 	}
 
-	collectDependencies := func(self types.Object, f func()) []DepId {
+	collectDependencies := func(self types.Object, f func()) []DepID {
 		c.p.dependencies = make(map[types.Object]bool)
 		f()
 		var deps []string
@@ -239,9 +239,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			}
 		}
 		sort.Strings(deps)
-		depIds := make([]DepId, len(deps))
+		depIds := make([]DepID, len(deps))
 		for i, dep := range deps {
-			depIds[i] = DepId(dep)
+			depIds[i] = DepID(dep)
 		}
 		return depIds
 	}
@@ -251,7 +251,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		typeName := c.objectName(o)
 		var d Decl
 		d.Vars = []string{typeName}
-		d.DceFilters = []DepId{DepId(o.Name())}
+		d.DceFilters = []DepID{DepID(o.Name())}
 		d.DceDeps = collectDependencies(o, func() {
 			d.BodyCode = removeWhitespace(c.CatchOutput(0, func() { c.translateType(o, true) }), minify)
 			d.InitCode = removeWhitespace(c.CatchOutput(1, func() { c.initType(o) }), minify)
@@ -280,7 +280,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				d.InitCode = removeWhitespace([]byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), value)), minify)
 			})
 		}
-		d.DceFilters = []DepId{DepId(o.Name())}
+		d.DceFilters = []DepID{DepID(o.Name())}
 		archive.Declarations = append(archive.Declarations, d)
 	}
 	for _, init := range c.p.info.InitOrder {
@@ -308,7 +308,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			v := hasCallVisitor{c.p.info, false}
 			ast.Walk(&v, init.Rhs)
 			if !v.hasCall {
-				d.DceFilters = []DepId{DepId(init.Lhs[0].Name())}
+				d.DceFilters = []DepID{DepID(init.Lhs[0].Name())}
 			}
 		}
 		archive.Declarations = append(archive.Declarations, d)
@@ -337,7 +337,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					c.translateStmt(&ast.ExprStmt{X: call}, "")
 				}), minify)
 			default:
-				d.DceFilters = []DepId{DepId(o.Name())}
+				d.DceFilters = []DepID{DepID(o.Name())}
 			}
 		}
 		if fun.Recv != nil {
@@ -347,9 +347,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			if isPointer {
 				namedRecvType = ptr.Elem().(*types.Named)
 			}
-			d.DceFilters = []DepId{DepId(namedRecvType.Obj().Name())}
+			d.DceFilters = []DepID{DepID(namedRecvType.Obj().Name())}
 			if !fun.Name.IsExported() {
-				d.DceFilters = append(d.DceFilters, DepId(fun.Name.Name))
+				d.DceFilters = append(d.DceFilters, DepID(fun.Name.Name))
 			}
 		}
 
@@ -545,7 +545,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 				&ast.AssignStmt{
 					Lhs: []ast.Expr{recv},
 					Tok: token.DEFINE,
-					Rhs: []ast.Expr{c.setType(&This{}, sig.Recv().Type())},
+					Rhs: []ast.Expr{c.setType(&this{}, sig.Recv().Type())},
 				},
 			}, stmts...)
 		}

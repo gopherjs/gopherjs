@@ -114,7 +114,7 @@ var Module Object
 // Debugger gets compiled to JavaScript's "debugger;" statement.
 func Debugger() {}
 
-// Returns the internal JavaScript object that represents i. Not intended for public use.
+// InternalObject returns the internal JavaScript object that represents i. Not intended for public use.
 func InternalObject(i interface{}) Object {
 	return nil
 }

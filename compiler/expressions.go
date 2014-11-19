@@ -104,7 +104,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 		collectIndexedElements := func(elementType types.Type) []string {
-			elements := make([]string, 0)
+			var elements []string
 			i := 0
 			zero := c.zeroValue(elementType)
 			for _, element := range e.Elts {
@@ -797,7 +797,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			panic(fmt.Sprintf("Unhandled object: %T\n", o))
 		}
 
-	case *This:
+	case *this:
 		this := "this"
 		if len(c.flattened) != 0 {
 			this = "$this"

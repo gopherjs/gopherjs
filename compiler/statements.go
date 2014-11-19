@@ -203,18 +203,24 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 		case *types.Chan:
 			okVar := c.newIdent(c.newVariable("_ok"), types.Typ[types.Bool])
+			key := s.Key
+			tok := s.Tok
+			if key == nil {
+				key = ast.NewIdent("_")
+				tok = token.ASSIGN
+			}
 			forStmt := &ast.ForStmt{
 				Body: &ast.BlockStmt{
 					List: []ast.Stmt{
 						&ast.AssignStmt{
 							Lhs: []ast.Expr{
-								s.Key,
+								key,
 								okVar,
 							},
 							Rhs: []ast.Expr{
 								c.setType(&ast.UnaryExpr{X: c.newIdent(refVar, t), Op: token.ARROW}, types.NewTuple(types.NewVar(0, nil, "", t.Elem()), types.NewVar(0, nil, "", types.Typ[types.Bool]))),
 							},
-							Tok: s.Tok,
+							Tok: tok,
 						},
 						&ast.IfStmt{
 							Cond: &ast.UnaryExpr{X: okVar, Op: token.NOT},

@@ -203,13 +203,13 @@ func Trunc(x float64) float64 {
 }
 
 func Float32bits(f float32) uint32 {
-	if f == 0 {
-		if 1/f == float32(negInf) {
+	if js.InternalObject(f) == js.InternalObject(0) {
+		if js.InternalObject(1/f) == js.InternalObject(negInf) {
 			return 1 << 31
 		}
 		return 0
 	}
-	if f != f { // NaN
+	if js.InternalObject(f) != js.InternalObject(f) { // NaN
 		return 2143289344
 	}
 
@@ -222,10 +222,13 @@ func Float32bits(f float32) uint32 {
 	e := uint32(127 + 23)
 	for f >= 1<<24 {
 		f /= 2
+		e++
 		if e == (1<<8)-1 {
+			if f >= 1<<23 {
+				f = float32(posInf)
+			}
 			break
 		}
-		e++
 	}
 	for f < 1<<23 {
 		e--
@@ -287,10 +290,10 @@ func Float64bits(f float64) uint64 {
 	e := uint32(1023 + 52)
 	for f >= 1<<53 {
 		f /= 2
+		e++
 		if e == (1<<11)-1 {
 			break
 		}
-		e++
 	}
 	for f < 1<<52 {
 		e--

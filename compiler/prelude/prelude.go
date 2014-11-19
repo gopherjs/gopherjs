@@ -387,7 +387,7 @@ var $float32IsEqual = function(a, b) {
   if (a === b) {
     return true;
   }
-  if (a === 0 || b === 0 || a === 1/0 || b === 1/0 || a === -1/0 || b === -1/0 || a !== a || b !== b) {
+  if (a === 1/0 || b === 1/0 || a === -1/0 || b === -1/0 || a !== a || b !== b) {
     return false;
   }
   var math = $packages["math"];

@@ -517,13 +517,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			return c.formatExpr("%e.%s", e.X, strings.Join(fields, "."))
 		case types.MethodVal:
-			if !sel.Obj().Exported() {
-				c.p.dependencies[sel.Obj()] = true
-			}
-			recv := c.translateExpr(e.X)
-			if isWrapped(sel.Recv()) {
-				recv = c.formatParenExpr("new %s(%s)", c.typeName(sel.Recv()), recv)
-			}
+			recv := c.makeReceiver(e.X, sel)
 			return c.formatExpr(`$methodVal(%s, "%s")`, recv, sel.Obj().(*types.Func).Name())
 		case types.MethodExpr:
 			if !sel.Obj().Exported() {
@@ -609,35 +603,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 
 			switch sel.Kind() {
 			case types.MethodVal:
-				if !sel.Obj().Exported() {
-					c.p.dependencies[sel.Obj()] = true
-				}
-
-				methodName := sel.Obj().Name()
-				if reservedKeywords[methodName] {
-					methodName += "$"
-				}
-
-				recvType := sel.Recv()
-				_, isPointer := recvType.Underlying().(*types.Pointer)
-				methodsRecvType := sel.Obj().Type().(*types.Signature).Recv().Type()
-				_, pointerExpected := methodsRecvType.(*types.Pointer)
-				var recv *expression
-				switch {
-				case !isPointer && pointerExpected:
-					recv = c.translateExpr(c.setType(&ast.UnaryExpr{Op: token.AND, X: f.X}, methodsRecvType))
-				default:
-					recv = c.translateExpr(f.X)
-				}
-
-				for _, index := range sel.Index()[:len(sel.Index())-1] {
-					if ptr, isPtr := recvType.(*types.Pointer); isPtr {
-						recvType = ptr.Elem()
-					}
-					s := recvType.Underlying().(*types.Struct)
-					recv = c.formatExpr("%s.%s", recv, fieldName(s, index))
-					recvType = s.Field(index).Type()
-				}
+				recv := c.makeReceiver(f.X, sel)
 
 				if isJsPackage(sel.Obj().Pkg()) {
 					globalRef := func(id string) string {
@@ -713,9 +679,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					}
 				}
 
-				if isWrapped(methodsRecvType) {
-					fun = c.formatExpr("(new %s(%s)).%s", c.typeName(methodsRecvType), recv, methodName)
-					break
+				methodName := sel.Obj().Name()
+				if reservedKeywords[methodName] {
+					methodName += "$"
 				}
 				fun = c.formatExpr("%s.%s", recv, methodName)
 
@@ -814,6 +780,39 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		panic(fmt.Sprintf("Unhandled expression: %T\n", e))
 
 	}
+}
+
+func (c *funcContext) makeReceiver(x ast.Expr, sel *types.Selection) *expression {
+	if !sel.Obj().Exported() {
+		c.p.dependencies[sel.Obj()] = true
+	}
+
+	recvType := sel.Recv()
+	_, isPointer := recvType.Underlying().(*types.Pointer)
+	methodsRecvType := sel.Obj().Type().(*types.Signature).Recv().Type()
+	_, pointerExpected := methodsRecvType.(*types.Pointer)
+	var recv *expression
+	switch {
+	case !isPointer && pointerExpected:
+		recv = c.translateExpr(c.setType(&ast.UnaryExpr{Op: token.AND, X: x}, methodsRecvType))
+	default:
+		recv = c.translateExpr(x)
+	}
+
+	for _, index := range sel.Index()[:len(sel.Index())-1] {
+		if ptr, isPtr := recvType.(*types.Pointer); isPtr {
+			recvType = ptr.Elem()
+		}
+		s := recvType.Underlying().(*types.Struct)
+		recv = c.formatExpr("%s.%s", recv, fieldName(s, index))
+		recvType = s.Field(index).Type()
+	}
+
+	if isWrapped(methodsRecvType) {
+		recv = c.formatExpr("new %s(%s)", c.typeName(methodsRecvType), recv)
+	}
+
+	return recv
 }
 
 func (c *funcContext) translateBuiltin(name string, args []ast.Expr, ellipsis bool, typ types.Type) *expression {

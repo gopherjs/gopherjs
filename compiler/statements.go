@@ -26,11 +26,9 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	switch s := stmt.(type) {
 	case *ast.BlockStmt:
-		c.printLabel(label)
 		c.translateStmtList(s.List)
 
 	case *ast.IfStmt:
-		c.printLabel(label)
 		if s.Init != nil {
 			c.translateStmt(s.Init, "")
 		}
@@ -234,7 +232,6 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.BranchStmt:
-		c.printLabel(label)
 		normalLabel := ""
 		blockingLabel := ""
 		data := c.flowDatas[""]
@@ -258,7 +255,6 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.ReturnStmt:
-		c.printLabel(label)
 		results := s.Results
 		if c.resultNames != nil {
 			if len(s.Results) != 0 {
@@ -291,7 +287,6 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.DeferStmt:
-		c.printLabel(label)
 		isBuiltin := false
 		isJs := false
 		switch fun := s.Call.Fun.(type) {
@@ -326,7 +321,6 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		c.Printf("$deferred.push([%s, [%s]]);", c.translateExpr(s.Call.Fun), strings.Join(args, ", "))
 
 	case *ast.AssignStmt:
-		c.printLabel(label)
 		if s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
 			var op token.Token
 			switch s.Tok {
@@ -489,7 +483,6 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		}, label)
 
 	case *ast.DeclStmt:
-		c.printLabel(label)
 		decl := s.Decl.(*ast.GenDecl)
 		switch decl.Tok {
 		case token.VAR:
@@ -524,18 +517,18 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.ExprStmt:
-		c.printLabel(label)
 		expr := c.translateExpr(s.X)
 		if expr != nil {
 			c.Printf("%s;", expr)
 		}
 
 	case *ast.LabeledStmt:
-		c.printLabel(label)
+		if labelCase, ok := c.labelCases[s.Label.Name]; ok {
+			c.PrintCond(false, s.Label.Name+":", fmt.Sprintf("case %d:", labelCase))
+		}
 		c.translateStmt(s.Stmt, s.Label.Name)
 
 	case *ast.GoStmt:
-		c.printLabel(label)
 		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid()), ", "))
 
 	case *ast.SendStmt:
@@ -681,9 +674,6 @@ clauseLoop:
 	}
 
 	var caseOffset, endCase int
-	if _, ok := c.labelCases[label]; ok {
-		flatten = true // always flatten if label is referenced by goto
-	}
 	if flatten {
 		caseOffset = c.caseCounter
 		endCase = caseOffset + len(branches) - 1
@@ -708,7 +698,6 @@ clauseLoop:
 		}()
 	}
 
-	c.printLabel(label)
 	if isSwitch && !flatten && label != "" {
 		c.Printf("%s:", label)
 	}
@@ -762,9 +751,6 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 	data := &flowData{
 		postStmt: post,
 	}
-	if _, ok := c.labelCases[label]; ok {
-		flatten = true // always flatten if label is referenced by goto
-	}
 	if flatten {
 		data.beginCase = c.caseCounter
 		data.endCase = c.caseCounter + 1
@@ -777,7 +763,6 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 		c.flowDatas[""] = prevFlowData
 	}()
 
-	c.printLabel(label)
 	if !flatten && label != "" {
 		c.Printf("%s:", label)
 	}
@@ -891,14 +876,6 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 		}
 	default:
 		panic(fmt.Sprintf("Unhandled lhs type: %T\n", l))
-	}
-}
-
-func (c *funcContext) printLabel(label string) {
-	if label != "" {
-		if labelCase, ok := c.labelCases[label]; ok {
-			c.PrintCond(false, label+":", fmt.Sprintf("case %d:", labelCase))
-		}
 	}
 }
 

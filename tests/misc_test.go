@@ -107,3 +107,14 @@ func blockingWithUnnamedParameter(bool) {
 	c := make(chan int, 1)
 	c <- 42
 }
+
+func TestGotoLoop(t *testing.T) {
+	goto loop
+loop:
+	for i := 42; ; {
+		if i != 42 {
+			t.Fail()
+		}
+		break
+	}
+}

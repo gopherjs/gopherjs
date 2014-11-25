@@ -58,7 +58,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- base64       | yes                   |                                   |
 | -- binary       | yes                   |                                   |
 | -- csv          | yes                   |                                   |
-| -- gob          | soon                  | will become supported with Go 1.4 |
+| -- gob          | yes                   |                                   |
 | -- hex          | yes                   |                                   |
 | -- json         | yes                   |                                   |
 | -- pem          | yes                   |                                   |

@@ -406,7 +406,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 
 		archive.Declarations = append(archive.Declarations, Decl{
-			BodyCode: removeWhitespace(append(append([]byte("\t$pkg.$run = function($b) {\n"), c.translateFunctionBody(stmts)...), []byte("\t};\n")...), minify),
+			BodyCode: removeWhitespace(append(append([]byte("\t$pkg.$run = function($b) {\n"), c.translateFunctionBody(stmts)...), []byte("\t\t$flushConsole();\n\t};\n")...), minify),
 		})
 	}
 

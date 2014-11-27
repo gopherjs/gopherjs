@@ -30,6 +30,7 @@ var $parseFloat = function(f) {
   }
   return parseFloat(f);
 };
+var $flushConsole = function() {};
 
 var $mapArray = function(array, f) {
   var newArray = new array.constructor(array.length), i;

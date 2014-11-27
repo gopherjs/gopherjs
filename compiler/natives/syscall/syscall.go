@@ -11,6 +11,15 @@ import (
 var warningPrinted = false
 var lineBuffer []byte
 
+func init() {
+	js.Global.Set("$flushConsole", js.InternalObject(func() {
+		if len(lineBuffer) != 0 {
+			js.Global.Get("console").Call("log", string(lineBuffer))
+			lineBuffer = nil
+		}
+	}))
+}
+
 func printWarning() {
 	if !warningPrinted {
 		println("warning: system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")

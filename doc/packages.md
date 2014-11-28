@@ -3,7 +3,7 @@ Supported Packages
 
 On each commit, Circle CI automatically compiles all supported packages with GopherJS and runs their tests:
 
-[![Circle CI](https://circleci.com/gh/gopherjs/gopherjs.png?style=badge)](https://circleci.com/gh/gopherjs/gopherjs)
+[![Circle CI](https://circleci.com/gh/gopherjs/gopherjs.svg?style=svg)](https://circleci.com/gh/gopherjs/gopherjs)
 
 | Name            | Supported (Tests OK?) | Comment                           |
 | --------------- | --------------------- | --------------------------------- |

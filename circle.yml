@@ -3,6 +3,8 @@ machine:
     version: 0.11.14
 
 dependencies:
+  pre:
+    - cd /usr/local && sudo rm -rf go && curl https://storage.googleapis.com/golang/go1.3.3.linux-amd64.tar.gz | sudo tar -xz && sudo chmod a+w go/src/pkg/path/filepath
   post:
     - npm install --global node-gyp
     - cd node-syscall && node-gyp rebuild && mkdir -p ~/.node_libraries/ && cp build/Release/syscall.node ~/.node_libraries/syscall.node

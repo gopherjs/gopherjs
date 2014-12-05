@@ -432,7 +432,7 @@ func (c *funcContext) translateType(o *types.TypeName, toplevel bool) {
 	case *types.Basic, *types.Array, *types.Slice, *types.Chan, *types.Signature, *types.Interface, *types.Pointer, *types.Map:
 		size = sizes32.Sizeof(t)
 	}
-	c.Printf(`%s = $newType(%d, "%s", "%s.%s", "%s", "%s", %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), constructor)
+	c.Printf(`%s = $newType(%d, %s, "%s.%s", "%s", "%s", %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), constructor)
 }
 
 func (c *funcContext) initType(o types.Object) {

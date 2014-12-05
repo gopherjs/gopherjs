@@ -132,7 +132,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			for len(elements) < int(t.Len()) {
 				elements = append(elements, zero)
 			}
-			return c.formatExpr(`$toNativeArray("%s", [%s])`, typeKind(t.Elem()), strings.Join(elements, ", "))
+			return c.formatExpr(`$toNativeArray(%s, [%s])`, typeKind(t.Elem()), strings.Join(elements, ", "))
 		case *types.Slice:
 			return c.formatExpr("new %s([%s])", c.typeName(exprType), strings.Join(collectIndexedElements(t.Elem()), ", "))
 		case *types.Map:
@@ -1155,7 +1155,7 @@ func (c *funcContext) loadStruct(array, target string, s *types.Struct) string {
 				code += fmt.Sprintf(", %s = %s.get%s(%d, true)", field.Name(), view, toJavaScriptType(t), offsets[i])
 			}
 		case *types.Array:
-			code += fmt.Sprintf(`, %s = new ($nativeArray("%s"))(%s.buffer, $min(%s.byteOffset + %d, %s.buffer.byteLength))`, field.Name(), typeKind(t.Elem()), array, array, offsets[i], array)
+			code += fmt.Sprintf(`, %s = new ($nativeArray(%s))(%s.buffer, $min(%s.byteOffset + %d, %s.buffer.byteLength))`, field.Name(), typeKind(t.Elem()), array, array, offsets[i], array)
 		}
 	}
 	return code

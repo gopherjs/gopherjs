@@ -3,20 +3,20 @@ package prelude
 const jsmapping = `
 var $needsExternalization = function(t) {
   switch (t.kind) {
-    case "Bool":
-    case "Int":
-    case "Int8":
-    case "Int16":
-    case "Int32":
-    case "Uint":
-    case "Uint8":
-    case "Uint16":
-    case "Uint32":
-    case "Uintptr":
-    case "Float32":
-    case "Float64":
+    case $kindBool:
+    case $kindInt:
+    case $kindInt8:
+    case $kindInt16:
+    case $kindInt32:
+    case $kindUint:
+    case $kindUint8:
+    case $kindUint16:
+    case $kindUint32:
+    case $kindUintptr:
+    case $kindFloat32:
+    case $kindFloat64:
       return false;
-    case "Interface":
+    case $kindInterface:
       return t !== $packages["github.com/gopherjs/gopherjs/js"].Object;
     default:
       return true;
@@ -25,28 +25,28 @@ var $needsExternalization = function(t) {
 
 var $externalize = function(v, t) {
   switch (t.kind) {
-  case "Bool":
-  case "Int":
-  case "Int8":
-  case "Int16":
-  case "Int32":
-  case "Uint":
-  case "Uint8":
-  case "Uint16":
-  case "Uint32":
-  case "Uintptr":
-  case "Float32":
-  case "Float64":
+  case $kindBool:
+  case $kindInt:
+  case $kindInt8:
+  case $kindInt16:
+  case $kindInt32:
+  case $kindUint:
+  case $kindUint8:
+  case $kindUint16:
+  case $kindUint32:
+  case $kindUintptr:
+  case $kindFloat32:
+  case $kindFloat64:
     return v;
-  case "Int64":
-  case "Uint64":
+  case $kindInt64:
+  case $kindUint64:
     return $flatten64(v);
-  case "Array":
+  case $kindArray:
     if ($needsExternalization(t.elem)) {
       return $mapArray(v, function(e) { return $externalize(e, t.elem); });
     }
     return v;
-  case "Func":
+  case $kindFunc:
     if (v === $throwNilPointerError) {
       return null;
     }
@@ -91,7 +91,7 @@ var $externalize = function(v, t) {
       };
     }
     return v.$externalizeWrapper;
-  case "Interface":
+  case $kindInterface:
     if (v === $ifaceNil) {
       return null;
     }
@@ -99,7 +99,7 @@ var $externalize = function(v, t) {
       return v;
     }
     return $externalize(v.$val, v.constructor);
-  case "Map":
+  case $kindMap:
     var m = {};
     var keys = $keys(v), i;
     for (i = 0; i < keys.length; i++) {
@@ -107,7 +107,7 @@ var $externalize = function(v, t) {
       m[$externalize(entry.k, t.key)] = $externalize(entry.v, t.elem);
     }
     return m;
-  case "Ptr":
+  case $kindPtr:
     var o = {}, i;
     for (i = 0; i < t.methods.length; i++) {
       var m = t.methods[i];
@@ -121,19 +121,19 @@ var $externalize = function(v, t) {
       })(m);
     }
     return o;
-  case "Slice":
+  case $kindSlice:
     if ($needsExternalization(t.elem)) {
       return $mapArray($sliceToArray(v), function(e) { return $externalize(e, t.elem); });
     }
     return $sliceToArray(v);
-  case "String":
+  case $kindString:
     var s = "", r, i, j = 0;
     for (i = 0; i < v.length; i += r[1], j++) {
       r = $decodeRune(v, i);
       s += String.fromCharCode(r[0]);
     }
     return s;
-  case "Struct":
+  case $kindStruct:
     var timePkg = $packages["time"];
     if (timePkg && v.constructor === timePkg.Time.Ptr) {
       var milli = $div64(v.UnixNano(), new $Int64(0, 1000000));
@@ -154,37 +154,37 @@ var $externalize = function(v, t) {
 
 var $internalize = function(v, t, recv) {
   switch (t.kind) {
-  case "Bool":
+  case $kindBool:
     return !!v;
-  case "Int":
+  case $kindInt:
     return parseInt(v);
-  case "Int8":
+  case $kindInt8:
     return parseInt(v) << 24 >> 24;
-  case "Int16":
+  case $kindInt16:
     return parseInt(v) << 16 >> 16;
-  case "Int32":
+  case $kindInt32:
     return parseInt(v) >> 0;
-  case "Uint":
+  case $kindUint:
     return parseInt(v);
-  case "Uint8":
+  case $kindUint8:
     return parseInt(v) << 24 >>> 24;
-  case "Uint16":
+  case $kindUint16:
     return parseInt(v) << 16 >>> 16;
-  case "Uint32":
-  case "Uintptr":
+  case $kindUint32:
+  case $kindUintptr:
     return parseInt(v) >>> 0;
-  case "Int64":
-  case "Uint64":
+  case $kindInt64:
+  case $kindUint64:
     return new t(0, v);
-  case "Float32":
-  case "Float64":
+  case $kindFloat32:
+  case $kindFloat64:
     return parseFloat(v);
-  case "Array":
+  case $kindArray:
     if (v.length !== t.len) {
       $throwRuntimeError("got array with wrong size from JavaScript native");
     }
     return $mapArray(v, function(e) { return $internalize(e, t.elem); });
-  case "Func":
+  case $kindFunc:
     return function() {
       var args = [], i;
       for (i = 0; i < t.params.length; i++) {
@@ -210,7 +210,7 @@ var $internalize = function(v, t, recv) {
         return result;
       }
     };
-  case "Interface":
+  case $kindInterface:
     if (t === $packages["github.com/gopherjs/gopherjs/js"].Object) {
       return v;
     }
@@ -257,7 +257,7 @@ var $internalize = function(v, t, recv) {
       var mapType = $mapType($String, $emptyInterface);
       return new mapType($internalize(v, mapType));
     }
-  case "Map":
+  case $kindMap:
     var m = new $Map();
     var keys = $keys(v), i;
     for (i = 0; i < keys.length; i++) {
@@ -265,9 +265,9 @@ var $internalize = function(v, t, recv) {
       m[key.$key ? key.$key() : key] = { k: key, v: $internalize(v[keys[i]], t.elem) };
     }
     return m;
-  case "Slice":
+  case $kindSlice:
     return new t($mapArray(v, function(e) { return $internalize(e, t.elem); }));
-  case "String":
+  case $kindString:
     v = String(v);
     var s = "", i;
     for (i = 0; i < v.length; i++) {

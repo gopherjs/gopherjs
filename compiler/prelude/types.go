@@ -1,32 +1,59 @@
 package prelude
 
 const types = `
+var $kindBool = 1;
+var $kindInt = 2;
+var $kindInt8 = 3;
+var $kindInt16 = 4;
+var $kindInt32 = 5;
+var $kindInt64 = 6;
+var $kindUint = 7;
+var $kindUint8 = 8;
+var $kindUint16 = 9;
+var $kindUint32 = 10;
+var $kindUint64 = 11;
+var $kindUintptr = 12;
+var $kindFloat32 = 13;
+var $kindFloat64 = 14;
+var $kindComplex64 = 15;
+var $kindComplex128 = 16;
+var $kindArray = 17;
+var $kindChan = 18;
+var $kindFunc = 19;
+var $kindInterface = 20;
+var $kindMap = 21;
+var $kindPtr = 22;
+var $kindSlice = 23;
+var $kindString = 24;
+var $kindStruct = 25;
+var $kindUnsafePointer = 26;
+
 var $newType = function(size, kind, string, name, pkgPath, constructor) {
   var typ;
   switch(kind) {
-  case "Bool":
-  case "Int":
-  case "Int8":
-  case "Int16":
-  case "Int32":
-  case "Uint":
-  case "Uint8" :
-  case "Uint16":
-  case "Uint32":
-  case "Uintptr":
-  case "String":
-  case "UnsafePointer":
+  case $kindBool:
+  case $kindInt:
+  case $kindInt8:
+  case $kindInt16:
+  case $kindInt32:
+  case $kindUint:
+  case $kindUint8:
+  case $kindUint16:
+  case $kindUint32:
+  case $kindUintptr:
+  case $kindString:
+  case $kindUnsafePointer:
     typ = function(v) { this.$val = v; };
     typ.prototype.$key = function() { return string + "$" + this.$val; };
     break;
 
-  case "Float32":
-  case "Float64":
+  case $kindFloat32:
+  case $kindFloat64:
     typ = function(v) { this.$val = v; };
     typ.prototype.$key = function() { return string + "$" + $floatKey(this.$val); };
     break;
 
-  case "Int64":
+  case $kindInt64:
     typ = function(high, low) {
       this.$high = (high + Math.floor(Math.ceil(low) / 4294967296)) >> 0;
       this.$low = low >>> 0;
@@ -35,7 +62,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     typ.prototype.$key = function() { return string + "$" + this.$high + "$" + this.$low; };
     break;
 
-  case "Uint64":
+  case $kindUint64:
     typ = function(high, low) {
       this.$high = (high + Math.floor(Math.ceil(low) / 4294967296)) >>> 0;
       this.$low = low >>> 0;
@@ -44,8 +71,8 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     typ.prototype.$key = function() { return string + "$" + this.$high + "$" + this.$low; };
     break;
 
-  case "Complex64":
-  case "Complex128":
+  case $kindComplex64:
+  case $kindComplex128:
     typ = function(real, imag) {
       this.$real = real;
       this.$imag = imag;
@@ -54,9 +81,9 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     typ.prototype.$key = function() { return string + "$" + this.$real + "$" + this.$imag; };
     break;
 
-  case "Array":
+  case $kindArray:
     typ = function(v) { this.$val = v; };
-    typ.Ptr = $newType(4, "Ptr", "*" + string, "", "", function(array) {
+    typ.Ptr = $newType(4, $kindPtr, "*" + string, "", "", function(array) {
       this.$get = function() { return array; };
       this.$set = function(v) { $copy(this, v, typ); };
       this.$val = array;
@@ -78,7 +105,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     };
     break;
 
-  case "Chan":
+  case $kindChan:
     typ = function(capacity) {
       this.$val = this;
       this.$capacity = capacity;
@@ -106,7 +133,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     };
     break;
 
-  case "Func":
+  case $kindFunc:
     typ = function(v) { this.$val = v; };
     typ.init = function(params, results, variadic) {
       typ.params = params;
@@ -119,7 +146,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     };
     break;
 
-  case "Interface":
+  case $kindInterface:
     typ = { implementedBy: {}, missingMethodFor: {} };
     typ.init = function(methods) {
       typ.methods = methods;
@@ -133,7 +160,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     };
     break;
 
-  case "Map":
+  case $kindMap:
     typ = function(v) { this.$val = v; };
     typ.init = function(key, elem) {
       typ.key = key;
@@ -144,7 +171,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     };
     break;
 
-  case "Ptr":
+  case $kindPtr:
     typ = constructor || function(getter, setter, target) {
       this.$get = getter;
       this.$set = setter;
@@ -166,7 +193,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     };
     break;
 
-  case "Slice":
+  case $kindSlice:
     var nativeArray;
     typ = function(array) {
       if (array.constructor !== nativeArray) {
@@ -200,9 +227,9 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     };
     break;
 
-  case "Struct":
+  case $kindStruct:
     typ = function(v) { this.$val = v; };
-    typ.Ptr = $newType(4, "Ptr", "*" + string, "", "", constructor);
+    typ.Ptr = $newType(4, $kindPtr, "*" + string, "", "", constructor);
     typ.Ptr.Struct = typ;
     typ.Ptr.prototype.$get = function() { return this; };
     typ.Ptr.prototype.$set = function(v) { $copy(this, v, typ); };
@@ -270,53 +297,53 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
   }
 
   switch(kind) {
-  case "Bool":
-  case "Map":
+  case $kindBool:
+  case $kindMap:
     typ.zero = function() { return false; };
     break;
 
-  case "Int":
-  case "Int8":
-  case "Int16":
-  case "Int32":
-  case "Uint":
-  case "Uint8" :
-  case "Uint16":
-  case "Uint32":
-  case "Uintptr":
-  case "UnsafePointer":
-  case "Float32":
-  case "Float64":
+  case $kindInt:
+  case $kindInt8:
+  case $kindInt16:
+  case $kindInt32:
+  case $kindUint:
+  case $kindUint8 :
+  case $kindUint16:
+  case $kindUint32:
+  case $kindUintptr:
+  case $kindUnsafePointer:
+  case $kindFloat32:
+  case $kindFloat64:
     typ.zero = function() { return 0; };
     break;
 
-  case "String":
+  case $kindString:
     typ.zero = function() { return ""; };
     break;
 
-  case "Int64":
-  case "Uint64":
-  case "Complex64":
-  case "Complex128":
+  case $kindInt64:
+  case $kindUint64:
+  case $kindComplex64:
+  case $kindComplex128:
     var zero = new typ(0, 0);
     typ.zero = function() { return zero; };
     break;
 
-  case "Chan":
-  case "Ptr":
-  case "Slice":
+  case $kindChan:
+  case $kindPtr:
+  case $kindSlice:
     typ.zero = function() { return typ.nil; };
     break;
 
-  case "Func":
+  case $kindFunc:
     typ.zero = function() { return $throwNilPointerError; };
     break;
 
-  case "Interface":
+  case $kindInterface:
     typ.zero = function() { return $ifaceNil; };
     break;
 
-  case "Array":
+  case $kindArray:
     typ.zero = function() {
       var arrayClass = $nativeArray(typ.elem.kind);
       if (arrayClass !== Array) {
@@ -330,7 +357,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     };
     break;
 
-  case "Struct":
+  case $kindStruct:
     typ.zero = function() { return new typ.Ptr(); };
     break;
 
@@ -346,7 +373,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
   var rt = null;
   typ.reflectType = function() {
     if (rt === null) {
-      rt = new $reflect.rtype.Ptr(size, 0, 0, 0, 0, $reflect.kinds[kind], undefined, undefined, $newStringPtr(string), undefined, undefined);
+      rt = new $reflect.rtype.Ptr(size, 0, 0, 0, 0, kind, undefined, undefined, $newStringPtr(string), undefined, undefined);
       rt.jsType = typ;
 
       var methods = [];
@@ -373,27 +400,52 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
   return typ;
 };
 
-var $Bool          = $newType( 1, "Bool",          "bool",           "bool",       "", null);
-var $Int           = $newType( 4, "Int",           "int",            "int",        "", null);
-var $Int8          = $newType( 1, "Int8",          "int8",           "int8",       "", null);
-var $Int16         = $newType( 2, "Int16",         "int16",          "int16",      "", null);
-var $Int32         = $newType( 4, "Int32",         "int32",          "int32",      "", null);
-var $Int64         = $newType( 8, "Int64",         "int64",          "int64",      "", null);
-var $Uint          = $newType( 4, "Uint",          "uint",           "uint",       "", null);
-var $Uint8         = $newType( 1, "Uint8",         "uint8",          "uint8",      "", null);
-var $Uint16        = $newType( 2, "Uint16",        "uint16",         "uint16",     "", null);
-var $Uint32        = $newType( 4, "Uint32",        "uint32",         "uint32",     "", null);
-var $Uint64        = $newType( 8, "Uint64",        "uint64",         "uint64",     "", null);
-var $Uintptr       = $newType( 4, "Uintptr",       "uintptr",        "uintptr",    "", null);
-var $Float32       = $newType( 4, "Float32",       "float32",        "float32",    "", null);
-var $Float64       = $newType( 8, "Float64",       "float64",        "float64",    "", null);
-var $Complex64     = $newType( 8, "Complex64",     "complex64",      "complex64",  "", null);
-var $Complex128    = $newType(16, "Complex128",    "complex128",     "complex128", "", null);
-var $String        = $newType( 8, "String",        "string",         "string",     "", null);
-var $UnsafePointer = $newType( 4, "UnsafePointer", "unsafe.Pointer", "Pointer",    "", null);
+var $Bool          = $newType( 1, $kindBool,          "bool",           "bool",       "", null);
+var $Int           = $newType( 4, $kindInt,           "int",            "int",        "", null);
+var $Int8          = $newType( 1, $kindInt8,          "int8",           "int8",       "", null);
+var $Int16         = $newType( 2, $kindInt16,         "int16",          "int16",      "", null);
+var $Int32         = $newType( 4, $kindInt32,         "int32",          "int32",      "", null);
+var $Int64         = $newType( 8, $kindInt64,         "int64",          "int64",      "", null);
+var $Uint          = $newType( 4, $kindUint,          "uint",           "uint",       "", null);
+var $Uint8         = $newType( 1, $kindUint8,         "uint8",          "uint8",      "", null);
+var $Uint16        = $newType( 2, $kindUint16,        "uint16",         "uint16",     "", null);
+var $Uint32        = $newType( 4, $kindUint32,        "uint32",         "uint32",     "", null);
+var $Uint64        = $newType( 8, $kindUint64,        "uint64",         "uint64",     "", null);
+var $Uintptr       = $newType( 4, $kindUintptr,       "uintptr",        "uintptr",    "", null);
+var $Float32       = $newType( 4, $kindFloat32,       "float32",        "float32",    "", null);
+var $Float64       = $newType( 8, $kindFloat64,       "float64",        "float64",    "", null);
+var $Complex64     = $newType( 8, $kindComplex64,     "complex64",      "complex64",  "", null);
+var $Complex128    = $newType(16, $kindComplex128,    "complex128",     "complex128", "", null);
+var $String        = $newType( 8, $kindString,        "string",         "string",     "", null);
+var $UnsafePointer = $newType( 4, $kindUnsafePointer, "unsafe.Pointer", "Pointer",    "", null);
 
 var $nativeArray = function(elemKind) {
-  return ({ Int: Int32Array, Int8: Int8Array, Int16: Int16Array, Int32: Int32Array, Uint: Uint32Array, Uint8: Uint8Array, Uint16: Uint16Array, Uint32: Uint32Array, Uintptr: Uint32Array, Float32: Float32Array, Float64: Float64Array })[elemKind] || Array;
+  switch (elemKind) {
+  case $kindInt:
+    return Int32Array;
+  case $kindInt8:
+    return Int8Array;
+  case $kindInt16:
+    return Int16Array;
+  case $kindInt32:
+    return Int32Array;
+  case $kindUint:
+    return Uint32Array;
+  case $kindUint8:
+    return Uint8Array;
+  case $kindUint16:
+    return Uint16Array;
+  case $kindUint32:
+    return Uint32Array;
+  case $kindUintptr:
+    return Uint32Array;
+  case $kindFloat32:
+    return Float32Array;
+  case $kindFloat64:
+    return Float64Array;
+  default:
+    return Array;
+  }
 };
 var $toNativeArray = function(elemKind, array) {
   var nativeArray = $nativeArray(elemKind);
@@ -407,7 +459,7 @@ var $arrayType = function(elem, len) {
   var string = "[" + len + "]" + elem.string;
   var typ = $arrayTypes[string];
   if (typ === undefined) {
-    typ = $newType(12, "Array", string, "", "", null);
+    typ = $newType(12, $kindArray, string, "", "", null);
     typ.init(elem, len);
     $arrayTypes[string] = typ;
   }
@@ -419,7 +471,7 @@ var $chanType = function(elem, sendOnly, recvOnly) {
   var field = sendOnly ? "SendChan" : (recvOnly ? "RecvChan" : "Chan");
   var typ = elem[field];
   if (typ === undefined) {
-    typ = $newType(4, "Chan", string, "", "", null);
+    typ = $newType(4, $kindChan, string, "", "", null);
     typ.init(elem, sendOnly, recvOnly);
     elem[field] = typ;
   }
@@ -440,7 +492,7 @@ var $funcType = function(params, results, variadic) {
   }
   var typ = $funcTypes[string];
   if (typ === undefined) {
-    typ = $newType(4, "Func", string, "", "", null);
+    typ = $newType(4, $kindFunc, string, "", "", null);
     typ.init(params, results, variadic);
     $funcTypes[string] = typ;
   }
@@ -457,7 +509,7 @@ var $interfaceType = function(methods) {
   }
   var typ = $interfaceTypes[string];
   if (typ === undefined) {
-    typ = $newType(8, "Interface", string, "", "", null);
+    typ = $newType(8, $kindInterface, string, "", "", null);
     typ.init(methods);
     $interfaceTypes[string] = typ;
   }
@@ -465,7 +517,7 @@ var $interfaceType = function(methods) {
 };
 var $emptyInterface = $interfaceType([]);
 var $ifaceNil = { $key: function() { return "nil"; } };
-var $error = $newType(8, "Interface", "error", "error", "", null);
+var $error = $newType(8, $kindInterface, "error", "error", "", null);
 $error.init([["Error", "Error", "", $funcType([], [$String], false)]]);
 
 var $Map = function() {};
@@ -480,7 +532,7 @@ var $mapType = function(key, elem) {
   var string = "map[" + key.string + "]" + elem.string;
   var typ = $mapTypes[string];
   if (typ === undefined) {
-    typ = $newType(4, "Map", string, "", "", null);
+    typ = $newType(4, $kindMap, string, "", "", null);
     typ.init(key, elem);
     $mapTypes[string] = typ;
   }
@@ -492,7 +544,7 @@ var $throwNilPointerError = function() { $throwRuntimeError("invalid memory addr
 var $ptrType = function(elem) {
   var typ = elem.Ptr;
   if (typ === undefined) {
-    typ = $newType(4, "Ptr", "*" + elem.string, "", "", null);
+    typ = $newType(4, $kindPtr, "*" + elem.string, "", "", null);
     typ.init(elem);
     elem.Ptr = typ;
   }
@@ -522,7 +574,7 @@ var $newDataPointer = function(data, constructor) {
 var $sliceType = function(elem) {
   var typ = elem.Slice;
   if (typ === undefined) {
-    typ = $newType(12, "Slice", "[]" + elem.string, "", "", null);
+    typ = $newType(12, $kindSlice, "[]" + elem.string, "", "", null);
     typ.init(elem);
     elem.Slice = typ;
   }
@@ -539,7 +591,7 @@ var $structType = function(fields) {
   }
   var typ = $structTypes[string];
   if (typ === undefined) {
-    typ = $newType(0, "Struct", string, "", "", function() {
+    typ = $newType(0, $kindStruct, string, "", "", function() {
       this.$val = this;
       var i;
       for (i = 0; i < fields.length; i++) {
@@ -559,7 +611,7 @@ var $structType = function(fields) {
           typ.methods.push(m);
           typ.Ptr.methods.push(m);
         }
-        if (field[3].kind === "Struct") {
+        if (field[3].kind === $kindStruct) {
           var methods = field[3].Ptr.methods;
           for (j = 0; j < methods.length; j++) {
             typ.Ptr.methods.push(methods[j].slice(0, 6).concat([i]));
@@ -574,7 +626,7 @@ var $structType = function(fields) {
 };
 
 var $assertType = function(value, type, returnTuple) {
-  var isInterface = (type.kind === "Interface"), ok, missingMethod = "";
+  var isInterface = (type.kind === $kindInterface), ok, missingMethod = "";
   if (value === $ifaceNil) {
     ok = false;
   } else if (!isInterface) {

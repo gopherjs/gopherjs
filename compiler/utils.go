@@ -286,7 +286,7 @@ func (c *funcContext) typeName(ty types.Type) string {
 		}
 		return fmt.Sprintf("($interfaceType(%s))", c.initArgs(t))
 	case *types.Array, *types.Chan, *types.Slice, *types.Map, *types.Signature, *types.Struct:
-		return fmt.Sprintf("($%sType(%s))", strings.ToLower(typeKind(t)), c.initArgs(t))
+		return fmt.Sprintf("($%sType(%s))", strings.ToLower(typeKind(t)[5:]), c.initArgs(t))
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
@@ -338,23 +338,23 @@ func fieldName(t *types.Struct, i int) string {
 func typeKind(ty types.Type) string {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
-		return toJavaScriptType(t)
+		return "$kind" + toJavaScriptType(t)
 	case *types.Array:
-		return "Array"
+		return "$kindArray"
 	case *types.Chan:
-		return "Chan"
+		return "$kindChan"
 	case *types.Interface:
-		return "Interface"
+		return "$kindInterface"
 	case *types.Map:
-		return "Map"
+		return "$kindMap"
 	case *types.Signature:
-		return "Func"
+		return "$kindFunc"
 	case *types.Slice:
-		return "Slice"
+		return "$kindSlice"
 	case *types.Struct:
-		return "Struct"
+		return "$kindStruct"
 	case *types.Pointer:
-		return "Ptr"
+		return "$kindPtr"
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}

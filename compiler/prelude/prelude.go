@@ -230,10 +230,10 @@ var $copySlice = function(dst, src) {
 var $copy = function(dst, src, type) {
   var i;
   switch (type.kind) {
-  case "Array":
+  case $kindArray:
     $internalCopy(dst, src, 0, 0, src.length, type.elem);
     return true;
-  case "Struct":
+  case $kindStruct:
     for (i = 0; i < type.fields.length; i++) {
       var field = type.fields[i];
       var name = field[0];
@@ -259,8 +259,8 @@ var $internalCopy = function(dst, src, dstOffset, srcOffset, n, elem) {
   }
 
   switch (elem.kind) {
-  case "Array":
-  case "Struct":
+  case $kindArray:
+  case $kindStruct:
     for (i = 0; i < n; i++) {
       $copy(dst[dstOffset + i], src[srcOffset + i], elem);
     }
@@ -328,21 +328,21 @@ var $equal = function(a, b, type) {
   }
   var i;
   switch (type.kind) {
-  case "Float32":
+  case $kindFloat32:
     return $float32IsEqual(a, b);
-  case "Complex64":
+  case $kindComplex64:
     return $float32IsEqual(a.$real, b.$real) && $float32IsEqual(a.$imag, b.$imag);
-  case "Complex128":
+  case $kindComplex128:
     return a.$real === b.$real && a.$imag === b.$imag;
-  case "Int64":
-  case "Uint64":
+  case $kindInt64:
+  case $kindUint64:
     return a.$high === b.$high && a.$low === b.$low;
-  case "Ptr":
+  case $kindPtr:
     if (a.constructor.Struct) {
       return false;
     }
     return $pointerIsEqual(a, b);
-  case "Array":
+  case $kindArray:
     if (a.length != b.length) {
       return false;
     }
@@ -353,7 +353,7 @@ var $equal = function(a, b, type) {
       }
     }
     return true;
-  case "Struct":
+  case $kindStruct:
     for (i = 0; i < type.fields.length; i++) {
       var field = type.fields[i];
       var name = field[0];
@@ -372,10 +372,10 @@ var $interfaceIsEqual = function(a, b) {
     return a === b;
   }
   switch (a.constructor.kind) {
-  case "Func":
-  case "Map":
-  case "Slice":
-  case "Struct":
+  case $kindFunc:
+  case $kindMap:
+  case $kindSlice:
+  case $kindStruct:
     $throwRuntimeError("comparing uncomparable type " + a.constructor.string);
   case undefined: /* js.Object */
     return a === b;

@@ -108,7 +108,7 @@ var This Object
 // Arguments gives the value of JavaScript's "arguments" keyword. It can be used when passing Go functions to JavaScript as callbacks. Set this to a mock for testing with pure Go.
 var Arguments []Object
 
-// Module gives the value of the "module" variable set by Node.js.
+// Module gives the value of the "module" variable set by Node.js. Hint: Set a module export with 'js.Module.Get("exports").Set("exportName", ...)'.
 var Module Object
 
 // Debugger gets compiled to JavaScript's "debugger;" statement.

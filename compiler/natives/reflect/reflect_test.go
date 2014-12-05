@@ -17,3 +17,7 @@ func TestSelect(t *testing.T) {
 func TestSliceOverflow(t *testing.T) {
 	t.Skip()
 }
+
+func TestFuncLayout(t *testing.T) {
+	t.Skip()
+}

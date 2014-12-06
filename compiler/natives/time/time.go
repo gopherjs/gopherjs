@@ -48,7 +48,7 @@ func Sleep(d Duration) {
 
 func startTimer(t *runtimeTimer) {
 	t.active = true
-	diff := (t.when - runtimeNano()) / int64(Millisecond)
+	diff := (t.when - runtimeNano() + int64(Millisecond-Nanosecond)) / int64(Millisecond)
 	if diff > 1<<31-1 { // math.MaxInt32
 		return
 	}

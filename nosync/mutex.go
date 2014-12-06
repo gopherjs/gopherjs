@@ -29,9 +29,7 @@ type RWMutex struct {
 
 // Lock locks m for writing. It is a run-time error if rw is already locked for reading or writing.
 func (rw *RWMutex) Lock() {
-	println("Lock")
 	if rw.readLockCounter != 0 || rw.writeLocked {
-		println("FAIL")
 		panic("nosync: mutex is already locked")
 	}
 	rw.writeLocked = true
@@ -39,7 +37,6 @@ func (rw *RWMutex) Lock() {
 
 // Unlock unlocks rw for writing. It is a run-time error if rw is not locked for writing.
 func (rw *RWMutex) Unlock() {
-	println("Unlock")
 	if !rw.writeLocked {
 		panic("nosync: unlock of unlocked mutex")
 	}
@@ -48,7 +45,6 @@ func (rw *RWMutex) Unlock() {
 
 // RLock locks m for reading. It is a run-time error if rw is already locked for reading or writing.
 func (rw *RWMutex) RLock() {
-	println("RLock")
 	if rw.writeLocked {
 		panic("nosync: mutex is already locked")
 	}
@@ -57,9 +53,33 @@ func (rw *RWMutex) RLock() {
 
 // RUnlock undoes a single RLock call; it does not affect other simultaneous readers. It is a run-time error if rw is not locked for reading.
 func (rw *RWMutex) RUnlock() {
-	println("RUnlock")
 	if rw.readLockCounter == 0 {
 		panic("nosync: unlock of unlocked mutex")
 	}
 	rw.readLockCounter--
+}
+
+// WaitGroup is a dummy which is non-blocking.
+type WaitGroup struct {
+	counter int
+}
+
+// Add adds delta, which may be negative, to the WaitGroup If the counter goes negative, Add panics.
+func (wg *WaitGroup) Add(delta int) {
+	wg.counter += delta
+	if wg.counter < 0 {
+		panic("sync: negative WaitGroup counter")
+	}
+}
+
+// Done decrements the WaitGroup counter.
+func (wg *WaitGroup) Done() {
+	wg.Add(-1)
+}
+
+// Wait panics if the WaitGroup counter is not zero.
+func (wg *WaitGroup) Wait() {
+	if wg.counter != 0 {
+		panic("sync: WaitGroup counter not zero")
+	}
 }

@@ -57,13 +57,12 @@ func Import(path string, mode build.ImportMode, archSuffix string) (*build.Packa
 	if err != nil {
 		return nil, err
 	}
-	if path == "runtime" {
+	switch path {
+	case "runtime":
 		pkg.GoFiles = []string{"error.go", fmt.Sprintf("zgoos_%s.go", runtime.GOOS), "zversion.go"}
-	}
-	if path == "runtime/pprof" {
+	case "runtime/pprof":
 		pkg.GoFiles = nil
-	}
-	if path == "hash/crc32" {
+	case "hash/crc32":
 		pkg.GoFiles = []string{"crc32.go", "crc32_generic.go"}
 	}
 	if pkg.IsCommand() {
@@ -155,6 +154,19 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 			}
 			errList = append(errList, err)
 			continue
+		}
+
+		switch pkg.ImportPath {
+		case "crypto/rand", "encoding/json", "math/big", "math/rand", "testing", "time":
+			for _, spec := range file.Imports {
+				path, _ := strconv.Unquote(spec.Path.Value)
+				if path == "sync" {
+					if spec.Name == nil {
+						spec.Name = ast.NewIdent("sync")
+					}
+					spec.Path.Value = `"github.com/gopherjs/gopherjs/nosync"`
+				}
+			}
 		}
 
 		for _, decl := range file.Decls {

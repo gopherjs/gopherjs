@@ -233,8 +233,10 @@ func main() {
 		Use:   "test [packages]",
 		Short: "test packages",
 	}
-	verbose := cmdTest.Flags().BoolP("verbose", "v", false, "verbose")
-	short := cmdTest.Flags().Bool("short", false, "short")
+	bench := cmdTest.Flags().String("bench", "", "Run benchmarks matching the regular expression. By default, no benchmarks run. To run all benchmarks, use '--bench=.'.")
+	run := cmdTest.Flags().String("run", "", "Run only those tests and examples matching the regular expression.")
+	short := cmdTest.Flags().Bool("short", false, "Tell long-running tests to shorten their run time.")
+	verbose := cmdTest.Flags().BoolP("verbose", "v", false, "Log all tests as they are run. Also print all text from Log and Logf calls even if the test succeeds.")
 	cmdTest.Flags().AddFlag(flagMinify)
 	cmdTest.Flags().AddFlag(flagColor)
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
@@ -291,14 +293,18 @@ func main() {
 
 				tests := &testFuncs{Package: buildPkg}
 				collectTests := func(pkg *gbuild.PackageData, testPkg string) bool {
-					testFound := false
+					pkgNeeded := false
 					for _, decl := range pkg.Archive.Declarations {
 						if strings.HasPrefix(decl.FullName, pkg.ImportPath+".Test") {
 							tests.Tests = append(tests.Tests, testFunc{Package: testPkg, Name: decl.FullName[len(pkg.ImportPath)+1:]})
-							testFound = true
+							pkgNeeded = true
+						}
+						if strings.HasPrefix(decl.FullName, pkg.ImportPath+".Benchmark") {
+							tests.Benchmarks = append(tests.Benchmarks, testFunc{Package: testPkg, Name: decl.FullName[len(pkg.ImportPath)+1:]})
+							pkgNeeded = true
 						}
 					}
-					return testFound
+					return pkgNeeded
 				}
 
 				tests.NeedTest = collectTests(pkg, "_test")
@@ -351,11 +357,17 @@ func main() {
 				}
 
 				var args []string
-				if *verbose {
-					args = append(args, "-test.v")
+				if *bench != "" {
+					args = append(args, "-test.bench", *bench)
+				}
+				if *run != "" {
+					args = append(args, "-test.run", *run)
 				}
 				if *short {
 					args = append(args, "-test.short")
+				}
+				if *verbose {
+					args = append(args, "-test.v")
 				}
 				status := "ok  "
 				start := time.Now()
@@ -476,6 +488,7 @@ var testmainTmpl = template.Must(template.New("main").Parse(`
 package main
 
 import (
+	"regexp"
 	"testing"
 
 {{if .NeedTest}}
@@ -504,8 +517,22 @@ var examples = []testing.InternalExample{
 {{end}}
 }
 
+var matchPat string
+var matchRe *regexp.Regexp
+
+func matchString(pat, str string) (result bool, err error) {
+	if matchRe == nil || matchPat != pat {
+		matchPat = pat
+		matchRe, err = regexp.Compile(matchPat)
+		if err != nil {
+			return
+		}
+	}
+	return matchRe.MatchString(str), nil
+}
+
 func main() {
-	testing.Main(func(pat, str string) (bool, error) { return true, nil }, tests, benchmarks, examples)
+	testing.Main(matchString, tests, benchmarks, examples)
 }
 
 `))

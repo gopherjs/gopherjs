@@ -291,10 +291,14 @@ func main() {
 
 				tests := &testFuncs{Package: buildPkg}
 				collectTests := func(pkg *gbuild.PackageData, testPkg string) bool {
-					for _, name := range pkg.Archive.Tests {
-						tests.Tests = append(tests.Tests, testFunc{Package: testPkg, Name: name})
+					testFound := false
+					for _, decl := range pkg.Archive.Declarations {
+						if strings.HasPrefix(decl.FullName, pkg.ImportPath+".Test") {
+							tests.Tests = append(tests.Tests, testFunc{Package: testPkg, Name: decl.FullName[len(pkg.ImportPath)+1:]})
+							testFound = true
+						}
 					}
-					return len(pkg.Archive.Tests) != 0
+					return testFound
 				}
 
 				tests.NeedTest = collectTests(pkg, "_test")

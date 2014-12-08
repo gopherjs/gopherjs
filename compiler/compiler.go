@@ -196,7 +196,6 @@ type Archive struct {
 	Dependencies []string
 	Imports      []*PkgImport
 	Declarations []*Decl
-	Tests        []string
 	FileSet      []byte
 	BlockingInit bool
 	Minified     bool

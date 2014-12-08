@@ -352,9 +352,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun, context), minify)
 		})
 		archive.Declarations = append(archive.Declarations, &d)
-		if fun.Recv == nil && strings.HasPrefix(fun.Name.String(), "Test") {
-			archive.Tests = append(archive.Tests, fun.Name.String())
-		}
 	}
 
 	archive.BlockingInit = len(c.blocking) != 0

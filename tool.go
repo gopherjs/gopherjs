@@ -284,6 +284,7 @@ func main() {
 
 				buildPkg.PkgObj = ""
 				buildPkg.GoFiles = append(buildPkg.GoFiles, buildPkg.TestGoFiles...)
+				buildPkg.Imports = append(buildPkg.Imports, buildPkg.TestImports...)
 				pkg := &gbuild.PackageData{Package: buildPkg}
 
 				s := gbuild.NewSession(options)

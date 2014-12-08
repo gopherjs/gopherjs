@@ -2,13 +2,12 @@ package compiler
 
 import (
 	"bytes"
-	"encoding/asn1"
 	"encoding/binary"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"go/token"
 	"io"
-	"io/ioutil"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/prelude"
@@ -174,14 +173,8 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 }
 
 func ReadArchive(filename, id string, r io.Reader, importContext *ImportContext) (*Archive, error) {
-	data, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-
 	var a Archive
-	_, err = asn1.Unmarshal(data, &a)
-	if err != nil {
+	if err := gob.NewDecoder(r).Decode(&a); err != nil {
 		return nil, err
 	}
 
@@ -195,12 +188,7 @@ func ReadArchive(filename, id string, r io.Reader, importContext *ImportContext)
 }
 
 func WriteArchive(a *Archive, w io.Writer) error {
-	data, err := asn1.Marshal(*a)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(data)
-	return err
+	return gob.NewEncoder(w).Encode(a)
 }
 
 type Archive struct {

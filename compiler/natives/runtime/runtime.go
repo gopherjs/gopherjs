@@ -6,6 +6,7 @@ import "github.com/gopherjs/gopherjs/js"
 
 const GOOS = theGoos
 const GOARCH = "js"
+const Compiler = "gopherjs"
 
 // fake for error.go
 type eface struct {

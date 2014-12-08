@@ -49,8 +49,7 @@ func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMa
 	declsByObject := make(map[string][]*Decl)
 	var pendingDecls []*Decl
 	for _, pkg := range pkgs {
-		for i := range pkg.Declarations {
-			d := &pkg.Declarations[i]
+		for _, d := range pkg.Declarations {
 			if len(d.DceFilters) == 0 {
 				pendingDecls = append(pendingDecls, d)
 				continue
@@ -192,18 +191,16 @@ func WriteArchive(a *Archive, w io.Writer) error {
 }
 
 type Archive struct {
-	ImportPath   PkgPath
+	ImportPath   string
 	GcData       []byte
-	Dependencies []PkgPath
-	Imports      []PkgImport
-	Declarations []Decl
+	Dependencies []string
+	Imports      []*PkgImport
+	Declarations []*Decl
 	Tests        []string
 	FileSet      []byte
 	BlockingInit bool
 	Minified     bool
 }
-
-type PkgPath []byte // make asn1 happy
 
 func (a *Archive) AddDependency(path string) {
 	for _, dep := range a.Dependencies {
@@ -211,7 +208,7 @@ func (a *Archive) AddDependency(path string) {
 			return
 		}
 	}
-	a.Dependencies = append(a.Dependencies, PkgPath(path))
+	a.Dependencies = append(a.Dependencies, path)
 }
 
 func (a *Archive) AddDependenciesOf(other *Archive) {
@@ -222,21 +219,19 @@ func (a *Archive) AddDependenciesOf(other *Archive) {
 }
 
 type PkgImport struct {
-	Path    PkgPath
+	Path    string
 	VarName string
 }
 
 type Decl struct {
-	FullName   []byte
+	FullName   string
 	Vars       []string
 	BodyCode   []byte
 	InitCode   []byte
-	DceFilters []DepID
-	DceDeps    []DepID
+	DceFilters []string
+	DceDeps    []string
 	Blocking   bool
 }
-
-type DepID []byte // make asn1 happy
 
 type SourceMapFilter struct {
 	Writer          io.Writer

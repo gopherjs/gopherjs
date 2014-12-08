@@ -461,13 +461,13 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 		return err
 	}
 
-	var jsDecls []compiler.Decl
+	var jsDecls []*compiler.Decl
 	for _, jsFile := range pkg.JsFiles {
 		code, err := ioutil.ReadFile(filepath.Join(pkg.Dir, jsFile))
 		if err != nil {
 			return err
 		}
-		jsDecls = append(jsDecls, compiler.Decl{
+		jsDecls = append(jsDecls, &compiler.Decl{
 			BodyCode: append(code, '\n'),
 		})
 	}

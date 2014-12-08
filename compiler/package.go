@@ -110,9 +110,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		return nil, err
 	}
 	archive := &Archive{
-		ImportPath:   PkgPath(importPath),
+		ImportPath:   importPath,
 		GcData:       gcData.Bytes(),
-		Dependencies: []PkgPath{PkgPath("github.com/gopherjs/gopherjs/js"), PkgPath("runtime")}, // all packages depend on those
+		Dependencies: []string{"github.com/gopherjs/gopherjs/js", "runtime"}, // all packages depend on those
 		FileSet:      encodedFileSet.Bytes(),
 		Minified:     minify,
 	}
@@ -148,7 +148,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	for _, importedPkg := range typesPkg.Imports() {
 		varName := c.newVariableWithLevel(importedPkg.Name(), true, "")
 		c.p.pkgVars[importedPkg.Path()] = varName
-		archive.Imports = append(archive.Imports, PkgImport{Path: PkgPath(importedPkg.Path()), VarName: varName})
+		archive.Imports = append(archive.Imports, &PkgImport{Path: importedPkg.Path(), VarName: varName})
 		importedPaths = append(importedPaths, importedPkg.Path())
 	}
 	sort.Strings(importedPaths)
@@ -232,7 +232,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 	}
 
-	collectDependencies := func(self types.Object, f func()) []DepID {
+	collectDependencies := func(self types.Object, f func()) []string {
 		c.p.dependencies = make(map[types.Object]bool)
 		f()
 		var deps []string
@@ -242,11 +242,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			}
 		}
 		sort.Strings(deps)
-		depIds := make([]DepID, len(deps))
-		for i, dep := range deps {
-			depIds[i] = DepID(dep)
-		}
-		return depIds
+		return deps
 	}
 
 	// types
@@ -254,12 +250,12 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		typeName := c.objectName(o)
 		var d Decl
 		d.Vars = []string{typeName}
-		d.DceFilters = []DepID{DepID(o.Name())}
+		d.DceFilters = []string{o.Name()}
 		d.DceDeps = collectDependencies(o, func() {
 			d.BodyCode = removeWhitespace(c.CatchOutput(0, func() { c.translateType(o, true) }), minify)
 			d.InitCode = removeWhitespace(c.CatchOutput(1, func() { c.initType(o) }), minify)
 		})
-		archive.Declarations = append(archive.Declarations, d)
+		archive.Declarations = append(archive.Declarations, &d)
 	}
 
 	// variables
@@ -279,8 +275,8 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				d.InitCode = removeWhitespace([]byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), c.zeroValue(o.Type()))), minify)
 			})
 		}
-		d.DceFilters = []DepID{DepID(o.Name())}
-		archive.Declarations = append(archive.Declarations, d)
+		d.DceFilters = []string{o.Name()}
+		archive.Declarations = append(archive.Declarations, &d)
 	}
 	for _, init := range c.p.info.InitOrder {
 		lhs := make([]ast.Expr, len(init.Lhs))
@@ -307,10 +303,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			v := hasCallVisitor{c.p.info, false}
 			ast.Walk(&v, init.Rhs)
 			if !v.hasCall {
-				d.DceFilters = []DepID{DepID(init.Lhs[0].Name())}
+				d.DceFilters = []string{init.Lhs[0].Name()}
 			}
 		}
-		archive.Declarations = append(archive.Declarations, d)
+		archive.Declarations = append(archive.Declarations, &d)
 	}
 
 	// functions
@@ -319,7 +315,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		o := c.p.info.Defs[fun.Name].(*types.Func)
 		context := c.p.funcContexts[o]
 		d := Decl{
-			FullName: []byte(o.FullName()),
+			FullName: o.FullName(),
 			Blocking: len(context.blocking) != 0,
 		}
 		if fun.Recv == nil {
@@ -336,7 +332,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					c.translateStmt(&ast.ExprStmt{X: call}, "")
 				}), minify)
 			default:
-				d.DceFilters = []DepID{DepID(o.Name())}
+				d.DceFilters = []string{o.Name()}
 			}
 		}
 		if fun.Recv != nil {
@@ -346,16 +342,16 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			if isPointer {
 				namedRecvType = ptr.Elem().(*types.Named)
 			}
-			d.DceFilters = []DepID{DepID(namedRecvType.Obj().Name())}
+			d.DceFilters = []string{namedRecvType.Obj().Name()}
 			if !fun.Name.IsExported() {
-				d.DceFilters = append(d.DceFilters, DepID(fun.Name.Name))
+				d.DceFilters = append(d.DceFilters, fun.Name.Name)
 			}
 		}
 
 		d.DceDeps = collectDependencies(o, func() {
 			d.BodyCode = removeWhitespace(c.translateToplevelFunction(fun, context), minify)
 		})
-		archive.Declarations = append(archive.Declarations, d)
+		archive.Declarations = append(archive.Declarations, &d)
 		if fun.Recv == nil && strings.HasPrefix(fun.Name.String(), "Test") {
 			archive.Tests = append(archive.Tests, fun.Name.String())
 		}
@@ -401,7 +397,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			stmts = append(stmts, &ast.ExprStmt{X: call})
 		}
 
-		archive.Declarations = append(archive.Declarations, Decl{
+		archive.Declarations = append(archive.Declarations, &Decl{
 			BodyCode: removeWhitespace(append(append([]byte("\t$pkg.$run = function($b) {\n"), c.translateFunctionBody(stmts)...), []byte("\t\t$flushConsole();\n\t};\n")...), minify),
 		})
 	}

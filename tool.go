@@ -473,6 +473,7 @@ package main
 
 import (
 	"testing"
+	"runtime"
 
 {{if .NeedTest}}
 	_test {{.Package.ImportPath | printf "%q"}}
@@ -501,7 +502,23 @@ var examples = []testing.InternalExample{
 }
 
 func main() {
-	testing.Main(nil, tests, benchmarks, examples)
+	for i, test := range tests {
+		f := test.F
+		tests[i].F = func(t *testing.T) {
+			defer func() {
+				err := recover()
+				if e, ok := err.(*runtime.NotSupportedError); ok {
+					t.Skip(e)
+				}
+				if err != nil {
+					panic(err)
+				}
+			}()
+			f(t)
+		}
+	}
+
+	testing.Main(func(pat, str string) (bool, error) { return true, nil }, tests, benchmarks, examples)
 }
 
 `))

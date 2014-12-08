@@ -436,12 +436,13 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 				return nil
 			}
 
-			objFile, err := ioutil.ReadFile(pkg.PkgObj)
+			objFile, err := os.Open(pkg.PkgObj)
 			if err != nil {
 				return err
 			}
+			defer objFile.Close()
 
-			pkg.Archive, err = compiler.UnmarshalArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.ImportContext)
+			pkg.Archive, err = compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.ImportContext)
 			if err != nil {
 				return err
 			}
@@ -500,12 +501,13 @@ func (s *Session) writeLibraryPackage(pkg *PackageData, pkgObj string) error {
 		return err
 	}
 
-	data, err := compiler.MarshalArchive(pkg.Archive)
+	objFile, err := os.Create(pkgObj)
 	if err != nil {
 		return err
 	}
+	defer objFile.Close()
 
-	return ioutil.WriteFile(pkgObj, data, 0666)
+	return compiler.WriteArchive(pkg.Archive, objFile)
 }
 
 func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {

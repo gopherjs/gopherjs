@@ -276,54 +276,53 @@ func main() {
 			}
 
 			var exitErr error
-			for _, buildPkg := range pkgs {
-				if len(buildPkg.TestGoFiles) == 0 && len(buildPkg.XTestGoFiles) == 0 {
-					fmt.Printf("?   \t%s\t[no test files]\n", buildPkg.ImportPath)
+			for _, pkg := range pkgs {
+				if len(pkg.TestGoFiles) == 0 && len(pkg.XTestGoFiles) == 0 {
+					fmt.Printf("?   \t%s\t[no test files]\n", pkg.ImportPath)
 					continue
 				}
 
-				buildPkg.PkgObj = ""
-				buildPkg.GoFiles = append(buildPkg.GoFiles, buildPkg.TestGoFiles...)
-				buildPkg.Imports = append(buildPkg.Imports, buildPkg.TestImports...)
-				pkg := &gbuild.PackageData{Package: buildPkg}
-
 				s := gbuild.NewSession(options)
-				if err := s.BuildPackage(pkg); err != nil {
-					return err
-				}
-
-				tests := &testFuncs{Package: buildPkg}
-				collectTests := func(pkg *gbuild.PackageData, testPkg string) bool {
-					pkgNeeded := false
-					for _, decl := range pkg.Archive.Declarations {
-						if strings.HasPrefix(decl.FullName, pkg.ImportPath+".Test") {
-							tests.Tests = append(tests.Tests, testFunc{Package: testPkg, Name: decl.FullName[len(pkg.ImportPath)+1:]})
-							pkgNeeded = true
-						}
-						if strings.HasPrefix(decl.FullName, pkg.ImportPath+".Benchmark") {
-							tests.Benchmarks = append(tests.Benchmarks, testFunc{Package: testPkg, Name: decl.FullName[len(pkg.ImportPath)+1:]})
-							pkgNeeded = true
-						}
-					}
-					return pkgNeeded
-				}
-
-				tests.NeedTest = collectTests(pkg, "_test")
-				if len(pkg.XTestGoFiles) != 0 {
-					testPkg := &gbuild.PackageData{Package: &build.Package{
-						ImportPath: pkg.ImportPath + "_test",
-						Dir:        pkg.Dir,
-						GoFiles:    pkg.XTestGoFiles,
-					}}
+				tests := &testFuncs{Package: pkg}
+				collectTests := func(buildPkg *build.Package, testPkgName string, needVar *bool) error {
+					testPkg := &gbuild.PackageData{Package: buildPkg}
 					if err := s.BuildPackage(testPkg); err != nil {
 						return err
 					}
-					tests.NeedXtest = collectTests(testPkg, "_xtest")
+
+					for _, decl := range testPkg.Archive.Declarations {
+						if strings.HasPrefix(decl.FullName, testPkg.ImportPath+".Test") {
+							tests.Tests = append(tests.Tests, testFunc{Package: testPkgName, Name: decl.FullName[len(testPkg.ImportPath)+1:]})
+							*needVar = true
+						}
+						if strings.HasPrefix(decl.FullName, testPkg.ImportPath+".Benchmark") {
+							tests.Benchmarks = append(tests.Benchmarks, testFunc{Package: testPkgName, Name: decl.FullName[len(testPkg.ImportPath)+1:]})
+							*needVar = true
+						}
+					}
+					return nil
+				}
+
+				if err := collectTests(&build.Package{
+					ImportPath: pkg.ImportPath,
+					Dir:        pkg.Dir,
+					GoFiles:    append(pkg.GoFiles, pkg.TestGoFiles...),
+					Imports:    append(pkg.Imports, pkg.TestImports...),
+				}, "_test", &tests.NeedTest); err != nil {
+					return err
+				}
+
+				if err := collectTests(&build.Package{
+					ImportPath: pkg.ImportPath + "_test",
+					Dir:        pkg.Dir,
+					GoFiles:    pkg.XTestGoFiles,
+					Imports:    pkg.XTestImports,
+				}, "_xtest", &tests.NeedXtest); err != nil {
+					return err
 				}
 
 				buf := bytes.NewBuffer(nil)
-				err := testmainTmpl.Execute(buf, tests)
-				if err != nil {
+				if err := testmainTmpl.Execute(buf, tests); err != nil {
 					return err
 				}
 
@@ -372,14 +371,14 @@ func main() {
 				}
 				status := "ok  "
 				start := time.Now()
-				if err := runNode(tempfile.Name(), args, buildPkg.Dir); err != nil {
+				if err := runNode(tempfile.Name(), args, pkg.Dir); err != nil {
 					if _, ok := err.(*exec.ExitError); !ok {
 						return err
 					}
 					exitErr = err
 					status = "FAIL"
 				}
-				fmt.Printf("%s\t%s\t%.3fs\n", status, buildPkg.ImportPath, time.Now().Sub(start).Seconds())
+				fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Now().Sub(start).Seconds())
 			}
 			return exitErr
 		}, options))

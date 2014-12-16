@@ -153,11 +153,21 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 	sort.Strings(importedPaths)
 	for _, impPath := range importedPaths {
-		impOutput, err := importContext.Import(impPath)
+		id := c.newIdent(fmt.Sprintf(`%s.$init`, c.p.pkgVars[impPath]), types.NewSignature(nil, nil, nil, nil, false))
+		call := &ast.CallExpr{Fun: id}
+		depArchive, err := importContext.Import(string(impPath))
 		if err != nil {
 			return nil, err
 		}
-		archive.AddDependenciesOf(impOutput)
+		archive.AddDependenciesOf(depArchive)
+		if depArchive.BlockingInit {
+			c.blocking[call] = true
+			c.flattened[call] = true
+		}
+
+		archive.Declarations = append(archive.Declarations, &Decl{
+			InitCode: removeWhitespace(c.CatchOutput(1, func() { c.translateStmt(&ast.ExprStmt{X: call}, "") }), minify),
+		})
 	}
 
 	var functions []*ast.FuncDecl
@@ -354,50 +364,20 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		archive.Declarations = append(archive.Declarations, &d)
 	}
 
-	archive.BlockingInit = len(c.blocking) != 0
-
-	// $run function
 	if typesPkg.Name() == "main" {
-		var stmts []ast.Stmt
-		for _, dep := range archive.Dependencies {
-			id := c.newIdent(fmt.Sprintf(`$packages["%s"].$init`, dep), types.NewSignature(nil, nil, nil, nil, false))
-			call := &ast.CallExpr{Fun: id}
-			depArchive, err := importContext.Import(string(dep))
-			if err != nil {
-				panic(err)
-			}
-			if depArchive.BlockingInit {
-				c.blocking[call] = true
-				c.flattened[call] = true
-			}
-			stmts = append(stmts, &ast.ExprStmt{X: call})
+		if mainFunc == nil {
+			return nil, fmt.Errorf("missing main function")
 		}
-
-		{
-			id := c.newIdent("$pkg.$init", types.NewSignature(nil, nil, nil, nil, false))
-			call := &ast.CallExpr{Fun: id}
-			if archive.BlockingInit {
-				c.blocking[call] = true
-				c.flattened[call] = true
-			}
-			stmts = append(stmts, &ast.ExprStmt{X: call})
-		}
-
-		{
-			if mainFunc == nil {
-				return nil, fmt.Errorf("missing main function")
-			}
-			id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
-			c.p.info.Uses[id] = mainFunc
-			call := &ast.CallExpr{Fun: id}
-			c.Visit(call)
-			stmts = append(stmts, &ast.ExprStmt{X: call})
-		}
-
+		id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
+		c.p.info.Uses[id] = mainFunc
+		call := &ast.CallExpr{Fun: id}
+		c.Visit(call)
 		archive.Declarations = append(archive.Declarations, &Decl{
-			BodyCode: removeWhitespace(append(append([]byte("\t$pkg.$run = function($b) {\n"), c.translateFunctionBody(stmts)...), []byte("\t\t$flushConsole();\n\t};\n")...), minify),
+			InitCode: removeWhitespace(c.CatchOutput(1, func() { c.translateStmt(&ast.ExprStmt{X: call}, "") }), minify),
 		})
 	}
+
+	archive.BlockingInit = len(c.blocking) != 0
 
 	return archive, nil
 }

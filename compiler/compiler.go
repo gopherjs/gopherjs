@@ -102,7 +102,7 @@ func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMa
 		}
 	}
 
-	if _, err := w.Write([]byte("$go($packages[\"" + string(mainPkg.ImportPath) + "\"].$run, [], true);\n\n})();\n")); err != nil {
+	if _, err := w.Write([]byte("$go($packages[\"" + string(mainPkg.ImportPath) + "\"].$init, [], true);\n$flushConsole();\n\n})();\n")); err != nil {
 		return err
 	}
 
@@ -141,7 +141,7 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 		}
 	}
 
-	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$init = function() {\n"), minify)); err != nil {
+	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$init = function() {\n\t\t$pkg.$init = function() {};\n"), minify)); err != nil {
 		return err
 	}
 	if pkg.BlockingInit {

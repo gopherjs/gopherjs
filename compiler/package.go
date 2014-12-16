@@ -154,15 +154,8 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	for _, impPath := range importedPaths {
 		id := c.newIdent(fmt.Sprintf(`%s.$init`, c.p.pkgVars[impPath]), types.NewSignature(nil, nil, nil, nil, false))
 		call := &ast.CallExpr{Fun: id}
-		depArchive, err := importContext.Import(string(impPath))
-		if err != nil {
-			return nil, err
-		}
-		if depArchive.BlockingInit {
-			c.blocking[call] = true
-			c.flattened[call] = true
-		}
-
+		c.blocking[call] = true
+		c.flattened[call] = true
 		archive.Declarations = append(archive.Declarations, &Decl{
 			InitCode: removeWhitespace(c.CatchOutput(1, func() { c.translateStmt(&ast.ExprStmt{X: call}, "") }), minify),
 		})
@@ -374,8 +367,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			InitCode: removeWhitespace(c.CatchOutput(1, func() { c.translateStmt(&ast.ExprStmt{X: call}, "") }), minify),
 		})
 	}
-
-	archive.BlockingInit = len(c.blocking) != 0
 
 	return archive, nil
 }

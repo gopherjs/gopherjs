@@ -110,11 +110,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		return nil, err
 	}
 	archive := &Archive{
-		ImportPath:   importPath,
-		GcData:       gcData.Bytes(),
-		Dependencies: []string{"github.com/gopherjs/gopherjs/js", "runtime"}, // all packages depend on those
-		FileSet:      encodedFileSet.Bytes(),
-		Minified:     minify,
+		ImportPath: importPath,
+		GcData:     gcData.Bytes(),
+		FileSet:    encodedFileSet.Bytes(),
+		Minified:   minify,
 	}
 
 	c := &funcContext{
@@ -159,7 +158,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		if err != nil {
 			return nil, err
 		}
-		archive.AddDependenciesOf(depArchive)
 		if depArchive.BlockingInit {
 			c.blocking[call] = true
 			c.flattened[call] = true

@@ -360,13 +360,33 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 
 func (s *Session) ImportDependencies(archive *compiler.Archive) ([]*compiler.Archive, error) {
 	var deps []*compiler.Archive
-	for _, depPath := range archive.Dependencies {
-		dep, err := s.ImportPackage(string(depPath))
+	paths := make(map[string]bool)
+	var collectDependencies func(path string) error
+	collectDependencies = func(path string) error {
+		if paths[path] {
+			return nil
+		}
+		dep, err := s.ImportPackage(path)
 		if err != nil {
-			return nil, err
+			return err
+		}
+		for _, imp := range dep.Imports {
+			if err := collectDependencies(imp.Path); err != nil {
+				return err
+			}
 		}
 		deps = append(deps, dep)
+		paths[dep.ImportPath] = true
+		return nil
 	}
+
+	collectDependencies("runtime")
+	for _, imp := range archive.Imports {
+		if err := collectDependencies(imp.Path); err != nil {
+			return nil, err
+		}
+	}
+
 	deps = append(deps, archive)
 	return deps, nil
 }

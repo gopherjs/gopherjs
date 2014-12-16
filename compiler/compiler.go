@@ -193,28 +193,11 @@ func WriteArchive(a *Archive, w io.Writer) error {
 type Archive struct {
 	ImportPath   string
 	GcData       []byte
-	Dependencies []string
 	Imports      []*PkgImport
 	Declarations []*Decl
 	FileSet      []byte
 	BlockingInit bool
 	Minified     bool
-}
-
-func (a *Archive) AddDependency(path string) {
-	for _, dep := range a.Dependencies {
-		if string(dep) == path {
-			return
-		}
-	}
-	a.Dependencies = append(a.Dependencies, path)
-}
-
-func (a *Archive) AddDependenciesOf(other *Archive) {
-	for _, path := range other.Dependencies {
-		a.AddDependency(string(path))
-	}
-	a.AddDependency(string(other.ImportPath))
 }
 
 type PkgImport struct {

@@ -30,6 +30,39 @@ func (err ErrorList) Error() string {
 	return err[0].Error()
 }
 
+func ImportDependencies(archive *Archive, importPkg func(string) (*Archive, error)) ([]*Archive, error) {
+	var deps []*Archive
+	paths := make(map[string]bool)
+	var collectDependencies func(path string) error
+	collectDependencies = func(path string) error {
+		if paths[path] {
+			return nil
+		}
+		dep, err := importPkg(path)
+		if err != nil {
+			return err
+		}
+		for _, imp := range dep.Imports {
+			if err := collectDependencies(imp.Path); err != nil {
+				return err
+			}
+		}
+		deps = append(deps, dep)
+		paths[dep.ImportPath] = true
+		return nil
+	}
+
+	collectDependencies("runtime")
+	for _, imp := range archive.Imports {
+		if err := collectDependencies(imp.Path); err != nil {
+			return nil, err
+		}
+	}
+
+	deps = append(deps, archive)
+	return deps, nil
+}
+
 func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified

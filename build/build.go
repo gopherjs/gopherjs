@@ -358,39 +358,6 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 	return pkg.Archive, nil
 }
 
-func (s *Session) ImportDependencies(archive *compiler.Archive) ([]*compiler.Archive, error) {
-	var deps []*compiler.Archive
-	paths := make(map[string]bool)
-	var collectDependencies func(path string) error
-	collectDependencies = func(path string) error {
-		if paths[path] {
-			return nil
-		}
-		dep, err := s.ImportPackage(path)
-		if err != nil {
-			return err
-		}
-		for _, imp := range dep.Imports {
-			if err := collectDependencies(imp.Path); err != nil {
-				return err
-			}
-		}
-		deps = append(deps, dep)
-		paths[dep.ImportPath] = true
-		return nil
-	}
-
-	collectDependencies("runtime")
-	for _, imp := range archive.Imports {
-		if err := collectDependencies(imp.Path); err != nil {
-			return nil, err
-		}
-	}
-
-	deps = append(deps, archive)
-	return deps, nil
-}
-
 func (s *Session) BuildPackage(pkg *PackageData) error {
 	s.Packages[pkg.ImportPath] = pkg
 	if pkg.ImportPath == "unsafe" {
@@ -577,7 +544,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 		}
 	}
 
-	deps, err := s.ImportDependencies(pkg.Archive)
+	deps, err := compiler.ImportDependencies(pkg.Archive, s.ImportContext.Import)
 	if err != nil {
 		return err
 	}

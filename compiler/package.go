@@ -52,6 +52,18 @@ type flowData struct {
 	endCase   int
 }
 
+type ImportContext struct {
+	Packages map[string]*types.Package
+	Import   func(string) (*Archive, error)
+}
+
+func NewImportContext(importFunc func(string) (*Archive, error)) *ImportContext {
+	return &ImportContext{
+		Packages: map[string]*types.Package{"unsafe": types.Unsafe},
+		Import:   importFunc,
+	}
+}
+
 func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {
 	info := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),

@@ -30,19 +30,7 @@ func (err ErrorList) Error() string {
 	return err[0].Error()
 }
 
-type ImportContext struct {
-	Packages map[string]*types.Package
-	Import   func(string) (*Archive, error)
-}
-
-func NewImportContext(importFunc func(string) (*Archive, error)) *ImportContext {
-	return &ImportContext{
-		Packages: map[string]*types.Package{"unsafe": types.Unsafe},
-		Import:   importFunc,
-	}
-}
-
-func WriteProgramCode(pkgs []*Archive, importContext *ImportContext, w *SourceMapFilter) error {
+func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified
 
@@ -160,17 +148,17 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 	return nil
 }
 
-func ReadArchive(filename, id string, r io.Reader, importContext *ImportContext) (*Archive, error) {
+func ReadArchive(filename, id string, r io.Reader, packages map[string]*types.Package) (*Archive, error) {
 	var a Archive
 	if err := gob.NewDecoder(r).Decode(&a); err != nil {
 		return nil, err
 	}
 
-	pkg, err := gcimporter.ImportData(importContext.Packages, filename, id, bytes.NewReader(a.GcData))
+	pkg, err := gcimporter.ImportData(packages, filename, id, bytes.NewReader(a.GcData))
 	if err != nil {
 		return nil, err
 	}
-	importContext.Packages[pkg.Path()] = pkg
+	packages[pkg.Path()] = pkg
 
 	return &a, nil
 }

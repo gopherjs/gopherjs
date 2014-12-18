@@ -462,7 +462,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			}
 			defer objFile.Close()
 
-			pkg.Archive, err = compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.ImportContext)
+			pkg.Archive, err = compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.ImportContext.Packages)
 			if err != nil {
 				return err
 			}
@@ -581,7 +581,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 	if err != nil {
 		return err
 	}
-	return compiler.WriteProgramCode(deps, s.ImportContext, sourceMapFilter)
+	return compiler.WriteProgramCode(deps, sourceMapFilter)
 }
 
 // hasGopathPrefix returns true and the length of the matched GOPATH workspace,

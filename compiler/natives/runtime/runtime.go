@@ -147,9 +147,9 @@ type Func struct {
 	opaque struct{} // unexported field to disallow conversions
 }
 
-func (f *Func) Name() string {
-	return ""
-}
+func (_ *Func) Entry() uintptr                              { return 0 }
+func (_ *Func) FileLine(pc uintptr) (file string, line int) { return "", 0 }
+func (_ *Func) Name() string                                { return "" }
 
 func FuncForPC(pc uintptr) *Func {
 	return nil

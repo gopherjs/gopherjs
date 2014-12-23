@@ -47,7 +47,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- -- driver    | yes                   |                                   |
 | debug           |                       |                                   |
 | -- dwarf        | not yet               |                                   |
-| -- elf          | yes                   |                                   |
+| -- elf          | not yet               |                                   |
 | -- gosym        | yes                   |                                   |
 | -- macho        | not yet               |                                   |
 | -- pe           | yes                   |                                   |

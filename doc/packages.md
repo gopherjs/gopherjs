@@ -47,7 +47,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- -- driver    | yes                   |                                   |
 | debug           |                       |                                   |
 | -- dwarf        | not yet               |                                   |
-| -- elf          | no                    |                                   |
+| -- elf          | yes                   |                                   |
 | -- gosym        | yes                   |                                   |
 | -- macho        | not yet               |                                   |
 | -- pe           | yes                   |                                   |
@@ -64,17 +64,17 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- pem          | yes                   |                                   |
 | -- xml          | yes                   |                                   |
 | errors          | yes                   |                                   |
-| expvar          | no                    |                                   |
+| expvar          | yes                   |                                   |
 | flag            | not yet               |                                   |
 | fmt             | yes                   |                                   |
 | go              |                       |                                   |
-| -- ast          | not yet               |                                   |
+| -- ast          | yes                   |                                   |
 | -- build        | not yet               |                                   |
-| -- doc          | not yet               |                                   |
+| -- doc          | yes                   |                                   |
 | -- format       | yes                   |                                   |
-| -- parser       | not yet               |                                   |
+| -- parser       | yes                   |                                   |
 | -- printer      | yes                   |                                   |
-| -- scanner      | not yet               |                                   |
+| -- scanner      | yes                   |                                   |
 | -- token        | yes                   |                                   |
 | hash            | (no tests)            |                                   |
 | -- adler32      | yes                   |                                   |
@@ -101,7 +101,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- cmplx        | yes                   |                                   |
 | -- rand         | yes                   |                                   |
 | mime            | yes                   |                                   |
-| -- multipart    | no                    |                                   |
+| -- multipart    | yes                   |                                   |
 | net             | no                    |                                   |
 | -- http         | partially             | data structures only (no net)     |
 | -- -- cgi       | not yet               |                                   |

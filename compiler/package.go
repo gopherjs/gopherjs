@@ -766,7 +766,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 			if c.name != "" && !c.p.minify {
 				f = "$blocking_" + c.name
 			}
-			prefix = prefix + fmt.Sprintf(" if(!$b) { $nonblockingCall(); }; var %s = function() {", f)
+			prefix = prefix + fmt.Sprintf(" if($b !== $BLOCKING) { $nonblockingCall(); }; var %s = function() {", f)
 			suffix = fmt.Sprintf(" }; %s.$blocking = true; return %s;", f, f) + suffix
 		}
 

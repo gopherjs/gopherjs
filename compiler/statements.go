@@ -322,7 +322,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		sig := c.p.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
 		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
 		if len(c.blocking) != 0 {
-			args = append(args, "true")
+			args = append(args, "$BLOCKING")
 		}
 		c.Printf("$deferred.push([%s, [%s]]);", c.translateExpr(s.Call.Fun), strings.Join(args, ", "))
 

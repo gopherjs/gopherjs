@@ -113,18 +113,20 @@ var $recover = function() {
   $panicStackDepth = null;
   return $panicValue;
 };
+var $throw = function(err) { throw err; };
+var $throwRuntimeError; /* set by package "runtime" */
+
+var $BLOCKING = new Object();
 var $nonblockingCall = function() {
   $panic(new $packages["runtime"].NotSupportedError.Ptr("non-blocking call to blocking function (mark call with \"//gopherjs:blocking\" to fix)"));
 };
-var $throw = function(err) { throw err; };
-var $throwRuntimeError; /* set by package "runtime" */
 
 var $dummyGoroutine = { asleep: false, exit: false, panicStack: [] };
 var $curGoroutine = $dummyGoroutine, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
 var $go = function(fun, args, direct) {
   $totalGoroutines++;
   $awakeGoroutines++;
-  args.push(true);
+  args.push($BLOCKING);
   var goroutine = function() {
     var rescheduled = false;
     try {

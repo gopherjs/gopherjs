@@ -44,7 +44,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- -- pkix      | (no tests)            |                                   |
 | database        |                       |                                   |
 | -- sql          | no                    |                                   |
-| -- -- driver    | no                    |                                   |
+| -- -- driver    | yes                   |                                   |
 | debug           |                       |                                   |
 | -- dwarf        | not yet               |                                   |
 | -- elf          | yes                   |                                   |

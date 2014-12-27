@@ -10,9 +10,9 @@
 //  | [?]int8                        | []int8                         | Int8Array       |
 //  | [?]int16                       | []int16                        | Int16Array      |
 //  | [?]int32, [?]int               | []int                          | Int32Array      |
-//  | [?]uint8                       | []uint8                        | Int8Array       |
-//  | [?]uint16                      | []uint16                       | Int16Array      |
-//  | [?]uint32, [?]uint, [?]uintptr | []uint                         | Int32Array      |
+//  | [?]uint8                       | []uint8                        | Uint8Array      |
+//  | [?]uint16                      | []uint16                       | Uint16Array     |
+//  | [?]uint32, [?]uint, [?]uintptr | []uint                         | Uint32Array     |
 //  | [?]float32                     | []float32                      | Float32Array    |
 //  | [?]float64                     | []float64                      | Float64Array    |
 //  | all other slices and arrays    | []interface{}                  | Array           |

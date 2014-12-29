@@ -346,9 +346,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				return c.formatExpr("%e %t %e", e.X, e.Op, e.Y)
 			case token.MUL:
 				switch basic.Kind() {
-				case types.Int32, types.Int:
+				case types.Int32:
 					return c.formatParenExpr("(((%1e >>> 16 << 16) * %2e >> 0) + (%1e << 16 >>> 16) * %2e) >> 0", e.X, e.Y)
-				case types.Uint32, types.Uint, types.Uintptr:
+				case types.Uint32, types.Uintptr:
 					return c.formatParenExpr("(((%1e >>> 16 << 16) * %2e >>> 0) + (%1e << 16 >>> 16) * %2e) >>> 0", e.X, e.Y)
 				case types.Float32, types.Float64:
 					return c.formatExpr("%e * %e", e.X, e.Y)

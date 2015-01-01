@@ -5,16 +5,8 @@ GopherJS - A compiler from Go to JavaScript
 
 GopherJS compiles Go code ([golang.org](http://golang.org/)) to pure JavaScript code. Its main purpose is to give you the opportunity to write front-end code in Go which will still run in all browsers. Give GopherJS a try on the [GopherJS Playground](http://gopherjs.github.io/playground/).
 
-You can take advantage of Go's elegant type system and other compile-time checks that can have a huge impact on bug detection and the ability to refactor, especially for big projects. Just think of how often a JavaScript method has extra handling of some legacy parameter scheme, because you don't know exactly if some other code is still calling it in that old way or not. GopherJS will tell you and if it does not complain, you can be sure that this kind of bug is not present any more.
-
-### Design Goals
-- performance of generated code (see [HTML5 game engine benchmark](http://ajhager.github.io/enj/) by Joseph Hager)
-- similarity between Go code and generated JavaScript code for easier debugging
-- compatibility with existing libraries (see the list of [bindings to JavaScript APIs and libraries](https://github.com/gopherjs/gopherjs/wiki/bindings))
-- small size of generated code
-
 ### What is supported?
-Nearly everything, including Goroutines. See the [compatibility table](doc/packages.md) for details.
+Nearly everything, including Goroutines ([compatibility table](doc/packages.md)). Performance it quite good in most cases, see [HTML5 game engine benchmark](http://ajhager.github.io/enj/).
 
 ### Installation and Usage
 Get or update GopherJS and dependencies with:
@@ -24,6 +16,12 @@ go get -u github.com/gopherjs/gopherjs
 Now you can use  `./bin/gopherjs build [files]` or `./bin/gopherjs install [package]` which behave similar to the `go` tool. For `main` packages, these commands create a `.js` file and `.js.map` source map in the current directory or in `$GOPATH/bin`. The generated JavaScript file can be used as usual in a website. Use `./bin/gopherjs help [command]` to get a list of possible command line flags, e.g. for minification and automatically watching for changes. If you want to run the generated code with Node.js, see [this page](doc/syscalls.md).
 
 *Note: GopherJS will try to write compiled object files of the core packages to your $GOROOT/pkg directory. If that fails, it will fall back to $GOPATH/pkg.*
+
+### Performance Tips
+
+- Use the `-m` command line flag to generate minified code.
+- Apply gzip compression (http://en.wikipedia.org/wiki/HTTP_compression).
+- Use `int` instead of `(u)int32` or `(u)int64` wherever possible.
 
 ### Getting started
 #### 1. Interacting with the DOM

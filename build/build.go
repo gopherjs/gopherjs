@@ -28,30 +28,34 @@ func (e *ImportCError) Error() string {
 	return `importing "C" is not supported by GopherJS`
 }
 
-func NewBuildContext(archSuffix string) *build.Context {
+func NewBuildContext(installSuffix string) *build.Context {
 	if strings.HasPrefix(runtime.Version(), "go1.") && runtime.Version()[4] < '4' {
 		panic("GopherJS requires Go 1.4. Please upgrade.")
 	}
 	return &build.Context{
-		GOROOT:      build.Default.GOROOT,
-		GOPATH:      build.Default.GOPATH,
-		GOOS:        build.Default.GOOS,
-		GOARCH:      archSuffix,
-		Compiler:    "gc",
-		BuildTags:   []string{"netgo"},
-		ReleaseTags: build.Default.ReleaseTags,
+		GOROOT:        build.Default.GOROOT,
+		GOPATH:        build.Default.GOPATH,
+		GOOS:          build.Default.GOOS,
+		GOARCH:        "js",
+		InstallSuffix: installSuffix,
+		Compiler:      "gc",
+		BuildTags:     []string{"netgo"},
+		ReleaseTags:   build.Default.ReleaseTags,
 	}
 }
 
-func Import(path string, mode build.ImportMode, archSuffix string) (*build.Package, error) {
+func Import(path string, mode build.ImportMode, installSuffix string) (*build.Package, error) {
 	if path == "C" {
 		return nil, &ImportCError{}
 	}
 
-	buildContext := NewBuildContext(archSuffix)
+	buildContext := NewBuildContext(installSuffix)
 	if path == "runtime" || path == "syscall" {
 		buildContext.GOARCH = build.Default.GOARCH
-		buildContext.InstallSuffix = archSuffix
+		buildContext.InstallSuffix = "js"
+		if installSuffix != "" {
+			buildContext.InstallSuffix += "_" + installSuffix
+		}
 	}
 	pkg, err := buildContext.Import(path, "", mode)
 	if err != nil {
@@ -97,7 +101,7 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 	if isTestPkg {
 		importPath = importPath[:len(importPath)-5]
 	}
-	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+importPath, 0, "js"); err == nil {
+	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+importPath, 0, ""); err == nil {
 		names := append(nativesPkg.GoFiles, nativesPkg.TestGoFiles...)
 		if isTestPkg {
 			names = nativesPkg.XTestGoFiles
@@ -273,18 +277,18 @@ func NewSession(options *Options) *Session {
 	return s
 }
 
-func (s *Session) ArchSuffix() string {
+func (s *Session) InstallSuffix() string {
 	if s.options.Minify {
-		return "js-min"
+		return "min"
 	}
-	return "js"
+	return ""
 }
 
 func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string) error {
 	if s.Watcher != nil {
 		s.Watcher.Add(packagePath)
 	}
-	buildPkg, err := NewBuildContext(s.ArchSuffix()).ImportDir(packagePath, 0)
+	buildPkg, err := NewBuildContext(s.InstallSuffix()).ImportDir(packagePath, 0)
 	if err != nil {
 		return err
 	}
@@ -333,7 +337,7 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 		return pkg.Archive, nil
 	}
 
-	buildPkg, err := Import(path, 0, s.ArchSuffix())
+	buildPkg, err := Import(path, 0, s.InstallSuffix())
 	if s.Watcher != nil && buildPkg != nil { // add watch even on error
 		s.Watcher.Add(buildPkg.Dir)
 	}

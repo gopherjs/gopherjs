@@ -118,7 +118,7 @@ var $throwRuntimeError; /* set by package "runtime" */
 
 var $BLOCKING = new Object();
 var $nonblockingCall = function() {
-  $panic(new $packages["runtime"].NotSupportedError.Ptr("non-blocking call to blocking function (mark call with \"//gopherjs:blocking\" to fix)"));
+  $panic(new $packages["runtime"].NotSupportedError.Ptr("non-blocking call to blocking function, see https://github.com/gopherjs/gopherjs#goroutines"));
 };
 
 var $dummyGoroutine = { asleep: false, exit: false, panicStack: [] };

@@ -6,7 +6,7 @@ GopherJS - A compiler from Go to JavaScript
 GopherJS compiles Go code ([golang.org](http://golang.org/)) to pure JavaScript code. Its main purpose is to give you the opportunity to write front-end code in Go which will still run in all browsers. Give GopherJS a try on the [GopherJS Playground](http://gopherjs.github.io/playground/).
 
 ### What is supported?
-Nearly everything, including Goroutines ([compatibility table](doc/packages.md)). Performance it quite good in most cases, see [HTML5 game engine benchmark](http://ajhager.github.io/enj/).
+Nearly everything, including Goroutines ([compatibility table](doc/packages.md)). Performance is quite good in most cases, see [HTML5 game engine benchmark](http://ajhager.github.io/enj/).
 
 ### Installation and Usage
 Get or update GopherJS and dependencies with:

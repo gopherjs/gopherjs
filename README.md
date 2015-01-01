@@ -13,7 +13,7 @@ Get or update GopherJS and dependencies with:
 ```
 go get -u github.com/gopherjs/gopherjs
 ```
-Now you can use  `./bin/gopherjs build [files]` or `./bin/gopherjs install [package]` which behave similar to the `go` tool. For `main` packages, these commands create a `.js` file and `.js.map` source map in the current directory or in `$GOPATH/bin`. The generated JavaScript file can be used as usual in a website. Use `./bin/gopherjs help [command]` to get a list of possible command line flags, e.g. for minification and automatically watching for changes. If you want to run the generated code with Node.js, see [this page](doc/syscalls.md).
+Now you can use  `gopherjs build [files]` or `gopherjs install [package]` which behave similar to the `go` tool. For `main` packages, these commands create a `.js` file and `.js.map` source map in the current directory or in `$GOPATH/bin`. The generated JavaScript file can be used as usual in a website. Use `gopherjs help [command]` to get a list of possible command line flags, e.g. for minification and automatically watching for changes. If you want to run the generated code with Node.js, see [this page](doc/syscalls.md).
 
 *Note: GopherJS will try to write compiled object files of the core packages to your $GOROOT/pkg directory. If that fails, it will fall back to $GOPATH/pkg.*
 

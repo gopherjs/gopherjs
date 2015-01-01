@@ -41,13 +41,23 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			return c.formatExpr("%s", strconv.FormatBool(exact.BoolVal(value)))
 		case basic.Info()&types.IsInteger != 0:
 			if is64Bit(basic) {
-				d, _ := exact.Uint64Val(value)
 				if basic.Kind() == types.Int64 {
-					return c.formatExpr("new %s(%s, %s)", c.typeName(exprType), strconv.FormatInt(int64(d)>>32, 10), strconv.FormatUint(d&(1<<32-1), 10))
+					d, ok := exact.Int64Val(value)
+					if !ok {
+						panic("could not get exact uint")
+					}
+					return c.formatExpr("new %s(%s, %s)", c.typeName(exprType), strconv.FormatInt(d>>32, 10), strconv.FormatUint(uint64(d)&(1<<32-1), 10))
+				}
+				d, ok := exact.Uint64Val(value)
+				if !ok {
+					panic("could not get exact uint")
 				}
 				return c.formatExpr("new %s(%s, %s)", c.typeName(exprType), strconv.FormatUint(d>>32, 10), strconv.FormatUint(d&(1<<32-1), 10))
 			}
-			d, _ := exact.Int64Val(value)
+			d, ok := exact.Int64Val(value)
+			if !ok {
+				panic("could not get exact int")
+			}
 			return c.formatExpr("%s", strconv.FormatInt(d, 10))
 		case basic.Info()&types.IsFloat != 0:
 			f, _ := exact.Float64Val(value)
@@ -109,7 +119,10 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			zero := c.zeroValue(elementType)
 			for _, element := range e.Elts {
 				if kve, isKve := element.(*ast.KeyValueExpr); isKve {
-					key, _ := exact.Int64Val(c.p.info.Types[kve.Key].Value)
+					key, ok := exact.Int64Val(c.p.info.Types[kve.Key].Value)
+					if !ok {
+						panic("could not get exact int")
+					}
 					i = int(key)
 					element = kve.Value
 				}

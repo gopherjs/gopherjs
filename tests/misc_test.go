@@ -1,6 +1,9 @@
 package tests
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestSyntax1(t *testing.T) {
 	a := 42
@@ -116,5 +119,11 @@ loop:
 			t.Fail()
 		}
 		break
+	}
+}
+
+func TestMaxUint64(t *testing.T) {
+	if math.MaxUint64 != 18446744073709551615 {
+		t.Fail()
 	}
 }

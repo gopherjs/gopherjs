@@ -29,7 +29,7 @@ Now you can use  `gopherjs build [files]` or `gopherjs install [package]` which 
 - [GopherJS on Twitter](https://twitter.com/GopherJS)
 
 ### Getting started
-#### 1. Interacting with the DOM
+#### Interacting with the DOM
 The package `github.com/gopherjs/gopherjs/js` (see [documentation](http://godoc.org/github.com/gopherjs/gopherjs/js)) provides functions for interacting with native JavaScript APIs. For example the line
 ```js
 document.write("Hello world!");
@@ -40,7 +40,7 @@ js.Global.Get("document").Call("write", "Hello world!")
 ```
 You may also want use the [DOM bindings](http://dominik.honnef.co/go/js/dom), the [jQuery bindings](https://github.com/gopherjs/jquery) (see [TodoMVC Example](https://github.com/gopherjs/todomvc)) or the [AngularJS bindings](https://github.com/gopherjs/go-angularjs). Those are some of the [bindings to JavaScript APIs and libraries](https://github.com/gopherjs/gopherjs/wiki/bindings) by community members.
 
-#### 2. Providing library functions for use in other JavaScript code
+#### Providing library functions for use in other JavaScript code
 Set a global variable to a map that contains the functions:
 ```go
 package main
@@ -59,7 +59,12 @@ func someFunction() {
 ```
 For more details see [Jason Stone's blog post](http://legacytotheedge.blogspot.de/2014/03/gopherjs-go-to-javascript-transpiler.html) about GopherJS.
 
-### Goroutines
+### Architecture
+
+#### General
+GopherJS emulates a 32-bit environment. This means that `int`, `uint` and `uintptr` have a precision of 32 bits. However, the 64-bit integers `int64` and `uint64` are supported. The `GOARCH` value of GopherJS is "js". You may use it as a build constraint: `// +build js`.
+
+#### Goroutines
 JavaScript has no concept of concurrency (except web workers, but those are too strictly separated to be used for goroutines). Because of that, instructions in JavaScript are never blocking. A blocking call would effectively freeze the responsiveness of your web page, so calls with callback arguments are used instead.
 
 GopherJS does some heavy lifting to work around this restriction: Whenever an instruction is blocking (e.g. communicating with a channel that isn't ready), the whole stack will unwind (= all functions return) and the goroutine will be put to sleep. Then another goroutine which is ready to resume gets picked and its stack with all local variables will be restored. This is done by preserving each stack frame inside a closure.

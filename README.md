@@ -21,7 +21,8 @@ Now you can use  `gopherjs build [files]` or `gopherjs install [package]` which 
 
 - Use the `-m` command line flag to generate minified code.
 - Apply gzip compression (http://en.wikipedia.org/wiki/HTTP_compression).
-- Use `int` instead of `(u)int32` or `(u)int64` wherever possible.
+- Use `int` instead of `(u)int32` or `(u)int64`.
+- Use `float64` instead of `float32`.
 
 ### Community
 - [Google Group](https://groups.google.com/d/forum/gopherjs)
@@ -62,7 +63,7 @@ For more details see [Jason Stone's blog post](http://legacytotheedge.blogspot.d
 ### Architecture
 
 #### General
-GopherJS emulates a 32-bit environment. This means that `int`, `uint` and `uintptr` have a precision of 32 bits. However, the 64-bit integers `int64` and `uint64` are supported. The `GOARCH` value of GopherJS is "js". You may use it as a build constraint: `// +build js`.
+GopherJS emulates a 32-bit environment. This means that `int`, `uint` and `uintptr` have a precision of 32 bits. However, the explicit 64-bit integer types `int64` and `uint64` are supported. The `GOARCH` value of GopherJS is "js". You may use it as a build constraint: `// +build js`.
 
 #### Goroutines
 JavaScript has no concept of concurrency (except web workers, but those are too strictly separated to be used for goroutines). Because of that, instructions in JavaScript are never blocking. A blocking call would effectively freeze the responsiveness of your web page, so calls with callback arguments are used instead.

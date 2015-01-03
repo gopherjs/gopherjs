@@ -167,3 +167,7 @@ func Stack(buf []byte, all bool) int {
 	}
 	return copy(buf, s.Call("substr", s.Call("indexOf", "\n").Int()+1).Str())
 }
+
+func LockOSThread() {}
+
+func UnlockOSThread() {}

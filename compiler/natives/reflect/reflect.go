@@ -100,7 +100,7 @@ func TypeOf(i interface{}) Type {
 		return nil
 	}
 	c := js.InternalObject(i).Get("constructor")
-	if c.Get("kind").IsUndefined() { // js.Object
+	if c.Get("kind") == js.Undefined { // js.Object
 		return jsObject()
 	}
 	return reflectType(c)
@@ -111,7 +111,7 @@ func ValueOf(i interface{}) Value {
 		return Value{}
 	}
 	c := js.InternalObject(i).Get("constructor")
-	if c.Get("kind").IsUndefined() { // js.Object
+	if c.Get("kind") == js.Undefined { // js.Object
 		return Value{jsObject(), unsafe.Pointer(js.InternalObject(i).Unsafe()), flag(Interface)}
 	}
 	return makeValue(reflectType(c), js.InternalObject(i).Get("$val"), 0)
@@ -231,11 +231,11 @@ func makemap(t *rtype) (m unsafe.Pointer) {
 
 func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
 	k := js.InternalObject(key).Call("$get")
-	if !k.Get("$key").IsUndefined() {
+	if k.Get("$key") != js.Undefined {
 		k = k.Call("$key")
 	}
 	entry := js.InternalObject(m).Get(k.Str())
-	if entry.IsUndefined() {
+	if entry == js.Undefined {
 		return nil
 	}
 	return unsafe.Pointer(js.Global.Call("$newDataPointer", entry.Get("v"), jsType(PtrTo(t.Elem()))).Unsafe())
@@ -244,7 +244,7 @@ func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
 func mapassign(t *rtype, m, key, val unsafe.Pointer) {
 	kv := js.InternalObject(key).Call("$get")
 	k := kv
-	if !k.Get("$key").IsUndefined() {
+	if k.Get("$key") != js.Undefined {
 		k = k.Call("$key")
 	}
 	jsVal := js.InternalObject(val).Call("$get")
@@ -262,7 +262,7 @@ func mapassign(t *rtype, m, key, val unsafe.Pointer) {
 
 func mapdelete(t *rtype, m unsafe.Pointer, key unsafe.Pointer) {
 	k := js.InternalObject(key).Call("$get")
-	if !k.Get("$key").IsUndefined() {
+	if k.Get("$key") != js.Undefined {
 		k = k.Call("$key")
 	}
 	js.InternalObject(m).Delete(k.Str())

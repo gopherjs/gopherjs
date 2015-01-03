@@ -10,7 +10,7 @@ import (
 
 func runtime_envs() []string {
 	process := js.Global.Get("process")
-	if process.IsUndefined() {
+	if process == js.Undefined {
 		return nil
 	}
 	jsEnv := process.Get("env")
@@ -25,7 +25,7 @@ func runtime_envs() []string {
 
 func setenv_c(k, v string) {
 	process := js.Global.Get("process")
-	if !process.IsUndefined() {
+	if process != js.Undefined {
 		process.Get("env").Set(k, v)
 	}
 }
@@ -45,7 +45,7 @@ func syscall(name string) js.Object {
 		}
 		alreadyTriedToLoad = true
 		require := js.Global.Get("require")
-		if require.IsUndefined() {
+		if require == js.Undefined {
 			panic("")
 		}
 		syscallModule = require.Invoke("syscall")

@@ -8,7 +8,7 @@ import (
 
 func runtime_args() []string {
 	process := js.Global.Get("process")
-	if process.IsUndefined() {
+	if process == js.Undefined {
 		return []string{"browser"}
 	}
 	argv := process.Get("argv")

@@ -104,6 +104,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			return c.formatExpr(`new ($sliceType(%s.Object))($global.Array.prototype.slice.call(%s, []))`, c.p.pkgVars["github.com/gopherjs/gopherjs/js"], args)
 		case "Module":
 			return c.formatExpr("$module")
+		case "Undefined":
+			return c.formatExpr("undefined")
 		}
 	}
 
@@ -683,10 +685,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						return c.internalize(recv, types.NewInterface(nil, nil))
 					case "Unsafe":
 						return recv
-					case "IsUndefined":
-						return c.formatParenExpr("%s === undefined", recv)
-					case "IsNull":
-						return c.formatParenExpr("%s === null", recv)
 					default:
 						panic("Invalid js package object: " + sel.Obj().Name())
 					}

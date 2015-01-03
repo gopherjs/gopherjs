@@ -30,7 +30,7 @@ func printWarning() {
 
 func printToConsole(b []byte) {
 	goPrintToConsole := js.Global.Get("goPrintToConsole")
-	if !goPrintToConsole.IsUndefined() {
+	if goPrintToConsole != js.Undefined {
 		goPrintToConsole.Invoke(js.InternalObject(b))
 		return
 	}

@@ -155,6 +155,9 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 	case *types.Map:
 		return "false"
 	case *types.Interface:
+		if isJsObject(ty) {
+			return "null"
+		}
 		return "$ifaceNil"
 	}
 	return fmt.Sprintf("%s.nil", c.typeName(ty))

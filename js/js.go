@@ -23,7 +23,7 @@
 // The second column denotes the types that are used when converting to `interface{}`. An exception are DOM elements, those are kept with the js.Object type. Additionally, a pointer to a named type is passed to JavaScript as an object which has wrappers for the type's exported methods. This can be used to provide getter and setter methods for Go fields to JavaScript.
 package js
 
-// Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax.
+// Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax. Nil is equal to JavaScript's "null".
 type Object interface {
 
 	// Get returns the object's property with the given key.
@@ -76,12 +76,6 @@ type Object interface {
 
 	// Unsafe returns the object as an uintptr, which can be converted via unsafe.Pointer. Not intended for public use.
 	Unsafe() uintptr
-
-	// IsUndefined returns true if the object is the JavaScript value "undefined".
-	IsUndefined() bool
-
-	// IsNull returns true if the object is the JavaScript value "null".
-	IsNull() bool
 }
 
 // Error encapsulates JavaScript errors. Those are turned into a Go panic and may be rescued, giving an *Error that holds the JavaScript error object.
@@ -111,6 +105,9 @@ var Arguments []Object
 // Module gives the value of the "module" variable set by Node.js. Hint: Set a module export with 'js.Module.Get("exports").Set("exportName", ...)'.
 var Module Object
 
+// Undefined gives the JavaScript value "undefined".
+var Undefined Object
+
 // Debugger gets compiled to JavaScript's "debugger;" statement.
 func Debugger() {}
 
@@ -121,7 +118,7 @@ func InternalObject(i interface{}) Object {
 
 // Keys returns the keys of the given JavaScript object.
 func Keys(o Object) []string {
-	if o.IsUndefined() || o.IsNull() {
+	if o == Undefined || o == nil {
 		return nil
 	}
 	a := Global.Get("Object").Call("keys", o)

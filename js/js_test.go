@@ -96,15 +96,16 @@ func TestFloat(t *testing.T) {
 	}
 }
 
-func TestIsUndefined(t *testing.T) {
-	if dummys.IsUndefined() || !dummys.Get("xyz").IsUndefined() {
+func TestUndefined(t *testing.T) {
+	if dummys == js.Undefined || dummys.Get("xyz") != js.Undefined {
 		t.Fail()
 	}
 }
 
-func TestIsNull(t *testing.T) {
+func TestNull(t *testing.T) {
+	var null js.Object
 	dummys.Set("test", nil)
-	if dummys.IsNull() || !dummys.Get("test").IsNull() {
+	if null != nil || dummys == nil || dummys.Get("test") != nil {
 		t.Fail()
 	}
 }
@@ -292,7 +293,7 @@ func TestError(t *testing.T) {
 			t.Fail()
 		}
 		jsErr, ok := err.(*js.Error)
-		if !ok || jsErr.Get("stack").IsUndefined() {
+		if !ok || jsErr.Get("stack") == js.Undefined {
 			t.Fail()
 		}
 	}()

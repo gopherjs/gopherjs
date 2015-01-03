@@ -36,11 +36,11 @@ func init() {
 
 func GOROOT() string {
 	process := js.Global.Get("process")
-	if process.IsUndefined() {
+	if process == js.Undefined {
 		return "/"
 	}
 	goroot := process.Get("env").Get("GOROOT")
-	if !goroot.IsUndefined() {
+	if goroot != js.Undefined {
 		return goroot.Str()
 	}
 	return defaultGoroot
@@ -52,7 +52,7 @@ func Breakpoint() {
 
 func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
 	info := js.Global.Get("Error").New().Get("stack").Call("split", "\n").Index(skip + 2)
-	if info.IsUndefined() {
+	if info == js.Undefined {
 		return 0, "", 0, false
 	}
 	parts := info.Call("substring", info.Call("indexOf", "(").Int()+1, info.Call("indexOf", ")").Int()).Call("split", ":")
@@ -162,7 +162,7 @@ func SetBlockProfileRate(rate int) {
 
 func Stack(buf []byte, all bool) int {
 	s := js.Global.Get("Error").New().Get("stack")
-	if s.IsUndefined() {
+	if s == js.Undefined {
 		return 0
 	}
 	return copy(buf, s.Call("substr", s.Call("indexOf", "\n").Int()+1).Str())

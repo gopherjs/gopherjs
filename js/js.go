@@ -2,23 +2,23 @@
 //
 // Type conversions between Go types and JavaScript types are performed automatically according to the following table:
 //
-//  | Go types                       | Go interface type              | JavaScript type |
-//  | ------------------------------ | ------------------------------ | --------------- |
-//  | bool                           | bool                           | Boolean         |
-//  | int?, uint?, float?            | float64                        | Number          |
-//  | string                         | string                         | String          |
-//  | [?]int8                        | []int8                         | Int8Array       |
-//  | [?]int16                       | []int16                        | Int16Array      |
-//  | [?]int32, [?]int               | []int                          | Int32Array      |
-//  | [?]uint8                       | []uint8                        | Uint8Array      |
-//  | [?]uint16                      | []uint16                       | Uint16Array     |
-//  | [?]uint32, [?]uint, [?]uintptr | []uint                         | Uint32Array     |
-//  | [?]float32                     | []float32                      | Float32Array    |
-//  | [?]float64                     | []float64                      | Float64Array    |
-//  | all other slices and arrays    | []interface{}                  | Array           |
-//  | maps, structs                  | map[string]interface{}         | Object          |
-//  | functions                      | func(...interface{}) js.Object | Function        |
-//  | time.Time                      | time.Time                      | Date            |
+//  | Go types                       | Go interface type | JavaScript type |
+//  | ------------------------------ | ----------------- | --------------- |
+//  | bool                           | bool              | Boolean         |
+//  | int?, uint?, float?            | float64           | Number          |
+//  | string                         | string            | String          |
+//  | [?]int8                        | []int8            | Int8Array       |
+//  | [?]int16                       | []int16           | Int16Array      |
+//  | [?]int32, [?]int               | []int             | Int32Array      |
+//  | [?]uint8                       | []uint8           | Uint8Array      |
+//  | [?]uint16                      | []uint16          | Uint16Array     |
+//  | [?]uint32, [?]uint, [?]uintptr | []uint            | Uint32Array     |
+//  | [?]float32                     | []float32         | Float32Array    |
+//  | [?]float64                     | []float64         | Float64Array    |
+//  | all other slices and arrays    | js.S              | Array           |
+//  | maps, structs                  | js.M              | Object          |
+//  | functions                      | js.F              | Function        |
+//  | time.Time                      | time.Time         | Date            |
 //
 // The second column denotes the types that are used when converting to `interface{}`. An exception are DOM elements, those are kept with the js.Object type. Additionally, a pointer to a named type is passed to JavaScript as an object which has wrappers for the type's exported methods. This can be used to provide getter and setter methods for Go fields to JavaScript.
 package js
@@ -129,14 +129,20 @@ func Keys(o Object) []string {
 	return s
 }
 
-// M is a simple map type. It is intended as a shorthand for JavaScript objects (before conversion).
-type M map[string]interface{}
-
 // S is a simple slice type. It is intended as a shorthand for JavaScript arrays (before conversion).
 type S []interface{}
 
+// M is a simple map type. It is intended as a shorthand for JavaScript objects (before conversion).
+type M map[string]interface{}
+
+// F is a simple func type.
+type F func(...interface{}) Object
+
 func init() {
-	// avoid dead code elimination of Error
+	// avoid dead code elimination
 	e := Error{}
-	_ = e
+	s := interface{}(S(nil))
+	m := interface{}(M(nil))
+	f := interface{}(F(nil))
+	_, _, _, _ = e, s, m, f
 }

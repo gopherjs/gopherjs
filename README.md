@@ -21,7 +21,7 @@ Now you can use  `gopherjs build [files]` or `gopherjs install [package]` which 
 
 - Use the `-m` command line flag to generate minified code.
 - Apply gzip compression (http://en.wikipedia.org/wiki/HTTP_compression).
-- Use `int` instead of `(u)int32` or `(u)int64`.
+- Use `int` instead of `(u)int8/16/32/64`.
 - Use `float64` instead of `float32`.
 
 ### Community

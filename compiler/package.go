@@ -346,7 +346,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			}
 			d.DceFilters = []string{qualifiedName(namedRecvType.Obj())}
 			if !fun.Name.IsExported() {
-				d.DceFilters = append(d.DceFilters, qualifiedName(o))
+				d.DceFilters = append(d.DceFilters, qualifiedName(o)+"~")
 			}
 		}
 

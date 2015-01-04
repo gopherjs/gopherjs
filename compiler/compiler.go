@@ -140,28 +140,29 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 		return err
 	}
 	vars := []string{"$pkg = {}"}
-	for i := range pkg.Declarations {
-		if len(pkg.Declarations[i].DceFilters) == 0 {
-			vars = append(vars, pkg.Declarations[i].Vars...)
+	for _, d := range pkg.Declarations {
+		if len(d.DceFilters) == 0 {
+			vars = append(vars, d.Vars...)
 		}
 	}
 	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
 		return err
 	}
-	for i := range pkg.Declarations {
-		if len(pkg.Declarations[i].DceFilters) == 0 {
-			if _, err := w.Write(pkg.Declarations[i].BodyCode); err != nil {
+	for _, d := range pkg.Declarations {
+		if len(d.DceFilters) == 0 {
+			if _, err := w.Write(d.BodyCode); err != nil {
 				return err
 			}
+		} else {
 		}
 	}
 
 	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $r, $s = 0; var $f = function() { while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
 		return err
 	}
-	for i := range pkg.Declarations {
-		if len(pkg.Declarations[i].DceFilters) == 0 {
-			if _, err := w.Write(pkg.Declarations[i].InitCode); err != nil {
+	for _, d := range pkg.Declarations {
+		if len(d.DceFilters) == 0 {
+			if _, err := w.Write(d.InitCode); err != nil {
 				return err
 			}
 		}

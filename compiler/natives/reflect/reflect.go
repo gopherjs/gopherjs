@@ -85,7 +85,7 @@ func MakeSlice(typ Type, len, cap int) Value {
 		panic("reflect.MakeSlice: len > cap")
 	}
 
-	return makeValue(typ, jsType(typ).Call("make", len, cap, func() js.Object { return jsType(typ.Elem()).Call("zero") }), 0)
+	return makeValue(typ, jsType(typ).Call("make", len, cap, js.InternalObject(func() js.Object { return jsType(typ.Elem()).Call("zero") })), 0)
 }
 
 func jsObject() *rtype {
@@ -673,7 +673,7 @@ func (v Value) Field(i int) Value {
 
 	s := js.InternalObject(v.ptr)
 	if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return s.Get(name) }, func(v js.Object) { s.Set(name, v) }).Unsafe()), fl}
+		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return s.Get(name) }), js.InternalObject(func(v js.Object) { s.Set(name, v) })).Unsafe()), fl}
 	}
 	return makeValue(typ, s.Get(name), fl)
 }
@@ -691,7 +691,7 @@ func (v Value) Index(i int) Value {
 
 		a := js.InternalObject(v.ptr)
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return a.Index(i) }, func(v js.Object) { a.SetIndex(i, v) }).Unsafe()), fl}
+			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return a.Index(i) }), js.InternalObject(func(v js.Object) { a.SetIndex(i, v) })).Unsafe()), fl}
 		}
 		return makeValue(typ, a.Index(i), fl)
 
@@ -708,7 +708,7 @@ func (v Value) Index(i int) Value {
 		i += s.Get("$offset").Int()
 		a := s.Get("$array")
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(func() js.Object { return a.Index(i) }, func(v js.Object) { a.SetIndex(i, v) }).Unsafe()), fl}
+			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return a.Index(i) }), js.InternalObject(func(v js.Object) { a.SetIndex(i, v) })).Unsafe()), fl}
 		}
 		return makeValue(typ, a.Index(i), fl)
 

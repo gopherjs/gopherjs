@@ -60,35 +60,35 @@ var $externalize = function(v, t) {
       for (i = 0; i < t.results.length; i++) {
         convert = convert || $needsExternalization(t.results[i]);
       }
-      if (!convert) {
-        return v;
-      }
-      v.$externalizeWrapper = function() {
-        var args = [], i;
-        for (i = 0; i < t.params.length; i++) {
-          if (t.variadic && i === t.params.length - 1) {
-            var vt = t.params[i].elem, varargs = [], j;
-            for (j = i; j < arguments.length; j++) {
-              varargs.push($internalize(arguments[j], vt));
+      v.$externalizeWrapper = v;
+      if (convert) {
+        v.$externalizeWrapper = function() {
+          var args = [], i;
+          for (i = 0; i < t.params.length; i++) {
+            if (t.variadic && i === t.params.length - 1) {
+              var vt = t.params[i].elem, varargs = [], j;
+              for (j = i; j < arguments.length; j++) {
+                varargs.push($internalize(arguments[j], vt));
+              }
+              args.push(new (t.params[i])(varargs));
+              break;
             }
-            args.push(new (t.params[i])(varargs));
-            break;
+            args.push($internalize(arguments[i], t.params[i]));
           }
-          args.push($internalize(arguments[i], t.params[i]));
-        }
-        var result = v.apply(this, args);
-        switch (t.results.length) {
-        case 0:
-          return;
-        case 1:
-          return $externalize(result, t.results[0]);
-        default:
-          for (i = 0; i < t.results.length; i++) {
-            result[i] = $externalize(result[i], t.results[i]);
+          var result = v.apply(this, args);
+          switch (t.results.length) {
+          case 0:
+            return;
+          case 1:
+            return $externalize(result, t.results[0]);
+          default:
+            for (i = 0; i < t.results.length; i++) {
+              result[i] = $externalize(result[i], t.results[i]);
+            }
+            return result;
           }
-          return result;
-        }
-      };
+        };
+      }
     }
     return v.$externalizeWrapper;
   case $kindInterface:
@@ -127,8 +127,11 @@ var $externalize = function(v, t) {
     }
     return $sliceToArray(v);
   case $kindString:
-    var s = "", r, i, j = 0;
-    for (i = 0; i < v.length; i += r[1], j++) {
+    if (v.search(/^[\x00-\x7F]*$/) !== -1) {
+      return v;
+    }
+    var s = "", r, i;
+    for (i = 0; i < v.length; i += r[1]) {
       r = $decodeRune(v, i);
       s += String.fromCharCode(r[0]);
     }
@@ -269,6 +272,9 @@ var $internalize = function(v, t, recv) {
     return new t($mapArray(v, function(e) { return $internalize(e, t.elem); }));
   case $kindString:
     v = String(v);
+    if (v.search(/^[\x00-\x7F]*$/) !== -1) {
+      return v;
+    }
     var s = "", i;
     for (i = 0; i < v.length; i++) {
       s += $encodeRune(v.charCodeAt(i));

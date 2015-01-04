@@ -43,7 +43,7 @@ func ImportDependencies(archive *Archive, importPkg func(string) (*Archive, erro
 			return err
 		}
 		for _, imp := range dep.Imports {
-			if err := collectDependencies(imp.Path); err != nil {
+			if err := collectDependencies(imp); err != nil {
 				return err
 			}
 		}
@@ -52,9 +52,11 @@ func ImportDependencies(archive *Archive, importPkg func(string) (*Archive, erro
 		return nil
 	}
 
-	collectDependencies("runtime")
+	if err := collectDependencies("runtime"); err != nil {
+		return nil, err
+	}
 	for _, imp := range archive.Imports {
-		if err := collectDependencies(imp.Path); err != nil {
+		if err := collectDependencies(imp); err != nil {
 			return nil, err
 		}
 	}
@@ -76,8 +78,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 				continue
 			}
 			for _, f := range d.DceFilters {
-				o := string(pkg.ImportPath) + ":" + string(f)
-				declsByObject[o] = append(declsByObject[o], d)
+				declsByObject[f] = append(declsByObject[f], d)
 			}
 		}
 	}
@@ -86,13 +87,11 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 		d := pendingDecls[len(pendingDecls)-1]
 		pendingDecls = pendingDecls[:len(pendingDecls)-1]
 		for _, dep := range d.DceDeps {
-			o := string(dep)
-			if decls, ok := declsByObject[o]; ok {
-				delete(declsByObject, o)
-				name := strings.Split(o, ":")[1]
+			if decls, ok := declsByObject[dep]; ok {
+				delete(declsByObject, dep)
 				for _, d := range decls {
 					for i, f := range d.DceFilters {
-						if string(f) == name {
+						if f == dep {
 							d.DceFilters[i] = d.DceFilters[len(d.DceFilters)-1]
 							d.DceFilters = d.DceFilters[:len(d.DceFilters)-1]
 							break
@@ -141,18 +140,13 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 		return err
 	}
 	vars := []string{"$pkg = {}"}
-	for i := range pkg.Imports {
-		vars = append(vars, fmt.Sprintf("%s = $packages[\"%s\"]", pkg.Imports[i].VarName, pkg.Imports[i].Path))
-	}
 	for i := range pkg.Declarations {
 		if len(pkg.Declarations[i].DceFilters) == 0 {
 			vars = append(vars, pkg.Declarations[i].Vars...)
 		}
 	}
-	if len(vars) != 0 {
-		if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
-			return err
-		}
+	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
+		return err
 	}
 	for i := range pkg.Declarations {
 		if len(pkg.Declarations[i].DceFilters) == 0 {
@@ -202,16 +196,11 @@ func WriteArchive(a *Archive, w io.Writer) error {
 
 type Archive struct {
 	ImportPath   string
+	Imports      []string
 	GcData       []byte
-	Imports      []*PkgImport
 	Declarations []*Decl
 	FileSet      []byte
 	Minified     bool
-}
-
-type PkgImport struct {
-	Path    string
-	VarName string
 }
 
 type Decl struct {

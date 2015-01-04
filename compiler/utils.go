@@ -204,15 +204,22 @@ func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool, initializ
 	}
 	n := c.allVars[name]
 	c.allVars[name] = n + 1
+	varName := name
 	if n > 0 {
-		name = fmt.Sprintf("%s$%d", name, n)
+		varName = fmt.Sprintf("%s$%d", name, n)
 	}
+
+	if pkgLevel {
+		c.p.toplevel.allVars[name] = n + 1
+		return varName
+	}
+
 	if initializer != "" {
-		c.localVars = append(c.localVars, name+" = "+initializer)
-		return name
+		c.localVars = append(c.localVars, varName+" = "+initializer)
+		return varName
 	}
-	c.localVars = append(c.localVars, name)
-	return name
+	c.localVars = append(c.localVars, varName)
+	return varName
 }
 
 func (c *funcContext) newIdent(name string, t types.Type) *ast.Ident {
@@ -237,7 +244,7 @@ func (c *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
 
 func (c *funcContext) objectName(o types.Object) string {
 	if o.Pkg() != c.p.pkg || o.Parent() == c.p.pkg.Scope() {
-		c.p.dependencies[o] = true
+		c.p.dependencies[qualifiedName(o)] = true
 	}
 
 	if o.Pkg() != c.p.pkg {
@@ -270,29 +277,27 @@ func (c *funcContext) objectName(o types.Object) string {
 func (c *funcContext) typeName(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Basic:
-		switch t.Kind() {
-		case types.UnsafePointer:
-			return "$UnsafePointer"
-		default:
-			return "$" + toJavaScriptType(t)
-		}
+		return "$" + toJavaScriptType(t)
 	case *types.Named:
 		if t.Obj().Name() == "error" {
 			return "$error"
 		}
 		return c.objectName(t.Obj())
-	case *types.Pointer:
-		return fmt.Sprintf("($ptrType(%s))", c.initArgs(t))
 	case *types.Interface:
 		if t.Empty() {
 			return "$emptyInterface"
 		}
-		return fmt.Sprintf("($interfaceType(%s))", c.initArgs(t))
-	case *types.Array, *types.Chan, *types.Slice, *types.Map, *types.Signature, *types.Struct:
-		return fmt.Sprintf("($%sType(%s))", strings.ToLower(typeKind(t)[5:]), c.initArgs(t))
-	default:
-		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
+
+	name, ok := c.p.anonTypeVars[ty.String()]
+	if !ok {
+		c.initArgs(ty) // cause all embedded types to be registered
+		c.p.anonTypes = append(c.p.anonTypes, ty)
+		name = c.newVariableWithLevel(strings.ToLower(typeKind(ty)[5:])+"Type", true, "")
+		c.p.anonTypeVars[ty.String()] = name
+	}
+	c.p.dependencies[c.p.pkg.Path()+":"+ty.String()] = true
+	return name
 }
 
 func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
@@ -554,4 +559,8 @@ func removeWhitespace(b []byte, minify bool) []byte {
 		b = b[1:]
 	}
 	return out
+}
+
+func qualifiedName(o types.Object) string {
+	return o.Pkg().Path() + "." + o.Name()
 }

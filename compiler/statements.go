@@ -515,8 +515,9 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		case token.TYPE:
 			for _, spec := range decl.Specs {
 				o := c.p.info.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
-				c.translateType(o, false)
-				c.initType(o)
+				c.p.typeNames = append(c.p.typeNames, o)
+				c.p.objectVars[o] = c.newVariableWithLevel(o.Name(), true, "")
+				c.p.dependencies[qualifiedName(o)] = true
 			}
 		case token.CONST:
 			// skip, constants are inlined

@@ -235,7 +235,7 @@ var $internalize = function(v, t, recv) {
     case Float64Array:
       return new ($sliceType($Float64))(v);
     case Array:
-      return $internalize(v, $packages["github.com/gopherjs/gopherjs/js"].S);
+      return $internalize(v, $sliceType($emptyInterface));
     case Boolean:
       return new $Bool(!!v);
     case Date:
@@ -244,7 +244,7 @@ var $internalize = function(v, t, recv) {
         return new timePkg.Time(timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000)));
       }
     case Function:
-      var funcType = $packages["github.com/gopherjs/gopherjs/js"].F;
+      var funcType = $funcType([$sliceType($emptyInterface)], [$packages["github.com/gopherjs/gopherjs/js"].Object], true);
       return new funcType($internalize(v, funcType));
     case Number:
       return new $Float64(parseFloat(v));
@@ -254,7 +254,7 @@ var $internalize = function(v, t, recv) {
       if ($global.Node && v instanceof $global.Node) {
         return v;
       }
-      var mapType = $packages["github.com/gopherjs/gopherjs/js"].M;
+      var mapType = $mapType($String, $emptyInterface);
       return new mapType($internalize(v, mapType));
     }
   case $kindMap:

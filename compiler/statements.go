@@ -840,7 +840,7 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 	switch typ.Underlying().(type) {
 	case *types.Array, *types.Struct:
 		if define {
-			return fmt.Sprintf("%[1]s = %[2]s; $copy(%[1]s, %[3]s, %[4]s);", c.translateExpr(lhs), c.zeroValue(typ), rhs, c.typeName(typ))
+			return fmt.Sprintf("%s = $clone(%s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
 		}
 		return fmt.Sprintf("$copy(%s, %s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
 	}

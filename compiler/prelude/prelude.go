@@ -228,22 +228,26 @@ var $copySlice = function(dst, src) {
 };
 
 var $copy = function(dst, src, type) {
-  var i;
   switch (type.kind) {
   case $kindArray:
     $internalCopy(dst, src, 0, 0, src.length, type.elem);
-    return true;
+    break;
   case $kindStruct:
-    for (i = 0; i < type.fields.length; i++) {
+    for (var i = 0; i < type.fields.length; i++) {
       var field = type.fields[i];
-      var name = field[0];
-      if (!$copy(dst[name], src[name], field[3])) {
-        dst[name] = src[name];
+      var fieldName = field[0];
+      var fieldType = field[3];
+      switch (fieldType.kind) {
+      case $kindArray:
+      case $kindStruct:
+        $copy(dst[fieldName], src[fieldName], fieldType);
+        continue;
+      default:
+        dst[fieldName] = src[fieldName];
+        continue;
       }
     }
-    return true;
-  default:
-    return false;
+    break;
   }
 };
 

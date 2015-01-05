@@ -837,12 +837,18 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 		panic("translateAssign with blank lhs")
 	}
 
-	switch typ.Underlying().(type) {
-	case *types.Array, *types.Struct:
-		if define {
-			return fmt.Sprintf("%s = $clone(%s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
+	isReflectValue := false
+	if named, ok := typ.(*types.Named); ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == "reflect" && named.Obj().Name() == "Value" {
+		isReflectValue = true
+	}
+	if !isReflectValue { // this is a performance hack, but it is safe since reflect.Value has no exported fields and the reflect package does not violate this assumption
+		switch typ.Underlying().(type) {
+		case *types.Array, *types.Struct:
+			if define {
+				return fmt.Sprintf("%s = $clone(%s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
+			}
+			return fmt.Sprintf("$copy(%s, %s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
 		}
-		return fmt.Sprintf("$copy(%s, %s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
 	}
 
 	switch l := lhs.(type) {

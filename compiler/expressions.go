@@ -715,7 +715,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 		sig := c.p.info.Types[plainFun].Type.Underlying().(*types.Signature)
-		args := c.translateArgs(sig, e.Args, e.Ellipsis.IsValid())
+		args := c.translateArgs(sig, e.Args, e.Ellipsis.IsValid(), false)
 		if c.blocking[e] {
 			resumeCase := c.caseCounter
 			c.caseCounter++

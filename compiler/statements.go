@@ -320,7 +320,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			return
 		}
 		sig := c.p.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
-		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
+		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid(), true)
 		if len(c.blocking) != 0 {
 			args = append(args, "$BLOCKING")
 		}
@@ -536,7 +536,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		c.translateStmt(s.Stmt, s.Label.Name)
 
 	case *ast.GoStmt:
-		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid()), ", "))
+		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.info.Types[s.Call.Fun].Type.Underlying().(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid(), false), ", "))
 
 	case *ast.SendStmt:
 		chanType := c.p.info.Types[s.Chan].Type.Underlying().(*types.Chan)

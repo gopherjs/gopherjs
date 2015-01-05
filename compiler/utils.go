@@ -60,7 +60,7 @@ func (c *funcContext) Delayed(f func()) {
 	c.delayedOutput = c.CatchOutput(0, f)
 }
 
-func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis bool) []string {
+func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis, clone bool) []string {
 	if len(args) == 1 {
 		if tuple, isTuple := c.p.info.Types[args[0]].Type.(*types.Tuple); isTuple {
 			tupleVar := c.newVariable("_tuple")
@@ -84,6 +84,10 @@ func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellip
 			break
 		}
 		argType := sig.Params().At(i).Type()
+		if clone {
+			params[i] = c.translateImplicitConversionWithCloning(args[i], argType).String()
+			continue
+		}
 		params[i] = c.translateImplicitConversion(args[i], argType).String()
 	}
 	return params

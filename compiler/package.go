@@ -538,6 +538,20 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 		}
 
 		stmts := fun.Body.List
+		for _, p := range fun.Type.Params.List {
+			for _, n := range p.Names {
+				switch c.p.info.Defs[n].Type().Underlying().(type) {
+				case *types.Array, *types.Struct:
+					stmts = append([]ast.Stmt{
+						&ast.AssignStmt{
+							Lhs: []ast.Expr{n},
+							Tok: token.DEFINE,
+							Rhs: []ast.Expr{n},
+						},
+					}, stmts...)
+				}
+			}
+		}
 		if recv != nil && !isBlank(recv) {
 			stmts = append([]ast.Stmt{
 				&ast.AssignStmt{

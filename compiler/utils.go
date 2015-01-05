@@ -84,7 +84,7 @@ func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellip
 			break
 		}
 		argType := sig.Params().At(i).Type()
-		params[i] = c.translateImplicitConversionWithCloning(args[i], argType).String()
+		params[i] = c.translateImplicitConversion(args[i], argType).String()
 	}
 	return params
 }

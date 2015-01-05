@@ -15,6 +15,7 @@ import (
 
 type funcContext struct {
 	p             *pkgContext
+	parent        *funcContext
 	name          string
 	sig           *types.Signature
 	allVars       map[string]int
@@ -37,7 +38,6 @@ type pkgContext struct {
 	info          *types.Info
 	importContext *ImportContext
 	comments      ast.CommentMap
-	toplevel      *funcContext
 	typeNames     []*types.TypeName
 	funcContexts  map[*types.Func]*funcContext
 	pkgVars       map[string]string
@@ -149,7 +149,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		labelCases:  make(map[string]int),
 		localCalls:  make(map[*types.Func][][]ast.Node),
 	}
-	c.p.toplevel = c
 	for name := range reservedKeywords {
 		c.allVars[name] = 1
 	}
@@ -548,7 +547,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 				},
 			}, stmts...)
 		}
-		params, body := context.translateFunction(fun.Type, stmts, c.allVars)
+		params, body := context.translateFunction(fun.Type, stmts, c)
 		joinedParams = strings.Join(params, ", ")
 		return []byte(fmt.Sprintf("\t%s = function(%s) {\n%s\t};\n", lhs, joinedParams, string(body)))
 	}
@@ -735,9 +734,10 @@ func (c *funcContext) markBlocking(stack []ast.Node) {
 	}
 }
 
-func (c *funcContext) translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerVars map[string]int) ([]string, []byte) {
-	c.allVars = make(map[string]int, len(outerVars))
-	for k, v := range outerVars {
+func (c *funcContext) translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcContext) ([]string, []byte) {
+	c.parent = outerContext
+	c.allVars = make(map[string]int, len(outerContext.allVars))
+	for k, v := range outerContext.allVars {
 		c.allVars[k] = v
 	}
 

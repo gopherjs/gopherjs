@@ -210,7 +210,9 @@ func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool, initializ
 	}
 
 	if pkgLevel {
-		c.p.toplevel.allVars[name] = n + 1
+		for c2 := c.parent; c2 != nil; c2 = c2.parent {
+			c2.allVars[name] = n + 1
+		}
 		return varName
 	}
 

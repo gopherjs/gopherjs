@@ -252,8 +252,7 @@ var $copy = function(dst, src, type) {
 };
 
 var $internalCopy = function(dst, src, dstOffset, srcOffset, n, elem) {
-  var i;
-  if (n === 0) {
+  if (n === 0 || (dst === src && dstOffset === srcOffset)) {
     return;
   }
 
@@ -265,13 +264,25 @@ var $internalCopy = function(dst, src, dstOffset, srcOffset, n, elem) {
   switch (elem.kind) {
   case $kindArray:
   case $kindStruct:
-    for (i = 0; i < n; i++) {
+    if (dst === src && dstOffset > srcOffset) {
+      for (var i = n - 1; i >= 0; i--) {
+        $copy(dst[dstOffset + i], src[srcOffset + i], elem);
+      }
+      return;
+    }
+    for (var i = 0; i < n; i++) {
       $copy(dst[dstOffset + i], src[srcOffset + i], elem);
     }
     return;
   }
 
-  for (i = 0; i < n; i++) {
+  if (dst === src && dstOffset > srcOffset) {
+    for (var i = n - 1; i >= 0; i--) {
+      dst[dstOffset + i] = src[srcOffset + i];
+    }
+    return;
+  }
+  for (var i = 0; i < n; i++) {
     dst[dstOffset + i] = src[srcOffset + i];
   }
 };

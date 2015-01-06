@@ -127,3 +127,20 @@ func TestMaxUint64(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestCopyBuiltin(t *testing.T) {
+	{
+		s := []string{"a", "b", "c"}
+		copy(s, s[1:])
+		if s[0] != "b" || s[1] != "c" || s[2] != "c" {
+			t.Fail()
+		}
+	}
+	{
+		s := []string{"a", "b", "c"}
+		copy(s[1:], s)
+		if s[0] != "a" || s[1] != "a" || s[2] != "b" {
+			t.Fail()
+		}
+	}
+}

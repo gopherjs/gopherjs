@@ -157,8 +157,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var importDecls []*Decl
 	var importedPaths []string
 	for _, importedPkg := range typesPkg.Imports() {
-		varName := c.newVariableWithLevel(importedPkg.Name(), true, "")
-		c.p.pkgVars[importedPkg.Path()] = varName
+		c.p.pkgVars[importedPkg.Path()] = c.newVariableWithLevel(importedPkg.Name(), true, "")
 		importedPaths = append(importedPaths, importedPkg.Path())
 	}
 	sort.Strings(importedPaths)

@@ -248,12 +248,12 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
         rt.ptrType = new $reflect.ptrType.Ptr(rt, typ.reflectType());
       };
       /* nil value */
-      typ.Ptr.nil = Object.create(constructor.prototype);
-      typ.Ptr.nil.$val = typ.Ptr.nil;
+      var properties = {};
       for (i = 0; i < fields.length; i++) {
-        var field = fields[i];
-        Object.defineProperty(typ.Ptr.nil, field[0], { get: $throwNilPointerError, set: $throwNilPointerError });
+        properties[fields[i][0]] = { get: $throwNilPointerError, set: $throwNilPointerError };
       }
+      typ.Ptr.nil = Object.create(constructor.prototype, properties);
+      typ.Ptr.nil.$val = typ.Ptr.nil;
       /* methods for embedded fields */
       for (i = 0; i < typ.methods.length; i++) {
         var m = typ.methods[i];

@@ -298,8 +298,8 @@ var $pointerOfStructConversion = function(obj, type) {
     obj.$proxies = {};
     obj.$proxies[obj.constructor.Struct.string] = obj;
   }
-  var proxie = obj.$proxies[type.string];
-  if (proxie === undefined) {
+  var proxy = obj.$proxies[type.string];
+  if (proxy === undefined) {
     var properties = {};
     for (var i = 0; i < type.fields.length; i++) {
       var fieldName = type.fields[i][0];
@@ -308,11 +308,11 @@ var $pointerOfStructConversion = function(obj, type) {
         set: function(value) { obj[fieldName] = value; },
       };
     }
-    proxie = Object.create(type.prototype, properties);
-    obj.$proxies[type.string] = proxie;
-    proxie.$proxies = obj.$proxies;
+    proxy = Object.create(type.prototype, properties);
+    obj.$proxies[type.string] = proxy;
+    proxy.$proxies = obj.$proxies;
   }
-  return proxie;
+  return proxy;
 };
 
 var $append = function(slice) {

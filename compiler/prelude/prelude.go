@@ -296,19 +296,21 @@ var $clone = function(src, type) {
 var $pointerOfStructConversion = function(obj, type) {
   if(obj.$proxies === undefined) {
     obj.$proxies = {};
-    obj.$proxies[obj.constructor.Struct.string] = obj;
+    obj.$proxies[obj.constructor.string] = obj;
   }
   var proxy = obj.$proxies[type.string];
   if (proxy === undefined) {
     var properties = {};
-    for (var i = 0; i < type.fields.length; i++) {
-      var fieldName = type.fields[i][0];
-      properties[fieldName] = {
-        get: function() { return obj[fieldName]; },
-        set: function(value) { obj[fieldName] = value; },
-      };
+    for (var i = 0; i < type.Struct.fields.length; i++) {
+      (function(fieldName) {
+        properties[fieldName] = {
+          get: function() { return obj[fieldName]; },
+          set: function(value) { obj[fieldName] = value; },
+        };
+      })(type.Struct.fields[i][0]);
     }
     proxy = Object.create(type.prototype, properties);
+    proxy.$val = proxy;
     obj.$proxies[type.string] = proxy;
     proxy.$proxies = obj.$proxies;
   }

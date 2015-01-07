@@ -1064,7 +1064,7 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 				target := c.newVariable("_struct")
 				return c.formatExpr("(%s = %e, %s = %s, %s, %s)", array, expr, target, c.zeroValue(t.Elem()), c.loadStruct(array, target, s), target)
 			}
-			return c.formatExpr("$pointerOfStructConversion(%e, %s)", expr, c.typeName(t.Elem()))
+			return c.formatExpr("$pointerOfStructConversion(%e, %s)", expr, c.typeName(t))
 		}
 
 		if !types.Identical(exprType, types.Typ[types.UnsafePointer]) {

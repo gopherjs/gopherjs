@@ -144,3 +144,22 @@ func TestCopyBuiltin(t *testing.T) {
 		}
 	}
 }
+
+func TestPointerOfStructConversion(t *testing.T) {
+	type A struct {
+		Value int
+	}
+
+	type B A
+
+	a1 := &A{Value: 1}
+	b1 := (*B)(a1)
+	b1.Value = 2
+	a2 := (*A)(b1)
+	a2.Value = 3
+	b2 := (*B)(a2)
+	b2.Value = 4
+	if a1 != a2 || b1 != b2 || a1.Value != 4 || a2.Value != 4 || b1.Value != 4 || b2.Value != 4 {
+		t.Fail()
+	}
+}

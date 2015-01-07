@@ -293,6 +293,28 @@ var $clone = function(src, type) {
   return clone;
 };
 
+var $pointerOfStructConversion = function(obj, type) {
+  if(obj.$proxies === undefined) {
+    obj.$proxies = {};
+    obj.$proxies[obj.constructor.Struct.string] = obj;
+  }
+  var proxie = obj.$proxies[type.string];
+  if (proxie === undefined) {
+    var properties = {};
+    for (var i = 0; i < type.fields.length; i++) {
+      var fieldName = type.fields[i][0];
+      properties[fieldName] = {
+        get: function() { return obj[fieldName]; },
+        set: function(value) { obj[fieldName] = value; },
+      };
+    }
+    proxie = Object.create(type.prototype, properties);
+    obj.$proxies[type.string] = proxie;
+    proxie.$proxies = obj.$proxies;
+  }
+  return proxie;
+};
+
 var $append = function(slice) {
   return $internalAppend(slice, arguments, 1, arguments.length - 1);
 };

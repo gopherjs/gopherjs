@@ -5,7 +5,6 @@ const Prelude = prelude + types + numeric + goroutines + jsmapping
 const prelude = `Error.stackTraceLimit = Infinity;
 
 var $global = (function() { return this; })();
-var $module;
 if (typeof module !== "undefined") {
   $module = module;
 }

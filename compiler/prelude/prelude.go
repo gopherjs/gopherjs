@@ -12,10 +12,12 @@ if (typeof window !== "undefined") { /* web page */
 } else if (typeof global !== "undefined") { /* Node.js */
   $global = global;
   $global.require = require;
-} else if (typeof $top_level_this !== "undefined") { /* Others (e.g. Nashorn) */
-  $global = $top_level_this;
-} else {
-  throw new Error("warning: no global object found");
+} else { /* others (e.g. Nashorn) */
+  $global = $topLevelThis;
+}
+
+if ($global === undefined || $global.Array === undefined) {
+  throw new Error("no global object found");
 }
 if (typeof module !== "undefined") {
   $module = module;

@@ -105,7 +105,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 		}
 	}
 
-	if _, err := w.Write([]byte("\"use strict\";\n(function($top_level_this) {\n\n")); err != nil {
+	if _, err := w.Write([]byte("\"use strict\";\n(function($topLevelThis) {\n\n")); err != nil {
 		return err
 	}
 	if _, err := w.Write(removeWhitespace([]byte(prelude.Prelude), minify)); err != nil {

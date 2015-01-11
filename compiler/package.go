@@ -864,6 +864,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 	})
 
 	if len(c.localVars) != 0 {
+		sort.Strings(c.localVars)
 		body = append([]byte(fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.p.indentation+1), strings.Join(c.localVars, ", "))), body...)
 	}
 	return body

@@ -4,7 +4,17 @@ const Prelude = prelude + types + numeric + goroutines + jsmapping
 
 const prelude = `Error.stackTraceLimit = Infinity;
 
-var $global = (function() { return this; })();
+var $global, $module;
+if (typeof window !== "undefined") { /* web page */
+  $global = window;
+} else if (typeof self !== "undefined") { /* web worker */
+  $global = self;
+} else if (typeof global !== "undefined") { /* Node.js */
+  $global = global;
+  $global.require = require;
+} else {
+  console.log("warning: no global object found");
+}
 if (typeof module !== "undefined") {
   $module = module;
 }

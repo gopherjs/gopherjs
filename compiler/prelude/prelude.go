@@ -12,8 +12,10 @@ if (typeof window !== "undefined") { /* web page */
 } else if (typeof global !== "undefined") { /* Node.js */
   $global = global;
   $global.require = require;
+} else if (typeof $top_level_this !== "undefined") { /* Others (e.g. Nashorn) */
+  $global = $top_level_this;
 } else {
-  console.log("warning: no global object found");
+  throw new Error("warning: no global object found");
 }
 if (typeof module !== "undefined") {
   $module = module;

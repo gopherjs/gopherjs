@@ -157,7 +157,7 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 		}
 	}
 
-	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $r, $s = 0; var $f = function() { while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
+	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $r, $s = 0; var $init_"+pkg.Name+" = function() { while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
 		return err
 	}
 	for _, d := range pkg.Declarations {
@@ -167,7 +167,7 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 			}
 		}
 	}
-	if _, err := w.Write(removeWhitespace([]byte("\t\t/* */ } return; } }; $f.$blocking = true; return $f;\n\t};\n\treturn $pkg;\n})();"), minify)); err != nil {
+	if _, err := w.Write(removeWhitespace([]byte("\t\t/* */ } return; } }; $init_"+pkg.Name+".$blocking = true; return $init_"+pkg.Name+";\n\t};\n\treturn $pkg;\n})();"), minify)); err != nil {
 		return err
 	}
 	if _, err := w.Write([]byte("\n")); err != nil { // keep this \n even when minified
@@ -197,6 +197,7 @@ func WriteArchive(a *Archive, w io.Writer) error {
 
 type Archive struct {
 	ImportPath   string
+	Name         string
 	Imports      []string
 	GcData       []byte
 	Declarations []*Decl

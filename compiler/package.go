@@ -461,6 +461,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	return &Archive{
 		ImportPath:   importPath,
+		Name:         typesPkg.Name(),
 		Imports:      importedPaths,
 		GcData:       gcData.Bytes(),
 		Declarations: allDecls,

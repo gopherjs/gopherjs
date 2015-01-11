@@ -63,7 +63,7 @@ func Import(path string, mode build.ImportMode, installSuffix string) (*build.Pa
 	}
 	switch path {
 	case "runtime":
-		pkg.GoFiles = []string{"error.go", fmt.Sprintf("zgoos_%s.go", runtime.GOOS), "zversion.go"}
+		pkg.GoFiles = []string{"error.go", fmt.Sprintf("zgoos_%s.go", buildContext.GOOS), "zversion.go"}
 	case "runtime/pprof":
 		pkg.GoFiles = nil
 	case "hash/crc32":

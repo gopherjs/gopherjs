@@ -6,15 +6,18 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-func runtime_args() []string {
+func runtime_args() []string { // not called on Windows
+	return Args
+}
+
+func init() {
 	process := js.Global.Get("process")
 	if process == js.Undefined {
-		return []string{"browser"}
+		Args = []string{"?"}
 	}
 	argv := process.Get("argv")
-	args := make([]string, argv.Length()-1)
+	Args = make([]string, argv.Length()-1)
 	for i := 0; i < argv.Length()-1; i++ {
-		args[i] = argv.Index(i + 1).Str()
+		Args[i] = argv.Index(i + 1).Str()
 	}
-	return args
 }

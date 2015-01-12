@@ -922,7 +922,7 @@ func (v Value) TrySend(x Value) bool {
 }
 
 func (v Value) Send(x Value) {
-	panic(&runtime.NotSupportedError{"reflect.Value.Send, use reflect.Value.TrySend is possible"})
+	panic(&runtime.NotSupportedError{"reflect.Value.Send, use reflect.Value.TrySend if possible"})
 }
 
 func (v Value) TryRecv() (x Value, ok bool) {
@@ -941,7 +941,7 @@ func (v Value) TryRecv() (x Value, ok bool) {
 }
 
 func (v Value) Recv() (x Value, ok bool) {
-	panic(&runtime.NotSupportedError{"reflect.Value.Recv, use reflect.Value.TryRecv is possible"})
+	panic(&runtime.NotSupportedError{"reflect.Value.Recv, use reflect.Value.TryRecv if possible"})
 }
 
 func DeepEqual(a1, a2 interface{}) bool {

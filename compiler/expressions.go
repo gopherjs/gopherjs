@@ -780,7 +780,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			this = "$this"
 		}
 		if isWrapped(c.p.info.Types[e].Type) {
-			return c.formatExpr("%1s.$val !== undefined ? %1s.$val : %1s", this)
+			return c.formatExpr("%1s.$val", this)
 		}
 		return c.formatExpr("%s", this)
 

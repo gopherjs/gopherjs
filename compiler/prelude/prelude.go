@@ -418,7 +418,6 @@ var $interfaceIsEqual = function(a, b) {
   case $kindFunc:
   case $kindMap:
   case $kindSlice:
-  case $kindStruct:
     $throwRuntimeError("comparing uncomparable type " + a.constructor.string);
   case undefined: /* js.Object */
     return a === b;

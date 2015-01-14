@@ -163,3 +163,17 @@ func TestPointerOfStructConversion(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestCompareStruct(t *testing.T) {
+	type A struct {
+		Value int
+	}
+
+	a := A{42}
+	var b interface{} = a
+	x := A{0}
+
+	if a != b || a == x || b == x {
+		t.Fail()
+	}
+}

@@ -366,10 +366,6 @@ var $internalAppend = function(slice, array, offset, length) {
 };
 
 var $equal = function(a, b, type) {
-  if (a === b) {
-    return true;
-  }
-  var i;
   switch (type.kind) {
   case $kindFloat32:
     return $float32IsEqual(a, b);
@@ -382,22 +378,21 @@ var $equal = function(a, b, type) {
     return a.$high === b.$high && a.$low === b.$low;
   case $kindPtr:
     if (a.constructor.Struct) {
-      return false;
+      return a === b;
     }
     return $pointerIsEqual(a, b);
   case $kindArray:
     if (a.length != b.length) {
       return false;
     }
-    var i;
-    for (i = 0; i < a.length; i++) {
+    for (var i = 0; i < a.length; i++) {
       if (!$equal(a[i], b[i], type.elem)) {
         return false;
       }
     }
     return true;
   case $kindStruct:
-    for (i = 0; i < type.fields.length; i++) {
+    for (var i = 0; i < type.fields.length; i++) {
       var field = type.fields[i];
       var name = field[0];
       if (!$equal(a[name], b[name], field[3])) {
@@ -405,25 +400,21 @@ var $equal = function(a, b, type) {
       }
     }
     return true;
+  case $kindInterface:
+    return $interfaceIsEqual(a, b);
   default:
-    return false;
+    return a === b;
   }
 };
 
 var $interfaceIsEqual = function(a, b) {
-  if (a === null || b === null || a === undefined || b === undefined || a.constructor !== b.constructor) {
+  if (a === null || b === null || a === undefined || b === undefined || a.constructor !== b.constructor || a.constructor.kind === undefined || b.constructor.kind === undefined) {
     return a === b;
   }
-  switch (a.constructor.kind) {
-  case $kindFunc:
-  case $kindMap:
-  case $kindSlice:
+  if (!a.constructor.comparable) {
     $throwRuntimeError("comparing uncomparable type " + a.constructor.string);
-  case undefined: /* js.Object */
-    return a === b;
-  default:
-    return $equal(a.$val, b.$val, a.constructor);
   }
+  return $equal(a.$val, b.$val, a.constructor);
 };
 
 var $float32IsEqual = function(a, b) {

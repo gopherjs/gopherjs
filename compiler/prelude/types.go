@@ -91,6 +91,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     typ.init = function(elem, len) {
       typ.elem = elem;
       typ.len = len;
+      typ.comparable = elem.comparable;
       typ.prototype.$key = function() {
         return string + "$" + Array.prototype.join.call($mapArray(this.$val, function(e) {
           var key = e.$key ? e.$key() : String(e);
@@ -139,6 +140,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       typ.params = params;
       typ.results = results;
       typ.variadic = variadic;
+      typ.comparable = false;
       typ.extendReflectType = function(rt) {
         var typeSlice = ($sliceType($ptrType($reflect.rtype.Ptr)));
         rt.funcType = new $reflect.funcType.Ptr(rt, variadic, new typeSlice($mapArray(params, function(p) { return p.reflectType(); })), new typeSlice($mapArray(results, function(p) { return p.reflectType(); })));
@@ -165,6 +167,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     typ.init = function(key, elem) {
       typ.key = key;
       typ.elem = elem;
+      typ.comparable = false;
       typ.extendReflectType = function(rt) {
         rt.mapType = new $reflect.mapType.Ptr(rt, key.reflectType(), elem.reflectType(), undefined, undefined);
       };
@@ -219,6 +222,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     };
     typ.init = function(elem) {
       typ.elem = elem;
+      typ.comparable = false;
       nativeArray = $nativeArray(elem.kind);
       typ.nil = new typ([]);
       typ.extendReflectType = function(rt) {
@@ -236,6 +240,11 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     typ.init = function(fields) {
       var i;
       typ.fields = fields;
+      for (i = 0; i < fields.length; i++) {
+        if (!fields[i][3].comparable) {
+          typ.comparable = false;
+        }
+      }
       typ.prototype.$key = function() {
         var val = this.$val;
         return string + "$" + $mapArray(fields, function(field) {
@@ -296,7 +305,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     $panic(new $String("invalid kind: " + kind));
   }
 
-  switch(kind) {
+  switch (kind) {
   case $kindBool:
   case $kindMap:
     typ.zero = function() { return false; };
@@ -370,6 +379,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
   typ.typeName = name;
   typ.pkgPath = pkgPath;
   typ.methods = [];
+  typ.comparable = true;
   var rt = null;
   typ.reflectType = function() {
     if (rt === null) {

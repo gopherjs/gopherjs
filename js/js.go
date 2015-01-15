@@ -31,7 +31,7 @@
 //  | all other slices and arrays    | []interface{}                  | Array             |
 //  | functions                      | func(...interface{}) js.Object | Function          |
 //  | time.Time                      | time.Time                      | Date              |
-//  | -                              | DOMNode                        | instanceof Node   |
+//  | -                              | *DOMNode                       | instanceof Node   |
 //  | maps, structs                  | map[string]interface{}         | instanceof Object |
 //  | pointers                       | -                              | wrapper           |
 //
@@ -98,7 +98,9 @@ type Object interface {
 type Any interface{}
 
 // DOMNode is used for encapsulating DOM nodes in a proper Go value. It is not feasible to convert a DOM node into a map[string]interface{}.
-type DOMNode struct{ Object }
+type DOMNode struct {
+	Object
+}
 
 // Error encapsulates JavaScript errors. Those are turned into a Go panic and may be rescued, giving an *Error that holds the JavaScript error object.
 type Error struct {

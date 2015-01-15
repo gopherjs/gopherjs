@@ -24,14 +24,14 @@
 package js
 
 // Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax. Nil is equal to JavaScript's "null".
-// An Object can not be used as a map key and it can not be converted to some other interface type, including interface{}. This means that you can't pass an Object obj to fmt.Println(obj), but using the println(obj) built-in is possible.
+// An Object can not be used as a map key and it can only be converted to Any, but no other interface type, including interface{}. This means that you can't pass an Object obj to fmt.Println(obj), but using the println(obj) built-in is possible.
 type Object interface {
 
 	// Get returns the object's property with the given key.
 	Get(key string) Object
 
 	// Set assigns the value to the object's property with the given key.
-	Set(key string, value interface{})
+	Set(key string, value Any)
 
 	// Delete removes the object's property with the given key.
 	Delete(key string)
@@ -43,16 +43,16 @@ type Object interface {
 	Index(i int) Object
 
 	// SetIndex sets the i'th element of an array.
-	SetIndex(i int, value interface{})
+	SetIndex(i int, value Any)
 
 	// Call calls the object's method with the given name.
-	Call(name string, args ...interface{}) Object
+	Call(name string, args ...Any) Object
 
 	// Invoke calls the object itself. This will fail if it is not a function.
-	Invoke(args ...interface{}) Object
+	Invoke(args ...Any) Object
 
 	// New creates a new instance of this type object. This will fail if it not a function (constructor).
-	New(args ...interface{}) Object
+	New(args ...Any) Object
 
 	// Bool returns the object converted to bool according to JavaScript type conversions.
 	Bool() bool
@@ -78,6 +78,9 @@ type Object interface {
 	// Unsafe returns the object as an uintptr, which can be converted via unsafe.Pointer. Not intended for public use.
 	Unsafe() uintptr
 }
+
+// Any may contain a JavaScript object or some Go value. An Object can not be used as a map key and it can not be converted to some other interface type, including interface{}.
+type Any interface{}
 
 // Error encapsulates JavaScript errors. Those are turned into a Go panic and may be rescued, giving an *Error that holds the JavaScript error object.
 type Error struct {
@@ -131,10 +134,10 @@ func Keys(o Object) []string {
 }
 
 // M is a simple map type. It is intended as a shorthand for JavaScript objects (before conversion).
-type M map[string]interface{}
+type M map[string]Any
 
 // S is a simple slice type. It is intended as a shorthand for JavaScript arrays (before conversion).
-type S []interface{}
+type S []Any
 
 func init() {
 	// avoid dead code elimination of Error

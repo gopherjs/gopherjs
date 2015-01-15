@@ -106,7 +106,8 @@ func (c *funcContext) translateSelection(sel *types.Selection, pos token.Pos) ([
 			searchJsObject = func(s *types.Struct) []string {
 				for i := 0; i < s.NumFields(); i++ {
 					ft := s.Field(i).Type()
-					if isJsObject(ft) {
+					named, isNamed := ft.(*types.Named)
+					if isNamed && isJsPackage(named.Obj().Pkg()) && named.Obj().Name() == "Object" {
 						return []string{fieldName(s, i)}
 					}
 					ft = ft.Underlying()
@@ -160,7 +161,7 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 	case *types.Map:
 		return "false"
 	case *types.Interface:
-		if isJsObject(ty) {
+		if isJsType(ty) {
 			return "null"
 		}
 		return "$ifaceNil"
@@ -327,7 +328,7 @@ func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
 }
 
 func (c *funcContext) externalize(s string, t types.Type) string {
-	if isJsObject(t) {
+	if isJsType(t) {
 		return s
 	}
 	switch u := t.Underlying().(type) {
@@ -467,9 +468,9 @@ func isJsPackage(pkg *types.Package) bool {
 	return pkg != nil && pkg.Path() == "github.com/gopherjs/gopherjs/js"
 }
 
-func isJsObject(t types.Type) bool {
+func isJsType(t types.Type) bool {
 	named, isNamed := t.(*types.Named)
-	return isNamed && isJsPackage(named.Obj().Pkg()) && named.Obj().Name() == "Object"
+	return isNamed && isJsPackage(named.Obj().Pkg()) && (named.Obj().Name() == "Object" || named.Obj().Name() == "Any")
 }
 
 func getJsTag(tag string) string {

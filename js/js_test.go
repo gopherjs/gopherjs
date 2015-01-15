@@ -133,6 +133,9 @@ func TestCall(t *testing.T) {
 	if dummys.Call("add", i, 2).Int() != 42 {
 		t.Fail()
 	}
+	if dummys.Call("add", js.Global.Call("eval", "40"), 2).Int() != 42 {
+		t.Fail()
+	}
 }
 
 func TestInvoke(t *testing.T) {

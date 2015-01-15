@@ -820,8 +820,8 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, typ types.Type, define bool) string {
 	if l, ok := lhs.(*ast.IndexExpr); ok {
 		if t, ok := c.p.info.Types[l.X].Type.Underlying().(*types.Map); ok {
-			if isJsObject(c.p.info.Types[l.Index].Type) {
-				c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: l.Index.Pos(), Msg: "can't use js.Object as map key"})
+			if isJsType(c.p.info.Types[l.Index].Type) {
+				c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: l.Index.Pos(), Msg: "can't use js.Object/js.Any as map key"})
 			}
 			keyVar := c.newVariable("_key")
 			return fmt.Sprintf(`%s = %s; (%s || $throwRuntimeError("assignment to entry in nil map"))[%s] = { k: %s, v: %s };`, keyVar, c.translateImplicitConversionWithCloning(l.Index, t.Key()), c.translateExpr(l.X), c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, c.translateImplicitConversionWithCloning(rhs, t.Elem()))

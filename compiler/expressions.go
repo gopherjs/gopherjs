@@ -431,7 +431,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			case *types.Array, *types.Struct:
 				return c.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, c.typeName(t))
 			case *types.Interface:
-				if isJsObject(t) {
+				if isJsType(t) {
 					return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 				}
 				return c.formatExpr("$interfaceIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
@@ -472,8 +472,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Slice:
 			return c.formatExpr(`((%2f < 0 || %2f >= %1e.$length) ? $throwRuntimeError("index out of range") : %1e.$array[%1e.$offset + %2f])`, e.X, e.Index)
 		case *types.Map:
-			if isJsObject(c.p.info.Types[e.Index].Type) {
-				c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: e.Index.Pos(), Msg: "can't use js.Object as map key"})
+			if isJsType(c.p.info.Types[e.Index].Type) {
+				c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: e.Index.Pos(), Msg: "can't use js.Object/js.Any as map key"})
 			}
 			key := c.makeKey(e.Index, t.Key())
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
@@ -749,8 +749,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		return c.formatExpr("%e.$get()", e.X)
 
 	case *ast.TypeAssertExpr:
-		if isJsObject(c.p.info.Types[e.X].Type) {
-			c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: e.X.Pos(), Msg: "can't type assert js.Object"})
+		if isJsType(c.p.info.Types[e.X].Type) {
+			c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: e.X.Pos(), Msg: "can't type assert js.Object/js.Any"})
 		}
 		if e.Type == nil {
 			return c.translateExpr(e.X)
@@ -1113,8 +1113,8 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 		return c.translateExpr(expr)
 	}
 
-	if isJsObject(exprType) {
-		c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: expr.Pos(), Msg: "can't convert js.Object to other interface type"})
+	if isJsType(exprType) && !isJsType(desiredType) {
+		c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: expr.Pos(), Msg: "can't convert js.Object/js.Any to other interface type"})
 	}
 
 	basicExprType, isBasicExpr := exprType.Underlying().(*types.Basic)
@@ -1202,7 +1202,7 @@ func (c *funcContext) fixNumber(value *expression, basic *types.Basic) *expressi
 }
 
 func (c *funcContext) internalize(s *expression, t types.Type) *expression {
-	if isJsObject(t) {
+	if isJsType(t) {
 		return s
 	}
 	switch u := t.Underlying().(type) {

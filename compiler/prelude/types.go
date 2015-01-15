@@ -641,8 +641,6 @@ var $assertType = function(value, type, returnTuple) {
     ok = false;
   } else if (!isInterface) {
     ok = value.constructor === type;
-  } else if (type.string === "js.Object") {
-    ok = true;
   } else {
     var valueTypeString = value.constructor.string;
     ok = type.implementedBy[valueTypeString];

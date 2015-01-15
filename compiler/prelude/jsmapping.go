@@ -217,6 +217,9 @@ var $internalize = function(v, t, recv) {
     if (t === $packages["github.com/gopherjs/gopherjs/js"].Object) {
       return v;
     }
+    if (t.methods.length !== 0) {
+      $panic(new $String("cannot internalize " + t.string));
+    }
     if (v === null) {
       return $ifaceNil;
     }

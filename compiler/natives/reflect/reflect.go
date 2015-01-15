@@ -635,12 +635,17 @@ func (v Value) Elem() Value {
 		tt := (*ptrType)(unsafe.Pointer(v.typ))
 		fl := v.flag&flagRO | flagIndir | flagAddr
 		fl |= flag(tt.elem.Kind())
+		if tt.elem == reflectType(jsObject) {
+			return ValueOf(val.Str())
+		}
 		return Value{tt.elem, unsafe.Pointer(val.Unsafe()), fl}
 
 	default:
 		panic(&ValueError{"reflect.Value.Elem", k})
 	}
 }
+
+var jsObject = js.Global.Get("$packages").Get("github.com/gopherjs/gopherjs/js").Get("Object")
 
 func (v Value) Field(i int) Value {
 	v.mustBe(Struct)
@@ -660,6 +665,9 @@ func (v Value) Field(i int) Value {
 	fl |= flag(typ.Kind())
 
 	s := js.InternalObject(v.ptr)
+	if typ == reflectType(jsObject) {
+		return ValueOf(s.Get(name).Str())
+	}
 	if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
 		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return s.Get(name) }), js.InternalObject(func(v js.Object) { s.Set(name, v) })).Unsafe()), fl}
 	}
@@ -678,6 +686,9 @@ func (v Value) Index(i int) Value {
 		fl |= flag(typ.Kind())
 
 		a := js.InternalObject(v.ptr)
+		if typ == reflectType(jsObject) {
+			return ValueOf(a.Index(i).Str())
+		}
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
 			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return a.Index(i) }), js.InternalObject(func(v js.Object) { a.SetIndex(i, v) })).Unsafe()), fl}
 		}
@@ -695,6 +706,9 @@ func (v Value) Index(i int) Value {
 
 		i += s.Get("$offset").Int()
 		a := s.Get("$array")
+		if typ == reflectType(jsObject) {
+			return ValueOf(a.Index(i).Str())
+		}
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
 			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return a.Index(i) }), js.InternalObject(func(v js.Object) { a.SetIndex(i, v) })).Unsafe()), fl}
 		}

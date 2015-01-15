@@ -15,25 +15,25 @@
 //
 // Type conversions between Go types and JavaScript types are performed automatically according to the following table:
 //
-//  | Go type                        | Conversions to interface{}     | JavaScript type   |
-//  | ------------------------------ | ------------------------------ | ----------------- |
-//  | bool                           | bool                           | Boolean           |
-//  | int?, uint?, float?            | float64                        | Number            |
-//  | string                         | string                         | String            |
-//  | [?]int8                        | []int8                         | Int8Array         |
-//  | [?]int16                       | []int16                        | Int16Array        |
-//  | [?]int32, [?]int               | []int                          | Int32Array        |
-//  | [?]uint8                       | []uint8                        | Uint8Array        |
-//  | [?]uint16                      | []uint16                       | Uint16Array       |
-//  | [?]uint32, [?]uint, [?]uintptr | []uint                         | Uint32Array       |
-//  | [?]float32                     | []float32                      | Float32Array      |
-//  | [?]float64                     | []float64                      | Float64Array      |
-//  | all other slices and arrays    | []interface{}                  | Array             |
-//  | functions                      | func(...interface{}) js.Object | Function          |
-//  | time.Time                      | time.Time                      | Date              |
-//  | -                              | *DOMNode                       | instanceof Node   |
-//  | maps, structs                  | map[string]interface{}         | instanceof Object |
-//  | pointers                       | -                              | wrapper           |
+//  | Go type                        | Conversions to interface{} | JavaScript type   |
+//  | ------------------------------ | -------------------------- | ----------------- |
+//  | bool                           | bool                       | Boolean           |
+//  | int?, uint?, float?            | float64                    | Number            |
+//  | string                         | string                     | String            |
+//  | [?]int8                        | []int8                     | Int8Array         |
+//  | [?]int16                       | []int16                    | Int16Array        |
+//  | [?]int32, [?]int               | []int                      | Int32Array        |
+//  | [?]uint8                       | []uint8                    | Uint8Array        |
+//  | [?]uint16                      | []uint16                   | Uint16Array       |
+//  | [?]uint32, [?]uint, [?]uintptr | []uint                     | Uint32Array       |
+//  | [?]float32                     | []float32                  | Float32Array      |
+//  | [?]float64                     | []float64                  | Float64Array      |
+//  | all other slices and arrays    | []interface{}              | Array             |
+//  | functions                      | func(...js.Any) js.Object  | Function          |
+//  | time.Time                      | time.Time                  | Date              |
+//  | -                              | *js.DOMNode                | instanceof Node   |
+//  | maps, structs                  | map[string]interface{}     | instanceof Object |
+//  | pointers                       | -                          | wrapper           |
 //
 // A pointer is passed to JavaScript as an object which has wrappers for the type's exported methods. This can be used to provide getter and setter methods for Go fields to JavaScript.
 package js

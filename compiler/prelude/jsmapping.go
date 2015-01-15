@@ -252,7 +252,7 @@ var $internalize = function(v, t, recv) {
         return new timePkg.Time(timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000)));
       }
     case Function:
-      var funcType = $funcType([$sliceType($emptyInterface)], [$js.Object], true);
+      var funcType = $funcType([$sliceType($js.Any)], [$js.Object], true);
       return new funcType($internalize(v, funcType));
     case Number:
       return new $Float64(parseFloat(v));

@@ -214,7 +214,7 @@ func TestFunc(t *testing.T) {
 		t.Fail()
 	}
 
-	add := dummys.Get("add").Interface().(func(...interface{}) js.Object)
+	add := dummys.Get("add").Interface().(func(...js.Any) js.Object)
 	var i int64 = 40
 	if add(i, 2).Int() != 42 {
 		t.Fail()

@@ -1,4 +1,17 @@
-// Package js provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their JavaScript syntax.
+// Package js provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their corresponding JavaScript syntax.
+// The types Object and Any are containers for JavaScript objects and are no real citizens of the Go world, e.g. they do not implement interface{} and you cannot type assert them. The type Any may also contain Go values, but it provides no methods for accessing its content. It is only useful for passing it to functions of this package. The relation between interface{} (Go world), Object (JS world) and Any looks like this:
+//
+//  +------------------------------------+
+//  |                                    |
+//  |  +-------------+  +-------------+  |
+//  |  |             |  |             |  |
+//  |  | interface{} |  |  js.Object  |  |
+//  |  |             |  |             |  |
+//  |  +-------------+  +-------------+  |
+//  |                                    |
+//  |               js.Any               |
+//  |                                    |
+//  +------------------------------------+
 //
 // Type conversions between Go types and JavaScript types are performed automatically according to the following table:
 //

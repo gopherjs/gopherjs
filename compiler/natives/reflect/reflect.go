@@ -1030,6 +1030,8 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 		return true
 	case Func:
 		return v1.IsNil() && v2.IsNil()
+	case UnsafePointer:
+		return v1.object() == v2.object()
 	}
 
 	return js.Global.Call("$interfaceIsEqual", js.InternalObject(valueInterface(v1, false)), js.InternalObject(valueInterface(v2, false))).Bool()

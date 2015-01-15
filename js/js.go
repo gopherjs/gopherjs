@@ -15,25 +15,27 @@
 //
 // Type conversions between Go types and JavaScript types are performed automatically according to the following table:
 //
-//  | Go types                       | Go interface type              | JavaScript type |
-//  | ------------------------------ | ------------------------------ | --------------- |
-//  | bool                           | bool                           | Boolean         |
-//  | int?, uint?, float?            | float64                        | Number          |
-//  | string                         | string                         | String          |
-//  | [?]int8                        | []int8                         | Int8Array       |
-//  | [?]int16                       | []int16                        | Int16Array      |
-//  | [?]int32, [?]int               | []int                          | Int32Array      |
-//  | [?]uint8                       | []uint8                        | Uint8Array      |
-//  | [?]uint16                      | []uint16                       | Uint16Array     |
-//  | [?]uint32, [?]uint, [?]uintptr | []uint                         | Uint32Array     |
-//  | [?]float32                     | []float32                      | Float32Array    |
-//  | [?]float64                     | []float64                      | Float64Array    |
-//  | all other slices and arrays    | []interface{}                  | Array           |
-//  | maps, structs                  | map[string]interface{}         | Object          |
-//  | functions                      | func(...interface{}) js.Object | Function        |
-//  | time.Time                      | time.Time                      | Date            |
+//  | Go type                        | Conversions to interface{}     | JavaScript type   |
+//  | ------------------------------ | ------------------------------ | ----------------- |
+//  | bool                           | bool                           | Boolean           |
+//  | int?, uint?, float?            | float64                        | Number            |
+//  | string                         | string                         | String            |
+//  | [?]int8                        | []int8                         | Int8Array         |
+//  | [?]int16                       | []int16                        | Int16Array        |
+//  | [?]int32, [?]int               | []int                          | Int32Array        |
+//  | [?]uint8                       | []uint8                        | Uint8Array        |
+//  | [?]uint16                      | []uint16                       | Uint16Array       |
+//  | [?]uint32, [?]uint, [?]uintptr | []uint                         | Uint32Array       |
+//  | [?]float32                     | []float32                      | Float32Array      |
+//  | [?]float64                     | []float64                      | Float64Array      |
+//  | all other slices and arrays    | []interface{}                  | Array             |
+//  | functions                      | func(...interface{}) js.Object | Function          |
+//  | time.Time                      | time.Time                      | Date              |
+//  | -                              | DOMNode                        | instanceof Node   |
+//  | maps, structs                  | map[string]interface{}         | instanceof Object |
+//  | pointers                       | -                              | wrapper           |
 //
-// The second column denotes the types that are used when converting to `interface{}`. An exception are DOM elements, those are kept with the js.Object type. Additionally, a pointer to a named type is passed to JavaScript as an object which has wrappers for the type's exported methods. This can be used to provide getter and setter methods for Go fields to JavaScript.
+// A pointer is passed to JavaScript as an object which has wrappers for the type's exported methods. This can be used to provide getter and setter methods for Go fields to JavaScript.
 package js
 
 // Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax. Nil is equal to JavaScript's "null".
@@ -95,6 +97,9 @@ type Object interface {
 // Any may contain a JavaScript object or some Go value. Any can not be used as a map key and it can not be converted to some other interface type, including interface{}.
 type Any interface{}
 
+// DOMNode is used for encapsulating DOM nodes in a proper Go value. It is not feasible to convert a DOM node into a map[string]interface{}.
+type DOMNode struct{ Object }
+
 // Error encapsulates JavaScript errors. Those are turned into a Go panic and may be rescued, giving an *Error that holds the JavaScript error object.
 type Error struct {
 	Object
@@ -153,7 +158,8 @@ type M map[string]Any
 type S []Any
 
 func init() {
-	// avoid dead code elimination of Error
+	// avoid dead code elimination
 	e := Error{}
-	_ = e
+	n := DOMNode{}
+	_, _ = e, n
 }

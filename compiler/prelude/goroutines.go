@@ -24,7 +24,7 @@ var $callDeferred = function(deferred, jsErr) {
     var newErr = null;
     try {
       $deferFrames.push(deferred);
-      $panic(new $packages["github.com/gopherjs/gopherjs/js"].Error.Ptr(jsErr));
+      $panic($js.Error.Ptr(jsErr));
     } catch (err) {
       newErr = err;
     }

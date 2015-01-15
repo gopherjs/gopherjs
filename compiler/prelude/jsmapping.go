@@ -1,6 +1,8 @@
 package prelude
 
 const jsmapping = `
+var $js;
+
 var $needsExternalization = function(t) {
   switch (t.kind) {
     case $kindBool:
@@ -17,7 +19,7 @@ var $needsExternalization = function(t) {
     case $kindFloat64:
       return false;
     case $kindInterface:
-      return t !== $packages["github.com/gopherjs/gopherjs/js"].Object;
+      return t !== $js.Object;
     default:
       return true;
   }
@@ -55,7 +57,7 @@ var $externalize = function(v, t) {
       var convert = false;
       var i;
       for (i = 0; i < t.params.length; i++) {
-        convert = convert || (t.params[i] !== $packages["github.com/gopherjs/gopherjs/js"].Object);
+        convert = convert || (t.params[i] !== $js.Object);
       }
       for (i = 0; i < t.results.length; i++) {
         convert = convert || $needsExternalization(t.results[i]);
@@ -95,7 +97,7 @@ var $externalize = function(v, t) {
     if (v === $ifaceNil) {
       return null;
     }
-    if (t === $packages["github.com/gopherjs/gopherjs/js"].Object || v.constructor.kind === undefined) {
+    if (t === $js.Object || (t === $js.Any && v.constructor.kind === undefined)) {
       return v;
     }
     return $externalize(v.$val, v.constructor);
@@ -214,7 +216,7 @@ var $internalize = function(v, t, recv) {
       }
     };
   case $kindInterface:
-    if (t === $packages["github.com/gopherjs/gopherjs/js"].Object) {
+    if (t === $js.Object || t === $js.Any) {
       return v;
     }
     if (t.methods.length !== 0) {
@@ -250,7 +252,7 @@ var $internalize = function(v, t, recv) {
         return new timePkg.Time(timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000)));
       }
     case Function:
-      var funcType = $funcType([$sliceType($emptyInterface)], [$packages["github.com/gopherjs/gopherjs/js"].Object], true);
+      var funcType = $funcType([$sliceType($emptyInterface)], [$js.Object], true);
       return new funcType($internalize(v, funcType));
     case Number:
       return new $Float64(parseFloat(v));
@@ -258,7 +260,7 @@ var $internalize = function(v, t, recv) {
       return new $String($internalize(v, $String));
     default:
       if ($global.Node && v instanceof $global.Node) {
-        return v;
+        return new $js.DOMNode(new $js.DOMNode.Ptr(v));
       }
       var mapType = $mapType($String, $emptyInterface);
       return new mapType($internalize(v, mapType));

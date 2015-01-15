@@ -674,7 +674,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						return c.formatExpr("new (%s)(%s)", recv, externalizeArgs(e.Args))
 					case "Bool":
 						return c.internalize(recv, types.Typ[types.Bool])
-					case "Str":
+					case "String":
 						return c.internalize(recv, types.Typ[types.String])
 					case "Int":
 						return c.internalize(recv, types.Typ[types.Int])

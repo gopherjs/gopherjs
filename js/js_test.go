@@ -56,13 +56,13 @@ func TestBool(t *testing.T) {
 func TestStr(t *testing.T) {
 	e := "abc\u1234"
 	o := dummys.Get("someString")
-	if v := o.Str(); v != e {
+	if v := o.String(); v != e {
 		t.Errorf("expected %#v, got %#v", e, v)
 	}
 	if i := o.Interface().(string); i != e {
 		t.Errorf("expected %#v, got %#v", e, i)
 	}
-	if dummys.Set("otherString", e); dummys.Get("otherString").Str() != e {
+	if dummys.Set("otherString", e); dummys.Get("otherString").String() != e {
 		t.Fail()
 	}
 }

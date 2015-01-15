@@ -57,8 +57,8 @@ type Object interface {
 	// Bool returns the object converted to bool according to JavaScript type conversions.
 	Bool() bool
 
-	// Str returns the object converted to string according to JavaScript type conversions. Does not implement fmt.Stringer on purpose.
-	Str() string
+	// String returns the object converted to string according to JavaScript type conversions.
+	String() string
 
 	// Int returns the object converted to int according to JavaScript type conversions (parseInt).
 	Int() int
@@ -89,12 +89,12 @@ type Error struct {
 
 // Error returns the message of the encapsulated JavaScript error object.
 func (err *Error) Error() string {
-	return "JavaScript error: " + err.Get("message").Str()
+	return "JavaScript error: " + err.Get("message").String()
 }
 
 // Stack returns the stack property of the encapsulated JavaScript error object.
 func (err *Error) Stack() string {
-	return err.Get("stack").Str()
+	return err.Get("stack").String()
 }
 
 // Global gives JavaScript's global object ("window" for browsers and "GLOBAL" for Node.js). Set this to a mock for testing with pure Go.
@@ -128,7 +128,7 @@ func Keys(o Object) []string {
 	a := Global.Get("Object").Call("keys", o)
 	s := make([]string, a.Length())
 	for i := 0; i < a.Length(); i++ {
-		s[i] = a.Index(i).Str()
+		s[i] = a.Index(i).String()
 	}
 	return s
 }

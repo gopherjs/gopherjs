@@ -20,7 +20,7 @@ type runtimeTimer struct {
 
 func initLocal() {
 	d := js.Global.Get("Date").New()
-	s := d.Str()
+	s := d.String()
 	i := strings.IndexByte(s, '(')
 	j := strings.IndexByte(s, ')')
 	if i == -1 || j == -1 {

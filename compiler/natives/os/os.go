@@ -15,7 +15,7 @@ func init() {
 		argv := process.Get("argv")
 		Args = make([]string, argv.Length()-1)
 		for i := 0; i < argv.Length()-1; i++ {
-			Args[i] = argv.Index(i + 1).Str()
+			Args[i] = argv.Index(i + 1).String()
 		}
 	}
 	if len(Args) == 0 {

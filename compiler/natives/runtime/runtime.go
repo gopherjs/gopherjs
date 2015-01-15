@@ -41,7 +41,7 @@ func GOROOT() string {
 	}
 	goroot := process.Get("env").Get("GOROOT")
 	if goroot != js.Undefined {
-		return goroot.Str()
+		return goroot.String()
 	}
 	return defaultGoroot
 }
@@ -56,7 +56,7 @@ func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
 		return 0, "", 0, false
 	}
 	parts := info.Call("substring", info.Call("indexOf", "(").Int()+1, info.Call("indexOf", ")").Int()).Call("split", ":")
-	return 0, parts.Index(0).Str(), parts.Index(1).Int(), true
+	return 0, parts.Index(0).String(), parts.Index(1).Int(), true
 }
 
 func GC() {
@@ -165,7 +165,7 @@ func Stack(buf []byte, all bool) int {
 	if s == js.Undefined {
 		return 0
 	}
-	return copy(buf, s.Call("substr", s.Call("indexOf", "\n").Int()+1).Str())
+	return copy(buf, s.Call("substr", s.Call("indexOf", "\n").Int()+1).String())
 }
 
 func LockOSThread() {}

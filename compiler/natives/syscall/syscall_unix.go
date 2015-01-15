@@ -17,8 +17,8 @@ func runtime_envs() []string {
 	envkeys := js.Global.Get("Object").Call("keys", jsEnv)
 	envs := make([]string, envkeys.Length())
 	for i := 0; i < envkeys.Length(); i++ {
-		key := envkeys.Index(i).Str()
-		envs[i] = key + "=" + jsEnv.Get(key).Str()
+		key := envkeys.Index(i).String()
+		envs[i] = key + "=" + jsEnv.Get(key).String()
 	}
 	return envs
 }

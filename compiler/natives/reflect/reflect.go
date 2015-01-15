@@ -58,7 +58,7 @@ func isWrapped(typ Type) bool {
 func copyStruct(dst, src js.Object, typ Type) {
 	fields := jsType(typ).Get("fields")
 	for i := 0; i < fields.Length(); i++ {
-		name := fields.Index(i).Index(0).Str()
+		name := fields.Index(i).Index(0).String()
 		dst.Set(name, src.Get(name))
 	}
 }
@@ -222,7 +222,7 @@ func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
 	if k.Get("$key") != js.Undefined {
 		k = k.Call("$key")
 	}
-	entry := js.InternalObject(m).Get(k.Str())
+	entry := js.InternalObject(m).Get(k.String())
 	if entry == js.Undefined {
 		return nil
 	}
@@ -245,7 +245,7 @@ func mapassign(t *rtype, m, key, val unsafe.Pointer) {
 	entry := js.Global.Get("Object").New()
 	entry.Set("k", kv)
 	entry.Set("v", jsVal)
-	js.InternalObject(m).Set(k.Str(), entry)
+	js.InternalObject(m).Set(k.String(), entry)
 }
 
 func mapdelete(t *rtype, m unsafe.Pointer, key unsafe.Pointer) {
@@ -253,7 +253,7 @@ func mapdelete(t *rtype, m unsafe.Pointer, key unsafe.Pointer) {
 	if k.Get("$key") != js.Undefined {
 		k = k.Call("$key")
 	}
-	js.InternalObject(m).Delete(k.Str())
+	js.InternalObject(m).Delete(k.String())
 }
 
 type mapIter struct {
@@ -270,7 +270,7 @@ func mapiterinit(t *rtype, m unsafe.Pointer) *byte {
 func mapiterkey(it *byte) unsafe.Pointer {
 	iter := (*mapIter)(unsafe.Pointer(it))
 	k := iter.keys.Index(iter.i)
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", iter.m.Get(k.Str()).Get("k"), jsType(PtrTo(iter.t.Key()))).Unsafe())
+	return unsafe.Pointer(js.Global.Call("$newDataPointer", iter.m.Get(k.String()).Get("k"), jsType(PtrTo(iter.t.Key()))).Unsafe())
 }
 
 func mapiternext(it *byte) {
@@ -380,7 +380,7 @@ func methodReceiver(op string, v Value, i int) (rcvrtype, t *rtype, fn unsafe.Po
 			panic("reflect: " + op + " of unexported method")
 		}
 		t = m.mtyp
-		name = jsType(v.typ).Get("methods").Index(i).Index(0).Str()
+		name = jsType(v.typ).Get("methods").Index(i).Index(0).String()
 	}
 	rcvr := v.object()
 	if isWrapped(v.typ) {
@@ -471,7 +471,7 @@ func (t *uncommonType) Method(i int) (m Method) {
 	}
 	mt := p.typ
 	m.Type = mt
-	name := js.InternalObject(t).Get("jsType").Get("methods").Index(i).Index(0).Str()
+	name := js.InternalObject(t).Get("jsType").Get("methods").Index(i).Index(0).String()
 	fn := func(rcvr js.Object) js.Object {
 		return rcvr.Get(name).Call("apply", rcvr, js.Arguments[1:])
 	}
@@ -636,7 +636,7 @@ func (v Value) Elem() Value {
 		fl := v.flag&flagRO | flagIndir | flagAddr
 		fl |= flag(tt.elem.Kind())
 		if tt.elem == reflectType(jsObject) {
-			return ValueOf(val.Str())
+			return ValueOf(val.String())
 		}
 		return Value{tt.elem, unsafe.Pointer(val.Unsafe()), fl}
 
@@ -655,7 +655,7 @@ func (v Value) Field(i int) Value {
 	}
 
 	field := &tt.fields[i]
-	name := jsType(v.typ).Get("fields").Index(i).Index(0).Str()
+	name := jsType(v.typ).Get("fields").Index(i).Index(0).String()
 	typ := field.typ
 
 	fl := v.flag & (flagRO | flagIndir | flagAddr)
@@ -666,7 +666,7 @@ func (v Value) Field(i int) Value {
 
 	s := js.InternalObject(v.ptr)
 	if typ == reflectType(jsObject) {
-		return ValueOf(s.Get(name).Str())
+		return ValueOf(s.Get(name).String())
 	}
 	if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
 		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return s.Get(name) }), js.InternalObject(func(v js.Object) { s.Set(name, v) })).Unsafe()), fl}
@@ -687,7 +687,7 @@ func (v Value) Index(i int) Value {
 
 		a := js.InternalObject(v.ptr)
 		if typ == reflectType(jsObject) {
-			return ValueOf(a.Index(i).Str())
+			return ValueOf(a.Index(i).String())
 		}
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
 			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return a.Index(i) }), js.InternalObject(func(v js.Object) { a.SetIndex(i, v) })).Unsafe()), fl}
@@ -707,7 +707,7 @@ func (v Value) Index(i int) Value {
 		i += s.Get("$offset").Int()
 		a := s.Get("$array")
 		if typ == reflectType(jsObject) {
-			return ValueOf(a.Index(i).Str())
+			return ValueOf(a.Index(i).String())
 		}
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
 			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return a.Index(i) }), js.InternalObject(func(v js.Object) { a.SetIndex(i, v) })).Unsafe()), fl}

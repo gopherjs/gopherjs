@@ -408,8 +408,11 @@ var $equal = function(a, b, type) {
 };
 
 var $interfaceIsEqual = function(a, b) {
-  if (a === null || b === null || a === undefined || b === undefined || a.constructor !== b.constructor || a.constructor.kind === undefined || b.constructor.kind === undefined) {
+  if (a === $ifaceNil || b === $ifaceNil) {
     return a === b;
+  }
+  if (a.constructor !== b.constructor) {
+    return false;
   }
   if (!a.constructor.comparable) {
     $throwRuntimeError("comparing uncomparable type " + a.constructor.string);

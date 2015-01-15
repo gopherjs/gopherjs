@@ -93,7 +93,7 @@ func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellip
 	return params
 }
 
-func (c *funcContext) translateSelection(sel *types.Selection) ([]string, string) {
+func (c *funcContext) translateSelection(sel *types.Selection, pos token.Pos) ([]string, string) {
 	var fields []string
 	t := sel.Recv()
 	for _, index := range sel.Index() {
@@ -124,6 +124,7 @@ func (c *funcContext) translateSelection(sel *types.Selection) ([]string, string
 			if jsObjectFields := searchJsObject(s); jsObjectFields != nil {
 				return append(fields, jsObjectFields...), jsTag
 			}
+			c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: pos, Msg: fmt.Sprintf("could not find field with type js.Object for 'js' tag of field '%s'", s.Field(index).Name()), Soft: true})
 		}
 		fields = append(fields, fieldName(s, index))
 		t = s.Field(index).Type()

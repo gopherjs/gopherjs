@@ -526,7 +526,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 
 		switch sel.Kind() {
 		case types.FieldVal:
-			fields, jsTag := c.translateSelection(sel)
+			fields, jsTag := c.translateSelection(sel, e.Pos())
 			if jsTag != "" {
 				if _, ok := sel.Type().(*types.Signature); ok {
 					return c.formatExpr("$internalize(%1e.%2s.%3s, %4s, %1e.%2s)", e.X, strings.Join(fields, "."), jsTag, c.typeName(sel.Type()))
@@ -700,7 +700,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				fun = c.formatExpr("%s.%s", recv, methodName)
 
 			case types.FieldVal:
-				fields, jsTag := c.translateSelection(sel)
+				fields, jsTag := c.translateSelection(sel, f.Pos())
 				if jsTag != "" {
 					sig := sel.Type().(*types.Signature)
 					return c.internalize(c.formatExpr("%e.%s.%s(%s)", f.X, strings.Join(fields, "."), jsTag, externalizeArgs(e.Args)), sig.Results().At(0).Type())

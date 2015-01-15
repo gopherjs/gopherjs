@@ -867,7 +867,7 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 			// qualified identifier
 			return fmt.Sprintf("%s.%s = %s;", c.translateExpr(l.X), l.Sel.Name, rhs)
 		}
-		fields, jsTag := c.translateSelection(sel)
+		fields, jsTag := c.translateSelection(sel, l.Pos())
 		if jsTag != "" {
 			return fmt.Sprintf("%s.%s.%s = %s;", c.translateExpr(l.X), strings.Join(fields, "."), jsTag, c.externalize(rhs, sel.Type()))
 		}

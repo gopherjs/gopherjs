@@ -48,6 +48,8 @@ type pkgContext struct {
 	indentation   int
 	dependencies  map[string]bool
 	minify        bool
+	fileSet       *token.FileSet
+	errList       ErrorList
 }
 
 type flowData struct {
@@ -140,6 +142,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			indentation:   1,
 			dependencies:  make(map[string]bool),
 			minify:        minify,
+			fileSet:       fileSet,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[string]*flowData{"": &flowData{}},
@@ -457,6 +460,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		d.BodyCode = removeWhitespace(d.BodyCode, minify)
 		d.InitCode = removeWhitespace(d.InitCode, minify)
 		allDecls = append(allDecls, d)
+	}
+
+	if len(c.p.errList) != 0 {
+		return nil, c.p.errList
 	}
 
 	return &Archive{

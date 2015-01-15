@@ -24,6 +24,7 @@
 package js
 
 // Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax. Nil is equal to JavaScript's "null".
+// An Object can not be used as a map key and it can not be converted to some other interface type, including interface{}. This means that you can't pass an Object obj to fmt.Println(obj), but using the println(obj) built-in is allowed.
 type Object interface {
 
 	// Get returns the object's property with the given key.

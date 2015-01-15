@@ -472,6 +472,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Slice:
 			return c.formatExpr(`((%2f < 0 || %2f >= %1e.$length) ? $throwRuntimeError("index out of range") : %1e.$array[%1e.$offset + %2f])`, e.X, e.Index)
 		case *types.Map:
+			if isJsObject(c.p.info.Types[e.Index].Type) {
+				c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: e.Index.Pos(), Msg: "can't use js.Object as map key"})
+			}
 			key := c.makeKey(e.Index, t.Key())
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
 				return c.formatExpr(`(%1s = %2e[%3s], %1s !== undefined ? [%1s.v, true] : [%4s, false])`, c.newVariable("_entry"), e.X, key, c.zeroValue(t.Elem()))
@@ -746,6 +749,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		return c.formatExpr("%e.$get()", e.X)
 
 	case *ast.TypeAssertExpr:
+		if isJsObject(c.p.info.Types[e.X].Type) {
+			c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: e.X.Pos(), Msg: "can't type assert js.Object"})
+		}
 		if e.Type == nil {
 			return c.translateExpr(e.X)
 		}
@@ -1105,6 +1111,10 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 	exprType := c.p.info.Types[expr].Type
 	if types.Identical(exprType, desiredType) {
 		return c.translateExpr(expr)
+	}
+
+	if isJsObject(exprType) {
+		c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: expr.Pos(), Msg: "can't convert js.Object to other interface type"})
 	}
 
 	basicExprType, isBasicExpr := exprType.Underlying().(*types.Basic)

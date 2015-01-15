@@ -3,7 +3,6 @@
 package js_test
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
@@ -298,25 +297,6 @@ func TestError(t *testing.T) {
 		}
 	}()
 	js.Global.Get("notExisting").Call("throwsError")
-}
-
-type S struct {
-	js.Object
-}
-
-func TestReflection(t *testing.T) {
-	if reflect.TypeOf(dummys).String() != "js.Object" || reflect.ValueOf(dummys).Type().String() != "js.Object" {
-		t.Fail()
-	}
-	v := reflect.ValueOf(dummys)
-	if v.Interface() != dummys || v.Interface().(js.Object) != dummys {
-		t.Fail()
-	}
-	var s S
-	reflect.ValueOf(&s).Elem().Field(0).Set(v)
-	if s.Object != dummys {
-		t.Fail()
-	}
 }
 
 type F struct {

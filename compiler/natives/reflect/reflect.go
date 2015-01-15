@@ -88,10 +88,6 @@ func MakeSlice(typ Type, len, cap int) Value {
 	return makeValue(typ, jsType(typ).Call("make", len, cap, js.InternalObject(func() js.Object { return jsType(typ.Elem()).Call("zero") })), 0)
 }
 
-func jsObject() *rtype {
-	return reflectType(js.Global.Get("$packages").Get("github.com/gopherjs/gopherjs/js").Get("Object"))
-}
-
 func TypeOf(i interface{}) Type {
 	if !initialized { // avoid error of uint8Type
 		return &rtype{}
@@ -99,22 +95,14 @@ func TypeOf(i interface{}) Type {
 	if i == nil {
 		return nil
 	}
-	c := js.InternalObject(i).Get("constructor")
-	if c.Get("kind") == js.Undefined { // js.Object
-		return jsObject()
-	}
-	return reflectType(c)
+	return reflectType(js.InternalObject(i).Get("constructor"))
 }
 
 func ValueOf(i interface{}) Value {
 	if i == nil {
 		return Value{}
 	}
-	c := js.InternalObject(i).Get("constructor")
-	if c.Get("kind") == js.Undefined { // js.Object
-		return Value{jsObject(), unsafe.Pointer(js.InternalObject(i).Unsafe()), flag(Interface)}
-	}
-	return makeValue(reflectType(c), js.InternalObject(i).Get("$val"), 0)
+	return makeValue(reflectType(js.InternalObject(i).Get("constructor")), js.InternalObject(i).Get("$val"), 0)
 }
 
 func arrayOf(count int, elem Type) Type {

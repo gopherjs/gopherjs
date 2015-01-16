@@ -151,7 +151,7 @@ func Keys(o Object) []string {
 	return s
 }
 
-// MakeWrapper creates a JavaScript object which has wrappers for the type's exported methods. This can be used to provide getter and setter methods for Go fields to JavaScript.
+// MakeWrapper creates a JavaScript object which has wrappers for the exported methods of i. This can be used to provide getter and setter methods for Go fields to JavaScript.
 func MakeWrapper(i interface{}) Object {
 	v := InternalObject(i)
 	o := Global.Get("Object").New()

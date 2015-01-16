@@ -55,11 +55,10 @@ var $externalize = function(v, t) {
     if (v.$externalizeWrapper === undefined) {
       $checkForDeadlock = false;
       var convert = false;
-      var i;
-      for (i = 0; i < t.params.length; i++) {
+      for (var i = 0; i < t.params.length; i++) {
         convert = convert || (t.params[i] !== $js.Object);
       }
-      for (i = 0; i < t.results.length; i++) {
+      for (var i = 0; i < t.results.length; i++) {
         convert = convert || $needsExternalization(t.results[i]);
       }
       v.$externalizeWrapper = v;
@@ -109,6 +108,8 @@ var $externalize = function(v, t) {
       m[$externalize(entry.k, t.key)] = $externalize(entry.v, t.elem);
     }
     return m;
+  case $kindPtr:
+    return $externalize(v.$get(), t.elem);
   case $kindSlice:
     if ($needsExternalization(t.elem)) {
       return $mapArray($sliceToArray(v), function(e) { return $externalize(e, t.elem); });
@@ -118,8 +119,8 @@ var $externalize = function(v, t) {
     if (v.search(/^[\x00-\x7F]*$/) !== -1) {
       return v;
     }
-    var s = "", r, i;
-    for (i = 0; i < v.length; i += r[1]) {
+    var s = "", r;
+    for (var i = 0; i < v.length; i += r[1]) {
       r = $decodeRune(v, i);
       s += String.fromCharCode(r[0]);
     }
@@ -130,8 +131,35 @@ var $externalize = function(v, t) {
       var milli = $div64(v.UnixNano(), new $Int64(0, 1000000));
       return new Date($flatten64(milli));
     }
-    var o = {}, i;
-    for (i = 0; i < t.fields.length; i++) {
+
+    var searchJsObject = function(v, t) {
+      if (t === $js.Object) {
+        return v;
+      }
+      if (t.kind === $kindPtr) {
+        var o = searchJsObject(v.$get(), t.elem);
+        if (o !== undefined) {
+          return o;
+        }
+      }
+      if (t.kind === $kindStruct) {
+        for (i = 0; i < t.fields.length; i++) {
+          var f = t.fields[i];
+          var o = searchJsObject(v[f[0]], f[3]);
+          if (o !== undefined) {
+            return o;
+          }
+        }
+      }
+      return undefined;
+    }
+    var o = searchJsObject(v, t);
+    if (o !== undefined) {
+      return o;
+    }
+
+    o = {};
+    for (var i = 0; i < t.fields.length; i++) {
       var f = t.fields[i];
       if (f[2] !== "") { /* not exported */
         continue;

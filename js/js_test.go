@@ -207,6 +207,19 @@ func TestCallingJsField(t *testing.T) {
 	}
 }
 
+func TestPassingStructWithJsObject(t *testing.T) {
+	a := StructWithJsField1{Object: js.Global.Get("Object").New()}
+	b := &StructWithJsField2{object: js.Global.Get("Object").New()}
+	if !dummys.Call("isEqual", a, a.Object).Bool() || !dummys.Call("isEqual", b, b.object).Bool() {
+		t.Fail()
+	}
+	wa := Wrapper1{StructWithJsField1: a}
+	wb := Wrapper2{innerStruct: b}
+	if !dummys.Call("isEqual", wa, a.Object).Bool() || !dummys.Call("isEqual", wb, b.object).Bool() {
+		t.Fail()
+	}
+}
+
 func TestFunc(t *testing.T) {
 	a := dummys.Call("mapArray", []int{1, 2, 3}, func(e int64) int64 { return e + 40 })
 	b := dummys.Call("mapArray", []int{1, 2, 3}, func(e ...int64) int64 { return e[0] + 40 })

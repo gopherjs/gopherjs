@@ -34,6 +34,7 @@
 //  | -                              | *js.DOMNode                | instanceof Node   |
 //  | maps, structs                  | map[string]interface{}     | instanceof Object |
 //
+// Additionally, for a struct containing a js.Object field, only the content of the field will be passed to JavaScript and vice versa.
 package js
 
 // Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax. Nil is equal to JavaScript's "null".

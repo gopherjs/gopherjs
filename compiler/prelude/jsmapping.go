@@ -152,7 +152,7 @@ var $externalize = function(v, t) {
         }
       }
       return undefined;
-    }
+    };
     var o = searchJsObject(v, t);
     if (o !== undefined) {
       return o;

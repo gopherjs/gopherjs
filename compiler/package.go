@@ -596,7 +596,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 	code := bytes.NewBuffer(nil)
 
 	if _, isStruct := namedRecvType.Underlying().(*types.Struct); isStruct {
-		code.Write(primaryFunction(typeName + ".Ptr.prototype." + funName))
+		code.Write(primaryFunction(typeName + ".ptr.prototype." + funName))
 		fmt.Fprintf(code, "\t%s.prototype.%s = function(%s) { return this.$val.%s(%s); };\n", typeName, funName, joinedParams, funName, joinedParams)
 		return code.Bytes()
 	}

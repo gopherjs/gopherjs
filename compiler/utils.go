@@ -157,7 +157,7 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 	case *types.Slice:
 		return fmt.Sprintf("%s.nil", c.typeName(ty))
 	case *types.Struct:
-		return fmt.Sprintf("new %s.Ptr()", c.typeName(ty))
+		return fmt.Sprintf("new %s.ptr()", c.typeName(ty))
 	case *types.Map:
 		return "false"
 	case *types.Interface:

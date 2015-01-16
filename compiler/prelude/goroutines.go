@@ -24,7 +24,7 @@ var $callDeferred = function(deferred, jsErr) {
     var newErr = null;
     try {
       $deferFrames.push(deferred);
-      $panic(new $js.Error.Ptr(jsErr));
+      $panic(new $js.Error.ptr(jsErr));
     } catch (err) {
       newErr = err;
     }
@@ -118,7 +118,7 @@ var $throwRuntimeError; /* set by package "runtime" */
 
 var $BLOCKING = new Object();
 var $nonblockingCall = function() {
-  $panic(new $packages["runtime"].NotSupportedError.Ptr("non-blocking call to blocking function, see https://github.com/gopherjs/gopherjs#goroutines"));
+  $panic(new $packages["runtime"].NotSupportedError.ptr("non-blocking call to blocking function, see https://github.com/gopherjs/gopherjs#goroutines"));
 };
 
 var $dummyGoroutine = { asleep: false, exit: false, panicStack: [] };

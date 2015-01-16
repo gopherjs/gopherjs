@@ -305,13 +305,13 @@ var $pointerOfStructConversion = function(obj, type) {
   var proxy = obj.$proxies[type.string];
   if (proxy === undefined) {
     var properties = {};
-    for (var i = 0; i < type.Struct.fields.length; i++) {
+    for (var i = 0; i < type.elem.fields.length; i++) {
       (function(fieldName) {
         properties[fieldName] = {
           get: function() { return obj[fieldName]; },
           set: function(value) { obj[fieldName] = value; },
         };
-      })(type.Struct.fields[i][0]);
+      })(type.elem.fields[i][0]);
     }
     proxy = Object.create(type.prototype, properties);
     proxy.$val = proxy;
@@ -377,7 +377,7 @@ var $equal = function(a, b, type) {
   case $kindUint64:
     return a.$high === b.$high && a.$low === b.$low;
   case $kindPtr:
-    if (a.constructor.Struct) {
+    if (a.constructor.elem) {
       return a === b;
     }
     return $pointerIsEqual(a, b);

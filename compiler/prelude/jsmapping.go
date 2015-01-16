@@ -126,7 +126,7 @@ var $externalize = function(v, t) {
     return s;
   case $kindStruct:
     var timePkg = $packages["time"];
-    if (timePkg && v.constructor === timePkg.Time.Ptr) {
+    if (timePkg && v.constructor === timePkg.Time.ptr) {
       var milli = $div64(v.UnixNano(), new $Int64(0, 1000000));
       return new Date($flatten64(milli));
     }
@@ -246,7 +246,7 @@ var $internalize = function(v, t, recv) {
       return new $String($internalize(v, $String));
     default:
       if ($global.Node && v instanceof $global.Node) {
-        return new $js.DOMNode.Ptr(v);
+        return new $js.DOMNode.ptr(v);
       }
       var mapType = $mapType($String, $emptyInterface);
       return new mapType($internalize(v, mapType));

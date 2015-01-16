@@ -184,7 +184,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					}
 				}
 			}
-			return c.formatExpr("new %s.Ptr(%s)", c.typeName(exprType), strings.Join(elements, ", "))
+			return c.formatExpr("new %s.ptr(%s)", c.typeName(exprType), strings.Join(elements, ", "))
 		default:
 			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", t))
 		}
@@ -1135,7 +1135,7 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 			return c.formatExpr("new %s(%e)", c.typeName(exprType), expr)
 		}
 		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
-			return c.formatExpr("new %1e.constructor.Struct(%1e)", expr)
+			return c.formatExpr("new %1e.constructor.elem(%1e)", expr)
 		}
 	}
 

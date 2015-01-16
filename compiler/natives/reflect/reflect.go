@@ -137,7 +137,7 @@ func Zero(typ Type) Value {
 func unsafe_New(typ *rtype) unsafe.Pointer {
 	switch typ.Kind() {
 	case Struct:
-		return unsafe.Pointer(jsType(typ).Get("Ptr").New().Unsafe())
+		return unsafe.Pointer(jsType(typ).Get("ptr").New().Unsafe())
 	case Array:
 		return unsafe.Pointer(jsType(typ).Call("zero").Unsafe())
 	default:
@@ -310,7 +310,7 @@ func cvtDirect(v Value, typ Type) Value {
 		}
 		val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"))
 	case Struct:
-		val = jsType(typ).Get("Ptr").New()
+		val = jsType(typ).Get("ptr").New()
 		copyStruct(val, srcVal, typ)
 	case Array, Func, Interface, Map, String:
 		val = js.InternalObject(v.ptr)

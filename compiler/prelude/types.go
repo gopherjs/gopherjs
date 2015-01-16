@@ -83,7 +83,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 
   case $kindArray:
     typ = function(v) { this.$val = v; };
-    typ.Ptr = $newType(4, $kindPtr, "*" + string, "", "", function(array) {
+    typ.ptr = $newType(4, $kindPtr, "*" + string, "", "", function(array) {
       this.$get = function() { return array; };
       this.$set = function(v) { $copy(this, v, typ); };
       this.$val = array;
@@ -99,10 +99,10 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
         }), "$");
       };
       typ.extendReflectType = function(rt) {
-        rt.arrayType = new $reflect.arrayType.Ptr(rt, elem.reflectType(), undefined, len);
+        rt.arrayType = new $reflect.arrayType.ptr(rt, elem.reflectType(), undefined, len);
       };
-      typ.Ptr.init(typ);
-      Object.defineProperty(typ.Ptr.nil, "nilCheck", { get: $throwNilPointerError });
+      typ.ptr.init(typ);
+      Object.defineProperty(typ.ptr.nil, "nilCheck", { get: $throwNilPointerError });
     };
     break;
 
@@ -129,7 +129,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       typ.nil = new typ(0);
       typ.nil.$sendQueue = typ.nil.$recvQueue = { length: 0, push: function() {}, shift: function() { return undefined; }, indexOf: function() { return -1; } };
       typ.extendReflectType = function(rt) {
-        rt.chanType = new $reflect.chanType.Ptr(rt, elem.reflectType(), sendOnly ? $reflect.SendDir : (recvOnly ? $reflect.RecvDir : $reflect.BothDir));
+        rt.chanType = new $reflect.chanType.ptr(rt, elem.reflectType(), sendOnly ? $reflect.SendDir : (recvOnly ? $reflect.RecvDir : $reflect.BothDir));
       };
     };
     break;
@@ -142,8 +142,8 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       typ.variadic = variadic;
       typ.comparable = false;
       typ.extendReflectType = function(rt) {
-        var typeSlice = ($sliceType($ptrType($reflect.rtype.Ptr)));
-        rt.funcType = new $reflect.funcType.Ptr(rt, variadic, new typeSlice($mapArray(params, function(p) { return p.reflectType(); })), new typeSlice($mapArray(results, function(p) { return p.reflectType(); })));
+        var typeSlice = ($sliceType($ptrType($reflect.rtype.ptr)));
+        rt.funcType = new $reflect.funcType.ptr(rt, variadic, new typeSlice($mapArray(params, function(p) { return p.reflectType(); })), new typeSlice($mapArray(results, function(p) { return p.reflectType(); })));
       };
     };
     break;
@@ -154,10 +154,10 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       typ.methods = methods;
       typ.extendReflectType = function(rt) {
         var imethods = $mapArray(methods, function(m) {
-          return new $reflect.imethod.Ptr($newStringPtr(m[1]), $newStringPtr(m[2]), m[3].reflectType());
+          return new $reflect.imethod.ptr($newStringPtr(m[1]), $newStringPtr(m[2]), m[3].reflectType());
         });
-        var methodSlice = ($sliceType($ptrType($reflect.imethod.Ptr)));
-        rt.interfaceType = new $reflect.interfaceType.Ptr(rt, new methodSlice(imethods));
+        var methodSlice = ($sliceType($ptrType($reflect.imethod.ptr)));
+        rt.interfaceType = new $reflect.interfaceType.ptr(rt, new methodSlice(imethods));
       };
     };
     break;
@@ -169,7 +169,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       typ.elem = elem;
       typ.comparable = false;
       typ.extendReflectType = function(rt) {
-        rt.mapType = new $reflect.mapType.Ptr(rt, key.reflectType(), elem.reflectType(), undefined, undefined);
+        rt.mapType = new $reflect.mapType.ptr(rt, key.reflectType(), elem.reflectType(), undefined, undefined);
       };
     };
     break;
@@ -189,9 +189,10 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       return String(this.$id);
     };
     typ.init = function(elem) {
+      typ.elem = elem;
       typ.nil = new typ($throwNilPointerError, $throwNilPointerError);
       typ.extendReflectType = function(rt) {
-        rt.ptrType = new $reflect.ptrType.Ptr(rt, elem.reflectType());
+        rt.ptrType = new $reflect.ptrType.ptr(rt, elem.reflectType());
       };
     };
     break;
@@ -226,17 +227,17 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       nativeArray = $nativeArray(elem.kind);
       typ.nil = new typ([]);
       typ.extendReflectType = function(rt) {
-        rt.sliceType = new $reflect.sliceType.Ptr(rt, elem.reflectType());
+        rt.sliceType = new $reflect.sliceType.ptr(rt, elem.reflectType());
       };
     };
     break;
 
   case $kindStruct:
     typ = function(v) { this.$val = v; };
-    typ.Ptr = $newType(4, $kindPtr, "*" + string, "", "", constructor);
-    typ.Ptr.Struct = typ;
-    typ.Ptr.prototype.$get = function() { return this; };
-    typ.Ptr.prototype.$set = function(v) { $copy(this, v, typ); };
+    typ.ptr = $newType(4, $kindPtr, "*" + string, "", "", constructor);
+    typ.ptr.elem = typ;
+    typ.ptr.prototype.$get = function() { return this; };
+    typ.ptr.prototype.$set = function(v) { $copy(this, v, typ); };
     typ.init = function(fields) {
       var i;
       typ.fields = fields;
@@ -253,16 +254,16 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
           return key.replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
         }).join("$");
       };
-      typ.Ptr.extendReflectType = function(rt) {
-        rt.ptrType = new $reflect.ptrType.Ptr(rt, typ.reflectType());
+      typ.ptr.extendReflectType = function(rt) {
+        rt.ptrType = new $reflect.ptrType.ptr(rt, typ.reflectType());
       };
       /* nil value */
       var properties = {};
       for (i = 0; i < fields.length; i++) {
         properties[fields[i][0]] = { get: $throwNilPointerError, set: $throwNilPointerError };
       }
-      typ.Ptr.nil = Object.create(constructor.prototype, properties);
-      typ.Ptr.nil.$val = typ.Ptr.nil;
+      typ.ptr.nil = Object.create(constructor.prototype, properties);
+      typ.ptr.nil.$val = typ.ptr.nil;
       /* methods for embedded fields */
       for (i = 0; i < typ.methods.length; i++) {
         var m = typ.methods[i];
@@ -275,11 +276,11 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
           })(fields[m[4]], m[0]);
         }
       }
-      for (i = 0; i < typ.Ptr.methods.length; i++) {
-        var m = typ.Ptr.methods[i];
+      for (i = 0; i < typ.ptr.methods.length; i++) {
+        var m = typ.ptr.methods[i];
         if (m[4] != -1) {
           (function(field, methodName) {
-            typ.Ptr.prototype[methodName] = function() {
+            typ.ptr.prototype[methodName] = function() {
               var v = this[field[0]];
               if (v.$val === undefined) {
                 v = new field[3](v);
@@ -294,9 +295,9 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
         var reflectFields = new Array(fields.length), i;
         for (i = 0; i < fields.length; i++) {
           var field = fields[i];
-          reflectFields[i] = new $reflect.structField.Ptr($newStringPtr(field[1]), $newStringPtr(field[2]), field[3].reflectType(), $newStringPtr(field[4]), i);
+          reflectFields[i] = new $reflect.structField.ptr($newStringPtr(field[1]), $newStringPtr(field[2]), field[3].reflectType(), $newStringPtr(field[4]), i);
         }
-        rt.structType = new $reflect.structType.Ptr(rt, new ($sliceType($reflect.structField.Ptr))(reflectFields));
+        rt.structType = new $reflect.structType.ptr(rt, new ($sliceType($reflect.structField.ptr))(reflectFields));
       };
     };
     break;
@@ -367,7 +368,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     break;
 
   case $kindStruct:
-    typ.zero = function() { return new typ.Ptr(); };
+    typ.zero = function() { return new typ.ptr(); };
     break;
 
   default:
@@ -383,7 +384,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
   var rt = null;
   typ.reflectType = function() {
     if (rt === null) {
-      rt = new $reflect.rtype.Ptr(size, 0, 0, 0, 0, kind, undefined, undefined, $newStringPtr(string), undefined, undefined);
+      rt = new $reflect.rtype.ptr(size, 0, 0, 0, 0, kind, undefined, undefined, $newStringPtr(string), undefined, undefined);
       rt.jsType = typ;
 
       var methods = [];
@@ -392,12 +393,12 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
         for (i = 0; i < typ.methods.length; i++) {
           var m = typ.methods[i];
           var t = m[3];
-          methods.push(new $reflect.method.Ptr($newStringPtr(m[1]), $newStringPtr(m[2]), t.reflectType(), $funcType([typ].concat(t.params), t.results, t.variadic).reflectType(), undefined, undefined));
+          methods.push(new $reflect.method.ptr($newStringPtr(m[1]), $newStringPtr(m[2]), t.reflectType(), $funcType([typ].concat(t.params), t.results, t.variadic).reflectType(), undefined, undefined));
         }
       }
       if (name !== "" || methods.length !== 0) {
-        var methodSlice = ($sliceType($ptrType($reflect.method.Ptr)));
-        rt.uncommonType = new $reflect.uncommonType.Ptr($newStringPtr(name), $newStringPtr(pkgPath), new methodSlice(methods));
+        var methodSlice = ($sliceType($ptrType($reflect.method.ptr)));
+        rt.uncommonType = new $reflect.uncommonType.ptr($newStringPtr(name), $newStringPtr(pkgPath), new methodSlice(methods));
         rt.uncommonType.jsType = typ;
       }
 
@@ -552,11 +553,11 @@ var $mapType = function(key, elem) {
 
 var $throwNilPointerError = function() { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var $ptrType = function(elem) {
-  var typ = elem.Ptr;
+  var typ = elem.ptr;
   if (typ === undefined) {
     typ = $newType(4, $kindPtr, "*" + elem.string, "", "", null);
     typ.init(elem);
-    elem.Ptr = typ;
+    elem.ptr = typ;
   }
   return typ;
 };
@@ -619,12 +620,12 @@ var $structType = function(fields) {
         for (j = 0; j < methods.length; j++) {
           var m = methods[j].slice(0, 6).concat([i]);
           typ.methods.push(m);
-          typ.Ptr.methods.push(m);
+          typ.ptr.methods.push(m);
         }
         if (field[3].kind === $kindStruct) {
-          var methods = field[3].Ptr.methods;
+          var methods = field[3].ptr.methods;
           for (j = 0; j < methods.length; j++) {
-            typ.Ptr.methods.push(methods[j].slice(0, 6).concat([i]));
+            typ.ptr.methods.push(methods[j].slice(0, 6).concat([i]));
           }
         }
       }
@@ -675,7 +676,7 @@ var $assertType = function(value, type, returnTuple) {
     if (returnTuple) {
       return [type.zero(), false];
     }
-    $panic(new $packages["runtime"].TypeAssertionError.Ptr("", (value === $ifaceNil ? "" : value.constructor.string), type.string, missingMethod));
+    $panic(new $packages["runtime"].TypeAssertionError.ptr("", (value === $ifaceNil ? "" : value.constructor.string), type.string, missingMethod));
   }
 
   if (!isInterface) {

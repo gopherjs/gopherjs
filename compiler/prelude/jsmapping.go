@@ -287,6 +287,10 @@ var $internalize = function(v, t, recv) {
       m[key.$key ? key.$key() : key] = { k: key, v: $internalize(v[keys[i]], t.elem) };
     }
     return m;
+  case $kindPtr:
+    if (t.elem.kind === $kindStruct) {
+      return $internalize(v, t.elem);
+    }
   case $kindSlice:
     return new t($mapArray(v, function(e) { return $internalize(e, t.elem); }));
   case $kindString:
@@ -299,8 +303,35 @@ var $internalize = function(v, t, recv) {
       s += $encodeRune(v.charCodeAt(i));
     }
     return s;
-  default:
-    $panic(new $String("cannot internalize " + t.string));
+  case $kindStruct:
+    var searchJsObject = function(v, t) {
+      if (t === $js.Object) {
+        return v;
+      }
+      if (t.kind === $kindPtr && t.elem.kind === $kindStruct) {
+        var o = searchJsObject(v, t.elem);
+        if (o !== undefined) {
+          return o;
+        }
+      }
+      if (t.kind === $kindStruct) {
+        for (i = 0; i < t.fields.length; i++) {
+          var f = t.fields[i];
+          var o = searchJsObject(v, f[3]);
+          if (o !== undefined) {
+            var n = new t.ptr();
+            n[f[0]] = o;
+            return n;
+          }
+        }
+      }
+      return undefined;
+    };
+    var o = searchJsObject(v, t);
+    if (o !== undefined) {
+      return o;
+    }
   }
+  $panic(new $String("cannot internalize " + t.string));
 };
 `

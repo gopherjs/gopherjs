@@ -36,7 +36,10 @@ var dummys = js.Global.Call("eval", `({
 	},
 	isEqual: function(a, b) {
 		return a === b;
-	}
+	},
+	call: function(f, a) {
+		f(a);
+	},
 })`)
 
 func TestBool(t *testing.T) {
@@ -207,7 +210,7 @@ func TestCallingJsField(t *testing.T) {
 	}
 }
 
-func TestPassingStructWithJsObject(t *testing.T) {
+func TestUnboxing(t *testing.T) {
 	a := StructWithJsField1{Object: js.Global.Get("Object").New()}
 	b := &StructWithJsField2{object: js.Global.Get("Object").New()}
 	if !dummys.Call("isEqual", a, a.Object).Bool() || !dummys.Call("isEqual", b, b.object).Bool() {
@@ -218,6 +221,30 @@ func TestPassingStructWithJsObject(t *testing.T) {
 	if !dummys.Call("isEqual", wa, a.Object).Bool() || !dummys.Call("isEqual", wb, b.object).Bool() {
 		t.Fail()
 	}
+}
+
+func TestBoxing(t *testing.T) {
+	o := js.Global.Get("Object").New()
+	dummys.Call("call", func(a StructWithJsField1) {
+		if a.Object != o {
+			t.Fail()
+		}
+	}, o)
+	dummys.Call("call", func(a *StructWithJsField2) {
+		if a.object != o {
+			t.Fail()
+		}
+	}, o)
+	dummys.Call("call", func(a Wrapper1) {
+		if a.Object != o {
+			t.Fail()
+		}
+	}, o)
+	dummys.Call("call", func(a Wrapper2) {
+		if a.innerStruct.object != o {
+			t.Fail()
+		}
+	}, o)
 }
 
 func TestFunc(t *testing.T) {

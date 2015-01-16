@@ -576,7 +576,7 @@ var $newStringPtr = function(str) {
 };
 
 var $newDataPointer = function(data, constructor) {
-  if (constructor.Struct) {
+  if (constructor.elem.kind === $kindStruct) {
     return data;
   }
   return new constructor(function() { return data; }, function(v) { data = v; });

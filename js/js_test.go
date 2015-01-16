@@ -323,9 +323,9 @@ func (m *M) Method(x int) {
 	m.x = x
 }
 
-func TestExternalizeNamed(t *testing.T) {
+func TestMakeWrapper(t *testing.T) {
 	m := &M{}
-	dummys.Call("testMethod", m)
+	dummys.Call("testMethod", js.MakeWrapper(m))
 	if m.x != 42 {
 		t.Fail()
 	}

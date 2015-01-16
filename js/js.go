@@ -33,9 +33,7 @@
 //  | time.Time                      | time.Time                  | Date              |
 //  | -                              | *js.DOMNode                | instanceof Node   |
 //  | maps, structs                  | map[string]interface{}     | instanceof Object |
-//  | pointers                       | -                          | wrapper           |
 //
-// A pointer is passed to JavaScript as an object which has wrappers for the type's exported methods. This can be used to provide getter and setter methods for Go fields to JavaScript.
 package js
 
 // Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax. Nil is equal to JavaScript's "null".
@@ -151,6 +149,23 @@ func Keys(o Object) []string {
 		s[i] = a.Index(i).String()
 	}
 	return s
+}
+
+// MakeWrapper creates a JavaScript object which has wrappers for the type's exported methods. This can be used to provide getter and setter methods for Go fields to JavaScript.
+func MakeWrapper(i interface{}) Object {
+	v := InternalObject(i)
+	o := Global.Get("Object").New()
+	methods := v.Get("constructor").Get("methods")
+	for i := 0; i < methods.Length(); i++ {
+		m := methods.Index(i)
+		if m.Index(2).String() != "" { // not exported
+			continue
+		}
+		o.Set(m.Index(1).String(), func(args ...Any) Object {
+			return v.Call(m.Index(0).String(), args...)
+		})
+	}
+	return o
 }
 
 // M is a simple map type. It is intended as a shorthand for JavaScript objects (before conversion).

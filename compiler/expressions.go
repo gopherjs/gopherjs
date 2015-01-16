@@ -582,8 +582,12 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		var fun *expression
 		switch f := plainFun.(type) {
 		case *ast.Ident:
-			if o, ok := c.p.info.Uses[f].(*types.Builtin); ok {
+			obj := c.p.info.Uses[f]
+			if o, ok := obj.(*types.Builtin); ok {
 				return c.translateBuiltin(o.Name(), e.Args, e.Ellipsis.IsValid(), exprType)
+			}
+			if isJsPackage(obj.Pkg()) && obj.Name() == "InternalObject" {
+				return c.translateExpr(e.Args[0])
 			}
 			fun = c.translateExpr(plainFun)
 

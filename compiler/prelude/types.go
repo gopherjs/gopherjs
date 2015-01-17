@@ -211,9 +211,9 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     };
     typ.make = function(length, capacity) {
       capacity = capacity || length;
-      var array = new nativeArray(capacity), i;
+      var array = new nativeArray(capacity);
       if (nativeArray === Array) {
-        for (i = 0; i < capacity; i++) {
+        for (var i = 0; i < capacity; i++) {
           array[i] = typ.elem.zero();
         }
       }
@@ -239,13 +239,12 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     typ.ptr.prototype.$get = function() { return this; };
     typ.ptr.prototype.$set = function(v) { $copy(this, v, typ); };
     typ.init = function(fields) {
-      var i;
       typ.fields = fields;
-      for (i = 0; i < fields.length; i++) {
-        if (!fields[i].type.comparable) {
+      fields.forEach(function(f) {
+        if (!f.type.comparable) {
           typ.comparable = false;
         }
-      }
+      });
       typ.prototype.$key = function() {
         var val = this.$val;
         return string + "$" + $mapArray(fields, function(f) {
@@ -259,41 +258,37 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       };
       /* nil value */
       var properties = {};
-      for (i = 0; i < fields.length; i++) {
-        properties[fields[i].prop] = { get: $throwNilPointerError, set: $throwNilPointerError };
-      }
+      fields.forEach(function(f) {
+        properties[f.prop] = { get: $throwNilPointerError, set: $throwNilPointerError };
+      });
       typ.ptr.nil = Object.create(constructor.prototype, properties);
       typ.ptr.nil.$val = typ.ptr.nil;
       /* methods for embedded fields */
-      for (i = 0; i < typ.methods.length; i++) {
-        var m = typ.methods[i];
+      typ.methods.forEach(function(m) {
         if (m.embedded != -1) {
-          (function(f, methodProp) {
-            typ.prototype[methodProp] = function() {
-              var v = this.$val[f.prop];
-              return v[methodProp].apply(v, arguments);
-            };
-          })(fields[m.embedded], m.prop);
+          var f = fields[m.embedded];
+          typ.prototype[m.prop] = function() {
+            var v = this.$val[f.prop];
+            return v[m.prop].apply(v, arguments);
+          };
         }
-      }
-      for (i = 0; i < typ.ptr.methods.length; i++) {
-        var m = typ.ptr.methods[i];
+      });
+      typ.ptr.methods.forEach(function(m) {
         if (m.embedded != -1) {
-          (function(f, methodProp) {
-            typ.ptr.prototype[methodProp] = function() {
-              var v = this[f.prop];
-              if (v.$val === undefined) {
-                v = new f.type(v);
-              }
-              return v[methodProp].apply(v, arguments);
-            };
-          })(fields[m.embedded], m.prop);
+          var f = fields[m.embedded];
+          typ.ptr.prototype[m.prop] = function() {
+            var v = this[f.prop];
+            if (v.$val === undefined) {
+              v = new f.type(v);
+            }
+            return v[m.prop].apply(v, arguments);
+          };
         }
-      }
+      });
       /* reflect type */
       typ.extendReflectType = function(rt) {
-        var reflectFields = new Array(fields.length), i;
-        for (i = 0; i < fields.length; i++) {
+        var reflectFields = new Array(fields.length);
+        for (var i = 0; i < fields.length; i++) {
           var f = fields[i];
           reflectFields[i] = new $reflect.structField.ptr($newStringPtr(f.name), $newStringPtr(f.pkg), f.type.reflectType(), $newStringPtr(f.tag), i);
         }
@@ -359,8 +354,8 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       if (arrayClass !== Array) {
         return new arrayClass(typ.len);
       }
-      var array = new Array(typ.len), i;
-      for (i = 0; i < typ.len; i++) {
+      var array = new Array(typ.len);
+      for (var i = 0; i < typ.len; i++) {
         array[i] = typ.elem.zero();
       }
       return array;
@@ -389,12 +384,10 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
 
       var methods = [];
       if (typ.methods !== undefined) {
-        var i;
-        for (i = 0; i < typ.methods.length; i++) {
-          var m = typ.methods[i];
+        typ.methods.forEach(function(m) {
           var t = m.type;
           methods.push(new $reflect.method.ptr($newStringPtr(m.name), $newStringPtr(m.pkg), t.reflectType(), $funcType([typ].concat(t.params), t.results, t.variadic).reflectType(), undefined, undefined));
-        }
+        });
       }
       if (name !== "" || methods.length !== 0) {
         var methodSlice = ($sliceType($ptrType($reflect.method.ptr)));
@@ -533,8 +526,8 @@ $error.init([{prop: "Error", name: "Error", pkg: "", type: $funcType([], [$Strin
 
 var $Map = function() {};
 (function() {
-  var names = Object.getOwnPropertyNames(Object.prototype), i;
-  for (i = 0; i < names.length; i++) {
+  var names = Object.getOwnPropertyNames(Object.prototype);
+  for (var i = 0; i < names.length; i++) {
     $Map.prototype[names[i]] = undefined;
   }
 })();
@@ -604,33 +597,27 @@ var $structType = function(fields) {
   if (typ === undefined) {
     typ = $newType(0, $kindStruct, string, "", "", function() {
       this.$val = this;
-      var i;
-      for (i = 0; i < fields.length; i++) {
+      for (var i = 0; i < fields.length; i++) {
         var f = fields[i];
         var arg = arguments[i];
         this[f.prop] = arg !== undefined ? arg : f.type.zero();
       }
     });
     /* collect methods for anonymous fields */
-    var i, j;
-    for (i = 0; i < fields.length; i++) {
+    for (var i = 0; i < fields.length; i++) {
       var f = fields[i];
       if (f.name === "") {
-        var methods = f.type.methods;
-        for (j = 0; j < methods.length; j++) {
-          var m = methods[j];
+        f.type.methods.forEach(function(m) {
           typ.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
           typ.ptr.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
-        }
+        });
         if (f.type.kind === $kindStruct) {
-          var methods = f.type.ptr.methods;
-          for (j = 0; j < methods.length; j++) {
-            var m = methods[j];
+          f.type.ptr.methods.forEach(function(m) {
             typ.ptr.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
-          }
+          });
         }
       }
-    }
+    };
     typ.init(fields);
     $structTypes[string] = typ;
   }

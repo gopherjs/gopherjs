@@ -64,11 +64,11 @@ var $externalize = function(v, t) {
       v.$externalizeWrapper = v;
       if (convert) {
         v.$externalizeWrapper = function() {
-          var args = [], i;
-          for (i = 0; i < t.params.length; i++) {
+          var args = [];
+          for (var i = 0; i < t.params.length; i++) {
             if (t.variadic && i === t.params.length - 1) {
-              var vt = t.params[i].elem, varargs = [], j;
-              for (j = i; j < arguments.length; j++) {
+              var vt = t.params[i].elem, varargs = [];
+              for (var j = i; j < arguments.length; j++) {
                 varargs.push($internalize(arguments[j], vt));
               }
               args.push(new (t.params[i])(varargs));
@@ -83,7 +83,7 @@ var $externalize = function(v, t) {
           case 1:
             return $externalize(result, t.results[0]);
           default:
-            for (i = 0; i < t.results.length; i++) {
+            for (var i = 0; i < t.results.length; i++) {
               result[i] = $externalize(result[i], t.results[i]);
             }
             return result;
@@ -102,8 +102,8 @@ var $externalize = function(v, t) {
     return $externalize(v.$val, v.constructor);
   case $kindMap:
     var m = {};
-    var keys = $keys(v), i;
-    for (i = 0; i < keys.length; i++) {
+    var keys = $keys(v);
+    for (var i = 0; i < keys.length; i++) {
       var entry = v[keys[i]];
       m[$externalize(entry.k, t.key)] = $externalize(entry.v, t.elem);
     }
@@ -143,7 +143,7 @@ var $externalize = function(v, t) {
         }
       }
       if (t.kind === $kindStruct) {
-        for (i = 0; i < t.fields.length; i++) {
+        for (var i = 0; i < t.fields.length; i++) {
           var f = t.fields[i];
           var o = searchJsObject(v[f.prop], f.type);
           if (o !== undefined) {
@@ -205,11 +205,11 @@ var $internalize = function(v, t, recv) {
     return $mapArray(v, function(e) { return $internalize(e, t.elem); });
   case $kindFunc:
     return function() {
-      var args = [], i;
-      for (i = 0; i < t.params.length; i++) {
+      var args = [];
+      for (var i = 0; i < t.params.length; i++) {
         if (t.variadic && i === t.params.length - 1) {
-          var vt = t.params[i].elem, varargs = arguments[i], j;
-          for (j = 0; j < varargs.$length; j++) {
+          var vt = t.params[i].elem, varargs = arguments[i];
+          for (var j = 0; j < varargs.$length; j++) {
             args.push($externalize(varargs.$array[varargs.$offset + j], vt));
           }
           break;
@@ -223,7 +223,7 @@ var $internalize = function(v, t, recv) {
       case 1:
         return $internalize(result, t.results[0]);
       default:
-        for (i = 0; i < t.results.length; i++) {
+        for (var i = 0; i < t.results.length; i++) {
           result[i] = $internalize(result[i], t.results[i]);
         }
         return result;
@@ -281,8 +281,8 @@ var $internalize = function(v, t, recv) {
     }
   case $kindMap:
     var m = new $Map();
-    var keys = $keys(v), i;
-    for (i = 0; i < keys.length; i++) {
+    var keys = $keys(v);
+    for (var i = 0; i < keys.length; i++) {
       var key = $internalize(keys[i], t.key);
       m[key.$key ? key.$key() : key] = { k: key, v: $internalize(v[keys[i]], t.elem) };
     }
@@ -298,8 +298,8 @@ var $internalize = function(v, t, recv) {
     if (v.search(/^[\x00-\x7F]*$/) !== -1) {
       return v;
     }
-    var s = "", i;
-    for (i = 0; i < v.length; i++) {
+    var s = "";
+    for (var i = 0; i < v.length; i++) {
       s += $encodeRune(v.charCodeAt(i));
     }
     return s;
@@ -315,7 +315,7 @@ var $internalize = function(v, t, recv) {
         }
       }
       if (t.kind === $kindStruct) {
-        for (i = 0; i < t.fields.length; i++) {
+        for (var i = 0; i < t.fields.length; i++) {
           var f = t.fields[i];
           var o = searchJsObject(v, f.type);
           if (o !== undefined) {

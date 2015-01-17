@@ -37,8 +37,8 @@ var $parseFloat = function(f) {
 var $flushConsole = function() {};
 
 var $mapArray = function(array, f) {
-  var newArray = new array.constructor(array.length), i;
-  for (i = 0; i < array.length; i++) {
+  var newArray = new array.constructor(array.length);
+  for (var i = 0; i < array.length; i++) {
     newArray[i] = f(array[i]);
   }
   return newArray;
@@ -178,8 +178,8 @@ var $encodeRune = function(r) {
 };
 
 var $stringToBytes = function(str) {
-  var array = new Uint8Array(str.length), i;
-  for (i = 0; i < str.length; i++) {
+  var array = new Uint8Array(str.length);
+  for (var i = 0; i < str.length; i++) {
     array[i] = str.charCodeAt(i);
   }
   return array;
@@ -189,8 +189,8 @@ var $bytesToString = function(slice) {
   if (slice.$length === 0) {
     return "";
   }
-  var str = "", i;
-  for (i = 0; i < slice.$length; i += 10000) {
+  var str = "";
+  for (var i = 0; i < slice.$length; i += 10000) {
     str += String.fromCharCode.apply(null, slice.$array.subarray(slice.$offset + i, slice.$offset + Math.min(slice.$length, i + 10000)));
   }
   return str;
@@ -198,8 +198,8 @@ var $bytesToString = function(slice) {
 
 var $stringToRunes = function(str) {
   var array = new Int32Array(str.length);
-  var rune, i, j = 0;
-  for (i = 0; i < str.length; i += rune[1], j++) {
+  var rune, j = 0;
+  for (var i = 0; i < str.length; i += rune[1], j++) {
     rune = $decodeRune(str, i);
     array[j] = rune[0];
   }
@@ -210,23 +210,23 @@ var $runesToString = function(slice) {
   if (slice.$length === 0) {
     return "";
   }
-  var str = "", i;
-  for (i = 0; i < slice.$length; i++) {
+  var str = "";
+  for (var i = 0; i < slice.$length; i++) {
     str += $encodeRune(slice.$array[slice.$offset + i]);
   }
   return str;
 };
 
 var $copyString = function(dst, src) {
-  var n = Math.min(src.length, dst.$length), i;
-  for (i = 0; i < n; i++) {
+  var n = Math.min(src.length, dst.$length);
+  for (var i = 0; i < n; i++) {
     dst.$array[dst.$offset + i] = src.charCodeAt(i);
   }
   return n;
 };
 
 var $copySlice = function(dst, src) {
-  var n = Math.min(src.$length, dst.$length), i;
+  var n = Math.min(src.$length, dst.$length);
   $internalCopy(dst.$array, src.$array, dst.$offset, src.$offset, n, dst.constructor.elem);
   return n;
 };
@@ -344,8 +344,8 @@ var $internalAppend = function(slice, array, offset, length) {
     if (slice.$array.constructor === Array) {
       newArray = slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
       newArray.length = newCapacity;
-      var zero = slice.constructor.elem.zero, i;
-      for (i = slice.$length; i < newCapacity; i++) {
+      var zero = slice.constructor.elem.zero;
+      for (var i = slice.$length; i < newCapacity; i++) {
         newArray[i] = zero();
       }
     } else {

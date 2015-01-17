@@ -19,8 +19,8 @@ var dummys = js.Global.Call("eval", `({
 		return a + b;
 	},
 	mapArray: function(array, f) {
-		var newArray = new Array(array.length), i;
-		for (i = 0; i < array.length; i++) {
+		var newArray = new Array(array.length);
+		for (var i = 0; i < array.length; i++) {
 			newArray[i] = f(array[i]);
 		}
 		return newArray;

@@ -64,18 +64,18 @@ var $shiftRightUint64 = function(x, y) {
 };
 
 var $mul64 = function(x, y) {
-  var high = 0, low = 0, i;
+  var high = 0, low = 0;
   if ((y.$low & 1) !== 0) {
     high = x.$high;
     low = x.$low;
   }
-  for (i = 1; i < 32; i++) {
+  for (var i = 1; i < 32; i++) {
     if ((y.$low & 1<<i) !== 0) {
       high += x.$high << i | x.$low >>> (32 - i);
       low += (x.$low << i) >>> 0;
     }
   }
-  for (i = 0; i < 32; i++) {
+  for (var i = 0; i < 32; i++) {
     if ((y.$high & 1<<i) !== 0) {
       high += x.$low << i;
     }
@@ -114,13 +114,13 @@ var $div64 = function(x, y, returnRemainder) {
     }
   }
 
-  var high = 0, low = 0, n = 0, i;
+  var high = 0, low = 0, n = 0;
   while (yHigh < 2147483648 && ((xHigh > yHigh) || (xHigh === yHigh && xLow > yLow))) {
     yHigh = (yHigh << 1 | yLow >>> 31) >>> 0;
     yLow = (yLow << 1) >>> 0;
     n++;
   }
-  for (i = 0; i <= n; i++) {
+  for (var i = 0; i <= n; i++) {
     high = high << 1 | low >>> 31;
     low = (low << 1) >>> 0;
     if ((xHigh > yHigh) || (xHigh === yHigh && xLow >= yLow)) {

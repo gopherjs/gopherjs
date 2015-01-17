@@ -281,9 +281,9 @@ var $close = function(chan) {
   }
 };
 var $select = function(comms) {
-  var ready = [], i;
+  var ready = [];
   var selection = -1;
-  for (i = 0; i < comms.length; i++) {
+  for (var i = 0; i < comms.length; i++) {
     var comm = comms[i];
     var chan = comm[0];
     switch (comm.length) {
@@ -325,7 +325,7 @@ var $select = function(comms) {
   var entries = [];
   var thisGoroutine = $curGoroutine;
   var removeFromQueues = function() {
-    for (i = 0; i < entries.length; i++) {
+    for (var i = 0; i < entries.length; i++) {
       var entry = entries[i];
       var queue = entry[0];
       var index = queue.indexOf(entry[1]);
@@ -334,7 +334,7 @@ var $select = function(comms) {
       }
     }
   };
-  for (i = 0; i < comms.length; i++) {
+  for (var i = 0; i < comms.length; i++) {
     (function(i) {
       var comm = comms[i];
       switch (comm.length) {

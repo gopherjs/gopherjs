@@ -277,6 +277,15 @@ func TestEquality(t *testing.T) {
 	if js.Global.Get("Array") != js.Global.Get("Array") || js.Global.Get("Array") == js.Global.Get("String") {
 		t.Fail()
 	}
+	type S struct{ js.Object }
+	o1 := js.Global.Get("Object").New()
+	o2 := js.Global.Get("Object").New()
+	a := S{o1}
+	b := S{o1}
+	c := S{o2}
+	if a != b || a == c {
+		t.Fail()
+	}
 }
 
 func TestThis(t *testing.T) {

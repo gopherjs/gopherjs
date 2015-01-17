@@ -398,6 +398,9 @@ var $equal = function(a, b, type) {
     }
     return true;
   case $kindInterface:
+    if (type === $js.Object || type === $js.Any) {
+      return a === b;
+    }
     return $interfaceIsEqual(a, b);
   default:
     return a === b;

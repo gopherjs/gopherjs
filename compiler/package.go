@@ -418,15 +418,11 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 								pkgPath = method.Obj().Pkg().Path()
 							}
 							t := method.Type().(*types.Signature)
-							embeddedIndex := -1
-							if len(method.Index()) > 1 {
-								embeddedIndex = method.Index()[0]
-							}
 							name := method.Obj().Name()
 							if reservedKeywords[name] {
 								name += "$"
 							}
-							methods[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", type: $funcType(%s), embedded: %d}`, name, method.Obj().Name(), pkgPath, c.initArgs(t), embeddedIndex)
+							methods[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", type: $funcType(%s)}`, name, method.Obj().Name(), pkgPath, c.initArgs(t))
 						}
 						c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
 					}

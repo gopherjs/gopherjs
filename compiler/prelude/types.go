@@ -264,25 +264,25 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       typ.ptr.nil = Object.create(constructor.prototype, properties);
       typ.ptr.nil.$val = typ.ptr.nil;
       /* methods for embedded fields */
-      typ.methods.forEach(function(m) {
-        if (m.embedded != -1) {
-          var f = fields[m.embedded];
-          typ.prototype[m.prop] = function() {
-            var v = this.$val[f.prop];
-            return v[m.prop].apply(v, arguments);
-          };
-        }
-      });
-      typ.ptr.methods.forEach(function(m) {
-        if (m.embedded != -1) {
-          var f = fields[m.embedded];
-          typ.ptr.prototype[m.prop] = function() {
-            var v = this[f.prop];
-            if (v.$val === undefined) {
-              v = new f.type(v);
-            }
-            return v[m.prop].apply(v, arguments);
-          };
+      var forwardMethod = function(target, m, f) {
+        if (target.prototype[m.prop] !== undefined) { return; }
+        target.prototype[m.prop] = function() {
+          var v = this.$val[f.prop];
+          if (v.$val === undefined) {
+            v = new f.type(v);
+          }
+          return v[m.prop].apply(v, arguments);
+        };
+      };
+      fields.forEach(function(f) {
+        if (f.name === "") {
+          f.type.methods.forEach(function(m) {
+            forwardMethod(typ, m, f);
+            forwardMethod(typ.ptr, m, f);
+          });
+          $ptrType(f.type).methods.forEach(function(m) {
+            forwardMethod(typ.ptr, m, f);
+          });
         }
       });
       /* reflect type */
@@ -623,14 +623,12 @@ var $structType = function(fields) {
         var f = fields[i];
         if (f.name === "") {
           f.type.methods.forEach(function(m) {
-            typ.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
-            typ.ptr.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
+            typ.methods.push(m);
+            typ.ptr.methods.push(m);
           });
-          if (f.type.kind === $kindStruct) {
-            f.type.ptr.methods.forEach(function(m) {
-              typ.ptr.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
-            });
-          }
+          $ptrType(f.type).methods.forEach(function(m) {
+            typ.ptr.methods.push(m);
+          });
         }
       };
       typ.init(fields);

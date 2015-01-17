@@ -122,7 +122,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 		}
 	}
 
-	if _, err := w.Write([]byte("$packages[\"runtime\"].$init()();\n$go($packages[\"" + string(mainPkg.ImportPath) + "\"].$init, [], true);\n$flushConsole();\n\n})(this);\n")); err != nil {
+	if _, err := w.Write([]byte("$initAnonTypes();\n$packages[\"runtime\"].$init()();\n$go($packages[\"" + string(mainPkg.ImportPath) + "\"].$init, [], true);\n$flushConsole();\n\n})(this);\n")); err != nil {
 		return err
 	}
 
@@ -140,31 +140,38 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 		return err
 	}
 	vars := []string{"$pkg = {}"}
+	var filteredDecls []*Decl
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 {
 			vars = append(vars, d.Vars...)
+			filteredDecls = append(filteredDecls, d)
 		}
 	}
 	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
 		return err
 	}
-	for _, d := range pkg.Declarations {
-		if len(d.DceFilters) == 0 {
-			if _, err := w.Write(d.BodyCode); err != nil {
-				return err
-			}
-		} else {
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.DeclCode); err != nil {
+			return err
+		}
+	}
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.MethodListCode); err != nil {
+			return err
+		}
+	}
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.TypeInitCode); err != nil {
+			return err
 		}
 	}
 
 	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $r, $s = 0; var $init_"+pkg.Name+" = function() { while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
 		return err
 	}
-	for _, d := range pkg.Declarations {
-		if len(d.DceFilters) == 0 {
-			if _, err := w.Write(d.InitCode); err != nil {
-				return err
-			}
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.InitCode); err != nil {
+			return err
 		}
 	}
 	if _, err := w.Write(removeWhitespace([]byte("\t\t/* */ } return; } }; $init_"+pkg.Name+".$blocking = true; return $init_"+pkg.Name+";\n\t};\n\treturn $pkg;\n})();"), minify)); err != nil {
@@ -206,13 +213,15 @@ type Archive struct {
 }
 
 type Decl struct {
-	FullName   string
-	Vars       []string
-	BodyCode   []byte
-	InitCode   []byte
-	DceFilters []string
-	DceDeps    []string
-	Blocking   bool
+	FullName       string
+	Vars           []string
+	DeclCode       []byte
+	MethodListCode []byte
+	TypeInitCode   []byte
+	InitCode       []byte
+	DceFilters     []string
+	DceDeps        []string
+	Blocking       bool
 }
 
 type SourceMapFilter struct {

@@ -171,7 +171,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		c.flattened[call] = true
 		importDecls = append(importDecls, &Decl{
 			Vars:     []string{c.p.pkgVars[impPath]},
-			BodyCode: []byte(fmt.Sprintf("\t%s = $packages[\"%s\"];\n", c.p.pkgVars[impPath], impPath)),
+			DeclCode: []byte(fmt.Sprintf("\t%s = $packages[\"%s\"];\n", c.p.pkgVars[impPath], impPath)),
 			InitCode: c.CatchOutput(1, func() { c.translateStmt(&ast.ExprStmt{X: call}, "") }),
 		})
 	}
@@ -352,7 +352,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 
 		d.DceDeps = collectDependencies(qualifiedName(o), func() {
-			d.BodyCode = c.translateToplevelFunction(fun, context)
+			d.DeclCode = c.translateToplevelFunction(fun, context)
 		})
 		funcDecls = append(funcDecls, &d)
 	}
@@ -378,7 +378,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			DceFilters: []string{qualifiedName(o)},
 		}
 		d.DceDeps = collectDependencies(qualifiedName(o), func() {
-			d.BodyCode = c.CatchOutput(0, func() {
+			d.DeclCode = c.CatchOutput(0, func() {
 				typeName := c.objectName(o)
 				lhs := typeName
 				if o.Parent() == c.p.pkg.Scope() {
@@ -403,7 +403,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				}
 				c.Printf(`%s = $newType(%d, %s, "%s.%s", "%s", "%s", %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), constructor)
 			})
-			d.InitCode = c.CatchOutput(1, func() {
+			d.MethodListCode = c.CatchOutput(0, func() {
 				if _, isInterface := o.Type().Underlying().(*types.Interface); !isInterface {
 					writeMethodSet := func(t types.Type) {
 						methodSet := types.NewMethodSet(t)
@@ -433,31 +433,34 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					writeMethodSet(o.Type())
 					writeMethodSet(types.NewPointer(o.Type()))
 				}
-				switch t := o.Type().Underlying().(type) {
-				case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
-					c.Printf("%s.init(%s);", c.objectName(o), c.initArgs(t))
-				}
 			})
+			switch t := o.Type().Underlying().(type) {
+			case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
+				d.TypeInitCode = c.CatchOutput(0, func() {
+					c.Printf("%s.init(%s);", c.objectName(o), c.initArgs(t))
+				})
+			}
 		})
 		typeDecls = append(typeDecls, &d)
 	}
 
 	// anonymous types
-	var anonTypeDecls []*Decl
 	for _, t := range c.p.anonTypes {
 		d := Decl{
 			Vars:       []string{c.p.anonTypeVars[t.String()]},
 			DceFilters: []string{importPath + ":" + t.String()},
 		}
 		d.DceDeps = collectDependencies("", func() {
-			d.InitCode = []byte(fmt.Sprintf("\t\t%s = $%sType(%s);\n", c.p.anonTypeVars[t.String()], strings.ToLower(typeKind(t)[5:]), c.initArgs(t)))
+			d.DeclCode = []byte(fmt.Sprintf("\t\t%s = $%sType(%s);\n", c.p.anonTypeVars[t.String()], strings.ToLower(typeKind(t)[5:]), c.initArgs(t)))
 		})
-		anonTypeDecls = append(anonTypeDecls, &d)
+		typeDecls = append(typeDecls, &d)
 	}
 
 	var allDecls []*Decl
-	for _, d := range append(append(append(append(importDecls, anonTypeDecls...), typeDecls...), varDecls...), funcDecls...) {
-		d.BodyCode = removeWhitespace(d.BodyCode, minify)
+	for _, d := range append(append(append(importDecls, typeDecls...), varDecls...), funcDecls...) {
+		d.DeclCode = removeWhitespace(d.DeclCode, minify)
+		d.MethodListCode = removeWhitespace(d.MethodListCode, minify)
+		d.TypeInitCode = removeWhitespace(d.TypeInitCode, minify)
 		d.InitCode = removeWhitespace(d.InitCode, minify)
 		allDecls = append(allDecls, d)
 	}

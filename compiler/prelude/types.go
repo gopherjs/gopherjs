@@ -423,6 +423,19 @@ var $Complex128    = $newType(16, $kindComplex128,    "complex128",     "complex
 var $String        = $newType( 8, $kindString,        "string",         "string",     "", null);
 var $UnsafePointer = $newType( 4, $kindUnsafePointer, "unsafe.Pointer", "Pointer",    "", null);
 
+var $anonTypeInits = [];
+var $addAnonTypeInit = function(f) {
+  if ($anonTypeInits === null) {
+    f();
+    return;
+  }
+  $anonTypeInits.push(f);
+};
+var $initAnonTypes = function() {
+  $anonTypeInits.forEach(function(f) { f(); });
+  $anonTypeInits = null;
+};
+
 var $nativeArray = function(elemKind) {
   switch (elemKind) {
   case $kindInt:
@@ -464,8 +477,8 @@ var $arrayType = function(elem, len) {
   var typ = $arrayTypes[string];
   if (typ === undefined) {
     typ = $newType(12, $kindArray, string, "", "", null);
-    typ.init(elem, len);
     $arrayTypes[string] = typ;
+    $addAnonTypeInit(function() { typ.init(elem, len); });
   }
   return typ;
 };
@@ -476,8 +489,8 @@ var $chanType = function(elem, sendOnly, recvOnly) {
   var typ = elem[field];
   if (typ === undefined) {
     typ = $newType(4, $kindChan, string, "", "", null);
-    typ.init(elem, sendOnly, recvOnly);
     elem[field] = typ;
+    $addAnonTypeInit(function() { typ.init(elem, sendOnly, recvOnly); });
   }
   return typ;
 };
@@ -497,8 +510,8 @@ var $funcType = function(params, results, variadic) {
   var typ = $funcTypes[string];
   if (typ === undefined) {
     typ = $newType(4, $kindFunc, string, "", "", null);
-    typ.init(params, results, variadic);
     $funcTypes[string] = typ;
+    $addAnonTypeInit(function() { typ.init(params, results, variadic); });
   }
   return typ;
 };
@@ -514,8 +527,8 @@ var $interfaceType = function(methods) {
   var typ = $interfaceTypes[string];
   if (typ === undefined) {
     typ = $newType(8, $kindInterface, string, "", "", null);
-    typ.init(methods);
     $interfaceTypes[string] = typ;
+    $addAnonTypeInit(function() { typ.init(methods); });
   }
   return typ;
 };
@@ -537,8 +550,8 @@ var $mapType = function(key, elem) {
   var typ = $mapTypes[string];
   if (typ === undefined) {
     typ = $newType(4, $kindMap, string, "", "", null);
-    typ.init(key, elem);
     $mapTypes[string] = typ;
+    $addAnonTypeInit(function() { typ.init(key, elem); });
   }
   return typ;
 };
@@ -549,8 +562,8 @@ var $ptrType = function(elem) {
   var typ = elem.ptr;
   if (typ === undefined) {
     typ = $newType(4, $kindPtr, "*" + elem.string, "", "", null);
-    typ.init(elem);
     elem.ptr = typ;
+    $addAnonTypeInit(function() { typ.init(elem); });
   }
   return typ;
 };
@@ -579,8 +592,8 @@ var $sliceType = function(elem) {
   var typ = elem.Slice;
   if (typ === undefined) {
     typ = $newType(12, $kindSlice, "[]" + elem.string, "", "", null);
-    typ.init(elem);
     elem.Slice = typ;
+    $addAnonTypeInit(function() { typ.init(elem); });
   }
   return typ;
 };
@@ -603,23 +616,25 @@ var $structType = function(fields) {
         this[f.prop] = arg !== undefined ? arg : f.type.zero();
       }
     });
-    /* collect methods for anonymous fields */
-    for (var i = 0; i < fields.length; i++) {
-      var f = fields[i];
-      if (f.name === "") {
-        f.type.methods.forEach(function(m) {
-          typ.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
-          typ.ptr.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
-        });
-        if (f.type.kind === $kindStruct) {
-          f.type.ptr.methods.forEach(function(m) {
+    $structTypes[string] = typ;
+    $anonTypeInits.push(function() {
+      /* collect methods for anonymous fields */
+      for (var i = 0; i < fields.length; i++) {
+        var f = fields[i];
+        if (f.name === "") {
+          f.type.methods.forEach(function(m) {
+            typ.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
             typ.ptr.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
           });
+          if (f.type.kind === $kindStruct) {
+            f.type.ptr.methods.forEach(function(m) {
+              typ.ptr.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
+            });
+          }
         }
-      }
-    };
-    typ.init(fields);
-    $structTypes[string] = typ;
+      };
+      typ.init(fields);
+    });
   }
   return typ;
 };

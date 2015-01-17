@@ -352,7 +352,7 @@ func Copy(dst, src Value) int {
 }
 
 func methodReceiver(op string, v Value, i int) (rcvrtype, t *rtype, fn unsafe.Pointer) { // TODO cleanup
-	var name string
+	var prop string
 	if v.typ.Kind() == Interface {
 		tt := (*interfaceType)(unsafe.Pointer(v.typ))
 		if i < 0 || i >= len(tt.methods) {
@@ -368,7 +368,7 @@ func methodReceiver(op string, v Value, i int) (rcvrtype, t *rtype, fn unsafe.Po
 		}
 		// rcvrtype = iface.itab.typ
 		t = m.typ
-		name = *m.name
+		prop = *m.name
 	} else {
 		// rcvrtype = v.typ
 		ut := v.typ.uncommon()
@@ -380,13 +380,13 @@ func methodReceiver(op string, v Value, i int) (rcvrtype, t *rtype, fn unsafe.Po
 			panic("reflect: " + op + " of unexported method")
 		}
 		t = m.mtyp
-		name = jsType(v.typ).Get("methods").Index(i).Index(0).String()
+		prop = jsType(v.typ).Get("methods").Index(i).Get("prop").String()
 	}
 	rcvr := v.object()
 	if isWrapped(v.typ) {
 		rcvr = jsType(v.typ).New(rcvr)
 	}
-	fn = unsafe.Pointer(rcvr.Get(name).Unsafe())
+	fn = unsafe.Pointer(rcvr.Get(prop).Unsafe())
 	return
 }
 
@@ -471,9 +471,9 @@ func (t *uncommonType) Method(i int) (m Method) {
 	}
 	mt := p.typ
 	m.Type = mt
-	name := js.InternalObject(t).Get("jsType").Get("methods").Index(i).Index(0).String()
+	prop := js.InternalObject(t).Get("jsType").Get("methods").Index(i).Get("prop").String()
 	fn := func(rcvr js.Object) js.Object {
-		return rcvr.Get(name).Call("apply", rcvr, js.Arguments[1:])
+		return rcvr.Get(prop).Call("apply", rcvr, js.Arguments[1:])
 	}
 	m.Func = Value{mt, unsafe.Pointer(js.InternalObject(fn).Unsafe()), fl}
 	m.Index = i

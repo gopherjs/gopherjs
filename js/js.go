@@ -159,11 +159,11 @@ func MakeWrapper(i interface{}) Object {
 	methods := v.Get("constructor").Get("methods")
 	for i := 0; i < methods.Length(); i++ {
 		m := methods.Index(i)
-		if m.Index(2).String() != "" { // not exported
+		if m.Get("pkg").String() != "" { // not exported
 			continue
 		}
-		o.Set(m.Index(1).String(), func(args ...Any) Object {
-			return v.Call(m.Index(0).String(), args...)
+		o.Set(m.Get("name").String(), func(args ...Any) Object {
+			return v.Call(m.Get("prop").String(), args...)
 		})
 	}
 	return o

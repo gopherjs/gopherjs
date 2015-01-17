@@ -426,7 +426,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 							if reservedKeywords[name] {
 								name += "$"
 							}
-							methods[i] = fmt.Sprintf(`["%s", "%s", "%s", $funcType(%s), %d]`, name, method.Obj().Name(), pkgPath, c.initArgs(t), embeddedIndex)
+							methods[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", type: $funcType(%s), embedded: %d}`, name, method.Obj().Name(), pkgPath, c.initArgs(t), embeddedIndex)
 						}
 						c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
 					}
@@ -491,7 +491,7 @@ func (c *funcContext) initArgs(ty types.Type) string {
 			if !method.Exported() {
 				pkgPath = method.Pkg().Path()
 			}
-			methods[i] = fmt.Sprintf(`["%s", "%s", "%s", $funcType(%s)]`, method.Name(), method.Name(), pkgPath, c.initArgs(method.Type()))
+			methods[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", type: $funcType(%s)}`, method.Name(), method.Name(), pkgPath, c.initArgs(method.Type()))
 		}
 		return fmt.Sprintf("[%s]", strings.Join(methods, ", "))
 	case *types.Map:

@@ -459,7 +459,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			return err
 		}
 		jsDecls = append(jsDecls, &compiler.Decl{
-			BodyCode: append(code, '\n'),
+			DeclCode: append(code, '\n'),
 		})
 	}
 	pkg.Archive.Declarations = append(jsDecls, pkg.Archive.Declarations...)

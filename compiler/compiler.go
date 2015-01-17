@@ -150,7 +150,7 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 	}
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 {
-			if _, err := w.Write(d.DeclCode); err != nil {
+			if _, err := w.Write(d.BodyCode); err != nil {
 				return err
 			}
 		} else {
@@ -159,13 +159,6 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 
 	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $r, $s = 0; var $init_"+pkg.Name+" = function() { while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
 		return err
-	}
-	for _, d := range pkg.Declarations {
-		if len(d.DceFilters) == 0 {
-			if _, err := w.Write(d.PreInitCode); err != nil {
-				return err
-			}
-		}
 	}
 	for _, d := range pkg.Declarations {
 		if len(d.DceFilters) == 0 {
@@ -213,14 +206,13 @@ type Archive struct {
 }
 
 type Decl struct {
-	FullName    string
-	Vars        []string
-	DeclCode    []byte
-	PreInitCode []byte
-	InitCode    []byte
-	DceFilters  []string
-	DceDeps     []string
-	Blocking    bool
+	FullName   string
+	Vars       []string
+	BodyCode   []byte
+	InitCode   []byte
+	DceFilters []string
+	DceDeps    []string
+	Blocking   bool
 }
 
 type SourceMapFilter struct {

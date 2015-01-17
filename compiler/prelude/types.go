@@ -242,14 +242,14 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       var i;
       typ.fields = fields;
       for (i = 0; i < fields.length; i++) {
-        if (!fields[i][3].comparable) {
+        if (!fields[i].type.comparable) {
           typ.comparable = false;
         }
       }
       typ.prototype.$key = function() {
         var val = this.$val;
-        return string + "$" + $mapArray(fields, function(field) {
-          var e = val[field[0]];
+        return string + "$" + $mapArray(fields, function(f) {
+          var e = val[f.prop];
           var key = e.$key ? e.$key() : String(e);
           return key.replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
         }).join("$");
@@ -260,7 +260,7 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       /* nil value */
       var properties = {};
       for (i = 0; i < fields.length; i++) {
-        properties[fields[i][0]] = { get: $throwNilPointerError, set: $throwNilPointerError };
+        properties[fields[i].prop] = { get: $throwNilPointerError, set: $throwNilPointerError };
       }
       typ.ptr.nil = Object.create(constructor.prototype, properties);
       typ.ptr.nil.$val = typ.ptr.nil;
@@ -268,10 +268,10 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       for (i = 0; i < typ.methods.length; i++) {
         var m = typ.methods[i];
         if (m.embedded != -1) {
-          (function(field, methodName) {
-            typ.prototype[methodName] = function() {
-              var v = this.$val[field[0]];
-              return v[methodName].apply(v, arguments);
+          (function(f, methodProp) {
+            typ.prototype[methodProp] = function() {
+              var v = this.$val[f.prop];
+              return v[methodProp].apply(v, arguments);
             };
           })(fields[m.embedded], m.prop);
         }
@@ -279,13 +279,13 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       for (i = 0; i < typ.ptr.methods.length; i++) {
         var m = typ.ptr.methods[i];
         if (m.embedded != -1) {
-          (function(field, methodName) {
-            typ.ptr.prototype[methodName] = function() {
-              var v = this[field[0]];
+          (function(f, methodProp) {
+            typ.ptr.prototype[methodProp] = function() {
+              var v = this[f.prop];
               if (v.$val === undefined) {
-                v = new field[3](v);
+                v = new f.type(v);
               }
-              return v[methodName].apply(v, arguments);
+              return v[methodProp].apply(v, arguments);
             };
           })(fields[m.embedded], m.prop);
         }
@@ -294,8 +294,8 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
       typ.extendReflectType = function(rt) {
         var reflectFields = new Array(fields.length), i;
         for (i = 0; i < fields.length; i++) {
-          var field = fields[i];
-          reflectFields[i] = new $reflect.structField.ptr($newStringPtr(field[1]), $newStringPtr(field[2]), field[3].reflectType(), $newStringPtr(field[4]), i);
+          var f = fields[i];
+          reflectFields[i] = new $reflect.structField.ptr($newStringPtr(f.name), $newStringPtr(f.pkg), f.type.reflectType(), $newStringPtr(f.tag), i);
         }
         rt.structType = new $reflect.structType.ptr(rt, new ($sliceType($reflect.structField.ptr))(reflectFields));
       };
@@ -595,7 +595,7 @@ var $sliceType = function(elem) {
 var $structTypes = {};
 var $structType = function(fields) {
   var string = "struct { " + $mapArray(fields, function(f) {
-    return f[1] + " " + f[3].string + (f[4] !== "" ? (" \"" + f[4].replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"") : "");
+    return f.name + " " + f.type.string + (f.tag !== "" ? (" \"" + f.tag.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"") : "");
   }).join("; ") + " }";
   if (fields.length === 0) {
     string = "struct {}";
@@ -606,24 +606,24 @@ var $structType = function(fields) {
       this.$val = this;
       var i;
       for (i = 0; i < fields.length; i++) {
-        var field = fields[i];
+        var f = fields[i];
         var arg = arguments[i];
-        this[field[0]] = arg !== undefined ? arg : field[3].zero();
+        this[f.prop] = arg !== undefined ? arg : f.type.zero();
       }
     });
     /* collect methods for anonymous fields */
     var i, j;
     for (i = 0; i < fields.length; i++) {
-      var field = fields[i];
-      if (field[1] === "") {
-        var methods = field[3].methods;
+      var f = fields[i];
+      if (f.name === "") {
+        var methods = f.type.methods;
         for (j = 0; j < methods.length; j++) {
           var m = methods[j];
           typ.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
           typ.ptr.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});
         }
-        if (field[3].kind === $kindStruct) {
-          var methods = field[3].ptr.methods;
+        if (f.type.kind === $kindStruct) {
+          var methods = f.type.ptr.methods;
           for (j = 0; j < methods.length; j++) {
             var m = methods[j];
             typ.ptr.methods.push({prop: m.prop, name: m.name, pkg: m.pkg, type: m.type, embedded: i});

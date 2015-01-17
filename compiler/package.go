@@ -522,7 +522,7 @@ func (c *funcContext) initArgs(ty types.Type) string {
 			if !field.Exported() {
 				pkgPath = field.Pkg().Path()
 			}
-			fields[i] = fmt.Sprintf(`["%s", "%s", "%s", %s, %s]`, fieldName(t, i), name, pkgPath, c.typeName(field.Type()), encodeString(t.Tag(i)))
+			fields[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", type: %s, tag: %s}`, fieldName(t, i), name, pkgPath, c.typeName(field.Type()), encodeString(t.Tag(i)))
 		}
 		return fmt.Sprintf("[%s]", strings.Join(fields, ", "))
 	default:

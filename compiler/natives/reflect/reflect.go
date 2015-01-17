@@ -58,8 +58,8 @@ func isWrapped(typ Type) bool {
 func copyStruct(dst, src js.Object, typ Type) {
 	fields := jsType(typ).Get("fields")
 	for i := 0; i < fields.Length(); i++ {
-		name := fields.Index(i).Index(0).String()
-		dst.Set(name, src.Get(name))
+		prop := fields.Index(i).Get("prop").String()
+		dst.Set(prop, src.Get(prop))
 	}
 }
 
@@ -655,7 +655,7 @@ func (v Value) Field(i int) Value {
 	}
 
 	field := &tt.fields[i]
-	name := jsType(v.typ).Get("fields").Index(i).Index(0).String()
+	prop := jsType(v.typ).Get("fields").Index(i).Get("prop").String()
 	typ := field.typ
 
 	fl := v.flag & (flagRO | flagIndir | flagAddr)
@@ -666,12 +666,12 @@ func (v Value) Field(i int) Value {
 
 	s := js.InternalObject(v.ptr)
 	if typ == reflectType(jsObject) {
-		return ValueOf(s.Get(name).String())
+		return ValueOf(s.Get(prop).String())
 	}
 	if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return s.Get(name) }), js.InternalObject(func(v js.Object) { s.Set(name, v) })).Unsafe()), fl}
+		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return s.Get(prop) }), js.InternalObject(func(v js.Object) { s.Set(prop, v) })).Unsafe()), fl}
 	}
-	return makeValue(typ, s.Get(name), fl)
+	return makeValue(typ, s.Get(prop), fl)
 }
 
 func (v Value) Index(i int) Value {

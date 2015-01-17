@@ -238,16 +238,14 @@ var $copy = function(dst, src, type) {
     break;
   case $kindStruct:
     for (var i = 0; i < type.fields.length; i++) {
-      var field = type.fields[i];
-      var fieldName = field[0];
-      var fieldType = field[3];
-      switch (fieldType.kind) {
+      var f = type.fields[i];
+      switch (f.type.kind) {
       case $kindArray:
       case $kindStruct:
-        $copy(dst[fieldName], src[fieldName], fieldType);
+        $copy(dst[f.prop], src[f.prop], f.type);
         continue;
       default:
-        dst[fieldName] = src[fieldName];
+        dst[f.prop] = src[f.prop];
         continue;
       }
     }
@@ -306,12 +304,12 @@ var $pointerOfStructConversion = function(obj, type) {
   if (proxy === undefined) {
     var properties = {};
     for (var i = 0; i < type.elem.fields.length; i++) {
-      (function(fieldName) {
-        properties[fieldName] = {
-          get: function() { return obj[fieldName]; },
-          set: function(value) { obj[fieldName] = value; },
+      (function(fieldProp) {
+        properties[fieldProp] = {
+          get: function() { return obj[fieldProp]; },
+          set: function(value) { obj[fieldProp] = value; },
         };
-      })(type.elem.fields[i][0]);
+      })(type.elem.fields[i].prop);
     }
     proxy = Object.create(type.prototype, properties);
     proxy.$val = proxy;
@@ -393,9 +391,8 @@ var $equal = function(a, b, type) {
     return true;
   case $kindStruct:
     for (var i = 0; i < type.fields.length; i++) {
-      var field = type.fields[i];
-      var name = field[0];
-      if (!$equal(a[name], b[name], field[3])) {
+      var f = type.fields[i];
+      if (!$equal(a[f.prop], b[f.prop], f.type)) {
         return false;
       }
     }

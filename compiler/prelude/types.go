@@ -28,7 +28,7 @@ var $kindString = 24;
 var $kindStruct = 25;
 var $kindUnsafePointer = 26;
 
-var $newType = function(size, kind, string, name, pkgPath, constructor) {
+var $newType = function(size, kind, string, name, pkg, constructor) {
   var typ;
   switch(kind) {
   case $kindBool:
@@ -332,70 +332,14 @@ var $newType = function(size, kind, string, name, pkgPath, constructor) {
     $panic(new $String("invalid kind: " + kind));
   }
 
+  typ.size = size;
   typ.kind = kind;
   typ.string = string;
   typ.typeName = name;
-  typ.pkgPath = pkgPath;
+  typ.pkg = pkg;
   typ.methods = [];
   typ.comparable = true;
   var rt = null;
-  typ.reflectType = function() {
-    if (rt === null) {
-      rt = new $reflect.rtype.ptr(size, 0, 0, 0, 0, kind, undefined, undefined, $newStringPtr(string), undefined, undefined);
-      rt.jsType = typ;
-
-      var methods = [];
-      if (typ.methods !== undefined) {
-        typ.methods.forEach(function(m) {
-          var t = m.type;
-          methods.push(new $reflect.method.ptr($newStringPtr(m.name), $newStringPtr(m.pkg), t.reflectType(), $funcType([typ].concat(t.params), t.results, t.variadic).reflectType(), undefined, undefined));
-        });
-      }
-      if (name !== "" || methods.length !== 0) {
-        var methodSlice = ($sliceType($ptrType($reflect.method.ptr)));
-        rt.uncommonType = new $reflect.uncommonType.ptr($newStringPtr(name), $newStringPtr(pkgPath), new methodSlice(methods));
-        rt.uncommonType.jsType = typ;
-      }
-
-      switch (typ.kind) {
-      case $kindArray:
-        rt.arrayType = new $reflect.arrayType.ptr(rt, typ.elem.reflectType(), undefined, typ.len);
-        break;
-      case $kindChan:
-        rt.chanType = new $reflect.chanType.ptr(rt, typ.elem.reflectType(), typ.sendOnly ? $reflect.SendDir : (typ.recvOnly ? $reflect.RecvDir : $reflect.BothDir));
-        break;
-      case $kindFunc:
-        var typeSlice = ($sliceType($ptrType($reflect.rtype.ptr)));
-        rt.funcType = new $reflect.funcType.ptr(rt, typ.variadic, new typeSlice($mapArray(typ.params, function(p) { return p.reflectType(); })), new typeSlice($mapArray(typ.results, function(p) { return p.reflectType(); })));
-        break;
-      case $kindInterface:
-        var imethods = $mapArray(typ.methods, function(m) {
-          return new $reflect.imethod.ptr($newStringPtr(m.name), $newStringPtr(m.pkg), m.type.reflectType());
-        });
-        var methodSlice = ($sliceType($ptrType($reflect.imethod.ptr)));
-        rt.interfaceType = new $reflect.interfaceType.ptr(rt, new methodSlice(imethods));
-        break;
-      case $kindMap:
-        rt.mapType = new $reflect.mapType.ptr(rt, typ.key.reflectType(), typ.elem.reflectType(), undefined, undefined);
-        break;
-      case $kindPtr:
-        rt.ptrType = new $reflect.ptrType.ptr(rt, typ.elem.reflectType());
-        break;
-      case $kindSlice:
-        rt.sliceType = new $reflect.sliceType.ptr(rt, typ.elem.reflectType());
-        break;
-      case $kindStruct:
-        var reflectFields = new Array(typ.fields.length);
-        for (var i = 0; i < typ.fields.length; i++) {
-          var f = typ.fields[i];
-          reflectFields[i] = new $reflect.structField.ptr($newStringPtr(f.name), $newStringPtr(f.pkg), f.type.reflectType(), $newStringPtr(f.tag), i);
-        }
-        rt.structType = new $reflect.structType.ptr(rt, new ($sliceType($reflect.structField.ptr))(reflectFields));
-        break;
-      }
-    }
-    return rt;
-  };
   return typ;
 };
 
@@ -561,19 +505,6 @@ var $ptrType = function(elem) {
     $addAnonTypeInit(function() { typ.init(elem); });
   }
   return typ;
-};
-
-var $stringPtrMap = new $Map();
-var $newStringPtr = function(str) {
-  if (str === undefined || str === "") {
-    return $ptrType($String).nil;
-  }
-  var ptr = $stringPtrMap[str];
-  if (ptr === undefined) {
-    ptr = new ($ptrType($String))(function() { return str; }, function(v) { str = v; });
-    $stringPtrMap[str] = ptr;
-  }
-  return ptr;
 };
 
 var $newDataPointer = function(data, constructor) {

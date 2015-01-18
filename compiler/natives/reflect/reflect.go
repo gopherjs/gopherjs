@@ -28,11 +28,6 @@ func init() {
 	used(imethod{})
 	used(structField{})
 
-	pkg := js.Global.Get("$pkg")
-	pkg.Set("RecvDir", RecvDir)
-	pkg.Set("SendDir", SendDir)
-	pkg.Set("BothDir", BothDir)
-	js.Global.Set("$reflect", pkg)
 	initialized = true
 	uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
 }
@@ -42,7 +37,142 @@ func jsType(typ Type) js.Object {
 }
 
 func reflectType(typ js.Object) *rtype {
-	return (*rtype)(unsafe.Pointer(typ.Call("reflectType").Unsafe()))
+	if typ.Get("reflectType") == js.Undefined {
+		rt := &rtype{
+			size:   uintptr(typ.Get("size").Int()),
+			kind:   uint8(typ.Get("kind").Int()),
+			string: newStringPtr(typ.Get("string")),
+		}
+		js.InternalObject(rt).Set("jsType", typ)
+		typ.Set("reflectType", js.InternalObject(rt))
+
+		methods := typ.Get("methods")
+		if typ.Get("typeName").String() != "" || methods.Length() != 0 {
+			reflectMethods := make([]method, methods.Length())
+			for i := range reflectMethods {
+				m := methods.Index(i)
+				t := m.Get("type")
+				reflectMethods[i] = method{
+					name:    newStringPtr(m.Get("name")),
+					pkgPath: newStringPtr(m.Get("pkg")),
+					mtyp:    reflectType(t),
+					typ:     reflectType(js.Global.Call("$funcType", js.Global.Get("Array").New(typ).Call("concat", t.Get("params")), t.Get("results"), t.Get("variadic"))),
+				}
+			}
+			rt.uncommonType = &uncommonType{
+				name:    newStringPtr(typ.Get("typeName")),
+				pkgPath: newStringPtr(typ.Get("pkg")),
+				methods: reflectMethods,
+			}
+			js.InternalObject(rt.uncommonType).Set("jsType", typ)
+		}
+
+		setKindType := func(kindType interface{}) {
+			js.InternalObject(kindType).Set("rtype", js.InternalObject(rt))
+			js.InternalObject(rt).Set("kindType", js.InternalObject(kindType))
+		}
+
+		switch rt.Kind() {
+		case Array:
+			setKindType(&arrayType{
+				elem: reflectType(typ.Get("elem")),
+				len:  uintptr(typ.Get("len").Int()),
+			})
+		case Chan:
+			dir := BothDir
+			if typ.Get("sendOnly").Bool() {
+				dir = SendDir
+			}
+			if typ.Get("recvOnly").Bool() {
+				dir = RecvDir
+			}
+			setKindType(&chanType{
+				elem: reflectType(typ.Get("elem")),
+				dir:  uintptr(dir),
+			})
+		case Func:
+			params := typ.Get("params")
+			in := make([]*rtype, params.Length())
+			for i := range in {
+				in[i] = reflectType(params.Index(i))
+			}
+			results := typ.Get("results")
+			out := make([]*rtype, results.Length())
+			for i := range out {
+				out[i] = reflectType(results.Index(i))
+			}
+			setKindType(&funcType{
+				rtype:     *rt,
+				dotdotdot: typ.Get("variadic").Bool(),
+				in:        in,
+				out:       out,
+			})
+		case Interface:
+			methods := typ.Get("methods")
+			imethods := make([]imethod, methods.Length())
+			for i := range imethods {
+				m := methods.Index(i)
+				imethods[i] = imethod{
+					name:    newStringPtr(m.Get("name")),
+					pkgPath: newStringPtr(m.Get("pkg")),
+					typ:     reflectType(m.Get("type")),
+				}
+			}
+			setKindType(&interfaceType{
+				rtype:   *rt,
+				methods: imethods,
+			})
+		case Map:
+			setKindType(&mapType{
+				key:  reflectType(typ.Get("key")),
+				elem: reflectType(typ.Get("elem")),
+			})
+		case Ptr:
+			setKindType(&ptrType{
+				elem: reflectType(typ.Get("elem")),
+			})
+		case Slice:
+			setKindType(&sliceType{
+				elem: reflectType(typ.Get("elem")),
+			})
+		case Struct:
+			fields := typ.Get("fields")
+			reflectFields := make([]structField, fields.Length())
+			for i := range reflectFields {
+				f := fields.Index(i)
+				reflectFields[i] = structField{
+					name:    newStringPtr(f.Get("name")),
+					pkgPath: newStringPtr(f.Get("pkg")),
+					typ:     reflectType(f.Get("type")),
+					tag:     newStringPtr(f.Get("tag")),
+					offset:  uintptr(i),
+				}
+			}
+			setKindType(&structType{
+				rtype:  *rt,
+				fields: reflectFields,
+			})
+		}
+	}
+
+	return (*rtype)(unsafe.Pointer(typ.Get("reflectType").Unsafe()))
+}
+
+var stringPtrMap = make(map[string]*string)
+
+func newStringPtr(strObj js.Object) *string {
+	var c struct{ str string }
+	js.InternalObject(c).Set("str", strObj) // get string without internalizing
+	str := c.str
+	if str == "" {
+		return nil
+	}
+	ptr, ok := stringPtrMap[str]
+	if !ok {
+		ptr = &str
+		stringPtrMap[str] = ptr
+	}
+	return ptr
 }
 
 func isWrapped(typ Type) bool {

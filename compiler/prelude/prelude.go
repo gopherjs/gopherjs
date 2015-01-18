@@ -23,7 +23,7 @@ if (typeof module !== "undefined") {
   $module = module;
 }
 
-var $packages = {}, $reflect, $idCounter = 0;
+var $packages = {}, $idCounter = 0;
 var $keys = function(m) { return m ? Object.keys(m) : []; };
 var $min = Math.min;
 var $mod = function(x, y) { return x % y; };

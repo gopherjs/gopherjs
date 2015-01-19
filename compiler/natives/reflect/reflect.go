@@ -718,7 +718,7 @@ func (v Value) call(op string, in []Value) []Value {
 
 	argsArray := js.Global.Get("Array").New(t.NumIn())
 	for i, arg := range in {
-		argsArray.SetIndex(i, arg.assignTo("reflect.Value.Call", t.In(i).common(), nil).object())
+		argsArray.SetIndex(i, unwrapJsObject(t.In(i), arg.assignTo("reflect.Value.Call", t.In(i).common(), nil).object()))
 	}
 	results := js.InternalObject(fn).Call("apply", rcvr, argsArray)
 
@@ -726,11 +726,11 @@ func (v Value) call(op string, in []Value) []Value {
 	case 0:
 		return nil
 	case 1:
-		return []Value{makeValue(t.Out(0), results, 0)}
+		return []Value{makeValue(t.Out(0), wrapJsObject(t.Out(0), results), 0)}
 	default:
 		ret := make([]Value, nout)
 		for i := range ret {
-			ret[i] = makeValue(t.Out(i), results.Index(i), 0)
+			ret[i] = makeValue(t.Out(i), wrapJsObject(t.Out(i), results.Index(i)), 0)
 		}
 		return ret
 	}
@@ -745,6 +745,23 @@ func (v Value) Cap() int {
 		return v.object().Get("$capacity").Int()
 	}
 	panic(&ValueError{"reflect.Value.Cap", k})
+}
+
+var jsObject = js.Global.Get("$js").Get("Object")
+var jsContainer = js.Global.Get("$js").Get("container").Get("ptr")
+
+func wrapJsObject(typ Type, val js.Object) js.Object {
+	if typ == reflectType(jsObject) {
+		return jsContainer.New(val)
+	}
+	return val
+}
+
+func unwrapJsObject(typ Type, val js.Object) js.Object {
+	if typ == reflectType(jsObject) {
+		return val.Get("Object")
+	}
+	return val
 }
 
 func (v Value) Elem() Value {
@@ -765,17 +782,12 @@ func (v Value) Elem() Value {
 		tt := (*ptrType)(unsafe.Pointer(v.typ))
 		fl := v.flag&flagRO | flagIndir | flagAddr
 		fl |= flag(tt.elem.Kind())
-		if tt.elem == reflectType(jsObject) {
-			return ValueOf(val.String())
-		}
-		return Value{tt.elem, unsafe.Pointer(val.Unsafe()), fl}
+		return Value{tt.elem, unsafe.Pointer(wrapJsObject(tt.elem, val).Unsafe()), fl}
 
 	default:
 		panic(&ValueError{"reflect.Value.Elem", k})
 	}
 }
-
-var jsObject = js.Global.Get("$packages").Get("github.com/gopherjs/gopherjs/js").Get("Object")
 
 func (v Value) Field(i int) Value {
 	v.mustBe(Struct)
@@ -795,13 +807,10 @@ func (v Value) Field(i int) Value {
 	fl |= flag(typ.Kind())
 
 	s := js.InternalObject(v.ptr)
-	if typ == reflectType(jsObject) {
-		return ValueOf(s.Get(prop).String())
-	}
 	if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return s.Get(prop) }), js.InternalObject(func(v js.Object) { s.Set(prop, v) })).Unsafe()), fl}
+		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return wrapJsObject(typ, s.Get(prop)) }), js.InternalObject(func(v js.Object) { s.Set(prop, unwrapJsObject(typ, v)) })).Unsafe()), fl}
 	}
-	return makeValue(typ, s.Get(prop), fl)
+	return makeValue(typ, wrapJsObject(typ, s.Get(prop)), fl)
 }
 
 func (v Value) Index(i int) Value {
@@ -816,13 +825,10 @@ func (v Value) Index(i int) Value {
 		fl |= flag(typ.Kind())
 
 		a := js.InternalObject(v.ptr)
-		if typ == reflectType(jsObject) {
-			return ValueOf(a.Index(i).String())
-		}
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return a.Index(i) }), js.InternalObject(func(v js.Object) { a.SetIndex(i, v) })).Unsafe()), fl}
+			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return wrapJsObject(typ, a.Index(i)) }), js.InternalObject(func(v js.Object) { a.SetIndex(i, unwrapJsObject(typ, v)) })).Unsafe()), fl}
 		}
-		return makeValue(typ, a.Index(i), fl)
+		return makeValue(typ, wrapJsObject(typ, a.Index(i)), fl)
 
 	case Slice:
 		s := v.object()
@@ -836,13 +842,10 @@ func (v Value) Index(i int) Value {
 
 		i += s.Get("$offset").Int()
 		a := s.Get("$array")
-		if typ == reflectType(jsObject) {
-			return ValueOf(a.Index(i).String())
-		}
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return a.Index(i) }), js.InternalObject(func(v js.Object) { a.SetIndex(i, v) })).Unsafe()), fl}
+			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return wrapJsObject(typ, a.Index(i)) }), js.InternalObject(func(v js.Object) { a.SetIndex(i, unwrapJsObject(typ, v)) })).Unsafe()), fl}
 		}
-		return makeValue(typ, a.Index(i), fl)
+		return makeValue(typ, wrapJsObject(typ, a.Index(i)), fl)
 
 	case String:
 		str := *(*string)(v.ptr)

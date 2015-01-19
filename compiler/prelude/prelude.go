@@ -398,7 +398,7 @@ var $equal = function(a, b, type) {
     }
     return true;
   case $kindInterface:
-    if (type === $js.Object || type === $js.Any) {
+    if (type === $js.Object) {
       return a === b;
     }
     return $interfaceIsEqual(a, b);

@@ -96,7 +96,7 @@ var $externalize = function(v, t) {
     if (v === $ifaceNil) {
       return null;
     }
-    if (t === $js.Object || (t === $js.Any && v.constructor.kind === undefined)) {
+    if (t === $js.Object || v.constructor.kind === undefined) {
       return v;
     }
     return $externalize(v.$val, v.constructor);
@@ -230,7 +230,7 @@ var $internalize = function(v, t, recv) {
       }
     };
   case $kindInterface:
-    if (t === $js.Object || t === $js.Any) {
+    if (t === $js.Object) {
       return v;
     }
     if (t.methods.length !== 0) {
@@ -266,7 +266,7 @@ var $internalize = function(v, t, recv) {
         return new timePkg.Time(timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000)));
       }
     case Function:
-      var funcType = $funcType([$sliceType($js.Any)], [$js.Object], true);
+      var funcType = $funcType([$sliceType($emptyInterface)], [$js.Object], true);
       return new funcType($internalize(v, funcType));
     case Number:
       return new $Float64(parseFloat(v));
@@ -274,7 +274,7 @@ var $internalize = function(v, t, recv) {
       return new $String($internalize(v, $String));
     default:
       if ($global.Node && v instanceof $global.Node) {
-        return new $js.DOMNode.ptr(v);
+        return new $js.container.ptr(v);
       }
       var mapType = $mapType($String, $emptyInterface);
       return new mapType($internalize(v, mapType));

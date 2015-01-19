@@ -3,6 +3,8 @@
 package js_test
 
 import (
+	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -254,7 +256,7 @@ func TestFunc(t *testing.T) {
 		t.Fail()
 	}
 
-	add := dummys.Get("add").Interface().(func(...js.Any) js.Object)
+	add := dummys.Get("add").Interface().(func(...interface{}) js.Object)
 	var i int64 = 40
 	if add(i, 2).Int() != 42 {
 		t.Fail()
@@ -376,6 +378,34 @@ func TestMakeWrapper(t *testing.T) {
 	m := &M{}
 	dummys.Call("testMethod", js.MakeWrapper(m))
 	if m.x != 42 {
+		t.Fail()
+	}
+}
+
+func TestReflection(t *testing.T) {
+	o := js.Global.Call("eval", "({ answer: 42 })")
+	if reflect.ValueOf(o).Interface().(js.Object) != o {
+		t.Fail()
+	}
+
+	type S struct {
+		Field js.Object
+	}
+	s := S{o}
+
+	v := reflect.ValueOf(&s).Elem()
+	if v.Field(0).Interface().(js.Object).Get("answer").Int() != 42 {
+		t.Fail()
+	}
+	if v.Field(0).MethodByName("Get").Call([]reflect.Value{reflect.ValueOf("answer")})[0].Interface().(js.Object).Int() != 42 {
+		t.Fail()
+	}
+	v.Field(0).Set(reflect.ValueOf(js.Global.Call("eval", "({ answer: 100 })")))
+	if s.Field.Get("answer").Int() != 100 {
+		t.Fail()
+	}
+
+	if fmt.Sprintf("%+v", s) != "{Field:[object Object]}" {
 		t.Fail()
 	}
 }

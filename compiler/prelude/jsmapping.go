@@ -93,11 +93,11 @@ var $externalize = function(v, t) {
     }
     return v.$externalizeWrapper;
   case $kindInterface:
+    if (t === $js.Object) {
+      return v;
+    }
     if (v === $ifaceNil) {
       return null;
-    }
-    if (t === $js.Object || v.constructor.kind === undefined) {
-      return v;
     }
     return $externalize(v.$val, v.constructor);
   case $kindMap:

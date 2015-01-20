@@ -851,9 +851,9 @@ func (c *funcContext) translateBuiltin(name string, args []ast.Expr, ellipsis bo
 		case *types.Slice:
 			t := c.typeName(c.p.info.Types[args[0]].Type)
 			if len(args) == 3 {
-				return c.formatExpr("%s.make(%f, %f)", t, args[1], args[2])
+				return c.formatExpr("$makeSlice(%s, %f, %f)", t, args[1], args[2])
 			}
-			return c.formatExpr("%s.make(%f)", t, args[1])
+			return c.formatExpr("$makeSlice(%s, %f)", t, args[1])
 		case *types.Map:
 			return c.formatExpr("new $Map()")
 		case *types.Chan:

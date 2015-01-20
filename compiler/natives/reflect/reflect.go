@@ -215,7 +215,7 @@ func MakeSlice(typ Type, len, cap int) Value {
 		panic("reflect.MakeSlice: len > cap")
 	}
 
-	return makeValue(typ, jsType(typ).Call("make", len, cap, js.InternalObject(func() js.Object { return jsType(typ.Elem()).Call("zero") })), 0)
+	return makeValue(typ, js.Global.Call("$makeSlice", jsType(typ), len, cap, js.InternalObject(func() js.Object { return jsType(typ.Elem()).Call("zero") })), 0)
 }
 
 func TypeOf(i interface{}) Type {

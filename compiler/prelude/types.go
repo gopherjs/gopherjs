@@ -175,10 +175,9 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
     break;
 
   case $kindSlice:
-    var nativeArray;
     typ = function(array) {
-      if (array.constructor !== nativeArray) {
-        array = new nativeArray(array);
+      if (array.constructor !== typ.nativeArray) {
+        array = new typ.nativeArray(array);
       }
       this.$array = array;
       this.$offset = 0;
@@ -186,22 +185,10 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
       this.$capacity = array.length;
       this.$val = this;
     };
-    typ.make = function(length, capacity) {
-      capacity = capacity || length;
-      var array = new nativeArray(capacity);
-      if (nativeArray === Array) {
-        for (var i = 0; i < capacity; i++) {
-          array[i] = typ.elem.zero();
-        }
-      }
-      var slice = new typ(array);
-      slice.$length = length;
-      return slice;
-    };
     typ.init = function(elem) {
       typ.elem = elem;
       typ.comparable = false;
-      nativeArray = $nativeArray(elem.kind);
+      typ.nativeArray = $nativeArray(elem.kind);
       typ.nil = new typ([]);
     };
     break;
@@ -525,6 +512,18 @@ var $sliceType = function(elem) {
     $addAnonTypeInit(function() { typ.init(elem); });
   }
   return typ;
+};
+var $makeSlice = function(typ, length, capacity) {
+  capacity = capacity || length;
+  var array = new typ.nativeArray(capacity);
+  if (typ.nativeArray === Array) {
+    for (var i = 0; i < capacity; i++) {
+      array[i] = typ.elem.zero();
+    }
+  }
+  var slice = new typ(array);
+  slice.$length = length;
+  return slice;
 };
 
 var $structTypes = {};

@@ -247,11 +247,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 	}
 
-	collectDependencies := func(self string, f func()) []string {
+	collectDependencies := func(f func()) []string {
 		c.p.dependencies = make(map[string]bool)
 		f()
 		var deps []string
-		delete(c.p.dependencies, self)
 		for dep := range c.p.dependencies {
 			deps = append(deps, dep)
 		}
@@ -273,7 +272,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			d.Vars = []string{c.objectName(o)}
 		}
 		if _, ok := varsWithInit[o]; !ok {
-			d.DceDeps = collectDependencies("", func() {
+			d.DceDeps = collectDependencies(func() {
 				d.InitCode = []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), c.zeroValue(o.Type())))
 			})
 		}
@@ -289,7 +288,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			varsWithInit[o] = true
 		}
 		var d Decl
-		d.DceDeps = collectDependencies("", func() {
+		d.DceDeps = collectDependencies(func() {
 			c.localVars = nil
 			d.InitCode = c.CatchOutput(1, func() {
 				ast.Walk(c, init.Rhs)
@@ -323,9 +322,11 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		if fun.Recv == nil {
 			d.Vars = []string{c.objectName(o)}
+			d.DceFilters = []string{qualifiedName(o)}
 			switch o.Name() {
 			case "main":
 				mainFunc = o
+				d.DceFilters = nil
 			case "init":
 				d.InitCode = c.CatchOutput(1, func() {
 					id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
@@ -334,8 +335,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					c.Visit(call)
 					c.translateStmt(&ast.ExprStmt{X: call}, "")
 				})
-			default:
-				d.DceFilters = []string{qualifiedName(o)}
+				d.DceFilters = nil
 			}
 		}
 		if fun.Recv != nil {
@@ -351,7 +351,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			}
 		}
 
-		d.DceDeps = collectDependencies(qualifiedName(o), func() {
+		d.DceDeps = collectDependencies(func() {
 			d.DeclCode = c.translateToplevelFunction(fun, context)
 		})
 		funcDecls = append(funcDecls, &d)
@@ -377,7 +377,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			Vars:       []string{typeName},
 			DceFilters: []string{qualifiedName(o)},
 		}
-		d.DceDeps = collectDependencies(qualifiedName(o), func() {
+		d.DceDeps = collectDependencies(func() {
 			d.DeclCode = c.CatchOutput(0, func() {
 				typeName := c.objectName(o)
 				lhs := typeName
@@ -446,7 +446,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			Vars:       []string{c.p.anonTypeVars[t.String()]},
 			DceFilters: []string{importPath + ":" + t.String()},
 		}
-		d.DceDeps = collectDependencies("", func() {
+		d.DceDeps = collectDependencies(func() {
 			d.DeclCode = []byte(fmt.Sprintf("\t\t%s = $%sType(%s);\n", c.p.anonTypeVars[t.String()], strings.ToLower(typeKind(t)[5:]), c.initArgs(t)))
 		})
 		typeDecls = append(typeDecls, &d)

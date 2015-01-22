@@ -965,13 +965,14 @@ func (v *escapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
 		}
 	case *ast.UnaryExpr:
 		if n.Op == token.AND {
-			switch v.info.Types[n.X].Type.Underlying().(type) {
-			case *types.Struct, *types.Array:
-				// always by reference
-				return nil
-			default:
-				return &escapingObjectCollector{v}
+			if _, ok := n.X.(*ast.Ident); ok {
+				switch v.info.Types[n.X].Type.Underlying().(type) {
+				case *types.Struct, *types.Array:
+					// always by reference
+					return nil
+				}
 			}
+			return &escapingObjectCollector{v}
 		}
 	case *ast.FuncLit:
 		return &escapingObjectCollector{v}

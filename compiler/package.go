@@ -447,7 +447,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			DceFilters: []string{importPath + ":" + t.String()},
 		}
 		d.DceDeps = collectDependencies(func() {
-			d.DeclCode = []byte(fmt.Sprintf("\t\t%s = $%sType(%s);\n", c.p.anonTypeVars[t.String()], strings.ToLower(typeKind(t)[5:]), c.initArgs(t)))
+			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", c.p.anonTypeVars[t.String()], strings.ToLower(typeKind(t)[5:]), c.initArgs(t)))
 		})
 		typeDecls = append(typeDecls, &d)
 	}

@@ -409,3 +409,11 @@ func TestReflection(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestNil(t *testing.T) {
+	type S struct{ X int }
+	var s *S
+	if !dummys.Call("isEqual", s, nil).Bool() {
+		t.Fail()
+	}
+}

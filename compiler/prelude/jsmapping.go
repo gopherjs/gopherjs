@@ -109,6 +109,9 @@ var $externalize = function(v, t) {
     }
     return m;
   case $kindPtr:
+    if (v === t.nil) {
+      return null;
+    }
     return $externalize(v.$get(), t.elem);
   case $kindSlice:
     if ($needsExternalization(t.elem)) {

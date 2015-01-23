@@ -968,7 +968,7 @@ func (v *escapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
 			switch v.info.Types[n.X].Type.Underlying().(type) {
 			case *types.Struct, *types.Array:
 				// always by reference
-				return nil
+				return v
 			default:
 				return &escapingObjectCollector{v}
 			}

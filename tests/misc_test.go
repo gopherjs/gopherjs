@@ -177,3 +177,21 @@ func TestCompareStruct(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestLoopClosure(t *testing.T) {
+	type S struct{ fn func() int }
+	var fns []*S
+	for i := 0; i < 2; i++ {
+		z := i
+		fns = append(fns, &S{
+			fn: func() int {
+				return z
+			},
+		})
+	}
+	for i, f := range fns {
+		if f.fn() != i {
+			t.Fail()
+		}
+	}
+}

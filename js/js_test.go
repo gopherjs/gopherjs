@@ -366,18 +366,19 @@ func TestExternalizeField(t *testing.T) {
 	}
 }
 
-type M struct {
-	x int
-}
+type M struct{}
 
-func (m *M) Method(x int) {
-	m.x = x
+func (m *M) Method(a interface{}) map[string]string {
+	if a.(map[string]interface{})["x"].(float64) != 1 {
+		return nil
+	}
+	return map[string]string{
+		"y": "z",
+	}
 }
 
 func TestMakeWrapper(t *testing.T) {
-	m := &M{}
-	dummys.Call("testMethod", js.MakeWrapper(m))
-	if m.x != 42 {
+	if !js.Global.Call("eval", `(function(m) { return m.Method({x: 1})["y"] === "z"; })`).Invoke(js.MakeWrapper(&M{})).Bool() {
 		t.Fail()
 	}
 }

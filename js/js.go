@@ -160,8 +160,26 @@ func MakeWrapper(i interface{}) Object {
 		if m.Get("pkg").String() != "" { // not exported
 			continue
 		}
-		o.Set(m.Get("name").String(), func(args ...interface{}) Object {
-			return v.Call(m.Get("prop").String(), args...)
+		o.Set(m.Get("name").String(), func(args ...Object) Object {
+			paramTypes := m.Get("type").Get("params")
+			internalizedArgs := make([]interface{}, paramTypes.Length())
+			for i := range internalizedArgs {
+				internalizedArgs[i] = Global.Call("$internalize", args[i], paramTypes.Index(i))
+			}
+			result := v.Call(m.Get("prop").String(), internalizedArgs...)
+			resultTypes := m.Get("type").Get("results")
+			switch resultTypes.Length() {
+			case 0:
+				return nil
+			case 1:
+				return Global.Call("$externalize", result, resultTypes.Index(0))
+			default:
+				a := Global.Get("Array").New(resultTypes.Length())
+				for i := 0; i < resultTypes.Length(); i++ {
+					a.SetIndex(i, Global.Call("$externalize", result.Index(i), resultTypes.Index(i)))
+				}
+				return a
+			}
 		})
 	}
 	return o

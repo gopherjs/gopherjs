@@ -416,4 +416,9 @@ func TestNil(t *testing.T) {
 	if !dummys.Call("isEqual", s, nil).Bool() {
 		t.Fail()
 	}
+
+	type T struct{ Field *S }
+	if dummys.Call("testField", T{}) != nil {
+		t.Fail()
+	}
 }

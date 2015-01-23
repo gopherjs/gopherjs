@@ -139,7 +139,7 @@ var $externalize = function(v, t) {
       if (t === $js.Object) {
         return v;
       }
-      if (t.kind === $kindPtr) {
+      if (t.kind === $kindPtr && v !== t.nil) {
         var o = searchJsObject(v.$get(), t.elem);
         if (o !== undefined) {
           return o;

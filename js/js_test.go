@@ -423,3 +423,11 @@ func TestNil(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestNewArrayBuffer(t *testing.T) {
+	b := []byte("abcd")
+	a := js.NewArrayBuffer(b[1:3])
+	if a.Get("byteLength").Int() != 2 {
+		t.Fail()
+	}
+}

@@ -185,6 +185,14 @@ func MakeWrapper(i interface{}) Object {
 	return o
 }
 
+// NewArrayBuffer creates a JavaScript ArrayBuffer from a byte slice.
+func NewArrayBuffer(b []byte) Object {
+	slice := InternalObject(b)
+	offset := slice.Get("$offset").Int()
+	length := slice.Get("$length").Int()
+	return slice.Get("$array").Get("buffer").Call("slice", offset, offset+length)
+}
+
 // M is a simple map type. It is intended as a shorthand for JavaScript objects (before conversion).
 type M map[string]interface{}
 

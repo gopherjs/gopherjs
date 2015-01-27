@@ -566,7 +566,7 @@ func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) 
 	gopathWorkspaces := filepath.SplitList(gopath)
 	for _, gopathWorkspace := range gopathWorkspaces {
 		if _, err := os.Stat(filepath.Join(gopathWorkspace, file)); err != nil {
-			return true, len(gopathWorkspace)
+			return true, len(filepath.Clean(gopathWorkspace))
 		}
 	}
 	return false, 0

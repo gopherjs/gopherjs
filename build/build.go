@@ -575,11 +575,5 @@ func (s *Session) WaitForChange() {
 	case err := <-s.Watcher.Errors:
 		s.options.PrintError("watcher error: %s\n", err.Error())
 	}
-
-	go func() {
-		for range s.Watcher.Events {
-			// consume, else Close() may deadlock
-		}
-	}()
 	s.Watcher.Close()
 }

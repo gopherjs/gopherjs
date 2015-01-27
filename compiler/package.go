@@ -301,9 +301,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			d.Vars = append(d.Vars, c.localVars...)
 		})
 		if len(init.Lhs) == 1 {
-			v := hasCallVisitor{c.p.info, false}
+			v := hasSideEffectAnalysis{c.p.info, false}
 			ast.Walk(&v, init.Rhs)
-			if !v.hasCall {
+			if !v.hasSideEffect {
 				d.DceFilters = []string{qualifiedName(init.Lhs[0])}
 			}
 		}

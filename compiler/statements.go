@@ -375,9 +375,9 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 					X: c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
 				}, c.p.info.Types[l].Type)
 			case *ast.SelectorExpr:
-				v := hasCallVisitor{c.p.info, false}
+				v := hasSideEffectAnalysis{c.p.info, false}
 				ast.Walk(&v, l.X)
-				if v.hasCall {
+				if v.hasSideEffect {
 					lhsVar := c.newVariable("_lhs")
 					parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String()+";")
 					lhs = c.setType(&ast.SelectorExpr{
@@ -414,9 +414,9 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
 			lhs := removeParens(s.Lhs[0])
 			if isBlank(lhs) {
-				v := hasCallVisitor{c.p.info, false}
+				v := hasSideEffectAnalysis{c.p.info, false}
 				ast.Walk(&v, s.Rhs[0])
-				if v.hasCall {
+				if v.hasSideEffect {
 					c.Printf("%s;", c.translateExpr(s.Rhs[0]).String())
 				}
 				return
@@ -442,9 +442,9 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			for i, rhs := range s.Rhs {
 				tmpVars[i] = c.newVariable("_tmp")
 				if isBlank(removeParens(s.Lhs[i])) {
-					v := hasCallVisitor{c.p.info, false}
+					v := hasSideEffectAnalysis{c.p.info, false}
 					ast.Walk(&v, rhs)
-					if v.hasCall {
+					if v.hasSideEffect {
 						c.Printf("%s;", c.translateExpr(rhs).String())
 					}
 					continue
@@ -923,18 +923,24 @@ func (v *hasBreakVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	return v
 }
 
-type hasCallVisitor struct {
-	info    *types.Info
-	hasCall bool
+type hasSideEffectAnalysis struct {
+	info          *types.Info
+	hasSideEffect bool
 }
 
-func (v *hasCallVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	if v.hasCall {
+func (v *hasSideEffectAnalysis) Visit(node ast.Node) (w ast.Visitor) {
+	if v.hasSideEffect {
 		return nil
 	}
-	if call, isCall := node.(*ast.CallExpr); isCall {
-		if _, isSig := v.info.Types[call.Fun].Type.(*types.Signature); isSig { // skip conversions
-			v.hasCall = true
+	switch n := node.(type) {
+	case *ast.CallExpr:
+		if _, isSig := v.info.Types[n.Fun].Type.(*types.Signature); isSig { // skip conversions
+			v.hasSideEffect = true
+			return nil
+		}
+	case *ast.UnaryExpr:
+		if n.Op == token.ARROW {
+			v.hasSideEffect = true
 			return nil
 		}
 	}

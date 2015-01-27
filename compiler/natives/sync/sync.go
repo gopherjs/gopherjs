@@ -56,10 +56,10 @@ func runtime_Semrelease(s *uint32) {
 	}
 
 	ch := w[0]
-	if len(w) == 1 {
+	w = w[1:]
+	semWaiters[s] = w
+	if len(w) == 0 {
 		delete(semWaiters, s)
-	} else {
-		semWaiters[s] = w[1:]
 	}
 
 	ch <- struct{}{}

@@ -161,7 +161,7 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 		}
 
 		switch pkg.ImportPath {
-		case "crypto/rand", "encoding/json", "math/big", "math/rand", "testing", "time":
+		case "crypto/rand", "encoding/json", "expvar", "go/token", "math/big", "math/rand", "regexp", "testing", "time":
 			for _, spec := range file.Imports {
 				path, _ := strconv.Unquote(spec.Path.Value)
 				if path == "sync" {

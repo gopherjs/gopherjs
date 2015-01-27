@@ -13,7 +13,7 @@ if (typeof window !== "undefined") { /* web page */
   $global = global;
   $global.require = require;
 } else { /* others (e.g. Nashorn) */
-  $global = $topLevelThis;
+  $global = this;
 }
 
 if ($global === undefined || $global.Array === undefined) {

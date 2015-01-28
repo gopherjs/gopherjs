@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -29,9 +28,6 @@ func (e *ImportCError) Error() string {
 }
 
 func NewBuildContext(installSuffix string) *build.Context {
-	if strings.HasPrefix(runtime.Version(), "go1.") && runtime.Version()[4] < '4' {
-		panic("GopherJS requires Go 1.4. Please upgrade.")
-	}
 	return &build.Context{
 		GOROOT:        build.Default.GOROOT,
 		GOPATH:        build.Default.GOPATH,

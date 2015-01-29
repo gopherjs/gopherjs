@@ -705,13 +705,14 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 				lookForComment()
 			}
 		}
-		switch f := n.Fun.(type) {
+		switch f := removeParens(n.Fun).(type) {
 		case *ast.Ident:
 			callTo(c.p.info.Uses[f])
 		case *ast.SelectorExpr:
+			if sel := c.p.info.Selections[f]; sel != nil && isJsObject(sel.Recv()) {
+				break
+			}
 			callTo(c.p.info.Uses[f.Sel])
-		default:
-			lookForComment()
 		}
 	case *ast.SendStmt:
 		c.markBlocking(c.analyzeStack)

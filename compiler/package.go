@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/gcexporter"
 	"golang.org/x/tools/go/types"
 )
@@ -44,7 +45,7 @@ type pkgContext struct {
 	objectVars    map[types.Object]string
 	anonTypes     []types.Type
 	anonTypeVars  map[string]string
-	escapingVars  map[types.Object]bool
+	escapingVars  map[*types.Var]bool
 	indentation   int
 	dependencies  map[string]bool
 	minify        bool
@@ -138,7 +139,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			pkgVars:       make(map[string]string),
 			objectVars:    make(map[types.Object]string),
 			anonTypeVars:  make(map[string]string),
-			escapingVars:  make(map[types.Object]bool),
+			escapingVars:  make(map[*types.Var]bool),
 			indentation:   1,
 			dependencies:  make(map[string]bool),
 			minify:        minify,
@@ -301,9 +302,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			d.Vars = append(d.Vars, c.localVars...)
 		})
 		if len(init.Lhs) == 1 {
-			v := hasSideEffectAnalysis{c.p.info, false}
-			ast.Walk(&v, init.Rhs)
-			if !v.hasSideEffect {
+			if !analysis.HasSideEffect(init.Rhs, c.p.info) {
 				d.DceFilters = []string{qualifiedName(init.Lhs[0])}
 			}
 		}

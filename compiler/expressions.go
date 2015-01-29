@@ -216,7 +216,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			case *ast.CompositeLit:
 				return c.formatExpr("$newDataPointer(%e, %s)", x, c.typeName(c.p.info.Types[e].Type))
 			case *ast.Ident:
-				if obj := c.p.info.Uses[x]; c.p.escapingVars[obj] {
+				if obj, _ := c.p.info.Uses[x].(*types.Var); c.p.escapingVars[obj] {
 					return c.formatExpr("new %s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %s)", c.typeName(exprType), c.p.objectVars[obj])
 				}
 				return c.formatExpr("new %s(function() { return %e; }, function($v) { %s })", c.typeName(exprType), x, c.translateAssign(x, "$v", exprType, false))

@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gopherjs/gopherjs/compiler/analysis"
+
 	"golang.org/x/tools/go/types"
 )
 
@@ -375,9 +377,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 					X: c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
 				}, c.p.info.Types[l].Type)
 			case *ast.SelectorExpr:
-				v := hasSideEffectAnalysis{c.p.info, false}
-				ast.Walk(&v, l.X)
-				if v.hasSideEffect {
+				if analysis.HasSideEffect(l.X, c.p.info) {
 					lhsVar := c.newVariable("_lhs")
 					parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String()+";")
 					lhs = c.setType(&ast.SelectorExpr{
@@ -414,9 +414,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
 			lhs := removeParens(s.Lhs[0])
 			if isBlank(lhs) {
-				v := hasSideEffectAnalysis{c.p.info, false}
-				ast.Walk(&v, s.Rhs[0])
-				if v.hasSideEffect {
+				if analysis.HasSideEffect(s.Rhs[0], c.p.info) {
 					c.Printf("%s;", c.translateExpr(s.Rhs[0]).String())
 				}
 				return
@@ -442,9 +440,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			for i, rhs := range s.Rhs {
 				tmpVars[i] = c.newVariable("_tmp")
 				if isBlank(removeParens(s.Lhs[i])) {
-					v := hasSideEffectAnalysis{c.p.info, false}
-					ast.Walk(&v, rhs)
-					if v.hasSideEffect {
+					if analysis.HasSideEffect(rhs, c.p.info) {
 						c.Printf("%s;", c.translateExpr(rhs).String())
 					}
 					continue
@@ -670,11 +666,12 @@ clauseLoop:
 	if isSwitch {
 		switch label {
 		case "":
-			v := hasBreakVisitor{}
 			for _, child := range caseClauses {
-				ast.Walk(&v, child)
+				if analysis.HasBreak(child) {
+					hasBreak = true
+					break
+				}
 			}
-			hasBreak = v.hasBreak
 		default:
 			hasBreak = true // always assume break if label is given
 		}
@@ -776,19 +773,13 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { $s = %d; continue; }", data.beginCase, cond, data.endCase))
 	c.Indent(func() {
 		prevEV := c.p.escapingVars
-		c.p.escapingVars = make(map[types.Object]bool)
+		c.p.escapingVars = make(map[*types.Var]bool)
 		for escaping := range prevEV {
 			c.p.escapingVars[escaping] = true
 		}
 
-		v := &escapeAnalysis{
-			info:       c.p.info,
-			candidates: make(map[types.Object]bool),
-			escaping:   make(map[types.Object]bool),
-		}
-		ast.Walk(v, body)
-		names := make([]string, 0, len(c.p.escapingVars))
-		for obj := range v.escaping {
+		names := make([]string, 0)
+		for obj := range analysis.EscapingObjects(body, c.p.info) {
 			names = append(names, c.objectName(obj))
 			c.p.escapingVars[obj] = true
 		}
@@ -901,102 +892,4 @@ func hasFallthrough(caseClause *ast.CaseClause) bool {
 	}
 	b, isBranchStmt := caseClause.Body[len(caseClause.Body)-1].(*ast.BranchStmt)
 	return isBranchStmt && b.Tok == token.FALLTHROUGH
-}
-
-type hasBreakVisitor struct {
-	hasBreak bool
-}
-
-func (v *hasBreakVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	if v.hasBreak {
-		return nil
-	}
-	switch n := node.(type) {
-	case *ast.BranchStmt:
-		if n.Tok == token.BREAK && n.Label == nil {
-			v.hasBreak = true
-			return nil
-		}
-	case *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt, ast.Expr:
-		return nil
-	}
-	return v
-}
-
-type hasSideEffectAnalysis struct {
-	info          *types.Info
-	hasSideEffect bool
-}
-
-func (v *hasSideEffectAnalysis) Visit(node ast.Node) (w ast.Visitor) {
-	if v.hasSideEffect {
-		return nil
-	}
-	switch n := node.(type) {
-	case *ast.CallExpr:
-		if _, isSig := v.info.Types[n.Fun].Type.(*types.Signature); isSig { // skip conversions
-			v.hasSideEffect = true
-			return nil
-		}
-	case *ast.UnaryExpr:
-		if n.Op == token.ARROW {
-			v.hasSideEffect = true
-			return nil
-		}
-	}
-	return v
-}
-
-type escapeAnalysis struct {
-	info       *types.Info
-	candidates map[types.Object]bool
-	escaping   map[types.Object]bool
-}
-
-func (v *escapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
-	// huge overapproximation
-	switch n := node.(type) {
-	case *ast.ValueSpec:
-		for _, name := range n.Names {
-			v.candidates[v.info.Defs[name]] = true
-		}
-	case *ast.AssignStmt:
-		if n.Tok == token.DEFINE {
-			for _, name := range n.Lhs {
-				def := v.info.Defs[name.(*ast.Ident)]
-				if def != nil {
-					v.candidates[def] = true
-				}
-			}
-		}
-	case *ast.UnaryExpr:
-		if n.Op == token.AND {
-			switch v.info.Types[n.X].Type.Underlying().(type) {
-			case *types.Struct, *types.Array:
-				// always by reference
-				return v
-			default:
-				return &escapingObjectCollector{v}
-			}
-		}
-	case *ast.FuncLit:
-		return &escapingObjectCollector{v}
-	case *ast.ForStmt, *ast.RangeStmt:
-		return nil
-	}
-	return v
-}
-
-type escapingObjectCollector struct {
-	analysis *escapeAnalysis
-}
-
-func (v *escapingObjectCollector) Visit(node ast.Node) (w ast.Visitor) {
-	if id, isIdent := node.(*ast.Ident); isIdent {
-		obj := v.analysis.info.Uses[id]
-		if v.analysis.candidates[obj] {
-			v.analysis.escaping[obj] = true
-		}
-	}
-	return v
 }

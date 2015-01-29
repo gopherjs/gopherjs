@@ -275,7 +275,7 @@ func (c *funcContext) objectName(o types.Object) string {
 		c.p.objectVars[o] = name
 	}
 
-	if c.p.escapingVars[o] {
+	if v, ok := o.(*types.Var); ok && c.p.escapingVars[v] {
 		return name + "[0]"
 	}
 	return name

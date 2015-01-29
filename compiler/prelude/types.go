@@ -142,6 +142,9 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
     typ = { implementedBy: {}, missingMethodFor: {} };
     typ.init = function(methods) {
       typ.methods = methods;
+      methods.forEach(function(m) {
+        $ifaceNil[m.prop] = $throwNilPointerError;
+      });
     };
     break;
 
@@ -485,8 +488,6 @@ var $mapType = function(key, elem) {
   return typ;
 };
 
-
-var $throwNilPointerError = function() { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var $ptrType = function(elem) {
   var typ = elem.ptr;
   if (typ === undefined) {

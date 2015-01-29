@@ -114,7 +114,6 @@ var $recover = function() {
   return $panicValue;
 };
 var $throw = function(err) { throw err; };
-var $throwRuntimeError; /* set by package "runtime" */
 
 var $BLOCKING = new Object();
 var $nonblockingCall = function() {

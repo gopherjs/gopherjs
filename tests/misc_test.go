@@ -2,6 +2,7 @@ package tests
 
 import (
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -194,4 +195,14 @@ func TestLoopClosure(t *testing.T) {
 			t.Fail()
 		}
 	}
+}
+
+func TestNilInterfaceError(t *testing.T) {
+	defer func() {
+		if err := recover(); err == nil || !strings.Contains(err.(error).Error(), "nil pointer dereference") {
+			t.Fail()
+		}
+	}()
+	var err error
+	err.Error()
 }

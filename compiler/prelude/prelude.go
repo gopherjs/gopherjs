@@ -35,6 +35,8 @@ var $parseFloat = function(f) {
   return parseFloat(f);
 };
 var $flushConsole = function() {};
+var $throwRuntimeError; /* set by package "runtime" */
+var $throwNilPointerError = function() { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
 
 var $mapArray = function(array, f) {
   var newArray = new array.constructor(array.length);

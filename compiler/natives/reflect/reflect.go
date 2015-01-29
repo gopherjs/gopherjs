@@ -67,14 +67,9 @@ func reflectType(typ js.Object) *rtype {
 			js.InternalObject(rt.uncommonType).Set("jsType", typ)
 		}
 
-		setKindType := func(kindType interface{}) {
-			js.InternalObject(kindType).Set("rtype", js.InternalObject(rt))
-			js.InternalObject(rt).Set("kindType", js.InternalObject(kindType))
-		}
-
 		switch rt.Kind() {
 		case Array:
-			setKindType(&arrayType{
+			setKindType(rt, &arrayType{
 				elem: reflectType(typ.Get("elem")),
 				len:  uintptr(typ.Get("len").Int()),
 			})
@@ -86,7 +81,7 @@ func reflectType(typ js.Object) *rtype {
 			if typ.Get("recvOnly").Bool() {
 				dir = RecvDir
 			}
-			setKindType(&chanType{
+			setKindType(rt, &chanType{
 				elem: reflectType(typ.Get("elem")),
 				dir:  uintptr(dir),
 			})
@@ -101,7 +96,7 @@ func reflectType(typ js.Object) *rtype {
 			for i := range out {
 				out[i] = reflectType(results.Index(i))
 			}
-			setKindType(&funcType{
+			setKindType(rt, &funcType{
 				rtype:     *rt,
 				dotdotdot: typ.Get("variadic").Bool(),
 				in:        in,
@@ -118,21 +113,21 @@ func reflectType(typ js.Object) *rtype {
 					typ:     reflectType(m.Get("type")),
 				}
 			}
-			setKindType(&interfaceType{
+			setKindType(rt, &interfaceType{
 				rtype:   *rt,
 				methods: imethods,
 			})
 		case Map:
-			setKindType(&mapType{
+			setKindType(rt, &mapType{
 				key:  reflectType(typ.Get("key")),
 				elem: reflectType(typ.Get("elem")),
 			})
 		case Ptr:
-			setKindType(&ptrType{
+			setKindType(rt, &ptrType{
 				elem: reflectType(typ.Get("elem")),
 			})
 		case Slice:
-			setKindType(&sliceType{
+			setKindType(rt, &sliceType{
 				elem: reflectType(typ.Get("elem")),
 			})
 		case Struct:
@@ -148,7 +143,7 @@ func reflectType(typ js.Object) *rtype {
 					offset:  uintptr(i),
 				}
 			}
-			setKindType(&structType{
+			setKindType(rt, &structType{
 				rtype:  *rt,
 				fields: reflectFields,
 			})
@@ -156,6 +151,11 @@ func reflectType(typ js.Object) *rtype {
 	}
 
 	return (*rtype)(unsafe.Pointer(typ.Get("reflectType").Unsafe()))
+}
+
+func setKindType(rt *rtype, kindType interface{}) {
+	js.InternalObject(rt).Set("kindType", js.InternalObject(kindType))
+	js.InternalObject(kindType).Set("rtype", js.InternalObject(rt))
 }
 
 var stringPtrMap = make(map[string]*string)

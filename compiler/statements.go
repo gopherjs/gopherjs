@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/filter"
 
+	"golang.org/x/tools/go/exact"
 	"golang.org/x/tools/go/types"
 )
 
@@ -25,6 +27,8 @@ func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 
 func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 	c.WritePos(stmt.Pos())
+
+	stmt = filter.IncDecStmt(stmt, c.p.info)
 
 	switch s := stmt.(type) {
 	case *ast.BlockStmt:
@@ -461,29 +465,6 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 		}
 
-	case *ast.IncDecStmt:
-		t := c.p.info.Types[s.X].Type
-		if iExpr, isIExpr := s.X.(*ast.IndexExpr); isIExpr {
-			switch u := c.p.info.Types[iExpr.X].Type.Underlying().(type) {
-			case *types.Array:
-				t = u.Elem()
-			case *types.Slice:
-				t = u.Elem()
-			case *types.Map:
-				t = u.Elem()
-			}
-		}
-
-		tok := token.ADD_ASSIGN
-		if s.Tok == token.DEC {
-			tok = token.SUB_ASSIGN
-		}
-		c.translateStmt(&ast.AssignStmt{
-			Lhs: []ast.Expr{s.X},
-			Tok: tok,
-			Rhs: []ast.Expr{c.newInt(1, t)},
-		}, label)
-
 	case *ast.DeclStmt:
 		decl := s.Decl.(*ast.GenDecl)
 		switch decl.Tok {
@@ -563,8 +544,10 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			default:
 				panic(fmt.Sprintf("unhandled: %T", comm))
 			}
+			indexLit := &ast.BasicLit{Kind: token.INT}
+			c.p.info.Types[indexLit] = types.TypeAndValue{Type: types.Typ[types.Int], Value: exact.MakeInt64(int64(i))}
 			caseClauses = append(caseClauses, &ast.CaseClause{
-				List: []ast.Expr{c.newInt(i, types.Typ[types.Int])},
+				List: []ast.Expr{indexLit},
 				Body: clause.Body,
 			})
 			flattened = flattened || c.flattened[clause]

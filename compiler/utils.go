@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/tools/go/exact"
 	"golang.org/x/tools/go/types"
 )
 
@@ -236,12 +235,6 @@ func (c *funcContext) newIdent(name string, t types.Type) *ast.Ident {
 	c.p.info.Uses[ident] = obj
 	c.p.objectVars[obj] = name
 	return ident
-}
-
-func (c *funcContext) newInt(i int, t types.Type) *ast.BasicLit {
-	lit := &ast.BasicLit{Kind: token.INT}
-	c.p.info.Types[lit] = types.TypeAndValue{Type: t, Value: exact.MakeInt64(int64(i))}
-	return lit
 }
 
 func (c *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {

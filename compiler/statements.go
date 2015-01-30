@@ -29,6 +29,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 	c.WritePos(stmt.Pos())
 
 	stmt = filter.IncDecStmt(stmt, c.p.info)
+	stmt = filter.Assign(stmt, c.p.info, c.p.pkg)
 
 	switch s := stmt.(type) {
 	case *ast.BlockStmt:
@@ -334,72 +335,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 	case *ast.AssignStmt:
 		if s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
-			var op token.Token
-			switch s.Tok {
-			case token.ADD_ASSIGN:
-				op = token.ADD
-			case token.SUB_ASSIGN:
-				op = token.SUB
-			case token.MUL_ASSIGN:
-				op = token.MUL
-			case token.QUO_ASSIGN:
-				op = token.QUO
-			case token.REM_ASSIGN:
-				op = token.REM
-			case token.AND_ASSIGN:
-				op = token.AND
-			case token.OR_ASSIGN:
-				op = token.OR
-			case token.XOR_ASSIGN:
-				op = token.XOR
-			case token.SHL_ASSIGN:
-				op = token.SHL
-			case token.SHR_ASSIGN:
-				op = token.SHR
-			case token.AND_NOT_ASSIGN:
-				op = token.AND_NOT
-			default:
-				panic(s.Tok)
-			}
-
-			var parts []string
-			lhs := s.Lhs[0]
-			switch l := lhs.(type) {
-			case *ast.IndexExpr:
-				lhsVar := c.newVariable("_lhs")
-				indexVar := c.newVariable("_index")
-				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String()+";")
-				parts = append(parts, indexVar+" = "+c.translateExpr(l.Index).String()+";")
-				lhs = c.setType(&ast.IndexExpr{
-					X:     c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
-					Index: c.newIdent(indexVar, c.p.info.Types[l.Index].Type),
-				}, c.p.info.Types[l].Type)
-			case *ast.StarExpr:
-				lhsVar := c.newVariable("_lhs")
-				parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String()+";")
-				lhs = c.setType(&ast.StarExpr{
-					X: c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
-				}, c.p.info.Types[l].Type)
-			case *ast.SelectorExpr:
-				if analysis.HasSideEffect(l.X, c.p.info) {
-					lhsVar := c.newVariable("_lhs")
-					parts = append(parts, lhsVar+" = "+c.translateExpr(l.X).String()+";")
-					lhs = c.setType(&ast.SelectorExpr{
-						X:   c.newIdent(lhsVar, c.p.info.Types[l.X].Type),
-						Sel: l.Sel,
-					}, c.p.info.Types[l].Type)
-					c.p.info.Selections[lhs.(*ast.SelectorExpr)] = c.p.info.Selections[l]
-				}
-			}
-
-			lhsType := c.p.info.Types[s.Lhs[0]].Type
-			parts = append(parts, c.translateAssignOfExpr(lhs, c.setType(&ast.BinaryExpr{
-				X:  lhs,
-				Op: op,
-				Y:  c.setType(&ast.ParenExpr{X: s.Rhs[0]}, c.p.info.Types[s.Rhs[0]].Type),
-			}, lhsType), lhsType, s.Tok == token.DEFINE))
-			c.Printf("%s", strings.Join(parts, " "))
-			return
+			panic(s.Tok)
 		}
 
 		if s.Tok == token.DEFINE {

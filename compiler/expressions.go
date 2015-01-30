@@ -32,10 +32,7 @@ func (e *expression) StringWithParens() string {
 func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 	exprType := c.p.info.Types[expr].Type
 	if value := c.p.info.Types[expr].Value; value != nil {
-		basic := types.Typ[types.String]
-		if value.Kind() != exact.String { // workaround for bug in go/types
-			basic = exprType.Underlying().(*types.Basic)
-		}
+		basic := exprType.Underlying().(*types.Basic)
 		switch {
 		case basic.Info()&types.IsBoolean != 0:
 			return c.formatExpr("%s", strconv.FormatBool(exact.BoolVal(value)))

@@ -26,8 +26,9 @@ type funcContext struct {
 	hasDefer      bool
 	flattened     map[ast.Node]bool
 	blocking      map[ast.Node]bool
+	gotoLabel     map[*types.Label]bool
 	caseCounter   int
-	labelCases    map[string]int
+	labelCases    map[*types.Label]int
 	output        []byte
 	delayedOutput []byte
 	analyzeStack  []ast.Node
@@ -149,8 +150,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		flowDatas:   map[string]*flowData{"": &flowData{}},
 		flattened:   make(map[ast.Node]bool),
 		blocking:    make(map[ast.Node]bool),
+		gotoLabel:   make(map[*types.Label]bool),
 		caseCounter: 1,
-		labelCases:  make(map[string]int),
+		labelCases:  make(map[*types.Label]int),
 		localCalls:  make(map[*types.Func][][]ast.Node),
 	}
 	for name := range reservedKeywords {
@@ -624,8 +626,9 @@ func (c *pkgContext) analyzeFunction(sig *types.Signature, body *ast.BlockStmt) 
 		flowDatas:   map[string]*flowData{"": &flowData{}},
 		flattened:   make(map[ast.Node]bool),
 		blocking:    make(map[ast.Node]bool),
+		gotoLabel:   make(map[*types.Label]bool),
 		caseCounter: 1,
-		labelCases:  make(map[string]int),
+		labelCases:  make(map[*types.Label]int),
 		localCalls:  make(map[*types.Func][][]ast.Node),
 	}
 	if body != nil {
@@ -647,10 +650,7 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 			for _, n2 := range c.analyzeStack {
 				c.flattened[n2] = true
 			}
-			if _, ok := c.labelCases[n.Label.String()]; !ok {
-				c.labelCases[n.Label.String()] = c.caseCounter
-				c.caseCounter++
-			}
+			c.gotoLabel[c.p.info.Uses[n.Label].(*types.Label)] = true
 		}
 	case *ast.CallExpr:
 		lookForComment := func() {

@@ -260,7 +260,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			data.postStmt()
 			c.PrintCond(data.beginCase == 0, fmt.Sprintf("continue%s;", normalLabel), fmt.Sprintf("$s = %d; continue%s;", data.beginCase, blockingLabel))
 		case token.GOTO:
-			c.PrintCond(false, "goto "+s.Label.Name, fmt.Sprintf("$s = %d; continue;", c.labelCases[s.Label.Name]))
+			c.PrintCond(false, "goto "+s.Label.Name, fmt.Sprintf("$s = %d; continue;", c.labelCase(c.p.info.Uses[s.Label].(*types.Label))))
 		case token.FALLTHROUGH:
 			// handled in CaseClause
 		default:
@@ -443,8 +443,9 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		}
 
 	case *ast.LabeledStmt:
-		if labelCase, ok := c.labelCases[s.Label.Name]; ok {
-			c.PrintCond(false, s.Label.Name+":", fmt.Sprintf("case %d:", labelCase))
+		label := c.p.info.Defs[s.Label].(*types.Label)
+		if c.gotoLabel[label] {
+			c.PrintCond(false, s.Label.Name+":", fmt.Sprintf("case %d:", c.labelCase(label)))
 		}
 		c.translateStmt(s.Stmt, s.Label.Name)
 
@@ -811,4 +812,14 @@ func hasFallthrough(caseClause *ast.CaseClause) bool {
 	}
 	b, isBranchStmt := caseClause.Body[len(caseClause.Body)-1].(*ast.BranchStmt)
 	return isBranchStmt && b.Tok == token.FALLTHROUGH
+}
+
+func (c *funcContext) labelCase(label *types.Label) int {
+	labelCase, ok := c.labelCases[label]
+	if !ok {
+		labelCase = c.caseCounter
+		c.caseCounter++
+		c.labelCases[label] = labelCase
+	}
+	return labelCase
 }

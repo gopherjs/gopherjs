@@ -17,7 +17,6 @@ import (
 type funcContext struct {
 	p             *pkgContext
 	parent        *funcContext
-	name          string
 	sig           *types.Signature
 	allVars       map[string]int
 	localVars     []string
@@ -198,9 +197,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					}
 				}
 				o := c.p.info.Defs[d.Name].(*types.Func)
-				context := c.p.analyzeFunction(sig, d.Body)
-				context.name = d.Name.Name
-				c.p.funcContexts[o] = context
+				c.p.funcContexts[o] = c.p.analyzeFunction(sig, d.Body)
 				if sig.Recv() == nil {
 					c.objectName(o) // register toplevel name
 				}
@@ -568,7 +565,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 				},
 			}, stmts...)
 		}
-		params, body := context.translateFunction(fun.Type, stmts, c)
+		params, body := context.translateFunction(fun.Type, stmts, c, fun.Name.Name)
 		joinedParams = strings.Join(params, ", ")
 		return []byte(fmt.Sprintf("\t%s = function(%s) {\n%s\t};\n", lhs, joinedParams, string(body)))
 	}
@@ -754,7 +751,7 @@ func (c *funcContext) markBlocking(stack []ast.Node) {
 	}
 }
 
-func (c *funcContext) translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcContext) ([]string, []byte) {
+func (c *funcContext) translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcContext, name string) ([]string, []byte) {
 	c.parent = outerContext
 	c.allVars = make(map[string]int, len(outerContext.allVars))
 	for k, v := range outerContext.allVars {
@@ -779,10 +776,10 @@ func (c *funcContext) translateFunction(typ *ast.FuncType, stmts []ast.Stmt, out
 		params = append(params, "$b")
 	}
 
-	return params, c.translateFunctionBody(stmts)
+	return params, c.translateFunctionBody(stmts, name)
 }
 
-func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
+func (c *funcContext) translateFunctionBody(stmts []ast.Stmt, name string) []byte {
 	c.localVars = nil
 	if len(c.flattened) != 0 {
 		c.localVars = append(c.localVars, "$this = this", "$args = arguments")
@@ -809,8 +806,8 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt) []byte {
 		if len(c.blocking) != 0 {
 			c.localVars = append(c.localVars, "$r")
 			f := "$f"
-			if c.name != "" && !c.p.minify {
-				f = "$blocking_" + c.name
+			if name != "" && !c.p.minify {
+				f = "$blocking_" + name
 			}
 			prefix = prefix + fmt.Sprintf(" if($b !== $BLOCKING) { $nonblockingCall(); }; var %s = function() {", f)
 			suffix = fmt.Sprintf(" }; %s.$blocking = true; return %s;", f, f) + suffix

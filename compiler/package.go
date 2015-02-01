@@ -42,7 +42,7 @@ type funcInfo struct {
 type pkgContext struct {
 	pkg           *types.Package
 	info          *types.Info
-	importContext *ImportContext
+	importArchive func(string) (*Archive, error)
 	comments      ast.CommentMap
 	typeNames     []*types.TypeName
 	funcDeclInfos map[*types.Func]*funcInfo
@@ -139,7 +139,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		p: &pkgContext{
 			pkg:           typesPkg,
 			info:          info,
-			importContext: importContext,
+			importArchive: importContext.Import,
 			comments:      make(ast.CommentMap),
 			funcDeclInfos: make(map[*types.Func]*funcInfo),
 			funcLitInfos:  make(map[*ast.FuncLit]*funcInfo),
@@ -704,7 +704,7 @@ func (c *funcInfo) Visit(node ast.Node) ast.Visitor {
 				}
 				if o.Pkg() != c.p.pkg {
 					fullName := o.FullName()
-					archive, err := c.p.importContext.Import(o.Pkg().Path())
+					archive, err := c.p.importArchive(o.Pkg().Path())
 					if err != nil {
 						panic(err)
 					}

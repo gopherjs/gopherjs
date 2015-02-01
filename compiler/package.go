@@ -42,7 +42,7 @@ type funcInfo struct {
 type pkgContext struct {
 	pkg           *types.Package
 	info          *types.Info
-	importArchive func(string) (*Archive, error)
+	isBlocking    func(*types.Func) bool
 	comments      ast.CommentMap
 	typeNames     []*types.TypeName
 	funcDeclInfos map[*types.Func]*funcInfo
@@ -137,9 +137,21 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	c := &funcContext{
 		p: &pkgContext{
-			pkg:           typesPkg,
-			info:          info,
-			importArchive: importContext.Import,
+			pkg:  typesPkg,
+			info: info,
+			isBlocking: func(f *types.Func) bool {
+				archive, err := importContext.Import(f.Pkg().Path())
+				if err != nil {
+					panic(err)
+				}
+				fullName := f.FullName()
+				for _, d := range archive.Declarations {
+					if string(d.FullName) == fullName {
+						return d.Blocking
+					}
+				}
+				panic(fullName)
+			},
 			comments:      make(ast.CommentMap),
 			funcDeclInfos: make(map[*types.Func]*funcInfo),
 			funcLitInfos:  make(map[*ast.FuncLit]*funcInfo),
@@ -703,18 +715,8 @@ func (c *funcInfo) Visit(node ast.Node) ast.Visitor {
 					}
 				}
 				if o.Pkg() != c.p.pkg {
-					fullName := o.FullName()
-					archive, err := c.p.importArchive(o.Pkg().Path())
-					if err != nil {
-						panic(err)
-					}
-					for _, d := range archive.Declarations {
-						if string(d.FullName) == fullName {
-							if d.Blocking {
-								c.markBlocking(c.analyzeStack)
-							}
-							return
-						}
+					if c.p.isBlocking(o) {
+						c.markBlocking(c.analyzeStack)
 					}
 					return
 				}

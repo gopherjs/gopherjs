@@ -22,16 +22,21 @@ type funcContext struct {
 	localVars     []string
 	resultNames   []ast.Expr
 	flowDatas     map[string]*flowData
-	hasDefer      bool
-	flattened     map[ast.Node]bool
-	blocking      map[ast.Node]bool
-	gotoLabel     map[*types.Label]bool
 	caseCounter   int
 	labelCases    map[*types.Label]int
 	output        []byte
 	delayedOutput []byte
-	analyzeStack  []ast.Node
-	localCalls    map[*types.Func][][]ast.Node
+	*funcInfo
+}
+
+type funcInfo struct {
+	p            *pkgContext
+	analyzeStack []ast.Node
+	hasDefer     bool
+	flattened    map[ast.Node]bool
+	blocking     map[ast.Node]bool
+	gotoLabel    map[*types.Label]bool
+	localCalls   map[*types.Func][][]ast.Node
 }
 
 type pkgContext struct {
@@ -147,13 +152,16 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[string]*flowData{"": &flowData{}},
-		flattened:   make(map[ast.Node]bool),
-		blocking:    make(map[ast.Node]bool),
-		gotoLabel:   make(map[*types.Label]bool),
 		caseCounter: 1,
 		labelCases:  make(map[*types.Label]int),
-		localCalls:  make(map[*types.Func][][]ast.Node),
+		funcInfo: &funcInfo{
+			flattened:  make(map[ast.Node]bool),
+			blocking:   make(map[ast.Node]bool),
+			gotoLabel:  make(map[*types.Label]bool),
+			localCalls: make(map[*types.Func][][]ast.Node),
+		},
 	}
+	c.funcInfo.p = c.p
 	for name := range reservedKeywords {
 		c.allVars[name] = 1
 	}
@@ -621,12 +629,15 @@ func (c *pkgContext) analyzeFunction(sig *types.Signature, body *ast.BlockStmt) 
 		p:           c,
 		sig:         sig,
 		flowDatas:   map[string]*flowData{"": &flowData{}},
-		flattened:   make(map[ast.Node]bool),
-		blocking:    make(map[ast.Node]bool),
-		gotoLabel:   make(map[*types.Label]bool),
 		caseCounter: 1,
 		labelCases:  make(map[*types.Label]int),
-		localCalls:  make(map[*types.Func][][]ast.Node),
+		funcInfo: &funcInfo{
+			p:          c,
+			flattened:  make(map[ast.Node]bool),
+			blocking:   make(map[ast.Node]bool),
+			gotoLabel:  make(map[*types.Label]bool),
+			localCalls: make(map[*types.Func][][]ast.Node),
+		},
 	}
 	if body != nil {
 		ast.Walk(newFuncContext, body)
@@ -634,7 +645,7 @@ func (c *pkgContext) analyzeFunction(sig *types.Signature, body *ast.BlockStmt) 
 	return newFuncContext
 }
 
-func (c *funcContext) Visit(node ast.Node) ast.Visitor {
+func (c *funcInfo) Visit(node ast.Node) ast.Visitor {
 	if node == nil {
 		c.analyzeStack = c.analyzeStack[:len(c.analyzeStack)-1]
 		return nil
@@ -744,7 +755,7 @@ func (c *funcContext) Visit(node ast.Node) ast.Visitor {
 	return c
 }
 
-func (c *funcContext) markBlocking(stack []ast.Node) {
+func (c *funcInfo) markBlocking(stack []ast.Node) {
 	c.blocking[stack[len(stack)-1]] = true
 	for _, n := range stack {
 		c.flattened[n] = true

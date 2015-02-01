@@ -133,7 +133,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		panic(fullName)
 	}
-	pkgInfo := analysis.AnalyzePkg(files, typesInfo, typesPkg, isBlocking)
+	pkgInfo := analysis.AnalyzePkg(files, fileSet, typesInfo, typesPkg, isBlocking)
 	c := &funcContext{
 		FuncInfo: pkgInfo.InitFuncInfo,
 		p: &pkgContext{
@@ -179,10 +179,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var functions []*ast.FuncDecl
 	var vars []*types.Var
 	for _, file := range files {
-		for k, v := range ast.NewCommentMap(fileSet, file, file.Comments) {
-			c.p.Comments[k] = v
-		}
-
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:

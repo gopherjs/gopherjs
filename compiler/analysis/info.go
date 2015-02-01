@@ -12,21 +12,21 @@ import (
 type Info struct {
 	*types.Info
 	Pkg           *types.Package
-	Comments      ast.CommentMap
 	IsBlocking    func(*types.Func) bool
 	FuncDeclInfos map[*types.Func]*FuncInfo
 	FuncLitInfos  map[*ast.FuncLit]*FuncInfo
 	InitFuncInfo  *FuncInfo
+	comments      ast.CommentMap
 }
 
 type FuncInfo struct {
-	p            *Info
-	analyzeStack []ast.Node
 	HasDefer     bool
 	Flattened    map[ast.Node]bool
 	Blocking     map[ast.Node]bool
 	GotoLabel    map[*types.Label]bool
 	LocalCalls   map[*types.Func][][]ast.Node
+	p            *Info
+	analyzeStack []ast.Node
 }
 
 func NewFuncInfo(p *Info) *FuncInfo {
@@ -39,11 +39,11 @@ func NewFuncInfo(p *Info) *FuncInfo {
 	}
 }
 
-func AnalyzePkg(files []*ast.File, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(*types.Func) bool) *Info {
+func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(*types.Func) bool) *Info {
 	info := &Info{
 		Info:          typesInfo,
 		Pkg:           typesPkg,
-		Comments:      make(ast.CommentMap),
+		comments:      make(ast.CommentMap),
 		IsBlocking:    isBlocking,
 		FuncDeclInfos: make(map[*types.Func]*FuncInfo),
 		FuncLitInfos:  make(map[*ast.FuncLit]*FuncInfo),
@@ -51,6 +51,9 @@ func AnalyzePkg(files []*ast.File, typesInfo *types.Info, typesPkg *types.Packag
 
 	info.InitFuncInfo = NewFuncInfo(info)
 	for _, file := range files {
+		for k, v := range ast.NewCommentMap(fileSet, file, file.Comments) {
+			info.comments[k] = v
+		}
 		ast.Walk(info.InitFuncInfo, file)
 	}
 	for {
@@ -112,7 +115,7 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 		lookForComment := func() {
 			for i := len(c.analyzeStack) - 1; i >= 0; i-- {
 				n2 := c.analyzeStack[i]
-				for _, group := range c.p.Comments[n2] {
+				for _, group := range c.p.comments[n2] {
 					for _, comment := range group.List {
 						if comment.Text == "//gopherjs:blocking" {
 							c.markBlocking(c.analyzeStack)

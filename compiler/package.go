@@ -14,7 +14,23 @@ import (
 	"golang.org/x/tools/go/types"
 )
 
+type pkgContext struct {
+	*analysis.Info
+	typeNames    []*types.TypeName
+	pkgVars      map[string]string
+	objectVars   map[types.Object]string
+	anonTypes    []types.Type
+	anonTypeVars map[string]string
+	escapingVars map[*types.Var]bool
+	indentation  int
+	dependencies map[string]bool
+	minify       bool
+	fileSet      *token.FileSet
+	errList      ErrorList
+}
+
 type funcContext struct {
+	*analysis.FuncInfo
 	p             *pkgContext
 	parent        *funcContext
 	sig           *types.Signature
@@ -26,37 +42,6 @@ type funcContext struct {
 	labelCases    map[*types.Label]int
 	output        []byte
 	delayedOutput []byte
-	*funcInfo
-}
-
-type funcInfo struct {
-	p            *pkgContext
-	analyzeStack []ast.Node
-	hasDefer     bool
-	flattened    map[ast.Node]bool
-	blocking     map[ast.Node]bool
-	gotoLabel    map[*types.Label]bool
-	localCalls   map[*types.Func][][]ast.Node
-}
-
-type pkgContext struct {
-	pkg           *types.Package
-	info          *types.Info
-	isBlocking    func(*types.Func) bool
-	comments      ast.CommentMap
-	typeNames     []*types.TypeName
-	funcDeclInfos map[*types.Func]*funcInfo
-	funcLitInfos  map[*ast.FuncLit]*funcInfo
-	pkgVars       map[string]string
-	objectVars    map[types.Object]string
-	anonTypes     []types.Type
-	anonTypeVars  map[string]string
-	escapingVars  map[*types.Var]bool
-	indentation   int
-	dependencies  map[string]bool
-	minify        bool
-	fileSet       *token.FileSet
-	errList       ErrorList
 }
 
 type flowData struct {
@@ -78,7 +63,7 @@ func NewImportContext(importFunc func(string) (*Archive, error)) *ImportContext 
 }
 
 func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {
-	info := &types.Info{
+	typesInfo := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),
 		Uses:       make(map[*ast.Ident]types.Object),
@@ -109,7 +94,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			previousErr = err
 		},
 	}
-	typesPkg, err := config.Check(importPath, fileSet, files, info)
+	typesPkg, err := config.Check(importPath, fileSet, files, typesInfo)
 	if importError != nil {
 		return nil, importError
 	}
@@ -135,54 +120,40 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		return nil, err
 	}
 
+	isBlocking := func(f *types.Func) bool {
+		archive, err := importContext.Import(f.Pkg().Path())
+		if err != nil {
+			panic(err)
+		}
+		fullName := f.FullName()
+		for _, d := range archive.Declarations {
+			if string(d.FullName) == fullName {
+				return d.Blocking
+			}
+		}
+		panic(fullName)
+	}
+	pkgInfo := analysis.AnalyzePkg(files, typesInfo, typesPkg, isBlocking)
 	c := &funcContext{
+		FuncInfo: pkgInfo.InitFuncInfo,
 		p: &pkgContext{
-			pkg:  typesPkg,
-			info: info,
-			isBlocking: func(f *types.Func) bool {
-				archive, err := importContext.Import(f.Pkg().Path())
-				if err != nil {
-					panic(err)
-				}
-				fullName := f.FullName()
-				for _, d := range archive.Declarations {
-					if string(d.FullName) == fullName {
-						return d.Blocking
-					}
-				}
-				panic(fullName)
-			},
-			comments:      make(ast.CommentMap),
-			funcDeclInfos: make(map[*types.Func]*funcInfo),
-			funcLitInfos:  make(map[*ast.FuncLit]*funcInfo),
-			pkgVars:       make(map[string]string),
-			objectVars:    make(map[types.Object]string),
-			anonTypeVars:  make(map[string]string),
-			escapingVars:  make(map[*types.Var]bool),
-			indentation:   1,
-			dependencies:  make(map[string]bool),
-			minify:        minify,
-			fileSet:       fileSet,
+			Info:         pkgInfo,
+			pkgVars:      make(map[string]string),
+			objectVars:   make(map[types.Object]string),
+			anonTypeVars: make(map[string]string),
+			escapingVars: make(map[*types.Var]bool),
+			indentation:  1,
+			dependencies: make(map[string]bool),
+			minify:       minify,
+			fileSet:      fileSet,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[string]*flowData{"": &flowData{}},
 		caseCounter: 1,
 		labelCases:  make(map[*types.Label]int),
-		funcInfo: &funcInfo{
-			flattened:  make(map[ast.Node]bool),
-			blocking:   make(map[ast.Node]bool),
-			gotoLabel:  make(map[*types.Label]bool),
-			localCalls: make(map[*types.Func][][]ast.Node),
-		},
 	}
-	c.funcInfo.p = c.p
 	for name := range reservedKeywords {
 		c.allVars[name] = 1
-	}
-
-	// analysis
-	for _, file := range files {
-		ast.Walk(c, file)
 	}
 
 	// imports
@@ -196,8 +167,8 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	for _, impPath := range importedPaths {
 		id := c.newIdent(fmt.Sprintf(`%s.$init`, c.p.pkgVars[impPath]), types.NewSignature(nil, nil, nil, nil, false))
 		call := &ast.CallExpr{Fun: id}
-		c.blocking[call] = true
-		c.flattened[call] = true
+		c.Blocking[call] = true
+		c.Flattened[call] = true
 		importDecls = append(importDecls, &Decl{
 			Vars:     []string{c.p.pkgVars[impPath]},
 			DeclCode: []byte(fmt.Sprintf("\t%s = $packages[\"%s\"];\n", c.p.pkgVars[impPath], impPath)),
@@ -209,13 +180,13 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var vars []*types.Var
 	for _, file := range files {
 		for k, v := range ast.NewCommentMap(fileSet, file, file.Comments) {
-			c.p.comments[k] = v
+			c.p.Comments[k] = v
 		}
 
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
-				sig := c.p.info.Defs[d.Name].(*types.Func).Type().(*types.Signature)
+				sig := c.p.Defs[d.Name].(*types.Func).Type().(*types.Signature)
 				var recvType types.Type
 				if sig.Recv() != nil {
 					recvType = sig.Recv().Type()
@@ -224,7 +195,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					}
 				}
 				if sig.Recv() == nil {
-					c.objectName(c.p.info.Defs[d.Name].(*types.Func)) // register toplevel name
+					c.objectName(c.p.Defs[d.Name].(*types.Func)) // register toplevel name
 				}
 				if !isBlank(d.Name) {
 					functions = append(functions, d)
@@ -233,7 +204,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				switch d.Tok {
 				case token.TYPE:
 					for _, spec := range d.Specs {
-						o := c.p.info.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
+						o := c.p.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
 						c.p.typeNames = append(c.p.typeNames, o)
 						c.objectName(o) // register toplevel name
 					}
@@ -241,7 +212,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					for _, spec := range d.Specs {
 						for _, name := range spec.(*ast.ValueSpec).Names {
 							if !isBlank(name) {
-								o := c.p.info.Defs[name].(*types.Var)
+								o := c.p.Defs[name].(*types.Var)
 								vars = append(vars, o)
 								c.objectName(o) // register toplevel name
 							}
@@ -249,33 +220,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					}
 				case token.CONST:
 					// skip, constants are inlined
-				}
-			}
-		}
-	}
-
-	for {
-		done := true
-		for _, info := range c.p.funcDeclInfos {
-			for obj, calls := range info.localCalls {
-				if len(c.p.funcDeclInfos[obj].blocking) != 0 {
-					for _, call := range calls {
-						info.markBlocking(call)
-					}
-					delete(info.localCalls, obj)
-					done = false
-				}
-			}
-		}
-		if done {
-			break
-		}
-	}
-	for _, info := range c.p.funcLitInfos {
-		for obj, calls := range info.localCalls {
-			if len(c.p.funcDeclInfos[obj].blocking) != 0 {
-				for _, call := range calls {
-					info.markBlocking(call)
 				}
 			}
 		}
@@ -295,7 +239,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	// variables
 	var varDecls []*Decl
 	varsWithInit := make(map[*types.Var]bool)
-	for _, init := range c.p.info.InitOrder {
+	for _, init := range c.p.InitOrder {
 		for _, o := range init.Lhs {
 			varsWithInit[o] = true
 		}
@@ -313,11 +257,11 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		d.DceFilters = []string{qualifiedName(o)}
 		varDecls = append(varDecls, &d)
 	}
-	for _, init := range c.p.info.InitOrder {
+	for _, init := range c.p.InitOrder {
 		lhs := make([]ast.Expr, len(init.Lhs))
 		for i, o := range init.Lhs {
 			ident := ast.NewIdent(o.Name())
-			c.p.info.Defs[ident] = o
+			c.p.Defs[ident] = o
 			lhs[i] = c.setType(ident, o.Type())
 			varsWithInit[o] = true
 		}
@@ -334,7 +278,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			d.Vars = append(d.Vars, c.localVars...)
 		})
 		if len(init.Lhs) == 1 {
-			if !analysis.HasSideEffect(init.Rhs, c.p.info) {
+			if !analysis.HasSideEffect(init.Rhs, c.p.Info) {
 				d.DceFilters = []string{qualifiedName(init.Lhs[0])}
 			}
 		}
@@ -345,11 +289,11 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var funcDecls []*Decl
 	var mainFunc *types.Func
 	for _, fun := range functions {
-		o := c.p.info.Defs[fun.Name].(*types.Func)
-		info := c.p.funcDeclInfos[o]
+		o := c.p.Defs[fun.Name].(*types.Func)
+		funcInfo := c.p.FuncDeclInfos[o]
 		d := Decl{
 			FullName: o.FullName(),
-			Blocking: len(info.blocking) != 0,
+			Blocking: len(funcInfo.Blocking) != 0,
 		}
 		if fun.Recv == nil {
 			d.Vars = []string{c.objectName(o)}
@@ -361,10 +305,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			case "init":
 				d.InitCode = c.CatchOutput(1, func() {
 					id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
-					c.p.info.Uses[id] = o
+					c.p.Uses[id] = o
 					call := &ast.CallExpr{Fun: id}
-					if len(c.p.funcDeclInfos[o].blocking) != 0 {
-						c.blocking[call] = true
+					if len(c.p.FuncDeclInfos[o].Blocking) != 0 {
+						c.Blocking[call] = true
 					}
 					c.translateStmt(&ast.ExprStmt{X: call}, "")
 				})
@@ -385,7 +329,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 
 		d.DceDeps = collectDependencies(func() {
-			d.DeclCode = c.translateToplevelFunction(fun, info)
+			d.DeclCode = c.translateToplevelFunction(fun, funcInfo)
 		})
 		funcDecls = append(funcDecls, &d)
 	}
@@ -394,10 +338,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			return nil, fmt.Errorf("missing main function")
 		}
 		id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
-		c.p.info.Uses[id] = mainFunc
+		c.p.Uses[id] = mainFunc
 		call := &ast.CallExpr{Fun: id}
-		if len(c.p.funcDeclInfos[mainFunc].blocking) != 0 {
-			c.blocking[call] = true
+		if len(c.p.FuncDeclInfos[mainFunc].Blocking) != 0 {
+			c.Blocking[call] = true
 		}
 		funcDecls = append(funcDecls, &Decl{
 			InitCode: c.CatchOutput(1, func() { c.translateStmt(&ast.ExprStmt{X: call}, "") }),
@@ -416,7 +360,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			d.DeclCode = c.CatchOutput(0, func() {
 				typeName := c.objectName(o)
 				lhs := typeName
-				if o.Parent() == c.p.pkg.Scope() {
+				if o.Parent() == c.p.Pkg.Scope() {
 					lhs += " = $pkg." + o.Name()
 				}
 				size := int64(0)
@@ -564,8 +508,8 @@ func (c *funcContext) initArgs(ty types.Type) string {
 	}
 }
 
-func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *funcInfo) []byte {
-	o := c.p.info.Defs[fun.Name].(*types.Func)
+func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysis.FuncInfo) []byte {
+	o := c.p.Defs[fun.Name].(*types.Func)
 	sig := o.Type().(*types.Signature)
 	var recv *ast.Ident
 	if fun.Recv != nil && fun.Recv.List[0].Names != nil {
@@ -581,7 +525,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *funcInf
 		stmts := fun.Body.List
 		for _, p := range fun.Type.Params.List {
 			for _, n := range p.Names {
-				switch c.p.info.Defs[n].Type().Underlying().(type) {
+				switch c.p.Defs[n].Type().Underlying().(type) {
 				case *types.Array, *types.Struct:
 					stmts = append([]ast.Stmt{
 						&ast.AssignStmt{
@@ -653,145 +597,17 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *funcInf
 	return code.Bytes()
 }
 
-func (c *pkgContext) newFuncInfo() *funcInfo {
-	return &funcInfo{
-		p:          c,
-		flattened:  make(map[ast.Node]bool),
-		blocking:   make(map[ast.Node]bool),
-		gotoLabel:  make(map[*types.Label]bool),
-		localCalls: make(map[*types.Func][][]ast.Node),
-	}
-}
-
-func (c *funcInfo) Visit(node ast.Node) ast.Visitor {
-	if node == nil {
-		if len(c.analyzeStack) != 0 {
-			c.analyzeStack = c.analyzeStack[:len(c.analyzeStack)-1]
-		}
-		return nil
-	}
-	c.analyzeStack = append(c.analyzeStack, node)
-
-	switch n := node.(type) {
-	case *ast.FuncDecl:
-		newInfo := c.p.newFuncInfo()
-		c.p.funcDeclInfos[c.p.info.Defs[n.Name].(*types.Func)] = newInfo
-		return newInfo
-	case *ast.FuncLit:
-		newInfo := c.p.newFuncInfo()
-		c.p.funcLitInfos[n] = newInfo
-		return newInfo
-	case *ast.BranchStmt:
-		if n.Tok == token.GOTO {
-			for _, n2 := range c.analyzeStack {
-				c.flattened[n2] = true
-			}
-			c.gotoLabel[c.p.info.Uses[n.Label].(*types.Label)] = true
-		}
-	case *ast.CallExpr:
-		lookForComment := func() {
-			for i := len(c.analyzeStack) - 1; i >= 0; i-- {
-				n2 := c.analyzeStack[i]
-				for _, group := range c.p.comments[n2] {
-					for _, comment := range group.List {
-						if comment.Text == "//gopherjs:blocking" {
-							c.markBlocking(c.analyzeStack)
-							return
-						}
-					}
-				}
-				if _, ok := n2.(ast.Stmt); ok {
-					break
-				}
-			}
-		}
-		callTo := func(obj types.Object) {
-			switch o := obj.(type) {
-			case *types.Func:
-				if recv := o.Type().(*types.Signature).Recv(); recv != nil {
-					if _, ok := recv.Type().Underlying().(*types.Interface); ok {
-						lookForComment()
-						return
-					}
-				}
-				if o.Pkg() != c.p.pkg {
-					if c.p.isBlocking(o) {
-						c.markBlocking(c.analyzeStack)
-					}
-					return
-				}
-				stack := make([]ast.Node, len(c.analyzeStack))
-				copy(stack, c.analyzeStack)
-				c.localCalls[o] = append(c.localCalls[o], stack)
-			case *types.Var:
-				lookForComment()
-			}
-		}
-		switch f := removeParens(n.Fun).(type) {
-		case *ast.Ident:
-			callTo(c.p.info.Uses[f])
-		case *ast.SelectorExpr:
-			if sel := c.p.info.Selections[f]; sel != nil && isJsObject(sel.Recv()) {
-				break
-			}
-			callTo(c.p.info.Uses[f.Sel])
-		}
-	case *ast.SendStmt:
-		c.markBlocking(c.analyzeStack)
-	case *ast.UnaryExpr:
-		if n.Op == token.ARROW {
-			c.markBlocking(c.analyzeStack)
-		}
-	case *ast.RangeStmt:
-		if _, ok := c.p.info.Types[n.X].Type.Underlying().(*types.Chan); ok {
-			c.markBlocking(c.analyzeStack)
-		}
-	case *ast.SelectStmt:
-		for _, s := range n.Body.List {
-			if s.(*ast.CommClause).Comm == nil { // default clause
-				return c
-			}
-		}
-		c.markBlocking(c.analyzeStack)
-	case *ast.CommClause:
-		for _, s := range n.Body {
-			ast.Walk(c, s)
-		}
-		return nil
-	case *ast.GoStmt:
-		ast.Walk(c, n.Call.Fun)
-		for _, arg := range n.Call.Args {
-			ast.Walk(c, arg)
-		}
-		return nil
-	case *ast.DeferStmt:
-		c.hasDefer = true
-		if funcLit, ok := n.Call.Fun.(*ast.FuncLit); ok {
-			ast.Walk(c, funcLit.Body)
-		}
-	}
-	return c
-}
-
-func (c *funcInfo) markBlocking(stack []ast.Node) {
-	c.blocking[stack[len(stack)-1]] = true
-	for _, n := range stack {
-		c.flattened[n] = true
-	}
-}
-
-func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcContext, sig *types.Signature, info *funcInfo, name string) ([]string, []byte) {
+func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcContext, sig *types.Signature, info *analysis.FuncInfo, name string) ([]string, []byte) {
 	c := &funcContext{
-		p:           info.p,
+		FuncInfo:    info,
+		p:           outerContext.p,
+		parent:      outerContext,
 		sig:         sig,
+		allVars:     make(map[string]int, len(outerContext.allVars)),
 		flowDatas:   map[string]*flowData{"": &flowData{}},
 		caseCounter: 1,
 		labelCases:  make(map[*types.Label]int),
-		funcInfo:    info,
 	}
-
-	c.parent = outerContext
-	c.allVars = make(map[string]int, len(outerContext.allVars))
 	for k, v := range outerContext.allVars {
 		c.allVars[k] = v
 	}
@@ -807,20 +623,15 @@ func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcCo
 				params = append(params, c.newVariable("param"))
 				continue
 			}
-			params = append(params, c.objectName(c.p.info.Defs[ident]))
+			params = append(params, c.objectName(c.p.Defs[ident]))
 		}
 	}
-	if len(c.blocking) != 0 {
+	if len(c.Blocking) != 0 {
 		params = append(params, "$b")
 	}
 
-	return params, c.translateFunctionBody(stmts, name)
-}
-
-func (c *funcContext) translateFunctionBody(stmts []ast.Stmt, name string) []byte {
-	c.localVars = nil
-	if len(c.flattened) != 0 {
-		c.localVars = append(c.localVars, "$this = this", "$args = arguments")
+	if len(c.Flattened) != 0 {
+		c.localVars = []string{"$this = this", "$args = arguments"}
 	}
 
 	body := c.CatchOutput(1, func() {
@@ -834,14 +645,14 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt, name string) []byt
 				}
 				c.p.objectVars[result] = c.newVariableWithLevel(name, false, c.zeroValue(result.Type()))
 				id := ast.NewIdent(name)
-				c.p.info.Uses[id] = result
+				c.p.Uses[id] = result
 				c.resultNames[i] = c.setType(id, result.Type())
 			}
 		}
 
 		var prefix, suffix string
 
-		if len(c.blocking) != 0 {
+		if len(c.Blocking) != 0 {
 			c.localVars = append(c.localVars, "$r")
 			f := "$f"
 			if name != "" && !c.p.minify {
@@ -851,7 +662,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt, name string) []byt
 			suffix = fmt.Sprintf(" }; %s.$blocking = true; return %s;", f, f) + suffix
 		}
 
-		if c.hasDefer {
+		if c.HasDefer {
 			c.localVars = append(c.localVars, "$deferred = []", "$err = null")
 			prefix = prefix + " try { $deferFrames.push($deferred);"
 			deferSuffix := " } catch(err) { $err = err;"
@@ -870,7 +681,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt, name string) []byt
 				}
 			}
 			deferSuffix += " } finally { $deferFrames.pop();"
-			if len(c.blocking) != 0 {
+			if len(c.Blocking) != 0 {
 				deferSuffix += " if ($curGoroutine.asleep && !$jumpToDefer) { throw null; } $s = -1;"
 			}
 			deferSuffix += " $callDeferred($deferred, $err);"
@@ -890,7 +701,7 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt, name string) []byt
 			suffix = deferSuffix + suffix
 		}
 
-		if len(c.flattened) != 0 {
+		if len(c.Flattened) != 0 {
 			c.localVars = append(c.localVars, "$s = 0")
 			prefix = prefix + " s: while (true) { switch ($s) { case 0:"
 			suffix = " case -1: } return; }" + suffix
@@ -909,5 +720,6 @@ func (c *funcContext) translateFunctionBody(stmts []ast.Stmt, name string) []byt
 		sort.Strings(c.localVars)
 		body = append([]byte(fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.p.indentation+1), strings.Join(c.localVars, ", "))), body...)
 	}
-	return body
+
+	return params, body
 }

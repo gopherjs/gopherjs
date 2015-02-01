@@ -4,11 +4,13 @@ import (
 	"go/ast"
 	"go/token"
 
+	"github.com/gopherjs/gopherjs/compiler/analysis"
+
 	"golang.org/x/tools/go/exact"
 	"golang.org/x/tools/go/types"
 )
 
-func IncDecStmt(stmt ast.Stmt, info *types.Info) ast.Stmt {
+func IncDecStmt(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 	if s, ok := stmt.(*ast.IncDecStmt); ok {
 		t := info.Types[s.X].Type
 		if iExpr, isIExpr := s.X.(*ast.IndexExpr); isIExpr {

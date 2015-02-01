@@ -4,10 +4,10 @@ import (
 	"go/ast"
 	"go/token"
 
-	"golang.org/x/tools/go/types"
+	"github.com/gopherjs/gopherjs/compiler/analysis"
 )
 
-func Assign(stmt ast.Stmt, info *types.Info, pkg *types.Package) ast.Stmt {
+func Assign(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 	if s, ok := stmt.(*ast.AssignStmt); ok && s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
 		var op token.Token
 		switch s.Tok {
@@ -65,7 +65,7 @@ func Assign(stmt ast.Stmt, info *types.Info, pkg *types.Package) ast.Stmt {
 				return e
 
 			default:
-				tmpVar := newIdent(name, info.Types[e].Type, info, pkg)
+				tmpVar := newIdent(name, info.Types[e].Type, info)
 				list = append(list, &ast.AssignStmt{
 					Lhs: []ast.Expr{tmpVar},
 					Tok: token.DEFINE,

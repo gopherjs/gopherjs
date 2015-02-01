@@ -61,7 +61,7 @@ func (c *funcContext) Delayed(f func()) {
 
 func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis, clone bool) []string {
 	if len(args) == 1 {
-		if tuple, isTuple := c.p.info.Types[args[0]].Type.(*types.Tuple); isTuple {
+		if tuple, isTuple := c.p.Types[args[0]].Type.(*types.Tuple); isTuple {
 			tupleVar := c.newVariable("_tuple")
 			c.Printf("%s = %s;", tupleVar, c.translateExpr(args[0]))
 			args = make([]ast.Expr, tuple.Len())
@@ -231,23 +231,23 @@ func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool, initializ
 func (c *funcContext) newIdent(name string, t types.Type) *ast.Ident {
 	ident := ast.NewIdent(name)
 	c.setType(ident, t)
-	obj := types.NewVar(0, c.p.pkg, name, t)
-	c.p.info.Uses[ident] = obj
+	obj := types.NewVar(0, c.p.Pkg, name, t)
+	c.p.Uses[ident] = obj
 	c.p.objectVars[obj] = name
 	return ident
 }
 
 func (c *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
-	c.p.info.Types[e] = types.TypeAndValue{Type: t}
+	c.p.Types[e] = types.TypeAndValue{Type: t}
 	return e
 }
 
 func (c *funcContext) objectName(o types.Object) string {
-	if o.Pkg() != c.p.pkg || o.Parent() == c.p.pkg.Scope() {
+	if o.Pkg() != c.p.Pkg || o.Parent() == c.p.Pkg.Scope() {
 		c.p.dependencies[qualifiedName(o)] = true
 	}
 
-	if o.Pkg() != c.p.pkg {
+	if o.Pkg() != c.p.Pkg {
 		pkgVar, found := c.p.pkgVars[o.Pkg().Path()]
 		if !found {
 			pkgVar = fmt.Sprintf(`$packages["%s"]`, o.Pkg().Path())
@@ -257,14 +257,14 @@ func (c *funcContext) objectName(o types.Object) string {
 
 	switch o.(type) {
 	case *types.Var, *types.Const:
-		if o.Exported() && o.Parent() == c.p.pkg.Scope() {
+		if o.Exported() && o.Parent() == c.p.Pkg.Scope() {
 			return "$pkg." + o.Name()
 		}
 	}
 
 	name, found := c.p.objectVars[o]
 	if !found {
-		name = c.newVariableWithLevel(o.Name(), o.Parent() == c.p.pkg.Scope(), "")
+		name = c.newVariableWithLevel(o.Name(), o.Parent() == c.p.Pkg.Scope(), "")
 		c.p.objectVars[o] = name
 	}
 
@@ -296,7 +296,7 @@ func (c *funcContext) typeName(ty types.Type) string {
 		name = c.newVariableWithLevel(strings.ToLower(typeKind(ty)[5:])+"Type", true, "")
 		c.p.anonTypeVars[ty.String()] = name
 	}
-	c.p.dependencies[c.p.pkg.Path()+":"+ty.String()] = true
+	c.p.dependencies[c.p.Pkg.Path()+":"+ty.String()] = true
 	return name
 }
 

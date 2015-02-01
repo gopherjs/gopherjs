@@ -7,14 +7,14 @@ import (
 	"golang.org/x/tools/go/types"
 )
 
-func HasSideEffect(n ast.Node, info *Info) bool {
+func HasSideEffect(n ast.Node, info *types.Info) bool {
 	v := hasSideEffectVisitor{info: info}
 	ast.Walk(&v, n)
 	return v.hasSideEffect
 }
 
 type hasSideEffectVisitor struct {
-	info          *Info
+	info          *types.Info
 	hasSideEffect bool
 }
 

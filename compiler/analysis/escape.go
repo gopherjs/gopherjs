@@ -7,7 +7,7 @@ import (
 	"golang.org/x/tools/go/types"
 )
 
-func EscapingObjects(n ast.Node, info *Info) map[*types.Var]bool {
+func EscapingObjects(n ast.Node, info *types.Info) map[*types.Var]bool {
 	v := escapeAnalysis{
 		info:       info,
 		candidates: make(map[types.Object]bool),
@@ -18,7 +18,7 @@ func EscapingObjects(n ast.Node, info *Info) map[*types.Var]bool {
 }
 
 type escapeAnalysis struct {
-	info       *Info
+	info       *types.Info
 	candidates map[types.Object]bool
 	escaping   map[*types.Var]bool
 }

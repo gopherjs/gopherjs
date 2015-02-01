@@ -355,7 +355,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
 			lhs := util.RemoveParens(s.Lhs[0])
 			if isBlank(lhs) {
-				if analysis.HasSideEffect(s.Rhs[0], c.p.Info) {
+				if analysis.HasSideEffect(s.Rhs[0], c.p.Info.Info) {
 					c.Printf("%s;", c.translateExpr(s.Rhs[0]).String())
 				}
 				return
@@ -381,7 +381,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			for i, rhs := range s.Rhs {
 				tmpVars[i] = c.newVariable("_tmp")
 				if isBlank(util.RemoveParens(s.Lhs[i])) {
-					if analysis.HasSideEffect(rhs, c.p.Info) {
+					if analysis.HasSideEffect(rhs, c.p.Info.Info) {
 						c.Printf("%s;", c.translateExpr(rhs).String())
 					}
 					continue
@@ -700,7 +700,7 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 		}
 
 		names := make([]string, 0)
-		for obj := range analysis.EscapingObjects(body, c.p.Info) {
+		for obj := range analysis.EscapingObjects(body, c.p.Info.Info) {
 			names = append(names, c.objectName(obj))
 			c.p.escapingVars[obj] = true
 		}

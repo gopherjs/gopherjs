@@ -278,7 +278,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			d.Vars = append(d.Vars, c.localVars...)
 		})
 		if len(init.Lhs) == 1 {
-			if !analysis.HasSideEffect(init.Rhs, c.p.Info) {
+			if !analysis.HasSideEffect(init.Rhs, c.p.Info.Info) {
 				d.DceFilters = []string{qualifiedName(init.Lhs[0])}
 			}
 		}

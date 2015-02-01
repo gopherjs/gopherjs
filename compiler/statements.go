@@ -9,6 +9,7 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/filter"
+	"github.com/gopherjs/gopherjs/compiler/util"
 
 	"golang.org/x/tools/go/exact"
 	"golang.org/x/tools/go/types"
@@ -311,7 +312,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				return
 			}
 		case *ast.SelectorExpr:
-			isJs = isJsPackage(c.p.Uses[fun.Sel].Pkg())
+			isJs = util.IsJsPackage(c.p.Uses[fun.Sel].Pkg())
 		}
 		if isBuiltin || isJs {
 			args := make([]ast.Expr, len(s.Call.Args))
@@ -352,7 +353,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 
 		switch {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
-			lhs := removeParens(s.Lhs[0])
+			lhs := util.RemoveParens(s.Lhs[0])
 			if isBlank(lhs) {
 				if analysis.HasSideEffect(s.Rhs[0], c.p.Info) {
 					c.Printf("%s;", c.translateExpr(s.Rhs[0]).String())
@@ -367,7 +368,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			out := tupleVar + " = " + c.translateExpr(s.Rhs[0]).String() + ";"
 			tuple := c.p.Types[s.Rhs[0]].Type.(*types.Tuple)
 			for i, lhs := range s.Lhs {
-				lhs = removeParens(lhs)
+				lhs = util.RemoveParens(lhs)
 				if !isBlank(lhs) {
 					lhsType := c.p.Types[s.Lhs[i]].Type
 					out += " " + c.translateAssignOfExpr(lhs, c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), lhsType, s.Tok == token.DEFINE)
@@ -379,7 +380,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 			var parts []string
 			for i, rhs := range s.Rhs {
 				tmpVars[i] = c.newVariable("_tmp")
-				if isBlank(removeParens(s.Lhs[i])) {
+				if isBlank(util.RemoveParens(s.Lhs[i])) {
 					if analysis.HasSideEffect(rhs, c.p.Info) {
 						c.Printf("%s;", c.translateExpr(rhs).String())
 					}
@@ -389,7 +390,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				parts = append(parts, c.translateAssignOfExpr(c.newIdent(tmpVars[i], c.p.Types[s.Lhs[i]].Type), rhs, lhsType, true))
 			}
 			for i, lhs := range s.Lhs {
-				lhs = removeParens(lhs)
+				lhs = util.RemoveParens(lhs)
 				if !isBlank(lhs) {
 					parts = append(parts, c.translateAssign(lhs, tmpVars[i], c.p.Types[lhs].Type, s.Tok == token.DEFINE))
 				}
@@ -473,9 +474,9 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label string) {
 				channels = append(channels, "[]")
 				hasDefault = true
 			case *ast.ExprStmt:
-				channels = append(channels, c.formatExpr("[%e]", removeParens(comm.X).(*ast.UnaryExpr).X).String())
+				channels = append(channels, c.formatExpr("[%e]", util.RemoveParens(comm.X).(*ast.UnaryExpr).X).String())
 			case *ast.AssignStmt:
-				channels = append(channels, c.formatExpr("[%e]", removeParens(comm.Rhs[0]).(*ast.UnaryExpr).X).String())
+				channels = append(channels, c.formatExpr("[%e]", util.RemoveParens(comm.Rhs[0]).(*ast.UnaryExpr).X).String())
 			case *ast.SendStmt:
 				channels = append(channels, c.formatExpr("[%e, %e]", comm.Chan, comm.Value).String())
 			default:
@@ -731,7 +732,7 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, typ types.Type, define bool) string {
 	if l, ok := lhs.(*ast.IndexExpr); ok {
 		if t, ok := c.p.Types[l.X].Type.Underlying().(*types.Map); ok {
-			if isJsObject(c.p.Types[l.Index].Type) {
+			if util.IsJsObject(c.p.Types[l.Index].Type) {
 				c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: l.Index.Pos(), Msg: "cannot use js.Object as map key"})
 			}
 			keyVar := c.newVariable("_key")
@@ -746,7 +747,7 @@ func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, typ types.Type, d
 }
 
 func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, define bool) string {
-	lhs = removeParens(lhs)
+	lhs = util.RemoveParens(lhs)
 	if isBlank(lhs) {
 		panic("translateAssign with blank lhs")
 	}

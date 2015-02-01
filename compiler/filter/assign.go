@@ -5,6 +5,7 @@ import (
 	"go/token"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/util"
 )
 
 func Assign(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
@@ -41,9 +42,9 @@ func Assign(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 
 		var viaTmpVars func(expr ast.Expr, name string) ast.Expr
 		viaTmpVars = func(expr ast.Expr, name string) ast.Expr {
-			switch e := removeParens(expr).(type) {
+			switch e := util.RemoveParens(expr).(type) {
 			case *ast.IndexExpr:
-				return setType(info, info.Types[e].Type, &ast.IndexExpr{
+				return util.SetType(info.Info, info.Types[e].Type, &ast.IndexExpr{
 					X:     viaTmpVars(e.X, "_slice"),
 					Index: viaTmpVars(e.Index, "_index"),
 				})
@@ -54,10 +55,10 @@ func Assign(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 					Sel: e.Sel,
 				}
 				info.Selections[newSel] = info.Selections[e]
-				return setType(info, info.Types[e].Type, newSel)
+				return util.SetType(info.Info, info.Types[e].Type, newSel)
 
 			case *ast.StarExpr:
-				return setType(info, info.Types[e].Type, &ast.StarExpr{
+				return util.SetType(info.Info, info.Types[e].Type, &ast.StarExpr{
 					X: viaTmpVars(e.X, "_ptr"),
 				})
 
@@ -65,7 +66,7 @@ func Assign(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 				return e
 
 			default:
-				tmpVar := newIdent(name, info.Types[e].Type, info)
+				tmpVar := util.NewIdent(name, info.Types[e].Type, info.Info, info.Pkg)
 				list = append(list, &ast.AssignStmt{
 					Lhs: []ast.Expr{tmpVar},
 					Tok: token.DEFINE,
@@ -82,10 +83,10 @@ func Assign(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 			Lhs: []ast.Expr{lhs},
 			Tok: token.ASSIGN,
 			Rhs: []ast.Expr{
-				setType(info, info.Types[s.Lhs[0]].Type, &ast.BinaryExpr{
+				util.SetType(info.Info, info.Types[s.Lhs[0]].Type, &ast.BinaryExpr{
 					X:  lhs,
 					Op: op,
-					Y: setType(info, info.Types[s.Rhs[0]].Type, &ast.ParenExpr{
+					Y: util.SetType(info.Info, info.Types[s.Rhs[0]].Type, &ast.ParenExpr{
 						X: s.Rhs[0],
 					}),
 				}),

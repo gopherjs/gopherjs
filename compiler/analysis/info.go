@@ -4,6 +4,8 @@ import (
 	"go/ast"
 	"go/token"
 
+	"github.com/gopherjs/gopherjs/compiler/util"
+
 	"golang.org/x/tools/go/types"
 )
 
@@ -145,11 +147,11 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 				lookForComment()
 			}
 		}
-		switch f := removeParens(n.Fun).(type) {
+		switch f := util.RemoveParens(n.Fun).(type) {
 		case *ast.Ident:
 			callTo(c.p.Uses[f])
 		case *ast.SelectorExpr:
-			if sel := c.p.Selections[f]; sel != nil && isJsObject(sel.Recv()) {
+			if sel := c.p.Selections[f]; sel != nil && util.IsJsObject(sel.Recv()) {
 				break
 			}
 			callTo(c.p.Uses[f.Sel])

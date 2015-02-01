@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gopherjs/gopherjs/compiler/util"
+
 	"golang.org/x/tools/go/types"
 )
 
@@ -105,7 +107,7 @@ func (c *funcContext) translateSelection(sel *types.Selection, pos token.Pos) ([
 			searchJsObject = func(s *types.Struct) []string {
 				for i := 0; i < s.NumFields(); i++ {
 					ft := s.Field(i).Type()
-					if isJsObject(ft) {
+					if util.IsJsObject(ft) {
 						return []string{fieldName(s, i)}
 					}
 					ft = ft.Underlying()
@@ -159,7 +161,7 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 	case *types.Map:
 		return "false"
 	case *types.Interface:
-		if isJsObject(ty) {
+		if util.IsJsObject(ty) {
 			return "null"
 		}
 		return "$ifaceNil"
@@ -320,7 +322,7 @@ func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
 }
 
 func (c *funcContext) externalize(s string, t types.Type) string {
-	if isJsObject(t) {
+	if util.IsJsObject(t) {
 		return s
 	}
 	switch u := t.Underlying().(type) {
@@ -415,16 +417,6 @@ func isWrapped(ty types.Type) bool {
 	return false
 }
 
-func removeParens(e ast.Expr) ast.Expr {
-	for {
-		p, isParen := e.(*ast.ParenExpr)
-		if !isParen {
-			return e
-		}
-		e = p.X
-	}
-}
-
 func encodeString(s string) string {
 	buffer := bytes.NewBuffer(nil)
 	for _, r := range []byte(s) {
@@ -454,15 +446,6 @@ func encodeString(s string) string {
 		}
 	}
 	return `"` + buffer.String() + `"`
-}
-
-func isJsPackage(pkg *types.Package) bool {
-	return pkg != nil && pkg.Path() == "github.com/gopherjs/gopherjs/js"
-}
-
-func isJsObject(t types.Type) bool {
-	named, isNamed := t.(*types.Named)
-	return isNamed && isJsPackage(named.Obj().Pkg()) && named.Obj().Name() == "Object"
 }
 
 func getJsTag(tag string) string {

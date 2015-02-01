@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gopherjs/gopherjs/compiler/util"
+
 	"golang.org/x/tools/go/exact"
 	"golang.org/x/tools/go/types"
 )
@@ -84,7 +86,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 	}
 
-	if obj != nil && isJsPackage(obj.Pkg()) {
+	if obj != nil && util.IsJsPackage(obj.Pkg()) {
 		switch obj.Name() {
 		case "Global":
 			return c.formatExpr("$global")
@@ -208,7 +210,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				return c.translateExpr(e.X)
 			}
 
-			switch x := removeParens(e.X).(type) {
+			switch x := util.RemoveParens(e.X).(type) {
 			case *ast.CompositeLit:
 				return c.formatExpr("$newDataPointer(%e, %s)", x, c.typeName(c.p.Types[e].Type))
 			case *ast.Ident:
@@ -427,7 +429,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			case *types.Array, *types.Struct:
 				return c.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, c.typeName(t))
 			case *types.Interface:
-				if isJsObject(t) {
+				if util.IsJsObject(t) {
 					return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 				}
 				return c.formatExpr("$interfaceIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
@@ -468,7 +470,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Slice:
 			return c.formatExpr(`((%2f < 0 || %2f >= %1e.$length) ? $throwRuntimeError("index out of range") : %1e.$array[%1e.$offset + %2f])`, e.X, e.Index)
 		case *types.Map:
-			if isJsObject(c.p.Types[e.Index].Type) {
+			if util.IsJsObject(c.p.Types[e.Index].Type) {
 				c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: e.Index.Pos(), Msg: "cannot use js.Object as map key"})
 			}
 			key := c.makeKey(e.Index, t.Key())
@@ -582,7 +584,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if o, ok := obj.(*types.Builtin); ok {
 				return c.translateBuiltin(o.Name(), e.Args, e.Ellipsis.IsValid(), exprType)
 			}
-			if isJsPackage(obj.Pkg()) && obj.Name() == "InternalObject" {
+			if util.IsJsPackage(obj.Pkg()) && obj.Name() == "InternalObject" {
 				return c.translateExpr(e.Args[0])
 			}
 			fun = c.translateExpr(plainFun)
@@ -592,7 +594,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if !ok {
 				// qualified identifier
 				obj := c.p.Uses[f.Sel]
-				if isJsPackage(obj.Pkg()) {
+				if util.IsJsPackage(obj.Pkg()) {
 					switch obj.Name() {
 					case "Debugger":
 						return c.formatExpr("debugger")
@@ -623,7 +625,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			case types.MethodVal:
 				recv := c.makeReceiver(f.X, sel)
 
-				if isJsPackage(sel.Obj().Pkg()) {
+				if util.IsJsPackage(sel.Obj().Pkg()) {
 					globalRef := func(id string) string {
 						if recv.String() == "$global" && id[0] == '$' {
 							return id
@@ -1110,7 +1112,7 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 		return c.translateExpr(expr)
 	}
 
-	if isJsObject(exprType) {
+	if util.IsJsObject(exprType) {
 		return c.formatExpr("new $js.container.ptr(%e)", expr)
 	}
 
@@ -1199,7 +1201,7 @@ func (c *funcContext) fixNumber(value *expression, basic *types.Basic) *expressi
 }
 
 func (c *funcContext) internalize(s *expression, t types.Type) *expression {
-	if isJsObject(t) {
+	if util.IsJsObject(t) {
 		return s
 	}
 	switch u := t.Underlying().(type) {

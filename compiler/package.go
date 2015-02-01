@@ -45,7 +45,8 @@ type pkgContext struct {
 	importContext *ImportContext
 	comments      ast.CommentMap
 	typeNames     []*types.TypeName
-	funcInfos     map[*types.Func]*funcInfo
+	funcDeclInfos map[*types.Func]*funcInfo
+	funcLitInfos  map[*ast.FuncLit]*funcInfo
 	pkgVars       map[string]string
 	objectVars    map[types.Object]string
 	anonTypes     []types.Type
@@ -140,7 +141,8 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			info:          info,
 			importContext: importContext,
 			comments:      make(ast.CommentMap),
-			funcInfos:     make(map[*types.Func]*funcInfo),
+			funcDeclInfos: make(map[*types.Func]*funcInfo),
+			funcLitInfos:  make(map[*ast.FuncLit]*funcInfo),
 			pkgVars:       make(map[string]string),
 			objectVars:    make(map[types.Object]string),
 			anonTypeVars:  make(map[string]string),
@@ -164,6 +166,11 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	c.funcInfo.p = c.p
 	for name := range reservedKeywords {
 		c.allVars[name] = 1
+	}
+
+	// analysis
+	for _, file := range files {
+		ast.Walk(c, file)
 	}
 
 	// imports
@@ -204,10 +211,8 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 						recvType = ptr.Elem()
 					}
 				}
-				o := c.p.info.Defs[d.Name].(*types.Func)
-				c.p.funcInfos[o] = c.p.analyzeFunction(d.Body)
 				if sig.Recv() == nil {
-					c.objectName(o) // register toplevel name
+					c.objectName(c.p.info.Defs[d.Name].(*types.Func)) // register toplevel name
 				}
 				if !isBlank(d.Name) {
 					functions = append(functions, d)
@@ -239,9 +244,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	for {
 		done := true
-		for _, info := range c.p.funcInfos {
+		for _, info := range c.p.funcDeclInfos {
 			for obj, calls := range info.localCalls {
-				if len(c.p.funcInfos[obj].blocking) != 0 {
+				if len(c.p.funcDeclInfos[obj].blocking) != 0 {
 					for _, call := range calls {
 						info.markBlocking(call)
 					}
@@ -252,6 +257,15 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		if done {
 			break
+		}
+	}
+	for _, info := range c.p.funcLitInfos {
+		for obj, calls := range info.localCalls {
+			if len(c.p.funcDeclInfos[obj].blocking) != 0 {
+				for _, call := range calls {
+					info.markBlocking(call)
+				}
+			}
 		}
 	}
 
@@ -299,7 +313,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		d.DceDeps = collectDependencies(func() {
 			c.localVars = nil
 			d.InitCode = c.CatchOutput(1, func() {
-				ast.Walk(c, init.Rhs)
 				c.translateStmt(&ast.AssignStmt{
 					Lhs: lhs,
 					Tok: token.DEFINE,
@@ -321,7 +334,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var mainFunc *types.Func
 	for _, fun := range functions {
 		o := c.p.info.Defs[fun.Name].(*types.Func)
-		info := c.p.funcInfos[o]
+		info := c.p.funcDeclInfos[o]
 		d := Decl{
 			FullName: o.FullName(),
 			Blocking: len(info.blocking) != 0,
@@ -338,7 +351,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
 					c.p.info.Uses[id] = o
 					call := &ast.CallExpr{Fun: id}
-					c.Visit(call)
+					if len(c.p.funcDeclInfos[o].blocking) != 0 {
+						c.blocking[call] = true
+					}
 					c.translateStmt(&ast.ExprStmt{X: call}, "")
 				})
 				d.DceFilters = nil
@@ -369,7 +384,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
 		c.p.info.Uses[id] = mainFunc
 		call := &ast.CallExpr{Fun: id}
-		c.Visit(call)
+		if len(c.p.funcDeclInfos[mainFunc].blocking) != 0 {
+			c.blocking[call] = true
+		}
 		funcDecls = append(funcDecls, &Decl{
 			InitCode: c.CatchOutput(1, func() { c.translateStmt(&ast.ExprStmt{X: call}, "") }),
 		})
@@ -624,28 +641,34 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *funcInf
 	return code.Bytes()
 }
 
-func (c *pkgContext) analyzeFunction(body *ast.BlockStmt) *funcInfo {
-	info := &funcInfo{
+func (c *pkgContext) newFuncInfo() *funcInfo {
+	return &funcInfo{
 		p:          c,
 		flattened:  make(map[ast.Node]bool),
 		blocking:   make(map[ast.Node]bool),
 		gotoLabel:  make(map[*types.Label]bool),
 		localCalls: make(map[*types.Func][][]ast.Node),
 	}
-	if body != nil {
-		ast.Walk(info, body)
-	}
-	return info
 }
 
 func (c *funcInfo) Visit(node ast.Node) ast.Visitor {
 	if node == nil {
-		c.analyzeStack = c.analyzeStack[:len(c.analyzeStack)-1]
+		if len(c.analyzeStack) != 0 {
+			c.analyzeStack = c.analyzeStack[:len(c.analyzeStack)-1]
+		}
 		return nil
 	}
 	c.analyzeStack = append(c.analyzeStack, node)
 
 	switch n := node.(type) {
+	case *ast.FuncDecl:
+		newInfo := c.p.newFuncInfo()
+		c.p.funcDeclInfos[c.p.info.Defs[n.Name].(*types.Func)] = newInfo
+		return newInfo
+	case *ast.FuncLit:
+		newInfo := c.p.newFuncInfo()
+		c.p.funcLitInfos[n] = newInfo
+		return newInfo
 	case *ast.BranchStmt:
 		if n.Tok == token.GOTO {
 			for _, n2 := range c.analyzeStack {
@@ -695,10 +718,6 @@ func (c *funcInfo) Visit(node ast.Node) ast.Visitor {
 					}
 					return
 				}
-				if info, ok := c.p.funcInfos[o]; ok && len(info.blocking) != 0 {
-					c.markBlocking(c.analyzeStack)
-					return
-				}
 				stack := make([]ast.Node, len(c.analyzeStack))
 				copy(stack, c.analyzeStack)
 				c.localCalls[o] = append(c.localCalls[o], stack)
@@ -737,13 +756,17 @@ func (c *funcInfo) Visit(node ast.Node) ast.Visitor {
 			ast.Walk(c, s)
 		}
 		return nil
+	case *ast.GoStmt:
+		ast.Walk(c, n.Call.Fun)
+		for _, arg := range n.Call.Args {
+			ast.Walk(c, arg)
+		}
+		return nil
 	case *ast.DeferStmt:
 		c.hasDefer = true
 		if funcLit, ok := n.Call.Fun.(*ast.FuncLit); ok {
 			ast.Walk(c, funcLit.Body)
 		}
-	case *ast.FuncLit, *ast.GoStmt:
-		return nil
 	}
 	return c
 }

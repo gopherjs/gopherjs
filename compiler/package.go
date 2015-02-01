@@ -45,7 +45,7 @@ type pkgContext struct {
 	importContext *ImportContext
 	comments      ast.CommentMap
 	typeNames     []*types.TypeName
-	funcContexts  map[*types.Func]*funcContext
+	funcInfos     map[*types.Func]*funcInfo
 	pkgVars       map[string]string
 	objectVars    map[types.Object]string
 	anonTypes     []types.Type
@@ -140,7 +140,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			info:          info,
 			importContext: importContext,
 			comments:      make(ast.CommentMap),
-			funcContexts:  make(map[*types.Func]*funcContext),
+			funcInfos:     make(map[*types.Func]*funcInfo),
 			pkgVars:       make(map[string]string),
 			objectVars:    make(map[types.Object]string),
 			anonTypeVars:  make(map[string]string),
@@ -205,7 +205,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					}
 				}
 				o := c.p.info.Defs[d.Name].(*types.Func)
-				c.p.funcContexts[o] = c.p.analyzeFunction(sig, d.Body)
+				c.p.funcInfos[o] = c.p.analyzeFunction(d.Body)
 				if sig.Recv() == nil {
 					c.objectName(o) // register toplevel name
 				}
@@ -239,13 +239,13 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	for {
 		done := true
-		for _, context := range c.p.funcContexts {
-			for obj, calls := range context.localCalls {
-				if len(c.p.funcContexts[obj].blocking) != 0 {
+		for _, info := range c.p.funcInfos {
+			for obj, calls := range info.localCalls {
+				if len(c.p.funcInfos[obj].blocking) != 0 {
 					for _, call := range calls {
-						context.markBlocking(call)
+						info.markBlocking(call)
 					}
-					delete(context.localCalls, obj)
+					delete(info.localCalls, obj)
 					done = false
 				}
 			}
@@ -321,10 +321,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var mainFunc *types.Func
 	for _, fun := range functions {
 		o := c.p.info.Defs[fun.Name].(*types.Func)
-		context := c.p.funcContexts[o]
+		info := c.p.funcInfos[o]
 		d := Decl{
 			FullName: o.FullName(),
-			Blocking: len(context.blocking) != 0,
+			Blocking: len(info.blocking) != 0,
 		}
 		if fun.Recv == nil {
 			d.Vars = []string{c.objectName(o)}
@@ -358,7 +358,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 
 		d.DceDeps = collectDependencies(func() {
-			d.DeclCode = c.translateToplevelFunction(fun, context)
+			d.DeclCode = c.translateToplevelFunction(fun, info)
 		})
 		funcDecls = append(funcDecls, &d)
 	}
@@ -535,7 +535,7 @@ func (c *funcContext) initArgs(ty types.Type) string {
 	}
 }
 
-func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *funcContext) []byte {
+func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *funcInfo) []byte {
 	o := c.p.info.Defs[fun.Name].(*types.Func)
 	sig := o.Type().(*types.Signature)
 	var recv *ast.Ident
@@ -573,7 +573,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 				},
 			}, stmts...)
 		}
-		params, body := context.translateFunction(fun.Type, stmts, c, fun.Name.Name)
+		params, body := translateFunction(fun.Type, stmts, c, sig, info, fun.Name.Name)
 		joinedParams = strings.Join(params, ", ")
 		return []byte(fmt.Sprintf("\t%s = function(%s) {\n%s\t};\n", lhs, joinedParams, string(body)))
 	}
@@ -624,25 +624,18 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, context *func
 	return code.Bytes()
 }
 
-func (c *pkgContext) analyzeFunction(sig *types.Signature, body *ast.BlockStmt) *funcContext {
-	newFuncContext := &funcContext{
-		p:           c,
-		sig:         sig,
-		flowDatas:   map[string]*flowData{"": &flowData{}},
-		caseCounter: 1,
-		labelCases:  make(map[*types.Label]int),
-		funcInfo: &funcInfo{
-			p:          c,
-			flattened:  make(map[ast.Node]bool),
-			blocking:   make(map[ast.Node]bool),
-			gotoLabel:  make(map[*types.Label]bool),
-			localCalls: make(map[*types.Func][][]ast.Node),
-		},
+func (c *pkgContext) analyzeFunction(body *ast.BlockStmt) *funcInfo {
+	info := &funcInfo{
+		p:          c,
+		flattened:  make(map[ast.Node]bool),
+		blocking:   make(map[ast.Node]bool),
+		gotoLabel:  make(map[*types.Label]bool),
+		localCalls: make(map[*types.Func][][]ast.Node),
 	}
 	if body != nil {
-		ast.Walk(newFuncContext, body)
+		ast.Walk(info, body)
 	}
-	return newFuncContext
+	return info
 }
 
 func (c *funcInfo) Visit(node ast.Node) ast.Visitor {
@@ -702,7 +695,7 @@ func (c *funcInfo) Visit(node ast.Node) ast.Visitor {
 					}
 					return
 				}
-				if context, ok := c.p.funcContexts[o]; ok && len(context.blocking) != 0 {
+				if info, ok := c.p.funcInfos[o]; ok && len(info.blocking) != 0 {
 					c.markBlocking(c.analyzeStack)
 					return
 				}
@@ -762,7 +755,16 @@ func (c *funcInfo) markBlocking(stack []ast.Node) {
 	}
 }
 
-func (c *funcContext) translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcContext, name string) ([]string, []byte) {
+func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcContext, sig *types.Signature, info *funcInfo, name string) ([]string, []byte) {
+	c := &funcContext{
+		p:           info.p,
+		sig:         sig,
+		flowDatas:   map[string]*flowData{"": &flowData{}},
+		caseCounter: 1,
+		labelCases:  make(map[*types.Label]int),
+		funcInfo:    info,
+	}
+
 	c.parent = outerContext
 	c.allVars = make(map[string]int, len(outerContext.allVars))
 	for k, v := range outerContext.allVars {

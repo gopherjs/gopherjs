@@ -187,8 +187,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
-		innerContext := c.p.analyzeFunction(exprType.(*types.Signature), e.Body)
-		params, body := innerContext.translateFunction(e.Type, e.Body.List, c, "")
+		info := c.p.analyzeFunction(e.Body)
+		params, body := translateFunction(e.Type, e.Body.List, c, exprType.(*types.Signature), info, "")
 		if len(c.p.escapingVars) != 0 {
 			names := make([]string, 0, len(c.p.escapingVars))
 			for obj := range c.p.escapingVars {

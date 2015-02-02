@@ -4,6 +4,7 @@ package net
 
 import (
 	"runtime"
+	"syscall"
 )
 
 func Listen(net, laddr string) (Listener, error) {
@@ -19,4 +20,8 @@ func probeIPv4Stack() bool {
 
 func probeIPv6Stack() (supportsIPv6, supportsIPv4map bool) {
 	return false, false
+}
+
+func maxListenerBacklog() int {
+	return syscall.SOMAXCONN
 }

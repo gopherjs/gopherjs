@@ -8,6 +8,7 @@ import (
 	"go/scanner"
 	"go/token"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -532,6 +533,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 			}
 			pos := fileSet.Position(originalPos)
 			file := pos.Filename
+
 			switch hasGopathPrefix, prefixLen := hasGopathPrefix(file, s.options.GOPATH); {
 			case hasGopathPrefix:
 				file = filepath.ToSlash(filepath.Join("/gopath", file[prefixLen:]))
@@ -539,6 +541,9 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 				file = filepath.ToSlash(filepath.Join("/goroot", file[len(s.options.GOROOT):]))
 			default:
 				file = filepath.Base(file)
+			}
+			if !strings.HasPrefix(file, "/goroot") && !strings.HasPrefix(file, "/gopath") {
+				log.Printf("warning: can't find %s in gopath (sourcemaps may be inaccurate)", file)
 			}
 			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: pos.Line, OriginalColumn: pos.Column})
 		}
@@ -556,8 +561,8 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) {
 	gopathWorkspaces := filepath.SplitList(gopath)
 	for _, gopathWorkspace := range gopathWorkspaces {
-		if strings.HasPrefix(file, gopathWorkspace) {
-			return true, len(gopathWorkspace)
+		if _, err := os.Stat(filepath.Join(gopathWorkspace, file)); err != nil {
+			return true, len(filepath.Clean(gopathWorkspace))
 		}
 	}
 	return false, 0

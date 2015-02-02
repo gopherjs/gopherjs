@@ -380,29 +380,29 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			})
 			d.MethodListCode = c.CatchOutput(0, func() {
 				if _, isInterface := o.Type().Underlying().(*types.Interface); !isInterface {
-					writeMethodSet := func(t types.Type) {
-						methodSet := types.NewMethodSet(t)
-						if methodSet.Len() == 0 {
-							return
+					named := o.Type().(*types.Named)
+					var methods []string
+					var ptrMethods []string
+					for i := 0; i < named.NumMethods(); i++ {
+						method := named.Method(i)
+						name := method.Name()
+						if reservedKeywords[name] {
+							name += "$"
 						}
-						methods := make([]string, methodSet.Len())
-						for i := range methods {
-							method := methodSet.At(i)
-							pkgPath := ""
-							if !method.Obj().Exported() {
-								pkgPath = method.Obj().Pkg().Path()
-							}
-							t := method.Type().(*types.Signature)
-							name := method.Obj().Name()
-							if reservedKeywords[name] {
-								name += "$"
-							}
-							methods[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", typ: $funcType(%s)}`, name, method.Obj().Name(), pkgPath, c.initArgs(t))
+						pkgPath := ""
+						if !method.Exported() {
+							pkgPath = method.Pkg().Path()
 						}
-						c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
+						t := method.Type().(*types.Signature)
+						entry := fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", typ: $funcType(%s)}`, name, method.Name(), pkgPath, c.initArgs(t))
+						if _, isPtr := t.Recv().Type().(*types.Pointer); isPtr {
+							ptrMethods = append(ptrMethods, entry)
+							continue
+						}
+						methods = append(methods, entry)
 					}
-					writeMethodSet(o.Type())
-					writeMethodSet(types.NewPointer(o.Type()))
+					c.Printf("%s.methods = [%s];", c.typeName(o.Type()), strings.Join(methods, ", "))
+					c.Printf("%s.methods = [%s];", c.typeName(types.NewPointer(o.Type())), strings.Join(ptrMethods, ", "))
 				}
 			})
 			switch t := o.Type().Underlying().(type) {

@@ -28,6 +28,19 @@ var $kindString = 24;
 var $kindStruct = 25;
 var $kindUnsafePointer = 26;
 
+var $methodSynthesizers = [];
+var $addMethodSynthesizer = function(f) {
+  if ($methodSynthesizers === null) {
+    f();
+    return;
+  }
+  $methodSynthesizers.push(f);
+};
+var $synthesizeMethods = function() {
+  $methodSynthesizers.forEach(function(f) { f(); });
+  $methodSynthesizers = null;
+};
+
 var $newType = function(size, kind, string, name, pkg, constructor) {
   var typ;
   switch(kind) {
@@ -225,29 +238,31 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
       typ.ptr.nil = Object.create(constructor.prototype, properties);
       typ.ptr.nil.$val = typ.ptr.nil;
       /* methods for embedded fields */
-      var forwardMethod = function(target, m, f) {
-        if (target.prototype[m.prop] !== undefined) { return; }
-        target.prototype[m.prop] = function() {
-          var v = this.$val[f.prop];
-          if (f.typ === $js.Object) {
-            v = new $js.container.ptr(v);
-          }
-          if (v.$val === undefined) {
-            v = new f.typ(v);
-          }
-          return v[m.prop].apply(v, arguments);
+      $addMethodSynthesizer(function() {
+        var synthesizeMethod = function(target, m, f) {
+          if (target.prototype[m.prop] !== undefined) { return; }
+          target.prototype[m.prop] = function() {
+            var v = this.$val[f.prop];
+            if (f.typ === $js.Object) {
+              v = new $js.container.ptr(v);
+            }
+            if (v.$val === undefined) {
+              v = new f.typ(v);
+            }
+            return v[m.prop].apply(v, arguments);
+          };
         };
-      };
-      fields.forEach(function(f) {
-        if (f.name === "") {
-          f.typ.methods.forEach(function(m) {
-            forwardMethod(typ, m, f);
-            forwardMethod(typ.ptr, m, f);
-          });
-          $ptrType(f.typ).methods.forEach(function(m) {
-            forwardMethod(typ.ptr, m, f);
-          });
-        }
+        fields.forEach(function(f) {
+          if (f.name === "") {
+            $methodSet(f.typ).forEach(function(m) {
+              synthesizeMethod(typ, m, f);
+              synthesizeMethod(typ.ptr, m, f);
+            });
+            $methodSet($ptrType(f.typ)).forEach(function(m) {
+              synthesizeMethod(typ.ptr, m, f);
+            });
+          }
+        });
       });
     };
     break;
@@ -331,9 +346,75 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
   typ.typeName = name;
   typ.pkg = pkg;
   typ.methods = [];
+  typ.methodSetCache = null;
   typ.comparable = true;
-  var rt = null;
   return typ;
+};
+
+var $methodSet = function(typ) {
+  if (typ.methodSetCache !== null) {
+    return typ.methodSetCache;
+  }
+  var base = {};
+
+  var isPtr = (typ.kind === $kindPtr);
+  if (isPtr && typ.elem.kind === $kindInterface) {
+    typ.methodSetCache = [];
+    return [];
+  }
+
+  var current = [{typ: isPtr ? typ.elem : typ, indirect: isPtr}];
+
+  var seen = {};
+
+  while (current.length > 0) {
+    var next = [];
+    var mset = [];
+
+    current.forEach(function(e) {
+      if (seen[e.typ.string]) {
+        return;
+      }
+      seen[e.typ.string] = true;
+
+      if(e.typ.typeName !== "") {
+        mset = mset.concat(e.typ.methods);
+        if (e.indirect) {
+          mset = mset.concat($ptrType(e.typ).methods);
+        }
+      }
+
+      switch (e.typ.kind) {
+      case $kindStruct:
+        e.typ.fields.forEach(function(f) {
+          if (f.name === "") {
+            var fTyp = f.typ;
+            var fIsPtr = (fTyp.kind === $kindPtr);
+            next.push({typ: fIsPtr ? fTyp.elem : fTyp, indirect: e.indirect || fIsPtr});
+          }
+        });
+        break;
+
+      case $kindInterface:
+        mset = mset.concat(e.typ.methods);
+        break;
+      }
+    });
+
+    mset.forEach(function(m) {
+      if (base[m.name] === undefined) {
+        base[m.name] = m;
+      }
+    });
+
+    current = next;
+  }
+
+  typ.methodSetCache = [];
+  Object.keys(base).sort().forEach(function(name) {
+    typ.methodSetCache.push(base[name]);
+  });
+  return typ.methodSetCache;
 };
 
 var $Bool          = $newType( 1, $kindBool,          "bool",           "bool",       "", null);
@@ -354,19 +435,6 @@ var $Complex64     = $newType( 8, $kindComplex64,     "complex64",      "complex
 var $Complex128    = $newType(16, $kindComplex128,    "complex128",     "complex128", "", null);
 var $String        = $newType( 8, $kindString,        "string",         "string",     "", null);
 var $UnsafePointer = $newType( 4, $kindUnsafePointer, "unsafe.Pointer", "Pointer",    "", null);
-
-var $anonTypeInits = [];
-var $addAnonTypeInit = function(f) {
-  if ($anonTypeInits === null) {
-    f();
-    return;
-  }
-  $anonTypeInits.push(f);
-};
-var $initAnonTypes = function() {
-  $anonTypeInits.forEach(function(f) { f(); });
-  $anonTypeInits = null;
-};
 
 var $nativeArray = function(elemKind) {
   switch (elemKind) {
@@ -410,7 +478,7 @@ var $arrayType = function(elem, len) {
   if (typ === undefined) {
     typ = $newType(12, $kindArray, string, "", "", null);
     $arrayTypes[string] = typ;
-    $addAnonTypeInit(function() { typ.init(elem, len); });
+    typ.init(elem, len);
   }
   return typ;
 };
@@ -422,7 +490,7 @@ var $chanType = function(elem, sendOnly, recvOnly) {
   if (typ === undefined) {
     typ = $newType(4, $kindChan, string, "", "", null);
     elem[field] = typ;
-    $addAnonTypeInit(function() { typ.init(elem, sendOnly, recvOnly); });
+    typ.init(elem, sendOnly, recvOnly);
   }
   return typ;
 };
@@ -443,7 +511,7 @@ var $funcType = function(params, results, variadic) {
   if (typ === undefined) {
     typ = $newType(4, $kindFunc, string, "", "", null);
     $funcTypes[string] = typ;
-    $addAnonTypeInit(function() { typ.init(params, results, variadic); });
+    typ.init(params, results, variadic);
   }
   return typ;
 };
@@ -460,7 +528,7 @@ var $interfaceType = function(methods) {
   if (typ === undefined) {
     typ = $newType(8, $kindInterface, string, "", "", null);
     $interfaceTypes[string] = typ;
-    $addAnonTypeInit(function() { typ.init(methods); });
+    typ.init(methods);
   }
   return typ;
 };
@@ -483,7 +551,7 @@ var $mapType = function(key, elem) {
   if (typ === undefined) {
     typ = $newType(4, $kindMap, string, "", "", null);
     $mapTypes[string] = typ;
-    $addAnonTypeInit(function() { typ.init(key, elem); });
+    typ.init(key, elem);
   }
   return typ;
 };
@@ -493,7 +561,7 @@ var $ptrType = function(elem) {
   if (typ === undefined) {
     typ = $newType(4, $kindPtr, "*" + elem.string, "", "", null);
     elem.ptr = typ;
-    $addAnonTypeInit(function() { typ.init(elem); });
+    typ.init(elem);
   }
   return typ;
 };
@@ -510,7 +578,7 @@ var $sliceType = function(elem) {
   if (typ === undefined) {
     typ = $newType(12, $kindSlice, "[]" + elem.string, "", "", null);
     elem.Slice = typ;
-    $addAnonTypeInit(function() { typ.init(elem); });
+    typ.init(elem);
   }
   return typ;
 };
@@ -546,22 +614,7 @@ var $structType = function(fields) {
       }
     });
     $structTypes[string] = typ;
-    $anonTypeInits.push(function() {
-      /* collect methods for anonymous fields */
-      for (var i = 0; i < fields.length; i++) {
-        var f = fields[i];
-        if (f.name === "") {
-          f.typ.methods.forEach(function(m) {
-            typ.methods.push(m);
-            typ.ptr.methods.push(m);
-          });
-          $ptrType(f.typ).methods.forEach(function(m) {
-            typ.ptr.methods.push(m);
-          });
-        }
-      };
-      typ.init(fields);
-    });
+    typ.init(fields);
   }
   return typ;
 };
@@ -577,13 +630,13 @@ var $assertType = function(value, type, returnTuple) {
     ok = type.implementedBy[valueTypeString];
     if (ok === undefined) {
       ok = true;
-      var valueMethods = value.constructor.methods;
-      var typeMethods = type.methods;
-      for (var i = 0; i < typeMethods.length; i++) {
-        var tm = typeMethods[i];
+      var valueMethodSet = $methodSet(value.constructor);
+      var interfaceMethods = type.methods;
+      for (var i = 0; i < interfaceMethods.length; i++) {
+        var tm = interfaceMethods[i];
         var found = false;
-        for (var j = 0; j < valueMethods.length; j++) {
-          var vm = valueMethods[j];
+        for (var j = 0; j < valueMethodSet.length; j++) {
+          var vm = valueMethodSet[j];
           if (vm.name === tm.name && vm.pkg === tm.pkg && vm.typ === tm.typ) {
             found = true;
             break;

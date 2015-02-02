@@ -46,11 +46,11 @@ func reflectType(typ js.Object) *rtype {
 		js.InternalObject(rt).Set("jsType", typ)
 		typ.Set("reflectType", js.InternalObject(rt))
 
-		methods := typ.Get("methods")
-		if typ.Get("typeName").String() != "" || methods.Length() != 0 {
-			reflectMethods := make([]method, methods.Length())
+		methodSet := js.Global.Call("$methodSet", typ)
+		if typ.Get("typeName").String() != "" || methodSet.Length() != 0 {
+			reflectMethods := make([]method, methodSet.Length())
 			for i := range reflectMethods {
-				m := methods.Index(i)
+				m := methodSet.Index(i)
 				t := m.Get("typ")
 				reflectMethods[i] = method{
 					name:    newStringPtr(m.Get("name")),
@@ -510,7 +510,7 @@ func methodReceiver(op string, v Value, i int) (rcvrtype, t *rtype, fn unsafe.Po
 			panic("reflect: " + op + " of unexported method")
 		}
 		t = m.mtyp
-		prop = jsType(v.typ).Get("methods").Index(i).Get("prop").String()
+		prop = js.Global.Call("$methodSet", jsType(v.typ)).Index(i).Get("prop").String()
 	}
 	rcvr := v.object()
 	if isWrapped(v.typ) {
@@ -601,7 +601,7 @@ func (t *uncommonType) Method(i int) (m Method) {
 	}
 	mt := p.typ
 	m.Type = mt
-	prop := js.InternalObject(t).Get("jsType").Get("methods").Index(i).Get("prop").String()
+	prop := js.Global.Call("$methodSet", js.InternalObject(t).Get("jsType")).Index(i).Get("prop").String()
 	fn := func(rcvr js.Object) js.Object {
 		return rcvr.Get(prop).Call("apply", rcvr, js.Arguments[1:])
 	}

@@ -123,7 +123,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 		}
 	}
 
-	if _, err := w.Write([]byte("$initAnonTypes();\n$packages[\"runtime\"].$init()();\n$go($packages[\"" + string(mainPkg.ImportPath) + "\"].$init, [], true);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
+	if _, err := w.Write([]byte("$synthesizeMethods();\n$packages[\"runtime\"].$init()();\n$go($packages[\"" + string(mainPkg.ImportPath) + "\"].$init, [], true);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
 		return err
 	}
 

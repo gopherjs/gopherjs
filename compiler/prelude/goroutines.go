@@ -49,6 +49,9 @@ var $callDeferred = function(deferred, jsErr) {
       if (deferred === null) {
         deferred = $deferFrames[$deferFrames.length - 1 - localSkippedDeferFrames];
         if (deferred === undefined) {
+          if (localPanicValue.Object instanceof Error) {
+            throw localPanicValue.Object;
+          }
           var msg;
           if (localPanicValue.constructor === $String) {
             msg = localPanicValue.$val;
@@ -59,12 +62,7 @@ var $callDeferred = function(deferred, jsErr) {
           } else {
             msg = localPanicValue;
           }
-          var e = new Error(msg);
-          if (localPanicValue.Stack !== undefined) {
-            e.stack = localPanicValue.Stack();
-            e.stack = msg + e.stack.substr(e.stack.indexOf("\n"));
-          }
-          throw e;
+          throw new Error(msg);
         }
       }
       var call = deferred.pop();

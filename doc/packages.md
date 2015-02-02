@@ -148,4 +148,4 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | unicode         | yes                   |                                   |
 | -- utf16        | yes                   |                                   |
 | -- utf8         | yes                   |                                   |
-| unsafe          | (no tests)            |                                   |
+| unsafe          | no                    |                                   |

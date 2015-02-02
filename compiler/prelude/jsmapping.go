@@ -148,7 +148,7 @@ var $externalize = function(v, t) {
       if (t.kind === $kindStruct) {
         for (var i = 0; i < t.fields.length; i++) {
           var f = t.fields[i];
-          var o = searchJsObject(v[f.prop], f.type);
+          var o = searchJsObject(v[f.prop], f.typ);
           if (o !== undefined) {
             return o;
           }
@@ -167,7 +167,7 @@ var $externalize = function(v, t) {
       if (f.pkg !== "") { /* not exported */
         continue;
       }
-      o[f.name] = $externalize(v[f.prop], f.type);
+      o[f.name] = $externalize(v[f.prop], f.typ);
     }
     return o;
   }
@@ -320,7 +320,7 @@ var $internalize = function(v, t, recv) {
       if (t.kind === $kindStruct) {
         for (var i = 0; i < t.fields.length; i++) {
           var f = t.fields[i];
-          var o = searchJsObject(v, f.type);
+          var o = searchJsObject(v, f.typ);
           if (o !== undefined) {
             var n = new t.ptr();
             n[f.prop] = o;

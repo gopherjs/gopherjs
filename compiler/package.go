@@ -397,7 +397,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 							if reservedKeywords[name] {
 								name += "$"
 							}
-							methods[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", type: $funcType(%s)}`, name, method.Obj().Name(), pkgPath, c.initArgs(t))
+							methods[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", typ: $funcType(%s)}`, name, method.Obj().Name(), pkgPath, c.initArgs(t))
 						}
 						c.Printf("%s.methods = [%s];", c.typeName(t), strings.Join(methods, ", "))
 					}
@@ -465,7 +465,7 @@ func (c *funcContext) initArgs(ty types.Type) string {
 			if !method.Exported() {
 				pkgPath = method.Pkg().Path()
 			}
-			methods[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", type: $funcType(%s)}`, method.Name(), method.Name(), pkgPath, c.initArgs(method.Type()))
+			methods[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", typ: $funcType(%s)}`, method.Name(), method.Name(), pkgPath, c.initArgs(method.Type()))
 		}
 		return fmt.Sprintf("[%s]", strings.Join(methods, ", "))
 	case *types.Map:
@@ -496,7 +496,7 @@ func (c *funcContext) initArgs(ty types.Type) string {
 			if !field.Exported() {
 				pkgPath = field.Pkg().Path()
 			}
-			fields[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", type: %s, tag: %s}`, fieldName(t, i), name, pkgPath, c.typeName(field.Type()), encodeString(t.Tag(i)))
+			fields[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", typ: %s, tag: %s}`, fieldName(t, i), name, pkgPath, c.typeName(field.Type()), encodeString(t.Tag(i)))
 		}
 		return fmt.Sprintf("[%s]", strings.Join(fields, ", "))
 	default:

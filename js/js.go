@@ -161,13 +161,13 @@ func MakeWrapper(i interface{}) Object {
 			continue
 		}
 		o.Set(m.Get("name").String(), func(args ...Object) Object {
-			paramTypes := m.Get("type").Get("params")
+			paramTypes := m.Get("typ").Get("params")
 			internalizedArgs := make([]interface{}, paramTypes.Length())
 			for i := range internalizedArgs {
 				internalizedArgs[i] = Global.Call("$internalize", args[i], paramTypes.Index(i))
 			}
 			result := v.Call(m.Get("prop").String(), internalizedArgs...)
-			resultTypes := m.Get("type").Get("results")
+			resultTypes := m.Get("typ").Get("results")
 			switch resultTypes.Length() {
 			case 0:
 				return nil

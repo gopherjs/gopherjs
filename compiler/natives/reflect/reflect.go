@@ -51,7 +51,7 @@ func reflectType(typ js.Object) *rtype {
 			reflectMethods := make([]method, methods.Length())
 			for i := range reflectMethods {
 				m := methods.Index(i)
-				t := m.Get("type")
+				t := m.Get("typ")
 				reflectMethods[i] = method{
 					name:    newStringPtr(m.Get("name")),
 					pkgPath: newStringPtr(m.Get("pkg")),
@@ -110,7 +110,7 @@ func reflectType(typ js.Object) *rtype {
 				imethods[i] = imethod{
 					name:    newStringPtr(m.Get("name")),
 					pkgPath: newStringPtr(m.Get("pkg")),
-					typ:     reflectType(m.Get("type")),
+					typ:     reflectType(m.Get("typ")),
 				}
 			}
 			setKindType(rt, &interfaceType{
@@ -138,7 +138,7 @@ func reflectType(typ js.Object) *rtype {
 				reflectFields[i] = structField{
 					name:    newStringPtr(f.Get("name")),
 					pkgPath: newStringPtr(f.Get("pkg")),
-					typ:     reflectType(f.Get("type")),
+					typ:     reflectType(f.Get("typ")),
 					tag:     newStringPtr(f.Get("tag")),
 					offset:  uintptr(i),
 				}

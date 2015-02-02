@@ -205,7 +205,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
     typ.init = function(fields) {
       typ.fields = fields;
       fields.forEach(function(f) {
-        if (!f.type.comparable) {
+        if (!f.typ.comparable) {
           typ.comparable = false;
         }
       });
@@ -229,22 +229,22 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
         if (target.prototype[m.prop] !== undefined) { return; }
         target.prototype[m.prop] = function() {
           var v = this.$val[f.prop];
-          if (f.type === $js.Object) {
+          if (f.typ === $js.Object) {
             v = new $js.container.ptr(v);
           }
           if (v.$val === undefined) {
-            v = new f.type(v);
+            v = new f.typ(v);
           }
           return v[m.prop].apply(v, arguments);
         };
       };
       fields.forEach(function(f) {
         if (f.name === "") {
-          f.type.methods.forEach(function(m) {
+          f.typ.methods.forEach(function(m) {
             forwardMethod(typ, m, f);
             forwardMethod(typ.ptr, m, f);
           });
-          $ptrType(f.type).methods.forEach(function(m) {
+          $ptrType(f.typ).methods.forEach(function(m) {
             forwardMethod(typ.ptr, m, f);
           });
         }
@@ -453,7 +453,7 @@ var $interfaceType = function(methods) {
   var string = "interface {}";
   if (methods.length !== 0) {
     string = "interface { " + $mapArray(methods, function(m) {
-      return (m.pkg !== "" ? m.pkg + "." : "") + m.name + m.type.string.substr(4);
+      return (m.pkg !== "" ? m.pkg + "." : "") + m.name + m.typ.string.substr(4);
     }).join("; ") + " }";
   }
   var typ = $interfaceTypes[string];
@@ -467,7 +467,7 @@ var $interfaceType = function(methods) {
 var $emptyInterface = $interfaceType([]);
 var $ifaceNil = { $key: function() { return "nil"; } };
 var $error = $newType(8, $kindInterface, "error", "error", "", null);
-$error.init([{prop: "Error", name: "Error", pkg: "", type: $funcType([], [$String], false)}]);
+$error.init([{prop: "Error", name: "Error", pkg: "", typ: $funcType([], [$String], false)}]);
 
 var $Map = function() {};
 (function() {
@@ -530,7 +530,7 @@ var $makeSlice = function(typ, length, capacity) {
 var $structTypes = {};
 var $structType = function(fields) {
   var string = "struct { " + $mapArray(fields, function(f) {
-    return f.name + " " + f.type.string + (f.tag !== "" ? (" \"" + f.tag.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"") : "");
+    return f.name + " " + f.typ.string + (f.tag !== "" ? (" \"" + f.tag.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"") : "");
   }).join("; ") + " }";
   if (fields.length === 0) {
     string = "struct {}";
@@ -542,7 +542,7 @@ var $structType = function(fields) {
       for (var i = 0; i < fields.length; i++) {
         var f = fields[i];
         var arg = arguments[i];
-        this[f.prop] = arg !== undefined ? arg : f.type.zero();
+        this[f.prop] = arg !== undefined ? arg : f.typ.zero();
       }
     });
     $structTypes[string] = typ;
@@ -551,11 +551,11 @@ var $structType = function(fields) {
       for (var i = 0; i < fields.length; i++) {
         var f = fields[i];
         if (f.name === "") {
-          f.type.methods.forEach(function(m) {
+          f.typ.methods.forEach(function(m) {
             typ.methods.push(m);
             typ.ptr.methods.push(m);
           });
-          $ptrType(f.type).methods.forEach(function(m) {
+          $ptrType(f.typ).methods.forEach(function(m) {
             typ.ptr.methods.push(m);
           });
         }
@@ -584,7 +584,7 @@ var $assertType = function(value, type, returnTuple) {
         var found = false;
         for (var j = 0; j < valueMethods.length; j++) {
           var vm = valueMethods[j];
-          if (vm.name === tm.name && vm.pkg === tm.pkg && vm.type === tm.type) {
+          if (vm.name === tm.name && vm.pkg === tm.pkg && vm.typ === tm.typ) {
             found = true;
             break;
           }

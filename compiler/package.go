@@ -401,8 +401,12 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 						}
 						methods = append(methods, entry)
 					}
-					c.Printf("%s.methods = [%s];", c.typeName(o.Type()), strings.Join(methods, ", "))
-					c.Printf("%s.methods = [%s];", c.typeName(types.NewPointer(o.Type())), strings.Join(ptrMethods, ", "))
+					if len(methods) > 0 {
+						c.Printf("%s.methods = [%s];", c.typeName(o.Type()), strings.Join(methods, ", "))
+					}
+					if len(ptrMethods) > 0 {
+						c.Printf("%s.methods = [%s];", c.typeName(types.NewPointer(o.Type())), strings.Join(ptrMethods, ", "))
+					}
 				}
 			})
 			switch t := o.Type().Underlying().(type) {

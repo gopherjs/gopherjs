@@ -19,12 +19,12 @@ When running your code with Node.js on Windows, it is theoretically possible to 
 
 GopherJS has support for system calls on OS X and Linux. Before running your code with Node.js, you need to install the system calls module. The module is only compatible with the unstable 0.11 releases of Node.js, so if you want to stay with the stable version you can opt to not install the module, but then system calls are not available.
 
-Install Node.js 0.11.14 with the Node Version Manager...
+Install Node.js 0.11.15 with the Node Version Manager...
 ```
 curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash
 . $HOME/.nvm/nvm.sh
-nvm install 0.11.14
-nvm use 0.11.14
+nvm install 0.11.15
+nvm use 0.11.15
 ```
 ... or Homebrew.
 ```

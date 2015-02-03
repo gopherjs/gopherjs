@@ -37,7 +37,7 @@ type funcContext struct {
 	allVars       map[string]int
 	localVars     []string
 	resultNames   []ast.Expr
-	flowDatas     map[string]*flowData
+	flowDatas     map[*types.Label]*flowData
 	caseCounter   int
 	labelCases    map[*types.Label]int
 	output        []byte
@@ -148,7 +148,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			fileSet:      fileSet,
 		},
 		allVars:     make(map[string]int),
-		flowDatas:   map[string]*flowData{"": &flowData{}},
+		flowDatas:   map[*types.Label]*flowData{nil: &flowData{}},
 		caseCounter: 1,
 		labelCases:  make(map[*types.Label]int),
 	}
@@ -172,7 +172,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		importDecls = append(importDecls, &Decl{
 			Vars:     []string{c.p.pkgVars[impPath]},
 			DeclCode: []byte(fmt.Sprintf("\t%s = $packages[\"%s\"];\n", c.p.pkgVars[impPath], impPath)),
-			InitCode: c.CatchOutput(1, func() { c.translateStmt(&ast.ExprStmt{X: call}, "") }),
+			InitCode: c.CatchOutput(1, func() { c.translateStmt(&ast.ExprStmt{X: call}, nil) }),
 		})
 	}
 
@@ -269,7 +269,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					Lhs: lhs,
 					Tok: token.DEFINE,
 					Rhs: []ast.Expr{init.Rhs},
-				}, "")
+				}, nil)
 			})
 			d.Vars = append(d.Vars, c.localVars...)
 		})
@@ -306,7 +306,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					if len(c.p.FuncDeclInfos[o].Blocking) != 0 {
 						c.Blocking[call] = true
 					}
-					c.translateStmt(&ast.ExprStmt{X: call}, "")
+					c.translateStmt(&ast.ExprStmt{X: call}, nil)
 				})
 				d.DceFilters = nil
 			}
@@ -340,7 +340,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			c.Blocking[call] = true
 		}
 		funcDecls = append(funcDecls, &Decl{
-			InitCode: c.CatchOutput(1, func() { c.translateStmt(&ast.ExprStmt{X: call}, "") }),
+			InitCode: c.CatchOutput(1, func() { c.translateStmt(&ast.ExprStmt{X: call}, nil) }),
 		})
 	}
 
@@ -604,7 +604,7 @@ func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcCo
 		parent:      outerContext,
 		sig:         sig,
 		allVars:     make(map[string]int, len(outerContext.allVars)),
-		flowDatas:   map[string]*flowData{"": &flowData{}},
+		flowDatas:   map[*types.Label]*flowData{nil: &flowData{}},
 		caseCounter: 1,
 		labelCases:  make(map[*types.Label]int),
 	}

@@ -556,6 +556,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) {
 	gopathWorkspaces := filepath.SplitList(gopath)
 	for _, gopathWorkspace := range gopathWorkspaces {
+		gopathWorkspace = filepath.Clean(gopathWorkspace)
 		if strings.HasPrefix(file, gopathWorkspace) {
 			return true, len(gopathWorkspace)
 		}

@@ -289,7 +289,7 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 		return err
 	}
 	pkg := &PackageData{Package: buildPkg}
-	pkg.ImportPath = importPath
+	pkg.ImportPath = "main"
 	if err := s.BuildPackage(pkg); err != nil {
 		return err
 	}

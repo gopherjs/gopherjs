@@ -691,15 +691,16 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 	if !flatten && label != nil {
 		c.Printf("%s:", label.Name())
 	}
-	c.PrintCond(!flatten, fmt.Sprintf("while (%s) {", cond), fmt.Sprintf("case %d: if(!(%s)) { $s = %d; continue; }", data.beginCase, cond, data.endCase))
+	c.PrintCond(!flatten, "while (true) {", fmt.Sprintf("case %d:", data.beginCase))
 	c.Indent(func() {
+		c.PrintCond(!flatten, fmt.Sprintf("if (!(%s)) { break; }", cond), fmt.Sprintf("if(!(%s)) { $s = %d; continue; }", cond, data.endCase))
 		prevEV := c.p.escapingVars
 		c.p.escapingVars = make(map[*types.Var]bool)
 		for escaping := range prevEV {
 			c.p.escapingVars[escaping] = true
 		}
 
-		names := make([]string, 0)
+		var names []string
 		for obj := range analysis.EscapingObjects(body, c.p.Info.Info) {
 			names = append(names, c.objectName(obj))
 			c.p.escapingVars[obj] = true

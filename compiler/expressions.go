@@ -411,6 +411,14 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		case token.ADD, token.LSS, token.LEQ, token.GTR, token.GEQ:
 			return c.formatExpr("%e %t %e", e.X, e.Op, e.Y)
 		case token.LAND:
+			if c.Blocking[e.Y] {
+				skipCase := c.caseCounter
+				c.caseCounter++
+				resultVar := c.newVariable("_v")
+				c.Printf("if (!(%s)) { %s = false; $s = %d; continue s; }", c.translateExpr(e.X), resultVar, skipCase)
+				c.Printf("%s = %s; case %d:", resultVar, c.translateExpr(e.Y), skipCase)
+				return c.formatExpr("%s", resultVar)
+			}
 			x := c.translateExpr(e.X)
 			y := c.translateExpr(e.Y)
 			if x.String() == "false" {
@@ -418,6 +426,14 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			return c.formatExpr("%s && %s", x, y)
 		case token.LOR:
+			if c.Blocking[e.Y] {
+				skipCase := c.caseCounter
+				c.caseCounter++
+				resultVar := c.newVariable("_v")
+				c.Printf("if (%s) { %s = true; $s = %d; continue s; }", c.translateExpr(e.X), resultVar, skipCase)
+				c.Printf("%s = %s; case %d:", resultVar, c.translateExpr(e.Y), skipCase)
+				return c.formatExpr("%s", resultVar)
+			}
 			x := c.translateExpr(e.X)
 			y := c.translateExpr(e.Y)
 			if x.String() == "true" {

@@ -2,24 +2,25 @@
 //
 // Type conversions between Go types and JavaScript types are performed automatically according to the following table:
 //
-//  | Go type                        | Conversions to interface{}     | JavaScript type   |
-//  | ------------------------------ | ------------------------------ | ----------------- |
-//  | bool                           | bool                           | Boolean           |
-//  | int?, uint?, float?            | float64                        | Number            |
-//  | string                         | string                         | String            |
-//  | [?]int8                        | []int8                         | Int8Array         |
-//  | [?]int16                       | []int16                        | Int16Array        |
-//  | [?]int32, [?]int               | []int                          | Int32Array        |
-//  | [?]uint8                       | []uint8                        | Uint8Array        |
-//  | [?]uint16                      | []uint16                       | Uint16Array       |
-//  | [?]uint32, [?]uint, [?]uintptr | []uint                         | Uint32Array       |
-//  | [?]float32                     | []float32                      | Float32Array      |
-//  | [?]float64                     | []float64                      | Float64Array      |
-//  | all other slices and arrays    | []interface{}                  | Array             |
-//  | functions                      | func(...interface{}) js.Object | Function          |
-//  | time.Time                      | time.Time                      | Date              |
-//  | -                              | js.Object                      | instanceof Node   |
-//  | maps, structs                  | map[string]interface{}         | instanceof Object |
+//  | Go type               | JavaScript type       | Conversions back to interface{} |
+//  | --------------------- | --------------------- | ------------------------------- |
+//  | bool                  | Boolean               | bool                            |
+//  | integers and floats   | Number                | float64                         |
+//  | string                | String                | string                          |
+//  | []int8                | Int8Array             | []int8                          |
+//  | []int16               | Int16Array            | []int16                         |
+//  | []int32, []int        | Int32Array            | []int                           |
+//  | []uint8               | Uint8Array            | []uint8                         |
+//  | []uint16              | Uint16Array           | []uint16                        |
+//  | []uint32, []uint      | Uint32Array           | []uint                          |
+//  | []float32             | Float32Array          | []float32                       |
+//  | []float64             | Float64Array          | []float64                       |
+//  | all other slices      | Array                 | []interface{}                   |
+//  | arrays                | see slice type        | see slice type                  |
+//  | functions             | Function              | func(...interface{}) js.Object  |
+//  | time.Time             | Date                  | time.Time                       |
+//  | -                     | instanceof Node       | js.Object                       |
+//  | maps, structs         | instanceof Object     | map[string]interface{}          |
 //
 // Additionally, for a struct containing a js.Object field, only the content of the field will be passed to JavaScript and vice versa.
 package js

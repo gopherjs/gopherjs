@@ -197,8 +197,8 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 }
 
 func (c *FuncInfo) markBlocking(stack []ast.Node) {
-	c.Blocking[stack[len(stack)-1]] = true
 	for _, n := range stack {
+		c.Blocking[n] = true
 		c.Flattened[n] = true
 	}
 }

@@ -77,7 +77,7 @@ Also, callbacks from external JavaScript code into Go code can never be blocking
 ```go
 js.Global.Get("myButton").Call("addEventListener", "click", func() {
   go func() {
-    someBlockingFuncion()
+    someBlockingFunction()
   }()
 })
 ```

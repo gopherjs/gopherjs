@@ -37,7 +37,7 @@ type Object interface {
 	// Delete removes the object's property with the given key.
 	Delete(key string)
 
-	// Get returns the object's "length" property, converted to int.
+	// Length returns the object's "length" property, converted to int.
 	Length() int
 
 	// Index returns the i'th element of an array.

@@ -366,6 +366,9 @@ var $internalAppend = function(slice, array, offset, length) {
 };
 
 var $equal = function(a, b, type) {
+  if (type === $js.Object) {
+    return a === b;
+  }
   switch (type.kind) {
   case $kindFloat32:
     return $float32IsEqual(a, b);
@@ -400,9 +403,6 @@ var $equal = function(a, b, type) {
     }
     return true;
   case $kindInterface:
-    if (type === $js.Object) {
-      return a === b;
-    }
     return $interfaceIsEqual(a, b);
   default:
     return a === b;

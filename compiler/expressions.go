@@ -441,13 +441,13 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			return c.formatExpr("%s || %s", x, y)
 		case token.EQL:
+			if util.IsJsObject(t) {
+				return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
+			}
 			switch u := t.Underlying().(type) {
 			case *types.Array, *types.Struct:
 				return c.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, c.typeName(t))
 			case *types.Interface:
-				if util.IsJsObject(t) {
-					return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
-				}
 				return c.formatExpr("$interfaceIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 			case *types.Pointer:
 				switch u.Elem().Underlying().(type) {

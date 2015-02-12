@@ -26,6 +26,9 @@ var $needsExternalization = function(t) {
 };
 
 var $externalize = function(v, t) {
+  if ($js !== undefined && t === $js.Object) {
+    return v;
+  }
   switch (t.kind) {
   case $kindBool:
   case $kindInt:
@@ -93,9 +96,6 @@ var $externalize = function(v, t) {
     }
     return v.$externalizeWrapper;
   case $kindInterface:
-    if (t === $js.Object) {
-      return v;
-    }
     if (v === $ifaceNil) {
       return null;
     }
@@ -175,6 +175,9 @@ var $externalize = function(v, t) {
 };
 
 var $internalize = function(v, t, recv) {
+  if (t === $js.Object) {
+    return v;
+  }
   switch (t.kind) {
   case $kindBool:
     return !!v;
@@ -233,9 +236,6 @@ var $internalize = function(v, t, recv) {
       }
     };
   case $kindInterface:
-    if (t === $js.Object) {
-      return v;
-    }
     if (t.methods.length !== 0) {
       $panic(new $String("cannot internalize " + t.string));
     }

@@ -316,7 +316,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 		resultsSlice := fn(args)
 		switch ftyp.NumOut() {
 		case 0:
-			return nil
+			return js.Null
 		case 1:
 			return resultsSlice[0].object()
 		default:
@@ -1085,7 +1085,7 @@ func DeepEqual(a1, a2 interface{}) bool {
 	if i1 == i2 {
 		return true
 	}
-	if i1 == nil || i2 == nil || i1.Get("constructor") != i2.Get("constructor") {
+	if i1 == js.Null || i2 == js.Null || i1.Get("constructor") != i2.Get("constructor") {
 		return false
 	}
 	return deepValueEqualJs(ValueOf(a1), ValueOf(a2), nil)

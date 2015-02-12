@@ -30,7 +30,7 @@ func setenv_c(k, v string) {
 	}
 }
 
-var syscallModule js.Object
+var syscallModule = js.Null
 var alreadyTriedToLoad = false
 var minusOne = -1
 
@@ -39,9 +39,9 @@ func syscall(name string) js.Object {
 		recover()
 		// return nil if recovered
 	}()
-	if syscallModule == nil {
+	if syscallModule == js.Null {
 		if alreadyTriedToLoad {
-			return nil
+			return js.Null
 		}
 		alreadyTriedToLoad = true
 		require := js.Global.Get("require")
@@ -54,7 +54,7 @@ func syscall(name string) js.Object {
 }
 
 func Syscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
-	if f := syscall("Syscall"); f != nil {
+	if f := syscall("Syscall"); f != js.Null {
 		r := f.Invoke(trap, a1, a2, a3)
 		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
 	}
@@ -70,7 +70,7 @@ func Syscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
 }
 
 func Syscall6(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errno) {
-	if f := syscall("Syscall6"); f != nil {
+	if f := syscall("Syscall6"); f != js.Null {
 		r := f.Invoke(trap, a1, a2, a3, a4, a5, a6)
 		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
 	}
@@ -81,7 +81,7 @@ func Syscall6(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errno) 
 }
 
 func RawSyscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
-	if f := syscall("Syscall"); f != nil {
+	if f := syscall("Syscall"); f != js.Null {
 		r := f.Invoke(trap, a1, a2, a3)
 		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
 	}
@@ -90,7 +90,7 @@ func RawSyscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
 }
 
 func RawSyscall6(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errno) {
-	if f := syscall("Syscall6"); f != nil {
+	if f := syscall("Syscall6"); f != js.Null {
 		r := f.Invoke(trap, a1, a2, a3, a4, a5, a6)
 		return uintptr(r.Index(0).Int()), uintptr(r.Index(1).Int()), Errno(r.Index(2).Int())
 	}

@@ -127,6 +127,9 @@ var Arguments []Object
 // Module gives the value of the "module" variable set by Node.js. Hint: Set a module export with 'js.Module.Get("exports").Set("exportName", ...)'.
 var Module Object
 
+// Null gives the JavaScript value "null".
+var Null Object
+
 // Undefined gives the JavaScript value "undefined".
 var Undefined Object
 
@@ -135,12 +138,12 @@ func Debugger() {}
 
 // InternalObject returns the internal JavaScript object that represents i. Not intended for public use.
 func InternalObject(i interface{}) Object {
-	return nil
+	return Null
 }
 
 // Keys returns the keys of the given JavaScript object.
 func Keys(o Object) []string {
-	if o == Undefined || o == nil {
+	if o == Undefined || o == Null {
 		return nil
 	}
 	a := Global.Get("Object").Call("keys", o)
@@ -171,7 +174,7 @@ func MakeWrapper(i interface{}) Object {
 			resultTypes := m.Get("typ").Get("results")
 			switch resultTypes.Length() {
 			case 0:
-				return nil
+				return Null
 			case 1:
 				return Global.Call("$externalize", result, resultTypes.Index(0))
 			default:

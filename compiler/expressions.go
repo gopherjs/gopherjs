@@ -103,6 +103,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			return c.formatExpr(`new ($sliceType(%s.Object))($global.Array.prototype.slice.call(%s, []))`, c.p.pkgVars["github.com/gopherjs/gopherjs/js"], args)
 		case "Module":
 			return c.formatExpr("$module")
+		case "Null":
+			return c.formatExpr("null")
 		case "Undefined":
 			return c.formatExpr("undefined")
 		}

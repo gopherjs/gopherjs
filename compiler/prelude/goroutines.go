@@ -24,7 +24,7 @@ var $callDeferred = function(deferred, jsErr) {
     var newErr = null;
     try {
       $deferFrames.push(deferred);
-      $panic(new $js.Error.ptr(jsErr));
+      $panic(new $jsErrorPtr(jsErr));
     } catch (err) {
       newErr = err;
     }

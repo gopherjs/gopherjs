@@ -21,7 +21,11 @@ func IsJsPackage(pkg *types.Package) bool {
 }
 
 func IsJsObject(t types.Type) bool {
-	named, isNamed := t.(*types.Named)
+	ptr, isPtr := t.(*types.Pointer)
+	if !isPtr {
+		return false
+	}
+	named, isNamed := ptr.Elem().(*types.Named)
 	return isNamed && IsJsPackage(named.Obj().Pkg()) && named.Obj().Name() == "Object"
 }
 

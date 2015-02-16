@@ -24,7 +24,9 @@ func (err *NotSupportedError) Error() string {
 }
 
 func init() {
-	js.Global.Set("$js", js.Global.Get("$packages").Get("github.com/gopherjs/gopherjs/js"))
+	jsPkg := js.Global.Get("$packages").Get("github.com/gopherjs/gopherjs/js")
+	js.Global.Set("$jsObjectPtr", jsPkg.Get("Object").Get("ptr"))
+	js.Global.Set("$jsErrorPtr", jsPkg.Get("Error").Get("ptr"))
 	js.Global.Set("$throwRuntimeError", js.InternalObject(func(msg string) {
 		panic(errorString(msg))
 	}))

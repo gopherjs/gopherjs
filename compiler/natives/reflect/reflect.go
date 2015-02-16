@@ -32,11 +32,11 @@ func init() {
 	uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
 }
 
-func jsType(typ Type) js.Object {
+func jsType(typ Type) *js.Object {
 	return js.InternalObject(typ).Get("jsType")
 }
 
-func reflectType(typ js.Object) *rtype {
+func reflectType(typ *js.Object) *rtype {
 	if typ.Get("reflectType") == js.Undefined {
 		rt := &rtype{
 			size:   uintptr(typ.Get("size").Int()),
@@ -160,7 +160,7 @@ func setKindType(rt *rtype, kindType interface{}) {
 
 var stringPtrMap = make(map[string]*string)
 
-func newStringPtr(strObj js.Object) *string {
+func newStringPtr(strObj *js.Object) *string {
 	var c struct{ str string }
 	js.InternalObject(c).Set("str", strObj) // get string without internalizing
 	str := c.str
@@ -185,7 +185,7 @@ func isWrapped(typ Type) bool {
 	return false
 }
 
-func copyStruct(dst, src js.Object, typ Type) {
+func copyStruct(dst, src *js.Object, typ Type) {
 	fields := jsType(typ).Get("fields")
 	for i := 0; i < fields.Length(); i++ {
 		prop := fields.Index(i).Get("prop").String()
@@ -193,7 +193,7 @@ func copyStruct(dst, src js.Object, typ Type) {
 	}
 }
 
-func makeValue(t Type, v js.Object, fl flag) Value {
+func makeValue(t Type, v *js.Object, fl flag) Value {
 	rt := t.common()
 	if t.Kind() == Array || t.Kind() == Struct || t.Kind() == Ptr {
 		return Value{rt, unsafe.Pointer(v.Unsafe()), fl | flag(t.Kind())}
@@ -215,7 +215,7 @@ func MakeSlice(typ Type, len, cap int) Value {
 		panic("reflect.MakeSlice: len > cap")
 	}
 
-	return makeValue(typ, js.Global.Call("$makeSlice", jsType(typ), len, cap, js.InternalObject(func() js.Object { return jsType(typ.Elem()).Call("zero") })), 0)
+	return makeValue(typ, js.Global.Call("$makeSlice", jsType(typ), len, cap, js.InternalObject(func() *js.Object { return jsType(typ.Elem()).Call("zero") })), 0)
 }
 
 func TypeOf(i interface{}) Type {
@@ -307,7 +307,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	t := typ.common()
 	ftyp := (*funcType)(unsafe.Pointer(t))
 
-	fv := func() js.Object {
+	fv := func() *js.Object {
 		args := make([]Value, ftyp.NumIn())
 		for i := range args {
 			argType := ftyp.In(i).common()
@@ -388,8 +388,8 @@ func mapdelete(t *rtype, m unsafe.Pointer, key unsafe.Pointer) {
 
 type mapIter struct {
 	t    Type
-	m    js.Object
-	keys js.Object
+	m    *js.Object
+	keys *js.Object
 	i    int
 }
 
@@ -418,7 +418,7 @@ func cvtDirect(v Value, typ Type) Value {
 		return makeValue(typ, jsType(typ).Get("nil"), v.flag)
 	}
 
-	var val js.Object
+	var val *js.Object
 	switch k := typ.Kind(); k {
 	case Chan:
 		val = jsType(typ).New()
@@ -555,7 +555,7 @@ func makeMethodValue(op string, v Value) Value {
 	if isWrapped(v.typ) {
 		rcvr = jsType(v.typ).New(rcvr)
 	}
-	fv := func() js.Object {
+	fv := func() *js.Object {
 		return js.InternalObject(fn).Call("apply", rcvr, js.Arguments)
 	}
 	return Value{v.Type().common(), unsafe.Pointer(js.InternalObject(fv).Unsafe()), v.flag&flagRO | flag(Func)}
@@ -602,7 +602,7 @@ func (t *uncommonType) Method(i int) (m Method) {
 	mt := p.typ
 	m.Type = mt
 	prop := js.Global.Call("$methodSet", js.InternalObject(t).Get("jsType")).Index(i).Get("prop").String()
-	fn := func(rcvr js.Object) js.Object {
+	fn := func(rcvr *js.Object) *js.Object {
 		return rcvr.Get(prop).Call("apply", rcvr, js.Arguments[1:])
 	}
 	m.Func = Value{mt, unsafe.Pointer(js.InternalObject(fn).Unsafe()), fl}
@@ -610,7 +610,7 @@ func (t *uncommonType) Method(i int) (m Method) {
 	return
 }
 
-func (v Value) object() js.Object {
+func (v Value) object() *js.Object {
 	if v.typ.Kind() == Array || v.typ.Kind() == Struct {
 		return js.InternalObject(v.ptr)
 	}
@@ -639,13 +639,13 @@ func (v Value) object() js.Object {
 	return js.InternalObject(v.ptr)
 }
 
-var callHelper = js.Global.Get("$call").Interface().(func(...interface{}) js.Object)
+var callHelper = js.Global.Get("$call").Interface().(func(...interface{}) *js.Object)
 
 func (v Value) call(op string, in []Value) []Value {
 	t := v.typ
 	var (
 		fn   unsafe.Pointer
-		rcvr js.Object
+		rcvr *js.Object
 	)
 	if v.flag&flagMethod != 0 {
 		_, t, fn = methodReceiver(op, v, int(v.flag)>>flagMethodShift)
@@ -750,18 +750,17 @@ func (v Value) Cap() int {
 	panic(&ValueError{"reflect.Value.Cap", k})
 }
 
-var jsObject = js.Global.Get("$js").Get("Object")
-var jsContainer = js.Global.Get("$js").Get("container").Get("ptr")
+var jsObjectPtr = js.Global.Get("$jsObjectPtr")
 
-func wrapJsObject(typ Type, val js.Object) js.Object {
-	if typ == reflectType(jsObject) {
-		return jsContainer.New(val)
+func wrapJsObject(typ Type, val *js.Object) *js.Object {
+	if typ == reflectType(jsObjectPtr) {
+		return jsObjectPtr.New(val)
 	}
 	return val
 }
 
-func unwrapJsObject(typ Type, val js.Object) js.Object {
-	if typ == reflectType(jsObject) {
+func unwrapJsObject(typ Type, val *js.Object) *js.Object {
+	if typ == reflectType(jsObjectPtr) {
 		return val.Get("Object")
 	}
 	return val
@@ -811,7 +810,7 @@ func (v Value) Field(i int) Value {
 
 	s := js.InternalObject(v.ptr)
 	if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return wrapJsObject(typ, s.Get(prop)) }), js.InternalObject(func(v js.Object) { s.Set(prop, unwrapJsObject(typ, v)) })).Unsafe()), fl}
+		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() *js.Object { return wrapJsObject(typ, s.Get(prop)) }), js.InternalObject(func(v *js.Object) { s.Set(prop, unwrapJsObject(typ, v)) })).Unsafe()), fl}
 	}
 	return makeValue(typ, wrapJsObject(typ, s.Get(prop)), fl)
 }
@@ -829,7 +828,7 @@ func (v Value) Index(i int) Value {
 
 		a := js.InternalObject(v.ptr)
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return wrapJsObject(typ, a.Index(i)) }), js.InternalObject(func(v js.Object) { a.SetIndex(i, unwrapJsObject(typ, v)) })).Unsafe()), fl}
+			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() *js.Object { return wrapJsObject(typ, a.Index(i)) }), js.InternalObject(func(v *js.Object) { a.SetIndex(i, unwrapJsObject(typ, v)) })).Unsafe()), fl}
 		}
 		return makeValue(typ, wrapJsObject(typ, a.Index(i)), fl)
 
@@ -846,7 +845,7 @@ func (v Value) Index(i int) Value {
 		i += s.Get("$offset").Int()
 		a := s.Get("$array")
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() js.Object { return wrapJsObject(typ, a.Index(i)) }), js.InternalObject(func(v js.Object) { a.SetIndex(i, unwrapJsObject(typ, v)) })).Unsafe()), fl}
+			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() *js.Object { return wrapJsObject(typ, a.Index(i)) }), js.InternalObject(func(v *js.Object) { a.SetIndex(i, unwrapJsObject(typ, v)) })).Unsafe()), fl}
 		}
 		return makeValue(typ, wrapJsObject(typ, a.Index(i)), fl)
 
@@ -968,7 +967,7 @@ func (v Value) Slice(i, j int) Value {
 	var (
 		cap int
 		typ Type
-		s   js.Object
+		s   *js.Object
 	)
 	switch kind := v.kind(); kind {
 	case Array:
@@ -1007,7 +1006,7 @@ func (v Value) Slice3(i, j, k int) Value {
 	var (
 		cap int
 		typ Type
-		s   js.Object
+		s   *js.Object
 	)
 	switch kind := v.kind(); kind {
 	case Array:

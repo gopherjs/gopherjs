@@ -367,7 +367,7 @@ var $internalAppend = function(slice, array, offset, length) {
 };
 
 var $equal = function(a, b, type) {
-  if (type === $js.Object) {
+  if (type === $jsObjectPtr) {
     return a === b;
   }
   switch (type.kind) {

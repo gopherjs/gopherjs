@@ -243,8 +243,8 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
           if (target.prototype[m.prop] !== undefined) { return; }
           target.prototype[m.prop] = function() {
             var v = this.$val[f.prop];
-            if (f.typ === $js.Object) {
-              v = new $js.container.ptr(v);
+            if (f.typ === $jsObjectPtr) {
+              v = new $jsObjectPtr(v);
             }
             if (v.$val === undefined) {
               v = new f.typ(v);
@@ -665,7 +665,7 @@ var $assertType = function(value, type, returnTuple) {
   if (!isInterface) {
     value = value.$val;
   }
-  if (type === $js.Object) {
+  if (type === $jsObjectPtr) {
     value = value.Object;
   }
   return returnTuple ? [value, true] : value;

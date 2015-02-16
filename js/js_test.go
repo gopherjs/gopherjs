@@ -107,7 +107,7 @@ func TestUndefined(t *testing.T) {
 }
 
 func TestNull(t *testing.T) {
-	var null js.Object
+	var null *js.Object
 	dummys.Set("test", nil)
 	if null != nil || dummys == nil || dummys.Get("test") != nil {
 		t.Fail()
@@ -157,13 +157,13 @@ func TestNew(t *testing.T) {
 }
 
 type StructWithJsField1 struct {
-	js.Object
+	*js.Object
 	Length int                  `js:"length"`
 	Slice  func(int, int) []int `js:"slice"`
 }
 
 type StructWithJsField2 struct {
-	object js.Object            // to hide members from public API
+	object *js.Object           // to hide members from public API
 	Length int                  `js:"length"`
 	Slice  func(int, int) []int `js:"slice"`
 }
@@ -256,7 +256,7 @@ func TestFunc(t *testing.T) {
 		t.Fail()
 	}
 
-	add := dummys.Get("add").Interface().(func(...interface{}) js.Object)
+	add := dummys.Get("add").Interface().(func(...interface{}) *js.Object)
 	var i int64 = 40
 	if add(i, 2).Int() != 42 {
 		t.Fail()
@@ -279,7 +279,7 @@ func TestEquality(t *testing.T) {
 	if js.Global.Get("Array") != js.Global.Get("Array") || js.Global.Get("Array") == js.Global.Get("String") {
 		t.Fail()
 	}
-	type S struct{ js.Object }
+	type S struct{ *js.Object }
 	o1 := js.Global.Get("Object").New()
 	o2 := js.Global.Get("Object").New()
 	a := S{o1}
@@ -385,20 +385,20 @@ func TestMakeWrapper(t *testing.T) {
 
 func TestReflection(t *testing.T) {
 	o := js.Global.Call("eval", "({ answer: 42 })")
-	if reflect.ValueOf(o).Interface().(js.Object) != o {
+	if reflect.ValueOf(o).Interface().(*js.Object) != o {
 		t.Fail()
 	}
 
 	type S struct {
-		Field js.Object
+		Field *js.Object
 	}
 	s := S{o}
 
 	v := reflect.ValueOf(&s).Elem()
-	if v.Field(0).Interface().(js.Object).Get("answer").Int() != 42 {
+	if v.Field(0).Interface().(*js.Object).Get("answer").Int() != 42 {
 		t.Fail()
 	}
-	if v.Field(0).MethodByName("Get").Call([]reflect.Value{reflect.ValueOf("answer")})[0].Interface().(js.Object).Int() != 42 {
+	if v.Field(0).MethodByName("Get").Call([]reflect.Value{reflect.ValueOf("answer")})[0].Interface().(*js.Object).Int() != 42 {
 		t.Fail()
 	}
 	v.Field(0).Set(reflect.ValueOf(js.Global.Call("eval", "({ answer: 100 })")))
@@ -434,7 +434,7 @@ func TestNewArrayBuffer(t *testing.T) {
 
 func TestInternalizeExternalizeUndefined(t *testing.T) {
 	type S struct {
-		js.Object
+		*js.Object
 	}
 	r := js.Global.Call("eval", "(function(f) { return f(undefined); })").Invoke(func(s S) S {
 		if s.Object != js.Undefined {

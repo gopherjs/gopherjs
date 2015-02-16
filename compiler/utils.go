@@ -134,6 +134,9 @@ func (c *funcContext) translateSelection(sel *types.Selection, pos token.Pos) ([
 }
 
 func (c *funcContext) zeroValue(ty types.Type) string {
+	if util.IsJsObject(ty) {
+		return "null"
+	}
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
 		switch {
@@ -161,9 +164,6 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 	case *types.Map:
 		return "false"
 	case *types.Interface:
-		if util.IsJsObject(ty) {
-			return "null"
-		}
 		return "$ifaceNil"
 	}
 	return fmt.Sprintf("%s.nil", c.typeName(ty))

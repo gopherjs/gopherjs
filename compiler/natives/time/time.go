@@ -14,7 +14,7 @@ type runtimeTimer struct {
 	period  int64
 	f       func(interface{}, uintptr)
 	arg     interface{}
-	timeout js.Object
+	timeout *js.Object
 	active  bool
 }
 

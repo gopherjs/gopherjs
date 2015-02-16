@@ -1,7 +1,7 @@
 package prelude
 
 const jsmapping = `
-var $js;
+var $jsObjectPtr, $jsErrorPtr;
 
 var $needsExternalization = function(t) {
   switch (t.kind) {
@@ -18,15 +18,13 @@ var $needsExternalization = function(t) {
     case $kindFloat32:
     case $kindFloat64:
       return false;
-    case $kindInterface:
-      return t !== $js.Object;
     default:
-      return true;
+      return t !== $jsObjectPtr;
   }
 };
 
 var $externalize = function(v, t) {
-  if ($js !== undefined && t === $js.Object) {
+  if (t === $jsObjectPtr) {
     return v;
   }
   switch (t.kind) {
@@ -59,7 +57,7 @@ var $externalize = function(v, t) {
       $checkForDeadlock = false;
       var convert = false;
       for (var i = 0; i < t.params.length; i++) {
-        convert = convert || (t.params[i] !== $js.Object);
+        convert = convert || (t.params[i] !== $jsObjectPtr);
       }
       for (var i = 0; i < t.results.length; i++) {
         convert = convert || $needsExternalization(t.results[i]);
@@ -99,6 +97,9 @@ var $externalize = function(v, t) {
     if (v === $ifaceNil) {
       return null;
     }
+    if (v.constructor === $jsObjectPtr) {
+      return v.$val.Object;
+    }
     return $externalize(v.$val, v.constructor);
   case $kindMap:
     var m = {};
@@ -137,7 +138,7 @@ var $externalize = function(v, t) {
 
     var noJsObject = {};
     var searchJsObject = function(v, t) {
-      if (t === $js.Object) {
+      if (t === $jsObjectPtr) {
         return v;
       }
       if (t.kind === $kindPtr && v !== t.nil) {
@@ -176,7 +177,7 @@ var $externalize = function(v, t) {
 };
 
 var $internalize = function(v, t, recv) {
-  if (t === $js.Object) {
+  if (t === $jsObjectPtr) {
     return v;
   }
   switch (t.kind) {
@@ -270,7 +271,7 @@ var $internalize = function(v, t, recv) {
         return new timePkg.Time(timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000)));
       }
     case Function:
-      var funcType = $funcType([$sliceType($emptyInterface)], [$js.Object], true);
+      var funcType = $funcType([$sliceType($emptyInterface)], [$jsObjectPtr], true);
       return new funcType($internalize(v, funcType));
     case Number:
       return new $Float64(parseFloat(v));
@@ -278,7 +279,7 @@ var $internalize = function(v, t, recv) {
       return new $String($internalize(v, $String));
     default:
       if ($global.Node && v instanceof $global.Node) {
-        return new $js.container.ptr(v);
+        return new $jsObjectPtr(v);
       }
       var mapType = $mapType($String, $emptyInterface);
       return new mapType($internalize(v, mapType));
@@ -310,7 +311,7 @@ var $internalize = function(v, t, recv) {
   case $kindStruct:
     var noJsObject = {};
     var searchJsObject = function(t) {
-      if (t === $js.Object) {
+      if (t === $jsObjectPtr) {
         return v;
       }
       if (t.kind === $kindPtr && t.elem.kind === $kindStruct) {

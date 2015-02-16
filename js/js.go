@@ -25,80 +25,59 @@
 // Additionally, for a struct containing a js.Object field, only the content of the field will be passed to JavaScript and vice versa.
 package js
 
-// Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax. Nil is equal to JavaScript's "null". Object can not be used as a map key.
-type Object interface {
+// Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax. Object can not be used as a map key.
+type Object struct{ *Object }
 
-	// Get returns the object's property with the given key.
-	Get(key string) Object
+// Get returns the object's property with the given key.
+func (o *Object) Get(key string) *Object { return o.Object.Get(key) }
 
-	// Set assigns the value to the object's property with the given key.
-	Set(key string, value interface{})
+// Set assigns the value to the object's property with the given key.
+func (o *Object) Set(key string, value interface{}) { o.Object.Set(key, value) }
 
-	// Delete removes the object's property with the given key.
-	Delete(key string)
+// Delete removes the object's property with the given key.
+func (o *Object) Delete(key string) { o.Object.Delete(key) }
 
-	// Length returns the object's "length" property, converted to int.
-	Length() int
+// Length returns the object's "length" property, converted to int.
+func (o *Object) Length() int { return o.Object.Length() }
 
-	// Index returns the i'th element of an array.
-	Index(i int) Object
+// Index returns the i'th element of an array.
+func (o *Object) Index(i int) *Object { return o.Object.Index(i) }
 
-	// SetIndex sets the i'th element of an array.
-	SetIndex(i int, value interface{})
+// SetIndex sets the i'th element of an array.
+func (o *Object) SetIndex(i int, value interface{}) { o.Object.SetIndex(i, value) }
 
-	// Call calls the object's method with the given name.
-	Call(name string, args ...interface{}) Object
+// Call calls the object's method with the given name.
+func (o *Object) Call(name string, args ...interface{}) *Object { return o.Object.Call(name, args...) }
 
-	// Invoke calls the object itself. This will fail if it is not a function.
-	Invoke(args ...interface{}) Object
+// Invoke calls the object itself. This will fail if it is not a function.
+func (o *Object) Invoke(args ...interface{}) *Object { return o.Object.Invoke(args...) }
 
-	// New creates a new instance of this type object. This will fail if it not a function (constructor).
-	New(args ...interface{}) Object
+// New creates a new instance of this type object. This will fail if it not a function (constructor).
+func (o *Object) New(args ...interface{}) *Object { return o.Object.New(args...) }
 
-	// Bool returns the object converted to bool according to JavaScript type conversions.
-	Bool() bool
+// Bool returns the object converted to bool according to JavaScript type conversions.
+func (o *Object) Bool() bool { return o.Object.Bool() }
 
-	// String returns the object converted to string according to JavaScript type conversions.
-	String() string
+// String returns the object converted to string according to JavaScript type conversions.
+func (o *Object) String() string { return o.Object.String() }
 
-	// Int returns the object converted to int according to JavaScript type conversions (parseInt).
-	Int() int
+// Int returns the object converted to int according to JavaScript type conversions (parseInt).
+func (o *Object) Int() int { return o.Object.Int() }
 
-	// Int64 returns the object converted to int64 according to JavaScript type conversions (parseInt).
-	Int64() int64
+// Int64 returns the object converted to int64 according to JavaScript type conversions (parseInt).
+func (o *Object) Int64() int64 { return o.Object.Int64() }
 
-	// Uint64 returns the object converted to uint64 according to JavaScript type conversions (parseInt).
-	Uint64() uint64
+// Uint64 returns the object converted to uint64 according to JavaScript type conversions (parseInt).
+func (o *Object) Uint64() uint64 { return o.Object.Uint64() }
 
-	// Float returns the object converted to float64 according to JavaScript type conversions (parseFloat).
-	Float() float64
+// Float returns the object converted to float64 according to JavaScript type conversions (parseFloat).
+func (o *Object) Float() float64 { return o.Object.Float() }
 
-	// Interface returns the object converted to interface{}. See GopherJS' README for details.
-	Interface() interface{}
+// Interface returns the object converted to interface{}. See GopherJS' README for details.
+func (o *Object) Interface() interface{} { return o.Object.Interface() }
 
-	// Unsafe returns the object as an uintptr, which can be converted via unsafe.Pointer. Not intended for public use.
-	Unsafe() uintptr
-}
-
-type container struct{ Object }
-
-func (c *container) Get(key string) Object                        { return c.Object.Get(key) }
-func (c *container) Set(key string, value interface{})            { c.Object.Set(key, value) }
-func (c *container) Delete(key string)                            { c.Object.Delete(key) }
-func (c *container) Length() int                                  { return c.Object.Length() }
-func (c *container) Index(i int) Object                           { return c.Object.Index(i) }
-func (c *container) SetIndex(i int, value interface{})            { c.Object.SetIndex(i, value) }
-func (c *container) Call(name string, args ...interface{}) Object { return c.Object.Call(name, args...) }
-func (c *container) Invoke(args ...interface{}) Object            { return c.Object.Invoke(args...) }
-func (c *container) New(args ...interface{}) Object               { return c.Object.New(args...) }
-func (c *container) Bool() bool                                   { return c.Object.Bool() }
-func (c *container) String() string                               { return c.Object.String() }
-func (c *container) Int() int                                     { return c.Object.Int() }
-func (c *container) Int64() int64                                 { return c.Object.Int64() }
-func (c *container) Uint64() uint64                               { return c.Object.Uint64() }
-func (c *container) Float() float64                               { return c.Object.Float() }
-func (c *container) Interface() interface{}                       { return c.Object.Interface() }
-func (c *container) Unsafe() uintptr                              { return c.Object.Unsafe() }
+// Unsafe returns the object as an uintptr, which can be converted via unsafe.Pointer. Not intended for public use.
+func (o *Object) Unsafe() uintptr { return o.Object.Unsafe() }
 
 // Error encapsulates JavaScript errors. Those are turned into a Go panic and may be rescued, giving an *Error that holds the JavaScript error object.
 type Error struct {
@@ -115,31 +94,31 @@ func (err *Error) Stack() string {
 	return err.Get("stack").String()
 }
 
-// Global gives JavaScript's global object ("window" for browsers and "GLOBAL" for Node.js). Set this to a mock for testing with pure Go.
-var Global Object
+// Global gives JavaScript's global object ("window" for browsers and "GLOBAL" for Node.js).
+var Global *Object
 
-// This gives the value of JavaScript's "this" keyword. It can be used when passing Go functions to JavaScript as callbacks. Set this to a mock for testing with pure Go.
-var This Object
+// This gives the value of JavaScript's "this" keyword. It can be used when passing Go functions to JavaScript as callbacks.
+var This *Object
 
-// Arguments gives the value of JavaScript's "arguments" keyword. It can be used when passing Go functions to JavaScript as callbacks. Set this to a mock for testing with pure Go.
-var Arguments []Object
+// Arguments gives the value of JavaScript's "arguments" keyword. It can be used when passing Go functions to JavaScript as callbacks.
+var Arguments []*Object
 
 // Module gives the value of the "module" variable set by Node.js. Hint: Set a module export with 'js.Module.Get("exports").Set("exportName", ...)'.
-var Module Object
+var Module *Object
 
 // Undefined gives the JavaScript value "undefined".
-var Undefined Object
+var Undefined *Object
 
 // Debugger gets compiled to JavaScript's "debugger;" statement.
 func Debugger() {}
 
 // InternalObject returns the internal JavaScript object that represents i. Not intended for public use.
-func InternalObject(i interface{}) Object {
+func InternalObject(i interface{}) *Object {
 	return nil
 }
 
 // Keys returns the keys of the given JavaScript object.
-func Keys(o Object) []string {
+func Keys(o *Object) []string {
 	if o == Undefined || o == nil {
 		return nil
 	}
@@ -152,7 +131,7 @@ func Keys(o Object) []string {
 }
 
 // MakeWrapper creates a JavaScript object which has wrappers for the exported methods of i. This can be used to provide getter and setter methods for Go fields to JavaScript.
-func MakeWrapper(i interface{}) Object {
+func MakeWrapper(i interface{}) *Object {
 	v := InternalObject(i)
 	o := Global.Get("Object").New()
 	methods := v.Get("constructor").Get("methods")
@@ -161,7 +140,7 @@ func MakeWrapper(i interface{}) Object {
 		if m.Get("pkg").String() != "" { // not exported
 			continue
 		}
-		o.Set(m.Get("name").String(), func(args ...Object) Object {
+		o.Set(m.Get("name").String(), func(args ...*Object) *Object {
 			paramTypes := m.Get("typ").Get("params")
 			internalizedArgs := make([]interface{}, paramTypes.Length())
 			for i := range internalizedArgs {
@@ -187,7 +166,7 @@ func MakeWrapper(i interface{}) Object {
 }
 
 // NewArrayBuffer creates a JavaScript ArrayBuffer from a byte slice.
-func NewArrayBuffer(b []byte) Object {
+func NewArrayBuffer(b []byte) *Object {
 	slice := InternalObject(b)
 	offset := slice.Get("$offset").Int()
 	length := slice.Get("$length").Int()
@@ -202,7 +181,6 @@ type S []interface{}
 
 func init() {
 	// avoid dead code elimination
-	c := container{}
 	e := Error{}
-	_, _ = c, e
+	_ = e
 }

@@ -1108,10 +1108,6 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 		return c.translateExpr(expr)
 	}
 
-	if util.IsJsObject(exprType) {
-		return c.formatExpr("new $js.container.ptr(%e)", expr)
-	}
-
 	basicExprType, isBasicExpr := exprType.Underlying().(*types.Basic)
 	if isBasicExpr && basicExprType.Kind() == types.UntypedNil {
 		return c.formatExpr("%s", c.zeroValue(desiredType))
@@ -1122,6 +1118,10 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 		return c.formatExpr("$subslice(new %1s(%2e.$array), %2e.$offset, %2e.$offset + %2e.$length)", c.typeName(desiredType), expr)
 
 	case *types.Interface:
+		if util.IsJsObject(exprType) {
+			// wrap JS object into js.Object struct when converting to interface
+			return c.formatExpr("new $jsObjectPtr(%e)", expr)
+		}
 		if isWrapped(exprType) {
 			return c.formatExpr("new %s(%e)", c.typeName(exprType), expr)
 		}

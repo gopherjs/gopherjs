@@ -30,11 +30,11 @@ func setenv_c(k, v string) {
 	}
 }
 
-var syscallModule js.Object
+var syscallModule *js.Object
 var alreadyTriedToLoad = false
 var minusOne = -1
 
-func syscall(name string) js.Object {
+func syscall(name string) *js.Object {
 	defer func() {
 		recover()
 		// return nil if recovered

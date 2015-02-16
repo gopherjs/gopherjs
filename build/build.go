@@ -27,7 +27,7 @@ func (e *ImportCError) Error() string {
 	return `importing "C" is not supported by GopherJS`
 }
 
-func NewBuildContext(installSuffix string) *build.Context {
+func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 	return &build.Context{
 		GOROOT:        build.Default.GOROOT,
 		GOPATH:        build.Default.GOPATH,
@@ -35,17 +35,17 @@ func NewBuildContext(installSuffix string) *build.Context {
 		GOARCH:        "js",
 		InstallSuffix: installSuffix,
 		Compiler:      "gc",
-		BuildTags:     []string{"netgo"},
+		BuildTags:     append(buildTags, "netgo"),
 		ReleaseTags:   build.Default.ReleaseTags,
 	}
 }
 
-func Import(path string, mode build.ImportMode, installSuffix string) (*build.Package, error) {
+func Import(path string, mode build.ImportMode, installSuffix string, buildTags []string) (*build.Package, error) {
 	if path == "C" {
 		return nil, &ImportCError{}
 	}
 
-	buildContext := NewBuildContext(installSuffix)
+	buildContext := NewBuildContext(installSuffix, buildTags)
 	if path == "runtime" || path == "syscall" {
 		buildContext.GOARCH = build.Default.GOARCH
 		buildContext.InstallSuffix = "js"
@@ -97,7 +97,7 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 	if isTestPkg {
 		importPath = importPath[:len(importPath)-5]
 	}
-	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+importPath, 0, ""); err == nil {
+	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+importPath, 0, "", nil); err == nil {
 		names := append(nativesPkg.GoFiles, nativesPkg.TestGoFiles...)
 		if isTestPkg {
 			names = nativesPkg.XTestGoFiles
@@ -212,6 +212,7 @@ type Options struct {
 	CreateMapFile bool
 	Minify        bool
 	Color         bool
+	BuildTags     []string
 }
 
 func (o *Options) PrintError(format string, a ...interface{}) {
@@ -284,7 +285,7 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 	if s.Watcher != nil {
 		s.Watcher.Add(packagePath)
 	}
-	buildPkg, err := NewBuildContext(s.InstallSuffix()).ImportDir(packagePath, 0)
+	buildPkg, err := NewBuildContext(s.InstallSuffix(), s.options.BuildTags).ImportDir(packagePath, 0)
 	if err != nil {
 		return err
 	}
@@ -333,7 +334,7 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 		return pkg.Archive, nil
 	}
 
-	buildPkg, err := Import(path, 0, s.InstallSuffix())
+	buildPkg, err := Import(path, 0, s.InstallSuffix(), s.options.BuildTags)
 	if s.Watcher != nil && buildPkg != nil { // add watch even on error
 		s.Watcher.Add(buildPkg.Dir)
 	}

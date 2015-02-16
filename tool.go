@@ -53,6 +53,8 @@ func main() {
 	flagMinify := pflag.Lookup("minify")
 	pflag.BoolVar(&options.Color, "color", terminal.IsTerminal(2) && os.Getenv("TERM") != "dumb", "colored output")
 	flagColor := pflag.Lookup("color")
+	tags := pflag.String("tags", "", "a list of build tags to consider satisfied during the build")
+	flagTags := pflag.Lookup("tags")
 
 	cmdBuild := &cobra.Command{
 		Use:   "build [packages]",
@@ -63,7 +65,11 @@ func main() {
 	cmdBuild.Flags().AddFlag(flagWatch)
 	cmdBuild.Flags().AddFlag(flagMinify)
 	cmdBuild.Flags().AddFlag(flagColor)
+	cmdBuild.Flags().AddFlag(flagTags)
 	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
+		if *tags != "" {
+			options.BuildTags = strings.Split(*tags, " ")
+		}
 		for {
 			s := gbuild.NewSession(options)
 
@@ -101,7 +107,7 @@ func main() {
 					if s.Watcher != nil {
 						s.Watcher.Add(pkgPath)
 					}
-					buildPkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix())
+					buildPkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
 					if err != nil {
 						return err
 					}
@@ -134,7 +140,11 @@ func main() {
 	cmdInstall.Flags().AddFlag(flagWatch)
 	cmdInstall.Flags().AddFlag(flagMinify)
 	cmdInstall.Flags().AddFlag(flagColor)
+	cmdInstall.Flags().AddFlag(flagTags)
 	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
+		if *tags != "" {
+			options.BuildTags = strings.Split(*tags, " ")
+		}
 		for {
 			s := gbuild.NewSession(options)
 
@@ -191,6 +201,7 @@ func main() {
 	cmdGet.Flags().AddFlag(flagWatch)
 	cmdGet.Flags().AddFlag(flagMinify)
 	cmdGet.Flags().AddFlag(flagColor)
+	cmdGet.Flags().AddFlag(flagTags)
 	cmdGet.Run = cmdInstall.Run
 
 	cmdRun := &cobra.Command{
@@ -245,7 +256,7 @@ func main() {
 			for i, pkgPath := range args {
 				pkgPath = filepath.ToSlash(pkgPath)
 				var err error
-				pkgs[i], err = gbuild.Import(pkgPath, 0, "")
+				pkgs[i], err = gbuild.Import(pkgPath, 0, "", nil)
 				if err != nil {
 					return err
 				}
@@ -262,7 +273,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					if pkg, err = gbuild.Import(pkgPath, 0, ""); err != nil {
+					if pkg, err = gbuild.Import(pkgPath, 0, "", nil); err != nil {
 						return err
 					}
 				}

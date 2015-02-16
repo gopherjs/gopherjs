@@ -109,7 +109,7 @@ func TestUndefined(t *testing.T) {
 func TestNull(t *testing.T) {
 	var null js.Object
 	dummys.Set("test", nil)
-	if null != js.Null || dummys == js.Null || dummys.Get("test") != js.Null {
+	if null != nil || dummys == nil || dummys.Get("test") != nil {
 		t.Fail()
 	}
 }
@@ -419,7 +419,7 @@ func TestNil(t *testing.T) {
 	}
 
 	type T struct{ Field *S }
-	if dummys.Call("testField", T{}) != js.Null {
+	if dummys.Call("testField", T{}) != nil {
 		t.Fail()
 	}
 }

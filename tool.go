@@ -67,9 +67,7 @@ func main() {
 	cmdBuild.Flags().AddFlag(flagColor)
 	cmdBuild.Flags().AddFlag(flagTags)
 	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
-		if *tags != "" {
-			options.BuildTags = strings.Split(*tags, " ")
-		}
+		options.BuildTags = strings.Fields(*tags)
 		for {
 			s := gbuild.NewSession(options)
 
@@ -142,9 +140,7 @@ func main() {
 	cmdInstall.Flags().AddFlag(flagColor)
 	cmdInstall.Flags().AddFlag(flagTags)
 	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
-		if *tags != "" {
-			options.BuildTags = strings.Split(*tags, " ")
-		}
+		options.BuildTags = strings.Fields(*tags)
 		for {
 			s := gbuild.NewSession(options)
 

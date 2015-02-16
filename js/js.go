@@ -81,7 +81,7 @@ func (o *Object) Unsafe() uintptr { return o.Object.Unsafe() }
 
 // Error encapsulates JavaScript errors. Those are turned into a Go panic and may be rescued, giving an *Error that holds the JavaScript error object.
 type Error struct {
-	Object
+	*Object
 }
 
 // Error returns the message of the encapsulated JavaScript error object.

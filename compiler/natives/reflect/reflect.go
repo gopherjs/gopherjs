@@ -761,7 +761,7 @@ func wrapJsObject(typ Type, val *js.Object) *js.Object {
 
 func unwrapJsObject(typ Type, val *js.Object) *js.Object {
 	if typ == reflectType(jsObjectPtr) {
-		return val.Get("Object")
+		return val.Get("object")
 	}
 	return val
 }

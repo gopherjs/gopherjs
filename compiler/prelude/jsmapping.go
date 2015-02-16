@@ -98,7 +98,7 @@ var $externalize = function(v, t) {
       return null;
     }
     if (v.constructor === $jsObjectPtr) {
-      return v.$val.Object;
+      return v.$val.object;
     }
     return $externalize(v.$val, v.constructor);
   case $kindMap:

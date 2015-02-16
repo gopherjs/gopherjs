@@ -666,7 +666,7 @@ var $assertType = function(value, type, returnTuple) {
     value = value.$val;
   }
   if (type === $jsObjectPtr) {
-    value = value.Object;
+    value = value.object;
   }
   return returnTuple ? [value, true] : value;
 };

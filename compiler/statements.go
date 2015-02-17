@@ -126,9 +126,11 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		if s.Init != nil {
 			c.translateStmt(s.Init, nil)
 		}
-		cond := "true"
-		if s.Cond != nil {
-			cond = c.translateExpr(s.Cond).String()
+		cond := func() string {
+			if s.Cond == nil {
+				return "true"
+			}
+			return c.translateExpr(s.Cond).String()
 		}
 		c.translateLoopingStmt(cond, s.Body, nil, func() {
 			if s.Post != nil {
@@ -145,7 +147,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			iVar := c.newVariable("_i")
 			c.Printf("%s = 0;", iVar)
 			runeVar := c.newVariable("_rune")
-			c.translateLoopingStmt(iVar+" < "+refVar+".length", s.Body, func() {
+			c.translateLoopingStmt(func() string { return iVar + " < " + refVar + ".length" }, s.Body, func() {
 				c.Printf("%s = $decodeRune(%s, %s);", runeVar, refVar, iVar)
 				if !isBlank(s.Key) {
 					c.Printf("%s", c.translateAssign(s.Key, iVar, types.Typ[types.Int], s.Tok == token.DEFINE))
@@ -162,7 +164,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			c.Printf("%s = 0;", iVar)
 			keysVar := c.newVariable("_keys")
 			c.Printf("%s = $keys(%s);", keysVar, refVar)
-			c.translateLoopingStmt(iVar+" < "+keysVar+".length", s.Body, func() {
+			c.translateLoopingStmt(func() string { return iVar + " < " + keysVar + ".length" }, s.Body, func() {
 				entryVar := c.newVariable("_entry")
 				c.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
 				c.translateStmt(&ast.IfStmt{
@@ -195,7 +197,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			}
 			iVar := c.newVariable("_i")
 			c.Printf("%s = 0;", iVar)
-			c.translateLoopingStmt(iVar+" < "+length, s.Body, func() {
+			c.translateLoopingStmt(func() string { return iVar + " < " + length }, s.Body, func() {
 				if !isBlank(s.Key) {
 					c.Printf("%s", c.translateAssign(s.Key, iVar, types.Typ[types.Int], s.Tok == token.DEFINE))
 				}
@@ -671,7 +673,7 @@ clauseLoop:
 	c.PrintCond(!flatten, "}", fmt.Sprintf("case %d:", endCase))
 }
 
-func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bodyPrefix, post func(), label *types.Label, flatten bool) {
+func (c *funcContext) translateLoopingStmt(cond func() string, body *ast.BlockStmt, bodyPrefix, post func(), label *types.Label, flatten bool) {
 	prevFlowData := c.flowDatas[nil]
 	data := &flowData{
 		postStmt: post,
@@ -693,7 +695,8 @@ func (c *funcContext) translateLoopingStmt(cond string, body *ast.BlockStmt, bod
 	}
 	c.PrintCond(!flatten, "while (true) {", fmt.Sprintf("case %d:", data.beginCase))
 	c.Indent(func() {
-		c.PrintCond(!flatten, fmt.Sprintf("if (!(%s)) { break; }", cond), fmt.Sprintf("if(!(%s)) { $s = %d; continue; }", cond, data.endCase))
+		condStr := cond()
+		c.PrintCond(!flatten, fmt.Sprintf("if (!(%s)) { break; }", condStr), fmt.Sprintf("if(!(%s)) { $s = %d; continue; }", condStr, data.endCase))
 		prevEV := c.p.escapingVars
 		c.p.escapingVars = make(map[*types.Var]bool)
 		for escaping := range prevEV {

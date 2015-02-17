@@ -50,6 +50,7 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 	}
 
 	info.InitFuncInfo = NewFuncInfo(info)
+	info.FuncLitInfos[nil] = info.InitFuncInfo
 	for _, file := range files {
 		for k, v := range ast.NewCommentMap(fileSet, file, file.Comments) {
 			info.comments[k] = v

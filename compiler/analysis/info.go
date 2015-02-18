@@ -159,6 +159,8 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 				break
 			}
 			callTo(c.p.Uses[f.Sel])
+		default:
+			lookForComment()
 		}
 	case *ast.SendStmt:
 		c.markBlocking(c.analyzeStack)

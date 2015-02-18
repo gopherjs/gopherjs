@@ -569,27 +569,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			break
 		}
 
-		var isType func(ast.Expr) bool
-		isType = func(expr ast.Expr) bool {
-			switch e := expr.(type) {
-			case *ast.ArrayType, *ast.ChanType, *ast.FuncType, *ast.InterfaceType, *ast.MapType, *ast.StructType:
-				return true
-			case *ast.StarExpr:
-				return isType(e.X)
-			case *ast.Ident:
-				_, ok := c.p.Uses[e].(*types.TypeName)
-				return ok
-			case *ast.SelectorExpr:
-				_, ok := c.p.Uses[e.Sel].(*types.TypeName)
-				return ok
-			case *ast.ParenExpr:
-				return isType(e.X)
-			default:
-				return false
-			}
-		}
-
-		if isType(plainFun) {
+		if util.IsTypeExpr(plainFun, c.p.Info.Info) {
 			return c.formatExpr("%s", c.translateConversion(e.Args[0], c.p.Types[plainFun].Type))
 		}
 

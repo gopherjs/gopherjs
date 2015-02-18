@@ -160,7 +160,9 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 			}
 			callTo(c.p.Uses[f.Sel])
 		default:
-			lookForComment()
+			if !util.IsTypeExpr(f, c.p.Info) {
+				lookForComment()
+			}
 		}
 	case *ast.SendStmt:
 		c.markBlocking(c.analyzeStack)

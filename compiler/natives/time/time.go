@@ -57,7 +57,7 @@ func startTimer(t *runtimeTimer) {
 	}
 	t.timeout = js.Global.Call("setTimeout", func() {
 		t.active = false
-		t.f(t.arg, 0)
+		go t.f(t.arg, 0)
 		if t.period != 0 {
 			t.when += t.period
 			startTimer(t)

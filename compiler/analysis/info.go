@@ -9,6 +9,11 @@ import (
 	"golang.org/x/tools/go/types"
 )
 
+type continueStmt struct {
+	forStmt      *ast.ForStmt
+	analyzeStack []ast.Node
+}
+
 type Info struct {
 	*types.Info
 	Pkg           *types.Package
@@ -16,27 +21,31 @@ type Info struct {
 	FuncDeclInfos map[*types.Func]*FuncInfo
 	FuncLitInfos  map[*ast.FuncLit]*FuncInfo
 	InitFuncInfo  *FuncInfo
+	allInfos      []*FuncInfo
 	comments      ast.CommentMap
 }
 
 type FuncInfo struct {
-	HasDefer     bool
-	Flattened    map[ast.Node]bool
-	Blocking     map[ast.Node]bool
-	GotoLabel    map[*types.Label]bool
-	LocalCalls   map[*types.Func][][]ast.Node
-	p            *Info
-	analyzeStack []ast.Node
+	HasDefer      bool
+	Flattened     map[ast.Node]bool
+	Blocking      map[ast.Node]bool
+	GotoLabel     map[*types.Label]bool
+	LocalCalls    map[*types.Func][][]ast.Node
+	ContinueStmts []continueStmt
+	p             *Info
+	analyzeStack  []ast.Node
 }
 
-func NewFuncInfo(p *Info) *FuncInfo {
-	return &FuncInfo{
-		p:          p,
+func (info *Info) newFuncInfo() *FuncInfo {
+	funcInfo := &FuncInfo{
+		p:          info,
 		Flattened:  make(map[ast.Node]bool),
 		Blocking:   make(map[ast.Node]bool),
 		GotoLabel:  make(map[*types.Label]bool),
 		LocalCalls: make(map[*types.Func][][]ast.Node),
 	}
+	info.allInfos = append(info.allInfos, funcInfo)
+	return funcInfo
 }
 
 func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(*types.Func) bool) *Info {
@@ -48,18 +57,18 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		FuncDeclInfos: make(map[*types.Func]*FuncInfo),
 		FuncLitInfos:  make(map[*ast.FuncLit]*FuncInfo),
 	}
+	info.InitFuncInfo = info.newFuncInfo()
 
-	info.InitFuncInfo = NewFuncInfo(info)
-	info.FuncLitInfos[nil] = info.InitFuncInfo
 	for _, file := range files {
 		for k, v := range ast.NewCommentMap(fileSet, file, file.Comments) {
 			info.comments[k] = v
 		}
 		ast.Walk(info.InitFuncInfo, file)
 	}
+
 	for {
 		done := true
-		for _, funcInfo := range info.FuncDeclInfos {
+		for _, funcInfo := range info.allInfos {
 			for obj, calls := range funcInfo.LocalCalls {
 				if len(info.FuncDeclInfos[obj].Blocking) != 0 {
 					for _, call := range calls {
@@ -74,12 +83,11 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 			break
 		}
 	}
-	for _, funcInfo := range info.FuncLitInfos {
-		for obj, calls := range funcInfo.LocalCalls {
-			if len(info.FuncDeclInfos[obj].Blocking) != 0 {
-				for _, call := range calls {
-					funcInfo.markBlocking(call)
-				}
+
+	for _, funcInfo := range info.allInfos {
+		for _, continueStmt := range funcInfo.ContinueStmts {
+			if funcInfo.Blocking[continueStmt.forStmt.Post] {
+				funcInfo.markBlocking(continueStmt.analyzeStack)
 			}
 		}
 	}
@@ -98,19 +106,47 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 
 	switch n := node.(type) {
 	case *ast.FuncDecl:
-		newInfo := NewFuncInfo(c.p)
+		newInfo := c.p.newFuncInfo()
 		c.p.FuncDeclInfos[c.p.Defs[n.Name].(*types.Func)] = newInfo
 		return newInfo
 	case *ast.FuncLit:
-		newInfo := NewFuncInfo(c.p)
+		newInfo := c.p.newFuncInfo()
 		c.p.FuncLitInfos[n] = newInfo
 		return newInfo
 	case *ast.BranchStmt:
-		if n.Tok == token.GOTO {
+		switch n.Tok {
+		case token.GOTO:
 			for _, n2 := range c.analyzeStack {
 				c.Flattened[n2] = true
 			}
 			c.GotoLabel[c.p.Uses[n.Label].(*types.Label)] = true
+		case token.CONTINUE:
+			if n.Label != nil {
+				label := c.p.Uses[n.Label].(*types.Label)
+				for i := len(c.analyzeStack) - 1; i >= 0; i-- {
+					if labelStmt, ok := c.analyzeStack[i].(*ast.LabeledStmt); ok && c.p.Defs[labelStmt.Label] == label {
+						if _, ok := labelStmt.Stmt.(*ast.RangeStmt); ok {
+							return nil
+						}
+						stack := make([]ast.Node, len(c.analyzeStack))
+						copy(stack, c.analyzeStack)
+						c.ContinueStmts = append(c.ContinueStmts, continueStmt{labelStmt.Stmt.(*ast.ForStmt), stack})
+						return nil
+					}
+				}
+				return nil
+			}
+			for i := len(c.analyzeStack) - 1; i >= 0; i-- {
+				if _, ok := c.analyzeStack[i].(*ast.RangeStmt); ok {
+					return nil
+				}
+				if forStmt, ok := c.analyzeStack[i].(*ast.ForStmt); ok {
+					stack := make([]ast.Node, len(c.analyzeStack))
+					copy(stack, c.analyzeStack)
+					c.ContinueStmts = append(c.ContinueStmts, continueStmt{forStmt, stack})
+					return nil
+				}
+			}
 		}
 	case *ast.CallExpr:
 		lookForComment := func() {

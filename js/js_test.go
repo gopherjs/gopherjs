@@ -431,3 +431,18 @@ func TestNewArrayBuffer(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestInternalizeExternalizeUndefined(t *testing.T) {
+	type S struct {
+		js.Object
+	}
+	r := js.Global.Call("eval", "(function(f) { return f(undefined); })").Invoke(func(s S) S {
+		if s.Object != js.Undefined {
+			t.Fail()
+		}
+		return s
+	})
+	if r != js.Undefined {
+		t.Fail()
+	}
+}

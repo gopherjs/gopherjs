@@ -135,13 +135,14 @@ var $externalize = function(v, t) {
       return new Date($flatten64(milli));
     }
 
+    var noJsObject = {};
     var searchJsObject = function(v, t) {
       if (t === $js.Object) {
         return v;
       }
       if (t.kind === $kindPtr && v !== t.nil) {
         var o = searchJsObject(v.$get(), t.elem);
-        if (o !== undefined) {
+        if (o !== noJsObject) {
           return o;
         }
       }
@@ -149,15 +150,15 @@ var $externalize = function(v, t) {
         for (var i = 0; i < t.fields.length; i++) {
           var f = t.fields[i];
           var o = searchJsObject(v[f.prop], f.typ);
-          if (o !== undefined) {
+          if (o !== noJsObject) {
             return o;
           }
         }
       }
-      return undefined;
+      return noJsObject;
     };
     var o = searchJsObject(v, t);
-    if (o !== undefined) {
+    if (o !== noJsObject) {
       return o;
     }
 
@@ -307,31 +308,32 @@ var $internalize = function(v, t, recv) {
     }
     return s;
   case $kindStruct:
-    var searchJsObject = function(v, t) {
+    var noJsObject = {};
+    var searchJsObject = function(t) {
       if (t === $js.Object) {
         return v;
       }
       if (t.kind === $kindPtr && t.elem.kind === $kindStruct) {
-        var o = searchJsObject(v, t.elem);
-        if (o !== undefined) {
+        var o = searchJsObject(t.elem);
+        if (o !== noJsObject) {
           return o;
         }
       }
       if (t.kind === $kindStruct) {
         for (var i = 0; i < t.fields.length; i++) {
           var f = t.fields[i];
-          var o = searchJsObject(v, f.typ);
-          if (o !== undefined) {
+          var o = searchJsObject(f.typ);
+          if (o !== noJsObject) {
             var n = new t.ptr();
             n[f.prop] = o;
             return n;
           }
         }
       }
-      return undefined;
+      return noJsObject;
     };
-    var o = searchJsObject(v, t);
-    if (o !== undefined) {
+    var o = searchJsObject(t);
+    if (o !== noJsObject) {
       return o;
     }
   }

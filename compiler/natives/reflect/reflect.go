@@ -639,6 +639,8 @@ func (v Value) object() js.Object {
 	return js.InternalObject(v.ptr)
 }
 
+var callHelper = js.Global.Get("$call").Interface().(func(...interface{}) js.Object)
+
 func (v Value) call(op string, in []Value) []Value {
 	t := v.typ
 	var (
@@ -716,11 +718,12 @@ func (v Value) call(op string, in []Value) []Value {
 	}
 	nout := t.NumOut()
 
-	argsArray := js.Global.Get("Array").New(t.NumIn())
+	argsArray := js.Global.Get("Array").New(t.NumIn() + 1)
 	for i, arg := range in {
 		argsArray.SetIndex(i, unwrapJsObject(t.In(i), arg.assignTo("reflect.Value.Call", t.In(i).common(), nil).object()))
 	}
-	results := js.InternalObject(fn).Call("apply", rcvr, argsArray)
+	argsArray.SetIndex(t.NumIn(), js.Global.Get("$BLOCKING"))
+	results := callHelper(js.InternalObject(fn), rcvr, argsArray)
 
 	switch nout {
 	case 0:

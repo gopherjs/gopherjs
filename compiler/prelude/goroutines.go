@@ -56,9 +56,11 @@ var $callDeferred = function(deferred, jsErr) {
           if (localPanicValue.constructor === $String) {
             msg = localPanicValue.$val;
           } else if (localPanicValue.Error !== undefined) {
-            msg = localPanicValue.Error();
+            msg = localPanicValue.Error($BLOCKING);
+            if (msg && msg.$blocking) { msg = msg(); }
           } else if (localPanicValue.String !== undefined) {
-            msg = localPanicValue.String();
+            msg = localPanicValue.String($BLOCKING);
+            if (msg && msg.$blocking) { msg = msg(); }
           } else {
             msg = localPanicValue;
           }

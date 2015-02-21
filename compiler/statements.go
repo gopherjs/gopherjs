@@ -603,7 +603,7 @@ clauseLoop:
 	var caseOffset, endCase int
 	if flatten {
 		caseOffset = c.caseCounter
-		endCase = caseOffset + len(branches) - 1
+		endCase = caseOffset + len(branches)
 		if defaultBranch != nil {
 			endCase++
 		}
@@ -632,33 +632,28 @@ clauseLoop:
 	if hasBreak {
 		prefix = "switch (0) { default: "
 	}
-	jump := ""
 	if flatten {
-		var jumpList []string
 		for i, branch := range branches {
-			if i == 0 {
-				jumpList = append(jumpList, fmt.Sprintf("if (%s) {}", branch.condition))
-				continue
-			}
-			jumpList = append(jumpList, fmt.Sprintf("if (%s) { $s = %d; continue; }", branch.condition, caseOffset+i-1))
+			c.Printf("/* */ if (%s) { $s = %d; continue; }", branch.condition, caseOffset+i)
 		}
-		jumpList = append(jumpList, fmt.Sprintf("{ $s = %d; continue; }", caseOffset+len(branches)-1))
-		jump = strings.Join(jumpList, " else ")
+		c.Printf("/* */ $s = %d; continue;", caseOffset+len(branches))
 	}
 	for i, branch := range branches {
 		c.WritePos(branch.clause.Pos())
-		c.PrintCond(!flatten, fmt.Sprintf("%sif (%s) {", prefix, branch.condition), jump)
+		c.PrintCond(!flatten, fmt.Sprintf("%sif (%s) {", prefix, branch.condition), fmt.Sprintf("case %d:", caseOffset+i))
 		c.Indent(func() {
 			if printCaseBodyPrefix != nil {
 				printCaseBodyPrefix(branch.index)
 			}
 			c.translateStmtList(branch.body)
+			if flatten && (defaultBranch != nil || i != len(branches)-1) {
+				c.Printf("$s = %d; continue;", endCase)
+			}
 		})
 		prefix = "} else "
-		jump = fmt.Sprintf("$s = %d; continue; case %d: ", endCase, caseOffset+i)
 	}
 	if defaultBranch != nil {
-		c.PrintCond(!flatten, "} else {", jump)
+		c.PrintCond(!flatten, "} else {", fmt.Sprintf("case %d:", caseOffset+len(branches)))
 		c.Indent(func() {
 			if printCaseBodyPrefix != nil {
 				printCaseBodyPrefix(defaultBranch.index)

@@ -556,14 +556,14 @@ clauseLoop:
 
 		var conds []string
 		for _, cond := range clause.List {
-			x := translateCond(cond).String()
-			if x == "true" {
-				defaultBranch = branch
-				break clauseLoop
+			if b, ok := analysis.BoolValue(cond, c.p.Info.Info); ok {
+				if b {
+					defaultBranch = branch
+					break clauseLoop
+				}
+				continue
 			}
-			if x != "false" {
-				conds = append(conds, x)
-			}
+			conds = append(conds, translateCond(cond).String())
 		}
 		if len(conds) == 0 {
 			continue
@@ -696,7 +696,9 @@ func (c *funcContext) translateLoopingStmt(cond func() string, body *ast.BlockSt
 	c.PrintCond(!flatten, "while (true) {", fmt.Sprintf("case %d:", data.beginCase))
 	c.Indent(func() {
 		condStr := cond()
-		c.PrintCond(!flatten, fmt.Sprintf("if (!(%s)) { break; }", condStr), fmt.Sprintf("if(!(%s)) { $s = %d; continue; }", condStr, data.endCase))
+		if condStr != "true" {
+			c.PrintCond(!flatten, fmt.Sprintf("if (!(%s)) { break; }", condStr), fmt.Sprintf("if(!(%s)) { $s = %d; continue; }", condStr, data.endCase))
+		}
 		prevEV := c.p.escapingVars
 		c.p.escapingVars = make(map[*types.Var]bool)
 		for escaping := range prevEV {

@@ -268,14 +268,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			return c.fixNumber(c.formatExpr("~%e", e.X), basic)
 		case token.NOT:
-			x := c.translateExpr(e.X)
-			if x.String() == "true" {
-				return c.formatExpr("false")
-			}
-			if x.String() == "false" {
-				return c.formatExpr("true")
-			}
-			return c.formatExpr("!%s", x)
+			return c.formatExpr("!%e", e.X)
 		default:
 			panic(e.Op)
 		}
@@ -423,12 +416,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				c.Printf("%s = %s; case %d:", resultVar, c.translateExpr(e.Y), skipCase)
 				return c.formatExpr("%s", resultVar)
 			}
-			x := c.translateExpr(e.X)
-			y := c.translateExpr(e.Y)
-			if x.String() == "false" {
-				return c.formatExpr("false")
-			}
-			return c.formatExpr("%s && %s", x, y)
+			return c.formatExpr("%e && %e", e.X, e.Y)
 		case token.LOR:
 			if c.Blocking[e.Y] {
 				skipCase := c.caseCounter
@@ -438,12 +426,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				c.Printf("%s = %s; case %d:", resultVar, c.translateExpr(e.Y), skipCase)
 				return c.formatExpr("%s", resultVar)
 			}
-			x := c.translateExpr(e.X)
-			y := c.translateExpr(e.Y)
-			if x.String() == "true" {
-				return c.formatExpr("true")
-			}
-			return c.formatExpr("%s || %s", x, y)
+			return c.formatExpr("%e || %e", e.X, e.Y)
 		case token.EQL:
 			if util.IsJsObject(t) {
 				return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
@@ -470,11 +453,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.ParenExpr:
-		x := c.translateExpr(e.X)
-		if x.String() == "true" || x.String() == "false" {
-			return x
-		}
-		return c.formatParenExpr("%s", x)
+		return c.formatParenExpr("%e", e.X)
 
 	case *ast.IndexExpr:
 		switch t := c.p.Types[e.X].Type.Underlying().(type) {

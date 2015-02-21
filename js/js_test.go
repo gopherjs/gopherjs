@@ -446,3 +446,11 @@ func TestInternalizeExternalizeUndefined(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestDereference(t *testing.T) {
+	s := *dummys
+	p := &s
+	if p != dummys {
+		t.Fail()
+	}
+}

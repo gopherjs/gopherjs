@@ -205,6 +205,10 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		t := c.p.Types[e.X].Type
 		switch e.Op {
 		case token.AND:
+			if util.IsJsObject(exprType) {
+				return c.formatExpr("%e.object", e.X)
+			}
+
 			switch t.Underlying().(type) {
 			case *types.Struct, *types.Array:
 				return c.translateExpr(e.X)
@@ -733,6 +737,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		return c.formatExpr("%s(%s)", fun, strings.Join(args, ", "))
 
 	case *ast.StarExpr:
+		if util.IsJsObject(c.p.Types[e.X].Type) {
+			return c.formatExpr("new $jsObjectPtr(%e)", e.X)
+		}
 		if c1, isCall := e.X.(*ast.CallExpr); isCall && len(c1.Args) == 1 {
 			if c2, isCall := c1.Args[0].(*ast.CallExpr); isCall && len(c2.Args) == 1 && types.Identical(c.p.Types[c2.Fun].Type, types.Typ[types.UnsafePointer]) {
 				if unary, isUnary := c2.Args[0].(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
@@ -806,7 +813,7 @@ func (c *funcContext) makeReceiver(x ast.Expr, sel *types.Selection) *expression
 	var recv *expression
 	switch {
 	case !isPointer && pointerExpected:
-		recv = c.translateExpr(c.setType(&ast.UnaryExpr{Op: token.AND, X: x}, methodsRecvType))
+		recv = c.translateExpr(c.setType(&ast.UnaryExpr{Op: token.AND, X: x}, types.NewPointer(recvType)))
 	default:
 		recv = c.translateExpr(x)
 	}

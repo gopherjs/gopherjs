@@ -141,13 +141,13 @@ var $externalize = function(v, t) {
       if (t === $jsObjectPtr) {
         return v;
       }
-      if (t.kind === $kindPtr && v !== t.nil) {
-        var o = searchJsObject(v.$get(), t.elem);
-        if (o !== noJsObject) {
-          return o;
+      switch (t.kind) {
+      case $kindPtr:
+        if (v === t.nil) {
+          return noJsObject;
         }
-      }
-      if (t.kind === $kindStruct) {
+        return searchJsObject(v.$get(), t.elem);
+      case $kindStruct:
         for (var i = 0; i < t.fields.length; i++) {
           var f = t.fields[i];
           var o = searchJsObject(v[f.prop], f.typ);
@@ -155,8 +155,12 @@ var $externalize = function(v, t) {
             return o;
           }
         }
+        return noJsObject;
+      case $kindInterface:
+        return searchJsObject(v.$val, v.constructor);
+      default:
+        return noJsObject;
       }
-      return noJsObject;
     };
     var o = searchJsObject(v, t);
     if (o !== noJsObject) {
@@ -320,13 +324,10 @@ var $internalize = function(v, t, recv) {
       if (t === $jsObjectPtr.elem) {
         $panic(new $String("cannot internalize js.Object, use *js.Object instead"));
       }
-      if (t.kind === $kindPtr && t.elem.kind === $kindStruct) {
-        var o = searchJsObject(t.elem);
-        if (o !== noJsObject) {
-          return o;
-        }
-      }
-      if (t.kind === $kindStruct) {
+      switch (t.kind) {
+      case $kindPtr:
+        return searchJsObject(t.elem);
+      case $kindStruct:
         for (var i = 0; i < t.fields.length; i++) {
           var f = t.fields[i];
           var o = searchJsObject(f.typ);
@@ -336,8 +337,10 @@ var $internalize = function(v, t, recv) {
             return n;
           }
         }
+        return noJsObject;
+      default:
+        return noJsObject;
       }
-      return noJsObject;
     };
     var o = searchJsObject(t);
     if (o !== noJsObject) {

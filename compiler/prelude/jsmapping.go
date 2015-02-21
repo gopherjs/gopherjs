@@ -180,6 +180,9 @@ var $internalize = function(v, t, recv) {
   if (t === $jsObjectPtr) {
     return v;
   }
+  if (t === $jsObjectPtr.elem) {
+    $panic(new $String("cannot internalize js.Object, use *js.Object instead"));
+  }
   switch (t.kind) {
   case $kindBool:
     return !!v;
@@ -313,6 +316,9 @@ var $internalize = function(v, t, recv) {
     var searchJsObject = function(t) {
       if (t === $jsObjectPtr) {
         return v;
+      }
+      if (t === $jsObjectPtr.elem) {
+        $panic(new $String("cannot internalize js.Object, use *js.Object instead"));
       }
       if (t.kind === $kindPtr && t.elem.kind === $kindStruct) {
         var o = searchJsObject(t.elem);

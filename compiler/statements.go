@@ -29,7 +29,6 @@ func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 	c.WritePos(stmt.Pos())
 
-	stmt = filter.ElseIf(stmt)
 	stmt = filter.IncDecStmt(stmt, c.p.Info)
 	stmt = filter.Assign(stmt, c.p.Info)
 
@@ -42,9 +41,25 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			c.translateStmt(s.Init, nil)
 		}
 		var caseClauses []ast.Stmt
-		caseClauses = append(caseClauses, &ast.CaseClause{List: []ast.Expr{s.Cond}, Body: s.Body.List})
-		if s.Else != nil {
-			caseClauses = append(caseClauses, &ast.CaseClause{List: nil, Body: s.Else.(*ast.BlockStmt).List})
+		ifStmt := s
+		for {
+			caseClauses = append(caseClauses, &ast.CaseClause{List: []ast.Expr{ifStmt.Cond}, Body: ifStmt.Body.List})
+			switch elseStmt := ifStmt.Else.(type) {
+			case *ast.IfStmt:
+				if elseStmt.Init != nil {
+					caseClauses = append(caseClauses, &ast.CaseClause{List: nil, Body: []ast.Stmt{elseStmt}})
+					break
+				}
+				ifStmt = elseStmt
+				continue
+			case *ast.BlockStmt:
+				caseClauses = append(caseClauses, &ast.CaseClause{List: nil, Body: elseStmt.List})
+			case *ast.EmptyStmt, nil:
+				// no else clause
+			default:
+				panic(fmt.Sprintf("Unhandled else: %T\n", elseStmt))
+			}
+			break
 		}
 		c.translateBranchingStmt(caseClauses, false, c.translateExpr, nil, nil, c.Flattened[s])
 

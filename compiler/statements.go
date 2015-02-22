@@ -85,38 +85,35 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		if s.Init != nil {
 			c.translateStmt(s.Init, nil)
 		}
+		refVar := c.newVariable("_ref")
 		var expr ast.Expr
-		var typeSwitchVar string
+		var printCaseBodyPrefix func(index int)
 		switch a := s.Assign.(type) {
 		case *ast.AssignStmt:
 			expr = a.Rhs[0].(*ast.TypeAssertExpr).X
-			typeSwitchVar = c.newVariable(a.Lhs[0].(*ast.Ident).Name)
+			typeSwitchVar := c.newVariable(a.Lhs[0].(*ast.Ident).Name)
 			for _, caseClause := range s.Body.List {
 				c.p.objectVars[c.p.Implicits[caseClause]] = typeSwitchVar
+			}
+			printCaseBodyPrefix = func(index int) {
+				value := refVar
+				if conds := s.Body.List[index].(*ast.CaseClause).List; len(conds) == 1 {
+					t := c.p.Types[conds[0]].Type
+					if _, isInterface := t.Underlying().(*types.Interface); !isInterface && !types.Identical(t, types.Typ[types.UntypedNil]) {
+						value += ".$val"
+					}
+				}
+				c.Printf("%s = %s;", typeSwitchVar, value)
 			}
 		case *ast.ExprStmt:
 			expr = a.X.(*ast.TypeAssertExpr).X
 		}
-		refVar := c.newVariable("_ref")
 		c.Printf("%s = %s;", refVar, c.translateExpr(expr))
 		translateCond := func(cond ast.Expr) *expression {
 			if types.Identical(c.p.Types[cond].Type, types.Typ[types.UntypedNil]) {
 				return c.formatExpr("%s === $ifaceNil", refVar)
 			}
 			return c.formatExpr("$assertType(%s, %s, true)[1]", refVar, c.typeName(c.p.Types[cond].Type))
-		}
-		printCaseBodyPrefix := func(index int) {
-			if typeSwitchVar == "" {
-				return
-			}
-			value := refVar
-			if conds := s.Body.List[index].(*ast.CaseClause).List; len(conds) == 1 {
-				t := c.p.Types[conds[0]].Type
-				if _, isInterface := t.Underlying().(*types.Interface); !isInterface && !types.Identical(t, types.Typ[types.UntypedNil]) {
-					value += ".$val"
-				}
-			}
-			c.Printf("%s = %s;", typeSwitchVar, value)
 		}
 		c.translateBranchingStmt(s.Body.List, true, translateCond, printCaseBodyPrefix, label, c.Flattened[s])
 

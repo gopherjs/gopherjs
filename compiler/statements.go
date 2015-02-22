@@ -551,9 +551,8 @@ clauseLoop:
 		}
 
 		for _, cond := range clause.List {
-			if translateCond != nil {
+			if translateCond == nil {
 				if b, ok := analysis.BoolValue(cond, c.p.Info.Info); ok {
-					println(b)
 					if b {
 						defaultBranch = branch
 						break clauseLoop

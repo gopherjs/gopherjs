@@ -61,37 +61,48 @@ func (c *funcContext) Delayed(f func()) {
 	c.delayedOutput = c.CatchOutput(0, f)
 }
 
-func (c *funcContext) translateArgs(sig *types.Signature, args []ast.Expr, ellipsis, clone bool) []string {
-	if len(args) == 1 {
-		if tuple, isTuple := c.p.Types[args[0]].Type.(*types.Tuple); isTuple {
+func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, ellipsis, clone bool) []string {
+	if len(argExprs) == 1 {
+		if tuple, isTuple := c.p.Types[argExprs[0]].Type.(*types.Tuple); isTuple {
 			tupleVar := c.newVariable("_tuple")
-			c.Printf("%s = %s;", tupleVar, c.translateExpr(args[0]))
-			args = make([]ast.Expr, tuple.Len())
-			for i := range args {
-				args[i] = c.newIdent(c.formatExpr("%s[%d]", tupleVar, i).String(), tuple.At(i).Type())
+			c.Printf("%s = %s;", tupleVar, c.translateExpr(argExprs[0]))
+			argExprs = make([]ast.Expr, tuple.Len())
+			for i := range argExprs {
+				argExprs[i] = c.newIdent(c.formatExpr("%s[%d]", tupleVar, i).String(), tuple.At(i).Type())
 			}
 		}
 	}
 
-	params := make([]string, sig.Params().Len())
-	for i := range params {
-		if sig.Variadic() && i == len(params)-1 && !ellipsis {
-			varargType := sig.Params().At(i).Type().(*types.Slice)
-			varargs := make([]string, len(args)-i)
-			for j, arg := range args[i:] {
-				varargs[j] = c.translateImplicitConversionWithCloning(arg, varargType.Elem()).String()
-			}
-			params[i] = fmt.Sprintf("new %s([%s])", c.typeName(varargType), strings.Join(varargs, ", "))
-			break
-		}
-		argType := sig.Params().At(i).Type()
-		if clone {
-			params[i] = c.translateImplicitConversionWithCloning(args[i], argType).String()
-			continue
-		}
-		params[i] = c.translateImplicitConversion(args[i], argType).String()
+	paramsLen := sig.Params().Len()
+
+	var varargType *types.Slice
+	if sig.Variadic() && !ellipsis {
+		varargType = sig.Params().At(paramsLen - 1).Type().(*types.Slice)
 	}
-	return params
+
+	args := make([]string, len(argExprs))
+	for i, argExpr := range argExprs {
+		var argType types.Type
+		switch {
+		case varargType != nil && i >= paramsLen-1:
+			argType = varargType.Elem()
+		default:
+			argType = sig.Params().At(i).Type()
+		}
+		var arg string
+		switch {
+		case clone:
+			arg = c.translateImplicitConversionWithCloning(argExpr, argType).String()
+		default:
+			arg = c.translateImplicitConversion(argExpr, argType).String()
+		}
+		args[i] = arg
+	}
+
+	if varargType != nil {
+		return append(args[:paramsLen-1], fmt.Sprintf("new %s([%s])", c.typeName(varargType), strings.Join(args[paramsLen-1:], ", ")))
+	}
+	return args
 }
 
 func (c *funcContext) translateSelection(sel *types.Selection, pos token.Pos) ([]string, string) {

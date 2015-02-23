@@ -285,7 +285,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		t := c.p.Types[e.X].Type
 		t2 := c.p.Types[e.Y].Type
 		_, isInterface := t2.Underlying().(*types.Interface)
-		if isInterface {
+		if isInterface || types.Identical(t, types.Typ[types.UntypedNil]) {
 			t = t2
 		}
 

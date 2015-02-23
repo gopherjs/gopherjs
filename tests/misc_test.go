@@ -206,3 +206,11 @@ func TestNilInterfaceError(t *testing.T) {
 	var err error
 	err.Error()
 }
+
+func TestNilAtLhs(t *testing.T) {
+	type F func(string) string
+	var f F
+	if nil != f {
+		t.Fail()
+	}
+}

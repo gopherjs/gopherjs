@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"bitbucket.org/kardianos/osext"
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/kardianos/osext"
 	"github.com/neelance/sourcemap"
 	"gopkg.in/fsnotify.v1"
 )

@@ -150,28 +150,12 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 			}
 		}
 	case *ast.CallExpr:
-		lookForComment := func() {
-			for i := len(c.analyzeStack) - 1; i >= 0; i-- {
-				n2 := c.analyzeStack[i]
-				for _, group := range c.p.comments[n2] {
-					for _, comment := range group.List {
-						if comment.Text == "//gopherjs:blocking" {
-							c.markBlocking(c.analyzeStack)
-							return
-						}
-					}
-				}
-				if _, ok := n2.(ast.Stmt); ok {
-					break
-				}
-			}
-		}
 		callTo := func(obj types.Object) {
 			switch o := obj.(type) {
 			case *types.Func:
 				if recv := o.Type().(*types.Signature).Recv(); recv != nil {
 					if _, ok := recv.Type().Underlying().(*types.Interface); ok {
-						lookForComment()
+						c.markBlocking(c.analyzeStack)
 						return
 					}
 				}
@@ -185,7 +169,7 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 				copy(stack, c.analyzeStack)
 				c.LocalCalls[o] = append(c.LocalCalls[o], stack)
 			case *types.Var:
-				lookForComment()
+				c.markBlocking(c.analyzeStack)
 			}
 		}
 		switch f := astutil.RemoveParens(n.Fun).(type) {
@@ -198,7 +182,7 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 			callTo(c.p.Uses[f.Sel])
 		default:
 			if !astutil.IsTypeExpr(f, c.p.Info) {
-				lookForComment()
+				c.markBlocking(c.analyzeStack)
 			}
 		}
 	case *ast.SendStmt:

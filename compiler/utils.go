@@ -80,6 +80,11 @@ func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, e
 		varargType = sig.Params().At(paramsLen - 1).Type().(*types.Slice)
 	}
 
+	blockingArg := false
+	for _, argExpr := range argExprs {
+		blockingArg = blockingArg || c.Blocking[argExpr]
+	}
+
 	args := make([]string, len(argExprs))
 	for i, argExpr := range argExprs {
 		var argType types.Type
@@ -89,6 +94,7 @@ func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, e
 		default:
 			argType = sig.Params().At(i).Type()
 		}
+
 		var arg string
 		switch {
 		case clone:
@@ -96,6 +102,13 @@ func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, e
 		default:
 			arg = c.translateImplicitConversion(argExpr, argType).String()
 		}
+
+		if blockingArg && c.p.Types[argExpr].Value == nil {
+			argVar := c.newVariable("_arg")
+			c.Printf("%s = %s;", argVar, arg)
+			arg = argVar
+		}
+
 		args[i] = arg
 	}
 

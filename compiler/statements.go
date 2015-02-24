@@ -797,16 +797,13 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 	case *ast.IndexExpr:
 		switch t := c.p.Types[l.X].Type.Underlying().(type) {
 		case *types.Array, *types.Pointer:
-			pattern := "%1e[%2f] = %3s"
-			if c.p.Types[l.Index].Value == nil { // add range check if not constant
-				pattern = `(%2f < 0 || %2f >= %1e.length) ? $throwRuntimeError("index out of range") : ` + pattern
-			}
+			pattern := rangeCheck("%1e[%2f] = %3s", c.p.Types[l.Index].Value != nil, true)
 			if _, ok := t.(*types.Pointer); ok { // check pointer for nix (attribute getter causes a panic)
 				pattern = `%1e.nilCheck, ` + pattern
 			}
 			return c.formatExpr(pattern, l.X, l.Index, rhs).String() + ";"
 		case *types.Slice:
-			return c.formatExpr(`(%2f < 0 || %2f >= %1e.$length) ? $throwRuntimeError("index out of range") : %1e.$array[%1e.$offset + %2f] = %3s`, l.X, l.Index, rhs).String() + ";"
+			return c.formatExpr(rangeCheck("%1e.$array[%1e.$offset + %2f] = %3s", c.p.Types[l.Index].Value != nil, false), l.X, l.Index, rhs).String() + ";"
 		default:
 			panic(fmt.Sprintf("Unhandled lhs type: %T\n", t))
 		}

@@ -458,16 +458,13 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 	case *ast.IndexExpr:
 		switch t := c.p.Types[e.X].Type.Underlying().(type) {
 		case *types.Array, *types.Pointer:
-			pattern := "%1e[%2f]"
-			if c.p.Types[e.Index].Value == nil { // add range check if not constant
-				pattern = `((%2f < 0 || %2f >= %1e.length) ? $throwRuntimeError("index out of range") : ` + pattern + `)`
-			}
+			pattern := rangeCheck("%1e[%2f]", c.p.Types[e.Index].Value != nil, true)
 			if _, ok := t.(*types.Pointer); ok { // check pointer for nix (attribute getter causes a panic)
 				pattern = `(%1e.nilCheck, ` + pattern + `)`
 			}
 			return c.formatExpr(pattern, e.X, e.Index)
 		case *types.Slice:
-			return c.formatExpr(`((%2f < 0 || %2f >= %1e.$length) ? $throwRuntimeError("index out of range") : %1e.$array[%1e.$offset + %2f])`, e.X, e.Index)
+			return c.formatExpr(rangeCheck("%1e.$array[%1e.$offset + %2f]", c.p.Types[e.Index].Value != nil, false), e.X, e.Index)
 		case *types.Map:
 			if util.IsJsObject(c.p.Types[e.Index].Type) {
 				c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: e.Index.Pos(), Msg: "cannot use js.Object as map key"})

@@ -558,3 +558,13 @@ func removeWhitespace(b []byte, minify bool) []byte {
 func qualifiedName(o types.Object) string {
 	return o.Pkg().Path() + "." + o.Name()
 }
+
+func rangeCheck(pattern string, constantIndex, array bool) string {
+	if constantIndex {
+		if array {
+			return pattern
+		}
+		return `(%2f >= %1e.length ? $throwRuntimeError("index out of range") : ` + pattern + `)`
+	}
+	return `((%2f < 0 || %2f >= %1e.length) ? $throwRuntimeError("index out of range") : ` + pattern + `)`
+}

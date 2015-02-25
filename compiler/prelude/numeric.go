@@ -1,12 +1,10 @@
 package prelude
 
 const numeric = `
+var $coerceFloat32buffer = new Float32Array(1);
 var $coerceFloat32 = function(f) {
-  var math = $packages["math"];
-  if (math === undefined) {
-    return f;
-  }
-  return math.Float32frombits(math.Float32bits(f));
+  $coerceFloat32buffer[0] = f;
+  return $coerceFloat32buffer[0];
 };
 
 var $floatKey = function(f) {

@@ -86,8 +86,8 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
 
   case $kindComplex64:
     typ = function(real, imag) {
-      this.$real = ($f32buf[0] = real, $f32buf[0]);
-      this.$imag = ($f32buf[0] = imag, $f32buf[0]);
+      this.$real = $fround(real);
+      this.$imag = $fround(imag);
       this.$val = this;
     };
     typ.prototype.$key = function() { return string + "$" + this.$real + "$" + this.$imag; };

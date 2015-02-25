@@ -38,7 +38,9 @@ var $flushConsole = function() {};
 var $throwRuntimeError; /* set by package "runtime" */
 var $throwNilPointerError = function() { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var $call = function(fn, rcvr, args) { return fn.apply(rcvr, args); };
-var $f32buf = new Float32Array(1);
+
+var $froundBuf = new Float32Array(1);
+var $fround = Math.fround || function(f) { $froundBuf[0] = f; return $froundBuf[0]; };
 
 var $mapArray = function(array, f) {
   var newArray = new array.constructor(array.length);

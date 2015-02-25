@@ -969,7 +969,7 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 			}
 		case t.Info()&types.IsFloat != 0:
 			if t.Kind() == types.Float32 && exprType.Underlying().(*types.Basic).Kind() == types.Float64 {
-				return c.formatExpr("($f32buf[0] = %e, $f32buf[0])", expr)
+				return c.formatExpr("$fround(%e)", expr)
 			}
 			return c.formatExpr("%f", expr)
 		case t.Info()&types.IsComplex != 0:
@@ -1167,7 +1167,7 @@ func (c *funcContext) fixNumber(value *expression, basic *types.Basic) *expressi
 	case types.Uint32, types.Uint, types.Uintptr:
 		return c.formatParenExpr("%s >>> 0", value)
 	case types.Float32:
-		return c.formatExpr("($f32buf[0] = %s, $f32buf[0])", value)
+		return c.formatExpr("$fround(%s)", value)
 	case types.Float64:
 		return value
 	default:

@@ -17,20 +17,9 @@ When running your code with Node.js on Windows, it is theoretically possible to 
 
 ### Node.js on OS X and Linux
 
-GopherJS has support for system calls on OS X and Linux. Before running your code with Node.js, you need to install the system calls module. The module is only compatible with the unstable 0.11 releases of Node.js, so if you want to stay with the stable version you can opt to not install the module, but then system calls are not available.
+GopherJS has support for system calls on OS X and Linux. Before running your code with Node.js, you need to install the system calls module. The module is only compatible with version 0.12 of Node.js. If you want to use an older version you can opt to not install the module, but then system calls are not available.
 
-Install Node.js 0.12.0 with the Node Version Manager...
-```
-curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash
-. $HOME/.nvm/nvm.sh
-nvm install 0.12.0
-nvm use 0.12.0
-```
-... or Homebrew.
-```
-brew install node --devel
-```
-Then compile and install the module:
+Compile and install the module with:
 ```
 cd $GOPATH/src/github.com/gopherjs/gopherjs/node-syscall/
 npm install --global node-gyp

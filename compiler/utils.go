@@ -80,9 +80,9 @@ func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, e
 		varargType = sig.Params().At(paramsLen - 1).Type().(*types.Slice)
 	}
 
-	blockingArg := false
-	for _, argExpr := range argExprs {
-		blockingArg = blockingArg || c.Blocking[argExpr]
+	preserveOrder := false
+	for i := 1; i < len(argExprs); i++ {
+		preserveOrder = preserveOrder || c.Blocking[argExprs[i]]
 	}
 
 	args := make([]string, len(argExprs))
@@ -103,7 +103,7 @@ func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, e
 			arg = c.translateImplicitConversion(argExpr, argType).String()
 		}
 
-		if blockingArg && c.p.Types[argExpr].Value == nil {
+		if preserveOrder && c.p.Types[argExpr].Value == nil {
 			argVar := c.newVariable("_arg")
 			c.Printf("%s = %s;", argVar, arg)
 			arg = argVar

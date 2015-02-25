@@ -1,12 +1,6 @@
 package prelude
 
 const numeric = `
-var $coerceFloat32buffer = new Float32Array(1);
-var $coerceFloat32 = function(f) {
-  $coerceFloat32buffer[0] = f;
-  return $coerceFloat32buffer[0];
-};
-
 var $floatKey = function(f) {
   if (f !== f) {
     $idCounter++;

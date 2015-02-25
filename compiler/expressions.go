@@ -327,9 +327,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if basic.Info()&types.IsComplex != 0 {
 				switch e.Op {
 				case token.EQL:
-					if basic.Kind() == types.Complex64 {
-						return c.formatExpr("($float32IsEqual(%1r, %2r) && $float32IsEqual(%1i, %2i))", e.X, e.Y)
-					}
 					return c.formatExpr("(%1r === %2r && %1i === %2i)", e.X, e.Y)
 				case token.ADD, token.SUB:
 					return c.formatExpr("new %3s(%1r %4t %2r, %1i %4t %2i)", e.X, e.Y, c.typeName(t), e.Op)
@@ -344,28 +341,19 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 
 			switch e.Op {
 			case token.EQL:
-				if basic.Kind() == types.Float32 {
-					return c.formatParenExpr("$float32IsEqual(%e, %e)", e.X, e.Y)
-				}
 				return c.formatParenExpr("%e === %e", e.X, e.Y)
 			case token.LSS, token.LEQ, token.GTR, token.GEQ:
 				return c.formatExpr("%e %t %e", e.X, e.Op, e.Y)
 			case token.ADD, token.SUB:
-				if basic.Info()&types.IsInteger != 0 {
-					return c.fixNumber(c.formatExpr("%e %t %e", e.X, e.Op, e.Y), basic)
-				}
-				return c.formatExpr("%e %t %e", e.X, e.Op, e.Y)
+				return c.fixNumber(c.formatExpr("%e %t %e", e.X, e.Op, e.Y), basic)
 			case token.MUL:
 				switch basic.Kind() {
 				case types.Int32:
 					return c.formatParenExpr("(((%1e >>> 16 << 16) * %2e >> 0) + (%1e << 16 >>> 16) * %2e) >> 0", e.X, e.Y)
 				case types.Uint32, types.Uintptr:
 					return c.formatParenExpr("(((%1e >>> 16 << 16) * %2e >>> 0) + (%1e << 16 >>> 16) * %2e) >>> 0", e.X, e.Y)
-				case types.Float32, types.Float64:
-					return c.formatExpr("%e * %e", e.X, e.Y)
-				default:
-					return c.fixNumber(c.formatExpr("%e * %e", e.X, e.Y), basic)
 				}
+				return c.fixNumber(c.formatExpr("%e * %e", e.X, e.Y), basic)
 			case token.QUO:
 				if basic.Info()&types.IsInteger != 0 {
 					// cut off decimals
@@ -374,6 +362,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						shift = ">>>"
 					}
 					return c.formatExpr(`(%1s = %2e / %3e, (%1s === %1s && %1s !== 1/0 && %1s !== -1/0) ? %1s %4s 0 : $throwRuntimeError("integer divide by zero"))`, c.newVariable("_q"), e.X, e.Y, shift)
+				}
+				if basic.Kind() == types.Float32 {
+					return c.fixNumber(c.formatExpr("%e / %e", e.X, e.Y), basic)
 				}
 				return c.formatExpr("%e / %e", e.X, e.Y)
 			case token.REM:
@@ -977,8 +968,8 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 				return c.fixNumber(c.translateExpr(expr), t)
 			}
 		case t.Info()&types.IsFloat != 0:
-			if t.Kind() == types.Float64 && exprType.Underlying().(*types.Basic).Kind() == types.Float32 {
-				return c.formatExpr("$coerceFloat32(%f)", expr)
+			if t.Kind() == types.Float32 && exprType.Underlying().(*types.Basic).Kind() == types.Float64 {
+				return c.formatExpr("($f32buf[0] = %e, $f32buf[0])", expr)
 			}
 			return c.formatExpr("%f", expr)
 		case t.Info()&types.IsComplex != 0:
@@ -1175,6 +1166,10 @@ func (c *funcContext) fixNumber(value *expression, basic *types.Basic) *expressi
 		return c.formatParenExpr("%s >> 0", value)
 	case types.Uint32, types.Uint, types.Uintptr:
 		return c.formatParenExpr("%s >>> 0", value)
+	case types.Float32:
+		return c.formatExpr("($f32buf[0] = %s, $f32buf[0])", value)
+	case types.Float64:
+		return value
 	default:
 		panic(int(basic.Kind()))
 	}

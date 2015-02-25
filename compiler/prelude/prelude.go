@@ -38,6 +38,7 @@ var $flushConsole = function() {};
 var $throwRuntimeError; /* set by package "runtime" */
 var $throwNilPointerError = function() { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var $call = function(fn, rcvr, args) { return fn.apply(rcvr, args); };
+var $f32buf = new Float32Array(1);
 
 var $mapArray = function(array, f) {
   var newArray = new array.constructor(array.length);
@@ -371,10 +372,7 @@ var $equal = function(a, b, type) {
     return a === b;
   }
   switch (type.kind) {
-  case $kindFloat32:
-    return $float32IsEqual(a, b);
   case $kindComplex64:
-    return $float32IsEqual(a.$real, b.$real) && $float32IsEqual(a.$imag, b.$imag);
   case $kindComplex128:
     return a.$real === b.$real && a.$imag === b.$imag;
   case $kindInt64:
@@ -421,17 +419,6 @@ var $interfaceIsEqual = function(a, b) {
     $throwRuntimeError("comparing uncomparable type " + a.constructor.string);
   }
   return $equal(a.$val, b.$val, a.constructor);
-};
-
-var $float32IsEqual = function(a, b) {
-  if (a === b) {
-    return true;
-  }
-  if (a === 1/0 || b === 1/0 || a === -1/0 || b === -1/0 || a !== a || b !== b) {
-    return false;
-  }
-  var math = $packages["math"];
-  return math !== undefined && math.Float32bits(a) === math.Float32bits(b);
 };
 
 var $pointerIsEqual = function(a, b) {

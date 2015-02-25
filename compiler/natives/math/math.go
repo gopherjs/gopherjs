@@ -202,130 +202,36 @@ func Trunc(x float64) float64 {
 	return float64(int(x))
 }
 
+var buf struct {
+	uint32array  [2]uint32
+	float32array [2]float32
+	float64array [1]float64
+}
+
+func init() {
+	ab := js.Global.Get("ArrayBuffer").New(8)
+	js.InternalObject(buf).Set("uint32array", js.Global.Get("Uint32Array").New(ab))
+	js.InternalObject(buf).Set("float32array", js.Global.Get("Float32Array").New(ab))
+	js.InternalObject(buf).Set("float64array", js.Global.Get("Float64Array").New(ab))
+}
+
 func Float32bits(f float32) uint32 {
-	if js.InternalObject(f) == js.InternalObject(0) {
-		if js.InternalObject(1/f) == js.InternalObject(negInf) {
-			return 1 << 31
-		}
-		return 0
-	}
-	if js.InternalObject(f) != js.InternalObject(f) { // NaN
-		return 2143289344
-	}
-
-	s := uint32(0)
-	if f < 0 {
-		s = 1 << 31
-		f = -f
-	}
-
-	e := uint32(127 + 23)
-	for f >= 1<<24 {
-		f /= 2
-		e++
-		if e == (1<<8)-1 {
-			if f >= 1<<23 {
-				f = float32(posInf)
-			}
-			break
-		}
-	}
-	for f < 1<<23 {
-		e--
-		if e == 0 {
-			break
-		}
-		f *= 2
-	}
-
-	r := js.Global.Call("$mod", f, 2).Float()
-	if (r > 0.5 && r < 1) || r >= 1.5 { // round to nearest even
-		f++
-	}
-
-	return s | uint32(e)<<23 | (uint32(f) &^ (1 << 23))
+	buf.float32array[0] = f
+	return buf.uint32array[0]
 }
 
 func Float32frombits(b uint32) float32 {
-	s := float32(+1)
-	if b&(1<<31) != 0 {
-		s = -1
-	}
-	e := (b >> 23) & (1<<8 - 1)
-	m := b & (1<<23 - 1)
-
-	if e == (1<<8)-1 {
-		if m == 0 {
-			return s / 0 // Inf
-		}
-		return float32(nan)
-	}
-	if e != 0 {
-		m += 1 << 23
-	}
-	if e == 0 {
-		e = 1
-	}
-
-	return float32(Ldexp(float64(m), int(e)-127-23)) * s
+	buf.uint32array[0] = b
+	return buf.float32array[0]
 }
 
 func Float64bits(f float64) uint64 {
-	if f == 0 {
-		if 1/f == negInf {
-			return 1 << 63
-		}
-		return 0
-	}
-	if f != f { // NaN
-		return 9221120237041090561
-	}
-
-	s := uint64(0)
-	if f < 0 {
-		s = 1 << 63
-		f = -f
-	}
-
-	e := uint32(1023 + 52)
-	for f >= 1<<53 {
-		f /= 2
-		e++
-		if e == (1<<11)-1 {
-			break
-		}
-	}
-	for f < 1<<52 {
-		e--
-		if e == 0 {
-			break
-		}
-		f *= 2
-	}
-
-	return s | uint64(e)<<52 | (uint64(f) &^ (1 << 52))
+	buf.float64array[0] = f
+	return uint64(buf.uint32array[1])<<32 + uint64(buf.uint32array[0])
 }
 
 func Float64frombits(b uint64) float64 {
-	s := float64(+1)
-	if b&(1<<63) != 0 {
-		s = -1
-	}
-	e := (b >> 52) & (1<<11 - 1)
-	m := b & (1<<52 - 1)
-
-	if e == (1<<11)-1 {
-		if m == 0 {
-			return s / 0
-		}
-		return nan
-	}
-	if e != 0 {
-		m += 1 << 52
-	}
-	if e == 0 {
-		e = 1
-	}
-
-	return Ldexp(float64(m), int(e)-1023-52) * s
+	buf.uint32array[0] = uint32(b)
+	buf.uint32array[1] = uint32(b >> 32)
+	return buf.float64array[0]
 }

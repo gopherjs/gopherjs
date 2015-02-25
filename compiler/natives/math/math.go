@@ -50,8 +50,7 @@ func Copysign(x, y float64) float64 {
 }
 
 func Cos(x float64) float64 {
-	// return math.Call("cos", x).Float() // not precise enough, see https://code.google.com/p/v8/issues/detail?id=3006
-	return cos(x)
+	return math.Call("cos", x).Float()
 }
 
 func Dim(x, y float64) float64 {
@@ -177,13 +176,11 @@ func Signbit(x float64) bool {
 }
 
 func Sin(x float64) float64 {
-	// return math.Call("sin", x).Float() // not precise enough, see https://code.google.com/p/v8/issues/detail?id=3006
-	return sin(x)
+	return math.Call("sin", x).Float()
 }
 
 func Sincos(x float64) (sin, cos float64) {
-	// return Sin(x), Cos(x) // not precise enough, see https://code.google.com/p/v8/issues/detail?id=3006
-	return sincos(x)
+	return Sin(x), Cos(x)
 }
 
 func Sqrt(x float64) float64 {
@@ -191,8 +188,7 @@ func Sqrt(x float64) float64 {
 }
 
 func Tan(x float64) float64 {
-	// return math.Call("tan", x).Float() // not precise enough, see https://code.google.com/p/v8/issues/detail?id=3006
-	return tan(x)
+	return math.Call("tan", x).Float()
 }
 
 func Trunc(x float64) float64 {

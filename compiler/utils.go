@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gopherjs/gopherjs/compiler/util"
+	"github.com/gopherjs/gopherjs/compiler/typesutil"
 
 	"golang.org/x/tools/go/types"
 )
@@ -131,7 +131,7 @@ func (c *funcContext) translateSelection(sel *types.Selection, pos token.Pos) ([
 			searchJsObject = func(s *types.Struct) []string {
 				for i := 0; i < s.NumFields(); i++ {
 					ft := s.Field(i).Type()
-					if util.IsJsObject(ft) {
+					if typesutil.IsJsObject(ft) {
 						return []string{fieldName(s, i)}
 					}
 					ft = ft.Underlying()
@@ -158,7 +158,7 @@ func (c *funcContext) translateSelection(sel *types.Selection, pos token.Pos) ([
 }
 
 func (c *funcContext) zeroValue(ty types.Type) string {
-	if util.IsJsObject(ty) {
+	if typesutil.IsJsObject(ty) {
 		return "null"
 	}
 	switch t := ty.Underlying().(type) {
@@ -346,7 +346,7 @@ func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
 }
 
 func (c *funcContext) externalize(s string, t types.Type) string {
-	if util.IsJsObject(t) {
+	if typesutil.IsJsObject(t) {
 		return s
 	}
 	switch u := t.Underlying().(type) {

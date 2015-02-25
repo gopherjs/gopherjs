@@ -9,7 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gopherjs/gopherjs/compiler/util"
+	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/typesutil"
 
 	"golang.org/x/tools/go/exact"
 	"golang.org/x/tools/go/types"
@@ -86,7 +87,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 	}
 
-	if obj != nil && util.IsJsPackage(obj.Pkg()) {
+	if obj != nil && typesutil.IsJsPackage(obj.Pkg()) {
 		switch obj.Name() {
 		case "Global":
 			return c.formatExpr("$global")
@@ -205,7 +206,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		t := c.p.Types[e.X].Type
 		switch e.Op {
 		case token.AND:
-			if util.IsJsObject(exprType) {
+			if typesutil.IsJsObject(exprType) {
 				return c.formatExpr("%e.object", e.X)
 			}
 
@@ -214,7 +215,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				return c.translateExpr(e.X)
 			}
 
-			switch x := util.RemoveParens(e.X).(type) {
+			switch x := astutil.RemoveParens(e.X).(type) {
 			case *ast.CompositeLit:
 				return c.formatExpr("$newDataPointer(%e, %s)", x, c.typeName(c.p.Types[e].Type))
 			case *ast.Ident:
@@ -428,7 +429,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			return c.formatExpr("%e || %e", e.X, e.Y)
 		case token.EQL:
-			if util.IsJsObject(t) {
+			if typesutil.IsJsObject(t) {
 				return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 			}
 			switch u := t.Underlying().(type) {
@@ -466,7 +467,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Slice:
 			return c.formatExpr(rangeCheck("%1e.$array[%1e.$offset + %2f]", c.p.Types[e.Index].Value != nil, false), e.X, e.Index)
 		case *types.Map:
-			if util.IsJsObject(c.p.Types[e.Index].Type) {
+			if typesutil.IsJsObject(c.p.Types[e.Index].Type) {
 				c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: e.Index.Pos(), Msg: "cannot use js.Object as map key"})
 			}
 			key := c.makeKey(e.Index, t.Key())
@@ -549,7 +550,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			break
 		}
 
-		if util.IsTypeExpr(plainFun, c.p.Info.Info) {
+		if astutil.IsTypeExpr(plainFun, c.p.Info.Info) {
 			return c.formatExpr("%s", c.translateConversion(e.Args[0], c.p.Types[plainFun].Type))
 		}
 
@@ -560,7 +561,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if o, ok := obj.(*types.Builtin); ok {
 				return c.translateBuiltin(o.Name(), e.Args, e.Ellipsis.IsValid(), exprType)
 			}
-			if util.IsJsPackage(obj.Pkg()) && obj.Name() == "InternalObject" {
+			if typesutil.IsJsPackage(obj.Pkg()) && obj.Name() == "InternalObject" {
 				return c.translateExpr(e.Args[0])
 			}
 			fun = c.translateExpr(plainFun)
@@ -570,7 +571,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if !ok {
 				// qualified identifier
 				obj := c.p.Uses[f.Sel]
-				if util.IsJsPackage(obj.Pkg()) {
+				if typesutil.IsJsPackage(obj.Pkg()) {
 					switch obj.Name() {
 					case "Debugger":
 						return c.formatExpr("debugger")
@@ -601,7 +602,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			case types.MethodVal:
 				recv := c.makeReceiver(f.X, sel)
 
-				if util.IsJsPackage(sel.Obj().Pkg()) {
+				if typesutil.IsJsPackage(sel.Obj().Pkg()) {
 					globalRef := func(id string) string {
 						if recv.String() == "$global" && id[0] == '$' {
 							return id
@@ -713,7 +714,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		return c.formatExpr("%s(%s)", fun, strings.Join(args, ", "))
 
 	case *ast.StarExpr:
-		if util.IsJsObject(c.p.Types[e.X].Type) {
+		if typesutil.IsJsObject(c.p.Types[e.X].Type) {
 			return c.formatExpr("new $jsObjectPtr(%e)", e.X)
 		}
 		if c1, isCall := e.X.(*ast.CallExpr); isCall && len(c1.Args) == 1 {
@@ -1101,7 +1102,7 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 		return c.formatExpr("$subslice(new %1s(%2e.$array), %2e.$offset, %2e.$offset + %2e.$length)", c.typeName(desiredType), expr)
 
 	case *types.Interface:
-		if util.IsJsObject(exprType) {
+		if typesutil.IsJsObject(exprType) {
 			// wrap JS object into js.Object struct when converting to interface
 			return c.formatExpr("new $jsObjectPtr(%e)", expr)
 		}
@@ -1180,7 +1181,7 @@ func (c *funcContext) fixNumber(value *expression, basic *types.Basic) *expressi
 }
 
 func (c *funcContext) internalize(s *expression, t types.Type) *expression {
-	if util.IsJsObject(t) {
+	if typesutil.IsJsObject(t) {
 		return s
 	}
 	switch u := t.Underlying().(type) {

@@ -573,11 +573,16 @@ func qualifiedName(o types.Object) string {
 }
 
 func rangeCheck(pattern string, constantIndex, array bool) string {
-	if constantIndex {
-		if array {
-			return pattern
-		}
-		return `(%2f >= %1e.length ? $throwRuntimeError("index out of range") : ` + pattern + `)`
+	if constantIndex && array {
+		return pattern
 	}
-	return `((%2f < 0 || %2f >= %1e.length) ? $throwRuntimeError("index out of range") : ` + pattern + `)`
+	lengthProp := "$length"
+	if array {
+		lengthProp = "length"
+	}
+	check := "%2f >= %1e." + lengthProp
+	if !constantIndex {
+		check = "(%2f < 0 || " + check + ")"
+	}
+	return "(" + check + ` ? $throwRuntimeError("index out of range") : ` + pattern + ")"
 }

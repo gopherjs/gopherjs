@@ -207,6 +207,16 @@ func TestNilInterfaceError(t *testing.T) {
 	err.Error()
 }
 
+func TestIndexOutOfRangeError(t *testing.T) {
+	defer func() {
+		if err := recover(); err == nil || !strings.Contains(err.(error).Error(), "index out of range") {
+			t.Fail()
+		}
+	}()
+	x := []int{1, 2, 3}[10]
+	_ = x
+}
+
 func TestNilAtLhs(t *testing.T) {
 	type F func(string) string
 	var f F

@@ -31,6 +31,37 @@ func (err ErrorList) Error() string {
 	return err[0].Error()
 }
 
+type Archive struct {
+	ImportPath   string
+	Name         string
+	Imports      []string
+	GcData       []byte
+	Declarations []*Decl
+	FileSet      []byte
+	Minified     bool
+
+	types *types.Package
+}
+
+type Decl struct {
+	FullName        string
+	Vars            []string
+	DeclCode        []byte
+	MethodListCode  []byte
+	TypeInitCode    []byte
+	InitCode        []byte
+	DceObjectFilter string
+	DceMethodFilter string
+	DceDeps         []string
+	Blocking        bool
+}
+
+type Dependency struct {
+	Pkg    string
+	Type   string
+	Method string
+}
+
 func ImportDependencies(archive *Archive, importPkg func(string) (*Archive, error)) ([]*Archive, error) {
 	var deps []*Archive
 	paths := make(map[string]bool)
@@ -74,12 +105,17 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 	var pendingDecls []*Decl
 	for _, pkg := range pkgs {
 		for _, d := range pkg.Declarations {
-			if len(d.DceFilters) == 0 {
+			if d.DceObjectFilter == "" && d.DceMethodFilter == "" {
 				pendingDecls = append(pendingDecls, d)
 				continue
 			}
-			for _, f := range d.DceFilters {
-				declsByObject[f] = append(declsByObject[f], d)
+			if d.DceObjectFilter != "" {
+				d.DceObjectFilter = pkg.ImportPath + "." + d.DceObjectFilter
+				declsByObject[d.DceObjectFilter] = append(declsByObject[d.DceObjectFilter], d)
+			}
+			if d.DceMethodFilter != "" {
+				d.DceMethodFilter = pkg.ImportPath + "." + d.DceMethodFilter
+				declsByObject[d.DceMethodFilter] = append(declsByObject[d.DceMethodFilter], d)
 			}
 		}
 	}
@@ -91,14 +127,13 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 			if decls, ok := declsByObject[dep]; ok {
 				delete(declsByObject, dep)
 				for _, d := range decls {
-					for i, f := range d.DceFilters {
-						if f == dep {
-							d.DceFilters[i] = d.DceFilters[len(d.DceFilters)-1]
-							d.DceFilters = d.DceFilters[:len(d.DceFilters)-1]
-							break
-						}
+					if d.DceObjectFilter == dep {
+						d.DceObjectFilter = ""
 					}
-					if len(d.DceFilters) == 0 {
+					if d.DceMethodFilter == dep {
+						d.DceMethodFilter = ""
+					}
+					if d.DceObjectFilter == "" && d.DceMethodFilter == "" {
 						pendingDecls = append(pendingDecls, d)
 					}
 				}
@@ -143,7 +178,7 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 	vars := []string{"$pkg = {}"}
 	var filteredDecls []*Decl
 	for _, d := range pkg.Declarations {
-		if len(d.DceFilters) == 0 {
+		if d.DceObjectFilter == "" && d.DceMethodFilter == "" {
 			vars = append(vars, d.Vars...)
 			filteredDecls = append(filteredDecls, d)
 		}
@@ -184,45 +219,24 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 	return nil
 }
 
-func ReadArchive(filename, id string, r io.Reader, packages map[string]*types.Package) (*Archive, error) {
+func ReadArchive(filename, path string, r io.Reader, packages map[string]*types.Package) (*Archive, error) {
 	var a Archive
 	if err := gob.NewDecoder(r).Decode(&a); err != nil {
 		return nil, err
 	}
 
-	pkg, err := gcimporter.ImportData(packages, filename, id, bytes.NewReader(a.GcData))
+	var err error
+	a.types, err = gcimporter.ImportData(packages, filename, path, bytes.NewReader(a.GcData))
 	if err != nil {
 		return nil, err
 	}
-	packages[pkg.Path()] = pkg
+	packages[path] = a.types
 
 	return &a, nil
 }
 
 func WriteArchive(a *Archive, w io.Writer) error {
 	return gob.NewEncoder(w).Encode(a)
-}
-
-type Archive struct {
-	ImportPath   string
-	Name         string
-	Imports      []string
-	GcData       []byte
-	Declarations []*Decl
-	FileSet      []byte
-	Minified     bool
-}
-
-type Decl struct {
-	FullName       string
-	Vars           []string
-	DeclCode       []byte
-	MethodListCode []byte
-	TypeInitCode   []byte
-	InitCode       []byte
-	DceFilters     []string
-	DceDeps        []string
-	Blocking       bool
 }
 
 type SourceMapFilter struct {

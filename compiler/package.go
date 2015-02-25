@@ -19,11 +19,11 @@ type pkgContext struct {
 	typeNames    []*types.TypeName
 	pkgVars      map[string]string
 	objectVars   map[types.Object]string
-	anonTypes    []types.Type
-	anonTypeVars map[string]string
+	anonTypes    []*types.TypeName
+	anonTypeMap map[types.Type]*types.TypeName
 	escapingVars map[*types.Var]bool
 	indentation  int
-	dependencies map[string]bool
+	dependencies map[types.Object]bool
 	minify       bool
 	fileSet      *token.FileSet
 	errList      ErrorList
@@ -140,10 +140,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			Info:         pkgInfo,
 			pkgVars:      make(map[string]string),
 			objectVars:   make(map[types.Object]string),
-			anonTypeVars: make(map[string]string),
+			anonTypeMap: make(map[types.Type]*types.TypeName),
 			escapingVars: make(map[*types.Var]bool),
 			indentation:  1,
-			dependencies: make(map[string]bool),
+			dependencies: make(map[types.Object]bool),
 			minify:       minify,
 			fileSet:      fileSet,
 		},
@@ -222,11 +222,16 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 
 	collectDependencies := func(f func()) []string {
-		c.p.dependencies = make(map[string]bool)
+		c.p.dependencies = make(map[types.Object]bool)
 		f()
 		var deps []string
-		for dep := range c.p.dependencies {
-			deps = append(deps, dep)
+		for o := range c.p.dependencies {
+			qualifiedName := o.Pkg().Path() + "." + o.Name()
+			if f, ok := o.(*types.Func); ok && f.Type().(*types.Signature).Recv() != nil {
+				deps = append(deps, qualifiedName+"~")
+				continue
+			}
+			deps = append(deps, qualifiedName)
 		}
 		sort.Strings(deps)
 		return deps
@@ -250,7 +255,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				d.InitCode = []byte(fmt.Sprintf("\t\t%s = %s;\n", c.objectName(o), c.zeroValue(o.Type())))
 			})
 		}
-		d.DceFilters = []string{qualifiedName(o)}
+		d.DceObjectFilter = o.Name()
 		varDecls = append(varDecls, &d)
 	}
 	for _, init := range c.p.InitOrder {
@@ -275,7 +280,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		})
 		if len(init.Lhs) == 1 {
 			if !analysis.HasSideEffect(init.Rhs, c.p.Info.Info) {
-				d.DceFilters = []string{qualifiedName(init.Lhs[0])}
+				d.DceObjectFilter = init.Lhs[0].Name()
 			}
 		}
 		varDecls = append(varDecls, &d)
@@ -293,11 +298,11 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		if fun.Recv == nil {
 			d.Vars = []string{c.objectName(o)}
-			d.DceFilters = []string{qualifiedName(o)}
+			d.DceObjectFilter = o.Name()
 			switch o.Name() {
 			case "main":
 				mainFunc = o
-				d.DceFilters = nil
+				d.DceObjectFilter = ""
 			case "init":
 				d.InitCode = c.CatchOutput(1, func() {
 					id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
@@ -308,7 +313,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					}
 					c.translateStmt(&ast.ExprStmt{X: call}, nil)
 				})
-				d.DceFilters = nil
+				d.DceObjectFilter = ""
 			}
 		}
 		if fun.Recv != nil {
@@ -318,9 +323,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			if isPointer {
 				namedRecvType = ptr.Elem().(*types.Named)
 			}
-			d.DceFilters = []string{qualifiedName(namedRecvType.Obj())}
+			d.DceObjectFilter = namedRecvType.Obj().Name()
 			if !fun.Name.IsExported() {
-				d.DceFilters = append(d.DceFilters, qualifiedName(o)+"~")
+				d.DceMethodFilter = o.Name() + "~"
 			}
 		}
 
@@ -349,8 +354,8 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	for _, o := range c.p.typeNames {
 		typeName := c.objectName(o)
 		d := Decl{
-			Vars:       []string{typeName},
-			DceFilters: []string{qualifiedName(o)},
+			Vars:            []string{typeName},
+			DceObjectFilter: o.Name(),
 		}
 		d.DceDeps = collectDependencies(func() {
 			d.DeclCode = c.CatchOutput(0, func() {
@@ -422,11 +427,11 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	// anonymous types
 	for _, t := range c.p.anonTypes {
 		d := Decl{
-			Vars:       []string{c.p.anonTypeVars[t.String()]},
-			DceFilters: []string{importPath + ":" + t.String()},
+			Vars:            []string{t.Name()},
+			DceObjectFilter: t.Name(),
 		}
 		d.DceDeps = collectDependencies(func() {
-			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", c.p.anonTypeVars[t.String()], strings.ToLower(typeKind(t)[5:]), c.initArgs(t)))
+			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), c.initArgs(t.Type())))
 		})
 		typeDecls = append(typeDecls, &d)
 	}
@@ -452,6 +457,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		Declarations: allDecls,
 		FileSet:      encodedFileSet.Bytes(),
 		Minified:     minify,
+		types:        typesPkg,
 	}, nil
 }
 

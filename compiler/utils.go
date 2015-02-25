@@ -270,7 +270,7 @@ func (c *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
 
 func (c *funcContext) objectName(o types.Object) string {
 	if o.Pkg() != c.p.Pkg || o.Parent() == c.p.Pkg.Scope() {
-		c.p.dependencies[qualifiedName(o)] = true
+		c.p.dependencies[o] = true
 	}
 
 	if o.Pkg() != c.p.Pkg {
@@ -315,15 +315,16 @@ func (c *funcContext) typeName(ty types.Type) string {
 		}
 	}
 
-	name, ok := c.p.anonTypeVars[ty.String()]
+	anonType, ok := c.p.anonTypeMap[ty]
 	if !ok {
 		c.initArgs(ty) // cause all embedded types to be registered
-		c.p.anonTypes = append(c.p.anonTypes, ty)
-		name = c.newVariableWithLevel(strings.ToLower(typeKind(ty)[5:])+"Type", true, "")
-		c.p.anonTypeVars[ty.String()] = name
+		varName := c.newVariableWithLevel(strings.ToLower(typeKind(ty)[5:])+"Type", true, "")
+		anonType = types.NewTypeName(token.NoPos, c.p.Pkg, varName, ty) // fake types.TypeName
+		c.p.anonTypes = append(c.p.anonTypes, anonType)
+		c.p.anonTypeMap[ty] = anonType
 	}
-	c.p.dependencies[c.p.Pkg.Path()+":"+ty.String()] = true
-	return name
+	c.p.dependencies[anonType] = true
+	return anonType.Name()
 }
 
 func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
@@ -566,10 +567,6 @@ func removeWhitespace(b []byte, minify bool) []byte {
 		b = b[1:]
 	}
 	return out
-}
-
-func qualifiedName(o types.Object) string {
-	return o.Pkg().Path() + "." + o.Name()
 }
 
 func rangeCheck(pattern string, constantIndex, array bool) string {

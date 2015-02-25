@@ -534,7 +534,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			return c.formatExpr(`$methodVal(%s, "%s")`, recv, sel.Obj().(*types.Func).Name())
 		case types.MethodExpr:
 			if !sel.Obj().Exported() {
-				c.p.dependencies[qualifiedName(sel.Obj())+"~"] = true
+				c.p.dependencies[sel.Obj()] = true
 			}
 			return c.formatExpr("$methodExpr(%s.prototype.%s)", c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
 		}
@@ -780,7 +780,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 
 func (c *funcContext) makeReceiver(x ast.Expr, sel *types.Selection) *expression {
 	if !sel.Obj().Exported() {
-		c.p.dependencies[qualifiedName(sel.Obj())+"~"] = true
+		c.p.dependencies[sel.Obj()] = true
 	}
 
 	recvType := sel.Recv()

@@ -429,7 +429,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 				o := c.p.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
 				c.p.typeNames = append(c.p.typeNames, o)
 				c.p.objectVars[o] = c.newVariableWithLevel(o.Name(), true, "")
-				c.p.dependencies[qualifiedName(o)] = true
+				c.p.dependencies[o] = true
 			}
 		case token.CONST:
 			// skip, constants are inlined

@@ -332,7 +332,7 @@ func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
 	case *types.Array, *types.Struct:
 		return fmt.Sprintf("(new %s(%s)).$key()", c.typeName(keyType), c.translateExpr(expr))
 	case *types.Basic:
-		if is64Bit(t) {
+		if is64Bit(t) || isComplex(t) {
 			return fmt.Sprintf("%s.$key()", c.translateExpr(expr))
 		}
 		if t.Info()&types.IsFloat != 0 {

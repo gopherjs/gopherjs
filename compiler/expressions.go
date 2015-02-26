@@ -37,9 +37,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 	if value := c.p.Types[expr].Value; value != nil {
 		basic := exprType.Underlying().(*types.Basic)
 		switch {
-		case basic.Info()&types.IsBoolean != 0:
+		case isBoolean(basic):
 			return c.formatExpr("%s", strconv.FormatBool(exact.BoolVal(value)))
-		case basic.Info()&types.IsInteger != 0:
+		case isInteger(basic):
 			if is64Bit(basic) {
 				if basic.Kind() == types.Int64 {
 					d, ok := exact.Int64Val(value)
@@ -59,17 +59,17 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				panic("could not get exact int")
 			}
 			return c.formatExpr("%s", strconv.FormatInt(d, 10))
-		case basic.Info()&types.IsFloat != 0:
+		case isFloat(basic):
 			f, _ := exact.Float64Val(value)
 			return c.formatExpr("%s", strconv.FormatFloat(f, 'g', -1, 64))
-		case basic.Info()&types.IsComplex != 0:
+		case isComplex(basic):
 			r, _ := exact.Float64Val(exact.Real(value))
 			i, _ := exact.Float64Val(exact.Imag(value))
 			if basic.Kind() == types.UntypedComplex {
 				exprType = types.Typ[types.Complex128]
 			}
 			return c.formatExpr("new %s(%s, %s)", c.typeName(exprType), strconv.FormatFloat(r, 'g', -1, 64), strconv.FormatFloat(i, 'g', -1, 64))
-		case basic.Info()&types.IsString != 0:
+		case isString(basic):
 			return c.formatExpr("%s", encodeString(exact.StringVal(value)))
 		default:
 			panic("Unhandled constant type: " + basic.String())
@@ -256,9 +256,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			switch {
 			case is64Bit(basic):
 				return c.formatExpr("new %1s(-%2h, -%2l)", c.typeName(t), e.X)
-			case basic.Info()&types.IsComplex != 0:
+			case isComplex(basic):
 				return c.formatExpr("new %1s(-%2r, -%2i)", c.typeName(t), e.X)
-			case basic.Info()&types.IsUnsigned != 0:
+			case isUnsigned(basic):
 				return c.fixNumber(c.formatExpr("-%e", e.X), basic)
 			default:
 				return c.formatExpr("-%e", e.X)
@@ -290,7 +290,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			t = t2
 		}
 
-		if basic, isBasic := t.Underlying().(*types.Basic); isBasic && basic.Info()&types.IsNumeric != 0 {
+		if basic, isBasic := t.Underlying().(*types.Basic); isBasic && isNumeric(basic) {
 			if is64Bit(basic) {
 				switch e.Op {
 				case token.MUL:
@@ -324,7 +324,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				}
 			}
 
-			if basic.Info()&types.IsComplex != 0 {
+			if isComplex(basic) {
 				switch e.Op {
 				case token.EQL:
 					return c.formatExpr("(%1r === %2r && %1i === %2i)", e.X, e.Y)
@@ -355,10 +355,10 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				}
 				return c.fixNumber(c.formatExpr("%e * %e", e.X, e.Y), basic)
 			case token.QUO:
-				if basic.Info()&types.IsInteger != 0 {
+				if isInteger(basic) {
 					// cut off decimals
 					shift := ">>"
-					if basic.Info()&types.IsUnsigned != 0 {
+					if isUnsigned(basic) {
 						shift = ">>>"
 					}
 					return c.formatExpr(`(%1s = %2e / %3e, (%1s === %1s && %1s !== 1/0 && %1s !== -1/0) ? %1s %4s 0 : $throwRuntimeError("integer divide by zero"))`, c.newVariable("_q"), e.X, e.Y, shift)
@@ -371,19 +371,19 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				return c.formatExpr(`(%1s = %2e %% %3e, %1s === %1s ? %1s : $throwRuntimeError("integer divide by zero"))`, c.newVariable("_r"), e.X, e.Y)
 			case token.SHL, token.SHR:
 				op := e.Op.String()
-				if e.Op == token.SHR && basic.Info()&types.IsUnsigned != 0 {
+				if e.Op == token.SHR && isUnsigned(basic) {
 					op = ">>>"
 				}
 				if c.p.Types[e.Y].Value != nil {
 					return c.fixNumber(c.formatExpr("%e %s %e", e.X, op, e.Y), basic)
 				}
-				if e.Op == token.SHR && basic.Info()&types.IsUnsigned == 0 {
+				if e.Op == token.SHR && !isUnsigned(basic) {
 					return c.fixNumber(c.formatParenExpr("%e >> $min(%e, 31)", e.X, e.Y), basic)
 				}
 				y := c.newVariable("y")
 				return c.fixNumber(c.formatExpr("(%s = %s, %s < 32 ? (%e %s %s) : 0)", y, c.translateImplicitConversion(e.Y, types.Typ[types.Uint]), y, e.X, op, y), basic)
 			case token.AND, token.OR:
-				if basic.Info()&types.IsUnsigned != 0 {
+				if isUnsigned(basic) {
 					return c.formatParenExpr("(%e %t %e) >>> 0", e.X, e.Op, e.Y)
 				}
 				return c.formatParenExpr("%e %t %e", e.X, e.Op, e.Y)
@@ -473,7 +473,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.SliceExpr:
-		if b, isBasic := c.p.Types[e.X].Type.Underlying().(*types.Basic); isBasic && b.Info()&types.IsString != 0 {
+		if b, isBasic := c.p.Types[e.X].Type.Underlying().(*types.Basic); isBasic && isString(b) {
 			switch {
 			case e.Low == nil && e.High == nil:
 				return c.translateExpr(e.X)
@@ -874,7 +874,7 @@ func (c *funcContext) translateBuiltin(name string, args []ast.Expr, ellipsis bo
 	case "delete":
 		return c.formatExpr(`delete %e[%s]`, args[0], c.makeKey(args[1], c.p.Types[args[0]].Type.Underlying().(*types.Map).Key()))
 	case "copy":
-		if basic, isBasic := c.p.Types[args[1]].Type.Underlying().(*types.Basic); isBasic && basic.Info()&types.IsString != 0 {
+		if basic, isBasic := c.p.Types[args[1]].Type.Underlying().(*types.Basic); isBasic && isString(basic) {
 			return c.formatExpr("$copyString(%e, %e)", args[0], args[1])
 		}
 		return c.formatExpr("$copySlice(%e, %e)", args[0], args[1])
@@ -944,7 +944,7 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 	switch t := desiredType.Underlying().(type) {
 	case *types.Basic:
 		switch {
-		case t.Info()&types.IsInteger != 0:
+		case isInteger(t):
 			basicExprType := exprType.Underlying().(*types.Basic)
 			switch {
 			case is64Bit(t):
@@ -956,32 +956,32 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 				}
 				return c.formatExpr("new %1s(%2h, %2l)", c.typeName(desiredType), expr)
 			case is64Bit(basicExprType):
-				if t.Info()&types.IsUnsigned == 0 && basicExprType.Info()&types.IsUnsigned == 0 {
+				if !isUnsigned(t) && !isUnsigned(basicExprType) {
 					return c.fixNumber(c.formatParenExpr("%1l + ((%1h >> 31) * 4294967296)", expr), t)
 				}
 				return c.fixNumber(c.formatExpr("%s.$low", c.translateExpr(expr)), t)
-			case basicExprType.Info()&types.IsFloat != 0:
+			case isFloat(basicExprType):
 				return c.formatParenExpr("%e >> 0", expr)
 			case types.Identical(exprType, types.Typ[types.UnsafePointer]):
 				return c.translateExpr(expr)
 			default:
 				return c.fixNumber(c.translateExpr(expr), t)
 			}
-		case t.Info()&types.IsFloat != 0:
+		case isFloat(t):
 			if t.Kind() == types.Float32 && exprType.Underlying().(*types.Basic).Kind() == types.Float64 {
 				return c.formatExpr("$fround(%e)", expr)
 			}
 			return c.formatExpr("%f", expr)
-		case t.Info()&types.IsComplex != 0:
+		case isComplex(t):
 			return c.formatExpr("new %1s(%2r, %2i)", c.typeName(desiredType), expr)
-		case t.Info()&types.IsString != 0:
+		case isString(t):
 			value := c.translateExpr(expr)
 			switch et := exprType.Underlying().(type) {
 			case *types.Basic:
 				if is64Bit(et) {
 					value = c.formatExpr("%s.$low", value)
 				}
-				if et.Info()&types.IsNumeric != 0 {
+				if isNumeric(et) {
 					return c.formatExpr("$encodeRune(%s)", value)
 				}
 				return value
@@ -1023,7 +1023,7 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 	case *types.Slice:
 		switch et := exprType.Underlying().(type) {
 		case *types.Basic:
-			if et.Info()&types.IsString != 0 {
+			if isString(et) {
 				if types.Identical(t.Elem().Underlying(), types.Typ[types.Rune]) {
 					return c.formatExpr("new %s($stringToRunes(%e))", c.typeName(desiredType), expr)
 				}
@@ -1138,7 +1138,7 @@ func (c *funcContext) loadStruct(array, target string, s *types.Struct) string {
 	for i, field := range fields {
 		switch t := field.Type().Underlying().(type) {
 		case *types.Basic:
-			if t.Info()&types.IsNumeric != 0 {
+			if isNumeric(t) {
 				if is64Bit(t) {
 					code += fmt.Sprintf(", %s = new %s(%s.getUint32(%d, true), %s.getUint32(%d, true))", field.Name(), c.typeName(field.Type()), view, offsets[i]+4, view, offsets[i])
 					break
@@ -1182,11 +1182,11 @@ func (c *funcContext) internalize(s *expression, t types.Type) *expression {
 	switch u := t.Underlying().(type) {
 	case *types.Basic:
 		switch {
-		case u.Info()&types.IsBoolean != 0:
+		case isBoolean(u):
 			return c.formatExpr("!!(%s)", s)
-		case u.Info()&types.IsInteger != 0 && !is64Bit(u):
+		case isInteger(u) && !is64Bit(u):
 			return c.fixNumber(c.formatExpr("$parseInt(%s)", s), u)
-		case u.Info()&types.IsFloat != 0:
+		case isFloat(u):
 			return c.formatExpr("$parseFloat(%s)", s)
 		}
 	}

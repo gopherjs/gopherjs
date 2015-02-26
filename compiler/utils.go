@@ -164,13 +164,13 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
 		switch {
-		case is64Bit(t) || t.Info()&types.IsComplex != 0:
+		case is64Bit(t) || isComplex(t):
 			return fmt.Sprintf("new %s(0, 0)", c.typeName(ty))
-		case t.Info()&types.IsBoolean != 0:
+		case isBoolean(t):
 			return "false"
-		case t.Info()&types.IsNumeric != 0, t.Kind() == types.UnsafePointer:
+		case isNumeric(t), t.Kind() == types.UnsafePointer:
 			return "0"
-		case t.Info()&types.IsString != 0:
+		case isString(t):
 			return `""`
 		case t.Kind() == types.UntypedNil:
 			panic("Zero value for untyped nil.")
@@ -335,7 +335,7 @@ func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
 		if is64Bit(t) || isComplex(t) {
 			return fmt.Sprintf("%s.$key()", c.translateExpr(expr))
 		}
-		if t.Info()&types.IsFloat != 0 {
+		if isFloat(t) {
 			return fmt.Sprintf("$floatKey(%s)", c.translateExpr(expr))
 		}
 		return c.translateImplicitConversion(expr, keyType).String()
@@ -352,7 +352,7 @@ func (c *funcContext) externalize(s string, t types.Type) string {
 	}
 	switch u := t.Underlying().(type) {
 	case *types.Basic:
-		if u.Info()&types.IsNumeric != 0 && !is64Bit(u) && u.Info()&types.IsComplex == 0 {
+		if isNumeric(u) && !is64Bit(u) && !isComplex(u) {
 			return s
 		}
 		if u.Kind() == types.UntypedNil {
@@ -415,8 +415,32 @@ func is64Bit(t *types.Basic) bool {
 	return t.Kind() == types.Int64 || t.Kind() == types.Uint64
 }
 
+func isBoolean(t *types.Basic) bool {
+	return t.Info()&types.IsBoolean != 0
+}
+
 func isComplex(t *types.Basic) bool {
-	return t.Kind() == types.Complex64 || t.Kind() == types.Complex128
+	return t.Info()&types.IsComplex != 0
+}
+
+func isFloat(t *types.Basic) bool {
+	return t.Info()&types.IsFloat != 0
+}
+
+func isInteger(t *types.Basic) bool {
+	return t.Info()&types.IsInteger != 0
+}
+
+func isNumeric(t *types.Basic) bool {
+	return t.Info()&types.IsNumeric != 0
+}
+
+func isString(t *types.Basic) bool {
+	return t.Info()&types.IsString != 0
+}
+
+func isUnsigned(t *types.Basic) bool {
+	return t.Info()&types.IsUnsigned != 0
 }
 
 func isBlank(expr ast.Expr) bool {
@@ -432,7 +456,7 @@ func isBlank(expr ast.Expr) bool {
 func isWrapped(ty types.Type) bool {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
-		return !is64Bit(t) && t.Info()&types.IsComplex == 0 && t.Kind() != types.UntypedNil
+		return !is64Bit(t) && !isComplex(t) && t.Kind() != types.UntypedNil
 	case *types.Array, *types.Map, *types.Signature:
 		return true
 	case *types.Pointer:

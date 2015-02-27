@@ -109,7 +109,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- -- fcgi      | yes                   |                                   |
 | -- -- httptest  | partially             |                                   |
 | -- -- httputil  | partially             |                                   |
-| -- -- pprof     | (no tests)            |                                   |
+| -- -- pprof     | no                    |                                   |
 | -- mail         | yes                   |                                   |
 | -- rpc          | not yet               |                                   |
 | -- -- jsonrpc   | not yet               |                                   |

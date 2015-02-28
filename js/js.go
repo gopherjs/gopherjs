@@ -97,12 +97,6 @@ func (err *Error) Stack() string {
 // Global gives JavaScript's global object ("window" for browsers and "GLOBAL" for Node.js).
 var Global *Object
 
-// This gives the value of JavaScript's "this" keyword. It can be used when passing Go functions to JavaScript as callbacks.
-var This *Object
-
-// Arguments gives the value of JavaScript's "arguments" keyword. It can be used when passing Go functions to JavaScript as callbacks.
-var Arguments []*Object
-
 // Module gives the value of the "module" variable set by Node.js. Hint: Set a module export with 'js.Module.Get("exports").Set("exportName", ...)'.
 var Module *Object
 
@@ -114,6 +108,11 @@ func Debugger() {}
 
 // InternalObject returns the internal JavaScript object that represents i. Not intended for public use.
 func InternalObject(i interface{}) *Object {
+	return nil
+}
+
+// MakeFunc wraps a function and gives access to the values of JavaScript's "this" and "arguments" keywords.
+func MakeFunc(func(this *Object, arguments []*Object) interface{}) *Object {
 	return nil
 }
 

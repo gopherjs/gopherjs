@@ -91,17 +91,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		switch obj.Name() {
 		case "Global":
 			return c.formatExpr("$global")
-		case "This":
-			if len(c.Flattened) != 0 {
-				return c.formatExpr("$this")
-			}
-			return c.formatExpr("this")
-		case "Arguments":
-			args := "arguments"
-			if len(c.Flattened) != 0 {
-				args = "$args"
-			}
-			return c.formatExpr(`new ($sliceType(%s.Object))($global.Array.prototype.slice.call(%s, []))`, c.p.pkgVars["github.com/gopherjs/gopherjs/js"], args)
 		case "Module":
 			return c.formatExpr("$module")
 		case "Undefined":
@@ -568,6 +557,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						return c.formatExpr("debugger")
 					case "InternalObject":
 						return c.translateExpr(e.Args[0])
+					case "MakeFunc":
+						return c.formatExpr("(function() { return $externalize(%e(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(arguments, []))), $emptyInterface); })", e.Args[0])
 					}
 				}
 				fun = c.translateExpr(f)

@@ -290,24 +290,6 @@ func TestEquality(t *testing.T) {
 	}
 }
 
-func TestThis(t *testing.T) {
-	dummys.Set("testThis", func(_ string) { // string argument to force wrapping
-		if js.This != dummys {
-			t.Fail()
-		}
-	})
-	dummys.Call("testThis", "")
-}
-
-func TestArguments(t *testing.T) {
-	dummys.Set("testArguments", func() {
-		if len(js.Arguments) != 3 || js.Arguments[1].Int() != 1 {
-			t.Fail()
-		}
-	})
-	dummys.Call("testArguments", 0, 1, 2)
-}
-
 func TestSameFuncWrapper(t *testing.T) {
 	a := func(_ string) {} // string argument to force wrapping
 	b := func(_ string) {} // string argument to force wrapping
@@ -374,6 +356,22 @@ func (m *M) Method(a interface{}) map[string]string {
 	}
 	return map[string]string{
 		"y": "z",
+	}
+}
+
+func TestMakeFunc(t *testing.T) {
+	o := js.Global.Get("Object").New()
+	o.Set("f", js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
+		if this != o {
+			t.Fail()
+		}
+		if len(arguments) != 2 || arguments[0].Int() != 1 || arguments[1].Int() != 2 {
+			t.Fail()
+		}
+		return 3
+	}))
+	if o.Call("f", 1, 2).Int() != 3 {
+		t.Fail()
 	}
 }
 

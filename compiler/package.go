@@ -20,7 +20,7 @@ type pkgContext struct {
 	pkgVars      map[string]string
 	objectVars   map[types.Object]string
 	anonTypes    []*types.TypeName
-	anonTypeMap map[types.Type]*types.TypeName
+	anonTypeMap  map[types.Type]*types.TypeName
 	escapingVars map[*types.Var]bool
 	indentation  int
 	dependencies map[types.Object]bool
@@ -140,7 +140,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			Info:         pkgInfo,
 			pkgVars:      make(map[string]string),
 			objectVars:   make(map[types.Object]string),
-			anonTypeMap: make(map[types.Type]*types.TypeName),
+			anonTypeMap:  make(map[types.Type]*types.TypeName),
 			escapingVars: make(map[*types.Var]bool),
 			indentation:  1,
 			dependencies: make(map[types.Object]bool),
@@ -637,7 +637,7 @@ func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcCo
 	}
 
 	if len(c.Flattened) != 0 {
-		c.localVars = []string{"$this = this", "$args = arguments"}
+		c.localVars = []string{"$this = this"}
 	}
 
 	body := c.CatchOutput(1, func() {

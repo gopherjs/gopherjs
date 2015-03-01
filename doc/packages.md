@@ -11,7 +11,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- tar          | yes                   |                                   |
 | -- zip          | yes                   |                                   |
 | bufio           | yes                   |                                   |
-| builtin         | (no tests)            |                                   |
+| builtin         | yes                   |                                   |
 | bytes           | yes                   |                                   |
 | compress        |                       |                                   |
 | -- bzip2        | yes                   |                                   |

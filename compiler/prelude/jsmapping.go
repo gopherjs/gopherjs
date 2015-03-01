@@ -55,42 +55,33 @@ var $externalize = function(v, t) {
     }
     if (v.$externalizeWrapper === undefined) {
       $checkForDeadlock = false;
-      var convert = false;
-      for (var i = 0; i < t.params.length; i++) {
-        convert = convert || (t.params[i] !== $jsObjectPtr);
-      }
-      for (var i = 0; i < t.results.length; i++) {
-        convert = convert || $needsExternalization(t.results[i]);
-      }
-      v.$externalizeWrapper = v;
-      if (convert) {
-        v.$externalizeWrapper = function() {
-          var args = [];
-          for (var i = 0; i < t.params.length; i++) {
-            if (t.variadic && i === t.params.length - 1) {
-              var vt = t.params[i].elem, varargs = [];
-              for (var j = i; j < arguments.length; j++) {
-                varargs.push($internalize(arguments[j], vt));
-              }
-              args.push(new (t.params[i])(varargs));
-              break;
+      v.$externalizeWrapper = function() {
+        var args = [];
+        for (var i = 0; i < t.params.length; i++) {
+          if (t.variadic && i === t.params.length - 1) {
+            var vt = t.params[i].elem, varargs = [];
+            for (var j = i; j < arguments.length; j++) {
+              varargs.push($internalize(arguments[j], vt));
             }
-            args.push($internalize(arguments[i], t.params[i]));
+            args.push(new (t.params[i])(varargs));
+            break;
           }
-          var result = v.apply(this, args);
-          switch (t.results.length) {
-          case 0:
-            return;
-          case 1:
-            return $externalize(result, t.results[0]);
-          default:
-            for (var i = 0; i < t.results.length; i++) {
-              result[i] = $externalize(result[i], t.results[i]);
-            }
-            return result;
+          args.push($internalize(arguments[i], t.params[i]));
+        }
+        var result = v.apply(this, args);
+        if (result && result.$blocking) { result = result(); }
+        switch (t.results.length) {
+        case 0:
+          return;
+        case 1:
+          return $externalize(result, t.results[0]);
+        default:
+          for (var i = 0; i < t.results.length; i++) {
+            result[i] = $externalize(result[i], t.results[i]);
           }
-        };
-      }
+          return result;
+        }
+      };
     }
     return v.$externalizeWrapper;
   case $kindInterface:

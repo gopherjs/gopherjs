@@ -12,6 +12,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/gcexporter"
 	"golang.org/x/tools/go/types"
+	"golang.org/x/tools/go/types/typeutil"
 )
 
 type pkgContext struct {
@@ -20,7 +21,7 @@ type pkgContext struct {
 	pkgVars      map[string]string
 	objectVars   map[types.Object]string
 	anonTypes    []*types.TypeName
-	anonTypeMap  map[types.Type]*types.TypeName
+	anonTypeMap  typeutil.Map
 	escapingVars map[*types.Var]bool
 	indentation  int
 	dependencies map[types.Object]bool
@@ -140,7 +141,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			Info:         pkgInfo,
 			pkgVars:      make(map[string]string),
 			objectVars:   make(map[types.Object]string),
-			anonTypeMap:  make(map[types.Type]*types.TypeName),
 			escapingVars: make(map[*types.Var]bool),
 			indentation:  1,
 			dependencies: make(map[types.Object]bool),

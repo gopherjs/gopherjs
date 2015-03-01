@@ -315,13 +315,13 @@ func (c *funcContext) typeName(ty types.Type) string {
 		}
 	}
 
-	anonType, ok := c.p.anonTypeMap[ty]
+	anonType, ok := c.p.anonTypeMap.At(ty).(*types.TypeName)
 	if !ok {
 		c.initArgs(ty) // cause all embedded types to be registered
 		varName := c.newVariableWithLevel(strings.ToLower(typeKind(ty)[5:])+"Type", true, "")
 		anonType = types.NewTypeName(token.NoPos, c.p.Pkg, varName, ty) // fake types.TypeName
 		c.p.anonTypes = append(c.p.anonTypes, anonType)
-		c.p.anonTypeMap[ty] = anonType
+		c.p.anonTypeMap.Set(ty, anonType)
 	}
 	c.p.dependencies[anonType] = true
 	return anonType.Name()

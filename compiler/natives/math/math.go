@@ -12,12 +12,6 @@ var posInf = 1 / zero
 var negInf = -1 / zero
 var nan = 0 / zero
 
-func init() {
-	// avoid dead code elimination
-	Float32bits(0)
-	Float32frombits(0)
-}
-
 func Abs(x float64) float64 {
 	return abs(x)
 }

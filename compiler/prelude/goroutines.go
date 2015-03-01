@@ -188,6 +188,14 @@ var $schedule = function(goroutine, direct) {
   }
 };
 
+var $block = function() {
+  if ($curGoroutine === $dummyGoroutine) {
+    $throwRuntimeError("cannot block in JavaScript callback, fix by wrapping code in goroutine");
+  }
+  $curGoroutine.asleep = true;
+  throw null;
+};
+
 var $send = function(chan, value) {
   if (chan.$closed) {
     $throwRuntimeError("send on closed channel");
@@ -216,8 +224,7 @@ var $send = function(chan, value) {
       return;
     };
     blocked = true;
-    $curGoroutine.asleep = true;
-    throw null;
+    $block();
   };
   f.$blocking = true;
   return f;
@@ -247,8 +254,7 @@ var $recv = function(chan) {
       return value;
     };
     blocked = true;
-    $curGoroutine.asleep = true;
-    throw null;
+    $block();
   };
   f.$blocking = true;
   return f;
@@ -362,8 +368,7 @@ var $select = function(comms) {
       return selection;
     };
     blocked = true;
-    $curGoroutine.asleep = true;
-    throw null;
+    $block();
   };
   f.$blocking = true;
   return f;

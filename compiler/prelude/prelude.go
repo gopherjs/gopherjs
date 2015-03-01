@@ -387,7 +387,7 @@ var $equal = function(a, b, type) {
     }
     return $pointerIsEqual(a, b);
   case $kindArray:
-    if (a.length != b.length) {
+    if (a.length !== b.length) {
       return false;
     }
     for (var i = 0; i < a.length; i++) {

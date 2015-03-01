@@ -207,9 +207,6 @@ func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool, initializ
 			break
 		}
 	}
-	if strings.HasPrefix(name, "dollar_") {
-		return "$" + name[7:]
-	}
 	if c.p.minify {
 		i := 0
 		for {

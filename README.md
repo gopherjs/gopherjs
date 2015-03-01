@@ -66,7 +66,7 @@ For more details see [Jason Stone's blog post](http://legacytotheedge.blogspot.d
 GopherJS emulates a 32-bit environment. This means that `int`, `uint` and `uintptr` have a precision of 32 bits. However, the explicit 64-bit integer types `int64` and `uint64` are supported. The `GOARCH` value of GopherJS is "js". You may use it as a build constraint: `// +build js`.
 
 #### Goroutines
-Goroutines are fully supported by GopherJS. The only restriction is that you need to start a new goroutine if you want to use blocking code inside of a callback from external JavaScript:
+Goroutines are fully supported by GopherJS. The only restriction is that you need to start a new goroutine if you want to use blocking code called from external JavaScript:
 
 ```go
 js.Global.Get("myButton").Call("addEventListener", "click", func() {

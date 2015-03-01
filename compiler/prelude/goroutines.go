@@ -56,10 +56,10 @@ var $callDeferred = function(deferred, jsErr) {
           if (localPanicValue.constructor === $String) {
             msg = localPanicValue.$val;
           } else if (localPanicValue.Error !== undefined) {
-            msg = localPanicValue.Error($BLOCKING);
+            msg = localPanicValue.Error();
             if (msg && msg.$blocking) { msg = msg(); }
           } else if (localPanicValue.String !== undefined) {
-            msg = localPanicValue.String($BLOCKING);
+            msg = localPanicValue.String();
             if (msg && msg.$blocking) { msg = msg(); }
           } else {
             msg = localPanicValue;
@@ -115,17 +115,11 @@ var $recover = function() {
 };
 var $throw = function(err) { throw err; };
 
-var $BLOCKING = new Object();
-var $nonblockingCall = function() {
-  $throwRuntimeError("non-blocking call to blocking function, see https://github.com/gopherjs/gopherjs#goroutines");
-};
-
 var $dummyGoroutine = { asleep: false, exit: false, panicStack: [] };
 var $curGoroutine = $dummyGoroutine, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
 var $go = function(fun, args, direct) {
   $totalGoroutines++;
   $awakeGoroutines++;
-  args.push($BLOCKING);
   var goroutine = function() {
     var rescheduled = false;
     try {

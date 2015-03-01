@@ -632,9 +632,6 @@ func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcCo
 			params = append(params, c.objectName(c.p.Defs[ident]))
 		}
 	}
-	if len(c.Blocking) != 0 {
-		params = append(params, "$b")
-	}
 
 	if len(c.Flattened) != 0 {
 		c.localVars = []string{"$this = this"}
@@ -664,7 +661,7 @@ func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcCo
 			if name != "" && !c.p.minify {
 				f = "$blocking_" + name
 			}
-			prefix = prefix + fmt.Sprintf(" if($b !== $BLOCKING) { $nonblockingCall(); }; var %s = function() {", f)
+			prefix = prefix + fmt.Sprintf(" var %s = function() {", f)
 			suffix = fmt.Sprintf(" }; %s.$blocking = true; return %s;", f, f) + suffix
 		}
 

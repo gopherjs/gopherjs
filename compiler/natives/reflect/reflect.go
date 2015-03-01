@@ -3,7 +3,6 @@
 package reflect
 
 import (
-	"runtime"
 	"unsafe"
 
 	"github.com/gopherjs/gopherjs/js"
@@ -340,7 +339,7 @@ func loadScalar(p unsafe.Pointer, n uintptr) uintptr {
 }
 
 func makechan(typ *rtype, size uint64) (ch unsafe.Pointer) {
-	return unsafe.Pointer(jsType(typ).New().Unsafe())
+	return unsafe.Pointer(jsType(typ).New(size).Unsafe())
 }
 
 func makemap(t *rtype) (m unsafe.Pointer) {
@@ -1041,45 +1040,32 @@ func (v Value) Close() {
 	js.Global.Call("$close", v.object())
 }
 
-func (v Value) TrySend(x Value) bool {
-	v.mustBe(Chan)
-	v.mustBeExported()
-	tt := (*chanType)(unsafe.Pointer(v.typ))
-	if ChanDir(tt.dir)&SendDir == 0 {
-		panic("reflect: send on recv-only channel")
-	}
-	x.mustBeExported()
+var selectHelper = js.Global.Get("$select").Interface().(func(...interface{}) *js.Object)
 
-	c := v.object()
-	if !c.Get("$closed").Bool() && c.Get("$recvQueue").Length() == 0 && c.Get("$buffer").Length() == c.Get("$capacity").Int() {
+func chanrecv(t *rtype, ch unsafe.Pointer, nb bool, val unsafe.Pointer) (selected, received bool) {
+	comms := [][]interface{}{{js.InternalObject(ch)}}
+	if nb {
+		comms = append(comms, []interface{}{})
+	}
+	selectRes := selectHelper(comms)
+	if nb && selectRes.Index(0).Int() == 1 {
+		return false, false
+	}
+	recvRes := selectRes.Index(1)
+	js.InternalObject(val).Call("$set", recvRes.Index(0))
+	return true, recvRes.Index(1).Bool()
+}
+
+func chansend(t *rtype, ch unsafe.Pointer, val unsafe.Pointer, nb bool) bool {
+	comms := [][]interface{}{{js.InternalObject(ch), js.InternalObject(val).Call("$get")}}
+	if nb {
+		comms = append(comms, []interface{}{})
+	}
+	selectRes := selectHelper(comms)
+	if nb && selectRes.Index(0).Int() == 1 {
 		return false
 	}
-	x = x.assignTo("reflect.Value.Send", tt.elem, nil)
-	js.Global.Call("$send", c, x.object())
 	return true
-}
-
-func (v Value) Send(x Value) {
-	panic(&runtime.NotSupportedError{"reflect.Value.Send, use reflect.Value.TrySend if possible"})
-}
-
-func (v Value) TryRecv() (x Value, ok bool) {
-	v.mustBe(Chan)
-	v.mustBeExported()
-	tt := (*chanType)(unsafe.Pointer(v.typ))
-	if ChanDir(tt.dir)&RecvDir == 0 {
-		panic("reflect: recv on send-only channel")
-	}
-
-	res := js.Global.Call("$recv", v.object())
-	if res.Get("constructor") == js.Global.Get("Function") {
-		return Value{}, false
-	}
-	return makeValue(tt.elem, res.Index(0), 0), res.Index(1).Bool()
-}
-
-func (v Value) Recv() (x Value, ok bool) {
-	panic(&runtime.NotSupportedError{"reflect.Value.Recv, use reflect.Value.TryRecv if possible"})
 }
 
 func DeepEqual(a1, a2 interface{}) bool {

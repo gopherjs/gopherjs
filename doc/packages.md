@@ -122,7 +122,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- user         | partially             | node.js only                      |
 | path            | yes                   |                                   |
 | -- filepath     | yes                   |                                   |
-| reflect         | yes                   | except blocking Call, Send and Recv |
+| reflect         | yes                   |                                   |
 | regexp          | yes                   |                                   |
 | -- syntax       | yes                   |                                   |
 | runtime         | partially             |                                   |

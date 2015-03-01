@@ -208,10 +208,11 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			case *ast.CompositeLit:
 				return c.formatExpr("$newDataPointer(%e, %s)", x, c.typeName(c.p.Types[e].Type))
 			case *ast.Ident:
-				if obj, _ := c.p.Uses[x].(*types.Var); c.p.escapingVars[obj] {
+				obj := c.p.Uses[x].(*types.Var)
+				if c.p.escapingVars[obj] {
 					return c.formatExpr("new %s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %s)", c.typeName(exprType), c.p.objectVars[obj])
 				}
-				return c.formatExpr("new %s(function() { return %e; }, function($v) { %s })", c.typeName(exprType), x, c.translateAssign(x, "$v", exprType, false))
+				return c.formatExpr("($ptr.%1s || ($ptr.%1s = new %2s(function() { return %1s; }, function($v) { %3s })))", c.p.objectVars[obj], c.typeName(exprType), c.translateAssign(x, "$v", exprType, false))
 			case *ast.SelectorExpr:
 				newSel := &ast.SelectorExpr{X: c.newIdent("this.$target", c.p.Types[x.X].Type), Sel: x.Sel}
 				c.p.Selections[newSel] = c.p.Selections[x]

@@ -175,7 +175,7 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify)); err != nil {
 		return err
 	}
-	vars := []string{"$pkg = {}"}
+	vars := []string{"$pkg = {}", "$ptr = {}"}
 	var filteredDecls []*Decl
 	for _, d := range pkg.Declarations {
 		if d.DceObjectFilter == "" && d.DceMethodFilter == "" {

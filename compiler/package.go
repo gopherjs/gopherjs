@@ -610,6 +610,7 @@ func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcCo
 		parent:      outerContext,
 		sig:         sig,
 		allVars:     make(map[string]int, len(outerContext.allVars)),
+		localVars:   []string{"$ptr = {}"},
 		flowDatas:   map[*types.Label]*flowData{nil: &flowData{}},
 		caseCounter: 1,
 		labelCases:  make(map[*types.Label]int),
@@ -634,7 +635,7 @@ func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcCo
 	}
 
 	if len(c.Flattened) != 0 {
-		c.localVars = []string{"$this = this"}
+		c.localVars = append(c.localVars, "$this = this")
 	}
 
 	body := c.CatchOutput(1, func() {

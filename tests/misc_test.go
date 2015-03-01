@@ -18,6 +18,18 @@ func TestPointerEquality(t *testing.T) {
 	if &a[0] != &a[0] || &a[:][0] != &a[0] || &a[:][0] != &a[:][0] {
 		t.Fail()
 	}
+
+	b := 1
+	c := 1
+	if &b != &b || &b == &c {
+		t.Fail()
+	}
+	m := make(map[*int]int)
+	m[&b] = 2
+	m[&c] = 3
+	if m[&b] != 2 || m[&c] != 3 {
+		t.Fail()
+	}
 }
 
 type SingleValue struct {

@@ -92,7 +92,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- png          | yes                   |                                   |
 | index           |                       |                                   |
 | -- suffixarray  | yes                   |                                   |
-| io              | yes                   | except Pipe                       |
+| io              | yes                   |                                   |
 | -- ioutil       | yes                   |                                   |
 | log             | not yet               |                                   |
 | -- syslog       | no                    |                                   |

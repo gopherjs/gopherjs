@@ -210,16 +210,18 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			case *ast.Ident:
 				obj := c.p.Uses[x].(*types.Var)
 				if c.p.escapingVars[obj] {
-					return c.formatExpr("new %s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %s)", c.typeName(exprType), c.p.objectVars[obj])
+					return c.formatExpr("(%1s.$ptr || (%1s.$ptr = new %2s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %1s)))", c.p.objectVars[obj], c.typeName(exprType))
 				}
 				return c.formatExpr("($ptr.%1s || ($ptr.%1s = new %2s(function() { return %1s; }, function($v) { %3s })))", c.p.objectVars[obj], c.typeName(exprType), c.translateAssign(x, "$v", exprType, false))
 			case *ast.SelectorExpr:
 				newSel := &ast.SelectorExpr{X: c.newIdent("this.$target", c.p.Types[x.X].Type), Sel: x.Sel}
 				c.p.Selections[newSel] = c.p.Selections[x]
-				return c.formatExpr("new %s(function() { return %e; }, function($v) { %s }, %e)", c.typeName(exprType), newSel, c.translateAssign(newSel, "$v", exprType, false), x.X)
+				return c.formatExpr("(%1e.$ptr_%2s || (%1e.$ptr_%2s = new %3s(function() { return %4e; }, function($v) { %5s }, %1e)))", x.X, x.Sel.Name, c.typeName(exprType), newSel, c.translateAssign(newSel, "$v", exprType, false))
 			case *ast.IndexExpr:
-				newIndex := &ast.IndexExpr{X: c.newIdent("this.$target", c.p.Types[x.X].Type), Index: x.Index}
-				return c.formatExpr("new %s(function() { return %e; }, function($v) { %s }, %e)", c.typeName(exprType), newIndex, c.translateAssign(newIndex, "$v", exprType, false), x.X)
+				if _, ok := c.p.Types[x.X].Type.Underlying().(*types.Slice); ok {
+					return c.formatExpr("$indexPtr(%1e.$array, %1e.$offset + %2e, %3s)", x.X, x.Index, c.typeName(exprType))
+				}
+				return c.formatExpr("$indexPtr(%e, %e, %s)", x.X, x.Index, c.typeName(exprType))
 			case *ast.StarExpr:
 				return c.translateExpr(x.X)
 			default:
@@ -410,26 +412,17 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			return c.formatExpr("%e || %e", e.X, e.Y)
 		case token.EQL:
-			if typesutil.IsJsObject(t) {
-				return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
-			}
 			switch u := t.Underlying().(type) {
 			case *types.Array, *types.Struct:
 				return c.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, c.typeName(t))
 			case *types.Interface:
 				return c.formatExpr("$interfaceIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 			case *types.Pointer:
-				switch u.Elem().Underlying().(type) {
-				case *types.Struct, *types.Interface:
-					return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
-				case *types.Array:
+				if _, ok := u.Elem().Underlying().(*types.Array); ok {
 					return c.formatExpr("$equal(%s, %s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t), c.typeName(u.Elem()))
-				default:
-					return c.formatExpr("$pointerIsEqual(%s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 				}
-			default:
-				return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 			}
+			return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))
 		default:
 			panic(e.Op)
 		}

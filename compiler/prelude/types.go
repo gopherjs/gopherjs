@@ -581,6 +581,11 @@ var $newDataPointer = function(data, constructor) {
   return new constructor(function() { return data; }, function(v) { data = v; });
 };
 
+var $indexPtr = function(array, index, constructor) {
+  array.$ptr = array.$ptr || {};
+  return array.$ptr[index] || (array.$ptr[index] = new constructor(function() { return array[index]; }, function(v) { array[index] = v; }));
+};
+
 var $sliceType = function(elem) {
   var typ = elem.Slice;
   if (typ === undefined) {

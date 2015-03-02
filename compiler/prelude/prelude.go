@@ -381,11 +381,6 @@ var $equal = function(a, b, type) {
   case $kindInt64:
   case $kindUint64:
     return a.$high === b.$high && a.$low === b.$low;
-  case $kindPtr:
-    if (a.constructor.elem) {
-      return a === b;
-    }
-    return $pointerIsEqual(a, b);
   case $kindArray:
     if (a.length !== b.length) {
       return false;
@@ -422,24 +417,5 @@ var $interfaceIsEqual = function(a, b) {
     $throwRuntimeError("comparing uncomparable type " + a.constructor.string);
   }
   return $equal(a.$val, b.$val, a.constructor);
-};
-
-var $pointerIsEqual = function(a, b) {
-  if (a === b) {
-    return true;
-  }
-  if (a.$get === $throwNilPointerError || b.$get === $throwNilPointerError) {
-    return a.$get === $throwNilPointerError && b.$get === $throwNilPointerError;
-  }
-  var va = a.$get();
-  var vb = b.$get();
-  if (va !== vb) {
-    return false;
-  }
-  var dummy = va + 1;
-  a.$set(dummy);
-  var equal = b.$get() === dummy;
-  a.$set(va);
-  return equal;
 };
 `

@@ -14,20 +14,37 @@ func TestSyntax1(t *testing.T) {
 }
 
 func TestPointerEquality(t *testing.T) {
-	a := [3]int{1, 2, 3}
-	if &a[0] != &a[0] || &a[:][0] != &a[0] || &a[:][0] != &a[:][0] {
-		t.Fail()
-	}
-
+	a := 1
 	b := 1
-	c := 1
-	if &b != &b || &b == &c {
+	if &a != &a || &a == &b {
 		t.Fail()
 	}
 	m := make(map[*int]int)
-	m[&b] = 2
-	m[&c] = 3
-	if m[&b] != 2 || m[&c] != 3 {
+	m[&a] = 2
+	m[&b] = 3
+	if m[&a] != 2 || m[&b] != 3 {
+		t.Fail()
+	}
+
+	for {
+		c := 1
+		d := 1
+		if &c != &c || &c == &d {
+			t.Fail()
+		}
+		break
+	}
+
+	s := struct {
+		e int
+		f int
+	}{1, 1}
+	if &s.e != &s.e || &s.e == &s.f {
+		t.Fail()
+	}
+
+	g := [3]int{1, 2, 3}
+	if &g[0] != &g[0] || &g[:][0] != &g[0] || &g[:][0] != &g[:][0] {
 		t.Fail()
 	}
 }

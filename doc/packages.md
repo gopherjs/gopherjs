@@ -111,8 +111,8 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- -- httputil  | partially             |                                   |
 | -- -- pprof     | no                    |                                   |
 | -- mail         | yes                   |                                   |
-| -- rpc          | not yet               |                                   |
-| -- -- jsonrpc   | not yet               |                                   |
+| -- rpc          | partially             | data structures only (no net)     |
+| -- -- jsonrpc   | yes                   |                                   |
 | -- smtp         | partially             | data structures only (no net)     |
 | -- textproto    | yes                   |                                   |
 | -- url          | yes                   |                                   |

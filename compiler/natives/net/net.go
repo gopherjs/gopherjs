@@ -11,6 +11,10 @@ func Listen(net, laddr string) (Listener, error) {
 	panic(&runtime.NotSupportedError{"net"})
 }
 
+func (d *Dialer) Dial(network, address string) (Conn, error) {
+	panic(&runtime.NotSupportedError{"net"})
+}
+
 func sysInit() {
 }
 

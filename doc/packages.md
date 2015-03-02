@@ -5,7 +5,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 
 [![Circle CI](https://circleci.com/gh/gopherjs/gopherjs.svg?style=svg)](https://circleci.com/gh/gopherjs/gopherjs)
 
-| Name            | Supported (Tests OK?) | Comment                           |
+| Name            | Supported             | Comment                           |
 | --------------- | --------------------- | --------------------------------- |
 | archive         |                       |                                   |
 | -- tar          | yes                   |                                   |
@@ -23,7 +23,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- heap         | yes                   |                                   |
 | -- list         | yes                   |                                   |
 | -- ring         | yes                   |                                   |
-| crypto          | (no tests)            |                                   |
+| crypto          |                       |                                   |
 | -- aes          | yes                   |                                   |
 | -- cipher       | yes                   |                                   |
 | -- des          | yes                   |                                   |
@@ -41,7 +41,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- subtle       | yes                   |                                   |
 | -- tls          | no                    |                                   |
 | -- x509         | not yet               |                                   |
-| -- -- pkix      | (no tests)            |                                   |
+| -- -- pkix      | not yet               |                                   |
 | database        |                       |                                   |
 | -- sql          | no                    |                                   |
 | -- -- driver    | yes                   |                                   |
@@ -51,7 +51,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- gosym        | yes                   |                                   |
 | -- macho        | not yet               |                                   |
 | -- pe           | yes                   |                                   |
-| encoding        | (no tests)            |                                   |
+| encoding        |                       |                                   |
 | -- ascii85      | yes                   |                                   |
 | -- asn1         | yes                   |                                   |
 | -- base32       | yes                   |                                   |
@@ -76,7 +76,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- printer      | yes                   |                                   |
 | -- scanner      | yes                   |                                   |
 | -- token        | yes                   |                                   |
-| hash            | (no tests)            |                                   |
+| hash            |                       |                                   |
 | -- adler32      | yes                   |                                   |
 | -- crc32        | yes                   |                                   |
 | -- crc64        | yes                   |                                   |
@@ -85,7 +85,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- template     | yes                   |                                   |
 | image           | yes                   |                                   |
 | -- color        | yes                   |                                   |
-| -- -- palette   | (no tests)            |                                   |
+| -- -- palette   | yes                   |                                   |
 | -- draw         | yes                   |                                   |
 | -- gif          | yes                   |                                   |
 | -- jpeg         | yes                   |                                   |
@@ -137,7 +137,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- atomic       | yes                   |                                   |
 | syscall         | partially             | node.js only                      |
 | testing         | yes                   |                                   |
-| -- iotest       | (no tests)            |                                   |
+| -- iotest       | yes                   |                                   |
 | -- quick        | yes                   |                                   |
 | text            |                       |                                   |
 | -- scanner      | yes                   |                                   |

@@ -13,12 +13,11 @@ type Cond struct {
 	ch chan bool
 }
 
-func NewCond(l Locker) *Cond {
-	return &Cond{L: l, ch: make(chan bool)}
-}
-
 func (c *Cond) Wait() {
 	c.n++
+	if c.ch == nil {
+		c.ch = make(chan bool)
+	}
 	c.L.Unlock()
 	<-c.ch
 	c.L.Lock()

@@ -133,7 +133,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | sort            | yes                   |                                   |
 | strconv         | yes                   |                                   |
 | strings         | yes                   |                                   |
-| sync            | partially             | stubs                             |
+| sync            | yes                   |                                   |
 | -- atomic       | yes                   |                                   |
 | syscall         | partially             | node.js only                      |
 | testing         | yes                   |                                   |

@@ -14,6 +14,10 @@ func TestPoolGC(t *testing.T) {
 	t.Skip()
 }
 
+func TestPoolRelease(t *testing.T) {
+	t.Skip()
+}
+
 func TestCondCopy(t *testing.T) {
 	t.Skip()
 }

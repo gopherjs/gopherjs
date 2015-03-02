@@ -348,17 +348,6 @@ func TestExternalizeField(t *testing.T) {
 	}
 }
 
-type M struct{}
-
-func (m *M) Method(a interface{}) map[string]string {
-	if a.(map[string]interface{})["x"].(float64) != 1 {
-		return nil
-	}
-	return map[string]string{
-		"y": "z",
-	}
-}
-
 func TestMakeFunc(t *testing.T) {
 	o := js.Global.Get("Object").New()
 	o.Set("f", js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
@@ -375,8 +364,21 @@ func TestMakeFunc(t *testing.T) {
 	}
 }
 
+type M struct {
+	f int
+}
+
+func (m *M) Method(a interface{}) map[string]string {
+	if a.(map[string]interface{})["x"].(float64) != 1 || m.f != 42 {
+		return nil
+	}
+	return map[string]string{
+		"y": "z",
+	}
+}
+
 func TestMakeWrapper(t *testing.T) {
-	if !js.Global.Call("eval", `(function(m) { return m.Method({x: 1})["y"] === "z"; })`).Invoke(js.MakeWrapper(&M{})).Bool() {
+	if !js.Global.Call("eval", `(function(m) { return m.Method({x: 1})["y"] === "z"; })`).Invoke(js.MakeWrapper(&M{42})).Bool() {
 		t.Fail()
 	}
 }

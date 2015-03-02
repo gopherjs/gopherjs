@@ -118,7 +118,7 @@ func MakeFunc(func(this *Object, arguments []*Object) interface{}) *Object {
 
 // Keys returns the keys of the given JavaScript object.
 func Keys(o *Object) []string {
-	if o == Undefined || o == nil {
+	if o == nil || o == Undefined {
 		return nil
 	}
 	a := Global.Get("Object").Call("keys", o)
@@ -140,25 +140,7 @@ func MakeWrapper(i interface{}) *Object {
 			continue
 		}
 		o.Set(m.Get("name").String(), func(args ...*Object) *Object {
-			paramTypes := m.Get("typ").Get("params")
-			internalizedArgs := make([]interface{}, paramTypes.Length())
-			for i := range internalizedArgs {
-				internalizedArgs[i] = Global.Call("$internalize", args[i], paramTypes.Index(i))
-			}
-			result := v.Call(m.Get("prop").String(), internalizedArgs...)
-			resultTypes := m.Get("typ").Get("results")
-			switch resultTypes.Length() {
-			case 0:
-				return nil
-			case 1:
-				return Global.Call("$externalize", result, resultTypes.Index(0))
-			default:
-				a := Global.Get("Array").New(resultTypes.Length())
-				for i := 0; i < resultTypes.Length(); i++ {
-					a.SetIndex(i, Global.Call("$externalize", result.Index(i), resultTypes.Index(i)))
-				}
-				return a
-			}
+			return Global.Call("$externalize", v.Get(m.Get("prop").String()), m.Get("typ")).Call("apply", v, args)
 		})
 	}
 	return o

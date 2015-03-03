@@ -127,29 +127,24 @@ func (c *funcContext) translateSelection(sel *types.Selection, pos token.Pos) ([
 		}
 		s := t.Underlying().(*types.Struct)
 		if jsTag := getJsTag(s.Tag(index)); jsTag != "" {
-			var searchJsObject func(*types.Struct) []string
-			searchJsObject = func(s *types.Struct) []string {
-				for i := 0; i < s.NumFields(); i++ {
-					ft := s.Field(i).Type()
-					if typesutil.IsJsObject(ft) {
-						return []string{fieldName(s, i)}
-					}
-					ft = ft.Underlying()
-					if ptr, ok := ft.(*types.Pointer); ok {
-						ft = ptr.Elem().Underlying()
-					}
-					if s2, ok := ft.(*types.Struct); ok {
-						if f := searchJsObject(s2); f != nil {
-							return append([]string{fieldName(s, i)}, f...)
-						}
-					}
+			jsFieldName := s.Field(index).Name()
+			for {
+				fields = append(fields, fieldName(s, 0))
+				ft := s.Field(0).Type()
+				if typesutil.IsJsObject(ft) {
+					return fields, jsTag
 				}
-				return nil
+				ft = ft.Underlying()
+				if ptr, ok := ft.(*types.Pointer); ok {
+					ft = ptr.Elem().Underlying()
+				}
+				var ok bool
+				s, ok = ft.(*types.Struct)
+				if !ok {
+					c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: pos, Msg: fmt.Sprintf("could not find field with type *js.Object for 'js' tag of field '%s'", jsFieldName), Soft: true})
+					return nil, ""
+				}
 			}
-			if jsObjectFields := searchJsObject(s); jsObjectFields != nil {
-				return append(fields, jsObjectFields...), jsTag
-			}
-			c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: pos, Msg: fmt.Sprintf("could not find field with type js.Object for 'js' tag of field '%s'", s.Field(index).Name()), Soft: true})
 		}
 		fields = append(fields, fieldName(s, index))
 		t = s.Field(index).Type()

@@ -139,14 +139,8 @@ var $externalize = function(v, t) {
         }
         return searchJsObject(v.$get(), t.elem);
       case $kindStruct:
-        for (var i = 0; i < t.fields.length; i++) {
-          var f = t.fields[i];
-          var o = searchJsObject(v[f.prop], f.typ);
-          if (o !== noJsObject) {
-            return o;
-          }
-        }
-        return noJsObject;
+        var f = t.fields[0];
+        return searchJsObject(v[f.prop], f.typ);
       case $kindInterface:
         return searchJsObject(v.$val, v.constructor);
       default:
@@ -319,14 +313,12 @@ var $internalize = function(v, t, recv) {
       case $kindPtr:
         return searchJsObject(t.elem);
       case $kindStruct:
-        for (var i = 0; i < t.fields.length; i++) {
-          var f = t.fields[i];
-          var o = searchJsObject(f.typ);
-          if (o !== noJsObject) {
-            var n = new t.ptr();
-            n[f.prop] = o;
-            return n;
-          }
+        var f = t.fields[0];
+        var o = searchJsObject(f.typ);
+        if (o !== noJsObject) {
+          var n = new t.ptr();
+          n[f.prop] = o;
+          return n;
         }
         return noJsObject;
       default:

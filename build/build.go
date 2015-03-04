@@ -567,11 +567,17 @@ func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) 
 
 func (s *Session) WaitForChange() {
 	s.options.PrintSuccess("watching for changes...\n")
-	select {
-	case ev := <-s.Watcher.Events:
-		s.options.PrintSuccess("change detected: %s\n", ev.Name)
-	case err := <-s.Watcher.Errors:
-		s.options.PrintError("watcher error: %s\n", err.Error())
+	for {
+		select {
+		case ev := <-s.Watcher.Events:
+			if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove|fsnotify.Rename) == 0 || filepath.Base(ev.Name)[0] == '.' {
+				continue
+			}
+			s.options.PrintSuccess("change detected: %s\n", ev.Name)
+		case err := <-s.Watcher.Errors:
+			s.options.PrintError("watcher error: %s\n", err.Error())
+		}
+		break
 	}
 
 	go func() {

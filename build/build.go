@@ -2,6 +2,7 @@ package build
 
 import (
 	"fmt"
+	"github.com/vova616/xxhash"
 	"go/ast"
 	"go/build"
 	"go/parser"
@@ -20,6 +21,12 @@ import (
 	"github.com/neelance/sourcemap"
 	"gopkg.in/fsnotify.v1"
 )
+
+// a map of known file hashes. This is required to
+// determine whether a file actually changed. It is a workaround
+// to fix false positives that can be triggered by e.g., an
+// operating system indexing a file
+var fileHashes = map[string][]byte{}
 
 type ImportCError struct{}
 
@@ -313,6 +320,9 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 	}
 
 	for _, file := range filenames {
+		if err := addFileHash(file); err != nil {
+			return err
+		}
 		if strings.HasSuffix(file, ".inc.js") {
 			pkg.JsFiles = append(pkg.JsFiles, file)
 			continue
@@ -360,6 +370,7 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 }
 
 func (s *Session) BuildPackage(pkg *PackageData) error {
+
 	s.Packages[pkg.ImportPath] = pkg
 	if pkg.ImportPath == "unsafe" {
 		return nil
@@ -383,6 +394,9 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			ignored := true
 			for _, pos := range pkg.ImportPos[importedPkgPath] {
 				importFile := filepath.Base(pos.Filename)
+				if err := addFileHash(pos.Filename); err != nil {
+					return err
+				}
 				for _, file := range pkg.GoFiles {
 					if importFile == file {
 						ignored = false
@@ -565,13 +579,71 @@ func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) 
 	return false, 0
 }
 
+func addFileHash(path string) error {
+	hash, err := calculateHashForFile(path)
+	if err != nil {
+		return err
+	}
+	fileHashes[path] = hash
+	return nil
+}
+
+func calculateHashForFile(path string) ([]byte, error) {
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return xxhash.New(0).Sum(content), nil
+}
+
+// fileDidChange uses the last known hash to determine whether or
+// not the file actually changed. It solves the problem of false positives
+// coming from fsnotify.
+func fileDidChange(path string) (bool, error) {
+	if hash, found := fileHashes[path]; !found {
+		// We have not seen this file before. Since it is new,
+		// consider it changed and rebuild
+		return true, nil
+	} else {
+		_, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			fmt.Println("File did not exist")
+			// If the file no longer exists, it has been deleted
+			// we should consider that a change and rebuild
+			delete(fileHashes, path)
+			return true, nil
+		}
+		if newHash, err := calculateHashForFile(path); err != nil {
+			return false, err
+		} else if string(newHash) != string(hash) {
+			// If the file does exist and has a different hash, there
+			// was an actual change and we should rebuild
+			return true, nil
+		}
+		return false, nil
+	}
+}
+
 func (s *Session) WaitForChange() {
 	s.options.PrintSuccess("watching for changes...\n")
-	select {
-	case ev := <-s.Watcher.Events:
-		s.options.PrintSuccess("change detected: %s\n", ev.Name)
-	case err := <-s.Watcher.Errors:
-		s.options.PrintError("watcher error: %s\n", err.Error())
+Outer:
+	for {
+		select {
+		case ev := <-s.Watcher.Events:
+			if filepath.Base(ev.Name)[0] == '.' {
+				continue
+			}
+			if changed, err := fileDidChange(ev.Name); err != nil {
+				panic(err)
+			} else if !changed {
+				continue
+			}
+			s.options.PrintSuccess("change detected: %s\n", ev.Name)
+			break Outer
+		case err := <-s.Watcher.Errors:
+			s.options.PrintError("watcher error: %s\n", err.Error())
+			break Outer
+		}
 	}
 
 	go func() {

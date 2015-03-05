@@ -1,6 +1,6 @@
 // Package js provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their corresponding JavaScript syntax.
 //
-// Type conversions between Go types and JavaScript types are performed automatically according to the following table:
+// Use MakeWrapper to expose methods to JavaScript. When passing values directly, the following type conversions are performed:
 //
 //  | Go type               | JavaScript type       | Conversions back to interface{} |
 //  | --------------------- | --------------------- | ------------------------------- |
@@ -129,7 +129,7 @@ func Keys(o *Object) []string {
 	return s
 }
 
-// MakeWrapper creates a JavaScript object which has wrappers for the exported methods of i. This can be used to provide getter and setter methods for Go fields to JavaScript.
+// MakeWrapper creates a JavaScript object which has wrappers for the exported methods of i. Use explicit getter and setter methods to expose struct fields to JavaScript.
 func MakeWrapper(i interface{}) *Object {
 	v := InternalObject(i)
 	o := Global.Get("Object").New()

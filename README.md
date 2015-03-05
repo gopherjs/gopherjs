@@ -49,13 +49,25 @@ package main
 import "github.com/gopherjs/gopherjs/js"
 
 func main() {
-  js.Global.Set("myLibrary", map[string]interface{}{
-    "someFunction": someFunction,
-  })
+	js.Global.Set("pet", map[string]interface{}{
+		"New": New,
+	})
 }
 
-func someFunction() {
-  [...]
+type Pet struct {
+	name string
+}
+
+func New(name string) *js.Object {
+	return js.MakeWrapper(&Pet{name})
+}
+
+func (p *Pet) Name() string {
+	return p.name
+}
+
+func (p *Pet) SetName(name string) {
+	p.name = name
 }
 ```
 For more details see [Jason Stone's blog post](http://legacytotheedge.blogspot.de/2014/03/gopherjs-go-to-javascript-transpiler.html) about GopherJS.

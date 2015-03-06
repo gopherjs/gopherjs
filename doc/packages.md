@@ -103,7 +103,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | mime            | yes                   |                                   |
 | -- multipart    | yes                   |                                   |
 | net             | no                    |                                   |
-| -- http         | partially             | data structures only (no net)     |
+| -- http         | partially             | emulated via XMLHttpRequest       |
 | -- -- cgi       | not yet               |                                   |
 | -- -- cookiejar | yes                   |                                   |
 | -- -- fcgi      | yes                   |                                   |

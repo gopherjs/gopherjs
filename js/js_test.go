@@ -212,6 +212,18 @@ func TestCallingJsField(t *testing.T) {
 	}
 }
 
+func TestReflectionOnJsField(t *testing.T) {
+	a := StructWithJsField1{Object: js.Global.Get("Array").New(42)}
+	wa := Wrapper1{StructWithJsField1: a}
+	if reflect.ValueOf(a).FieldByName("Length").Int() != 42 || reflect.ValueOf(&wa).Elem().FieldByName("WrapperLength").Int() != 42 {
+		t.Fail()
+	}
+	reflect.ValueOf(&wa).Elem().FieldByName("WrapperLength").Set(reflect.ValueOf(10))
+	if a.Length != 10 {
+		t.Fail()
+	}
+}
+
 func TestUnboxing(t *testing.T) {
 	a := StructWithJsField1{Object: js.Global.Get("Object").New()}
 	b := &StructWithJsField2{object: js.Global.Get("Object").New()}

@@ -749,17 +749,17 @@ func (v Value) Cap() int {
 	panic(&ValueError{"reflect.Value.Cap", k})
 }
 
-var jsObjectPtr = js.Global.Get("$jsObjectPtr")
+var jsObjectPtr = reflectType(js.Global.Get("$jsObjectPtr"))
 
 func wrapJsObject(typ Type, val *js.Object) *js.Object {
-	if typ == reflectType(jsObjectPtr) {
-		return jsObjectPtr.New(val)
+	if typ == jsObjectPtr {
+		return jsType(jsObjectPtr).New(val)
 	}
 	return val
 }
 
 func unwrapJsObject(typ Type, val *js.Object) *js.Object {
-	if typ == reflectType(jsObjectPtr) {
+	if typ == jsObjectPtr {
 		return val.Get("object")
 	}
 	return val
@@ -792,24 +792,42 @@ func (v Value) Elem() Value {
 
 func (v Value) Field(i int) Value {
 	v.mustBe(Struct)
-	tt := (*structType)(unsafe.Pointer(v.typ))
-	if i < 0 || i >= len(tt.fields) {
+	if i < 0 || i >= v.typ.NumField() {
 		panic("reflect: Field index out of range")
 	}
 
-	field := &tt.fields[i]
 	prop := jsType(v.typ).Get("fields").Index(i).Get("prop").String()
-	typ := field.typ
+	field := v.typ.Field(i)
+	typ := field.Type
 
 	fl := v.flag & (flagRO | flagIndir | flagAddr)
-	if field.pkgPath != nil {
+	if field.PkgPath != "" {
 		fl |= flagRO
 	}
 	fl |= flag(typ.Kind())
 
+	if jsTag := v.typ.Field(i).Tag.Get("js"); jsTag != "" && i != 0 {
+		for {
+			v = v.Field(0)
+			if v.Type() == jsObjectPtr {
+				o := v.object().Get("object")
+				return Value{typ.(*rtype), unsafe.Pointer(jsType(PtrTo(typ)).New(
+					js.InternalObject(func() *js.Object { return js.Global.Call("$internalize", o.Get(jsTag), jsType(typ)) }),
+					js.InternalObject(func(x *js.Object) { o.Set(jsTag, js.Global.Call("$externalize", x, jsType(typ))) }),
+				).Unsafe()), fl}
+			}
+			if v.Type().Kind() == Ptr {
+				v = v.Elem()
+			}
+		}
+	}
+
 	s := js.InternalObject(v.ptr)
 	if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() *js.Object { return wrapJsObject(typ, s.Get(prop)) }), js.InternalObject(func(v *js.Object) { s.Set(prop, unwrapJsObject(typ, v)) })).Unsafe()), fl}
+		return Value{typ.(*rtype), unsafe.Pointer(jsType(PtrTo(typ)).New(
+			js.InternalObject(func() *js.Object { return wrapJsObject(typ, s.Get(prop)) }),
+			js.InternalObject(func(x *js.Object) { s.Set(prop, unwrapJsObject(typ, x)) }),
+		).Unsafe()), fl}
 	}
 	return makeValue(typ, wrapJsObject(typ, s.Get(prop)), fl)
 }
@@ -827,7 +845,10 @@ func (v Value) Index(i int) Value {
 
 		a := js.InternalObject(v.ptr)
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() *js.Object { return wrapJsObject(typ, a.Index(i)) }), js.InternalObject(func(v *js.Object) { a.SetIndex(i, unwrapJsObject(typ, v)) })).Unsafe()), fl}
+			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(
+				js.InternalObject(func() *js.Object { return wrapJsObject(typ, a.Index(i)) }),
+				js.InternalObject(func(x *js.Object) { a.SetIndex(i, unwrapJsObject(typ, x)) }),
+			).Unsafe()), fl}
 		}
 		return makeValue(typ, wrapJsObject(typ, a.Index(i)), fl)
 
@@ -844,7 +865,10 @@ func (v Value) Index(i int) Value {
 		i += s.Get("$offset").Int()
 		a := s.Get("$array")
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(js.InternalObject(func() *js.Object { return wrapJsObject(typ, a.Index(i)) }), js.InternalObject(func(v *js.Object) { a.SetIndex(i, unwrapJsObject(typ, v)) })).Unsafe()), fl}
+			return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(
+				js.InternalObject(func() *js.Object { return wrapJsObject(typ, a.Index(i)) }),
+				js.InternalObject(func(x *js.Object) { a.SetIndex(i, unwrapJsObject(typ, x)) }),
+			).Unsafe()), fl}
 		}
 		return makeValue(typ, wrapJsObject(typ, a.Index(i)), fl)
 

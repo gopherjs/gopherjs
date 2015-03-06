@@ -140,7 +140,7 @@ func (c *funcContext) translateSelection(sel *types.Selection, pos token.Pos) ([
 				}
 				var ok bool
 				s, ok = ft.(*types.Struct)
-				if !ok {
+				if !ok || s.NumFields() == 0 {
 					c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: pos, Msg: fmt.Sprintf("could not find field with type *js.Object for 'js' tag of field '%s'", jsFieldName), Soft: true})
 					return nil, ""
 				}

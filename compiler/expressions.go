@@ -179,7 +179,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
-		params, body := translateFunction(e.Type, e.Body.List, c, exprType.(*types.Signature), c.p.FuncLitInfos[e], "")
+		_, fun := translateFunction(e.Type, e.Body.List, c, exprType.(*types.Signature), c.p.FuncLitInfos[e], "")
 		if len(c.p.escapingVars) != 0 {
 			names := make([]string, 0, len(c.p.escapingVars))
 			for obj := range c.p.escapingVars {
@@ -187,9 +187,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			sort.Strings(names)
 			list := strings.Join(names, ", ")
-			return c.formatExpr("(function(%s) { return function(%s) {\n%s%s}; })(%s)", list, strings.Join(params, ", "), string(body), strings.Repeat("\t", c.p.indentation), list)
+			return c.formatExpr("(function(%s) { return %s; })(%s)", list, fun, list)
 		}
-		return c.formatExpr("(function(%s) {\n%s%s})", strings.Join(params, ", "), string(body), strings.Repeat("\t", c.p.indentation))
+		return c.formatExpr("(%s)", fun)
 
 	case *ast.UnaryExpr:
 		t := c.p.Types[e.X].Type

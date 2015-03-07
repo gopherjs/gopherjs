@@ -552,9 +552,9 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysi
 				},
 			}, stmts...)
 		}
-		params, body := translateFunction(fun.Type, stmts, c, sig, info, fun.Name.Name)
+		params, fun := translateFunction(fun.Type, stmts, c, sig, info, fun.Name.Name)
 		joinedParams = strings.Join(params, ", ")
-		return []byte(fmt.Sprintf("\t%s = function(%s) {\n%s\t};\n", lhs, joinedParams, string(body)))
+		return []byte(fmt.Sprintf("\t%s = %s;\n", lhs, fun))
 	}
 
 	if fun.Recv == nil {
@@ -603,7 +603,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysi
 	return code.Bytes()
 }
 
-func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcContext, sig *types.Signature, info *analysis.FuncInfo, name string) ([]string, []byte) {
+func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcContext, sig *types.Signature, info *analysis.FuncInfo, name string) ([]string, string) {
 	c := &funcContext{
 		FuncInfo:    info,
 		p:           outerContext.p,
@@ -638,7 +638,7 @@ func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcCo
 		c.localVars = append(c.localVars, "$this = this")
 	}
 
-	body := c.CatchOutput(1, func() {
+	body := string(c.CatchOutput(1, func() {
 		if c.sig != nil && c.sig.Results().Len() != 0 && c.sig.Results().At(0).Name() != "" {
 			c.resultNames = make([]ast.Expr, c.sig.Results().Len())
 			for i := 0; i < c.sig.Results().Len(); i++ {
@@ -720,12 +720,12 @@ func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcCo
 		if suffix != "" {
 			c.Printf("/* */%s", suffix)
 		}
-	})
+	}))
 
 	if len(c.localVars) != 0 {
 		sort.Strings(c.localVars)
-		body = append([]byte(fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.p.indentation+1), strings.Join(c.localVars, ", "))), body...)
+		body = fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.p.indentation+1), strings.Join(c.localVars, ", ")) + body
 	}
 
-	return params, body
+	return params, fmt.Sprintf("function(%s) {\n%s%s}", strings.Join(params, ", "), body, strings.Repeat("\t", c.p.indentation))
 }

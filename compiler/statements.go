@@ -434,7 +434,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 
 	case *ast.ExprStmt:
 		expr := c.translateExpr(s.X)
-		if expr != nil {
+		if expr != nil && expr.String() != "" {
 			c.Printf("%s;", expr)
 		}
 

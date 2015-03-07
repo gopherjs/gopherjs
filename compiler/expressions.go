@@ -515,20 +515,14 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		panic("")
 
 	case *ast.CallExpr:
-		plainFun := e.Fun
-		for {
-			if p, isParen := plainFun.(*ast.ParenExpr); isParen {
-				plainFun = p.X
-				continue
-			}
-			break
-		}
+		plainFun := astutil.RemoveParens(e.Fun)
 
 		if astutil.IsTypeExpr(plainFun, c.p.Info.Info) {
 			return c.formatExpr("%s", c.translateConversion(e.Args[0], c.p.Types[plainFun].Type))
 		}
 
-		var fun *expression
+		sig := c.p.Types[plainFun].Type.Underlying().(*types.Signature)
+
 		switch f := plainFun.(type) {
 		case *ast.Ident:
 			obj := c.p.Uses[f]
@@ -538,7 +532,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if typesutil.IsJsPackage(obj.Pkg()) && obj.Name() == "InternalObject" {
 				return c.translateExpr(e.Args[0])
 			}
-			fun = c.translateExpr(plainFun)
+			return c.formatExpr("%s", c.translateCall(e, sig, c.translateExpr(plainFun)))
 
 		case *ast.SelectorExpr:
 			sel, ok := c.p.Selections[f]
@@ -555,8 +549,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						return c.formatExpr("(function() { return $externalize(%e(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(arguments, []))), $emptyInterface); })", e.Args[0])
 					}
 				}
-				fun = c.translateExpr(f)
-				break
+				return c.formatExpr("%s", c.translateCall(e, sig, c.translateExpr(f)))
 			}
 
 			externalizeExpr := func(e ast.Expr) string {
@@ -652,42 +645,21 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				if reservedKeywords[methodName] {
 					methodName += "$"
 				}
-				fun = c.formatExpr("%s.%s", recv, methodName)
+				return c.formatExpr("%s", c.translateCall(e, sig, c.formatExpr("%s.%s", recv, methodName)))
 
 			case types.FieldVal:
 				fields, jsTag := c.translateSelection(sel, f.Pos())
 				if jsTag != "" {
-					sig := sel.Type().(*types.Signature)
 					return c.internalize(c.formatExpr("%e.%s.%s(%s)", f.X, strings.Join(fields, "."), jsTag, externalizeArgs(e.Args)), sig.Results().At(0).Type())
 				}
-				fun = c.formatExpr("%e.%s", f.X, strings.Join(fields, "."))
-
-			case types.MethodExpr:
-				fun = c.translateExpr(f)
+				return c.formatExpr("%s", c.translateCall(e, sig, c.formatExpr("%e.%s", f.X, strings.Join(fields, "."))))
 
 			default:
 				panic("")
 			}
 		default:
-			fun = c.translateExpr(plainFun)
+			return c.formatExpr("%s", c.translateCall(e, sig, c.translateExpr(plainFun)))
 		}
-
-		sig := c.p.Types[plainFun].Type.Underlying().(*types.Signature)
-		args := c.translateArgs(sig, e.Args, e.Ellipsis.IsValid(), false)
-		if c.Blocking[e] {
-			resumeCase := c.caseCounter
-			c.caseCounter++
-			returnVar := "$r"
-			if sig.Results().Len() != 0 {
-				returnVar = c.newVariable("_r")
-			}
-			c.Printf("%[1]s = %[2]s(%[3]s); /* */ $s = %[4]d; case %[4]d: if (%[1]s && %[1]s.$blocking) { %[1]s = %[1]s(); }", returnVar, fun, strings.Join(args, ", "), resumeCase)
-			if sig.Results().Len() != 0 {
-				return c.formatExpr("%s", returnVar)
-			}
-			return nil
-		}
-		return c.formatExpr("%s(%s)", fun, strings.Join(args, ", "))
 
 	case *ast.StarExpr:
 		if typesutil.IsJsObject(c.p.Types[e.X].Type) {
@@ -752,6 +724,24 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		panic(fmt.Sprintf("Unhandled expression: %T\n", e))
 
 	}
+}
+
+func (c *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun *expression) string {
+	args := c.translateArgs(sig, e.Args, e.Ellipsis.IsValid(), false)
+	if c.Blocking[e] {
+		resumeCase := c.caseCounter
+		c.caseCounter++
+		returnVar := "$r"
+		if sig.Results().Len() != 0 {
+			returnVar = c.newVariable("_r")
+		}
+		c.Printf("%[1]s = %[2]s(%[3]s); /* */ $s = %[4]d; case %[4]d: if (%[1]s && %[1]s.$blocking) { %[1]s = %[1]s(); }", returnVar, fun, strings.Join(args, ", "), resumeCase)
+		if sig.Results().Len() != 0 {
+			return returnVar
+		}
+		return ""
+	}
+	return fmt.Sprintf("%s(%s)", fun, strings.Join(args, ", "))
 }
 
 func (c *funcContext) makeReceiver(x ast.Expr, sel *types.Selection) *expression {

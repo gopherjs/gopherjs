@@ -12,17 +12,23 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-var DefaultTransport RoundTripper = &XhrTransport{}
+var DefaultTransport RoundTripper = &XhrTransport{
+	inflight: map[*Request]*js.Object{},
+}
 
-type XhrTransport struct{}
+type XhrTransport struct {
+	inflight map[*Request]*js.Object
+}
 
 func (t *XhrTransport) RoundTrip(req *Request) (*Response, error) {
 	xhrConstructor := js.Global.Get("XMLHttpRequest")
 	if xhrConstructor == js.Undefined {
-		panic("XMLHttpRequest not available")
+		return nil, errors.New("net/http: XMLHttpRequest not available")
 	}
 	xhr := xhrConstructor.New()
 	xhr.Set("responseType", "arraybuffer")
+	t.inflight[req] = xhr
+	defer delete(t.inflight, req)
 
 	respCh := make(chan *Response)
 	errCh := make(chan error)
@@ -31,15 +37,21 @@ func (t *XhrTransport) RoundTrip(req *Request) (*Response, error) {
 		header, _ := textproto.NewReader(bufio.NewReader(bytes.NewReader([]byte(xhr.Call("getAllResponseHeaders").String() + "\n")))).ReadMIMEHeader()
 		body := js.Global.Get("Uint8Array").New(xhr.Get("response")).Interface().([]byte)
 		respCh <- &Response{
-			Status:     xhr.Get("status").String() + " " + xhr.Get("statusText").String(),
-			StatusCode: xhr.Get("status").Int(),
-			Header:     Header(header),
-			Body:       ioutil.NopCloser(bytes.NewReader(body)),
+			Status:        xhr.Get("status").String() + " " + xhr.Get("statusText").String(),
+			StatusCode:    xhr.Get("status").Int(),
+			Header:        Header(header),
+			ContentLength: int64(len(body)),
+			Body:          ioutil.NopCloser(bytes.NewReader(body)),
+			Request:       req,
 		}
 	})
 
 	xhr.Set("onerror", func(e *js.Object) {
-		errCh <- errors.New("XMLHttpRequest failed")
+		errCh <- errors.New("net/http: XMLHttpRequest failed")
+	})
+
+	xhr.Set("onabort", func(e *js.Object) {
+		errCh <- errors.New("net/http: request canceled")
 	})
 
 	xhr.Call("open", req.Method, req.URL.String())
@@ -64,4 +76,8 @@ func (t *XhrTransport) RoundTrip(req *Request) (*Response, error) {
 	case err := <-errCh:
 		return nil, err
 	}
+}
+
+func (t *XhrTransport) CancelRequest(req *Request) {
+	t.inflight[req].Call("abort")
 }

@@ -12,21 +12,23 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-var DefaultTransport RoundTripper = &XhrTransport{
-	inflight: map[*Request]*js.Object{},
-}
+var DefaultTransport RoundTripper = &XHRTransport{}
 
-type XhrTransport struct {
+type XHRTransport struct {
 	inflight map[*Request]*js.Object
 }
 
-func (t *XhrTransport) RoundTrip(req *Request) (*Response, error) {
+func (t *XHRTransport) RoundTrip(req *Request) (*Response, error) {
 	xhrConstructor := js.Global.Get("XMLHttpRequest")
 	if xhrConstructor == js.Undefined {
 		return nil, errors.New("net/http: XMLHttpRequest not available")
 	}
 	xhr := xhrConstructor.New()
 	xhr.Set("responseType", "arraybuffer")
+
+	if t.inflight == nil {
+		t.inflight = map[*Request]*js.Object{}
+	}
 	t.inflight[req] = xhr
 	defer delete(t.inflight, req)
 
@@ -78,6 +80,8 @@ func (t *XhrTransport) RoundTrip(req *Request) (*Response, error) {
 	}
 }
 
-func (t *XhrTransport) CancelRequest(req *Request) {
-	t.inflight[req].Call("abort")
+func (t *XHRTransport) CancelRequest(req *Request) {
+	if xhr, ok := t.inflight[req]; ok {
+		xhr.Call("abort")
+	}
 }

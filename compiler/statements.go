@@ -425,7 +425,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			for _, spec := range decl.Specs {
 				o := c.p.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
 				c.p.typeNames = append(c.p.typeNames, o)
-				c.p.objectVars[o] = c.newVariableWithLevel(o.Name(), true, "")
+				c.p.objectVars[o] = c.newVariableWithLevel(o.Name(), true)
 				c.p.dependencies[o] = true
 			}
 		case token.CONST:

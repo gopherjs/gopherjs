@@ -189,10 +189,10 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 }
 
 func (c *funcContext) newVariable(name string) string {
-	return c.newVariableWithLevel(name, false, "")
+	return c.newVariableWithLevel(name, false)
 }
 
-func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool, initializer string) string {
+func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
 	if name == "" {
 		panic("newVariable: empty name")
 	}
@@ -238,10 +238,6 @@ func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool, initializ
 		return varName
 	}
 
-	if initializer != "" {
-		c.localVars = append(c.localVars, varName+" = "+initializer)
-		return varName
-	}
 	c.localVars = append(c.localVars, varName)
 	return varName
 }
@@ -282,7 +278,7 @@ func (c *funcContext) objectName(o types.Object) string {
 
 	name, found := c.p.objectVars[o]
 	if !found {
-		name = c.newVariableWithLevel(o.Name(), o.Parent() == c.p.Pkg.Scope(), "")
+		name = c.newVariableWithLevel(o.Name(), o.Parent() == c.p.Pkg.Scope())
 		c.p.objectVars[o] = name
 	}
 
@@ -310,7 +306,7 @@ func (c *funcContext) typeName(ty types.Type) string {
 	anonType, ok := c.p.anonTypeMap.At(ty).(*types.TypeName)
 	if !ok {
 		c.initArgs(ty) // cause all embedded types to be registered
-		varName := c.newVariableWithLevel(strings.ToLower(typeKind(ty)[5:])+"Type", true, "")
+		varName := c.newVariableWithLevel(strings.ToLower(typeKind(ty)[5:])+"Type", true)
 		anonType = types.NewTypeName(token.NoPos, c.p.Pkg, varName, ty) // fake types.TypeName
 		c.p.anonTypes = append(c.p.anonTypes, anonType)
 		c.p.anonTypeMap.Set(ty, anonType)

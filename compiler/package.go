@@ -160,7 +160,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var importDecls []*Decl
 	var importedPaths []string
 	for _, importedPkg := range typesPkg.Imports() {
-		c.p.pkgVars[importedPkg.Path()] = c.newVariableWithLevel(importedPkg.Name(), true, "")
+		c.p.pkgVars[importedPkg.Path()] = c.newVariableWithLevel(importedPkg.Name(), true)
 		importedPaths = append(importedPaths, importedPkg.Path())
 	}
 	sort.Strings(importedPaths)
@@ -647,7 +647,9 @@ func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcCo
 				if result.Name() == "_" {
 					name = "result"
 				}
-				c.p.objectVars[result] = c.newVariableWithLevel(name, false, c.zeroValue(result.Type()))
+				varName := c.newVariableWithLevel(name, false)
+				c.Printf("%s = %s;", varName, c.zeroValue(result.Type()))
+				c.p.objectVars[result] = varName
 				id := ast.NewIdent(name)
 				c.p.Uses[id] = result
 				c.resultNames[i] = c.setType(id, result.Type())

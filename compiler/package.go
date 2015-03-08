@@ -70,6 +70,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		Uses:       make(map[*ast.Ident]types.Object),
 		Implicits:  make(map[ast.Node]types.Object),
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
+		Scopes:     make(map[ast.Node]*types.Scope),
 	}
 
 	var importError error

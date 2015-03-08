@@ -180,6 +180,15 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 				break
 			}
 			callTo(c.p.Uses[f.Sel])
+		case *ast.FuncLit:
+			ast.Walk(c, n.Fun)
+			for _, arg := range n.Args {
+				ast.Walk(c, arg)
+			}
+			if len(c.p.FuncLitInfos[f].Blocking) != 0 {
+				c.markBlocking(c.analyzeStack)
+			}
+			return nil
 		default:
 			if !astutil.IsTypeExpr(f, c.p.Info) {
 				c.markBlocking(c.analyzeStack)

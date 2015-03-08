@@ -10,26 +10,24 @@ var $getStackDepth = function() {
   return $stackDepthOffset + err.stack.split("\n").length;
 };
 
-var $deferFrames = [], $skippedDeferFrames = 0, $jumpToDefer = false, $panicStackDepth = null, $panicValue;
-var $callDeferred = function(deferred, jsErr) {
-  if ($skippedDeferFrames !== 0) {
-    $skippedDeferFrames--;
-    throw jsErr;
-  }
-  if ($jumpToDefer) {
-    $jumpToDefer = false;
-    throw jsErr;
-  }
-  if (jsErr) {
+var $panicStackDepth = null, $panicValue;
+var $callDeferred = function(deferred, jsErr, fromPanic) {
+  if (jsErr !== null) {
     var newErr = null;
     try {
-      $deferFrames.push(deferred);
+      $curGoroutine.deferStack.push(deferred);
       $panic(new $jsErrorPtr(jsErr));
     } catch (err) {
       newErr = err;
     }
-    $deferFrames.pop();
+    $curGoroutine.deferStack.pop();
     $callDeferred(deferred, newErr);
+    return;
+  }
+  if (!fromPanic && deferred !== null && deferred.index >= $curGoroutine.deferStack.length) {
+    throw null;
+  }
+  if ($curGoroutine.asleep) {
     return;
   }
 
@@ -43,11 +41,10 @@ var $callDeferred = function(deferred, jsErr) {
     $panicValue = localPanicValue;
   }
 
-  var call, localSkippedDeferFrames = 0;
   try {
     while (true) {
       if (deferred === null) {
-        deferred = $deferFrames[$deferFrames.length - 1 - localSkippedDeferFrames];
+        deferred = $curGoroutine.deferStack[$curGoroutine.deferStack.length - 1];
         if (deferred === undefined) {
           if (localPanicValue.Object instanceof Error) {
             throw localPanicValue.Object;
@@ -57,10 +54,8 @@ var $callDeferred = function(deferred, jsErr) {
             msg = localPanicValue.$val;
           } else if (localPanicValue.Error !== undefined) {
             msg = localPanicValue.Error();
-            if (msg && msg.$blocking) { msg = msg(); }
           } else if (localPanicValue.String !== undefined) {
             msg = localPanicValue.String();
-            if (msg && msg.$blocking) { msg = msg(); }
           } else {
             msg = localPanicValue;
           }
@@ -69,16 +64,20 @@ var $callDeferred = function(deferred, jsErr) {
       }
       var call = deferred.pop();
       if (call === undefined) {
+        $curGoroutine.deferStack.pop();
         if (localPanicValue !== undefined) {
-          localSkippedDeferFrames++;
           deferred = null;
           continue;
         }
         return;
       }
-      var r = call[0].apply(undefined, call[1]);
-      if (r && r.$blocking) {
-        deferred.push([r, []]);
+      var r = call[0].apply(call[2], call[1]);
+      if (r && r.$blk !== undefined) {
+        deferred.push([r.$blk, [], r]);
+        if (fromPanic) {
+          throw null;
+        }
+        return;
       }
 
       if (localPanicValue !== undefined && $panicStackDepth === null) {
@@ -86,11 +85,6 @@ var $callDeferred = function(deferred, jsErr) {
       }
     }
   } finally {
-    $skippedDeferFrames += localSkippedDeferFrames;
-    if ($curGoroutine.asleep) {
-      deferred.push(call);
-      $jumpToDefer = true;
-    }
     if (localPanicValue !== undefined) {
       if ($panicStackDepth !== null) {
         $curGoroutine.panicStack.push(localPanicValue);
@@ -104,7 +98,7 @@ var $callDeferred = function(deferred, jsErr) {
 
 var $panic = function(value) {
   $curGoroutine.panicStack.push(value);
-  $callDeferred(null, null);
+  $callDeferred(null, null, true);
 };
 var $recover = function() {
   if ($panicStackDepth === null || ($panicStackDepth !== undefined && $panicStackDepth !== $getStackDepth() - 2)) {
@@ -115,7 +109,7 @@ var $recover = function() {
 };
 var $throw = function(err) { throw err; };
 
-var $dummyGoroutine = { asleep: false, exit: false, panicStack: [] };
+var $dummyGoroutine = { asleep: false, exit: false, deferStack: [], panicStack: [] };
 var $curGoroutine = $dummyGoroutine, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
 var $go = function(fun, args, direct) {
   $totalGoroutines++;
@@ -124,22 +118,17 @@ var $go = function(fun, args, direct) {
     var rescheduled = false;
     try {
       $curGoroutine = goroutine;
-      $skippedDeferFrames = 0;
-      $jumpToDefer = false;
       var r = fun.apply(undefined, args);
-      if (r && r.$blocking) {
-        fun = r;
+      if (r && r.$blk !== undefined) {
+        fun = function() { r.$blk(); };
         args = [];
-        $schedule(goroutine, direct);
         rescheduled = true;
         return;
       }
       goroutine.exit = true;
     } catch (err) {
-      if (!$curGoroutine.asleep) {
-        goroutine.exit = true;
-        throw err;
-      }
+      goroutine.exit = true;
+      throw err;
     } finally {
       $curGoroutine = $dummyGoroutine;
       if (goroutine.exit && !rescheduled) { /* also set by runtime.Goexit() */
@@ -156,6 +145,7 @@ var $go = function(fun, args, direct) {
   };
   goroutine.asleep = false;
   goroutine.exit = false;
+  goroutine.deferStack = [];
   goroutine.panicStack = [];
   $schedule(goroutine, direct);
 };
@@ -193,7 +183,6 @@ var $block = function() {
     $throwRuntimeError("cannot block in JavaScript callback, fix by wrapping code in goroutine");
   }
   $curGoroutine.asleep = true;
-  throw null;
 };
 
 var $send = function(chan, value) {
@@ -215,19 +204,14 @@ var $send = function(chan, value) {
     $schedule(thisGoroutine);
     return value;
   });
-  var blocked = false;
-  var f = function() {
-    if (blocked) {
+  $block();
+  return {
+    $blk: function() {
       if (chan.$closed) {
         $throwRuntimeError("send on closed channel");
       }
-      return;
-    };
-    blocked = true;
-    $block();
+    },
   };
-  f.$blocking = true;
-  return f;
 };
 var $recv = function(chan) {
   var queuedSend = chan.$sendQueue.shift();
@@ -242,21 +226,14 @@ var $recv = function(chan) {
     return [chan.constructor.elem.zero(), false];
   }
 
-  var thisGoroutine = $curGoroutine, value;
+  var thisGoroutine = $curGoroutine;
+  var f = { $blk: function() { return this.value; } };
   var queueEntry = function(v) {
-    value = v;
+    f.value = v;
     $schedule(thisGoroutine);
   };
   chan.$recvQueue.push(queueEntry);
-  var blocked = false;
-  var f = function() {
-    if (blocked) {
-      return value;
-    };
-    blocked = true;
-    $block();
-  };
-  f.$blocking = true;
+  $block();
   return f;
 };
 var $close = function(chan) {
@@ -323,6 +300,7 @@ var $select = function(comms) {
 
   var entries = [];
   var thisGoroutine = $curGoroutine;
+  var f = { $blk: function() { return this.selection; } };
   var removeFromQueues = function() {
     for (var i = 0; i < entries.length; i++) {
       var entry = entries[i];
@@ -339,7 +317,7 @@ var $select = function(comms) {
       switch (comm.length) {
       case 1: /* recv */
         var queueEntry = function(value) {
-          selection = [i, value];
+          f.selection = [i, value];
           removeFromQueues();
           $schedule(thisGoroutine);
         };
@@ -351,7 +329,7 @@ var $select = function(comms) {
           if (comm[0].$closed) {
             $throwRuntimeError("send on closed channel");
           }
-          selection = [i];
+          f.selection = [i];
           removeFromQueues();
           $schedule(thisGoroutine);
           return comm[1];
@@ -362,15 +340,7 @@ var $select = function(comms) {
       }
     })(i);
   }
-  var blocked = false;
-  var f = function() {
-    if (blocked) {
-      return selection;
-    };
-    blocked = true;
-    $block();
-  };
-  f.$blocking = true;
+  $block();
   return f;
 };
 `

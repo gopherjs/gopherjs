@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 
 	"golang.org/x/tools/go/types"
@@ -348,6 +350,24 @@ func (c *funcContext) externalize(s string, t types.Type) string {
 		}
 	}
 	return fmt.Sprintf("$externalize(%s, %s)", s, c.typeName(t))
+}
+
+func (c *funcContext) handleEscapingVars(n ast.Node) {
+	newEscapingVars := make(map[*types.Var]bool)
+	for escaping := range c.p.escapingVars {
+		newEscapingVars[escaping] = true
+	}
+	c.p.escapingVars = newEscapingVars
+
+	var names []string
+	for obj := range analysis.EscapingObjects(n, c.p.Info.Info) {
+		names = append(names, c.objectName(obj))
+		c.p.escapingVars[obj] = true
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		c.Printf("%s = [%s];", name, name)
+	}
 }
 
 func fieldName(t *types.Struct, i int) string {

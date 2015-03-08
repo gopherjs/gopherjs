@@ -69,7 +69,6 @@ var $externalize = function(v, t) {
           args.push($internalize(arguments[i], t.params[i]));
         }
         var result = v.apply(this, args);
-        if (result && result.$blocking) { result = result(); }
         switch (t.results.length) {
         case 0:
           return;

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"sort"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
@@ -278,25 +277,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			}
 			results = c.resultNames
 		}
-		switch len(results) {
-		case 0:
-			c.Printf("return;")
-		case 1:
-			if c.sig.Results().Len() > 1 {
-				c.Printf("return %s;", c.translateExpr(results[0]))
-				return
-			}
-			v := c.translateImplicitConversion(results[0], c.sig.Results().At(0).Type())
-			c.delayedOutput = nil
-			c.Printf("return %s;", v)
-		default:
-			values := make([]string, len(results))
-			for i, result := range results {
-				values[i] = c.translateImplicitConversion(result, c.sig.Results().At(i).Type()).String()
-			}
-			c.delayedOutput = nil
-			c.Printf("return [%s];", strings.Join(values, ", "))
-		}
+		c.Printf("return%s;", c.translateResults(results))
 
 	case *ast.DeferStmt:
 		isBuiltin := false
@@ -699,21 +680,9 @@ func (c *funcContext) translateLoopingStmt(cond func() string, body *ast.BlockSt
 		if condStr != "true" {
 			c.PrintCond(!flatten, fmt.Sprintf("if (!(%s)) { break; }", condStr), fmt.Sprintf("if(!(%s)) { $s = %d; continue; }", condStr, data.endCase))
 		}
-		prevEV := c.p.escapingVars
-		c.p.escapingVars = make(map[*types.Var]bool)
-		for escaping := range prevEV {
-			c.p.escapingVars[escaping] = true
-		}
 
-		var names []string
-		for obj := range analysis.EscapingObjects(body, c.p.Info.Info) {
-			names = append(names, c.objectName(obj))
-			c.p.escapingVars[obj] = true
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			c.Printf("%s = [undefined];", name)
-		}
+		prevEV := c.p.escapingVars
+		c.handleEscapingVars(body)
 
 		if bodyPrefix != nil {
 			bodyPrefix()
@@ -807,6 +776,27 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 		}
 	default:
 		panic(fmt.Sprintf("Unhandled lhs type: %T\n", l))
+	}
+}
+
+func (c *funcContext) translateResults(results []ast.Expr) string {
+	switch len(results) {
+	case 0:
+		return ""
+	case 1:
+		if c.sig.Results().Len() > 1 {
+			return " " + c.translateExpr(results[0]).String()
+		}
+		v := c.translateImplicitConversion(results[0], c.sig.Results().At(0).Type())
+		c.delayedOutput = nil
+		return " " + v.String()
+	default:
+		values := make([]string, len(results))
+		for i, result := range results {
+			values[i] = c.translateImplicitConversion(result, c.sig.Results().At(i).Type()).String()
+		}
+		c.delayedOutput = nil
+		return " [" + strings.Join(values, ", ") + "]"
 	}
 }
 

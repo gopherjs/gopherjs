@@ -179,7 +179,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
-		_, fun := translateFunction(e.Type, e.Body.List, c, exprType.(*types.Signature), c.p.FuncLitInfos[e], "")
+		_, fun := translateFunction(e.Type, nil, e.Body, c, exprType.(*types.Signature), c.p.FuncLitInfos[e], "")
 		if len(c.p.escapingVars) != 0 {
 			names := make([]string, 0, len(c.p.escapingVars))
 			for obj := range c.p.escapingVars {
@@ -708,14 +708,10 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *this:
-		this := "this"
-		if len(c.Flattened) != 0 {
-			this = "$this"
-		}
 		if isWrapped(c.p.Types[e].Type) {
-			return c.formatExpr("%1s.$val", this)
+			return c.formatExpr("this.$val")
 		}
-		return c.formatExpr("%s", this)
+		return c.formatExpr("this")
 
 	case nil:
 		return c.formatExpr("")
@@ -735,7 +731,7 @@ func (c *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun *
 		if sig.Results().Len() != 0 {
 			returnVar = c.newVariable("_r")
 		}
-		c.Printf("%[1]s = %[2]s(%[3]s); /* */ $s = %[4]d; case %[4]d: if (%[1]s && %[1]s.$blocking) { %[1]s = %[1]s(); }", returnVar, fun, strings.Join(args, ", "), resumeCase)
+		c.Printf("%[1]s = %[2]s(%[3]s); /* */ $s = %[4]d; case %[4]d: if($c) { $c = false; %[1]s = %[1]s.$blk(); } if (%[1]s && %[1]s.$blk !== undefined) { break s; }", returnVar, fun, strings.Join(args, ", "), resumeCase)
 		if sig.Results().Len() != 0 {
 			return returnVar
 		}
@@ -1019,7 +1015,7 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 		}
 
 		if !types.Identical(exprType, types.Typ[types.UnsafePointer]) {
-			return c.formatExpr("new %1s(%2e.$get, %2e.$set)", c.typeName(desiredType), expr)
+			return c.formatExpr("new %1s(%2e.$get, %2e.$set, %2e.$target)", c.typeName(desiredType), expr)
 		}
 
 	case *types.Interface:

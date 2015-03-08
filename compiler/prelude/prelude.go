@@ -198,7 +198,7 @@ var $bytesToString = function(slice) {
   }
   var str = "";
   for (var i = 0; i < slice.$length; i += 10000) {
-    str += String.fromCharCode.apply(null, slice.$array.subarray(slice.$offset + i, slice.$offset + Math.min(slice.$length, i + 10000)));
+    str += String.fromCharCode.apply(undefined, slice.$array.subarray(slice.$offset + i, slice.$offset + Math.min(slice.$length, i + 10000)));
   }
   return str;
 };

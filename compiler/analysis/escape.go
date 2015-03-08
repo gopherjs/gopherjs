@@ -9,18 +9,20 @@ import (
 
 func EscapingObjects(n ast.Node, info *types.Info) map[*types.Var]bool {
 	v := escapeAnalysis{
-		info:     info,
-		escaping: make(map[*types.Var]bool),
-		topScope: info.Scopes[n],
+		info:         info,
+		escaping:     make(map[*types.Var]bool),
+		topScope:     info.Scopes[n],
+		bottomScopes: make(map[*types.Scope]bool),
 	}
 	ast.Walk(&v, n)
 	return v.escaping
 }
 
 type escapeAnalysis struct {
-	info     *types.Info
-	escaping map[*types.Var]bool
-	topScope *types.Scope
+	info         *types.Info
+	escaping     map[*types.Var]bool
+	topScope     *types.Scope
+	bottomScopes map[*types.Scope]bool
 }
 
 func (v *escapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
@@ -29,20 +31,20 @@ func (v *escapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
 	case *ast.UnaryExpr:
 		if n.Op == token.AND {
 			if _, ok := n.X.(*ast.Ident); ok {
-				return &escapingObjectCollector{v, nil}
+				return &escapingObjectCollector{v}
 			}
 		}
 	case *ast.FuncLit:
-		return &escapingObjectCollector{v, v.info.Scopes[n.Type]}
+		v.bottomScopes[v.info.Scopes[n.Type]] = true
+		return &escapingObjectCollector{v}
 	case *ast.ForStmt, *ast.RangeStmt:
-		return nil
+		v.bottomScopes[v.info.Scopes[n]] = true
 	}
 	return v
 }
 
 type escapingObjectCollector struct {
-	analysis    *escapeAnalysis
-	bottomScope *types.Scope
+	analysis *escapeAnalysis
 }
 
 func (v *escapingObjectCollector) Visit(node ast.Node) (w ast.Visitor) {
@@ -55,11 +57,11 @@ func (v *escapingObjectCollector) Visit(node ast.Node) (w ast.Visitor) {
 			}
 
 			for s := obj.Parent(); s != nil; s = s.Parent() {
-				if s == v.bottomScope {
-					break
-				}
 				if s == v.analysis.topScope {
 					v.analysis.escaping[obj] = true
+					break
+				}
+				if v.analysis.bottomScopes[s] {
 					break
 				}
 			}

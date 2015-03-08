@@ -655,6 +655,7 @@ func (v Value) call(op string, in []Value) []Value {
 		}
 	} else {
 		fn = unsafe.Pointer(v.object().Unsafe())
+		rcvr = js.Undefined
 	}
 
 	if fn == nil {

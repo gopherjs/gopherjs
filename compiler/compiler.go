@@ -158,7 +158,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 		}
 	}
 
-	if _, err := w.Write([]byte("$synthesizeMethods();\n$packages[\"runtime\"].$init()();\n$go($packages[\"" + string(mainPkg.ImportPath) + "\"].$init, [], true);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
+	if _, err := w.Write([]byte("$synthesizeMethods();\n$packages[\"runtime\"].$init();\n$go($packages[\"" + string(mainPkg.ImportPath) + "\"].$init, [], true);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
 		return err
 	}
 
@@ -175,7 +175,7 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify)); err != nil {
 		return err
 	}
-	vars := []string{"$pkg = {}", "$ptr = {}"}
+	vars := []string{"$pkg = {}", "$ptr = {}", "$init"}
 	var filteredDecls []*Decl
 	for _, d := range pkg.Declarations {
 		if d.DceObjectFilter == "" && d.DceMethodFilter == "" {
@@ -202,7 +202,7 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 		}
 	}
 
-	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $r, $s = 0; var $init_"+pkg.Name+" = function() { while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
+	if _, err := w.Write(removeWhitespace([]byte("\t$init = $pkg.$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
 		return err
 	}
 	for _, d := range filteredDecls {
@@ -210,7 +210,7 @@ func WritePkgCode(pkg *Archive, minify bool, w *SourceMapFilter) error {
 			return err
 		}
 	}
-	if _, err := w.Write(removeWhitespace([]byte("\t\t/* */ } return; } }; $init_"+pkg.Name+".$blocking = true; return $init_"+pkg.Name+";\n\t};\n\treturn $pkg;\n})();"), minify)); err != nil {
+	if _, err := w.Write(removeWhitespace([]byte("\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n\t};\n\treturn $pkg;\n})();"), minify)); err != nil {
 		return err
 	}
 	if _, err := w.Write([]byte("\n")); err != nil { // keep this \n even when minified

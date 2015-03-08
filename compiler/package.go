@@ -373,12 +373,15 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					for i := 0; i < t.NumFields(); i++ {
 						params[i] = fieldName(t, i) + "_"
 					}
-					constructor = fmt.Sprintf("function(%s) {\n%sthis.$val = this;\n", strings.Join(params, ", "), strings.Repeat("\t", c.p.indentation+1))
+					constructor = fmt.Sprintf("function(%s) {\n\t\tthis.$val = this;\n\t\tif (arguments.length === 0) {\n", strings.Join(params, ", "))
 					for i := 0; i < t.NumFields(); i++ {
-						name := fieldName(t, i)
-						constructor += fmt.Sprintf("%sthis.%s = %s_ !== undefined ? %s_ : %s;\n", strings.Repeat("\t", c.p.indentation+1), name, name, name, c.zeroValue(t.Field(i).Type()))
+						constructor += fmt.Sprintf("\t\t\tthis.%s = %s;\n", fieldName(t, i), c.zeroValue(t.Field(i).Type()))
 					}
-					constructor += strings.Repeat("\t", c.p.indentation) + "}"
+					constructor += "\t\t\treturn;\n\t\t}\n"
+					for i := 0; i < t.NumFields(); i++ {
+						constructor += fmt.Sprintf("\t\tthis.%[1]s = %[1]s_;\n", fieldName(t, i))
+					}
+					constructor += "\t}"
 				case *types.Basic, *types.Array, *types.Slice, *types.Chan, *types.Signature, *types.Interface, *types.Pointer, *types.Map:
 					size = sizes32.Sizeof(t)
 				}
@@ -529,31 +532,31 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysi
 			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$panic(\"Native function not implemented: %s\");\n\t};\n", lhs, o.FullName()))
 		}
 
-		stmts := fun.Body.List
+		var initStmts []ast.Stmt
 		for _, p := range fun.Type.Params.List {
 			for _, n := range p.Names {
 				switch c.p.Defs[n].Type().Underlying().(type) {
 				case *types.Array, *types.Struct:
-					stmts = append([]ast.Stmt{
+					initStmts = append([]ast.Stmt{
 						&ast.AssignStmt{
 							Lhs: []ast.Expr{n},
 							Tok: token.DEFINE,
 							Rhs: []ast.Expr{n},
 						},
-					}, stmts...)
+					}, initStmts...)
 				}
 			}
 		}
 		if recv != nil && !isBlank(recv) {
-			stmts = append([]ast.Stmt{
+			initStmts = append([]ast.Stmt{
 				&ast.AssignStmt{
 					Lhs: []ast.Expr{recv},
 					Tok: token.DEFINE,
 					Rhs: []ast.Expr{c.setType(&this{}, sig.Recv().Type())},
 				},
-			}, stmts...)
+			}, initStmts...)
 		}
-		params, fun := translateFunction(fun.Type, stmts, c, sig, info, fun.Name.Name)
+		params, fun := translateFunction(fun.Type, initStmts, fun.Body, c, sig, info, fun.Name.Name)
 		joinedParams = strings.Join(params, ", ")
 		return []byte(fmt.Sprintf("\t%s = %s;\n", lhs, fun))
 	}
@@ -604,14 +607,14 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysi
 	return code.Bytes()
 }
 
-func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcContext, sig *types.Signature, info *analysis.FuncInfo, name string) ([]string, string) {
+func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockStmt, outerContext *funcContext, sig *types.Signature, info *analysis.FuncInfo, name string) ([]string, string) {
 	c := &funcContext{
 		FuncInfo:    info,
 		p:           outerContext.p,
 		parent:      outerContext,
 		sig:         sig,
 		allVars:     make(map[string]int, len(outerContext.allVars)),
-		localVars:   []string{"$ptr = {}"},
+		localVars:   []string{"$ptr"},
 		flowDatas:   map[*types.Label]*flowData{nil: &flowData{}},
 		caseCounter: 1,
 		labelCases:  make(map[*types.Label]int),
@@ -619,6 +622,7 @@ func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcCo
 	for k, v := range outerContext.allVars {
 		c.allVars[k] = v
 	}
+	prevEV := c.p.escapingVars
 
 	var params []string
 	for _, param := range typ.Params.List {
@@ -635,98 +639,98 @@ func translateFunction(typ *ast.FuncType, stmts []ast.Stmt, outerContext *funcCo
 		}
 	}
 
-	if len(c.Flattened) != 0 {
-		c.localVars = append(c.localVars, "$this = this")
-	}
+	bodyOutput := string(c.CatchOutput(1, func() {
+		if len(c.Blocking) != 0 {
+			c.p.Scopes[body] = c.p.Scopes[typ]
+			c.handleEscapingVars(body)
+		}
 
-	body := string(c.CatchOutput(1, func() {
 		if c.sig != nil && c.sig.Results().Len() != 0 && c.sig.Results().At(0).Name() != "" {
 			c.resultNames = make([]ast.Expr, c.sig.Results().Len())
 			for i := 0; i < c.sig.Results().Len(); i++ {
 				result := c.sig.Results().At(i)
-				name := result.Name()
-				if result.Name() == "_" {
-					name = "result"
-				}
-				varName := c.newVariableWithLevel(name, false)
-				c.Printf("%s = %s;", varName, c.zeroValue(result.Type()))
-				c.p.objectVars[result] = varName
-				id := ast.NewIdent(name)
+				c.Printf("%s = %s;", c.objectName(result), c.zeroValue(result.Type()))
+				id := ast.NewIdent("")
 				c.p.Uses[id] = result
 				c.resultNames[i] = c.setType(id, result.Type())
 			}
 		}
 
-		var prefix, suffix string
-
-		if len(c.Blocking) != 0 {
-			c.localVars = append(c.localVars, "$r")
-			f := "$f"
-			if name != "" && !c.p.minify {
-				f = "$blocking_" + name
-			}
-			prefix = prefix + fmt.Sprintf(" var %s = function() {", f)
-			suffix = fmt.Sprintf(" }; %s.$blocking = true; return %s;", f, f) + suffix
-		}
-
-		if c.HasDefer {
-			c.localVars = append(c.localVars, "$deferred = []", "$err = null")
-			prefix = prefix + " try { $deferFrames.push($deferred);"
-			deferSuffix := " } catch(err) { $err = err;"
-			if c.sig != nil && c.resultNames == nil {
-				switch c.sig.Results().Len() {
-				case 0:
-					// nothing
-				case 1:
-					deferSuffix += fmt.Sprintf(" return %s;", c.zeroValue(c.sig.Results().At(0).Type()))
-				default:
-					zeros := make([]string, c.sig.Results().Len())
-					for i := range zeros {
-						zeros[i] = c.zeroValue(c.sig.Results().At(i).Type())
-					}
-					deferSuffix += fmt.Sprintf(" return [%s];", strings.Join(zeros, ", "))
-				}
-			}
-			deferSuffix += " } finally { $deferFrames.pop();"
-			if len(c.Blocking) != 0 {
-				deferSuffix += " if ($curGoroutine.asleep && !$jumpToDefer) { throw null; } $s = -1;"
-			}
-			deferSuffix += " $callDeferred($deferred, $err);"
-			if c.resultNames != nil {
-				switch len(c.resultNames) {
-				case 1:
-					deferSuffix += fmt.Sprintf(" return %s;", c.translateExpr(c.resultNames[0]))
-				default:
-					values := make([]string, len(c.resultNames))
-					for i, result := range c.resultNames {
-						values[i] = c.translateExpr(result).String()
-					}
-					deferSuffix += fmt.Sprintf(" return [%s];", strings.Join(values, ", "))
-				}
-			}
-			deferSuffix += " }"
-			suffix = deferSuffix + suffix
-		}
-
-		if len(c.Flattened) != 0 {
-			c.localVars = append(c.localVars, "$s = 0")
-			prefix = prefix + " s: while (true) { switch ($s) { case 0:"
-			suffix = " case -1: } return; }" + suffix
-		}
-
-		if prefix != "" {
-			c.Printf("/* */%s", prefix)
-		}
-		c.translateStmtList(stmts)
-		if suffix != "" {
-			c.Printf("/* */%s", suffix)
-		}
+		c.translateStmtList(initStmts)
+		c.translateStmtList(body.List)
 	}))
 
-	if len(c.localVars) != 0 {
-		sort.Strings(c.localVars)
-		body = fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.p.indentation+1), strings.Join(c.localVars, ", ")) + body
+	sort.Strings(c.localVars)
+
+	var prefix, suffix, functionName string
+
+	if len(c.Flattened) != 0 {
+		c.localVars = append(c.localVars, "$s")
+		prefix = prefix + " $s = 0;"
 	}
 
-	return params, fmt.Sprintf("function(%s) {\n%s%s}", strings.Join(params, ", "), body, strings.Repeat("\t", c.p.indentation))
+	if c.HasDefer {
+		c.localVars = append(c.localVars, "$deferred")
+		suffix = " }" + suffix
+		if len(c.Blocking) != 0 {
+			suffix = " }" + suffix
+		}
+	}
+
+	if len(c.Blocking) != 0 {
+		c.localVars = append(c.localVars, "$r")
+		b := "$b"
+		if name != "" && !c.p.minify {
+			b = "$blocking_" + name
+		}
+		functionName = " " + b
+		var stores, loads string
+		for _, v := range c.localVars {
+			loads += fmt.Sprintf("%s = $f.%s; ", v, v)
+			stores += fmt.Sprintf("$f.%s = %s; ", v, v)
+		}
+		prefix = prefix + " var $f, $c = false; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; " + loads + "}"
+		suffix = " if ($f === undefined) { $f = { $blk: " + b + " }; } " + stores + "return $f;" + suffix
+	}
+
+	if c.HasDefer {
+		prefix = prefix + " var $err = null; try {"
+		deferSuffix := " } catch(err) { $err = err;"
+		if len(c.Blocking) != 0 {
+			deferSuffix += " $s = -1;"
+		}
+		deferSuffix += " } finally { $callDeferred($deferred, $err);"
+		if c.resultNames != nil {
+			deferSuffix += fmt.Sprintf(" if (!$curGoroutine.asleep) { return %s; }", c.translateResults(c.resultNames))
+		}
+		if len(c.Blocking) != 0 {
+			deferSuffix += " if($curGoroutine.asleep) {"
+		}
+		suffix = deferSuffix + suffix
+	}
+
+	if len(c.Flattened) != 0 {
+		prefix = prefix + " s: while (true) { switch ($s) { case 0:"
+		suffix = " $s = -1; case -1: } return; }" + suffix
+	}
+
+	if c.HasDefer {
+		prefix = prefix + " $deferred = []; $deferred.index = $curGoroutine.deferStack.length; $curGoroutine.deferStack.push($deferred);"
+	}
+
+	prefix = prefix + " $ptr = {};"
+
+	if prefix != "" {
+		bodyOutput = strings.Repeat("\t", c.p.indentation+1) + "/* */" + prefix + "\n" + bodyOutput
+	}
+	if suffix != "" {
+		bodyOutput = bodyOutput + strings.Repeat("\t", c.p.indentation+1) + "/* */" + suffix + "\n"
+	}
+	if len(c.localVars) != 0 {
+		bodyOutput = fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.p.indentation+1), strings.Join(c.localVars, ", ")) + bodyOutput
+	}
+
+	c.p.escapingVars = prevEV
+
+	return params, fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(params, ", "), bodyOutput, strings.Repeat("\t", c.p.indentation))
 }

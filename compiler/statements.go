@@ -91,19 +91,16 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		switch a := s.Assign.(type) {
 		case *ast.AssignStmt:
 			expr = a.Rhs[0].(*ast.TypeAssertExpr).X
-			typeSwitchVar := c.newVariable(a.Lhs[0].(*ast.Ident).Name)
-			for _, caseClause := range s.Body.List {
-				c.p.objectVars[c.p.Implicits[caseClause]] = typeSwitchVar
-			}
 			printCaseBodyPrefix = func(index int) {
 				value := refVar
-				if conds := s.Body.List[index].(*ast.CaseClause).List; len(conds) == 1 {
-					t := c.p.Types[conds[0]].Type
+				caseClause := s.Body.List[index].(*ast.CaseClause)
+				if len(caseClause.List) == 1 {
+					t := c.p.Types[caseClause.List[0]].Type
 					if _, isInterface := t.Underlying().(*types.Interface); !isInterface && !types.Identical(t, types.Typ[types.UntypedNil]) {
 						value += ".$val"
 					}
 				}
-				c.Printf("%s = %s;", typeSwitchVar, value)
+				c.Printf("%s = %s;", c.objectName(c.p.Implicits[caseClause]), value)
 			}
 		case *ast.ExprStmt:
 			expr = a.X.(*ast.TypeAssertExpr).X

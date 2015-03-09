@@ -699,6 +699,9 @@ func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockS
 		if len(c.Blocking) != 0 {
 			deferSuffix += " $s = -1;"
 		}
+		if c.resultNames == nil && c.sig.Results().Len() > 0 {
+			deferSuffix += fmt.Sprintf(" return%s;", c.translateResults(nil))
+		}
 		deferSuffix += " } finally { $callDeferred($deferred, $err);"
 		if c.resultNames != nil {
 			deferSuffix += fmt.Sprintf(" if (!$curGoroutine.asleep) { return %s; }", c.translateResults(c.resultNames))

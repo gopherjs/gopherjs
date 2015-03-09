@@ -780,19 +780,27 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 }
 
 func (c *funcContext) translateResults(results []ast.Expr) string {
-	switch len(results) {
+	switch c.sig.Results().Len() {
 	case 0:
 		return ""
 	case 1:
-		if c.sig.Results().Len() > 1 {
-			return " " + c.translateExpr(results[0]).String()
+		var result ast.Expr
+		if results != nil {
+			result = results[0]
 		}
-		v := c.translateImplicitConversion(results[0], c.sig.Results().At(0).Type())
+		v := c.translateImplicitConversion(result, c.sig.Results().At(0).Type())
 		c.delayedOutput = nil
 		return " " + v.String()
 	default:
-		values := make([]string, len(results))
-		for i, result := range results {
+		if len(results) == 1 {
+			return " " + c.translateExpr(results[0]).String()
+		}
+		values := make([]string, c.sig.Results().Len())
+		for i := range values {
+			var result ast.Expr
+			if results != nil {
+				result = results[i]
+			}
 			values[i] = c.translateImplicitConversion(result, c.sig.Results().At(i).Type()).String()
 		}
 		c.delayedOutput = nil

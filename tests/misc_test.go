@@ -253,3 +253,16 @@ func TestNilAtLhs(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestZeroResultByPanic(t *testing.T) {
+	if zero() != 0 {
+		t.Fail()
+	}
+}
+
+func zero() int {
+	defer func() {
+		recover()
+	}()
+	panic("")
+}

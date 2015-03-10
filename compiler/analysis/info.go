@@ -19,6 +19,7 @@ type Info struct {
 	*types.Info
 	Pkg           *types.Package
 	IsBlocking    func(*types.Func) bool
+	HasPointer    map[*types.Var]bool
 	FuncDeclInfos map[*types.Func]*FuncInfo
 	FuncLitInfos  map[*ast.FuncLit]*FuncInfo
 	InitFuncInfo  *FuncInfo
@@ -53,6 +54,7 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 	info := &Info{
 		Info:          typesInfo,
 		Pkg:           typesPkg,
+		HasPointer:    make(map[*types.Var]bool),
 		comments:      make(ast.CommentMap),
 		IsBlocking:    isBlocking,
 		FuncDeclInfos: make(map[*types.Func]*FuncInfo),
@@ -197,7 +199,12 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 	case *ast.SendStmt:
 		c.markBlocking(c.analyzeStack)
 	case *ast.UnaryExpr:
-		if n.Op == token.ARROW {
+		switch n.Op {
+		case token.AND:
+			if id, ok := astutil.RemoveParens(n.X).(*ast.Ident); ok {
+				c.p.HasPointer[c.p.Uses[id].(*types.Var)] = true
+			}
+		case token.ARROW:
 			c.markBlocking(c.analyzeStack)
 		}
 	case *ast.RangeStmt:

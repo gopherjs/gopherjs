@@ -20,6 +20,7 @@ type pkgContext struct {
 	typeNames    []*types.TypeName
 	pkgVars      map[string]string
 	objectNames  map[types.Object]string
+	varPtrNames  map[*types.Var]string
 	anonTypes    []*types.TypeName
 	anonTypeMap  typeutil.Map
 	escapingVars map[*types.Var]bool
@@ -142,6 +143,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			Info:         pkgInfo,
 			pkgVars:      make(map[string]string),
 			objectNames:  make(map[types.Object]string),
+			varPtrNames:  make(map[*types.Var]string),
 			escapingVars: make(map[*types.Var]bool),
 			indentation:  1,
 			dependencies: make(map[types.Object]bool),
@@ -250,6 +252,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		var d Decl
 		if !o.Exported() {
 			d.Vars = []string{c.objectName(o)}
+		}
+		if c.p.HasPointer[o] {
+			d.Vars = append(d.Vars, c.varPtrName(o))
 		}
 		if _, ok := varsWithInit[o]; !ok {
 			d.DceDeps = collectDependencies(func() {
@@ -720,8 +725,6 @@ func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockS
 	if c.HasDefer {
 		prefix = prefix + " $deferred = []; $deferred.index = $curGoroutine.deferStack.length; $curGoroutine.deferStack.push($deferred);"
 	}
-
-	prefix = prefix + " $ptr = {};"
 
 	if prefix != "" {
 		bodyOutput = strings.Repeat("\t", c.p.indentation+1) + "/* */" + prefix + "\n" + bodyOutput

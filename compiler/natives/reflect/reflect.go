@@ -3,6 +3,7 @@
 package reflect
 
 import (
+	"strconv"
 	"unsafe"
 
 	"github.com/gopherjs/gopherjs/js"
@@ -793,44 +794,93 @@ func (v Value) Elem() Value {
 
 func (v Value) Field(i int) Value {
 	v.mustBe(Struct)
-	if i < 0 || i >= v.typ.NumField() {
+	tt := (*structType)(unsafe.Pointer(v.typ))
+	if i < 0 || i >= len(tt.fields) {
 		panic("reflect: Field index out of range")
 	}
 
 	prop := jsType(v.typ).Get("fields").Index(i).Get("prop").String()
-	field := v.typ.Field(i)
-	typ := field.Type
+	field := &tt.fields[i]
+	typ := field.typ
 
 	fl := v.flag & (flagRO | flagIndir | flagAddr)
-	if field.PkgPath != "" {
+	if field.pkgPath != nil {
 		fl |= flagRO
 	}
 	fl |= flag(typ.Kind())
 
-	if jsTag := v.typ.Field(i).Tag.Get("js"); jsTag != "" && i != 0 {
-		for {
-			v = v.Field(0)
-			if v.Type() == jsObjectPtr {
-				o := v.object().Get("object")
-				return Value{typ.(*rtype), unsafe.Pointer(jsType(PtrTo(typ)).New(
-					js.InternalObject(func() *js.Object { return js.Global.Call("$internalize", o.Get(jsTag), jsType(typ)) }),
-					js.InternalObject(func(x *js.Object) { o.Set(jsTag, js.Global.Call("$externalize", x, jsType(typ))) }),
-				).Unsafe()), fl}
-			}
-			if v.Type().Kind() == Ptr {
-				v = v.Elem()
+	if tag := tt.fields[i].tag; tag != nil && i != 0 {
+		if jsTag := getJsTag(*tag); jsTag != "" {
+			for {
+				v = v.Field(0)
+				if v.typ == jsObjectPtr {
+					o := v.object().Get("object")
+					return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(
+						js.InternalObject(func() *js.Object { return js.Global.Call("$internalize", o.Get(jsTag), jsType(typ)) }),
+						js.InternalObject(func(x *js.Object) { o.Set(jsTag, js.Global.Call("$externalize", x, jsType(typ))) }),
+					).Unsafe()), fl}
+				}
+				if v.typ.Kind() == Ptr {
+					v = v.Elem()
+				}
 			}
 		}
 	}
 
 	s := js.InternalObject(v.ptr)
 	if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
-		return Value{typ.(*rtype), unsafe.Pointer(jsType(PtrTo(typ)).New(
+		return Value{typ, unsafe.Pointer(jsType(PtrTo(typ)).New(
 			js.InternalObject(func() *js.Object { return wrapJsObject(typ, s.Get(prop)) }),
 			js.InternalObject(func(x *js.Object) { s.Set(prop, unwrapJsObject(typ, x)) }),
 		).Unsafe()), fl}
 	}
 	return makeValue(typ, wrapJsObject(typ, s.Get(prop)), fl)
+}
+
+func getJsTag(tag string) string {
+	for tag != "" {
+		// skip leading space
+		i := 0
+		for i < len(tag) && tag[i] == ' ' {
+			i++
+		}
+		tag = tag[i:]
+		if tag == "" {
+			break
+		}
+
+		// scan to colon.
+		// a space or a quote is a syntax error
+		i = 0
+		for i < len(tag) && tag[i] != ' ' && tag[i] != ':' && tag[i] != '"' {
+			i++
+		}
+		if i+1 >= len(tag) || tag[i] != ':' || tag[i+1] != '"' {
+			break
+		}
+		name := string(tag[:i])
+		tag = tag[i+1:]
+
+		// scan quoted string to find value
+		i = 1
+		for i < len(tag) && tag[i] != '"' {
+			if tag[i] == '\\' {
+				i++
+			}
+			i++
+		}
+		if i >= len(tag) {
+			break
+		}
+		qvalue := string(tag[:i+1])
+		tag = tag[i+1:]
+
+		if name == "js" {
+			value, _ := strconv.Unquote(qvalue)
+			return value
+		}
+	}
+	return ""
 }
 
 func (v Value) Index(i int) Value {

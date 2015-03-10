@@ -19,7 +19,7 @@ type pkgContext struct {
 	*analysis.Info
 	typeNames    []*types.TypeName
 	pkgVars      map[string]string
-	objectVars   map[types.Object]string
+	objectNames  map[types.Object]string
 	varPtrNames  map[types.Object]string
 	anonTypes    []*types.TypeName
 	anonTypeMap  typeutil.Map
@@ -142,7 +142,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		p: &pkgContext{
 			Info:         pkgInfo,
 			pkgVars:      make(map[string]string),
-			objectVars:   make(map[types.Object]string),
+			objectNames:  make(map[types.Object]string),
 			varPtrNames:  make(map[types.Object]string),
 			escapingVars: make(map[*types.Var]bool),
 			indentation:  1,

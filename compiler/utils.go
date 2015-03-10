@@ -249,7 +249,7 @@ func (c *funcContext) newIdent(name string, t types.Type) *ast.Ident {
 	c.setType(ident, t)
 	obj := types.NewVar(0, c.p.Pkg, name, t)
 	c.p.Uses[ident] = obj
-	c.p.objectVars[obj] = name
+	c.p.objectNames[obj] = name
 	return ident
 }
 
@@ -278,10 +278,10 @@ func (c *funcContext) objectName(o types.Object) string {
 		}
 	}
 
-	name, ok := c.p.objectVars[o]
+	name, ok := c.p.objectNames[o]
 	if !ok {
 		name = c.newVariableWithLevel(o.Name(), o.Parent() == c.p.Pkg.Scope())
-		c.p.objectVars[o] = name
+		c.p.objectNames[o] = name
 	}
 
 	if v, ok := o.(*types.Var); ok && c.p.escapingVars[v] {

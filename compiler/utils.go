@@ -278,14 +278,23 @@ func (c *funcContext) objectName(o types.Object) string {
 		}
 	}
 
-	name, found := c.p.objectVars[o]
-	if !found {
+	name, ok := c.p.objectVars[o]
+	if !ok {
 		name = c.newVariableWithLevel(o.Name(), o.Parent() == c.p.Pkg.Scope())
 		c.p.objectVars[o] = name
 	}
 
 	if v, ok := o.(*types.Var); ok && c.p.escapingVars[v] {
 		return name + "[0]"
+	}
+	return name
+}
+
+func (c *funcContext) varPtrName(o types.Object) string {
+	name, ok := c.p.varPtrNames[o]
+	if !ok {
+		name = c.newVariableWithLevel(o.Name()+"$ptr", o.Parent() == c.p.Pkg.Scope())
+		c.p.varPtrNames[o] = name
 	}
 	return name
 }

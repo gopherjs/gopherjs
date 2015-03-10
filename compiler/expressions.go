@@ -212,7 +212,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				if c.p.escapingVars[obj] {
 					return c.formatExpr("(%1s.$ptr || (%1s.$ptr = new %2s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %1s)))", c.p.objectNames[obj], c.typeName(exprType))
 				}
-				return c.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, c.varPtrName(obj), c.typeName(exprType), c.objectName(obj), c.translateAssign(x, "$v", exprType, false))
+				return c.formatExpr("($ptr.%1s || ($ptr.%1s = new %2s(function() { return %1s; }, function($v) { %3s })))", c.objectName(obj), c.typeName(exprType), c.translateAssign(x, "$v", exprType, false))
 			case *ast.SelectorExpr:
 				newSel := &ast.SelectorExpr{X: c.newIdent("this.$target", c.p.Types[x.X].Type), Sel: x.Sel}
 				c.p.Selections[newSel] = c.p.Selections[x]

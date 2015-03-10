@@ -290,15 +290,6 @@ func (c *funcContext) objectName(o types.Object) string {
 	return name
 }
 
-func (c *funcContext) varPtrName(o types.Object) string {
-	name, ok := c.p.varPtrNames[o]
-	if !ok {
-		name = c.newVariableWithLevel(o.Name()+"$ptr", o.Parent() == c.p.Pkg.Scope())
-		c.p.varPtrNames[o] = name
-	}
-	return name
-}
-
 func (c *funcContext) typeName(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Basic:

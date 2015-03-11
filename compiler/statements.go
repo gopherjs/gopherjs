@@ -290,21 +290,24 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		case *ast.SelectorExpr:
 			isJs = typesutil.IsJsPackage(c.p.Uses[fun.Sel].Pkg())
 		}
+		sig := c.p.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
+		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid(), true)
 		if isBuiltin || isJs {
-			args := make([]ast.Expr, len(s.Call.Args))
+			vars := make([]string, len(s.Call.Args))
+			callArgs := make([]ast.Expr, len(s.Call.Args))
 			for i, arg := range s.Call.Args {
-				args[i] = c.newIdent(c.newVariable("_arg"), c.p.Types[arg].Type)
+				v := c.newVariable("_arg")
+				vars[i] = v
+				callArgs[i] = c.newIdent(v, c.p.Types[arg].Type)
 			}
 			call := c.translateExpr(&ast.CallExpr{
 				Fun:      s.Call.Fun,
-				Args:     args,
+				Args:     callArgs,
 				Ellipsis: s.Call.Ellipsis,
 			})
-			c.Printf("$deferred.push([function(%s) { %s; }, [%s]]);", strings.Join(c.translateExprSlice(args, nil), ", "), call, strings.Join(c.translateExprSlice(s.Call.Args, nil), ", "))
+			c.Printf("$deferred.push([function(%s) { %s; }, [%s]]);", strings.Join(vars, ", "), call, strings.Join(args, ", "))
 			return
 		}
-		sig := c.p.Types[s.Call.Fun].Type.Underlying().(*types.Signature)
-		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid(), true)
 		c.Printf("$deferred.push([%s, [%s]]);", c.translateExpr(s.Call.Fun), strings.Join(args, ", "))
 
 	case *ast.AssignStmt:

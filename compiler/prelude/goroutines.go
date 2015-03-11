@@ -12,6 +12,9 @@ var $getStackDepth = function() {
 
 var $panicStackDepth = null, $panicValue;
 var $callDeferred = function(deferred, jsErr, fromPanic) {
+  if (!fromPanic && deferred !== null && deferred.index >= $curGoroutine.deferStack.length) {
+    throw jsErr;
+  }
   if (jsErr !== null) {
     var newErr = null;
     try {
@@ -23,9 +26,6 @@ var $callDeferred = function(deferred, jsErr, fromPanic) {
     $curGoroutine.deferStack.pop();
     $callDeferred(deferred, newErr);
     return;
-  }
-  if (!fromPanic && deferred !== null && deferred.index >= $curGoroutine.deferStack.length) {
-    throw null;
   }
   if ($curGoroutine.asleep) {
     return;

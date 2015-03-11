@@ -15,14 +15,6 @@ type eface struct {
 	}
 }
 
-type NotSupportedError struct {
-	Feature string
-}
-
-func (err *NotSupportedError) Error() string {
-	return "not supported by GopherJS: " + err.Feature
-}
-
 func init() {
 	jsPkg := js.Global.Get("$packages").Get("github.com/gopherjs/gopherjs/js")
 	js.Global.Set("$jsObjectPtr", jsPkg.Get("Object").Get("ptr"))
@@ -33,7 +25,6 @@ func init() {
 	// avoid dead code elimination
 	var e error
 	e = &TypeAssertionError{}
-	e = &NotSupportedError{}
 	_ = e
 }
 
@@ -71,9 +62,6 @@ func Goexit() {
 }
 
 func GOMAXPROCS(n int) int {
-	if n > 1 {
-		panic(&NotSupportedError{"GOMAXPROCS > 1"})
-	}
 	return 1
 }
 

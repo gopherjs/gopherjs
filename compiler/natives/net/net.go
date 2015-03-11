@@ -3,16 +3,16 @@
 package net
 
 import (
-	"runtime"
+	"errors"
 	"syscall"
 )
 
 func Listen(net, laddr string) (Listener, error) {
-	panic(&runtime.NotSupportedError{"net"})
+	panic(errors.New("network access is not supported by GopherJS"))
 }
 
 func (d *Dialer) Dial(network, address string) (Conn, error) {
-	panic(&runtime.NotSupportedError{"net"})
+	panic(errors.New("network access is not supported by GopherJS"))
 }
 
 func sysInit() {

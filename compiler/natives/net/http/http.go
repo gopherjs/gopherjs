@@ -41,12 +41,12 @@ func (t *XHRTransport) RoundTrip(req *Request) (*Response, error) {
 		body := js.Global.Get("Uint8Array").New(xhr.Get("response")).Interface().([]byte)
 
 		contentLength := int64(-1)
-		if req.Method == "HEAD" {
-			i, err := strconv.ParseInt(header.Get("Content-Length"), 10, 64)
-			if err == nil {
-				contentLength = i
+		switch req.Method {
+		case "HEAD":
+			if l, err := strconv.ParseInt(header.Get("Content-Length"), 10, 64); err == nil {
+				contentLength = l
 			}
-		} else {
+		default:
 			contentLength = int64(len(body))
 		}
 

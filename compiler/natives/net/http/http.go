@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"net/textproto"
+	"strconv"
 
 	"github.com/gopherjs/gopherjs/js"
 )
@@ -38,11 +39,22 @@ func (t *XHRTransport) RoundTrip(req *Request) (*Response, error) {
 	xhr.Set("onload", func() {
 		header, _ := textproto.NewReader(bufio.NewReader(bytes.NewReader([]byte(xhr.Call("getAllResponseHeaders").String() + "\n")))).ReadMIMEHeader()
 		body := js.Global.Get("Uint8Array").New(xhr.Get("response")).Interface().([]byte)
+
+		contentLength := int64(-1)
+		if req.Method == "HEAD" {
+			i, err := strconv.ParseInt(header.Get("Content-Length"), 10, 64)
+			if err == nil {
+				contentLength = i
+			}
+		} else {
+			contentLength = int64(len(body))
+		}
+
 		respCh <- &Response{
 			Status:        xhr.Get("status").String() + " " + xhr.Get("statusText").String(),
 			StatusCode:    xhr.Get("status").Int(),
 			Header:        Header(header),
-			ContentLength: int64(len(body)),
+			ContentLength: contentLength,
 			Body:          ioutil.NopCloser(bytes.NewReader(body)),
 			Request:       req,
 		}

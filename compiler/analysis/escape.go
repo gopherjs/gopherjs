@@ -50,12 +50,6 @@ type escapingObjectCollector struct {
 func (v *escapingObjectCollector) Visit(node ast.Node) (w ast.Visitor) {
 	if id, ok := node.(*ast.Ident); ok {
 		if obj, ok := v.analysis.info.Uses[id].(*types.Var); ok {
-			switch obj.Type().Underlying().(type) {
-			case *types.Struct, *types.Array:
-				// always by reference
-				return nil
-			}
-
 			for s := obj.Parent(); s != nil; s = s.Parent() {
 				if s == v.analysis.topScope {
 					v.analysis.escaping[obj] = true

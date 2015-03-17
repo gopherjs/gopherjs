@@ -226,6 +226,23 @@ func TestLoopClosure(t *testing.T) {
 	}
 }
 
+func TestLoopClosureWithStruct(t *testing.T) {
+	type T struct{ A int }
+	ts := []T{{0}, {1}, {2}}
+	fns := make([]func() T, 3)
+	for i, t := range ts {
+		t := t
+		fns[i] = func() T {
+			return t
+		}
+	}
+	for i := range fns {
+		if fns[i]().A != i {
+			t.Fail()
+		}
+	}
+}
+
 func TestNilInterfaceError(t *testing.T) {
 	defer func() {
 		if err := recover(); err == nil || !strings.Contains(err.(error).Error(), "nil pointer dereference") {

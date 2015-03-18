@@ -241,7 +241,7 @@ func WriteArchive(a *Archive, w io.Writer) error {
 
 type SourceMapFilter struct {
 	Writer          io.Writer
-	MappingCallback func(generatedLine, generatedColumn int, fileSet *token.FileSet, originalPos token.Pos)
+	MappingCallback func(generatedLine, generatedColumn int, originalPos token.Position)
 	line            int
 	column          int
 	fileSet         *token.FileSet
@@ -273,7 +273,7 @@ func (f *SourceMapFilter) Write(p []byte) (n int, err error) {
 			return
 		}
 		if f.MappingCallback != nil {
-			f.MappingCallback(f.line+1, f.column, f.fileSet, token.Pos(binary.BigEndian.Uint32(p[i+1:i+5])))
+			f.MappingCallback(f.line+1, f.column, f.fileSet.Position(token.Pos(binary.BigEndian.Uint32(p[i+1:i+5]))))
 		}
 		p = p[i+5:]
 		n += 5

@@ -23,11 +23,11 @@ func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 	for _, stmt := range stmts {
 		c.translateStmt(stmt, nil)
 	}
-	c.WritePos(token.NoPos)
+	c.SetPos(token.NoPos)
 }
 
 func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
-	c.WritePos(stmt.Pos())
+	c.SetPos(stmt.Pos())
 
 	stmt = filter.IncDecStmt(stmt, c.p.Info)
 	stmt = filter.Assign(stmt, c.p.Info)
@@ -625,7 +625,7 @@ clauseLoop:
 		c.Printf("/* */ $s = %d; continue;", caseOffset+len(branches))
 	}
 	for i, b := range branches {
-		c.WritePos(b.clause.Pos())
+		c.SetPos(b.clause.Pos())
 		c.PrintCond(!flatten, fmt.Sprintf("%sif (%s) {", prefix, b.condStr), fmt.Sprintf("case %d:", caseOffset+i))
 		c.Indent(func() {
 			if printCaseBodyPrefix != nil {

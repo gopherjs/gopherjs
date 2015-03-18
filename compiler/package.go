@@ -44,6 +44,8 @@ type funcContext struct {
 	labelCases    map[*types.Label]int
 	output        []byte
 	delayedOutput []byte
+	posAvailable  bool
+	pos           token.Pos
 }
 
 type flowData struct {

@@ -17,6 +17,7 @@ import (
 )
 
 func (c *funcContext) Write(b []byte) (int, error) {
+	c.writePos()
 	c.output = append(c.output, b...)
 	return len(b), nil
 }
@@ -37,9 +38,17 @@ func (c *funcContext) PrintCond(cond bool, onTrue, onFalse string) {
 	c.Printf("%s", onTrue)
 }
 
-func (c *funcContext) WritePos(pos token.Pos) {
-	c.Write([]byte{'\b'})
-	binary.Write(c, binary.BigEndian, uint32(pos))
+func (c *funcContext) SetPos(pos token.Pos) {
+	c.posAvailable = true
+	c.pos = pos
+}
+
+func (c *funcContext) writePos() {
+	if c.posAvailable {
+		c.posAvailable = false
+		c.Write([]byte{'\b'})
+		binary.Write(c, binary.BigEndian, uint32(c.pos))
+	}
 }
 
 func (c *funcContext) Indent(f func()) {
@@ -53,6 +62,7 @@ func (c *funcContext) CatchOutput(indent int, f func()) []byte {
 	c.output = nil
 	c.p.indentation += indent
 	f()
+	c.writePos()
 	catched := c.output
 	c.output = origoutput
 	c.p.indentation -= indent

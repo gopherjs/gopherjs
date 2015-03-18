@@ -526,13 +526,12 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 			fmt.Fprintf(codeFile, "//# sourceMappingURL=%s.map\n", filepath.Base(pkgObj))
 		}()
 
-		sourceMapFilter.MappingCallback = func(generatedLine, generatedColumn int, fileSet *token.FileSet, originalPos token.Pos) {
+		sourceMapFilter.MappingCallback = func(generatedLine, generatedColumn int, originalPos token.Position) {
 			if !originalPos.IsValid() {
 				m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn})
 				return
 			}
-			pos := fileSet.Position(originalPos)
-			file := pos.Filename
+			file := originalPos.Filename
 			switch hasGopathPrefix, prefixLen := hasGopathPrefix(file, s.options.GOPATH); {
 			case hasGopathPrefix:
 				file = filepath.ToSlash(filepath.Join("/gopath", file[prefixLen:]))
@@ -541,7 +540,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 			default:
 				file = filepath.Base(file)
 			}
-			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: pos.Line, OriginalColumn: pos.Column})
+			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: originalPos.Line, OriginalColumn: originalPos.Column})
 		}
 	}
 

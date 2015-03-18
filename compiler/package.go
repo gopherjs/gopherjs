@@ -532,9 +532,9 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysi
 	}
 
 	var joinedParams string
-	primaryFunction := func(lhs string) []byte {
+	primaryFunction := func(funcRef string) []byte {
 		if fun.Body == nil {
-			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$panic(\"Native function not implemented: %s\");\n\t};\n", lhs, o.FullName()))
+			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$panic(\"Native function not implemented: %s\");\n\t};\n", funcRef, o.FullName()))
 		}
 
 		var initStmts []ast.Stmt
@@ -561,17 +561,20 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysi
 				},
 			}, initStmts...)
 		}
-		params, fun := translateFunction(fun.Type, initStmts, fun.Body, c, sig, info, fun.Name.Name)
+		params, fun := translateFunction(fun.Type, initStmts, fun.Body, c, sig, info, funcRef)
 		joinedParams = strings.Join(params, ", ")
-		return []byte(fmt.Sprintf("\t%s = %s;\n", lhs, fun))
+		return []byte(fmt.Sprintf("\t%s = %s;\n", funcRef, fun))
 	}
 
+	code := bytes.NewBuffer(nil)
+
 	if fun.Recv == nil {
-		lhs := c.objectName(o)
+		funcRef := c.objectName(o)
+		code.Write(primaryFunction(funcRef))
 		if fun.Name.IsExported() {
-			lhs += " = $pkg." + fun.Name.Name
+			fmt.Fprintf(code, "\t$pkg.%s = %s;\n", fun.Name.Name, funcRef)
 		}
-		return primaryFunction(lhs)
+		return code.Bytes()
 	}
 
 	recvType := sig.Recv().Type()
@@ -585,8 +588,6 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysi
 	if reservedKeywords[funName] {
 		funName += "$"
 	}
-
-	code := bytes.NewBuffer(nil)
 
 	if _, isStruct := namedRecvType.Underlying().(*types.Struct); isStruct {
 		code.Write(primaryFunction(typeName + ".ptr.prototype." + funName))
@@ -612,7 +613,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysi
 	return code.Bytes()
 }
 
-func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockStmt, outerContext *funcContext, sig *types.Signature, info *analysis.FuncInfo, name string) ([]string, string) {
+func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockStmt, outerContext *funcContext, sig *types.Signature, info *analysis.FuncInfo, funcRef string) ([]string, string) {
 	c := &funcContext{
 		FuncInfo:    info,
 		p:           outerContext.p,
@@ -684,18 +685,17 @@ func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockS
 
 	if len(c.Blocking) != 0 {
 		c.localVars = append(c.localVars, "$r")
-		b := "$b"
-		if name != "" && !c.p.minify {
-			b = "$blocking_" + name
+		if funcRef == "" {
+			funcRef = "$b"
+			functionName = " $b"
 		}
-		functionName = " " + b
 		var stores, loads string
 		for _, v := range c.localVars {
 			loads += fmt.Sprintf("%s = $f.%s; ", v, v)
 			stores += fmt.Sprintf("$f.%s = %s; ", v, v)
 		}
 		prefix = prefix + " var $f, $c = false; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; " + loads + "}"
-		suffix = " if ($f === undefined) { $f = { $blk: " + b + " }; } " + stores + "return $f;" + suffix
+		suffix = " if ($f === undefined) { $f = { $blk: " + funcRef + " }; } " + stores + "return $f;" + suffix
 	}
 
 	if c.HasDefer {

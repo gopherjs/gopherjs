@@ -153,7 +153,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			fileSet:      fileSet,
 		},
 		allVars:     make(map[string]int),
-		flowDatas:   map[*types.Label]*flowData{nil: &flowData{}},
+		flowDatas:   map[*types.Label]*flowData{nil: {}},
 		caseCounter: 1,
 		labelCases:  make(map[*types.Label]int),
 	}
@@ -623,7 +623,7 @@ func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockS
 		sig:         sig,
 		allVars:     make(map[string]int, len(outerContext.allVars)),
 		localVars:   []string{"$ptr"},
-		flowDatas:   map[*types.Label]*flowData{nil: &flowData{}},
+		flowDatas:   map[*types.Label]*flowData{nil: {}},
 		caseCounter: 1,
 		labelCases:  make(map[*types.Label]int),
 	}

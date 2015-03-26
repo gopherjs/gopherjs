@@ -432,7 +432,7 @@ func main() {
 	cmdServe.Flags().AddFlag(flagColor)
 	cmdServe.Flags().AddFlag(flagTags)
 	var port int
-	cmdServe.Flags().IntVarP(&port, "port", "p", 6060, "HTTP port")
+	cmdServe.Flags().IntVarP(&port, "port", "p", 8080, "HTTP port")
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {
 		dirs := append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT)
 		sourceFiles := http.FileServer(serveCommandFileSystem{options: options, dirs: dirs, sourceMaps: make(map[string][]byte)})

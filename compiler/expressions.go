@@ -1015,7 +1015,11 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 		}
 
 		if !types.Identical(exprType, types.Typ[types.UnsafePointer]) {
-			return c.formatExpr("new %1s(%2e.$get, %2e.$set, %2e.$target)", c.typeName(desiredType), expr)
+			exprTypeElem := exprType.Underlying().(*types.Pointer).Elem()
+			ptrVar := c.newVariable("_ptr")
+			getterConv := c.translateConversion(c.setType(&ast.StarExpr{X: c.newIdent(ptrVar, exprType)}, exprTypeElem), t.Elem())
+			setterConv := c.translateConversion(c.newIdent("$v", t.Elem()), exprTypeElem)
+			return c.formatExpr("(%1s = %2e, new %3s(function() { return %4s; }, function($v) { %1s.$set(%5s); }, %1s.$target))", ptrVar, expr, c.typeName(desiredType), getterConv, setterConv)
 		}
 
 	case *types.Interface:

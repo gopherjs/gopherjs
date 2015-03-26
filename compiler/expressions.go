@@ -310,7 +310,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				case token.AND, token.OR, token.XOR:
 					return c.formatExpr("new %3s(%1h %4t %2h, (%1l %4t %2l) >>> 0)", e.X, e.Y, c.typeName(t), e.Op)
 				case token.AND_NOT:
-					return c.formatExpr("new %3s(%1h &~ %2h, (%1l &~ %2l) >>> 0)", e.X, e.Y, c.typeName(t))
+					return c.formatExpr("new %3s(%1h & ~%2h, (%1l & ~%2l) >>> 0)", e.X, e.Y, c.typeName(t))
 				default:
 					panic(e.Op)
 				}
@@ -380,7 +380,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				}
 				return c.formatParenExpr("%e %t %e", e.X, e.Op, e.Y)
 			case token.AND_NOT:
-				return c.formatParenExpr("%e & ~%e", e.X, e.Y)
+				return c.fixNumber(c.formatParenExpr("%e & ~%e", e.X, e.Y), basic)
 			case token.XOR:
 				return c.fixNumber(c.formatParenExpr("%e ^ %e", e.X, e.Y), basic)
 			default:

@@ -47,7 +47,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- -- driver    | yes                   |                                   |
 | debug           |                       |                                   |
 | -- dwarf        | not yet               |                                   |
-| -- elf          | not yet               |                                   |
+| -- elf          | yes                   |                                   |
 | -- gosym        | yes                   |                                   |
 | -- macho        | not yet               |                                   |
 | -- pe           | yes                   |                                   |
@@ -69,7 +69,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | fmt             | yes                   |                                   |
 | go              |                       |                                   |
 | -- ast          | yes                   |                                   |
-| -- build        | not yet               |                                   |
+| -- build        | no                    |                                   |
 | -- doc          | yes                   |                                   |
 | -- format       | yes                   |                                   |
 | -- parser       | yes                   |                                   |
@@ -94,7 +94,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- suffixarray  | yes                   |                                   |
 | io              | yes                   |                                   |
 | -- ioutil       | yes                   |                                   |
-| log             | not yet               |                                   |
+| log             | yes                   |                                   |
 | -- syslog       | no                    |                                   |
 | math            | yes                   |                                   |
 | -- big          | yes                   |                                   |
@@ -104,7 +104,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- multipart    | yes                   |                                   |
 | net             | no                    |                                   |
 | -- http         | partially             | emulated via XMLHttpRequest       |
-| -- -- cgi       | not yet               |                                   |
+| -- -- cgi       | no                    |                                   |
 | -- -- cookiejar | yes                   |                                   |
 | -- -- fcgi      | yes                   |                                   |
 | -- -- httptest  | partially             |                                   |

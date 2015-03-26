@@ -8,9 +8,12 @@ import (
 	"go/parser"
 	"go/scanner"
 	"go/token"
+	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -19,6 +22,7 @@ import (
 
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/neelance/sourcemap"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/crypto/ssh/terminal"
@@ -419,12 +423,142 @@ func main() {
 		}, options))
 	}
 
+	cmdServe := &cobra.Command{
+		Use:   "serve",
+		Short: "compile on-the-fly and serve",
+	}
+	cmdServe.Flags().AddFlag(flagVerbose)
+	cmdServe.Flags().AddFlag(flagMinify)
+	cmdServe.Flags().AddFlag(flagColor)
+	cmdServe.Flags().AddFlag(flagTags)
+	var port int
+	cmdServe.Flags().IntVarP(&port, "port", "p", 6060, "HTTP port")
+	cmdServe.Run = func(cmd *cobra.Command, args []string) {
+		dirs := append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT)
+		sourceFiles := http.FileServer(serveCommandFileSystem{options: options, dirs: dirs, sourceMaps: make(map[string][]byte)})
+		fmt.Printf("serving at http://localhost:%d\n", port)
+		fmt.Println(http.ListenAndServe(fmt.Sprintf(":%d", port), sourceFiles))
+	}
+
 	rootCmd := &cobra.Command{
 		Use:  "gopherjs",
 		Long: "GopherJS is a tool for compiling Go source code to JavaScript.",
 	}
-	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdTool)
+	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdTool, cmdServe)
 	rootCmd.Execute()
+}
+
+type serveCommandFileSystem struct {
+	options    *gbuild.Options
+	dirs       []string
+	sourceMaps map[string][]byte
+}
+
+func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
+	for _, d := range fs.dirs {
+		file, err := http.Dir(d + "/src").Open(name)
+		if err == nil {
+			return file, nil
+		}
+	}
+
+	if strings.HasSuffix(name, "/main.js.map") {
+		if content, ok := fs.sourceMaps[name]; ok {
+			return newFakeFile("main.js.map", content), nil
+		}
+	}
+
+	isIndex := strings.HasSuffix(name, "/index.html")
+	isMain := strings.HasSuffix(name, "/main.js")
+	if isIndex || isMain {
+		s := gbuild.NewSession(fs.options)
+		buildPkg, err := gbuild.Import(path.Dir(name[1:]), 0, s.InstallSuffix(), fs.options.BuildTags)
+		if err != nil || buildPkg.Name != "main" {
+			return nil, os.ErrNotExist
+		}
+
+		if isIndex {
+			return newFakeFile("index.html", []byte(`<html><head><meta charset="utf-8"><script src="main.js"></script></head></html>`)), nil
+		}
+
+		if isMain {
+			buf := bytes.NewBuffer(nil)
+			handleError(func() error {
+				pkg := &gbuild.PackageData{Package: buildPkg}
+				if err := s.BuildPackage(pkg); err != nil {
+					return err
+				}
+
+				sourceMapFilter := &compiler.SourceMapFilter{Writer: buf}
+				m := &sourcemap.Map{File: "main.js"}
+				sourceMapFilter.MappingCallback = gbuild.NewMappingCallback(m, fs.options.GOROOT, fs.options.GOPATH)
+
+				deps, err := compiler.ImportDependencies(pkg.Archive, s.ImportContext.Import)
+				if err != nil {
+					return err
+				}
+				if err := compiler.WriteProgramCode(deps, sourceMapFilter); err != nil {
+					return err
+				}
+
+				mapBuf := bytes.NewBuffer(nil)
+				m.WriteTo(mapBuf)
+				buf.WriteString("//# sourceMappingURL=main.js.map\n")
+				fs.sourceMaps[name+".map"] = mapBuf.Bytes()
+
+				return nil
+			}, fs.options)
+			return newFakeFile("main.js", buf.Bytes()), nil
+		}
+	}
+
+	return nil, os.ErrNotExist
+}
+
+type fakeFile struct {
+	name string
+	size int
+	io.ReadSeeker
+}
+
+func newFakeFile(name string, content []byte) *fakeFile {
+	return &fakeFile{name: name, size: len(content), ReadSeeker: bytes.NewReader(content)}
+}
+
+func (f *fakeFile) Close() error {
+	return nil
+}
+
+func (f *fakeFile) Readdir(count int) ([]os.FileInfo, error) {
+	return nil, os.ErrInvalid
+}
+
+func (f *fakeFile) Stat() (os.FileInfo, error) {
+	return f, nil
+}
+
+func (f *fakeFile) Name() string {
+	return f.name
+}
+
+func (f *fakeFile) Size() int64 {
+	return int64(f.size)
+}
+
+func (f *fakeFile) Mode() os.FileMode {
+	return 0
+}
+
+func (f *fakeFile) ModTime() time.Time {
+	return time.Time{}
+}
+
+func (f *fakeFile) IsDir() bool {
+	return false
+}
+
+func (f *fakeFile) Sys() interface{} {
+	return nil
 }
 
 func handleError(f func() error, options *gbuild.Options) int {

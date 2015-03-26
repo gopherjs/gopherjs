@@ -514,7 +514,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 
 	sourceMapFilter := &compiler.SourceMapFilter{Writer: codeFile}
 	if s.options.CreateMapFile {
-		m := sourcemap.Map{File: filepath.Base(pkgObj)}
+		m := &sourcemap.Map{File: filepath.Base(pkgObj)}
 		mapFile, err := os.Create(pkgObj + ".map")
 		if err != nil {
 			return err
@@ -526,22 +526,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 			fmt.Fprintf(codeFile, "//# sourceMappingURL=%s.map\n", filepath.Base(pkgObj))
 		}()
 
-		sourceMapFilter.MappingCallback = func(generatedLine, generatedColumn int, originalPos token.Position) {
-			if !originalPos.IsValid() {
-				m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn})
-				return
-			}
-			file := originalPos.Filename
-			switch hasGopathPrefix, prefixLen := hasGopathPrefix(file, s.options.GOPATH); {
-			case hasGopathPrefix:
-				file = filepath.ToSlash(filepath.Join("/gopath", file[prefixLen:]))
-			case strings.HasPrefix(file, s.options.GOROOT):
-				file = filepath.ToSlash(filepath.Join("/goroot", file[len(s.options.GOROOT):]))
-			default:
-				file = filepath.Base(file)
-			}
-			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: originalPos.Line, OriginalColumn: originalPos.Column})
-		}
+		sourceMapFilter.MappingCallback = NewMappingCallback(m, s.options.GOROOT, s.options.GOPATH)
 	}
 
 	deps, err := compiler.ImportDependencies(pkg.Archive, s.ImportContext.Import)
@@ -549,6 +534,25 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 		return err
 	}
 	return compiler.WriteProgramCode(deps, sourceMapFilter)
+}
+
+func NewMappingCallback(m *sourcemap.Map, goroot, gopath string) func(generatedLine, generatedColumn int, originalPos token.Position) {
+	return func(generatedLine, generatedColumn int, originalPos token.Position) {
+		if !originalPos.IsValid() {
+			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn})
+			return
+		}
+		file := originalPos.Filename
+		switch hasGopathPrefix, prefixLen := hasGopathPrefix(file, gopath); {
+		case hasGopathPrefix:
+			file = filepath.ToSlash(file[prefixLen+4:])
+		case strings.HasPrefix(file, goroot):
+			file = filepath.ToSlash(file[len(goroot)+4:])
+		default:
+			file = filepath.Base(file)
+		}
+		m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: originalPos.Line, OriginalColumn: originalPos.Column})
+	}
 }
 
 // hasGopathPrefix returns true and the length of the matched GOPATH workspace,

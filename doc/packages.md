@@ -46,10 +46,10 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- sql          | no                    |                                   |
 | -- -- driver    | yes                   |                                   |
 | debug           |                       |                                   |
-| -- dwarf        | not yet               |                                   |
-| -- elf          | not yet               |                                   |
+| -- dwarf        | yes                   |                                   |
+| -- elf          | yes                   |                                   |
 | -- gosym        | yes                   |                                   |
-| -- macho        | not yet               |                                   |
+| -- macho        | yes                   |                                   |
 | -- pe           | yes                   |                                   |
 | encoding        |                       |                                   |
 | -- ascii85      | yes                   |                                   |

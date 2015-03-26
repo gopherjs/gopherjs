@@ -65,7 +65,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- xml          | yes                   |                                   |
 | errors          | yes                   |                                   |
 | expvar          | yes                   |                                   |
-| flag            | not yet               |                                   |
+| flag            | yes                   |                                   |
 | fmt             | yes                   |                                   |
 | go              |                       |                                   |
 | -- ast          | yes                   |                                   |

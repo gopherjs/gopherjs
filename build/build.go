@@ -398,7 +398,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			}
 			_, err := s.ImportPackage(importedPkgPath)
 			if err != nil {
-				return &scanner.Error{Pos: pkg.ImportPos[importedPkgPath][0], Msg: err.Error()}
+				return err
 			}
 			impModeTime := s.Packages[importedPkgPath].SrcModTime
 			if impModeTime.After(pkg.SrcModTime) {

@@ -40,8 +40,8 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- sha512       | yes                   |                                   |
 | -- subtle       | yes                   |                                   |
 | -- tls          | no                    |                                   |
-| -- x509         | not yet               |                                   |
-| -- -- pkix      | not yet               |                                   |
+| -- x509         | yes                   |                                   |
+| -- -- pkix      | yes                   |                                   |
 | database        |                       |                                   |
 | -- sql          | no                    |                                   |
 | -- -- driver    | yes                   |                                   |

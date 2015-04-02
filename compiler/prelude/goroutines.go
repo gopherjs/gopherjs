@@ -109,7 +109,7 @@ var $recover = function() {
 };
 var $throw = function(err) { throw err; };
 
-var $dummyGoroutine = { asleep: false, exit: false, deferStack: [], panicStack: [] };
+var $dummyGoroutine = { asleep: false, exit: false, deferStack: [], panicStack: [], canBlock: false };
 var $curGoroutine = $dummyGoroutine, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
 var $go = function(fun, args, direct) {
   $totalGoroutines++;
@@ -147,6 +147,7 @@ var $go = function(fun, args, direct) {
   $goroutine.exit = false;
   $goroutine.deferStack = [];
   $goroutine.panicStack = [];
+  $goroutine.canBlock = true;
   $schedule($goroutine, direct);
 };
 
@@ -179,7 +180,7 @@ var $schedule = function(goroutine, direct) {
 };
 
 var $block = function() {
-  if ($curGoroutine === $dummyGoroutine) {
+  if (!$curGoroutine.canBlock) {
     $throwRuntimeError("cannot block in JavaScript callback, fix by wrapping code in goroutine");
   }
   $curGoroutine.asleep = true;

@@ -50,45 +50,7 @@ var $externalize = function(v, t) {
     }
     return v;
   case $kindFunc:
-    if (v === $throwNilPointerError) {
-      return null;
-    }
-    if (v.$externalizeWrapper === undefined) {
-      $checkForDeadlock = false;
-      v.$externalizeWrapper = function() {
-        var args = [];
-        for (var i = 0; i < t.params.length; i++) {
-          if (t.variadic && i === t.params.length - 1) {
-            var vt = t.params[i].elem, varargs = [];
-            for (var j = i; j < arguments.length; j++) {
-              varargs.push($internalize(arguments[j], vt));
-            }
-            args.push(new (t.params[i])(varargs));
-            break;
-          }
-          args.push($internalize(arguments[i], t.params[i]));
-        }
-        var canBlock = $curGoroutine.canBlock;
-        $curGoroutine.canBlock = false;
-        try {
-          var result = v.apply(this, args);
-        } finally {
-          $curGoroutine.canBlock = canBlock;
-        }
-        switch (t.results.length) {
-        case 0:
-          return;
-        case 1:
-          return $externalize(result, t.results[0]);
-        default:
-          for (var i = 0; i < t.results.length; i++) {
-            result[i] = $externalize(result[i], t.results[i]);
-          }
-          return result;
-        }
-      };
-    }
-    return v.$externalizeWrapper;
+    return $externalizeFunction(v, t, false);
   case $kindInterface:
     if (v === $ifaceNil) {
       return null;
@@ -168,6 +130,48 @@ var $externalize = function(v, t) {
     return o;
   }
   $panic(new $String("cannot externalize " + t.string));
+};
+
+var $externalizeFunction = function(v, t, passThis) {
+  if (v === $throwNilPointerError) {
+    return null;
+  }
+  if (v.$externalizeWrapper === undefined) {
+    $checkForDeadlock = false;
+    v.$externalizeWrapper = function() {
+      var args = [];
+      for (var i = 0; i < t.params.length; i++) {
+        if (t.variadic && i === t.params.length - 1) {
+          var vt = t.params[i].elem, varargs = [];
+          for (var j = i; j < arguments.length; j++) {
+            varargs.push($internalize(arguments[j], vt));
+          }
+          args.push(new (t.params[i])(varargs));
+          break;
+        }
+        args.push($internalize(arguments[i], t.params[i]));
+      }
+      var canBlock = $curGoroutine.canBlock;
+      $curGoroutine.canBlock = false;
+      try {
+        var result = v.apply(passThis ? this : undefined, args);
+      } finally {
+        $curGoroutine.canBlock = canBlock;
+      }
+      switch (t.results.length) {
+      case 0:
+        return;
+      case 1:
+        return $externalize(result, t.results[0]);
+      default:
+        for (var i = 0; i < t.results.length; i++) {
+          result[i] = $externalize(result[i], t.results[i]);
+        }
+        return result;
+      }
+    };
+  }
+  return v.$externalizeWrapper;
 };
 
 var $internalize = function(v, t, recv) {

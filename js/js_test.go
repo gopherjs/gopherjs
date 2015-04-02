@@ -395,6 +395,17 @@ func TestMakeWrapper(t *testing.T) {
 	}
 }
 
+func TestCallWithNull(t *testing.T) {
+	c := make(chan int, 1)
+	js.Global.Set("test", func() {
+		c <- 42
+	})
+	js.Global.Get("test").Call("call", nil)
+	if <-c != 42 {
+		t.Fail()
+	}
+}
+
 func TestReflection(t *testing.T) {
 	o := js.Global.Call("eval", "({ answer: 42 })")
 	if reflect.ValueOf(o).Interface().(*js.Object) != o {

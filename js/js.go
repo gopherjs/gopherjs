@@ -140,7 +140,7 @@ func MakeWrapper(i interface{}) *Object {
 			continue
 		}
 		o.Set(m.Get("name").String(), func(args ...*Object) *Object {
-			return Global.Call("$externalize", v.Get(m.Get("prop").String()), m.Get("typ")).Call("apply", v, args)
+			return Global.Call("$externalizeFunction", v.Get(m.Get("prop").String()), m.Get("typ"), true).Call("apply", v, args)
 		})
 	}
 	return o

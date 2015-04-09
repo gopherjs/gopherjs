@@ -283,3 +283,12 @@ func zero() int {
 	}()
 	panic("")
 }
+
+func TestSwitchEmptyTag(t *testing.T) {
+	var i interface{} = 0
+	switch {
+	case i:
+		t.Fail()
+	default:
+	}
+}

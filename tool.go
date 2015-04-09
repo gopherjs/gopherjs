@@ -95,7 +95,7 @@ func main() {
 						name = filepath.ToSlash(name)
 						names[i] = name
 						if s.Watcher != nil {
-							s.Watcher.Add(filepath.ToSlash(name))
+							s.Watcher.Add(name)
 						}
 					}
 					if err := s.BuildFiles(args, pkgObj, currentDirectory); err != nil {

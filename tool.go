@@ -456,7 +456,7 @@ type serveCommandFileSystem struct {
 
 func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 	for _, d := range fs.dirs {
-		file, err := http.Dir(d + "/src").Open(name)
+		file, err := http.Dir(filepath.Join(d, "src")).Open(name)
 		if err == nil {
 			return file, nil
 		}

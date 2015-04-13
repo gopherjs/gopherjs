@@ -297,8 +297,8 @@ func TestNumGoroutine(t *testing.T) {
 	c <- true
 	c <- true
 	c <- true
-	if g, w := runtime.NumGoroutine(), n+1; g != w {
-		t.Errorf("runtime.NumGoroutine(): Got %d, want %d.", g, w)
+	if got, want := runtime.NumGoroutine(), n+1; got != want {
+		t.Errorf("runtime.NumGoroutine(): Got %d, want %d.", got, want)
 	}
 	c <- true
 }

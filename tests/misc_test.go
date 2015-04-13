@@ -2,6 +2,7 @@ package tests
 
 import (
 	"math"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -282,4 +283,22 @@ func zero() int {
 		recover()
 	}()
 	panic("")
+}
+
+func TestNumGoroutine(t *testing.T) {
+	n := runtime.NumGoroutine()
+	c := make(chan bool)
+	go func() {
+		<-c
+		<-c
+		<-c
+		<-c
+	}()
+	c <- true
+	c <- true
+	c <- true
+	if g, w := runtime.NumGoroutine(), n+1; g != w {
+		t.Errorf("runtime.NumGoroutine(): Got %d, want %d.", g, w)
+	}
+	c <- true
 }

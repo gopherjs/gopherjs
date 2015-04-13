@@ -120,7 +120,7 @@ var $go = function(fun, args, direct) {
       $curGoroutine = $goroutine;
       var r = fun.apply(undefined, args);
       if (r && r.$blk !== undefined) {
-        fun = function() { r.$blk(); };
+        fun = function() { return r.$blk(); };
         args = [];
         rescheduled = true;
         return;

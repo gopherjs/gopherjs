@@ -78,6 +78,17 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 					Y:  cond,
 				})
 			}
+		} else {
+			translateCond = func(cond ast.Expr) *expression {
+				if c.p.Info.TypeOf(cond).Underlying() == types.Typ[types.Bool] {
+					return c.translateExpr(cond)
+				}
+				return c.translateExpr(&ast.BinaryExpr{
+					X:  c.newIdent("true", types.Typ[types.Bool]),
+					Op: token.EQL,
+					Y:  cond,
+				})
+			}
 		}
 		c.translateBranchingStmt(s.Body.List, true, translateCond, nil, label, c.Flattened[s])
 

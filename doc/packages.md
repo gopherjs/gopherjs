@@ -43,7 +43,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- x509         | yes                   |                                   |
 | -- -- pkix      | yes                   |                                   |
 | database        |                       |                                   |
-| -- sql          | no                    |                                   |
+| -- sql          | yes                   |                                   |
 | -- -- driver    | yes                   |                                   |
 | debug           |                       |                                   |
 | -- dwarf        | yes                   |                                   |

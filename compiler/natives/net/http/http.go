@@ -25,7 +25,6 @@ func (t *XHRTransport) RoundTrip(req *Request) (*Response, error) {
 		return nil, errors.New("net/http: XMLHttpRequest not available")
 	}
 	xhr := xhrConstructor.New()
-	xhr.Set("responseType", "arraybuffer")
 
 	if t.inflight == nil {
 		t.inflight = map[*Request]*js.Object{}
@@ -69,6 +68,7 @@ func (t *XHRTransport) RoundTrip(req *Request) (*Response, error) {
 	})
 
 	xhr.Call("open", req.Method, req.URL.String())
+	xhr.Set("responseType", "arraybuffer")
 	for key, values := range req.Header {
 		for _, value := range values {
 			xhr.Call("setRequestHeader", key, value)

@@ -68,7 +68,7 @@ func (t *XHRTransport) RoundTrip(req *Request) (*Response, error) {
 	})
 
 	xhr.Call("open", req.Method, req.URL.String())
-	xhr.Set("responseType", "arraybuffer")
+	xhr.Set("responseType", "arraybuffer") // has to be after "open" until https://bugzilla.mozilla.org/show_bug.cgi?id=1110761 is resolved
 	for key, values := range req.Header {
 		for _, value := range values {
 			xhr.Call("setRequestHeader", key, value)

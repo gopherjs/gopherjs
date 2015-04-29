@@ -29,7 +29,7 @@ func (r *rngReader) Read(b []byte) (n int, err error) {
 	// Node.js
 	if require := js.Global.Get("require"); require != js.Undefined {
 		if randomBytes := require.Invoke("crypto").Get("randomBytes"); randomBytes != js.Undefined {
-			array.Call("set", js.Global.Get("Uint8Array").New(randomBytes.Invoke(len(b))), offset)
+			array.Call("set", randomBytes.Invoke(len(b)), offset)
 			return len(b), nil
 		}
 	}

@@ -25,8 +25,15 @@ func (r *rngReader) Read(b []byte) (n int, err error) {
 	}
 	if crypto != js.Undefined {
 		if crypto.Get("getRandomValues") != js.Undefined {
-			crypto.Call("getRandomValues", array.Call("subarray", offset, offset+len(b)))
-			return len(b), nil
+			n = len(b)
+			if n > 65536 {
+				// Avoid QuotaExceededError thrown by getRandomValues
+				// when length is more than 65536, as specified in
+				// http://www.w3.org/TR/WebCryptoAPI/#Crypto-method-getRandomValues
+				n = 65536
+			}
+			crypto.Call("getRandomValues", array.Call("subarray", offset, offset+n))
+			return n, nil
 		}
 	}
 

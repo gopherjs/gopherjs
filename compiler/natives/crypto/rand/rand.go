@@ -19,7 +19,11 @@ func (r *rngReader) Read(b []byte) (n int, err error) {
 	offset := js.InternalObject(b).Get("$offset").Int()
 
 	// browser
-	if crypto := js.Global.Get("crypto"); crypto != js.Undefined {
+	crypto := js.Global.Get("crypto")
+	if crypto == js.Undefined {
+		crypto = js.Global.Get("msCrypto")
+	}
+	if crypto != js.Undefined {
 		if crypto.Get("getRandomValues") != js.Undefined {
 			crypto.Call("getRandomValues", array.Call("subarray", offset, offset+len(b)))
 			return len(b), nil

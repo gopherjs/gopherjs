@@ -21,10 +21,12 @@ import (
 	"gopkg.in/fsnotify.v1"
 )
 
-type ImportCError struct{}
+type ImportCError struct {
+	pkgPath string
+}
 
 func (e *ImportCError) Error() string {
-	return `importing "C" is not supported by GopherJS`
+	return e.pkgPath + `: importing "C" is not supported by GopherJS`
 }
 
 func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
@@ -37,14 +39,11 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 		Compiler:      "gc",
 		BuildTags:     append(buildTags, "netgo"),
 		ReleaseTags:   build.Default.ReleaseTags,
+		CgoEnabled:    true, // detect `import "C"` to throw proper error
 	}
 }
 
 func Import(path string, mode build.ImportMode, installSuffix string, buildTags []string) (*build.Package, error) {
-	if path == "C" {
-		return nil, &ImportCError{}
-	}
-
 	buildContext := NewBuildContext(installSuffix, buildTags)
 	if path == "runtime" || path == "syscall" {
 		buildContext.GOARCH = build.Default.GOARCH
@@ -57,6 +56,7 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 	if err != nil {
 		return nil, err
 	}
+
 	switch path {
 	case "runtime":
 		pkg.GoFiles = []string{"error.go", fmt.Sprintf("zgoos_%s.go", buildContext.GOOS), "zversion.go"}
@@ -64,12 +64,20 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 		pkg.GoFiles = nil
 	case "crypto/rand":
 		pkg.GoFiles = []string{"rand.go", "util.go"}
+	case "crypto/x509":
+		pkg.CgoFiles = nil
 	case "hash/crc32":
 		pkg.GoFiles = []string{"crc32.go", "crc32_generic.go"}
 	}
+
+	if len(pkg.CgoFiles) > 0 {
+		return nil, &ImportCError{path}
+	}
+
 	if pkg.IsCommand() {
 		pkg.PkgObj = filepath.Join(pkg.BinDir, filepath.Base(pkg.ImportPath)+".js")
 	}
+
 	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
 		// fall back to GOPATH
 		firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: Need to check inside all GOPATH workspaces.
@@ -78,6 +86,7 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 			pkg.PkgObj = gopathPkgObj
 		}
 	}
+
 	return pkg, nil
 }
 
@@ -446,6 +455,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 	if err != nil {
 		return err
 	}
+
 	pkg.Archive, err = compiler.Compile(pkg.ImportPath, files, fileSet, s.ImportContext, s.options.Minify)
 	if err != nil {
 		return err

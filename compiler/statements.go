@@ -368,7 +368,8 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			for i, lhs := range s.Lhs {
 				lhs = astutil.RemoveParens(lhs)
 				if !isBlank(lhs) {
-					parts = append(parts, c.translateAssign(lhs, tmpVars[i], c.p.Types[lhs].Type, s.Tok == token.DEFINE))
+					t := c.p.Types[lhs].Type
+					parts = append(parts, c.translateAssignOfExpr(lhs, c.newIdent(tmpVars[i], t), t, s.Tok == token.DEFINE))
 				}
 			}
 			c.Printf("%s", strings.Join(parts, " "))

@@ -302,3 +302,12 @@ func TestNumGoroutine(t *testing.T) {
 	}
 	c <- true
 }
+
+func TestMapAssign(t *testing.T) {
+	x := 0
+	m := map[string]string{}
+	x, m["foo"] = 5, "bar"
+	if x != 5 || m["foo"] != "bar" {
+		t.Fail()
+	}
+}

@@ -121,7 +121,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
       typ.len = len;
       typ.comparable = elem.comparable;
       typ.keyFor = function(x) {
-        return Array.prototype.join.call($mapArray(x.$val, function(e) {
+        return Array.prototype.join.call($mapArray(x, function(e) {
           return elem.keyFor(e).replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
         }), "$");
       };

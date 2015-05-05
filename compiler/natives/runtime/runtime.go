@@ -53,6 +53,10 @@ func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
 	return 0, parts.Index(0).String(), parts.Index(1).Int(), true
 }
 
+func Callers(skip int, pc []uintptr) int {
+	return 0
+}
+
 func GC() {
 }
 

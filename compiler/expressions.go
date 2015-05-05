@@ -145,7 +145,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			assignments := ""
 			for _, element := range e.Elts {
 				kve := element.(*ast.KeyValueExpr)
-				assignments += c.formatExpr(`%s = %s, %s[%s] = { k: %s, v: %s }, `, keyVar, c.translateImplicitConversionWithCloning(kve.Key, t.Key()), mapVar, c.makeKey(c.newIdent(keyVar, t.Key()), t.Key()), keyVar, c.translateImplicitConversionWithCloning(kve.Value, t.Elem())).String()
+				assignments += c.formatExpr(`%s = %s, %s[%s.keyFor(%s)] = { k: %s, v: %s }, `, keyVar, c.translateImplicitConversionWithCloning(kve.Key, t.Key()), mapVar, c.typeName(t.Key()), keyVar, keyVar, c.translateImplicitConversionWithCloning(kve.Value, t.Elem())).String()
 			}
 			return c.formatExpr("(%s = new $Map(), %s%s)", mapVar, assignments, mapVar)
 		case *types.Struct:
@@ -444,7 +444,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if typesutil.IsJsObject(c.p.Types[e.Index].Type) {
 				c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: e.Index.Pos(), Msg: "cannot use js.Object as map key"})
 			}
-			key := c.makeKey(e.Index, t.Key())
+			key := fmt.Sprintf("%s.keyFor(%s)", c.typeName(t.Key()), c.translateImplicitConversion(e.Index, t.Key()))
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
 				return c.formatExpr(`(%1s = %2e[%3s], %1s !== undefined ? [%1s.v, true] : [%4s, false])`, c.newVariable("_entry"), e.X, key, c.zeroValue(t.Elem()))
 			}
@@ -843,7 +843,8 @@ func (c *funcContext) translateBuiltin(name string, args []ast.Expr, ellipsis bo
 		sliceType := typ.Underlying().(*types.Slice)
 		return c.formatExpr("$append(%e, %s)", args[0], strings.Join(c.translateExprSlice(args[1:], sliceType.Elem()), ", "))
 	case "delete":
-		return c.formatExpr(`delete %e[%s]`, args[0], c.makeKey(args[1], c.p.Types[args[0]].Type.Underlying().(*types.Map).Key()))
+		keyType := c.p.Types[args[0]].Type.Underlying().(*types.Map).Key()
+		return c.formatExpr(`delete %e[%s.keyFor(%s)]`, args[0], c.typeName(keyType), c.translateImplicitConversion(args[1], keyType))
 	case "copy":
 		if basic, isBasic := c.p.Types[args[1]].Type.Underlying().(*types.Basic); isBasic && isString(basic) {
 			return c.formatExpr("$copyString(%e, %e)", args[0], args[1])

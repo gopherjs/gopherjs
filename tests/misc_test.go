@@ -2,6 +2,7 @@ package tests
 
 import (
 	"math"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -62,7 +63,7 @@ func TestStructKey(t *testing.T) {
 	m := make(map[SingleValue]int)
 	m[SingleValue{Value: 1}] = 42
 	m[SingleValue{Value: 2}] = 43
-	if m[SingleValue{Value: 1}] != 42 || m[SingleValue{Value: 2}] != 43 {
+	if m[SingleValue{Value: 1}] != 42 || m[SingleValue{Value: 2}] != 43 || reflect.ValueOf(m).MapIndex(reflect.ValueOf(SingleValue{Value: 1})).Interface() != 42 {
 		t.Fail()
 	}
 
@@ -70,7 +71,7 @@ func TestStructKey(t *testing.T) {
 	m2[SingleValue{Value: 1}] = 42
 	m2[SingleValue{Value: 2}] = 43
 	m2[OtherSingleValue{Value: 1}] = 44
-	if m2[SingleValue{Value: 1}] != 42 || m2[SingleValue{Value: 2}] != 43 || m2[OtherSingleValue{Value: 1}] != 44 {
+	if m2[SingleValue{Value: 1}] != 42 || m2[SingleValue{Value: 2}] != 43 || m2[OtherSingleValue{Value: 1}] != 44 || reflect.ValueOf(m2).MapIndex(reflect.ValueOf(SingleValue{Value: 1})).Interface() != 42 {
 		t.Fail()
 	}
 }

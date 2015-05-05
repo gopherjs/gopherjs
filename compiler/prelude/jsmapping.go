@@ -289,8 +289,8 @@ var $internalize = function(v, t, recv) {
     var m = new $Map();
     var keys = $keys(v);
     for (var i = 0; i < keys.length; i++) {
-      var key = $internalize(keys[i], t.key);
-      m[key.$key ? key.$key() : key] = { k: key, v: $internalize(v[keys[i]], t.elem) };
+      var k = $internalize(keys[i], t.key);
+      m[t.key.keyFor(k)] = { k: k, v: $internalize(v[keys[i]], t.elem) };
     }
     return m;
   case $kindPtr:

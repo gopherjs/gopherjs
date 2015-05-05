@@ -336,25 +336,6 @@ func (c *funcContext) typeName(ty types.Type) string {
 	return anonType.Name()
 }
 
-func (c *funcContext) makeKey(expr ast.Expr, keyType types.Type) string {
-	switch t := keyType.Underlying().(type) {
-	case *types.Array, *types.Struct:
-		return fmt.Sprintf("(new %s(%s)).$key()", c.typeName(keyType), c.translateExpr(expr))
-	case *types.Basic:
-		if is64Bit(t) || isComplex(t) {
-			return fmt.Sprintf("%s.$key()", c.translateExpr(expr))
-		}
-		if isFloat(t) {
-			return fmt.Sprintf("$floatKey(%s)", c.translateExpr(expr))
-		}
-		return c.translateImplicitConversion(expr, keyType).String()
-	case *types.Chan, *types.Pointer, *types.Interface:
-		return fmt.Sprintf("%s.$key()", c.translateImplicitConversion(expr, keyType))
-	default:
-		return c.translateImplicitConversion(expr, keyType).String()
-	}
-}
-
 func (c *funcContext) externalize(s string, t types.Type) string {
 	if typesutil.IsJsObject(t) {
 		return s

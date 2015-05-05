@@ -348,11 +348,8 @@ func makemap(t *rtype) (m unsafe.Pointer) {
 }
 
 func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
-	k := js.InternalObject(key).Call("$get")
-	if k.Get("$key") != js.Undefined {
-		k = k.Call("$key")
-	}
-	entry := js.InternalObject(m).Get(k.String())
+	k := jsType(t.Key()).Call("keyFor", js.InternalObject(key).Call("$get")).String()
+	entry := js.InternalObject(m).Get(k)
 	if entry == js.Undefined {
 		return nil
 	}
@@ -361,10 +358,7 @@ func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
 
 func mapassign(t *rtype, m, key, val unsafe.Pointer) {
 	kv := js.InternalObject(key).Call("$get")
-	k := kv
-	if k.Get("$key") != js.Undefined {
-		k = k.Call("$key")
-	}
+	k := jsType(t.Key()).Call("keyFor", kv).String()
 	jsVal := js.InternalObject(val).Call("$get")
 	et := t.Elem()
 	if et.Kind() == Struct {
@@ -375,15 +369,12 @@ func mapassign(t *rtype, m, key, val unsafe.Pointer) {
 	entry := js.Global.Get("Object").New()
 	entry.Set("k", kv)
 	entry.Set("v", jsVal)
-	js.InternalObject(m).Set(k.String(), entry)
+	js.InternalObject(m).Set(k, entry)
 }
 
 func mapdelete(t *rtype, m unsafe.Pointer, key unsafe.Pointer) {
-	k := js.InternalObject(key).Call("$get")
-	if k.Get("$key") != js.Undefined {
-		k = k.Call("$key")
-	}
-	js.InternalObject(m).Delete(k.String())
+	k := jsType(t.Key()).Call("keyFor", js.InternalObject(key).Call("$get")).String()
+	js.InternalObject(m).Delete(k)
 }
 
 type mapIter struct {

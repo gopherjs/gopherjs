@@ -49,6 +49,8 @@ var $ifaceKeyFor = function(x) {
   return c.string + '$' + c.keyFor(x.$val);
 };
 
+var $identity = function(x) { return x; };
+
 var $newType = function(size, kind, string, name, pkg, constructor) {
   var typ;
   switch(kind) {
@@ -122,7 +124,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
       typ.comparable = elem.comparable;
       typ.keyFor = function(x) {
         return Array.prototype.join.call($mapArray(x, function(e) {
-          return elem.keyFor(e).replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
+          return String(elem.keyFor(e)).replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
         }), "$");
       };
       typ.ptr.init(typ);
@@ -240,7 +242,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
       typ.keyFor = function(x) {
         var val = x.$val;
         return $mapArray(fields, function(f) {
-          return f.typ.keyFor(val[f.prop]).replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
+          return String(f.typ.keyFor(val[f.prop])).replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
         }).join("$");
       };
       /* nil value */
@@ -361,7 +363,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
   typ.methods = [];
   typ.methodSetCache = null;
   typ.comparable = true;
-  typ.keyFor = typ.keyFor || function(x) { return String(x); };
+  typ.keyFor = typ.keyFor || $identity;
   return typ;
 };
 

@@ -151,7 +151,20 @@ var $go = function(fun, args, direct) {
   $schedule($goroutine, direct);
 };
 
-var $scheduled = [], $schedulerLoopActive = false;
+var $scheduled = [], $schedulerActive = false;
+var $runScheduled = function() {
+  try {
+    var r;
+    while ((r = $scheduled.shift()) !== undefined) {
+      r();
+    }
+    $schedulerActive = false;
+  } finally {
+    if ($schedulerActive) {
+      setTimeout($runScheduled, 0);
+    }
+  }
+};
 var $schedule = function(goroutine, direct) {
   if (goroutine.asleep) {
     goroutine.asleep = false;
@@ -164,18 +177,9 @@ var $schedule = function(goroutine, direct) {
   }
 
   $scheduled.push(goroutine);
-  if (!$schedulerLoopActive) {
-    $schedulerLoopActive = true;
-    setTimeout(function() {
-      try {
-        var r;
-        while ((r = $scheduled.shift()) !== undefined) {
-          r();
-        }
-      } finally {
-        $schedulerLoopActive = false;
-      }
-    }, 0);
+  if (!$schedulerActive) {
+    $schedulerActive = true;
+    setTimeout($runScheduled, 0);
   }
 };
 

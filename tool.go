@@ -228,6 +228,7 @@ func main() {
 			defer func() {
 				tempfile.Close()
 				os.Remove(tempfile.Name())
+				os.Remove(tempfile.Name() + ".map")
 			}()
 			s := gbuild.NewSession(options)
 			if err := s.BuildFiles(args[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
@@ -361,6 +362,7 @@ func main() {
 				defer func() {
 					tempfile.Close()
 					os.Remove(tempfile.Name())
+					os.Remove(tempfile.Name() + ".map")
 				}()
 
 				if err := s.WriteCommandPackage(mainPkg, tempfile.Name()); err != nil {

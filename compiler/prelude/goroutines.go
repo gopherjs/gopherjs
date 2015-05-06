@@ -167,14 +167,14 @@ var $schedule = function(goroutine, direct) {
   if (!$schedulerLoopActive) {
     $schedulerLoopActive = true;
     setTimeout(function() {
-      while (true) {
-        var r = $scheduled.shift();
-        if (r === undefined) {
-          $schedulerLoopActive = false;
-          break;
+      try {
+        var r;
+        while ((r = $scheduled.shift()) !== undefined) {
+          r();
         }
-        r();
-      };
+      } finally {
+        $schedulerLoopActive = false;
+      }
     }, 0);
   }
 };

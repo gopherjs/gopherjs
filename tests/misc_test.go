@@ -312,3 +312,14 @@ func TestMapAssign(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestSwitchStatement(t *testing.T) {
+	zero := 0
+	var interfaceZero interface{} = zero
+	switch {
+	case interfaceZero:
+		t.Fail()
+	default:
+		// ok
+	}
+}

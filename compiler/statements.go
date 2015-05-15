@@ -67,17 +67,25 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		if s.Init != nil {
 			c.translateStmt(s.Init, nil)
 		}
-		var translateCond func(cond ast.Expr) *expression
-		if s.Tag != nil {
+
+		tag := s.Tag
+		if tag == nil {
+			tag = ast.NewIdent("true")
+			c.p.Types[tag] = types.TypeAndValue{Type: types.Typ[types.Bool], Value: exact.MakeBool(true)}
+		}
+
+		if c.p.Types[tag].Value == nil {
 			refVar := c.newVariable("_ref")
-			c.Printf("%s = %s;", refVar, c.translateExpr(s.Tag))
-			translateCond = func(cond ast.Expr) *expression {
-				return c.translateExpr(&ast.BinaryExpr{
-					X:  c.newIdent(refVar, c.p.Types[s.Tag].Type),
-					Op: token.EQL,
-					Y:  cond,
-				})
-			}
+			c.Printf("%s = %s;", refVar, c.translateExpr(tag))
+			tag = c.newIdent(refVar, c.p.Types[tag].Type)
+		}
+
+		translateCond := func(cond ast.Expr) *expression {
+			return c.translateExpr(&ast.BinaryExpr{
+				X:  tag,
+				Op: token.EQL,
+				Y:  cond,
+			})
 		}
 		c.translateBranchingStmt(s.Body.List, true, translateCond, nil, label, c.Flattened[s])
 

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 
@@ -420,6 +421,15 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			case *types.Pointer:
 				if _, ok := u.Elem().Underlying().(*types.Array); ok {
 					return c.formatExpr("$equal(%s, %s, %s)", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t), c.typeName(u.Elem()))
+				}
+			case *types.Basic:
+				if isBoolean(u) {
+					if b, ok := analysis.BoolValue(e.X, c.p.Info.Info); ok && b {
+						return c.translateExpr(e.Y)
+					}
+					if b, ok := analysis.BoolValue(e.Y, c.p.Info.Info); ok && b {
+						return c.translateExpr(e.X)
+					}
 				}
 			}
 			return c.formatExpr("%s === %s", c.translateImplicitConversion(e.X, t), c.translateImplicitConversion(e.Y, t))

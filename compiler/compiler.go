@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/prelude"
-	"golang.org/x/tools/go/gcimporter"
+	"golang.org/x/tools/go/importer"
 	"golang.org/x/tools/go/types"
 )
 
@@ -35,7 +35,7 @@ type Archive struct {
 	ImportPath   string
 	Name         string
 	Imports      []string
-	GcData       []byte
+	ExportData   []byte
 	Declarations []*Decl
 	FileSet      []byte
 	Minified     bool
@@ -226,7 +226,7 @@ func ReadArchive(filename, path string, r io.Reader, packages map[string]*types.
 	}
 
 	var err error
-	a.types, err = gcimporter.ImportData(packages, filename, path, bytes.NewReader(a.GcData))
+	_, a.types, err = importer.ImportData(packages, a.ExportData)
 	if err != nil {
 		return nil, err
 	}

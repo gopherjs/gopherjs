@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
-	"github.com/gopherjs/gopherjs/gcexporter"
+	"golang.org/x/tools/go/importer"
 	"golang.org/x/tools/go/types"
 	"golang.org/x/tools/go/types/typeutil"
 )
@@ -118,8 +118,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 	importContext.Packages[importPath] = typesPkg
 
-	gcData := bytes.NewBuffer(nil)
-	gcexporter.Write(typesPkg, gcData, sizes32)
+	exportData := importer.ExportData(typesPkg)
 	encodedFileSet := bytes.NewBuffer(nil)
 	if err := fileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
 		return nil, err
@@ -464,7 +463,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		ImportPath:   importPath,
 		Name:         typesPkg.Name(),
 		Imports:      importedPaths,
-		GcData:       gcData.Bytes(),
+		ExportData:   exportData,
 		Declarations: allDecls,
 		FileSet:      encodedFileSet.Bytes(),
 		Minified:     minify,

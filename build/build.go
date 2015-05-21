@@ -588,6 +588,9 @@ func (s *Session) WaitForChange() {
 			if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove|fsnotify.Rename) == 0 || filepath.Base(ev.Name)[0] == '.' {
 				continue
 			}
+			if !strings.HasSuffix(ev.Name, ".go") && !strings.HasSuffix(ev.Name, ".inc.js") {
+				continue
+			}
 			s.options.PrintSuccess("change detected: %s\n", ev.Name)
 		case err := <-s.Watcher.Errors:
 			s.options.PrintError("watcher error: %s\n", err.Error())

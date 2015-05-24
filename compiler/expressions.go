@@ -660,7 +660,15 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			case types.FieldVal:
 				fields, jsTag := c.translateSelection(sel, f.Pos())
 				if jsTag != "" {
-					return c.internalize(c.formatExpr("%e.%s.%s(%s)", f.X, strings.Join(fields, "."), jsTag, externalizeArgs(e.Args)), sig.Results().At(0).Type())
+					call := c.formatExpr("%e.%s.%s(%s)", f.X, strings.Join(fields, "."), jsTag, externalizeArgs(e.Args))
+					switch sig.Results().Len() {
+					case 0:
+						return call
+					case 1:
+						return c.internalize(call, sig.Results().At(0).Type())
+					default:
+						c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: f.Pos(), Msg: "field with js tag can not have func type with multiple results"})
+					}
 				}
 				return c.formatExpr("%s", c.translateCall(e, sig, c.formatExpr("%e.%s", f.X, strings.Join(fields, "."))))
 

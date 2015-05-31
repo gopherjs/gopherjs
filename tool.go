@@ -35,12 +35,12 @@ func init() {
 	var err error
 	currentDirectory, err = os.Getwd()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	currentDirectory, err = filepath.EvalSymlinks(currentDirectory)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -55,7 +55,7 @@ func main() {
 	flagWatch := pflag.Lookup("watch")
 	pflag.BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
 	flagMinify := pflag.Lookup("minify")
-	pflag.BoolVar(&options.Color, "color", terminal.IsTerminal(2) && os.Getenv("TERM") != "dumb", "colored output")
+	pflag.BoolVar(&options.Color, "color", terminal.IsTerminal(syscall.Stderr) && os.Getenv("TERM") != "dumb", "colored output")
 	flagColor := pflag.Lookup("color")
 	tags := pflag.String("tags", "", "a list of build tags to consider satisfied during the build")
 	flagTags := pflag.Lookup("tags")

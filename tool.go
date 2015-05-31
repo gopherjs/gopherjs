@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -433,13 +434,13 @@ func main() {
 	cmdServe.Flags().AddFlag(flagMinify)
 	cmdServe.Flags().AddFlag(flagColor)
 	cmdServe.Flags().AddFlag(flagTags)
-	var port int
-	cmdServe.Flags().IntVarP(&port, "port", "p", 8080, "HTTP port")
+	var addr string
+	cmdServe.Flags().StringVarP(&addr, "http", "", ":8080", "HTTP bind address to serve")
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {
 		dirs := append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT)
 		sourceFiles := http.FileServer(serveCommandFileSystem{options: options, dirs: dirs, sourceMaps: make(map[string][]byte)})
-		fmt.Printf("serving at http://localhost:%d\n", port)
-		fmt.Println(http.ListenAndServe(fmt.Sprintf(":%d", port), sourceFiles))
+		printServingAt(addr)
+		fmt.Fprintln(os.Stderr, http.ListenAndServe(addr, sourceFiles))
 	}
 
 	rootCmd := &cobra.Command{
@@ -610,6 +611,57 @@ func runNode(script string, args []string, dir string) error {
 		err = fmt.Errorf("could not run Node.js: %s", err.Error())
 	}
 	return err
+}
+
+// printServingAt prints "serving at:" message with all addresses where served content is available.
+func printServingAt(addr string) {
+	var hosts []string
+	if len(addr) >= 1 && (addr)[0] == ':' { // ":port" form.
+		ips, err := getAllIps()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "unable to get ips:", err)
+			fmt.Printf("serving at %s\n", addr)
+			return
+		}
+		for _, ip := range ips {
+			if ip == "127.0.0.1" {
+				ip = "localhost"
+			}
+			hosts = append(hosts, ip+addr)
+		}
+	} else { // "host" or "host:port" form.
+		hosts = []string{addr}
+	}
+	fmt.Println("serving at:")
+	for _, host := range hosts {
+		fmt.Printf("http://%s\n", host)
+	}
+}
+
+// getAllIps returns a string slice of all IPs.
+func getAllIps() (ips []string, err error) {
+	ifis, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	for _, ifi := range ifis {
+		addrs, err := ifi.Addrs()
+		if err != nil {
+			return nil, err
+		}
+		for _, addr := range addrs {
+			ipNet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			ip4 := ipNet.IP.To4()
+			if ip4 == nil {
+				continue
+			}
+			ips = append(ips, ipNet.IP.String())
+		}
+	}
+	return ips, nil
 }
 
 type testFuncs struct {

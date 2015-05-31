@@ -125,7 +125,7 @@ func main() {
 					}
 				}
 				return nil
-			}, options)
+			}, options, nil)
 
 			if s.Watcher == nil {
 				os.Exit(exitCode)
@@ -184,7 +184,7 @@ func main() {
 					}
 				}
 				return nil
-			}, options)
+			}, options, nil)
 
 			if s.Watcher == nil {
 				os.Exit(exitCode)
@@ -238,7 +238,7 @@ func main() {
 				return err
 			}
 			return nil
-		}, options))
+		}, options, nil))
 	}
 
 	cmdTest := &cobra.Command{
@@ -394,7 +394,7 @@ func main() {
 				fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Now().Sub(start).Seconds())
 			}
 			return exitErr
-		}, options))
+		}, options, nil))
 	}
 
 	cmdTool := &cobra.Command{
@@ -422,7 +422,7 @@ func main() {
 			}
 			cmdTool.Help()
 			return nil
-		}, options))
+		}, options, nil))
 	}
 
 	cmdServe := &cobra.Command{
@@ -485,7 +485,8 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 
 		if isMain {
 			buf := bytes.NewBuffer(nil)
-			handleError(func() error {
+			browserErrors := bytes.NewBuffer(nil)
+			exitCode := handleError(func() error {
 				pkg := &gbuild.PackageData{Package: buildPkg}
 				if err := s.BuildPackage(pkg); err != nil {
 					return err
@@ -509,7 +510,10 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 				fs.sourceMaps[name+".map"] = mapBuf.Bytes()
 
 				return nil
-			}, fs.options)
+			}, fs.options, browserErrors)
+			if exitCode != 0 {
+				buf = browserErrors
+			}
 			return newFakeFile("main.js", buf.Bytes()), nil
 		}
 	}
@@ -563,24 +567,26 @@ func (f *fakeFile) Sys() interface{} {
 	return nil
 }
 
-func handleError(f func() error, options *gbuild.Options) int {
+// If browserErrors is non-nil, errors are written for presentation in browser.
+func handleError(f func() error, options *gbuild.Options, browserErrors *bytes.Buffer) int {
 	switch err := f().(type) {
 	case nil:
 		return 0
 	case compiler.ErrorList:
 		for _, entry := range err {
-			printError(entry, options)
+			printError(entry, options, browserErrors)
 		}
 		return 1
 	case *exec.ExitError:
 		return err.Sys().(syscall.WaitStatus).ExitStatus()
 	default:
-		printError(err, options)
+		printError(err, options, browserErrors)
 		return 1
 	}
 }
 
-func printError(err error, options *gbuild.Options) {
+// sprintError returns an annotated error string without trailing newline.
+func sprintError(err error) string {
 	makeRel := func(name string) string {
 		if relname, err := filepath.Rel(currentDirectory, name); err == nil {
 			return relname
@@ -590,12 +596,21 @@ func printError(err error, options *gbuild.Options) {
 
 	switch e := err.(type) {
 	case *scanner.Error:
-		options.PrintError("%s:%d:%d: %s\n", makeRel(e.Pos.Filename), e.Pos.Line, e.Pos.Column, e.Msg)
+		return fmt.Sprintf("%s:%d:%d: %s", makeRel(e.Pos.Filename), e.Pos.Line, e.Pos.Column, e.Msg)
 	case types.Error:
 		pos := e.Fset.Position(e.Pos)
-		options.PrintError("%s:%d:%d: %s\n", makeRel(pos.Filename), pos.Line, pos.Column, e.Msg)
+		return fmt.Sprintf("%s:%d:%d: %s", makeRel(pos.Filename), pos.Line, pos.Column, e.Msg)
 	default:
-		options.PrintError("%s\n", e)
+		return fmt.Sprintf("%s", e)
+	}
+}
+
+// printError prints err to Stderr with options. If browserErrors is non-nil, errors are also written for presentation in browser.
+func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer) {
+	e := sprintError(err)
+	options.PrintError("%s\n", e)
+	if browserErrors != nil {
+		fmt.Fprintln(browserErrors, `console.error("`+template.JSEscapeString(e)+`");`)
 	}
 }
 

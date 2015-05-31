@@ -55,7 +55,7 @@ func main() {
 	flagWatch := pflag.Lookup("watch")
 	pflag.BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
 	flagMinify := pflag.Lookup("minify")
-	pflag.BoolVar(&options.Color, "color", terminal.IsTerminal(syscall.Stderr) && os.Getenv("TERM") != "dumb", "colored output")
+	pflag.BoolVar(&options.Color, "color", terminal.IsTerminal(int(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb", "colored output")
 	flagColor := pflag.Lookup("color")
 	tags := pflag.String("tags", "", "a list of build tags to consider satisfied during the build")
 	flagTags := pflag.Lookup("tags")

@@ -27,6 +27,7 @@ Now you can use  `gopherjs build [files]` or `gopherjs install [package]` which 
 - Use `float64` instead of `float32`.
 
 ### Community
+- [#gopherjs Channel on Gophers Slack](https://gophers.slack.com/messages/gopherjs/) (invites to Gophers Slack are available [here](http://blog.gopheracademy.com/gophers-slack-community/#how-can-i-be-invited-to-join:2facdc921b2310f18cb851c36fa92369))
 - [Google Group](https://groups.google.com/d/forum/gopherjs)
 - [Bindings to JavaScript APIs and libraries](https://github.com/gopherjs/gopherjs/wiki/bindings)
 - [GopherJS on Twitter](https://twitter.com/GopherJS)

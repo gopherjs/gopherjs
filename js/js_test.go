@@ -302,6 +302,13 @@ func TestEquality(t *testing.T) {
 	}
 }
 
+func TestUndefinedEquality(t *testing.T) {
+	var ui interface{} = js.Undefined
+	if ui != js.Undefined {
+		t.Fail()
+	}
+}
+
 func TestSameFuncWrapper(t *testing.T) {
 	a := func(_ string) {} // string argument to force wrapping
 	b := func(_ string) {} // string argument to force wrapping

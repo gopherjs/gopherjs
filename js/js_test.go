@@ -309,6 +309,16 @@ func TestUndefinedEquality(t *testing.T) {
 	}
 }
 
+func TestUndefinedInternalization(t *testing.T) {
+	undefinedEqualsJsUndefined := func(i interface{}) bool {
+		return i == js.Undefined
+	}
+	js.Global.Set("undefinedEqualsJsUndefined", undefinedEqualsJsUndefined)
+	if !js.Global.Call("eval", "(undefinedEqualsJsUndefined(undefined))").Bool() {
+		t.Fail()
+	}
+}
+
 func TestSameFuncWrapper(t *testing.T) {
 	a := func(_ string) {} // string argument to force wrapping
 	b := func(_ string) {} // string argument to force wrapping

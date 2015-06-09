@@ -309,6 +309,14 @@ func TestUndefinedEquality(t *testing.T) {
 	}
 }
 
+func TestInterfaceEquality(t *testing.T) {
+	o := js.Global.Get("Object").New()
+	var i interface{} = o
+	if i != o {
+		t.Fail()
+	}
+}
+
 func TestUndefinedInternalization(t *testing.T) {
 	undefinedEqualsJsUndefined := func(i interface{}) bool {
 		return i == js.Undefined

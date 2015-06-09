@@ -413,6 +413,9 @@ var $interfaceIsEqual = function(a, b) {
   if (a.constructor !== b.constructor) {
     return false;
   }
+  if (a.constructor === $jsObjectPtr) {
+    return a.object === b.object;
+  }
   if (!a.constructor.comparable) {
     $throwRuntimeError("comparing uncomparable type " + a.constructor.string);
   }

@@ -245,6 +245,9 @@ var $internalize = function(v, t, recv) {
     if (v === null) {
       return $ifaceNil;
     }
+    if (v === undefined) {
+      return new $jsObjectPtr(undefined);
+    }
     switch (v.constructor) {
     case Int8Array:
       return new ($sliceType($Int8))(v);

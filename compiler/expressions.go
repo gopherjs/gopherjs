@@ -231,7 +231,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 
 		case token.ARROW:
 			call := &ast.CallExpr{
-				Fun:  c.newIdent("$recv", types.NewSignature(nil, nil, types.NewTuple(types.NewVar(0, nil, "", t)), types.NewTuple(types.NewVar(0, nil, "", exprType), types.NewVar(0, nil, "", types.Typ[types.Bool])), false)),
+				Fun:  c.newIdent("$recv", types.NewSignature(nil, types.NewTuple(types.NewVar(0, nil, "", t)), types.NewTuple(types.NewVar(0, nil, "", exprType), types.NewVar(0, nil, "", types.Typ[types.Bool])), false)),
 				Args: []ast.Expr{e.X},
 			}
 			c.Blocking[call] = true

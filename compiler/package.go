@@ -169,7 +169,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 	sort.Strings(importedPaths)
 	for _, impPath := range importedPaths {
-		id := c.newIdent(fmt.Sprintf(`%s.$init`, c.p.pkgVars[impPath]), types.NewSignature(nil, nil, nil, nil, false))
+		id := c.newIdent(fmt.Sprintf(`%s.$init`, c.p.pkgVars[impPath]), types.NewSignature(nil, nil, nil, false))
 		call := &ast.CallExpr{Fun: id}
 		c.Blocking[call] = true
 		c.Flattened[call] = true
@@ -312,7 +312,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				d.DceObjectFilter = ""
 			case "init":
 				d.InitCode = c.CatchOutput(1, func() {
-					id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
+					id := c.newIdent("", types.NewSignature(nil, nil, nil, false))
 					c.p.Uses[id] = o
 					call := &ast.CallExpr{Fun: id}
 					if len(c.p.FuncDeclInfos[o].Blocking) != 0 {
@@ -345,7 +345,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		if mainFunc == nil {
 			return nil, fmt.Errorf("missing main function")
 		}
-		id := c.newIdent("", types.NewSignature(nil, nil, nil, nil, false))
+		id := c.newIdent("", types.NewSignature(nil, nil, nil, false))
 		c.p.Uses[id] = mainFunc
 		call := &ast.CallExpr{Fun: id}
 		if len(c.p.FuncDeclInfos[mainFunc].Blocking) != 0 {

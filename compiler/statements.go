@@ -441,7 +441,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 	case *ast.SendStmt:
 		chanType := c.p.Types[s.Chan].Type.Underlying().(*types.Chan)
 		call := &ast.CallExpr{
-			Fun:  c.newIdent("$send", types.NewSignature(nil, nil, types.NewTuple(types.NewVar(0, nil, "", chanType), types.NewVar(0, nil, "", chanType.Elem())), nil, false)),
+			Fun:  c.newIdent("$send", types.NewSignature(nil, types.NewTuple(types.NewVar(0, nil, "", chanType), types.NewVar(0, nil, "", chanType.Elem())), nil, false)),
 			Args: []ast.Expr{s.Chan, s.Value},
 		}
 		c.Blocking[call] = true
@@ -477,7 +477,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		}
 
 		selectCall := c.setType(&ast.CallExpr{
-			Fun:  c.newIdent("$select", types.NewSignature(nil, nil, types.NewTuple(types.NewVar(0, nil, "", types.NewInterface(nil, nil))), types.NewTuple(types.NewVar(0, nil, "", types.Typ[types.Int])), false)),
+			Fun:  c.newIdent("$select", types.NewSignature(nil, types.NewTuple(types.NewVar(0, nil, "", types.NewInterface(nil, nil))), types.NewTuple(types.NewVar(0, nil, "", types.Typ[types.Int])), false)),
 			Args: []ast.Expr{c.newIdent(fmt.Sprintf("[%s]", strings.Join(channels, ", ")), types.NewInterface(nil, nil))},
 		}, types.Typ[types.Int])
 		c.Blocking[selectCall] = !hasDefault

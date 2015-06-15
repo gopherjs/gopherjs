@@ -436,6 +436,7 @@ func main() {
 	var port int
 	cmdServe.Flags().IntVarP(&port, "port", "p", 8080, "HTTP port")
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {
+		options.BuildTags = strings.Fields(*tags)
 		dirs := append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT)
 		sourceFiles := http.FileServer(serveCommandFileSystem{options: options, dirs: dirs, sourceMaps: make(map[string][]byte)})
 		fmt.Printf("serving at http://localhost:%d\n", port)

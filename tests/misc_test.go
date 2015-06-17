@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/gopherjs/gopherjs/tests/otherpkg"
 )
 
 func TestSyntax1(t *testing.T) {
@@ -321,5 +323,13 @@ func TestSwitchStatement(t *testing.T) {
 		t.Fail()
 	default:
 		// ok
+	}
+}
+
+func TestAddAssignOnPackageVar(t *testing.T) {
+	otherpkg.Test = 0
+	otherpkg.Test += 42
+	if otherpkg.Test != 42 {
+		t.Fail()
 	}
 }

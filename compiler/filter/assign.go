@@ -50,11 +50,16 @@ func Assign(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 				})
 
 			case *ast.SelectorExpr:
+				sel, ok := info.Selections[e]
+				if !ok {
+					// qualified identifier
+					return e
+				}
 				newSel := &ast.SelectorExpr{
 					X:   viaTmpVars(e.X, "_struct"),
 					Sel: e.Sel,
 				}
-				info.Selections[newSel] = info.Selections[e]
+				info.Selections[newSel] = sel
 				return astutil.SetType(info.Info, info.Types[e].Type, newSel)
 
 			case *ast.StarExpr:

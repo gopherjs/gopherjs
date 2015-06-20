@@ -333,3 +333,11 @@ func TestAddAssignOnPackageVar(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestPointerOfPackageVar(t *testing.T) {
+	otherpkg.Test = 42
+	p := &otherpkg.Test
+	if *p != 42 {
+		t.Fail()
+	}
+}

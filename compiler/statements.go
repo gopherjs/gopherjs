@@ -761,7 +761,7 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 		sel, ok := c.p.Selections[l]
 		if !ok {
 			// qualified identifier
-			return fmt.Sprintf("%s.%s = %s;", c.translateExpr(l.X), l.Sel.Name, rhs)
+			return fmt.Sprintf("%s = %s;", c.objectName(c.p.Uses[l.Sel]), rhs)
 		}
 		fields, jsTag := c.translateSelection(sel, l.Pos())
 		if jsTag != "" {

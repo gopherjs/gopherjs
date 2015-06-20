@@ -215,8 +215,14 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				}
 				return c.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, c.varPtrName(obj), c.typeName(exprType), c.objectName(obj), c.translateAssign(x, "$v", exprType, false))
 			case *ast.SelectorExpr:
+				sel, ok := c.p.Selections[x]
+				if !ok {
+					// qualified identifier
+					obj := c.p.Uses[x.Sel].(*types.Var)
+					return c.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, c.varPtrName(obj), c.typeName(exprType), c.objectName(obj), c.translateAssign(x, "$v", exprType, false))
+				}
 				newSel := &ast.SelectorExpr{X: c.newIdent("this.$target", c.p.Types[x.X].Type), Sel: x.Sel}
-				c.p.Selections[newSel] = c.p.Selections[x]
+				c.p.Selections[newSel] = sel
 				return c.formatExpr("(%1e.$ptr_%2s || (%1e.$ptr_%2s = new %3s(function() { return %4e; }, function($v) { %5s }, %1e)))", x.X, x.Sel.Name, c.typeName(exprType), newSel, c.translateAssign(newSel, "$v", exprType, false))
 			case *ast.IndexExpr:
 				if _, ok := c.p.Types[x.X].Type.Underlying().(*types.Slice); ok {
@@ -542,7 +548,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if typesutil.IsJsPackage(obj.Pkg()) && obj.Name() == "InternalObject" {
 				return c.translateExpr(e.Args[0])
 			}
-			return c.formatExpr("%s", c.translateCall(e, sig, c.translateExpr(plainFun)))
+			return c.formatExpr("%s", c.translateCall(e, sig, c.translateExpr(f)))
 
 		case *ast.SelectorExpr:
 			sel, ok := c.p.Selections[f]
@@ -711,8 +717,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			panic("Tried to translate underscore identifier.")
 		}
 		switch o := obj.(type) {
-		case *types.PkgName:
-			return c.formatExpr("%s", c.p.pkgVars[o.Imported().Path()])
 		case *types.Var, *types.Const:
 			return c.formatExpr("%s", c.objectName(o))
 		case *types.Func:

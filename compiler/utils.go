@@ -268,29 +268,42 @@ func (c *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
 	return e
 }
 
-func (c *funcContext) objectName(o types.Object) string {
-	if o.Pkg() != c.p.Pkg || o.Parent() == c.p.Pkg.Scope() {
-		c.p.dependencies[o] = true
+func (c *funcContext) pkgVar(pkg *types.Package) string {
+	if pkg == c.p.Pkg {
+		return "$pkg"
 	}
 
-	if o.Pkg() != c.p.Pkg {
-		pkgVar, found := c.p.pkgVars[o.Pkg().Path()]
-		if !found {
-			pkgVar = fmt.Sprintf(`$packages["%s"]`, o.Pkg().Path())
-		}
-		return pkgVar + "." + o.Name()
+	pkgVar, found := c.p.pkgVars[pkg.Path()]
+	if !found {
+		pkgVar = fmt.Sprintf(`$packages["%s"]`, pkg.Path())
 	}
+	return pkgVar
+}
 
+func isVarOrConst(o types.Object) bool {
 	switch o.(type) {
 	case *types.Var, *types.Const:
-		if o.Exported() && o.Parent() == c.p.Pkg.Scope() {
-			return "$pkg." + o.Name()
+		return true
+	}
+	return false
+}
+
+func isPkgLevel(o types.Object) bool {
+	return o.Parent() != nil && o.Parent().Parent() == types.Universe
+}
+
+func (c *funcContext) objectName(o types.Object) string {
+	if isPkgLevel(o) {
+		c.p.dependencies[o] = true
+
+		if o.Pkg() != c.p.Pkg || (isVarOrConst(o) && o.Exported()) {
+			return c.pkgVar(o.Pkg()) + "." + o.Name()
 		}
 	}
 
 	name, ok := c.p.objectNames[o]
 	if !ok {
-		name = c.newVariableWithLevel(o.Name(), o.Parent() == c.p.Pkg.Scope())
+		name = c.newVariableWithLevel(o.Name(), isPkgLevel(o))
 		c.p.objectNames[o] = name
 	}
 
@@ -300,11 +313,15 @@ func (c *funcContext) objectName(o types.Object) string {
 	return name
 }
 
-func (c *funcContext) varPtrName(v *types.Var) string {
-	name, ok := c.p.varPtrNames[v]
+func (c *funcContext) varPtrName(o *types.Var) string {
+	if isPkgLevel(o) && o.Exported() {
+		return c.pkgVar(o.Pkg()) + "." + o.Name() + "$ptr"
+	}
+
+	name, ok := c.p.varPtrNames[o]
 	if !ok {
-		name = c.newVariableWithLevel(v.Name()+"_ptr", v.Parent() == c.p.Pkg.Scope())
-		c.p.varPtrNames[v] = name
+		name = c.newVariableWithLevel(o.Name()+"$ptr", isPkgLevel(o))
+		c.p.varPtrNames[o] = name
 	}
 	return name
 }

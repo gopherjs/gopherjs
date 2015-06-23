@@ -225,6 +225,8 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 			ast.Walk(c, comm.Value)
 		case *ast.ExprStmt:
 			ast.Walk(c, comm.X.(*ast.UnaryExpr).X)
+		case *ast.AssignStmt:
+			ast.Walk(c, comm.Rhs[0].(*ast.UnaryExpr).X)
 		}
 		for _, s := range n.Body {
 			ast.Walk(c, s)

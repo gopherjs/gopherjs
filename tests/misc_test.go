@@ -348,6 +348,7 @@ func TestFuncInSelect(t *testing.T) {
 	}
 	select {
 	case <-f(func() {}):
+	case _ = <-f(func() {}):
 	case f(func() {}) <- 42:
 	}
 }

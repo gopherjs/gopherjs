@@ -344,9 +344,8 @@ func TestPointerOfPackageVar(t *testing.T) {
 
 func TestFuncInSelect(t *testing.T) {
 	f := func(_ func()) chan int {
-		return nil
+		return make(chan int, 1)
 	}
-
 	select {
 	case <-f(func() {}):
 	case f(func() {}) <- 42:

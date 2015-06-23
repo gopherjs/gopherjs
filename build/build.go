@@ -94,7 +94,7 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 	var files []*ast.File
 	replacedDeclNames := make(map[string]bool)
 	funcName := func(d *ast.FuncDecl) string {
-		if d.Recv == nil {
+		if d.Recv == nil || len(d.Recv.List) == 0 {
 			return d.Name.Name
 		}
 		recv := d.Recv.List[0].Type

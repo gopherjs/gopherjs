@@ -219,6 +219,13 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 		}
 		c.markBlocking(c.analyzeStack)
 	case *ast.CommClause:
+		switch comm := n.Comm.(type) {
+		case *ast.SendStmt:
+			ast.Walk(c, comm.Chan)
+			ast.Walk(c, comm.Value)
+		case *ast.ExprStmt:
+			ast.Walk(c, comm.X.(*ast.UnaryExpr).X)
+		}
 		for _, s := range n.Body {
 			ast.Walk(c, s)
 		}

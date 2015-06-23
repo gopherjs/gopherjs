@@ -615,6 +615,10 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysi
 }
 
 func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockStmt, outerContext *funcContext, sig *types.Signature, info *analysis.FuncInfo, funcRef string) ([]string, string) {
+	if info == nil {
+		panic("nil info")
+	}
+
 	c := &funcContext{
 		FuncInfo:    info,
 		p:           outerContext.p,

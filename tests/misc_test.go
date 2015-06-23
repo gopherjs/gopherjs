@@ -341,3 +341,14 @@ func TestPointerOfPackageVar(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestFuncInSelect(t *testing.T) {
+	f := func(_ func()) chan int {
+		return nil
+	}
+
+	select {
+	case <-f(func() {}):
+	case f(func() {}) <- 42:
+	}
+}

@@ -92,7 +92,9 @@ Goroutines are fully supported by GopherJS. The only restriction is that you nee
 ```go
 js.Global.Get("myButton").Call("addEventListener", "click", func() {
   go func() {
+    [...]
     someBlockingFunction()
+    [...]
   }()
 })
 ```

@@ -22,3 +22,5 @@ func init() {
 		Args = []string{"?"}
 	}
 }
+
+func runtime_beforeExit() {}

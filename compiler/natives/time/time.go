@@ -3,6 +3,7 @@
 package time
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/js"
@@ -70,4 +71,8 @@ func stopTimer(t *runtimeTimer) bool {
 	wasActive := t.active
 	t.active = false
 	return wasActive
+}
+
+func loadLocation(name string) (*Location, error) {
+	return nil, errors.New("unknown time zone " + name)
 }

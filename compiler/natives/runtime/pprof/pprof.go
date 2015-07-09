@@ -33,3 +33,6 @@ func WriteHeapProfile(w io.Writer) error {
 func Lookup(name string) *Profile {
 	return nil
 }
+
+func StartTrace(w io.Writer) error { return nil }
+func StopTrace()                   {}

@@ -166,3 +166,7 @@ func Stack(buf []byte, all bool) int {
 func LockOSThread() {}
 
 func UnlockOSThread() {}
+
+func Version() string {
+	return theVersion
+}

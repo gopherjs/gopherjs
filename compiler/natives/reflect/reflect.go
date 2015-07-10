@@ -229,7 +229,7 @@ func ValueOf(i interface{}) Value {
 	return makeValue(reflectType(js.InternalObject(i).Get("constructor")), js.InternalObject(i).Get("$val"), 0)
 }
 
-func arrayOf(count int, elem Type) Type {
+func ArrayOf(count int, elem Type) Type {
 	return reflectType(js.Global.Call("$arrayType", jsType(elem), count))
 }
 
@@ -325,8 +325,8 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	return Value{t, unsafe.Pointer(fv.Unsafe()), flag(Func)}
 }
 
-func memmove(adst, asrc unsafe.Pointer, n uintptr) {
-	js.InternalObject(adst).Call("$set", js.InternalObject(asrc).Call("$get"))
+func typedmemmove(t *rtype, dst, src unsafe.Pointer) {
+	js.InternalObject(dst).Call("$set", js.InternalObject(src).Call("$get"))
 }
 
 func loadScalar(p unsafe.Pointer, n uintptr) uintptr {

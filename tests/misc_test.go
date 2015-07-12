@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gopherjs/gopherjs/tests/otherpkg"
 )
@@ -350,5 +351,17 @@ func TestFuncInSelect(t *testing.T) {
 	case <-f(func() {}):
 	case _ = <-f(func() {}):
 	case f(func() {}) <- 42:
+	}
+}
+
+func TestEscapeAnalysisOnForLoopVariableScope(t *testing.T) {
+	for i := 0; ; {
+		p := &i
+		time.Sleep(0)
+		i = 42
+		if *p != 42 {
+			t.Fail()
+		}
+		break
 	}
 }

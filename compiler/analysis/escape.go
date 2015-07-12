@@ -37,8 +37,10 @@ func (v *escapeAnalysis) Visit(node ast.Node) (w ast.Visitor) {
 	case *ast.FuncLit:
 		v.bottomScopes[v.info.Scopes[n.Type]] = true
 		return &escapingObjectCollector{v}
-	case *ast.ForStmt, *ast.RangeStmt:
-		v.bottomScopes[v.info.Scopes[n]] = true
+	case *ast.ForStmt:
+		v.bottomScopes[v.info.Scopes[n.Body]] = true
+	case *ast.RangeStmt:
+		v.bottomScopes[v.info.Scopes[n.Body]] = true
 	}
 	return v
 }

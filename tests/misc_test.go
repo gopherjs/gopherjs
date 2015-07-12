@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gopherjs/gopherjs/tests/otherpkg"
 )
@@ -244,6 +245,21 @@ func TestLoopClosureWithStruct(t *testing.T) {
 		if fns[i]().A != i {
 			t.Fail()
 		}
+	}
+}
+
+func TestLoopEscape(t *testing.T) {
+	fail := true
+	for i := 0; i < 3; i++ {
+		func(j *int) {
+			if *j == 2 {
+				fail = false
+			}
+			time.Sleep(1)
+		}(&i)
+	}
+	if fail {
+		t.Fail()
 	}
 }
 

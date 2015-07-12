@@ -209,7 +209,7 @@ func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
 		panic("newVariable: empty name")
 	}
 	for _, b := range []byte(name) {
-		if b < '0' || b > 'z' {
+		if (b < '0' || b > 'z') && b != '$' {
 			name = "nonAsciiName"
 			break
 		}

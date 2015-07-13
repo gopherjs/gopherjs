@@ -365,3 +365,25 @@ func TestEscapeAnalysisOnForLoopVariableScope(t *testing.T) {
 		break
 	}
 }
+
+func TestGoStmtWithStructArg(t *testing.T) {
+	type S struct {
+		i int
+	}
+
+	f := func(s S, c chan int) {
+		c <- s.i
+		c <- s.i
+	}
+
+	c := make(chan int)
+	s := S{42}
+	go f(s, c)
+	s.i = 0
+	if <-c != 42 {
+		t.Fail()
+	}
+	if <-c != 42 {
+		t.Fail()
+	}
+}

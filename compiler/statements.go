@@ -436,7 +436,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		c.translateStmt(s.Stmt, label)
 
 	case *ast.GoStmt:
-		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.Types[s.Call.Fun].Type.Underlying().(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid(), false), ", "))
+		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.Types[s.Call.Fun].Type.Underlying().(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid(), true), ", "))
 
 	case *ast.SendStmt:
 		chanType := c.p.Types[s.Chan].Type.Underlying().(*types.Chan)

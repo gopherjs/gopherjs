@@ -621,7 +621,6 @@ func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockS
 	}
 	prevEV := c.p.escapingVars
 
-	writes := analysis.Writes(body, c.p.Info.Info)
 	var params []string
 	for _, param := range typ.Params.List {
 		if len(param.Names) == 0 {
@@ -633,20 +632,17 @@ func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockS
 				params = append(params, c.newVariable("param"))
 				continue
 			}
-			obj := c.p.Defs[ident].(*types.Var)
-			params = append(params, c.objectName(obj))
+			params = append(params, c.objectName(c.p.Defs[ident]))
 
-			if _, ok := writes[obj]; ok {
-				switch obj.Type().Underlying().(type) {
-				case *types.Array, *types.Struct:
-					initStmts = append([]ast.Stmt{
-						&ast.AssignStmt{
-							Lhs: []ast.Expr{ident},
-							Tok: token.DEFINE,
-							Rhs: []ast.Expr{ident},
-						},
-					}, initStmts...)
-				}
+			switch c.p.Defs[ident].Type().Underlying().(type) {
+			case *types.Array, *types.Struct:
+				initStmts = append([]ast.Stmt{
+					&ast.AssignStmt{
+						Lhs: []ast.Expr{ident},
+						Tok: token.DEFINE,
+						Rhs: []ast.Expr{ident},
+					},
+				}, initStmts...)
 			}
 		}
 	}

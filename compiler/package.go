@@ -539,20 +539,6 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysi
 		}
 
 		var initStmts []ast.Stmt
-		for _, p := range fun.Type.Params.List {
-			for _, n := range p.Names {
-				switch c.p.Defs[n].Type().Underlying().(type) {
-				case *types.Array, *types.Struct:
-					initStmts = append([]ast.Stmt{
-						&ast.AssignStmt{
-							Lhs: []ast.Expr{n},
-							Tok: token.DEFINE,
-							Rhs: []ast.Expr{n},
-						},
-					}, initStmts...)
-				}
-			}
-		}
 		if recv != nil && !isBlank(recv) {
 			initStmts = append([]ast.Stmt{
 				&ast.AssignStmt{
@@ -647,6 +633,17 @@ func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockS
 				continue
 			}
 			params = append(params, c.objectName(c.p.Defs[ident]))
+
+			switch c.p.Defs[ident].Type().Underlying().(type) {
+			case *types.Array, *types.Struct:
+				initStmts = append([]ast.Stmt{
+					&ast.AssignStmt{
+						Lhs: []ast.Expr{ident},
+						Tok: token.DEFINE,
+						Rhs: []ast.Expr{ident},
+					},
+				}, initStmts...)
+			}
 		}
 	}
 

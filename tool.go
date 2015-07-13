@@ -465,15 +465,18 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 		}
 	}
 
-	if strings.HasSuffix(name, "/main.js.map") {
+	dir, _ := path.Split(name)
+	base := path.Base(dir) // base is parent folder name, which becomes the output file name.
+
+	if strings.HasSuffix(name, "/"+base+".js.map") {
 		if content, ok := fs.sourceMaps[name]; ok {
-			return newFakeFile("main.js.map", content), nil
+			return newFakeFile(base+".js.map", content), nil
 		}
 	}
 
 	isIndex := strings.HasSuffix(name, "/index.html")
-	isMain := strings.HasSuffix(name, "/main.js")
-	if isIndex || isMain {
+	isPkg := strings.HasSuffix(name, "/"+base+".js")
+	if isIndex || isPkg {
 		s := gbuild.NewSession(fs.options)
 		buildPkg, err := gbuild.Import(path.Dir(name[1:]), 0, s.InstallSuffix(), fs.options.BuildTags)
 		if err != nil || buildPkg.Name != "main" {
@@ -481,10 +484,10 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 		}
 
 		if isIndex {
-			return newFakeFile("index.html", []byte(`<html><head><meta charset="utf-8"><script src="main.js"></script></head></html>`)), nil
+			return newFakeFile("index.html", []byte(`<html><head><meta charset="utf-8"><script src="`+base+`.js"></script></head></html>`)), nil
 		}
 
-		if isMain {
+		if isPkg {
 			buf := bytes.NewBuffer(nil)
 			browserErrors := bytes.NewBuffer(nil)
 			exitCode := handleError(func() error {
@@ -494,7 +497,7 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 				}
 
 				sourceMapFilter := &compiler.SourceMapFilter{Writer: buf}
-				m := &sourcemap.Map{File: "main.js"}
+				m := &sourcemap.Map{File: base + ".js"}
 				sourceMapFilter.MappingCallback = gbuild.NewMappingCallback(m, fs.options.GOROOT, fs.options.GOPATH)
 
 				deps, err := compiler.ImportDependencies(pkg.Archive, s.ImportContext.Import)
@@ -507,7 +510,7 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 
 				mapBuf := bytes.NewBuffer(nil)
 				m.WriteTo(mapBuf)
-				buf.WriteString("//# sourceMappingURL=main.js.map\n")
+				buf.WriteString("//# sourceMappingURL=" + base + ".js.map\n")
 				fs.sourceMaps[name+".map"] = mapBuf.Bytes()
 
 				return nil
@@ -515,7 +518,7 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 			if exitCode != 0 {
 				buf = browserErrors
 			}
-			return newFakeFile("main.js", buf.Bytes()), nil
+			return newFakeFile(base+".js", buf.Bytes()), nil
 		}
 	}
 

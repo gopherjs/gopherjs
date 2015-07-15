@@ -458,12 +458,12 @@ type serveCommandFileSystem struct {
 }
 
 func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
-	dir, _ := path.Split(name)
+	dir, file := path.Split(name)
 	base := path.Base(dir) // base is parent folder name, which becomes the output file name.
 
-	isPkg := strings.HasSuffix(name, "/"+base+".js")
-	isMap := strings.HasSuffix(name, "/"+base+".js.map")
-	isIndex := strings.HasSuffix(name, "/index.html")
+	isPkg := file == base+".js"
+	isMap := file == base+".js.map"
+	isIndex := file == "index.html"
 
 	if isPkg || isMap || isIndex {
 		// If we're going to be serving our special files, make sure there's a Go command in this folder.
@@ -517,9 +517,9 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 	}
 
 	for _, d := range fs.dirs {
-		file, err := http.Dir(filepath.Join(d, "src")).Open(name)
+		f, err := http.Dir(filepath.Join(d, "src")).Open(name)
 		if err == nil {
-			return file, nil
+			return f, nil
 		}
 	}
 

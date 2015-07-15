@@ -527,8 +527,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				c.p.dependencies[sel.Obj()] = true
 			}
 			return c.formatExpr(`$methodExpr(%s, "%s")`, c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
+		default:
+			panic(fmt.Sprintf("unexpected sel.Kind(): %T", sel.Kind()))
 		}
-		panic("")
 
 	case *ast.CallExpr:
 		plainFun := astutil.RemoveParens(e.Fun)
@@ -682,7 +683,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				return c.translateCall(e, sig, c.translateExpr(f))
 
 			default:
-				panic("")
+				panic(fmt.Sprintf("unexpected sel.Kind(): %T", sel.Kind()))
 			}
 		default:
 			return c.translateCall(e, sig, c.translateExpr(plainFun))

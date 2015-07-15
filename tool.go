@@ -458,36 +458,25 @@ type serveCommandFileSystem struct {
 }
 
 func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
-	for _, d := range fs.dirs {
-		file, err := http.Dir(filepath.Join(d, "src")).Open(name)
-		if err == nil {
-			return file, nil
-		}
-	}
-
 	dir, _ := path.Split(name)
 	base := path.Base(dir) // base is parent folder name, which becomes the output file name.
 
-	if strings.HasSuffix(name, "/"+base+".js.map") {
-		if content, ok := fs.sourceMaps[name]; ok {
-			return newFakeFile(base+".js.map", content), nil
-		}
-	}
-
-	isIndex := strings.HasSuffix(name, "/index.html")
 	isPkg := strings.HasSuffix(name, "/"+base+".js")
-	if isIndex || isPkg {
+	isMap := strings.HasSuffix(name, "/"+base+".js.map")
+	isIndex := strings.HasSuffix(name, "/index.html")
+
+	if isPkg || isMap || isIndex {
+		// If we're going to be serving our special files, make sure there's a Go command in this folder.
 		s := gbuild.NewSession(fs.options)
 		buildPkg, err := gbuild.Import(path.Dir(name[1:]), 0, s.InstallSuffix(), fs.options.BuildTags)
 		if err != nil || buildPkg.Name != "main" {
-			return nil, os.ErrNotExist
+			isPkg = false
+			isMap = false
+			isIndex = false
 		}
 
-		if isIndex {
-			return newFakeFile("index.html", []byte(`<html><head><meta charset="utf-8"><script src="`+base+`.js"></script></head></html>`)), nil
-		}
-
-		if isPkg {
+		switch {
+		case isPkg:
 			buf := bytes.NewBuffer(nil)
 			browserErrors := bytes.NewBuffer(nil)
 			exitCode := handleError(func() error {
@@ -519,7 +508,24 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 				buf = browserErrors
 			}
 			return newFakeFile(base+".js", buf.Bytes()), nil
+
+		case isMap:
+			if content, ok := fs.sourceMaps[name]; ok {
+				return newFakeFile(base+".js.map", content), nil
+			}
 		}
+	}
+
+	for _, d := range fs.dirs {
+		file, err := http.Dir(filepath.Join(d, "src")).Open(name)
+		if err == nil {
+			return file, nil
+		}
+	}
+
+	if isIndex {
+		// If there was no index.html file in any dirs, supply our own.
+		return newFakeFile("index.html", []byte(`<html><head><meta charset="utf-8"><script src="`+base+`.js"></script></head></html>`)), nil
 	}
 
 	return nil, os.ErrNotExist

@@ -90,7 +90,10 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 	return pkg, nil
 }
 
-func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
+// parse parses and returns all .go files for given pkg, including all transitive dependencies.
+// isTest is true when package is being built for running tests.
+// Standard Go library files are augmented with files in compiler/natives folder.
+func parse(pkg *build.Package, isTest bool, fileSet *token.FileSet) ([]*ast.File, error) {
 	var files []*ast.File
 	replacedDeclNames := make(map[string]bool)
 	funcName := func(d *ast.FuncDecl) string {
@@ -103,14 +106,17 @@ func Parse(pkg *build.Package, fileSet *token.FileSet) ([]*ast.File, error) {
 		}
 		return recv.(*ast.Ident).Name + "." + d.Name.Name
 	}
-	isTestPkg := strings.HasSuffix(pkg.ImportPath, "_test")
+	isXTest := strings.HasSuffix(pkg.ImportPath, "_test")
 	importPath := pkg.ImportPath
-	if isTestPkg {
+	if isXTest {
 		importPath = importPath[:len(importPath)-5]
 	}
 	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+importPath, 0, "", nil); err == nil {
-		names := append(nativesPkg.GoFiles, nativesPkg.TestGoFiles...)
-		if isTestPkg {
+		names := nativesPkg.GoFiles
+		if isTest {
+			names = append(names, nativesPkg.TestGoFiles...)
+		}
+		if isXTest {
 			names = nativesPkg.XTestGoFiles
 		}
 		for _, name := range names {
@@ -243,6 +249,7 @@ func (o *Options) PrintSuccess(format string, a ...interface{}) {
 type PackageData struct {
 	*build.Package
 	JsFiles    []string
+	IsTest     bool // IsTest is true if the package is being built for running tests.
 	SrcModTime time.Time
 	UpToDate   bool
 	Archive    *compiler.Archive
@@ -451,7 +458,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 	}
 
 	fileSet := token.NewFileSet()
-	files, err := Parse(pkg.Package, fileSet)
+	files, err := parse(pkg.Package, pkg.IsTest, fileSet)
 	if err != nil {
 		return err
 	}

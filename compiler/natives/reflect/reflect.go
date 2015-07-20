@@ -176,13 +176,7 @@ func newStringPtr(strObj *js.Object) *string {
 }
 
 func isWrapped(typ Type) bool {
-	switch typ.Kind() {
-	case Bool, Int, Int8, Int16, Int32, Uint, Uint8, Uint16, Uint32, Uintptr, Float32, Float64, Array, Map, Func, String, Struct:
-		return true
-	case Ptr:
-		return typ.Elem().Kind() == Array
-	}
-	return false
+	return jsType(typ).Get("wrapped").Bool()
 }
 
 func copyStruct(dst, src *js.Object, typ Type) {

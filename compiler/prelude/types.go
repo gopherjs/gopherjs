@@ -67,11 +67,13 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
   case $kindString:
   case $kindUnsafePointer:
     typ = function(v) { this.$val = v; };
+    typ.wrapped = true;
     break;
 
   case $kindFloat32:
   case $kindFloat64:
     typ = function(v) { this.$val = v; };
+    typ.wrapped = true;
     typ.keyFor = function(x) { return $floatKey(x); };
     break;
 
@@ -113,6 +115,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
 
   case $kindArray:
     typ = function(v) { this.$val = v; };
+    typ.wrapped = true;
     typ.ptr = $newType(4, $kindPtr, "*" + string, "", "", function(array) {
       this.$get = function() { return array; };
       this.$set = function(v) { $copy(this, v, typ); };
@@ -159,6 +162,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
 
   case $kindFunc:
     typ = function(v) { this.$val = v; };
+    typ.wrapped = true;
     typ.init = function(params, results, variadic) {
       typ.params = params;
       typ.results = results;
@@ -180,6 +184,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
 
   case $kindMap:
     typ = function(v) { this.$val = v; };
+    typ.wrapped = true;
     typ.init = function(key, elem) {
       typ.key = key;
       typ.elem = elem;
@@ -203,6 +208,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
     };
     typ.init = function(elem) {
       typ.elem = elem;
+      typ.wrapped = (elem.kind === $kindArray);
       typ.nil = new typ($throwNilPointerError, $throwNilPointerError);
     };
     break;
@@ -228,6 +234,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
 
   case $kindStruct:
     typ = function(v) { this.$val = v; };
+    typ.wrapped = true;
     typ.ptr = $newType(4, $kindPtr, "*" + string, "", "", constructor);
     typ.ptr.elem = typ;
     typ.ptr.prototype.$get = function() { return this; };

@@ -388,14 +388,14 @@ func TestGoStmtWithStructArg(t *testing.T) {
 	}
 }
 
-type methodExprCallType struct{ i int }
+type methodExprCallType int
 
-func (t methodExprCallType) test() int {
-	return t.i + 2
+func (i methodExprCallType) test() int {
+	return int(i) + 2
 }
 
 func TestMethodExprCall(t *testing.T) {
-	if methodExprCallType.test(methodExprCallType{40}) != 42 {
+	if methodExprCallType.test(40) != 42 {
 		t.Fail()
 	}
 }

@@ -526,7 +526,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if !sel.Obj().Exported() {
 				c.p.dependencies[sel.Obj()] = true
 			}
-			return c.formatExpr("$methodExpr(%s.prototype.%s)", c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
+			return c.formatExpr(`$methodExpr(%s, "%s")`, c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
 		}
 		panic("")
 

@@ -71,11 +71,15 @@ var $methodVal = function(recv, name) {
   return f;
 };
 
-var $methodExpr = function(method) {
+var $methodExpr = function(typ, name) {
+  var method = typ.prototype[name];
   if (method.$expr === undefined) {
     method.$expr = function() {
       $stackDepthOffset--;
       try {
+        if (typ.wrapped) {
+          arguments[0] = new typ(arguments[0]);
+        }
         return Function.call.apply(method, arguments);
       } finally {
         $stackDepthOffset++;

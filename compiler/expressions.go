@@ -548,7 +548,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if typesutil.IsJsPackage(obj.Pkg()) && obj.Name() == "InternalObject" {
 				return c.translateExpr(e.Args[0])
 			}
-			return c.formatExpr("%s", c.translateCall(e, sig, c.translateExpr(f)))
+			return c.translateCall(e, sig, c.translateExpr(f))
 
 		case *ast.SelectorExpr:
 			sel, ok := c.p.Selections[f]
@@ -565,7 +565,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						return c.formatExpr("(function() { return $externalize(%e(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(arguments, []))), $emptyInterface); })", e.Args[0])
 					}
 				}
-				return c.formatExpr("%s", c.translateCall(e, sig, c.translateExpr(f)))
+				return c.translateCall(e, sig, c.translateExpr(f))
 			}
 
 			externalizeExpr := func(e ast.Expr) string {
@@ -661,7 +661,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				if reservedKeywords[methodName] {
 					methodName += "$"
 				}
-				return c.formatExpr("%s", c.translateCall(e, sig, c.formatExpr("%s.%s", recv, methodName)))
+				return c.translateCall(e, sig, c.formatExpr("%s.%s", recv, methodName))
 
 			case types.FieldVal:
 				fields, jsTag := c.translateSelection(sel, f.Pos())
@@ -676,16 +676,16 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: f.Pos(), Msg: "field with js tag can not have func type with multiple results"})
 					}
 				}
-				return c.formatExpr("%s", c.translateCall(e, sig, c.formatExpr("%e.%s", f.X, strings.Join(fields, "."))))
+				return c.translateCall(e, sig, c.formatExpr("%e.%s", f.X, strings.Join(fields, ".")))
 
 			case types.MethodExpr:
-				return c.formatExpr("%s", c.translateCall(e, sig, c.translateExpr(f)))
+				return c.translateCall(e, sig, c.translateExpr(f))
 
 			default:
 				panic("")
 			}
 		default:
-			return c.formatExpr("%s", c.translateCall(e, sig, c.translateExpr(plainFun)))
+			return c.translateCall(e, sig, c.translateExpr(plainFun))
 		}
 
 	case *ast.StarExpr:
@@ -747,7 +747,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 	}
 }
 
-func (c *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun *expression) string {
+func (c *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun *expression) *expression {
 	args := c.translateArgs(sig, e.Args, e.Ellipsis.IsValid(), false)
 	if c.Blocking[e] {
 		resumeCase := c.caseCounter
@@ -758,11 +758,11 @@ func (c *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun *
 		}
 		c.Printf("%[1]s = %[2]s(%[3]s); /* */ $s = %[4]d; case %[4]d: if($c) { $c = false; %[1]s = %[1]s.$blk(); } if (%[1]s && %[1]s.$blk !== undefined) { break s; }", returnVar, fun, strings.Join(args, ", "), resumeCase)
 		if sig.Results().Len() != 0 {
-			return returnVar
+			return c.formatExpr("%s", returnVar)
 		}
-		return ""
+		return c.formatExpr("")
 	}
-	return fmt.Sprintf("%s(%s)", fun, strings.Join(args, ", "))
+	return c.formatExpr("%s(%s)", fun, strings.Join(args, ", "))
 }
 
 func (c *funcContext) makeReceiver(x ast.Expr, sel *types.Selection) *expression {

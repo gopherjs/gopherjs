@@ -678,6 +678,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				}
 				return c.formatExpr("%s", c.translateCall(e, sig, c.formatExpr("%e.%s", f.X, strings.Join(fields, "."))))
 
+			case types.MethodExpr:
+				return c.formatExpr("%s", c.translateCall(e, sig, c.translateExpr(f)))
+
 			default:
 				panic("")
 			}

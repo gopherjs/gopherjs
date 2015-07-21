@@ -90,9 +90,9 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 	return pkg, nil
 }
 
-// parse parses and returns all .go files for given pkg, including all transitive dependencies.
+// parse parses and returns all .go files of given pkg.
+// Standard Go library packages are augmented with files in compiler/natives folder.
 // isTest is true when package is being built for running tests.
-// Standard Go library files are augmented with files in compiler/natives folder.
 func parse(pkg *build.Package, isTest bool, fileSet *token.FileSet) ([]*ast.File, error) {
 	var files []*ast.File
 	replacedDeclNames := make(map[string]bool)

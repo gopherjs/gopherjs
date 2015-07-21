@@ -297,7 +297,7 @@ func main() {
 				s := gbuild.NewSession(options)
 				tests := &testFuncs{Package: pkg}
 				collectTests := func(buildPkg *build.Package, testPkgName string, needVar *bool) error {
-					testPkg := &gbuild.PackageData{Package: buildPkg}
+					testPkg := &gbuild.PackageData{Package: buildPkg, IsTest: true}
 					if err := s.BuildPackage(testPkg); err != nil {
 						return err
 					}

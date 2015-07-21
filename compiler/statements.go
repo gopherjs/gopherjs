@@ -442,7 +442,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		chanType := c.p.Types[s.Chan].Type.Underlying().(*types.Chan)
 		call := &ast.CallExpr{
 			Fun:  c.newIdent("$send", types.NewSignature(nil, types.NewTuple(types.NewVar(0, nil, "", chanType), types.NewVar(0, nil, "", chanType.Elem())), nil, false)),
-			Args: []ast.Expr{s.Chan, s.Value},
+			Args: []ast.Expr{s.Chan, c.newIdent(c.translateImplicitConversionWithCloning(s.Value, chanType.Elem()).String(), chanType.Elem())},
 		}
 		c.Blocking[call] = true
 		c.translateStmt(&ast.ExprStmt{X: call}, label)
@@ -463,7 +463,8 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			case *ast.AssignStmt:
 				channels = append(channels, c.formatExpr("[%e]", astutil.RemoveParens(comm.Rhs[0]).(*ast.UnaryExpr).X).String())
 			case *ast.SendStmt:
-				channels = append(channels, c.formatExpr("[%e, %e]", comm.Chan, comm.Value).String())
+				chanType := c.p.Types[comm.Chan].Type.Underlying().(*types.Chan)
+				channels = append(channels, c.formatExpr("[%e, %s]", comm.Chan, c.translateImplicitConversionWithCloning(comm.Value, chanType.Elem())).String())
 			default:
 				panic(fmt.Sprintf("unhandled: %T", comm))
 			}

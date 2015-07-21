@@ -399,3 +399,23 @@ func TestMethodExprCall(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestCopyOnSend(t *testing.T) {
+	type S struct{ i int }
+	c := make(chan S, 2)
+	go func() {
+		var s S
+		s.i = 42
+		c <- s
+		select {
+		case c <- s:
+		}
+		s.i = 10
+	}()
+	if (<-c).i != 42 {
+		t.Fail()
+	}
+	if (<-c).i != 42 {
+		t.Fail()
+	}
+}

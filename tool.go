@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -433,14 +434,23 @@ func main() {
 	cmdServe.Flags().AddFlag(flagMinify)
 	cmdServe.Flags().AddFlag(flagColor)
 	cmdServe.Flags().AddFlag(flagTags)
-	var port int
-	cmdServe.Flags().IntVarP(&port, "port", "p", 8080, "HTTP port")
+	var addr string
+	cmdServe.Flags().StringVarP(&addr, "http", "", ":8080", "HTTP bind address to serve")
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(*tags)
 		dirs := append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT)
 		sourceFiles := http.FileServer(serveCommandFileSystem{options: options, dirs: dirs, sourceMaps: make(map[string][]byte)})
-		fmt.Printf("serving at http://localhost:%d\n", port)
-		fmt.Println(http.ListenAndServe(fmt.Sprintf(":%d", port), sourceFiles))
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if tcpAddr := ln.Addr().(*net.TCPAddr); tcpAddr.IP.Equal(net.IPv4zero) || tcpAddr.IP.Equal(net.IPv6zero) { // Any available addresses.
+			fmt.Printf("serving at http://localhost:%d and on port %d of any available addresses\n", tcpAddr.Port, tcpAddr.Port)
+		} else { // Specific address.
+			fmt.Printf("serving at http://%s\n", tcpAddr)
+		}
+		fmt.Fprintln(os.Stderr, http.Serve(tcpKeepAliveListener{ln.(*net.TCPListener)}, sourceFiles))
 	}
 
 	rootCmd := &cobra.Command{
@@ -449,6 +459,24 @@ func main() {
 	}
 	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdTool, cmdServe)
 	rootCmd.Execute()
+}
+
+// tcpKeepAliveListener sets TCP keep-alive timeouts on accepted
+// connections. It's used by ListenAndServe and ListenAndServeTLS so
+// dead TCP connections (e.g. closing laptop mid-download) eventually
+// go away.
+type tcpKeepAliveListener struct {
+	*net.TCPListener
+}
+
+func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
+	tc, err := ln.AcceptTCP()
+	if err != nil {
+		return
+	}
+	tc.SetKeepAlive(true)
+	tc.SetKeepAlivePeriod(3 * time.Minute)
+	return tc, nil
 }
 
 type serveCommandFileSystem struct {

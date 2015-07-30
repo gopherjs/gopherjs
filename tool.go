@@ -443,8 +443,8 @@ func main() {
 		if host, port, err := net.SplitHostPort(addr); err != nil {
 			fmt.Fprintf(os.Stderr, "invalid http flag value: %v\n", err)
 			os.Exit(2)
-		} else if host == "" || host == "0.0.0.0" { // ":port" or "0.0.0.0:port" form, all network interfaces.
-			fmt.Printf("serving on port %s on all interfaces, e.g., http://localhost:%s\n", port, port)
+		} else if host == "" || host == net.IPv4zero.String() { // ":port" or "0.0.0.0:port" form, any available addresses.
+			fmt.Printf("serving on port %s on any available addresses, e.g., http://localhost:%s\n", port, port)
 		} else { // "host:port" form, specific network interface.
 			fmt.Printf("serving at http://%s\n", addr)
 		}

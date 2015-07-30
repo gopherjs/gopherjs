@@ -446,7 +446,7 @@ func main() {
 			os.Exit(1)
 		}
 		if tcpAddr := ln.Addr().(*net.TCPAddr); tcpAddr.IP.Equal(net.IPv4zero) || tcpAddr.IP.Equal(net.IPv6zero) { // Any available addresses.
-			fmt.Printf("serving on port %d on any available addresses, e.g., http://localhost:%d\n", tcpAddr.Port, tcpAddr.Port)
+			fmt.Printf("serving at http://localhost:%d and on port %d of any available addresses\n", tcpAddr.Port, tcpAddr.Port)
 		} else { // Specific address.
 			fmt.Printf("serving at http://%s\n", tcpAddr)
 		}

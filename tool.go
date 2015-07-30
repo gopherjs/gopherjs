@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -433,14 +434,21 @@ func main() {
 	cmdServe.Flags().AddFlag(flagMinify)
 	cmdServe.Flags().AddFlag(flagColor)
 	cmdServe.Flags().AddFlag(flagTags)
-	var port int
-	cmdServe.Flags().IntVarP(&port, "port", "p", 8080, "HTTP port")
+	var addr string
+	cmdServe.Flags().StringVarP(&addr, "http", "", ":8080", "HTTP bind address to serve")
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(*tags)
 		dirs := append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT)
 		sourceFiles := http.FileServer(serveCommandFileSystem{options: options, dirs: dirs, sourceMaps: make(map[string][]byte)})
-		fmt.Printf("serving at http://localhost:%d\n", port)
-		fmt.Println(http.ListenAndServe(fmt.Sprintf(":%d", port), sourceFiles))
+		if host, port, err := net.SplitHostPort(addr); err != nil {
+			fmt.Fprintf(os.Stderr, "invalid http flag value: %v\n", err)
+			os.Exit(2)
+		} else if host == "" || host == "0.0.0.0" { // ":port" or "0.0.0.0:port" form, all network interfaces.
+			fmt.Printf("serving on port %s on all interfaces, e.g., http://localhost:%s\n", port, port)
+		} else { // "host:port" form, specific network interface.
+			fmt.Printf("serving at http://%s\n", addr)
+		}
+		fmt.Fprintln(os.Stderr, http.ListenAndServe(addr, sourceFiles))
 	}
 
 	rootCmd := &cobra.Command{

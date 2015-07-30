@@ -440,15 +440,17 @@ func main() {
 		options.BuildTags = strings.Fields(*tags)
 		dirs := append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT)
 		sourceFiles := http.FileServer(serveCommandFileSystem{options: options, dirs: dirs, sourceMaps: make(map[string][]byte)})
-		if host, port, err := net.SplitHostPort(addr); err != nil {
-			fmt.Fprintf(os.Stderr, "invalid http flag value: %v\n", err)
-			os.Exit(2)
-		} else if host == "" || host == net.IPv4zero.String() { // ":port" or "0.0.0.0:port" form, any available addresses.
-			fmt.Printf("serving on port %s on any available addresses, e.g., http://localhost:%s\n", port, port)
-		} else { // "host:port" form, specific network interface.
-			fmt.Printf("serving at http://%s\n", addr)
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
-		fmt.Fprintln(os.Stderr, http.ListenAndServe(addr, sourceFiles))
+		if tcpAddr := ln.Addr().(*net.TCPAddr); tcpAddr.IP.Equal(net.IPv4zero) || tcpAddr.IP.Equal(net.IPv6zero) { // Any available addresses.
+			fmt.Printf("serving on port %d on any available addresses, e.g., http://localhost:%d\n", tcpAddr.Port, tcpAddr.Port)
+		} else { // Specific address.
+			fmt.Printf("serving at http://%s\n", tcpAddr)
+		}
+		fmt.Fprintln(os.Stderr, http.Serve(tcpKeepAliveListener{ln.(*net.TCPListener)}, sourceFiles))
 	}
 
 	rootCmd := &cobra.Command{
@@ -457,6 +459,24 @@ func main() {
 	}
 	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdTool, cmdServe)
 	rootCmd.Execute()
+}
+
+// tcpKeepAliveListener sets TCP keep-alive timeouts on accepted
+// connections. It's used by ListenAndServe and ListenAndServeTLS so
+// dead TCP connections (e.g. closing laptop mid-download) eventually
+// go away.
+type tcpKeepAliveListener struct {
+	*net.TCPListener
+}
+
+func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
+	tc, err := ln.AcceptTCP()
+	if err != nil {
+		return
+	}
+	tc.SetKeepAlive(true)
+	tc.SetKeepAlivePeriod(3 * time.Minute)
+	return tc, nil
 }
 
 type serveCommandFileSystem struct {

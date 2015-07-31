@@ -255,7 +255,7 @@ func TestNilInterfaceError(t *testing.T) {
 		}
 	}()
 	var err error
-	err.Error()
+	_ = err.Error()
 }
 
 func TestIndexOutOfRangeError(t *testing.T) {
@@ -416,6 +416,19 @@ func TestCopyOnSend(t *testing.T) {
 		t.Fail()
 	}
 	if (<-c).i != 42 {
+		t.Fail()
+	}
+}
+
+func TestEmptySelectCase(t *testing.T) {
+	ch := make(chan int, 1)
+	ch <- 42
+
+	var v = 0
+	select {
+	case v = <-ch:
+	}
+	if v != 42 {
 		t.Fail()
 	}
 }

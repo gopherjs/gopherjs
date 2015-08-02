@@ -3,7 +3,7 @@
 package time
 
 import (
-	"errors"
+	"runtime"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/js"
@@ -74,5 +74,17 @@ func stopTimer(t *runtimeTimer) bool {
 }
 
 func loadLocation(name string) (*Location, error) {
-	return nil, errors.New("unknown time zone " + name)
+	return loadZoneFile(runtime.GOROOT()+"/lib/time/zoneinfo.zip", name)
+}
+
+func forceZipFileForTesting(zipOnly bool) {
+}
+
+func initTestingZone() {
+	z, err := loadLocation("America/Los_Angeles")
+	if err != nil {
+		panic("cannot load America/Los_Angeles for testing: " + err.Error())
+	}
+	z.name = "Local"
+	localLoc = *z
 }

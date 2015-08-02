@@ -30,3 +30,7 @@ func runtime_Semrelease(s *uint32) {
 
 	ch <- true
 }
+
+func runtime_canSpin(i int) bool {
+	return false
+}

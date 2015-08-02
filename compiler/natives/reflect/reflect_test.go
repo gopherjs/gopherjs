@@ -21,3 +21,15 @@ func TestSliceOverflow(t *testing.T) {
 func TestFuncLayout(t *testing.T) {
 	t.Skip()
 }
+
+func TestArrayOfDirectIface(t *testing.T) {
+	t.Skip()
+}
+
+func TestTypelinksSorted(t *testing.T) {
+	t.Skip()
+}
+
+func TestGCBits(t *testing.T) {
+	t.Skip()
+}

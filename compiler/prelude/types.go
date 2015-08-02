@@ -51,6 +51,8 @@ var $ifaceKeyFor = function(x) {
 
 var $identity = function(x) { return x; };
 
+var $typeIDCounter = 0;
+
 var $newType = function(size, kind, string, name, pkg, constructor) {
   var typ;
   switch(kind) {
@@ -362,6 +364,8 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
     $panic(new $String("invalid kind: " + kind));
   }
 
+  typ.id = $typeIDCounter;
+  $typeIDCounter++;
   typ.size = size;
   typ.kind = kind;
   typ.string = string;
@@ -496,11 +500,11 @@ var $toNativeArray = function(elemKind, array) {
 };
 var $arrayTypes = {};
 var $arrayType = function(elem, len) {
-  var string = "[" + len + "]" + elem.string;
-  var typ = $arrayTypes[string];
+  var typeKey = elem.id + "$" + len;
+  var typ = $arrayTypes[typeKey];
   if (typ === undefined) {
-    typ = $newType(12, $kindArray, string, "", "", null);
-    $arrayTypes[string] = typ;
+    typ = $newType(12, $kindArray, "[" + len + "]" + elem.string, "", "", null);
+    $arrayTypes[typeKey] = typ;
     typ.init(elem, len);
   }
   return typ;
@@ -520,20 +524,21 @@ var $chanType = function(elem, sendOnly, recvOnly) {
 
 var $funcTypes = {};
 var $funcType = function(params, results, variadic) {
-  var paramTypes = $mapArray(params, function(p) { return p.string; });
-  if (variadic) {
-    paramTypes[paramTypes.length - 1] = "..." + paramTypes[paramTypes.length - 1].substr(2);
-  }
-  var string = "func(" + paramTypes.join(", ") + ")";
-  if (results.length === 1) {
-    string += " " + results[0].string;
-  } else if (results.length > 1) {
-    string += " (" + $mapArray(results, function(r) { return r.string; }).join(", ") + ")";
-  }
-  var typ = $funcTypes[string];
+  var typeKey = $mapArray(params, function(p) { return p.id; }).join(",") + "$" + $mapArray(results, function(r) { return r.id; }).join(",") + "$" + variadic;
+  var typ = $funcTypes[typeKey];
   if (typ === undefined) {
+    var paramTypes = $mapArray(params, function(p) { return p.string; });
+    if (variadic) {
+      paramTypes[paramTypes.length - 1] = "..." + paramTypes[paramTypes.length - 1].substr(2);
+    }
+    var string = "func(" + paramTypes.join(", ") + ")";
+    if (results.length === 1) {
+      string += " " + results[0].string;
+    } else if (results.length > 1) {
+      string += " (" + $mapArray(results, function(r) { return r.string; }).join(", ") + ")";
+    }
     typ = $newType(4, $kindFunc, string, "", "", null);
-    $funcTypes[string] = typ;
+    $funcTypes[typeKey] = typ;
     typ.init(params, results, variadic);
   }
   return typ;
@@ -541,16 +546,17 @@ var $funcType = function(params, results, variadic) {
 
 var $interfaceTypes = {};
 var $interfaceType = function(methods) {
-  var string = "interface {}";
-  if (methods.length !== 0) {
-    string = "interface { " + $mapArray(methods, function(m) {
-      return (m.pkg !== "" ? m.pkg + "." : "") + m.name + m.typ.string.substr(4);
-    }).join("; ") + " }";
-  }
-  var typ = $interfaceTypes[string];
+  var typeKey = $mapArray(methods, function(m) { return m.pkg + "," + m.name + "," + m.typ.id; }).join("$");
+  var typ = $interfaceTypes[typeKey];
   if (typ === undefined) {
+    var string = "interface {}";
+    if (methods.length !== 0) {
+      string = "interface { " + $mapArray(methods, function(m) {
+        return (m.pkg !== "" ? m.pkg + "." : "") + m.name + m.typ.string.substr(4);
+      }).join("; ") + " }";
+    }
     typ = $newType(8, $kindInterface, string, "", "", null);
-    $interfaceTypes[string] = typ;
+    $interfaceTypes[typeKey] = typ;
     typ.init(methods);
   }
   return typ;
@@ -569,11 +575,11 @@ var $Map = function() {};
 })();
 var $mapTypes = {};
 var $mapType = function(key, elem) {
-  var string = "map[" + key.string + "]" + elem.string;
-  var typ = $mapTypes[string];
+  var typeKey = key.id + "$" + elem.id;
+  var typ = $mapTypes[typeKey];
   if (typ === undefined) {
-    typ = $newType(4, $kindMap, string, "", "", null);
-    $mapTypes[string] = typ;
+    typ = $newType(4, $kindMap, "map[" + key.string + "]" + elem.string, "", "", null);
+    $mapTypes[typeKey] = typ;
     typ.init(key, elem);
   }
   return typ;
@@ -602,10 +608,10 @@ var $indexPtr = function(array, index, constructor) {
 };
 
 var $sliceType = function(elem) {
-  var typ = elem.Slice;
+  var typ = elem.slice;
   if (typ === undefined) {
     typ = $newType(12, $kindSlice, "[]" + elem.string, "", "", null);
-    elem.Slice = typ;
+    elem.slice = typ;
     typ.init(elem);
   }
   return typ;
@@ -625,14 +631,15 @@ var $makeSlice = function(typ, length, capacity) {
 
 var $structTypes = {};
 var $structType = function(fields) {
-  var string = "struct { " + $mapArray(fields, function(f) {
-    return f.name + " " + f.typ.string + (f.tag !== "" ? (" \"" + f.tag.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"") : "");
-  }).join("; ") + " }";
-  if (fields.length === 0) {
-    string = "struct {}";
-  }
-  var typ = $structTypes[string];
+  var typeKey = $mapArray(fields, function(f) { return f.name + "," + f.typ.id + "," + f.tag; }).join("$");
+  var typ = $structTypes[typeKey];
   if (typ === undefined) {
+    var string = "struct { " + $mapArray(fields, function(f) {
+      return f.name + " " + f.typ.string + (f.tag !== "" ? (" \"" + f.tag.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"") : "");
+    }).join("; ") + " }";
+    if (fields.length === 0) {
+      string = "struct {}";
+    }
     typ = $newType(0, $kindStruct, string, "", "", function() {
       this.$val = this;
       for (var i = 0; i < fields.length; i++) {
@@ -641,7 +648,7 @@ var $structType = function(fields) {
         this[f.prop] = arg !== undefined ? arg : f.typ.zero();
       }
     });
-    $structTypes[string] = typ;
+    $structTypes[typeKey] = typ;
     typ.init(fields);
   }
   return typ;

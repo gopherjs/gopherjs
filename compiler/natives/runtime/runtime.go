@@ -170,3 +170,7 @@ func UnlockOSThread() {}
 func Version() string {
 	return theVersion
 }
+
+func StartTrace() error { return nil }
+func StopTrace()        {}
+func ReadTrace() []byte

@@ -238,14 +238,14 @@ var $copyString = function(dst, src) {
 
 var $copySlice = function(dst, src) {
   var n = Math.min(src.$length, dst.$length);
-  $internalCopy(dst.$array, src.$array, dst.$offset, src.$offset, n, dst.constructor.elem);
+  $copyArray(dst.$array, src.$array, dst.$offset, src.$offset, n, dst.constructor.elem);
   return n;
 };
 
 var $copy = function(dst, src, typ) {
   switch (typ.kind) {
   case $kindArray:
-    $internalCopy(dst, src, 0, 0, src.length, typ.elem);
+    $copyArray(dst, src, 0, 0, src.length, typ.elem);
     break;
   case $kindStruct:
     for (var i = 0; i < typ.fields.length; i++) {
@@ -264,7 +264,7 @@ var $copy = function(dst, src, typ) {
   }
 };
 
-var $internalCopy = function(dst, src, dstOffset, srcOffset, n, elem) {
+var $copyArray = function(dst, src, dstOffset, srcOffset, n, elem) {
   if (n === 0 || (dst === src && dstOffset === srcOffset)) {
     return;
   }
@@ -365,7 +365,7 @@ var $internalAppend = function(slice, array, offset, length) {
     }
   }
 
-  $internalCopy(newArray, array, newOffset + slice.$length, offset, length, slice.constructor.elem);
+  $copyArray(newArray, array, newOffset + slice.$length, offset, length, slice.constructor.elem);
 
   var newSlice = new slice.constructor(newArray);
   newSlice.$offset = newOffset;

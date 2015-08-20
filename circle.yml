@@ -4,7 +4,7 @@ machine:
 
 dependencies:
   pre:
-    - cd /usr/local && sudo rm -rf go && curl https://storage.googleapis.com/golang/go1.5beta3.linux-amd64.tar.gz | sudo tar -xz && sudo chmod a+w go/src/path/filepath
+    - cd /usr/local && sudo rm -rf go && curl https://storage.googleapis.com/golang/go1.5.linux-amd64.tar.gz | sudo tar -xz && sudo chmod a+w go/src/path/filepath
   post:
     - npm install --global node-gyp
     - cd node-syscall && node-gyp rebuild && mkdir -p ~/.node_libraries/ && cp build/Release/syscall.node ~/.node_libraries/syscall.node

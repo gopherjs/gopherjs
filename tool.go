@@ -8,6 +8,7 @@ import (
 	"go/parser"
 	"go/scanner"
 	"go/token"
+	"go/types"
 	"io"
 	"io/ioutil"
 	"net"
@@ -29,7 +30,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/crypto/ssh/terminal"
-	"golang.org/x/tools/go/types"
 )
 
 var currentDirectory string

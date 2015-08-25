@@ -5,7 +5,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/token"
+	"go/types"
 	"net/url"
 	"sort"
 	"strconv"
@@ -13,9 +15,6 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
-
-	"golang.org/x/tools/go/exact"
-	"golang.org/x/tools/go/types"
 )
 
 func (c *funcContext) Write(b []byte) (int, error) {
@@ -173,11 +172,11 @@ func (c *funcContext) zeroValue(ty types.Type) ast.Expr {
 	case *types.Basic:
 		switch {
 		case isBoolean(t):
-			return c.newConst(ty, exact.MakeBool(false))
+			return c.newConst(ty, constant.MakeBool(false))
 		case isNumeric(t):
-			return c.newConst(ty, exact.MakeInt64(0))
+			return c.newConst(ty, constant.MakeInt64(0))
 		case isString(t):
-			return c.newConst(ty, exact.MakeString(""))
+			return c.newConst(ty, constant.MakeString(""))
 		case t.Kind() == types.UnsafePointer:
 			// fall through to "nil"
 		case t.Kind() == types.UntypedNil:
@@ -197,7 +196,7 @@ func (c *funcContext) zeroValue(ty types.Type) ast.Expr {
 	return id
 }
 
-func (c *funcContext) newConst(t types.Type, value exact.Value) ast.Expr {
+func (c *funcContext) newConst(t types.Type, value constant.Value) ast.Expr {
 	id := &ast.Ident{}
 	c.p.Types[id] = types.TypeAndValue{Type: t, Value: value}
 	return id

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/token"
+	"go/types"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,9 +14,6 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
-
-	"golang.org/x/tools/go/exact"
-	"golang.org/x/tools/go/types"
 )
 
 type expression struct {
@@ -39,39 +38,39 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		basic := exprType.Underlying().(*types.Basic)
 		switch {
 		case isBoolean(basic):
-			return c.formatExpr("%s", strconv.FormatBool(exact.BoolVal(value)))
+			return c.formatExpr("%s", strconv.FormatBool(constant.BoolVal(value)))
 		case isInteger(basic):
 			if is64Bit(basic) {
 				if basic.Kind() == types.Int64 {
-					d, ok := exact.Int64Val(value)
+					d, ok := constant.Int64Val(value)
 					if !ok {
 						panic("could not get exact uint")
 					}
 					return c.formatExpr("new %s(%s, %s)", c.typeName(exprType), strconv.FormatInt(d>>32, 10), strconv.FormatUint(uint64(d)&(1<<32-1), 10))
 				}
-				d, ok := exact.Uint64Val(value)
+				d, ok := constant.Uint64Val(value)
 				if !ok {
 					panic("could not get exact uint")
 				}
 				return c.formatExpr("new %s(%s, %s)", c.typeName(exprType), strconv.FormatUint(d>>32, 10), strconv.FormatUint(d&(1<<32-1), 10))
 			}
-			d, ok := exact.Int64Val(value)
+			d, ok := constant.Int64Val(value)
 			if !ok {
 				panic("could not get exact int")
 			}
 			return c.formatExpr("%s", strconv.FormatInt(d, 10))
 		case isFloat(basic):
-			f, _ := exact.Float64Val(value)
+			f, _ := constant.Float64Val(value)
 			return c.formatExpr("%s", strconv.FormatFloat(f, 'g', -1, 64))
 		case isComplex(basic):
-			r, _ := exact.Float64Val(exact.Real(value))
-			i, _ := exact.Float64Val(exact.Imag(value))
+			r, _ := constant.Float64Val(constant.Real(value))
+			i, _ := constant.Float64Val(constant.Imag(value))
 			if basic.Kind() == types.UntypedComplex {
 				exprType = types.Typ[types.Complex128]
 			}
 			return c.formatExpr("new %s(%s, %s)", c.typeName(exprType), strconv.FormatFloat(r, 'g', -1, 64), strconv.FormatFloat(i, 'g', -1, 64))
 		case isString(basic):
-			return c.formatExpr("%s", encodeString(exact.StringVal(value)))
+			return c.formatExpr("%s", encodeString(constant.StringVal(value)))
 		default:
 			panic("Unhandled constant type: " + basic.String())
 		}
@@ -111,7 +110,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			zero := c.translateExpr(c.zeroValue(elementType)).String()
 			for _, element := range e.Elts {
 				if kve, isKve := element.(*ast.KeyValueExpr); isKve {
-					key, ok := exact.Int64Val(c.p.Types[kve.Key].Value)
+					key, ok := constant.Int64Val(c.p.Types[kve.Key].Value)
 					if !ok {
 						panic("could not get exact int")
 					}
@@ -920,7 +919,7 @@ func (c *funcContext) identifierConstant(expr ast.Expr) (string, bool) {
 	if val == nil {
 		return "", false
 	}
-	s := exact.StringVal(val)
+	s := constant.StringVal(val)
 	if len(s) == 0 {
 		return "", false
 	}
@@ -1303,7 +1302,7 @@ func (c *funcContext) formatExprInternal(format string, a []interface{}, parens 
 		case 'f':
 			e := a[n].(ast.Expr)
 			if val := c.p.Types[e].Value; val != nil {
-				d, _ := exact.Int64Val(val)
+				d, _ := constant.Int64Val(val)
 				out.WriteString(strconv.FormatInt(d, 10))
 				return
 			}
@@ -1317,7 +1316,7 @@ func (c *funcContext) formatExprInternal(format string, a []interface{}, parens 
 		case 'h':
 			e := a[n].(ast.Expr)
 			if val := c.p.Types[e].Value; val != nil {
-				d, _ := exact.Uint64Val(val)
+				d, _ := constant.Uint64Val(val)
 				if c.p.TypeOf(e).Underlying().(*types.Basic).Kind() == types.Int64 {
 					out.WriteString(strconv.FormatInt(int64(d)>>32, 10))
 					return
@@ -1328,21 +1327,21 @@ func (c *funcContext) formatExprInternal(format string, a []interface{}, parens 
 			writeExpr(".$high")
 		case 'l':
 			if val := c.p.Types[a[n].(ast.Expr)].Value; val != nil {
-				d, _ := exact.Uint64Val(val)
+				d, _ := constant.Uint64Val(val)
 				out.WriteString(strconv.FormatUint(d&(1<<32-1), 10))
 				return
 			}
 			writeExpr(".$low")
 		case 'r':
 			if val := c.p.Types[a[n].(ast.Expr)].Value; val != nil {
-				r, _ := exact.Float64Val(exact.Real(val))
+				r, _ := constant.Float64Val(constant.Real(val))
 				out.WriteString(strconv.FormatFloat(r, 'g', -1, 64))
 				return
 			}
 			writeExpr(".$real")
 		case 'i':
 			if val := c.p.Types[a[n].(ast.Expr)].Value; val != nil {
-				i, _ := exact.Float64Val(exact.Imag(val))
+				i, _ := constant.Float64Val(constant.Imag(val))
 				out.WriteString(strconv.FormatFloat(i, 'g', -1, 64))
 				return
 			}

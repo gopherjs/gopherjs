@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/token"
+	"go/types"
 	"io"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/prelude"
 	"golang.org/x/tools/go/importer"
-	"golang.org/x/tools/go/types"
 )
 
 var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}

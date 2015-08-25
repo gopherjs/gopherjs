@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"go/types"
 	"sort"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"golang.org/x/tools/go/importer"
-	"golang.org/x/tools/go/types"
 	"golang.org/x/tools/go/types/typeutil"
 )
 

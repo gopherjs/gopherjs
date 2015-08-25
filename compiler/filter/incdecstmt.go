@@ -2,12 +2,11 @@ package filter
 
 import (
 	"go/ast"
+	"go/constant"
 	"go/token"
+	"go/types"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
-
-	"golang.org/x/tools/go/exact"
-	"golang.org/x/tools/go/types"
 )
 
 func IncDecStmt(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
@@ -30,7 +29,7 @@ func IncDecStmt(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 		}
 
 		one := &ast.BasicLit{Kind: token.INT}
-		info.Types[one] = types.TypeAndValue{Type: t, Value: exact.MakeInt64(1)}
+		info.Types[one] = types.TypeAndValue{Type: t, Value: constant.MakeInt64(1)}
 
 		return &ast.AssignStmt{
 			Lhs: []ast.Expr{s.X},

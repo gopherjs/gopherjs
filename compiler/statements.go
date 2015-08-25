@@ -3,16 +3,15 @@ package compiler
 import (
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/token"
+	"go/types"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/filter"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
-
-	"golang.org/x/tools/go/exact"
-	"golang.org/x/tools/go/types"
 )
 
 type this struct {
@@ -71,7 +70,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		tag := s.Tag
 		if tag == nil {
 			tag = ast.NewIdent("true")
-			c.p.Types[tag] = types.TypeAndValue{Type: types.Typ[types.Bool], Value: exact.MakeBool(true)}
+			c.p.Types[tag] = types.TypeAndValue{Type: types.Typ[types.Bool], Value: constant.MakeBool(true)}
 		}
 
 		if c.p.Types[tag].Value == nil {
@@ -455,7 +454,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 				panic(fmt.Sprintf("unhandled: %T", comm))
 			}
 			indexLit := &ast.BasicLit{Kind: token.INT}
-			c.p.Types[indexLit] = types.TypeAndValue{Type: types.Typ[types.Int], Value: exact.MakeInt64(int64(i))}
+			c.p.Types[indexLit] = types.TypeAndValue{Type: types.Typ[types.Int], Value: constant.MakeInt64(int64(i))}
 			caseClauses = append(caseClauses, &ast.CaseClause{
 				List: []ast.Expr{indexLit},
 				Body: clause.Body,

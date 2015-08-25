@@ -2,8 +2,7 @@ package astutil
 
 import (
 	"go/ast"
-
-	"golang.org/x/tools/go/types"
+	"go/types"
 )
 
 func RemoveParens(e ast.Expr) ast.Expr {

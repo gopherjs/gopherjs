@@ -1,6 +1,6 @@
 package typesutil
 
-import "golang.org/x/tools/go/types"
+import "go/types"
 
 func IsJsPackage(pkg *types.Package) bool {
 	return pkg != nil && pkg.Path() == "github.com/gopherjs/gopherjs/js"

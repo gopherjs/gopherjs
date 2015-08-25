@@ -3,11 +3,10 @@ package analysis
 import (
 	"go/ast"
 	"go/token"
+	"go/types"
 
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
-
-	"golang.org/x/tools/go/types"
 )
 
 type continueStmt struct {

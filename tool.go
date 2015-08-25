@@ -653,7 +653,7 @@ func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer)
 }
 
 func runNode(script string, args []string, dir string) error {
-	node := exec.Command("node", append([]string{script}, args...)...)
+	node := exec.Command("node", append([]string{"--stack_size=10000", script}, args...)...)
 	node.Dir = dir
 	node.Stdin = os.Stdin
 	node.Stdout = os.Stdout

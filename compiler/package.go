@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
-	"golang.org/x/tools/go/importer"
+	"github.com/gopherjs/gopherjs/third_party/importer"
 	"golang.org/x/tools/go/types/typeutil"
 )
 

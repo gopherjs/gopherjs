@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/prelude"
-	"golang.org/x/tools/go/importer"
+	"github.com/gopherjs/gopherjs/third_party/importer"
 )
 
 var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}

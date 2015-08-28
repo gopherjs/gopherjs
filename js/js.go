@@ -17,12 +17,12 @@
 //  | []float64             | Float64Array          | []float64                       |
 //  | all other slices      | Array                 | []interface{}                   |
 //  | arrays                | see slice type        | see slice type                  |
-//  | functions             | Function              | func(...interface{}) *js.object |
+//  | functions             | Function              | func(...interface{}) *js.Object |
 //  | time.Time             | Date                  | time.Time                       |
-//  | -                     | instanceof Node       | *js.object                      |
+//  | -                     | instanceof Node       | *js.Object                      |
 //  | maps, structs         | instanceof Object     | map[string]interface{}          |
 //
-// Additionally, for a struct containing a *js.object field, only the content of the field will be passed to JavaScript and vice versa.
+// Additionally, for a struct containing a *js.Object field, only the content of the field will be passed to JavaScript and vice versa.
 package js
 
 // Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax. A nil pointer to Object is equal to JavaScript's "null". Object can not be used as a map key.

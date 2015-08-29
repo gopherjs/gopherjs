@@ -73,7 +73,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- constant     | yes                   |                                   |
 | -- doc          | yes                   |                                   |
 | -- format       | yes                   |                                   |
-| -- importer     | yes                   | (TODO: unconfirmed, no tests)     |
+| -- importer     | no                    |                                   |
 | -- parser       | yes                   |                                   |
 | -- printer      | yes                   |                                   |
 | -- scanner      | yes                   |                                   |

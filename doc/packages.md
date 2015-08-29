@@ -70,12 +70,15 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | go              |                       |                                   |
 | -- ast          | yes                   |                                   |
 | -- build        | no                    |                                   |
+| -- constant     | untriaged             |                                   |
 | -- doc          | yes                   |                                   |
 | -- format       | yes                   |                                   |
+| -- importer     | untriaged             |                                   |
 | -- parser       | yes                   |                                   |
 | -- printer      | yes                   |                                   |
 | -- scanner      | yes                   |                                   |
 | -- token        | yes                   |                                   |
+| -- types        | untriaged             |                                   |
 | hash            |                       |                                   |
 | -- adler32      | yes                   |                                   |
 | -- crc32        | yes                   |                                   |
@@ -102,6 +105,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- rand         | yes                   |                                   |
 | mime            | yes                   |                                   |
 | -- multipart    | yes                   |                                   |
+| -- quotedprintable | untriaged          |                                   |
 | net             | no                    |                                   |
 | -- http         | partially             | emulated via XMLHttpRequest       |
 | -- -- cgi       | no                    |                                   |
@@ -130,6 +134,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- debug        | no                    |                                   |
 | -- pprof        | no                    |                                   |
 | -- race         | no                    |                                   |
+| -- trace        | untriaged             |                                   |
 | sort            | yes                   |                                   |
 | strconv         | yes                   |                                   |
 | strings         | yes                   |                                   |

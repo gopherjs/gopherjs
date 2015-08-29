@@ -348,11 +348,22 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		id := c.newIdent("", types.NewSignature(nil, nil, nil, false))
 		c.p.Uses[id] = mainFunc
 		call := &ast.CallExpr{Fun: id}
+		ifStmt := &ast.IfStmt{
+			Cond: c.newIdent("$pkg === $mainPkg", types.Typ[types.Bool]),
+			Body: &ast.BlockStmt{
+				List: []ast.Stmt{
+					&ast.ExprStmt{X: call},
+				},
+			},
+		}
 		if len(c.p.FuncDeclInfos[mainFunc].Blocking) != 0 {
 			c.Blocking[call] = true
+			c.Flattened[ifStmt] = true
 		}
 		funcDecls = append(funcDecls, &Decl{
-			InitCode: c.CatchOutput(1, func() { c.translateStmt(&ast.ExprStmt{X: call}, nil) }),
+			InitCode: c.CatchOutput(1, func() {
+				c.translateStmt(ifStmt, nil)
+			}),
 		})
 	}
 

@@ -273,6 +273,9 @@ var $internalize = function(v, t, recv) {
       var timePkg = $packages["time"];
       if (timePkg) {
         return new timePkg.Time(timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000)));
+      } else {
+        /* time package is not present, internalize as &js.Object{Date} so it can be externalized into original Date. */
+        return new $jsObjectPtr(v);
       }
     case Function:
       var funcType = $funcType([$sliceType($emptyInterface)], [$jsObjectPtr], true);

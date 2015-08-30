@@ -9,6 +9,13 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+// Make sure time.Unix func and time.Time struct it returns are always included with this package (despite DCE),
+// because they're needed for internalization/externalization of time.Time/Date. See issue https://github.com/gopherjs/gopherjs/issues/279.
+func init() {
+	// avoid dead code elimination
+	var _ Time = Unix(0, 0)
+}
+
 type runtimeTimer struct {
 	i       int32
 	when    int64

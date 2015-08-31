@@ -287,6 +287,17 @@ func TestDate(t *testing.T) {
 	}
 }
 
+// https://github.com/gopherjs/gopherjs/issues/287
+func TestInternalizeDate(t *testing.T) {
+	var a = time.Unix(0, (123 * time.Millisecond).Nanoseconds())
+	var b time.Time
+	js.Global.Set("internalizeDate", func(t time.Time) { b = t })
+	js.Global.Call("eval", "(internalizeDate(new Date(123)))")
+	if a != b {
+		t.Fail()
+	}
+}
+
 func TestEquality(t *testing.T) {
 	if js.Global.Get("Array") != js.Global.Get("Array") || js.Global.Get("Array") == js.Global.Get("String") {
 		t.Fail()

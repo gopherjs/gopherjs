@@ -480,6 +480,21 @@ func TestNewArrayBuffer(t *testing.T) {
 	}
 }
 
+func TestInternalizeExternalizeNull(t *testing.T) {
+	type S struct {
+		*js.Object
+	}
+	r := js.Global.Call("eval", "(function(f) { return f(null); })").Invoke(func(s S) S {
+		if s.Object != nil {
+			t.Fail()
+		}
+		return s
+	})
+	if r != nil {
+		t.Fail()
+	}
+}
+
 func TestInternalizeExternalizeUndefined(t *testing.T) {
 	type S struct {
 		*js.Object

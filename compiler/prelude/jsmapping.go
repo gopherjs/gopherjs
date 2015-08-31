@@ -89,7 +89,7 @@ var $externalize = function(v, t) {
     return s;
   case $kindStruct:
     var timePkg = $packages["time"];
-    if (timePkg && v.constructor === timePkg.Time.ptr) {
+    if (timePkg !== undefined && v.constructor === timePkg.Time.ptr) {
       var milli = $div64(v.UnixNano(), new $Int64(0, 1000000));
       return new Date($flatten64(milli));
     }
@@ -271,9 +271,11 @@ var $internalize = function(v, t, recv) {
       return new $Bool(!!v);
     case Date:
       var timePkg = $packages["time"];
-      if (timePkg) {
-        return new timePkg.Time(timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000)));
+      if (timePkg === undefined) {
+        /* time package is not present, internalize as &js.Object{Date} so it can be externalized into original Date. */
+        return new $jsObjectPtr(v);
       }
+      return new timePkg.Time(timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000)));
     case Function:
       var funcType = $funcType([$sliceType($emptyInterface)], [$jsObjectPtr], true);
       return new funcType($internalize(v, funcType));

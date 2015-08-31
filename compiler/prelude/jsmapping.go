@@ -315,6 +315,13 @@ var $internalize = function(v, t, recv) {
     }
     return s;
   case $kindStruct:
+    if (v !== null && v !== undefined && v.constructor === Date) {
+      var timePkg = $packages["time"];
+      if (timePkg !== undefined && t === timePkg.Time) {
+        return timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000));
+      }
+    }
+
     var noJsObject = {};
     var searchJsObject = function(t) {
       if (t === $jsObjectPtr) {

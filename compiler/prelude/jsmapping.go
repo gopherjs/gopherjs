@@ -181,6 +181,13 @@ var $internalize = function(v, t, recv) {
   if (t === $jsObjectPtr.elem) {
     $panic(new $String("cannot internalize js.Object, use *js.Object instead"));
   }
+  var timePkg = $packages["time"];
+  if (timePkg !== undefined && t === timePkg.Time) {
+    if (!(v !== null && v !== undefined && v.constructor === Date)) {
+      $panic(new $String("cannot internalize time.Time from " + typeof v + ", must be Date"));
+    }
+    return timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000));
+  }
   switch (t.kind) {
   case $kindBool:
     return !!v;
@@ -270,12 +277,11 @@ var $internalize = function(v, t, recv) {
     case Boolean:
       return new $Bool(!!v);
     case Date:
-      var timePkg = $packages["time"];
       if (timePkg === undefined) {
         /* time package is not present, internalize as &js.Object{Date} so it can be externalized into original Date. */
         return new $jsObjectPtr(v);
       }
-      return new timePkg.Time(timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000)));
+      return new timePkg.Time($internalize(v, timePkg.Time));
     case Function:
       var funcType = $funcType([$sliceType($emptyInterface)], [$jsObjectPtr], true);
       return new funcType($internalize(v, funcType));
@@ -315,13 +321,6 @@ var $internalize = function(v, t, recv) {
     }
     return s;
   case $kindStruct:
-    if (v !== null && v !== undefined && v.constructor === Date) {
-      var timePkg = $packages["time"];
-      if (timePkg !== undefined && t === timePkg.Time) {
-        return timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000));
-      }
-    }
-
     var noJsObject = {};
     var searchJsObject = function(t) {
       if (t === $jsObjectPtr) {

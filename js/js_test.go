@@ -287,6 +287,17 @@ func TestDate(t *testing.T) {
 	}
 }
 
+// https://github.com/gopherjs/gopherjs/issues/287
+func TestInternalizeDate(t *testing.T) {
+	var a = time.Unix(0, (123 * time.Millisecond).Nanoseconds())
+	var b time.Time
+	js.Global.Set("internalizeDate", func(t time.Time) { b = t })
+	js.Global.Call("eval", "(internalizeDate(new Date(123)))")
+	if a != b {
+		t.Fail()
+	}
+}
+
 func TestEquality(t *testing.T) {
 	if js.Global.Get("Array") != js.Global.Get("Array") || js.Global.Get("Array") == js.Global.Get("String") {
 		t.Fail()
@@ -476,6 +487,21 @@ func TestNewArrayBuffer(t *testing.T) {
 	b := []byte("abcd")
 	a := js.NewArrayBuffer(b[1:3])
 	if a.Get("byteLength").Int() != 2 {
+		t.Fail()
+	}
+}
+
+func TestInternalizeExternalizeNull(t *testing.T) {
+	type S struct {
+		*js.Object
+	}
+	r := js.Global.Call("eval", "(function(f) { return f(null); })").Invoke(func(s S) S {
+		if s.Object != nil {
+			t.Fail()
+		}
+		return s
+	})
+	if r != nil {
 		t.Fail()
 	}
 }

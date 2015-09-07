@@ -2,7 +2,6 @@ package jsbuiltin
 
 import (
 	"testing"
-//	"github.com/gopherjs/gopherjs/jsbuiltin"
 )
 
 
@@ -19,15 +18,40 @@ func TestEncodeURI(t *testing.T) {
 	}
 }
 
+type testData struct {
+	URL				string
+	ExpectedURL		string
+	ExpectedError	string
+}
+
 func TestDecodeURI(t *testing.T) {
-	data := map[string]string{
-		"http://foo.com/?msg=%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82%20%D0%BC%D0%B8%D1%80.": "http://foo.com/?msg=Привет мир.",
-		"http://user:host@foo.com/": "http://user:host@foo.com/",
+	data := []testData{
+		testData{
+			"http://foo.com/?msg=%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82%20%D0%BC%D0%B8%D1%80.", "http://foo.com/?msg=Привет мир.", "",
+		},
+		testData{
+			"http://user:host@foo.com/", "http://user:host@foo.com/", "",
+		},
+		testData{
+			"http://foo.com/?invalidutf8=%80", "", "JavaScript error: URI malformed",
+		},
 	}
-	for url,expected := range data {
-		result := DecodeURI(url)
-		if result != expected {
-			t.Fatalf("DecodeURI(%s) returned '%s', not '%s'", url, result, expected)
+	for _,test := range data {
+		result,err := DecodeURI(test.URL)
+		if len(test.ExpectedError) > 0 {
+			if err == nil {
+				t.Fatalf("DecodeURI(%s) should have resulted in an error", test.URL)
+			}
+			if err.Error() != test.ExpectedError {
+				t.Fatalf("DecodeURI(%s) should have resulted in error '%s', got '%s'", test.ExpectedError, err)
+			}
+		} else {
+			if err != nil && err.Error() != test.ExpectedError {
+				t.Fatal("DecodeURI() resulted in an error: %s", err)
+			}
+			if result != test.ExpectedURL {
+				t.Fatalf("DecodeURI(%s) returned '%s', not '%s'", test.URL, result, test.ExpectedURL)
+			}
 		}
 	}
 }
@@ -46,14 +70,33 @@ func TestEncodeURIComponentn(t *testing.T) {
 }
 
 func TestDecodeURIComponentn(t *testing.T) {
-	data := map[string]string{
-		"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82%20%D0%BC%D0%B8%D1%80.": "Привет мир.",
-		"bar": "bar",
+	data := []testData{
+		testData{
+			"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82%20%D0%BC%D0%B8%D1%80.", "Привет мир.", "",
+		},
+		testData{
+			"bar", "bar", "",
+		},
+		testData{
+			"%80", "", "JavaScript error: URI malformed",
+		},
 	}
-	for url,expected := range data {
-		result := DecodeURIComponent(url)
-		if result != expected {
-			t.Fatalf("DecodeURIComponent(%s) returned '%s', not '%s'", url, result, expected)
+	for _,test := range data {
+		result,err := DecodeURIComponent(test.URL)
+		if len(test.ExpectedError) > 0 {
+			if err == nil {
+				t.Fatalf("DecodeURIComponent(%s) should have resulted in an error", test.URL)
+			}
+			if err.Error() != test.ExpectedError {
+				t.Fatalf("DecodeURIComponent(%s) should have resulted in error '%s', got '%s'", test.ExpectedError, err)
+			}
+		} else {
+			if err != nil && err.Error() != test.ExpectedError {
+				t.Fatal("DecodeURIComponent() resulted in an error: %s", err)
+			}
+			if result != test.ExpectedURL {
+				t.Fatalf("DecodeURIComponent(%s) returned '%s', not '%s'", test.URL, result, test.ExpectedURL)
+			}
 		}
 	}
 }

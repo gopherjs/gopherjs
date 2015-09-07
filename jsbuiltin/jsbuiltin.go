@@ -9,9 +9,16 @@ import (
 )
 
 // DecodeURI decodes a Uniform Resource Identifier (URI) previously created
-// by EncodeURI() or by a similar routine.
-func DecodeURI(uri string) string {
-	return js.Global.Call("decodeURI", uri).String()
+// by EncodeURI() or by a similar routine. If the underlying JavaScript
+// function throws an error, it is returned as an error.
+func DecodeURI(uri string) (raw string,err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = r.(*js.Error)
+		}
+	}()
+	raw = js.Global.Call("decodeURI", uri).String()
+	return
 }
 
 // EncodeURI encodes a Uniform Resource Identifier (URI) by replacing each
@@ -32,9 +39,16 @@ func EncodeURIComponent(uri string) string {
 }
 
 // DecodeURIComponent decodes a Uniform Resource Identifier (URI) component
-// previously created by EncodeURIComponent() or by a similar routine
-func DecodeURIComponent(uri string) string {
-	return js.Global.Call("decodeURIComponent", uri).String()
+// previously created by EncodeURIComponent() or by a similar routine. If the
+// underlying JavaScript function throws an error, it is returned as an error.
+func DecodeURIComponent(uri string) (raw string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = r.(*js.Error)
+		}
+	}()
+	raw = js.Global.Call("decodeURIComponent", uri).String()
+	return
 }
 
 // IsFinite determines whether the passed value is a finite number, and returns

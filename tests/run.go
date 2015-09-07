@@ -45,17 +45,6 @@ import (
 //
 var knownFails = map[string]failReason{
 	// GopherJS compiler panics.
-	"fixedbugs/bug180.go": {category: compilerPanic, desc: `
-panic: 20
-
-goroutine 1 [running]:
-github.com/gopherjs/gopherjs/compiler.(*funcContext).fixNumber(0xc820164210, 0xc82000f360, 0x9088a0, 0xc820018ea0)
-	github.com/gopherjs/gopherjs/compiler/expressions.go:1176 +0x235
-`},
-	"fixedbugs/issue12133.go": {category: compilerPanic, desc: `
-github.com/gopherjs/gopherjs/compiler.(*funcContext).fixNumber(0xc82027c840, 0xc82004c820, 0x9088a0, 0xc82004c6c0)
-	github.com/gopherjs/gopherjs/compiler/expressions.go:1176 +0x235
-`},
 	"fixedbugs/issue5793.go": {category: compilerPanic, desc: `
 panic: runtime error: index out of range
 

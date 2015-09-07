@@ -1164,7 +1164,7 @@ func (c *funcContext) fixNumber(value *expression, basic *types.Basic) *expressi
 		return c.formatParenExpr("%s << 16 >> 16", value)
 	case types.Uint16:
 		return c.formatParenExpr("%s << 16 >>> 16", value)
-	case types.Int32, types.Int:
+	case types.Int32, types.Int, types.UntypedInt:
 		return c.formatParenExpr("%s >> 0", value)
 	case types.Uint32, types.Uint, types.Uintptr:
 		return c.formatParenExpr("%s >>> 0", value)
@@ -1173,7 +1173,7 @@ func (c *funcContext) fixNumber(value *expression, basic *types.Basic) *expressi
 	case types.Float64:
 		return value
 	default:
-		panic(int(basic.Kind()))
+		panic(fmt.Sprintf("fixNumber: unhandled basic.Kind(): %s", basic.String()))
 	}
 }
 

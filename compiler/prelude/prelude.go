@@ -335,6 +335,10 @@ var $append = function(slice) {
 };
 
 var $appendSlice = function(slice, toAppend) {
+  if (toAppend.constructor === String) {
+    var bytes = $stringToBytes(toAppend);
+    return $internalAppend(slice, bytes, 0, bytes.length);
+  }
   return $internalAppend(slice, toAppend.$array, toAppend.$offset, toAppend.$length);
 };
 

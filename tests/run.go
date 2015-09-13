@@ -45,13 +45,6 @@ import (
 //
 var knownFails = map[string]failReason{
 	// GopherJS compiler panics.
-	"fixedbugs/issue5793.go": {category: compilerPanic, desc: `
-panic: runtime error: index out of range
-
-goroutine 1 [running]:
-github.com/gopherjs/gopherjs/compiler.(*funcContext).translateBuiltin(0xc820160420, 0x6331c0, 0x7, 0xc8201344e0, 0x1, 0x1, 0xc820135900, 0xe04788, 0x908820, 0xc820135910)
-	github.com/gopherjs/gopherjs/compiler/expressions.go:882 +0x41c7
-`},
 	"fixedbugs/issue9691.go": {category: compilerPanic, desc: `
 panic: Unhandled lhs type: *types.Map
 

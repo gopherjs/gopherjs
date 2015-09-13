@@ -544,7 +544,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *ast.Ident:
 			obj := c.p.Uses[f]
 			if o, ok := obj.(*types.Builtin); ok {
-				return c.translateBuiltin(o.Name(), e.Args, e.Ellipsis.IsValid(), exprType)
+				return c.translateBuiltin(o.Name(), sig, e.Args, e.Ellipsis.IsValid())
 			}
 			if typesutil.IsJsPackage(obj.Pkg()) && obj.Name() == "InternalObject" {
 				return c.translateExpr(e.Args[0])
@@ -799,10 +799,10 @@ func (c *funcContext) makeReceiver(x ast.Expr, sel *types.Selection) *expression
 	return recv
 }
 
-func (c *funcContext) translateBuiltin(name string, args []ast.Expr, ellipsis bool, typ types.Type) *expression {
+func (c *funcContext) translateBuiltin(name string, sig *types.Signature, args []ast.Expr, ellipsis bool) *expression {
 	switch name {
 	case "new":
-		t := typ.(*types.Pointer)
+		t := sig.Results().At(0).Type().(*types.Pointer)
 		if c.p.Pkg.Path() == "syscall" && types.Identical(t.Elem().Underlying(), types.Typ[types.Uintptr]) {
 			return c.formatExpr("new Uint8Array(8)")
 		}
@@ -860,13 +860,11 @@ func (c *funcContext) translateBuiltin(name string, args []ast.Expr, ellipsis bo
 	case "panic":
 		return c.formatExpr("$panic(%s)", c.translateImplicitConversion(args[0], types.NewInterface(nil, nil)))
 	case "append":
-		if len(args) == 1 {
-			return c.translateExpr(args[0])
+		if ellipsis || len(args) == 1 {
+			argStr := c.translateArgs(sig, args, ellipsis, false)
+			return c.formatExpr("$appendSlice(%s, %s)", argStr[0], argStr[1])
 		}
-		if ellipsis {
-			return c.formatExpr("$appendSlice(%e, %s)", args[0], c.translateConversionToSlice(args[1], typ))
-		}
-		sliceType := typ.Underlying().(*types.Slice)
+		sliceType := sig.Results().At(0).Type().Underlying().(*types.Slice)
 		return c.formatExpr("$append(%e, %s)", args[0], strings.Join(c.translateExprSlice(args[1:], sliceType.Elem()), ", "))
 	case "delete":
 		keyType := c.p.Types[args[0]].Type.Underlying().(*types.Map).Key()
@@ -879,7 +877,8 @@ func (c *funcContext) translateBuiltin(name string, args []ast.Expr, ellipsis bo
 	case "print", "println":
 		return c.formatExpr("console.log(%s)", strings.Join(c.translateExprSlice(args, nil), ", "))
 	case "complex":
-		return c.formatExpr("new %s(%e, %e)", c.typeName(typ), args[0], args[1])
+		argStr := c.translateArgs(sig, args, ellipsis, false)
+		return c.formatExpr("new %s(%s, %s)", c.typeName(sig.Results().At(0).Type()), argStr[0], argStr[1])
 	case "real":
 		return c.formatExpr("%e.$real", args[0])
 	case "imag":
@@ -1112,8 +1111,6 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 
 func (c *funcContext) translateConversionToSlice(expr ast.Expr, desiredType types.Type) *expression {
 	switch c.p.Types[expr].Type.Underlying().(type) {
-	case *types.Basic:
-		return c.formatExpr("new %s($stringToBytes(%e))", c.typeName(desiredType), expr)
 	case *types.Array, *types.Pointer:
 		return c.formatExpr("new %s(%e)", c.typeName(desiredType), expr)
 	}

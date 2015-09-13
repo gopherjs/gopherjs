@@ -24,7 +24,7 @@ func (v *hasSideEffectVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	}
 	switch n := node.(type) {
 	case *ast.CallExpr:
-		if _, isSig := v.info.Types[n.Fun].Type.(*types.Signature); isSig { // skip conversions
+		if _, isSig := v.info.TypeOf(n.Fun).(*types.Signature); isSig { // skip conversions
 			v.hasSideEffect = true
 			return nil
 		}

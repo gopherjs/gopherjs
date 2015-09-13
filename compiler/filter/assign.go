@@ -44,7 +44,7 @@ func Assign(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 		viaTmpVars = func(expr ast.Expr, name string) ast.Expr {
 			switch e := astutil.RemoveParens(expr).(type) {
 			case *ast.IndexExpr:
-				return astutil.SetType(info.Info, info.Types[e].Type, &ast.IndexExpr{
+				return astutil.SetType(info.Info, info.TypeOf(e), &ast.IndexExpr{
 					X:     viaTmpVars(e.X, "_slice"),
 					Index: viaTmpVars(e.Index, "_index"),
 				})
@@ -60,10 +60,10 @@ func Assign(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 					Sel: e.Sel,
 				}
 				info.Selections[newSel] = sel
-				return astutil.SetType(info.Info, info.Types[e].Type, newSel)
+				return astutil.SetType(info.Info, info.TypeOf(e), newSel)
 
 			case *ast.StarExpr:
-				return astutil.SetType(info.Info, info.Types[e].Type, &ast.StarExpr{
+				return astutil.SetType(info.Info, info.TypeOf(e), &ast.StarExpr{
 					X: viaTmpVars(e.X, "_ptr"),
 				})
 
@@ -71,7 +71,7 @@ func Assign(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 				return e
 
 			default:
-				tmpVar := astutil.NewIdent(name, info.Types[e].Type, info.Info, info.Pkg)
+				tmpVar := astutil.NewIdent(name, info.TypeOf(e), info.Info, info.Pkg)
 				list = append(list, &ast.AssignStmt{
 					Lhs: []ast.Expr{tmpVar},
 					Tok: token.DEFINE,
@@ -88,10 +88,10 @@ func Assign(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 			Lhs: []ast.Expr{lhs},
 			Tok: token.ASSIGN,
 			Rhs: []ast.Expr{
-				astutil.SetType(info.Info, info.Types[s.Lhs[0]].Type, &ast.BinaryExpr{
+				astutil.SetType(info.Info, info.TypeOf(s.Lhs[0]), &ast.BinaryExpr{
 					X:  lhs,
 					Op: op,
-					Y: astutil.SetType(info.Info, info.Types[s.Rhs[0]].Type, &ast.ParenExpr{
+					Y: astutil.SetType(info.Info, info.TypeOf(s.Rhs[0]), &ast.ParenExpr{
 						X: s.Rhs[0],
 					}),
 				}),

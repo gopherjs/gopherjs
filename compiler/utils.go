@@ -75,7 +75,7 @@ func (c *funcContext) Delayed(f func()) {
 
 func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, ellipsis, clone bool) []string {
 	if len(argExprs) == 1 {
-		if tuple, isTuple := c.p.Types[argExprs[0]].Type.(*types.Tuple); isTuple {
+		if tuple, isTuple := c.p.TypeOf(argExprs[0]).(*types.Tuple); isTuple {
 			tupleVar := c.newVariable("_tuple")
 			c.Printf("%s = %s;", tupleVar, c.translateExpr(argExprs[0]))
 			argExprs = make([]ast.Expr, tuple.Len())

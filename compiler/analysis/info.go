@@ -208,7 +208,7 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 			c.markBlocking(c.analyzeStack)
 		}
 	case *ast.RangeStmt:
-		if _, ok := c.p.Types[n.X].Type.Underlying().(*types.Chan); ok {
+		if _, ok := c.p.TypeOf(n.X).Underlying().(*types.Chan); ok {
 			c.markBlocking(c.analyzeStack)
 		}
 	case *ast.SelectStmt:

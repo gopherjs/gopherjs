@@ -12,9 +12,9 @@ import (
 
 func IncDecStmt(stmt ast.Stmt, info *analysis.Info) ast.Stmt {
 	if s, ok := stmt.(*ast.IncDecStmt); ok {
-		t := info.Types[s.X].Type
+		t := info.TypeOf(s.X)
 		if iExpr, isIExpr := s.X.(*ast.IndexExpr); isIExpr {
-			switch u := info.Types[iExpr.X].Type.Underlying().(type) {
+			switch u := info.TypeOf(iExpr.X).Underlying().(type) {
 			case *types.Array:
 				t = u.Elem()
 			case *types.Slice:

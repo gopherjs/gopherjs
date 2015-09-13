@@ -188,7 +188,7 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 		return fmt.Sprintf("%s.zero()", c.typeName(ty))
 	case *types.Signature:
 		return "$throwNilPointerError"
-	case *types.Slice:
+	case *types.Slice, *types.Pointer, *types.Chan:
 		return fmt.Sprintf("%s.nil", c.typeName(ty))
 	case *types.Struct:
 		return fmt.Sprintf("new %s.ptr()", c.typeName(ty))
@@ -196,8 +196,9 @@ func (c *funcContext) zeroValue(ty types.Type) string {
 		return "false"
 	case *types.Interface:
 		return "$ifaceNil"
+	default:
+		panic(fmt.Sprintf("unexpected type: %T", t))
 	}
-	return fmt.Sprintf("%s.nil", c.typeName(ty))
 }
 
 func (c *funcContext) newVariable(name string) string {

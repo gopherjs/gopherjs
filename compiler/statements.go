@@ -150,10 +150,10 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			c.translateLoopingStmt(func() string { return iVar + " < " + refVar + ".length" }, s.Body, func() {
 				c.Printf("%s = $decodeRune(%s, %s);", runeVar, refVar, iVar)
 				if !isBlank(s.Key) {
-					c.Printf("%s", c.translateAssign(s.Key, iVar, types.Typ[types.Int], s.Tok == token.DEFINE))
+					c.Printf("%s", c.translateAssign(s.Key, c.newIdent(iVar, types.Typ[types.Int]), s.Tok == token.DEFINE))
 				}
 				if !isBlank(s.Value) {
-					c.Printf("%s", c.translateAssign(s.Value, runeVar+"[0]", types.Typ[types.Rune], s.Tok == token.DEFINE))
+					c.Printf("%s", c.translateAssign(s.Value, c.newIdent(runeVar+"[0]", types.Typ[types.Rune]), s.Tok == token.DEFINE))
 				}
 			}, func() {
 				c.Printf("%s += %s[1];", iVar, runeVar)
@@ -172,10 +172,10 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 					Body: &ast.BlockStmt{List: []ast.Stmt{&ast.BranchStmt{Tok: token.CONTINUE}}},
 				}, nil)
 				if !isBlank(s.Key) {
-					c.Printf("%s", c.translateAssign(s.Key, entryVar+".k", t.Key(), s.Tok == token.DEFINE))
+					c.Printf("%s", c.translateAssign(s.Key, c.newIdent(entryVar+".k", t.Key()), s.Tok == token.DEFINE))
 				}
 				if !isBlank(s.Value) {
-					c.Printf("%s", c.translateAssign(s.Value, entryVar+".v", t.Elem(), s.Tok == token.DEFINE))
+					c.Printf("%s", c.translateAssign(s.Value, c.newIdent(entryVar+".v", t.Elem()), s.Tok == token.DEFINE))
 				}
 			}, func() {
 				c.Printf("%s++;", iVar)
@@ -199,13 +199,13 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			c.Printf("%s = 0;", iVar)
 			c.translateLoopingStmt(func() string { return iVar + " < " + length }, s.Body, func() {
 				if !isBlank(s.Key) {
-					c.Printf("%s", c.translateAssign(s.Key, iVar, types.Typ[types.Int], s.Tok == token.DEFINE))
+					c.Printf("%s", c.translateAssign(s.Key, c.newIdent(iVar, types.Typ[types.Int]), s.Tok == token.DEFINE))
 				}
 				if !isBlank(s.Value) {
-					c.Printf("%s", c.translateAssign(s.Value, c.translateImplicitConversion(c.setType(&ast.IndexExpr{
+					c.Printf("%s", c.translateAssign(s.Value, c.setType(&ast.IndexExpr{
 						X:     c.newIdent(refVar, t),
 						Index: c.newIdent(iVar, types.Typ[types.Int]),
-					}, elemType), elemType).String(), elemType, s.Tok == token.DEFINE))
+					}, elemType), s.Tok == token.DEFINE))
 				}
 			}, func() {
 				c.Printf("%s++;", iVar)
@@ -332,7 +332,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 				}
 				return
 			}
-			c.Printf("%s", c.translateAssignOfExpr(lhs, s.Rhs[0], s.Tok == token.DEFINE))
+			c.Printf("%s", c.translateAssign(lhs, s.Rhs[0], s.Tok == token.DEFINE))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			tupleVar := c.newVariable("_tuple")
@@ -341,7 +341,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			for i, lhs := range s.Lhs {
 				lhs = astutil.RemoveParens(lhs)
 				if !isBlank(lhs) {
-					out += " " + c.translateAssignOfExpr(lhs, c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), s.Tok == token.DEFINE)
+					out += " " + c.translateAssign(lhs, c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), s.Tok == token.DEFINE)
 				}
 			}
 			c.Printf("%s", out)
@@ -356,12 +356,12 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 					}
 					continue
 				}
-				parts = append(parts, c.translateAssignOfExpr(c.newIdent(tmpVars[i], c.p.TypeOf(s.Lhs[i])), rhs, true))
+				parts = append(parts, c.translateAssign(c.newIdent(tmpVars[i], c.p.TypeOf(s.Lhs[i])), rhs, true))
 			}
 			for i, lhs := range s.Lhs {
 				lhs = astutil.RemoveParens(lhs)
 				if !isBlank(lhs) {
-					parts = append(parts, c.translateAssignOfExpr(lhs, c.newIdent(tmpVars[i], c.p.TypeOf(lhs)), s.Tok == token.DEFINE))
+					parts = append(parts, c.translateAssign(lhs, c.newIdent(tmpVars[i], c.p.TypeOf(lhs)), s.Tok == token.DEFINE))
 				}
 			}
 			c.Printf("%s", strings.Join(parts, " "))
@@ -697,7 +697,12 @@ func (c *funcContext) translateLoopingStmt(cond func() string, body *ast.BlockSt
 	c.PrintCond(!flatten, "}", fmt.Sprintf("$s = %d; continue; case %d:", data.beginCase, data.endCase))
 }
 
-func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, define bool) string {
+func (c *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
+	lhs = astutil.RemoveParens(lhs)
+	if isBlank(lhs) {
+		panic("translateAssign with blank lhs")
+	}
+
 	if l, ok := lhs.(*ast.IndexExpr); ok {
 		if t, ok := c.p.TypeOf(l.X).Underlying().(*types.Map); ok {
 			if typesutil.IsJsObject(c.p.TypeOf(l.Index)) {
@@ -709,29 +714,22 @@ func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, define bool) stri
 	}
 
 	lhsType := c.p.TypeOf(lhs)
+	rhsExpr := c.translateImplicitConversion(rhs, lhsType)
 	if _, ok := rhs.(*ast.CompositeLit); ok && define {
-		return fmt.Sprintf("%s = %s;", c.translateExpr(lhs), c.translateImplicitConversion(rhs, lhsType)) // skip $copy
-	}
-	return c.translateAssign(lhs, c.translateImplicitConversion(rhs, lhsType).String(), lhsType, define)
-}
-
-func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, define bool) string {
-	lhs = astutil.RemoveParens(lhs)
-	if isBlank(lhs) {
-		panic("translateAssign with blank lhs")
+		return fmt.Sprintf("%s = %s;", c.translateExpr(lhs), rhsExpr) // skip $copy
 	}
 
 	isReflectValue := false
-	if named, ok := typ.(*types.Named); ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == "reflect" && named.Obj().Name() == "Value" {
+	if named, ok := lhsType.(*types.Named); ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == "reflect" && named.Obj().Name() == "Value" {
 		isReflectValue = true
 	}
 	if !isReflectValue { // this is a performance hack, but it is safe since reflect.Value has no exported fields and the reflect package does not violate this assumption
-		switch typ.Underlying().(type) {
+		switch lhsType.Underlying().(type) {
 		case *types.Array, *types.Struct:
 			if define {
-				return fmt.Sprintf("%s = $clone(%s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
+				return fmt.Sprintf("%s = $clone(%s, %s);", c.translateExpr(lhs), rhsExpr, c.typeName(lhsType))
 			}
-			return fmt.Sprintf("$copy(%s, %s, %s);", c.translateExpr(lhs), rhs, c.typeName(typ))
+			return fmt.Sprintf("$copy(%s, %s, %s);", c.translateExpr(lhs), rhsExpr, c.typeName(lhsType))
 		}
 	}
 
@@ -741,20 +739,20 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 		if o == nil {
 			o = c.p.Uses[l]
 		}
-		return fmt.Sprintf("%s = %s;", c.objectName(o), rhs)
+		return fmt.Sprintf("%s = %s;", c.objectName(o), rhsExpr)
 	case *ast.SelectorExpr:
 		sel, ok := c.p.Selections[l]
 		if !ok {
 			// qualified identifier
-			return fmt.Sprintf("%s = %s;", c.objectName(c.p.Uses[l.Sel]), rhs)
+			return fmt.Sprintf("%s = %s;", c.objectName(c.p.Uses[l.Sel]), rhsExpr)
 		}
 		fields, jsTag := c.translateSelection(sel, l.Pos())
 		if jsTag != "" {
-			return fmt.Sprintf("%s.%s.%s = %s;", c.translateExpr(l.X), strings.Join(fields, "."), jsTag, c.externalize(rhs, sel.Type()))
+			return fmt.Sprintf("%s.%s.%s = %s;", c.translateExpr(l.X), strings.Join(fields, "."), jsTag, c.externalize(rhsExpr.String(), sel.Type()))
 		}
-		return fmt.Sprintf("%s.%s = %s;", c.translateExpr(l.X), strings.Join(fields, "."), rhs)
+		return fmt.Sprintf("%s.%s = %s;", c.translateExpr(l.X), strings.Join(fields, "."), rhsExpr)
 	case *ast.StarExpr:
-		return fmt.Sprintf("%s.$set(%s);", c.translateExpr(l.X), rhs)
+		return fmt.Sprintf("%s.$set(%s);", c.translateExpr(l.X), rhsExpr)
 	case *ast.IndexExpr:
 		switch t := c.p.TypeOf(l.X).Underlying().(type) {
 		case *types.Array, *types.Pointer:
@@ -762,9 +760,9 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 			if _, ok := t.(*types.Pointer); ok { // check pointer for nix (attribute getter causes a panic)
 				pattern = `%1e.nilCheck, ` + pattern
 			}
-			return c.formatExpr(pattern, l.X, l.Index, rhs).String() + ";"
+			return c.formatExpr(pattern, l.X, l.Index, rhsExpr).String() + ";"
 		case *types.Slice:
-			return c.formatExpr(rangeCheck("%1e.$array[%1e.$offset + %2f] = %3s", c.p.Types[l.Index].Value != nil, false), l.X, l.Index, rhs).String() + ";"
+			return c.formatExpr(rangeCheck("%1e.$array[%1e.$offset + %2f] = %3s", c.p.Types[l.Index].Value != nil, false), l.X, l.Index, rhsExpr).String() + ";"
 		default:
 			panic(fmt.Sprintf("Unhandled lhs type: %T\n", t))
 		}

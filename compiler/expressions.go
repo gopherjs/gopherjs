@@ -213,17 +213,18 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				if c.p.escapingVars[obj] {
 					return c.formatExpr("(%1s.$ptr || (%1s.$ptr = new %2s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %1s)))", c.p.objectNames[obj], c.typeName(exprType))
 				}
-				return c.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, c.varPtrName(obj), c.typeName(exprType), c.objectName(obj), c.translateAssign(x, "$v", exprType, false))
+				return c.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, c.varPtrName(obj), c.typeName(exprType), c.objectName(obj), c.translateAssign(x, c.newIdent("$v", exprType), false))
 			case *ast.SelectorExpr:
 				sel, ok := c.p.Selections[x]
 				if !ok {
 					// qualified identifier
 					obj := c.p.Uses[x.Sel].(*types.Var)
-					return c.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, c.varPtrName(obj), c.typeName(exprType), c.objectName(obj), c.translateAssign(x, "$v", exprType, false))
+					return c.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, c.varPtrName(obj), c.typeName(exprType), c.objectName(obj), c.translateAssign(x, c.newIdent("$v", exprType), false))
 				}
 				newSel := &ast.SelectorExpr{X: c.newIdent("this.$target", c.p.TypeOf(x.X)), Sel: x.Sel}
+				c.setType(newSel, exprType)
 				c.p.Selections[newSel] = sel
-				return c.formatExpr("(%1e.$ptr_%2s || (%1e.$ptr_%2s = new %3s(function() { return %4e; }, function($v) { %5s }, %1e)))", x.X, x.Sel.Name, c.typeName(exprType), newSel, c.translateAssign(newSel, "$v", exprType, false))
+				return c.formatExpr("(%1e.$ptr_%2s || (%1e.$ptr_%2s = new %3s(function() { return %4e; }, function($v) { %5s }, %1e)))", x.X, x.Sel.Name, c.typeName(exprType), newSel, c.translateAssign(newSel, c.newIdent("$v", exprType), false))
 			case *ast.IndexExpr:
 				if _, ok := c.p.TypeOf(x.X).Underlying().(*types.Slice); ok {
 					return c.formatExpr("$indexPtr(%1e.$array, %1e.$offset + %2e, %3s)", x.X, x.Index, c.typeName(exprType))

@@ -44,15 +44,6 @@ import (
 // TODO: Reduce these to zero or as close as possible.
 //
 var knownFails = map[string]failReason{
-	// GopherJS compiler panics.
-	"fixedbugs/issue9691.go": {category: compilerPanic, desc: `
-panic: Unhandled lhs type: *types.Map
-
-goroutine 1 [running]:
-github.com/gopherjs/gopherjs/compiler.(*funcContext).translateAssign(0xc820160210, 0xe00488, 0xc820105050, 0x632508, 0x2, 0xcb46b0, 0x908660, 0x0, 0x0, 0x0)
-	github.com/gopherjs/gopherjs/compiler/statements.go:785 +0x1931
-`},
-
 	"fixedbugs/bug243.go":    {desc: "TypeError: undefined is not a function"},
 	"fixedbugs/issue4495.go": {desc: "TypeError: Cannot read property 'm' of undefined"},
 

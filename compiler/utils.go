@@ -13,6 +13,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 
+	"golang.org/x/tools/go/exact"
 	"golang.org/x/tools/go/types"
 )
 
@@ -164,41 +165,33 @@ func (c *funcContext) translateSelection(sel *types.Selection, pos token.Pos) ([
 	return fields, ""
 }
 
-func (c *funcContext) zeroValue(ty types.Type) string {
-	if typesutil.IsJsObject(ty) {
-		return "null"
-	}
+var nilObj = types.Universe.Lookup("nil")
+
+func (c *funcContext) zeroValue(ty types.Type) ast.Expr {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
 		switch {
-		case is64Bit(t) || isComplex(t):
-			return fmt.Sprintf("new %s(0, 0)", c.typeName(ty))
 		case isBoolean(t):
-			return "false"
-		case isNumeric(t), t.Kind() == types.UnsafePointer:
-			return "0"
+			return c.newConst(ty, exact.MakeBool(false))
+		case isNumeric(t):
+			return c.newConst(ty, exact.MakeInt64(0))
 		case isString(t):
-			return `""`
+			return c.newConst(ty, exact.MakeString(""))
 		case t.Kind() == types.UntypedNil:
 			panic("Zero value for untyped nil.")
-		default:
-			panic("Unhandled type")
 		}
-	case *types.Array:
-		return fmt.Sprintf("%s.zero()", c.typeName(ty))
-	case *types.Signature:
-		return "$throwNilPointerError"
-	case *types.Slice, *types.Pointer, *types.Chan:
-		return fmt.Sprintf("%s.nil", c.typeName(ty))
-	case *types.Struct:
-		return fmt.Sprintf("new %s.ptr()", c.typeName(ty))
-	case *types.Map:
-		return "false"
-	case *types.Interface:
-		return "$ifaceNil"
-	default:
-		panic(fmt.Sprintf("unexpected type: %T", t))
+	case *types.Array, *types.Struct:
+		return c.setType(&ast.CompositeLit{}, ty)
 	}
+	id := c.newIdent("nil", ty)
+	c.p.Uses[id] = nilObj
+	return id
+}
+
+func (c *funcContext) newConst(t types.Type, value exact.Value) ast.Expr {
+	id := &ast.Ident{}
+	c.p.Types[id] = types.TypeAndValue{Type: t, Value: value}
+	return id
 }
 
 func (c *funcContext) newVariable(name string) string {

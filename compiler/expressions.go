@@ -108,7 +108,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		collectIndexedElements := func(elementType types.Type) []string {
 			var elements []string
 			i := 0
-			zero := c.zeroValue(elementType)
+			zero := c.translateExpr(c.zeroValue(elementType)).String()
 			for _, element := range e.Elts {
 				if kve, isKve := element.(*ast.KeyValueExpr); isKve {
 					key, ok := exact.Int64Val(c.p.Types[kve.Key].Value)
@@ -131,9 +131,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Array:
 			elements := collectIndexedElements(t.Elem())
 			if len(elements) == 0 {
-				return c.formatExpr("%s", c.zeroValue(t))
+				return c.formatExpr("%s.zero()", c.typeName(t))
 			}
-			zero := c.zeroValue(t.Elem())
+			zero := c.translateExpr(c.zeroValue(t.Elem())).String()
 			for len(elements) < int(t.Len()) {
 				elements = append(elements, zero)
 			}
@@ -162,7 +162,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			if isKeyValue {
 				for i := range elements {
-					elements[i] = c.zeroValue(t.Field(i).Type())
+					elements[i] = c.translateExpr(c.zeroValue(t.Field(i).Type())).String()
 				}
 				for _, element := range e.Elts {
 					kve := element.(*ast.KeyValueExpr)
@@ -462,9 +462,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			key := fmt.Sprintf("%s.keyFor(%s)", c.typeName(t.Key()), c.translateImplicitConversion(e.Index, t.Key()))
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
-				return c.formatExpr(`(%1s = %2e[%3s], %1s !== undefined ? [%1s.v, true] : [%4s, false])`, c.newVariable("_entry"), e.X, key, c.zeroValue(t.Elem()))
+				return c.formatExpr(`(%1s = %2e[%3s], %1s !== undefined ? [%1s.v, true] : [%4e, false])`, c.newVariable("_entry"), e.X, key, c.zeroValue(t.Elem()))
 			}
-			return c.formatExpr(`(%1s = %2e[%3s], %1s !== undefined ? %1s.v : %4s)`, c.newVariable("_entry"), e.X, key, c.zeroValue(t.Elem()))
+			return c.formatExpr(`(%1s = %2e[%3s], %1s !== undefined ? %1s.v : %4e)`, c.newVariable("_entry"), e.X, key, c.zeroValue(t.Elem()))
 		case *types.Basic:
 			return c.formatExpr("%e.charCodeAt(%f)", e.X, e.Index)
 		default:
@@ -728,7 +728,26 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.TypeName:
 			return c.formatExpr("%s", c.typeName(o.Type()))
 		case *types.Nil:
-			return c.formatExpr("%s", c.zeroValue(c.p.TypeOf(e)))
+			if typesutil.IsJsObject(exprType) {
+				return c.formatExpr("null")
+			}
+			switch t := exprType.Underlying().(type) {
+			case *types.Basic:
+				if t.Kind() != types.UnsafePointer {
+					panic("unexpected basic type")
+				}
+				return c.formatExpr("0")
+			case *types.Slice, *types.Pointer, *types.Chan:
+				return c.formatExpr("%s.nil", c.typeName(exprType))
+			case *types.Map:
+				return c.formatExpr("false")
+			case *types.Interface:
+				return c.formatExpr("$ifaceNil")
+			case *types.Signature:
+				return c.formatExpr("$throwNilPointerError")
+			default:
+				panic(fmt.Sprintf("unexpected type: %T", t))
+			}
 		default:
 			panic(fmt.Sprintf("Unhandled object: %T\n", o))
 		}
@@ -808,9 +827,9 @@ func (c *funcContext) translateBuiltin(name string, sig *types.Signature, args [
 		}
 		switch t.Elem().Underlying().(type) {
 		case *types.Struct, *types.Array:
-			return c.formatExpr("%s", c.zeroValue(t.Elem()))
+			return c.formatExpr("%e", c.zeroValue(t.Elem()))
 		default:
-			return c.formatExpr("$newDataPointer(%s, %s)", c.zeroValue(t.Elem()), c.typeName(t))
+			return c.formatExpr("$newDataPointer(%e, %s)", c.zeroValue(t.Elem()), c.typeName(t))
 		}
 	case "make":
 		switch argType := c.p.TypeOf(args[0]).Underlying().(type) {
@@ -1035,7 +1054,7 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 			if c.p.Pkg.Path() == "syscall" && types.Identical(exprType, types.Typ[types.UnsafePointer]) {
 				array := c.newVariable("_array")
 				target := c.newVariable("_struct")
-				return c.formatExpr("(%s = %e, %s = %s, %s, %s)", array, expr, target, c.zeroValue(t.Elem()), c.loadStruct(array, target, s), target)
+				return c.formatExpr("(%s = %e, %s = %e, %s, %s)", array, expr, target, c.zeroValue(t.Elem()), c.loadStruct(array, target, s), target)
 			}
 			return c.formatExpr("$pointerOfStructConversion(%e, %s)", expr, c.typeName(t))
 		}
@@ -1076,7 +1095,7 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 		return c.translateExpr(expr)
 	}
 	if expr == nil {
-		return c.formatExpr("%s", c.zeroValue(desiredType))
+		return c.formatExpr("%e", c.zeroValue(desiredType))
 	}
 
 	exprType := c.p.TypeOf(expr)
@@ -1086,7 +1105,7 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 
 	basicExprType, isBasicExpr := exprType.Underlying().(*types.Basic)
 	if isBasicExpr && basicExprType.Kind() == types.UntypedNil {
-		return c.formatExpr("%s", c.zeroValue(desiredType))
+		return c.formatExpr("%e", c.zeroValue(desiredType))
 	}
 
 	switch desiredType.Underlying().(type) {

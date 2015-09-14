@@ -332,8 +332,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 				}
 				return
 			}
-			lhsType := c.p.TypeOf(s.Lhs[0])
-			c.Printf("%s", c.translateAssignOfExpr(lhs, s.Rhs[0], lhsType, s.Tok == token.DEFINE))
+			c.Printf("%s", c.translateAssignOfExpr(lhs, s.Rhs[0], s.Tok == token.DEFINE))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			tupleVar := c.newVariable("_tuple")
@@ -342,8 +341,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			for i, lhs := range s.Lhs {
 				lhs = astutil.RemoveParens(lhs)
 				if !isBlank(lhs) {
-					lhsType := c.p.TypeOf(s.Lhs[i])
-					out += " " + c.translateAssignOfExpr(lhs, c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), lhsType, s.Tok == token.DEFINE)
+					out += " " + c.translateAssignOfExpr(lhs, c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), s.Tok == token.DEFINE)
 				}
 			}
 			c.Printf("%s", out)
@@ -358,14 +356,12 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 					}
 					continue
 				}
-				lhsType := c.p.TypeOf(s.Lhs[i])
-				parts = append(parts, c.translateAssignOfExpr(c.newIdent(tmpVars[i], c.p.TypeOf(s.Lhs[i])), rhs, lhsType, true))
+				parts = append(parts, c.translateAssignOfExpr(c.newIdent(tmpVars[i], c.p.TypeOf(s.Lhs[i])), rhs, true))
 			}
 			for i, lhs := range s.Lhs {
 				lhs = astutil.RemoveParens(lhs)
 				if !isBlank(lhs) {
-					t := c.p.TypeOf(lhs)
-					parts = append(parts, c.translateAssignOfExpr(lhs, c.newIdent(tmpVars[i], t), t, s.Tok == token.DEFINE))
+					parts = append(parts, c.translateAssignOfExpr(lhs, c.newIdent(tmpVars[i], c.p.TypeOf(lhs)), s.Tok == token.DEFINE))
 				}
 			}
 			c.Printf("%s", strings.Join(parts, " "))
@@ -701,7 +697,7 @@ func (c *funcContext) translateLoopingStmt(cond func() string, body *ast.BlockSt
 	c.PrintCond(!flatten, "}", fmt.Sprintf("$s = %d; continue; case %d:", data.beginCase, data.endCase))
 }
 
-func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, typ types.Type, define bool) string {
+func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, define bool) string {
 	if l, ok := lhs.(*ast.IndexExpr); ok {
 		if t, ok := c.p.TypeOf(l.X).Underlying().(*types.Map); ok {
 			if typesutil.IsJsObject(c.p.TypeOf(l.Index)) {
@@ -712,10 +708,11 @@ func (c *funcContext) translateAssignOfExpr(lhs, rhs ast.Expr, typ types.Type, d
 		}
 	}
 
+	lhsType := c.p.TypeOf(lhs)
 	if _, ok := rhs.(*ast.CompositeLit); ok && define {
-		return fmt.Sprintf("%s = %s;", c.translateExpr(lhs), c.translateImplicitConversion(rhs, typ)) // skip $copy
+		return fmt.Sprintf("%s = %s;", c.translateExpr(lhs), c.translateImplicitConversion(rhs, lhsType)) // skip $copy
 	}
-	return c.translateAssign(lhs, c.translateImplicitConversion(rhs, typ).String(), typ, define)
+	return c.translateAssign(lhs, c.translateImplicitConversion(rhs, lhsType).String(), lhsType, define)
 }
 
 func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, define bool) string {

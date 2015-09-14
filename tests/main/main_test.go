@@ -2,7 +2,7 @@ package main
 
 import "testing"
 
-func TestMain(t *testing.T) {
+func TestNotRunMain(t *testing.T) {
 	if mainDidRun {
 		t.Error("main function did run")
 	}

@@ -1094,9 +1094,6 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 	if desiredType == nil {
 		return c.translateExpr(expr)
 	}
-	if expr == nil {
-		return c.formatExpr("%e", c.zeroValue(desiredType))
-	}
 
 	exprType := c.p.TypeOf(expr)
 	if types.Identical(exprType, desiredType) {

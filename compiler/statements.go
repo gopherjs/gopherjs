@@ -386,12 +386,11 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 					lhs[i] = name
 				}
 				rhs := valueSpec.Values
-				isTuple := false
-				if len(rhs) == 1 {
-					_, isTuple = c.p.TypeOf(rhs[0]).(*types.Tuple)
-				}
-				for len(rhs) < len(lhs) && !isTuple {
-					rhs = append(rhs, nil)
+				if len(rhs) == 0 {
+					rhs = make([]ast.Expr, len(lhs))
+					for i, e := range lhs {
+						rhs[i] = c.zeroValue(c.p.TypeOf(e))
+					}
 				}
 				c.translateStmt(&ast.AssignStmt{
 					Lhs: lhs,
@@ -778,28 +777,29 @@ func (c *funcContext) translateAssign(lhs ast.Expr, rhs string, typ types.Type, 
 }
 
 func (c *funcContext) translateResults(results []ast.Expr) string {
-	switch c.sig.Results().Len() {
+	tuple := c.sig.Results()
+	switch tuple.Len() {
 	case 0:
 		return ""
 	case 1:
-		var result ast.Expr
+		result := c.zeroValue(tuple.At(0).Type())
 		if results != nil {
 			result = results[0]
 		}
-		v := c.translateImplicitConversion(result, c.sig.Results().At(0).Type())
+		v := c.translateImplicitConversion(result, tuple.At(0).Type())
 		c.delayedOutput = nil
 		return " " + v.String()
 	default:
 		if len(results) == 1 {
 			return " " + c.translateExpr(results[0]).String()
 		}
-		values := make([]string, c.sig.Results().Len())
+		values := make([]string, tuple.Len())
 		for i := range values {
-			var result ast.Expr
+			result := c.zeroValue(tuple.At(i).Type())
 			if results != nil {
 				result = results[i]
 			}
-			values[i] = c.translateImplicitConversion(result, c.sig.Results().At(i).Type()).String()
+			values[i] = c.translateImplicitConversion(result, tuple.At(i).Type()).String()
 		}
 		c.delayedOutput = nil
 		return " [" + strings.Join(values, ", ") + "]"

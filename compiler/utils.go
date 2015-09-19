@@ -177,11 +177,19 @@ func (c *funcContext) zeroValue(ty types.Type) ast.Expr {
 			return c.newConst(ty, exact.MakeInt64(0))
 		case isString(t):
 			return c.newConst(ty, exact.MakeString(""))
+		case t.Kind() == types.UnsafePointer:
+			// fall through to "nil"
 		case t.Kind() == types.UntypedNil:
 			panic("Zero value for untyped nil.")
+		default:
+			panic(fmt.Sprintf("Unhandled basic type: %v\n", t))
 		}
 	case *types.Array, *types.Struct:
 		return c.setType(&ast.CompositeLit{}, ty)
+	case *types.Chan, *types.Interface, *types.Map, *types.Signature, *types.Slice, *types.Pointer:
+		// fall through to "nil"
+	default:
+		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
 	id := c.newIdent("nil", ty)
 	c.p.Uses[id] = nilObj

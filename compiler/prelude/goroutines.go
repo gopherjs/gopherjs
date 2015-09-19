@@ -46,6 +46,9 @@ var $callDeferred = function(deferred, jsErr, fromPanic) {
       if (deferred === null) {
         deferred = $curGoroutine.deferStack[$curGoroutine.deferStack.length - 1];
         if (deferred === undefined) {
+          // The panic reached the top of the stack. Clear it and throw it as
+          // a JavaScript error.
+          $panicStackDepth = null;
           if (localPanicValue.Object instanceof Error) {
             throw localPanicValue.Object;
           }

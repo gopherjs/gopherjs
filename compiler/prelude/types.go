@@ -591,7 +591,7 @@ var $makeMap = function(keyForFunc, entries) {
     m[keyForFunc(e.k)] = e;
   }
   return m;
-}
+};
 
 var $ptrType = function(elem) {
   var typ = elem.ptr;

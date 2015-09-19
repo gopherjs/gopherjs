@@ -141,14 +141,12 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Slice:
 			return c.formatExpr("new %s([%s])", c.typeName(exprType), strings.Join(collectIndexedElements(t.Elem()), ", "))
 		case *types.Map:
-			mapVar := c.newVariable("_map")
-			keyVar := c.newVariable("_key")
-			assignments := ""
-			for _, element := range e.Elts {
+			entries := make([]string, len(e.Elts))
+			for i, element := range e.Elts {
 				kve := element.(*ast.KeyValueExpr)
-				assignments += c.formatExpr(`%s = %s, %s[%s.keyFor(%s)] = { k: %s, v: %s }, `, keyVar, c.translateImplicitConversionWithCloning(kve.Key, t.Key()), mapVar, c.typeName(t.Key()), keyVar, keyVar, c.translateImplicitConversionWithCloning(kve.Value, t.Elem())).String()
+				entries[i] = fmt.Sprintf("{ k: %s, v: %s }", c.translateImplicitConversionWithCloning(kve.Key, t.Key()), c.translateImplicitConversionWithCloning(kve.Value, t.Elem()))
 			}
-			return c.formatExpr("(%s = new $Map(), %s%s)", mapVar, assignments, mapVar)
+			return c.formatExpr("$makeMap(%s.keyFor, [%s])", c.typeName(t.Key()), strings.Join(entries, ", "))
 		case *types.Struct:
 			elements := make([]string, t.NumFields())
 			isKeyValue := true

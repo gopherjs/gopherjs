@@ -584,6 +584,14 @@ var $mapType = function(key, elem) {
   }
   return typ;
 };
+var $makeMap = function(keyForFunc, entries) {
+  var m = new $Map();
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    m[keyForFunc(e.k)] = e;
+  }
+  return m;
+}
 
 var $ptrType = function(elem) {
   var typ = elem.ptr;

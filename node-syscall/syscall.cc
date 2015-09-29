@@ -7,13 +7,19 @@
 
 using namespace v8;
 
+#if NODE_MAJOR_VERSION == 0
+#define ARRAY_BUFFER_DATA_OFFSET 23
+#else
+#define ARRAY_BUFFER_DATA_OFFSET 31
+#endif
+
 intptr_t toNative(Local<Value> value) {
   if (value.IsEmpty()) {
     return 0;
   }
   if (value->IsArrayBufferView()) {
     Local<ArrayBufferView> view = Local<ArrayBufferView>::Cast(value);
-    return *reinterpret_cast<intptr_t*>(*reinterpret_cast<char**>(*view->Buffer()) + 23) + view->ByteOffset(); // ugly hack, because of https://codereview.chromium.org/25221002
+    return *reinterpret_cast<intptr_t*>(*reinterpret_cast<char**>(*view->Buffer()) + ARRAY_BUFFER_DATA_OFFSET) + view->ByteOffset(); // ugly hack, because of https://codereview.chromium.org/25221002
   }
   if (value->IsArray()) {
     Local<Array> array = Local<Array>::Cast(value);

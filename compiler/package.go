@@ -254,7 +254,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		if !o.Exported() {
 			d.Vars = []string{c.objectName(o)}
 		}
-		if c.p.HasPointer[o] {
+		if c.p.HasPointer[o] && !o.Exported() {
 			d.Vars = append(d.Vars, c.varPtrName(o))
 		}
 		if _, ok := varsWithInit[o]; !ok {

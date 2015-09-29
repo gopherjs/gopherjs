@@ -432,3 +432,21 @@ func TestEmptySelectCase(t *testing.T) {
 		t.Fail()
 	}
 }
+
+var a int
+var b int
+var C int
+var D int
+
+var a1 = &a
+var a2 = &a
+var b1 = &b
+var C1 = &C
+var C2 = &C
+var D1 = &D
+
+func TestPkgVarPointers(t *testing.T) {
+	if a1 != a2 || a1 == b1 || C1 != C2 || C1 == D1 {
+		t.Fail()
+	}
+}

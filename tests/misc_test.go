@@ -450,3 +450,14 @@ func TestPkgVarPointers(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestStringMap(t *testing.T) {
+	m := make(map[string]interface{})
+	if m["__proto__"] != nil {
+		t.Fail()
+	}
+	m["__proto__"] = 42
+	if m["__proto__"] != 42 {
+		t.Fail()
+	}
+}

@@ -66,10 +66,16 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
   case $kindUint16:
   case $kindUint32:
   case $kindUintptr:
-  case $kindString:
   case $kindUnsafePointer:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
+    typ.keyFor = $identity;
+    break;
+
+  case $kindString:
+    typ = function(v) { this.$val = v; };
+    typ.wrapped = true;
+    typ.keyFor = function(x) { return "$" + x; };
     break;
 
   case $kindFloat32:
@@ -374,7 +380,6 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
   typ.methods = [];
   typ.methodSetCache = null;
   typ.comparable = true;
-  typ.keyFor = typ.keyFor || $identity;
   return typ;
 };
 
@@ -566,13 +571,6 @@ var $ifaceNil = {};
 var $error = $newType(8, $kindInterface, "error", "error", "", null);
 $error.init([{prop: "Error", name: "Error", pkg: "", typ: $funcType([], [$String], false)}]);
 
-var $Map = function() {};
-(function() {
-  var names = Object.getOwnPropertyNames(Object.prototype);
-  for (var i = 0; i < names.length; i++) {
-    $Map.prototype[names[i]] = undefined;
-  }
-})();
 var $mapTypes = {};
 var $mapType = function(key, elem) {
   var typeKey = key.id + "$" + elem.id;
@@ -585,7 +583,7 @@ var $mapType = function(key, elem) {
   return typ;
 };
 var $makeMap = function(keyForFunc, entries) {
-  var m = new $Map();
+  var m = {};
   for (var i = 0; i < entries.length; i++) {
     var e = entries[i];
     m[keyForFunc(e.k)] = e;

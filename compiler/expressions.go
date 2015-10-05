@@ -839,7 +839,7 @@ func (c *funcContext) translateBuiltin(name string, sig *types.Signature, args [
 			}
 			return c.formatExpr("$makeSlice(%s, %f)", t, args[1])
 		case *types.Map:
-			return c.formatExpr("new $Map()")
+			return c.formatExpr("{}")
 		case *types.Chan:
 			length := "0"
 			if len(args) == 2 {

@@ -297,7 +297,7 @@ var $internalize = function(v, t, recv) {
       return new mapType($internalize(v, mapType));
     }
   case $kindMap:
-    var m = new $Map();
+    var m = {};
     var keys = $keys(v);
     for (var i = 0; i < keys.length; i++) {
       var k = $internalize(keys[i], t.key);

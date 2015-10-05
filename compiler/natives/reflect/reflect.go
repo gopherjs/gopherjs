@@ -355,7 +355,7 @@ func makechan(typ *rtype, size uint64) (ch unsafe.Pointer) {
 }
 
 func makemap(t *rtype) (m unsafe.Pointer) {
-	return unsafe.Pointer(js.Global.Get("$Map").New().Unsafe())
+	return unsafe.Pointer(js.Global.Get("Object").New().Unsafe())
 }
 
 func keyFor(t *rtype, key unsafe.Pointer) (*js.Object, string) {

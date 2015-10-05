@@ -625,7 +625,7 @@ clauseLoop:
 				printCaseBodyPrefix(b.index)
 			}
 			c.translateStmtList(b.body)
-			if flatten && (defaultBranch != nil || i != len(branches)-1) {
+			if flatten && (defaultBranch != nil || i != len(branches)-1) && !endsWithReturn(b.body) {
 				c.Printf("$s = %d; continue;", endCase)
 			}
 		})

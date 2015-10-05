@@ -634,3 +634,12 @@ func rangeCheck(pattern string, constantIndex, array bool) string {
 	}
 	return "(" + check + ` ? $throwRuntimeError("index out of range") : ` + pattern + ")"
 }
+
+func endsWithReturn(stmts []ast.Stmt) bool {
+	if len(stmts) > 0 {
+		if _, ok := stmts[len(stmts)-1].(*ast.ReturnStmt); ok {
+			return true
+		}
+	}
+	return false
+}

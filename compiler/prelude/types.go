@@ -53,6 +53,14 @@ var $identity = function(x) { return x; };
 
 var $typeIDCounter = 0;
 
+var $idKey = function(x) {
+  if (x.$id === undefined) {
+    $idCounter++;
+    x.$id = $idCounter;
+  }
+  return String(x.$id);
+};
+
 var $newType = function(size, kind, string, name, pkg, constructor) {
   var typ;
   switch(kind) {
@@ -144,27 +152,13 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
     break;
 
   case $kindChan:
-    typ = function(capacity) {
-      this.$val = this;
-      this.$capacity = capacity;
-      this.$buffer = [];
-      this.$sendQueue = [];
-      this.$recvQueue = [];
-      this.$closed = false;
-    };
-    typ.keyFor = function(x) {
-      if (x.$id === undefined) {
-        $idCounter++;
-        x.$id = $idCounter;
-      }
-      return String(x.$id);
-    };
+    typ = function(v) { this.$val = v; };
+    typ.wrapped = true;
+    typ.keyFor = $idKey;
     typ.init = function(elem, sendOnly, recvOnly) {
       typ.elem = elem;
       typ.sendOnly = sendOnly;
       typ.recvOnly = recvOnly;
-      typ.nil = new typ(0);
-      typ.nil.$sendQueue = typ.nil.$recvQueue = { length: 0, push: function() {}, shift: function() { return undefined; }, indexOf: function() { return -1; } };
     };
     break;
 
@@ -207,13 +201,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
       this.$target = target;
       this.$val = this;
     };
-    typ.keyFor = function(x) {
-      if (x.$id === undefined) {
-        $idCounter++;
-        x.$id = $idCounter;
-      }
-      return String(x.$id);
-    };
+    typ.keyFor = $idKey;
     typ.init = function(elem) {
       typ.elem = elem;
       typ.wrapped = (elem.kind === $kindArray);
@@ -334,11 +322,13 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
     typ.zero = function() { return zero; };
     break;
 
-  case $kindChan:
   case $kindPtr:
   case $kindSlice:
     typ.zero = function() { return typ.nil; };
     break;
+
+  case $kindChan:
+    typ.zero = function() { return $chanNil; };
 
   case $kindFunc:
     typ.zero = function() { return $throwNilPointerError; };
@@ -526,6 +516,16 @@ var $chanType = function(elem, sendOnly, recvOnly) {
   }
   return typ;
 };
+var $Chan = function(elem, capacity) {
+  this.$elem = elem;
+  this.$capacity = capacity;
+  this.$buffer = [];
+  this.$sendQueue = [];
+  this.$recvQueue = [];
+  this.$closed = false;
+};
+var $chanNil = new $Chan(0);
+$chanNil.$sendQueue = $chanNil.$recvQueue = { length: 0, push: function() {}, shift: function() { return undefined; }, indexOf: function() { return -1; } };
 
 var $funcTypes = {};
 var $funcType = function(params, results, variadic) {

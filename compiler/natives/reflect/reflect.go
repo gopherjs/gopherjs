@@ -351,7 +351,7 @@ func loadScalar(p unsafe.Pointer, n uintptr) uintptr {
 }
 
 func makechan(typ *rtype, size uint64) (ch unsafe.Pointer) {
-	return unsafe.Pointer(jsType(typ).New(size).Unsafe())
+	return unsafe.Pointer(js.Global.Get("$Chan").New(size).Unsafe())
 }
 
 func makemap(t *rtype) (m unsafe.Pointer) {
@@ -953,8 +953,10 @@ func (v Value) InterfaceData() [2]uintptr {
 
 func (v Value) IsNil() bool {
 	switch k := v.kind(); k {
-	case Chan, Ptr, Slice:
+	case Ptr, Slice:
 		return v.object() == jsType(v.typ).Get("nil")
+	case Chan:
+		return v.object() == js.Global.Get("$chanNil")
 	case Func:
 		return v.object() == js.Global.Get("$throwNilPointerError")
 	case Map:

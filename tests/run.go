@@ -44,7 +44,6 @@ import (
 // TODO: Reduce these to zero or as close as possible.
 //
 var knownFails = map[string]failReason{
-	"fixedbugs/bug243.go":    {desc: "TypeError: undefined is not a function"},
 	"fixedbugs/issue4495.go": {desc: "TypeError: Cannot read property 'm' of undefined"},
 
 	"fixedbugs/bug114.go":     {desc: "fixedbugs/bug114.go:15:27: B32 (untyped int constant 4294967295) overflows int"},

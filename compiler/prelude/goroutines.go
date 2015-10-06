@@ -230,7 +230,7 @@ var $recv = function(chan) {
     return [bufferedValue, true];
   }
   if (chan.$closed) {
-    return [chan.constructor.elem.zero(), false];
+    return [chan.$elem.zero(), false];
   }
 
   var thisGoroutine = $curGoroutine;
@@ -260,7 +260,7 @@ var $close = function(chan) {
     if (queuedRecv === undefined) {
       break;
     }
-    queuedRecv([chan.constructor.elem.zero(), false]);
+    queuedRecv([chan.$elem.zero(), false]);
   }
 };
 var $select = function(comms) {

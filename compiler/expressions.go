@@ -736,8 +736,10 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					panic("unexpected basic type")
 				}
 				return c.formatExpr("0")
-			case *types.Slice, *types.Pointer, *types.Chan:
+			case *types.Slice, *types.Pointer:
 				return c.formatExpr("%s.nil", c.typeName(exprType))
+			case *types.Chan:
+				return c.formatExpr("$chanNil")
 			case *types.Map:
 				return c.formatExpr("false")
 			case *types.Interface:
@@ -845,7 +847,7 @@ func (c *funcContext) translateBuiltin(name string, sig *types.Signature, args [
 			if len(args) == 2 {
 				length = c.translateExpr(args[1]).String()
 			}
-			return c.formatExpr("new %s(%s)", c.typeName(c.p.TypeOf(args[0])), length)
+			return c.formatExpr("new $Chan(%s, %s)", c.typeName(c.p.TypeOf(args[0]).Underlying().(*types.Chan).Elem()), length)
 		default:
 			panic(fmt.Sprintf("Unhandled make type: %T\n", argType))
 		}

@@ -525,6 +525,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			if !sel.Obj().Exported() {
 				c.p.dependencies[sel.Obj()] = true
 			}
+			if _, ok := sel.Recv().Underlying().(*types.Interface); ok {
+				return c.formatExpr(`$ifaceMethodExpr("%s")`, sel.Obj().(*types.Func).Name())
+			}
 			return c.formatExpr(`$methodExpr(%s, "%s")`, c.typeName(sel.Recv()), sel.Obj().(*types.Func).Name())
 		default:
 			panic(fmt.Sprintf("unexpected sel.Kind(): %T", sel.Kind()))

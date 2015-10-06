@@ -44,8 +44,6 @@ import (
 // TODO: Reduce these to zero or as close as possible.
 //
 var knownFails = map[string]failReason{
-	"fixedbugs/issue4495.go": {desc: "TypeError: Cannot read property 'm' of undefined"},
-
 	"fixedbugs/bug114.go":     {desc: "fixedbugs/bug114.go:15:27: B32 (untyped int constant 4294967295) overflows int"},
 	"fixedbugs/bug242.go":     {desc: "bad map check 13 false false Error: fail"},
 	"fixedbugs/bug260.go":     {desc: "maybe unsupportedFeature, pointer arithm"},

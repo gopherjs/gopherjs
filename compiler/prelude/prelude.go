@@ -89,6 +89,22 @@ var $methodExpr = function(typ, name) {
   return method.$expr;
 };
 
+var $ifaceMethodExprs = {};
+var $ifaceMethodExpr = function(name) {
+  var expr = $ifaceMethodExprs["$" + name];
+  if (expr === undefined) {
+    expr = $ifaceMethodExprs["$" + name] = function() {
+      $stackDepthOffset--;
+      try {
+        return Function.call.apply(arguments[0][name], arguments);
+      } finally {
+        $stackDepthOffset++;
+      }
+    };
+  }
+  return expr;
+};
+
 var $subslice = function(slice, low, high, max) {
   if (low < 0 || high < low || max < high || high > slice.$capacity || max > slice.$capacity) {
     $throwRuntimeError("slice bounds out of range");

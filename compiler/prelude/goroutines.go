@@ -217,7 +217,7 @@ var $send = function(chan, value) {
       if (chan.$closed) {
         $throwRuntimeError("send on closed channel");
       }
-    },
+    }
   };
 };
 var $recv = function(chan) {

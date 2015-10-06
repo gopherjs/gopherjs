@@ -318,7 +318,7 @@ var $pointerOfStructConversion = function(obj, type) {
       (function(fieldProp) {
         properties[fieldProp] = {
           get: function() { return obj[fieldProp]; },
-          set: function(value) { obj[fieldProp] = value; },
+          set: function(value) { obj[fieldProp] = value; }
         };
       })(type.elem.fields[i].prop);
     }

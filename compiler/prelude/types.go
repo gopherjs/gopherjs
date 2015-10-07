@@ -517,6 +517,9 @@ var $chanType = function(elem, sendOnly, recvOnly) {
   return typ;
 };
 var $Chan = function(elem, capacity) {
+  if (capacity < 0 || capacity > 2147483647) {
+    $throwRuntimeError("makechan: size out of range");
+  }
   this.$elem = elem;
   this.$capacity = capacity;
   this.$buffer = [];
@@ -524,7 +527,7 @@ var $Chan = function(elem, capacity) {
   this.$recvQueue = [];
   this.$closed = false;
 };
-var $chanNil = new $Chan(0);
+var $chanNil = new $Chan(null, 0);
 $chanNil.$sendQueue = $chanNil.$recvQueue = { length: 0, push: function() {}, shift: function() { return undefined; }, indexOf: function() { return -1; } };
 
 var $funcTypes = {};
@@ -624,6 +627,12 @@ var $sliceType = function(elem) {
 };
 var $makeSlice = function(typ, length, capacity) {
   capacity = capacity || length;
+  if (length < 0 || length > 2147483647) {
+    $throwRuntimeError("makeslice: len out of range");
+  }
+  if (capacity < 0 || capacity < length || capacity > 2147483647) {
+    $throwRuntimeError("makeslice: cap out of range");
+  }
   var array = new typ.nativeArray(capacity);
   if (typ.nativeArray === Array) {
     for (var i = 0; i < capacity; i++) {

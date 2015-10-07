@@ -844,11 +844,14 @@ func (c *funcContext) translateBuiltin(name string, sig *types.Signature, args [
 			}
 			return c.formatExpr("$makeSlice(%s, %f)", t, args[1])
 		case *types.Map:
+			if len(args) == 2 && c.p.Types[args[1]].Value == nil {
+				return c.formatExpr(`((%1f < 0 || %1f > 2147483647) ? $throwRuntimeError("makemap: size out of range") : {})`, args[1])
+			}
 			return c.formatExpr("{}")
 		case *types.Chan:
 			length := "0"
 			if len(args) == 2 {
-				length = c.translateExpr(args[1]).String()
+				length = c.formatExpr("%f", args[1]).String()
 			}
 			return c.formatExpr("new $Chan(%s, %s)", c.typeName(c.p.TypeOf(args[0]).Underlying().(*types.Chan).Elem()), length)
 		default:

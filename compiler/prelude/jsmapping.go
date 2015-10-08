@@ -315,9 +315,10 @@ var $internalize = function(v, t, recv) {
     if (v.search(/^[\x00-\x7F]*$/) !== -1) {
       return v;
     }
-    var s = "";
-    for (var i = 0; i < v.length; i++) {
-      s += $encodeRune(v.charCodeAt(i));
+    var s = "", r;
+    for (var i = 0; i < v.length; i += r[1]) {
+      r = $encodeRune2(v.codePointAt(i));
+      s += r[0];
     }
     return s;
   case $kindStruct:

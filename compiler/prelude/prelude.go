@@ -204,6 +204,22 @@ var $encodeRune = function(r) {
   return String.fromCharCode(0xF0 | r >> 18, 0x80 | (r >> 12 & 0x3F), 0x80 | (r >> 6 & 0x3F), 0x80 | (r & 0x3F));
 };
 
+var $encodeRune2 = function(r) {
+  if (r < 0 || r > 0x10FFFF || (0xD800 <= r && r <= 0xDFFF)) {
+    r = 0xFFFD;
+  }
+  if (r <= 0x7F) {
+    return [String.fromCharCode(r), 1];
+  }
+  if (r <= 0x7FF) {
+    return [String.fromCharCode(0xC0 | r >> 6, 0x80 | (r & 0x3F)), 1];
+  }
+  if (r <= 0xFFFF) {
+    return [String.fromCharCode(0xE0 | r >> 12, 0x80 | (r >> 6 & 0x3F), 0x80 | (r & 0x3F)), 1];
+  }
+  return [String.fromCharCode(0xF0 | r >> 18, 0x80 | (r >> 12 & 0x3F), 0x80 | (r >> 6 & 0x3F), 0x80 | (r & 0x3F)), 2];
+};
+
 var $stringToBytes = function(str) {
   var array = new Uint8Array(str.length);
   for (var i = 0; i < str.length; i++) {

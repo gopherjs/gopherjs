@@ -521,6 +521,19 @@ func TestInternalizeExternalizeUndefined(t *testing.T) {
 	}
 }
 
+func TestInternalizeExternalizeUnicodeString(t *testing.T) {
+	const want = "Hello, 世界. 😀!" // U+1F600 emoticon.
+	r := js.Global.Call("eval", `(function(f) { return f("Hello, 世界. 😀!"); })`).Invoke(func(s string) string {
+		if got := s; got != want {
+			t.Errorf("got %s, want %s", got, want)
+		}
+		return s
+	})
+	if got := r.String(); got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+}
+
 func TestDereference(t *testing.T) {
 	s := *dummys
 	p := &s

@@ -328,7 +328,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			lhs := astutil.RemoveParens(s.Lhs[0])
 			if isBlank(lhs) {
 				if analysis.HasSideEffect(s.Rhs[0], c.p.Info.Info) {
-					c.Printf("%s;", c.translateExpr(s.Rhs[0]).String())
+					c.Printf("%s;", c.translateExpr(s.Rhs[0]))
 				}
 				return
 			}
@@ -336,35 +336,32 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			tupleVar := c.newVariable("_tuple")
-			out := tupleVar + " = " + c.translateExpr(s.Rhs[0]).String() + ";"
+			c.Printf("%s = %s;", tupleVar, c.translateExpr(s.Rhs[0]))
 			tuple := c.p.TypeOf(s.Rhs[0]).(*types.Tuple)
 			for i, lhs := range s.Lhs {
 				lhs = astutil.RemoveParens(lhs)
 				if !isBlank(lhs) {
-					out += " " + c.translateAssign(lhs, c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), s.Tok == token.DEFINE)
+					c.Printf("%s", c.translateAssign(lhs, c.newIdent(fmt.Sprintf("%s[%d]", tupleVar, i), tuple.At(i).Type()), s.Tok == token.DEFINE))
 				}
 			}
-			c.Printf("%s", out)
 		case len(s.Lhs) == len(s.Rhs):
 			tmpVars := make([]string, len(s.Rhs))
-			var parts []string
 			for i, rhs := range s.Rhs {
 				tmpVars[i] = c.newVariable("_tmp")
 				if isBlank(astutil.RemoveParens(s.Lhs[i])) {
 					if analysis.HasSideEffect(rhs, c.p.Info.Info) {
-						c.Printf("%s;", c.translateExpr(rhs).String())
+						c.Printf("%s;", c.translateExpr(rhs))
 					}
 					continue
 				}
-				parts = append(parts, c.translateAssign(c.newIdent(tmpVars[i], c.p.TypeOf(s.Lhs[i])), rhs, true))
+				c.Printf("%s", c.translateAssign(c.newIdent(tmpVars[i], c.p.TypeOf(s.Lhs[i])), rhs, true))
 			}
 			for i, lhs := range s.Lhs {
 				lhs = astutil.RemoveParens(lhs)
 				if !isBlank(lhs) {
-					parts = append(parts, c.translateAssign(lhs, c.newIdent(tmpVars[i], c.p.TypeOf(lhs)), s.Tok == token.DEFINE))
+					c.Printf("%s", c.translateAssign(lhs, c.newIdent(tmpVars[i], c.p.TypeOf(lhs)), s.Tok == token.DEFINE))
 				}
 			}
-			c.Printf("%s", strings.Join(parts, " "))
 
 		default:
 			panic("Invalid arity of AssignStmt.")

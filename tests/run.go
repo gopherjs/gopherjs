@@ -56,7 +56,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/bug356.go":     {desc: "BUG bug344 0"},
 	"fixedbugs/bug409.go":     {desc: "1 2 3 4"},
 	"fixedbugs/bug433.go":     {desc: "Error: [object Object]"},
-	"fixedbugs/bug491.go":     {desc: "BUG: append call not ordered: 3 2 3"},
 	"fixedbugs/issue10353.go": {desc: "incorrect output"},
 	"fixedbugs/issue11256.go": {desc: "null"},
 	"fixedbugs/issue11656.go": {desc: "Error: Native function not implemented: runtime/debug.setPanicOnFault"},

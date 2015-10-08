@@ -4,6 +4,8 @@ machine:
 
 dependencies:
   pre:
+    - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 20 # Temporary fix for node-gyp with Node.js 4.x.
+    - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 20 # Temporary fix for node-gyp with Node.js 4.x.
     - cd /usr/local && sudo rm -rf go && curl https://storage.googleapis.com/golang/go1.5.linux-amd64.tar.gz | sudo tar -xz && sudo chmod a+w go/src/path/filepath
   post:
     - mv ./gopherjs $HOME/bin

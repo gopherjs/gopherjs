@@ -528,3 +528,14 @@ func TestDereference(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestSurrogatePairs(t *testing.T) {
+	js.Global.Set("str", "\U0001F600")
+	str := js.Global.Get("str")
+	if str.Get("length").Int() != 2 || str.Call("charCodeAt", 0).Int() != 55357 || str.Call("charCodeAt", 1).Int() != 56832 {
+		t.Fail()
+	}
+	if str.String() != "\U0001F600" {
+		t.Fail()
+	}
+}

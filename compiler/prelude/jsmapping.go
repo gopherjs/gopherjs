@@ -84,7 +84,14 @@ var $externalize = function(v, t) {
     var s = "", r;
     for (var i = 0; i < v.length; i += r[1]) {
       r = $decodeRune(v, i);
-      s += String.fromCharCode(r[0]);
+      var c = r[0];
+      if (c > 0xFFFF) {
+        var h = Math.floor((c - 0x10000) / 0x400) + 0xD800;
+        var l = (c - 0x10000) % 0x400 + 0xDC00;
+        s += String.fromCharCode(h, l);
+        continue;
+      }
+      s += String.fromCharCode(c);
     }
     return s;
   case $kindStruct:
@@ -316,8 +323,18 @@ var $internalize = function(v, t, recv) {
       return v;
     }
     var s = "";
-    for (var i = 0; i < v.length; i++) {
-      s += $encodeRune(v.charCodeAt(i));
+    var i = 0;
+    while (i < v.length) {
+      var h = v.charCodeAt(i);
+      if (0xD800 <= h && h <= 0xDBFF) {
+        var l = v.charCodeAt(i + 1);
+        var c = (h - 0xD800) * 0x400 + l - 0xDC00 + 0x10000;
+        s += $encodeRune(c);
+        i += 2;
+        continue;
+      }
+      s += $encodeRune(h);
+      i++;
     }
     return s;
   case $kindStruct:

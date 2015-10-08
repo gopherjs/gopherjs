@@ -84,7 +84,7 @@ var $externalize = function(v, t) {
     var s = "", r;
     for (var i = 0; i < v.length; i += r[1]) {
       r = $decodeRune(v, i);
-      s += String.fromCharCode(r[0]);
+      s += String.fromCodePoint(r[0]);
     }
     return s;
   case $kindStruct:

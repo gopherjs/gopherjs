@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
@@ -495,7 +496,8 @@ func isWrapped(ty types.Type) bool {
 
 func encodeString(s string) string {
 	buffer := bytes.NewBuffer(nil)
-	for _, r := range []byte(s) {
+	runeBuf := make([]byte, utf8.UTFMax)
+	for _, r := range []rune(s) {
 		switch r {
 		case '\b':
 			buffer.WriteString(`\b`)
@@ -514,11 +516,18 @@ func encodeString(s string) string {
 		case '\\':
 			buffer.WriteString(`\\`)
 		default:
-			if r < 0x20 || r > 0x7E {
+			if r < 0x20 {
 				fmt.Fprintf(buffer, `\x%02X`, r)
 				continue
 			}
-			buffer.WriteByte(r)
+			if r > 0x7E {
+				n := utf8.EncodeRune(runeBuf, r)
+				for i := 0; i < n; i++ {
+					fmt.Fprintf(buffer, `\x%02X`, runeBuf[i])
+				}
+				continue
+			}
+			buffer.WriteByte(byte(r))
 		}
 	}
 	return `"` + buffer.String() + `"`

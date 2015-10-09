@@ -309,6 +309,15 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 	}
 	pkg := &PackageData{Package: buildPkg}
 	pkg.ImportPath = "main"
+	files, err := ioutil.ReadDir(pkg.Dir)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), ".inc.js") && file.Name()[0] != '_' {
+			pkg.JsFiles = append(pkg.JsFiles, file.Name())
+		}
+	}
 	if err := s.BuildPackage(pkg); err != nil {
 		return err
 	}

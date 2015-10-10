@@ -370,6 +370,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
   typ.methods = [];
   typ.methodSetCache = null;
   typ.comparable = true;
+  typ.keyFor = typ.keyFor || $identity;
   return typ;
 };
 

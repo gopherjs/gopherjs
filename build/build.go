@@ -309,6 +309,11 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 	}
 	pkg := &PackageData{Package: buildPkg}
 	pkg.ImportPath = "main"
+	jsFiles, err := jsFilesFromDir(pkg.Dir)
+	if err != nil {
+		return err
+	}
+	pkg.JsFiles = jsFiles
 	if err := s.BuildPackage(pkg); err != nil {
 		return err
 	}
@@ -361,15 +366,11 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 	}
 	pkg := &PackageData{Package: buildPkg}
 
-	files, err := ioutil.ReadDir(pkg.Dir)
+	jsFiles, err := jsFilesFromDir(pkg.Dir)
 	if err != nil {
 		return nil, err
 	}
-	for _, file := range files {
-		if strings.HasSuffix(file.Name(), ".inc.js") && file.Name()[0] != '_' {
-			pkg.JsFiles = append(pkg.JsFiles, file.Name())
-		}
-	}
+	pkg.JsFiles = jsFiles
 
 	if err := s.BuildPackage(pkg); err != nil {
 		return nil, err
@@ -572,6 +573,20 @@ func NewMappingCallback(m *sourcemap.Map, goroot, gopath string) func(generatedL
 		}
 		m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: originalPos.Line, OriginalColumn: originalPos.Column})
 	}
+}
+
+func jsFilesFromDir(dir string) ([]string, error) {
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var jsFiles []string
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), ".inc.js") && file.Name()[0] != '_' {
+			jsFiles = append(jsFiles, file.Name())
+		}
+	}
+	return jsFiles, nil
 }
 
 // hasGopathPrefix returns true and the length of the matched GOPATH workspace,

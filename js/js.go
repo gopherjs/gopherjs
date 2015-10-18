@@ -79,7 +79,7 @@ func (o *Object) Interface() interface{} { return o.object.Interface() }
 // Unsafe returns the object as an uintptr, which can be converted via unsafe.Pointer. Not intended for public use.
 func (o *Object) Unsafe() uintptr { return o.object.Unsafe() }
 
-// Error encapsulates JavaScript errors. Those are turned into a Go panic and may be rescued, giving an *Error that holds the JavaScript error object.
+// Error encapsulates JavaScript errors. Those are turned into a Go panic and may be recovered, giving an *Error that holds the JavaScript error object.
 type Error struct {
 	*Object
 }

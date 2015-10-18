@@ -309,11 +309,6 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 	}
 	pkg := &PackageData{Package: buildPkg}
 	pkg.ImportPath = "main"
-	jsFiles, err := jsFilesFromDir(pkg.Dir)
-	if err != nil {
-		return err
-	}
-	pkg.JSFiles = jsFiles
 	if err := s.BuildPackage(pkg); err != nil {
 		return err
 	}
@@ -337,7 +332,6 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 
 	for _, file := range filenames {
 		if strings.HasSuffix(file, ".inc.js") {
-			pkg.JSFiles = append(pkg.JSFiles, file)
 			continue
 		}
 		pkg.GoFiles = append(pkg.GoFiles, file)
@@ -366,12 +360,6 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 	}
 	pkg := &PackageData{Package: buildPkg}
 
-	jsFiles, err := jsFilesFromDir(pkg.Dir)
-	if err != nil {
-		return nil, err
-	}
-	pkg.JSFiles = jsFiles
-
 	if err := s.BuildPackage(pkg); err != nil {
 		return nil, err
 	}
@@ -383,6 +371,12 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 	if pkg.ImportPath == "unsafe" {
 		return nil
 	}
+
+	jsFiles, err := jsFilesFromDir(pkg.Dir)
+	if err != nil {
+		return err
+	}
+	pkg.JSFiles = jsFiles
 
 	if pkg.PkgObj != "" {
 		var fileInfo os.FileInfo

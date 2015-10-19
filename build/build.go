@@ -248,7 +248,7 @@ func (o *Options) PrintSuccess(format string, a ...interface{}) {
 
 type PackageData struct {
 	*build.Package
-	JsFiles    []string
+	JSFiles    []string
 	IsTest     bool // IsTest is true if the package is being built for running tests.
 	SrcModTime time.Time
 	UpToDate   bool
@@ -309,11 +309,6 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 	}
 	pkg := &PackageData{Package: buildPkg}
 	pkg.ImportPath = "main"
-	jsFiles, err := jsFilesFromDir(pkg.Dir)
-	if err != nil {
-		return err
-	}
-	pkg.JsFiles = jsFiles
 	if err := s.BuildPackage(pkg); err != nil {
 		return err
 	}
@@ -337,7 +332,6 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 
 	for _, file := range filenames {
 		if strings.HasSuffix(file, ".inc.js") {
-			pkg.JsFiles = append(pkg.JsFiles, file)
 			continue
 		}
 		pkg.GoFiles = append(pkg.GoFiles, file)
@@ -366,12 +360,6 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 	}
 	pkg := &PackageData{Package: buildPkg}
 
-	jsFiles, err := jsFilesFromDir(pkg.Dir)
-	if err != nil {
-		return nil, err
-	}
-	pkg.JsFiles = jsFiles
-
 	if err := s.BuildPackage(pkg); err != nil {
 		return nil, err
 	}
@@ -383,6 +371,12 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 	if pkg.ImportPath == "unsafe" {
 		return nil
 	}
+
+	jsFiles, err := jsFilesFromDir(pkg.Dir)
+	if err != nil {
+		return err
+	}
+	pkg.JSFiles = jsFiles
 
 	if pkg.PkgObj != "" {
 		var fileInfo os.FileInfo
@@ -425,7 +419,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			}
 		}
 
-		for _, name := range append(pkg.GoFiles, pkg.JsFiles...) {
+		for _, name := range append(pkg.GoFiles, pkg.JSFiles...) {
 			fileInfo, err := os.Stat(filepath.Join(pkg.Dir, name))
 			if err != nil {
 				return err
@@ -470,7 +464,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 	}
 
 	var jsDecls []*compiler.Decl
-	for _, jsFile := range pkg.JsFiles {
+	for _, jsFile := range pkg.JSFiles {
 		code, err := ioutil.ReadFile(filepath.Join(pkg.Dir, jsFile))
 		if err != nil {
 			return err

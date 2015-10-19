@@ -110,11 +110,10 @@ func main() {
 					if s.Watcher != nil {
 						s.Watcher.Add(pkgPath)
 					}
-					buildPkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
+					pkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
 					if err != nil {
 						return err
 					}
-					pkg := &gbuild.PackageData{Package: buildPkg}
 					if err := s.BuildPackage(pkg); err != nil {
 						return err
 					}
@@ -254,7 +253,7 @@ func main() {
 	cmdTest.Flags().AddFlag(flagColor)
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
 		os.Exit(handleError(func() error {
-			pkgs := make([]*build.Package, len(args))
+			pkgs := make([]*gbuild.PackageData, len(args))
 			for i, pkgPath := range args {
 				pkgPath = filepath.ToSlash(pkgPath)
 				var err error
@@ -269,7 +268,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				var pkg *build.Package
+				var pkg *gbuild.PackageData
 				if strings.HasPrefix(currentDirectory, srcDir) {
 					pkgPath, err := filepath.Rel(srcDir, currentDirectory)
 					if err != nil {
@@ -280,12 +279,12 @@ func main() {
 					}
 				}
 				if pkg == nil {
-					if pkg, err = build.ImportDir(currentDirectory, 0); err != nil {
+					if pkg, err = gbuild.ImportDir(currentDirectory, 0); err != nil {
 						return err
 					}
 					pkg.ImportPath = "_" + currentDirectory
 				}
-				pkgs = []*build.Package{pkg}
+				pkgs = []*gbuild.PackageData{pkg}
 			}
 
 			var exitErr error
@@ -296,7 +295,7 @@ func main() {
 				}
 
 				s := gbuild.NewSession(options)
-				tests := &testFuncs{Package: pkg}
+				tests := &testFuncs{Package: pkg.Package}
 				collectTests := func(buildPkg *build.Package, testPkgName string, needVar *bool) error {
 					testPkg := &gbuild.PackageData{Package: buildPkg, IsTest: true}
 					if err := s.BuildPackage(testPkg); err != nil {
@@ -496,8 +495,8 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 	if isPkg || isMap || isIndex {
 		// If we're going to be serving our special files, make sure there's a Go command in this folder.
 		s := gbuild.NewSession(fs.options)
-		buildPkg, err := gbuild.Import(path.Dir(name[1:]), 0, s.InstallSuffix(), fs.options.BuildTags)
-		if err != nil || buildPkg.Name != "main" {
+		pkg, err := gbuild.Import(path.Dir(name[1:]), 0, s.InstallSuffix(), fs.options.BuildTags)
+		if err != nil || pkg.Name != "main" {
 			isPkg = false
 			isMap = false
 			isIndex = false
@@ -508,7 +507,6 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 			buf := bytes.NewBuffer(nil)
 			browserErrors := bytes.NewBuffer(nil)
 			exitCode := handleError(func() error {
-				pkg := &gbuild.PackageData{Package: buildPkg}
 				if err := s.BuildPackage(pkg); err != nil {
 					return err
 				}

@@ -309,7 +309,7 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 	}
 	pkg := &PackageData{Package: buildPkg}
 	pkg.ImportPath = "main"
-	jsFiles, err := jsFilesFromDir(pkg.Dir)
+	jsFiles, err := JsFilesFromDir(pkg.Dir)
 	if err != nil {
 		return err
 	}
@@ -366,7 +366,7 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 	}
 	pkg := &PackageData{Package: buildPkg}
 
-	jsFiles, err := jsFilesFromDir(pkg.Dir)
+	jsFiles, err := JsFilesFromDir(pkg.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -575,7 +575,7 @@ func NewMappingCallback(m *sourcemap.Map, goroot, gopath string) func(generatedL
 	}
 }
 
-func jsFilesFromDir(dir string) ([]string, error) {
+func JsFilesFromDir(dir string) ([]string, error) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return nil, err

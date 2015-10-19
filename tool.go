@@ -299,6 +299,11 @@ func main() {
 				tests := &testFuncs{Package: pkg}
 				collectTests := func(buildPkg *build.Package, testPkgName string, needVar *bool) error {
 					testPkg := &gbuild.PackageData{Package: buildPkg, IsTest: true}
+					jsFiles, err := gbuild.JsFilesFromDir(pkg.Dir)
+					if err != nil {
+						return err
+					}
+					testPkg.JsFiles = jsFiles
 					if err := s.BuildPackage(testPkg); err != nil {
 						return err
 					}

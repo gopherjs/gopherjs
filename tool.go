@@ -31,6 +31,7 @@ import (
 )
 
 var currentDirectory string
+var temporaryDirectory string
 
 func init() {
 	var err error
@@ -43,6 +44,10 @@ func init() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	temporaryDirectory = os.Getenv("GOPHERJS_TEMPDIR")
+	if temporaryDirectory == "" {
+		temporaryDirectory = currentDirectory
 	}
 }
 
@@ -222,7 +227,7 @@ func main() {
 				return fmt.Errorf("gopherjs run: no go files listed")
 			}
 
-			tempfile, err := ioutil.TempFile("", filepath.Base(args[0])+".")
+			tempfile, err := ioutil.TempFile(temporaryDirectory, filepath.Base(args[0])+".")
 			if err != nil {
 				return err
 			}
@@ -356,7 +361,7 @@ func main() {
 					return err
 				}
 
-				tempfile, err := ioutil.TempFile("", "test.")
+				tempfile, err := ioutil.TempFile(temporaryDirectory, "test.")
 				if err != nil {
 					return err
 				}

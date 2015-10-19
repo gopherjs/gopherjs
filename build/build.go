@@ -43,14 +43,6 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 	}
 }
 
-func ImportDir(path string, mode build.ImportMode) (*PackageData, error) {
-	pkg,err := build.ImportDir(path, mode)
-	if err != nil {
-		return nil,err
-	}
-	return &PackageData{Package: pkg},nil
-}
-
 func Import(path string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
 	buildContext := NewBuildContext(installSuffix, buildTags)
 	if path == "runtime" || path == "syscall" {
@@ -95,7 +87,26 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 		}
 	}
 
-	return &PackageData{Package: pkg}, nil
+	jsFiles, err := jsFilesFromDir(pkg.Dir)
+	if err != nil {
+		return nil,err
+	}
+
+	return &PackageData{Package: pkg, JSFiles: jsFiles}, nil
+}
+
+func ImportDir(path string, mode build.ImportMode) (*PackageData, error) {
+	pkg,err := build.ImportDir(path, mode)
+	if err != nil {
+		return nil,err
+	}
+
+	jsFiles, err := jsFilesFromDir(pkg.Dir)
+	if err != nil {
+		return nil,err
+	}
+
+	return &PackageData{Package: pkg, JSFiles: jsFiles}, nil
 }
 
 // parse parses and returns all .go files of given pkg.
@@ -372,12 +383,6 @@ func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	jsFiles, err := jsFilesFromDir(pkg.Dir)
-	if err != nil {
-		return nil, err
-	}
-	pkg.JSFiles = jsFiles
 
 	if err := s.BuildPackage(pkg); err != nil {
 		return nil, err

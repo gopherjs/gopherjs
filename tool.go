@@ -658,11 +658,25 @@ func runNode(script string, args []string, dir string) error {
 	node.Stdin = os.Stdin
 	node.Stdout = os.Stdout
 	node.Stderr = os.Stderr
+	node.Env = setNodeEnv(dir)
 	err := node.Run()
 	if _, ok := err.(*exec.ExitError); err != nil && !ok {
 		err = fmt.Errorf("could not run Node.js: %s", err.Error())
 	}
 	return err
+}
+
+func setNodeEnv(dir string) []string {
+	nodePath := dir + "/node_modules"
+
+	env := os.Environ()
+	for i, e := range env {
+		if strings.HasPrefix(e, "NODE_PATH=") {
+			env[i] = e + ":" + nodePath
+			return env
+		}
+	}
+	return append(env, "NODE_PATH="+nodePath)
 }
 
 type testFuncs struct {

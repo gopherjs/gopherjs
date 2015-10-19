@@ -167,7 +167,7 @@ func main() {
 					pkgs = []string{pkgPath}
 				}
 				if cmd.Name() == "get" {
-					goGet := exec.Command("go", append([]string{"get", "-d"}, pkgs...)...)
+					goGet := exec.Command("go", append([]string{"get", "-d", "-tags=js"}, pkgs...)...)
 					goGet.Stdout = os.Stdout
 					goGet.Stderr = os.Stderr
 					if err := goGet.Run(); err != nil {

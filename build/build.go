@@ -594,7 +594,7 @@ func jsFilesFromDir(dir string) ([]string, error) {
 	}
 	var jsFiles []string
 	for _, file := range files {
-		if strings.HasSuffix(file.Name(), ".inc.js") && file.Name()[0] != '_' {
+		if strings.HasSuffix(file.Name(), ".inc.js") && file.Name()[0] != '_' && file.Name()[0] != '.' {
 			jsFiles = append(jsFiles, file.Name())
 		}
 	}

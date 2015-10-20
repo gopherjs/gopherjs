@@ -175,7 +175,7 @@ func main() {
 				}
 				for _, pkgPath := range pkgs {
 					pkgPath = filepath.ToSlash(pkgPath)
-					if _, err := s.ImportPackage(pkgPath); err != nil {
+					if _, err := s.BuildImportPath(pkgPath); err != nil {
 						return err
 					}
 					pkg := s.Packages[pkgPath]

@@ -294,7 +294,7 @@ func NewSession(options *Options) *Session {
 		options:  options,
 		Packages: make(map[string]*PackageData),
 	}
-	s.ImportContext = compiler.NewImportContext(s.ImportPackage)
+	s.ImportContext = compiler.NewImportContext(s.BuildImportPath)
 	if options.Watch {
 		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
 			if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n < 1024 {
@@ -371,7 +371,7 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 	return s.WriteCommandPackage(pkg, pkgObj)
 }
 
-func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
+func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
 	if pkg, found := s.Packages[path]; found {
 		return pkg.Archive, nil
 	}
@@ -427,7 +427,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			if importedPkgPath == "unsafe" || ignored {
 				continue
 			}
-			_, err := s.ImportPackage(importedPkgPath)
+			_, err := s.BuildImportPath(importedPkgPath)
 			if err != nil {
 				return err
 			}

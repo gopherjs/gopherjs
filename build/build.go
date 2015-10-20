@@ -343,7 +343,6 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 		return err
 	}
 	pkg := &PackageData{Package: buildPkg}
-	pkg.ImportPath = "main"
 	jsFiles, err := jsFilesFromDir(pkg.Dir)
 	if err != nil {
 		return err

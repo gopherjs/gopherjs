@@ -43,6 +43,20 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 	}
 }
 
+// Import returns details about the Go package named by the import path. If the
+// path is a local import path naming a package that can be imported using
+// a standard import path, the returned package will set p.ImportPath to
+// that path.
+//
+// In the directory containing the package, .go and .inc.js files are
+// considered part of the package except for:
+//
+//    - .go files in package documentation
+//    - files starting with _ or . (likely editor temporary files)
+//    - files with build constraints not satisfied by the context
+//
+// If an error occurs, Import returns a non-nil error and a nil
+// *PackageData.
 func Import(path string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
 	buildContext := NewBuildContext(installSuffix, buildTags)
 	if path == "runtime" || path == "syscall" {
@@ -95,6 +109,8 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 	return &PackageData{Package: pkg, JSFiles: jsFiles}, nil
 }
 
+// ImportDir is like Import but processes the Go package found in the named
+// directory.
 func ImportDir(path string, mode build.ImportMode) (*PackageData, error) {
 	pkg,err := build.ImportDir(path, mode)
 	if err != nil {

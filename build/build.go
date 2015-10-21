@@ -43,7 +43,21 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 	}
 }
 
-func Import(path string, mode build.ImportMode, installSuffix string, buildTags []string) (*build.Package, error) {
+// Import returns details about the Go package named by the import path. If the
+// path is a local import path naming a package that can be imported using
+// a standard import path, the returned package will set p.ImportPath to
+// that path.
+//
+// In the directory containing the package, .go and .inc.js files are
+// considered part of the package except for:
+//
+//    - .go files in package documentation
+//    - files starting with _ or . (likely editor temporary files)
+//    - files with build constraints not satisfied by the context
+//
+// If an error occurs, Import returns a non-nil error and a nil
+// *PackageData.
+func Import(path string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
 	buildContext := NewBuildContext(installSuffix, buildTags)
 	if path == "runtime" || path == "syscall" {
 		buildContext.GOARCH = build.Default.GOARCH
@@ -87,7 +101,28 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 		}
 	}
 
-	return pkg, nil
+	jsFiles, err := jsFilesFromDir(pkg.Dir)
+	if err != nil {
+		return nil,err
+	}
+
+	return &PackageData{Package: pkg, JSFiles: jsFiles}, nil
+}
+
+// ImportDir is like Import but processes the Go package found in the named
+// directory.
+func ImportDir(dir string, mode build.ImportMode) (*PackageData, error) {
+	pkg,err := build.ImportDir(dir, mode)
+	if err != nil {
+		return nil,err
+	}
+
+	jsFiles, err := jsFilesFromDir(pkg.Dir)
+	if err != nil {
+		return nil,err
+	}
+
+	return &PackageData{Package: pkg, JSFiles: jsFiles}, nil
 }
 
 // parse parses and returns all .go files of given pkg.
@@ -248,7 +283,7 @@ func (o *Options) PrintSuccess(format string, a ...interface{}) {
 
 type PackageData struct {
 	*build.Package
-	JsFiles    []string
+	JSFiles    []string
 	IsTest     bool // IsTest is true if the package is being built for running tests.
 	SrcModTime time.Time
 	UpToDate   bool
@@ -275,7 +310,7 @@ func NewSession(options *Options) *Session {
 		options:  options,
 		Packages: make(map[string]*PackageData),
 	}
-	s.ImportContext = compiler.NewImportContext(s.ImportPackage)
+	s.ImportContext = compiler.NewImportContext(s.BuildImportPath)
 	if options.Watch {
 		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
 			if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n < 1024 {
@@ -313,7 +348,7 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 	if err != nil {
 		return err
 	}
-	pkg.JsFiles = jsFiles
+	pkg.JSFiles = jsFiles
 	if err := s.BuildPackage(pkg); err != nil {
 		return err
 	}
@@ -337,7 +372,7 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 
 	for _, file := range filenames {
 		if strings.HasSuffix(file, ".inc.js") {
-			pkg.JsFiles = append(pkg.JsFiles, file)
+			pkg.JSFiles = append(pkg.JSFiles, file)
 			continue
 		}
 		pkg.GoFiles = append(pkg.GoFiles, file)
@@ -352,25 +387,18 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 	return s.WriteCommandPackage(pkg, pkgObj)
 }
 
-func (s *Session) ImportPackage(path string) (*compiler.Archive, error) {
+func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
 	if pkg, found := s.Packages[path]; found {
 		return pkg.Archive, nil
 	}
 
-	buildPkg, err := Import(path, 0, s.InstallSuffix(), s.options.BuildTags)
-	if s.Watcher != nil && buildPkg != nil { // add watch even on error
-		s.Watcher.Add(buildPkg.Dir)
+	pkg, err := Import(path, 0, s.InstallSuffix(), s.options.BuildTags)
+	if s.Watcher != nil && pkg != nil { // add watch even on error
+		s.Watcher.Add(pkg.Dir)
 	}
 	if err != nil {
 		return nil, err
 	}
-	pkg := &PackageData{Package: buildPkg}
-
-	jsFiles, err := jsFilesFromDir(pkg.Dir)
-	if err != nil {
-		return nil, err
-	}
-	pkg.JsFiles = jsFiles
 
 	if err := s.BuildPackage(pkg); err != nil {
 		return nil, err
@@ -415,7 +443,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			if importedPkgPath == "unsafe" || ignored {
 				continue
 			}
-			_, err := s.ImportPackage(importedPkgPath)
+			_, err := s.BuildImportPath(importedPkgPath)
 			if err != nil {
 				return err
 			}
@@ -425,7 +453,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			}
 		}
 
-		for _, name := range append(pkg.GoFiles, pkg.JsFiles...) {
+		for _, name := range append(pkg.GoFiles, pkg.JSFiles...) {
 			fileInfo, err := os.Stat(filepath.Join(pkg.Dir, name))
 			if err != nil {
 				return err
@@ -470,7 +498,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 	}
 
 	var jsDecls []*compiler.Decl
-	for _, jsFile := range pkg.JsFiles {
+	for _, jsFile := range pkg.JSFiles {
 		code, err := ioutil.ReadFile(filepath.Join(pkg.Dir, jsFile))
 		if err != nil {
 			return err
@@ -582,7 +610,7 @@ func jsFilesFromDir(dir string) ([]string, error) {
 	}
 	var jsFiles []string
 	for _, file := range files {
-		if strings.HasSuffix(file.Name(), ".inc.js") && file.Name()[0] != '_' {
+		if strings.HasSuffix(file.Name(), ".inc.js") && file.Name()[0] != '_' && file.Name()[0] != '.' {
 			jsFiles = append(jsFiles, file.Name())
 		}
 	}

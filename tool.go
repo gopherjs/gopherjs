@@ -657,7 +657,17 @@ func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer)
 }
 
 func runNode(script string, args []string, dir string) error {
-	node := exec.Command("node", append([]string{"--stack_size=10000", script}, args...)...)
+	allArgs := []string{"--require", "source-map-support/register"}
+
+	if err := exec.Command("node", "--require", "source-map-support/register", "--eval", "").Run(); err != nil {
+		fmt.Fprintln(os.Stderr, "gopherjs: Source maps disabled. Use Node.js 4.x with source-map-support module for nice stack traces.")
+		allArgs = []string{}
+	}
+
+	allArgs = append(allArgs, "--stack_size=10000", script)
+	allArgs = append(allArgs, args...)
+
+	node := exec.Command("node", allArgs...)
 	node.Dir = dir
 	node.Stdin = os.Stdin
 	node.Stdout = os.Stdout

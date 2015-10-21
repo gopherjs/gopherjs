@@ -1,6 +1,8 @@
 machine:
   node:
     version: 0.12.7
+  environment:
+    SOURCE_MAP_SUPPORT: false
 
 dependencies:
   pre:

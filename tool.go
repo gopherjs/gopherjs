@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"text/template"
@@ -657,11 +658,14 @@ func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer)
 }
 
 func runNode(script string, args []string, dir string) error {
-	allArgs := []string{"--require", "source-map-support/register"}
+	var allArgs []string
 
-	if err := exec.Command("node", "--require", "source-map-support/register", "--eval", "").Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "gopherjs: Source maps disabled. Use Node.js 4.x with source-map-support module for nice stack traces.")
-		allArgs = []string{}
+	if b, _ := strconv.ParseBool(os.Getenv("SOURCE_MAP_SUPPORT")); os.Getenv("SOURCE_MAP_SUPPORT") == "" || b {
+		allArgs = []string{"--require", "source-map-support/register"}
+		if err := exec.Command("node", "--require", "source-map-support/register", "--eval", "").Run(); err != nil {
+			fmt.Fprintln(os.Stderr, "gopherjs: Source maps disabled. Use Node.js 4.x with source-map-support module for nice stack traces.")
+			allArgs = []string{}
+		}
 	}
 
 	allArgs = append(allArgs, "--stack_size=10000", script)

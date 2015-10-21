@@ -23,7 +23,7 @@ func init() {
 
 func printWarning() {
 	if !warningPrinted {
-		println("warning: system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
+		js.Global.Get("console").Call("error", "warning: system calls not available, see https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md")
 	}
 	warningPrinted = true
 }

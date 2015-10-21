@@ -296,8 +296,7 @@ func main() {
 
 				s := gbuild.NewSession(options)
 				tests := &testFuncs{Package: pkg.Package}
-				collectTests := func(buildPkg *build.Package, testPkgName string, needVar *bool) error {
-					testPkg := &gbuild.PackageData{Package: buildPkg, IsTest: true}
+				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
 					if err := s.BuildPackage(testPkg); err != nil {
 						return err
 					}
@@ -315,20 +314,27 @@ func main() {
 					return nil
 				}
 
-				if err := collectTests(&build.Package{
-					ImportPath: pkg.ImportPath,
-					Dir:        pkg.Dir,
-					GoFiles:    append(pkg.GoFiles, pkg.TestGoFiles...),
-					Imports:    append(pkg.Imports, pkg.TestImports...),
+				if err := collectTests(&gbuild.PackageData{
+					Package: &build.Package{
+						ImportPath: pkg.ImportPath,
+						Dir:        pkg.Dir,
+						GoFiles:    append(pkg.GoFiles, pkg.TestGoFiles...),
+						Imports:    append(pkg.Imports, pkg.TestImports...),
+					},
+					IsTest:  true,
+					JSFiles: pkg.JSFiles,
 				}, "_test", &tests.NeedTest); err != nil {
 					return err
 				}
 
-				if err := collectTests(&build.Package{
-					ImportPath: pkg.ImportPath + "_test",
-					Dir:        pkg.Dir,
-					GoFiles:    pkg.XTestGoFiles,
-					Imports:    pkg.XTestImports,
+				if err := collectTests(&gbuild.PackageData{
+					Package: &build.Package{
+						ImportPath: pkg.ImportPath + "_test",
+						Dir:        pkg.Dir,
+						GoFiles:    pkg.XTestGoFiles,
+						Imports:    pkg.XTestImports,
+					},
+					IsTest: true,
 				}, "_xtest", &tests.NeedXtest); err != nil {
 					return err
 				}

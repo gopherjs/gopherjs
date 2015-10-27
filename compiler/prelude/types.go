@@ -134,7 +134,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
     typ.wrapped = true;
     typ.ptr = $newType(4, $kindPtr, "*" + string, "", "", function(array) {
       this.$get = function() { return array; };
-      this.$set = function(v) { $copy(this, v, typ); };
+      this.$set = function(v) { typ.copy(this, v); };
       this.$val = array;
     });
     typ.init = function(elem, len) {
@@ -145,6 +145,9 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
         return Array.prototype.join.call($mapArray(x, function(e) {
           return String(elem.keyFor(e)).replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
         }), "$");
+      };
+      typ.copy = function(dst, src) {
+        $copyArray(dst, src, 0, 0, src.length, elem);
       };
       typ.ptr.init(typ);
       Object.defineProperty(typ.ptr.nil, "nilCheck", { get: $throwNilPointerError });
@@ -234,7 +237,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
     typ.ptr = $newType(4, $kindPtr, "*" + string, "", "", constructor);
     typ.ptr.elem = typ;
     typ.ptr.prototype.$get = function() { return this; };
-    typ.ptr.prototype.$set = function(v) { $copy(this, v, typ); };
+    typ.ptr.prototype.$set = function(v) { typ.copy(this, v); };
     typ.init = function(fields) {
       typ.fields = fields;
       fields.forEach(function(f) {
@@ -247,6 +250,20 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
         return $mapArray(fields, function(f) {
           return String(f.typ.keyFor(val[f.prop])).replace(/\\/g, "\\\\").replace(/\$/g, "\\$");
         }).join("$");
+      };
+      typ.copy = function(dst, src) {
+        for (var i = 0; i < fields.length; i++) {
+          var f = fields[i];
+          switch (f.typ.kind) {
+          case $kindArray:
+          case $kindStruct:
+            f.typ.copy(dst[f.prop], src[f.prop]);
+            continue;
+          default:
+            dst[f.prop] = src[f.prop];
+            continue;
+          }
+        }
       };
       /* nil value */
       var properties = {};

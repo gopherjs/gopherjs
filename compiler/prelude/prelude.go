@@ -258,28 +258,6 @@ var $copySlice = function(dst, src) {
   return n;
 };
 
-var $copy = function(dst, src, typ) {
-  switch (typ.kind) {
-  case $kindArray:
-    $copyArray(dst, src, 0, 0, src.length, typ.elem);
-    break;
-  case $kindStruct:
-    for (var i = 0; i < typ.fields.length; i++) {
-      var f = typ.fields[i];
-      switch (f.typ.kind) {
-      case $kindArray:
-      case $kindStruct:
-        $copy(dst[f.prop], src[f.prop], f.typ);
-        continue;
-      default:
-        dst[f.prop] = src[f.prop];
-        continue;
-      }
-    }
-    break;
-  }
-};
-
 var $copyArray = function(dst, src, dstOffset, srcOffset, n, elem) {
   if (n === 0 || (dst === src && dstOffset === srcOffset)) {
     return;
@@ -295,12 +273,12 @@ var $copyArray = function(dst, src, dstOffset, srcOffset, n, elem) {
   case $kindStruct:
     if (dst === src && dstOffset > srcOffset) {
       for (var i = n - 1; i >= 0; i--) {
-        $copy(dst[dstOffset + i], src[srcOffset + i], elem);
+        elem.copy(dst[dstOffset + i], src[srcOffset + i]);
       }
       return;
     }
     for (var i = 0; i < n; i++) {
-      $copy(dst[dstOffset + i], src[srcOffset + i], elem);
+      elem.copy(dst[dstOffset + i], src[srcOffset + i]);
     }
     return;
   }
@@ -318,7 +296,7 @@ var $copyArray = function(dst, src, dstOffset, srcOffset, n, elem) {
 
 var $clone = function(src, type) {
   var clone = type.zero();
-  $copy(clone, src, type);
+  type.copy(clone, src);
   return clone;
 };
 

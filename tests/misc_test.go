@@ -464,8 +464,20 @@ func TestStringMap(t *testing.T) {
 
 type Int int
 
-func (e *Int) test() int {
-	return int(*e)
+func (i Int) Value() int {
+	return int(i)
+}
+
+func (i *Int) ValueByPtr() int {
+	return int(*i)
+}
+
+func TestWrappedTypeMethod(t *testing.T) {
+	i := Int(42)
+	p := &i
+	if p.Value() != 42 {
+		t.Fail()
+	}
 }
 
 type EmbeddedInt struct {
@@ -474,7 +486,7 @@ type EmbeddedInt struct {
 
 func TestEmbeddedMethod(t *testing.T) {
 	e := EmbeddedInt{42}
-	if e.test() != 42 {
+	if e.ValueByPtr() != 42 {
 		t.Fail()
 	}
 }

@@ -808,14 +808,14 @@ func (c *funcContext) makeReceiver(x ast.Expr, sel *types.Selection) *expression
 	methodsRecvType := sel.Obj().Type().(*types.Signature).Recv().Type()
 	_, pointerExpected := methodsRecvType.(*types.Pointer)
 	if !isPointer && pointerExpected {
-		x = c.setType(&ast.UnaryExpr{Op: token.AND, X: x}, types.NewPointer(recvType))
+		recvType = types.NewPointer(recvType)
+		x = c.setType(&ast.UnaryExpr{Op: token.AND, X: x}, recvType)
 	}
 
 	recv := c.translateExpr(x)
-	if isWrapped(methodsRecvType) {
+	if isWrapped(recvType) {
 		recv = c.formatExpr("new %s(%s)", c.typeName(methodsRecvType), recv)
 	}
-
 	return recv
 }
 

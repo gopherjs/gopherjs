@@ -461,3 +461,20 @@ func TestStringMap(t *testing.T) {
 		t.Fail()
 	}
 }
+
+type Int int
+
+func (e *Int) test() int {
+	return int(*e)
+}
+
+type EmbeddedInt struct {
+	Int
+}
+
+func TestEmbeddedMethod(t *testing.T) {
+	e := EmbeddedInt{42}
+	if e.test() != 42 {
+		t.Fail()
+	}
+}

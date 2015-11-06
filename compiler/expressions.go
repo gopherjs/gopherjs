@@ -795,26 +795,23 @@ func (c *funcContext) makeReceiver(x ast.Expr, sel *types.Selection) *expression
 	}
 
 	recvType := sel.Recv()
-	_, isPointer := recvType.Underlying().(*types.Pointer)
-	methodsRecvType := sel.Obj().Type().(*types.Signature).Recv().Type()
-	_, pointerExpected := methodsRecvType.(*types.Pointer)
-	var recv *expression
-	switch {
-	case !isPointer && pointerExpected:
-		recv = c.translateExpr(c.setType(&ast.UnaryExpr{Op: token.AND, X: x}, types.NewPointer(recvType)))
-	default:
-		recv = c.translateExpr(x)
-	}
-
 	for _, index := range sel.Index()[:len(sel.Index())-1] {
 		if ptr, isPtr := recvType.(*types.Pointer); isPtr {
 			recvType = ptr.Elem()
 		}
 		s := recvType.Underlying().(*types.Struct)
-		recv = c.formatExpr("%s.%s", recv, fieldName(s, index))
 		recvType = s.Field(index).Type()
+		x = c.newIdent(c.formatExpr("%e.%s", x, fieldName(s, index)).String(), recvType)
 	}
 
+	_, isPointer := recvType.Underlying().(*types.Pointer)
+	methodsRecvType := sel.Obj().Type().(*types.Signature).Recv().Type()
+	_, pointerExpected := methodsRecvType.(*types.Pointer)
+	if !isPointer && pointerExpected {
+		x = c.setType(&ast.UnaryExpr{Op: token.AND, X: x}, types.NewPointer(recvType))
+	}
+
+	recv := c.translateExpr(x)
 	if isWrapped(methodsRecvType) {
 		recv = c.formatExpr("new %s(%s)", c.typeName(methodsRecvType), recv)
 	}

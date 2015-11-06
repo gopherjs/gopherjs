@@ -1,6 +1,19 @@
 package prelude
 
 const numeric = `
+var $min = Math.min;
+var $mod = function(x, y) { return x % y; };
+var $parseInt = parseInt;
+var $parseFloat = function(f) {
+  if (f !== undefined && f !== null && f.constructor === Number) {
+    return f;
+  }
+  return parseFloat(f);
+};
+
+var $froundBuf = new Float32Array(1);
+var $fround = Math.fround || function(f) { $froundBuf[0] = f; return $froundBuf[0]; };
+
 var $floatKey = function(f) {
   if (f !== f) {
     $idCounter++;

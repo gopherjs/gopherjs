@@ -1,6 +1,6 @@
 package prelude
 
-const Prelude = prelude + types + numeric + goroutines + jsmapping
+const Prelude = prelude + numeric + types + goroutines + jsmapping
 
 const prelude = `Error.stackTraceLimit = Infinity;
 
@@ -25,23 +25,11 @@ if (typeof module !== "undefined") {
 
 var $packages = {}, $idCounter = 0;
 var $keys = function(m) { return m ? Object.keys(m) : []; };
-var $min = Math.min;
-var $mod = function(x, y) { return x % y; };
-var $parseInt = parseInt;
-var $parseFloat = function(f) {
-  if (f !== undefined && f !== null && f.constructor === Number) {
-    return f;
-  }
-  return parseFloat(f);
-};
 var $flushConsole = function() {};
 var $throwRuntimeError; /* set by package "runtime" */
 var $throwNilPointerError = function() { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var $call = function(fn, rcvr, args) { return fn.apply(rcvr, args); };
 var $makeFunc = function(fn) { return function() { return fn(new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(arguments, []))); } };
-
-var $froundBuf = new Float32Array(1);
-var $fround = Math.fround || function(f) { $froundBuf[0] = f; return $froundBuf[0]; };
 
 var $mapArray = function(array, f) {
   var newArray = new array.constructor(array.length);

@@ -346,10 +346,10 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				return c.fixNumber(c.formatExpr("%e %t %e", e.X, e.Op, e.Y), basic)
 			case token.MUL:
 				switch basic.Kind() {
-				case types.Int32:
-					return c.formatParenExpr("(((%1e >>> 16 << 16) * %2e >> 0) + (%1e << 16 >>> 16) * %2e) >> 0", e.X, e.Y)
+				case types.Int32, types.Int:
+					return c.formatParenExpr("$imul(%e, %e)", e.X, e.Y)
 				case types.Uint32, types.Uintptr:
-					return c.formatParenExpr("(((%1e >>> 16 << 16) * %2e >>> 0) + (%1e << 16 >>> 16) * %2e) >>> 0", e.X, e.Y)
+					return c.formatParenExpr("$imul(%e, %e) >>> 0", e.X, e.Y)
 				}
 				return c.fixNumber(c.formatExpr("%e * %e", e.X, e.Y), basic)
 			case token.QUO:

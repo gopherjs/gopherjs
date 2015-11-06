@@ -12,7 +12,18 @@ var $parseFloat = function(f) {
 };
 
 var $froundBuf = new Float32Array(1);
-var $fround = Math.fround || function(f) { $froundBuf[0] = f; return $froundBuf[0]; };
+var $fround = Math.fround || function(f) {
+  $froundBuf[0] = f;
+  return $froundBuf[0];
+};
+
+var $imul = Math.imul || function(a, b) {
+  var ah = (a >>> 16) & 0xffff;
+  var al = a & 0xffff;
+  var bh = (b >>> 16) & 0xffff;
+  var bl = b & 0xffff;
+  return ((al * bl) + (((ah * bl + al * bh) << 16) >>> 0) >> 0);
+};
 
 var $floatKey = function(f) {
   if (f !== f) {

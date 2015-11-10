@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -210,12 +211,7 @@ func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
 	if name == "" {
 		panic("newVariable: empty name")
 	}
-	for _, b := range []byte(name) {
-		if (b < '0' || b > 'z') && b != '$' {
-			name = "nonAsciiName"
-			break
-		}
-	}
+	name = encodeIdent(name)
 	if c.p.minify {
 		i := 0
 		for {
@@ -642,4 +638,8 @@ func endsWithReturn(stmts []ast.Stmt) bool {
 		}
 	}
 	return false
+}
+
+func encodeIdent(name string) string {
+	return strings.Replace(url.QueryEscape(name), "%", "$", -1)
 }

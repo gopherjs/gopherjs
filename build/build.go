@@ -496,17 +496,16 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 		return err
 	}
 
-	var jsDecls []*compiler.Decl
+	pkg.Archive.JSDecls = []*compiler.Decl{}
 	for _, jsFile := range pkg.JSFiles {
 		code, err := ioutil.ReadFile(filepath.Join(pkg.Dir, jsFile))
 		if err != nil {
 			return err
 		}
-		jsDecls = append(jsDecls, &compiler.Decl{
+		pkg.Archive.JSDecls = append(pkg.Archive.JSDecls, &compiler.Decl{
 			DeclCode: append(append([]byte("\t(function() {\n"), code...), []byte("\n\t}).call($global);\n")...),
 		})
 	}
-	pkg.Archive.Declarations = append(jsDecls, pkg.Archive.Declarations...)
 
 	if s.options.Verbose {
 		fmt.Println(pkg.ImportPath)

@@ -37,7 +37,7 @@ type Archive struct {
 	Imports      []string
 	ExportData   []byte
 	Declarations []*Decl
-	JSDecls      []*Decl
+	IncJSCode    []byte
 	FileSet      []byte
 	Minified     bool
 
@@ -184,8 +184,8 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, minify bool, w 
 			panic(err)
 		}
 	}
-	for _, d := range pkg.JSDecls {
-		if _, err := w.Write(d.DeclCode); err != nil {
+	if pkg.IncJSCode != nil {
+		if _, err := w.Write(pkg.IncJSCode); err != nil {
 			return err
 		}
 	}

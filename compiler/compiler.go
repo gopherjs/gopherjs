@@ -184,10 +184,8 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, minify bool, w 
 			panic(err)
 		}
 	}
-	if pkg.IncJSCode != nil {
-		if _, err := w.Write(pkg.IncJSCode); err != nil {
-			return err
-		}
+	if _, err := w.Write(pkg.IncJSCode); err != nil {
+		return err
 	}
 	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify)); err != nil {
 		return err

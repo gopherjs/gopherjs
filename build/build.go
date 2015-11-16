@@ -501,8 +501,9 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 		if err != nil {
 			return err
 		}
-		code = append(append([]byte("\t(function() {\n"), code...), []byte("\n\t}).call($global);\n")...)
+		pkg.Archive.IncJSCode = append(pkg.Archive.IncJSCode, []byte("\t(function() {\n")...)
 		pkg.Archive.IncJSCode = append(pkg.Archive.IncJSCode, code...)
+		pkg.Archive.IncJSCode = append(pkg.Archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
 	}
 
 	if s.options.Verbose {

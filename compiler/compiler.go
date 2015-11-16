@@ -37,6 +37,7 @@ type Archive struct {
 	Imports      []string
 	ExportData   []byte
 	Declarations []*Decl
+	IncJSCode    []byte
 	FileSet      []byte
 	Minified     bool
 
@@ -182,6 +183,9 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, minify bool, w 
 		if err := w.fileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
 			panic(err)
 		}
+	}
+	if _, err := w.Write(pkg.IncJSCode); err != nil {
+		return err
 	}
 	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify)); err != nil {
 		return err

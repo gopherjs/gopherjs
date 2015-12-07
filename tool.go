@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -668,7 +669,10 @@ func runNode(script string, args []string, dir string) error {
 		}
 	}
 
-	allArgs = append(allArgs, "--stack_size=10000", script)
+	if runtime.GOOS != "windows" {
+		allArgs = append(allArgs, "--stack_size=10000", script)
+	}
+
 	allArgs = append(allArgs, args...)
 
 	node := exec.Command("node", allArgs...)

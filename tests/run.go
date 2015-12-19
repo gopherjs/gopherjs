@@ -734,8 +734,8 @@ func (t *test) run() {
 					t.err = err
 					return
 				}
-				if strings.Replace(string(out), "\r\n", "\n", -1) != t.expectedOutput() {
-					t.err = fmt.Errorf("incorrect output\n%s", out)
+				if fo := filterOutput(out); fo != t.expectedOutput() {
+					t.err = fmt.Errorf("incorrect output\n%s", fo)
 				}
 			}
 		}
@@ -754,8 +754,8 @@ func (t *test) run() {
 			t.err = err
 			return
 		}
-		if strings.Replace(string(out), "\r\n", "\n", -1) != t.expectedOutput() {
-			t.err = fmt.Errorf("incorrect output\n%s", out)
+		if fo := filterOutput(out); fo != t.expectedOutput() {
+			t.err = fmt.Errorf("incorrect output\n%s", fo)
 		}
 
 	case "runoutput":
@@ -779,8 +779,8 @@ func (t *test) run() {
 			t.err = err
 			return
 		}
-		if string(out) != t.expectedOutput() {
-			t.err = fmt.Errorf("incorrect output\n%s", out)
+		if fo := filterOutput(out); fo != t.expectedOutput() {
+			t.err = fmt.Errorf("incorrect output\n%s", fo)
 		}
 
 	case "errorcheckoutput":
@@ -814,6 +814,13 @@ func (t *test) run() {
 		t.err = t.errorCheck(string(out), tfile, "tmp__.go")
 		return
 	}
+}
+
+func filterOutput(out []byte) string {
+	filteredOut := strings.Replace(string(out), "\r\n", "\n", -1)
+	re := regexp.MustCompile("(?m)^gopherjs: Source maps disabled.*?\n")
+	filteredOut = re.ReplaceAllString(filteredOut, "")
+	return filteredOut
 }
 
 var execCmd []string

@@ -426,9 +426,21 @@ func (m *M) Method(a interface{}) map[string]string {
 }
 
 func TestMakeWrapper(t *testing.T) {
-	if !js.Global.Call("eval", `(function(m) { return m.Method({x: 1})["y"] === "z"; })`).Invoke(js.MakeWrapper(&M{42})).Bool() {
+	m := &M{42}
+	if !js.Global.Call("eval", `(function(m) { return m.Method({x: 1})["y"] === "z"; })`).Invoke(js.MakeWrapper(m)).Bool() {
 		t.Fail()
 	}
+
+	if js.MakeWrapper(m).Interface() != m {
+		t.Fail()
+	}
+
+	f := func(m *M) {
+		if m.f != 42 {
+			t.Fail()
+		}
+	}
+	js.Global.Call("eval", `(function(f, m) { f(m); })`).Invoke(f, js.MakeWrapper(m))
 }
 
 func TestCallWithNull(t *testing.T) {

@@ -133,6 +133,7 @@ func Keys(o *Object) []string {
 func MakeWrapper(i interface{}) *Object {
 	v := InternalObject(i)
 	o := Global.Get("Object").New()
+	o.Set("__internal_object__", v)
 	methods := v.Get("constructor").Get("methods")
 	for i := 0; i < methods.Length(); i++ {
 		m := methods.Index(i)

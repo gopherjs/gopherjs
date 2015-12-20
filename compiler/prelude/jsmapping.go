@@ -188,6 +188,9 @@ var $internalize = function(v, t, recv) {
   if (t === $jsObjectPtr.elem) {
     $panic(new $String("cannot internalize js.Object, use *js.Object instead"));
   }
+  if (v && v.__internal_object__ !== undefined) {
+    return $assertType(v.__internal_object__, t, false);
+  }
   var timePkg = $packages["time"];
   if (timePkg !== undefined && t === timePkg.Time) {
     if (!(v !== null && v !== undefined && v.constructor === Date)) {

@@ -54,6 +54,8 @@ func main() {
 
 	pflag.BoolVarP(&options.Verbose, "verbose", "v", false, "print the names of packages as they are compiled")
 	flagVerbose := pflag.Lookup("verbose")
+	pflag.BoolVarP(&options.Quiet, "quiet", "q", false, "suppress non-fatal warnings")
+	flagQuiet := pflag.Lookup("quiet")
 	pflag.BoolVarP(&options.Watch, "watch", "w", false, "watch for changes to the source files")
 	flagWatch := pflag.Lookup("watch")
 	pflag.BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
@@ -69,6 +71,7 @@ func main() {
 	}
 	cmdBuild.Flags().StringVarP(&pkgObj, "output", "o", "", "output file")
 	cmdBuild.Flags().AddFlag(flagVerbose)
+	cmdBuild.Flags().AddFlag(flagQuiet)
 	cmdBuild.Flags().AddFlag(flagWatch)
 	cmdBuild.Flags().AddFlag(flagMinify)
 	cmdBuild.Flags().AddFlag(flagColor)
@@ -141,6 +144,7 @@ func main() {
 		Short: "compile and install packages and dependencies",
 	}
 	cmdInstall.Flags().AddFlag(flagVerbose)
+	cmdInstall.Flags().AddFlag(flagQuiet)
 	cmdInstall.Flags().AddFlag(flagWatch)
 	cmdInstall.Flags().AddFlag(flagMinify)
 	cmdInstall.Flags().AddFlag(flagColor)
@@ -200,6 +204,7 @@ func main() {
 		Short: "download and install packages and dependencies",
 	}
 	cmdGet.Flags().AddFlag(flagVerbose)
+	cmdGet.Flags().AddFlag(flagQuiet)
 	cmdGet.Flags().AddFlag(flagWatch)
 	cmdGet.Flags().AddFlag(flagMinify)
 	cmdGet.Flags().AddFlag(flagColor)
@@ -236,7 +241,7 @@ func main() {
 			if err := s.BuildFiles(args[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
 				return err
 			}
-			if err := runNode(tempfile.Name(), args[lastSourceArg:], ""); err != nil {
+			if err := runNode(tempfile.Name(), args[lastSourceArg:], "", options.Quiet); err != nil {
 				return err
 			}
 			return nil
@@ -392,7 +397,7 @@ func main() {
 				}
 				status := "ok  "
 				start := time.Now()
-				if err := runNode(tempfile.Name(), args, pkg.Dir); err != nil {
+				if err := runNode(tempfile.Name(), args, pkg.Dir, options.Quiet); err != nil {
 					if _, ok := err.(*exec.ExitError); !ok {
 						return err
 					}
@@ -438,6 +443,7 @@ func main() {
 		Short: "compile on-the-fly and serve",
 	}
 	cmdServe.Flags().AddFlag(flagVerbose)
+	cmdServe.Flags().AddFlag(flagQuiet)
 	cmdServe.Flags().AddFlag(flagMinify)
 	cmdServe.Flags().AddFlag(flagColor)
 	cmdServe.Flags().AddFlag(flagTags)
@@ -658,13 +664,14 @@ func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer)
 	}
 }
 
-func runNode(script string, args []string, dir string) error {
+func runNode(script string, args []string, dir string, quiet bool) error {
 	var allArgs []string
-
 	if b, _ := strconv.ParseBool(os.Getenv("SOURCE_MAP_SUPPORT")); os.Getenv("SOURCE_MAP_SUPPORT") == "" || b {
 		allArgs = []string{"--require", "source-map-support/register"}
 		if err := exec.Command("node", "--require", "source-map-support/register", "--eval", "").Run(); err != nil {
-			fmt.Fprintln(os.Stderr, "gopherjs: Source maps disabled. Use Node.js 4.x with source-map-support module for nice stack traces.")
+			if !quiet {
+				fmt.Fprintln(os.Stderr, "gopherjs: Source maps disabled. Use Node.js 4.x with source-map-support module for nice stack traces.")
+			}
 			allArgs = []string{}
 		}
 	}

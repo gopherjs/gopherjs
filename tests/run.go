@@ -749,7 +749,7 @@ func (t *test) run() {
 	case "run":
 		useTmp = false
 		// GOPHERJS.
-		out, err := runcmd(append([]string{"gopherjs", "run", t.goFileName()}, args...)...)
+		out, err := runcmd(append([]string{"gopherjs", "run", "-q", t.goFileName()}, args...)...)
 		if err != nil {
 			t.err = err
 			return

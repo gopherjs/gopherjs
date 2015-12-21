@@ -282,7 +282,13 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			}
 			results = c.resultNames
 		}
-		c.Printf("return%s;", c.translateResults(results))
+		rVal := c.translateResults(results)
+		if c.Flattened[s] {
+			resumeCase := c.caseCounter
+			c.caseCounter++
+			c.Printf("/* */ $s = %[1]d; case %[1]d:", resumeCase)
+		}
+		c.Printf("return%s;", rVal)
 
 	case *ast.DeferStmt:
 		isBuiltin := false

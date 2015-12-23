@@ -260,6 +260,7 @@ type Options struct {
 	GOROOT        string
 	GOPATH        string
 	Verbose       bool
+	Quiet         bool
 	Watch         bool
 	CreateMapFile bool
 	Minify        bool

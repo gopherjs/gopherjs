@@ -46,6 +46,11 @@ func init() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	gopaths := filepath.SplitList(build.Default.GOPATH)
+	if len(gopaths) == 0 {
+		fmt.Fprintf(os.Stderr, "$GOPATH not set. For more details see: go help gopath\n")
+		os.Exit(1)
+	}
 }
 
 func main() {

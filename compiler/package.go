@@ -76,16 +76,15 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		Scopes:     make(map[ast.Node]*types.Scope),
 	}
 
-	var importError error
+	var importError bool
+	var importErrorList ErrorList
 	var errList ErrorList
 	var previousErr error
 	config := &types.Config{
 		Packages: importContext.Packages,
 		Import: func(_ map[string]*types.Package, path string) (*types.Package, error) {
 			if _, err := importContext.Import(path); err != nil {
-				if importError == nil {
-					importError = err
-				}
+				importError = true // Next error is an import error.
 				return nil, err
 			}
 			return importContext.Packages[path], nil
@@ -93,17 +92,23 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		Sizes: sizes32,
 		Error: func(err error) {
 			if previousErr != nil && previousErr.Error() == err.Error() {
+				importError = false
 				return
 			}
-			errList = append(errList, err)
+			if importError {
+				importErrorList = append(importErrorList, err)
+				importError = false
+			} else {
+				errList = append(errList, err)
+			}
 			previousErr = err
 		},
 	}
 	typesPkg, err := config.Check(importPath, fileSet, files, typesInfo)
-	if importError != nil {
-		return nil, importError
+	if len(importErrorList) > 0 { // If there are any import errors, don't show other errors (issue #119).
+		errList = importErrorList
 	}
-	if errList != nil {
+	if len(errList) > 0 {
 		if len(errList) > 10 {
 			pos := token.NoPos
 			if last, ok := errList[9].(types.Error); ok {

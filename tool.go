@@ -233,7 +233,10 @@ func main() {
 				return fmt.Errorf("gopherjs run: no go files listed")
 			}
 
-			tempfile, err := ioutil.TempFile("", filepath.Base(args[0])+".")
+			tempfile, err := ioutil.TempFile(currentDirectory, filepath.Base(args[0])+".")
+			if err != nil && strings.HasPrefix(currentDirectory, runtime.GOROOT()) {
+				tempfile, err = ioutil.TempFile("", filepath.Base(args[0])+".")
+			}
 			if err != nil {
 				return err
 			}
@@ -373,7 +376,7 @@ func main() {
 					return err
 				}
 
-				tempfile, err := ioutil.TempFile("", "test.")
+				tempfile, err := ioutil.TempFile(currentDirectory, "test.")
 				if err != nil {
 					return err
 				}

@@ -66,6 +66,23 @@ func NewImportContext(importFunc func(string) (*Archive, error)) *ImportContext 
 	}
 }
 
+// packageImporter implements go/types.Importer interface.
+type packageImporter struct {
+	importContext *ImportContext
+	importError   *error // A pointer to importError in Compile.
+}
+
+func (pi packageImporter) Import(path string) (*types.Package, error) {
+	if _, err := pi.importContext.Import(path); err != nil {
+		if *pi.importError == nil {
+			// If import failed, show first error of import only (https://github.com/gopherjs/gopherjs/issues/119).
+			*pi.importError = err
+		}
+		return nil, err
+	}
+	return pi.importContext.Packages[path], nil
+}
+
 func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {
 	typesInfo := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
@@ -80,15 +97,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var errList ErrorList
 	var previousErr error
 	config := &types.Config{
-		Packages: importContext.Packages,
-		Import: func(_ map[string]*types.Package, path string) (*types.Package, error) {
-			if _, err := importContext.Import(path); err != nil {
-				if importError == nil {
-					importError = err
-				}
-				return nil, err
-			}
-			return importContext.Packages[path], nil
+		Importer: packageImporter{
+			importContext: importContext,
+			importError:   &importError,
 		},
 		Sizes: sizes32,
 		Error: func(err error) {

@@ -16,6 +16,20 @@ if (typeof window !== "undefined") { /* web page */
   $global = this;
 }
 
+// Fix Error prototype for PhantomJS
+if (typeof phantom !== "undefined") {
+	var OriginalErrorPrototype = Error.prototype;
+	var OriginalError = Error;
+	$global.Error = function(m) {
+		try {
+			throw new OriginalError(m);
+		} catch (e) {
+			return e;
+		}
+	};
+	$global.Error.prototype = OriginalErrorPrototype;
+}
+
 if ($global === undefined || $global.Array === undefined) {
   throw new Error("no global object found");
 }

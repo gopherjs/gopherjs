@@ -69,6 +69,7 @@ func main() {
 	flagColor := pflag.Lookup("color")
 	tags := pflag.String("tags", "", "a list of build tags to consider satisfied during the build")
 	flagTags := pflag.Lookup("tags")
+	jsCmd := pflag.String("exec", "", "specify alternate js interpreter (default: node)")
 
 	cmdBuild := &cobra.Command{
 		Use:   "build [packages]",
@@ -249,7 +250,7 @@ func main() {
 			if err := s.BuildFiles(args[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
 				return err
 			}
-			if err := runNode(tempfile.Name(), args[lastSourceArg:], "", options.Quiet); err != nil {
+			if err := runJS(tempfile.Name(), *jsCmd, args[lastSourceArg:], "", options.Quiet); err != nil {
 				return err
 			}
 			return nil
@@ -405,7 +406,7 @@ func main() {
 				}
 				status := "ok  "
 				start := time.Now()
-				if err := runNode(tempfile.Name(), args, pkg.Dir, options.Quiet); err != nil {
+				if err := runJS(tempfile.Name(), *jsCmd, args, pkg.Dir, options.Quiet); err != nil {
 					if _, ok := err.(*exec.ExitError); !ok {
 						return err
 					}
@@ -672,25 +673,31 @@ func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer)
 	}
 }
 
-func runNode(script string, args []string, dir string, quiet bool) error {
+func runJS(script string, cmd string, args []string, dir string, quiet bool) error {
 	var allArgs []string
-	if b, _ := strconv.ParseBool(os.Getenv("SOURCE_MAP_SUPPORT")); os.Getenv("SOURCE_MAP_SUPPORT") == "" || b {
-		allArgs = []string{"--require", "source-map-support/register"}
-		if err := exec.Command("node", "--require", "source-map-support/register", "--eval", "").Run(); err != nil {
-			if !quiet {
-				fmt.Fprintln(os.Stderr, "gopherjs: Source maps disabled. Use Node.js 4.x with source-map-support module for nice stack traces.")
+	if len(cmd) == 0 {
+		cmd = "node"
+		// Use the default nodejs interpretor
+		if b, _ := strconv.ParseBool(os.Getenv("SOURCE_MAP_SUPPORT")); os.Getenv("SOURCE_MAP_SUPPORT") == "" || b {
+			allArgs = []string{"--require", "source-map-support/register"}
+			if err := exec.Command(cmd, "--require", "source-map-support/register", "--eval", "").Run(); err != nil {
+				if !quiet {
+					fmt.Fprintln(os.Stderr, "gopherjs: Source maps disabled. Use Node.js 4.x with source-map-support module for nice stack traces.")
+				}
+				allArgs = []string{}
 			}
-			allArgs = []string{}
 		}
-	}
 
-	if runtime.GOOS != "windows" {
-		allArgs = append(allArgs, "--stack_size=10000", script)
+		if runtime.GOOS != "windows" {
+			allArgs = append(allArgs, "--stack_size=10000", script)
+		}
+	} else {
+		allArgs = []string{script}
 	}
 
 	allArgs = append(allArgs, args...)
 
-	node := exec.Command("node", allArgs...)
+	node := exec.Command(cmd, allArgs...)
 	node.Dir = dir
 	node.Stdin = os.Stdin
 	node.Stdout = os.Stdout

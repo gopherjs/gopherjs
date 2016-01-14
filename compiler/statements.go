@@ -743,7 +743,7 @@ func (c *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 		}
 		return fmt.Sprintf("%s = %s;", c.objectName(o), rhsExpr)
 	case *ast.SelectorExpr:
-		sel, ok := c.p.Selections[l]
+		sel, ok := c.p.SelectionOf(l)
 		if !ok {
 			// qualified identifier
 			return fmt.Sprintf("%s = %s;", c.objectName(c.p.Uses[l.Sel]), rhsExpr)

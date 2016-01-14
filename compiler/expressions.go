@@ -212,7 +212,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				}
 				return c.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, c.varPtrName(obj), c.typeName(exprType), c.objectName(obj), c.translateAssign(x, c.newIdent("$v", exprType), false))
 			case *ast.SelectorExpr:
-				sel, ok := c.p.Selections[x]
+				sel, ok := c.p.SelectionOf(x)
 				if !ok {
 					// qualified identifier
 					obj := c.p.Uses[x.Sel].(*types.Var)
@@ -220,7 +220,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				}
 				newSel := &ast.SelectorExpr{X: c.newIdent("this.$target", c.p.TypeOf(x.X)), Sel: x.Sel}
 				c.setType(newSel, exprType)
-				c.p.Selections[newSel] = sel
+				c.p.additionalSelections[newSel] = sel
 				return c.formatExpr("(%1e.$ptr_%2s || (%1e.$ptr_%2s = new %3s(function() { return %4e; }, function($v) { %5s }, %1e)))", x.X, x.Sel.Name, c.typeName(exprType), newSel, c.translateAssign(newSel, c.newIdent("$v", exprType), false))
 			case *ast.IndexExpr:
 				if _, ok := c.p.TypeOf(x.X).Underlying().(*types.Slice); ok {
@@ -501,7 +501,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.SelectorExpr:
-		sel, ok := c.p.Selections[e]
+		sel, ok := c.p.SelectionOf(e)
 		if !ok {
 			// qualified identifier
 			return c.formatExpr("%s", c.objectName(obj))
@@ -553,7 +553,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			return c.translateCall(e, sig, c.translateExpr(f))
 
 		case *ast.SelectorExpr:
-			sel, ok := c.p.Selections[f]
+			sel, ok := c.p.SelectionOf(f)
 			if !ok {
 				// qualified identifier
 				obj := c.p.Uses[f.Sel]
@@ -788,19 +788,29 @@ func (c *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun *
 	return c.formatExpr("%s(%s)", fun, strings.Join(args, ", "))
 }
 
-func (c *funcContext) makeReceiver(x ast.Expr, sel *types.Selection) *expression {
+func (c *funcContext) makeReceiver(x ast.Expr, sel selection) *expression {
 	if !sel.Obj().Exported() {
 		c.p.dependencies[sel.Obj()] = true
 	}
 
 	recvType := sel.Recv()
-	for _, index := range sel.Index()[:len(sel.Index())-1] {
-		if ptr, isPtr := recvType.(*types.Pointer); isPtr {
-			recvType = ptr.Elem()
+	if len(sel.Index()) > 1 {
+		for _, index := range sel.Index()[:len(sel.Index())-1] {
+			if ptr, isPtr := recvType.(*types.Pointer); isPtr {
+				recvType = ptr.Elem()
+			}
+			s := recvType.Underlying().(*types.Struct)
+			recvType = s.Field(index).Type()
 		}
-		s := recvType.Underlying().(*types.Struct)
-		recvType = s.Field(index).Type()
-		x = c.newIdent(c.formatExpr("%e.%s", x, fieldName(s, index)).String(), recvType)
+
+		fakeSel := &ast.SelectorExpr{X: x, Sel: ast.NewIdent("o")}
+		c.p.additionalSelections[fakeSel] = &fakeSelection{
+			kind:  types.FieldVal,
+			recv:  sel.Recv(),
+			index: sel.Index()[:len(sel.Index())-1],
+			typ:   recvType,
+		}
+		x = c.setType(fakeSel, recvType)
 	}
 
 	_, isPointer := recvType.Underlying().(*types.Pointer)

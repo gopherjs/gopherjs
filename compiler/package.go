@@ -17,6 +17,8 @@ import (
 
 type pkgContext struct {
 	*analysis.Info
+	additionalSelections map[*ast.SelectorExpr]selection
+
 	typeNames    []*types.TypeName
 	pkgVars      map[string]string
 	objectNames  map[types.Object]string
@@ -30,6 +32,38 @@ type pkgContext struct {
 	fileSet      *token.FileSet
 	errList      ErrorList
 }
+
+func (p *pkgContext) SelectionOf(e *ast.SelectorExpr) (selection, bool) {
+	if sel, ok := p.Selections[e]; ok {
+		return sel, true
+	}
+	if sel, ok := p.additionalSelections[e]; ok {
+		return sel, true
+	}
+	return nil, false
+}
+
+type selection interface {
+	Kind() types.SelectionKind
+	Recv() types.Type
+	Index() []int
+	Obj() types.Object
+	Type() types.Type
+}
+
+type fakeSelection struct {
+	kind  types.SelectionKind
+	recv  types.Type
+	index []int
+	obj   types.Object
+	typ   types.Type
+}
+
+func (sel *fakeSelection) Kind() types.SelectionKind { return sel.kind }
+func (sel *fakeSelection) Recv() types.Type          { return sel.recv }
+func (sel *fakeSelection) Index() []int              { return sel.index }
+func (sel *fakeSelection) Obj() types.Object         { return sel.obj }
+func (sel *fakeSelection) Type() types.Type          { return sel.typ }
 
 type funcContext struct {
 	*analysis.FuncInfo
@@ -152,7 +186,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	c := &funcContext{
 		FuncInfo: pkgInfo.InitFuncInfo,
 		p: &pkgContext{
-			Info:         pkgInfo,
+			Info:                 pkgInfo,
+			additionalSelections: make(map[*ast.SelectorExpr]selection),
+
 			pkgVars:      make(map[string]string),
 			objectNames:  make(map[types.Object]string),
 			varPtrNames:  make(map[*types.Var]string),

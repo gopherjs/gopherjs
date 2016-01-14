@@ -131,7 +131,7 @@ func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, e
 	return args
 }
 
-func (c *funcContext) translateSelection(sel *types.Selection, pos token.Pos) ([]string, string) {
+func (c *funcContext) translateSelection(sel selection, pos token.Pos) ([]string, string) {
 	var fields []string
 	t := sel.Recv()
 	for _, index := range sel.Index() {

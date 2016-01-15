@@ -490,3 +490,9 @@ func TestEmbeddedMethod(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestBoolConvert(t *testing.T) {
+	if !reflect.ValueOf(true).Convert(reflect.TypeOf(true)).Bool() {
+		t.Fail()
+	}
+}

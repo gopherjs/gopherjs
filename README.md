@@ -94,6 +94,12 @@ For more details see [Jason Stone's blog post](http://legacytotheedge.blogspot.d
 #### General
 GopherJS emulates a 32-bit environment. This means that `int`, `uint` and `uintptr` have a precision of 32 bits. However, the explicit 64-bit integer types `int64` and `uint64` are supported. The `GOARCH` value of GopherJS is "js". You may use it as a build constraint: `// +build js`.
 
+#### Application Lifecycle
+
+The `main` function is executed as usual after all `init` functions have run. JavaScript callbacks can also invoke Go functions, even after the `main` function has exited. Therefore the end of the `main` function should not be regarded as the end of the application and does not end the execution of other goroutines.
+
+In the browser, calling `os.Exit` (e.g. indirectly by `log.Fatal`) also does not terminate the execution of the program. For convenience, it calls `runtime.Goexit` to immediately terminate the calling goroutine.
+
 #### Goroutines
 Goroutines are fully supported by GopherJS. The only restriction is that you need to start a new goroutine if you want to use blocking code called from external JavaScript:
 

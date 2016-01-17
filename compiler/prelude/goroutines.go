@@ -129,6 +129,9 @@ var $go = function(fun, args, direct) {
       }
       $goroutine.exit = true;
     } catch (err) {
+      if ($goroutine.exit) {
+        return;
+      }
       $goroutine.exit = true;
       throw err;
     } finally {

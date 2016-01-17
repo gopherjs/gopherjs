@@ -496,3 +496,9 @@ func TestBoolConvert(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestGoexit(t *testing.T) {
+	go func() {
+		runtime.Goexit()
+	}()
+}

@@ -2,6 +2,8 @@
 
 package syscall
 
+import "runtime"
+
 var minusOne = -1
 
 func Syscall(trap, nargs, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
@@ -69,6 +71,10 @@ func WriteFile(handle Handle, buf []byte, done *uint32, overlapped *Overlapped) 
 	}
 	printWarning()
 	return nil
+}
+
+func ExitProcess(exitcode uint32) {
+	runtime.Goexit()
 }
 
 func GetCommandLine() (cmd *uint16) {

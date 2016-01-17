@@ -3,6 +3,7 @@
 package syscall
 
 import (
+	"runtime"
 	"unsafe"
 
 	"github.com/gopherjs/gopherjs/js"
@@ -64,6 +65,9 @@ func Syscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
 		js.InternalObject(slice).Set("$array", array)
 		printToConsole(slice)
 		return uintptr(array.Length()), 0, 0
+	}
+	if trap == SYS_EXIT {
+		runtime.Goexit()
 	}
 	printWarning()
 	return uintptr(minusOne), 0, EACCES

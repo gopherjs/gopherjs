@@ -264,6 +264,8 @@ func main() {
 	run := cmdTest.Flags().String("run", "", "Run only those tests and examples matching the regular expression.")
 	short := cmdTest.Flags().Bool("short", false, "Tell long-running tests to shorten their run time.")
 	verbose := cmdTest.Flags().BoolP("verbose", "v", false, "Log all tests as they are run. Also print all text from Log and Logf calls even if the test succeeds.")
+	compileOnly := cmdTest.Flags().BoolP("compileonly", "c", false, "Compile the test binary to pkg.test.js but do not run it (where pkg is the last element of the package's import path). The file name can be changed with the -o flag.")
+	outputFilename := cmdTest.Flags().StringP("output", "o", "", "Compile the test binary to the named file. The test still runs (unless -c is specified).")
 	cmdTest.Flags().AddFlag(flagMinify)
 	cmdTest.Flags().AddFlag(flagColor)
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
@@ -376,18 +378,36 @@ func main() {
 					return err
 				}
 
-				tempfile, err := ioutil.TempFile(currentDirectory, "test.")
-				if err != nil {
-					return err
+				if *compileOnly && *outputFilename == "" {
+					*outputFilename = pkg.Package.Name + "_test.js"
+				}
+
+				var outfile *os.File
+				if *outputFilename != "" {
+					outfile, err = os.Create(*outputFilename)
+					if err != nil {
+						return err
+					}
+				} else {
+					outfile, err = ioutil.TempFile(currentDirectory, "test.")
+					if err != nil {
+						return err
+					}
 				}
 				defer func() {
-					tempfile.Close()
-					os.Remove(tempfile.Name())
-					os.Remove(tempfile.Name() + ".map")
+					outfile.Close()
+					if *outputFilename == "" {
+						os.Remove(outfile.Name())
+						os.Remove(outfile.Name() + ".map")
+					}
 				}()
 
-				if err := s.WriteCommandPackage(mainPkg, tempfile.Name()); err != nil {
+				if err := s.WriteCommandPackage(mainPkg, outfile.Name()); err != nil {
 					return err
+				}
+
+				if *compileOnly {
+					continue
 				}
 
 				var args []string
@@ -405,7 +425,7 @@ func main() {
 				}
 				status := "ok  "
 				start := time.Now()
-				if err := runNode(tempfile.Name(), args, pkg.Dir, options.Quiet); err != nil {
+				if err := runNode(outfile.Name(), args, pkg.Dir, options.Quiet); err != nil {
 					if _, ok := err.(*exec.ExitError); !ok {
 						return err
 					}

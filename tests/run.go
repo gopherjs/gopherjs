@@ -57,7 +57,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/bug409.go":     {desc: "1 2 3 4"},
 	"fixedbugs/bug433.go":     {desc: "Error: [object Object]"},
 	"fixedbugs/issue10353.go": {desc: "incorrect output"},
-	"fixedbugs/issue11256.go": {desc: "null"},
 	"fixedbugs/issue11656.go": {desc: "Error: Native function not implemented: runtime/debug.setPanicOnFault"},
 	"fixedbugs/issue4085b.go": {desc: "Error: got panic JavaScript error: Invalid typed array length, want len out of range"},
 	"fixedbugs/issue4316.go":  {desc: "Error: runtime error: invalid memory address or nil pointer dereference"},

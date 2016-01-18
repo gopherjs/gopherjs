@@ -518,8 +518,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			return c.formatExpr("%e.%s", e.X, strings.Join(fields, "."))
 		case types.MethodVal:
-			recv := c.makeReceiver(e.X, sel)
-			return c.formatExpr(`$methodVal(%s, "%s")`, recv, sel.Obj().(*types.Func).Name())
+			return c.formatExpr(`$methodVal(%s, "%s")`, c.makeReceiver(e), sel.Obj().(*types.Func).Name())
 		case types.MethodExpr:
 			if !sel.Obj().Exported() {
 				c.p.dependencies[sel.Obj()] = true
@@ -587,7 +586,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 
 			switch sel.Kind() {
 			case types.MethodVal:
-				recv := c.makeReceiver(f.X, sel)
+				recv := c.makeReceiver(f)
 
 				if typesutil.IsJsPackage(sel.Obj().Pkg()) {
 					globalRef := func(id string) string {
@@ -788,11 +787,13 @@ func (c *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun *
 	return c.formatExpr("%s(%s)", fun, strings.Join(args, ", "))
 }
 
-func (c *funcContext) makeReceiver(x ast.Expr, sel selection) *expression {
+func (c *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
+	sel, _ := c.p.SelectionOf(e)
 	if !sel.Obj().Exported() {
 		c.p.dependencies[sel.Obj()] = true
 	}
 
+	x := e.X
 	recvType := sel.Recv()
 	if len(sel.Index()) > 1 {
 		for _, index := range sel.Index()[:len(sel.Index())-1] {

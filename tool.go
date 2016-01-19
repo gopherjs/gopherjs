@@ -335,11 +335,16 @@ func main() {
 					}
 
 					for _, decl := range archive.Declarations {
-						if strings.HasPrefix(decl.FullName, testPkg.ImportPath+".Test") {
+						switch {
+						case decl.FullName == testPkg.ImportPath+".TestMain":
+							if tests.TestMain != nil {
+								return fmt.Errorf("multiple definitions of TestMain")
+							}
+							tests.TestMain = &testFunc{Package: testPkgName, Name: decl.FullName[len(testPkg.ImportPath)+1:]}
+						case strings.HasPrefix(decl.FullName, testPkg.ImportPath+".Test"):
 							tests.Tests = append(tests.Tests, testFunc{Package: testPkgName, Name: decl.FullName[len(testPkg.ImportPath)+1:]})
 							*needVar = true
-						}
-						if strings.HasPrefix(decl.FullName, testPkg.ImportPath+".Benchmark") {
+						case strings.HasPrefix(decl.FullName, testPkg.ImportPath+".Benchmark"):
 							tests.Benchmarks = append(tests.Benchmarks, testFunc{Package: testPkgName, Name: decl.FullName[len(testPkg.ImportPath)+1:]})
 							*needVar = true
 						}
@@ -773,6 +778,7 @@ type testFuncs struct {
 	Tests      []testFunc
 	Benchmarks []testFunc
 	Examples   []testFunc
+	TestMain   *testFunc
 	Package    *build.Package
 	NeedTest   bool
 	NeedXtest  bool
@@ -788,6 +794,9 @@ var testmainTmpl = template.Must(template.New("main").Parse(`
 package main
 
 import (
+{{if not .TestMain}}
+	"os"
+{{end}}
 	"regexp"
 	"testing"
 
@@ -832,7 +841,12 @@ func matchString(pat, str string) (result bool, err error) {
 }
 
 func main() {
-	testing.Main(matchString, tests, benchmarks, examples)
+	m := testing.MainStart(matchString, tests, benchmarks, examples)
+{{with .TestMain}}
+	{{.Package}}.{{.Name}}(m)
+{{else}}
+	os.Exit(m.Run())
+{{end}}
 }
 
 `))

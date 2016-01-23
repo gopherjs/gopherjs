@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/build"
+	"go/doc"
 	"go/parser"
 	"go/scanner"
 	"go/token"
@@ -18,11 +20,14 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	// 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 	"text/template"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/compiler"
@@ -325,28 +330,25 @@ func main() {
 					fmt.Printf("?   \t%s\t[no test files]\n", pkg.ImportPath)
 					continue
 				}
-
 				s := gbuild.NewSession(options)
+
 				tests := &testFuncs{Package: pkg.Package}
 				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
 					archive, err := s.BuildPackage(testPkg)
 					if err != nil {
 						return err
 					}
-
-					for _, decl := range archive.Declarations {
-						switch {
-						case decl.FullName == testPkg.ImportPath+".TestMain":
-							if tests.TestMain != nil {
-								return fmt.Errorf("multiple definitions of TestMain")
+					if testPkgName == "_test" {
+						for _, file := range pkg.TestGoFiles {
+							if err := tests.load(filepath.Join(pkg.Package.Dir, file), testPkgName, &tests.ImportTest, &tests.NeedTest); err != nil {
+								return err
 							}
-							tests.TestMain = &testFunc{Package: testPkgName, Name: decl.FullName[len(testPkg.ImportPath)+1:]}
-						case strings.HasPrefix(decl.FullName, testPkg.ImportPath+".Test"):
-							tests.Tests = append(tests.Tests, testFunc{Package: testPkgName, Name: decl.FullName[len(testPkg.ImportPath)+1:]})
-							*needVar = true
-						case strings.HasPrefix(decl.FullName, testPkg.ImportPath+".Benchmark"):
-							tests.Benchmarks = append(tests.Benchmarks, testFunc{Package: testPkgName, Name: decl.FullName[len(testPkg.ImportPath)+1:]})
-							*needVar = true
+						}
+					} else {
+						for _, file := range pkg.XTestGoFiles {
+							if err := tests.load(filepath.Join(pkg.Package.Dir, file), "_xtest", &tests.ImportXtest, &tests.NeedXtest); err != nil {
+								return err
+							}
 						}
 					}
 					return nil
@@ -775,19 +777,111 @@ func runNode(script string, args []string, dir string, quiet bool) error {
 }
 
 type testFuncs struct {
-	Tests      []testFunc
-	Benchmarks []testFunc
-	Examples   []testFunc
-	TestMain   *testFunc
-	Package    *build.Package
-	NeedTest   bool
-	NeedXtest  bool
+	Tests       []testFunc
+	Benchmarks  []testFunc
+	Examples    []testFunc
+	TestMain    *testFunc
+	Package     *build.Package
+	ImportTest  bool
+	NeedTest    bool
+	ImportXtest bool
+	NeedXtest   bool
 }
 
 type testFunc struct {
 	Package string // imported package name (_test or _xtest)
 	Name    string // function name
 	Output  string // output, for examples
+}
+
+var testFileSet = token.NewFileSet()
+
+func (t *testFuncs) load(filename, pkg string, doImport, seen *bool) error {
+	f, err := parser.ParseFile(testFileSet, filename, nil, parser.ParseComments)
+	if err != nil {
+		return err
+	}
+	for _, d := range f.Decls {
+		n, ok := d.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		if n.Recv != nil {
+			continue
+		}
+		name := n.Name.String()
+		switch {
+		case isTestMain(n):
+			if t.TestMain != nil {
+				return errors.New("multiple definitions of TestMain")
+			}
+			t.TestMain = &testFunc{pkg, name, ""}
+			*doImport, *seen = true, true
+		case isTest(name, "Test"):
+			t.Tests = append(t.Tests, testFunc{pkg, name, ""})
+			*doImport, *seen = true, true
+		case isTest(name, "Benchmark"):
+			t.Benchmarks = append(t.Benchmarks, testFunc{pkg, name, ""})
+			*doImport, *seen = true, true
+		}
+	}
+	// 	ex := doc.Examples(f)
+	// 	sort.Sort(byOrder(ex))
+	// 	for _, e := range ex {
+	// 		*doImport = true // import test file whether executed or not
+	// 		if e.Output == "" && !e.EmptyOutput {
+	// 			// Don't run examples with no output.
+	// 			continue
+	// 		}
+	// 		t.Examples = append(t.Examples, testFunc{pkg, "Example" + e.Name, e.Output})
+	// 		*seen = true
+	// 	}
+	return nil
+}
+
+type byOrder []*doc.Example
+
+func (x byOrder) Len() int           { return len(x) }
+func (x byOrder) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
+func (x byOrder) Less(i, j int) bool { return x[i].Order < x[j].Order }
+
+// isTestMain tells whether fn is a TestMain(m *testing.M) function.
+func isTestMain(fn *ast.FuncDecl) bool {
+	if fn.Name.String() != "TestMain" ||
+		fn.Type.Results != nil && len(fn.Type.Results.List) > 0 ||
+		fn.Type.Params == nil ||
+		len(fn.Type.Params.List) != 1 ||
+		len(fn.Type.Params.List[0].Names) > 1 {
+		return false
+	}
+	ptr, ok := fn.Type.Params.List[0].Type.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	// We can't easily check that the type is *testing.M
+	// because we don't know how testing has been imported,
+	// but at least check that it's *M or *something.M.
+	if name, ok := ptr.X.(*ast.Ident); ok && name.Name == "M" {
+		return true
+	}
+	if sel, ok := ptr.X.(*ast.SelectorExpr); ok && sel.Sel.Name == "M" {
+		return true
+	}
+	return false
+}
+
+// isTest tells whether name looks like a test (or benchmark, according to prefix).
+// It is a Test (say) if there is a character after Test that is not a lower-case letter.
+// We don't want TesticularCancer.
+func isTest(name, prefix string) bool {
+	if !strings.HasPrefix(name, prefix) {
+		return false
+	}
+	if len(name) == len(prefix) { // "Test" is ok
+		return true
+	}
+	rune, _ := utf8.DecodeRuneInString(name[len(prefix):])
+	return !unicode.IsLower(rune)
 }
 
 var testmainTmpl = template.Must(template.New("main").Parse(`
@@ -800,11 +894,11 @@ import (
 	"regexp"
 	"testing"
 
-{{if .NeedTest}}
-	_test {{.Package.ImportPath | printf "%q"}}
+{{if .ImportTest}}
+	{{if .NeedTest}}_test{{else}}_{{end}} {{.Package.ImportPath | printf "%q"}}
 {{end}}
-{{if .NeedXtest}}
-	_xtest {{.Package.ImportPath | printf "%s_test" | printf "%q"}}
+{{if .ImportXtest}}
+	{{if .NeedXtest}}_xtest{{else}}_{{end}} {{.Package.ImportPath | printf "%s_test" | printf "%q"}}
 {{end}}
 )
 

@@ -431,8 +431,6 @@ func cvtDirect(v Value, typ Type) Value {
 
 	var val *js.Object
 	switch k := typ.Kind(); k {
-	case Chan:
-		val = jsType(typ).New()
 	case Slice:
 		slice := jsType(typ).New(srcVal.Get("$array"))
 		slice.Set("$offset", srcVal.Get("$offset"))
@@ -453,7 +451,7 @@ func cvtDirect(v Value, typ Type) Value {
 	case Struct:
 		val = jsType(typ).Get("ptr").New()
 		copyStruct(val, srcVal, typ)
-	case Array, Bool, Func, Interface, Map, String:
+	case Array, Bool, Chan, Func, Interface, Map, String:
 		val = js.InternalObject(v.ptr)
 	default:
 		panic(&ValueError{"reflect.Convert", k})

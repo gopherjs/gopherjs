@@ -1013,7 +1013,7 @@ func (v Value) Set(x Value) {
 	if v.flag&flagIndir != 0 {
 		switch v.typ.Kind() {
 		case Array:
-			js.Global.Call("$copy", js.InternalObject(v.ptr), js.InternalObject(x.ptr), jsType(v.typ))
+			jsType(v.typ).Call("copy", js.InternalObject(v.ptr), js.InternalObject(x.ptr))
 		case Interface:
 			js.InternalObject(v.ptr).Call("$set", js.InternalObject(valueInterface(x, false)))
 		case Struct:

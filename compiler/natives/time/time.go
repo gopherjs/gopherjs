@@ -50,7 +50,7 @@ func now() (sec int64, nsec int32) {
 
 func Sleep(d Duration) {
 	c := make(chan struct{})
-	js.Global.Call("setTimeout", func() { close(c) }, int(d/Millisecond))
+	js.Global.Call("$setTimeout", js.InternalObject(func() { close(c) }), int(d/Millisecond))
 	<-c
 }
 
@@ -63,14 +63,14 @@ func startTimer(t *runtimeTimer) {
 	if diff < 0 {
 		diff = 0
 	}
-	t.timeout = js.Global.Call("setTimeout", func() {
+	t.timeout = js.Global.Call("$setTimeout", js.InternalObject(func() {
 		t.active = false
 		go t.f(t.arg, 0)
 		if t.period != 0 {
 			t.when += t.period
 			startTimer(t)
 		}
-	}, diff+1)
+	}), diff+1)
 }
 
 func stopTimer(t *runtimeTimer) bool {

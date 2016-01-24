@@ -190,7 +190,7 @@ var $schedule = function(goroutine, direct) {
 
 var $setTimeout = function(f, t) {
   $awakeGoroutines++;
-  setTimeout(function() {
+  return setTimeout(function() {
     $awakeGoroutines--;
     f();
   }, t);

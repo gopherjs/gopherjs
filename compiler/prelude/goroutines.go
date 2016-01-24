@@ -127,11 +127,9 @@ var $go = function(fun, args, direct) {
       }
       $goroutine.exit = true;
     } catch (err) {
-      if ($goroutine.exit) {
-        return;
+      if (!$goroutine.exit) {
+        throw err;
       }
-      $goroutine.exit = true;
-      throw err;
     } finally {
       $curGoroutine = $dummyGoroutine;
       if ($goroutine.exit) { /* also set by runtime.Goexit() */

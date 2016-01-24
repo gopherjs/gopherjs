@@ -113,6 +113,7 @@ var $throw = function(err) { throw err; };
 
 var $dummyGoroutine = { asleep: false, exit: false, deferStack: [], panicStack: [], canBlock: false };
 var $curGoroutine = $dummyGoroutine, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
+var $mainFinished = false;
 var $go = function(fun, args, direct) {
   $totalGoroutines++;
   $awakeGoroutines++;
@@ -138,7 +139,7 @@ var $go = function(fun, args, direct) {
       }
       if ($goroutine.asleep) {
         $awakeGoroutines--;
-        if ($awakeGoroutines === 0 && $totalGoroutines !== 0 && $checkForDeadlock) {
+        if (!$mainFinished && $awakeGoroutines === 0 && $checkForDeadlock) {
           console.error("fatal error: all goroutines are asleep - deadlock!");
           if ($global.process !== undefined) {
             $global.process.exit(2);

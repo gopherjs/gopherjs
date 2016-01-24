@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/token"
 	"go/types"
 	"sort"
@@ -400,6 +401,11 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			Body: &ast.BlockStmt{
 				List: []ast.Stmt{
 					&ast.ExprStmt{X: call},
+					&ast.AssignStmt{
+						Lhs: []ast.Expr{c.newIdent("$mainFinished", types.Typ[types.Bool])},
+						Tok: token.ASSIGN,
+						Rhs: []ast.Expr{c.newConst(types.Typ[types.Bool], constant.MakeBool(true))},
+					},
 				},
 			},
 		}

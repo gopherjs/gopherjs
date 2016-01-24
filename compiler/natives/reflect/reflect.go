@@ -351,7 +351,8 @@ func loadScalar(p unsafe.Pointer, n uintptr) uintptr {
 }
 
 func makechan(typ *rtype, size uint64) (ch unsafe.Pointer) {
-	return unsafe.Pointer(js.Global.Get("$Chan").New(size).Unsafe())
+	ctyp := (*chanType)(unsafe.Pointer(typ))
+	return unsafe.Pointer(js.Global.Get("$Chan").New(jsType(ctyp.elem), size).Unsafe())
 }
 
 func makemap(t *rtype) (m unsafe.Pointer) {

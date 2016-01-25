@@ -606,7 +606,7 @@ func (t *uncommonType) Method(i int) (m Method) {
 	fl := flag(Func)
 	if p.pkgPath != nil {
 		m.PkgPath = *p.pkgPath
-		fl |= flagRO
+		fl |= flagStickyRO
 	}
 	mt := p.typ
 	m.Type = mt
@@ -812,11 +812,14 @@ func (v Value) Field(i int) Value {
 	field := &tt.fields[i]
 	typ := field.typ
 
-	fl := v.flag & (flagRO | flagIndir | flagAddr)
+	fl := v.flag&(flagStickyRO|flagIndir|flagAddr) | flag(typ.Kind())
 	if field.pkgPath != nil {
-		fl |= flagRO
+		if field.name == nil {
+			fl |= flagEmbedRO
+		} else {
+			fl |= flagStickyRO
+		}
 	}
-	fl |= flag(typ.Kind())
 
 	if tag := tt.fields[i].tag; tag != nil && i != 0 {
 		if jsTag := getJsTag(*tag); jsTag != "" {
@@ -1022,6 +1025,23 @@ func (v Value) Set(x Value) {
 		return
 	}
 	v.ptr = x.ptr
+}
+
+func (v Value) SetBytes(x []byte) {
+	v.mustBeAssignable()
+	v.mustBe(Slice)
+	if v.typ.Elem().Kind() != Uint8 {
+		panic("reflect.Value.SetBytes of non-byte slice")
+	}
+	slice := js.InternalObject(x)
+	if v.typ.Name() != "" || v.typ.Elem().Name() != "" {
+		typedSlice := jsType(v.typ).New(slice.Get("$array"))
+		typedSlice.Set("$offset", slice.Get("$offset"))
+		typedSlice.Set("$length", slice.Get("$length"))
+		typedSlice.Set("$capacity", slice.Get("$capacity"))
+		slice = typedSlice
+	}
+	js.InternalObject(v.ptr).Call("$set", slice)
 }
 
 func (v Value) SetCap(n int) {
@@ -1234,7 +1254,9 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 			return false
 		}
 		for _, k := range keys {
-			if !deepValueEqualJs(v1.MapIndex(k), v2.MapIndex(k), visited) {
+			val1 := v1.MapIndex(k)
+			val2 := v2.MapIndex(k)
+			if !val1.IsValid() || !val2.IsValid() || !deepValueEqualJs(val1, val2, visited) {
 				return false
 			}
 		}

@@ -2,9 +2,13 @@
 
 package runtime
 
-import "github.com/gopherjs/gopherjs/js"
+import (
+	"runtime/internal/sys"
 
-const GOOS = theGoos
+	"github.com/gopherjs/gopherjs/js"
+)
+
+const GOOS = sys.TheGoos
 const GOARCH = "js"
 const Compiler = "gopherjs"
 
@@ -37,7 +41,7 @@ func GOROOT() string {
 	if goroot != js.Undefined {
 		return goroot.String()
 	}
-	return defaultGoroot
+	return sys.DefaultGoroot
 }
 
 func Breakpoint() {
@@ -169,9 +173,13 @@ func LockOSThread() {}
 func UnlockOSThread() {}
 
 func Version() string {
-	return theVersion
+	return sys.TheVersion
 }
 
 func StartTrace() error { return nil }
 func StopTrace()        {}
 func ReadTrace() []byte
+
+func efaceOf(ep *interface{}) *eface {
+	panic("efaceOf: not supported")
+}

@@ -5,7 +5,13 @@ package net
 import (
 	"errors"
 	"syscall"
+
+	"github.com/gopherjs/gopherjs/js"
 )
+
+func byteIndex(s string, c byte) int {
+	return js.InternalObject(s).Call("indexOf", js.Global.Get("String").Call("fromCharCode", c)).Int()
+}
 
 func Listen(net, laddr string) (Listener, error) {
 	panic(errors.New("network access is not supported by GopherJS"))

@@ -12,10 +12,6 @@ var posInf = 1 / zero
 var negInf = -1 / zero
 var nan = 0 / zero
 
-func Abs(x float64) float64 {
-	return abs(x)
-}
-
 func Acos(x float64) float64 {
 	return math.Call("acos", x).Float()
 }
@@ -145,6 +141,9 @@ func Mod(x, y float64) float64 {
 func Modf(f float64) (float64, float64) {
 	if f == posInf || f == negInf {
 		return f, nan
+	}
+	if 1/f == negInf {
+		return f, f
 	}
 	frac := Mod(f, 1)
 	return f - frac, frac

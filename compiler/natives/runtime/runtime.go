@@ -2,9 +2,13 @@
 
 package runtime
 
-import "github.com/gopherjs/gopherjs/js"
+import (
+	"runtime/internal/sys"
 
-const GOOS = theGoos
+	"github.com/gopherjs/gopherjs/js"
+)
+
+const GOOS = sys.TheGoos
 const GOARCH = "js"
 const Compiler = "gopherjs"
 
@@ -37,7 +41,7 @@ func GOROOT() string {
 	if goroot != js.Undefined {
 		return goroot.String()
 	}
-	return defaultGoroot
+	return sys.DefaultGoroot
 }
 
 func Breakpoint() {
@@ -169,7 +173,7 @@ func LockOSThread() {}
 func UnlockOSThread() {}
 
 func Version() string {
-	return theVersion
+	return sys.TheVersion
 }
 
 func StartTrace() error { return nil }
@@ -179,4 +183,8 @@ func ReadTrace() []byte
 // We fake a cgo environment to catch errors. Therefor we have to implement this and always return 0
 func NumCgoCall() int64 {
 	return 0
+}
+
+func efaceOf(ep *interface{}) *eface {
+	panic("efaceOf: not supported")
 }

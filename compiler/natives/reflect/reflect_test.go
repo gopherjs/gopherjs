@@ -33,3 +33,7 @@ func TestTypelinksSorted(t *testing.T) {
 func TestGCBits(t *testing.T) {
 	t.Skip()
 }
+
+func TestChanAlloc(t *testing.T) {
+	t.Skip()
+}

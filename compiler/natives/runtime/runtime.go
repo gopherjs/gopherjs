@@ -174,3 +174,8 @@ func Version() string {
 func StartTrace() error { return nil }
 func StopTrace()        {}
 func ReadTrace() []byte
+
+// We fake a cgo environment to catch errors. Therefor we have to implement this and always return 0
+func NumCgoCall() int64 {
+	return 0
+}

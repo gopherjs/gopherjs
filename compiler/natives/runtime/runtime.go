@@ -114,14 +114,15 @@ type MemStats struct {
 	OtherSys    uint64 // other system allocations
 
 	// Garbage collector statistics.
-	NextGC       uint64 // next collection will happen when HeapAlloc ≥ this amount
-	LastGC       uint64 // end time of last collection (nanoseconds since 1970)
-	PauseTotalNs uint64
-	PauseNs      [256]uint64 // circular buffer of recent GC pause durations, most recent at [(NumGC+255)%256]
-	PauseEnd     [256]uint64 // circular buffer of recent GC pause end times
-	NumGC        uint32
-	EnableGC     bool
-	DebugGC      bool
+	NextGC        uint64 // next collection will happen when HeapAlloc ≥ this amount
+	LastGC        uint64 // end time of last collection (nanoseconds since 1970)
+	PauseTotalNs  uint64
+	PauseNs       [256]uint64 // circular buffer of recent GC pause durations, most recent at [(NumGC+255)%256]
+	PauseEnd      [256]uint64 // circular buffer of recent GC pause end times
+	NumGC         uint32
+	GCCPUFraction float64 // fraction of CPU time used by GC
+	EnableGC      bool
+	DebugGC       bool
 
 	// Per-size allocation statistics.
 	// 61 is NumSizeClasses in the C code.

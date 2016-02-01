@@ -114,6 +114,9 @@ var $externalize = function(v, t) {
         return searchJsObject(v.$get(), t.elem);
       case $kindStruct:
         var f = t.fields[0];
+        if (f === undefined) {
+          return noJsObject;
+        }
         return searchJsObject(v[f.prop], f.typ);
       case $kindInterface:
         return searchJsObject(v.$val, v.constructor);

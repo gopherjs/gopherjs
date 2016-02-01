@@ -132,7 +132,11 @@ var $externalize = function(v, t) {
       if (f.pkg !== "") { /* not exported */
         continue;
       }
-      o[f.name] = $externalize(v[f.prop], f.typ);
+      var name = f.name;
+      if (name === "") {
+        name = f.prop;
+      }
+      o[name] = $externalize(v[f.prop], f.typ);
     }
     return o;
   }

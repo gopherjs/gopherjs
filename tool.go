@@ -373,7 +373,11 @@ func main() {
 						ImportPath: "main",
 					},
 				}
-				mainPkg.Archive, err = compiler.Compile("main", []*ast.File{mainFile}, fset, s.ImportContext, options.Minify)
+				importContext := &compiler.ImportContext{
+					Packages: s.Types,
+					Import:   s.BuildImportPath,
+				}
+				mainPkg.Archive, err = compiler.Compile("main", []*ast.File{mainFile}, fset, importContext, options.Minify)
 				if err != nil {
 					return err
 				}
@@ -557,7 +561,7 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 				m := &sourcemap.Map{File: base + ".js"}
 				sourceMapFilter.MappingCallback = gbuild.NewMappingCallback(m, fs.options.GOROOT, fs.options.GOPATH)
 
-				deps, err := compiler.ImportDependencies(pkg.Archive, s.ImportContext.Import)
+				deps, err := compiler.ImportDependencies(pkg.Archive, s.BuildImportPath)
 				if err != nil {
 					return err
 				}

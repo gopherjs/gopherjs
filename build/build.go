@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/scanner"
 	"go/token"
+	"go/types"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -58,6 +59,10 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 // If an error occurs, Import returns a non-nil error and a nil
 // *PackageData.
 func Import(path string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
+	return importWithSrcDir(path, "", mode, installSuffix, buildTags)
+}
+
+func importWithSrcDir(path string, srcDir string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
 	buildContext := NewBuildContext(installSuffix, buildTags)
 	if path == "runtime" || path == "syscall" {
 		buildContext.GOARCH = build.Default.GOARCH
@@ -66,7 +71,7 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 			buildContext.InstallSuffix += "_" + installSuffix
 		}
 	}
-	pkg, err := buildContext.Import(path, "", mode)
+	pkg, err := buildContext.Import(path, srcDir, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -292,10 +297,10 @@ type PackageData struct {
 }
 
 type Session struct {
-	options       *Options
-	Packages      map[string]*PackageData
-	ImportContext *compiler.ImportContext
-	Watcher       *fsnotify.Watcher
+	options  *Options
+	Packages map[string]*PackageData
+	Types    map[string]*types.Package
+	Watcher  *fsnotify.Watcher
 }
 
 func NewSession(options *Options) *Session {
@@ -311,7 +316,7 @@ func NewSession(options *Options) *Session {
 		options:  options,
 		Packages: make(map[string]*PackageData),
 	}
-	s.ImportContext = compiler.NewImportContext(s.BuildImportPath)
+	s.Types = map[string]*types.Package{"unsafe": types.Unsafe}
 	if options.Watch {
 		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
 			if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n < 1024 {
@@ -381,18 +386,22 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 	if err := s.BuildPackage(pkg); err != nil {
 		return err
 	}
-	if s.ImportContext.Packages["main"].Name() != "main" {
+	if s.Types["main"].Name() != "main" {
 		return fmt.Errorf("cannot build/run non-main package")
 	}
 	return s.WriteCommandPackage(pkg, pkgObj)
 }
 
 func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
+	return s.buildImportPathWithSrcDir(path, "")
+}
+
+func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*compiler.Archive, error) {
 	if pkg, found := s.Packages[path]; found {
 		return pkg.Archive, nil
 	}
 
-	pkg, err := Import(path, 0, s.InstallSuffix(), s.options.BuildTags)
+	pkg, err := importWithSrcDir(path, srcDir, 0, s.InstallSuffix(), s.options.BuildTags)
 	if s.Watcher != nil && pkg != nil { // add watch even on error
 		s.Watcher.Add(pkg.Dir)
 	}
@@ -477,7 +486,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			}
 			defer objFile.Close()
 
-			pkg.Archive, err = compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.ImportContext.Packages)
+			pkg.Archive, err = compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.Types)
 			if err != nil {
 				return err
 			}
@@ -492,7 +501,13 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 		return err
 	}
 
-	pkg.Archive, err = compiler.Compile(pkg.ImportPath, files, fileSet, s.ImportContext, s.options.Minify)
+	importContext := &compiler.ImportContext{
+		Packages: s.Types,
+		Import: func(path string) (*compiler.Archive, error) {
+			return s.buildImportPathWithSrcDir(path, pkg.Dir)
+		},
+	}
+	pkg.Archive, err = compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
 	if err != nil {
 		return err
 	}
@@ -575,7 +590,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 		sourceMapFilter.MappingCallback = NewMappingCallback(m, s.options.GOROOT, s.options.GOPATH)
 	}
 
-	deps, err := compiler.ImportDependencies(pkg.Archive, s.ImportContext.Import)
+	deps, err := compiler.ImportDependencies(pkg.Archive, s.BuildImportPath)
 	if err != nil {
 		return err
 	}

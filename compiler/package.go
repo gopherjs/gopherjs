@@ -94,13 +94,6 @@ type ImportContext struct {
 	Import   func(string) (*Archive, error)
 }
 
-func NewImportContext(importFunc func(string) (*Archive, error)) *ImportContext {
-	return &ImportContext{
-		Packages: map[string]*types.Package{"unsafe": types.Unsafe},
-		Import:   importFunc,
-	}
-}
-
 // packageImporter implements go/types.Importer interface.
 type packageImporter struct {
 	importContext *ImportContext

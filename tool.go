@@ -448,7 +448,6 @@ func main() {
 	}
 	cmdTool.Flags().BoolP("e", "e", false, "")
 	cmdTool.Flags().BoolP("l", "l", false, "")
-	cmdTool.Flags().BoolP("m", "m", false, "")
 	cmdTool.Flags().StringP("o", "o", "", "")
 	cmdTool.Flags().StringP("D", "D", "", "")
 	cmdTool.Flags().StringP("I", "I", "", "")

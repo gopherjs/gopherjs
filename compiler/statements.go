@@ -28,8 +28,8 @@ func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 	c.SetPos(stmt.Pos())
 
-	stmt = filter.IncDecStmt(stmt, c.p.Info)
-	stmt = filter.Assign(stmt, c.p.Info)
+	stmt = filter.IncDecStmt(stmt, c.p.Info.Info)
+	stmt = filter.Assign(stmt, c.p.Info.Info, c.p.Info.Pkg)
 
 	switch s := stmt.(type) {
 	case *ast.BlockStmt:

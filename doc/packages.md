@@ -48,7 +48,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | debug           |                       |                                   |
 | -- dwarf        | yes                   |                                   |
 | -- elf          | yes                   |                                   |
-| -- gosym        | yes                   |                                   |
+| -- gosym        | no                    | removed support for go1.6         |
 | -- macho        | yes                   |                                   |
 | -- pe           | yes                   |                                   |
 | encoding        |                       |                                   |

@@ -3,7 +3,7 @@ GopherJS - A compiler from Go to JavaScript
 
 [![Circle CI](https://circleci.com/gh/gopherjs/gopherjs.svg?style=svg)](https://circleci.com/gh/gopherjs/gopherjs)
 
-GopherJS compiles Go code ([golang.org](http://golang.org/)) to pure JavaScript code. Its main purpose is to give you the opportunity to write front-end code in Go which will still run in all browsers. Give GopherJS a try on the [GopherJS Playground](http://gopherjs.github.io/playground/).
+GopherJS compiles Go code ([golang.org](https://golang.org/)) to pure JavaScript code. Its main purpose is to give you the opportunity to write front-end code in Go which will still run in all browsers. Give GopherJS a try on the [GopherJS Playground](http://gopherjs.github.io/playground/).
 
 ### What is supported?
 Nearly everything, including Goroutines ([compatibility table](https://github.com/gopherjs/gopherjs/blob/master/doc/packages.md)). Performance is quite good in most cases, see [HTML5 game engine benchmark](http://ajhager.github.io/enj/).
@@ -30,7 +30,7 @@ For system calls (file system access, etc.), see [this page](https://github.com/
 ### Performance Tips
 
 - Use the `-m` command line flag to generate minified code.
-- Apply gzip compression (http://en.wikipedia.org/wiki/HTTP_compression).
+- Apply gzip compression (https://en.wikipedia.org/wiki/HTTP_compression).
 - Use `int` instead of `(u)int8/16/32/64`.
 - Use `float64` instead of `float32`.
 
@@ -42,7 +42,7 @@ For system calls (file system access, etc.), see [this page](https://github.com/
 
 ### Getting started
 #### Interacting with the DOM
-The package `github.com/gopherjs/gopherjs/js` (see [documentation](http://godoc.org/github.com/gopherjs/gopherjs/js)) provides functions for interacting with native JavaScript APIs. For example the line
+The package `github.com/gopherjs/gopherjs/js` (see [documentation](https://godoc.org/github.com/gopherjs/gopherjs/js)) provides functions for interacting with native JavaScript APIs. For example the line
 
 ```js
 document.write("Hello world!");
@@ -54,7 +54,7 @@ would look like this in Go:
 js.Global.Get("document").Call("write", "Hello world!")
 ```
 
-You may also want use the [DOM bindings](http://dominik.honnef.co/go/js/dom), the [jQuery bindings](https://github.com/gopherjs/jquery) (see [TodoMVC Example](https://github.com/gopherjs/todomvc)) or the [AngularJS bindings](https://github.com/gopherjs/go-angularjs). Those are some of the [bindings to JavaScript APIs and libraries](https://github.com/gopherjs/gopherjs/wiki/bindings) by community members.
+You may also want use the [DOM bindings](http://dominik.honnef.co/go/js/dom), the [jQuery bindings](https://github.com/gopherjs/jquery) (see [TodoMVC Example](https://github.com/gopherjs/todomvc)) or the [AngularJS bindings](https://github.com/neelance/go-angularjs). Those are some of the [bindings to JavaScript APIs and libraries](https://github.com/gopherjs/gopherjs/wiki/bindings) by community members.
 
 #### Providing library functions for use in other JavaScript code
 Set a global variable to a map that contains the functions:

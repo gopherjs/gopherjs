@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"vendored"
 
 	"github.com/gopherjs/gopherjs/tests/otherpkg"
 )
@@ -501,4 +502,10 @@ func TestGoexit(t *testing.T) {
 	go func() {
 		runtime.Goexit()
 	}()
+}
+
+func TestVendoring(t *testing.T) {
+	if vendored.Answer != 42 {
+		t.Fail()
+	}
 }

@@ -101,14 +101,20 @@ type packageImporter struct {
 }
 
 func (pi packageImporter) Import(path string) (*types.Package, error) {
-	if _, err := pi.importContext.Import(path); err != nil {
+	if path == "unsafe" {
+		return types.Unsafe, nil
+	}
+
+	a, err := pi.importContext.Import(path)
+	if err != nil {
 		if *pi.importError == nil {
 			// If import failed, show first error of import only (https://github.com/gopherjs/gopherjs/issues/119).
 			*pi.importError = err
 		}
 		return nil, err
 	}
-	return pi.importContext.Packages[path], nil
+
+	return a.types, nil
 }
 
 func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {

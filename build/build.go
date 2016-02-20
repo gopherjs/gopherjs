@@ -318,7 +318,7 @@ func NewSession(options *Options) *Session {
 		options:  options,
 		Packages: make(map[string]*PackageData),
 	}
-	s.Types = map[string]*types.Package{"unsafe": types.Unsafe}
+	s.Types = make(map[string]*types.Package)
 	if options.Watch {
 		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
 			if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n < 1024 {

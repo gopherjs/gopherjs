@@ -113,6 +113,9 @@ func (pi packageImporter) Import(path string) (*types.Package, error) {
 		}
 		return nil, err
 	}
+	if a == nil {
+		return nil, fmt.Errorf("cannot find %q", path)
+	}
 
 	return a.types, nil
 }

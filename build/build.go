@@ -362,7 +362,7 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 	if pkgObj == "" {
 		pkgObj = filepath.Base(packagePath) + ".js"
 	}
-	if err := s.WriteCommandPackage(pkg, pkgObj); err != nil {
+	if err := s.WriteCommandPackage(pkg.Archive, pkgObj); err != nil {
 		return err
 	}
 	return nil
@@ -391,7 +391,7 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 	if s.Types["main"].Name() != "main" {
 		return fmt.Errorf("cannot build/run non-main package")
 	}
-	return s.WriteCommandPackage(pkg, pkgObj)
+	return s.WriteCommandPackage(pkg.Archive, pkgObj)
 }
 
 func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
@@ -561,11 +561,7 @@ func (s *Session) writeLibraryPackage(pkg *PackageData, pkgObj string) error {
 	return compiler.WriteArchive(pkg.Archive, objFile)
 }
 
-func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
-	if !pkg.IsCommand() || pkg.UpToDate {
-		return nil
-	}
-
+func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) error {
 	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
 		return err
 	}
@@ -592,7 +588,7 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 		sourceMapFilter.MappingCallback = NewMappingCallback(m, s.options.GOROOT, s.options.GOPATH)
 	}
 
-	deps, err := compiler.ImportDependencies(pkg.Archive, s.BuildImportPath)
+	deps, err := compiler.ImportDependencies(archive, s.BuildImportPath)
 	if err != nil {
 		return err
 	}

@@ -40,8 +40,6 @@ type Archive struct {
 	IncJSCode    []byte
 	FileSet      []byte
 	Minified     bool
-
-	types *types.Package
 }
 
 type Decl struct {
@@ -241,11 +239,10 @@ func ReadArchive(filename, path string, r io.Reader, packages map[string]*types.
 	}
 
 	var err error
-	_, a.types, err = importer.ImportData(packages, a.ExportData)
+	_, packages[path], err = importer.ImportData(packages, a.ExportData)
 	if err != nil {
 		return nil, err
 	}
-	packages[path] = a.types
 
 	return &a, nil
 }

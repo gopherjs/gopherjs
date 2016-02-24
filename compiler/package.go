@@ -114,7 +114,7 @@ func (pi packageImporter) Import(path string) (*types.Package, error) {
 		return nil, err
 	}
 
-	return a.types, nil
+	return pi.importContext.Packages[a.ImportPath], nil
 }
 
 func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {
@@ -530,7 +530,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		Declarations: allDecls,
 		FileSet:      encodedFileSet.Bytes(),
 		Minified:     minify,
-		types:        typesPkg,
 	}, nil
 }
 

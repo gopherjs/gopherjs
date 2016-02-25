@@ -542,7 +542,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			if err := s.writeLibraryPackage(archive, filepath.Join(firstGopathWorkspace, pkg.PkgObj[len(s.options.GOROOT):])); err != nil {
 				return nil, err
 			}
-			return nil, nil
+			return archive, nil
 		}
 		return nil, err
 	}

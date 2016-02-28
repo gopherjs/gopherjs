@@ -124,14 +124,17 @@ func main() {
 					if err != nil {
 						return err
 					}
-					if err := s.BuildPackage(pkg); err != nil {
+					archive, err := s.BuildPackage(pkg)
+					if err != nil {
 						return err
 					}
 					if pkgObj == "" {
 						pkgObj = filepath.Base(args[0]) + ".js"
 					}
-					if err := s.WriteCommandPackage(pkg, pkgObj); err != nil {
-						return err
+					if pkg.IsCommand() && !pkg.UpToDate {
+						if err := s.WriteCommandPackage(archive, pkgObj); err != nil {
+							return err
+						}
 					}
 				}
 				return nil
@@ -186,12 +189,24 @@ func main() {
 				}
 				for _, pkgPath := range pkgs {
 					pkgPath = filepath.ToSlash(pkgPath)
-					if _, err := s.BuildImportPath(pkgPath); err != nil {
+
+					pkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
+					if s.Watcher != nil && pkg != nil { // add watch even on error
+						s.Watcher.Add(pkg.Dir)
+					}
+					if err != nil {
 						return err
 					}
-					pkg := s.Packages[pkgPath]
-					if err := s.WriteCommandPackage(pkg, pkg.PkgObj); err != nil {
+
+					archive, err := s.BuildPackage(pkg)
+					if err != nil {
 						return err
+					}
+
+					if pkg.IsCommand() && !pkg.UpToDate {
+						if err := s.WriteCommandPackage(archive, pkg.PkgObj); err != nil {
+							return err
+						}
 					}
 				}
 				return nil
@@ -314,11 +329,12 @@ func main() {
 				s := gbuild.NewSession(options)
 				tests := &testFuncs{Package: pkg.Package}
 				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
-					if err := s.BuildPackage(testPkg); err != nil {
+					archive, err := s.BuildPackage(testPkg)
+					if err != nil {
 						return err
 					}
 
-					for _, decl := range testPkg.Archive.Declarations {
+					for _, decl := range archive.Declarations {
 						if strings.HasPrefix(decl.FullName, testPkg.ImportPath+".Test") {
 							tests.Tests = append(tests.Tests, testFunc{Package: testPkgName, Name: decl.FullName[len(testPkg.ImportPath)+1:]})
 							*needVar = true
@@ -367,17 +383,16 @@ func main() {
 					return err
 				}
 
-				mainPkg := &gbuild.PackageData{
-					Package: &build.Package{
-						Name:       "main",
-						ImportPath: "main",
-					},
-				}
 				importContext := &compiler.ImportContext{
 					Packages: s.Types,
-					Import:   s.BuildImportPath,
+					Import: func(path string) (*compiler.Archive, error) {
+						if path == pkg.ImportPath || path == pkg.ImportPath+"_test" {
+							return s.Archives[path], nil
+						}
+						return s.BuildImportPath(path)
+					},
 				}
-				mainPkg.Archive, err = compiler.Compile("main", []*ast.File{mainFile}, fset, importContext, options.Minify)
+				mainPkgArchive, err := compiler.Compile("main", []*ast.File{mainFile}, fset, importContext, options.Minify)
 				if err != nil {
 					return err
 				}
@@ -406,7 +421,7 @@ func main() {
 					}
 				}()
 
-				if err := s.WriteCommandPackage(mainPkg, outfile.Name()); err != nil {
+				if err := s.WriteCommandPackage(mainPkgArchive, outfile.Name()); err != nil {
 					return err
 				}
 
@@ -552,7 +567,8 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 			buf := bytes.NewBuffer(nil)
 			browserErrors := bytes.NewBuffer(nil)
 			exitCode := handleError(func() error {
-				if err := s.BuildPackage(pkg); err != nil {
+				archive, err := s.BuildPackage(pkg)
+				if err != nil {
 					return err
 				}
 
@@ -560,7 +576,7 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 				m := &sourcemap.Map{File: base + ".js"}
 				sourceMapFilter.MappingCallback = gbuild.NewMappingCallback(m, fs.options.GOROOT, fs.options.GOPATH)
 
-				deps, err := compiler.ImportDependencies(pkg.Archive, s.BuildImportPath)
+				deps, err := compiler.ImportDependencies(archive, s.BuildImportPath)
 				if err != nil {
 					return err
 				}

@@ -295,12 +295,11 @@ type PackageData struct {
 	IsTest     bool // IsTest is true if the package is being built for running tests.
 	SrcModTime time.Time
 	UpToDate   bool
-	Archive    *compiler.Archive
 }
 
 type Session struct {
 	options  *Options
-	Packages map[string]*PackageData
+	Archives map[string]*compiler.Archive
 	Types    map[string]*types.Package
 	Watcher  *fsnotify.Watcher
 }
@@ -316,7 +315,7 @@ func NewSession(options *Options) *Session {
 
 	s := &Session{
 		options:  options,
-		Packages: make(map[string]*PackageData),
+		Archives: make(map[string]*compiler.Archive),
 	}
 	s.Types = make(map[string]*types.Package)
 	if options.Watch {
@@ -356,14 +355,17 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 		return err
 	}
 	pkg.JSFiles = jsFiles
-	if err := s.BuildPackage(pkg); err != nil {
+	archive, err := s.BuildPackage(pkg)
+	if err != nil {
 		return err
 	}
 	if pkgObj == "" {
 		pkgObj = filepath.Base(packagePath) + ".js"
 	}
-	if err := s.WriteCommandPackage(pkg, pkgObj); err != nil {
-		return err
+	if pkg.IsCommand() && !pkg.UpToDate {
+		if err := s.WriteCommandPackage(archive, pkgObj); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -385,42 +387,41 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 		pkg.GoFiles = append(pkg.GoFiles, file)
 	}
 
-	if err := s.BuildPackage(pkg); err != nil {
+	archive, err := s.BuildPackage(pkg)
+	if err != nil {
 		return err
 	}
 	if s.Types["main"].Name() != "main" {
 		return fmt.Errorf("cannot build/run non-main package")
 	}
-	return s.WriteCommandPackage(pkg, pkgObj)
+	return s.WriteCommandPackage(archive, pkgObj)
 }
 
 func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
-	return s.buildImportPathWithSrcDir(path, "")
+	_, archive, err := s.buildImportPathWithSrcDir(path, "")
+	return archive, err
 }
 
-func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*compiler.Archive, error) {
-	if pkg, found := s.Packages[path]; found {
-		return pkg.Archive, nil
-	}
-
+func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*PackageData, *compiler.Archive, error) {
 	pkg, err := importWithSrcDir(path, srcDir, 0, s.InstallSuffix(), s.options.BuildTags)
 	if s.Watcher != nil && pkg != nil { // add watch even on error
 		s.Watcher.Add(pkg.Dir)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	if err := s.BuildPackage(pkg); err != nil {
-		return nil, err
+	archive, err := s.BuildPackage(pkg)
+	if err != nil {
+		return nil, nil, err
 	}
-	return pkg.Archive, nil
+
+	return pkg, archive, nil
 }
 
-func (s *Session) BuildPackage(pkg *PackageData) error {
-	s.Packages[pkg.ImportPath] = pkg
-	if pkg.ImportPath == "unsafe" {
-		return nil
+func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
+	if archive, ok := s.Archives[pkg.ImportPath]; ok {
+		return archive, nil
 	}
 
 	if pkg.PkgObj != "" {
@@ -454,11 +455,11 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			if importedPkgPath == "unsafe" || ignored {
 				continue
 			}
-			_, err := s.BuildImportPath(importedPkgPath)
+			pkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, "")
 			if err != nil {
-				return err
+				return nil, err
 			}
-			impModeTime := s.Packages[importedPkgPath].SrcModTime
+			impModeTime := pkg.SrcModTime
 			if impModeTime.After(pkg.SrcModTime) {
 				pkg.SrcModTime = impModeTime
 			}
@@ -467,7 +468,7 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 		for _, name := range append(pkg.GoFiles, pkg.JSFiles...) {
 			fileInfo, err := os.Stat(filepath.Join(pkg.Dir, name))
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if fileInfo.ModTime().After(pkg.SrcModTime) {
 				pkg.SrcModTime = fileInfo.ModTime()
@@ -479,75 +480,79 @@ func (s *Session) BuildPackage(pkg *PackageData) error {
 			// package object is up to date, load from disk if library
 			pkg.UpToDate = true
 			if pkg.IsCommand() {
-				return nil
+				return nil, nil
 			}
 
 			objFile, err := os.Open(pkg.PkgObj)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			defer objFile.Close()
 
-			pkg.Archive, err = compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.Types)
+			archive, err := compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.Types)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
-			return nil
+			s.Archives[pkg.ImportPath] = archive
+			return archive, err
 		}
 	}
 
 	fileSet := token.NewFileSet()
 	files, err := parse(pkg.Package, pkg.IsTest, fileSet)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	importContext := &compiler.ImportContext{
 		Packages: s.Types,
 		Import: func(path string) (*compiler.Archive, error) {
-			return s.buildImportPathWithSrcDir(path, pkg.Dir)
+			_, archive, err := s.buildImportPathWithSrcDir(path, pkg.Dir)
+			return archive, err
 		},
 	}
-	pkg.Archive, err = compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
+	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for _, jsFile := range pkg.JSFiles {
 		code, err := ioutil.ReadFile(filepath.Join(pkg.Dir, jsFile))
 		if err != nil {
-			return err
+			return nil, err
 		}
-		pkg.Archive.IncJSCode = append(pkg.Archive.IncJSCode, []byte("\t(function() {\n")...)
-		pkg.Archive.IncJSCode = append(pkg.Archive.IncJSCode, code...)
-		pkg.Archive.IncJSCode = append(pkg.Archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
+		archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
+		archive.IncJSCode = append(archive.IncJSCode, code...)
+		archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
 	}
 
 	if s.options.Verbose {
 		fmt.Println(pkg.ImportPath)
 	}
 
+	s.Archives[pkg.ImportPath] = archive
+
 	if pkg.PkgObj == "" || pkg.IsCommand() {
-		return nil
+		return archive, nil
 	}
 
-	if err := s.writeLibraryPackage(pkg, pkg.PkgObj); err != nil {
+	if err := s.writeLibraryPackage(archive, pkg.PkgObj); err != nil {
 		if strings.HasPrefix(pkg.PkgObj, s.options.GOROOT) {
 			// fall back to first GOPATH workspace
 			firstGopathWorkspace := filepath.SplitList(s.options.GOPATH)[0]
-			if err := s.writeLibraryPackage(pkg, filepath.Join(firstGopathWorkspace, pkg.PkgObj[len(s.options.GOROOT):])); err != nil {
-				return err
+			if err := s.writeLibraryPackage(archive, filepath.Join(firstGopathWorkspace, pkg.PkgObj[len(s.options.GOROOT):])); err != nil {
+				return nil, err
 			}
-			return nil
+			return archive, nil
 		}
-		return err
+		return nil, err
 	}
 
-	return nil
+	return archive, nil
 }
 
-func (s *Session) writeLibraryPackage(pkg *PackageData, pkgObj string) error {
+func (s *Session) writeLibraryPackage(archive *compiler.Archive, pkgObj string) error {
 	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
 		return err
 	}
@@ -558,14 +563,10 @@ func (s *Session) writeLibraryPackage(pkg *PackageData, pkgObj string) error {
 	}
 	defer objFile.Close()
 
-	return compiler.WriteArchive(pkg.Archive, objFile)
+	return compiler.WriteArchive(archive, objFile)
 }
 
-func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
-	if !pkg.IsCommand() || pkg.UpToDate {
-		return nil
-	}
-
+func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) error {
 	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
 		return err
 	}
@@ -592,7 +593,13 @@ func (s *Session) WriteCommandPackage(pkg *PackageData, pkgObj string) error {
 		sourceMapFilter.MappingCallback = NewMappingCallback(m, s.options.GOROOT, s.options.GOPATH)
 	}
 
-	deps, err := compiler.ImportDependencies(pkg.Archive, s.BuildImportPath)
+	deps, err := compiler.ImportDependencies(archive, func(path string) (*compiler.Archive, error) {
+		if archive, ok := s.Archives[path]; ok {
+			return archive, nil
+		}
+		_, archive, err := s.buildImportPathWithSrcDir(path, "")
+		return archive, err
+	})
 	if err != nil {
 		return err
 	}

@@ -131,8 +131,10 @@ func main() {
 					if pkgObj == "" {
 						pkgObj = filepath.Base(args[0]) + ".js"
 					}
-					if err := s.WriteCommandPackage(archive, pkgObj); err != nil {
-						return err
+					if pkg.IsCommand() && !pkg.UpToDate {
+						if err := s.WriteCommandPackage(archive, pkgObj); err != nil {
+							return err
+						}
 					}
 				}
 				return nil

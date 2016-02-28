@@ -362,8 +362,10 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 	if pkgObj == "" {
 		pkgObj = filepath.Base(packagePath) + ".js"
 	}
-	if err := s.WriteCommandPackage(archive, pkgObj); err != nil {
-		return err
+	if pkg.IsCommand() && !pkg.UpToDate {
+		if err := s.WriteCommandPackage(archive, pkgObj); err != nil {
+			return err
+		}
 	}
 	return nil
 }

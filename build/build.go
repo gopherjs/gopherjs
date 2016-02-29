@@ -505,11 +505,19 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		return nil, err
 	}
 
+	localImportPathCache := make(map[string]*compiler.Archive)
 	importContext := &compiler.ImportContext{
 		Packages: s.Types,
 		Import: func(path string) (*compiler.Archive, error) {
+			if archive, ok := localImportPathCache[path]; ok {
+				return archive, nil
+			}
 			_, archive, err := s.buildImportPathWithSrcDir(path, pkg.Dir)
-			return archive, err
+			if err != nil {
+				return nil, err
+			}
+			localImportPathCache[path] = archive
+			return archive, nil
 		},
 	}
 	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)

@@ -27,6 +27,14 @@ For system calls (file system access, etc.), see [this page](https://github.com/
 
 *Note: GopherJS will try to write compiled object files of the core packages to your $GOROOT/pkg directory. If that fails, it will fall back to $GOPATH/pkg.*
 
+#### gopherjs serve
+
+`gopherjs serve` is a useful command you can use during development. It will start an HTTP server serving on ":8080" by default, and dynamically compile Go packages with GopherJS and serve them.
+
+For example, navigating to `http://localhost:8080/example.com/user/project/` should compile and run the Go package `example.com/user/project`. The generated JavaScript output will be served at `http://localhost:8080/example.com/user/project/project.js`. If the directory contains `index.html` it will be served, otherwise a minimal `index.html` that includes `<script src="{{base}}.js"></script>` will be provided, causing the JavaScript to be executed. All other static files will be served too.
+
+Refreshing in the browser will rebuild the served files if needed. Compilation errors will be displayed in terminal, and in browser console. Additionally, it will serve $GOROOT and $GOPATH for sourcemaps.
+
 ### Performance Tips
 
 - Use the `-m` command line flag to generate minified code.

@@ -509,3 +509,12 @@ func TestVendoring(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestShift(t *testing.T) {
+	if x := uint(32); uint32(1)<<x != 0 {
+		t.Fail()
+	}
+	if x := uint64(0); uint32(1)<<x != 1 {
+		t.Fail()
+	}
+}

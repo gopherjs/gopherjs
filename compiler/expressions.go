@@ -375,10 +375,10 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					return c.fixNumber(c.formatExpr("%e %s %e", e.X, op, e.Y), basic)
 				}
 				if e.Op == token.SHR && !isUnsigned(basic) {
-					return c.fixNumber(c.formatParenExpr("%e >> $min(%e, 31)", e.X, e.Y), basic)
+					return c.fixNumber(c.formatParenExpr("%e >> $min(%f, 31)", e.X, e.Y), basic)
 				}
 				y := c.newVariable("y")
-				return c.fixNumber(c.formatExpr("(%s = %s, %s < 32 ? (%e %s %s) : 0)", y, c.translateImplicitConversion(e.Y, types.Typ[types.Uint]), y, e.X, op, y), basic)
+				return c.fixNumber(c.formatExpr("(%s = %f, %s < 32 ? (%e %s %s) : 0)", y, e.Y, y, e.X, op, y), basic)
 			case token.AND, token.OR:
 				if isUnsigned(basic) {
 					return c.formatParenExpr("(%e %t %e) >>> 0", e.X, e.Op, e.Y)

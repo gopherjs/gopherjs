@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/kardianos/osext"
 	"github.com/neelance/sourcemap"
-	"gopkg.in/fsnotify.v1"
 )
 
 type ImportCError struct {

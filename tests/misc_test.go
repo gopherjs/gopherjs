@@ -518,3 +518,14 @@ func TestShift(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestTrivialSwitch(t *testing.T) {
+	for {
+		switch {
+		default:
+			break
+		}
+		return
+	}
+	t.Fail()
+}

@@ -547,11 +547,7 @@ clauseLoop:
 		branches = branches[:len(branches)-1]
 	}
 
-	if len(branches) == 0 {
-		if defaultBranch != nil {
-			c.translateStmtList(defaultBranch.body)
-			return
-		}
+	if len(branches) == 0 && defaultBranch == nil {
 		return
 	}
 
@@ -634,7 +630,7 @@ clauseLoop:
 		prefix = "} else "
 	}
 	if defaultBranch != nil {
-		c.PrintCond(!flatten, "} else {", fmt.Sprintf("case %d:", caseOffset+len(branches)))
+		c.PrintCond(!flatten, prefix+"{", fmt.Sprintf("case %d:", caseOffset+len(branches)))
 		c.Indent(func() {
 			if printCaseBodyPrefix != nil {
 				printCaseBodyPrefix(defaultBranch.index)

@@ -517,6 +517,12 @@ func TestShift(t *testing.T) {
 	if x := uint64(0); uint32(1)<<x != 1 {
 		t.Fail()
 	}
+	if x := uint(4294967295); x>>32 != 0 {
+		t.Fail()
+	}
+	if x := uint(4294967295); x>>35 != 0 {
+		t.Fail()
+	}
 }
 
 func TestTrivialSwitch(t *testing.T) {

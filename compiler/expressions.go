@@ -371,8 +371,12 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				if e.Op == token.SHR && isUnsigned(basic) {
 					op = ">>>"
 				}
-				if c.p.Types[e.Y].Value != nil {
-					return c.fixNumber(c.formatExpr("%e %s %e", e.X, op, e.Y), basic)
+				if v := c.p.Types[e.Y].Value; v != nil {
+					i, _ := constant.Uint64Val(constant.ToInt(v))
+					if i >= 32 {
+						return c.formatExpr("0")
+					}
+					return c.fixNumber(c.formatExpr("%e %s %s", e.X, op, strconv.FormatUint(i, 10)), basic)
 				}
 				if e.Op == token.SHR && !isUnsigned(basic) {
 					return c.fixNumber(c.formatParenExpr("%e >> $min(%f, 31)", e.X, e.Y), basic)

@@ -346,6 +346,7 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
 
   case $kindChan:
     typ.zero = function() { return $chanNil; };
+		break;
 
   case $kindFunc:
     typ.zero = function() { return $throwNilPointerError; };

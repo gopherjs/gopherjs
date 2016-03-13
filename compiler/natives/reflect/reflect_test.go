@@ -10,10 +10,6 @@ func TestAlignment(t *testing.T) {
 	t.Skip()
 }
 
-func TestSelect(t *testing.T) {
-	t.Skip()
-}
-
 func TestSliceOverflow(t *testing.T) {
 	t.Skip()
 }

@@ -1177,6 +1177,28 @@ func chansend(t *rtype, ch unsafe.Pointer, val unsafe.Pointer, nb bool) bool {
 	return true
 }
 
+func rselect(rselects []runtimeSelect) (chosen int, recvOK bool) {
+	comms := make([][]interface{}, len(rselects))
+	for i, s := range rselects {
+		switch ChanDir(s.dir) {
+		case 0:
+			comms[i] = []interface{}{}
+		case RecvDir:
+			comms[i] = []interface{}{js.InternalObject(s.ch)}
+		case SendDir:
+			comms[i] = []interface{}{js.InternalObject(s.ch), js.InternalObject(s.val).Call("$get")}
+		}
+	}
+	selectRes := selectHelper(comms)
+	c := selectRes.Index(0).Int()
+	if ChanDir(rselects[c].dir) == RecvDir {
+		recvRes := selectRes.Index(1)
+		js.InternalObject(rselects[c].val).Call("$set", recvRes.Index(0))
+		return c, recvRes.Index(1).Bool()
+	}
+	return c, false
+}
+
 func DeepEqual(a1, a2 interface{}) bool {
 	i1 := js.InternalObject(a1)
 	i2 := js.InternalObject(a2)

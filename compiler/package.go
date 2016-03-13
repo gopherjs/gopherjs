@@ -597,7 +597,7 @@ func (c *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysi
 	var joinedParams string
 	primaryFunction := func(funcRef string) []byte {
 		if fun.Body == nil {
-			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$panic(\"Native function not implemented: %s\");\n\t};\n", funcRef, o.FullName()))
+			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t};\n", funcRef, o.FullName()))
 		}
 
 		var initStmts []ast.Stmt

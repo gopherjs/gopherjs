@@ -3,6 +3,7 @@
 package reflect_test
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -32,4 +33,19 @@ func TestGCBits(t *testing.T) {
 
 func TestChanAlloc(t *testing.T) {
 	t.Skip()
+}
+
+func TestSelectOnInvalid(t *testing.T) {
+	reflect.Select([]reflect.SelectCase{
+		{
+			Dir:  reflect.SelectRecv,
+			Chan: reflect.Value{},
+		}, {
+			Dir:  reflect.SelectSend,
+			Chan: reflect.Value{},
+			Send: reflect.ValueOf(1),
+		}, {
+			Dir: reflect.SelectDefault,
+		},
+	})
 }

@@ -1152,9 +1152,9 @@ func (v Value) Close() {
 var selectHelper = js.Global.Get("$select").Interface().(func(...interface{}) *js.Object)
 
 func chanrecv(t *rtype, ch unsafe.Pointer, nb bool, val unsafe.Pointer) (selected, received bool) {
-	comms := [][]interface{}{{js.InternalObject(ch)}}
+	comms := [][]*js.Object{{js.InternalObject(ch)}}
 	if nb {
-		comms = append(comms, []interface{}{})
+		comms = append(comms, []*js.Object{})
 	}
 	selectRes := selectHelper(comms)
 	if nb && selectRes.Index(0).Int() == 1 {
@@ -1166,9 +1166,9 @@ func chanrecv(t *rtype, ch unsafe.Pointer, nb bool, val unsafe.Pointer) (selecte
 }
 
 func chansend(t *rtype, ch unsafe.Pointer, val unsafe.Pointer, nb bool) bool {
-	comms := [][]interface{}{{js.InternalObject(ch), js.InternalObject(val).Call("$get")}}
+	comms := [][]*js.Object{{js.InternalObject(ch), js.InternalObject(val).Call("$get")}}
 	if nb {
-		comms = append(comms, []interface{}{})
+		comms = append(comms, []*js.Object{})
 	}
 	selectRes := selectHelper(comms)
 	if nb && selectRes.Index(0).Int() == 1 {
@@ -1178,20 +1178,30 @@ func chansend(t *rtype, ch unsafe.Pointer, val unsafe.Pointer, nb bool) bool {
 }
 
 func rselect(rselects []runtimeSelect) (chosen int, recvOK bool) {
-	comms := make([][]interface{}, len(rselects))
+	comms := make([][]*js.Object, len(rselects))
 	for i, s := range rselects {
-		switch ChanDir(s.dir) {
-		case 0:
-			comms[i] = []interface{}{}
-		case RecvDir:
-			comms[i] = []interface{}{js.InternalObject(s.ch)}
-		case SendDir:
-			comms[i] = []interface{}{js.InternalObject(s.ch), js.InternalObject(s.val).Call("$get")}
+		switch SelectDir(s.dir) {
+		case SelectDefault:
+			comms[i] = []*js.Object{}
+		case SelectRecv:
+			ch := js.Global.Get("$chanNil")
+			if js.InternalObject(s.ch) != js.InternalObject(0) {
+				ch = js.InternalObject(s.ch)
+			}
+			comms[i] = []*js.Object{ch}
+		case SelectSend:
+			ch := js.Global.Get("$chanNil")
+			var val *js.Object
+			if js.InternalObject(s.ch) != js.InternalObject(0) {
+				ch = js.InternalObject(s.ch)
+				val = js.InternalObject(s.val).Call("$get")
+			}
+			comms[i] = []*js.Object{ch, val}
 		}
 	}
 	selectRes := selectHelper(comms)
 	c := selectRes.Index(0).Int()
-	if ChanDir(rselects[c].dir) == RecvDir {
+	if SelectDir(rselects[c].dir) == SelectRecv {
 		recvRes := selectRes.Index(1)
 		js.InternalObject(rselects[c].val).Call("$set", recvRes.Index(0))
 		return c, recvRes.Index(1).Bool()

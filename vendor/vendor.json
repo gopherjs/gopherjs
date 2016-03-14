@@ -1,0 +1,41 @@
+{
+	"comment": "",
+	"ignore": "test !go1.5",
+	"package": [
+		{
+			"path": "github.com/inconshreveable/mousetrap",
+			"revision": "76626ae9c91c4f2a10f34cad8ce83ea42c93bb75",
+			"revisionTime": "2014-10-17T13:07:13-07:00"
+		},
+		{
+			"path": "github.com/kardianos/osext",
+			"revision": "29ae4ffbc9a6fe9fb2bc5029050ce6996ea1d3bc",
+			"revisionTime": "2015-12-22T07:32:29-08:00"
+		},
+		{
+			"path": "github.com/neelance/sourcemap",
+			"revision": "8c68805598ab8d5637b1a72b5f7d381ea0f39c31",
+			"revisionTime": "2015-10-28T02:37:22+01:00"
+		},
+		{
+			"path": "github.com/spf13/cobra",
+			"revision": "65a708cee0a4424f4e353d031ce440643e312f92",
+			"revisionTime": "2016-02-08T02:29:17+08:00"
+		},
+		{
+			"path": "github.com/spf13/pflag",
+			"revision": "7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7",
+			"revisionTime": "2015-10-24T12:54:09+02:00"
+		},
+		{
+			"path": "golang.org/x/crypto/ssh/terminal",
+			"revision": "de93d05161db39bcbd84d3da2e54c4a18f37f0b1",
+			"revisionTime": "2016-03-10T15:33:58-08:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/types/typeutil",
+			"revision": "093d7650abf0a26882924de03a6c840a00356572",
+			"revisionTime": "2016-03-09T21:59:58Z"
+		}
+	]
+}

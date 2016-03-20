@@ -13,6 +13,7 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/third_party/importer"
+	"github.com/neelance/astrewrite"
 	"golang.org/x/tools/go/types/typeutil"
 )
 
@@ -118,6 +119,11 @@ func (pi packageImporter) Import(path string) (*types.Package, error) {
 }
 
 func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {
+	simplifiedFiles := make([]*ast.File, len(files))
+	for i, file := range files {
+		simplifiedFiles[i] = astrewrite.Simplify(file, &types.Info{}, false)
+	}
+
 	typesInfo := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),
@@ -144,7 +150,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			previousErr = err
 		},
 	}
-	typesPkg, err := config.Check(importPath, fileSet, files, typesInfo)
+	typesPkg, err := config.Check(importPath, fileSet, simplifiedFiles, typesInfo)
 	if importError != nil {
 		return nil, importError
 	}
@@ -182,7 +188,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		panic(fullName)
 	}
-	pkgInfo := analysis.AnalyzePkg(files, fileSet, typesInfo, typesPkg, isBlocking)
+	pkgInfo := analysis.AnalyzePkg(simplifiedFiles, fileSet, typesInfo, typesPkg, isBlocking)
 	c := &funcContext{
 		FuncInfo: pkgInfo.InitFuncInfo,
 		p: &pkgContext{
@@ -229,7 +235,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	var functions []*ast.FuncDecl
 	var vars []*types.Var
-	for _, file := range files {
+	for _, file := range simplifiedFiles {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:

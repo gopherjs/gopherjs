@@ -181,10 +181,13 @@ func (c *simplifyContext) simplifyStmt(stmts *[]ast.Stmt, s ast.Stmt) {
 		default:
 			panic("unexpected type switch assign")
 		}
-		simplifiedClauses := c.simplifyCaseClauses(s.Body.List)
-		clauses := make([]ast.Stmt, len(simplifiedClauses))
-		for i, entry := range simplifiedClauses {
-			cc := entry.(*ast.CaseClause)
+		nonDefaultClauses, defaultClause := c.simplifyCaseClauses(s.Body.List)
+		allClauses := nonDefaultClauses
+		if defaultClause != nil {
+			allClauses = append(allClauses, defaultClause)
+		}
+		clauses := make([]ast.Stmt, len(allClauses))
+		for i, cc := range allClauses {
 			clauses[i] = &ast.CaseClause{
 				Case:  cc.Case,
 				List:  cc.List,
@@ -367,7 +370,7 @@ func (c *simplifyContext) simplifyBlock(s *ast.BlockStmt) *ast.BlockStmt {
 }
 
 func (c *simplifyContext) simplifySwitch(stmts *[]ast.Stmt, s *ast.SwitchStmt) {
-	clauses := c.simplifyCaseClauses(s.Body.List)
+	nonDefaultClauses, defaultClause := c.simplifyCaseClauses(s.Body.List)
 
 	wrapClause := &ast.CaseClause{}
 	*stmts = append(*stmts, &ast.SwitchStmt{
@@ -380,20 +383,19 @@ func (c *simplifyContext) simplifySwitch(stmts *[]ast.Stmt, s *ast.SwitchStmt) {
 
 	var tag ast.Expr = ast.NewIdent("true")
 	if s.Tag != nil {
-		switch len(s.Body.List) {
+		switch len(nonDefaultClauses) {
 		case 0:
 			*stmts = append(*stmts, simpleAssign(ast.NewIdent("_"), token.ASSIGN, s.Tag))
 		default:
 			tag = c.newVar(stmts, s.Tag)
 		}
 	}
-	*stmts = append(*stmts, c.switchToIfElse(tag, clauses)...)
+
+	*stmts = append(*stmts, c.switchToIfElse(tag, nonDefaultClauses, defaultClause)...)
 }
 
-func (c *simplifyContext) simplifyCaseClauses(clauses []ast.Stmt) []ast.Stmt {
-	var newClauses []ast.Stmt
+func (c *simplifyContext) simplifyCaseClauses(clauses []ast.Stmt) (nonDefaultClauses []*ast.CaseClause, defaultClause *ast.CaseClause) {
 	var openClauses []*ast.CaseClause
-	var defaultClause *ast.CaseClause
 	for _, cc := range clauses {
 		clause := cc.(*ast.CaseClause)
 		newClause := &ast.CaseClause{
@@ -422,26 +424,20 @@ func (c *simplifyContext) simplifyCaseClauses(clauses []ast.Stmt) []ast.Stmt {
 			defaultClause = newClause
 			continue
 		}
-		newClauses = append(newClauses, newClause)
+		nonDefaultClauses = append(nonDefaultClauses, newClause)
 	}
-
-	if defaultClause != nil {
-		newClauses = append(newClauses, defaultClause)
-	}
-
-	return newClauses
+	return
 }
 
-func (c *simplifyContext) switchToIfElse(tag ast.Expr, clauses []ast.Stmt) (stmts []ast.Stmt) {
-	if len(clauses) == 0 {
+func (c *simplifyContext) switchToIfElse(tag ast.Expr, nonDefaultClauses []*ast.CaseClause, defaultClause *ast.CaseClause) (stmts []ast.Stmt) {
+	if len(nonDefaultClauses) == 0 {
+		if defaultClause != nil {
+			return c.simplifyStmtList(defaultClause.Body)
+		}
 		return nil
 	}
 
-	clause := clauses[0].(*ast.CaseClause)
-	if len(clause.List) == 0 {
-		return c.simplifyStmtList(clause.Body)
-	}
-
+	clause := nonDefaultClauses[0]
 	conds := make([]ast.Expr, len(clause.List))
 	for i, cond := range clause.List {
 		conds[i] = &ast.BinaryExpr{X: tag, Op: token.EQL, Y: &ast.ParenExpr{X: cond}}
@@ -450,7 +446,7 @@ func (c *simplifyContext) switchToIfElse(tag ast.Expr, clauses []ast.Stmt) (stmt
 		If:   clause.Case,
 		Cond: c.simplifyExpr(&stmts, disjunction(conds)),
 		Body: &ast.BlockStmt{List: c.simplifyStmtList(clause.Body)},
-		Else: toElseBranch(c.switchToIfElse(tag, clauses[1:])),
+		Else: toElseBranch(c.switchToIfElse(tag, nonDefaultClauses[1:], defaultClause)),
 	})
 	return
 }

@@ -3,10 +3,10 @@
 	"ignore": "test",
 	"package": [
 		{
-			"checksumSHA1": "QfJKuv5zMfEizLK5u8FD9miVzv0=",
+			"checksumSHA1": "Y2+857rZsG+tq3OJgAPt4o6JTw0=",
 			"path": "github.com/neelance/astrewrite",
-			"revision": "a94904344ea8c1abfb1f0f68e129dda24d5dab23",
-			"revisionTime": "2016-03-21T02:00:33+01:00"
+			"revision": "fbfd11ebbd2b7592b6f53e4f8c328c05ac06639c",
+			"revisionTime": "2016-03-24T11:59:19+01:00"
 		}
 	],
 	"rootPath": "github.com/gopherjs/gopherjs/compiler"

@@ -563,7 +563,11 @@ type serveCommandFileSystem struct {
 }
 
 func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
-	name := path.Join(fs.serveRoot, requestName[1:]) // requestName[0] == '/'
+	name := requestName[1:] // requestName[0] == '/'
+	if !strings.HasSuffix(requestName, ".go") {
+		name = path.Join(fs.serveRoot, name)
+	}
+
 	dir, file := path.Split(name)
 	base := path.Base(dir) // base is parent folder name, which becomes the output file name.
 

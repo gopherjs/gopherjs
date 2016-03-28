@@ -510,10 +510,12 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		c.Blocking[selectCall] = !hasDefault
 		c.Printf("%s = %s;", selectionVar, c.translateExpr(selectCall))
 
-		translateCond := func(cond ast.Expr) *expression {
-			return c.formatExpr("%s[0] === %e", selectionVar, cond)
+		if len(caseClauses) != 0 {
+			translateCond := func(cond ast.Expr) *expression {
+				return c.formatExpr("%s[0] === %e", selectionVar, cond)
+			}
+			c.translateBranchingStmt(caseClauses, nil, true, translateCond, label, flattened)
 		}
-		c.translateBranchingStmt(caseClauses, nil, true, translateCond, label, flattened)
 
 	case *ast.EmptyStmt:
 		// skip

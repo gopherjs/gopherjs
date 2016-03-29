@@ -563,10 +563,7 @@ type serveCommandFileSystem struct {
 }
 
 func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
-	name := requestName[1:] // requestName[0] == '/'
-	if !strings.HasSuffix(requestName, ".go") {
-		name = path.Join(fs.serveRoot, name)
-	}
+	name := path.Join(fs.serveRoot, requestName[1:]) // requestName[0] == '/'
 
 	dir, file := path.Split(name)
 	base := path.Base(dir) // base is parent folder name, which becomes the output file name.
@@ -627,7 +624,15 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 	}
 
 	for _, d := range fs.dirs {
-		f, err := http.Dir(filepath.Join(d, "src")).Open(name)
+		dir := http.Dir(filepath.Join(d, "src"))
+
+		f, err := dir.Open(name)
+		if err == nil {
+			return f, nil
+		}
+
+		// source maps are served outside of serveRoot
+		f, err = dir.Open(requestName)
 		if err == nil {
 			return f, nil
 		}

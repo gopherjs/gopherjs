@@ -485,7 +485,7 @@ func main() {
 	}
 
 	cmdServe := &cobra.Command{
-		Use:   "serve",
+		Use:   "serve [root]",
 		Short: "compile on-the-fly and serve",
 	}
 	cmdServe.Flags().AddFlag(flagVerbose)
@@ -498,7 +498,24 @@ func main() {
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(*tags)
 		dirs := append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT)
-		sourceFiles := http.FileServer(serveCommandFileSystem{options: options, dirs: dirs, sourceMaps: make(map[string][]byte)})
+		var root string
+
+		if len(args) > 1 {
+			cmdServe.Help()
+			return
+		}
+
+		if len(args) == 1 {
+			root = args[0]
+		}
+
+		sourceFiles := http.FileServer(serveCommandFileSystem{
+			serveRoot:  root,
+			options:    options,
+			dirs:       dirs,
+			sourceMaps: make(map[string][]byte),
+		})
+
 		ln, err := net.Listen("tcp", addr)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -539,12 +556,15 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 }
 
 type serveCommandFileSystem struct {
+	serveRoot  string
 	options    *gbuild.Options
 	dirs       []string
 	sourceMaps map[string][]byte
 }
 
-func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
+func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
+	name := path.Join(fs.serveRoot, requestName[1:]) // requestName[0] == '/'
+
 	dir, file := path.Split(name)
 	base := path.Base(dir) // base is parent folder name, which becomes the output file name.
 
@@ -555,7 +575,7 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 	if isPkg || isMap || isIndex {
 		// If we're going to be serving our special files, make sure there's a Go command in this folder.
 		s := gbuild.NewSession(fs.options)
-		pkg, err := gbuild.Import(path.Dir(name[1:]), 0, s.InstallSuffix(), fs.options.BuildTags)
+		pkg, err := gbuild.Import(path.Dir(name), 0, s.InstallSuffix(), fs.options.BuildTags)
 		if err != nil || pkg.Name != "main" {
 			isPkg = false
 			isMap = false
@@ -604,7 +624,15 @@ func (fs serveCommandFileSystem) Open(name string) (http.File, error) {
 	}
 
 	for _, d := range fs.dirs {
-		f, err := http.Dir(filepath.Join(d, "src")).Open(name)
+		dir := http.Dir(filepath.Join(d, "src"))
+
+		f, err := dir.Open(name)
+		if err == nil {
+			return f, nil
+		}
+
+		// source maps are served outside of serveRoot
+		f, err = dir.Open(requestName)
 		if err == nil {
 			return f, nil
 		}

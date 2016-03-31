@@ -35,6 +35,8 @@ For example, navigating to `http://localhost:8080/example.com/user/project/` sho
 
 Refreshing in the browser will rebuild the served files if needed. Compilation errors will be displayed in terminal, and in browser console. Additionally, it will serve $GOROOT and $GOPATH for sourcemaps.
 
+If you include an argument, it will be the root from which everything is served. For example, if you run gopherjs serve github.com/user/project then the generated JavaScript for the package github.com/user/project/mypkg will be served at http://localhost:8080/mypkg/mypkg.js.
+
 ### Performance Tips
 
 - Use the `-m` command line flag to generate minified code.

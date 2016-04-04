@@ -32,6 +32,10 @@ func probeIPv6Stack() (supportsIPv6, supportsIPv4map bool) {
 	return false, false
 }
 
+func probeWindowsIPStack() (supportsVistaIP bool) {
+	return false
+}
+
 func maxListenerBacklog() int {
 	return syscall.SOMAXCONN
 }

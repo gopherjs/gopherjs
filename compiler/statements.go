@@ -701,11 +701,7 @@ func (c *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 
 	switch l := lhs.(type) {
 	case *ast.Ident:
-		o := c.p.Defs[l]
-		if o == nil {
-			o = c.p.Uses[l]
-		}
-		return fmt.Sprintf("%s = %s;", c.objectName(o), rhsExpr)
+		return fmt.Sprintf("%s = %s;", c.objectName(c.p.ObjectOf(l)), rhsExpr)
 	case *ast.SelectorExpr:
 		sel, ok := c.p.SelectionOf(l)
 		if !ok {

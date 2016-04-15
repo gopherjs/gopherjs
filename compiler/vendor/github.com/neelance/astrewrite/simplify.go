@@ -3,6 +3,7 @@ package astrewrite
 import (
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/token"
 	"go/types"
 )
@@ -33,7 +34,7 @@ func Simplify(file *ast.File, info *types.Info, simplifyCalls bool) *ast.File {
 		}
 	}
 
-	return &ast.File{
+	newFile := &ast.File{
 		Doc:        file.Doc,
 		Package:    file.Package,
 		Name:       file.Name,
@@ -43,6 +44,8 @@ func Simplify(file *ast.File, info *types.Info, simplifyCalls bool) *ast.File {
 		Unresolved: file.Unresolved,
 		Comments:   file.Comments,
 	}
+	c.info.Scopes[newFile] = c.info.Scopes[file]
+	return newFile
 }
 
 func (c *simplifyContext) simplifyStmtList(stmts []ast.Stmt) []ast.Stmt {
@@ -62,11 +65,24 @@ func (c *simplifyContext) simplifyGenDecl(stmts *[]ast.Stmt, decl *ast.GenDecl) 
 	for j, spec := range decl.Specs {
 		switch spec := spec.(type) {
 		case *ast.ValueSpec:
+			var values []ast.Expr
+			if spec.Values != nil {
+				values = make([]ast.Expr, len(spec.Values))
+				for i, v := range spec.Values {
+					v2 := c.simplifyExpr(stmts, v)
+					for _, initializer := range c.info.InitOrder {
+						if initializer.Rhs == v {
+							initializer.Rhs = v2
+						}
+					}
+					values[i] = v2
+				}
+			}
 			specs[j] = &ast.ValueSpec{
 				Doc:     spec.Doc,
 				Names:   spec.Names,
 				Type:    spec.Type,
-				Values:  c.simplifyExprList(stmts, spec.Values),
+				Values:  values,
 				Comment: spec.Comment,
 			}
 		default:
@@ -134,12 +150,14 @@ func (c *simplifyContext) simplifyStmt(stmts *[]ast.Stmt, s ast.Stmt) {
 			stmts = &block.List
 			c.simplifyStmt(stmts, s.Init)
 		}
-		*stmts = append(*stmts, &ast.IfStmt{
+		newS := &ast.IfStmt{
 			If:   s.If,
 			Cond: c.simplifyExpr(stmts, s.Cond),
 			Body: c.simplifyBlock(s.Body),
-			Else: toElseBranch(c.simplifyToStmtList(s.Else)),
-		})
+			Else: c.toElseBranch(c.simplifyToStmtList(s.Else), c.info.Scopes[s.Else]),
+		}
+		c.info.Scopes[newS] = c.info.Scopes[s]
+		*stmts = append(*stmts, newS)
 
 	case *ast.SwitchStmt:
 		c.simplifySwitch(stmts, s)
@@ -181,36 +199,40 @@ func (c *simplifyContext) simplifyStmt(stmts *[]ast.Stmt, s ast.Stmt) {
 		default:
 			panic("unexpected type switch assign")
 		}
-		nonDefaultClauses, defaultClause := c.simplifyCaseClauses(s.Body.List)
-		allClauses := nonDefaultClauses
-		if defaultClause != nil {
-			allClauses = append(allClauses, defaultClause)
-		}
-		clauses := make([]ast.Stmt, len(allClauses))
-		for i, cc := range allClauses {
-			clauses[i] = &ast.CaseClause{
+		clauses := make([]ast.Stmt, len(s.Body.List))
+		for i, ccs := range s.Body.List {
+			cc := ccs.(*ast.CaseClause)
+			newClause := &ast.CaseClause{
 				Case:  cc.Case,
 				List:  cc.List,
 				Colon: cc.Colon,
 				Body:  c.simplifyStmtList(cc.Body),
 			}
+			if implicit, ok := c.info.Implicits[cc]; ok {
+				c.info.Implicits[newClause] = implicit
+			}
+			clauses[i] = newClause
 		}
-		*stmts = append(*stmts, &ast.TypeSwitchStmt{
+		newS := &ast.TypeSwitchStmt{
 			Switch: s.Switch,
 			Assign: assign,
 			Body: &ast.BlockStmt{
 				List: clauses,
 			},
-		})
+		}
+		c.info.Scopes[newS] = c.info.Scopes[s]
+		*stmts = append(*stmts, newS)
 
 	case *ast.ForStmt:
-		*stmts = append(*stmts, &ast.ForStmt{
+		newS := &ast.ForStmt{
 			For:  s.For,
 			Init: s.Init,
 			Cond: s.Cond,
 			Post: s.Post,
 			Body: c.simplifyBlock(s.Body),
-		})
+		}
+		c.info.Scopes[newS] = c.info.Scopes[s]
+		*stmts = append(*stmts, newS)
 
 	// case *ast.ForStmt:
 	// 	c.simplifyStmt(stmts, s.Init)
@@ -241,7 +263,7 @@ func (c *simplifyContext) simplifyStmt(stmts *[]ast.Stmt, s ast.Stmt) {
 	// 	})
 
 	case *ast.RangeStmt:
-		*stmts = append(*stmts, &ast.RangeStmt{
+		newS := &ast.RangeStmt{
 			For:    s.For,
 			Key:    s.Key,
 			Value:  s.Value,
@@ -249,7 +271,9 @@ func (c *simplifyContext) simplifyStmt(stmts *[]ast.Stmt, s ast.Stmt) {
 			Tok:    s.Tok,
 			X:      s.X,
 			Body:   c.simplifyBlock(s.Body),
-		})
+		}
+		c.info.Scopes[newS] = c.info.Scopes[s]
+		*stmts = append(*stmts, newS)
 
 	case *ast.IncDecStmt:
 		*stmts = append(*stmts, &ast.IncDecStmt{
@@ -298,7 +322,7 @@ func (c *simplifyContext) simplifyStmt(stmts *[]ast.Stmt, s ast.Stmt) {
 				tok := comm.Tok
 				if simplifyLhs {
 					for i, x := range lhs {
-						id := c.newIdent()
+						id := c.newIdent(c.info.TypeOf(x))
 						bodyPrefix = append(bodyPrefix, simpleAssign(c.simplifyExpr(&bodyPrefix, x), comm.Tok, id))
 						lhs[i] = id
 					}
@@ -320,12 +344,14 @@ func (c *simplifyContext) simplifyStmt(stmts *[]ast.Stmt, s ast.Stmt) {
 			default:
 				panic("unexpected comm clause")
 			}
-			clauses[i] = &ast.CommClause{
+			newCC := &ast.CommClause{
 				Case:  cc.Case,
 				Comm:  newComm,
 				Colon: cc.Colon,
 				Body:  append(bodyPrefix, c.simplifyStmtList(cc.Body)...),
 			}
+			c.info.Scopes[newCC] = c.info.Scopes[cc]
+			clauses[i] = newCC
 		}
 		*stmts = append(*stmts, &ast.SelectStmt{
 			Select: s.Select,
@@ -362,36 +388,44 @@ func (c *simplifyContext) simplifyBlock(s *ast.BlockStmt) *ast.BlockStmt {
 	if s == nil {
 		return nil
 	}
-	return &ast.BlockStmt{
+	newS := &ast.BlockStmt{
 		Lbrace: s.Lbrace,
 		List:   c.simplifyStmtList(s.List),
 		Rbrace: s.Rbrace,
 	}
+	c.info.Scopes[newS] = c.info.Scopes[s]
+	return newS
 }
 
 func (c *simplifyContext) simplifySwitch(stmts *[]ast.Stmt, s *ast.SwitchStmt) {
-	nonDefaultClauses, defaultClause := c.simplifyCaseClauses(s.Body.List)
-
 	wrapClause := &ast.CaseClause{}
-	*stmts = append(*stmts, &ast.SwitchStmt{
+	newS := &ast.SwitchStmt{
 		Switch: s.Switch,
 		Body:   &ast.BlockStmt{List: []ast.Stmt{wrapClause}},
-	})
+	}
+	c.info.Scopes[newS] = c.info.Scopes[s]
+	c.info.Scopes[wrapClause] = c.info.Scopes[s]
+	*stmts = append(*stmts, newS)
 	stmts = &wrapClause.Body
 
 	c.simplifyStmt(stmts, s.Init)
 
-	var tag ast.Expr = ast.NewIdent("true")
-	if s.Tag != nil {
-		switch len(nonDefaultClauses) {
-		case 0:
-			*stmts = append(*stmts, simpleAssign(ast.NewIdent("_"), token.ASSIGN, s.Tag))
-		default:
-			tag = c.newVar(stmts, s.Tag)
-		}
-	}
+	nonDefaultClauses, defaultClause := c.simplifyCaseClauses(s.Body.List)
+	tag := c.makeTag(stmts, s.Tag, len(nonDefaultClauses) != 0)
+	*stmts = append(*stmts, unwrapBlock(c.switchToIfElse(tag, nonDefaultClauses, defaultClause))...)
+}
 
-	*stmts = append(*stmts, c.switchToIfElse(tag, nonDefaultClauses, defaultClause)...)
+func (c *simplifyContext) makeTag(stmts *[]ast.Stmt, tag ast.Expr, needsTag bool) ast.Expr {
+	if tag == nil {
+		id := ast.NewIdent("true")
+		c.info.Types[id] = types.TypeAndValue{Type: types.Typ[types.Bool], Value: constant.MakeBool(true)}
+		return id
+	}
+	if !needsTag {
+		*stmts = append(*stmts, simpleAssign(ast.NewIdent("_"), token.ASSIGN, tag))
+		return nil
+	}
+	return c.newVar(stmts, tag)
 }
 
 func (c *simplifyContext) simplifyCaseClauses(clauses []ast.Stmt) (nonDefaultClauses []*ast.CaseClause, defaultClause *ast.CaseClause) {
@@ -403,6 +437,7 @@ func (c *simplifyContext) simplifyCaseClauses(clauses []ast.Stmt) (nonDefaultCla
 			List:  clause.List,
 			Colon: clause.Colon,
 		}
+		c.info.Scopes[newClause] = c.info.Scopes[clause]
 
 		body := clause.Body
 		hasFallthrough := false
@@ -429,10 +464,10 @@ func (c *simplifyContext) simplifyCaseClauses(clauses []ast.Stmt) (nonDefaultCla
 	return
 }
 
-func (c *simplifyContext) switchToIfElse(tag ast.Expr, nonDefaultClauses []*ast.CaseClause, defaultClause *ast.CaseClause) (stmts []ast.Stmt) {
+func (c *simplifyContext) switchToIfElse(tag ast.Expr, nonDefaultClauses []*ast.CaseClause, defaultClause *ast.CaseClause) ast.Stmt {
 	if len(nonDefaultClauses) == 0 {
 		if defaultClause != nil {
-			return c.simplifyStmtList(defaultClause.Body)
+			return c.toElseBranch(c.simplifyStmtList(defaultClause.Body), c.info.Scopes[defaultClause])
 		}
 		return nil
 	}
@@ -440,26 +475,34 @@ func (c *simplifyContext) switchToIfElse(tag ast.Expr, nonDefaultClauses []*ast.
 	clause := nonDefaultClauses[0]
 	conds := make([]ast.Expr, len(clause.List))
 	for i, cond := range clause.List {
-		conds[i] = &ast.BinaryExpr{X: tag, Op: token.EQL, Y: &ast.ParenExpr{X: cond}}
+		conds[i] = c.setType(&ast.BinaryExpr{
+			X:  tag,
+			Op: token.EQL,
+			Y:  c.setType(&ast.ParenExpr{X: cond}, c.info.TypeOf(cond)),
+		}, types.Typ[types.Bool])
 	}
-	stmts = append(stmts, &ast.IfStmt{
+
+	var stmts []ast.Stmt
+	ifStmt := &ast.IfStmt{
 		If:   clause.Case,
-		Cond: c.simplifyExpr(&stmts, disjunction(conds)),
+		Cond: c.simplifyExpr(&stmts, c.disjunction(conds)),
 		Body: &ast.BlockStmt{List: c.simplifyStmtList(clause.Body)},
-		Else: toElseBranch(c.switchToIfElse(tag, nonDefaultClauses[1:], defaultClause)),
-	})
-	return
+		Else: c.switchToIfElse(tag, nonDefaultClauses[1:], defaultClause),
+	}
+	c.info.Scopes[ifStmt] = c.info.Scopes[clause]
+	stmts = append(stmts, ifStmt)
+	return c.toElseBranch(stmts, c.info.Scopes[clause])
 }
 
-func disjunction(conds []ast.Expr) ast.Expr {
+func (c *simplifyContext) disjunction(conds []ast.Expr) ast.Expr {
 	if len(conds) == 1 {
 		return conds[0]
 	}
-	return &ast.BinaryExpr{
+	return c.setType(&ast.BinaryExpr{
 		X:  conds[0],
 		Op: token.LOR,
-		Y:  disjunction(conds[1:]),
-	}
+		Y:  c.disjunction(conds[1:]),
+	}, types.Typ[types.Bool])
 }
 
 func (c *simplifyContext) simplifyToStmtList(s ast.Stmt) (stmts []ast.Stmt) {
@@ -467,19 +510,32 @@ func (c *simplifyContext) simplifyToStmtList(s ast.Stmt) (stmts []ast.Stmt) {
 	return
 }
 
-func toElseBranch(stmts []ast.Stmt) ast.Stmt {
+func (c *simplifyContext) toElseBranch(stmts []ast.Stmt, scope *types.Scope) ast.Stmt {
 	if len(stmts) == 0 {
 		return nil
 	}
 	if len(stmts) == 1 {
 		switch stmt := stmts[0].(type) {
 		case *ast.IfStmt, *ast.BlockStmt:
+			c.info.Scopes[stmt] = scope
 			return stmt
 		}
 	}
-	return &ast.BlockStmt{
+	block := &ast.BlockStmt{
 		List: stmts,
 	}
+	c.info.Scopes[block] = scope
+	return block
+}
+
+func unwrapBlock(s ast.Stmt) []ast.Stmt {
+	if s == nil {
+		return nil
+	}
+	if block, ok := s.(*ast.BlockStmt); ok {
+		return block.List
+	}
+	return []ast.Stmt{s}
 }
 
 func (c *simplifyContext) simplifyExpr(stmts *[]ast.Stmt, x ast.Expr) ast.Expr {
@@ -487,6 +543,14 @@ func (c *simplifyContext) simplifyExpr(stmts *[]ast.Stmt, x ast.Expr) ast.Expr {
 }
 
 func (c *simplifyContext) simplifyExpr2(stmts *[]ast.Stmt, x ast.Expr, callOK bool) ast.Expr {
+	x2 := c.simplifyExpr3(stmts, x, callOK)
+	if t, ok := c.info.Types[x]; ok {
+		c.info.Types[x2] = t
+	}
+	return x2
+}
+
+func (c *simplifyContext) simplifyExpr3(stmts *[]ast.Stmt, x ast.Expr, callOK bool) ast.Expr {
 	switch x := x.(type) {
 	case *ast.FuncLit:
 		return &ast.FuncLit{
@@ -524,10 +588,14 @@ func (c *simplifyContext) simplifyExpr2(stmts *[]ast.Stmt, x ast.Expr, callOK bo
 		}
 
 	case *ast.SelectorExpr:
-		return &ast.SelectorExpr{
+		selExpr := &ast.SelectorExpr{
 			X:   c.simplifyExpr(stmts, x.X),
 			Sel: x.Sel,
 		}
+		if sel, ok := c.info.Selections[x]; ok {
+			c.info.Selections[selExpr] = sel
+		}
+		return selExpr
 
 	case *ast.IndexExpr:
 		return &ast.IndexExpr{
@@ -624,7 +692,7 @@ func (c *simplifyContext) simplifyArgs(stmts *[]ast.Stmt, args []ast.Expr) []ast
 			call := c.simplifyExpr2(stmts, args[0], true)
 			vars := make([]ast.Expr, tuple.Len())
 			for i := range vars {
-				vars[i] = c.newIdent()
+				vars[i] = c.newIdent(tuple.At(i).Type())
 			}
 			*stmts = append(*stmts, &ast.AssignStmt{
 				Lhs: vars,
@@ -649,14 +717,22 @@ func (c *simplifyContext) simplifyExprList(stmts *[]ast.Stmt, exprs []ast.Expr) 
 }
 
 func (c *simplifyContext) newVar(stmts *[]ast.Stmt, x ast.Expr) ast.Expr {
-	id := c.newIdent()
+	id := c.newIdent(c.info.TypeOf(x))
 	*stmts = append(*stmts, simpleAssign(id, token.DEFINE, x))
 	return id
 }
 
-func (c *simplifyContext) newIdent() *ast.Ident {
+func (c *simplifyContext) newIdent(t types.Type) *ast.Ident {
 	c.varCounter++
-	return ast.NewIdent(fmt.Sprintf("_%d", c.varCounter))
+	id := ast.NewIdent(fmt.Sprintf("_%d", c.varCounter))
+	c.info.Types[id] = types.TypeAndValue{Type: t} // TODO remove?
+	c.info.Uses[id] = types.NewVar(token.NoPos, nil, id.Name, t)
+	return id
+}
+
+func (c *simplifyContext) setType(x ast.Expr, t types.Type) ast.Expr {
+	c.info.Types[x] = types.TypeAndValue{Type: t}
+	return x
 }
 
 func simpleAssign(lhs ast.Expr, tok token.Token, rhs ast.Expr) *ast.AssignStmt {

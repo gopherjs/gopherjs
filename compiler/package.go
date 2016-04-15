@@ -119,11 +119,6 @@ func (pi packageImporter) Import(path string) (*types.Package, error) {
 }
 
 func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {
-	simplifiedFiles := make([]*ast.File, len(files))
-	for i, file := range files {
-		simplifiedFiles[i] = astrewrite.Simplify(file, &types.Info{}, false)
-	}
-
 	typesInfo := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),
@@ -150,7 +145,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			previousErr = err
 		},
 	}
-	typesPkg, err := config.Check(importPath, fileSet, simplifiedFiles, typesInfo)
+	typesPkg, err := config.Check(importPath, fileSet, files, typesInfo)
 	if importError != nil {
 		return nil, importError
 	}
@@ -173,6 +168,11 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	encodedFileSet := bytes.NewBuffer(nil)
 	if err := fileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
 		return nil, err
+	}
+
+	simplifiedFiles := make([]*ast.File, len(files))
+	for i, file := range files {
+		simplifiedFiles[i] = astrewrite.Simplify(file, typesInfo, false)
 	}
 
 	isBlocking := func(f *types.Func) bool {

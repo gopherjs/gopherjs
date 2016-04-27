@@ -748,7 +748,26 @@ func (c *funcContext) translateResults(results []ast.Expr) string {
 		return " " + v.String()
 	default:
 		if len(results) == 1 {
-			return " " + c.translateExpr(results[0]).String()
+			resultTuple := c.p.TypeOf(results[0]).(*types.Tuple)
+
+			if resultTuple.Len() != tuple.Len() {
+				panic("invalid tuple return assignment")
+			}
+
+			resultExpr := c.translateExpr(results[0]).String()
+
+			if types.Identical(resultTuple, tuple) {
+				return " " + resultExpr
+			}
+
+			tmpVar := c.newVariable("_returncast")
+			c.Printf("%s = %s;", tmpVar, resultExpr)
+
+			// Not all the return types matched, map everything out for implicit casting
+			results = make([]ast.Expr, resultTuple.Len())
+			for i := range results {
+				results[i] = c.newIdent(fmt.Sprintf("%s[%d]", tmpVar, i), resultTuple.At(i).Type())
+			}
 		}
 		values := make([]string, tuple.Len())
 		for i := range values {

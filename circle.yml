@@ -2,7 +2,7 @@ machine:
   node:
     version: 6.0.0
   environment:
-    SOURCE_MAP_SUPPORT: true
+    NODE_PATH: /usr/local/lib/node_modules
 
 dependencies:
   pre:

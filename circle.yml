@@ -2,13 +2,14 @@ machine:
   node:
     version: 5.1.0
   environment:
-    SOURCE_MAP_SUPPORT: false
+    SOURCE_MAP_SUPPORT: true
 
 dependencies:
   pre:
     - cd /usr/local && sudo rm -rf go && curl https://storage.googleapis.com/golang/go1.6.2.linux-amd64.tar.gz | sudo tar -xz && sudo chmod a+w go/src/path/filepath
   post:
     - mv ./gopherjs $HOME/bin
+    - npm install --global source-map-support
     - npm install --global node-gyp
     - cd node-syscall && node-gyp rebuild && mkdir -p ~/.node_libraries/ && cp build/Release/syscall.node ~/.node_libraries/syscall.node
 

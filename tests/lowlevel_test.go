@@ -15,7 +15,7 @@ import (
 //
 // See https://github.com/gopherjs/gopherjs/issues/279.
 func TestTimeInternalizationExternalization(t *testing.T) {
-	got, err := exec.Command("gopherjs", "run", filepath.Join("testdata", "time_inexternalization.go")).CombinedOutput()
+	got, err := exec.Command("gopherjs", "run", filepath.Join("testdata", "time_inexternalization.go")).Output()
 	if err != nil {
 		t.Fatalf("%v:\n%s", err, got)
 	}

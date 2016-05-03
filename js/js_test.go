@@ -5,6 +5,7 @@ package js_test
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -376,7 +377,7 @@ func TestError(t *testing.T) {
 			t.Fail()
 		}
 		jsErr, ok := err.(*js.Error)
-		if !ok || jsErr.Get("stack") == js.Undefined {
+		if !ok || !strings.Contains(jsErr.Error(), "throwsError") {
 			t.Fail()
 		}
 	}()

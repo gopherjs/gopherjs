@@ -591,8 +591,8 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			switch sel.Kind() {
 			case types.MethodVal:
 				recv := c.makeReceiver(f)
-
-				if typesutil.IsJsPackage(sel.Obj().Pkg()) {
+				declaredFuncRecv := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
+				if typesutil.IsJsObject(declaredFuncRecv) {
 					globalRef := func(id string) string {
 						if recv.String() == "$global" && id[0] == '$' {
 							return id

@@ -455,7 +455,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			if importedPkgPath == "unsafe" || ignored {
 				continue
 			}
-			pkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, "")
+			pkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
 			if err != nil {
 				return nil, err
 			}

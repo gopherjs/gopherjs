@@ -3,7 +3,6 @@
 package syscall
 
 import (
-	"bytes"
 	"unsafe"
 
 	"github.com/gopherjs/gopherjs/js"
@@ -37,7 +36,7 @@ func printToConsole(b []byte) {
 
 	lineBuffer = append(lineBuffer, b...)
 	for {
-		i := bytes.IndexByte(lineBuffer, '\n')
+		i := indexByte(lineBuffer, '\n')
 		if i == -1 {
 			break
 		}
@@ -48,4 +47,14 @@ func printToConsole(b []byte) {
 
 func use(p unsafe.Pointer) {
 	// no-op
+}
+
+// indexByte is copied from bytes package to avoid importing it (since the real syscall package doesn't).
+func indexByte(s []byte, c byte) int {
+	for i, b := range s {
+		if b == c {
+			return i
+		}
+	}
+	return -1
 }

@@ -8,9 +8,11 @@ import (
 	"go/scanner"
 	"go/token"
 	"go/types"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/gopherjs/gopherjs/compiler/natives"
 	"github.com/kardianos/osext"
 	"github.com/neelance/sourcemap"
 )
@@ -153,7 +156,48 @@ func parse(pkg *build.Package, isTest bool, fileSet *token.FileSet) ([]*ast.File
 	if isXTest {
 		importPath = importPath[:len(importPath)-5]
 	}
-	if nativesPkg, err := Import("github.com/gopherjs/gopherjs/compiler/natives/"+importPath, 0, "", nil); err == nil {
+
+	nativesContext := &build.Context{
+		GOROOT:   "/",
+		GOOS:     build.Default.GOOS,
+		GOARCH:   "js",
+		Compiler: "gc",
+		JoinPath: path.Join,
+		SplitPathList: func(list string) []string {
+			if list == "" {
+				return nil
+			}
+			return strings.Split(list, "/")
+		},
+		IsAbsPath: path.IsAbs,
+		IsDir: func(name string) bool {
+			dir, err := natives.FS.Open(name)
+			if err != nil {
+				return false
+			}
+			defer dir.Close()
+			info, err := dir.Stat()
+			if err != nil {
+				return false
+			}
+			return info.IsDir()
+		},
+		HasSubdir: func(root, name string) (rel string, ok bool) {
+			panic("not implemented")
+		},
+		ReadDir: func(name string) (fi []os.FileInfo, err error) {
+			dir, err := natives.FS.Open(name)
+			if err != nil {
+				return nil, err
+			}
+			defer dir.Close()
+			return dir.Readdir(0)
+		},
+		OpenFile: func(name string) (r io.ReadCloser, err error) {
+			return natives.FS.Open(name)
+		},
+	}
+	if nativesPkg, err := nativesContext.Import(importPath, "", 0); err == nil {
 		names := nativesPkg.GoFiles
 		if isTest {
 			names = append(names, nativesPkg.TestGoFiles...)
@@ -162,10 +206,16 @@ func parse(pkg *build.Package, isTest bool, fileSet *token.FileSet) ([]*ast.File
 			names = nativesPkg.XTestGoFiles
 		}
 		for _, name := range names {
-			file, err := parser.ParseFile(fileSet, filepath.Join(nativesPkg.Dir, name), nil, parser.ParseComments)
+			fullPath := path.Join(nativesPkg.Dir, name)
+			r, err := nativesContext.OpenFile(fullPath)
 			if err != nil {
 				panic(err)
 			}
+			file, err := parser.ParseFile(fileSet, fullPath, r, parser.ParseComments)
+			if err != nil {
+				panic(err)
+			}
+			r.Close()
 			for _, decl := range file.Decls {
 				switch d := decl.(type) {
 				case *ast.FuncDecl:

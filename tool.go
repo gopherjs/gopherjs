@@ -334,7 +334,7 @@ func main() {
 
 				tests := &testFuncs{Package: pkg.Package}
 				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
-					archive, err := s.BuildPackage(testPkg)
+					_, err := s.BuildPackage(testPkg)
 					if err != nil {
 						return err
 					}

@@ -334,10 +334,6 @@ func main() {
 
 				tests := &testFuncs{Package: pkg.Package}
 				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
-					_, err := s.BuildPackage(testPkg)
-					if err != nil {
-						return err
-					}
 					if testPkgName == "_test" {
 						for _, file := range pkg.TestGoFiles {
 							if err := tests.load(filepath.Join(pkg.Package.Dir, file), testPkgName, &tests.ImportTest, &tests.NeedTest); err != nil {
@@ -350,6 +346,10 @@ func main() {
 								return err
 							}
 						}
+					}
+					_, err := s.BuildPackage(testPkg)
+					if err != nil {
+						return err
 					}
 					return nil
 				}

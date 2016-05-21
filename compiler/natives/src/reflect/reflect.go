@@ -318,7 +318,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	t := typ.common()
 	ftyp := (*funcType)(unsafe.Pointer(t))
 
-	fv := js.Global.Call("$makeFunc", js.InternalObject(func(arguments []*js.Object) *js.Object {
+	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
 		args := make([]Value, ftyp.NumIn())
 		for i := range args {
 			argType := ftyp.In(i).common()
@@ -337,7 +337,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 			}
 			return results
 		}
-	}))
+	})
 
 	return Value{t, unsafe.Pointer(fv.Unsafe()), flag(Func)}
 }
@@ -564,9 +564,9 @@ func makeMethodValue(op string, v Value) Value {
 	if isWrapped(v.typ) {
 		rcvr = jsType(v.typ).New(rcvr)
 	}
-	fv := js.Global.Call("$makeFunc", js.InternalObject(func(arguments []*js.Object) *js.Object {
+	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
 		return js.InternalObject(fn).Call("apply", rcvr, arguments)
-	}))
+	})
 	return Value{v.Type().common(), unsafe.Pointer(fv.Unsafe()), v.flag&flagRO | flag(Func)}
 }
 
@@ -611,10 +611,10 @@ func (t *uncommonType) Method(i int) (m Method) {
 	mt := p.typ
 	m.Type = mt
 	prop := js.Global.Call("$methodSet", js.InternalObject(t).Get("jsType")).Index(i).Get("prop").String()
-	fn := js.Global.Call("$makeFunc", js.InternalObject(func(arguments []*js.Object) *js.Object {
+	fn := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
 		rcvr := arguments[0]
 		return rcvr.Get(prop).Call("apply", rcvr, arguments[1:])
-	}))
+	})
 	m.Func = Value{mt, unsafe.Pointer(fn.Unsafe()), fl}
 	m.Index = i
 	return

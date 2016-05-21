@@ -399,15 +399,21 @@ func TestExternalizeField(t *testing.T) {
 
 func TestMakeFunc(t *testing.T) {
 	o := js.Global.Get("Object").New()
-	o.Set("f", js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
-		if this != o {
-			t.Fail()
+	for i := 3; i < 5; i++ {
+		x := i
+		if i == 4 {
+			break
 		}
-		if len(arguments) != 2 || arguments[0].Int() != 1 || arguments[1].Int() != 2 {
-			t.Fail()
-		}
-		return 3
-	}))
+		o.Set("f", js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
+			if this != o {
+				t.Fail()
+			}
+			if len(arguments) != 2 || arguments[0].Int() != 1 || arguments[1].Int() != 2 {
+				t.Fail()
+			}
+			return x
+		}))
+	}
 	if o.Call("f", 1, 2).Int() != 3 {
 		t.Fail()
 	}

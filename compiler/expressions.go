@@ -567,7 +567,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					case "InternalObject":
 						return c.translateExpr(e.Args[0])
 					case "MakeFunc":
-						return c.formatExpr("(function() { return $externalize(%e(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(arguments, []))), $emptyInterface); })", e.Args[0])
+						return c.formatExpr("$makeFunc(%e)", e.Args[0])
 					}
 				}
 				return c.translateCall(e, sig, c.translateExpr(f))

@@ -566,8 +566,6 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 						return c.formatExpr("debugger")
 					case "InternalObject":
 						return c.translateExpr(e.Args[0])
-					case "MakeFunc":
-						return c.formatExpr("$makeFunc(%e)", e.Args[0])
 					}
 				}
 				return c.translateCall(e, sig, c.translateExpr(f))

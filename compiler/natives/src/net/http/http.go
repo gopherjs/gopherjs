@@ -79,8 +79,10 @@ func (t *XHRTransport) RoundTrip(req *Request) (*Response, error) {
 		var err error
 		body, err = ioutil.ReadAll(req.Body)
 		if err != nil {
+			req.Body.Close() // RoundTrip must always close the body, including on errors.
 			return nil, err
 		}
+		req.Body.Close()
 	}
 	xhr.Call("send", body)
 

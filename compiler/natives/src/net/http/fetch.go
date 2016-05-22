@@ -112,26 +112,32 @@ func (t *fetchTransport) RoundTrip(req *Request) (*Response, error) {
 				contentLength = cl
 			}
 
-			respCh <- &Response{
+			select {
+			case respCh <- &Response{
 				Status:        result.Get("status").String() + " " + StatusText(result.Get("status").Int()),
 				StatusCode:    result.Get("status").Int(),
 				Header:        header,
 				ContentLength: contentLength,
 				Body:          &streamReader{stream: result.Get("body").Call("getReader")},
 				Request:       req,
+			}:
+			case <-req.Cancel:
 			}
 		},
 		func(reason *js.Object) {
-			errCh <- errors.New("net/http: fetch() failed")
+			select {
+			case errCh <- errors.New("net/http: fetch() failed"):
+			case <-req.Cancel:
+			}
 		},
 	)
 	select {
+	case <-req.Cancel:
+		// TODO: Abort request if possible using Fetch API.
+		return nil, errors.New("net/http: request canceled")
 	case resp := <-respCh:
 		return resp, nil
 	case err := <-errCh:
 		return nil, err
-	case <-req.Cancel:
-		// TODO: Abort request if possible using Fetch API.
-		return nil, errors.New("net/http: request canceled")
 	}
 }

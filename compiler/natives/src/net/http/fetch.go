@@ -81,7 +81,6 @@ func (t *fetchTransport) RoundTrip(req *Request) (*Response, error) {
 	opt := map[string]interface{}{
 		"method":  req.Method,
 		"headers": headers,
-		//"redirect": "manual", // Can't use this because it results in an opaque-redirect filtered response, which appears to be unfit for the purpose of completing the redirect.
 	}
 	if req.Body != nil {
 		// TODO: Find out if request body can be streamed into the fetch request rather than in advance here.
@@ -108,22 +107,10 @@ func (t *fetchTransport) RoundTrip(req *Request) (*Response, error) {
 				header[ck] = append(header[ck], value.String())
 			})
 
-			// TODO: With streaming responses, this cannot be set.
-			//       But it doesn't seem to be set even for non-streaming responses. In other words,
-			//       this code is currently completely unexercised/untested. Need to test it. Probably
-			//       by writing a http.Handler that explicitly sets Content-Type header? Figure this out.
 			contentLength := int64(-1)
 			if cl, err := strconv.ParseInt(header.Get("Content-Length"), 10, 64); err == nil {
 				contentLength = cl
 			}
-
-			// TODO: Sort this out.
-			/*var body io.ReadCloser
-			if b := result.Get("body"); b != nil {
-				body = &streamReader{stream: b.Call("getReader")}
-			} else {
-				body = noBody
-			}*/
 
 			respCh <- &Response{
 				Status:        result.Get("status").String() + " " + StatusText(result.Get("status").Int()),
@@ -148,6 +135,3 @@ func (t *fetchTransport) RoundTrip(req *Request) (*Response, error) {
 		return nil, errors.New("net/http: request canceled")
 	}
 }
-
-// TODO: Consider implementing here if importing those 2 packages is expensive.
-//var noBody io.ReadCloser = ioutil.NopCloser(bytes.NewReader(nil))

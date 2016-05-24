@@ -21,9 +21,9 @@ func importPathToDir(importPath string) string {
 }
 
 // FS is a virtual filesystem that contains native packages.
-var FS = filter.New(
+var FS = filter.Keep(
 	http.Dir(importPathToDir("github.com/gopherjs/gopherjs/compiler/natives")),
 	func(path string, fi os.FileInfo) bool {
-		return path != "/" && path != "/src" && !strings.HasPrefix(path, "/src/")
+		return path == "/" || path == "/src" || strings.HasPrefix(path, "/src/")
 	},
 )

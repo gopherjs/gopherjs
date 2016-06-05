@@ -457,33 +457,6 @@ func main() {
 		}, options, nil))
 	}
 
-	cmdTool := &cobra.Command{
-		Use:   "tool [command] [args...]",
-		Short: "run specified go tool",
-	}
-	cmdTool.Flags().BoolP("e", "e", false, "")
-	cmdTool.Flags().BoolP("l", "l", false, "")
-	cmdTool.Flags().StringP("o", "o", "", "")
-	cmdTool.Flags().StringP("D", "D", "", "")
-	cmdTool.Flags().StringP("I", "I", "", "")
-	cmdTool.Run = func(cmd *cobra.Command, args []string) {
-		os.Exit(handleError(func() error {
-			if len(args) == 2 {
-				switch args[0][1] {
-				case 'g':
-					basename := filepath.Base(args[1])
-					s := gbuild.NewSession(options)
-					if err := s.BuildFiles([]string{args[1]}, basename[:len(basename)-3]+".js", currentDirectory); err != nil {
-						return err
-					}
-					return nil
-				}
-			}
-			cmdTool.Help()
-			return nil
-		}, options, nil))
-	}
-
 	cmdServe := &cobra.Command{
 		Use:   "serve [root]",
 		Short: "compile on-the-fly and serve",
@@ -533,7 +506,7 @@ func main() {
 		Use:  "gopherjs",
 		Long: "GopherJS is a tool for compiling Go source code to JavaScript.",
 	}
-	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdTool, cmdServe)
+	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe)
 	rootCmd.Execute()
 }
 

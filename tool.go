@@ -20,7 +20,6 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	// 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -798,17 +797,8 @@ func (t *testFuncs) load(filename, pkg string, doImport, seen *bool) error {
 			*doImport, *seen = true, true
 		}
 	}
-	// 	ex := doc.Examples(f)
-	// 	sort.Sort(byOrder(ex))
-	// 	for _, e := range ex {
-	// 		*doImport = true // import test file whether executed or not
-	// 		if e.Output == "" && !e.EmptyOutput {
-	// 			// Don't run examples with no output.
-	// 			continue
-	// 		}
-	// 		t.Examples = append(t.Examples, testFunc{pkg, "Example" + e.Name, e.Output})
-	// 		*seen = true
-	// 	}
+	// TODO: Support examples, populate t.Examples here.
+	//       Blocking on https://github.com/gopherjs/gopherjs/issues/381 being resolved.
 	return nil
 }
 

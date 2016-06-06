@@ -19,6 +19,7 @@ func Simplify(file *ast.File, info *types.Info, simplifyCalls bool) *ast.File {
 
 	decls := make([]ast.Decl, len(file.Decls))
 	for i, decl := range file.Decls {
+		c.varCounter = 0
 		switch decl := decl.(type) {
 		case *ast.GenDecl:
 			decls[i] = c.simplifyGenDecl(nil, decl)
@@ -263,14 +264,70 @@ func (c *simplifyContext) simplifyStmt(stmts *[]ast.Stmt, s ast.Stmt) {
 	// 	})
 
 	case *ast.RangeStmt:
-		newS := &ast.RangeStmt{
-			For:    s.For,
-			Key:    s.Key,
-			Value:  s.Value,
-			TokPos: s.TokPos,
-			Tok:    s.Tok,
-			X:      s.X,
-			Body:   c.simplifyBlock(s.Body),
+		var newS ast.Stmt
+		switch t := c.info.TypeOf(s.X).Underlying().(type) {
+		case *types.Chan:
+			key := s.Key
+			tok := s.Tok
+			if key == nil {
+				key = ast.NewIdent("_")
+				tok = token.DEFINE
+			}
+			okVar := c.newIdent(types.Typ[types.Bool])
+			if s.Tok == token.ASSIGN {
+				*stmts = append(*stmts, &ast.DeclStmt{
+					Decl: &ast.GenDecl{
+						Tok: token.VAR,
+						Specs: []ast.Spec{&ast.ValueSpec{
+							Names: []*ast.Ident{okVar},
+							Type:  ast.NewIdent("bool"),
+						}},
+					},
+				})
+			}
+			newS = &ast.ForStmt{
+				For: s.For,
+				Body: &ast.BlockStmt{
+					Lbrace: s.Body.Lbrace,
+					List: append([]ast.Stmt{
+						&ast.AssignStmt{
+							Lhs:    []ast.Expr{key, okVar},
+							TokPos: s.TokPos,
+							Tok:    tok,
+							Rhs: []ast.Expr{c.setType(&ast.UnaryExpr{
+								Op: token.ARROW,
+								X:  c.newVar(stmts, s.X),
+							}, types.NewTuple(
+								types.NewVar(token.NoPos, nil, "", t.Elem()),
+								types.NewVar(token.NoPos, nil, "", types.Typ[types.Bool]),
+							))},
+						},
+						&ast.IfStmt{
+							Cond: c.setType(&ast.UnaryExpr{
+								Op: token.NOT,
+								X:  okVar,
+							}, types.Typ[types.Bool]),
+							Body: &ast.BlockStmt{
+								List: []ast.Stmt{
+									&ast.BranchStmt{Tok: token.BREAK},
+								},
+							},
+						},
+					}, c.simplifyStmtList(s.Body.List)...),
+					Rbrace: s.Body.Rbrace,
+				},
+			}
+
+		default:
+			newS = &ast.RangeStmt{
+				For:    s.For,
+				Key:    s.Key,
+				Value:  s.Value,
+				TokPos: s.TokPos,
+				Tok:    s.Tok,
+				X:      s.X,
+				Body:   c.simplifyBlock(s.Body),
+			}
 		}
 		c.info.Scopes[newS] = c.info.Scopes[s]
 		*stmts = append(*stmts, newS)

@@ -107,7 +107,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | -- multipart    | yes                   |                                   |
 | -- quotedprintable | yes                |                                   |
 | net             | no                    |                                   |
-| -- http         | partially             | emulated via XMLHttpRequest       |
+| -- http         | partially             | client only, emulated via Fetch/XMLHttpRequest APIs;<br>node.js requires polyfill |
 | -- -- cgi       | no                    |                                   |
 | -- -- cookiejar | yes                   |                                   |
 | -- -- fcgi      | yes                   |                                   |

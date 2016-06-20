@@ -218,14 +218,16 @@ var $send = function(chan, value) {
   }
 
   var thisGoroutine = $curGoroutine;
-  chan.$sendQueue.push(function() {
+  var closedDuringSend;
+  chan.$sendQueue.push(function(closed) {
+    closedDuringSend = closed;
     $schedule(thisGoroutine);
     return value;
   });
   $block();
   return {
     $blk: function() {
-      if (chan.$closed) {
+      if (closedDuringSend) {
         $throwRuntimeError("send on closed channel");
       }
     }
@@ -234,7 +236,7 @@ var $send = function(chan, value) {
 var $recv = function(chan) {
   var queuedSend = chan.$sendQueue.shift();
   if (queuedSend !== undefined) {
-    chan.$buffer.push(queuedSend());
+    chan.$buffer.push(queuedSend(false));
   }
   var bufferedValue = chan.$buffer.shift();
   if (bufferedValue !== undefined) {
@@ -264,7 +266,7 @@ var $close = function(chan) {
     if (queuedSend === undefined) {
       break;
     }
-    queuedSend(); /* will panic because of closed channel */
+    queuedSend(true); /* will panic */
   }
   while (true) {
     var queuedRecv = chan.$recvQueue.shift();

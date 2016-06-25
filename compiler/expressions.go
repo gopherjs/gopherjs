@@ -592,7 +592,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 				declaredFuncRecv := sel.Obj().(*types.Func).Type().(*types.Signature).Recv().Type()
 				if typesutil.IsJsObject(declaredFuncRecv) {
 					globalRef := func(id string) string {
-						if recv.String() == "$global" && id[0] == '$' {
+						if recv.String() == "$global" && id[0] == '$' && len(id) > 1 {
 							return id
 						}
 						return recv.String() + "." + id

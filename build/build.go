@@ -139,6 +139,13 @@ func ImportDir(dir string, mode build.ImportMode) (*PackageData, error) {
 // Standard Go library packages are augmented with files in compiler/natives folder.
 // If isTest is true and pkg.ImportPath has no _test suffix, package is built for running internal tests.
 // If isTest is true and pkg.ImportPath has _test suffix, package is built for running external tests.
+//
+// The native packages are augmented by the contents of natives.FS in the following way.
+// The file names do not matter except the usual `_test` suffix. The files for
+// native overrides get added to the package (even if they have the same name
+// as an existing file from the standard library). For all identifiers that exist
+// in the original AND the overrides, the original identifier in the AST gets
+// replaced by `_`. New identifiers that don't exist in original package get added.
 func parseAndAugment(pkg *build.Package, isTest bool, fileSet *token.FileSet) ([]*ast.File, error) {
 	var files []*ast.File
 	replacedDeclNames := make(map[string]bool)

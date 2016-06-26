@@ -1,6 +1,7 @@
 package build
 
 import (
+	"fmt"
 	gobuild "go/build"
 	"go/token"
 	"strconv"
@@ -37,7 +38,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 	// Note, this does not include transitive imports of test/xtest packages,
 	// which could cause some false positives. It currently doesn't, but if it does,
 	// then support for that should be added here.
-	populateImportSet := func(imports []string, set *map[string]struct{}) {
+	populateImportSet := func(imports []string, set *stringSet) {
 		for _, p := range imports {
 			(*set)[p] = struct{}{}
 			switch p {
@@ -71,7 +72,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 			if err != nil {
 				t.Fatalf("gobuild.Import: %v", err)
 			}
-			realImports := make(map[string]struct{})
+			realImports := make(stringSet)
 			populateImportSet(bpkg.Imports, &realImports)
 
 			// Use parseAndAugment to get a list of augmented AST files.
@@ -97,7 +98,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 						continue
 					}
 					if _, ok := realImports[importPath]; !ok {
-						t.Errorf("augmented normal package %q imports %q in file %v, but real %q doesn't:\nrealImports = %q", bpkg.ImportPath, importPath, fileName, bpkg.ImportPath, toSlice(realImports))
+						t.Errorf("augmented normal package %q imports %q in file %v, but real %q doesn't:\nrealImports = %v", bpkg.ImportPath, importPath, fileName, bpkg.ImportPath, realImports)
 					}
 				}
 			}
@@ -110,7 +111,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 			if err != nil {
 				t.Fatalf("gobuild.Import: %v", err)
 			}
-			realTestImports := make(map[string]struct{})
+			realTestImports := make(stringSet)
 			populateImportSet(bpkg.TestImports, &realTestImports)
 
 			// Use parseAndAugment to get a list of augmented AST files.
@@ -136,7 +137,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 						continue
 					}
 					if _, ok := realTestImports[importPath]; !ok {
-						t.Errorf("augmented test package %q imports %q in file %v, but real %q doesn't:\nrealTestImports = %q", bpkg.ImportPath, importPath, fileName, bpkg.ImportPath, toSlice(realTestImports))
+						t.Errorf("augmented test package %q imports %q in file %v, but real %q doesn't:\nrealTestImports = %v", bpkg.ImportPath, importPath, fileName, bpkg.ImportPath, realTestImports)
 					}
 				}
 			}
@@ -149,7 +150,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 			if err != nil {
 				t.Fatalf("gobuild.Import: %v", err)
 			}
-			realXTestImports := make(map[string]struct{})
+			realXTestImports := make(stringSet)
 			populateImportSet(bpkg.XTestImports, &realXTestImports)
 
 			// Add _test suffix to import path to cause parseAndAugment to use external test mode.
@@ -178,7 +179,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 						continue
 					}
 					if _, ok := realXTestImports[importPath]; !ok {
-						t.Errorf("augmented external test package %q imports %q in file %v, but real %q doesn't:\nrealXTestImports = %q", bpkg.ImportPath, importPath, fileName, bpkg.ImportPath, toSlice(realXTestImports))
+						t.Errorf("augmented external test package %q imports %q in file %v, but real %q doesn't:\nrealXTestImports = %v", bpkg.ImportPath, importPath, fileName, bpkg.ImportPath, realXTestImports)
 					}
 				}
 			}
@@ -186,10 +187,13 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 	}
 }
 
-func toSlice(m map[string]struct{}) []string {
+// stringSet is used to print a set of strings in a more readable way.
+type stringSet map[string]struct{}
+
+func (m stringSet) String() string {
 	s := make([]string, 0, len(m))
 	for v := range m {
 		s = append(s, v)
 	}
-	return s
+	return fmt.Sprintf("%q", s)
 }

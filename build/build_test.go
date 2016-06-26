@@ -52,9 +52,21 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 	}
 
 	// Check all standard library packages.
+	//
+	// The general strategy is to first import each standard library package using the
+	// normal build.Import, which returns a *build.Package. That contains Imports, TestImports,
+	// and XTestImports values that are considered the "real imports".
+	//
+	// That list of direct imports is then expanded to the transitive closure by populateImportSet,
+	// meaning all packages that are indirectly imported are also added to the set.
+	//
+	// Then, github.com/gopherjs/gopherjs/build.parseAndAugment(*build.Package) returns []*ast.File.
+	// Those augmented parsed Go files of the package are checked, one file at at time, one import
+	// at a time. Each import is verified to belong in the set of allowed real imports.
 	for _, pkg := range gotool.ImportPaths([]string{"std"}) {
 		// Normal package.
 		{
+			// Import the real normal package, and populate its real import set.
 			bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
 			if err != nil {
 				t.Fatalf("gobuild.Import: %v", err)
@@ -62,11 +74,14 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 			realImports := make(map[string]struct{})
 			populateImportSet(bpkg.Imports, &realImports)
 
+			// Use parseAndAugment to get a list of augmented AST files.
 			fset := token.NewFileSet()
-			files, err := parse(bpkg, false, fset)
+			files, err := parseAndAugment(bpkg, false, fset)
 			if err != nil {
-				t.Fatalf("parse: %v", err)
+				t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
 			}
+
+			// Verify imports of normal augmented AST files.
 			for _, f := range files {
 				fileName := fset.File(f.Pos()).Name()
 				normalFile := !strings.HasSuffix(fileName, "_test.go")
@@ -90,6 +105,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 
 		// Test package.
 		{
+			// Import the real test package, and populate its real import set.
 			bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
 			if err != nil {
 				t.Fatalf("gobuild.Import: %v", err)
@@ -97,11 +113,14 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 			realTestImports := make(map[string]struct{})
 			populateImportSet(bpkg.TestImports, &realTestImports)
 
+			// Use parseAndAugment to get a list of augmented AST files.
 			fset := token.NewFileSet()
-			files, err := parse(bpkg, true, fset)
+			files, err := parseAndAugment(bpkg, true, fset)
 			if err != nil {
-				t.Fatalf("parse: %v", err)
+				t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
 			}
+
+			// Verify imports of test augmented AST files.
 			for _, f := range files {
 				fileName, pkgName := fset.File(f.Pos()).Name(), f.Name.String()
 				testFile := strings.HasSuffix(fileName, "_test.go") && !strings.HasSuffix(pkgName, "_test")
@@ -125,6 +144,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 
 		// External test package.
 		{
+			// Import the real external test package, and populate its real import set.
 			bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
 			if err != nil {
 				t.Fatalf("gobuild.Import: %v", err)
@@ -132,11 +152,17 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 			realXTestImports := make(map[string]struct{})
 			populateImportSet(bpkg.XTestImports, &realXTestImports)
 
+			// Add _test suffix to import path to cause parseAndAugment to use external test mode.
+			bpkg.ImportPath += "_test"
+
+			// Use parseAndAugment to get a list of augmented AST files, then check only the external test files.
 			fset := token.NewFileSet()
-			files, err := parse(bpkg, true, fset)
+			files, err := parseAndAugment(bpkg, true, fset)
 			if err != nil {
-				t.Fatalf("parse: %v", err)
+				t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
 			}
+
+			// Verify imports of external test augmented AST files.
 			for _, f := range files {
 				fileName, pkgName := fset.File(f.Pos()).Name(), f.Name.String()
 				xTestFile := strings.HasSuffix(fileName, "_test.go") && strings.HasSuffix(pkgName, "_test")

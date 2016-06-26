@@ -135,10 +135,11 @@ func ImportDir(dir string, mode build.ImportMode) (*PackageData, error) {
 	return &PackageData{Package: pkg, JSFiles: jsFiles}, nil
 }
 
-// parse parses and returns all .go files of given pkg.
+// parseAndAugment parses and returns all .go files of given pkg.
 // Standard Go library packages are augmented with files in compiler/natives folder.
-// isTest is true when package is being built for running tests.
-func parse(pkg *build.Package, isTest bool, fileSet *token.FileSet) ([]*ast.File, error) {
+// If isTest is true and pkg.ImportPath has no _test suffix, package is built for running internal tests.
+// If isTest is true and pkg.ImportPath has _test suffix, package is built for running external tests.
+func parseAndAugment(pkg *build.Package, isTest bool, fileSet *token.FileSet) ([]*ast.File, error) {
 	var files []*ast.File
 	replacedDeclNames := make(map[string]bool)
 	funcName := func(d *ast.FuncDecl) string {
@@ -550,7 +551,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	}
 
 	fileSet := token.NewFileSet()
-	files, err := parse(pkg.Package, pkg.IsTest, fileSet)
+	files, err := parseAndAugment(pkg.Package, pkg.IsTest, fileSet)
 	if err != nil {
 		return nil, err
 	}

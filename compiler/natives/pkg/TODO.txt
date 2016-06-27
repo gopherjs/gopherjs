@@ -1,0 +1,1 @@
+Get rid of this folder and find a way to compile js.a and nosync.a in a uniform way, like other packages.

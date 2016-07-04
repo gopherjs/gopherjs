@@ -79,8 +79,9 @@ func (t *fetchTransport) RoundTrip(req *Request) (*Response, error) {
 		}
 	}
 	opt := map[string]interface{}{
-		"method":  req.Method,
-		"headers": headers,
+		"method":      req.Method,
+		"headers":     headers,
+		"credentials": "same-origin",
 	}
 	if req.Body != nil {
 		// TODO: Find out if request body can be streamed into the fetch request rather than in advance here.

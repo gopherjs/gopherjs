@@ -480,8 +480,8 @@ func main() {
 		var root string
 
 		if len(args) > 1 {
-			cmdServe.Help()
-			return
+			cmdServe.HelpFunc()(cmd, args)
+			os.Exit(1)
 		}
 
 		if len(args) == 1 {

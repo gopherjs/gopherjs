@@ -573,6 +573,7 @@ func (c *funcContext) initArgs(ty types.Type) string {
 		}
 		return fmt.Sprintf("[%s], [%s], %t", strings.Join(params, ", "), strings.Join(results, ", "), t.Variadic())
 	case *types.Struct:
+		pkgPath := ""
 		fields := make([]string, t.NumFields())
 		for i := range fields {
 			field := t.Field(i)
@@ -580,13 +581,12 @@ func (c *funcContext) initArgs(ty types.Type) string {
 			if !field.Anonymous() {
 				name = field.Name()
 			}
-			pkgPath := ""
 			if !field.Exported() {
 				pkgPath = field.Pkg().Path()
 			}
-			fields[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", typ: %s, tag: %s}`, fieldName(t, i), name, pkgPath, c.typeName(field.Type()), encodeString(t.Tag(i)))
+			fields[i] = fmt.Sprintf(`{prop: "%s", name: "%s", exported: %t, typ: %s, tag: %s}`, fieldName(t, i), name, field.Exported(), c.typeName(field.Type()), encodeString(t.Tag(i)))
 		}
-		return fmt.Sprintf("[%s]", strings.Join(fields, ", "))
+		return fmt.Sprintf(`"%s", [%s]`, pkgPath, strings.Join(fields, ", "))
 	default:
 		panic("invalid type")
 	}

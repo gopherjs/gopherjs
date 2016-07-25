@@ -3,12 +3,13 @@
 package sync
 
 type Cond struct {
-	L Locker
-
-	sema    syncSema
-	waiters uint32
+	// fields used by vanilla implementation
+	noCopy  noCopy
+	L       Locker
+	notify  notifyList
 	checker copyChecker
 
+	// fields used by new implementation
 	n  int
 	ch chan bool
 }
@@ -37,7 +38,4 @@ func (c *Cond) Broadcast() {
 	for i := 0; i < n; i++ {
 		c.ch <- true
 	}
-}
-
-func runtime_Syncsemcheck(size uintptr) {
 }

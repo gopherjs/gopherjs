@@ -40,32 +40,33 @@ func jsType(typ Type) *js.Object {
 func reflectType(typ *js.Object) *rtype {
 	if typ.Get("reflectType") == js.Undefined {
 		rt := &rtype{
-			size:   uintptr(typ.Get("size").Int()),
-			kind:   uint8(typ.Get("kind").Int()),
-			string: newStringPtr(typ.Get("string")),
+			size: uintptr(typ.Get("size").Int()),
+			kind: uint8(typ.Get("kind").Int()),
+			str:  newNameOff(newName(internalStr(typ.Get("string")), "", internalStr(typ.Get("pkg")), false)), // TODO is pkg used?
 		}
 		js.InternalObject(rt).Set("jsType", typ)
 		typ.Set("reflectType", js.InternalObject(rt))
 
 		methodSet := js.Global.Call("$methodSet", typ)
-		if typ.Get("typeName").String() != "" || methodSet.Length() != 0 {
+		if methodSet.Length() != 0 {
+			rt.tflag |= tflagUncommon
 			reflectMethods := make([]method, methodSet.Length())
 			for i := range reflectMethods {
 				m := methodSet.Index(i)
-				t := m.Get("typ")
 				reflectMethods[i] = method{
-					name:    newStringPtr(m.Get("name")),
-					pkgPath: newStringPtr(m.Get("pkg")),
-					mtyp:    reflectType(t),
-					typ:     reflectType(js.Global.Call("$funcType", js.Global.Get("Array").New(typ).Call("concat", t.Get("params")), t.Get("results"), t.Get("variadic"))),
+					name: newNameOff(newName(internalStr(m.Get("name")), "", "", internalStr(m.Get("pkg")) == "")), // TODO pkg
+					mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				}
 			}
-			rt.uncommonType = &uncommonType{
-				name:    newStringPtr(typ.Get("typeName")),
-				pkgPath: newStringPtr(typ.Get("pkg")),
-				methods: reflectMethods,
+			ut := &uncommonType{
+				mcount:   uint16(methodSet.Length()),
+				_methods: reflectMethods,
 			}
-			js.InternalObject(rt.uncommonType).Set("jsType", typ)
+			uncommonTypeMap[rt] = ut
+			js.InternalObject(ut).Set("jsType", typ)
+		}
+		if typ.Get("typeName").String() != "" { // TODO remove typeName?
+			rt.tflag |= tflagNamed
 		}
 
 		switch rt.Kind() {
@@ -97,11 +98,16 @@ func reflectType(typ *js.Object) *rtype {
 			for i := range out {
 				out[i] = reflectType(results.Index(i))
 			}
+			outCount := uint16(results.Length())
+			if typ.Get("variadic").Bool() {
+				outCount |= 1 << 15
+			}
 			setKindType(rt, &funcType{
-				rtype:     *rt,
-				dotdotdot: typ.Get("variadic").Bool(),
-				in:        in,
-				out:       out,
+				rtype:    *rt,
+				inCount:  uint16(params.Length()),
+				outCount: outCount,
+				_in:      in,
+				_out:     out,
 			})
 		case Interface:
 			methods := typ.Get("methods")
@@ -109,9 +115,8 @@ func reflectType(typ *js.Object) *rtype {
 			for i := range imethods {
 				m := methods.Index(i)
 				imethods[i] = imethod{
-					name:    newStringPtr(m.Get("name")),
-					pkgPath: newStringPtr(m.Get("pkg")),
-					typ:     reflectType(m.Get("typ")),
+					name: newNameOff(newName(internalStr(m.Get("name")), "", "", internalStr(m.Get("pkg")) == "")), // TODO pkg
+					typ:  newTypeOff(reflectType(m.Get("typ"))),
 				}
 			}
 			setKindType(rt, &interfaceType{
@@ -137,16 +142,15 @@ func reflectType(typ *js.Object) *rtype {
 			for i := range reflectFields {
 				f := fields.Index(i)
 				reflectFields[i] = structField{
-					name:    newStringPtr(f.Get("name")),
-					pkgPath: newStringPtr(f.Get("pkg")),
-					typ:     reflectType(f.Get("typ")),
-					tag:     newStringPtr(f.Get("tag")),
-					offset:  uintptr(i),
+					name:   newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), "", f.Get("exported").Bool()),
+					typ:    reflectType(f.Get("typ")),
+					offset: uintptr(i),
 				}
 			}
 			setKindType(rt, &structType{
-				rtype:  *rt,
-				fields: reflectFields,
+				rtype:   *rt,
+				pkgPath: newName(internalStr(typ.Get("pkgPath")), "", "", false),
+				fields:  reflectFields,
 			})
 		}
 	}
@@ -159,21 +163,113 @@ func setKindType(rt *rtype, kindType interface{}) {
 	js.InternalObject(kindType).Set("rtype", js.InternalObject(rt))
 }
 
-var stringPtrMap = make(map[string]*string)
+type uncommonType struct {
+	pkgPath nameOff
+	mcount  uint16
+	_       uint16
+	moff    uint32
+	_       uint32
 
-func newStringPtr(strObj *js.Object) *string {
+	_methods []method
+}
+
+func (t *uncommonType) methods() []method {
+	return t._methods
+}
+
+var uncommonTypeMap = make(map[*rtype]*uncommonType)
+
+func (t *rtype) uncommon() *uncommonType {
+	return uncommonTypeMap[t]
+}
+
+type funcType struct {
+	rtype    `reflect:"func"`
+	inCount  uint16
+	outCount uint16
+
+	_in  []*rtype
+	_out []*rtype
+}
+
+func (t *funcType) in() []*rtype {
+	return t._in
+}
+
+func (t *funcType) out() []*rtype {
+	return t._out
+}
+
+type name struct {
+	bytes *byte
+}
+
+type nameData struct {
+	name     string
+	tag      string
+	pkgPath  string
+	exported bool
+}
+
+var nameMap = make(map[*byte]*nameData)
+
+func (n name) name() (s string) {
+	return nameMap[n.bytes].name
+}
+
+func (n name) tag() (s string) {
+	return nameMap[n.bytes].tag
+}
+
+func (n name) pkgPath() string {
+	return nameMap[n.bytes].pkgPath
+}
+
+func (n name) isExported() bool {
+	return nameMap[n.bytes].exported
+}
+
+func newName(n, tag, pkgPath string, exported bool) name {
+	b := new(byte)
+	nameMap[b] = &nameData{
+		name:     n,
+		tag:      tag,
+		pkgPath:  pkgPath,
+		exported: exported,
+	}
+	return name{
+		bytes: b,
+	}
+}
+
+var nameOffList []name // TODO use cast?
+
+func (t *rtype) nameOff(off nameOff) name {
+	return nameOffList[int(off)]
+}
+
+func newNameOff(n name) nameOff {
+	i := len(nameOffList)
+	nameOffList = append(nameOffList, n)
+	return nameOff(i)
+}
+
+var typeOffList []*rtype // TODO use cast?
+
+func (t *rtype) typeOff(off typeOff) *rtype {
+	return typeOffList[int(off)]
+}
+
+func newTypeOff(t *rtype) typeOff {
+	i := len(typeOffList)
+	typeOffList = append(typeOffList, t)
+	return typeOff(i)
+}
+
+func internalStr(strObj *js.Object) string {
 	var c struct{ str string }
 	js.InternalObject(c).Set("str", strObj) // get string without internalizing
-	str := c.str
-	if str == "" {
-		return nil
-	}
-	ptr, ok := stringPtrMap[str]
-	if !ok {
-		ptr = &str
-		stringPtrMap[str] = ptr
-	}
-	return ptr
+	return c.str
 }
 
 func isWrapped(typ Type) bool {
@@ -270,6 +366,45 @@ func (t *rtype) ptrTo() *rtype {
 func SliceOf(t Type) Type {
 	return reflectType(js.Global.Call("$sliceType", jsType(t)))
 }
+
+// func StructOf(fields []StructField) Type {
+// 	jsFields := make([]*js.Object, len(fields))
+// 	fset := map[string]struct{}{}
+// 	for i, f := range fields {
+// 		if f.Type == nil {
+// 			panic("reflect.StructOf: field " + strconv.Itoa(i) + " has no type")
+// 		}
+
+// 		name := f.Name
+// 		if name == "" {
+// 			// Embedded field
+// 			if f.Type.Kind() == Ptr {
+// 				// Embedded ** and *interface{} are illegal
+// 				elem := f.Type.Elem()
+// 				if k := elem.Kind(); k == Ptr || k == Interface {
+// 					panic("reflect.StructOf: illegal anonymous field type " + f.Type.String())
+// 				}
+// 				name = elem.String()
+// 			} else {
+// 				name = f.Type.String()
+// 			}
+// 		}
+
+// 		if _, dup := fset[name]; dup {
+// 			panic("reflect.StructOf: duplicate field " + name)
+// 		}
+// 		fset[name] = struct{}{}
+
+// 		jsf := js.Global.Get("Object").New()
+// 		jsf.Set("prop", name)
+// 		jsf.Set("name", name)
+// 		jsf.Set("exported", true)
+// 		jsf.Set("typ", jsType(f.Type))
+// 		jsf.Set("tag", f.Tag)
+// 		jsFields[i] = jsf
+// 	}
+// 	return reflectType(js.Global.Call("$structType", "", jsFields))
+// }
 
 func Zero(typ Type) Value {
 	return makeValue(typ, jsType(typ).Call("zero"), 0)
@@ -498,7 +633,7 @@ func methodReceiver(op string, v Value, i int) (rcvrtype, t *rtype, fn unsafe.Po
 			panic("reflect: internal error: invalid method index")
 		}
 		m := &tt.methods[i]
-		if m.pkgPath != nil {
+		if !tt.nameOff(m.name).isExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
 		iface := (*nonEmptyInterface)(v.ptr)
@@ -506,19 +641,19 @@ func methodReceiver(op string, v Value, i int) (rcvrtype, t *rtype, fn unsafe.Po
 			panic("reflect: " + op + " of method on nil interface value")
 		}
 		// rcvrtype = iface.itab.typ
-		t = m.typ
-		prop = *m.name
+		t = tt.typeOff(m.typ)
+		prop = tt.nameOff(m.name).name()
 	} else {
 		// rcvrtype = v.typ
 		ut := v.typ.uncommon()
-		if ut == nil || i < 0 || i >= len(ut.methods) {
+		if ut == nil || uint(i) >= uint(ut.mcount) {
 			panic("reflect: internal error: invalid method index")
 		}
-		m := &ut.methods[i]
-		if m.pkgPath != nil {
+		m := ut.methods()[i]
+		if !v.typ.nameOff(m.name).isExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		t = m.mtyp
+		t = v.typ.typeOff(m.mtyp)
 		prop = js.Global.Call("$methodSet", jsType(v.typ)).Index(i).Get("prop").String()
 	}
 	rcvr := v.object()
@@ -595,29 +730,41 @@ func (t *rtype) Comparable() bool {
 	return true
 }
 
-func (t *uncommonType) Method(i int) (m Method) {
-	if t == nil || i < 0 || i >= len(t.methods) {
+func (t *rtype) Method(i int) (m Method) {
+	if t.Kind() == Interface {
+		tt := (*interfaceType)(unsafe.Pointer(t))
+		return tt.Method(i)
+	}
+	methods := t.exportedMethods()
+	if i < 0 || i >= len(methods) {
 		panic("reflect: Method index out of range")
 	}
-	p := &t.methods[i]
-	if p.name != nil {
-		m.Name = *p.name
-	}
+	p := methods[i]
+	pname := t.nameOff(p.name)
+	m.Name = pname.name()
 	fl := flag(Func)
-	if p.pkgPath != nil {
-		m.PkgPath = *p.pkgPath
-		fl |= flagStickyRO
+	mtyp := t.typeOff(p.mtyp)
+	ft := (*funcType)(unsafe.Pointer(mtyp))
+	in := make([]Type, 0, 1+len(ft.in()))
+	in = append(in, t)
+	for _, arg := range ft.in() {
+		in = append(in, arg)
 	}
-	mt := p.typ
+	out := make([]Type, 0, len(ft.out()))
+	for _, ret := range ft.out() {
+		out = append(out, ret)
+	}
+	mt := FuncOf(in, out, ft.IsVariadic())
 	m.Type = mt
 	prop := js.Global.Call("$methodSet", js.InternalObject(t).Get("jsType")).Index(i).Get("prop").String()
 	fn := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
 		rcvr := arguments[0]
 		return rcvr.Get(prop).Call("apply", rcvr, arguments[1:])
 	})
-	m.Func = Value{mt, unsafe.Pointer(fn.Unsafe()), fl}
+	m.Func = Value{mt.(*rtype), unsafe.Pointer(fn.Unsafe()), fl}
+
 	m.Index = i
-	return
+	return m
 }
 
 func (v Value) object() *js.Object {
@@ -652,8 +799,8 @@ func (v Value) object() *js.Object {
 var callHelper = js.Global.Get("$call").Interface().(func(...interface{}) *js.Object)
 
 func (v Value) call(op string, in []Value) []Value {
-	t := v.typ
 	var (
+		t    *rtype
 		fn   unsafe.Pointer
 		rcvr *js.Object
 	)
@@ -664,6 +811,7 @@ func (v Value) call(op string, in []Value) []Value {
 			rcvr = jsType(v.typ).New(rcvr)
 		}
 	} else {
+		t = v.typ
 		fn = unsafe.Pointer(v.object().Unsafe())
 		rcvr = js.Undefined
 	}
@@ -802,9 +950,11 @@ func (v Value) Elem() Value {
 }
 
 func (v Value) Field(i int) Value {
-	v.mustBe(Struct)
+	if v.kind() != Struct {
+		panic(&ValueError{"reflect.Value.Field", v.kind()})
+	}
 	tt := (*structType)(unsafe.Pointer(v.typ))
-	if i < 0 || i >= len(tt.fields) {
+	if uint(i) >= uint(len(tt.fields)) {
 		panic("reflect: Field index out of range")
 	}
 
@@ -813,16 +963,16 @@ func (v Value) Field(i int) Value {
 	typ := field.typ
 
 	fl := v.flag&(flagStickyRO|flagIndir|flagAddr) | flag(typ.Kind())
-	if field.pkgPath != nil {
-		if field.name == nil {
+	if !field.name.isExported() {
+		if field.name.name() == "" {
 			fl |= flagEmbedRO
 		} else {
 			fl |= flagStickyRO
 		}
 	}
 
-	if tag := tt.fields[i].tag; tag != nil && i != 0 {
-		if jsTag := getJsTag(*tag); jsTag != "" {
+	if tag := tt.fields[i].name.tag(); tag != "" && i != 0 {
+		if jsTag := getJsTag(tag); jsTag != "" {
 			for {
 				v = v.Field(0)
 				if v.typ == jsObjectPtr {

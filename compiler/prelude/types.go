@@ -238,7 +238,8 @@ var $newType = function(size, kind, string, name, pkg, constructor) {
     typ.ptr.elem = typ;
     typ.ptr.prototype.$get = function() { return this; };
     typ.ptr.prototype.$set = function(v) { typ.copy(this, v); };
-    typ.init = function(fields) {
+    typ.init = function(pkgPath, fields) {
+      typ.pkgPath = pkgPath;
       typ.fields = fields;
       fields.forEach(function(f) {
         if (!f.typ.comparable) {
@@ -663,7 +664,7 @@ var $makeSlice = function(typ, length, capacity) {
 };
 
 var $structTypes = {};
-var $structType = function(fields) {
+var $structType = function(pkgPath, fields) {
   var typeKey = $mapArray(fields, function(f) { return f.name + "," + f.typ.id + "," + f.tag; }).join("$");
   var typ = $structTypes[typeKey];
   if (typ === undefined) {
@@ -682,7 +683,7 @@ var $structType = function(fields) {
       }
     });
     $structTypes[typeKey] = typ;
-    typ.init(fields);
+    typ.init(pkgPath, fields);
   }
   return typ;
 };

@@ -8,15 +8,19 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-const GOOS = sys.TheGoos
+const GOOS = sys.GOOS
 const GOARCH = "js"
 const Compiler = "gopherjs"
 
 // fake for error.go
 type eface struct {
-	_type *struct {
-		_string *string
-	}
+	_type *_type
+}
+type _type struct {
+}
+
+func (t *_type) string() string {
+	return ""
 }
 
 func init() {
@@ -188,3 +192,5 @@ func NumCgoCall() int64 {
 func efaceOf(ep *interface{}) *eface {
 	panic("efaceOf: not supported")
 }
+
+func KeepAlive(interface{}) {}

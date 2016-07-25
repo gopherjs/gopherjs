@@ -35,6 +35,14 @@ func TestChanAlloc(t *testing.T) {
 	t.Skip()
 }
 
+func TestNameBytesAreAligned(t *testing.T) {
+	t.Skip()
+}
+
+func TestOffsetLock(t *testing.T) {
+	t.Skip()
+}
+
 func TestSelectOnInvalid(t *testing.T) {
 	reflect.Select([]reflect.SelectCase{
 		{
@@ -48,4 +56,32 @@ func TestSelectOnInvalid(t *testing.T) {
 			Dir: reflect.SelectDefault,
 		},
 	})
+}
+
+func TestStructOf(t *testing.T) {
+	t.Skip("StructOf")
+}
+
+func TestStructOfExportRules(t *testing.T) {
+	t.Skip("StructOf")
+}
+
+func TestStructOfGC(t *testing.T) {
+	t.Skip("StructOf")
+}
+
+func TestStructOfAlg(t *testing.T) {
+	t.Skip("StructOf")
+}
+
+func TestStructOfGenericAlg(t *testing.T) {
+	t.Skip("StructOf")
+}
+
+func TestStructOfDirectIface(t *testing.T) {
+	t.Skip("StructOf")
+}
+
+func TestStructOfWithInterface(t *testing.T) {
+	t.Skip("StructOf")
 }

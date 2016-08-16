@@ -78,6 +78,13 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue9862_run.go": {desc: "os/exec.Command unsupported"},*/
 	"fixedbugs/issue10607.go": {desc: "os/exec.Command unsupported"},
 	"fixedbugs/issue13268.go": {desc: "os/exec.Command unsupported"},
+	"fixedbugs/issue14636.go": {desc: "os/exec.Command unsupported"},
+
+	// These are new tests in Go 1.7.
+	"fixedbugs/issue14646.go": {category: unsureIfGopherJSSupportsThisFeature, desc: "it tests runtime.Caller behavior in a deferred func in SSA backend... does GopherJS even support runtime.Caller?"},
+	"fixedbugs/issue15039.go": {category: validButDealWithAfterGo17SinceNew, desc: "valid bug but deal with after Go 1.7 support is out? it's likely not a regression"},
+	"fixedbugs/issue15281.go": {category: validButDealWithAfterGo17SinceNew, desc: "also looks valid but deal with after Go 1.7 support is out? it's likely not a regression"},
+	"fixedbugs/issue15975.go": {category: validButDealWithAfterGo17SinceNew, desc: "also looks valid but deal with after Go 1.7 support is out?"},
 }
 
 type failCategory uint8
@@ -85,6 +92,8 @@ type failCategory uint8
 const (
 	other failCategory = iota
 	compilerPanic
+	unsureIfGopherJSSupportsThisFeature
+	validButDealWithAfterGo17SinceNew // TODO: After Go 1.7 support is out, this category should be re-triaged and removed.
 )
 
 type failReason struct {

@@ -1066,11 +1066,14 @@ func (c *funcContext) translateConversion(expr ast.Expr, desiredType types.Type)
 		}
 
 	case *types.Pointer:
-		if s, isStruct := t.Elem().Underlying().(*types.Struct); isStruct {
+		switch u := t.Elem().Underlying().(type) {
+		case *types.Array:
+			return c.translateExpr(expr)
+		case *types.Struct:
 			if c.p.Pkg.Path() == "syscall" && types.Identical(exprType, types.Typ[types.UnsafePointer]) {
 				array := c.newVariable("_array")
 				target := c.newVariable("_struct")
-				return c.formatExpr("(%s = %e, %s = %e, %s, %s)", array, expr, target, c.zeroValue(t.Elem()), c.loadStruct(array, target, s), target)
+				return c.formatExpr("(%s = %e, %s = %e, %s, %s)", array, expr, target, c.zeroValue(t.Elem()), c.loadStruct(array, target, u), target)
 			}
 			return c.formatExpr("$pointerOfStructConversion(%e, %s)", expr, c.typeName(t))
 		}

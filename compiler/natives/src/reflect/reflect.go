@@ -42,7 +42,7 @@ func reflectType(typ *js.Object) *rtype {
 		rt := &rtype{
 			size: uintptr(typ.Get("size").Int()),
 			kind: uint8(typ.Get("kind").Int()),
-			str:  newNameOff(newName(internalStr(typ.Get("string")), "", internalStr(typ.Get("pkg")), false)), // TODO is pkg used?
+			str:  newNameOff(newName(internalStr(typ.Get("string")), "", internalStr(typ.Get("pkg")), typ.Get("exported").Bool())), // TODO is pkg used?
 		}
 		js.InternalObject(rt).Set("jsType", typ)
 		typ.Set("reflectType", js.InternalObject(rt))

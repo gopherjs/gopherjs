@@ -460,7 +460,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				case *types.Basic, *types.Array, *types.Slice, *types.Chan, *types.Signature, *types.Interface, *types.Pointer, *types.Map:
 					size = sizes32.Sizeof(t)
 				}
-				c.Printf(`%s = $newType(%d, %s, "%s.%s", "%s", "%s", %t, %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name(), o.Pkg().Path(), o.Exported(), constructor)
+				c.Printf(`%s = $newType(%d, %s, "%s.%s", %t, "%s", %t, %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name() != "", o.Pkg().Path(), o.Exported(), constructor)
 			})
 			d.MethodListCode = c.CatchOutput(0, func() {
 				if _, isInterface := o.Type().Underlying().(*types.Interface); !isInterface {

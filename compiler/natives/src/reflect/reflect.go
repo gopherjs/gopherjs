@@ -42,19 +42,22 @@ func reflectType(typ *js.Object) *rtype {
 		rt := &rtype{
 			size: uintptr(typ.Get("size").Int()),
 			kind: uint8(typ.Get("kind").Int()),
-			str:  newNameOff(newName(internalStr(typ.Get("string")), "", internalStr(typ.Get("pkg")), typ.Get("exported").Bool())), // TODO is pkg used?
+			str:  newNameOff(newName(internalStr(typ.Get("string")), "", "", typ.Get("exported").Bool())),
 		}
 		js.InternalObject(rt).Set("jsType", typ)
 		typ.Set("reflectType", js.InternalObject(rt))
 
 		methodSet := js.Global.Call("$methodSet", typ)
-		if methodSet.Length() != 0 || typ.Get("typeName").String() != "" {
+		if methodSet.Length() != 0 || typ.Get("named").Bool() {
 			rt.tflag |= tflagUncommon
+			if typ.Get("named").Bool() {
+				rt.tflag |= tflagNamed
+			}
 			reflectMethods := make([]method, methodSet.Length())
 			for i := range reflectMethods {
 				m := methodSet.Index(i)
 				reflectMethods[i] = method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", "", internalStr(m.Get("pkg")) == "")), // TODO pkg
+					name: newNameOff(newName(internalStr(m.Get("name")), "", "", internalStr(m.Get("pkg")) == "")),
 					mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				}
 			}
@@ -65,9 +68,6 @@ func reflectType(typ *js.Object) *rtype {
 			}
 			uncommonTypeMap[rt] = ut
 			js.InternalObject(ut).Set("jsType", typ)
-		}
-		if typ.Get("typeName").String() != "" { // TODO remove typeName?
-			rt.tflag |= tflagNamed
 		}
 
 		switch rt.Kind() {
@@ -116,7 +116,7 @@ func reflectType(typ *js.Object) *rtype {
 			for i := range imethods {
 				m := methods.Index(i)
 				imethods[i] = imethod{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", "", internalStr(m.Get("pkg")) == "")), // TODO pkg
+					name: newNameOff(newName(internalStr(m.Get("name")), "", "", internalStr(m.Get("pkg")) == "")),
 					typ:  newTypeOff(reflectType(m.Get("typ"))),
 				}
 			}
@@ -243,7 +243,7 @@ func newName(n, tag, pkgPath string, exported bool) name {
 	}
 }
 
-var nameOffList []name // TODO use cast?
+var nameOffList []name
 
 func (t *rtype) nameOff(off nameOff) name {
 	return nameOffList[int(off)]
@@ -255,7 +255,7 @@ func newNameOff(n name) nameOff {
 	return nameOff(i)
 }
 
-var typeOffList []*rtype // TODO use cast?
+var typeOffList []*rtype
 
 func (t *rtype) typeOff(off typeOff) *rtype {
 	return typeOffList[int(off)]
@@ -626,7 +626,7 @@ func Copy(dst, src Value) int {
 	return js.Global.Call("$copySlice", dstVal, srcVal).Int()
 }
 
-func methodReceiver(op string, v Value, i int) (rcvrtype, t *rtype, fn unsafe.Pointer) { // TODO cleanup
+func methodReceiver(op string, v Value, i int) (_, t *rtype, fn unsafe.Pointer) {
 	var prop string
 	if v.typ.Kind() == Interface {
 		tt := (*interfaceType)(unsafe.Pointer(v.typ))
@@ -637,15 +637,9 @@ func methodReceiver(op string, v Value, i int) (rcvrtype, t *rtype, fn unsafe.Po
 		if !tt.nameOff(m.name).isExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		iface := (*nonEmptyInterface)(v.ptr)
-		if iface.itab == nil {
-			panic("reflect: " + op + " of method on nil interface value")
-		}
-		// rcvrtype = iface.itab.typ
 		t = tt.typeOff(m.typ)
 		prop = tt.nameOff(m.name).name()
 	} else {
-		// rcvrtype = v.typ
 		ut := v.typ.uncommon()
 		if ut == nil || uint(i) >= uint(ut.mcount) {
 			panic("reflect: internal error: invalid method index")

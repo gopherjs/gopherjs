@@ -61,7 +61,7 @@ var $idKey = function(x) {
   return String(x.$id);
 };
 
-var $newType = function(size, kind, string, name, pkg, exported, constructor) {
+var $newType = function(size, kind, string, named, pkg, exported, constructor) {
   var typ;
   switch(kind) {
   case $kindBool:
@@ -132,7 +132,7 @@ var $newType = function(size, kind, string, name, pkg, exported, constructor) {
   case $kindArray:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
-    typ.ptr = $newType(4, $kindPtr, "*" + string, "", "", false, function(array) {
+    typ.ptr = $newType(4, $kindPtr, "*" + string, false, "", false, function(array) {
       this.$get = function() { return array; };
       this.$set = function(v) { typ.copy(this, v); };
       this.$val = array;
@@ -234,7 +234,7 @@ var $newType = function(size, kind, string, name, pkg, exported, constructor) {
   case $kindStruct:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
-    typ.ptr = $newType(4, $kindPtr, "*" + string, "", "", exported, constructor);
+    typ.ptr = $newType(4, $kindPtr, "*" + string, false, "", exported, constructor);
     typ.ptr.elem = typ;
     typ.ptr.prototype.$get = function() { return this; };
     typ.ptr.prototype.$set = function(v) { typ.copy(this, v); };
@@ -384,7 +384,7 @@ var $newType = function(size, kind, string, name, pkg, exported, constructor) {
   typ.size = size;
   typ.kind = kind;
   typ.string = string;
-  typ.typeName = name;
+  typ.named = named;
   typ.pkg = pkg;
   typ.exported = exported;
   typ.methods = [];
@@ -419,11 +419,9 @@ var $methodSet = function(typ) {
       }
       seen[e.typ.string] = true;
 
-      if(e.typ.typeName !== "") {
-        mset = mset.concat(e.typ.methods);
-        if (e.indirect) {
-          mset = mset.concat($ptrType(e.typ).methods);
-        }
+      mset = mset.concat(e.typ.methods);
+      if (e.indirect) {
+        mset = mset.concat($ptrType(e.typ).methods);
       }
 
       switch (e.typ.kind) {
@@ -459,24 +457,24 @@ var $methodSet = function(typ) {
   return typ.methodSetCache;
 };
 
-var $Bool          = $newType( 1, $kindBool,          "bool",           "bool",       "", false, null);
-var $Int           = $newType( 4, $kindInt,           "int",            "int",        "", false, null);
-var $Int8          = $newType( 1, $kindInt8,          "int8",           "int8",       "", false, null);
-var $Int16         = $newType( 2, $kindInt16,         "int16",          "int16",      "", false, null);
-var $Int32         = $newType( 4, $kindInt32,         "int32",          "int32",      "", false, null);
-var $Int64         = $newType( 8, $kindInt64,         "int64",          "int64",      "", false, null);
-var $Uint          = $newType( 4, $kindUint,          "uint",           "uint",       "", false, null);
-var $Uint8         = $newType( 1, $kindUint8,         "uint8",          "uint8",      "", false, null);
-var $Uint16        = $newType( 2, $kindUint16,        "uint16",         "uint16",     "", false, null);
-var $Uint32        = $newType( 4, $kindUint32,        "uint32",         "uint32",     "", false, null);
-var $Uint64        = $newType( 8, $kindUint64,        "uint64",         "uint64",     "", false, null);
-var $Uintptr       = $newType( 4, $kindUintptr,       "uintptr",        "uintptr",    "", false, null);
-var $Float32       = $newType( 4, $kindFloat32,       "float32",        "float32",    "", false, null);
-var $Float64       = $newType( 8, $kindFloat64,       "float64",        "float64",    "", false, null);
-var $Complex64     = $newType( 8, $kindComplex64,     "complex64",      "complex64",  "", false, null);
-var $Complex128    = $newType(16, $kindComplex128,    "complex128",     "complex128", "", false, null);
-var $String        = $newType( 8, $kindString,        "string",         "string",     "", false, null);
-var $UnsafePointer = $newType( 4, $kindUnsafePointer, "unsafe.Pointer", "Pointer",    "", false, null);
+var $Bool          = $newType( 1, $kindBool,          "bool",           true, "", false, null);
+var $Int           = $newType( 4, $kindInt,           "int",            true, "", false, null);
+var $Int8          = $newType( 1, $kindInt8,          "int8",           true, "", false, null);
+var $Int16         = $newType( 2, $kindInt16,         "int16",          true, "", false, null);
+var $Int32         = $newType( 4, $kindInt32,         "int32",          true, "", false, null);
+var $Int64         = $newType( 8, $kindInt64,         "int64",          true, "", false, null);
+var $Uint          = $newType( 4, $kindUint,          "uint",           true, "", false, null);
+var $Uint8         = $newType( 1, $kindUint8,         "uint8",          true, "", false, null);
+var $Uint16        = $newType( 2, $kindUint16,        "uint16",         true, "", false, null);
+var $Uint32        = $newType( 4, $kindUint32,        "uint32",         true, "", false, null);
+var $Uint64        = $newType( 8, $kindUint64,        "uint64",         true, "", false, null);
+var $Uintptr       = $newType( 4, $kindUintptr,       "uintptr",        true, "", false, null);
+var $Float32       = $newType( 4, $kindFloat32,       "float32",        true, "", false, null);
+var $Float64       = $newType( 8, $kindFloat64,       "float64",        true, "", false, null);
+var $Complex64     = $newType( 8, $kindComplex64,     "complex64",      true, "", false, null);
+var $Complex128    = $newType(16, $kindComplex128,    "complex128",     true, "", false, null);
+var $String        = $newType( 8, $kindString,        "string",         true, "", false, null);
+var $UnsafePointer = $newType( 4, $kindUnsafePointer, "unsafe.Pointer", true, "", false, null);
 
 var $nativeArray = function(elemKind) {
   switch (elemKind) {
@@ -518,7 +516,7 @@ var $arrayType = function(elem, len) {
   var typeKey = elem.id + "$" + len;
   var typ = $arrayTypes[typeKey];
   if (typ === undefined) {
-    typ = $newType(12, $kindArray, "[" + len + "]" + elem.string, "", "", false, null);
+    typ = $newType(12, $kindArray, "[" + len + "]" + elem.string, false, "", false, null);
     $arrayTypes[typeKey] = typ;
     typ.init(elem, len);
   }
@@ -530,7 +528,7 @@ var $chanType = function(elem, sendOnly, recvOnly) {
   var field = sendOnly ? "SendChan" : (recvOnly ? "RecvChan" : "Chan");
   var typ = elem[field];
   if (typ === undefined) {
-    typ = $newType(4, $kindChan, string, "", "", false, null);
+    typ = $newType(4, $kindChan, string, false, "", false, null);
     elem[field] = typ;
     typ.init(elem, sendOnly, recvOnly);
   }
@@ -565,7 +563,7 @@ var $funcType = function(params, results, variadic) {
     } else if (results.length > 1) {
       string += " (" + $mapArray(results, function(r) { return r.string; }).join(", ") + ")";
     }
-    typ = $newType(4, $kindFunc, string, "", "", false, null);
+    typ = $newType(4, $kindFunc, string, false, "", false, null);
     $funcTypes[typeKey] = typ;
     typ.init(params, results, variadic);
   }
@@ -583,7 +581,7 @@ var $interfaceType = function(methods) {
         return (m.pkg !== "" ? m.pkg + "." : "") + m.name + m.typ.string.substr(4);
       }).join("; ") + " }";
     }
-    typ = $newType(8, $kindInterface, string, "", "", false, null);
+    typ = $newType(8, $kindInterface, string, false, "", false, null);
     $interfaceTypes[typeKey] = typ;
     typ.init(methods);
   }
@@ -591,7 +589,7 @@ var $interfaceType = function(methods) {
 };
 var $emptyInterface = $interfaceType([]);
 var $ifaceNil = {};
-var $error = $newType(8, $kindInterface, "error", "error", "", false, null);
+var $error = $newType(8, $kindInterface, "error", true, "", false, null);
 $error.init([{prop: "Error", name: "Error", pkg: "", typ: $funcType([], [$String], false)}]);
 
 var $mapTypes = {};
@@ -599,7 +597,7 @@ var $mapType = function(key, elem) {
   var typeKey = key.id + "$" + elem.id;
   var typ = $mapTypes[typeKey];
   if (typ === undefined) {
-    typ = $newType(4, $kindMap, "map[" + key.string + "]" + elem.string, "", "", false, null);
+    typ = $newType(4, $kindMap, "map[" + key.string + "]" + elem.string, false, "", false, null);
     $mapTypes[typeKey] = typ;
     typ.init(key, elem);
   }
@@ -617,7 +615,7 @@ var $makeMap = function(keyForFunc, entries) {
 var $ptrType = function(elem) {
   var typ = elem.ptr;
   if (typ === undefined) {
-    typ = $newType(4, $kindPtr, "*" + elem.string, "", "", elem.exported, null);
+    typ = $newType(4, $kindPtr, "*" + elem.string, false, "", elem.exported, null);
     elem.ptr = typ;
     typ.init(elem);
   }
@@ -639,7 +637,7 @@ var $indexPtr = function(array, index, constructor) {
 var $sliceType = function(elem) {
   var typ = elem.slice;
   if (typ === undefined) {
-    typ = $newType(12, $kindSlice, "[]" + elem.string, "", "", false, null);
+    typ = $newType(12, $kindSlice, "[]" + elem.string, false, "", false, null);
     elem.slice = typ;
     typ.init(elem);
   }
@@ -675,7 +673,7 @@ var $structType = function(pkgPath, fields) {
     if (fields.length === 0) {
       string = "struct {}";
     }
-    typ = $newType(0, $kindStruct, string, "", "", false, function() {
+    typ = $newType(0, $kindStruct, string, false, "", false, function() {
       this.$val = this;
       for (var i = 0; i < fields.length; i++) {
         var f = fields[i];

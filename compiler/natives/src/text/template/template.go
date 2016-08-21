@@ -1,3 +1,3 @@
 package template
 
-const maxExecDepth = 5000
+const maxExecDepth = 3000

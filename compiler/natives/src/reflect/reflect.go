@@ -59,6 +59,7 @@ func reflectType(typ *js.Object) *rtype {
 				}
 			}
 			ut := &uncommonType{
+				pkgPath: newNameOff(newName(internalStr(typ.Get("pkg")), "", "", false)),
 				mcount:   uint16(methodSet.Length()),
 				_methods: reflectMethods,
 			}

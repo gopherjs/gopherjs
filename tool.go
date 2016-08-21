@@ -510,7 +510,7 @@ func main() {
 
 	cmdVersion := &cobra.Command{
 		Use:   "version",
-		Short: "print GopherJS version",
+		Short: "print GopherJS compiler version",
 	}
 	cmdVersion.Run = func(cmd *cobra.Command, args []string) {
 		if len(args) > 0 {

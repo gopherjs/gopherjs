@@ -48,7 +48,7 @@ func reflectType(typ *js.Object) *rtype {
 		typ.Set("reflectType", js.InternalObject(rt))
 
 		methodSet := js.Global.Call("$methodSet", typ)
-		if methodSet.Length() != 0 {
+		if methodSet.Length() != 0 || typ.Get("typeName").String() != "" {
 			rt.tflag |= tflagUncommon
 			reflectMethods := make([]method, methodSet.Length())
 			for i := range reflectMethods {

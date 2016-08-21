@@ -508,11 +508,24 @@ func main() {
 		fmt.Fprintln(os.Stderr, http.Serve(tcpKeepAliveListener{ln.(*net.TCPListener)}, sourceFiles))
 	}
 
+	cmdVersion := &cobra.Command{
+		Use:   "version",
+		Short: "print GopherJS version",
+	}
+	cmdVersion.Run = func(cmd *cobra.Command, args []string) {
+		if len(args) > 0 {
+			cmdServe.HelpFunc()(cmd, args)
+			os.Exit(1)
+		}
+
+		fmt.Printf("GopherJS %s\n", compiler.Version)
+	}
+
 	rootCmd := &cobra.Command{
 		Use:  "gopherjs",
 		Long: "GopherJS is a tool for compiling Go source code to JavaScript.",
 	}
-	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe)
+	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion)
 	rootCmd.Execute()
 }
 

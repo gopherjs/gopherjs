@@ -419,9 +419,11 @@ var $methodSet = function(typ) {
       }
       seen[e.typ.string] = true;
 
-      mset = mset.concat(e.typ.methods);
-      if (e.indirect) {
-        mset = mset.concat($ptrType(e.typ).methods);
+      if (e.typ.named) {
+        mset = mset.concat(e.typ.methods);
+        if (e.indirect) {
+          mset = mset.concat($ptrType(e.typ).methods);
+        }
       }
 
       switch (e.typ.kind) {

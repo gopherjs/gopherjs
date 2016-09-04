@@ -287,13 +287,15 @@ func main() {
 	outputFilename := cmdTest.Flags().StringP("output", "o", "", "Compile the test binary to the named file. The test still runs (unless -c is specified).")
 	cmdTest.Flags().AddFlag(flagMinify)
 	cmdTest.Flags().AddFlag(flagColor)
+	cmdTest.Flags().AddFlag(flagTags)
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
+		options.BuildTags = strings.Fields(*tags)
 		os.Exit(handleError(func() error {
 			pkgs := make([]*gbuild.PackageData, len(args))
 			for i, pkgPath := range args {
 				pkgPath = filepath.ToSlash(pkgPath)
 				var err error
-				pkgs[i], err = gbuild.Import(pkgPath, 0, "", nil)
+				pkgs[i], err = gbuild.Import(pkgPath, 0, "", options.BuildTags)
 				if err != nil {
 					return err
 				}
@@ -310,7 +312,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					if pkg, err = gbuild.Import(pkgPath, 0, "", nil); err != nil {
+					if pkg, err = gbuild.Import(pkgPath, 0, "", options.BuildTags); err != nil {
 						return err
 					}
 				}

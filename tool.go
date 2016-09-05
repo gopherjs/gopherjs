@@ -317,7 +317,7 @@ func main() {
 					}
 				}
 				if pkg == nil {
-					if pkg, err = gbuild.ImportDir(currentDirectory, 0); err != nil {
+					if pkg, err = gbuild.ImportDir(currentDirectory, 0, "", options.BuildTags); err != nil {
 						return err
 					}
 					pkg.ImportPath = "_" + currentDirectory

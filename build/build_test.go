@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gopherjs/gopherjs/go/build"
 	"github.com/kisielk/gotool"
 	"github.com/shurcooL/go/importgraphutil"
 )
@@ -68,9 +69,9 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 		// Normal package.
 		{
 			// Import the real normal package, and populate its real import set.
-			bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
+			bpkg, err := build.Import(pkg, "", build.ImportComment)
 			if err != nil {
-				t.Fatalf("gobuild.Import: %v", err)
+				t.Fatalf("build.Import: %v", err)
 			}
 			realImports := make(stringSet)
 			populateImportSet(bpkg.Imports, &realImports)
@@ -107,9 +108,9 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 		// Test package.
 		{
 			// Import the real test package, and populate its real import set.
-			bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
+			bpkg, err := build.Import(pkg, "", build.ImportComment)
 			if err != nil {
-				t.Fatalf("gobuild.Import: %v", err)
+				t.Fatalf("build.Import: %v", err)
 			}
 			realTestImports := make(stringSet)
 			populateImportSet(bpkg.TestImports, &realTestImports)
@@ -146,9 +147,9 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 		// External test package.
 		{
 			// Import the real external test package, and populate its real import set.
-			bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
+			bpkg, err := build.Import(pkg, "", build.ImportComment)
 			if err != nil {
-				t.Fatalf("gobuild.Import: %v", err)
+				t.Fatalf("build.Import: %v", err)
 			}
 			realXTestImports := make(stringSet)
 			populateImportSet(bpkg.XTestImports, &realXTestImports)

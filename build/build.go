@@ -3,7 +3,6 @@ package build
 import (
 	"fmt"
 	"go/ast"
-	"go/build"
 	"go/parser"
 	"go/scanner"
 	"go/token"
@@ -21,6 +20,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/natives"
+	"github.com/gopherjs/gopherjs/go/build"
 	"github.com/kardianos/osext"
 	"github.com/neelance/sourcemap"
 )
@@ -133,6 +133,11 @@ func ImportDir(dir string, mode build.ImportMode) (*PackageData, error) {
 	}
 
 	return &PackageData{Package: pkg, JSFiles: jsFiles}, nil
+}
+
+// Parse ...
+func Parse(pkg *build.Package, isTest bool, fileSet *token.FileSet) ([]*ast.File, error) {
+	return parseAndAugment(pkg, isTest, fileSet)
 }
 
 // parseAndAugment parses and returns all .go files of given pkg.
@@ -547,7 +552,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			}
 			defer objFile.Close()
 
-			archive, err := compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.Types)
+			archive, err := compiler.ReadArchive(pkg.ImportPath, objFile, s.Types)
 			if err != nil {
 				return nil, err
 			}

@@ -232,7 +232,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, minify bool, w 
 	return nil
 }
 
-func ReadArchive(filename, path string, r io.Reader, packages map[string]*types.Package) (*Archive, error) {
+func ReadArchive(path string, r io.Reader, packages map[string]*types.Package) (*Archive, error) {
 	var a Archive
 	if err := gob.NewDecoder(r).Decode(&a); err != nil {
 		return nil, err

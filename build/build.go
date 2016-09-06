@@ -121,8 +121,8 @@ func importWithSrcDir(path string, srcDir string, mode build.ImportMode, install
 
 // ImportDir is like Import but processes the Go package found in the named
 // directory.
-func ImportDir(dir string, mode build.ImportMode) (*PackageData, error) {
-	pkg, err := build.ImportDir(dir, mode)
+func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
+	pkg, err := NewBuildContext(installSuffix, buildTags).ImportDir(dir, mode)
 	if err != nil {
 		return nil, err
 	}

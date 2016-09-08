@@ -1,5 +1,5 @@
-// Created by cgo -godefs - DO NOT EDIT
-// cgo -godefs defs_freebsd.go
+// This is a copy of https://raw.githubusercontent.com/golang/go/go1.7.1/src/vendor/golang_org/x/net/route/zsys_freebsd_amd64.go.
+// which is needed to be able to compile gopherjs code on FreeBSD. Other BSDs (and Linux) are not affected.
 
 // +build js
 

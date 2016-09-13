@@ -1373,6 +1373,9 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	if v1.Type() != v2.Type() {
 		return false
 	}
+	if v1.Type() == jsObjectPtr {
+		return unwrapJsObject(jsObjectPtr, v1.object()) == unwrapJsObject(jsObjectPtr, v2.object())
+	}
 
 	switch v1.Kind() {
 	case Array, Map, Slice, Struct:

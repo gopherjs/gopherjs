@@ -374,7 +374,9 @@ func (c *funcContext) handleEscapingVars(n ast.Node) {
 	c.p.escapingVars = newEscapingVars
 
 	var names []string
-	for obj := range analysis.EscapingObjects(n, c.p.Info.Info) {
+	objs := analysis.EscapingObjects(n, c.p.Info.Info)
+	sort.Sort(varsByName(objs))
+	for _, obj := range objs {
 		names = append(names, c.objectName(obj))
 		c.p.escapingVars[obj] = true
 	}
@@ -641,4 +643,18 @@ func endsWithReturn(stmts []ast.Stmt) bool {
 
 func encodeIdent(name string) string {
 	return strings.Replace(url.QueryEscape(name), "%", "$", -1)
+}
+
+type varsByName []*types.Var
+
+func (s varsByName) Len() int {
+	return len(s)
+}
+
+func (s varsByName) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s varsByName) Less(i, j int) bool {
+	return s[i].Name() < s[j].Name()
 }

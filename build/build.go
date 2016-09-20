@@ -673,7 +673,7 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 	return compiler.WriteProgramCode(deps, sourceMapFilter)
 }
 
-func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localmap bool) func(generatedLine, generatedColumn int, originalPos token.Position) {
+func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localMap bool) func(generatedLine, generatedColumn int, originalPos token.Position) {
 	return func(generatedLine, generatedColumn int, originalPos token.Position) {
 		if !originalPos.IsValid() {
 			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn})
@@ -683,7 +683,7 @@ func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localmap bool) 
 		file := originalPos.Filename
 
 		switch hasGopathPrefix, prefixLen := hasGopathPrefix(file, gopath); {
-		case localmap:
+		case localMap:
 			// no-op:  keep file as-is
 		case hasGopathPrefix:
 			file = filepath.ToSlash(file[prefixLen+4:])

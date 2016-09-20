@@ -530,7 +530,7 @@ func main() {
 	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion)
 	err := rootCmd.Execute()
 	if err != nil {
-		os.Exit(-1)
+		os.Exit(2)
 	}
 }
 

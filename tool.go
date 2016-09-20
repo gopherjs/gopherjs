@@ -528,7 +528,10 @@ func main() {
 		Long: "GopherJS is a tool for compiling Go source code to JavaScript.",
 	}
 	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion)
-	rootCmd.Execute()
+	err := rootCmd.Execute()
+	if err != nil {
+		os.Exit(2)
+	}
 }
 
 // tcpKeepAliveListener sets TCP keep-alive timeouts on accepted

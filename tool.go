@@ -121,12 +121,21 @@ func main() {
 
 				for _, pkgPath := range args {
 					pkgPath = filepath.ToSlash(pkgPath)
-					if s.Watcher != nil {
-						s.Watcher.Add(pkgPath)
-					}
 					pkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
 					if err != nil {
 						return err
+					}
+					if s.Watcher != nil {
+						s.Watcher.Add(pkg.Dir)
+
+						// We want to have the package dir watched when calling Import to avoid
+						// races where we could miss a change made and not re-trigger a build.
+						// However, we need to call Import to get the directory to watch, so we
+						// just call it again here to be sure about the race.
+						pkg, err = gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
+						if err != nil {
+							return err
+						}
 					}
 					archive, err := s.BuildPackage(pkg)
 					if err != nil {

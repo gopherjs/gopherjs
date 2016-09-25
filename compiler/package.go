@@ -734,6 +734,9 @@ func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockS
 
 		c.translateStmtList(initStmts)
 		c.translateStmtList(body.List)
+		if len(c.Flattened) != 0 && !endsWithReturn(body.List) {
+			c.translateStmt(&ast.ReturnStmt{}, nil)
+		}
 	}))
 
 	sort.Strings(c.localVars)
@@ -790,9 +793,6 @@ func translateFunction(typ *ast.FuncType, initStmts []ast.Stmt, body *ast.BlockS
 	if len(c.Flattened) != 0 {
 		prefix = prefix + " s: while (true) { switch ($s) { case 0:"
 		suffix = " } return; }" + suffix
-		if !endsWithReturn(body.List) {
-			suffix = " $s = -1; case -1:" + suffix
-		}
 	}
 
 	if c.HasDefer {

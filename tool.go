@@ -165,6 +165,7 @@ func main() {
 	cmdInstall.Flags().AddFlag(flagMinify)
 	cmdInstall.Flags().AddFlag(flagColor)
 	cmdInstall.Flags().AddFlag(flagTags)
+	cmdInstall.Flags().AddFlag(flagLocalMap)
 	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(*tags)
 		for {
@@ -237,6 +238,7 @@ func main() {
 	cmdGet.Flags().AddFlag(flagMinify)
 	cmdGet.Flags().AddFlag(flagColor)
 	cmdGet.Flags().AddFlag(flagTags)
+	cmdGet.Flags().AddFlag(flagLocalMap)
 	cmdGet.Run = cmdInstall.Run
 
 	cmdRun := &cobra.Command{
@@ -292,6 +294,7 @@ func main() {
 	cmdTest.Flags().AddFlag(flagMinify)
 	cmdTest.Flags().AddFlag(flagColor)
 	cmdTest.Flags().AddFlag(flagTags)
+	cmdTest.Flags().AddFlag(flagLocalMap)
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(*tags)
 		os.Exit(handleError(func() error {
@@ -478,6 +481,7 @@ func main() {
 	cmdServe.Flags().AddFlag(flagMinify)
 	cmdServe.Flags().AddFlag(flagColor)
 	cmdServe.Flags().AddFlag(flagTags)
+	cmdServe.Flags().AddFlag(flagLocalMap)
 	var addr string
 	cmdServe.Flags().StringVarP(&addr, "http", "", ":8080", "HTTP bind address to serve")
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {

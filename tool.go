@@ -780,9 +780,10 @@ type testFuncs struct {
 }
 
 type testFunc struct {
-	Package string // imported package name (_test or _xtest)
-	Name    string // function name
-	Output  string // output, for examples
+	Package   string // imported package name (_test or _xtest)
+	Name      string // function name
+	Output    string // output, for examples
+	Unordered bool   // output is allowed to be unordered.
 }
 
 var testFileSet = token.NewFileSet()
@@ -806,13 +807,13 @@ func (t *testFuncs) load(filename, pkg string, doImport, seen *bool) error {
 			if t.TestMain != nil {
 				return errors.New("multiple definitions of TestMain")
 			}
-			t.TestMain = &testFunc{pkg, name, ""}
+			t.TestMain = &testFunc{pkg, name, "", false}
 			*doImport, *seen = true, true
 		case isTest(name, "Test"):
-			t.Tests = append(t.Tests, testFunc{pkg, name, ""})
+			t.Tests = append(t.Tests, testFunc{pkg, name, "", false})
 			*doImport, *seen = true, true
 		case isTest(name, "Benchmark"):
-			t.Benchmarks = append(t.Benchmarks, testFunc{pkg, name, ""})
+			t.Benchmarks = append(t.Benchmarks, testFunc{pkg, name, "", false})
 			*doImport, *seen = true, true
 		}
 	}
@@ -824,7 +825,7 @@ func (t *testFuncs) load(filename, pkg string, doImport, seen *bool) error {
 			// Don't run examples with no output.
 			continue
 		}
-		t.Examples = append(t.Examples, testFunc{pkg, "Example" + e.Name, e.Output})
+		t.Examples = append(t.Examples, testFunc{pkg, "Example" + e.Name, e.Output, e.Unordered})
 		*seen = true
 	}
 
@@ -908,7 +909,7 @@ var benchmarks = []testing.InternalBenchmark{
 
 var examples = []testing.InternalExample{
 {{range .Examples}}
-	{"{{.Name}}", {{.Package}}.{{.Name}}, {{.Output | printf "%q"}}},
+	{"{{.Name}}", {{.Package}}.{{.Name}}, {{.Output | printf "%q"}}, {{.Unordered}}},
 {{end}}
 }
 

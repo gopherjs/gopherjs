@@ -322,15 +322,16 @@ func parseAndAugment(pkg *build.Package, isTest bool, fileSet *token.FileSet) ([
 }
 
 type Options struct {
-	GOROOT        string
-	GOPATH        string
-	Verbose       bool
-	Quiet         bool
-	Watch         bool
-	CreateMapFile bool
-	Minify        bool
-	Color         bool
-	BuildTags     []string
+	GOROOT         string
+	GOPATH         string
+	Verbose        bool
+	Quiet          bool
+	Watch          bool
+	CreateMapFile  bool
+	MapToLocalDisk bool
+	Minify         bool
+	Color          bool
+	BuildTags      []string
 }
 
 func (o *Options) PrintError(format string, a ...interface{}) {
@@ -656,7 +657,7 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 			fmt.Fprintf(codeFile, "//# sourceMappingURL=%s.map\n", filepath.Base(pkgObj))
 		}()
 
-		sourceMapFilter.MappingCallback = NewMappingCallback(m, s.options.GOROOT, s.options.GOPATH)
+		sourceMapFilter.MappingCallback = NewMappingCallback(m, s.options.GOROOT, s.options.GOPATH, s.options.MapToLocalDisk)
 	}
 
 	deps, err := compiler.ImportDependencies(archive, func(path string) (*compiler.Archive, error) {
@@ -672,14 +673,18 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 	return compiler.WriteProgramCode(deps, sourceMapFilter)
 }
 
-func NewMappingCallback(m *sourcemap.Map, goroot, gopath string) func(generatedLine, generatedColumn int, originalPos token.Position) {
+func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localMap bool) func(generatedLine, generatedColumn int, originalPos token.Position) {
 	return func(generatedLine, generatedColumn int, originalPos token.Position) {
 		if !originalPos.IsValid() {
 			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn})
 			return
 		}
+
 		file := originalPos.Filename
+
 		switch hasGopathPrefix, prefixLen := hasGopathPrefix(file, gopath); {
+		case localMap:
+			// no-op:  keep file as-is
 		case hasGopathPrefix:
 			file = filepath.ToSlash(file[prefixLen+4:])
 		case strings.HasPrefix(file, goroot):
@@ -687,6 +692,7 @@ func NewMappingCallback(m *sourcemap.Map, goroot, gopath string) func(generatedL
 		default:
 			file = filepath.Base(file)
 		}
+
 		m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: originalPos.Line, OriginalColumn: originalPos.Column})
 	}
 }

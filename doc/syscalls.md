@@ -27,3 +27,7 @@ node-gyp rebuild
 mkdir -p ~/.node_libraries/
 cp build/Release/syscall.node ~/.node_libraries/syscall.node
 ```
+
+### Caveats
+
+Note that even with syscalls enabled in Node.js, some programs may not behave as expected due to the fact that the current implementation blocks other goroutines during a syscall, which can lead to a deadlock in some situations. This is not considered a bug, as it is considered sufficient for most test cases (which is all Node.js should be used for). Get in contact if you feel like you want to change this situation.

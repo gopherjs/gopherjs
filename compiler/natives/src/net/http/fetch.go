@@ -49,20 +49,9 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 }
 
 func (r *streamReader) Close() error {
-	// TOOD: Cannot do this because it's a blocking call, and Close() is often called
-	//       via `defer resp.Body.Close()`, but GopherJS currently has an issue with supporting that.
-	//       See https://github.com/gopherjs/gopherjs/issues/381 and https://github.com/gopherjs/gopherjs/issues/426.
-	/*ch := make(chan error)
-	r.stream.Call("cancel").Call("then",
-		func(result *js.Object) {
-			if result != js.Undefined {
-				ch <- errors.New(result.String()) // TODO: Verify this works, it probably doesn't and should be rewritten as result.Get("message").String() or something.
-				return
-			}
-			ch <- nil
-		},
-	)
-	return <-ch*/
+	// This ignores any error returned from cancel method. So far, I did not encounter any concrete
+	// situation where reporting the error is meaningful. Most users ignore error from resp.Body.Close().
+	// If there's a need to report error here, it can be implemented and tested when that need comes up.
 	r.stream.Call("cancel")
 	return nil
 }

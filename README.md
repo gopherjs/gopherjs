@@ -51,6 +51,7 @@ If you include an argument, it will be the root from which everything is served.
 - [GopherJS on Twitter](https://twitter.com/GopherJS)
 
 ### Getting started
+
 #### Interacting with the DOM
 The package `github.com/gopherjs/gopherjs/js` (see [documentation](https://godoc.org/github.com/gopherjs/gopherjs/js)) provides functions for interacting with native JavaScript APIs. For example the line
 

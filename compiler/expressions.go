@@ -479,11 +479,11 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 			case e.Low == nil && e.High == nil:
 				return c.translateExpr(e.X)
 			case e.Low == nil:
-				return c.formatExpr("%e.substring(0, %f)", e.X, e.High)
+				return c.formatExpr("$substring(%e, 0, %f)", e.X, e.High)
 			case e.High == nil:
-				return c.formatExpr("%e.substring(%f)", e.X, e.Low)
+				return c.formatExpr("$substring(%e, %f)", e.X, e.Low)
 			default:
-				return c.formatExpr("%e.substring(%f, %f)", e.X, e.Low, e.High)
+				return c.formatExpr("$substring(%e, %f, %f)", e.X, e.Low, e.High)
 			}
 		}
 		slice := c.translateConversionToSlice(e.X, exprType)

@@ -110,6 +110,13 @@ var $subslice = function(slice, low, high, max) {
   return s;
 };
 
+var $substring = function(str, low, high) {
+  if (low < 0 || high < low || high > str.length) {
+    $throwRuntimeError("slice bounds out of range");
+  }
+  return str.substring(low, high);
+};
+
 var $sliceToArray = function(slice) {
   if (slice.$length === 0) {
     return [];

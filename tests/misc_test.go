@@ -585,3 +585,14 @@ func TestDeferNamedTupleReturnImplicitCast(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestSliceOfString(t *testing.T) {
+	defer func() {
+		if err := recover(); err == nil || !strings.Contains(err.(error).Error(), "slice bounds out of range") {
+			t.Fail()
+		}
+	}()
+
+	str := "foo"
+	print(str[0:10])
+}

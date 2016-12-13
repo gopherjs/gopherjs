@@ -68,6 +68,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue7690.go":  {desc: "Error: runtime error: slice bounds out of range"},
 	"fixedbugs/issue8047.go":  {desc: "null"},
 	"fixedbugs/issue8047b.go": {desc: "Error: [object Object]"},
+	"fixedbugs/issue8613.go":  {desc: "Does not panic upon division by zero when assigned to _, see https://github.com/gopherjs/gopherjs/issues/551."},
 
 	// Failing due to use of os/exec.Command, which is unsupported. Now skipped via !nacl build tag.
 	/*"fixedbugs/bug248.go":        {desc: "os/exec.Command unsupported"},
@@ -81,16 +82,22 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue14636.go": {desc: "os/exec.Command unsupported"},
 
 	// These are new tests in Go 1.7.
-	"fixedbugs/issue14646.go": {category: unsureIfGopherJSSupportsThisFeature, desc: "it tests runtime.Caller behavior in a deferred func in SSA backend... does GopherJS even support runtime.Caller?"},
+	"fixedbugs/issue14646.go": {category: unsureIfGopherJSSupportsThisFeature, desc: "tests runtime.Caller behavior in a deferred func in SSA backend... does GopherJS even support runtime.Caller?"},
 	"fixedbugs/issue15039.go": {category: validButDealWithAfterGo17SinceNew, desc: "valid bug but deal with after Go 1.7 support is out? it's likely not a regression"},
 	"fixedbugs/issue15281.go": {category: validButDealWithAfterGo17SinceNew, desc: "also looks valid but deal with after Go 1.7 support is out? it's likely not a regression"},
 	"fixedbugs/issue15975.go": {category: validButDealWithAfterGo17SinceNew, desc: "also looks valid but deal with after Go 1.7 support is out?"},
+
+	// These are new tests in Go 1.8.
+	"fixedbugs/issue15528.go": {category: usesUnsupportedPackage, desc: `imports "unsafe" package and gets: Error: reflect: call of reflect.Value.IsNil on unsafe.Pointer Value`}, // See https://github.com/golang/go/commit/dfc56a4cd313c9c5de37f4fadb14912286edc42f for relevant commit.
+	"fixedbugs/issue17381.go": {category: unsureIfGopherJSSupportsThisFeature, desc: "tests runtime.{Callers,FuncForPC} behavior in a deferred func with garbage on stack... does GopherJS even support runtime.{Callers,FuncForPC}?"},
+	"fixedbugs/issue18149.go": {desc: "//line directives with filenames are not correctly parsed, see https://github.com/gopherjs/gopherjs/issues/553."},
 }
 
 type failCategory uint8
 
 const (
-	other failCategory = iota
+	other                  failCategory = iota
+	usesUnsupportedPackage              // Test fails because it imports an unsupported package, e.g., "unsafe".
 	compilerPanic
 	unsureIfGopherJSSupportsThisFeature
 	validButDealWithAfterGo17SinceNew // TODO: After Go 1.7 support is out, this category should be re-triaged and removed.

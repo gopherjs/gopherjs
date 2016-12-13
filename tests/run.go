@@ -563,14 +563,13 @@ func (t *test) run() {
 		args = f[1:]
 	}
 
-	// GOPHERJS: For now, only run with "run", "cmpout" actions, in "fixedbugs" dir.
+	// GOPHERJS: For now, only run with "run", "cmpout" actions, in "fixedbugs" dir. Skip all others.
 	switch action {
 	case "run", "cmpout":
 		if filepath.Clean(t.dir) != "fixedbugs" {
 			action = "skip"
 		}
-	case "rundircmpout", "compile", "compiledir", "build", "runoutput",
-		"rundir", "errorcheck", "errorcheckdir", "errorcheckoutput":
+	default:
 		action = "skip"
 	}
 

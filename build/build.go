@@ -95,8 +95,6 @@ func importWithSrcDir(path string, srcDir string, mode build.ImportMode, install
 		pkg.GoFiles = []string{"rand.go", "util.go"}
 	case "crypto/x509":
 		pkg.CgoFiles = nil
-	case "hash/crc32":
-		pkg.GoFiles = []string{"crc32.go", "crc32_generic.go"}
 	}
 
 	if len(pkg.CgoFiles) > 0 {

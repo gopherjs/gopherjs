@@ -636,12 +636,14 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 		if err == nil {
 			return f, nil
 		}
+		defer f.Close()
 
 		// source maps are served outside of serveRoot
 		f, err = dir.Open(requestName)
 		if err == nil {
 			return f, nil
 		}
+		defer f.Close()
 	}
 
 	if isIndex {

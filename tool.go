@@ -229,6 +229,25 @@ func main() {
 		}
 	}
 
+	cmdDoc := &cobra.Command{
+		Use:   "doc [arguments]",
+		Short: "display documentation for the requested, package, method or symbol",
+	}
+	cmdDoc.Run = func(cmd *cobra.Command, args []string) {
+		exitCode := handleError(func() error {
+			goDoc := exec.Command("go", append([]string{"doc"}, args...)...)
+			goDoc.Stdout = os.Stdout
+			goDoc.Stderr = os.Stderr
+			goDoc.Env = append(os.Environ(), "GOARCH=js")
+			if err := goDoc.Run(); err != nil {
+				return err
+			}
+			return nil
+		}, options, nil)
+
+		os.Exit(exitCode)
+	}
+
 	cmdGet := &cobra.Command{
 		Use:   "get [packages]",
 		Short: "download and install packages and dependencies",
@@ -536,7 +555,7 @@ func main() {
 		Use:  "gopherjs",
 		Long: "GopherJS is a tool for compiling Go source code to JavaScript.",
 	}
-	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion)
+	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion, cmdDoc)
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(2)

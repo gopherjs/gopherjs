@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/gopherjs/gopherjs/js"
+	"github.com/gopherjs/gopherjs/js/webcrypto"
 )
 
 func init() {
@@ -19,22 +20,16 @@ func (r *rngReader) Read(b []byte) (n int, err error) {
 	offset := js.InternalObject(b).Get("$offset").Int()
 
 	// browser
-	crypto := js.Global.Get("crypto")
-	if crypto == js.Undefined {
-		crypto = js.Global.Get("msCrypto")
-	}
-	if crypto != js.Undefined {
-		if crypto.Get("getRandomValues") != js.Undefined {
-			n = len(b)
-			if n > 65536 {
-				// Avoid QuotaExceededError thrown by getRandomValues
-				// when length is more than 65536, as specified in
-				// http://www.w3.org/TR/WebCryptoAPI/#Crypto-method-getRandomValues
-				n = 65536
-			}
-			crypto.Call("getRandomValues", array.Call("subarray", offset, offset+n))
-			return n, nil
+	if webcrypto.Crypto != nil && webcrypto.Crypto.Get("getRandomValues") != js.Undefined {
+		n = len(b)
+		if n > 65536 {
+			// Avoid QuotaExceededError thrown by getRandomValues
+			// when length is more than 65536, as specified in
+			// http://www.w3.org/TR/WebCryptoAPI/#Crypto-method-getRandomValues
+			n = 65536
 		}
+		webcrypto.Crypto.Call("getRandomValues", array.Call("subarray", offset, offset+n))
+		return n, nil
 	}
 
 	// Node.js

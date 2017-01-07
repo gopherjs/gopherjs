@@ -152,4 +152,4 @@ time               | ✅ yes       | UTC and Local only (see [issue](https://git
 unicode            | ✅ yes       |
 -- utf16           | ✅ yes       |
 -- utf8            | ✅ yes       |
-unsafe             | ❌ no
+unsafe             | ❌ no        |

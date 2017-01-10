@@ -665,7 +665,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 	if isIndex {
 		// If there was no index.html file in any dirs, supply our own.
-		return newFakeFile("index.html", []byte(`<html><head><meta charset="utf-8"><script src="`+base+`.js"></script></head><body></body></html>`)), nil
+		return newFakeFile("index.html", []byte(`<html><head><meta charset="utf-8"><script defer src="`+base+`.js"></script></head><body></body></html>`)), nil
 	}
 
 	return nil, os.ErrNotExist

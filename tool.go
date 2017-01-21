@@ -127,7 +127,11 @@ func main() {
 				for _, pkgPath := range args {
 					pkgPath = filepath.ToSlash(pkgPath)
 					if s.Watcher != nil {
-						s.Watcher.Add(pkgPath)
+						pkg, err := gbuild.NewBuildContext(s.InstallSuffix(), options.BuildTags).Import(pkgPath, "", build.FindOnly)
+						if err != nil {
+							return err
+						}
+						s.Watcher.Add(pkg.Dir)
 					}
 					pkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
 					if err != nil {

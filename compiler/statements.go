@@ -311,6 +311,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		rVal := c.translateResults(results)
 		if len(c.Flattened) != 0 {
 			c.Printf("$s = -1; return%s;", rVal)
+			return
 		}
 		c.Printf("return%s;", rVal)
 

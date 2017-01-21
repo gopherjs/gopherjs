@@ -358,9 +358,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
 			lhs := astutil.RemoveParens(s.Lhs[0])
 			if isBlank(lhs) {
-				if analysis.HasSideEffect(s.Rhs[0], c.p.Info.Info) {
-					c.Printf("%s;", c.translateExpr(s.Rhs[0]))
-				}
+				c.Printf("$unused(%s);", c.translateExpr(s.Rhs[0]))
 				return
 			}
 			c.Printf("%s", c.translateAssign(lhs, s.Rhs[0], s.Tok == token.DEFINE))
@@ -380,9 +378,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			for i, rhs := range s.Rhs {
 				tmpVars[i] = c.newVariable("_tmp")
 				if isBlank(astutil.RemoveParens(s.Lhs[i])) {
-					if analysis.HasSideEffect(rhs, c.p.Info.Info) {
-						c.Printf("%s;", c.translateExpr(rhs))
-					}
+					c.Printf("$unused(%s);", c.translateExpr(rhs))
 					continue
 				}
 				c.Printf("%s", c.translateAssign(c.newIdent(tmpVars[i], c.p.TypeOf(s.Lhs[i])), rhs, true))

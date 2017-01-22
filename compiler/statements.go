@@ -14,10 +14,6 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
-type this struct {
-	ast.Ident
-}
-
 func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 	for _, stmt := range stmts {
 		c.translateStmt(stmt, nil)
@@ -330,7 +326,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			isJs = typesutil.IsJsPackage(c.p.Uses[fun.Sel].Pkg())
 		}
 		sig := c.p.TypeOf(s.Call.Fun).Underlying().(*types.Signature)
-		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid(), true)
+		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
 		if isBuiltin || isJs {
 			vars := make([]string, len(s.Call.Args))
 			callArgs := make([]ast.Expr, len(s.Call.Args))
@@ -443,7 +439,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		c.translateStmt(s.Stmt, label)
 
 	case *ast.GoStmt:
-		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.TypeOf(s.Call.Fun).Underlying().(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid(), true), ", "))
+		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.TypeOf(s.Call.Fun).Underlying().(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid()), ", "))
 
 	case *ast.SendStmt:
 		chanType := c.p.TypeOf(s.Chan).Underlying().(*types.Chan)

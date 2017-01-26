@@ -376,6 +376,9 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 					if i >= 32 {
 						return c.formatExpr("0")
 					}
+					if op == ">>>" && isUnsigned(basic) {
+						return c.formatExpr("%e %s %s", e.X, op, strconv.FormatUint(i, 10))
+					}
 					return c.fixNumber(c.formatExpr("%e %s %s", e.X, op, strconv.FormatUint(i, 10)), basic)
 				}
 				if e.Op == token.SHR && !isUnsigned(basic) {

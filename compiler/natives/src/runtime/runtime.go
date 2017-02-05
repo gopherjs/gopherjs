@@ -79,7 +79,7 @@ func GOMAXPROCS(n int) int {
 
 func Gosched() {
 	c := make(chan struct{})
-	js.Global.Call("setTimeout", func() { close(c) }, 0)
+	js.Global.Call("$setTimeout", js.InternalObject(func() { close(c) }), 0)
 	<-c
 }
 

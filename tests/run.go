@@ -68,7 +68,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue7690.go":  {desc: "Error: runtime error: slice bounds out of range"},
 	"fixedbugs/issue8047.go":  {desc: "null"},
 	"fixedbugs/issue8047b.go": {desc: "Error: [object Object]"},
-	"fixedbugs/issue8613.go":  {desc: "Does not panic upon division by zero when assigned to _, see https://github.com/gopherjs/gopherjs/issues/551."},
 
 	// Failing due to use of os/exec.Command, which is unsupported. Now skipped via !nacl build tag.
 	/*"fixedbugs/bug248.go":        {desc: "os/exec.Command unsupported"},

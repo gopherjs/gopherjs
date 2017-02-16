@@ -84,6 +84,8 @@ func importWithSrcDir(path string, srcDir string, mode build.ImportMode, install
 	}
 
 	switch path {
+	case "os":
+		pkg.GoFiles = stripExecutable(pkg.GoFiles) // Need to strip executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
 	case "runtime":
 		pkg.GoFiles = []string{"error.go"}
 	case "runtime/internal/sys":
@@ -119,6 +121,19 @@ func importWithSrcDir(path string, srcDir string, mode build.ImportMode, install
 	}
 
 	return &PackageData{Package: pkg, JSFiles: jsFiles}, nil
+}
+
+// stripExecutable strips all executable implementation .go files.
+// They have "executable_" prefix.
+func stripExecutable(goFiles []string) []string {
+	var s []string
+	for _, f := range goFiles {
+		if strings.HasPrefix(f, "executable_") {
+			continue
+		}
+		s = append(s, f)
+	}
+	return s
 }
 
 // ImportDir is like Import but processes the Go package found in the named

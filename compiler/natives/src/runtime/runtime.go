@@ -164,6 +164,11 @@ var MemProfileRate int = 512 * 1024
 func SetBlockProfileRate(rate int) {
 }
 
+func SetMutexProfileFraction(rate int) int {
+	// TODO: Investigate this. If it's possible to implement, consider doing so, otherwise remove this comment.
+	return 0
+}
+
 func Stack(buf []byte, all bool) int {
 	s := js.Global.Get("Error").New().Get("stack")
 	if s == js.Undefined {

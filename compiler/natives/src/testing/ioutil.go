@@ -1,10 +1,11 @@
+// +build js
+
 package testing
 
 import (
 	"bytes"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -35,7 +36,7 @@ func tempFile(prefix string) (f *os.File, err error) {
 
 	nconflict := 0
 	for i := 0; i < 10000; i++ {
-		name := filepath.Join(dir, prefix+nextSuffix())
+		name := dir + string(os.PathSeparator) + prefix + nextSuffix()
 		f, err = os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
 		if os.IsExist(err) {
 			if nconflict++; nconflict > 10 {

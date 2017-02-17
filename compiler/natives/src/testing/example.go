@@ -6,7 +6,6 @@ package testing
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -19,7 +18,7 @@ func runExample(eg InternalExample) (ok bool) {
 
 	// Capture stdout.
 	stdout := os.Stdout
-	w, err := ioutil.TempFile("", "."+eg.Name+".stdout.")
+	w, err := tempFile("." + eg.Name + ".stdout.")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -36,7 +35,7 @@ func runExample(eg InternalExample) (ok bool) {
 		// Close pipe, restore stdout, get output.
 		w.Close()
 		os.Stdout = stdout
-		out, e := ioutil.ReadFile(w.Name())
+		out, e := readFile(w.Name())
 		if e != nil {
 			fmt.Fprintf(os.Stderr, "testing: reading stdout file: %v\n", e)
 			os.Exit(1)
@@ -45,7 +44,7 @@ func runExample(eg InternalExample) (ok bool) {
 
 		var fail string
 		err := recover()
-		got := strings.TrimSpace(string(out))
+		got := strings.TrimSpace(out)
 		want := strings.TrimSpace(eg.Output)
 		if eg.Unordered {
 			if sortLines(got) != sortLines(want) && err == nil {

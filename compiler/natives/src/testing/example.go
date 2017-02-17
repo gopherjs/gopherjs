@@ -5,9 +5,8 @@
 package testing
 
 import (
-	"bytes"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -20,23 +19,12 @@ func runExample(eg InternalExample) (ok bool) {
 
 	// Capture stdout.
 	stdout := os.Stdout
-	r, w, err := os.Pipe()
+	w, err := ioutil.TempFile("", "."+eg.Name+".stdout.")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	os.Stdout = w
-	outC := make(chan string)
-	go func() {
-		var buf bytes.Buffer
-		_, err := io.Copy(&buf, r)
-		r.Close()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "testing: copying pipe: %v\n", err)
-			os.Exit(1)
-		}
-		outC <- buf.String()
-	}()
 
 	start := time.Now()
 	ok = true
@@ -48,11 +36,16 @@ func runExample(eg InternalExample) (ok bool) {
 		// Close pipe, restore stdout, get output.
 		w.Close()
 		os.Stdout = stdout
-		out := <-outC
+		out, e := ioutil.ReadFile(w.Name())
+		if e != nil {
+			fmt.Fprintf(os.Stderr, "testing: reading stdout file: %v\n", e)
+			os.Exit(1)
+		}
+		_ = os.Remove(w.Name())
 
 		var fail string
 		err := recover()
-		got := strings.TrimSpace(out)
+		got := strings.TrimSpace(string(out))
 		want := strings.TrimSpace(eg.Output)
 		if eg.Unordered {
 			if sortLines(got) != sortLines(want) && err == nil {

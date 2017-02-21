@@ -52,12 +52,15 @@ func tempFile(prefix string) (f *os.File, err error) {
 }
 
 func readFile(filename string) (string, error) {
-	buf := new(bytes.Buffer)
 	f, err := os.Open(filename)
 	if err != nil {
 		return "", err
 	}
-	io.Copy(buf, f)
-	f.Close()
+	defer f.Close()
+	var buf bytes.Buffer
+	_, err := io.Copy(buf, f)
+	if err != nil {
+		return "", err
+	}
 	return buf.String(), nil
 }

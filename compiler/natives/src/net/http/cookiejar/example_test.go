@@ -1,7 +1,7 @@
 // +build js
 
-package cookiejar
+package cookiejar_test
 
 func ExampleNew() {
-  // network access not supported by GopherJS, and this test depends on httptest.NewServer
+	// network access not supported by GopherJS, and this test depends on httptest.NewServer
 }

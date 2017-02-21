@@ -58,7 +58,7 @@ func readFile(filename string) (string, error) {
 	}
 	defer f.Close()
 	var buf bytes.Buffer
-	_, err := io.Copy(buf, f)
+	_, err = io.Copy(&buf, f)
 	if err != nil {
 		return "", err
 	}

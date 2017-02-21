@@ -33,12 +33,12 @@ func runExample(eg InternalExample) (ok bool) {
 		// Close pipe, restore stdout, get output.
 		w.Close()
 		os.Stdout = stdout
-		out, e := readFile(w.Name())
-		if e != nil {
-			fmt.Fprintf(os.Stderr, "testing: reading stdout file: %v\n", e)
+		out, readFileErr := readFile(w.Name())
+		_ = os.Remove(w.Name())
+		if readFileErr != nil {
+			fmt.Fprintf(os.Stderr, "testing: reading stdout file: %v\n", readFileErr)
 			os.Exit(1)
 		}
-		_ = os.Remove(w.Name())
 
 		var fail string
 		err := recover()

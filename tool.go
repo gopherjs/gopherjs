@@ -91,6 +91,10 @@ func main() {
 	cmdBuild.Flags().AddFlag(flagTags)
 	cmdBuild.Flags().AddFlag(flagLocalMap)
 	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
+		if err := verifyGOARCH(); err != nil {
+			printError(err, options, nil)
+			os.Exit(2)
+		}
 		options.BuildTags = strings.Fields(*tags)
 		for {
 			s := gbuild.NewSession(options)
@@ -172,6 +176,10 @@ func main() {
 	cmdInstall.Flags().AddFlag(flagTags)
 	cmdInstall.Flags().AddFlag(flagLocalMap)
 	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
+		if err := verifyGOARCH(); err != nil {
+			printError(err, options, nil)
+			os.Exit(2)
+		}
 		options.BuildTags = strings.Fields(*tags)
 		for {
 			s := gbuild.NewSession(options)
@@ -238,6 +246,10 @@ func main() {
 		Short: "display documentation for the requested, package, method or symbol",
 	}
 	cmdDoc.Run = func(cmd *cobra.Command, args []string) {
+		if err := verifyGOARCH(); err != nil {
+			printError(err, options, nil)
+			os.Exit(2)
+		}
 		exitCode := handleError(func() error {
 			goDoc := exec.Command("go", append([]string{"doc"}, args...)...)
 			goDoc.Stdout = os.Stdout
@@ -270,6 +282,10 @@ func main() {
 		Short: "compile and run Go program",
 	}
 	cmdRun.Run = func(cmd *cobra.Command, args []string) {
+		if err := verifyGOARCH(); err != nil {
+			printError(err, options, nil)
+			os.Exit(2)
+		}
 		os.Exit(handleError(func() error {
 			lastSourceArg := 0
 			for {
@@ -321,6 +337,10 @@ func main() {
 	cmdTest.Flags().AddFlag(flagTags)
 	cmdTest.Flags().AddFlag(flagLocalMap)
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
+		if err := verifyGOARCH(); err != nil {
+			printError(err, options, nil)
+			os.Exit(2)
+		}
 		options.BuildTags = strings.Fields(*tags)
 		os.Exit(handleError(func() error {
 			pkgs := make([]*gbuild.PackageData, len(args))
@@ -513,6 +533,10 @@ func main() {
 	var addr string
 	cmdServe.Flags().StringVarP(&addr, "http", "", ":8080", "HTTP bind address to serve")
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {
+		if err := verifyGOARCH(); err != nil {
+			printError(err, options, nil)
+			os.Exit(2)
+		}
 		options.BuildTags = strings.Fields(*tags)
 		dirs := append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT)
 		var root string
@@ -770,6 +794,19 @@ func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer)
 	if browserErrors != nil {
 		fmt.Fprintln(browserErrors, `console.error("`+template.JSEscapeString(e)+`");`)
 	}
+}
+
+// verifyGOARCH verifies that GOARCH environment value is not set to
+// an unsupported value.
+func verifyGOARCH() error {
+	goarch, ok := os.LookupEnv("GOARCH")
+	if !ok {
+		return nil
+	}
+	if goarch != "js" {
+		return fmt.Errorf("gopherjs: unsupported GOOS/GOARCH pair %s/%s", build.Default.GOOS, goarch)
+	}
+	return nil
 }
 
 func runNode(script string, args []string, dir string, quiet bool) error {

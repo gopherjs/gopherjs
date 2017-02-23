@@ -91,7 +91,7 @@ func main() {
 	cmdBuild.Flags().AddFlag(flagTags)
 	cmdBuild.Flags().AddFlag(flagLocalMap)
 	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
-		if err := verifyAndUnsetGOARCH(); err != nil {
+		if err := verifyGOARCH(); err != nil {
 			printError(err, options, nil)
 			os.Exit(2)
 		}
@@ -176,7 +176,7 @@ func main() {
 	cmdInstall.Flags().AddFlag(flagTags)
 	cmdInstall.Flags().AddFlag(flagLocalMap)
 	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
-		if err := verifyAndUnsetGOARCH(); err != nil {
+		if err := verifyGOARCH(); err != nil {
 			printError(err, options, nil)
 			os.Exit(2)
 		}
@@ -246,7 +246,7 @@ func main() {
 		Short: "display documentation for the requested, package, method or symbol",
 	}
 	cmdDoc.Run = func(cmd *cobra.Command, args []string) {
-		if err := verifyAndUnsetGOARCH(); err != nil {
+		if err := verifyGOARCH(); err != nil {
 			printError(err, options, nil)
 			os.Exit(2)
 		}
@@ -282,7 +282,7 @@ func main() {
 		Short: "compile and run Go program",
 	}
 	cmdRun.Run = func(cmd *cobra.Command, args []string) {
-		if err := verifyAndUnsetGOARCH(); err != nil {
+		if err := verifyGOARCH(); err != nil {
 			printError(err, options, nil)
 			os.Exit(2)
 		}
@@ -337,7 +337,7 @@ func main() {
 	cmdTest.Flags().AddFlag(flagTags)
 	cmdTest.Flags().AddFlag(flagLocalMap)
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
-		if err := verifyAndUnsetGOARCH(); err != nil {
+		if err := verifyGOARCH(); err != nil {
 			printError(err, options, nil)
 			os.Exit(2)
 		}
@@ -533,7 +533,7 @@ func main() {
 	var addr string
 	cmdServe.Flags().StringVarP(&addr, "http", "", ":8080", "HTTP bind address to serve")
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {
-		if err := verifyAndUnsetGOARCH(); err != nil {
+		if err := verifyGOARCH(); err != nil {
 			printError(err, options, nil)
 			os.Exit(2)
 		}
@@ -796,10 +796,9 @@ func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer)
 	}
 }
 
-// verifyAndUnsetGOARCH verifies that GOARCH environment value is not set to
-// an unsupported value. It also unsets it, if set, because the gopherjs compiler
-// expects build.Default.GOARCH to actually be something like amd64 rather than js.
-func verifyAndUnsetGOARCH() error {
+// verifyGOARCH verifies that GOARCH environment value is not set to
+// an unsupported value.
+func verifyGOARCH() error {
 	goarch, ok := os.LookupEnv("GOARCH")
 	if !ok {
 		return nil
@@ -807,11 +806,6 @@ func verifyAndUnsetGOARCH() error {
 	if goarch != "js" {
 		return fmt.Errorf("gopherjs: unsupported GOOS/GOARCH pair %s/%s", build.Default.GOOS, goarch)
 	}
-	err := os.Unsetenv("GOARCH")
-	if err != nil {
-		return err
-	}
-	build.Default.GOARCH = runtime.GOARCH // Reset GOARCH to its default value, what it would've been had the GOARCH environment variable not overridden it.
 	return nil
 }
 

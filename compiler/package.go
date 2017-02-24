@@ -2,7 +2,6 @@ package compiler
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/constant"
@@ -12,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
-	"github.com/gopherjs/gopherjs/third_party/importer"
 	"github.com/neelance/astrewrite"
+	"golang.org/x/tools/go/gcimporter15"
 	"golang.org/x/tools/go/types/typeutil"
 )
 
@@ -163,12 +162,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		return nil, err
 	}
 	importContext.Packages[importPath] = typesPkg
-
-	exportData := importer.ExportData(typesPkg)
-	encodedFileSet := bytes.NewBuffer(nil)
-	if err := fileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
-		return nil, err
-	}
 
 	simplifiedFiles := make([]*ast.File, len(files))
 	for i, file := range files {
@@ -532,10 +525,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		ImportPath:   importPath,
 		Name:         typesPkg.Name(),
 		Imports:      importedPaths,
-		ExportData:   exportData,
+		ExportData:   gcimporter.BExportData(fileSet, typesPkg),
 		Declarations: allDecls,
-		FileSet:      encodedFileSet.Bytes(),
 		Minified:     minify,
+		fileSet:      fileSet,
 	}, nil
 }
 

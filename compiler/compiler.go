@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
-	"encoding/json"
 	"fmt"
 	"go/token"
 	"go/types"
@@ -12,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/prelude"
-	"github.com/gopherjs/gopherjs/third_party/importer"
+	"golang.org/x/tools/go/gcimporter15"
 )
 
 var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}
@@ -38,8 +37,8 @@ type Archive struct {
 	ExportData   []byte
 	Declarations []*Decl
 	IncJSCode    []byte
-	FileSet      []byte
 	Minified     bool
+	fileSet      *token.FileSet
 }
 
 type Decl struct {
@@ -176,12 +175,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 }
 
 func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, minify bool, w *SourceMapFilter) error {
-	if w.MappingCallback != nil && pkg.FileSet != nil {
-		w.fileSet = token.NewFileSet()
-		if err := w.fileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
-			panic(err)
-		}
-	}
+	w.fileSet = pkg.fileSet
 	if _, err := w.Write(pkg.IncJSCode); err != nil {
 		return err
 	}
@@ -238,9 +232,8 @@ func ReadArchive(filename, path string, r io.Reader, packages map[string]*types.
 		return nil, err
 	}
 
-	var err error
-	_, packages[path], err = importer.ImportData(packages, a.ExportData)
-	if err != nil {
+	a.fileSet = token.NewFileSet()
+	if _, _, err := gcimporter.BImportData(a.fileSet, packages, a.ExportData, path); err != nil {
 		return nil, err
 	}
 

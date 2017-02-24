@@ -758,11 +758,5 @@ func (s *Session) WaitForChange() {
 		}
 		break
 	}
-
-	go func() {
-		for range s.Watcher.Events {
-			// consume, else Close() may deadlock
-		}
-	}()
 	s.Watcher.Close()
 }

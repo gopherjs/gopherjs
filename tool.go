@@ -286,7 +286,7 @@ func main() {
 			printError(err, options, nil)
 			os.Exit(2)
 		}
-		os.Exit(handleError(func() error {
+		exitCode := handleError(func() error {
 			lastSourceArg := 0
 			for {
 				if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {
@@ -318,7 +318,9 @@ func main() {
 				return err
 			}
 			return nil
-		}(), options, nil))
+		}(), options, nil)
+
+		os.Exit(exitCode)
 	}
 
 	cmdTest := &cobra.Command{
@@ -342,7 +344,7 @@ func main() {
 			os.Exit(2)
 		}
 		options.BuildTags = strings.Fields(*tags)
-		os.Exit(handleError(func() error {
+		exitCode := handleError(func() error {
 			pkgs := make([]*gbuild.PackageData, len(args))
 			for i, pkgPath := range args {
 				pkgPath = filepath.ToSlash(pkgPath)
@@ -517,7 +519,9 @@ func main() {
 				fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Now().Sub(start).Seconds())
 			}
 			return exitErr
-		}(), options, nil))
+		}(), options, nil)
+
+		os.Exit(exitCode)
 	}
 
 	cmdServe := &cobra.Command{

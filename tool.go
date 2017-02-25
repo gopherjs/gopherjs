@@ -671,8 +671,8 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 				return nil
 			}()
-			exitCode := handleError(err, fs.options, browserErrors)
-			if exitCode != 0 {
+			handleError(err, fs.options, browserErrors)
+			if err != nil {
 				buf = browserErrors
 			}
 			return newFakeFile(base+".js", buf.Bytes()), nil

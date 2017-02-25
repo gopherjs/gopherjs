@@ -155,7 +155,7 @@ func main() {
 					}
 				}
 				return nil
-			}, options, nil)
+			}(), options, nil)
 
 			if s.Watcher == nil {
 				os.Exit(exitCode)
@@ -232,7 +232,7 @@ func main() {
 					}
 				}
 				return nil
-			}, options, nil)
+			}(), options, nil)
 
 			if s.Watcher == nil {
 				os.Exit(exitCode)
@@ -259,7 +259,7 @@ func main() {
 				return err
 			}
 			return nil
-		}, options, nil)
+		}(), options, nil)
 
 		os.Exit(exitCode)
 	}
@@ -318,7 +318,7 @@ func main() {
 				return err
 			}
 			return nil
-		}, options, nil))
+		}(), options, nil))
 	}
 
 	cmdTest := &cobra.Command{
@@ -517,7 +517,7 @@ func main() {
 				fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Now().Sub(start).Seconds())
 			}
 			return exitErr
-		}, options, nil))
+		}(), options, nil))
 	}
 
 	cmdServe := &cobra.Command{
@@ -667,7 +667,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 				fs.sourceMaps[name+".map"] = mapBuf.Bytes()
 
 				return nil
-			}, fs.options, browserErrors)
+			}(), fs.options, browserErrors)
 			if exitCode != 0 {
 				buf = browserErrors
 			}
@@ -749,9 +749,10 @@ func (f *fakeFile) Sys() interface{} {
 	return nil
 }
 
+// handleError handles err and returns an appropriate exit code.
 // If browserErrors is non-nil, errors are written for presentation in browser.
-func handleError(f func() error, options *gbuild.Options, browserErrors *bytes.Buffer) int {
-	switch err := f().(type) {
+func handleError(err error, options *gbuild.Options, browserErrors *bytes.Buffer) int {
+	switch err := err.(type) {
 	case nil:
 		return 0
 	case compiler.ErrorList:

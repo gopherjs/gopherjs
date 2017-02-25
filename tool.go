@@ -432,7 +432,7 @@ func main() {
 					return err
 				}
 
-				buf := bytes.NewBuffer(nil)
+				buf := new(bytes.Buffer)
 				if err := testmainTmpl.Execute(buf, tests); err != nil {
 					return err
 				}
@@ -644,8 +644,8 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 		switch {
 		case isPkg:
-			buf := bytes.NewBuffer(nil)
-			browserErrors := bytes.NewBuffer(nil)
+			buf := new(bytes.Buffer)
+			browserErrors := new(bytes.Buffer)
 			err := func() error {
 				archive, err := s.BuildPackage(pkg)
 				if err != nil {
@@ -664,7 +664,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 					return err
 				}
 
-				mapBuf := bytes.NewBuffer(nil)
+				mapBuf := new(bytes.Buffer)
 				m.WriteTo(mapBuf)
 				buf.WriteString("//# sourceMappingURL=" + base + ".js.map\n")
 				fs.sourceMaps[name+".map"] = mapBuf.Bytes()

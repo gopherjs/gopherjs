@@ -252,18 +252,12 @@ func main() {
 			printError(err, options, nil)
 			os.Exit(2)
 		}
-		err := func() error {
-			goDoc := exec.Command("go", append([]string{"doc"}, args...)...)
-			goDoc.Stdout = os.Stdout
-			goDoc.Stderr = os.Stderr
-			goDoc.Env = append(os.Environ(), "GOARCH=js")
-			if err := goDoc.Run(); err != nil {
-				return err
-			}
-			return nil
-		}()
+		goDoc := exec.Command("go", append([]string{"doc"}, args...)...)
+		goDoc.Stdout = os.Stdout
+		goDoc.Stderr = os.Stderr
+		goDoc.Env = append(os.Environ(), "GOARCH=js")
+		err := goDoc.Run()
 		exitCode := handleError(err, options, nil)
-
 		os.Exit(exitCode)
 	}
 

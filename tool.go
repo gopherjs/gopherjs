@@ -99,7 +99,7 @@ func main() {
 		for {
 			s := gbuild.NewSession(options)
 
-			exitCode := handleError(func() error {
+			err := func() error {
 				if len(args) == 0 {
 					return s.BuildDir(currentDirectory, currentDirectory, pkgObj)
 				}
@@ -155,7 +155,8 @@ func main() {
 					}
 				}
 				return nil
-			}(), options, nil)
+			}()
+			exitCode := handleError(err, options, nil)
 
 			if s.Watcher == nil {
 				os.Exit(exitCode)
@@ -184,7 +185,7 @@ func main() {
 		for {
 			s := gbuild.NewSession(options)
 
-			exitCode := handleError(func() error {
+			err := func() error {
 				pkgs := args
 				if len(pkgs) == 0 {
 					firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: The GOPATH workspace that contains the package source should be chosen.
@@ -232,7 +233,8 @@ func main() {
 					}
 				}
 				return nil
-			}(), options, nil)
+			}()
+			exitCode := handleError(err, options, nil)
 
 			if s.Watcher == nil {
 				os.Exit(exitCode)
@@ -250,7 +252,7 @@ func main() {
 			printError(err, options, nil)
 			os.Exit(2)
 		}
-		exitCode := handleError(func() error {
+		err := func() error {
 			goDoc := exec.Command("go", append([]string{"doc"}, args...)...)
 			goDoc.Stdout = os.Stdout
 			goDoc.Stderr = os.Stderr
@@ -259,7 +261,8 @@ func main() {
 				return err
 			}
 			return nil
-		}(), options, nil)
+		}()
+		exitCode := handleError(err, options, nil)
 
 		os.Exit(exitCode)
 	}
@@ -286,7 +289,7 @@ func main() {
 			printError(err, options, nil)
 			os.Exit(2)
 		}
-		exitCode := handleError(func() error {
+		err := func() error {
 			lastSourceArg := 0
 			for {
 				if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {
@@ -318,7 +321,8 @@ func main() {
 				return err
 			}
 			return nil
-		}(), options, nil)
+		}()
+		exitCode := handleError(err, options, nil)
 
 		os.Exit(exitCode)
 	}
@@ -344,7 +348,7 @@ func main() {
 			os.Exit(2)
 		}
 		options.BuildTags = strings.Fields(*tags)
-		exitCode := handleError(func() error {
+		err := func() error {
 			pkgs := make([]*gbuild.PackageData, len(args))
 			for i, pkgPath := range args {
 				pkgPath = filepath.ToSlash(pkgPath)
@@ -519,7 +523,8 @@ func main() {
 				fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Now().Sub(start).Seconds())
 			}
 			return exitErr
-		}(), options, nil)
+		}()
+		exitCode := handleError(err, options, nil)
 
 		os.Exit(exitCode)
 	}
@@ -647,7 +652,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 		case isPkg:
 			buf := bytes.NewBuffer(nil)
 			browserErrors := bytes.NewBuffer(nil)
-			exitCode := handleError(func() error {
+			err := func() error {
 				archive, err := s.BuildPackage(pkg)
 				if err != nil {
 					return err
@@ -671,7 +676,8 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 				fs.sourceMaps[name+".map"] = mapBuf.Bytes()
 
 				return nil
-			}(), fs.options, browserErrors)
+			}()
+			exitCode := handleError(err, fs.options, browserErrors)
 			if exitCode != 0 {
 				buf = browserErrors
 			}

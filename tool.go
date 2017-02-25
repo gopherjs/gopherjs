@@ -767,6 +767,15 @@ func handleError(f func() error, options *gbuild.Options, browserErrors *bytes.B
 	}
 }
 
+// printError prints err to Stderr with options. If browserErrors is non-nil, errors are also written for presentation in browser.
+func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer) {
+	e := sprintError(err)
+	options.PrintError("%s\n", e)
+	if browserErrors != nil {
+		fmt.Fprintln(browserErrors, `console.error("`+template.JSEscapeString(e)+`");`)
+	}
+}
+
 // sprintError returns an annotated error string without trailing newline.
 func sprintError(err error) string {
 	makeRel := func(name string) string {
@@ -784,15 +793,6 @@ func sprintError(err error) string {
 		return fmt.Sprintf("%s:%d:%d: %s", makeRel(pos.Filename), pos.Line, pos.Column, e.Msg)
 	default:
 		return fmt.Sprintf("%s", e)
-	}
-}
-
-// printError prints err to Stderr with options. If browserErrors is non-nil, errors are also written for presentation in browser.
-func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer) {
-	e := sprintError(err)
-	options.PrintError("%s\n", e)
-	if browserErrors != nil {
-		fmt.Fprintln(browserErrors, `console.error("`+template.JSEscapeString(e)+`");`)
 	}
 }
 

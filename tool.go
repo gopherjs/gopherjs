@@ -122,10 +122,7 @@ func main() {
 							s.Watcher.Add(name)
 						}
 					}
-					if err := s.BuildFiles(args, pkgObj, currentDirectory); err != nil {
-						return err
-					}
-					return nil
+					return s.BuildFiles(args, pkgObj, currentDirectory)
 				}
 
 				for _, pkgPath := range args {
@@ -401,10 +398,7 @@ func main() {
 						}
 					}
 					_, err := s.BuildPackage(testPkg)
-					if err != nil {
-						return err
-					}
-					return nil
+					return err
 				}
 
 				if err := collectTests(&gbuild.PackageData{
@@ -514,7 +508,7 @@ func main() {
 					exitErr = err
 					status = "FAIL"
 				}
-				fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Now().Sub(start).Seconds())
+				fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Since(start).Seconds())
 			}
 			return exitErr
 		}()

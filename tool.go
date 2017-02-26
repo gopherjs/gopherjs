@@ -99,7 +99,7 @@ func main() {
 		for {
 			s := gbuild.NewSession(options)
 
-			exitCode := handleError(func() error {
+			err := func() error {
 				if len(args) == 0 {
 					return s.BuildDir(currentDirectory, currentDirectory, pkgObj)
 				}
@@ -155,7 +155,8 @@ func main() {
 					}
 				}
 				return nil
-			}, options, nil)
+			}()
+			exitCode := handleError(err, options, nil)
 
 			if s.Watcher == nil {
 				os.Exit(exitCode)
@@ -184,7 +185,7 @@ func main() {
 		for {
 			s := gbuild.NewSession(options)
 
-			exitCode := handleError(func() error {
+			err := func() error {
 				pkgs := args
 				if len(pkgs) == 0 {
 					firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: The GOPATH workspace that contains the package source should be chosen.
@@ -232,7 +233,8 @@ func main() {
 					}
 				}
 				return nil
-			}, options, nil)
+			}()
+			exitCode := handleError(err, options, nil)
 
 			if s.Watcher == nil {
 				os.Exit(exitCode)
@@ -250,17 +252,12 @@ func main() {
 			printError(err, options, nil)
 			os.Exit(2)
 		}
-		exitCode := handleError(func() error {
-			goDoc := exec.Command("go", append([]string{"doc"}, args...)...)
-			goDoc.Stdout = os.Stdout
-			goDoc.Stderr = os.Stderr
-			goDoc.Env = append(os.Environ(), "GOARCH=js")
-			if err := goDoc.Run(); err != nil {
-				return err
-			}
-			return nil
-		}, options, nil)
-
+		goDoc := exec.Command("go", append([]string{"doc"}, args...)...)
+		goDoc.Stdout = os.Stdout
+		goDoc.Stderr = os.Stderr
+		goDoc.Env = append(os.Environ(), "GOARCH=js")
+		err := goDoc.Run()
+		exitCode := handleError(err, options, nil)
 		os.Exit(exitCode)
 	}
 
@@ -286,7 +283,7 @@ func main() {
 			printError(err, options, nil)
 			os.Exit(2)
 		}
-		os.Exit(handleError(func() error {
+		err := func() error {
 			lastSourceArg := 0
 			for {
 				if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {
@@ -318,7 +315,10 @@ func main() {
 				return err
 			}
 			return nil
-		}, options, nil))
+		}()
+		exitCode := handleError(err, options, nil)
+
+		os.Exit(exitCode)
 	}
 
 	cmdTest := &cobra.Command{
@@ -342,7 +342,7 @@ func main() {
 			os.Exit(2)
 		}
 		options.BuildTags = strings.Fields(*tags)
-		os.Exit(handleError(func() error {
+		err := func() error {
 			pkgs := make([]*gbuild.PackageData, len(args))
 			for i, pkgPath := range args {
 				pkgPath = filepath.ToSlash(pkgPath)
@@ -432,7 +432,7 @@ func main() {
 					return err
 				}
 
-				buf := bytes.NewBuffer(nil)
+				buf := new(bytes.Buffer)
 				if err := testmainTmpl.Execute(buf, tests); err != nil {
 					return err
 				}
@@ -514,10 +514,13 @@ func main() {
 					exitErr = err
 					status = "FAIL"
 				}
-				fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Now().Sub(start).Seconds())
+				fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Since(start).Seconds())
 			}
 			return exitErr
-		}, options, nil))
+		}()
+		exitCode := handleError(err, options, nil)
+
+		os.Exit(exitCode)
 	}
 
 	cmdServe := &cobra.Command{
@@ -641,9 +644,9 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 		switch {
 		case isPkg:
-			buf := bytes.NewBuffer(nil)
-			browserErrors := bytes.NewBuffer(nil)
-			exitCode := handleError(func() error {
+			buf := new(bytes.Buffer)
+			browserErrors := new(bytes.Buffer)
+			err := func() error {
 				archive, err := s.BuildPackage(pkg)
 				if err != nil {
 					return err
@@ -661,14 +664,15 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 					return err
 				}
 
-				mapBuf := bytes.NewBuffer(nil)
+				mapBuf := new(bytes.Buffer)
 				m.WriteTo(mapBuf)
 				buf.WriteString("//# sourceMappingURL=" + base + ".js.map\n")
 				fs.sourceMaps[name+".map"] = mapBuf.Bytes()
 
 				return nil
-			}, fs.options, browserErrors)
-			if exitCode != 0 {
+			}()
+			handleError(err, fs.options, browserErrors)
+			if err != nil {
 				buf = browserErrors
 			}
 			return newFakeFile(base+".js", buf.Bytes()), nil
@@ -749,9 +753,10 @@ func (f *fakeFile) Sys() interface{} {
 	return nil
 }
 
+// handleError handles err and returns an appropriate exit code.
 // If browserErrors is non-nil, errors are written for presentation in browser.
-func handleError(f func() error, options *gbuild.Options, browserErrors *bytes.Buffer) int {
-	switch err := f().(type) {
+func handleError(err error, options *gbuild.Options, browserErrors *bytes.Buffer) int {
+	switch err := err.(type) {
 	case nil:
 		return 0
 	case compiler.ErrorList:
@@ -764,6 +769,15 @@ func handleError(f func() error, options *gbuild.Options, browserErrors *bytes.B
 	default:
 		printError(err, options, browserErrors)
 		return 1
+	}
+}
+
+// printError prints err to Stderr with options. If browserErrors is non-nil, errors are also written for presentation in browser.
+func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer) {
+	e := sprintError(err)
+	options.PrintError("%s\n", e)
+	if browserErrors != nil {
+		fmt.Fprintln(browserErrors, `console.error("`+template.JSEscapeString(e)+`");`)
 	}
 }
 
@@ -784,15 +798,6 @@ func sprintError(err error) string {
 		return fmt.Sprintf("%s:%d:%d: %s", makeRel(pos.Filename), pos.Line, pos.Column, e.Msg)
 	default:
 		return fmt.Sprintf("%s", e)
-	}
-}
-
-// printError prints err to Stderr with options. If browserErrors is non-nil, errors are also written for presentation in browser.
-func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer) {
-	e := sprintError(err)
-	options.PrintError("%s\n", e)
-	if browserErrors != nil {
-		fmt.Fprintln(browserErrors, `console.error("`+template.JSEscapeString(e)+`");`)
 	}
 }
 

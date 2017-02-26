@@ -558,3 +558,17 @@ func TestSurrogatePairs(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func instanceof(x interface{}, y *js.Object) bool {
+	return js.Global.Call("$instanceof", x, y).Bool()
+}
+
+func TestUint8Array(t *testing.T) {
+	uint8Array := js.Global.Get("Uint8Array")
+	if !instanceof([]byte{}, uint8Array) {
+		t.Errorf("Empty byte array is not externalized as a Uint8Array")
+	}
+	if !instanceof([]byte{0x01}, uint8Array) {
+		t.Errorf("Non-empty byte array is not externalized as a Uint8Array")
+	}
+}

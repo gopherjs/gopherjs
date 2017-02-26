@@ -30,7 +30,7 @@ func runExample(eg InternalExample) (ok bool) {
 	defer func() {
 		dstr := fmtDuration(time.Now().Sub(start))
 
-		// Close pipe, restore stdout, get output.
+		// Close file, restore stdout, get output.
 		w.Close()
 		os.Stdout = stdout
 		out, readFileErr := readFile(w.Name())

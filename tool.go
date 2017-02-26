@@ -122,7 +122,10 @@ func main() {
 							s.Watcher.Add(name)
 						}
 					}
-					return s.BuildFiles(args, pkgObj, currentDirectory)
+					if err := s.BuildFiles(args, pkgObj, currentDirectory); err != nil {
+						return err
+					}
+					return nil
 				}
 
 				for _, pkgPath := range args {
@@ -398,7 +401,10 @@ func main() {
 						}
 					}
 					_, err := s.BuildPackage(testPkg)
-					return err
+					if err != nil {
+						return err
+					}
+					return nil
 				}
 
 				if err := collectTests(&gbuild.PackageData{

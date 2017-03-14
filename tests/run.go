@@ -620,9 +620,7 @@ func (t *test) run() {
 		os.Setenv("GOOS", runtime.GOOS)
 	}
 	if os.Getenv("GOARCH") == "" {
-		//os.Setenv("GOARCH", runtime.GOARCH)
-		// GOPHERJS.
-		os.Setenv("GOARCH", "js") // We're running this script natively, but the tests are executed with js architecture.
+		os.Setenv("GOARCH", runtime.GOARCH)
 	}
 
 	useTmp := true

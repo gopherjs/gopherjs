@@ -258,6 +258,13 @@ func main() {
 		Use:   "run [gofiles...] [arguments...]",
 		Short: "compile and run Go program",
 	}
+	cmdRun.Flags().AddFlag(flagVerbose)
+	cmdRun.Flags().AddFlag(flagQuiet)
+	cmdRun.Flags().AddFlag(flagWatch)
+	cmdRun.Flags().AddFlag(flagMinify)
+	cmdRun.Flags().AddFlag(flagColor)
+	cmdRun.Flags().AddFlag(flagTags)
+	cmdRun.Flags().AddFlag(flagLocalMap)
 	cmdRun.Run = func(cmd *cobra.Command, args []string) {
 		err := func() error {
 			lastSourceArg := 0

@@ -37,6 +37,10 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
+const (
+	minifyBuildTag = "minify"
+)
+
 var currentDirectory string
 
 func init() {
@@ -92,6 +96,9 @@ func main() {
 	cmdBuild.Flags().AddFlag(flagLocalMap)
 	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(*tags)
+		if options.Minify {
+			options.BuildTags = append(options.BuildTags, minifyBuildTag)
+		}
 		for {
 			s := gbuild.NewSession(options)
 
@@ -174,6 +181,9 @@ func main() {
 	cmdInstall.Flags().AddFlag(flagLocalMap)
 	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(*tags)
+		if options.Minify {
+			options.BuildTags = append(options.BuildTags, minifyBuildTag)
+		}
 		for {
 			s := gbuild.NewSession(options)
 
@@ -322,6 +332,9 @@ func main() {
 	cmdTest.Flags().AddFlag(flagLocalMap)
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(*tags)
+		if options.Minify {
+			options.BuildTags = append(options.BuildTags, minifyBuildTag)
+		}
 		err := func() error {
 			pkgs := make([]*gbuild.PackageData, len(args))
 			for i, pkgPath := range args {
@@ -517,6 +530,9 @@ func main() {
 	cmdServe.Flags().StringVarP(&addr, "http", "", ":8080", "HTTP bind address to serve")
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(*tags)
+		if options.Minify {
+			options.BuildTags = append(options.BuildTags, minifyBuildTag)
+		}
 		dirs := append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT)
 		var root string
 

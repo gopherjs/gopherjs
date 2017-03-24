@@ -209,6 +209,11 @@ var $bytesToString = function(slice) {
   if (slice.$length === 0) {
     return "";
   }
+
+  if ($global.Buffer !== "undefined") {
+    return Buffer.from(slice.$array).toString("binary", slice.$offset, slice.$offset + slice.$length);
+  }
+
   var str = "";
   for (var i = 0; i < slice.$length; i += 10000) {
     str += String.fromCharCode.apply(undefined, slice.$array.subarray(slice.$offset + i, slice.$offset + Math.min(slice.$length, i + 10000)));

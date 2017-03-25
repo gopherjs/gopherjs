@@ -33,6 +33,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/neelance/sourcemap"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -64,25 +65,34 @@ func main() {
 		tags    string
 	)
 
+	flags := pflag.NewFlagSet("", 0)
+	flags.BoolVarP(&options.Verbose, "verbose", "v", false, "print the names of packages as they are compiled")
+	flagVerbose := flags.Lookup("verbose")
+	flags.BoolVarP(&options.Quiet, "quiet", "q", false, "suppress non-fatal warnings")
+	flagQuiet := flags.Lookup("quiet")
+	flags.BoolVarP(&options.Watch, "watch", "w", false, "watch for changes to the source files")
+	flagWatch := flags.Lookup("watch")
+	flags.BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
+	flagMinify := flags.Lookup("minify")
+	flags.BoolVar(&options.Color, "color", terminal.IsTerminal(int(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb", "colored output")
+	flagColor := flags.Lookup("color")
+	flags.StringVar(&tags, "tags", "", "a list of build tags to consider satisfied during the build")
+	flagTags := flags.Lookup("tags")
+	flags.BoolVar(&options.MapToLocalDisk, "localmap", false, "use local paths for sourcemap")
+	flagLocalMap := flags.Lookup("localmap")
+
 	cmdBuild := &cobra.Command{
 		Use:   "build [packages]",
 		Short: "compile packages and dependencies",
 	}
 	cmdBuild.Flags().StringVarP(&pkgObj, "output", "o", "", "output file")
-	cmdBuild.Flags().BoolVarP(&options.Verbose, "verbose", "v", false, "print the names of packages as they are compiled")
-	flagVerbose := cmdBuild.Flags().Lookup("verbose")
-	cmdBuild.Flags().BoolVarP(&options.Quiet, "quiet", "q", false, "suppress non-fatal warnings")
-	flagQuiet := cmdBuild.Flags().Lookup("quiet")
-	cmdBuild.Flags().BoolVarP(&options.Watch, "watch", "w", false, "watch for changes to the source files")
-	flagWatch := cmdBuild.Flags().Lookup("watch")
-	cmdBuild.Flags().BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
-	flagMinify := cmdBuild.Flags().Lookup("minify")
-	cmdBuild.Flags().BoolVar(&options.Color, "color", terminal.IsTerminal(int(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb", "colored output")
-	flagColor := cmdBuild.Flags().Lookup("color")
-	cmdBuild.Flags().StringVar(&tags, "tags", "", "a list of build tags to consider satisfied during the build")
-	flagTags := cmdBuild.Flags().Lookup("tags")
-	cmdBuild.Flags().BoolVar(&options.MapToLocalDisk, "localmap", false, "use local paths for sourcemap")
-	flagLocalMap := cmdBuild.Flags().Lookup("localmap")
+	cmdBuild.Flags().AddFlag(flagVerbose)
+	cmdBuild.Flags().AddFlag(flagQuiet)
+	cmdBuild.Flags().AddFlag(flagWatch)
+	cmdBuild.Flags().AddFlag(flagMinify)
+	cmdBuild.Flags().AddFlag(flagColor)
+	cmdBuild.Flags().AddFlag(flagTags)
+	cmdBuild.Flags().AddFlag(flagLocalMap)
 	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(tags)
 		for {

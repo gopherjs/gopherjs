@@ -59,39 +59,37 @@ func init() {
 }
 
 func main() {
-	options := &gbuild.Options{CreateMapFile: true}
-	var pkgObj string
+	var (
+		options = &gbuild.Options{CreateMapFile: true}
+		pkgObj  string
+		tags    string
+	)
 
-	pflag.BoolVarP(&options.Verbose, "verbose", "v", false, "print the names of packages as they are compiled")
-	flagVerbose := pflag.Lookup("verbose")
-	pflag.BoolVarP(&options.Quiet, "quiet", "q", false, "suppress non-fatal warnings")
-	flagQuiet := pflag.Lookup("quiet")
-	pflag.BoolVarP(&options.Watch, "watch", "w", false, "watch for changes to the source files")
-	flagWatch := pflag.Lookup("watch")
-	pflag.BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
-	flagMinify := pflag.Lookup("minify")
-	pflag.BoolVar(&options.Color, "color", terminal.IsTerminal(int(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb", "colored output")
-	flagColor := pflag.Lookup("color")
-	tags := pflag.String("tags", "", "a list of build tags to consider satisfied during the build")
-	flagTags := pflag.Lookup("tags")
+	flagVerbose := pflag.NewFlagSet("", 0)
+	flagVerbose.BoolVarP(&options.Verbose, "verbose", "v", false, "print the names of packages as they are compiled")
+	flagQuiet := pflag.NewFlagSet("", 0)
+	flagQuiet.BoolVarP(&options.Quiet, "quiet", "q", false, "suppress non-fatal warnings")
 
-	pflag.BoolVar(&options.MapToLocalDisk, "localmap", false, "use local paths for sourcemap")
-	flagLocalMap := pflag.Lookup("localmap")
+	compilerFlags := pflag.NewFlagSet("", 0)
+	compilerFlags.BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
+	compilerFlags.BoolVar(&options.Color, "color", terminal.IsTerminal(int(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb", "colored output")
+	compilerFlags.StringVar(&tags, "tags", "", "a list of build tags to consider satisfied during the build")
+	compilerFlags.BoolVar(&options.MapToLocalDisk, "localmap", false, "use local paths for sourcemap")
+
+	flagWatch := pflag.NewFlagSet("", 0)
+	flagWatch.BoolVarP(&options.Watch, "watch", "w", false, "watch for changes to the source files")
 
 	cmdBuild := &cobra.Command{
 		Use:   "build [packages]",
 		Short: "compile packages and dependencies",
 	}
 	cmdBuild.Flags().StringVarP(&pkgObj, "output", "o", "", "output file")
-	cmdBuild.Flags().AddFlag(flagVerbose)
-	cmdBuild.Flags().AddFlag(flagQuiet)
-	cmdBuild.Flags().AddFlag(flagWatch)
-	cmdBuild.Flags().AddFlag(flagMinify)
-	cmdBuild.Flags().AddFlag(flagColor)
-	cmdBuild.Flags().AddFlag(flagTags)
-	cmdBuild.Flags().AddFlag(flagLocalMap)
+	cmdBuild.Flags().AddFlagSet(flagVerbose)
+	cmdBuild.Flags().AddFlagSet(flagQuiet)
+	cmdBuild.Flags().AddFlagSet(compilerFlags)
+	cmdBuild.Flags().AddFlagSet(flagWatch)
 	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
-		options.BuildTags = strings.Fields(*tags)
+		options.BuildTags = strings.Fields(tags)
 		for {
 			s := gbuild.NewSession(options)
 
@@ -165,15 +163,12 @@ func main() {
 		Use:   "install [packages]",
 		Short: "compile and install packages and dependencies",
 	}
-	cmdInstall.Flags().AddFlag(flagVerbose)
-	cmdInstall.Flags().AddFlag(flagQuiet)
-	cmdInstall.Flags().AddFlag(flagWatch)
-	cmdInstall.Flags().AddFlag(flagMinify)
-	cmdInstall.Flags().AddFlag(flagColor)
-	cmdInstall.Flags().AddFlag(flagTags)
-	cmdInstall.Flags().AddFlag(flagLocalMap)
+	cmdInstall.Flags().AddFlagSet(flagVerbose)
+	cmdInstall.Flags().AddFlagSet(flagQuiet)
+	cmdInstall.Flags().AddFlagSet(compilerFlags)
+	cmdInstall.Flags().AddFlagSet(flagWatch)
 	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
-		options.BuildTags = strings.Fields(*tags)
+		options.BuildTags = strings.Fields(tags)
 		for {
 			s := gbuild.NewSession(options)
 
@@ -253,19 +248,18 @@ func main() {
 		Use:   "get [packages]",
 		Short: "download and install packages and dependencies",
 	}
-	cmdGet.Flags().AddFlag(flagVerbose)
-	cmdGet.Flags().AddFlag(flagQuiet)
-	cmdGet.Flags().AddFlag(flagWatch)
-	cmdGet.Flags().AddFlag(flagMinify)
-	cmdGet.Flags().AddFlag(flagColor)
-	cmdGet.Flags().AddFlag(flagTags)
-	cmdGet.Flags().AddFlag(flagLocalMap)
+	cmdGet.Flags().AddFlagSet(flagVerbose)
+	cmdGet.Flags().AddFlagSet(flagQuiet)
+	cmdGet.Flags().AddFlagSet(compilerFlags)
 	cmdGet.Run = cmdInstall.Run
 
 	cmdRun := &cobra.Command{
 		Use:   "run [gofiles...] [arguments...]",
 		Short: "compile and run Go program",
 	}
+	cmdRun.Flags().AddFlagSet(flagVerbose)
+	cmdRun.Flags().AddFlagSet(flagQuiet)
+	cmdRun.Flags().AddFlagSet(compilerFlags)
 	cmdRun.Run = func(cmd *cobra.Command, args []string) {
 		err := func() error {
 			lastSourceArg := 0
@@ -316,12 +310,9 @@ func main() {
 	verbose := cmdTest.Flags().BoolP("verbose", "v", false, "Log all tests as they are run. Also print all text from Log and Logf calls even if the test succeeds.")
 	compileOnly := cmdTest.Flags().BoolP("compileonly", "c", false, "Compile the test binary to pkg.test.js but do not run it (where pkg is the last element of the package's import path). The file name can be changed with the -o flag.")
 	outputFilename := cmdTest.Flags().StringP("output", "o", "", "Compile the test binary to the named file. The test still runs (unless -c is specified).")
-	cmdTest.Flags().AddFlag(flagMinify)
-	cmdTest.Flags().AddFlag(flagColor)
-	cmdTest.Flags().AddFlag(flagTags)
-	cmdTest.Flags().AddFlag(flagLocalMap)
+	cmdTest.Flags().AddFlagSet(compilerFlags)
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
-		options.BuildTags = strings.Fields(*tags)
+		options.BuildTags = strings.Fields(tags)
 		err := func() error {
 			pkgs := make([]*gbuild.PackageData, len(args))
 			for i, pkgPath := range args {
@@ -507,16 +498,13 @@ func main() {
 		Use:   "serve [root]",
 		Short: "compile on-the-fly and serve",
 	}
-	cmdServe.Flags().AddFlag(flagVerbose)
-	cmdServe.Flags().AddFlag(flagQuiet)
-	cmdServe.Flags().AddFlag(flagMinify)
-	cmdServe.Flags().AddFlag(flagColor)
-	cmdServe.Flags().AddFlag(flagTags)
-	cmdServe.Flags().AddFlag(flagLocalMap)
+	cmdServe.Flags().AddFlagSet(flagVerbose)
+	cmdServe.Flags().AddFlagSet(flagQuiet)
+	cmdServe.Flags().AddFlagSet(compilerFlags)
 	var addr string
 	cmdServe.Flags().StringVarP(&addr, "http", "", ":8080", "HTTP bind address to serve")
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {
-		options.BuildTags = strings.Fields(*tags)
+		options.BuildTags = strings.Fields(tags)
 		dirs := append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT)
 		var root string
 

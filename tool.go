@@ -70,11 +70,11 @@ func main() {
 	flagQuiet := pflag.NewFlagSet("", 0)
 	flagQuiet.BoolVarP(&options.Quiet, "quiet", "q", false, "suppress non-fatal warnings")
 
-	minifyColorTagsLocalMapFlags := pflag.NewFlagSet("", 0)
-	minifyColorTagsLocalMapFlags.BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
-	minifyColorTagsLocalMapFlags.BoolVar(&options.Color, "color", terminal.IsTerminal(int(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb", "colored output")
-	minifyColorTagsLocalMapFlags.StringVar(&tags, "tags", "", "a list of build tags to consider satisfied during the build")
-	minifyColorTagsLocalMapFlags.BoolVar(&options.MapToLocalDisk, "localmap", false, "use local paths for sourcemap")
+	compilerFlags := pflag.NewFlagSet("", 0)
+	compilerFlags.BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
+	compilerFlags.BoolVar(&options.Color, "color", terminal.IsTerminal(int(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb", "colored output")
+	compilerFlags.StringVar(&tags, "tags", "", "a list of build tags to consider satisfied during the build")
+	compilerFlags.BoolVar(&options.MapToLocalDisk, "localmap", false, "use local paths for sourcemap")
 
 	flagWatch := pflag.NewFlagSet("", 0)
 	flagWatch.BoolVarP(&options.Watch, "watch", "w", false, "watch for changes to the source files")
@@ -86,7 +86,7 @@ func main() {
 	cmdBuild.Flags().StringVarP(&pkgObj, "output", "o", "", "output file")
 	cmdBuild.Flags().AddFlagSet(flagVerbose)
 	cmdBuild.Flags().AddFlagSet(flagQuiet)
-	cmdBuild.Flags().AddFlagSet(minifyColorTagsLocalMapFlags)
+	cmdBuild.Flags().AddFlagSet(compilerFlags)
 	cmdBuild.Flags().AddFlagSet(flagWatch)
 	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(tags)
@@ -165,7 +165,7 @@ func main() {
 	}
 	cmdInstall.Flags().AddFlagSet(flagVerbose)
 	cmdInstall.Flags().AddFlagSet(flagQuiet)
-	cmdInstall.Flags().AddFlagSet(minifyColorTagsLocalMapFlags)
+	cmdInstall.Flags().AddFlagSet(compilerFlags)
 	cmdInstall.Flags().AddFlagSet(flagWatch)
 	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(tags)
@@ -250,7 +250,7 @@ func main() {
 	}
 	cmdGet.Flags().AddFlagSet(flagVerbose)
 	cmdGet.Flags().AddFlagSet(flagQuiet)
-	cmdGet.Flags().AddFlagSet(minifyColorTagsLocalMapFlags)
+	cmdGet.Flags().AddFlagSet(compilerFlags)
 	cmdGet.Run = cmdInstall.Run
 
 	cmdRun := &cobra.Command{
@@ -259,7 +259,7 @@ func main() {
 	}
 	cmdRun.Flags().AddFlagSet(flagVerbose)
 	cmdRun.Flags().AddFlagSet(flagQuiet)
-	cmdRun.Flags().AddFlagSet(minifyColorTagsLocalMapFlags)
+	cmdRun.Flags().AddFlagSet(compilerFlags)
 	cmdRun.Run = func(cmd *cobra.Command, args []string) {
 		err := func() error {
 			lastSourceArg := 0
@@ -310,7 +310,7 @@ func main() {
 	verbose := cmdTest.Flags().BoolP("verbose", "v", false, "Log all tests as they are run. Also print all text from Log and Logf calls even if the test succeeds.")
 	compileOnly := cmdTest.Flags().BoolP("compileonly", "c", false, "Compile the test binary to pkg.test.js but do not run it (where pkg is the last element of the package's import path). The file name can be changed with the -o flag.")
 	outputFilename := cmdTest.Flags().StringP("output", "o", "", "Compile the test binary to the named file. The test still runs (unless -c is specified).")
-	cmdTest.Flags().AddFlagSet(minifyColorTagsLocalMapFlags)
+	cmdTest.Flags().AddFlagSet(compilerFlags)
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(tags)
 		err := func() error {
@@ -500,7 +500,7 @@ func main() {
 	}
 	cmdServe.Flags().AddFlagSet(flagVerbose)
 	cmdServe.Flags().AddFlagSet(flagQuiet)
-	cmdServe.Flags().AddFlagSet(minifyColorTagsLocalMapFlags)
+	cmdServe.Flags().AddFlagSet(compilerFlags)
 	var addr string
 	cmdServe.Flags().StringVarP(&addr, "http", "", ":8080", "HTTP bind address to serve")
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {

@@ -1213,8 +1213,6 @@ func (c *funcContext) internalize(s *expression, t types.Type) *expression {
 	switch u := t.Underlying().(type) {
 	case *types.Basic:
 		switch {
-		case isBoolean(u):
-			return c.formatExpr("!!(%s)", s)
 		case isInteger(u) && !is64Bit(u):
 			return c.fixNumber(c.formatExpr("$parseInt(%s)", s), u)
 		case isFloat(u):

@@ -1,28 +1,60 @@
-// Package js provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their corresponding JavaScript syntax.
+// Package js provides functions for interacting with native JavaScript APIs.
+// Calls to these functions are treated specially by GopherJS and translated
+// directly to their corresponding JavaScript syntax.
 //
-// Use MakeWrapper to expose methods to JavaScript. When passing values directly, the following type conversions are performed:
+// Use MakeWrapper to expose methods to JavaScript.
 //
-//  | Go type               | JavaScript type       | Conversions back to interface{} |
-//  | --------------------- | --------------------- | ------------------------------- |
-//  | bool                  | Boolean               | bool                            |
-//  | integers and floats   | Number                | float64                         |
-//  | string                | String                | string                          |
-//  | []int8                | Int8Array             | []int8                          |
-//  | []int16               | Int16Array            | []int16                         |
-//  | []int32, []int        | Int32Array            | []int                           |
-//  | []uint8               | Uint8Array            | []uint8                         |
-//  | []uint16              | Uint16Array           | []uint16                        |
-//  | []uint32, []uint      | Uint32Array           | []uint                          |
-//  | []float32             | Float32Array          | []float32                       |
-//  | []float64             | Float64Array          | []float64                       |
-//  | all other slices      | Array                 | []interface{}                   |
-//  | arrays                | see slice type        | see slice type                  |
-//  | functions             | Function              | func(...interface{}) *js.Object |
-//  | time.Time             | Date                  | time.Time                       |
-//  | -                     | instanceof Node       | *js.Object                      |
-//  | maps, structs         | instanceof Object     | map[string]interface{}          |
+// Internalization
 //
-// Additionally, for a struct containing a *js.Object field, only the content of the field will be passed to JavaScript and vice versa.
+// When values pass from Javascript to Go, a process known as internalization,
+// the following conversion table is applied:
+//
+//  |----------------+---------------+-------------------------+--------|
+//  | Go target type | Translation   | Javascript source value | Result |
+//  |----------------+---------------+-------------------------+--------|
+//  | string         | UTF16 -> UTF8 | null                    | ""     |
+//  |                |               | undefined               | ""     |
+//  |                |               | ""                      | ""     |
+//  |                |               | new String("")          | ""     |
+//  |                |               | "ok" †                  | "ok"   |
+//  |                |               | new String("ok") †      | "ok"   |
+//  |----------------+---------------+-------------------------+--------|
+//  | bool           | none          | null                    | false  |
+//  |                |               | undefined               | false  |
+//  |                |               | false †                 | false  |
+//  |                |               | new Boolean(false) †    | false  |
+//  |----------------+---------------+-------------------------+--------|
+//
+// Any source values not listed in this table cause a runtime panic for a given
+// target type if a conversion is attempted, e.g. a Javascript number value
+// being assigned to a string type Go variable.
+//
+// Source values annotated with † are generally applicable to all valid
+// values of the target type. e.g. for target type string, "ok" represents
+// all valid string primitive values.
+//
+// Externalization
+//
+// When values pass from Go to Javascript, a process known as externalization,
+// the following conversion table is applied:
+//
+//  |----------------+---------------+-----------------+--------+---------+-------------|
+//  | Go source type | Translation   | Go source value | Result | typeof  | constructor |
+//  |----------------+---------------+-----------------+--------+---------+-------------|
+//  | string         | UTF8 -> UTF16 | ""              | ""     | string  | String      |
+//  |                |               | "ok" †          | "ok"   |         |             |
+//  |----------------+---------------+-----------------+--------+---------+-------------|
+//  | bool           | none          | false           | false  | boolean | Boolean     |
+//  |                |               | true            | true   |         |             |
+//  |----------------+---------------+-----------------+--------+---------+-------------|
+//
+// Source values annotated with † are generally applicable to all valid
+// values of the target type. e.g. for target type string, "ok" represents
+// all valid string values.
+//
+// Special struct types
+//
+// To follow....
 package js
 
 // Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax. A nil pointer to Object is equal to JavaScript's "null". Object can not be used as a map key.

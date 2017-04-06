@@ -467,7 +467,7 @@ func TestCallWithNull(t *testing.T) {
 func TestReflection(t *testing.T) {
 	o := js.Global.Call("eval", "({ answer: 42 })")
 	if reflect.ValueOf(o).Interface().(*js.Object) != o {
-		t.Fail()
+		t.Fatal()
 	}
 
 	type S struct {
@@ -477,18 +477,19 @@ func TestReflection(t *testing.T) {
 
 	v := reflect.ValueOf(&s).Elem()
 	if v.Field(0).Interface().(*js.Object).Get("answer").Int() != 42 {
-		t.Fail()
+		t.Fatal()
 	}
 	if v.Field(0).MethodByName("Get").Call([]reflect.Value{reflect.ValueOf("answer")})[0].Interface().(*js.Object).Int() != 42 {
-		t.Fail()
+		t.Fatal()
 	}
 	v.Field(0).Set(reflect.ValueOf(js.Global.Call("eval", "({ answer: 100 })")))
 	if s.Field.Get("answer").Int() != 100 {
-		t.Fail()
+		t.Fatal()
 	}
 
-	if fmt.Sprintf("%+v", s) != "{Field:[object Object]}" {
-		t.Fail()
+	expFmt := "{Field:[object Object]}"
+	if v := fmt.Sprintf("%+v", s); v != expFmt {
+		t.Fatalf("fmt out was: %q; expected %q", v, expFmt)
 	}
 }
 
@@ -619,4 +620,208 @@ func TestStructWithNonIdentifierJSTag(t *testing.T) {
 	if want := "Paul"; got != want {
 		t.Errorf("value via js.Object.Get gave %q, want %q", got, want)
 	}
+}
+
+// Internalize is used as a helper type to test $internalize. A struct is used
+// in order that all of the Go types can be verified (otherwise we are limited
+// to the methods on *Object). Where methods on *Object exist they too will be
+// tested
+type Internalize struct {
+	*js.Object
+
+	string string `js:"string"`
+	bool   bool   `js:"bool"`
+}
+
+func TestInternalizeString(t *testing.T) {
+	fieldName := "string"
+	zero := ""
+
+	s := &Internalize{Object: js.Global.Get("Object").New()}
+
+	// *************
+	// undefined
+	// *************
+	s.Object.Set(fieldName, jsundefined())
+
+	// via struct field
+	if v := s.string; v != zero {
+		t.Fatalf("expected string field to be %q, got %q", zero, v)
+	}
+
+	// via *js.Object.String()
+	if v := s.Object.Get(fieldName).String(); v != zero {
+		t.Fatalf("expected string field via *js.Object.String() to be %q, got %q", zero, v)
+	}
+
+	// *************
+	// null
+	// *************
+	s.Object.Set(fieldName, jsnull())
+
+	// via struct field
+	if v := s.string; v != zero {
+		t.Fatalf("expected string field to be %q, got %q", zero, v)
+	}
+
+	// via *js.Object.String()
+	if v := s.Object.Get(fieldName).String(); v != zero {
+		t.Fatalf("expected string field via *js.Object.String() to be %q, got %q", zero, v)
+	}
+
+	// *************
+	// valid primitive string
+	// *************
+	exp := "ok"
+	s.Object.Set(fieldName, jsval(`"`+exp+`"`))
+
+	// via struct field
+	if v := s.string; v != exp {
+		t.Fatalf("expected string field to be %q, got %q", zero, v)
+	}
+
+	// via *js.Object.String()
+	if v := s.Object.Get(fieldName).String(); v != exp {
+		t.Fatalf("expected string field via *js.Object.String() to be %q, got %q", zero, v)
+	}
+
+	// *************
+	// valid String object
+	// *************
+	s.Object.Set(fieldName, jsval(`new String("`+exp+`")`))
+
+	// via struct field
+	if v := s.string; v != exp {
+		t.Fatalf("expected string field to be %q, got %q", zero, v)
+	}
+
+	// via *js.Object.String()
+	if v := s.Object.Get(fieldName).String(); v != exp {
+		t.Fatalf("expected string field via *js.Object.String() to be %q, got %q", zero, v)
+	}
+
+	// *************
+	// invalid
+	// *************
+	s.Object.Set(fieldName, jsval("5"))
+
+	shouldRuntimePanic(t, "runtime error: tried to internalize non-string value of type number/Number", func() {
+		_ = s.string
+	})
+
+	shouldRuntimePanic(t, "runtime error: tried to internalize non-string value of type number/Number", func() {
+		_ = s.Object.Get(fieldName).String()
+	})
+}
+
+func TestInternalizeBool(t *testing.T) {
+	fieldName := "bool"
+	zero := false
+
+	s := &Internalize{Object: js.Global.Get("Object").New()}
+
+	// *************
+	// undefined
+	// *************
+	s.Object.Set(fieldName, jsundefined())
+
+	// via struct field
+	if v := s.bool; v != zero {
+		t.Fatalf("expected bool field to be %q, got %q", zero, v)
+	}
+
+	// via *js.Object.Bool()
+	if v := s.Object.Get(fieldName).Bool(); v != zero {
+		t.Fatalf("expected bool field via *js.Object.Bool() to be %q, got %q", zero, v)
+	}
+
+	// *************
+	// null
+	// *************
+	s.Object.Set(fieldName, jsnull())
+
+	// via struct field
+	if v := s.bool; v != zero {
+		t.Fatalf("expected bool field to be %q, got %q", zero, v)
+	}
+
+	// via *js.Object.Bool()
+	if v := s.Object.Get(fieldName).Bool(); v != zero {
+		t.Fatalf("expected bool field via *js.Object.Bool() to be %q, got %q", zero, v)
+	}
+
+	// *************
+	// valid primitive bool
+	// *************
+	exp := true
+	s.Object.Set(fieldName, jsval(`true`))
+
+	// via struct field
+	if v := s.bool; v != exp {
+		t.Fatalf("expected bool field to be %v, got %v", exp, v)
+	}
+
+	// via *js.Object.Bool()
+	if v := s.Object.Get(fieldName).Bool(); v != exp {
+		t.Fatalf("expected bool field via *js.Object.Bool() to be %q, got %q", zero, v)
+	}
+
+	// *************
+	// valid Bool object
+	// *************
+	s.Object.Set(fieldName, jsval(`new Boolean(true)`))
+
+	// via struct field
+	if v := s.bool; v != exp {
+		t.Fatalf("expected bool field to be %q, got %q", zero, v)
+	}
+
+	// via *js.Object.Bool()
+	if v := s.Object.Get(fieldName).Bool(); v != exp {
+		t.Fatalf("expected bool field via *js.Object.Bool() to be %q, got %q", zero, v)
+	}
+
+	// *************
+	// invalid
+	// *************
+	s.Object.Set(fieldName, jsval("5"))
+
+	shouldRuntimePanic(t, "runtime error: tried to internalize non-bool value of type number/Number", func() {
+		_ = s.bool
+	})
+
+	shouldRuntimePanic(t, "runtime error: tried to internalize non-bool value of type number/Number", func() {
+		_ = s.Object.Get(fieldName).Bool()
+	})
+}
+
+func jsval(v string) *js.Object {
+	return js.Global.Call("eval", v)
+}
+
+func jsnull() *js.Object {
+	return js.Global.Call("eval", "null")
+}
+
+func jsundefined() *js.Object {
+	return js.Global.Call("eval", "undefined")
+}
+
+func consolelog(args ...interface{}) {
+	js.Global.Get("console").Call("log", args...)
+}
+
+func shouldRuntimePanic(t *testing.T, msg string, f func()) {
+	defer func() {
+		err, ok := recover().(error)
+		if !ok {
+			t.Fatalf("expected to have had to handle panic; we didn't see a panic")
+		}
+
+		if err.Error() != msg {
+			t.Fatalf("expected error %q, got %q", msg, err)
+		}
+	}()
+
+	f()
 }

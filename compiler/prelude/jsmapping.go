@@ -194,7 +194,13 @@ var $internalize = function(v, t, recv) {
   }
   switch (t.kind) {
   case $kindBool:
-    return !!v;
+    if (v === undefined || v == null) {
+      return false;
+    }
+    if (v.constructor !== Boolean) {
+      $throwRuntimeError("tried to internalize non-bool value of type " + $typeof(v));
+    }
+    return Boolean(v);
   case $kindInt:
     return parseInt(v);
   case $kindInt8:
@@ -253,11 +259,8 @@ var $internalize = function(v, t, recv) {
     if (t.methods.length !== 0) {
       $throwRuntimeError("cannot internalize " + t.string);
     }
-    if (v === null) {
+    if (v === null || v === undefined) {
       return $ifaceNil;
-    }
-    if (v === undefined) {
-      return new $jsObjectPtr(undefined);
     }
     switch (v.constructor) {
     case Int8Array:
@@ -315,6 +318,12 @@ var $internalize = function(v, t, recv) {
   case $kindSlice:
     return new t($mapArray(v, function(e) { return $internalize(e, t.elem); }));
   case $kindString:
+    if (v === undefined || v == null) {
+      return "";
+    }
+    if (v.constructor !== String) {
+      $throwRuntimeError("tried to internalize non-string value of type " + $typeof(v));
+    }
     v = String(v);
     if ($isASCII(v)) {
       return v;
@@ -365,6 +374,21 @@ var $internalize = function(v, t, recv) {
     }
   }
   $throwRuntimeError("cannot internalize " + t.string);
+};
+
+var $typeof = function(v) {
+  if (v === undefined) {
+    return "undefined";
+  }
+
+  if (v === null) {
+    return "null";
+  }
+
+  var to = typeof v;
+  var cn = v.constructor.name;
+
+  return to + "/" + cn;
 };
 
 /* $isASCII reports whether string s contains only ASCII characters. */

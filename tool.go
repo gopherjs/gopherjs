@@ -771,7 +771,7 @@ func runNode(script string, args []string, dir string, quiet bool) error {
 		allArgs = []string{"--require", "source-map-support/register"}
 		if err := exec.Command("node", "--require", "source-map-support/register", "--eval", "").Run(); err != nil {
 			if !quiet {
-				fmt.Fprintln(os.Stderr, "gopherjs: Source maps disabled. Use Node.js 4.x with source-map-support module for nice stack traces.")
+				fmt.Fprintln(os.Stderr, "gopherjs: Source maps disabled. Install source-map-support module for nice stack traces. See https://github.com/gopherjs/gopherjs#gopherjs-run-gopherjs-test.")
 			}
 			allArgs = []string{}
 		}

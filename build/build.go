@@ -532,11 +532,11 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			if importedPkgPath == "unsafe" || ignored {
 				continue
 			}
-			pkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
+			importedPkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
 			if err != nil {
 				return nil, err
 			}
-			impModeTime := pkg.SrcModTime
+			impModeTime := importedPkg.SrcModTime
 			if impModeTime.After(pkg.SrcModTime) {
 				pkg.SrcModTime = impModeTime
 			}

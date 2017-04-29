@@ -305,6 +305,7 @@ func main() {
 	}
 	bench := cmdTest.Flags().String("bench", "", "Run benchmarks matching the regular expression. By default, no benchmarks run. To run all benchmarks, use '--bench=.'.")
 	benchtime := cmdTest.Flags().String("benchtime", "", "Run enough iterations of each benchmark to take t, specified as a time.Duration (for example, -benchtime 1h30s). The default is 1 second (1s).")
+	count := cmdTest.Flags().String("count", "", "Run each test and benchmark n times (default 1). Examples are always run once.")
 	run := cmdTest.Flags().String("run", "", "Run only those tests and examples matching the regular expression.")
 	short := cmdTest.Flags().Bool("short", false, "Tell long-running tests to shorten their run time.")
 	verbose := cmdTest.Flags().BoolP("verbose", "v", false, "Log all tests as they are run. Also print all text from Log and Logf calls even if the test succeeds.")
@@ -466,6 +467,9 @@ func main() {
 				}
 				if *benchtime != "" {
 					args = append(args, "-test.benchtime", *benchtime)
+				}
+				if *count != "" {
+					args = append(args, "-test.count", *count)
 				}
 				if *run != "" {
 					args = append(args, "-test.run", *run)

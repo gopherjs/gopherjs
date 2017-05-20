@@ -516,6 +516,8 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		}
 
 		for _, importedPkgPath := range pkg.Imports {
+			// Ignore all imports that aren't mentioned in import specs of pkg.
+			// For example, this ignores imports such as runtime/internal/sys and runtime/internal/atomic.
 			ignored := true
 			for _, pos := range pkg.ImportPos[importedPkgPath] {
 				importFile := filepath.Base(pos.Filename)
@@ -529,6 +531,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 					break
 				}
 			}
+
 			if importedPkgPath == "unsafe" || ignored {
 				continue
 			}
@@ -536,9 +539,9 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			if err != nil {
 				return nil, err
 			}
-			impModeTime := importedPkg.SrcModTime
-			if impModeTime.After(pkg.SrcModTime) {
-				pkg.SrcModTime = impModeTime
+			impModTime := importedPkg.SrcModTime
+			if impModTime.After(pkg.SrcModTime) {
+				pkg.SrcModTime = impModTime
 			}
 		}
 

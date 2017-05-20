@@ -62,7 +62,14 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 // If an error occurs, Import returns a non-nil error and a nil
 // *PackageData.
 func Import(path string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
-	return importWithSrcDir(path, "", mode, installSuffix, buildTags)
+	wd, err := os.Getwd()
+	if err != nil {
+		// Getwd may fail if we're in GOARCH=js mode. That's okay, handle
+		// it by falling back to empty working directory. It just means
+		// Import will not be able to resolve relative import paths.
+		wd = ""
+	}
+	return importWithSrcDir(path, wd, mode, installSuffix, buildTags)
 }
 
 func importWithSrcDir(path string, srcDir string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {

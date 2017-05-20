@@ -128,7 +128,6 @@ func main() {
 				pkgs := (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
 
 				for _, pkgPath := range pkgs {
-					pkgPath = filepath.ToSlash(pkgPath)
 					if s.Watcher != nil {
 						pkg, err := gbuild.NewBuildContext(s.InstallSuffix(), options.BuildTags).Import(pkgPath, "", build.FindOnly)
 						if err != nil {
@@ -208,8 +207,6 @@ func main() {
 					}
 				}
 				for _, pkgPath := range pkgs {
-					pkgPath = filepath.ToSlash(pkgPath)
-
 					pkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
 					if s.Watcher != nil && pkg != nil { // add watch even on error
 						s.Watcher.Add(pkg.Dir)
@@ -331,7 +328,6 @@ func main() {
 
 			pkgs := make([]*gbuild.PackageData, len(args))
 			for i, pkgPath := range args {
-				pkgPath = filepath.ToSlash(pkgPath)
 				var err error
 				pkgs[i], err = gbuild.Import(pkgPath, 0, "", options.BuildTags)
 				if err != nil {

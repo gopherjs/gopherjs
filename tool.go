@@ -95,11 +95,8 @@ func main() {
 			s := gbuild.NewSession(options)
 
 			err := func() error {
-				if len(args) == 0 {
-					return s.BuildDir(currentDirectory, currentDirectory, pkgObj)
-				}
-
-				if strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".inc.js") {
+				// Handle "gopherjs build [files]" ad-hoc package mode.
+				if len(args) > 0 && (strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".inc.js")) {
 					for _, arg := range args {
 						if !strings.HasSuffix(arg, ".go") && !strings.HasSuffix(arg, ".inc.js") {
 							return fmt.Errorf("named files must be .go or .inc.js files")
@@ -183,21 +180,6 @@ func main() {
 				patternContext := gbuild.NewBuildContext("", options.BuildTags)
 				pkgs := (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
 
-				if len(pkgs) == 0 {
-					firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: The GOPATH workspace that contains the package source should be chosen.
-					srcDir, err := filepath.EvalSymlinks(filepath.Join(firstGopathWorkspace, "src"))
-					if err != nil {
-						return err
-					}
-					if !strings.HasPrefix(currentDirectory, srcDir) {
-						return fmt.Errorf("gopherjs install: no install location for directory %s outside GOPATH", currentDirectory)
-					}
-					pkgPath, err := filepath.Rel(srcDir, currentDirectory)
-					if err != nil {
-						return err
-					}
-					pkgs = []string{pkgPath}
-				}
 				if cmd.Name() == "get" {
 					goGet := exec.Command("go", append([]string{"get", "-d", "-tags=js"}, pkgs...)...)
 					goGet.Stdout = os.Stdout
@@ -333,30 +315,6 @@ func main() {
 				if err != nil {
 					return err
 				}
-			}
-			if len(pkgs) == 0 {
-				firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0]
-				srcDir, err := filepath.EvalSymlinks(filepath.Join(firstGopathWorkspace, "src"))
-				if err != nil {
-					return err
-				}
-				var pkg *gbuild.PackageData
-				if strings.HasPrefix(currentDirectory, srcDir) {
-					pkgPath, err := filepath.Rel(srcDir, currentDirectory)
-					if err != nil {
-						return err
-					}
-					if pkg, err = gbuild.Import(pkgPath, 0, "", options.BuildTags); err != nil {
-						return err
-					}
-				}
-				if pkg == nil {
-					if pkg, err = gbuild.ImportDir(currentDirectory, 0, "", options.BuildTags); err != nil {
-						return err
-					}
-					pkg.ImportPath = "_" + currentDirectory
-				}
-				pkgs = []*gbuild.PackageData{pkg}
 			}
 
 			var exitErr error

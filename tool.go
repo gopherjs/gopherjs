@@ -31,6 +31,7 @@ import (
 
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/kisielk/gotool"
 	"github.com/neelance/sourcemap"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -122,7 +123,11 @@ func main() {
 					return nil
 				}
 
-				for _, pkgPath := range args {
+				// Expand import path patterns.
+				patternContext := gbuild.NewBuildContext("", options.BuildTags)
+				pkgs := (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
+
+				for _, pkgPath := range pkgs {
 					pkgPath = filepath.ToSlash(pkgPath)
 					if s.Watcher != nil {
 						pkg, err := gbuild.NewBuildContext(s.InstallSuffix(), options.BuildTags).Import(pkgPath, "", build.FindOnly)
@@ -139,12 +144,14 @@ func main() {
 					if err != nil {
 						return err
 					}
-					if pkgObj == "" {
-						pkgObj = filepath.Base(args[0]) + ".js"
-					}
-					if pkg.IsCommand() && !pkg.UpToDate {
-						if err := s.WriteCommandPackage(archive, pkgObj); err != nil {
-							return err
+					if len(pkgs) == 1 { // Only consider writing output if single package specified.
+						if pkgObj == "" {
+							pkgObj = filepath.Base(pkg.ImportPath) + ".js"
+						}
+						if pkg.IsCommand() && !pkg.UpToDate {
+							if err := s.WriteCommandPackage(archive, pkgObj); err != nil {
+								return err
+							}
 						}
 					}
 				}
@@ -173,7 +180,10 @@ func main() {
 			s := gbuild.NewSession(options)
 
 			err := func() error {
-				pkgs := args
+				// Expand import path patterns.
+				patternContext := gbuild.NewBuildContext("", options.BuildTags)
+				pkgs := (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
+
 				if len(pkgs) == 0 {
 					firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: The GOPATH workspace that contains the package source should be chosen.
 					srcDir, err := filepath.EvalSymlinks(filepath.Join(firstGopathWorkspace, "src"))
@@ -315,6 +325,10 @@ func main() {
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(tags)
 		err := func() error {
+			// Expand import path patterns.
+			patternContext := gbuild.NewBuildContext("", options.BuildTags)
+			args = (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
+
 			pkgs := make([]*gbuild.PackageData, len(args))
 			for i, pkgPath := range args {
 				pkgPath = filepath.ToSlash(pkgPath)

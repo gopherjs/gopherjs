@@ -1,6 +1,8 @@
 GopherJS - A compiler from Go to JavaScript
 -------------------------------------------
 
+(This is a test edit to see if Circle CI is fixed for outside PRs now.)
+
 [![Sourcegraph](https://sourcegraph.com/github.com/gopherjs/gopherjs/-/badge.svg)](https://sourcegraph.com/github.com/gopherjs/gopherjs?badge)
 [![Circle CI](https://circleci.com/gh/gopherjs/gopherjs.svg?style=svg)](https://circleci.com/gh/gopherjs/gopherjs)
 

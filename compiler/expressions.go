@@ -539,7 +539,7 @@ func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 		plainFun := astutil.RemoveParens(e.Fun)
 
 		if astutil.IsTypeExpr(plainFun, c.p.Info.Info) {
-			return c.formatExpr("%s", c.translateConversion(e.Args[0], c.p.TypeOf(plainFun)))
+			return c.formatExpr("(%s)", c.translateConversion(e.Args[0], c.p.TypeOf(plainFun)))
 		}
 
 		sig := c.p.TypeOf(plainFun).Underlying().(*types.Signature)
@@ -1186,21 +1186,21 @@ func (c *funcContext) loadStruct(array, target string, s *types.Struct) string {
 func (c *funcContext) fixNumber(value *expression, basic *types.Basic) *expression {
 	switch basic.Kind() {
 	case types.Int8:
-		return c.formatParenExpr("(%s) << 24 >> 24", value)
+		return c.formatParenExpr("%s << 24 >> 24", value)
 	case types.Uint8:
-		return c.formatParenExpr("(%s) << 24 >>> 24", value)
+		return c.formatParenExpr("%s << 24 >>> 24", value)
 	case types.Int16:
-		return c.formatParenExpr("(%s) << 16 >> 16", value)
+		return c.formatParenExpr("%s << 16 >> 16", value)
 	case types.Uint16:
-		return c.formatParenExpr("(%s) << 16 >>> 16", value)
+		return c.formatParenExpr("%s << 16 >>> 16", value)
 	case types.Int32, types.Int, types.UntypedInt:
-		return c.formatParenExpr("(%s) >> 0", value)
+		return c.formatParenExpr("%s >> 0", value)
 	case types.Uint32, types.Uint, types.Uintptr:
-		return c.formatParenExpr("(%s) >>> 0", value)
+		return c.formatParenExpr("%s >>> 0", value)
 	case types.Float32:
 		return c.formatExpr("$fround(%s)", value)
 	case types.Float64:
-		return c.formatExpr("(%s)", value)
+		return value
 	default:
 		panic(fmt.Sprintf("fixNumber: unhandled basic.Kind(): %s", basic.String()))
 	}

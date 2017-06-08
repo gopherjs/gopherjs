@@ -613,7 +613,7 @@ func TestReceiverCapture(t *testing.T) {
 	}
 }
 
-func TestParenthesis(t *testing.T) {
+func TestTypeConversion(t *testing.T) {
 	i1, i2, i3 := 4, 2, 2
 	if (i1 - i2) / i3 != int(i1 - i2) / int(i3) {
 		t.Fail()

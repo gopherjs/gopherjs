@@ -63,6 +63,23 @@ func Callers(skip int, pc []uintptr) int {
 	return 0
 }
 
+// CallersFrames is not implemented for GOARCH=js.
+// TODO: Implement if possible.
+func CallersFrames(callers []uintptr) *Frames { return &Frames{} }
+
+type Frames struct{}
+
+func (ci *Frames) Next() (frame Frame, more bool) { return }
+
+type Frame struct {
+	PC       uintptr
+	Func     *Func
+	Function string
+	File     string
+	Line     int
+	Entry    uintptr
+}
+
 func GC() {
 }
 

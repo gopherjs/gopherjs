@@ -122,6 +122,7 @@ func reflectType(typ *js.Object) *rtype {
 			}
 			setKindType(rt, &interfaceType{
 				rtype:   *rt,
+				pkgPath: newName(internalStr(typ.Get("pkg")), "", "", false),
 				methods: imethods,
 			})
 		case Map:

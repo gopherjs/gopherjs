@@ -234,7 +234,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
   case $kindStruct:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
-    typ.ptr = $newType(4, $kindPtr, "*" + string, false, "", exported, constructor);
+    typ.ptr = $newType(4, $kindPtr, "*" + string, false, pkg, exported, constructor);
     typ.ptr.elem = typ;
     typ.ptr.prototype.$get = function() { return this; };
     typ.ptr.prototype.$set = function(v) { typ.copy(this, v); };

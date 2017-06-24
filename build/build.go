@@ -93,13 +93,15 @@ func importWithSrcDir(path string, srcDir string, mode build.ImportMode, install
 
 	switch path {
 	case "os":
-		pkg.GoFiles = stripExecutable(pkg.GoFiles) // Need to strip executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
+		pkg.GoFiles = excludeExecutable(pkg.GoFiles) // Need to exclude executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
 	case "runtime":
 		pkg.GoFiles = []string{"error.go"}
 	case "runtime/internal/sys":
 		pkg.GoFiles = []string{fmt.Sprintf("zgoos_%s.go", buildContext.GOOS), "zversion.go"}
 	case "runtime/pprof":
 		pkg.GoFiles = nil
+	case "internal/poll":
+		pkg.GoFiles = exclude(pkg.GoFiles, "fd_poll_runtime.go")
 	case "crypto/rand":
 		pkg.GoFiles = []string{"rand.go", "util.go"}
 	case "crypto/x509":
@@ -131,13 +133,28 @@ func importWithSrcDir(path string, srcDir string, mode build.ImportMode, install
 	return &PackageData{Package: pkg, JSFiles: jsFiles}, nil
 }
 
-// stripExecutable strips all executable implementation .go files.
+// excludeExecutable excludes all executable implementation .go files.
 // They have "executable_" prefix.
-func stripExecutable(goFiles []string) []string {
+func excludeExecutable(goFiles []string) []string {
 	var s []string
 	for _, f := range goFiles {
 		if strings.HasPrefix(f, "executable_") {
 			continue
+		}
+		s = append(s, f)
+	}
+	return s
+}
+
+// exclude returns files, excluding specified files.
+func exclude(files []string, exclude ...string) []string {
+	var s []string
+Outer:
+	for _, f := range files {
+		for _, e := range exclude {
+			if f == e {
+				continue Outer
+			}
 		}
 		s = append(s, f)
 	}

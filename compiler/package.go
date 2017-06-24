@@ -463,12 +463,15 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				c.Printf(`%s = $newType(%d, %s, "%s.%s", %t, "%s", %t, %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name() != "", o.Pkg().Path(), o.Exported(), constructor)
 			})
 			d.MethodListCode = c.CatchOutput(0, func() {
-				if _, isInterface := o.Type().Underlying().(*types.Interface); !isInterface {
-					named := o.Type().(*types.Named)
+				if _, isInterface := o.Type().Underlying().(*types.Interface); isInterface {
+					return
+				}
+				switch t := o.Type().(type) {
+				case *types.Named:
 					var methods []string
 					var ptrMethods []string
-					for i := 0; i < named.NumMethods(); i++ {
-						method := named.Method(i)
+					for i := 0; i < t.NumMethods(); i++ {
+						method := t.Method(i)
 						name := method.Name()
 						if reservedKeywords[name] {
 							name += "$"
@@ -491,6 +494,8 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					if len(ptrMethods) > 0 {
 						c.Printf("%s.methods = [%s];", c.typeName(types.NewPointer(o.Type())), strings.Join(ptrMethods, ", "))
 					}
+				case *types.Struct:
+					// TODO: Support type aliases.
 				}
 			})
 			switch t := o.Type().Underlying().(type) {

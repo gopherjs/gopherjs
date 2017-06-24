@@ -2,6 +2,13 @@
 
 package big
 
+// TODO: This is a workaround for https://github.com/gopherjs/gopherjs/issues/652.
+//       Remove after that issue is resolved.
+type Word uintptr
+
+// TODO: Consider using math_big_pure_go build tag for this package, instead of
+//       defining all these pure Go low level operators ourselves.
+
 func mulWW(x, y Word) (z1, z0 Word) {
 	return mulWW_g(x, y)
 }
@@ -34,7 +41,4 @@ func addMulVVW(z, x []Word, y Word) (c Word) {
 }
 func divWVW(z []Word, xn Word, x []Word, y Word) (r Word) {
 	return divWVW_g(z, xn, x, y)
-}
-func bitLen(x Word) (n int) {
-	return bitLen_g(x)
 }

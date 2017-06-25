@@ -2,6 +2,8 @@
 
 package sync
 
+import "github.com/gopherjs/gopherjs/js"
+
 var semWaiters = make(map[*uint32][]chan bool)
 
 func runtime_Semacquire(s *uint32) {
@@ -49,4 +51,10 @@ func runtime_notifyListCheck(size uintptr) {}
 
 func runtime_canSpin(i int) bool {
 	return false
+}
+
+// Copy of time.runtimeNano.
+func runtime_nanotime() int64 {
+	const millisecond = 1000000
+	return js.Global.Get("Date").New().Call("getTime").Int64() * millisecond
 }

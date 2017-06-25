@@ -43,9 +43,8 @@ func runtimeNano() int64 {
 }
 
 func now() (sec int64, nsec int32, mono int64) {
-	// TODO: Use mono if needed/possible.
 	n := runtimeNano()
-	return n / int64(Second), int32(n % int64(Second)), 0
+	return n / int64(Second), int32(n % int64(Second)), n
 }
 
 func Sleep(d Duration) {

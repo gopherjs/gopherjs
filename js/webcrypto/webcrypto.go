@@ -60,7 +60,7 @@ func getSubtle() *js.Object {
 // }
 
 // SubtleCall calls the object's method with the given arguments assuming that it returns a promise, wait for it to be settled, and returns the result/error.
-func SubtleCall(method string, args ...interface{}) (*js.Object, error) {
+func SubtleCall(method string, args ...interface{}) (res *js.Object, err error) {
 	if SubtleCrypto == nil {
 		return nil, ErrWebCryptoInterfaceNotFound
 	}
@@ -73,6 +73,17 @@ func SubtleCall(method string, args ...interface{}) (*js.Object, error) {
 	resCh := make(chan *js.Object, 1)
 	failCh := make(chan *js.Object, 1)
 
+	defer func() {
+		switch exc := recover().(type) {
+		case *js.Error:
+			err = exc
+		case nil:
+			break
+		default:
+			panic(exc)
+		}
+	}()
+
 	promise := SubtleCrypto.Call(method, args...)
 	promise.Call(
 		"then",
@@ -80,10 +91,10 @@ func SubtleCall(method string, args ...interface{}) (*js.Object, error) {
 		func(err *js.Object) { failCh <- err })
 
 	select {
-	case res := <-resCh:
-		return res, nil
-	case err := <-failCh:
-		switch err.Get("name").String() {
+	case jsres := <-resCh:
+		return jsres, nil
+	case jserr := <-failCh:
+		switch jserr.Get("name").String() {
 		case "DataError":
 			return nil, ErrWebCryptoDataError
 		case "NotSupportedError":
@@ -91,7 +102,7 @@ func SubtleCall(method string, args ...interface{}) (*js.Object, error) {
 		case "OperationError":
 			return nil, ErrWebCryptoOperationError
 		default:
-			return nil, &js.Error{Object: err}
+			return nil, &js.Error{Object: jserr}
 		}
 	}
 }

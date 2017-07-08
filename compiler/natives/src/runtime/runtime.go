@@ -9,9 +9,11 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-const GOOS = sys.GOOS
-const GOARCH = "js"
-const Compiler = "gopherjs"
+const (
+	GOOS     = sys.GOOS
+	GOARCH   = "js"
+	Compiler = "gopherjs"
+)
 
 // The Error interface identifies a run time error.
 type Error interface {
@@ -141,18 +143,45 @@ type basicFrame struct {
 
 func callstack(skip, limit int) []basicFrame {
 	skip = skip + 1 /*skip error message*/ + 1 /*skip callstack's own frame*/
-	lines := js.Global.Get("Error").New().Get("stack").Call("split", "\n").Call("slice", skip)
-	frames := []basicFrame{}
-	l := lines.Get("length").Int()
-	for i := 0; i < l && i < limit; i++ {
-		info := lines.Index(i)
-		pos := info.Call("substring", info.Call("indexOf", "(").Int()+1, info.Call("indexOf", ")").Int())
-		parts := pos.Call("split", ":")
+	lines := js.Global.Get("Error").New().Get("stack").Call("split", "\n").Call("slice", skip, skip+limit)
+	return parseCallstack(lines)
+}
 
+func parseCallstack(lines *js.Object) []basicFrame {
+	frames := []basicFrame{}
+	l := lines.Length()
+	for i := 0; i < l; i++ {
+		var file, funcName string
+		var line int
+		info := lines.Index(i)
+		openIdx := info.Call("lastIndexOf", "(").Int()
+		if openIdx == -1 {
+			parts := info.Call("split", ":")
+
+			file = parts.Call("slice", 0, parts.Length()-2).Call("join", ":").
+				Call("replace", js.Global.Get("RegExp").New(`^\s+at `), "").String()
+			line = parts.Index(parts.Length() - 2).Int()
+			funcName = "<none>"
+		} else {
+			pos := info.Call("substring", openIdx+1, info.Call("indexOf", ")").Int())
+			parts := pos.Call("split", ":")
+
+			if pos.String() == "<anonymous>" {
+				file = "<anonymous>"
+			} else {
+				file = parts.Call("slice", 0, parts.Length()-2).Call("join", ":").String()
+				line = parts.Index(parts.Length() - 2).Int()
+			}
+			fn := info.Call("substring", info.Call("indexOf", "at ").Int()+3, info.Call("indexOf", " (").Int())
+			if idx := fn.Call("indexOf", "[as ").Int(); idx > 0 {
+				fn = fn.Call("substring", idx+4, fn.Call("indexOf", "]"))
+			}
+			funcName = fn.String()
+		}
 		frames = append(frames, basicFrame{
-			File:     parts.Index(0).String(),
-			Line:     parts.Index(1).Int(),
-			FuncName: info.Call("substring", info.Call("indexOf", "at ").Int()+3, info.Call("indexOf", " (").Int()).String(),
+			File:     file,
+			Line:     line,
+			FuncName: funcName,
 		})
 	}
 	return frames
@@ -312,6 +341,7 @@ func (f *Func) FileLine(pc uintptr) (file string, line int) {
 	}
 	return f.file, f.line
 }
+
 func (f *Func) Name() string {
 	if f == nil || f.name == "" {
 		return "<unknown>"

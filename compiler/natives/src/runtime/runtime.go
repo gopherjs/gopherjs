@@ -55,8 +55,8 @@ func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
 	if info == js.Undefined {
 		return 0, "", 0, false
 	}
-	parts := info.Call("substring", info.Call("indexOf", "(").Int()+1, info.Call("indexOf", ")").Int()).Call("split", ":")
-	return 0, parts.Index(0).String(), parts.Index(1).Int(), true
+	parts := info.Call("substring", info.Call("lastIndexOf", "(").Int()+1, info.Call("indexOf", ")").Int()).Call("split", ":")
+	return 0, parts.Call("slice", 0, parts.Length()-2).Call("join", ":").String(), parts.Index(parts.Length() - 2).Int(), true
 }
 
 func Callers(skip int, pc []uintptr) int {

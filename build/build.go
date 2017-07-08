@@ -299,7 +299,7 @@ func parseAndAugment(pkg *build.Package, isTest bool, fileSet *token.FileSet) ([
 		}
 
 		switch pkg.ImportPath {
-		case "crypto/rand", "encoding/gob", "encoding/json", "expvar", "go/token", "log", "math/big", "math/rand", "regexp", "testing", "time":
+		case "crypto/rand", "encoding/gob", "encoding/json", "expvar", "go/token", "math/big", "math/rand", "regexp", "testing", "time":
 			for _, spec := range file.Imports {
 				path, _ := strconv.Unquote(spec.Path.Value)
 				if path == "sync" {

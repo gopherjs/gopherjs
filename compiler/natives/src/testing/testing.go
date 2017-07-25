@@ -4,5 +4,5 @@ package testing
 
 func callerName(skip int) string {
 	// TODO: Implement if possible.
-	return "caller"
+	return "<unknown>"
 }

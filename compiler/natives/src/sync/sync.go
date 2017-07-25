@@ -20,12 +20,7 @@ func runtime_Semacquire(s *uint32) {
 // TODO: Investigate this. If it's possible to implement, consider doing so, otherwise remove this comment.
 func runtime_SemacquireMutex(s *uint32, lifo bool) {
 	// TODO: Use lifo if needed/possible.
-	if *s == 0 {
-		ch := make(chan bool)
-		semWaiters[s] = append(semWaiters[s], ch)
-		<-ch
-	}
-	*s--
+	runtime_Semacquire(s)
 }
 
 func runtime_Semrelease(s *uint32, handoff bool) {

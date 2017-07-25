@@ -3,7 +3,6 @@
 package signal
 
 // Package signal is not implemented for GOARCH=js.
-// TODO: Implement if possible.
 
 func signal_disable(uint32) {}
 func signal_enable(uint32)  {}

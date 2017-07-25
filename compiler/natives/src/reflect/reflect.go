@@ -497,7 +497,6 @@ func makechan(typ *rtype, size uint64) (ch unsafe.Pointer) {
 }
 
 func makemap(t *rtype, cap int) (m unsafe.Pointer) {
-	// TODO: Use cap if needed/possible.
 	return unsafe.Pointer(js.Global.Get("Object").New().Unsafe())
 }
 

@@ -128,3 +128,4 @@ test:
       unicode/utf16
       unicode/utf8
     - go test -v -race ./...
+    - gopherjs test -v --minify fmt # Minification should work.

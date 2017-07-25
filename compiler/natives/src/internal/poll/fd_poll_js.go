@@ -5,6 +5,9 @@ package poll
 import "time"
 
 // pollDesc is a no-op implementation of an I/O poller for GOARCH=js.
+//
+// Its implementation is based on NaCL in gc compiler (see GOROOT/src/internal/poll/fd_poll_nacl.go),
+// but it does even less.
 type pollDesc struct {
 	closing bool
 }
@@ -38,6 +41,8 @@ func (pd *pollDesc) waitRead(isFile bool) error { return pd.wait('r', isFile) }
 func (pd *pollDesc) waitWrite(isFile bool) error { return pd.wait('w', isFile) }
 
 func (*pollDesc) waitCanceled(mode int) {}
+
+func (*pollDesc) pollable() bool { return true }
 
 func (*FD) SetDeadline(t time.Time) error { return nil }
 

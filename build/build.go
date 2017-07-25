@@ -73,15 +73,20 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 }
 
 func importWithSrcDir(path string, srcDir string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
-	buildContext := NewBuildContext(installSuffix, buildTags)
-	if path == "syscall" { // syscall needs to use a typical GOARCH like amd64 to pick up definitions for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t, etc.
-		buildContext.GOARCH = runtime.GOARCH
-		buildContext.InstallSuffix = "js"
+	bctx := NewBuildContext(installSuffix, buildTags)
+	switch path {
+	case "syscall":
+		// syscall needs to use a typical GOARCH like amd64 to pick up definitions for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t, etc.
+		bctx.GOARCH = runtime.GOARCH
+		bctx.InstallSuffix = "js"
 		if installSuffix != "" {
-			buildContext.InstallSuffix += "_" + installSuffix
+			bctx.InstallSuffix += "_" + installSuffix
 		}
+	case "math/big":
+		// Use pure Go version of math/big; we don't want non-Go assembly versions.
+		bctx.BuildTags = append(bctx.BuildTags, "math_big_pure_go")
 	}
-	pkg, err := buildContext.Import(path, srcDir, mode)
+	pkg, err := bctx.Import(path, srcDir, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +102,7 @@ func importWithSrcDir(path string, srcDir string, mode build.ImportMode, install
 	case "runtime":
 		pkg.GoFiles = []string{"error.go"}
 	case "runtime/internal/sys":
-		pkg.GoFiles = []string{fmt.Sprintf("zgoos_%s.go", buildContext.GOOS), "zversion.go"}
+		pkg.GoFiles = []string{fmt.Sprintf("zgoos_%s.go", bctx.GOOS), "zversion.go"}
 	case "runtime/pprof":
 		pkg.GoFiles = nil
 	case "internal/poll":

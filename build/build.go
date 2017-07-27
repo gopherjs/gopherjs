@@ -85,6 +85,9 @@ func importWithSrcDir(path string, srcDir string, mode build.ImportMode, install
 	case "math/big":
 		// Use pure Go version of math/big; we don't want non-Go assembly versions.
 		bctx.BuildTags = append(bctx.BuildTags, "math_big_pure_go")
+	case "crypto/x509", "os/user":
+		// These stdlib packages have cgo and non-cgo versions (via build tags); we want the latter.
+		bctx.CgoEnabled = false
 	}
 	pkg, err := bctx.Import(path, srcDir, mode)
 	if err != nil {
@@ -109,8 +112,6 @@ func importWithSrcDir(path string, srcDir string, mode build.ImportMode, install
 		pkg.GoFiles = exclude(pkg.GoFiles, "fd_poll_runtime.go")
 	case "crypto/rand":
 		pkg.GoFiles = []string{"rand.go", "util.go"}
-	case "crypto/x509":
-		pkg.CgoFiles = nil
 	}
 
 	if len(pkg.CgoFiles) > 0 {

@@ -812,6 +812,11 @@ func (c *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 
 	_, isPointer := recvType.Underlying().(*types.Pointer)
 	methodsRecvType := sel.Obj().Type().(*types.Signature).Recv().Type()
+
+	if _, isInterface := methodsRecvType.Underlying().(*types.Interface); isInterface {
+		return c.formatExpr("$copyInterfaceVal(%e)", x)
+	}
+
 	_, pointerExpected := methodsRecvType.(*types.Pointer)
 	if !isPointer && pointerExpected {
 		recvType = types.NewPointer(recvType)
@@ -825,6 +830,7 @@ func (c *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 	if isWrapped(recvType) {
 		recv = c.formatExpr("new %s(%s)", c.typeName(methodsRecvType), recv)
 	}
+
 	return recv
 }
 
@@ -1130,11 +1136,16 @@ func (c *funcContext) translateImplicitConversion(expr ast.Expr, desiredType typ
 			// wrap JS object into js.Object struct when converting to interface
 			return c.formatExpr("new $jsObjectPtr(%e)", expr)
 		}
+
+		switch exprType.Underlying().(type) {
+		case *types.Array:
+			return c.formatExpr("new %1s($clone(%e, %1s))", c.typeName(exprType), expr)
+		case *types.Struct:
+			return c.formatExpr("new %1e.constructor.elem($clone(%1e, %s))", expr, c.typeName(exprType))
+		}
+
 		if isWrapped(exprType) {
 			return c.formatExpr("new %s(%e)", c.typeName(exprType), expr)
-		}
-		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
-			return c.formatExpr("new %1e.constructor.elem(%1e)", expr)
 		}
 	}
 

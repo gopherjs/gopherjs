@@ -296,6 +296,14 @@ var $clone = function(src, type) {
   return clone;
 };
 
+var $copyInterfaceVal = function(src) {
+	if (src.constructor.copy) {
+		return new src.constructor($clone(src.$val, src.constructor));
+	}
+
+	return src;
+};
+
 var $pointerOfStructConversion = function(obj, type) {
   if(obj.$proxies === undefined) {
     obj.$proxies = {};

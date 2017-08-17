@@ -12,6 +12,10 @@ const GOOS = sys.GOOS
 const GOARCH = "js"
 const Compiler = "gopherjs"
 
+// Note: code in build/build.go depends on this constant having this exact name. If the name of this constant is changed
+// or the constant is removed, the code there needs to be updated as well.
+const gopherJSPath = "github.com/gopherjs/gopherjs/js"
+
 // fake for error.go
 type eface struct {
 	_type *_type
@@ -24,7 +28,7 @@ func (t *_type) string() string {
 }
 
 func init() {
-	jsPkg := js.Global.Get("$packages").Get("github.com/gopherjs/gopherjs/js")
+	jsPkg := js.Global.Get("$packages").Get(gopherJSPath)
 	js.Global.Set("$jsObjectPtr", jsPkg.Get("Object").Get("ptr"))
 	js.Global.Set("$jsErrorPtr", jsPkg.Get("Error").Get("ptr"))
 	js.Global.Set("$throwRuntimeError", js.InternalObject(func(msg string) {

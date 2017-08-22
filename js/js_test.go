@@ -571,3 +571,28 @@ func TestUint8Array(t *testing.T) {
 		t.Errorf("Non-empty byte array is not externalized as a Uint8Array")
 	}
 }
+
+func TestTypeSwitchJsObject(t *testing.T) {
+	obj := js.Global.Get("Object").New()
+	obj.Set("foo", "bar")
+
+	exp := "bar"
+
+	if act := obj.Get("foo").String(); act != exp {
+		t.Fatalf("Direct access to *js.Object field gave %q; expected %q", act, exp)
+	}
+
+	var x interface{} = obj
+	switch x := x.(type) {
+	case *js.Object:
+		if act := x.Get("foo").String(); act != exp {
+			t.Fatalf("Value passed through interface and type switch gave %q; expected %q", act, exp)
+		}
+	}
+
+	if y, ok := x.(*js.Object); ok {
+		if act := y.Get("foo").String(); act != exp {
+			t.Fatalf("Value passed through interface and type assert gave %q; expected %q", act, exp)
+		}
+	}
+}

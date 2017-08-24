@@ -72,6 +72,10 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 	return importWithSrcDir(path, wd, mode, installSuffix, buildTags)
 }
 
+// TODO: figure out how we can determine this per project/per operation so that it can be set and unset properly rather
+//       than maintaining it as package-level variable state.
+var vendoredGopherJS string
+
 func importWithSrcDir(path string, srcDir string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
 	buildContext := NewBuildContext(installSuffix, buildTags)
 	if path == "syscall" { // syscall needs to use a typical GOARCH like amd64 to pick up definitions for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t, etc.
@@ -81,14 +85,21 @@ func importWithSrcDir(path string, srcDir string, mode build.ImportMode, install
 			buildContext.InstallSuffix += "_" + installSuffix
 		}
 	}
+
+	// if current path is for gopherjs import and a vendored path for gopherjs has previously been encountered, update
+	// the path to be the vendored one
+	if strings.HasPrefix(path, "github.com/gopherjs/gopherjs") && vendoredGopherJS != "" {
+		path = vendoredGopherJS + strings.TrimPrefix(path, "github.com/gopherjs/gopherjs")
+	}
+
 	pkg, err := buildContext.Import(path, srcDir, mode)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO: Resolve issue #415 and remove this temporary workaround.
+	// if gopherjs package path is vendored, store it so that we can update future paths
 	if strings.HasSuffix(pkg.ImportPath, "/vendor/github.com/gopherjs/gopherjs/js") {
-		return nil, fmt.Errorf("vendoring github.com/gopherjs/gopherjs/js package is not supported, see https://github.com/gopherjs/gopherjs/issues/415")
+		vendoredGopherJS = strings.TrimSuffix(pkg.ImportPath, "/js")
 	}
 
 	switch path {
@@ -249,6 +260,36 @@ func parseAndAugment(pkg *build.Package, isTest bool, fileSet *token.FileSet) ([
 				panic(err)
 			}
 			r.Close()
+
+			if importPath == "runtime" && name == "runtime.go" && vendoredGopherJS != "" {
+				// special case handling for #415: runtime.go contains a string constant named "gopherJSPath" that
+				// contains the import path "github.com/gopherjs/gopherjs/js". If we are using a vendored version of
+				// gopherjs, we must update the contents of the string constant to be the vendored path.
+				for _, decl := range file.Decls {
+					switch d := decl.(type) {
+					case *ast.GenDecl:
+						switch d.Tok {
+						case token.CONST:
+							for _, spec := range d.Specs {
+								for i, name := range spec.(*ast.ValueSpec).Names {
+									if name.Name != "gopherJSPath" {
+										continue
+									}
+									if i < len(spec.(*ast.ValueSpec).Values) {
+										constValue, ok := spec.(*ast.ValueSpec).Values[i].(*ast.BasicLit)
+										if !ok {
+											continue
+										}
+										// update value of constant to be "js" package within vendored gopherjs
+										constValue.Value = fmt.Sprintf(`"%s/js"`, vendoredGopherJS)
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
 			for _, decl := range file.Decls {
 				switch d := decl.(type) {
 				case *ast.FuncDecl:

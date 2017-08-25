@@ -217,6 +217,11 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var importDecls []*Decl
 	var importedPaths []string
 	for _, importedPkg := range typesPkg.Imports() {
+		if importedPkg == types.Unsafe {
+			// Prior to Go 1.9, unsafe import was excluded by Imports() method,
+			// but now we do it here to maintain previous behavior.
+			continue
+		}
 		c.p.pkgVars[importedPkg.Path()] = c.newVariableWithLevel(importedPkg.Name(), true)
 		importedPaths = append(importedPaths, importedPkg.Path())
 	}

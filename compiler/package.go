@@ -433,6 +433,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	// named types
 	var typeDecls []*Decl
 	for _, o := range c.p.typeNames {
+		if o.IsAlias() {
+			continue
+		}
 		typeName := c.objectName(o)
 		d := Decl{
 			Vars:            []string{typeName},
@@ -468,9 +471,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				c.Printf(`%s = $newType(%d, %s, "%s.%s", %t, "%s", %t, %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name() != "", o.Pkg().Path(), o.Exported(), constructor)
 			})
 			d.MethodListCode = c.CatchOutput(0, func() {
-				if o.IsAlias() {
-					return
-				}
 				named := o.Type().(*types.Named)
 				if _, ok := named.Underlying().(*types.Interface); ok {
 					return

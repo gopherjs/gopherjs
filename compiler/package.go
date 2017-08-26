@@ -468,39 +468,38 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				c.Printf(`%s = $newType(%d, %s, "%s.%s", %t, "%s", %t, %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name() != "", o.Pkg().Path(), o.Exported(), constructor)
 			})
 			d.MethodListCode = c.CatchOutput(0, func() {
-				if _, isInterface := o.Type().Underlying().(*types.Interface); isInterface {
+				if o.IsAlias() {
 					return
 				}
-				switch t := o.Type().(type) {
-				case *types.Named:
-					var methods []string
-					var ptrMethods []string
-					for i := 0; i < t.NumMethods(); i++ {
-						method := t.Method(i)
-						name := method.Name()
-						if reservedKeywords[name] {
-							name += "$"
-						}
-						pkgPath := ""
-						if !method.Exported() {
-							pkgPath = method.Pkg().Path()
-						}
-						t := method.Type().(*types.Signature)
-						entry := fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", typ: $funcType(%s)}`, name, method.Name(), pkgPath, c.initArgs(t))
-						if _, isPtr := t.Recv().Type().(*types.Pointer); isPtr {
-							ptrMethods = append(ptrMethods, entry)
-							continue
-						}
-						methods = append(methods, entry)
+				named := o.Type().(*types.Named)
+				if _, ok := named.Underlying().(*types.Interface); ok {
+					return
+				}
+				var methods []string
+				var ptrMethods []string
+				for i := 0; i < named.NumMethods(); i++ {
+					method := named.Method(i)
+					name := method.Name()
+					if reservedKeywords[name] {
+						name += "$"
 					}
-					if len(methods) > 0 {
-						c.Printf("%s.methods = [%s];", c.typeName(o.Type()), strings.Join(methods, ", "))
+					pkgPath := ""
+					if !method.Exported() {
+						pkgPath = method.Pkg().Path()
 					}
-					if len(ptrMethods) > 0 {
-						c.Printf("%s.methods = [%s];", c.typeName(types.NewPointer(o.Type())), strings.Join(ptrMethods, ", "))
+					t := method.Type().(*types.Signature)
+					entry := fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", typ: $funcType(%s)}`, name, method.Name(), pkgPath, c.initArgs(t))
+					if _, isPtr := t.Recv().Type().(*types.Pointer); isPtr {
+						ptrMethods = append(ptrMethods, entry)
+						continue
 					}
-				case *types.Struct:
-					// TODO: Support type aliases.
+					methods = append(methods, entry)
+				}
+				if len(methods) > 0 {
+					c.Printf("%s.methods = [%s];", c.typeName(named), strings.Join(methods, ", "))
+				}
+				if len(ptrMethods) > 0 {
+					c.Printf("%s.methods = [%s];", c.typeName(types.NewPointer(named)), strings.Join(ptrMethods, ", "))
 				}
 			})
 			switch t := o.Type().Underlying().(type) {

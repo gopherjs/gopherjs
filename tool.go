@@ -750,26 +750,25 @@ func runNode(script string, args []string, dir string, quiet bool) error {
 	}
 
 	if runtime.GOOS != "windows" {
-		// For non-windows OS environments, we've seen issues with stack space
-		// limits causeing Go std library tests that are recursion-heavy to fail
-		// (see https://github.com/gopherjs/gopherjs/issues/661 for more detail).
+		// For non-Windows environments, we've seen issues with stack space
+		// limits causing Go standard library tests that are recursion-heavy to
+		// fail (see https://github.com/gopherjs/gopherjs/issues/661 for more details).
 		//
-		// There are two limits that come into play here, listed in order:
+		// There are two limits that come into play here:
 		//
 		// 1. V8 limit (NodeJS effectively wraps V8)
 		// 2. OS process limit
 		//
 		// In order to limit the surface area of the gopherjs command and not
-		// expose V8 flags/options etc to the caller, we control limit 1 via
-		// limit 2. That is to say, whatever value is returned by ulimit -s is
-		// essentially the value that we pass on to NodeJS via the appropriate V8
-		// flag.
+		// expose V8 flags/options etc. to the caller, we control limit 1 via
+		// limit 2. Whatever value is returned by ulimit -s is the value that we
+		// pass on to NodeJS via the appropriate V8 flag.
 		var r syscall.Rlimit
 		err := syscall.Getrlimit(syscall.RLIMIT_STACK, &r)
 		if err != nil {
 			return fmt.Errorf("failed to get stack size limit: %v", err)
 		}
-		// rlimit value is in bytes, we need rounded kBytes value per node --v8-options.
+		// rlimit value is in bytes, we need rounded kilobytes value per node --v8-options.
 		stackSize := fmt.Sprintf("--stack_size=%v", r.Cur/1000)
 		allArgs = append(allArgs, stackSize)
 	}

@@ -31,6 +31,7 @@ import (
 
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/gopherjs/gopherjs/internal/sysutil"
 	"github.com/kisielk/gotool"
 	"github.com/neelance/sourcemap"
 	"github.com/spf13/cobra"
@@ -765,12 +766,11 @@ func runNode(script string, args []string, dir string, quiet bool) error {
 		//
 		// 	ulimit -s 10000 && gopherjs test
 		//
-		var r syscall.Rlimit
-		err := syscall.Getrlimit(syscall.RLIMIT_STACK, &r)
+		cur, err := sysutil.RlimitStack()
 		if err != nil {
 			return fmt.Errorf("failed to get stack size limit: %v", err)
 		}
-		allArgs = append(allArgs, fmt.Sprintf("--stack_size=%v", r.Cur/1000)) // Convert from bytes to KB.
+		allArgs = append(allArgs, fmt.Sprintf("--stack_size=%v", cur/1000)) // Convert from bytes to KB.
 	}
 
 	allArgs = append(allArgs, script)

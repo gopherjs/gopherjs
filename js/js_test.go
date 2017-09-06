@@ -579,20 +579,21 @@ func TestTypeSwitchJSObject(t *testing.T) {
 	want := "bar"
 
 	if got := obj.Get("foo").String(); got != want {
-		t.Fatalf("Direct access to *js.Object field gave %q, want %q", got, want)
+		t.Errorf("Direct access to *js.Object field gave %q, want %q", got, want)
 	}
 
 	var x interface{} = obj
+
 	switch x := x.(type) {
 	case *js.Object:
 		if got := x.Get("foo").String(); got != want {
-			t.Fatalf("Value passed through interface and type switch gave %q, want %q", got, want)
+			t.Errorf("Value passed through interface and type switch gave %q, want %q", got, want)
 		}
 	}
 
 	if y, ok := x.(*js.Object); ok {
 		if got := y.Get("foo").String(); got != want {
-			t.Fatalf("Value passed through interface and type assert gave %q, want %q", got, want)
+			t.Errorf("Value passed through interface and type assert gave %q, want %q", got, want)
 		}
 	}
 }

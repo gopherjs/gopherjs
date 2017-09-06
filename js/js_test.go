@@ -572,27 +572,27 @@ func TestUint8Array(t *testing.T) {
 	}
 }
 
-func TestTypeSwitchJsObject(t *testing.T) {
+func TestTypeSwitchJSObject(t *testing.T) {
 	obj := js.Global.Get("Object").New()
 	obj.Set("foo", "bar")
 
-	exp := "bar"
+	want := "bar"
 
-	if act := obj.Get("foo").String(); act != exp {
-		t.Fatalf("Direct access to *js.Object field gave %q; expected %q", act, exp)
+	if got := obj.Get("foo").String(); got != want {
+		t.Fatalf("Direct access to *js.Object field gave %q, want %q", got, want)
 	}
 
 	var x interface{} = obj
 	switch x := x.(type) {
 	case *js.Object:
-		if act := x.Get("foo").String(); act != exp {
-			t.Fatalf("Value passed through interface and type switch gave %q; expected %q", act, exp)
+		if got := x.Get("foo").String(); got != want {
+			t.Fatalf("Value passed through interface and type switch gave %q, want %q", got, want)
 		}
 	}
 
 	if y, ok := x.(*js.Object); ok {
-		if act := y.Get("foo").String(); act != exp {
-			t.Fatalf("Value passed through interface and type assert gave %q; expected %q", act, exp)
+		if got := y.Get("foo").String(); got != want {
+			t.Fatalf("Value passed through interface and type assert gave %q, want %q", got, want)
 		}
 	}
 }

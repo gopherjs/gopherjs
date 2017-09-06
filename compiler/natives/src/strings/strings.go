@@ -20,6 +20,10 @@ func LastIndex(s, sep string) int {
 	return js.InternalObject(s).Call("lastIndexOf", js.InternalObject(sep)).Int()
 }
 
+func Join(a []string, sep string) string {
+	return js.InternalObject(a).Get("$array").Call("join", js.InternalObject(sep)).String()
+}
+
 func Count(s, sep string) int {
 	n := 0
 	// special cases

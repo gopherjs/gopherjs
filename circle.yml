@@ -20,7 +20,7 @@ test:
     - diff -u <(echo -n) <(go list ./compiler/natives/src/...) # All those packages should have // +build js.
     - gopherjs install -v net/http # Should build successfully (can't run tests, since only client is supported).
     - >
-      gopherjs test --minify -v --short
+      ulimit -s 10000 && gopherjs test --minify -v --short
       github.com/gopherjs/gopherjs/tests
       github.com/gopherjs/gopherjs/tests/main
       github.com/gopherjs/gopherjs/js

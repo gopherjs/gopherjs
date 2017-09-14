@@ -143,11 +143,11 @@ func main() {
 					}
 					if len(pkgs) == 1 { // Only consider writing output if single package specified.
 						if pkgObj == "" {
-                                                       if pkg.ImportPath == "." {
-                                                               pkgObj = filepath.Base(currentDirectory) + ".js"
-                                                       } else {
-                                                               pkgObj = filepath.Base(pkg.ImportPath) + ".js"
-                                                       }
+							if pkg.ImportPath == "." {
+								pkgObj = filepath.Base(currentDirectory) + ".js"
+							} else {
+								pkgObj = filepath.Base(pkg.ImportPath) + ".js"
+							}
 						}
 						if pkg.IsCommand() && !pkg.UpToDate {
 							if err := s.WriteCommandPackage(archive, pkgObj); err != nil {

@@ -151,7 +151,7 @@ func main() {
 								path := filepath.Dir(currentDirectory)
 								step := filepath.Dir(filepath.Clean(pkg.ImportPath))
 								for {
-									if step == "." {
+									if step == "." || (len(step) == 1 && os.IsPathSeparator(step[0])) {
 										break
 									}
 									path = filepath.Dir(path)

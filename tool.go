@@ -148,10 +148,14 @@ func main() {
 								pkgObj = filepath.Base(currentDirectory) + ".js"
 							} else if importPath == ".." {
 								// allow for build requests like "build .. or build ../.."
-								path := currentDirectory
-								count := strings.Count(pkg.ImportPath, "..")
-								for i := 0; i < count; i++ {
+								path := filepath.Dir(currentDirectory)
+								step := filepath.Dir(filepath.Clean(pkg.ImportPath))
+								for {
+									if step == "." {
+										break
+									}
 									path = filepath.Dir(path)
+									step = filepath.Dir(step)
 								}
 								pkgObj = filepath.Base(path) + ".js"
 							} else {

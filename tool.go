@@ -143,7 +143,7 @@ func main() {
 					}
 					if len(pkgs) == 1 { // Only consider writing output if single package specified.
 						if pkgObj == "" {
-							importPath := filepath.Base(pkg.ImportPath)
+							importPath := filepath.Base(filepath.Clean(pkg.ImportPath))
 							if importPath == "." {
 								pkgObj = filepath.Base(currentDirectory) + ".js"
 							} else if importPath == ".." {

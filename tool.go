@@ -143,23 +143,10 @@ func main() {
 					}
 					if len(pkgs) == 1 { // Only consider writing output if single package specified.
 						if pkgObj == "" {
-							importPath := filepath.Base(filepath.Clean(pkg.ImportPath))
-							if importPath == "." {
-								pkgObj = filepath.Base(currentDirectory) + ".js"
-							} else if importPath == ".." {
-								// allow for build requests like "build .. or build ../.."
-								path := filepath.Dir(currentDirectory)
-								step := filepath.Dir(filepath.Clean(pkg.ImportPath))
-								for {
-									if step == "." || (len(step) == 1 && os.IsPathSeparator(step[0])) {
-										break
-									}
-									path = filepath.Dir(path)
-									step = filepath.Dir(step)
-								}
-								pkgObj = filepath.Base(path) + ".js"
-							} else {
+							if !build.IsLocalImport(pkg.ImportPath) {
 								pkgObj = filepath.Base(pkg.ImportPath) + ".js"
+							} else {
+								pkgObj = filepath.Base(pkg.Dir) + ".js"
 							}
 						}
 						if pkg.IsCommand() && !pkg.UpToDate {

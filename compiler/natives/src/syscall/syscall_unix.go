@@ -67,6 +67,9 @@ func Syscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
 		return uintptr(array.Length()), 0, 0
 	}
 	if trap == SYS_EXIT {
+		if process := js.Global.Get("process"); process != js.Undefined {
+			process.Call("exit", a1)
+		}
 		runtime.Goexit()
 	}
 	printWarning()

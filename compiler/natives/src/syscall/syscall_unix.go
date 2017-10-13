@@ -61,9 +61,24 @@ func Syscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
 	}
 	if trap == SYS_WRITE && (a1 == 1 || a1 == 2) {
 		array := js.InternalObject(a2)
-		slice := make([]byte, array.Length())
-		js.InternalObject(slice).Set("$array", array)
-		printToConsole(slice)
+		if process := js.Global.Get("process"); process != js.Undefined {
+			var buffer interface{}
+			if bufferFrom := js.Global.Get("Buffer").Get("from"); bufferFrom != js.Undefined {
+				// since node 5.10.0
+				buffer = bufferFrom.Invoke(array)
+			} else {
+				buffer = js.Global.Get("Buffer").New(array)
+			}
+			if a1 == 1 {
+				process.Get("stdout").Call("write", buffer)
+			} else {
+				process.Get("stderr").Call("write", buffer)
+			}
+		} else {
+			slice := make([]byte, array.Length())
+			js.InternalObject(slice).Set("$array", array)
+			printToConsole(slice)
+		}
 		return uintptr(array.Length()), 0, 0
 	}
 	if trap == SYS_EXIT {

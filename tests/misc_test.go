@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"encoding/json"
 	"math"
 	"reflect"
 	"runtime"
@@ -621,5 +622,12 @@ func TestTypeConversion(t *testing.T) {
 	f1, f2, f3 := 4.0, 2.0, 2.0
 	if (f1-f2)/f3 != float64(f1-f2)/float64(f3) {
 		t.Fail()
+	}
+}
+
+func TestJSONWithFixedArray(t *testing.T) {
+	var v map[string][2]float64
+	if err := json.Unmarshal([]byte(`{"a": [350, 350]}`), &v); err != nil {
+		t.Error(err)
 	}
 }

@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"encoding/json"
 	"math"
 	"reflect"
 	"runtime"
@@ -625,9 +624,10 @@ func TestTypeConversion(t *testing.T) {
 	}
 }
 
-func TestJSONWithFixedArray(t *testing.T) {
-	var v map[string][2]float64
-	if err := json.Unmarshal([]byte(`{"a": [350, 350]}`), &v); err != nil {
-		t.Error(err)
-	}
+func TestReflectSetMapIndex(t *testing.T) {
+	mt := reflect.TypeOf(map[string][1]int{})
+	m := reflect.MakeMap(mt)
+	k := reflect.ValueOf("foo")
+	v := reflect.New(mt.Elem()).Elem()
+	m.SetMapIndex(k, v)
 }

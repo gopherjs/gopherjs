@@ -520,7 +520,10 @@ func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
 
 func mapassign(t *rtype, m, key, val unsafe.Pointer) {
 	kv, k := keyFor(t, key)
-	jsVal := js.InternalObject(val).Call("$get")
+	jsVal := js.InternalObject(val)
+	if jsVal.Get("$get") != js.Undefined {
+		jsVal = jsVal.Call("$get")
+	}
 	et := t.Elem()
 	if et.Kind() == Struct {
 		newVal := jsType(et).Call("zero")

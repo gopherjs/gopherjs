@@ -623,3 +623,11 @@ func TestTypeConversion(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestReflectSetMapIndex(t *testing.T) {
+	mt := reflect.TypeOf(map[string][1]int{})
+	m := reflect.MakeMap(mt)
+	k := reflect.ValueOf("foo")
+	v := reflect.New(mt.Elem()).Elem()
+	m.SetMapIndex(k, v)
+}

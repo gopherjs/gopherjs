@@ -478,7 +478,7 @@ func loadScalar(p unsafe.Pointer, n uintptr) uintptr {
 	return js.InternalObject(p).Call("$get").Unsafe()
 }
 
-func makechan(typ *rtype, size uint64) (ch unsafe.Pointer) {
+func makechan(typ *rtype, size int) (ch unsafe.Pointer) {
 	ctyp := (*chanType)(unsafe.Pointer(typ))
 	return unsafe.Pointer(js.Global.Get("$Chan").New(jsType(ctyp.elem), size).Unsafe())
 }

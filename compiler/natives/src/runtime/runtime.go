@@ -218,3 +218,11 @@ func KeepAlive(interface{}) {}
 func throw(s string) {
 	panic(errorString(s))
 }
+
+// These are used by panicwrap. Not implemented for GOARCH=js.
+// TODO: Implement if possible.
+func getcallerpc() uintptr         { return 0 }
+func findfunc(pc uintptr) funcInfo { return funcInfo{} }
+func funcname(f funcInfo) string   { return "" }
+
+type funcInfo struct{}

@@ -99,6 +99,9 @@ func (t *XHRTransport) RoundTrip(req *Request) (*Response, error) {
 	}
 
 	select {
+	case <-req.Context().Done():
+		xhr.Call("abort")
+		return nil, <-errCh
 	case resp := <-respCh:
 		return resp, nil
 	case err := <-errCh:

@@ -641,11 +641,11 @@ func methodReceiver(op string, v Value, i int) (_, t *rtype, fn unsafe.Pointer) 
 		t = tt.typeOff(m.typ)
 		prop = tt.nameOff(m.name).name()
 	} else {
-		ut := v.typ.uncommon()
-		if ut == nil || uint(i) >= uint(ut.mcount) {
+		ms := v.typ.exportedMethods()
+		if uint(i) >= uint(len(ms)) {
 			panic("reflect: internal error: invalid method index")
 		}
-		m := ut.methods()[i]
+		m := ms[i]
 		if !v.typ.nameOff(m.name).isExported() {
 			panic("reflect: " + op + " of unexported method")
 		}

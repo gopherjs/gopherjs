@@ -156,3 +156,20 @@ var deepEqualTests = []DeepEqualTest{
 	{&loopy1, &loopy1, true},
 	//{&loopy1, &loopy2, true}, // TODO: Fix.
 }
+
+func TestIssue22073(t *testing.T) {
+	m := reflect.ValueOf(NonExportedFirst(0)).Method(0)
+
+	if got := m.Type().NumOut(); got != 0 {
+		t.Errorf("NumOut: got %v, want 0", got)
+	}
+
+	// TODO: Fix this. The call below fails with:
+	//
+	//	var $call = function(fn, rcvr, args) { return fn.apply(rcvr, args); };
+	//	                                                 ^
+	//	TypeError: Cannot read property 'apply' of undefined
+
+	// Shouldn't panic.
+	//m.Call(nil)
+}

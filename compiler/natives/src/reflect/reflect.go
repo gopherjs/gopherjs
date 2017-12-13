@@ -584,7 +584,7 @@ func cvtDirect(v Value, typ Type) Value {
 	default:
 		panic(&ValueError{"reflect.Convert", k})
 	}
-	return Value{typ.common(), unsafe.Pointer(val.Unsafe()), v.flag&(flagRO|flagIndir) | flag(typ.Kind())}
+	return Value{typ.common(), unsafe.Pointer(val.Unsafe()), v.flag.ro() | v.flag&flagIndir | flag(typ.Kind())}
 }
 
 func Copy(dst, src Value) int {
@@ -698,7 +698,7 @@ func makeMethodValue(op string, v Value) Value {
 	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
 		return js.InternalObject(fn).Call("apply", rcvr, arguments)
 	})
-	return Value{v.Type().common(), unsafe.Pointer(fv.Unsafe()), v.flag&flagRO | flag(Func)}
+	return Value{v.Type().common(), unsafe.Pointer(fv.Unsafe()), v.flag.ro() | flag(Func)}
 }
 
 func (t *rtype) pointers() bool {
@@ -928,7 +928,7 @@ func (v Value) Elem() Value {
 			return Value{}
 		}
 		typ := reflectType(val.Get("constructor"))
-		return makeValue(typ, val.Get("$val"), v.flag&flagRO)
+		return makeValue(typ, val.Get("$val"), v.flag.ro())
 
 	case Ptr:
 		if v.IsNil() {
@@ -1049,8 +1049,7 @@ func (v Value) Index(i int) Value {
 			panic("reflect: array index out of range")
 		}
 		typ := tt.elem
-		fl := v.flag & (flagRO | flagIndir | flagAddr)
-		fl |= flag(typ.Kind())
+		fl := v.flag&(flagIndir|flagAddr) | v.flag.ro() | flag(typ.Kind())
 
 		a := js.InternalObject(v.ptr)
 		if fl&flagIndir != 0 && typ.Kind() != Array && typ.Kind() != Struct {
@@ -1068,8 +1067,7 @@ func (v Value) Index(i int) Value {
 		}
 		tt := (*sliceType)(unsafe.Pointer(v.typ))
 		typ := tt.elem
-		fl := flagAddr | flagIndir | v.flag&flagRO
-		fl |= flag(typ.Kind())
+		fl := flagAddr | flagIndir | v.flag.ro() | flag(typ.Kind())
 
 		i += s.Get("$offset").Int()
 		a := s.Get("$array")
@@ -1086,9 +1084,9 @@ func (v Value) Index(i int) Value {
 		if i < 0 || i >= len(str) {
 			panic("reflect: string index out of range")
 		}
-		fl := v.flag&flagRO | flag(Uint8)
+		fl := v.flag.ro() | flag(Uint8) | flagIndir
 		c := str[i]
-		return Value{uint8Type, unsafe.Pointer(&c), fl | flagIndir}
+		return Value{uint8Type, unsafe.Pointer(&c), fl}
 
 	default:
 		panic(&ValueError{"reflect.Value.Index", k})
@@ -1254,7 +1252,7 @@ func (v Value) Slice(i, j int) Value {
 		panic("reflect.Value.Slice: slice index out of bounds")
 	}
 
-	return makeValue(typ, js.Global.Call("$subslice", s, i, j), v.flag&flagRO)
+	return makeValue(typ, js.Global.Call("$subslice", s, i, j), v.flag.ro())
 }
 
 func (v Value) Slice3(i, j, k int) Value {
@@ -1286,7 +1284,7 @@ func (v Value) Slice3(i, j, k int) Value {
 		panic("reflect.Value.Slice3: slice index out of bounds")
 	}
 
-	return makeValue(typ, js.Global.Call("$subslice", s, i, j, k), v.flag&flagRO)
+	return makeValue(typ, js.Global.Call("$subslice", s, i, j, k), v.flag.ro())
 }
 
 func (v Value) Close() {

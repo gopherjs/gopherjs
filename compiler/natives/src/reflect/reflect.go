@@ -598,12 +598,18 @@ func Copy(dst, src Value) int {
 	dst.mustBeExported()
 
 	sk := src.kind()
+	var stringCopy bool
 	if sk != Array && sk != Slice {
-		panic(&ValueError{"reflect.Copy", sk})
+		stringCopy = sk == String && dst.typ.Elem().Kind() == Uint8
+		if !stringCopy {
+			panic(&ValueError{"reflect.Copy", sk})
+		}
 	}
 	src.mustBeExported()
 
-	typesMustMatch("reflect.Copy", dst.typ.Elem(), src.typ.Elem())
+	if !stringCopy {
+		typesMustMatch("reflect.Copy", dst.typ.Elem(), src.typ.Elem())
+	}
 
 	dstVal := dst.object()
 	if dk == Array {
@@ -615,6 +621,9 @@ func Copy(dst, src Value) int {
 		srcVal = jsType(SliceOf(src.typ.Elem())).New(srcVal)
 	}
 
+	if stringCopy {
+		return js.Global.Call("$copyString", dstVal, srcVal).Int()
+	}
 	return js.Global.Call("$copySlice", dstVal, srcVal).Int()
 }
 

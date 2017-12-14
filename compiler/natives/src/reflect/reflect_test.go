@@ -156,3 +156,7 @@ var deepEqualTests = []DeepEqualTest{
 	{&loopy1, &loopy1, true},
 	//{&loopy1, &loopy2, true}, // TODO: Fix.
 }
+
+func TestCallReturnsEmpty(t *testing.T) {
+	t.Skip("test uses runtime.SetFinalizer, which is not supported by GopherJS")
+}

@@ -918,7 +918,7 @@ func (v Value) Elem() Value {
 	switch k := v.kind(); k {
 	case Interface:
 		val := v.object()
-		if val == js.Global.Get("$ifaceNil") {
+		if val == js.Global.Get("$ifaceNil") { // TODO: Do we need to check for val == js.InternalObject(0) here?
 			return Value{}
 		}
 		typ := reflectType(val.Get("constructor"))
@@ -1102,7 +1102,7 @@ func (v Value) IsNil() bool {
 	case Map:
 		return v.object() == js.InternalObject(false)
 	case Interface:
-		return v.object() == js.Global.Get("$ifaceNil")
+		return v.object() == js.Global.Get("$ifaceNil") || v.object() == js.InternalObject(0)
 	default:
 		panic(&ValueError{"reflect.Value.IsNil", k})
 	}

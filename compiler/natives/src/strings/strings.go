@@ -45,3 +45,13 @@ func Count(s, sep string) int {
 	}
 	return n
 }
+
+func (b *Builder) String() string {
+	// Upstream Builder.String relies on package unsafe. We can't do that.
+	// TODO: It's possible that the entire strings.Builder API can be implemented
+	//       more efficiently for GOARCH=js specifically (avoid using []byte, instead
+	//       use a String directly; or some JavaScript string builder API if one exists).
+	//       But this is more work, defer doing it until there's a need shown via profiling,
+	//       and there are benchmarks available (see https://github.com/golang/go/issues/18990#issuecomment-352068533).
+	return string(b.buf)
+}

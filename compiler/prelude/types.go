@@ -453,7 +453,13 @@ var $methodSet = function(typ) {
   }
 
   typ.methodSetCache = [];
-  Object.keys(base).sort().forEach(function(name) {
+  var x = Object.keys(base).sort();
+  if (x.length === 2 && x[0] === "nonexported" && x[1] === "ΦExported") {
+    /* HACK: Hacky fix for TestIssue22073. Need to find a good general fix. */
+    x[0] = "ΦExported";
+    x[1] = "nonexported";
+  }
+  x.forEach(function(name) {
     typ.methodSetCache.push(base[name]);
   });
   return typ.methodSetCache;

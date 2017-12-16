@@ -17,6 +17,7 @@ var dummys = js.Global.Call("eval", `({
 	someString: "abc\u1234",
 	someInt: 42,
 	someFloat: 42.123,
+	someByteArray: []byte{1,2,3},
 	someArray: [41, 42, 43],
 	add: function(a, b) {
 		return a + b;
@@ -100,6 +101,17 @@ func TestFloat(t *testing.T) {
 		t.Errorf("expected %#v, got %#v", e, i)
 	}
 	if dummys.Set("otherFloat", e); dummys.Get("otherFloat").Float() != e {
+		t.Fail()
+	}
+}
+
+func TestByteArray(t *testing.T) {
+	e := []byte{1,2,3}
+	o := dummys.Get("someByteArray")
+	if v := o.Interface().([]byte); v != e {
+		t.Errorf("expected %#v, got %#v", e, v)
+	}
+	if dummys.Set("otherByteArray", e); dummys.Get("otherByteArray").Interface().([]byte) != e {
 		t.Fail()
 	}
 }

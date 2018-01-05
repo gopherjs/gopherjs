@@ -5,22 +5,32 @@ package sync
 import "github.com/gopherjs/gopherjs/js"
 
 var semWaiters = make(map[*uint32][]chan bool)
+var semAwoken = make(map[*uint32]uint32)
 
 func runtime_Semacquire(s *uint32) {
-	if *s == 0 {
-		ch := make(chan bool)
-		semWaiters[s] = append(semWaiters[s], ch)
-		<-ch
-	}
-	*s--
+	runtime_SemacquireMutex(s, false)
 }
 
 // SemacquireMutex is like Semacquire, but for profiling contended Mutexes.
 // Mutex profiling is not supported, so just use the same implementation as runtime_Semacquire.
 // TODO: Investigate this. If it's possible to implement, consider doing so, otherwise remove this comment.
 func runtime_SemacquireMutex(s *uint32, lifo bool) {
-	// TODO: Use lifo if needed/possible.
-	runtime_Semacquire(s)
+	// semAwoken prevents a goroutine to acquire the semaphore while waiters are about to be awaken by <-ch.
+	// See https://github.com/gopherjs/gopherjs/issues/736.
+	if (*s - semAwoken[s]) == 0 {
+		ch := make(chan bool)
+		if lifo {
+			semWaiters[s] = append([]chan bool{ch}, semWaiters[s]...)
+		} else {
+			semWaiters[s] = append(semWaiters[s], ch)
+		}
+		<-ch
+		semAwoken[s] -= 1
+		if semAwoken[s] == 0 {
+			delete(semAwoken, s)
+		}
+	}
+	*s--
 }
 
 func runtime_Semrelease(s *uint32, handoff bool) {
@@ -38,6 +48,8 @@ func runtime_Semrelease(s *uint32, handoff bool) {
 	if len(w) == 0 {
 		delete(semWaiters, s)
 	}
+
+	semAwoken[s] += 1
 
 	ch <- true
 }

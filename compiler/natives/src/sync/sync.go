@@ -73,3 +73,8 @@ func runtime_nanotime() int64 {
 	const millisecond = 1000000
 	return js.Global.Get("Date").New().Call("getTime").Int64() * millisecond
 }
+
+// Implemented in runtime.
+func throw(s string) {
+	js.Global.Call("$throwRuntimeError", s)
+}

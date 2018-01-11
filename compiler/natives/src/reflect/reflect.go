@@ -42,7 +42,7 @@ func reflectType(typ *js.Object) *rtype {
 		rt := &rtype{
 			size: uintptr(typ.Get("size").Int()),
 			kind: uint8(typ.Get("kind").Int()),
-			str:  newNameOff(newName(typ.Get("string").String(), "", typ.Get("exported").Bool())),
+			str:  newNameOff(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool())),
 		}
 		js.InternalObject(rt).Set("jsType", typ)
 		typ.Set("reflectType", js.InternalObject(rt))
@@ -57,12 +57,12 @@ func reflectType(typ *js.Object) *rtype {
 			for i := range reflectMethods {
 				m := methodSet.Index(i)
 				reflectMethods[i] = method{
-					name: newNameOff(newName(m.Get("name").String(), "", m.Get("pkg").String() == "")),
+					name: newNameOff(newName(internalStr(m.Get("name")), "", internalStr(m.Get("pkg")) == "")),
 					mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				}
 			}
 			ut := &uncommonType{
-				pkgPath:  newNameOff(newName(typ.Get("pkg").String(), "", false)),
+				pkgPath:  newNameOff(newName(internalStr(typ.Get("pkg")), "", false)),
 				mcount:   uint16(methodSet.Length()),
 				_methods: reflectMethods,
 			}
@@ -116,13 +116,13 @@ func reflectType(typ *js.Object) *rtype {
 			for i := range imethods {
 				m := methods.Index(i)
 				imethods[i] = imethod{
-					name: newNameOff(newName(m.Get("name").String(), "", m.Get("pkg").String() == "")),
+					name: newNameOff(newName(internalStr(m.Get("name")), "", internalStr(m.Get("pkg")) == "")),
 					typ:  newTypeOff(reflectType(m.Get("typ"))),
 				}
 			}
 			setKindType(rt, &interfaceType{
 				rtype:   *rt,
-				pkgPath: newName(typ.Get("pkg").String(), "", false),
+				pkgPath: newName(internalStr(typ.Get("pkg")), "", false),
 				methods: imethods,
 			})
 		case Map:
@@ -148,14 +148,14 @@ func reflectType(typ *js.Object) *rtype {
 					offsetAnon |= 1
 				}
 				reflectFields[i] = structField{
-					name:       newName(f.Get("name").String(), f.Get("tag").String(), f.Get("exported").Bool()),
+					name:       newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool()),
 					typ:        reflectType(f.Get("typ")),
 					offsetAnon: offsetAnon,
 				}
 			}
 			setKindType(rt, &structType{
 				rtype:   *rt,
-				pkgPath: newName(typ.Get("pkgPath").String(), "", false),
+				pkgPath: newName(internalStr(typ.Get("pkgPath")), "", false),
 				fields:  reflectFields,
 			})
 		}
@@ -257,6 +257,12 @@ func newTypeOff(t *rtype) typeOff {
 	i := len(typeOffList)
 	typeOffList = append(typeOffList, t)
 	return typeOff(i)
+}
+
+func internalStr(strObj *js.Object) string {
+	var c struct{ str string }
+	js.InternalObject(c).Set("str", strObj) // get string without internalizing
+	return c.str
 }
 
 func isWrapped(typ Type) bool {

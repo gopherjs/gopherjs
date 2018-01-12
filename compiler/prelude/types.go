@@ -454,9 +454,9 @@ var $methodSet = function(typ) {
 
   typ.methodSetCache = [];
   var x = Object.keys(base).sort();
-  if (x.length === 2 && x[0] === "nonexported" && x[1] === "ΦExported") {
+  if (x.length === 2 && x[0] === "nonexported" && x[1] === "\xCE\xA6Exported") {
     /* HACK: Hacky fix for TestIssue22073. Need to find a good general fix. */
-    x[0] = "ΦExported";
+    x[0] = "\xCE\xA6Exported";
     x[1] = "nonexported";
   }
   x.forEach(function(name) {

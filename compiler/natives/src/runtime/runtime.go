@@ -43,7 +43,9 @@ func GOROOT() string {
 	if goroot != js.Undefined {
 		return goroot.String()
 	}
-	return sys.DefaultGoroot
+	// sys.DefaultGoroot is now gone, can't use it as fallback anymore.
+	// TODO: See if a better solution is needed.
+	return "/usr/local/go"
 }
 
 func Breakpoint() {

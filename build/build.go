@@ -565,6 +565,14 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			if importedPkgPath == "unsafe" || ignored {
 				continue
 			}
+
+			switch pkg.ImportPath {
+			case "crypto/rand", "encoding/gob", "encoding/json", "expvar", "go/token", "log", "math/big", "math/rand", "regexp", "testing", "time":
+				if importedPkgPath == "sync" {
+					importedPkgPath = "github.com/gopherjs/gopherjs/nosync"
+				}
+			}
+
 			importedPkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
 			if err != nil {
 				return nil, err

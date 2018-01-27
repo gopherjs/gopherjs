@@ -267,7 +267,10 @@ func parseAndAugment(pkg *build.Package, isTest bool, fileSet *token.FileSet) ([
 			if err != nil {
 				panic(err)
 			}
-			file, err := parser.ParseFile(fileSet, fullPath, r, parser.ParseComments)
+			// Files should be uniquely named and in the original package directory in order to be
+			// ordered correctly
+			newPath := path.Join(pkg.Dir, "__"+name)
+			file, err := parser.ParseFile(fileSet, newPath, r, parser.ParseComments)
 			if err != nil {
 				panic(err)
 			}

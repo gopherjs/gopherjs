@@ -119,6 +119,12 @@ func (pi packageImporter) Import(path string) (*types.Package, error) {
 }
 
 func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {
+
+	// Files must be in the same order to get reproducible JS
+	sort.Slice(files, func(i, j int) bool {
+		return fileSet.File(files[i].Pos()).Name() > fileSet.File(files[j].Pos()).Name()
+	})
+
 	typesInfo := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),

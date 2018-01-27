@@ -135,6 +135,12 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		// Some other unexpected panic, catch the stack trace and return as an error.
 		err = bailout(e)
 	}()
+
+	// Files must be in the same order to get reproducible JS
+	sort.Slice(files, func(i, j int) bool {
+		return fileSet.File(files[i].Pos()).Name() > fileSet.File(files[j].Pos()).Name()
+	})
+
 	typesInfo := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),

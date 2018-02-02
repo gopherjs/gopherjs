@@ -41,7 +41,7 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 		GOARCH:        "js",
 		InstallSuffix: installSuffix,
 		Compiler:      "gc",
-		BuildTags:     append(buildTags, "netgo"),
+		BuildTags:     append(buildTags, "netgo", "purego"),
 		ReleaseTags:   build.Default.ReleaseTags,
 		CgoEnabled:    true, // detect `import "C"` to throw proper error
 	}

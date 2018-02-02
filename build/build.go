@@ -41,9 +41,12 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 		GOARCH:        "js",
 		InstallSuffix: installSuffix,
 		Compiler:      "gc",
-		BuildTags:     append(buildTags, "netgo"),
-		ReleaseTags:   build.Default.ReleaseTags,
-		CgoEnabled:    true, // detect `import "C"` to throw proper error
+		BuildTags: append(buildTags,
+			"netgo",  // See https://godoc.org/net#hdr-Name_Resolution.
+			"purego", // See https://golang.org/issues/23172.
+		),
+		ReleaseTags: build.Default.ReleaseTags,
+		CgoEnabled:  true, // detect `import "C"` to throw proper error
 	}
 }
 

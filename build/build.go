@@ -115,6 +115,7 @@ func importWithSrcDir(path string, srcDir string, mode build.ImportMode, install
 		pkg.GoFiles = exclude(pkg.GoFiles, "fd_poll_runtime.go")
 	case "crypto/rand":
 		pkg.GoFiles = []string{"rand.go", "util.go"}
+		pkg.TestGoFiles = exclude(pkg.TestGoFiles, "rand_linux_test.go") // Don't want linux-specific tests (since linux-specific package files are excluded too).
 	}
 
 	if len(pkg.CgoFiles) > 0 {

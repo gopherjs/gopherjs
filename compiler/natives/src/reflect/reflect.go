@@ -792,6 +792,39 @@ func (v Value) object() *js.Object {
 	return js.InternalObject(v.ptr)
 }
 
+func (v Value) assignTo(context string, dst *rtype, target unsafe.Pointer) Value {
+	if v.flag&flagMethod != 0 {
+		v = makeMethodValue(context, v)
+	}
+
+	switch {
+	case directlyAssignable(dst, v.typ):
+		// Overwrite type so that they match.
+		// Same memory layout, so no harm done.
+		fl := v.flag&(flagAddr|flagIndir) | v.flag.ro()
+		fl |= flag(dst.Kind())
+		return Value{dst, v.ptr, fl}
+
+	case implements(dst, v.typ):
+		if target == nil {
+			target = unsafe_New(dst)
+		}
+		// GopherJS: Skip the v.Kind() == Interface && v.IsNil() if statement
+		//           from upstream. ifaceE2I below does not panic, and it needs
+		//           to run, given its custom implementation.
+		x := valueInterface(v, false)
+		if dst.NumMethod() == 0 {
+			*(*interface{})(target) = x
+		} else {
+			ifaceE2I(dst, x, target)
+		}
+		return Value{dst, target, flagIndir | flag(Interface)}
+	}
+
+	// Failed.
+	panic(context + ": value of type " + v.typ.String() + " is not assignable to type " + dst.String())
+}
+
 var callHelper = js.Global.Get("$call").Interface().(func(...interface{}) *js.Object)
 
 func (v Value) call(op string, in []Value) []Value {

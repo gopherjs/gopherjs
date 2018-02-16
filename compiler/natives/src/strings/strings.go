@@ -55,3 +55,13 @@ func (b *Builder) String() string {
 	//       and there are benchmarks available (see https://github.com/golang/go/issues/18990#issuecomment-352068533).
 	return string(b.buf)
 }
+
+func (b *Builder) copyCheck() {
+	if b.addr == nil {
+		// Upstream copyCheck uses noescape, which performs unsafe.Pointer manipulation.
+		// We can't do that, so skip it. See https://github.com/golang/go/commit/484586c81a0196e42ac52f651bc56017ca454280.
+		b.addr = b
+	} else if b.addr != b {
+		panic("strings: illegal use of non-zero Builder copied by value")
+	}
+}

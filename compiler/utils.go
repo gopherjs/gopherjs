@@ -369,12 +369,6 @@ func (c *funcContext) handleEscapingVars(n ast.Node) {
 
 	var names []string
 	objs := analysis.EscapingObjects(n, c.p.Info.Info)
-	sort.Slice(objs, func(i, j int) bool {
-		if objs[i].Name() == objs[j].Name() {
-			return objs[i].Pos() < objs[j].Pos()
-		}
-		return objs[i].Name() < objs[j].Name()
-	})
 	for _, obj := range objs {
 		names = append(names, c.objectName(obj))
 		c.p.escapingVars[obj] = true

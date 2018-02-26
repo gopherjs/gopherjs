@@ -129,7 +129,7 @@ path               | ✅ yes       |
 reflect            | ✅ yes       | except StructOf (pending)
 regexp             | ✅ yes       |
 -- syntax          | ✅ yes       |
-runtime            | ☑️ partially | SetMutexProfileFraction, SetFinalizer unsupported
+runtime            | ☑️ partially | SetMutexProfileFraction, SetFinalizer, ReadMemStats, Callers, CallersFrames unsupported
 -- cgo             | ❌ no        |
 -- debug           | ❌ no        |
 -- pprof           | ❌ no        |
@@ -141,7 +141,7 @@ strings            | ✅ yes       |
 sync               | ✅ yes       |
 -- atomic          | ✅ yes       |
 syscall            | ☑️ partially | node.js only
-testing            | ✅ yes       |
+testing            | ☑️ partially | AllocsPerRun unsupported
 -- iotest          | ✅ yes       |
 -- quick           | ✅ yes       |
 text               |              |

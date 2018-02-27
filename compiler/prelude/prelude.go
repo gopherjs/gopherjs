@@ -1,5 +1,7 @@
 package prelude
 
+//go:generate go run regen.go
+
 const Prelude = prelude + numeric + types + goroutines + jsmapping
 
 const prelude = `Error.stackTraceLimit = Infinity;

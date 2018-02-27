@@ -10,10 +10,13 @@ dependencies:
   post:
     - mv ./gopherjs $HOME/bin
     - npm install --global node-gyp
+    - npm install
     - cd node-syscall && node-gyp rebuild && mkdir -p ~/.node_libraries/ && cp build/Release/syscall.node ~/.node_libraries/syscall.node
 
 test:
   override:
+    - PATH=node_modules/.bin:$PATH go generate github.com/gopherjs/gopherjs/compiler/prelude
+    - diff -u <(echo -n) <(git status --porcelain)
     - diff -u <(echo -n) <(gofmt -d .)
     - go tool vet *.go                                                   # Go package in root directory.
     - for d in */; do echo $d; done | grep -v tests/ | grep -v third_party/ | xargs go tool vet # All subdirectories except "tests", "third_party".

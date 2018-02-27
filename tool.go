@@ -307,6 +307,13 @@ func main() {
 			patternContext := gbuild.NewBuildContext("", options.BuildTags)
 			args = (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
 
+			if *compileOnly && len(args) > 1 {
+				return errors.New("cannot use -c flag with multiple packages")
+			}
+			if *outputFilename != "" && len(args) > 1 {
+				return errors.New("cannot use -o flag with multiple packages")
+			}
+
 			pkgs := make([]*gbuild.PackageData, len(args))
 			for i, pkgPath := range args {
 				var err error

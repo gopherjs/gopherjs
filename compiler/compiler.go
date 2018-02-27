@@ -156,11 +156,11 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 	}
 	var preludeString string
 	if minify {
-		preludeString = prelude.PreludeMinified
+		preludeString = prelude.Minified
 	} else {
 		preludeString = prelude.Prelude
 	}
-	if _, err := w.Write([]byte(preludeString)); err != nil {
+	if _, err := io.WriteString(w, preludeString); err != nil {
 		return err
 	}
 	if _, err := w.Write([]byte("\n")); err != nil {

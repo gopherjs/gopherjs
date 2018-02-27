@@ -154,13 +154,11 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 	if _, err := w.Write([]byte("\"use strict\";\n(function() {\n\n")); err != nil {
 		return err
 	}
-	var preludeString string
+	preludeJS := prelude.Prelude
 	if minify {
-		preludeString = prelude.Minified
-	} else {
-		preludeString = prelude.Prelude
+		preludeJS = prelude.Minified
 	}
-	if _, err := io.WriteString(w, preludeString); err != nil {
+	if _, err := io.WriteString(w, preludeJS); err != nil {
 		return err
 	}
 	if _, err := w.Write([]byte("\n")); err != nil {

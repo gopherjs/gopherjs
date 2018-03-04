@@ -39,7 +39,7 @@ func initLocal() {
 }
 
 func runtimeNano() int64 {
-	return js.Global.Get("Date").New().Call("getTime").Int64() * int64(Millisecond)
+	return int64(js.Global.Get("performance").Call("now").Float() * float64(time.Millisecond))
 }
 
 func now() (sec int64, nsec int32, mono int64) {

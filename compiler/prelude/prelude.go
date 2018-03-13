@@ -99,19 +99,19 @@ var $ifaceMethodExpr = function(name) {
 };
 
 var $subslice = function(slice, low, high, max) {
+  if (high === undefined) {
+    high = slice.$length;
+  }
+  if (max === undefined) {
+    max = slice.$capacity
+  }
   if (low < 0 || high < low || max < high || high > slice.$capacity || max > slice.$capacity) {
     $throwRuntimeError("slice bounds out of range");
   }
   var s = new slice.constructor(slice.$array);
   s.$offset = slice.$offset + low;
-  s.$length = slice.$length - low;
-  s.$capacity = slice.$capacity - low;
-  if (high !== undefined) {
-    s.$length = high - low;
-  }
-  if (max !== undefined) {
-    s.$capacity = max - low;
-  }
+  s.$length = high - low;
+  s.$capacity = max - low;
   return s;
 };
 

@@ -623,3 +623,15 @@ func TestTypeConversion(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestSliceOutOfRange(t *testing.T) {
+	defer func() {
+		if err := recover(); err == nil || !strings.Contains(err.(error).Error(), "slice bounds out of range") {
+			t.Fail()
+		}
+	}()
+
+	a := make([]byte, 4096)
+	b := a[8192:]
+	_ = b
+}

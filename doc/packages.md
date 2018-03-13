@@ -126,6 +126,7 @@ os                 | ☑️ partially | node.js only
 -- user            | ☑️ partially | node.js only
 path               | ✅ yes       |
 -- filepath        | ✅ yes       |
+plugin             | ❌ no        |
 reflect            | ✅ yes       | except StructOf (pending)
 regexp             | ✅ yes       |
 -- syntax          | ✅ yes       |

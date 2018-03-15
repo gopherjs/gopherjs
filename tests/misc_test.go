@@ -597,6 +597,18 @@ func TestSliceOfString(t *testing.T) {
 	print(str[0:10])
 }
 
+func TestSliceOutOfRange(t *testing.T) {
+	defer func() {
+		if err := recover(); err == nil || !strings.Contains(err.(error).Error(), "slice bounds out of range") {
+			t.Fail()
+		}
+	}()
+
+	a := make([]byte, 4)
+	b := a[8:]
+	_ = b
+}
+
 type R struct{ v int }
 
 func (r R) Val() int {
@@ -622,16 +634,4 @@ func TestTypeConversion(t *testing.T) {
 	if (f1-f2)/f3 != float64(f1-f2)/float64(f3) {
 		t.Fail()
 	}
-}
-
-func TestSliceOutOfRange(t *testing.T) {
-	defer func() {
-		if err := recover(); err == nil || !strings.Contains(err.(error).Error(), "slice bounds out of range") {
-			t.Fail()
-		}
-	}()
-
-	a := make([]byte, 4096)
-	b := a[8192:]
-	_ = b
 }

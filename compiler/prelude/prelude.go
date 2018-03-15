@@ -103,7 +103,7 @@ var $subslice = function(slice, low, high, max) {
     high = slice.$length;
   }
   if (max === undefined) {
-    max = slice.$capacity
+    max = slice.$capacity;
   }
   if (low < 0 || high < low || max < high || high > slice.$capacity || max > slice.$capacity) {
     $throwRuntimeError("slice bounds out of range");

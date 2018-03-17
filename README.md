@@ -33,7 +33,7 @@ If you want to use `gopherjs run` or `gopherjs test` to run the generated code l
 npm install --global source-map-support
 ```
 
-System calls (file system access, etc.) will work only supported `GOOS` platforms (see above). See [doc/syscalls.md](https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md) for instructions.
+On supported `GOOS` platforms, it's possible to make system calls (file system access, etc.) available. See [doc/syscalls.md](https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md) for instructions on how to do so.
 
 #### gopherjs serve
 

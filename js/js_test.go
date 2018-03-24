@@ -597,3 +597,34 @@ func TestTypeSwitchJSObject(t *testing.T) {
 		}
 	}
 }
+
+type StructWithNonIdentifierJsTags struct {
+	object *js.Object
+	Name   string `js:"@&\"'<>//my name"`
+}
+
+func TestStructWithNonIdentifierJsTags(t *testing.T) {
+	s := StructWithNonIdentifierJsTags{
+		object: js.Global.Get("Object").New(),
+	}
+
+	const want = "Paul"
+
+	// externalise a value
+	s.Name = want
+
+	// internalise again
+	got := s.Name
+
+	if want != got {
+		t.Errorf("Value via non-identifier js tag field gave %q, want %q", got, want)
+	}
+
+	// verify we can do a Get with the struct tag
+	got = s.object.Get("@&\"'<>//my name").String()
+
+	if want != got {
+		t.Errorf("Value via .Get gave %q, want %q", got, want)
+	}
+
+}

@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
+	"unicode"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
@@ -642,4 +644,31 @@ func endsWithReturn(stmts []ast.Stmt) bool {
 
 func encodeIdent(name string) string {
 	return strings.Replace(url.QueryEscape(name), "%", "$", -1)
+}
+
+// formatJSStructTagVal returns a string of JavaScript code appropriate for
+// accessing the property identified by jsTag. If the jsTag value can be safely
+// encoded in JavaScript using the dot notation this is used, else we fallback
+// to the bracket notation. For more details see:
+//
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Property_Accessors
+//
+// Uses definition of an identifier from
+// https://developer.mozilla.org/en-US/docs/Glossary/Identifier
+func formatJSStructTagVal(jsTag string) string {
+	useDot := true
+
+	for i, r := range jsTag {
+		ok := unicode.IsLetter(r) || (i != 0 && unicode.IsNumber(r)) || r == '$' || r == '_'
+		if !ok {
+			useDot = false
+			break
+		}
+	}
+
+	if useDot {
+		return "." + jsTag
+	}
+
+	return "[\"" + template.JSEscapeString(jsTag) + "\"]"
 }

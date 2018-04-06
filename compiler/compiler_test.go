@@ -8,7 +8,6 @@ import (
 	"go/token"
 	"go/types"
 	"testing"
-
 	"fmt"
 
 	"github.com/sergi/go-diff/diffmatchpatch"
@@ -80,7 +79,6 @@ type source struct {
 }
 
 func compile(path string, sourceFiles []source, minify bool) ([]byte, error) {
-
 	conf := loader.Config{}
 	conf.Fset = token.NewFileSet()
 	conf.ParserMode = parser.ParseComments

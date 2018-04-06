@@ -21,13 +21,16 @@ func Swapper(slice interface{}) func(i, j int) {
 			}
 		}
 	}
-	s := js.InternalObject(slice).Get("$array")
+	a := js.InternalObject(slice).Get("$array")
+	off := js.InternalObject(slice).Get("$offset").Int()
 	return func(i, j int) {
 		if uint(i) >= vLen || uint(j) >= vLen {
 			panic("reflect: slice index out of range")
 		}
-		tmp := s.Index(i)
-		s.SetIndex(i, s.Index(j))
-		s.SetIndex(j, tmp)
+		i += off
+		j += off
+		tmp := a.Index(i)
+		a.SetIndex(i, a.Index(j))
+		a.SetIndex(j, tmp)
 	}
 }

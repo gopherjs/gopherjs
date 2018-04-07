@@ -33,6 +33,8 @@ func (e *ImportCError) Error() string {
 	return e.pkgPath + `: importing "C" is not supported by GopherJS`
 }
 
+// NewBuildContext creates a build context for building Go packages
+// with GopherJS compiler.
 func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 	return &build.Context{
 		GOROOT:        build.Default.GOROOT,
@@ -72,11 +74,12 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 		// Import will not be able to resolve relative import paths.
 		wd = ""
 	}
-	return importWithSrcDir(path, wd, mode, installSuffix, buildTags)
+	bctx := NewBuildContext(installSuffix, buildTags)
+	return importWithSrcDir(*bctx, path, wd, mode, installSuffix)
 }
 
-func importWithSrcDir(path string, srcDir string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
-	bctx := NewBuildContext(installSuffix, buildTags)
+func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build.ImportMode, installSuffix string) (*PackageData, error) {
+	// bctx is passed by value, so it can be modified here.
 	switch path {
 	case "syscall":
 		// syscall needs to use a typical GOARCH like amd64 to pick up definitions for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t, etc.
@@ -410,6 +413,7 @@ type PackageData struct {
 
 type Session struct {
 	options  *Options
+	bctx     *build.Context
 	Archives map[string]*compiler.Archive
 	Types    map[string]*types.Package
 	Watcher  *fsnotify.Watcher
@@ -428,6 +432,7 @@ func NewSession(options *Options) *Session {
 		options:  options,
 		Archives: make(map[string]*compiler.Archive),
 	}
+	s.bctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
 	s.Types = make(map[string]*types.Package)
 	if options.Watch {
 		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
@@ -456,7 +461,7 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 	if s.Watcher != nil {
 		s.Watcher.Add(packagePath)
 	}
-	buildPkg, err := NewBuildContext(s.InstallSuffix(), s.options.BuildTags).ImportDir(packagePath, 0)
+	buildPkg, err := s.bctx.ImportDir(packagePath, 0)
 	if err != nil {
 		return err
 	}
@@ -514,7 +519,7 @@ func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
 }
 
 func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*PackageData, *compiler.Archive, error) {
-	pkg, err := importWithSrcDir(path, srcDir, 0, s.InstallSuffix(), s.options.BuildTags)
+	pkg, err := importWithSrcDir(*s.bctx, path, srcDir, 0, s.InstallSuffix())
 	if s.Watcher != nil && pkg != nil { // add watch even on error
 		s.Watcher.Add(pkg.Dir)
 	}

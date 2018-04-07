@@ -2,13 +2,13 @@ package compiler
 
 import (
 	"bytes"
+	"fmt"
 	"go/ast"
 	"go/build"
 	"go/parser"
 	"go/token"
 	"go/types"
 	"testing"
-	"fmt"
 
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"golang.org/x/tools/go/loader"

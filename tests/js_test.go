@@ -391,6 +391,14 @@ type F struct {
 	Field int
 }
 
+func (f F) NonPoint() int {
+	return 10
+}
+
+func (f *F) Point() int {
+	return 20
+}
+
 func TestExternalizeField(t *testing.T) {
 	if dummys.Call("testField", map[string]int{"Field": 42}).Int() != 42 {
 		t.Fail()
@@ -423,7 +431,12 @@ func TestMakeFunc(t *testing.T) {
 }
 
 type M struct {
-	f int
+	Struct  F
+	Pointer *F
+	Array   [1]F
+	Slice   []*F
+	Name    string
+	f       int
 }
 
 func (m *M) Method(a interface{}) map[string]string {
@@ -435,8 +448,28 @@ func (m *M) Method(a interface{}) map[string]string {
 	}
 }
 
+func (m *M) GetF() F {
+	return m.Struct
+}
+
+func (m *M) GetFPointer() *F {
+	return m.Pointer
+}
+
+func (m *M) ParamMethod(v *M) string {
+	return v.Name
+}
+
+func (m *M) Field() string {
+	return "rubbish"
+}
+
+func (m M) NonPointField() string {
+	return "sensible"
+}
+
 func TestMakeWrapper(t *testing.T) {
-	m := &M{42}
+	m := &M{f: 42}
 	if !js.Global.Call("eval", `(function(m) { return m.Method({x: 1})["y"] === "z"; })`).Invoke(js.MakeWrapper(m)).Bool() {
 		t.Fail()
 	}
@@ -445,12 +478,140 @@ func TestMakeWrapper(t *testing.T) {
 		t.Fail()
 	}
 
+}
+
+func TestMakeFullWrapperType(t *testing.T) {
+	m := &M{f: 42}
 	f := func(m *M) {
 		if m.f != 42 {
 			t.Fail()
 		}
 	}
-	js.Global.Call("eval", `(function(f, m) { f(m); })`).Invoke(f, js.MakeWrapper(m))
+
+	js.Global.Call("eval", `(function(f, m) { f(m); })`).Invoke(f, js.MakeFullWrapper(m))
+	want := "github.com/gopherjs/gopherjs/tests_test.*M"
+	if got := js.MakeFullWrapper(m).Get("$type").String(); got != want {
+		t.Errorf("wanted type string %q; got %q", want, got)
+	}
+}
+
+func TestMakeFullWrapperGettersAndSetters(t *testing.T) {
+	f := &F{Field: 50}
+	m := &M{
+		Name:    "Gopher",
+		Struct:  F{Field: 42},
+		Pointer: f,
+		Array:   [1]F{F{Field: 42}},
+		Slice:   []*F{f},
+	}
+
+	const globalVar = "TestMakeFullWrapper_w1"
+
+	eval := func(s string, v ...interface{}) *js.Object {
+		return js.Global.Call("eval", s).Invoke(v...)
+	}
+	call := func(s string, v ...interface{}) *js.Object {
+		return eval(fmt.Sprintf(`(function(g) { return g["%v"]%v; })`, globalVar, s), js.Global).Invoke(v...)
+	}
+	get := func(s string) *js.Object {
+		return eval(fmt.Sprintf(`(function(g) { return g["%v"]%v; })`, globalVar, s), js.Global)
+	}
+	set := func(s string, v interface{}) {
+		eval(fmt.Sprintf(`(function(g, v) { g["%v"]%v = v; })`, globalVar, s), js.Global, v)
+	}
+
+	w1 := js.MakeFullWrapper(m)
+	{
+		w2 := js.MakeFullWrapper(m)
+
+		// we expect that MakeFullWrapper produces a different value each time
+		if eval(`(function(o, p) { return o === p; })`, w1, w2).Bool() {
+			t.Fatalf("w1 equalled w2 when we didn't expect it to")
+		}
+	}
+
+	set("", w1)
+
+	{
+		prop := ".Name"
+		want := m.Name
+		if got := get(prop).String(); got != want {
+			t.Fatalf("wanted w1%v to be %v; got %v", prop, want, got)
+		}
+		newVal := "JS"
+		set(prop, newVal)
+		if got := m.Name; got != newVal {
+			t.Fatalf("wanted m%v to be %v; got %v", prop, newVal, got)
+		}
+	}
+	{
+		prop := ".Struct.Field"
+		want := m.Struct.Field
+		if got := get(prop).Int(); got != want {
+			t.Fatalf("wanted w1%v to be %v; got %v", prop, want, got)
+		}
+		newVal := 40
+		set(prop, newVal)
+		if got := m.Struct.Field; got == newVal {
+			t.Fatalf("wanted m%v not to be %v; but was", prop, newVal)
+		}
+	}
+	{
+		prop := ".Pointer.Field"
+		want := m.Pointer.Field
+		if got := get(prop).Int(); got != want {
+			t.Fatalf("wanted w1%v to be %v; got %v", prop, want, got)
+		}
+		newVal := 40
+		set(prop, newVal)
+		if got := m.Pointer.Field; got != newVal {
+			t.Fatalf("wanted m%v to be %v; got %v", prop, newVal, got)
+		}
+	}
+	{
+		prop := ".Array[0].Field"
+		want := m.Array[0].Field
+		if got := get(prop).Int(); got != want {
+			t.Fatalf("wanted w1%v to be %v; got %v", prop, want, got)
+		}
+		newVal := 40
+		set(prop, newVal)
+		if got := m.Array[0].Field; got == newVal {
+			t.Fatalf("wanted m%v not to be %v; but was", prop, newVal)
+		}
+	}
+	{
+		prop := ".Slice[0].Field"
+		want := m.Slice[0].Field
+		if got := get(prop).Int(); got != want {
+			t.Fatalf("wanted w1%v to be %v; got %v", prop, want, got)
+		}
+		newVal := 40
+		set(prop, newVal)
+		if got := m.Slice[0].Field; got != newVal {
+			t.Fatalf("wanted m%v to be %v; got %v", prop, newVal, got)
+		}
+	}
+	{
+		prop := ".GetF().Field"
+		want := m.Struct.Field
+		if got := get(prop).Int(); got != want {
+			t.Fatalf("wanted w1%v to be %v; got %v", prop, want, got)
+		}
+		newVal := 105
+		set(prop, newVal)
+		if got := m.Struct.Field; got == newVal {
+			t.Fatalf("wanted m%v not to be %v; but was", prop, newVal)
+		}
+	}
+	{
+		method := ".ParamMethod"
+		want := method
+		m.Name = want
+		if got := call(method, get("")).String(); got != want {
+			t.Fatalf("wanted w1%v() to be %v; got %v", method, want, got)
+		}
+	}
 }
 
 func TestCallWithNull(t *testing.T) {

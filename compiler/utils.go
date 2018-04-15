@@ -656,19 +656,12 @@ func encodeIdent(name string) string {
 // Uses definition of an identifier from
 // https://developer.mozilla.org/en-US/docs/Glossary/Identifier
 func formatJSStructTagVal(jsTag string) string {
-	useDot := true
-
 	for i, r := range jsTag {
 		ok := unicode.IsLetter(r) || (i != 0 && unicode.IsNumber(r)) || r == '$' || r == '_'
 		if !ok {
-			useDot = false
-			break
+			return "[\"" + template.JSEscapeString(jsTag) + "\"]"
 		}
 	}
 
-	if useDot {
-		return "." + jsTag
-	}
-
-	return "[\"" + template.JSEscapeString(jsTag) + "\"]"
+	return "." + jsTag
 }

@@ -163,10 +163,10 @@ var $externalizeFunction = function(v, t, passThis) {
       case 0:
         return;
       case 1:
-        return $externalize(result, t.results[0]);
+        return $externalize($copyInterfaceVal(result), t.results[0]);
       default:
         for (var i = 0; i < t.results.length; i++) {
-          result[i] = $externalize(result[i], t.results[i]);
+          result[i] = $externalize($copyInterfaceVal(result[i]), t.results[i]);
         }
         return result;
       }

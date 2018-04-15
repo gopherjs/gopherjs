@@ -23,7 +23,7 @@ func main() {
 func run() error {
 	bpkg, err := build.Import("github.com/gopherjs/gopherjs", "", build.FindOnly)
 	if err != nil {
-		return fmt.Errorf("failed to locate path for github.com/gopherjs/gopherjs/compiler/prelude: %v", err)
+		return fmt.Errorf("failed to locate path for github.com/gopherjs/gopherjs: %v", err)
 	}
 
 	preludeDir := filepath.Join(bpkg.Dir, "compiler", "prelude")

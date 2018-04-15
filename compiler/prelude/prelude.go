@@ -2,7 +2,7 @@ package prelude
 
 //go:generate go run genmin.go
 
-// Prelude is the GopherJS Javascript interop layer that is behind
+// Prelude is the GopherJS JavaScript interop layer that is behind
 // the github.com/gopherjs/gopherjs/js package
 const Prelude = prelude + numeric + types + goroutines + jsmapping
 

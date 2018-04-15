@@ -4,9 +4,11 @@ package main
 
 import (
 	"fmt"
+	"go/build"
 	"io/ioutil"
 	"log"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/prelude"
@@ -19,12 +21,24 @@ func main() {
 }
 
 func run() error {
-	cmd := exec.Command("uglifyjs", "--config-file", "uglifyjs_options.json")
+	bpkg, err := build.Import("github.com/gopherjs/gopherjs", "", build.FindOnly)
+	if err != nil {
+		return fmt.Errorf("failed to locate path for github.com/gopherjs/gopherjs/compiler/prelude: %v", err)
+	}
+
+	preludeDir := filepath.Join(bpkg.Dir, "compiler", "prelude")
+
+	args := []string{
+		filepath.Join(bpkg.Dir, "node_modules", ".bin", "uglifyjs"),
+		"--config-file",
+		filepath.Join(preludeDir, "uglifyjs_options.json"),
+	}
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = strings.NewReader(prelude.Prelude)
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to run uglifyjs: %v\n%s", err, string(out))
+		return fmt.Errorf("failed to run %v: %v\n%s", strings.Join(args, " "), err, string(out))
 	}
 
 	fn := "prelude_min.go"

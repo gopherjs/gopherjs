@@ -15,7 +15,7 @@ dependencies:
 
 test:
   override:
-    - PATH=$PWD/node_modules/.bin:$PATH go generate github.com/gopherjs/gopherjs/compiler/prelude
+    - go generate github.com/gopherjs/gopherjs/compiler/prelude
     - diff -u <(echo -n) <(git status --porcelain)
     - diff -u <(echo -n) <(gofmt -d .)
     - go tool vet *.go                                                   # Go package in root directory.

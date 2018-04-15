@@ -1,6 +1,7 @@
 {
   "name": "gopherjs",
   "devDependencies": {
-    "uglify-es": "3.3.9"
+    "uglify-es": "3.3.9",
+    "prettier": "1.12.0"
   }
 }

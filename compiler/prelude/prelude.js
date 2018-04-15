@@ -1,14 +1,18 @@
 Error.stackTraceLimit = Infinity;
 
 var $global, $module;
-if (typeof window !== "undefined") { /* web page */
+if (typeof window !== "undefined") {
+  /* web page */
   $global = window;
-} else if (typeof self !== "undefined") { /* web worker */
+} else if (typeof self !== "undefined") {
+  /* web worker */
   $global = self;
-} else if (typeof global !== "undefined") { /* Node.js */
+} else if (typeof global !== "undefined") {
+  /* Node.js */
   $global = global;
   $global.require = require;
-} else { /* others (e.g. Nashorn) */
+} else {
+  /* others (e.g. Nashorn) */
   $global = this;
 }
 
@@ -19,13 +23,24 @@ if (typeof module !== "undefined") {
   $module = module;
 }
 
-var $packages = {}, $idCounter = 0;
-var $keys = function(m) { return m ? Object.keys(m) : []; };
+var $packages = {},
+  $idCounter = 0;
+var $keys = function(m) {
+  return m ? Object.keys(m) : [];
+};
 var $flushConsole = function() {};
 var $throwRuntimeError; /* set by package "runtime" */
-var $throwNilPointerError = function() { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
-var $call = function(fn, rcvr, args) { return fn.apply(rcvr, args); };
-var $makeFunc = function(fn) { return function() { return $externalize(fn(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(arguments, []))), $emptyInterface); }; };
+var $throwNilPointerError = function() {
+  $throwRuntimeError("invalid memory address or nil pointer dereference");
+};
+var $call = function(fn, rcvr, args) {
+  return fn.apply(rcvr, args);
+};
+var $makeFunc = function(fn) {
+  return function() {
+    return $externalize(fn(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(arguments, []))), $emptyInterface);
+  };
+};
 var $unused = function(v) {};
 
 var $mapArray = function(array, f) {
@@ -128,69 +143,69 @@ var $decodeRune = function(str, pos) {
     return [c0, 1];
   }
 
-  if (c0 !== c0 || c0 < 0xC0) {
-    return [0xFFFD, 1];
+  if (c0 !== c0 || c0 < 0xc0) {
+    return [0xfffd, 1];
   }
 
   var c1 = str.charCodeAt(pos + 1);
-  if (c1 !== c1 || c1 < 0x80 || 0xC0 <= c1) {
-    return [0xFFFD, 1];
+  if (c1 !== c1 || c1 < 0x80 || 0xc0 <= c1) {
+    return [0xfffd, 1];
   }
 
-  if (c0 < 0xE0) {
-    var r = (c0 & 0x1F) << 6 | (c1 & 0x3F);
-    if (r <= 0x7F) {
-      return [0xFFFD, 1];
+  if (c0 < 0xe0) {
+    var r = ((c0 & 0x1f) << 6) | (c1 & 0x3f);
+    if (r <= 0x7f) {
+      return [0xfffd, 1];
     }
     return [r, 2];
   }
 
   var c2 = str.charCodeAt(pos + 2);
-  if (c2 !== c2 || c2 < 0x80 || 0xC0 <= c2) {
-    return [0xFFFD, 1];
+  if (c2 !== c2 || c2 < 0x80 || 0xc0 <= c2) {
+    return [0xfffd, 1];
   }
 
-  if (c0 < 0xF0) {
-    var r = (c0 & 0x0F) << 12 | (c1 & 0x3F) << 6 | (c2 & 0x3F);
-    if (r <= 0x7FF) {
-      return [0xFFFD, 1];
+  if (c0 < 0xf0) {
+    var r = ((c0 & 0x0f) << 12) | ((c1 & 0x3f) << 6) | (c2 & 0x3f);
+    if (r <= 0x7ff) {
+      return [0xfffd, 1];
     }
-    if (0xD800 <= r && r <= 0xDFFF) {
-      return [0xFFFD, 1];
+    if (0xd800 <= r && r <= 0xdfff) {
+      return [0xfffd, 1];
     }
     return [r, 3];
   }
 
   var c3 = str.charCodeAt(pos + 3);
-  if (c3 !== c3 || c3 < 0x80 || 0xC0 <= c3) {
-    return [0xFFFD, 1];
+  if (c3 !== c3 || c3 < 0x80 || 0xc0 <= c3) {
+    return [0xfffd, 1];
   }
 
-  if (c0 < 0xF8) {
-    var r = (c0 & 0x07) << 18 | (c1 & 0x3F) << 12 | (c2 & 0x3F) << 6 | (c3 & 0x3F);
-    if (r <= 0xFFFF || 0x10FFFF < r) {
-      return [0xFFFD, 1];
+  if (c0 < 0xf8) {
+    var r = ((c0 & 0x07) << 18) | ((c1 & 0x3f) << 12) | ((c2 & 0x3f) << 6) | (c3 & 0x3f);
+    if (r <= 0xffff || 0x10ffff < r) {
+      return [0xfffd, 1];
     }
     return [r, 4];
   }
 
-  return [0xFFFD, 1];
+  return [0xfffd, 1];
 };
 
 var $encodeRune = function(r) {
-  if (r < 0 || r > 0x10FFFF || (0xD800 <= r && r <= 0xDFFF)) {
-    r = 0xFFFD;
+  if (r < 0 || r > 0x10ffff || (0xd800 <= r && r <= 0xdfff)) {
+    r = 0xfffd;
   }
-  if (r <= 0x7F) {
+  if (r <= 0x7f) {
     return String.fromCharCode(r);
   }
-  if (r <= 0x7FF) {
-    return String.fromCharCode(0xC0 | r >> 6, 0x80 | (r & 0x3F));
+  if (r <= 0x7ff) {
+    return String.fromCharCode(0xc0 | (r >> 6), 0x80 | (r & 0x3f));
   }
-  if (r <= 0xFFFF) {
-    return String.fromCharCode(0xE0 | r >> 12, 0x80 | (r >> 6 & 0x3F), 0x80 | (r & 0x3F));
+  if (r <= 0xffff) {
+    return String.fromCharCode(0xe0 | (r >> 12), 0x80 | ((r >> 6) & 0x3f), 0x80 | (r & 0x3f));
   }
-  return String.fromCharCode(0xF0 | r >> 18, 0x80 | (r >> 12 & 0x3F), 0x80 | (r >> 6 & 0x3F), 0x80 | (r & 0x3F));
+  return String.fromCharCode(0xf0 | (r >> 18), 0x80 | ((r >> 12) & 0x3f), 0x80 | ((r >> 6) & 0x3f), 0x80 | (r & 0x3f));
 };
 
 var $stringToBytes = function(str) {
@@ -214,7 +229,8 @@ var $bytesToString = function(slice) {
 
 var $stringToRunes = function(str) {
   var array = new Int32Array(str.length);
-  var rune, j = 0;
+  var rune,
+    j = 0;
   for (var i = 0; i < str.length; i += rune[1], j++) {
     rune = $decodeRune(str, i);
     array[j] = rune[0];
@@ -258,18 +274,18 @@ var $copyArray = function(dst, src, dstOffset, srcOffset, n, elem) {
   }
 
   switch (elem.kind) {
-  case $kindArray:
-  case $kindStruct:
-    if (dst === src && dstOffset > srcOffset) {
-      for (var i = n - 1; i >= 0; i--) {
+    case $kindArray:
+    case $kindStruct:
+      if (dst === src && dstOffset > srcOffset) {
+        for (var i = n - 1; i >= 0; i--) {
+          elem.copy(dst[dstOffset + i], src[srcOffset + i]);
+        }
+        return;
+      }
+      for (var i = 0; i < n; i++) {
         elem.copy(dst[dstOffset + i], src[srcOffset + i]);
       }
       return;
-    }
-    for (var i = 0; i < n; i++) {
-      elem.copy(dst[dstOffset + i], src[srcOffset + i]);
-    }
-    return;
   }
 
   if (dst === src && dstOffset > srcOffset) {
@@ -290,7 +306,7 @@ var $clone = function(src, type) {
 };
 
 var $pointerOfStructConversion = function(obj, type) {
-  if(obj.$proxies === undefined) {
+  if (obj.$proxies === undefined) {
     obj.$proxies = {};
     obj.$proxies[obj.constructor.string] = obj;
   }
@@ -300,8 +316,12 @@ var $pointerOfStructConversion = function(obj, type) {
     for (var i = 0; i < type.elem.fields.length; i++) {
       (function(fieldProp) {
         properties[fieldProp] = {
-          get: function() { return obj[fieldProp]; },
-          set: function(value) { obj[fieldProp] = value; }
+          get: function() {
+            return obj[fieldProp];
+          },
+          set: function(value) {
+            obj[fieldProp] = value;
+          },
         };
       })(type.elem.fields[i].prop);
     }
@@ -366,34 +386,34 @@ var $equal = function(a, b, type) {
     return a === b;
   }
   switch (type.kind) {
-  case $kindComplex64:
-  case $kindComplex128:
-    return a.$real === b.$real && a.$imag === b.$imag;
-  case $kindInt64:
-  case $kindUint64:
-    return a.$high === b.$high && a.$low === b.$low;
-  case $kindArray:
-    if (a.length !== b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (!$equal(a[i], b[i], type.elem)) {
+    case $kindComplex64:
+    case $kindComplex128:
+      return a.$real === b.$real && a.$imag === b.$imag;
+    case $kindInt64:
+    case $kindUint64:
+      return a.$high === b.$high && a.$low === b.$low;
+    case $kindArray:
+      if (a.length !== b.length) {
         return false;
       }
-    }
-    return true;
-  case $kindStruct:
-    for (var i = 0; i < type.fields.length; i++) {
-      var f = type.fields[i];
-      if (!$equal(a[f.prop], b[f.prop], f.typ)) {
-        return false;
+      for (var i = 0; i < a.length; i++) {
+        if (!$equal(a[i], b[i], type.elem)) {
+          return false;
+        }
       }
-    }
-    return true;
-  case $kindInterface:
-    return $interfaceIsEqual(a, b);
-  default:
-    return a === b;
+      return true;
+    case $kindStruct:
+      for (var i = 0; i < type.fields.length; i++) {
+        var f = type.fields[i];
+        if (!$equal(a[f.prop], b[f.prop], f.typ)) {
+          return false;
+        }
+      }
+      return true;
+    case $kindInterface:
+      return $interfaceIsEqual(a, b);
+    default:
+      return a === b;
   }
 };
 

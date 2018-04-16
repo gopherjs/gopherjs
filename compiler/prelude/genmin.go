@@ -38,7 +38,7 @@ func run() error {
 
 	byts, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to run %v: %v\n%s", strings.Join(args, " "), err, string(out))
+		return fmt.Errorf("failed to run %v: %v\n%s", strings.Join(args, " "), err, string(byts))
 	}
 
 	fn := "prelude_min.go"

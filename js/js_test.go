@@ -598,33 +598,25 @@ func TestTypeSwitchJSObject(t *testing.T) {
 	}
 }
 
-type StructWithNonIdentifierJsTags struct {
-	object *js.Object
-	Name   string `js:"@&\"'<>//my name"`
-}
-
-func TestStructWithNonIdentifierJsTags(t *testing.T) {
-	s := StructWithNonIdentifierJsTags{
-		object: js.Global.Get("Object").New(),
+func TestStructWithNonIdentifierJSTag(t *testing.T) {
+	type S struct {
+		*js.Object
+		Name string `js:"@&\"'<>//my name"`
 	}
+	s := S{Object: js.Global.Get("Object").New()}
 
-	const want = "Paul"
+	// externalise a value via field
+	s.Name = "Paul"
 
-	// externalise a value
-	s.Name = want
-
-	// internalise again
+	// internalise via field
 	got := s.Name
-
-	if want != got {
-		t.Errorf("Value via non-identifier js tag field gave %q, want %q", got, want)
+	if want := "Paul"; got != want {
+		t.Errorf("value via field with non-identifier js tag gave %q, want %q", got, want)
 	}
 
 	// verify we can do a Get with the struct tag
-	got = s.object.Get("@&\"'<>//my name").String()
-
-	if want != got {
-		t.Errorf("Value via .Get gave %q, want %q", got, want)
+	got = s.Get("@&\"'<>//my name").String()
+	if want := "Paul"; got != want {
+		t.Errorf("value via js.Object.Get gave %q, want %q", got, want)
 	}
-
 }

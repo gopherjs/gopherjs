@@ -646,22 +646,28 @@ func encodeIdent(name string) string {
 	return strings.Replace(url.QueryEscape(name), "%", "$", -1)
 }
 
-// formatJSStructTagVal returns a string of JavaScript code appropriate for
-// accessing the property identified by jsTag. If the jsTag value can be safely
-// encoded in JavaScript using the dot notation this is used, else we fallback
-// to the bracket notation. For more details see:
+// formatJSStructTagVal returns JavaScript code for accessing an object's property
+// identified by jsTag. It prefers the dot notation over the bracket notation when
+// possible, since the dot notation produces slightly smaller output.
 //
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Property_Accessors
+// For example:
 //
-// Uses definition of an identifier from
-// https://developer.mozilla.org/en-US/docs/Glossary/Identifier
+// 	"my_name" -> ".my_name"
+// 	"my name" -> `["my name"]`
+//
+// For more information about JavaScript property accessors and identifiers, see
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Property_Accessors and
+// https://developer.mozilla.org/en-US/docs/Glossary/Identifier.
+//
 func formatJSStructTagVal(jsTag string) string {
 	for i, r := range jsTag {
 		ok := unicode.IsLetter(r) || (i != 0 && unicode.IsNumber(r)) || r == '$' || r == '_'
 		if !ok {
-			return "[\"" + template.JSEscapeString(jsTag) + "\"]"
+			// Saw an invalid JavaScript identifier character,
+			// so use bracket notation.
+			return `["` + template.JSEscapeString(jsTag) + `"]`
 		}
 	}
-
+	// Safe to use dot notation without any escaping.
 	return "." + jsTag
 }

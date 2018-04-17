@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"go/build"
 	"io/ioutil"
@@ -33,12 +34,15 @@ func run() error {
 		"--config-file",
 		filepath.Join(preludeDir, "uglifyjs_options.json"),
 	}
+
+	stderr := new(bytes.Buffer)
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = strings.NewReader(prelude.Prelude)
+	cmd.Stderr = stderr
 
-	byts, err := cmd.CombinedOutput()
+	byts, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("failed to run %v: %v\n%s", strings.Join(args, " "), err, string(byts))
+		return fmt.Errorf("failed to run %v: %v\n%s", strings.Join(args, " "), err, stderr.String())
 	}
 
 	fn := "prelude_min.go"

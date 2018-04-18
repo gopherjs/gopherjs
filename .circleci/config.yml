@@ -1,0 +1,49 @@
+version: 2
+jobs:
+  build:
+    working_directory: /go/src/github.com/gopherjs/gopherjs
+    docker:
+      - image: circleci/golang:1.10
+
+    environment:
+      SOURCE_MAP_SUPPORT: false
+
+    steps:
+      - run: |
+          git clone https://github.com/creationix/nvm.git $HOME/.nvm
+          cd $HOME/.nvm && git checkout v0.33.9
+          echo 'export NVM_DIR="$HOME/.nvm"' >> $BASH_ENV
+          echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> $BASH_ENV
+
+      - run: |
+          nvm install 6.2.2 node
+          nvm alias default 6.2.2
+
+      - checkout
+
+      - run: |
+          node --version
+          go version
+          go env
+          nproc --all
+
+      - run: |
+          npm install --global node-gyp
+          cd node-syscall && node-gyp rebuild && mkdir -p $HOME/.node_libraries/ && cp build/Release/syscall.node $HOME/.node_libraries/syscall.node
+
+      - run: |
+          go get myitcv.io/cmd/concsh
+          go get -t ./...
+          go install github.com/gopherjs/gopherjs
+
+      - run:
+          no_output_timeout: 30m
+          command: |
+              diff -u <(echo -n) <(gofmt -d .)
+              go tool vet *.go                                                   # Go package in root directory.
+              for d in */; do echo $d; done | grep -v tests/ | grep -v third_party/ | xargs go tool vet # All subdirectories except "tests", "third_party".
+              diff -u <(echo -n) <(go list ./compiler/natives/src/...) # All those packages should have // +build js.
+              gopherjs install -v net/http # Should build successfully (can't run tests, since only client is supported).
+              ulimit -s 10000 && go run run_tests.go -debug -p 2
+              go test -v -race ./...
+              gopherjs test -v fmt # No minification should work.

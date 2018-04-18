@@ -1,6 +1,3 @@
-package prelude
-
-const jsmapping = `
 var $jsObjectPtr, $jsErrorPtr;
 
 var $needsExternalization = function(t) {
@@ -376,4 +373,3 @@ var $isASCII = function(s) {
   }
   return true;
 };
-`

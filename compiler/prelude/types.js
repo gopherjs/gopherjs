@@ -1,6 +1,3 @@
-package prelude
-
-const types = `
 var $kindBool = 1;
 var $kindInt = 2;
 var $kindInt8 = 3;
@@ -740,4 +737,3 @@ var $assertType = function(value, type, returnTuple) {
   }
   return returnTuple ? [value, true] : value;
 };
-`

@@ -1,6 +1,3 @@
-package prelude
-
-const goroutines = `
 var $stackDepthOffset = 0;
 var $getStackDepth = function() {
   var err = new Error();
@@ -355,4 +352,3 @@ var $select = function(comms) {
   $block();
   return f;
 };
-`

@@ -1,6 +1,3 @@
-package prelude
-
-const numeric = `
 var $min = Math.min;
 var $mod = function(x, y) { return x % y; };
 var $parseInt = parseInt;
@@ -193,4 +190,3 @@ var $divComplex = function(n, d) {
   var denom = d.$imag * ratio + d.$real;
   return new n.constructor((n.$imag * ratio + n.$real) / denom, (n.$imag - n.$real * ratio) / denom);
 };
-`

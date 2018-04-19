@@ -64,7 +64,7 @@
 		"ascii_only": false,
 		"beautify": false,
 		"bracketize": false,
-		"comments": {},
+		"comments": "/@license|@preserve|^!/",
 		"ecma": 5,
 		"ie8": false,
 		"indent_level": 4,

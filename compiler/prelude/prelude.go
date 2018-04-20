@@ -2,8 +2,7 @@ package prelude
 
 //go:generate go run genmin.go
 
-// Prelude is the GopherJS JavaScript interop layer that is behind
-// the github.com/gopherjs/gopherjs/js package
+// Prelude is the GopherJS JavaScript interop layer.
 const Prelude = prelude + numeric + types + goroutines + jsmapping
 
 const prelude = `Error.stackTraceLimit = Infinity;

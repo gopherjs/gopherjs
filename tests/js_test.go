@@ -1,6 +1,6 @@
 // +build js
 
-package js_test
+package tests_test
 
 import (
 	"fmt"

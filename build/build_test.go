@@ -94,7 +94,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 					if err != nil {
 						t.Fatalf("strconv.Unquote(%v): %v", imp.Path.Value, err)
 					}
-					if importPath == "github.com/gopherjs/gopherjs/js" {
+					if strings.HasPrefix(importPath, "github.com/gopherjs/gopherjs/js") {
 						continue
 					}
 					if _, ok := realImports[importPath]; !ok {
@@ -133,7 +133,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 					if err != nil {
 						t.Fatalf("strconv.Unquote(%v): %v", imp.Path.Value, err)
 					}
-					if importPath == "github.com/gopherjs/gopherjs/js" {
+					if strings.HasPrefix(importPath, "github.com/gopherjs/gopherjs/js") {
 						continue
 					}
 					if _, ok := realTestImports[importPath]; !ok {
@@ -175,7 +175,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 					if err != nil {
 						t.Fatalf("strconv.Unquote(%v): %v", imp.Path.Value, err)
 					}
-					if importPath == "github.com/gopherjs/gopherjs/js" {
+					if strings.HasPrefix(importPath, "github.com/gopherjs/gopherjs/js") {
 						continue
 					}
 					if _, ok := realXTestImports[importPath]; !ok {

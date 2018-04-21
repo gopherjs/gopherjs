@@ -243,7 +243,7 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 }
 
 // Test if we find the '//gopherjs:keep_overridden' comment
-func findKeepOverridenComment(doc *ast.CommentGroup) bool {
+func findKeepOverriddenComment(doc *ast.CommentGroup) bool {
 	if doc == nil {
 		return false
 	}
@@ -277,7 +277,7 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 	var files []*ast.File
 
 	type overrideInfo struct {
-		keepOverriden bool
+		keepOverridden bool
 	}
 	replacedDeclNames := make(map[string]overrideInfo)
 	funcName := func(d *ast.FuncDecl) string {
@@ -358,7 +358,7 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 			for _, decl := range file.Decls {
 				switch d := decl.(type) {
 				case *ast.FuncDecl:
-					replacedDeclNames[funcName(d)] = overrideInfo{keepOverriden: findKeepOverridenComment(d.Doc)}
+					replacedDeclNames[funcName(d)] = overrideInfo{keepOverridden: findKeepOverriddenComment(d.Doc)}
 				case *ast.GenDecl:
 					switch d.Tok {
 					case token.TYPE:
@@ -421,7 +421,7 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
 				if info, ok := replacedDeclNames[funcName(d)]; ok {
-					if info.keepOverriden {
+					if info.keepOverridden {
 						// Allow overridden function calls
 						// The standard library implementation of foo() becomes _gopherjs_overridden_foo()
 						d.Name.Name = "_gopherjs_overridden_" + d.Name.Name

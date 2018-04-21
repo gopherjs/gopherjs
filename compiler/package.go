@@ -13,7 +13,7 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/neelance/astrewrite"
-	"golang.org/x/tools/go/gcimporter15"
+	"golang.org/x/tools/go/gcexportdata"
 	"golang.org/x/tools/go/types/typeutil"
 )
 
@@ -164,7 +164,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 	importContext.Packages[importPath] = typesPkg
 
-	exportData := gcimporter.BExportData(nil, typesPkg)
+	exportData := new(bytes.Buffer)
+	if err := gcexportdata.Write(exportData, nil, typesPkg); err != nil {
+		return nil, fmt.Errorf("failed to write export data: %v", err)
+	}
 	encodedFileSet := bytes.NewBuffer(nil)
 	if err := fileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
 		return nil, err
@@ -541,7 +544,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		ImportPath:   importPath,
 		Name:         typesPkg.Name(),
 		Imports:      importedPaths,
-		ExportData:   exportData,
+		ExportData:   exportData.Bytes(),
 		Declarations: allDecls,
 		FileSet:      encodedFileSet.Bytes(),
 		Minified:     minify,

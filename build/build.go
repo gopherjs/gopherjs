@@ -590,14 +590,42 @@ func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*Packag
 	return pkg, archive, nil
 }
 
+const (
+	hashDebug = false
+)
+
 func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if archive, ok := s.Archives[pkg.ImportPath]; ok {
 		return archive, nil
 	}
 
+	// For non-main and test packages we build up a hash that will help
+	// determine staleness. Set hashDebug to see this in action. The format is:
+	//
+	// ## sync
+	// gopherjs bin: 0x519d22c6ab65a950f5b6278e4d65cb75dbd3a7eb1cf16e976a40b9f1febc0446
+	// build tags:
+	// import: internal/race
+	//   hash: 0xb966d7680c1c8ca75026f993c153aff0102dc9551f314e5352043187b5f9c9a6
+	// ...
+	//
+	// file: /home/myitcv/gos/src/sync/cond.go
+	// <file contents>
+	// N bytes
+	// ...
+
 	pkgHash := sha256.New()
+	var hw io.Writer = pkgHash
+	var hashDebugOut *bytes.Buffer
+	if hashDebug {
+		hashDebugOut = new(bytes.Buffer)
+		hw = io.MultiWriter(hashDebugOut, pkgHash)
+	}
 
 	if pkg.PkgObj != "" {
+		fmt.Fprintf(hw, "## %v\n", pkg.ImportPath)
+
+		binHash := sha256.New()
 		binPath, err := os.Executable()
 		if err != nil {
 			return nil, fmt.Errorf("could not locate GopherJS binary: %v", err)
@@ -606,16 +634,16 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not open %v: %v", binPath, err)
 		}
-
-		binHash := sha256.New()
-		io.Copy(binHash, binFile)
+		if _, err := io.Copy(binHash, binFile); err != nil {
+			return nil, fmt.Errorf("failed to hash %v: %v", binPath, err)
+		}
 		binFile.Close()
-		fmt.Fprintf(pkgHash, "gopherjs bin: %#x\n", binHash.Sum(nil))
+		fmt.Fprintf(hw, "gopherjs bin: %#x\n", binHash.Sum(nil))
 
 		orderedBuildTags := append([]string{}, s.options.BuildTags...)
 		sort.Strings(orderedBuildTags)
 
-		fmt.Fprintf(pkgHash, "build tags: %v\n", strings.Join(orderedBuildTags, ","))
+		fmt.Fprintf(hw, "build tags: %v\n", strings.Join(orderedBuildTags, ","))
 
 		for _, importedPkgPath := range pkg.Imports {
 			// Ignore all imports that aren't mentioned in import specs of pkg.
@@ -642,20 +670,34 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 				return nil, err
 			}
 
-			fmt.Fprintf(pkgHash, "import: %v\n", importedPkgPath)
-			fmt.Fprintf(pkgHash, "  hash: %#x\n", importedArchive.Hash)
+			fmt.Fprintf(hw, "import: %v\n", importedPkgPath)
+			fmt.Fprintf(hw, "  hash: %#x\n", importedArchive.Hash)
 		}
 
 		for _, name := range append(pkg.GoFiles, pkg.JSFiles...) {
-			fp := filepath.Join(pkg.Dir, name)
-			file, err := s.bctx.OpenFile(fp)
-			if err != nil {
-				return nil, fmt.Errorf("failed to open %v: %v", fp, err)
+			hashFile := func() error {
+				fp := filepath.Join(pkg.Dir, name)
+				file, err := s.bctx.OpenFile(fp)
+				if err != nil {
+					return fmt.Errorf("failed to open %v: %v", fp, err)
+				}
+				defer file.Close()
+				fmt.Fprintf(hw, "file: %v\n", fp)
+				n, err := io.Copy(hw, file)
+				if err != nil {
+					return fmt.Errorf("failed to hash file contents: %v", err)
+				}
+				fmt.Fprintf(hw, "%d bytes\n", n)
+				return nil
 			}
-			fmt.Fprintf(pkgHash, "file: %v\n", fp)
-			n, _ := io.Copy(pkgHash, file)
-			file.Close()
-			fmt.Fprintf(pkgHash, "%d bytes\n", n)
+
+			if err := hashFile(); err != nil {
+				return nil, fmt.Errorf("failed to hash file %v: %v", name, err)
+			}
+		}
+
+		if hashDebug {
+			fmt.Printf("%s", hashDebugOut.String())
 		}
 
 		// no commands are archived

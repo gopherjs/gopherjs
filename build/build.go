@@ -596,6 +596,32 @@ const (
 	hashDebug = false
 )
 
+var (
+	gopherJsBinaryHash string
+)
+
+func hashGopherJsBinary() (string, error) {
+	if gopherJsBinaryHash != "" {
+		return gopherJsBinaryHash, nil
+	}
+
+	binHash := sha256.New()
+	binPath, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("could not locate GopherJS binary: %v", err)
+	}
+	binFile, err := os.Open(binPath)
+	if err != nil {
+		return "", fmt.Errorf("could not open %v: %v", binPath, err)
+	}
+	defer binFile.Close()
+	if _, err := io.Copy(binHash, binFile); err != nil {
+		return "", fmt.Errorf("failed to hash %v: %v", binPath, err)
+	}
+	gopherJsBinaryHash = fmt.Sprintf("%#x", binHash.Sum(nil))
+	return gopherJsBinaryHash, nil
+}
+
 func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if archive, ok := s.Archives[pkg.ImportPath]; ok {
 		return archive, nil
@@ -605,7 +631,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	// determine staleness. Set hashDebug to see this in action. The format is:
 	//
 	// ## sync
-	// gopherjs bin: 0x519d22c6ab65a950f5b6278e4d65cb75dbd3a7eb1cf16e976a40b9f1febc0446
+	// gopherjs binary hash: 0x519d22c6ab65a950f5b6278e4d65cb75dbd3a7eb1cf16e976a40b9f1febc0446
 	// build tags:
 	// import: internal/race
 	//   hash: 0xb966d7680c1c8ca75026f993c153aff0102dc9551f314e5352043187b5f9c9a6
@@ -627,27 +653,12 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if pkg.PkgObj != "" {
 		fmt.Fprintf(hw, "## %v\n", pkg.ImportPath)
 
-		hashBin := func() error {
-			binHash := sha256.New()
-			binPath, err := os.Executable()
-			if err != nil {
-				return fmt.Errorf("could not locate GopherJS binary: %v", err)
-			}
-			binFile, err := os.Open(binPath)
-			if err != nil {
-				return fmt.Errorf("could not open %v: %v", binPath, err)
-			}
-			defer binFile.Close()
-			if _, err := io.Copy(binHash, binFile); err != nil {
-				return fmt.Errorf("failed to hash %v: %v", binPath, err)
-			}
-			fmt.Fprintf(hw, "gopherjs bin: %#x\n", binHash.Sum(nil))
-			return nil
-		}
-
-		if err := hashBin(); err != nil {
+		binHash, err := hashGopherJsBinary()
+		if err != nil {
 			return nil, err
 		}
+
+		fmt.Fprintf(hw, "gopherjs binary hash: %v\n", binHash)
 
 		orderedBuildTags := append([]string{}, s.options.BuildTags...)
 		sort.Strings(orderedBuildTags)

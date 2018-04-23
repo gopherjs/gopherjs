@@ -49,6 +49,7 @@ func (err ErrorList) Normalize() error {
 //
 // This is a logical equivalent of an object file in traditional compilers.
 type Archive struct {
+	Hash []byte
 	// Package's full import path, e.g. "some/package/name".
 	ImportPath string
 	// Package's name as per "package" statement at the top of a source file.

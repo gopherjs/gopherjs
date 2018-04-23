@@ -627,20 +627,27 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if pkg.PkgObj != "" {
 		fmt.Fprintf(hw, "## %v\n", pkg.ImportPath)
 
-		binHash := sha256.New()
-		binPath, err := os.Executable()
-		if err != nil {
-			return nil, fmt.Errorf("could not locate GopherJS binary: %v", err)
+		hashBin := func() error {
+			binHash := sha256.New()
+			binPath, err := os.Executable()
+			if err != nil {
+				return fmt.Errorf("could not locate GopherJS binary: %v", err)
+			}
+			binFile, err := os.Open(binPath)
+			if err != nil {
+				return fmt.Errorf("could not open %v: %v", binPath, err)
+			}
+			defer binFile.Close()
+			if _, err := io.Copy(binHash, binFile); err != nil {
+				return fmt.Errorf("failed to hash %v: %v", binPath, err)
+			}
+			fmt.Fprintf(hw, "gopherjs bin: %#x\n", binHash.Sum(nil))
+			return nil
 		}
-		binFile, err := os.Open(binPath)
-		if err != nil {
-			return nil, fmt.Errorf("could not open %v: %v", binPath, err)
+
+		if err := hashBin(); err != nil {
+			return nil, err
 		}
-		defer binFile.Close()
-		if _, err := io.Copy(binHash, binFile); err != nil {
-			return nil, fmt.Errorf("failed to hash %v: %v", binPath, err)
-		}
-		fmt.Fprintf(hw, "gopherjs bin: %#x\n", binHash.Sum(nil))
 
 		orderedBuildTags := append([]string{}, s.options.BuildTags...)
 		sort.Strings(orderedBuildTags)

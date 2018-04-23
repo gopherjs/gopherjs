@@ -243,8 +243,7 @@ func ReadArchive(filename, path string, r io.Reader, packages map[string]*types.
 	}
 
 	var err error
-	b := bytes.NewReader(a.ExportData)
-	packages[path], err = gcexportdata.Read(b, token.NewFileSet(), packages, path)
+	packages[path], err = gcexportdata.Read(bytes.NewReader(a.ExportData), token.NewFileSet(), packages, path)
 	if err != nil {
 		return nil, err
 	}

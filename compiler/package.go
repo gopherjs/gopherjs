@@ -168,7 +168,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	if err := gcexportdata.Write(exportData, nil, typesPkg); err != nil {
 		return nil, fmt.Errorf("failed to write export data: %v", err)
 	}
-	encodedFileSet := bytes.NewBuffer(nil)
+	encodedFileSet := new(bytes.Buffer)
 	if err := fileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
 		return nil, err
 	}

@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -607,6 +608,11 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		}
 		defer binFile.Close()
 		io.Copy(pkgHash, binFile)
+
+		orderedBuildTags := append([]string{}, s.options.BuildTags...)
+		sort.Strings(orderedBuildTags)
+
+		fmt.Fprintf(pkgHash, "build tags: %v\n", strings.Join(orderedBuildTags, ","))
 
 		for _, importedPkgPath := range pkg.Imports {
 			// Ignore all imports that aren't mentioned in import specs of pkg.

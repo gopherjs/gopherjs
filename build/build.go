@@ -608,10 +608,10 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not open %v: %v", binPath, err)
 		}
-		defer binFile.Close()
 
 		binHash := sha256.New()
 		io.Copy(binHash, binFile)
+		binFile.Close()
 		fmt.Fprintf(pkgHash, "gopherjs bin: %#x\n", binHash.Sum(nil))
 
 		orderedBuildTags := append([]string{}, s.options.BuildTags...)
@@ -656,6 +656,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			}
 			fmt.Fprintf(pkgHash, "file: %v\n", fp)
 			n, _ := io.Copy(pkgHash, file)
+			file.Close()
 			fmt.Fprintf(pkgHash, "%d bytes\n", n)
 		}
 
@@ -671,9 +672,9 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			}
 			return nil, err
 		}
-		defer objFile.Close()
 
 		archive, err := compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.Types)
+		objFile.Close()
 		if err != nil {
 			return nil, err
 		}

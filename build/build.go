@@ -609,7 +609,10 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			return nil, fmt.Errorf("could not open %v: %v", binPath, err)
 		}
 		defer binFile.Close()
-		io.Copy(pkgHash, binFile)
+
+		binHash := sha256.New()
+		io.Copy(binHash, binFile)
+		fmt.Fprintf(pkgHash, "gopherjs bin: %#x\n", binHash.Sum(nil))
 
 		orderedBuildTags := append([]string{}, s.options.BuildTags...)
 		sort.Strings(orderedBuildTags)
@@ -642,7 +645,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			}
 
 			fmt.Fprintf(pkgHash, "import: %v\n", importedPkgPath)
-			fmt.Fprintf(pkgHash, "  hash: %v\n", importedArchive.Hash)
+			fmt.Fprintf(pkgHash, "  hash: %#x\n", importedArchive.Hash)
 		}
 
 		for _, name := range append(pkg.GoFiles, pkg.JSFiles...) {

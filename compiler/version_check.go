@@ -6,4 +6,4 @@ package compiler
 const ___GOPHERJS_REQUIRES_GO_VERSION_1_10___ = true
 
 // Version is the GopherJS compiler version string.
-const Version = "1.10-3"
+const Version = "1.10-4"

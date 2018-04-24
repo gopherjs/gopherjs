@@ -30,6 +30,25 @@ import (
 	"golang.org/x/tools/go/buildutil"
 )
 
+const (
+	hashDebug = false
+)
+
+var (
+	compilerBinaryHash string
+)
+
+func init() {
+	// We do this here because it will only fail in truly bad situations, i.e.
+	// machine running out of resources. We also panic if there is a problem
+	// because it's unlikely anything else will be useful/work
+	h, err := hashCompilerBinary()
+	if err != nil {
+		panic(err)
+	}
+	compilerBinaryHash = h
+}
+
 type ImportCError struct {
 	pkgPath string
 }
@@ -592,17 +611,9 @@ func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*Packag
 	return pkg, archive, nil
 }
 
-const (
-	hashDebug = false
-)
-
-var (
-	gopherJsBinaryHash string
-)
-
-func hashGopherJsBinary() (string, error) {
-	if gopherJsBinaryHash != "" {
-		return gopherJsBinaryHash, nil
+func hashCompilerBinary() (string, error) {
+	if compilerBinaryHash != "" {
+		return compilerBinaryHash, nil
 	}
 
 	binHash := sha256.New()
@@ -618,8 +629,8 @@ func hashGopherJsBinary() (string, error) {
 	if _, err := io.Copy(binHash, binFile); err != nil {
 		return "", fmt.Errorf("failed to hash %v: %v", binPath, err)
 	}
-	gopherJsBinaryHash = fmt.Sprintf("%#x", binHash.Sum(nil))
-	return gopherJsBinaryHash, nil
+	compilerBinaryHash = fmt.Sprintf("%#x", binHash.Sum(nil))
+	return compilerBinaryHash, nil
 }
 
 func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
@@ -630,14 +641,14 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	// For non-main and test packages we build up a hash that will help
 	// determine staleness. Set hashDebug to see this in action. The format is:
 	//
-	// ## sync
-	// gopherjs binary hash: 0x519d22c6ab65a950f5b6278e4d65cb75dbd3a7eb1cf16e976a40b9f1febc0446
-	// build tags:
-	// import: internal/race
+	// ## <package>
+	// compiler binary hash: 0x519d22c6ab65a950f5b6278e4d65cb75dbd3a7eb1cf16e976a40b9f1febc0446
+	// build tags: <list of build tags>
+	// import: <import path>
 	//   hash: 0xb966d7680c1c8ca75026f993c153aff0102dc9551f314e5352043187b5f9c9a6
 	// ...
 	//
-	// file: /home/myitcv/gos/src/sync/cond.go
+	// file: <file path>
 	// <file contents>
 	// N bytes
 	// ...
@@ -652,13 +663,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 
 	if pkg.PkgObj != "" {
 		fmt.Fprintf(hw, "## %v\n", pkg.ImportPath)
-
-		binHash, err := hashGopherJsBinary()
-		if err != nil {
-			return nil, err
-		}
-
-		fmt.Fprintf(hw, "gopherjs binary hash: %v\n", binHash)
+		fmt.Fprintf(hw, "compiler binary hash: %v\n", compilerBinaryHash)
 
 		orderedBuildTags := append([]string{}, s.options.BuildTags...)
 		sort.Strings(orderedBuildTags)

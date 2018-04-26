@@ -1,5 +1,3 @@
-// +build js
-
 package tests
 
 import (
@@ -11,7 +9,7 @@ func TestVariadicNil(t *testing.T) {
 		return strs
 	}
 
-	if v := printVari(); v != nil {
-		t.Errorf("expected printVari() to be %v; got: %v", nil, v)
+	if got := printVari(); got != nil {
+		t.Errorf("expected printVari() to be %v; got: %v", nil, got)
 	}
 }

@@ -95,6 +95,10 @@ func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, e
 		varargType = sig.Params().At(paramsLen - 1).Type().(*types.Slice)
 	}
 
+	if sig.Variadic() && len(argExprs) == 0 {
+		return []string{fmt.Sprintf("%s.nil", c.typeName(varargType))}
+	}
+
 	preserveOrder := false
 	for i := 1; i < len(argExprs); i++ {
 		preserveOrder = preserveOrder || c.Blocking[argExprs[i]]

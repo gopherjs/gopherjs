@@ -10,6 +10,6 @@ func TestVariadicNil(t *testing.T) {
 	}
 
 	if got := printVari(); got != nil {
-		t.Errorf("expected printVari() to be %v; got: %v", nil, got)
+		t.Errorf("printVari(): got: %#v; want %#v.", got, nil)
 	}
 }

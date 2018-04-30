@@ -25,10 +25,10 @@ intptr_t toNative(Local<Value> value) {
     Local<Array> array = Local<Array>::Cast(value);
     intptr_t* native = reinterpret_cast<intptr_t*>(malloc(array->Length() * sizeof(intptr_t))); // TODO memory leak
     for (uint32_t i = 0; i < array->Length(); i++) {
-#if (NODE_MODULE_VERSION >= NODE_6_0_MODULE_VERSION)
-      v8::Local<v8::Value> elem = array->Get(i);
+#if (NODE_MAJOR_VERSION >= 6)
+      Local<Value> elem = array->Get(i);
       if (elem->IsObject()) {
-        v8::Local<v8::Object> obj = v8::Local<v8::Object>::Cast(elem);
+        Local<Object> obj = Local<Object>::Cast(elem);
         native[i] = toNative(obj->Clone());
       } else {
         native[i] = toNative(elem);

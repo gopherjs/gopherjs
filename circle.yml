@@ -19,7 +19,7 @@ test:
     - diff -u <(echo -n) <(git status --porcelain)
     - diff -u <(echo -n) <(gofmt -d .)
     - go tool vet *.go                                                   # Go package in root directory.
-    - for d in */; do echo $d; done | grep -v tests/ | grep -v third_party/ | xargs go tool vet # All subdirectories except "tests", "third_party".
+    - for d in */; do echo $d; done | grep -v tests/ | grep -v third_party/ | grep -v vendor/ | xargs go tool vet # All subdirectories except "tests", "third_party".
     - diff -u <(echo -n) <(go list ./compiler/natives/src/...) # All those packages should have // +build js.
     - gopherjs install -v net/http # Should build successfully (can't run tests, since only client is supported).
     - >

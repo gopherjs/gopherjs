@@ -113,7 +113,7 @@ var $externalize = function(v, t) {
         }
         return searchJsObject(v.$get(), t.elem);
       case $kindStruct:
-        if (t.fields.length == 0) {
+        if (t.fields.length === 0) {
           return noJsObject;
         }
         var f = t.fields[0];
@@ -350,7 +350,7 @@ var $internalize = function(v, t, recv) {
       case $kindPtr:
         return searchJsObject(t.elem);
       case $kindStruct:
-        if (t.fields.length == 0) {
+        if (t.fields.length === 0) {
           return noJsObject;
         }
         var f = t.fields[0];

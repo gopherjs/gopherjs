@@ -143,14 +143,14 @@ func reflectType(typ *js.Object) *rtype {
 			reflectFields := make([]structField, fields.Length())
 			for i := range reflectFields {
 				f := fields.Index(i)
-				offsetAnon := uintptr(i) << 1
-				if f.Get("anonymous").Bool() {
-					offsetAnon |= 1
+				offsetEmbed := uintptr(i) << 1
+				if f.Get("embedded").Bool() {
+					offsetEmbed |= 1
 				}
 				reflectFields[i] = structField{
-					name:       newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool()),
-					typ:        reflectType(f.Get("typ")),
-					offsetAnon: offsetAnon,
+					name:        newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool()),
+					typ:         reflectType(f.Get("typ")),
+					offsetEmbed: offsetEmbed,
 				}
 			}
 			setKindType(rt, &structType{
@@ -993,7 +993,7 @@ func (v Value) Field(i int) Value {
 
 	fl := v.flag&(flagStickyRO|flagIndir|flagAddr) | flag(typ.Kind())
 	if !field.name.isExported() {
-		if field.anon() {
+		if field.embedded() {
 			fl |= flagEmbedRO
 		} else {
 			fl |= flagStickyRO

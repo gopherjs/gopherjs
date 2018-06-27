@@ -53,17 +53,34 @@ func reflectType(typ *js.Object) *rtype {
 			if typ.Get("named").Bool() {
 				rt.tflag |= tflagNamed
 			}
-			reflectMethods := make([]method, methodSet.Length())
-			for i := range reflectMethods {
+			var reflectMethods []method
+			for i := 0; i < methodSet.Length(); i++ { // Exported methods first.
 				m := methodSet.Index(i)
-				reflectMethods[i] = method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", internalStr(m.Get("pkg")) == "")),
-					mtyp: newTypeOff(reflectType(m.Get("typ"))),
+				exported := internalStr(m.Get("pkg")) == ""
+				if !exported {
+					continue
 				}
+				reflectMethods = append(reflectMethods, method{
+					name: newNameOff(newName(internalStr(m.Get("name")), "", exported)),
+					mtyp: newTypeOff(reflectType(m.Get("typ"))),
+				})
+			}
+			xcount := uint16(len(reflectMethods))
+			for i := 0; i < methodSet.Length(); i++ { // Unexported methods second.
+				m := methodSet.Index(i)
+				exported := internalStr(m.Get("pkg")) == ""
+				if exported {
+					continue
+				}
+				reflectMethods = append(reflectMethods, method{
+					name: newNameOff(newName(internalStr(m.Get("name")), "", exported)),
+					mtyp: newTypeOff(reflectType(m.Get("typ"))),
+				})
 			}
 			ut := &uncommonType{
 				pkgPath:  newNameOff(newName(internalStr(typ.Get("pkg")), "", false)),
 				mcount:   uint16(methodSet.Length()),
+				xcount:   xcount,
 				_methods: reflectMethods,
 			}
 			uncommonTypeMap[rt] = ut
@@ -172,15 +189,18 @@ func setKindType(rt *rtype, kindType interface{}) {
 type uncommonType struct {
 	pkgPath nameOff
 	mcount  uint16
-	_       uint16
+	xcount  uint16
 	moff    uint32
-	_       uint32
 
 	_methods []method
 }
 
 func (t *uncommonType) methods() []method {
 	return t._methods
+}
+
+func (t *uncommonType) exportedMethods() []method {
+	return t._methods[:t.xcount:t.xcount]
 }
 
 var uncommonTypeMap = make(map[*rtype]*uncommonType)

@@ -10,7 +10,7 @@ dependencies:
   post:
     - mv ./gopherjs $HOME/bin
     - npm install --global node-gyp
-    - npm install # install our (dev) dependencies from package.json
+    - npm install --no-save # install our (dev) dependencies from package.json
     - cd node-syscall && node-gyp rebuild && mkdir -p ~/.node_libraries/ && cp build/Release/syscall.node ~/.node_libraries/syscall.node
 
 test:

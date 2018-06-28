@@ -8,6 +8,8 @@ dependencies:
   pre:
     - cd /usr/local && sudo rm -rf go && curl https://storage.googleapis.com/golang/go1.10.1.linux-amd64.tar.gz | sudo tar -xz && sudo chmod a+w go/src/path/filepath
   override:
+    - mkdir -p ~/.go_project/src/github.com/${CIRCLE_PROJECT_USERNAME}
+    - ln -s ${HOME}/${CIRCLE_PROJECT_REPONAME} ${HOME}/.go_project/src/github.com/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}
     - go get -t -d -v ./...
     - go build -v
     - npm install --no-save # install our (dev) dependencies from package.json

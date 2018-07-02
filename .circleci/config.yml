@@ -1,0 +1,84 @@
+version: 2
+jobs:
+  build:
+    working_directory: /go/src/github.com/gopherjs/gopherjs
+    docker:
+      # We have a custom installation of Go below so this version is (largely) irrelevant.
+      - image: circleci/golang:1.10
+
+    environment:
+      SOURCE_MAP_SUPPORT: false
+      NVM_VERSION: v0.33.9
+      GO_VERSION: 1.10.3
+      NODE_VERSION: 10.0.0
+
+    steps:
+      - checkout
+
+      - run: |
+          # Install nvm.
+          git clone https://github.com/creationix/nvm.git $HOME/.nvm
+          cd $HOME/.nvm && git checkout $NVM_VERSION
+          echo 'export NVM_DIR="$HOME/.nvm"' >> $BASH_ENV
+          echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> $BASH_ENV
+
+      - run: |
+          # Install our own local Go version; we need src/path/filepath to be writable for certain tests.
+          mkdir $HOME/goroot
+          curl https://storage.googleapis.com/golang/go$GO_VERSION.linux-amd64.tar.gz | tar -C $HOME/goroot --strip-components=1 -xz
+          chmod a+w $HOME/goroot/src/path/filepath
+          echo 'export PATH="$HOME/goroot/bin:$PATH"' >> $BASH_ENV
+
+      - run: |
+          # Per https://github.com/gopherjs/gopherjs/pull/687.
+          echo 'ulimit -s 10000' >> $BASH_ENV
+
+      - run: |
+          # Setup our required Node version now that nvm is installed.
+          nvm install $NODE_VERSION node
+          nvm alias default $NODE_VERSION
+
+      - run: |
+          # Verify our environment setup.
+          which node
+          which go
+          node --version
+          go version
+          go env
+
+      - run: |
+          # Per https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md.
+          npm install --global node-gyp
+          cd node-syscall && node-gyp rebuild && mkdir -p $HOME/.node_libraries/ && cp build/Release/syscall.node $HOME/.node_libraries/syscall.node
+
+      - run: |
+          go get -t ./...
+          go install github.com/gopherjs/gopherjs
+
+      - run:
+          # because this is a long-running test suite
+          no_output_timeout: 30m
+          command: |
+              echo ">> Ensure all go code is well formatted."
+              diff -u <(echo -n) <(gofmt -d .)
+
+              echo ">> Vetting github.com/gopherjs/gopherjs"
+              go tool vet *.go
+
+              echo ">> vet all subdirectories except tests and third_party."
+              for d in */; do echo $d; done | grep -v tests/ | grep -v third_party/ | xargs go tool vet
+
+              echo ">> All those packages should have // +build js."
+              diff -u <(echo -n) <(go list ./compiler/natives/src/...)
+
+              echo ">> Should build successfully (can't run tests, since only client is supported)."
+              gopherjs install -v net/http
+
+              echo ">> Run the core gopherjs tests; exclusions take from .std_test_pkg_exclusions."
+              go list std | grep -v -x -f .std_test_pkg_exclusions | xargs gopherjs test --minify -v --short github.com/gopherjs/gopherjs/tests/...
+
+              echo ">> Race tests."
+              go test -v -race ./...
+
+              echo ">> Non-minified gopherjs tests should also work."
+              gopherjs test -v fmt

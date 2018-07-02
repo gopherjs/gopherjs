@@ -5,13 +5,20 @@ machine:
     SOURCE_MAP_SUPPORT: false
 
 dependencies:
-  pre:
+  override:
     - cd /usr/local && sudo rm -rf go && curl https://storage.googleapis.com/golang/go1.10.1.linux-amd64.tar.gz | sudo tar -xz && sudo chmod a+w go/src/path/filepath
-  post:
-    - mv ./gopherjs $HOME/bin
     - npm install --global node-gyp
     - npm install # install our (dev) dependencies from package.json
     - cd node-syscall && node-gyp rebuild && mkdir -p ~/.node_libraries/ && cp build/Release/syscall.node ~/.node_libraries/syscall.node
+    - mkdir -p $HOME/.gopath/src/github.com/gopherjs
+    - mv $HOME/$CIRCLE_PROJECT_REPONAME $HOME/.gopath/src/github.com/gopherjs/gopherjs
+    - ln -s $HOME/.gopath/src/github.com/gopherjs/gopherjs $HOME/$CIRCLE_PROJECT_REPONAME
+    - |
+      echo 'export GOPATH=$HOME/.gopath:$GOPATH' >> ~/.circlerc
+      echo 'export PATH=$HOME/.gopath/bin:$PATH' >> ~/.circlerc
+    - go get -t -d -v github.com/gopherjs/gopherjs/...
+    - go install github.com/gopherjs/gopherjs
+    - which gopherjs
 
 test:
   override:

@@ -75,7 +75,7 @@ jobs:
               go tool vet *.go
 
               echo ">> vet all subdirectories except tests and third_party."
-              for d in */; do echo $d; done | grep -v tests/ | grep -v third_party/ | xargs go tool vet
+              for d in */; do echo $d; done | grep -v tests/ | grep -v third_party/ | grep -v vendor/ | xargs go tool vet
 
               echo ">> All those packages should have // +build js."
               diff -u <(echo -n) <(go list ./compiler/natives/src/...)

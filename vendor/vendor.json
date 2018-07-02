@@ -1,0 +1,35 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "CaUaJLLnql96d2JGRgCpYsKomxw=",
+			"path": "github.com/neelance/astrewrite",
+			"revision": "99348263ae862cc230986ce88deaddbf7edcc034",
+			"revisionTime": "2016-05-11T09:36:45Z"
+		},
+		{
+			"path": "go/types",
+			"revision": "030ac2c719e14925830de5e97d4ef86b3ab5826f"
+		},
+		{
+			"checksumSHA1": "ba80UZ0mLHlMRtyMQXLo2rqkISY=",
+			"path": "golang.org/x/tools/go/gcexportdata",
+			"revision": "836e0f611e69f12657ca7b4ff1d5747865308e2d",
+			"revisionTime": "2018-04-30T23:40:03Z"
+		},
+		{
+			"checksumSHA1": "4fHLwo8NkpTrPdtOezgBMFqnWz4=",
+			"path": "golang.org/x/tools/go/internal/gcimporter",
+			"revision": "836e0f611e69f12657ca7b4ff1d5747865308e2d",
+			"revisionTime": "2018-04-30T23:40:03Z"
+		},
+		{
+			"checksumSHA1": "QKvPv3TJ+ZnOLkUeUkT8Wm8eCV0=",
+			"path": "golang.org/x/tools/go/types/typeutil",
+			"revision": "836e0f611e69f12657ca7b4ff1d5747865308e2d",
+			"revisionTime": "2018-04-30T23:40:03Z"
+		}
+	],
+	"rootPath": "github.com/gopherjs/gopherjs"
+}

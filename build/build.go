@@ -1,6 +1,8 @@
 package build
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -15,9 +17,9 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gopherjs/gopherjs/compiler"
@@ -27,6 +29,25 @@ import (
 	"github.com/shurcooL/httpfs/vfsutil"
 	"golang.org/x/tools/go/buildutil"
 )
+
+const (
+	hashDebug = false
+)
+
+var (
+	compilerBinaryHash string
+)
+
+func init() {
+	// We do this here because it will only fail in truly bad situations, i.e.
+	// machine running out of resources. We also panic if there is a problem
+	// because it's unlikely anything else will be useful/work
+	h, err := hashCompilerBinary()
+	if err != nil {
+		panic(err)
+	}
+	compilerBinaryHash = h
+}
 
 type ImportCError struct {
 	pkgPath string
@@ -457,11 +478,10 @@ func (o *Options) PrintSuccess(format string, a ...interface{}) {
 
 type PackageData struct {
 	*build.Package
-	JSFiles    []string
-	IsTest     bool // IsTest is true if the package is being built for running tests.
-	SrcModTime time.Time
-	UpToDate   bool
-	IsVirtual  bool // If true, the package does not have a corresponding physical directory on disk.
+	JSFiles   []string
+	IsTest    bool // IsTest is true if the package is being built for running tests.
+	UpToDate  bool
+	IsVirtual bool // If true, the package does not have a corresponding physical directory on disk.
 }
 
 type Session struct {
@@ -591,24 +611,64 @@ func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*Packag
 	return pkg, archive, nil
 }
 
+func hashCompilerBinary() (string, error) {
+	if compilerBinaryHash != "" {
+		return compilerBinaryHash, nil
+	}
+
+	binHash := sha256.New()
+	binPath, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("could not locate GopherJS binary: %v", err)
+	}
+	binFile, err := os.Open(binPath)
+	if err != nil {
+		return "", fmt.Errorf("could not open %v: %v", binPath, err)
+	}
+	defer binFile.Close()
+	if _, err := io.Copy(binHash, binFile); err != nil {
+		return "", fmt.Errorf("failed to hash %v: %v", binPath, err)
+	}
+	compilerBinaryHash = fmt.Sprintf("%#x", binHash.Sum(nil))
+	return compilerBinaryHash, nil
+}
+
 func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if archive, ok := s.Archives[pkg.ImportPath]; ok {
 		return archive, nil
 	}
 
+	// For non-main and test packages we build up a hash that will help
+	// determine staleness. Set hashDebug to see this in action. The format is:
+	//
+	// ## <package>
+	// compiler binary hash: 0x519d22c6ab65a950f5b6278e4d65cb75dbd3a7eb1cf16e976a40b9f1febc0446
+	// build tags: <list of build tags>
+	// import: <import path>
+	//   hash: 0xb966d7680c1c8ca75026f993c153aff0102dc9551f314e5352043187b5f9c9a6
+	// ...
+	//
+	// file: <file path>
+	// <file contents>
+	// N bytes
+	// ...
+
+	pkgHash := sha256.New()
+	var hw io.Writer = pkgHash
+	var hashDebugOut *bytes.Buffer
+	if hashDebug {
+		hashDebugOut = new(bytes.Buffer)
+		hw = io.MultiWriter(hashDebugOut, pkgHash)
+	}
+
 	if pkg.PkgObj != "" {
-		var fileInfo os.FileInfo
-		gopherjsBinary, err := os.Executable()
-		if err == nil {
-			fileInfo, err = os.Stat(gopherjsBinary)
-			if err == nil {
-				pkg.SrcModTime = fileInfo.ModTime()
-			}
-		}
-		if err != nil {
-			os.Stderr.WriteString("Could not get GopherJS binary's modification timestamp. Please report issue.\n")
-			pkg.SrcModTime = time.Now()
-		}
+		fmt.Fprintf(hw, "## %v\n", pkg.ImportPath)
+		fmt.Fprintf(hw, "compiler binary hash: %v\n", compilerBinaryHash)
+
+		orderedBuildTags := append([]string{}, s.options.BuildTags...)
+		sort.Strings(orderedBuildTags)
+
+		fmt.Fprintf(hw, "build tags: %v\n", strings.Join(orderedBuildTags, ","))
 
 		for _, importedPkgPath := range pkg.Imports {
 			// Ignore all imports that aren't mentioned in import specs of pkg.
@@ -630,48 +690,70 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			if importedPkgPath == "unsafe" || ignored {
 				continue
 			}
-			importedPkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
+			_, importedArchive, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
 			if err != nil {
 				return nil, err
 			}
-			impModTime := importedPkg.SrcModTime
-			if impModTime.After(pkg.SrcModTime) {
-				pkg.SrcModTime = impModTime
-			}
+
+			fmt.Fprintf(hw, "import: %v\n", importedPkgPath)
+			fmt.Fprintf(hw, "  hash: %#x\n", importedArchive.Hash)
 		}
 
 		for _, name := range append(pkg.GoFiles, pkg.JSFiles...) {
-			fileInfo, err := statFile(filepath.Join(pkg.Dir, name))
-			if err != nil {
-				return nil, err
+			hashFile := func() error {
+				fp := filepath.Join(pkg.Dir, name)
+				file, err := s.bctx.OpenFile(fp)
+				if err != nil {
+					return fmt.Errorf("failed to open %v: %v", fp, err)
+				}
+				defer file.Close()
+				fmt.Fprintf(hw, "file: %v\n", fp)
+				n, err := io.Copy(hw, file)
+				if err != nil {
+					return fmt.Errorf("failed to hash file contents: %v", err)
+				}
+				fmt.Fprintf(hw, "%d bytes\n", n)
+				return nil
 			}
-			if fileInfo.ModTime().After(pkg.SrcModTime) {
-				pkg.SrcModTime = fileInfo.ModTime()
+
+			if err := hashFile(); err != nil {
+				return nil, fmt.Errorf("failed to hash file %v: %v", name, err)
 			}
 		}
 
-		pkgObjFileInfo, err := os.Stat(pkg.PkgObj)
-		if err == nil && !pkg.SrcModTime.After(pkgObjFileInfo.ModTime()) {
-			// package object is up to date, load from disk if library
-			pkg.UpToDate = true
-			if pkg.IsCommand() {
-				return nil, nil
-			}
+		if hashDebug {
+			fmt.Printf("%s", hashDebugOut.String())
+		}
 
-			objFile, err := os.Open(pkg.PkgObj)
-			if err != nil {
-				return nil, err
-			}
-			defer objFile.Close()
+		// no commands are archived
+		if pkg.IsCommand() {
+			goto CacheMiss
+		}
 
-			archive, err := compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.Types)
-			if err != nil {
-				return nil, err
+		objFile, err := os.Open(pkg.PkgObj)
+		if err != nil {
+			if os.IsNotExist(err) {
+				goto CacheMiss
 			}
+			return nil, err
+		}
+		defer objFile.Close()
 
+		archive, err := compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.Types)
+		if err != nil {
+			return nil, err
+		}
+
+		if bytes.Equal(archive.Hash, pkgHash.Sum(nil)) {
 			s.Archives[pkg.ImportPath] = archive
-			return archive, err
+			return archive, nil
 		}
+	}
+
+CacheMiss:
+
+	if s.options.Verbose {
+		fmt.Printf("Cache miss for %v\n", pkg.ImportPath)
 	}
 
 	fileSet := token.NewFileSet()
@@ -700,6 +782,8 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		return nil, err
 	}
 
+	archive.Hash = pkgHash.Sum(nil)
+
 	for _, jsFile := range pkg.JSFiles {
 		code, err := ioutil.ReadFile(filepath.Join(pkg.Dir, jsFile))
 		if err != nil {
@@ -708,10 +792,6 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
 		archive.IncJSCode = append(archive.IncJSCode, code...)
 		archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
-	}
-
-	if s.options.Verbose {
-		fmt.Println(pkg.ImportPath)
 	}
 
 	s.Archives[pkg.ImportPath] = archive

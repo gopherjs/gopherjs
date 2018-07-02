@@ -51,6 +51,9 @@ jobs:
           npm install --global node-gyp
           cd node-syscall && node-gyp rebuild && mkdir -p $HOME/.node_libraries/ && cp build/Release/syscall.node $HOME/.node_libraries/syscall.node
 
+          # this gives us the repo-local binaries we require
+          npm install
+
       - run: |
           go get -t ./...
           go install github.com/gopherjs/gopherjs
@@ -59,6 +62,12 @@ jobs:
           # because this is a long-running test suite
           no_output_timeout: 30m
           command: |
+              echo ">> Regenerate compiler/prelude"
+              go generate github.com/gopherjs/gopherjs/compiler/prelude
+
+              echo ">> Ensure there are no variations from the git commit"
+              diff -u <(echo -n) <(git status --porcelain)
+
               echo ">> Ensure all go code is well formatted."
               diff -u <(echo -n) <(gofmt -d .)
 

@@ -1,5 +1,7 @@
 var $min = Math.min;
-var $mod = function(x, y) { return x % y; };
+var $mod = function(x, y) {
+  return x % y;
+};
 var $parseInt = parseInt;
 var $parseFloat = function(f) {
   if (f !== undefined && f !== null && f.constructor === Number) {
@@ -9,18 +11,22 @@ var $parseFloat = function(f) {
 };
 
 var $froundBuf = new Float32Array(1);
-var $fround = Math.fround || function(f) {
-  $froundBuf[0] = f;
-  return $froundBuf[0];
-};
+var $fround =
+  Math.fround ||
+  function(f) {
+    $froundBuf[0] = f;
+    return $froundBuf[0];
+  };
 
-var $imul = Math.imul || function(a, b) {
-  var ah = (a >>> 16) & 0xffff;
-  var al = a & 0xffff;
-  var bh = (b >>> 16) & 0xffff;
-  var bl = b & 0xffff;
-  return ((al * bl) + (((ah * bl + al * bh) << 16) >>> 0) >> 0);
-};
+var $imul =
+  Math.imul ||
+  function(a, b) {
+    var ah = (a >>> 16) & 0xffff;
+    var al = a & 0xffff;
+    var bh = (b >>> 16) & 0xffff;
+    var bl = b & 0xffff;
+    return (al * bl + (((ah * bl + al * bh) << 16) >>> 0)) >> 0;
+  };
 
 var $floatKey = function(f) {
   if (f !== f) {
@@ -39,7 +45,7 @@ var $shiftLeft64 = function(x, y) {
     return x;
   }
   if (y < 32) {
-    return new x.constructor(x.$high << y | x.$low >>> (32 - y), (x.$low << y) >>> 0);
+    return new x.constructor((x.$high << y) | (x.$low >>> (32 - y)), (x.$low << y) >>> 0);
   }
   if (y < 64) {
     return new x.constructor(x.$low << (y - 32), 0);
@@ -52,7 +58,7 @@ var $shiftRightInt64 = function(x, y) {
     return x;
   }
   if (y < 32) {
-    return new x.constructor(x.$high >> y, (x.$low >>> y | x.$high << (32 - y)) >>> 0);
+    return new x.constructor(x.$high >> y, ((x.$low >>> y) | (x.$high << (32 - y))) >>> 0);
   }
   if (y < 64) {
     return new x.constructor(x.$high >> 31, (x.$high >> (y - 32)) >>> 0);
@@ -68,7 +74,7 @@ var $shiftRightUint64 = function(x, y) {
     return x;
   }
   if (y < 32) {
-    return new x.constructor(x.$high >>> y, (x.$low >>> y | x.$high << (32 - y)) >>> 0);
+    return new x.constructor(x.$high >>> y, ((x.$low >>> y) | (x.$high << (32 - y))) >>> 0);
   }
   if (y < 64) {
     return new x.constructor(0, x.$high >>> (y - 32));
@@ -77,19 +83,20 @@ var $shiftRightUint64 = function(x, y) {
 };
 
 var $mul64 = function(x, y) {
-  var high = 0, low = 0;
+  var high = 0,
+    low = 0;
   if ((y.$low & 1) !== 0) {
     high = x.$high;
     low = x.$low;
   }
   for (var i = 1; i < 32; i++) {
-    if ((y.$low & 1<<i) !== 0) {
-      high += x.$high << i | x.$low >>> (32 - i);
+    if ((y.$low & (1 << i)) !== 0) {
+      high += (x.$high << i) | (x.$low >>> (32 - i));
       low += (x.$low << i) >>> 0;
     }
   }
   for (var i = 0; i < 32; i++) {
-    if ((y.$high & 1<<i) !== 0) {
+    if ((y.$high & (1 << i)) !== 0) {
       high += x.$low << i;
     }
   }
@@ -127,16 +134,18 @@ var $div64 = function(x, y, returnRemainder) {
     }
   }
 
-  var high = 0, low = 0, n = 0;
-  while (yHigh < 2147483648 && ((xHigh > yHigh) || (xHigh === yHigh && xLow > yLow))) {
-    yHigh = (yHigh << 1 | yLow >>> 31) >>> 0;
+  var high = 0,
+    low = 0,
+    n = 0;
+  while (yHigh < 2147483648 && (xHigh > yHigh || (xHigh === yHigh && xLow > yLow))) {
+    yHigh = ((yHigh << 1) | (yLow >>> 31)) >>> 0;
     yLow = (yLow << 1) >>> 0;
     n++;
   }
   for (var i = 0; i <= n; i++) {
-    high = high << 1 | low >>> 31;
+    high = (high << 1) | (low >>> 31);
     low = (low << 1) >>> 0;
-    if ((xHigh > yHigh) || (xHigh === yHigh && xLow >= yLow)) {
+    if (xHigh > yHigh || (xHigh === yHigh && xLow >= yLow)) {
       xHigh = xHigh - yHigh;
       xLow = xLow - yLow;
       if (xLow < 0) {
@@ -149,7 +158,7 @@ var $div64 = function(x, y, returnRemainder) {
         low = 0;
       }
     }
-    yLow = (yLow >>> 1 | yHigh << (32 - 1)) >>> 0;
+    yLow = ((yLow >>> 1) | (yHigh << (32 - 1))) >>> 0;
     yHigh = yHigh >>> 1;
   }
 
@@ -164,7 +173,7 @@ var $divComplex = function(n, d) {
   var dinf = d.$real === Infinity || d.$real === -Infinity || d.$imag === Infinity || d.$imag === -Infinity;
   var nnan = !ninf && (n.$real !== n.$real || n.$imag !== n.$imag);
   var dnan = !dinf && (d.$real !== d.$real || d.$imag !== d.$imag);
-  if(nnan || dnan) {
+  if (nnan || dnan) {
     return new n.constructor(NaN, NaN);
   }
   if (ninf && !dinf) {

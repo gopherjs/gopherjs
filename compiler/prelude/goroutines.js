@@ -7,7 +7,8 @@ var $getStackDepth = function() {
   return $stackDepthOffset + err.stack.split("\n").length;
 };
 
-var $panicStackDepth = null, $panicValue;
+var $panicStackDepth = null,
+  $panicValue;
 var $callDeferred = function(deferred, jsErr, fromPanic) {
   if (!fromPanic && deferred !== null && deferred.index >= $curGoroutine.deferStack.length) {
     throw jsErr;
@@ -106,10 +107,20 @@ var $recover = function() {
   $panicStackDepth = null;
   return $panicValue;
 };
-var $throw = function(err) { throw err; };
+var $throw = function(err) {
+  throw err;
+};
 
-var $noGoroutine = { asleep: false, exit: false, deferStack: [], panicStack: [] };
-var $curGoroutine = $noGoroutine, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
+var $noGoroutine = {
+  asleep: false,
+  exit: false,
+  deferStack: [],
+  panicStack: [],
+};
+var $curGoroutine = $noGoroutine,
+  $totalGoroutines = 0,
+  $awakeGoroutines = 0,
+  $checkForDeadlock = true;
 var $mainFinished = false;
 var $go = function(fun, args) {
   $totalGoroutines++;
@@ -119,7 +130,9 @@ var $go = function(fun, args) {
       $curGoroutine = $goroutine;
       var r = fun.apply(undefined, args);
       if (r && r.$blk !== undefined) {
-        fun = function() { return r.$blk(); };
+        fun = function() {
+          return r.$blk();
+        };
         args = [];
         return;
       }
@@ -130,7 +143,8 @@ var $go = function(fun, args) {
       }
     } finally {
       $curGoroutine = $noGoroutine;
-      if ($goroutine.exit) { /* also set by runtime.Goexit() */
+      if ($goroutine.exit) {
+        /* also set by runtime.Goexit() */
         $totalGoroutines--;
         $goroutine.asleep = true;
       }
@@ -219,7 +233,7 @@ var $send = function(chan, value) {
       if (closedDuringSend) {
         $throwRuntimeError("send on closed channel");
       }
-    }
+    },
   };
 };
 var $recv = function(chan) {
@@ -236,7 +250,11 @@ var $recv = function(chan) {
   }
 
   var thisGoroutine = $curGoroutine;
-  var f = { $blk: function() { return this.value; } };
+  var f = {
+    $blk: function() {
+      return this.value;
+    },
+  };
   var queueEntry = function(v) {
     f.value = v;
     $schedule(thisGoroutine);
@@ -272,22 +290,22 @@ var $select = function(comms) {
     var comm = comms[i];
     var chan = comm[0];
     switch (comm.length) {
-    case 0: /* default */
-      selection = i;
-      break;
-    case 1: /* recv */
-      if (chan.$sendQueue.length !== 0 || chan.$buffer.length !== 0 || chan.$closed) {
-        ready.push(i);
-      }
-      break;
-    case 2: /* send */
-      if (chan.$closed) {
-        $throwRuntimeError("send on closed channel");
-      }
-      if (chan.$recvQueue.length !== 0 || chan.$buffer.length < chan.$capacity) {
-        ready.push(i);
-      }
-      break;
+      case 0 /* default */:
+        selection = i;
+        break;
+      case 1 /* recv */:
+        if (chan.$sendQueue.length !== 0 || chan.$buffer.length !== 0 || chan.$closed) {
+          ready.push(i);
+        }
+        break;
+      case 2 /* send */:
+        if (chan.$closed) {
+          $throwRuntimeError("send on closed channel");
+        }
+        if (chan.$recvQueue.length !== 0 || chan.$buffer.length < chan.$capacity) {
+          ready.push(i);
+        }
+        break;
     }
   }
 
@@ -297,19 +315,23 @@ var $select = function(comms) {
   if (selection !== -1) {
     var comm = comms[selection];
     switch (comm.length) {
-    case 0: /* default */
-      return [selection];
-    case 1: /* recv */
-      return [selection, $recv(comm[0])];
-    case 2: /* send */
-      $send(comm[0], comm[1]);
-      return [selection];
+      case 0 /* default */:
+        return [selection];
+      case 1 /* recv */:
+        return [selection, $recv(comm[0])];
+      case 2 /* send */:
+        $send(comm[0], comm[1]);
+        return [selection];
     }
   }
 
   var entries = [];
   var thisGoroutine = $curGoroutine;
-  var f = { $blk: function() { return this.selection; } };
+  var f = {
+    $blk: function() {
+      return this.selection;
+    },
+  };
   var removeFromQueues = function() {
     for (var i = 0; i < entries.length; i++) {
       var entry = entries[i];
@@ -324,28 +346,28 @@ var $select = function(comms) {
     (function(i) {
       var comm = comms[i];
       switch (comm.length) {
-      case 1: /* recv */
-        var queueEntry = function(value) {
-          f.selection = [i, value];
-          removeFromQueues();
-          $schedule(thisGoroutine);
-        };
-        entries.push([comm[0].$recvQueue, queueEntry]);
-        comm[0].$recvQueue.push(queueEntry);
-        break;
-      case 2: /* send */
-        var queueEntry = function() {
-          if (comm[0].$closed) {
-            $throwRuntimeError("send on closed channel");
-          }
-          f.selection = [i];
-          removeFromQueues();
-          $schedule(thisGoroutine);
-          return comm[1];
-        };
-        entries.push([comm[0].$sendQueue, queueEntry]);
-        comm[0].$sendQueue.push(queueEntry);
-        break;
+        case 1 /* recv */:
+          var queueEntry = function(value) {
+            f.selection = [i, value];
+            removeFromQueues();
+            $schedule(thisGoroutine);
+          };
+          entries.push([comm[0].$recvQueue, queueEntry]);
+          comm[0].$recvQueue.push(queueEntry);
+          break;
+        case 2 /* send */:
+          var queueEntry = function() {
+            if (comm[0].$closed) {
+              $throwRuntimeError("send on closed channel");
+            }
+            f.selection = [i];
+            removeFromQueues();
+            $schedule(thisGoroutine);
+            return comm[1];
+          };
+          entries.push([comm[0].$sendQueue, queueEntry]);
+          comm[0].$sendQueue.push(queueEntry);
+          break;
       }
     })(i);
   }

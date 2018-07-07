@@ -20,7 +20,7 @@ var $needsExternalization = function(t) {
   }
 };
 
-var $externalize = function(v, t) {
+var $externalize = function(v, t, makeWrapper) {
   if (t === $jsObjectPtr) {
     return v;
   }
@@ -44,12 +44,12 @@ var $externalize = function(v, t) {
     case $kindArray:
       if ($needsExternalization(t.elem)) {
         return $mapArray(v, function(e) {
-          return $externalize(e, t.elem);
+          return $externalize(e, t.elem, makeWrapper);
         });
       }
       return v;
     case $kindFunc:
-      return $externalizeFunction(v, t, false);
+      return $externalizeFunction(v, t, false, makeWrapper);
     case $kindInterface:
       if (v === $ifaceNil) {
         return null;
@@ -57,24 +57,24 @@ var $externalize = function(v, t) {
       if (v.constructor === $jsObjectPtr) {
         return v.$val.object;
       }
-      return $externalize(v.$val, v.constructor);
+      return $externalize(v.$val, v.constructor, makeWrapper);
     case $kindMap:
       var m = {};
       var keys = $keys(v);
       for (var i = 0; i < keys.length; i++) {
         var entry = v[keys[i]];
-        m[$externalize(entry.k, t.key)] = $externalize(entry.v, t.elem);
+        m[$externalize(entry.k, t.key, makeWrapper)] = $externalize(entry.v, t.elem, makeWrapper);
       }
       return m;
     case $kindPtr:
       if (v === t.nil) {
         return null;
       }
-      return $externalize(v.$get(), t.elem);
+      return $externalize(v.$get(), t.elem, makeWrapper);
     case $kindSlice:
       if ($needsExternalization(t.elem)) {
         return $mapArray($sliceToArray(v), function(e) {
-          return $externalize(e, t.elem);
+          return $externalize(e, t.elem, makeWrapper);
         });
       }
       return $sliceToArray(v);
@@ -128,20 +128,24 @@ var $externalize = function(v, t) {
         return o;
       }
 
+      if (makeWrapper !== undefined) {
+        return makeWrapper(v);
+      }
+
       o = {};
       for (var i = 0; i < t.fields.length; i++) {
         var f = t.fields[i];
         if (!f.exported) {
           continue;
         }
-        o[f.name] = $externalize(v[f.prop], f.typ);
+        o[f.name] = $externalize(v[f.prop], f.typ, makeWrapper);
       }
       return o;
   }
   $throwRuntimeError("cannot externalize " + t.string);
 };
 
-var $externalizeFunction = function(v, t, passThis) {
+var $externalizeFunction = function(v, t, passThis, makeWrapper) {
   if (v === $throwNilPointerError) {
     return null;
   }
@@ -154,22 +158,22 @@ var $externalizeFunction = function(v, t, passThis) {
           var vt = t.params[i].elem,
             varargs = [];
           for (var j = i; j < arguments.length; j++) {
-            varargs.push($internalize(arguments[j], vt));
+            varargs.push($internalize(arguments[j], vt, makeWrapper));
           }
           args.push(new t.params[i](varargs));
           break;
         }
-        args.push($internalize(arguments[i], t.params[i]));
+        args.push($internalize(arguments[i], t.params[i], makeWrapper));
       }
       var result = v.apply(passThis ? this : undefined, args);
       switch (t.results.length) {
         case 0:
           return;
         case 1:
-          return $externalize(result, t.results[0]);
+          return $externalize($copyIfRequired(result, t.results[0]), t.results[0], makeWrapper);
         default:
           for (var i = 0; i < t.results.length; i++) {
-            result[i] = $externalize(result[i], t.results[i]);
+            result[i] = $externalize($copyIfRequired(result[i], t.results[i]), t.results[i], makeWrapper);
           }
           return result;
       }
@@ -178,7 +182,7 @@ var $externalizeFunction = function(v, t, passThis) {
   return v.$externalizeWrapper;
 };
 
-var $internalize = function(v, t, recv) {
+var $internalize = function(v, t, recv, makeWrapper) {
   if (t === $jsObjectPtr) {
     return v;
   }
@@ -226,7 +230,7 @@ var $internalize = function(v, t, recv) {
         $throwRuntimeError("got array with wrong size from JavaScript native");
       }
       return $mapArray(v, function(e) {
-        return $internalize(e, t.elem);
+        return $internalize(e, t.elem, makeWrapper);
       });
     case $kindFunc:
       return function() {
@@ -236,21 +240,21 @@ var $internalize = function(v, t, recv) {
             var vt = t.params[i].elem,
               varargs = arguments[i];
             for (var j = 0; j < varargs.$length; j++) {
-              args.push($externalize(varargs.$array[varargs.$offset + j], vt));
+              args.push($externalize(varargs.$array[varargs.$offset + j], vt, makeWrapper));
             }
             break;
           }
-          args.push($externalize(arguments[i], t.params[i]));
+          args.push($externalize(arguments[i], t.params[i], makeWrapper));
         }
         var result = v.apply(recv, args);
         switch (t.results.length) {
           case 0:
             return;
           case 1:
-            return $internalize(result, t.results[0]);
+            return $internalize(result, t.results[0], makeWrapper);
           default:
             for (var i = 0; i < t.results.length; i++) {
-              result[i] = $internalize(result[i], t.results[i]);
+              result[i] = $internalize(result[i], t.results[i], makeWrapper);
             }
             return result;
         }
@@ -283,7 +287,7 @@ var $internalize = function(v, t, recv) {
         case Float64Array:
           return new ($sliceType($Float64))(v);
         case Array:
-          return $internalize(v, $sliceType($emptyInterface));
+          return $internalize(v, $sliceType($emptyInterface), makeWrapper);
         case Boolean:
           return new $Bool(!!v);
         case Date:
@@ -291,37 +295,37 @@ var $internalize = function(v, t, recv) {
             /* time package is not present, internalize as &js.Object{Date} so it can be externalized into original Date. */
             return new $jsObjectPtr(v);
           }
-          return new timePkg.Time($internalize(v, timePkg.Time));
+          return new timePkg.Time($internalize(v, timePkg.Time, makeWrapper));
         case Function:
           var funcType = $funcType([$sliceType($emptyInterface)], [$jsObjectPtr], true);
-          return new funcType($internalize(v, funcType));
+          return new funcType($internalize(v, funcType, makeWrapper));
         case Number:
           return new $Float64(parseFloat(v));
         case String:
-          return new $String($internalize(v, $String));
+          return new $String($internalize(v, $String, makeWrapper));
         default:
           if ($global.Node && v instanceof $global.Node) {
             return new $jsObjectPtr(v);
           }
           var mapType = $mapType($String, $emptyInterface);
-          return new mapType($internalize(v, mapType));
+          return new mapType($internalize(v, mapType, makeWrapper));
       }
     case $kindMap:
       var m = {};
       var keys = $keys(v);
       for (var i = 0; i < keys.length; i++) {
-        var k = $internalize(keys[i], t.key);
-        m[t.key.keyFor(k)] = { k: k, v: $internalize(v[keys[i]], t.elem) };
+        var k = $internalize(keys[i], t.key, makeWrapper);
+        m[t.key.keyFor(k)] = { k: k, v: $internalize(v[keys[i]], t.elem, makeWrapper) };
       }
       return m;
     case $kindPtr:
       if (t.elem.kind === $kindStruct) {
-        return $internalize(v, t.elem);
+        return $internalize(v, t.elem, makeWrapper);
       }
     case $kindSlice:
       return new t(
         $mapArray(v, function(e) {
-          return $internalize(e, t.elem);
+          return $internalize(e, t.elem, makeWrapper);
         })
       );
     case $kindString:
@@ -385,4 +389,18 @@ var $isASCII = function(s) {
     }
   }
   return true;
+};
+
+var $copyIfRequired = function(v, typ) {
+  // interface values
+  if (v.constructor.copy) {
+    return new v.constructor($clone(v.$val, v.constructor));
+  }
+  // array and struct values
+  if (typ.copy) {
+    var clone = typ.zero();
+    typ.copy(clone, v);
+    return clone;
+  }
+  return v;
 };

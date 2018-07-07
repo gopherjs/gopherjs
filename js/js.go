@@ -1,6 +1,6 @@
 // Package js provides functions for interacting with native JavaScript APIs. Calls to these functions are treated specially by GopherJS and translated directly to their corresponding JavaScript syntax.
 //
-// Use MakeWrapper to expose methods to JavaScript. When passing values directly, the following type conversions are performed:
+// Use MakeWrapper to expose methods to JavaScript. Use MakeFullWrapper to expose methods AND fields to JavaScript. When passing values directly, the following type conversions are performed:
 //
 //  | Go type               | JavaScript type       | Conversions back to interface{} |
 //  | --------------------- | --------------------- | ------------------------------- |
@@ -143,6 +143,103 @@ func MakeWrapper(i interface{}) *Object {
 		o.Set(m.Get("name").String(), func(args ...*Object) *Object {
 			return Global.Call("$externalizeFunction", v.Get(m.Get("prop").String()), m.Get("typ"), true).Call("apply", v, args)
 		})
+	}
+	return o
+}
+
+// MakeFullWrapper creates a JavaScript object which has wrappers for the exported
+// methods of i, and, where i is a (pointer to a) struct value, wrapped getters
+// and setters
+// (https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/defineProperty)
+// for the non-embedded exported fields of i. Values accessed via these methods
+// and getters are themsevles wrapped when accessed, but an important point to
+// note is that a new wrapped value is created on each access.
+func MakeFullWrapper(i interface{}) *Object {
+	v := InternalObject(i)
+	c := v.Get("constructor")
+
+	o := Global.Get("Object").New()
+
+	defineProperty := func(k string, fns ...func(*Object)) {
+		op := Global.Get("Object").New()
+		for _, f := range fns {
+			f(op)
+		}
+		Global.Get("Object").Call("defineProperty", o, k, op)
+	}
+
+	defineProperty("__internal_object__", func(op *Object) {
+		op.Set("value", v)
+	})
+
+	{
+		// caculate a sensible type string
+
+		// we don't want to import any packages in this package
+		// so we do some string operations by hand
+
+		typ := c.Get("string").String()
+		pkg := c.Get("pkg").String()
+
+		ptr := ""
+		if typ[0] == '*' {
+			ptr = "*"
+		}
+
+		for i := 0; i < len(typ); i++ {
+			if typ[i] == '.' {
+				typ = typ[i+1:]
+				break
+			}
+		}
+
+		pkgTyp := pkg + "." + ptr + typ
+		defineProperty("$type", func(op *Object) {
+			op.Set("value", pkgTyp)
+		})
+	}
+
+	var fields *Object
+	methods := Global.Get("Array").New()
+	if ms := c.Get("methods"); ms != Undefined {
+		methods = methods.Call("concat", ms)
+	}
+	// if we are a pointer value then add fields from element
+	// else the constructor itself will have them
+	if e := c.Get("elem"); e != Undefined {
+		fields = e.Get("fields")
+		methods = methods.Call("concat", e.Get("methods"))
+	} else {
+		fields = c.Get("fields")
+	}
+	for i := 0; i < methods.Length(); i++ {
+		m := methods.Index(i)
+		if m.Get("pkg").String() != "" { // not exported
+			continue
+		}
+		defineProperty(m.Get("prop").String(), func(op *Object) {
+			op.Set("value", func(args ...*Object) *Object {
+				return Global.Call("$externalizeFunction", v.Get(m.Get("prop").String()), m.Get("typ"), true, InternalObject(MakeFullWrapper)).Call("apply", v, args)
+			})
+		})
+	}
+	if fields != Undefined {
+		for i := 0; i < fields.Length(); i++ {
+			f := fields.Index(i)
+			if !f.Get("exported").Bool() {
+				continue
+			}
+			defineProperty(f.Get("prop").String(), func(op *Object) {
+				op.Set("get", func() *Object {
+					vc := Global.Call("$copyIfRequired", v.Get("$val").Get(f.Get("prop").String()), f.Get("typ"))
+					return Global.Call("$externalize", vc, f.Get("typ"), InternalObject(MakeFullWrapper))
+				})
+				op.Set("set", func(jv *Object) {
+					gv := Global.Call("$internalize", jv, f.Get("typ"), InternalObject(MakeFullWrapper))
+					v.Get("$val").Set(f.Get("prop").String(), gv)
+				})
+			})
+		}
 	}
 	return o
 }

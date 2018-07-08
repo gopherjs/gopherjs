@@ -468,6 +468,11 @@ func (m M) NonPointField() string {
 	return "sensible"
 }
 
+func (m *M) IncF() {
+	// no return value
+	m.f++
+}
+
 func TestMakeWrapper(t *testing.T) {
 	m := &M{f: 42}
 	if !js.Global.Call("eval", `(function(m) { return m.Method({x: 1})["y"] === "z"; })`).Invoke(js.MakeWrapper(m)).Bool() {
@@ -478,6 +483,9 @@ func TestMakeWrapper(t *testing.T) {
 		t.Fail()
 	}
 
+	if !js.Global.Call("eval", `(function(m) { return m.IncF() === undefined })`).Invoke(js.MakeWrapper(m)).Bool() {
+		t.Fail()
+	}
 }
 
 func TestMakeFullWrapperType(t *testing.T) {

@@ -392,6 +392,9 @@ var $isASCII = function(s) {
 };
 
 var $copyIfRequired = function(v, typ) {
+  if (v == undefined) {
+    return v;
+  }
   // interface values
   if (v.constructor.copy) {
     return new v.constructor($clone(v.$val, v.constructor));

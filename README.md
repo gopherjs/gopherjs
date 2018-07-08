@@ -13,9 +13,23 @@ Give GopherJS a try on the [GopherJS Playground](http://gopherjs.github.io/playg
 Nearly everything, including Goroutines ([compatibility table](https://github.com/gopherjs/gopherjs/blob/master/doc/packages.md)). Performance is quite good in most cases, see [HTML5 game engine benchmark](https://ajhager.github.io/engi/demos/botmark.html). Cgo is not supported.
 
 ### Installation and Usage
-Get or update GopherJS and dependencies with:
+
+If you already have `github.com/gopherjs/gopherjs` installed:
 
 ```
+cd $(go list -f "{{.Dir}}" github.com/gopherjs/gopherjs)
+git remote add myitcv https://github.com/myitcv/gopherjs
+git fetch myitcv
+git checkout -f master
+git reset --hard myitcv/master
+git branch --set-upstream-to=myitcv/master
+go get -u github.com/gopherjs/gopherjs
+```
+
+Or for a fresh install:
+
+```
+git clone https://github.com/myitcv/gopherjs "$(cut -d':' -f1 <<< $GOPATH)/src/github.com/gopherjs/gopherjs"
 go get -u github.com/gopherjs/gopherjs
 ```
 

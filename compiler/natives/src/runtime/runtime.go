@@ -22,6 +22,9 @@ type _type struct {
 func (t *_type) string() string {
 	return ""
 }
+func (t *_type) pkgpath() string {
+	return ""
+}
 
 func init() {
 	jsPkg := js.Global.Get("$packages").Get("github.com/gopherjs/gopherjs/js")

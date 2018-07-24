@@ -1,6 +1,6 @@
 machine:
   node:
-    version: 6.2.2
+    version: 10.0.0
   environment:
     SOURCE_MAP_SUPPORT: false
 

@@ -74,6 +74,7 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 		BuildTags: append(buildTags,
 			"netgo",  // See https://godoc.org/net#hdr-Name_Resolution.
 			"purego", // See https://golang.org/issues/23172.
+			"js",
 		),
 		ReleaseTags: build.Default.ReleaseTags,
 		CgoEnabled:  true, // detect `import "C"` to throw proper error
@@ -174,7 +175,14 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	}
 	pkg, err := bctx.Import(path, srcDir, mode)
 	if err != nil {
-		return nil, err
+		bc := build.Default
+		bc.InstallSuffix = bctx.InstallSuffix
+		bc.BuildTags = bctx.BuildTags
+		bc.ReleaseTags = bctx.ReleaseTags
+		pkg, err = bc.Import(path, srcDir, mode)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	switch path {
@@ -590,7 +598,8 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 }
 
 func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
-	_, archive, err := s.buildImportPathWithSrcDir(path, "")
+	wd, _ := os.Getwd()
+	_, archive, err := s.buildImportPathWithSrcDir(path, wd)
 	return archive, err
 }
 
@@ -690,7 +699,8 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			if importedPkgPath == "unsafe" || ignored {
 				continue
 			}
-			_, importedArchive, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
+			wd, _ := os.Getwd()
+			_, importedArchive, err := s.buildImportPathWithSrcDir(importedPkgPath, wd)
 			if err != nil {
 				return nil, err
 			}
@@ -769,7 +779,8 @@ CacheMiss:
 			if archive, ok := localImportPathCache[path]; ok {
 				return archive, nil
 			}
-			_, archive, err := s.buildImportPathWithSrcDir(path, pkg.Dir)
+			wd, _ := os.Getwd()
+			_, archive, err := s.buildImportPathWithSrcDir(path, wd)
 			if err != nil {
 				return nil, err
 			}
@@ -944,4 +955,31 @@ func (s *Session) WaitForChange() {
 		}
 	}()
 	s.Watcher.Close()
+}
+
+func ImportPaths(vs []string) ([]string, error) {
+	if len(vs) == 0 {
+		return nil, nil
+	}
+
+	args := []string{"go", "list"}
+	args = append(args, vs...)
+	cmd := exec.Command(args[0], args[1:]...)
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to resolve import paths: %v\n%s", err, stderr.String())
+	}
+
+	res := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+
+	for i, v := range res {
+		// inefficiently handles CR
+		res[i] = strings.TrimSpace(v)
+	}
+
+	return res, nil
 }

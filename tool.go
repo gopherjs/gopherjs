@@ -32,7 +32,6 @@ import (
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
-	"github.com/kisielk/gotool"
 	"github.com/neelance/sourcemap"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -121,8 +120,10 @@ func main() {
 				}
 
 				// Expand import path patterns.
-				patternContext := gbuild.NewBuildContext("", options.BuildTags)
-				pkgs := (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
+				pkgs, err := gbuild.ImportPaths(args)
+				if err != nil {
+					return err
+				}
 
 				for _, pkgPath := range pkgs {
 					if s.Watcher != nil {
@@ -177,8 +178,10 @@ func main() {
 
 			err := func() error {
 				// Expand import path patterns.
-				patternContext := gbuild.NewBuildContext("", options.BuildTags)
-				pkgs := (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
+				pkgs, err := gbuild.ImportPaths(args)
+				if err != nil {
+					return err
+				}
 
 				if cmd.Name() == "get" {
 					goGet := exec.Command("go", append([]string{"get", "-d", "-tags=js"}, pkgs...)...)
@@ -305,8 +308,10 @@ func main() {
 		options.BuildTags = strings.Fields(tags)
 		err := func() error {
 			// Expand import path patterns.
-			patternContext := gbuild.NewBuildContext("", options.BuildTags)
-			args = (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
+			args, err := gbuild.ImportPaths(args)
+			if err != nil {
+				return err
+			}
 
 			if *compileOnly && len(args) > 1 {
 				return errors.New("cannot use -c flag with multiple packages")

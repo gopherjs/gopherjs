@@ -23,6 +23,10 @@ func (t *_type) string() string {
 	return ""
 }
 
+func (t *_type) pkgpath() string {
+	return ""
+}
+
 func init() {
 	jsPkg := js.Global.Get("$packages").Get("github.com/gopherjs/gopherjs/js")
 	js.Global.Set("$jsObjectPtr", jsPkg.Get("Object").Get("ptr"))

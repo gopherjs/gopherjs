@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kisielk/gotool"
 	"github.com/shurcooL/go/importgraphutil"
 )
 
@@ -26,9 +25,9 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 	// It's needed for populateImportSet.
 	stdOnly := gobuild.Default
 	stdOnly.GOPATH = "" // We only care about standard library, so skip all GOPATH packages.
-	forward, _, err := importgraphutil.BuildNoTests(&stdOnly)
-	if err != nil {
-		t.Fatalf("importgraphutil.BuildNoTests: %v", err)
+	forward, _, errs := importgraphutil.BuildNoTests(&stdOnly)
+	if errs != nil {
+		t.Fatalf("importgraphutil.BuildNoTests: %v", errs)
 	}
 
 	// populateImportSet takes a slice of imports, and populates set with those
@@ -64,7 +63,11 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 	// Then, github.com/gopherjs/gopherjs/build.parseAndAugment(*build.Package) returns []*ast.File.
 	// Those augmented parsed Go files of the package are checked, one file at at time, one import
 	// at a time. Each import is verified to belong in the set of allowed real imports.
-	for _, pkg := range gotool.ImportPaths([]string{"std"}) {
+	ips, err := ImportPaths([]string{"std"})
+	if err != nil {
+		t.Fatalf("failed to resolve std package spec: %v", err)
+	}
+	for _, pkg := range ips {
 		// Normal package.
 		{
 			// Import the real normal package, and populate its real import set.

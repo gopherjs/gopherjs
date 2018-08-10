@@ -79,3 +79,5 @@ vendor/golang_org/x/text/transform
 vendor/golang_org/x/text/unicode
 vendor/golang_org/x/text/unicode/bidi
 vendor/golang_org/x/text/unicode/norm
+# https://github.com/golang/go/issues/26924
+vendor/golang_org/x/net/http/httpproxy

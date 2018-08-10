@@ -27,6 +27,7 @@ func TestBasicHashStaleness(t *testing.T) {
 	h.setEnv("GOPATH", td)
 	h.dir = h.mkdir(td, "src", "example.com", "rubbish")
 	h.mkdir(h.dir, "blah")
+	h.writeFile("go.mod", `module example.com/rubbish`)
 	h.writeFile("main.go", `
 	package main
 	import "example.com/rubbish/blah"

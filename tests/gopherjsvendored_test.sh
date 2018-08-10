@@ -44,5 +44,7 @@ export GOPATH="$tmp"
 # Build the vendored copy of GopherJS.
 go install example.org/hello/vendor/github.com/gopherjs/gopherjs
 
+export GO111MODULE=auto
+
 # Use it to build and run the hello command.
 (cd "$GOPATH/src/example.org/hello" && "$GOPATH/bin/gopherjs" run main.go)

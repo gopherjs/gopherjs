@@ -9,11 +9,15 @@ jobs:
     environment:
       SOURCE_MAP_SUPPORT: false
       NVM_VERSION: v0.33.9
-      GO_VERSION: 1.10.3
+      GO_VERSION: 64205cd4b6d48432fdcbe2127d45e4f786468ff3
       NODE_VERSION: 10.0.0
 
     steps:
       - checkout
+
+      - run: |
+          echo 'export GO111MODULE=on' >> $BASH_ENV
+          git --version
 
       - run: |
           # Install nvm.
@@ -24,10 +28,19 @@ jobs:
 
       - run: |
           # Install our own local Go version; we need src/path/filepath to be writable for certain tests.
-          mkdir $HOME/goroot
-          curl https://storage.googleapis.com/golang/go$GO_VERSION.linux-amd64.tar.gz | tar -C $HOME/goroot --strip-components=1 -xz
-          chmod a+w $HOME/goroot/src/path/filepath
-          echo 'export PATH="$HOME/goroot/bin:$PATH"' >> $BASH_ENV
+          mkdir $HOME/go
+          if [[ "$GO_VERSION" =~ go* ]]
+          then
+            curl https://storage.googleapis.com/golang/$GO_VERSION.linux-amd64.tar.gz | tar -C $HOME -xz
+          else
+            sudo apt-get -y -qq update < /dev/null > /dev/null
+            sudo apt-get -y -qq install python-pip < /dev/null > /dev/null
+            pip install -q awscli
+            export PATH=$HOME/.local/bin:$PATH
+            aws s3 cp "s3://io.myitcv.gobuilds/linux_amd64/$GO_VERSION.tar.gz" - | tar -C $HOME -xz
+          fi
+          chmod a+w $HOME/go/src/path/filepath
+          echo 'export PATH="$HOME/go/bin:$PATH"' >> $BASH_ENV
 
       - run: |
           # Per https://github.com/gopherjs/gopherjs/pull/687.
@@ -55,7 +68,6 @@ jobs:
           npm install
 
       - run: |
-          go get -t ./...
           go install github.com/gopherjs/gopherjs
 
       - run:
@@ -72,19 +84,19 @@ jobs:
               diff -u <(echo -n) <(gofmt -d .)
 
               echo ">> Vetting github.com/gopherjs/gopherjs"
-              go tool vet *.go
+              go vet .
 
-              echo ">> vet all subdirectories except tests and third_party."
-              for d in */; do echo $d; done | grep -v tests/ | grep -v third_party/ | grep -v vendor/ | xargs go tool vet
+              echo ">> vet all packages except tests"
+              go vet $(go list ./... | grep -v github.com/gopherjs/gopherjs/tests)
 
               echo ">> All those packages should have // +build js."
-              diff -u <(echo -n) <(go list ./compiler/natives/src/...)
+              diff -u <(echo "github.com/gopherjs/gopherjs/compiler/natives") <(go list ./compiler/natives/...)
 
               echo ">> Should build successfully (can't run tests, since only client is supported)."
               gopherjs install -v net/http
 
               echo ">> Run the core gopherjs tests; exclusions take from .std_test_pkg_exclusions."
-              go list std | grep -v -x -f .std_test_pkg_exclusions | xargs gopherjs test --minify -v --short github.com/gopherjs/gopherjs/tests/...
+              gopherjs test --minify -v --short github.com/gopherjs/gopherjs/tests/... $(go list std | grep -v -x -f .std_test_pkg_exclusions)
 
               echo ">> Race tests."
               go test -v -race ./...

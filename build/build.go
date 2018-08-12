@@ -959,7 +959,7 @@ func (s *Session) WaitForChange() {
 
 func ImportPaths(vs []string) ([]string, error) {
 	if len(vs) == 0 {
-		return nil, nil
+		vs = []string{"."}
 	}
 
 	args := []string{"go", "list"}

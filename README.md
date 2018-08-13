@@ -1,3 +1,9 @@
+# `** A note on Go 1.11 **`
+
+This branch has **experimental** support for modules in Go 1.11. It is working to the point that in module mode
+tests pass, GopherJS can be used in other projects that are operating in module mode, but it is distinctly
+untested in GOPATH-mode or any non OS-based environment (e.g. playground).
+
 GopherJS - A compiler from Go to JavaScript
 -------------------------------------------
 

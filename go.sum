@@ -5,6 +5,8 @@ github.com/gopherjs/gopherjs v0.0.0-20180628210949-0892b62f0d9f/go.mod h1:wJfORR
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/myitcv/vfsgen v0.0.0-20180801150002-413c97b24eaa h1:SeHmgZYQUMuGq6XaSMBGXTL8sYjRVPlGWskqPN71UGo=
 github.com/myitcv/vfsgen v0.0.0-20180801150002-413c97b24eaa/go.mod h1:zXljppuit34nO3XudRZd36yRUhP2HkHNmL3s92+zsqY=
+github.com/myitcv/vfsgen v0.0.0-20180812213343-816be997bc25 h1:B+zmiucBFdxvtr4/DlRbHjZ8+EmII16VsbpJ/rOksUQ=
+github.com/myitcv/vfsgen v0.0.0-20180812213343-816be997bc25/go.mod h1:zXljppuit34nO3XudRZd36yRUhP2HkHNmL3s92+zsqY=
 github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86 h1:D6paGObi5Wud7xg83MaEFyjxQB1W5bz5d0IFppr+ymk=
 github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86/go.mod h1:kHJEU3ofeGjhHklVoIGuVj85JJwZ6kWPaJwCIxgnFmo=
 github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab h1:eFXv9Nu1lGbrNbj619aWwZfVF5HBrm9Plte8aNptuTI=

@@ -144,7 +144,7 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 		// Getwd may fail if we're in GOARCH=js mode. That's okay, handle
 		// it by falling back to empty working directory. It just means
 		// Import will not be able to resolve relative import paths.
-		wd = ""
+		wd = "."
 	}
 	bctx := NewBuildContext(installSuffix, buildTags)
 	return importWithSrcDir(*bctx, path, wd, mode, installSuffix)
@@ -170,7 +170,10 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	case "github.com/gopherjs/gopherjs/js", "github.com/gopherjs/gopherjs/nosync":
 		// These packages are already embedded via gopherjspkg.FS virtual filesystem (which can be
 		// safely vendored). Don't try to use vendor directory to resolve them.
-		mode |= build.IgnoreVendor
+
+		// TODO work ouw whether this is still critical in GOPATH mode
+		// mode |= build.IgnoreVendor
+
 		isVirtual = true
 	}
 	pkg, err := bctx.Import(path, srcDir, mode)

@@ -1,7 +1,7 @@
 version: 2
 jobs:
   build:
-    working_directory: /go/src/github.com/gopherjs/gopherjs
+    working_directory: /go/gopherjs
     docker:
       # We have a custom installation of Go below so this version is (largely) irrelevant.
       - image: circleci/golang:1.10

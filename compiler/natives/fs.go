@@ -21,7 +21,7 @@ var FS = filter.Keep(
 )
 
 func importPathToDir(importPath string) string {
-	p, err := build.Import(importPath, "", build.FindOnly)
+	p, err := build.Import(importPath, ".", build.FindOnly)
 	if err != nil {
 		log.Fatalln(err)
 	}

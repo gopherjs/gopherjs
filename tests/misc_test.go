@@ -641,16 +641,24 @@ func TestSlicingNilSlice(t *testing.T) {
 	t.Run("StaysNil", func(t *testing.T) {
 		var s []int
 		s = s[:]
+		if s != nil {
+			t.Errorf("nil slice became non-nil after slicing with s[:]: %#v, want []int(nil)", s)
+		}
+		s = nil
 		s = s[0:0]
+		if s != nil {
+			t.Errorf("nil slice became non-nil after slicing with s[0:0]: %#v, want []int(nil)", s)
+		}
+		s = nil
 		s = s[0:0:0]
 		if s != nil {
-			t.Errorf("nil slice became non-nil after slicing: %#v", s)
+			t.Errorf("nil slice became non-nil after slicing with s[0:0:0]: %#v, want []int(nil)", s)
 		}
 	})
 	t.Run("Panics", func(t *testing.T) {
 		defer func() {
 			if err := recover(); err == nil || !strings.Contains(err.(error).Error(), "slice bounds out of range") {
-				t.Error("slicing nil slice out of range didn't panic as expected")
+				t.Error("slicing nil slice out of range didn't panic, want panic")
 			}
 		}()
 		var s []int
@@ -660,7 +668,7 @@ func TestSlicingNilSlice(t *testing.T) {
 		var s = []int{}
 		s = s[:]
 		if s == nil {
-			t.Errorf("non-nil slice became nil after slicing: %#v", s)
+			t.Errorf("non-nil slice became nil after slicing: %#v, want []int{}", s)
 		}
 	})
 }

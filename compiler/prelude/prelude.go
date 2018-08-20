@@ -107,6 +107,9 @@ var $subslice = function(slice, low, high, max) {
   if (low < 0 || high < low || max < high || high > slice.$capacity || max > slice.$capacity) {
     $throwRuntimeError("slice bounds out of range");
   }
+  if (slice === slice.constructor.nil) {
+    return slice;
+  }
   var s = new slice.constructor(slice.$array);
   s.$offset = slice.$offset + low;
   s.$length = high - low;

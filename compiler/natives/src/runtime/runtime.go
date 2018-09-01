@@ -17,10 +17,11 @@ type eface struct {
 	_type *_type
 }
 type _type struct {
+	str string
 }
 
 func (t *_type) string() string {
-	return ""
+	return t.str
 }
 
 func (t *_type) pkgpath() string {

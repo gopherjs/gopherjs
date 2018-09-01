@@ -628,3 +628,24 @@ func TestTypeConversion(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestInterfaceConversionRuntimeError(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("got no panic, want panic")
+		}
+		re, ok := r.(runtime.Error)
+		if !ok {
+			t.Fatalf("got %T, want runtime.Error", r)
+		}
+		if got, want := re.Error(), "interface conversion: int is not tests.I: missing method Get"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	}()
+	type I interface {
+		Get() int
+	}
+	e := (interface{})(0)
+	_ = e.(I)
+}

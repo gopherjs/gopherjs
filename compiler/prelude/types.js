@@ -851,7 +851,7 @@ var $assertType = function(value, type, returnTuple) {
     if (returnTuple) {
       return [type.zero(), false];
     }
-    $panic(new $packages["runtime"].TypeAssertionError.ptr("", value === $ifaceNil ? "" : value.constructor.string, type.string, missingMethod));
+    $panic(new $packages["runtime"].TypeAssertionError.ptr($packages["runtime"]._type.ptr.nil, value === $ifaceNil ? $packages["runtime"]._type.ptr.nil : new $packages["runtime"]._type.ptr(value.constructor.string), new $packages["runtime"]._type.ptr(type.string), missingMethod));
   }
 
   if (!isInterface) {

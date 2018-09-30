@@ -647,8 +647,9 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 	<meta charset="utf-8">
 	<script defer src="`+base+`.js"></script>
 </head>
-	<body></body>
-	</html>`)), nil
+<body>
+</body>
+</html>`)), nil
 	}
 
 	return nil, os.ErrNotExist

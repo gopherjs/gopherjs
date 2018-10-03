@@ -647,7 +647,7 @@ func Copy(dst, src Value) int {
 	return js.Global.Call("$copySlice", dstVal, srcVal).Int()
 }
 
-func methodReceiver(op string, v Value, i int) (_, t *rtype, fn unsafe.Pointer) {
+func methodReceiver(op string, v Value, i int) (_ *rtype, t *funcType, fn unsafe.Pointer) {
 	var prop string
 	if v.typ.Kind() == Interface {
 		tt := (*interfaceType)(unsafe.Pointer(v.typ))
@@ -658,7 +658,7 @@ func methodReceiver(op string, v Value, i int) (_, t *rtype, fn unsafe.Pointer) 
 		if !tt.nameOff(m.name).isExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		t = tt.typeOff(m.typ)
+		t = (*funcType)(unsafe.Pointer(tt.typeOff(m.typ)))
 		prop = tt.nameOff(m.name).name()
 	} else {
 		ms := v.typ.exportedMethods()
@@ -669,7 +669,7 @@ func methodReceiver(op string, v Value, i int) (_, t *rtype, fn unsafe.Pointer) 
 		if !v.typ.nameOff(m.name).isExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		t = v.typ.typeOff(m.mtyp)
+		t = (*funcType)(unsafe.Pointer(v.typ.typeOff(m.mtyp)))
 		prop = js.Global.Call("$methodSet", jsType(v.typ)).Index(i).Get("prop").String()
 	}
 	rcvr := v.object()
@@ -849,7 +849,7 @@ var callHelper = js.Global.Get("$call").Interface().(func(...interface{}) *js.Ob
 
 func (v Value) call(op string, in []Value) []Value {
 	var (
-		t    *rtype
+		t    *funcType
 		fn   unsafe.Pointer
 		rcvr *js.Object
 	)
@@ -860,7 +860,7 @@ func (v Value) call(op string, in []Value) []Value {
 			rcvr = jsType(v.typ).New(rcvr)
 		}
 	} else {
-		t = v.typ
+		t = (*funcType)(unsafe.Pointer(v.typ))
 		fn = unsafe.Pointer(v.object().Unsafe())
 		rcvr = js.Undefined
 	}

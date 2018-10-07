@@ -9,7 +9,7 @@ jobs:
     environment:
       SOURCE_MAP_SUPPORT: false
       NVM_VERSION: v0.33.9
-      GO_VERSION: go1.11
+      GO_VERSION: go1.11.1
       NODE_VERSION: 10.0.0
 
     steps:

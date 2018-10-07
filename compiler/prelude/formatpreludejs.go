@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"go/build"
 	"io/ioutil"
 	"log"
 	"os/exec"
@@ -18,20 +19,15 @@ func main() {
 }
 
 func run() error {
-	var bpkgDir string
-	{
-		cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}")
-		out, err := cmd.Output()
-		if err != nil {
-			return fmt.Errorf("failed to resolve module path: %v", err)
-		}
-		bpkgDir = strings.TrimSpace(string(out))
+	bpkg, err := build.Import("github.com/gopherjs/gopherjs", ".", build.FindOnly)
+	if err != nil {
+		return fmt.Errorf("failed to locate path for github.com/gopherjs/gopherjs/compiler/prelude: %v", err)
 	}
 
-	preludeDir := filepath.Join(bpkgDir, "compiler", "prelude")
+	preludeDir := filepath.Join(bpkg.Dir, "compiler", "prelude")
 
 	args := []string{
-		filepath.Join(bpkgDir, "node_modules", ".bin", "prettier"),
+		filepath.Join(bpkg.Dir, "node_modules", ".bin", "prettier"),
 		"--config",
 		filepath.Join(preludeDir, "prettier_options.json"),
 		"--write",

@@ -29,14 +29,15 @@ git fetch myitcv
 git checkout -f master
 git reset --hard myitcv/master
 git branch --set-upstream-to=myitcv/master
-go get -u github.com/gopherjs/gopherjs
+GO111MODULE=on go install
 ```
 
 Or for a fresh install:
 
 ```
 git clone https://github.com/myitcv/gopherjs "$(cut -d':' -f1 <<< $GOPATH)/src/github.com/gopherjs/gopherjs"
-go get -u github.com/gopherjs/gopherjs
+cd "$(cut -d':' -f1 <<< $GOPATH)/src/github.com/gopherjs/gopherjs"
+GO111MODULE=on go install
 ```
 
 Now you can use `gopherjs build [package]`, `gopherjs build [files]` or `gopherjs install [package]` which behave similar to the `go` tool. For `main` packages, these commands create a `.js` file and `.js.map` source map in the current directory or in `$GOPATH/bin`. The generated JavaScript file can be used as usual in a website. Use `gopherjs help [command]` to get a list of possible command line flags, e.g. for minification and automatically watching for changes.

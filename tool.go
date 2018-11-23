@@ -103,6 +103,7 @@ func main1() int {
 			if err := handleError(err, options, nil); err != nil {
 				return err
 			}
+			defer s.Cleanup()
 
 			err = func() error {
 				// Handle "gopherjs build [files]" ad-hoc package mode.
@@ -190,6 +191,7 @@ func main1() int {
 			if err := handleError(err, options, nil); err != nil {
 				return err
 			}
+			defer s.Cleanup()
 
 			err = func() error {
 				// Expand import path patterns.
@@ -299,6 +301,7 @@ func main1() int {
 			if err != nil {
 				return err
 			}
+			defer s.Cleanup()
 			if err := s.BuildFiles(args[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
 				return err
 			}
@@ -358,6 +361,7 @@ func main1() int {
 				if err != nil {
 					return err
 				}
+				defer s.Cleanup()
 
 				tests := &testFuncs{BuildContext: s.BuildContext(), Package: pkg.Package}
 				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
@@ -609,6 +613,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 		if err != nil {
 			return nil, err
 		}
+		defer s.Cleanup()
 		pkg, err := gbuild.Import(path.Dir(name), 0, s.InstallSuffix(), fs.options.BuildTags)
 		if err != nil || pkg.Name != "main" {
 			isPkg = false

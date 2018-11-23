@@ -32,7 +32,7 @@ func (err ErrorList) Error() string {
 }
 
 type Archive struct {
-	Hash         []byte
+	Hash         [32]byte
 	ImportPath   string
 	Name         string
 	Imports      []string

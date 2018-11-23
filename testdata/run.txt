@@ -1,0 +1,30 @@
+env HOME=$WORK/home
+mkdir $HOME
+env GOPATH=$HOME/go
+
+go mod tidy
+
+go run .
+stdout '^Greeting: Hello$'
+! stderr .+
+
+gopherjs run main.go
+stdout '^Greeting: Hello$'
+! stderr .+
+
+-- go.mod --
+module example.com/main
+
+-- main.go --
+package main
+
+import (
+	"fmt"
+
+	"example.com/hello"
+)
+
+func main() {
+	fmt.Printf("Greeting: %v\n", hello.Greeting)
+}
+

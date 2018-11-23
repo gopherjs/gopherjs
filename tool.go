@@ -41,6 +41,8 @@ import (
 
 var currentDirectory string
 
+var errorFail = errors.New("command exited with non-zero exit code")
+
 func init() {
 	var err error
 	currentDirectory, err = os.Getwd()
@@ -61,6 +63,10 @@ func init() {
 }
 
 func main() {
+	os.Exit(main1())
+}
+
+func main1() int {
 	var (
 		options = &gbuild.Options{CreateMapFile: true}
 		pkgObj  string
@@ -90,12 +96,15 @@ func main() {
 	cmdBuild.Flags().AddFlagSet(flagQuiet)
 	cmdBuild.Flags().AddFlagSet(compilerFlags)
 	cmdBuild.Flags().AddFlagSet(flagWatch)
-	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
+	cmdBuild.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 		for {
-			s := gbuild.NewSession(options)
+			s, err := gbuild.NewSession(options)
+			if err := handleError(err, options, nil); err != nil {
+				return err
+			}
 
-			err := func() error {
+			err = func() error {
 				// Handle "gopherjs build [files]" ad-hoc package mode.
 				if len(args) > 0 && (strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".inc.js")) {
 					for _, arg := range args {
@@ -154,12 +163,15 @@ func main() {
 				}
 				return nil
 			}()
-			exitCode := handleError(err, options, nil)
-
-			if s.Watcher == nil {
-				os.Exit(exitCode)
+			if err := handleError(err, options, nil); err != nil {
+				return err
 			}
-			s.WaitForChange()
+
+			if s.Watcher != nil {
+				s.WaitForChange()
+			}
+
+			return nil
 		}
 	}
 
@@ -171,12 +183,15 @@ func main() {
 	cmdInstall.Flags().AddFlagSet(flagQuiet)
 	cmdInstall.Flags().AddFlagSet(compilerFlags)
 	cmdInstall.Flags().AddFlagSet(flagWatch)
-	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
+	cmdInstall.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 		for {
-			s := gbuild.NewSession(options)
+			s, err := gbuild.NewSession(options)
+			if err := handleError(err, options, nil); err != nil {
+				return err
+			}
 
-			err := func() error {
+			err = func() error {
 				// Expand import path patterns.
 				pkgs, err := gbuild.ImportPaths(args)
 				if err != nil {
@@ -213,12 +228,15 @@ func main() {
 				}
 				return nil
 			}()
-			exitCode := handleError(err, options, nil)
-
-			if s.Watcher == nil {
-				os.Exit(exitCode)
+			if err := handleError(err, options, nil); err != nil {
+				return err
 			}
-			s.WaitForChange()
+
+			if s.Watcher != nil {
+				s.WaitForChange()
+			}
+
+			return nil
 		}
 	}
 
@@ -226,14 +244,13 @@ func main() {
 		Use:   "doc [arguments]",
 		Short: "display documentation for the requested, package, method or symbol",
 	}
-	cmdDoc.Run = func(cmd *cobra.Command, args []string) {
+	cmdDoc.RunE = func(cmd *cobra.Command, args []string) error {
 		goDoc := exec.Command("go", append([]string{"doc"}, args...)...)
 		goDoc.Stdout = os.Stdout
 		goDoc.Stderr = os.Stderr
 		goDoc.Env = append(os.Environ(), "GOARCH=js")
 		err := goDoc.Run()
-		exitCode := handleError(err, options, nil)
-		os.Exit(exitCode)
+		return handleError(err, options, nil)
 	}
 
 	cmdGet := &cobra.Command{
@@ -243,7 +260,7 @@ func main() {
 	cmdGet.Flags().AddFlagSet(flagVerbose)
 	cmdGet.Flags().AddFlagSet(flagQuiet)
 	cmdGet.Flags().AddFlagSet(compilerFlags)
-	cmdGet.Run = cmdInstall.Run
+	cmdGet.RunE = cmdInstall.RunE
 
 	cmdRun := &cobra.Command{
 		Use:   "run [gofiles...] [arguments...]",
@@ -252,7 +269,8 @@ func main() {
 	cmdRun.Flags().AddFlagSet(flagVerbose)
 	cmdRun.Flags().AddFlagSet(flagQuiet)
 	cmdRun.Flags().AddFlagSet(compilerFlags)
-	cmdRun.Run = func(cmd *cobra.Command, args []string) {
+	cmdRun.RunE = func(cmd *cobra.Command, args []string) error {
+		options.BuildTags = strings.Fields(tags)
 		err := func() error {
 			lastSourceArg := 0
 			for {
@@ -277,7 +295,10 @@ func main() {
 				os.Remove(tempfile.Name())
 				os.Remove(tempfile.Name() + ".map")
 			}()
-			s := gbuild.NewSession(options)
+			s, err := gbuild.NewSession(options)
+			if err != nil {
+				return err
+			}
 			if err := s.BuildFiles(args[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
 				return err
 			}
@@ -286,9 +307,7 @@ func main() {
 			}
 			return nil
 		}()
-		exitCode := handleError(err, options, nil)
-
-		os.Exit(exitCode)
+		return handleError(err, options, nil)
 	}
 
 	cmdTest := &cobra.Command{
@@ -304,7 +323,7 @@ func main() {
 	compileOnly := cmdTest.Flags().BoolP("compileonly", "c", false, "Compile the test binary to pkg.test.js but do not run it (where pkg is the last element of the package's import path). The file name can be changed with the -o flag.")
 	outputFilename := cmdTest.Flags().StringP("output", "o", "", "Compile the test binary to the named file. The test still runs (unless -c is specified).")
 	cmdTest.Flags().AddFlagSet(compilerFlags)
-	cmdTest.Run = func(cmd *cobra.Command, args []string) {
+	cmdTest.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 		err := func() error {
 			// Expand import path patterns.
@@ -335,7 +354,10 @@ func main() {
 					fmt.Printf("?   \t%s\t[no test files]\n", pkg.ImportPath)
 					continue
 				}
-				s := gbuild.NewSession(options)
+				s, err := gbuild.NewSession(options)
+				if err != nil {
+					return err
+				}
 
 				tests := &testFuncs{BuildContext: s.BuildContext(), Package: pkg.Package}
 				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
@@ -470,9 +492,7 @@ func main() {
 			}
 			return exitErr
 		}()
-		exitCode := handleError(err, options, nil)
-
-		os.Exit(exitCode)
+		return handleError(err, options, nil)
 	}
 
 	cmdServe := &cobra.Command{
@@ -484,14 +504,14 @@ func main() {
 	cmdServe.Flags().AddFlagSet(compilerFlags)
 	var addr string
 	cmdServe.Flags().StringVarP(&addr, "http", "", ":8080", "HTTP bind address to serve")
-	cmdServe.Run = func(cmd *cobra.Command, args []string) {
+	cmdServe.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 		dirs := append(filepath.SplitList(build.Default.GOPATH), build.Default.GOROOT)
 		var root string
 
 		if len(args) > 1 {
 			cmdServe.HelpFunc()(cmd, args)
-			os.Exit(1)
+			return errors.New("non-zero exit code")
 		}
 
 		if len(args) == 1 {
@@ -508,7 +528,7 @@ func main() {
 		ln, err := net.Listen("tcp", addr)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return errors.New("non-zero exit code")
 		}
 		if tcpAddr := ln.Addr().(*net.TCPAddr); tcpAddr.IP.Equal(net.IPv4zero) || tcpAddr.IP.Equal(net.IPv6zero) { // Any available addresses.
 			fmt.Printf("serving at http://localhost:%d and on port %d of any available addresses\n", tcpAddr.Port, tcpAddr.Port)
@@ -516,19 +536,23 @@ func main() {
 			fmt.Printf("serving at http://%s\n", tcpAddr)
 		}
 		fmt.Fprintln(os.Stderr, http.Serve(tcpKeepAliveListener{ln.(*net.TCPListener)}, sourceFiles))
+
+		return nil
 	}
 
 	cmdVersion := &cobra.Command{
 		Use:   "version",
 		Short: "print GopherJS compiler version",
 	}
-	cmdVersion.Run = func(cmd *cobra.Command, args []string) {
+	cmdVersion.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			cmdServe.HelpFunc()(cmd, args)
-			os.Exit(1)
+			return errors.New("non-zero exit code")
 		}
 
 		fmt.Printf("GopherJS %s\n", compiler.Version)
+
+		return nil
 	}
 
 	rootCmd := &cobra.Command{
@@ -538,8 +562,10 @@ func main() {
 	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion, cmdDoc)
 	err := rootCmd.Execute()
 	if err != nil {
-		os.Exit(2)
+		return 2
 	}
+
+	return 0
 }
 
 // tcpKeepAliveListener sets TCP keep-alive timeouts on accepted
@@ -579,7 +605,10 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 	if isPkg || isMap || isIndex {
 		// If we're going to be serving our special files, make sure there's a Go command in this folder.
-		s := gbuild.NewSession(fs.options)
+		s, err := gbuild.NewSession(fs.options)
+		if err != nil {
+			return nil, err
+		}
 		pkg, err := gbuild.Import(path.Dir(name), 0, s.InstallSuffix(), fs.options.BuildTags)
 		if err != nil || pkg.Name != "main" {
 			isPkg = false
@@ -700,21 +729,24 @@ func (f *fakeFile) Sys() interface{} {
 
 // handleError handles err and returns an appropriate exit code.
 // If browserErrors is non-nil, errors are written for presentation in browser.
-func handleError(err error, options *gbuild.Options, browserErrors *bytes.Buffer) int {
+func handleError(err error, options *gbuild.Options, browserErrors *bytes.Buffer) error {
 	switch err := err.(type) {
 	case nil:
-		return 0
 	case compiler.ErrorList:
 		for _, entry := range err {
 			printError(entry, options, browserErrors)
 		}
-		return 1
+		return errors.New("compiler errors")
 	case *exec.ExitError:
-		return err.Sys().(syscall.WaitStatus).ExitStatus()
+		if err.Sys().(syscall.WaitStatus).ExitStatus() != 0 {
+			return errors.New("non-zero exit code")
+		}
 	default:
 		printError(err, options, browserErrors)
-		return 1
+		return err
 	}
+
+	return nil
 }
 
 // printError prints err to Stderr with options. If browserErrors is non-nil, errors are also written for presentation in browser.

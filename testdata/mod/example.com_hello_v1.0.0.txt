@@ -1,0 +1,13 @@
+module example.com/hello@v1.0.0
+
+-- .mod --
+module "example.com/hello"
+
+require "example.com/hello" v1.0.0
+-- .info --
+{"Version":"v1.0.0","Time":"2018-02-14T15:44:20Z"}
+
+-- hello.go --
+package hello
+
+const Greeting = "Hello"

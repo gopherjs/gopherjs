@@ -1,0 +1,4 @@
+gopherjs version
+stdout '^GopherJS [0-9]'
+! stderr .+
+

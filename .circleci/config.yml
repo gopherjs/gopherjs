@@ -7,16 +7,17 @@ jobs:
       - image: circleci/golang:1.10
 
     environment:
-      SOURCE_MAP_SUPPORT: false
-      NVM_VERSION: v0.33.9
+      NVM_VERSION: v0.33.11
       GO_VERSION: go1.11.2
-      NODE_VERSION: 10.0.0
+      NODE_VERSION: 10.13.0
 
     steps:
       - checkout
 
       - run: |
+          echo 'export NODE_PATH="$HOME/.node_libraries:$NODE_PATH"' >> $BASH_ENV
           echo 'export GO111MODULE=on' >> $BASH_ENV
+          echo 'export PATH="$PWD/node_modules/.bin:$PATH"' >> $BASH_ENV
           git --version
 
       - run: |
@@ -50,6 +51,7 @@ jobs:
           # Setup our required Node version now that nvm is installed.
           nvm install $NODE_VERSION node
           nvm alias default $NODE_VERSION
+          echo 'export NODE_PATH="$(npm root --global):$NODE_PATH"' >> $BASH_ENV
 
       - run: |
           # Verify our environment setup.
@@ -61,8 +63,10 @@ jobs:
 
       - run: |
           # Per https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md.
-          npm install --global node-gyp
+          npm install -g node-gyp
           cd node-syscall && node-gyp rebuild && mkdir -p $HOME/.node_libraries/ && cp build/Release/syscall.node $HOME/.node_libraries/syscall.node
+
+          npm install -g source-map-support
 
           # this gives us the repo-local binaries we require
           npm install
@@ -74,8 +78,15 @@ jobs:
           # because this is a long-running test suite
           no_output_timeout: 30m
           command: |
+
               echo ">> Regenerate compiler/prelude"
               go generate github.com/gopherjs/gopherjs/compiler/prelude
+
+              echo ">> Ensure we have a tidy go.{mod,sum}"
+              go mod tidy
+              go list all > /dev/null # https://github.com/golang/go/issues/27868#issuecomment-431413621
+
+              git diff
 
               echo ">> Ensure there are no variations from the git commit"
               diff -u <(echo -n) <(git status --porcelain)

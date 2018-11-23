@@ -1,0 +1,122 @@
+# Various tests that ensure that, across the GopherJS commands, we do not
+# use stale build artefacts.
+
+env HOME=$WORK/home
+mkdir $HOME
+env GOPATH=$HOME/go
+
+# gopherjs test
+cp blah/blah.go.fish blah/blah.go
+cp main_test.go.fish main_test.go
+gopherjs test
+stdout '^fish$'
+! stderr .+
+cp blah/blah.go.chips blah/blah.go
+cp main_test.go.chips main_test.go
+gopherjs test
+stdout '^chips$'
+! stderr .+
+
+# gopherjs run
+cp blah/blah.go.fish blah/blah.go
+gopherjs run main.go
+stdout '^Today we will eat fish$'
+! stderr .+
+cp blah/blah.go.chips blah/blah.go
+gopherjs run main.go
+stdout '^Today we will eat chips$'
+! stderr .+
+gopherjs run --tags thin main.go
+stdout '^Today we will eat thin chips$'
+! stderr .+
+
+# gopherjs build
+cp blah/blah.go.fish blah/blah.go
+! exists output.js output.js.map
+gopherjs build -o output.js
+! stdout .+
+! stderr .+
+exists output.js output.js.map
+! modified output.js
+! changed output.js
+exec node output.js
+stdout '^Today we will eat fish$'
+! stderr .+
+gopherjs build -o output.js
+modified output.js
+! changed output.js
+cp blah/blah.go.chips blah/blah.go
+gopherjs build -o output.js
+modified output.js
+changed output.js
+exec node output.js
+stdout '^Today we will eat chips$'
+! stderr .+
+gopherjs build --tags thin -o output.js
+modified output.js
+changed output.js
+exec node output.js
+stdout '^Today we will eat thin chips$'
+! stderr .+
+
+
+-- go.mod --
+module example.com/hello
+
+-- main.go --
+package main
+
+import "example.com/hello/blah"
+
+func main() {
+        print("Today we will eat", blah.Name)
+}
+
+-- main_test.go.fish --
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "fish"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- main_test.go.chips --
+// +build !thin
+
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "chips"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- blah/blah.go.fish --
+package blah
+
+const Name = "fish"
+
+-- blah/blah.go.chips --
+// +build !thin
+
+package blah
+const Name = "chips"
+
+-- blah/blahthin.go --
+// +build thin
+
+package blah
+const Name = "thin chips"

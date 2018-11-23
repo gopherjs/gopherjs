@@ -1,0 +1,3 @@
+gopherjs --help
+stdout '^GopherJS is a tool for compiling Go source code to JavaScript.$'
+! stderr .+

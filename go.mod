@@ -5,6 +5,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86
 	github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab
+	github.com/rogpeppe/go-internal v1.0.1-alpha
 	github.com/shurcooL/go v0.0.0-20180423040247-9e1955d9fb6e
 	github.com/shurcooL/httpfs v0.0.0-20171119174359-809beceb2371
 	github.com/shurcooL/vfsgen v0.0.0-20180915214035-33ae1944be3f

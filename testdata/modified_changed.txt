@@ -1,0 +1,9 @@
+exec touch file
+! modified file
+! changed file
+exec touch file
+modified file
+! changed file
+exec bash -c 'echo string > file'
+modified file
+changed file

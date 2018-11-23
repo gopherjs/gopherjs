@@ -20,6 +20,7 @@ func TestGoRepositoryCompilerTests(t *testing.T) {
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stdout
+	cmd.Env = append(os.Environ(), "SOURCE_MAP_SUPPORT=false")
 	err := cmd.Run()
 	if err != nil {
 		t.Fatal(err)

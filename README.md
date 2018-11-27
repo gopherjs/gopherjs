@@ -1,9 +1,3 @@
-# `** A note on Go 1.11 **`
-
-This branch has **experimental** support for modules in Go 1.11. It is working to the point that in module mode
-tests pass, GopherJS can be used in other projects that are operating in module mode, but it is distinctly
-untested in GOPATH-mode or any non OS-based environment (e.g. playground).
-
 GopherJS - A compiler from Go to JavaScript
 -------------------------------------------
 
@@ -16,7 +10,13 @@ GopherJS compiles Go code ([golang.org](https://golang.org/)) to pure JavaScript
 Give GopherJS a try on the [GopherJS Playground](http://gopherjs.github.io/playground/).
 
 ### What is supported?
-Nearly everything, including Goroutines ([compatibility table](https://github.com/gopherjs/gopherjs/blob/master/doc/packages.md)). Performance is quite good in most cases, see [HTML5 game engine benchmark](https://ajhager.github.io/engi/demos/botmark.html). Cgo is not supported.
+Nearly everything, including Goroutines ([compatibility
+table](https://github.com/gopherjs/gopherjs/blob/master/doc/packages.md)). Performance is quite good in most cases, see
+[HTML5 game engine benchmark](https://ajhager.github.io/engi/demos/botmark.html). Cgo is not supported.
+
+This fork of GopherJS has almost complete support for modules in Go 1.11. There are also fairly extensive tests to
+ensure that GopherJS works in both GOPATH and module modes. For more up-to-date commentary on modules support, please
+see https://github.com/myitcv/gopherjs/wiki/Go-1.11-and-GopherJS.
 
 ### Installation and Usage
 

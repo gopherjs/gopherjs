@@ -632,15 +632,18 @@ func (s *Session) determineModLookup(tests bool, imports []string) error {
 		return nil
 	}
 
-	// we always need to be able to resolve these
-	imports = append(imports, "runtime", "github.com/gopherjs/gopherjs/js", "github.com/gopherjs/gopherjs/nosync")
-
 	if tests {
+		if len(imports) != 1 {
+			panic("invariant broken for test list")
+		}
 		imports = append(imports, "testing", "testing/internal/testdeps")
 	}
 
+	// we always need to be able to resolve these
+	imports = append(imports, "runtime", "github.com/gopherjs/gopherjs/js", "github.com/gopherjs/gopherjs/nosync")
+
 	var stdout, stderr bytes.Buffer
-	golistCmd := exec.Command("go", "list", "-deps", "-json")
+	golistCmd := exec.Command("go", "list", "-deps", `-f={{if or (eq .ForTest "") (eq .ForTest "`+imports[0]+`")}}{"ImportPath": "{{.ImportPath}}", "Dir": "{{.Dir}}"{{with .Module}}, "Module": {"Path": "{{.Path}}", "Dir": "{{.Dir}}"}{{end}}}{{end}}`)
 	if tests {
 		golistCmd.Args = append(golistCmd.Args, "-test")
 	}

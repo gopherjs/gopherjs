@@ -597,11 +597,11 @@ func NewSession(options *Options, tests bool, imports ...string) (*Session, erro
 		wd:         wd,
 		buildCache: buildCache,
 	}
+	s.bctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
+	s.Types = make(map[string]*types.Package)
 	if err := s.determineModLookup(tests, imports); err != nil {
 		return nil, err
 	}
-	s.bctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
-	s.Types = make(map[string]*types.Package)
 	if options.Watch {
 		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
 			if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n < 1024 {
@@ -646,6 +646,9 @@ func (s *Session) determineModLookup(tests bool, imports []string) error {
 	golistCmd := exec.Command("go", "list", "-deps", `-f={{if or (eq .ForTest "") (eq .ForTest "`+imports[0]+`")}}{"ImportPath": "{{.ImportPath}}", "Dir": "{{.Dir}}"{{with .Module}}, "Module": {"Path": "{{.Path}}", "Dir": "{{.Dir}}"}{{end}}}{{end}}`)
 	if tests {
 		golistCmd.Args = append(golistCmd.Args, "-test")
+	}
+	if len(s.bctx.BuildTags) > 0 {
+		golistCmd.Args = append(golistCmd.Args, "-tags="+strings.Join(s.bctx.BuildTags, " "))
 	}
 	golistCmd.Args = append(golistCmd.Args, imports...)
 	golistCmd.Stdout = &stdout

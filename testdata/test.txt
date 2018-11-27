@@ -6,6 +6,10 @@
 # A change from the original GopherJS here, we do _not_ now install
 # a dependency in $GOPATH/pkg unless explicitly asked to do so by
 # gopherjs install (which is not this command).
+#
+# The use of a build constraint in the test files and imports of
+# math/big is to ensure we are correctly computing the module
+# dependencies based on the build tags passed to gopherjs.
 
 env HOME=$WORK/home
 mkdir $HOME
@@ -17,19 +21,20 @@ cp blah/blah.go.fish blah/blah.go
 
 # No test files then test files
 ! exists exists $GOPATH/pkg/${GOOS}_js $GOPATH/bin
-gopherjs test
+gopherjs test --tags asdf
 stdout '^?\s+example.com/hello\s+\[no test files\]$'
 ! stderr .+
-gopherjs test example.com/hello
+gopherjs test --tags asdf example.com/hello
 stdout '^?\s+example.com/hello\s+\[no test files\]$'
 ! stderr .+
+cp empty_test.go.empty empty_test.go
 cp main_test.go.fish main_test.go
-gopherjs test
+gopherjs test --tags asdf
 stdout 'fish'
 stdout '^PASS$'
 stdout '^ok\s+example.com/hello\s+'
 ! stderr .+
-gopherjs test example.com/hello
+gopherjs test --tags asdf example.com/hello
 stdout 'fish'
 stdout '^PASS$'
 stdout '^ok\s+example.com/hello\s+'
@@ -37,7 +42,7 @@ stdout '^ok\s+example.com/hello\s+'
 ! exists $GOPATH/pkg/${GOOS}_js $GOPATH/bin
 
 # mutliple packages
-gopherjs test . ./blah
+gopherjs test --tags asdf . ./blah
 stdout 'fish'
 stdout '^PASS$'
 stdout '^ok\s+example.com/hello\s+'
@@ -48,27 +53,27 @@ stdout '^?\s+example.com/hello/blah\s+\[no test files\]$'
 # Staleness checks
 ! exists exists $GOPATH/pkg/${GOOS}_js $GOPATH/bin
 cp blah/blah.go.fish blah/blah.go
-gopherjs test
+gopherjs test --tags asdf
 stdout 'fish'
 stdout '^PASS$'
 stdout '^ok\s+example.com/hello\s+'
 cp blah/blah.go.chips blah/blah.go
-! gopherjs test
+! gopherjs test --tags asdf
 stdout '^--- FAIL: TestBlah'
 stdout 'expected fish; got chips$'
 stdout '^FAIL\s+example.com/hello\s+'
 cp main_test.go.chips main_test.go
-gopherjs test
+gopherjs test --tags asdf
 stdout 'chips'
 stdout '^PASS$'
 stdout '^ok\s+example.com/hello\s+'
-! gopherjs test --tags thin
+! gopherjs test --tags 'thin asdf'
 stdout '^--- FAIL: TestBlah'
 stdout 'expected chips; got thin chips$'
 stdout '^FAIL\s+example.com/hello\s+'
 ! stderr .+
 cp main_test.go.thinchips main_test.go
-gopherjs test --tags thin
+gopherjs test --tags 'asdf thin'
 stdout 'thin chips'
 stdout '^PASS$'
 stdout '^ok\s+example.com/hello\s+'
@@ -85,13 +90,22 @@ func main() {
         print("Today we will eat", blah.Name)
 }
 
+-- hello/empty_test.go.empty --
+package main
+
+var x = u
+
 -- hello/main_test.go.fish --
+// +build asdf
+
 package main
 
 import "fmt"
 import "testing"
 import "example.com/hello/blah"
+import "math/big"
 
+var u big.Word
 
 func TestBlah(t *testing.T) {
   fmt.Println(blah.Name)
@@ -101,12 +115,16 @@ func TestBlah(t *testing.T) {
 }
 
 -- hello/main_test.go.chips --
+// +build asdf
+
 package main
 
 import "fmt"
 import "testing"
 import "example.com/hello/blah"
+import "math/big"
 
+var u big.Word
 
 func TestBlah(t *testing.T) {
   fmt.Println(blah.Name)
@@ -116,12 +134,16 @@ func TestBlah(t *testing.T) {
 }
 
 -- hello/main_test.go.thinchips --
+// +build asdf
+
 package main
 
 import "fmt"
 import "testing"
 import "example.com/hello/blah"
+import "math/big"
 
+var u big.Word
 
 func TestBlah(t *testing.T) {
   fmt.Println(blah.Name)

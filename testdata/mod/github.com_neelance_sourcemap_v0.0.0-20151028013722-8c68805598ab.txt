@@ -1,0 +1,7 @@
+module github.com/neelance/sourcemap@v0.0.0-20151028013722-8c68805598ab
+
+-- .mod --
+module "github.com/neelance/sourcemap"
+
+-- .info --
+{"Version":"v0.0.0-20151028013722-8c68805598ab","Time":"2018-05-06T08:24:08Z"}

@@ -1,0 +1,143 @@
+# Tests for gopherjs serve command in GOPATH mode. Includes checks for
+# behaviour, staleness and output side effects (e.g. files in $GOPATH/pkg)
+#
+# A change from the original GopherJS here, we do _not_ now install
+# a dependency in $GOPATH/pkg unless explicitly asked to do so by
+# gopherjs install (which is not this command).
+
+env HOME=$WORK/home
+mkdir $HOME
+env GOPATH=$WORK/go
+
+cd go/src/example.com/hello
+
+cp blah/blah.go.fish blah/blah.go
+
+highport GOPHERJSPORT
+! gopherjs serve --http :$GOPHERJSPORT &
+sleep 500ms
+! httpget http://:$GOPHERJSPORT/doesnotexist 404.resp
+cmp 404.golden 404.resp
+httpget http://:$GOPHERJSPORT/example.com/ list.resp
+cmp list.golden list.resp
+httpget http://:$GOPHERJSPORT/example.com/hello/blah/ blahlist.resp
+cmp blahlist.golden blahlist.resp
+httpget http://:$GOPHERJSPORT/example.com/hello/ naked.resp
+cmp index.html naked.resp
+httpget http://:$GOPHERJSPORT/example.com/hello/index.html hello.resp
+cmp index.html hello.resp
+httpget http://:$GOPHERJSPORT/example.com/hello/cmd/ cmd.resp
+cmp cmd/index.golden cmd.resp
+gopherjs build
+cp hello.js js.golden
+rm hello.js
+httpget http://:$GOPHERJSPORT/example.com/hello/hello.js js.resp
+cmp js.golden js.resp
+httpget http://:$GOPHERJSPORT/example.com/hello/hello.js.map js.map.resp
+grep '^{"version":3,"file":"hello.js"' js.map.resp
+
+# Staleness checks
+cp blah/blah.go.fish blah/blah.go
+gopherjs build
+cp hello.js js.golden
+rm hello.js
+httpget http://:$GOPHERJSPORT/example.com/hello/hello.js js.resp
+cmp js.golden js.resp
+cp blah/blah.go.chips blah/blah.go
+gopherjs build
+cp hello.js js.golden
+rm hello.js
+httpget http://:$GOPHERJSPORT/example.com/hello/hello.js js.resp
+cmp js.golden js.resp
+
+# Use of --tags
+highport GOPHERJSPORT
+! gopherjs serve --tags thin --http :$GOPHERJSPORT &
+sleep 500ms
+gopherjs build --tags thin
+cp hello.js js.golden
+rm hello.js
+httpget http://:$GOPHERJSPORT/example.com/hello/hello.js js.resp
+cmp js.golden js.resp
+
+stop
+
+-- go/src/example.com/hello/index.html --
+Our index
+-- go/src/example.com/hello/cmd/main.go --
+package main
+
+func main() {}
+-- go/src/example.com/hello/main.go --
+package main
+
+import "example.com/hello/blah"
+
+func main() {
+        print("Today we will eat", blah.Name)
+}
+
+-- go/src/example.com/hello/main_test.go.fish --
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "fish"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- go/src/example.com/hello/main_test.go.chips --
+// +build !thin
+
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "chips"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- go/src/example.com/hello/blah/blah.go.fish --
+package blah
+
+const Name = "fish"
+
+-- go/src/example.com/hello/blah/blah.go.chips --
+// +build !thin
+
+package blah
+const Name = "chips"
+
+-- go/src/example.com/hello/blah/blahthin.go --
+// +build thin
+
+package blah
+const Name = "thin chips"
+
+-- go/src/example.com/hello/list.golden --
+<pre>
+<a href="hello/">hello/</a>
+</pre>
+-- go/src/example.com/hello/404.golden --
+404 page not found
+-- go/src/example.com/hello/blahlist.golden --
+<pre>
+<a href="blah.go">blah.go</a>
+<a href="blah.go.chips">blah.go.chips</a>
+<a href="blah.go.fish">blah.go.fish</a>
+<a href="blahthin.go">blahthin.go</a>
+</pre>
+-- go/src/example.com/hello/cmd/index.golden --
+<html><head><meta charset="utf-8"><script src="cmd.js"></script></head><body></body></html>

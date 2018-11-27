@@ -1,0 +1,7 @@
+module github.com/fsnotify/fsnotify@v1.4.7
+
+-- .mod --
+module "github.com/fsnotify/fsnotify"
+
+-- .info --
+{"Version":"v1.4.7","Time":"2018-05-06T08:24:08Z"}

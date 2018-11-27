@@ -1,0 +1,41 @@
+# Tests to ensure that in module mode we never take from GOPATH
+
+env HOME=$WORK/home
+env GOPATH=$WORK/gopath
+
+cd foomood
+go mod edit -require=github.com/gopherjs/gopherjs@v0.0.0 -replace=github.com/gopherjs/gopherjs=$SELF
+go run .
+stdout '^Hello from module foo/bar!$'
+gopherjs run main.go
+stdout '^Hello from module foo/bar!$'
+
+-- foomood/go.mod --
+module foo
+
+-- foomood/main.go --
+package main
+
+import "foo/bar"
+
+func main() {
+   bar.Bar()
+}
+
+-- foomood/bar/bar.go --
+package bar
+
+import "fmt"
+
+func Bar() {
+   fmt.Println("Hello from module foo/bar!")
+}
+
+-- gopath/src/foo/bar/bar.go --
+package bar
+
+import "fmt"
+
+func Bar() {
+   fmt.Println("Hello from GOPATH foo/bar!")
+}

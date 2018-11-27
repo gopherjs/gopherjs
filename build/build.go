@@ -3,6 +3,7 @@ package build
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -67,22 +68,32 @@ func (e *ImportCError) Error() string {
 // are loaded from gopherjspkg.FS virtual filesystem rather than GOPATH.
 func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 	gopherjsRoot := filepath.Join(build.Default.GOROOT, "src", "github.com", "gopherjs", "gopherjs")
-	return &build.Context{
-		GOROOT:        build.Default.GOROOT,
-		GOPATH:        build.Default.GOPATH,
-		GOOS:          build.Default.GOOS,
-		GOARCH:        "js",
-		InstallSuffix: installSuffix,
-		Compiler:      "gc",
-		BuildTags: append(buildTags,
-			"netgo",  // See https://godoc.org/net#hdr-Name_Resolution.
-			"purego", // See https://golang.org/issues/23172.
-			"js",
-		),
-		ReleaseTags: build.Default.ReleaseTags,
-		CgoEnabled:  true, // detect `import "C"` to throw proper error
 
-		IsDir: func(path string) bool {
+	ctxt := build.Default
+	ctxt.GOARCH = "js"
+	ctxt.Compiler = "gc"
+	ctxt.BuildTags = append(buildTags,
+		"netgo",            // See https://godoc.org/net#hdr-Name_Resolution.
+		"purego",           // See https://golang.org/issues/23172.
+		"js",               // this effectively identifies that we are GopherJS
+		"!wasm",            // but not webassembly
+		"math_big_pure_go", // Use pure Go version of math/big; we don't want non-Go assembly versions.
+	)
+
+	// TODO this is not great; the build use by GopherJS should not
+	// be a function of the package imported. See below for check
+
+	ctxt.CgoEnabled = true // detect `import "C"` to throw proper error
+
+	foundGopherJSDev := false
+	for _, t := range buildTags {
+		if t == "gopherjsdev" {
+			foundGopherJSDev = true
+		}
+	}
+
+	if !foundGopherJSDev {
+		ctxt.IsDir = func(path string) bool {
 			if strings.HasPrefix(path, gopherjsRoot+string(filepath.Separator)) {
 				path = filepath.ToSlash(path[len(gopherjsRoot):])
 				if fi, err := vfsutil.Stat(gopherjspkg.FS, path); err == nil {
@@ -91,8 +102,8 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 			}
 			fi, err := os.Stat(path)
 			return err == nil && fi.IsDir()
-		},
-		ReadDir: func(path string) ([]os.FileInfo, error) {
+		}
+		ctxt.ReadDir = func(path string) ([]os.FileInfo, error) {
 			if strings.HasPrefix(path, gopherjsRoot+string(filepath.Separator)) {
 				path = filepath.ToSlash(path[len(gopherjsRoot):])
 				if fis, err := vfsutil.ReadDir(gopherjspkg.FS, path); err == nil {
@@ -100,8 +111,8 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 				}
 			}
 			return ioutil.ReadDir(path)
-		},
-		OpenFile: func(path string) (io.ReadCloser, error) {
+		}
+		ctxt.OpenFile = func(path string) (io.ReadCloser, error) {
 			if strings.HasPrefix(path, gopherjsRoot+string(filepath.Separator)) {
 				path = filepath.ToSlash(path[len(gopherjsRoot):])
 				if f, err := gopherjspkg.FS.Open(path); err == nil {
@@ -109,22 +120,10 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 				}
 			}
 			return os.Open(path)
-		},
-	}
-}
-
-// statFile returns an os.FileInfo describing the named file.
-// For files in "$GOROOT/src/github.com/gopherjs/gopherjs" directory,
-// gopherjspkg.FS is consulted first.
-func statFile(path string) (os.FileInfo, error) {
-	gopherjsRoot := filepath.Join(build.Default.GOROOT, "src", "github.com", "gopherjs", "gopherjs")
-	if strings.HasPrefix(path, gopherjsRoot+string(filepath.Separator)) {
-		path = filepath.ToSlash(path[len(gopherjsRoot):])
-		if fi, err := vfsutil.Stat(gopherjspkg.FS, path); err == nil {
-			return fi, nil
 		}
 	}
-	return os.Stat(path)
+
+	return &ctxt
 }
 
 // Import returns details about the Go package named by the import path. If the
@@ -141,7 +140,7 @@ func statFile(path string) (os.FileInfo, error) {
 //
 // If an error occurs, Import returns a non-nil error and a nil
 // *PackageData.
-func Import(path string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
+func (s *Session) Import(path string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		// Getwd may fail if we're in GOARCH=js mode. That's okay, handle
@@ -150,10 +149,10 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 		wd = "."
 	}
 	bctx := NewBuildContext(installSuffix, buildTags)
-	return importWithSrcDir(*bctx, path, wd, mode, installSuffix)
+	return s.importWithSrcDir(*bctx, path, wd, mode, installSuffix)
 }
 
-func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build.ImportMode, installSuffix string) (*PackageData, error) {
+func (s *Session) importWithSrcDir(bctx build.Context, path string, srcDir string, mode build.ImportMode, installSuffix string) (*PackageData, error) {
 	// bctx is passed by value, so it can be modified here.
 	var isVirtual bool
 	switch path {
@@ -179,15 +178,33 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 
 		isVirtual = true
 	}
-	pkg, err := bctx.Import(path, srcDir, mode)
-	if err != nil {
-		bc := build.Default
-		bc.InstallSuffix = bctx.InstallSuffix
-		bc.BuildTags = bctx.BuildTags
-		bc.ReleaseTags = bctx.ReleaseTags
-		pkg, err = bc.Import(path, srcDir, mode)
+
+	var pkg *build.Package
+	var err error
+	if s.modLookup == nil {
+		pkg, err = bctx.Import(path, srcDir, mode)
 		if err != nil {
 			return nil, err
+		}
+	} else {
+		dir, ok := s.modLookup[path]
+		if !ok {
+			return nil, fmt.Errorf("failed to find import directory for %v", path)
+		}
+
+		// set IgnoreVendor even in module mode to prevent go/build from doing
+		// anything with go list; we've already done that work.
+		pkg, err = bctx.ImportDir(dir, mode|build.IgnoreVendor)
+		if err != nil {
+			return nil, fmt.Errorf("build context ImportDir failed: %v", err)
+		}
+		// because ImportDir doesn't know the ImportPath, we need to set
+		// certain things manually
+		gp := filepath.SplitList(build.Default.GOPATH)[0]
+		pkg.ImportPath = path
+		pkg.BinDir = filepath.Join(gp, "bin")
+		if !pkg.IsCommand() {
+			pkg.PkgObj = filepath.Join(gp, "pkg", build.Default.GOOS+"_js", path+".a")
 		}
 	}
 
@@ -215,12 +232,15 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 		pkg.PkgObj = filepath.Join(pkg.BinDir, filepath.Base(pkg.ImportPath)+".js")
 	}
 
-	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
-		// fall back to GOPATH
-		firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: Need to check inside all GOPATH workspaces.
-		gopathPkgObj := filepath.Join(firstGopathWorkspace, pkg.PkgObj[len(build.Default.GOROOT):])
-		if _, err := os.Stat(gopathPkgObj); err == nil {
-			pkg.PkgObj = gopathPkgObj
+	// this is pre-module behaviour. Don't touch it
+	if s.modLookup == nil {
+		if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, build.Default.GOROOT) {
+			// fall back to GOPATH
+			firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: Need to check inside all GOPATH workspaces.
+			gopathPkgObj := filepath.Join(firstGopathWorkspace, pkg.PkgObj[len(build.Default.GOROOT):])
+			if _, err := os.Stat(gopathPkgObj); err == nil {
+				pkg.PkgObj = gopathPkgObj
+			}
 		}
 	}
 
@@ -288,7 +308,7 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 // as an existing file from the standard library). For all identifiers that exist
 // in the original AND the overrides, the original identifier in the AST gets
 // replaced by `_`. New identifiers that don't exist in original package get added.
-func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileSet *token.FileSet) ([]*ast.File, error) {
+func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileSet *token.FileSet, hw io.Writer) ([]*ast.File, error) {
 	var files []*ast.File
 	replacedDeclNames := make(map[string]bool)
 	funcName := func(d *ast.FuncDecl) string {
@@ -369,11 +389,20 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 			if err != nil {
 				panic(err)
 			}
-			file, err := parser.ParseFile(fileSet, fullPath, r, parser.ParseComments)
+			rbyts, err := ioutil.ReadAll(r)
+			r.Close()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read native file %v: %v", fullPath, err)
+			}
+			if hw != nil {
+				fmt.Fprintf(hw, "file: %v\n", fullPath)
+				fmt.Fprintf(hw, "%s\n", rbyts)
+				fmt.Fprintf(hw, "%d bytes\n", len(rbyts))
+			}
+			file, err := parser.ParseFile(fileSet, fullPath, rbyts, parser.ParseComments)
 			if err != nil {
 				panic(err)
 			}
-			r.Close()
 			for _, decl := range file.Decls {
 				switch d := decl.(type) {
 				case *ast.FuncDecl:
@@ -407,8 +436,17 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 		if err != nil {
 			return nil, err
 		}
-		file, err := parser.ParseFile(fileSet, name, r, parser.ParseComments)
+		rbyts, err := ioutil.ReadAll(r)
 		r.Close()
+		if err != nil {
+			return nil, err
+		}
+		if hw != nil {
+			fmt.Fprintf(hw, "file: %v\n", name)
+			fmt.Fprintf(hw, "%s\n", rbyts)
+			fmt.Fprintf(hw, "%d bytes\n", len(rbyts))
+		}
+		file, err := parser.ParseFile(fileSet, name, rbyts, parser.ParseComments)
 		if err != nil {
 			if list, isList := err.(scanner.ErrorList); isList {
 				if len(list) > 10 {
@@ -515,9 +553,16 @@ type Session struct {
 	wd           string // working directory
 	buildCache   *cache.Cache
 	didCacheWork bool
+
+	// map of import path to dir for module mode resolution
+	// a nil value implies we are not in module mode
+	modLookup map[string]string
+
+	// map of module path
+	mods map[string]string
 }
 
-func NewSession(options *Options) (*Session, error) {
+func NewSession(options *Options, tests bool, imports ...string) (*Session, error) {
 	if options.GOROOT == "" {
 		options.GOROOT = build.Default.GOROOT
 	}
@@ -552,6 +597,9 @@ func NewSession(options *Options) (*Session, error) {
 		wd:         wd,
 		buildCache: buildCache,
 	}
+	if err := s.determineModLookup(tests, imports); err != nil {
+		return nil, err
+	}
 	s.bctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
 	s.Types = make(map[string]*types.Package)
 	if options.Watch {
@@ -568,6 +616,77 @@ func NewSession(options *Options) (*Session, error) {
 		}
 	}
 	return s, nil
+}
+
+func (s *Session) GO111MODULE() bool {
+	return s.modLookup != nil
+}
+
+func (s *Session) determineModLookup(tests bool, imports []string) error {
+	goenvCmd := exec.Command("go", "env", "GOMOD")
+	output, err := goenvCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to determine if we are module-mode or not: %v", err)
+	}
+	if strings.TrimSpace(string(output)) == "" {
+		return nil
+	}
+
+	// we always need to be able to resolve these
+	imports = append(imports, "runtime", "github.com/gopherjs/gopherjs/js", "github.com/gopherjs/gopherjs/nosync")
+
+	if tests {
+		imports = append(imports, "testing", "testing/internal/testdeps")
+	}
+
+	var stdout, stderr bytes.Buffer
+	golistCmd := exec.Command("go", "list", "-deps", "-json")
+	if tests {
+		golistCmd.Args = append(golistCmd.Args, "-test")
+	}
+	golistCmd.Args = append(golistCmd.Args, imports...)
+	golistCmd.Stdout = &stdout
+	golistCmd.Stderr = &stderr
+
+	if err := golistCmd.Run(); err != nil {
+		return fmt.Errorf("failed to run %v: %v\n%s", strings.Join(golistCmd.Args, " "), err, stderr.Bytes())
+	}
+
+	dec := json.NewDecoder(&stdout)
+
+	s.modLookup = make(map[string]string)
+	s.mods = make(map[string]string)
+
+	for {
+		var entry struct {
+			ImportPath string
+			Dir        string
+			Module     struct {
+				Path string
+				Dir  string
+			}
+		}
+
+		if err := dec.Decode(&entry); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("failed to decode list output: %v\n%s", err, stdout.Bytes())
+		}
+
+		ipParts := strings.Split(entry.ImportPath, " ")
+		entry.ImportPath = ipParts[0]
+
+		s.modLookup[entry.ImportPath] = entry.Dir
+		s.mods[entry.Module.Path] = entry.Module.Dir
+	}
+
+	return nil
+}
+
+func (s *Session) IsModulePath(path string) (string, bool) {
+	dir, ok := s.mods[path]
+	return dir, ok
 }
 
 func (s *Session) Cleanup() error {
@@ -643,14 +762,12 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 	return s.WriteCommandPackage(archive, pkgObj)
 }
 
-func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
-	wd, _ := os.Getwd()
-	_, archive, err := s.buildImportPathWithSrcDir(path, wd)
-	return archive, err
+func (s *Session) BuildImportPath(path string) (*PackageData, *compiler.Archive, error) {
+	return s.buildImportPathWithSrcDir(path, s.wd)
 }
 
 func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*PackageData, *compiler.Archive, error) {
-	pkg, err := importWithSrcDir(*s.bctx, path, srcDir, 0, s.InstallSuffix())
+	pkg, err := s.importWithSrcDir(*s.bctx, path, srcDir, 0, s.InstallSuffix())
 	if s.Watcher != nil && pkg != nil { // add watch even on error
 		s.Watcher.Add(pkg.Dir)
 	}
@@ -697,25 +814,128 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		return archive, nil
 	}
 
-	archive, pkgHash, err := s.checkCache(pkg)
-	if archive != nil || err != nil {
-		return archive, err
+	var pkgHash *cache.Hash
+	var hw io.Writer
+	var hashDebugOut *bytes.Buffer
+
+	// We never cache main or test packages because of the "hack" used to run
+	// arbitrary files and some legacy (at the time of writing) unknown reason
+	// for test packages.
+	//
+	// Where we do cache an archive, build up a hash that represents a complete
+	// description of a repeatable computation (command line, environment
+	// variables, input file contents, executable contents). This therefore
+	// needs to be a stable computation.  The iteration through imports is, by
+	// definition, stable, because those imports are ordered.
+	if !(pkg.IsCommand() || pkg.IsTest) {
+		pkgHash = cache.NewHash("## build " + pkg.ImportPath)
+		hw = pkgHash
+		if hashDebug {
+			hashDebugOut = new(bytes.Buffer)
+			hw = io.MultiWriter(hashDebugOut, pkgHash)
+		}
+	}
+
+	if hw != nil {
+		fmt.Fprintf(hw, "compiler binary hash: %v\n", compilerBinaryHash)
+
+		orderedBuildTags := append([]string{}, s.options.BuildTags...)
+		sort.Strings(orderedBuildTags)
+
+		fmt.Fprintf(hw, "build tags: %v\n", strings.Join(orderedBuildTags, ","))
+
+		for _, importedPkgPath := range pkg.Imports {
+			// Ignore all imports that aren't mentioned in import specs of pkg. For
+			// example, this ignores imports such as runtime/internal/sys and
+			// runtime/internal/atomic; nobody explicitly adds such imports to their
+			// packages, they are automatically added by the Go tool.
+			//
+			// TODO perhaps there is a cleaner way of doing this?
+			ignored := true
+			for _, pos := range pkg.ImportPos[importedPkgPath] {
+				importFile := filepath.Base(pos.Filename)
+				for _, file := range pkg.GoFiles {
+					if importFile == file {
+						ignored = false
+						break
+					}
+				}
+				if !ignored {
+					break
+				}
+			}
+
+			if importedPkgPath == "unsafe" || ignored {
+				continue
+			}
+
+			_, importedArchive, err := s.buildImportPathWithSrcDir(importedPkgPath, s.wd)
+			if err != nil {
+				return nil, err
+			}
+
+			fmt.Fprintf(hw, "import: %v\n", importedPkgPath)
+			fmt.Fprintf(hw, "  hash: %#x\n", importedArchive.Hash)
+		}
+	}
+
+	fset := token.NewFileSet()
+	files, err := parseAndAugment(s.bctx, pkg.Package, pkg.IsTest, fset, hw)
+	if err != nil {
+		return nil, err
+	}
+
+	if hw != nil {
+		for _, name := range pkg.JSFiles {
+			hashFile := func() error {
+				fp := filepath.Join(pkg.Dir, name)
+				file, err := s.bctx.OpenFile(fp)
+				if err != nil {
+					return fmt.Errorf("failed to open %v: %v", fp, err)
+				}
+				defer file.Close()
+				fmt.Fprintf(hw, "file: %v\n", fp)
+				n, err := io.Copy(hw, file)
+				if err != nil {
+					return fmt.Errorf("failed to hash file contents: %v", err)
+				}
+				fmt.Fprintf(hw, "%d bytes\n", n)
+				return nil
+			}
+
+			if err := hashFile(); err != nil {
+				return nil, fmt.Errorf("failed to hash file %v: %v", name, err)
+			}
+		}
+
+		if hashDebug {
+			fmt.Printf("%s", hashDebugOut.String())
+		}
+
+		// At this point we have a complete Hash. Hence we can check the Cache to see whether
+		// we already have an archive for this key.
+
+		if objFilePath, _, err := s.buildCache.GetFile(pkgHash.Sum()); err == nil {
+			// Try to open objFile; we are not guaranteed it will still be available
+			objFile, err := os.Open(objFilePath)
+			if err == nil {
+				archive, err := compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.Types)
+				objFile.Close()
+				if err == nil {
+					s.Archives[pkg.ImportPath] = archive
+					return archive, nil
+				}
+			}
+		}
 	}
 
 	// At this point, for whatever reason, we were unable to read a build-cached archive.
 	// So we need to build one.
 
 	if s.options.Verbose {
-		fmt.Printf("Cache miss for %v\n", pkg.ImportPath)
+		fmt.Fprintf(os.Stderr, "Cache miss for %v\n", pkg.ImportPath)
 	}
 
-	fileSet := token.NewFileSet()
-	files, err := parseAndAugment(s.bctx, pkg.Package, pkg.IsTest, fileSet)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: localImportPathCache is probably redundent given s.Archives
 	localImportPathCache := make(map[string]*compiler.Archive)
 	importContext := &compiler.ImportContext{
 		Packages: s.Types,
@@ -731,7 +951,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			return archive, nil
 		},
 	}
-	archive, err = compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
+	archive, err := compiler.Compile(pkg.ImportPath, files, fset, importContext, s.options.Minify)
 	if err != nil {
 		return nil, err
 	}
@@ -765,132 +985,6 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	}
 
 	return archive, nil
-}
-
-// checkCache returns the *compiler.Archive for pkg if it is present in the build cache. The *cache.Hash
-// for pkg is returned for all non-main packages.
-func (s *Session) checkCache(pkg *PackageData) (*compiler.Archive, *cache.Hash, error) {
-	// We never cache main packages because of the "hack" used to run arbitrary files.
-	if pkg.IsCommand() {
-		return nil, nil, nil
-	}
-
-	// Build up a hash that represents a complete description of a repeatable
-	// computation (command line, environment variables, input file contents,
-	// executable contents). This therefore needs to be a stable computation.
-	// The iteration through imports is, by definition, stable, because those
-	// imports are ordered.
-	//
-	// We then use this hash value as a cache.ActionID
-
-	// staleness. Set hashDebug to see this in action. The format is:
-	//
-	// ## <package>
-	// compiler binary hash: 0x519d22c6ab65a950f5b6278e4d65cb75dbd3a7eb1cf16e976a40b9f1febc0446
-	// build tags: <list of build tags>
-	// import: <import path>
-	//   hash: 0xb966d7680c1c8ca75026f993c153aff0102dc9551f314e5352043187b5f9c9a6
-	// ...
-	//
-	// file: <file path>
-	// <file contents>
-	// N bytes
-	// ...
-
-	pkgHash := cache.NewHash("## build " + pkg.ImportPath)
-	var hw io.Writer = pkgHash
-	var hashDebugOut *bytes.Buffer
-	if hashDebug {
-		hashDebugOut = new(bytes.Buffer)
-		hw = io.MultiWriter(hashDebugOut, pkgHash)
-	}
-
-	fmt.Fprintf(hw, "compiler binary hash: %v\n", compilerBinaryHash)
-
-	orderedBuildTags := append([]string{}, s.options.BuildTags...)
-	sort.Strings(orderedBuildTags)
-
-	fmt.Fprintf(hw, "build tags: %v\n", strings.Join(orderedBuildTags, ","))
-
-	for _, importedPkgPath := range pkg.Imports {
-		// Ignore all imports that aren't mentioned in import specs of pkg. For
-		// example, this ignores imports such as runtime/internal/sys and
-		// runtime/internal/atomic; nobody explicitly adds such imports to their
-		// packages, they are automatically added by the Go tool.
-		//
-		// TODO perhaps there is a cleaner way of doing this?
-		ignored := true
-		for _, pos := range pkg.ImportPos[importedPkgPath] {
-			importFile := filepath.Base(pos.Filename)
-			for _, file := range pkg.GoFiles {
-				if importFile == file {
-					ignored = false
-					break
-				}
-			}
-			if !ignored {
-				break
-			}
-		}
-
-		if importedPkgPath == "unsafe" || ignored {
-			continue
-		}
-
-		_, importedArchive, err := s.buildImportPathWithSrcDir(importedPkgPath, s.wd)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		fmt.Fprintf(hw, "import: %v\n", importedPkgPath)
-		fmt.Fprintf(hw, "  hash: %#x\n", importedArchive.Hash)
-	}
-
-	for _, name := range append(pkg.GoFiles, pkg.JSFiles...) {
-		hashFile := func() error {
-			fp := filepath.Join(pkg.Dir, name)
-			file, err := s.bctx.OpenFile(fp)
-			if err != nil {
-				return fmt.Errorf("failed to open %v: %v", fp, err)
-			}
-			defer file.Close()
-			fmt.Fprintf(hw, "file: %v\n", fp)
-			n, err := io.Copy(hw, file)
-			if err != nil {
-				return fmt.Errorf("failed to hash file contents: %v", err)
-			}
-			fmt.Fprintf(hw, "%d bytes\n", n)
-			return nil
-		}
-
-		if err := hashFile(); err != nil {
-			return nil, nil, fmt.Errorf("failed to hash file %v: %v", name, err)
-		}
-	}
-
-	if hashDebug {
-		fmt.Printf("%s", hashDebugOut.String())
-	}
-
-	// At this point we have a complete Hash. Hence we can check the Cache to see whether
-	// we already have an archive for this key.
-
-	if objFilePath, _, err := s.buildCache.GetFile(pkgHash.Sum()); err == nil {
-		// Try to open objFile; we are not guaranteed it will still be available
-		objFile, err := os.Open(objFilePath)
-		if err != nil {
-			return nil, pkgHash, nil
-		}
-
-		archive, err := compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.Types)
-		objFile.Close()
-		if err == nil {
-			s.Archives[pkg.ImportPath] = archive
-			return archive, pkgHash, nil
-		}
-	}
-
-	return nil, pkgHash, nil
 }
 
 func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) error {
@@ -1010,7 +1104,7 @@ func (s *Session) WaitForChange() {
 	s.Watcher.Close()
 }
 
-func ImportPaths(vs []string) ([]string, error) {
+func ImportPaths(vs ...string) ([]string, error) {
 	if len(vs) == 0 {
 		vs = []string{"."}
 	}

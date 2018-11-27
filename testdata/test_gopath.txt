@@ -1,0 +1,144 @@
+# Tests for gopherjs test command in GOPATH mode. Includes checks for
+# behaviour, staleness and output side effects (e.g. files in $GOPATH/pkg)
+#
+# A change from the original GopherJS here, we do _not_ now install
+# a dependency in $GOPATH/pkg unless explicitly asked to do so by
+# gopherjs install (which is not this command).
+
+env HOME=$WORK/home
+mkdir $HOME
+env GOPATH=$WORK/go
+
+cd go/src/example.com/hello
+
+cp blah/blah.go.fish blah/blah.go
+
+# No test files then test files
+! exists $GOPATH/pkg $GOPATH/bin
+gopherjs test
+stdout '^?\s+example.com/hello\s+\[no test files\]$'
+! stderr .+
+gopherjs test example.com/hello
+stdout '^?\s+example.com/hello\s+\[no test files\]$'
+! stderr .+
+cp main_test.go.fish main_test.go
+gopherjs test
+stdout 'fish'
+stdout '^PASS$'
+stdout '^ok\s+example.com/hello\s+'
+! stderr .+
+gopherjs test example.com/hello
+stdout 'fish'
+stdout '^PASS$'
+stdout '^ok\s+example.com/hello\s+'
+! stderr .+
+! exists $GOPATH/pkg $GOPATH/bin
+
+# mutliple packages
+gopherjs test . ./blah
+stdout 'fish'
+stdout '^PASS$'
+stdout '^ok\s+example.com/hello\s+'
+stdout '^?\s+example.com/hello/blah\s+\[no test files\]$'
+! stderr .+
+! exists $GOPATH/pkg $GOPATH/bin
+
+# Staleness checks
+! exists $GOPATH/pkg $GOPATH/bin
+cp blah/blah.go.fish blah/blah.go
+gopherjs test
+stdout 'fish'
+stdout '^PASS$'
+stdout '^ok\s+example.com/hello\s+'
+cp blah/blah.go.chips blah/blah.go
+! gopherjs test
+stdout '^--- FAIL: TestBlah'
+stdout 'expected fish; got chips$'
+stdout '^FAIL\s+example.com/hello\s+'
+cp main_test.go.chips main_test.go
+gopherjs test
+stdout 'chips'
+stdout '^PASS$'
+stdout '^ok\s+example.com/hello\s+'
+! gopherjs test --tags thin
+stdout '^--- FAIL: TestBlah'
+stdout 'expected chips; got thin chips$'
+stdout '^FAIL\s+example.com/hello\s+'
+! stderr .+
+cp main_test.go.thinchips main_test.go
+gopherjs test --tags thin
+stdout 'thin chips'
+stdout '^PASS$'
+stdout '^ok\s+example.com/hello\s+'
+
+-- go/src/example.com/hello/main.go --
+package main
+
+import "example.com/hello/blah"
+
+func main() {
+        print("Today we will eat", blah.Name)
+}
+
+-- go/src/example.com/hello/main_test.go.fish --
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "fish"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- go/src/example.com/hello/main_test.go.chips --
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "chips"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- go/src/example.com/hello/main_test.go.thinchips --
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "thin chips"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- go/src/example.com/hello/blah/blah.go.fish --
+package blah
+
+const Name = "fish"
+
+-- go/src/example.com/hello/blah/blah.go.chips --
+// +build !thin
+
+package blah
+const Name = "chips"
+
+-- go/src/example.com/hello/blah/blahthin.go --
+// +build thin
+
+package blah
+const Name = "thin chips"
+

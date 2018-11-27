@@ -1,0 +1,7 @@
+module github.com/spf13/pflag@v1.0.1
+
+-- .mod --
+module "github.com/spf13/pflag"
+
+-- .info --
+{"Version":"v1.0.1","Time":"2018-05-06T08:24:08Z"}

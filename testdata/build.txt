@@ -1,0 +1,147 @@
+# Tests for gopherjs build command in module mode. These tests are
+# largely copied from their GOPATH equivalents. Includes checks
+# for behaviour, staleness and output side effects (e.g. files in
+# $GOPATH/pkg)
+#
+# A change from the original GopherJS here, we do _not_ now install
+# a dependency in $GOPATH/pkg unless explicitly asked to do so by
+# gopherjs install.
+
+env HOME=$WORK/home
+mkdir $HOME
+env GOPATH=$WORK/go
+cd hello
+go mod edit -require=github.com/gopherjs/gopherjs@v0.0.0 -replace=github.com/gopherjs/gopherjs=$SELF
+
+cp blah/blah.go.fish blah/blah.go
+
+# Ensure that we get the "same" output from a file arg or an implicit
+# or explicit package argument. We don't have a neat way (yet) of
+# comparing the main.js output with the package output, allowing for the
+# difference in pkg name
+! exists hello.js
+gopherjs build
+exists hello.js
+exec node hello.js
+stdout '^Today we will eat fish$'
+! stderr .+
+cp hello.js implicit.js
+rm hello.js
+! exists hello.js
+gopherjs build example.com/hello
+exists hello.js
+exec node hello.js
+stdout '^Today we will eat fish$'
+! stderr .+
+cp hello.js explicit.js
+rm hello.js
+cmp implicit.js explicit.js
+! exists hello.js main.js
+gopherjs build main.go
+exists main.js
+exec node main.js
+stdout '^Today we will eat fish$'
+! stderr .+
+! exists $GOPATH/pkg/${GOOS}_js
+
+# tidy up
+rm hello.js.map implicit.js explicit.js main.js main.js.map
+
+# non-command package
+cd blah
+gopherjs build
+! exists $GOPATH/pkg/${GOOS}_js
+! exists blah.js
+
+cd ..
+
+# Staleness checks
+cp blah/blah.go.fish blah/blah.go
+! exists hello.js hello.js.map
+gopherjs build
+! stdout .+
+! stderr .+
+exists hello.js hello.js.map
+! modified hello.js
+! changed hello.js
+exec node hello.js
+stdout '^Today we will eat fish$'
+! stderr .+
+gopherjs build
+modified hello.js
+! changed hello.js
+cp blah/blah.go.chips blah/blah.go
+gopherjs build
+modified hello.js
+changed hello.js
+exec node hello.js
+stdout '^Today we will eat chips$'
+! stderr .+
+gopherjs build --tags thin
+modified hello.js
+changed hello.js
+exec node hello.js
+stdout '^Today we will eat thin chips$'
+! stderr .+
+
+-- hello/go.mod --
+module example.com/hello
+
+-- hello/main.go --
+package main
+
+import "example.com/hello/blah"
+
+func main() {
+        print("Today we will eat", blah.Name)
+}
+
+-- hello/main_test.go.fish --
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "fish"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- hello/main_test.go.chips --
+// +build !thin
+
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "chips"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- hello/blah/blah.go.fish --
+package blah
+
+const Name = "fish"
+
+-- hello/blah/blah.go.chips --
+// +build !thin
+
+package blah
+const Name = "chips"
+
+-- hello/blah/blahthin.go --
+// +build thin
+
+package blah
+const Name = "thin chips"
+

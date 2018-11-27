@@ -63,7 +63,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 	// Then, github.com/gopherjs/gopherjs/build.parseAndAugment(*build.Package) returns []*ast.File.
 	// Those augmented parsed Go files of the package are checked, one file at at time, one import
 	// at a time. Each import is verified to belong in the set of allowed real imports.
-	ips, err := ImportPaths([]string{"std"})
+	ips, err := ImportPaths("std")
 	if err != nil {
 		t.Fatalf("failed to resolve std package spec: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 
 			// Use parseAndAugment to get a list of augmented AST files.
 			fset := token.NewFileSet()
-			files, err := parseAndAugment(NewBuildContext("", nil), bpkg, false, fset)
+			files, err := parseAndAugment(NewBuildContext("", nil), bpkg, false, fset, nil)
 			if err != nil {
 				t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
 			}
@@ -119,7 +119,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 
 			// Use parseAndAugment to get a list of augmented AST files.
 			fset := token.NewFileSet()
-			files, err := parseAndAugment(NewBuildContext("", nil), bpkg, true, fset)
+			files, err := parseAndAugment(NewBuildContext("", nil), bpkg, true, fset, nil)
 			if err != nil {
 				t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
 			}
@@ -161,7 +161,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 
 			// Use parseAndAugment to get a list of augmented AST files, then check only the external test files.
 			fset := token.NewFileSet()
-			files, err := parseAndAugment(NewBuildContext("", nil), bpkg, true, fset)
+			files, err := parseAndAugment(NewBuildContext("", nil), bpkg, true, fset, nil)
 			if err != nil {
 				t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
 			}

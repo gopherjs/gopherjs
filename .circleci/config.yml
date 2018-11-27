@@ -70,47 +70,17 @@ jobs:
 
           # this gives us the repo-local binaries we require
           npm install
-
-      - run: |
-          go install github.com/gopherjs/gopherjs
-
-      - run:
-          # because this is a long-running test suite
-          no_output_timeout: 30m
-          command: |
-
-              echo ">> Regenerate compiler/prelude"
-              go generate github.com/gopherjs/gopherjs/compiler/prelude
-
-              echo ">> Ensure we have a tidy go.{mod,sum}"
-              go mod tidy
-              go list all > /dev/null # https://github.com/golang/go/issues/27868#issuecomment-431413621
-
-              git diff
-
-              echo ">> Ensure there are no variations from the git commit"
-              diff -u <(echo -n) <(git status --porcelain)
-
-              echo ">> Ensure all go code is well formatted."
-              diff -u <(echo -n) <(gofmt -d .)
-
-              echo ">> Vetting github.com/gopherjs/gopherjs"
-              go vet .
-
-              echo ">> vet all packages except tests"
-              go vet $(go list ./... | grep -v github.com/gopherjs/gopherjs/tests)
-
-              echo ">> All those packages should have // +build js."
-              diff -u <(echo "github.com/gopherjs/gopherjs/compiler/natives") <(go list ./compiler/natives/...)
-
-              echo ">> Should build successfully (can't run tests, since only client is supported)."
-              gopherjs install -v net/http
-
-              echo ">> Run the core gopherjs tests; exclusions take from .std_test_pkg_exclusions."
-              gopherjs test --minify -v --short github.com/gopherjs/gopherjs/tests/... $(go list std | grep -v -x -f .std_test_pkg_exclusions)
-
-              echo ">> Race tests."
-              go test -v -race ./...
-
-              echo ">> Non-minified gopherjs tests should also work."
-              gopherjs test -v fmt
+      - run: go install github.com/gopherjs/gopherjs
+      - run: go generate github.com/gopherjs/gopherjs/compiler/prelude
+      - run: go mod tidy && go list all > /dev/null # https://github.com/golang/go/issues/27868#issuecomment-431413621
+      - run: go run genmodstubbs.go
+      - run: git diff
+      - run: diff -u <(echo -n) <(git status --porcelain)
+      - run: diff -u <(echo -n) <(gofmt -d .)
+      - run: go vet .
+      - run: go vet $(go list ./... | grep -v github.com/gopherjs/gopherjs/tests)
+      - run: diff -u <(echo "github.com/gopherjs/gopherjs/compiler/natives") <(go list ./compiler/natives/...)
+      - run: gopherjs install -v net/http
+      - run: gopherjs test --minify -v --short github.com/gopherjs/gopherjs/tests/... $(go list std | grep -v -x -f .std_test_pkg_exclusions)
+      - run: go test -v ./...
+      - run: gopherjs test -v fmt

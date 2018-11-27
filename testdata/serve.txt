@@ -1,0 +1,148 @@
+# Tests for gopherjs serve command in module mode.These tests are
+# largely copied from their GOPATH equivalents. Includes checks
+# for behaviour, staleness and output side effects (e.g. files in
+# $GOPATH/pkg)
+#
+# A change from the original GopherJS here, we do _not_ now install a
+# dependency in $GOPATH/pkg unless explicitly asked to do so by gopherjs
+# install (which is not this command).
+
+env HOME=$WORK/home
+mkdir $HOME
+env GOPATH=$WORK/go
+cd hello
+go mod edit -require=github.com/gopherjs/gopherjs@v0.0.0 -replace=github.com/gopherjs/gopherjs=$SELF
+
+cp blah/blah.go.fish blah/blah.go
+
+highport GOPHERJSPORT
+! gopherjs serve --http :$GOPHERJSPORT &
+sleep 500ms
+! httpget http://:$GOPHERJSPORT/doesnotexist 404.resp
+cmp 404.golden 404.resp
+# httpget http://:$GOPHERJSPORT/example.com/ list.resp
+# cmp list.golden list.resp
+httpget http://:$GOPHERJSPORT/example.com/hello/blah blahlist.resp
+cmp blahlist.golden blahlist.resp
+httpget http://:$GOPHERJSPORT/example.com/hello/ naked.resp
+cmp index.html naked.resp
+httpget http://:$GOPHERJSPORT/example.com/hello/index.html hello.resp
+cmp index.html hello.resp
+httpget http://:$GOPHERJSPORT/example.com/hello/cmd/ cmd.resp
+cmp cmd/index.golden cmd.resp
+gopherjs build
+cp hello.js js.golden
+rm hello.js
+httpget http://:$GOPHERJSPORT/example.com/hello/hello.js js.resp
+cmp js.golden js.resp
+httpget http://:$GOPHERJSPORT/example.com/hello/hello.js.map js.map.resp
+grep '^{"version":3,"file":"hello.js"' js.map.resp
+
+# Staleness checks
+cp blah/blah.go.fish blah/blah.go
+gopherjs build
+cp hello.js js.golden
+rm hello.js
+httpget http://:$GOPHERJSPORT/example.com/hello/hello.js js.resp
+cmp js.golden js.resp
+cp blah/blah.go.chips blah/blah.go
+gopherjs build
+cp hello.js js.golden
+rm hello.js
+httpget http://:$GOPHERJSPORT/example.com/hello/hello.js js.resp
+cmp js.golden js.resp
+
+# Use of --tags
+highport GOPHERJSPORT
+! gopherjs serve --tags thin --http :$GOPHERJSPORT &
+sleep 500ms
+gopherjs build --tags thin
+cp hello.js js.golden
+rm hello.js
+httpget http://:$GOPHERJSPORT/example.com/hello/hello.js js.resp
+cmp js.golden js.resp
+
+stop
+
+-- hello/go.mod --
+module example.com/hello
+
+-- hello/index.html --
+Our index
+-- hello/cmd/main.go --
+package main
+
+func main() {}
+-- hello/main.go --
+package main
+
+import "example.com/hello/blah"
+
+func main() {
+        print("Today we will eat", blah.Name)
+}
+
+-- hello/main_test.go.fish --
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "fish"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- hello/main_test.go.chips --
+// +build !thin
+
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "chips"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- hello/blah/blah.go.fish --
+package blah
+
+const Name = "fish"
+
+-- hello/blah/blah.go.chips --
+// +build !thin
+
+package blah
+const Name = "chips"
+
+-- hello/blah/blahthin.go --
+// +build thin
+
+package blah
+const Name = "thin chips"
+
+-- hello/list.golden --
+<pre>
+<a href="hello/">hello/</a>
+</pre>
+-- hello/404.golden --
+404 page not found
+-- hello/blahlist.golden --
+<pre>
+<a href="blah.go">blah.go</a>
+<a href="blah.go.chips">blah.go.chips</a>
+<a href="blah.go.fish">blah.go.fish</a>
+<a href="blahthin.go">blahthin.go</a>
+</pre>
+-- hello/cmd/index.golden --
+<html><head><meta charset="utf-8"><script src="cmd.js"></script></head><body></body></html>

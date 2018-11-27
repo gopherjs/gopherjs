@@ -151,7 +151,7 @@ var (
 
 	// dirs are the directories to look for *.go files in.
 	// TODO(bradfitz): just use all directories?
-	dirs = []string{".", "ken", "chan", "interface", "syntax", "dwarf", "fixedbugs"}
+	dirs = []string{"fixedbugs"}
 
 	// ratec controls the max number of tests running at a time.
 	ratec chan bool
@@ -163,6 +163,8 @@ var (
 	// rungatec controls the max number of runoutput tests
 	// executed in parallel as they can each consume a lot of memory.
 	rungatec chan bool
+
+	testRoot = filepath.Join(runtime.GOROOT(), "test")
 )
 
 // maxTests is an upper bound on the total number of tests.
@@ -172,15 +174,11 @@ const maxTests = 5000
 func main() {
 	flag.Parse()
 
-	// GOPHERJS.
-	err := os.Chdir(filepath.Join(runtime.GOROOT(), "test"))
-	if err != nil {
-		log.Fatalln(err)
+	mkAbs := func(p string) string {
+		return filepath.Join(testRoot, p)
 	}
 
 	goos = getenv("GOOS", runtime.GOOS)
-	//goarch = getenv("GOARCH", runtime.GOARCH)
-	// GOPHERJS.
 	goarch = getenv("GOARCH", "js") // We're running this script natively, but the tests are executed with js architecture.
 
 	if *verbose {
@@ -221,6 +219,7 @@ func main() {
 		}
 	} else {
 		for _, dir := range dirs {
+			dir = mkAbs(dir)
 			for _, baseGoFile := range goFiles(dir) {
 				tests = append(tests, startTest(dir, baseGoFile))
 			}
@@ -408,12 +407,16 @@ func runTests() {
 
 var cwd, _ = os.Getwd()
 
-func (t *test) goFileName() string {
+func (t *test) filename() string {
 	return filepath.Join(t.dir, t.gofile)
 }
 
+func (t *test) goFileName() string {
+	return strings.TrimPrefix(filepath.Join(t.dir, t.gofile), testRoot+string(os.PathSeparator))
+}
+
 func (t *test) goDirName() string {
-	return filepath.Join(t.dir, strings.Replace(t.gofile, ".go", ".dir", -1))
+	return filepath.Join(t.dir, strings.Replace(t.goFileName(), ".go", ".dir", -1))
 }
 
 func goDirFiles(longdir string) (filter []os.FileInfo, err error) {
@@ -552,7 +555,7 @@ func (t *test) run() {
 		return
 	}
 
-	srcBytes, err := ioutil.ReadFile(t.goFileName())
+	srcBytes, err := ioutil.ReadFile(filepath.Join(t.dir, t.gofile))
 	if err != nil {
 		t.err = err
 		return
@@ -602,7 +605,7 @@ func (t *test) run() {
 	// GOPHERJS: For now, only run with "run", "cmpout" actions, in "fixedbugs" dir. Skip all others.
 	switch action {
 	case "run", "cmpout":
-		if filepath.Clean(t.dir) != "fixedbugs" {
+		if filepath.Base(t.dir) != "fixedbugs" {
 			action = "skip"
 		}
 	default:
@@ -669,7 +672,7 @@ func (t *test) run() {
 		return buf.Bytes(), err
 	}
 
-	long := filepath.Join(cwd, t.goFileName())
+	long := t.filename()
 	switch action {
 	default:
 		t.err = fmt.Errorf("unimplemented action %q", action)
@@ -792,7 +795,7 @@ func (t *test) run() {
 	case "run":
 		useTmp = false
 		// GOPHERJS.
-		out, err := runcmd(append([]string{"gopherjs", "run", "-q", t.goFileName()}, args...)...)
+		out, err := runcmd(append([]string{"gopherjs", "run", "-q", t.filename()}, args...)...)
 		if err != nil {
 			t.err = err
 			return
@@ -807,7 +810,7 @@ func (t *test) run() {
 			<-rungatec
 		}()
 		useTmp = false
-		out, err := runcmd(append([]string{"go", "run", t.goFileName()}, args...)...)
+		out, err := runcmd(append([]string{"go", "run", t.filename()}, args...)...)
 		if err != nil {
 			t.err = err
 			return
@@ -828,7 +831,7 @@ func (t *test) run() {
 
 	case "errorcheckoutput":
 		useTmp = false
-		out, err := runcmd(append([]string{"go", "run", t.goFileName()}, args...)...)
+		out, err := runcmd(append([]string{"go", "run", t.filename()}, args...)...)
 		if err != nil {
 			t.err = err
 			return

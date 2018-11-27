@@ -1,0 +1,7 @@
+module github.com/spf13/cobra@v0.0.3
+
+-- .mod --
+module "github.com/spf13/cobra"
+
+-- .info --
+{"Version":"v0.0.3","Time":"2018-05-06T08:24:08Z"}

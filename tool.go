@@ -41,7 +41,10 @@ import (
 
 var currentDirectory string
 
-var errorFail = errors.New("command exited with non-zero exit code")
+var (
+	errorFail = errors.New("command exited with non-zero exit code")
+	testsFail = errors.New("tests failed")
+)
 
 func init() {
 	var err error
@@ -99,13 +102,8 @@ func main1() int {
 	cmdBuild.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 		for {
-			s, err := gbuild.NewSession(options)
-			if err := handleError(err, options, nil); err != nil {
-				return err
-			}
-			defer s.Cleanup()
 
-			err = func() error {
+			err := func() error {
 				// Handle "gopherjs build [files]" ad-hoc package mode.
 				if len(args) > 0 && (strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".inc.js")) {
 					for _, arg := range args {
@@ -113,6 +111,15 @@ func main1() int {
 							return fmt.Errorf("named files must be .go or .inc.js files")
 						}
 					}
+					imports, err := importsFromFiles(args)
+					if err != nil {
+						return err
+					}
+					s, err := gbuild.NewSession(options, false, imports...)
+					if err := handleError(err, options, nil); err != nil {
+						return err
+					}
+					defer s.Cleanup()
 					if pkgObj == "" {
 						basename := filepath.Base(args[0])
 						pkgObj = basename[:len(basename)-3] + ".js"
@@ -125,15 +132,23 @@ func main1() int {
 							s.Watcher.Add(name)
 						}
 					}
-					err := s.BuildFiles(args, pkgObj, currentDirectory)
-					return err
+					if s.Watcher != nil {
+						s.WaitForChange()
+					}
+					return s.BuildFiles(args, pkgObj, currentDirectory)
 				}
 
 				// Expand import path patterns.
-				pkgs, err := gbuild.ImportPaths(args)
+				pkgs, err := gbuild.ImportPaths(args...)
 				if err != nil {
 					return err
 				}
+
+				s, err := gbuild.NewSession(options, false, pkgs...)
+				if err := handleError(err, options, nil); err != nil {
+					return err
+				}
+				defer s.Cleanup()
 
 				for _, pkgPath := range pkgs {
 					if s.Watcher != nil {
@@ -143,7 +158,7 @@ func main1() int {
 						}
 						s.Watcher.Add(pkg.Dir)
 					}
-					pkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
+					pkg, err := s.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
 					if err != nil {
 						return err
 					}
@@ -162,14 +177,14 @@ func main1() int {
 						}
 					}
 				}
+
+				if s.Watcher != nil {
+					s.WaitForChange()
+				}
 				return nil
 			}()
 			if err := handleError(err, options, nil); err != nil {
 				return err
-			}
-
-			if s.Watcher != nil {
-				s.WaitForChange()
 			}
 
 			return nil
@@ -187,18 +202,18 @@ func main1() int {
 	cmdInstall.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 		for {
-			s, err := gbuild.NewSession(options)
-			if err := handleError(err, options, nil); err != nil {
-				return err
-			}
-			defer s.Cleanup()
-
-			err = func() error {
+			err := func() error {
 				// Expand import path patterns.
-				pkgs, err := gbuild.ImportPaths(args)
+				pkgs, err := gbuild.ImportPaths(args...)
 				if err != nil {
 					return err
 				}
+
+				s, err := gbuild.NewSession(options, false, pkgs...)
+				if err := handleError(err, options, nil); err != nil {
+					return err
+				}
+				defer s.Cleanup()
 
 				if cmd.Name() == "get" {
 					goGet := exec.Command("go", append([]string{"get", "-d", "-tags=js"}, pkgs...)...)
@@ -209,7 +224,7 @@ func main1() int {
 					}
 				}
 				for _, pkgPath := range pkgs {
-					pkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
+					pkg, err := s.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
 					if s.Watcher != nil && pkg != nil { // add watch even on error
 						s.Watcher.Add(pkg.Dir)
 					}
@@ -222,20 +237,19 @@ func main1() int {
 						return err
 					}
 
-					if pkg.IsCommand() && !pkg.UpToDate {
-						if err := s.WriteCommandPackage(archive, pkg.PkgObj); err != nil {
-							return err
-						}
+					if err := s.WriteCommandPackage(archive, pkg.PkgObj); err != nil {
+						return err
 					}
 				}
+
+				if s.Watcher != nil {
+					s.WaitForChange()
+				}
+
 				return nil
 			}()
 			if err := handleError(err, options, nil); err != nil {
 				return err
-			}
-
-			if s.Watcher != nil {
-				s.WaitForChange()
 			}
 
 			return nil
@@ -274,38 +288,70 @@ func main1() int {
 	cmdRun.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 		err := func() error {
-			lastSourceArg := 0
-			for {
-				if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {
-					break
-				}
-				lastSourceArg++
+
+			tempDir, err := ioutil.TempDir("", "gopherjs-run-*")
+			if err != nil {
+				return fmt.Errorf("gopherjs run: failed to create temp directory: %v", err)
 			}
-			if lastSourceArg == 0 {
+			tempFile := filepath.Join(tempDir, "main.js")
+			defer func() {
+				os.RemoveAll(tempDir)
+			}()
+
+			i := 0
+			for i < len(args) && (strings.HasSuffix(args[i], ".go") || strings.HasSuffix(args[i], ".inc.js")) {
+				i++
+			}
+			if i > 0 {
+				files := args[:i]
+				for _, f := range files {
+					if strings.HasSuffix(f, "_test.go") {
+						return fmt.Errorf("gopherjs run: cannot run test files")
+					}
+				}
+				imports, err := importsFromFiles(files)
+				if err != nil {
+					return err
+				}
+				s, err := gbuild.NewSession(options, false, imports...)
+				if err != nil {
+					return err
+				}
+				defer s.Cleanup()
+				if err := s.BuildFiles(files, tempFile, currentDirectory); err != nil {
+					return err
+				}
+			} else if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+				pkgs, err := gbuild.ImportPaths(args[0])
+				if err != nil {
+					return fmt.Errorf("gopherjs run: failed to resolve package pattern %v: %v", args[0], err)
+				}
+				if len(pkgs) > 1 {
+					return fmt.Errorf("gopherjs run: pattern %s matches multiple packages:\n\t%s", args[0], strings.Join(pkgs, "\n\t"))
+				}
+				s, err := gbuild.NewSession(options, false, pkgs[0])
+				if err != nil {
+					return err
+				}
+				defer s.Cleanup()
+				pkg, arc, err := s.BuildImportPath(pkgs[0])
+				if err != nil {
+					return fmt.Errorf("gopherjs run: failed to build %v: %v", pkgs[0], err)
+				}
+				if !pkg.IsCommand() {
+					return fmt.Errorf("gopherjs run: %v is not a main package", pkg.ImportPath)
+				}
+				if err := s.WriteCommandPackage(arc, tempFile); err != nil {
+					return fmt.Errorf("gopherjs run: failed to write build output to %v: %v", tempFile, err)
+				}
+				i++
+			} else {
 				return fmt.Errorf("gopherjs run: no go files listed")
 			}
 
-			tempfile, err := ioutil.TempFile(currentDirectory, filepath.Base(args[0])+".")
-			if err != nil && strings.HasPrefix(currentDirectory, runtime.GOROOT()) {
-				tempfile, err = ioutil.TempFile("", filepath.Base(args[0])+".")
-			}
-			if err != nil {
-				return err
-			}
-			defer func() {
-				tempfile.Close()
-				os.Remove(tempfile.Name())
-				os.Remove(tempfile.Name() + ".map")
-			}()
-			s, err := gbuild.NewSession(options)
-			if err != nil {
-				return err
-			}
-			defer s.Cleanup()
-			if err := s.BuildFiles(args[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
-				return err
-			}
-			if err := runNode(tempfile.Name(), args[lastSourceArg:], "", options.Quiet); err != nil {
+			cmdArgs := args[i:]
+
+			if err := runNode(tempFile, cmdArgs, "", options.Quiet); err != nil {
 				return err
 			}
 			return nil
@@ -329,8 +375,9 @@ func main1() int {
 	cmdTest.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 		err := func() error {
+			var err error
 			// Expand import path patterns.
-			args, err := gbuild.ImportPaths(args)
+			args, err := gbuild.ImportPaths(args...)
 			if err != nil {
 				return err
 			}
@@ -342,26 +389,27 @@ func main1() int {
 				return errors.New("cannot use -o flag with multiple packages")
 			}
 
-			pkgs := make([]*gbuild.PackageData, len(args))
-			for i, pkgPath := range args {
-				var err error
-				pkgs[i], err = gbuild.Import(pkgPath, 0, "", options.BuildTags)
-				if err != nil {
-					return err
-				}
-			}
-
 			var exitErr error
-			for _, pkg := range pkgs {
-				if len(pkg.TestGoFiles) == 0 && len(pkg.XTestGoFiles) == 0 {
-					fmt.Printf("?   \t%s\t[no test files]\n", pkg.ImportPath)
-					continue
+			var s *gbuild.Session
+			for _, pkgPath := range args {
+				if s != nil {
+					s.Cleanup()
 				}
-				s, err := gbuild.NewSession(options)
+				s, err = gbuild.NewSession(options, true, pkgPath)
 				if err != nil {
 					return err
 				}
 				defer s.Cleanup()
+
+				pkg, err := s.Import(pkgPath, 0, "", options.BuildTags)
+				if err != nil {
+					return err
+				}
+
+				if len(pkg.TestGoFiles) == 0 && len(pkg.XTestGoFiles) == 0 {
+					fmt.Printf("?   \t%s\t[no test files]\n", pkg.ImportPath)
+					continue
+				}
 
 				tests := &testFuncs{BuildContext: s.BuildContext(), Package: pkg.Package}
 				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
@@ -378,6 +426,8 @@ func main1() int {
 							}
 						}
 					}
+					// this call is simply used for its side effect of populating s.Archives
+					// which is referenced below int he test main package's import resolution
 					_, err := s.BuildPackage(testPkg)
 					return err
 				}
@@ -424,7 +474,8 @@ func main1() int {
 						if path == pkg.ImportPath || path == pkg.ImportPath+"_test" {
 							return s.Archives[path], nil
 						}
-						return s.BuildImportPath(path)
+						_, arc, err := s.BuildImportPath(path)
+						return arc, err
 					},
 				}
 				mainPkgArchive, err := compiler.Compile("main", []*ast.File{mainFile}, fset, importContext, options.Minify)
@@ -489,11 +540,18 @@ func main1() int {
 					if _, ok := err.(*exec.ExitError); !ok {
 						return err
 					}
-					exitErr = err
+					exitErr = testsFail
 					status = "FAIL"
 				}
 				fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Since(start).Seconds())
 			}
+			s.Cleanup()
+
+			// at this point we know we have "successfully" run the test main. It
+			// may have failed, but we don't want usage information in case it
+			// has failed. See https://github.com/spf13/cobra/issues/340
+			cmdTest.SilenceUsage = true
+
 			return exitErr
 		}()
 		return handleError(err, options, nil)
@@ -560,8 +618,9 @@ func main1() int {
 	}
 
 	rootCmd := &cobra.Command{
-		Use:  "gopherjs",
-		Long: "GopherJS is a tool for compiling Go source code to JavaScript.",
+		Use:           "gopherjs",
+		Long:          "GopherJS is a tool for compiling Go source code to JavaScript.",
+		SilenceErrors: true,
 	}
 	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion, cmdDoc)
 	err := rootCmd.Execute()
@@ -570,6 +629,45 @@ func main1() int {
 	}
 
 	return 0
+}
+
+func importsFromFiles(files []string) ([]string, error) {
+	fset := token.NewFileSet()
+	find := &importFinder{
+		imports: make(map[string]bool),
+	}
+	for _, fn := range files {
+		if !strings.HasSuffix(fn, ".go") {
+			continue
+		}
+		fd, err := os.Open(fn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open %v: %v", fn, err)
+		}
+		f, err := parser.ParseFile(fset, fn, fd, parser.ImportsOnly)
+		fd.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse %v: %v", fn, err)
+		}
+		ast.Walk(find, f)
+	}
+	var res []string
+	for k := range find.imports {
+		res = append(res, k)
+	}
+	return res, nil
+}
+
+type importFinder struct {
+	imports map[string]bool
+}
+
+func (i *importFinder) Visit(node ast.Node) ast.Visitor {
+	switch node := node.(type) {
+	case *ast.ImportSpec:
+		i.imports[node.Path.Value[1:len(node.Path.Value)-1]] = true
+	}
+	return i
 }
 
 // tcpKeepAliveListener sets TCP keep-alive timeouts on accepted
@@ -598,6 +696,130 @@ type serveCommandFileSystem struct {
 }
 
 func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
+	wd := fs.serveRoot
+	if wd == "" {
+		wd = "all"
+	}
+	s, err := gbuild.NewSession(fs.options, false, wd)
+	if err != nil {
+		return nil, err
+	}
+	defer s.Cleanup()
+
+	if s.GO111MODULE() {
+		return fs.openModule(s, requestName)
+	} else {
+		return fs.openGOPATH(s, requestName)
+	}
+}
+
+func (fs serveCommandFileSystem) openModule(s *gbuild.Session, requestName string) (http.File, error) {
+	reqPath := requestName[1:] // remove leading /
+
+	var err error
+	var modDir string
+	var inPkg string
+
+	check := reqPath
+
+	var pkg *gbuild.PackageData
+
+	// try to resolve a package path
+	for {
+		pkg, err = s.Import(check, 0, s.InstallSuffix(), fs.options.BuildTags)
+		if err == nil {
+			break
+		}
+
+		if dir, ok := s.IsModulePath(check); ok {
+			modDir = dir
+			break
+		}
+
+		inPkg = path.Join(path.Base(check), inPkg)
+		check = path.Dir(check)
+		if check == "." {
+			break
+		}
+	}
+
+	var httpDir string
+
+	if pkg == nil {
+		if modDir == "" {
+			return nil, os.ErrNotExist
+		}
+		httpDir = modDir
+	} else {
+		// we're going to fall through to trying to simply open the file
+		httpDir = pkg.Dir
+	}
+
+	dir := http.Dir(httpDir)
+
+	if pkg.IsCommand() {
+		base := path.Base(pkg.ImportPath)
+
+		switch {
+		case inPkg == "index.html":
+			if f, err := dir.Open(inPkg); err == nil {
+				return f, nil
+			}
+			return newFakeFile(inPkg, fs.index(base)), nil
+		case inPkg == base+".js":
+			buf := new(bytes.Buffer)
+			browserErrors := new(bytes.Buffer)
+			err := func() error {
+				archive, err := s.BuildPackage(pkg)
+				if err != nil {
+					return err
+				}
+
+				sourceMapFilter := &compiler.SourceMapFilter{Writer: buf}
+				m := &sourcemap.Map{File: base + ".js"}
+				sourceMapFilter.MappingCallback = gbuild.NewMappingCallback(m, fs.options.GOROOT, fs.options.GOPATH, fs.options.MapToLocalDisk)
+
+				deps, err := compiler.ImportDependencies(archive, func(ip string) (*compiler.Archive, error) {
+					_, arc, err := s.BuildImportPath(ip)
+					return arc, err
+				})
+				if err != nil {
+					return err
+				}
+				if err := compiler.WriteProgramCode(deps, sourceMapFilter); err != nil {
+					return err
+				}
+
+				mapBuf := new(bytes.Buffer)
+				m.WriteTo(mapBuf)
+				buf.WriteString("//# sourceMappingURL=" + base + ".js.map\n")
+				fs.sourceMaps[pkg.ImportPath+".map"] = mapBuf.Bytes()
+
+				return nil
+			}()
+			handleError(err, fs.options, browserErrors)
+			if err != nil {
+				buf = browserErrors
+			}
+			return newFakeFile(base+".js", buf.Bytes()), nil
+		case inPkg == base+".js.map":
+			// TODO this will fail unless we have requested the .js file first
+			// could probably easily fix this. And it suffers from the .js.map
+			// potentially going stale.
+			if content, ok := fs.sourceMaps[pkg.ImportPath+".map"]; ok {
+				return newFakeFile(base+".js.map", content), nil
+			}
+		}
+
+	}
+
+	// if we get here we could have a main package or a non-main
+	// package. All we are trying to do at this point is serve
+	// the file system
+	return dir.Open(inPkg)
+}
+
+func (fs serveCommandFileSystem) openGOPATH(s *gbuild.Session, requestName string) (http.File, error) {
 	name := path.Join(fs.serveRoot, requestName[1:]) // requestName[0] == '/'
 
 	dir, file := path.Split(name)
@@ -609,12 +831,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 	if isPkg || isMap || isIndex {
 		// If we're going to be serving our special files, make sure there's a Go command in this folder.
-		s, err := gbuild.NewSession(fs.options)
-		if err != nil {
-			return nil, err
-		}
-		defer s.Cleanup()
-		pkg, err := gbuild.Import(path.Dir(name), 0, s.InstallSuffix(), fs.options.BuildTags)
+		pkg, err := s.Import(path.Dir(name), 0, s.InstallSuffix(), fs.options.BuildTags)
 		if err != nil || pkg.Name != "main" {
 			isPkg = false
 			isMap = false
@@ -635,7 +852,10 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 				m := &sourcemap.Map{File: base + ".js"}
 				sourceMapFilter.MappingCallback = gbuild.NewMappingCallback(m, fs.options.GOROOT, fs.options.GOPATH, fs.options.MapToLocalDisk)
 
-				deps, err := compiler.ImportDependencies(archive, s.BuildImportPath)
+				deps, err := compiler.ImportDependencies(archive, func(ip string) (*compiler.Archive, error) {
+					_, arc, err := s.BuildImportPath(ip)
+					return arc, err
+				})
 				if err != nil {
 					return err
 				}
@@ -680,10 +900,14 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 	if isIndex {
 		// If there was no index.html file in any dirs, supply our own.
-		return newFakeFile("index.html", []byte(`<html><head><meta charset="utf-8"><script src="`+base+`.js"></script></head><body></body></html>`)), nil
+		return newFakeFile("index.html", fs.index(base)), nil
 	}
 
 	return nil, os.ErrNotExist
+}
+
+func (fs serveCommandFileSystem) index(base string) []byte {
+	return []byte(`<html><head><meta charset="utf-8"><script src="` + base + `.js"></script></head><body></body></html>` + "\n")
 }
 
 type fakeFile struct {
@@ -735,6 +959,10 @@ func (f *fakeFile) Sys() interface{} {
 // handleError handles err and returns an appropriate exit code.
 // If browserErrors is non-nil, errors are written for presentation in browser.
 func handleError(err error, options *gbuild.Options, browserErrors *bytes.Buffer) error {
+	if err == testsFail {
+		return err
+	}
+
 	switch err := err.(type) {
 	case nil:
 	case compiler.ErrorList:

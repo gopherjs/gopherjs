@@ -107,6 +107,7 @@ func (pi packageImporter) Import(path string) (*types.Package, error) {
 	}
 
 	a, err := pi.importContext.Import(path)
+
 	if err != nil {
 		if *pi.importError == nil {
 			// If import failed, show first error of import only (https://github.com/gopherjs/gopherjs/issues/119).

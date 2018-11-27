@@ -1,0 +1,7 @@
+module golang.org/x/tools@v0.0.0-20180803180156-3c07937fe18c
+
+-- .mod --
+module "golang.org/x/tools"
+
+-- .info --
+{"Version":"v0.0.0-20180803180156-3c07937fe18c","Time":"2018-05-06T08:24:08Z"}

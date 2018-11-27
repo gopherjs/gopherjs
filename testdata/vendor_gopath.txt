@@ -1,0 +1,32 @@
+# In GOPATH mode, it should be possible to use GopherJS standalone, that is
+# without relying on the source for github.com/gopherjs/gopherjs/... being
+# available. The flip is that in module mode we _have_ to have the source.
+
+env HOME=$WORK/home
+mkdir $HOME
+env GOPATH=$WORK/go
+cd go/src/example.com/hello
+
+# use the version of github.com/gopherjs/gopherjs/... compiled into the binary
+gopherjs run main.go
+stdout '^hello using js pkg$'
+
+# check that we get an error if we choose not to use the compiled in pacakges
+! gopherjs run --tags gopherjsdev main.go
+stderr '^cannot find package "github.com/gopherjs/gopherjs/js"'
+
+# make the source available
+cpr $SELF $GOPATH/src/github.com/gopherjs/gopherjs
+
+# verify we can now actually run with --tags gopherjsdev
+gopherjs run --tags gopherjsdev main.go
+stdout '^hello using js pkg$'
+
+-- go/src/example.com/hello/main.go --
+package main
+
+import "github.com/gopherjs/gopherjs/js"
+
+func main() {
+	js.Global.Get("console").Call("log", "hello using js pkg")
+}

@@ -1,0 +1,7 @@
+module github.com/neelance/astrewrite@v0.0.0-20160511093645-99348263ae86
+
+-- .mod --
+module "github.com/neelance/astrewrite"
+
+-- .info --
+{"Version":"v0.0.0-20160511093645-99348263ae86","Time":"2018-05-06T08:24:08Z"}

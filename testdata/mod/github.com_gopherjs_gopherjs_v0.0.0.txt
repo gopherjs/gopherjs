@@ -1,0 +1,7 @@
+module github.com/gopherjs/gopherjs@v0.0.0
+
+-- .mod --
+module "github.com/gopherjs/gopherjs"
+
+-- .info --
+{"Version":"v0.0.0","Time":"2018-05-06T08:24:08Z"}

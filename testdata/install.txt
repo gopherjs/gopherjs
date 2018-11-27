@@ -1,0 +1,147 @@
+# Tests for gopherjs install command in GOPATH mode. These tests
+# are largely copied from their GOPATH equivalents. Includes checks
+# for behaviour, staleness and output side effects (e.g. files in
+# $GOPATH/pkg)
+#
+# A change from the original GopherJS here, we do _not_ now install
+# a dependency in $GOPATH/pkg unless explicitly asked to do so by
+# gopherjs install.
+
+env HOME=$WORK/home
+mkdir $HOME
+env GOPATH=$WORK/go
+cd hello
+go mod edit -require=github.com/gopherjs/gopherjs@v0.0.0 -replace=github.com/gopherjs/gopherjs=$SELF
+
+cp blah/blah.go.fish blah/blah.go
+
+# Ensure that we get the "same" output from a file arg or an implicit
+# or explicit package argument. We don't have a neat way (yet) of
+# comparing the main.js output with the package output, allowing for the
+# difference in pkg name
+! exists $GOPATH/pkg/${GOOS}_js $GOPATH/bin
+gopherjs install
+! exists $GOPATH/pkg/${GOOS}_js
+exists $GOPATH/bin/hello.js
+! modified $GOPATH/bin/hello.js
+! changed $GOPATH/bin/hello.js
+exec node $GOPATH/bin/hello.js
+stdout '^Today we will eat fish$'
+! stderr .+
+gopherjs install example.com/hello
+! exists $GOPATH/pkg/${GOOS}_js
+modified $GOPATH/bin/hello.js
+! changed $GOPATH/bin/hello.js
+
+rm $GOPATH/pkg $GOPATH/bin
+
+# non-command package
+! exists $GOPATH/pkg/${GOOS}_js $GOPATH/bin
+cd blah
+gopherjs install
+! exists $GOPATH/bin
+exists $GOPATH/pkg/${GOOS}_js/example.com/hello/blah.a
+! modified $GOPATH/pkg/linux_js/example.com/hello/blah.a
+! changed $GOPATH/pkg/linux_js/example.com/hello/blah.a
+gopherjs install example.com/hello
+modified $GOPATH/pkg/linux_js/example.com/hello/blah.a
+! changed $GOPATH/pkg/linux_js/example.com/hello/blah.a
+
+cd ..
+rm $GOPATH/pkg $GOPATH/bin
+
+modified -clear $GOPATH/pkg/linux_js/example.com/hello/blah.a
+modified -clear $GOPATH/bin/hello.js
+changed -clear $GOPATH/pkg/linux_js/example.com/hello/blah.a
+changed -clear $GOPATH/bin/hello.js
+
+# Staleness checks
+! exists $GOPATH/pkg/${GOOS}_js $GOPATH/bin
+cp blah/blah.go.fish blah/blah.go
+gopherjs install
+! stdout .+
+! stderr .+
+exists $GOPATH/bin/hello.js
+! modified $GOPATH/bin/hello.js
+! changed $GOPATH/bin/hello.js
+exec node $GOPATH/bin/hello.js
+stdout '^Today we will eat fish$'
+! stderr .+
+gopherjs install
+modified $GOPATH/bin/hello.js
+! changed $GOPATH/bin/hello.js
+cp blah/blah.go.chips blah/blah.go
+gopherjs install
+modified $GOPATH/bin/hello.js
+changed $GOPATH/bin/hello.js
+exec node $GOPATH/bin/hello.js
+stdout '^Today we will eat chips$'
+! stderr .+
+gopherjs install --tags thin
+modified $GOPATH/bin/hello.js
+changed $GOPATH/bin/hello.js
+exec node $GOPATH/bin/hello.js
+stdout '^Today we will eat thin chips$'
+! stderr .+
+
+-- hello/go.mod --
+module example.com/hello
+
+-- hello/main.go --
+package main
+
+import "example.com/hello/blah"
+
+func main() {
+        print("Today we will eat", blah.Name)
+}
+
+-- hello/main_test.go.fish --
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "fish"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- hello/main_test.go.chips --
+// +build !thin
+
+package main
+
+import "fmt"
+import "testing"
+import "example.com/hello/blah"
+
+
+func TestBlah(t *testing.T) {
+  fmt.Println(blah.Name)
+  if exp := "chips"; blah.Name != exp {
+    t.Fatalf("expected %v; got %v", exp, blah.Name)
+  }
+}
+
+-- hello/blah/blah.go.fish --
+package blah
+
+const Name = "fish"
+
+-- hello/blah/blah.go.chips --
+// +build !thin
+
+package blah
+const Name = "chips"
+
+-- hello/blah/blahthin.go --
+// +build thin
+
+package blah
+const Name = "thin chips"
+

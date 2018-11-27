@@ -1,6 +1,6 @@
-# Tests for gopherjs run command in GOPATH mode. These tests are largely
-# copied from their GOPATH equivalents. Includes checks for behaviour,
-# staleness and output side effects (e.g. files in $GOPATH/pkg)
+# Tests for gopherjs run command in GOPATH mode. Includes checks
+# for behaviour, staleness and output side effects (e.g. files in
+# $GOPATH/pkg)
 #
 # A change from the original GopherJS here, we do _not_ now install a
 # dependency in $GOPATH/pkg unless explicitly asked to do so by gopherjs
@@ -11,8 +11,8 @@
 env HOME=$WORK/home
 mkdir $HOME
 env GOPATH=$WORK/go
-cd hello
-go mod edit -require=github.com/gopherjs/gopherjs@v0.0.0 -replace=github.com/gopherjs/gopherjs=$SELF
+
+cd go/src/example.com/hello
 
 cp blah/blah.go.fish blah/blah.go
 
@@ -20,25 +20,25 @@ cp blah/blah.go.fish blah/blah.go
 # or explicit package argument. We don't have a neat way (yet) of
 # comparing the main.js output with the package output, allowing for the
 # difference in pkg name
-! exists exists $GOPATH/pkg/${GOOS}_js $GOPATH/bin
+! exists $GOPATH/pkg $GOPATH/bin
 gopherjs run main.go and peas
 stdout '^Today we will eat fish and peas$'
 ! stderr .+
-! exists exists $GOPATH/pkg/${GOOS}_js $GOPATH/bin
+! exists $GOPATH/pkg $GOPATH/bin
 gopherjs run example.com/hello and peas
 stdout '^Today we will eat fish and peas$'
 ! stderr .+
-! exists exists $GOPATH/pkg/${GOOS}_js $GOPATH/bin
+! exists $GOPATH/pkg $GOPATH/bin
 gopherjs run . and peas
 stdout '^Today we will eat fish and peas$'
 ! stderr .+
-! exists exists $GOPATH/pkg/${GOOS}_js $GOPATH/bin
+! exists $GOPATH/pkg $GOPATH/bin
 ! gopherjs run
 stderr '^gopherjs run: no go files listed$'
 ! gopherjs run ./... and peas
 ! stdout .+
 stderr '^gopherjs run: pattern ./... matches multiple packages:$'
-! exists exists $GOPATH/pkg/${GOOS}_js $GOPATH/bin
+! exists $GOPATH/pkg $GOPATH/bin
 
 # Ensure that gopherjs run does not work for a non-main package. But
 # whilst we're there, check that we can still run the main package from
@@ -64,10 +64,7 @@ gopherjs run --tags thin . and peas
 stdout '^Today we will eat thin chips and peas$'
 ! stderr .+
 
--- hello/go.mod --
-module example.com/hello
-
--- hello/main.go --
+-- go/src/example.com/hello/main.go --
 package main
 
 import "strings"
@@ -78,7 +75,7 @@ func main() {
         print("Today we will eat", blah.Name, strings.Join(os.Args[1:], " "))
 }
 
--- hello/main_test.go.fish --
+-- go/src/example.com/hello/main_test.go.fish --
 package main
 
 import "fmt"
@@ -93,7 +90,7 @@ func TestBlah(t *testing.T) {
   }
 }
 
--- hello/main_test.go.chips --
+-- go/src/example.com/hello/main_test.go.chips --
 // +build !thin
 
 package main
@@ -110,18 +107,18 @@ func TestBlah(t *testing.T) {
   }
 }
 
--- hello/blah/blah.go.fish --
+-- go/src/example.com/hello/blah/blah.go.fish --
 package blah
 
 const Name = "fish"
 
--- hello/blah/blah.go.chips --
+-- go/src/example.com/hello/blah/blah.go.chips --
 // +build !thin
 
 package blah
 const Name = "chips"
 
--- hello/blah/blahthin.go --
+-- go/src/example.com/hello/blah/blahthin.go --
 // +build thin
 
 package blah

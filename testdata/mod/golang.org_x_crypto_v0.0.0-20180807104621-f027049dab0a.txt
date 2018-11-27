@@ -1,0 +1,7 @@
+module golang.org/x/crypto@v0.0.0-20180807104621-f027049dab0a
+
+-- .mod --
+module "golang.org/x/crypto"
+
+-- .info --
+{"Version":"v0.0.0-20180807104621-f027049dab0a","Time":"2018-05-06T08:24:08Z"}

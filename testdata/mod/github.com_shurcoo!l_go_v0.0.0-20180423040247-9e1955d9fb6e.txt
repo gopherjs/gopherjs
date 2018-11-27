@@ -1,0 +1,7 @@
+module github.com/shurcooL/go@v0.0.0-20180423040247-9e1955d9fb6e
+
+-- .mod --
+module "github.com/shurcooL/go"
+
+-- .info --
+{"Version":"v0.0.0-20180423040247-9e1955d9fb6e","Time":"2018-05-06T08:24:08Z"}

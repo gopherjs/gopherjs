@@ -1,0 +1,7 @@
+module github.com/shurcooL/vfsgen@v0.0.0-20180915214035-33ae1944be3f
+
+-- .mod --
+module "github.com/shurcooL/vfsgen"
+
+-- .info --
+{"Version":"v0.0.0-20180915214035-33ae1944be3f","Time":"2018-05-06T08:24:08Z"}

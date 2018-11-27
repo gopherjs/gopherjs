@@ -1,0 +1,7 @@
+module golang.org/x/sys@v0.0.0-20180807162357-acbc56fc7007
+
+-- .mod --
+module "golang.org/x/sys"
+
+-- .info --
+{"Version":"v0.0.0-20180807162357-acbc56fc7007","Time":"2018-05-06T08:24:08Z"}

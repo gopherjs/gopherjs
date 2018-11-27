@@ -1,0 +1,7 @@
+module github.com/inconshreveable/mousetrap@v1.0.0
+
+-- .mod --
+module "github.com/inconshreveable/mousetrap"
+
+-- .info --
+{"Version":"v1.0.0","Time":"2018-05-06T08:24:08Z"}

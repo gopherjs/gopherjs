@@ -1,0 +1,52 @@
+# Tests to ensure that the special vendors from golang.org/x/* in the
+# standard Go distribution work.
+
+env HOME=$WORK/home
+mkdir $HOME
+env GOPATH=$WORK/go
+
+# Check path exists in GOROOT
+exists $GOROOT/src/vendor/golang_org/x/crypto/poly1305/poly1305.go
+
+# GOPATH mode
+env GO111MODULE=off
+cd go/src/example.com/hello
+gopherjs test
+
+# module mode - disabled pending https://github.com/golang/go/issues/26924
+env GO111MODULE=on
+cd $WORK
+go mod edit -require=github.com/gopherjs/gopherjs@v0.0.0 -replace=github.com/gopherjs/gopherjs=$SELF
+exec cat go.mod
+gopherjs test
+
+-- go.mod --
+module mod
+
+-- main.go --
+package main
+
+import (
+        "fmt"
+
+        // import for transitive dependency on golang_org/x/crypto/cryptobyte
+        _ "crypto/x509"
+)
+
+func main() {
+        fmt.Println("Hello World!")
+}
+
+-- go/src/example.com/hello/main.go --
+package main
+
+import (
+        "fmt"
+
+        // import for transitive dependency on golang_org/x/crypto/cryptobyte
+        _ "crypto/x509"
+)
+
+func main() {
+        fmt.Println("Hello World!")
+}

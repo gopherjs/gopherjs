@@ -1,0 +1,19 @@
+env HOME=$WORK/home
+mkdir $HOME
+env GOPATH=$WORK/go
+go mod edit -require=github.com/gopherjs/gopherjs@v0.0.0 -replace=github.com/gopherjs/gopherjs=$SELF
+
+gopherjs run .
+stdout '^hello, world!$'
+
+-- go.mod --
+module mod
+
+-- nilref.go --
+package main
+
+func main() {
+  var _ interface{} = nil
+    print("hello, world!")
+}
+

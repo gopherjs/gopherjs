@@ -34,7 +34,11 @@ func (e *expression) StringWithParens() string {
 
 func (c *funcContext) translateExpr(expr ast.Expr) *expression {
 	exprType := c.p.TypeOf(expr)
-	if value := c.p.Types[expr].Value; value != nil {
+	switch tav := c.p.Types[expr]; {
+	case tav.IsNil():
+		return c.formatExpr("undefined")
+	case tav.Value != nil:
+		value := tav.Value
 		basic := exprType.Underlying().(*types.Basic)
 		switch {
 		case isBoolean(basic):

@@ -960,7 +960,7 @@ func (t *test) errorCheck(outStr string, fullshort ...string) (err error) {
 	}
 
 	if len(out) > 0 {
-		errs = append(errs, fmt.Errorf("Unmatched Errors:"))
+		errs = append(errs, fmt.Errorf("unmatched Errors"))
 		for _, errLine := range out {
 			errs = append(errs, fmt.Errorf("%s", errLine))
 		}

@@ -2,4 +2,7 @@
 
 package cpu
 
-const CacheLineSize = 0
+const (
+	CacheLineSize    = 0
+	CacheLinePadSize = 0
+)

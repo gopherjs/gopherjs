@@ -552,18 +552,18 @@ type mapIter struct {
 	i    int
 }
 
-func mapiterinit(t *rtype, m unsafe.Pointer) *byte {
-	return (*byte)(unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Call("$keys", js.InternalObject(m)), 0}))
+func mapiterinit(t *rtype, m unsafe.Pointer) unsafe.Pointer {
+	return unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Call("$keys", js.InternalObject(m)), 0})
 }
 
-func mapiterkey(it *byte) unsafe.Pointer {
-	iter := (*mapIter)(unsafe.Pointer(it))
+func mapiterkey(it unsafe.Pointer) unsafe.Pointer {
+	iter := (*mapIter)(it)
 	k := iter.keys.Index(iter.i)
 	return unsafe.Pointer(js.Global.Call("$newDataPointer", iter.m.Get(k.String()).Get("k"), jsType(PtrTo(iter.t.Key()))).Unsafe())
 }
 
-func mapiternext(it *byte) {
-	iter := (*mapIter)(unsafe.Pointer(it))
+func mapiternext(it unsafe.Pointer) {
+	iter := (*mapIter)(it)
 	iter.i++
 }
 

@@ -1042,6 +1042,8 @@ func (v Value) IsNil() bool {
 		return v.object() == js.InternalObject(false)
 	case Interface:
 		return v.object() == js.Global.Get("$ifaceNil")
+	case UnsafePointer:
+		return v.object().Unsafe() == 0
 	default:
 		panic(&ValueError{"reflect.Value.IsNil", k})
 	}

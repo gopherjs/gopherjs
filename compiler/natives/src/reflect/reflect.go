@@ -559,7 +559,19 @@ func mapiterinit(t *rtype, m unsafe.Pointer) unsafe.Pointer {
 func mapiterkey(it unsafe.Pointer) unsafe.Pointer {
 	iter := (*mapIter)(it)
 	k := iter.keys.Index(iter.i)
+	if k == js.Undefined {
+		return nil
+	}
 	return unsafe.Pointer(js.Global.Call("$newDataPointer", iter.m.Get(k.String()).Get("k"), jsType(PtrTo(iter.t.Key()))).Unsafe())
+}
+
+func mapitervalue(it unsafe.Pointer) unsafe.Pointer {
+	iter := (*mapIter)(it)
+	k := iter.keys.Index(iter.i)
+	if k == js.Undefined {
+		return nil
+	}
+	return unsafe.Pointer(js.Global.Call("$newDataPointer", iter.m.Get(k.String()).Get("v"), jsType(PtrTo(iter.t.Elem()))).Unsafe())
 }
 
 func mapiternext(it unsafe.Pointer) {

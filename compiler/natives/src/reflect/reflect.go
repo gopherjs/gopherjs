@@ -550,33 +550,62 @@ type mapIter struct {
 	m    *js.Object
 	keys *js.Object
 	i    int
+	last *js.Object
 }
 
 func mapiterinit(t *rtype, m unsafe.Pointer) unsafe.Pointer {
-	return unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Call("$keys", js.InternalObject(m)), 0})
+	return unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Call("$keys", js.InternalObject(m)), 0, nil})
 }
 
 func mapiterkey(it unsafe.Pointer) unsafe.Pointer {
 	iter := (*mapIter)(it)
-	k := iter.keys.Index(iter.i)
-	if k == js.Undefined {
-		return nil
+	var kv *js.Object
+	if iter.last != nil {
+		kv = iter.last
+	} else {
+		// Compare the index and the size of the actual key set, and check if the iterator is already exhausted.
+		if iter.i >= js.Global.Call("$keys", iter.m).Length() {
+			return nil
+		}
+		k := iter.keys.Index(iter.i)
+		kv = iter.m.Get(k.String())
+
+		// Record the key-value pair for later accesses.
+		iter.last = kv
 	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", iter.m.Get(k.String()).Get("k"), jsType(PtrTo(iter.t.Key()))).Unsafe())
+	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("k"), jsType(PtrTo(iter.t.Key()))).Unsafe())
 }
 
 func mapitervalue(it unsafe.Pointer) unsafe.Pointer {
 	iter := (*mapIter)(it)
-	k := iter.keys.Index(iter.i)
-	if k == js.Undefined {
-		return nil
+	var kv *js.Object
+	if iter.last != nil {
+		kv = iter.last
+	} else {
+		if iter.i >= js.Global.Call("$keys", iter.m).Length() {
+			return nil
+		}
+		k := iter.keys.Index(iter.i)
+		kv = iter.m.Get(k.String())
+		iter.last = kv
 	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", iter.m.Get(k.String()).Get("v"), jsType(PtrTo(iter.t.Elem()))).Unsafe())
+	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("v"), jsType(PtrTo(iter.t.Elem()))).Unsafe())
 }
 
 func mapiternext(it unsafe.Pointer) {
 	iter := (*mapIter)(it)
+	iter.last = nil
 	iter.i++
+
+	// Skip iter until the key gets valid.
+	for iter.i < iter.keys.Length() {
+		k := iter.keys.Index(iter.i)
+		if iter.m.Get(k.String()) != js.Undefined {
+			break
+		}
+		// The key is already deleted.
+		iter.i++
+	}
 }
 
 func maplen(m unsafe.Pointer) int {

@@ -553,6 +553,17 @@ type mapIter struct {
 	last *js.Object
 }
 
+func (iter *mapIter) skipUntilValidKey() {
+	for iter.i < iter.keys.Length() {
+		k := iter.keys.Index(iter.i)
+		if iter.m.Get(k.String()) != js.Undefined {
+			break
+		}
+		// The key is already deleted. Move on the next item.
+		iter.i++
+	}
+}
+
 func mapiterinit(t *rtype, m unsafe.Pointer) unsafe.Pointer {
 	return unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Call("$keys", js.InternalObject(m)), 0, nil})
 }
@@ -563,8 +574,8 @@ func mapiterkey(it unsafe.Pointer) unsafe.Pointer {
 	if iter.last != nil {
 		kv = iter.last
 	} else {
-		// Compare the index and the size of the actual key set, and check if the iterator is already exhausted.
-		if iter.i >= js.Global.Call("$keys", iter.m).Length() {
+		iter.skipUntilValidKey()
+		if iter.i == iter.keys.Length() {
 			return nil
 		}
 		k := iter.keys.Index(iter.i)
@@ -582,7 +593,8 @@ func mapitervalue(it unsafe.Pointer) unsafe.Pointer {
 	if iter.last != nil {
 		kv = iter.last
 	} else {
-		if iter.i >= js.Global.Call("$keys", iter.m).Length() {
+		iter.skipUntilValidKey()
+		if iter.i == iter.keys.Length() {
 			return nil
 		}
 		k := iter.keys.Index(iter.i)
@@ -596,16 +608,6 @@ func mapiternext(it unsafe.Pointer) {
 	iter := (*mapIter)(it)
 	iter.last = nil
 	iter.i++
-
-	// Skip iter until the key gets valid.
-	for iter.i < iter.keys.Length() {
-		k := iter.keys.Index(iter.i)
-		if iter.m.Get(k.String()) != js.Undefined {
-			break
-		}
-		// The key is already deleted.
-		iter.i++
-	}
 }
 
 func maplen(m unsafe.Pointer) int {

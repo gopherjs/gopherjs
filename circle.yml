@@ -22,7 +22,7 @@ jobs:
     - run: go generate github.com/gopherjs/gopherjs/compiler/prelude
     - run: diff -u <(echo -n) <(git status --porcelain)
     - run: diff -u <(echo -n) <(gofmt -d .)
-    - run: go vet *.go # Go package in root directory.
+    - run: go vet . # Go package in root directory.
     - run: for d in */; do echo ./$d...; done | grep -v ./doc | grep -v ./test | grep -v ./node | xargs go vet # All subdirectories except "doc", "tests", "node*".
     - run: diff -u <(echo -n) <(go list ./compiler/natives/src/...) # All those packages should have // +build js.
     - run: gopherjs install -v net/http # Should build successfully (can't run tests, since only client is supported).

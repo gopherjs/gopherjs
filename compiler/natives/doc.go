@@ -5,4 +5,4 @@
 // in src subfolder.
 package natives
 
-//go:generate vfsgendev -source="github.com/gopherjs/gopherjs/compiler/natives".FS -tag=gopherjsdev
+//go:generate go run github.com/shurcooL/vfsgen/cmd/vfsgendev -source="github.com/gopherjs/gopherjs/compiler/natives".FS -tag=gopherjsdev -nomodtime

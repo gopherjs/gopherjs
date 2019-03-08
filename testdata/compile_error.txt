@@ -1,0 +1,38 @@
+# Verify the stderr output in case of compiler-issues
+
+env HOME=$WORK/home
+mkdir $HOME
+env GOPATH=$WORK/go
+go mod edit -require=github.com/gopherjs/gopherjs@v0.0.0 -replace=github.com/gopherjs/gopherjs=$SELF
+
+# run
+! gopherjs run main.go
+! stdout .+
+cmp stderr stderr.golden
+
+# build
+! gopherjs build main.go
+! stdout .+
+cmp stderr stderr.golden
+
+# install
+! gopherjs install
+! stdout .+
+cmp stderr stderr.golden
+
+# test
+! gopherjs test
+! stdout .+
+cmp stderr stderr.golden
+
+-- go.mod --
+module mod.com
+
+-- main.go --
+package main
+
+func() main {
+-- main_test.go --
+package main
+-- stderr.golden --
+main.go:3:13: expected '(', found '{'

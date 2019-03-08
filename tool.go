@@ -547,11 +547,6 @@ func main1() int {
 			}
 			s.Cleanup()
 
-			// at this point we know we have "successfully" run the test main. It
-			// may have failed, but we don't want usage information in case it
-			// has failed. See https://github.com/spf13/cobra/issues/340
-			cmdTest.SilenceUsage = true
-
 			return exitErr
 		}()
 		return handleError(err, options, nil)
@@ -621,6 +616,9 @@ func main1() int {
 		Use:           "gopherjs",
 		Long:          "GopherJS is a tool for compiling Go source code to JavaScript.",
 		SilenceErrors: true,
+	}
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		cmd.SilenceUsage = true
 	}
 	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion, cmdDoc)
 	err := rootCmd.Execute()

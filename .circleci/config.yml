@@ -8,7 +8,7 @@ jobs:
 
     environment:
       NVM_VERSION: v0.33.11
-      GO_VERSION: go1.11.2
+      GO_VERSION: go1.11.5
       NODE_VERSION: 10.13.0
 
     steps:
@@ -71,7 +71,7 @@ jobs:
           # this gives us the repo-local binaries we require
           npm install
       - run: go install github.com/gopherjs/gopherjs
-      - run: go generate github.com/gopherjs/gopherjs/compiler/prelude
+      - run: go generate ./...
       - run: go mod tidy && go list all > /dev/null # https://github.com/golang/go/issues/27868#issuecomment-431413621
       - run: go run genmodstubbs.go
       - run: git diff

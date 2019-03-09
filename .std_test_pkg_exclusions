@@ -16,7 +16,6 @@ hash
 image/color/palette
 image/internal/imageutil
 internal/cpu
-internal/fmtsort
 internal/goroot
 internal/nettrace
 internal/poll

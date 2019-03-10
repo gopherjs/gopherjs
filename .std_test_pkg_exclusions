@@ -28,7 +28,7 @@ internal/syscall/windows/sysdll
 internal/testenv
 internal/testlog
 internal/trace
-internal/x/net/internal/nettest
+internal/x/net/nettest
 log
 log/syslog
 net

@@ -8,7 +8,7 @@ jobs:
 
     environment:
       NVM_VERSION: v0.33.11
-      GO_VERSION: go1.11.5
+      GO_VERSION: go1.12
       NODE_VERSION: 10.13.0
 
     steps:
@@ -77,8 +77,7 @@ jobs:
       - run: git diff
       - run: diff -u <(echo -n) <(git status --porcelain)
       - run: diff -u <(echo -n) <(gofmt -d .)
-      - run: go vet .
-      - run: go vet $(go list ./... | grep -v github.com/gopherjs/gopherjs/tests)
+      - run: go vet $(go list ./... | grep -v -x -f .vet_exclusions)
       - run: diff -u <(echo "github.com/gopherjs/gopherjs/compiler/natives") <(go list ./compiler/natives/...)
       - run: gopherjs install -v net/http
       - run: gopherjs test --minify -v --short github.com/gopherjs/gopherjs/tests/... $(go list std | grep -v -x -f .std_test_pkg_exclusions)

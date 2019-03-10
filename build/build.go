@@ -214,7 +214,7 @@ func (s *Session) importWithSrcDir(bctx build.Context, path string, srcDir strin
 	case "runtime":
 		pkg.GoFiles = []string{"error.go"}
 	case "runtime/internal/sys":
-		pkg.GoFiles = []string{fmt.Sprintf("zgoos_%s.go", bctx.GOOS), "zversion.go"}
+		pkg.GoFiles = []string{fmt.Sprintf("zgoos_%s.go", bctx.GOOS), "stubs.go", "zversion.go"}
 	case "runtime/pprof":
 		pkg.GoFiles = nil
 	case "internal/poll":

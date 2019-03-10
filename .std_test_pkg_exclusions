@@ -1,7 +1,5 @@
-# these are go list std packages we want to exclude from our tests
 context
 crypto
-crypto/internal/cipherhw
 crypto/tls
 crypto/x509/pkix
 debug/gosym
@@ -28,6 +26,10 @@ internal/syscall/windows/sysdll
 internal/testenv
 internal/testlog
 internal/trace
+
+# GopherJS does not support network access
+internal/x/net/nettest
+
 log
 log/syslog
 net
@@ -61,23 +63,3 @@ testing
 testing/internal/testdeps
 testing/iotest
 unsafe
-vendor/golang_org/x/crypto/chacha20poly1305
-vendor/golang_org/x/crypto/chacha20poly1305/internal/chacha20
-vendor/golang_org/x/crypto/cryptobyte
-vendor/golang_org/x/crypto/cryptobyte/asn1
-vendor/golang_org/x/crypto/curve25519
-vendor/golang_org/x/crypto/poly1305
-vendor/golang_org/x/net/http2/hpack
-vendor/golang_org/x/net/idna
-vendor/golang_org/x/net/internal/nettest
-vendor/golang_org/x/net/lex/httplex
-vendor/golang_org/x/net/nettest
-vendor/golang_org/x/net/proxy
-vendor/golang_org/x/text/secure
-vendor/golang_org/x/text/secure/bidirule
-vendor/golang_org/x/text/transform
-vendor/golang_org/x/text/unicode
-vendor/golang_org/x/text/unicode/bidi
-vendor/golang_org/x/text/unicode/norm
-# https://github.com/golang/go/issues/26924
-vendor/golang_org/x/net/http/httpproxy

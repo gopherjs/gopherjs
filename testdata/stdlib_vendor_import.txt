@@ -6,7 +6,7 @@ mkdir $HOME
 env GOPATH=$WORK/go
 
 # Check path exists in GOROOT
-exists $GOROOT/src/vendor/golang_org/x/crypto/poly1305/poly1305.go
+exists $GOROOT/src/internal/x/crypto/poly1305/poly1305.go
 
 # GOPATH mode
 env GO111MODULE=off

@@ -550,6 +550,10 @@ type mapIter struct {
 	m    *js.Object
 	keys *js.Object
 	i    int
+
+	// last is the last object the iterator indicates. If this object exists, the functions that return the
+	// current key or value returns this object, regardless of the current iterator. It is because the current
+	// iterator might be stale due to key deletion in a loop.
 	last *js.Object
 }
 

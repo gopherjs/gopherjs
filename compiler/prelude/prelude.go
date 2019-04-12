@@ -65,6 +65,9 @@ var $methodVal = function(recv, name) {
 
 var $methodExpr = function(typ, name) {
   var method = typ.prototype[name];
+  if (method == undefined) {
+    return method;
+  }
   if (method.$expr === undefined) {
     method.$expr = function() {
       $stackDepthOffset--;
@@ -424,7 +427,7 @@ var $interfaceIsEqual = function(a, b) {
 };
 
 if ($global.ArrayBuffer == undefined) {
-    $global.ArrayBuffer = ArrayBuffer;
+  $global.ArrayBuffer = ArrayBuffer;
 }
 if ($global.Int8Array == undefined) {
   $global.Int8Array = Int8Array;
@@ -451,7 +454,7 @@ if ($global.Float32Array == undefined) {
   $global.Float32Array = Float32Array;
 }
 if ($global.Float64Array == undefined) {
-   $global.Float64Array = Float64Array;
+  $global.Float64Array = Float64Array;
 }
 if ($global.Date == undefined) {
   $global.Date = Date;

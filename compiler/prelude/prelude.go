@@ -19,7 +19,7 @@ if (typeof window !== "undefined") { /* web page */
   $global = this;
 }
 
-if ($global === undefined || $global.Array === undefined) {
+if ($global === undefined) {
   throw new Error("no global object found");
 }
 if (typeof module !== "undefined") {
@@ -422,4 +422,38 @@ var $interfaceIsEqual = function(a, b) {
   }
   return $equal(a.$val, b.$val, a.constructor);
 };
+
+if ($global.ArrayBuffer == undefined) {
+    $global.ArrayBuffer = ArrayBuffer;
+}
+if ($global.Int8Array == undefined) {
+  $global.Int8Array = Int8Array;
+}
+if ($global.Int16Array == undefined) {
+  $global.Int16Array = Int16Array;
+}
+if ($global.Int32Array == undefined) {
+  $global.Int32Array = Int32Array;
+}
+if ($global.Uint8array == undefined) {
+  $global.Uint8Array = Uint8Array;
+}
+if ($global.Uint16array == undefined) {
+  $global.Uint16Array = Uint16Array;
+}
+if ($global.Uint32array == undefined) {
+  $global.Uint32Array = Uint32Array;
+}
+if ($global.Uint8ClampedArray == undefined) {
+  $global.Uint8ClampedArray = Uint8ClampedArray;	
+}
+if ($global.Float32Array == undefined) {
+  $global.Float32Array = Float32Array;
+}
+if ($global.Float64Array == undefined) {
+   $global.Float64Array = Float64Array;
+}
+if ($global.Date == undefined) {
+  $global.Date = Date;
+}
 `

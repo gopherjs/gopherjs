@@ -173,6 +173,9 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	case "crypto/rand":
 		pkg.GoFiles = []string{"rand.go", "util.go"}
 		pkg.TestGoFiles = exclude(pkg.TestGoFiles, "rand_linux_test.go") // Don't want linux-specific tests (since linux-specific package files are excluded too).
+	case "syscall/js":
+		// Add Go files for tests explicitly since the files are excluded due to 'wasm' build tag.
+		pkg.XTestGoFiles = []string{"js_test.go"}
 	}
 
 	if len(pkg.CgoFiles) > 0 {

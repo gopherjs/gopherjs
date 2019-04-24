@@ -326,9 +326,12 @@ func main() {
 
 			var exitErr error
 			for _, pkg := range pkgs {
-				if len(pkg.TestGoFiles) == 0 && len(pkg.XTestGoFiles) == 0 {
-					fmt.Printf("?   \t%s\t[no test files]\n", pkg.ImportPath)
-					continue
+				// syscall/js doesn't have a buildable file originally, but has Go files in compiler/natives.
+				if pkg.Package.ImportPath != "syscall/js" {
+					if len(pkg.TestGoFiles) == 0 && len(pkg.XTestGoFiles) == 0 {
+						fmt.Printf("?   \t%s\t[no test files]\n", pkg.ImportPath)
+						continue
+					}
 				}
 				s := gbuild.NewSession(options)
 

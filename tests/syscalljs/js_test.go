@@ -301,7 +301,7 @@ func TestValueOf(t *testing.T) {
 
 func TestZeroValue(t *testing.T) {
 	t.Skip("the initial value is nil on GopherJS")
-	
+
 	var v js.Value
 	if v != js.Undefined() {
 		t.Error("zero js.Value is not js.Undefined()")

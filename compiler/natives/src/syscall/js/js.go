@@ -46,15 +46,15 @@ func (t Type) String() string {
 }
 
 func Global() Value {
-	return Value{v: js.Global}
+	return objectToValue(js.Global)
 }
 
 func Null() Value {
-	return Value{v: nil}
+	return objectToValue(nil)
 }
 
 func Undefined() Value {
-	return Value{v: js.Undefined}
+	return objectToValue(js.Undefined)
 }
 
 type Func struct {
@@ -67,15 +67,13 @@ func (f Func) Release() {
 
 func FuncOf(fn func(this Value, args []Value) interface{}) Func {
 	return Func{
-		Value: Value{
-			v: js.MakeFunc(func(this *js.Object, args []*js.Object) interface{} {
-				vargs := make([]Value, len(args))
-				for i, a := range args {
-					vargs[i] = Value{a}
-				}
-				return fn(Value{this}, vargs)
-			}),
-		},
+		Value: objectToValue(js.MakeFunc(func(this *js.Object, args []*js.Object) interface{} {
+			vargs := make([]Value, len(args))
+			for i, a := range args {
+				vargs[i] = objectToValue(a)
+			}
+			return fn(objectToValue(this), vargs)
+		})),
 	}
 }
 
@@ -89,6 +87,16 @@ func (e Error) Error() string {
 
 type Value struct {
 	v *js.Object
+
+	// inited represents whether Value is non-zero value. true represents the value is not 'undefined'.
+	inited bool
+}
+
+func objectToValue(obj *js.Object) Value {
+	if obj == js.Undefined {
+		return Value{}
+	}
+	return Value{obj, true}
 }
 
 var (
@@ -139,24 +147,32 @@ func ValueOf(x interface{}) Value {
 	case nil:
 		return Null()
 	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, unsafe.Pointer, string, map[string]interface{}, []interface{}:
-		return Value{v: id.Invoke(x)}
+		return objectToValue(id.Invoke(x))
 	default:
 		panic(`invalid arg: ` + reflect.TypeOf(x).String())
 	}
+}
+
+func (v Value) internal() *js.Object {
+	if !v.inited {
+		return js.Undefined
+	}
+	return v.v
 }
 
 func (v Value) Bool() bool {
 	if vType := v.Type(); vType != TypeBoolean {
 		panic(&ValueError{"Value.Bool", vType})
 	}
-	return v.v.Bool()
+	return v.internal().Bool()
 }
 
-func convertArgs(args []interface{}) []interface{} {
+// convertArgs converts arguments into values for GopherJS arguments.
+func convertArgs(args ...interface{}) []interface{} {
 	newArgs := []interface{}{}
 	for _, arg := range args {
 		v := ValueOf(arg)
-		newArgs = append(newArgs, v.v)
+		newArgs = append(newArgs, v.internal())
 	}
 	return newArgs
 }
@@ -168,40 +184,40 @@ func (v Value) Call(m string, args ...interface{}) Value {
 	if propType := v.Get(m).Type(); propType != TypeFunction {
 		panic("js: Value.Call: property " + m + " is not a function, got " + propType.String())
 	}
-	return Value{v: v.v.Call(m, convertArgs(args)...)}
+	return objectToValue(v.internal().Call(m, convertArgs(args...)...))
 }
 
 func (v Value) Float() float64 {
 	if vType := v.Type(); vType != TypeNumber {
 		panic(&ValueError{"Value.Float", vType})
 	}
-	return v.v.Float()
+	return v.internal().Float()
 }
 
 func (v Value) Get(p string) Value {
-	return Value{v: v.v.Get(p)}
+	return objectToValue(v.internal().Get(p))
 }
 
 func (v Value) Index(i int) Value {
-	return Value{v: v.v.Index(i)}
+	return objectToValue(v.internal().Index(i))
 }
 
 func (v Value) Int() int {
 	if vType := v.Type(); vType != TypeNumber {
 		panic(&ValueError{"Value.Int", vType})
 	}
-	return v.v.Int()
+	return v.internal().Int()
 }
 
 func (v Value) InstanceOf(t Value) bool {
-	return instanceOf.Invoke(v, t).Bool()
+	return instanceOf.Invoke(v.internal(), t.internal()).Bool()
 }
 
 func (v Value) Invoke(args ...interface{}) Value {
 	if vType := v.Type(); vType != TypeFunction {
 		panic(&ValueError{"Value.Invoke", vType})
 	}
-	return Value{v: v.v.Invoke(convertArgs(args)...)}
+	return objectToValue(v.internal().Invoke(convertArgs(args...)...))
 }
 
 func (v Value) JSValue() Value {
@@ -209,31 +225,31 @@ func (v Value) JSValue() Value {
 }
 
 func (v Value) Length() int {
-	return v.v.Length()
+	return v.internal().Length()
 }
 
 func (v Value) New(args ...interface{}) Value {
-	return Value{v: v.v.New(convertArgs(args)...)}
+	return objectToValue(v.internal().New(convertArgs(args...)...))
 }
 
 func (v Value) Set(p string, x interface{}) {
-	v.v.Set(p, x)
+	v.internal().Set(p, convertArgs(x)[0])
 }
 
 func (v Value) SetIndex(i int, x interface{}) {
-	v.v.SetIndex(i, x)
+	v.internal().SetIndex(i, convertArgs(x)[0])
 }
 
 func (v Value) String() string {
-	return v.v.String()
+	return v.internal().String()
 }
 
 func (v Value) Truthy() bool {
-	return v.v.Bool()
+	return v.internal().Bool()
 }
 
 func (v Value) Type() Type {
-	return Type(getValueType.Invoke(v).Int())
+	return Type(getValueType.Invoke(v.internal()).Int())
 }
 
 type TypedArray struct {
@@ -243,14 +259,14 @@ type TypedArray struct {
 func TypedArrayOf(slice interface{}) TypedArray {
 	switch slice := slice.(type) {
 	case []int8, []int16, []int32, []uint8, []uint16, []uint32, []float32, []float64:
-		return TypedArray{Value{v: id.Invoke(slice)}}
+		return TypedArray{objectToValue(id.Invoke(slice))}
 	default:
 		panic("TypedArrayOf: not a supported slice")
 	}
 }
 
 func (t *TypedArray) Release() {
-	t.Value = Null()
+	t.Value = Value{}
 }
 
 type ValueError struct {

@@ -1,4 +1,4 @@
-// This file is copied from $GOROOT/src/syscall/js/js_test.go
+// This file is basically copied from $GOROOT/src/syscall/js/js_test.go
 
 // Copyright 2018 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
@@ -23,6 +23,14 @@ import (
 	"syscall/js"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	// Suppress the 'deadlock' error on GopherJS by goroutine
+	// (https://github.com/gopherjs/gopherjs/issues/826).
+	go func() {
+		m.Run()
+	}()
+}
 
 var dummys = js.Global().Call("eval", `({
 	someBool: true,

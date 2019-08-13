@@ -72,7 +72,7 @@ jobs:
           npm install
       - run: go install github.com/gopherjs/gopherjs
       - run: go generate ./...
-      - run: go mod tidy && go list all > /dev/null # https://github.com/golang/go/issues/27868#issuecomment-431413621
+      - run: go mod tidy
       - run: go run genmodstubbs.go
       - run: git diff
       - run: diff -u <(echo -n) <(git status --porcelain)

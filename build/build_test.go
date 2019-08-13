@@ -63,7 +63,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 	// Then, github.com/gopherjs/gopherjs/build.parseAndAugment(*build.Package) returns []*ast.File.
 	// Those augmented parsed Go files of the package are checked, one file at at time, one import
 	// at a time. Each import is verified to belong in the set of allowed real imports.
-	ips, err := ImportPaths("std")
+	ips, err := ImportPaths(nil, "std")
 	if err != nil {
 		t.Fatalf("failed to resolve std package spec: %v", err)
 	}

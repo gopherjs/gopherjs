@@ -40,6 +40,13 @@ const (
 
 var (
 	compilerBinaryHash string
+	defaultBuildTags   = []string{
+		"netgo",            // See https://godoc.org/net#hdr-Name_Resolution.
+		"purego",           // See https://golang.org/issues/23172.
+		"js",               // this effectively identifies that we are GopherJS
+		"!wasm",            // but not webassembly
+		"math_big_pure_go", // Use pure Go version of math/big; we don't want non-Go assembly versions.
+	}
 )
 
 func init() {
@@ -72,13 +79,7 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 	ctxt := build.Default
 	ctxt.GOARCH = "js"
 	ctxt.Compiler = "gc"
-	ctxt.BuildTags = append(buildTags,
-		"netgo",            // See https://godoc.org/net#hdr-Name_Resolution.
-		"purego",           // See https://golang.org/issues/23172.
-		"js",               // this effectively identifies that we are GopherJS
-		"!wasm",            // but not webassembly
-		"math_big_pure_go", // Use pure Go version of math/big; we don't want non-Go assembly versions.
-	)
+	ctxt.BuildTags = append(buildTags, defaultBuildTags...)
 
 	// TODO this is not great; the build use by GopherJS should not
 	// be a function of the package imported. See below for check
@@ -163,6 +164,9 @@ func (s *Session) importWithSrcDir(bctx build.Context, path string, srcDir strin
 		if installSuffix != "" {
 			bctx.InstallSuffix += "_" + installSuffix
 		}
+	case "syscall/js":
+		// There are no buildable files in this package, but we need to use files in the virtual directory.
+		isVirtual = true
 	case "math/big":
 		// Use pure Go version of math/big; we don't want non-Go assembly versions.
 		bctx.BuildTags = append(bctx.BuildTags, "math_big_pure_go")
@@ -189,7 +193,12 @@ func (s *Session) importWithSrcDir(bctx build.Context, path string, srcDir strin
 	} else {
 		dir, ok := s.modLookup[path]
 		if !ok {
-			return nil, fmt.Errorf("failed to find import directory for %v", path)
+			if path == "syscall/js" {
+				mode |= build.FindOnly
+				dir = filepath.Join(runtime.GOROOT(), "src", "syscall", "js")
+			} else {
+				return nil, fmt.Errorf("failed to find import directory for %v", path)
+			}
 		}
 
 		// set IgnoreVendor even in module mode to prevent go/build from doing
@@ -643,7 +652,7 @@ func (s *Session) determineModLookup(tests bool, imports []string) error {
 	imports = append(imports, "runtime", "github.com/gopherjs/gopherjs/js", "github.com/gopherjs/gopherjs/nosync")
 
 	var stdout, stderr bytes.Buffer
-	golistCmd := exec.Command("go", "list", "-deps", `-f={{if or (eq .ForTest "") (eq .ForTest "`+imports[0]+`")}}{"ImportPath": "{{.ImportPath}}", "Dir": "{{.Dir}}"{{with .Module}}, "Module": {"Path": "{{.Path}}", "Dir": "{{.Dir}}"}{{end}}}{{end}}`)
+	golistCmd := exec.Command("go", "list", "-e", "-deps", `-f={{if or (eq .ForTest "") (eq .ForTest "`+imports[0]+`")}}{ {{with .Error}}"Error": "{{.Err}}",{{end}} "ImportPath": "{{.ImportPath}}", "Dir": "{{.Dir}}"{{with .Module}}, "Module": {"Path": "{{.Path}}", "Dir": "{{.Dir}}"}{{end}}}{{end}}`)
 	if tests {
 		golistCmd.Args = append(golistCmd.Args, "-test")
 	}
@@ -665,6 +674,7 @@ func (s *Session) determineModLookup(tests bool, imports []string) error {
 
 	for {
 		var entry struct {
+			Error      string
 			ImportPath string
 			Dir        string
 			Module     struct {
@@ -678,6 +688,19 @@ func (s *Session) determineModLookup(tests bool, imports []string) error {
 				break
 			}
 			return fmt.Errorf("failed to decode list output: %v\n%s", err, stdout.Bytes())
+		}
+
+		// If a dependency relies on syscall/js we have a problem. All files
+		// in syscall/js are build constrained to GOOS=js GOARCH=wasm. Hence
+		// our go list will fail. And we can't go list with GOOS=js and GOARCH=wasm
+		// because we're not building for that target. Hence we need to more
+		// gracefully handle errors. We therefore report all errors _except_
+		// the failure to load syscall/js. WARNING - gross hack follows
+		if entry.Error != "" {
+			msg := fmt.Sprintf("build constraints exclude all Go files in " + filepath.Join(runtime.GOROOT(), "src", "syscall", "js"))
+			if !strings.HasSuffix(entry.Error, msg) {
+				return fmt.Errorf("failed to resolve dependencies: %v", entry.Error)
+			}
 		}
 
 		ipParts := strings.Split(entry.ImportPath, " ")
@@ -1110,12 +1133,14 @@ func (s *Session) WaitForChange() {
 	s.Watcher.Close()
 }
 
-func ImportPaths(vs ...string) ([]string, error) {
+func ImportPaths(buildTags []string, vs ...string) ([]string, error) {
 	if len(vs) == 0 {
 		vs = []string{"."}
 	}
 
-	args := []string{"go", "list"}
+	buildTags = append(defaultBuildTags, buildTags...)
+
+	args := []string{"go", "list", "-tags=" + strings.Join(buildTags, " ")}
 	args = append(args, vs...)
 	cmd := exec.Command(args[0], args[1:]...)
 

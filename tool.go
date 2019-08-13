@@ -139,7 +139,7 @@ func main1() int {
 				}
 
 				// Expand import path patterns.
-				pkgs, err := gbuild.ImportPaths(args...)
+				pkgs, err := gbuild.ImportPaths(options.BuildTags, args...)
 				if err != nil {
 					return err
 				}
@@ -204,7 +204,7 @@ func main1() int {
 		for {
 			err := func() error {
 				// Expand import path patterns.
-				pkgs, err := gbuild.ImportPaths(args...)
+				pkgs, err := gbuild.ImportPaths(options.BuildTags, args...)
 				if err != nil {
 					return err
 				}
@@ -322,7 +322,7 @@ func main1() int {
 					return err
 				}
 			} else if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-				pkgs, err := gbuild.ImportPaths(args[0])
+				pkgs, err := gbuild.ImportPaths(options.BuildTags, args[0])
 				if err != nil {
 					return fmt.Errorf("gopherjs run: failed to resolve package pattern %v: %v", args[0], err)
 				}
@@ -377,7 +377,7 @@ func main1() int {
 		err := func() error {
 			var err error
 			// Expand import path patterns.
-			args, err := gbuild.ImportPaths(args...)
+			args, err := gbuild.ImportPaths(options.BuildTags, args...)
 			if err != nil {
 				return err
 			}

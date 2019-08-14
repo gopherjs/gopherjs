@@ -120,6 +120,11 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue27201.go":  {desc: "incorrect stack trace for nil dereference in inlined function"},
 	"fixedbugs/issue27518b.go": {desc: "sigpanic can make dead pointer live again"},
 	"fixedbugs/issue29190.go":  {desc: "append does not fail when length overflows"},
+
+	// These are new tests in Go 1.12.8
+	"fixedbugs/issue30977.go": {desc: "fails to terminate", category: neverTerminates},
+	"fixedbugs/issue32477.go": {desc: "incorrect stack trace expectation"},
+	"fixedbugs/issue32680.go": {desc: "arch-specific bug; does not apply to GopherJS"},
 }
 
 type failCategory uint8

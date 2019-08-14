@@ -8,7 +8,7 @@ jobs:
 
     environment:
       NVM_VERSION: v0.33.11
-      GO_VERSION: go1.12.1
+      GO_VERSION: go1.12.8
       NODE_VERSION: 10.13.0
 
     steps:
@@ -82,4 +82,5 @@ jobs:
       - run: gopherjs install -v net/http
       - run: gopherjs test --minify -v --short github.com/gopherjs/gopherjs/tests/... $(go list std | grep -v -x -f .std_test_pkg_exclusions)
       - run: go test -v ./...
+      - run: SOURCE_MAP_SUPPORT=false go run tests/run.go -summary
       - run: gopherjs test -v fmt

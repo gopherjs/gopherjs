@@ -13,14 +13,24 @@ The JavaScript environment of a web browser is completely isolated from your ope
 
 ### Node.js on Linux and macOS
 
-GopherJS has support for system calls on Linux and macOS. Before running your code with Node.js, you need to install the system calls module. The module is compatible with Node.js version 10.0.0 (or newer). If you want to use an older version you can opt to not install the module, but then system calls are not available.
+GopherJS has support for system calls on Linux and macOS. Before running your code with Node.js, you need to install the system calls module. The module is compatible with Node.js versions from 10.0.0 to 11.15.0 (Node.js version 12 is not yet supported).  If you want to use an older version you can opt to not install the module, but then system calls are not available.
 
 Compile and install the module with:
 
 ```
-cd $GOPATH/src/github.com/gopherjs/gopherjs/node-syscall/
+# Install node-gyp globally
 npm install --global node-gyp
-node-gyp rebuild
+
+# Change directory into gopherjs/node-syscall
+cd $GOPATH/src/github.com/gopherjs/gopherjs/node-syscall/
+
+# Rebuild using a specific node version
+# Use can install a specific node version using https://github.com/tj/n
+# To install Node.js version 11.15.0 use:
+# n v11.15.0
+node-gyp --target=v11.15.0 rebuild
+
+# Create a Node Libraries folder and copy the artifact over
 mkdir -p ~/.node_libraries/
 cp build/Release/syscall.node ~/.node_libraries/syscall.node
 ```

@@ -2,12 +2,12 @@ version: 2
 jobs:
   build:
     docker:
-    - image: circleci/build-image:ubuntu-14.04-XXL-upstart-1189-5614f37
-      command: /sbin/init
+    - image: ubuntu:18.04
     environment:
       SOURCE_MAP_SUPPORT: false
     working_directory: ~/go/src/github.com/gopherjs/gopherjs
     steps:
+    - run: apt-get update && apt-get install -y sudo curl git python make g++
     - checkout
     - run: git clone https://github.com/creationix/nvm $HOME/.nvm && cd $HOME/.nvm && git checkout v0.33.9 && echo 'export NVM_DIR="$HOME/.nvm"' >> $BASH_ENV && echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> $BASH_ENV
     - run: nvm install 10.0.0 && nvm alias default 10.0.0

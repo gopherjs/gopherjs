@@ -120,6 +120,11 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue27201.go":  {desc: "incorrect stack trace for nil dereference in inlined function"},
 	"fixedbugs/issue27518b.go": {desc: "sigpanic can make dead pointer live again"},
 	"fixedbugs/issue29190.go":  {desc: "append does not fail when length overflows"},
+
+	// These are new tests in Go 1.12.9.
+	"fixedbugs/issue30977.go": {category: neverTerminates, desc: "does for { runtime.GC() }"},
+	"fixedbugs/issue32477.go": {category: notApplicable, desc: "uses runtime.SetFinalizer and runtime.GC"},
+	"fixedbugs/issue32680.go": {category: notApplicable, desc: "uses -gcflags=-d=ssa/check/on flag"},
 }
 
 type failCategory uint8

@@ -29,7 +29,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	gbuild "github.com/gopherjs/gopherjs/build"
+	build_v1 "github.com/gopherjs/gopherjs/build"
+	build_v2 "github.com/gopherjs/gopherjs/build/v2"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
 	"github.com/kisielk/gotool"
@@ -63,7 +64,7 @@ func init() {
 
 func main() {
 	var (
-		options = &gbuild.Options{CreateMapFile: true}
+		options = &build_v1.Options{}
 		pkgObj  string
 		tags    string
 	)
@@ -77,6 +78,7 @@ func main() {
 	compilerFlags.BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
 	compilerFlags.BoolVar(&options.Color, "color", terminal.IsTerminal(int(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb", "colored output")
 	compilerFlags.StringVar(&tags, "tags", "", "a list of build tags to consider satisfied during the build")
+	compilerFlags.BoolVar(&options.CreateMapFile, "sourcemap", true, "generate source map file")
 	compilerFlags.BoolVar(&options.MapToLocalDisk, "localmap", false, "use local paths for sourcemap")
 
 	flagWatch := pflag.NewFlagSet("", 0)
@@ -91,10 +93,12 @@ func main() {
 	cmdBuild.Flags().AddFlagSet(flagQuiet)
 	cmdBuild.Flags().AddFlagSet(compilerFlags)
 	cmdBuild.Flags().AddFlagSet(flagWatch)
-	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
+
+	// GopherJS "classic" implementation of build subcommand.
+	buildOriginal := func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(tags)
 		for {
-			s := gbuild.NewSession(options)
+			s := build_v1.NewSession(options)
 
 			err := func() error {
 				// Handle "gopherjs build [files]" ad-hoc package mode.
@@ -121,18 +125,18 @@ func main() {
 				}
 
 				// Expand import path patterns.
-				patternContext := gbuild.NewBuildContext("", options.BuildTags)
+				patternContext := build_v1.NewBuildContext("", options.BuildTags)
 				pkgs := (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
 
 				for _, pkgPath := range pkgs {
 					if s.Watcher != nil {
-						pkg, err := gbuild.NewBuildContext(s.InstallSuffix(), options.BuildTags).Import(pkgPath, "", build.FindOnly)
+						pkg, err := build_v1.NewBuildContext(s.InstallSuffix(), options.BuildTags).Import(pkgPath, "", build.FindOnly)
 						if err != nil {
 							return err
 						}
 						s.Watcher.Add(pkg.Dir)
 					}
-					pkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
+					pkg, err := build_v1.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
 					if err != nil {
 						return err
 					}
@@ -162,6 +166,36 @@ func main() {
 		}
 	}
 
+	// The new implementation if build subcommand, which relies on go/packages for package loading and
+	// build system interaction. This implementation is highly experimental at the moment and may not
+	// support all the features of the "classic" yet.
+	buildGoPackages := func(cmd *cobra.Command, args []string) {
+		err := func() error {
+			session, err := build_v2.NewSession(*options)
+			if err != nil {
+				return fmt.Errorf("failed to initialize build session with options %+v: %s", options, err)
+			}
+
+			archive, err := session.Build(args...)
+			if err != nil {
+				return fmt.Errorf("failed to build %s: %s", args, err)
+			}
+
+			// TODO: Write the compiled code to the appropriate location.
+			_ = archive
+			return nil
+		}()
+
+		os.Exit(handleError(err, options, nil))
+	}
+
+	// Enable the experimental implementation only for adventurous souls who explicitly requested it :)
+	if os.Getenv("GOPHERJS_BUILD") == "go/packages" {
+		cmdBuild.Run = buildGoPackages
+	} else {
+		cmdBuild.Run = buildOriginal
+	}
+
 	cmdInstall := &cobra.Command{
 		Use:   "install [packages]",
 		Short: "compile and install packages and dependencies",
@@ -173,11 +207,11 @@ func main() {
 	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(tags)
 		for {
-			s := gbuild.NewSession(options)
+			s := build_v1.NewSession(options)
 
 			err := func() error {
 				// Expand import path patterns.
-				patternContext := gbuild.NewBuildContext("", options.BuildTags)
+				patternContext := build_v1.NewBuildContext("", options.BuildTags)
 				pkgs := (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
 
 				if cmd.Name() == "get" {
@@ -189,7 +223,7 @@ func main() {
 					}
 				}
 				for _, pkgPath := range pkgs {
-					pkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
+					pkg, err := build_v1.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
 					if s.Watcher != nil && pkg != nil { // add watch even on error
 						s.Watcher.Add(pkg.Dir)
 					}
@@ -274,7 +308,7 @@ func main() {
 				os.Remove(tempfile.Name())
 				os.Remove(tempfile.Name() + ".map")
 			}()
-			s := gbuild.NewSession(options)
+			s := build_v1.NewSession(options)
 			if err := s.BuildFiles(args[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
 				return err
 			}
@@ -305,7 +339,7 @@ func main() {
 		options.BuildTags = strings.Fields(tags)
 		err := func() error {
 			// Expand import path patterns.
-			patternContext := gbuild.NewBuildContext("", options.BuildTags)
+			patternContext := build_v1.NewBuildContext("", options.BuildTags)
 			args = (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
 
 			if *compileOnly && len(args) > 1 {
@@ -315,10 +349,10 @@ func main() {
 				return errors.New("cannot use -o flag with multiple packages")
 			}
 
-			pkgs := make([]*gbuild.PackageData, len(args))
+			pkgs := make([]*build_v1.PackageData, len(args))
 			for i, pkgPath := range args {
 				var err error
-				pkgs[i], err = gbuild.Import(pkgPath, 0, "", options.BuildTags)
+				pkgs[i], err = build_v1.Import(pkgPath, 0, "", options.BuildTags)
 				if err != nil {
 					return err
 				}
@@ -330,10 +364,10 @@ func main() {
 					fmt.Printf("?   \t%s\t[no test files]\n", pkg.ImportPath)
 					continue
 				}
-				s := gbuild.NewSession(options)
+				s := build_v1.NewSession(options)
 
 				tests := &testFuncs{BuildContext: s.BuildContext(), Package: pkg.Package}
-				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
+				collectTests := func(testPkg *build_v1.PackageData, testPkgName string, needVar *bool) error {
 					if testPkgName == "_test" {
 						for _, file := range pkg.TestGoFiles {
 							if err := tests.load(pkg.Package.Dir, file, testPkgName, &tests.ImportTest, &tests.NeedTest); err != nil {
@@ -351,7 +385,7 @@ func main() {
 					return err
 				}
 
-				if err := collectTests(&gbuild.PackageData{
+				if err := collectTests(&build_v1.PackageData{
 					Package: &build.Package{
 						ImportPath: pkg.ImportPath,
 						Dir:        pkg.Dir,
@@ -364,7 +398,7 @@ func main() {
 					return err
 				}
 
-				if err := collectTests(&gbuild.PackageData{
+				if err := collectTests(&build_v1.PackageData{
 					Package: &build.Package{
 						ImportPath: pkg.ImportPath + "_test",
 						Dir:        pkg.Dir,
@@ -557,7 +591,7 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 
 type serveCommandFileSystem struct {
 	serveRoot  string
-	options    *gbuild.Options
+	options    *build_v1.Options
 	dirs       []string
 	sourceMaps map[string][]byte
 }
@@ -574,8 +608,8 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 	if isPkg || isMap || isIndex {
 		// If we're going to be serving our special files, make sure there's a Go command in this folder.
-		s := gbuild.NewSession(fs.options)
-		pkg, err := gbuild.Import(path.Dir(name), 0, s.InstallSuffix(), fs.options.BuildTags)
+		s := build_v1.NewSession(fs.options)
+		pkg, err := build_v1.Import(path.Dir(name), 0, s.InstallSuffix(), fs.options.BuildTags)
 		if err != nil || pkg.Name != "main" {
 			isPkg = false
 			isMap = false
@@ -594,7 +628,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 				sourceMapFilter := &compiler.SourceMapFilter{Writer: buf}
 				m := &sourcemap.Map{File: base + ".js"}
-				sourceMapFilter.MappingCallback = gbuild.NewMappingCallback(m, fs.options.GOROOT, fs.options.GOPATH, fs.options.MapToLocalDisk)
+				sourceMapFilter.MappingCallback = build_v1.NewMappingCallback(m, fs.options.GOROOT, fs.options.GOPATH, fs.options.MapToLocalDisk)
 
 				deps, err := compiler.ImportDependencies(archive, s.BuildImportPath)
 				if err != nil {
@@ -695,7 +729,7 @@ func (f *fakeFile) Sys() interface{} {
 
 // handleError handles err and returns an appropriate exit code.
 // If browserErrors is non-nil, errors are written for presentation in browser.
-func handleError(err error, options *gbuild.Options, browserErrors *bytes.Buffer) int {
+func handleError(err error, options *build_v1.Options, browserErrors *bytes.Buffer) int {
 	switch err := err.(type) {
 	case nil:
 		return 0
@@ -713,7 +747,7 @@ func handleError(err error, options *gbuild.Options, browserErrors *bytes.Buffer
 }
 
 // printError prints err to Stderr with options. If browserErrors is non-nil, errors are also written for presentation in browser.
-func printError(err error, options *gbuild.Options, browserErrors *bytes.Buffer) {
+func printError(err error, options *build_v1.Options, browserErrors *bytes.Buffer) {
 	e := sprintError(err)
 	options.PrintError("%s\n", e)
 	if browserErrors != nil {
@@ -795,7 +829,7 @@ func runNode(script string, args []string, dir string, quiet bool) error {
 
 // runTestDir returns the directory for Node.js to use when running tests for package p.
 // Empty string means current directory.
-func runTestDir(p *gbuild.PackageData) string {
+func runTestDir(p *build_v1.PackageData) string {
 	if p.IsVirtual {
 		// The package is virtual and doesn't have a physical directory. Use current directory.
 		return ""

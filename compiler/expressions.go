@@ -865,7 +865,7 @@ func (c *funcContext) translateBuiltin(name string, sig *types.Signature, args [
 		}
 	case "len":
 		switch argType := c.p.TypeOf(args[0]).Underlying().(type) {
-		case *types.Basic:
+		case *types.Basic, *types.Array:
 			return c.formatExpr("%e.length", args[0])
 		case *types.Slice:
 			return c.formatExpr("%e.$length", args[0])

@@ -42,6 +42,11 @@ type Archive struct {
 	Minified     bool
 }
 
+// IsCommand returns true if the archive represents an executable binary (i.e. a package "main").
+func (a *Archive) IsCommand() bool {
+	return a.Name == "main"
+}
+
 type Decl struct {
 	FullName        string
 	Vars            []string

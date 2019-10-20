@@ -176,13 +176,20 @@ func main() {
 				return fmt.Errorf("failed to initialize build session with options %+v: %s", options, err)
 			}
 
-			archive, err := session.Build(args...)
+			archives, err := session.Build(args...)
 			if err != nil {
 				return fmt.Errorf("failed to build %s: %s", args, err)
 			}
 
-			// TODO: Write the compiled code to the appropriate location.
-			_ = archive
+			if len(archives) == 1 && archives[0].IsCommand() {
+				a := archives[0]
+				if pkgObj == "" {
+					pkgObj = filepath.Base(a.ImportPath) + ".js"
+				}
+				if err := session.WriteCommandPackage(a, pkgObj); err != nil {
+					return fmt.Errorf("failed to write command package to %q: %s", pkgObj, err)
+				}
+			}
 			return nil
 		}()
 

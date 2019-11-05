@@ -37,7 +37,7 @@ public:
 // Cast value to integer or throw an exception.
 //
 // The exception must be explicitly caught up the call stack, since the Node API
-// doesn't handle exceptions (as far as I can tell).
+// this extension is using doesn't seem to handle exceptions.
 Local<Integer> integerOrDie(Local<Context> ctx, Local<Value> value) {
   Local<Integer> integer;
   if (value->ToInteger(ctx).ToLocal(&integer)) {
@@ -100,10 +100,9 @@ void Syscall(const FunctionCallbackInfo<Value>& info) {
       err = errno;
     }
     Local<Array> res = Array::New(isolate, 3);
-    // TODO: Actually check the value.
-    auto dont_nag = res->Set(ctx, 0, Integer::New(isolate, r1));
-    dont_nag = res->Set(ctx, 1, Integer::New(isolate, r2));
-    dont_nag = res->Set(ctx, 2, Integer::New(isolate, err));
+    res->Set(ctx, 0, Integer::New(isolate, r1)).ToChecked();
+    res->Set(ctx, 1, Integer::New(isolate, r2)).ToChecked();
+    res->Set(ctx, 2, Integer::New(isolate, err)).ToChecked();
     info.GetReturnValue().Set(res);
   } catch (std::exception& e) {
     auto message = String::NewFromUtf8(isolate, e.what(), NewStringType::kNormal).ToLocalChecked();
@@ -132,9 +131,9 @@ void Syscall6(const FunctionCallbackInfo<Value>& info) {
       err = errno;
     }
     Local<Array> res = Array::New(isolate, 3);
-    auto dont_nag = res->Set(ctx, 0, Integer::New(isolate, r));
-    dont_nag = res->Set(ctx, 1, Integer::New(isolate, 0));
-    dont_nag = res->Set(ctx, 2, Integer::New(isolate, err));
+    res->Set(ctx, 0, Integer::New(isolate, r)).ToChecked();
+    res->Set(ctx, 1, Integer::New(isolate, 0)).ToChecked();
+    res->Set(ctx, 2, Integer::New(isolate, err)).ToChecked();
     info.GetReturnValue().Set(res);
   } catch (std::exception& e) {
     auto message = String::NewFromUtf8(isolate, e.what(), NewStringType::kNormal).ToLocalChecked();

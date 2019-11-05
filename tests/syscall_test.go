@@ -1,6 +1,6 @@
 // +build js
 
-package syscall_test
+package tests
 
 import (
 	"io/ioutil"

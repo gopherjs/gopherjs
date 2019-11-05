@@ -29,6 +29,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/davecgh/go-spew/spew"
 	build_v1 "github.com/gopherjs/gopherjs/build"
 	build_v2 "github.com/gopherjs/gopherjs/build/v2"
 	"github.com/gopherjs/gopherjs/compiler"
@@ -180,6 +181,7 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to build %s: %s", args, err)
 			}
+			spew.Dump(archives)
 
 			if len(archives) == 1 && archives[0].IsCommand() {
 				a := archives[0]

@@ -10,11 +10,16 @@ package build
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
 	"go/token"
 	"go/types"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/davecgh/go-spew/spew"
 	build_v1 "github.com/gopherjs/gopherjs/build"
@@ -37,6 +42,7 @@ type Session struct {
 	pkgs     map[string]*packages.Package
 	archives map[string]*compiler.Archive
 	types    map[string]*types.Package
+	fset     *token.FileSet
 }
 
 // NewSession initializes a fresh build session.
@@ -56,6 +62,7 @@ func NewSession(opts Options) (*Session, error) {
 		pkgs:     map[string]*packages.Package{},
 		archives: map[string]*compiler.Archive{},
 		types:    map[string]*types.Package{},
+		fset:     token.NewFileSet(),
 	}, nil
 }
 
@@ -113,8 +120,15 @@ func (s *Session) load(patterns ...string) ([]*packages.Package, error) {
 	log.Printf("Loading %s...", patterns)
 
 	cfg := packages.Config{
-		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports | packages.NeedSyntax | packages.NeedDeps | packages.NeedTypes,
-		Fset: token.NewFileSet(),
+		Mode: packages.NeedName |
+			packages.NeedFiles |
+			packages.NeedCompiledGoFiles |
+			packages.NeedImports |
+			packages.NeedSyntax |
+			packages.NeedExportsFile |
+			packages.NeedDeps,
+		Fset:      s.fset,
+		ParseFile: s.parseAndAugment,
 		// TODO: This is different from the currently documented GopherJS behavior, which uses
 		// GOOS=linux (or darvin) and GOARCH=js. We can't do exactly this because `go list` considers
 		// this combination invalid. Since compiler uses 32-bit sizes, setting GOARCH=386 helps with
@@ -126,6 +140,7 @@ func (s *Session) load(patterns ...string) ([]*packages.Package, error) {
 		Env: append(os.Environ(), "GOARCH=386"),
 		// TODO: make sure to pass "js" build tag if we end up not using GOOS=js.
 	}
+	log.Println(cfg.Mode & packages.NeedSyntax)
 
 	pkgs, err := packages.Load(&cfg, patterns...)
 	if err != nil {
@@ -135,6 +150,7 @@ func (s *Session) load(patterns ...string) ([]*packages.Package, error) {
 	if count := packages.PrintErrors(pkgs); count > 0 {
 		return nil, fmt.Errorf("encountered %d errors while loading %q", count, patterns)
 	}
+	spew.Dump(pkgs)
 
 	// TODO: parseAndAugment()
 
@@ -160,7 +176,7 @@ func (s *Session) compile(pkgs ...*packages.Package) ([]*compiler.Archive, error
 	archives := []*compiler.Archive{}
 
 	for _, pkg := range pkgs {
-		archive, err := compiler.Compile(pkg.PkgPath, pkg.Syntax, pkg.Fset, importCtx, s.opts.Minify)
+		archive, err := compiler.Compile(pkg.PkgPath, pkg.Syntax, s.fset, importCtx, s.opts.Minify)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build package %q: %s", pkg, err)
 		}
@@ -203,4 +219,42 @@ func (s *Session) loadAndCompile(path string) (*compiler.Archive, error) {
 		return nil, fmt.Errorf("s.compile(%q) returned %d archives, expected 1", path, count)
 	}
 	return archives[0], nil
+}
+
+func (s *Session) parseAndAugment(fset *token.FileSet, filename string, src []byte) (*ast.File, error) {
+	if s.pruned(filename) {
+		return nil, nil
+	}
+	const mode = parser.AllErrors | parser.ParseComments
+	file, err := parser.ParseFile(fset, filename, src, mode)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
+var stdlibKeep = map[string]map[string]bool{
+	"runtime": map[string]bool{"error.go": true},
+}
+var stdlibPrefix = path.Join(runtime.GOROOT(), "src")
+
+func (s *Session) pruned(filename string) bool {
+	dir, file := path.Split(filename)
+	if !strings.HasPrefix(dir, stdlibPrefix) {
+		return false
+	}
+	dir = strings.TrimPrefix(dir, stdlibPrefix)
+	dir = strings.Trim(dir, "\\/")
+
+	keep, ok := stdlibKeep[dir]
+	if !ok {
+		return false
+	}
+
+	if keep[file] {
+		log.Printf("Passed %s...", filename)
+		return false
+	}
+
+	return true
 }

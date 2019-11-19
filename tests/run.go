@@ -340,6 +340,7 @@ func goFiles(dir string) []string {
 		}
 	}
 	sort.Strings(names)
+	f.Close()
 	return names
 }
 

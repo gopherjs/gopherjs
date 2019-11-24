@@ -118,7 +118,7 @@ func (pi packageImporter) Import(path string) (*types.Package, error) {
 	return pi.importContext.Packages[a.ImportPath], nil
 }
 
-func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {
+func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (_ *Archive, err error) {
 	typesInfo := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),

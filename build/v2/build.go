@@ -14,23 +14,22 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 
-	"github.com/davecgh/go-spew/spew"
 	build_v1 "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/gopherjs/gopherjs/tracer"
 	"github.com/neelance/sourcemap"
 	"golang.org/x/tools/go/packages"
 )
 
 func init() {
-	spew.Config.DisablePointerAddresses = true
-	spew.Config.DisableMethods = true
+	// spew.Config.DisablePointerAddresses = true
+	// spew.Config.DisableMethods = true
 }
 
 type Options = build_v1.Options
@@ -66,8 +65,8 @@ func NewSession(opts Options) (*Session, error) {
 	}, nil
 }
 
-func (s *Session) Build(patterns ...string) ([]*compiler.Archive, error) {
-	fmt.Printf("Building %s...\n", patterns)
+func (s *Session) Build(patterns ...string) (_ []*compiler.Archive, err error) {
+	defer tracer.Scope("Build(%s)\n", patterns).Leave(&err)
 
 	pkgs, err := s.load(patterns...)
 	if err != nil {
@@ -116,8 +115,8 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 	return compiler.WriteProgramCode(deps, sourceMapFilter)
 }
 
-func (s *Session) load(patterns ...string) ([]*packages.Package, error) {
-	log.Printf("Loading %s...", patterns)
+func (s *Session) load(patterns ...string) (_ []*packages.Package, err error) {
+	defer tracer.Scope("load(%s)", patterns).Leave(&err)
 
 	cfg := packages.Config{
 		Mode: packages.NeedName |
@@ -127,8 +126,8 @@ func (s *Session) load(patterns ...string) ([]*packages.Package, error) {
 			packages.NeedSyntax |
 			packages.NeedExportsFile |
 			packages.NeedDeps,
-		Fset:      s.fset,
-		ParseFile: s.parseAndAugment,
+		Fset: s.fset,
+		// ParseFile: s.parseAndAugment,
 		// TODO: This is different from the currently documented GopherJS behavior, which uses
 		// GOOS=linux (or darvin) and GOARCH=js. We can't do exactly this because `go list` considers
 		// this combination invalid. Since compiler uses 32-bit sizes, setting GOARCH=386 helps with
@@ -140,7 +139,6 @@ func (s *Session) load(patterns ...string) ([]*packages.Package, error) {
 		Env: append(os.Environ(), "GOARCH=386"),
 		// TODO: make sure to pass "js" build tag if we end up not using GOOS=js.
 	}
-	log.Println(cfg.Mode & packages.NeedSyntax)
 
 	pkgs, err := packages.Load(&cfg, patterns...)
 	if err != nil {
@@ -150,12 +148,16 @@ func (s *Session) load(patterns ...string) ([]*packages.Package, error) {
 	if count := packages.PrintErrors(pkgs); count > 0 {
 		return nil, fmt.Errorf("encountered %d errors while loading %q", count, patterns)
 	}
-	spew.Dump(pkgs)
 
 	// TODO: parseAndAugment()
 
 	packages.Visit(pkgs, nil, func(p *packages.Package) {
-		log.Printf("Putting %s package into cache...", p.ID)
+		// TODO: Remove this workaround once http://golang.org/cl/205160 is accepted.
+		if len(p.CompiledGoFiles) != len(p.Syntax) {
+			tracer.Tracef("go/packages bug: syntax is not loaded, not caching %q", p.ID)
+			return
+		}
+		tracer.Tracef("Putting %s package into cache...", p.ID)
 		// TODO: Verify that this doesn't cause collisions with odd packages such as main or test.
 		// If it does, consider using p.ID as a key.
 		s.pkgs[p.PkgPath] = p
@@ -164,9 +166,9 @@ func (s *Session) load(patterns ...string) ([]*packages.Package, error) {
 	return pkgs, nil
 }
 
-func (s *Session) compile(pkgs ...*packages.Package) ([]*compiler.Archive, error) {
+func (s *Session) compile(pkgs ...*packages.Package) (_ []*compiler.Archive, err error) {
 	// TODO: Check if recompilation is not required. Can we use go compiler's cache?
-	log.Printf("Compiling %s...", pkgs)
+	defer tracer.Scope("compile(%s)", pkgs).Leave(&err)
 
 	importCtx := &compiler.ImportContext{
 		Packages: s.types,
@@ -182,25 +184,28 @@ func (s *Session) compile(pkgs ...*packages.Package) ([]*compiler.Archive, error
 		}
 		archives = append(archives, archive)
 		s.archives[archive.ImportPath] = archive
-		log.Printf("Putting %q archive into cache...", archive.ImportPath)
+		tracer.Tracef("Putting %q archive into cache...", archive.ImportPath)
 	}
 
 	return archives, nil
 }
 
-func (s *Session) loadAndCompile(path string) (*compiler.Archive, error) {
+func (s *Session) loadAndCompile(path string) (_ *compiler.Archive, err error) {
+	defer tracer.Scope("loadAndCompile(%q)", path).Leave(&err)
 	if a, ok := s.archives[path]; ok {
+		tracer.Tracef("Got %s from cache...", path)
 		// We've already compiled this package during this session.
 		return a, nil
 	}
 
-	var err error
 	var pkgs []*packages.Package
 
 	if p, ok := s.pkgs[path]; ok {
 		// We've already loaded this package during this session, but haven't compiled it yet.
 		pkgs = []*packages.Package{p}
+		tracer.Tracef("Package %s was pre-loaded earlier: %s", path, p)
 	} else {
+		tracer.Tracef("Loading package %s on demand from scratch...", path)
 		// This is the first time we need this package during the session, let's load it.
 		pkgs, err = s.load(path)
 		if err != nil {
@@ -252,7 +257,7 @@ func (s *Session) pruned(filename string) bool {
 	}
 
 	if keep[file] {
-		log.Printf("Passed %s...", filename)
+		tracer.Tracef("Passed %s...", filename)
 		return false
 	}
 

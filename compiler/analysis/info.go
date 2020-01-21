@@ -32,6 +32,7 @@ type FuncInfo struct {
 	Blocking      map[ast.Node]bool
 	GotoLabel     map[*types.Label]bool
 	LocalCalls    map[*types.Func][][]ast.Node
+	lFLitCalls    map[*FuncInfo][][]ast.Node
 	ContinueStmts []continueStmt
 	p             *Info
 	analyzeStack  []ast.Node
@@ -44,6 +45,7 @@ func (info *Info) newFuncInfo() *FuncInfo {
 		Blocking:   make(map[ast.Node]bool),
 		GotoLabel:  make(map[*types.Label]bool),
 		LocalCalls: make(map[*types.Func][][]ast.Node),
+		lFLitCalls: make(map[*FuncInfo][][]ast.Node),
 	}
 	info.allInfos = append(info.allInfos, funcInfo)
 	return funcInfo
@@ -77,6 +79,15 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 						funcInfo.markBlocking(call)
 					}
 					delete(funcInfo.LocalCalls, obj)
+					done = false
+				}
+			}
+			for fi, calls := range funcInfo.lFLitCalls {
+				if len(fi.Blocking) != 0 {
+					for _, call := range calls {
+						funcInfo.markBlocking(call)
+					}
+					delete(funcInfo.lFLitCalls, fi)
 					done = false
 				}
 			}
@@ -186,8 +197,13 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 			for _, arg := range n.Args {
 				ast.Walk(c, arg)
 			}
-			if len(c.p.FuncLitInfos[f].Blocking) != 0 {
+			fi := c.p.FuncLitInfos[f]
+			if len(fi.Blocking) != 0 {
 				c.markBlocking(c.analyzeStack)
+			} else {
+				stack := make([]ast.Node, len(c.analyzeStack))
+				copy(stack, c.analyzeStack)
+				c.lFLitCalls[fi] = append(c.lFLitCalls[fi], stack)
 			}
 			return nil
 		default:

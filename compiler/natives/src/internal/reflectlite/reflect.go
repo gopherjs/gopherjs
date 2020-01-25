@@ -31,19 +31,26 @@ func init() {
 	//uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
 }
 
+var (
+	idJsType      = "__jsType"
+	idReflectType = "__reflectType"
+	idKindType    = "__kindType"
+	idRtype       = "__rtype"
+)
+
 func jsType(typ Type) *js.Object {
-	return js.InternalObject(typ).Get("jsType")
+	return js.InternalObject(typ).Get(idJsType)
 }
 
 func reflectType(typ *js.Object) *rtype {
-	if typ.Get("reflectType") == js.Undefined {
+	if typ.Get(idReflectType) == js.Undefined {
 		rt := &rtype{
 			size: uintptr(typ.Get("size").Int()),
 			kind: uint8(typ.Get("kind").Int()),
 			str:  newNameOff(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool())),
 		}
-		js.InternalObject(rt).Set("jsType", typ)
-		typ.Set("reflectType", js.InternalObject(rt))
+		js.InternalObject(rt).Set(idJsType, typ)
+		typ.Set(idReflectType, js.InternalObject(rt))
 
 		methodSet := js.Global.Call("$methodSet", typ)
 		if methodSet.Length() != 0 || typ.Get("named").Bool() {
@@ -82,7 +89,7 @@ func reflectType(typ *js.Object) *rtype {
 				_methods: reflectMethods,
 			}
 			uncommonTypeMap[rt] = ut
-			js.InternalObject(ut).Set("jsType", typ)
+			js.InternalObject(ut).Set(idJsType, typ)
 		}
 
 		switch rt.Kind() {
@@ -176,12 +183,12 @@ func reflectType(typ *js.Object) *rtype {
 		}
 	}
 
-	return (*rtype)(unsafe.Pointer(typ.Get("reflectType").Unsafe()))
+	return (*rtype)(unsafe.Pointer(typ.Get(idReflectType).Unsafe()))
 }
 
 func setKindType(rt *rtype, kindType interface{}) {
-	js.InternalObject(rt).Set("kindType", js.InternalObject(kindType))
-	js.InternalObject(kindType).Set("rtype", js.InternalObject(rt))
+	js.InternalObject(rt).Set(idKindType, js.InternalObject(kindType))
+	js.InternalObject(kindType).Set(idRtype, js.InternalObject(rt))
 }
 
 type uncommonType struct {
@@ -818,7 +825,7 @@ func (t *rtype) pointers() bool {
 // 	}
 // 	mt := FuncOf(in, out, ft.IsVariadic())
 // 	m.Type = mt
-// 	prop := js.Global.Call("$methodSet", js.InternalObject(t).Get("jsType")).Index(i).Get("prop").String()
+// 	prop := js.Global.Call("$methodSet", js.InternalObject(t).Get(idJsType)).Index(i).Get("prop").String()
 // 	fn := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
 // 		rcvr := arguments[0]
 // 		return rcvr.Get(prop).Call("apply", rcvr, arguments[1:])

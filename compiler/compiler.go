@@ -15,7 +15,22 @@ import (
 	"golang.org/x/tools/go/gcexportdata"
 )
 
-var sizes32 = &types.StdSizes{WordSize: 4, MaxAlign: 8}
+type Sizes struct {
+	types.StdSizes
+}
+
+func (s *Sizes) Sizeof(T types.Type) int64 {
+	switch t := T.Underlying().(type) {
+	case *types.Basic:
+		k := t.Kind()
+		if k == types.Int {
+			return 8
+		}
+	}
+	return s.StdSizes.Sizeof(T)
+}
+
+var sizes32 = &Sizes{types.StdSizes{WordSize: 4, MaxAlign: 8}}
 var reservedKeywords = make(map[string]bool)
 var _ = ___GOPHERJS_REQUIRES_GO_VERSION_1_12___ // Compile error on other Go versions, because they're not supported.
 

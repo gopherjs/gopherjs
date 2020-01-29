@@ -194,11 +194,21 @@ func (v Value) Float() float64 {
 	return v.internal().Float()
 }
 
+func (t Type) isObject() bool {
+	return t == TypeObject || t == TypeFunction
+}
+
 func (v Value) Get(p string) Value {
+	if vType := v.Type(); !vType.isObject() {
+		panic(&ValueError{"Value.Get", vType})
+	}
 	return objectToValue(v.internal().Get(p))
 }
 
 func (v Value) Index(i int) Value {
+	if vType := v.Type(); !vType.isObject() {
+		panic(&ValueError{"Value.Index", vType})
+	}
 	return objectToValue(v.internal().Index(i))
 }
 
@@ -228,20 +238,67 @@ func (v Value) Length() int {
 	return v.internal().Length()
 }
 
+func (v Value) newWrap(args ...interface{}) (obj *js.Object, err error) {
+	defer func() {
+		ret := recover()
+		if r, ok := ret.(*js.Error); ok {
+			err = r
+		}
+	}()
+	obj = v.internal().New(convertArgs(args...)...)
+	return
+}
+
 func (v Value) New(args ...interface{}) Value {
-	return objectToValue(v.internal().New(convertArgs(args...)...))
+	obj, err := v.newWrap(args...)
+	if err != nil {
+		if vType := v.Type(); vType != TypeFunction { // check here to avoid overhead in success case
+			panic(&ValueError{"Value.Invoke", vType})
+		}
+		panic(Error{objectToValue(obj)})
+	}
+	return objectToValue(obj)
 }
 
 func (v Value) Set(p string, x interface{}) {
+	if vType := v.Type(); !vType.isObject() {
+		panic(&ValueError{"Value.Set", vType})
+	}
 	v.internal().Set(p, convertArgs(x)[0])
 }
 
 func (v Value) SetIndex(i int, x interface{}) {
+	if vType := v.Type(); !vType.isObject() {
+		panic(&ValueError{"Value.SetIndex", vType})
+	}
 	v.internal().SetIndex(i, convertArgs(x)[0])
 }
 
+// func (v Value) String() string {
+// 	return v.internal().String()
+// }
+
 func (v Value) String() string {
-	return v.internal().String()
+	switch v.Type() {
+	case TypeString:
+		return v.internal().String()
+	case TypeUndefined:
+		return "<undefined>"
+	case TypeNull:
+		return "<null>"
+	case TypeBoolean:
+		return "<boolean: " + v.internal().String() + ">"
+	case TypeNumber:
+		return "<number: " + v.internal().String() + ">"
+	case TypeSymbol:
+		return "<symbol>"
+	case TypeObject:
+		return "<object>"
+	case TypeFunction:
+		return "<function>"
+	default:
+		panic("bad type")
+	}
 }
 
 func (v Value) Truthy() bool {

@@ -123,7 +123,6 @@ func main() {
 				// Expand import path patterns.
 				patternContext := gbuild.NewBuildContext("", options.BuildTags)
 				pkgs := (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
-
 				for _, pkgPath := range pkgs {
 					if s.Watcher != nil {
 						pkg, err := gbuild.NewBuildContext(s.InstallSuffix(), options.BuildTags).Import(pkgPath, "", build.FindOnly)
@@ -136,6 +135,8 @@ func main() {
 					if err != nil {
 						return err
 					}
+					s.LoadMod(pkg.Dir)
+
 					archive, err := s.BuildPackage(pkg)
 					if err != nil {
 						return err
@@ -196,6 +197,7 @@ func main() {
 					if err != nil {
 						return err
 					}
+					s.LoadMod(pkg.Dir)
 
 					archive, err := s.BuildPackage(pkg)
 					if err != nil {
@@ -331,6 +333,7 @@ func main() {
 					continue
 				}
 				s := gbuild.NewSession(options)
+				s.LoadMod(pkg.Dir)
 
 				tests := &testFuncs{BuildContext: s.BuildContext(), Package: pkg.Package}
 				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
@@ -584,6 +587,8 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 		switch {
 		case isPkg:
+			s.LoadMod(pkg.Dir)
+
 			buf := new(bytes.Buffer)
 			browserErrors := new(bytes.Buffer)
 			err := func() error {

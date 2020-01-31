@@ -26,6 +26,8 @@ import (
 	"github.com/neelance/sourcemap"
 	"github.com/shurcooL/httpfs/vfsutil"
 	"golang.org/x/tools/go/buildutil"
+
+	"github.com/visualfc/fastmod"
 )
 
 type ImportCError struct {
@@ -125,10 +127,10 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 		wd = ""
 	}
 	bctx := NewBuildContext(installSuffix, buildTags)
-	return importWithSrcDir(*bctx, path, wd, mode, installSuffix)
+	return importWithSrcDir(*bctx, path, wd, mode, installSuffix, nil)
 }
 
-func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build.ImportMode, installSuffix string) (*PackageData, error) {
+func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build.ImportMode, installSuffix string, mod *fastmod.Package) (*PackageData, error) {
 	// bctx is passed by value, so it can be modified here.
 	var isVirtual bool
 	switch path {
@@ -154,7 +156,20 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 		mode |= build.IgnoreVendor
 		isVirtual = true
 	}
-	pkg, err := bctx.Import(path, srcDir, mode)
+	var pkg *build.Package
+	var err error
+	if mod != nil {
+		if _, dir, typ := mod.Lookup(path); typ != fastmod.PkgTypeNil {
+			srcDir = dir
+			pkg, err = bctx.ImportDir(srcDir, mode)
+			if err == nil {
+				pkg.ImportPath = path
+			}
+		}
+	}
+	if pkg == nil {
+		pkg, err = bctx.Import(path, srcDir, mode) //bctx.Import(path, srcDir, mode)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -471,9 +486,15 @@ type PackageData struct {
 type Session struct {
 	options  *Options
 	bctx     *build.Context
+	Mod      *fastmod.Package
 	Archives map[string]*compiler.Archive
 	Types    map[string]*types.Package
 	Watcher  *fsnotify.Watcher
+}
+
+func (s *Session) LoadMod(dir string) (err error) {
+	s.Mod, err = fastmod.LoadPackage(dir, s.bctx)
+	return
 }
 
 func NewSession(options *Options) *Session {
@@ -579,7 +600,7 @@ func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
 }
 
 func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*PackageData, *compiler.Archive, error) {
-	pkg, err := importWithSrcDir(*s.bctx, path, srcDir, 0, s.InstallSuffix())
+	pkg, err := importWithSrcDir(*s.bctx, path, srcDir, 0, s.InstallSuffix(), s.Mod)
 	if s.Watcher != nil && pkg != nil { // add watch even on error
 		s.Watcher.Add(pkg.Dir)
 	}
@@ -715,7 +736,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	}
 
 	if s.options.Verbose {
-		fmt.Println(pkg.ImportPath)
+		fmt.Println(pkg.Dir)
 	}
 
 	s.Archives[pkg.ImportPath] = archive

@@ -7,10 +7,10 @@ import (
 )
 
 var math = js.Global.Get("Math")
-var zero float64 = 0
-var posInf = 1 / zero
-var negInf = -1 / zero
-var nan = 0 / zero
+var _zero float64 = 0
+var posInf = 1 / _zero
+var negInf = -1 / _zero
+var nan = 0 / _zero
 
 func Acos(x float64) float64 {
 	return math.Call("acos", x).Float()

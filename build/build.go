@@ -461,6 +461,7 @@ type Options struct {
 	Minify         bool
 	Color          bool
 	BuildTags      []string
+	Rebuild        bool
 }
 
 func (o *Options) PrintError(format string, a ...interface{}) {
@@ -679,7 +680,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		}
 
 		pkgObjFileInfo, err := os.Stat(pkg.PkgObj)
-		if err == nil && !pkg.SrcModTime.After(pkgObjFileInfo.ModTime()) {
+		if !s.options.Rebuild && err == nil && !pkg.SrcModTime.After(pkgObjFileInfo.ModTime()) {
 			// package object is up to date, load from disk if library
 			pkg.UpToDate = true
 			if pkg.IsCommand() {

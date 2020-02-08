@@ -278,29 +278,6 @@ func (v Value) SetIndex(i int, x interface{}) {
 // 	return v.internal().String()
 // }
 
-func (v Value) String() string {
-	switch v.Type() {
-	case TypeString:
-		return v.internal().String()
-	case TypeUndefined:
-		return "<undefined>"
-	case TypeNull:
-		return "<null>"
-	case TypeBoolean:
-		return "<boolean: " + v.internal().String() + ">"
-	case TypeNumber:
-		return "<number: " + v.internal().String() + ">"
-	case TypeSymbol:
-		return "<symbol>"
-	case TypeObject:
-		return "<object>"
-	case TypeFunction:
-		return "<function>"
-	default:
-		panic("bad type")
-	}
-}
-
 func (v Value) Truthy() bool {
 	return v.internal().Bool()
 }

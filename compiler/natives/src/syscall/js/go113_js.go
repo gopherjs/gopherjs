@@ -1,6 +1,30 @@
 // +build js
+// +build go1.13
 
 package js
+
+func (v Value) String() string {
+	switch v.Type() {
+	case TypeString:
+		return v.internal().String()
+	case TypeUndefined:
+		return "<undefined>"
+	case TypeNull:
+		return "<null>"
+	case TypeBoolean:
+		return "<boolean: " + v.internal().String() + ">"
+	case TypeNumber:
+		return "<number: " + v.internal().String() + ">"
+	case TypeSymbol:
+		return "<symbol>"
+	case TypeObject:
+		return "<object>"
+	case TypeFunction:
+		return "<function>"
+	default:
+		panic("bad type")
+	}
+}
 
 // CopyBytesToGo copies bytes from the Uint8Array src to dst.
 // It returns the number of bytes copied, which will be the minimum of the lengths of src and dst.

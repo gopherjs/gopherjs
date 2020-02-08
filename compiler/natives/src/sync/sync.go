@@ -18,14 +18,13 @@ var semWaiters = make(map[*uint32][]chan bool)
 var semAwoken = make(map[*uint32]uint32)
 
 func runtime_Semacquire(s *uint32) {
-	runtime_SemacquireMutex(s, false, 0)
+	runtime_SemacquireMutex(s, false)
 }
 
 // SemacquireMutex is like Semacquire, but for profiling contended Mutexes.
 // Mutex profiling is not supported, so just use the same implementation as runtime_Semacquire.
 // TODO: Investigate this. If it's possible to implement, consider doing so, otherwise remove this comment.
-func runtime_SemacquireMutex(s *uint32, lifo bool, skipframes int) {
-	// TODO: Use skipframes if needed/possible.
+func runtime_SemacquireMutex(s *uint32, lifo bool) {
 	if (*s - semAwoken[s]) == 0 {
 		ch := make(chan bool)
 		if lifo {
@@ -42,8 +41,8 @@ func runtime_SemacquireMutex(s *uint32, lifo bool, skipframes int) {
 	*s--
 }
 
-func runtime_Semrelease(s *uint32, handoff bool, skipframes int) {
-	// TODO: Use handoff, skipframes if needed/possible.
+func runtime_Semrelease(s *uint32, handoff bool) {
+	// TODO: Use handoff if needed/possible.
 	*s++
 
 	w := semWaiters[s]

@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/fsnotify/fsnotify v1.4.7
+	github.com/go-delve/delve v1.3.2
 	github.com/kisielk/gotool v1.0.0
 	github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86
 	github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab

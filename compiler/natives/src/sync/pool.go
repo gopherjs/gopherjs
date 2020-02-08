@@ -8,9 +8,6 @@ type Pool struct {
 	local     unsafe.Pointer
 	localSize uintptr
 
-	victim     unsafe.Pointer
-	victimSize uintptr
-
 	store []interface{}
 	New   func() interface{}
 }

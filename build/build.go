@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gopherjs/gopherjs/internal/goversion"
+
 	"github.com/fsnotify/fsnotify"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
@@ -56,7 +58,7 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 			"netgo",  // See https://godoc.org/net#hdr-Name_Resolution.
 			"purego", // See https://golang.org/issues/23172.
 		),
-		ReleaseTags: build.Default.ReleaseTags,
+		ReleaseTags: goversion.ReleaseTags(),
 		CgoEnabled:  true, // detect `import "C"` to throw proper error
 
 		IsDir: func(path string) bool {
@@ -291,11 +293,12 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 	}
 
 	nativesContext := &build.Context{
-		GOROOT:   "/",
-		GOOS:     build.Default.GOOS,
-		GOARCH:   "js",
-		Compiler: "gc",
-		JoinPath: path.Join,
+		GOROOT:      "/",
+		GOOS:        build.Default.GOOS,
+		GOARCH:      "js",
+		Compiler:    "gc",
+		ReleaseTags: goversion.ReleaseTags(),
+		JoinPath:    path.Join,
 		SplitPathList: func(list string) []string {
 			if list == "" {
 				return nil

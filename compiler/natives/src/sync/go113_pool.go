@@ -1,5 +1,5 @@
 // +build js
-// +build !go1.13
+// +build go1.13
 
 package sync
 
@@ -8,6 +8,9 @@ import "unsafe"
 type Pool struct {
 	local     unsafe.Pointer
 	localSize uintptr
+
+	victim     unsafe.Pointer
+	victimSize uintptr
 
 	store []interface{}
 	New   func() interface{}

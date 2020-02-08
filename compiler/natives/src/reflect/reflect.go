@@ -600,6 +600,25 @@ func mapiterkey(it unsafe.Pointer) unsafe.Pointer {
 	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("k"), jsType(PtrTo(iter.t.Key()))).Unsafe())
 }
 
+// Go 1.12
+func mapitervalue(it unsafe.Pointer) unsafe.Pointer {
+	iter := (*mapIter)(it)
+	var kv *js.Object
+	if iter.last != nil {
+		kv = iter.last
+	} else {
+		iter.skipUntilValidKey()
+		if iter.i == iter.keys.Length() {
+			return nil
+		}
+		k := iter.keys.Index(iter.i)
+		kv = iter.m.Get(k.String())
+		iter.last = kv
+	}
+	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("v"), jsType(PtrTo(iter.t.Elem()))).Unsafe())
+}
+
+// Go 1.13
 func mapiterelem(it unsafe.Pointer) unsafe.Pointer {
 	iter := (*mapIter)(it)
 	var kv *js.Object

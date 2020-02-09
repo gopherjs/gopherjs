@@ -14,7 +14,7 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	github.com/visualfc/fastmod v1.0.0
-	golang.org/x/crypto v0.0.0-20200128174031-69ecbb4d6d5d
+	golang.org/x/crypto v0.0.0-20200208060501-ecb85df21340
 	golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9
 	golang.org/x/tools v0.0.0-20200131143746-097c1f2eed26
 )

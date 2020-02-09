@@ -136,7 +136,9 @@ func main() {
 					if err != nil {
 						return err
 					}
-					s.LoadMod(pkg.Dir)
+					if !pkg.Goroot {
+						s.LoadMod(pkg.Dir)
+					}
 
 					archive, err := s.BuildPackage(pkg)
 					if err != nil {
@@ -198,7 +200,9 @@ func main() {
 					if err != nil {
 						return err
 					}
-					s.LoadMod(pkg.Dir)
+					if !pkg.Goroot {
+						s.LoadMod(pkg.Dir)
+					}
 
 					archive, err := s.BuildPackage(pkg)
 					if err != nil {
@@ -334,7 +338,9 @@ func main() {
 					continue
 				}
 				s := gbuild.NewSession(options)
-				s.LoadMod(pkg.Dir)
+				if !pkg.Goroot {
+					s.LoadMod(pkg.Dir)
+				}
 
 				tests := &testFuncs{BuildContext: s.BuildContext(), Package: pkg.Package}
 				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
@@ -588,7 +594,9 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 		switch {
 		case isPkg:
-			s.LoadMod(pkg.Dir)
+			if !pkg.Goroot {
+				s.LoadMod(pkg.Dir)
+			}
 
 			buf := new(bytes.Buffer)
 			browserErrors := new(bytes.Buffer)

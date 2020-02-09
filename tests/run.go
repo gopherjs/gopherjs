@@ -36,6 +36,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	gbuild "github.com/gopherjs/gopherjs/build"
 )
 
 // -----------------------------------------------------------------------------
@@ -186,7 +188,7 @@ func main() {
 	flag.Parse()
 
 	// GOPHERJS.
-	err := os.Chdir(filepath.Join(runtime.GOROOT(), "test"))
+	err := os.Chdir(filepath.Join(gbuild.DefaultGOROOT, "test"))
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -309,14 +311,6 @@ func main() {
 	if failed {
 		os.Exit(1)
 	}
-}
-
-func toolPath(name string) string {
-	p := filepath.Join(os.Getenv("GOROOT"), "bin", "tool", name)
-	if _, err := os.Stat(p); err != nil {
-		log.Fatalf("didn't find binary at %s", p)
-	}
-	return p
 }
 
 func shardMatch(name string) bool {

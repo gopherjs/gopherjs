@@ -43,9 +43,11 @@ func GOROOT() string {
 	if process == js.Undefined {
 		return "/"
 	}
-	goroot := process.Get("env").Get("GOROOT")
-	if goroot != js.Undefined {
-		return goroot.String()
+	if v := process.Get("env").Get("GOPHERJS_GOROOT"); v != js.Undefined {
+		// GopherJS-specific GOROOT value takes precedence.
+		return v.String()
+	} else if v := process.Get("env").Get("GOROOT"); v != js.Undefined {
+		return v.String()
 	}
 	// sys.DefaultGoroot is now gone, can't use it as fallback anymore.
 	// TODO: See if a better solution is needed.

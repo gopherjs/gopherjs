@@ -14,10 +14,20 @@ Give GopherJS a try on the [GopherJS Playground](http://gopherjs.github.io/playg
 Nearly everything, including Goroutines ([compatibility table](https://github.com/gopherjs/gopherjs/blob/master/doc/packages.md)). Performance is quite good in most cases, see [HTML5 game engine benchmark](https://ajhager.github.io/engi/demos/botmark.html). Cgo is not supported.
 
 ### Installation and Usage
+GopherJS requires Go 1.12 or newer.
+
 Get or update GopherJS and dependencies with:
 
 ```
 go get -u github.com/gopherjs/gopherjs
+```
+
+If your local Go distribution as reported by `go version` is newer than Go 1.12, then you need to set the `GOPHERJS_GOROOT` environment variable to a directory that contains a Go 1.12 distribution. For example:
+
+```
+go get golang.org/dl/go1.12.16
+go1.12.16 download
+export GOPHERJS_GOROOT="$(go1.12.16 env GOROOT)"  # Also add this line to your .profile or equivalent.
 ```
 
 Now you can use `gopherjs build [package]`, `gopherjs build [files]` or `gopherjs install [package]` which behave similar to the `go` tool. For `main` packages, these commands create a `.js` file and `.js.map` source map in the current directory or in `$GOPATH/bin`. The generated JavaScript file can be used as usual in a website. Use `gopherjs help [command]` to get a list of possible command line flags, e.g. for minification and automatically watching for changes.
@@ -45,6 +55,15 @@ For example, navigating to `http://localhost:8080/example.com/user/project/` sho
 Refreshing in the browser will rebuild the served files if needed. Compilation errors will be displayed in terminal, and in browser console. Additionally, it will serve $GOROOT and $GOPATH for sourcemaps.
 
 If you include an argument, it will be the root from which everything is served. For example, if you run `gopherjs serve github.com/user/project` then the generated JavaScript for the package github.com/user/project/mypkg will be served at http://localhost:8080/mypkg/mypkg.js.
+
+#### Environment Variables
+
+There is one GopherJS-specific environment variable:
+
+```
+GOPHERJS_GOROOT - if set, GopherJS uses this value as the default GOROOT value,
+                  instead of using the system GOROOT as the default GOROOT value
+```
 
 ### Performance Tips
 

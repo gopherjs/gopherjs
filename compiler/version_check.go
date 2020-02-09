@@ -8,7 +8,7 @@ import (
 )
 
 // Version is the GopherJS compiler version string.
-const Version = "1.12-2"
+const Version = "1.12-3"
 
 // CheckGoVersion checks the version of the Go distribution
 // at goroot, and reports an error if it's not compatible

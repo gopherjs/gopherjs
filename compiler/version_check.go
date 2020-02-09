@@ -18,7 +18,7 @@ func CheckGoVersion(goroot string) error {
 	if err != nil {
 		return fmt.Errorf("GopherJS %s requires a Go 1.12.x distribution, but failed to read its VERSION file: %v", Version, err)
 	}
-	if !bytes.Equal(v, []byte("go1.12")) && !bytes.HasPrefix(v, []byte("go1.12.")) {
+	if !bytes.HasPrefix(v, []byte("go1.12")) { // TODO(dmitshur): Change this before Go 1.120 comes out.
 		return fmt.Errorf("GopherJS %s requires a Go 1.12.x distribution, but found version %s", Version, v)
 	}
 	return nil

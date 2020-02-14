@@ -183,6 +183,16 @@ func TestCallReturnsEmpty(t *testing.T) {
 	t.Skip("test uses runtime.SetFinalizer, which is not supported by GopherJS")
 }
 
+// Go 1.13
+func TestMakeFuncInvalidReturnAssignments(t *testing.T) {
+	t.Skip("TestMakeFuncInvalidReturnAssignments")
+}
+
+// Go 1.14
+func TestStructOfDifferentPkgPath(t *testing.T) {
+	t.Skip("TestStructOfDifferentPkgPath")
+}
+
 func init() {
 	// TODO: This is a failure in 1.11, try to determine the cause and fix.
 	typeTests = append(typeTests[:31], typeTests[32:]...) // skip test case #31

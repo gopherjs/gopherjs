@@ -21,3 +21,11 @@ func TestPoolRelease(t *testing.T) {
 func TestCondCopy(t *testing.T) {
 	t.Skip()
 }
+
+func TestPoolDequeue(t *testing.T) {
+	t.Skip()
+}
+
+func TestPoolChain(t *testing.T) {
+	t.Skip()
+}

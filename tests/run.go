@@ -120,6 +120,21 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue27201.go":  {desc: "incorrect stack trace for nil dereference in inlined function"},
 	"fixedbugs/issue27518b.go": {desc: "sigpanic can make dead pointer live again"},
 	"fixedbugs/issue29190.go":  {desc: "append does not fail when length overflows"},
+
+	// These are new tests in Go 1.13.
+	"fixedbugs/issue15002.go":  {desc: "native function not implemented: syscall.Getpagesize"},
+	"fixedbugs/issue15992.go":  {desc: "native function not implemented: syscall.Getpagesize"},
+	"fixedbugs/issue19113.go":  {desc: "did not panic"},
+	"fixedbugs/issue28748.go":  {desc: "reflect error"},
+	"fixedbugs/issue29504.go":  {desc: "did not panic"},
+	"fixedbugs/issue30116.go":  {desc: "index out of range"},
+	"fixedbugs/issue30116u.go": {desc: "index out of range"},
+	"fixedbugs/issue30606.go":  {desc: "reflect.name.ptr.tagLen"},
+	"fixedbugs/issue30606b.go": {desc: "reflect.name.ptr.tagLen"},
+	"fixedbugs/issue30977.go":  {category: neverTerminates, desc: "timeout"},
+	"fixedbugs/issue31546.go":  {desc: "throw error"},
+	"fixedbugs/issue32477.go":  {desc: "heap object finalized at the wrong time"},
+	"fixedbugs/issue32680.go":  {desc: "unknown shorthand flag"},
 }
 
 type failCategory uint8

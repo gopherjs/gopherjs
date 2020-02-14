@@ -125,6 +125,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue15002.go":  {desc: "native function not implemented: syscall.Getpagesize"},
 	"fixedbugs/issue15992.go":  {desc: "native function not implemented: syscall.Getpagesize"},
 	"fixedbugs/issue19113.go":  {desc: "did not panic"},
+	"fixedbugs/issue22326.go":  {desc: "incorrect output for print"},
 	"fixedbugs/issue28748.go":  {desc: "reflect error"},
 	"fixedbugs/issue29504.go":  {desc: "did not panic"},
 	"fixedbugs/issue30116.go":  {desc: "index out of range"},

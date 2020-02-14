@@ -40,7 +40,7 @@ done
 
 # Make $tmp our GOPATH workspace.
 export GOPATH="$tmp"
-
+export GO111MODULE=off
 # Build the vendored copy of GopherJS.
 go install example.org/hello/vendor/github.com/gopherjs/gopherjs
 

@@ -184,7 +184,7 @@ func (v Value) Cap() int {
 func (v Value) Index(i int) Value {
 	switch k := v.kind(); k {
 	case Array:
-		tt := (*arrayType)(unsafe.Pointer(v.typ.kindType()))
+		tt := (*arrayType)(unsafe.Pointer(v.typ))
 		if i < 0 || i > int(tt.len) {
 			panic("reflect: array index out of range")
 		}
@@ -205,7 +205,7 @@ func (v Value) Index(i int) Value {
 		if i < 0 || i >= s.Get("$length").Int() {
 			panic("reflect: slice index out of range")
 		}
-		tt := (*sliceType)(unsafe.Pointer(v.typ.kindType()))
+		tt := (*sliceType)(unsafe.Pointer(v.typ))
 		typ := tt.elem
 		fl := flagAddr | flagIndir | v.flag.ro() | flag(typ.Kind())
 
@@ -408,7 +408,7 @@ func (v Value) Slice3(i, j, k int) Value {
 		if v.flag&flagAddr == 0 {
 			panic("reflect.Value.Slice: slice of unaddressable array")
 		}
-		tt := (*arrayType)(unsafe.Pointer(v.typ.kindType()))
+		tt := (*arrayType)(unsafe.Pointer(v.typ))
 		cap = int(tt.len)
 		typ = SliceOf(tt.elem)
 		s = jsType(typ).New(v.object())
@@ -450,7 +450,7 @@ func (v Value) Elem() Value {
 			return Value{}
 		}
 		val := v.object()
-		tt := (*ptrType)(unsafe.Pointer(v.typ.kindType()))
+		tt := (*ptrType)(unsafe.Pointer(v.typ))
 		fl := v.flag&flagRO | flagIndir | flagAddr
 		fl |= flag(tt.elem.Kind())
 		return Value{tt.elem, unsafe.Pointer(wrapJsObject(tt.elem, val).Unsafe()), fl}
@@ -464,7 +464,7 @@ func (v Value) Elem() Value {
 // It panics if v's Kind is not Struct.
 func (v Value) NumField() int {
 	v.mustBe(Struct)
-	tt := (*structType)(unsafe.Pointer(v.typ.kindType()))
+	tt := (*structType)(unsafe.Pointer(v.typ))
 	return len(tt.fields)
 }
 
@@ -474,7 +474,7 @@ func (v Value) NumField() int {
 // It returns an empty slice if v represents a nil map.
 func (v Value) MapKeys() []Value {
 	v.mustBe(Map)
-	tt := (*mapType)(unsafe.Pointer(v.typ.kindType()))
+	tt := (*mapType)(unsafe.Pointer(v.typ))
 	keyType := tt.key
 
 	fl := v.flag.ro() | flag(keyType.Kind())
@@ -507,7 +507,7 @@ func (v Value) MapKeys() []Value {
 // As in Go, the key's value must be assignable to the map's key type.
 func (v Value) MapIndex(key Value) Value {
 	v.mustBe(Map)
-	tt := (*mapType)(unsafe.Pointer(v.typ.kindType()))
+	tt := (*mapType)(unsafe.Pointer(v.typ))
 
 	// Do not require key to be exported, so that DeepEqual
 	// and other programs can use all the keys returned by
@@ -538,7 +538,7 @@ func (v Value) Field(i int) Value {
 	if v.kind() != Struct {
 		panic(&ValueError{"reflect.Value.Field", v.kind()})
 	}
-	tt := (*structType)(unsafe.Pointer(v.typ.kindType()))
+	tt := (*structType)(unsafe.Pointer(v.typ))
 	if uint(i) >= uint(len(tt.fields)) {
 		panic("reflect: Field index out of range")
 	}

@@ -20,8 +20,7 @@ func TField(typ Type, i int) Type {
 	if t.Kind() != Struct {
 		panic("reflect: Field of non-struct type")
 	}
-	tt := (*structType)(unsafe.Pointer(t.kindType()))
-
+	tt := (*structType)(unsafe.Pointer(t))
 	return StructFieldType(tt, i)
 }
 

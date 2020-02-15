@@ -38,7 +38,7 @@ var (
 var (
 	idJsType      = "_jsType"
 	idReflectType = "_reflectType"
-	idKindType    = "_kindType"
+	idKindType    = "kindType"
 	idRtype       = "_rtype"
 )
 

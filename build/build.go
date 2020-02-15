@@ -56,6 +56,14 @@ func (e *ImportCError) Error() string {
 // are loaded from gopherjspkg.FS virtual filesystem rather than GOPATH.
 func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 	gopherjsRoot := filepath.Join(DefaultGOROOT, "src", "github.com", "gopherjs", "gopherjs")
+	var releaseTags []string
+
+	// Modification of https://golang.org/src/go/build/build.go#L303, to exclude
+	// newer versions of Go.
+	for i := 1; i <= 12; i++ {
+		releaseTags = append(releaseTags, "go1."+strconv.Itoa(i))
+	}
+
 	return &build.Context{
 		GOROOT:        DefaultGOROOT,
 		GOPATH:        build.Default.GOPATH,
@@ -67,7 +75,7 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 			"netgo",  // See https://godoc.org/net#hdr-Name_Resolution.
 			"purego", // See https://golang.org/issues/23172.
 		),
-		ReleaseTags: build.Default.ReleaseTags,
+		ReleaseTags: releaseTags,
 		CgoEnabled:  true, // detect `import "C"` to throw proper error
 
 		IsDir: func(path string) bool {

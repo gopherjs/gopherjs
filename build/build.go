@@ -60,7 +60,7 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 
 	// Modification of https://golang.org/src/go/build/build.go#L303, to exclude
 	// newer versions of Go.
-	for i := 1; i <= 12; i++ {
+	for i := 1; i <= compiler.GoVersion; i++ {
 		releaseTags = append(releaseTags, "go1."+strconv.Itoa(i))
 	}
 

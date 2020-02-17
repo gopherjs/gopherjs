@@ -67,7 +67,7 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 			"netgo",  // See https://godoc.org/net#hdr-Name_Resolution.
 			"purego", // See https://golang.org/issues/23172.
 		),
-		ReleaseTags: build.Default.ReleaseTags,
+		ReleaseTags: build.Default.ReleaseTags[:compiler.GoVersion],
 		CgoEnabled:  true, // detect `import "C"` to throw proper error
 
 		IsDir: func(path string) bool {

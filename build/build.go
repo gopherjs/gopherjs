@@ -521,6 +521,7 @@ func NewSession(options *Options) (*Session, error) {
 		Archives: make(map[string]*compiler.Archive),
 	}
 	s.bctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
+	s.mod = fastmod.NewPackage(s.bctx)
 	s.Types = make(map[string]*types.Package)
 	if options.Watch {
 		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
@@ -538,16 +539,17 @@ func NewSession(options *Options) (*Session, error) {
 	return s, nil
 }
 
-func (s *Session) CheckMod(pkg *PackageData) {
-	if pkg.Goroot {
-		s.mod = nil
-	} else {
-		s.mod, _ = fastmod.LoadPackage(pkg.Dir, s.bctx)
+func (s *Session) CheckMod(pkg *PackageData) (err error) {
+	s.mod = nil
+	if !pkg.Goroot {
+		s.mod, err = fastmod.LoadPackage(pkg.Dir, s.bctx)
 	}
+	return
 }
 
-func (s *Session) CheckModFromDir(dir string) {
-	s.mod, _ = fastmod.LoadPackage(dir, s.bctx)
+func (s *Session) CheckModFromDir(dir string) (err error) {
+	s.mod, err = fastmod.LoadPackage(dir, s.bctx)
+	return
 }
 
 // BuildContext returns the session's build context.

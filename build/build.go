@@ -599,12 +599,20 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 }
 
 func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
-	_, archive, err := s.buildImportPathWithSrcDir(path, "")
+	_, archive, err := s.buildImportPathWithParent(path, nil)
 	return archive, err
 }
 
-func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*PackageData, *compiler.Archive, error) {
-	pkg, err := importWithSrcDir(*s.bctx, path, srcDir, 0, s.InstallSuffix(), s.Mod)
+func (s *Session) buildImportPathWithParent(path string, parent *PackageData) (*PackageData, *compiler.Archive, error) {
+	var srcDir string
+	var mod *fastmod.Package
+	if parent != nil {
+		srcDir = parent.Dir
+		if !parent.Goroot {
+			mod = s.Mod
+		}
+	}
+	pkg, err := importWithSrcDir(*s.bctx, path, srcDir, 0, s.InstallSuffix(), mod)
 	if s.Watcher != nil && pkg != nil { // add watch even on error
 		s.Watcher.Add(pkg.Dir)
 	}
@@ -659,7 +667,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			if importedPkgPath == "unsafe" || ignored {
 				continue
 			}
-			importedPkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
+			importedPkg, _, err := s.buildImportPathWithParent(importedPkgPath, pkg)
 			if err != nil {
 				return nil, err
 			}
@@ -716,7 +724,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			if archive, ok := localImportPathCache[path]; ok {
 				return archive, nil
 			}
-			_, archive, err := s.buildImportPathWithSrcDir(path, pkg.Dir)
+			_, archive, err := s.buildImportPathWithParent(path, pkg)
 			if err != nil {
 				return nil, err
 			}
@@ -809,7 +817,7 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 		if archive, ok := s.Archives[path]; ok {
 			return archive, nil
 		}
-		_, archive, err := s.buildImportPathWithSrcDir(path, "")
+		_, archive, err := s.buildImportPathWithParent(path, nil)
 		return archive, err
 	})
 	if err != nil {

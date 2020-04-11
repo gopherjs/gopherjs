@@ -574,7 +574,6 @@ type serveCommandFileSystem struct {
 
 func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 	name := path.Join(fs.serveRoot, requestName[1:]) // requestName[0] == '/'
-
 	dir, file := path.Split(name)
 	base := path.Base(dir) // base is parent folder name, which becomes the output file name.
 
@@ -591,7 +590,6 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 			isMap = false
 			isIndex = false
 		}
-
 		switch {
 		case isPkg:
 			if !pkg.Goroot {
@@ -610,7 +608,10 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 				m := &sourcemap.Map{File: base + ".js"}
 				sourceMapFilter.MappingCallback = gbuild.NewMappingCallback(m, fs.options.GOROOT, fs.options.GOPATH, fs.options.MapToLocalDisk)
 
-				deps, err := compiler.ImportDependencies(archive, s.BuildImportPath)
+				deps, err := compiler.ImportDependencies(archive, func(path string) (*compiler.Archive, error) {
+					_, archive, err := s.BuildImportPathWithPackage(path, pkg)
+					return archive, err
+				})
 				if err != nil {
 					return err
 				}

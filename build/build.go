@@ -160,7 +160,7 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	}
 	var pkg *build.Package
 	var err error
-	if mod != nil {
+	if mod != nil && mod.IsValid() {
 		if _, dir, typ := mod.Lookup(path); typ != fastmod.PkgTypeNil {
 			srcDir = dir
 			pkg, err = bctx.ImportDir(srcDir, mode)
@@ -490,15 +490,21 @@ type PackageData struct {
 type Session struct {
 	options  *Options
 	bctx     *build.Context
-	Mod      *fastmod.Package
+	mod      *fastmod.Package
 	Archives map[string]*compiler.Archive
 	Types    map[string]*types.Package
 	Watcher  *fsnotify.Watcher
 }
 
-func (s *Session) LoadMod(dir string) (err error) {
-	s.Mod, err = fastmod.LoadPackage(dir, s.bctx)
-	return
+func (s *Session) CheckMod(pkg *PackageData) (err error) {
+	s.mod.Clear()
+	if pkg != nil && !pkg.Goroot {
+		err := s.mod.LoadModule(pkg.Dir)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func NewSession(options *Options) *Session {
@@ -515,6 +521,7 @@ func NewSession(options *Options) *Session {
 		Archives: make(map[string]*compiler.Archive),
 	}
 	s.bctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
+	s.mod = fastmod.NewPackage(s.bctx)
 	s.Types = make(map[string]*types.Package)
 	if options.Watch {
 		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
@@ -609,7 +616,7 @@ func (s *Session) BuildImportPathWithPackage(path string, pkgData *PackageData) 
 	if pkgData != nil {
 		srcDir = pkgData.Dir
 		if !pkgData.Goroot {
-			mod = s.Mod
+			mod = s.mod
 		}
 	}
 	pkg, err := importWithSrcDir(*s.bctx, path, srcDir, 0, s.InstallSuffix(), mod)

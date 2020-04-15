@@ -496,7 +496,7 @@ type Session struct {
 	Watcher  *fsnotify.Watcher
 }
 
-func (s *Session) CheckMod(pkg *PackageData) (err error) {
+func (s *Session) checkMod(pkg *PackageData) (err error) {
 	s.mod.Clear()
 	if pkg != nil && !pkg.Goroot {
 		err := s.mod.LoadModule(pkg.Dir)
@@ -563,7 +563,7 @@ func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string)
 		return err
 	}
 	pkg.JSFiles = jsFiles
-	archive, err := s.BuildPackage(pkg)
+	archive, err := s.buildPackage(pkg)
 	if err != nil {
 		return err
 	}
@@ -586,7 +586,7 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 			Dir:        packagePath,
 		},
 	}
-	err := s.CheckMod(pkg)
+	err := s.checkMod(pkg)
 	if err != nil {
 		return err
 	}
@@ -599,7 +599,7 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 		pkg.GoFiles = append(pkg.GoFiles, file)
 	}
 
-	archive, err := s.BuildPackage(pkg)
+	archive, err := s.buildPackage(pkg)
 	if err != nil {
 		return err
 	}
@@ -631,7 +631,7 @@ func (s *Session) BuildImportPathWithPackage(path string, pkgData *PackageData) 
 		return nil, nil, err
 	}
 
-	archive, err := s.BuildPackage(pkg)
+	archive, err := s.buildPackage(pkg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -640,6 +640,14 @@ func (s *Session) BuildImportPathWithPackage(path string, pkgData *PackageData) 
 }
 
 func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
+	err := s.checkMod(pkg)
+	if err != nil {
+		return nil, err
+	}
+	return s.buildPackage(pkg)
+}
+
+func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if archive, ok := s.Archives[pkg.ImportPath]; ok {
 		return archive, nil
 	}

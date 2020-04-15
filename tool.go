@@ -136,10 +136,6 @@ func main() {
 					if err != nil {
 						return err
 					}
-					err = s.CheckMod(pkg)
-					if err != nil {
-						return err
-					}
 					archive, err := s.BuildPackage(pkg)
 					if err != nil {
 						return err
@@ -197,10 +193,6 @@ func main() {
 					if s.Watcher != nil && pkg != nil { // add watch even on error
 						s.Watcher.Add(pkg.Dir)
 					}
-					if err != nil {
-						return err
-					}
-					err = s.CheckMod(pkg)
 					if err != nil {
 						return err
 					}
@@ -338,10 +330,6 @@ func main() {
 					continue
 				}
 				s := gbuild.NewSession(options)
-				err := s.CheckMod(pkg)
-				if err != nil {
-					return err
-				}
 
 				tests := &testFuncs{BuildContext: s.BuildContext(), Package: pkg.Package}
 				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
@@ -593,10 +581,6 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 		}
 		switch {
 		case isPkg:
-			if err := s.CheckMod(pkg); err != nil {
-				return nil, err
-			}
-
 			buf := new(bytes.Buffer)
 			browserErrors := new(bytes.Buffer)
 			err := func() error {

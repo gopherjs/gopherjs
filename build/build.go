@@ -586,6 +586,10 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 			Dir:        packagePath,
 		},
 	}
+	err := s.CheckMod(pkg)
+	if err != nil {
+		return err
+	}
 
 	for _, file := range filenames {
 		if strings.HasSuffix(file, ".inc.js") {

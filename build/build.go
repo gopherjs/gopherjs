@@ -160,7 +160,7 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	}
 	var pkg *build.Package
 	var err error
-	if mod != nil && mod.IsValid() {
+	if mod != nil && mod.IsValid() && !mod.IsStd() {
 		if _, dir, typ := mod.Lookup(path); typ != fastmod.PkgTypeNil {
 			srcDir = dir
 			pkg, err = bctx.ImportDir(srcDir, mode)

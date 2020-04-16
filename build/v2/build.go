@@ -118,6 +118,8 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 func (s *Session) load(patterns ...string) (_ []*packages.Package, err error) {
 	defer tracer.Scope("load(%s)", patterns).Leave(&err)
 
+	augmenter := NewAugmenter()
+
 	cfg := packages.Config{
 		Mode: packages.NeedName |
 			packages.NeedFiles |
@@ -126,8 +128,8 @@ func (s *Session) load(patterns ...string) (_ []*packages.Package, err error) {
 			packages.NeedSyntax |
 			packages.NeedExportsFile |
 			packages.NeedDeps,
-		Fset: s.fset,
-		// ParseFile: s.parseAndAugment,
+		Fset:      s.fset,
+		ParseFile: s.parseAndAugment,
 		// TODO: This is different from the currently documented GopherJS behavior, which uses
 		// GOOS=linux (or darvin) and GOARCH=js. We can't do exactly this because `go list` considers
 		// this combination invalid. Since compiler uses 32-bit sizes, setting GOARCH=386 helps with
@@ -152,10 +154,10 @@ func (s *Session) load(patterns ...string) (_ []*packages.Package, err error) {
 	// TODO: parseAndAugment()
 
 	packages.Visit(pkgs, nil, func(p *packages.Package) {
-		// TODO: Remove this workaround once http://golang.org/cl/205160 is accepted.
-		if len(p.CompiledGoFiles) != len(p.Syntax) {
-			tracer.Tracef("go/packages bug: syntax is not loaded, not caching %q", p.ID)
-			return
+		p.Fset = s.fset
+		if err := augmenter.Augment(p); err != nil {
+			// TODO: This should be error.
+			panic(fmt.Sprintf("Failed to augment package %s: %s", p, err))
 		}
 		tracer.Tracef("Putting %s package into cache...", p.ID)
 		// TODO: Verify that this doesn't cause collisions with odd packages such as main or test.

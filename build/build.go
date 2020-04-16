@@ -550,11 +550,6 @@ func (s *Session) checkMod(pkg *PackageData) (err error) {
 	return nil
 }
 
-func (s *Session) CheckModFromDir(dir string) (err error) {
-	s.mod, err = fastmod.LoadPackage(dir, s.bctx)
-	return
-}
-
 // BuildContext returns the session's build context.
 func (s *Session) BuildContext() *build.Context { return s.bctx }
 

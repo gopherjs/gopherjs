@@ -120,7 +120,6 @@ func main() {
 							s.Watcher.Add(name)
 						}
 					}
-					s.CheckModFromDir(currentDirectory)
 					err := s.BuildFiles(args, pkgObj, currentDirectory)
 					return err
 				}
@@ -141,7 +140,6 @@ func main() {
 					if err != nil {
 						return err
 					}
-					s.CheckMod(pkg)
 					archive, err := s.BuildPackage(pkg)
 					if err != nil {
 						return err
@@ -206,7 +204,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					s.CheckMod(pkg)
+
 					archive, err := s.BuildPackage(pkg)
 					if err != nil {
 						return err
@@ -288,7 +286,6 @@ func main() {
 			if err != nil {
 				return err
 			}
-			s.CheckModFromDir(currentDirectory)
 			if err := s.BuildFiles(args[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
 				return err
 			}
@@ -348,7 +345,6 @@ func main() {
 				if err != nil {
 					return err
 				}
-				s.CheckMod(pkg)
 
 				tests := &testFuncs{BuildContext: s.BuildContext(), Package: pkg.Package}
 				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
@@ -614,7 +610,6 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 		switch {
 		case isPkg:
-			s.CheckMod(pkg)
 			buf := new(bytes.Buffer)
 			browserErrors := new(bytes.Buffer)
 			err := func() error {

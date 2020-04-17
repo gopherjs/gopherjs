@@ -170,7 +170,11 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 		}
 	}
 	if pkg == nil {
-		pkg, err = bctx.Import(path, srcDir, mode) //bctx.Import(path, srcDir, mode)
+		if filepath.IsAbs(path) {
+			pkg, err = bctx.ImportDir(path, mode)
+		} else {
+			pkg, err = bctx.Import(path, srcDir, mode)
+		}
 	}
 	if err != nil {
 		return nil, err

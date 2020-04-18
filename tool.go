@@ -490,6 +490,9 @@ func main() {
 
 		if len(args) == 1 {
 			root = args[0]
+			if strings.HasPrefix(root, ".") {
+				root = filepath.Join(currentDirectory, root)
+			}
 		}
 
 		sourceFiles := http.FileServer(serveCommandFileSystem{
@@ -621,6 +624,16 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 			if content, ok := fs.sourceMaps[name]; ok {
 				return newFakeFile(base+".js.map", content), nil
 			}
+		}
+	}
+
+	if fs.serveRoot != "" {
+		dir := http.Dir(fs.serveRoot)
+		if f, err := dir.Open(name); err == nil {
+			return f, nil
+		}
+		if f, err := dir.Open(requestName); err == nil {
+			return f, nil
 		}
 	}
 

@@ -122,6 +122,9 @@ func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, e
 	}
 
 	if varargType != nil {
+		if len(argExprs[paramsLen-1:]) == 0 {
+			return append(args[:paramsLen-1], fmt.Sprintf("%s.nil", c.typeName(varargType)))
+		}
 		return append(args[:paramsLen-1], fmt.Sprintf("new %s([%s])", c.typeName(varargType), strings.Join(args[paramsLen-1:], ", ")))
 	}
 	return args

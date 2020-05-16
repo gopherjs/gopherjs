@@ -4,7 +4,7 @@ import (
 	"go/build"
 	"strconv"
 
-	"github.com/go-delve/delve/pkg/goversion"
+	"github.com/visualfc/goversion"
 )
 
 func ReleaseTags() []string {

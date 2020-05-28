@@ -74,6 +74,8 @@ github.com/visualfc/fastmod v1.3.3 h1:NPT3Zog9LJT0IX8pSTYIYUiL/HUib5tVUrySZXMDLE
 github.com/visualfc/fastmod v1.3.3/go.mod h1:IpOumy9gVomQ72T+yA7gayE3V1FCNlwr6if3mlqnasY=
 github.com/visualfc/fastmod v1.3.4 h1:iEE80QCEn5/kczkRNgzSLbXmk9KtlkRpl3jd3UC/754=
 github.com/visualfc/fastmod v1.3.4/go.mod h1:IpOumy9gVomQ72T+yA7gayE3V1FCNlwr6if3mlqnasY=
+github.com/visualfc/fastmod v1.3.6 h1:gFvAxk6VoEbk0JF1XP0KznbQl5hYJN9ZYhRYQy3pcKs=
+github.com/visualfc/fastmod v1.3.6/go.mod h1:IpOumy9gVomQ72T+yA7gayE3V1FCNlwr6if3mlqnasY=
 github.com/visualfc/goversion v1.0.0 h1:FAgKP4pat4gzRovdiT7AqxLG3oZXhmJVd7FekcjKnls=
 github.com/visualfc/goversion v1.0.0/go.mod h1:hk2JexdCD524I4uxWPUf6e++g7ZaCMu6TC7xESs/soc=
 github.com/xordataexchange/crypt v0.0.3-0.20170626215501-b2862e3d0a77/go.mod h1:aYKd//L2LvnjZzWKhF00oedf4jCCReLcmhLdhm1A27Q=

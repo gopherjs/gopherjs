@@ -38,11 +38,15 @@ func jsType(typ Type) *js.Object {
 }
 
 func reflectType(typ *js.Object) *rtype {
+	return _reflectType(typ, internalStr)
+}
+
+func _reflectType(typ *js.Object, fnObjStr func(strObj *js.Object) string) *rtype {
 	if typ.Get("reflectType") == js.Undefined {
 		rt := &rtype{
 			size: uintptr(typ.Get("size").Int()),
 			kind: uint8(typ.Get("kind").Int()),
-			str:  newNameOff(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool())),
+			str:  newNameOff(newName(fnObjStr(typ.Get("string")), "", typ.Get("exported").Bool())),
 		}
 		js.InternalObject(rt).Set("jsType", typ)
 		typ.Set("reflectType", js.InternalObject(rt))
@@ -56,29 +60,29 @@ func reflectType(typ *js.Object) *rtype {
 			var reflectMethods []method
 			for i := 0; i < methodSet.Length(); i++ { // Exported methods first.
 				m := methodSet.Index(i)
-				exported := internalStr(m.Get("pkg")) == ""
+				exported := fnObjStr(m.Get("pkg")) == ""
 				if !exported {
 					continue
 				}
 				reflectMethods = append(reflectMethods, method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", exported)),
+					name: newNameOff(newName(fnObjStr(m.Get("name")), "", exported)),
 					mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				})
 			}
 			xcount := uint16(len(reflectMethods))
 			for i := 0; i < methodSet.Length(); i++ { // Unexported methods second.
 				m := methodSet.Index(i)
-				exported := internalStr(m.Get("pkg")) == ""
+				exported := fnObjStr(m.Get("pkg")) == ""
 				if exported {
 					continue
 				}
 				reflectMethods = append(reflectMethods, method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", exported)),
+					name: newNameOff(newName(fnObjStr(m.Get("name")), "", exported)),
 					mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				})
 			}
 			ut := &uncommonType{
-				pkgPath:  newNameOff(newName(internalStr(typ.Get("pkg")), "", false)),
+				pkgPath:  newNameOff(newName(fnObjStr(typ.Get("pkg")), "", false)),
 				mcount:   uint16(methodSet.Length()),
 				xcount:   xcount,
 				_methods: reflectMethods,
@@ -133,13 +137,13 @@ func reflectType(typ *js.Object) *rtype {
 			for i := range imethods {
 				m := methods.Index(i)
 				imethods[i] = imethod{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", internalStr(m.Get("pkg")) == "")),
+					name: newNameOff(newName(fnObjStr(m.Get("name")), "", fnObjStr(m.Get("pkg")) == "")),
 					typ:  newTypeOff(reflectType(m.Get("typ"))),
 				}
 			}
 			setKindType(rt, &interfaceType{
 				rtype:   *rt,
-				pkgPath: newName(internalStr(typ.Get("pkg")), "", false),
+				pkgPath: newName(fnObjStr(typ.Get("pkg")), "", false),
 				methods: imethods,
 			})
 		case Map:
@@ -165,14 +169,14 @@ func reflectType(typ *js.Object) *rtype {
 					offsetEmbed |= 1
 				}
 				reflectFields[i] = structField{
-					name:        newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool()),
+					name:        newName(fnObjStr(f.Get("name")), fnObjStr(f.Get("tag")), f.Get("exported").Bool()),
 					typ:         reflectType(f.Get("typ")),
 					offsetEmbed: offsetEmbed,
 				}
 			}
 			setKindType(rt, &structType{
 				rtype:   *rt,
-				pkgPath: newName(internalStr(typ.Get("pkgPath")), "", false),
+				pkgPath: newName(fnObjStr(typ.Get("pkgPath")), "", false),
 				fields:  reflectFields,
 			})
 		}

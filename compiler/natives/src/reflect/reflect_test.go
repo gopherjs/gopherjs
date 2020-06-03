@@ -4,7 +4,7 @@ package reflect_test
 
 import (
 	"math"
-	"reflect"
+	. "reflect"
 	"testing"
 )
 
@@ -45,54 +45,18 @@ func TestOffsetLock(t *testing.T) {
 }
 
 func TestSelectOnInvalid(t *testing.T) {
-	reflect.Select([]reflect.SelectCase{
+	Select([]SelectCase{
 		{
-			Dir:  reflect.SelectRecv,
-			Chan: reflect.Value{},
+			Dir:  SelectRecv,
+			Chan: Value{},
 		}, {
-			Dir:  reflect.SelectSend,
-			Chan: reflect.Value{},
-			Send: reflect.ValueOf(1),
+			Dir:  SelectSend,
+			Chan: Value{},
+			Send: ValueOf(1),
 		}, {
-			Dir: reflect.SelectDefault,
+			Dir: SelectDefault,
 		},
 	})
-}
-
-func TestStructOfFieldName(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOf(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfExportRules(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfGC(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfAlg(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfGenericAlg(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfDirectIface(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfWithInterface(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfTooManyFields(t *testing.T) {
-	t.Skip("StructOf")
 }
 
 var deepEqualTests = []DeepEqualTest{
@@ -163,7 +127,7 @@ var deepEqualTests = []DeepEqualTest{
 
 // TODO: Fix this. See https://github.com/gopherjs/gopherjs/issues/763.
 func TestIssue22073(t *testing.T) {
-	m := reflect.ValueOf(NonExportedFirst(0)).Method(0)
+	m := ValueOf(NonExportedFirst(0)).Method(0)
 
 	if got := m.Type().NumOut(); got != 0 {
 		t.Errorf("NumOut: got %v, want 0", got)
@@ -189,11 +153,202 @@ func TestMakeFuncInvalidReturnAssignments(t *testing.T) {
 }
 
 // Go 1.14
-func TestStructOfDifferentPkgPath(t *testing.T) {
-	t.Skip("TestStructOfDifferentPkgPath")
-}
+// func TestStructOfDifferentPkgPath(t *testing.T) {
+// 	t.Skip("TestStructOfDifferentPkgPath")
+// }
 
 func init() {
 	// TODO: This is a failure in 1.11, try to determine the cause and fix.
 	typeTests = append(typeTests[:31], typeTests[32:]...) // skip test case #31
+}
+
+func TestStructOfDirectIface(t *testing.T) {
+	t.Skip("reflect.InterfaceData unsupport")
+}
+
+func TestStructOfWithInterface(t *testing.T) {
+	const want = 42
+	type Iface interface {
+		Get() int
+	}
+	type IfaceSet interface {
+		Set(int)
+	}
+	tests := []struct {
+		name string
+		typ  Type
+		val  Value
+		impl bool
+	}{
+		{
+			name: "StructI",
+			typ:  TypeOf(StructI(want)),
+			val:  ValueOf(StructI(want)),
+			impl: true,
+		},
+		{
+			name: "StructI",
+			typ:  PtrTo(TypeOf(StructI(want))),
+			val: ValueOf(func() interface{} {
+				v := StructI(want)
+				return &v
+			}()),
+			impl: true,
+		},
+		{
+			name: "StructIPtr",
+			typ:  PtrTo(TypeOf(StructIPtr(want))),
+			val: ValueOf(func() interface{} {
+				v := StructIPtr(want)
+				return &v
+			}()),
+			impl: true,
+		},
+		{
+			name: "StructIPtr",
+			typ:  TypeOf(StructIPtr(want)),
+			val:  ValueOf(StructIPtr(want)),
+			impl: false,
+		},
+		// {
+		// 	typ:  TypeOf((*Iface)(nil)).Elem(), // FIXME(sbinet): fix method.ifn/tfn
+		// 	val:  ValueOf(StructI(want)),
+		// 	impl: true,
+		// },
+	}
+
+	for i, table := range tests {
+		for j := 0; j < 2; j++ {
+			var fields []StructField
+			if j == 1 {
+				fields = append(fields, StructField{
+					Name:    "Dummy",
+					PkgPath: "",
+					Type:    TypeOf(int(0)),
+				})
+			}
+			fields = append(fields, StructField{
+				Name:      table.name,
+				Anonymous: true,
+				PkgPath:   "",
+				Type:      table.typ,
+			})
+
+			// We currently do not correctly implement methods
+			// for embedded fields other than the first.
+			// Therefore, for now, we expect those methods
+			// to not exist.  See issues 15924 and 20824.
+			// When those issues are fixed, this test of panic
+			// should be removed.
+			if j == 1 && table.impl {
+				func() {
+					defer func() {
+						if err := recover(); err == nil {
+							t.Errorf("test-%d-%d did not panic", i, j)
+						}
+					}()
+					_ = StructOf(fields)
+				}()
+				continue
+			}
+
+			rt := StructOf(fields)
+			rv := New(rt).Elem()
+			rv.Field(j).Set(table.val)
+
+			if _, ok := rv.Interface().(Iface); ok != table.impl {
+				if table.impl {
+					t.Errorf("test-%d-%d: type=%v fails to implement Iface.\n", i, j, table.typ)
+				} else {
+					t.Errorf("test-%d-%d: type=%v should NOT implement Iface\n", i, j, table.typ)
+				}
+				continue
+			}
+
+			if !table.impl {
+				continue
+			}
+
+			v := rv.Interface().(Iface).Get()
+			if v != want {
+				t.Errorf("test-%d-%d: x.Get()=%v. want=%v\n", i, j, v, want)
+			}
+
+			fct := rv.MethodByName("Get")
+			out := fct.Call(nil)
+			if !DeepEqual(out[0].Interface(), want) {
+				t.Errorf("test-%d-%d: x.Get()=%v. want=%v\n", i, j, out[0].Interface(), want)
+			}
+		}
+	}
+	// Test an embedded nil pointer with pointer methods.
+	fields := []StructField{{
+		Name:      "StructIPtr",
+		Anonymous: true,
+		Type:      PtrTo(TypeOf(StructIPtr(want))),
+	}}
+	rt := StructOf(fields)
+	rv := New(rt).Elem()
+	// This should panic since the pointer is nil.
+	shouldPanic(func() {
+		rv.Interface().(IfaceSet).Set(want)
+	})
+
+	// Test an embedded nil pointer to a struct with pointer methods.
+
+	fields = []StructField{{
+		Name:      "SettableStruct",
+		Anonymous: true,
+		Type:      PtrTo(TypeOf(SettableStruct{})),
+	}}
+	rt = StructOf(fields)
+	rv = New(rt).Elem()
+	// This should panic since the pointer is nil.
+	shouldPanic(func() {
+		rv.Interface().(IfaceSet).Set(want)
+	})
+
+	// The behavior is different if there is a second field,
+	// since now an interface value holds a pointer to the struct
+	// rather than just holding a copy of the struct.
+	fields = []StructField{
+		{
+			Name:      "SettableStruct",
+			Anonymous: true,
+			Type:      PtrTo(TypeOf(SettableStruct{})),
+		},
+		{
+			Name:      "EmptyStruct",
+			Anonymous: true,
+			Type:      StructOf(nil),
+		},
+	}
+	// With the current implementation this is expected to panic.
+	// Ideally it should work and we should be able to see a panic
+	// if we call the Set method.
+	shouldPanic(func() {
+		StructOf(fields)
+	})
+
+	return
+	// Embed a field that can be stored directly in an interface,
+	// with a second field.
+	fields = []StructField{
+		{
+			Name:      "SettablePointer",
+			Anonymous: true,
+			Type:      TypeOf(SettablePointer{}),
+		},
+		{
+			Name:      "EmptyStruct",
+			Anonymous: true,
+			Type:      StructOf(nil),
+		},
+	}
+	// With the current implementation this is expected to panic.
+	// Ideally it should work and we should be able to call the
+	// Set and Get methods.
+	shouldPanic(func() {
+		StructOf(fields)
+	})
 }

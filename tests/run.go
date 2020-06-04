@@ -130,8 +130,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue29504.go":  {desc: "did not panic"},
 	"fixedbugs/issue30116.go":  {desc: "index out of range"},
 	"fixedbugs/issue30116u.go": {desc: "index out of range"},
-	"fixedbugs/issue30606.go":  {desc: "reflect.name.ptr.tagLen"},
-	"fixedbugs/issue30606b.go": {desc: "reflect.name.ptr.tagLen"},
 	"fixedbugs/issue30977.go":  {category: neverTerminates, desc: "timeout"},
 	"fixedbugs/issue31546.go":  {desc: "throw error"},
 	"fixedbugs/issue32477.go":  {desc: "heap object finalized at the wrong time"},

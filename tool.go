@@ -78,6 +78,7 @@ func main() {
 	compilerFlags.BoolVar(&options.Color, "color", terminal.IsTerminal(int(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb", "colored output")
 	compilerFlags.StringVar(&tags, "tags", "", "a list of build tags to consider satisfied during the build")
 	compilerFlags.BoolVar(&options.MapToLocalDisk, "localmap", false, "use local paths for sourcemap")
+	compilerFlags.BoolVar(&options.AnalyzeSize, "analyze_size", false, "produce an Tree Map diagram visualizing each package's contribution to the output artifact size")
 
 	flagWatch := pflag.NewFlagSet("", 0)
 	flagWatch.BoolVarP(&options.Watch, "watch", "w", false, "watch for changes to the source files")

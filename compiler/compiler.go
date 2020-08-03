@@ -150,6 +150,9 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 		}
 	}
 
+	leaveSection := w.EnterSection("$prelude")
+	defer leaveSection()
+
 	if _, err := w.Write([]byte("\"use strict\";\n(function() {\n\n")); err != nil {
 		return err
 	}
@@ -179,6 +182,9 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 }
 
 func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, minify bool, w *SourceMapFilter) error {
+	leaveSection := w.EnterSection(pkg.ImportPath)
+	defer leaveSection()
+
 	if w.MappingCallback != nil && pkg.FileSet != nil {
 		w.fileSet = token.NewFileSet()
 		if err := w.fileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
@@ -260,9 +266,30 @@ type SourceMapFilter struct {
 	line            int
 	column          int
 	fileSet         *token.FileSet
+	// BytesWritten per program section.
+	//
+	// This information is used to produce artifact size report. The key is
+	// a Go package name or one of a special IDs: $prelude.
+	BytesWritten map[string]int
+	// The current program section being written. Empty string means "UNKNOWN".
+	currentSection string
 }
 
+// Write program code and populate source map if available.
+//
+// The passed byte slice is written verbatim, except when it contains an ASCII
+// "backspace" character (\b, 0x08). In that case the 4 bytes following the
+// backspace character are interpreted as big-endian-encoded token.Pos that must
+// be present in the fileSet. The position is interpreted as the position in the
+// original source code for the JS code that is about to be written (?) and will
+// be passed to the MappingCallback in order to emit the appropriate source map.
+// The sequence of \b and the following 4 bytes are then omitted from the actual
+// output.
 func (f *SourceMapFilter) Write(p []byte) (n int, err error) {
+	if f.BytesWritten == nil {
+		f.BytesWritten = map[string]int{}
+	}
+
 	var n2 int
 	for {
 		i := bytes.IndexByte(p, '\b')
@@ -273,6 +300,7 @@ func (f *SourceMapFilter) Write(p []byte) (n int, err error) {
 
 		n2, err = f.Writer.Write(w)
 		n += n2
+		f.BytesWritten[f.currentSection] += n2
 		for {
 			i := bytes.IndexByte(w, '\n')
 			if i == -1 {
@@ -293,4 +321,15 @@ func (f *SourceMapFilter) Write(p []byte) (n int, err error) {
 		p = p[i+5:]
 		n += 5
 	}
+}
+
+// EnterSection marks a beginning of a new program section.
+//
+// All bytes written between entering and leaving a section will be attributed
+// to the specified section in the artifact size report. The returned callback
+// restores the previous section, allowing for sections to nest.
+func (f *SourceMapFilter) EnterSection(s string) func() {
+	previousSection := f.currentSection
+	f.currentSection = s
+	return func() { f.currentSection = previousSection }
 }

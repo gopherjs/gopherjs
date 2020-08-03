@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/gopherjs/gopherjs/build/analysis"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
 	"github.com/gopherjs/gopherjs/compiler/natives"
@@ -452,6 +453,7 @@ type Options struct {
 	Quiet          bool
 	Watch          bool
 	CreateMapFile  bool
+	AnalyzeSize    bool
 	MapToLocalDisk bool
 	Minify         bool
 	Color          bool
@@ -807,6 +809,24 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 	})
 	if err != nil {
 		return err
+	}
+
+	if s.options.AnalyzeSize {
+		f, err := os.Create(pkgObj + ".svg")
+		if err != nil {
+			return fmt.Errorf("failed to create artifact size diagram file: %s", err)
+		}
+		defer f.Close()
+		visualizer := &analysis.Visualizer{
+			Main: archive,
+			Deps: deps,
+			File: f,
+		}
+		defer func() {
+			if err := visualizer.Render(sourceMapFilter.BytesWritten); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to render artifact size diagram: %s", err)
+			}
+		}()
 	}
 	return compiler.WriteProgramCode(deps, sourceMapFilter)
 }

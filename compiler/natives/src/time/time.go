@@ -23,6 +23,7 @@ type runtimeTimer struct {
 	arg     interface{}
 	timeout *js.Object
 	active  bool
+	req     uintptr
 }
 
 func initLocal() {

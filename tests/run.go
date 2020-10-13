@@ -134,6 +134,14 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue31546.go":  {desc: "throw error"},
 	"fixedbugs/issue32477.go":  {desc: "heap object finalized at the wrong time"},
 	"fixedbugs/issue32680.go":  {desc: "unknown shorthand flag"},
+
+	// These are new test in Go 1.15
+	"fixedbugs/issue16130.go": {desc: "got *js.Error, expected runtime.Error"},
+	"fixedbugs/issue26094.go": {desc: "TypeError: Cannot read property 'ptr' of undefined"},
+	"fixedbugs/issue34395.go": {desc: "FATAL ERROR: CALL_AND_RETRY_LAST Allocation failed - JavaScript heap out of memory"},
+	"fixedbugs/issue35027.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
+	"fixedbugs/issue35576.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
+	"fixedbugs/issue40917.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
 }
 
 type failCategory uint8

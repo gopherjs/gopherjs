@@ -200,15 +200,7 @@ func NumCgoCall() int64 {
 	return 0
 }
 
-func efaceOf(ep *interface{}) *eface {
-	panic("efaceOf: not supported")
-}
-
 func KeepAlive(interface{}) {}
-
-func throw(s string) {
-	panic(errorString(s))
-}
 
 // These are used by panicwrap. Not implemented for GOARCH=js.
 // TODO: Implement if possible.

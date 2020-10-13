@@ -15,17 +15,6 @@ func init() {
 	var _ Time = Unix(0, 0)
 }
 
-type runtimeTimer struct {
-	i       int32
-	when    int64
-	period  int64
-	f       func(interface{}, uintptr)
-	arg     interface{}
-	timeout *js.Object
-	active  bool
-	req     uintptr
-}
-
 func initLocal() {
 	d := js.Global.Get("Date").New()
 	s := d.String()

@@ -140,6 +140,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue26094.go": {desc: "TypeError: Cannot read property 'ptr' of undefined"},
 	"fixedbugs/issue34395.go": {desc: "FATAL ERROR: CALL_AND_RETRY_LAST Allocation failed - JavaScript heap out of memory"},
 	"fixedbugs/issue35027.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
+	"fixedbugs/issue35073.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
 	"fixedbugs/issue35576.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
 	"fixedbugs/issue40917.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
 }

@@ -59,6 +59,9 @@ func init() {
 		fmt.Fprintf(os.Stderr, "$GOPATH not set. For more details see: go help gopath\n")
 		os.Exit(1)
 	}
+	if build.Default.GOOS != "linux" && build.Default.GOOS != "darwin" {
+		build.Default.GOOS = "darwin"
+	}
 }
 
 func main() {

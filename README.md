@@ -1,6 +1,19 @@
 GopherJS - A compiler from Go to JavaScript
 -------------------------------------------
 
+### GopherJS
+This version of GopherJS is a fork of the <https://github.com/gopherjs/gopherjs>
+
+Supported Go version
+Go1.12 Go1.13 Go1.14 Go1.15
+
+```
+go get -u github.com/goplusjs/gopherjs
+```
+
+***
+
+
 [![GoDoc](https://godoc.org/github.com/gopherjs/gopherjs/js?status.svg)](https://godoc.org/github.com/gopherjs/gopherjs/js)
 [![Sourcegraph](https://sourcegraph.com/github.com/gopherjs/gopherjs/-/badge.svg)](https://sourcegraph.com/github.com/gopherjs/gopherjs?badge)
 [![Circle CI](https://circleci.com/gh/gopherjs/gopherjs.svg?style=svg)](https://circleci.com/gh/gopherjs/gopherjs)

@@ -9,4 +9,4 @@
 //
 package gopherjspkg
 
-//go:generate vfsgendev -source="github.com/gopherjs/gopherjs/compiler/gopherjspkg".FS -tag=gopherjsdev
+//go:generate vfsgendev -source="github.com/goplusjs/gopherjs/compiler/gopherjspkg".FS -tag=gopherjsdev

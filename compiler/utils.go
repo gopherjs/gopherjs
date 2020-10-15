@@ -15,8 +15,8 @@ import (
 	"text/template"
 	"unicode"
 
-	"github.com/gopherjs/gopherjs/compiler/analysis"
-	"github.com/gopherjs/gopherjs/compiler/typesutil"
+	"github.com/goplusjs/gopherjs/compiler/analysis"
+	"github.com/goplusjs/gopherjs/compiler/typesutil"
 )
 
 func (c *funcContext) Write(b []byte) (int, error) {
@@ -220,7 +220,7 @@ func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
 			j := i
 			name = ""
 			for {
-				name = string(offset+(j%26)) + name
+				name = string(rune(offset+(j%26))) + name
 				j = j/26 - 1
 				if j == -1 {
 					break

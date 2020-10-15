@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gopherjs/gopherjs/compiler/prelude"
+	"github.com/goplusjs/gopherjs/compiler/prelude"
 )
 
 func main() {

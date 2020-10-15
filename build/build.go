@@ -19,17 +19,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gopherjs/gopherjs/internal/goversion"
-
 	"github.com/fsnotify/fsnotify"
-	"github.com/gopherjs/gopherjs/compiler"
-	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
-	"github.com/gopherjs/gopherjs/compiler/natives"
+	"github.com/goplusjs/gopherjs/compiler"
+	"github.com/goplusjs/gopherjs/compiler/gopherjspkg"
+	"github.com/goplusjs/gopherjs/compiler/natives"
+	"github.com/goplusjs/gopherjs/internal/goversion"
 	"github.com/neelance/sourcemap"
 	"github.com/shurcooL/httpfs/vfsutil"
-	"golang.org/x/tools/go/buildutil"
-
 	"github.com/visualfc/fastmod"
+	"golang.org/x/tools/go/buildutil"
 )
 
 type ImportCError struct {
@@ -184,7 +182,7 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	case "os":
 		pkg.GoFiles = excludeExecutable(pkg.GoFiles) // Need to exclude executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
 	case "runtime":
-		pkg.GoFiles = []string{"error.go", "typekind.go"}
+		pkg.GoFiles = []string{"typekind.go", "error.go"}
 	case "runtime/internal/sys":
 		pkg.GoFiles = []string{fmt.Sprintf("zgoos_%s.go", bctx.GOOS), "zversion.go", "stubs.go", "zgoarch_386.go", "arch_386.go", "arch.go"}
 	case "runtime/pprof":

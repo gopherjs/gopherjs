@@ -15,7 +15,7 @@ import (
 
 // FS is a virtual filesystem that contains core GopherJS packages.
 var FS = filter.Keep(
-	http.Dir(importPathToDir("github.com/gopherjs/gopherjs")),
+	http.Dir(importPathToDir("github.com/goplusjs/gopherjs")),
 	func(path string, fi os.FileInfo) bool {
 		return path == "/" ||
 			path == "/js" || (pathpkg.Dir(path) == "/js" && !fi.IsDir()) ||

@@ -29,9 +29,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	gbuild "github.com/gopherjs/gopherjs/build"
-	"github.com/gopherjs/gopherjs/compiler"
-	"github.com/gopherjs/gopherjs/internal/sysutil"
+	gbuild "github.com/goplusjs/gopherjs/build"
+	"github.com/goplusjs/gopherjs/compiler"
+	"github.com/goplusjs/gopherjs/internal/sysutil"
 	"github.com/kisielk/gotool"
 	"github.com/neelance/sourcemap"
 	"github.com/spf13/cobra"

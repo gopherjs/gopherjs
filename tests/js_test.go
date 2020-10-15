@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gopherjs/gopherjs/js"
+	"github.com/goplusjs/gopherjs/js"
 )
 
 var dummys = js.Global.Call("eval", `({

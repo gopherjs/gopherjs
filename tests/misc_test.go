@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gopherjs/gopherjs/tests/otherpkg"
+	"github.com/goplusjs/gopherjs/tests/otherpkg"
 )
 
 func TestSyntax1(t *testing.T) {

@@ -4,6 +4,7 @@ package runtime
 
 import (
 	"runtime/internal/sys"
+	"unsafe"
 
 	"github.com/gopherjs/gopherjs/js"
 )
@@ -12,15 +13,42 @@ const GOOS = sys.GOOS
 const GOARCH = "js"
 const Compiler = "gopherjs"
 
+type eface struct {
+	_type *_type
+	data  unsafe.Pointer
+}
+
+type _type struct {
+	str  string
+	kind uint8
+}
+
+func (t *_type) string() string {
+	return t.str
+}
+
+func (t *_type) pkgpath() string {
+	return ""
+}
+
+// An errorString represents a runtime error described by a single string.
+type errorString string
+
+func (e errorString) RuntimeError() {}
+
+func (e errorString) Error() string {
+	return "runtime error: " + string(e)
+}
+
 func init() {
 	jsPkg := js.Global.Get("$packages").Get("github.com/gopherjs/gopherjs/js")
 	js.Global.Set("$jsObjectPtr", jsPkg.Get("Object").Get("ptr"))
 	js.Global.Set("$jsErrorPtr", jsPkg.Get("Error").Get("ptr"))
 	js.Global.Set("$throwRuntimeError", js.InternalObject(throw))
 	// avoid dead code elimination
-	// var e error
-	// e = &TypeAssertionError{}
-	// _ = e
+	var e error
+	e = &TypeAssertionError{}
+	_ = e
 }
 
 func GOROOT() string {

@@ -11,6 +11,22 @@ Go1.12 Go1.13 Go1.14 Go1.15
 go get -u github.com/goplusjs/gopherjs
 ```
 
+
+### syscall/js
+```
+package main
+
+import (
+	"syscall/js"
+)
+
+func main() {
+	js.Global().Get("document").Call("write", "Hello world!")
+}
+```
+
+`$ gopherjs serve`
+
 ***
 
 

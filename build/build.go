@@ -133,6 +133,11 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build.ImportMode, installSuffix string, mod *fastmod.Package) (*PackageData, error) {
 	// bctx is passed by value, so it can be modified here.
 	var isVirtual bool
+	if path == "github.com/goplusjs/gopherjs/js" {
+		path = "github.com/gopherjs/gopherjs/js"
+	} else if path == "github.com/goplusjs/gopherjs/nosync" {
+		path = "github.com/gopherjs/gopherjs/nosync"
+	}
 	switch path {
 	case "syscall":
 		// syscall needs to use a typical GOARCH like amd64 to pick up definitions for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t, etc.

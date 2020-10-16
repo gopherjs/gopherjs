@@ -155,6 +155,20 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 		// safely vendored). Don't try to use vendor directory to resolve them.
 		mode |= build.IgnoreVendor
 		isVirtual = true
+		_, name := filepath.Split(path)
+		var gofiles []string
+		if name == "js" {
+			gofiles = []string{"js.go"}
+		} else {
+			gofiles = []string{"map.go", "mutex.go", "once.go", "pool.go"}
+		}
+		pkg := &build.Package{
+			Dir:        filepath.Join(bctx.GOROOT, "src", path),
+			Name:       name,
+			ImportPath: path,
+			GoFiles:    gofiles,
+		}
+		return &PackageData{Package: pkg, IsVirtual: isVirtual}, nil
 	}
 	var pkg *build.Package
 	var err error

@@ -34,7 +34,7 @@ func main() {
 }' > "$tmp/src/example.org/hello/main.go"
 
 # Vendor GopherJS and its dependencies into hello project.
-for pkg in $(go list -f '{{if not .Goroot}}{{.ImportPath}}{{end}}' $(go list -f '{{.ImportPath}} {{join .Deps " "}}' github.com/gopherjs/gopherjs)); do
+for pkg in $(go list -f '{{if not .Goroot}}{{.ImportPath}}{{end}}' $(go list -f '{{.ImportPath}} {{join .Deps " "}}' github.com/goplusjs/gopherjs)); do
     copyGoPackage "$pkg" "$tmp/src/example.org/hello/vendor/$pkg"
 done
 
@@ -42,7 +42,7 @@ done
 export GOPATH="$tmp"
 export GO111MODULE=off
 # Build the vendored copy of GopherJS.
-go install example.org/hello/vendor/github.com/gopherjs/gopherjs
+go install example.org/hello/vendor/github.com/goplusjs/gopherjs
 
 # Use it to build and run the hello command.
 (cd "$GOPATH/src/example.org/hello" && "$GOPATH/bin/gopherjs" run main.go)

@@ -136,8 +136,8 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue32680.go":  {desc: "unknown shorthand flag"},
 
 	// These are new test in Go 1.15
-	"fixedbugs/issue29215.go": {desc: "panic: test timed out after 10m0s"},
-	"fixedbugs/issue34395.go": {desc: "FATAL ERROR: CALL_AND_RETRY_LAST Allocation failed - JavaScript heap out of memory"},
+	"fixedbugs/issue15277.go": {category: neverTerminates, desc: "skip amd64"},
+	"fixedbugs/issue34395.go": {category: neverTerminates, desc: "FATAL ERROR: CALL_AND_RETRY_LAST Allocation failed - JavaScript heap out of memory"},
 	"fixedbugs/issue35027.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
 	"fixedbugs/issue35073.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
 	"fixedbugs/issue35576.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
@@ -547,10 +547,10 @@ func (ctxt *context) match(name string) bool {
 	if strings.HasPrefix(name, "!!") { // bad syntax, reject always
 		return false
 	}
-	if name == "!js" {
-		return false
-	}
 	if strings.HasPrefix(name, "!") { // negation
+		if name[1:] == "js" {
+			return false
+		}
 		return len(name) > 1 && !ctxt.match(name[1:])
 	}
 

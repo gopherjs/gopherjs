@@ -144,6 +144,22 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue40917.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
 }
 
+var knownFailsWindows = map[string]failReason{
+	"fixedbugs/bug130.go":     {desc: "fatal error: all goroutines are asleep - deadlock!"},
+	"fixedbugs/issue18725.go": {desc: "fatal error: all goroutines are asleep - deadlock!"},
+	"fixedbugs/issue29190.go": {category: neverTerminates, desc: " make([]T, maxInt) time out"},
+	"fixedbugs/issue29215.go": {category: neverTerminates, desc: "time out"},
+	"fixedbugs/issue7525.go":  {category: neverTerminates, desc: "initialization cycle"},
+	"fixedbugs/issue7525b.go": {category: neverTerminates, desc: "initialization cycle"},
+	"fixedbugs/issue7525c.go": {category: neverTerminates, desc: "initialization cycle"},
+	"fixedbugs/issue7525d.go": {category: neverTerminates, desc: "initialization cycle"},
+	"fixedbugs/issue7525e.go": {category: neverTerminates, desc: "initialization cycle"},
+	"fixedbugs/issue7538a.go": {category: neverTerminates, desc: "label _ not declared"},
+	"fixedbugs/issue7538b.go": {category: neverTerminates, desc: "panic: interface conversion: types.Object is nil, not *types.Label"},
+	"fixedbugs/issue7547.go":  {category: neverTerminates, desc: "time out"},
+	"fixedbugs/issue7550.go":  {category: neverTerminates, desc: "time out"},
+}
+
 type failCategory uint8
 
 const (
@@ -215,6 +231,11 @@ func main() {
 
 	if *verbose {
 		fmt.Printf("goos: %q, goarch: %q\n", goos, goarch)
+	}
+	if goos == "windows" {
+		for k, v := range knownFailsWindows {
+			knownFails[k] = v
+		}
 	}
 
 	findExecCmd()

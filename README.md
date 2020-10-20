@@ -25,7 +25,9 @@ func main() {
 }
 ```
 
-`$ gopherjs serve`
+```
+$ gopherjs serve
+```
 
 ***
 

@@ -871,16 +871,18 @@ func (t *testFuncs) load(dir, file, pkg string, doImport, seen *bool) error {
 			*doImport, *seen = true, true
 		}
 	}
-	ex := doc.Examples(f)
-	sort.Sort(byOrder(ex))
-	for _, e := range ex {
-		*doImport = true // import test file whether executed or not
-		if e.Output == "" && !e.EmptyOutput {
-			// Don't run examples with no output.
-			continue
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		ex := doc.Examples(f)
+		sort.Sort(byOrder(ex))
+		for _, e := range ex {
+			*doImport = true // import test file whether executed or not
+			if e.Output == "" && !e.EmptyOutput {
+				// Don't run examples with no output.
+				continue
+			}
+			t.Examples = append(t.Examples, testFunc{pkg, "Example" + e.Name, e.Output, e.Unordered})
+			*seen = true
 		}
-		t.Examples = append(t.Examples, testFunc{pkg, "Example" + e.Name, e.Output, e.Unordered})
-		*seen = true
 	}
 
 	return nil

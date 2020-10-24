@@ -10,12 +10,12 @@ import (
 	"go/types"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -763,7 +763,7 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if err != nil {
 		return nil, err
 	}
-	var linknames []linkname
+	var linknames []compiler.LinkName
 	for _, f := range files {
 		for _, group := range f.Comments {
 			for _, c := range group.List {
@@ -773,26 +773,19 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 					if len(f) == 3 {
 						target = f[2]
 					}
-					linknames = append(linknames, linkname{c.Slash, f[1], target})
+					var targetName, targetImportPath string
+					pos := strings.LastIndex(target, ".")
+					if pos > 0 {
+						targetImportPath = target[:pos]
+						targetName = target[pos+1:]
+					} else {
+						targetName = target
+					}
+					linknames = append(linknames, compiler.LinkName{f[1], target, targetName, targetImportPath})
 				}
 			}
 		}
 	}
-	// for _, f := range files {
-	// 	for _, decl := range f.Decls {
-	// 		if fn, ok := decl.(*ast.FuncDecl); ok {
-	// 			for _, link := range linknames {
-	// 				if fn.Name.Name == link.local {
-	// 					log.Println("-->", link)
-	// 					// ast.ValueSpec{
-	// 					// 	Names: []*ast.Ident{&ast.Ident{fn.Name.Name}},
-	// 					// }
-	// 					break
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-	// }
 
 	localImportPathCache := make(map[string]*compiler.Archive)
 	importContext := &compiler.ImportContext{
@@ -810,7 +803,45 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		},
 	}
 
-	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
+	if len(linknames) > 0 && pkg.Name != "bytealg" {
+		var linkImports []string
+		for _, link := range linknames {
+			if link.TargetImportPath != "" {
+				var found bool
+				for _, v := range linkImports {
+					if v == link.TargetImportPath {
+						found = true
+					}
+				}
+				if !found {
+					linkImports = append(linkImports, link.TargetImportPath)
+				}
+			}
+		}
+		sort.Strings(linkImports)
+		var lines []string
+		lines = append(lines, "package "+pkg.Name)
+		for _, im := range linkImports {
+			lines = append(lines, "import _ \""+im+"\"")
+			if ar := s.Archives[im]; ar != nil {
+				for _, d := range ar.Declarations {
+					for _, link := range linknames {
+						if d.FullName == link.Target {
+							d.DeclCode = append(d.DeclCode, []byte(fmt.Sprintf("\t$pkg.%v=%v;\n", link.TargetName, link.TargetName))...)
+							break
+						}
+					}
+				}
+			}
+		}
+		f, err := parser.ParseFile(fileSet, "_linknames", []byte(strings.Join(lines, "\n")), 0)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+
+	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, linknames, s.options.Minify)
 	if err != nil {
 		return nil, err
 	}
@@ -823,16 +854,6 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
 		archive.IncJSCode = append(archive.IncJSCode, code...)
 		archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
-	}
-
-	if pkg.ImportPath == "time/tzdata" {
-		for _, link := range linknames {
-			log.Println("-->", link.local, link.traget)
-			code := []byte("$mypkg." + link.local + "=" + link.traget)
-			archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
-			archive.IncJSCode = append(archive.IncJSCode, code...)
-			archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
-		}
 	}
 
 	if s.options.Verbose {

@@ -8,7 +8,6 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
-	"log"
 	"sort"
 	"strings"
 
@@ -17,6 +16,13 @@ import (
 	"golang.org/x/tools/go/gcexportdata"
 	"golang.org/x/tools/go/types/typeutil"
 )
+
+type LinkName struct {
+	Local            string
+	Target           string
+	TargetName       string
+	TargetImportPath string
+}
 
 type pkgContext struct {
 	*analysis.Info
@@ -119,7 +125,7 @@ func (pi packageImporter) Import(path string) (*types.Package, error) {
 	return pi.importContext.Packages[a.ImportPath], nil
 }
 
-func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {
+func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, linknames []LinkName, minify bool) (*Archive, error) {
 	typesInfo := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),
@@ -193,6 +199,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		panic(fullName)
 	}
 	pkgInfo := analysis.AnalyzePkg(simplifiedFiles, fileSet, typesInfo, typesPkg, isBlocking)
+
 	c := &funcContext{
 		FuncInfo: pkgInfo.InitFuncInfo,
 		p: &pkgContext{
@@ -229,6 +236,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		c.p.pkgVars[importedPkg.Path()] = c.newVariableWithLevel(importedPkg.Name(), true)
 		importedPaths = append(importedPaths, importedPkg.Path())
 	}
+
 	sort.Strings(importedPaths)
 	for _, impPath := range importedPaths {
 		id := c.newIdent(fmt.Sprintf(`%s.$init`, c.p.pkgVars[impPath]), types.NewSignature(nil, nil, nil, false))
@@ -277,9 +285,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 								o := c.p.Defs[name].(*types.Var)
 								vars = append(vars, o)
 								c.objectName(o) // register toplevel name
-								if importPath == "time/tzdata" {
-									log.Println("---->", c.p.Defs)
-								}
 							}
 						}
 					}
@@ -404,6 +409,15 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		d.DceDeps = collectDependencies(func() {
 			d.DeclCode = c.translateToplevelFunction(fun, funcInfo)
 		})
+		if fun.Body == nil {
+			for _, link := range linknames {
+				if link.Local == fun.Name.Name {
+					d.DeclCode = []byte("\t" + link.Local + "=" + link.Target + ";\n")
+					d.DceDeps = append(d.DceDeps, link.Target)
+					break
+				}
+			}
+		}
 		funcDecls = append(funcDecls, &d)
 	}
 	if typesPkg.Name() == "main" {

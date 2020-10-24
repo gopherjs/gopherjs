@@ -803,7 +803,7 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		},
 	}
 
-	if len(linknames) > 0 && pkg.Name != "bytealg" {
+	if len(linknames) > 0 && pkg.ImportPath != "internal/bytealg" {
 		var linkImports []string
 		for _, link := range linknames {
 			if link.TargetImportPath != "" {

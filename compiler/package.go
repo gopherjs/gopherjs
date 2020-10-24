@@ -8,6 +8,7 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
+	"log"
 	"sort"
 	"strings"
 
@@ -276,6 +277,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 								o := c.p.Defs[name].(*types.Var)
 								vars = append(vars, o)
 								c.objectName(o) // register toplevel name
+								if importPath == "time/tzdata" {
+									log.Println("---->", c.p.Defs)
+								}
 							}
 						}
 					}

@@ -10,6 +10,7 @@ import (
 	"go/types"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"path"
@@ -508,6 +509,12 @@ type PackageData struct {
 	IsVirtual  bool // If true, the package does not have a corresponding physical directory on disk.
 }
 
+type linkname struct {
+	pos    token.Pos
+	local  string
+	traget string
+}
+
 type Session struct {
 	options  *Options
 	bctx     *build.Context
@@ -756,6 +763,36 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if err != nil {
 		return nil, err
 	}
+	var linknames []linkname
+	for _, f := range files {
+		for _, group := range f.Comments {
+			for _, c := range group.List {
+				if strings.HasPrefix(c.Text, "//go:linkname ") {
+					f := strings.Fields(c.Text)
+					var target string
+					if len(f) == 3 {
+						target = f[2]
+					}
+					linknames = append(linknames, linkname{c.Slash, f[1], target})
+				}
+			}
+		}
+	}
+	// for _, f := range files {
+	// 	for _, decl := range f.Decls {
+	// 		if fn, ok := decl.(*ast.FuncDecl); ok {
+	// 			for _, link := range linknames {
+	// 				if fn.Name.Name == link.local {
+	// 					log.Println("-->", link)
+	// 					// ast.ValueSpec{
+	// 					// 	Names: []*ast.Ident{&ast.Ident{fn.Name.Name}},
+	// 					// }
+	// 					break
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	localImportPathCache := make(map[string]*compiler.Archive)
 	importContext := &compiler.ImportContext{
@@ -772,6 +809,7 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			return archive, nil
 		},
 	}
+
 	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
 	if err != nil {
 		return nil, err
@@ -785,6 +823,16 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
 		archive.IncJSCode = append(archive.IncJSCode, code...)
 		archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
+	}
+
+	if pkg.ImportPath == "time/tzdata" {
+		for _, link := range linknames {
+			log.Println("-->", link.local, link.traget)
+			code := []byte("$mypkg." + link.local + "=" + link.traget)
+			archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
+			archive.IncJSCode = append(archive.IncJSCode, code...)
+			archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
+		}
 	}
 
 	if s.options.Verbose {

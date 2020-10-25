@@ -3,8 +3,6 @@
 package time
 
 import (
-	"runtime"
-
 	"github.com/gopherjs/gopherjs/js"
 )
 
@@ -13,19 +11,6 @@ import (
 func init() {
 	// avoid dead code elimination
 	var _ Time = Unix(0, 0)
-}
-
-func initLocal() {
-	d := js.Global.Get("Date").New()
-	s := d.String()
-	i := indexByte(s, '(')
-	j := indexByte(s, ')')
-	if i == -1 || j == -1 {
-		localLoc.name = "UTC"
-		return
-	}
-	localLoc.name = s[i+1 : j]
-	localLoc.zone = []zone{{localLoc.name, d.Call("getTimezoneOffset").Int() * -60, false}}
 }
 
 func runtimeNano() int64 {
@@ -67,13 +52,6 @@ func stopTimer(t *runtimeTimer) bool {
 	wasActive := t.active
 	t.active = false
 	return wasActive
-}
-
-func forceZipFileForTesting(zipOnly bool) {
-}
-
-var zoneSources = []string{
-	runtime.GOROOT() + "/lib/time/zoneinfo.zip",
 }
 
 // indexByte is copied from strings package to avoid importing it (since the real time package doesn't).

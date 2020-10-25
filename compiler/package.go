@@ -17,6 +17,13 @@ import (
 	"golang.org/x/tools/go/types/typeutil"
 )
 
+type LinkName struct {
+	Local            string
+	Target           string
+	TargetName       string
+	TargetImportPath string
+}
+
 type pkgContext struct {
 	*analysis.Info
 	additionalSelections map[*ast.SelectorExpr]selection
@@ -118,7 +125,7 @@ func (pi packageImporter) Import(path string) (*types.Package, error) {
 	return pi.importContext.Packages[a.ImportPath], nil
 }
 
-func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {
+func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, linknames []LinkName, minify bool) (*Archive, error) {
 	typesInfo := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),
@@ -192,6 +199,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		panic(fullName)
 	}
 	pkgInfo := analysis.AnalyzePkg(simplifiedFiles, fileSet, typesInfo, typesPkg, isBlocking)
+
 	c := &funcContext{
 		FuncInfo: pkgInfo.InitFuncInfo,
 		p: &pkgContext{
@@ -228,6 +236,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		c.p.pkgVars[importedPkg.Path()] = c.newVariableWithLevel(importedPkg.Name(), true)
 		importedPaths = append(importedPaths, importedPkg.Path())
 	}
+
 	sort.Strings(importedPaths)
 	for _, impPath := range importedPaths {
 		id := c.newIdent(fmt.Sprintf(`%s.$init`, c.p.pkgVars[impPath]), types.NewSignature(nil, nil, nil, false))
@@ -400,6 +409,18 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		d.DceDeps = collectDependencies(func() {
 			d.DeclCode = c.translateToplevelFunction(fun, funcInfo)
 		})
+		if fun.Body == nil {
+			for _, link := range linknames {
+				if link.Local == fun.Name.Name {
+					d.DeclCode = []byte(fmt.Sprintf("\t%v=%v.%v;\n",
+						c.p.objectNames[o],
+						c.p.pkgVars[link.TargetImportPath],
+						link.TargetName))
+					d.DceDeps = append(d.DceDeps, link.Target)
+					break
+				}
+			}
+		}
 		funcDecls = append(funcDecls, &d)
 	}
 	if typesPkg.Name() == "main" {

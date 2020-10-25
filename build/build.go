@@ -1,6 +1,7 @@
 package build
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -15,6 +16,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -508,6 +510,12 @@ type PackageData struct {
 	IsVirtual  bool // If true, the package does not have a corresponding physical directory on disk.
 }
 
+type linkname struct {
+	pos    token.Pos
+	local  string
+	traget string
+}
+
 type Session struct {
 	options  *Options
 	bctx     *build.Context
@@ -668,6 +676,85 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	return s.buildPackage(pkg)
 }
 
+func (s *Session) checkLinkNames(importPath string, fileSet *token.FileSet, files []*ast.File) (linknames []compiler.LinkName, linkfile *ast.File) {
+	if importPath == "internal/bytealg" {
+		return
+	}
+	for _, f := range files {
+		for _, group := range f.Comments {
+			for _, c := range group.List {
+				if strings.HasPrefix(c.Text, "//go:linkname ") {
+					f := strings.Fields(c.Text)
+					var target string
+					if len(f) == 3 {
+						target = f[2]
+					}
+					var targetName, targetImportPath string
+					pos := strings.LastIndex(target, ".")
+					if pos > 0 {
+						targetImportPath = target[:pos]
+						targetName = target[pos+1:]
+					} else {
+						targetName = target
+					}
+					linknames = append(linknames, compiler.LinkName{f[1], target, targetName, targetImportPath})
+				}
+			}
+		}
+	}
+	if len(linknames) == 0 {
+		return
+	}
+	var linkImports []string
+	for _, link := range linknames {
+		if link.TargetImportPath != "" {
+			var found bool
+			for _, v := range linkImports {
+				if v == link.TargetImportPath {
+					found = true
+				}
+			}
+			if !found {
+				linkImports = append(linkImports, link.TargetImportPath)
+			}
+		}
+	}
+	if len(linkImports) == 0 {
+		return
+	}
+	sort.Strings(linkImports)
+	var lines []string
+	_, pkgName := path.Split(importPath)
+	lines = append(lines, "package "+pkgName)
+	for _, im := range linkImports {
+		lines = append(lines, "import _ \""+im+"\"")
+		if ar := s.Archives[im]; ar != nil {
+			for _, d := range ar.Declarations {
+				for _, link := range linknames {
+					if d.FullName == link.Target {
+						var fnName string
+						pos := bytes.Index(d.DeclCode, []byte("="))
+						if pos > 0 {
+							fnName = strings.TrimSpace(string(d.DeclCode[:pos]))
+						}
+						if ar.Minified {
+							d.DeclCode = append(d.DeclCode, []byte(fmt.Sprintf("$pkg.%v=%v;", link.TargetName, fnName))...)
+						} else {
+							d.DeclCode = append(d.DeclCode, []byte(fmt.Sprintf("\t$pkg.%v=%v;\n", link.TargetName, fnName))...)
+						}
+						break
+					}
+				}
+			}
+		}
+	}
+	f, err := parser.ParseFile(fileSet, "_linkname.go", []byte(strings.Join(lines, "\n")+"\n"), 0)
+	if err == nil {
+		linkfile = f
+	}
+	return
+}
+
 func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if archive, ok := s.Archives[pkg.ImportPath]; ok {
 		return archive, nil
@@ -772,7 +859,13 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			return archive, nil
 		},
 	}
-	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
+
+	linknames, linkfile := s.checkLinkNames(pkg.ImportPath, fileSet, files)
+	if linkfile != nil {
+		files = append(files, linkfile)
+	}
+
+	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, linknames, s.options.Minify)
 	if err != nil {
 		return nil, err
 	}

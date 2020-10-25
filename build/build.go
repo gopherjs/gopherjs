@@ -820,7 +820,8 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		}
 		sort.Strings(linkImports)
 		var lines []string
-		lines = append(lines, "package "+pkg.Name)
+		_, pkgName := path.Split(pkg.ImportPath)
+		lines = append(lines, "package "+pkgName)
 		for _, im := range linkImports {
 			lines = append(lines, "import _ \""+im+"\"")
 			if ar := s.Archives[im]; ar != nil {
@@ -834,7 +835,7 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 				}
 			}
 		}
-		f, err := parser.ParseFile(fileSet, "_linknames", []byte(strings.Join(lines, "\n")+"\n"), 0)
+		f, err := parser.ParseFile(fileSet, "_linkname.go", []byte(strings.Join(lines, "\n")+"\n"), 0)
 		if err != nil {
 			return nil, err
 		}

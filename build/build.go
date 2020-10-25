@@ -834,7 +834,7 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 				}
 			}
 		}
-		f, err := parser.ParseFile(fileSet, "_linknames", []byte(strings.Join(lines, "\n")), 0)
+		f, err := parser.ParseFile(fileSet, "_linknames", []byte(strings.Join(lines, "\n")+"\n"), 0)
 		if err != nil {
 			return nil, err
 		}

@@ -244,12 +244,16 @@ func syscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
 	return Syscall(trap, a1, a2, a3)
 }
 
+func syscallX(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
+	return Syscall(trap, a1, a2, a3)
+}
+
 func syscall6(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errno) {
 	return Syscall6(trap, a1, a2, a3, a4, a5, a6)
 }
 
 func syscall6X(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errno) {
-	panic("syscall6X is not implemented")
+	return Syscall6(trap, a1, a2, a3, a4, a5, a6)
 }
 
 func rawSyscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {

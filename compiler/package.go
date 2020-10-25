@@ -412,7 +412,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		if fun.Body == nil {
 			for _, link := range linknames {
 				if link.Local == fun.Name.Name {
-					d.DeclCode = []byte("\t" + link.Local + "=" + link.Target + ";\n")
+					d.DeclCode = []byte(fmt.Sprintf("\t%v=%v.%v;\n",
+						c.p.objectNames[o],
+						c.p.pkgVars[link.TargetImportPath],
+						link.TargetName))
 					d.DceDeps = append(d.DceDeps, link.Target)
 					break
 				}

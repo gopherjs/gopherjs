@@ -16,13 +16,6 @@ type runtimeTimer struct {
 	seq     uintptr
 }
 
-func resetTimer(r *runtimeTimer, w int64) bool {
-	active := stopTimer(r)
-	r.when = w
-	startTimer(r)
-	return active
-}
-
 func (t *Ticker) Reset(d Duration) {
 	if t.r.f == nil {
 		panic("time: Reset called on uninitialized Ticker")

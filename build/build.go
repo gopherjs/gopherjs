@@ -677,7 +677,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 }
 
 func (s *Session) checkLinkNames(importPath string, fileSet *token.FileSet, files []*ast.File) (linknames []compiler.LinkName, linkfile *ast.File) {
-	if importPath == "internal/bytealg" {
+	if importPath == "internal/bytealg" || importPath == "runtime" {
 		return
 	}
 	for _, f := range files {

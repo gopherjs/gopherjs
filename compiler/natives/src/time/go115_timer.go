@@ -22,3 +22,19 @@ func resetTimer(r *runtimeTimer, w int64) bool {
 	startTimer(r)
 	return active
 }
+
+func (t *Ticker) Reset(d Duration) {
+	if t.r.f == nil {
+		panic("time: Reset called on uninitialized Ticker")
+	}
+	stopTimer(&t.r)
+	c := make(chan Time, 1)
+	t.C = c
+	t.r = runtimeTimer{
+		when:   when(d),
+		period: int64(d),
+		f:      sendTime,
+		arg:    c,
+	}
+	startTimer(&t.r)
+}

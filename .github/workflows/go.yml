@@ -33,4 +33,4 @@ jobs:
       run: go install -v .
 
     - name: Test
-      run: go test -race -v ./...
+      run: go test -race -v ./tests

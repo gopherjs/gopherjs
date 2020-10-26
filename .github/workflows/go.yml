@@ -20,6 +20,8 @@ jobs:
 
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2
+      with:
+        path: $HOME/go/src/github.com/goplusjs
 
     - name: Get dependencies
       run: |
@@ -32,5 +34,5 @@ jobs:
     - name: Install
       run: go install -v .
 
-    - name: Test
-      run: go test -race -v ./tests
+    # - name: Test
+    #   run: go test -race -v ./tests

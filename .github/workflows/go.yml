@@ -20,8 +20,6 @@ jobs:
 
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2
-      with:
-        path: $HOME/go/src/github.com/goplusjs
 
     - name: Get dependencies
       run: |
@@ -31,8 +29,15 @@ jobs:
             dep ensure
         fi
 
-    - name: Install
-      run: go install -v .
+    - name: check source
+      run: |
+        go generate github.com/gopherjs/gopherjs/compiler/prelude
+        diff -u <(echo -n) <(git status --porcelain)
+        diff -u <(echo -n) <(gofmt -d .)
+        go vet .
+
+    - name: Build
+      run: go build -v .
 
     # - name: Test
     #   run: go test -race -v ./tests

@@ -15,3 +15,10 @@ type runtimeTimer struct {
 	active  bool
 	seq     uintptr
 }
+
+func resetTimer(r *runtimeTimer, w int64) bool {
+	active := stopTimer(r)
+	r.when = w
+	startTimer(r)
+	return active
+}

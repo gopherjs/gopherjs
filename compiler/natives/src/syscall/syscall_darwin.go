@@ -236,6 +236,14 @@ func funcPC(f func()) uintptr {
 		return SYS_STATFS64
 	case js.InternalObject(libc_ptrace_trampoline):
 		return SYS_PTRACE
+	case js.InternalObject(libc_fstatat64_trampoline):
+		return SYS_FSTATFS64
+	case js.InternalObject(libc_unlinkat_trampoline):
+		return 472 //SYS_UNLINKAT
+	case js.InternalObject(libc_fdopendir_trampoline):
+		break
+	default:
+		f()
 	}
 	return uintptr(minusOne)
 }
@@ -245,6 +253,10 @@ func syscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
 }
 
 func syscallX(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
+	return Syscall(trap, a1, a2, a3)
+}
+
+func syscallPtr(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
 	return Syscall(trap, a1, a2, a3)
 }
 

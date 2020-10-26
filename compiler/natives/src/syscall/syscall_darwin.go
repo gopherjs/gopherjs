@@ -240,10 +240,10 @@ func funcPC(f func()) uintptr {
 		return SYS_FSTATFS64
 	case js.InternalObject(libc_unlinkat_trampoline):
 		return 472 //SYS_UNLINKAT
-	case js.InternalObject(libc_fdopendir_trampoline):
-		break
+	// case js.InternalObject(libc_fdopendir_trampoline):
+	// 	break
 	default:
-		f()
+		println("warning syscall:", f)
 	}
 	return uintptr(minusOne)
 }

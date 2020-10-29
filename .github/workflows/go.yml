@@ -1,10 +1,10 @@
-name: Go
+name: Go 1.15
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
 
@@ -13,35 +13,26 @@ jobs:
     runs-on: macos-10.15
     steps:
 
-    - name: Set up Go 1.x
+    - name: Set up Go 1.15
       uses: actions/setup-go@v2
       with:
-        go-version: ^1.13
+        go-version: ^1.15
 
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2 
+  
     - name: Setup Node.js environment
       uses: actions/setup-node@v2.1.2
       with:
-        node-version: ^10.0.0
-
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v2
-
-    - name: Get dependencies
+        node-version: 10.0.0
+  
+    - name: Install github.com/goplusjs/gopherjs
       run: |
-        go get -v -t -d ./...
-        if [ -f Gopkg.toml ]; then
-            curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-            dep ensure
-        fi
-
-    - name: Check source
+        go get -v github.com/goplusjs/gopherjs
+        cd $HOME/go/src/github.com/goplusjs/gopherjs
+        npm install # Install our (dev) dependencies from package.json.
+        cd node-syscall && ../node_modules/node-gyp/bin/node-gyp.js rebuild rebuild && mkdir -p ~/.node_libraries && cp build/Release/syscall.node ~/.node_libraries/syscall.node
+    - name: Test gopherjs
       run: |
-        diff -u <(echo -n) <(git status --porcelain)
-        diff -u <(echo -n) <(gofmt -d .)
-        go vet .
-
-    - name: Build
-      run: go build -v .
-
-    # - name: Test
-    #   run: go test -race -v ./tests
+        cd $HOME/go/src/github.com/goplusjs/gopherjs
+        ulimit -s 10000 && gopherjs test --minify -v --short $(go list std | grep -v -f .std_test_pkg_exclusions)

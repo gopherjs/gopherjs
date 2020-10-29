@@ -29,3 +29,7 @@ func TestPoolDequeue(t *testing.T) {
 func TestPoolChain(t *testing.T) {
 	t.Skip()
 }
+
+func TestIssue40999(t *testing.T) {
+	t.Skip()
+}

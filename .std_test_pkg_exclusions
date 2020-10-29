@@ -33,6 +33,7 @@ internal/testenv
 internal/testlog
 internal/trace
 internal/x/net/nettest
+internal/unsafeheader
 log
 log/syslog
 net

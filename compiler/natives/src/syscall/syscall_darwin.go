@@ -238,6 +238,8 @@ func funcPC(f func()) uintptr {
 		return SYS_PTRACE
 	case js.InternalObject(libc_fstatat64_trampoline):
 		return SYS_FSTATFS64
+	case js.InternalObject(libc_getattrlist_trampoline):
+		return SYS_GETATTRLIST
 	case js.InternalObject(libc_unlinkat_trampoline):
 		return 472 //SYS_UNLINKAT
 	// case js.InternalObject(libc_fdopendir_trampoline):

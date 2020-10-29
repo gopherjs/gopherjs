@@ -21,3 +21,7 @@ func TestTempDir_BadPattern(t *testing.T) {
 func TestTempDir(t *testing.T) {
 	t.Skip()
 }
+
+func TestTempFile_pattern(t *testing.T) {
+	t.Skip()
+}

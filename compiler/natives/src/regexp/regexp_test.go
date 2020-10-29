@@ -9,3 +9,7 @@ import (
 func TestOnePassCutoff(t *testing.T) {
 	t.Skip() // "Maximum call stack size exceeded" on V8
 }
+
+func TestFowler(t *testing.T) {
+	t.Skip()
+}

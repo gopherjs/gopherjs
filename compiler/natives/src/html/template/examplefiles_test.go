@@ -25,3 +25,9 @@ func ExampleTemplate_share() {
 	// T0 (second version) invokes T1: (T1 invokes T2: (T2, version B))
 	// T0 (first version) invokes T1: (T1 invokes T2: (T2, version A))
 }
+
+func ExampleTemplate_parsefiles() {
+	fmt.Print("T1 invokes T2: (This is T2)")
+	// Output:
+	// T1 invokes T2: (This is T2)
+}

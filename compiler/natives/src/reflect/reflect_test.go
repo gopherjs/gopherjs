@@ -290,7 +290,7 @@ func TestStructOfWithInterface(t *testing.T) {
 	rt := StructOf(fields)
 	rv := New(rt).Elem()
 	// This should panic since the pointer is nil.
-	shouldPanic(func() {
+	_shouldPanic(func() {
 		rv.Interface().(IfaceSet).Set(want)
 	})
 
@@ -304,7 +304,7 @@ func TestStructOfWithInterface(t *testing.T) {
 	rt = StructOf(fields)
 	rv = New(rt).Elem()
 	// This should panic since the pointer is nil.
-	shouldPanic(func() {
+	_shouldPanic(func() {
 		rv.Interface().(IfaceSet).Set(want)
 	})
 
@@ -326,7 +326,7 @@ func TestStructOfWithInterface(t *testing.T) {
 	// With the current implementation this is expected to panic.
 	// Ideally it should work and we should be able to see a panic
 	// if we call the Set method.
-	shouldPanic(func() {
+	_shouldPanic(func() {
 		StructOf(fields)
 	})
 
@@ -348,7 +348,16 @@ func TestStructOfWithInterface(t *testing.T) {
 	// With the current implementation this is expected to panic.
 	// Ideally it should work and we should be able to call the
 	// Set and Get methods.
-	shouldPanic(func() {
+	_shouldPanic(func() {
 		StructOf(fields)
 	})
+}
+
+func _shouldPanic(f func()) {
+	defer func() {
+		if recover() == nil {
+			panic("did not panic")
+		}
+	}()
+	f()
 }

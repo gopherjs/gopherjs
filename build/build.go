@@ -697,7 +697,7 @@ func (s *Session) checkLinkNames(importPath string, fileSet *token.FileSet, file
 					} else {
 						targetName = target
 					}
-					linknames = append(linknames, compiler.LinkName{f[1], target, targetName, targetImportPath})
+					linknames = append(linknames, compiler.LinkName{Local: f[1], Target: target, TargetName: targetName, TargetImportPath: targetImportPath})
 				}
 			}
 		}

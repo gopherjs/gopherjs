@@ -1,0 +1,44 @@
+name: Go1.15
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+
+  test:
+    name: Test on Go 1.15
+    runs-on: macos-10.15
+    steps:
+
+    - name: Set up Go 1.15
+      uses: actions/setup-go@v2
+      with:
+        go-version: ^1.15
+  
+    - name: Setup Node.js environment
+      uses: actions/setup-node@v2.1.2
+      with:
+        node-version: 10.0.0
+  
+    - name: Install GopherJS
+      run: |
+        go version
+        go get -v github.com/goplusjs/gopherjs
+        cd $HOME/go/src/github.com/goplusjs/gopherjs
+        npm install # Install our (dev) dependencies from package.json.
+        cd node-syscall && ../node_modules/node-gyp/bin/node-gyp.js rebuild rebuild && mkdir -p ~/.node_libraries && cp build/Release/syscall.node ~/.node_libraries/syscall.node
+    - name: Test GopherJS
+      run: |
+        cd $HOME/go/src/github.com/goplusjs/gopherjs
+        diff -u <(echo -n) <(git status --porcelain)
+        diff -u <(echo -n) <(gofmt -d .)
+        go vet . # Go package in root directory.
+        for d in */; do echo ./$d...; done | grep -v ./doc | grep -v ./tests | grep -v ./node | xargs go vet # All subdirectories except "doc", "tests", "node*".
+        diff -u <(echo -n) <(go list ./compiler/natives/src/...) # All those packages should have // +build js.
+        gopherjs install -v net/http # Should build successfully (can't run tests, since only client is supported).
+        ulimit -s 10000 && gopherjs test --minify -v --short $(go list std | grep -v -f .std_test_pkg_exclusions)
+        go test -v -race ./...
+        gopherjs test -v fmt

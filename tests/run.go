@@ -142,6 +142,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue35073.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
 	"fixedbugs/issue35576.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
 	"fixedbugs/issue40917.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
+	"fixedbugs/issue40629.go": {desc: "throw err"},
 }
 
 var knownFailsWindows = map[string]failReason{

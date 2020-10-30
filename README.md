@@ -30,9 +30,9 @@ $ gopherjs serve
 ```
 
 
-Test on Go version:
-[![Go1.14](https://github.com/goplusjs/gopherjs/workflows/Go1.14/badge.svg)](https://github.com/goplusjs/gopherjs/actions)
-[![Go1.15](https://github.com/goplusjs/gopherjs/workflows/Go1.15/badge.svg)](https://github.com/goplusjs/gopherjs/actions)
+#### Test on Go version
+[![Go1.14](https://github.com/goplusjs/gopherjs/workflows/Go1.14/badge.svg)](https://github.com/goplusjs/gopherjs/actions?query=workflow%3AGo1.14)
+[![Go1.15](https://github.com/goplusjs/gopherjs/workflows/Go1.15/badge.svg)](https://github.com/goplusjs/gopherjs/actions?query=workflow%3AGo1.15)
 
 ***
 

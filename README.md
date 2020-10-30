@@ -30,7 +30,8 @@ $ gopherjs serve
 ```
 
 
-#### Test on Go version
+#### Test on macOS
+[![Go1.13](https://github.com/goplusjs/gopherjs/workflows/Go1.13/badge.svg)](https://github.com/goplusjs/gopherjs/actions?query=workflow%3AGo1.13)
 [![Go1.14](https://github.com/goplusjs/gopherjs/workflows/Go1.14/badge.svg)](https://github.com/goplusjs/gopherjs/actions?query=workflow%3AGo1.14)
 [![Go1.15](https://github.com/goplusjs/gopherjs/workflows/Go1.15/badge.svg)](https://github.com/goplusjs/gopherjs/actions?query=workflow%3AGo1.15)
 
@@ -39,7 +40,6 @@ $ gopherjs serve
 
 [![GoDoc](https://godoc.org/github.com/gopherjs/gopherjs/js?status.svg)](https://godoc.org/github.com/gopherjs/gopherjs/js)
 [![Sourcegraph](https://sourcegraph.com/github.com/gopherjs/gopherjs/-/badge.svg)](https://sourcegraph.com/github.com/gopherjs/gopherjs?badge)
-[![Circle CI](https://circleci.com/gh/gopherjs/gopherjs.svg?style=svg)](https://circleci.com/gh/gopherjs/gopherjs)
 
 GopherJS compiles Go code ([golang.org](https://golang.org/)) to pure JavaScript code. Its main purpose is to give you the opportunity to write front-end code in Go which will still run in all browsers.
 

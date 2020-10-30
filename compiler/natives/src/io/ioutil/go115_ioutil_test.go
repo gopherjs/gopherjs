@@ -1,7 +1,7 @@
 // +build js
-// +build !go1.15
+// +build go1.15
 
-package ioutil
+package ioutil_test
 
 import (
 	"testing"

@@ -29,6 +29,8 @@ func main() {
 $ gopherjs serve
 ```
 
+[Test for Go1.14 and Go1.15](https://github.com/goplusjs/gopherjs/workflows/Go/badge.svg)
+
 ***
 
 

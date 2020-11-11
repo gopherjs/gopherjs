@@ -23,27 +23,47 @@ type Info struct {
 	FuncLitInfos  map[*ast.FuncLit]*FuncInfo
 	InitFuncInfo  *FuncInfo
 	allInfos      []*FuncInfo
-	comments      ast.CommentMap
 }
 
 type FuncInfo struct {
-	HasDefer      bool
-	Flattened     map[ast.Node]bool
-	Blocking      map[ast.Node]bool
-	GotoLabel     map[*types.Label]bool
-	LocalCalls    map[*types.Func][][]ast.Node
-	ContinueStmts []continueStmt
-	p             *Info
+	HasDefer bool
+	// Flattened map tracks which AST nodes within function body must be
+	// translated into re-enterant blocks.
+	//
+	// Function body needs to be "flattened" if an option to jump an arbitrary
+	// position in the code is required. Typical examples are a "goto" operator or
+	// resuming goroutine execution after a blocking call.
+	Flattened map[ast.Node]bool
+	// Blocking map tracks which AST nodes lead to potentially blocking calls.
+	//
+	// Blocking calls require special handling on JS side to avoid blocking the
+	// event loop and freezing the page.
+	Blocking map[ast.Node]bool
+	// GotoLabel keeps track of labels referenced by a goto operator.
+	//
+	// JS doesn't support "goto" natively and it needs to be emulated with a
+	// switch/case statement. This is distinct from labeled loop statements, which
+	// have native JS syntax and don't require special handling.
+	GotoLabel map[*types.Label]bool
+
+	// All callsite AST paths for all functions called by this function.
+	localCalls map[*types.Func][][]ast.Node
+	// All "continue" operators in the function body.
+	//
+	// "continue" operator may trigger blocking calls in for loop condition or
+	// post-iteration statement, so they may require special handling.
+	continueStmts []continueStmt
+	packageInfo   *Info
 	analyzeStack  []ast.Node
 }
 
 func (info *Info) newFuncInfo() *FuncInfo {
 	funcInfo := &FuncInfo{
-		p:          info,
-		Flattened:  make(map[ast.Node]bool),
-		Blocking:   make(map[ast.Node]bool),
-		GotoLabel:  make(map[*types.Label]bool),
-		LocalCalls: make(map[*types.Func][][]ast.Node),
+		packageInfo: info,
+		Flattened:   make(map[ast.Node]bool),
+		Blocking:    make(map[ast.Node]bool),
+		GotoLabel:   make(map[*types.Label]bool),
+		localCalls:  make(map[*types.Func][][]ast.Node),
 	}
 	info.allInfos = append(info.allInfos, funcInfo)
 	return funcInfo
@@ -54,7 +74,6 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		Info:          typesInfo,
 		Pkg:           typesPkg,
 		HasPointer:    make(map[*types.Var]bool),
-		comments:      make(ast.CommentMap),
 		IsBlocking:    isBlocking,
 		FuncDeclInfos: make(map[*types.Func]*FuncInfo),
 		FuncLitInfos:  make(map[*ast.FuncLit]*FuncInfo),
@@ -62,21 +81,21 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 	info.InitFuncInfo = info.newFuncInfo()
 
 	for _, file := range files {
-		for k, v := range ast.NewCommentMap(fileSet, file, file.Comments) {
-			info.comments[k] = v
-		}
 		ast.Walk(info.InitFuncInfo, file)
 	}
 
+	// Propagate information about blocking calls through the AST tree.
+	// TODO: This can probably be done more efficiently while traversing the AST
+	// tree.
 	for {
 		done := true
 		for _, funcInfo := range info.allInfos {
-			for obj, calls := range funcInfo.LocalCalls {
+			for obj, calls := range funcInfo.localCalls {
 				if len(info.FuncDeclInfos[obj].Blocking) != 0 {
 					for _, call := range calls {
 						funcInfo.markBlocking(call)
 					}
-					delete(funcInfo.LocalCalls, obj)
+					delete(funcInfo.localCalls, obj)
 					done = false
 				}
 			}
@@ -86,13 +105,17 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		}
 	}
 
+	// Detect all "continue" statements that lead to blocking calls.
 	for _, funcInfo := range info.allInfos {
-		for _, continueStmt := range funcInfo.ContinueStmts {
+		for _, continueStmt := range funcInfo.continueStmts {
 			if funcInfo.Blocking[continueStmt.forStmt.Post] {
 				funcInfo.markBlocking(continueStmt.analyzeStack)
 			}
 		}
+		funcInfo.continueStmts = nil // We no longer need this information.
 	}
+
+	info.allInfos = nil // Let GC reclaim memory we no longer need.
 
 	return info
 }
@@ -108,12 +131,12 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 
 	switch n := node.(type) {
 	case *ast.FuncDecl:
-		newInfo := c.p.newFuncInfo()
-		c.p.FuncDeclInfos[c.p.Defs[n.Name].(*types.Func)] = newInfo
+		newInfo := c.packageInfo.newFuncInfo()
+		c.packageInfo.FuncDeclInfos[c.packageInfo.Defs[n.Name].(*types.Func)] = newInfo
 		return newInfo
 	case *ast.FuncLit:
-		newInfo := c.p.newFuncInfo()
-		c.p.FuncLitInfos[n] = newInfo
+		newInfo := c.packageInfo.newFuncInfo()
+		c.packageInfo.FuncLitInfos[n] = newInfo
 		return newInfo
 	case *ast.BranchStmt:
 		switch n.Tok {
@@ -121,18 +144,18 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 			for _, n2 := range c.analyzeStack {
 				c.Flattened[n2] = true
 			}
-			c.GotoLabel[c.p.Uses[n.Label].(*types.Label)] = true
+			c.GotoLabel[c.packageInfo.Uses[n.Label].(*types.Label)] = true
 		case token.CONTINUE:
 			if n.Label != nil {
-				label := c.p.Uses[n.Label].(*types.Label)
+				label := c.packageInfo.Uses[n.Label].(*types.Label)
 				for i := len(c.analyzeStack) - 1; i >= 0; i-- {
-					if labelStmt, ok := c.analyzeStack[i].(*ast.LabeledStmt); ok && c.p.Defs[labelStmt.Label] == label {
+					if labelStmt, ok := c.analyzeStack[i].(*ast.LabeledStmt); ok && c.packageInfo.Defs[labelStmt.Label] == label {
 						if _, ok := labelStmt.Stmt.(*ast.RangeStmt); ok {
 							return nil
 						}
 						stack := make([]ast.Node, len(c.analyzeStack))
 						copy(stack, c.analyzeStack)
-						c.ContinueStmts = append(c.ContinueStmts, continueStmt{labelStmt.Stmt.(*ast.ForStmt), stack})
+						c.continueStmts = append(c.continueStmts, continueStmt{labelStmt.Stmt.(*ast.ForStmt), stack})
 						return nil
 					}
 				}
@@ -145,7 +168,7 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 				if forStmt, ok := c.analyzeStack[i].(*ast.ForStmt); ok {
 					stack := make([]ast.Node, len(c.analyzeStack))
 					copy(stack, c.analyzeStack)
-					c.ContinueStmts = append(c.ContinueStmts, continueStmt{forStmt, stack})
+					c.continueStmts = append(c.continueStmts, continueStmt{forStmt, stack})
 					return nil
 				}
 			}
@@ -160,38 +183,38 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 						return
 					}
 				}
-				if o.Pkg() != c.p.Pkg {
-					if c.p.IsBlocking(o) {
+				if o.Pkg() != c.packageInfo.Pkg {
+					if c.packageInfo.IsBlocking(o) {
 						c.markBlocking(c.analyzeStack)
 					}
 					return
 				}
 				stack := make([]ast.Node, len(c.analyzeStack))
 				copy(stack, c.analyzeStack)
-				c.LocalCalls[o] = append(c.LocalCalls[o], stack)
+				c.localCalls[o] = append(c.localCalls[o], stack)
 			case *types.Var:
 				c.markBlocking(c.analyzeStack)
 			}
 		}
 		switch f := astutil.RemoveParens(n.Fun).(type) {
 		case *ast.Ident:
-			callTo(c.p.Uses[f])
+			callTo(c.packageInfo.Uses[f])
 		case *ast.SelectorExpr:
-			if sel := c.p.Selections[f]; sel != nil && typesutil.IsJsObject(sel.Recv()) {
+			if sel := c.packageInfo.Selections[f]; sel != nil && typesutil.IsJsObject(sel.Recv()) {
 				break
 			}
-			callTo(c.p.Uses[f.Sel])
+			callTo(c.packageInfo.Uses[f.Sel])
 		case *ast.FuncLit:
 			ast.Walk(c, n.Fun)
 			for _, arg := range n.Args {
 				ast.Walk(c, arg)
 			}
-			if len(c.p.FuncLitInfos[f].Blocking) != 0 {
+			if len(c.packageInfo.FuncLitInfos[f].Blocking) != 0 {
 				c.markBlocking(c.analyzeStack)
 			}
 			return nil
 		default:
-			if !astutil.IsTypeExpr(f, c.p.Info) {
+			if !astutil.IsTypeExpr(f, c.packageInfo.Info) {
 				c.markBlocking(c.analyzeStack)
 			}
 		}
@@ -201,13 +224,13 @@ func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
 		switch n.Op {
 		case token.AND:
 			if id, ok := astutil.RemoveParens(n.X).(*ast.Ident); ok {
-				c.p.HasPointer[c.p.Uses[id].(*types.Var)] = true
+				c.packageInfo.HasPointer[c.packageInfo.Uses[id].(*types.Var)] = true
 			}
 		case token.ARROW:
 			c.markBlocking(c.analyzeStack)
 		}
 	case *ast.RangeStmt:
-		if _, ok := c.p.TypeOf(n.X).Underlying().(*types.Chan); ok {
+		if _, ok := c.packageInfo.TypeOf(n.X).Underlying().(*types.Chan); ok {
 			c.markBlocking(c.analyzeStack)
 		}
 	case *ast.SelectStmt:

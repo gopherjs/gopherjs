@@ -676,7 +676,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	return s.buildPackage(pkg)
 }
 
-func (s *Session) checkLinkNames(importPath string, fileSet *token.FileSet, files []*ast.File) (linknames []compiler.LinkName, linkfile *ast.File) {
+func (s *Session) checkLinkNames(importPath string, fileSet *token.FileSet, files []*ast.File) (linknames []compiler.LinkName, linkfile *ast.File, err error) {
 	if importPath == "internal/bytealg" || importPath == "runtime" {
 		return
 	}
@@ -726,29 +726,33 @@ func (s *Session) checkLinkNames(importPath string, fileSet *token.FileSet, file
 	var lines []string
 	_, pkgName := path.Split(importPath)
 	lines = append(lines, "package "+pkgName)
+
 	for _, im := range linkImports {
+		ar, ok := s.Archives[im]
+		if !ok {
+			ar, err = s.BuildImportPath(im)
+		}
 		lines = append(lines, "import _ \""+im+"\"")
-		if ar := s.Archives[im]; ar != nil {
-			for _, d := range ar.Declarations {
-				for _, link := range linknames {
-					if d.FullName == link.Target {
-						var fnName string
-						pos := bytes.Index(d.DeclCode, []byte("="))
-						if pos > 0 {
-							fnName = strings.TrimSpace(string(d.DeclCode[:pos]))
-						}
-						if ar.Minified {
-							d.DeclCode = append(d.DeclCode, []byte(fmt.Sprintf("$pkg.%v=%v;", link.TargetName, fnName))...)
-						} else {
-							d.DeclCode = append(d.DeclCode, []byte(fmt.Sprintf("\t$pkg.%v=%v;\n", link.TargetName, fnName))...)
-						}
-						break
+		for _, d := range ar.Declarations {
+			for _, link := range linknames {
+				if d.FullName == link.Target {
+					var fnName string
+					pos := bytes.Index(d.DeclCode, []byte("="))
+					if pos > 0 {
+						fnName = strings.TrimSpace(string(d.DeclCode[:pos]))
 					}
+					if ar.Minified {
+						d.DeclCode = append(d.DeclCode, []byte(fmt.Sprintf("$pkg.%v=%v;", link.TargetName, fnName))...)
+					} else {
+						d.DeclCode = append(d.DeclCode, []byte(fmt.Sprintf("\t$pkg.%v=%v;\n", link.TargetName, fnName))...)
+					}
+					break
 				}
 			}
 		}
 	}
-	f, err := parser.ParseFile(fileSet, "_linkname.go", []byte(strings.Join(lines, "\n")+"\n"), 0)
+	var f *ast.File
+	f, err = parser.ParseFile(fileSet, "_linkname.go", []byte(strings.Join(lines, "\n")+"\n"), 0)
 	if err == nil {
 		linkfile = f
 	}
@@ -859,8 +863,10 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			return archive, nil
 		},
 	}
-
-	linknames, linkfile := s.checkLinkNames(pkg.ImportPath, fileSet, files)
+	linknames, linkfile, err := s.checkLinkNames(pkg.ImportPath, fileSet, files)
+	if err != nil {
+		return nil, err
+	}
 	if linkfile != nil {
 		files = append(files, linkfile)
 	}

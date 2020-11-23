@@ -731,6 +731,9 @@ func (s *Session) checkLinkNames(importPath string, fileSet *token.FileSet, file
 		ar, ok := s.Archives[im]
 		if !ok {
 			ar, err = s.BuildImportPath(im)
+			if err != nil {
+				return
+			}
 		}
 		lines = append(lines, "import _ \""+im+"\"")
 		for _, d := range ar.Declarations {

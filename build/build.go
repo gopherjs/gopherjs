@@ -724,7 +724,15 @@ func (s *Session) checkLinkNames(importPath string, fileSet *token.FileSet, file
 	}
 	sort.Strings(linkImports)
 	var lines []string
-	_, pkgName := path.Split(importPath)
+
+	var pkgName string
+	for _, f := range files {
+		if f.Name != nil {
+			pkgName = f.Name.Name
+			break
+		}
+	}
+
 	lines = append(lines, "package "+pkgName)
 
 	for _, im := range linkImports {

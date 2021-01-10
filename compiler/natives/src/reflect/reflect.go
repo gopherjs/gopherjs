@@ -775,8 +775,11 @@ func valueInterface(v Value, safe bool) interface{} {
 	if v.flag&flagMethod != 0 {
 		v = makeMethodValue("Interface", v)
 	}
-
 	if isWrapped(v.typ) {
+		if v.flag&flagAddr != 0 {
+			cv := cvtDirect(v, v.Type())
+			return interface{}(unsafe.Pointer(jsType(v.typ).New(cv.object()).Unsafe()))
+		}
 		return interface{}(unsafe.Pointer(jsType(v.typ).New(v.object()).Unsafe()))
 	}
 	return interface{}(unsafe.Pointer(v.object().Unsafe()))

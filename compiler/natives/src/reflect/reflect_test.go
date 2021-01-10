@@ -44,6 +44,10 @@ func TestOffsetLock(t *testing.T) {
 	t.Skip()
 }
 
+func TestSelect(t *testing.T) {
+	t.Skip("slow")
+}
+
 func TestSelectOnInvalid(t *testing.T) {
 	Select([]SelectCase{
 		{

@@ -202,6 +202,7 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	switch path {
 	case "os":
 		pkg.GoFiles = excludeExecutable(pkg.GoFiles) // Need to exclude executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
+		pkg.GoFiles = exclude(pkg.GoFiles, "dirent_js.go")
 	case "runtime":
 		pkg.GoFiles = []string{"typekind.go", "error.go"}
 	case "runtime/internal/sys":

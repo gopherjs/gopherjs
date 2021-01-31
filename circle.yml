@@ -16,7 +16,7 @@ jobs:
     - run: go get -t -d -v ./...
     - run: go install -v
     - run: npm install # Install our (dev) dependencies from package.json.
-    - run: npm install --global node-gyp
+    - run: npm install --global node-gyp@5.1.1
     - run: cd node-syscall && node-gyp rebuild && mkdir -p ~/.node_libraries && cp build/Release/syscall.node ~/.node_libraries/syscall.node
 
     - run: go generate github.com/gopherjs/gopherjs/compiler/prelude

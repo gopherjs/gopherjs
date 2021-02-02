@@ -21,3 +21,7 @@ func TestLoadLocationFromTZData(t *testing.T) {
 func TestEnvTZUsage(t *testing.T) {
 	t.Skip()
 }
+
+func TestEmbeddedTZData(t *testing.T) {
+	t.Skip()
+}

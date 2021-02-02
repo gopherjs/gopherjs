@@ -202,6 +202,7 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	switch path {
 	case "os":
 		pkg.GoFiles = excludeExecutable(pkg.GoFiles) // Need to exclude executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
+		pkg.GoFiles = exclude(pkg.GoFiles, "dirent_js.go")
 	case "runtime":
 		pkg.GoFiles = []string{"typekind.go", "error.go"}
 	case "runtime/internal/sys":
@@ -521,6 +522,7 @@ type Session struct {
 	bctx     *build.Context
 	mod      *fastmod.Package
 	Archives map[string]*compiler.Archive
+	Packages map[string]*PackageData
 	Types    map[string]*types.Package
 	Watcher  *fsnotify.Watcher
 }
@@ -548,6 +550,7 @@ func NewSession(options *Options) *Session {
 	s := &Session{
 		options:  options,
 		Archives: make(map[string]*compiler.Archive),
+		Packages: make(map[string]*PackageData),
 	}
 	s.bctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
 	s.mod = fastmod.NewPackage(s.bctx)
@@ -761,6 +764,9 @@ func (s *Session) checkLinkNames(importPath string, fileSet *token.FileSet, file
 				}
 			}
 		}
+		if pkg, ok := s.Packages[im]; ok {
+			s.writeArchive(ar, pkg)
+		}
 	}
 	var f *ast.File
 	f, err = parser.ParseFile(fileSet, "_linkname.go", []byte(strings.Join(lines, "\n")+"\n"), 0)
@@ -847,7 +853,6 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			if err != nil {
 				return nil, err
 			}
-
 			s.Archives[pkg.ImportPath] = archive
 			return archive, err
 		}
@@ -900,13 +905,16 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if s.options.Verbose {
 		fmt.Println(pkg.Dir)
 	}
-
 	s.Archives[pkg.ImportPath] = archive
+	s.Packages[pkg.ImportPath] = pkg
 
+	return s.writeArchive(archive, pkg)
+}
+
+func (s *Session) writeArchive(archive *compiler.Archive, pkg *PackageData) (*compiler.Archive, error) {
 	if pkg.PkgObj == "" || pkg.IsCommand() {
 		return archive, nil
 	}
-
 	if err := s.writeLibraryPackage(archive, pkg.PkgObj); err != nil {
 		if strings.HasPrefix(pkg.PkgObj, s.options.GOROOT) {
 			// fall back to first GOPATH workspace
@@ -918,7 +926,6 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		}
 		return nil, err
 	}
-
 	return archive, nil
 }
 

@@ -17,3 +17,11 @@ func TestBadLocationErrMsg(t *testing.T) {
 func TestLoadLocationFromTZData(t *testing.T) {
 	t.Skip()
 }
+
+func TestEnvTZUsage(t *testing.T) {
+	t.Skip()
+}
+
+func TestEmbeddedTZData(t *testing.T) {
+	t.Skip()
+}

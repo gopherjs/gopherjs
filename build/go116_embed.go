@@ -3,130 +3,99 @@
 package build
 
 import (
+	"bytes"
+	"fmt"
 	"go/ast"
+	"go/parser"
 	"go/token"
-	"log"
-	"sort"
 	"strings"
+
+	"github.com/visualfc/goembed"
 )
 
-type Embed struct {
-	Name     string
-	Kind     int
-	Patterns []string
+func buildIdent(name string) string {
+	return fmt.Sprintf("__js_embed_%x__", name)
 }
 
-type embedPattern struct {
-	Patterns string
-	Pos      token.Position
-}
+var embed_head = `package $pkg
 
-type embedPatterns struct {
-	Patterns []string
-	Pos      token.Position
-}
-
-func (s *Session) checkEmbed(pkg *PackageData, fset *token.FileSet, files []*ast.File) error {
-	if len(pkg.EmbedPatternPos) == 0 {
-		return nil
-	}
-	fmap := make(map[string]bool)
-	var ep []*embedPattern
-	for k, v := range pkg.EmbedPatternPos {
-		for _, pos := range v {
-			fmap[pos.Filename] = true
-			ep = append(ep, &embedPattern{k, pos})
-		}
-	}
-	sort.SliceStable(ep, func(i, j int) bool {
-		n := strings.Compare(ep[i].Pos.Filename, ep[j].Pos.Filename)
-		if n == 0 {
-			return ep[i].Pos.Offset < ep[j].Pos.Offset
-		}
-		return n < 0
-	})
-	var eps []*embedPatterns
-	last := &embedPatterns{[]string{ep[0].Patterns}, ep[0].Pos}
-	eps = append(eps, last)
-	for i := 1; i < len(ep); i++ {
-		e := ep[i]
-		if e.Pos.Filename == last.Pos.Filename &&
-			e.Pos.Line == last.Pos.Line+1 {
-			last.Patterns = append(last.Patterns, e.Patterns)
-			last.Pos = e.Pos
-		} else {
-			last = &embedPatterns{[]string{e.Patterns}, e.Pos}
-			eps = append(eps, last)
-		}
-	}
-	var embeds []*Embed
-	for _, file := range files {
-		if fmap[fset.Position(file.Package).Filename] {
-			ems := findEmbed(pkg, fset, file, eps)
-			if len(ems) > 0 {
-				embeds = append(embeds, ems...)
-			}
-		}
-	}
-	for _, e := range embeds {
-		log.Println(e)
-	}
-	return nil
-}
-
-const (
-	embedUnknown int = iota
-	embedBytes
-	embedString
-	embedFiles
+import (
+	"embed"
+	_ "unsafe"
 )
 
-func checkIdent(v ast.Expr, name string) bool {
-	if ident, ok := v.(*ast.Ident); ok && ident.Name == name {
-		return true
-	}
-	return false
-}
+//go:linkname gopherjs_embed_append embed.appendData
+func gopherjs_embed_append(fs *embed.FS, name string, data string, hash [16]byte)
 
-func embedKind(typ ast.Expr) int {
-	switch v := typ.(type) {
-	case *ast.Ident:
-		if checkIdent(v, "string") {
-			return embedString
-		}
-	case *ast.ArrayType:
-		if checkIdent(v.Elt, "byte") {
-			return embedBytes
-		}
-	case *ast.SelectorExpr:
-		if checkIdent(v.X, "embed") && checkIdent(v.Sel, "FS") {
-			return embedFiles
-		}
-	}
-	return embedUnknown
-}
+`
 
-func findEmbed(pkg *PackageData, fset *token.FileSet, file *ast.File, eps []*embedPatterns) (embeds []*Embed) {
-	for _, decl := range file.Decls {
-		if d, ok := decl.(*ast.GenDecl); ok && d.Tok == token.VAR {
-			pos := fset.Position(d.Pos())
-			for _, e := range eps {
-				if pos.Filename == e.Pos.Filename &&
-					pos.Line == e.Pos.Line+1 {
-					if len(d.Specs) == 1 {
-						if spec, ok := d.Specs[0].(*ast.ValueSpec); ok {
-							embeds = append(embeds,
-								&Embed{
-									Name:     spec.Names[0].Name,
-									Kind:     embedKind(spec.Type),
-									Patterns: e.Patterns,
-								},
-							)
-						}
-					}
+func checkEmbed(pkg *PackageData, embedPatternPos map[string][]token.Position, fset *token.FileSet, files []*ast.File, outPkgName string, outPkgFile string) (*ast.File, error) {
+	if len(embedPatternPos) == 0 {
+		return nil, nil
+	}
+	ems := goembed.CheckEmbed(embedPatternPos, fset, files)
+	r := goembed.NewResolve()
+	var buf bytes.Buffer
+	buf.WriteString(strings.Replace(embed_head, "$pkg", outPkgName, 1))
+	buf.WriteString("\nfunc init() {\n")
+	for _, v := range ems {
+		fs, _ := r.Load(pkg.Dir, v)
+		switch v.Kind {
+		case goembed.EmbedBytes:
+			buf.WriteString(fmt.Sprintf("\t%v = %v\n", v.Name, buildIdent(fs[0].Name)))
+		case goembed.EmbedString:
+			buf.WriteString(fmt.Sprintf("\t%v = string(%v)\n", v.Name, buildIdent(fs[0].Name)))
+		case goembed.EmbedFiles:
+			fs = goembed.BuildFS(fs)
+			for _, f := range fs {
+				if len(f.Data) == 0 {
+					buf.WriteString(fmt.Sprintf("\tgopherjs_embed_append(&%v,\"%v\",\"\",[16]byte{})\n", v.Name, f.Name))
+				} else {
+					buf.WriteString(fmt.Sprintf("\tgopherjs_embed_append(&%v,\"%v\",string(%v),[16]byte{})\n", v.Name, f.Name, buildIdent(f.Name)))
 				}
 			}
 		}
 	}
-	return
+	buf.WriteString("\n}\n")
+	buf.WriteString("\nvar (\n")
+	for _, f := range r.Files() {
+		if len(f.Data) > 0 {
+			hex, _ := goembed.BytesToHex(f.Data)
+			buf.WriteString(fmt.Sprintf("\t%v = []byte(\"%v\")\n", buildIdent(f.Name), hex))
+		} else {
+			buf.WriteString(fmt.Sprintf("\t%v []byte\n", buildIdent(f.Name)))
+		}
+	}
+	buf.WriteString(")\n")
+	f, err := parser.ParseFile(fset, outPkgFile, buf.String(), parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+func (s *Session) checkEmbed(pkg *PackageData, fset *token.FileSet, files []*ast.File) ([]*ast.File, error) {
+	var embeds []*ast.File
+	if len(pkg.EmbedPatternPos) > 0 {
+		f, err := checkEmbed(pkg, pkg.EmbedPatternPos, fset, files, pkg.Name, "js_embed.go")
+		if err != nil {
+			return nil, err
+		}
+		embeds = append(embeds, f)
+	}
+	if len(pkg.TestEmbedPatternPos) > 0 {
+		f, err := checkEmbed(pkg, pkg.TestEmbedPatternPos, fset, files, pkg.Name, "js_embed_test.go")
+		if err != nil {
+			return nil, err
+		}
+		embeds = append(embeds, f)
+	}
+	if len(pkg.XTestEmbedPatternPos) > 0 {
+		f, err := checkEmbed(pkg, pkg.XTestEmbedPatternPos, fset, files, pkg.Name+"_test", "js_embed_x_test.go")
+		if err != nil {
+			return nil, err
+		}
+		embeds = append(embeds, f)
+	}
+	return embeds, nil
 }

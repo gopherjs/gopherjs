@@ -353,28 +353,11 @@ func main() {
 					return err
 				}
 
-				if err := collectTests(&gbuild.PackageData{
-					Package: &build.Package{
-						ImportPath: pkg.ImportPath,
-						Dir:        pkg.Dir,
-						GoFiles:    append(pkg.GoFiles, pkg.TestGoFiles...),
-						Imports:    append(pkg.Imports, pkg.TestImports...),
-					},
-					IsTest:  true,
-					JSFiles: pkg.JSFiles,
-				}, "_test", &tests.NeedTest); err != nil {
+				if err := collectTests(makeTestPkg(pkg, false), "_test", &tests.NeedTest); err != nil {
 					return err
 				}
 
-				if err := collectTests(&gbuild.PackageData{
-					Package: &build.Package{
-						ImportPath: pkg.ImportPath + "_test",
-						Dir:        pkg.Dir,
-						GoFiles:    pkg.XTestGoFiles,
-						Imports:    pkg.XTestImports,
-					},
-					IsTest: true,
-				}, "_xtest", &tests.NeedXtest); err != nil {
+				if err := collectTests(makeTestPkg(pkg, true), "_xtest", &tests.NeedXtest); err != nil {
 					return err
 				}
 

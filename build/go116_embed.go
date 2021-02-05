@@ -29,14 +29,17 @@ func gopherjs_embed_append(fs *embed.FS, name string, data string, hash [16]byte
 
 `
 
-func checkEmbed(pkg *PackageData, embedPatternPos map[string][]token.Position, fset *token.FileSet, files []*ast.File, outPkgName string, outPkgFile string) (*ast.File, error) {
-	if len(embedPatternPos) == 0 {
+func (s *Session) checkEmbed(pkg *PackageData, fset *token.FileSet, files []*ast.File) (*ast.File, error) {
+	if len(pkg.EmbedPatternPos) == 0 {
 		return nil, nil
 	}
-	ems := goembed.CheckEmbed(embedPatternPos, fset, files)
+	ems := goembed.CheckEmbed(pkg.EmbedPatternPos, fset, files)
+	if len(ems) == 0 {
+		return nil, nil
+	}
 	r := goembed.NewResolve()
 	var buf bytes.Buffer
-	buf.WriteString(strings.Replace(embed_head, "$pkg", outPkgName, 1))
+	buf.WriteString(strings.Replace(embed_head, "$pkg", pkg.Name, 1))
 	buf.WriteString("\nfunc init() {\n")
 	for _, v := range ems {
 		fs, _ := r.Load(pkg.Dir, v)
@@ -67,35 +70,9 @@ func checkEmbed(pkg *PackageData, embedPatternPos map[string][]token.Position, f
 		}
 	}
 	buf.WriteString(")\n")
-	f, err := parser.ParseFile(fset, outPkgFile, buf.String(), parser.ParseComments)
+	f, err := parser.ParseFile(fset, "js_embed.go", buf.String(), parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
 	return f, nil
-}
-
-func (s *Session) checkEmbed(pkg *PackageData, fset *token.FileSet, files []*ast.File) ([]*ast.File, error) {
-	var embeds []*ast.File
-	if len(pkg.EmbedPatternPos) > 0 {
-		f, err := checkEmbed(pkg, pkg.EmbedPatternPos, fset, files, pkg.Name, "js_embed.go")
-		if err != nil {
-			return nil, err
-		}
-		embeds = append(embeds, f)
-	}
-	if len(pkg.TestEmbedPatternPos) > 0 {
-		f, err := checkEmbed(pkg, pkg.TestEmbedPatternPos, fset, files, pkg.Name, "js_embed_test.go")
-		if err != nil {
-			return nil, err
-		}
-		embeds = append(embeds, f)
-	}
-	if len(pkg.XTestEmbedPatternPos) > 0 {
-		f, err := checkEmbed(pkg, pkg.XTestEmbedPatternPos, fset, files, pkg.Name+"_test", "js_embed_x_test.go")
-		if err != nil {
-			return nil, err
-		}
-		embeds = append(embeds, f)
-	}
-	return embeds, nil
 }

@@ -52,9 +52,11 @@ func (s *Session) checkEmbed(pkg *PackageData, fset *token.FileSet, files []*ast
 			fs = goembed.BuildFS(fs)
 			for _, f := range fs {
 				if len(f.Data) == 0 {
-					buf.WriteString(fmt.Sprintf("\tgopherjs_embed_append(&%v,\"%v\",\"\",[16]byte{})\n", v.Name, f.Name))
+					buf.WriteString(fmt.Sprintf("\tgopherjs_embed_append(&%v,\"%v\",\"\",[16]byte{})\n",
+						v.Name, f.Name))
 				} else {
-					buf.WriteString(fmt.Sprintf("\tgopherjs_embed_append(&%v,\"%v\",string(%v),[16]byte{})\n", v.Name, f.Name, buildIdent(f.Name)))
+					buf.WriteString(fmt.Sprintf("\tgopherjs_embed_append(&%v,\"%v\",string(%v),[16]byte{%v})\n",
+						v.Name, f.Name, buildIdent(f.Name), goembed.BytesToList(f.Hash[:])))
 				}
 			}
 		}
@@ -62,11 +64,12 @@ func (s *Session) checkEmbed(pkg *PackageData, fset *token.FileSet, files []*ast
 	buf.WriteString("\n}\n")
 	buf.WriteString("\nvar (\n")
 	for _, f := range r.Files() {
-		if len(f.Data) > 0 {
-			hex, _ := goembed.BytesToHex(f.Data)
-			buf.WriteString(fmt.Sprintf("\t%v = []byte(\"%v\")\n", buildIdent(f.Name), hex))
+		if len(f.Data) == 0 {
+			buf.WriteString(fmt.Sprintf("\t%v []byte\n",
+				buildIdent(f.Name)))
 		} else {
-			buf.WriteString(fmt.Sprintf("\t%v []byte\n", buildIdent(f.Name)))
+			buf.WriteString(fmt.Sprintf("\t%v = []byte(\"%v\")\n",
+				buildIdent(f.Name), goembed.BytesToHex(f.Data)))
 		}
 	}
 	buf.WriteString(")\n")

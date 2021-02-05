@@ -10,11 +10,10 @@ require (
 	github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab
 	github.com/shurcooL/go v0.0.0-20191216061654-b114cc39af9f
 	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749
-	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	github.com/visualfc/fastmod v1.3.6
-	github.com/visualfc/goembed v0.0.0-20210205002730-8144b4d0cb1d
+	github.com/visualfc/goembed v0.1.0
 	github.com/visualfc/goversion v1.0.0
 	golang.org/x/crypto v0.0.0-20200208060501-ecb85df21340
 	golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9

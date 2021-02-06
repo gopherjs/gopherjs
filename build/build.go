@@ -879,6 +879,13 @@ func (s *Session) buildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			return archive, nil
 		},
 	}
+	embedfile, err := s.checkEmbed(pkg, fileSet, files)
+	if err != nil {
+		return nil, fmt.Errorf("check embed error: %v", err)
+	}
+	if embedfile != nil {
+		files = append(files, embedfile)
+	}
 	linknames, linkfile, err := s.checkLinkNames(pkg.ImportPath, fileSet, files)
 	if err != nil {
 		return nil, err

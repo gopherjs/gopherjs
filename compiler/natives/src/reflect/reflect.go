@@ -867,7 +867,6 @@ func (t *rtype) Method(i int) (m Method) {
 		return rcvr.Get(prop).Call("apply", rcvr, arguments[1:])
 	})
 	m.Func = Value{mt.(*rtype), unsafe.Pointer(fn.Unsafe()), fl}
-
 	m.Index = i
 	return m
 }

@@ -518,7 +518,7 @@ var $arrayType = function(elem, len) {
   var typeKey = elem.id + "$" + len;
   var typ = $arrayTypes[typeKey];
   if (typ === undefined) {
-    typ = $newType(12, $kindArray, "[" + len + "]" + elem.string, false, "", false, null);
+    typ = $newType(elem.size*len, $kindArray, "[" + len + "]" + elem.string, false, "", false, null);
     $arrayTypes[typeKey] = typ;
     typ.init(elem, len);
   }

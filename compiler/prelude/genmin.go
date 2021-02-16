@@ -22,7 +22,7 @@ func main() {
 }
 
 func run() error {
-	bpkg, err := build.Import("github.com/gopherjs/gopherjs", "", build.FindOnly)
+	bpkg, err := build.Import("github.com/goplusjs/gopherjs", "", build.FindOnly)
 	if err != nil {
 		return fmt.Errorf("failed to locate path for github.com/gopherjs/gopherjs: %v", err)
 	}

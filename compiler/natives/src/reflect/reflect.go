@@ -867,19 +867,27 @@ func (t *rtype) Method(i int) (m Method) {
 		return rcvr.Get(prop).Call("apply", rcvr, arguments[1:])
 	})
 	m.Func = Value{mt.(*rtype), unsafe.Pointer(fn.Unsafe()), fl}
-
 	m.Index = i
 	return m
 }
 
 func (v Value) object() *js.Object {
-	if v.typ.Kind() == Array || v.typ.Kind() == Struct {
-		return js.InternalObject(v.ptr)
+	obj := js.InternalObject(v.ptr)
+	kind := v.typ.Kind()
+	if kind == Array || kind == Struct {
+		return obj
+	} else if kind == Ptr && v.typ.Elem().Kind() == Array {
+		val := obj.Get("$val")
+		if val != js.Undefined {
+			return js.InternalObject(val.Unsafe())
+		} else {
+			return obj
+		}
 	}
 	if v.flag&flagIndir != 0 {
-		val := js.InternalObject(v.ptr).Call("$get")
+		val := obj.Call("$get")
 		if val != js.Global.Get("$ifaceNil") && val.Get("constructor") != jsType(v.typ) {
-			switch v.typ.Kind() {
+			switch kind {
 			case Uint64, Int64:
 				val = jsType(v.typ).New(val.Get("$high"), val.Get("$low"))
 			case Complex64, Complex128:
@@ -898,7 +906,7 @@ func (v Value) object() *js.Object {
 		}
 		return js.InternalObject(val.Unsafe())
 	}
-	return js.InternalObject(v.ptr)
+	return obj
 }
 
 func (v Value) assignTo(context string, dst *rtype, target unsafe.Pointer) Value {

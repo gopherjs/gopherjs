@@ -3,11 +3,11 @@
 package natives
 
 import (
+	"fmt"
 	"go/build"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/shurcooL/httpfs/filter"
@@ -22,15 +22,10 @@ var FS = filter.Keep(
 )
 
 func importPathToDir(importPath string) string {
-	for _, src := range build.Default.SrcDirs() {
-		dir := filepath.Join(src, importPath)
-		if _, err := os.Stat(dir); err == nil {
-			return dir
-		}
-	}
 	p, err := build.Import(importPath, "", build.FindOnly)
 	if err != nil {
 		log.Fatalln(err)
 	}
+	fmt.Println("gopherjsdev importpath:", p.Dir)
 	return p.Dir
 }

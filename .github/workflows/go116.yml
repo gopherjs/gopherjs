@@ -10,7 +10,7 @@ jobs:
 
   test:
     name: Test on Go 1.16
-    runs-on: macos-10.15
+    runs-on: ubuntu-latest
     steps:
 
     - name: Set up Go 1.16

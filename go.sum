@@ -45,6 +45,8 @@ github.com/visualfc/fastmod v1.3.6 h1:gFvAxk6VoEbk0JF1XP0KznbQl5hYJN9ZYhRYQy3pcK
 github.com/visualfc/fastmod v1.3.6/go.mod h1:IpOumy9gVomQ72T+yA7gayE3V1FCNlwr6if3mlqnasY=
 github.com/visualfc/goembed v0.1.2 h1:jAJgIEATpp1qpm3VrJC4Pu1w/jbKoSB1gx7SQk/wfkU=
 github.com/visualfc/goembed v0.1.2/go.mod h1:jCVCz/yTJGyslo6Hta+pYxWWBuq9ADCcIVZBTQ0/iVI=
+github.com/visualfc/goembed v0.2.0 h1:dUrY831SEpX8YB0GabPzmoApTskTuPfxGXWdL12dRyw=
+github.com/visualfc/goembed v0.2.0/go.mod h1:jCVCz/yTJGyslo6Hta+pYxWWBuq9ADCcIVZBTQ0/iVI=
 github.com/visualfc/goversion v1.0.0 h1:FAgKP4pat4gzRovdiT7AqxLG3oZXhmJVd7FekcjKnls=
 github.com/visualfc/goversion v1.0.0/go.mod h1:hk2JexdCD524I4uxWPUf6e++g7ZaCMu6TC7xESs/soc=
 github.com/xordataexchange/crypt v0.0.3-0.20170626215501-b2862e3d0a77/go.mod h1:aYKd//L2LvnjZzWKhF00oedf4jCCReLcmhLdhm1A27Q=

@@ -8,6 +8,9 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+//go:linkname fastrand runtime.fastrand
+func fastrand() uint32
+
 func runtime_args() []string { // not called on Windows
 	return Args
 }

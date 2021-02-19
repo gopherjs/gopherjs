@@ -21,3 +21,7 @@ func TestMultiWriterSingleChainFlatten(t *testing.T) {
 func TestMultiReaderFreesExhaustedReaders(t *testing.T) {
 	t.Skip("test relies on runtime.SetFinalizer, which GopherJS does not implement")
 }
+
+func TestCopyLargeWriter(t *testing.T) {
+	t.Skip("known issue: unsupport hides interface")
+}

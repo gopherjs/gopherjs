@@ -3,15 +3,19 @@
 
 package embed
 
-func appendData(f *FS, name string, data string, hash [16]byte) {
+func buildFS(list []struct {
+	name string
+	data string
+	hash [16]byte
+}) (f FS) {
 	var files []file
-	if f.files != nil {
-		files = *f.files
+	for _, v := range list {
+		files = append(files, file{
+			name: v.name,
+			data: v.data,
+			hash: v.hash,
+		})
 	}
-	files = append(files, file{
-		name: name,
-		data: data,
-		hash: hash,
-	})
 	f.files = &files
+	return
 }

@@ -145,8 +145,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue40629.go": {desc: "throw err"},
 
 	// These are new test in Go 1.16
-	"fixedbugs/bug130.go":      {desc: "all goroutines are asleep - deadlock!"},
-	"fixedbugs/issue18725.go":  {desc: "all goroutines are asleep - deadlock!"},
 	"fixedbugs/issue24491a.go": {desc: "throw err"},
 	"fixedbugs/issue24491b.go": {desc: "throw err"},
 }

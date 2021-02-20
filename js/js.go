@@ -86,8 +86,8 @@ func (o *Object) Invoke2(args ...interface{}) (_ *Object, rErr error) {
 func (o *Object) New(args ...interface{}) *Object { return o.object.New(args...) }
 
 // New2 creates a new instance of this type object. This will fail if it not a function (constructor).
-// If calling New throws a Javascript error, an *Error is returned.
-func (o *Object) New2(args ...interface{}) (_ *Object, rerr error) {
+// If calling New2 throws a Javascript error, an *Error is returned.
+func (o *Object) New2(args ...interface{}) (_ *Object, rErr error) {
 	defer func() {
 		if e := recover(); e != nil {
 			err, ok := e.(*Error)
@@ -97,7 +97,7 @@ func (o *Object) New2(args ...interface{}) (_ *Object, rerr error) {
 			rErr = err
 		}
 	}()
-	return o.object.New(args...)
+	return o.object.New(args...), nil
 }
 
 // Bool returns the object converted to bool according to JavaScript type conversions.

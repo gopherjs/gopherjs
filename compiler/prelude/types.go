@@ -675,7 +675,11 @@ var $structType = function(pkgPath, fields) {
   var typ = $structTypes[typeKey];
   if (typ === undefined) {
     var string = "struct { " + $mapArray(fields, function(f) {
-      return f.name + " " + f.typ.string + (f.tag !== "" ? (" \"" + f.tag.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"") : "");
+    var str = f.typ.string + (f.tag !== "" ? (" \"" + f.tag.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"") : "");
+    if (f.embedded) {
+      return str
+    }
+    return f.name + " " + str
     }).join("; ") + " }";
     if (fields.length === 0) {
       string = "struct {}";

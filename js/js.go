@@ -61,7 +61,7 @@ func (o *Object) Call2(name string, args ...interface{}) (_ *Object, rerr error)
 			rErr = err
 		}
 	}()
-	return o.object.Call(name, args...)
+	return o.object.Call(name, args...), nil
 }
 
 // Invoke calls the object itself. This will fail if it is not a function. 
@@ -79,7 +79,7 @@ func (o *Object) Invoke2(args ...interface{}) (_ *Object, rerr error) {
 			rErr = err
 		}
 	}()
-	return o.object.Invoke(args...)
+	return o.object.Invoke(args...), nil
 }
 
 // New creates a new instance of this type object. This will fail if it not a function (constructor).

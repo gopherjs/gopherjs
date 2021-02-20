@@ -526,7 +526,12 @@ var $arrayType = function(elem, len) {
 };
 
 var $chanType = function(elem, sendOnly, recvOnly) {
-  var string = (recvOnly ? "<-" : "") + "chan" + (sendOnly ? "<- " : " ") + elem.string;
+  var string = (recvOnly ? "<-" : "") + "chan" + (sendOnly ? "<- " : " ")
+  if (!sendOnly && !recvOnly && (elem.string[0] == "<")) {
+    string += "(" + elem.string + ")";
+  } else {
+    string += elem.string;
+  }
   var field = sendOnly ? "SendChan" : (recvOnly ? "RecvChan" : "Chan");
   var typ = elem[field];
   if (typ === undefined) {

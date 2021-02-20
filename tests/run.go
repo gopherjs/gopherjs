@@ -143,6 +143,10 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue35576.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
 	"fixedbugs/issue40917.go": {desc: "unknown shorthand flag: 'g' in -gcflags=-d=checkptr"},
 	"fixedbugs/issue40629.go": {desc: "throw err"},
+
+	// These are new test in Go 1.16
+	"fixedbugs/issue24491a.go": {desc: "throw err"},
+	"fixedbugs/issue24491b.go": {desc: "throw err"},
 }
 
 var knownFailsWindows = map[string]failReason{

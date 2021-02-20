@@ -1,4 +1,4 @@
 package compiler
 
 // Version is the GopherJS compiler version string.
-const Version = "1.16rc1"
+const Version = "1.16"

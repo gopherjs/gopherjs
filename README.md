@@ -4,12 +4,13 @@ GopherJS - A compiler from Go to JavaScript
 [![Go1.13](https://github.com/goplusjs/gopherjs/workflows/Go1.13/badge.svg)](https://github.com/goplusjs/gopherjs/actions?query=workflow%3AGo1.13)
 [![Go1.14](https://github.com/goplusjs/gopherjs/workflows/Go1.14/badge.svg)](https://github.com/goplusjs/gopherjs/actions?query=workflow%3AGo1.14)
 [![Go1.15](https://github.com/goplusjs/gopherjs/workflows/Go1.15/badge.svg)](https://github.com/goplusjs/gopherjs/actions?query=workflow%3AGo1.15)
+[![Go1.16](https://github.com/goplusjs/gopherjs/workflows/Go1.16/badge.svg)](https://github.com/goplusjs/gopherjs/actions?query=workflow%3AGo1.16)
 
 ### GopherJS
 This version of GopherJS is a fork of the <https://github.com/gopherjs/gopherjs>
 
 Supported Go version
-Go1.12 Go1.13 Go1.14 Go1.15
+Go1.12 Go1.13 Go1.14 Go1.15 Go1.16
 
 ```
 go get -u github.com/goplusjs/gopherjs

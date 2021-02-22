@@ -83,7 +83,7 @@ hash               |              |
 -- crc32           | ✅ yes       |
 -- crc64           | ✅ yes       |
 -- fnv             | ✅ yes       |
--- maphash         | ❌ no        |
+-- maphash         | ✅ yes       |
 html               | ✅ yes       |
 -- template        | ✅ yes       |
 image              | ✅ yes       |

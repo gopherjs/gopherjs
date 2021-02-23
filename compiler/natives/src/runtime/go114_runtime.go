@@ -104,7 +104,13 @@ func add(p unsafe.Pointer, x uintptr) unsafe.Pointer {
 var hashkey [4]uintptr
 
 func init() {
-	getRandomData((*[len(hashkey) * sys.PtrSize]byte)(unsafe.Pointer(&hashkey))[:])
+	var hash [16]byte
+	getRandomData(hash[:])
+	obj := js.NewArrayBuffer(hash[:])
+	v := js.Global.Get("Uint32Array").New(obj)
+	for i := 0; i < v.Length(); i++ {
+		hashkey[i] = v.Index(i).Unsafe()
+	}
 	hashkey[0] |= 1 // make sure these numbers are odd
 	hashkey[1] |= 1
 	hashkey[2] |= 1
@@ -128,7 +134,8 @@ func extendRandom(r []byte, n int) {
 		if w > 16 {
 			w = 16
 		}
-		h := memhash(unsafe.Pointer(&r[n-w]), uintptr(nanotime()), uintptr(w))
+		seed := js.Global.Get("Date").New().Call("getTime").Unsafe()
+		h := memhash(unsafe.Pointer(&r[n-w]), seed, uintptr(w))
 		for i := 0; i < sys.PtrSize && n < len(r); i++ {
 			r[n] = byte(h)
 			n++

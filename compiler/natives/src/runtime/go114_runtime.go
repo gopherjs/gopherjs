@@ -1,7 +1,7 @@
 // +build js
 // +build go1.14
 
-package maphash
+package runtime
 
 import (
 	"runtime/internal/sys"
@@ -18,7 +18,7 @@ const (
 	m4 = 2336365089
 )
 
-func runtime_memhash(p unsafe.Pointer, seed, s uintptr) uintptr {
+func memhash(p unsafe.Pointer, seed, s uintptr) uintptr {
 	h := uint32(seed + s*hashkey[0])
 tail:
 	switch {
@@ -103,7 +103,13 @@ func add(p unsafe.Pointer, x uintptr) unsafe.Pointer {
 // used in hash{32,64}.go to seed the hash function
 var hashkey [4]uintptr
 
-func init() {
+var memhash_has_init bool
+
+func memhash_init() {
+	if memhash_has_init {
+		return
+	}
+	memhash_has_init = true
 	var hash [16]byte
 	getRandomData(hash[:])
 	obj := js.NewArrayBuffer(hash[:])
@@ -135,11 +141,15 @@ func extendRandom(r []byte, n int) {
 			w = 16
 		}
 		seed := js.Global.Get("Date").New().Call("getTime").Unsafe()
-		h := runtime_memhash(unsafe.Pointer(&r[n-w]), seed, uintptr(w))
+		h := memhash(unsafe.Pointer(&r[n-w]), seed, uintptr(w))
 		for i := 0; i < sys.PtrSize && n < len(r); i++ {
 			r[n] = byte(h)
 			n++
 			h >>= 8
 		}
 	}
+}
+
+func nanotime() int64 {
+	return js.Global.Get("Date").New().Call("getTime").Int64() * 1e6
 }

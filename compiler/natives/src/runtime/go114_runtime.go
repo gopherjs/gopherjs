@@ -103,7 +103,13 @@ func add(p unsafe.Pointer, x uintptr) unsafe.Pointer {
 // used in hash{32,64}.go to seed the hash function
 var hashkey [4]uintptr
 
-func init() {
+var memhash_has_init bool
+
+func memhash_init() {
+	if memhash_has_init {
+		return
+	}
+	memhash_has_init = true
 	var hash [16]byte
 	getRandomData(hash[:])
 	obj := js.NewArrayBuffer(hash[:])

@@ -27,7 +27,7 @@ type Error interface {
 type TypeAssertionError struct{}
 
 func (*TypeAssertionError) RuntimeError() {}
-func (e *TypeAssertionError) Error() string {
+func (*TypeAssertionError) Error() string {
 	panic("TypeAssertionError is not used in GopherJS.")
 }
 
@@ -97,7 +97,7 @@ func Goexit() {
 	js.Global.Call("$throw", nil)
 }
 
-func GOMAXPROCS(n int) int { return 1 }
+func GOMAXPROCS(int) int { return 1 }
 
 func Gosched() {
 	c := make(chan struct{})

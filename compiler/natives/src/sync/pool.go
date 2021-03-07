@@ -2,12 +2,25 @@
 
 package sync
 
-import "unsafe"
-
+// A Pool is a set of temporary objects that may be individually saved and
+// retrieved.
+//
+// GopherJS provides a simpler, naive implementation with no synchronization at
+// all. This is still correct for the GopherJS runtime because:
+//
+//  1. JavaScript is single-threaded, so it is impossible for two threads to be
+//     accessing the pool at the same moment in time.
+//  2. GopherJS goroutine implementation uses cooperative multi-tasking model,
+//     which only allows passing control to other goroutines when the function
+//     might block.
+//
+// TODO(nevkontakte): Consider adding a mutex just to be safe if it doesn't
+// create a large performance hit.
+//
+// Note: there is a special handling in the gopherjs/build package that filters
+// out all original Pool implementation in order to avoid awkward unused fields
+// referenced by dead code.
 type Pool struct {
-	local     unsafe.Pointer
-	localSize uintptr
-
 	store []interface{}
 	New   func() interface{}
 }
@@ -29,7 +42,4 @@ func (p *Pool) Put(x interface{}) {
 		return
 	}
 	p.store = append(p.store, x)
-}
-
-func runtime_registerPoolCleanup(cleanup func()) {
 }

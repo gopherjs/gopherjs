@@ -12,19 +12,23 @@ const GOOS = sys.GOOS
 const GOARCH = "js"
 const Compiler = "gopherjs"
 
-// fake for error.go
-type eface struct {
-	_type *_type
-}
-type _type struct {
-	str string
+// The Error interface identifies a run time error.
+type Error interface {
+	error
+
+	// RuntimeError is a no-op function but
+	// serves to distinguish types that are run time
+	// errors from ordinary errors: a type is a
+	// run time error if it has a RuntimeError method.
+	RuntimeError()
 }
 
-func (t *_type) string() string {
-	return t.str
-}
-func (t *_type) pkgpath() string {
-	return ""
+// A TypeAssertionError explains a failed type assertion.
+type TypeAssertionError struct{}
+
+func (*TypeAssertionError) RuntimeError() {}
+func (*TypeAssertionError) Error() string {
+	panic("TypeAssertionError is not used in GopherJS.")
 }
 
 func init() {
@@ -54,9 +58,7 @@ func GOROOT() string {
 	return "/usr/local/go"
 }
 
-func Breakpoint() {
-	js.Debugger()
-}
+func Breakpoint() { js.Debugger() }
 
 func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
 	info := js.Global.Get("Error").New().Get("stack").Call("split", "\n").Index(skip + 2)
@@ -88,17 +90,14 @@ type Frame struct {
 	Entry    uintptr
 }
 
-func GC() {
-}
+func GC() {}
 
 func Goexit() {
 	js.Global.Get("$curGoroutine").Set("exit", true)
 	js.Global.Call("$throw", nil)
 }
 
-func GOMAXPROCS(n int) int {
-	return 1
-}
+func GOMAXPROCS(int) int { return 1 }
 
 func Gosched() {
 	c := make(chan struct{})
@@ -106,9 +105,7 @@ func Gosched() {
 	<-c
 }
 
-func NumCPU() int {
-	return 1
-}
+func NumCPU() int { return 1 }
 
 func NumGoroutine() int {
 	return js.Global.Get("$totalGoroutines").Int()
@@ -165,9 +162,13 @@ type MemStats struct {
 }
 
 func ReadMemStats(m *MemStats) {
+	// TODO(nevkontakte): This function is effectively unimplemented and may
+	// lead to silent unexpected behaviors. Consider panicing explicitly.
 }
 
 func SetFinalizer(x, f interface{}) {
+	// TODO(nevkontakte): This function is effectively unimplemented and may
+	// lead to silent unexpected behaviors. Consider panicing explicitly.
 }
 
 type Func struct {
@@ -217,20 +218,8 @@ func NumCgoCall() int64 {
 	return 0
 }
 
-func efaceOf(ep *interface{}) *eface {
-	panic("efaceOf: not supported")
-}
-
 func KeepAlive(interface{}) {}
 
 func throw(s string) {
-	panic(errorString(s))
+	panic("runtime error: " + s)
 }
-
-// These are used by panicwrap. Not implemented for GOARCH=js.
-// TODO: Implement if possible.
-func getcallerpc() uintptr         { return 0 }
-func findfunc(pc uintptr) funcInfo { return funcInfo{} }
-func funcname(f funcInfo) string   { return "" }
-
-type funcInfo struct{}

@@ -176,7 +176,7 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	case "os":
 		pkg.GoFiles = excludeExecutable(pkg.GoFiles) // Need to exclude executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
 	case "runtime":
-		pkg.GoFiles = []string{"error.go"}
+		pkg.GoFiles = []string{} // Package sources are completely replaced in natives.
 	case "runtime/internal/sys":
 		pkg.GoFiles = []string{fmt.Sprintf("zgoos_%s.go", bctx.GOOS), "zversion.go"}
 	case "runtime/pprof":

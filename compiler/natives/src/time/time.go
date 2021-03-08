@@ -21,6 +21,7 @@ type runtimeTimer struct {
 	period  int64
 	f       func(interface{}, uintptr)
 	arg     interface{}
+	seq     uintptr
 	timeout *js.Object
 	active  bool
 }
@@ -76,6 +77,22 @@ func stopTimer(t *runtimeTimer) bool {
 	js.Global.Call("clearTimeout", t.timeout)
 	wasActive := t.active
 	t.active = false
+	return wasActive
+}
+
+func modTimer(t *runtimeTimer, when, period int64, f func(interface{}, uintptr), arg interface{}, seq uintptr) {
+	stopTimer(t)
+	t.when = when
+	t.period = period
+	t.f = f
+	t.arg = arg
+	t.seq = seq
+	startTimer(t)
+}
+
+func resetTimer(t *runtimeTimer, when int64) bool {
+	wasActive := t.active
+	modTimer(t, when, t.period, t.f, t.arg, t.seq)
 	return wasActive
 }
 

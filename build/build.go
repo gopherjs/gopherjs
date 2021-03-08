@@ -175,6 +175,10 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	switch path {
 	case "os":
 		pkg.GoFiles = excludeExecutable(pkg.GoFiles) // Need to exclude executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
+		// Prefer dirent_js.go version, since it targets a similar environment to
+		// ours. Arguably this file should be excluded by the build tags (see
+		// https://github.com/gopherjs/gopherjs/issues/991).
+		pkg.GoFiles = exclude(pkg.GoFiles, "dirent_linux.go")
 	case "runtime":
 		pkg.GoFiles = []string{} // Package sources are completely replaced in natives.
 	case "runtime/internal/sys":

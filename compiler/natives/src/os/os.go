@@ -8,6 +8,8 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+const isBigEndian = false
+
 func runtime_args() []string { // not called on Windows
 	return Args
 }

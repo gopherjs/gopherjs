@@ -288,15 +288,6 @@ func newTypeOff(t *rtype) typeOff {
 	return typeOff(i)
 }
 
-// addReflectOff adds a pointer to the reflection lookup map in the runtime.
-// It returns a new ID that can be used as a typeOff or textOff, and will
-// be resolved correctly. Implemented in the runtime package.
-func addReflectOff(ptr unsafe.Pointer) int32 {
-	i := len(typeOffList)
-	typeOffList = append(typeOffList, (*rtype)(ptr))
-	return int32(i)
-}
-
 func internalStr(strObj *js.Object) string {
 	var c struct{ str string }
 	js.InternalObject(c).Set("str", strObj) // get string without internalizing

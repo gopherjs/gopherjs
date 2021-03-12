@@ -60,13 +60,52 @@ func GOROOT() string {
 
 func Breakpoint() { js.Debugger() }
 
+var (
+	// JavaScript runtime doesn't provide access to low-level execution position
+	// counters, so we emulate them by recording positions we've encountered in
+	// Caller() and Callers() functions and assigning them arbitrary integer values.
+	//
+	// We use the map and the slice below to convert a "file:line" position
+	// into an integer position counter and then to a Func instance.
+	knownPositions   = map[string]uintptr{}
+	positionCounters = []*Func{}
+)
+
+func registerPosition(funcName string, file string, line int) uintptr {
+	key := file + ":" + itoa(line)
+	if pc, found := knownPositions[key]; found {
+		return pc
+	}
+	f := &Func{
+		name: funcName,
+		file: file,
+		line: line,
+	}
+	pc := uintptr(len(positionCounters))
+	positionCounters = append(positionCounters, f)
+	knownPositions[key] = pc
+	return pc
+}
+
+// itoa converts an integer to a string.
+//
+// Can't use strconv.Itoa() in the `runtime` package due to a cyclic dependency.
+func itoa(i int) string {
+	return js.Global.Get("String").New(i).String()
+}
+
 func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
 	info := js.Global.Get("Error").New().Get("stack").Call("split", "\n").Index(skip + 2)
 	if info == js.Undefined {
 		return 0, "", 0, false
 	}
-	parts := info.Call("substring", info.Call("indexOf", "(").Int()+1, info.Call("indexOf", ")").Int()).Call("split", ":")
-	return 0, parts.Index(0).String(), parts.Index(1).Int(), true
+	pos := info.Call("substring", info.Call("indexOf", "(").Int()+1, info.Call("indexOf", ")").Int())
+	parts := pos.Call("split", ":")
+	file = parts.Index(0).String()
+	line = parts.Index(1).Int()
+	funcName := info.Call("substring", info.Call("indexOf", "at ").Int()+3, info.Call("indexOf", " (").Int()).String()
+	pc = registerPosition(funcName, file, line)
+	return pc, file, line, true
 }
 
 func Callers(skip int, pc []uintptr) int {
@@ -172,15 +211,39 @@ func SetFinalizer(x, f interface{}) {
 }
 
 type Func struct {
+	name string
+	file string
+	line int
+
 	opaque struct{} // unexported field to disallow conversions
 }
 
-func (_ *Func) Entry() uintptr                              { return 0 }
-func (_ *Func) FileLine(pc uintptr) (file string, line int) { return "", 0 }
-func (_ *Func) Name() string                                { return "" }
+func (_ *Func) Entry() uintptr { return 0 }
+
+func (f *Func) FileLine(pc uintptr) (file string, line int) {
+	if f == nil {
+		return "", 0
+	}
+	return f.file, f.line
+}
+func (f *Func) Name() string {
+	if f == nil || f.name == "" {
+		return "<unknown>"
+	}
+	return f.name
+}
 
 func FuncForPC(pc uintptr) *Func {
-	return nil
+	ipc := int(pc)
+	if ipc >= len(positionCounters) {
+		// Since we are faking position counters, the only valid way to obtain one
+		// is through a Caller() or Callers() function. If pc is out of positionCounters
+		// bounds it must have been obtained in some other way, which is unexpected.
+		// If a panic proves problematic, we can return a nil *Func, which will
+		// present itself as a generic "unknown" function.
+		panic("GopherJS: pc=" + itoa(ipc) + " is out of range of known position counters")
+	}
+	return positionCounters[ipc]
 }
 
 var MemProfileRate int = 512 * 1024

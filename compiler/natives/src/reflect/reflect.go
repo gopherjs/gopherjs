@@ -748,10 +748,6 @@ func ifaceE2I(t *rtype, src interface{}, dst unsafe.Pointer) {
 	js.InternalObject(dst).Call("$set", js.InternalObject(src))
 }
 
-func methodName() string {
-	return "?FIXME?"
-}
-
 func makeMethodValue(op string, v Value) Value {
 	if v.flag&flagMethod == 0 {
 		panic("reflect: internal error: invalid use of makePartialFunc")

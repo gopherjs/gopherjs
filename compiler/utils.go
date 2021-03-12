@@ -217,7 +217,7 @@ func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
 			j := i
 			name = ""
 			for {
-				name = string(offset+(j%26)) + name
+				name = string(rune(offset+(j%26))) + name
 				j = j/26 - 1
 				if j == -1 {
 					break

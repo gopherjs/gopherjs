@@ -467,12 +467,27 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	ftyp := (*funcType)(unsafe.Pointer(t))
 
 	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
+		// Convert raw JS arguments into []Value the user-supplied function expects.
 		args := make([]Value, ftyp.NumIn())
 		for i := range args {
 			argType := ftyp.In(i).common()
 			args[i] = makeValue(argType, arguments[i], 0)
 		}
+
+		// Call the user-supplied function.
 		resultsSlice := fn(args)
+
+		// Verify that returned value types are compatible with the function type specified by the caller.
+		if want, got := ftyp.NumOut(), len(resultsSlice); want != got {
+			panic("reflect: expected " + strconv.Itoa(want) + " return values, got " + strconv.Itoa(got))
+		}
+		for i, rtyp := range ftyp.out() {
+			if !resultsSlice[i].Type().AssignableTo(rtyp) {
+				panic("reflect: " + strconv.Itoa(i) + " return value type is not compatible with the function declaration")
+			}
+		}
+
+		// Rearrange return values according to the expected function signature.
 		switch ftyp.NumOut() {
 		case 0:
 			return nil

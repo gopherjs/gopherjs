@@ -406,7 +406,7 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 		}
 
 		switch pkg.ImportPath {
-		case "crypto/rand", "encoding/gob", "encoding/json", "expvar", "go/token", "log", "math/big", "math/rand", "regexp", "testing", "time":
+		case "crypto/rand", "encoding/gob", "encoding/json", "expvar", "go/token", "log", "math/big", "math/rand", "regexp", "time":
 			for _, spec := range file.Imports {
 				path, _ := strconv.Unquote(spec.Path.Value)
 				if path == "sync" {

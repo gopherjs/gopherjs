@@ -59,7 +59,6 @@ runtime/pprof/internal/profile
 runtime/race
 runtime/trace
 syscall
-testing
 testing/internal/testdeps
 testing/iotest
 unsafe

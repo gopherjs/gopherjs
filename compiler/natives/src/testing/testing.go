@@ -4,7 +4,7 @@ package testing
 
 import "runtime"
 
-// The upstream callerName and frameSkip rely on runtime.Callers,
+// The upstream callerName, frameSkip and Helper rely on runtime.Callers,
 // and panic if there are zero callers found. However, runtime.Callers
 // is not implemented for GopherJS at this time, so we can't use
 // that implementation. Use these stubs instead.
@@ -23,4 +23,8 @@ func (*common) frameSkip(skip int) runtime.Frame {
 		File: file,
 		Line: line,
 	}
+}
+
+func (c *common) Helper() {
+	// Not supported by GopherJS.
 }

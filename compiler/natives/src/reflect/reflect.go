@@ -389,44 +389,95 @@ func SliceOf(t Type) Type {
 	return reflectType(js.Global.Call("$sliceType", jsType(t)))
 }
 
-// func StructOf(fields []StructField) Type {
-// 	jsFields := make([]*js.Object, len(fields))
-// 	fset := map[string]struct{}{}
-// 	for i, f := range fields {
-// 		if f.Type == nil {
-// 			panic("reflect.StructOf: field " + strconv.Itoa(i) + " has no type")
-// 		}
+func StructOf(fields []StructField) Type {
+	var (
+		jsFields  = make([]*js.Object, len(fields))
+		fset      = map[string]struct{}{}
+		pkgpath   string
+		hasGCProg bool
+	)
+	for i, field := range fields {
+		if field.Name == "" {
+			panic("reflect.StructOf: field " + strconv.Itoa(i) + " has no name")
+		}
+		if !isValidFieldName(field.Name) {
+			panic("reflect.StructOf: field " + strconv.Itoa(i) + " has invalid name")
+		}
+		if field.Type == nil {
+			panic("reflect.StructOf: field " + strconv.Itoa(i) + " has no type")
+		}
+		f, fpkgpath := runtimeStructField(field)
+		ft := f.typ
+		if ft.kind&kindGCProg != 0 {
+			hasGCProg = true
+		}
+		if fpkgpath != "" {
+			if pkgpath == "" {
+				pkgpath = fpkgpath
+			} else if pkgpath != fpkgpath {
+				panic("reflect.Struct: fields with different PkgPath " + pkgpath + " and " + fpkgpath)
+			}
+		}
+		name := field.Name
+		if f.embedded() {
+			// Embedded field
+			if field.Type.Kind() == Ptr {
+				// Embedded ** and *interface{} are illegal
+				elem := field.Type.Elem()
+				if k := elem.Kind(); k == Ptr || k == Interface {
+					panic("reflect.StructOf: illegal anonymous field type " + field.Type.String())
+				}
+			}
+			switch field.Type.Kind() {
+			case Interface:
+			case Ptr:
+				ptr := (*ptrType)(unsafe.Pointer(ft))
+				if unt := ptr.uncommon(); unt != nil {
+					if i > 0 && unt.mcount > 0 {
+						// Issue 15924.
+						panic("reflect: embedded type with methods not implemented if type is not first field")
+					}
+					if len(fields) > 1 {
+						panic("reflect: embedded type with methods not implemented if there is more than one field")
+					}
+				}
+			default:
+				if unt := ft.uncommon(); unt != nil {
+					if i > 0 && unt.mcount > 0 {
+						// Issue 15924.
+						panic("reflect: embedded type with methods not implemented if type is not first field")
+					}
+					if len(fields) > 1 && ft.kind&kindDirectIface != 0 {
+						panic("reflect: embedded type with methods not implemented for non-pointer type")
+					}
+				}
+			}
+		}
 
-// 		name := f.Name
-// 		if name == "" {
-// 			// Embedded field
-// 			if f.Type.Kind() == Ptr {
-// 				// Embedded ** and *interface{} are illegal
-// 				elem := f.Type.Elem()
-// 				if k := elem.Kind(); k == Ptr || k == Interface {
-// 					panic("reflect.StructOf: illegal anonymous field type " + f.Type.String())
-// 				}
-// 				name = elem.String()
-// 			} else {
-// 				name = f.Type.String()
-// 			}
-// 		}
-
-// 		if _, dup := fset[name]; dup {
-// 			panic("reflect.StructOf: duplicate field " + name)
-// 		}
-// 		fset[name] = struct{}{}
-
-// 		jsf := js.Global.Get("Object").New()
-// 		jsf.Set("prop", name)
-// 		jsf.Set("name", name)
-// 		jsf.Set("exported", true)
-// 		jsf.Set("typ", jsType(f.Type))
-// 		jsf.Set("tag", f.Tag)
-// 		jsFields[i] = jsf
-// 	}
-// 	return reflectType(js.Global.Call("$structType", "", jsFields))
-// }
+		if _, dup := fset[name]; dup {
+			panic("reflect.StructOf: duplicate field " + name)
+		}
+		fset[name] = struct{}{}
+		// To be consistent with Compiler's behavior we need to avoid externalizing
+		// the "name" property. The line below is effectively an inverse of the
+		// internalStr() function.
+		jsf := js.InternalObject(struct{ name string }{name})
+		// The rest is set through the js.Object() interface, which the compiler will
+		// externalize for us.
+		jsf.Set("prop", name)
+		jsf.Set("exported", f.name.isExported())
+		jsf.Set("typ", jsType(field.Type))
+		jsf.Set("tag", field.Tag)
+		jsf.Set("embedded", field.Anonymous)
+		jsFields[i] = jsf
+	}
+	_ = hasGCProg
+	typ := js.Global.Call("$structType", "", jsFields)
+	if pkgpath != "" {
+		typ.Set("pkgPath", pkgpath)
+	}
+	return reflectType(typ)
+}
 
 func Zero(typ Type) Value {
 	return makeValue(typ, jsType(typ).Call("zero"), 0)

@@ -59,40 +59,20 @@ func TestSelectOnInvalid(t *testing.T) {
 	})
 }
 
-func TestStructOfFieldName(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOf(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfExportRules(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfGC(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfAlg(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfGenericAlg(t *testing.T) {
-	t.Skip("StructOf")
-}
-
 func TestStructOfDirectIface(t *testing.T) {
-	t.Skip("StructOf")
+	t.Skip("reflect.Value.InterfaceData is not supported by GopherJS.")
 }
 
 func TestStructOfWithInterface(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfTooManyFields(t *testing.T) {
-	t.Skip("StructOf")
+	// TODO(nevkontakte) Most of this test actually passes, but there is something
+	// about embedding fields with methods that can or can't be stored in an
+	// interface value directly that GopherJS does differently from upstream. As
+	// a result, GopherJS's implementation of StructOf() doesn't panic where
+	// upstream does. It seems to be a result of our implementation not propagating
+	// the kindDirectIface flag in struct types created by StructOf(), but at this
+	// point I wasn't able to figure out what that flag actually means in the
+	// GopherJS context or how it maps onto our own reflection implementation.
+	t.Skip("GopherJS doesn't support storing types directly in interfaces.")
 }
 
 var deepEqualTests = []DeepEqualTest{

@@ -666,7 +666,7 @@ func mapiterkey(it unsafe.Pointer) unsafe.Pointer {
 	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("k"), jsType(PtrTo(iter.t.Key()))).Unsafe())
 }
 
-func mapitervalue(it unsafe.Pointer) unsafe.Pointer {
+func mapiterelem(it unsafe.Pointer) unsafe.Pointer {
 	iter := (*mapIter)(it)
 	var kv *js.Object
 	if iter.last != nil {

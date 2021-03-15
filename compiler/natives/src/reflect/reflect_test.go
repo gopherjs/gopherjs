@@ -167,3 +167,18 @@ func init() {
 	// TODO: This is a failure in 1.11, try to determine the cause and fix.
 	typeTests = append(typeTests[:31], typeTests[32:]...) // skip test case #31
 }
+
+func TestConvertNaNs(t *testing.T) {
+	// This test is exactly the same as the upstream, except it uses a "quiet NaN"
+	// value instead of "signalling NaN". JavaScript appears to coerce all NaNs
+	// into quiet ones, but for the purpose of this test either is fine.
+
+	const qnan uint32 = 0x7fc00001 // Originally: 0x7f800001.
+	type myFloat32 float32
+	x := V(myFloat32(math.Float32frombits(qnan)))
+	y := x.Convert(reflect.TypeOf(float32(0)))
+	z := y.Interface().(float32)
+	if got := math.Float32bits(z); got != qnan {
+		t.Errorf("quiet nan conversion got %x, want %x", got, qnan)
+	}
+}

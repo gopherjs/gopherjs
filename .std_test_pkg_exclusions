@@ -5,6 +5,7 @@ crypto/tls
 crypto/x509/pkix
 debug/gosym
 debug/plan9obj
+embed/internal/embedtest
 encoding
 go/build
 go/importer

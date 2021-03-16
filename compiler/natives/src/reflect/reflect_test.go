@@ -59,40 +59,20 @@ func TestSelectOnInvalid(t *testing.T) {
 	})
 }
 
-func TestStructOfFieldName(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOf(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfExportRules(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfGC(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfAlg(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfGenericAlg(t *testing.T) {
-	t.Skip("StructOf")
-}
-
 func TestStructOfDirectIface(t *testing.T) {
-	t.Skip("StructOf")
+	t.Skip("reflect.Value.InterfaceData is not supported by GopherJS.")
 }
 
 func TestStructOfWithInterface(t *testing.T) {
-	t.Skip("StructOf")
-}
-
-func TestStructOfTooManyFields(t *testing.T) {
-	t.Skip("StructOf")
+	// TODO(nevkontakte) Most of this test actually passes, but there is something
+	// about embedding fields with methods that can or can't be stored in an
+	// interface value directly that GopherJS does differently from upstream. As
+	// a result, GopherJS's implementation of StructOf() doesn't panic where
+	// upstream does. It seems to be a result of our implementation not propagating
+	// the kindDirectIface flag in struct types created by StructOf(), but at this
+	// point I wasn't able to figure out what that flag actually means in the
+	// GopherJS context or how it maps onto our own reflection implementation.
+	t.Skip("GopherJS doesn't support storing types directly in interfaces.")
 }
 
 var deepEqualTests = []DeepEqualTest{
@@ -186,4 +166,19 @@ func TestCallReturnsEmpty(t *testing.T) {
 func init() {
 	// TODO: This is a failure in 1.11, try to determine the cause and fix.
 	typeTests = append(typeTests[:31], typeTests[32:]...) // skip test case #31
+}
+
+func TestConvertNaNs(t *testing.T) {
+	// This test is exactly the same as the upstream, except it uses a "quiet NaN"
+	// value instead of "signalling NaN". JavaScript appears to coerce all NaNs
+	// into quiet ones, but for the purpose of this test either is fine.
+
+	const qnan uint32 = 0x7fc00001 // Originally: 0x7f800001.
+	type myFloat32 float32
+	x := V(myFloat32(math.Float32frombits(qnan)))
+	y := x.Convert(reflect.TypeOf(float32(0)))
+	z := y.Interface().(float32)
+	if got := math.Float32bits(z); got != qnan {
+		t.Errorf("quiet nan conversion got %x, want %x", got, qnan)
+	}
 }

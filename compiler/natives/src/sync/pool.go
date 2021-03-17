@@ -43,3 +43,7 @@ func (p *Pool) Put(x interface{}) {
 	}
 	p.store = append(p.store, x)
 }
+
+// These are referenced by tests, but are no-ops in GopherJS runtime.
+func runtime_procPin() int { return 0 }
+func runtime_procUnpin()   {}

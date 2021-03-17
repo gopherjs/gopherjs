@@ -1,5 +1,4 @@
 // +build js
-// +build go1.15
 
 package x509
 

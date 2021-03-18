@@ -328,14 +328,23 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			isJs = typesutil.IsJsPackage(c.p.Uses[fun.Sel].Pkg())
 		}
 		sig := c.p.TypeOf(s.Call.Fun).Underlying().(*types.Signature)
+		sigTypes := signatureTypes{Sig: sig}
 		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
 		if isBuiltin || isJs {
+			// Since some builtins or js.Object methods may not transpile into
+			// callable expressions, we need to wrap then in a proxy lambda in order
+			// to push them onto the deferral stack.
 			vars := make([]string, len(s.Call.Args))
 			callArgs := make([]ast.Expr, len(s.Call.Args))
-			for i, arg := range s.Call.Args {
+			ellipsis := s.Call.Ellipsis
+
+			for i := range s.Call.Args {
 				v := c.newVariable("_arg")
 				vars[i] = v
-				callArgs[i] = c.newIdent(v, c.p.TypeOf(arg))
+				// Subtle: the proxy lambda argument needs to be assigned with the type
+				// that the original function expects, and not with the argument
+				// expression result type, or we may do implicit type conversion twice.
+				callArgs[i] = c.newIdent(v, sigTypes.Param(i, ellipsis.IsValid()))
 			}
 			call := c.translateExpr(&ast.CallExpr{
 				Fun:      s.Call.Fun,

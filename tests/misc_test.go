@@ -683,7 +683,7 @@ func TestInterfaceConversionRuntimeError(t *testing.T) {
 		}
 		re, ok := r.(runtime.Error)
 		if !ok {
-			t.Fatalf("got %T, want runtime.Error", r)
+			t.Fatalf("got %T (%s), want runtime.Error", r, r)
 		}
 		if got, want := re.Error(), "interface conversion: int is not tests.I: missing method Get"; got != want {
 			t.Fatalf("got %q, want %q", got, want)

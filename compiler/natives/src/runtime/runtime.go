@@ -23,12 +23,48 @@ type Error interface {
 	RuntimeError()
 }
 
+// TODO(nevkontakte): In the upstream, this struct is meant to be compatible
+// with reflect.rtype, but here we use a minimal stub that satisfies the API
+// TypeAssertionError expects, which we dynamically instantiate in $assertType().
+type _type struct{ str string }
+
+func (t *_type) string() string  { return t.str }
+func (t *_type) pkgpath() string { return "" }
+
 // A TypeAssertionError explains a failed type assertion.
-type TypeAssertionError struct{}
+type TypeAssertionError struct {
+	_interface    *_type
+	concrete      *_type
+	asserted      *_type
+	missingMethod string // one method needed by Interface, missing from Concrete
+}
 
 func (*TypeAssertionError) RuntimeError() {}
-func (*TypeAssertionError) Error() string {
-	panic("TypeAssertionError is not used in GopherJS.")
+
+func (e *TypeAssertionError) Error() string {
+	inter := "interface"
+	if e._interface != nil {
+		inter = e._interface.string()
+	}
+	as := e.asserted.string()
+	if e.concrete == nil {
+		return "interface conversion: " + inter + " is nil, not " + as
+	}
+	cs := e.concrete.string()
+	if e.missingMethod == "" {
+		msg := "interface conversion: " + inter + " is " + cs + ", not " + as
+		if cs == as {
+			// provide slightly clearer error message
+			if e.concrete.pkgpath() != e.asserted.pkgpath() {
+				msg += " (types from different packages)"
+			} else {
+				msg += " (types from different scopes)"
+			}
+		}
+		return msg
+	}
+	return "interface conversion: " + cs + " is not " + as +
+		": missing method " + e.missingMethod
 }
 
 func init() {

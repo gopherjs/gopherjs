@@ -19,71 +19,71 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
-func (c *funcContext) Write(b []byte) (int, error) {
-	c.writePos()
-	c.output = append(c.output, b...)
+func (fc *funcContext) Write(b []byte) (int, error) {
+	fc.writePos()
+	fc.output = append(fc.output, b...)
 	return len(b), nil
 }
 
-func (c *funcContext) Printf(format string, values ...interface{}) {
-	c.Write([]byte(strings.Repeat("\t", c.p.indentation)))
-	fmt.Fprintf(c, format, values...)
-	c.Write([]byte{'\n'})
-	c.Write(c.delayedOutput)
-	c.delayedOutput = nil
+func (fc *funcContext) Printf(format string, values ...interface{}) {
+	fc.Write([]byte(strings.Repeat("\t", fc.pkgCtx.indentation)))
+	fmt.Fprintf(fc, format, values...)
+	fc.Write([]byte{'\n'})
+	fc.Write(fc.delayedOutput)
+	fc.delayedOutput = nil
 }
 
-func (c *funcContext) PrintCond(cond bool, onTrue, onFalse string) {
+func (fc *funcContext) PrintCond(cond bool, onTrue, onFalse string) {
 	if !cond {
-		c.Printf("/* %s */ %s", strings.Replace(onTrue, "*/", "<star>/", -1), onFalse)
+		fc.Printf("/* %s */ %s", strings.Replace(onTrue, "*/", "<star>/", -1), onFalse)
 		return
 	}
-	c.Printf("%s", onTrue)
+	fc.Printf("%s", onTrue)
 }
 
-func (c *funcContext) SetPos(pos token.Pos) {
-	c.posAvailable = true
-	c.pos = pos
+func (fc *funcContext) SetPos(pos token.Pos) {
+	fc.posAvailable = true
+	fc.pos = pos
 }
 
-func (c *funcContext) writePos() {
-	if c.posAvailable {
-		c.posAvailable = false
-		c.Write([]byte{'\b'})
-		binary.Write(c, binary.BigEndian, uint32(c.pos))
+func (fc *funcContext) writePos() {
+	if fc.posAvailable {
+		fc.posAvailable = false
+		fc.Write([]byte{'\b'})
+		binary.Write(fc, binary.BigEndian, uint32(fc.pos))
 	}
 }
 
-func (c *funcContext) Indent(f func()) {
-	c.p.indentation++
+func (fc *funcContext) Indent(f func()) {
+	fc.pkgCtx.indentation++
 	f()
-	c.p.indentation--
+	fc.pkgCtx.indentation--
 }
 
-func (c *funcContext) CatchOutput(indent int, f func()) []byte {
-	origoutput := c.output
-	c.output = nil
-	c.p.indentation += indent
+func (fc *funcContext) CatchOutput(indent int, f func()) []byte {
+	origoutput := fc.output
+	fc.output = nil
+	fc.pkgCtx.indentation += indent
 	f()
-	c.writePos()
-	catched := c.output
-	c.output = origoutput
-	c.p.indentation -= indent
-	return catched
+	fc.writePos()
+	caught := fc.output
+	fc.output = origoutput
+	fc.pkgCtx.indentation -= indent
+	return caught
 }
 
-func (c *funcContext) Delayed(f func()) {
-	c.delayedOutput = c.CatchOutput(0, f)
+func (fc *funcContext) Delayed(f func()) {
+	fc.delayedOutput = fc.CatchOutput(0, f)
 }
 
-func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, ellipsis bool) []string {
+func (fc *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, ellipsis bool) []string {
 	if len(argExprs) == 1 {
-		if tuple, isTuple := c.p.TypeOf(argExprs[0]).(*types.Tuple); isTuple {
-			tupleVar := c.newVariable("_tuple")
-			c.Printf("%s = %s;", tupleVar, c.translateExpr(argExprs[0]))
+		if tuple, isTuple := fc.pkgCtx.TypeOf(argExprs[0]).(*types.Tuple); isTuple {
+			tupleVar := fc.newVariable("_tuple")
+			fc.Printf("%s = %s;", tupleVar, fc.translateExpr(argExprs[0]))
 			argExprs = make([]ast.Expr, tuple.Len())
 			for i := range argExprs {
-				argExprs[i] = c.newIdent(c.formatExpr("%s[%d]", tupleVar, i).String(), tuple.At(i).Type())
+				argExprs[i] = fc.newIdent(fc.formatExpr("%s[%d]", tupleVar, i).String(), tuple.At(i).Type())
 			}
 		}
 	}
@@ -92,16 +92,16 @@ func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, e
 
 	preserveOrder := false
 	for i := 1; i < len(argExprs); i++ {
-		preserveOrder = preserveOrder || c.Blocking[argExprs[i]]
+		preserveOrder = preserveOrder || fc.Blocking[argExprs[i]]
 	}
 
 	args := make([]string, len(argExprs))
 	for i, argExpr := range argExprs {
-		arg := c.translateImplicitConversionWithCloning(argExpr, sigTypes.Param(i, ellipsis)).String()
+		arg := fc.translateImplicitConversionWithCloning(argExpr, sigTypes.Param(i, ellipsis)).String()
 
-		if preserveOrder && c.p.Types[argExpr].Value == nil {
-			argVar := c.newVariable("_arg")
-			c.Printf("%s = %s;", argVar, arg)
+		if preserveOrder && fc.pkgCtx.Types[argExpr].Value == nil {
+			argVar := fc.newVariable("_arg")
+			fc.Printf("%s = %s;", argVar, arg)
 			arg = argVar
 		}
 
@@ -112,12 +112,12 @@ func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, e
 	// into a slice and pass it as a single argument.
 	if sig.Variadic() && !ellipsis {
 		return append(args[:sigTypes.RequiredParams()],
-			fmt.Sprintf("new %s([%s])", c.typeName(sigTypes.VariadicType()), strings.Join(args[sigTypes.RequiredParams():], ", ")))
+			fmt.Sprintf("new %s([%s])", fc.typeName(sigTypes.VariadicType()), strings.Join(args[sigTypes.RequiredParams():], ", ")))
 	}
 	return args
 }
 
-func (c *funcContext) translateSelection(sel selection, pos token.Pos) ([]string, string) {
+func (fc *funcContext) translateSelection(sel selection, pos token.Pos) ([]string, string) {
 	var fields []string
 	t := sel.Recv()
 	for _, index := range sel.Index() {
@@ -140,7 +140,7 @@ func (c *funcContext) translateSelection(sel selection, pos token.Pos) ([]string
 				var ok bool
 				s, ok = ft.(*types.Struct)
 				if !ok || s.NumFields() == 0 {
-					c.p.errList = append(c.p.errList, types.Error{Fset: c.p.fileSet, Pos: pos, Msg: fmt.Sprintf("could not find field with type *js.Object for 'js' tag of field '%s'", jsFieldName), Soft: true})
+					fc.pkgCtx.errList = append(fc.pkgCtx.errList, types.Error{Fset: fc.pkgCtx.fileSet, Pos: pos, Msg: fmt.Sprintf("could not find field with type *js.Object for 'js' tag of field '%s'", jsFieldName), Soft: true})
 					return nil, ""
 				}
 			}
@@ -153,16 +153,16 @@ func (c *funcContext) translateSelection(sel selection, pos token.Pos) ([]string
 
 var nilObj = types.Universe.Lookup("nil")
 
-func (c *funcContext) zeroValue(ty types.Type) ast.Expr {
+func (fc *funcContext) zeroValue(ty types.Type) ast.Expr {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:
 		switch {
 		case isBoolean(t):
-			return c.newConst(ty, constant.MakeBool(false))
+			return fc.newConst(ty, constant.MakeBool(false))
 		case isNumeric(t):
-			return c.newConst(ty, constant.MakeInt64(0))
+			return fc.newConst(ty, constant.MakeInt64(0))
 		case isString(t):
-			return c.newConst(ty, constant.MakeString(""))
+			return fc.newConst(ty, constant.MakeString(""))
 		case t.Kind() == types.UnsafePointer:
 			// fall through to "nil"
 		case t.Kind() == types.UntypedNil:
@@ -171,33 +171,33 @@ func (c *funcContext) zeroValue(ty types.Type) ast.Expr {
 			panic(fmt.Sprintf("Unhandled basic type: %v\n", t))
 		}
 	case *types.Array, *types.Struct:
-		return c.setType(&ast.CompositeLit{}, ty)
+		return fc.setType(&ast.CompositeLit{}, ty)
 	case *types.Chan, *types.Interface, *types.Map, *types.Signature, *types.Slice, *types.Pointer:
 		// fall through to "nil"
 	default:
 		panic(fmt.Sprintf("Unhandled type: %T\n", t))
 	}
-	id := c.newIdent("nil", ty)
-	c.p.Uses[id] = nilObj
+	id := fc.newIdent("nil", ty)
+	fc.pkgCtx.Uses[id] = nilObj
 	return id
 }
 
-func (c *funcContext) newConst(t types.Type, value constant.Value) ast.Expr {
+func (fc *funcContext) newConst(t types.Type, value constant.Value) ast.Expr {
 	id := &ast.Ident{}
-	c.p.Types[id] = types.TypeAndValue{Type: t, Value: value}
+	fc.pkgCtx.Types[id] = types.TypeAndValue{Type: t, Value: value}
 	return id
 }
 
-func (c *funcContext) newVariable(name string) string {
-	return c.newVariableWithLevel(name, false)
+func (fc *funcContext) newVariable(name string) string {
+	return fc.newVariableWithLevel(name, false)
 }
 
-func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
+func (fc *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
 	if name == "" {
 		panic("newVariable: empty name")
 	}
 	name = encodeIdent(name)
-	if c.p.minify {
+	if fc.pkgCtx.minify {
 		i := 0
 		for {
 			offset := int('a')
@@ -213,50 +213,50 @@ func (c *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
 					break
 				}
 			}
-			if c.allVars[name] == 0 {
+			if fc.allVars[name] == 0 {
 				break
 			}
 			i++
 		}
 	}
-	n := c.allVars[name]
-	c.allVars[name] = n + 1
+	n := fc.allVars[name]
+	fc.allVars[name] = n + 1
 	varName := name
 	if n > 0 {
 		varName = fmt.Sprintf("%s$%d", name, n)
 	}
 
 	if pkgLevel {
-		for c2 := c.parent; c2 != nil; c2 = c2.parent {
+		for c2 := fc.parent; c2 != nil; c2 = c2.parent {
 			c2.allVars[name] = n + 1
 		}
 		return varName
 	}
 
-	c.localVars = append(c.localVars, varName)
+	fc.localVars = append(fc.localVars, varName)
 	return varName
 }
 
-func (c *funcContext) newIdent(name string, t types.Type) *ast.Ident {
+func (fc *funcContext) newIdent(name string, t types.Type) *ast.Ident {
 	ident := ast.NewIdent(name)
-	c.setType(ident, t)
-	obj := types.NewVar(0, c.p.Pkg, name, t)
-	c.p.Uses[ident] = obj
-	c.p.objectNames[obj] = name
+	fc.setType(ident, t)
+	obj := types.NewVar(0, fc.pkgCtx.Pkg, name, t)
+	fc.pkgCtx.Uses[ident] = obj
+	fc.pkgCtx.objectNames[obj] = name
 	return ident
 }
 
-func (c *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
-	c.p.Types[e] = types.TypeAndValue{Type: t}
+func (fc *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
+	fc.pkgCtx.Types[e] = types.TypeAndValue{Type: t}
 	return e
 }
 
-func (c *funcContext) pkgVar(pkg *types.Package) string {
-	if pkg == c.p.Pkg {
+func (fc *funcContext) pkgVar(pkg *types.Package) string {
+	if pkg == fc.pkgCtx.Pkg {
 		return "$pkg"
 	}
 
-	pkgVar, found := c.p.pkgVars[pkg.Path()]
+	pkgVar, found := fc.pkgCtx.pkgVars[pkg.Path()]
 	if !found {
 		pkgVar = fmt.Sprintf(`$packages["%s"]`, pkg.Path())
 	}
@@ -275,41 +275,41 @@ func isPkgLevel(o types.Object) bool {
 	return o.Parent() != nil && o.Parent().Parent() == types.Universe
 }
 
-func (c *funcContext) objectName(o types.Object) string {
+func (fc *funcContext) objectName(o types.Object) string {
 	if isPkgLevel(o) {
-		c.p.dependencies[o] = true
+		fc.pkgCtx.dependencies[o] = true
 
-		if o.Pkg() != c.p.Pkg || (isVarOrConst(o) && o.Exported()) {
-			return c.pkgVar(o.Pkg()) + "." + o.Name()
+		if o.Pkg() != fc.pkgCtx.Pkg || (isVarOrConst(o) && o.Exported()) {
+			return fc.pkgVar(o.Pkg()) + "." + o.Name()
 		}
 	}
 
-	name, ok := c.p.objectNames[o]
+	name, ok := fc.pkgCtx.objectNames[o]
 	if !ok {
-		name = c.newVariableWithLevel(o.Name(), isPkgLevel(o))
-		c.p.objectNames[o] = name
+		name = fc.newVariableWithLevel(o.Name(), isPkgLevel(o))
+		fc.pkgCtx.objectNames[o] = name
 	}
 
-	if v, ok := o.(*types.Var); ok && c.p.escapingVars[v] {
+	if v, ok := o.(*types.Var); ok && fc.pkgCtx.escapingVars[v] {
 		return name + "[0]"
 	}
 	return name
 }
 
-func (c *funcContext) varPtrName(o *types.Var) string {
+func (fc *funcContext) varPtrName(o *types.Var) string {
 	if isPkgLevel(o) && o.Exported() {
-		return c.pkgVar(o.Pkg()) + "." + o.Name() + "$ptr"
+		return fc.pkgVar(o.Pkg()) + "." + o.Name() + "$ptr"
 	}
 
-	name, ok := c.p.varPtrNames[o]
+	name, ok := fc.pkgCtx.varPtrNames[o]
 	if !ok {
-		name = c.newVariableWithLevel(o.Name()+"$ptr", isPkgLevel(o))
-		c.p.varPtrNames[o] = name
+		name = fc.newVariableWithLevel(o.Name()+"$ptr", isPkgLevel(o))
+		fc.pkgCtx.varPtrNames[o] = name
 	}
 	return name
 }
 
-func (c *funcContext) typeName(ty types.Type) string {
+func (fc *funcContext) typeName(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Basic:
 		return "$" + toJavaScriptType(t)
@@ -317,26 +317,26 @@ func (c *funcContext) typeName(ty types.Type) string {
 		if t.Obj().Name() == "error" {
 			return "$error"
 		}
-		return c.objectName(t.Obj())
+		return fc.objectName(t.Obj())
 	case *types.Interface:
 		if t.Empty() {
 			return "$emptyInterface"
 		}
 	}
 
-	anonType, ok := c.p.anonTypeMap.At(ty).(*types.TypeName)
+	anonType, ok := fc.pkgCtx.anonTypeMap.At(ty).(*types.TypeName)
 	if !ok {
-		c.initArgs(ty) // cause all embedded types to be registered
-		varName := c.newVariableWithLevel(strings.ToLower(typeKind(ty)[5:])+"Type", true)
-		anonType = types.NewTypeName(token.NoPos, c.p.Pkg, varName, ty) // fake types.TypeName
-		c.p.anonTypes = append(c.p.anonTypes, anonType)
-		c.p.anonTypeMap.Set(ty, anonType)
+		fc.initArgs(ty) // cause all embedded types to be registered
+		varName := fc.newVariableWithLevel(strings.ToLower(typeKind(ty)[5:])+"Type", true)
+		anonType = types.NewTypeName(token.NoPos, fc.pkgCtx.Pkg, varName, ty) // fake types.TypeName
+		fc.pkgCtx.anonTypes = append(fc.pkgCtx.anonTypes, anonType)
+		fc.pkgCtx.anonTypeMap.Set(ty, anonType)
 	}
-	c.p.dependencies[anonType] = true
+	fc.pkgCtx.dependencies[anonType] = true
 	return anonType.Name()
 }
 
-func (c *funcContext) externalize(s string, t types.Type) string {
+func (fc *funcContext) externalize(s string, t types.Type) string {
 	if typesutil.IsJsObject(t) {
 		return s
 	}
@@ -349,18 +349,18 @@ func (c *funcContext) externalize(s string, t types.Type) string {
 			return "null"
 		}
 	}
-	return fmt.Sprintf("$externalize(%s, %s)", s, c.typeName(t))
+	return fmt.Sprintf("$externalize(%s, %s)", s, fc.typeName(t))
 }
 
-func (c *funcContext) handleEscapingVars(n ast.Node) {
+func (fc *funcContext) handleEscapingVars(n ast.Node) {
 	newEscapingVars := make(map[*types.Var]bool)
-	for escaping := range c.p.escapingVars {
+	for escaping := range fc.pkgCtx.escapingVars {
 		newEscapingVars[escaping] = true
 	}
-	c.p.escapingVars = newEscapingVars
+	fc.pkgCtx.escapingVars = newEscapingVars
 
 	var names []string
-	objs := analysis.EscapingObjects(n, c.p.Info.Info)
+	objs := analysis.EscapingObjects(n, fc.pkgCtx.Info.Info)
 	sort.Slice(objs, func(i, j int) bool {
 		if objs[i].Name() == objs[j].Name() {
 			return objs[i].Pos() < objs[j].Pos()
@@ -368,12 +368,12 @@ func (c *funcContext) handleEscapingVars(n ast.Node) {
 		return objs[i].Name() < objs[j].Name()
 	})
 	for _, obj := range objs {
-		names = append(names, c.objectName(obj))
-		c.p.escapingVars[obj] = true
+		names = append(names, fc.objectName(obj))
+		fc.pkgCtx.escapingVars[obj] = true
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		c.Printf("%s = [%s];", name, name)
+		fc.Printf("%s = [%s];", name, name)
 	}
 }
 

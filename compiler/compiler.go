@@ -1,3 +1,8 @@
+// Package compiler implements GopherJS compiler logic.
+//
+// WARNING: This package's API is treated as internal and currently doesn't
+// provide any API stability guarantee, use it at your own risk. If you need a
+// stable interface, prefer invoking the gopherjs CLI tool as a subprocess.
 package compiler
 
 import (

@@ -78,6 +78,8 @@ type Archive struct {
 	FileSet []byte
 	// Whether or not the package was compiled with minification enabled.
 	Minified bool
+	// A list of go:linkname directives encountered in the package.
+	GoLinknames []GoLinkname
 }
 
 // Decl represents a package-level symbol (e.g. a function, variable or type).
@@ -88,6 +90,11 @@ type Decl struct {
 	// The package- or receiver-type-qualified name of function or method obj.
 	// See go/types.Func.FullName().
 	FullName string
+	// A logical equivalent of a symbol name in an object file in the traditional
+	// Go compiler/linker toolchain. Used by GopherJS to support go:linkname
+	// directives. Must be set for decls that are supported by go:linkname
+	// implementation.
+	LinkingName SymName
 	// A list of package-level JavaScript variable names this symbol needs to declare.
 	Vars []string
 	// JavaScript code that declares basic information about a symbol. For a type
@@ -170,13 +177,28 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified
 
+	// Aggregate all go:linkname directives in the program together.
+	gls := goLinknameSet{}
+	for _, pkg := range pkgs {
+		gls.Add(pkg.GoLinknames)
+	}
+
 	byFilter := make(map[string][]*dceInfo)
-	var pendingDecls []*Decl
+	var pendingDecls []*Decl // A queue of live decls to find other live decls.
 	for _, pkg := range pkgs {
 		for _, d := range pkg.Declarations {
 			if d.DceObjectFilter == "" && d.DceMethodFilter == "" {
+				// This is an entry point (like main() or init() functions) or a variable
+				// initializer which has a side effect, consider it live.
 				pendingDecls = append(pendingDecls, d)
 				continue
+			}
+			if gls.IsImplementation(d.LinkingName) {
+				// If a decl is referenced by a go:linkname directive, we just assume
+				// it's not dead.
+				// TODO(nevkontakte): This is a safe, but imprecise assumption. We should
+				// try and trace whether the referencing functions are actually live.
+				pendingDecls = append(pendingDecls, d)
 			}
 			info := &dceInfo{decl: d}
 			if d.DceObjectFilter != "" {
@@ -190,13 +212,15 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 		}
 	}
 
-	dceSelection := make(map[*Decl]struct{})
+	dceSelection := make(map[*Decl]struct{}) // Known live decls.
 	for len(pendingDecls) != 0 {
 		d := pendingDecls[len(pendingDecls)-1]
 		pendingDecls = pendingDecls[:len(pendingDecls)-1]
 
-		dceSelection[d] = struct{}{}
+		dceSelection[d] = struct{}{} // Mark the decl as live.
 
+		// Consider all decls the current one is known to depend on and possible add
+		// them to the live queue.
 		for _, dep := range d.DceDeps {
 			if infos, ok := byFilter[dep]; ok {
 				delete(byFilter, dep)
@@ -231,19 +255,19 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 
 	// write packages
 	for _, pkg := range pkgs {
-		if err := WritePkgCode(pkg, dceSelection, minify, w); err != nil {
+		if err := WritePkgCode(pkg, dceSelection, gls, minify, w); err != nil {
 			return err
 		}
 	}
 
-	if _, err := w.Write([]byte("$synthesizeMethods();\nvar $mainPkg = $packages[\"" + string(mainPkg.ImportPath) + "\"];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
+	if _, err := w.Write([]byte("$synthesizeMethods();\n$initAllLinknames();var $mainPkg = $packages[\"" + string(mainPkg.ImportPath) + "\"];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, minify bool, w *SourceMapFilter) error {
+func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameSet, minify bool, w *SourceMapFilter) error {
 	if w.MappingCallback != nil && pkg.FileSet != nil {
 		w.fileSet = token.NewFileSet()
 		if err := w.fileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
@@ -271,6 +295,15 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, minify bool, w 
 		if _, err := w.Write(d.DeclCode); err != nil {
 			return err
 		}
+		if gls.IsImplementation(d.LinkingName) {
+			// This decl is referenced by a go:linkname directive, expose it to external
+			// callers via $linkname object (declared in prelude). We are not using
+			// $pkg to avoid clashes with exported symbols.
+			code := fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.Vars[0])
+			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
+				return err
+			}
+		}
 	}
 	for _, d := range filteredDecls {
 		if _, err := w.Write(d.MethodListCode); err != nil {
@@ -280,6 +313,29 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, minify bool, w 
 	for _, d := range filteredDecls {
 		if _, err := w.Write(d.TypeInitCode); err != nil {
 			return err
+		}
+	}
+
+	{
+		// Set up all functions which package declares, but which implementation
+		// comes from elsewhere via a go:linkname compiler directive. This code
+		// needs to be executed after all $packages entries were defined, since such
+		// reference may go in a direction opposite of the import graph. It also
+		// needs to run before any initializer code runs, since that code may invoke
+		// linknamed function.
+		lines := []string{}
+		for _, d := range filteredDecls {
+			impl, found := gls.FindImplementation(d.LinkingName)
+			if !found {
+				continue // The symbol is not affected by a go:linkname directive.
+			}
+			lines = append(lines, fmt.Sprintf("\t\t%s = $linknames[%q];\n", d.Vars[0], impl.String()))
+		}
+		if len(lines) > 0 {
+			code := fmt.Sprintf("\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, ""))
+			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
+				return err
+			}
 		}
 	}
 

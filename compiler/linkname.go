@@ -105,11 +105,23 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 		}
 
 		if obj.Kind != ast.Fun {
+			if pkgPath == "math/bits" || pkgPath == "reflect" {
+				// These standard library packages are known to use go:linkname with
+				// variables, which GopherJS doesn't support. We silently ignore such
+				// directives, since it doesn't seem to cause any problems.
+				return nil
+			}
 			return fmt.Errorf("gopherjs: //go:linkname is only supported for functions, got %q", obj.Kind)
 		}
 
 		decl := obj.Decl.(*ast.FuncDecl)
 		if decl.Body != nil {
+			if pkgPath == "runtime" || pkgPath == "internal/bytealg" {
+				// These standard library packages are known to use unsupported
+				// "insert"-style go:linkname directives, which we ignore here and handle
+				// case-by-case in native overrides.
+				return nil
+			}
 			return fmt.Errorf("gopherjs: //go:linkname can not insert local implementation into an external package %q", extPkg)
 		}
 		// Local function has no body, treat it as a reference to an external implementation.
@@ -129,4 +141,45 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 	}
 
 	return directives, errs.Normalize()
+}
+
+// goLinknameSet is a utility that enables quick lookup of whether a decl is
+// affected by any go:linkname directive in the program.
+type goLinknameSet struct {
+	byImplementation map[SymName][]GoLinkname
+	byReference      map[SymName]GoLinkname
+}
+
+// Add more GoLinkname directives into the set.
+func (gls *goLinknameSet) Add(entries []GoLinkname) error {
+	if gls.byImplementation == nil {
+		gls.byImplementation = map[SymName][]GoLinkname{}
+	}
+	if gls.byReference == nil {
+		gls.byReference = map[SymName]GoLinkname{}
+	}
+	for _, e := range entries {
+		gls.byImplementation[e.Implementation] = append(gls.byImplementation[e.Implementation], e)
+		if prev, found := gls.byReference[e.Reference]; found {
+			return fmt.Errorf("conflicting go:linkname directives: two implementations for %q: %q and %q",
+				e.Reference, prev.Implementation, e.Implementation)
+		}
+		gls.byReference[e.Reference] = e
+	}
+	return nil
+}
+
+// IsImplementation returns true if there is a directive referencing this symbol
+// as an implementation.
+func (gls *goLinknameSet) IsImplementation(sym SymName) bool {
+	_, found := gls.byImplementation[sym]
+	return found
+}
+
+// FindImplementation returns a symbol name, which provides the implementation
+// for the given symbol. The second value indicates whether the implementation
+// was found.
+func (gls *goLinknameSet) FindImplementation(sym SymName) (SymName, bool) {
+	directive, found := gls.byReference[sym]
+	return directive.Implementation, found
 }

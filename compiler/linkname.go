@@ -1,6 +1,14 @@
 package compiler
 
-import "go/types"
+import (
+	"fmt"
+	"go/ast"
+	"go/token"
+	"go/types"
+	"strings"
+
+	"github.com/gopherjs/gopherjs/compiler/astutil"
+)
 
 // GoLinkname describes a go:linkname compiler directive found in the source code.
 //
@@ -8,20 +16,6 @@ import "go/types"
 // where for a single given symbol implementation there may be zero or more
 // symbols referencing it. This is subtly different from the upstream Go
 // implementation, which simply overrides symbol name the linker will use.
-//
-// The following directive format is supported:
-// //go:linkname <localname> <importpath>.<name>
-//
-// Currently only package-level functions are supported for use with this
-// directive.
-//
-// The compiler infers whether the local symbols is meant to be a reference or
-// implementation based on whether the local symbol has implementation or not.
-// The program behavior when neither or both symbols have implementation is
-// undefined.
-//
-// Both reference and implementation symbols are referred to by a fully qualified
-// name (see go/types.ObjectString()).
 type GoLinkname struct {
 	Implementation SymName
 	Reference      SymName
@@ -41,8 +35,8 @@ type SymName struct {
 	Name    string // Symbol name.
 }
 
-// NewSymName constructs SymName for a given named symbol.
-func NewSymName(o types.Object) SymName {
+// newSymName constructs SymName for a given named symbol.
+func newSymName(o types.Object) SymName {
 	if fun, ok := o.(*types.Func); ok {
 		sig := fun.Type().(*types.Signature)
 		if recv := sig.Recv(); recv != nil {
@@ -60,3 +54,79 @@ func NewSymName(o types.Object) SymName {
 }
 
 func (n SymName) String() string { return n.PkgPath + "." + n.Name }
+
+// parseGoLinknames processed comments in a source file and extracts //go:linkname
+// compiler directive from the comments.
+//
+// The following directive format is supported:
+// //go:linkname <localname> <importpath>.<name>
+//
+// GopherJS directive support has the following limitations:
+//
+//  - External linkname must be specified.
+//  - The directive must be applied to a package-level function (variables and
+//    methods are not supported).
+//  - The local function referenced by the directive must have no body (in other
+//    words, it can only "import" an external function implementation into the
+//    local scope).
+func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]GoLinkname, error) {
+	var errs ErrorList = nil
+	var directives []GoLinkname
+
+	isUnsafe := astutil.ImportsUnsafe(file)
+
+	processComment := func(comment *ast.Comment) error {
+		if !strings.HasPrefix(comment.Text, "//go:linkname ") {
+			return nil // Not a linkname compiler directive.
+		}
+
+		// TODO(nevkontakte): Ideally we should check that the directive comment
+		// is on a line by itself, line Go compiler does, but ast.Comment doesn't
+		// provide an easy way to find that out.
+
+		if !isUnsafe {
+			return fmt.Errorf(`//go:linkname is only allowed in Go files that import "unsafe"`)
+		}
+
+		fields := strings.Fields(comment.Text)
+		if len(fields) != 3 {
+			return fmt.Errorf(`usage (all fields required): //go:linkname localname importpath.extname`)
+		}
+
+		localPkg, localName := pkgPath, fields[1]
+		extPkg, extName := "", fields[2]
+		if idx := strings.LastIndexByte(extName, '.'); idx != -1 {
+			extPkg, extName = extName[0:idx], extName[idx+1:]
+		}
+
+		obj := file.Scope.Lookup(localName)
+		if obj == nil {
+			return fmt.Errorf("//go:linkname local symbol %q is not found in the current source file", localName)
+		}
+
+		if obj.Kind != ast.Fun {
+			return fmt.Errorf("gopherjs: //go:linkname is only supported for functions, got %q", obj.Kind)
+		}
+
+		decl := obj.Decl.(*ast.FuncDecl)
+		if decl.Body != nil {
+			return fmt.Errorf("gopherjs: //go:linkname can not insert local implementation into an external package %q", extPkg)
+		}
+		// Local function has no body, treat it as a reference to an external implementation.
+		directives = append(directives, GoLinkname{
+			Reference:      SymName{PkgPath: localPkg, Name: localName},
+			Implementation: SymName{PkgPath: extPkg, Name: extName},
+		})
+		return nil
+	}
+
+	for _, cg := range file.Comments {
+		for _, c := range cg.List {
+			if err := processComment(c); err != nil {
+				errs = append(errs, ErrorAt(err, fset, c.Pos()))
+			}
+		}
+	}
+
+	return directives, errs.Normalize()
+}

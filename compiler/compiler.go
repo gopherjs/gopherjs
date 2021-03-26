@@ -32,7 +32,17 @@ func init() {
 type ErrorList []error
 
 func (err ErrorList) Error() string {
-	return err[0].Error()
+	if len(err) == 0 {
+		return "<no errors>"
+	}
+	return fmt.Sprintf("%s (and %d more errors)", err[0].Error(), len(err[1:]))
+}
+
+func (err ErrorList) Normalize() error {
+	if len(err) == 0 {
+		return nil
+	}
+	return err
 }
 
 // Archive contains intermediate build outputs of a single package.

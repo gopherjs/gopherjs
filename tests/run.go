@@ -127,8 +127,10 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue32477.go": {category: notApplicable, desc: "uses runtime.SetFinalizer and runtime.GC"},
 	"fixedbugs/issue32680.go": {category: notApplicable, desc: "uses -gcflags=-d=ssa/check/on flag"},
 
-	// These are new tests in Go 1.16
-	"fixedbugs/issue19113.go": {category: lowLevelRuntimeDifference, desc: "JavaScript bit shifts by negative amount don't cause an exception"},
+	// These are new tests in Go 1.13-1.16.
+	"fixedbugs/issue19113.go":  {category: lowLevelRuntimeDifference, desc: "JavaScript bit shifts by negative amount don't cause an exception"},
+	"fixedbugs/issue24491a.go": {category: notApplicable, desc: "tests interaction between unsafe and GC; uses runtime.SetFinalizer()"},
+	"fixedbugs/issue24491b.go": {category: notApplicable, desc: "tests interaction between unsafe and GC; uses runtime.SetFinalizer()"},
 }
 
 type failCategory uint8

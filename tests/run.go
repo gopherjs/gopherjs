@@ -136,6 +136,9 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue30116.go":  {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
 	"fixedbugs/issue30116u.go": {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
 	"fixedbugs/issue34395.go":  {category: neverTerminates, desc: "https://github.com/gopherjs/gopherjs/issues/1007"},
+	"fixedbugs/issue35027.go":  {category: usesUnsupportedPackage, desc: "uses unsupported conversion to reflect.SliceHeader and -gcflags=-d=checkptr"},
+	"fixedbugs/issue35073.go":  {category: usesUnsupportedPackage, desc: "uses unsupported flag -gcflags=-d=checkptr"},
+	"fixedbugs/issue40917.go":  {category: notApplicable, desc: "uses pointer arithmetic and unsupported flag -gcflags=-d=checkptr"},
 }
 
 type failCategory uint8

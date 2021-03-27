@@ -131,6 +131,8 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue19113.go":  {category: lowLevelRuntimeDifference, desc: "JavaScript bit shifts by negative amount don't cause an exception"},
 	"fixedbugs/issue24491a.go": {category: notApplicable, desc: "tests interaction between unsafe and GC; uses runtime.SetFinalizer()"},
 	"fixedbugs/issue24491b.go": {category: notApplicable, desc: "tests interaction between unsafe and GC; uses runtime.SetFinalizer()"},
+	"fixedbugs/issue29504.go":  {category: notApplicable, desc: "requires source map support beyond what GopherJS currently provides"},
+	"fixedbugs/issue29735.go":  {category: usesUnsupportedPackage, desc: "GopherJS only supports runtime.FuncForPC() with position counters previously returned by runtime.Callers() or runtime.Caller()"},
 }
 
 type failCategory uint8

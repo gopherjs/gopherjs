@@ -908,7 +908,9 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			return fc.formatExpr("$copyString(%e, %e)", args[0], args[1])
 		}
 		return fc.formatExpr("$copySlice(%e, %e)", args[0], args[1])
-	case "print", "println":
+	case "print":
+		return fc.formatExpr("$print(%s)", strings.Join(fc.translateExprSlice(args, nil), ", "))
+	case "println":
 		return fc.formatExpr("console.log(%s)", strings.Join(fc.translateExprSlice(args, nil), ", "))
 	case "complex":
 		argStr := fc.translateArgs(sig, args, ellipsis)

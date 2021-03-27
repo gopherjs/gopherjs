@@ -57,7 +57,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/bug352.go":     {desc: "BUG: bug352 struct{}"},
 	"fixedbugs/bug409.go":     {desc: "1 2 3 4"},
 	"fixedbugs/bug433.go":     {desc: "Error: [object Object]"},
-	"fixedbugs/issue10353.go": {desc: "incorrect output"},
 	"fixedbugs/issue11656.go": {desc: "Error: Native function not implemented: runtime/debug.setPanicOnFault"},
 	"fixedbugs/issue4085b.go": {desc: "Error: got panic JavaScript error: Invalid typed array length, want len out of range"},
 	"fixedbugs/issue4316.go":  {desc: "Error: runtime error: invalid memory address or nil pointer dereference"},
@@ -127,6 +126,9 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue30977.go": {category: neverTerminates, desc: "does for { runtime.GC() }"},
 	"fixedbugs/issue32477.go": {category: notApplicable, desc: "uses runtime.SetFinalizer and runtime.GC"},
 	"fixedbugs/issue32680.go": {category: notApplicable, desc: "uses -gcflags=-d=ssa/check/on flag"},
+
+	// These are new tests in Go 1.16
+	"fixedbugs/issue19113.go": {category: lowLevelRuntimeDifference, desc: "JavaScript bit shifts by negative amount don't cause an exception"},
 }
 
 type failCategory uint8
@@ -138,7 +140,8 @@ const (
 	requiresSourceMapSupport              // Test fails without source map support (as configured in CI), because it tries to check filename/line number via runtime.Caller.
 	compilerPanic
 	unsureIfGopherJSSupportsThisFeature
-	notApplicable // Test that doesn't need to run under GopherJS; it doesn't apply to the Go language in a general way.
+	lowLevelRuntimeDifference // JavaScript runtime behaves differently from Go in ways that are difficult to work around.
+	notApplicable             // Test that doesn't need to run under GopherJS; it doesn't apply to the Go language in a general way.
 )
 
 type failReason struct {

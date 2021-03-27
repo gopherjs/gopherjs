@@ -26,19 +26,6 @@ type runtimeTimer struct {
 	active  bool
 }
 
-func initLocal() {
-	d := js.Global.Get("Date").New()
-	s := d.String()
-	i := indexByte(s, '(')
-	j := indexByte(s, ')')
-	if i == -1 || j == -1 {
-		localLoc.name = "UTC"
-		return
-	}
-	localLoc.name = s[i+1 : j]
-	localLoc.zone = []zone{{localLoc.name, d.Call("getTimezoneOffset").Int() * -60, false}}
-}
-
 func now() (sec int64, nsec int32, mono int64) {
 	n := runtimeNano()
 	return n / int64(Second), int32(n % int64(Second)), n

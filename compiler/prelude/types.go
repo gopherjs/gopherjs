@@ -688,6 +688,9 @@ var $structType = function(pkgPath, fields) {
       this.$val = this;
       for (var i = 0; i < fields.length; i++) {
         var f = fields[i];
+        if (f.name == '_') {
+          continue;
+        }
         var arg = arguments[i];
         this[f.prop] = arg !== undefined ? arg : f.typ.zero();
       }

@@ -76,17 +76,39 @@ func (fc *funcContext) Delayed(f func()) {
 	fc.delayedOutput = fc.CatchOutput(0, f)
 }
 
-func (fc *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, ellipsis bool) []string {
-	if len(argExprs) == 1 {
-		if tuple, isTuple := fc.pkgCtx.TypeOf(argExprs[0]).(*types.Tuple); isTuple {
-			tupleVar := fc.newVariable("_tuple")
-			fc.Printf("%s = %s;", tupleVar, fc.translateExpr(argExprs[0]))
-			argExprs = make([]ast.Expr, tuple.Len())
-			for i := range argExprs {
-				argExprs[i] = fc.newIdent(fc.formatExpr("%s[%d]", tupleVar, i).String(), tuple.At(i).Type())
-			}
-		}
+// expandTupleArgs converts a function call which argument is a tuple returned
+// by another function into a set of individual call arguments corresponding to
+// tuple elements.
+//
+// For example, for functions defined as:
+//   func a() (int, string) {return 42, "foo"}
+//   func b(a1 int, a2 string) {}
+// ...the following statement:
+//     b(a())
+// ...will be transformed into:
+//     _tuple := a()
+//     b(_tuple[0], _tuple[1])
+func (fc *funcContext) expandTupleArgs(argExprs []ast.Expr) []ast.Expr {
+	if len(argExprs) != 1 {
+		return argExprs
 	}
+
+	tuple, isTuple := fc.pkgCtx.TypeOf(argExprs[0]).(*types.Tuple)
+	if !isTuple {
+		return argExprs
+	}
+
+	tupleVar := fc.newVariable("_tuple")
+	fc.Printf("%s = %s;", tupleVar, fc.translateExpr(argExprs[0]))
+	argExprs = make([]ast.Expr, tuple.Len())
+	for i := range argExprs {
+		argExprs[i] = fc.newIdent(fc.formatExpr("%s[%d]", tupleVar, i).String(), tuple.At(i).Type())
+	}
+	return argExprs
+}
+
+func (fc *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, ellipsis bool) []string {
+	argExprs = fc.expandTupleArgs(argExprs)
 
 	sigTypes := signatureTypes{Sig: sig}
 

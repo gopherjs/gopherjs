@@ -102,7 +102,6 @@ var knownFails = map[string]failReason{
 	// These are new tests in Go 1.10.
 	"fixedbugs/issue21879.go": {desc: "incorrect output related to runtime.Callers, runtime.CallersFrames, etc."},
 	"fixedbugs/issue21887.go": {desc: "incorrect output (although within spec, not worth fixing) for println(^uint64(0)). got: { '$high': 4294967295, '$low': 4294967295, '$val': [Circular] } want: 18446744073709551615"},
-	"fixedbugs/issue22083.go": {category: requiresSourceMapSupport}, // Technically, added in Go 1.9.2.
 	"fixedbugs/issue22660.go": {category: notApplicable, desc: "test of gc compiler, uses os/exec.Command"},
 	"fixedbugs/issue23305.go": {desc: "GopherJS fails to compile println(0xffffffff), maybe because 32-bit arch"},
 

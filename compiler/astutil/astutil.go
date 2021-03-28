@@ -46,3 +46,12 @@ func IsTypeExpr(expr ast.Expr, info *types.Info) bool {
 		return false
 	}
 }
+
+func ImportsUnsafe(file *ast.File) bool {
+	for _, imp := range file.Imports {
+		if imp.Path.Value == `"unsafe"` {
+			return true
+		}
+	}
+	return false
+}

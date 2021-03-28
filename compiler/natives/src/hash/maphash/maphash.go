@@ -2,10 +2,6 @@
 
 package maphash
 
-import (
-	"runtime"
-)
-
 // used in hash{32,64}.go to seed the hash function
 var hashkey [4]uint32
 
@@ -17,10 +13,6 @@ func init() {
 	hashkey[1] |= 1
 	hashkey[2] |= 1
 	hashkey[3] |= 1
-}
-
-func runtime_fastrand() uint32 {
-	return runtime.InternalFastrand()
 }
 
 func rthash(b []byte, seed uint64) uint64 {

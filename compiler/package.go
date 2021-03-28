@@ -130,8 +130,23 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		Scopes:     make(map[ast.Node]*types.Scope),
 	}
 
-	var importError error
 	var errList ErrorList
+
+	// Extract all go:linkname compiler directives from the package source.
+	goLinknames := []GoLinkname{}
+	for _, file := range files {
+		found, err := parseGoLinknames(fileSet, importPath, file)
+		if err != nil {
+			if errs, ok := err.(ErrorList); ok {
+				errList = append(errList, errs...)
+			} else {
+				errList = append(errList, err)
+			}
+		}
+		goLinknames = append(goLinknames, found...)
+	}
+
+	var importError error
 	var previousErr error
 	config := &types.Config{
 		Importer: packageImporter{
@@ -367,6 +382,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			Blocking: len(funcInfo.Blocking) != 0,
 		}
 		if fun.Recv == nil {
+			d.LinkingName = newSymName(o)
 			d.Vars = []string{funcCtx.objectName(o)}
 			d.DceObjectFilter = o.Name()
 			switch o.Name() {
@@ -550,6 +566,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		Declarations: allDecls,
 		FileSet:      encodedFileSet.Bytes(),
 		Minified:     minify,
+		GoLinknames:  goLinknames,
 	}, nil
 }
 

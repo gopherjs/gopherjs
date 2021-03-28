@@ -711,3 +711,8 @@ func (st signatureTypes) Param(i int, ellipsis bool) types.Type {
 	}
 	return st.VariadicType().(*types.Slice).Elem()
 }
+
+// ErrorAt annotates an error with a position in the source code.
+func ErrorAt(err error, fset *token.FileSet, pos token.Pos) error {
+	return fmt.Errorf("%s: %w", fset.Position(pos), err)
+}

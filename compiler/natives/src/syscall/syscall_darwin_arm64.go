@@ -1,4 +1,5 @@
 // +build js
+// +build darwin,arm64
 
 package syscall
 
@@ -222,24 +223,24 @@ func funcPC(f func()) uintptr {
 		return SYS_EXECVE
 	case js.InternalObject(libc_exit_trampoline):
 		return SYS_EXIT
-	case js.InternalObject(libc_fstat64_trampoline):
-		return SYS_FSTAT64
-	case js.InternalObject(libc_fstatfs64_trampoline):
-		return SYS_FSTATFS64
+	// case js.InternalObject(libc_fstat64_trampoline):
+	// 	return SYS_FSTAT64
+	// case js.InternalObject(libc_fstatfs64_trampoline):
+	// 	return SYS_FSTATFS64
 	case js.InternalObject(libc_gettimeofday_trampoline):
 		return SYS_GETTIMEOFDAY
-	case js.InternalObject(libc_lstat64_trampoline):
-		return SYS_LSTAT64
-	case js.InternalObject(libc_stat64_trampoline):
-		return SYS_STAT64
-	case js.InternalObject(libc_statfs64_trampoline):
-		return SYS_STATFS64
+	// case js.InternalObject(libc_lstat64_trampoline):
+	// 	return SYS_LSTAT64
+	// case js.InternalObject(libc_stat64_trampoline):
+	// 	return SYS_STAT64
+	// case js.InternalObject(libc_statfs64_trampoline):
+	// 	return SYS_STATFS64
 	case js.InternalObject(libc_ptrace_trampoline):
 		return SYS_PTRACE
-	case js.InternalObject(libc_fstatat64_trampoline):
-		return SYS_FSTATFS64
-	case js.InternalObject(libc_getattrlist_trampoline):
-		return SYS_GETATTRLIST
+	// case js.InternalObject(libc_fstatat64_trampoline):
+	// 	return SYS_FSTATFS64
+	// case js.InternalObject(libc_getattrlist_trampoline):
+	// 	return SYS_GETATTRLIST
 	case js.InternalObject(libc_unlinkat_trampoline):
 		return 472 //SYS_UNLINKAT
 	// case js.InternalObject(libc_fdopendir_trampoline):

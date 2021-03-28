@@ -4,7 +4,7 @@ package os
 
 import (
 	"errors"
-	"runtime"
+	_ "unsafe" // for go:linkname
 
 	"github.com/gopherjs/gopherjs/js"
 )
@@ -34,6 +34,5 @@ func executable() (string, error) {
 	return "", errors.New("Executable not implemented for GOARCH=js")
 }
 
-func fastrand() uint32 {
-	return runtime.InternalFastrand()
-}
+//go:linkname fastrand runtime.fastrand
+func fastrand() uint32

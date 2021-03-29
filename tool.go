@@ -510,8 +510,9 @@ func main() {
 			cmdServe.HelpFunc()(cmd, args)
 			os.Exit(1)
 		}
+		golangVersion := fmt.Sprintf("%s %s %s", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 
-		fmt.Printf("GopherJS %s\n", compiler.Version)
+		fmt.Printf("GopherJS %s %s\n", compiler.Version, golangVersion)
 	}
 
 	rootCmd := &cobra.Command{

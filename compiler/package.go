@@ -405,16 +405,15 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				d.DceMethodFilter = o.Name() + "~"
 			}
 		}
-
 		d.DceDeps = collectDependencies(func() {
 			d.DeclCode = c.translateToplevelFunction(fun, funcInfo)
 		})
 		if fun.Body == nil {
 			for _, link := range linknames {
 				if link.Local == fun.Name.Name {
-					d.DeclCode = []byte(fmt.Sprintf("\t%v=%v.%v;\n",
+					d.DeclCode = []byte(fmt.Sprintf("\t%v=function(){ return $packages[%q].%v(...arguments); };\n",
 						c.p.objectNames[o],
-						c.p.pkgVars[link.TargetImportPath],
+						link.TargetImportPath,
 						link.TargetName))
 					d.DceDeps = append(d.DceDeps, link.Target)
 					break
@@ -570,6 +569,26 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		FileSet:      encodedFileSet.Bytes(),
 		Minified:     minify,
 	}, nil
+}
+
+func UpdateLinkNames(ar *Archive, linknames []LinkName) {
+	for _, d := range ar.Declarations {
+		for _, link := range linknames {
+			if d.FullName == link.Target {
+				var fnName string
+				pos := bytes.Index(d.DeclCode, []byte("="))
+				if pos > 0 {
+					fnName = strings.TrimSpace(string(d.DeclCode[:pos]))
+				}
+				if ar.Minified {
+					d.DeclCode = append(d.DeclCode, []byte(fmt.Sprintf("$pkg.%v=%v;", link.TargetName, fnName))...)
+				} else {
+					d.DeclCode = append(d.DeclCode, []byte(fmt.Sprintf("\t$pkg.%v=%v;\n", link.TargetName, fnName))...)
+				}
+				break
+			}
+		}
+	}
 }
 
 func (c *funcContext) initArgs(ty types.Type) string {

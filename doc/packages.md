@@ -137,7 +137,7 @@ plugin             | ❌ no        |
 reflect            | ✅ yes       |
 regexp             | ✅ yes       |
 -- syntax          | ✅ yes       |
-runtime            | ☑️ partially  | SetMutexProfileFraction, SetFinalizer, ReadMemStats, Callers, CallersFrames unsupported
+runtime            | ☑️ partially  | SetMutexProfileFraction, SetFinalizer, ReadMemStats unsupported
 -- metrics         | ☑️ partially  | Same as runtime.
 -- cgo             | ❌ no        |
 -- debug           | ❌ no        |

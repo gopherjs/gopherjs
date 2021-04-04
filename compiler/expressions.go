@@ -899,14 +899,20 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 		sliceType := sig.Results().At(0).Type().Underlying().(*types.Slice)
 		return fc.formatExpr("$append(%e, %s)", args[0], strings.Join(fc.translateExprSlice(args[1:], sliceType.Elem()), ", "))
 	case "delete":
+		args = fc.expandTupleArgs(args)
 		keyType := fc.pkgCtx.TypeOf(args[0]).Underlying().(*types.Map).Key()
 		return fc.formatExpr(`delete %e[%s.keyFor(%s)]`, args[0], fc.typeName(keyType), fc.translateImplicitConversion(args[1], keyType))
 	case "copy":
+		args = fc.expandTupleArgs(args)
 		if basic, isBasic := fc.pkgCtx.TypeOf(args[1]).Underlying().(*types.Basic); isBasic && isString(basic) {
 			return fc.formatExpr("$copyString(%e, %e)", args[0], args[1])
 		}
 		return fc.formatExpr("$copySlice(%e, %e)", args[0], args[1])
-	case "print", "println":
+	case "print":
+		args = fc.expandTupleArgs(args)
+		return fc.formatExpr("$print(%s)", strings.Join(fc.translateExprSlice(args, nil), ", "))
+	case "println":
+		args = fc.expandTupleArgs(args)
 		return fc.formatExpr("console.log(%s)", strings.Join(fc.translateExprSlice(args, nil), ", "))
 	case "complex":
 		argStr := fc.translateArgs(sig, args, ellipsis)

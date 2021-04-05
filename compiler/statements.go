@@ -22,6 +22,27 @@ func (fc *funcContext) translateStmtList(stmts []ast.Stmt) {
 }
 
 func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
+	defer func() {
+		err := recover()
+		if err == nil {
+			return
+		}
+		if _, yes := bailingOut(err); yes {
+			panic(err) // Continue orderly bailout.
+		}
+
+		// Oh noes, we've tried to compile something so bad that compiler paniced
+		// and ran away. Let's gather some debugging clues.
+		bail := bailout(err)
+		pos := stmt.Pos()
+		if fc.posAvailable && fc.pos.IsValid() {
+			pos = fc.pos
+		}
+		fmt.Fprintf(bail, "Occurred while compiling statement at %s:\n", fc.pkgCtx.fileSet.Position(pos))
+		ast.Fprint(bail, fc.pkgCtx.fileSet, stmt, ast.NotNilFilter)
+		panic(bail) // Initiate orderly bailout.
+	}()
+
 	fc.SetPos(stmt.Pos())
 
 	stmt = filter.IncDecStmt(stmt, fc.pkgCtx.Info.Info)

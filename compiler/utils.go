@@ -3,12 +3,14 @@ package compiler
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/constant"
 	"go/token"
 	"go/types"
 	"net/url"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -737,4 +739,56 @@ func (st signatureTypes) Param(i int, ellipsis bool) types.Type {
 // ErrorAt annotates an error with a position in the source code.
 func ErrorAt(err error, fset *token.FileSet, pos token.Pos) error {
 	return fmt.Errorf("%s: %w", fset.Position(pos), err)
+}
+
+// FatalError is an error compiler panics with when it encountered a fatal error.
+//
+// FatalError implements io.Writer, which can be used to record any free-form
+// debugging details for human consumption. This information will be included
+// into String() result along with the rest.
+type FatalError struct {
+	cause interface{}
+	stack []byte
+	clues strings.Builder
+}
+
+func (b FatalError) Unwrap() error {
+	if b.cause == nil {
+		return nil
+	}
+	if err, ok := b.cause.(error); ok {
+		return err
+	}
+	if s, ok := b.cause.(string); ok {
+		return errors.New(s)
+	}
+	return fmt.Errorf("[%T]: %v", b.cause, b.cause)
+}
+
+// Write implements io.Writer and can be used to store free-form debugging clues.
+func (b *FatalError) Write(p []byte) (n int, err error) { return b.clues.Write(p) }
+
+func (b FatalError) Error() string {
+	buf := &strings.Builder{}
+	fmt.Fprintln(buf, "[compiler panic] ", b.Unwrap())
+	if b.clues.Len() > 0 {
+		fmt.Fprintln(buf, "\n", b.clues.String())
+	}
+	if len(b.stack) > 0 {
+		fmt.Fprintln(buf, "\n", string(b.stack))
+	}
+	return buf.String()
+}
+
+func bailout(cause interface{}) *FatalError {
+	b := &FatalError{
+		cause: cause,
+		stack: debug.Stack(),
+	}
+	return b
+}
+
+func bailingOut(err interface{}) (*FatalError, bool) {
+	fe, ok := err.(*FatalError)
+	return fe, ok
 }

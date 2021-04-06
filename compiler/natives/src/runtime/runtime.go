@@ -130,31 +130,79 @@ func itoa(i int) string {
 	return js.Global.Get("String").New(i).String()
 }
 
+// basicFrame contains stack trace information extracted from JS stack trace.
+type basicFrame struct {
+	FuncName string
+	File     string
+	Line     int
+}
+
+func callstack(skip, limit int) []basicFrame {
+	skip = skip + 1 /*skip error message*/ + 1 /*skip callstack's own frame*/
+	lines := js.Global.Get("Error").New().Get("stack").Call("split", "\n").Call("slice", skip)
+	frames := []basicFrame{}
+	l := lines.Get("length").Int()
+	for i := 0; i < l && i < limit; i++ {
+		info := lines.Index(i)
+		pos := info.Call("substring", info.Call("indexOf", "(").Int()+1, info.Call("indexOf", ")").Int())
+		parts := pos.Call("split", ":")
+
+		frames = append(frames, basicFrame{
+			File:     parts.Index(0).String(),
+			Line:     parts.Index(1).Int(),
+			FuncName: info.Call("substring", info.Call("indexOf", "at ").Int()+3, info.Call("indexOf", " (").Int()).String(),
+		})
+	}
+	return frames
+}
+
 func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
-	info := js.Global.Get("Error").New().Get("stack").Call("split", "\n").Index(skip + 2)
-	if info == js.Undefined {
+	skip = skip + 1 /*skip Caller's own frame*/
+	frames := callstack(skip, 1)
+	if len(frames) != 1 {
 		return 0, "", 0, false
 	}
-	pos := info.Call("substring", info.Call("indexOf", "(").Int()+1, info.Call("indexOf", ")").Int())
-	parts := pos.Call("split", ":")
-	file = parts.Index(0).String()
-	line = parts.Index(1).Int()
-	funcName := info.Call("substring", info.Call("indexOf", "at ").Int()+3, info.Call("indexOf", " (").Int()).String()
-	pc = registerPosition(funcName, file, line)
-	return pc, file, line, true
+	pc = registerPosition(frames[0].FuncName, frames[0].File, frames[0].Line)
+	return pc, frames[0].File, frames[0].Line, true
 }
 
 func Callers(skip int, pc []uintptr) int {
-	return 0
+	frames := callstack(skip, len(pc))
+	for i, frame := range frames {
+		pc[i] = registerPosition(frame.FuncName, frame.File, frame.Line)
+	}
+	return len(frames)
 }
 
-// CallersFrames is not implemented for GOARCH=js.
-// TODO: Implement if possible.
-func CallersFrames(callers []uintptr) *Frames { return &Frames{} }
+func CallersFrames(callers []uintptr) *Frames {
+	result := Frames{}
+	for _, pc := range callers {
+		fun := FuncForPC(pc)
+		result.frames = append(result.frames, Frame{
+			PC:       pc,
+			Func:     fun,
+			Function: fun.name,
+			File:     fun.file,
+			Line:     fun.line,
+			Entry:    fun.Entry(),
+		})
+	}
+	return &result
+}
 
-type Frames struct{}
+type Frames struct {
+	frames  []Frame
+	current int
+}
 
-func (ci *Frames) Next() (frame Frame, more bool) { return }
+func (ci *Frames) Next() (frame Frame, more bool) {
+	if ci.current >= len(ci.frames) {
+		return Frame{}, false
+	}
+	f := ci.frames[ci.current]
+	ci.current++
+	return f, ci.current < len(ci.frames)
+}
 
 type Frame struct {
 	PC       uintptr

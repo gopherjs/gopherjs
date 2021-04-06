@@ -32,3 +32,14 @@ func TestTimeInternalizationExternalization(t *testing.T) {
 		t.Fatalf("got != want:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+func TestDeferBuiltin(t *testing.T) {
+	if runtime.GOARCH == "js" {
+		t.Skip("test meant to be run using normal Go compiler (needs os/exec)")
+	}
+
+	got, err := exec.Command("gopherjs", "run", filepath.Join("testdata", "defer_builtin.go")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v:\n%s", err, got)
+	}
+}

@@ -83,7 +83,11 @@ var $callDeferred = function(deferred, jsErr, fromPanic) {
       }
 
       if (localPanicValue !== undefined && $panicStackDepth === null) {
-        throw null; /* error was recovered */
+        /* error was recovered */
+        if (fromPanic) {
+          throw null;
+        }
+        return;
       }
     }
   } finally {

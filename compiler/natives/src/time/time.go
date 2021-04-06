@@ -21,25 +21,9 @@ type runtimeTimer struct {
 	period  int64
 	f       func(interface{}, uintptr)
 	arg     interface{}
+	seq     uintptr
 	timeout *js.Object
 	active  bool
-}
-
-func initLocal() {
-	d := js.Global.Get("Date").New()
-	s := d.String()
-	i := indexByte(s, '(')
-	j := indexByte(s, ')')
-	if i == -1 || j == -1 {
-		localLoc.name = "UTC"
-		return
-	}
-	localLoc.name = s[i+1 : j]
-	localLoc.zone = []zone{{localLoc.name, d.Call("getTimezoneOffset").Int() * -60, false}}
-}
-
-func runtimeNano() int64 {
-	return js.Global.Get("Date").New().Call("getTime").Int64() * int64(Millisecond)
 }
 
 func now() (sec int64, nsec int32, mono int64) {
@@ -76,6 +60,22 @@ func stopTimer(t *runtimeTimer) bool {
 	js.Global.Call("clearTimeout", t.timeout)
 	wasActive := t.active
 	t.active = false
+	return wasActive
+}
+
+func modTimer(t *runtimeTimer, when, period int64, f func(interface{}, uintptr), arg interface{}, seq uintptr) {
+	stopTimer(t)
+	t.when = when
+	t.period = period
+	t.f = f
+	t.arg = arg
+	t.seq = seq
+	startTimer(t)
+}
+
+func resetTimer(t *runtimeTimer, when int64) bool {
+	wasActive := t.active
+	modTimer(t, when, t.period, t.f, t.arg, t.seq)
 	return wasActive
 }
 

@@ -12,6 +12,10 @@ func TestSystemRoots(t *testing.T) {
 	t.Skip("no system roots")
 }
 
+func TestLoadSystemCertsLoadColonSeparatedDirs(t *testing.T) {
+	t.Skip("no system roots")
+}
+
 func TestEnvVars(t *testing.T) {
 	t.Skip("no system roots")
 }

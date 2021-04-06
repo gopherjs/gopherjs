@@ -526,7 +526,12 @@ var $arrayType = function(elem, len) {
 };
 
 var $chanType = function(elem, sendOnly, recvOnly) {
-  var string = (recvOnly ? "<-" : "") + "chan" + (sendOnly ? "<- " : " ") + elem.string;
+  var string = (recvOnly ? "<-" : "") + "chan" + (sendOnly ? "<- " : " ");
+  if (!sendOnly && !recvOnly && (elem.string[0] == "<")) {
+    string += "(" + elem.string + ")";
+  } else {
+    string += elem.string;
+  }
   var field = sendOnly ? "SendChan" : (recvOnly ? "RecvChan" : "Chan");
   var typ = elem[field];
   if (typ === undefined) {
@@ -670,7 +675,11 @@ var $structType = function(pkgPath, fields) {
   var typ = $structTypes[typeKey];
   if (typ === undefined) {
     var string = "struct { " + $mapArray(fields, function(f) {
-      return f.name + " " + f.typ.string + (f.tag !== "" ? (" \"" + f.tag.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"") : "");
+      var str = f.typ.string + (f.tag !== "" ? (" \"" + f.tag.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"") : "");
+      if (f.embedded) {
+        return str;
+      }
+      return f.name + " " + str;
     }).join("; ") + " }";
     if (fields.length === 0) {
       string = "struct {}";
@@ -679,6 +688,9 @@ var $structType = function(pkgPath, fields) {
       this.$val = this;
       for (var i = 0; i < fields.length; i++) {
         var f = fields[i];
+        if (f.name == '_') {
+          continue;
+        }
         var arg = arguments[i];
         this[f.prop] = arg !== undefined ? arg : f.typ.zero();
       }

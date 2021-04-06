@@ -13,7 +13,7 @@ import (
 // needsSkip reports whether the kind doesn't work for sorting on GopherJS.
 func needsSkip(k reflect.Kind) bool {
 	switch k {
-	case reflect.Ptr, reflect.Chan:
+	case reflect.Ptr, reflect.Chan, reflect.UnsafePointer:
 		return true
 	}
 	return false

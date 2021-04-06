@@ -4,21 +4,24 @@ jobs:
     docker:
     - image: ubuntu:18.04
     environment:
-      SOURCE_MAP_SUPPORT: false
+      SOURCE_MAP_SUPPORT: true
+      GO111MODULE: "off" # Until issue #855 is fixed, we operate in GOPATH mode.
     working_directory: ~/go/src/github.com/gopherjs/gopherjs
     steps:
     - run: apt-get update && apt-get install -y sudo curl git python make g++
     - checkout
     - run: git clone https://github.com/creationix/nvm $HOME/.nvm && cd $HOME/.nvm && git checkout v0.33.9 && echo 'export NVM_DIR="$HOME/.nvm"' >> $BASH_ENV && echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> $BASH_ENV
     - run: nvm install 10.0.0 && nvm alias default 10.0.0
-    - run: cd /usr/local && sudo rm -rf go && curl https://storage.googleapis.com/golang/go1.12.17.linux-amd64.tar.gz | sudo tar -xz
+    - run: echo export "NODE_PATH='$(npm root --global)'" >> $BASH_ENV # Make nodejs able to require globally installed modules from any working path.
+    - run: env
+    - run: cd /usr/local && sudo rm -rf go && curl https://storage.googleapis.com/golang/go1.16.3.linux-amd64.tar.gz | sudo tar -xz
     - run: echo 'export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin"' >> $BASH_ENV
     - run: go get -t -d -v ./...
     - run: go install -v
     - run: npm install # Install our (dev) dependencies from package.json.
+    - run: npm install --global source-map-support # Required by standard library tests.
     - run: npm install --global node-gyp@5.1.1
-    - run: cd node-syscall && node-gyp rebuild && mkdir -p ~/.node_libraries && cp build/Release/syscall.node ~/.node_libraries/syscall.node
-
+    - run: cd node-syscall && node-gyp rebuild && mkdir -p $NODE_PATH && cp build/Release/syscall.node $NODE_PATH/syscall.node
     - run: go generate github.com/gopherjs/gopherjs/compiler/prelude
     - run: diff -u <(echo -n) <(git status --porcelain)
     - run: diff -u <(echo -n) <(gofmt -d .)

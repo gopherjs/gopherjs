@@ -25,7 +25,7 @@ if ($global === undefined || $global.Array === undefined) {
 if (typeof module !== "undefined") {
   $module = module;
 }
-
+var $linknames = {} // Collection of functions referenced by a go:linkname directive.
 var $packages = {}, $idCounter = 0;
 var $keys = function(m) { return m ? Object.keys(m) : []; };
 var $flushConsole = function() {};
@@ -34,6 +34,27 @@ var $throwNilPointerError = function() { $throwRuntimeError("invalid memory addr
 var $call = function(fn, rcvr, args) { return fn.apply(rcvr, args); };
 var $makeFunc = function(fn) { return function() { return $externalize(fn(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(arguments, []))), $emptyInterface); }; };
 var $unused = function(v) {};
+var $print = console.log;
+// Under Node we can emulate print() more closely by avoiding a newline.
+if (($global.process !== undefined) && $global.require) {
+  try {
+    var util = $global.require('util');
+    $print = function() { $global.process.stderr.write(util.format.apply(this, arguments)); };
+  } catch (e) {
+    // Failed to require util module, keep using console.log().
+  }
+}
+var $println = console.log
+
+var $initAllLinknames = function() {
+  var names = $keys($packages);
+  for (var i = 0; i < names.length; i++) {
+    var f = $packages[names[i]]["$initLinknames"];
+    if (typeof f == 'function') {
+      f();
+    }
+  }
+}
 
 var $mapArray = function(array, f) {
   var newArray = new array.constructor(array.length);

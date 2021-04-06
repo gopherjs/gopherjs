@@ -57,7 +57,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/bug352.go":     {desc: "BUG: bug352 struct{}"},
 	"fixedbugs/bug409.go":     {desc: "1 2 3 4"},
 	"fixedbugs/bug433.go":     {desc: "Error: [object Object]"},
-	"fixedbugs/issue10353.go": {desc: "incorrect output"},
 	"fixedbugs/issue11656.go": {desc: "Error: Native function not implemented: runtime/debug.setPanicOnFault"},
 	"fixedbugs/issue4085b.go": {desc: "Error: got panic JavaScript error: Invalid typed array length, want len out of range"},
 	"fixedbugs/issue4316.go":  {desc: "Error: runtime error: invalid memory address or nil pointer dereference"},
@@ -103,7 +102,6 @@ var knownFails = map[string]failReason{
 	// These are new tests in Go 1.10.
 	"fixedbugs/issue21879.go": {desc: "incorrect output related to runtime.Callers, runtime.CallersFrames, etc."},
 	"fixedbugs/issue21887.go": {desc: "incorrect output (although within spec, not worth fixing) for println(^uint64(0)). got: { '$high': 4294967295, '$low': 4294967295, '$val': [Circular] } want: 18446744073709551615"},
-	"fixedbugs/issue22083.go": {category: requiresSourceMapSupport}, // Technically, added in Go 1.9.2.
 	"fixedbugs/issue22660.go": {category: notApplicable, desc: "test of gc compiler, uses os/exec.Command"},
 	"fixedbugs/issue23305.go": {desc: "GopherJS fails to compile println(0xffffffff), maybe because 32-bit arch"},
 
@@ -127,6 +125,21 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue30977.go": {category: neverTerminates, desc: "does for { runtime.GC() }"},
 	"fixedbugs/issue32477.go": {category: notApplicable, desc: "uses runtime.SetFinalizer and runtime.GC"},
 	"fixedbugs/issue32680.go": {category: notApplicable, desc: "uses -gcflags=-d=ssa/check/on flag"},
+
+	// These are new tests in Go 1.13-1.16.
+	"fixedbugs/issue19113.go":  {category: lowLevelRuntimeDifference, desc: "JavaScript bit shifts by negative amount don't cause an exception"},
+	"fixedbugs/issue24491a.go": {category: notApplicable, desc: "tests interaction between unsafe and GC; uses runtime.SetFinalizer()"},
+	"fixedbugs/issue24491b.go": {category: notApplicable, desc: "tests interaction between unsafe and GC; uses runtime.SetFinalizer()"},
+	"fixedbugs/issue29504.go":  {category: notApplicable, desc: "requires source map support beyond what GopherJS currently provides"},
+	// This test incorrectly passes because main function's name is returned as "main" and not "main.main". Even number of bugs cancel each other out ¯\_(ツ)_/¯
+	// "fixedbugs/issue29735.go":  {category: usesUnsupportedPackage, desc: "GopherJS only supports runtime.FuncForPC() with position counters previously returned by runtime.Callers() or runtime.Caller()"},
+	"fixedbugs/issue30116.go":  {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
+	"fixedbugs/issue30116u.go": {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
+	"fixedbugs/issue34395.go":  {category: neverTerminates, desc: "https://github.com/gopherjs/gopherjs/issues/1007"},
+	"fixedbugs/issue35027.go":  {category: usesUnsupportedPackage, desc: "uses unsupported conversion to reflect.SliceHeader and -gcflags=-d=checkptr"},
+	"fixedbugs/issue35073.go":  {category: usesUnsupportedPackage, desc: "uses unsupported flag -gcflags=-d=checkptr"},
+	"fixedbugs/issue35576.go":  {category: lowLevelRuntimeDifference, desc: "GopherJS print/println format for floats differs from Go's"},
+	"fixedbugs/issue40917.go":  {category: notApplicable, desc: "uses pointer arithmetic and unsupported flag -gcflags=-d=checkptr"},
 }
 
 type failCategory uint8
@@ -138,7 +151,8 @@ const (
 	requiresSourceMapSupport              // Test fails without source map support (as configured in CI), because it tries to check filename/line number via runtime.Caller.
 	compilerPanic
 	unsureIfGopherJSSupportsThisFeature
-	notApplicable // Test that doesn't need to run under GopherJS; it doesn't apply to the Go language in a general way.
+	lowLevelRuntimeDifference // JavaScript runtime behaves differently from Go in ways that are difficult to work around.
+	notApplicable             // Test that doesn't need to run under GopherJS; it doesn't apply to the Go language in a general way.
 )
 
 type failReason struct {

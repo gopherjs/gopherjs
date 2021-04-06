@@ -33,7 +33,7 @@ func (pd *pollDesc) wait(mode int, isFile bool) error {
 	if pd.closing {
 		return errClosing(isFile)
 	}
-	return ErrTimeout
+	return ErrDeadlineExceeded
 }
 
 func (pd *pollDesc) waitRead(isFile bool) error { return pd.wait('r', isFile) }

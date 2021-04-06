@@ -4,9 +4,12 @@ package os
 
 import (
 	"errors"
+	_ "unsafe" // for go:linkname
 
 	"github.com/gopherjs/gopherjs/js"
 )
+
+const isBigEndian = false
 
 func runtime_args() []string { // not called on Windows
 	return Args
@@ -30,3 +33,6 @@ func runtime_beforeExit() {}
 func executable() (string, error) {
 	return "", errors.New("Executable not implemented for GOARCH=js")
 }
+
+//go:linkname fastrand runtime.fastrand
+func fastrand() uint32

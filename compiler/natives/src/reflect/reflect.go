@@ -279,6 +279,15 @@ func newTypeOff(t *rtype) typeOff {
 	return typeOff(i)
 }
 
+// addReflectOff adds a pointer to the reflection lookup map in the runtime.
+// It returns a new ID that can be used as a typeOff or textOff, and will
+// be resolved correctly. Implemented in the runtime package.
+func addReflectOff(ptr unsafe.Pointer) int32 {
+	i := len(typeOffList)
+	typeOffList = append(typeOffList, (*rtype)(ptr))
+	return int32(i)
+}
+
 func internalStr(strObj *js.Object) string {
 	var c struct{ str string }
 	js.InternalObject(c).Set("str", strObj) // get string without internalizing
@@ -380,44 +389,95 @@ func SliceOf(t Type) Type {
 	return reflectType(js.Global.Call("$sliceType", jsType(t)))
 }
 
-// func StructOf(fields []StructField) Type {
-// 	jsFields := make([]*js.Object, len(fields))
-// 	fset := map[string]struct{}{}
-// 	for i, f := range fields {
-// 		if f.Type == nil {
-// 			panic("reflect.StructOf: field " + strconv.Itoa(i) + " has no type")
-// 		}
+func StructOf(fields []StructField) Type {
+	var (
+		jsFields  = make([]*js.Object, len(fields))
+		fset      = map[string]struct{}{}
+		pkgpath   string
+		hasGCProg bool
+	)
+	for i, field := range fields {
+		if field.Name == "" {
+			panic("reflect.StructOf: field " + strconv.Itoa(i) + " has no name")
+		}
+		if !isValidFieldName(field.Name) {
+			panic("reflect.StructOf: field " + strconv.Itoa(i) + " has invalid name")
+		}
+		if field.Type == nil {
+			panic("reflect.StructOf: field " + strconv.Itoa(i) + " has no type")
+		}
+		f, fpkgpath := runtimeStructField(field)
+		ft := f.typ
+		if ft.kind&kindGCProg != 0 {
+			hasGCProg = true
+		}
+		if fpkgpath != "" {
+			if pkgpath == "" {
+				pkgpath = fpkgpath
+			} else if pkgpath != fpkgpath {
+				panic("reflect.Struct: fields with different PkgPath " + pkgpath + " and " + fpkgpath)
+			}
+		}
+		name := field.Name
+		if f.embedded() {
+			// Embedded field
+			if field.Type.Kind() == Ptr {
+				// Embedded ** and *interface{} are illegal
+				elem := field.Type.Elem()
+				if k := elem.Kind(); k == Ptr || k == Interface {
+					panic("reflect.StructOf: illegal anonymous field type " + field.Type.String())
+				}
+			}
+			switch field.Type.Kind() {
+			case Interface:
+			case Ptr:
+				ptr := (*ptrType)(unsafe.Pointer(ft))
+				if unt := ptr.uncommon(); unt != nil {
+					if i > 0 && unt.mcount > 0 {
+						// Issue 15924.
+						panic("reflect: embedded type with methods not implemented if type is not first field")
+					}
+					if len(fields) > 1 {
+						panic("reflect: embedded type with methods not implemented if there is more than one field")
+					}
+				}
+			default:
+				if unt := ft.uncommon(); unt != nil {
+					if i > 0 && unt.mcount > 0 {
+						// Issue 15924.
+						panic("reflect: embedded type with methods not implemented if type is not first field")
+					}
+					if len(fields) > 1 && ft.kind&kindDirectIface != 0 {
+						panic("reflect: embedded type with methods not implemented for non-pointer type")
+					}
+				}
+			}
+		}
 
-// 		name := f.Name
-// 		if name == "" {
-// 			// Embedded field
-// 			if f.Type.Kind() == Ptr {
-// 				// Embedded ** and *interface{} are illegal
-// 				elem := f.Type.Elem()
-// 				if k := elem.Kind(); k == Ptr || k == Interface {
-// 					panic("reflect.StructOf: illegal anonymous field type " + f.Type.String())
-// 				}
-// 				name = elem.String()
-// 			} else {
-// 				name = f.Type.String()
-// 			}
-// 		}
-
-// 		if _, dup := fset[name]; dup {
-// 			panic("reflect.StructOf: duplicate field " + name)
-// 		}
-// 		fset[name] = struct{}{}
-
-// 		jsf := js.Global.Get("Object").New()
-// 		jsf.Set("prop", name)
-// 		jsf.Set("name", name)
-// 		jsf.Set("exported", true)
-// 		jsf.Set("typ", jsType(f.Type))
-// 		jsf.Set("tag", f.Tag)
-// 		jsFields[i] = jsf
-// 	}
-// 	return reflectType(js.Global.Call("$structType", "", jsFields))
-// }
+		if _, dup := fset[name]; dup {
+			panic("reflect.StructOf: duplicate field " + name)
+		}
+		fset[name] = struct{}{}
+		// To be consistent with Compiler's behavior we need to avoid externalizing
+		// the "name" property. The line below is effectively an inverse of the
+		// internalStr() function.
+		jsf := js.InternalObject(struct{ name string }{name})
+		// The rest is set through the js.Object() interface, which the compiler will
+		// externalize for us.
+		jsf.Set("prop", name)
+		jsf.Set("exported", f.name.isExported())
+		jsf.Set("typ", jsType(field.Type))
+		jsf.Set("tag", field.Tag)
+		jsf.Set("embedded", field.Anonymous)
+		jsFields[i] = jsf
+	}
+	_ = hasGCProg
+	typ := js.Global.Call("$structType", "", jsFields)
+	if pkgpath != "" {
+		typ.Set("pkgPath", pkgpath)
+	}
+	return reflectType(typ)
+}
 
 func Zero(typ Type) Value {
 	return makeValue(typ, jsType(typ).Call("zero"), 0)
@@ -467,12 +527,27 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	ftyp := (*funcType)(unsafe.Pointer(t))
 
 	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
+		// Convert raw JS arguments into []Value the user-supplied function expects.
 		args := make([]Value, ftyp.NumIn())
 		for i := range args {
 			argType := ftyp.In(i).common()
 			args[i] = makeValue(argType, arguments[i], 0)
 		}
+
+		// Call the user-supplied function.
 		resultsSlice := fn(args)
+
+		// Verify that returned value types are compatible with the function type specified by the caller.
+		if want, got := ftyp.NumOut(), len(resultsSlice); want != got {
+			panic("reflect: expected " + strconv.Itoa(want) + " return values, got " + strconv.Itoa(got))
+		}
+		for i, rtyp := range ftyp.out() {
+			if !resultsSlice[i].Type().AssignableTo(rtyp) {
+				panic("reflect: " + strconv.Itoa(i) + " return value type is not compatible with the function declaration")
+			}
+		}
+
+		// Rearrange return values according to the expected function signature.
 		switch ftyp.NumOut() {
 		case 0:
 			return nil
@@ -591,7 +666,7 @@ func mapiterkey(it unsafe.Pointer) unsafe.Pointer {
 	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("k"), jsType(PtrTo(iter.t.Key()))).Unsafe())
 }
 
-func mapitervalue(it unsafe.Pointer) unsafe.Pointer {
+func mapiterelem(it unsafe.Pointer) unsafe.Pointer {
 	iter := (*mapIter)(it)
 	var kv *js.Object
 	if iter.last != nil {
@@ -646,7 +721,7 @@ func cvtDirect(v Value, typ Type) Value {
 	case Struct:
 		val = jsType(typ).Get("ptr").New()
 		copyStruct(val, srcVal, typ)
-	case Array, Bool, Chan, Func, Interface, Map, String:
+	case Array, Bool, Chan, Func, Interface, Map, String, UnsafePointer:
 		val = js.InternalObject(v.ptr)
 	default:
 		panic(&ValueError{"reflect.Convert", k})
@@ -746,10 +821,6 @@ func valueInterface(v Value, safe bool) interface{} {
 
 func ifaceE2I(t *rtype, src interface{}, dst unsafe.Pointer) {
 	js.InternalObject(dst).Call("$set", js.InternalObject(src))
-}
-
-func methodName() string {
-	return "?FIXME?"
 }
 
 func makeMethodValue(op string, v Value) Value {

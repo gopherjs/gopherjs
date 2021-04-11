@@ -710,3 +710,136 @@ func TestReflectMapIterationAndDelete(t *testing.T) {
 		t.Fatalf("got %d, want %d", got, want)
 	}
 }
+
+func TestUntypedNil(t *testing.T) {
+	// This test makes sure GopherJS compiler correctly handles untyped nil.
+	// See https://github.com/gopherjs/gopherjs/issues/1011 for details.
+
+	// Code below is based on test cases from https://golang.org/cl/284052.
+	var _ *int = nil
+	var _ func() = nil
+	var _ []byte = nil
+	var _ map[int]int = nil
+	var _ chan int = nil
+	var _ interface{} = nil
+
+	{
+		var (
+			x *int = nil
+			_      = x
+		)
+	}
+	{
+		var (
+			x func() = nil
+			_        = x
+		)
+	}
+	{
+		var (
+			x []byte = nil
+			_        = x
+		)
+	}
+	{
+		var (
+			x map[int]int = nil
+			_             = x
+		)
+	}
+	{
+		var (
+			x chan int = nil
+			_          = x
+		)
+	}
+	{
+		var (
+			x interface{} = nil
+			_             = x
+		)
+	}
+
+	{
+		var (
+			x *int
+			_ = x == nil
+		)
+	}
+	{
+		var (
+			x func()
+			_ = x == nil
+		)
+	}
+	{
+		var (
+			x []byte
+			_ = x == nil
+		)
+	}
+	{
+		var (
+			x map[int]int
+			_ = x == nil
+		)
+	}
+	{
+		var (
+			x chan int
+			_ = x == nil
+		)
+	}
+	{
+		var (
+			x interface{}
+			_ = x == nil
+		)
+	}
+	var _ = (*int)(nil)
+	var _ = (func())(nil)
+	var _ = ([]byte)(nil)
+	var _ = (map[int]int)(nil)
+	var _ = (chan int)(nil)
+	var _ = (interface{})(nil)
+	{
+		f := func(*int) {}
+		f(nil)
+	}
+	{
+		f := func(func()) {}
+		f(nil)
+	}
+	{
+		f := func([]byte) {}
+		f(nil)
+	}
+	{
+		f := func(map[int]int) {}
+		f(nil)
+	}
+	{
+		f := func(chan int) {}
+		f(nil)
+	}
+	{
+		f := func(interface{}) {}
+		f(nil)
+	}
+	{
+		f := func(*int) {}
+		f(nil)
+	}
+	{
+		f := func(*int) {}
+		f(nil)
+	}
+	{
+		f := func(*int) {}
+		f(nil)
+	}
+	{
+		f := func(*int) {}
+		f(nil)
+	}
+}

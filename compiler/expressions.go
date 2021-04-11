@@ -1069,25 +1069,48 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		}
 
 	case *types.Pointer:
+		if types.Identical(exprType, types.Typ[types.UntypedNil]) {
+			// Fall through to the fc.translateImplicitConversionWithCloning(), which
+			// handles conversion from untyped nil to a pointer type.
+			break
+		}
+
 		switch u := t.Elem().Underlying().(type) {
-		case *types.Array:
+		case *types.Array: // (*[N]T)(expr) — converting expr to a pointer to an array.
 			return fc.translateExpr(expr)
-		case *types.Struct:
+		case *types.Struct: // (*StructT)(expr) — converting expr to a pointer to a struct.
 			if fc.pkgCtx.Pkg.Path() == "syscall" && types.Identical(exprType, types.Typ[types.UnsafePointer]) {
+				// Special case: converting an unsafe pointer to a byte array into a
+				// struct pointer when handling syscalls.
+				// TODO(nevkontakte): Add a runtime assertion that the unsafe.Pointer is
+				// indeed pointing at a byte array.
 				array := fc.newVariable("_array")
 				target := fc.newVariable("_struct")
 				return fc.formatExpr("(%s = %e, %s = %e, %s, %s)", array, expr, target, fc.zeroValue(t.Elem()), fc.loadStruct(array, target, u), target)
 			}
+			// Convert between structs of different types but identical layouts,
+			// for example:
+			// type A struct { foo int }; type B A; var a *A = &A{42}; var b *B = (*B)(a)
+			//
+			// TODO(nevkontakte): Should this only apply when exprType is a pointer to a
+			// struct as well?
 			return fc.formatExpr("$pointerOfStructConversion(%e, %s)", expr, fc.typeName(t))
 		}
 
-		if !types.Identical(exprType, types.Typ[types.UnsafePointer]) {
-			exprTypeElem := exprType.Underlying().(*types.Pointer).Elem()
-			ptrVar := fc.newVariable("_ptr")
-			getterConv := fc.translateConversion(fc.setType(&ast.StarExpr{X: fc.newIdent(ptrVar, exprType)}, exprTypeElem), t.Elem())
-			setterConv := fc.translateConversion(fc.newIdent("$v", t.Elem()), exprTypeElem)
-			return fc.formatExpr("(%1s = %2e, new %3s(function() { return %4s; }, function($v) { %1s.$set(%5s); }, %1s.$target))", ptrVar, expr, fc.typeName(desiredType), getterConv, setterConv)
+		if types.Identical(exprType, types.Typ[types.UnsafePointer]) {
+			// TODO(nevkontakte): Why do we fall through to the implicit conversion here?
+			// Conversion from unsafe.Pointer() requires explicit type conversion: https://play.golang.org/p/IQxtmpn1wgc.
+			// Possibly related to https://github.com/gopherjs/gopherjs/issues/1001.
+			break // Fall through to fc.translateImplicitConversionWithCloning() below.
 		}
+		// Handle remaining cases, for example:
+		// type iPtr *int; var c int = 42; println((iPtr)(&c));
+		// TODO(nevkontakte): Are there any other cases that fall into this case?
+		exprTypeElem := exprType.Underlying().(*types.Pointer).Elem()
+		ptrVar := fc.newVariable("_ptr")
+		getterConv := fc.translateConversion(fc.setType(&ast.StarExpr{X: fc.newIdent(ptrVar, exprType)}, exprTypeElem), t.Elem())
+		setterConv := fc.translateConversion(fc.newIdent("$v", t.Elem()), exprTypeElem)
+		return fc.formatExpr("(%1s = %2e, new %3s(function() { return %4s; }, function($v) { %1s.$set(%5s); }, %1s.$target))", ptrVar, expr, fc.typeName(desiredType), getterConv, setterConv)
 
 	case *types.Interface:
 		if types.Identical(exprType, types.Typ[types.UnsafePointer]) {
@@ -1185,6 +1208,7 @@ func (fc *funcContext) loadStruct(array, target string, s *types.Struct) string 
 		case *types.Array:
 			code += fmt.Sprintf(`, %s = new ($nativeArray(%s))(%s.buffer, $min(%s.byteOffset + %d, %s.buffer.byteLength))`, field.Name(), typeKind(t.Elem()), array, array, offsets[i], array)
 		}
+		// TODO(nevkontakte): Explicitly panic if unsupported field type is encountered?
 	}
 	return code
 }

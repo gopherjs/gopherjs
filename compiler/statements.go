@@ -386,7 +386,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
 			lhs := astutil.RemoveParens(s.Lhs[0])
 			if isBlank(lhs) {
-				fc.Printf("$unused(%s);", fc.translateExpr(s.Rhs[0]))
+				fc.Printf("$unused(%s);", fc.translateImplicitConversion(s.Rhs[0], fc.pkgCtx.TypeOf(s.Lhs[0])))
 				return
 			}
 			fc.Printf("%s", fc.translateAssign(lhs, s.Rhs[0], s.Tok == token.DEFINE))

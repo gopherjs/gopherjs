@@ -712,7 +712,8 @@ func TestReflectMapIterationAndDelete(t *testing.T) {
 }
 
 func TestUntypedNil(t *testing.T) {
-	// This test makes sure GopherJS compiler correctly handles untyped nil.
+	// This test makes sure GopherJS compiler is able to correctly infer the
+	// desired type of an untyped nil ident.
 	// See https://github.com/gopherjs/gopherjs/issues/1011 for details.
 
 	// Code below is based on test cases from https://golang.org/cl/284052.

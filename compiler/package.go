@@ -120,7 +120,20 @@ func (pi packageImporter) Import(path string) (*types.Package, error) {
 	return pi.importContext.Packages[a.ImportPath], nil
 }
 
-func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (*Archive, error) {
+func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (_ *Archive, err error) {
+	defer func() {
+		e := recover()
+		if e == nil {
+			return
+		}
+		if fe, ok := bailingOut(e); ok {
+			// Orderly bailout, return whatever clues we already have.
+			err = fe
+			return
+		}
+		// Some other unexpected panic, catch the stack trace and return as an error.
+		err = bailout(e)
+	}()
 	typesInfo := &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),

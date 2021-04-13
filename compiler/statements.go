@@ -22,6 +22,27 @@ func (fc *funcContext) translateStmtList(stmts []ast.Stmt) {
 }
 
 func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
+	defer func() {
+		err := recover()
+		if err == nil {
+			return
+		}
+		if _, yes := bailingOut(err); yes {
+			panic(err) // Continue orderly bailout.
+		}
+
+		// Oh noes, we've tried to compile something so bad that compiler paniced
+		// and ran away. Let's gather some debugging clues.
+		bail := bailout(err)
+		pos := stmt.Pos()
+		if fc.posAvailable && fc.pos.IsValid() {
+			pos = fc.pos
+		}
+		fmt.Fprintf(bail, "Occurred while compiling statement at %s:\n", fc.pkgCtx.fileSet.Position(pos))
+		ast.Fprint(bail, fc.pkgCtx.fileSet, stmt, ast.NotNilFilter)
+		panic(bail) // Initiate orderly bailout.
+	}()
+
 	fc.SetPos(stmt.Pos())
 
 	stmt = filter.IncDecStmt(stmt, fc.pkgCtx.Info.Info)
@@ -365,7 +386,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
 			lhs := astutil.RemoveParens(s.Lhs[0])
 			if isBlank(lhs) {
-				fc.Printf("$unused(%s);", fc.translateExpr(s.Rhs[0]))
+				fc.Printf("$unused(%s);", fc.translateImplicitConversion(s.Rhs[0], fc.pkgCtx.TypeOf(s.Lhs[0])))
 				return
 			}
 			fc.Printf("%s", fc.translateAssign(lhs, s.Rhs[0], s.Tok == token.DEFINE))

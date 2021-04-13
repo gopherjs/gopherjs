@@ -68,10 +68,11 @@ If you include an argument, it will be the root from which everything is served.
 
 There is one GopherJS-specific environment variable:
 
-```
-GOPHERJS_GOROOT - if set, GopherJS uses this value as the default GOROOT value,
-                  instead of using the system GOROOT as the default GOROOT value
-```
+ - `GOPHERJS_GOROOT` - if set, GopherJS uses this value as the default GOROOT
+   value, instead of using the system GOROOT as the default GOROOT value
+ - `GOPHERJS_SKIP_VERSION_CHECK` - if set to true, GopherJS will not check 
+   Go version in the GOROOT for compatibility with the GopherJS release. This
+	 is primarily useful for testing GopherJS against unreleased versions of Go.
 
 ### Performance Tips
 

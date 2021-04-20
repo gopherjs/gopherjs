@@ -1,3 +1,4 @@
+//go:build js
 // +build js
 
 package js
@@ -298,10 +299,9 @@ func CopyBytesToGo(dst []byte, src Value) int {
 // It returns the number of bytes copied, which will be the minimum of the lengths of src and dst.
 // CopyBytesToJS panics if dst is not an Uint8Array.
 func CopyBytesToJS(dst Value, src []byte) int {
-	dt, ok := dst.([]byte)
+	dt, ok := dst.v.Interface().([]byte)
 	if !ok {
 		panic("syscall/js: CopyBytesToJS: expected dst to be an Uint8Array")
 	}
-	copy(dt, src)
-	return n
+	return copy(dt, src)
 }

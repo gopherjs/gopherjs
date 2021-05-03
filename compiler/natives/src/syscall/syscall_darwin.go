@@ -20,10 +20,6 @@ func funcPC(f func()) uintptr {
 		return SYS_CHDIR
 	case js.InternalObject(libc_rmdir_trampoline):
 		return SYS_RMDIR
-	case js.InternalObject(libc___getdirentries64_trampoline):
-		return SYS_GETDIRENTRIES64
-	case js.InternalObject(libc_getattrlist_trampoline):
-		return SYS_GETATTRLIST
 	case js.InternalObject(libc_symlink_trampoline):
 		return SYS_SYMLINK
 	case js.InternalObject(libc_readlink_trampoline):

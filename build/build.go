@@ -175,10 +175,11 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	switch path {
 	case "os":
 		pkg.GoFiles = excludeExecutable(pkg.GoFiles) // Need to exclude executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
-		// Prefer dirent_js.go version, since it targets a similar environment to
-		// ours. Arguably this file should be excluded by the build tags (see
-		// https://github.com/gopherjs/gopherjs/issues/693).
-		pkg.GoFiles = exclude(pkg.GoFiles, "dirent_linux.go")
+		// Prefer the dirent_${GOOS}.go version, to make the build pass on both linux
+		// and darwin.
+		// In the long term, our builds should produce the same output regardless
+		// of the host OS: https://github.com/gopherjs/gopherjs/issues/693.
+		pkg.GoFiles = exclude(pkg.GoFiles, "dirent_js.go")
 	case "runtime":
 		pkg.GoFiles = []string{} // Package sources are completely replaced in natives.
 	case "runtime/internal/sys":
@@ -194,6 +195,16 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	case "crypto/rand":
 		pkg.GoFiles = []string{"rand.go", "util.go"}
 		pkg.TestGoFiles = exclude(pkg.TestGoFiles, "rand_linux_test.go") // Don't want linux-specific tests (since linux-specific package files are excluded too).
+	case "crypto/x509":
+		// GopherJS doesn't support loading OS root certificates regardless of the
+		// OS. The substitution below allows to avoid build dependency on Mac OS
+		// implementation, which won't be used anyway.
+		//
+		// Just like above, https://github.com/gopherjs/gopherjs/issues/693 is
+		// probably the best long-term option.
+		pkg.GoFiles = include(
+			exclude(pkg.GoFiles, fmt.Sprintf("root_%s.go", bctx.GOOS)),
+			"root_unix.go", "root_js.go")
 	}
 
 	if len(pkg.CgoFiles) > 0 {
@@ -247,6 +258,12 @@ Outer:
 		s = append(s, f)
 	}
 	return s
+}
+
+func include(files []string, includes ...string) []string {
+	files = exclude(files, includes...) // Ensure there won't be duplicates.
+	files = append(files, includes...)
+	return files
 }
 
 // ImportDir is like Import but processes the Go package found in the named

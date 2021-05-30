@@ -24,6 +24,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/natives"
 	"github.com/neelance/sourcemap"
 	"github.com/shurcooL/httpfs/vfsutil"
+	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/buildutil"
 )
 
@@ -447,6 +448,9 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 			case *ast.FuncDecl:
 				if replacedDeclNames[funcName(d)] {
 					d.Name = ast.NewIdent("_")
+					// Prune function bodies, since it may contain code invalid for
+					// GopherJS and pin unwanted imports.
+					d.Body = nil
 				}
 			case *ast.GenDecl:
 				switch d.Tok {
@@ -469,8 +473,24 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 				}
 			}
 		}
+
+		// Prune any imports that might have become unused after pruning function bodies.
+		for _, impGroup := range astutil.Imports(fileSet, file) {
+			for _, imp := range impGroup {
+				path, _ := strconv.Unquote(imp.Path.Value)
+				if !astutil.UsesImport(file, path) {
+					name := ""
+					if imp.Name != nil {
+						name = imp.Name.Name
+					}
+					astutil.DeleteNamedImport(fileSet, file, name, path)
+				}
+			}
+		}
+
 		files = append(files, file)
 	}
+
 	if errList != nil {
 		return nil, errList
 	}

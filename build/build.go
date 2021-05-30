@@ -205,6 +205,10 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 		pkg.GoFiles = include(
 			exclude(pkg.GoFiles, fmt.Sprintf("root_%s.go", bctx.GOOS)),
 			"root_unix.go", "root_js.go")
+	case "syscall/js":
+		// Reuse upstream tests to ensure conformance, but completely replace
+		// implementation.
+		pkg.XTestGoFiles = append(pkg.TestGoFiles, "js_test.go")
 	}
 
 	if len(pkg.CgoFiles) > 0 {

@@ -114,7 +114,7 @@ var $recover = function() {
 var $throw = function(err) { throw err; };
 
 var $noGoroutine = { asleep: false, exit: false, deferStack: [], panicStack: [] };
-var $curGoroutine = $noGoroutine, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true;
+var $curGoroutine = $noGoroutine, $totalGoroutines = 0, $awakeGoroutines = 0, $checkForDeadlock = true, $exportedFunctions = 0;
 var $mainFinished = false;
 var $go = function(fun, args) {
   $totalGoroutines++;
@@ -141,7 +141,7 @@ var $go = function(fun, args) {
       }
       if ($goroutine.asleep) {
         $awakeGoroutines--;
-        if (!$mainFinished && $awakeGoroutines === 0 && $checkForDeadlock) {
+        if (!$mainFinished && $awakeGoroutines === 0 && $checkForDeadlock && $exportedFunctions === 0) {
           console.error("fatal error: all goroutines are asleep - deadlock!");
           if ($global.process !== undefined) {
             $global.process.exit(2);

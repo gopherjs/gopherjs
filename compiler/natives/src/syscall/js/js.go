@@ -46,6 +46,10 @@ func (t Type) String() string {
 	}
 }
 
+func (t Type) isObject() bool {
+	return t == TypeObject || t == TypeFunction
+}
+
 func Global() Value {
 	return objectToValue(js.Global)
 }
@@ -63,10 +67,14 @@ type Func struct {
 }
 
 func (f Func) Release() {
+	js.Global.Set("$exportedFunctions", js.Global.Get("$exportedFunctions").Int()-1)
 	f.Value = Null()
 }
 
 func FuncOf(fn func(this Value, args []Value) interface{}) Func {
+	// Existence of a wrapped function means that an external event may awaken the
+	// program and we need to suppress deadlock detection.
+	js.Global.Set("$exportedFunctions", js.Global.Get("$exportedFunctions").Int()+1)
 	return Func{
 		Value: objectToValue(js.MakeFunc(func(this *js.Object, args []*js.Object) interface{} {
 			vargs := make([]Value, len(args))
@@ -91,13 +99,15 @@ type Value struct {
 
 	// inited represents whether Value is non-zero value. true represents the value is not 'undefined'.
 	inited bool
+
+	_ [0]func() // uncomparable; to make == not compile
 }
 
 func objectToValue(obj *js.Object) Value {
 	if obj == js.Undefined {
 		return Value{}
 	}
-	return Value{obj, true}
+	return Value{v: obj, inited: true}
 }
 
 var (
@@ -196,10 +206,16 @@ func (v Value) Float() float64 {
 }
 
 func (v Value) Get(p string) Value {
+	if vType := v.Type(); !vType.isObject() {
+		panic(&ValueError{"Value.Get", vType})
+	}
 	return objectToValue(v.internal().Get(p))
 }
 
 func (v Value) Index(i int) Value {
+	if vType := v.Type(); !vType.isObject() {
+		panic(&ValueError{"Value.Index", vType})
+	}
 	return objectToValue(v.internal().Index(i))
 }
 
@@ -230,19 +246,61 @@ func (v Value) Length() int {
 }
 
 func (v Value) New(args ...interface{}) Value {
+	defer func() {
+		err := recover()
+		if err == nil {
+			return
+		}
+		if vType := v.Type(); vType != TypeFunction { // check here to avoid overhead in success case
+			panic(&ValueError{"Value.New", vType})
+		}
+		if jsErr, ok := err.(*js.Error); ok {
+			panic(Error{objectToValue(jsErr.Object)})
+		}
+		panic(err)
+	}()
 	return objectToValue(v.internal().New(convertArgs(args...)...))
 }
 
 func (v Value) Set(p string, x interface{}) {
+	if vType := v.Type(); !vType.isObject() {
+		panic(&ValueError{"Value.Set", vType})
+	}
 	v.internal().Set(p, convertArgs(x)[0])
 }
 
 func (v Value) SetIndex(i int, x interface{}) {
+	if vType := v.Type(); !vType.isObject() {
+		panic(&ValueError{"Value.SetIndex", vType})
+	}
 	v.internal().SetIndex(i, convertArgs(x)[0])
 }
 
+// String returns the value v as a string.
+// String is a special case because of Go's String method convention. Unlike the other getters,
+// it does not panic if v's Type is not TypeString. Instead, it returns a string of the form "<T>"
+// or "<T: V>" where T is v's type and V is a string representation of v's value.
 func (v Value) String() string {
-	return v.internal().String()
+	switch v.Type() {
+	case TypeString:
+		return v.internal().String()
+	case TypeUndefined:
+		return "<undefined>"
+	case TypeNull:
+		return "<null>"
+	case TypeBoolean:
+		return "<boolean: " + v.internal().String() + ">"
+	case TypeNumber:
+		return "<number: " + v.internal().String() + ">"
+	case TypeSymbol:
+		return "<symbol>"
+	case TypeObject:
+		return "<object>"
+	case TypeFunction:
+		return "<function>"
+	default:
+		panic("bad type")
+	}
 }
 
 func (v Value) Truthy() bool {
@@ -251,6 +309,31 @@ func (v Value) Truthy() bool {
 
 func (v Value) Type() Type {
 	return Type(getValueType.Invoke(v.internal()).Int())
+}
+
+func (v Value) IsNull() bool {
+	return v.Type() == TypeNull
+}
+
+func (v Value) IsUndefined() bool {
+	return !v.inited
+}
+
+func (v Value) IsNaN() bool {
+	return js.Global.Call("isNaN", v.internal()).Bool()
+}
+
+// Delete deletes the JavaScript property p of value v.
+// It panics if v is not a JavaScript object.
+func (v Value) Delete(p string) {
+	if vType := v.Type(); !vType.isObject() {
+		panic(&ValueError{"Value.Delete", vType})
+	}
+	v.internal().Delete(p)
+}
+
+func (v Value) Equal(w Value) bool {
+	return v.internal() == w.internal()
 }
 
 type TypedArray struct {

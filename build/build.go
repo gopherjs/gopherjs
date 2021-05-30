@@ -314,8 +314,8 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 
 	nativesContext := &build.Context{
 		GOROOT:   "/",
-		GOOS:     build.Default.GOOS,
-		GOARCH:   "js",
+		GOOS:     bctx.GOOS,
+		GOARCH:   bctx.GOARCH,
 		Compiler: "gc",
 		JoinPath: path.Join,
 		SplitPathList: func(list string) []string {
@@ -351,6 +351,14 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 		OpenFile: func(name string) (r io.ReadCloser, err error) {
 			return natives.FS.Open(name)
 		},
+	}
+
+	if importPath == "syscall" {
+		// Special handling for the syscall package, which uses OS native
+		// GOOS/GOARCH pair. This will no longer be necessary after
+		// https://github.com/gopherjs/gopherjs/issues/693.
+		nativesContext.GOARCH = build.Default.GOARCH
+		nativesContext.BuildTags = append(nativesContext.BuildTags, "js")
 	}
 
 	if nativesPkg, err := nativesContext.Import(importPath, "", 0); err == nil {

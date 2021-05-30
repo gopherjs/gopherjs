@@ -14,7 +14,6 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -147,7 +146,7 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	switch path {
 	case "syscall":
 		// syscall needs to use a typical GOARCH like amd64 to pick up definitions for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t, etc.
-		bctx.GOARCH = runtime.GOARCH
+		bctx.GOARCH = build.Default.GOARCH
 		bctx.InstallSuffix = "js"
 		if installSuffix != "" {
 			bctx.InstallSuffix += "_" + installSuffix

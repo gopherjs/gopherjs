@@ -1,4 +1,4 @@
-// +build js,!arm64
+// +build js
 
 package syscall
 
@@ -8,11 +8,11 @@ func funcPC(f func()) uintptr {
 	switch js.InternalObject(f) {
 	case js.InternalObject(libc_open_trampoline):
 		return SYS_OPEN
-	case js.InternalObject(libc_stat64_trampoline):
+	case js.InternalObject(libc_stat_trampoline):
 		return SYS_STAT64
-	case js.InternalObject(libc_fstat64_trampoline):
+	case js.InternalObject(libc_fstat_trampoline):
 		return SYS_FSTAT64
-	case js.InternalObject(libc_lstat64_trampoline):
+	case js.InternalObject(libc_lstat_trampoline):
 		return SYS_LSTAT64
 	case js.InternalObject(libc_mkdir_trampoline):
 		return SYS_MKDIR

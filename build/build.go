@@ -14,7 +14,6 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -147,7 +146,7 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	switch path {
 	case "syscall":
 		// syscall needs to use a typical GOARCH like amd64 to pick up definitions for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t, etc.
-		bctx.GOARCH = runtime.GOARCH
+		bctx.GOARCH = build.Default.GOARCH
 		bctx.InstallSuffix = "js"
 		if installSuffix != "" {
 			bctx.InstallSuffix += "_" + installSuffix
@@ -315,8 +314,8 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 
 	nativesContext := &build.Context{
 		GOROOT:   "/",
-		GOOS:     build.Default.GOOS,
-		GOARCH:   "js",
+		GOOS:     bctx.GOOS,
+		GOARCH:   bctx.GOARCH,
 		Compiler: "gc",
 		JoinPath: path.Join,
 		SplitPathList: func(list string) []string {
@@ -352,6 +351,14 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 		OpenFile: func(name string) (r io.ReadCloser, err error) {
 			return natives.FS.Open(name)
 		},
+	}
+
+	if importPath == "syscall" {
+		// Special handling for the syscall package, which uses OS native
+		// GOOS/GOARCH pair. This will no longer be necessary after
+		// https://github.com/gopherjs/gopherjs/issues/693.
+		nativesContext.GOARCH = build.Default.GOARCH
+		nativesContext.BuildTags = append(nativesContext.BuildTags, "js")
 	}
 
 	if nativesPkg, err := nativesContext.Import(importPath, "", 0); err == nil {

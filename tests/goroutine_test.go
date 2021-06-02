@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/gopherjs/gopherjs/js"
 )
 
 var expectedI int
@@ -96,6 +98,50 @@ func testPanicAdvanced2(t *testing.T) {
 		checkI(t, 5)
 	}()
 	checkI(t, 4)
+}
+
+func TestPanicIssue1030(t *testing.T) {
+	throwException := func() {
+		t.Log("Will throw now...")
+		js.Global.Call("eval", "throw 'original panic';")
+	}
+
+	wrapException := func() {
+		defer func() {
+			err := recover()
+			if err == nil {
+				t.Fatal("Should never happen: no original panic.")
+			}
+			t.Log("Got original panic: ", err)
+			panic("replacement panic")
+		}()
+
+		throwException()
+	}
+
+	panicing := false
+
+	expectPanic := func() {
+		defer func() {
+			t.Log("No longer panicing.")
+			panicing = false
+		}()
+		defer func() {
+			err := recover()
+			if err == nil {
+				t.Fatal("Should never happen: no wrapped panic.")
+			}
+			t.Log("Got wrapped panic: ", err)
+		}()
+
+		wrapException()
+	}
+
+	expectPanic()
+
+	if panicing {
+		t.Fatal("Deferrals were not executed correctly!")
+	}
 }
 
 func TestSelect(t *testing.T) {

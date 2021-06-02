@@ -18,12 +18,10 @@ var $callDeferred = function(deferred, jsErr, fromPanic) {
   if (jsErr !== null) {
     var newErr = null;
     try {
-      $curGoroutine.deferStack.push(deferred);
       $panic(new $jsErrorPtr(jsErr));
     } catch (err) {
       newErr = err;
     }
-    $curGoroutine.deferStack.pop();
     $callDeferred(deferred, newErr);
     return;
   }

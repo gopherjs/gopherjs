@@ -1,9 +1,11 @@
 package analysis
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
+	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
@@ -30,6 +32,19 @@ func (src astPath) copy() astPath {
 	dst := make(astPath, len(src))
 	copy(dst, src)
 	return dst
+}
+
+func (ap astPath) String() string {
+	s := &strings.Builder{}
+	s.WriteString("[")
+	for i, n := range ap {
+		if i > 0 {
+			s.WriteString(", ")
+		}
+		fmt.Fprintf(s, "%T(%p)", n, n)
+	}
+	s.WriteString("]")
+	return s.String()
 }
 
 type Info struct {
@@ -88,6 +103,21 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		ast.Walk(info.InitFuncInfo, file)
 	}
 
+	for _, funcInfo := range info.allInfos {
+		if !funcInfo.HasDefer {
+			continue
+		}
+		// Conservatively assume that if a function has a deferred call, it might be
+		// blocking, and therefore all return statements need to be treated as
+		// blocking.
+		// TODO(nevkontakte): This could be improved by detecting whether a deferred
+		// call is actually blocking. Doing so might reduce generated code size a
+		// bit.
+		for _, returnStmt := range funcInfo.returnStmts {
+			funcInfo.markBlocking(returnStmt)
+		}
+	}
+
 	// Propagate information about blocking calls to the caller functions.
 	for {
 		done := true
@@ -136,6 +166,8 @@ type FuncInfo struct {
 	GotoLabel map[*types.Label]bool
 	// List of continue statements in the function.
 	continueStmts []continueStmt
+	// List of return statements in the function.
+	returnStmts []astPath
 	// List of other functions from the current package this function calls. If
 	// any of them are blocking, this function will become blocking too.
 	localCallees map[*types.Func][]astPath
@@ -238,6 +270,11 @@ func (fi *FuncInfo) Visit(node ast.Node) ast.Visitor {
 		if funcLit, ok := n.Call.Fun.(*ast.FuncLit); ok {
 			ast.Walk(fi, funcLit.Body)
 		}
+		return fi
+	case *ast.ReturnStmt:
+		// Capture all return statements in the function. They could become blocking
+		// if the function has a blocking deferred call.
+		fi.returnStmts = append(fi.returnStmts, fi.visitorStack.copy())
 		return fi
 	default:
 		return fi

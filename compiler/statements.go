@@ -328,11 +328,36 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			results = fc.resultNames
 		}
 		rVal := fc.translateResults(results)
-		if len(fc.Flattened) != 0 {
+
+		if len(fc.Flattened) == 0 {
+			// The function is not flattened and we don't have to worry about
+			// resumption. A plain return statement is sufficient.
+			fc.Printf("return%s;", rVal)
+			return
+		}
+		if !fc.Blocking[s] {
+			// The function is flattened, but the return statement is non-blocking
+			// (i.e. doesn't lead to blocking deferred calls). A regular return
+			// is sufficient, but we also make sure to not resume function body.
 			fc.Printf("$s = -1; return%s;", rVal)
 			return
 		}
-		fc.Printf("return%s;", rVal)
+
+		if rVal != "" {
+			// If returned expression is non empty, evaluate and store it in a
+			// variable to avoid double-execution in case a deferred function blocks.
+			rVar := fc.newVariable("$r")
+			fc.Printf("%s =%s;", rVar, rVal)
+			rVal = " " + rVar
+		}
+
+		// If deferred function is blocking, we need to re-execute return statement
+		// upon resumption to make sure the returned value is not lost.
+		// See: https://github.com/gopherjs/gopherjs/issues/603.
+		nextCase := fc.caseCounter
+		fc.caseCounter++
+		fc.Printf("$s = %[1]d; case %[1]d: return%[2]s;", nextCase, rVal)
+		return
 
 	case *ast.DeferStmt:
 		isBuiltin := false

@@ -202,7 +202,7 @@ func withBlockingDeferral() int {
 }
 
 func TestReturnWithBlockingDefer(t *testing.T) {
-	t.Skip("https://github.com/gopherjs/gopherjs/issues/603")
+	// See: https://github.com/gopherjs/gopherjs/issues/603.
 	counter = 0
 
 	got := withBlockingDeferral()

@@ -1,7 +1,9 @@
 package astutil
 
 import (
+	"fmt"
 	"go/ast"
+	"go/token"
 	"go/types"
 	"strings"
 )
@@ -89,4 +91,41 @@ func PruneOriginal(d *ast.FuncDecl) bool {
 		}
 	}
 	return false
+}
+
+// FindLoopStmt tries to find the loop statement among the AST nodes in the
+// |stack| that corresponds to the break/continue statement represented by
+// branch.
+//
+// This function is label-aware and assumes the code was successfully
+// type-checked.
+func FindLoopStmt(stack []ast.Node, branch *ast.BranchStmt, typeInfo *types.Info) ast.Stmt {
+	if branch.Tok != token.CONTINUE && branch.Tok != token.BREAK {
+		panic(fmt.Errorf("FindLoopStmt() must be used with a break or continue statement only, got: %v", branch))
+	}
+
+	for i := len(stack) - 1; i >= 0; i-- {
+		n := stack[i]
+
+		if branch.Label != nil {
+			// For a labelled continue the loop will always be in a labelled statement.
+			referencedLabel := typeInfo.Uses[branch.Label].(*types.Label)
+			labelStmt, ok := n.(*ast.LabeledStmt)
+			if !ok {
+				continue
+			}
+			if definedLabel := typeInfo.Defs[labelStmt.Label]; definedLabel != referencedLabel {
+				continue
+			}
+			n = labelStmt.Stmt
+		}
+
+		switch s := n.(type) {
+		case *ast.RangeStmt, *ast.ForStmt:
+			return s.(ast.Stmt)
+		}
+	}
+
+	// This should never happen in a source that passed type checking.
+	panic(fmt.Errorf("continue/break statement %v doesn't have a matching loop statement among ancestors", branch))
 }

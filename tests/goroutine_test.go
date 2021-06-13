@@ -186,3 +186,30 @@ func TestDeferWithBlocking(t *testing.T) {
 	fmt.Print("")
 	return
 }
+
+// counter, sideEffect and withBlockingDeferral are defined as top-level symbols
+// to make compiler generate simplest code possible without any closures.
+var counter = 0
+
+func sideEffect() int {
+	counter++
+	return 42
+}
+
+func withBlockingDeferral() int {
+	defer time.Sleep(0)
+	return sideEffect()
+}
+
+func TestReturnWithBlockingDefer(t *testing.T) {
+	t.Skip("https://github.com/gopherjs/gopherjs/issues/603")
+	counter = 0
+
+	got := withBlockingDeferral()
+	if got != 42 {
+		t.Errorf("Unexpected return value %v. Want: 42.", got)
+	}
+	if counter != 1 {
+		t.Errorf("Return value was computed %d times. Want: exactly 1.", counter)
+	}
+}

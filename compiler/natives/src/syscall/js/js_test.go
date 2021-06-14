@@ -4,6 +4,7 @@ package js_test
 
 import "testing"
 
+//gopherjs:prune-original
 func TestIntConversion(t *testing.T) {
 	// Same as upstream, but only test cases appropriate for a 32-bit environment.
 	testIntConversion(t, 0)

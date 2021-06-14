@@ -20,11 +20,11 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
 	"github.com/gopherjs/gopherjs/compiler/natives"
 	"github.com/neelance/sourcemap"
 	"github.com/shurcooL/httpfs/vfsutil"
-	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/buildutil"
 )
 
@@ -301,16 +301,8 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileSet *token.FileSet) ([]*ast.File, error) {
 	var files []*ast.File
 	replacedDeclNames := make(map[string]bool)
-	funcName := func(d *ast.FuncDecl) string {
-		if d.Recv == nil || len(d.Recv.List) == 0 {
-			return d.Name.Name
-		}
-		recv := d.Recv.List[0].Type
-		if star, ok := recv.(*ast.StarExpr); ok {
-			recv = star.X
-		}
-		return recv.(*ast.Ident).Name + "." + d.Name.Name
-	}
+	pruneOriginalFuncs := make(map[string]bool)
+
 	isXTest := strings.HasSuffix(pkg.ImportPath, "_test")
 	importPath := pkg.ImportPath
 	if isXTest {
@@ -388,7 +380,9 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 			for _, decl := range file.Decls {
 				switch d := decl.(type) {
 				case *ast.FuncDecl:
-					replacedDeclNames[funcName(d)] = true
+					k := astutil.FuncKey(d)
+					replacedDeclNames[k] = true
+					pruneOriginalFuncs[k] = astutil.PruneOriginal(d)
 				case *ast.GenDecl:
 					switch d.Tok {
 					case token.TYPE:
@@ -450,11 +444,14 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
-				if replacedDeclNames[funcName(d)] {
+				k := astutil.FuncKey(d)
+				if replacedDeclNames[k] {
 					d.Name = ast.NewIdent("_")
-					// Prune function bodies, since it may contain code invalid for
-					// GopherJS and pin unwanted imports.
-					d.Body = nil
+					if pruneOriginalFuncs[k] {
+						// Prune function bodies, since it may contain code invalid for
+						// GopherJS and pin unwanted imports.
+						d.Body = nil
+					}
 				}
 			case *ast.GenDecl:
 				switch d.Tok {
@@ -474,20 +471,6 @@ func parseAndAugment(bctx *build.Context, pkg *build.Package, isTest bool, fileS
 							}
 						}
 					}
-				}
-			}
-		}
-
-		// Prune any imports that might have become unused after pruning function bodies.
-		for _, impGroup := range astutil.Imports(fileSet, file) {
-			for _, imp := range impGroup {
-				path, _ := strconv.Unquote(imp.Path.Value)
-				if !astutil.UsesImport(file, path) {
-					name := ""
-					if imp.Name != nil {
-						name = imp.Name.Name
-					}
-					astutil.DeleteNamedImport(fileSet, file, name, path)
 				}
 			}
 		}

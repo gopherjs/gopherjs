@@ -11,72 +11,93 @@ import (
 
 type continueStmt struct {
 	forStmt      *ast.ForStmt
-	analyzeStack []ast.Node
+	analyzeStack astPath
+}
+
+func newContinueStmt(forStmt *ast.ForStmt, stack astPath) continueStmt {
+	cs := continueStmt{
+		forStmt:      forStmt,
+		analyzeStack: stack.copy(),
+	}
+	return cs
+}
+
+// astPath is a list of AST nodes where each previous node is a parent of the
+// next node.
+type astPath []ast.Node
+
+func (src astPath) copy() astPath {
+	dst := make(astPath, len(src))
+	copy(dst, src)
+	return dst
 }
 
 type Info struct {
 	*types.Info
 	Pkg           *types.Package
-	IsBlocking    func(*types.Func) bool
 	HasPointer    map[*types.Var]bool
 	FuncDeclInfos map[*types.Func]*FuncInfo
 	FuncLitInfos  map[*ast.FuncLit]*FuncInfo
-	InitFuncInfo  *FuncInfo
-	allInfos      []*FuncInfo
-	comments      ast.CommentMap
+	InitFuncInfo  *FuncInfo // Context for package variable initialization.
+
+	isImportedBlocking func(*types.Func) bool // For functions from other packages.
+	allInfos           []*FuncInfo
 }
 
-type FuncInfo struct {
-	HasDefer      bool
-	Flattened     map[ast.Node]bool
-	Blocking      map[ast.Node]bool
-	GotoLabel     map[*types.Label]bool
-	LocalCalls    map[*types.Func][][]ast.Node
-	ContinueStmts []continueStmt
-	p             *Info
-	analyzeStack  []ast.Node
-}
-
-func (info *Info) newFuncInfo() *FuncInfo {
+func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
 	funcInfo := &FuncInfo{
-		p:          info,
-		Flattened:  make(map[ast.Node]bool),
-		Blocking:   make(map[ast.Node]bool),
-		GotoLabel:  make(map[*types.Label]bool),
-		LocalCalls: make(map[*types.Func][][]ast.Node),
+		pkgInfo:      info,
+		Flattened:    make(map[ast.Node]bool),
+		Blocking:     make(map[ast.Node]bool),
+		GotoLabel:    make(map[*types.Label]bool),
+		localCallees: make(map[*types.Func][]astPath),
 	}
+
+	// Register the function in the appropriate map.
+	switch n := n.(type) {
+	case *ast.FuncDecl:
+		info.FuncDeclInfos[info.Defs[n.Name].(*types.Func)] = funcInfo
+	case *ast.FuncLit:
+		info.FuncLitInfos[n] = funcInfo
+	}
+
+	// And add it to the list of all functions.
 	info.allInfos = append(info.allInfos, funcInfo)
+
 	return funcInfo
+}
+
+func (info *Info) IsBlocking(fun *types.Func) bool {
+	return len(info.FuncDeclInfos[fun].Blocking) > 0
 }
 
 func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(*types.Func) bool) *Info {
 	info := &Info{
-		Info:          typesInfo,
-		Pkg:           typesPkg,
-		HasPointer:    make(map[*types.Var]bool),
-		comments:      make(ast.CommentMap),
-		IsBlocking:    isBlocking,
-		FuncDeclInfos: make(map[*types.Func]*FuncInfo),
-		FuncLitInfos:  make(map[*ast.FuncLit]*FuncInfo),
+		Info:               typesInfo,
+		Pkg:                typesPkg,
+		HasPointer:         make(map[*types.Var]bool),
+		isImportedBlocking: isBlocking,
+		FuncDeclInfos:      make(map[*types.Func]*FuncInfo),
+		FuncLitInfos:       make(map[*ast.FuncLit]*FuncInfo),
 	}
-	info.InitFuncInfo = info.newFuncInfo()
+	info.InitFuncInfo = info.newFuncInfo(nil)
 
+	// Traverse the full AST of the package and collect information about existing
+	// functions.
 	for _, file := range files {
-		for k, v := range ast.NewCommentMap(fileSet, file, file.Comments) {
-			info.comments[k] = v
-		}
 		ast.Walk(info.InitFuncInfo, file)
 	}
 
+	// Propagate information about blocking calls to the caller functions.
 	for {
 		done := true
-		for _, funcInfo := range info.allInfos {
-			for obj, calls := range funcInfo.LocalCalls {
-				if len(info.FuncDeclInfos[obj].Blocking) != 0 {
-					for _, call := range calls {
-						funcInfo.markBlocking(call)
+		for _, caller := range info.allInfos {
+			for callee, callSites := range caller.localCallees {
+				if info.IsBlocking(callee) {
+					for _, callSite := range callSites {
+						caller.markBlocking(callSite)
 					}
-					delete(funcInfo.LocalCalls, obj)
+					delete(caller.localCallees, callee)
 					done = false
 				}
 			}
@@ -86,9 +107,13 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		}
 	}
 
+	// After all function blocking information was propagated, mark flow control
+	// statements as blocking whenever they may lead to a blocking function call.
 	for _, funcInfo := range info.allInfos {
-		for _, continueStmt := range funcInfo.ContinueStmts {
+		for _, continueStmt := range funcInfo.continueStmts {
 			if funcInfo.Blocking[continueStmt.forStmt.Post] {
+				// If a for-loop post-expression is blocking, the continue statement
+				// that leads to it must be treated as blocking.
 				funcInfo.markBlocking(continueStmt.analyzeStack)
 			}
 		}
@@ -97,158 +122,206 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 	return info
 }
 
-func (c *FuncInfo) Visit(node ast.Node) ast.Visitor {
+type FuncInfo struct {
+	HasDefer bool
+	// Nodes are "flattened" into a switch-case statement when we need to be able
+	// to jump into an arbitrary position in the code with a GOTO statement, or
+	// resume a goroutine after a blocking call unblocks.
+	Flattened map[ast.Node]bool
+	// Blocking indicates that either the AST node itself or its descendant may
+	// block goroutine execution (for example, a channel operation).
+	Blocking map[ast.Node]bool
+	// GotoLavel indicates a label referenced by a goto statement, rather than a
+	// named loop.
+	GotoLabel map[*types.Label]bool
+	// List of continue statements in the function.
+	continueStmts []continueStmt
+	// List of other functions from the current package this function calls. If
+	// any of them are blocking, this function will become blocking too.
+	localCallees map[*types.Func][]astPath
+
+	pkgInfo      *Info // Function's parent package.
+	visitorStack astPath
+}
+
+func (fi *FuncInfo) Visit(node ast.Node) ast.Visitor {
 	if node == nil {
-		if len(c.analyzeStack) != 0 {
-			c.analyzeStack = c.analyzeStack[:len(c.analyzeStack)-1]
+		if len(fi.visitorStack) != 0 {
+			fi.visitorStack = fi.visitorStack[:len(fi.visitorStack)-1]
 		}
 		return nil
 	}
-	c.analyzeStack = append(c.analyzeStack, node)
+	fi.visitorStack = append(fi.visitorStack, node)
 
 	switch n := node.(type) {
-	case *ast.FuncDecl:
-		newInfo := c.p.newFuncInfo()
-		c.p.FuncDeclInfos[c.p.Defs[n.Name].(*types.Func)] = newInfo
-		return newInfo
-	case *ast.FuncLit:
-		newInfo := c.p.newFuncInfo()
-		c.p.FuncLitInfos[n] = newInfo
-		return newInfo
+	case *ast.FuncDecl, *ast.FuncLit:
+		// Analyze the function in its own context.
+		return fi.pkgInfo.newFuncInfo(n)
 	case *ast.BranchStmt:
 		switch n.Tok {
 		case token.GOTO:
-			for _, n2 := range c.analyzeStack {
-				c.Flattened[n2] = true
-			}
-			c.GotoLabel[c.p.Uses[n.Label].(*types.Label)] = true
+			// Emulating GOTO in JavaScript requires the code to be flattened into a
+			// switch-statement.
+			fi.markFlattened(fi.visitorStack)
+			fi.GotoLabel[fi.pkgInfo.Uses[n.Label].(*types.Label)] = true
 		case token.CONTINUE:
-			if n.Label != nil {
-				label := c.p.Uses[n.Label].(*types.Label)
-				for i := len(c.analyzeStack) - 1; i >= 0; i-- {
-					if labelStmt, ok := c.analyzeStack[i].(*ast.LabeledStmt); ok && c.p.Defs[labelStmt.Label] == label {
-						if _, ok := labelStmt.Stmt.(*ast.RangeStmt); ok {
-							return nil
-						}
-						stack := make([]ast.Node, len(c.analyzeStack))
-						copy(stack, c.analyzeStack)
-						c.ContinueStmts = append(c.ContinueStmts, continueStmt{labelStmt.Stmt.(*ast.ForStmt), stack})
-						return nil
-					}
-				}
-				return nil
-			}
-			for i := len(c.analyzeStack) - 1; i >= 0; i-- {
-				if _, ok := c.analyzeStack[i].(*ast.RangeStmt); ok {
-					return nil
-				}
-				if forStmt, ok := c.analyzeStack[i].(*ast.ForStmt); ok {
-					stack := make([]ast.Node, len(c.analyzeStack))
-					copy(stack, c.analyzeStack)
-					c.ContinueStmts = append(c.ContinueStmts, continueStmt{forStmt, stack})
-					return nil
-				}
+			loopStmt := astutil.FindLoopStmt(fi.visitorStack, n, fi.pkgInfo.Info)
+			if forStmt, ok := (loopStmt).(*ast.ForStmt); ok {
+				// In `for x; y; z { ... }` loops `z` may be potentially blocking
+				// and therefore continue expression that triggers it would have to
+				// be treated as blocking.
+				fi.continueStmts = append(fi.continueStmts, newContinueStmt(forStmt, fi.visitorStack))
 			}
 		}
+		return fi
 	case *ast.CallExpr:
-		callTo := func(obj types.Object) {
-			switch o := obj.(type) {
-			case *types.Func:
-				if recv := o.Type().(*types.Signature).Recv(); recv != nil {
-					if _, ok := recv.Type().Underlying().(*types.Interface); ok {
-						c.markBlocking(c.analyzeStack)
-						return
-					}
-				}
-				if o.Pkg() != c.p.Pkg {
-					if c.p.IsBlocking(o) {
-						c.markBlocking(c.analyzeStack)
-					}
-					return
-				}
-				stack := make([]ast.Node, len(c.analyzeStack))
-				copy(stack, c.analyzeStack)
-				c.LocalCalls[o] = append(c.LocalCalls[o], stack)
-			case *types.Var:
-				c.markBlocking(c.analyzeStack)
-			}
-		}
-		switch f := astutil.RemoveParens(n.Fun).(type) {
-		case *ast.Ident:
-			callTo(c.p.Uses[f])
-		case *ast.SelectorExpr:
-			if sel := c.p.Selections[f]; sel != nil && typesutil.IsJsObject(sel.Recv()) {
-				break
-			}
-			callTo(c.p.Uses[f.Sel])
-		case *ast.FuncLit:
-			ast.Walk(c, n.Fun)
-			for _, arg := range n.Args {
-				ast.Walk(c, arg)
-			}
-			if len(c.p.FuncLitInfos[f].Blocking) != 0 {
-				c.markBlocking(c.analyzeStack)
-			}
-			return nil
-		default:
-			if !astutil.IsTypeExpr(f, c.p.Info) {
-				c.markBlocking(c.analyzeStack)
-			}
-		}
+		return fi.visitCallExpr(n)
 	case *ast.SendStmt:
-		c.markBlocking(c.analyzeStack)
+		// Sending into a channel is blocking.
+		fi.markBlocking(fi.visitorStack)
+		return fi
 	case *ast.UnaryExpr:
 		switch n.Op {
 		case token.AND:
 			if id, ok := astutil.RemoveParens(n.X).(*ast.Ident); ok {
-				c.p.HasPointer[c.p.Uses[id].(*types.Var)] = true
+				fi.pkgInfo.HasPointer[fi.pkgInfo.Uses[id].(*types.Var)] = true
 			}
 		case token.ARROW:
-			c.markBlocking(c.analyzeStack)
+			// Receiving from a channel is blocking.
+			fi.markBlocking(fi.visitorStack)
 		}
+		return fi
 	case *ast.RangeStmt:
-		if _, ok := c.p.TypeOf(n.X).Underlying().(*types.Chan); ok {
-			c.markBlocking(c.analyzeStack)
+		if _, ok := fi.pkgInfo.TypeOf(n.X).Underlying().(*types.Chan); ok {
+			// for-range loop over a channel is blocking.
+			fi.markBlocking(fi.visitorStack)
 		}
+		return fi
 	case *ast.SelectStmt:
 		for _, s := range n.Body.List {
 			if s.(*ast.CommClause).Comm == nil { // default clause
-				return c
+				return fi
 			}
 		}
-		c.markBlocking(c.analyzeStack)
+		// Select statements without a default case are blocking.
+		fi.markBlocking(fi.visitorStack)
+		return fi
 	case *ast.CommClause:
+		// FIXME(nevkontakte): Does this need to be manually spelled out? Presumably
+		// ast.Walk would visit all those nodes anyway, and we are not creating any
+		// new contexts here.
+		// https://github.com/gopherjs/gopherjs/issues/230 seems to be relevant?
 		switch comm := n.Comm.(type) {
 		case *ast.SendStmt:
-			ast.Walk(c, comm.Chan)
-			ast.Walk(c, comm.Value)
+			ast.Walk(fi, comm.Chan)
+			ast.Walk(fi, comm.Value)
 		case *ast.ExprStmt:
-			ast.Walk(c, comm.X.(*ast.UnaryExpr).X)
+			ast.Walk(fi, comm.X.(*ast.UnaryExpr).X)
 		case *ast.AssignStmt:
-			ast.Walk(c, comm.Rhs[0].(*ast.UnaryExpr).X)
+			ast.Walk(fi, comm.Rhs[0].(*ast.UnaryExpr).X)
 		}
 		for _, s := range n.Body {
-			ast.Walk(c, s)
+			ast.Walk(fi, s)
 		}
-		return nil
+		return nil // The subtree was manually checked, no need to visit it again.
 	case *ast.GoStmt:
-		ast.Walk(c, n.Call.Fun)
+		// Unlike a regular call, the function in a go statement doesn't block the
+		// caller goroutine, but the expression that determines the function and its
+		// arguments still need to be checked.
+		ast.Walk(fi, n.Call.Fun)
 		for _, arg := range n.Call.Args {
-			ast.Walk(c, arg)
+			ast.Walk(fi, arg)
 		}
-		return nil
+		return nil // The subtree was manually checked, no need to visit it again.
 	case *ast.DeferStmt:
-		c.HasDefer = true
+		fi.HasDefer = true
 		if funcLit, ok := n.Call.Fun.(*ast.FuncLit); ok {
-			ast.Walk(c, funcLit.Body)
+			ast.Walk(fi, funcLit.Body)
 		}
+		return fi
+	default:
+		return fi
 	}
-	return c
+	// Deliberately no return here to make sure that each of the cases above is
+	// self-sufficient and explicitly decides in which context the its AST subtree
+	// needs to be analyzed.
 }
 
-func (c *FuncInfo) markBlocking(stack []ast.Node) {
+func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
+	switch f := astutil.RemoveParens(n.Fun).(type) {
+	case *ast.Ident:
+		fi.callTo(fi.pkgInfo.Uses[f])
+	case *ast.SelectorExpr:
+		if sel := fi.pkgInfo.Selections[f]; sel != nil && typesutil.IsJsObject(sel.Recv()) {
+			// js.Object methods are known to be non-blocking, but we still must
+			// check its arguments.
+		} else {
+			fi.callTo(fi.pkgInfo.Uses[f.Sel])
+		}
+	case *ast.FuncLit:
+		// Collect info about the function literal itself.
+		ast.Walk(fi, n.Fun)
+
+		// Check all argument expressions.
+		for _, arg := range n.Args {
+			ast.Walk(fi, arg)
+		}
+		// If the function literal is blocking, this function is blocking to.
+		// FIXME(nevkontakte): What if the function literal is calling a blocking
+		// function through several layers of indirection? This will only become
+		// known at a later stage of analysis.
+		if len(fi.pkgInfo.FuncLitInfos[f].Blocking) != 0 {
+			fi.markBlocking(fi.visitorStack)
+		}
+		return nil // No need to walk under this CallExpr, we already did it manually.
+	default:
+		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
+			// This is a type assertion, not a call. Type assertion itself is not
+			// blocking, but we will visit the expression itself.
+		} else {
+			// The function is returned by a non-trivial expression. We have to be
+			// conservative and assume that function might be blocking.
+			fi.markBlocking(fi.visitorStack)
+		}
+	}
+
+	return fi
+}
+
+func (fi *FuncInfo) callTo(callee types.Object) {
+	switch o := callee.(type) {
+	case *types.Func:
+		if recv := o.Type().(*types.Signature).Recv(); recv != nil {
+			if _, ok := recv.Type().Underlying().(*types.Interface); ok {
+				// Conservatively assume that an interfact implementation might be blocking.
+				fi.markBlocking(fi.visitorStack)
+				return
+			}
+		}
+		if o.Pkg() != fi.pkgInfo.Pkg {
+			if fi.pkgInfo.isImportedBlocking(o) {
+				fi.markBlocking(fi.visitorStack)
+			}
+			return
+		}
+		// We probably don't know yet whether the callee function is blocking.
+		// Record the calls site for the later stage.
+		fi.localCallees[o] = append(fi.localCallees[o], fi.visitorStack.copy())
+	case *types.Var:
+		// Conservatively assume that a function in a variable might be blocking.
+		fi.markBlocking(fi.visitorStack)
+	}
+}
+
+func (fi *FuncInfo) markBlocking(stack astPath) {
 	for _, n := range stack {
-		c.Blocking[n] = true
-		c.Flattened[n] = true
+		fi.Blocking[n] = true
+		fi.Flattened[n] = true
+	}
+}
+
+func (fi *FuncInfo) markFlattened(stack astPath) {
+	for _, n := range stack {
+		fi.Flattened[n] = true
 	}
 }

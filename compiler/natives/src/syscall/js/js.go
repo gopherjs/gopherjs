@@ -149,6 +149,8 @@ func init() {
 
 func ValueOf(x interface{}) Value {
 	switch x := x.(type) {
+	case Wrapper:
+		return x.JSValue()
 	case Value:
 		return x
 	case Func:

@@ -9,6 +9,7 @@ GopherJS compiles Go code ([golang.org](https://golang.org/)) to pure JavaScript
 
 ### What's new?
 
+ - 2021-06-19: Complete `syscall/js` package implementation compatible with the upstream Go 1.16.
  - 2021-04-04: **Go 1.16 is now officially supported!** 🎉 🎉 🎉
 
 ### Playground

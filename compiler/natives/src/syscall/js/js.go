@@ -149,11 +149,11 @@ func init() {
 
 func ValueOf(x interface{}) Value {
 	switch x := x.(type) {
+	case Wrapper:
+		return x.JSValue()
 	case Value:
 		return x
 	case Func:
-		return x.Value
-	case TypedArray:
 		return x.Value
 	case nil:
 		return Null()
@@ -334,23 +334,6 @@ func (v Value) Delete(p string) {
 
 func (v Value) Equal(w Value) bool {
 	return v.internal() == w.internal()
-}
-
-type TypedArray struct {
-	Value
-}
-
-func TypedArrayOf(slice interface{}) TypedArray {
-	switch slice := slice.(type) {
-	case []int8, []int16, []int32, []uint8, []uint16, []uint32, []float32, []float64:
-		return TypedArray{objectToValue(id.Invoke(slice))}
-	default:
-		panic("TypedArrayOf: not a supported slice")
-	}
-}
-
-func (t *TypedArray) Release() {
-	t.Value = Value{}
 }
 
 type ValueError struct {

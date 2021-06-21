@@ -32,7 +32,6 @@ import (
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
-	"github.com/kisielk/gotool"
 	"github.com/neelance/sourcemap"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -124,19 +123,19 @@ func main() {
 					return err
 				}
 
+				xctx := gbuild.NewBuildContext(s.InstallSuffix(), options.BuildTags)
 				// Expand import path patterns.
-				patternContext := gbuild.NewBuildContext("", options.BuildTags)
-				pkgs := (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
+				pkgs := xctx.Match(args)
 
 				for _, pkgPath := range pkgs {
 					if s.Watcher != nil {
-						pkg, err := gbuild.NewBuildContext(s.InstallSuffix(), options.BuildTags).Import(pkgPath, "", build.FindOnly)
+						pkg, err := xctx.Import(pkgPath, "", build.FindOnly)
 						if err != nil {
 							return err
 						}
 						s.Watcher.Add(pkg.Dir)
 					}
-					pkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
+					pkg, err := xctx.Import(pkgPath, ".", 0)
 					if err != nil {
 						return err
 					}
@@ -185,8 +184,8 @@ func main() {
 
 			err = func() error {
 				// Expand import path patterns.
-				patternContext := gbuild.NewBuildContext("", options.BuildTags)
-				pkgs := (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
+				xctx := gbuild.NewBuildContext(s.InstallSuffix(), options.BuildTags)
+				pkgs := xctx.Match(args)
 
 				if cmd.Name() == "get" {
 					goGet := exec.Command("go", append([]string{"get", "-d", "-tags=js"}, pkgs...)...)
@@ -197,7 +196,7 @@ func main() {
 					}
 				}
 				for _, pkgPath := range pkgs {
-					pkg, err := gbuild.Import(pkgPath, 0, s.InstallSuffix(), options.BuildTags)
+					pkg, err := xctx.Import(pkgPath, ".", 0)
 					if s.Watcher != nil && pkg != nil { // add watch even on error
 						s.Watcher.Add(pkg.Dir)
 					}
@@ -317,7 +316,7 @@ func main() {
 		err := func() error {
 			// Expand import path patterns.
 			patternContext := gbuild.NewBuildContext("", options.BuildTags)
-			args = (&gotool.Context{BuildContext: *patternContext}).ImportPaths(args)
+			args = patternContext.Match(args)
 
 			if *compileOnly && len(args) > 1 {
 				return errors.New("cannot use -c flag with multiple packages")
@@ -346,7 +345,7 @@ func main() {
 					return err
 				}
 
-				tests := &testFuncs{BuildContext: s.BuildContext(), Package: pkg.Package}
+				tests := &testFuncs{BuildContext: pkg.InternalBuildContext(), Package: pkg.Package}
 				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
 					if testPkgName == "_test" {
 						for _, file := range pkg.TestGoFiles {
@@ -365,28 +364,11 @@ func main() {
 					return err
 				}
 
-				if err := collectTests(&gbuild.PackageData{
-					Package: &build.Package{
-						ImportPath: pkg.ImportPath,
-						Dir:        pkg.Dir,
-						GoFiles:    append(pkg.GoFiles, pkg.TestGoFiles...),
-						Imports:    append(pkg.Imports, pkg.TestImports...),
-					},
-					IsTest:  true,
-					JSFiles: pkg.JSFiles,
-				}, "_test", &tests.NeedTest); err != nil {
+				if err := collectTests(pkg.TestPackage(), "_test", &tests.NeedTest); err != nil {
 					return err
 				}
 
-				if err := collectTests(&gbuild.PackageData{
-					Package: &build.Package{
-						ImportPath: pkg.ImportPath + "_test",
-						Dir:        pkg.Dir,
-						GoFiles:    pkg.XTestGoFiles,
-						Imports:    pkg.XTestImports,
-					},
-					IsTest: true,
-				}, "_xtest", &tests.NeedXtest); err != nil {
+				if err := collectTests(pkg.XTestPackage(), "_xtest", &tests.NeedXtest); err != nil {
 					return err
 				}
 

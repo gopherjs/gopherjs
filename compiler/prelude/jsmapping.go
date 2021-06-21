@@ -175,7 +175,7 @@ var $externalizeFunction = function(v, t, passThis) {
   return v.$externalizeWrapper;
 };
 
-var $internalize = function(v, t, recv) {
+var $internalize = function(v, t, recv, seen) {
   if (t === $jsObjectPtr) {
     return v;
   }
@@ -192,6 +192,13 @@ var $internalize = function(v, t, recv) {
     }
     return timePkg.Unix(new $Int64(0, 0), new $Int64(0, v.getTime() * 1000000));
   }
+
+  // Cache for values we've already internalized in order to deal with circular
+  // references.
+  if (seen === undefined) { seen = new Map(); }
+  if (!seen.has(t)) { seen.set(t, new Map()); }
+  if (seen.get(t).has(v)) { return seen.get(t).get(v); }
+
   switch (t.kind) {
   case $kindBool:
     return !!v;
@@ -298,14 +305,15 @@ var $internalize = function(v, t, recv) {
         return new $jsObjectPtr(v);
       }
       var mapType = $mapType($String, $emptyInterface);
-      return new mapType($internalize(v, mapType));
+      return new mapType($internalize(v, mapType, recv, seen));
     }
   case $kindMap:
     var m = {};
+    seen.get(t).set(v, m);
     var keys = $keys(v);
     for (var i = 0; i < keys.length; i++) {
-      var k = $internalize(keys[i], t.key);
-      m[t.key.keyFor(k)] = { k: k, v: $internalize(v[keys[i]], t.elem) };
+      var k = $internalize(keys[i], t.key, recv, seen);
+      m[t.key.keyFor(k)] = { k: k, v: $internalize(v[keys[i]], t.elem, recv, seen) };
     }
     return m;
   case $kindPtr:

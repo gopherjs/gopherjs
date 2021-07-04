@@ -64,8 +64,9 @@ func NewBuildContext(installSuffix string, buildTags []string) *build.Context {
 		InstallSuffix: installSuffix,
 		Compiler:      "gc",
 		BuildTags: append(buildTags,
-			"netgo",  // See https://godoc.org/net#hdr-Name_Resolution.
-			"purego", // See https://golang.org/issues/23172.
+			"netgo",            // See https://godoc.org/net#hdr-Name_Resolution.
+			"purego",           // See https://golang.org/issues/23172.
+			"math_big_pure_go", // Use pure Go version of math/big.
 		),
 		ReleaseTags: build.Default.ReleaseTags[:compiler.GoVersion],
 		CgoEnabled:  true, // detect `import "C"` to throw proper error
@@ -155,9 +156,6 @@ func importWithSrcDir(bctx build.Context, path string, srcDir string, mode build
 	case "syscall/js":
 		// There are no buildable files in this package, but we need to use files in the virtual directory.
 		mode |= build.FindOnly
-	case "math/big":
-		// Use pure Go version of math/big; we don't want non-Go assembly versions.
-		bctx.BuildTags = append(bctx.BuildTags, "math_big_pure_go")
 	case "crypto/x509", "os/user":
 		// These stdlib packages have cgo and non-cgo versions (via build tags); we want the latter.
 		bctx.CgoEnabled = false

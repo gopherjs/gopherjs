@@ -171,9 +171,8 @@ func goCtx(installSuffix string, buildTags []string) *simpleCtx {
 			// This limitation stems from the fact that it will invoke the Go tool
 			// which can only see files on the real FS and will assume release tags
 			// based on the Go tool's version.
-			// TODO(nevkontakte): We should be able to omit this if we place
-			// $GOROOT/bin at the front of $PATH.
-			// See also: https://github.com/golang/go/issues/46856.
+			//
+			// See also comments to the versionhack package.
 			ReleaseTags: build.Default.ReleaseTags[:compiler.GoVersion],
 		},
 	}

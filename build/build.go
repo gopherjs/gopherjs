@@ -30,6 +30,8 @@ import (
 	"github.com/neelance/sourcemap"
 	"github.com/shurcooL/httpfs/vfsutil"
 	"golang.org/x/tools/go/buildutil"
+
+	_ "github.com/gopherjs/gopherjs/build/versionhack" // go/build release tags hack.
 )
 
 // DefaultGOROOT is the default GOROOT value for builds.

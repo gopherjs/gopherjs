@@ -5,6 +5,7 @@ import (
 	"go/build"
 	"net/http"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -47,6 +48,7 @@ func (sc simpleCtx) Import(importPath string, srcDir string, mode build.ImportMo
 	if err != nil {
 		return nil, fmt.Errorf("failed to enumerate .inc.js files in %s: %w", pkg.Dir, err)
 	}
+	pkg.PkgObj = sc.rewritePkgObj(pkg.PkgObj)
 	return &PackageData{
 		Package:   pkg,
 		IsVirtual: sc.isVirtual,
@@ -93,6 +95,33 @@ func (sc simpleCtx) applyPackageTweaks(importPath string, mode build.ImportMode)
 	}
 
 	return bctx, mode
+}
+
+func (sc simpleCtx) rewritePkgObj(orig string) string {
+	if orig == "" {
+		return orig
+	}
+
+	goroot := mustAbs(sc.bctx.GOROOT)
+	gopath := mustAbs(sc.bctx.GOPATH)
+	orig = mustAbs(orig)
+
+	if strings.HasPrefix(orig, filepath.Join(gopath, "pkg", "mod")) {
+		// Go toolchain makes sources under GOPATH/pkg/mod readonly, so we can't
+		// store our artifacts there.
+		return cachedPath(orig)
+	}
+
+	allowed := []string{goroot, gopath}
+	for _, prefix := range allowed {
+		if strings.HasPrefix(orig, prefix) {
+			// Traditional GOPATH-style locations for build artifacts are ok to use.
+			return orig
+		}
+	}
+
+	// Everything else also goes into the cache just in case.
+	return cachedPath(orig)
 }
 
 var defaultBuildTags = []string{

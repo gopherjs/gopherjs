@@ -49,6 +49,9 @@ func (sc simpleCtx) Import(importPath string, srcDir string, mode build.ImportMo
 		return nil, fmt.Errorf("failed to enumerate .inc.js files in %s: %w", pkg.Dir, err)
 	}
 	pkg.PkgObj = sc.rewritePkgObj(pkg.PkgObj)
+	if !path.IsAbs(pkg.Dir) {
+		pkg.Dir = mustAbs(pkg.Dir)
+	}
 	return &PackageData{
 		Package:   pkg,
 		IsVirtual: sc.isVirtual,

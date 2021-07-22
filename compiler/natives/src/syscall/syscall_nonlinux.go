@@ -1,3 +1,4 @@
+//go:build js && !linux
 // +build js,!linux
 
 package syscall

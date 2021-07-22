@@ -1,3 +1,4 @@
+//go:build gopherjsdev
 // +build gopherjsdev
 
 package gopherjspkg

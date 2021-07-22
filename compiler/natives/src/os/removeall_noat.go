@@ -6,6 +6,7 @@
 // module can't handle passing a struct in correctly.
 // https://github.com/gopherjs/gopherjs/issues/993
 
+//go:build js
 // +build js
 
 package os

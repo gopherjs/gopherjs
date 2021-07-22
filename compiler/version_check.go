@@ -12,10 +12,10 @@ import (
 )
 
 // Version is the GopherJS compiler version string.
-const Version = "1.16.4+go1.16.7"
+const Version = "1.17.0+go1.17"
 
 // GoVersion is the current Go 1.x version that GopherJS is compatible with.
-const GoVersion = 16
+const GoVersion = 17
 
 // CheckGoVersion checks the version of the Go distribution
 // at goroot, and reports an error if it's not compatible
@@ -26,10 +26,10 @@ func CheckGoVersion(goroot string) error {
 	}
 	v, err := ioutil.ReadFile(filepath.Join(goroot, "VERSION"))
 	if err != nil {
-		return fmt.Errorf("GopherJS %s requires a Go 1.16.x distribution, but failed to read its VERSION file: %v", Version, err)
+		return fmt.Errorf("GopherJS %s requires a Go 1.%d.x distribution, but failed to read its VERSION file: %v", Version, GoVersion, err)
 	}
-	if !bytes.HasPrefix(v, []byte("go1.16")) {
-		return fmt.Errorf("GopherJS %s requires a Go 1.16.x distribution, but found version %s", Version, v)
+	if !bytes.HasPrefix(v, []byte("go1."+strconv.Itoa(GoVersion))) {
+		return fmt.Errorf("GopherJS %s requires a Go 1.%d.x distribution, but found version %s", Version, GoVersion, v)
 	}
 	return nil
 }

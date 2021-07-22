@@ -48,7 +48,7 @@ workflows:
 parameters:
   go_version:
     type: string
-    default: "1.16.7"
+    default: "1.17"
   nvm_version:
     type: string
     default: "0.38.0"

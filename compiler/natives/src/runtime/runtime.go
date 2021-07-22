@@ -354,7 +354,8 @@ func LockOSThread() {}
 func UnlockOSThread() {}
 
 func Version() string {
-	return sys.TheVersion
+	// TODO: Make this smarter
+	return "go1.17rc1"
 }
 
 func StartTrace() error { return nil }

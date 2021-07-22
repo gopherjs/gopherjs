@@ -16,7 +16,7 @@ func runExample(eg InternalExample) (ok bool) {
 
 	// Capture stdout.
 	stdout := os.Stdout
-	w, err := tempFile("." + eg.Name + ".stdout.")
+	w, err := os.CreateTemp("", "."+eg.Name+".stdout.")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -33,7 +33,7 @@ func runExample(eg InternalExample) (ok bool) {
 		// Close file, restore stdout, get output.
 		w.Close()
 		os.Stdout = stdout
-		out, readFileErr := readFile(w.Name())
+		out, readFileErr := os.ReadFile(w.Name())
 		_ = os.Remove(w.Name())
 		if readFileErr != nil {
 			fmt.Fprintf(os.Stderr, "testing: reading stdout file: %v\n", readFileErr)
@@ -42,11 +42,11 @@ func runExample(eg InternalExample) (ok bool) {
 
 		var fail string
 		err := recover()
-		got := strings.TrimSpace(out)
+		got := strings.TrimSpace(string(out))
 		want := strings.TrimSpace(eg.Output)
 		if eg.Unordered {
 			if sortLines(got) != sortLines(want) && err == nil {
-				fail = fmt.Sprintf("got:\n%s\nwant (unordered):\n%s\n", out, eg.Output)
+				fail = fmt.Sprintf("got:\n%s\nwant (unordered):\n%s\n", string(out), eg.Output)
 			}
 		} else {
 			if got != want && err == nil {

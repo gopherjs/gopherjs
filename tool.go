@@ -13,6 +13,7 @@ import (
 	"go/types"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -486,7 +487,6 @@ func main() {
 	cmdServe.Flags().StringVarP(&addr, "http", "", ":8080", "HTTP bind address to serve")
 	cmdServe.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(tags)
-		dirs := append(filepath.SplitList(build.Default.GOPATH), gbuild.DefaultGOROOT)
 		var root string
 
 		if len(args) > 1 {
@@ -508,7 +508,6 @@ func main() {
 		sourceFiles := http.FileServer(serveCommandFileSystem{
 			serveRoot:  root,
 			options:    options,
-			dirs:       dirs,
 			sourceMaps: make(map[string][]byte),
 		})
 
@@ -570,12 +569,12 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 type serveCommandFileSystem struct {
 	serveRoot  string
 	options    *gbuild.Options
-	dirs       []string
 	sourceMaps map[string][]byte
 }
 
 func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 	name := path.Join(fs.serveRoot, requestName[1:]) // requestName[0] == '/'
+	log.Printf("Request: %s", name)
 
 	dir, file := path.Split(name)
 	base := path.Base(dir) // base is parent folder name, which becomes the output file name.
@@ -584,13 +583,14 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 	isMap := file == base+".js.map"
 	isIndex := file == "index.html"
 
+	// Create a new session to pick up changes to source code on disk.
+	// TODO(dmitshur): might be possible to get a single session to detect changes to source code on disk
+	s, err := gbuild.NewSession(fs.options)
+	if err != nil {
+		return nil, err
+	}
+
 	if isPkg || isMap || isIndex {
-		// Create a new session to pick up changes to source code on disk.
-		// TODO(dmitshur): might be possible to get a single session to detect changes to source code on disk
-		s, err := gbuild.NewSession(fs.options)
-		if err != nil {
-			return nil, err
-		}
 		// If we're going to be serving our special files, make sure there's a Go command in this folder.
 		pkg, err := gbuild.Import(path.Dir(name), 0, s.InstallSuffix(), fs.options.BuildTags)
 		if err != nil || pkg.Name != "main" {
@@ -641,19 +641,14 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 		}
 	}
 
-	for _, d := range fs.dirs {
-		dir := http.Dir(filepath.Join(d, "src"))
+	// First try to serve the request with a root prefix supplied in the CLI.
+	if f, err := fs.serveSourceTree(s.XContext(), name); err == nil {
+		return f, nil
+	}
 
-		f, err := dir.Open(name)
-		if err == nil {
-			return f, nil
-		}
-
-		// source maps are served outside of serveRoot
-		f, err = dir.Open(requestName)
-		if err == nil {
-			return f, nil
-		}
+	// If that didn't work, try without the prefix.
+	if f, err := fs.serveSourceTree(s.XContext(), requestName); err == nil {
+		return f, nil
 	}
 
 	if isIndex {
@@ -661,6 +656,24 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 		return newFakeFile("index.html", []byte(`<html><head><meta charset="utf-8"><script src="`+base+`.js"></script></head><body></body></html>`)), nil
 	}
 
+	return nil, os.ErrNotExist
+}
+
+func (fs serveCommandFileSystem) serveSourceTree(xctx gbuild.XContext, reqPath string) (http.File, error) {
+	parts := strings.Split(path.Clean(reqPath), "/")
+	// Under Go Modules different packages can be located in different module
+	// directories, which no longer align with import paths.
+	//
+	// We don't know which part of the requested path is package import path and
+	// which is a path under the package directory, so we try different slipt
+	// points until the package is found successfully.
+	for i := len(parts); i > 0; i-- {
+		pkgPath := path.Clean(path.Join(parts[:i]...))
+		filePath := path.Clean(path.Join(parts[i:]...))
+		if pkg, err := xctx.Import(pkgPath, ".", build.FindOnly); err == nil {
+			return http.Dir(pkg.Dir).Open(filePath)
+		}
+	}
 	return nil, os.ErrNotExist
 }
 

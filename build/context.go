@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"go/build"
 	"net/http"
+	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler"
-	"github.com/kisielk/gotool"
+	"golang.org/x/tools/go/buildutil"
 )
 
 // XContext is an extension of go/build.Context with GopherJS-specifc features.
@@ -27,7 +29,7 @@ type XContext interface {
 	GOOS() string
 
 	// Match explans build patterns into a set of matching import paths (see go help packages).
-	Match(patterns []string) []string
+	Match(patterns []string) ([]string, error)
 }
 
 // simpleCtx is a wrapper around go/build.Context with support for GopherJS-specific
@@ -61,17 +63,94 @@ func (sc simpleCtx) Import(importPath string, srcDir string, mode build.ImportMo
 }
 
 // Match implements XContext.Match.
-func (sc simpleCtx) Match(patterns []string) []string {
-	// TODO(nevkontakte): The gotool library prints warnings directly to stderr
-	// when it matched no packages. This may be misleading with chained contexts
-	// when a package is only found in the secondary context. Perhaps we could
-	// replace gotool package with golang.org/x/tools/go/buildutil.ExpandPatterns()
-	// at the cost of a slightly more limited pattern support compared to go tool?
-	tool := gotool.Context{BuildContext: sc.bctx}
-	return tool.ImportPaths(patterns)
+func (sc simpleCtx) Match(patterns []string) ([]string, error) {
+	if sc.isVirtual {
+		// We can't use go tool to enumerate packages in a virtual file system,
+		// so we fall back onto a simpler implementation provided by the buildutil
+		// package. It doesn't support all valid patterns, but should be good enough.
+		//
+		// Note: this code path will become unnecessary after
+		// https://github.com/gopherjs/gopherjs/issues/1021 is implemented.
+		args := []string{}
+		for _, p := range patterns {
+			switch p {
+			case "all":
+				args = append(args, "...")
+			case "std", "main", "cmd":
+				// These patterns are not supported by buildutil.ExpandPatterns(),
+				// but they would be matched by the real context correctly, so skip them.
+			default:
+				args = append(args, p)
+			}
+		}
+		matches := []string{}
+		for importPath := range buildutil.ExpandPatterns(&sc.bctx, args) {
+			if importPath[0] == '.' {
+				p, err := sc.Import(importPath, ".", build.FindOnly)
+				// Resolve relative patterns into canonical import paths.
+				if err != nil {
+					continue
+				}
+				importPath = p.ImportPath
+			}
+			matches = append(matches, importPath)
+		}
+		sort.Strings(matches)
+		return matches, nil
+	}
+
+	args := append([]string{
+		"-e", "-compiler=gc",
+		"-tags=" + strings.Join(sc.bctx.BuildTags, ","),
+		"-installsuffix=" + sc.bctx.InstallSuffix,
+		"-f={{.ImportPath}}",
+		"--",
+	}, patterns...)
+
+	out, err := sc.gotool("list", args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list packages on FS: %w", err)
+	}
+	matches := strings.Split(strings.TrimSpace(out), "\n")
+	sort.Strings(matches)
+	return matches, nil
 }
 
 func (sc simpleCtx) GOOS() string { return sc.bctx.GOOS }
+
+// gotool executes the go tool set up for the build context and returns standard output.
+func (sc simpleCtx) gotool(subcommand string, args ...string) (string, error) {
+	if sc.isVirtual {
+		panic(fmt.Errorf("can't use go tool with a virtual build context"))
+	}
+	args = append([]string{subcommand}, args...)
+	cmd := exec.Command("go", args...)
+
+	if sc.bctx.Dir != "" {
+		cmd.Dir = sc.bctx.Dir
+	}
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	cgo := "0"
+	if sc.bctx.CgoEnabled {
+		cgo = "1"
+	}
+	cmd.Env = append(os.Environ(),
+		"GOOS="+sc.bctx.GOOS,
+		"GOARCH="+sc.bctx.GOARCH,
+		"GOROOT="+sc.bctx.GOROOT,
+		"GOPATH="+sc.bctx.GOPATH,
+		"CGO_ENABLED="+cgo,
+	)
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("go tool error: %v: %w\n%s", cmd, err, stderr.String())
+	}
+	return stdout.String(), nil
+}
 
 // applyPackageTweaks makes several package-specific adjustments to package importing.
 //
@@ -211,10 +290,19 @@ func (cc chainedCtx) GOOS() string { return cc.primary.GOOS() }
 //
 // Packages from both contexts are included and returned as a deduplicated
 // sorted list.
-func (cc chainedCtx) Match(patterns []string) []string {
+func (cc chainedCtx) Match(patterns []string) ([]string, error) {
+	m1, err := cc.primary.Match(patterns)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list packages in the primary context: %s", err)
+	}
+	m2, err := cc.secondary.Match(patterns)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list packages in the secondary context: %s", err)
+	}
+
 	seen := map[string]bool{}
 	matches := []string{}
-	for _, m := range append(cc.primary.Match(patterns), cc.secondary.Match(patterns)...) {
+	for _, m := range append(m1, m2...) {
 		if seen[m] {
 			continue
 		}
@@ -222,7 +310,7 @@ func (cc chainedCtx) Match(patterns []string) []string {
 		matches = append(matches, m)
 	}
 	sort.Strings(matches)
-	return matches
+	return matches, nil
 }
 
 // IsPkgNotFound returns true if the error was caused by package not found.

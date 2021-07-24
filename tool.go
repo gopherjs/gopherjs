@@ -125,7 +125,10 @@ func main() {
 
 				xctx := gbuild.NewBuildContext(s.InstallSuffix(), options.BuildTags)
 				// Expand import path patterns.
-				pkgs := xctx.Match(args)
+				pkgs, err := xctx.Match(args)
+				if err != nil {
+					return fmt.Errorf("failed to expand patterns %v: %w", args, err)
+				}
 
 				for _, pkgPath := range pkgs {
 					if s.Watcher != nil {
@@ -185,7 +188,10 @@ func main() {
 			err = func() error {
 				// Expand import path patterns.
 				xctx := gbuild.NewBuildContext(s.InstallSuffix(), options.BuildTags)
-				pkgs := xctx.Match(args)
+				pkgs, err := xctx.Match(args)
+				if err != nil {
+					return fmt.Errorf("failed to expand patterns %v: %w", args, err)
+				}
 
 				if cmd.Name() == "get" {
 					goGet := exec.Command("go", append([]string{"get", "-d", "-tags=js"}, pkgs...)...)
@@ -316,17 +322,20 @@ func main() {
 		err := func() error {
 			// Expand import path patterns.
 			patternContext := gbuild.NewBuildContext("", options.BuildTags)
-			args = patternContext.Match(args)
+			matches, err := patternContext.Match(args)
+			if err != nil {
+				return fmt.Errorf("failed to expand patterns %v: %w", args, err)
+			}
 
-			if *compileOnly && len(args) > 1 {
+			if *compileOnly && len(matches) > 1 {
 				return errors.New("cannot use -c flag with multiple packages")
 			}
-			if *outputFilename != "" && len(args) > 1 {
+			if *outputFilename != "" && len(matches) > 1 {
 				return errors.New("cannot use -o flag with multiple packages")
 			}
 
-			pkgs := make([]*gbuild.PackageData, len(args))
-			for i, pkgPath := range args {
+			pkgs := make([]*gbuild.PackageData, len(matches))
+			for i, pkgPath := range matches {
 				var err error
 				pkgs[i], err = gbuild.Import(pkgPath, 0, "", options.BuildTags)
 				if err != nil {

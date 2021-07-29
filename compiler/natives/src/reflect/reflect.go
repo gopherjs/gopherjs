@@ -34,6 +34,23 @@ func init() {
 	uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
 }
 
+// New returns a Value representing a pointer to a new zero value
+// for the specified type. That is, the returned Value's Type is PtrTo(typ).
+//
+// The upstream version includes an extra check to avoid creating types that
+// are tagged as go:notinheap. This shouldn't matter in GopherJS, and tracking
+// that state is over-complex, so we just skip that check.
+func New(typ Type) Value {
+	if typ == nil {
+		panic("reflect: New(nil)")
+	}
+	t := typ.(*rtype)
+	pt := t.ptrTo()
+	ptr := unsafe_New(t)
+	fl := flag(Ptr)
+	return Value{pt, ptr, fl}
+}
+
 func jsType(typ Type) *js.Object {
 	return js.InternalObject(typ).Get("jsType")
 }

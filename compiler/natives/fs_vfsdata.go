@@ -22,7 +22,7 @@ var FS = func() http.FileSystem {
 	fs := vfsgen۰FS{
 		"/": &vfsgen۰DirInfo{
 			name:    "/",
-			modTime: time.Date(2021, 7, 29, 14, 16, 49, 371441823, time.UTC),
+			modTime: time.Date(2021, 7, 29, 14, 18, 2, 114854122, time.UTC),
 		},
 		"/src": &vfsgen۰DirInfo{
 			name:    "src",
@@ -59,7 +59,33 @@ var FS = func() http.FileSystem {
 		},
 		"/src/crypto": &vfsgen۰DirInfo{
 			name:    "crypto",
-			modTime: time.Date(2021, 7, 29, 14, 15, 42, 115994867, time.UTC),
+			modTime: time.Date(2021, 7, 29, 14, 18, 2, 102854218, time.UTC),
+		},
+		"/src/crypto/ed25519": &vfsgen۰DirInfo{
+			name:    "ed25519",
+			modTime: time.Date(2021, 7, 29, 14, 18, 2, 102854218, time.UTC),
+		},
+		"/src/crypto/ed25519/ed25519vectors_test.go": &vfsgen۰CompressedFileInfo{
+			name:             "ed25519vectors_test.go",
+			modTime:          time.Date(2021, 7, 29, 14, 18, 2, 102854218, time.UTC),
+			uncompressedSize: 204,
+
+			compressedContent: []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x02\xff\x3c\xcc\xc1\x4a\xc4\x30\x10\xc6\xf1\xb3\xf3\x14\x43\x4e\xbb\x0a\x0d\x0a\x7b\xb0\x47\x51\xaf\x7b\xb0\x78\x5d\x62\x3a\x2d\x63\x93\x4c\x98\x4c\x05\x11\xdf\x5d\x8a\x65\x8f\x7f\xf8\x7d\x9f\xf7\xb3\xf4\x1f\x2b\xa7\x11\x3f\x1b\x78\x8f\x77\xd7\x80\x1a\xe2\x12\x66\x42\x1a\x1f\x4e\xa7\xfb\xc7\x8b\x51\x33\x00\xce\x55\xd4\xd0\x6d\xc5\x65\x76\x00\xd3\x5a\x22\x0e\xd4\xec\xe5\x1f\xbe\x53\x34\xd1\x76\x30\xbc\xdd\x51\x37\x1c\xf1\x07\x6e\xac\x7b\x5b\xb8\x1e\xdc\x70\x7e\x3e\xbb\x23\x7a\x8f\xba\x16\xe3\x4c\x48\xaa\xa2\x3d\x96\x60\xfc\x45\xb8\x1d\x1a\x4b\xc1\x22\x86\x9c\x6b\xa2\x4c\xc5\x68\xec\xb1\x7d\xb7\x18\x52\xea\xf6\xdd\xe5\x89\x26\x51\x7a\x15\x5d\xe0\x17\xfe\x02\x00\x00\xff\xff\x2a\x62\x6f\xaa\xcc\x00\x00\x00"),
+		},
+		"/src/crypto/ed25519/internal": &vfsgen۰DirInfo{
+			name:    "internal",
+			modTime: time.Date(2021, 7, 29, 14, 18, 2, 102854218, time.UTC),
+		},
+		"/src/crypto/ed25519/internal/edwards25519": &vfsgen۰DirInfo{
+			name:    "edwards25519",
+			modTime: time.Date(2021, 7, 29, 14, 18, 2, 102854218, time.UTC),
+		},
+		"/src/crypto/ed25519/internal/edwards25519/scalar_test.go": &vfsgen۰CompressedFileInfo{
+			name:             "scalar_test.go",
+			modTime:          time.Date(2021, 7, 29, 14, 18, 2, 102854218, time.UTC),
+			uncompressedSize: 447,
+
+			compressedContent: []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x02\xff\xa4\xd0\xb1\x4e\xc3\x30\x10\xc6\xf1\x99\x7b\x8a\x53\xa6\x16\x50\xad\x82\x32\xc0\x80\x04\x74\xe9\x50\x40\x6a\xc4\xee\xc4\x47\x38\xe2\xd8\x91\xef\x4c\x85\x50\x79\x76\x14\x44\x98\x40\x42\x30\x7e\x83\x7f\x7f\xf9\x8c\x69\xe3\x79\x9d\xd9\x3b\x7c\x12\x30\x06\x8f\xbe\x06\x0c\xb6\xe9\x6c\x4b\x48\x6e\x67\x93\x93\x93\xb2\x5c\x9e\x01\x70\x3f\xc4\xa4\x58\x28\x89\x72\x68\x0b\x80\x87\x1c\x1a\xac\x48\x74\xdb\x58\x6f\xd3\x26\x7b\x5d\xb1\x68\xe2\x3a\x2b\xc9\xed\x33\xa5\x4b\xe7\x66\x8a\x87\x9f\x4f\x16\xd5\x1c\x5f\xe1\x40\x17\xdb\x8e\x87\x59\x21\x3e\xee\x8a\x39\x1a\x83\x15\xf7\x24\x18\xb3\x1e\xa3\xda\x8e\x04\xdf\x96\xa7\xd8\x73\x18\x19\xd8\x7f\x1b\xba\x89\x61\xed\x28\x28\xeb\xcb\x5d\xe4\xa0\xbf\xca\x7c\xd8\x17\x58\x8e\xf6\x0f\xee\xc6\x6a\xf3\x48\x72\x65\x85\xc6\xf9\x3f\xf6\xde\xa6\xf1\x6b\xab\x98\x6b\x4f\x13\xf9\x97\xc2\x74\x1f\xe4\x80\xd7\x6b\xd8\xc3\x7b\x00\x00\x00\xff\xff\x4f\xa8\xf0\x10\xbf\x01\x00\x00"),
 		},
 		"/src/crypto/internal": &vfsgen۰DirInfo{
 			name:    "internal",
@@ -870,9 +896,20 @@ var FS = func() http.FileSystem {
 		fs["/src/bytes/bytes_test.go"].(os.FileInfo),
 	}
 	fs["/src/crypto"].(*vfsgen۰DirInfo).entries = []os.FileInfo{
+		fs["/src/crypto/ed25519"].(os.FileInfo),
 		fs["/src/crypto/internal"].(os.FileInfo),
 		fs["/src/crypto/rand"].(os.FileInfo),
 		fs["/src/crypto/x509"].(os.FileInfo),
+	}
+	fs["/src/crypto/ed25519"].(*vfsgen۰DirInfo).entries = []os.FileInfo{
+		fs["/src/crypto/ed25519/ed25519vectors_test.go"].(os.FileInfo),
+		fs["/src/crypto/ed25519/internal"].(os.FileInfo),
+	}
+	fs["/src/crypto/ed25519/internal"].(*vfsgen۰DirInfo).entries = []os.FileInfo{
+		fs["/src/crypto/ed25519/internal/edwards25519"].(os.FileInfo),
+	}
+	fs["/src/crypto/ed25519/internal/edwards25519"].(*vfsgen۰DirInfo).entries = []os.FileInfo{
+		fs["/src/crypto/ed25519/internal/edwards25519/scalar_test.go"].(os.FileInfo),
 	}
 	fs["/src/crypto/internal"].(*vfsgen۰DirInfo).entries = []os.FileInfo{
 		fs["/src/crypto/internal/subtle"].(os.FileInfo),

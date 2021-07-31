@@ -5,8 +5,8 @@ jobs:
     - image: ubuntu:18.04
     environment:
       SOURCE_MAP_SUPPORT: true
-      GO111MODULE: "off" # Until issue #855 is fixed, we operate in GOPATH mode.
-    working_directory: ~/go/src/github.com/gopherjs/gopherjs
+      GO111MODULE: "on"
+    working_directory: ~/gopherjs
     steps:
     - run: apt-get update && apt-get install -y sudo curl git python make g++
     - checkout

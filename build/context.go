@@ -165,8 +165,10 @@ func (sc simpleCtx) applyPackageTweaks(importPath string, mode build.ImportMode)
 		bctx.GOARCH = build.Default.GOARCH
 		bctx.InstallSuffix += build.Default.GOARCH
 	case "syscall/js":
-		// There are no buildable files in this package, but we need to use files in the virtual directory.
-		mode |= build.FindOnly
+		if !sc.isVirtual {
+			// There are no buildable files in this package upstream, but we need to use files in the virtual directory.
+			mode |= build.FindOnly
+		}
 	case "crypto/x509", "os/user":
 		// These stdlib packages have cgo and non-cgo versions (via build tags); we want the latter.
 		bctx.CgoEnabled = false

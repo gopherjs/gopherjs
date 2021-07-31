@@ -32,3 +32,28 @@ jobs:
     - run: ulimit -s 10000 && gopherjs test --minify -v --short github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/... $(go list std | grep -v -x -f .std_test_pkg_exclusions)
     - run: go test -v -race ./...
     - run: gopherjs test -v fmt # No minification should work.
+    - run:
+        name: TodoMVC in GOPATH mode
+        command: |
+          export GO111MODULE=off
+          export GOPATH=/tmp/gopath
+          mkdir -p $GOPATH/src
+          go get -v github.com/gopherjs/todomvc
+          gopherjs build -v -o /tmp/todomvc_gopath.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+          find $GOPATH
+    - run:
+        name: TodoMVC in Go Modules mode
+        command: |
+          export GO111MODULE=on
+          export GOPATH=/tmp/gomod
+          mkdir -p $GOPATH/src
+          cd /tmp
+          git clone --depth=1 https://github.com/gopherjs/todomvc.git
+          cd /tmp/todomvc
+          gopherjs build -v -o /tmp/todomvc_gomod.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+          find $GOPATH
+    - run:
+        name: Compare GOPATH and Go Modules output
+        command: diff -u <(sed 's/todomvc_gomod.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gomod.js) <(sed 's/todomvc_gopath.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gopath.js)

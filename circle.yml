@@ -29,7 +29,7 @@ jobs:
     - run: for d in */; do echo ./$d...; done | grep -v ./doc | grep -v ./tests | grep -v ./node | xargs go vet # All subdirectories except "doc", "tests", "node*".
     - run: diff -u <(echo -n) <(go list ./compiler/natives/src/...) # All those packages should have // +build js.
     - run: gopherjs install -v net/http # Should build successfully (can't run tests, since only client is supported).
-    - run: ulimit -s 10000 && gopherjs test --minify -v --short github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/... $(go list std | grep -v -x -f .std_test_pkg_exclusions)
+    - run: ulimit -s 10000 && gopherjs test --minify -v --short github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/... $(GOOS=js GOARCH=wasm go list std | grep -v -x -f .std_test_pkg_exclusions)
     - run: go test -v -race ./...
     - run: gopherjs test -v fmt # No minification should work.
     - run:

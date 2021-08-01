@@ -1,8 +1,22 @@
 version: 2.1
-jobs:
-  build:
+executors:
+  gopherjs:
     docker:
     - image: cimg/base:stable
+    working_directory: ~/gopherjs
+
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+    - build
+    - gopherjs_tests:
+        requires: 
+          - build
+
+jobs:
+  build:
+    executor: gopherjs
     environment:
       SOURCE_MAP_SUPPORT: true
       GO111MODULE: "on"
@@ -10,24 +24,11 @@ jobs:
       NVM_VERSION: "0.33.9"
       NODE_VERSION: "10.0.0"
       NODE_GYP_VERSION: "5.1.1"
-    working_directory: ~/gopherjs
     steps:
     - setup_environment
     - checkout
-    - run:
-        name: Install required Node.js packages
-        command: |
-          set -e
-          npm install # Install our (dev) dependencies from package.json.
-          npm install --global source-map-support # Required by standard library tests.
-          npm install --global "node-gyp@${NODE_GYP_VERSION}"
-          (cd node-syscall && node-gyp rebuild && mkdir -p $NODE_PATH && cp build/Release/syscall.node "${NODE_PATH}/syscall.node")
-    - run: 
-        name: Install required Go packages
-        command: go get -t -d -v ./...
-    - run: 
-        name: Install GopherJS
-        command: go install -v
+    - install_deps
+    - install_gopherjs
     - run:
         name: Check minified prelude
         command: |
@@ -53,6 +54,57 @@ jobs:
         command: |
           gopherjs install -v net/http # Should build successfully.
           gopherjs test -v fmt log # Should catch problems with test execution and source maps.
+    # - run:
+    #     name: go test ...
+    #     command: |
+    #       go test -v -race ./... | tee /tmp/test-go.txt
+    #       # Convert test output into junit format for CircleCI.
+    #       mkdir -p ~/test-reports/
+    #       go-junit-report < /tmp/test-go.txt > ~/test-reports/go.xml
+    # - store_test_results:
+    #     path: ~/test-reports/
+    # - run:
+    #     name: TodoMVC in GOPATH mode
+    #     command: |
+    #       set -e
+    #       export GO111MODULE=off
+    #       export GOPATH=/tmp/gopath
+    #       mkdir -p $GOPATH/src
+    #       go get -v github.com/gopherjs/todomvc
+    #       gopherjs build -v -o /tmp/todomvc_gopath.js github.com/gopherjs/todomvc
+    #       gopherjs test -v github.com/gopherjs/todomvc/...
+    #       find $GOPATH
+    # - run:
+    #     name: TodoMVC in Go Modules mode
+    #     command: |
+    #       set -e  
+    #       export GO111MODULE=on
+    #       export GOPATH=/tmp/gomod
+    #       mkdir -p $GOPATH/src
+    #       cd /tmp
+    #       git clone --depth=1 https://github.com/gopherjs/todomvc.git
+    #       cd /tmp/todomvc
+    #       gopherjs build -v -o /tmp/todomvc_gomod.js github.com/gopherjs/todomvc
+    #       gopherjs test -v github.com/gopherjs/todomvc/...
+    #       find $GOPATH
+    # - run:
+    #     name: Compare GOPATH and Go Modules output
+    #     command: diff -u <(sed 's/todomvc_gomod.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gomod.js) <(sed 's/todomvc_gopath.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gopath.js)
+  
+  gopherjs_tests:
+    executor: gopherjs
+    environment:
+      SOURCE_MAP_SUPPORT: true
+      GO111MODULE: "on"
+      GO_VERSION: "1.16.5"
+      NVM_VERSION: "0.33.9"
+      NODE_VERSION: "10.0.0"
+      NODE_GYP_VERSION: "5.1.1"
+    steps:
+    - setup_environment
+    - checkout
+    - install_deps
+    - install_gopherjs
     - run:
         name: gopherjs test ...
         command: |
@@ -65,42 +117,9 @@ jobs:
           # Convert test output into junit format for CircleCI.
           mkdir -p ~/test-reports/
           go-junit-report < /tmp/test-gopherjs.txt > ~/test-reports/gopherjs.xml
-    - run:
-        name: go test ...
-        command: |
-          go test -v -race ./... | tee /tmp/test-go.txt
-          # Convert test output into junit format for CircleCI.
-          mkdir -p ~/test-reports/
-          go-junit-report < /tmp/test-go.txt > ~/test-reports/go.xml
     - store_test_results:
         path: ~/test-reports/
-    - run:
-        name: TodoMVC in GOPATH mode
-        command: |
-          set -e
-          export GO111MODULE=off
-          export GOPATH=/tmp/gopath
-          mkdir -p $GOPATH/src
-          go get -v github.com/gopherjs/todomvc
-          gopherjs build -v -o /tmp/todomvc_gopath.js github.com/gopherjs/todomvc
-          gopherjs test -v github.com/gopherjs/todomvc/...
-          find $GOPATH
-    - run:
-        name: TodoMVC in Go Modules mode
-        command: |
-          set -e  
-          export GO111MODULE=on
-          export GOPATH=/tmp/gomod
-          mkdir -p $GOPATH/src
-          cd /tmp
-          git clone --depth=1 https://github.com/gopherjs/todomvc.git
-          cd /tmp/todomvc
-          gopherjs build -v -o /tmp/todomvc_gomod.js github.com/gopherjs/todomvc
-          gopherjs test -v github.com/gopherjs/todomvc/...
-          find $GOPATH
-    - run:
-        name: Compare GOPATH and Go Modules output
-        command: diff -u <(sed 's/todomvc_gomod.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gomod.js) <(sed 's/todomvc_gopath.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gopath.js)
+
 commands:
   setup_environment:
     description: Set up Go, NVM and Node.js
@@ -130,3 +149,24 @@ commands:
           nvm install "${NODE_VERSION}" && nvm alias default "${NODE_VERSION}"
           # Make nodejs able to require globally installed modules from any working path.
           echo export "NODE_PATH='$(npm root --global)'" >> "${BASH_ENV}"
+  install_deps:
+    description: Install Go and Node dependency packages
+    steps:
+    - run:
+        name: Install required Node.js packages
+        command: |
+          set -e
+          npm install # Install our (dev) dependencies from package.json.
+          npm install --global source-map-support # Required by standard library tests.
+          npm install --global "node-gyp@${NODE_GYP_VERSION}"
+          (cd node-syscall && node-gyp rebuild && mkdir -p $NODE_PATH && cp build/Release/syscall.node "${NODE_PATH}/syscall.node")
+    - run: 
+        name: Install required Go packages
+        command: go get -t -d -v ./...
+  install_gopherjs:
+    description: Install GopherJS
+    steps:
+    - run:
+        name: Install GopherJS
+        command: go install -v
+

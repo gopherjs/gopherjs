@@ -218,8 +218,12 @@ func main() {
 
 	findExecCmd()
 
-	// Disable parallelism if printing or if using a simulator.
-	if *verbose || len(findExecCmd()) > 0 {
+	// Disable parallelism if using a simulator.
+	// Do not disable parallelism in verbose mode, since Go's file IO had internal
+	// r/w locking, which should make significant output garbling very unlikely.
+	// GopherJS CI setup runs these tests in verbose mode, but it can benefit from
+	// parallelism a lot.
+	if len(findExecCmd()) > 0 {
 		*numParallel = 1
 	}
 

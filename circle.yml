@@ -57,10 +57,13 @@ jobs:
     # - run:
     #     name: go test ...
     #     command: |
+    #       set +e
     #       go test -v -race ./... | tee /tmp/test-go.txt
+    #       status="$?"
     #       # Convert test output into junit format for CircleCI.
     #       mkdir -p ~/test-reports/
     #       go-junit-report < /tmp/test-go.txt > ~/test-reports/go.xml
+    #       exit "$status"
     # - store_test_results:
     #     path: ~/test-reports/
     # - run:
@@ -108,15 +111,18 @@ jobs:
     - run:
         name: gopherjs test ...
         command: |
+          set +e
           ulimit -s 10000
           gopherjs test --minify -v --short \
             github.com/gopherjs/gopherjs/js/... \
             github.com/gopherjs/gopherjs/tests/... \
             $(GOOS=js GOARCH=wasm go list std | grep -v -x -f .std_test_pkg_exclusions) \
             | tee /tmp/test-gopherjs.txt
+          status="$?"
           # Convert test output into junit format for CircleCI.
           mkdir -p ~/test-reports/
           go-junit-report < /tmp/test-gopherjs.txt > ~/test-reports/gopherjs.xml
+          exit "$status"
     - store_test_results:
         path: ~/test-reports/
 

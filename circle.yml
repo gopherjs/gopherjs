@@ -1,4 +1,4 @@
-version: 2
+version: 2.1
 jobs:
   build:
     docker:
@@ -12,31 +12,7 @@ jobs:
       NODE_GYP_VERSION: "5.1.1"
     working_directory: ~/gopherjs
     steps:
-    - run:
-        name: Install Go
-        command: |
-          set -e
-          cd /usr/local
-          sudo rm -rf go
-          curl "https://storage.googleapis.com/golang/go${GO_VERSION}.linux-amd64.tar.gz" | sudo tar -xz
-          echo 'export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin"' >> $BASH_ENV
-          . $BASH_ENV
-          go get -v github.com/jstemmer/go-junit-report # For CircleCI test reports.
-    - run:
-        name: Install NVM
-        command: |
-          set -e
-          git clone https://github.com/creationix/nvm $HOME/.nvm
-          cd $HOME/.nvm && git checkout "v${NVM_VERSION}"
-          echo 'export NVM_DIR="${HOME}/.nvm"' >> "${BASH_ENV}"
-          echo '[ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"' >> "${BASH_ENV}"
-    - run:
-        name: Install Node.js
-        command: |
-          set -e
-          nvm install "${NODE_VERSION}" && nvm alias default "${NODE_VERSION}"
-          # Make nodejs able to require globally installed modules from any working path.
-          echo export "NODE_PATH='$(npm root --global)'" >> "${BASH_ENV}"
+    - setup_environment
     - checkout
     - run:
         name: Install required Node.js packages
@@ -125,3 +101,32 @@ jobs:
     - run:
         name: Compare GOPATH and Go Modules output
         command: diff -u <(sed 's/todomvc_gomod.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gomod.js) <(sed 's/todomvc_gopath.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gopath.js)
+commands:
+  setup_environment:
+    description: Set up Go, NVM and Node.js
+    steps:
+    - run:
+        name: Install Go
+        command: |
+          set -e
+          cd /usr/local
+          sudo rm -rf go
+          curl "https://storage.googleapis.com/golang/go${GO_VERSION}.linux-amd64.tar.gz" | sudo tar -xz
+          echo 'export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin"' >> $BASH_ENV
+          . $BASH_ENV
+          go get -v github.com/jstemmer/go-junit-report # For CircleCI test reports.
+    - run:
+        name: Install NVM
+        command: |
+          set -e
+          git clone https://github.com/creationix/nvm $HOME/.nvm
+          cd $HOME/.nvm && git checkout "v${NVM_VERSION}"
+          echo 'export NVM_DIR="${HOME}/.nvm"' >> "${BASH_ENV}"
+          echo '[ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"' >> "${BASH_ENV}"
+    - run:
+        name: Install Node.js
+        command: |
+          set -e
+          nvm install "${NODE_VERSION}" && nvm alias default "${NODE_VERSION}"
+          # Make nodejs able to require globally installed modules from any working path.
+          echo export "NODE_PATH='$(npm root --global)'" >> "${BASH_ENV}"

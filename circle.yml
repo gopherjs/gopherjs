@@ -20,6 +20,8 @@ jobs:
           sudo rm -rf go
           curl "https://storage.googleapis.com/golang/go${GO_VERSION}.linux-amd64.tar.gz" | sudo tar -xz
           echo 'export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin"' >> $BASH_ENV
+          . $BASH_ENV
+          go get -v github.com/jstemmer/go-junit-report # For CircleCI test reports.
     - run:
         name: Install NVM
         command: |
@@ -76,17 +78,26 @@ jobs:
           gopherjs install -v net/http # Should build successfully.
           gopherjs test -v fmt log # Should catch problems with test execution and source maps.
     - run:
-        name: Test standard library
+        name: gopherjs test ...
         command: |
-          set -e
           ulimit -s 10000
           gopherjs test --minify -v --short \
             github.com/gopherjs/gopherjs/js/... \
             github.com/gopherjs/gopherjs/tests/... \
-            $(GOOS=js GOARCH=wasm go list std | grep -v -x -f .std_test_pkg_exclusions)
+            $(GOOS=js GOARCH=wasm go list std | grep -v -x -f .std_test_pkg_exclusions) \
+            | tee /tmp/test-gopherjs.txt
+          # Convert test output into junit format for CircleCI.
+          mkdir -p ~/test-reports/
+          go-junit-report < /tmp/test-gopherjs.txt > ~/test-reports/gopherjs.xml
     - run:
-        name: Test GopherJS compiler
-        command: go test -v -race ./...
+        name: go test ...
+        command: |
+          go test -v -race ./... | tee /tmp/test-go.txt
+          # Convert test output into junit format for CircleCI.
+          mkdir -p ~/test-reports/
+          go-junit-report < /tmp/test-go.txt > ~/test-reports/go.xml
+    - store_test_results:
+        path: ~/test-reports/
     - run:
         name: TodoMVC in GOPATH mode
         command: |

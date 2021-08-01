@@ -14,16 +14,23 @@ workflows:
         requires: 
           - build
 
+parameters:
+  go_version:
+    type: string
+    default: "1.16.5"
+  nvm_version:
+    type: string
+    default: "0.33.9"
+  node_version:
+    type: string
+    default: "10.0.0"
+  node_gyp_version:
+    type: string
+    default: "5.1.1"
+
 jobs:
   build:
     executor: gopherjs
-    environment:
-      SOURCE_MAP_SUPPORT: true
-      GO111MODULE: "on"
-      GO_VERSION: "1.16.5"
-      NVM_VERSION: "0.33.9"
-      NODE_VERSION: "10.0.0"
-      NODE_GYP_VERSION: "5.1.1"
     steps:
     - setup_environment
     - checkout
@@ -54,55 +61,49 @@ jobs:
         command: |
           gopherjs install -v net/http # Should build successfully.
           gopherjs test -v fmt log # Should catch problems with test execution and source maps.
-    # - run:
-    #     name: go test ...
-    #     command: |
-    #       set +e
-    #       go test -v -race ./... | tee /tmp/test-go.txt
-    #       status="$?"
-    #       # Convert test output into junit format for CircleCI.
-    #       mkdir -p ~/test-reports/
-    #       go-junit-report < /tmp/test-go.txt > ~/test-reports/go.xml
-    #       exit "$status"
-    # - store_test_results:
-    #     path: ~/test-reports/
-    # - run:
-    #     name: TodoMVC in GOPATH mode
-    #     command: |
-    #       set -e
-    #       export GO111MODULE=off
-    #       export GOPATH=/tmp/gopath
-    #       mkdir -p $GOPATH/src
-    #       go get -v github.com/gopherjs/todomvc
-    #       gopherjs build -v -o /tmp/todomvc_gopath.js github.com/gopherjs/todomvc
-    #       gopherjs test -v github.com/gopherjs/todomvc/...
-    #       find $GOPATH
-    # - run:
-    #     name: TodoMVC in Go Modules mode
-    #     command: |
-    #       set -e  
-    #       export GO111MODULE=on
-    #       export GOPATH=/tmp/gomod
-    #       mkdir -p $GOPATH/src
-    #       cd /tmp
-    #       git clone --depth=1 https://github.com/gopherjs/todomvc.git
-    #       cd /tmp/todomvc
-    #       gopherjs build -v -o /tmp/todomvc_gomod.js github.com/gopherjs/todomvc
-    #       gopherjs test -v github.com/gopherjs/todomvc/...
-    #       find $GOPATH
-    # - run:
-    #     name: Compare GOPATH and Go Modules output
-    #     command: diff -u <(sed 's/todomvc_gomod.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gomod.js) <(sed 's/todomvc_gopath.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gopath.js)
+    - run:
+        name: go test ...
+        command: |
+          set +e
+          go test -v -race ./... | tee /tmp/test-go.txt
+          status="$?"
+          # Convert test output into junit format for CircleCI.
+          mkdir -p ~/test-reports/
+          go-junit-report --full-class-name < /tmp/test-go.txt > ~/test-reports/go.xml
+          exit "$status"
+    - store_test_results:
+        path: ~/test-reports/
+    - run:
+        name: TodoMVC in GOPATH mode
+        command: |
+          set -e
+          export GO111MODULE=off
+          export GOPATH=/tmp/gopath
+          mkdir -p $GOPATH/src
+          go get -v github.com/gopherjs/todomvc
+          gopherjs build -v -o /tmp/todomvc_gopath.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+          find $GOPATH
+    - run:
+        name: TodoMVC in Go Modules mode
+        command: |
+          set -e  
+          export GO111MODULE=on
+          export GOPATH=/tmp/gomod
+          mkdir -p $GOPATH/src
+          cd /tmp
+          git clone --depth=1 https://github.com/gopherjs/todomvc.git
+          cd /tmp/todomvc
+          gopherjs build -v -o /tmp/todomvc_gomod.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+          find $GOPATH
+    - run:
+        name: Compare GOPATH and Go Modules output
+        command: diff -u <(sed 's/todomvc_gomod.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gomod.js) <(sed 's/todomvc_gopath.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gopath.js)
   
   gopherjs_tests:
     executor: gopherjs
-    environment:
-      SOURCE_MAP_SUPPORT: true
-      GO111MODULE: "on"
-      GO_VERSION: "1.16.5"
-      NVM_VERSION: "0.33.9"
-      NODE_VERSION: "10.0.0"
-      NODE_GYP_VERSION: "5.1.1"
+    parallelism: 4
     steps:
     - setup_environment
     - checkout
@@ -113,15 +114,18 @@ jobs:
         command: |
           set +e
           ulimit -s 10000
-          gopherjs test --minify -v --short \
-            github.com/gopherjs/gopherjs/js/... \
-            github.com/gopherjs/gopherjs/tests/... \
-            $(GOOS=js GOARCH=wasm go list std | grep -v -x -f .std_test_pkg_exclusions) \
+          PACKAGE_NAMES=$( \
+            GOOS=js GOARCH=wasm go list std github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/... \
+            | grep -v -x -f .std_test_pkg_exclusions \
+            | circleci tests split --split-by=timings --timings-type=classname \
+          )
+          gopherjs test -p 2 --minify -v --short $PACKAGE_NAMES \
             | tee /tmp/test-gopherjs.txt
           status="$?"
+          set -e
           # Convert test output into junit format for CircleCI.
           mkdir -p ~/test-reports/
-          go-junit-report < /tmp/test-gopherjs.txt > ~/test-reports/gopherjs.xml
+          go-junit-report --full-class-name < /tmp/test-gopherjs.txt > ~/test-reports/gopherjs.xml
           exit "$status"
     - store_test_results:
         path: ~/test-reports/
@@ -133,26 +137,24 @@ commands:
     - run:
         name: Install Go
         command: |
-          set -e
           cd /usr/local
           sudo rm -rf go
-          curl "https://storage.googleapis.com/golang/go${GO_VERSION}.linux-amd64.tar.gz" | sudo tar -xz
+          curl "https://storage.googleapis.com/golang/go<< pipeline.parameters.go_version >>.linux-amd64.tar.gz" | sudo tar -xz
           echo 'export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin"' >> $BASH_ENV
+          echo 'export GO111MODULE=on' >> $BASH_ENV
           . $BASH_ENV
-          go get -v github.com/jstemmer/go-junit-report # For CircleCI test reports.
+          go get -v github.com/nevkontakte/go-junit-report@forked # For CircleCI test reports.
     - run:
         name: Install NVM
         command: |
-          set -e
           git clone https://github.com/creationix/nvm $HOME/.nvm
-          cd $HOME/.nvm && git checkout "v${NVM_VERSION}"
+          cd $HOME/.nvm && git checkout "v<< pipeline.parameters.nvm_version >>"
           echo 'export NVM_DIR="${HOME}/.nvm"' >> "${BASH_ENV}"
           echo '[ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"' >> "${BASH_ENV}"
     - run:
         name: Install Node.js
         command: |
-          set -e
-          nvm install "${NODE_VERSION}" && nvm alias default "${NODE_VERSION}"
+          nvm install "<< pipeline.parameters.node_version >>" && nvm alias default "<< pipeline.parameters.node_version >>"
           # Make nodejs able to require globally installed modules from any working path.
           echo export "NODE_PATH='$(npm root --global)'" >> "${BASH_ENV}"
   install_deps:
@@ -161,11 +163,11 @@ commands:
     - run:
         name: Install required Node.js packages
         command: |
-          set -e
           npm install # Install our (dev) dependencies from package.json.
           npm install --global source-map-support # Required by standard library tests.
-          npm install --global "node-gyp@${NODE_GYP_VERSION}"
+          npm install --global "node-gyp@<< pipeline.parameters.node_gyp_version >>"
           (cd node-syscall && node-gyp rebuild && mkdir -p $NODE_PATH && cp build/Release/syscall.node "${NODE_PATH}/syscall.node")
+          echo 'export SOURCE_MAP_SUPPORT=true' >> $BASH_ENV
     - run: 
         name: Install required Go packages
         command: go get -t -d -v ./...

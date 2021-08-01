@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"text/template"
 	"time"
@@ -37,6 +38,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/tools/go/buildutil"
 )
 
@@ -295,7 +297,7 @@ func main() {
 			if err := s.BuildFiles(args[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
 				return err
 			}
-			if err := runNode(tempfile.Name(), args[lastSourceArg:], "", options.Quiet); err != nil {
+			if err := runNode(tempfile.Name(), args[lastSourceArg:], "", options.Quiet, nil); err != nil {
 				return err
 			}
 			return nil
@@ -317,9 +319,11 @@ func main() {
 	verbose := cmdTest.Flags().BoolP("verbose", "v", false, "Log all tests as they are run. Also print all text from Log and Logf calls even if the test succeeds.")
 	compileOnly := cmdTest.Flags().BoolP("compileonly", "c", false, "Compile the test binary to pkg.test.js but do not run it (where pkg is the last element of the package's import path). The file name can be changed with the -o flag.")
 	outputFilename := cmdTest.Flags().StringP("output", "o", "", "Compile the test binary to the named file. The test still runs (unless -c is specified).")
+	parallelTests := cmdTest.Flags().IntP("parallel", "p", runtime.NumCPU(), "Allow running tests in parallel for up to -p packages. Tests within the same package are still executed sequentially.")
 	cmdTest.Flags().AddFlagSet(compilerFlags)
 	cmdTest.Run = func(cmd *cobra.Command, args []string) {
 		options.BuildTags = strings.Fields(tags)
+
 		err := func() error {
 			// Expand import path patterns.
 			patternContext := gbuild.NewBuildContext("", options.BuildTags)
@@ -334,6 +338,12 @@ func main() {
 			if *outputFilename != "" && len(matches) > 1 {
 				return errors.New("cannot use -o flag with multiple packages")
 			}
+			if *parallelTests < 1 {
+				return errors.New("--parallel cannot be less than 1")
+			}
+
+			parallelSlots := make(chan (bool), *parallelTests) // Semaphore for parallel test executions.
+			executions := errgroup.Group{}
 
 			pkgs := make([]*gbuild.PackageData, len(matches))
 			for i, pkgPath := range matches {
@@ -344,8 +354,12 @@ func main() {
 				}
 			}
 
-			var exitErr error
+			var (
+				exitErr   error
+				exitErrMu = &sync.Mutex{}
+			)
 			for _, pkg := range pkgs {
+				pkg := pkg // Capture for the goroutine.
 				if len(pkg.TestGoFiles) == 0 && len(pkg.XTestGoFiles) == 0 {
 					fmt.Printf("?   \t%s\t[no test files]\n", pkg.ImportPath)
 					continue
@@ -460,14 +474,38 @@ func main() {
 				}
 				status := "ok  "
 				start := time.Now()
-				if err := runNode(outfile.Name(), args, runTestDir(pkg), options.Quiet); err != nil {
-					if _, ok := err.(*exec.ExitError); !ok {
-						return err
+				executions.Go(func() error {
+					parallelSlots <- true              // Acquire slot
+					defer func() { <-parallelSlots }() // Release slot
+
+					var testOut io.ReadWriter
+					if cap(parallelSlots) > 1 {
+						// If running in parallel, capture test output in a temporary buffer to avoid mixing
+						// output from different tests and print it later.
+						testOut = &bytes.Buffer{}
 					}
-					exitErr = err
-					status = "FAIL"
-				}
-				fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Since(start).Seconds())
+
+					err := runNode(outfile.Name(), args, runTestDir(pkg), options.Quiet, testOut)
+
+					if testOut != nil {
+						io.Copy(os.Stdout, testOut)
+					}
+
+					if err != nil {
+						if _, ok := err.(*exec.ExitError); !ok {
+							return err
+						}
+						exitErrMu.Lock()
+						exitErr = err
+						exitErrMu.Unlock()
+						status = "FAIL"
+					}
+					fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Since(start).Seconds())
+					return nil
+				})
+			}
+			if err := executions.Wait(); err != nil {
+				return err
 			}
 			return exitErr
 		}()
@@ -773,7 +811,9 @@ func sprintError(err error) string {
 
 // runNode runs script with args using Node.js in directory dir.
 // If dir is empty string, current directory is used.
-func runNode(script string, args []string, dir string, quiet bool) error {
+// Is out is not nil, process stderr and stdout are redirected to it, otherwise
+// os.Stdout and os.Stderr are used.
+func runNode(script string, args []string, dir string, quiet bool, out io.Writer) error {
 	var allArgs []string
 	if b, _ := strconv.ParseBool(os.Getenv("SOURCE_MAP_SUPPORT")); os.Getenv("SOURCE_MAP_SUPPORT") == "" || b {
 		allArgs = []string{"--require", "source-map-support/register"}
@@ -814,8 +854,13 @@ func runNode(script string, args []string, dir string, quiet bool) error {
 	node := exec.Command("node", allArgs...)
 	node.Dir = dir
 	node.Stdin = os.Stdin
-	node.Stdout = os.Stdout
-	node.Stderr = os.Stderr
+	if out != nil {
+		node.Stdout = out
+		node.Stderr = out
+	} else {
+		node.Stdout = os.Stdout
+		node.Stderr = os.Stderr
+	}
 	err := node.Run()
 	if _, ok := err.(*exec.ExitError); err != nil && !ok {
 		err = fmt.Errorf("could not run Node.js: %s", err.Error())

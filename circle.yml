@@ -13,6 +13,9 @@ workflows:
     - gopherjs_tests:
         requires: 
           - build
+    - gorepo_tests:
+        requires: 
+          - build
 
 parameters:
   go_version:
@@ -65,7 +68,8 @@ jobs:
         name: go test ...
         command: |
           set +e
-          go test -v -race ./... | tee /tmp/test-go.txt
+          # Run all tests except gorepo, which will be run separately in parallel.
+          go test -v -race $(go list ./... | grep -v github.com/gopherjs/gopherjs/tests/gorepo) | tee /tmp/test-go.txt
           status="$?"
           # Convert test output into junit format for CircleCI.
           mkdir -p ~/test-reports/
@@ -129,6 +133,19 @@ jobs:
           exit "$status"
     - store_test_results:
         path: ~/test-reports/
+
+  gorepo_tests:
+    executor: gopherjs
+    parallelism: 4
+    steps:
+    - setup_environment
+    - checkout
+    - install_deps
+    - install_gopherjs
+    - run:
+        name: Go Repository tests
+        command: |
+          go test -v github.com/gopherjs/gopherjs/tests/gorepo
 
 commands:
   setup_environment:

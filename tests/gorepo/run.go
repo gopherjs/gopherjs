@@ -212,10 +212,6 @@ func main() {
 	// GOPHERJS.
 	goarch = getenv("GOARCH", "js") // We're running this script natively, but the tests are executed with js architecture.
 
-	if *verbose {
-		fmt.Printf("goos: %q, goarch: %q\n", goos, goarch)
-	}
-
 	findExecCmd()
 
 	// Disable parallelism if using a simulator.
@@ -225,6 +221,11 @@ func main() {
 	// parallelism a lot.
 	if len(findExecCmd()) > 0 {
 		*numParallel = 1
+	}
+
+	if *verbose {
+		fmt.Printf("goos: %q, goarch: %q\n", goos, goarch)
+		fmt.Printf("parallel: %d\n", *numParallel)
 	}
 
 	ratec = make(chan bool, *numParallel)
@@ -817,7 +818,7 @@ func (t *test) run() {
 	case "run":
 		useTmp = false
 		// GOPHERJS.
-		out, err := runcmd(append([]string{"gopherjs", "run", "-q", t.goFileName()}, args...)...)
+		out, err := runcmd(append([]string{"gopherjs", "run", t.goFileName()}, args...)...)
 		if err != nil {
 			t.err = err
 			return

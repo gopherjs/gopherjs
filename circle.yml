@@ -1,3 +1,31 @@
+# CircleCI configuration for GopherJS.
+# 
+# This configuration has one build_and_test workflow designed to run on all commits
+# and pull requests. It consists of three jobs:
+# 
+#  - build: Builds and runs GopherJS unit tests, as well as lits, smoke tests, etc.
+#    This job is designed to provide quickest feedback on the most important
+#    functionality. It should not include anything heavyweight and should be kept
+#    under 2-3 minutes of runtime.
+# 
+#  - gopherjs_tests: Runs standard library and GopherJS package tests using GopherJS
+#    *itself*. This is the most comprehensive test suite we have and it is sharded
+#    into 4 parallel instances for faster execution.
+# 
+#  - gorepo_tests: Runs language tests from the Go compiler test suite. The objective
+#    of these tests is to ensure conformance of GopherJS to the upstream Go to the
+#    highest degree possible, considering differences in the runtime.
+# 
+# If all tests passed, it is reasonably to assume that the version is more or less
+# bug-free (although as of summer 2021 our test coverage is not ideal).
+# 
+# For convenience of upgrades, NVM, Node.js and Go versions are specified as
+# parameters at the top of the config. Increasing the version and ensuring that the
+# workflow passes is sufficient to verify GopherJS compatibility with that version.
+# 
+# Versions of Node modules GopherJS depends on are specified in package.json and can
+# be changed there (remember to run `npm install` to update the lock file).
+
 version: 2.1
 executors:
   gopherjs:

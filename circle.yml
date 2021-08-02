@@ -32,10 +32,7 @@ jobs:
   build:
     executor: gopherjs
     steps:
-    - setup_environment
-    - checkout
-    - install_deps
-    - install_gopherjs
+    - setup_and_install_gopherjs
     - run:
         name: Check minified prelude
         command: |
@@ -106,10 +103,7 @@ jobs:
     executor: gopherjs
     parallelism: 4
     steps:
-    - setup_environment
-    - checkout
-    - install_deps
-    - install_gopherjs
+    - setup_and_install_gopherjs
     - run:
         name: gopherjs test ...
         command: |
@@ -188,4 +182,10 @@ commands:
     - run:
         name: Install GopherJS
         command: go install -v
-
+  setup_and_install_gopherjs:
+    description: A shorthand for setting up GopherJS environment and building the binary.
+    steps:
+    - setup_environment
+    - checkout
+    - install_deps
+    - install_gopherjs

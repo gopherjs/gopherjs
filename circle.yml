@@ -151,6 +151,7 @@ commands:
           echo 'export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin"' >> $BASH_ENV
           echo 'export GO111MODULE=on' >> $BASH_ENV
           . $BASH_ENV
+          go version
           go get -v github.com/nevkontakte/go-junit-report@forked # For CircleCI test reports.
     - run:
         name: Install NVM
@@ -163,6 +164,7 @@ commands:
         name: Install Node.js
         command: |
           nvm install "<< pipeline.parameters.node_version >>" && nvm alias default "<< pipeline.parameters.node_version >>"
+          node --version
   install_deps:
     description: Install Go and Node dependency packages
     steps:
@@ -181,7 +183,7 @@ commands:
     steps:
     - run:
         name: Install GopherJS
-        command: go install -v
+        command: go install -v && gopherjs version
   setup_and_install_gopherjs:
     description: A shorthand for setting up GopherJS environment and building the binary.
     steps:

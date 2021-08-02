@@ -51,10 +51,10 @@ parameters:
     default: "1.16.5"
   nvm_version:
     type: string
-    default: "0.33.9"
+    default: "0.38.0"
   node_version:
     type: string
-    default: "10"
+    default: "12"
 
 jobs:
   build:
@@ -184,7 +184,7 @@ commands:
     - run:
         name: Install NVM
         command: |
-          git clone https://github.com/creationix/nvm $HOME/.nvm
+          git clone https://github.com/nvm-sh/nvm $HOME/.nvm
           cd $HOME/.nvm && git checkout "v<< pipeline.parameters.nvm_version >>"
           echo 'export NVM_DIR="${HOME}/.nvm"' >> "${BASH_ENV}"
           echo '[ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"' >> "${BASH_ENV}"

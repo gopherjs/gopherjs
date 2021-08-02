@@ -5,8 +5,8 @@ jobs:
     - image: ubuntu:18.04
     environment:
       SOURCE_MAP_SUPPORT: true
-      GO111MODULE: "off" # Until issue #855 is fixed, we operate in GOPATH mode.
-    working_directory: ~/go/src/github.com/gopherjs/gopherjs
+      GO111MODULE: "on"
+    working_directory: ~/gopherjs
     steps:
     - run: apt-get update && apt-get install -y sudo curl git python make g++
     - checkout
@@ -29,6 +29,31 @@ jobs:
     - run: for d in */; do echo ./$d...; done | grep -v ./doc | grep -v ./tests | grep -v ./node | xargs go vet # All subdirectories except "doc", "tests", "node*".
     - run: diff -u <(echo -n) <(go list ./compiler/natives/src/...) # All those packages should have // +build js.
     - run: gopherjs install -v net/http # Should build successfully (can't run tests, since only client is supported).
-    - run: ulimit -s 10000 && gopherjs test --minify -v --short github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/... $(go list std | grep -v -x -f .std_test_pkg_exclusions)
+    - run: ulimit -s 10000 && gopherjs test --minify -v --short github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/... $(GOOS=js GOARCH=wasm go list std | grep -v -x -f .std_test_pkg_exclusions)
     - run: go test -v -race ./...
     - run: gopherjs test -v fmt # No minification should work.
+    - run:
+        name: TodoMVC in GOPATH mode
+        command: |
+          export GO111MODULE=off
+          export GOPATH=/tmp/gopath
+          mkdir -p $GOPATH/src
+          go get -v github.com/gopherjs/todomvc
+          gopherjs build -v -o /tmp/todomvc_gopath.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+          find $GOPATH
+    - run:
+        name: TodoMVC in Go Modules mode
+        command: |
+          export GO111MODULE=on
+          export GOPATH=/tmp/gomod
+          mkdir -p $GOPATH/src
+          cd /tmp
+          git clone --depth=1 https://github.com/gopherjs/todomvc.git
+          cd /tmp/todomvc
+          gopherjs build -v -o /tmp/todomvc_gomod.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+          find $GOPATH
+    - run:
+        name: Compare GOPATH and Go Modules output
+        command: diff -u <(sed 's/todomvc_gomod.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gomod.js) <(sed 's/todomvc_gopath.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gopath.js)

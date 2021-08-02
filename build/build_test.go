@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kisielk/gotool"
 	"github.com/shurcooL/go/importgraphutil"
 )
 
@@ -64,7 +63,12 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 	// Then, github.com/gopherjs/gopherjs/build.parseAndAugment(*build.Package) returns []*ast.File.
 	// Those augmented parsed Go files of the package are checked, one file at at time, one import
 	// at a time. Each import is verified to belong in the set of allowed real imports.
-	for _, pkg := range gotool.ImportPaths([]string{"std"}) {
+	matches, matchErr := simpleCtx{bctx: stdOnly}.Match([]string{"std"})
+	if matchErr != nil {
+		t.Fatalf("Failed to list standard library packages: %s", err)
+	}
+	for _, pkg := range matches {
+		t.Logf("Checking package %s...", pkg)
 		// Normal package.
 		{
 			// Import the real normal package, and populate its real import set.
@@ -77,7 +81,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 
 			// Use parseAndAugment to get a list of augmented AST files.
 			fset := token.NewFileSet()
-			files, err := parseAndAugment(NewBuildContext("", nil), bpkg, false, fset)
+			files, err := parseAndAugment(NewBuildContext("", nil), &PackageData{Package: bpkg, bctx: &gobuild.Default}, false, fset)
 			if err != nil {
 				t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
 			}
@@ -116,7 +120,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 
 			// Use parseAndAugment to get a list of augmented AST files.
 			fset := token.NewFileSet()
-			files, err := parseAndAugment(NewBuildContext("", nil), bpkg, true, fset)
+			files, err := parseAndAugment(NewBuildContext("", nil), &PackageData{Package: bpkg, bctx: &gobuild.Default}, true, fset)
 			if err != nil {
 				t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
 			}
@@ -158,7 +162,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 
 			// Use parseAndAugment to get a list of augmented AST files, then check only the external test files.
 			fset := token.NewFileSet()
-			files, err := parseAndAugment(NewBuildContext("", nil), bpkg, true, fset)
+			files, err := parseAndAugment(NewBuildContext("", nil), &PackageData{Package: bpkg, bctx: &gobuild.Default}, true, fset)
 			if err != nil {
 				t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
 			}

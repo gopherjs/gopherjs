@@ -187,7 +187,7 @@ commands:
           echo 'export SOURCE_MAP_SUPPORT=true' >> $BASH_ENV
     - run: 
         name: Install required Go packages
-        command: go get -t -d -v ./...
+        command: go mod download -x
   install_gopherjs:
     description: Install GopherJS
     steps:

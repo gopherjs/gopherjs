@@ -1,0 +1,15 @@
+{
+  "name": "syscall",
+  "description": "Native syscall support for GopherJS.",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "install": "node-gyp rebuild"
+  },
+  "main": "index.js",
+  "author": "",
+  "license": "BSD-2-Clause",
+  "gypfile": true,
+  "dependencies": {
+    "node-gyp": "^8.1.0"
+  }
+}

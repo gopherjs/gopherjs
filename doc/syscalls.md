@@ -18,12 +18,23 @@ GopherJS has support for system calls on Linux and macOS. Before running your co
 Compile and install the module with:
 
 ```
-cd $GOPATH/src/github.com/gopherjs/gopherjs/node-syscall/
-npm install --global node-gyp
-node-gyp rebuild
-mkdir -p ~/.node_libraries/
-cp build/Release/syscall.node ~/.node_libraries/syscall.node
+cd gopherjs/node-syscall/
+npm install
 ```
+
+You can copy build/Release/syscall.node into you `node_modules` directory and run `node -r syscall` to make sure the module can be loaded successfully.
+
+Alternatively, in _your_ `package.json` you can do something like this:
+
+```
+{
+  "dependencies": {
+    "syscall": "file:path/to/gopherjs/node-syscall"
+  }
+}
+```
+
+Which will make `npm install` in your project capable of building the extension. You may need to set `export NODE_PATH="$(npm root)"` to ensure that node can load modules from any working directory, for example when running `gopherjs test`.
 
 ### Node.js on Windows
 

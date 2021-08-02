@@ -26,10 +26,7 @@ parameters:
     default: "0.33.9"
   node_version:
     type: string
-    default: "10.0.0"
-  node_gyp_version:
-    type: string
-    default: "5.1.1"
+    default: "10"
 
 jobs:
   build:
@@ -172,19 +169,16 @@ commands:
         name: Install Node.js
         command: |
           nvm install "<< pipeline.parameters.node_version >>" && nvm alias default "<< pipeline.parameters.node_version >>"
-          # Make nodejs able to require globally installed modules from any working path.
-          echo export "NODE_PATH='$(npm root --global)'" >> "${BASH_ENV}"
   install_deps:
     description: Install Go and Node dependency packages
     steps:
     - run:
         name: Install required Node.js packages
         command: |
-          npm install # Install our (dev) dependencies from package.json.
-          npm install --global source-map-support # Required by standard library tests.
-          npm install --global "node-gyp@<< pipeline.parameters.node_gyp_version >>"
-          (cd node-syscall && node-gyp rebuild && mkdir -p $NODE_PATH && cp build/Release/syscall.node "${NODE_PATH}/syscall.node")
+          npm ci # Install our dependencies from package.json.
           echo 'export SOURCE_MAP_SUPPORT=true' >> $BASH_ENV
+          # Make nodejs able to require installed modules from any working path.
+          echo export "NODE_PATH='$(npm root)'" >> "${BASH_ENV}"
     - run: 
         name: Install required Go packages
         command: go mod download -x

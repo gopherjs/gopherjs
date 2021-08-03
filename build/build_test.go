@@ -68,126 +68,131 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 		t.Fatalf("Failed to list standard library packages: %s", err)
 	}
 	for _, pkg := range matches {
-		t.Logf("Checking package %s...", pkg)
-		// Normal package.
-		{
-			// Import the real normal package, and populate its real import set.
-			bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
-			if err != nil {
-				t.Fatalf("gobuild.Import: %v", err)
-			}
-			realImports := make(stringSet)
-			populateImportSet(bpkg.Imports, &realImports)
+		pkg := pkg // Capture for the goroutine.
+		t.Run(pkg, func(t *testing.T) {
+			t.Parallel()
 
-			// Use parseAndAugment to get a list of augmented AST files.
-			fset := token.NewFileSet()
-			files, err := parseAndAugment(NewBuildContext("", nil), &PackageData{Package: bpkg, bctx: &gobuild.Default}, false, fset)
-			if err != nil {
-				t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
-			}
-
-			// Verify imports of normal augmented AST files.
-			for _, f := range files {
-				fileName := fset.File(f.Pos()).Name()
-				normalFile := !strings.HasSuffix(fileName, "_test.go")
-				if !normalFile {
-					continue
+			t.Logf("Checking package %s...", pkg)
+			// Normal package.
+			{
+				// Import the real normal package, and populate its real import set.
+				bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
+				if err != nil {
+					t.Fatalf("gobuild.Import: %v", err)
 				}
-				for _, imp := range f.Imports {
-					importPath, err := strconv.Unquote(imp.Path.Value)
-					if err != nil {
-						t.Fatalf("strconv.Unquote(%v): %v", imp.Path.Value, err)
-					}
-					if importPath == "github.com/gopherjs/gopherjs/js" {
+				realImports := make(stringSet)
+				populateImportSet(bpkg.Imports, &realImports)
+
+				// Use parseAndAugment to get a list of augmented AST files.
+				fset := token.NewFileSet()
+				files, err := parseAndAugment(NewBuildContext("", nil), &PackageData{Package: bpkg, bctx: &gobuild.Default}, false, fset)
+				if err != nil {
+					t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
+				}
+
+				// Verify imports of normal augmented AST files.
+				for _, f := range files {
+					fileName := fset.File(f.Pos()).Name()
+					normalFile := !strings.HasSuffix(fileName, "_test.go")
+					if !normalFile {
 						continue
 					}
-					if _, ok := realImports[importPath]; !ok {
-						t.Errorf("augmented normal package %q imports %q in file %v, but real %q doesn't:\nrealImports = %v", bpkg.ImportPath, importPath, fileName, bpkg.ImportPath, realImports)
+					for _, imp := range f.Imports {
+						importPath, err := strconv.Unquote(imp.Path.Value)
+						if err != nil {
+							t.Fatalf("strconv.Unquote(%v): %v", imp.Path.Value, err)
+						}
+						if importPath == "github.com/gopherjs/gopherjs/js" {
+							continue
+						}
+						if _, ok := realImports[importPath]; !ok {
+							t.Errorf("augmented normal package %q imports %q in file %v, but real %q doesn't:\nrealImports = %v", bpkg.ImportPath, importPath, fileName, bpkg.ImportPath, realImports)
+						}
 					}
 				}
 			}
-		}
 
-		// Test package.
-		{
-			// Import the real test package, and populate its real import set.
-			bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
-			if err != nil {
-				t.Fatalf("gobuild.Import: %v", err)
-			}
-			realTestImports := make(stringSet)
-			populateImportSet(bpkg.TestImports, &realTestImports)
-
-			// Use parseAndAugment to get a list of augmented AST files.
-			fset := token.NewFileSet()
-			files, err := parseAndAugment(NewBuildContext("", nil), &PackageData{Package: bpkg, bctx: &gobuild.Default}, true, fset)
-			if err != nil {
-				t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
-			}
-
-			// Verify imports of test augmented AST files.
-			for _, f := range files {
-				fileName, pkgName := fset.File(f.Pos()).Name(), f.Name.String()
-				testFile := strings.HasSuffix(fileName, "_test.go") && !strings.HasSuffix(pkgName, "_test")
-				if !testFile {
-					continue
+			// Test package.
+			{
+				// Import the real test package, and populate its real import set.
+				bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
+				if err != nil {
+					t.Fatalf("gobuild.Import: %v", err)
 				}
-				for _, imp := range f.Imports {
-					importPath, err := strconv.Unquote(imp.Path.Value)
-					if err != nil {
-						t.Fatalf("strconv.Unquote(%v): %v", imp.Path.Value, err)
-					}
-					if importPath == "github.com/gopherjs/gopherjs/js" {
+				realTestImports := make(stringSet)
+				populateImportSet(bpkg.TestImports, &realTestImports)
+
+				// Use parseAndAugment to get a list of augmented AST files.
+				fset := token.NewFileSet()
+				files, err := parseAndAugment(NewBuildContext("", nil), &PackageData{Package: bpkg, bctx: &gobuild.Default}, true, fset)
+				if err != nil {
+					t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
+				}
+
+				// Verify imports of test augmented AST files.
+				for _, f := range files {
+					fileName, pkgName := fset.File(f.Pos()).Name(), f.Name.String()
+					testFile := strings.HasSuffix(fileName, "_test.go") && !strings.HasSuffix(pkgName, "_test")
+					if !testFile {
 						continue
 					}
-					if _, ok := realTestImports[importPath]; !ok {
-						t.Errorf("augmented test package %q imports %q in file %v, but real %q doesn't:\nrealTestImports = %v", bpkg.ImportPath, importPath, fileName, bpkg.ImportPath, realTestImports)
+					for _, imp := range f.Imports {
+						importPath, err := strconv.Unquote(imp.Path.Value)
+						if err != nil {
+							t.Fatalf("strconv.Unquote(%v): %v", imp.Path.Value, err)
+						}
+						if importPath == "github.com/gopherjs/gopherjs/js" {
+							continue
+						}
+						if _, ok := realTestImports[importPath]; !ok {
+							t.Errorf("augmented test package %q imports %q in file %v, but real %q doesn't:\nrealTestImports = %v", bpkg.ImportPath, importPath, fileName, bpkg.ImportPath, realTestImports)
+						}
 					}
 				}
 			}
-		}
 
-		// External test package.
-		{
-			// Import the real external test package, and populate its real import set.
-			bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
-			if err != nil {
-				t.Fatalf("gobuild.Import: %v", err)
-			}
-			realXTestImports := make(stringSet)
-			populateImportSet(bpkg.XTestImports, &realXTestImports)
-
-			// Add _test suffix to import path to cause parseAndAugment to use external test mode.
-			bpkg.ImportPath += "_test"
-
-			// Use parseAndAugment to get a list of augmented AST files, then check only the external test files.
-			fset := token.NewFileSet()
-			files, err := parseAndAugment(NewBuildContext("", nil), &PackageData{Package: bpkg, bctx: &gobuild.Default}, true, fset)
-			if err != nil {
-				t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
-			}
-
-			// Verify imports of external test augmented AST files.
-			for _, f := range files {
-				fileName, pkgName := fset.File(f.Pos()).Name(), f.Name.String()
-				xTestFile := strings.HasSuffix(fileName, "_test.go") && strings.HasSuffix(pkgName, "_test")
-				if !xTestFile {
-					continue
+			// External test package.
+			{
+				// Import the real external test package, and populate its real import set.
+				bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
+				if err != nil {
+					t.Fatalf("gobuild.Import: %v", err)
 				}
-				for _, imp := range f.Imports {
-					importPath, err := strconv.Unquote(imp.Path.Value)
-					if err != nil {
-						t.Fatalf("strconv.Unquote(%v): %v", imp.Path.Value, err)
-					}
-					if importPath == "github.com/gopherjs/gopherjs/js" {
+				realXTestImports := make(stringSet)
+				populateImportSet(bpkg.XTestImports, &realXTestImports)
+
+				// Add _test suffix to import path to cause parseAndAugment to use external test mode.
+				bpkg.ImportPath += "_test"
+
+				// Use parseAndAugment to get a list of augmented AST files, then check only the external test files.
+				fset := token.NewFileSet()
+				files, err := parseAndAugment(NewBuildContext("", nil), &PackageData{Package: bpkg, bctx: &gobuild.Default}, true, fset)
+				if err != nil {
+					t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
+				}
+
+				// Verify imports of external test augmented AST files.
+				for _, f := range files {
+					fileName, pkgName := fset.File(f.Pos()).Name(), f.Name.String()
+					xTestFile := strings.HasSuffix(fileName, "_test.go") && strings.HasSuffix(pkgName, "_test")
+					if !xTestFile {
 						continue
 					}
-					if _, ok := realXTestImports[importPath]; !ok {
-						t.Errorf("augmented external test package %q imports %q in file %v, but real %q doesn't:\nrealXTestImports = %v", bpkg.ImportPath, importPath, fileName, bpkg.ImportPath, realXTestImports)
+					for _, imp := range f.Imports {
+						importPath, err := strconv.Unquote(imp.Path.Value)
+						if err != nil {
+							t.Fatalf("strconv.Unquote(%v): %v", imp.Path.Value, err)
+						}
+						if importPath == "github.com/gopherjs/gopherjs/js" {
+							continue
+						}
+						if _, ok := realXTestImports[importPath]; !ok {
+							t.Errorf("augmented external test package %q imports %q in file %v, but real %q doesn't:\nrealXTestImports = %v", bpkg.ImportPath, importPath, fileName, bpkg.ImportPath, realXTestImports)
+						}
 					}
 				}
 			}
-		}
+		})
 	}
 }
 

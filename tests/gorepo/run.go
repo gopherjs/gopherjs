@@ -65,7 +65,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue4620.go":  {desc: "map[0:1 1:2], Error: m[i] != 2"},
 	"fixedbugs/issue5856.go":  {category: requiresSourceMapSupport},
 	"fixedbugs/issue6899.go":  {desc: "incorrect output -0"},
-	"fixedbugs/issue7550.go":  {desc: "FATAL ERROR: invalid table size Allocation failed - process out of memory"},
+	"fixedbugs/issue7550.go":  {category: neverTerminates, desc: "FATAL ERROR: invalid table size Allocation failed - process out of memory"},
 	"fixedbugs/issue7690.go":  {desc: "Error: runtime error: slice bounds out of range"},
 	"fixedbugs/issue8047.go":  {desc: "null"},
 	"fixedbugs/issue8047b.go": {desc: "Error: [object Object]"},
@@ -119,7 +119,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue23837.go":  {desc: "missing panic on nil pointer-to-empty-struct dereference"},
 	"fixedbugs/issue27201.go":  {desc: "incorrect stack trace for nil dereference in inlined function"},
 	"fixedbugs/issue27518b.go": {desc: "sigpanic can make dead pointer live again"},
-	"fixedbugs/issue29190.go":  {desc: "append does not fail when length overflows"},
+	"fixedbugs/issue29190.go":  {desc: "append does not fail when length overflows", category: neverTerminates},
 
 	// These are new tests in Go 1.12.9.
 	"fixedbugs/issue30977.go": {category: neverTerminates, desc: "does for { runtime.GC() }"},
@@ -212,15 +212,20 @@ func main() {
 	// GOPHERJS.
 	goarch = getenv("GOARCH", "js") // We're running this script natively, but the tests are executed with js architecture.
 
-	if *verbose {
-		fmt.Printf("goos: %q, goarch: %q\n", goos, goarch)
-	}
-
 	findExecCmd()
 
-	// Disable parallelism if printing or if using a simulator.
-	if *verbose || len(findExecCmd()) > 0 {
+	// Disable parallelism if using a simulator.
+	// Do not disable parallelism in verbose mode, since Go's file IO had internal
+	// r/w locking, which should make significant output garbling very unlikely.
+	// GopherJS CI setup runs these tests in verbose mode, but it can benefit from
+	// parallelism a lot.
+	if len(findExecCmd()) > 0 {
 		*numParallel = 1
+	}
+
+	if *verbose {
+		fmt.Printf("goos: %q, goarch: %q\n", goos, goarch)
+		fmt.Printf("parallel: %d\n", *numParallel)
 	}
 
 	ratec = make(chan bool, *numParallel)
@@ -813,7 +818,7 @@ func (t *test) run() {
 	case "run":
 		useTmp = false
 		// GOPHERJS.
-		out, err := runcmd(append([]string{"gopherjs", "run", "-q", t.goFileName()}, args...)...)
+		out, err := runcmd(append([]string{"gopherjs", "run", t.goFileName()}, args...)...)
 		if err != nil {
 			t.err = err
 			return

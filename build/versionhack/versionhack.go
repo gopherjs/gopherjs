@@ -37,6 +37,10 @@ import (
 //go:linkname releaseTags go/build.defaultReleaseTags
 var releaseTags []string
 
+//go:linkname toolTags go/build.defaultToolTags
+var toolTags []string
+
 func init() {
 	releaseTags = build.Default.ReleaseTags[:compiler.GoVersion]
+	toolTags = []string{}
 }

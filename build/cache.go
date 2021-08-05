@@ -11,7 +11,7 @@ import (
 // cachePath is the base path for GopherJS's own build cache.
 //
 // It serves a similar function to the Go build cache, but is a lot more
-// simlistic and therefore not compatible with Go. We use this cache directory
+// simplistic and therefore not compatible with Go. We use this cache directory
 // to store build artifacts for packages loaded from a module, for which PkgObj
 // provided by go/build points inside the module source tree, which can cause
 // inconvenience with version control, etc.
@@ -28,7 +28,7 @@ var cachePath = func() string {
 // returned by go/build.
 func cachedPath(orig string) string {
 	if orig == "" {
-		panic(fmt.Errorf("CachedPath() must not be used with an empty string"))
+		panic("CachedPath() must not be used with an empty string")
 	}
 	sum := fmt.Sprintf("%x", sha256.Sum256([]byte(orig)))
 	return filepath.Join(cachePath, sum[0:2], sum)

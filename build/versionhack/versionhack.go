@@ -10,10 +10,10 @@
 // However, it naively assumes that the go tool version in the PATH matches the
 // version that was used to build GopherJS and disables module support whenever
 // ReleaseTags in the context are set to anything other than the default. This,
-// unfortunately, isn't very helpful since gopherjs may be build by a Go version
+// unfortunately, isn't very helpful since gopherjs may be built by a Go version
 // other than the PATH's default.
 //
-// Luckily, even if go tool version is mismatches, it's only used for discovery
+// Luckily, even if go tool version is mismatched, it's only used for discovery
 // of the package locations, and go/build evaluates build constraints on its own
 // with ReleaseTags we've passed.
 //

@@ -141,6 +141,12 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue35073.go":  {category: usesUnsupportedPackage, desc: "uses unsupported flag -gcflags=-d=checkptr"},
 	"fixedbugs/issue35576.go":  {category: lowLevelRuntimeDifference, desc: "GopherJS print/println format for floats differs from Go's"},
 	"fixedbugs/issue40917.go":  {category: notApplicable, desc: "uses pointer arithmetic and unsupported flag -gcflags=-d=checkptr"},
+
+	// These are new tests in Go 1.17
+	"fixedbugs/issue45045.go": {category: notApplicable, desc: "GC related, not relevant to GopherJS"},
+	"fixedbugs/issue5493.go":  {category: notApplicable, desc: "GC related, not relevant to GopherJS"},
+	"fixedbugs/issue46725.go": {category: notApplicable, desc: "GC related, not relevant to GopherJS"},
+	"fixedbugs/issue43444.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
 }
 
 type failCategory uint8

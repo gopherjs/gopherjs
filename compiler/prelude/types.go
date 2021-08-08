@@ -637,8 +637,17 @@ var $newDataPointer = function(data, constructor) {
 };
 
 var $indexPtr = function(array, index, constructor) {
-  array.$ptr = array.$ptr || {};
-  return array.$ptr[index] || (array.$ptr[index] = new constructor(function() { return array[index]; }, function(v) { array[index] = v; }));
+  if (array.buffer) {
+    // Pointers to the same underlying ArrayBuffer share cache.
+    var cache = array.buffer.$ptr = array.buffer.$ptr || {};
+    // Pointers of different primitive types are non-comparable and stored in different caches.
+    var typeCache = cache[array.name] = cache[array.name] || {};
+    var cacheIdx = array.BYTES_PER_ELEMENT * index + array.byteOffset;
+    return typeCache[cacheIdx] || (typeCache[cacheIdx] = new constructor(function() { return array[index]; }, function(v) { array[index] = v; }));
+  } else {
+    array.$ptr = array.$ptr || {};
+    return array.$ptr[index] || (array.$ptr[index] = new constructor(function() { return array[index]; }, function(v) { array[index] = v; }));
+  }
 };
 
 var $sliceType = function(elem) {

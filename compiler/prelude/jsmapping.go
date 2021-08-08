@@ -74,9 +74,9 @@ var $externalize = function(v, t) {
     return $externalize(v.$get(), t.elem);
   case $kindSlice:
     if ($needsExternalization(t.elem)) {
-      return $mapArray($sliceToArray(v), function(e) { return $externalize(e, t.elem); });
+      return $mapArray($sliceToNativeArray(v), function(e) { return $externalize(e, t.elem); });
     }
-    return $sliceToArray(v);
+    return $sliceToNativeArray(v);
   case $kindString:
     if ($isASCII(v)) {
       return v;

@@ -426,10 +426,6 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				return fc.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, fc.typeName(t))
 			case *types.Interface:
 				return fc.formatExpr("$interfaceIsEqual(%s, %s)", fc.translateImplicitConversion(e.X, t), fc.translateImplicitConversion(e.Y, t))
-			case *types.Pointer:
-				if _, ok := u.Elem().Underlying().(*types.Array); ok {
-					return fc.formatExpr("$equal(%s, %s, %s)", fc.translateImplicitConversion(e.X, t), fc.translateImplicitConversion(e.Y, t), fc.typeName(u.Elem()))
-				}
 			case *types.Basic:
 				if isBoolean(u) {
 					if b, ok := analysis.BoolValue(e.X, fc.pkgCtx.Info.Info); ok && b {
@@ -1031,7 +1027,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		case t.Kind() == types.UnsafePointer:
 			if unary, isUnary := expr.(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
 				if indexExpr, isIndexExpr := unary.X.(*ast.IndexExpr); isIndexExpr {
-					return fc.formatExpr("$sliceToArray(%s)", fc.translateConversionToSlice(indexExpr.X, types.NewSlice(types.Typ[types.Uint8])))
+					return fc.formatExpr("$sliceToNativeArray(%s)", fc.translateConversionToSlice(indexExpr.X, types.NewSlice(types.Typ[types.Uint8])))
 				}
 				if ident, isIdent := unary.X.(*ast.Ident); isIdent && ident.Name == "_zero" {
 					return fc.formatExpr("new Uint8Array(0)")
@@ -1075,8 +1071,14 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 			break
 		}
 
-		switch u := t.Elem().Underlying().(type) {
+		switch ptrElType := t.Elem().Underlying().(type) {
 		case *types.Array: // (*[N]T)(expr) — converting expr to a pointer to an array.
+			if _, ok := exprType.Underlying().(*types.Slice); ok {
+				// GopherJS interprets pointer to an array as the array object itself
+				// due to its reference semantics, so the bellow coversion is correct.
+				return fc.formatExpr("$sliceToGoArray(%e, %s)", expr, fc.typeName(t))
+			}
+			// TODO(nevkontakte): Is this just for aliased types (e.g. `type a [4]byte`)?
 			return fc.translateExpr(expr)
 		case *types.Struct: // (*StructT)(expr) — converting expr to a pointer to a struct.
 			if fc.pkgCtx.Pkg.Path() == "syscall" && types.Identical(exprType, types.Typ[types.UnsafePointer]) {
@@ -1086,7 +1088,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 				// indeed pointing at a byte array.
 				array := fc.newVariable("_array")
 				target := fc.newVariable("_struct")
-				return fc.formatExpr("(%s = %e, %s = %e, %s, %s)", array, expr, target, fc.zeroValue(t.Elem()), fc.loadStruct(array, target, u), target)
+				return fc.formatExpr("(%s = %e, %s = %e, %s, %s)", array, expr, target, fc.zeroValue(t.Elem()), fc.loadStruct(array, target, ptrElType), target)
 			}
 			// Convert between structs of different types but identical layouts,
 			// for example:

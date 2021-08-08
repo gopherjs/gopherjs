@@ -145,11 +145,39 @@ var $substring = function(str, low, high) {
   return str.substring(low, high);
 };
 
-var $sliceToArray = function(slice) {
+// Convert Go slice to an equivalent JS array type.
+var $sliceToNativeArray = function(slice) {
   if (slice.$array.constructor !== Array) {
     return slice.$array.subarray(slice.$offset, slice.$offset + slice.$length);
   }
   return slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
+};
+
+// Convert Go slice to a pointer to an underlying Go array.
+var $sliceToGoArray = function(slice, arrayPtrType) {
+  var arrayType = arrayPtrType.elem;
+  if (arrayType !== undefined && slice.$length < arrayType.len) {
+    $throwRuntimeError("cannot convert slice with length " + slice.$length + " to pointer to array with length " + arrayType.len);
+  }
+  if (slice == slice.constructor.nil) {
+    return arrayPtrType.nil; // Nil slice converts to nil array pointer.
+  }
+  if (slice.$array.constructor !== Array) {
+    return slice.$array.subarray(slice.$offset, slice.$offset + slice.$length);
+  }
+  if (slice.$offset == 0 && slice.$length == slice.$capacity && slice.$length == arrayType.len) {
+    return slice.$array;
+  }
+  if (arrayType.len == 0) {
+    return new arrayType([]);
+  }
+
+  // Array.slice (unlike TypedArray.subarray) returns a copy of an array range,
+  // which is not sharing memory with the original one, which violates the spec
+  // for slice to array conversion. This is incompatible with the Go spec, in
+  // particular that the assignments to the array elements would be visible in
+  // the slice. Prefer to fail explicitly instead of creating subtle bugs.
+  $throwRuntimeError("gopherjs: non-numeric slice to underlying array conversion is not supported for subslices");
 };
 
 var $decodeRune = function(str, pos) {

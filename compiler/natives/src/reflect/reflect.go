@@ -5,6 +5,7 @@ package reflect
 
 import (
 	"errors"
+	"internal/itoa"
 	"strconv"
 	"unsafe"
 
@@ -745,6 +746,19 @@ func cvtDirect(v Value, typ Type) Value {
 		panic(&ValueError{"reflect.Convert", k})
 	}
 	return Value{typ.common(), unsafe.Pointer(val.Unsafe()), v.flag.ro() | v.flag&flagIndir | flag(typ.Kind())}
+}
+
+// convertOp: []T -> *[N]T
+func cvtSliceArrayPtr(v Value, t Type) Value {
+	slice := v.object()
+
+	slen := slice.Get("$length").Int()
+	alen := t.Elem().Len()
+	if alen > slen {
+		panic("reflect: cannot convert slice with length " + itoa.Itoa(slen) + " to pointer to array with length " + itoa.Itoa(alen))
+	}
+	array := js.Global.Call("$sliceToGoArray", slice, jsType(t))
+	return Value{t.common(), unsafe.Pointer(array.Unsafe()), v.flag&^(flagIndir|flagAddr|flagKindMask) | flag(Ptr)}
 }
 
 func Copy(dst, src Value) int {

@@ -1154,7 +1154,7 @@ func (fc *funcContext) translateImplicitConversion(expr ast.Expr, desiredType ty
 
 	switch desiredType.Underlying().(type) {
 	case *types.Slice:
-		return fc.formatExpr("$subslice(new %1s(%2e.$array), %2e.$offset, %2e.$offset + %2e.$length)", fc.typeName(desiredType), expr)
+		return fc.formatExpr("$convertSliceType(%1e, %2s)", expr, fc.typeName(desiredType))
 
 	case *types.Interface:
 		if typesutil.IsJsObject(exprType) {

@@ -180,6 +180,15 @@ var $sliceToGoArray = function(slice, arrayPtrType) {
   $throwRuntimeError("gopherjs: non-numeric slice to underlying array conversion is not supported for subslices");
 };
 
+// Convert between compatible slice types (e.g. native and names).
+var $convertSliceType = function(slice, desiredType) {
+  if (slice == slice.constructor.nil) {
+    return desiredType.nil; // Preserve nil value.
+  }
+
+  return $subslice(new desiredType(slice.$array), slice.$offset, slice.$offset + slice.$length);
+}
+
 var $decodeRune = function(str, pos) {
   var c0 = str.charCodeAt(pos);
 

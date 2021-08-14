@@ -1,28 +1,28 @@
 # CircleCI configuration for GopherJS.
-# 
+#
 # This configuration has one build_and_test workflow designed to run on all commits
 # and pull requests. It consists of three jobs:
-# 
+#
 #  - build: Builds and runs GopherJS unit tests, as well as lits, smoke tests, etc.
 #    This job is designed to provide quickest feedback on the most important
 #    functionality. It should not include anything heavyweight and should be kept
 #    under 2-3 minutes of runtime.
-# 
+#
 #  - gopherjs_tests: Runs standard library and GopherJS package tests using GopherJS
 #    *itself*. This is the most comprehensive test suite we have and it is sharded
 #    into 4 parallel instances for faster execution.
-# 
+#
 #  - gorepo_tests: Runs language tests from the Go compiler test suite. The objective
 #    of these tests is to ensure conformance of GopherJS to the upstream Go to the
 #    highest degree possible, considering differences in the runtime.
-# 
+#
 # If all tests passed, it is reasonably to assume that the version is more or less
 # bug-free (although as of summer 2021 our test coverage is not ideal).
-# 
+#
 # For convenience of upgrades, NVM, Node.js and Go versions are specified as
 # parameters at the top of the config. Increasing the version and ensuring that the
 # workflow passes is sufficient to verify GopherJS compatibility with that version.
-# 
+#
 # Versions of Node modules GopherJS depends on are specified in package.json and can
 # be changed there (remember to run `npm install` to update the lock file).
 
@@ -39,10 +39,10 @@ workflows:
     jobs:
     - build
     - gopherjs_tests:
-        requires: 
+        requires:
           - build
     - gorepo_tests:
-        requires: 
+        requires:
           - build
 
 parameters:
@@ -70,14 +70,14 @@ jobs:
     - run:
         name: Check gofmt
         command: diff -u <(echo -n) <(gofmt -d .)
-    - run: 
+    - run:
         name: Check go vet
         command: |
-          set -e  
+          set -e
           # Go package in root directory.
-          go vet . 
+          go vet .
           # All subdirectories except "doc", "tests", "node*".
-          for d in */; do echo ./$d...; done | grep -v ./doc | grep -v ./tests | grep -v ./node | xargs go vet 
+          for d in */; do echo ./$d...; done | grep -v ./doc | grep -v ./tests | grep -v ./node | xargs go vet
     - run:
         name: Check natives build tags
         command: diff -u <(echo -n) <(go list ./compiler/natives/src/...) # All those packages should have // +build js.
@@ -126,7 +126,7 @@ jobs:
     - run:
         name: Compare GOPATH and Go Modules output
         command: diff -u <(sed 's/todomvc_gomod.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gomod.js) <(sed 's/todomvc_gopath.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gopath.js)
-  
+
   gopherjs_tests:
     executor: gopherjs
     parallelism: 4
@@ -148,8 +148,9 @@ jobs:
           set -e
           # Convert test output into junit format for CircleCI.
           mkdir -p ~/test-reports/
-          go-junit-report --full-class-name < /tmp/test-gopherjs.txt > ~/test-reports/gopherjs.xml
+          go-junit-report --full-class-name < /tmp/test-gopherjs.txt > ~/test-reports/gopherjs-${CIRCLE_NODE_INDEX}.xml
           exit "$status"
+        no_output_timeout: "1h"  # Packages like math/big take a while to run all tests.
     - store_test_results:
         path: ~/test-reports/
 
@@ -203,7 +204,7 @@ commands:
           echo 'export SOURCE_MAP_SUPPORT=true' >> $BASH_ENV
           # Make nodejs able to require installed modules from any working path.
           echo export "NODE_PATH='$(npm root)'" >> "${BASH_ENV}"
-    - run: 
+    - run:
         name: Install required Go packages
         command: go mod download -x
   install_gopherjs:

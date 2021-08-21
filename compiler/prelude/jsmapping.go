@@ -293,7 +293,7 @@ var $internalize = function(v, t, recv, seen) {
         return new $jsObjectPtr(v);
       }
       return new timePkg.Time($internalize(v, timePkg.Time));
-    case Function:
+    case (function () { }).constructor: // is usually Function, but in Chrome extensions it is something else
       var funcType = $funcType([$sliceType($emptyInterface)], [$jsObjectPtr], true);
       return new funcType($internalize(v, funcType));
     case Number:

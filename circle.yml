@@ -48,7 +48,7 @@ workflows:
 parameters:
   go_version:
     type: string
-    default: "1.16.5"
+    default: "1.16.7"
   nvm_version:
     type: string
     default: "0.38.0"
@@ -113,7 +113,7 @@ jobs:
     - run:
         name: TodoMVC in Go Modules mode
         command: |
-          set -e  
+          set -e
           export GO111MODULE=on
           export GOPATH=/tmp/gomod
           mkdir -p $GOPATH/src

@@ -472,12 +472,12 @@ func main() {
 				if *verbose {
 					args = append(args, "-test.v")
 				}
-				status := "ok  "
-				start := time.Now()
 				executions.Go(func() error {
 					parallelSlots <- true              // Acquire slot
 					defer func() { <-parallelSlots }() // Release slot
 
+					status := "ok  "
+					start := time.Now()
 					var testOut io.ReadWriter
 					if cap(parallelSlots) > 1 {
 						// If running in parallel, capture test output in a temporary buffer to avoid mixing

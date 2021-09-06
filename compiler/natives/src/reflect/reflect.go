@@ -80,7 +80,7 @@ func reflectType(typ *js.Object) *rtype {
 					continue
 				}
 				reflectMethods = append(reflectMethods, method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", exported)),
+					name: newNameOff(newMethodName(m)),
 					mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				})
 			}
@@ -92,7 +92,7 @@ func reflectType(typ *js.Object) *rtype {
 					continue
 				}
 				reflectMethods = append(reflectMethods, method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", exported)),
+					name: newNameOff(newMethodName(m)),
 					mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				})
 			}
@@ -152,7 +152,7 @@ func reflectType(typ *js.Object) *rtype {
 			for i := range imethods {
 				m := methods.Index(i)
 				imethods[i] = imethod{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", internalStr(m.Get("pkg")) == "")),
+					name: newNameOff(newMethodName(m)),
 					typ:  newTypeOff(reflectType(m.Get("typ"))),
 				}
 			}
@@ -253,13 +253,14 @@ type nameData struct {
 	name     string
 	tag      string
 	exported bool
+	pkgPath  string
 }
 
 var nameMap = make(map[*byte]*nameData)
 
 func (n name) name() (s string) { return nameMap[n.bytes].name }
 func (n name) tag() (s string)  { return nameMap[n.bytes].tag }
-func (n name) pkgPath() string  { return "" }
+func (n name) pkgPath() string  { return nameMap[n.bytes].pkgPath }
 func (n name) isExported() bool { return nameMap[n.bytes].exported }
 
 func newName(n, tag string, exported bool) name {
@@ -272,6 +273,21 @@ func newName(n, tag string, exported bool) name {
 	return name{
 		bytes: b,
 	}
+}
+
+// newMethodName creates name instance for a method.
+//
+// Input object is expected to be an entry of the "methods" list of the
+// corresponding JS type.
+func newMethodName(m *js.Object) name {
+	b := new(byte)
+	nameMap[b] = &nameData{
+		name:     internalStr(m.Get("name")),
+		tag:      "",
+		pkgPath:  internalStr(m.Get("pkg")),
+		exported: internalStr(m.Get("pkg")) == "",
+	}
+	return name{bytes: b}
 }
 
 var nameOffList []name

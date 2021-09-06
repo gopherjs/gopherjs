@@ -384,6 +384,10 @@ func ValueOf(i interface{}) Value {
 }
 
 func ArrayOf(count int, elem Type) Type {
+	if count < 0 {
+		panic("reflect: negative length passed to ArrayOf")
+	}
+
 	return reflectType(js.Global.Call("$arrayType", jsType(elem), count))
 }
 

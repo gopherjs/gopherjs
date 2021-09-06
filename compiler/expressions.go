@@ -1076,7 +1076,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 			if _, ok := exprType.Underlying().(*types.Slice); ok {
 				// GopherJS interprets pointer to an array as the array object itself
 				// due to its reference semantics, so the bellow coversion is correct.
-				return fc.formatExpr("$sliceToGoArray(%e, %s)", expr, fc.typeName(t))
+				return fc.formatExpr("$sliceToGoArray(%e, %s)", expr, fc.typeName(desiredType))
 			}
 			// TODO(nevkontakte): Is this just for aliased types (e.g. `type a [4]byte`)?
 			return fc.translateExpr(expr)

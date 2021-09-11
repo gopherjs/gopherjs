@@ -492,6 +492,36 @@ func isBlank(expr ast.Expr) bool {
 	return false
 }
 
+// isWrapped returns true for types that may need to be boxed to access full
+// functionality of the Go type.
+//
+// For efficiency or interoperability reasons certain Go types can be represented
+// by JavaScript values that weren't constructed by the corresponding Go type
+// constructor.
+//
+// For example, consider a Go type:
+//
+// 		 type SecretInt int
+//     func (_ SecretInt) String() string { return "<secret>" }
+//
+//     func main() {
+//       var i SecretInt = 1
+//       println(i.String())
+//     }
+//
+// For this example the compiler will generate code similar to the snippet below:
+//
+//     SecretInt = $pkg.SecretInt = $newType(4, $kindInt, "main.SecretInt", true, "main", true, null);
+//     SecretInt.prototype.String = function() {
+//       return "<secret>";
+//     };
+//     main = function() {
+//       var i = 1;
+//       console.log(new SecretInt(i).String());
+//     };
+//
+// Note that the generated code assigns a primitive "number" value into i, and
+// only boxes it into an object when it's necessary to access its methods.
 func isWrapped(ty types.Type) bool {
 	switch t := ty.Underlying().(type) {
 	case *types.Basic:

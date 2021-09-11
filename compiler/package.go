@@ -502,6 +502,13 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				case *types.Basic, *types.Array, *types.Slice, *types.Chan, *types.Signature, *types.Interface, *types.Pointer, *types.Map:
 					size = sizes32.Sizeof(t)
 				}
+				if tPointer, ok := o.Type().Underlying().(*types.Pointer); ok {
+					if _, ok := tPointer.Elem().Underlying().(*types.Array); ok {
+						// Array pointers have non-default constructors to support wrapping
+						// of the native objects.
+						constructor = "$arrayPtrCtor()"
+					}
+				}
 				funcCtx.Printf(`%s = $newType(%d, %s, "%s.%s", %t, "%s", %t, %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name() != "", o.Pkg().Path(), o.Exported(), constructor)
 			})
 			d.MethodListCode = funcCtx.CatchOutput(0, func() {
@@ -754,7 +761,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		if recv != nil && !isBlank(recv) {
 			this := "this"
 			if isWrapped(c.pkgCtx.TypeOf(recv)) {
-				this = "this.$val"
+				this = "this.$val" // Unwrap receiver value.
 			}
 			c.Printf("%s = %s;", c.translateExpr(recv), this)
 		}

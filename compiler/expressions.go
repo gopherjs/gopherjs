@@ -199,6 +199,10 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 			switch t.Underlying().(type) {
 			case *types.Struct, *types.Array:
+				// JavaScript's pass-by-reference semantics makes passing array's or
+				// struct's object semantically equivalent to passing a pointer
+				// TODO(nevkontakte): Evaluate if performance gain justifies complexity
+				// introduced by the special case.
 				return fc.translateExpr(e.X)
 			}
 
@@ -830,6 +834,7 @@ func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 
 	recv := fc.translateImplicitConversionWithCloning(x, methodsRecvType)
 	if isWrapped(recvType) {
+		// Wrap JS-native value to have access to the Go type's methods.
 		recv = fc.formatExpr("new %s(%s)", fc.typeName(methodsRecvType), recv)
 	}
 	return recv
@@ -1085,8 +1090,6 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		switch ptrElType := t.Elem().Underlying().(type) {
 		case *types.Array: // (*[N]T)(expr) — converting expr to a pointer to an array.
 			if _, ok := exprType.Underlying().(*types.Slice); ok {
-				// GopherJS interprets pointer to an array as the array object itself
-				// due to its reference semantics, so the bellow coversion is correct.
 				return fc.formatExpr("$sliceToGoArray(%e, %s)", expr, fc.typeName(desiredType))
 			}
 			// TODO(nevkontakte): Is this just for aliased types (e.g. `type a [4]byte`)?

@@ -154,6 +154,9 @@ var $sliceToNativeArray = function(slice) {
 };
 
 // Convert Go slice to a pointer to an underlying Go array.
+// 
+// Note that an array pointer can be represented by an "unwrapped" native array
+// type, and it will be wrapped back into its Go type when necessary.
 var $sliceToGoArray = function(slice, arrayPtrType) {
   var arrayType = arrayPtrType.elem;
   if (arrayType !== undefined && slice.$length < arrayType.len) {

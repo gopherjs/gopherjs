@@ -446,11 +446,22 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 	case *ast.IndexExpr:
 		switch t := fc.pkgCtx.TypeOf(e.X).Underlying().(type) {
-		case *types.Array, *types.Pointer:
-			pattern := rangeCheck("%1e[%2f]", fc.pkgCtx.Types[e.Index].Value != nil, true)
-			if _, ok := t.(*types.Pointer); ok { // check pointer for nix (attribute getter causes a panic)
-				pattern = `(%1e.nilCheck, ` + pattern + `)`
+		case *types.Pointer:
+			if _, ok := t.Elem().Underlying().(*types.Array); !ok {
+				// Should never happen in type-checked code.
+				panic(fmt.Errorf("non-array pointers can't be used with index expression"))
 			}
+			// Rewrite arrPtr[i] → (*arrPtr)[i] to concentrate array dereferencing
+			// logic in one place.
+			x := &ast.StarExpr{
+				Star: e.X.Pos(),
+				X:    e.X,
+			}
+			astutil.SetType(fc.pkgCtx.Info.Info, t.Elem(), x)
+			e.X = x
+			return fc.translateExpr(e)
+		case *types.Array:
+			pattern := rangeCheck("%1e[%2f]", fc.pkgCtx.Types[e.Index].Value != nil, true)
 			return fc.formatExpr(pattern, e.X, e.Index)
 		case *types.Slice:
 			return fc.formatExpr(rangeCheck("%1e.$array[%1e.$offset + %2f]", fc.pkgCtx.Types[e.Index].Value != nil, false), e.X, e.Index)

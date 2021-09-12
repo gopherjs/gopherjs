@@ -1270,6 +1270,28 @@ func getJsTag(tag string) string {
 	return ""
 }
 
+// CanConvert reports whether the value v can be converted to type t. If
+// v.CanConvert(t) returns true then v.Convert(t) will not panic.
+//
+// TODO(nevkontakte): this overlay can be removed after
+// https://github.com/golang/go/pull/48346 is in the lastest stable Go release.
+func (v Value) CanConvert(t Type) bool {
+	vt := v.Type()
+	if !vt.ConvertibleTo(t) {
+		return false
+	}
+	// Currently the only conversion that is OK in terms of type
+	// but that can panic depending on the value is converting
+	// from slice to pointer-to-array.
+	if vt.Kind() == Slice && t.Kind() == Ptr && t.Elem().Kind() == Array {
+		n := t.Elem().Len()
+		if n > v.Len() { // Avoiding use of unsafeheader.Slice here.
+			return false
+		}
+	}
+	return true
+}
+
 func (v Value) Index(i int) Value {
 	switch k := v.kind(); k {
 	case Array:

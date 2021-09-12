@@ -747,16 +747,22 @@ func cvtDirect(v Value, typ Type) Value {
 		slice.Set("$capacity", srcVal.Get("$capacity"))
 		val = js.Global.Call("$newDataPointer", slice, jsType(PtrTo(typ)))
 	case Ptr:
-		if typ.Elem().Kind() == Struct {
+		switch typ.Elem().Kind() {
+		case Struct:
 			if typ.Elem() == v.typ.Elem() {
 				val = srcVal
 				break
 			}
 			val = jsType(typ).New()
 			copyStruct(val, srcVal, typ.Elem())
-			break
+		case Array:
+			// Unlike other pointers, array pointers are "wrapped" types (see
+			// isWrapped() in the compiler package), and are represented by a native
+			// javascript array object here.
+			val = srcVal
+		default:
+			val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"))
 		}
-		val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"))
 	case Struct:
 		val = jsType(typ).Get("ptr").New()
 		copyStruct(val, srcVal, typ)

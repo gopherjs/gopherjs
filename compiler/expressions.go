@@ -199,6 +199,10 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 			switch t.Underlying().(type) {
 			case *types.Struct, *types.Array:
+				// JavaScript's pass-by-reference semantics makes passing array's or
+				// struct's object semantically equivalent to passing a pointer
+				// TODO(nevkontakte): Evaluate if performance gain justifies complexity
+				// introduced by the special case.
 				return fc.translateExpr(e.X)
 			}
 
@@ -446,11 +450,22 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 	case *ast.IndexExpr:
 		switch t := fc.pkgCtx.TypeOf(e.X).Underlying().(type) {
-		case *types.Array, *types.Pointer:
-			pattern := rangeCheck("%1e[%2f]", fc.pkgCtx.Types[e.Index].Value != nil, true)
-			if _, ok := t.(*types.Pointer); ok { // check pointer for nix (attribute getter causes a panic)
-				pattern = `(%1e.nilCheck, ` + pattern + `)`
+		case *types.Pointer:
+			if _, ok := t.Elem().Underlying().(*types.Array); !ok {
+				// Should never happen in type-checked code.
+				panic(fmt.Errorf("non-array pointers can't be used with index expression"))
 			}
+			// Rewrite arrPtr[i] → (*arrPtr)[i] to concentrate array dereferencing
+			// logic in one place.
+			x := &ast.StarExpr{
+				Star: e.X.Pos(),
+				X:    e.X,
+			}
+			astutil.SetType(fc.pkgCtx.Info.Info, t.Elem(), x)
+			e.X = x
+			return fc.translateExpr(e)
+		case *types.Array:
+			pattern := rangeCheck("%1e[%2f]", fc.pkgCtx.Types[e.Index].Value != nil, true)
 			return fc.formatExpr(pattern, e.X, e.Index)
 		case *types.Slice:
 			return fc.formatExpr(rangeCheck("%1e.$array[%1e.$offset + %2f]", fc.pkgCtx.Types[e.Index].Value != nil, false), e.X, e.Index)
@@ -819,6 +834,7 @@ func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 
 	recv := fc.translateImplicitConversionWithCloning(x, methodsRecvType)
 	if isWrapped(recvType) {
+		// Wrap JS-native value to have access to the Go type's methods.
 		recv = fc.formatExpr("new %s(%s)", fc.typeName(methodsRecvType), recv)
 	}
 	return recv
@@ -1074,8 +1090,6 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		switch ptrElType := t.Elem().Underlying().(type) {
 		case *types.Array: // (*[N]T)(expr) — converting expr to a pointer to an array.
 			if _, ok := exprType.Underlying().(*types.Slice); ok {
-				// GopherJS interprets pointer to an array as the array object itself
-				// due to its reference semantics, so the bellow coversion is correct.
 				return fc.formatExpr("$sliceToGoArray(%e, %s)", expr, fc.typeName(desiredType))
 			}
 			// TODO(nevkontakte): Is this just for aliased types (e.g. `type a [4]byte`)?

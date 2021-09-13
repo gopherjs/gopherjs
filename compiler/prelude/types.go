@@ -61,6 +61,16 @@ var $idKey = function(x) {
   return String(x.$id);
 };
 
+// Creates constructor functions for array pointer types. Returns a new function
+// instace each time to make sure each type is independent of the other.
+var $arrayPtrCtor = function() {
+  return function(array) {
+    this.$get = function() { return array; };
+    this.$set = function(v) { typ.copy(this, v); };
+    this.$val = array;
+  }
+}
+
 var $newType = function(size, kind, string, named, pkg, exported, constructor) {
   var typ;
   switch(kind) {
@@ -132,11 +142,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
   case $kindArray:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
-    typ.ptr = $newType(4, $kindPtr, "*" + string, false, "", false, function(array) {
-      this.$get = function() { return array; };
-      this.$set = function(v) { typ.copy(this, v); };
-      this.$val = array;
-    });
+    typ.ptr = $newType(4, $kindPtr, "*" + string, false, "", false, $arrayPtrCtor());
     typ.init = function(elem, len) {
       typ.elem = elem;
       typ.len = len;

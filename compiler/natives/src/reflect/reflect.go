@@ -747,16 +747,22 @@ func cvtDirect(v Value, typ Type) Value {
 		slice.Set("$capacity", srcVal.Get("$capacity"))
 		val = js.Global.Call("$newDataPointer", slice, jsType(PtrTo(typ)))
 	case Ptr:
-		if typ.Elem().Kind() == Struct {
+		switch typ.Elem().Kind() {
+		case Struct:
 			if typ.Elem() == v.typ.Elem() {
 				val = srcVal
 				break
 			}
 			val = jsType(typ).New()
 			copyStruct(val, srcVal, typ.Elem())
-			break
+		case Array:
+			// Unlike other pointers, array pointers are "wrapped" types (see
+			// isWrapped() in the compiler package), and are represented by a native
+			// javascript array object here.
+			val = srcVal
+		default:
+			val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"))
 		}
-		val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"))
 	case Struct:
 		val = jsType(typ).Get("ptr").New()
 		copyStruct(val, srcVal, typ)
@@ -1262,6 +1268,28 @@ func getJsTag(tag string) string {
 		}
 	}
 	return ""
+}
+
+// CanConvert reports whether the value v can be converted to type t. If
+// v.CanConvert(t) returns true then v.Convert(t) will not panic.
+//
+// TODO(nevkontakte): this overlay can be removed after
+// https://github.com/golang/go/pull/48346 is in the lastest stable Go release.
+func (v Value) CanConvert(t Type) bool {
+	vt := v.Type()
+	if !vt.ConvertibleTo(t) {
+		return false
+	}
+	// Currently the only conversion that is OK in terms of type
+	// but that can panic depending on the value is converting
+	// from slice to pointer-to-array.
+	if vt.Kind() == Slice && t.Kind() == Ptr && t.Elem().Kind() == Array {
+		n := t.Elem().Len()
+		if n > v.Len() { // Avoiding use of unsafeheader.Slice here.
+			return false
+		}
+	}
+	return true
 }
 
 func (v Value) Index(i int) Value {

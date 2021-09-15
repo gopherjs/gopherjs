@@ -7,6 +7,7 @@ go/internal/gccgoimporter
 go/internal/gcimporter
 go/internal/srcimporter
 go/types
+internal/abi
 internal/syscall/unix
 internal/syscall/windows
 internal/syscall/windows/registry

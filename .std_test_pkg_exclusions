@@ -45,4 +45,3 @@ runtime/trace
 syscall
 testing/internal/testdeps
 unsafe
-hash/maphash

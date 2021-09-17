@@ -147,6 +147,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue5493.go":  {category: notApplicable, desc: "GC related, not relevant to GopherJS"},
 	"fixedbugs/issue46725.go": {category: notApplicable, desc: "GC related, not relevant to GopherJS"},
 	"fixedbugs/issue43444.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+	"fixedbugs/issue23017.go": {desc: "https://github.com/gopherjs/gopherjs/issues/1063"},
 }
 
 type failCategory uint8

@@ -482,7 +482,7 @@ var $Float64       = $newType( 8, $kindFloat64,       "float64",        true, ""
 var $Complex64     = $newType( 8, $kindComplex64,     "complex64",      true, "", false, null);
 var $Complex128    = $newType(16, $kindComplex128,    "complex128",     true, "", false, null);
 var $String        = $newType( 8, $kindString,        "string",         true, "", false, null);
-var $UnsafePointer = $newType( 4, $kindUnsafePointer, "unsafe.Pointer", true, "", false, null);
+var $UnsafePointer = $newType( 4, $kindUnsafePointer, "unsafe.Pointer", true, "unsafe", false, null);
 
 var $nativeArray = function(elemKind) {
   switch (elemKind) {

@@ -173,7 +173,7 @@ type dceInfo struct {
 	methodFilter string
 }
 
-func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
+func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified
 
@@ -242,6 +242,10 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 	if _, err := w.Write([]byte("\"use strict\";\n(function() {\n\n")); err != nil {
 		return err
 	}
+	if _, err := w.Write([]byte(fmt.Sprintf("var $goVersion = %q;\n", goVersion))); err != nil {
+		return err
+	}
+
 	preludeJS := prelude.Prelude
 	if minify {
 		preludeJS = prelude.Minified
@@ -260,10 +264,9 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter) error {
 		}
 	}
 
-	if _, err := w.Write([]byte("$synthesizeMethods();\n$initAllLinknames();var $mainPkg = $packages[\"" + string(mainPkg.ImportPath) + "\"];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
+	if _, err := w.Write([]byte("$synthesizeMethods();\n$initAllLinknames();\nvar $mainPkg = $packages[\"" + string(mainPkg.ImportPath) + "\"];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
 		return err
 	}
-
 	return nil
 }
 

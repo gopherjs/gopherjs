@@ -856,3 +856,9 @@ func TestUntypedNil(t *testing.T) {
 		f(nil)
 	}
 }
+
+func TestVersion(t *testing.T) {
+	if got := runtime.Version(); !strings.HasPrefix(got, "go1.") {
+		t.Fatalf("Got: runtime.Version() returned %q. Want: a valid Go version.", got)
+	}
+}

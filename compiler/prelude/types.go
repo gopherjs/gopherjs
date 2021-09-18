@@ -61,6 +61,16 @@ var $idKey = function(x) {
   return String(x.$id);
 };
 
+// Creates constructor functions for array pointer types. Returns a new function
+// instace each time to make sure each type is independent of the other.
+var $arrayPtrCtor = function() {
+  return function(array) {
+    this.$get = function() { return array; };
+    this.$set = function(v) { typ.copy(this, v); };
+    this.$val = array;
+  }
+}
+
 var $newType = function(size, kind, string, named, pkg, exported, constructor) {
   var typ;
   switch(kind) {
@@ -132,11 +142,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
   case $kindArray:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
-    typ.ptr = $newType(4, $kindPtr, "*" + string, false, "", false, function(array) {
-      this.$get = function() { return array; };
-      this.$set = function(v) { typ.copy(this, v); };
-      this.$val = array;
-    });
+    typ.ptr = $newType(4, $kindPtr, "*" + string, false, "", false, $arrayPtrCtor());
     typ.init = function(elem, len) {
       typ.elem = elem;
       typ.len = len;
@@ -476,7 +482,7 @@ var $Float64       = $newType( 8, $kindFloat64,       "float64",        true, ""
 var $Complex64     = $newType( 8, $kindComplex64,     "complex64",      true, "", false, null);
 var $Complex128    = $newType(16, $kindComplex128,    "complex128",     true, "", false, null);
 var $String        = $newType( 8, $kindString,        "string",         true, "", false, null);
-var $UnsafePointer = $newType( 4, $kindUnsafePointer, "unsafe.Pointer", true, "", false, null);
+var $UnsafePointer = $newType( 4, $kindUnsafePointer, "unsafe.Pointer", true, "unsafe", false, null);
 
 var $nativeArray = function(elemKind) {
   switch (elemKind) {
@@ -637,8 +643,17 @@ var $newDataPointer = function(data, constructor) {
 };
 
 var $indexPtr = function(array, index, constructor) {
-  array.$ptr = array.$ptr || {};
-  return array.$ptr[index] || (array.$ptr[index] = new constructor(function() { return array[index]; }, function(v) { array[index] = v; }));
+  if (array.buffer) {
+    // Pointers to the same underlying ArrayBuffer share cache.
+    var cache = array.buffer.$ptr = array.buffer.$ptr || {};
+    // Pointers of different primitive types are non-comparable and stored in different caches.
+    var typeCache = cache[array.name] = cache[array.name] || {};
+    var cacheIdx = array.BYTES_PER_ELEMENT * index + array.byteOffset;
+    return typeCache[cacheIdx] || (typeCache[cacheIdx] = new constructor(function() { return array[index]; }, function(v) { array[index] = v; }));
+  } else {
+    array.$ptr = array.$ptr || {};
+    return array.$ptr[index] || (array.$ptr[index] = new constructor(function() { return array[index]; }, function(v) { array[index] = v; }));
+  }
 };
 
 var $sliceType = function(elem) {

@@ -655,7 +655,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 				if err != nil {
 					return err
 				}
-				if err := compiler.WriteProgramCode(deps, sourceMapFilter); err != nil {
+				if err := compiler.WriteProgramCode(deps, sourceMapFilter, s.GoRelease()); err != nil {
 					return err
 				}
 

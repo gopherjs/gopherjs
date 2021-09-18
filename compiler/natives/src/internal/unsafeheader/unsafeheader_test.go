@@ -1,4 +1,5 @@
-//+build js
+//go:build js
+// +build js
 
 package unsafeheader_test
 

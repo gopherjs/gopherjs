@@ -1,9 +1,11 @@
+//go:build js
 // +build js
 
 package reflect
 
 import (
 	"errors"
+	"internal/itoa"
 	"strconv"
 	"unsafe"
 
@@ -31,6 +33,23 @@ func init() {
 
 	initialized = true
 	uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
+}
+
+// New returns a Value representing a pointer to a new zero value
+// for the specified type. That is, the returned Value's Type is PtrTo(typ).
+//
+// The upstream version includes an extra check to avoid creating types that
+// are tagged as go:notinheap. This shouldn't matter in GopherJS, and tracking
+// that state is over-complex, so we just skip that check.
+func New(typ Type) Value {
+	if typ == nil {
+		panic("reflect: New(nil)")
+	}
+	t := typ.(*rtype)
+	pt := t.ptrTo()
+	ptr := unsafe_New(t)
+	fl := flag(Ptr)
+	return Value{pt, ptr, fl}
 }
 
 func jsType(typ Type) *js.Object {
@@ -61,7 +80,7 @@ func reflectType(typ *js.Object) *rtype {
 					continue
 				}
 				reflectMethods = append(reflectMethods, method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", exported)),
+					name: newNameOff(newMethodName(m)),
 					mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				})
 			}
@@ -73,7 +92,7 @@ func reflectType(typ *js.Object) *rtype {
 					continue
 				}
 				reflectMethods = append(reflectMethods, method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", exported)),
+					name: newNameOff(newMethodName(m)),
 					mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				})
 			}
@@ -133,7 +152,7 @@ func reflectType(typ *js.Object) *rtype {
 			for i := range imethods {
 				m := methods.Index(i)
 				imethods[i] = imethod{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", internalStr(m.Get("pkg")) == "")),
+					name: newNameOff(newMethodName(m)),
 					typ:  newTypeOff(reflectType(m.Get("typ"))),
 				}
 			}
@@ -234,13 +253,14 @@ type nameData struct {
 	name     string
 	tag      string
 	exported bool
+	pkgPath  string
 }
 
 var nameMap = make(map[*byte]*nameData)
 
 func (n name) name() (s string) { return nameMap[n.bytes].name }
 func (n name) tag() (s string)  { return nameMap[n.bytes].tag }
-func (n name) pkgPath() string  { return "" }
+func (n name) pkgPath() string  { return nameMap[n.bytes].pkgPath }
 func (n name) isExported() bool { return nameMap[n.bytes].exported }
 
 func newName(n, tag string, exported bool) name {
@@ -253,6 +273,21 @@ func newName(n, tag string, exported bool) name {
 	return name{
 		bytes: b,
 	}
+}
+
+// newMethodName creates name instance for a method.
+//
+// Input object is expected to be an entry of the "methods" list of the
+// corresponding JS type.
+func newMethodName(m *js.Object) name {
+	b := new(byte)
+	nameMap[b] = &nameData{
+		name:     internalStr(m.Get("name")),
+		tag:      "",
+		pkgPath:  internalStr(m.Get("pkg")),
+		exported: internalStr(m.Get("pkg")) == "",
+	}
+	return name{bytes: b}
 }
 
 var nameOffList []name
@@ -349,6 +384,10 @@ func ValueOf(i interface{}) Value {
 }
 
 func ArrayOf(count int, elem Type) Type {
+	if count < 0 {
+		panic("reflect: negative length passed to ArrayOf")
+	}
+
 	return reflectType(js.Global.Call("$arrayType", jsType(elem), count))
 }
 
@@ -708,16 +747,22 @@ func cvtDirect(v Value, typ Type) Value {
 		slice.Set("$capacity", srcVal.Get("$capacity"))
 		val = js.Global.Call("$newDataPointer", slice, jsType(PtrTo(typ)))
 	case Ptr:
-		if typ.Elem().Kind() == Struct {
+		switch typ.Elem().Kind() {
+		case Struct:
 			if typ.Elem() == v.typ.Elem() {
 				val = srcVal
 				break
 			}
 			val = jsType(typ).New()
 			copyStruct(val, srcVal, typ.Elem())
-			break
+		case Array:
+			// Unlike other pointers, array pointers are "wrapped" types (see
+			// isWrapped() in the compiler package), and are represented by a native
+			// javascript array object here.
+			val = srcVal
+		default:
+			val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"))
 		}
-		val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"))
 	case Struct:
 		val = jsType(typ).Get("ptr").New()
 		copyStruct(val, srcVal, typ)
@@ -727,6 +772,19 @@ func cvtDirect(v Value, typ Type) Value {
 		panic(&ValueError{"reflect.Convert", k})
 	}
 	return Value{typ.common(), unsafe.Pointer(val.Unsafe()), v.flag.ro() | v.flag&flagIndir | flag(typ.Kind())}
+}
+
+// convertOp: []T -> *[N]T
+func cvtSliceArrayPtr(v Value, t Type) Value {
+	slice := v.object()
+
+	slen := slice.Get("$length").Int()
+	alen := t.Elem().Len()
+	if alen > slen {
+		panic("reflect: cannot convert slice with length " + itoa.Itoa(slen) + " to pointer to array with length " + itoa.Itoa(alen))
+	}
+	array := js.Global.Call("$sliceToGoArray", slice, jsType(t))
+	return Value{t.common(), unsafe.Pointer(array.Unsafe()), v.flag&^(flagIndir|flagAddr|flagKindMask) | flag(Ptr)}
 }
 
 func Copy(dst, src Value) int {
@@ -1210,6 +1268,28 @@ func getJsTag(tag string) string {
 		}
 	}
 	return ""
+}
+
+// CanConvert reports whether the value v can be converted to type t. If
+// v.CanConvert(t) returns true then v.Convert(t) will not panic.
+//
+// TODO(nevkontakte): this overlay can be removed after
+// https://github.com/golang/go/pull/48346 is in the lastest stable Go release.
+func (v Value) CanConvert(t Type) bool {
+	vt := v.Type()
+	if !vt.ConvertibleTo(t) {
+		return false
+	}
+	// Currently the only conversion that is OK in terms of type
+	// but that can panic depending on the value is converting
+	// from slice to pointer-to-array.
+	if vt.Kind() == Slice && t.Kind() == Ptr && t.Elem().Kind() == Array {
+		n := t.Elem().Len()
+		if n > v.Len() { // Avoiding use of unsafeheader.Slice here.
+			return false
+		}
+	}
+	return true
 }
 
 func (v Value) Index(i int) Value {

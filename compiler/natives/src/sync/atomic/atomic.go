@@ -1,3 +1,4 @@
+//go:build js
 // +build js
 
 package atomic
@@ -174,12 +175,50 @@ func (v *Value) Load() (x interface{}) {
 	return v.v
 }
 
-func (v *Value) Store(x interface{}) {
-	if x == nil {
-		panic("sync/atomic: store of nil value into Value")
+func (v *Value) Store(new interface{}) {
+	v.checkNew("store", new)
+	v.v = new
+}
+
+func (v *Value) Swap(new interface{}) (old interface{}) {
+	v.checkNew("swap", new)
+	old, v.v = v.v, new
+	return old
+}
+
+func (v *Value) CompareAndSwap(old, new interface{}) (swapped bool) {
+	v.checkNew("compare and swap", new)
+
+	if !(v.v == nil && old == nil) && !sameType(old, new) {
+		panic("sync/atomic: compare and swap of inconsistently typed values into Value")
 	}
-	if v.v != nil && js.InternalObject(x).Get("constructor") != js.InternalObject(v.v).Get("constructor") {
-		panic("sync/atomic: store of inconsistently typed value into Value")
+
+	if v.v != old {
+		return false
 	}
-	v.v = x
+
+	v.v = new
+
+	return true
+}
+
+func (v *Value) checkNew(op string, new interface{}) {
+	if new == nil {
+		panic("sync/atomic: " + op + " of nil value into Value")
+	}
+
+	if v.v != nil && !sameType(new, v.v) {
+		panic("sync/atomic: " + op + " of inconsistently typed value into Value")
+	}
+}
+
+var typOf = js.Global.Call("Function", "x", "return typeof x")
+
+// sameType returns true if x and y contain the same concrete Go types.
+func sameType(x, y interface{}) bool {
+	// This relies upon the fact that an interface in GopherJS is represented
+	// by the instance of the underlying Go type. Primitive values (e.g. bools)
+	// are still wrapped into a Go type object, so we can rely upon constructors
+	// existing and differing for different types.
+	return js.InternalObject(x).Get("constructor") == js.InternalObject(y).Get("constructor")
 }

@@ -666,6 +666,25 @@ func TestSlicingNilSlice(t *testing.T) {
 	})
 }
 
+func TestConvertingNilSlice(t *testing.T) {
+	type mySlice []byte
+
+	a := []byte(nil)
+	if a != nil {
+		t.Errorf("[]byte(nil) != nil")
+	}
+
+	b := mySlice(a)
+	if b != nil {
+		t.Errorf("mySlice([]byte(nil)) != nil")
+	}
+
+	c := mySlice(nil)
+	if c != nil {
+		t.Errorf("mySlice(nil) != nil")
+	}
+}
+
 // Ensure that doing an interface conversion that fails
 // produces an expected error type with the right error text.
 func TestInterfaceConversionRuntimeError(t *testing.T) {
@@ -835,5 +854,11 @@ func TestUntypedNil(t *testing.T) {
 	{
 		f := func(*int) {}
 		f(nil)
+	}
+}
+
+func TestVersion(t *testing.T) {
+	if got := runtime.Version(); !strings.HasPrefix(got, "go1.") {
+		t.Fatalf("Got: runtime.Version() returned %q. Want: a valid Go version.", got)
 	}
 }

@@ -199,6 +199,10 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 			switch t.Underlying().(type) {
 			case *types.Struct, *types.Array:
+				// JavaScript's pass-by-reference semantics makes passing array's or
+				// struct's object semantically equivalent to passing a pointer
+				// TODO(nevkontakte): Evaluate if performance gain justifies complexity
+				// introduced by the special case.
 				return fc.translateExpr(e.X)
 			}
 
@@ -426,10 +430,6 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				return fc.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, fc.typeName(t))
 			case *types.Interface:
 				return fc.formatExpr("$interfaceIsEqual(%s, %s)", fc.translateImplicitConversion(e.X, t), fc.translateImplicitConversion(e.Y, t))
-			case *types.Pointer:
-				if _, ok := u.Elem().Underlying().(*types.Array); ok {
-					return fc.formatExpr("$equal(%s, %s, %s)", fc.translateImplicitConversion(e.X, t), fc.translateImplicitConversion(e.Y, t), fc.typeName(u.Elem()))
-				}
 			case *types.Basic:
 				if isBoolean(u) {
 					if b, ok := analysis.BoolValue(e.X, fc.pkgCtx.Info.Info); ok && b {
@@ -450,11 +450,22 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 	case *ast.IndexExpr:
 		switch t := fc.pkgCtx.TypeOf(e.X).Underlying().(type) {
-		case *types.Array, *types.Pointer:
-			pattern := rangeCheck("%1e[%2f]", fc.pkgCtx.Types[e.Index].Value != nil, true)
-			if _, ok := t.(*types.Pointer); ok { // check pointer for nix (attribute getter causes a panic)
-				pattern = `(%1e.nilCheck, ` + pattern + `)`
+		case *types.Pointer:
+			if _, ok := t.Elem().Underlying().(*types.Array); !ok {
+				// Should never happen in type-checked code.
+				panic(fmt.Errorf("non-array pointers can't be used with index expression"))
 			}
+			// Rewrite arrPtr[i] → (*arrPtr)[i] to concentrate array dereferencing
+			// logic in one place.
+			x := &ast.StarExpr{
+				Star: e.X.Pos(),
+				X:    e.X,
+			}
+			astutil.SetType(fc.pkgCtx.Info.Info, t.Elem(), x)
+			e.X = x
+			return fc.translateExpr(e)
+		case *types.Array:
+			pattern := rangeCheck("%1e[%2f]", fc.pkgCtx.Types[e.Index].Value != nil, true)
 			return fc.formatExpr(pattern, e.X, e.Index)
 		case *types.Slice:
 			return fc.formatExpr(rangeCheck("%1e.$array[%1e.$offset + %2f]", fc.pkgCtx.Types[e.Index].Value != nil, false), e.X, e.Index)
@@ -823,6 +834,7 @@ func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 
 	recv := fc.translateImplicitConversionWithCloning(x, methodsRecvType)
 	if isWrapped(recvType) {
+		// Wrap JS-native value to have access to the Go type's methods.
 		recv = fc.formatExpr("new %s(%s)", fc.typeName(methodsRecvType), recv)
 	}
 	return recv
@@ -1031,7 +1043,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		case t.Kind() == types.UnsafePointer:
 			if unary, isUnary := expr.(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
 				if indexExpr, isIndexExpr := unary.X.(*ast.IndexExpr); isIndexExpr {
-					return fc.formatExpr("$sliceToArray(%s)", fc.translateConversionToSlice(indexExpr.X, types.NewSlice(types.Typ[types.Uint8])))
+					return fc.formatExpr("$sliceToNativeArray(%s)", fc.translateConversionToSlice(indexExpr.X, types.NewSlice(types.Typ[types.Uint8])))
 				}
 				if ident, isIdent := unary.X.(*ast.Ident); isIdent && ident.Name == "_zero" {
 					return fc.formatExpr("new Uint8Array(0)")
@@ -1075,8 +1087,12 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 			break
 		}
 
-		switch u := t.Elem().Underlying().(type) {
+		switch ptrElType := t.Elem().Underlying().(type) {
 		case *types.Array: // (*[N]T)(expr) — converting expr to a pointer to an array.
+			if _, ok := exprType.Underlying().(*types.Slice); ok {
+				return fc.formatExpr("$sliceToGoArray(%e, %s)", expr, fc.typeName(desiredType))
+			}
+			// TODO(nevkontakte): Is this just for aliased types (e.g. `type a [4]byte`)?
 			return fc.translateExpr(expr)
 		case *types.Struct: // (*StructT)(expr) — converting expr to a pointer to a struct.
 			if fc.pkgCtx.Pkg.Path() == "syscall" && types.Identical(exprType, types.Typ[types.UnsafePointer]) {
@@ -1086,7 +1102,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 				// indeed pointing at a byte array.
 				array := fc.newVariable("_array")
 				target := fc.newVariable("_struct")
-				return fc.formatExpr("(%s = %e, %s = %e, %s, %s)", array, expr, target, fc.zeroValue(t.Elem()), fc.loadStruct(array, target, u), target)
+				return fc.formatExpr("(%s = %e, %s = %e, %s, %s)", array, expr, target, fc.zeroValue(t.Elem()), fc.loadStruct(array, target, ptrElType), target)
 			}
 			// Convert between structs of different types but identical layouts,
 			// for example:
@@ -1152,7 +1168,7 @@ func (fc *funcContext) translateImplicitConversion(expr ast.Expr, desiredType ty
 
 	switch desiredType.Underlying().(type) {
 	case *types.Slice:
-		return fc.formatExpr("$subslice(new %1s(%2e.$array), %2e.$offset, %2e.$offset + %2e.$length)", fc.typeName(desiredType), expr)
+		return fc.formatExpr("$convertSliceType(%1e, %2s)", expr, fc.typeName(desiredType))
 
 	case *types.Interface:
 		if typesutil.IsJsObject(exprType) {

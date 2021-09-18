@@ -1,3 +1,4 @@
+//go:build js && !arm64
 // +build js,!arm64
 
 package syscall

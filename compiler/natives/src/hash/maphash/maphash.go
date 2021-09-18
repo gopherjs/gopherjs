@@ -1,4 +1,5 @@
-//+build js
+//go:build js
+// +build js
 
 package maphash
 
@@ -15,7 +16,7 @@ func init() {
 	hashkey[3] |= 1
 }
 
-func rthash(b []byte, seed uint64) uint64 {
+func _rthash(b []byte, seed uint64) uint64 {
 	if len(b) == 0 {
 		return seed
 	}
@@ -74,4 +75,56 @@ func readUnaligned32(p []byte) uint32 {
 func mix32(a, b uint32) (uint32, uint32) {
 	c := uint64(a^uint32(hashkey[1])) * uint64(b^uint32(hashkey[2]))
 	return uint32(c), uint32(c >> 32)
+}
+
+/*
+	The following functions were modified in Go 1.17 to improve performance,
+	but at the expense of being unsafe, and thus incompatible with GopherJS.
+	To compensate, we have reverted these to the unoptimized Go 1.16 versions
+	for now.
+
+	See upstream issue https://github.com/golang/go/issues/47342 to implement
+	a purego version of this package, which should render this hack (and
+	likely this entire file) obsolete.
+*/
+
+// Write is borrowed from Go 1.16.
+func (h *Hash) Write(b []byte) (int, error) {
+	size := len(b)
+	for h.n+len(b) > len(h.buf) {
+		k := copy(h.buf[h.n:], b)
+		h.n = len(h.buf)
+		b = b[k:]
+		h.flush()
+	}
+	h.n += copy(h.buf[h.n:], b)
+	return size, nil
+}
+
+// WriteString is borrowed from Go 1.16.
+func (h *Hash) WriteString(s string) (int, error) {
+	size := len(s)
+	for h.n+len(s) > len(h.buf) {
+		k := copy(h.buf[h.n:], s)
+		h.n = len(h.buf)
+		s = s[k:]
+		h.flush()
+	}
+	h.n += copy(h.buf[h.n:], s)
+	return size, nil
+}
+
+func (h *Hash) flush() {
+	if h.n != len(h.buf) {
+		panic("maphash: flush of partially full buffer")
+	}
+	h.initSeed()
+	h.state.s = _rthash(h.buf[:], h.state.s)
+	h.n = 0
+}
+
+// Sum64 is borrowed from Go 1.16.
+func (h *Hash) Sum64() uint64 {
+	h.initSeed()
+	return _rthash(h.buf[:h.n], h.state.s)
 }

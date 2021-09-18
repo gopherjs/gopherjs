@@ -509,6 +509,11 @@ func (s *Session) InstallSuffix() string {
 	return ""
 }
 
+// GoRelease returns Go release version this session is building with.
+func (s *Session) GoRelease() string {
+	return compiler.GoRelease(s.options.GOROOT)
+}
+
 func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string) error {
 	if s.Watcher != nil {
 		s.Watcher.Add(packagePath)
@@ -778,7 +783,7 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 	if err != nil {
 		return err
 	}
-	return compiler.WriteProgramCode(deps, sourceMapFilter)
+	return compiler.WriteProgramCode(deps, sourceMapFilter, s.GoRelease())
 }
 
 func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localMap bool) func(generatedLine, generatedColumn int, originalPos token.Position) {

@@ -73,6 +73,7 @@ func init() {
 	js.Global.Set("$jsObjectPtr", jsPkg.Get("Object").Get("ptr"))
 	js.Global.Set("$jsErrorPtr", jsPkg.Get("Error").Get("ptr"))
 	js.Global.Set("$throwRuntimeError", js.InternalObject(throw))
+	buildVersion = js.Global.Get("$goVersion").String()
 	// avoid dead code elimination
 	var e error
 	e = &TypeAssertionError{}
@@ -353,9 +354,10 @@ func LockOSThread() {}
 
 func UnlockOSThread() {}
 
+var buildVersion string // Set by init()
+
 func Version() string {
-	// TODO: Make this smarter
-	return "go1.17rc1"
+	return buildVersion
 }
 
 func StartTrace() error { return nil }

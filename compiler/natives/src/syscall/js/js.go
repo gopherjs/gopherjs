@@ -188,6 +188,22 @@ func convertArgs(args ...interface{}) []interface{} {
 	return newArgs
 }
 
+func convertJSError() {
+	err := recover()
+	if err == nil {
+		return
+	}
+	if jsErr, ok := err.(*js.Error); ok {
+		// We expect that all panics caught by Value.Call() are in fact JavaScript
+		// exceptions intercepted by GopherJS runtime, which we convert to
+		// syscall/js.Error, which the callers would expect.
+		panic(Error{Value: objectToValue(jsErr.Object)})
+	}
+	// Panics of other types are unexpected and should never happen. But if it
+	// does, we will just re-raise it as-is.
+	panic(err)
+}
+
 func (v Value) Call(m string, args ...interface{}) Value {
 	if vType := v.Type(); vType != TypeObject && vType != TypeFunction {
 		panic(&ValueError{"Value.Call", vType})
@@ -195,6 +211,7 @@ func (v Value) Call(m string, args ...interface{}) Value {
 	if propType := v.Get(m).Type(); propType != TypeFunction {
 		panic("js: Value.Call: property " + m + " is not a function, got " + propType.String())
 	}
+	defer convertJSError()
 	return objectToValue(v.internal().Call(m, convertArgs(args...)...))
 }
 

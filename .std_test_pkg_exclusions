@@ -28,7 +28,6 @@ net/http/pprof
 net/internal/socktest
 net/rpc
 net/smtp
-os
 os/exec
 os/signal
 os/signal/internal/pty
@@ -43,6 +42,5 @@ runtime/pprof
 runtime/pprof/internal/profile
 runtime/race
 runtime/trace
-syscall
 testing/internal/testdeps
 unsafe

@@ -360,6 +360,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		lhs := make([]ast.Expr, len(init.Lhs))
 		for i, o := range init.Lhs {
 			ident := ast.NewIdent(o.Name())
+			ident.NamePos = o.Pos()
 			funcCtx.pkgCtx.Defs[ident] = o
 			lhs[i] = funcCtx.setType(ident, o.Type())
 			varsWithInit[o] = true

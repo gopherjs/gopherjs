@@ -9,11 +9,10 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-const (
-	GOOS     = sys.GOOS
-	GOARCH   = "js"
-	Compiler = "gopherjs"
-)
+// FIXME(nevkontakte): Update these to GopherJS-specific.
+const GOOS = sys.GOOS
+const GOARCH = sys.GOARCH
+const Compiler = "gopherjs"
 
 // The Error interface identifies a run time error.
 type Error interface {

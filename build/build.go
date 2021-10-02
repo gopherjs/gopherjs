@@ -186,8 +186,9 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 		// Special handling for the syscall package, which uses OS native
 		// GOOS/GOARCH pair. This will no longer be necessary after
 		// https://github.com/gopherjs/gopherjs/issues/693.
-		nativesContext.bctx.GOARCH = build.Default.GOARCH
-		nativesContext.bctx.BuildTags = append(nativesContext.bctx.BuildTags, "js")
+		// FIXME(nevkontakte): Remove this.
+		// nativesContext.bctx.GOARCH = build.Default.GOARCH
+		// nativesContext.bctx.BuildTags = append(nativesContext.bctx.BuildTags, "js")
 	}
 
 	if nativesPkg, err := nativesContext.Import(importPath, "", 0); err == nil {

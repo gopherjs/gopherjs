@@ -170,8 +170,9 @@ func (sc simpleCtx) applyPreloadTweaks(importPath string, mode build.ImportMode)
 		// syscall needs to use a typical GOARCH like amd64 to pick up definitions
 		// for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t,
 		// etc.
-		bctx.GOARCH = build.Default.GOARCH
-		bctx.InstallSuffix += build.Default.GOARCH
+		// FIXME(nevkontakte): Remove this.
+		// bctx.GOARCH = build.Default.GOARCH
+		// bctx.InstallSuffix += build.Default.GOARCH
 	case "syscall/js":
 		if !sc.isVirtual {
 			// There are no buildable files in this package upstream, but we need to
@@ -206,16 +207,18 @@ func (sc simpleCtx) applyPostloadTweaks(pkg *build.Package) *build.Package {
 	}
 	switch pkg.ImportPath {
 	case "os":
-		pkg.GoFiles = excludeExecutable(pkg.GoFiles) // Need to exclude executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
+		// FIXME(nevkontakte): Remove this.
+		// pkg.GoFiles = excludeExecutable(pkg.GoFiles) // Need to exclude executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
 		// Prefer the dirent_${GOOS}.go version, to make the build pass on both linux
 		// and darwin.
 		// In the long term, our builds should produce the same output regardless
 		// of the host OS: https://github.com/gopherjs/gopherjs/issues/693.
-		pkg.GoFiles = exclude(pkg.GoFiles, "dirent_js.go")
+		// pkg.GoFiles = exclude(pkg.GoFiles, "dirent_js.go")
 	case "runtime":
 		pkg.GoFiles = []string{} // Package sources are completely replaced in natives.
 	case "runtime/internal/sys":
-		pkg.GoFiles = []string{fmt.Sprintf("zgoos_%s.go", sc.GOOS()), "zversion.go"}
+		// FIXME(nevkontakte): Remove this.
+		// pkg.GoFiles = []string{fmt.Sprintf("zgoos_%s.go", sc.GOOS()), "zversion.go"}
 	case "runtime/pprof":
 		pkg.GoFiles = nil
 	case "internal/poll":
@@ -283,10 +286,11 @@ func embeddedCtx(embedded http.FileSystem, installSuffix string, buildTags []str
 func goCtx(installSuffix string, buildTags []string) *simpleCtx {
 	gc := simpleCtx{
 		bctx: build.Context{
-			GOROOT:        DefaultGOROOT,
-			GOPATH:        build.Default.GOPATH,
-			GOOS:          build.Default.GOOS,
-			GOARCH:        "js",
+			GOROOT: DefaultGOROOT,
+			GOPATH: build.Default.GOPATH,
+			// FIXME(nevkontakte): Use these for standard library only.
+			GOOS:          "js",
+			GOARCH:        "wasm",
 			InstallSuffix: installSuffix,
 			Compiler:      "gc",
 			BuildTags:     append(buildTags, defaultBuildTags...),

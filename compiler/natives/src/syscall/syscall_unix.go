@@ -1,5 +1,5 @@
-//go:build js && !windows
-// +build js,!windows
+//go:build js && !windows && !wasm
+// +build js,!windows,!wasm
 
 package syscall
 

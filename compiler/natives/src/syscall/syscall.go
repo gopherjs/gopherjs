@@ -51,7 +51,13 @@ func use(p unsafe.Pointer) {
 }
 
 func Exit(code int) {
-	Syscall(exitTrap, uintptr(code), 0, 0)
+	if process := js.Global.Get("process"); process.Bool() {
+		process.Call("exit", code)
+		return
+	}
+	if code != 0 {
+		js.Global.Get("console").Call("warn", "Go program exited with non-zero code:", code)
+	}
 }
 
 // indexByte is copied from bytes package to avoid importing it (since the real syscall package doesn't).

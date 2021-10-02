@@ -1,5 +1,5 @@
-//go:build js && !linux
-// +build js,!linux
+//go:build js && !linux && !wasm
+// +build js,!linux,!wasm
 
 package syscall
 

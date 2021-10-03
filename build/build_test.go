@@ -25,6 +25,9 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 	// It's needed for populateImportSet.
 	stdOnly := gobuild.Default
 	stdOnly.GOPATH = "" // We only care about standard library, so skip all GOPATH packages.
+	// FIXME(nevkontakte): Use appropriate GOOS/GOARCH.
+	stdOnly.GOOS = "js"
+	stdOnly.GOARCH = "wasm"
 	forward, _, err := importgraphutil.BuildNoTests(&stdOnly)
 	if err != nil {
 		t.Fatalf("importgraphutil.BuildNoTests: %v", err)
@@ -76,7 +79,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 			// Normal package.
 			{
 				// Import the real normal package, and populate its real import set.
-				bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
+				bpkg, err := stdOnly.Import(pkg, "", gobuild.ImportComment)
 				if err != nil {
 					t.Fatalf("gobuild.Import: %v", err)
 				}
@@ -115,7 +118,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 			// Test package.
 			{
 				// Import the real test package, and populate its real import set.
-				bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
+				bpkg, err := stdOnly.Import(pkg, "", gobuild.ImportComment)
 				if err != nil {
 					t.Fatalf("gobuild.Import: %v", err)
 				}
@@ -154,7 +157,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 			// External test package.
 			{
 				// Import the real external test package, and populate its real import set.
-				bpkg, err := gobuild.Import(pkg, "", gobuild.ImportComment)
+				bpkg, err := stdOnly.Import(pkg, "", gobuild.ImportComment)
 				if err != nil {
 					t.Fatalf("gobuild.Import: %v", err)
 				}

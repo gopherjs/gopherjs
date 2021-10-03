@@ -4,7 +4,6 @@
 package js
 
 import (
-	"reflect"
 	"unsafe"
 
 	"github.com/gopherjs/gopherjs/js"
@@ -160,7 +159,7 @@ func ValueOf(x interface{}) Value {
 	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, unsafe.Pointer, string, map[string]interface{}, []interface{}:
 		return objectToValue(id.Invoke(x))
 	default:
-		panic(`invalid arg: ` + reflect.TypeOf(x).String())
+		panic("ValueOf: invalid value")
 	}
 }
 

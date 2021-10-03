@@ -14,7 +14,7 @@ import (
 //
 // See https://github.com/gopherjs/gopherjs/issues/279.
 func TestTimeInternalizationExternalization(t *testing.T) {
-	if runtime.GOARCH == "js" {
+	if runtime.GOOS == "js" {
 		t.Skip("test meant to be run using normal Go compiler (needs os/exec)")
 	}
 
@@ -34,7 +34,7 @@ func TestTimeInternalizationExternalization(t *testing.T) {
 }
 
 func TestDeferBuiltin(t *testing.T) {
-	if runtime.GOARCH == "js" {
+	if runtime.GOOS == "js" {
 		t.Skip("test meant to be run using normal Go compiler (needs os/exec)")
 	}
 

@@ -10,7 +10,7 @@ import (
 // Test that GopherJS can be vendored into a project, and then used to build Go programs.
 // See issue https://github.com/gopherjs/gopherjs/issues/415.
 func TestGopherJSCanBeVendored(t *testing.T) {
-	if runtime.GOARCH == "js" {
+	if runtime.GOOS == "js" {
 		t.Skip("test meant to be run using normal Go compiler (needs os/exec)")
 	}
 

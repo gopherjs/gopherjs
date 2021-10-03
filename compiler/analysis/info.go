@@ -71,6 +71,15 @@ func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
 	// Register the function in the appropriate map.
 	switch n := n.(type) {
 	case *ast.FuncDecl:
+		if n.Body == nil {
+			// Function body comes from elsewhere (for example, from a go:linkname
+			// directive), conservatively assume that it may be blocking.
+			// TODO(nevkontakte): It is possible to improve accuracy of this detection.
+			// Since GopherJS supports inly "import-style" go:linkname, at this stage
+			// the compiler already determined whether the implementation function is
+			// blocking, and we could check that.
+			funcInfo.Blocking[n] = true
+		}
 		info.FuncDeclInfos[info.Defs[n.Name].(*types.Func)] = funcInfo
 	case *ast.FuncLit:
 		info.FuncLitInfos[n] = funcInfo

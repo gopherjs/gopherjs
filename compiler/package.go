@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/neelance/astrewrite"
 	"golang.org/x/tools/go/gcexportdata"
 	"golang.org/x/tools/go/types/typeutil"
@@ -768,7 +769,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		}
 
 		c.translateStmtList(body.List)
-		if len(c.Flattened) != 0 && !endsWithReturn(body.List) {
+		if len(c.Flattened) != 0 && !astutil.EndsWithReturn(body.List) {
 			c.translateStmt(&ast.ReturnStmt{}, nil)
 		}
 	}))

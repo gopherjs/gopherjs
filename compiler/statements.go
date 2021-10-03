@@ -644,7 +644,7 @@ func (fc *funcContext) translateBranchingStmt(caseClauses []*ast.CaseClause, def
 		fc.PrintCond(!flatten, fmt.Sprintf("%sif (%s) {", prefix, condStrs[i]), fmt.Sprintf("case %d:", caseOffset+i))
 		fc.Indent(func() {
 			fc.translateStmtList(clause.Body)
-			if flatten && (i < len(caseClauses)-1 || defaultClause != nil) && !endsWithReturn(clause.Body) {
+			if flatten && (i < len(caseClauses)-1 || defaultClause != nil) && !astutil.EndsWithReturn(clause.Body) {
 				fc.Printf("$s = %d; continue;", endCase)
 			}
 		})

@@ -644,7 +644,7 @@ func (fc *funcContext) translateBranchingStmt(caseClauses []*ast.CaseClause, def
 		fc.PrintCond(!flatten, fmt.Sprintf("%sif (%s) {", prefix, condStrs[i]), fmt.Sprintf("case %d:", caseOffset+i))
 		fc.Indent(func() {
 			fc.translateStmtList(clause.Body)
-			if flatten && (i < len(caseClauses)-1 || defaultClause != nil) && !endsWithReturn(clause.Body) {
+			if flatten && (i < len(caseClauses)-1 || defaultClause != nil) && !astutil.EndsWithReturn(clause.Body) {
 				fc.Printf("$s = %d; continue;", endCase)
 			}
 		})
@@ -681,6 +681,7 @@ func (fc *funcContext) translateLoopingStmt(cond func() string, body *ast.BlockS
 	if !flatten && label != nil {
 		fc.Printf("%s:", label.Name())
 	}
+	isTerminated := false
 	fc.PrintCond(!flatten, "while (true) {", fmt.Sprintf("case %d:", data.beginCase))
 	fc.Indent(func() {
 		condStr := cond()
@@ -695,7 +696,6 @@ func (fc *funcContext) translateLoopingStmt(cond func() string, body *ast.BlockS
 			bodyPrefix()
 		}
 		fc.translateStmtList(body.List)
-		isTerminated := false
 		if len(body.List) != 0 {
 			switch body.List[len(body.List)-1].(type) {
 			case *ast.ReturnStmt, *ast.BranchStmt:
@@ -708,7 +708,17 @@ func (fc *funcContext) translateLoopingStmt(cond func() string, body *ast.BlockS
 
 		fc.pkgCtx.escapingVars = prevEV
 	})
-	fc.PrintCond(!flatten, "}", fmt.Sprintf("$s = %d; continue; case %d:", data.beginCase, data.endCase))
+	if flatten {
+		// If the last statement of the loop is a return or unconditional branching
+		// statement, there's no need for an instruction to go back to the beginning
+		// of the loop.
+		if !isTerminated {
+			fc.Printf("$s = %d; continue;", data.beginCase)
+		}
+		fc.Printf("case %d:", data.endCase)
+	} else {
+		fc.Printf("}")
+	}
 }
 
 func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {

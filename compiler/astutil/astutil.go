@@ -129,3 +129,21 @@ func FindLoopStmt(stack []ast.Node, branch *ast.BranchStmt, typeInfo *types.Info
 	// This should never happen in a source that passed type checking.
 	panic(fmt.Errorf("continue/break statement %v doesn't have a matching loop statement among ancestors", branch))
 }
+
+// EndsWithReturn returns true if the last effective statement is a "return".
+func EndsWithReturn(stmts []ast.Stmt) bool {
+	if len(stmts) == 0 {
+		return false
+	}
+	last := stmts[len(stmts)-1]
+	switch l := last.(type) {
+	case *ast.ReturnStmt:
+		return true
+	case *ast.LabeledStmt:
+		return EndsWithReturn([]ast.Stmt{l.Stmt})
+	case *ast.BlockStmt:
+		return EndsWithReturn(l.List)
+	default:
+		return false
+	}
+}

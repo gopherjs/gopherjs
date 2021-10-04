@@ -677,15 +677,6 @@ func rangeCheck(pattern string, constantIndex, array bool) string {
 	return "(" + check + ` ? ($throwRuntimeError("index out of range"), undefined) : ` + pattern + ")"
 }
 
-func endsWithReturn(stmts []ast.Stmt) bool {
-	if len(stmts) > 0 {
-		if _, ok := stmts[len(stmts)-1].(*ast.ReturnStmt); ok {
-			return true
-		}
-	}
-	return false
-}
-
 func encodeIdent(name string) string {
 	return strings.Replace(url.QueryEscape(name), "%", "$", -1)
 }

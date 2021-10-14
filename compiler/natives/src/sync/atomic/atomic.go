@@ -212,8 +212,6 @@ func (v *Value) checkNew(op string, new interface{}) {
 	}
 }
 
-var typOf = js.Global.Call("Function", "x", "return typeof x")
-
 // sameType returns true if x and y contain the same concrete Go types.
 func sameType(x, y interface{}) bool {
 	// This relies upon the fact that an interface in GopherJS is represented

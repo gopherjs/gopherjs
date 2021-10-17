@@ -1,0 +1,14 @@
+name: Publish canonical app size
+
+on:
+  workflow_run:
+    workflows: ["Measure canonical app size"]
+    types: ["completed"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: gopherjs/output-size-action/publish@main
+        with:
+          report_artifact: size_report

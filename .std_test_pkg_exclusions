@@ -17,7 +17,6 @@ internal/testlog
 internal/trace
 internal/x/net/nettest
 log/syslog
-net
 net/http
 net/http/cgi
 net/http/httptest

@@ -159,14 +159,28 @@ var $go = function(fun, args) {
 
 var $scheduled = [];
 var $runScheduled = function() {
+  // For nested setTimeout calls browsers enforce 4ms minimum delay. We minimize
+  // the effect of this penalty by queueing the timer preemptively before we run
+  // the goroutines, and later cancelling it if it turns out unneeded. See:
+  // https://developer.mozilla.org/en-US/docs/Web/API/setTimeout#nested_timeouts
+  var nextRun = setTimeout($runScheduled);
   try {
+    var start = Date.now();
     var r;
     while ((r = $scheduled.shift()) !== undefined) {
       r();
+      // We need to interrupt this loop in order to allow the event loop to
+      // process timers, IO, etc. However, invoking scheduling through
+      // setTimeout is ~1000 times more expensive, so we amortize this cost by
+      // looping until the 4ms minimal delay has elapsed (assuming there are
+      // scheduled goroutines to run), and then yield to the event loop.
+      var elapsed = Date.now() - start;
+      if (elapsed > 4 || elapsed < 0) { break; }
     }
   } finally {
-    if ($scheduled.length > 0) {
-      setTimeout($runScheduled, 0);
+    if ($scheduled.length == 0) {
+      // Cancel scheduling pass if there's nothing to run.
+      clearTimeout(nextRun);
     }
   }
 };

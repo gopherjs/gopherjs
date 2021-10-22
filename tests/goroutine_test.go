@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -212,4 +213,55 @@ func TestReturnWithBlockingDefer(t *testing.T) {
 	if counter != 1 {
 		t.Errorf("Return value was computed %d times. Want: exactly 1.", counter)
 	}
+}
+
+func BenchmarkGoroutineSwitching(b *testing.B) {
+	// This benchmark is designed to measure the cost of goroutine switching.
+	// The two goroutines communicate through an unbuffered channel, which forces
+	// the control to be passed between them on each iteraction of the benchmark.
+	// Although the cost of channel operations is also included in the measurement,
+	// it still allows relative comparison of changes to goroutine scheduling
+	// performance.
+	c := make(chan bool)
+	go func() {
+		for i := 0; i < b.N; i++ {
+			c <- true
+		}
+		close(c)
+	}()
+
+	b.ResetTimer()
+	count := 0
+	for range c {
+		count++
+	}
+}
+
+func TestEventLoopStarvation(t *testing.T) {
+	// See: https://github.com/gopherjs/gopherjs/issues/1078.
+	c := make(chan bool)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+	}()
+	go func() {
+		for {
+			select {
+			case c <- true:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	go func() {
+		for {
+			select {
+			case <-c:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	<-ctx.Done()
 }

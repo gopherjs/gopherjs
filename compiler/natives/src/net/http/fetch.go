@@ -1,5 +1,5 @@
-//go:build js
-// +build js
+//go:build js && !wasm
+// +build js,!wasm
 
 package http
 
@@ -13,13 +13,13 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-// streamReader implements an io.ReadCloser wrapper for ReadableStream of https://fetch.spec.whatwg.org/.
-type streamReader struct {
+// jsStreamReader implements an io.ReadCloser wrapper for ReadableStream of https://fetch.spec.whatwg.org/.
+type jsStreamReader struct {
 	pending []byte
 	stream  *js.Object
 }
 
-func (r *streamReader) Read(p []byte) (n int, err error) {
+func (r *jsStreamReader) Read(p []byte) (n int, err error) {
 	if len(r.pending) == 0 {
 		var (
 			bCh   = make(chan []byte)
@@ -50,7 +50,7 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
-func (r *streamReader) Close() error {
+func (r *jsStreamReader) Close() error {
 	// This ignores any error returned from cancel method. So far, I did not encounter any concrete
 	// situation where reporting the error is meaningful. Most users ignore error from resp.Body.Close().
 	// If there's a need to report error here, it can be implemented and tested when that need comes up.
@@ -110,7 +110,7 @@ func (t *fetchTransport) RoundTrip(req *Request) (*Response, error) {
 				StatusCode:    result.Get("status").Int(),
 				Header:        header,
 				ContentLength: contentLength,
-				Body:          &streamReader{stream: result.Get("body").Call("getReader")},
+				Body:          &jsStreamReader{stream: result.Get("body").Call("getReader")},
 				Request:       req,
 			}:
 			case <-req.Context().Done():

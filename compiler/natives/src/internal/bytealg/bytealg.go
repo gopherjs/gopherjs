@@ -14,3 +14,21 @@ func Equal(a, b []byte) bool {
 	}
 	return true
 }
+
+func IndexByte(b []byte, c byte) int {
+	for i, x := range b {
+		if x == c {
+			return i
+		}
+	}
+	return -1
+}
+
+func IndexByteString(s string, c byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == c {
+			return i
+		}
+	}
+	return -1
+}

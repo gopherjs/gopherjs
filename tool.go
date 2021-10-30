@@ -432,18 +432,19 @@ func main() {
 						return err
 					}
 				} else {
-					outfile, err = ioutil.TempFile(currentDirectory, "test.")
+					outfile, err = os.CreateTemp(currentDirectory, pkg.Package.Name+"_test.*.js")
 					if err != nil {
 						return err
 					}
+					outfile.Close() // Release file handle early, we only need the name.
 				}
-				defer func() {
-					outfile.Close()
+				cleanupTemp := func() {
 					if *outputFilename == "" {
 						os.Remove(outfile.Name())
 						os.Remove(outfile.Name() + ".map")
 					}
-				}()
+				}
+				defer cleanupTemp() // Safety net in case cleanup after execution doesn't happen.
 
 				if err := s.WriteCommandPackage(mainPkgArchive, outfile.Name()); err != nil {
 					return err
@@ -486,6 +487,8 @@ func main() {
 					}
 
 					err := runNode(outfile.Name(), args, runTestDir(pkg), options.Quiet, testOut)
+
+					cleanupTemp() // Eagerly cleanup temporary compiled files after execution.
 
 					if testOut != nil {
 						io.Copy(os.Stdout, testOut)

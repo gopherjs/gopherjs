@@ -80,23 +80,43 @@ var $shiftRightUint64 = function(x, y) {
 };
 
 var $mul64 = function(x, y) {
-  var high = 0, low = 0;
-  if ((y.$low & 1) !== 0) {
-    high = x.$high;
-    low = x.$low;
-  }
-  for (var i = 1; i < 32; i++) {
-    if ((y.$low & 1<<i) !== 0) {
-      high += x.$high << i | x.$low >>> (32 - i);
-      low += (x.$low << i) >>> 0;
-    }
-  }
-  for (var i = 0; i < 32; i++) {
-    if ((y.$high & 1<<i) !== 0) {
-      high += x.$low << i;
-    }
-  }
-  return new x.constructor(high, low);
+  var x48 = x.$high >>> 16;
+  var x32 = x.$high & 0xFFFF;
+  var x16 = x.$low >>> 16;
+  var x00 = x.$low & 0xFFFF;
+
+  var y48 = y.$high >>> 16;
+  var y32 = y.$high & 0xFFFF;
+  var y16 = y.$low >>> 16;
+  var y00 = y.$low & 0xFFFF;
+
+  var z48 = 0, z32 = 0, z16 = 0, z00 = 0;
+  z00 += x00 * y00;
+  z16 += z00 >>> 16;
+  z00 &= 0xFFFF;
+  z16 += x16 * y00;
+  z32 += z16 >>> 16;
+  z16 &= 0xFFFF;
+  z16 += x00 * y16;
+  z32 += z16 >>> 16;
+  z16 &= 0xFFFF;
+  z32 += x32 * y00;
+  z48 += z32 >>> 16;
+  z32 &= 0xFFFF;
+  z32 += x16 * y16;
+  z48 += z32 >>> 16;
+  z32 &= 0xFFFF;
+  z32 += x00 * y32;
+  z48 += z32 >>> 16;
+  z32 &= 0xFFFF;
+  z48 += x48 * y00 + x32 * y16 + x16 * y32 + x00 * y48;
+  z48 &= 0xFFFF;
+
+  var hi = ((z48 << 16) | z32) >>> 0;
+  var lo = ((z16 << 16) | z00) >>> 0;
+
+  var r = new x.constructor(hi, lo);
+  return r;
 };
 
 var $div64 = function(x, y, returnRemainder) {

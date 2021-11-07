@@ -343,6 +343,10 @@ func main() {
 			}
 
 			parallelSlots := make(chan (bool), *parallelTests) // Semaphore for parallel test executions.
+			if len(matches) == 1 {
+				// Disable output buffering if testing only one package.
+				parallelSlots = make(chan (bool), 1)
+			}
 			executions := errgroup.Group{}
 
 			pkgs := make([]*gbuild.PackageData, len(matches))

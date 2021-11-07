@@ -40,3 +40,35 @@ func TestBlockingInDefer(t *testing.T) {
 
 	outer(ch, b)
 }
+
+func TestIssue1083(t *testing.T) {
+	// https://github.com/gopherjs/gopherjs/issues/1083
+	var block = make(chan bool)
+
+	recoverCompleted := false
+
+	recoverAndBlock := func() {
+		defer func() {}()
+		recover()
+		block <- true
+		recoverCompleted = true
+	}
+
+	handle := func() {
+		defer func() {}()
+		panic("expected panic")
+	}
+
+	serve := func() {
+		defer recoverAndBlock()
+		handle()
+		t.Fatal("This line must never execute.")
+	}
+
+	go func() { <-block }()
+
+	serve()
+	if !recoverCompleted {
+		t.Fatal("Recovery function did not execute fully.")
+	}
+}

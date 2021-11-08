@@ -831,7 +831,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	}
 
 	if c.HasDefer {
-		prefix = prefix + " $deferred = []; $deferred.index = $curGoroutine.deferStack.length; $curGoroutine.deferStack.push($deferred);"
+		prefix = prefix + " $deferred = []; $curGoroutine.deferStack.push($deferred);"
 	}
 
 	if prefix != "" {

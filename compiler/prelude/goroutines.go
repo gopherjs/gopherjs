@@ -12,7 +12,7 @@ var $getStackDepth = function() {
 
 var $panicStackDepth = null, $panicValue;
 var $callDeferred = function(deferred, jsErr, fromPanic) {
-  if (!fromPanic && deferred !== null && deferred.index >= $curGoroutine.deferStack.length) {
+  if (!fromPanic && deferred !== null && $curGoroutine.deferStack.indexOf(deferred) == -1) {
     throw jsErr;
   }
   if (jsErr !== null) {
@@ -88,6 +88,18 @@ var $callDeferred = function(deferred, jsErr, fromPanic) {
         return;
       }
     }
+  } catch(e) {
+    // Deferred function threw a JavaScript exception or tries to unwind stack
+    // to the point where a panic was handled.
+    if (fromPanic) {
+      // Re-throw the exception to reach deferral execution call at the end
+      // of the function.
+      throw e;
+    }
+    // We are at the end of the function, handle the error or re-throw to
+    // continue unwinding if necessary, or simply stop unwinding if we got far
+    // enough.
+    $callDeferred(deferred, e, fromPanic);
   } finally {
     if (localPanicValue !== undefined) {
       if ($panicStackDepth !== null) {

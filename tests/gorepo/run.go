@@ -68,7 +68,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue6899.go":  {desc: "incorrect output -0"},
 	"fixedbugs/issue7550.go":  {category: neverTerminates, desc: "FATAL ERROR: invalid table size Allocation failed - process out of memory"},
 	"fixedbugs/issue7690.go":  {desc: "Error: runtime error: slice bounds out of range"},
-	"fixedbugs/issue8047.go":  {desc: "null"},
 	"fixedbugs/issue8047b.go": {desc: "Error: [object Object]"},
 
 	// Failing due to use of os/exec.Command, which is unsupported. Now skipped via !nacl build tag.

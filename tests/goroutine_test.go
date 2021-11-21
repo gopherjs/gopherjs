@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"testing"
 	"time"
 
@@ -264,4 +265,27 @@ func TestEventLoopStarvation(t *testing.T) {
 		}
 	}()
 	<-ctx.Done()
+}
+
+func TestGoroutineBuiltin(t *testing.T) {
+	// Test that a built-in function can be a goroutine body.
+	// https://github.com/gopherjs/gopherjs/issues/547.
+	c := make(chan bool)
+	go close(c)
+	<-c // Wait until goroutine executes successfully.
+}
+
+func TestGoroutineJsObject(t *testing.T) {
+	// Test that js.Object methods can be a goroutine body.
+	// https://github.com/gopherjs/gopherjs/issues/547.
+	if !(runtime.GOOS == "js" || runtime.GOARCH == "js") {
+		t.Skip("Test requires GopherJS")
+	}
+	o := js.Global.Get("Object").New()
+	go o.Set("x", "y")
+	// Wait until the goroutine executes successfully. Can't use locks here
+	// because goroutine body must be a bare js.Object method call.
+	for o.Get("x").String() != "y" {
+		runtime.Gosched()
+	}
 }

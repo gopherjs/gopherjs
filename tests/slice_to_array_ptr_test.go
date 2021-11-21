@@ -7,6 +7,13 @@ func TestSliceToArrayPointerConversion(t *testing.T) {
 	// GopherJS uses TypedArray for numeric types and Array for everything else
 	// since those are substantially different types, the tests are repeated
 	// for both.
+	expectOutOfBoundsPanic := func(t *testing.T) {
+		t.Helper()
+		if recover() == nil {
+			t.Error("out-of-bounds conversion of s should panic")
+		}
+	}
+
 	t.Run("Numeric", func(t *testing.T) {
 		s := make([]byte, 2, 4)
 		t.Run("NotNil", func(t *testing.T) {
@@ -28,15 +35,9 @@ func TestSliceToArrayPointerConversion(t *testing.T) {
 		})
 
 		t.Run("SliceToLargerArray", func(t *testing.T) {
-			r := func() (r interface{}) {
-				defer func() { r = recover() }()
-				s4 := (*[4]byte)(s)
-				_ = s4
-				return nil
-			}()
-			if r == nil {
-				t.Error("out-of-bounds conversion of s should panic")
-			}
+			defer expectOutOfBoundsPanic(t)
+			s4 := (*[4]byte)(s)
+			_ = s4
 		})
 
 		t.Run("SharedMemory", func(t *testing.T) {
@@ -62,15 +63,9 @@ func TestSliceToArrayPointerConversion(t *testing.T) {
 		})
 
 		t.Run("NilSliceToLargerArray", func(t *testing.T) {
-			r := func() (r interface{}) {
-				defer func() { r = recover() }()
-				q1 := (*[1]byte)(q)
-				_ = q1
-				return nil
-			}
-			if r == nil {
-				t.Error("out-of-bounds conversion of q should panic")
-			}
+			defer expectOutOfBoundsPanic(t)
+			q1 := (*[1]byte)(q)
+			_ = q1
 		})
 
 		t.Run("ZeroLenSlice", func(t *testing.T) {
@@ -105,15 +100,9 @@ func TestSliceToArrayPointerConversion(t *testing.T) {
 		})
 
 		t.Run("SliceToLargerArray", func(t *testing.T) {
-			r := func() (r interface{}) {
-				defer func() { r = recover() }()
-				s4 := (*[4]string)(s)
-				_ = s4
-				return nil
-			}()
-			if r == nil {
-				t.Error("out-of-bounds conversion of s should panic")
-			}
+			defer expectOutOfBoundsPanic(t)
+			s4 := (*[4]string)(s)
+			_ = s4
 		})
 
 		t.Run("SharedMemory", func(t *testing.T) {
@@ -140,15 +129,9 @@ func TestSliceToArrayPointerConversion(t *testing.T) {
 		})
 
 		t.Run("NilSliceToLargerArray", func(t *testing.T) {
-			r := func() (r interface{}) {
-				defer func() { r = recover() }()
-				q1 := (*[1]string)(q)
-				_ = q1
-				return nil
-			}
-			if r == nil {
-				t.Error("out-of-bounds conversion of q should panic")
-			}
+			defer expectOutOfBoundsPanic(t)
+			q1 := (*[1]string)(q)
+			_ = q1
 		})
 
 		t.Run("ZeroLenSlice", func(t *testing.T) {

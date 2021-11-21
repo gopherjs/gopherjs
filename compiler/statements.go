@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/constant"
+	"go/printer"
 	"go/token"
 	"go/types"
 	"strings"
@@ -39,6 +40,8 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			pos = fc.pos
 		}
 		fmt.Fprintf(bail, "Occurred while compiling statement at %s:\n", fc.pkgCtx.fileSet.Position(pos))
+		(&printer.Config{Tabwidth: 2, Indent: 1, Mode: printer.UseSpaces}).Fprint(bail, fc.pkgCtx.fileSet, stmt)
+		fmt.Fprintf(bail, "\n\nDetailed AST:\n")
 		ast.Fprint(bail, fc.pkgCtx.fileSet, stmt, ast.NotNilFilter)
 		panic(bail) // Initiate orderly bailout.
 	}()

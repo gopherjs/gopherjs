@@ -363,47 +363,8 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		return
 
 	case *ast.DeferStmt:
-		isBuiltin := false
-		isJs := false
-		switch fun := s.Call.Fun.(type) {
-		case *ast.Ident:
-			var builtin *types.Builtin
-			builtin, isBuiltin = fc.pkgCtx.Uses[fun].(*types.Builtin)
-			if isBuiltin && builtin.Name() == "recover" {
-				fc.Printf("$deferred.push([$recover, []]);")
-				return
-			}
-		case *ast.SelectorExpr:
-			isJs = typesutil.IsJsPackage(fc.pkgCtx.Uses[fun.Sel].Pkg())
-		}
-		sig := fc.pkgCtx.TypeOf(s.Call.Fun).Underlying().(*types.Signature)
-		sigTypes := signatureTypes{Sig: sig}
-		args := fc.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
-		if isBuiltin || isJs {
-			// Since some builtins or js.Object methods may not transpile into
-			// callable expressions, we need to wrap then in a proxy lambda in order
-			// to push them onto the deferral stack.
-			vars := make([]string, len(s.Call.Args))
-			callArgs := make([]ast.Expr, len(s.Call.Args))
-			ellipsis := s.Call.Ellipsis
-
-			for i := range s.Call.Args {
-				v := fc.newVariable("_arg")
-				vars[i] = v
-				// Subtle: the proxy lambda argument needs to be assigned with the type
-				// that the original function expects, and not with the argument
-				// expression result type, or we may do implicit type conversion twice.
-				callArgs[i] = fc.newIdent(v, sigTypes.Param(i, ellipsis.IsValid()))
-			}
-			call := fc.translateExpr(&ast.CallExpr{
-				Fun:      s.Call.Fun,
-				Args:     callArgs,
-				Ellipsis: s.Call.Ellipsis,
-			})
-			fc.Printf("$deferred.push([function(%s) { %s; }, [%s]]);", strings.Join(vars, ", "), call, strings.Join(args, ", "))
-			return
-		}
-		fc.Printf("$deferred.push([%s, [%s]]);", fc.translateExpr(s.Call.Fun), strings.Join(args, ", "))
+		callable, arglist := fc.delegatedCall(s.Call)
+		fc.Printf("$deferred.push([%s, %s]);", callable, arglist)
 
 	case *ast.AssignStmt:
 		if s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
@@ -499,7 +460,8 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		fc.translateStmt(s.Stmt, label)
 
 	case *ast.GoStmt:
-		fc.Printf("$go(%s, [%s]);", fc.translateExpr(s.Call.Fun), strings.Join(fc.translateArgs(fc.pkgCtx.TypeOf(s.Call.Fun).Underlying().(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid()), ", "))
+		callable, arglist := fc.delegatedCall(s.Call)
+		fc.Printf("$go(%s, %s);", callable, arglist)
 
 	case *ast.SendStmt:
 		chanType := fc.pkgCtx.TypeOf(s.Chan).Underlying().(*types.Chan)

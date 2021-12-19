@@ -794,6 +794,62 @@ func (fc *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun 
 	return fc.formatExpr("%s(%s)", fun, strings.Join(args, ", "))
 }
 
+// delegatedCall returns a pair of JS expresions representing a callable function
+// and its arguments to be invoked elsewhere.
+//
+// This function is necessary in conjunction with keywords such as `go` and `defer`,
+// where we need to compute function and its arguments at the the keyword site,
+// but the call itself will happen elsewhere (hence "delegated").
+//
+// Built-in functions and cetrain `js.Object` methods don't translate into JS
+// function calls, and need to be wrapped before they can be delegated, which
+// this function handles and returns JS expressions that are safe to delegate
+// and behave like a regular JS function and a list of its argument values.
+func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, arglist *expression) {
+	isBuiltin := false
+	isJs := false
+	switch fun := expr.Fun.(type) {
+	case *ast.Ident:
+		_, isBuiltin = fc.pkgCtx.Uses[fun].(*types.Builtin)
+	case *ast.SelectorExpr:
+		isJs = typesutil.IsJsPackage(fc.pkgCtx.Uses[fun.Sel].Pkg())
+	}
+	sig := fc.pkgCtx.TypeOf(expr.Fun).Underlying().(*types.Signature)
+	sigTypes := signatureTypes{Sig: sig}
+	args := fc.translateArgs(sig, expr.Args, expr.Ellipsis.IsValid())
+
+	if !isBuiltin && !isJs {
+		// Normal function calls don't require wrappers.
+		callable = fc.translateExpr(expr.Fun)
+		arglist = fc.formatExpr("[%s]", strings.Join(args, ", "))
+		return callable, arglist
+	}
+
+	// Since some builtins or js.Object methods may not transpile into
+	// callable expressions, we need to wrap then in a proxy lambda in order
+	// to push them onto the deferral stack.
+	vars := make([]string, len(expr.Args))
+	callArgs := make([]ast.Expr, len(expr.Args))
+	ellipsis := expr.Ellipsis
+
+	for i := range expr.Args {
+		v := fc.newVariable("_arg")
+		vars[i] = v
+		// Subtle: the proxy lambda argument needs to be assigned with the type
+		// that the original function expects, and not with the argument
+		// expression result type, or we may do implicit type conversion twice.
+		callArgs[i] = fc.newIdent(v, sigTypes.Param(i, ellipsis.IsValid()))
+	}
+	wrapper := &ast.CallExpr{
+		Fun:      expr.Fun,
+		Args:     callArgs,
+		Ellipsis: expr.Ellipsis,
+	}
+	callable = fc.formatExpr("function(%s) { %e; }", strings.Join(vars, ", "), wrapper)
+	arglist = fc.formatExpr("[%s]", strings.Join(args, ", "))
+	return callable, arglist
+}
+
 func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 	sel, _ := fc.pkgCtx.SelectionOf(e)
 	if !sel.Obj().Exported() {

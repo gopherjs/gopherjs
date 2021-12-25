@@ -117,49 +117,6 @@ func importWithSrcDir(xctx XContext, path string, srcDir string, mode build.Impo
 		return nil, err
 	}
 
-	switch path {
-	case "os":
-		pkg.GoFiles = excludeExecutable(pkg.GoFiles) // Need to exclude executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
-		// Prefer the dirent_${GOOS}.go version, to make the build pass on both linux
-		// and darwin.
-		// In the long term, our builds should produce the same output regardless
-		// of the host OS: https://github.com/gopherjs/gopherjs/issues/693.
-		pkg.GoFiles = exclude(pkg.GoFiles, "dirent_js.go")
-	case "runtime":
-		pkg.GoFiles = []string{} // Package sources are completely replaced in natives.
-	case "runtime/internal/sys":
-		pkg.GoFiles = []string{fmt.Sprintf("zgoos_%s.go", xctx.GOOS()), "zversion.go"}
-	case "runtime/pprof":
-		pkg.GoFiles = nil
-	case "internal/poll":
-		pkg.GoFiles = exclude(pkg.GoFiles, "fd_poll_runtime.go")
-	case "sync":
-		// GopherJS completely replaces sync.Pool implementation with a simpler one,
-		// since it always executes in a single-threaded environment.
-		pkg.GoFiles = exclude(pkg.GoFiles, "pool.go")
-	case "crypto/rand":
-		pkg.GoFiles = []string{"rand.go", "util.go"}
-		pkg.TestGoFiles = exclude(pkg.TestGoFiles, "rand_linux_test.go") // Don't want linux-specific tests (since linux-specific package files are excluded too).
-	case "crypto/x509":
-		// GopherJS doesn't support loading OS root certificates regardless of the
-		// OS. The substitution below allows to avoid build dependency on Mac OS
-		// implementation, which won't be used anyway.
-		//
-		// Just like above, https://github.com/gopherjs/gopherjs/issues/693 is
-		// probably the best long-term option.
-		pkg.GoFiles = include(
-			exclude(pkg.GoFiles, fmt.Sprintf("root_%s.go", xctx.GOOS())),
-			"root_unix.go", "root_js.go")
-	case "syscall/js":
-		// Reuse upstream tests to ensure conformance, but completely replace
-		// implementation.
-		pkg.XTestGoFiles = append(pkg.TestGoFiles, "js_test.go")
-	}
-
-	if len(pkg.CgoFiles) > 0 {
-		return nil, &ImportCError{path}
-	}
-
 	if pkg.IsCommand() {
 		pkg.PkgObj = filepath.Join(pkg.BinDir, filepath.Base(pkg.ImportPath)+".js")
 	}

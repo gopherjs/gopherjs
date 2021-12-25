@@ -3,6 +3,7 @@ package build
 import (
 	"fmt"
 	"go/build"
+	"go/token"
 	"net/http"
 	"os"
 	"os/exec"
@@ -240,8 +241,13 @@ func (sc simpleCtx) applyPostloadTweaks(pkg *build.Package) *build.Package {
 	case "syscall/js":
 		// Reuse upstream tests to ensure conformance, but completely replace
 		// implementation.
-		pkg.XTestGoFiles = append(pkg.TestGoFiles, "js_test.go")
+		pkg.GoFiles = []string{}
+		pkg.XTestGoFiles = append(pkg.XTestGoFiles, "js_test.go")
 	}
+
+	pkg.Imports, pkg.ImportPos = updateImports(pkg.GoFiles, pkg.ImportPos)
+	pkg.TestImports, pkg.TestImportPos = updateImports(pkg.TestGoFiles, pkg.TestImportPos)
+	pkg.XTestImports, pkg.XTestImportPos = updateImports(pkg.XTestGoFiles, pkg.XTestImportPos)
 
 	return pkg
 }
@@ -388,4 +394,32 @@ func IsPkgNotFound(err error) bool {
 	return err != nil &&
 		(strings.Contains(err.Error(), "cannot find package") || // Modules off.
 			strings.Contains(err.Error(), "is not in GOROOT")) // Modules on.
+}
+
+// updateImports package's list of import paths to only those present in sources
+// after post-load tweaks.
+func updateImports(sources []string, importPos map[string][]token.Position) (newImports []string, newImportPos map[string][]token.Position) {
+	if importPos == nil {
+		// Short-circuit for tests when no imports are loaded.
+		return nil, nil
+	}
+	sourceSet := map[string]bool{}
+	for _, source := range sources {
+		sourceSet[source] = true
+	}
+
+	newImportPos = map[string][]token.Position{}
+	for importPath, positions := range importPos {
+		for _, pos := range positions {
+			if sourceSet[filepath.Base(pos.Filename)] {
+				newImportPos[importPath] = append(newImportPos[importPath], pos)
+			}
+		}
+	}
+
+	for importPath := range newImportPos {
+		newImports = append(newImports, importPath)
+	}
+	sort.Strings(newImports)
+	return newImports, newImportPos
 }

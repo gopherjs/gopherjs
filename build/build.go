@@ -564,23 +564,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		}
 
 		for _, importedPkgPath := range pkg.Imports {
-			// Ignore all imports that aren't mentioned in import specs of pkg.
-			// For example, this ignores imports such as runtime/internal/sys and runtime/internal/atomic.
-			ignored := true
-			for _, pos := range pkg.ImportPos[importedPkgPath] {
-				importFile := filepath.Base(pos.Filename)
-				for _, file := range pkg.GoFiles {
-					if importFile == file {
-						ignored = false
-						break
-					}
-				}
-				if !ignored {
-					break
-				}
-			}
-
-			if importedPkgPath == "unsafe" || ignored {
+			if importedPkgPath == "unsafe" {
 				continue
 			}
 			importedPkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)

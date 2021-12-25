@@ -37,7 +37,7 @@ import (
 // DefaultGOROOT is the default GOROOT value for builds.
 //
 // It uses the GOPHERJS_GOROOT environment variable if it is set,
-// or else the default GOROOT value of the system Go distrubtion.
+// or else the default GOROOT value of the system Go distribution.
 var DefaultGOROOT = func() string {
 	if goroot, ok := os.LookupEnv("GOPHERJS_GOROOT"); ok {
 		// GopherJS-specific GOROOT value takes precedence.
@@ -47,6 +47,8 @@ var DefaultGOROOT = func() string {
 	return build.Default.GOROOT
 }()
 
+// ImportCError is returned when GopherJS attempts to build a package that uses
+// CGo.
 type ImportCError struct {
 	pkgPath string
 }
@@ -378,6 +380,7 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 	return files, nil
 }
 
+// Options controls build process behavior.
 type Options struct {
 	GOROOT         string
 	GOPATH         string
@@ -391,6 +394,7 @@ type Options struct {
 	BuildTags      []string
 }
 
+// PrintError message to the terminal.
 func (o *Options) PrintError(format string, a ...interface{}) {
 	if o.Color {
 		format = "\x1B[31m" + format + "\x1B[39m"
@@ -398,6 +402,7 @@ func (o *Options) PrintError(format string, a ...interface{}) {
 	fmt.Fprintf(os.Stderr, format, a...)
 }
 
+// PrintSuccess message to the terminal.
 func (o *Options) PrintSuccess(format string, a ...interface{}) {
 	if o.Color {
 		format = "\x1B[32m" + format + "\x1B[39m"
@@ -455,6 +460,10 @@ func (p *PackageData) XTestPackage() *PackageData {
 	}
 }
 
+// Session manages internal state GopherJS requires to perform a build.
+//
+// This is the main interface to GopherJS build system. Session lifetime is
+// roughly equivalent to a single GopherJS tool invocation.
 type Session struct {
 	options  *Options
 	xctx     XContext
@@ -463,6 +472,7 @@ type Session struct {
 	Watcher  *fsnotify.Watcher
 }
 
+// NewSession creates a new GopherJS build session.
 func NewSession(options *Options) (*Session, error) {
 	if options.GOROOT == "" {
 		options.GOROOT = DefaultGOROOT
@@ -499,9 +509,10 @@ func NewSession(options *Options) (*Session, error) {
 	return s, nil
 }
 
-// BuildContext returns the session's build context.
+// XContext returns the session's build context.
 func (s *Session) XContext() XContext { return s.xctx }
 
+// InstallSuffix returns the suffix added to the generated output file.
 func (s *Session) InstallSuffix() string {
 	if s.options.Minify {
 		return "min"
@@ -514,30 +525,10 @@ func (s *Session) GoRelease() string {
 	return compiler.GoRelease(s.options.GOROOT)
 }
 
-func (s *Session) BuildDir(packagePath string, importPath string, pkgObj string) error {
-	if s.Watcher != nil {
-		s.Watcher.Add(packagePath)
-	}
-	pkg, err := s.xctx.Import(".", packagePath, 0)
-	if err != nil {
-		return err
-	}
-
-	archive, err := s.BuildPackage(pkg)
-	if err != nil {
-		return err
-	}
-	if pkgObj == "" {
-		pkgObj = filepath.Base(packagePath) + ".js"
-	}
-	if pkg.IsCommand() && !pkg.UpToDate {
-		if err := s.WriteCommandPackage(archive, pkgObj); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
+// BuildFiles passed to the GopherJS tool as if they were a package.
+//
+// A ephemeral package will be created with only the provided files. This
+// function is intended for use with, for example, `gopherjs run main.go`.
 func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath string) error {
 	pkg := &PackageData{
 		Package: &build.Package{
@@ -566,11 +557,18 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 	return s.WriteCommandPackage(archive, pkgObj)
 }
 
+// BuildImportPath loads and compiles package with the given import path.
+//
+// Relative paths are interpreted relative to the current working dir.
 func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
 	_, archive, err := s.buildImportPathWithSrcDir(path, "")
 	return archive, err
 }
 
+// buildImportPathWithSrcDir builds the package specified by the import path.
+//
+// Relative import paths are interpreted relative to the passed srcDir. If
+// srcDir is empty, current working directory is assumed.
 func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*PackageData, *compiler.Archive, error) {
 	pkg, err := importWithSrcDir(s.xctx, path, srcDir, 0, s.InstallSuffix())
 	if s.Watcher != nil && pkg != nil { // add watch even on error
@@ -588,6 +586,7 @@ func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*Packag
 	return pkg, archive, nil
 }
 
+// BuildPackage compiles an already loaded package.
 func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if archive, ok := s.Archives[pkg.ImportPath]; ok {
 		return archive, nil
@@ -732,6 +731,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	return archive, nil
 }
 
+// writeLibraryPackage writes a compiled package archive to disk at pkgObj path.
 func (s *Session) writeLibraryPackage(archive *compiler.Archive, pkgObj string) error {
 	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
 		return err
@@ -746,6 +746,7 @@ func (s *Session) writeLibraryPackage(archive *compiler.Archive, pkgObj string) 
 	return compiler.WriteArchive(archive, objFile)
 }
 
+// WriteCommandPackage writes the final JavaScript output file at pkgObj path.
 func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) error {
 	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
 		return err
@@ -786,6 +787,7 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 	return compiler.WriteProgramCode(deps, sourceMapFilter, s.GoRelease())
 }
 
+// NewMappingCallback creates a new callback for source map generation.
 func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localMap bool) func(generatedLine, generatedColumn int, originalPos token.Position) {
 	return func(generatedLine, generatedColumn int, originalPos token.Position) {
 		if !originalPos.IsValid() {
@@ -810,6 +812,8 @@ func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localMap bool) 
 	}
 }
 
+// jsFilesFromDir finds and loads any *.inc.js packages in the build context
+// directory.
 func jsFilesFromDir(bctx *build.Context, dir string) ([]string, error) {
 	files, err := buildutil.ReadDir(bctx, dir)
 	if err != nil {
@@ -837,6 +841,8 @@ func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) 
 	return false, 0
 }
 
+// WaitForChange watches file system events and returns if either when one of
+// the source files is modified.
 func (s *Session) WaitForChange() {
 	s.options.PrintSuccess("watching for changes...\n")
 	for {

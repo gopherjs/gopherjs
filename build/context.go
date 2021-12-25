@@ -161,20 +161,25 @@ func (sc simpleCtx) applyPackageTweaks(importPath string, mode build.ImportMode)
 	bctx := sc.bctx
 	switch importPath {
 	case "syscall":
-		// syscall needs to use a typical GOARCH like amd64 to pick up definitions for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t, etc.
+		// syscall needs to use a typical GOARCH like amd64 to pick up definitions
+		// for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t,
+		// etc.
 		bctx.GOARCH = build.Default.GOARCH
 		bctx.InstallSuffix += build.Default.GOARCH
 	case "syscall/js":
 		if !sc.isVirtual {
-			// There are no buildable files in this package upstream, but we need to use files in the virtual directory.
+			// There are no buildable files in this package upstream, but we need to
+			// use files in the virtual directory.
 			mode |= build.FindOnly
 		}
 	case "crypto/x509", "os/user":
-		// These stdlib packages have cgo and non-cgo versions (via build tags); we want the latter.
+		// These stdlib packages have cgo and non-cgo versions (via build tags); we
+		// want the latter.
 		bctx.CgoEnabled = false
 	case "github.com/gopherjs/gopherjs/js", "github.com/gopherjs/gopherjs/nosync":
-		// These packages are already embedded via gopherjspkg.FS virtual filesystem (which can be
-		// safely vendored). Don't try to use vendor directory to resolve them.
+		// These packages are already embedded via gopherjspkg.FS virtual filesystem
+		// (which can be safely vendored). Don't try to use vendor directory to
+		// resolve them.
 		mode |= build.IgnoreVendor
 	}
 

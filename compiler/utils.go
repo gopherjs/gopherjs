@@ -116,7 +116,7 @@ func (fc *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, 
 	sigTypes := signatureTypes{Sig: sig}
 
 	if sig.Variadic() && len(argExprs) == 0 {
-		return []string{fmt.Sprintf("%s.nil", c.typeName(varargType))}
+		return []string{fmt.Sprintf("%s.nil", fc.typeName(sigTypes.VariadicType()))}
 	}
 
 	preserveOrder := false

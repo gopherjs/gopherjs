@@ -708,11 +708,16 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			hashFile := func() error {
 				fp := filepath.Join(pkg.Dir, name)
 				file, err := buildutil.OpenFile(pkg.bctx, name)
+				fmt.Printf("buildutil.OpenFile err: %s\n", err)
 				if errors.Is(err, os.ErrNotExist) {
+					fmt.Printf("trying natives\n")
 					nativesCtx := newNativesContext(pkg.ImportPath)
 					if nativesPkg, e := nativesCtx.Import(pkg.ImportPath, "", 0); e == nil {
 						fullPath := path.Join(nativesPkg.Dir, name)
 						file, err = nativesCtx.bctx.OpenFile(fullPath)
+						fmt.Printf("nativesCtx.bctx.OpenFile err: %s\n", err)
+					} else {
+						fmt.Printf("nativesCtx.Import err: %s", e)
 					}
 				}
 				if err != nil {

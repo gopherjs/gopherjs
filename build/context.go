@@ -3,6 +3,7 @@ package build
 import (
 	"fmt"
 	"go/build"
+	"go/token"
 	"net/http"
 	"os"
 	"os/exec"
@@ -41,7 +42,7 @@ type simpleCtx struct {
 
 // Import implements XContext.Import().
 func (sc simpleCtx) Import(importPath string, srcDir string, mode build.ImportMode) (*PackageData, error) {
-	bctx, mode := sc.applyPackageTweaks(importPath, mode)
+	bctx, mode := sc.applyPreloadTweaks(importPath, mode)
 	pkg, err := bctx.Import(importPath, srcDir, mode)
 	if err != nil {
 		return nil, err
@@ -54,6 +55,12 @@ func (sc simpleCtx) Import(importPath string, srcDir string, mode build.ImportMo
 	if !path.IsAbs(pkg.Dir) {
 		pkg.Dir = mustAbs(pkg.Dir)
 	}
+	pkg = sc.applyPostloadTweaks(pkg)
+
+	if len(pkg.CgoFiles) > 0 {
+		return nil, &ImportCError{pkg.ImportPath}
+	}
+
 	return &PackageData{
 		Package:   pkg,
 		IsVirtual: sc.isVirtual,
@@ -152,33 +159,97 @@ func (sc simpleCtx) gotool(subcommand string, args ...string) (string, error) {
 	return stdout.String(), nil
 }
 
-// applyPackageTweaks makes several package-specific adjustments to package importing.
+// applyPreloadTweaks makes several package-specific adjustments to package importing.
 //
 // Ideally this method would not be necessary, but currently several packages
 // require special handing in order to be compatible with GopherJS. This method
 // returns a copy of the build context, keeping the original one intact.
-func (sc simpleCtx) applyPackageTweaks(importPath string, mode build.ImportMode) (build.Context, build.ImportMode) {
+func (sc simpleCtx) applyPreloadTweaks(importPath string, mode build.ImportMode) (build.Context, build.ImportMode) {
 	bctx := sc.bctx
 	switch importPath {
 	case "syscall":
-		// syscall needs to use a typical GOARCH like amd64 to pick up definitions for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t, etc.
+		// syscall needs to use a typical GOARCH like amd64 to pick up definitions
+		// for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t,
+		// etc.
 		bctx.GOARCH = build.Default.GOARCH
 		bctx.InstallSuffix += build.Default.GOARCH
 	case "syscall/js":
 		if !sc.isVirtual {
-			// There are no buildable files in this package upstream, but we need to use files in the virtual directory.
+			// There are no buildable files in this package upstream, but we need to
+			// use files in the virtual directory.
 			mode |= build.FindOnly
 		}
 	case "crypto/x509", "os/user":
-		// These stdlib packages have cgo and non-cgo versions (via build tags); we want the latter.
+		// These stdlib packages have cgo and non-cgo versions (via build tags); we
+		// want the latter.
 		bctx.CgoEnabled = false
 	case "github.com/gopherjs/gopherjs/js", "github.com/gopherjs/gopherjs/nosync":
-		// These packages are already embedded via gopherjspkg.FS virtual filesystem (which can be
-		// safely vendored). Don't try to use vendor directory to resolve them.
+		// These packages are already embedded via gopherjspkg.FS virtual filesystem
+		// (which can be safely vendored). Don't try to use vendor directory to
+		// resolve them.
 		mode |= build.IgnoreVendor
 	}
 
 	return bctx, mode
+}
+
+// applyPostloadTweaks makes adjustments to the contents of the loaded package.
+//
+// Some of the standard library packages require additional tweaks that are not
+// covered by our augmentation logic, for example excluding or including
+// particular source files. This method ensures that all such tweaks are applied
+// before the package is returned to the caller.
+func (sc simpleCtx) applyPostloadTweaks(pkg *build.Package) *build.Package {
+	if sc.isVirtual {
+		// GopherJS overlay package sources don't need tweaks to their content,
+		// since we already control them directly.
+		return pkg
+	}
+	switch pkg.ImportPath {
+	case "os":
+		pkg.GoFiles = excludeExecutable(pkg.GoFiles) // Need to exclude executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
+		// Prefer the dirent_${GOOS}.go version, to make the build pass on both linux
+		// and darwin.
+		// In the long term, our builds should produce the same output regardless
+		// of the host OS: https://github.com/gopherjs/gopherjs/issues/693.
+		pkg.GoFiles = exclude(pkg.GoFiles, "dirent_js.go")
+	case "runtime":
+		pkg.GoFiles = []string{} // Package sources are completely replaced in natives.
+	case "runtime/internal/sys":
+		pkg.GoFiles = []string{fmt.Sprintf("zgoos_%s.go", sc.GOOS()), "zversion.go"}
+	case "runtime/pprof":
+		pkg.GoFiles = nil
+	case "internal/poll":
+		pkg.GoFiles = exclude(pkg.GoFiles, "fd_poll_runtime.go")
+	case "sync":
+		// GopherJS completely replaces sync.Pool implementation with a simpler one,
+		// since it always executes in a single-threaded environment.
+		pkg.GoFiles = exclude(pkg.GoFiles, "pool.go")
+	case "crypto/rand":
+		pkg.GoFiles = []string{"rand.go", "util.go"}
+		pkg.TestGoFiles = exclude(pkg.TestGoFiles, "rand_linux_test.go") // Don't want linux-specific tests (since linux-specific package files are excluded too).
+	case "crypto/x509":
+		// GopherJS doesn't support loading OS root certificates regardless of the
+		// OS. The substitution below allows to avoid build dependency on Mac OS
+		// implementation, which won't be used anyway.
+		//
+		// Just like above, https://github.com/gopherjs/gopherjs/issues/693 is
+		// probably the best long-term option.
+		pkg.GoFiles = include(
+			exclude(pkg.GoFiles, fmt.Sprintf("root_%s.go", sc.GOOS())),
+			"root_unix.go", "root_js.go")
+	case "syscall/js":
+		// Reuse upstream tests to ensure conformance, but completely replace
+		// implementation.
+		pkg.GoFiles = []string{}
+		pkg.XTestGoFiles = append(pkg.XTestGoFiles, "js_test.go")
+	}
+
+	pkg.Imports, pkg.ImportPos = updateImports(pkg.GoFiles, pkg.ImportPos)
+	pkg.TestImports, pkg.TestImportPos = updateImports(pkg.TestGoFiles, pkg.TestImportPos)
+	pkg.XTestImports, pkg.XTestImportPos = updateImports(pkg.XTestGoFiles, pkg.XTestImportPos)
+
+	return pkg
 }
 
 func (sc simpleCtx) rewritePkgObj(orig string) string {
@@ -323,4 +394,32 @@ func IsPkgNotFound(err error) bool {
 	return err != nil &&
 		(strings.Contains(err.Error(), "cannot find package") || // Modules off.
 			strings.Contains(err.Error(), "is not in GOROOT")) // Modules on.
+}
+
+// updateImports package's list of import paths to only those present in sources
+// after post-load tweaks.
+func updateImports(sources []string, importPos map[string][]token.Position) (newImports []string, newImportPos map[string][]token.Position) {
+	if importPos == nil {
+		// Short-circuit for tests when no imports are loaded.
+		return nil, nil
+	}
+	sourceSet := map[string]bool{}
+	for _, source := range sources {
+		sourceSet[source] = true
+	}
+
+	newImportPos = map[string][]token.Position{}
+	for importPath, positions := range importPos {
+		for _, pos := range positions {
+			if sourceSet[filepath.Base(pos.Filename)] {
+				newImportPos[importPath] = append(newImportPos[importPath], pos)
+			}
+		}
+	}
+
+	for importPath := range newImportPos {
+		newImports = append(newImports, importPath)
+	}
+	sort.Strings(newImports)
+	return newImports, newImportPos
 }

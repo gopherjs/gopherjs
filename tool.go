@@ -61,6 +61,11 @@ func init() {
 		fmt.Fprintf(os.Stderr, "$GOPATH not set. For more details see: go help gopath\n")
 		os.Exit(1)
 	}
+
+	if build.Default.GOOS != "linux" && build.Default.GOOS != "darwin" {
+		fmt.Fprintf(os.Stderr, "GOOS is not supported, the supported GOOS values are linux and darwin. The GopherJS is falling back to GOOS=linux\n")
+		build.Default.GOOS = "linux"
+	}
 }
 
 func main() {

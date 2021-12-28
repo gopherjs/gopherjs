@@ -698,7 +698,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		for _, name := range append(pkg.GoFiles, pkg.JSFiles...) {
 			hashFile := func() error {
 				fp := filepath.Join(pkg.Dir, name)
-				file, err := s.bctx.OpenFile(fp)
+				file, err := buildutil.OpenFile(pkg.bctx, name)
 				if err != nil {
 					return fmt.Errorf("failed to open %v: %v", fp, err)
 				}

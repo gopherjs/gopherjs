@@ -8,6 +8,7 @@ package build
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -240,6 +241,22 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 	return pkg, nil
 }
 
+// newNativesContext returns a new nativesContext, with special considerations
+// for the syscall package.
+func newNativesContext(importPath string) *simpleCtx {
+	nativesContext := embeddedCtx(&withPrefix{fs: natives.FS, prefix: DefaultGOROOT}, "", nil)
+
+	if importPath == "syscall" {
+		// Special handling for the syscall package, which uses OS native
+		// GOOS/GOARCH pair. This will no longer be necessary after
+		// https://github.com/gopherjs/gopherjs/issues/693.
+		nativesContext.bctx.GOARCH = build.Default.GOARCH
+		nativesContext.bctx.BuildTags = append(nativesContext.bctx.BuildTags, "js")
+	}
+
+	return nativesContext
+}
+
 // parseAndAugment parses and returns all .go files of given pkg.
 // Standard Go library packages are augmented with files in compiler/natives folder.
 // If isTest is true and pkg.ImportPath has no _test suffix, package is built for running internal tests.
@@ -262,15 +279,7 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 		importPath = importPath[:len(importPath)-5]
 	}
 
-	nativesContext := embeddedCtx(&withPrefix{fs: natives.FS, prefix: DefaultGOROOT}, "", nil)
-
-	if importPath == "syscall" {
-		// Special handling for the syscall package, which uses OS native
-		// GOOS/GOARCH pair. This will no longer be necessary after
-		// https://github.com/gopherjs/gopherjs/issues/693.
-		nativesContext.bctx.GOARCH = build.Default.GOARCH
-		nativesContext.bctx.BuildTags = append(nativesContext.bctx.BuildTags, "js")
-	}
+	nativesContext := newNativesContext(importPath)
 
 	if nativesPkg, err := nativesContext.Import(importPath, "", 0); err == nil {
 		names := nativesPkg.GoFiles
@@ -699,6 +708,13 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			hashFile := func() error {
 				fp := filepath.Join(pkg.Dir, name)
 				file, err := buildutil.OpenFile(pkg.bctx, name)
+				if errors.Is(err, os.ErrNotExist) {
+					nativesCtx := newNativesContext(pkg.ImportPath)
+					if nativesPkg, e := nativesCtx.Import(pkg.ImportPath, "", 0); e == nil {
+						fullPath := path.Join(nativesPkg.Dir, name)
+						file, err = nativesCtx.bctx.OpenFile(fullPath)
+					}
+				}
 				if err != nil {
 					return fmt.Errorf("failed to open %v: %v", fp, err)
 				}

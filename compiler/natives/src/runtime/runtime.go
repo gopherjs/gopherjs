@@ -163,7 +163,7 @@ func parseCallFrame(info *js.Object) basicFrame {
 
 		return basicFrame{
 			File: parts.Call("slice", 0, parts.Length()-2).Call("join", ":").
-				Call("replace", js.Global.Get("RegExp").New(`^\s+at `), "").String(),
+				Call("replace", js.Global.Get("RegExp").New(`^\s*at `), "").String(),
 			Line:     parts.Index(parts.Length() - 2).Int(),
 			FuncName: "<none>",
 		}

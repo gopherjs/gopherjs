@@ -68,13 +68,6 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 		t.Fatalf("Failed to list standard library packages: %s", err)
 	}
 	for _, pkg := range matches {
-		// RUNTIME_TEST_HACK: We don't run the normal tests for the runtime
-		// package at the moment, so this check is not useful. However, we
-		// do run a hacky sort of test against our JS-stack parsing code which
-		// is in this package. See the related comment in circle.yml.
-		if pkg == "runtime" {
-			continue
-		}
 		pkg := pkg // Capture for the goroutine.
 		t.Run(pkg, func(t *testing.T) {
 			t.Parallel()

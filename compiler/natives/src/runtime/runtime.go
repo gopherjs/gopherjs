@@ -151,12 +151,15 @@ func parseCallstack(lines *js.Object) []basicFrame {
 	frames := []basicFrame{}
 	l := lines.Length()
 	for i := 0; i < l; i++ {
-		frames = append(frames, parseCallFrame(lines.Index(i)))
+		frames = append(frames, ParseCallFrame(lines.Index(i)))
 	}
 	return frames
 }
 
-func parseCallFrame(info *js.Object) basicFrame {
+// ParseCallFrame is exported for the sake of testing. See this discussion for context https://github.com/gopherjs/gopherjs/pull/1097/files/561e6381406f04ccb8e04ef4effedc5c7887b70f#r776063799
+//
+// TLDR; never use this function!
+func ParseCallFrame(info *js.Object) basicFrame {
 	// FireFox
 	if info.Call("indexOf", "@").Int() >= 0 {
 		split := js.Global.Get("RegExp").New("[@:]")

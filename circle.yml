@@ -137,10 +137,6 @@ jobs:
         command: |
           set +e
           ulimit -s 10000
-          # RUNTIME_TEST_HACK: This ugly hack works around all the special cases
-          # in the compiler for the 'runtime' package in the stdlib, while
-          # allowing us to run the stacktrace parsing code we care about
-          gopherjs test -p 2 --minify -v --short ./compiler/natives/src/runtime
           PACKAGE_NAMES=$( \
             GOOS=js GOARCH=wasm go list std github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/... \
             | grep -v -x -f .std_test_pkg_exclusions \

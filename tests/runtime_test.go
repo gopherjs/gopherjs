@@ -1,11 +1,11 @@
 //go:build js
 // +build js
 
-package runtime
+package tests
 
 import (
 	"fmt"
-	"strings"
+	"runtime"
 	"testing"
 
 	"github.com/gopherjs/gopherjs/js"
@@ -62,47 +62,10 @@ func Test_parseCallFrame(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			lines := js.Global.Get("String").New(tt.input)
-			frame := parseCallFrame(lines)
+			frame := runtime.ParseCallFrame(lines)
 			got := fmt.Sprintf("%v %v %v", frame.FuncName, frame.File, frame.Line)
 			if tt.want != got {
 				t.Errorf("Unexpected result: %s", got)
-			}
-		})
-	}
-}
-
-func Test_parseCallstack(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name: "Chrome 96.0.4664.110 on Linux",
-			input: `at foo (eval at $b (https://gopherjs.github.io/playground/playground.js:102:11836), <anonymous>:25887:60)
-	at eval (<anonymous>)
-	at k.e.$externalizeWrapper.e.$externalizeWrapper [as run] (https://gopherjs.github.io/playground/playground.js:5:30547)
-	at HTMLInputElement.<anonymous> (https://ajax.googleapis.com/ajax/libs/angularjs/1.2.18/angular.min.js:192:147)
-	at HTMLInputElement.c (https://ajax.googleapis.com/ajax/libs/angularjs/1.2.18/angular.min.js:31:207)`,
-			want: `foo https://gopherjs.github.io/playground/playground.js 102
-eval <anonymous> 0
-run https://gopherjs.github.io/playground/playground.js 5
-HTMLInputElement.<anonymous> https://ajax.googleapis.com/ajax/libs/angularjs/1.2.18/angular.min.js 192
-HTMLInputElement.c https://ajax.googleapis.com/ajax/libs/angularjs/1.2.18/angular.min.js 31`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			lines := js.Global.Get("String").New(tt.input).Call("split", "\n")
-			frames := parseCallstack(lines)
-			got := make([]string, lines.Length())
-			for i, frame := range frames {
-				got[i] = fmt.Sprintf("%v %v %v", frame.FuncName, frame.File, frame.Line)
-			}
-			result := strings.Join(got, "\n")
-			if tt.want != result {
-				t.Errorf("Unexpected result: %s", result)
 			}
 		})
 	}

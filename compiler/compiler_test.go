@@ -46,7 +46,6 @@ func Bfunc() int {
 
 	compare(t, "foo", files, false)
 	compare(t, "foo", files, true)
-
 }
 
 func compare(t *testing.T, path string, sourceFiles []source, minify bool) {
@@ -106,7 +105,6 @@ func compile(path string, sourceFiles []source, minify bool) ([]byte, error) {
 	importContext = &ImportContext{
 		Packages: make(map[string]*types.Package),
 		Import: func(path string) (*Archive, error) {
-
 			// find in local cache
 			if a, ok := archiveCache[path]; ok {
 				return a, nil
@@ -137,7 +135,6 @@ func compile(path string, sourceFiles []source, minify bool) ([]byte, error) {
 }
 
 func renderPackage(archive *Archive) ([]byte, error) {
-
 	selection := make(map[*Decl]struct{})
 	for _, d := range archive.Declarations {
 		selection[d] = struct{}{}
@@ -145,7 +142,7 @@ func renderPackage(archive *Archive) ([]byte, error) {
 
 	buf := &bytes.Buffer{}
 
-	if err := WritePkgCode(archive, selection, false, &SourceMapFilter{Writer: buf}); err != nil {
+	if err := WritePkgCode(archive, selection, goLinknameSet{}, false, &SourceMapFilter{Writer: buf}); err != nil {
 		return nil, err
 	}
 

@@ -11,6 +11,41 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+func Test_parseCallFrame(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "Chrome 96.0.4664.110 on Linux #1",
+			input: "at foo (eval at $b (https://gopherjs.github.io/playground/playground.js:102:11836), <anonymous>:25887:60)",
+			want:  "foo https://gopherjs.github.io/playground/playground.js 102",
+		},
+		{
+			name: "Chrome 96, anonymous eval",
+			input: "	at eval (<anonymous>)",
+			want: "eval <anonymous> 0",
+		},
+		{
+			name: "Chrome 96, anonymous Array.forEach",
+			input: "	at Array.forEach (<anonymous>)",
+			want: "Array.forEach <anonymous> 0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lines := js.Global.Get("String").New(tt.input)
+			frame := parseCallFrame(lines)
+			got := fmt.Sprintf("%v %v %v", frame.FuncName, frame.File, frame.Line)
+			if tt.want != got {
+				t.Errorf("Unexpected result: %s", got)
+			}
+		})
+	}
+}
+
 func Test_parseCallstack(t *testing.T) {
 	tests := []struct {
 		name  string

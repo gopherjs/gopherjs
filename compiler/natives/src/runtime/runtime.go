@@ -151,40 +151,47 @@ func parseCallstack(lines *js.Object) []basicFrame {
 	frames := []basicFrame{}
 	l := lines.Length()
 	for i := 0; i < l; i++ {
-		var file, funcName string
-		var line int
-		info := lines.Index(i)
-		openIdx := info.Call("lastIndexOf", "(").Int()
-		if openIdx == -1 {
-			parts := info.Call("split", ":")
-
-			file = parts.Call("slice", 0, parts.Length()-2).Call("join", ":").
-				Call("replace", js.Global.Get("RegExp").New(`^\s+at `), "").String()
-			line = parts.Index(parts.Length() - 2).Int()
-			funcName = "<none>"
-		} else {
-			pos := info.Call("substring", openIdx+1, info.Call("indexOf", ")").Int())
-			parts := pos.Call("split", ":")
-
-			if pos.String() == "<anonymous>" {
-				file = "<anonymous>"
-			} else {
-				file = parts.Call("slice", 0, parts.Length()-2).Call("join", ":").String()
-				line = parts.Index(parts.Length() - 2).Int()
-			}
-			fn := info.Call("substring", info.Call("indexOf", "at ").Int()+3, info.Call("indexOf", " (").Int())
-			if idx := fn.Call("indexOf", "[as ").Int(); idx > 0 {
-				fn = fn.Call("substring", idx+4, fn.Call("indexOf", "]"))
-			}
-			funcName = fn.String()
-		}
-		frames = append(frames, basicFrame{
-			File:     file,
-			Line:     line,
-			FuncName: funcName,
-		})
+		frames = append(frames, parseCallFrame(lines.Index(i)))
 	}
 	return frames
+}
+
+func parseCallFrame(info *js.Object) basicFrame {
+	openIdx := info.Call("lastIndexOf", "(").Int()
+	if openIdx == -1 {
+		parts := info.Call("split", ":")
+
+		return basicFrame{
+			File: parts.Call("slice", 0, parts.Length()-2).Call("join", ":").
+				Call("replace", js.Global.Get("RegExp").New(`^\s+at `), "").String(),
+			Line:     parts.Index(parts.Length() - 2).Int(),
+			FuncName: "<none>",
+		}
+	}
+
+	var file, funcName string
+	var line int
+
+	pos := info.Call("substring", openIdx+1, info.Call("indexOf", ")").Int())
+	parts := pos.Call("split", ":")
+
+	if pos.String() == "<anonymous>" {
+		file = "<anonymous>"
+	} else {
+		file = parts.Call("slice", 0, parts.Length()-2).Call("join", ":").String()
+		line = parts.Index(parts.Length() - 2).Int()
+	}
+	fn := info.Call("substring", info.Call("indexOf", "at ").Int()+3, info.Call("indexOf", " (").Int())
+	if idx := fn.Call("indexOf", "[as ").Int(); idx > 0 {
+		fn = fn.Call("substring", idx+4, fn.Call("indexOf", "]"))
+	}
+	funcName = fn.String()
+
+	return basicFrame{
+		File:     file,
+		Line:     line,
+		FuncName: funcName,
+	}
 }
 
 func Caller(skip int) (pc uintptr, file string, line int, ok bool) {

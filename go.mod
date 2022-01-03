@@ -7,6 +7,7 @@ require (
 	github.com/google/go-cmp v0.5.6
 	github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86
 	github.com/neelance/sourcemap v0.0.0-20200213170602-2833bce08e4c
+	github.com/sergi/go-diff v1.2.0
 	github.com/shurcooL/go v0.0.0-20200502201357-93f07166e636
 	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749
 	github.com/spf13/cobra v1.2.1
@@ -19,7 +20,6 @@ require (
 
 require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 )

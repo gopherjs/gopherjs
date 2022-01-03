@@ -42,6 +42,21 @@ func Test_parseCallFrame(t *testing.T) {
 			input: "at k.e.$externalizeWrapper.e.$externalizeWrapper [as run] (https://gopherjs.github.io/playground/playground.js:5:30547)",
 			want:  "run https://gopherjs.github.io/playground/playground.js 5",
 		},
+		{
+			name:  "Node.js v12.22.5",
+			input: "    at Script.runInThisContext (vm.js:120:18)",
+			want:  "Script.runInThisContext vm.js 120",
+		},
+		{
+			name:  "Node.js v12.22.5, aliased function",
+			input: "at REPLServer.runBound [as eval] (domain.js:440:12)",
+			want:  "eval domain.js 440",
+		},
+		{
+			name:  "Firefox 78.15.0esr Linux",
+			input: "getEvalResult@resource://devtools/server/actors/webconsole/eval-with-debugger.js:231:24",
+			want:  "getEvalResult resource://devtools/server/actors/webconsole/eval-with-debugger.js 231",
+		},
 	}
 
 	for _, tt := range tests {

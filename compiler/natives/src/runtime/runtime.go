@@ -157,6 +157,18 @@ func parseCallstack(lines *js.Object) []basicFrame {
 }
 
 func parseCallFrame(info *js.Object) basicFrame {
+	// FireFox
+	if info.Call("indexOf", "@").Int() >= 0 {
+		split := js.Global.Get("RegExp").New("[@:]")
+		parts := info.Call("split", split)
+		return basicFrame{
+			File:     parts.Call("slice", 1, parts.Length()-2).Call("join", ":").String(),
+			Line:     parts.Index(parts.Length() - 2).Int(),
+			FuncName: parts.Index(0).String(),
+		}
+	}
+
+	// Chrome / Node.js
 	openIdx := info.Call("lastIndexOf", "(").Int()
 	if openIdx == -1 {
 		parts := info.Call("split", ":")

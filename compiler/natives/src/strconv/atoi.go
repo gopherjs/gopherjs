@@ -1,3 +1,4 @@
+//go:build js
 // +build js
 
 package strconv
@@ -6,8 +7,10 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-const maxInt32 float64 = 1<<31 - 1
-const minInt32 float64 = -1 << 31
+const (
+	maxInt32 float64 = 1<<31 - 1
+	minInt32 float64 = -1 << 31
+)
 
 // Atoi returns the result of ParseInt(s, 10, 0) converted to type int.
 func Atoi(s string) (int, error) {

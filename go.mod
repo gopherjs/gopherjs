@@ -7,7 +7,6 @@ require (
 	github.com/google/go-cmp v0.5.6
 	github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86
 	github.com/neelance/sourcemap v0.0.0-20200213170602-2833bce08e4c
-	github.com/sergi/go-diff v1.2.0
 	github.com/shurcooL/go v0.0.0-20200502201357-93f07166e636
 	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749
 	github.com/spf13/cobra v1.2.1

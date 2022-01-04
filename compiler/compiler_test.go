@@ -2,7 +2,6 @@ package compiler
 
 import (
 	"bytes"
-	"fmt"
 	"go/ast"
 	"go/build"
 	"go/parser"
@@ -10,7 +9,7 @@ import (
 	"go/types"
 	"testing"
 
-	"github.com/sergi/go-diff/diffmatchpatch"
+	"github.com/google/go-cmp/cmp"
 	"golang.org/x/tools/go/loader"
 )
 
@@ -64,11 +63,8 @@ func compare(t *testing.T, path string, sourceFiles []source, minify bool) {
 		t.Fatal(err)
 	}
 
-	if string(outputNormal) != string(outputReversed) {
-		dmp := diffmatchpatch.New()
-		diffs := dmp.DiffMain(string(outputNormal), string(outputReversed), true)
-		fmt.Println(dmp.DiffPrettyText(diffs))
-		t.Fatal("files in different order produces differens JS")
+	if diff := cmp.Diff(string(outputNormal), string(outputReversed)); diff != "" {
+		t.Errorf("files in different order produce different JS:\n%s", diff)
 	}
 }
 

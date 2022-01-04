@@ -227,7 +227,7 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 			}
 			// Files should be uniquely named and in the original package directory in order to be
 			// ordered correctly
-			newPath := path.Join(pkg.Dir, "__"+name)
+			newPath := path.Join(pkg.Dir, "gopherjs__"+name)
 			file, err := parser.ParseFile(fileSet, newPath, r, parser.ParseComments)
 			if err != nil {
 				panic(err)

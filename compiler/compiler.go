@@ -15,6 +15,7 @@ import (
 	"go/types"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/gopherjs/gopherjs/compiler/prelude"
 	"golang.org/x/tools/go/gcexportdata"
@@ -80,6 +81,21 @@ type Archive struct {
 	Minified bool
 	// A list of go:linkname directives encountered in the package.
 	GoLinknames []GoLinkname
+	// Time when this archive was built.
+	BuildTime time.Time
+}
+
+func (a Archive) String() string {
+	return fmt.Sprintf("compiler.Archive{%s}", a.ImportPath)
+}
+
+// RegisterTypes adds package type information from the archive into the provided map.
+func (a *Archive) RegisterTypes(packages map[string]*types.Package) error {
+	var err error
+	// TODO(nevkontakte): Should this be shared throughout the build?
+	fset := token.NewFileSet()
+	packages[a.ImportPath], err = gcexportdata.Read(bytes.NewReader(a.ExportData), fset, packages, a.ImportPath)
+	return err
 }
 
 // Decl represents a package-level symbol (e.g. a function, variable or type).
@@ -359,21 +375,17 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 	return nil
 }
 
-func ReadArchive(filename, path string, r io.Reader, packages map[string]*types.Package) (*Archive, error) {
+// ReadArchive reads serialized compiled archive of the importPath package.
+func ReadArchive(path string, r io.Reader) (*Archive, error) {
 	var a Archive
 	if err := gob.NewDecoder(r).Decode(&a); err != nil {
-		return nil, err
-	}
-
-	var err error
-	packages[path], err = gcexportdata.Read(bytes.NewReader(a.ExportData), token.NewFileSet(), packages, path)
-	if err != nil {
 		return nil, err
 	}
 
 	return &a, nil
 }
 
+// WriteArchive writes compiled package archive on disk for later reuse.
 func WriteArchive(a *Archive, w io.Writer) error {
 	return gob.NewEncoder(w).Encode(a)
 }

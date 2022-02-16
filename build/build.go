@@ -31,6 +31,7 @@ import (
 	"github.com/shurcooL/httpfs/vfsutil"
 	"golang.org/x/tools/go/buildutil"
 
+	"github.com/gopherjs/gopherjs/build/cache"
 	_ "github.com/gopherjs/gopherjs/build/versionhack" // go/build release tags hack.
 )
 
@@ -108,29 +109,7 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 		wd = ""
 	}
 	xctx := NewBuildContext(installSuffix, buildTags)
-	return importWithSrcDir(xctx, path, wd, mode, installSuffix)
-}
-
-func importWithSrcDir(xctx XContext, path string, srcDir string, mode build.ImportMode, installSuffix string) (*PackageData, error) {
-	pkg, err := xctx.Import(path, srcDir, mode)
-	if err != nil {
-		return nil, err
-	}
-
-	if pkg.IsCommand() {
-		pkg.PkgObj = filepath.Join(pkg.BinDir, filepath.Base(pkg.ImportPath)+".js")
-	}
-
-	if _, err := os.Stat(pkg.PkgObj); os.IsNotExist(err) && strings.HasPrefix(pkg.PkgObj, DefaultGOROOT) {
-		// fall back to GOPATH
-		firstGopathWorkspace := filepath.SplitList(build.Default.GOPATH)[0] // TODO: Need to check inside all GOPATH workspaces.
-		gopathPkgObj := filepath.Join(firstGopathWorkspace, pkg.PkgObj[len(DefaultGOROOT):])
-		if _, err := os.Stat(gopathPkgObj); err == nil {
-			pkg.PkgObj = gopathPkgObj
-		}
-	}
-
-	return pkg, nil
+	return xctx.Import(path, wd, mode)
 }
 
 // excludeExecutable excludes all executable implementation .go files.
@@ -352,6 +331,7 @@ type Options struct {
 	Minify         bool
 	Color          bool
 	BuildTags      []string
+	TestedPackage  string
 }
 
 // PrintError message to the terminal.
@@ -374,11 +354,13 @@ func (o *Options) PrintSuccess(format string, a ...interface{}) {
 // GopherJS requires.
 type PackageData struct {
 	*build.Package
-	JSFiles    []string
-	IsTest     bool // IsTest is true if the package is being built for running tests.
+	JSFiles []string
+	// IsTest is true if the package is being built for running tests.
+	IsTest     bool
 	SrcModTime time.Time
 	UpToDate   bool
-	IsVirtual  bool // If true, the package does not have a corresponding physical directory on disk.
+	// If true, the package does not have a corresponding physical directory on disk.
+	IsVirtual bool
 
 	bctx *build.Context // The original build context this package came from.
 }
@@ -420,16 +402,38 @@ func (p *PackageData) XTestPackage() *PackageData {
 	}
 }
 
+// InstallPath returns the path where "gopherjs install" command should place the
+// generated output.
+func (p *PackageData) InstallPath() string {
+	if p.IsCommand() {
+		name := filepath.Base(p.ImportPath) + ".js"
+		// For executable packages, mimic go tool behavior if possible.
+		if gobin := os.Getenv("GOBIN"); gobin != "" {
+			return filepath.Join(gobin, name)
+		} else if gopath := os.Getenv("GOPATH"); gopath != "" {
+			return filepath.Join(gopath, "bin", name)
+		} else if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, "go", "bin", name)
+		}
+	}
+	return p.PkgObj
+}
+
 // Session manages internal state GopherJS requires to perform a build.
 //
 // This is the main interface to GopherJS build system. Session lifetime is
 // roughly equivalent to a single GopherJS tool invocation.
 type Session struct {
-	options  *Options
-	xctx     XContext
-	Archives map[string]*compiler.Archive
-	Types    map[string]*types.Package
-	Watcher  *fsnotify.Watcher
+	options    *Options
+	xctx       XContext
+	buildCache cache.BuildCache
+
+	// Binary archives produced during the current session and assumed to be
+	// up to date with input sources and dependencies. In the -w ("watch") mode
+	// must be cleared upon entering watching.
+	UpToDateArchives map[string]*compiler.Archive
+	Types            map[string]*types.Package
+	Watcher          *fsnotify.Watcher
 }
 
 // NewSession creates a new GopherJS build session.
@@ -448,10 +452,19 @@ func NewSession(options *Options) (*Session, error) {
 	}
 
 	s := &Session{
-		options:  options,
-		Archives: make(map[string]*compiler.Archive),
+		options:          options,
+		UpToDateArchives: make(map[string]*compiler.Archive),
 	}
 	s.xctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
+	s.buildCache = cache.BuildCache{
+		GOOS:          s.xctx.GOOS(),
+		GOARCH:        "js",
+		GOROOT:        options.GOROOT,
+		GOPATH:        options.GOPATH,
+		BuildTags:     options.BuildTags,
+		Minify:        options.Minify,
+		TestedPackage: options.TestedPackage,
+	}
 	s.Types = make(map[string]*types.Package)
 	if options.Watch {
 		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
@@ -496,7 +509,10 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 			ImportPath: "main",
 			Dir:        packagePath,
 		},
-		bctx: &goCtx(s.InstallSuffix(), s.options.BuildTags).bctx,
+		// This ephemeral package doesn't have a unique import path to be used as a
+		// build cache key, so we never cache it.
+		SrcModTime: time.Now().Add(time.Hour),
+		bctx:       &goCtx(s.InstallSuffix(), s.options.BuildTags).bctx,
 	}
 
 	for _, file := range filenames {
@@ -530,7 +546,7 @@ func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
 // Relative import paths are interpreted relative to the passed srcDir. If
 // srcDir is empty, current working directory is assumed.
 func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*PackageData, *compiler.Archive, error) {
-	pkg, err := importWithSrcDir(s.xctx, path, srcDir, 0, s.InstallSuffix())
+	pkg, err := s.xctx.Import(path, srcDir, 0)
 	if s.Watcher != nil && pkg != nil { // add watch even on error
 		s.Watcher.Add(pkg.Dir)
 	}
@@ -548,94 +564,70 @@ func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*Packag
 
 // BuildPackage compiles an already loaded package.
 func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
-	if archive, ok := s.Archives[pkg.ImportPath]; ok {
+	if archive, ok := s.UpToDateArchives[pkg.ImportPath]; ok {
 		return archive, nil
 	}
 
-	if pkg.PkgObj != "" {
-		var fileInfo os.FileInfo
-		gopherjsBinary, err := os.Executable()
-		if err == nil {
-			fileInfo, err = os.Stat(gopherjsBinary)
-			if err == nil {
-				pkg.SrcModTime = fileInfo.ModTime()
-			}
+	var fileInfo os.FileInfo
+	gopherjsBinary, err := os.Executable()
+	if err == nil {
+		fileInfo, err = os.Stat(gopherjsBinary)
+		if err == nil && fileInfo.ModTime().After(pkg.SrcModTime) {
+			pkg.SrcModTime = fileInfo.ModTime()
 		}
+	}
+	if err != nil {
+		os.Stderr.WriteString("Could not get GopherJS binary's modification timestamp. Please report issue.\n")
+		pkg.SrcModTime = time.Now()
+	}
+
+	for _, importedPkgPath := range pkg.Imports {
+		if importedPkgPath == "unsafe" {
+			continue
+		}
+		importedPkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
 		if err != nil {
-			os.Stderr.WriteString("Could not get GopherJS binary's modification timestamp. Please report issue.\n")
-			pkg.SrcModTime = time.Now()
+			return nil, err
 		}
 
-		for _, importedPkgPath := range pkg.Imports {
-			if importedPkgPath == "unsafe" {
-				continue
-			}
-			importedPkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
-			if err != nil {
-				return nil, err
-			}
-			impModTime := importedPkg.SrcModTime
-			if impModTime.After(pkg.SrcModTime) {
-				pkg.SrcModTime = impModTime
-			}
-		}
-
-		for _, name := range append(pkg.GoFiles, pkg.JSFiles...) {
-			fileInfo, err := statFile(filepath.Join(pkg.Dir, name))
-			if err != nil {
-				return nil, err
-			}
-			if fileInfo.ModTime().After(pkg.SrcModTime) {
-				pkg.SrcModTime = fileInfo.ModTime()
-			}
-		}
-
-		pkgObjFileInfo, err := os.Stat(pkg.PkgObj)
-		if err == nil && !pkg.SrcModTime.After(pkgObjFileInfo.ModTime()) {
-			// package object is up to date, load from disk if library
-			pkg.UpToDate = true
-			if pkg.IsCommand() {
-				return nil, nil
-			}
-
-			objFile, err := os.Open(pkg.PkgObj)
-			if err != nil {
-				return nil, err
-			}
-			defer objFile.Close()
-
-			archive, err := compiler.ReadArchive(pkg.PkgObj, pkg.ImportPath, objFile, s.Types)
-			if err != nil {
-				return nil, err
-			}
-
-			s.Archives[pkg.ImportPath] = archive
-			return archive, err
+		impModTime := importedPkg.SrcModTime
+		if impModTime.After(pkg.SrcModTime) {
+			pkg.SrcModTime = impModTime
 		}
 	}
 
+	for _, name := range append(pkg.GoFiles, pkg.JSFiles...) {
+		fileInfo, err := statFile(filepath.Join(pkg.Dir, name))
+		if err != nil {
+			return nil, err
+		}
+		if fileInfo.ModTime().After(pkg.SrcModTime) {
+			pkg.SrcModTime = fileInfo.ModTime()
+		}
+	}
+
+	archive := s.buildCache.LoadArchive(pkg.ImportPath)
+	if archive != nil && !pkg.SrcModTime.After(archive.BuildTime) {
+		if err := archive.RegisterTypes(s.Types); err != nil {
+			panic(fmt.Errorf("Failed to load type information from %v: %w", archive, err))
+		}
+		s.UpToDateArchives[pkg.ImportPath] = archive
+		// Existing archive is up to date, no need to build it from scratch.
+		return archive, nil
+	}
+
+	// Existing archive is out of date or doesn't exist, let's build the package.
 	fileSet := token.NewFileSet()
 	files, err := parseAndAugment(s.xctx, pkg, pkg.IsTest, fileSet)
 	if err != nil {
 		return nil, err
 	}
 
-	localImportPathCache := make(map[string]*compiler.Archive)
 	importContext := &compiler.ImportContext{
 		Packages: s.Types,
-		Import: func(path string) (*compiler.Archive, error) {
-			if archive, ok := localImportPathCache[path]; ok {
-				return archive, nil
-			}
-			_, archive, err := s.buildImportPathWithSrcDir(path, pkg.Dir)
-			if err != nil {
-				return nil, err
-			}
-			localImportPathCache[path] = archive
-			return archive, nil
-		},
+		Import:   s.ImportResolverFor(pkg),
 	}
-	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
+	archive, err = compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
 	if err != nil {
 		return nil, err
 	}
@@ -654,40 +646,22 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		fmt.Println(pkg.ImportPath)
 	}
 
-	s.Archives[pkg.ImportPath] = archive
-
-	if pkg.PkgObj == "" || pkg.IsCommand() {
-		return archive, nil
-	}
-
-	if err := s.writeLibraryPackage(archive, pkg.PkgObj); err != nil {
-		if strings.HasPrefix(pkg.PkgObj, s.options.GOROOT) {
-			// fall back to first GOPATH workspace
-			firstGopathWorkspace := filepath.SplitList(s.options.GOPATH)[0]
-			if err := s.writeLibraryPackage(archive, filepath.Join(firstGopathWorkspace, pkg.PkgObj[len(s.options.GOROOT):])); err != nil {
-				return nil, err
-			}
-			return archive, nil
-		}
-		return nil, err
-	}
+	s.buildCache.StoreArchive(archive)
+	s.UpToDateArchives[pkg.ImportPath] = archive
 
 	return archive, nil
 }
 
-// writeLibraryPackage writes a compiled package archive to disk at pkgObj path.
-func (s *Session) writeLibraryPackage(archive *compiler.Archive, pkgObj string) error {
-	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
-		return err
+// ImportResolverFor returns a function which returns a compiled package archive
+// given an import path.
+func (s *Session) ImportResolverFor(pkg *PackageData) func(string) (*compiler.Archive, error) {
+	return func(path string) (*compiler.Archive, error) {
+		if archive, ok := s.UpToDateArchives[path]; ok {
+			return archive, nil
+		}
+		_, archive, err := s.buildImportPathWithSrcDir(path, pkg.Dir)
+		return archive, err
 	}
-
-	objFile, err := os.Create(pkgObj)
-	if err != nil {
-		return err
-	}
-	defer objFile.Close()
-
-	return compiler.WriteArchive(archive, objFile)
 }
 
 // WriteCommandPackage writes the final JavaScript output file at pkgObj path.
@@ -719,7 +693,7 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 	}
 
 	deps, err := compiler.ImportDependencies(archive, func(path string) (*compiler.Archive, error) {
-		if archive, ok := s.Archives[path]; ok {
+		if archive, ok := s.UpToDateArchives[path]; ok {
 			return archive, nil
 		}
 		_, archive, err := s.buildImportPathWithSrcDir(path, "")
@@ -788,6 +762,11 @@ func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) 
 // WaitForChange watches file system events and returns if either when one of
 // the source files is modified.
 func (s *Session) WaitForChange() {
+	// Will need to re-validate up-to-dateness of all archives, so flush them from
+	// memory.
+	s.UpToDateArchives = map[string]*compiler.Archive{}
+	s.Types = map[string]*types.Package{}
+
 	s.options.PrintSuccess("watching for changes...\n")
 	for {
 		select {

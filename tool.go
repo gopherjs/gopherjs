@@ -31,6 +31,7 @@ import (
 	"unicode/utf8"
 
 	gbuild "github.com/gopherjs/gopherjs/build"
+	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
 	"github.com/neelance/sourcemap"
@@ -591,11 +592,19 @@ func main() {
 		fmt.Printf("GopherJS %s\n", compiler.Version)
 	}
 
+	cmdClean := &cobra.Command{
+		Use:   "clean",
+		Short: "clean GopherJS build cache",
+	}
+	cmdClean.RunE = func(cmd *cobra.Command, args []string) error {
+		return cache.Clear()
+	}
+
 	rootCmd := &cobra.Command{
 		Use:  "gopherjs",
 		Long: "GopherJS is a tool for compiling Go source code to JavaScript.",
 	}
-	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion, cmdDoc)
+	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion, cmdDoc, cmdClean)
 
 	{
 		var logLevel string

@@ -10,6 +10,7 @@ import (
 	"go/types"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
@@ -595,6 +596,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		FileSet:      encodedFileSet.Bytes(),
 		Minified:     minify,
 		GoLinknames:  goLinknames,
+		BuildTime:    time.Now(),
 	}, nil
 }
 

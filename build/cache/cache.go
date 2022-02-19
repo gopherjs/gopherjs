@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/gopherjs/gopherjs/compiler"
+	log "github.com/sirupsen/logrus"
 )
 
 // cacheRoot is the base path for GopherJS's own build cache.
@@ -95,21 +96,28 @@ func (bc *BuildCache) StoreArchive(a *compiler.Archive) {
 	}
 	path := cachedPath(bc.archiveKey(a.ImportPath))
 	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+		log.Warningf("Failed to create build cache directory: %v", err)
 		return
 	}
 	// Write the archive in a temporary file first to avoid concurrency errors.
 	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path))
 	if err != nil {
+		log.Warningf("Failed to temporary build cache file: %v", err)
 		return
 	}
 	defer f.Close()
 	if err := compiler.WriteArchive(a, f); err != nil {
+		log.Warningf("Failed to write build cache archive %q: %v", a, err)
 		// Make sure we don't leave a half-written archive behind.
 		os.Remove(f.Name())
+		return
 	}
 	f.Close()
 	// Rename fully written file into its permanent name.
-	os.Rename(f.Name(), path)
+	if err := os.Rename(f.Name(), path); err != nil {
+		log.Warningf("Failed to rename build cache archive to %q: %v", path, err)
+	}
+	log.Infof("Successfully stored build archive %q as %q.", a, path)
 }
 
 // LoadArchive returns a previously cached archive of the given package or nil
@@ -124,13 +132,20 @@ func (bc *BuildCache) LoadArchive(importPath string) *compiler.Archive {
 	path := cachedPath(bc.archiveKey(importPath))
 	f, err := os.Open(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			log.Infof("No cached package archive for %q.", importPath)
+		} else {
+			log.Warningf("Failed to open cached package archive for %q: %v", importPath, err)
+		}
 		return nil // Cache miss.
 	}
 	defer f.Close()
 	a, err := compiler.ReadArchive(importPath, f)
 	if err != nil {
+		log.Warningf("Failed to read cached package archive for %q: %v", importPath, err)
 		return nil // Invalid/corrupted archive, cache miss.
 	}
+	log.Infof("Found cached package archive for %q, built at %v.", importPath, a.BuildTime)
 	return a
 }
 

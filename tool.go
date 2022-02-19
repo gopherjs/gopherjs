@@ -13,7 +13,6 @@ import (
 	"go/types"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -35,6 +34,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
 	"github.com/neelance/sourcemap"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/crypto/ssh/terminal"
@@ -595,6 +595,19 @@ func main() {
 		Long: "GopherJS is a tool for compiling Go source code to JavaScript.",
 	}
 	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion, cmdDoc)
+
+	{
+		var logLevel string
+		rootCmd.PersistentFlags().StringVar(&logLevel, "log_level", log.ErrorLevel.String(), "Compiler log level (debug, info, warn, error, fatal, panic).")
+		rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+			lvl, err := log.ParseLevel(logLevel)
+			if err != nil {
+				return fmt.Errorf("invalid --log_level value %q: %w", logLevel, err)
+			}
+			log.SetLevel(lvl)
+			return nil
+		}
+	}
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(2)

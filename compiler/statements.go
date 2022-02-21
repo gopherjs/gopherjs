@@ -520,7 +520,9 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			Fun:  fc.newIdent("$select", types.NewSignature(nil, types.NewTuple(types.NewVar(0, nil, "", types.NewInterface(nil, nil))), types.NewTuple(types.NewVar(0, nil, "", types.Typ[types.Int])), false)),
 			Args: []ast.Expr{fc.newIdent(fmt.Sprintf("[%s]", strings.Join(channels, ", ")), types.NewInterface(nil, nil))},
 		}, types.Typ[types.Int])
-		fc.Blocking[selectCall] = !hasDefault
+		if !hasDefault {
+			fc.Blocking[selectCall] = true
+		}
 		fc.Printf("%s = %s;", selectionVar, fc.translateExpr(selectCall))
 
 		if len(caseClauses) != 0 {

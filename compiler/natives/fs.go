@@ -5,12 +5,12 @@ package natives
 
 import (
 	"go/build"
-	"log"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/shurcooL/httpfs/filter"
+	log "github.com/sirupsen/logrus"
 )
 
 // FS is a virtual filesystem that contains native packages.

@@ -332,6 +332,7 @@ type Options struct {
 	Color          bool
 	BuildTags      []string
 	TestedPackage  string
+	NoCache        bool
 }
 
 // PrintError message to the terminal.
@@ -606,14 +607,16 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		}
 	}
 
-	archive := s.buildCache.LoadArchive(pkg.ImportPath)
-	if archive != nil && !pkg.SrcModTime.After(archive.BuildTime) {
-		if err := archive.RegisterTypes(s.Types); err != nil {
-			panic(fmt.Errorf("Failed to load type information from %v: %w", archive, err))
+	if !s.options.NoCache {
+		archive := s.buildCache.LoadArchive(pkg.ImportPath)
+		if archive != nil && !pkg.SrcModTime.After(archive.BuildTime) {
+			if err := archive.RegisterTypes(s.Types); err != nil {
+				panic(fmt.Errorf("Failed to load type information from %v: %w", archive, err))
+			}
+			s.UpToDateArchives[pkg.ImportPath] = archive
+			// Existing archive is up to date, no need to build it from scratch.
+			return archive, nil
 		}
-		s.UpToDateArchives[pkg.ImportPath] = archive
-		// Existing archive is up to date, no need to build it from scratch.
-		return archive, nil
 	}
 
 	// Existing archive is out of date or doesn't exist, let's build the package.
@@ -627,7 +630,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		Packages: s.Types,
 		Import:   s.ImportResolverFor(pkg),
 	}
-	archive, err = compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
+	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
 	if err != nil {
 		return nil, err
 	}

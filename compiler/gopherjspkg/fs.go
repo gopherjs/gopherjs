@@ -5,12 +5,12 @@ package gopherjspkg
 
 import (
 	"go/build"
-	"log"
 	"net/http"
 	"os"
 	pathpkg "path"
 
 	"github.com/shurcooL/httpfs/filter"
+	log "github.com/sirupsen/logrus"
 )
 
 // FS is a virtual filesystem that contains core GopherJS packages.

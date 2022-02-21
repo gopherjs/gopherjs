@@ -13,7 +13,6 @@ import (
 	"go/types"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -32,9 +31,11 @@ import (
 	"unicode/utf8"
 
 	gbuild "github.com/gopherjs/gopherjs/build"
+	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
 	"github.com/neelance/sourcemap"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/crypto/ssh/terminal"
@@ -85,6 +86,7 @@ func main() {
 	compilerFlags.BoolVar(&options.Color, "color", terminal.IsTerminal(int(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb", "colored output")
 	compilerFlags.StringVar(&tags, "tags", "", "a list of build tags to consider satisfied during the build")
 	compilerFlags.BoolVar(&options.MapToLocalDisk, "localmap", false, "use local paths for sourcemap")
+	compilerFlags.BoolVarP(&options.NoCache, "no_cache", "a", false, "rebuild all packages from scratch")
 
 	flagWatch := pflag.NewFlagSet("", 0)
 	flagWatch.BoolVarP(&options.Watch, "watch", "w", false, "watch for changes to the source files")
@@ -590,11 +592,32 @@ func main() {
 		fmt.Printf("GopherJS %s\n", compiler.Version)
 	}
 
+	cmdClean := &cobra.Command{
+		Use:   "clean",
+		Short: "clean GopherJS build cache",
+	}
+	cmdClean.RunE = func(cmd *cobra.Command, args []string) error {
+		return cache.Clear()
+	}
+
 	rootCmd := &cobra.Command{
 		Use:  "gopherjs",
 		Long: "GopherJS is a tool for compiling Go source code to JavaScript.",
 	}
-	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion, cmdDoc)
+	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion, cmdDoc, cmdClean)
+
+	{
+		var logLevel string
+		rootCmd.PersistentFlags().StringVar(&logLevel, "log_level", log.ErrorLevel.String(), "Compiler log level (debug, info, warn, error, fatal, panic).")
+		rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+			lvl, err := log.ParseLevel(logLevel)
+			if err != nil {
+				return fmt.Errorf("invalid --log_level value %q: %w", logLevel, err)
+			}
+			log.SetLevel(lvl)
+			return nil
+		}
+	}
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(2)

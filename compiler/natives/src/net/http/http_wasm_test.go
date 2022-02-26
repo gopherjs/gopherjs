@@ -4,15 +4,13 @@
 package http
 
 func init() {
-	if DefaultTransport == nil {
-		panic("Expected DefaultTransport to be initialized before init() is run!")
-	}
-	if _, ok := DefaultTransport.(noTransport); ok && useFakeNetwork {
-		// NodeJS doesn't provide Fetch API by default, but wasm version of standard
-		// library has a fake network implementation that can be used to execute
-		// tests. If we are running under tests, use of fake networking is requested
-		// and no actual transport is found, use the fake that's implemented by
-		// `Transport`.
-		DefaultTransport = &Transport{}
-	}
+	// Use standard transport with fake networking under tests. Although GopherJS
+	// supports "real" http.Client implementations using Fetch or XMLHttpRequest
+	// APIs, tests also need to start local web servers, which is not supported
+	// for those APIs.
+	// TODO(nevkontakte): We could test our real implementations if we mock out
+	// browser APIs and redirect them to the fake networking stack, but this is
+	// not easy.
+	useFakeNetwork = true
+	DefaultTransport = &Transport{}
 }

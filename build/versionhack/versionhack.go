@@ -43,4 +43,5 @@ var toolTags []string
 func init() {
 	releaseTags = build.Default.ReleaseTags[:compiler.GoVersion]
 	toolTags = []string{}
+	build.Default.ToolTags = []string{}
 }

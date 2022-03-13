@@ -64,9 +64,9 @@ func init() {
 		os.Exit(1)
 	}
 
-	if build.Default.GOOS != "linux" && build.Default.GOOS != "darwin" {
-		fmt.Fprintf(os.Stderr, "GOOS is not supported, the supported GOOS values are linux and darwin. The GopherJS is falling back to GOOS=linux\n")
-		build.Default.GOOS = "linux"
+	e := gbuild.DefaultEnv()
+	if e.GOOS != "js" || e.GOARCH != "ecmascript" {
+		fmt.Fprintf(os.Stderr, "Using GOOS=%s and GOARCH=%s in GopherJS is deprecated and will be removed in future. Use GOOS=js GOARCH=ecmascript instead.\n", e.GOOS, e.GOARCH)
 	}
 }
 

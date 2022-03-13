@@ -15,11 +15,13 @@ import (
 )
 
 func TestSimpleCtx(t *testing.T) {
-	gopherjsRoot := filepath.Join(DefaultGOROOT, "src", "github.com", "gopherjs", "gopherjs")
-	fs := &withPrefix{gopherjspkg.FS, gopherjsRoot}
-	ec := embeddedCtx(fs, "", []string{})
+	e := DefaultEnv()
 
-	gc := goCtx("", []string{})
+	gopherjsRoot := filepath.Join(e.GOROOT, "src", "github.com", "gopherjs", "gopherjs")
+	fs := &withPrefix{gopherjspkg.FS, gopherjsRoot}
+	ec := embeddedCtx(fs, e)
+
+	gc := goCtx(e)
 
 	t.Run("exists", func(t *testing.T) {
 		tests := []struct {
@@ -29,13 +31,13 @@ func TestSimpleCtx(t *testing.T) {
 			{
 				buildCtx: ec,
 				wantPkg: &PackageData{
-					Package:   expectedPackage(&ec.bctx, "github.com/gopherjs/gopherjs/js"),
+					Package:   expectedPackage(&ec.bctx, "github.com/gopherjs/gopherjs/js", "wasm"),
 					IsVirtual: true,
 				},
 			}, {
 				buildCtx: gc,
 				wantPkg: &PackageData{
-					Package:   expectedPackage(&gc.bctx, "fmt"),
+					Package:   expectedPackage(&gc.bctx, "fmt", "wasm"),
 					IsVirtual: false,
 				},
 			},
@@ -136,8 +138,63 @@ func TestChainedCtx(t *testing.T) {
 	}
 }
 
-func expectedPackage(bctx *build.Context, importPath string) *build.Package {
-	targetRoot := path.Clean(fmt.Sprintf("%s/pkg/%s_%s", bctx.GOROOT, bctx.GOOS, bctx.GOARCH))
+func TestIsStd(t *testing.T) {
+	realGOROOT := goCtx(DefaultEnv())
+	overlayGOROOT := overlayCtx(DefaultEnv())
+	gopherjsPackages := gopherjsCtx(DefaultEnv())
+	tests := []struct {
+		descr      string
+		importPath string
+		context    *simpleCtx
+		want       bool
+	}{
+		{
+			descr:      "real goroot, standard package",
+			importPath: "fmt",
+			context:    realGOROOT,
+			want:       true,
+		},
+		{
+			descr:      "real goroot, non-standard package",
+			importPath: "github.com/gopherjs/gopherjs/build",
+			context:    realGOROOT,
+			want:       false,
+		},
+		{
+			descr:      "real goroot, non-exiting package",
+			importPath: "does/not/exist",
+			context:    realGOROOT,
+			want:       false,
+		},
+		{
+			descr:      "overlay goroot, standard package",
+			importPath: "fmt",
+			context:    overlayGOROOT,
+			want:       true,
+		},
+		{
+			descr:      "embedded gopherjs packages, gopherjs/js package",
+			importPath: "github.com/gopherjs/gopherjs/js",
+			context:    gopherjsPackages,
+			// When user's source tree doesn't contain gopherjs package (e.g. it uses
+			// syscall/js API only), we pretend that gopherjs/js package is included
+			// in the standard library.
+			want: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.descr, func(t *testing.T) {
+			got := test.context.isStd(test.importPath, "")
+			if got != test.want {
+				t.Errorf("Got: simpleCtx.isStd(%q) = %v. Want: %v", test.importPath, got, test.want)
+			}
+		})
+	}
+}
+
+func expectedPackage(bctx *build.Context, importPath string, goarch string) *build.Package {
+	targetRoot := path.Clean(fmt.Sprintf("%s/pkg/%s_%s", bctx.GOROOT, bctx.GOOS, goarch))
 	return &build.Package{
 		Dir:           path.Join(bctx.GOROOT, "src", importPath),
 		ImportPath:    importPath,

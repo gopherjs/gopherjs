@@ -12,9 +12,52 @@ import (
 	"sort"
 	"strings"
 
+	_ "github.com/gopherjs/gopherjs/build/versionhack" // go/build release tags hack.
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
+	"github.com/gopherjs/gopherjs/compiler/natives"
 	"golang.org/x/tools/go/buildutil"
 )
+
+// Env contains build environment configuration required to define an instance
+// of XContext.
+type Env struct {
+	GOROOT string
+	GOPATH string
+
+	GOOS   string
+	GOARCH string
+
+	BuildTags     []string
+	InstallSuffix string
+}
+
+// DefaultEnv creates a new instance of build Env according to environment
+// variables.
+//
+// By default, GopherJS will use GOOS=js GOARCH=ecmascript to build non-standard
+// library packages. If GOOS or GOARCH environment variables are set and not
+// empty, user-provided values will be used instead. This is done to facilitate
+// transition from the legacy GopherJS behavior, which used native GOOS, and may
+// be removed in future.
+func DefaultEnv() Env {
+	e := Env{}
+	e.GOROOT = DefaultGOROOT
+	e.GOPATH = build.Default.GOPATH
+
+	if val := os.Getenv("GOOS"); val != "" {
+		e.GOOS = val
+	} else {
+		e.GOOS = "js"
+	}
+
+	if val := os.Getenv("GOARCH"); val != "" {
+		e.GOARCH = val
+	} else {
+		e.GOARCH = "ecmascript"
+	}
+	return e
+}
 
 // XContext is an extension of go/build.Context with GopherJS-specifc features.
 //
@@ -25,9 +68,8 @@ type XContext interface {
 	// interpreting local import paths relative to the srcDir directory.
 	Import(path string, srcDir string, mode build.ImportMode) (*PackageData, error)
 
-	// GOOS returns GOOS value the underlying build.Context is using.
-	// This will become obsolete after https://github.com/gopherjs/gopherjs/issues/693.
-	GOOS() string
+	// Env returns build environment configuration this context has been set up for.
+	Env() Env
 
 	// Match explans build patterns into a set of matching import paths (see go help packages).
 	Match(patterns []string) ([]string, error)
@@ -42,7 +84,7 @@ type simpleCtx struct {
 
 // Import implements XContext.Import().
 func (sc simpleCtx) Import(importPath string, srcDir string, mode build.ImportMode) (*PackageData, error) {
-	bctx, mode := sc.applyPreloadTweaks(importPath, mode)
+	bctx, mode := sc.applyPreloadTweaks(importPath, srcDir, mode)
 	pkg, err := bctx.Import(importPath, srcDir, mode)
 	if err != nil {
 		return nil, err
@@ -122,7 +164,16 @@ func (sc simpleCtx) Match(patterns []string) ([]string, error) {
 	return matches, nil
 }
 
-func (sc simpleCtx) GOOS() string { return sc.bctx.GOOS }
+func (sc simpleCtx) Env() Env {
+	return Env{
+		GOROOT:        sc.bctx.GOROOT,
+		GOPATH:        sc.bctx.GOPATH,
+		GOOS:          sc.bctx.GOOS,
+		GOARCH:        sc.bctx.GOARCH,
+		BuildTags:     sc.bctx.BuildTags,
+		InstallSuffix: sc.bctx.InstallSuffix,
+	}
+}
 
 // gotool executes the go tool set up for the build context and returns standard output.
 func (sc simpleCtx) gotool(subcommand string, args ...string) (string, error) {
@@ -163,22 +214,16 @@ func (sc simpleCtx) gotool(subcommand string, args ...string) (string, error) {
 // Ideally this method would not be necessary, but currently several packages
 // require special handing in order to be compatible with GopherJS. This method
 // returns a copy of the build context, keeping the original one intact.
-func (sc simpleCtx) applyPreloadTweaks(importPath string, mode build.ImportMode) (build.Context, build.ImportMode) {
+func (sc simpleCtx) applyPreloadTweaks(importPath string, srcDir string, mode build.ImportMode) (build.Context, build.ImportMode) {
 	bctx := sc.bctx
+	if sc.isStd(importPath, srcDir) {
+		// For most of the platform-dependent code in the standard library we simply
+		// reuse implementations targeting WebAssembly. For the user-supplied we use
+		// regular gopherjs-specific GOOS/GOARCH.
+		bctx.GOOS = "js"
+		bctx.GOARCH = "wasm"
+	}
 	switch importPath {
-	case "syscall":
-		// syscall needs to use a typical GOARCH like amd64 to pick up definitions
-		// for _Socklen, BpfInsn, IFNAMSIZ, Timeval, BpfStat, SYS_FCNTL, Flock_t,
-		// etc.
-		// FIXME(nevkontakte): Remove this.
-		// bctx.GOARCH = build.Default.GOARCH
-		// bctx.InstallSuffix += build.Default.GOARCH
-	case "syscall/js":
-		if !sc.isVirtual {
-			// There are no buildable files in this package upstream, but we need to
-			// use files in the virtual directory.
-			mode |= build.FindOnly
-		}
 	case "crypto/x509", "os/user":
 		// These stdlib packages have cgo and non-cgo versions (via build tags); we
 		// want the latter.
@@ -206,19 +251,8 @@ func (sc simpleCtx) applyPostloadTweaks(pkg *build.Package) *build.Package {
 		return pkg
 	}
 	switch pkg.ImportPath {
-	case "os":
-		// FIXME(nevkontakte): Remove this.
-		// pkg.GoFiles = excludeExecutable(pkg.GoFiles) // Need to exclude executable implementation files, because some of them contain package scope variables that perform (indirectly) syscalls on init.
-		// Prefer the dirent_${GOOS}.go version, to make the build pass on both linux
-		// and darwin.
-		// In the long term, our builds should produce the same output regardless
-		// of the host OS: https://github.com/gopherjs/gopherjs/issues/693.
-		// pkg.GoFiles = exclude(pkg.GoFiles, "dirent_js.go")
 	case "runtime":
 		pkg.GoFiles = []string{} // Package sources are completely replaced in natives.
-	case "runtime/internal/sys":
-		// FIXME(nevkontakte): Remove this.
-		// pkg.GoFiles = []string{fmt.Sprintf("zgoos_%s.go", sc.GOOS()), "zversion.go"}
 	case "runtime/pprof":
 		pkg.GoFiles = nil
 	case "internal/poll":
@@ -229,22 +263,11 @@ func (sc simpleCtx) applyPostloadTweaks(pkg *build.Package) *build.Package {
 		pkg.GoFiles = exclude(pkg.GoFiles, "pool.go")
 	case "crypto/rand":
 		pkg.GoFiles = []string{"rand.go", "util.go"}
-		pkg.TestGoFiles = exclude(pkg.TestGoFiles, "rand_linux_test.go") // Don't want linux-specific tests (since linux-specific package files are excluded too).
-	case "crypto/x509":
-		// GopherJS doesn't support loading OS root certificates regardless of the
-		// OS. The substitution below allows to avoid build dependency on Mac OS
-		// implementation, which won't be used anyway.
-		//
-		// Just like above, https://github.com/gopherjs/gopherjs/issues/693 is
-		// probably the best long-term option.
-		pkg.GoFiles = include(
-			exclude(pkg.GoFiles, fmt.Sprintf("root_%s.go", sc.GOOS())),
-			"root_unix.go", "root_js.go")
 	case "syscall/js":
 		// Reuse upstream tests to ensure conformance, but completely replace
 		// implementation.
 		pkg.GoFiles = []string{}
-		pkg.XTestGoFiles = append(pkg.XTestGoFiles, "js_test.go")
+		pkg.TestGoFiles = []string{}
 	}
 
 	pkg.Imports, pkg.ImportPos = updateImports(pkg.GoFiles, pkg.ImportPos)
@@ -254,17 +277,30 @@ func (sc simpleCtx) applyPostloadTweaks(pkg *build.Package) *build.Package {
 	return pkg
 }
 
+// isStd returns true if the given importPath resolves into a standard library
+// package. Relative paths are interpreted relative to srcDir.
+func (sc simpleCtx) isStd(importPath, srcDir string) bool {
+	pkg, err := sc.bctx.Import(importPath, srcDir, build.FindOnly)
+	if err != nil {
+		return false
+	}
+	return pkg.Goroot
+}
+
 var defaultBuildTags = []string{
 	"netgo",            // See https://godoc.org/net#hdr-Name_Resolution.
 	"purego",           // See https://golang.org/issues/23172.
 	"math_big_pure_go", // Use pure Go version of math/big.
+	// We can't set compiler to gopherjs, since Go tooling doesn't support that,
+	// but, we can at least always set this build tag.
+	"gopherjs",
 }
 
 // embeddedCtx creates simpleCtx that imports from a virtual FS embedded into
 // the GopherJS compiler.
-func embeddedCtx(embedded http.FileSystem, installSuffix string, buildTags []string) *simpleCtx {
+func embeddedCtx(embedded http.FileSystem, e Env) *simpleCtx {
 	fs := &vfs{embedded}
-	ec := goCtx(installSuffix, buildTags)
+	ec := goCtx(e)
 	ec.bctx.GOPATH = ""
 
 	// Path functions must behave unix-like to work with the VFS.
@@ -281,19 +317,31 @@ func embeddedCtx(embedded http.FileSystem, installSuffix string, buildTags []str
 	return ec
 }
 
+// overlayCtx creates simpleCtx that imports from the embedded standard library
+// overlays.
+func overlayCtx(e Env) *simpleCtx {
+	return embeddedCtx(&withPrefix{fs: natives.FS, prefix: e.GOROOT}, e)
+}
+
+// gopherjsCtx creates a simpleCtx that imports from the embedded gopherjs
+// packages in case they are not present in the user's source tree.
+func gopherjsCtx(e Env) *simpleCtx {
+	gopherjsRoot := filepath.Join(e.GOROOT, "src", "github.com", "gopherjs", "gopherjs")
+	return embeddedCtx(&withPrefix{gopherjspkg.FS, gopherjsRoot}, e)
+}
+
 // goCtx creates simpleCtx that imports from the real file system GOROOT, GOPATH
 // or Go Modules.
-func goCtx(installSuffix string, buildTags []string) *simpleCtx {
+func goCtx(e Env) *simpleCtx {
 	gc := simpleCtx{
 		bctx: build.Context{
-			GOROOT: DefaultGOROOT,
-			GOPATH: build.Default.GOPATH,
-			// FIXME(nevkontakte): Use these for standard library only.
-			GOOS:          "js",
-			GOARCH:        "wasm",
-			InstallSuffix: installSuffix,
+			GOROOT:        e.GOROOT,
+			GOPATH:        e.GOPATH,
+			GOOS:          e.GOOS,
+			GOARCH:        e.GOARCH,
+			InstallSuffix: e.InstallSuffix,
 			Compiler:      "gc",
-			BuildTags:     append(buildTags, defaultBuildTags...),
+			BuildTags:     append(append([]string{}, e.BuildTags...), defaultBuildTags...),
 			CgoEnabled:    true, // detect `import "C"` to throw proper error
 
 			// go/build supports modules, but only when no FS access functions are
@@ -333,7 +381,7 @@ func (cc chainedCtx) Import(importPath string, srcDir string, mode build.ImportM
 	}
 }
 
-func (cc chainedCtx) GOOS() string { return cc.primary.GOOS() }
+func (cc chainedCtx) Env() Env { return cc.primary.Env() }
 
 // Match implements XContext.Match().
 //

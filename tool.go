@@ -273,6 +273,7 @@ func main() {
 	cmdRun.Flags().AddFlagSet(flagQuiet)
 	cmdRun.Flags().AddFlagSet(compilerFlags)
 	cmdRun.RunE = func(cmd *cobra.Command, args []string) error {
+		options.BuildTags = strings.Fields(tags)
 		lastSourceArg := 0
 		for {
 			if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {

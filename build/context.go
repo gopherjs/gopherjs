@@ -98,10 +98,6 @@ func (sc simpleCtx) Import(importPath string, srcDir string, mode build.ImportMo
 	}
 	pkg = sc.applyPostloadTweaks(pkg)
 
-	if len(pkg.CgoFiles) > 0 {
-		return nil, &ImportCError{pkg.ImportPath}
-	}
-
 	return &PackageData{
 		Package:   pkg,
 		IsVirtual: sc.isVirtual,
@@ -224,10 +220,6 @@ func (sc simpleCtx) applyPreloadTweaks(importPath string, srcDir string, mode bu
 		bctx.GOARCH = "wasm"
 	}
 	switch importPath {
-	case "crypto/x509", "os/user":
-		// These stdlib packages have cgo and non-cgo versions (via build tags); we
-		// want the latter.
-		bctx.CgoEnabled = false
 	case "github.com/gopherjs/gopherjs/js", "github.com/gopherjs/gopherjs/nosync":
 		// These packages are already embedded via gopherjspkg.FS virtual filesystem
 		// (which can be safely vendored). Don't try to use vendor directory to
@@ -342,7 +334,7 @@ func goCtx(e Env) *simpleCtx {
 			InstallSuffix: e.InstallSuffix,
 			Compiler:      "gc",
 			BuildTags:     append(append([]string{}, e.BuildTags...), defaultBuildTags...),
-			CgoEnabled:    true, // detect `import "C"` to throw proper error
+			CgoEnabled:    false, // CGo is not supported by GopherJS.
 
 			// go/build supports modules, but only when no FS access functions are
 			// overridden and when provided ReleaseTags match those of the default

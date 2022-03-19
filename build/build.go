@@ -47,16 +47,6 @@ var DefaultGOROOT = func() string {
 	return build.Default.GOROOT
 }()
 
-// ImportCError is returned when GopherJS attempts to build a package that uses
-// CGo.
-type ImportCError struct {
-	pkgPath string
-}
-
-func (e *ImportCError) Error() string {
-	return e.pkgPath + `: importing "C" is not supported by GopherJS`
-}
-
 // NewBuildContext creates a build context for building Go packages
 // with GopherJS compiler.
 //

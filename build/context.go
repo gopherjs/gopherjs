@@ -253,8 +253,6 @@ func (sc simpleCtx) applyPostloadTweaks(pkg *build.Package) *build.Package {
 		// GopherJS completely replaces sync.Pool implementation with a simpler one,
 		// since it always executes in a single-threaded environment.
 		pkg.GoFiles = exclude(pkg.GoFiles, "pool.go")
-	case "crypto/rand":
-		pkg.GoFiles = []string{"rand.go", "util.go"}
 	case "syscall/js":
 		// Reuse upstream tests to ensure conformance, but completely replace
 		// implementation.

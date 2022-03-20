@@ -9,13 +9,9 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-func init() {
-	Reader = &rngReader{}
-}
+type reader struct{}
 
-type rngReader struct{}
-
-func (r *rngReader) Read(b []byte) (n int, err error) {
+func (r *reader) Read(b []byte) (n int, err error) {
 	array := js.InternalObject(b).Get("$array")
 	offset := js.InternalObject(b).Get("$offset").Int()
 
@@ -47,16 +43,4 @@ func (r *rngReader) Read(b []byte) (n int, err error) {
 	}
 
 	return 0, errors.New("crypto/rand not available in this environment")
-}
-
-func batched(f func([]byte) bool, readMax int) func([]byte) bool {
-	return func(buf []byte) bool {
-		for len(buf) > readMax {
-			if !f(buf[:readMax]) {
-				return false
-			}
-			buf = buf[readMax:]
-		}
-		return len(buf) == 0 || f(buf)
-	}
 }

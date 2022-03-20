@@ -1,19 +1,18 @@
+//go:build js
+
 package syscall
 
 import (
-	sysjs "syscall/js"
-
-	"github.com/gopherjs/gopherjs/js"
+	"syscall/js"
 )
 
-// FIXME(nevkontakte): Duplicated from syscall_unix.go.
 func runtime_envs() []string {
-	process := js.Global.Get("process")
-	if process == js.Undefined {
+	process := js.Global().Get("process")
+	if process.IsUndefined() {
 		return nil
 	}
 	jsEnv := process.Get("env")
-	envkeys := js.Global.Get("Object").Call("keys", jsEnv)
+	envkeys := js.Global().Get("Object").Call("keys", jsEnv)
 	envs := make([]string, envkeys.Length())
 	for i := 0; i < envkeys.Length(); i++ {
 		key := envkeys.Index(i).String()
@@ -23,22 +22,22 @@ func runtime_envs() []string {
 }
 
 func setenv_c(k, v string) {
-	process := js.Global.Get("process")
-	if process == js.Undefined {
+	process := js.Global().Get("process")
+	if process.IsUndefined() {
 		return
 	}
 	process.Get("env").Set(k, v)
 }
 
 func unsetenv_c(k string) {
-	process := js.Global.Get("process")
-	if process == js.Undefined {
+	process := js.Global().Get("process")
+	if process.IsUndefined() {
 		return
 	}
 	process.Get("env").Delete(k)
 }
 
-func setStat(st *Stat_t, jsSt sysjs.Value) {
+func setStat(st *Stat_t, jsSt js.Value) {
 	// This method is an almost-exact copy of upstream, except for 4 places where
 	// time stamps are obtained as floats in lieu of int64. Unstread wasm emulates
 	// a 64-bit architecture and millisecond-based timestamps fit within an int
@@ -65,4 +64,14 @@ func setStat(st *Stat_t, jsSt sysjs.Value) {
 	ctime := int64(jsSt.Get("ctimeMs").Float()) // Int64
 	st.Ctime = ctime / 1000
 	st.CtimeNsec = (ctime % 1000) * 1000000
+}
+
+func Exit(code int) {
+	if process := js.Global().Get("process"); !process.IsUndefined() {
+		process.Call("exit", code)
+		return
+	}
+	if code != 0 {
+		js.Global().Get("console").Call("warn", "Go program exited with non-zero code:", code)
+	}
 }

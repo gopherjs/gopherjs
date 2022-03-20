@@ -247,8 +247,6 @@ func (sc simpleCtx) applyPostloadTweaks(pkg *build.Package) *build.Package {
 		pkg.GoFiles = []string{} // Package sources are completely replaced in natives.
 	case "runtime/pprof":
 		pkg.GoFiles = nil
-	case "internal/poll":
-		pkg.GoFiles = exclude(pkg.GoFiles, "fd_poll_runtime.go")
 	case "sync":
 		// GopherJS completely replaces sync.Pool implementation with a simpler one,
 		// since it always executes in a single-threaded environment.

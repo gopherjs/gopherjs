@@ -78,8 +78,9 @@ type XContext interface {
 // simpleCtx is a wrapper around go/build.Context with support for GopherJS-specific
 // features.
 type simpleCtx struct {
-	bctx      build.Context
-	isVirtual bool // Imported packages don't have a physical directory on disk.
+	bctx         build.Context
+	isVirtual    bool // Imported packages don't have a physical directory on disk.
+	noPostTweaks bool // Don't apply post-load tweaks to packages. For tests only.
 }
 
 // Import implements XContext.Import().
@@ -240,6 +241,9 @@ func (sc simpleCtx) applyPostloadTweaks(pkg *build.Package) *build.Package {
 	if sc.isVirtual {
 		// GopherJS overlay package sources don't need tweaks to their content,
 		// since we already control them directly.
+		return pkg
+	}
+	if sc.noPostTweaks {
 		return pkg
 	}
 	switch pkg.ImportPath {

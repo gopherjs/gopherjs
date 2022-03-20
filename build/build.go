@@ -351,6 +351,10 @@ type PackageData struct {
 	bctx *build.Context // The original build context this package came from.
 }
 
+func (p PackageData) String() string {
+	return fmt.Sprintf("%s [is_test=%v]", p.ImportPath, p.IsTest)
+}
+
 // InternalBuildContext returns the build context that produced the package.
 //
 // WARNING: This function is a part of internal API and will be removed in

@@ -4,14 +4,11 @@
 package runtime
 
 import (
-	"runtime/internal/sys"
-
 	"github.com/gopherjs/gopherjs/js"
 )
 
-// FIXME(nevkontakte): Update these to GopherJS-specific.
-const GOOS = sys.GOOS
-const GOARCH = sys.GOARCH
+const GOOS = "js"
+const GOARCH = "ecmascript"
 const Compiler = "gopherjs"
 
 // The Error interface identifies a run time error.

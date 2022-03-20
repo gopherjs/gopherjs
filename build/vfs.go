@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -13,6 +14,7 @@ import (
 type vfs struct{ http.FileSystem }
 
 func (fs vfs) IsDir(name string) bool {
+	name = filepath.ToSlash(name)
 	dir, err := fs.Open(name)
 	if err != nil {
 		return false
@@ -26,6 +28,7 @@ func (fs vfs) IsDir(name string) bool {
 }
 
 func (fs vfs) ReadDir(name string) (fi []os.FileInfo, err error) {
+	name = filepath.ToSlash(name)
 	dir, err := fs.Open(name)
 	if err != nil {
 		return nil, err
@@ -35,6 +38,7 @@ func (fs vfs) ReadDir(name string) (fi []os.FileInfo, err error) {
 }
 
 func (fs vfs) OpenFile(name string) (r io.ReadCloser, err error) {
+	name = filepath.ToSlash(name)
 	return fs.Open(name)
 }
 
@@ -75,10 +79,12 @@ type withPrefix struct {
 }
 
 func (wp *withPrefix) Open(name string) (http.File, error) {
-	if !strings.HasPrefix(name, wp.prefix) {
+	name = filepath.ToSlash(name)
+	prefix := filepath.ToSlash(wp.prefix)
+	if !strings.HasPrefix(name, prefix) {
 		return nil, &os.PathError{Op: "open", Path: name, Err: os.ErrNotExist}
 	}
-	f, err := wp.fs.Open(strings.TrimPrefix(name, wp.prefix))
+	f, err := wp.fs.Open(strings.TrimPrefix(name, prefix))
 	if err != nil {
 		return nil, &os.PathError{Op: "open", Path: name, Err: err}
 	}

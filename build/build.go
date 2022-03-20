@@ -305,9 +305,6 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 
 // Options controls build process behavior.
 type Options struct {
-	// FIXME(nevkontakte): Remove GOROOT and GOPATH from options. They are in Env now.
-	GOROOT         string
-	GOPATH         string
 	Verbose        bool
 	Quiet          bool
 	Watch          bool
@@ -428,18 +425,7 @@ type Session struct {
 
 // NewSession creates a new GopherJS build session.
 func NewSession(options *Options) (*Session, error) {
-	if options.GOROOT == "" {
-		options.GOROOT = DefaultGOROOT
-	}
-	if options.GOPATH == "" {
-		options.GOPATH = build.Default.GOPATH
-	}
 	options.Verbose = options.Verbose || options.Watch
-
-	// Go distribution version check.
-	if err := compiler.CheckGoVersion(options.GOROOT); err != nil {
-		return nil, err
-	}
 
 	s := &Session{
 		options:          options,
@@ -447,6 +433,12 @@ func NewSession(options *Options) (*Session, error) {
 	}
 	s.xctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
 	env := s.xctx.Env()
+
+	// Go distribution version check.
+	if err := compiler.CheckGoVersion(env.GOROOT); err != nil {
+		return nil, err
+	}
+
 	s.buildCache = cache.BuildCache{
 		GOOS:          env.GOOS,
 		GOARCH:        env.GOARCH,
@@ -486,7 +478,7 @@ func (s *Session) InstallSuffix() string {
 
 // GoRelease returns Go release version this session is building with.
 func (s *Session) GoRelease() string {
-	return compiler.GoRelease(s.options.GOROOT)
+	return compiler.GoRelease(s.xctx.Env().GOROOT)
 }
 
 // BuildFiles passed to the GopherJS tool as if they were a package.
@@ -657,6 +649,12 @@ func (s *Session) ImportResolverFor(pkg *PackageData) func(string) (*compiler.Ar
 	}
 }
 
+// SourceMappingCallback returns a call back for compiler.SourceMapFilter
+// configured for the current build session.
+func (s *Session) SourceMappingCallback(m *sourcemap.Map) func(generatedLine, generatedColumn int, originalPos token.Position) {
+	return NewMappingCallback(m, s.xctx.Env().GOROOT, s.xctx.Env().GOPATH, s.options.MapToLocalDisk)
+}
+
 // WriteCommandPackage writes the final JavaScript output file at pkgObj path.
 func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) error {
 	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
@@ -682,7 +680,7 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 			fmt.Fprintf(codeFile, "//# sourceMappingURL=%s.map\n", filepath.Base(pkgObj))
 		}()
 
-		sourceMapFilter.MappingCallback = NewMappingCallback(m, s.options.GOROOT, s.options.GOPATH, s.options.MapToLocalDisk)
+		sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 	}
 
 	deps, err := compiler.ImportDependencies(archive, func(path string) (*compiler.Archive, error) {

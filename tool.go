@@ -705,7 +705,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 				sourceMapFilter := &compiler.SourceMapFilter{Writer: buf}
 				m := &sourcemap.Map{File: base + ".js"}
-				sourceMapFilter.MappingCallback = gbuild.NewMappingCallback(m, fs.options.GOROOT, fs.options.GOPATH, fs.options.MapToLocalDisk)
+				sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 
 				deps, err := compiler.ImportDependencies(archive, s.BuildImportPath)
 				if err != nil {

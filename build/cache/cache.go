@@ -58,7 +58,7 @@ func Clear() error {
 // the cache. For example, any artifacts that were cached for a minified build
 // must not be reused for a non-minified build. GopherJS version change also
 // invalidates the cache. It is callers responsibility to ensure that artifacts
-// passed the the StoreArchive function were generated with the same build
+// passed to the StoreArchive function were generated with the same build
 // parameters as the cache is configured.
 //
 // There is no upper limit for the total cache size. It can be cleared
@@ -77,11 +77,6 @@ type BuildCache struct {
 	GOPATH    string
 	BuildTags []string
 	Minify    bool
-	// When building for tests, import path of the package being tested. The
-	// package under test is built with *_test.go sources included, and since it
-	// may be imported by other packages in the binary we can't reuse the "normal"
-	// cache.
-	TestedPackage string
 }
 
 func (bc BuildCache) String() string {
@@ -90,11 +85,11 @@ func (bc BuildCache) String() string {
 
 // StoreArchive compiled archive in the cache. Any error inside this method
 // will cause the cache not to be persisted.
-func (bc *BuildCache) StoreArchive(a *compiler.Archive) {
+func (bc *BuildCache) StoreArchive(a *compiler.Archive, testedPackage string) {
 	if bc == nil {
 		return // Caching is disabled.
 	}
-	path := cachedPath(bc.archiveKey(a.ImportPath))
+	path := cachedPath(bc.archiveKey(a.ImportPath, testedPackage))
 	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 		log.Warningf("Failed to create build cache directory: %v", err)
 		return
@@ -125,11 +120,11 @@ func (bc *BuildCache) StoreArchive(a *compiler.Archive) {
 //
 // The returned archive would have been built with the same configuration as
 // the build cache was.
-func (bc *BuildCache) LoadArchive(importPath string) *compiler.Archive {
+func (bc *BuildCache) LoadArchive(importPath string, testedPackage string) *compiler.Archive {
 	if bc == nil {
 		return nil // Caching is disabled.
 	}
-	path := cachedPath(bc.archiveKey(importPath))
+	path := cachedPath(bc.archiveKey(importPath, testedPackage))
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -156,6 +151,11 @@ func (bc *BuildCache) commonKey() string {
 }
 
 // archiveKey returns a full cache key for a package's compiled archive.
-func (bc *BuildCache) archiveKey(importPath string) string {
-	return path.Join("archive", bc.commonKey(), importPath)
+func (bc *BuildCache) archiveKey(importPath string, testedPackage string) string {
+	// When building for tests, testedPackage is import path of the package being tested.
+	// testedPackage is built with *_test.go sources included, and since it
+	// may be imported by other packages in the binary we can't reuse the "normal"
+	// cache.
+	compiledWithTests := testedPackage == importPath
+	return path.Join("archive", bc.commonKey(), importPath, fmt.Sprintf("compiledWithTests: %v", compiledWithTests))
 }

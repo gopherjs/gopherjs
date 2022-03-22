@@ -16,20 +16,20 @@ func TestStore(t *testing.T) {
 	}
 
 	bc := BuildCache{}
-	if got := bc.LoadArchive(want.ImportPath); got != nil {
+	if got := bc.LoadArchive(want.ImportPath, ""); got != nil {
 		t.Errorf("Got: %s was found in the cache. Want: empty cache.", got.ImportPath)
 	}
-	bc.StoreArchive(want)
-	got := bc.LoadArchive(want.ImportPath)
+	bc.StoreArchive(want, "")
+	got := bc.LoadArchive(want.ImportPath, "")
 	if got == nil {
-		t.Errorf("Got: %s wan not found in the cache. Want: archive is can be loaded after store.", want.ImportPath)
+		t.Errorf("Got: %s was not found in the cache. Want: archive can be loaded after store.", want.ImportPath)
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Loaded archive is different from stored (-want,+got):\n%s", diff)
 	}
 
 	// Make sure the package names are a part of the cache key.
-	if got := bc.LoadArchive("fake/other"); got != nil {
+	if got := bc.LoadArchive("fake/other", ""); got != nil {
 		t.Errorf("Got: fake/other was found in cache: %#v. Want: nil for packages that weren't cached.", got)
 	}
 }
@@ -61,12 +61,54 @@ func TestInvalidation(t *testing.T) {
 
 	for _, test := range tests {
 		a := &compiler.Archive{ImportPath: "package/fake"}
-		test.cache1.StoreArchive(a)
+		test.cache1.StoreArchive(a, "")
 
-		if got := test.cache2.LoadArchive(a.ImportPath); got != nil {
+		if got := test.cache2.LoadArchive(a.ImportPath, ""); got != nil {
 			t.Logf("-cache1,+cache2:\n%s", cmp.Diff(test.cache1, test.cache2))
 			t.Errorf("Got: %v loaded from cache. Want: build parameter change invalidates cache.", got)
 		}
+	}
+}
+
+func TestDoNotReuseCacheWhenLoadingPackageForTest(t *testing.T) {
+	cacheForTest(t)
+
+	sharedPkgArchive := &compiler.Archive{
+		ImportPath: "fake/sharedTestPkg",
+	}
+
+	bc := BuildCache{}
+	if got := bc.LoadArchive(sharedPkgArchive.ImportPath, "fake/pkg1"); got != nil {
+		t.Errorf("Got: %s was found in the cache. Want: empty cache.", got.ImportPath)
+	}
+	bc.StoreArchive(sharedPkgArchive, "fake/package_1")
+
+	// sharedPkgArchive has not been stored with *_test.go sources, so it cannot be reused
+	if got := bc.LoadArchive(sharedPkgArchive.ImportPath, sharedPkgArchive.ImportPath); got != nil {
+		t.Errorf("Got: %s was found in the cache. Want: empty cache.", got.ImportPath)
+	}
+}
+
+func TestDifferentSourcesCanShareSameArchive(t *testing.T) {
+	cacheForTest(t)
+
+	sharedPkgArchive := &compiler.Archive{
+		ImportPath: "fake/sharedTestPkg",
+	}
+
+	bc := BuildCache{}
+	if got := bc.LoadArchive(sharedPkgArchive.ImportPath, "fake/pkg1"); got != nil {
+		t.Errorf("Got: %s was found in the cache. Want: empty cache.", got.ImportPath)
+	}
+	bc.StoreArchive(sharedPkgArchive, "fake/package_1")
+
+	// sharedPkgArchive has been stored without *_test.go sources, so it can be reused
+	if got := bc.LoadArchive(sharedPkgArchive.ImportPath, "fake/pkg2"); got == nil {
+		t.Errorf("Got: %s was not found in the cache. Want: archive can be loaded after store.", sharedPkgArchive.ImportPath)
+	}
+
+	if got := bc.LoadArchive(sharedPkgArchive.ImportPath, ""); got == nil {
+		t.Errorf("Got: %s was not found in the cache. Want: archive can be loaded after store.", sharedPkgArchive.ImportPath)
 	}
 }
 

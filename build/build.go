@@ -458,13 +458,12 @@ func NewSession(options *Options) (*Session, error) {
 	}
 	s.xctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
 	s.buildCache = cache.BuildCache{
-		GOOS:          s.xctx.GOOS(),
-		GOARCH:        "js",
-		GOROOT:        options.GOROOT,
-		GOPATH:        options.GOPATH,
-		BuildTags:     options.BuildTags,
-		Minify:        options.Minify,
-		TestedPackage: options.TestedPackage,
+		GOOS:      s.xctx.GOOS(),
+		GOARCH:    "js",
+		GOROOT:    options.GOROOT,
+		GOPATH:    options.GOPATH,
+		BuildTags: options.BuildTags,
+		Minify:    options.Minify,
 	}
 	s.Types = make(map[string]*types.Package)
 	if options.Watch {
@@ -608,7 +607,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	}
 
 	if !s.options.NoCache {
-		archive := s.buildCache.LoadArchive(pkg.ImportPath)
+		archive := s.buildCache.LoadArchive(pkg.ImportPath, s.options.TestedPackage)
 		if archive != nil && !pkg.SrcModTime.After(archive.BuildTime) {
 			if err := archive.RegisterTypes(s.Types); err != nil {
 				panic(fmt.Errorf("Failed to load type information from %v: %w", archive, err))
@@ -649,7 +648,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		fmt.Println(pkg.ImportPath)
 	}
 
-	s.buildCache.StoreArchive(archive)
+	s.buildCache.StoreArchive(archive, s.options.TestedPackage)
 	s.UpToDateArchives[pkg.ImportPath] = archive
 
 	return archive, nil

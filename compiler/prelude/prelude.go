@@ -27,10 +27,12 @@ if (typeof module !== "undefined") {
 }
 
 if (!$global.fs && $global.require) {
-  var fs = $global.require('fs');
-  if (typeof fs === "object" && fs !== null && Object.keys(fs).length !== 0) {
-    $global.fs = fs;
-  }
+  try {
+    var fs = $global.require('fs');
+    if (typeof fs === "object" && fs !== null && Object.keys(fs).length !== 0) {
+      $global.fs = fs;
+    }
+  } catch(e) { /* Ignore if the module couldn't be loaded. */ }
 }
 
 if (!$global.fs) {

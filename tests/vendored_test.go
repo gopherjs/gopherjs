@@ -13,6 +13,9 @@ func TestGopherJSCanBeVendored(t *testing.T) {
 	if runtime.GOOS == "js" {
 		t.Skip("test meant to be run using normal Go compiler (needs os/exec)")
 	}
+	if runtime.GOOS == "windows" {
+		t.Skip("test requires POSIX environment to run")
+	}
 
 	cmd := exec.Command("sh", "gopherjsvendored_test.sh")
 	cmd.Stderr = os.Stdout

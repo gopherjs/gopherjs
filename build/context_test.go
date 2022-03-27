@@ -3,7 +3,6 @@ package build
 import (
 	"fmt"
 	"go/build"
-	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,6 +19,7 @@ func TestSimpleCtx(t *testing.T) {
 	gopherjsRoot := filepath.Join(e.GOROOT, "src", "github.com", "gopherjs", "gopherjs")
 	fs := &withPrefix{gopherjspkg.FS, gopherjsRoot}
 	ec := embeddedCtx(fs, e)
+	ec.bctx.JoinPath = filepath.Join // Avoid diffs in the test on Windows.
 
 	gc := goCtx(e)
 
@@ -194,16 +194,16 @@ func TestIsStd(t *testing.T) {
 }
 
 func expectedPackage(bctx *build.Context, importPath string, goarch string) *build.Package {
-	targetRoot := path.Clean(fmt.Sprintf("%s/pkg/%s_%s", bctx.GOROOT, bctx.GOOS, goarch))
+	targetRoot := filepath.Clean(filepath.Join(bctx.GOROOT, "pkg", bctx.GOOS+"_"+goarch))
 	return &build.Package{
-		Dir:           path.Join(bctx.GOROOT, "src", importPath),
+		Dir:           filepath.Join(bctx.GOROOT, "src", importPath),
 		ImportPath:    importPath,
 		Root:          bctx.GOROOT,
-		SrcRoot:       path.Join(bctx.GOROOT, "src"),
-		PkgRoot:       path.Join(bctx.GOROOT, "pkg"),
+		SrcRoot:       filepath.Join(bctx.GOROOT, "src"),
+		PkgRoot:       filepath.Join(bctx.GOROOT, "pkg"),
 		PkgTargetRoot: targetRoot,
-		BinDir:        path.Join(bctx.GOROOT, "bin"),
+		BinDir:        filepath.Join(bctx.GOROOT, "bin"),
 		Goroot:        true,
-		PkgObj:        path.Join(targetRoot, importPath+".a"),
+		PkgObj:        filepath.Join(targetRoot, importPath+".a"),
 	}
 }

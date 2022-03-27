@@ -1,12 +1,14 @@
 package tests_test
 
 import (
-	"bytes"
 	"io/ioutil"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 // Test for internalization/externalization of time.Time/Date when time package is imported
@@ -18,18 +20,22 @@ func TestTimeInternalizationExternalization(t *testing.T) {
 		t.Skip("test meant to be run using normal Go compiler (needs os/exec)")
 	}
 
-	got, err := exec.Command("gopherjs", "run", filepath.Join("testdata", "time_inexternalization.go")).Output()
+	gotb, err := exec.Command("gopherjs", "run", filepath.Join("testdata", "time_inexternalization.go")).Output()
+	got := string(gotb)
 	if err != nil {
 		t.Fatalf("%v:\n%s", err, got)
 	}
 
-	want, err := ioutil.ReadFile(filepath.Join("testdata", "time_inexternalization.out"))
+	wantb, err := ioutil.ReadFile(filepath.Join("testdata", "time_inexternalization.out"))
+	want := string(wantb)
 	if err != nil {
 		t.Fatalf("error reading .out file: %v", err)
 	}
+	got = strings.ReplaceAll(got, "\r\n", "\n")
+	want = strings.ReplaceAll(want, "\r\n", "\n")
 
-	if !bytes.Equal(got, want) {
-		t.Fatalf("got != want:\ngot:\n%s\nwant:\n%s", got, want)
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("Got diff (-want,+got):\n%s", diff)
 	}
 }
 

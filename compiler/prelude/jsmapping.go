@@ -381,7 +381,7 @@ var $internalize = function(v, t, recv, seen, makeWrapper) {
 
 var $copyIfRequired = function(v, typ) {
   // interface values
-  if (v.constructor.copy) {
+  if (v && v.constructor && v.constructor.copy) {
     return new v.constructor($clone(v.$val, v.constructor))
   }
   // array and struct values

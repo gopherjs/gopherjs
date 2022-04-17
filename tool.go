@@ -20,6 +20,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
@@ -586,13 +587,47 @@ func main() {
 
 	{
 		var logLevel string
+		var cpuProfile string
+		var allocProfile string
 		rootCmd.PersistentFlags().StringVar(&logLevel, "log_level", log.ErrorLevel.String(), "Compiler log level (debug, info, warn, error, fatal, panic).")
+		rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpu_profile", "", "Save GopherJS compiler CPU profile at the given path. If unset, profiling is disabled.")
+		rootCmd.PersistentFlags().StringVar(&allocProfile, "alloc_profile", "", "Save GopherJS compiler allocation profile at the given path. If unset, profiling is disabled.")
+
 		rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 			lvl, err := log.ParseLevel(logLevel)
 			if err != nil {
 				return fmt.Errorf("invalid --log_level value %q: %w", logLevel, err)
 			}
 			log.SetLevel(lvl)
+
+			if cpuProfile != "" {
+				f, err := os.Create(cpuProfile)
+				if err != nil {
+					return fmt.Errorf("failed to create CPU profile file at %q: %w", cpuProfile, err)
+				}
+				if err := pprof.StartCPUProfile(f); err != nil {
+					return fmt.Errorf("failed to start CPU profile: %w", err)
+				}
+				// Not closing the file here, since we'll be writing to it throughout
+				// the lifetime of the process. It will be closed automatically when
+				// the process terminates.
+			}
+			return nil
+		}
+		rootCmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
+			if cpuProfile != "" {
+				pprof.StopCPUProfile()
+			}
+			if allocProfile != "" {
+				f, err := os.Create(allocProfile)
+				if err != nil {
+					return fmt.Errorf("failed to create alloc profile file at %q: %w", allocProfile, err)
+				}
+				if err := pprof.Lookup("allocs").WriteTo(f, 0); err != nil {
+					return fmt.Errorf("failed to write alloc profile: %w", err)
+				}
+				f.Close()
+			}
 			return nil
 		}
 	}

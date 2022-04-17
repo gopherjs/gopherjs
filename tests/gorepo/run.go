@@ -147,6 +147,9 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue46725.go": {category: notApplicable, desc: "GC related, not relevant to GopherJS"},
 	"fixedbugs/issue43444.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
 	"fixedbugs/issue23017.go": {desc: "https://github.com/gopherjs/gopherjs/issues/1063"},
+
+	// These are new tests in Go 1.17.8
+	"fixedbugs/issue50854.go": {category: lowLevelRuntimeDifference, desc: "negative int32 overflow behaves differently in JS"},
 }
 
 type failCategory uint8

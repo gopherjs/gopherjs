@@ -100,13 +100,13 @@ func main() {
 	cmdBuild.Flags().AddFlagSet(flagQuiet)
 	cmdBuild.Flags().AddFlagSet(compilerFlags)
 	cmdBuild.Flags().AddFlagSet(flagWatch)
-	cmdBuild.Run = func(cmd *cobra.Command, args []string) {
+	cmdBuild.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 		for {
 			s, err := gbuild.NewSession(options)
 			if err != nil {
 				options.PrintError("%s\n", err)
-				os.Exit(1)
+				return err
 			}
 
 			err = func() error {
@@ -169,10 +169,9 @@ func main() {
 				}
 				return nil
 			}()
-			exitCode := handleError(err, options, nil)
 
 			if s.Watcher == nil {
-				os.Exit(exitCode)
+				return err
 			}
 			s.WaitForChange()
 		}
@@ -186,13 +185,12 @@ func main() {
 	cmdInstall.Flags().AddFlagSet(flagQuiet)
 	cmdInstall.Flags().AddFlagSet(compilerFlags)
 	cmdInstall.Flags().AddFlagSet(flagWatch)
-	cmdInstall.Run = func(cmd *cobra.Command, args []string) {
+	cmdInstall.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 		for {
 			s, err := gbuild.NewSession(options)
 			if err != nil {
-				options.PrintError("%s\n", err)
-				os.Exit(1)
+				return err
 			}
 
 			err = func() error {
@@ -233,10 +231,9 @@ func main() {
 				}
 				return nil
 			}()
-			exitCode := handleError(err, options, nil)
 
 			if s.Watcher == nil {
-				os.Exit(exitCode)
+				return err
 			}
 			s.WaitForChange()
 		}
@@ -246,14 +243,12 @@ func main() {
 		Use:   "doc [arguments]",
 		Short: "display documentation for the requested, package, method or symbol",
 	}
-	cmdDoc.Run = func(cmd *cobra.Command, args []string) {
+	cmdDoc.RunE = func(cmd *cobra.Command, args []string) error {
 		goDoc := exec.Command("go", append([]string{"doc"}, args...)...)
 		goDoc.Stdout = os.Stdout
 		goDoc.Stderr = os.Stderr
 		goDoc.Env = append(os.Environ(), "GOARCH=js")
-		err := goDoc.Run()
-		exitCode := handleError(err, options, nil)
-		os.Exit(exitCode)
+		return goDoc.Run()
 	}
 
 	cmdGet := &cobra.Command{
@@ -272,46 +267,41 @@ func main() {
 	cmdRun.Flags().AddFlagSet(flagVerbose)
 	cmdRun.Flags().AddFlagSet(flagQuiet)
 	cmdRun.Flags().AddFlagSet(compilerFlags)
-	cmdRun.Run = func(cmd *cobra.Command, args []string) {
-		err := func() error {
-			lastSourceArg := 0
-			for {
-				if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {
-					break
-				}
-				lastSourceArg++
+	cmdRun.RunE = func(cmd *cobra.Command, args []string) error {
+		lastSourceArg := 0
+		for {
+			if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {
+				break
 			}
-			if lastSourceArg == 0 {
-				return fmt.Errorf("gopherjs run: no go files listed")
-			}
+			lastSourceArg++
+		}
+		if lastSourceArg == 0 {
+			return fmt.Errorf("gopherjs run: no go files listed")
+		}
 
-			tempfile, err := ioutil.TempFile(currentDirectory, filepath.Base(args[0])+".")
-			if err != nil && strings.HasPrefix(currentDirectory, runtime.GOROOT()) {
-				tempfile, err = ioutil.TempFile("", filepath.Base(args[0])+".")
-			}
-			if err != nil {
-				return err
-			}
-			defer func() {
-				tempfile.Close()
-				os.Remove(tempfile.Name())
-				os.Remove(tempfile.Name() + ".map")
-			}()
-			s, err := gbuild.NewSession(options)
-			if err != nil {
-				return err
-			}
-			if err := s.BuildFiles(args[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
-				return err
-			}
-			if err := runNode(tempfile.Name(), args[lastSourceArg:], "", options.Quiet, nil); err != nil {
-				return err
-			}
-			return nil
+		tempfile, err := ioutil.TempFile(currentDirectory, filepath.Base(args[0])+".")
+		if err != nil && strings.HasPrefix(currentDirectory, runtime.GOROOT()) {
+			tempfile, err = ioutil.TempFile("", filepath.Base(args[0])+".")
+		}
+		if err != nil {
+			return err
+		}
+		defer func() {
+			tempfile.Close()
+			os.Remove(tempfile.Name())
+			os.Remove(tempfile.Name() + ".map")
 		}()
-		exitCode := handleError(err, options, nil)
-
-		os.Exit(exitCode)
+		s, err := gbuild.NewSession(options)
+		if err != nil {
+			return err
+		}
+		if err := s.BuildFiles(args[:lastSourceArg], tempfile.Name(), currentDirectory); err != nil {
+			return err
+		}
+		if err := runNode(tempfile.Name(), args[lastSourceArg:], "", options.Quiet, nil); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	cmdTest := &cobra.Command{
@@ -328,226 +318,217 @@ func main() {
 	outputFilename := cmdTest.Flags().StringP("output", "o", "", "Compile the test binary to the named file. The test still runs (unless -c is specified).")
 	parallelTests := cmdTest.Flags().IntP("parallel", "p", runtime.NumCPU(), "Allow running tests in parallel for up to -p packages. Tests within the same package are still executed sequentially.")
 	cmdTest.Flags().AddFlagSet(compilerFlags)
-	cmdTest.Run = func(cmd *cobra.Command, args []string) {
+	cmdTest.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 
-		err := func() error {
-			// Expand import path patterns.
-			patternContext := gbuild.NewBuildContext("", options.BuildTags)
-			matches, err := patternContext.Match(args)
+		// Expand import path patterns.
+		patternContext := gbuild.NewBuildContext("", options.BuildTags)
+		matches, err := patternContext.Match(args)
+		if err != nil {
+			return fmt.Errorf("failed to expand patterns %v: %w", args, err)
+		}
+
+		if *compileOnly && len(matches) > 1 {
+			return errors.New("cannot use -c flag with multiple packages")
+		}
+		if *outputFilename != "" && len(matches) > 1 {
+			return errors.New("cannot use -o flag with multiple packages")
+		}
+		if *parallelTests < 1 {
+			return errors.New("--parallel cannot be less than 1")
+		}
+
+		parallelSlots := make(chan (bool), *parallelTests) // Semaphore for parallel test executions.
+		if len(matches) == 1 {
+			// Disable output buffering if testing only one package.
+			parallelSlots = make(chan (bool), 1)
+		}
+		executions := errgroup.Group{}
+
+		pkgs := make([]*gbuild.PackageData, len(matches))
+		for i, pkgPath := range matches {
+			var err error
+			pkgs[i], err = gbuild.Import(pkgPath, 0, "", options.BuildTags)
 			if err != nil {
-				return fmt.Errorf("failed to expand patterns %v: %w", args, err)
-			}
-
-			if *compileOnly && len(matches) > 1 {
-				return errors.New("cannot use -c flag with multiple packages")
-			}
-			if *outputFilename != "" && len(matches) > 1 {
-				return errors.New("cannot use -o flag with multiple packages")
-			}
-			if *parallelTests < 1 {
-				return errors.New("--parallel cannot be less than 1")
-			}
-
-			parallelSlots := make(chan (bool), *parallelTests) // Semaphore for parallel test executions.
-			if len(matches) == 1 {
-				// Disable output buffering if testing only one package.
-				parallelSlots = make(chan (bool), 1)
-			}
-			executions := errgroup.Group{}
-
-			pkgs := make([]*gbuild.PackageData, len(matches))
-			for i, pkgPath := range matches {
-				var err error
-				pkgs[i], err = gbuild.Import(pkgPath, 0, "", options.BuildTags)
-				if err != nil {
-					return err
-				}
-			}
-
-			var (
-				exitErr   error
-				exitErrMu = &sync.Mutex{}
-			)
-			for _, pkg := range pkgs {
-				pkg := pkg // Capture for the goroutine.
-				if len(pkg.TestGoFiles) == 0 && len(pkg.XTestGoFiles) == 0 {
-					fmt.Printf("?   \t%s\t[no test files]\n", pkg.ImportPath)
-					continue
-				}
-				localOpts := options
-				localOpts.TestedPackage = pkg.ImportPath
-				s, err := gbuild.NewSession(localOpts)
-				if err != nil {
-					return err
-				}
-
-				tests := &testFuncs{BuildContext: pkg.InternalBuildContext(), Package: pkg.Package}
-				collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
-					if testPkgName == "_test" {
-						for _, file := range pkg.TestGoFiles {
-							if err := tests.load(pkg.Package.Dir, file, testPkgName, &tests.ImportTest, &tests.NeedTest); err != nil {
-								return err
-							}
-						}
-					} else {
-						for _, file := range pkg.XTestGoFiles {
-							if err := tests.load(pkg.Package.Dir, file, "_xtest", &tests.ImportXtest, &tests.NeedXtest); err != nil {
-								return err
-							}
-						}
-					}
-					_, err := s.BuildPackage(testPkg)
-					return err
-				}
-
-				if err := collectTests(pkg.TestPackage(), "_test", &tests.NeedTest); err != nil {
-					return err
-				}
-
-				if err := collectTests(pkg.XTestPackage(), "_xtest", &tests.NeedXtest); err != nil {
-					return err
-				}
-
-				buf := new(bytes.Buffer)
-				if err := testmainTmpl.Execute(buf, tests); err != nil {
-					return err
-				}
-
-				fset := token.NewFileSet()
-				mainFile, err := parser.ParseFile(fset, "_testmain.go", buf, 0)
-				if err != nil {
-					return err
-				}
-
-				mainPkg := &gbuild.PackageData{
-					Package: &build.Package{
-						ImportPath: pkg.ImportPath + ".testmain",
-						Name:       "main",
-					},
-				}
-				importContext := &compiler.ImportContext{
-					Packages: s.Types,
-					Import:   s.ImportResolverFor(mainPkg),
-				}
-				mainPkgArchive, err := compiler.Compile(mainPkg.ImportPath, []*ast.File{mainFile}, fset, importContext, options.Minify)
-				if err != nil {
-					return err
-				}
-
-				if *compileOnly && *outputFilename == "" {
-					*outputFilename = pkg.Package.Name + "_test.js"
-				}
-
-				var outfile *os.File
-				if *outputFilename != "" {
-					outfile, err = os.Create(*outputFilename)
-					if err != nil {
-						return err
-					}
-				} else {
-					outfile, err = os.CreateTemp(currentDirectory, pkg.Package.Name+"_test.*.js")
-					if err != nil {
-						return err
-					}
-					outfile.Close() // Release file handle early, we only need the name.
-				}
-				cleanupTemp := func() {
-					if *outputFilename == "" {
-						os.Remove(outfile.Name())
-						os.Remove(outfile.Name() + ".map")
-					}
-				}
-				defer cleanupTemp() // Safety net in case cleanup after execution doesn't happen.
-
-				if err := s.WriteCommandPackage(mainPkgArchive, outfile.Name()); err != nil {
-					return err
-				}
-
-				if *compileOnly {
-					continue
-				}
-
-				var args []string
-				if *bench != "" {
-					args = append(args, "-test.bench", *bench)
-				}
-				if *benchtime != "" {
-					args = append(args, "-test.benchtime", *benchtime)
-				}
-				if *count != "" {
-					args = append(args, "-test.count", *count)
-				}
-				if *run != "" {
-					args = append(args, "-test.run", *run)
-				}
-				if *short {
-					args = append(args, "-test.short")
-				}
-				if *verbose {
-					args = append(args, "-test.v")
-				}
-				executions.Go(func() error {
-					parallelSlots <- true              // Acquire slot
-					defer func() { <-parallelSlots }() // Release slot
-
-					status := "ok  "
-					start := time.Now()
-					var testOut io.ReadWriter
-					if cap(parallelSlots) > 1 {
-						// If running in parallel, capture test output in a temporary buffer to avoid mixing
-						// output from different tests and print it later.
-						testOut = &bytes.Buffer{}
-					}
-
-					err := runNode(outfile.Name(), args, runTestDir(pkg), options.Quiet, testOut)
-
-					cleanupTemp() // Eagerly cleanup temporary compiled files after execution.
-
-					if testOut != nil {
-						io.Copy(os.Stdout, testOut)
-					}
-
-					if err != nil {
-						if _, ok := err.(*exec.ExitError); !ok {
-							return err
-						}
-						exitErrMu.Lock()
-						exitErr = err
-						exitErrMu.Unlock()
-						status = "FAIL"
-					}
-					fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Since(start).Seconds())
-					return nil
-				})
-			}
-			if err := executions.Wait(); err != nil {
 				return err
 			}
-			return exitErr
-		}()
-		exitCode := handleError(err, options, nil)
+		}
 
-		os.Exit(exitCode)
+		var (
+			exitErr   error
+			exitErrMu = &sync.Mutex{}
+		)
+		for _, pkg := range pkgs {
+			pkg := pkg // Capture for the goroutine.
+			if len(pkg.TestGoFiles) == 0 && len(pkg.XTestGoFiles) == 0 {
+				fmt.Printf("?   \t%s\t[no test files]\n", pkg.ImportPath)
+				continue
+			}
+			localOpts := options
+			localOpts.TestedPackage = pkg.ImportPath
+			s, err := gbuild.NewSession(localOpts)
+			if err != nil {
+				return err
+			}
+
+			tests := &testFuncs{BuildContext: pkg.InternalBuildContext(), Package: pkg.Package}
+			collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
+				if testPkgName == "_test" {
+					for _, file := range pkg.TestGoFiles {
+						if err := tests.load(pkg.Package.Dir, file, testPkgName, &tests.ImportTest, &tests.NeedTest); err != nil {
+							return err
+						}
+					}
+				} else {
+					for _, file := range pkg.XTestGoFiles {
+						if err := tests.load(pkg.Package.Dir, file, "_xtest", &tests.ImportXtest, &tests.NeedXtest); err != nil {
+							return err
+						}
+					}
+				}
+				_, err := s.BuildPackage(testPkg)
+				return err
+			}
+
+			if err := collectTests(pkg.TestPackage(), "_test", &tests.NeedTest); err != nil {
+				return err
+			}
+
+			if err := collectTests(pkg.XTestPackage(), "_xtest", &tests.NeedXtest); err != nil {
+				return err
+			}
+
+			buf := new(bytes.Buffer)
+			if err := testmainTmpl.Execute(buf, tests); err != nil {
+				return err
+			}
+
+			fset := token.NewFileSet()
+			mainFile, err := parser.ParseFile(fset, "_testmain.go", buf, 0)
+			if err != nil {
+				return err
+			}
+
+			mainPkg := &gbuild.PackageData{
+				Package: &build.Package{
+					ImportPath: pkg.ImportPath + ".testmain",
+					Name:       "main",
+				},
+			}
+			importContext := &compiler.ImportContext{
+				Packages: s.Types,
+				Import:   s.ImportResolverFor(mainPkg),
+			}
+			mainPkgArchive, err := compiler.Compile(mainPkg.ImportPath, []*ast.File{mainFile}, fset, importContext, options.Minify)
+			if err != nil {
+				return err
+			}
+
+			if *compileOnly && *outputFilename == "" {
+				*outputFilename = pkg.Package.Name + "_test.js"
+			}
+
+			var outfile *os.File
+			if *outputFilename != "" {
+				outfile, err = os.Create(*outputFilename)
+				if err != nil {
+					return err
+				}
+			} else {
+				outfile, err = os.CreateTemp(currentDirectory, pkg.Package.Name+"_test.*.js")
+				if err != nil {
+					return err
+				}
+				outfile.Close() // Release file handle early, we only need the name.
+			}
+			cleanupTemp := func() {
+				if *outputFilename == "" {
+					os.Remove(outfile.Name())
+					os.Remove(outfile.Name() + ".map")
+				}
+			}
+			defer cleanupTemp() // Safety net in case cleanup after execution doesn't happen.
+
+			if err := s.WriteCommandPackage(mainPkgArchive, outfile.Name()); err != nil {
+				return err
+			}
+
+			if *compileOnly {
+				continue
+			}
+
+			var args []string
+			if *bench != "" {
+				args = append(args, "-test.bench", *bench)
+			}
+			if *benchtime != "" {
+				args = append(args, "-test.benchtime", *benchtime)
+			}
+			if *count != "" {
+				args = append(args, "-test.count", *count)
+			}
+			if *run != "" {
+				args = append(args, "-test.run", *run)
+			}
+			if *short {
+				args = append(args, "-test.short")
+			}
+			if *verbose {
+				args = append(args, "-test.v")
+			}
+			executions.Go(func() error {
+				parallelSlots <- true              // Acquire slot
+				defer func() { <-parallelSlots }() // Release slot
+
+				status := "ok  "
+				start := time.Now()
+				var testOut io.ReadWriter
+				if cap(parallelSlots) > 1 {
+					// If running in parallel, capture test output in a temporary buffer to avoid mixing
+					// output from different tests and print it later.
+					testOut = &bytes.Buffer{}
+				}
+
+				err := runNode(outfile.Name(), args, runTestDir(pkg), options.Quiet, testOut)
+
+				cleanupTemp() // Eagerly cleanup temporary compiled files after execution.
+
+				if testOut != nil {
+					io.Copy(os.Stdout, testOut)
+				}
+
+				if err != nil {
+					if _, ok := err.(*exec.ExitError); !ok {
+						return err
+					}
+					exitErrMu.Lock()
+					exitErr = err
+					exitErrMu.Unlock()
+					status = "FAIL"
+				}
+				fmt.Printf("%s\t%s\t%.3fs\n", status, pkg.ImportPath, time.Since(start).Seconds())
+				return nil
+			})
+		}
+		if err := executions.Wait(); err != nil {
+			return err
+		}
+		return exitErr
 	}
 
 	cmdServe := &cobra.Command{
 		Use:   "serve [root]",
 		Short: "compile on-the-fly and serve",
 	}
+	cmdServe.Args = cobra.MaximumNArgs(1)
 	cmdServe.Flags().AddFlagSet(flagVerbose)
 	cmdServe.Flags().AddFlagSet(flagQuiet)
 	cmdServe.Flags().AddFlagSet(compilerFlags)
 	var addr string
 	cmdServe.Flags().StringVarP(&addr, "http", "", ":8080", "HTTP bind address to serve")
-	cmdServe.Run = func(cmd *cobra.Command, args []string) {
+	cmdServe.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 		var root string
-
-		if len(args) > 1 {
-			cmdServe.HelpFunc()(cmd, args)
-			os.Exit(1)
-		}
 
 		if len(args) == 1 {
 			root = args[0]
@@ -557,8 +538,7 @@ func main() {
 		// Otherwise users will see it only after trying to serve a package, which is a bad experience.
 		_, err := gbuild.NewSession(options)
 		if err != nil {
-			options.PrintError("%s\n", err)
-			os.Exit(1)
+			return err
 		}
 		sourceFiles := http.FileServer(serveCommandFileSystem{
 			serveRoot:  root,
@@ -568,8 +548,7 @@ func main() {
 
 		ln, err := net.Listen("tcp", addr)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 		if tcpAddr := ln.Addr().(*net.TCPAddr); tcpAddr.IP.Equal(net.IPv4zero) || tcpAddr.IP.Equal(net.IPv6zero) { // Any available addresses.
 			fmt.Printf("serving at http://localhost:%d and on port %d of any available addresses\n", tcpAddr.Port, tcpAddr.Port)
@@ -577,18 +556,15 @@ func main() {
 			fmt.Printf("serving at http://%s\n", tcpAddr)
 		}
 		fmt.Fprintln(os.Stderr, http.Serve(tcpKeepAliveListener{ln.(*net.TCPListener)}, sourceFiles))
+		return nil
 	}
 
 	cmdVersion := &cobra.Command{
 		Use:   "version",
 		Short: "print GopherJS compiler version",
+		Args:  cobra.ExactArgs(0),
 	}
 	cmdVersion.Run = func(cmd *cobra.Command, args []string) {
-		if len(args) > 0 {
-			cmdServe.HelpFunc()(cmd, args)
-			os.Exit(1)
-		}
-
 		fmt.Printf("GopherJS %s\n", compiler.Version)
 	}
 
@@ -601,8 +577,10 @@ func main() {
 	}
 
 	rootCmd := &cobra.Command{
-		Use:  "gopherjs",
-		Long: "GopherJS is a tool for compiling Go source code to JavaScript.",
+		Use:           "gopherjs",
+		Long:          "GopherJS is a tool for compiling Go source code to JavaScript.",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 	rootCmd.AddCommand(cmdBuild, cmdGet, cmdInstall, cmdRun, cmdTest, cmdServe, cmdVersion, cmdDoc, cmdClean)
 
@@ -620,7 +598,7 @@ func main() {
 	}
 	err := rootCmd.Execute()
 	if err != nil {
-		os.Exit(2)
+		os.Exit(handleError(err, options, nil))
 	}
 }
 

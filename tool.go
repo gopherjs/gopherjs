@@ -173,6 +173,8 @@ func main() {
 
 			if s.Watcher == nil {
 				return err
+			} else if err != nil {
+				handleError(err, options, nil)
 			}
 			s.WaitForChange()
 		}
@@ -235,6 +237,8 @@ func main() {
 
 			if s.Watcher == nil {
 				return err
+			} else if err != nil {
+				handleError(err, options, nil)
 			}
 			s.WaitForChange()
 		}

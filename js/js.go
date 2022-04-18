@@ -161,31 +161,27 @@ func MakeWrapper(i interface{}) *Object {
 // and getters are themsevles wrapped when accessed, but an important point to
 // note is that a new wrapped value is created on each access.
 func MakeFullWrapper(i interface{}) *Object {
-	v := InternalObject(i)
-	c := v.Get("constructor")
+	internalObj := InternalObject(i)
+	constructor := internalObj.Get("constructor")
 
-	o := Global.Get("Object").New()
+	wrapperObj := Global.Get("Object").New()
 
-	defineProperty := func(k string, fns ...func(*Object)) {
-		op := Global.Get("Object").New()
-		for _, f := range fns {
-			f(op)
-		}
-		Global.Get("Object").Call("defineProperty", o, k, op)
+	defineProperty := func(key string, descriptor M) {
+		Global.Get("Object").Call("defineProperty", wrapperObj, key, descriptor)
 	}
 
-	defineProperty("__internal_object__", func(op *Object) {
-		op.Set("value", v)
+	defineProperty("__internal_object__", M{
+		"value": internalObj,
 	})
 
 	{
-		// caculate a sensible type string
+		// Calculate a sensible type string.
 
-		// we don't want to import any packages in this package
-		// so we do some string operations by hand
+		// We don't want to import any packages in this package,
+		// so we do some string operations by hand.
 
-		typ := c.Get("string").String()
-		pkg := c.Get("pkg").String()
+		typ := constructor.Get("string").String()
+		pkg := constructor.Get("pkg").String()
 
 		ptr := ""
 		if typ[0] == '*' {
@@ -200,33 +196,33 @@ func MakeFullWrapper(i interface{}) *Object {
 		}
 
 		pkgTyp := pkg + "." + ptr + typ
-		defineProperty("$type", func(op *Object) {
-			op.Set("value", pkgTyp)
+		defineProperty("$type", M{
+			"value": pkgTyp,
 		})
 	}
 
 	var fields *Object
 	methods := Global.Get("Array").New()
-	if ms := c.Get("methods"); ms != Undefined {
+	if ms := constructor.Get("methods"); ms != Undefined {
 		methods = methods.Call("concat", ms)
 	}
-	// if we are a pointer value then add fields from element
-	// else the constructor itself will have them
-	if e := c.Get("elem"); e != Undefined {
+	// If we are a pointer value then add fields from element,
+	// else the constructor itself will have them.
+	if e := constructor.Get("elem"); e != Undefined {
 		fields = e.Get("fields")
 		methods = methods.Call("concat", e.Get("methods"))
 	} else {
-		fields = c.Get("fields")
+		fields = constructor.Get("fields")
 	}
 	for i := 0; i < methods.Length(); i++ {
 		m := methods.Index(i)
 		if m.Get("pkg").String() != "" { // not exported
 			continue
 		}
-		defineProperty(m.Get("prop").String(), func(op *Object) {
-			op.Set("value", func(args ...*Object) *Object {
-				return Global.Call("$externalizeFunction", v.Get(m.Get("prop").String()), m.Get("typ"), true, InternalObject(MakeFullWrapper)).Call("apply", v, args)
-			})
+		defineProperty(m.Get("prop").String(), M{
+			"value": func(args ...*Object) *Object {
+				return Global.Call("$externalizeFunction", internalObj.Get(m.Get("prop").String()), m.Get("typ"), true, InternalObject(MakeFullWrapper)).Call("apply", internalObj, args)
+			},
 		})
 	}
 	if fields != Undefined {
@@ -235,19 +231,19 @@ func MakeFullWrapper(i interface{}) *Object {
 			if !f.Get("exported").Bool() {
 				continue
 			}
-			defineProperty(f.Get("prop").String(), func(op *Object) {
-				op.Set("get", func() *Object {
-					vc := Global.Call("$copyIfRequired", v.Get("$val").Get(f.Get("prop").String()), f.Get("typ"))
+			defineProperty(f.Get("prop").String(), M{
+				"get": func() *Object {
+					vc := Global.Call("$copyIfRequired", internalObj.Get("$val").Get(f.Get("prop").String()), f.Get("typ"))
 					return Global.Call("$externalize", vc, f.Get("typ"), InternalObject(MakeFullWrapper))
-				})
-				op.Set("set", func(jv *Object) {
+				},
+				"set": func(jv *Object) {
 					gv := Global.Call("$internalize", jv, f.Get("typ"), InternalObject(MakeFullWrapper))
-					v.Get("$val").Set(f.Get("prop").String(), gv)
-				})
+					internalObj.Get("$val").Set(f.Get("prop").String(), gv)
+				},
 			})
 		}
 	}
-	return o
+	return wrapperObj
 }
 
 // NewArrayBuffer creates a JavaScript ArrayBuffer from a byte slice.
@@ -265,7 +261,7 @@ type M map[string]interface{}
 type S []interface{}
 
 func init() {
-	// avoid dead code elimination
+	// Avoid dead code elimination.
 	e := Error{}
 	_ = e
 }

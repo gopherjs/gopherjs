@@ -61,11 +61,12 @@ type Info struct {
 
 func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
 	funcInfo := &FuncInfo{
-		pkgInfo:      info,
-		Flattened:    make(map[ast.Node]bool),
-		Blocking:     make(map[ast.Node]bool),
-		GotoLabel:    make(map[*types.Label]bool),
-		localCallees: make(map[*types.Func][]astPath),
+		pkgInfo:            info,
+		Flattened:          make(map[ast.Node]bool),
+		Blocking:           make(map[ast.Node]bool),
+		GotoLabel:          make(map[*types.Label]bool),
+		localNamedCallees:  make(map[*types.Func][]astPath),
+		literalFuncCallees: make(map[*ast.FuncLit][]astPath),
 	}
 
 	// Register the function in the appropriate map.
@@ -128,15 +129,30 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 	}
 
 	// Propagate information about blocking calls to the caller functions.
+	// For each function we check all other functions it may call and if any of
+	// them are blocking, we mark the caller blocking as well. The process is
+	// repeated until no new blocking functions is detected.
 	for {
 		done := true
 		for _, caller := range info.allInfos {
-			for callee, callSites := range caller.localCallees {
+			// Check calls to named functions and function-typed variables.
+			for callee, callSites := range caller.localNamedCallees {
 				if info.IsBlocking(callee) {
 					for _, callSite := range callSites {
 						caller.markBlocking(callSite)
 					}
-					delete(caller.localCallees, callee)
+					delete(caller.localNamedCallees, callee)
+					done = false
+				}
+			}
+
+			// Check direct calls to function literals.
+			for callee, callSites := range caller.literalFuncCallees {
+				if len(info.FuncLitInfos[callee].Blocking) > 0 {
+					for _, callSite := range callSites {
+						caller.markBlocking(callSite)
+					}
+					delete(caller.literalFuncCallees, callee)
 					done = false
 				}
 			}
@@ -177,9 +193,15 @@ type FuncInfo struct {
 	continueStmts []continueStmt
 	// List of return statements in the function.
 	returnStmts []astPath
-	// List of other functions from the current package this function calls. If
-	// any of them are blocking, this function will become blocking too.
-	localCallees map[*types.Func][]astPath
+	// List of other named functions from the current package this function calls.
+	// If any of them are blocking, this function will become blocking too.
+	localNamedCallees map[*types.Func][]astPath
+	// List of function literals directly called from this function (for example:
+	// `func() { /* do stuff */ }()`). This is distinct from function literals
+	// assigned to named variables (for example: `doStuff := func() {};
+	// doStuff()`), which are handled by localNamedCallees. If any of them are
+	// identified as blocking, this function will become blocking too.
+	literalFuncCallees map[*ast.FuncLit][]astPath
 
 	pkgInfo      *Info // Function's parent package.
 	visitorStack astPath
@@ -296,13 +318,13 @@ func (fi *FuncInfo) Visit(node ast.Node) ast.Visitor {
 func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 	switch f := astutil.RemoveParens(n.Fun).(type) {
 	case *ast.Ident:
-		fi.callTo(fi.pkgInfo.Uses[f])
+		fi.callToNamedFunc(fi.pkgInfo.Uses[f])
 	case *ast.SelectorExpr:
 		if sel := fi.pkgInfo.Selections[f]; sel != nil && typesutil.IsJsObject(sel.Recv()) {
 			// js.Object methods are known to be non-blocking, but we still must
 			// check its arguments.
 		} else {
-			fi.callTo(fi.pkgInfo.Uses[f.Sel])
+			fi.callToNamedFunc(fi.pkgInfo.Uses[f.Sel])
 		}
 	case *ast.FuncLit:
 		// Collect info about the function literal itself.
@@ -312,13 +334,8 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 		for _, arg := range n.Args {
 			ast.Walk(fi, arg)
 		}
-		// If the function literal is blocking, this function is blocking to.
-		// FIXME(nevkontakte): What if the function literal is calling a blocking
-		// function through several layers of indirection? This will only become
-		// known at a later stage of analysis.
-		if len(fi.pkgInfo.FuncLitInfos[f].Blocking) != 0 {
-			fi.markBlocking(fi.visitorStack)
-		}
+		// Register literal function call site in case it is identified as blocking.
+		fi.literalFuncCallees[f] = append(fi.literalFuncCallees[f], fi.visitorStack.copy())
 		return nil // No need to walk under this CallExpr, we already did it manually.
 	default:
 		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
@@ -334,12 +351,12 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 	return fi
 }
 
-func (fi *FuncInfo) callTo(callee types.Object) {
+func (fi *FuncInfo) callToNamedFunc(callee types.Object) {
 	switch o := callee.(type) {
 	case *types.Func:
 		if recv := o.Type().(*types.Signature).Recv(); recv != nil {
 			if _, ok := recv.Type().Underlying().(*types.Interface); ok {
-				// Conservatively assume that an interfact implementation might be blocking.
+				// Conservatively assume that an interface implementation may be blocking.
 				fi.markBlocking(fi.visitorStack)
 				return
 			}
@@ -352,7 +369,7 @@ func (fi *FuncInfo) callTo(callee types.Object) {
 		}
 		// We probably don't know yet whether the callee function is blocking.
 		// Record the calls site for the later stage.
-		fi.localCallees[o] = append(fi.localCallees[o], fi.visitorStack.copy())
+		fi.localNamedCallees[o] = append(fi.localNamedCallees[o], fi.visitorStack.copy())
 	case *types.Var:
 		// Conservatively assume that a function in a variable might be blocking.
 		fi.markBlocking(fi.visitorStack)

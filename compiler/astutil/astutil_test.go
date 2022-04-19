@@ -1,10 +1,10 @@
 package astutil
 
 import (
-	"go/ast"
-	"go/parser"
 	"go/token"
 	"testing"
+
+	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
 func TestImportsUnsafe(t *testing.T) {
@@ -43,7 +43,7 @@ func TestImportsUnsafe(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			src := "package testpackage\n\n" + test.imports
 			fset := token.NewFileSet()
-			file := parse(t, fset, src)
+			file := srctesting.Parse(t, fset, src)
 			got := ImportsUnsafe(file)
 			if got != test.want {
 				t.Fatalf("ImportsUnsafe() returned %t, want %t", got, test.want)
@@ -74,7 +74,7 @@ func TestFuncKey(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			fdecl := parseFuncDecl(t, test.src)
+			fdecl := srctesting.ParseFuncDecl(t, test.src)
 			if got := FuncKey(fdecl); got != test.want {
 				t.Errorf("Got %q, want %q", got, test.want)
 			}
@@ -122,7 +122,7 @@ func TestPruneOriginal(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			fdecl := parseFuncDecl(t, test.src)
+			fdecl := srctesting.ParseFuncDecl(t, test.src)
 			if got := PruneOriginal(fdecl); got != test.want {
 				t.Errorf("PruneOriginal() returned %t, want %t", got, test.want)
 			}
@@ -173,34 +173,11 @@ func TestEndsWithReturn(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			fdecl := parseFuncDecl(t, "package testpackage\n"+test.src)
+			fdecl := srctesting.ParseFuncDecl(t, "package testpackage\n"+test.src)
 			got := EndsWithReturn(fdecl.Body.List)
 			if got != test.want {
 				t.Errorf("EndsWithReturn() returned %t, want %t", got, test.want)
 			}
 		})
 	}
-}
-
-func parse(t *testing.T, fset *token.FileSet, src string) *ast.File {
-	t.Helper()
-	f, err := parser.ParseFile(fset, "test.go", src, parser.ParseComments)
-	if err != nil {
-		t.Fatalf("Failed to parse test source: %s", err)
-	}
-	return f
-}
-
-func parseFuncDecl(t *testing.T, src string) *ast.FuncDecl {
-	t.Helper()
-	fset := token.NewFileSet()
-	file := parse(t, fset, src)
-	if l := len(file.Decls); l != 1 {
-		t.Fatalf("Got %d decls in the sources, expected exactly 1", l)
-	}
-	fdecl, ok := file.Decls[0].(*ast.FuncDecl)
-	if !ok {
-		t.Fatalf("Got %T decl, expected *ast.FuncDecl", file.Decls[0])
-	}
-	return fdecl
 }

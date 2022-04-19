@@ -1,5 +1,3 @@
-//go:build js
-
 package syscall
 
 import (
@@ -39,7 +37,7 @@ func unsetenv_c(k string) {
 
 func setStat(st *Stat_t, jsSt js.Value) {
 	// This method is an almost-exact copy of upstream, except for 4 places where
-	// time stamps are obtained as floats in lieu of int64. Unstread wasm emulates
+	// time stamps are obtained as floats in lieu of int64. Upstream wasm emulates
 	// a 64-bit architecture and millisecond-based timestamps fit within an int
 	// type. GopherJS is 32-bit and use of 32-bit ints causes timestamp truncation.
 	// We get timestamps as float64 (which matches JS-native representation) and

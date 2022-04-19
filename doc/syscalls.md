@@ -2,7 +2,7 @@
 
 System calls are the bridge between your application and your operating system. They are used whenever you access something outside of your application's memory, for example when you write to the console, when you read or write files or when you access the network. In Go, system calls are mostly used by the `os` package, hence the name. When using GopherJS you need to consider if system calls are available or not.
 
-Starting with 1.18, GopherJS provides to the same [set of cross-platform](https://pkg.go.dev/syscall?GOOS=js) syscalls as standard Go WebAssembly, emulating them via JavaScript APIs available in the runtime (browser or Node.js).
+Starting with 1.18, GopherJS provides the same [set of cross-platform](https://pkg.go.dev/syscall?GOOS=js) syscalls as standard Go WebAssembly, emulating them via JavaScript APIs available in the runtime (browser or Node.js).
 
 ### Output redirection to console
 

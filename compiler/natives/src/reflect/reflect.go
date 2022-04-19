@@ -5,9 +5,10 @@ package reflect
 
 import (
 	"errors"
-	"internal/itoa"
 	"strconv"
 	"unsafe"
+
+	"internal/itoa"
 
 	"github.com/gopherjs/gopherjs/js"
 )
@@ -682,50 +683,8 @@ func (iter *mapIter) skipUntilValidKey() {
 	}
 }
 
-func mapiterinit(t *rtype, m unsafe.Pointer) unsafe.Pointer {
+func mapiterinit(t *rtype, m unsafe.Pointer, _ *hiter) unsafe.Pointer {
 	return unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Call("$keys", js.InternalObject(m)), 0, nil})
-}
-
-func mapiterkey(it unsafe.Pointer) unsafe.Pointer {
-	iter := (*mapIter)(it)
-	var kv *js.Object
-	if iter.last != nil {
-		kv = iter.last
-	} else {
-		iter.skipUntilValidKey()
-		if iter.i == iter.keys.Length() {
-			return nil
-		}
-		k := iter.keys.Index(iter.i)
-		kv = iter.m.Get(k.String())
-
-		// Record the key-value pair for later accesses.
-		iter.last = kv
-	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("k"), jsType(PtrTo(iter.t.Key()))).Unsafe())
-}
-
-func mapiterelem(it unsafe.Pointer) unsafe.Pointer {
-	iter := (*mapIter)(it)
-	var kv *js.Object
-	if iter.last != nil {
-		kv = iter.last
-	} else {
-		iter.skipUntilValidKey()
-		if iter.i == iter.keys.Length() {
-			return nil
-		}
-		k := iter.keys.Index(iter.i)
-		kv = iter.m.Get(k.String())
-		iter.last = kv
-	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("v"), jsType(PtrTo(iter.t.Elem()))).Unsafe())
-}
-
-func mapiternext(it unsafe.Pointer) {
-	iter := (*mapIter)(it)
-	iter.last = nil
-	iter.i++
 }
 
 func maplen(m unsafe.Pointer) int {
@@ -733,7 +692,7 @@ func maplen(m unsafe.Pointer) int {
 }
 
 func cvtDirect(v Value, typ Type) Value {
-	var srcVal = v.object()
+	srcVal := v.object()
 	if srcVal == jsType(v.typ).Get("nil") {
 		return makeValue(typ, jsType(typ).Get("nil"), v.flag)
 	}
@@ -1649,7 +1608,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 				return true
 			}
 		}
-		var n = v1.Len()
+		n := v1.Len()
 		if n != v2.Len() {
 			return false
 		}
@@ -1667,7 +1626,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	case Ptr:
 		return deepValueEqualJs(v1.Elem(), v2.Elem(), visited)
 	case Struct:
-		var n = v1.NumField()
+		n := v1.NumField()
 		for i := 0; i < n; i++ {
 			if !deepValueEqualJs(v1.Field(i), v2.Field(i), visited) {
 				return false
@@ -1681,7 +1640,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 		if v1.object() == v2.object() {
 			return true
 		}
-		var keys = v1.MapKeys()
+		keys := v1.MapKeys()
 		if len(keys) != v2.Len() {
 			return false
 		}

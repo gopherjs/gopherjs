@@ -190,11 +190,18 @@ jobs:
             choco install golang --version="<< pipeline.parameters.go_version >>" -my
             go version
             (Get-Command go).Path
+            [Environment]::SetEnvironmentVariable(
+              "Path",
+              [Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::Machine) + ";C:\Users\circleci\go\bin",
+              [EnvironmentVariableTarget]::Machine)
+
       - install_deps:
           optional: false
       - run: 
           name: Install GopherJS
-          command: go install -v .
+          command: 
+            go install -v .
+            (Get-Command gopherjs).Path
       - run: 
           name: Test GopherJS
           command: go test -v -short ./...

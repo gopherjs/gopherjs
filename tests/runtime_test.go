@@ -1,5 +1,5 @@
-//go:build js
-// +build js
+//go:build js && gopherjs
+// +build js,gopherjs
 
 package tests
 
@@ -68,5 +68,14 @@ func Test_parseCallFrame(t *testing.T) {
 				t.Errorf("Unexpected result: %s", got)
 			}
 		})
+	}
+}
+
+func TestBuildPlatform(t *testing.T) {
+	if runtime.GOOS != "js" {
+		t.Errorf("Got runtime.GOOS=%q. Want: %q.", runtime.GOOS, "js")
+	}
+	if runtime.GOARCH != "ecmascript" {
+		t.Errorf("Got runtime.GOARCH=%q. Want: %q.", runtime.GOARCH, "ecmascript")
 	}
 }

@@ -101,15 +101,6 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 
 		obj := file.Scope.Lookup(localName)
 		if obj == nil {
-			if pkgPath == "syscall" {
-				// Syscall uses go:cgo_import_dynamic pragma to import symbols from
-				// dynamic libraries when build with GOOS=darwin, which GopherJS doesn't
-				// support. Silently ignore such directives.
-				//
-				// In the long term https://github.com/gopherjs/gopherjs/issues/693 is a
-				// preferred solution.
-				return nil
-			}
 			return fmt.Errorf("//go:linkname local symbol %q is not found in the current source file", localName)
 		}
 

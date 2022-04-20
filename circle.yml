@@ -44,6 +44,12 @@ workflows:
     - gorepo_tests:
         requires:
           - build
+    - darwin_smoke:
+        requires:
+          - build
+    - windows_smoke:
+        requires:
+          - build
 
 parameters:
   go_version:
@@ -55,6 +61,11 @@ parameters:
   node_version:
     type: string
     default: "12"
+
+orbs:
+  win: circleci/windows@4.0.0
+  go: circleci/go@1.7.1
+  node: circleci/node@5.0.1
 
 jobs:
   build:
@@ -167,46 +178,98 @@ jobs:
         command: |
           go test -v github.com/gopherjs/gopherjs/tests/gorepo
 
+  windows_smoke:
+    executor:
+      name: win/default
+      shell: powershell.exe
+    steps:
+      - checkout
+      - run:
+          name: Install Go
+          command: |
+            choco install golang --version="<< pipeline.parameters.go_version >>" -my
+            go version
+            (Get-Command go).Path
+      - install_deps:
+          optional: false
+      - run: 
+          name: Install GopherJS
+          command: go install -v .
+      - run: 
+          name: Test GopherJS
+          command: go test -v -short ./...
+      - run:
+          name: Smoke tests
+          command: |
+            $env:NODE_PATH=$(npm root)
+            $env:SOURCE_MAP_SUPPORT=false
+            gopherjs build -v net/http
+            gopherjs test -v --short fmt sort ./tests
+    
+  darwin_smoke:
+    macos:
+      xcode: 13.3.0  # Mac OS 12.2.1
+    steps:
+      - checkout
+      - setup_environment
+      - install_deps:
+          optional: false
+      - run: 
+          name: Install GopherJS
+          command: go install -v .
+      - run: 
+          name: Test GopherJS
+          command: go test -v -short ./...
+      - run:
+          name: Smoke tests
+          command: |
+            gopherjs build -v net/http
+            gopherjs test -v --short fmt log os ./tests
+
 commands:
   setup_environment:
     description: Set up Go, NVM and Node.js
     steps:
+    - go/install:
+        version: << pipeline.parameters.go_version >>
+    - node/install:
+        node-version: << pipeline.parameters.node_version >>
     - run:
-        name: Install Go
+        name: Set up environment
         command: |
-          cd /usr/local
-          sudo rm -rf go
-          curl "https://storage.googleapis.com/golang/go<< pipeline.parameters.go_version >>.linux-amd64.tar.gz" | sudo tar -xz
-          echo 'export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin"' >> $BASH_ENV
+          echo 'export PATH="$PATH:$HOME/go/bin"' >> $BASH_ENV
           echo 'export GO111MODULE=on' >> $BASH_ENV
-          . $BASH_ENV
-          go version
-          go get -v github.com/nevkontakte/go-junit-report@forked # For CircleCI test reports.
-    - run:
-        name: Install NVM
-        command: |
-          git clone https://github.com/nvm-sh/nvm $HOME/.nvm
-          cd $HOME/.nvm && git checkout "v<< pipeline.parameters.nvm_version >>"
-          echo 'export NVM_DIR="${HOME}/.nvm"' >> "${BASH_ENV}"
-          echo '[ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"' >> "${BASH_ENV}"
-    - run:
-        name: Install Node.js
-        command: |
-          nvm install "<< pipeline.parameters.node_version >>" && nvm alias default "<< pipeline.parameters.node_version >>"
-          node --version
-  install_deps:
-    description: Install Go and Node dependency packages
-    steps:
-    - run:
-        name: Install required Node.js packages
-        command: |
-          npm ci # Install our dependencies from package.json.
           echo 'export SOURCE_MAP_SUPPORT=true' >> $BASH_ENV
           # Make nodejs able to require installed modules from any working path.
-          echo export "NODE_PATH='$(npm root)'" >> "${BASH_ENV}"
-    - run:
-        name: Install required Go packages
-        command: go mod download -x
+          echo "export NODE_PATH=$(npm root)" >> $BASH_ENV
+          go version
+          node -v
+          go install -v github.com/nevkontakte/go-junit-report@forked # For CircleCI test reports.
+  install_deps:
+    description: Install Go and Node dependency packages
+    parameters:
+      optional:
+        default: true
+        type: boolean
+        description: Install node-syscall module and its dependencies.
+    steps:
+    - when:
+        condition:
+          not: << parameters.optional >>
+        steps:
+        - run:
+            name: Install required Node.js packages
+            command: |
+              # Extra flags to avoid installing node-syscall.
+              npm install --no-optional --no-package-lock
+    - when:
+        condition: << parameters.optional >>
+        steps:
+        - run:
+            name: Install required Node.js packages (including optional)
+            command: |
+              npm ci # Install our dependencies from package.json.
+    - go/mod-download
   install_gopherjs:
     description: Install GopherJS
     steps:

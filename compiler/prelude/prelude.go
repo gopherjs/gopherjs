@@ -25,6 +25,41 @@ if ($global === undefined || $global.Array === undefined) {
 if (typeof module !== "undefined") {
   $module = module;
 }
+
+if (!$global.fs && $global.require) {
+  try {
+    var fs = $global.require('fs');
+    if (typeof fs === "object" && fs !== null && Object.keys(fs).length !== 0) {
+      $global.fs = fs;
+    }
+  } catch(e) { /* Ignore if the module couldn't be loaded. */ }
+}
+
+if (!$global.fs) {
+  var outputBuf = "";
+  var decoder = new TextDecoder("utf-8");
+  $global.fs = {
+    constants: { O_WRONLY: -1, O_RDWR: -1, O_CREAT: -1, O_TRUNC: -1, O_APPEND: -1, O_EXCL: -1 }, // unused
+    writeSync: function writeSync(fd, buf) {
+      outputBuf += decoder.decode(buf);
+      var nl = outputBuf.lastIndexOf("\n");
+      if (nl != -1) {
+        console.log(outputBuf.substr(0, nl));
+        outputBuf = outputBuf.substr(nl + 1);
+      }
+      return buf.length;
+    },
+    write: function write(fd, buf, offset, length, position, callback) {
+      if (offset !== 0 || length !== buf.length || position !== null) {
+        callback(enosys());
+        return;
+      }
+      var n = this.writeSync(fd, buf);
+      callback(null, n);
+    }
+  };
+}
+
 var $linknames = {} // Collection of functions referenced by a go:linkname directive.
 var $packages = {}, $idCounter = 0;
 var $keys = function(m) { return m ? Object.keys(m) : []; };

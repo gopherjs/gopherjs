@@ -64,9 +64,9 @@ func init() {
 		os.Exit(1)
 	}
 
-	if build.Default.GOOS != "linux" && build.Default.GOOS != "darwin" {
-		fmt.Fprintf(os.Stderr, "GOOS is not supported, the supported GOOS values are linux and darwin. The GopherJS is falling back to GOOS=linux\n")
-		build.Default.GOOS = "linux"
+	e := gbuild.DefaultEnv()
+	if e.GOOS != "js" || e.GOARCH != "ecmascript" {
+		fmt.Fprintf(os.Stderr, "Using GOOS=%s and GOARCH=%s in GopherJS is deprecated and will be removed in future. Use GOOS=js GOARCH=ecmascript instead.\n", e.GOOS, e.GOARCH)
 	}
 }
 
@@ -273,6 +273,7 @@ func main() {
 	cmdRun.Flags().AddFlagSet(flagQuiet)
 	cmdRun.Flags().AddFlagSet(compilerFlags)
 	cmdRun.RunE = func(cmd *cobra.Command, args []string) error {
+		options.BuildTags = strings.Fields(tags)
 		lastSourceArg := 0
 		for {
 			if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {
@@ -704,7 +705,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 				sourceMapFilter := &compiler.SourceMapFilter{Writer: buf}
 				m := &sourcemap.Map{File: base + ".js"}
-				sourceMapFilter.MappingCallback = gbuild.NewMappingCallback(m, fs.options.GOROOT, fs.options.GOPATH, fs.options.MapToLocalDisk)
+				sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 
 				deps, err := compiler.ImportDependencies(archive, s.BuildImportPath)
 				if err != nil {

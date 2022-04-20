@@ -4,16 +4,12 @@
 package runtime
 
 import (
-	"runtime/internal/sys"
-
 	"github.com/gopherjs/gopherjs/js"
 )
 
-const (
-	GOOS     = sys.GOOS
-	GOARCH   = "js"
-	Compiler = "gopherjs"
-)
+const GOOS = "js"
+const GOARCH = "ecmascript"
+const Compiler = "gopherjs"
 
 // The Error interface identifies a run time error.
 type Error interface {

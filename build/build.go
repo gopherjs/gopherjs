@@ -26,13 +26,12 @@ import (
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
-	"github.com/gopherjs/gopherjs/compiler/natives"
+
 	"github.com/neelance/sourcemap"
 	"github.com/shurcooL/httpfs/vfsutil"
 	"golang.org/x/tools/go/buildutil"
 
 	"github.com/gopherjs/gopherjs/build/cache"
-	_ "github.com/gopherjs/gopherjs/build/versionhack" // go/build release tags hack.
 )
 
 // DefaultGOROOT is the default GOROOT value for builds.
@@ -48,16 +47,6 @@ var DefaultGOROOT = func() string {
 	return build.Default.GOROOT
 }()
 
-// ImportCError is returned when GopherJS attempts to build a package that uses
-// CGo.
-type ImportCError struct {
-	pkgPath string
-}
-
-func (e *ImportCError) Error() string {
-	return e.pkgPath + `: importing "C" is not supported by GopherJS`
-}
-
 // NewBuildContext creates a build context for building Go packages
 // with GopherJS compiler.
 //
@@ -65,10 +54,13 @@ func (e *ImportCError) Error() string {
 // are loaded from gopherjspkg.FS virtual filesystem if not present in GOPATH or
 // go.mod.
 func NewBuildContext(installSuffix string, buildTags []string) XContext {
-	gopherjsRoot := filepath.Join(DefaultGOROOT, "src", "github.com", "gopherjs", "gopherjs")
+	e := DefaultEnv()
+	e.InstallSuffix = installSuffix
+	e.BuildTags = buildTags
+	realGOROOT := goCtx(e)
 	return &chainedCtx{
-		primary:   goCtx(installSuffix, buildTags),
-		secondary: embeddedCtx(&withPrefix{gopherjspkg.FS, gopherjsRoot}, installSuffix, buildTags),
+		primary:   realGOROOT,
+		secondary: gopherjsCtx(e),
 	}
 }
 
@@ -103,7 +95,7 @@ func statFile(path string) (os.FileInfo, error) {
 func Import(path string, mode build.ImportMode, installSuffix string, buildTags []string) (*PackageData, error) {
 	wd, err := os.Getwd()
 	if err != nil {
-		// Getwd may fail if we're in GOARCH=js mode. That's okay, handle
+		// Getwd may fail if we're in GOOS=js mode. That's okay, handle
 		// it by falling back to empty working directory. It just means
 		// Import will not be able to resolve relative import paths.
 		wd = ""
@@ -180,15 +172,7 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 		importPath = importPath[:len(importPath)-5]
 	}
 
-	nativesContext := embeddedCtx(&withPrefix{fs: natives.FS, prefix: DefaultGOROOT}, "", nil)
-
-	if importPath == "syscall" {
-		// Special handling for the syscall package, which uses OS native
-		// GOOS/GOARCH pair. This will no longer be necessary after
-		// https://github.com/gopherjs/gopherjs/issues/693.
-		nativesContext.bctx.GOARCH = build.Default.GOARCH
-		nativesContext.bctx.BuildTags = append(nativesContext.bctx.BuildTags, "js")
-	}
+	nativesContext := overlayCtx(xctx.Env())
 
 	if nativesPkg, err := nativesContext.Import(importPath, "", 0); err == nil {
 		names := nativesPkg.GoFiles
@@ -321,8 +305,6 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 
 // Options controls build process behavior.
 type Options struct {
-	GOROOT         string
-	GOPATH         string
 	Verbose        bool
 	Quiet          bool
 	Watch          bool
@@ -364,6 +346,10 @@ type PackageData struct {
 	IsVirtual bool
 
 	bctx *build.Context // The original build context this package came from.
+}
+
+func (p PackageData) String() string {
+	return fmt.Sprintf("%s [is_test=%v]", p.ImportPath, p.IsTest)
 }
 
 // InternalBuildContext returns the build context that produced the package.
@@ -439,30 +425,26 @@ type Session struct {
 
 // NewSession creates a new GopherJS build session.
 func NewSession(options *Options) (*Session, error) {
-	if options.GOROOT == "" {
-		options.GOROOT = DefaultGOROOT
-	}
-	if options.GOPATH == "" {
-		options.GOPATH = build.Default.GOPATH
-	}
 	options.Verbose = options.Verbose || options.Watch
-
-	// Go distribution version check.
-	if err := compiler.CheckGoVersion(options.GOROOT); err != nil {
-		return nil, err
-	}
 
 	s := &Session{
 		options:          options,
 		UpToDateArchives: make(map[string]*compiler.Archive),
 	}
 	s.xctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
+	env := s.xctx.Env()
+
+	// Go distribution version check.
+	if err := compiler.CheckGoVersion(env.GOROOT); err != nil {
+		return nil, err
+	}
+
 	s.buildCache = cache.BuildCache{
-		GOOS:          s.xctx.GOOS(),
-		GOARCH:        "js",
-		GOROOT:        options.GOROOT,
-		GOPATH:        options.GOPATH,
-		BuildTags:     options.BuildTags,
+		GOOS:          env.GOOS,
+		GOARCH:        env.GOARCH,
+		GOROOT:        env.GOROOT,
+		GOPATH:        env.GOPATH,
+		BuildTags:     append([]string{}, env.BuildTags...),
 		Minify:        options.Minify,
 		TestedPackage: options.TestedPackage,
 	}
@@ -496,7 +478,7 @@ func (s *Session) InstallSuffix() string {
 
 // GoRelease returns Go release version this session is building with.
 func (s *Session) GoRelease() string {
-	return compiler.GoRelease(s.options.GOROOT)
+	return compiler.GoRelease(s.xctx.Env().GOROOT)
 }
 
 // BuildFiles passed to the GopherJS tool as if they were a package.
@@ -513,7 +495,7 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 		// This ephemeral package doesn't have a unique import path to be used as a
 		// build cache key, so we never cache it.
 		SrcModTime: time.Now().Add(time.Hour),
-		bctx:       &goCtx(s.InstallSuffix(), s.options.BuildTags).bctx,
+		bctx:       &goCtx(s.xctx.Env()).bctx,
 	}
 
 	for _, file := range filenames {
@@ -667,6 +649,12 @@ func (s *Session) ImportResolverFor(pkg *PackageData) func(string) (*compiler.Ar
 	}
 }
 
+// SourceMappingCallback returns a call back for compiler.SourceMapFilter
+// configured for the current build session.
+func (s *Session) SourceMappingCallback(m *sourcemap.Map) func(generatedLine, generatedColumn int, originalPos token.Position) {
+	return NewMappingCallback(m, s.xctx.Env().GOROOT, s.xctx.Env().GOPATH, s.options.MapToLocalDisk)
+}
+
 // WriteCommandPackage writes the final JavaScript output file at pkgObj path.
 func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) error {
 	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
@@ -692,7 +680,7 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 			fmt.Fprintf(codeFile, "//# sourceMappingURL=%s.map\n", filepath.Base(pkgObj))
 		}()
 
-		sourceMapFilter.MappingCallback = NewMappingCallback(m, s.options.GOROOT, s.options.GOPATH, s.options.MapToLocalDisk)
+		sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 	}
 
 	deps, err := compiler.ImportDependencies(archive, func(path string) (*compiler.Archive, error) {

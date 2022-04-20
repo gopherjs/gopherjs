@@ -12,7 +12,7 @@ func TestGoRepositoryCompilerTests(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping Go repository tests in the short mode")
 	}
-	if runtime.GOARCH == "js" {
+	if runtime.GOOS == "js" {
 		t.Skip("test meant to be run using normal Go compiler (needs os/exec)")
 	}
 

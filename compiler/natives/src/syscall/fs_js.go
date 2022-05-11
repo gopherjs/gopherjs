@@ -23,7 +23,7 @@ func fsCall(name string, args ...interface{}) (js.Value, error) {
 		var res callResult
 
 		if len(args) >= 1 {
-			if jsErr := args[0]; !jsErr.IsNull() {
+			if jsErr := args[0]; !jsErr.IsUndefined() && !jsErr.IsNull() {
 				res.err = mapJSError(jsErr)
 			}
 		}

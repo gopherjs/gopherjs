@@ -18,7 +18,7 @@ func runtime_args() []string { // not called on Windows
 
 func init() {
 	if process := js.Global.Get("process"); process != js.Undefined {
-		if argv := process.Get("argv"); argv != js.Undefined {
+		if argv := process.Get("argv"); argv != js.Undefined && argv.Length() >= 1 {
 			Args = make([]string, argv.Length()-1)
 			for i := 0; i < argv.Length()-1; i++ {
 				Args[i] = argv.Index(i + 1).String()

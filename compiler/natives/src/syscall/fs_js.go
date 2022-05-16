@@ -22,8 +22,13 @@ func fsCall(name string, args ...interface{}) (js.Value, error) {
 	f := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		var res callResult
 
-		if jsErr := args[0]; !jsErr.IsNull() {
-			res.err = mapJSError(jsErr)
+		// Check that args has at least one element, then check both IsUndefined() and IsNull() on
+		// that element. In some situations, BrowserFS calls the callback without arguments or with
+		// an undefined argument: https://github.com/gopherjs/gopherjs/pull/1118
+		if len(args) >= 1 {
+			if jsErr := args[0]; !jsErr.IsUndefined() && !jsErr.IsNull() {
+				res.err = mapJSError(jsErr)
+			}
 		}
 
 		res.val = js.Undefined()

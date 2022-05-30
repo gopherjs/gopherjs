@@ -1076,6 +1076,9 @@ var benchmarks = []testing.InternalBenchmark{
 {{end}}
 }
 
+// TODO(nevkontakte): Extract fuzz targets from the source.
+var fuzzTargets = []testing.InternalFuzzTarget{}
+
 var examples = []testing.InternalExample{
 {{range .Examples}}
 	{"{{.Name}}", {{.Package}}.{{.Name}}, {{.Output | printf "%q"}}, {{.Unordered}}},
@@ -1083,7 +1086,7 @@ var examples = []testing.InternalExample{
 }
 
 func main() {
-	m := testing.MainStart(testdeps.TestDeps{}, tests, benchmarks, examples)
+	m := testing.MainStart(testdeps.TestDeps{}, tests, benchmarks, fuzzTargets, examples)
 {{with .TestMain}}
 	{{.Package}}.{{.Name}}(m)
 {{else}}

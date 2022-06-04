@@ -201,7 +201,7 @@ var $sliceToGoArray = function(slice, arrayPtrType) {
     return arrayPtrType.nil; // Nil slice converts to nil array pointer.
   }
   if (slice.$array.constructor !== Array) {
-    return slice.$array.subarray(slice.$offset, slice.$offset + slice.$length);
+    return slice.$array.subarray(slice.$offset, slice.$offset + arrayType.len);
   }
   if (slice.$offset == 0 && slice.$length == slice.$capacity && slice.$length == arrayType.len) {
     return slice.$array;

@@ -1,6 +1,9 @@
 package tests
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 // https://tip.golang.org/ref/spec#Conversions_from_slice_to_array_pointer
 func TestSliceToArrayPointerConversion(t *testing.T) {
@@ -74,6 +77,25 @@ func TestSliceToArrayPointerConversion(t *testing.T) {
 			if u0 == nil {
 				t.Error("u0 should not be nil")
 			}
+		})
+
+		t.Run("SliceToShorterArray", func(t *testing.T) {
+			s[0] = 'x'
+			s[1] = 'y'
+			s4 := (*[1]byte)(s[:])
+			if got := s4[0]; got != 'x' {
+				t.Errorf("Got s0[0] = %q, want 'x'", got)
+			}
+			if got := len(s4); got != 1 {
+				t.Errorf("Got len(s0) = %d, want 1.", got)
+			}
+
+			// Verify that the backing array size has been reduced to match the Go
+			// type. If not, a "source too large" runtime exception will be thrown
+			// upon the copy attempt.
+			s5 := [1]byte{}
+			s5 = *s4
+			runtime.KeepAlive(s5)
 		})
 	})
 

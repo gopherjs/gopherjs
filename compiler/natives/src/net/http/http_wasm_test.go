@@ -11,6 +11,6 @@ func init() {
 	// TODO(nevkontakte): We could test our real implementations if we mock out
 	// browser APIs and redirect them to the fake networking stack, but this is
 	// not easy.
-	useFakeNetwork = true
+	jsFetchMissing = true
 	DefaultTransport = &Transport{}
 }

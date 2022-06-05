@@ -13,11 +13,11 @@ import (
 	"go/scanner"
 	"go/token"
 	"go/types"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -25,10 +25,9 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
-	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/neelance/sourcemap"
-	"github.com/shurcooL/httpfs/vfsutil"
 	"golang.org/x/tools/go/buildutil"
 
 	"github.com/gopherjs/gopherjs/build/cache"
@@ -62,20 +61,6 @@ func NewBuildContext(installSuffix string, buildTags []string) XContext {
 		primary:   realGOROOT,
 		secondary: gopherjsCtx(e),
 	}
-}
-
-// statFile returns an os.FileInfo describing the named file.
-// For files in "$GOROOT/src/github.com/gopherjs/gopherjs" directory,
-// gopherjspkg.FS is consulted first.
-func statFile(path string) (os.FileInfo, error) {
-	gopherjsRoot := filepath.Join(DefaultGOROOT, "src", "github.com", "gopherjs", "gopherjs")
-	if strings.HasPrefix(path, gopherjsRoot+string(filepath.Separator)) {
-		path = filepath.ToSlash(path[len(gopherjsRoot):])
-		if fi, err := vfsutil.Stat(gopherjspkg.FS, path); err == nil {
-			return fi, nil
-		}
-	}
-	return os.Stat(path)
 }
 
 // Import returns details about the Go package named by the import path. If the
@@ -161,7 +146,7 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 // as an existing file from the standard library). For all identifiers that exist
 // in the original AND the overrides, the original identifier in the AST gets
 // replaced by `_`. New identifiers that don't exist in original package get added.
-func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]*ast.File, error) {
+func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]*ast.File, []JSFile, error) {
 	var files []*ast.File
 	replacedDeclNames := make(map[string]bool)
 	pruneOriginalFuncs := make(map[string]bool)
@@ -172,9 +157,12 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 		importPath = importPath[:len(importPath)-5]
 	}
 
+	jsFiles := []JSFile{}
+
 	nativesContext := overlayCtx(xctx.Env())
 
 	if nativesPkg, err := nativesContext.Import(importPath, "", 0); err == nil {
+		jsFiles = nativesPkg.JSFiles
 		names := nativesPkg.GoFiles
 		if isTest {
 			names = append(names, nativesPkg.TestGoFiles...)
@@ -229,7 +217,7 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 		}
 		r, err := buildutil.OpenFile(pkg.bctx, name)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		file, err := parser.ParseFile(fileSet, name, r, parser.ParseComments)
 		r.Close()
@@ -298,9 +286,9 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 	}
 
 	if errList != nil {
-		return nil, errList
+		return nil, nil, errList
 	}
-	return files, nil
+	return files, jsFiles, nil
 }
 
 // Options controls build process behavior.
@@ -333,11 +321,18 @@ func (o *Options) PrintSuccess(format string, a ...interface{}) {
 	fmt.Fprintf(os.Stderr, format, a...)
 }
 
+// JSFile represents a *.inc.js file metadata and content.
+type JSFile struct {
+	Path    string // Full file path for the build context the file came from.
+	ModTime time.Time
+	Content []byte
+}
+
 // PackageData is an extension of go/build.Package with additional metadata
 // GopherJS requires.
 type PackageData struct {
 	*build.Package
-	JSFiles []string
+	JSFiles []JSFile
 	// IsTest is true if the package is being built for running tests.
 	IsTest     bool
 	SrcModTime time.Time
@@ -350,6 +345,43 @@ type PackageData struct {
 
 func (p PackageData) String() string {
 	return fmt.Sprintf("%s [is_test=%v]", p.ImportPath, p.IsTest)
+}
+
+// FileModTime returns the most recent modification time of the package's source
+// files. This includes all .go and .inc.js that would be included in the build,
+// but excludes any dependencies.
+func (p PackageData) FileModTime() time.Time {
+	newest := time.Time{}
+	for _, file := range p.JSFiles {
+		if file.ModTime.After(newest) {
+			newest = file.ModTime
+		}
+	}
+
+	// Unfortunately, build.Context methods don't allow us to Stat and individual
+	// file, only to enumerate a directory. So we first get mtimes for all files
+	// in the package directory, and then pick the newest for the relevant GoFiles.
+	mtimes := map[string]time.Time{}
+	files, err := buildutil.ReadDir(p.bctx, p.Dir)
+	if err != nil {
+		log.Errorf("Failed to enumerate files in the %q in context %v: %s. Assuming time.Now().", p.Dir, p.bctx, err)
+		return time.Now()
+	}
+	for _, file := range files {
+		mtimes[file.Name()] = file.ModTime()
+	}
+
+	for _, file := range p.GoFiles {
+		t, ok := mtimes[file]
+		if !ok {
+			log.Errorf("No mtime found for source file %q of package %q, assuming time.Now().", file, p.Name)
+			return time.Now()
+		}
+		if t.After(newest) {
+			newest = t
+		}
+	}
+	return newest
 }
 
 // InternalBuildContext returns the build context that produced the package.
@@ -485,12 +517,38 @@ func (s *Session) GoRelease() string {
 //
 // A ephemeral package will be created with only the provided files. This
 // function is intended for use with, for example, `gopherjs run main.go`.
-func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath string) error {
+func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) error {
+	if len(filenames) == 0 {
+		return fmt.Errorf("no input sources are provided")
+	}
+
+	normalizedDir := func(filename string) string {
+		d := filepath.Dir(filename)
+		if !filepath.IsAbs(d) {
+			d = filepath.Join(cwd, d)
+		}
+		return filepath.Clean(d)
+	}
+
+	// Ensure all source files are in the same directory.
+	dirSet := map[string]bool{}
+	for _, file := range filenames {
+		dirSet[normalizedDir(file)] = true
+	}
+	dirList := []string{}
+	for dir := range dirSet {
+		dirList = append(dirList, dir)
+	}
+	sort.Strings(dirList)
+	if len(dirList) != 1 {
+		return fmt.Errorf("named files must all be in one directory; have: %v", strings.Join(dirList, ", "))
+	}
+
 	pkg := &PackageData{
 		Package: &build.Package{
 			Name:       "main",
 			ImportPath: "main",
-			Dir:        packagePath,
+			Dir:        dirList[0],
 		},
 		// This ephemeral package doesn't have a unique import path to be used as a
 		// build cache key, so we never cache it.
@@ -499,11 +557,24 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, packagePath stri
 	}
 
 	for _, file := range filenames {
-		if strings.HasSuffix(file, ".inc.js") {
-			pkg.JSFiles = append(pkg.JSFiles, file)
+		if !strings.HasSuffix(file, ".inc.js") {
+			pkg.GoFiles = append(pkg.GoFiles, filepath.Base(file))
 			continue
 		}
-		pkg.GoFiles = append(pkg.GoFiles, file)
+
+		content, err := os.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", file, err)
+		}
+		info, err := os.Stat(file)
+		if err != nil {
+			return fmt.Errorf("failed to stat %s: %w", file, err)
+		}
+		pkg.JSFiles = append(pkg.JSFiles, JSFile{
+			Path:    filepath.Join(pkg.Dir, filepath.Base(file)),
+			ModTime: info.ModTime(),
+			Content: content,
+		})
 	}
 
 	archive, err := s.BuildPackage(pkg)
@@ -579,14 +650,8 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		}
 	}
 
-	for _, name := range append(pkg.GoFiles, pkg.JSFiles...) {
-		fileInfo, err := statFile(filepath.Join(pkg.Dir, name))
-		if err != nil {
-			return nil, err
-		}
-		if fileInfo.ModTime().After(pkg.SrcModTime) {
-			pkg.SrcModTime = fileInfo.ModTime()
-		}
+	if pkg.FileModTime().After(pkg.SrcModTime) {
+		pkg.SrcModTime = pkg.FileModTime()
 	}
 
 	if !s.options.NoCache {
@@ -603,7 +668,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 
 	// Existing archive is out of date or doesn't exist, let's build the package.
 	fileSet := token.NewFileSet()
-	files, err := parseAndAugment(s.xctx, pkg, pkg.IsTest, fileSet)
+	files, overlayJsFiles, err := parseAndAugment(s.xctx, pkg, pkg.IsTest, fileSet)
 	if err != nil {
 		return nil, err
 	}
@@ -617,13 +682,9 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		return nil, err
 	}
 
-	for _, jsFile := range pkg.JSFiles {
-		code, err := ioutil.ReadFile(filepath.Join(pkg.Dir, jsFile))
-		if err != nil {
-			return nil, err
-		}
+	for _, jsFile := range append(pkg.JSFiles, overlayJsFiles...) {
 		archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
-		archive.IncJSCode = append(archive.IncJSCode, code...)
+		archive.IncJSCode = append(archive.IncJSCode, jsFile.Content...)
 		archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
 	}
 
@@ -719,22 +780,6 @@ func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localMap bool) 
 
 		m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: originalPos.Line, OriginalColumn: originalPos.Column})
 	}
-}
-
-// jsFilesFromDir finds and loads any *.inc.js packages in the build context
-// directory.
-func jsFilesFromDir(bctx *build.Context, dir string) ([]string, error) {
-	files, err := buildutil.ReadDir(bctx, dir)
-	if err != nil {
-		return nil, err
-	}
-	var jsFiles []string
-	for _, file := range files {
-		if strings.HasSuffix(file.Name(), ".inc.js") && file.Name()[0] != '_' && file.Name()[0] != '.' {
-			jsFiles = append(jsFiles, file.Name())
-		}
-	}
-	return jsFiles, nil
 }
 
 // hasGopathPrefix returns true and the length of the matched GOPATH workspace,

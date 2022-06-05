@@ -7,6 +7,7 @@ const Prelude = prelude + numeric + types + goroutines + jsmapping
 
 const prelude = `Error.stackTraceLimit = Infinity;
 
+var $NaN = NaN;
 var $global, $module;
 if (typeof window !== "undefined") { /* web page */
   $global = window;

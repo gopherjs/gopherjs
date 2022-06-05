@@ -1,4 +1,5 @@
 embed/internal/embedtest
+encoding/xml
 go/build
 go/internal/srcimporter
 go/types

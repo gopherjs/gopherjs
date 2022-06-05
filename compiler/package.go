@@ -134,7 +134,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			return
 		}
 		// Some other unexpected panic, catch the stack trace and return as an error.
-		err = bailout(e)
+		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", importPath, e))
 	}()
 
 	// Files must be in the same order to get reproducible JS

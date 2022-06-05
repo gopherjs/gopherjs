@@ -645,7 +645,8 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 		}
 		return fmt.Sprintf(`"%s", [%s]`, pkgPath, strings.Join(fields, ", "))
 	default:
-		panic("invalid type")
+		err := bailout(fmt.Errorf("%v has unexpected type %T", ty, ty))
+		panic(err)
 	}
 }
 

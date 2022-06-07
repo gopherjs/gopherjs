@@ -90,7 +90,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 
 				// Use parseAndAugment to get a list of augmented AST files.
 				fset := token.NewFileSet()
-				files, err := parseAndAugment(stdOnly, pkgVariant, pkgVariant.IsTest, fset)
+				files, _, err := parseAndAugment(stdOnly, pkgVariant, pkgVariant.IsTest, fset)
 				if err != nil {
 					t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
 				}

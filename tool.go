@@ -891,9 +891,11 @@ func runNode(script string, args []string, dir string, quiet bool, out io.Writer
 		// -	OS process limit
 		// -	Node.js (V8) limit
 		//
-		// GopherJS fetches the current OS process limit, and sets the
-		// Node.js limit to the same value. So both limits are kept in sync
-		// and can be controlled by setting OS process limit. E.g.:
+		// GopherJS fetches the current OS process limit, and sets the Node.js limit
+		// to a value slightly below it (otherwise nodejs is likely to segfault).
+		// The backoff size has been determined experimentally on a linux machine,
+		// so it may not be 100% reliable. So both limits are kept in sync and can
+		// be controlled by setting OS process limit. E.g.:
 		//
 		// 	ulimit -s 10000 && gopherjs test
 		//
@@ -901,7 +903,12 @@ func runNode(script string, args []string, dir string, quiet bool, out io.Writer
 		if err != nil {
 			return fmt.Errorf("failed to get stack size limit: %v", err)
 		}
-		allArgs = append(allArgs, fmt.Sprintf("--stack_size=%v", cur/1000)) // Convert from bytes to KB.
+		cur = cur / 1024           // Convert bytes to KiB.
+		defaultSize := uint64(984) // --stack-size default value.
+		if backoff := uint64(64); cur > defaultSize+backoff {
+			cur = cur - backoff
+		}
+		allArgs = append(allArgs, fmt.Sprintf("--stack_size=%v", cur))
 	}
 
 	allArgs = append(allArgs, script)

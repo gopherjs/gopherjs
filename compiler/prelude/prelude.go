@@ -100,6 +100,8 @@ var $mapArray = function(array, f) {
   return newArray;
 };
 
+// Returns a method bound to the receiver instance, safe to invoke as a 
+// standalone function. Bound function is cached for later reuse.
 var $methodVal = function(recv, name) {
   var vals = recv.$methodVals || {};
   recv.$methodVals = vals; /* noop for primitives */
@@ -108,14 +110,7 @@ var $methodVal = function(recv, name) {
     return f;
   }
   var method = recv[name];
-  f = function() {
-    $stackDepthOffset--;
-    try {
-      return method.apply(recv, arguments);
-    } finally {
-      $stackDepthOffset++;
-    }
-  };
+  f = method.bind(recv);
   vals[name] = f;
   return f;
 };

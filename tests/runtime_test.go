@@ -1,5 +1,4 @@
 //go:build js && gopherjs
-// +build js,gopherjs
 
 package tests
 
@@ -8,6 +7,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/gopherjs/gopherjs/js"
 )
 
@@ -78,4 +78,85 @@ func TestBuildPlatform(t *testing.T) {
 	if runtime.GOARCH != "ecmascript" {
 		t.Errorf("Got runtime.GOARCH=%q. Want: %q.", runtime.GOARCH, "ecmascript")
 	}
+}
+
+type funcName string
+
+func masked(_ funcName) funcName { return "<MASKED>" }
+
+type callStack []funcName
+
+func (c *callStack) capture() {
+	*c = nil
+	pc := [100]uintptr{}
+	depth := runtime.Callers(0, pc[:])
+	frames := runtime.CallersFrames(pc[:depth])
+	for true {
+		frame, more := frames.Next()
+		*c = append(*c, funcName(frame.Function))
+		if !more {
+			break
+		}
+	}
+}
+
+func TestCallers(t *testing.T) {
+	got := callStack{}
+
+	// Some of the GopherJS function names don't match upstream Go, or even the
+	// function names in the Go source when minified.
+	// Until https://github.com/gopherjs/gopherjs/issues/1085 is resolved, the
+	// mismatch is difficult to avoid, but we can at least use "masked" frames to
+	// make sure the number of frames matches expected.
+	want := callStack{
+		masked("runtime.Callers"),
+		masked("github.com/gopherjs/gopherjs/tests.(*callerNames).capture"),
+		masked("github.com/gopherjs/gopherjs/tests.TestCallers.func{1,2}"),
+		masked("testing.tRunner"),
+		"runtime.goexit",
+	}
+
+	opts := cmp.Comparer(func(a, b funcName) bool {
+		if a == masked("") || b == masked("") {
+			return true
+		}
+		return a == b
+	})
+
+	t.Run("Normal", func(t *testing.T) {
+		got.capture()
+		if diff := cmp.Diff(want, got, opts); diff != "" {
+			t.Errorf("runtime.Callers() returned a diff (-want,+got):\n%s", diff)
+		}
+	})
+
+	t.Run("Deferred", func(t *testing.T) {
+		defer func() {
+			if diff := cmp.Diff(want, got, opts); diff != "" {
+				t.Errorf("runtime.Callers() returned a diff (-want,+got):\n%s", diff)
+			}
+		}()
+		defer got.capture()
+	})
+
+	t.Run("Recover", func(t *testing.T) {
+		defer func() {
+			recover()
+			got.capture()
+
+			want := callStack{
+				masked("runtime.Callers"),
+				masked("github.com/gopherjs/gopherjs/tests.(*callerNames).capture"),
+				masked("github.com/gopherjs/gopherjs/tests.TestCallers.func3.1"),
+				"runtime.gopanic",
+				masked("github.com/gopherjs/gopherjs/tests.TestCallers.func{1,2}"),
+				masked("testing.tRunner"),
+				"runtime.goexit",
+			}
+			if diff := cmp.Diff(want, got, opts); diff != "" {
+				t.Errorf("runtime.Callers() returned a diff (-want,+got):\n%s", diff)
+			}
+		}()
+		panic("panic")
+	})
 }

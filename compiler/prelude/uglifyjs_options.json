@@ -56,7 +56,7 @@
 		"keep_classnames": false,
 		"keep_fnames": false,
 		"properties": false,
-		"reserved": [],
+		"reserved": ["$goroutine", "$panic"],
 		"safari10": false,
 		"toplevel": false
 	},

@@ -660,6 +660,25 @@ func mapdelete(t *rtype, m unsafe.Pointer, key unsafe.Pointer) {
 	js.InternalObject(m).Delete(k)
 }
 
+// TODO(nevkonatkte): The following three "faststr" implementations are meant to
+// perform better for the common case of string-keyed maps (see upstream:
+// https://github.com/golang/go/commit/23832ba2e2fb396cda1dacf3e8afcb38ec36dcba)
+// However, the stubs below will perform the same or worse because of the extra
+// string-to-pointer conversion. Not sure how to fix this without significant
+// code duplication, however.
+
+func mapaccess_faststr(t *rtype, m unsafe.Pointer, key string) (val unsafe.Pointer) {
+	return mapaccess(t, m, unsafe.Pointer(&key))
+}
+
+func mapassign_faststr(t *rtype, m unsafe.Pointer, key string, val unsafe.Pointer) {
+	mapassign(t, m, unsafe.Pointer(&key), val)
+}
+
+func mapdelete_faststr(t *rtype, m unsafe.Pointer, key string) {
+	mapdelete(t, m, unsafe.Pointer(&key))
+}
+
 type hiter struct {
 	t    Type
 	m    *js.Object // Underlying map object.

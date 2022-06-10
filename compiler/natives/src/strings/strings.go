@@ -66,3 +66,10 @@ func (b *Builder) copyCheck() {
 		panic("strings: illegal use of non-zero Builder copied by value")
 	}
 }
+
+func Clone(s string) string {
+	// Since in the JavaScript runtime we don't have access the the string's
+	// baking memory, we let the engine's garbage collector deal with substring
+	// memory overheads and simply return the string as-is.
+	return s
+}

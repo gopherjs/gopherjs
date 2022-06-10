@@ -5,7 +5,7 @@ package reflect_test
 
 import (
 	"math"
-	"reflect"
+	. "reflect"
 	"testing"
 )
 
@@ -46,16 +46,16 @@ func TestOffsetLock(t *testing.T) {
 }
 
 func TestSelectOnInvalid(t *testing.T) {
-	reflect.Select([]reflect.SelectCase{
+	Select([]SelectCase{
 		{
-			Dir:  reflect.SelectRecv,
-			Chan: reflect.Value{},
+			Dir:  SelectRecv,
+			Chan: Value{},
 		}, {
-			Dir:  reflect.SelectSend,
-			Chan: reflect.Value{},
-			Send: reflect.ValueOf(1),
+			Dir:  SelectSend,
+			Chan: Value{},
+			Send: ValueOf(1),
 		}, {
-			Dir: reflect.SelectDefault,
+			Dir: SelectDefault,
 		},
 	})
 }
@@ -144,7 +144,7 @@ var deepEqualTests = []DeepEqualTest{
 
 // TODO: Fix this. See https://github.com/gopherjs/gopherjs/issues/763.
 func TestIssue22073(t *testing.T) {
-	m := reflect.ValueOf(NonExportedFirst(0)).Method(0)
+	m := ValueOf(NonExportedFirst(0)).Method(0)
 
 	if got := m.Type().NumOut(); got != 0 {
 		t.Errorf("NumOut: got %v, want 0", got)
@@ -177,9 +177,40 @@ func TestConvertNaNs(t *testing.T) {
 	const qnan uint32 = 0x7fc00001 // Originally: 0x7f800001.
 	type myFloat32 float32
 	x := V(myFloat32(math.Float32frombits(qnan)))
-	y := x.Convert(reflect.TypeOf(float32(0)))
+	y := x.Convert(TypeOf(float32(0)))
 	z := y.Interface().(float32)
 	if got := math.Float32bits(z); got != qnan {
 		t.Errorf("quiet nan conversion got %x, want %x", got, qnan)
 	}
+}
+
+func TestMapIterSet(t *testing.T) {
+	m := make(map[string]any, len(valueTests))
+	for _, tt := range valueTests {
+		m[tt.s] = tt.i
+	}
+	v := ValueOf(m)
+
+	k := New(v.Type().Key()).Elem()
+	e := New(v.Type().Elem()).Elem()
+
+	iter := v.MapRange()
+	for iter.Next() {
+		k.SetIterKey(iter)
+		e.SetIterValue(iter)
+		want := m[k.String()]
+		got := e.Interface()
+		if got != want {
+			t.Errorf("%q: want (%T) %v, got (%T) %v", k.String(), want, want, got, got)
+		}
+		if setkey, key := valueToString(k), valueToString(iter.Key()); setkey != key {
+			t.Errorf("MapIter.Key() = %q, MapIter.SetKey() = %q", key, setkey)
+		}
+		if setval, val := valueToString(e), valueToString(iter.Value()); setval != val {
+			t.Errorf("MapIter.Value() = %q, MapIter.SetValue() = %q", val, setval)
+		}
+	}
+
+	// Upstream test also tests allocations made by the iterator. GopherJS doesn't
+	// support runtime.ReadMemStats(), so we leave that part out.
 }

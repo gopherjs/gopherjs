@@ -107,8 +107,8 @@ var (
 	positionCounters = []*Func{}
 )
 
-func registerPosition(funcName string, file string, line int) uintptr {
-	key := file + ":" + itoa(line)
+func registerPosition(funcName string, file string, line int, col int) uintptr {
+	key := file + ":" + itoa(line) + ":" + itoa(col)
 	if pc, found := knownPositions[key]; found {
 		return pc
 	}
@@ -135,6 +135,7 @@ type basicFrame struct {
 	FuncName string
 	File     string
 	Line     int
+	Col      int
 }
 
 func callstack(skip, limit int) []basicFrame {
@@ -189,6 +190,7 @@ func ParseCallFrame(info *js.Object) basicFrame {
 		return basicFrame{
 			File:     parts.Call("slice", 1, parts.Length()-2).Call("join", ":").String(),
 			Line:     parts.Index(parts.Length() - 2).Int(),
+			Col:      parts.Index(parts.Length() - 1).Int(),
 			FuncName: parts.Index(0).String(),
 		}
 	}
@@ -202,12 +204,13 @@ func ParseCallFrame(info *js.Object) basicFrame {
 			File: parts.Call("slice", 0, parts.Length()-2).Call("join", ":").
 				Call("replace", js.Global.Get("RegExp").New(`^\s*at `), "").String(),
 			Line:     parts.Index(parts.Length() - 2).Int(),
+			Col:      parts.Index(parts.Length() - 1).Int(),
 			FuncName: "<none>",
 		}
 	}
 
 	var file, funcName string
-	var line int
+	var line, col int
 
 	pos := info.Call("substring", openIdx+1, info.Call("indexOf", ")").Int())
 	parts := pos.Call("split", ":")
@@ -217,6 +220,7 @@ func ParseCallFrame(info *js.Object) basicFrame {
 	} else {
 		file = parts.Call("slice", 0, parts.Length()-2).Call("join", ":").String()
 		line = parts.Index(parts.Length() - 2).Int()
+		col = parts.Index(parts.Length() - 1).Int()
 	}
 	fn := info.Call("substring", info.Call("indexOf", "at ").Int()+3, info.Call("indexOf", " (").Int())
 	if idx := fn.Call("indexOf", "[as ").Int(); idx > 0 {
@@ -227,6 +231,7 @@ func ParseCallFrame(info *js.Object) basicFrame {
 	return basicFrame{
 		File:     file,
 		Line:     line,
+		Col:      col,
 		FuncName: funcName,
 	}
 }
@@ -237,7 +242,7 @@ func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
 	if len(frames) != 1 {
 		return 0, "", 0, false
 	}
-	pc = registerPosition(frames[0].FuncName, frames[0].File, frames[0].Line)
+	pc = registerPosition(frames[0].FuncName, frames[0].File, frames[0].Line, frames[0].Col)
 	return pc, frames[0].File, frames[0].Line, true
 }
 
@@ -261,7 +266,7 @@ func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
 func Callers(skip int, pc []uintptr) int {
 	frames := callstack(skip, len(pc))
 	for i, frame := range frames {
-		pc[i] = registerPosition(frame.FuncName, frame.File, frame.Line)
+		pc[i] = registerPosition(frame.FuncName, frame.File, frame.Line, frame.Col)
 	}
 	return len(frames)
 }

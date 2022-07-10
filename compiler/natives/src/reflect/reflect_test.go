@@ -214,3 +214,77 @@ func TestMapIterSet(t *testing.T) {
 	// Upstream test also tests allocations made by the iterator. GopherJS doesn't
 	// support runtime.ReadMemStats(), so we leave that part out.
 }
+
+type inner struct {
+	x int
+}
+
+type outer struct {
+	y int
+	inner
+}
+
+func (*inner) M() int { return 1 }
+func (*outer) M() int { return 2 }
+
+func TestNestedMethods(t *testing.T) {
+	// This test is similar to the upstream, but avoids using the unsupported
+	// Value.UnsafePointer() method.
+	typ := TypeOf((*outer)(nil))
+	args := []Value{
+		ValueOf((*outer)(nil)), // nil receiver
+	}
+	if typ.NumMethod() != 1 {
+		t.Errorf("Wrong method table for outer, found methods:")
+		for i := 0; i < typ.NumMethod(); i++ {
+			m := typ.Method(i)
+			t.Errorf("\t%d: %s\n", i, m.Name)
+		}
+	}
+	if got := typ.Method(0).Func.Call(args)[0]; got.Int() != 2 {
+		t.Errorf("Wrong method table for outer, expected return value 2, got: %v", got)
+	}
+	if got := ValueOf((*outer).M).Call(args)[0]; got.Int() != 2 {
+		t.Errorf("Wrong method table for outer, expected return value 2, got: %v", got)
+	}
+}
+
+func TestEmbeddedMethods(t *testing.T) {
+	// This test is similar to the upstream, but avoids using the unsupported
+	// Value.UnsafePointer() method.
+	typ := TypeOf((*OuterInt)(nil))
+	if typ.NumMethod() != 1 {
+		t.Errorf("Wrong method table for OuterInt: (m=%p)", (*OuterInt).M)
+		for i := 0; i < typ.NumMethod(); i++ {
+			m := typ.Method(i)
+			t.Errorf("\t%d: %s %p\n", i, m.Name, m.Func.UnsafePointer())
+		}
+	}
+
+	i := &InnerInt{3}
+	if v := ValueOf(i).Method(0).Call(nil)[0].Int(); v != 3 {
+		t.Errorf("i.M() = %d, want 3", v)
+	}
+
+	o := &OuterInt{1, InnerInt{2}}
+	if v := ValueOf(o).Method(0).Call(nil)[0].Int(); v != 2 {
+		t.Errorf("i.M() = %d, want 2", v)
+	}
+
+	f := (*OuterInt).M
+	if v := f(o); v != 2 {
+		t.Errorf("f(o) = %d, want 2", v)
+	}
+}
+
+func TestNotInHeapDeref(t *testing.T) {
+	t.Skip("GopherJS doesn't support //go:notinheap")
+}
+
+func TestMethodCallValueCodePtr(t *testing.T) {
+	t.Skip("methodValueCallCodePtr() is not applicable in GopherJS")
+}
+
+func TestIssue50208(t *testing.T) {
+	t.Skip("This test required generics, which are not yet supported: https://github.com/gopherjs/gopherjs/issues/1013")
+}

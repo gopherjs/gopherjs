@@ -5,6 +5,7 @@ package reflect
 
 import (
 	"errors"
+	"runtime"
 	"strconv"
 	"unsafe"
 
@@ -1724,4 +1725,36 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	}
 
 	return js.Global.Call("$interfaceIsEqual", js.InternalObject(valueInterface(v1, false)), js.InternalObject(valueInterface(v2, false))).Bool()
+}
+
+func methodNameSkip() string {
+	pc, _, _, _ := runtime.Caller(3)
+	f := runtime.FuncForPC(pc)
+	if f == nil {
+		return "unknown method"
+	}
+	// Function name extracted from the call stack can be different from vanilla
+	// Go. Here we try to fix stuff like "Object.$packages.reflect.Q.ptr.SetIterKey"
+	// into "Value.SetIterKey".
+	// This workaround may become obsolete after https://github.com/gopherjs/gopherjs/issues/1085
+	// is resolved.
+	name := f.Name()
+	idx := len(name) - 1
+	for idx > 0 {
+		if name[idx] == '.' {
+			break
+		}
+		idx--
+	}
+	if idx < 0 {
+		return name
+	}
+	return "Value" + name[idx:]
+}
+
+func verifyNotInHeapPtr(p uintptr) bool {
+	// Go runtime uses this method to make sure that a uintptr won't crash GC if
+	// interpreted as a heap pointer. This is not relevant for GopherJS, so we can
+	// always return true.
+	return true
 }

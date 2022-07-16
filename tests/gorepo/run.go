@@ -85,7 +85,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue14646.go": {category: unsureIfGopherJSSupportsThisFeature, desc: "tests runtime.Caller behavior in a deferred func in SSA backend... does GopherJS even support runtime.Caller?"},
 	"fixedbugs/issue15039.go": {desc: "valid bug but deal with after Go 1.7 support is out? it's likely not a regression"},
 	"fixedbugs/issue15281.go": {desc: "also looks valid but deal with after Go 1.7 support is out? it's likely not a regression"},
-	"fixedbugs/issue15975.go": {desc: "also looks valid but deal with after Go 1.7 support is out?"},
 
 	// These are new tests in Go 1.8.
 	"fixedbugs/issue17381.go": {category: unsureIfGopherJSSupportsThisFeature, desc: "tests runtime.{Callers,FuncForPC} behavior in a deferred func with garbage on stack... does GopherJS even support runtime.{Callers,FuncForPC}?"},

@@ -85,7 +85,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue14646.go": {category: unsureIfGopherJSSupportsThisFeature, desc: "tests runtime.Caller behavior in a deferred func in SSA backend... does GopherJS even support runtime.Caller?"},
 	"fixedbugs/issue15039.go": {desc: "valid bug but deal with after Go 1.7 support is out? it's likely not a regression"},
 	"fixedbugs/issue15281.go": {desc: "also looks valid but deal with after Go 1.7 support is out? it's likely not a regression"},
-	"fixedbugs/issue15975.go": {desc: "also looks valid but deal with after Go 1.7 support is out?"},
 
 	// These are new tests in Go 1.8.
 	"fixedbugs/issue17381.go": {category: unsureIfGopherJSSupportsThisFeature, desc: "tests runtime.{Callers,FuncForPC} behavior in a deferred func with garbage on stack... does GopherJS even support runtime.{Callers,FuncForPC}?"},
@@ -150,6 +149,13 @@ var knownFails = map[string]failReason{
 
 	// These are new tests in Go 1.17.8
 	"fixedbugs/issue50854.go": {category: lowLevelRuntimeDifference, desc: "negative int32 overflow behaves differently in JS"},
+
+	// These are new tests in Go 1.18
+	"fixedbugs/issue46938.go": {category: notApplicable, desc: "tests -d=checkptr compiler mode, which GopherJS doesn't support"},
+	"fixedbugs/issue47928.go": {category: notApplicable, desc: "//go:nointerface is a part of GOEXPERIMENT=fieldtrack and is not supported by GopherJS"},
+	"fixedbugs/issue49665.go": {category: other, desc: "attempts to pass -gcflags=-G=3 to enable generics, GopherJS doesn't expect the flag; re-enable in Go 1.19 where the flag is removed"},
+	"fixedbugs/issue48898.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
+	"fixedbugs/issue48536.go": {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
 }
 
 type failCategory uint8

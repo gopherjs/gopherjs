@@ -69,6 +69,7 @@ type TestMain struct {
 	Package    *build.PackageData
 	Tests      []TestFunc
 	Benchmarks []TestFunc
+	Fuzz       []TestFunc
 	Examples   []ExampleFunc
 	TestMain   *TestFunc
 }
@@ -130,6 +131,11 @@ func (tm *TestMain) scanFile(f *ast.File, loc FuncLocation) error {
 			})
 		case isTest(name, "Benchmark"):
 			tm.Benchmarks = append(tm.Benchmarks, TestFunc{
+				Location: loc,
+				Name:     name,
+			})
+		case isTest(name, "Fuzz"):
+			tm.Fuzz = append(tm.Fuzz, TestFunc{
 				Location: loc,
 				Name:     name,
 			})
@@ -275,8 +281,11 @@ var benchmarks = []testing.InternalBenchmark{
 {{- end}}
 }
 
-// TODO(nevkontakte): Extract fuzz targets from the source.
-var fuzzTargets = []testing.InternalFuzzTarget{}
+var fuzzTargets = []testing.InternalFuzzTarget{
+{{- range .Fuzz}}
+	{"{{.Name}}", {{.Location}}.{{.Name}}},
+{{- end}}
+}
 
 var examples = []testing.InternalExample{
 {{- range .Examples }}

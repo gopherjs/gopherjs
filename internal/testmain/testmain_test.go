@@ -36,6 +36,10 @@ func TestScan(t *testing.T) {
 			{Location: LocInPackage, Name: "BenchmarkXxx"},
 			{Location: LocExternal, Name: "BenchmarkYyy"},
 		},
+		Fuzz: []TestFunc{
+			{Location: LocInPackage, Name: "FuzzXxx"},
+			{Location: LocExternal, Name: "FuzzYyy"},
+		},
 		Examples: []ExampleFunc{
 			{Location: LocInPackage, Name: "ExampleXxx"},
 			{Location: LocExternal, Name: "ExampleYyy", Output: "hello\n"},
@@ -70,6 +74,10 @@ func TestSynthesize(t *testing.T) {
 				Benchmarks: []TestFunc{
 					{Location: LocInPackage, Name: "BenchmarkXxx"},
 					{Location: LocExternal, Name: "BenchmarkYyy"},
+				},
+				Fuzz: []TestFunc{
+					{Location: LocInPackage, Name: "FuzzXxx"},
+					{Location: LocExternal, Name: "FuzzYyy"},
 				},
 				Examples: []ExampleFunc{
 					{Location: LocInPackage, Name: "ExampleXxx", EmptyOutput: true},
@@ -134,7 +142,10 @@ var benchmarks = []testing.InternalBenchmark{
 	{"BenchmarkYyy", _xtest.BenchmarkYyy},
 }
 
-var fuzzTargets = []testing.InternalFuzzTarget{}
+var fuzzTargets = []testing.InternalFuzzTarget{
+	{"FuzzXxx", _test.FuzzXxx},
+	{"FuzzYyy", _xtest.FuzzYyy},
+}
 
 var examples = []testing.InternalExample{
 	{"ExampleXxx", _test.ExampleXxx, "", false},

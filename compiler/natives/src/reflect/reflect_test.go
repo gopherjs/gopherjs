@@ -285,6 +285,9 @@ func TestMethodCallValueCodePtr(t *testing.T) {
 	t.Skip("methodValueCallCodePtr() is not applicable in GopherJS")
 }
 
+type B struct{}
+
+//gopherjs:prune-original
 func TestIssue50208(t *testing.T) {
 	t.Skip("This test required generics, which are not yet supported: https://github.com/gopherjs/gopherjs/issues/1013")
 }

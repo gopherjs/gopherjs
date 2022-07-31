@@ -148,8 +148,6 @@ func init() {
 
 func ValueOf(x interface{}) Value {
 	switch x := x.(type) {
-	case Wrapper:
-		return x.JSValue()
 	case Value:
 		return x
 	case Func:
@@ -359,10 +357,6 @@ type ValueError struct {
 
 func (e *ValueError) Error() string {
 	return "syscall/js: call of " + e.Method + " on " + e.Type.String()
-}
-
-type Wrapper interface {
-	JSValue() Value
 }
 
 // CopyBytesToGo copies bytes from the Uint8Array src to dst.

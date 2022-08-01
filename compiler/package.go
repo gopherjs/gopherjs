@@ -823,10 +823,8 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 			functionName = " $b"
 		}
 		var stores, loads string
-		for _, v := range c.localVars {
-			loads += fmt.Sprintf("%s = $f.%s; ", v, v)
-			stores += fmt.Sprintf("$f.%s = %s; ", v, v)
-		}
+		loads = fmt.Sprintf("({%s} = $f); ", strings.Join(c.localVars, ", "))
+		stores = fmt.Sprintf("$f = {...$f, %s};", strings.Join(c.localVars, ", "))
 		prefix = prefix + " var $f, $c = false; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; " + loads + "}"
 		suffix = " if ($f === undefined) { $f = { $blk: " + funcRef + " }; } " + stores + "return $f;" + suffix
 	}

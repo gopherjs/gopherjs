@@ -364,6 +364,7 @@ func (p *PackageData) InternalBuildContext() *build.Context {
 func (p *PackageData) TestPackage() *PackageData {
 	return &PackageData{
 		Package: &build.Package{
+			Name:       p.Name,
 			ImportPath: p.ImportPath,
 			Dir:        p.Dir,
 			GoFiles:    append(p.GoFiles, p.TestGoFiles...),
@@ -379,6 +380,7 @@ func (p *PackageData) TestPackage() *PackageData {
 func (p *PackageData) XTestPackage() *PackageData {
 	return &PackageData{
 		Package: &build.Package{
+			Name:       p.Name + "_test",
 			ImportPath: p.ImportPath + "_test",
 			Dir:        p.Dir,
 			GoFiles:    p.XTestGoFiles,

@@ -156,6 +156,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue49665.go": {category: other, desc: "attempts to pass -gcflags=-G=3 to enable generics, GopherJS doesn't expect the flag; re-enable in Go 1.19 where the flag is removed"},
 	"fixedbugs/issue48898.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
 	"fixedbugs/issue48536.go": {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
+	"fixedbugs/issue53600.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
 }
 
 type failCategory uint8

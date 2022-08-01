@@ -279,6 +279,8 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 						s := spec.(*ast.TypeSpec)
 						if replacedDeclNames[s.Name.Name] {
 							s.Name = ast.NewIdent("_")
+							s.Type = &ast.StructType{Struct: s.Pos(), Fields: &ast.FieldList{}}
+							s.TypeParams = nil
 						}
 					}
 				case token.VAR, token.CONST:

@@ -211,10 +211,15 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			iVar := fc.newVariable("_i")
 			fc.Printf("%s = 0;", iVar)
 			keysVar := fc.newVariable("_keys")
-			fc.Printf("%s = $keys(%s);", keysVar, refVar)
-			fc.translateLoopingStmt(func() string { return iVar + " < " + keysVar + ".length" }, s.Body, func() {
+			fc.Printf("%s = %s ? %s.keys() : undefined;", keysVar, refVar, refVar)
+
+			sizeVar := fc.newVariable("_size")
+			fc.Printf("%s = %s ? %s.size : 0;", sizeVar, refVar, refVar)
+			fc.translateLoopingStmt(func() string { return iVar + " < " + sizeVar }, s.Body, func() {
+				keyVar := fc.newVariable("_key")
 				entryVar := fc.newVariable("_entry")
-				fc.Printf("%s = %s[%s[%s]];", entryVar, refVar, keysVar, iVar)
+				fc.Printf("%s = %s.next().value;", keyVar, keysVar)
+				fc.Printf("%s = %s.get(%s);", entryVar, refVar, keyVar)
 				fc.translateStmt(&ast.IfStmt{
 					Cond: fc.newIdent(entryVar+" === undefined", types.Typ[types.Bool]),
 					Body: &ast.BlockStmt{List: []ast.Stmt{&ast.BranchStmt{Tok: token.CONTINUE}}},
@@ -700,7 +705,16 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 				fc.pkgCtx.errList = append(fc.pkgCtx.errList, types.Error{Fset: fc.pkgCtx.fileSet, Pos: l.Index.Pos(), Msg: "cannot use js.Object as map key"})
 			}
 			keyVar := fc.newVariable("_key")
-			return fmt.Sprintf(`%s = %s; (%s || $throwRuntimeError("assignment to entry in nil map"))[%s.keyFor(%s)] = { k: %s, v: %s };`, keyVar, fc.translateImplicitConversionWithCloning(l.Index, t.Key()), fc.translateExpr(l.X), fc.typeName(t.Key()), keyVar, keyVar, fc.translateImplicitConversionWithCloning(rhs, t.Elem()))
+			return fmt.Sprintf(
+				`%s = %s; (%s || $throwRuntimeError("assignment to entry in nil map")).set(%s.keyFor(%s), { k: %s, v: %s });`,
+				keyVar,
+				fc.translateImplicitConversionWithCloning(l.Index, t.Key()),
+				fc.translateExpr(l.X),
+				fc.typeName(t.Key()),
+				keyVar,
+				keyVar,
+				fc.translateImplicitConversionWithCloning(rhs, t.Elem()),
+			)
 		}
 	}
 

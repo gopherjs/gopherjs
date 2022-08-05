@@ -9,6 +9,7 @@ require (
 	github.com/neelance/sourcemap v0.0.0-20200213170602-2833bce08e4c
 	github.com/shurcooL/go v0.0.0-20200502201357-93f07166e636
 	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749
+	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
@@ -20,7 +21,6 @@ require (
 
 require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
 	golang.org/x/term v0.0.0-20220411215600-e5f449aeb171 // indirect
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 )

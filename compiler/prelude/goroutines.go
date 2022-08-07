@@ -223,6 +223,21 @@ var $block = function() {
   $curGoroutine.asleep = true;
 };
 
+var $restore = function(context, params) {
+  if (context !== undefined && context.$blk !== undefined) {
+    return {
+      $f: context,
+      $c: true,
+      ...context,
+    };
+  } else {
+    return {
+      $c: false,
+      ...params,
+    };
+  }
+}
+
 var $send = function(chan, value) {
   if (chan.$closed) {
     $throwRuntimeError("send on closed channel");

@@ -805,7 +805,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 
 	if len(c.Flattened) != 0 {
 		c.localVars = append(c.localVars, "$s")
-		prefix = prefix + " $s = 0;"
+		prefix = prefix + " $s = $s || 0;"
 	}
 
 	if c.HasDefer {
@@ -816,17 +816,27 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		}
 	}
 
+	localVarDefs := "" // Function-local var declaration at the top.
+
 	if len(c.Blocking) != 0 {
-		c.localVars = append(c.localVars, "$r")
+		localVars := append([]string{}, c.localVars...)
+		// $r is sometimes used as a temporary variable to store blocking call result.
+		// $c indicates that a function is being resumed after a blocking call when set to true.
+		// $f is an object used to save and restore function context for blocking calls.
+		localVars = append(localVars, "$r", "$c", "$f")
+		// If a blocking function is being resumed, initialize local variables from the saved context.
+		localVarDefs = fmt.Sprintf("var {%s} = $restore(this, {%s});\n", strings.Join(localVars, ", "), strings.Join(params, ", "))
+		// If the function gets blocked, save local variables for future.
+		saveContext := fmt.Sprintf("$f = {...$f, $r, %s};", strings.Join(c.localVars, ", "))
+
 		if funcRef == "" {
 			funcRef = "$b"
 			functionName = " $b"
 		}
-		var stores, loads string
-		loads = fmt.Sprintf("({%s} = $f); ", strings.Join(c.localVars, ", "))
-		stores = fmt.Sprintf("$f = {...$f, %s};", strings.Join(c.localVars, ", "))
-		prefix = prefix + " var $f, $c = false; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; " + loads + "}"
-		suffix = " if ($f === undefined) { $f = { $blk: " + funcRef + " }; } " + stores + "return $f;" + suffix
+		suffix = " if ($f === undefined) { $f = { $blk: " + funcRef + " }; } " + saveContext + "return $f;" + suffix
+	} else if len(c.localVars) > 0 {
+		// Non-blocking functions simply declare local variables with no need for restore support.
+		localVarDefs = fmt.Sprintf("var %s;\n", strings.Join(c.localVars, ", "))
 	}
 
 	if c.HasDefer {
@@ -863,8 +873,8 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	if suffix != "" {
 		bodyOutput = bodyOutput + strings.Repeat("\t", c.pkgCtx.indentation+1) + "/* */" + suffix + "\n"
 	}
-	if len(c.localVars) != 0 {
-		bodyOutput = fmt.Sprintf("%svar %s;\n", strings.Repeat("\t", c.pkgCtx.indentation+1), strings.Join(c.localVars, ", ")) + bodyOutput
+	if localVarDefs != "" {
+		bodyOutput = strings.Repeat("\t", c.pkgCtx.indentation+1) + localVarDefs + bodyOutput
 	}
 
 	c.pkgCtx.escapingVars = prevEV

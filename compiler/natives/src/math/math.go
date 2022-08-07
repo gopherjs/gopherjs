@@ -11,7 +11,12 @@ var math = js.Global.Get("Math")
 var _zero float64 = 0
 var posInf = 1 / _zero
 var negInf = -1 / _zero
-var nan = 0 / _zero
+
+// Usually, NaN can be obtained in JavaScript with `0 / 0` operation. However,
+// in V8, `0 / _zero` yields a bitwise-different value of NaN compared to the
+// default NaN or `0 / 0`. Unfortunately, Go compiler forbids division by zero,
+// so we have to get this value from prelude.
+var nan = js.Global.Get("$NaN").Float()
 
 func Acos(x float64) float64 {
 	return math.Call("acos", x).Float()

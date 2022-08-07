@@ -7,6 +7,7 @@ const Prelude = prelude + numeric + types + goroutines + jsmapping
 
 const prelude = `Error.stackTraceLimit = Infinity;
 
+var $NaN = NaN;
 var $global, $module;
 if (typeof window !== "undefined") { /* web page */
   $global = window;
@@ -99,6 +100,8 @@ var $mapArray = function(array, f) {
   return newArray;
 };
 
+// Returns a method bound to the receiver instance, safe to invoke as a 
+// standalone function. Bound function is cached for later reuse.
 var $methodVal = function(recv, name) {
   var vals = recv.$methodVals || {};
   recv.$methodVals = vals; /* noop for primitives */
@@ -107,14 +110,7 @@ var $methodVal = function(recv, name) {
     return f;
   }
   var method = recv[name];
-  f = function() {
-    $stackDepthOffset--;
-    try {
-      return method.apply(recv, arguments);
-    } finally {
-      $stackDepthOffset++;
-    }
-  };
+  f = method.bind(recv);
   vals[name] = f;
   return f;
 };
@@ -201,7 +197,7 @@ var $sliceToGoArray = function(slice, arrayPtrType) {
     return arrayPtrType.nil; // Nil slice converts to nil array pointer.
   }
   if (slice.$array.constructor !== Array) {
-    return slice.$array.subarray(slice.$offset, slice.$offset + slice.$length);
+    return slice.$array.subarray(slice.$offset, slice.$offset + arrayType.len);
   }
   if (slice.$offset == 0 && slice.$length == slice.$capacity && slice.$length == arrayType.len) {
     return slice.$array;

@@ -116,7 +116,7 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 
 		decl := obj.Decl.(*ast.FuncDecl)
 		if decl.Body != nil {
-			if pkgPath == "runtime" || pkgPath == "internal/bytealg" {
+			if pkgPath == "runtime" || pkgPath == "internal/bytealg" || pkgPath == "internal/fuzz" {
 				// These standard library packages are known to use unsupported
 				// "insert"-style go:linkname directives, which we ignore here and handle
 				// case-by-case in native overrides.

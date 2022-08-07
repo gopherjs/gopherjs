@@ -1,5 +1,5 @@
-//go:build go1.17
-// +build go1.17
+//go:build go1.18
+// +build go1.18
 
 package compiler
 
@@ -13,10 +13,10 @@ import (
 )
 
 // Version is the GopherJS compiler version string.
-const Version = "1.17.2+go1.17.9"
+const Version = "1.18.0+go1.18.4"
 
 // GoVersion is the current Go 1.x version that GopherJS is compatible with.
-const GoVersion = 17
+const GoVersion = 18
 
 // CheckGoVersion checks the version of the Go distribution
 // at goroot, and reports an error if it's not compatible
@@ -50,7 +50,7 @@ func goRootVersion(goroot string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("`go version` command failed: %w", err)
 	}
-	// Expected output: go version go1.17.1 linux/amd64
+	// Expected output: go version go1.18.1 linux/amd64
 	parts := strings.Split(string(out), " ")
 	if len(parts) != 4 {
 		return "", fmt.Errorf("unexpected `go version` output %q, expected 4 words", string(out))

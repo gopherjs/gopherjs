@@ -3,7 +3,9 @@
 package srctesting
 
 import (
+	"bytes"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"go/types"
@@ -62,4 +64,18 @@ func ParseFuncDecl(t *testing.T, src string) *ast.FuncDecl {
 		t.Fatalf("Got %T decl, expected *ast.FuncDecl", file.Decls[0])
 	}
 	return fdecl
+}
+
+// Format AST node into a string.
+//
+// The node type must be *ast.File, *printer.CommentedNode, []ast.Decl,
+// []ast.Stmt, or assignment-compatible to ast.Expr, ast.Decl, ast.Spec, or
+// ast.Stmt.
+func Format(t *testing.T, fset *token.FileSet, node any) string {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	if err := format.Node(buf, fset, node); err != nil {
+		t.Fatalf("Failed to format AST node %T: %s", node, err)
+	}
+	return buf.String()
 }

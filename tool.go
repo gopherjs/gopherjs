@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/build"
-	"go/doc"
-	"go/parser"
 	"go/scanner"
 	"go/token"
 	"go/types"
@@ -21,27 +19,24 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"text/template"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
+	"github.com/gopherjs/gopherjs/internal/testmain"
 	"github.com/neelance/sourcemap"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/tools/go/buildutil"
 )
 
 var currentDirectory string
@@ -377,49 +372,21 @@ func main() {
 				return err
 			}
 
-			tests := &testFuncs{BuildContext: pkg.InternalBuildContext(), Package: pkg.Package}
-			collectTests := func(testPkg *gbuild.PackageData, testPkgName string, needVar *bool) error {
-				if testPkgName == "_test" {
-					for _, file := range pkg.TestGoFiles {
-						if err := tests.load(pkg.Package.Dir, file, testPkgName, &tests.ImportTest, &tests.NeedTest); err != nil {
-							return err
-						}
-					}
-				} else {
-					for _, file := range pkg.XTestGoFiles {
-						if err := tests.load(pkg.Package.Dir, file, "_xtest", &tests.ImportXtest, &tests.NeedXtest); err != nil {
-							return err
-						}
-					}
-				}
-				_, err := s.BuildPackage(testPkg)
+			_, err = s.BuildPackage(pkg.TestPackage())
+			if err != nil {
 				return err
 			}
-
-			if err := collectTests(pkg.TestPackage(), "_test", &tests.NeedTest); err != nil {
-				return err
-			}
-
-			if err := collectTests(pkg.XTestPackage(), "_xtest", &tests.NeedXtest); err != nil {
-				return err
-			}
-
-			buf := new(bytes.Buffer)
-			if err := testmainTmpl.Execute(buf, tests); err != nil {
-				return err
-			}
-
-			fset := token.NewFileSet()
-			mainFile, err := parser.ParseFile(fset, "_testmain.go", buf, 0)
+			_, err = s.BuildPackage(pkg.XTestPackage())
 			if err != nil {
 				return err
 			}
 
-			mainPkg := &gbuild.PackageData{
-				Package: &build.Package{
-					ImportPath: pkg.ImportPath + ".testmain",
-					Name:       "main",
-				},
+			fset := token.NewFileSet()
+			tests := testmain.TestMain{Package: pkg}
+			tests.Scan(fset)
+			mainPkg, mainFile, err := tests.Synthesize(fset)
+			if err != nil {
+				return fmt.Errorf("failed to generate testmain package for %s: %w", pkg.ImportPath, err)
 			}
 			importContext := &compiler.ImportContext{
 				Packages: s.Types,
@@ -427,7 +394,7 @@ func main() {
 			}
 			mainPkgArchive, err := compiler.Compile(mainPkg.ImportPath, []*ast.File{mainFile}, fset, importContext, options.Minify)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to compile testmain package for %s: %w", pkg.ImportPath, err)
 			}
 
 			if *compileOnly && *outputFilename == "" {
@@ -941,161 +908,3 @@ func runTestDir(p *gbuild.PackageData) string {
 	// Run tests in the package directory.
 	return p.Dir
 }
-
-type testFuncs struct {
-	BuildContext *build.Context
-	Tests        []testFunc
-	Benchmarks   []testFunc
-	Examples     []testFunc
-	TestMain     *testFunc
-	Package      *build.Package
-	ImportTest   bool
-	NeedTest     bool
-	ImportXtest  bool
-	NeedXtest    bool
-}
-
-type testFunc struct {
-	Package   string // imported package name (_test or _xtest)
-	Name      string // function name
-	Output    string // output, for examples
-	Unordered bool   // output is allowed to be unordered.
-}
-
-var testFileSet = token.NewFileSet()
-
-func (t *testFuncs) load(dir, file, pkg string, doImport, seen *bool) error {
-	f, err := buildutil.ParseFile(testFileSet, t.BuildContext, nil, dir, file, parser.ParseComments)
-	if err != nil {
-		return err
-	}
-	for _, d := range f.Decls {
-		n, ok := d.(*ast.FuncDecl)
-		if !ok {
-			continue
-		}
-		if n.Recv != nil {
-			continue
-		}
-		name := n.Name.String()
-		switch {
-		case isTestMain(n):
-			if t.TestMain != nil {
-				return errors.New("multiple definitions of TestMain")
-			}
-			t.TestMain = &testFunc{pkg, name, "", false}
-			*doImport, *seen = true, true
-		case isTest(name, "Test"):
-			t.Tests = append(t.Tests, testFunc{pkg, name, "", false})
-			*doImport, *seen = true, true
-		case isTest(name, "Benchmark"):
-			t.Benchmarks = append(t.Benchmarks, testFunc{pkg, name, "", false})
-			*doImport, *seen = true, true
-		}
-	}
-	ex := doc.Examples(f)
-	sort.Sort(byOrder(ex))
-	for _, e := range ex {
-		*doImport = true // import test file whether executed or not
-		if e.Output == "" && !e.EmptyOutput {
-			// Don't run examples with no output.
-			continue
-		}
-		t.Examples = append(t.Examples, testFunc{pkg, "Example" + e.Name, e.Output, e.Unordered})
-		*seen = true
-	}
-
-	return nil
-}
-
-type byOrder []*doc.Example
-
-func (x byOrder) Len() int           { return len(x) }
-func (x byOrder) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
-func (x byOrder) Less(i, j int) bool { return x[i].Order < x[j].Order }
-
-// isTestMain tells whether fn is a TestMain(m *testing.M) function.
-func isTestMain(fn *ast.FuncDecl) bool {
-	if fn.Name.String() != "TestMain" ||
-		fn.Type.Results != nil && len(fn.Type.Results.List) > 0 ||
-		fn.Type.Params == nil ||
-		len(fn.Type.Params.List) != 1 ||
-		len(fn.Type.Params.List[0].Names) > 1 {
-		return false
-	}
-	ptr, ok := fn.Type.Params.List[0].Type.(*ast.StarExpr)
-	if !ok {
-		return false
-	}
-	// We can't easily check that the type is *testing.M
-	// because we don't know how testing has been imported,
-	// but at least check that it's *M or *something.M.
-	if name, ok := ptr.X.(*ast.Ident); ok && name.Name == "M" {
-		return true
-	}
-	if sel, ok := ptr.X.(*ast.SelectorExpr); ok && sel.Sel.Name == "M" {
-		return true
-	}
-	return false
-}
-
-// isTest tells whether name looks like a test (or benchmark, according to prefix).
-// It is a Test (say) if there is a character after Test that is not a lower-case letter.
-// We don't want TesticularCancer.
-func isTest(name, prefix string) bool {
-	if !strings.HasPrefix(name, prefix) {
-		return false
-	}
-	if len(name) == len(prefix) { // "Test" is ok
-		return true
-	}
-	rune, _ := utf8.DecodeRuneInString(name[len(prefix):])
-	return !unicode.IsLower(rune)
-}
-
-var testmainTmpl = template.Must(template.New("main").Parse(`
-package main
-
-import (
-{{if not .TestMain}}
-	"os"
-{{end}}
-	"testing"
-	"testing/internal/testdeps"
-
-{{if .ImportTest}}
-	{{if .NeedTest}}_test{{else}}_{{end}} {{.Package.ImportPath | printf "%q"}}
-{{end}}
-{{if .ImportXtest}}
-	{{if .NeedXtest}}_xtest{{else}}_{{end}} {{.Package.ImportPath | printf "%s_test" | printf "%q"}}
-{{end}}
-)
-
-var tests = []testing.InternalTest{
-{{range .Tests}}
-	{"{{.Name}}", {{.Package}}.{{.Name}}},
-{{end}}
-}
-
-var benchmarks = []testing.InternalBenchmark{
-{{range .Benchmarks}}
-	{"{{.Name}}", {{.Package}}.{{.Name}}},
-{{end}}
-}
-
-var examples = []testing.InternalExample{
-{{range .Examples}}
-	{"{{.Name}}", {{.Package}}.{{.Name}}, {{.Output | printf "%q"}}, {{.Unordered}}},
-{{end}}
-}
-
-func main() {
-	m := testing.MainStart(testdeps.TestDeps{}, tests, benchmarks, examples)
-{{with .TestMain}}
-	{{.Package}}.{{.Name}}(m)
-{{else}}
-	os.Exit(m.Run())
-{{end}}
-}
-
-`))

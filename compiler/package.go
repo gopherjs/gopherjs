@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/constant"
+	"go/scanner"
 	"go/token"
 	"go/types"
 	"sort"
@@ -134,7 +135,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			return
 		}
 		// Some other unexpected panic, catch the stack trace and return as an error.
-		err = bailout(e)
+		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", importPath, e))
 	}()
 
 	// Files must be in the same order to get reproducible JS
@@ -398,6 +399,13 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var mainFunc *types.Func
 	for _, fun := range functions {
 		o := funcCtx.pkgCtx.Defs[fun.Name].(*types.Func)
+
+		if fun.Type.TypeParams.NumFields() > 0 {
+			return nil, scanner.Error{
+				Pos: fileSet.Position(fun.Type.TypeParams.Pos()),
+				Msg: fmt.Sprintf("function %s: type parameters are not supported by GopherJS: https://github.com/gopherjs/gopherjs/issues/1013", o.Name()),
+			}
+		}
 		funcInfo := funcCtx.pkgCtx.FuncDeclInfos[o]
 		d := Decl{
 			FullName: o.FullName(),
@@ -480,6 +488,14 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			continue
 		}
 		typeName := funcCtx.objectName(o)
+
+		if named, ok := o.Type().(*types.Named); ok && named.TypeParams().Len() > 0 {
+			return nil, scanner.Error{
+				Pos: fileSet.Position(o.Pos()),
+				Msg: fmt.Sprintf("type %s: type parameters are not supported by GopherJS: https://github.com/gopherjs/gopherjs/issues/1013", o.Name()),
+			}
+		}
+
 		d := Decl{
 			Vars:            []string{typeName},
 			DceObjectFilter: o.Name(),
@@ -645,7 +661,8 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 		}
 		return fmt.Sprintf(`"%s", [%s]`, pkgPath, strings.Join(fields, ", "))
 	default:
-		panic("invalid type")
+		err := bailout(fmt.Errorf("%v has unexpected type %T", ty, ty))
+		panic(err)
 	}
 }
 

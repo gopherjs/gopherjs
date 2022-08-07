@@ -107,8 +107,8 @@ var (
 	positionCounters = []*Func{}
 )
 
-func registerPosition(funcName string, file string, line int) uintptr {
-	key := file + ":" + itoa(line)
+func registerPosition(funcName string, file string, line int, col int) uintptr {
+	key := file + ":" + itoa(line) + ":" + itoa(col)
 	if pc, found := knownPositions[key]; found {
 		return pc
 	}
@@ -135,6 +135,7 @@ type basicFrame struct {
 	FuncName string
 	File     string
 	Line     int
+	Col      int
 }
 
 func callstack(skip, limit int) []basicFrame {
@@ -143,11 +144,37 @@ func callstack(skip, limit int) []basicFrame {
 	return parseCallstack(lines)
 }
 
+var (
+	// These functions are GopherJS-specific and don't have counterparts in
+	// upstream Go runtime. To improve interoperability, we filter them out from
+	// the stack trace.
+	hiddenFrames = map[string]bool{
+		"$callDeferred": true,
+	}
+	// The following GopherJS prelude functions have differently-named
+	// counterparts in the upstream Go runtime. Some standard library code relies
+	// on the names matching, so we perform this substitution.
+	knownFrames = map[string]string{
+		"$panic":     "runtime.gopanic",
+		"$goroutine": "runtime.goexit",
+	}
+)
+
 func parseCallstack(lines *js.Object) []basicFrame {
 	frames := []basicFrame{}
 	l := lines.Length()
 	for i := 0; i < l; i++ {
-		frames = append(frames, ParseCallFrame(lines.Index(i)))
+		frame := ParseCallFrame(lines.Index(i))
+		if hiddenFrames[frame.FuncName] {
+			continue
+		}
+		if alias, ok := knownFrames[frame.FuncName]; ok {
+			frame.FuncName = alias
+		}
+		frames = append(frames, frame)
+		if frame.FuncName == "runtime.goexit" {
+			break // We've reached the bottom of the goroutine stack.
+		}
 	}
 	return frames
 }
@@ -163,6 +190,7 @@ func ParseCallFrame(info *js.Object) basicFrame {
 		return basicFrame{
 			File:     parts.Call("slice", 1, parts.Length()-2).Call("join", ":").String(),
 			Line:     parts.Index(parts.Length() - 2).Int(),
+			Col:      parts.Index(parts.Length() - 1).Int(),
 			FuncName: parts.Index(0).String(),
 		}
 	}
@@ -176,12 +204,13 @@ func ParseCallFrame(info *js.Object) basicFrame {
 			File: parts.Call("slice", 0, parts.Length()-2).Call("join", ":").
 				Call("replace", js.Global.Get("RegExp").New(`^\s*at `), "").String(),
 			Line:     parts.Index(parts.Length() - 2).Int(),
+			Col:      parts.Index(parts.Length() - 1).Int(),
 			FuncName: "<none>",
 		}
 	}
 
 	var file, funcName string
-	var line int
+	var line, col int
 
 	pos := info.Call("substring", openIdx+1, info.Call("indexOf", ")").Int())
 	parts := pos.Call("split", ":")
@@ -191,6 +220,7 @@ func ParseCallFrame(info *js.Object) basicFrame {
 	} else {
 		file = parts.Call("slice", 0, parts.Length()-2).Call("join", ":").String()
 		line = parts.Index(parts.Length() - 2).Int()
+		col = parts.Index(parts.Length() - 1).Int()
 	}
 	fn := info.Call("substring", info.Call("indexOf", "at ").Int()+3, info.Call("indexOf", " (").Int())
 	if idx := fn.Call("indexOf", "[as ").Int(); idx > 0 {
@@ -201,6 +231,7 @@ func ParseCallFrame(info *js.Object) basicFrame {
 	return basicFrame{
 		File:     file,
 		Line:     line,
+		Col:      col,
 		FuncName: funcName,
 	}
 }
@@ -211,14 +242,31 @@ func Caller(skip int) (pc uintptr, file string, line int, ok bool) {
 	if len(frames) != 1 {
 		return 0, "", 0, false
 	}
-	pc = registerPosition(frames[0].FuncName, frames[0].File, frames[0].Line)
+	pc = registerPosition(frames[0].FuncName, frames[0].File, frames[0].Line, frames[0].Col)
 	return pc, frames[0].File, frames[0].Line, true
 }
 
+// Callers fills the slice pc with the return program counters of function
+// invocations on the calling goroutine's stack. The argument skip is the number
+// of stack frames to skip before recording in pc, with 0 identifying the frame
+// for Callers itself and 1 identifying the caller of Callers. It returns the
+// number of entries written to pc.
+//
+// The returned call stack represents the logical Go call stack, which excludes
+// certain runtime-internal call frames that would be present in the raw
+// JavaScript stack trace. This is done to improve interoperability with the
+// upstream Go. Use JavaScript native APIs to access the raw call stack.
+//
+// To translate these PCs into symbolic information such as function names and
+// line numbers, use CallersFrames. CallersFrames accounts for inlined functions
+// and adjusts the return program counters into call program counters. Iterating
+// over the returned slice of PCs directly is discouraged, as is using FuncForPC
+// on any of the returned PCs, since these cannot account for inlining or return
+// program counter adjustment.
 func Callers(skip int, pc []uintptr) int {
 	frames := callstack(skip, len(pc))
 	for i, frame := range frames {
-		pc[i] = registerPosition(frame.FuncName, frame.File, frame.Line)
+		pc[i] = registerPosition(frame.FuncName, frame.File, frame.Line, frame.Col)
 	}
 	return len(frames)
 }
@@ -390,6 +438,12 @@ func SetMutexProfileFraction(rate int) int {
 	return 0
 }
 
+// Stack formats a stack trace of the calling goroutine into buf and returns the
+// number of bytes written to buf. If all is true, Stack formats stack traces of
+// all other goroutines into buf after the trace for the current goroutine.
+//
+// Unlike runtime.Callers(), it returns an unprocessed, runtime-specific text
+// representation of the JavaScript stack trace.
 func Stack(buf []byte, all bool) int {
 	s := js.Global.Get("Error").New().Get("stack")
 	if s == js.Undefined {

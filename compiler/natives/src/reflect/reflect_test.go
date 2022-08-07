@@ -5,7 +5,7 @@ package reflect_test
 
 import (
 	"math"
-	"reflect"
+	. "reflect"
 	"testing"
 )
 
@@ -46,16 +46,16 @@ func TestOffsetLock(t *testing.T) {
 }
 
 func TestSelectOnInvalid(t *testing.T) {
-	reflect.Select([]reflect.SelectCase{
+	Select([]SelectCase{
 		{
-			Dir:  reflect.SelectRecv,
-			Chan: reflect.Value{},
+			Dir:  SelectRecv,
+			Chan: Value{},
 		}, {
-			Dir:  reflect.SelectSend,
-			Chan: reflect.Value{},
-			Send: reflect.ValueOf(1),
+			Dir:  SelectSend,
+			Chan: Value{},
+			Send: ValueOf(1),
 		}, {
-			Dir: reflect.SelectDefault,
+			Dir: SelectDefault,
 		},
 	})
 }
@@ -144,7 +144,7 @@ var deepEqualTests = []DeepEqualTest{
 
 // TODO: Fix this. See https://github.com/gopherjs/gopherjs/issues/763.
 func TestIssue22073(t *testing.T) {
-	m := reflect.ValueOf(NonExportedFirst(0)).Method(0)
+	m := ValueOf(NonExportedFirst(0)).Method(0)
 
 	if got := m.Type().NumOut(); got != 0 {
 		t.Errorf("NumOut: got %v, want 0", got)
@@ -177,9 +177,117 @@ func TestConvertNaNs(t *testing.T) {
 	const qnan uint32 = 0x7fc00001 // Originally: 0x7f800001.
 	type myFloat32 float32
 	x := V(myFloat32(math.Float32frombits(qnan)))
-	y := x.Convert(reflect.TypeOf(float32(0)))
+	y := x.Convert(TypeOf(float32(0)))
 	z := y.Interface().(float32)
 	if got := math.Float32bits(z); got != qnan {
 		t.Errorf("quiet nan conversion got %x, want %x", got, qnan)
 	}
+}
+
+func TestMapIterSet(t *testing.T) {
+	m := make(map[string]any, len(valueTests))
+	for _, tt := range valueTests {
+		m[tt.s] = tt.i
+	}
+	v := ValueOf(m)
+
+	k := New(v.Type().Key()).Elem()
+	e := New(v.Type().Elem()).Elem()
+
+	iter := v.MapRange()
+	for iter.Next() {
+		k.SetIterKey(iter)
+		e.SetIterValue(iter)
+		want := m[k.String()]
+		got := e.Interface()
+		if got != want {
+			t.Errorf("%q: want (%T) %v, got (%T) %v", k.String(), want, want, got, got)
+		}
+		if setkey, key := valueToString(k), valueToString(iter.Key()); setkey != key {
+			t.Errorf("MapIter.Key() = %q, MapIter.SetKey() = %q", key, setkey)
+		}
+		if setval, val := valueToString(e), valueToString(iter.Value()); setval != val {
+			t.Errorf("MapIter.Value() = %q, MapIter.SetValue() = %q", val, setval)
+		}
+	}
+
+	// Upstream test also tests allocations made by the iterator. GopherJS doesn't
+	// support runtime.ReadMemStats(), so we leave that part out.
+}
+
+type inner struct {
+	x int
+}
+
+type outer struct {
+	y int
+	inner
+}
+
+func (*inner) M() int { return 1 }
+func (*outer) M() int { return 2 }
+
+func TestNestedMethods(t *testing.T) {
+	// This test is similar to the upstream, but avoids using the unsupported
+	// Value.UnsafePointer() method.
+	typ := TypeOf((*outer)(nil))
+	args := []Value{
+		ValueOf((*outer)(nil)), // nil receiver
+	}
+	if typ.NumMethod() != 1 {
+		t.Errorf("Wrong method table for outer, found methods:")
+		for i := 0; i < typ.NumMethod(); i++ {
+			m := typ.Method(i)
+			t.Errorf("\t%d: %s\n", i, m.Name)
+		}
+	}
+	if got := typ.Method(0).Func.Call(args)[0]; got.Int() != 2 {
+		t.Errorf("Wrong method table for outer, expected return value 2, got: %v", got)
+	}
+	if got := ValueOf((*outer).M).Call(args)[0]; got.Int() != 2 {
+		t.Errorf("Wrong method table for outer, expected return value 2, got: %v", got)
+	}
+}
+
+func TestEmbeddedMethods(t *testing.T) {
+	// This test is similar to the upstream, but avoids using the unsupported
+	// Value.UnsafePointer() method.
+	typ := TypeOf((*OuterInt)(nil))
+	if typ.NumMethod() != 1 {
+		t.Errorf("Wrong method table for OuterInt: (m=%p)", (*OuterInt).M)
+		for i := 0; i < typ.NumMethod(); i++ {
+			m := typ.Method(i)
+			t.Errorf("\t%d: %s %p\n", i, m.Name, m.Func.UnsafePointer())
+		}
+	}
+
+	i := &InnerInt{3}
+	if v := ValueOf(i).Method(0).Call(nil)[0].Int(); v != 3 {
+		t.Errorf("i.M() = %d, want 3", v)
+	}
+
+	o := &OuterInt{1, InnerInt{2}}
+	if v := ValueOf(o).Method(0).Call(nil)[0].Int(); v != 2 {
+		t.Errorf("i.M() = %d, want 2", v)
+	}
+
+	f := (*OuterInt).M
+	if v := f(o); v != 2 {
+		t.Errorf("f(o) = %d, want 2", v)
+	}
+}
+
+func TestNotInHeapDeref(t *testing.T) {
+	t.Skip("GopherJS doesn't support //go:notinheap")
+}
+
+func TestMethodCallValueCodePtr(t *testing.T) {
+	t.Skip("methodValueCallCodePtr() is not applicable in GopherJS")
+}
+
+type B struct{}
+
+//gopherjs:prune-original
+func TestIssue50208(t *testing.T) {
+	t.Skip("This test required generics, which are not yet supported: https://github.com/gopherjs/gopherjs/issues/1013")
 }

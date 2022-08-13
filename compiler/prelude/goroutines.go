@@ -225,17 +225,9 @@ var $block = function() {
 
 var $restore = function(context, params) {
   if (context !== undefined && context.$blk !== undefined) {
-    return {
-      $f: context,
-      $c: true,
-      ...context,
-    };
-  } else {
-    return {
-      $c: false,
-      ...params,
-    };
+    return context;
   }
+  return params;
 }
 
 var $send = function(chan, value) {

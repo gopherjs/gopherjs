@@ -819,21 +819,23 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	localVarDefs := "" // Function-local var declaration at the top.
 
 	if len(c.Blocking) != 0 {
-		localVars := append([]string{}, c.localVars...)
-		// $r is sometimes used as a temporary variable to store blocking call result.
-		// $c indicates that a function is being resumed after a blocking call when set to true.
-		// $f is an object used to save and restore function context for blocking calls.
-		localVars = append(localVars, "$r", "$c", "$f")
-		// If a blocking function is being resumed, initialize local variables from the saved context.
-		localVarDefs = fmt.Sprintf("var {%s} = $restore(this, {%s});\n", strings.Join(localVars, ", "), strings.Join(params, ", "))
-		// If the function gets blocked, save local variables for future.
-		saveContext := fmt.Sprintf("$f = {...$f, $r, %s};", strings.Join(c.localVars, ", "))
-
 		if funcRef == "" {
 			funcRef = "$b"
 			functionName = " $b"
 		}
-		suffix = " if ($f === undefined) { $f = { $blk: " + funcRef + " }; } " + saveContext + "return $f;" + suffix
+
+		localVars := append([]string{}, c.localVars...)
+		// There are several special variables involved in handling blocking functions:
+		// $r is sometimes used as a temporary variable to store blocking call result.
+		// $c indicates that a function is being resumed after a blocking call when set to true.
+		// $f is an object used to save and restore function context for blocking calls.
+		localVars = append(localVars, "$r")
+		// If a blocking function is being resumed, initialize local variables from the saved context.
+		localVarDefs = fmt.Sprintf("var {%s, $c} = $restore(this, {%s});\n", strings.Join(localVars, ", "), strings.Join(params, ", "))
+		// If the function gets blocked, save local variables for future.
+		saveContext := fmt.Sprintf("var $f = {$blk: "+funcRef+", $c: true, $r, %s};", strings.Join(c.localVars, ", "))
+
+		suffix = " " + saveContext + "return $f;" + suffix
 	} else if len(c.localVars) > 0 {
 		// Non-blocking functions simply declare local variables with no need for restore support.
 		localVarDefs = fmt.Sprintf("var %s;\n", strings.Join(c.localVars, ", "))

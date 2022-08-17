@@ -794,7 +794,7 @@ func (fc *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun 
 	return fc.formatExpr("%s(%s)", fun, strings.Join(args, ", "))
 }
 
-// delegatedCall returns a pair of JS expresions representing a callable function
+// delegatedCall returns a pair of JS expressions representing a callable function
 // and its arguments to be invoked elsewhere.
 //
 // This function is necessary in conjunction with keywords such as `go` and `defer`,

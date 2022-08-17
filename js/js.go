@@ -158,7 +158,7 @@ func MakeWrapper(i interface{}) *Object {
 // and setters
 // (https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/defineProperty)
 // for the non-embedded exported fields of i. Values accessed via these methods
-// and getters are themsevles wrapped when accessed, but an important point to
+// and getters are themselves wrapped when accessed, but an important point to
 // note is that a new wrapped value is created on each access.
 func MakeFullWrapper(i interface{}) *Object {
 	internalObj := InternalObject(i)

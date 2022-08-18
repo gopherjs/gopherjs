@@ -16,7 +16,7 @@ GopherJS compiles Go code ([golang.org](https://golang.org/)) to pure JavaScript
 
 ### What's new?
 
- - 2022-XX-XX: Go 1.18 support is available
+ - 2022-08-18: Go 1.18 support is [available](https://github.com/gopherjs/gopherjs/releases/tag/v1.18.0-beta1%2Bgo1.18.5)!
  - 2021-09-19: Go 1.17 support is available!
  - 2021-08-23: Go Modules are now fully supported.
  - 2021-06-19: Complete `syscall/js` package implementation compatible with the upstream Go 1.16.

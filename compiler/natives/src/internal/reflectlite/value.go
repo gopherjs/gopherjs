@@ -266,7 +266,7 @@ func (v Value) Len() int {
 	case Chan:
 		return v.object().Get("$buffer").Get("length").Int()
 	case Map:
-		return js.Global.Call("$keys", v.object()).Length()
+		return v.object().Get("size").Int()
 	default:
 		panic(&ValueError{"reflect.Value.Len", k})
 	}

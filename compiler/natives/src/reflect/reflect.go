@@ -620,21 +620,24 @@ func makechan(typ *rtype, size int) (ch unsafe.Pointer) {
 }
 
 func makemap(t *rtype, cap int) (m unsafe.Pointer) {
-	return unsafe.Pointer(js.Global.Get("Object").New().Unsafe())
+	return unsafe.Pointer(js.Global.Get("Map").New().Unsafe())
 }
 
-func keyFor(t *rtype, key unsafe.Pointer) (*js.Object, string) {
+func keyFor(t *rtype, key unsafe.Pointer) (*js.Object, *js.Object) {
 	kv := js.InternalObject(key)
 	if kv.Get("$get") != js.Undefined {
 		kv = kv.Call("$get")
 	}
-	k := jsType(t.Key()).Call("keyFor", kv).String()
+	k := jsType(t.Key()).Call("keyFor", kv)
 	return kv, k
 }
 
 func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
+	if !js.InternalObject(m).Bool() {
+		return nil // nil map
+	}
 	_, k := keyFor(t, key)
-	entry := js.InternalObject(m).Get(k)
+	entry := js.InternalObject(m).Call("get", k)
 	if entry == js.Undefined {
 		return nil
 	}
@@ -653,12 +656,15 @@ func mapassign(t *rtype, m, key, val unsafe.Pointer) {
 	entry := js.Global.Get("Object").New()
 	entry.Set("k", kv)
 	entry.Set("v", jsVal)
-	js.InternalObject(m).Set(k, entry)
+	js.InternalObject(m).Call("set", k, entry)
 }
 
 func mapdelete(t *rtype, m unsafe.Pointer, key unsafe.Pointer) {
 	_, k := keyFor(t, key)
-	js.InternalObject(m).Delete(k)
+	if !js.InternalObject(m).Bool() {
+		return // nil map
+	}
+	js.InternalObject(m).Call("delete", k)
 }
 
 // TODO(nevkonatkte): The following three "faststr" implementations are meant to
@@ -696,7 +702,8 @@ type hiter struct {
 func (iter *hiter) skipUntilValidKey() {
 	for iter.i < iter.keys.Length() {
 		k := iter.keys.Index(iter.i)
-		if iter.m.Get(k.String()) != js.Undefined {
+		entry := iter.m.Call("get", k)
+		if entry != js.Undefined {
 			break
 		}
 		// The key is already deleted. Move on the next item.
@@ -705,10 +712,19 @@ func (iter *hiter) skipUntilValidKey() {
 }
 
 func mapiterinit(t *rtype, m unsafe.Pointer, it *hiter) {
+	mapObj := js.InternalObject(m)
+	keys := js.Global.Get("Array").New()
+	if mapObj.Get("keys") != js.Undefined {
+		keysIter := mapObj.Call("keys")
+		if mapObj.Get("keys") != js.Undefined {
+			keys = js.Global.Get("Array").Call("from", keysIter)
+		}
+	}
+
 	*it = hiter{
 		t:    t,
-		m:    js.InternalObject(m),
-		keys: js.Global.Call("$keys", js.InternalObject(m)),
+		m:    mapObj,
+		keys: keys,
 		i:    0,
 		last: nil,
 	}
@@ -724,7 +740,7 @@ func mapiterkey(it *hiter) unsafe.Pointer {
 			return nil
 		}
 		k := it.keys.Index(it.i)
-		kv = it.m.Get(k.String())
+		kv = it.m.Call("get", k)
 
 		// Record the key-value pair for later accesses.
 		it.last = kv
@@ -742,7 +758,7 @@ func mapiterelem(it *hiter) unsafe.Pointer {
 			return nil
 		}
 		k := it.keys.Index(it.i)
-		kv = it.m.Get(k.String())
+		kv = it.m.Call("get", k)
 		it.last = kv
 	}
 	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("v"), jsType(PtrTo(it.t.Elem()))).Unsafe())
@@ -754,7 +770,7 @@ func mapiternext(it *hiter) {
 }
 
 func maplen(m unsafe.Pointer) int {
-	return js.Global.Call("$keys", js.InternalObject(m)).Length()
+	return js.InternalObject(m).Get("size").Int()
 }
 
 func cvtDirect(v Value, typ Type) Value {
@@ -1379,7 +1395,7 @@ func (v Value) Len() int {
 	case Chan:
 		return v.object().Get("$buffer").Get("length").Int()
 	case Map:
-		return js.Global.Call("$keys", v.object()).Length()
+		return v.object().Get("size").Int()
 	default:
 		panic(&ValueError{"reflect.Value.Len", k})
 	}

@@ -475,7 +475,7 @@ func makechan(typ *rtype, size int) (ch unsafe.Pointer) {
 }
 
 func makemap(t *rtype, cap int) (m unsafe.Pointer) {
-	return unsafe.Pointer(js.Global.Get("Object").New().Unsafe())
+	return unsafe.Pointer(js.Global.Get("Map").New().Unsafe())
 }
 
 func keyFor(t *rtype, key unsafe.Pointer) (*js.Object, string) {
@@ -489,7 +489,7 @@ func keyFor(t *rtype, key unsafe.Pointer) (*js.Object, string) {
 
 func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
 	_, k := keyFor(t, key)
-	entry := js.InternalObject(m).Get(k)
+	entry := js.InternalObject(m).Call("get", k)
 	if entry == js.Undefined {
 		return nil
 	}
@@ -508,12 +508,12 @@ func mapassign(t *rtype, m, key, val unsafe.Pointer) {
 	entry := js.Global.Get("Object").New()
 	entry.Set("k", kv)
 	entry.Set("v", jsVal)
-	js.InternalObject(m).Set(k, entry)
+	js.InternalObject(m).Call("set", k, entry)
 }
 
 func mapdelete(t *rtype, m unsafe.Pointer, key unsafe.Pointer) {
 	_, k := keyFor(t, key)
-	js.InternalObject(m).Delete(k)
+	js.InternalObject(m).Call("delete", k)
 }
 
 type mapIter struct {
@@ -531,7 +531,7 @@ type mapIter struct {
 func (iter *mapIter) skipUntilValidKey() {
 	for iter.i < iter.keys.Length() {
 		k := iter.keys.Index(iter.i)
-		if iter.m.Get(k.String()) != js.Undefined {
+		if iter.m.Call("get", k) != js.Undefined {
 			break
 		}
 		// The key is already deleted. Move on the next item.
@@ -540,7 +540,7 @@ func (iter *mapIter) skipUntilValidKey() {
 }
 
 func mapiterinit(t *rtype, m unsafe.Pointer) unsafe.Pointer {
-	return unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Call("$keys", js.InternalObject(m)), 0, nil})
+	return unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Get("Array").Call("from", js.InternalObject(m).Call("keys")), 0, nil})
 }
 
 type TypeEx interface {
@@ -559,7 +559,7 @@ func mapiterkey(it unsafe.Pointer) unsafe.Pointer {
 			return nil
 		}
 		k := iter.keys.Index(iter.i)
-		kv = iter.m.Get(k.String())
+		kv = iter.m.Call("get", k)
 
 		// Record the key-value pair for later accesses.
 		iter.last = kv
@@ -574,7 +574,7 @@ func mapiternext(it unsafe.Pointer) {
 }
 
 func maplen(m unsafe.Pointer) int {
-	return js.Global.Call("$keys", js.InternalObject(m)).Length()
+	return js.InternalObject(m).Get("size").Int()
 }
 
 func cvtDirect(v Value, typ Type) Value {

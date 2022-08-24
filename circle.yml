@@ -3,13 +3,13 @@
 # This configuration has one build_and_test workflow designed to run on all commits
 # and pull requests. It consists of three jobs:
 #
-#  - build: Builds and runs GopherJS unit tests, as well as lits, smoke tests, etc.
+#  - build: Builds and runs GopherJS unit tests, as well as lints, smoke tests, etc.
 #    This job is designed to provide quickest feedback on the most important
 #    functionality. It should not include anything heavyweight and should be kept
 #    under 2-3 minutes of runtime.
 #
 #  - gopherjs_tests: Runs standard library and GopherJS package tests using GopherJS
-#    *itself*. This is the most comprehensive test suite we have and it is sharded
+#    *itself*. This is the most comprehensive test suite we have, and it is sharded
 #    into 4 parallel instances for faster execution.
 #
 #  - gorepo_tests: Runs language tests from the Go compiler test suite. The objective

@@ -100,6 +100,14 @@ var $mapArray = function(array, f) {
   return newArray;
 };
 
+// $mapIndex returns the value of the given key in m, or undefined if m is nil/undefined or not a map
+var $mapIndex = function(m, key) {
+  return typeof m.get === "function" ? m.get(key) : undefined;
+};
+// $mapDelete deletes the key and associated value from m.  If m is nil/undefined or not a map, $mapDelete is a no-op
+var $mapDelete = function(m, key) {
+  typeof m.delete === "function" && m.delete(key)
+};
 // Returns a method bound to the receiver instance, safe to invoke as a 
 // standalone function. Bound function is cached for later reuse.
 var $methodVal = function(recv, name) {

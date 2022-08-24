@@ -61,9 +61,9 @@ var $externalize = function(v, t, makeWrapper) {
     return $externalize(v.$val, v.constructor, makeWrapper);
   case $kindMap:
     var m = {};
-    var keys = $keys(v);
+    var keys = Array.from(v.keys());
     for (var i = 0; i < keys.length; i++) {
-      var entry = v[keys[i]];
+      var entry = v.get(keys[i]);
       m[$externalize(entry.k, t.key, makeWrapper)] = $externalize(entry.v, t.elem, makeWrapper);
     }
     return m;
@@ -312,12 +312,12 @@ var $internalize = function(v, t, recv, seen, makeWrapper) {
       return new mapType($internalize(v, mapType, recv, seen, makeWrapper));
     }
   case $kindMap:
-    var m = {};
+    var m = new Map();
     seen.get(t).set(v, m);
     var keys = $keys(v);
     for (var i = 0; i < keys.length; i++) {
       var k = $internalize(keys[i], t.key, recv, seen, makeWrapper);
-      m[t.key.keyFor(k)] = { k: k, v: $internalize(v[keys[i]], t.elem, recv, seen, makeWrapper) };
+      m.set(t.key.keyFor(k), { k: k, v: $internalize(v[keys[i]], t.elem, recv, seen, makeWrapper) });
     }
     return m;
   case $kindPtr:

@@ -617,10 +617,10 @@ var $mapType = function(key, elem) {
   return typ;
 };
 var $makeMap = function(keyForFunc, entries) {
-  var m = {};
+  var m = new Map();
   for (var i = 0; i < entries.length; i++) {
     var e = entries[i];
-    m[keyForFunc(e.k)] = e;
+    m.set(keyForFunc(e.k), e);
   }
   return m;
 };

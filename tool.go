@@ -135,16 +135,15 @@ func main() {
 				if err != nil {
 					return fmt.Errorf("failed to expand patterns %v: %w", args, err)
 				}
-
 				for _, pkgPath := range pkgs {
 					if s.Watcher != nil {
-						pkg, err := xctx.Import(pkgPath, "", build.FindOnly)
+						pkg, err := xctx.Import(pkgPath, currentDirectory, build.FindOnly)
 						if err != nil {
 							return err
 						}
 						s.Watcher.Add(pkg.Dir)
 					}
-					pkg, err := xctx.Import(pkgPath, ".", 0)
+					pkg, err := xctx.Import(pkgPath, currentDirectory, 0)
 					if err != nil {
 						return err
 					}
@@ -208,7 +207,7 @@ func main() {
 					}
 				}
 				for _, pkgPath := range pkgs {
-					pkg, err := xctx.Import(pkgPath, ".", 0)
+					pkg, err := xctx.Import(pkgPath, currentDirectory, 0)
 					if s.Watcher != nil && pkg != nil { // add watch even on error
 						s.Watcher.Add(pkg.Dir)
 					}

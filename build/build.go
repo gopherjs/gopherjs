@@ -290,6 +290,9 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 	if errList != nil {
 		return nil, nil, errList
 	}
+	if f, found := checkEmbed(pkg, fileSet, files, isTest, isXTest); found {
+		files = append(files, f)
+	}
 	return files, jsFiles, nil
 }
 
@@ -398,11 +401,15 @@ func (p *PackageData) InternalBuildContext() *build.Context {
 func (p *PackageData) TestPackage() *PackageData {
 	return &PackageData{
 		Package: &build.Package{
-			Name:       p.Name,
-			ImportPath: p.ImportPath,
-			Dir:        p.Dir,
-			GoFiles:    append(p.GoFiles, p.TestGoFiles...),
-			Imports:    append(p.Imports, p.TestImports...),
+			Name:                p.Name,
+			ImportPath:          p.ImportPath,
+			Dir:                 p.Dir,
+			GoFiles:             append(p.GoFiles, p.TestGoFiles...),
+			Imports:             append(p.Imports, p.TestImports...),
+			EmbedPatternPos:     p.EmbedPatternPos,
+			EmbedPatterns:       p.EmbedPatterns,
+			TestEmbedPatterns:   p.TestEmbedPatterns,
+			TestEmbedPatternPos: p.TestEmbedPatternPos,
 		},
 		IsTest:  true,
 		JSFiles: p.JSFiles,
@@ -414,11 +421,13 @@ func (p *PackageData) TestPackage() *PackageData {
 func (p *PackageData) XTestPackage() *PackageData {
 	return &PackageData{
 		Package: &build.Package{
-			Name:       p.Name + "_test",
-			ImportPath: p.ImportPath + "_test",
-			Dir:        p.Dir,
-			GoFiles:    p.XTestGoFiles,
-			Imports:    p.XTestImports,
+			Name:                 p.Name + "_test",
+			ImportPath:           p.ImportPath + "_test",
+			Dir:                  p.Dir,
+			GoFiles:              p.XTestGoFiles,
+			Imports:              p.XTestImports,
+			XTestEmbedPatterns:   p.XTestEmbedPatterns,
+			XTestEmbedPatternPos: p.XTestEmbedPatternPos,
 		},
 		IsTest: true,
 		bctx:   p.bctx,

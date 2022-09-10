@@ -13,6 +13,7 @@ import (
 	"go/scanner"
 	"go/token"
 	"go/types"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -557,12 +558,28 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 		return fmt.Errorf("named files must all be in one directory; have: %v", strings.Join(dirList, ", "))
 	}
 
+	root := dirList[0]
+	ctx := build.Default
+	ctx.UseAllFiles = true
+	ctx.ReadDir = func(dir string) (infos []fs.FileInfo, err error) {
+		for _, f := range filenames {
+			info, err := os.Stat(f)
+			if err != nil {
+				return nil, err
+			}
+			infos = append(infos, info)
+		}
+		return
+	}
+	p, err := ctx.Import(".", root, 0)
+	if err != nil {
+		return err
+	}
+	p.Name = "main"
+	p.ImportPath = "main"
+
 	pkg := &PackageData{
-		Package: &build.Package{
-			Name:       "main",
-			ImportPath: "main",
-			Dir:        dirList[0],
-		},
+		Package: p,
 		// This ephemeral package doesn't have a unique import path to be used as a
 		// build cache key, so we never cache it.
 		SrcModTime: time.Now().Add(time.Hour),
@@ -571,7 +588,6 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 
 	for _, file := range filenames {
 		if !strings.HasSuffix(file, ".inc.js") {
-			pkg.GoFiles = append(pkg.GoFiles, filepath.Base(file))
 			continue
 		}
 

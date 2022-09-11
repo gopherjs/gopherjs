@@ -49,11 +49,11 @@ func checkEmbed(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.F
 	buf.WriteString(strings.Replace(embed_head, "$pkg", bp.Name, 1))
 	buf.WriteString("\nvar (\n")
 	for _, v := range ems {
-		v.Spec.Names[0].Name = "_"
 		fs, err := r.Load(bp.Dir, v)
 		if err != nil {
 			return nil, err
 		}
+		v.Spec.Names[0].Name = "_"
 		switch v.Kind {
 		case goembed.EmbedBytes:
 			buf.WriteString(fmt.Sprintf("\t%v = []byte(%v)\n", v.Name, buildIdent(fs[0].Name)))
@@ -78,6 +78,8 @@ func checkEmbed(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.F
 				}
 			}
 			buf.WriteString("})\n")
+		default:
+			return nil, fmt.Errorf("%v: go:embed cannot apply to var of type %v", v.Pos, v.Spec.Type)
 		}
 	}
 	buf.WriteString("\n)\n")

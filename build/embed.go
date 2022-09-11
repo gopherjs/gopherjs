@@ -31,7 +31,7 @@ func __gopherjs_embed_buildFS__(list []struct {
 `
 
 // checkEmbed is check package embed file
-func checkEmbed(bp *PackageData, fset *token.FileSet, files []*ast.File, test bool, xtest bool) (*ast.File, bool) {
+func checkEmbed(bp *PackageData, fset *token.FileSet, files []*ast.File, test bool, xtest bool) (*ast.File, error) {
 	var ems []*goembed.Embed
 	if xtest {
 		ems = goembed.CheckEmbed(bp.XTestEmbedPatternPos, fset, files)
@@ -44,7 +44,7 @@ func checkEmbed(bp *PackageData, fset *token.FileSet, files []*ast.File, test bo
 		}
 	}
 	if len(ems) == 0 {
-		return nil, false
+		return nil, nil
 	}
 	r := goembed.NewResolve()
 	var buf bytes.Buffer
@@ -52,7 +52,10 @@ func checkEmbed(bp *PackageData, fset *token.FileSet, files []*ast.File, test bo
 	buf.WriteString("\nvar (\n")
 	for _, v := range ems {
 		v.Spec.Names[0].Name = "_"
-		fs, _ := r.Load(bp.Dir, v)
+		fs, err := r.Load(bp.Dir, v)
+		if err != nil {
+			return nil, err
+		}
 		switch v.Kind {
 		case goembed.EmbedBytes:
 			buf.WriteString(fmt.Sprintf("\t%v = []byte(%v)\n", v.Name, buildIdent(fs[0].Name)))
@@ -94,7 +97,7 @@ func checkEmbed(bp *PackageData, fset *token.FileSet, files []*ast.File, test bo
 
 	f, err := parser.ParseFile(fset, "js_embed.go", buf.String(), parser.ParseComments)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return f, true
+	return f, nil
 }

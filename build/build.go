@@ -291,8 +291,12 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 	if errList != nil {
 		return nil, nil, errList
 	}
-	if f, found := checkEmbed(pkg, fileSet, files, isTest, isXTest); found {
-		files = append(files, f)
+	embed, err := checkEmbed(pkg, fileSet, files, isTest, isXTest)
+	if err != nil {
+		return nil, nil, err
+	}
+	if embed != nil {
+		files = append(files, embed)
 	}
 	return files, jsFiles, nil
 }

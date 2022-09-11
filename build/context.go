@@ -60,7 +60,7 @@ func DefaultEnv() Env {
 	return e
 }
 
-// XContext is an extension of go/build.Context with GopherJS-specifc features.
+// XContext is an extension of go/build.Context with GopherJS-specific features.
 //
 // It abstracts away several different sources GopherJS can load its packages
 // from, with a minimal API.
@@ -313,7 +313,7 @@ func embeddedCtx(embedded http.FileSystem, e Env) *simpleCtx {
 // overlayCtx creates simpleCtx that imports from the embedded standard library
 // overlays.
 func overlayCtx(e Env) *simpleCtx {
-	return embeddedCtx(&withPrefix{fs: natives.FS, prefix: e.GOROOT}, e)
+	return embeddedCtx(&withPrefix{fs: http.FS(natives.FS), prefix: e.GOROOT}, e)
 }
 
 // gopherjsCtx creates a simpleCtx that imports from the embedded gopherjs

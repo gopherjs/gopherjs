@@ -5,9 +5,9 @@
 // in src subfolder.
 package natives
 
-import (
-	_ "github.com/shurcooL/vfsgen" // Force go.mod to require this package
-)
+import "embed"
 
-//go:generate vfsgendev -source="github.com/gopherjs/gopherjs/compiler/natives".FS -tag=gopherjsdev
-//go:generate gofmt -w -s fs_vfsdata.go
+// FS is a virtual filesystem that contains native packages.
+//
+//go:embed src
+var FS embed.FS

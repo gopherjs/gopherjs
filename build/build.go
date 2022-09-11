@@ -291,13 +291,6 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 	if errList != nil {
 		return nil, nil, errList
 	}
-	embed, err := checkEmbed(pkg, fileSet, files, isTest, isXTest)
-	if err != nil {
-		return nil, nil, err
-	}
-	if embed != nil {
-		files = append(files, embed)
-	}
 	return files, jsFiles, nil
 }
 
@@ -426,13 +419,13 @@ func (p *PackageData) TestPackage() *PackageData {
 func (p *PackageData) XTestPackage() *PackageData {
 	return &PackageData{
 		Package: &build.Package{
-			Name:                 p.Name + "_test",
-			ImportPath:           p.ImportPath + "_test",
-			Dir:                  p.Dir,
-			GoFiles:              p.XTestGoFiles,
-			Imports:              p.XTestImports,
-			XTestEmbedPatterns:   p.XTestEmbedPatterns,
-			XTestEmbedPatternPos: p.XTestEmbedPatternPos,
+			Name:            p.Name + "_test",
+			ImportPath:      p.ImportPath + "_test",
+			Dir:             p.Dir,
+			GoFiles:         p.XTestGoFiles,
+			Imports:         p.XTestImports,
+			EmbedPatterns:   p.XTestEmbedPatterns,
+			EmbedPatternPos: p.XTestEmbedPatternPos,
 		},
 		IsTest: true,
 		bctx:   p.bctx,
@@ -704,6 +697,13 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	files, overlayJsFiles, err := parseAndAugment(s.xctx, pkg, pkg.IsTest, fileSet)
 	if err != nil {
 		return nil, err
+	}
+	embed, err := checkEmbed(pkg, fileSet, files)
+	if err != nil {
+		return nil, err
+	}
+	if embed != nil {
+		files = append(files, embed)
 	}
 
 	importContext := &compiler.ImportContext{

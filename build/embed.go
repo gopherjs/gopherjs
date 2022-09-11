@@ -31,16 +31,14 @@ func __gopherjs_embed_buildFS__(list []struct {
 `
 
 // checkEmbed is check package embed file
-func checkEmbed(bp *PackageData, fset *token.FileSet, files []*ast.File, test bool, xtest bool) (*ast.File, error) {
+func checkEmbed(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.File, error) {
 	var ems []*goembed.Embed
-	if xtest {
-		ems = goembed.CheckEmbed(bp.XTestEmbedPatternPos, fset, files)
-	} else {
+	if len(bp.EmbedPatternPos) != 0 {
 		ems = goembed.CheckEmbed(bp.EmbedPatternPos, fset, files)
-		if test {
-			if tems := goembed.CheckEmbed(bp.TestEmbedPatternPos, fset, files); len(tems) > 0 {
-				ems = append(ems, tems...)
-			}
+	}
+	if bp.IsTest && len(bp.TestEmbedPatternPos) != 0 {
+		if tems := goembed.CheckEmbed(bp.TestEmbedPatternPos, fset, files); len(tems) > 0 {
+			ems = append(ems, tems...)
 		}
 	}
 	if len(ems) == 0 {

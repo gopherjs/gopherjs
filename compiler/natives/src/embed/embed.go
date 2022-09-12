@@ -9,7 +9,7 @@ func buildFS(list []struct {
 	hash [16]byte
 }) (f FS) {
 	n := len(list)
-	files := make([]file, n, n)
+	files := make([]file, n)
 	for i := 0; i < n; i++ {
 		files[i].name = list[i].name
 		files[i].data = list[i].data

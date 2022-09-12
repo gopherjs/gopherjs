@@ -558,15 +558,17 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 	root := dirList[0]
 	ctx := build.Default
 	ctx.UseAllFiles = true
-	ctx.ReadDir = func(dir string) (infos []fs.FileInfo, err error) {
-		for _, f := range filenames {
-			info, err := os.Stat(f)
+	ctx.ReadDir = func(dir string) ([]fs.FileInfo, error) {
+		n := len(filenames)
+		infos := make([]fs.FileInfo, n)
+		for i := 0; i < n; i++ {
+			info, err := os.Stat(filenames[i])
 			if err != nil {
 				return nil, err
 			}
-			infos = append(infos, info)
+			infos[i] = info
 		}
-		return
+		return infos, nil
 	}
 	p, err := ctx.Import(".", root, 0)
 	if err != nil {

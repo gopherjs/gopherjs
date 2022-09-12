@@ -105,7 +105,7 @@ func embedFiles(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.F
 		case goembed.EmbedFiles:
 			// value = __gopherjs_embed_buildFS__([]struct{name string; data string; hash [16]byte}{...})
 			fs = goembed.BuildFS(fs)
-			elts := make([]ast.Expr, len(fs), len(fs))
+			elts := make([]ast.Expr, len(fs))
 			for i, f := range fs {
 				if len(f.Data) == 0 {
 					elts[i] = &ast.CompositeLit{

@@ -698,7 +698,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if err != nil {
 		return nil, err
 	}
-	embed, err := checkEmbed(pkg, fileSet, files)
+	embed, err := embedFiles(pkg, fileSet, files)
 	if err != nil {
 		return nil, err
 	}

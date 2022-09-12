@@ -8,13 +8,12 @@ func buildFS(list []struct {
 	data string
 	hash [16]byte
 }) (f FS) {
-	var files []file
-	for _, v := range list {
-		files = append(files, file{
-			name: v.name,
-			data: v.data,
-			hash: v.hash,
-		})
+	n := len(list)
+	files := make([]file, n, n)
+	for i := 0; i < n; i++ {
+		files[i].name = list[i].name
+		files[i].data = list[i].data
+		files[i].hash = list[i].hash
 	}
 	f.files = &files
 	return

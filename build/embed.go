@@ -39,18 +39,10 @@ func embedTypeError(fset *token.FileSet, spec *ast.ValueSpec) error {
 
 // embedFiles generates an additional source file, which initializes all variables in the package with a go:embed directive.
 func embedFiles(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.File, error) {
-	var ems []*goembed.Embed
-	if len(bp.EmbedPatternPos) != 0 {
-		ems = goembed.CheckEmbed(bp.EmbedPatternPos, fset, files)
-	}
-	if bp.IsTest && len(bp.TestEmbedPatternPos) != 0 {
-		if tems := goembed.CheckEmbed(bp.TestEmbedPatternPos, fset, files); len(tems) > 0 {
-			ems = append(ems, tems...)
-		}
-	}
-	if len(ems) == 0 {
+	if len(bp.EmbedPatternPos) == 0 {
 		return nil, nil
 	}
+	ems := goembed.CheckEmbed(bp.EmbedPatternPos, fset, files)
 	r := goembed.NewResolve()
 	for _, v := range ems {
 		if len(v.Spec.Values) > 0 {

@@ -42,12 +42,14 @@ func embedFiles(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.F
 	if len(bp.EmbedPatternPos) == 0 {
 		return nil, nil
 	}
-	ems := goembed.CheckEmbed(bp.EmbedPatternPos, fset, files)
+
+	ems, err := goembed.CheckEmbed(bp.EmbedPatternPos, fset, files)
+	if err != nil {
+		return nil, err
+	}
+
 	r := goembed.NewResolve()
 	for _, v := range ems {
-		if len(v.Spec.Values) > 0 {
-			return nil, fmt.Errorf("%v: go:embed cannot apply to var with initializer", v.Pos)
-		}
 		fs, err := r.Load(bp.Dir, v)
 		if err != nil {
 			return nil, err
@@ -166,6 +168,7 @@ func embedFiles(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.F
 			v.Spec.Values = []ast.Expr{call}
 		}
 	}
+
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, embed_head, bp.Name)
 	buf.WriteString("\nconst (\n")
@@ -177,7 +180,6 @@ func embedFiles(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.F
 		}
 	}
 	buf.WriteString(")\n\n")
-
 	f, err := parser.ParseFile(fset, "js_embed.go", buf.String(), parser.ParseComments)
 	if err != nil {
 		return nil, err

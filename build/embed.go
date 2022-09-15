@@ -50,7 +50,7 @@ func embedFiles(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.F
 
 	r := goembed.NewResolve()
 	for _, v := range ems {
-		fs, err := r.Load(bp.Dir, v)
+		fs, err := r.Load(bp.Dir, fset, v)
 		if err != nil {
 			return nil, err
 		}

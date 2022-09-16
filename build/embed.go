@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
-	"go/printer"
 	"go/token"
 	"strconv"
 
@@ -30,12 +29,6 @@ func __gopherjs_embed_buildFS__(list []struct {
 	hash [16]byte
 }) (f embed.FS)
 `
-
-func embedTypeError(fset *token.FileSet, spec *ast.ValueSpec) error {
-	var buf bytes.Buffer
-	printer.Fprint(&buf, fset, spec.Type)
-	return fmt.Errorf("%v: go:embed cannot apply to var of type %v", fset.Position(spec.Names[0].NamePos), buf.String())
-}
 
 // embedFiles generates an additional source file, which initializes all variables in the package with a go:embed directive.
 func embedFiles(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.File, error) {

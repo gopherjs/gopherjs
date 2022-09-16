@@ -55,37 +55,17 @@ func embedFiles(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.F
 			return nil, err
 		}
 		switch v.Kind {
-		default:
-			switch t := v.Spec.Type.(type) {
-			case *ast.Ident:
-				// value = Type(data)
-				// valid alias string or []byte type used by types.check
-				v.Spec.Values = []ast.Expr{
-					&ast.CallExpr{
-						Fun: v.Spec.Type,
-						Args: []ast.Expr{
-							&ast.Ident{Name: buildIdent(fs[0].Name),
-								NamePos: v.Spec.Names[0].NamePos},
-						},
-					}}
-			case *ast.ArrayType:
-				// value = Type(data)
-				// valid alias string or []byte type used by types.check
-				if _, ok := t.Elt.(*ast.Ident); ok {
-					v.Spec.Values = []ast.Expr{
-						&ast.CallExpr{
-							Fun: v.Spec.Type,
-							Args: []ast.Expr{
-								&ast.Ident{Name: buildIdent(fs[0].Name),
-									NamePos: v.Spec.Names[0].NamePos},
-							},
-						}}
-					break
-				}
-				return nil, embedTypeError(fset, v.Spec)
-			default:
-				return nil, embedTypeError(fset, v.Spec)
-			}
+		case goembed.EmbedMaybeAlias:
+			// value = Type(data)
+			// valid alias string or []byte type used by types.check
+			v.Spec.Values = []ast.Expr{
+				&ast.CallExpr{
+					Fun: v.Spec.Type,
+					Args: []ast.Expr{
+						&ast.Ident{Name: buildIdent(fs[0].Name),
+							NamePos: v.Spec.Names[0].NamePos},
+					},
+				}}
 		case goembed.EmbedBytes:
 			// value = []byte(data)
 			v.Spec.Values = []ast.Expr{

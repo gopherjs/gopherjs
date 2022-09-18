@@ -197,7 +197,7 @@ var (
 
 	// dirs are the directories to look for *.go files in.
 	// TODO(bradfitz): just use all directories?
-	dirs = []string{".", "ken", "chan", "interface", "syntax", "dwarf", "fixedbugs"}
+	dirs = []string{".", "ken", "chan", "interface", "syntax", "dwarf", "fixedbugs", "typeparam"}
 
 	// ratec controls the max number of tests running at a time.
 	ratec chan bool
@@ -641,10 +641,10 @@ func (t *test) run() {
 		args = f[1:]
 	}
 
-	// GOPHERJS: For now, only run with "run", "cmpout" actions, in "fixedbugs" dir. Skip all others.
+	// GOPHERJS: For now, only run with "run", "cmpout" actions, in "fixedbugs" and "typeparam" dirs. Skip all others.
 	switch action {
 	case "run", "cmpout":
-		if filepath.Clean(t.dir) != "fixedbugs" {
+		if d := filepath.Clean(t.dir); d != "fixedbugs" && d != "typeparam" {
 			action = "skip"
 		}
 	default:
@@ -692,6 +692,21 @@ func (t *test) run() {
 	}
 	if os.Getenv("GOARCH") == "" {
 		os.Setenv("GOARCH", goarch)
+	}
+
+	{
+		// GopherJS: we don't support -gcflags=-G=3 flag, but it's the default
+		// behavior anyway.
+		supportedArgs := []string{}
+		for _, a := range args {
+			switch a {
+			case "-gcflags=-G=3":
+				continue
+			default:
+				supportedArgs = append(supportedArgs, a)
+			}
+		}
+		args = supportedArgs
 	}
 
 	useTmp := true

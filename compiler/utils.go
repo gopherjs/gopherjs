@@ -140,8 +140,15 @@ func (fc *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, 
 	// If variadic arguments were passed in as individual elements, regroup them
 	// into a slice and pass it as a single argument.
 	if sig.Variadic() && !ellipsis {
-		return append(args[:sigTypes.RequiredParams()],
-			fmt.Sprintf("new %s([%s])", fc.typeName(sigTypes.VariadicType()), strings.Join(args[sigTypes.RequiredParams():], ", ")))
+		required := args[:sigTypes.RequiredParams()]
+		var variadic string
+		if len(args) == sigTypes.RequiredParams() {
+			// If no variadic parameters were passed, the slice value defaults to nil.
+			variadic = fmt.Sprintf("%s.nil", fc.typeName(sigTypes.VariadicType()))
+		} else {
+			variadic = fmt.Sprintf("new %s([%s])", fc.typeName(sigTypes.VariadicType()), strings.Join(args[sigTypes.RequiredParams():], ", "))
+		}
+		return append(required, variadic)
 	}
 	return args
 }

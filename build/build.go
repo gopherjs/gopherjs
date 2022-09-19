@@ -395,20 +395,6 @@ func (p *PackageData) InternalBuildContext() *build.Context {
 	return p.bctx
 }
 
-func joinEmbedPatternPos(m1, m2 map[string][]token.Position) map[string][]token.Position {
-	if len(m1) == 0 && len(m2) == 0 {
-		return nil
-	}
-	m := make(map[string][]token.Position)
-	for k, v := range m1 {
-		m[k] = v
-	}
-	for k, v := range m2 {
-		m[k] = append(m[k], v...)
-	}
-	return m
-}
-
 // TestPackage returns a variant of the package with "internal" tests.
 func (p *PackageData) TestPackage() *PackageData {
 	return &PackageData{

@@ -31,44 +31,44 @@ func __gopherjs_embed_buildFS__(list []struct {
 `
 
 // embedFiles generates an additional source file, which initializes all variables in the package with a go:embed directive.
-func embedFiles(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.File, error) {
-	if len(bp.EmbedPatternPos) == 0 {
+func embedFiles(pkg *PackageData, fset *token.FileSet, files []*ast.File) (*ast.File, error) {
+	if len(pkg.EmbedPatternPos) == 0 {
 		return nil, nil
 	}
 
-	ems, err := goembed.CheckEmbed(bp.EmbedPatternPos, fset, files)
+	ems, err := goembed.CheckEmbed(pkg.EmbedPatternPos, fset, files)
 	if err != nil {
 		return nil, err
 	}
 
 	r := goembed.NewResolve()
-	for _, v := range ems {
-		fs, err := r.Load(bp.Dir, fset, v)
+	for _, em := range ems {
+		fs, err := r.Load(pkg.Dir, fset, em)
 		if err != nil {
 			return nil, err
 		}
-		switch v.Kind {
+		switch em.Kind {
 		case goembed.EmbedMaybeAlias:
 			// value = Type(data)
 			// valid alias string or []byte type used by types.check
-			v.Spec.Values = []ast.Expr{
+			em.Spec.Values = []ast.Expr{
 				&ast.CallExpr{
-					Fun: v.Spec.Type,
+					Fun: em.Spec.Type,
 					Args: []ast.Expr{
 						&ast.Ident{Name: buildIdent(fs[0].Name),
-							NamePos: v.Spec.Names[0].NamePos},
+							NamePos: em.Spec.Names[0].NamePos},
 					},
 				}}
 		case goembed.EmbedBytes:
 			// value = []byte(data)
-			v.Spec.Values = []ast.Expr{
+			em.Spec.Values = []ast.Expr{
 				&ast.CallExpr{
-					Fun:  v.Spec.Type,
+					Fun:  em.Spec.Type,
 					Args: []ast.Expr{ast.NewIdent(buildIdent(fs[0].Name))},
 				}}
 		case goembed.EmbedString:
 			// value = data
-			v.Spec.Values = []ast.Expr{ast.NewIdent(buildIdent(fs[0].Name))}
+			em.Spec.Values = []ast.Expr{ast.NewIdent(buildIdent(fs[0].Name))}
 		case goembed.EmbedFiles:
 			// value = __gopherjs_embed_buildFS__([]struct{name string; data string; hash [16]byte}{...})
 			fs = goembed.BuildFS(fs)
@@ -138,12 +138,12 @@ func embedFiles(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.F
 					},
 				},
 			}
-			v.Spec.Values = []ast.Expr{call}
+			em.Spec.Values = []ast.Expr{call}
 		}
 	}
 
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, embed_head, bp.Name)
+	fmt.Fprintf(&buf, embed_head, pkg.Name)
 	buf.WriteString("\nconst (\n")
 	for _, f := range r.Files() {
 		if len(f.Data) == 0 {
@@ -158,4 +158,18 @@ func embedFiles(bp *PackageData, fset *token.FileSet, files []*ast.File) (*ast.F
 		return nil, err
 	}
 	return f, nil
+}
+
+func joinEmbedPatternPos(m1, m2 map[string][]token.Position) map[string][]token.Position {
+	if len(m1) == 0 && len(m2) == 0 {
+		return nil
+	}
+	m := make(map[string][]token.Position)
+	for k, v := range m1 {
+		m[k] = v
+	}
+	for k, v := range m2 {
+		m[k] = append(m[k], v...)
+	}
+	return m
 }

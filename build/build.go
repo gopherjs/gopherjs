@@ -13,6 +13,7 @@ import (
 	"go/scanner"
 	"go/token"
 	"go/types"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -398,11 +399,12 @@ func (p *PackageData) InternalBuildContext() *build.Context {
 func (p *PackageData) TestPackage() *PackageData {
 	return &PackageData{
 		Package: &build.Package{
-			Name:       p.Name,
-			ImportPath: p.ImportPath,
-			Dir:        p.Dir,
-			GoFiles:    append(p.GoFiles, p.TestGoFiles...),
-			Imports:    append(p.Imports, p.TestImports...),
+			Name:            p.Name,
+			ImportPath:      p.ImportPath,
+			Dir:             p.Dir,
+			GoFiles:         append(p.GoFiles, p.TestGoFiles...),
+			Imports:         append(p.Imports, p.TestImports...),
+			EmbedPatternPos: joinEmbedPatternPos(p.EmbedPatternPos, p.TestEmbedPatternPos),
 		},
 		IsTest:  true,
 		JSFiles: p.JSFiles,
@@ -414,11 +416,12 @@ func (p *PackageData) TestPackage() *PackageData {
 func (p *PackageData) XTestPackage() *PackageData {
 	return &PackageData{
 		Package: &build.Package{
-			Name:       p.Name + "_test",
-			ImportPath: p.ImportPath + "_test",
-			Dir:        p.Dir,
-			GoFiles:    p.XTestGoFiles,
-			Imports:    p.XTestImports,
+			Name:            p.Name + "_test",
+			ImportPath:      p.ImportPath + "_test",
+			Dir:             p.Dir,
+			GoFiles:         p.XTestGoFiles,
+			Imports:         p.XTestImports,
+			EmbedPatternPos: p.XTestEmbedPatternPos,
 		},
 		IsTest: true,
 		bctx:   p.bctx,
@@ -548,12 +551,30 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 		return fmt.Errorf("named files must all be in one directory; have: %v", strings.Join(dirList, ", "))
 	}
 
+	root := dirList[0]
+	ctx := build.Default
+	ctx.UseAllFiles = true
+	ctx.ReadDir = func(dir string) ([]fs.FileInfo, error) {
+		n := len(filenames)
+		infos := make([]fs.FileInfo, n)
+		for i := 0; i < n; i++ {
+			info, err := os.Stat(filenames[i])
+			if err != nil {
+				return nil, err
+			}
+			infos[i] = info
+		}
+		return infos, nil
+	}
+	p, err := ctx.Import(".", root, 0)
+	if err != nil {
+		return err
+	}
+	p.Name = "main"
+	p.ImportPath = "main"
+
 	pkg := &PackageData{
-		Package: &build.Package{
-			Name:       "main",
-			ImportPath: "main",
-			Dir:        dirList[0],
-		},
+		Package: p,
 		// This ephemeral package doesn't have a unique import path to be used as a
 		// build cache key, so we never cache it.
 		SrcModTime: time.Now().Add(time.Hour),
@@ -562,7 +583,6 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 
 	for _, file := range filenames {
 		if !strings.HasSuffix(file, ".inc.js") {
-			pkg.GoFiles = append(pkg.GoFiles, filepath.Base(file))
 			continue
 		}
 
@@ -675,6 +695,13 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	files, overlayJsFiles, err := parseAndAugment(s.xctx, pkg, pkg.IsTest, fileSet)
 	if err != nil {
 		return nil, err
+	}
+	embed, err := embedFiles(pkg, fileSet, files)
+	if err != nil {
+		return nil, err
+	}
+	if embed != nil {
+		files = append(files, embed)
 	}
 
 	importContext := &compiler.ImportContext{

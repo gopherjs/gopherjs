@@ -111,6 +111,8 @@ type Decl struct {
 	// directives. Must be set for decls that are supported by go:linkname
 	// implementation.
 	LinkingName SymName
+	// List of interface method symbols that support go:linkname.
+	IMethodLinkingNames []SymName
 	// A list of package-level JavaScript variable names this symbol needs to declare.
 	Vars []string
 	// JavaScript code that declares basic information about a symbol. For a type
@@ -314,11 +316,72 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 		if _, err := w.Write(d.DeclCode); err != nil {
 			return err
 		}
+		for _, linkName := range d.IMethodLinkingNames {
+			if gls.IsImplementation(linkName) {
+				// This decl is referenced by a go:linkname directive, expose it to external
+				// callers via $linkname object (declared in prelude). We are not using
+				// $pkg to avoid clashes with exported symbols.
+				var code string
+				n := strings.LastIndexByte(linkName.Name, '.')
+				code = fmt.Sprintf("\t$linknames[%q] = function(s) { return s.%v(...[...arguments].slice(1))};\n", linkName.String(), linkName.Name[n+1:])
+				if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
+					return err
+				}
+			}
+		}
 		if gls.IsImplementation(d.LinkingName) {
 			// This decl is referenced by a go:linkname directive, expose it to external
 			// callers via $linkname object (declared in prelude). We are not using
 			// $pkg to avoid clashes with exported symbols.
-			code := fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.Vars[0])
+			var code string
+			if recv, method, ok := d.LinkingName.IsMethod(); ok {
+				if strings.HasPrefix(recv, "*") {
+					code = fmt.Sprintf(`$linknames[%q] = function(v) {
+	var T = %v;
+	var r = v;
+	var ptrType = $ptrType(T);
+	if (v.constructor != ptrType) {
+		switch (T.kind) {
+		case $kindStruct:
+			r = $pointerOfStructConversion(v, ptrType);
+			break;
+		case $kindArray:
+			r = new ptrType(v);
+			break;
+		default:
+			r = new ptrType(v.$get,v.$set,v.$target);
+		}
+	}
+	return r.%v(...[...arguments].slice(1));
+};
+`, d.LinkingName.String(), recv[1:], method)
+				} else {
+					code = fmt.Sprintf(`$linknames[%q] = function(v) {
+	var T = %v;
+	var r = v;
+	if (v.constructor != $ptrType(T)) {
+		switch (T.kind) {
+		case $kindStruct:
+			r = $clone(v, T);
+			break;
+		case $kindSlice:
+			r = $convertSliceType(v, T);
+			break;
+		case $kindComplex64:
+		case $kindComplex128:
+			r = new T(v.$real, v.$imag);
+			break;
+		default:
+			r = new T(v);
+		}
+	}
+	return r.%v(...[...arguments].slice(1));
+};
+`, d.LinkingName.String(), recv, method)
+				}
+			} else {
+				code = fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.Vars[0])
+			}
 			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
 				return err
 			}

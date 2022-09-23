@@ -411,8 +411,8 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			FullName: o.FullName(),
 			Blocking: len(funcInfo.Blocking) != 0,
 		}
+		d.LinkingName = newSymName(o)
 		if fun.Recv == nil {
-			d.LinkingName = newSymName(o)
 			d.Vars = []string{funcCtx.objectName(o)}
 			d.DceObjectFilter = o.Name()
 			switch o.Name() {
@@ -431,8 +431,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				})
 				d.DceObjectFilter = ""
 			}
-		}
-		if fun.Recv != nil {
+		} else {
 			recvType := o.Type().(*types.Signature).Recv().Type()
 			ptr, isPointer := recvType.(*types.Pointer)
 			namedRecvType, _ := recvType.(*types.Named)
@@ -568,6 +567,15 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					funcCtx.Printf("%s.methods = [%s];", funcCtx.typeName(types.NewPointer(named)), strings.Join(ptrMethods, ", "))
 				}
 			})
+			if named, ok := o.Type().(*types.Named); ok {
+				if t, ok := named.Underlying().(*types.Interface); ok {
+					pkgPath := named.Obj().Pkg().Path()
+					for i := 0; i < t.NumMethods(); i++ {
+						sym := SymName{PkgPath: pkgPath, Name: named.Obj().Name() + "." + t.Method(i).Name()}
+						d.IMethodLinkingNames = append(d.IMethodLinkingNames, sym)
+					}
+				}
+			}
 			switch t := o.Type().Underlying().(type) {
 			case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
 				d.TypeInitCode = funcCtx.CatchOutput(0, func() {

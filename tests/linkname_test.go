@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/gopherjs/gopherjs/tests/testdata/linkname/method"
 	"github.com/gopherjs/gopherjs/tests/testdata/linkname/one"
 )
 
@@ -23,4 +24,13 @@ func TestLinknames(t *testing.T) {
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Fatalf("Callink linknamed functions returned a diff (-want,+got):\n%s", diff)
 	}
+}
+
+func TestLinknameMethods(t *testing.T) {
+	defer func() {
+		if err := recover(); err != nil {
+			t.Fatalf("method.TestLinkname() paniced: %s", err)
+		}
+	}()
+	method.TestLinkname()
 }

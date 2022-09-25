@@ -696,6 +696,11 @@ func valueInterface(v Value) interface{} {
 	}
 
 	if isWrapped(v.typ) {
+		if v.flag&flagIndir != 0 && v.Kind() == Struct {
+			cv := jsType(v.typ).Call("zero")
+			copyStruct(cv, v.object(), v.typ)
+			return interface{}(unsafe.Pointer(jsType(v.typ).New(cv).Unsafe()))
+		}
 		return interface{}(unsafe.Pointer(jsType(v.typ).New(v.object()).Unsafe()))
 	}
 	return interface{}(unsafe.Pointer(v.object().Unsafe()))

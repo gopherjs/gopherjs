@@ -336,48 +336,9 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			var code string
 			if recv, method, ok := d.LinkingName.IsMethod(); ok {
 				if strings.HasPrefix(recv, "*") {
-					code = fmt.Sprintf(`$linknames[%q] = function(v) {
-	var T = %v;
-	var r = v;
-	var ptrType = $ptrType(T);
-	if (v.constructor != ptrType) {
-		switch (T.kind) {
-		case $kindStruct:
-			r = $pointerOfStructConversion(v, ptrType);
-			break;
-		case $kindArray:
-			r = new ptrType(v);
-			break;
-		default:
-			r = new ptrType(v.$get,v.$set,v.$target);
-		}
-	}
-	return r.%v(...[...arguments].slice(1));
-};
-`, d.LinkingName.String(), recv[1:], method)
+					code = fmt.Sprintf("\t$linknames[%q] = $methodToFunction(%v,%q,true);\n", d.LinkingName.String(), recv[1:], method)
 				} else {
-					code = fmt.Sprintf(`$linknames[%q] = function(v) {
-	var T = %v;
-	var r = v;
-	if (v.constructor != $ptrType(T)) {
-		switch (T.kind) {
-		case $kindStruct:
-			r = $clone(v, T);
-			break;
-		case $kindSlice:
-			r = $convertSliceType(v, T);
-			break;
-		case $kindComplex64:
-		case $kindComplex128:
-			r = new T(v.$real, v.$imag);
-			break;
-		default:
-			r = new T(v);
-		}
-	}
-	return r.%v(...[...arguments].slice(1));
-};
-`, d.LinkingName.String(), recv, method)
+					code = fmt.Sprintf("\t$linknames[%q] = $methodToFunction(%v,%q,false);\n", d.LinkingName.String(), recv, method)
 				}
 			} else {
 				code = fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.Vars[0])

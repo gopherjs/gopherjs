@@ -111,8 +111,6 @@ type Decl struct {
 	// directives. Must be set for decls that are supported by go:linkname
 	// implementation.
 	LinkingName SymName
-	// List of interface method symbols that support go:linkname.
-	IMethodLinkingNames []SymName
 	// A list of package-level JavaScript variable names this symbol needs to declare.
 	Vars []string
 	// NamedRecvType is method named recv declare.
@@ -317,19 +315,6 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 	for _, d := range filteredDecls {
 		if _, err := w.Write(d.DeclCode); err != nil {
 			return err
-		}
-		for _, linkName := range d.IMethodLinkingNames {
-			if gls.IsImplementation(linkName) {
-				// This decl is referenced by a go:linkname directive, expose it to external
-				// callers via $linkname object (declared in prelude). We are not using
-				// $pkg to avoid clashes with exported symbols.
-				var code string
-				n := strings.LastIndexByte(linkName.Name, '.')
-				code = fmt.Sprintf("\t$linknames[%q] = function(s) { return s.%v(...[...arguments].slice(1))};\n", linkName.String(), linkName.Name[n+1:])
-				if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
-					return err
-				}
-			}
 		}
 		if gls.IsImplementation(d.LinkingName) {
 			// This decl is referenced by a go:linkname directive, expose it to external

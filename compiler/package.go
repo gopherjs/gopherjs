@@ -438,6 +438,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			if isPointer {
 				namedRecvType = ptr.Elem().(*types.Named)
 			}
+			d.NamedRecvType = funcCtx.objectName(namedRecvType.Obj())
 			d.DceObjectFilter = namedRecvType.Obj().Name()
 			if !fun.Name.IsExported() {
 				d.DceMethodFilter = o.Name() + "~"

@@ -134,6 +134,7 @@ func TestExplicitConversion(t *testing.T) {
 }
 
 func TestCopyStructByReflect(t *testing.T) {
+	// https://github.com/gopherjs/gopherjs/issues/1156
 	type Info struct {
 		name string
 	}

@@ -32,5 +32,5 @@ func TestLinknameMethods(t *testing.T) {
 			t.Fatalf("method.TestLinkname() paniced: %s", err)
 		}
 	}()
-	method.TestLinkname()
+	method.TestLinkname(t)
 }

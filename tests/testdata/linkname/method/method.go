@@ -1,7 +1,9 @@
 package method
 
 import (
+	"sort"
 	"strings"
+	"testing"
 	_ "unsafe"
 )
 
@@ -29,12 +31,12 @@ type point struct {
 	Y int
 }
 
-func testStruct() {
+func testStruct(t *testing.T) {
 	var pt point
 	struct_Set(&pt, 1, 2)
 	x, y := struct_Get(pt)
 	if x != 1 || y != 2 {
-		panic(pt)
+		t.Fatalf("Got: struct_Get(pt) = (%v,%v). Want: (1,2).", x, y)
 	}
 }
 
@@ -56,13 +58,14 @@ func slice_Append(*list, ...string)
 //go:linkname slice_Get github.com/gopherjs/gopherjs/tests/testdata/linkname/method.List.Get
 func slice_Get(list) string
 
-func testSlice() {
+func testSlice(t *testing.T) {
 	var v list
 	v = append(v, "one")
 	slice_Append(&v, "two", "three")
-	s := slice_Get(v)
-	if s != "one,two,three" {
-		panic(s)
+	got := slice_Get(v)
+	want := "one,two,three"
+	if got != want {
+		t.Fatalf("Got: slice_Get(v) = %q. Want: %q.", got, want)
 	}
 }
 
@@ -84,14 +87,15 @@ func array_Set(*array, int, string)
 //go:linkname array_Get github.com/gopherjs/gopherjs/tests/testdata/linkname/method.Array.Get
 func array_Get(array) string
 
-func testArray() {
+func testArray(t *testing.T) {
 	var a array
 	a[0] = "one"
 	array_Set(&a, 1, "two")
 	array_Set(&a, 4, "five")
-	r := array_Get(a)
-	if r != "one,two,,,five" {
-		panic(r)
+	got := array_Get(a)
+	want := "one,two,,,five"
+	if got != want {
+		t.Fatalf("Got: array_Get(a) = %q. Want: %q.", got, want)
 	}
 }
 
@@ -110,6 +114,7 @@ func (m Map) Get() string {
 	for _, v := range m {
 		list = append(list, v)
 	}
+	sort.Strings(list)
 	return strings.Join(list, ",")
 }
 
@@ -124,13 +129,14 @@ func map_SetPtr(*_map, int, string)
 //go:linkname map_Get github.com/gopherjs/gopherjs/tests/testdata/linkname/method.Map.Get
 func map_Get(_map) string
 
-func testMap() {
+func testMap(t *testing.T) {
 	m := make(_map)
 	map_Set(m, 1, "one")
 	map_SetPtr(&m, 2, "two")
-	r := map_Get(m)
-	if r != "one,two" {
-		panic(r)
+	got := map_Get(m)
+	want := "one,two"
+	if got != want {
+		t.Fatalf("Got: map_Get(m) = %q. Want: %q.", got, want)
 	}
 }
 
@@ -152,17 +158,17 @@ func func_Call(_func, int, int) int
 //go:linkname func_CallPtr github.com/gopherjs/gopherjs/tests/testdata/linkname/method.(*Func).CallPtr
 func func_CallPtr(*_func, int, int) int
 
-func testFunc() {
+func testFunc(t *testing.T) {
 	var fn _func = func(a, b int) int {
 		return a + b
 	}
 	r := func_Call(fn, 100, 200)
 	if r != 300 {
-		panic(r)
+		t.Fatalf("Got: func_Call(fn,100,200) = %v. Want: 300.", r)
 	}
 	r2 := func_CallPtr(&fn, 100, 200)
 	if r2 != 300 {
-		panic(r2)
+		t.Fatalf("Got: func_CallPtr(fn,100,200) = %v. Want: 300.", r2)
 	}
 }
 
@@ -191,21 +197,21 @@ func chan_SendPtr(*_chan, int)
 //go:linkname chan_Recv github.com/gopherjs/gopherjs/tests/testdata/linkname/method.Chan.Recv
 func chan_Recv(_chan) int
 
-func testChan() {
+func testChan(t *testing.T) {
 	c := make(_chan)
 	go func() {
 		chan_Send(c, 100)
 	}()
 	r := chan_Recv(c)
 	if r != 100 {
-		panic(r)
+		t.Fatalf("Got: chan_Recv(c) = %v. Want: 100.", r)
 	}
 	go func() {
 		chan_SendPtr(&c, 200)
 	}()
 	r = chan_Recv(c)
 	if r != 200 {
-		panic(r)
+		t.Fatalf("Got: chan_Recv(c) = %v. Want: 200.", r)
 	}
 }
 
@@ -247,12 +253,12 @@ func int_Set(*_int, int) int
 //go:linkname int_Get github.com/gopherjs/gopherjs/tests/testdata/linkname/method.Int.Get
 func int_Get(_int) int
 
-func testInt() {
+func testInt(t *testing.T) {
 	var i _int
 	int_Set(&i, 100)
 	r := int_Get(i)
 	if r != 100 {
-		panic(r)
+		t.Fatalf("Got: int_Get(i) = %v. Want: 100.", r)
 	}
 }
 
@@ -274,12 +280,12 @@ func uint_Set(*_uint, uint) uint
 //go:linkname uint_Get github.com/gopherjs/gopherjs/tests/testdata/linkname/method.Uint.Get
 func uint_Get(_uint) uint
 
-func testUint() {
+func testUint(t *testing.T) {
 	var i _uint
 	uint_Set(&i, 100)
 	r := uint_Get(i)
 	if r != 100 {
-		panic(r)
+		t.Fatalf("Got: uint_Get(i) = %v. Want: 100.", r)
 	}
 }
 
@@ -301,12 +307,12 @@ func float64_Set(*_float64, float64) float64
 //go:linkname float64_Get github.com/gopherjs/gopherjs/tests/testdata/linkname/method.Float64.Get
 func float64_Get(_float64) float64
 
-func testFloat64() {
+func testFloat64(t *testing.T) {
 	var i _float64
 	float64_Set(&i, 3.14)
 	r := float64_Get(i)
 	if r != 3.14 {
-		panic(r)
+		t.Fatalf("Got: float64_Get(i) = %v. Want: 3.14.", r)
 	}
 }
 
@@ -328,12 +334,13 @@ func complex128_Set(*_complex128, complex128) complex128
 //go:linkname complex128_Get github.com/gopherjs/gopherjs/tests/testdata/linkname/method.Complex128.Get
 func complex128_Get(_complex128) complex128
 
-func testComplex128() {
+func testComplex128(t *testing.T) {
 	var i _complex128
-	complex128_Set(&i, 1+2i)
-	r := complex128_Get(i)
-	if r != 1+2i {
-		panic(r)
+	want := 1 + 2i
+	complex128_Set(&i, want)
+	got := complex128_Get(i)
+	if got != want {
+		t.Fatalf("Got: complex128_Get(i) = %v. Want: %v.", got, want)
 	}
 }
 
@@ -355,12 +362,12 @@ func uintptr_Set(*_uintptr, uintptr) uintptr
 //go:linkname uintptr_Get github.com/gopherjs/gopherjs/tests/testdata/linkname/method.Uintptr.Get
 func uintptr_Get(_uintptr) uintptr
 
-func testUintptr() {
+func testUintptr(t *testing.T) {
 	var i _uintptr
 	uintptr_Set(&i, 0x1234)
 	r := uintptr_Get(i)
 	if r != 0x1234 {
-		panic(r)
+		t.Fatalf("Got: uintptr_Get(i) = %v. Want: 0x1234.", r)
 	}
 }
 
@@ -382,12 +389,12 @@ func bool_Set(*_bool, bool) bool
 //go:linkname bool_Get github.com/gopherjs/gopherjs/tests/testdata/linkname/method.Bool.Get
 func bool_Get(_bool) bool
 
-func testBool() {
+func testBool(t *testing.T) {
 	var i _bool
 	bool_Set(&i, true)
 	r := bool_Get(i)
 	if r != true {
-		panic(r)
+		t.Fatalf("Got: bool_Get(i) = %v. Want: true.", r)
 	}
 }
 
@@ -409,12 +416,12 @@ func byte_Set(*_byte, byte) byte
 //go:linkname byte_Get github.com/gopherjs/gopherjs/tests/testdata/linkname/method.Byte.Get
 func byte_Get(_byte) byte
 
-func testByte() {
+func testByte(t *testing.T) {
 	var i _byte
 	byte_Set(&i, 0x7f)
 	r := byte_Get(i)
 	if r != 0x7f {
-		panic(r)
+		t.Fatalf("Got: byte_Get(i) = %v. Want: 0x7f.", r)
 	}
 }
 
@@ -436,27 +443,28 @@ func string_Set(*_string, string) string
 //go:linkname string_Get github.com/gopherjs/gopherjs/tests/testdata/linkname/method.String.Get
 func string_Get(_string) string
 
-func testString() {
+func testString(t *testing.T) {
 	var i _string
-	string_Set(&i, "hello world")
-	r := string_Get(i)
-	if r != "hello world" {
-		panic(r)
+	want := "hello world"
+	string_Set(&i, want)
+	got := string_Get(i)
+	if got != want {
+		t.Fatalf("Got: string_Get(i) = %q. Want: %q.", got, want)
 	}
 }
 
-func TestLinkname() {
-	testStruct()
-	testSlice()
-	testArray()
-	testMap()
-	testFunc()
-	testChan()
-	testBool()
-	testByte()
-	testInt()
-	testUint()
-	testFloat64()
-	testComplex128()
-	testString()
+func TestLinkname(t *testing.T) {
+	testStruct(t)
+	testSlice(t)
+	testArray(t)
+	testMap(t)
+	testFunc(t)
+	testChan(t)
+	testBool(t)
+	testByte(t)
+	testInt(t)
+	testUint(t)
+	testFloat64(t)
+	testComplex128(t)
+	testString(t)
 }

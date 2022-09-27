@@ -3,6 +3,7 @@ package tests
 import (
 	"reflect"
 	"testing"
+	"unsafe"
 )
 
 func TestArrayPointer(t *testing.T) {
@@ -75,4 +76,11 @@ func TestArrayPointer(t *testing.T) {
 	t.Run("reflect.IsNil", func(t *testing.T) {
 
 	})
+}
+
+func TestReflectArraySize(t *testing.T) {
+	want := unsafe.Sizeof(int(0)) * 8
+	if got := reflect.TypeOf([8]int{}).Size(); got != want {
+		t.Errorf("array type size gave %v, want %v", got, want)
+	}
 }

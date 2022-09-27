@@ -523,7 +523,7 @@ var $interfaceIsEqual = function(a, b) {
   return $equal(a.$val, b.$val, a.constructor);
 };
 
-var $methodToFunction = function(typ, name, isPtr) {
+var $unsafeMethodToFunction = function(typ, name, isPtr) {
   if (isPtr) {
     return function(v) {
       var r = v;

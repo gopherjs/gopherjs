@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -129,5 +130,19 @@ func TestExplicitConversion(t *testing.T) {
 	i = T(coolGuy)
 	if i.M() != 42 {
 		t.Fail()
+	}
+}
+
+func TestCopyStructByReflect(t *testing.T) {
+	// https://github.com/gopherjs/gopherjs/issues/1156
+	type Info struct {
+		name string
+	}
+	a := []Info{Info{"A"}, Info{"B"}, Info{"C"}}
+	v := reflect.ValueOf(a)
+	i := v.Index(0).Interface()
+	a[0] = Info{"X"}
+	if got := i.(Info).name; got != "A" {
+		t.Fatalf(`bad copy struct got %q, want "A"`, got)
 	}
 }

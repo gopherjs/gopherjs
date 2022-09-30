@@ -525,44 +525,42 @@ var $interfaceIsEqual = function(a, b) {
 
 var $unsafeMethodToFunction = function(typ, name, isPtr) {
   if (isPtr) {
-    return function(v) {
-      var r = v;
+    return function(r, ...args) {
       var ptrType = $ptrType(typ);
-      if (v.constructor != ptrType) {
+      if (r.constructor != ptrType) {
          switch (typ.kind) {
          case $kindStruct:
-           r = $pointerOfStructConversion(v, ptrType);
+           r = $pointerOfStructConversion(r, ptrType);
            break;
          case $kindArray:
-           r = new ptrType(v);
+           r = new ptrType(r);
            break;
          default:
-           r = new ptrType(v.$get,v.$set,v.$target);
+           r = new ptrType(r.$get,r.$set,r.$target);
          }
       }
-      return r[name](...[...arguments].slice(1));
+      return r[name](...args);
     }
   } else {
-     return function(v) {
-       var r = v;
+     return function(r, ...args) {
        var ptrType = $ptrType(typ);
-       if (v.constructor != ptrType) {
+       if (r.constructor != ptrType) {
          switch (typ.kind) {
          case $kindStruct:
-           r = $clone(v, typ);
+           r = $clone(r, typ);
            break;
          case $kindSlice:
-           r = $convertSliceType(v, typ);
+           r = $convertSliceType(r, typ);
            break;
          case $kindComplex64:
          case $kindComplex128:
-           r = new typ(v.$real, v.$imag);
+           r = new typ(r.$real, r.$imag);
            break;
          default:
-           r = new typ(v);
+           r = new typ(r);
          }
        }
-       return r[name](...[...arguments].slice(1));
+       return r[name](...args);
      }
   }
 };

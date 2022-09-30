@@ -322,11 +322,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			// $pkg to avoid clashes with exported symbols.
 			var code string
 			if recv, method, ok := d.LinkingName.IsMethod(); ok {
-				if strings.HasPrefix(recv, "*") {
-					code = fmt.Sprintf("\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,true);\n", d.LinkingName.String(), d.NamedRecvType, method)
-				} else {
-					code = fmt.Sprintf("\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,false);\n", d.LinkingName.String(), d.NamedRecvType, method)
-				}
+				code = fmt.Sprintf("\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,%t);\n", d.LinkingName.String(), d.NamedRecvType, method, strings.HasPrefix(recv, "*"))
 			} else {
 				code = fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.Vars[0])
 			}

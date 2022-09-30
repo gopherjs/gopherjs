@@ -25,9 +25,14 @@ Signatures of `remotename` and `localname` must be identical. Since this
 directive can subvert package incapsulation, the source file that uses the
 directive must also import `unsafe`.
 
+The following directive format is supported:
+//go:linkname <localname> <importpath>.<name>
+//go:linkname <localname> <importpath>.<type>.<name>
+//go:linkname <localname> <importpath>.<(*type)>.<name>
+
 Compared to the upstream Go, the following limitations exist in GopherJS:
 
-  - The directive only works on package-level functions (variables and methods
+  - The directive only works on package-level functions or methods (variables
     are not supported).
   - The directive can only be used to "import" implementation from another
     package, and not to "provide" local implementation to another package.

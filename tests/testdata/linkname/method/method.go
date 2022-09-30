@@ -215,26 +215,6 @@ func testChan(t *testing.T) {
 	}
 }
 
-type T = complex64
-
-type Basic int
-
-func (m *Basic) Set(v int) {
-	*m = Basic(v)
-}
-
-func (m Basic) Get() int {
-	return int(m)
-}
-
-type basic uintptr
-
-//go:linkname basic_Set github.com/gopherjs/gopherjs/tests/testdata/linkname/method.(*Basic).Set
-func basic_Set(*_int, int) int
-
-//go:linkname basic_Get github.com/gopherjs/gopherjs/tests/testdata/linkname/method.Basic.Get
-func basic_Get(_int) int
-
 type Int int
 
 func (m *Int) Set(v int) {

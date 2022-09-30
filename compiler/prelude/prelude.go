@@ -522,4 +522,46 @@ var $interfaceIsEqual = function(a, b) {
   }
   return $equal(a.$val, b.$val, a.constructor);
 };
+
+var $unsafeMethodToFunction = function(typ, name, isPtr) {
+  if (isPtr) {
+    return function(r, ...args) {
+      var ptrType = $ptrType(typ);
+      if (r.constructor != ptrType) {
+         switch (typ.kind) {
+         case $kindStruct:
+           r = $pointerOfStructConversion(r, ptrType);
+           break;
+         case $kindArray:
+           r = new ptrType(r);
+           break;
+         default:
+           r = new ptrType(r.$get,r.$set,r.$target);
+         }
+      }
+      return r[name](...args);
+    }
+  } else {
+     return function(r, ...args) {
+       var ptrType = $ptrType(typ);
+       if (r.constructor != ptrType) {
+         switch (typ.kind) {
+         case $kindStruct:
+           r = $clone(r, typ);
+           break;
+         case $kindSlice:
+           r = $convertSliceType(r, typ);
+           break;
+         case $kindComplex64:
+         case $kindComplex128:
+           r = new typ(r.$real, r.$imag);
+           break;
+         default:
+           r = new typ(r);
+         }
+       }
+       return r[name](...args);
+     }
+  }
+};
 `

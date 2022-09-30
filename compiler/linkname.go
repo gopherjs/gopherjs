@@ -41,9 +41,16 @@ func newSymName(o types.Object) SymName {
 		sig := fun.Type().(*types.Signature)
 		if recv := sig.Recv(); recv != nil {
 			// Special case: disambiguate names for different types' methods.
+			typ := recv.Type()
+			if ptr, ok := typ.(*types.Pointer); ok {
+				return SymName{
+					PkgPath: o.Pkg().Path(),
+					Name:    "(*" + ptr.Elem().(*types.Named).Obj().Name() + ")." + o.Name(),
+				}
+			}
 			return SymName{
 				PkgPath: o.Pkg().Path(),
-				Name:    recv.Type().(*types.Named).Obj().Name() + "." + o.Name(),
+				Name:    typ.(*types.Named).Obj().Name() + "." + o.Name(),
 			}
 		}
 	}
@@ -55,17 +62,32 @@ func newSymName(o types.Object) SymName {
 
 func (n SymName) String() string { return n.PkgPath + "." + n.Name }
 
+func (n SymName) IsMethod() (recv string, method string, ok bool) {
+	pos := strings.IndexByte(n.Name, '.')
+	if pos == -1 {
+		return
+	}
+	recv, method, ok = n.Name[:pos], n.Name[pos+1:], true
+	size := len(recv)
+	if size > 2 && recv[0] == '(' && recv[size-1] == ')' {
+		recv = recv[1 : size-1]
+	}
+	return
+}
+
 // parseGoLinknames processed comments in a source file and extracts //go:linkname
 // compiler directive from the comments.
 //
 // The following directive format is supported:
 // //go:linkname <localname> <importpath>.<name>
+// //go:linkname <localname> <importpath>.<type>.<name>
+// //go:linkname <localname> <importpath>.<(*type)>.<name>
 //
 // GopherJS directive support has the following limitations:
 //
 //  - External linkname must be specified.
-//  - The directive must be applied to a package-level function (variables and
-//    methods are not supported).
+//  - The directive must be applied to a package-level function or method (variables
+//    are not supported).
 //  - The local function referenced by the directive must have no body (in other
 //    words, it can only "import" an external function implementation into the
 //    local scope).
@@ -95,7 +117,11 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 
 		localPkg, localName := pkgPath, fields[1]
 		extPkg, extName := "", fields[2]
-		if idx := strings.LastIndexByte(extName, '.'); idx != -1 {
+		if pos := strings.LastIndexByte(extName, '/'); pos != -1 {
+			if idx := strings.IndexByte(extName[pos+1:], '.'); idx != -1 {
+				extPkg, extName = extName[0:pos+idx+1], extName[pos+idx+2:]
+			}
+		} else if idx := strings.IndexByte(extName, '.'); idx != -1 {
 			extPkg, extName = extName[0:idx], extName[idx+1:]
 		}
 

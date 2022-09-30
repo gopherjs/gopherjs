@@ -113,6 +113,8 @@ type Decl struct {
 	LinkingName SymName
 	// A list of package-level JavaScript variable names this symbol needs to declare.
 	Vars []string
+	// NamedRecvType is method named recv declare.
+	NamedRecvType string
 	// JavaScript code that declares basic information about a symbol. For a type
 	// it configures basic information about the type and its identity. For a function
 	// or method it contains its compiled body.
@@ -318,7 +320,12 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			// This decl is referenced by a go:linkname directive, expose it to external
 			// callers via $linkname object (declared in prelude). We are not using
 			// $pkg to avoid clashes with exported symbols.
-			code := fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.Vars[0])
+			var code string
+			if recv, method, ok := d.LinkingName.IsMethod(); ok {
+				code = fmt.Sprintf("\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,%t);\n", d.LinkingName.String(), d.NamedRecvType, method, strings.HasPrefix(recv, "*"))
+			} else {
+				code = fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.Vars[0])
+			}
 			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
 				return err
 			}

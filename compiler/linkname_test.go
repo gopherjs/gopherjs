@@ -48,7 +48,7 @@ func TestSymName(t *testing.T) {
 	func AFunction() {}
 	type AType struct {}
 	func (AType) AMethod() {}
-	func (AType) APointerMethod() {}
+	func (*AType) APointerMethod() {}
 	var AVariable int32
 	`)
 
@@ -66,8 +66,8 @@ func TestSymName(t *testing.T) {
 			obj:  types.NewMethodSet(pkg.Scope().Lookup("AType").Type()).Lookup(pkg, "AMethod").Obj(),
 			want: SymName{PkgPath: "testcase", Name: "AType.AMethod"},
 		}, {
-			obj:  types.NewMethodSet(pkg.Scope().Lookup("AType").Type()).Lookup(pkg, "APointerMethod").Obj(),
-			want: SymName{PkgPath: "testcase", Name: "AType.APointerMethod"},
+			obj:  types.NewMethodSet(types.NewPointer(pkg.Scope().Lookup("AType").Type())).Lookup(pkg, "APointerMethod").Obj(),
+			want: SymName{PkgPath: "testcase", Name: "(*AType).APointerMethod"},
 		}, {
 			obj:  pkg.Scope().Lookup("AVariable"),
 			want: SymName{PkgPath: "testcase", Name: "AVariable"},

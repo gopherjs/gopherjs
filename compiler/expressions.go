@@ -362,14 +362,14 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 					if isUnsigned(basic) {
 						shift = ">>>"
 					}
-					return fc.formatExpr(`(%1s = %2e / %3e, (%1s === %1s && %1s !== 1/0 && %1s !== -1/0) ? %1s %4s 0 : $throwRuntimeError("integer divide by zero"))`, fc.newVariable("_q"), e.X, e.Y, shift)
+					return fc.formatExpr(`(%1s = %2e / %3e, (%1s === %1s && %1s !== 1/0 && %1s !== -1/0) ? %1s %4s 0 : $throwRuntimeError("integer divide by zero"))`, fc.newLocalVariable("_q"), e.X, e.Y, shift)
 				}
 				if basic.Kind() == types.Float32 {
 					return fc.fixNumber(fc.formatExpr("%e / %e", e.X, e.Y), basic)
 				}
 				return fc.formatExpr("%e / %e", e.X, e.Y)
 			case token.REM:
-				return fc.formatExpr(`(%1s = %2e %% %3e, %1s === %1s ? %1s : $throwRuntimeError("integer divide by zero"))`, fc.newVariable("_r"), e.X, e.Y)
+				return fc.formatExpr(`(%1s = %2e %% %3e, %1s === %1s ? %1s : $throwRuntimeError("integer divide by zero"))`, fc.newLocalVariable("_r"), e.X, e.Y)
 			case token.SHL, token.SHR:
 				op := e.Op.String()
 				if e.Op == token.SHR && isUnsigned(basic) {
@@ -385,7 +385,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				if e.Op == token.SHR && !isUnsigned(basic) {
 					return fc.fixNumber(fc.formatParenExpr("%e >> $min(%f, 31)", e.X, e.Y), basic)
 				}
-				y := fc.newVariable("y")
+				y := fc.newLocalVariable("y")
 				return fc.fixNumber(fc.formatExpr("(%s = %f, %s < 32 ? (%e %s %s) : 0)", y, e.Y, y, e.X, op, y), basic)
 			case token.AND, token.OR:
 				if isUnsigned(basic) {
@@ -408,7 +408,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			if fc.Blocking[e.Y] {
 				skipCase := fc.caseCounter
 				fc.caseCounter++
-				resultVar := fc.newVariable("_v")
+				resultVar := fc.newLocalVariable("_v")
 				fc.Printf("if (!(%s)) { %s = false; $s = %d; continue s; }", fc.translateExpr(e.X), resultVar, skipCase)
 				fc.Printf("%s = %s; case %d:", resultVar, fc.translateExpr(e.Y), skipCase)
 				return fc.formatExpr("%s", resultVar)
@@ -418,7 +418,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			if fc.Blocking[e.Y] {
 				skipCase := fc.caseCounter
 				fc.caseCounter++
-				resultVar := fc.newVariable("_v")
+				resultVar := fc.newLocalVariable("_v")
 				fc.Printf("if (%s) { %s = true; $s = %d; continue s; }", fc.translateExpr(e.X), resultVar, skipCase)
 				fc.Printf("%s = %s; case %d:", resultVar, fc.translateExpr(e.Y), skipCase)
 				return fc.formatExpr("%s", resultVar)
@@ -477,7 +477,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			if _, isTuple := exprType.(*types.Tuple); isTuple {
 				return fc.formatExpr(
 					`(%1s = $mapIndex(%2e,%3s), %1s !== undefined ? [%1s.v, true] : [%4e, false])`,
-					fc.newVariable("_entry"),
+					fc.newLocalVariable("_entry"),
 					e.X,
 					key,
 					fc.zeroValue(t.Elem()),
@@ -485,7 +485,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			return fc.formatExpr(
 				`(%1s = $mapIndex(%2e,%3s), %1s !== undefined ? %1s.v : %4e)`,
-				fc.newVariable("_entry"),
+				fc.newLocalVariable("_entry"),
 				e.X,
 				key,
 				fc.zeroValue(t.Elem()),
@@ -642,13 +642,13 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 					case "Call":
 						if id, ok := fc.identifierConstant(e.Args[0]); ok {
 							if e.Ellipsis.IsValid() {
-								objVar := fc.newVariable("obj")
+								objVar := fc.newLocalVariable("obj")
 								return fc.formatExpr("(%s = %s, %s.%s.apply(%s, %s))", objVar, recv, objVar, id, objVar, externalizeExpr(e.Args[1]))
 							}
 							return fc.formatExpr("%s(%s)", globalRef(id), externalizeArgs(e.Args[1:]))
 						}
 						if e.Ellipsis.IsValid() {
-							objVar := fc.newVariable("obj")
+							objVar := fc.newLocalVariable("obj")
 							return fc.formatExpr("(%s = %s, %s[$externalize(%e, $String)].apply(%s, %s))", objVar, recv, objVar, e.Args[0], objVar, externalizeExpr(e.Args[1]))
 						}
 						return fc.formatExpr("%s[$externalize(%e, $String)](%s)", recv, e.Args[0], externalizeArgs(e.Args[1:]))
@@ -795,7 +795,7 @@ func (fc *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun 
 		fc.caseCounter++
 		returnVar := "$r"
 		if sig.Results().Len() != 0 {
-			returnVar = fc.newVariable("_r")
+			returnVar = fc.newLocalVariable("_r")
 		}
 		fc.Printf("%[1]s = %[2]s(%[3]s); /* */ $s = %[4]d; case %[4]d: if($c) { $c = false; %[1]s = %[1]s.$blk(); } if (%[1]s && %[1]s.$blk !== undefined) { break s; }", returnVar, fun, strings.Join(args, ", "), resumeCase)
 		if sig.Results().Len() != 0 {
@@ -845,7 +845,7 @@ func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, 
 	ellipsis := expr.Ellipsis
 
 	for i := range expr.Args {
-		v := fc.newVariable("_arg")
+		v := fc.newLocalVariable("_arg")
 		vars[i] = v
 		// Subtle: the proxy lambda argument needs to be assigned with the type
 		// that the original function expects, and not with the argument
@@ -1124,8 +1124,8 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 			}
 			if ptr, isPtr := fc.pkgCtx.TypeOf(expr).(*types.Pointer); fc.pkgCtx.Pkg.Path() == "syscall" && isPtr {
 				if s, isStruct := ptr.Elem().Underlying().(*types.Struct); isStruct {
-					array := fc.newVariable("_array")
-					target := fc.newVariable("_struct")
+					array := fc.newLocalVariable("_array")
+					target := fc.newLocalVariable("_struct")
 					fc.Printf("%s = new Uint8Array(%d);", array, sizes32.Sizeof(s))
 					fc.Delayed(func() {
 						fc.Printf("%s = %s, %s;", target, fc.translateExpr(expr), fc.loadStruct(array, target, s))
@@ -1173,8 +1173,8 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 				// struct pointer when handling syscalls.
 				// TODO(nevkontakte): Add a runtime assertion that the unsafe.Pointer is
 				// indeed pointing at a byte array.
-				array := fc.newVariable("_array")
-				target := fc.newVariable("_struct")
+				array := fc.newLocalVariable("_array")
+				target := fc.newLocalVariable("_struct")
 				return fc.formatExpr("(%s = %e, %s = %e, %s, %s)", array, expr, target, fc.zeroValue(t.Elem()), fc.loadStruct(array, target, ptrElType), target)
 			}
 			// Convert between structs of different types but identical layouts,
@@ -1196,7 +1196,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		// type iPtr *int; var c int = 42; println((iPtr)(&c));
 		// TODO(nevkontakte): Are there any other cases that fall into this case?
 		exprTypeElem := exprType.Underlying().(*types.Pointer).Elem()
-		ptrVar := fc.newVariable("_ptr")
+		ptrVar := fc.newLocalVariable("_ptr")
 		getterConv := fc.translateConversion(fc.setType(&ast.StarExpr{X: fc.newIdent(ptrVar, exprType)}, exprTypeElem), t.Elem())
 		setterConv := fc.translateConversion(fc.newIdent("$v", t.Elem()), exprTypeElem)
 		return fc.formatExpr("(%1s = %2e, new %3s(function() { return %4s; }, function($v) { %1s.$set(%5s); }, %1s.$target))", ptrVar, expr, fc.typeName(desiredType), getterConv, setterConv)
@@ -1268,7 +1268,7 @@ func (fc *funcContext) translateConversionToSlice(expr ast.Expr, desiredType typ
 }
 
 func (fc *funcContext) loadStruct(array, target string, s *types.Struct) string {
-	view := fc.newVariable("_view")
+	view := fc.newLocalVariable("_view")
 	code := fmt.Sprintf("%s = new DataView(%s.buffer, %s.byteOffset)", view, array, array)
 	var fields []*types.Var
 	var collectFields func(s *types.Struct, path string)
@@ -1398,7 +1398,7 @@ func (fc *funcContext) formatExprInternal(format string, a []interface{}, parens
 			out.WriteByte('(')
 			parens = false
 		}
-		v := fc.newVariable("x")
+		v := fc.newLocalVariable("x")
 		out.WriteString(v + " = " + fc.translateExpr(e.(ast.Expr)).String() + ", ")
 		vars[i] = v
 	}

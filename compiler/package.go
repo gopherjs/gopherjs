@@ -913,16 +913,16 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	}
 
 	if prefix != "" {
-		bodyOutput = strings.Repeat("\t", c.pkgCtx.indentation+1) + "/* */" + prefix + "\n" + bodyOutput
+		bodyOutput = c.Indentation(1) + "/* */" + prefix + "\n" + bodyOutput
 	}
 	if suffix != "" {
-		bodyOutput = bodyOutput + strings.Repeat("\t", c.pkgCtx.indentation+1) + "/* */" + suffix + "\n"
+		bodyOutput = bodyOutput + c.Indentation(1) + "/* */" + suffix + "\n"
 	}
 	if localVarDefs != "" {
-		bodyOutput = strings.Repeat("\t", c.pkgCtx.indentation+1) + localVarDefs + bodyOutput
+		bodyOutput = c.Indentation(1) + localVarDefs + bodyOutput
 	}
 
 	c.pkgCtx.escapingVars = prevEV
 
-	return params, fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(params, ", "), bodyOutput, strings.Repeat("\t", c.pkgCtx.indentation))
+	return params, fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(params, ", "), bodyOutput, c.Indentation(0))
 }

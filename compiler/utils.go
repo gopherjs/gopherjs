@@ -778,6 +778,17 @@ func (st signatureTypes) Param(i int, ellipsis bool) types.Type {
 	return st.VariadicType().(*types.Slice).Elem()
 }
 
+// HasResults returns true if the function signature returns something.
+func (st signatureTypes) HasResults() bool {
+	return st.Sig.Results().Len() > 0
+}
+
+// HasNamedResults returns true if the function signature returns something and
+// returned results are names (e.g. `func () (val int, err error)`).
+func (st signatureTypes) HasNamedResults() bool {
+	return st.HasResults() && st.Sig.Results().At(0).Name() != ""
+}
+
 // ErrorAt annotates an error with a position in the source code.
 func ErrorAt(err error, fset *token.FileSet, pos token.Pos) error {
 	return fmt.Errorf("%s: %w", fset.Position(pos), err)

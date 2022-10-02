@@ -29,7 +29,7 @@ func (fc *funcContext) Write(b []byte) (int, error) {
 }
 
 func (fc *funcContext) Printf(format string, values ...interface{}) {
-	fc.Write([]byte(strings.Repeat("\t", fc.pkgCtx.indentation)))
+	fc.Write([]byte(fc.Indentation(0)))
 	fmt.Fprintf(fc, format, values...)
 	fc.Write([]byte{'\n'})
 	fc.Write(fc.delayedOutput)
@@ -57,10 +57,19 @@ func (fc *funcContext) writePos() {
 	}
 }
 
-func (fc *funcContext) Indent(f func()) {
+// Indented increases generated code indentation level by 1 for the code emitted
+// from the callback f.
+func (fc *funcContext) Indented(f func()) {
 	fc.pkgCtx.indentation++
 	f()
 	fc.pkgCtx.indentation--
+}
+
+// Indentation returns a sequence of "\t" characters appropriate to the current
+// generated code indentation level. The `extra` parameter provides relative
+// indentation adjustment.
+func (fc *funcContext) Indentation(extra int) string {
+	return strings.Repeat("\t", fc.pkgCtx.indentation+extra)
 }
 
 func (fc *funcContext) CatchOutput(indent int, f func()) []byte {

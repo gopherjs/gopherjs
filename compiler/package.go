@@ -180,6 +180,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		Implicits:  make(map[ast.Node]types.Object),
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 		Scopes:     make(map[ast.Node]*types.Scope),
+		Instances:  make(map[*ast.Ident]types.Instance),
 	}
 
 	var errList ErrorList
@@ -294,7 +295,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			// but now we do it here to maintain previous behavior.
 			continue
 		}
-		funcCtx.pkgCtx.pkgVars[importedPkg.Path()] = funcCtx.newVariable(importedPkg.Name(), true)
+		funcCtx.pkgCtx.pkgVars[importedPkg.Path()] = funcCtx.newVariable(importedPkg.Name(), varPackage)
 		importedPaths = append(importedPaths, importedPkg.Path())
 	}
 	sort.Strings(importedPaths)
@@ -521,7 +522,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			d.DeclCode = funcCtx.CatchOutput(0, func() {
 				typeName := funcCtx.objectName(o)
 				lhs := typeName
-				if isPkgLevel(o) {
+				if typeVarLevel(o) == varPackage {
 					lhs += " = $pkg." + encodeIdent(o.Name())
 				}
 				size := int64(0)
@@ -898,5 +899,22 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 
 	c.pkgCtx.escapingVars = prevEV
 
-	return params, fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(params, ", "), bodyOutput, c.Indentation(0))
+	if !c.sigTypes.IsGeneric() {
+		return params, fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(params, ", "), bodyOutput, c.Indentation(0))
+	}
+
+	// Generic functions are generated as factories to allow passing type parameters
+	// from the call site.
+	// TODO(nevkontakte): Cache function instances for a given combination of type
+	// parameters.
+	// TODO(nevkontakte): Generate type parameter arguments and derive all dependent
+	// types inside the function.
+	typeParams := []string{}
+	for i := 0; i < c.sigTypes.Sig.TypeParams().Len(); i++ {
+		typeParam := c.sigTypes.Sig.TypeParams().At(i)
+		typeParams = append(typeParams, c.typeName(typeParam))
+	}
+
+	return params, fmt.Sprintf("function%s(%s){ return function(%s) {\n%s%s}; }",
+		functionName, strings.Join(typeParams, ", "), strings.Join(params, ", "), bodyOutput, c.Indentation(0))
 }

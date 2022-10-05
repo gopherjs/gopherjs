@@ -492,10 +492,18 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			)
 		case *types.Basic:
 			return fc.formatExpr("%e.charCodeAt(%f)", e.X, e.Index)
+		case *types.Signature:
+			return fc.translateGenericInstance(e)
 		default:
-			panic(fmt.Sprintf("Unhandled IndexExpr: %T\n", t))
+			panic(fmt.Errorf("unhandled IndexExpr: %T", t))
 		}
-
+	case *ast.IndexListExpr:
+		switch t := fc.pkgCtx.TypeOf(e.X).Underlying().(type) {
+		case *types.Signature:
+			return fc.translateGenericInstance(e)
+		default:
+			panic(fmt.Errorf("unhandled IndexListExpr: %T", t))
+		}
 	case *ast.SliceExpr:
 		if b, isBasic := fc.pkgCtx.TypeOf(e.X).Underlying().(*types.Basic); isBasic && isString(b) {
 			switch {
@@ -749,6 +757,10 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Var, *types.Const:
 			return fc.formatExpr("%s", fc.objectName(o))
 		case *types.Func:
+			if _, ok := fc.pkgCtx.Info.Instances[e]; ok {
+				// Generic function call with auto-inferred types.
+				return fc.translateGenericInstance(e)
+			}
 			return fc.formatExpr("%s", fc.objectName(o))
 		case *types.TypeName:
 			return fc.formatExpr("%s", fc.typeName(o.Type()))
@@ -786,6 +798,38 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		panic(fmt.Sprintf("Unhandled expression: %T\n", e))
 
 	}
+}
+
+// translateGenericInstance translates a generic function instantiation.
+//
+// The returned JS expression evaluates into a callable function with type params
+// substituted.
+func (fc *funcContext) translateGenericInstance(e ast.Expr) *expression {
+	var identifier *ast.Ident
+	switch e := e.(type) {
+	case *ast.Ident:
+		identifier = e
+	case *ast.IndexExpr:
+		identifier = e.X.(*ast.Ident)
+	case *ast.IndexListExpr:
+		identifier = e.X.(*ast.Ident)
+	default:
+		err := bailout(fmt.Errorf("unexpected generic instantiation expression type %T at %s", e, fc.pkgCtx.fileSet.Position(e.Pos())))
+		panic(err)
+	}
+
+	instance, ok := fc.pkgCtx.Info.Instances[identifier]
+	if !ok {
+		err := fmt.Errorf("no matching generic instantiation for %q at %s", identifier, fc.pkgCtx.fileSet.Position(identifier.Pos()))
+		bailout(err)
+	}
+	typeParams := []string{}
+	for i := 0; i < instance.TypeArgs.Len(); i++ {
+		t := instance.TypeArgs.At(i)
+		typeParams = append(typeParams, fc.typeName(t))
+	}
+	o := fc.pkgCtx.Uses[identifier]
+	return fc.formatExpr("%s(%s)", fc.objectName(o), strings.Join(typeParams, ", "))
 }
 
 func (fc *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun *expression) *expression {

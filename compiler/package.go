@@ -70,22 +70,53 @@ func (sel *fakeSelection) Index() []int              { return sel.index }
 func (sel *fakeSelection) Obj() types.Object         { return sel.obj }
 func (sel *fakeSelection) Type() types.Type          { return sel.typ }
 
-// funcContext maintains compiler context for a specific function (lexical scope?).
+// funcContext maintains compiler context for a specific function.
+//
+// An instance of this type roughly corresponds to a lexical scope for generated
+// JavaScript code (as defined for `var` declarations).
 type funcContext struct {
 	*analysis.FuncInfo
-	pkgCtx        *pkgContext
-	parent        *funcContext
-	sig           *types.Signature
-	allVars       map[string]int
-	localVars     []string
-	resultNames   []ast.Expr
-	flowDatas     map[*types.Label]*flowData
-	caseCounter   int
-	labelCases    map[*types.Label]int
-	output        []byte
+	// Surrounding package context.
+	pkgCtx *pkgContext
+	// Function context, surrounding this function definition. For package-level
+	// functions or methods it is the package-level function context (even though
+	// it technically doesn't correspond to a function). nil for the package-level
+	// function context.
+	parent *funcContext
+	// Information about function signature types. nil for the package-level
+	// function context.
+	sigTypes *signatureTypes
+	// All variable names available in the current function scope. The key is a Go
+	// variable name and the value is the number of synonymous variable names
+	// visible from this scope (e.g. due to shadowing). This number is used to
+	// avoid conflicts when assigning JS variable names for Go variables.
+	allVars map[string]int
+	// Local JS variable names defined within this function context. This list
+	// contains JS variable names assigned to Go variables, as well as other
+	// auxiliary variables the compiler needs. It is used to generate `var`
+	// declaration at the top of the function, as well as context save/restore.
+	localVars []string
+	// AST expressions representing function's named return values. nil if the
+	// function has no return values or they are not named.
+	resultNames []ast.Expr
+	// Function's internal control flow graph used for generation of a "flattened"
+	// version of the function when the function is blocking or uses goto.
+	// TODO(nevkontakte): Describe the exact semantics of this map.
+	flowDatas map[*types.Label]*flowData
+	// Number of control flow blocks in a "flattened" function.
+	caseCounter int
+	// A mapping from Go labels statements (e.g. labelled loop) to the flow block
+	// id corresponding to it.
+	labelCases map[*types.Label]int
+	// Generated code buffer for the current function.
+	output []byte
+	// Generated code that should be emitted at the end of the JS statement (?).
 	delayedOutput []byte
-	posAvailable  bool
-	pos           token.Pos
+	// Set to true if source position is available and should be emitted for the
+	// source map.
+	posAvailable bool
+	// Current position in the Go source code.
+	pos token.Pos
 }
 
 type flowData struct {
@@ -727,7 +758,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		FuncInfo:    info,
 		pkgCtx:      outerContext.pkgCtx,
 		parent:      outerContext,
-		sig:         sig,
+		sigTypes:    &signatureTypes{Sig: sig},
 		allVars:     make(map[string]int, len(outerContext.allVars)),
 		localVars:   []string{},
 		flowDatas:   map[*types.Label]*flowData{nil: {}},
@@ -760,10 +791,10 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 			c.handleEscapingVars(body)
 		}
 
-		if c.sig != nil && c.sig.Results().Len() != 0 && c.sig.Results().At(0).Name() != "" {
-			c.resultNames = make([]ast.Expr, c.sig.Results().Len())
-			for i := 0; i < c.sig.Results().Len(); i++ {
-				result := c.sig.Results().At(i)
+		if c.sigTypes != nil && c.sigTypes.HasNamedResults() {
+			c.resultNames = make([]ast.Expr, c.sigTypes.Sig.Results().Len())
+			for i := 0; i < c.sigTypes.Sig.Results().Len(); i++ {
+				result := c.sigTypes.Sig.Results().At(i)
 				c.Printf("%s = %s;", c.objectName(result), c.translateExpr(c.zeroValue(result.Type())).String())
 				id := ast.NewIdent("")
 				c.pkgCtx.Uses[id] = result
@@ -833,7 +864,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		if len(c.Blocking) != 0 {
 			deferSuffix += " $s = -1;"
 		}
-		if c.resultNames == nil && c.sig.Results().Len() > 0 {
+		if c.resultNames == nil && c.sigTypes.HasResults() {
 			deferSuffix += fmt.Sprintf(" return%s;", c.translateResults(nil))
 		}
 		deferSuffix += " } finally { $callDeferred($deferred, $err);"
@@ -856,16 +887,16 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	}
 
 	if prefix != "" {
-		bodyOutput = strings.Repeat("\t", c.pkgCtx.indentation+1) + "/* */" + prefix + "\n" + bodyOutput
+		bodyOutput = c.Indentation(1) + "/* */" + prefix + "\n" + bodyOutput
 	}
 	if suffix != "" {
-		bodyOutput = bodyOutput + strings.Repeat("\t", c.pkgCtx.indentation+1) + "/* */" + suffix + "\n"
+		bodyOutput = bodyOutput + c.Indentation(1) + "/* */" + suffix + "\n"
 	}
 	if localVarDefs != "" {
-		bodyOutput = strings.Repeat("\t", c.pkgCtx.indentation+1) + localVarDefs + bodyOutput
+		bodyOutput = c.Indentation(1) + localVarDefs + bodyOutput
 	}
 
 	c.pkgCtx.escapingVars = prevEV
 
-	return params, fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(params, ", "), bodyOutput, strings.Repeat("\t", c.pkgCtx.indentation))
+	return params, fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(params, ", "), bodyOutput, c.Indentation(0))
 }

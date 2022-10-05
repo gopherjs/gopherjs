@@ -29,7 +29,7 @@ func (fc *funcContext) Write(b []byte) (int, error) {
 }
 
 func (fc *funcContext) Printf(format string, values ...interface{}) {
-	fc.Write([]byte(strings.Repeat("\t", fc.pkgCtx.indentation)))
+	fc.Write([]byte(fc.Indentation(0)))
 	fmt.Fprintf(fc, format, values...)
 	fc.Write([]byte{'\n'})
 	fc.Write(fc.delayedOutput)
@@ -57,10 +57,19 @@ func (fc *funcContext) writePos() {
 	}
 }
 
-func (fc *funcContext) Indent(f func()) {
+// Indented increases generated code indentation level by 1 for the code emitted
+// from the callback f.
+func (fc *funcContext) Indented(f func()) {
 	fc.pkgCtx.indentation++
 	f()
 	fc.pkgCtx.indentation--
+}
+
+// Indentation returns a sequence of "\t" characters appropriate to the current
+// generated code indentation level. The `extra` parameter provides relative
+// indentation adjustment.
+func (fc *funcContext) Indentation(extra int) string {
+	return strings.Repeat("\t", fc.pkgCtx.indentation+extra)
 }
 
 func (fc *funcContext) CatchOutput(indent int, f func()) []byte {
@@ -767,6 +776,17 @@ func (st signatureTypes) Param(i int, ellipsis bool) types.Type {
 		return st.VariadicType()
 	}
 	return st.VariadicType().(*types.Slice).Elem()
+}
+
+// HasResults returns true if the function signature returns something.
+func (st signatureTypes) HasResults() bool {
+	return st.Sig.Results().Len() > 0
+}
+
+// HasNamedResults returns true if the function signature returns something and
+// returned results are names (e.g. `func () (val int, err error)`).
+func (st signatureTypes) HasNamedResults() bool {
+	return st.HasResults() && st.Sig.Results().At(0).Name() != ""
 }
 
 // ErrorAt annotates an error with a position in the source code.

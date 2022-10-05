@@ -100,7 +100,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			data.endCase = fc.caseCounter
 			fc.caseCounter++
 
-			fc.Indent(func() {
+			fc.Indented(func() {
 				fc.translateStmtList(clause.Body)
 			})
 			fc.Printf("case %d:", data.endCase)
@@ -112,7 +112,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 				fc.Printf("%s:", label.Name())
 			}
 			fc.Printf("switch (0) { default:")
-			fc.Indent(func() {
+			fc.Indented(func() {
 				fc.translateStmtList(clause.Body)
 			})
 			fc.Printf("}")
@@ -614,7 +614,7 @@ func (fc *funcContext) translateBranchingStmt(caseClauses []*ast.CaseClause, def
 	for i, clause := range caseClauses {
 		fc.SetPos(clause.Pos())
 		fc.PrintCond(!flatten, fmt.Sprintf("%sif (%s) {", prefix, condStrs[i]), fmt.Sprintf("case %d:", caseOffset+i))
-		fc.Indent(func() {
+		fc.Indented(func() {
 			fc.translateStmtList(clause.Body)
 			if flatten && (i < len(caseClauses)-1 || defaultClause != nil) && !astutil.EndsWithReturn(clause.Body) {
 				fc.Printf("$s = %d; continue;", endCase)
@@ -625,7 +625,7 @@ func (fc *funcContext) translateBranchingStmt(caseClauses []*ast.CaseClause, def
 
 	if defaultClause != nil {
 		fc.PrintCond(!flatten, prefix+"{", fmt.Sprintf("case %d:", caseOffset+len(caseClauses)))
-		fc.Indent(func() {
+		fc.Indented(func() {
 			fc.translateStmtList(defaultClause.Body)
 		})
 	}
@@ -655,7 +655,7 @@ func (fc *funcContext) translateLoopingStmt(cond func() string, body *ast.BlockS
 	}
 	isTerminated := false
 	fc.PrintCond(!flatten, "while (true) {", fmt.Sprintf("case %d:", data.beginCase))
-	fc.Indent(func() {
+	fc.Indented(func() {
 		condStr := cond()
 		if condStr != "true" {
 			fc.PrintCond(!flatten, fmt.Sprintf("if (!(%s)) { break; }", condStr), fmt.Sprintf("if(!(%s)) { $s = %d; continue; }", condStr, data.endCase))
@@ -773,7 +773,7 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 }
 
 func (fc *funcContext) translateResults(results []ast.Expr) string {
-	tuple := fc.sig.Results()
+	tuple := fc.sigTypes.Sig.Results()
 	switch tuple.Len() {
 	case 0:
 		return ""

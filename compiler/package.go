@@ -14,9 +14,9 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/neelance/astrewrite"
 	"golang.org/x/tools/go/gcexportdata"
-	"golang.org/x/tools/go/types/typeutil"
 )
 
 // pkgContext maintains compiler context for a specific package.
@@ -28,14 +28,21 @@ type pkgContext struct {
 	pkgVars      map[string]string
 	objectNames  map[types.Object]string
 	varPtrNames  map[*types.Var]string
-	anonTypes    []*types.TypeName
-	anonTypeMap  typeutil.Map
+	anonTypes    typesutil.AnonymousTypes
 	escapingVars map[*types.Var]bool
 	indentation  int
 	dependencies map[types.Object]bool
 	minify       bool
 	fileSet      *token.FileSet
 	errList      ErrorList
+}
+
+// genericCtx contains compiler context for a generic function or type.
+//
+// It is used to accumulate information about types and objects that depend on
+// type parameters and must be constructed in a generic factory function.
+type genericCtx struct {
+	anonTypes typesutil.AnonymousTypes
 }
 
 func (p *pkgContext) SelectionOf(e *ast.SelectorExpr) (selection, bool) {
@@ -78,6 +85,8 @@ type funcContext struct {
 	*analysis.FuncInfo
 	// Surrounding package context.
 	pkgCtx *pkgContext
+	// Surrounding generic function context. nil if non-generic code.
+	genericCtx *genericCtx
 	// Function context, surrounding this function definition. For package-level
 	// functions or methods it is the package-level function context (even though
 	// it technically doesn't correspond to a function). nil for the package-level
@@ -597,7 +606,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 
 	// anonymous types
-	for _, t := range funcCtx.pkgCtx.anonTypes {
+	for _, t := range funcCtx.pkgCtx.anonTypes.Ordered() {
 		d := Decl{
 			Vars:            []string{t.Name()},
 			DceObjectFilter: t.Name(),
@@ -758,6 +767,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	c := &funcContext{
 		FuncInfo:    info,
 		pkgCtx:      outerContext.pkgCtx,
+		genericCtx:  outerContext.genericCtx,
 		parent:      outerContext,
 		sigTypes:    &signatureTypes{Sig: sig},
 		allVars:     make(map[string]int, len(outerContext.allVars)),
@@ -768,6 +778,9 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	}
 	for k, v := range outerContext.allVars {
 		c.allVars[k] = v
+	}
+	if c.sigTypes.IsGeneric() {
+		c.genericCtx = &genericCtx{}
 	}
 	prevEV := c.pkgCtx.escapingVars
 
@@ -786,7 +799,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		}
 	}
 
-	bodyOutput := string(c.CatchOutput(1, func() {
+	bodyOutput := string(c.CatchOutput(c.bodyIndent(), func() {
 		if len(c.Blocking) != 0 {
 			c.pkgCtx.Scopes[body] = c.pkgCtx.Scopes[typ]
 			c.handleEscapingVars(body)
@@ -888,13 +901,13 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	}
 
 	if prefix != "" {
-		bodyOutput = c.Indentation(1) + "/* */" + prefix + "\n" + bodyOutput
+		bodyOutput = c.Indentation(c.bodyIndent()) + "/* */" + prefix + "\n" + bodyOutput
 	}
 	if suffix != "" {
-		bodyOutput = bodyOutput + c.Indentation(1) + "/* */" + suffix + "\n"
+		bodyOutput = bodyOutput + c.Indentation(c.bodyIndent()) + "/* */" + suffix + "\n"
 	}
 	if localVarDefs != "" {
-		bodyOutput = c.Indentation(1) + localVarDefs + bodyOutput
+		bodyOutput = c.Indentation(c.bodyIndent()) + localVarDefs + bodyOutput
 	}
 
 	c.pkgCtx.escapingVars = prevEV
@@ -907,14 +920,23 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	// from the call site.
 	// TODO(nevkontakte): Cache function instances for a given combination of type
 	// parameters.
-	// TODO(nevkontakte): Generate type parameter arguments and derive all dependent
-	// types inside the function.
 	typeParams := []string{}
 	for i := 0; i < c.sigTypes.Sig.TypeParams().Len(); i++ {
 		typeParam := c.sigTypes.Sig.TypeParams().At(i)
 		typeParams = append(typeParams, c.typeName(typeParam))
 	}
 
-	return params, fmt.Sprintf("function%s(%s){ return function(%s) {\n%s%s}; }",
-		functionName, strings.Join(typeParams, ", "), strings.Join(params, ", "), bodyOutput, c.Indentation(0))
+	// anonymous types
+	typesInit := strings.Builder{}
+	for _, t := range c.genericCtx.anonTypes.Ordered() {
+		fmt.Fprintf(&typesInit, "%svar %s = $%sType(%s);\n", c.Indentation(1), t.Name(), strings.ToLower(typeKind(t.Type())[5:]), c.initArgs(t.Type()))
+	}
+
+	code := &strings.Builder{}
+	fmt.Fprintf(code, "function%s(%s){\n", functionName, strings.Join(typeParams, ", "))
+	fmt.Fprintf(code, "%s", typesInit.String())
+	fmt.Fprintf(code, "%sreturn function(%s) {\n", c.Indentation(1), strings.Join(params, ", "))
+	fmt.Fprintf(code, "%s", bodyOutput)
+	fmt.Fprintf(code, "%s};\n%s}", c.Indentation(1), c.Indentation(0))
+	return params, code.String()
 }

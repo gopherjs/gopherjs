@@ -768,6 +768,9 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			if typesutil.IsJsObject(exprType) {
 				return fc.formatExpr("null")
 			}
+			if typesutil.IsGeneric(exprType) {
+				return fc.formatExpr("%s.zero()", fc.typeName(exprType))
+			}
 			switch t := exprType.Underlying().(type) {
 			case *types.Basic:
 				if t.Kind() != types.UnsafePointer {

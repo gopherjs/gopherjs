@@ -700,7 +700,7 @@ func (t *test) run() {
 		supportedArgs := []string{}
 		for _, a := range args {
 			switch a {
-			case "-gcflags=-G=3":
+			case "-gcflags=-G=3", `-gcflags="-G=3"`:
 				continue
 			default:
 				supportedArgs = append(supportedArgs, a)

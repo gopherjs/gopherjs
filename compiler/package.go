@@ -531,7 +531,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			d.DeclCode = funcCtx.CatchOutput(0, func() {
 				typeName := funcCtx.objectName(o)
 				lhs := typeName
-				if typeVarLevel(o) == varPackage {
+				if getVarLevel(o) == varPackage {
 					lhs += " = $pkg." + encodeIdent(o.Name())
 				}
 				size := int64(0)

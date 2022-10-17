@@ -117,9 +117,9 @@ var (
 
 func init() {
 	if js.Global != nil {
-		id = js.Global.Call("eval", "(function(x) { return x; })")
-		instanceOf = js.Global.Call("eval", "(function(x, y) { return x instanceof y; })")
-		getValueType = js.Global.Call("eval", `(function(x) {
+		id = js.Global.Call("Function", "x", "return x")
+		instanceOf = js.Global.Call("Function", "x", "y", "return x instanceof y")
+		getValueType = js.Global.Call("Function", "x", `
   if (typeof(x) === "undefined") {
     return 0; // TypeUndefined
   }
@@ -142,7 +142,7 @@ func init() {
     return 7; // TypeFunction
   }
   return 6; // TypeObject
-})`)
+`)
 	}
 }
 

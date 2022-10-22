@@ -1436,12 +1436,10 @@ func (v Value) Set(x Value) {
 	x = x.assignTo("reflect.Set", v.typ, nil)
 	if v.flag&flagIndir != 0 {
 		switch v.typ.Kind() {
-		case Array:
+		case Array, Struct:
 			jsType(v.typ).Call("copy", js.InternalObject(v.ptr), js.InternalObject(x.ptr))
 		case Interface:
 			js.InternalObject(v.ptr).Call("$set", js.InternalObject(valueInterface(x, false)))
-		case Struct:
-			copyStruct(js.InternalObject(v.ptr), js.InternalObject(x.ptr), v.typ)
 		default:
 			js.InternalObject(v.ptr).Call("$set", x.object())
 		}

@@ -862,3 +862,29 @@ func TestVersion(t *testing.T) {
 		t.Fatalf("Got: runtime.Version() returned %q. Want: a valid Go version.", got)
 	}
 }
+
+// https://github.com/gopherjs/gopherjs/issues/1163
+func TestReflectSetForEmbed(t *testing.T) {
+	type Point struct {
+		x int
+		y int
+	}
+	type Embed struct {
+		value bool
+		point Point
+	}
+	type A struct {
+		Embed
+	}
+	c := &A{}
+	c.value = true
+	c.point = Point{100, 200}
+	in := reflect.ValueOf(c).Elem()
+	v := reflect.New(in.Type())
+	e := v.Elem()
+	f0 := e.Field(0)
+	e.Set(in)
+	if e.Field(0) != f0 {
+		t.Fatalf("relfect.Set got %v, want %v", f0, e.Field(0))
+	}
+}

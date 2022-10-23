@@ -67,7 +67,7 @@ func init() {
 
 func main() {
 	var (
-		options = &gbuild.Options{CreateMapFile: true}
+		options = &gbuild.Options{}
 		pkgObj  string
 		tags    string
 	)
@@ -83,6 +83,7 @@ func main() {
 	compilerFlags.StringVar(&tags, "tags", "", "a list of build tags to consider satisfied during the build")
 	compilerFlags.BoolVar(&options.MapToLocalDisk, "localmap", false, "use local paths for sourcemap")
 	compilerFlags.BoolVarP(&options.NoCache, "no_cache", "a", false, "rebuild all packages from scratch")
+	compilerFlags.BoolVarP(&options.CreateMapFile, "source_map", "s", true, "disable generation of source maps")
 
 	flagWatch := pflag.NewFlagSet("", 0)
 	flagWatch.BoolVarP(&options.Watch, "watch", "w", false, "watch for changes to the source files")
@@ -507,7 +508,7 @@ func main() {
 		}
 
 		// Create a new session eagerly to check if it fails, and report the error right away.
-		// Otherwise users will see it only after trying to serve a package, which is a bad experience.
+		// Otherwise, users will see it only after trying to serve a package, which is a bad experience.
 		_, err := gbuild.NewSession(options)
 		if err != nil {
 			return err
@@ -725,7 +726,7 @@ func (fs serveCommandFileSystem) serveSourceTree(xctx gbuild.XContext, reqPath s
 	// directories, which no longer align with import paths.
 	//
 	// We don't know which part of the requested path is package import path and
-	// which is a path under the package directory, so we try different slipt
+	// which is a path under the package directory, so we try different split
 	// points until the package is found successfully.
 	for i := len(parts); i > 0; i-- {
 		pkgPath := path.Clean(path.Join(parts[:i]...))

@@ -67,7 +67,7 @@ func init() {
 
 func main() {
 	var (
-		options = &gbuild.Options{CreateMapFile: true}
+		options = &gbuild.Options{}
 		pkgObj  string
 		tags    string
 	)
@@ -83,7 +83,7 @@ func main() {
 	compilerFlags.StringVar(&tags, "tags", "", "a list of build tags to consider satisfied during the build")
 	compilerFlags.BoolVar(&options.MapToLocalDisk, "localmap", false, "use local paths for sourcemap")
 	compilerFlags.BoolVarP(&options.NoCache, "no_cache", "a", false, "rebuild all packages from scratch")
-	compilerFlags.BoolVarP(&options.CreateMapFile, "no_source_map", "s", false, "disable generation of source maps")
+	compilerFlags.BoolVarP(&options.CreateMapFile, "source_map", "s", true, "enable generation of source maps")
 
 	flagWatch := pflag.NewFlagSet("", 0)
 	flagWatch.BoolVarP(&options.Watch, "watch", "w", false, "watch for changes to the source files")

@@ -125,7 +125,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		if s.Init != nil {
 			fc.translateStmt(s.Init, nil)
 		}
-		refVar := fc.newVariable("_ref")
+		refVar := fc.newLocalVariable("_ref")
 		var expr ast.Expr
 		switch a := s.Assign.(type) {
 		case *ast.AssignStmt:
@@ -187,14 +187,14 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		}, label, fc.Flattened[s])
 
 	case *ast.RangeStmt:
-		refVar := fc.newVariable("_ref")
+		refVar := fc.newLocalVariable("_ref")
 		fc.Printf("%s = %s;", refVar, fc.translateExpr(s.X))
 
 		switch t := fc.pkgCtx.TypeOf(s.X).Underlying().(type) {
 		case *types.Basic:
-			iVar := fc.newVariable("_i")
+			iVar := fc.newLocalVariable("_i")
 			fc.Printf("%s = 0;", iVar)
-			runeVar := fc.newVariable("_rune")
+			runeVar := fc.newLocalVariable("_rune")
 			fc.translateLoopingStmt(func() string { return iVar + " < " + refVar + ".length" }, s.Body, func() {
 				fc.Printf("%s = $decodeRune(%s, %s);", runeVar, refVar, iVar)
 				if !isBlank(s.Key) {
@@ -208,16 +208,16 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			}, label, fc.Flattened[s])
 
 		case *types.Map:
-			iVar := fc.newVariable("_i")
+			iVar := fc.newLocalVariable("_i")
 			fc.Printf("%s = 0;", iVar)
-			keysVar := fc.newVariable("_keys")
+			keysVar := fc.newLocalVariable("_keys")
 			fc.Printf("%s = %s ? %s.keys() : undefined;", keysVar, refVar, refVar)
 
-			sizeVar := fc.newVariable("_size")
+			sizeVar := fc.newLocalVariable("_size")
 			fc.Printf("%s = %s ? %s.size : 0;", sizeVar, refVar, refVar)
 			fc.translateLoopingStmt(func() string { return iVar + " < " + sizeVar }, s.Body, func() {
-				keyVar := fc.newVariable("_key")
-				entryVar := fc.newVariable("_entry")
+				keyVar := fc.newLocalVariable("_key")
+				entryVar := fc.newLocalVariable("_entry")
 				fc.Printf("%s = %s.next().value;", keyVar, keysVar)
 				fc.Printf("%s = %s.get(%s);", entryVar, refVar, keyVar)
 				fc.translateStmt(&ast.IfStmt{
@@ -248,7 +248,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 				length = refVar + ".$length"
 				elemType = t2.Elem()
 			}
-			iVar := fc.newVariable("_i")
+			iVar := fc.newLocalVariable("_i")
 			fc.Printf("%s = 0;", iVar)
 			fc.translateLoopingStmt(func() string { return iVar + " < " + length }, s.Body, func() {
 				if !isBlank(s.Key) {
@@ -265,7 +265,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			}, label, fc.Flattened[s])
 
 		case *types.Chan:
-			okVar := fc.newIdent(fc.newVariable("_ok"), types.Typ[types.Bool])
+			okVar := fc.newIdent(fc.newLocalVariable("_ok"), types.Typ[types.Bool])
 			key := s.Key
 			tok := s.Tok
 			if key == nil {
@@ -354,7 +354,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		if rVal != "" {
 			// If returned expression is non empty, evaluate and store it in a
 			// variable to avoid double-execution in case a deferred function blocks.
-			rVar := fc.newVariable("$r")
+			rVar := fc.newLocalVariable("$r")
 			fc.Printf("%s =%s;", rVar, rVal)
 			rVal = " " + rVar
 		}
@@ -386,7 +386,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			fc.Printf("%s", fc.translateAssign(lhs, s.Rhs[0], s.Tok == token.DEFINE))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
-			tupleVar := fc.newVariable("_tuple")
+			tupleVar := fc.newLocalVariable("_tuple")
 			fc.Printf("%s = %s;", tupleVar, fc.translateExpr(s.Rhs[0]))
 			tuple := fc.pkgCtx.TypeOf(s.Rhs[0]).(*types.Tuple)
 			for i, lhs := range s.Lhs {
@@ -398,7 +398,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		case len(s.Lhs) == len(s.Rhs):
 			tmpVars := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
-				tmpVars[i] = fc.newVariable("_tmp")
+				tmpVars[i] = fc.newLocalVariable("_tmp")
 				if isBlank(astutil.RemoveParens(s.Lhs[i])) {
 					fc.Printf("$unused(%s);", fc.translateExpr(rhs))
 					continue
@@ -444,7 +444,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			for _, spec := range decl.Specs {
 				o := fc.pkgCtx.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
 				fc.pkgCtx.typeNames = append(fc.pkgCtx.typeNames, o)
-				fc.pkgCtx.objectNames[o] = fc.newVariableWithLevel(o.Name(), true)
+				fc.pkgCtx.objectNames[o] = fc.newVariable(o.Name(), varPackage)
 				fc.pkgCtx.dependencies[o] = true
 			}
 		case token.CONST:
@@ -478,7 +478,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		fc.translateStmt(&ast.ExprStmt{X: call}, label)
 
 	case *ast.SelectStmt:
-		selectionVar := fc.newVariable("_selection")
+		selectionVar := fc.newLocalVariable("_selection")
 		var channels []string
 		var caseClauses []*ast.CaseClause
 		flattened := false
@@ -704,7 +704,7 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 			if typesutil.IsJsObject(fc.pkgCtx.TypeOf(l.Index)) {
 				fc.pkgCtx.errList = append(fc.pkgCtx.errList, types.Error{Fset: fc.pkgCtx.fileSet, Pos: l.Index.Pos(), Msg: "cannot use js.Object as map key"})
 			}
-			keyVar := fc.newVariable("_key")
+			keyVar := fc.newLocalVariable("_key")
 			return fmt.Sprintf(
 				`%s = %s; (%s || $throwRuntimeError("assignment to entry in nil map")).set(%s.keyFor(%s), { k: %s, v: %s });`,
 				keyVar,
@@ -799,7 +799,7 @@ func (fc *funcContext) translateResults(results []ast.Expr) string {
 				return " " + resultExpr
 			}
 
-			tmpVar := fc.newVariable("_returncast")
+			tmpVar := fc.newLocalVariable("_returncast")
 			fc.Printf("%s = %s;", tmpVar, resultExpr)
 
 			// Not all the return types matched, map everything out for implicit casting

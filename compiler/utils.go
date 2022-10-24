@@ -110,7 +110,7 @@ func (fc *funcContext) expandTupleArgs(argExprs []ast.Expr) []ast.Expr {
 		return argExprs
 	}
 
-	tupleVar := fc.newVariable("_tuple")
+	tupleVar := fc.newLocalVariable("_tuple")
 	fc.Printf("%s = %s;", tupleVar, fc.translateExpr(argExprs[0]))
 	argExprs = make([]ast.Expr, tuple.Len())
 	for i := range argExprs {
@@ -138,7 +138,7 @@ func (fc *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, 
 		arg := fc.translateImplicitConversionWithCloning(argExpr, sigTypes.Param(i, ellipsis)).String()
 
 		if preserveOrder && fc.pkgCtx.Types[argExpr].Value == nil {
-			argVar := fc.newVariable("_arg")
+			argVar := fc.newLocalVariable("_arg")
 			fc.Printf("%s = %s;", argVar, arg)
 			arg = argVar
 		}
@@ -233,11 +233,40 @@ func (fc *funcContext) newConst(t types.Type, value constant.Value) ast.Expr {
 	return id
 }
 
-func (fc *funcContext) newVariable(name string) string {
-	return fc.newVariableWithLevel(name, false)
+// newLocalVariable assigns a new JavaScript variable name for the given Go
+// local variable name. In this context "local" means "in scope of the current"
+// functionContext.
+func (fc *funcContext) newLocalVariable(name string) string {
+	return fc.newVariable(name, varFuncLocal)
 }
 
-func (fc *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
+// varLevel specifies at which level a JavaScript variable should be declared.
+type varLevel int
+
+const (
+	// A variable defined at a function level (e.g. local variables).
+	varFuncLocal = iota
+	// A variable that should be declared in a generic type or function factory.
+	// This is mainly for type parameters and generic-dependent types.
+	varGenericFactory
+	// A variable that should be declared in a package factory. This user is for
+	// top-level functions, types, etc.
+	varPackage
+)
+
+// newVariable assigns a new JavaScript variable name for the given Go variable
+// or type.
+//
+// If there is already a variable with the same name visible in the current
+// function context (e.g. due to shadowing), the returned name will be suffixed
+// with a number to prevent conflict. This is necessary because Go name
+// resolution scopes differ from var declarations in JS.
+//
+// If pkgLevel is true, the variable is declared at the package level and added
+// to this functionContext, as well as all parents, but not to the list of local
+// variables. If false, it is added to this context only, as well as the list of
+// local vars.
+func (fc *funcContext) newVariable(name string, level varLevel) string {
 	if name == "" {
 		panic("newVariable: empty name")
 	}
@@ -246,7 +275,7 @@ func (fc *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
 		i := 0
 		for {
 			offset := int('a')
-			if pkgLevel {
+			if level == varPackage {
 				offset = int('A')
 			}
 			j := i
@@ -271,9 +300,22 @@ func (fc *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
 		varName = fmt.Sprintf("%s$%d", name, n)
 	}
 
-	if pkgLevel {
-		for c2 := fc.parent; c2 != nil; c2 = c2.parent {
-			c2.allVars[name] = n + 1
+	// Package-level variables are registered in all outer scopes.
+	if level == varPackage {
+		for c := fc.parent; c != nil; c = c.parent {
+			c.allVars[name] = n + 1
+		}
+		return varName
+	}
+
+	// Generic-factory level variables are registered in outer scopes up to the
+	// level of the generic function or method.
+	if level == varGenericFactory {
+		for c := fc; c != nil; c = c.parent {
+			c.allVars[name] = n + 1
+			if c.sigTypes.IsGeneric() {
+				break
+			}
 		}
 		return varName
 	}
@@ -316,12 +358,20 @@ func isVarOrConst(o types.Object) bool {
 	return false
 }
 
-func isPkgLevel(o types.Object) bool {
-	return o.Parent() != nil && o.Parent().Parent() == types.Universe
+func typeVarLevel(o types.Object) varLevel {
+	if _, ok := o.Type().(*types.TypeParam); ok {
+		return varGenericFactory
+	}
+	if o.Parent() != nil && o.Parent().Parent() == types.Universe {
+		return varPackage
+	}
+	return varFuncLocal
 }
 
+// objectName returns a JS identifier corresponding to the given types.Object.
+// Repeated calls for the same object will return the same name.
 func (fc *funcContext) objectName(o types.Object) string {
-	if isPkgLevel(o) {
+	if typeVarLevel(o) == varPackage {
 		fc.pkgCtx.dependencies[o] = true
 
 		if o.Pkg() != fc.pkgCtx.Pkg || (isVarOrConst(o) && o.Exported()) {
@@ -331,7 +381,7 @@ func (fc *funcContext) objectName(o types.Object) string {
 
 	name, ok := fc.pkgCtx.objectNames[o]
 	if !ok {
-		name = fc.newVariableWithLevel(o.Name(), isPkgLevel(o))
+		name = fc.newVariable(o.Name(), typeVarLevel(o))
 		fc.pkgCtx.objectNames[o] = name
 	}
 
@@ -342,18 +392,23 @@ func (fc *funcContext) objectName(o types.Object) string {
 }
 
 func (fc *funcContext) varPtrName(o *types.Var) string {
-	if isPkgLevel(o) && o.Exported() {
+	if typeVarLevel(o) == varPackage && o.Exported() {
 		return fc.pkgVar(o.Pkg()) + "." + o.Name() + "$ptr"
 	}
 
 	name, ok := fc.pkgCtx.varPtrNames[o]
 	if !ok {
-		name = fc.newVariableWithLevel(o.Name()+"$ptr", isPkgLevel(o))
+		name = fc.newVariable(o.Name()+"$ptr", typeVarLevel(o))
 		fc.pkgCtx.varPtrNames[o] = name
 	}
 	return name
 }
 
+// typeName returns a JS identifier name for the given Go type.
+//
+// For the built-in types it returns identifiers declared in the prelude. For
+// all user-defined or composite types it creates a unique JS identifier and
+// will return it on all subsequent calls for the type.
 func (fc *funcContext) typeName(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Basic:
@@ -363,16 +418,22 @@ func (fc *funcContext) typeName(ty types.Type) string {
 			return "$error"
 		}
 		return fc.objectName(t.Obj())
+	case *types.TypeParam:
+		return fc.objectName(t.Obj())
 	case *types.Interface:
 		if t.Empty() {
 			return "$emptyInterface"
 		}
 	}
 
+	// For anonymous composite types, generate a synthetic package-level type
+	// declaration, which will be reused for all instances of this type. This
+	// improves performance, since runtime won't have to synthesize the same type
+	// repeatedly.
 	anonType, ok := fc.pkgCtx.anonTypeMap.At(ty).(*types.TypeName)
 	if !ok {
-		fc.initArgs(ty) // cause all embedded types to be registered
-		varName := fc.newVariableWithLevel(strings.ToLower(typeKind(ty)[5:])+"Type", true)
+		fc.initArgs(ty) // cause all dependency types to be registered
+		varName := fc.newVariable(strings.ToLower(typeKind(ty)[5:])+"Type", varPackage)
 		anonType = types.NewTypeName(token.NoPos, fc.pkgCtx.Pkg, varName, ty) // fake types.TypeName
 		fc.pkgCtx.anonTypes = append(fc.pkgCtx.anonTypes, anonType)
 		fc.pkgCtx.anonTypeMap.Set(ty, anonType)
@@ -787,6 +848,12 @@ func (st signatureTypes) HasResults() bool {
 // returned results are names (e.g. `func () (val int, err error)`).
 func (st signatureTypes) HasNamedResults() bool {
 	return st.HasResults() && st.Sig.Results().At(0).Name() != ""
+}
+
+// IsGeneric returns true if the signature represents a generic function or a
+// method of a generic type.
+func (st signatureTypes) IsGeneric() bool {
+	return st.Sig.TypeParams().Len() > 0 || st.Sig.RecvTypeParams().Len() > 0
 }
 
 // ErrorAt annotates an error with a position in the source code.

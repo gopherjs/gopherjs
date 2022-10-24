@@ -573,28 +573,7 @@ var $instanceOf = function(x, y) {
   return x instanceof y;
 };
 
-var $getValueType = function(x) {
-  if (typeof(x) === "undefined") {
-    return 0; // TypeUndefined
-  }
-  if (x === null) {
-    return 1; // TypeNull
-  }
-  if (typeof(x) === "boolean") {
-    return 2; // TypeBoolean
-  }
-  if (typeof(x) === "number") {
-    return 3; // TypeNumber
-  }
-  if (typeof(x) === "string") {
-    return 4; // TypeString
-  }
-  if (typeof(x) === "symbol") {
-    return 5; // TypeSymbol
-  }
-  if (typeof(x) === "function") {
-    return 7; // TypeFunction
-  }
-  return 6; // TypeObject
+var $typeOf = function(x) {
+  return typeof(x);
 };
 `

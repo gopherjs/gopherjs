@@ -22,27 +22,31 @@ const (
 	TypeFunction
 )
 
+var typeToName = map[Type]string{
+	TypeUndefined: "undefined",
+	TypeNull:      "null",
+	TypeBoolean:   "boolean",
+	TypeNumber:    "number",
+	TypeString:    "string",
+	TypeSymbol:    "symbol",
+	TypeObject:    "object",
+	TypeFunction:  "function",
+}
+
+var nameToType = map[string]Type{}
+
+func init() {
+	for typ, name := range typeToName {
+		nameToType[name] = typ
+	}
+}
+
 func (t Type) String() string {
-	switch t {
-	case TypeUndefined:
-		return "undefined"
-	case TypeNull:
-		return "null"
-	case TypeBoolean:
-		return "boolean"
-	case TypeNumber:
-		return "number"
-	case TypeString:
-		return "string"
-	case TypeSymbol:
-		return "symbol"
-	case TypeObject:
-		return "object"
-	case TypeFunction:
-		return "function"
-	default:
+	name, ok := typeToName[t]
+	if !ok {
 		panic("bad type")
 	}
+	return name
 }
 
 func (t Type) isObject() bool {
@@ -110,17 +114,24 @@ func objectToValue(obj *js.Object) Value {
 }
 
 var (
-	id           *js.Object
-	instanceOf   *js.Object
-	getValueType *js.Object
+	id         *js.Object
+	instanceOf *js.Object
+	typeOf     *js.Object
 )
 
 func init() {
 	if js.Global != nil {
 		id = js.Global.Get("$id")
 		instanceOf = js.Global.Get("$instanceOf")
-		getValueType = js.Global.Get("$getValueType")
+		typeOf = js.Global.Get("$typeOf")
 	}
+}
+
+func getValueType(obj *js.Object) Type {
+	if typ, ok := nameToType[typeOf.Invoke(obj).String()]; ok {
+		return typ
+	}
+	return TypeObject
 }
 
 func ValueOf(x interface{}) Value {
@@ -299,7 +310,7 @@ func (v Value) Truthy() bool {
 }
 
 func (v Value) Type() Type {
-	return Type(getValueType.Invoke(v.internal()).Int())
+	return Type(getValueType(v.internal()))
 }
 
 func (v Value) IsNull() bool {

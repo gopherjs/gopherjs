@@ -564,4 +564,16 @@ var $unsafeMethodToFunction = function(typ, name, isPtr) {
      }
   }
 };
+
+var $id = function(x) {
+  return x;
+};
+
+var $instanceOf = function(x, y) {
+  return x instanceof y;
+};
+
+var $typeOf = function(x) {
+  return typeof(x);
+};
 `

@@ -22,27 +22,23 @@ const (
 	TypeFunction
 )
 
+// Same order as Type constants
+var typeNames = []string{
+	"undefined",
+	"null",
+	"boolean",
+	"number",
+	"string",
+	"symbol",
+	"object",
+	"function",
+}
+
 func (t Type) String() string {
-	switch t {
-	case TypeUndefined:
-		return "undefined"
-	case TypeNull:
-		return "null"
-	case TypeBoolean:
-		return "boolean"
-	case TypeNumber:
-		return "number"
-	case TypeString:
-		return "string"
-	case TypeSymbol:
-		return "symbol"
-	case TypeObject:
-		return "object"
-	case TypeFunction:
-		return "function"
-	default:
+	if int(t) < 0 || len(typeNames) <= int(t) {
 		panic("bad type")
 	}
+	return typeNames[t]
 }
 
 func (t Type) isObject() bool {
@@ -110,40 +106,30 @@ func objectToValue(obj *js.Object) Value {
 }
 
 var (
-	id           *js.Object
-	instanceOf   *js.Object
-	getValueType *js.Object
+	id         *js.Object
+	instanceOf *js.Object
+	typeOf     *js.Object
 )
 
 func init() {
 	if js.Global != nil {
-		id = js.Global.Call("Function", "x", "return x")
-		instanceOf = js.Global.Call("Function", "x", "y", "return x instanceof y")
-		getValueType = js.Global.Call("Function", "x", `
-  if (typeof(x) === "undefined") {
-    return 0; // TypeUndefined
-  }
-  if (x === null) {
-    return 1; // TypeNull
-  }
-  if (typeof(x) === "boolean") {
-    return 2; // TypeBoolean
-  }
-  if (typeof(x) === "number") {
-    return 3; // TypeNumber
-  }
-  if (typeof(x) === "string") {
-    return 4; // TypeString
-  }
-  if (typeof(x) === "symbol") {
-    return 5; // TypeSymbol
-  }
-  if (typeof(x) === "function") {
-    return 7; // TypeFunction
-  }
-  return 6; // TypeObject
-`)
+		id = js.Global.Get("$id")
+		instanceOf = js.Global.Get("$instanceOf")
+		typeOf = js.Global.Get("$typeOf")
 	}
+}
+
+func getValueType(obj *js.Object) Type {
+	if obj == nil {
+		return TypeNull
+	}
+	name := typeOf.Invoke(obj).String()
+	for type2, name2 := range typeNames {
+		if name == name2 {
+			return Type(type2)
+		}
+	}
+	return TypeObject
 }
 
 func ValueOf(x interface{}) Value {
@@ -322,7 +308,7 @@ func (v Value) Truthy() bool {
 }
 
 func (v Value) Type() Type {
-	return Type(getValueType.Invoke(v.internal()).Int())
+	return Type(getValueType(v.internal()))
 }
 
 func (v Value) IsNull() bool {

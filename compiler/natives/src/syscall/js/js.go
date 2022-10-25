@@ -22,31 +22,23 @@ const (
 	TypeFunction
 )
 
-var typeToName = map[Type]string{
-	TypeUndefined: "undefined",
-	TypeNull:      "null",
-	TypeBoolean:   "boolean",
-	TypeNumber:    "number",
-	TypeString:    "string",
-	TypeSymbol:    "symbol",
-	TypeObject:    "object",
-	TypeFunction:  "function",
-}
-
-var nameToType = map[string]Type{}
-
-func init() {
-	for typ, name := range typeToName {
-		nameToType[name] = typ
-	}
+// Same order as Type constants
+var typeNames = []string{
+	"undefined",
+	"null",
+	"boolean",
+	"number",
+	"string",
+	"symbol",
+	"object",
+	"function",
 }
 
 func (t Type) String() string {
-	name, ok := typeToName[t]
-	if !ok {
+	if len(typeNames) <= int(t) {
 		panic("bad type")
 	}
-	return name
+	return typeNames[t]
 }
 
 func (t Type) isObject() bool {
@@ -128,8 +120,14 @@ func init() {
 }
 
 func getValueType(obj *js.Object) Type {
-	if typ, ok := nameToType[typeOf.Invoke(obj).String()]; ok {
-		return typ
+	if obj == nil {
+		return TypeNull
+	}
+	name := typeOf.Invoke(obj).String()
+	for type2, name2 := range typeNames {
+		if name == name2 {
+			return Type(type2)
+		}
 	}
 	return TypeObject
 }

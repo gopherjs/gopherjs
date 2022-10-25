@@ -35,7 +35,7 @@ var typeNames = []string{
 }
 
 func (t Type) String() string {
-	if len(typeNames) <= int(t) {
+	if int(t) < 0 || len(typeNames) <= int(t) {
 		panic("bad type")
 	}
 	return typeNames[t]

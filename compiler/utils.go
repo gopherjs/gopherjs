@@ -72,6 +72,16 @@ func (fc *funcContext) Indentation(extra int) string {
 	return strings.Repeat("\t", fc.pkgCtx.indentation+extra)
 }
 
+// bodyIndent returns the number of indentations necessary for the function
+// body code. Generic functions need deeper indentation to account for the
+// surrounding factory function.
+func (fc *funcContext) bodyIndent() int {
+	if fc.sigTypes.IsGeneric() {
+		return 2
+	}
+	return 1
+}
+
 func (fc *funcContext) CatchOutput(indent int, f func()) []byte {
 	origoutput := fc.output
 	fc.output = nil
@@ -245,7 +255,7 @@ type varLevel int
 
 const (
 	// A variable defined at a function level (e.g. local variables).
-	varFuncLocal = iota
+	varFuncLocal varLevel = iota
 	// A variable that should be declared in a generic type or function factory.
 	// This is mainly for type parameters and generic-dependent types.
 	varGenericFactory
@@ -430,13 +440,18 @@ func (fc *funcContext) typeName(ty types.Type) string {
 	// declaration, which will be reused for all instances of this type. This
 	// improves performance, since runtime won't have to synthesize the same type
 	// repeatedly.
-	anonType, ok := fc.pkgCtx.anonTypeMap.At(ty).(*types.TypeName)
-	if !ok {
+	anonTypes := &fc.pkgCtx.anonTypes
+	level := varPackage
+	if typesutil.IsGeneric(ty) {
+		anonTypes = &fc.genericCtx.anonTypes
+		level = varGenericFactory
+	}
+	anonType := anonTypes.Get(ty)
+	if anonType == nil {
 		fc.initArgs(ty) // cause all dependency types to be registered
-		varName := fc.newVariable(strings.ToLower(typeKind(ty)[5:])+"Type", varPackage)
+		varName := fc.newVariable(strings.ToLower(typeKind(ty)[5:])+"Type", level)
 		anonType = types.NewTypeName(token.NoPos, fc.pkgCtx.Pkg, varName, ty) // fake types.TypeName
-		fc.pkgCtx.anonTypes = append(fc.pkgCtx.anonTypes, anonType)
-		fc.pkgCtx.anonTypeMap.Set(ty, anonType)
+		anonTypes.Register(anonType, ty)
 	}
 	fc.pkgCtx.dependencies[anonType] = true
 	return anonType.Name()

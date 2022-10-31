@@ -368,8 +368,17 @@ func isVarOrConst(o types.Object) bool {
 	return false
 }
 
-func typeVarLevel(o types.Object) varLevel {
-	if _, ok := o.Type().(*types.TypeParam); ok {
+func isTypeParameterName(o types.Object) bool {
+	_, isTypeName := o.(*types.TypeName)
+	_, isTypeParam := o.Type().(*types.TypeParam)
+	return isTypeName && isTypeParam
+}
+
+// getVarLevel returns at which level a JavaScript variable for the given object
+// should be defined. The object can represent any named Go object: variable,
+// type, function, etc.
+func getVarLevel(o types.Object) varLevel {
+	if isTypeParameterName(o) {
 		return varGenericFactory
 	}
 	if o.Parent() != nil && o.Parent().Parent() == types.Universe {
@@ -381,7 +390,7 @@ func typeVarLevel(o types.Object) varLevel {
 // objectName returns a JS identifier corresponding to the given types.Object.
 // Repeated calls for the same object will return the same name.
 func (fc *funcContext) objectName(o types.Object) string {
-	if typeVarLevel(o) == varPackage {
+	if getVarLevel(o) == varPackage {
 		fc.pkgCtx.dependencies[o] = true
 
 		if o.Pkg() != fc.pkgCtx.Pkg || (isVarOrConst(o) && o.Exported()) {
@@ -391,7 +400,7 @@ func (fc *funcContext) objectName(o types.Object) string {
 
 	name, ok := fc.pkgCtx.objectNames[o]
 	if !ok {
-		name = fc.newVariable(o.Name(), typeVarLevel(o))
+		name = fc.newVariable(o.Name(), getVarLevel(o))
 		fc.pkgCtx.objectNames[o] = name
 	}
 
@@ -402,13 +411,13 @@ func (fc *funcContext) objectName(o types.Object) string {
 }
 
 func (fc *funcContext) varPtrName(o *types.Var) string {
-	if typeVarLevel(o) == varPackage && o.Exported() {
+	if getVarLevel(o) == varPackage && o.Exported() {
 		return fc.pkgVar(o.Pkg()) + "." + o.Name() + "$ptr"
 	}
 
 	name, ok := fc.pkgCtx.varPtrNames[o]
 	if !ok {
-		name = fc.newVariable(o.Name()+"$ptr", typeVarLevel(o))
+		name = fc.newVariable(o.Name()+"$ptr", getVarLevel(o))
 		fc.pkgCtx.varPtrNames[o] = name
 	}
 	return name

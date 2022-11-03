@@ -87,12 +87,14 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
   case $kindUnsafePointer:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
+    typ.wrap = (v) => new typ(v);
     typ.keyFor = $identity;
     break;
 
   case $kindString:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
+    typ.wrap = (v) => new typ(v);
     typ.keyFor = function(x) { return "$" + x; };
     break;
 
@@ -100,6 +102,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
   case $kindFloat64:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
+    typ.wrap = (v) => new typ(v);
     typ.keyFor = function(x) { return $floatKey(x); };
     break;
 
@@ -109,6 +112,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
       this.$low = low >>> 0;
       this.$val = this;
     };
+    typ.wrap = (v) => v;
     typ.keyFor = function(x) { return x.$high + "$" + x.$low; };
     break;
 
@@ -118,6 +122,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
       this.$low = low >>> 0;
       this.$val = this;
     };
+    typ.wrap = (v) => v;
     typ.keyFor = function(x) { return x.$high + "$" + x.$low; };
     break;
 
@@ -127,6 +132,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
       this.$imag = $fround(imag);
       this.$val = this;
     };
+    typ.wrap = (v) => v;
     typ.keyFor = function(x) { return x.$real + "$" + x.$imag; };
     break;
 
@@ -136,12 +142,14 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
       this.$imag = imag;
       this.$val = this;
     };
+    typ.wrap = (v) => v;
     typ.keyFor = function(x) { return x.$real + "$" + x.$imag; };
     break;
 
   case $kindArray:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
+    typ.wrap = (v) => new typ(v);
     typ.ptr = $newType(4, $kindPtr, "*" + string, false, "", false, $arrayPtrCtor());
     typ.init = function(elem, len) {
       typ.elem = elem;
@@ -163,6 +171,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
   case $kindChan:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
+    typ.wrap = (v) => new typ(v);
     typ.keyFor = $idKey;
     typ.init = function(elem, sendOnly, recvOnly) {
       typ.elem = elem;
@@ -174,6 +183,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
   case $kindFunc:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
+    typ.wrap = (v) => new typ(v);
     typ.init = function(params, results, variadic) {
       typ.params = params;
       typ.results = results;
@@ -184,6 +194,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
 
   case $kindInterface:
     typ = { implementedBy: {}, missingMethodFor: {} };
+    typ.wrap = (v) => v;
     typ.keyFor = $ifaceKeyFor;
     typ.init = function(methods) {
       typ.methods = methods;
@@ -196,6 +207,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
   case $kindMap:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
+    typ.wrap = (v) => new typ(v);
     typ.init = function(key, elem) {
       typ.key = key;
       typ.elem = elem;
@@ -210,6 +222,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
       this.$target = target;
       this.$val = this;
     };
+    typ.wrap = (v) => v;
     typ.keyFor = $idKey;
     typ.init = function(elem) {
       typ.elem = elem;
@@ -229,6 +242,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
       this.$capacity = array.length;
       this.$val = this;
     };
+    typ.wrap = (v) => v;
     typ.init = function(elem) {
       typ.elem = elem;
       typ.comparable = false;
@@ -240,6 +254,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
   case $kindStruct:
     typ = function(v) { this.$val = v; };
     typ.wrapped = true;
+    typ.wrap = (v) => new typ(v);
     typ.ptr = $newType(4, $kindPtr, "*" + string, false, pkg, exported, constructor);
     typ.ptr.elem = typ;
     typ.ptr.prototype.$get = function() { return this; };

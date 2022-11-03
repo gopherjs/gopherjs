@@ -751,7 +751,9 @@ func (fc *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analys
 	}
 
 	value := "this.$get()"
-	if isWrapped(recvType) {
+	if typesutil.IsGeneric(recvType) {
+		value = fmt.Sprintf("%s.wrap(%s)", typeName, value)
+	} else if isWrapped(recvType) {
 		value = fmt.Sprintf("new %s(%s)", typeName, value)
 	}
 	code.Write(primaryFunction(typeName + ".prototype." + funName))

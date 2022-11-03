@@ -1295,7 +1295,9 @@ func (fc *funcContext) translateImplicitConversion(expr ast.Expr, desiredType ty
 			// wrap JS object into js.Object struct when converting to interface
 			return fc.formatExpr("new $jsObjectPtr(%e)", expr)
 		}
-		if isWrapped(exprType) {
+		if typesutil.IsGeneric(exprType) {
+			return fc.formatExpr("%s.wrap(%e)", fc.typeName(exprType), expr)
+		} else if isWrapped(exprType) {
 			return fc.formatExpr("new %s(%e)", fc.typeName(exprType), expr)
 		}
 		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {

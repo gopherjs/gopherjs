@@ -781,6 +781,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	}
 	if c.sigTypes.IsGeneric() {
 		c.genericCtx = &genericCtx{}
+		funcRef = c.newVariable(funcRef, varGenericFactory)
 	}
 	prevEV := c.pkgCtx.escapingVars
 
@@ -935,8 +936,10 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	code := &strings.Builder{}
 	fmt.Fprintf(code, "function%s(%s){\n", functionName, strings.Join(typeParams, ", "))
 	fmt.Fprintf(code, "%s", typesInit.String())
-	fmt.Fprintf(code, "%sreturn function(%s) {\n", c.Indentation(1), strings.Join(params, ", "))
+	fmt.Fprintf(code, "%sconst %s = function(%s) {\n", c.Indentation(1), funcRef, strings.Join(params, ", "))
 	fmt.Fprintf(code, "%s", bodyOutput)
-	fmt.Fprintf(code, "%s};\n%s}", c.Indentation(1), c.Indentation(0))
+	fmt.Fprintf(code, "%s};\n", c.Indentation(1))
+	fmt.Fprintf(code, "%sreturn %s;\n", c.Indentation(1), funcRef)
+	fmt.Fprintf(code, "%s}", c.Indentation(0))
 	return params, code.String()
 }

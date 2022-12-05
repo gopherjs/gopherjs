@@ -323,7 +323,7 @@ func (fc *funcContext) newVariable(name string, level varLevel) string {
 	if level == varGenericFactory {
 		for c := fc; c != nil; c = c.parent {
 			c.allVars[name] = n + 1
-			if c.sigTypes.IsGeneric() {
+			if c.parent != nil && c.parent.genericCtx != fc.genericCtx {
 				break
 			}
 		}

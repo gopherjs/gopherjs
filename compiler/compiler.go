@@ -30,22 +30,6 @@ func init() {
 	}
 }
 
-type ErrorList []error
-
-func (err ErrorList) Error() string {
-	if len(err) == 0 {
-		return "<no errors>"
-	}
-	return fmt.Sprintf("%s (and %d more errors)", err[0].Error(), len(err[1:]))
-}
-
-func (err ErrorList) Normalize() error {
-	if len(err) == 0 {
-		return nil
-	}
-	return err
-}
-
 // Archive contains intermediate build outputs of a single package.
 //
 // This is a logical equivalent of an object file in traditional compilers.

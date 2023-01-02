@@ -15,7 +15,6 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
-	"github.com/neelance/astrewrite"
 	"golang.org/x/tools/go/gcexportdata"
 )
 
@@ -134,34 +133,20 @@ type flowData struct {
 	endCase   int
 }
 
+// ImportContext provides access to information about imported packages.
 type ImportContext struct {
+	// Mapping for an absolute import path to the package type information.
 	Packages map[string]*types.Package
-	Import   func(string) (*Archive, error)
+	// Import returns a previously compiled Archive for a dependency package. If
+	// the Import() call was successful, the corresponding entry must be added to
+	// the Packages map.
+	Import func(importPath string) (*Archive, error)
 }
 
-// packageImporter implements go/types.Importer interface.
-type packageImporter struct {
-	importContext *ImportContext
-	importError   *error // A pointer to importError in Compile.
-}
-
-func (pi packageImporter) Import(path string) (*types.Package, error) {
-	if path == "unsafe" {
-		return types.Unsafe, nil
-	}
-
-	a, err := pi.importContext.Import(path)
-	if err != nil {
-		if *pi.importError == nil {
-			// If import failed, show first error of import only (https://github.com/gopherjs/gopherjs/issues/119).
-			*pi.importError = err
-		}
-		return nil, err
-	}
-
-	return pi.importContext.Packages[a.ImportPath], nil
-}
-
+// Compile the provided Go sources as a single package.
+//
+// Import path must be the absolute import path for a package. Provided sources
+// are always sorted by name to ensure reproducible JavaScript output.
 func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (_ *Archive, err error) {
 	defer func() {
 		e := recover()
@@ -177,85 +162,25 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", importPath, e))
 	}()
 
-	// Files must be in the same order to get reproducible JS
-	sort.Slice(files, func(i, j int) bool {
-		return fileSet.File(files[i].Pos()).Name() > fileSet.File(files[j].Pos()).Name()
-	})
+	srcs := sources{
+		ImportPath: importPath,
+		Files:      files,
+		FileSet:    fileSet,
+	}.Sort()
 
-	typesInfo := &types.Info{
-		Types:      make(map[ast.Expr]types.TypeAndValue),
-		Defs:       make(map[*ast.Ident]types.Object),
-		Uses:       make(map[*ast.Ident]types.Object),
-		Implicits:  make(map[ast.Node]types.Object),
-		Selections: make(map[*ast.SelectorExpr]*types.Selection),
-		Scopes:     make(map[ast.Node]*types.Scope),
-		Instances:  make(map[*ast.Ident]types.Instance),
-	}
-
-	var errList ErrorList
-
-	// Extract all go:linkname compiler directives from the package source.
-	goLinknames := []GoLinkname{}
-	for _, file := range files {
-		found, err := parseGoLinknames(fileSet, importPath, file)
-		if err != nil {
-			if errs, ok := err.(ErrorList); ok {
-				errList = append(errList, errs...)
-			} else {
-				errList = append(errList, err)
-			}
-		}
-		goLinknames = append(goLinknames, found...)
-	}
-
-	var importError error
-	var previousErr error
-	config := &types.Config{
-		Importer: packageImporter{
-			importContext: importContext,
-			importError:   &importError,
-		},
-		Sizes: sizes32,
-		Error: func(err error) {
-			if previousErr != nil && previousErr.Error() == err.Error() {
-				return
-			}
-			errList = append(errList, err)
-			previousErr = err
-		},
-	}
-	typesPkg, err := config.Check(importPath, fileSet, files, typesInfo)
-	if importError != nil {
-		return nil, importError
-	}
-	if errList != nil {
-		if len(errList) > 10 {
-			pos := token.NoPos
-			if last, ok := errList[9].(types.Error); ok {
-				pos = last.Pos
-			}
-			errList = append(errList[:10], types.Error{Fset: fileSet, Pos: pos, Msg: "too many errors"})
-		}
-		return nil, errList
-	}
+	typesInfo, typesPkg, err := srcs.TypeCheck(importContext)
 	if err != nil {
 		return nil, err
 	}
-	importContext.Packages[importPath] = typesPkg
+	importContext.Packages[srcs.ImportPath] = typesPkg
 
-	exportData := new(bytes.Buffer)
-	if err := gcexportdata.Write(exportData, nil, typesPkg); err != nil {
-		return nil, fmt.Errorf("failed to write export data: %v", err)
-	}
-	encodedFileSet := new(bytes.Buffer)
-	if err := fileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
+	// Extract all go:linkname compiler directives from the package source.
+	goLinknames, err := srcs.ParseGoLinknames()
+	if err != nil {
 		return nil, err
 	}
 
-	simplifiedFiles := make([]*ast.File, len(files))
-	for i, file := range files {
-		simplifiedFiles[i] = astrewrite.Simplify(file, typesInfo, false)
-	}
+	srcs = srcs.Simplified(typesInfo)
 
 	isBlocking := func(f *types.Func) bool {
 		archive, err := importContext.Import(f.Pkg().Path())
@@ -270,7 +195,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		panic(fullName)
 	}
-	pkgInfo := analysis.AnalyzePkg(simplifiedFiles, fileSet, typesInfo, typesPkg, isBlocking)
+	pkgInfo := analysis.AnalyzePkg(srcs.Files, srcs.FileSet, typesInfo, typesPkg, isBlocking)
 	funcCtx := &funcContext{
 		FuncInfo: pkgInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{
@@ -284,7 +209,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			indentation:  1,
 			dependencies: make(map[types.Object]bool),
 			minify:       minify,
-			fileSet:      fileSet,
+			fileSet:      srcs.FileSet,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[*types.Label]*flowData{nil: {}},
@@ -322,7 +247,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	var functions []*ast.FuncDecl
 	var vars []*types.Var
-	for _, file := range simplifiedFiles {
+	for _, file := range srcs.Files {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
@@ -630,8 +555,17 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		return nil, funcCtx.pkgCtx.errList
 	}
 
+	exportData := new(bytes.Buffer)
+	if err := gcexportdata.Write(exportData, nil, typesPkg); err != nil {
+		return nil, fmt.Errorf("failed to write export data: %w", err)
+	}
+	encodedFileSet := new(bytes.Buffer)
+	if err := srcs.FileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
+		return nil, err
+	}
+
 	return &Archive{
-		ImportPath:   importPath,
+		ImportPath:   srcs.ImportPath,
 		Name:         typesPkg.Name(),
 		Imports:      importedPaths,
 		ExportData:   exportData.Bytes(),

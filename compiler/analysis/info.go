@@ -92,8 +92,21 @@ func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
 	return funcInfo
 }
 
+// IsBlocking returns true if the function may contain blocking calls or operations.
 func (info *Info) IsBlocking(fun *types.Func) bool {
 	return len(info.FuncDeclInfos[fun].Blocking) > 0
+}
+
+// VarsWithInitializers returns a set of package-level variables that have
+// explicit initializers.
+func (info *Info) VarsWithInitializers() map[*types.Var]bool {
+	result := map[*types.Var]bool{}
+	for _, init := range info.InitOrder {
+		for _, o := range init.Lhs {
+			result[o] = true
+		}
+	}
+	return result
 }
 
 func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(*types.Func) bool) *Info {

@@ -22,6 +22,11 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
+// IsRoot returns true for the package-level context.
+func (fc *funcContext) IsRoot() bool {
+	return fc.parent == nil
+}
+
 func (fc *funcContext) Write(b []byte) (int, error) {
 	fc.writePos()
 	fc.output = append(fc.output, b...)
@@ -96,6 +101,43 @@ func (fc *funcContext) CatchOutput(indent int, f func()) []byte {
 
 func (fc *funcContext) Delayed(f func()) {
 	fc.delayedOutput = fc.CatchOutput(0, f)
+}
+
+// CollectDCEDeps captures a list of Go objects (types, functions, etc.)
+// the code translated inside f() depends on. The returned list of identifiers
+// can be used in dead-code elimination.
+//
+// Note that calling CollectDCEDeps() inside another CollectDCEDeps() call is
+// not allowed.
+func (fc *funcContext) CollectDCEDeps(f func()) []string {
+	if fc.pkgCtx.dependencies != nil {
+		panic(bailout(fmt.Errorf("called funcContext.CollectDependencies() inside another funcContext.CollectDependencies() call")))
+	}
+
+	fc.pkgCtx.dependencies = make(map[types.Object]bool)
+	defer func() { fc.pkgCtx.dependencies = nil }()
+
+	f()
+
+	var deps []string
+	for o := range fc.pkgCtx.dependencies {
+		qualifiedName := o.Pkg().Path() + "." + o.Name()
+		if typesutil.IsMethod(o) {
+			qualifiedName += "~"
+		}
+		deps = append(deps, qualifiedName)
+	}
+	sort.Strings(deps)
+	return deps
+}
+
+// DeclareDCEDep records that the code that is currently being transpiled
+// depends on a given Go object.
+func (fc *funcContext) DeclareDCEDep(o types.Object) {
+	if fc.pkgCtx.dependencies == nil {
+		return // Dependencies are not being collected.
+	}
+	fc.pkgCtx.dependencies[o] = true
 }
 
 // expandTupleArgs converts a function call which argument is a tuple returned
@@ -334,12 +376,20 @@ func (fc *funcContext) newVariable(name string, level varLevel) string {
 	return varName
 }
 
+// newIdent declares a new Go variable with the given name and type and returns
+// an *ast.Ident referring to that object.
 func (fc *funcContext) newIdent(name string, t types.Type) *ast.Ident {
-	ident := ast.NewIdent(name)
-	fc.setType(ident, t)
 	obj := types.NewVar(0, fc.pkgCtx.Pkg, name, t)
-	fc.pkgCtx.Uses[ident] = obj
 	fc.pkgCtx.objectNames[obj] = name
+	return fc.newIdentFor(obj)
+}
+
+// newIdentFor creates a new *ast.Ident referring to the given Go object.
+func (fc *funcContext) newIdentFor(obj types.Object) *ast.Ident {
+	ident := ast.NewIdent(obj.Name())
+	ident.NamePos = obj.Pos()
+	fc.pkgCtx.Uses[ident] = obj
+	fc.setType(ident, obj.Type())
 	return ident
 }
 
@@ -391,7 +441,7 @@ func getVarLevel(o types.Object) varLevel {
 // Repeated calls for the same object will return the same name.
 func (fc *funcContext) objectName(o types.Object) string {
 	if getVarLevel(o) == varPackage {
-		fc.pkgCtx.dependencies[o] = true
+		fc.DeclareDCEDep(o)
 
 		if o.Pkg() != fc.pkgCtx.Pkg || (isVarOrConst(o) && o.Exported()) {
 			return fc.pkgVar(o.Pkg()) + "." + o.Name()
@@ -462,8 +512,27 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		anonType = types.NewTypeName(token.NoPos, fc.pkgCtx.Pkg, varName, ty) // fake types.TypeName
 		anonTypes.Register(anonType, ty)
 	}
-	fc.pkgCtx.dependencies[anonType] = true
+	fc.DeclareDCEDep(anonType)
 	return anonType.Name()
+}
+
+// importedPkgVar returns a package-level variable name for accessing an imported
+// package.
+//
+// Allocates a new variable if this is the first call, or returns the existing
+// one. The variable is based on the package name (implicitly derived from the
+// `package` declaration in the imported package, or explicitly assigned by the
+// import decl in the importing source file).
+//
+// Returns the allocated variable name.
+func (fc *funcContext) importedPkgVar(pkg *types.Package) string {
+	if pkgVar, ok := fc.pkgCtx.pkgVars[pkg.Path()]; ok {
+		return pkgVar // Already registered.
+	}
+
+	pkgVar := fc.newVariable(pkg.Name(), varPackage)
+	fc.pkgCtx.pkgVars[pkg.Path()] = pkgVar
+	return pkgVar
 }
 
 func (fc *funcContext) externalize(s string, t types.Type) string {

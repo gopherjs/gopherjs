@@ -155,7 +155,9 @@ For more details see [Jason Stone's blog post](http://legacytotheedge.blogspot.d
 
 #### General
 
-GopherJS emulates a 32-bit environment. This means that `int`, `uint` and `uintptr` have a precision of 32 bits. However, the explicit 64-bit integer types `int64` and `uint64` are supported. The `GOARCH` value of GopherJS is "js". You may use it as a build constraint: `// +build js,-wasm`.
+GopherJS emulates a 32-bit environment. This means that `int`, `uint` and `uintptr` have a precision of 32 bits. However, the explicit 64-bit integer types `int64` and `uint64` are supported.
+
+The `GOOS` value of this environment is `js`, and the `GOARCH` value is `ecmascript`. You may use these values in build constraints when [writing platform-specific code](doc/compatibility.md#how-to-write-portable-code). (GopherJS 1.17 and older used `js` as the `GOARCH` value.)
 
 #### Application Lifecycle
 

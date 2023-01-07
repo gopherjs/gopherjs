@@ -110,3 +110,9 @@ func IsGeneric(t types.Type) bool {
 		panic(fmt.Errorf("%v has unexpected type %T", t, t))
 	}
 }
+
+// IsMethod returns true if the passed object is a method.
+func IsMethod(o types.Object) bool {
+	f, ok := o.(*types.Func)
+	return ok && f.Type().(*types.Signature).Recv() != nil
+}

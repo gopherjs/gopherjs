@@ -116,3 +116,13 @@ func IsMethod(o types.Object) bool {
 	f, ok := o.(*types.Func)
 	return ok && f.Type().(*types.Signature).Recv() != nil
 }
+
+// TypeParams returns a list of type parameters for a parameterized type, or
+// nil otherwise.
+func TypeParams(t types.Type) *types.TypeParamList {
+	named, ok := t.(*types.Named)
+	if !ok {
+		return nil
+	}
+	return named.TypeParams()
+}

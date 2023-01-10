@@ -80,7 +80,8 @@ if (($global.process !== undefined) && $global.require) {
     // Failed to require util module, keep using console.log().
   }
 }
-var $println = console.log
+var $println = console.log;
+var $Map = $global.Map;
 
 var $initAllLinknames = function() {
   var names = $keys($packages);

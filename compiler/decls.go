@@ -399,16 +399,21 @@ func (fc *funcContext) newNamedTypeDecl(o *types.TypeName) *Decl {
 		DceObjectFilter: o.Name(),
 	}
 
+	extraIndent := 0               // Additional indentation for the type initialization code.
+	instanceVar := typeName        // JS variable the type instance is assigned to.
+	typeString := fc.typeString(o) // Type string for reflect.
+
+	typeParams := typesutil.TypeParams(o.Type())
+	if typeParams != nil {
+		fc.genericCtx = &genericCtx{}
+		defer func() { fc.genericCtx = nil }()
+		extraIndent++                                 // For generic factory function.
+		instanceVar = fc.newLocalVariable("instance") // Avoid conflict with factory function name.
+	}
+
 	d.DceDeps = fc.CollectDCEDeps(func() {
 		// Code that declares a JS type (i.e. prototype) for each Go type.
-		d.DeclCode = fc.CatchOutput(0, func() {
-			lhs := typeName
-			if getVarLevel(o) == varPackage {
-				// Package-level types are also accessible as properties on the package
-				// object.
-				lhs += " = $pkg." + encodeIdent(o.Name())
-			}
-
+		d.DeclCode = fc.CatchOutput(extraIndent, func() {
 			size := int64(0)
 			constructor := "null"
 
@@ -425,12 +430,12 @@ func (fc *funcContext) newNamedTypeDecl(o *types.TypeName) *Decl {
 					constructor = "$arrayPtrCtor()"
 				}
 			}
-			fc.Printf(`%s = $newType(%d, %s, "%s.%s", %t, "%s", %t, %s);`,
-				lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name() != "", o.Pkg().Path(), o.Exported(), constructor)
+			fc.Printf(`%s = $newType(%d, %s, %s, %t, "%s", %t, %s);`,
+				instanceVar, size, typeKind(o.Type()), typeString, o.Name() != "", o.Pkg().Path(), o.Exported(), constructor)
 		})
 
 		// Reflection metadata about methods the type has.
-		d.MethodListCode = fc.CatchOutput(0, func() {
+		d.MethodListCode = fc.CatchOutput(extraIndent, func() {
 			named := o.Type().(*types.Named)
 			if _, ok := named.Underlying().(*types.Interface); ok {
 				return
@@ -446,10 +451,10 @@ func (fc *funcContext) newNamedTypeDecl(o *types.TypeName) *Decl {
 				}
 			}
 			if len(methods) > 0 {
-				fc.Printf("%s.methods = [%s];", fc.typeName(named), strings.Join(methods, ", "))
+				fc.Printf("%s.methods = [%s];", instanceVar, strings.Join(methods, ", "))
 			}
 			if len(ptrMethods) > 0 {
-				fc.Printf("%s.methods = [%s];", fc.typeName(types.NewPointer(named)), strings.Join(ptrMethods, ", "))
+				fc.Printf("$ptrType(%s).methods = [%s];", instanceVar, strings.Join(ptrMethods, ", "))
 			}
 		})
 
@@ -457,12 +462,81 @@ func (fc *funcContext) newNamedTypeDecl(o *types.TypeName) *Decl {
 		// initialize themselves.
 		switch t := o.Type().Underlying().(type) {
 		case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
-			d.TypeInitCode = fc.CatchOutput(0, func() {
-				fc.Printf("%s.init(%s);", fc.objectName(o), fc.initArgs(t))
+			d.TypeInitCode = fc.CatchOutput(extraIndent, func() {
+				fc.Printf("%s.init(%s);", instanceVar, fc.initArgs(t))
 			})
 		}
 	})
+
+	if typeParams != nil {
+		// Generic types are instantiated at runtime by calling an intermediate
+		// generic factory function. This function combines together all code
+		// from a regular type Decl (e.g. DeclCode, TypeInitCode, MethodListCode)
+		// and is defined at DeclCode time.
+
+		typeParamNames := []string{}
+		for i := 0; i < typeParams.Len(); i++ {
+			typeParamNames = append(typeParamNames, fc.typeName(typeParams.At(i)))
+		}
+
+		d.DeclCode = fc.CatchOutput(0, func() {
+			// Begin generic factory function.
+			fc.Printf("%s = function(%s) {", typeName, strings.Join(typeParamNames, ", "))
+
+			fc.Indented(func() {
+				// If this instance has been instantiated already, reuse the object.
+				fc.Printf("var %s = $typeInstances.get(%s);", instanceVar, typeString)
+				fc.Printf("if (%[1]s) { return %[1]s; }", instanceVar)
+
+				// Construct anonymous types which depend on type parameters.
+				for _, t := range fc.genericCtx.anonTypes.Ordered() {
+					fc.Printf("var %s = $%sType(%s);", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type()))
+				}
+
+				// Construct type instance.
+				fmt.Fprint(fc, string(d.DeclCode))
+				fc.Printf("$typeInstances.set(%s, %s)", typeString, instanceVar)
+				fmt.Fprint(fc, string(d.TypeInitCode))
+				fmt.Fprint(fc, string(d.MethodListCode))
+
+				fc.Printf("return %s;", instanceVar)
+			})
+
+			// End generic factory function.
+			fc.Printf("}")
+		})
+
+		// Clean out code that has been absorbed by the generic factory function.
+		d.TypeInitCode = nil
+		d.MethodListCode = nil
+	}
+
+	if getVarLevel(o) == varPackage {
+		// Package-level types are also accessible as properties on the package
+		// object.
+		exported := fc.CatchOutput(0, func() {
+			fc.Printf("$pkg.%s = %s;", encodeIdent(o.Name()), typeName)
+		})
+		d.DeclCode = append(d.DeclCode, []byte(exported)...)
+	}
 	return d
+}
+
+// typeString returns a string with a JavaScript string expression that
+// constructs the type string for the provided object. For a generic type this
+// will be a template literal that substitutes type parameters at runtime.
+func (fc *funcContext) typeString(o types.Object) string {
+	typeParams := typesutil.TypeParams(o.Type())
+	if typeParams == nil {
+		return fmt.Sprintf(`"%s.%s"`, o.Pkg().Name(), o.Name())
+	}
+
+	args := []string{}
+	for i := 0; i < typeParams.Len(); i++ {
+		args = append(args, fmt.Sprintf("${%s.string}", fc.typeName(typeParams.At(i))))
+	}
+
+	return fmt.Sprintf("`%s.%s[%s]`", o.Pkg().Name(), o.Name(), strings.Join(args, ","))
 }
 
 // structConstructor returns JS constructor function for a struct type.
@@ -475,21 +549,21 @@ func (fc *funcContext) structConstructor(t *types.Struct) string {
 	}
 
 	fmt.Fprintf(constructor, "function(%s) {\n", strings.Join(ctrArgs, ", "))
-	fmt.Fprintf(constructor, "\t\tthis.$val = this;\n")
+	fmt.Fprintf(constructor, "%sthis.$val = this;\n", fc.Indentation(1))
 
 	// If no arguments were passed, zero-initialize all fields.
-	fmt.Fprintf(constructor, "\t\tif (arguments.length === 0) {\n")
+	fmt.Fprintf(constructor, "%sif (arguments.length === 0) {\n", fc.Indentation(1))
 	for i := 0; i < t.NumFields(); i++ {
-		fmt.Fprintf(constructor, "\t\t\tthis.%s = %s;\n", fieldName(t, i), fc.translateExpr(fc.zeroValue(t.Field(i).Type())).String())
+		fmt.Fprintf(constructor, "%sthis.%s = %s;\n", fc.Indentation(2), fieldName(t, i), fc.translateExpr(fc.zeroValue(t.Field(i).Type())).String())
 	}
-	fmt.Fprintf(constructor, "\t\t\treturn;\n")
-	fmt.Fprintf(constructor, "\t\t}\n")
+	fmt.Fprintf(constructor, "%sreturn;\n", fc.Indentation(2))
+	fmt.Fprintf(constructor, "%s}\n", fc.Indentation(1))
 
 	// Otherwise initialize fields with the provided values.
 	for i := 0; i < t.NumFields(); i++ {
-		fmt.Fprintf(constructor, "\t\tthis.%[1]s = %[1]s_;\n", fieldName(t, i))
+		fmt.Fprintf(constructor, "%sthis.%[2]s = %[2]s_;\n", fc.Indentation(1), fieldName(t, i))
 	}
-	fmt.Fprintf(constructor, "\t}")
+	fmt.Fprintf(constructor, "%s}", fc.Indentation(0))
 	return constructor.String()
 }
 

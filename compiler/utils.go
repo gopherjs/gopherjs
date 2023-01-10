@@ -486,7 +486,15 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		if t.Obj().Name() == "error" {
 			return "$error"
 		}
-		return fc.objectName(t.Obj())
+		if t.TypeArgs() == nil {
+			return fc.objectName(t.Obj())
+		}
+		// Generic types require generic factory call.
+		args := []string{}
+		for i := 0; i < t.TypeArgs().Len(); i++ {
+			args = append(args, fc.typeName(t.TypeArgs().At(i)))
+		}
+		return fmt.Sprintf("(%s(%s))", fc.objectName(t.Obj()), strings.Join(args, ","))
 	case *types.TypeParam:
 		return fc.objectName(t.Obj())
 	case *types.Interface:

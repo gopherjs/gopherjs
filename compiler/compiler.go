@@ -239,7 +239,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify)); err != nil {
 		return err
 	}
-	vars := []string{"$pkg = {}", "$init"}
+	vars := []string{"$pkg = {}", "$typeInstances = new $Map()", "$init"}
 	var filteredDecls []*Decl
 	for _, d := range pkg.Declarations {
 		if _, ok := dceSelection[d]; ok {

@@ -393,6 +393,17 @@ func (fc *funcContext) newIdentFor(obj types.Object) *ast.Ident {
 	return ident
 }
 
+// typeParamVars returns a list of JS variable names representing type given
+// parameters.
+func (fc *funcContext) typeParamVars(params *types.TypeParamList) []string {
+	vars := []string{}
+	for i := 0; i < params.Len(); i++ {
+		vars = append(vars, fc.typeName(params.At(i)))
+	}
+
+	return vars
+}
+
 func (fc *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
 	fc.pkgCtx.Types[e] = types.TypeAndValue{Type: t}
 	return e

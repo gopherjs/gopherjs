@@ -43,6 +43,13 @@ func IsTypeExpr(expr ast.Expr, info *types.Info) bool {
 	case *ast.SelectorExpr:
 		_, ok := info.Uses[e.Sel].(*types.TypeName)
 		return ok
+	case *ast.IndexExpr:
+		ident, ok := e.X.(*ast.Ident)
+		if !ok {
+			return false
+		}
+		_, ok = info.Uses[ident].(*types.TypeName)
+		return ok
 	case *ast.ParenExpr:
 		return IsTypeExpr(e.X, info)
 	default:
@@ -66,8 +73,13 @@ func FuncKey(d *ast.FuncDecl) string {
 		return d.Name.Name
 	}
 	recv := d.Recv.List[0].Type
-	if star, ok := recv.(*ast.StarExpr); ok {
-		recv = star.X
+	switch r := recv.(type) {
+	case *ast.StarExpr:
+		recv = r.X
+	case *ast.IndexExpr:
+		recv = r.X
+	case *ast.IndexListExpr:
+		recv = r.X
 	}
 	return recv.(*ast.Ident).Name + "." + d.Name.Name
 }

@@ -474,10 +474,7 @@ func (fc *funcContext) newNamedTypeDecl(o *types.TypeName) *Decl {
 		// from a regular type Decl (e.g. DeclCode, TypeInitCode, MethodListCode)
 		// and is defined at DeclCode time.
 
-		typeParamNames := []string{}
-		for i := 0; i < typeParams.Len(); i++ {
-			typeParamNames = append(typeParamNames, fc.typeName(typeParams.At(i)))
-		}
+		typeParamNames := fc.typeParamVars(typeParams)
 
 		d.DeclCode = fc.CatchOutput(0, func() {
 			// Begin generic factory function.
@@ -495,7 +492,9 @@ func (fc *funcContext) newNamedTypeDecl(o *types.TypeName) *Decl {
 
 				// Construct type instance.
 				fmt.Fprint(fc, string(d.DeclCode))
-				fc.Printf("$typeInstances.set(%s, %s)", typeString, instanceVar)
+				fc.Printf("$typeInstances.set(%s, %s);", typeString, instanceVar)
+				fc.Printf("$instantiateMethods(%s, %s, %s)", instanceVar, fmt.Sprintf("%s.methods", typeName), strings.Join(typeParamNames, ", "))
+				fc.Printf("$instantiateMethods(%s, %s, %s)", fmt.Sprintf("$ptrType(%s)", instanceVar), fmt.Sprintf("%s.ptrMethods", typeName), strings.Join(typeParamNames, ", "))
 				fmt.Fprint(fc, string(d.TypeInitCode))
 				fmt.Fprint(fc, string(d.MethodListCode))
 
@@ -504,6 +503,7 @@ func (fc *funcContext) newNamedTypeDecl(o *types.TypeName) *Decl {
 
 			// End generic factory function.
 			fc.Printf("}")
+			fc.Printf("%[1]s.methods = {}; %[1]s.ptrMethods = {};", typeName)
 		})
 
 		// Clean out code that has been absorbed by the generic factory function.

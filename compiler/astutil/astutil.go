@@ -72,14 +72,16 @@ func FuncKey(d *ast.FuncDecl) string {
 	if d.Recv == nil || len(d.Recv.List) == 0 {
 		return d.Name.Name
 	}
+	// Each if-statement progressively unwraps receiver type expression.
 	recv := d.Recv.List[0].Type
-	switch r := recv.(type) {
-	case *ast.StarExpr:
-		recv = r.X
-	case *ast.IndexExpr:
-		recv = r.X
-	case *ast.IndexListExpr:
-		recv = r.X
+	if star, ok := recv.(*ast.StarExpr); ok {
+		recv = star.X
+	}
+	if index, ok := recv.(*ast.IndexExpr); ok {
+		recv = index.X
+	}
+	if index, ok := recv.(*ast.IndexListExpr); ok {
+		recv = index.X
 	}
 	return recv.(*ast.Ident).Name + "." + d.Name.Name
 }

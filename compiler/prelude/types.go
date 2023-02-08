@@ -480,6 +480,12 @@ var $methodSet = function(typ) {
   return typ.methodSetCache;
 };
 
+var $instantiateMethods = function(typeInstance, methodFactories, ...typeArgs) {
+  for (let [method, factory] of Object.entries(methodFactories)) {
+    typeInstance.prototype[method] = factory(...typeArgs);
+  }
+};
+
 var $Bool          = $newType( 1, $kindBool,          "bool",           true, "", false, null);
 var $Int           = $newType( 4, $kindInt,           "int",            true, "", false, null);
 var $Int8          = $newType( 1, $kindInt8,          "int8",           true, "", false, null);

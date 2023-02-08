@@ -365,14 +365,16 @@ func (fc *funcContext) translateTopLevelFunction(fun *ast.FuncDecl) []byte {
 	}
 
 	var joinedParams string
-	primaryFunction := func(funcRef string) []byte {
+	// primaryFunction generates a JS function equivalent of the current Go function
+	// and assigns it to the JS variable defined by lvalue.
+	primaryFunction := func(lvalue string) []byte {
 		if fun.Body == nil {
-			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t};\n", funcRef, o.FullName()))
+			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t};\n", lvalue, o.FullName()))
 		}
 
-		params, fun := translateFunction(fun.Type, recv, fun.Body, fc, sig, info, funcRef)
+		params, fun := translateFunction(fun.Type, recv, fun.Body, fc, sig, info, lvalue)
 		joinedParams = strings.Join(params, ", ")
-		return []byte(fmt.Sprintf("\t%s = %s;\n", funcRef, fun))
+		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fun))
 	}
 
 	code := bytes.NewBuffer(nil)
@@ -398,29 +400,55 @@ func (fc *funcContext) translateTopLevelFunction(fun *ast.FuncDecl) []byte {
 		funName += "$"
 	}
 
+	// Objects the method should be assigned to.
+	prototypeVar := fmt.Sprintf("%s.prototype.%s", typeName, funName)
+	ptrPrototypeVar := fmt.Sprintf("$ptrType(%s).prototype.%s", typeName, funName)
+	isGeneric := signatureTypes{Sig: sig}.IsGeneric()
+	if isGeneric {
+		// Generic method factories are assigned to the generic type factory
+		// properties, to be invoked at type construction time rather than method
+		// call time.
+		prototypeVar = fmt.Sprintf("%s.methods.%s", typeName, funName)
+		ptrPrototypeVar = fmt.Sprintf("%s.ptrMethods.%s", typeName, funName)
+	}
+
+	// proxyFunction generates a JS function that forwards the call to the actual
+	// method implementation for the alternate receiver (e.g. pointer vs
+	// non-pointer).
+	proxyFunction := func(lvalue, receiver string) []byte {
+		fun := fmt.Sprintf("function(%s) { return %s.%s(%s); }", joinedParams, receiver, funName, joinedParams)
+		if isGeneric {
+			// For a generic function, we wrap the proxy function in a trivial generic
+			// factory function for consistency. It is the same for any possible type
+			// arguments, so we simply ignore them.
+			fun = fmt.Sprintf("function() { return %s; }", fun)
+		}
+		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fun))
+	}
+
 	if _, isStruct := namedRecvType.Underlying().(*types.Struct); isStruct {
-		code.Write(primaryFunction(typeName + ".ptr.prototype." + funName))
-		fmt.Fprintf(code, "\t%s.prototype.%s = function(%s) { return this.$val.%s(%s); };\n", typeName, funName, joinedParams, funName, joinedParams)
+		code.Write(primaryFunction(ptrPrototypeVar))
+		code.Write(proxyFunction(prototypeVar, "this.$val"))
 		return code.Bytes()
 	}
 
 	if isPointer {
 		if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
-			code.Write(primaryFunction(typeName + ".prototype." + funName))
-			fmt.Fprintf(code, "\t$ptrType(%s).prototype.%s = function(%s) { return (new %s(this.$get())).%s(%s); };\n", typeName, funName, joinedParams, typeName, funName, joinedParams)
+			code.Write(primaryFunction(prototypeVar))
+			code.Write(proxyFunction(ptrPrototypeVar, fmt.Sprintf("(new %s(this.$get()))", typeName)))
 			return code.Bytes()
 		}
-		return primaryFunction(fmt.Sprintf("$ptrType(%s).prototype.%s", typeName, funName))
+		return primaryFunction(ptrPrototypeVar)
 	}
 
-	value := "this.$get()"
+	recvExpr := "this.$get()"
 	if typesutil.IsGeneric(recvType) {
-		value = fmt.Sprintf("%s.wrap(%s)", typeName, value)
+		recvExpr = fmt.Sprintf("%s.wrap(%s)", typeName, recvExpr)
 	} else if isWrapped(recvType) {
-		value = fmt.Sprintf("new %s(%s)", typeName, value)
+		recvExpr = fmt.Sprintf("new %s(%s)", typeName, recvExpr)
 	}
-	code.Write(primaryFunction(typeName + ".prototype." + funName))
-	fmt.Fprintf(code, "\t$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };\n", typeName, funName, joinedParams, value, funName, joinedParams)
+	code.Write(primaryFunction(prototypeVar))
+	code.Write(proxyFunction(ptrPrototypeVar, recvExpr))
 	return code.Bytes()
 }
 
@@ -444,10 +472,23 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	for k, v := range outerContext.allVars {
 		c.allVars[k] = v
 	}
+
+	functionName := "" // Function object name, i.e. identifier after the "function" keyword.
+	if funcRef == "" {
+		// Assign a name for the anonymous function.
+		funcRef = "$b"
+		functionName = " $b"
+	}
+
+	// For regular functions instance is directly in the function variable name.
+	instanceVar := funcRef
 	if c.sigTypes.IsGeneric() {
 		c.genericCtx = &genericCtx{}
-		funcRef = c.newVariable(funcRef, varGenericFactory)
+		// For generic function, funcRef refers to the generic factory function,
+		// allocate a separate variable for a function instance.
+		instanceVar = c.newVariable("instance", varGenericFactory)
 	}
+
 	prevEV := c.pkgCtx.escapingVars
 
 	var params []string
@@ -498,7 +539,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 
 	sort.Strings(c.localVars)
 
-	var prefix, suffix, functionName string
+	var prefix, suffix string
 
 	if len(c.Flattened) != 0 {
 		c.localVars = append(c.localVars, "$s")
@@ -516,11 +557,6 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	localVarDefs := "" // Function-local var declaration at the top.
 
 	if len(c.Blocking) != 0 {
-		if funcRef == "" {
-			funcRef = "$b"
-			functionName = " $b"
-		}
-
 		localVars := append([]string{}, c.localVars...)
 		// There are several special variables involved in handling blocking functions:
 		// $r is sometimes used as a temporary variable to store blocking call result.
@@ -530,7 +566,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		// If a blocking function is being resumed, initialize local variables from the saved context.
 		localVarDefs = fmt.Sprintf("var {%s, $c} = $restore(this, {%s});\n", strings.Join(localVars, ", "), strings.Join(params, ", "))
 		// If the function gets blocked, save local variables for future.
-		saveContext := fmt.Sprintf("var $f = {$blk: "+funcRef+", $c: true, $r, %s};", strings.Join(c.localVars, ", "))
+		saveContext := fmt.Sprintf("var $f = {$blk: %s, $c: true, $r, %s};", instanceVar, strings.Join(c.localVars, ", "))
 
 		suffix = " " + saveContext + "return $f;" + suffix
 	} else if len(c.localVars) > 0 {
@@ -586,11 +622,8 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	// from the call site.
 	// TODO(nevkontakte): Cache function instances for a given combination of type
 	// parameters.
-	typeParams := []string{}
-	for i := 0; i < c.sigTypes.Sig.TypeParams().Len(); i++ {
-		typeParam := c.sigTypes.Sig.TypeParams().At(i)
-		typeParams = append(typeParams, c.typeName(typeParam))
-	}
+	typeParams := c.typeParamVars(c.sigTypes.Sig.TypeParams())
+	typeParams = append(typeParams, c.typeParamVars(c.sigTypes.Sig.RecvTypeParams())...)
 
 	// anonymous types
 	typesInit := strings.Builder{}
@@ -601,10 +634,10 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	code := &strings.Builder{}
 	fmt.Fprintf(code, "function%s(%s){\n", functionName, strings.Join(typeParams, ", "))
 	fmt.Fprintf(code, "%s", typesInit.String())
-	fmt.Fprintf(code, "%sconst %s = function(%s) {\n", c.Indentation(1), funcRef, strings.Join(params, ", "))
+	fmt.Fprintf(code, "%sconst %s = function(%s) {\n", c.Indentation(1), instanceVar, strings.Join(params, ", "))
 	fmt.Fprintf(code, "%s", bodyOutput)
 	fmt.Fprintf(code, "%s};\n", c.Indentation(1))
-	fmt.Fprintf(code, "%sreturn %s;\n", c.Indentation(1), funcRef)
+	fmt.Fprintf(code, "%sreturn %s;\n", c.Indentation(1), instanceVar)
 	fmt.Fprintf(code, "%s}", c.Indentation(0))
 	return params, code.String()
 }

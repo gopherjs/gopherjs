@@ -78,8 +78,11 @@ func IsGeneric(t types.Type) bool {
 	case *types.Map:
 		return IsGeneric(t.Key()) || IsGeneric(t.Elem())
 	case *types.Named:
-		// Named type declarations dependent on a type param are currently not
-		// supported by the upstream Go compiler.
+		for i := 0; i < t.TypeArgs().Len(); i++ {
+			if IsGeneric(t.TypeArgs().At(i)) {
+				return true
+			}
+		}
 		return false
 	case *types.Pointer:
 		return IsGeneric(t.Elem())

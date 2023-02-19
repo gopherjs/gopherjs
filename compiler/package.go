@@ -7,12 +7,10 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
-	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"golang.org/x/tools/go/gcexportdata"
 )
@@ -30,15 +28,19 @@ type pkgContext struct {
 	pkgVars map[string]string
 	// Mapping from a named Go object (e.g. type, func, var...) to a JS variable
 	// name assigned to them.
-	objectNames  map[types.Object]string
-	varPtrNames  map[*types.Var]string
-	anonTypes    typesutil.AnonymousTypes
-	escapingVars map[*types.Var]bool
-	indentation  int
-	dependencies map[types.Object]bool
-	minify       bool
-	fileSet      *token.FileSet
-	errList      ErrorList
+	objectNames map[types.Object]string
+	varPtrNames map[*types.Var]string
+	// Mapping from a `_` variable to a synthetic JS variable name representing
+	// it. Map is keyed by the variable position (we can't use *ast.Ident because
+	// nameless function parameters may not have it).
+	blankVarNames map[token.Pos]string
+	anonTypes     typesutil.AnonymousTypes
+	escapingVars  map[*types.Var]bool
+	indentation   int
+	dependencies  map[types.Object]bool
+	minify        bool
+	fileSet       *token.FileSet
+	errList       ErrorList
 }
 
 // IsMain returns true if this is the main package of the program.
@@ -147,13 +149,14 @@ func newRootCtx(srcs sources, typesInfo *types.Info, typesPkg *types.Package, is
 			Info:                 pkgInfo,
 			additionalSelections: make(map[*ast.SelectorExpr]selection),
 
-			pkgVars:      make(map[string]string),
-			objectNames:  make(map[types.Object]string),
-			varPtrNames:  make(map[*types.Var]string),
-			escapingVars: make(map[*types.Var]bool),
-			indentation:  1,
-			minify:       minify,
-			fileSet:      srcs.FileSet,
+			pkgVars:       make(map[string]string),
+			objectNames:   make(map[types.Object]string),
+			varPtrNames:   make(map[*types.Var]string),
+			blankVarNames: make(map[token.Pos]string),
+			escapingVars:  make(map[*types.Var]bool),
+			indentation:   1,
+			minify:        minify,
+			fileSet:       srcs.FileSet,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[*types.Label]*flowData{nil: {}},
@@ -352,292 +355,4 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 		err := bailout(fmt.Errorf("%v has unexpected type %T", ty, ty))
 		panic(err)
 	}
-}
-
-func (fc *funcContext) translateTopLevelFunction(fun *ast.FuncDecl) []byte {
-	o := fc.pkgCtx.Defs[fun.Name].(*types.Func)
-	info := fc.pkgCtx.FuncDeclInfos[o]
-
-	sig := o.Type().(*types.Signature)
-	var recv *ast.Ident
-	if fun.Recv != nil && fun.Recv.List[0].Names != nil {
-		recv = fun.Recv.List[0].Names[0]
-	}
-
-	var joinedParams string
-	// primaryFunction generates a JS function equivalent of the current Go function
-	// and assigns it to the JS variable defined by lvalue.
-	primaryFunction := func(lvalue string) []byte {
-		if fun.Body == nil {
-			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t};\n", lvalue, o.FullName()))
-		}
-
-		params, fun := translateFunction(fun.Type, recv, fun.Body, fc, sig, info, lvalue)
-		joinedParams = strings.Join(params, ", ")
-		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fun))
-	}
-
-	code := bytes.NewBuffer(nil)
-
-	if fun.Recv == nil {
-		funcRef := fc.objectName(o)
-		code.Write(primaryFunction(funcRef))
-		if fun.Name.IsExported() {
-			fmt.Fprintf(code, "\t$pkg.%s = %s;\n", encodeIdent(fun.Name.Name), funcRef)
-		}
-		return code.Bytes()
-	}
-
-	recvType := sig.Recv().Type()
-	ptr, isPointer := recvType.(*types.Pointer)
-	namedRecvType, _ := recvType.(*types.Named)
-	if isPointer {
-		namedRecvType = ptr.Elem().(*types.Named)
-	}
-	typeName := fc.objectName(namedRecvType.Obj())
-	funName := fun.Name.Name
-	if reservedKeywords[funName] {
-		funName += "$"
-	}
-
-	// Objects the method should be assigned to.
-	prototypeVar := fmt.Sprintf("%s.prototype.%s", typeName, funName)
-	ptrPrototypeVar := fmt.Sprintf("$ptrType(%s).prototype.%s", typeName, funName)
-	isGeneric := signatureTypes{Sig: sig}.IsGeneric()
-	if isGeneric {
-		// Generic method factories are assigned to the generic type factory
-		// properties, to be invoked at type construction time rather than method
-		// call time.
-		prototypeVar = fmt.Sprintf("%s.methods.%s", typeName, funName)
-		ptrPrototypeVar = fmt.Sprintf("%s.ptrMethods.%s", typeName, funName)
-	}
-
-	// proxyFunction generates a JS function that forwards the call to the actual
-	// method implementation for the alternate receiver (e.g. pointer vs
-	// non-pointer).
-	proxyFunction := func(lvalue, receiver string) []byte {
-		fun := fmt.Sprintf("function(%s) { return %s.%s(%s); }", joinedParams, receiver, funName, joinedParams)
-		if isGeneric {
-			// For a generic function, we wrap the proxy function in a trivial generic
-			// factory function for consistency. It is the same for any possible type
-			// arguments, so we simply ignore them.
-			fun = fmt.Sprintf("function() { return %s; }", fun)
-		}
-		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fun))
-	}
-
-	if _, isStruct := namedRecvType.Underlying().(*types.Struct); isStruct {
-		code.Write(primaryFunction(ptrPrototypeVar))
-		code.Write(proxyFunction(prototypeVar, "this.$val"))
-		return code.Bytes()
-	}
-
-	if isPointer {
-		if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
-			code.Write(primaryFunction(prototypeVar))
-			code.Write(proxyFunction(ptrPrototypeVar, fmt.Sprintf("(new %s(this.$get()))", typeName)))
-			return code.Bytes()
-		}
-		return primaryFunction(ptrPrototypeVar)
-	}
-
-	recvExpr := "this.$get()"
-	if typesutil.IsGeneric(recvType) {
-		recvExpr = fmt.Sprintf("%s.wrap(%s)", typeName, recvExpr)
-	} else if isWrapped(recvType) {
-		recvExpr = fmt.Sprintf("new %s(%s)", typeName, recvExpr)
-	}
-	code.Write(primaryFunction(prototypeVar))
-	code.Write(proxyFunction(ptrPrototypeVar, recvExpr))
-	return code.Bytes()
-}
-
-func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, outerContext *funcContext, sig *types.Signature, info *analysis.FuncInfo, funcRef string) ([]string, string) {
-	if info == nil {
-		panic("nil info")
-	}
-
-	c := &funcContext{
-		FuncInfo:    info,
-		pkgCtx:      outerContext.pkgCtx,
-		genericCtx:  outerContext.genericCtx,
-		parent:      outerContext,
-		sigTypes:    &signatureTypes{Sig: sig},
-		allVars:     make(map[string]int, len(outerContext.allVars)),
-		localVars:   []string{},
-		flowDatas:   map[*types.Label]*flowData{nil: {}},
-		caseCounter: 1,
-		labelCases:  make(map[*types.Label]int),
-	}
-	for k, v := range outerContext.allVars {
-		c.allVars[k] = v
-	}
-
-	functionName := "" // Function object name, i.e. identifier after the "function" keyword.
-	if funcRef == "" {
-		// Assign a name for the anonymous function.
-		funcRef = "$b"
-		functionName = " $b"
-	}
-
-	// For regular functions instance is directly in the function variable name.
-	instanceVar := funcRef
-	if c.sigTypes.IsGeneric() {
-		c.genericCtx = &genericCtx{}
-		// For generic function, funcRef refers to the generic factory function,
-		// allocate a separate variable for a function instance.
-		instanceVar = c.newVariable("instance", varGenericFactory)
-	}
-
-	prevEV := c.pkgCtx.escapingVars
-
-	var params []string
-	for _, param := range typ.Params.List {
-		if len(param.Names) == 0 {
-			params = append(params, c.newLocalVariable("param"))
-			continue
-		}
-		for _, ident := range param.Names {
-			if isBlank(ident) {
-				params = append(params, c.newLocalVariable("param"))
-				continue
-			}
-			params = append(params, c.objectName(c.pkgCtx.Defs[ident]))
-		}
-	}
-
-	bodyOutput := string(c.CatchOutput(c.bodyIndent(), func() {
-		if len(c.Blocking) != 0 {
-			c.pkgCtx.Scopes[body] = c.pkgCtx.Scopes[typ]
-			c.handleEscapingVars(body)
-		}
-
-		if c.sigTypes != nil && c.sigTypes.HasNamedResults() {
-			c.resultNames = make([]ast.Expr, c.sigTypes.Sig.Results().Len())
-			for i := 0; i < c.sigTypes.Sig.Results().Len(); i++ {
-				result := c.sigTypes.Sig.Results().At(i)
-				c.Printf("%s = %s;", c.objectName(result), c.translateExpr(c.zeroValue(result.Type())).String())
-				id := ast.NewIdent("")
-				c.pkgCtx.Uses[id] = result
-				c.resultNames[i] = c.setType(id, result.Type())
-			}
-		}
-
-		if recv != nil && !isBlank(recv) {
-			this := "this"
-			if isWrapped(c.pkgCtx.TypeOf(recv)) {
-				this = "this.$val" // Unwrap receiver value.
-			}
-			c.Printf("%s = %s;", c.translateExpr(recv), this)
-		}
-
-		c.translateStmtList(body.List)
-		if len(c.Flattened) != 0 && !astutil.EndsWithReturn(body.List) {
-			c.translateStmt(&ast.ReturnStmt{}, nil)
-		}
-	}))
-
-	sort.Strings(c.localVars)
-
-	var prefix, suffix string
-
-	if len(c.Flattened) != 0 {
-		c.localVars = append(c.localVars, "$s")
-		prefix = prefix + " $s = $s || 0;"
-	}
-
-	if c.HasDefer {
-		c.localVars = append(c.localVars, "$deferred")
-		suffix = " }" + suffix
-		if len(c.Blocking) != 0 {
-			suffix = " }" + suffix
-		}
-	}
-
-	localVarDefs := "" // Function-local var declaration at the top.
-
-	if len(c.Blocking) != 0 {
-		localVars := append([]string{}, c.localVars...)
-		// There are several special variables involved in handling blocking functions:
-		// $r is sometimes used as a temporary variable to store blocking call result.
-		// $c indicates that a function is being resumed after a blocking call when set to true.
-		// $f is an object used to save and restore function context for blocking calls.
-		localVars = append(localVars, "$r")
-		// If a blocking function is being resumed, initialize local variables from the saved context.
-		localVarDefs = fmt.Sprintf("var {%s, $c} = $restore(this, {%s});\n", strings.Join(localVars, ", "), strings.Join(params, ", "))
-		// If the function gets blocked, save local variables for future.
-		saveContext := fmt.Sprintf("var $f = {$blk: %s, $c: true, $r, %s};", instanceVar, strings.Join(c.localVars, ", "))
-
-		suffix = " " + saveContext + "return $f;" + suffix
-	} else if len(c.localVars) > 0 {
-		// Non-blocking functions simply declare local variables with no need for restore support.
-		localVarDefs = fmt.Sprintf("var %s;\n", strings.Join(c.localVars, ", "))
-	}
-
-	if c.HasDefer {
-		prefix = prefix + " var $err = null; try {"
-		deferSuffix := " } catch(err) { $err = err;"
-		if len(c.Blocking) != 0 {
-			deferSuffix += " $s = -1;"
-		}
-		if c.resultNames == nil && c.sigTypes.HasResults() {
-			deferSuffix += fmt.Sprintf(" return%s;", c.translateResults(nil))
-		}
-		deferSuffix += " } finally { $callDeferred($deferred, $err);"
-		if c.resultNames != nil {
-			deferSuffix += fmt.Sprintf(" if (!$curGoroutine.asleep) { return %s; }", c.translateResults(c.resultNames))
-		}
-		if len(c.Blocking) != 0 {
-			deferSuffix += " if($curGoroutine.asleep) {"
-		}
-		suffix = deferSuffix + suffix
-	}
-
-	if len(c.Flattened) != 0 {
-		prefix = prefix + " s: while (true) { switch ($s) { case 0:"
-		suffix = " } return; }" + suffix
-	}
-
-	if c.HasDefer {
-		prefix = prefix + " $deferred = []; $curGoroutine.deferStack.push($deferred);"
-	}
-
-	if prefix != "" {
-		bodyOutput = c.Indentation(c.bodyIndent()) + "/* */" + prefix + "\n" + bodyOutput
-	}
-	if suffix != "" {
-		bodyOutput = bodyOutput + c.Indentation(c.bodyIndent()) + "/* */" + suffix + "\n"
-	}
-	if localVarDefs != "" {
-		bodyOutput = c.Indentation(c.bodyIndent()) + localVarDefs + bodyOutput
-	}
-
-	c.pkgCtx.escapingVars = prevEV
-
-	if !c.sigTypes.IsGeneric() {
-		return params, fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(params, ", "), bodyOutput, c.Indentation(0))
-	}
-
-	// Generic functions are generated as factories to allow passing type parameters
-	// from the call site.
-	// TODO(nevkontakte): Cache function instances for a given combination of type
-	// parameters.
-	typeParams := c.typeParamVars(c.sigTypes.Sig.TypeParams())
-	typeParams = append(typeParams, c.typeParamVars(c.sigTypes.Sig.RecvTypeParams())...)
-
-	// anonymous types
-	typesInit := strings.Builder{}
-	for _, t := range c.genericCtx.anonTypes.Ordered() {
-		fmt.Fprintf(&typesInit, "%svar %s = $%sType(%s);\n", c.Indentation(1), t.Name(), strings.ToLower(typeKind(t.Type())[5:]), c.initArgs(t.Type()))
-	}
-
-	code := &strings.Builder{}
-	fmt.Fprintf(code, "function%s(%s){\n", functionName, strings.Join(typeParams, ", "))
-	fmt.Fprintf(code, "%s", typesInit.String())
-	fmt.Fprintf(code, "%sconst %s = function(%s) {\n", c.Indentation(1), instanceVar, strings.Join(params, ", "))
-	fmt.Fprintf(code, "%s", bodyOutput)
-	fmt.Fprintf(code, "%s};\n", c.Indentation(1))
-	fmt.Fprintf(code, "%sreturn %s;\n", c.Indentation(1), instanceVar)
-	fmt.Fprintf(code, "%s}", c.Indentation(0))
-	return params, code.String()
 }

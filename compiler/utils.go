@@ -292,6 +292,23 @@ func (fc *funcContext) newLocalVariable(name string) string {
 	return fc.newVariable(name, varFuncLocal)
 }
 
+// newBlankVariable assigns a new JavaScript variable name for a blank Go
+// variable, such as a `_` variable or an unnamed function parameter.
+// Such variables can't be referenced by the Go code anywhere aside from where
+// it is defined, so position is a good key for it.
+func (fc *funcContext) newBlankVariable(pos token.Pos) string {
+	if !pos.IsValid() {
+		panic("valid position is required to assign a blank variable name")
+	}
+	if name, ok := fc.pkgCtx.blankVarNames[pos]; ok {
+		return name
+	}
+
+	name := fc.newLocalVariable("blank")
+	fc.pkgCtx.blankVarNames[pos] = name
+	return name
+}
+
 // varLevel specifies at which level a JavaScript variable should be declared.
 type varLevel int
 

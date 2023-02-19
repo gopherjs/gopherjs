@@ -80,7 +80,7 @@ func init() {
 
 func GOROOT() string {
 	process := js.Global.Get("process")
-	if process == js.Undefined {
+	if process == js.Undefined || process.Get("env") == js.Undefined {
 		return "/"
 	}
 	if v := process.Get("env").Get("GOPHERJS_GOROOT"); v != js.Undefined && v.String() != "" {

@@ -75,7 +75,7 @@ func (fc *funcContext) translateTopLevelFunction(fun *ast.FuncDecl, inst typepar
 	// and assigns it to the JS expression defined by lvalue.
 	primaryFunction := func(lvalue string) []byte {
 		if fun.Body == nil {
-			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t};\n", lvalue, o.FullName()))
+			return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fc.unimplementedFunction(o)))
 		}
 
 		var recv *ast.Ident
@@ -162,7 +162,7 @@ func (fc *funcContext) translateStandaloneFunction(fun *ast.FuncDecl, inst typep
 	lvalue := fc.instName(inst)
 
 	if fun.Body == nil {
-		return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t};\n", lvalue, o.FullName()))
+		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fc.unimplementedFunction(o)))
 	}
 
 	body := fc.nestedFunctionContext(info, sig, inst).translateFunctionBody(fun.Type, nil, fun.Body, lvalue)
@@ -172,6 +172,15 @@ func (fc *funcContext) translateStandaloneFunction(fun *ast.FuncDecl, inst typep
 		fmt.Fprintf(code, "\t$pkg.%s = %s;\n", encodeIdent(fun.Name.Name), lvalue)
 	}
 	return code.Bytes()
+}
+
+// unimplementedFunction returns a JS function expression for a Go function
+// without a body, which would throw an exception if called.
+//
+// In Go such functions are either used with a //go:linkname directive or with
+// assembler intrinsics, only former of which is supported by GopherJS.
+func (fc *funcContext) unimplementedFunction(o *types.Func) string {
+	return fmt.Sprintf("function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t}", o.FullName())
 }
 
 // translateFunctionBody translates body of a top-level or literal function.

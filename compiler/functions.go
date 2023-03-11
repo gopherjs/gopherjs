@@ -121,15 +121,7 @@ func (fc *funcContext) translateTopLevelFunction(fun *ast.FuncDecl, inst typepar
 		return code.Bytes()
 	}
 
-	if ptr, isPointer := sig.Recv().Type().(*types.Pointer); isPointer {
-		if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
-			// Pointer-to-array is another special case.
-			// TODO(nevkontakte) Find out and document why.
-			code.Write(primaryFunction(prototypeVar))
-			code.Write(proxyFunction(ptrPrototypeVar, fmt.Sprintf("(new %s(this.$get()))", recvInstName)))
-			return code.Bytes()
-		}
-
+	if _, isPointer := sig.Recv().Type().(*types.Pointer); isPointer {
 		// Methods with pointer-receiver are only attached to the pointer-receiver
 		// type.
 		return primaryFunction(ptrPrototypeVar)

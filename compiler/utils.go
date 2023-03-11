@@ -488,6 +488,20 @@ func (fc *funcContext) objectName(o types.Object) string {
 	return name
 }
 
+// methodName returns a JS identifier (specifically, object property name)
+// corresponding to the given method.
+func (fc *funcContext) methodName(fun *types.Func) string {
+	if fun.Type().(*types.Signature).Recv() == nil {
+		panic(fmt.Errorf("expected a method, got a standalone function %v", fun))
+	}
+	name := fun.Name()
+	// Method names are scoped to their receiver type and guaranteed to be
+	// unique within that, so we only need to make sure it's not a reserved keyword
+	if reservedKeywords[name] {
+		name += "$"
+	}
+	return name
+}
 func (fc *funcContext) varPtrName(o *types.Var) string {
 	if getVarLevel(o) == varPackage && o.Exported() {
 		return fc.pkgVar(o.Pkg()) + "." + o.Name() + "$ptr"

@@ -691,10 +691,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 					}
 				}
 
-				methodName := sel.Obj().Name()
-				if reservedKeywords[methodName] {
-					methodName += "$"
-				}
+				methodName := fc.methodName(sel.Obj().(*types.Func))
 				return fc.translateCall(e, sig, fc.formatExpr("%s.%s", recv, methodName))
 
 			case types.FieldVal:

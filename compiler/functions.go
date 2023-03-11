@@ -128,11 +128,6 @@ func (fc *funcContext) translateTopLevelFunction(fun *ast.FuncDecl) []byte {
 	}
 
 	if isPointer {
-		if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
-			code.Write(primaryFunction(prototypeVar))
-			code.Write(proxyFunction(ptrPrototypeVar, fmt.Sprintf("(new %s(this.$get()))", typeName)))
-			return code.Bytes()
-		}
 		return primaryFunction(ptrPrototypeVar)
 	}
 

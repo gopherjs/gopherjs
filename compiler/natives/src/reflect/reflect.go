@@ -1734,13 +1734,14 @@ func methodNameSkip() string {
 	}
 	// Function name extracted from the call stack can be different from vanilla
 	// Go. Here we try to fix stuff like "Object.$packages.reflect.Q.ptr.SetIterKey"
-	// into "Value.SetIterKey".
+	// or plain "SetIterKey" into "Value.SetIterKey".
 	// This workaround may become obsolete after https://github.com/gopherjs/gopherjs/issues/1085
 	// is resolved.
 	name := f.Name()
 	idx := len(name) - 1
 	for idx > 0 {
 		if name[idx] == '.' {
+			idx++
 			break
 		}
 		idx--
@@ -1748,7 +1749,7 @@ func methodNameSkip() string {
 	if idx < 0 {
 		return name
 	}
-	return "Value" + name[idx:]
+	return "Value." + name[idx:]
 }
 
 func verifyNotInHeapPtr(p uintptr) bool {

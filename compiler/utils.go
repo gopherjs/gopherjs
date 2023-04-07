@@ -22,6 +22,11 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
+// We use this character as a separator in synthetic identifiers instead of a
+// regular dot. This character is safe for use in JS identifiers and helps to
+// visually separate components of the name when it appears in a stack trace.
+const midDot = "·"
+
 // IsRoot returns true for the package-level context.
 func (fc *funcContext) IsRoot() bool {
 	return fc.parent == nil
@@ -410,6 +415,25 @@ func (fc *funcContext) newIdentFor(obj types.Object) *ast.Ident {
 	return ident
 }
 
+// newLitFuncName generates a new synthetic name for a function literal.
+func (fc *funcContext) newLitFuncName() string {
+	fc.funcLitCounter++
+	name := &strings.Builder{}
+
+	// If function literal is defined inside another function, qualify its
+	// synthetic name with the outer function to make it easier to identify.
+	if fc.funcObject != nil {
+		if recvType := fc.sigTypes.RecvTypeName(); recvType != "" {
+			name.WriteString(recvType)
+			name.WriteString(midDot)
+		}
+		name.WriteString(fc.funcObject.Name())
+		name.WriteString(midDot)
+	}
+	fmt.Fprintf(name, "func%d", fc.funcLitCounter)
+	return name.String()
+}
+
 // typeParamVars returns a list of JS variable names representing type given
 // parameters.
 func (fc *funcContext) typeParamVars(params *types.TypeParamList) []string {
@@ -502,6 +526,7 @@ func (fc *funcContext) methodName(fun *types.Func) string {
 	}
 	return name
 }
+
 func (fc *funcContext) varPtrName(o *types.Var) string {
 	if getVarLevel(o) == varPackage && o.Exported() {
 		return fc.pkgVar(o.Pkg()) + "." + o.Name() + "$ptr"
@@ -903,7 +928,15 @@ func rangeCheck(pattern string, constantIndex, array bool) string {
 }
 
 func encodeIdent(name string) string {
-	return strings.Replace(url.QueryEscape(name), "%", "$", -1)
+	// Quick-and-dirty way to make any string safe for use as an identifier in JS.
+	name = url.QueryEscape(name)
+	// We use unicode middle dot as a visual separator in synthetic identifiers.
+	// It is safe for use in a JS identifier, so we un-encode it for readability.
+	name = strings.ReplaceAll(name, "%C2%B7", midDot)
+	// QueryEscape uses '%' before hex-codes of escaped characters, which is not
+	// allowed in a JS identifier, use '$' instead.
+	name = strings.ReplaceAll(name, "%", "$")
+	return name
 }
 
 // formatJSStructTagVal returns JavaScript code for accessing an object's property
@@ -999,6 +1032,23 @@ func (st signatureTypes) IsGeneric() bool {
 	return st.Sig.TypeParams().Len() > 0 || st.Sig.RecvTypeParams().Len() > 0
 }
 
+// RecvTypeName returns receiver type name for a method signature. For pointer
+// receivers the named type is unwrapped from the pointer type. For non-methods
+// an empty string is returned.
+func (st signatureTypes) RecvTypeName() string {
+	recv := st.Sig.Recv()
+	if recv == nil {
+		return ""
+	}
+
+	typ := recv.Type()
+	if ptrType, ok := typ.(*types.Pointer); ok {
+		typ = ptrType.Elem()
+	}
+
+	return typ.(*types.Named).Obj().Name()
+}
+
 // ErrorAt annotates an error with a position in the source code.
 func ErrorAt(err error, fset *token.FileSet, pos token.Pos) error {
 	return fmt.Errorf("%s: %w", fset.Position(pos), err)
@@ -1056,4 +1106,14 @@ func bailout(cause interface{}) *FatalError {
 func bailingOut(err interface{}) (*FatalError, bool) {
 	fe, ok := err.(*FatalError)
 	return fe, ok
+}
+
+func removeMatching[T comparable](haystack []T, needle T) []T {
+	var result []T
+	for _, el := range haystack {
+		if el != needle {
+			result = append(result, el)
+		}
+	}
+	return result
 }

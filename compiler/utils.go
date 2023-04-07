@@ -292,6 +292,23 @@ func (fc *funcContext) newLocalVariable(name string) string {
 	return fc.newVariable(name, varFuncLocal)
 }
 
+// newBlankVariable assigns a new JavaScript variable name for a blank Go
+// variable, such as a `_` variable or an unnamed function parameter.
+// Such variables can't be referenced by the Go code anywhere aside from where
+// it is defined, so position is a good key for it.
+func (fc *funcContext) newBlankVariable(pos token.Pos) string {
+	if !pos.IsValid() {
+		panic("valid position is required to assign a blank variable name")
+	}
+	if name, ok := fc.pkgCtx.blankVarNames[pos]; ok {
+		return name
+	}
+
+	name := fc.newLocalVariable("blank")
+	fc.pkgCtx.blankVarNames[pos] = name
+	return name
+}
+
 // varLevel specifies at which level a JavaScript variable should be declared.
 type varLevel int
 
@@ -471,6 +488,20 @@ func (fc *funcContext) objectName(o types.Object) string {
 	return name
 }
 
+// methodName returns a JS identifier (specifically, object property name)
+// corresponding to the given method.
+func (fc *funcContext) methodName(fun *types.Func) string {
+	if fun.Type().(*types.Signature).Recv() == nil {
+		panic(fmt.Errorf("expected a method, got a standalone function %v", fun))
+	}
+	name := fun.Name()
+	// Method names are scoped to their receiver type and guaranteed to be
+	// unique within that, so we only need to make sure it's not a reserved keyword
+	if reservedKeywords[name] {
+		name += "$"
+	}
+	return name
+}
 func (fc *funcContext) varPtrName(o *types.Var) string {
 	if getVarLevel(o) == varPackage && o.Exported() {
 		return fc.pkgVar(o.Pkg()) + "." + o.Name() + "$ptr"

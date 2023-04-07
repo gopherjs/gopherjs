@@ -177,7 +177,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
-		_, fun := translateFunction(e.Type, nil, e.Body, fc, exprType.(*types.Signature), fc.pkgCtx.FuncLitInfos[e], "")
+		fun := fc.nestedFunctionContext(fc.pkgCtx.FuncLitInfos[e], exprType.(*types.Signature)).translateFunctionBody(e.Type, nil, e.Body, "")
 		if len(fc.pkgCtx.escapingVars) != 0 {
 			names := make([]string, 0, len(fc.pkgCtx.escapingVars))
 			for obj := range fc.pkgCtx.escapingVars {
@@ -691,10 +691,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 					}
 				}
 
-				methodName := sel.Obj().Name()
-				if reservedKeywords[methodName] {
-					methodName += "$"
-				}
+				methodName := fc.methodName(sel.Obj().(*types.Func))
 				return fc.translateCall(e, sig, fc.formatExpr("%s.%s", recv, methodName))
 
 			case types.FieldVal:

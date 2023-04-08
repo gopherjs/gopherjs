@@ -19,20 +19,21 @@ import (
 
 // newFunctionContext creates a new nested context for a function corresponding
 // to the provided info.
-func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, sig *types.Signature) *funcContext {
+func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, o *types.Func) *funcContext {
 	if info == nil {
 		panic(errors.New("missing *analysis.FuncInfo"))
 	}
-	if sig == nil {
-		panic(errors.New("missing *types.Signature"))
+	if o == nil {
+		panic(errors.New("missing *types.Func"))
 	}
 
 	c := &funcContext{
 		FuncInfo:    info,
+		funcObject:  o,
 		pkgCtx:      fc.pkgCtx,
 		genericCtx:  fc.genericCtx,
 		parent:      fc,
-		sigTypes:    &signatureTypes{Sig: sig},
+		sigTypes:    &signatureTypes{Sig: o.Type().(*types.Signature)},
 		allVars:     make(map[string]int, len(fc.allVars)),
 		localVars:   []string{},
 		flowDatas:   map[*types.Label]*flowData{nil: {}},
@@ -44,6 +45,42 @@ func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, sig *types
 		c.allVars[k] = v
 	}
 
+	// Synthesize an identifier by which the function may reference itself. Since
+	// it appears in the stack trace, it's useful to include the receiver type in
+	// it.
+	funcRef := o.Name()
+	if typeName := c.sigTypes.RecvTypeName(); typeName != "" {
+		funcRef = typeName + midDot + funcRef
+	}
+	c.funcRef = c.newVariable(funcRef, varPackage)
+
+	// If the function has type parameters, create a new generic context for it.
+	if c.sigTypes.IsGeneric() {
+		c.genericCtx = &genericCtx{}
+	}
+
+	return c
+}
+
+// namedFuncContext creates a new funcContext for a named Go function
+// (standalone or method).
+func (fc *funcContext) namedFuncContext(fun *ast.FuncDecl) *funcContext {
+	o := fc.pkgCtx.Defs[fun.Name].(*types.Func)
+	info := fc.pkgCtx.FuncDeclInfos[o]
+	c := fc.nestedFunctionContext(info, o)
+
+	return c
+}
+
+// literalFuncContext creates a new funcContext for a function literal. Since
+// go/types doesn't generate *types.Func objects for function literals, we
+// generate a synthetic one for it.
+func (fc *funcContext) literalFuncContext(fun *ast.FuncLit) *funcContext {
+	info := fc.pkgCtx.FuncLitInfos[fun]
+	sig := fc.pkgCtx.TypeOf(fun).(*types.Signature)
+	o := types.NewFunc(fun.Pos(), fc.pkgCtx.Pkg, fc.newLitFuncName(), sig)
+
+	c := fc.nestedFunctionContext(info, o)
 	return c
 }
 
@@ -68,9 +105,6 @@ func (fc *funcContext) translateTopLevelFunction(fun *ast.FuncDecl) []byte {
 // package context. Exported functions are also assigned to the `$pkg` object.
 func (fc *funcContext) translateStandaloneFunction(fun *ast.FuncDecl) []byte {
 	o := fc.pkgCtx.Defs[fun.Name].(*types.Func)
-	info := fc.pkgCtx.FuncDeclInfos[o]
-	sig := o.Type().(*types.Signature)
-
 	if fun.Recv != nil {
 		panic(fmt.Errorf("expected standalone function, got method: %s", o))
 	}
@@ -79,7 +113,7 @@ func (fc *funcContext) translateStandaloneFunction(fun *ast.FuncDecl) []byte {
 	if fun.Body == nil {
 		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fc.unimplementedFunction(o)))
 	}
-	body := fc.nestedFunctionContext(info, sig).translateFunctionBody(fun.Type, nil, fun.Body, lvalue)
+	body := fc.namedFuncContext(fun).translateFunctionBody(fun.Type, nil, fun.Body)
 
 	code := &bytes.Buffer{}
 	fmt.Fprintf(code, "\t%s = %s;\n", lvalue, body)
@@ -99,14 +133,11 @@ func (fc *funcContext) translateMethod(fun *ast.FuncDecl) []byte {
 	}
 
 	o := fc.pkgCtx.Defs[fun.Name].(*types.Func)
-	info := fc.pkgCtx.FuncDeclInfos[o]
-
-	sig := o.Type().(*types.Signature)
 	var recv *ast.Ident
 	if fun.Recv.List[0].Names != nil {
 		recv = fun.Recv.List[0].Names[0]
 	}
-	nestedFC := fc.nestedFunctionContext(info, sig)
+	nestedFC := fc.namedFuncContext(fun)
 
 	// primaryFunction generates a JS function equivalent of the current Go function
 	// and assigns it to the JS expression defined by lvalue.
@@ -115,11 +146,11 @@ func (fc *funcContext) translateMethod(fun *ast.FuncDecl) []byte {
 			return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fc.unimplementedFunction(o)))
 		}
 
-		funDef := nestedFC.translateFunctionBody(fun.Type, recv, fun.Body, lvalue)
+		funDef := nestedFC.translateFunctionBody(fun.Type, recv, fun.Body)
 		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, funDef))
 	}
 
-	recvType := sig.Recv().Type()
+	recvType := nestedFC.sigTypes.Sig.Recv().Type()
 	ptr, isPointer := recvType.(*types.Pointer)
 	namedRecvType, _ := recvType.(*types.Named)
 	if isPointer {
@@ -131,7 +162,7 @@ func (fc *funcContext) translateMethod(fun *ast.FuncDecl) []byte {
 	// Objects the method should be assigned to.
 	prototypeVar := fmt.Sprintf("%s.prototype.%s", typeName, funName)
 	ptrPrototypeVar := fmt.Sprintf("$ptrType(%s).prototype.%s", typeName, funName)
-	isGeneric := signatureTypes{Sig: sig}.IsGeneric()
+	isGeneric := nestedFC.sigTypes.IsGeneric()
 	if isGeneric {
 		// Generic method factories are assigned to the generic type factory
 		// properties, to be invoked at type construction time rather than method
@@ -194,23 +225,7 @@ func (fc *funcContext) unimplementedFunction(o *types.Func) string {
 	return fmt.Sprintf("function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t}", o.FullName())
 }
 
-func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, funcRef string) string {
-	functionName := "" // Function object name, i.e. identifier after the "function" keyword.
-	if funcRef == "" {
-		// Assign a name for the anonymous function.
-		funcRef = "$b"
-		functionName = " $b"
-	}
-
-	// For regular functions instance is directly in the function variable name.
-	instanceVar := funcRef
-	if fc.sigTypes.IsGeneric() {
-		fc.genericCtx = &genericCtx{}
-		// For generic function, funcRef refers to the generic factory function,
-		// allocate a separate variable for a function instance.
-		instanceVar = fc.newVariable("instance", varGenericFactory)
-	}
-
+func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt) string {
 	prevEV := fc.pkgCtx.escapingVars
 
 	params := fc.funcParamVars(typ)
@@ -272,10 +287,13 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 		// $c indicates that a function is being resumed after a blocking call when set to true.
 		// $f is an object used to save and restore function context for blocking calls.
 		localVars = append(localVars, "$r")
+		// funcRef identifies the function object itself, so it doesn't need to be saved
+		// or restored.
+		localVars = removeMatching(localVars, fc.funcRef)
 		// If a blocking function is being resumed, initialize local variables from the saved context.
 		localVarDefs = fmt.Sprintf("var {%s, $c} = $restore(this, {%s});\n", strings.Join(localVars, ", "), strings.Join(params, ", "))
 		// If the function gets blocked, save local variables for future.
-		saveContext := fmt.Sprintf("var $f = {$blk: %s, $c: true, $r, %s};", instanceVar, strings.Join(fc.localVars, ", "))
+		saveContext := fmt.Sprintf("var $f = {$blk: %s, $c: true, %s};", fc.funcRef, strings.Join(localVars, ", "))
 
 		suffix = " " + saveContext + "return $f;" + suffix
 	} else if len(fc.localVars) > 0 {
@@ -324,8 +342,12 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	fc.pkgCtx.escapingVars = prevEV
 
 	if !fc.sigTypes.IsGeneric() {
-		return fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(params, ", "), bodyOutput, fc.Indentation(0))
+		return fmt.Sprintf("function %s(%s) {\n%s%s}", fc.funcRef, strings.Join(params, ", "), bodyOutput, fc.Indentation(0))
 	}
+
+	// For generic function, funcRef refers to the generic factory function,
+	// allocate a separate variable for a function instance.
+	instanceVar := fc.newVariable("instance", varGenericFactory)
 
 	// Generic functions are generated as factories to allow passing type parameters
 	// from the call site.
@@ -341,9 +363,9 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	}
 
 	code := &strings.Builder{}
-	fmt.Fprintf(code, "function%s(%s){\n", functionName, strings.Join(typeParams, ", "))
+	fmt.Fprintf(code, "function(%s){\n", strings.Join(typeParams, ", "))
 	fmt.Fprintf(code, "%s", typesInit.String())
-	fmt.Fprintf(code, "%sconst %s = function(%s) {\n", fc.Indentation(1), instanceVar, strings.Join(params, ", "))
+	fmt.Fprintf(code, "%sconst %s = function %s(%s) {\n", fc.Indentation(1), instanceVar, fc.funcRef, strings.Join(params, ", "))
 	fmt.Fprintf(code, "%s", bodyOutput)
 	fmt.Fprintf(code, "%s};\n", fc.Indentation(1))
 	// TODO(nevkontakte): Method list entries for generic type methods should be

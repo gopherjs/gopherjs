@@ -1,11 +1,13 @@
 package typesutil
 
 import (
+	"go/ast"
 	"go/token"
 	"go/types"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
 func TestAnonymousTypes(t *testing.T) {
@@ -164,5 +166,53 @@ func TestIsGeneric(t *testing.T) {
 				t.Errorf("Got: IsGeneric(%v) = %v. Want: %v.", test.typ, got, test.want)
 			}
 		})
+	}
+}
+
+func TestCanonicalTypeParamMap(t *testing.T) {
+	src := `package main
+	type A[T any] struct{}
+	func (a A[T1]) Method(t T1) {}
+
+	func Func[U any](u U) {}
+	`
+	fset := token.NewFileSet()
+	f := srctesting.Parse(t, fset, src)
+	info, _ := srctesting.Check(t, fset, f)
+
+	// Extract relevant information about the method Method.
+	methodDecl := f.Decls[1].(*ast.FuncDecl)
+	if methodDecl.Name.String() != "Method" {
+		t.Fatalf("Unexpected function at f.Decls[2] position: %q. Want: Method.", methodDecl.Name.String())
+	}
+	method := info.Defs[methodDecl.Name]
+	T1 := method.Type().(*types.Signature).Params().At(0).Type().(*types.TypeParam)
+	if T1.Obj().Name() != "T1" {
+		t.Fatalf("Unexpected type of the Func's first argument: %s. Want: T1.", T1.Obj().Name())
+	}
+
+	// Extract relevant information about the standalone function Func.
+	funcDecl := f.Decls[2].(*ast.FuncDecl)
+	if funcDecl.Name.String() != "Func" {
+		t.Fatalf("Unexpected function at f.Decls[2] position: %q. Want: Func.", funcDecl.Name.String())
+	}
+	fun := info.Defs[funcDecl.Name]
+	U := fun.Type().(*types.Signature).Params().At(0).Type().(*types.TypeParam)
+	if U.Obj().Name() != "U" {
+		t.Fatalf("Unexpected type of the Func's first argument: %s. Want: U.", U.Obj().Name())
+	}
+
+	cm := NewCanonicalTypeParamMap([]*ast.FuncDecl{methodDecl, funcDecl}, info)
+
+	// Method's type params canonicalized to their receiver type's.
+	got := cm.Lookup(T1)
+	if got.Obj().Name() != "T" {
+		t.Errorf("Got canonical type parameter %q for %q. Want: T.", got, T1)
+	}
+
+	// Function's type params don't need canonicalization.
+	got = cm.Lookup(U)
+	if got.Obj().Name() != "U" {
+		t.Errorf("Got canonical type parameter %q for %q. Want: U.", got, U)
 	}
 }

@@ -33,7 +33,7 @@ func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, o *types.F
 		pkgCtx:      fc.pkgCtx,
 		genericCtx:  fc.genericCtx,
 		parent:      fc,
-		sigTypes:    &signatureTypes{Sig: o.Type().(*types.Signature)},
+		sigTypes:    &typesutil.Signature{Sig: o.Type().(*types.Signature)},
 		allVars:     make(map[string]int, len(fc.allVars)),
 		localVars:   []string{},
 		flowDatas:   map[*types.Label]*flowData{nil: {}},

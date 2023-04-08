@@ -34,13 +34,20 @@ type pkgContext struct {
 	// it. Map is keyed by the variable position (we can't use *ast.Ident because
 	// nameless function parameters may not have it).
 	blankVarNames map[token.Pos]string
-	anonTypes     typesutil.AnonymousTypes
-	escapingVars  map[*types.Var]bool
-	indentation   int
-	dependencies  map[types.Object]bool
-	minify        bool
-	fileSet       *token.FileSet
-	errList       ErrorList
+	// Mapping between methods' type parameters and their canonical counterparts
+	// on the receiver types. This ensures we always use the same identifier for
+	// the type parameter even if a method declaration gives it a different name
+	// compared to the receiver type declaration:
+	//     type A[T any] struct{}
+	//     func (a A[T1]) M() {}
+	canonicalTypeParams typesutil.CanonicalTypeParamMap
+	anonTypes           typesutil.AnonymousTypes
+	escapingVars        map[*types.Var]bool
+	indentation         int
+	dependencies        map[types.Object]bool
+	minify              bool
+	fileSet             *token.FileSet
+	errList             ErrorList
 }
 
 // IsMain returns true if this is the main package of the program.
@@ -114,7 +121,7 @@ type funcContext struct {
 	parent *funcContext
 	// Information about function signature types. nil for the package-level
 	// function context.
-	sigTypes *signatureTypes
+	sigTypes *typesutil.Signature
 	// All variable names available in the current function scope. The key is a Go
 	// variable name and the value is the number of synonymous variable names
 	// visible from this scope (e.g. due to shadowing). This number is used to
@@ -261,6 +268,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	importedPaths, importDecls := rootCtx.importDecls()
 
 	vars, functions, typeNames := rootCtx.topLevelObjects(srcs)
+	rootCtx.pkgCtx.canonicalTypeParams = typesutil.NewCanonicalTypeParamMap(functions, typesInfo)
 
 	// More named types may be added to the list when function bodies are processed.
 	rootCtx.pkgCtx.typeNames = typeNames

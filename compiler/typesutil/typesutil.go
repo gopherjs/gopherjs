@@ -2,6 +2,7 @@ package typesutil
 
 import (
 	"fmt"
+	"go/ast"
 	"go/types"
 
 	"golang.org/x/tools/go/types/typeutil"
@@ -128,4 +129,44 @@ func TypeParams(t types.Type) *types.TypeParamList {
 		return nil
 	}
 	return named.TypeParams()
+}
+
+// CanonicalTypeParamMap allows mapping type parameters on method receivers
+// to their canonical counterparts on the receiver types.
+type CanonicalTypeParamMap map[*types.TypeParam]*types.TypeParam
+
+// NewCanonicalTypeParamMap creates a mapping between methods' type parameters
+// for the provided function decls and their receiver types' type parameters.
+//
+// Non-method decls are ignored.
+func NewCanonicalTypeParamMap(funcs []*ast.FuncDecl, tInfo *types.Info) CanonicalTypeParamMap {
+	result := CanonicalTypeParamMap{}
+	for _, fun := range funcs {
+		o := tInfo.Defs[fun.Name]
+		sig := Signature{Sig: o.Type().(*types.Signature)}
+		if sig.Sig.RecvTypeParams().Len() == 0 {
+			continue
+		}
+		tParams := sig.Sig.RecvTypeParams()
+		recvTParams := sig.RecvType().TypeParams()
+		if tParams.Len() != recvTParams.Len() {
+			// This should never happen in a type-checked program.
+			panic(fmt.Errorf("mismatched number of type parameters on a method %s and its receiver type %s: %d != %d", o, sig.RecvType(), tParams.Len(), recvTParams.Len()))
+		}
+		for i := 0; i < tParams.Len(); i++ {
+			tParam := tParams.At(i)
+			canonicalTParam := recvTParams.At(i)
+			result[tParam] = canonicalTParam
+		}
+	}
+	return result
+}
+
+// Lookup returns the canonical version of the given type parameter. If there is
+// no canonical version, the type parameter is returned as-is.
+func (cm CanonicalTypeParamMap) Lookup(tParam *types.TypeParam) *types.TypeParam {
+	if canonical, ok := cm[tParam]; ok {
+		return canonical
+	}
+	return tParam
 }

@@ -871,7 +871,7 @@ func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, 
 		isJs = typesutil.IsJsPackage(fc.pkgCtx.Uses[fun.Sel].Pkg())
 	}
 	sig := fc.pkgCtx.TypeOf(expr.Fun).Underlying().(*types.Signature)
-	sigTypes := signatureTypes{Sig: sig}
+	sigTypes := typesutil.Signature{Sig: sig}
 	args := fc.translateArgs(sig, expr.Args, expr.Ellipsis.IsValid())
 
 	if !isBuiltin && !isJs {

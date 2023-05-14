@@ -368,10 +368,6 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	fmt.Fprintf(code, "%sconst %s = function %s(%s) {\n", fc.Indentation(1), instanceVar, fc.funcRef, strings.Join(params, ", "))
 	fmt.Fprintf(code, "%s", bodyOutput)
 	fmt.Fprintf(code, "%s};\n", fc.Indentation(1))
-	// TODO(nevkontakte): Method list entries for generic type methods should be
-	// generated inside the generic factory.
-	// meta, _ := fc.methodListEntry(fc.pkgCtx.Defs[typ.Name].(*types.Func))
-	// fmt.Fprintf(code, "%s%s.metadata = %s", fc.Indentation(1), instanceVar, meta)
 	fmt.Fprintf(code, "%sreturn %s;\n", fc.Indentation(1), instanceVar)
 	fmt.Fprintf(code, "%s}", fc.Indentation(0))
 	return code.String()

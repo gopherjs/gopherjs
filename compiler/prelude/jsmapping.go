@@ -61,7 +61,7 @@ var $externalize = function(v, t, makeWrapper) {
     return $externalize(v.$val, v.constructor, makeWrapper);
   case $kindMap:
     var m = {};
-    var keys = Array.from(v.keys());
+    var keys = Array.from(Object.keys(v));
     for (var i = 0; i < keys.length; i++) {
       var entry = v.get(keys[i]);
       m[$externalize(entry.k, t.key, makeWrapper)] = $externalize(entry.v, t.elem, makeWrapper);

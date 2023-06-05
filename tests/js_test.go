@@ -675,6 +675,67 @@ func TestNewArrayBuffer(t *testing.T) {
 	}
 }
 
+func TestExternalize(t *testing.T) {
+	fn := js.Global.Call("eval", "(function(x) { return JSON.stringify(x); })")
+
+	tests := []struct {
+		name  string
+		input interface{}
+		want  string
+	}{
+		{
+			name:  "bool",
+			input: true,
+			want:  "true",
+		},
+		// {
+		// 	name:  "nil map",
+		// 	input: func() map[string]string { return nil }(),
+		// 	want:  "null",
+		// },
+		{
+			name:  "empty map",
+			input: map[string]string{},
+			want:  "{}",
+		},
+		// {
+		// 	name:  "nil slice",
+		// 	input: func() []string { return nil }(),
+		// 	want:  "null",
+		// },
+		{
+			name:  "empty slice",
+			input: []string{},
+			want:  "[]",
+		},
+		// {
+		// 	name:  "empty struct",
+		// 	input: struct{}{},
+		// 	want:  "{}",
+		// },
+		{
+			name:  "nil pointer",
+			input: func() *int { return nil }(),
+			want:  "null",
+		},
+		{
+			name:  "nil func",
+			input: func() func() { return nil }(),
+			want:  "null",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := fn.Invoke(tt.input).String()
+			if result != tt.want {
+				t.Errorf("Unexpected result %s", result)
+			}
+
+		})
+	}
+}
+
 func TestInternalizeExternalizeNull(t *testing.T) {
 	type S struct {
 		*js.Object

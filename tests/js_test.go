@@ -708,11 +708,11 @@ func TestExternalize(t *testing.T) {
 			input: []string{},
 			want:  "[]",
 		},
-		// {
-		// 	name:  "empty struct",
-		// 	input: struct{}{},
-		// 	want:  "{}",
-		// },
+		{
+			name:  "empty struct",
+			input: struct{}{},
+			want:  "{}",
+		},
 		{
 			name:  "nil pointer",
 			input: func() *int { return nil }(),
@@ -729,7 +729,7 @@ func TestExternalize(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := fn.Invoke(tt.input).String()
 			if result != tt.want {
-				t.Errorf("Unexpected result %s", result)
+				t.Errorf("Unexpected result %q != %q", result, tt.want)
 			}
 
 		})

@@ -60,6 +60,9 @@ var $externalize = function(v, t, makeWrapper) {
     }
     return $externalize(v.$val, v.constructor, makeWrapper);
   case $kindMap:
+    if (v.keys === undefined) {
+      return null;
+    }
     var m = {};
     var keys = Array.from(v.keys());
     for (var i = 0; i < keys.length; i++) {

@@ -688,11 +688,11 @@ func TestExternalize(t *testing.T) {
 			input: true,
 			want:  "true",
 		},
-		// {
-		// 	name:  "nil map",
-		// 	input: func() map[string]string { return nil }(),
-		// 	want:  "null",
-		// },
+		{
+			name:  "nil map",
+			input: func() map[string]string { return nil }(),
+			want:  "null",
+		},
 		{
 			name:  "empty map",
 			input: map[string]string{},

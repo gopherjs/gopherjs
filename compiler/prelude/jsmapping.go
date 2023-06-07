@@ -60,6 +60,9 @@ var $externalize = function(v, t, makeWrapper) {
     }
     return $externalize(v.$val, v.constructor, makeWrapper);
   case $kindMap:
+    if (v.keys === undefined) {
+      return null;
+    }
     var m = {};
     var keys = Array.from(v.keys());
     for (var i = 0; i < keys.length; i++) {
@@ -73,6 +76,9 @@ var $externalize = function(v, t, makeWrapper) {
     }
     return $externalize(v.$get(), t.elem, makeWrapper);
   case $kindSlice:
+    if (v === v.constructor.nil) {
+      return null;
+    }
     if ($needsExternalization(t.elem)) {
       return $mapArray($sliceToNativeArray(v), function(e) { return $externalize(e, t.elem, makeWrapper); });
     }
@@ -113,6 +119,9 @@ var $externalize = function(v, t, makeWrapper) {
         }
         return searchJsObject(v.$get(), t.elem);
       case $kindStruct:
+        if (t.fields.length === 0) {
+          return noJsObject;
+        }
         var f = t.fields[0];
         return searchJsObject(v[f.prop], f.typ);
       case $kindInterface:
@@ -359,6 +368,9 @@ var $internalize = function(v, t, recv, seen, makeWrapper) {
       case $kindPtr:
         return searchJsObject(t.elem);
       case $kindStruct:
+        if (t.fields.length === 0) {
+          return noJsObject;
+        }
         var f = t.fields[0];
         var o = searchJsObject(f.typ);
         if (o !== noJsObject) {

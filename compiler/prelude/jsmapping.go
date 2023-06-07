@@ -76,6 +76,9 @@ var $externalize = function(v, t, makeWrapper) {
     }
     return $externalize(v.$get(), t.elem, makeWrapper);
   case $kindSlice:
+    if (v === v.constructor.nil) {
+      return null;
+    }
     if ($needsExternalization(t.elem)) {
       return $mapArray($sliceToNativeArray(v), function(e) { return $externalize(e, t.elem, makeWrapper); });
     }

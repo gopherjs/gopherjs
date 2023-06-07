@@ -698,11 +698,11 @@ func TestExternalize(t *testing.T) {
 			input: map[string]string{},
 			want:  "{}",
 		},
-		// {
-		// 	name:  "nil slice",
-		// 	input: func() []string { return nil }(),
-		// 	want:  "null",
-		// },
+		{
+			name:  "nil slice",
+			input: func() []string { return nil }(),
+			want:  "null",
+		},
 		{
 			name:  "empty slice",
 			input: []string{},

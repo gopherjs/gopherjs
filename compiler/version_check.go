@@ -13,7 +13,7 @@ import (
 )
 
 // Version is the GopherJS compiler version string.
-const Version = "1.18.0-beta2+go1.18.5"
+const Version = "1.18.0-beta3+go1.18.10"
 
 // GoVersion is the current Go 1.x version that GopherJS is compatible with.
 const GoVersion = 18

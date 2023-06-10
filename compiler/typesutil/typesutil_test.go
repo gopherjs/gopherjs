@@ -30,6 +30,10 @@ func TestAnonymousTypes(t *testing.T) {
 		anonTypes.Register(typ.name, typ.typ)
 	}
 
+	if want, got := 2, anonTypes.Len(); want != got {
+		t.Errorf("Got: anonTypes.Len() = %v. Want: %v.", got, want)
+	}
+
 	for _, typ := range typs {
 		t.Run(typ.name.Name(), func(t *testing.T) {
 			got := anonTypes.Get(typ.typ)
@@ -46,6 +50,9 @@ func TestAnonymousTypes(t *testing.T) {
 	wantNames := []string{"sliceType$1", "mapType$1"}
 	if !cmp.Equal(wantNames, gotNames) {
 		t.Errorf("Got: anonTypes.Ordered() = %v. Want: %v (in the order of registration)", gotNames, wantNames)
+	}
+	if !cmp.Equal(wantNames, anonTypes.Names()) {
+		t.Errorf("Got: anonTypes.Names() = %v. Want: %v (in the order of registration)", gotNames, wantNames)
 	}
 }
 

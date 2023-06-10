@@ -301,14 +301,8 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl) *Decl {
 	}
 
 	if typesutil.IsMethod(o) {
-		var namedRecvType *types.Named
-
-		recvType := o.Type().(*types.Signature).Recv().Type()
-		if ptr, isPointer := recvType.(*types.Pointer); isPointer {
-			namedRecvType = ptr.Elem().(*types.Named)
-		} else {
-			namedRecvType = recvType.(*types.Named)
-		}
+		sig := typesutil.Signature{Sig: o.Type().(*types.Signature)}
+		namedRecvType := sig.RecvType()
 
 		d.NamedRecvType = fc.objectName(namedRecvType.Obj())
 		d.DceObjectFilter = namedRecvType.Obj().Name()

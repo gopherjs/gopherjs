@@ -9,6 +9,7 @@ package main
 
 import (
 	"embed"
+	"net/http"
 
 	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
 )
@@ -17,5 +18,5 @@ import (
 var fs embed.FS
 
 func init() {
-	gopherjspkg.RegisterFS(fs)
+	gopherjspkg.RegisterFS(http.FS(fs))
 }

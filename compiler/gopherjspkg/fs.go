@@ -1,7 +1,6 @@
 package gopherjspkg
 
 import (
-	"io/fs"
 	"net/http"
 )
 
@@ -9,6 +8,6 @@ import (
 var FS http.FileSystem
 
 // RegisterFS allows setting the embedded fs from another package.
-func RegisterFS(fs fs.ReadDirFS) {
-	FS = http.FS(fs)
+func RegisterFS(fs http.FileSystem) {
+	FS = fs
 }

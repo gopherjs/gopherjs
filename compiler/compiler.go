@@ -250,6 +250,13 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
 		return err
 	}
+
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.GenericFactoryCode); err != nil {
+			return err
+		}
+	}
+
 	for _, d := range filteredDecls {
 		if _, err := w.Write(d.DeclCode); err != nil {
 			return err

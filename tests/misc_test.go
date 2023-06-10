@@ -187,6 +187,8 @@ func TestPointerOfStructConversion(t *testing.T) {
 
 	type B A
 
+	type AP *A
+
 	a1 := &A{Value: 1}
 	b1 := (*B)(a1)
 	b1.Value = 2
@@ -196,6 +198,10 @@ func TestPointerOfStructConversion(t *testing.T) {
 	b2.Value = 4
 	if a1 != a2 || b1 != b2 || a1.Value != 4 || a2.Value != 4 || b1.Value != 4 || b2.Value != 4 {
 		t.Fail()
+	}
+
+	if got := reflect.TypeOf((AP)(&A{Value: 1})); got.String() != "tests.AP" {
+		t.Errorf("Got: reflect.TypeOf((AP)(&A{Value: 1})) = %v. Want: tests.AP.", got)
 	}
 }
 

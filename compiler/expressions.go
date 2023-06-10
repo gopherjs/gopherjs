@@ -206,6 +206,8 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				return fc.translateExpr(e.X)
 			}
 
+			elemType := exprType.(*types.Pointer).Elem()
+
 			switch x := astutil.RemoveParens(e.X).(type) {
 			case *ast.CompositeLit:
 				return fc.formatExpr("$newDataPointer(%e, %s)", x, fc.typeName(fc.pkgCtx.TypeOf(e)))
@@ -214,13 +216,13 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				if fc.pkgCtx.escapingVars[obj] {
 					return fc.formatExpr("(%1s.$ptr || (%1s.$ptr = new %2s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %1s)))", fc.pkgCtx.objectNames[obj], fc.typeName(exprType))
 				}
-				return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", exprType), false))
+				return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", elemType), false))
 			case *ast.SelectorExpr:
 				sel, ok := fc.pkgCtx.SelectionOf(x)
 				if !ok {
 					// qualified identifier
 					obj := fc.pkgCtx.Uses[x.Sel].(*types.Var)
-					return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", exprType), false))
+					return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", elemType), false))
 				}
 				newSel := &ast.SelectorExpr{X: fc.newIdent("this.$target", fc.pkgCtx.TypeOf(x.X)), Sel: x.Sel}
 				fc.setType(newSel, exprType)
@@ -1213,12 +1215,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 func (fc *funcContext) translateImplicitConversionWithCloning(expr ast.Expr, desiredType types.Type) *expression {
 	switch desiredType.Underlying().(type) {
 	case *types.Struct, *types.Array:
-		switch expr.(type) {
-		case nil, *ast.CompositeLit:
-			// nothing
-		default:
-			return fc.formatExpr("$clone(%e, %s)", expr, fc.typeName(desiredType))
-		}
+		return fc.formatExpr("$clone(%e, %s)", expr, fc.typeName(desiredType))
 	}
 
 	return fc.translateImplicitConversion(expr, desiredType)

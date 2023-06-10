@@ -719,7 +719,7 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 	}
 
 	lhsType := fc.pkgCtx.TypeOf(lhs)
-	rhsExpr := fc.translateImplicitConversion(rhs, lhsType)
+	rhsExpr := fc.translateConversion(rhs, lhsType)
 	if _, ok := rhs.(*ast.CompositeLit); ok && define {
 		return fmt.Sprintf("%s = %s;", fc.translateExpr(lhs), rhsExpr) // skip $copy
 	}

@@ -34,6 +34,10 @@ type Decl struct {
 	// it configures basic information about the type and its identity. For a function
 	// or method it contains its compiled body.
 	DeclCode []byte
+	// JavaScript code that declared a factory function for a generic type or
+	// function, which can be called to create specific instanced of the type or
+	// function.
+	GenericFactoryCode []byte
 	// JavaScript code that initializes reflection metadata about type's method list.
 	MethodListCode []byte
 	// JavaScript code that initializes the rest of reflection metadata about a type
@@ -300,8 +304,8 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl) *Decl {
 		LinkingName: newSymName(o),
 	}
 
+	sig := typesutil.Signature{Sig: o.Type().(*types.Signature)}
 	if typesutil.IsMethod(o) {
-		sig := typesutil.Signature{Sig: o.Type().(*types.Signature)}
 		namedRecvType := sig.RecvType()
 
 		d.NamedRecvType = fc.objectName(namedRecvType.Obj())
@@ -324,7 +328,14 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl) *Decl {
 		}
 	}
 
-	d.DceDeps = fc.CollectDCEDeps(func() { d.DeclCode = fc.translateTopLevelFunction(fun) })
+	d.DceDeps = fc.CollectDCEDeps(func() {
+		code := fc.translateTopLevelFunction(fun)
+		if sig.IsGeneric() {
+			d.GenericFactoryCode = code
+		} else {
+			d.DeclCode = code
+		}
+	})
 	return d
 }
 
@@ -470,7 +481,7 @@ func (fc *funcContext) newNamedTypeDecl(o *types.TypeName) *Decl {
 
 		typeParamNames := fc.typeParamVars(typeParams)
 
-		d.DeclCode = fc.CatchOutput(0, func() {
+		d.GenericFactoryCode = fc.CatchOutput(0, func() {
 			// Begin generic factory function.
 			fc.Printf("%s = function(%s) {", typeName, strings.Join(typeParamNames, ", "))
 
@@ -512,6 +523,7 @@ func (fc *funcContext) newNamedTypeDecl(o *types.TypeName) *Decl {
 		// Clean out code that has been absorbed by the generic factory function.
 		d.TypeInitCode = nil
 		d.MethodListCode = nil
+		d.DeclCode = nil
 	}
 
 	if getVarLevel(o) == varPackage {

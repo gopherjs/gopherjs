@@ -266,7 +266,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 
 	preludeJS := prelude.Prelude
 	if minify {
-		preludeJS = prelude.Minified
+		preludeJS = prelude.Minified()
 	}
 	if _, err := io.WriteString(w, preludeJS); err != nil {
 		return err

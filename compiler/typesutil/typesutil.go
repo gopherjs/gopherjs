@@ -42,10 +42,25 @@ func (at *AnonymousTypes) Get(t types.Type) *types.TypeName {
 	return s
 }
 
-// Ordered returns synthesized type names for the registered anonymous types in
+// Ordered returns synthesized named types for the registered anonymous types in
 // the order they were registered.
 func (at *AnonymousTypes) Ordered() []*types.TypeName {
 	return at.order
+}
+
+// Names returns synthesized type name strings for the registered anonymous
+// types in the order they were registered.
+func (at *AnonymousTypes) Names() []string {
+	names := []string{}
+	for _, t := range at.order {
+		names = append(names, t.Name())
+	}
+	return names
+}
+
+// Len returns the number of registered anonymous types.
+func (at *AnonymousTypes) Len() int {
+	return len(at.order)
 }
 
 // Register a synthesized type name for an anonymous type.

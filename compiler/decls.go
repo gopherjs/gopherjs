@@ -479,14 +479,23 @@ func (fc *funcContext) newNamedTypeDecl(o *types.TypeName) *Decl {
 				fc.Printf("var %s = $typeInstances.get(%s);", instanceVar, typeString)
 				fc.Printf("if (%[1]s) { return %[1]s; }", instanceVar)
 
-				// Construct anonymous types which depend on type parameters.
-				for _, t := range fc.genericCtx.anonTypes.Ordered() {
-					fc.Printf("var %s = $%sType(%s);", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type()))
+				// Forward-declare variables for the synthesized type names so that they
+				// could be captured by the type constructor closure.
+				if fc.genericCtx.anonTypes.Len() != 0 {
+					fc.Printf("var %s;", strings.Join(fc.genericCtx.anonTypes.Names(), ", "))
 				}
 
 				// Construct type instance.
 				fmt.Fprint(fc, string(d.DeclCode))
 				fc.Printf("$typeInstances.set(%s, %s);", typeString, instanceVar)
+
+				// Construct anonymous types which depend on type parameters. It must be
+				// done after the type instance has been cached to avoid infinite
+				// recursion in case the type depends on itself.
+				for _, t := range fc.genericCtx.anonTypes.Ordered() {
+					fc.Printf("%s = $%sType(%s);", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type()))
+				}
+
 				fc.Printf("$instantiateMethods(%s, %s, %s)", instanceVar, fmt.Sprintf("%s.methods", typeName), strings.Join(typeParamNames, ", "))
 				fc.Printf("$instantiateMethods(%s, %s, %s)", fmt.Sprintf("$ptrType(%s)", instanceVar), fmt.Sprintf("%s.ptrMethods", typeName), strings.Join(typeParamNames, ", "))
 				fmt.Fprint(fc, string(d.TypeInitCode))

@@ -187,6 +187,8 @@ func TestPointerOfStructConversion(t *testing.T) {
 
 	type B A
 
+	type AP *A
+
 	a1 := &A{Value: 1}
 	b1 := (*B)(a1)
 	b1.Value = 2
@@ -196,6 +198,10 @@ func TestPointerOfStructConversion(t *testing.T) {
 	b2.Value = 4
 	if a1 != a2 || b1 != b2 || a1.Value != 4 || a2.Value != 4 || b1.Value != 4 || b2.Value != 4 {
 		t.Fail()
+	}
+
+	if got := reflect.TypeOf((AP)(&A{Value: 1})); got.String() != "tests.AP" {
+		t.Errorf("Got: reflect.TypeOf((AP)(&A{Value: 1})) = %v. Want: tests.AP.", got)
 	}
 }
 
@@ -887,4 +893,30 @@ func TestReflectSetForEmbed(t *testing.T) {
 	if e.Field(0) != f0 {
 		t.Fatalf("relfect.Set got %v, want %v", f0, e.Field(0))
 	}
+}
+
+func TestAssignImplicitConversion(t *testing.T) {
+	type S struct{}
+	type SP *S
+
+	t.Run("Pointer to named type", func(t *testing.T) {
+		var sp SP = &S{}
+		if got := reflect.TypeOf(sp); got.String() != "tests.SP" {
+			t.Errorf("Got: reflect.TypeOf(sp) = %v. Want: tests.SP", got)
+		}
+	})
+
+	t.Run("Anonymous struct to named type", func(t *testing.T) {
+		var s S = struct{}{}
+		if got := reflect.TypeOf(s); got.String() != "tests.S" {
+			t.Errorf("Got: reflect.TypeOf(s) = %v. Want: tests.S", got)
+		}
+	})
+
+	t.Run("Named type to anonymous type", func(t *testing.T) {
+		var x struct{} = S{}
+		if got := reflect.TypeOf(x); got.String() != "struct {}" {
+			t.Errorf("Got: reflect.TypeOf(x) = %v. Want: struct {}", got)
+		}
+	})
 }

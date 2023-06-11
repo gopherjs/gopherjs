@@ -90,19 +90,6 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 	return xctx.Import(path, wd, mode)
 }
 
-// excludeExecutable excludes all executable implementation .go files.
-// They have "executable_" prefix.
-func excludeExecutable(goFiles []string) []string {
-	var s []string
-	for _, f := range goFiles {
-		if strings.HasPrefix(f, "executable_") {
-			continue
-		}
-		s = append(s, f)
-	}
-	return s
-}
-
 // exclude returns files, excluding specified files.
 func exclude(files []string, exclude ...string) []string {
 	var s []string
@@ -116,12 +103,6 @@ Outer:
 		s = append(s, f)
 	}
 	return s
-}
-
-func include(files []string, includes ...string) []string {
-	files = exclude(files, includes...) // Ensure there won't be duplicates.
-	files = append(files, includes...)
-	return files
 }
 
 // ImportDir is like Import but processes the Go package found in the named

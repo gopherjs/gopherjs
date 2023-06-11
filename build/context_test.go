@@ -3,6 +3,7 @@ package build
 import (
 	"fmt"
 	"go/build"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +13,10 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
 	"golang.org/x/tools/go/buildutil"
 )
+
+func init() {
+	gopherjspkg.RegisterFS(http.Dir(".."))
+}
 
 func TestSimpleCtx(t *testing.T) {
 	e := DefaultEnv()

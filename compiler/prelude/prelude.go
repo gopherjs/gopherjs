@@ -31,6 +31,7 @@ func Minified() string {
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
+		KeepNames:         true,
 		Charset:           api.CharsetUTF8,
 		LegalComments:     api.LegalCommentsEndOfFile,
 	})

@@ -2,7 +2,7 @@ package prelude
 
 import (
 	_ "embed"
-	"fmt"
+	"log"
 
 	"github.com/evanw/esbuild/pkg/api"
 )
@@ -35,9 +35,14 @@ func Minified() string {
 		Charset:           api.CharsetUTF8,
 		LegalComments:     api.LegalCommentsEndOfFile,
 	})
-	if len(result.Errors) > 0 {
-		e := result.Errors[0]
-		panic(fmt.Sprintf("%d:%d: %s\n%s\n", e.Location.Line, e.Location.Column, e.Text, e.Location.LineText))
+	for _, w := range result.Warnings {
+		log.Printf("WARNING %d:%d: %s\n%s\n", w.Location.Line, w.Location.Column, w.Text, w.Location.LineText)
+	}
+	if errCount := len(result.Errors); errCount > 0 {
+		for _, e := range result.Errors {
+			log.Printf("ERROR %d:%d: %s\n%s\n", e.Location.Line, e.Location.Column, e.Text, e.Location.LineText)
+		}
+		log.Fatalf("JS minification failed with %d errors", errCount)
 	}
 	return string(result.Code)
 

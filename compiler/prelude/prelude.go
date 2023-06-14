@@ -2,9 +2,9 @@ package prelude
 
 import (
 	_ "embed"
-	"log"
 
 	"github.com/evanw/esbuild/pkg/api"
+	log "github.com/sirupsen/logrus"
 )
 
 // Prelude is the GopherJS JavaScript interop layer.
@@ -36,13 +36,13 @@ func Minified() string {
 		LegalComments:     api.LegalCommentsEndOfFile,
 	})
 	for _, w := range result.Warnings {
-		log.Printf("WARNING %d:%d: %s\n%s\n", w.Location.Line, w.Location.Column, w.Text, w.Location.LineText)
+		log.Warnf("%d:%d: %s\n%s\n", w.Location.Line, w.Location.Column, w.Text, w.Location.LineText)
 	}
 	if errCount := len(result.Errors); errCount > 0 {
 		for _, e := range result.Errors {
-			log.Printf("ERROR %d:%d: %s\n%s\n", e.Location.Line, e.Location.Column, e.Text, e.Location.LineText)
+			log.Errorf("%d:%d: %s\n%s\n", e.Location.Line, e.Location.Column, e.Text, e.Location.LineText)
 		}
-		log.Fatalf("JS minification failed with %d errors", errCount)
+		log.Fatalf("Prelude minification failed with %d errors", errCount)
 	}
 	return string(result.Code)
 

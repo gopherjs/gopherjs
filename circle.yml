@@ -73,12 +73,6 @@ jobs:
     steps:
     - setup_and_install_gopherjs
     - run:
-        name: Check minified prelude
-        command: |
-          set -e
-          go generate github.com/gopherjs/gopherjs/compiler/prelude
-          diff -u <(echo -n) <(git status --porcelain)
-    - run:
         name: Check gofmt
         command: diff -u <(echo -n) <(gofmt -d .)
     - run:

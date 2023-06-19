@@ -45,7 +45,7 @@ func TestBlockingInDefer(t *testing.T) {
 
 func TestIssue1083(t *testing.T) {
 	// https://github.com/gopherjs/gopherjs/issues/1083
-	var block = make(chan bool)
+	block := make(chan bool)
 
 	recoverCompleted := false
 

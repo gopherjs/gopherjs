@@ -23,9 +23,7 @@ func (e *errorString) Error() string {
 	return e.s
 }
 
-var (
-	ErrSyntax = &errorString{"invalid syntax"}
-)
+var ErrSyntax = &errorString{"invalid syntax"}
 
 func unquote(s string) (string, error) {
 	if len(s) < 2 {

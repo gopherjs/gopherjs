@@ -74,7 +74,6 @@ func TestArrayPointer(t *testing.T) {
 	})
 
 	t.Run("reflect.IsNil", func(t *testing.T) {
-
 	})
 }
 

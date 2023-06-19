@@ -26,7 +26,7 @@ func TestOpen(t *testing.T) {
 	}
 	f.Close()
 	defer os.Remove(f.Name())
-	fd, err := syscall.Open(f.Name(), syscall.O_RDONLY, 0600)
+	fd, err := syscall.Open(f.Name(), syscall.O_RDONLY, 0o600)
 	if err != nil {
 		t.Fatalf("syscall.Open() returned error: %s", err)
 	}

@@ -125,7 +125,7 @@ func (t T) M() int {
 }
 
 func TestExplicitConversion(t *testing.T) {
-	var coolGuy = S{x: 42}
+	coolGuy := S{x: 42}
 	var i I
 	i = T(coolGuy)
 	if i.M() != 42 {
@@ -138,7 +138,7 @@ func TestCopyStructByReflect(t *testing.T) {
 	type Info struct {
 		name string
 	}
-	a := []Info{Info{"A"}, Info{"B"}, Info{"C"}}
+	a := []Info{{"A"}, {"B"}, {"C"}}
 	v := reflect.ValueOf(a)
 	i := v.Index(0).Interface()
 	a[0] = Info{"X"}

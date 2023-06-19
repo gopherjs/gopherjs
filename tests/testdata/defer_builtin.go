@@ -1,7 +1,9 @@
 package main
 
-type set map[interface{}]struct{}
-type key struct{ a int }
+type (
+	set map[interface{}]struct{}
+	key struct{ a int }
+)
 
 var m = set{}
 

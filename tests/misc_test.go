@@ -430,7 +430,7 @@ func TestEmptySelectCase(t *testing.T) {
 	ch := make(chan int, 1)
 	ch <- 42
 
-	var v = 0
+	v := 0
 	select {
 	case v = <-ch:
 	}
@@ -439,17 +439,21 @@ func TestEmptySelectCase(t *testing.T) {
 	}
 }
 
-var a int
-var b int
-var C int
-var D int
+var (
+	a int
+	b int
+	C int
+	D int
+)
 
-var a1 = &a
-var a2 = &a
-var b1 = &b
-var C1 = &C
-var C2 = &C
-var D1 = &D
+var (
+	a1 = &a
+	a2 = &a
+	b1 = &b
+	C1 = &C
+	C2 = &C
+	D1 = &D
+)
 
 func TestPkgVarPointers(t *testing.T) {
 	if a1 != a2 || a1 == b1 || C1 != C2 || C1 == D1 {
@@ -554,10 +558,12 @@ var tuple2called = 0
 func tuple1() (interface{}, error) {
 	return tuple2()
 }
+
 func tuple2() (int, error) {
 	tuple2called++
 	return 14, nil
 }
+
 func TestTupleReturnImplicitCast(t *testing.T) {
 	x, _ := tuple1()
 	if x != 14 || tuple2called != 1 {
@@ -664,7 +670,7 @@ func TestSlicingNilSlice(t *testing.T) {
 		s = s[5:10]
 	})
 	t.Run("DoesNotBecomeNil", func(t *testing.T) {
-		var s = []int{}
+		s := []int{}
 		s = s[:]
 		if s == nil {
 			t.Errorf("non-nil slice became nil after slicing: %#v, want []int{}", s)
@@ -815,12 +821,12 @@ func TestUntypedNil(t *testing.T) {
 			_ = x == nil
 		)
 	}
-	var _ = (*int)(nil)
-	var _ = (func())(nil)
-	var _ = ([]byte)(nil)
-	var _ = (map[int]int)(nil)
-	var _ = (chan int)(nil)
-	var _ = (interface{})(nil)
+	_ = (*int)(nil)
+	_ = (func())(nil)
+	_ = ([]byte)(nil)
+	_ = (map[int]int)(nil)
+	_ = (chan int)(nil)
+	_ = (interface{})(nil)
 	{
 		f := func(*int) {}
 		f(nil)

@@ -294,7 +294,7 @@ func TestDate(t *testing.T) {
 
 // https://github.com/gopherjs/gopherjs/issues/287
 func TestInternalizeDate(t *testing.T) {
-	var a = time.Unix(0, (123 * time.Millisecond).Nanoseconds())
+	a := time.Unix(0, (123 * time.Millisecond).Nanoseconds())
 	var b time.Time
 	js.Global.Set("internalizeDate", func(t time.Time) { b = t })
 	js.Global.Call("eval", "(internalizeDate(new Date(123)))")
@@ -478,7 +478,6 @@ func TestMakeWrapper(t *testing.T) {
 	if js.MakeWrapper(m).Interface() != m {
 		t.Fail()
 	}
-
 }
 
 func TestMakeFullWrapperType(t *testing.T) {
@@ -502,7 +501,7 @@ func TestMakeFullWrapperGettersAndSetters(t *testing.T) {
 		Name:    "Gopher",
 		Struct:  F{Field: 42},
 		Pointer: f,
-		Array:   [1]F{F{Field: 42}},
+		Array:   [1]F{{Field: 42}},
 		Slice:   []*F{f},
 	}
 
@@ -731,7 +730,6 @@ func TestExternalize(t *testing.T) {
 			if result != tt.want {
 				t.Errorf("Unexpected result %q != %q", result, tt.want)
 			}
-
 		})
 	}
 }

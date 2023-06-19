@@ -4,6 +4,7 @@ package netip
 
 import (
 	"fmt"
+
 	"internal/intern"
 )
 

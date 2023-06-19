@@ -7,9 +7,11 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-const GOOS = "js"
-const GOARCH = "ecmascript"
-const Compiler = "gopherjs"
+const (
+	GOOS     = "js"
+	GOARCH   = "ecmascript"
+	Compiler = "gopherjs"
+)
 
 // The Error interface identifies a run time error.
 type Error interface {

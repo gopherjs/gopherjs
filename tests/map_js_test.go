@@ -4,8 +4,9 @@
 package tests
 
 import (
-	"github.com/gopherjs/gopherjs/js"
 	"testing"
+
+	"github.com/gopherjs/gopherjs/js"
 )
 
 func Test_MapWrapper(t *testing.T) {
@@ -43,7 +44,6 @@ func Test_MapWrapper(t *testing.T) {
 	}
 	if got := swmWrapper.Get("DummyMap").Get("key").Get("Msg").String(); got != swm.DummyMap["key"].Msg {
 		t.Errorf("DummyMap Got: %s, Want: %s", got, swm.DummyMap["key"].Msg)
-
 	}
 	if got := swmWrapper.Call("MapFunc", mapFuncArg).Get("key2").String(); got != mapFuncArg["key2"] {
 		t.Errorf("MapFunc Got: %s, Want: %s", got, mapFuncArg["key2"])
@@ -111,5 +111,4 @@ func Test_MapEmbeddedObject(t *testing.T) {
 	if d.Props["two"] != 2 {
 		t.Errorf("key 'two' value Got: %d, Want: %d", d.Props["two"], 2)
 	}
-
 }

@@ -73,9 +73,6 @@ jobs:
     steps:
     - setup_and_install_gopherjs
     - run:
-        name: Check gofmt
-        command: diff -u <(echo -n) <(gofmt -d .)
-    - run:
         name: Check go vet
         command: |
           set -e

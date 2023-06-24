@@ -28,7 +28,6 @@ package nosync
 // not a suitable use for a Pool, since the overhead does not amortize well in
 // that scenario. It is more efficient to have such objects implement their own
 // free list.
-//
 type Pool struct {
 	store []interface{}
 	New   func() interface{}

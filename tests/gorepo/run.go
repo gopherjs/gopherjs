@@ -11,7 +11,7 @@
 //
 // To run manually with summary, verbose output, and full stack traces of of known failures:
 //
-// 	go run run.go -summary -v -show_known_fails
+//	go run run.go -summary -v -show_known_fails
 //
 // TODO(bradfitz): docs of some sort, once we figure out how we're changing
 // headers of files
@@ -45,7 +45,6 @@ import (
 // GOPHERJS: Known test fails for GopherJS compiler.
 //
 // TODO: Reduce these to zero or as close as possible.
-//
 var knownFails = map[string]failReason{
 	"fixedbugs/bug114.go":     {desc: "fixedbugs/bug114.go:15:27: B32 (untyped int constant 4294967295) overflows int"},
 	"fixedbugs/bug242.go":     {desc: "bad map check 13 false false Error: fail"},

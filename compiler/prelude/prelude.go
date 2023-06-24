@@ -45,5 +45,4 @@ func Minified() string {
 		log.Fatalf("Prelude minification failed with %d errors", errCount)
 	}
 	return string(result.Code)
-
 }

@@ -32,9 +32,7 @@ func init() {
 	uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
 }
 
-var (
-	uint8Type *rtype
-)
+var uint8Type *rtype
 
 var (
 	idJsType      = "_jsType"
@@ -578,7 +576,7 @@ func maplen(m unsafe.Pointer) int {
 }
 
 func cvtDirect(v Value, typ Type) Value {
-	var srcVal = v.object()
+	srcVal := v.object()
 	if srcVal == jsType(v.typ).Get("nil") {
 		return makeValue(typ, jsType(typ).Get("nil"), v.flag)
 	}
@@ -914,7 +912,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 				return true
 			}
 		}
-		var n = v1.Len()
+		n := v1.Len()
 		if n != v2.Len() {
 			return false
 		}
@@ -932,7 +930,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	case Ptr:
 		return deepValueEqualJs(v1.Elem(), v2.Elem(), visited)
 	case Struct:
-		var n = v1.NumField()
+		n := v1.NumField()
 		for i := 0; i < n; i++ {
 			if !deepValueEqualJs(v1.Field(i), v2.Field(i), visited) {
 				return false
@@ -946,7 +944,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 		if v1.object() == v2.object() {
 			return true
 		}
-		var keys = v1.MapKeys()
+		keys := v1.MapKeys()
 		if len(keys) != v2.Len() {
 			return false
 		}

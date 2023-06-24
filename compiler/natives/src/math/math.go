@@ -7,10 +7,12 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-var math = js.Global.Get("Math")
-var _zero float64 = 0
-var posInf = 1 / _zero
-var negInf = -1 / _zero
+var (
+	math           = js.Global.Get("Math")
+	_zero  float64 = 0
+	posInf         = 1 / _zero
+	negInf         = -1 / _zero
+)
 
 // Usually, NaN can be obtained in JavaScript with `0 / 0` operation. However,
 // in V8, `0 / _zero` yields a bitwise-different value of NaN compared to the

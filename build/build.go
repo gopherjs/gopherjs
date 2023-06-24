@@ -730,7 +730,7 @@ func (s *Session) SourceMappingCallback(m *sourcemap.Map) func(generatedLine, ge
 
 // WriteCommandPackage writes the final JavaScript output file at pkgObj path.
 func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) error {
-	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(pkgObj), 0o777); err != nil {
 		return err
 	}
 	codeFile, err := os.Create(pkgObj)

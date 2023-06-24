@@ -920,3 +920,18 @@ func TestAssignImplicitConversion(t *testing.T) {
 		}
 	})
 }
+
+func TestCompositeLiterals(t *testing.T) {
+	type S struct{}
+	type SP *S
+
+	s1 := []*S{{}}
+	if got := reflect.TypeOf(s1[0]); got.String() != "*tests.S" {
+		t.Errorf("Got: reflect.TypeOf(s1[0]) = %v. Want: *tests.S", got)
+	}
+
+	s2 := []SP{{}}
+	if got := reflect.TypeOf(s2[0]); got.String() != "tests.SP" {
+		t.Errorf("Got: reflect.TypeOf(s2[0]) = %v. Want: tests.SP", got)
+	}
+}

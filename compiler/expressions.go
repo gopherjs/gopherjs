@@ -100,8 +100,34 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 	switch e := expr.(type) {
 	case *ast.CompositeLit:
-		if ptrType, isPointer := exprType.(*types.Pointer); isPointer {
-			exprType = ptrType.Elem()
+		if ptrType, isPointer := exprType.Underlying().(*types.Pointer); isPointer {
+			// Go automatically treats `[]*T{{}}` as `[]*T{&T{}}`, in which case the
+			// inner composite literal `{}` would has a pointer type. To make sure the
+			// type conversion is handled correctly, we generate the explicit AST for
+			// this.
+			var rewritten ast.Expr = fc.setType(&ast.UnaryExpr{
+				OpPos: e.Pos(),
+				Op:    token.AND,
+				X: fc.setType(&ast.CompositeLit{
+					Elts: e.Elts,
+				}, ptrType.Elem()),
+			}, ptrType)
+
+			if exprType, ok := exprType.(*types.Named); ok {
+				// Handle a special case when the pointer type is named, e.g.:
+				//   type PS *S
+				//   _ = []PS{{}}
+				// In that case the value corresponding to the inner literal `{}` is
+				// initialized as `&S{}` and then converted to `PS`: `[]PS{PS(&S{})}`.
+				typeCast := fc.setType(&ast.CallExpr{
+					Fun:    fc.newTypeIdent(exprType.String(), exprType.Obj()),
+					Lparen: e.Lbrace,
+					Args:   []ast.Expr{rewritten},
+					Rparen: e.Rbrace,
+				}, exprType)
+				rewritten = typeCast
+			}
+			return fc.translateExpr(rewritten)
 		}
 
 		collectIndexedElements := func(elementType types.Type) []string {
@@ -173,7 +199,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			return fc.formatExpr("new %s.ptr(%s)", fc.typeName(exprType), strings.Join(elements, ", "))
 		default:
-			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", t))
+			panic(fmt.Sprintf("Unhandled CompositeLit type: %[1]T %[1]v\n", t))
 		}
 
 	case *ast.FuncLit:

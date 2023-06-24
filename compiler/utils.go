@@ -282,6 +282,12 @@ func (fc *funcContext) newIdent(name string, t types.Type) *ast.Ident {
 	return ident
 }
 
+func (fc *funcContext) newTypeIdent(name string, obj types.Object) *ast.Ident {
+	ident := ast.NewIdent(name)
+	fc.pkgCtx.Info.Uses[ident] = obj
+	return ident
+}
+
 func (fc *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
 	fc.pkgCtx.Types[e] = types.TypeAndValue{Type: t}
 	return e

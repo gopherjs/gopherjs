@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// RemoveParens removed parens around an expression, if any.
 func RemoveParens(e ast.Expr) ast.Expr {
 	for {
 		p, isParen := e.(*ast.ParenExpr)
@@ -18,12 +19,14 @@ func RemoveParens(e ast.Expr) ast.Expr {
 	}
 }
 
+// SetType of the expression e to type t.
 func SetType(info *types.Info, t types.Type, e ast.Expr) ast.Expr {
 	info.Types[e] = types.TypeAndValue{Type: t}
 	return e
 }
 
-func NewIdent(name string, t types.Type, info *types.Info, pkg *types.Package) *ast.Ident {
+// NewVarIdent creates a new variable object with the given name and type.
+func NewVarIdent(name string, t types.Type, info *types.Info, pkg *types.Package) *ast.Ident {
 	ident := ast.NewIdent(name)
 	info.Types[ident] = types.TypeAndValue{Type: t}
 	obj := types.NewVar(0, pkg, name, t)
@@ -31,6 +34,7 @@ func NewIdent(name string, t types.Type, info *types.Info, pkg *types.Package) *
 	return ident
 }
 
+// IsTypeExpr returns true if expr denotes a type.
 func IsTypeExpr(expr ast.Expr, info *types.Info) bool {
 	switch e := expr.(type) {
 	case *ast.ArrayType, *ast.ChanType, *ast.FuncType, *ast.InterfaceType, *ast.MapType, *ast.StructType:
@@ -57,6 +61,7 @@ func IsTypeExpr(expr ast.Expr, info *types.Info) bool {
 	}
 }
 
+// ImportsUnsafe returns true of the source imports package "unsafe".
 func ImportsUnsafe(file *ast.File) bool {
 	for _, imp := range file.Imports {
 		if imp.Path.Value == `"unsafe"` {

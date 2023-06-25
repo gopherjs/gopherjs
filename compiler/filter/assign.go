@@ -71,7 +71,7 @@ func Assign(stmt ast.Stmt, info *types.Info, pkg *types.Package) ast.Stmt {
 				return e
 
 			default:
-				tmpVar := astutil.NewIdent(name, info.TypeOf(e), info, pkg)
+				tmpVar := astutil.NewVarIdent(name, info.TypeOf(e), info, pkg)
 				list = append(list, &ast.AssignStmt{
 					Lhs: []ast.Expr{tmpVar},
 					Tok: token.DEFINE,

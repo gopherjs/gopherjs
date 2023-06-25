@@ -183,7 +183,6 @@ var knownFails = map[string]failReason{
 	"typeparam/ordered.go":           {category: generics, desc: "missing support for the comparable type constraint"},
 	"typeparam/orderedmap.go":        {category: generics, desc: "missing support for the comparable type constraint"},
 	"typeparam/sets.go":              {category: generics, desc: "missing support for the comparable type constraint"},
-	"typeparam/settable.go":          {category: generics, desc: "undiagnosed: len() returns an invalid value on a generic function result"},
 	"typeparam/slices.go":            {category: generics, desc: "missing operator support for generic types"},
 	"typeparam/subdict.go":           {category: generics, desc: "missing support for the comparable type constraint"},
 	"typeparam/typeswitch2.go":       {category: generics, desc: "complex types have different print() format"},

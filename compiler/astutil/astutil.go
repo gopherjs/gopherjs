@@ -172,3 +172,30 @@ func EndsWithReturn(stmts []ast.Stmt) bool {
 		return false
 	}
 }
+
+// TypeCast wraps expression e into an AST of type conversion to a type denoted
+// by typeExpr. The new AST node is associated with the appropriate type.
+func TypeCast(info *types.Info, e ast.Expr, typeExpr ast.Expr) *ast.CallExpr {
+	cast := &ast.CallExpr{
+		Fun:    typeExpr,
+		Lparen: e.Pos(),
+		Args:   []ast.Expr{e},
+		Rparen: e.End(),
+	}
+	SetType(info, info.TypeOf(typeExpr), cast)
+	return cast
+}
+
+// TakeAddress wraps expression e into an AST of address-taking operator &e. The
+// new AST node is associated with pointer to the type of e.
+func TakeAddress(info *types.Info, e ast.Expr) *ast.UnaryExpr {
+	exprType := info.TypeOf(e)
+	ptrType := types.NewPointer(exprType)
+	addrOf := &ast.UnaryExpr{
+		OpPos: e.Pos(),
+		Op:    token.AND,
+		X:     e,
+	}
+	SetType(info, ptrType, addrOf)
+	return addrOf
+}

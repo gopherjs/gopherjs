@@ -100,12 +100,24 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 	switch e := expr.(type) {
 	case *ast.CompositeLit:
+		if exprType, ok := exprType.(*types.TypeParam); ok {
+			// Composite literals can be used with a type parameter if it has a core
+			// type. However, because at compile time we don't know the concrete type
+			// the type parameter will take, we initialize the literal with the core
+			// type and cast it to the a type denoted by the type param at runtime.
+			litValue := fc.setType(&ast.CompositeLit{
+				Elts: e.Elts,
+			}, typesutil.CoreType(exprType))
+			cast := fc.typeCastExpr(litValue, fc.newIdentFor(exprType.Obj()))
+			return fc.translateExpr(cast)
+		}
+
 		if ptrType, isPointer := exprType.Underlying().(*types.Pointer); isPointer {
 			// Go automatically treats `[]*T{{}}` as `[]*T{&T{}}`, in which case the
 			// inner composite literal `{}` would has a pointer type. To make sure the
 			// type conversion is handled correctly, we generate the explicit AST for
 			// this.
-			var rewritten ast.Expr = fc.takeAddress(fc.setType(&ast.CompositeLit{
+			var rewritten ast.Expr = fc.takeAddressExpr(fc.setType(&ast.CompositeLit{
 				Elts: e.Elts,
 			}, ptrType.Elem()))
 
@@ -115,7 +127,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				//   _ = []PS{{}}
 				// In that case the value corresponding to the inner literal `{}` is
 				// initialized as `&S{}` and then converted to `PS`: `[]PS{PS(&S{})}`.
-				rewritten = fc.typeCast(rewritten, fc.newIdentFor(exprType.Obj()))
+				rewritten = fc.typeCastExpr(rewritten, fc.newIdentFor(exprType.Obj()))
 			}
 			return fc.translateExpr(rewritten)
 		}
@@ -956,7 +968,7 @@ func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 	_, pointerExpected := methodsRecvType.(*types.Pointer)
 	if !isPointer && pointerExpected {
 		recvType = types.NewPointer(recvType)
-		x = fc.takeAddress(x)
+		x = fc.takeAddressExpr(x)
 	}
 	if isPointer && !pointerExpected {
 		x = fc.setType(x, methodsRecvType)

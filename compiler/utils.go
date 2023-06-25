@@ -451,11 +451,11 @@ func (fc *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
 	return astutil.SetType(fc.pkgCtx.Info.Info, t, e)
 }
 
-func (fc *funcContext) typeCast(e ast.Expr, typeExpr ast.Expr) *ast.CallExpr {
+func (fc *funcContext) typeCastExpr(e ast.Expr, typeExpr ast.Expr) *ast.CallExpr {
 	return astutil.TypeCast(fc.pkgCtx.Info.Info, e, typeExpr)
 }
 
-func (fc *funcContext) takeAddress(e ast.Expr) *ast.UnaryExpr {
+func (fc *funcContext) takeAddressExpr(e ast.Expr) *ast.UnaryExpr {
 	return astutil.TakeAddress(fc.pkgCtx.Info.Info, e)
 }
 

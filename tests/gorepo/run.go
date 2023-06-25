@@ -149,6 +149,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue48898.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
 	"fixedbugs/issue48536.go": {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
 	"fixedbugs/issue53600.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+	"typeparam/issue51733.go": {category: usesUnsupportedPackage, desc: "unsafe: uintptr to struct pointer conversion is unsupported"},
 
 	// Failures related to the lack of generics support. Ideally, this section
 	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
@@ -175,7 +176,6 @@ var knownFails = map[string]failReason{
 	"typeparam/issue51303.go":        {category: generics, desc: "missing support for conversion into a parameterized type"},
 	"typeparam/issue51522a.go":       {category: generics, desc: "missing support for the comparable type constraint"},
 	"typeparam/issue51522b.go":       {category: generics, desc: "missing support for the comparable type constraint"},
-	"typeparam/issue51733.go":        {category: generics, desc: "undiagnosed: unsafe.Pointer to struct pointer conversion"},
 	"typeparam/list.go":              {category: generics, desc: "missing operator support for generic types"},
 	"typeparam/maps.go":              {category: generics, desc: "missing support for the comparable type constraint"},
 	"typeparam/metrics.go":           {category: generics, desc: "missing support for the comparable type constraint"},

@@ -27,10 +27,16 @@ func SetType(info *types.Info, t types.Type, e ast.Expr) ast.Expr {
 
 // NewVarIdent creates a new variable object with the given name and type.
 func NewVarIdent(name string, t types.Type, info *types.Info, pkg *types.Package) *ast.Ident {
-	ident := ast.NewIdent(name)
-	info.Types[ident] = types.TypeAndValue{Type: t}
-	obj := types.NewVar(0, pkg, name, t)
+	obj := types.NewVar(token.NoPos, pkg, name, t)
+	return NewIdentFor(info, obj)
+}
+
+// NewIdentFor creates a new identifier referencing the given object.
+func NewIdentFor(info *types.Info, obj types.Object) *ast.Ident {
+	ident := ast.NewIdent(obj.Name())
+	ident.NamePos = obj.Pos()
 	info.Uses[ident] = obj
+	SetType(info, obj.Type(), ident)
 	return ident
 }
 

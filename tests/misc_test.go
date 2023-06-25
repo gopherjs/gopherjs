@@ -187,6 +187,8 @@ func TestPointerOfStructConversion(t *testing.T) {
 
 	type B A
 
+	type AP *A
+
 	a1 := &A{Value: 1}
 	b1 := (*B)(a1)
 	b1.Value = 2
@@ -196,6 +198,10 @@ func TestPointerOfStructConversion(t *testing.T) {
 	b2.Value = 4
 	if a1 != a2 || b1 != b2 || a1.Value != 4 || a2.Value != 4 || b1.Value != 4 || b2.Value != 4 {
 		t.Fail()
+	}
+
+	if got := reflect.TypeOf((AP)(&A{Value: 1})); got.String() != "tests.AP" {
+		t.Errorf("Got: reflect.TypeOf((AP)(&A{Value: 1})) = %v. Want: tests.AP.", got)
 	}
 }
 
@@ -424,7 +430,7 @@ func TestEmptySelectCase(t *testing.T) {
 	ch := make(chan int, 1)
 	ch <- 42
 
-	var v = 0
+	v := 0
 	select {
 	case v = <-ch:
 	}
@@ -433,17 +439,21 @@ func TestEmptySelectCase(t *testing.T) {
 	}
 }
 
-var a int
-var b int
-var C int
-var D int
+var (
+	a int
+	b int
+	C int
+	D int
+)
 
-var a1 = &a
-var a2 = &a
-var b1 = &b
-var C1 = &C
-var C2 = &C
-var D1 = &D
+var (
+	a1 = &a
+	a2 = &a
+	b1 = &b
+	C1 = &C
+	C2 = &C
+	D1 = &D
+)
 
 func TestPkgVarPointers(t *testing.T) {
 	if a1 != a2 || a1 == b1 || C1 != C2 || C1 == D1 {
@@ -548,10 +558,12 @@ var tuple2called = 0
 func tuple1() (interface{}, error) {
 	return tuple2()
 }
+
 func tuple2() (int, error) {
 	tuple2called++
 	return 14, nil
 }
+
 func TestTupleReturnImplicitCast(t *testing.T) {
 	x, _ := tuple1()
 	if x != 14 || tuple2called != 1 {
@@ -658,7 +670,7 @@ func TestSlicingNilSlice(t *testing.T) {
 		s = s[5:10]
 	})
 	t.Run("DoesNotBecomeNil", func(t *testing.T) {
-		var s = []int{}
+		s := []int{}
 		s = s[:]
 		if s == nil {
 			t.Errorf("non-nil slice became nil after slicing: %#v, want []int{}", s)
@@ -809,12 +821,12 @@ func TestUntypedNil(t *testing.T) {
 			_ = x == nil
 		)
 	}
-	var _ = (*int)(nil)
-	var _ = (func())(nil)
-	var _ = ([]byte)(nil)
-	var _ = (map[int]int)(nil)
-	var _ = (chan int)(nil)
-	var _ = (interface{})(nil)
+	_ = (*int)(nil)
+	_ = (func())(nil)
+	_ = ([]byte)(nil)
+	_ = (map[int]int)(nil)
+	_ = (chan int)(nil)
+	_ = (interface{})(nil)
 	{
 		f := func(*int) {}
 		f(nil)
@@ -886,5 +898,46 @@ func TestReflectSetForEmbed(t *testing.T) {
 	e.Set(in)
 	if e.Field(0) != f0 {
 		t.Fatalf("relfect.Set got %v, want %v", f0, e.Field(0))
+	}
+}
+
+func TestAssignImplicitConversion(t *testing.T) {
+	type S struct{}
+	type SP *S
+
+	t.Run("Pointer to named type", func(t *testing.T) {
+		var sp SP = &S{}
+		if got := reflect.TypeOf(sp); got.String() != "tests.SP" {
+			t.Errorf("Got: reflect.TypeOf(sp) = %v. Want: tests.SP", got)
+		}
+	})
+
+	t.Run("Anonymous struct to named type", func(t *testing.T) {
+		var s S = struct{}{}
+		if got := reflect.TypeOf(s); got.String() != "tests.S" {
+			t.Errorf("Got: reflect.TypeOf(s) = %v. Want: tests.S", got)
+		}
+	})
+
+	t.Run("Named type to anonymous type", func(t *testing.T) {
+		var x struct{} = S{}
+		if got := reflect.TypeOf(x); got.String() != "struct {}" {
+			t.Errorf("Got: reflect.TypeOf(x) = %v. Want: struct {}", got)
+		}
+	})
+}
+
+func TestCompositeLiterals(t *testing.T) {
+	type S struct{}
+	type SP *S
+
+	s1 := []*S{{}}
+	if got := reflect.TypeOf(s1[0]); got.String() != "*tests.S" {
+		t.Errorf("Got: reflect.TypeOf(s1[0]) = %v. Want: *tests.S", got)
+	}
+
+	s2 := []SP{{}}
+	if got := reflect.TypeOf(s2[0]); got.String() != "tests.SP" {
+		t.Errorf("Got: reflect.TypeOf(s2[0]) = %v. Want: tests.SP", got)
 	}
 }

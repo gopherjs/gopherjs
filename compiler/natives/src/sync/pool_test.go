@@ -24,7 +24,6 @@ func TestPool(t *testing.T) {
 			t.Fatalf("Got: p.Get() returned: %s. Want: %s.", got, want)
 		}
 	}
-
 }
 
 func TestPoolGC(t *testing.T) {

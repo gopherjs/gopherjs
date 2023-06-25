@@ -54,7 +54,7 @@ workflows:
 parameters:
   go_version:
     type: string
-    default: "1.18.5"
+    default: "1.18.10"
   nvm_version:
     type: string
     default: "0.38.0"
@@ -72,15 +72,6 @@ jobs:
     executor: gopherjs
     steps:
     - setup_and_install_gopherjs
-    - run:
-        name: Check minified prelude
-        command: |
-          set -e
-          go generate github.com/gopherjs/gopherjs/compiler/prelude
-          diff -u <(echo -n) <(git status --porcelain)
-    - run:
-        name: Check gofmt
-        command: diff -u <(echo -n) <(gofmt -d .)
     - run:
         name: Check go vet
         command: |

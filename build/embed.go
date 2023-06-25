@@ -55,17 +55,21 @@ func embedFiles(pkg *PackageData, fset *token.FileSet, files []*ast.File) (*ast.
 				&ast.CallExpr{
 					Fun: em.Spec.Type,
 					Args: []ast.Expr{
-						&ast.Ident{Name: buildIdent(fs[0].Name),
-							NamePos: em.Spec.Names[0].NamePos},
+						&ast.Ident{
+							Name:    buildIdent(fs[0].Name),
+							NamePos: em.Spec.Names[0].NamePos,
+						},
 					},
-				}}
+				},
+			}
 		case goembed.EmbedBytes:
 			// value = []byte(data)
 			em.Spec.Values = []ast.Expr{
 				&ast.CallExpr{
 					Fun:  em.Spec.Type,
 					Args: []ast.Expr{ast.NewIdent(buildIdent(fs[0].Name))},
-				}}
+				},
+			}
 		case goembed.EmbedString:
 			// value = data
 			em.Spec.Values = []ast.Expr{ast.NewIdent(buildIdent(fs[0].Name))}
@@ -115,15 +119,15 @@ func embedFiles(pkg *PackageData, fset *token.FileSet, files []*ast.File) (*ast.
 							Elt: &ast.StructType{
 								Fields: &ast.FieldList{
 									List: []*ast.Field{
-										&ast.Field{
+										{
 											Names: []*ast.Ident{ast.NewIdent("name")},
 											Type:  ast.NewIdent("string"),
 										},
-										&ast.Field{
+										{
 											Names: []*ast.Ident{ast.NewIdent("data")},
 											Type:  ast.NewIdent("string"),
 										},
-										&ast.Field{
+										{
 											Names: []*ast.Ident{ast.NewIdent("hash")},
 											Type: &ast.ArrayType{
 												Len: &ast.BasicLit{Kind: token.INT, Value: "16"},

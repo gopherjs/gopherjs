@@ -157,7 +157,7 @@ func TestIssue22073(t *testing.T) {
 	// 	TypeError: Cannot read property 'apply' of undefined
 
 	// Shouldn't panic.
-	//m.Call(nil)
+	// m.Call(nil)
 }
 
 func TestCallReturnsEmpty(t *testing.T) {

@@ -5,7 +5,7 @@ import _ "unsafe" // for go:linkname
 func init() {
 	// Avoid dead-code elimination.
 	// TODO(nevkontakte): This should not be necessary.
-	var _ = doInternalOne
+	_ = doInternalOne
 }
 
 func DoTwo() string {

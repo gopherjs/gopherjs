@@ -72,9 +72,9 @@ func NewBuildContext(installSuffix string, buildTags []string) XContext {
 // In the directory containing the package, .go and .inc.js files are
 // considered part of the package except for:
 //
-//    - .go files in package documentation
-//    - files starting with _ or . (likely editor temporary files)
-//    - files with build constraints not satisfied by the context
+//   - .go files in package documentation
+//   - files starting with _ or . (likely editor temporary files)
+//   - files with build constraints not satisfied by the context
 //
 // If an error occurs, Import returns a non-nil error and a nil
 // *PackageData.
@@ -90,19 +90,6 @@ func Import(path string, mode build.ImportMode, installSuffix string, buildTags 
 	return xctx.Import(path, wd, mode)
 }
 
-// excludeExecutable excludes all executable implementation .go files.
-// They have "executable_" prefix.
-func excludeExecutable(goFiles []string) []string {
-	var s []string
-	for _, f := range goFiles {
-		if strings.HasPrefix(f, "executable_") {
-			continue
-		}
-		s = append(s, f)
-	}
-	return s
-}
-
 // exclude returns files, excluding specified files.
 func exclude(files []string, exclude ...string) []string {
 	var s []string
@@ -116,12 +103,6 @@ Outer:
 		s = append(s, f)
 	}
 	return s
-}
-
-func include(files []string, includes ...string) []string {
-	files = exclude(files, includes...) // Ensure there won't be duplicates.
-	files = append(files, includes...)
-	return files
 }
 
 // ImportDir is like Import but processes the Go package found in the named
@@ -749,7 +730,7 @@ func (s *Session) SourceMappingCallback(m *sourcemap.Map) func(generatedLine, ge
 
 // WriteCommandPackage writes the final JavaScript output file at pkgObj path.
 func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) error {
-	if err := os.MkdirAll(filepath.Dir(pkgObj), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(pkgObj), 0o777); err != nil {
 		return err
 	}
 	codeFile, err := os.Create(pkgObj)

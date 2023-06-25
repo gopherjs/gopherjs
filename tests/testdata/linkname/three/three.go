@@ -7,7 +7,7 @@ func DoThree() string {
 func init() {
 	// Avoid dead-code elimination.
 	// TODO(nevkontakte): This should not be necessary.
-	var _ = doInternalThree
+	_ = doInternalThree
 }
 
 var threeSecret = "three secret"

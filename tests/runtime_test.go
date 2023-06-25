@@ -23,14 +23,14 @@ func Test_parseCallFrame(t *testing.T) {
 			want:  "foo https://gopherjs.github.io/playground/playground.js 102 11836",
 		},
 		{
-			name: "Chrome 96, anonymous eval",
+			name:  "Chrome 96, anonymous eval",
 			input: "	at eval (<anonymous>)",
-			want: "eval <anonymous> 0 0",
+			want:  "eval <anonymous> 0 0",
 		},
 		{
-			name: "Chrome 96, anonymous Array.forEach",
+			name:  "Chrome 96, anonymous Array.forEach",
 			input: "	at Array.forEach (<anonymous>)",
-			want: "Array.forEach <anonymous> 0 0",
+			want:  "Array.forEach <anonymous> 0 0",
 		},
 		{
 			name:  "Chrome 96, file location only",

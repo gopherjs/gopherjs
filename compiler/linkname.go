@@ -26,10 +26,10 @@ type GoLinkname struct {
 // This is a logical equivalent of a symbol name used by traditional linkers.
 // The following properties should hold true:
 //
-//  - Each named symbol within a program has a unique SymName.
-//  - Similarly named methods of different types will have different symbol names.
-//  - The string representation is opaque and should not be attempted to reversed
-//    to a struct form.
+//   - Each named symbol within a program has a unique SymName.
+//   - Similarly named methods of different types will have different symbol names.
+//   - The string representation is opaque and should not be attempted to reversed
+//     to a struct form.
 type SymName struct {
 	PkgPath string // Full package import path.
 	Name    string // Symbol name.
@@ -85,12 +85,12 @@ func (n SymName) IsMethod() (recv string, method string, ok bool) {
 //
 // GopherJS directive support has the following limitations:
 //
-//  - External linkname must be specified.
-//  - The directive must be applied to a package-level function or method (variables
-//    are not supported).
-//  - The local function referenced by the directive must have no body (in other
-//    words, it can only "import" an external function implementation into the
-//    local scope).
+//   - External linkname must be specified.
+//   - The directive must be applied to a package-level function or method (variables
+//     are not supported).
+//   - The local function referenced by the directive must have no body (in other
+//     words, it can only "import" an external function implementation into the
+//     local scope).
 func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]GoLinkname, error) {
 	var errs ErrorList = nil
 	var directives []GoLinkname

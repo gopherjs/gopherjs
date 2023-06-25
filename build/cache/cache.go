@@ -95,7 +95,7 @@ func (bc *BuildCache) StoreArchive(a *compiler.Archive) {
 		return // Caching is disabled.
 	}
 	path := cachedPath(bc.archiveKey(a.ImportPath))
-	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		log.Warningf("Failed to create build cache directory: %v", err)
 		return
 	}

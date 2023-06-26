@@ -117,23 +117,6 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 	return pkg, nil
 }
 
-// Test if we find the '//gopherjs:keep-original' comment
-func findKeepOverriddenComment(doc *ast.CommentGroup) bool {
-	if doc == nil {
-		return false
-	}
-	for _, comment := range doc.List {
-		text := comment.Text
-		if i := strings.Index(text, " "); i >= 0 {
-			text = text[:i]
-		}
-		if text == "//gopherjs:keep-original" {
-			return true
-		}
-	}
-	return false
-}
-
 // parseAndAugment parses and returns all .go files of given pkg.
 // Standard Go library packages are augmented with files in compiler/natives folder.
 // If isTest is true and pkg.ImportPath has no _test suffix, package is built for running internal tests.
@@ -194,7 +177,7 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 				switch d := decl.(type) {
 				case *ast.FuncDecl:
 					k := astutil.FuncKey(d)
-					replacedDeclNames[k] = overrideInfo{keepOverridden: findKeepOverriddenComment(d.Doc)}
+					replacedDeclNames[k] = overrideInfo{keepOverridden: astutil.KeepOriginal(d)}
 					pruneOriginalFuncs[k] = astutil.PruneOriginal(d)
 				case *ast.GenDecl:
 					switch d.Tok {

@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-//gopherjs:keep_overridden
+//gopherjs:keep-original
 func TestOnePassCutoff(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {

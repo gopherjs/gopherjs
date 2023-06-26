@@ -117,7 +117,7 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 	return pkg, nil
 }
 
-// Test if we find the '//gopherjs:keep_overridden' comment
+// Test if we find the '//gopherjs:keep-original' comment
 func findKeepOverriddenComment(doc *ast.CommentGroup) bool {
 	if doc == nil {
 		return false
@@ -127,7 +127,7 @@ func findKeepOverriddenComment(doc *ast.CommentGroup) bool {
 		if i := strings.Index(text, " "); i >= 0 {
 			text = text[:i]
 		}
-		if text == "//gopherjs:keep_overridden" {
+		if text == "//gopherjs:keep-original" {
 			return true
 		}
 	}
@@ -144,7 +144,7 @@ func findKeepOverriddenComment(doc *ast.CommentGroup) bool {
 // native overrides get added to the package (even if they have the same name
 // as an existing file from the standard library). For function identifiers that exist
 // in the original AND the overrides AND that include the following directive in their comment:
-// //gopherjs:keep_overridden, the original identifier in the AST gets prefixed by
+// //gopherjs:keep-original, the original identifier in the AST gets prefixed by
 // `_gopherjs_overridden_`. For other identifiers that exist in the original AND the overrides,
 // the original identifier gets replaced by `_`. New identifiers that don't exist in original
 // package get added.

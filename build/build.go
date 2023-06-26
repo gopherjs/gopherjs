@@ -135,10 +135,10 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 	var files []*ast.File
 
 	type overrideInfo struct {
-		keepOverridden bool
+		keepOriginal  bool
+		pruneOriginal bool
 	}
 	replacedDeclNames := make(map[string]overrideInfo)
-	pruneOriginalFuncs := make(map[string]bool)
 
 	isXTest := strings.HasSuffix(pkg.ImportPath, "_test")
 	importPath := pkg.ImportPath
@@ -177,8 +177,10 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 				switch d := decl.(type) {
 				case *ast.FuncDecl:
 					k := astutil.FuncKey(d)
-					replacedDeclNames[k] = overrideInfo{keepOverridden: astutil.KeepOriginal(d)}
-					pruneOriginalFuncs[k] = astutil.PruneOriginal(d)
+					replacedDeclNames[k] = overrideInfo{
+						keepOriginal:  astutil.KeepOriginal(d),
+						pruneOriginal: astutil.PruneOriginal(d),
+					}
 				case *ast.GenDecl:
 					switch d.Tok {
 					case token.TYPE:
@@ -242,12 +244,12 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 			case *ast.FuncDecl:
 				k := astutil.FuncKey(d)
 				if info, ok := replacedDeclNames[k]; ok {
-					if pruneOriginalFuncs[k] {
+					if info.pruneOriginal {
 						// Prune function bodies, since it may contain code invalid for
 						// GopherJS and pin unwanted imports.
 						d.Body = nil
 					}
-					if info.keepOverridden {
+					if info.keepOriginal {
 						// Allow overridden function calls
 						// The standard library implementation of foo() becomes _gopherjs_overridden_foo()
 						d.Name.Name = "_gopherjs_overridden_" + d.Name.Name

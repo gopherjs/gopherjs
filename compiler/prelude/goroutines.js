@@ -250,7 +250,7 @@ var $send = (chan, value) => {
     });
     $block();
     return {
-        $blk: function () {
+        $blk() {
             if (closedDuringSend) {
                 $throwRuntimeError("send on closed channel");
             }
@@ -271,7 +271,7 @@ var $recv = chan => {
     }
 
     var thisGoroutine = $curGoroutine;
-    var f = { $blk: function () { return this.value; } };
+    var f = { $blk() { return this.value; } };
     var queueEntry = v => {
         f.value = v;
         $schedule(thisGoroutine);
@@ -344,7 +344,7 @@ var $select = comms => {
 
     var entries = [];
     var thisGoroutine = $curGoroutine;
-    var f = { $blk: function () { return this.selection; } };
+    var f = { $blk() { return this.selection; } };
     var removeFromQueues = () => {
         for (var i = 0; i < entries.length; i++) {
             var entry = entries[i];

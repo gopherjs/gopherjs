@@ -556,7 +556,7 @@ var $Chan = function (elem, capacity) {
     this.$closed = false;
 };
 var $chanNil = new $Chan(null, 0);
-$chanNil.$sendQueue = $chanNil.$recvQueue = { length: 0, push: function () { }, shift: function () { return undefined; }, indexOf: function () { return -1; } };
+$chanNil.$sendQueue = $chanNil.$recvQueue = { length: 0, push() { }, shift() { return undefined; }, indexOf() { return -1; } };
 
 var $funcTypes = {};
 var $funcType = (params, results, variadic) => {

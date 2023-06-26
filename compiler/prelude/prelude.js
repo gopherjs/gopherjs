@@ -403,8 +403,8 @@ var $pointerOfStructConversion = (obj, type) => {
         for (var i = 0; i < type.elem.fields.length; i++) {
             (fieldProp => {
                 properties[fieldProp] = {
-                    get: function () { return obj[fieldProp]; },
-                    set: function (value) { obj[fieldProp] = value; }
+                    get() { return obj[fieldProp]; },
+                    set(value) { obj[fieldProp] = value; }
                 };
             })(type.elem.fields[i].prop);
         }

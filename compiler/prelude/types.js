@@ -288,7 +288,7 @@ var $newType = function (size, kind, string, named, pkg, exported, constructor) 
                             if (v.$val === undefined) {
                                 v = new f.typ(v);
                             }
-                            return v[m.prop].apply(v, args);
+                            return v[m.prop](...args);
                         };
                     };
                     fields.forEach(function (f) {

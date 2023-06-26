@@ -131,7 +131,7 @@ var $go = function (fun, args) {
     var $goroutine = function () {
         try {
             $curGoroutine = $goroutine;
-            var r = fun.apply(undefined, args);
+            var r = fun(...args);
             if (r && r.$blk !== undefined) {
                 fun = function () { return r.$blk(); };
                 args = [];

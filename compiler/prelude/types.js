@@ -662,8 +662,7 @@ var $sliceType = elem => {
     }
     return typ;
 };
-var $makeSlice = (typ, length, capacity) => {
-    capacity = capacity || length;
+var $makeSlice = (typ, length, capacity = length) => {
     if (length < 0 || length > 2147483647) {
         $throwRuntimeError("makeslice: len out of range");
     }

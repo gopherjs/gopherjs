@@ -6,9 +6,11 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-var syscallModule *js.Object
-var alreadyTriedToLoad = false
-var minusOne = -1
+var (
+	syscallModule      *js.Object
+	alreadyTriedToLoad = false
+	minusOne           = -1
+)
 
 var warningPrinted = false
 

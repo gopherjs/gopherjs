@@ -38,9 +38,11 @@ func TestLinknameMethods(t *testing.T) {
 	method.TestLinkname(t)
 }
 
-type name struct{ bytes *byte }
-type nameOff int32
-type rtype struct{}
+type (
+	name    struct{ bytes *byte }
+	nameOff int32
+	rtype   struct{}
+)
 
 //go:linkname rtype_nameOff reflect.(*rtype).nameOff
 func rtype_nameOff(r *rtype, off nameOff) name

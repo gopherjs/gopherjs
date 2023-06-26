@@ -7,9 +7,11 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-const GOOS = "js"
-const GOARCH = "ecmascript"
-const Compiler = "gopherjs"
+const (
+	GOOS     = "js"
+	GOARCH   = "ecmascript"
+	Compiler = "gopherjs"
+)
 
 // The Error interface identifies a run time error.
 type Error interface {
@@ -80,7 +82,7 @@ func init() {
 
 func GOROOT() string {
 	process := js.Global.Get("process")
-	if process == js.Undefined {
+	if process == js.Undefined || process.Get("env") == js.Undefined {
 		return "/"
 	}
 	if v := process.Get("env").Get("GOPHERJS_GOROOT"); v != js.Undefined && v.String() != "" {

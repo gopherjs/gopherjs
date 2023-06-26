@@ -4,8 +4,9 @@
 package reflectlite_test
 
 import (
-	. "internal/reflectlite"
 	"testing"
+
+	. "internal/reflectlite"
 )
 
 func TestTypes(t *testing.T) {

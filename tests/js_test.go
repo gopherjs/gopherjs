@@ -294,7 +294,7 @@ func TestDate(t *testing.T) {
 
 // https://github.com/gopherjs/gopherjs/issues/287
 func TestInternalizeDate(t *testing.T) {
-	var a = time.Unix(0, (123 * time.Millisecond).Nanoseconds())
+	a := time.Unix(0, (123 * time.Millisecond).Nanoseconds())
 	var b time.Time
 	js.Global.Set("internalizeDate", func(t time.Time) { b = t })
 	js.Global.Call("eval", "(internalizeDate(new Date(123)))")
@@ -478,7 +478,6 @@ func TestMakeWrapper(t *testing.T) {
 	if js.MakeWrapper(m).Interface() != m {
 		t.Fail()
 	}
-
 }
 
 func TestMakeFullWrapperType(t *testing.T) {
@@ -502,7 +501,7 @@ func TestMakeFullWrapperGettersAndSetters(t *testing.T) {
 		Name:    "Gopher",
 		Struct:  F{Field: 42},
 		Pointer: f,
-		Array:   [1]F{F{Field: 42}},
+		Array:   [1]F{{Field: 42}},
 		Slice:   []*F{f},
 	}
 
@@ -672,6 +671,66 @@ func TestNewArrayBuffer(t *testing.T) {
 	a := js.NewArrayBuffer(b[1:3])
 	if a.Get("byteLength").Int() != 2 {
 		t.Fail()
+	}
+}
+
+func TestExternalize(t *testing.T) {
+	fn := js.Global.Call("eval", "(function(x) { return JSON.stringify(x); })")
+
+	tests := []struct {
+		name  string
+		input interface{}
+		want  string
+	}{
+		{
+			name:  "bool",
+			input: true,
+			want:  "true",
+		},
+		{
+			name:  "nil map",
+			input: func() map[string]string { return nil }(),
+			want:  "null",
+		},
+		{
+			name:  "empty map",
+			input: map[string]string{},
+			want:  "{}",
+		},
+		{
+			name:  "nil slice",
+			input: func() []string { return nil }(),
+			want:  "null",
+		},
+		{
+			name:  "empty slice",
+			input: []string{},
+			want:  "[]",
+		},
+		{
+			name:  "empty struct",
+			input: struct{}{},
+			want:  "{}",
+		},
+		{
+			name:  "nil pointer",
+			input: func() *int { return nil }(),
+			want:  "null",
+		},
+		{
+			name:  "nil func",
+			input: func() func() { return nil }(),
+			want:  "null",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := fn.Invoke(tt.input).String()
+			if result != tt.want {
+				t.Errorf("Unexpected result %q != %q", result, tt.want)
+			}
+		})
 	}
 }
 

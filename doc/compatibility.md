@@ -58,7 +58,7 @@ Also be careful about using GopherJS-specific packages (e.g. `github.com/gopherj
 
 GopherJS implements `syscall/js` package, so it _should_ be able to run most code written for WebAssembly. However, in practice this topic is largely unexplored at this time.
 
-It is worth noting that GopherJS emulates 32-bit environment, whereas Go WebAssembly is 64 bit, so you should use fixed-size types if you need to guarantee consistent behavior between the two architectures.
+It is worth noting that Go predeclares both architecture-independent [numeric types](https://go.dev/ref/spec#Numeric_types) (`int32`, `int64`, etc.) and ones with implementation-specific sizes (`int`, `uintptr`, etc.). Pay attention to this distinction to avoid portability issues between 32-bit and 64-bit platforms.
 
 🚧 If you have first-hand experience with this, please consider adding it to this section!
 

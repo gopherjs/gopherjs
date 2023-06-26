@@ -100,8 +100,34 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 	switch e := expr.(type) {
 	case *ast.CompositeLit:
-		if ptrType, isPointer := exprType.(*types.Pointer); isPointer {
-			exprType = ptrType.Elem()
+		if ptrType, isPointer := exprType.Underlying().(*types.Pointer); isPointer {
+			// Go automatically treats `[]*T{{}}` as `[]*T{&T{}}`, in which case the
+			// inner composite literal `{}` would has a pointer type. To make sure the
+			// type conversion is handled correctly, we generate the explicit AST for
+			// this.
+			var rewritten ast.Expr = fc.setType(&ast.UnaryExpr{
+				OpPos: e.Pos(),
+				Op:    token.AND,
+				X: fc.setType(&ast.CompositeLit{
+					Elts: e.Elts,
+				}, ptrType.Elem()),
+			}, ptrType)
+
+			if exprType, ok := exprType.(*types.Named); ok {
+				// Handle a special case when the pointer type is named, e.g.:
+				//   type PS *S
+				//   _ = []PS{{}}
+				// In that case the value corresponding to the inner literal `{}` is
+				// initialized as `&S{}` and then converted to `PS`: `[]PS{PS(&S{})}`.
+				typeCast := fc.setType(&ast.CallExpr{
+					Fun:    fc.newIdentFor(exprType.Obj()),
+					Lparen: e.Lbrace,
+					Args:   []ast.Expr{rewritten},
+					Rparen: e.Rbrace,
+				}, exprType)
+				rewritten = typeCast
+			}
+			return fc.translateExpr(rewritten)
 		}
 
 		collectIndexedElements := func(elementType types.Type) []string {
@@ -173,7 +199,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			return fc.formatExpr("new %s.ptr(%s)", fc.typeName(exprType), strings.Join(elements, ", "))
 		default:
-			panic(fmt.Sprintf("Unhandled CompositeLit type: %T\n", t))
+			panic(fmt.Sprintf("Unhandled CompositeLit type: %[1]T %[1]v\n", t))
 		}
 
 	case *ast.FuncLit:
@@ -206,6 +232,8 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				return fc.translateExpr(e.X)
 			}
 
+			elemType := exprType.(*types.Pointer).Elem()
+
 			switch x := astutil.RemoveParens(e.X).(type) {
 			case *ast.CompositeLit:
 				return fc.formatExpr("$newDataPointer(%e, %s)", x, fc.typeName(fc.pkgCtx.TypeOf(e)))
@@ -214,13 +242,13 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				if fc.pkgCtx.escapingVars[obj] {
 					return fc.formatExpr("(%1s.$ptr || (%1s.$ptr = new %2s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %1s)))", fc.pkgCtx.objectNames[obj], fc.typeName(exprType))
 				}
-				return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", exprType), false))
+				return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", elemType), false))
 			case *ast.SelectorExpr:
 				sel, ok := fc.pkgCtx.SelectionOf(x)
 				if !ok {
 					// qualified identifier
 					obj := fc.pkgCtx.Uses[x.Sel].(*types.Var)
-					return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", exprType), false))
+					return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", elemType), false))
 				}
 				newSel := &ast.SelectorExpr{X: fc.newIdent("this.$target", fc.pkgCtx.TypeOf(x.X)), Sel: x.Sel}
 				fc.setType(newSel, exprType)
@@ -1227,7 +1255,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 			//
 			// TODO(nevkontakte): Should this only apply when exprType is a pointer to a
 			// struct as well?
-			return fc.formatExpr("$pointerOfStructConversion(%e, %s)", expr, fc.typeName(t))
+			return fc.formatExpr("$pointerOfStructConversion(%e, %s)", expr, fc.typeName(desiredType))
 		}
 
 		if types.Identical(exprType, types.Typ[types.UnsafePointer]) {
@@ -1257,12 +1285,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 func (fc *funcContext) translateImplicitConversionWithCloning(expr ast.Expr, desiredType types.Type) *expression {
 	switch desiredType.Underlying().(type) {
 	case *types.Struct, *types.Array:
-		switch expr.(type) {
-		case nil, *ast.CompositeLit:
-			// nothing
-		default:
-			return fc.formatExpr("$clone(%e, %s)", expr, fc.typeName(desiredType))
-		}
+		return fc.formatExpr("$clone(%e, %s)", expr, fc.typeName(desiredType))
 	}
 
 	return fc.translateImplicitConversion(expr, desiredType)

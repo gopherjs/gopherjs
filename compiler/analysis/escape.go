@@ -14,16 +14,13 @@ func EscapingObjects(n ast.Node, info *types.Info) []*types.Var {
 		bottomScopes: make(map[*types.Scope]bool),
 	}
 	ast.Walk(&v, n)
-	var list []*types.Var
-	for obj := range v.escaping {
-		list = append(list, obj)
-	}
-	return list
+	return v.ordered
 }
 
 type escapeAnalysis struct {
 	info         *types.Info
 	escaping     map[*types.Var]bool
+	ordered      []*types.Var
 	topScope     *types.Scope
 	bottomScopes map[*types.Scope]bool
 }
@@ -57,7 +54,10 @@ func (v *escapingObjectCollector) Visit(node ast.Node) (w ast.Visitor) {
 		if obj, ok := v.analysis.info.Uses[id].(*types.Var); ok {
 			for s := obj.Parent(); s != nil; s = s.Parent() {
 				if s == v.analysis.topScope {
-					v.analysis.escaping[obj] = true
+					if !v.analysis.escaping[obj] {
+						v.analysis.escaping[obj] = true
+						v.analysis.ordered = append(v.analysis.ordered, obj)
+					}
 					break
 				}
 				if v.analysis.bottomScopes[s] {

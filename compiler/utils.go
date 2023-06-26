@@ -150,13 +150,18 @@ func (fc *funcContext) DeclareDCEDep(o types.Object) {
 // tuple elements.
 //
 // For example, for functions defined as:
-//   func a() (int, string) {return 42, "foo"}
-//   func b(a1 int, a2 string) {}
+//
+//	func a() (int, string) {return 42, "foo"}
+//	func b(a1 int, a2 string) {}
+//
 // ...the following statement:
-//     b(a())
+//
+//	b(a())
+//
 // ...will be transformed into:
-//     _tuple := a()
-//     b(_tuple[0], _tuple[1])
+//
+//	_tuple := a()
+//	b(_tuple[0], _tuple[1])
 func (fc *funcContext) expandTupleArgs(argExprs []ast.Expr) []ast.Expr {
 	if len(argExprs) != 1 {
 		return argExprs
@@ -635,12 +640,6 @@ func (fc *funcContext) handleEscapingVars(n ast.Node) {
 
 	var names []string
 	objs := analysis.EscapingObjects(n, fc.pkgCtx.Info.Info)
-	sort.Slice(objs, func(i, j int) bool {
-		if objs[i].Name() == objs[j].Name() {
-			return objs[i].Pos() < objs[j].Pos()
-		}
-		return objs[i].Name() < objs[j].Name()
-	})
 	for _, obj := range objs {
 		names = append(names, fc.objectName(obj))
 		fc.pkgCtx.escapingVars[obj] = true
@@ -751,24 +750,24 @@ func isBlank(expr ast.Expr) bool {
 //
 // For example, consider a Go type:
 //
-// 		 type SecretInt int
-//     func (_ SecretInt) String() string { return "<secret>" }
+//			 type SecretInt int
+//	    func (_ SecretInt) String() string { return "<secret>" }
 //
-//     func main() {
-//       var i SecretInt = 1
-//       println(i.String())
-//     }
+//	    func main() {
+//	      var i SecretInt = 1
+//	      println(i.String())
+//	    }
 //
 // For this example the compiler will generate code similar to the snippet below:
 //
-//     SecretInt = $pkg.SecretInt = $newType(4, $kindInt, "main.SecretInt", true, "main", true, null);
-//     SecretInt.prototype.String = function() {
-//       return "<secret>";
-//     };
-//     main = function() {
-//       var i = 1;
-//       console.log(new SecretInt(i).String());
-//     };
+//	SecretInt = $pkg.SecretInt = $newType(4, $kindInt, "main.SecretInt", true, "main", true, null);
+//	SecretInt.prototype.String = function() {
+//	  return "<secret>";
+//	};
+//	main = function() {
+//	  var i = 1;
+//	  console.log(new SecretInt(i).String());
+//	};
 //
 // Note that the generated code assigns a primitive "number" value into i, and
 // only boxes it into an object when it's necessary to access its methods.
@@ -945,13 +944,12 @@ func encodeIdent(name string) string {
 //
 // For example:
 //
-// 	"my_name" -> ".my_name"
-// 	"my name" -> `["my name"]`
+//	"my_name" -> ".my_name"
+//	"my name" -> `["my name"]`
 //
 // For more information about JavaScript property accessors and identifiers, see
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Property_Accessors and
 // https://developer.mozilla.org/en-US/docs/Glossary/Identifier.
-//
 func formatJSStructTagVal(jsTag string) string {
 	for i, r := range jsTag {
 		ok := unicode.IsLetter(r) || (i != 0 && unicode.IsNumber(r)) || r == '$' || r == '_'

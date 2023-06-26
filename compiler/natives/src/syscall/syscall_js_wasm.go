@@ -10,6 +10,9 @@ func runtime_envs() []string {
 		return nil
 	}
 	jsEnv := process.Get("env")
+	if jsEnv.IsUndefined() {
+		return nil
+	}
 	envkeys := js.Global().Get("Object").Call("keys", jsEnv)
 	envs := make([]string, envkeys.Length())
 	for i := 0; i < envkeys.Length(); i++ {

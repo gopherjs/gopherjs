@@ -280,7 +280,7 @@ var $newType = function (size, kind, string, named, pkg, exported, constructor) 
                 $addMethodSynthesizer(function () {
                     var synthesizeMethod = function (target, m, f) {
                         if (target.prototype[m.prop] !== undefined) { return; }
-                        target.prototype[m.prop] = function () {
+                        target.prototype[m.prop] = function(...args) {
                             var v = this.$val[f.prop];
                             if (f.typ === $jsObjectPtr) {
                                 v = new $jsObjectPtr(v);
@@ -288,7 +288,7 @@ var $newType = function (size, kind, string, named, pkg, exported, constructor) 
                             if (v.$val === undefined) {
                                 v = new f.typ(v);
                             }
-                            return v[m.prop].apply(v, arguments);
+                            return v[m.prop].apply(v, args);
                         };
                     };
                     fields.forEach(function (f) {
@@ -696,14 +696,14 @@ var $structType = function (pkgPath, fields) {
         if (fields.length === 0) {
             string = "struct {}";
         }
-        typ = $newType(0, $kindStruct, string, false, "", false, function () {
+        typ = $newType(0, $kindStruct, string, false, "", false, function(...args) {
             this.$val = this;
             for (var i = 0; i < fields.length; i++) {
                 var f = fields[i];
                 if (f.name == '_') {
                     continue;
                 }
-                var arg = arguments[i];
+                var arg = args[i];
                 this[f.prop] = arg !== undefined ? arg : f.typ.zero();
             }
         });

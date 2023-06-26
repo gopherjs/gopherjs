@@ -61,14 +61,14 @@ var $flushConsole = function () { };
 var $throwRuntimeError; /* set by package "runtime" */
 var $throwNilPointerError = function () { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var $call = function (fn, rcvr, args) { return fn.apply(rcvr, args); };
-var $makeFunc = function (fn) { return function () { return $externalize(fn(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(arguments, []))), $emptyInterface); }; };
+var $makeFunc = function (fn) { return function(...args) { return $externalize(fn(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(args, []))), $emptyInterface); }; };
 var $unused = function (v) { };
 var $print = console.log;
 // Under Node we can emulate print() more closely by avoiding a newline.
 if (($global.process !== undefined) && $global.require) {
     try {
         var util = $global.require('util');
-        $print = function () { $global.process.stderr.write(util.format.apply(this, arguments)); };
+        $print = function(...args) { $global.process.stderr.write(util.format.apply(this, args)); };
     } catch (e) {
         // Failed to require util module, keep using console.log().
     }
@@ -119,13 +119,13 @@ var $methodVal = function (recv, name) {
 var $methodExpr = function (typ, name) {
     var method = typ.prototype[name];
     if (method.$expr === undefined) {
-        method.$expr = function () {
+        method.$expr = function(...args) {
             $stackDepthOffset--;
             try {
                 if (typ.wrapped) {
-                    arguments[0] = new typ(arguments[0]);
+                    args[0] = new typ(args[0]);
                 }
-                return Function.call.apply(method, arguments);
+                return Function.call.apply(method, args);
             } finally {
                 $stackDepthOffset++;
             }
@@ -138,10 +138,10 @@ var $ifaceMethodExprs = {};
 var $ifaceMethodExpr = function (name) {
     var expr = $ifaceMethodExprs["$" + name];
     if (expr === undefined) {
-        expr = $ifaceMethodExprs["$" + name] = function () {
+        expr = $ifaceMethodExprs["$" + name] = function(...args) {
             $stackDepthOffset--;
             try {
-                return Function.call.apply(arguments[0][name], arguments);
+                return Function.call.apply(args[0][name], args);
             } finally {
                 $stackDepthOffset++;
             }

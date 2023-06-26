@@ -1,6 +1,6 @@
 var $jsObjectPtr, $jsErrorPtr;
 
-var $needsExternalization = function (t) {
+var $needsExternalization = t => {
     switch (t.kind) {
         case $kindBool:
         case $kindInt:
@@ -20,7 +20,7 @@ var $needsExternalization = function (t) {
     }
 };
 
-var $externalize = function (v, t, makeWrapper) {
+var $externalize = (v, t, makeWrapper) => {
     if (t === $jsObjectPtr) {
         return v;
     }
@@ -43,7 +43,7 @@ var $externalize = function (v, t, makeWrapper) {
             return $flatten64(v);
         case $kindArray:
             if ($needsExternalization(t.elem)) {
-                return $mapArray(v, function (e) { return $externalize(e, t.elem, makeWrapper); });
+                return $mapArray(v, e => { return $externalize(e, t.elem, makeWrapper); });
             }
             return v;
         case $kindFunc:
@@ -77,7 +77,7 @@ var $externalize = function (v, t, makeWrapper) {
                 return null;
             }
             if ($needsExternalization(t.elem)) {
-                return $mapArray($sliceToNativeArray(v), function (e) { return $externalize(e, t.elem, makeWrapper); });
+                return $mapArray($sliceToNativeArray(v), e => { return $externalize(e, t.elem, makeWrapper); });
             }
             return $sliceToNativeArray(v);
         case $kindString:
@@ -105,7 +105,7 @@ var $externalize = function (v, t, makeWrapper) {
             }
 
             var noJsObject = {};
-            var searchJsObject = function (v, t) {
+            var searchJsObject = (v, t) => {
                 if (t === $jsObjectPtr) {
                     return v;
                 }
@@ -149,7 +149,7 @@ var $externalize = function (v, t, makeWrapper) {
     $throwRuntimeError("cannot externalize " + t.string);
 };
 
-var $externalizeFunction = function (v, t, passThis, makeWrapper) {
+var $externalizeFunction = (v, t, passThis, makeWrapper) => {
     if (v === $throwNilPointerError) {
         return null;
     }
@@ -185,7 +185,7 @@ var $externalizeFunction = function (v, t, passThis, makeWrapper) {
     return v.$externalizeWrapper;
 };
 
-var $internalize = function (v, t, recv, seen, makeWrapper) {
+var $internalize = (v, t, recv, seen, makeWrapper) => {
     if (t === $jsObjectPtr) {
         return v;
     }
@@ -239,7 +239,7 @@ var $internalize = function (v, t, recv, seen, makeWrapper) {
             if (v.length !== t.len) {
                 $throwRuntimeError("got array with wrong size from JavaScript native");
             }
-            return $mapArray(v, function (e) { return $internalize(e, t.elem, makeWrapper); });
+            return $mapArray(v, e => { return $internalize(e, t.elem, makeWrapper); });
         case $kindFunc:
             return function () {
                 var args = [];
@@ -303,7 +303,7 @@ var $internalize = function (v, t, recv, seen, makeWrapper) {
                         return new $jsObjectPtr(v);
                     }
                     return new timePkg.Time($internalize(v, timePkg.Time, makeWrapper));
-                case (function () { }).constructor: // is usually Function, but in Chrome extensions it is something else
+                case ((() => { })).constructor: // is usually Function, but in Chrome extensions it is something else
                     var funcType = $funcType([$sliceType($emptyInterface)], [$jsObjectPtr], true);
                     return new funcType($internalize(v, funcType, makeWrapper));
                 case Number:
@@ -331,7 +331,7 @@ var $internalize = function (v, t, recv, seen, makeWrapper) {
                 return $internalize(v, t.elem, makeWrapper);
             }
         case $kindSlice:
-            return new t($mapArray(v, function (e) { return $internalize(e, t.elem, makeWrapper); }));
+            return new t($mapArray(v, e => { return $internalize(e, t.elem, makeWrapper); }));
         case $kindString:
             v = String(v);
             if ($isASCII(v)) {
@@ -354,7 +354,7 @@ var $internalize = function (v, t, recv, seen, makeWrapper) {
             return s;
         case $kindStruct:
             var noJsObject = {};
-            var searchJsObject = function (t) {
+            var searchJsObject = t => {
                 if (t === $jsObjectPtr) {
                     return v;
                 }
@@ -388,7 +388,7 @@ var $internalize = function (v, t, recv, seen, makeWrapper) {
     $throwRuntimeError("cannot internalize " + t.string);
 };
 
-var $copyIfRequired = function (v, typ) {
+var $copyIfRequired = (v, typ) => {
     // interface values
     if (v && v.constructor && v.constructor.copy) {
         return new v.constructor($clone(v.$val, v.constructor))
@@ -403,7 +403,7 @@ var $copyIfRequired = function (v, typ) {
 }
 
 /* $isASCII reports whether string s contains only ASCII characters. */
-var $isASCII = function (s) {
+var $isASCII = s => {
     for (var i = 0; i < s.length; i++) {
         if (s.charCodeAt(i) >= 128) {
             return false;

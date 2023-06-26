@@ -323,7 +323,7 @@ var $internalize = (v, t, recv, seen, makeWrapper) => {
             var keys = $keys(v);
             for (var i = 0; i < keys.length; i++) {
                 var k = $internalize(keys[i], t.key, recv, seen, makeWrapper);
-                m.set(t.key.keyFor(k), { k: k, v: $internalize(v[keys[i]], t.elem, recv, seen, makeWrapper) });
+                m.set(t.key.keyFor(k), { k, v: $internalize(v[keys[i]], t.elem, recv, seen, makeWrapper) });
             }
             return m;
         case $kindPtr:

@@ -536,7 +536,7 @@ func TestTrivialSwitch(t *testing.T) {
 		}
 		return
 	}
-	t.Fail()
+	t.Fail() //nolint:govet // unreachable code intentional for test
 }
 
 func TestTupleFnReturnImplicitCast(t *testing.T) {

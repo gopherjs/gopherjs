@@ -8,6 +8,7 @@ format = "colored-line-number"
 disable-all = true
 enable = [
     "gofumpt",
+    "govet",
 ]
 
 [issues]

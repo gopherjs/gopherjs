@@ -73,14 +73,6 @@ jobs:
     steps:
     - setup_and_install_gopherjs
     - run:
-        name: Check go vet
-        command: |
-          set -e
-          # Go package in root directory.
-          go vet .
-          # All subdirectories except "doc", "tests", "node*".
-          for d in */; do echo ./$d...; done | grep -v ./doc | grep -v ./tests | grep -v ./node | xargs go vet
-    - run:
         name: Check natives build tags
         command: diff -u <(echo -n) <(go list ./compiler/natives/src/...) # All those packages should have // +build js.
     - run:

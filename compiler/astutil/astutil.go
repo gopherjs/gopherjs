@@ -93,6 +93,26 @@ func PruneOriginal(d *ast.FuncDecl) bool {
 	return false
 }
 
+// KeepOriginal returns true if gopherjs:keep-original directive is present
+// before a function decl.
+//
+// `//gopherjs:keep-original` is a GopherJS-specific directive, which can be
+// applied to functions in native overlays and will instruct the augmentation
+// logic to expose the original function such that it can be called. For a
+// function in the original called `foo`, it will be accessible by the name
+// `_gopherjs_original_foo`.
+func KeepOriginal(d *ast.FuncDecl) bool {
+	if d.Doc == nil {
+		return false
+	}
+	for _, c := range d.Doc.List {
+		if strings.HasPrefix(c.Text, "//gopherjs:keep-original") {
+			return true
+		}
+	}
+	return false
+}
+
 // FindLoopStmt tries to find the loop statement among the AST nodes in the
 // |stack| that corresponds to the break/continue statement represented by
 // branch.

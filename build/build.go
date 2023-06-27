@@ -128,7 +128,7 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 // as an existing file from the standard library). For function identifiers that exist
 // in the original AND the overrides AND that include the following directive in their comment:
 // //gopherjs:keep-original, the original identifier in the AST gets prefixed by
-// `_gopherjs_overridden_`. For other identifiers that exist in the original AND the overrides,
+// `_gopherjs_original_`. For other identifiers that exist in the original AND the overrides,
 // the original identifier gets replaced by `_`. New identifiers that don't exist in original
 // package get added.
 func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]*ast.File, []JSFile, error) {
@@ -251,8 +251,8 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 					}
 					if info.keepOriginal {
 						// Allow overridden function calls
-						// The standard library implementation of foo() becomes _gopherjs_overridden_foo()
-						d.Name.Name = "_gopherjs_overridden_" + d.Name.Name
+						// The standard library implementation of foo() becomes _gopherjs_original_foo()
+						d.Name.Name = "_gopherjs_original_" + d.Name.Name
 					} else {
 						d.Name = ast.NewIdent("_")
 					}

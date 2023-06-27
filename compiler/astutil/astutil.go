@@ -100,7 +100,7 @@ func PruneOriginal(d *ast.FuncDecl) bool {
 // applied to functions in native overlays and will instruct the augmentation
 // logic to expose the original function such that it can be called. For a
 // function in the original called `foo`, it will be accessible by the name
-// `_gopherjs_overridden_foo`.
+// `_gopherjs_original_foo`.
 func KeepOriginal(d *ast.FuncDecl) bool {
 	if d.Doc == nil {
 		return false

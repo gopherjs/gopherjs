@@ -16,5 +16,5 @@ func TestOnePassCutoff(t *testing.T) {
 		}
 	}()
 
-	_gopherjs_overridden_TestOnePassCutoff(t)
+	_gopherjs_original_TestOnePassCutoff(t)
 }

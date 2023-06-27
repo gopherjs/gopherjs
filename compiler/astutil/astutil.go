@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// RemoveParens removed parens around an expression, if any.
 func RemoveParens(e ast.Expr) ast.Expr {
 	for {
 		p, isParen := e.(*ast.ParenExpr)
@@ -18,19 +19,28 @@ func RemoveParens(e ast.Expr) ast.Expr {
 	}
 }
 
+// SetType of the expression e to type t.
 func SetType(info *types.Info, t types.Type, e ast.Expr) ast.Expr {
 	info.Types[e] = types.TypeAndValue{Type: t}
 	return e
 }
 
-func NewIdent(name string, t types.Type, info *types.Info, pkg *types.Package) *ast.Ident {
-	ident := ast.NewIdent(name)
-	info.Types[ident] = types.TypeAndValue{Type: t}
-	obj := types.NewVar(0, pkg, name, t)
+// NewVarIdent creates a new variable object with the given name and type.
+func NewVarIdent(name string, t types.Type, info *types.Info, pkg *types.Package) *ast.Ident {
+	obj := types.NewVar(token.NoPos, pkg, name, t)
+	return NewIdentFor(info, obj)
+}
+
+// NewIdentFor creates a new identifier referencing the given object.
+func NewIdentFor(info *types.Info, obj types.Object) *ast.Ident {
+	ident := ast.NewIdent(obj.Name())
+	ident.NamePos = obj.Pos()
 	info.Uses[ident] = obj
+	SetType(info, obj.Type(), ident)
 	return ident
 }
 
+// IsTypeExpr returns true if expr denotes a type.
 func IsTypeExpr(expr ast.Expr, info *types.Info) bool {
 	switch e := expr.(type) {
 	case *ast.ArrayType, *ast.ChanType, *ast.FuncType, *ast.InterfaceType, *ast.MapType, *ast.StructType:
@@ -57,6 +67,7 @@ func IsTypeExpr(expr ast.Expr, info *types.Info) bool {
 	}
 }
 
+// ImportsUnsafe returns true of the source imports package "unsafe".
 func ImportsUnsafe(file *ast.File) bool {
 	for _, imp := range file.Imports {
 		if imp.Path.Value == `"unsafe"` {
@@ -160,4 +171,31 @@ func EndsWithReturn(stmts []ast.Stmt) bool {
 	default:
 		return false
 	}
+}
+
+// TypeCast wraps expression e into an AST of type conversion to a type denoted
+// by typeExpr. The new AST node is associated with the appropriate type.
+func TypeCast(info *types.Info, e ast.Expr, typeExpr ast.Expr) *ast.CallExpr {
+	cast := &ast.CallExpr{
+		Fun:    typeExpr,
+		Lparen: e.Pos(),
+		Args:   []ast.Expr{e},
+		Rparen: e.End(),
+	}
+	SetType(info, info.TypeOf(typeExpr), cast)
+	return cast
+}
+
+// TakeAddress wraps expression e into an AST of address-taking operator &e. The
+// new AST node is associated with pointer to the type of e.
+func TakeAddress(info *types.Info, e ast.Expr) *ast.UnaryExpr {
+	exprType := info.TypeOf(e)
+	ptrType := types.NewPointer(exprType)
+	addrOf := &ast.UnaryExpr{
+		OpPos: e.Pos(),
+		Op:    token.AND,
+		X:     e,
+	}
+	SetType(info, ptrType, addrOf)
+	return addrOf
 }

@@ -149,6 +149,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue48898.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
 	"fixedbugs/issue48536.go": {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
 	"fixedbugs/issue53600.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+	"typeparam/issue51733.go": {category: usesUnsupportedPackage, desc: "unsafe: uintptr to struct pointer conversion is unsupported"},
 
 	// Failures related to the lack of generics support. Ideally, this section
 	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
@@ -172,11 +173,9 @@ var knownFails = map[string]failReason{
 	"typeparam/issue48453.go":        {category: generics, desc: "make() doesn't support generic slice types"},
 	"typeparam/issue49295.go":        {category: generics, desc: "len() doesn't support generic pointer to array types"},
 	"typeparam/issue50193.go":        {category: generics, desc: "invalid print format for complex numbers"},
-	"typeparam/issue50833.go":        {category: generics, desc: "undiagnosed: compiler panic triggered by a composite literal"},
 	"typeparam/issue51303.go":        {category: generics, desc: "missing support for conversion into a parameterized type"},
 	"typeparam/issue51522a.go":       {category: generics, desc: "missing support for the comparable type constraint"},
 	"typeparam/issue51522b.go":       {category: generics, desc: "missing support for the comparable type constraint"},
-	"typeparam/issue51733.go":        {category: generics, desc: "undiagnosed: unsafe.Pointer to struct pointer conversion"},
 	"typeparam/list.go":              {category: generics, desc: "missing operator support for generic types"},
 	"typeparam/maps.go":              {category: generics, desc: "missing support for the comparable type constraint"},
 	"typeparam/metrics.go":           {category: generics, desc: "missing support for the comparable type constraint"},
@@ -184,7 +183,6 @@ var knownFails = map[string]failReason{
 	"typeparam/ordered.go":           {category: generics, desc: "missing support for the comparable type constraint"},
 	"typeparam/orderedmap.go":        {category: generics, desc: "missing support for the comparable type constraint"},
 	"typeparam/sets.go":              {category: generics, desc: "missing support for the comparable type constraint"},
-	"typeparam/settable.go":          {category: generics, desc: "undiagnosed: len() returns an invalid value on a generic function result"},
 	"typeparam/slices.go":            {category: generics, desc: "missing operator support for generic types"},
 	"typeparam/subdict.go":           {category: generics, desc: "missing support for the comparable type constraint"},
 	"typeparam/typeswitch2.go":       {category: generics, desc: "complex types have different print() format"},

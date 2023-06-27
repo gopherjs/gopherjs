@@ -661,6 +661,10 @@ var $newDataPointer = function (data, constructor) {
 };
 
 var $indexPtr = function (array, index, constructor) {
+    if (constructor.kind == $kindPtr && constructor.elem.kind == $kindStruct) {
+        // Pointer to a struct is represented by the underlying object itself, no wrappers needed.
+        return array[index]
+    }
     if (array.buffer) {
         // Pointers to the same underlying ArrayBuffer share cache.
         var cache = array.buffer.$ptr = array.buffer.$ptr || {};

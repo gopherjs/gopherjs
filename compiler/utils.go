@@ -19,6 +19,7 @@ import (
 	"unicode"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
@@ -406,18 +407,14 @@ func (fc *funcContext) newVariable(name string, level varLevel) string {
 // newIdent declares a new Go variable with the given name and type and returns
 // an *ast.Ident referring to that object.
 func (fc *funcContext) newIdent(name string, t types.Type) *ast.Ident {
-	obj := types.NewVar(0, fc.pkgCtx.Pkg, name, t)
+	obj := types.NewVar(token.NoPos, fc.pkgCtx.Pkg, name, t)
 	fc.pkgCtx.objectNames[obj] = name
 	return fc.newIdentFor(obj)
 }
 
 // newIdentFor creates a new *ast.Ident referring to the given Go object.
 func (fc *funcContext) newIdentFor(obj types.Object) *ast.Ident {
-	ident := ast.NewIdent(obj.Name())
-	ident.NamePos = obj.Pos()
-	fc.pkgCtx.Uses[ident] = obj
-	fc.setType(ident, obj.Type())
-	return ident
+	return astutil.NewIdentFor(fc.pkgCtx.Info.Info, obj)
 }
 
 // newLitFuncName generates a new synthetic name for a function literal.
@@ -451,8 +448,15 @@ func (fc *funcContext) typeParamVars(params *types.TypeParamList) []string {
 }
 
 func (fc *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
-	fc.pkgCtx.Types[e] = types.TypeAndValue{Type: t}
-	return e
+	return astutil.SetType(fc.pkgCtx.Info.Info, t, e)
+}
+
+func (fc *funcContext) typeCastExpr(e ast.Expr, typeExpr ast.Expr) *ast.CallExpr {
+	return astutil.TypeCast(fc.pkgCtx.Info.Info, e, typeExpr)
+}
+
+func (fc *funcContext) takeAddressExpr(e ast.Expr) *ast.UnaryExpr {
+	return astutil.TakeAddress(fc.pkgCtx.Info.Info, e)
 }
 
 func (fc *funcContext) pkgVar(pkg *types.Package) string {

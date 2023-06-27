@@ -56,26 +56,26 @@ if (!$global.fs) {
 
 var $linknames = {} // Collection of functions referenced by a go:linkname directive.
 var $packages = {}, $idCounter = 0;
-var $keys = function (m) { return m ? Object.keys(m) : []; };
-var $flushConsole = function () { };
+var $keys = m => { return m ? Object.keys(m) : []; };
+var $flushConsole = () => { };
 var $throwRuntimeError; /* set by package "runtime" */
-var $throwNilPointerError = function () { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
-var $call = function (fn, rcvr, args) { return fn.apply(rcvr, args); };
-var $makeFunc = function (fn) { return function () { return $externalize(fn(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(arguments, []))), $emptyInterface); }; };
-var $unused = function (v) { };
+var $throwNilPointerError = () => { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
+var $call = (fn, rcvr, args) => { return fn.apply(rcvr, args); };
+var $makeFunc = fn => { return function(...args) { return $externalize(fn(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(args, []))), $emptyInterface); }; };
+var $unused = v => { };
 var $print = console.log;
 // Under Node we can emulate print() more closely by avoiding a newline.
 if (($global.process !== undefined) && $global.require) {
     try {
         var util = $global.require('util');
-        $print = function () { $global.process.stderr.write(util.format.apply(this, arguments)); };
+        $print = function(...args) { $global.process.stderr.write(util.format.apply(this, args)); };
     } catch (e) {
         // Failed to require util module, keep using console.log().
     }
 }
 var $println = console.log
 
-var $initAllLinknames = function () {
+var $initAllLinknames = () => {
     var names = $keys($packages);
     for (var i = 0; i < names.length; i++) {
         var f = $packages[names[i]]["$initLinknames"];
@@ -85,7 +85,7 @@ var $initAllLinknames = function () {
     }
 }
 
-var $mapArray = function (array, f) {
+var $mapArray = (array, f) => {
     var newArray = new array.constructor(array.length);
     for (var i = 0; i < array.length; i++) {
         newArray[i] = f(array[i]);
@@ -94,16 +94,16 @@ var $mapArray = function (array, f) {
 };
 
 // $mapIndex returns the value of the given key in m, or undefined if m is nil/undefined or not a map
-var $mapIndex = function (m, key) {
+var $mapIndex = (m, key) => {
     return typeof m.get === "function" ? m.get(key) : undefined;
 };
 // $mapDelete deletes the key and associated value from m.  If m is nil/undefined or not a map, $mapDelete is a no-op
-var $mapDelete = function (m, key) {
+var $mapDelete = (m, key) => {
     typeof m.delete === "function" && m.delete(key)
 };
 // Returns a method bound to the receiver instance, safe to invoke as a 
 // standalone function. Bound function is cached for later reuse.
-var $methodVal = function (recv, name) {
+var $methodVal = (recv, name) => {
     var vals = recv.$methodVals || {};
     recv.$methodVals = vals; /* noop for primitives */
     var f = vals[name];
@@ -116,16 +116,16 @@ var $methodVal = function (recv, name) {
     return f;
 };
 
-var $methodExpr = function (typ, name) {
+var $methodExpr = (typ, name) => {
     var method = typ.prototype[name];
     if (method.$expr === undefined) {
-        method.$expr = function () {
+        method.$expr = (...args) => {
             $stackDepthOffset--;
             try {
                 if (typ.wrapped) {
-                    arguments[0] = new typ(arguments[0]);
+                    args[0] = new typ(args[0]);
                 }
-                return Function.call.apply(method, arguments);
+                return Function.call.apply(method, args);
             } finally {
                 $stackDepthOffset++;
             }
@@ -135,13 +135,13 @@ var $methodExpr = function (typ, name) {
 };
 
 var $ifaceMethodExprs = {};
-var $ifaceMethodExpr = function (name) {
+var $ifaceMethodExpr = name => {
     var expr = $ifaceMethodExprs["$" + name];
     if (expr === undefined) {
-        expr = $ifaceMethodExprs["$" + name] = function () {
+        expr = $ifaceMethodExprs["$" + name] = (...args) => {
             $stackDepthOffset--;
             try {
-                return Function.call.apply(arguments[0][name], arguments);
+                return Function.call.apply(args[0][name], args);
             } finally {
                 $stackDepthOffset++;
             }
@@ -150,7 +150,7 @@ var $ifaceMethodExpr = function (name) {
     return expr;
 };
 
-var $subslice = function (slice, low, high, max) {
+var $subslice = (slice, low, high, max) => {
     if (high === undefined) {
         high = slice.$length;
     }
@@ -170,7 +170,7 @@ var $subslice = function (slice, low, high, max) {
     return s;
 };
 
-var $substring = function (str, low, high) {
+var $substring = (str, low, high) => {
     if (low < 0 || high < low || high > str.length) {
         $throwRuntimeError("slice bounds out of range");
     }
@@ -178,7 +178,7 @@ var $substring = function (str, low, high) {
 };
 
 // Convert Go slice to an equivalent JS array type.
-var $sliceToNativeArray = function (slice) {
+var $sliceToNativeArray = slice => {
     if (slice.$array.constructor !== Array) {
         return slice.$array.subarray(slice.$offset, slice.$offset + slice.$length);
     }
@@ -189,7 +189,7 @@ var $sliceToNativeArray = function (slice) {
 // 
 // Note that an array pointer can be represented by an "unwrapped" native array
 // type, and it will be wrapped back into its Go type when necessary.
-var $sliceToGoArray = function (slice, arrayPtrType) {
+var $sliceToGoArray = (slice, arrayPtrType) => {
     var arrayType = arrayPtrType.elem;
     if (arrayType !== undefined && slice.$length < arrayType.len) {
         $throwRuntimeError("cannot convert slice with length " + slice.$length + " to pointer to array with length " + arrayType.len);
@@ -216,7 +216,7 @@ var $sliceToGoArray = function (slice, arrayPtrType) {
 };
 
 // Convert between compatible slice types (e.g. native and names).
-var $convertSliceType = function (slice, desiredType) {
+var $convertSliceType = (slice, desiredType) => {
     if (slice == slice.constructor.nil) {
         return desiredType.nil; // Preserve nil value.
     }
@@ -224,7 +224,7 @@ var $convertSliceType = function (slice, desiredType) {
     return $subslice(new desiredType(slice.$array), slice.$offset, slice.$offset + slice.$length);
 }
 
-var $decodeRune = function (str, pos) {
+var $decodeRune = (str, pos) => {
     var c0 = str.charCodeAt(pos);
 
     if (c0 < 0x80) {
@@ -280,7 +280,7 @@ var $decodeRune = function (str, pos) {
     return [0xFFFD, 1];
 };
 
-var $encodeRune = function (r) {
+var $encodeRune = r => {
     if (r < 0 || r > 0x10FFFF || (0xD800 <= r && r <= 0xDFFF)) {
         r = 0xFFFD;
     }
@@ -296,7 +296,7 @@ var $encodeRune = function (r) {
     return String.fromCharCode(0xF0 | r >> 18, 0x80 | (r >> 12 & 0x3F), 0x80 | (r >> 6 & 0x3F), 0x80 | (r & 0x3F));
 };
 
-var $stringToBytes = function (str) {
+var $stringToBytes = str => {
     var array = new Uint8Array(str.length);
     for (var i = 0; i < str.length; i++) {
         array[i] = str.charCodeAt(i);
@@ -304,7 +304,7 @@ var $stringToBytes = function (str) {
     return array;
 };
 
-var $bytesToString = function (slice) {
+var $bytesToString = slice => {
     if (slice.$length === 0) {
         return "";
     }
@@ -315,7 +315,7 @@ var $bytesToString = function (slice) {
     return str;
 };
 
-var $stringToRunes = function (str) {
+var $stringToRunes = str => {
     var array = new Int32Array(str.length);
     var rune, j = 0;
     for (var i = 0; i < str.length; i += rune[1], j++) {
@@ -325,7 +325,7 @@ var $stringToRunes = function (str) {
     return array.subarray(0, j);
 };
 
-var $runesToString = function (slice) {
+var $runesToString = slice => {
     if (slice.$length === 0) {
         return "";
     }
@@ -336,7 +336,7 @@ var $runesToString = function (slice) {
     return str;
 };
 
-var $copyString = function (dst, src) {
+var $copyString = (dst, src) => {
     var n = Math.min(src.length, dst.$length);
     for (var i = 0; i < n; i++) {
         dst.$array[dst.$offset + i] = src.charCodeAt(i);
@@ -344,13 +344,13 @@ var $copyString = function (dst, src) {
     return n;
 };
 
-var $copySlice = function (dst, src) {
+var $copySlice = (dst, src) => {
     var n = Math.min(src.$length, dst.$length);
     $copyArray(dst.$array, src.$array, dst.$offset, src.$offset, n, dst.constructor.elem);
     return n;
 };
 
-var $copyArray = function (dst, src, dstOffset, srcOffset, n, elem) {
+var $copyArray = (dst, src, dstOffset, srcOffset, n, elem) => {
     if (n === 0 || (dst === src && dstOffset === srcOffset)) {
         return;
     }
@@ -386,13 +386,13 @@ var $copyArray = function (dst, src, dstOffset, srcOffset, n, elem) {
     }
 };
 
-var $clone = function (src, type) {
+var $clone = (src, type) => {
     var clone = type.zero();
     type.copy(clone, src);
     return clone;
 };
 
-var $pointerOfStructConversion = function (obj, type) {
+var $pointerOfStructConversion = (obj, type) => {
     if (obj.$proxies === undefined) {
         obj.$proxies = {};
         obj.$proxies[obj.constructor.string] = obj;
@@ -401,10 +401,10 @@ var $pointerOfStructConversion = function (obj, type) {
     if (proxy === undefined) {
         var properties = {};
         for (var i = 0; i < type.elem.fields.length; i++) {
-            (function (fieldProp) {
+            (fieldProp => {
                 properties[fieldProp] = {
-                    get: function () { return obj[fieldProp]; },
-                    set: function (value) { obj[fieldProp] = value; }
+                    get() { return obj[fieldProp]; },
+                    set(value) { obj[fieldProp] = value; }
                 };
             })(type.elem.fields[i].prop);
         }
@@ -420,7 +420,7 @@ var $append = function (slice) {
     return $internalAppend(slice, arguments, 1, arguments.length - 1);
 };
 
-var $appendSlice = function (slice, toAppend) {
+var $appendSlice = (slice, toAppend) => {
     if (toAppend.constructor === String) {
         var bytes = $stringToBytes(toAppend);
         return $internalAppend(slice, bytes, 0, bytes.length);
@@ -428,7 +428,7 @@ var $appendSlice = function (slice, toAppend) {
     return $internalAppend(slice, toAppend.$array, toAppend.$offset, toAppend.$length);
 };
 
-var $internalAppend = function (slice, array, offset, length) {
+var $internalAppend = (slice, array, offset, length) => {
     if (length === 0) {
         return slice;
     }
@@ -464,7 +464,7 @@ var $internalAppend = function (slice, array, offset, length) {
     return newSlice;
 };
 
-var $equal = function (a, b, type) {
+var $equal = (a, b, type) => {
     if (type === $jsObjectPtr) {
         return a === b;
     }
@@ -500,7 +500,7 @@ var $equal = function (a, b, type) {
     }
 };
 
-var $interfaceIsEqual = function (a, b) {
+var $interfaceIsEqual = (a, b) => {
     if (a === $ifaceNil || b === $ifaceNil) {
         return a === b;
     }
@@ -516,9 +516,9 @@ var $interfaceIsEqual = function (a, b) {
     return $equal(a.$val, b.$val, a.constructor);
 };
 
-var $unsafeMethodToFunction = function (typ, name, isPtr) {
+var $unsafeMethodToFunction = (typ, name, isPtr) => {
     if (isPtr) {
-        return function (r, ...args) {
+        return (r, ...args) => {
             var ptrType = $ptrType(typ);
             if (r.constructor != ptrType) {
                 switch (typ.kind) {
@@ -533,9 +533,9 @@ var $unsafeMethodToFunction = function (typ, name, isPtr) {
                 }
             }
             return r[name](...args);
-        }
+        };
     } else {
-        return function (r, ...args) {
+        return (r, ...args) => {
             var ptrType = $ptrType(typ);
             if (r.constructor != ptrType) {
                 switch (typ.kind) {
@@ -554,18 +554,18 @@ var $unsafeMethodToFunction = function (typ, name, isPtr) {
                 }
             }
             return r[name](...args);
-        }
+        };
     }
 };
 
-var $id = function (x) {
+var $id = x => {
     return x;
 };
 
-var $instanceOf = function (x, y) {
+var $instanceOf = (x, y) => {
     return x instanceof y;
 };
 
-var $typeOf = function (x) {
+var $typeOf = x => {
     return typeof (x);
 };

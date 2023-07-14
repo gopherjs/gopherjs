@@ -12,6 +12,11 @@ const (
 	minInt32 float64 = -1 << 31
 )
 
+//gopherjs:keep-original
+func ParseInt(s string, base, bitSize int) (i int64, err error) {
+	return _gopherjs_original_ParseInt(s, base, bitSize)
+}
+
 // Atoi returns the result of ParseInt(s, 10, 0) converted to type int.
 func Atoi(s string) (int, error) {
 	const fnAtoi = "Atoi"

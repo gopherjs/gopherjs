@@ -14,6 +14,10 @@ const (
 
 //gopherjs:keep-original
 func ParseInt(s string, base, bitSize int) (i int64, err error) {
+	if base == 10 && (bitSize == 0 || bitSize == 32) {
+		i, err := Atoi(s)
+		return int64(i), err
+	}
 	return _gopherjs_original_ParseInt(s, base, bitSize)
 }
 
@@ -44,7 +48,8 @@ func Atoi(s string) (int, error) {
 	floatval := jsValue.Float()
 	if floatval > maxInt32 {
 		return int(maxInt32), rangeError(fnAtoi, s)
-	} else if floatval < minInt32 {
+	}
+	if floatval < minInt32 {
 		return int(minInt32), rangeError(fnAtoi, s)
 	}
 	// Success!

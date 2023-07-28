@@ -885,7 +885,7 @@ func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, 
 		Args:     callArgs,
 		Ellipsis: expr.Ellipsis,
 	}
-	callable = fc.formatExpr("function(%s) { %e; }", strings.Join(vars, ", "), wrapper)
+	callable = fc.formatExpr("function(%s) { $stackDepthOffset--; %e; }", strings.Join(vars, ", "), wrapper)
 	arglist = fc.formatExpr("[%s]", strings.Join(args, ", "))
 	return callable, arglist
 }

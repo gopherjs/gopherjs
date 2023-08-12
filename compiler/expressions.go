@@ -1135,13 +1135,21 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		}
 	}
 
-	switch t := desiredType.Underlying().(type) {
+	_, fromTypeParam := exprType.(*types.TypeParam)
+	_, toTypeParam := desiredType.(*types.TypeParam)
+	if fromTypeParam || toTypeParam {
+		// Conversion from or to a type param can only be done at runtime, since the
+		// concrete type is not known to the compiler at compile time.
+		return fc.formatExpr("%s.convertFrom(%s.wrap(%e))", fc.typeName(desiredType), fc.typeName(exprType), expr)
+	}
+
+	switch dst := desiredType.Underlying().(type) {
 	case *types.Basic:
 		switch {
-		case isInteger(t):
+		case isInteger(dst):
 			basicExprType := exprType.Underlying().(*types.Basic)
 			switch {
-			case is64Bit(t):
+			case is64Bit(dst):
 				if !is64Bit(basicExprType) {
 					if basicExprType.Kind() == types.Uintptr { // this might be an Object returned from reflect.Value.Pointer()
 						return fc.formatExpr("new %1s(0, %2e.constructor === Number ? %2e : 1)", fc.typeName(desiredType), expr)
@@ -1150,25 +1158,25 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 				}
 				return fc.formatExpr("new %1s(%2h, %2l)", fc.typeName(desiredType), expr)
 			case is64Bit(basicExprType):
-				if !isUnsigned(t) && !isUnsigned(basicExprType) {
-					return fc.fixNumber(fc.formatParenExpr("%1l + ((%1h >> 31) * 4294967296)", expr), t)
+				if !isUnsigned(dst) && !isUnsigned(basicExprType) {
+					return fc.fixNumber(fc.formatParenExpr("%1l + ((%1h >> 31) * 4294967296)", expr), dst)
 				}
-				return fc.fixNumber(fc.formatExpr("%s.$low", fc.translateExpr(expr)), t)
+				return fc.fixNumber(fc.formatExpr("%s.$low", fc.translateExpr(expr)), dst)
 			case isFloat(basicExprType):
 				return fc.formatParenExpr("%e >> 0", expr)
 			case types.Identical(exprType, types.Typ[types.UnsafePointer]):
 				return fc.translateExpr(expr)
 			default:
-				return fc.fixNumber(fc.translateExpr(expr), t)
+				return fc.fixNumber(fc.translateExpr(expr), dst)
 			}
-		case isFloat(t):
-			if t.Kind() == types.Float32 && exprType.Underlying().(*types.Basic).Kind() == types.Float64 {
+		case isFloat(dst):
+			if dst.Kind() == types.Float32 && exprType.Underlying().(*types.Basic).Kind() == types.Float64 {
 				return fc.formatExpr("$fround(%e)", expr)
 			}
 			return fc.formatExpr("%f", expr)
-		case isComplex(t):
+		case isComplex(dst):
 			return fc.formatExpr("new %1s(%2r, %2i)", fc.typeName(desiredType), expr)
-		case isString(t):
+		case isString(dst):
 			value := fc.translateExpr(expr)
 			switch et := exprType.Underlying().(type) {
 			case *types.Basic:
@@ -1187,7 +1195,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 			default:
 				panic(fmt.Sprintf("Unhandled conversion: %v\n", et))
 			}
-		case t.Kind() == types.UnsafePointer:
+		case dst.Kind() == types.UnsafePointer:
 			if unary, isUnary := expr.(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
 				if indexExpr, isIndexExpr := unary.X.(*ast.IndexExpr); isIndexExpr {
 					return fc.formatExpr("$sliceToNativeArray(%s)", fc.translateConversionToSlice(indexExpr.X, types.NewSlice(types.Typ[types.Uint8])))
@@ -1218,7 +1226,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		switch et := exprType.Underlying().(type) {
 		case *types.Basic:
 			if isString(et) {
-				if types.Identical(t.Elem().Underlying(), types.Typ[types.Rune]) {
+				if types.Identical(dst.Elem().Underlying(), types.Typ[types.Rune]) {
 					return fc.formatExpr("new %s($stringToRunes(%e))", fc.typeName(desiredType), expr)
 				}
 				return fc.formatExpr("new %s($stringToBytes(%e))", fc.typeName(desiredType), expr)
@@ -1234,7 +1242,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 			break
 		}
 
-		switch ptrElType := t.Elem().Underlying().(type) {
+		switch ptrElType := dst.Elem().Underlying().(type) {
 		case *types.Array: // (*[N]T)(expr) — converting expr to a pointer to an array.
 			if _, ok := exprType.Underlying().(*types.Slice); ok {
 				return fc.formatExpr("$sliceToGoArray(%e, %s)", expr, fc.typeName(desiredType))
@@ -1249,7 +1257,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 				// indeed pointing at a byte array.
 				array := fc.newLocalVariable("_array")
 				target := fc.newLocalVariable("_struct")
-				return fc.formatExpr("(%s = %e, %s = %e, %s, %s)", array, expr, target, fc.zeroValue(t.Elem()), fc.loadStruct(array, target, ptrElType), target)
+				return fc.formatExpr("(%s = %e, %s = %e, %s, %s)", array, expr, target, fc.zeroValue(dst.Elem()), fc.loadStruct(array, target, ptrElType), target)
 			}
 			// Convert between structs of different types but identical layouts,
 			// for example:
@@ -1271,8 +1279,8 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		// TODO(nevkontakte): Are there any other cases that fall into this case?
 		exprTypeElem := exprType.Underlying().(*types.Pointer).Elem()
 		ptrVar := fc.newLocalVariable("_ptr")
-		getterConv := fc.translateConversion(fc.setType(&ast.StarExpr{X: fc.newIdent(ptrVar, exprType)}, exprTypeElem), t.Elem())
-		setterConv := fc.translateConversion(fc.newIdent("$v", t.Elem()), exprTypeElem)
+		getterConv := fc.translateConversion(fc.setType(&ast.StarExpr{X: fc.newIdent(ptrVar, exprType)}, exprTypeElem), dst.Elem())
+		setterConv := fc.translateConversion(fc.newIdent("$v", dst.Elem()), exprTypeElem)
 		return fc.formatExpr("(%1s = %2e, new %3s(function() { return %4s; }, function($v) { %1s.$set(%5s); }, %1s.$target))", ptrVar, expr, fc.typeName(desiredType), getterConv, setterConv)
 
 	case *types.Interface:

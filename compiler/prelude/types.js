@@ -415,15 +415,18 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
         case $kindUint64:
             typ.convertFrom = (src) => $convertToInt64(src, typ);
             break;
-        case $kindBool:
-        case $kindInt:
+        case $kindInt8:
         case $kindInt16:
         case $kindInt32:
-        case $kindInt8:
-        case $kindUint:
+        case $kindInt:
+        case $kindUint8:
         case $kindUint16:
         case $kindUint32:
-        case $kindUint8:
+        case $kindUint:
+        case $kindUintptr:
+            typ.convertFrom = (src) => $convertToNativeInt(src, typ);
+            break;
+        case $kindBool:
         case $kindFloat32:
         case $kindFloat64:
         case $kindComplex128:
@@ -434,7 +437,6 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
         case $kindMap:
         case $kindChan:
         case $kindPtr:
-        case $kindUintptr:
         case $kindUnsafePointer:
         case $kindFunc:
         case $kindInterface:
@@ -840,6 +842,49 @@ var $assertType = (value, type, returnTuple) => {
     return returnTuple ? [value, true] : value;
 };
 
+const $isSigned = (typ) => {
+    switch (typ.kind) {
+        case $kindInt:
+        case $kindInt8:
+        case $kindInt16:
+        case $kindInt32:
+        case $kindInt64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/**
+ * Truncate a JavaScript number `n` according to precision of the Go type `typ`
+ * it is supposed to represent.
+ */
+const $truncateNumber = (n, typ) => {
+    switch (typ.kind) {
+        case $kindInt8:
+            return n << 24 >> 24;
+        case $kindUint8:
+            return n << 24 >>> 24;
+        case $kindInt16:
+            return n << 16 >> 16;
+        case $kindUint16:
+            return n << 16 >>> 16;
+        case $kindInt32:
+        case $kindInt:
+            return n << 0 >> 0;
+        case $kindUint32:
+        case $kindUint:
+        case $kindUintptr:
+            return n << 0 >>> 0;
+        case $kindFloat32:
+            return $fround(n);
+        case $kindFloat64:
+            return n;
+        default:
+            $panic(new $String("invalid kind: " + kind));
+    }
+}
+
 /**
  * Trivial type conversion function, which only accepts destination type identical to the src
  * type.
@@ -879,5 +924,33 @@ const $convertToInt64 = (src, dstType) => {
             return new dstType(0, src.$val.constructor === Number ? src.$val : 1);
         default:
             return new dstType(0, src.$val);
+    }
+};
+
+/**
+ * Conversion to int and uint types of 32 bits or less.
+ * 
+ * dstType.kind must be $kindInt{8,16,32} or $kindUint{8,16,32}. For wrapped
+ * types, src value must be wrapped. The return value will always be a bare
+ * JavaScript number, since all 32-or-less integers in GopherJS are considered
+ * wrapped types.
+ */
+const $convertToNativeInt = (src, dstType) => {
+    const srcType = src.constructor;
+    // Since we are returning a bare number, identical kinds means no actual
+    // conversion is required.
+    if (srcType.kind === dstType.kind) {
+        return src.$val;
+    }
+
+    switch (srcType.kind) {
+        case $kindInt64:
+        case $kindUint64:
+            if ($isSigned(srcType) && $isSigned(dstType)) { // Carry over the sign.
+                return $truncateNumber(src.$val.$low + ((src.$val.$high >> 31) * 4294967296), dstType);
+            }
+            return $truncateNumber(src.$val.$low, dstType);
+        default:
+            return $truncateNumber(src.$val, dstType);
     }
 };

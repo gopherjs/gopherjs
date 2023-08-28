@@ -1,7 +1,7 @@
 //go:build js
 // +build js
 
-package subtle
+package alias
 
 // This file duplicated is these two locations:
 // - src/crypto/internal/subtle/aliasing.go

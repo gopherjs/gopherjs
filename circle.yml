@@ -198,7 +198,7 @@ jobs:
     
   darwin_smoke:
     macos:
-      xcode: 13.3.0  # Mac OS 12.2.1
+      xcode: 13.4.1 # Mac OS 12.6.1, see https://circleci.com/docs/using-macos/
     steps:
       - checkout
       - setup_environment

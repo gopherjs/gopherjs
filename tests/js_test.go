@@ -303,6 +303,95 @@ func TestInternalizeDate(t *testing.T) {
 	}
 }
 
+func TestInternalizeStruct(t *testing.T) {
+	type Person struct {
+		Name string
+		Age  int
+	}
+	var a Person
+
+	js.Global.Set("return_person", func(p *Person) *Person {
+		if p == nil {
+			t.Fail() // Or t.Error("Received nil pointer")
+			return nil
+		}
+		a = *p
+		return p
+	})
+
+	js.Global.Call("eval", "return_person({Name: 'foo', Age: 952})")
+
+	if a.Name != "foo" || a.Age != 952 {
+		t.Fail()
+	}
+}
+
+func TestInternalizeStructUnexportedFields(t *testing.T) {
+	type Person struct {
+		Name string
+		age  int
+	}
+	var a Person
+
+	js.Global.Set("return_person", func(p *Person) *Person {
+		a = *p
+		return p
+	})
+
+	js.Global.Call("eval", "return_person({Name: 'foo', age: 952})")
+
+	if a.Name != "foo" || a.age != 0 {
+		t.Fail()
+	}
+}
+
+func TestInternalizeStructNested(t *testing.T) {
+	type FullName struct {
+		FirstName string
+		LastName  string
+	}
+	type Person struct {
+		Name string
+		Age  int
+		F    FullName
+	}
+	var a Person
+
+	js.Global.Set("return_person", func(p *Person) *Person {
+		a = *p
+		return p
+	})
+
+	js.Global.Call("eval", "return_person({Name: 'foo', Age: 952, F: {FirstName: 'John', LastName: 'Doe'}})")
+
+	if a.Name != "foo" || a.Age != 952 || a.F.FirstName != "John" || a.F.LastName != "Doe" {
+		t.Fail()
+	}
+}
+
+func TestInternalizeArrayOfStructs(t *testing.T) {
+	type Person struct {
+		Name string
+		Age  int
+	}
+	type ArrayOfStructs struct {
+		People []Person
+	}
+
+	var a ArrayOfStructs
+
+	js.Global.Set("return_people_array", func(p ArrayOfStructs) ArrayOfStructs {
+		a = p
+		return p
+	})
+
+	js.Global.Call("eval", `return_people_array({People: [{Name: "Alice", Age: 30}, {Name: "Bob", Age: 40}]})`)
+
+	if len(a.People) != 2 || a.People[0].Name != "Alice" || a.People[1].Age != 40 {
+		t.Fail()
+	}
+}
+
 func TestEquality(t *testing.T) {
 	if js.Global.Get("Array") != js.Global.Get("Array") || js.Global.Get("Array") == js.Global.Get("String") {
 		t.Fail()

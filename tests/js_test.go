@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/gopherjs/gopherjs/js"
 )
 
@@ -308,11 +309,12 @@ func TestInternalizeStruct(t *testing.T) {
 		Name string
 		Age  int
 	}
-	var a Person
+	var a, expected Person
+	expected = Person{Name: "foo", Age: 952}
 
 	js.Global.Set("return_person", func(p *Person) *Person {
 		if p == nil {
-			t.Fail() // Or t.Error("Received nil pointer")
+			t.Fail()
 			return nil
 		}
 		a = *p
@@ -320,19 +322,17 @@ func TestInternalizeStruct(t *testing.T) {
 	})
 
 	js.Global.Call("eval", "return_person({Name: 'foo', Age: 952})")
-
-	if a.Name != "foo" || a.Age != 952 {
-		t.Fail()
+	if diff := cmp.Diff(a, expected); diff != "" {
+		t.Errorf("Mismatch (-want +got):\n%s", diff)
 	}
 }
-
 func TestInternalizeStructUnexportedFields(t *testing.T) {
 	type Person struct {
 		Name string
 		age  int
 	}
-	var a Person
-
+	var a, expected Person
+	expected = Person{Name: "foo", age: 0}
 	js.Global.Set("return_person", func(p *Person) *Person {
 		a = *p
 		return p
@@ -340,8 +340,14 @@ func TestInternalizeStructUnexportedFields(t *testing.T) {
 
 	js.Global.Call("eval", "return_person({Name: 'foo', age: 952})")
 
-	if a.Name != "foo" || a.age != 0 {
-		t.Fail()
+	// Manually check unexported fields
+	if a.age != expected.age {
+		t.Errorf("Mismatch in age: got %v, want %v", a.age, expected.age)
+	}
+
+	// Check exported fields using cmp.Diff
+	if diff := cmp.Diff(a.Name, expected.Name); diff != "" {
+		t.Errorf("Mismatch in Name (-want +got):\n%s", diff)
 	}
 }
 
@@ -355,7 +361,8 @@ func TestInternalizeStructNested(t *testing.T) {
 		Age  int
 		F    FullName
 	}
-	var a Person
+	var a, expected Person
+	expected = Person{Name: "foo", Age: 952, F: FullName{FirstName: "John", LastName: "Doe"}}
 
 	js.Global.Set("return_person", func(p *Person) *Person {
 		a = *p
@@ -363,9 +370,8 @@ func TestInternalizeStructNested(t *testing.T) {
 	})
 
 	js.Global.Call("eval", "return_person({Name: 'foo', Age: 952, F: {FirstName: 'John', LastName: 'Doe'}})")
-
-	if a.Name != "foo" || a.Age != 952 || a.F.FirstName != "John" || a.F.LastName != "Doe" {
-		t.Fail()
+	if diff := cmp.Diff(a, expected); diff != "" {
+		t.Errorf("Mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -377,8 +383,8 @@ func TestInternalizeArrayOfStructs(t *testing.T) {
 	type ArrayOfStructs struct {
 		People []Person
 	}
-
-	var a ArrayOfStructs
+	var a, expected ArrayOfStructs
+	expected = ArrayOfStructs{People: []Person{{Name: "Alice", Age: 30}, {Name: "Bob", Age: 40}}}
 
 	js.Global.Set("return_people_array", func(p ArrayOfStructs) ArrayOfStructs {
 		a = p
@@ -386,9 +392,8 @@ func TestInternalizeArrayOfStructs(t *testing.T) {
 	})
 
 	js.Global.Call("eval", `return_people_array({People: [{Name: "Alice", Age: 30}, {Name: "Bob", Age: 40}]})`)
-
-	if len(a.People) != 2 || a.People[0].Name != "Alice" || a.People[1].Age != 40 {
-		t.Fail()
+	if diff := cmp.Diff(a, expected); diff != "" {
+		t.Errorf("Mismatch (-want +got):\n%s", diff)
 	}
 }
 

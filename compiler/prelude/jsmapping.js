@@ -384,6 +384,19 @@ var $internalize = (v, t, recv, seen, makeWrapper) => {
             if (o !== noJsObject) {
                 return o;
             }
+            var n = new t.ptr();
+            for (var i = 0; i < t.fields.length; i++) {
+              var f = t.fields[i];
+      
+              if (!f.exported) {
+                continue;
+              }
+              var jsProp = v[f.name];
+      
+              n[f.prop] = $internalize(jsProp, f.typ, recv, seen, makeWrapper);
+            }
+      
+            return n;
     }
     $throwRuntimeError("cannot internalize " + t.string);
 };

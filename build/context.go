@@ -179,7 +179,7 @@ func (sc simpleCtx) gotool(subcommand string, args ...string) (string, error) {
 		panic(fmt.Errorf("can't use go tool with a virtual build context"))
 	}
 	args = append([]string{subcommand}, args...)
-	cmd := exec.Command("go", args...)
+	cmd := exec.Command(filepath.Join(sc.bctx.GOROOT, "bin", "go"), args...)
 
 	if sc.bctx.Dir != "" {
 		cmd.Dir = sc.bctx.Dir

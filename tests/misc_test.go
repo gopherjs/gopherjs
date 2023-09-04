@@ -1,12 +1,15 @@
 package tests
 
 import (
+	"go/token"
 	"math"
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/gopherjs/gopherjs/tests/otherpkg"
 )
@@ -939,5 +942,20 @@ func TestCompositeLiterals(t *testing.T) {
 	s2 := []SP{{}}
 	if got := reflect.TypeOf(s2[0]); got.String() != "tests.SP" {
 		t.Errorf("Got: reflect.TypeOf(s2[0]) = %v. Want: tests.SP", got)
+	}
+}
+
+func TestFileSetSize(t *testing.T) {
+	type tokenFileSet struct {
+		// This type remained essentially consistent from go1.16 to go1.21.
+		mutex sync.RWMutex
+		base  int
+		files []*token.File
+		_     *token.File // changed to atomic.Pointer[token.File] in go1.19
+	}
+	n1 := unsafe.Sizeof(tokenFileSet{})
+	n2 := unsafe.Sizeof(token.FileSet{})
+	if n1 != n2 {
+		t.Errorf("Got: unsafe.Sizeof(token.FileSet{}) %v, Want: %v", n2, n1)
 	}
 }

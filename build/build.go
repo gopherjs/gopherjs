@@ -226,16 +226,13 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 			continue
 		}
 
-		switch pkg.ImportPath {
-		case "crypto/rand", "encoding/gob", "encoding/json", "expvar", "go/token", "log", "math/big", "math/rand", "regexp", "time":
-			for _, spec := range file.Imports {
-				path, _ := strconv.Unquote(spec.Path.Value)
-				if path == "sync" {
-					if spec.Name == nil {
-						spec.Name = ast.NewIdent("sync")
-					}
-					spec.Path.Value = `"github.com/gopherjs/gopherjs/nosync"`
+		for _, spec := range file.Imports {
+			path, _ := strconv.Unquote(spec.Path.Value)
+			if path == "sync" {
+				if spec.Name == nil {
+					spec.Name = ast.NewIdent("sync")
 				}
+				spec.Path.Value = `"github.com/gopherjs/gopherjs/nosync"`
 			}
 		}
 

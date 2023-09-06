@@ -99,7 +99,8 @@ jobs:
           set -e
           export GO111MODULE=off
           export GOPATH=/tmp/gopath
-          mkdir -p $GOPATH/src
+          mkdir -p $GOPATH/src/github.com/gopherjs/gopherjs
+          cp -r -p . $GOPATH/src/github.com/gopherjs/gopherjs/
           go get -v github.com/gopherjs/todomvc
           gopherjs build -v -o /tmp/todomvc_gopath.js github.com/gopherjs/todomvc
           gopherjs test -v github.com/gopherjs/todomvc/...

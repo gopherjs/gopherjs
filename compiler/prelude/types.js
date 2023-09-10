@@ -426,9 +426,11 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
         case $kindUintptr:
             typ.convertFrom = (src) => $convertToNativeInt(src, typ);
             break;
-        case $kindBool:
         case $kindFloat32:
         case $kindFloat64:
+            typ.convertFrom = (src) => $convertToFloat(src, typ);
+            break;
+        case $kindBool:
         case $kindComplex128:
         case $kindComplex64:
         case $kindString:
@@ -952,5 +954,36 @@ const $convertToNativeInt = (src, dstType) => {
             return $truncateNumber(src.$val.$low, dstType);
         default:
             return $truncateNumber(src.$val, dstType);
+    }
+};
+
+/**
+ * Conversion to floating point types.
+ *
+ * dstType.kind must be $kindFloat{32,64}. For wrapped types, src value must be
+ * wrapped. Returned value will always be a bare JavaScript number, since all
+ * floating point numbers in GopherJS are considered wrapped types.
+ */
+const $convertToFloat = (src, dstType) => {
+    const srcType = src.constructor;
+    // Since we are returning a bare number, identical kinds means no actual
+    // conversion is required.
+    if (srcType.kind === dstType.kind) {
+        return src.$val;
+    }
+
+    if (dstType.kind == $kindFloat32 && srcType.kind == $kindFloat64) {
+        return $fround(src.$val);
+    }
+
+    switch (srcType.kind) {
+        case $kindInt64:
+        case $kindUint64:
+            const val = $flatten64(src.$val);
+            return (dstType.kind == $kindFloat32) ? $fround(val) : val;
+        case $kindFloat64:
+            return (dstType.kind == $kindFloat32) ? $fround(src.$val) : src.$val;
+        default:
+            return src.$val;
     }
 };

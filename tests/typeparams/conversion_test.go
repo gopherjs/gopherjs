@@ -47,6 +47,8 @@ func (tc numericConverter[srcType, dstType]) Quirk() bool {
 func TestConversion(t *testing.T) {
 	type i64 int64
 	type i32 int32
+	type f64 float64
+	type f32 float32
 	tests := []converter{
 		// $convertToInt64
 		numericConverter[int, int64]{src: 0x7FFFFFFF, want: 0x7FFFFFFF},
@@ -81,6 +83,17 @@ func TestConversion(t *testing.T) {
 		numericConverter[uint32, int32]{src: 0xFFFFFFFF, want: -1},
 		numericConverter[uint16, int16]{src: 0xFFFF, want: -1},
 		numericConverter[uint8, int8]{src: 0xFF, want: -1},
+		// $convertToFloat
+		numericConverter[float64, float32]{src: 12345678.1234567890, want: 12345678.0},
+		numericConverter[int64, float32]{src: 123456789, want: 123456792.0},
+		numericConverter[int32, float32]{src: 12345678, want: 12345678.0},
+		numericConverter[f32, float32]{src: 12345678.0, want: 12345678.0},
+		numericConverter[float32, f32]{src: 12345678.0, want: 12345678.0},
+		numericConverter[float32, float64]{src: 1234567.125000, want: 1234567.125000},
+		numericConverter[int64, float64]{src: 12345678, want: 12345678.0},
+		numericConverter[int32, float64]{src: 12345678, want: 12345678.0},
+		numericConverter[f64, float64]{src: 12345678.0, want: 12345678.0},
+		numericConverter[float64, f64]{src: 12345678.0, want: 12345678.0},
 	}
 
 	for _, test := range tests {

@@ -446,7 +446,6 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
         case $kindMap:
         case $kindChan:
         case $kindPtr:
-        case $kindUnsafePointer:
         case $kindFunc:
         case $kindInterface:
         case $kindStruct:
@@ -1049,4 +1048,15 @@ const $convertToString = (src, dstType) => {
     }
 
     throw new Error(`Unsupported conversion from ${srcType.string} to ${dstType.string}`);
+};
+
+/**
+ * Convert to unsafe.Pointer.
+ */
+const $convertToUnsafePtr = (src, dstType) => {
+    // Unsafe pointers are not well supported by GopherJS and whatever support
+    // exists is not well documented. Implementing this conversion will require
+    // a great deal of great reverse engineering, and I'm not sure anyone will
+    // ever need this.
+    throw new Error(`Conversion between a typeparam and unsafe.Pointer is not implemented.`)
 };

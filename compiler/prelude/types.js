@@ -434,8 +434,13 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
         case $kindComplex64:
             typ.convertFrom = (src) => $convertToComplex(src, typ);
             break;
-        case $kindBool:
         case $kindString:
+            typ.convertFrom = (src) => $convertToString(src, typ);
+            break;
+        case $kindUnsafePointer:
+            typ.convertFrom = (src) => $convertToUnsafePtr(src, typ);
+            break;
+        case $kindBool:
         case $kindArray:
         case $kindSlice:
         case $kindMap:
@@ -1003,4 +1008,45 @@ const $convertToComplex = (src, dstType) => {
     }
 
     return new dstType(src.$real, src.$imag);
+};
+
+/**
+ * Conversion to string types.
+ *
+ * dstType.kind must be $kindString. For wrapped types, src value must be
+ * wrapped. Returned value will always be a bare JavaScript string.
+ */
+const $convertToString = (src, dstType) => {
+    const srcType = src.constructor;
+    if (srcType === dstType) {
+        return src.$val;
+    }
+
+    switch (srcType.kind) {
+        case $kindInt64:
+        case $kindUint64:
+            return $encodeRune(src.$val.$low);
+        case $kindInt32:
+        case $kindInt16:
+        case $kindInt8:
+        case $kindInt:
+        case $kindUint32:
+        case $kindUint16:
+        case $kindUint8:
+        case $kindUint:
+        case $kindUintptr:
+            return $encodeRune(src.$val);
+        case $kindString:
+            return src.$val;
+        case $kindSlice:
+            if (srcType.elem.kind === $kindInt32) { // Runes are int32.
+                return $runesToString(src.$val);
+            } else if (srcType.elem.kind === $kindUint8) { // Bytes are uint8.
+                return $bytesToString(src.$val);
+            }
+            break;
+            
+    }
+
+    throw new Error(`Unsupported conversion from ${srcType.string} to ${dstType.string}`);
 };

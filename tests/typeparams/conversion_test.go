@@ -69,6 +69,39 @@ func (tc complexConverter[srcType, dstType]) Quirk() bool {
 	return false
 }
 
+type stringLike interface {
+	// Ideally, we would test conversions from all integer types. unfortunately,
+	// that trips up the stringintconv check in `go vet` that is ran by `go test`
+	// by default. Unfortunately, there is no way to selectively suppress that
+	// check.
+	// ~int | ~int8 | ~int16 | ~int32 | ~int64 |
+	// ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
+	// ~uintptr |
+	byte | rune |
+		~[]byte | ~[]rune | ~string
+}
+
+type stringConverter[srcType stringLike, dstType ~string] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc stringConverter[srcType, dstType]) Src() any {
+	return tc.src
+}
+
+func (tc stringConverter[srcType, dstType]) Got() any {
+	return dstType(tc.src)
+}
+
+func (tc stringConverter[srcType, dstType]) Want() any {
+	return tc.want
+}
+
+func (tc stringConverter[srcType, dstType]) Quirk() bool {
+	return false
+}
+
 func TestConversion(t *testing.T) {
 	type i64 int64
 	type i32 int32
@@ -76,6 +109,7 @@ func TestConversion(t *testing.T) {
 	type f32 float32
 	type c64 complex64
 	type c128 complex128
+	type str string
 
 	tests := []converter{
 		// $convertToInt64
@@ -127,6 +161,13 @@ func TestConversion(t *testing.T) {
 		complexConverter[complex128, complex64]{src: 1 + 1i, want: 1 + 1i},
 		complexConverter[complex128, c128]{src: 1 + 1i, want: 1 + 1i},
 		complexConverter[complex64, c64]{src: 1 + 1i, want: 1 + 1i},
+		// $convertToString
+		stringConverter[str, string]{src: "abc", want: "abc"},
+		stringConverter[string, str]{src: "abc", want: "abc"},
+		stringConverter[rune, string]{src: 'a', want: "a"},
+		stringConverter[byte, string]{src: 'a', want: "a"},
+		stringConverter[[]byte, string]{src: []byte{'a', 'b', 'c'}, want: "abc"},
+		stringConverter[[]rune, string]{src: []rune{'a', 'b', 'c'}, want: "abc"},
 	}
 
 	for _, test := range tests {

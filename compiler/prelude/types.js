@@ -441,6 +441,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.convertFrom = (src) => $convertToUnsafePtr(src, typ);
             break;
         case $kindBool:
+            typ.convertFrom = (src) => $convertToBool(src, typ);
         case $kindArray:
         case $kindSlice:
         case $kindMap:
@@ -1059,4 +1060,14 @@ const $convertToUnsafePtr = (src, dstType) => {
     // a great deal of great reverse engineering, and I'm not sure anyone will
     // ever need this.
     throw new Error(`Conversion between a typeparam and unsafe.Pointer is not implemented.`)
+};
+
+/**
+ * Convert to boolean types.
+ *
+ * dstType.kind must be $kindBool. Src must be a wrapped boolean value. Returned
+ * value will always be a bare JavaScript boolean.
+ */
+const $convertToBool = (src, dstType) => {
+    return src.$val;
 };

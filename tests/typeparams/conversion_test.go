@@ -102,6 +102,27 @@ func (tc stringConverter[srcType, dstType]) Quirk() bool {
 	return false
 }
 
+type boolConverter[srcType ~bool, dstType ~bool] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc boolConverter[srcType, dstType]) Src() any {
+	return tc.src
+}
+
+func (tc boolConverter[srcType, dstType]) Got() any {
+	return dstType(tc.src)
+}
+
+func (tc boolConverter[srcType, dstType]) Want() any {
+	return tc.want
+}
+
+func (tc boolConverter[srcType, dstType]) Quirk() bool {
+	return false
+}
+
 func TestConversion(t *testing.T) {
 	type i64 int64
 	type i32 int32
@@ -110,6 +131,7 @@ func TestConversion(t *testing.T) {
 	type c64 complex64
 	type c128 complex128
 	type str string
+	type b bool
 
 	tests := []converter{
 		// $convertToInt64
@@ -168,6 +190,11 @@ func TestConversion(t *testing.T) {
 		stringConverter[byte, string]{src: 'a', want: "a"},
 		stringConverter[[]byte, string]{src: []byte{'a', 'b', 'c'}, want: "abc"},
 		stringConverter[[]rune, string]{src: []rune{'a', 'b', 'c'}, want: "abc"},
+		// $convertToBool
+		boolConverter[b, bool]{src: true, want: true},
+		boolConverter[b, bool]{src: false, want: false},
+		boolConverter[bool, b]{src: true, want: true},
+		boolConverter[bool, b]{src: false, want: false},
 	}
 
 	for _, test := range tests {

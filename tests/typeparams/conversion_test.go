@@ -44,11 +44,39 @@ func (tc numericConverter[srcType, dstType]) Quirk() bool {
 	return tc.quirk
 }
 
+type complex interface {
+	~complex64 | ~complex128
+}
+
+type complexConverter[srcType complex, dstType complex] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc complexConverter[srcType, dstType]) Src() any {
+	return tc.src
+}
+
+func (tc complexConverter[srcType, dstType]) Got() any {
+	return dstType(tc.src)
+}
+
+func (tc complexConverter[srcType, dstType]) Want() any {
+	return tc.want
+}
+
+func (tc complexConverter[srcType, dstType]) Quirk() bool {
+	return false
+}
+
 func TestConversion(t *testing.T) {
 	type i64 int64
 	type i32 int32
 	type f64 float64
 	type f32 float32
+	type c64 complex64
+	type c128 complex128
+
 	tests := []converter{
 		// $convertToInt64
 		numericConverter[int, int64]{src: 0x7FFFFFFF, want: 0x7FFFFFFF},
@@ -94,6 +122,11 @@ func TestConversion(t *testing.T) {
 		numericConverter[int32, float64]{src: 12345678, want: 12345678.0},
 		numericConverter[f64, float64]{src: 12345678.0, want: 12345678.0},
 		numericConverter[float64, f64]{src: 12345678.0, want: 12345678.0},
+		// $convertToComplex
+		complexConverter[complex64, complex128]{src: 1 + 1i, want: 1 + 1i},
+		complexConverter[complex128, complex64]{src: 1 + 1i, want: 1 + 1i},
+		complexConverter[complex128, c128]{src: 1 + 1i, want: 1 + 1i},
+		complexConverter[complex64, c64]{src: 1 + 1i, want: 1 + 1i},
 	}
 
 	for _, test := range tests {
@@ -103,6 +136,11 @@ func TestConversion(t *testing.T) {
 			}
 			got := test.Got()
 			want := test.Want()
+
+			if reflect.TypeOf(got) != reflect.TypeOf(want) {
+				t.Errorf("Want: converted type is: %v. Got: %v.", reflect.TypeOf(want), reflect.TypeOf(got))
+			}
+
 			if !reflect.DeepEqual(want, got) {
 				t.Errorf("Want: %[1]T(%#[1]v) convert to %[2]T(%#[2]v). Got: %[3]T(%#[3]v)", test.Src(), want, got)
 			}

@@ -430,9 +430,11 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
         case $kindFloat64:
             typ.convertFrom = (src) => $convertToFloat(src, typ);
             break;
-        case $kindBool:
         case $kindComplex128:
         case $kindComplex64:
+            typ.convertFrom = (src) => $convertToComplex(src, typ);
+            break;
+        case $kindBool:
         case $kindString:
         case $kindArray:
         case $kindSlice:
@@ -986,4 +988,19 @@ const $convertToFloat = (src, dstType) => {
         default:
             return src.$val;
     }
+};
+
+/**
+ * Conversion to complex types.
+ * 
+ * dstType.kind must me $kindComplex{64,128}. Src must be another complex type.
+ * Returned value will always be an oject created by the dstType constructor.
+ */
+const $convertToComplex = (src, dstType) => {
+    const srcType = src.constructor;
+    if (srcType === dstType) {
+        return src;
+    }
+
+    return new dstType(src.$real, src.$imag);
 };

@@ -35,13 +35,13 @@ func CheckGoVersion(goroot string) error {
 	return nil
 }
 
-// goRootVersion defermines Go release for the given GOROOT installation.
+// goRootVersion determines the Go release for the given GOROOT installation.
 func goRootVersion(goroot string) (string, error) {
-	v, err := os.ReadFile(filepath.Join(goroot, "VERSION"))
-	if err == nil {
-		// Standard Go distribution has VERSION file inside its GOROOT, checking it
-		// is the most efficient option.
-		return string(v), nil
+	if b, err := os.ReadFile(filepath.Join(goroot, "VERSION")); err == nil {
+		// Standard Go distribution has a VERSION file inside its GOROOT,
+		// checking its first line is the most efficient option.
+		v, _, _ := strings.Cut(string(b), "\n")
+		return v, nil
 	}
 
 	// Fall back to the "go version" command.
@@ -58,8 +58,8 @@ func goRootVersion(goroot string) (string, error) {
 	return parts[2], nil
 }
 
-// GoRelease does a best-effort to identify Go release we are building with.
-// If unable to determin the precise version for the given GOROOT, falls back
+// GoRelease does a best-effort to identify the Go release we are building with.
+// If unable to determine the precise version for the given GOROOT, falls back
 // to the best guess available.
 func GoRelease(goroot string) string {
 	v, err := goRootVersion(goroot)

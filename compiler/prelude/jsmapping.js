@@ -1,4 +1,4 @@
-var $jsObjectPtr, $jsErrorPtr;
+var $jsObjectPtr, $jsErrorPtr;  // Initialized by init() in the runtime package.
 
 var $needsExternalization = t => {
     switch (t.kind) {

@@ -220,6 +220,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 this.$val = this;
             };
             typ.wrap = (v) => v;
+            typ.wrapped = false;
             typ.keyFor = $idKey;
             typ.init = elem => {
                 typ.elem = elem;
@@ -253,6 +254,15 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.wrapped = true;
             typ.wrap = (v) => new typ(v);
             typ.ptr = $newType(4, $kindPtr, "*" + string, false, pkg, exported, constructor);
+            if (string === "js.Object" && pkg === "github.com/gopherjs/gopherjs/js") {
+                // *js.Object is a special case because unlike other pointers it
+                // passes around a raw JS object without any GopherJS-specific
+                // metadata. As a result, it must be wrapped to preserve type
+                // information whenever it's used through an interface or type
+                // param. However, it's now a "wrapped" type in a complete sense,
+                // because it's handling is mostly special-cased at the compiler level.
+                typ.ptr.wrap = (v) => new typ.ptr(v);
+            }
             typ.ptr.elem = typ;
             typ.ptr.prototype.$get = function () { return this; };
             typ.ptr.prototype.$set = function (v) { typ.copy(this, v); };
@@ -442,13 +452,16 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             break;
         case $kindBool:
             typ.convertFrom = (src) => $convertToBool(src, typ);
+            break;
+        case $kindInterface:
+            typ.convertFrom = (src) => $convertToInterface(src, typ);
+            break;
         case $kindArray:
         case $kindSlice:
         case $kindMap:
         case $kindChan:
         case $kindPtr:
         case $kindFunc:
-        case $kindInterface:
         case $kindStruct:
             break;
         default:
@@ -1045,7 +1058,6 @@ const $convertToString = (src, dstType) => {
                 return $bytesToString(src.$val);
             }
             break;
-            
     }
 
     throw new Error(`Unsupported conversion from ${srcType.string} to ${dstType.string}`);
@@ -1070,4 +1082,15 @@ const $convertToUnsafePtr = (src, dstType) => {
  */
 const $convertToBool = (src, dstType) => {
     return src.$val;
+};
+
+/**
+ * Convert any type to an interface value.
+ *
+ * dstType.kind must be $kindInterface. For wrapped types, src value must be
+ * wrapped. Since GopherJS represents interfaces as wrapped values of the original
+ * type, the returned value is always src.
+ */
+const $convertToInterface = (src, dstType) => {
+    return src;
 };

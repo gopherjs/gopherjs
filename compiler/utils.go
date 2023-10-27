@@ -572,7 +572,14 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		}
 		return fmt.Sprintf("(%s(%s))", fc.objectName(t.Obj()), strings.Join(args, ","))
 	case *types.TypeParam:
-		return fc.objectName(fc.pkgCtx.canonicalTypeParams.Lookup(t).Obj())
+		o := t.Obj()
+		if fc.funcObject == nil {
+			// If the current context is not associated with a function or method,
+			// we processing type declaration, so we canonicalize method's type
+			// parameter names to their receiver counterparts.
+			o = fc.pkgCtx.canonicalTypeParams.Lookup(t).Obj()
+		}
+		return fc.objectName(o)
 	case *types.Interface:
 		if t.Empty() {
 			return "$emptyInterface"

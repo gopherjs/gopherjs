@@ -125,13 +125,20 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 // The native packages are augmented by the contents of natives.FS in the following way.
 // The file names do not matter except the usual `_test` suffix. The files for
 // native overrides get added to the package (even if they have the same name
-// as an existing file from the standard library). For all identifiers that exist
-// in the original AND the overrides, the original identifier in the AST gets
-// replaced by `_`. New identifiers that don't exist in original package get added.
+// as an existing file from the standard library). For function identifiers that exist
+// in the original AND the overrides AND that include the following directive in their comment:
+// //gopherjs:keep-original, the original identifier in the AST gets prefixed by
+// `_gopherjs_original_`. For other identifiers that exist in the original AND the overrides,
+// the original identifier gets replaced by `_`. New identifiers that don't exist in original
+// package get added.
 func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]*ast.File, []JSFile, error) {
 	var files []*ast.File
-	replacedDeclNames := make(map[string]bool)
-	pruneOriginalFuncs := make(map[string]bool)
+
+	type overrideInfo struct {
+		keepOriginal  bool
+		pruneOriginal bool
+	}
+	replacedDeclNames := make(map[string]overrideInfo)
 
 	isXTest := strings.HasSuffix(pkg.ImportPath, "_test")
 	importPath := pkg.ImportPath
@@ -170,18 +177,20 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 				switch d := decl.(type) {
 				case *ast.FuncDecl:
 					k := astutil.FuncKey(d)
-					replacedDeclNames[k] = true
-					pruneOriginalFuncs[k] = astutil.PruneOriginal(d)
+					replacedDeclNames[k] = overrideInfo{
+						keepOriginal:  astutil.KeepOriginal(d),
+						pruneOriginal: astutil.PruneOriginal(d),
+					}
 				case *ast.GenDecl:
 					switch d.Tok {
 					case token.TYPE:
 						for _, spec := range d.Specs {
-							replacedDeclNames[spec.(*ast.TypeSpec).Name.Name] = true
+							replacedDeclNames[spec.(*ast.TypeSpec).Name.Name] = overrideInfo{}
 						}
 					case token.VAR, token.CONST:
 						for _, spec := range d.Specs {
 							for _, name := range spec.(*ast.ValueSpec).Names {
-								replacedDeclNames[name.Name] = true
+								replacedDeclNames[name.Name] = overrideInfo{}
 							}
 						}
 					}
@@ -234,12 +243,18 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
 				k := astutil.FuncKey(d)
-				if replacedDeclNames[k] {
-					d.Name = ast.NewIdent("_")
-					if pruneOriginalFuncs[k] {
+				if info, ok := replacedDeclNames[k]; ok {
+					if info.pruneOriginal {
 						// Prune function bodies, since it may contain code invalid for
 						// GopherJS and pin unwanted imports.
 						d.Body = nil
+					}
+					if info.keepOriginal {
+						// Allow overridden function calls
+						// The standard library implementation of foo() becomes _gopherjs_original_foo()
+						d.Name.Name = "_gopherjs_original_" + d.Name.Name
+					} else {
+						d.Name = ast.NewIdent("_")
 					}
 				}
 			case *ast.GenDecl:
@@ -247,7 +262,7 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 				case token.TYPE:
 					for _, spec := range d.Specs {
 						s := spec.(*ast.TypeSpec)
-						if replacedDeclNames[s.Name.Name] {
+						if _, ok := replacedDeclNames[s.Name.Name]; ok {
 							s.Name = ast.NewIdent("_")
 							s.Type = &ast.StructType{Struct: s.Pos(), Fields: &ast.FieldList{}}
 							s.TypeParams = nil
@@ -257,7 +272,7 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 					for _, spec := range d.Specs {
 						s := spec.(*ast.ValueSpec)
 						for i, name := range s.Names {
-							if replacedDeclNames[name.Name] {
+							if _, ok := replacedDeclNames[name.Name]; ok {
 								s.Names[i] = ast.NewIdent("_")
 							}
 						}

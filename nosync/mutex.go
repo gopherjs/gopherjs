@@ -3,6 +3,10 @@ package nosync
 // Mutex is a dummy which is non-blocking.
 type Mutex struct {
 	locked bool
+	_      bool
+	_      bool
+	_      bool
+	_      uint32
 }
 
 // Lock locks m. It is a run-time error if m is already locked.
@@ -23,8 +27,14 @@ func (m *Mutex) Unlock() {
 
 // RWMutex is a dummy which is non-blocking.
 type RWMutex struct {
+	_               Mutex
 	writeLocked     bool
-	readLockCounter int
+	_               bool
+	_               bool
+	_               bool
+	readLockCounter int32
+	_               int32
+	_               int32
 }
 
 // Lock locks m for writing. It is a run-time error if rw is already locked for reading or writing.

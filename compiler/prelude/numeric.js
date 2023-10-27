@@ -1,7 +1,7 @@
 var $min = Math.min;
-var $mod = function (x, y) { return x % y; };
+var $mod = (x, y) => { return x % y; };
 var $parseInt = parseInt;
-var $parseFloat = function (f) {
+var $parseFloat = f => {
     if (f !== undefined && f !== null && f.constructor === Number) {
         return f;
     }
@@ -9,20 +9,20 @@ var $parseFloat = function (f) {
 };
 
 var $froundBuf = new Float32Array(1);
-var $fround = Math.fround || function (f) {
+var $fround = Math.fround || (f => {
     $froundBuf[0] = f;
     return $froundBuf[0];
-};
+});
 
-var $imul = Math.imul || function (a, b) {
+var $imul = Math.imul || ((a, b) => {
     var ah = (a >>> 16) & 0xffff;
     var al = a & 0xffff;
     var bh = (b >>> 16) & 0xffff;
     var bl = b & 0xffff;
     return ((al * bl) + (((ah * bl + al * bh) << 16) >>> 0) >> 0);
-};
+});
 
-var $floatKey = function (f) {
+var $floatKey = f => {
     if (f !== f) {
         $idCounter++;
         return "NaN$" + $idCounter;
@@ -30,11 +30,11 @@ var $floatKey = function (f) {
     return String(f);
 };
 
-var $flatten64 = function (x) {
+var $flatten64 = x => {
     return x.$high * 4294967296 + x.$low;
 };
 
-var $shiftLeft64 = function (x, y) {
+var $shiftLeft64 = (x, y) => {
     if (y === 0) {
         return x;
     }
@@ -47,7 +47,7 @@ var $shiftLeft64 = function (x, y) {
     return new x.constructor(0, 0);
 };
 
-var $shiftRightInt64 = function (x, y) {
+var $shiftRightInt64 = (x, y) => {
     if (y === 0) {
         return x;
     }
@@ -63,7 +63,7 @@ var $shiftRightInt64 = function (x, y) {
     return new x.constructor(0, 0);
 };
 
-var $shiftRightUint64 = function (x, y) {
+var $shiftRightUint64 = (x, y) => {
     if (y === 0) {
         return x;
     }
@@ -76,7 +76,7 @@ var $shiftRightUint64 = function (x, y) {
     return new x.constructor(0, 0);
 };
 
-var $mul64 = function (x, y) {
+var $mul64 = (x, y) => {
     var x48 = x.$high >>> 16;
     var x32 = x.$high & 0xFFFF;
     var x16 = x.$low >>> 16;
@@ -116,7 +116,7 @@ var $mul64 = function (x, y) {
     return r;
 };
 
-var $div64 = function (x, y, returnRemainder) {
+var $div64 = (x, y, returnRemainder) => {
     if (y.$high === 0 && y.$low === 0) {
         $throwRuntimeError("integer divide by zero");
     }
@@ -179,7 +179,7 @@ var $div64 = function (x, y, returnRemainder) {
     return new x.constructor(high * s, low * s);
 };
 
-var $divComplex = function (n, d) {
+var $divComplex = (n, d) => {
     var ninf = n.$real === Infinity || n.$real === -Infinity || n.$imag === Infinity || n.$imag === -Infinity;
     var dinf = d.$real === Infinity || d.$real === -Infinity || d.$imag === Infinity || d.$imag === -Infinity;
     var nnan = !ninf && (n.$real !== n.$real || n.$imag !== n.$imag);

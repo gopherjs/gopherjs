@@ -266,6 +266,9 @@ func (n name) name() (s string) { return nameMap[n.bytes].name }
 func (n name) tag() (s string)  { return nameMap[n.bytes].tag }
 func (n name) pkgPath() string  { return nameMap[n.bytes].pkgPath }
 func (n name) isExported() bool { return nameMap[n.bytes].exported }
+func (n name) setPkgPath(pkgpath string) {
+	nameMap[n.bytes].pkgPath = pkgpath
+}
 
 func newName(n, tag string, exported bool) name {
 	b := new(byte)

@@ -73,7 +73,7 @@ func testPanic2(t *testing.T) {
 	time.Sleep(0)
 	checkI(t, 4)
 	panic(7)
-	checkI(t, -3)
+	checkI(t, -3) //nolint:govet // Unreachable code is intentional for panic test
 }
 
 func TestPanicAdvanced(t *testing.T) {

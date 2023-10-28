@@ -159,6 +159,24 @@ func (tc interfaceConversion[srcType]) Run(t *testing.T) {
 	}
 }
 
+type sliceConversion[elType any, srcType ~[]elType, dstType ~[]elType] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc sliceConversion[elType, srcType, dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
+type stringToSliceConversion[dstType []byte | []rune] struct {
+	src  string
+	want dstType
+}
+
+func (tc stringToSliceConversion[dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
 func TestConversion(t *testing.T) {
 	type i64 int64
 	type i32 int32
@@ -172,6 +190,7 @@ func TestConversion(t *testing.T) {
 		s string
 		i int
 	}
+	type sl []byte
 
 	tests := []conversionTest{
 		// $convertToInt64
@@ -243,6 +262,13 @@ func TestConversion(t *testing.T) {
 		interfaceConversion[error]{src: fmt.Errorf("test error")},
 		interfaceConversion[*js.Object]{src: js.Global},
 		interfaceConversion[*int]{src: func(i int) *int { return &i }(1)},
+		// $convertToSlice
+		sliceConversion[byte, []byte, sl]{src: []byte{1, 2, 3}, want: sl{1, 2, 3}},
+		sliceConversion[byte, sl, []byte]{src: sl{1, 2, 3}, want: []byte{1, 2, 3}},
+		sliceConversion[byte, []byte, sl]{src: []byte(nil), want: sl(nil)},
+		sliceConversion[byte, sl, []byte]{src: sl(nil), want: []byte(nil)},
+		stringToSliceConversion[[]byte]{src: "🐞", want: []byte{240, 159, 144, 158}},
+		stringToSliceConversion[[]rune]{src: "🐞x", want: []rune{'🐞', 'x'}},
 	}
 
 	for _, test := range tests {

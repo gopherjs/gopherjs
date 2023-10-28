@@ -456,8 +456,10 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
         case $kindInterface:
             typ.convertFrom = (src) => $convertToInterface(src, typ);
             break;
-        case $kindArray:
         case $kindSlice:
+            typ.convertFrom = (src) => $convertToSlice(src, typ);
+            break;
+        case $kindArray:
         case $kindMap:
         case $kindChan:
         case $kindPtr:
@@ -1093,4 +1095,31 @@ const $convertToBool = (src, dstType) => {
  */
 const $convertToInterface = (src, dstType) => {
     return src;
+};
+
+/**
+ * Convert any type to a slice value.
+ * 
+ * dstType.kind must be $kindSlice. For wrapped types, src value must be wrapped.
+ * The returned value is always a slice type.
+ */
+const $convertToSlice = (src, dstType) => {
+    const srcType = src.constructor;
+    if (srcType === dstType) {
+        return src;
+    }
+
+    switch (srcType.kind) {
+        case $kindString:
+            if (dstType.elem.kind === $kindInt32) { // Runes are int32.
+                return new dstType($stringToRunes(src.$val));
+            } else if (dstType.elem.kind === $kindUint8) { // Bytes are uint8.
+                return new dstType($stringToBytes(src.$val));
+            }
+            break;
+        case $kindSlice:
+            return $convertSliceType(src, dstType);
+            break;
+    }
+    throw new Error(`Unsupported conversion from ${srcType.string} to ${dstType.string}`);
 };

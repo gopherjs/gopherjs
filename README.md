@@ -36,13 +36,13 @@ version, you can use an [older GopherJS release](https://github.com/gopherjs/gop
 
 Install GopherJS with `go install`:
 
-```
+```bash
 go install github.com/gopherjs/gopherjs@v1.18.0-beta3  # Or replace 'v1.18.0-beta3' with another version.
 ```
 
 If your local Go distribution as reported by `go version` is newer than Go 1.18, then you need to set the `GOPHERJS_GOROOT` environment variable to a directory that contains a Go 1.18 distribution. For example:
 
-```
+```bash
 go install golang.org/dl/go1.18.10@latest
 go1.18.10 download
 export GOPHERJS_GOROOT="$(go1.18.10 env GOROOT)"  # Also add this line to your .profile or equivalent.
@@ -58,11 +58,18 @@ _Note: GopherJS will try to write compiled object files of the core packages to 
 
 If you want to use `gopherjs run` or `gopherjs test` to run the generated code locally, install Node.js 10.0.0 (or newer), and the `source-map-support` module:
 
-```
+```bash
 npm install --global source-map-support
 ```
 
-On supported `GOOS` platforms, it's possible to make system calls (file system access, etc.) available. See [doc/syscalls.md](https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md) for instructions on how to do so.
+The `source-map-support` module is needed to make some unit-tests for stack tracing (e.g. `issue22083.go`) pass.
+
+If you are still being told to install `source-map-support` after you have already installed it globally,
+check that you can run `node --require source-map-support/register --eval ""` from your Go install's tests (e.g. `~/sdk/go1.19.10/test`);
+You may not have your global `NODE_PATH` setup correctly.
+
+On supported `GOOS` platforms, it's possible to make system calls (file system access, etc.) available.
+See [doc/syscalls.md](https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md) for instructions on how to do so.
 
 #### gopherjs serve
 

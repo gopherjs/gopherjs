@@ -832,20 +832,32 @@ func sprintError(err error) string {
 	}
 }
 
+func hasSourceMapSupport(quiet bool) bool {
+	srcMapEnv := os.Getenv(`SOURCE_MAP_SUPPORT`)
+	if srcMapEnv != `` {
+		if b, _ := strconv.ParseBool(srcMapEnv); !b {
+			return false
+		}
+	}
+
+	srcMapCmd := exec.Command(`node`, `--require`, `source-map-support/register`, `--eval`, `""`)
+	if err := srcMapCmd.Run(); err != nil {
+		if !quiet {
+			fmt.Fprintln(os.Stderr, `gopherjs: Source maps disabled. See https://github.com/gopherjs/gopherjs#gopherjs-run-gopherjs-test.`)
+		}
+		return false
+	}
+	return true
+}
+
 // runNode runs script with args using Node.js in directory dir.
 // If dir is empty string, current directory is used.
 // Is out is not nil, process stderr and stdout are redirected to it, otherwise
 // os.Stdout and os.Stderr are used.
 func runNode(script string, args []string, dir string, quiet bool, out io.Writer) error {
 	var allArgs []string
-	if b, _ := strconv.ParseBool(os.Getenv("SOURCE_MAP_SUPPORT")); os.Getenv("SOURCE_MAP_SUPPORT") == "" || b {
-		allArgs = []string{"--require", "source-map-support/register"}
-		if err := exec.Command("node", "--require", "source-map-support/register", "--eval", "").Run(); err != nil {
-			if !quiet {
-				fmt.Fprintln(os.Stderr, "gopherjs: Source maps disabled. Install source-map-support module for nice stack traces. See https://github.com/gopherjs/gopherjs#gopherjs-run-gopherjs-test.")
-			}
-			allArgs = []string{}
-		}
+	if hasSourceMapSupport(quiet) {
+		allArgs = append(allArgs, `--require`, `source-map-support/register`)
 	}
 
 	if runtime.GOOS != "windows" {
@@ -881,7 +893,7 @@ func runNode(script string, args []string, dir string, quiet bool, out io.Writer
 	allArgs = append(allArgs, script)
 	allArgs = append(allArgs, args...)
 
-	node := exec.Command("node", allArgs...)
+	node := exec.Command(`node`, allArgs...)
 	node.Dir = dir
 	node.Stdin = os.Stdin
 	if out != nil {
@@ -893,7 +905,7 @@ func runNode(script string, args []string, dir string, quiet bool, out io.Writer
 	}
 	err := node.Run()
 	if _, ok := err.(*exec.ExitError); err != nil && !ok {
-		err = fmt.Errorf("could not run Node.js: %s", err.Error())
+		err = fmt.Errorf(`could not run Node.js: %w`, err)
 	}
 	return err
 }

@@ -326,6 +326,7 @@ func TestInternalizeStruct(t *testing.T) {
 		t.Errorf("Mismatch (-want +got):\n%s", diff)
 	}
 }
+
 func TestInternalizeStructUnexportedFields(t *testing.T) {
 	type Person struct {
 		Name string
@@ -731,19 +732,20 @@ func TestReflection(t *testing.T) {
 	s := S{o}
 
 	v := reflect.ValueOf(&s).Elem()
-	if v.Field(0).Interface().(*js.Object).Get("answer").Int() != 42 {
-		t.Fail()
+	println(v.Field(0).Interface())
+	if got := v.Field(0).Interface().(*js.Object).Get("answer").Int(); got != 42 {
+		t.Errorf("Got: Accessing JS object property via reflect.Value.Interface() returned %v. Want: 42.", got)
 	}
-	if v.Field(0).MethodByName("Get").Call([]reflect.Value{reflect.ValueOf("answer")})[0].Interface().(*js.Object).Int() != 42 {
-		t.Fail()
+	if got := v.Field(0).MethodByName("Get").Call([]reflect.Value{reflect.ValueOf("answer")})[0].Interface().(*js.Object).Int(); got != 42 {
+		t.Errorf("Got: accessing JS object property via reflect.Value.Call('Get') returned %v. Want: 42.", got)
 	}
 	v.Field(0).Set(reflect.ValueOf(js.Global.Call("eval", "({ answer: 100 })")))
-	if s.Field.Get("answer").Int() != 100 {
-		t.Fail()
+	if got := s.Field.Get("answer").Int(); got != 100 {
+		t.Errorf("Got: setting a field to JS object via reflection failed, got %s. Want: 100.", got)
 	}
 
-	if fmt.Sprintf("%+v", s) != "{Field:[object Object]}" {
-		t.Fail()
+	if got, want := fmt.Sprintf("%+v", s), "{Field:[object Object]}"; got != want {
+		t.Errorf("Got: Formatting JS object returned %q. Want: %q.", got, want)
 	}
 }
 

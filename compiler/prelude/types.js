@@ -220,6 +220,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 this.$val = this;
             };
             typ.wrap = (v) => v;
+            typ.wrapped = false;
             typ.keyFor = $idKey;
             typ.init = elem => {
                 typ.elem = elem;
@@ -253,6 +254,15 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.wrapped = true;
             typ.wrap = (v) => new typ(v);
             typ.ptr = $newType(4, $kindPtr, "*" + string, false, pkg, exported, constructor);
+            if (string === "js.Object" && pkg === "github.com/gopherjs/gopherjs/js") {
+                // *js.Object is a special case because unlike other pointers it
+                // passes around a raw JS object without any GopherJS-specific
+                // metadata. As a result, it must be wrapped to preserve type
+                // information whenever it's used through an interface or type
+                // param. However, it's now a "wrapped" type in a complete sense,
+                // because it's handling is mostly special-cased at the compiler level.
+                typ.ptr.wrap = (v) => new typ.ptr(v);
+            }
             typ.ptr.elem = typ;
             typ.ptr.prototype.$get = function () { return this; };
             typ.ptr.prototype.$set = function (v) { typ.copy(this, v); };
@@ -393,6 +403,67 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.zero = () => { return new typ.ptr(); };
             break;
 
+        default:
+            $panic(new $String("invalid kind: " + kind));
+    }
+
+    /**
+     * convertFrom converts value src to the type typ.
+     * 
+     * For wrapped types src must be a wrapped value, e.g. for int32 this must be an instance of
+     * the $Int32 class, rather than the bare JavaScript number. This is required to determine
+     * the original Go type to convert from.
+     * 
+     * The returned value will be a representation of typ; for wrapped values it will be unwrapped;
+     * for example, conversion to int32 will return a bare JavaScript number. This is required 
+     * to make results of type conversion expression consistent with any other expressions of the
+     * same type.
+     */
+    typ.convertFrom = (src) => $convertIdentity(src, typ);
+    switch (kind) {
+        case $kindInt64:
+        case $kindUint64:
+            typ.convertFrom = (src) => $convertToInt64(src, typ);
+            break;
+        case $kindInt8:
+        case $kindInt16:
+        case $kindInt32:
+        case $kindInt:
+        case $kindUint8:
+        case $kindUint16:
+        case $kindUint32:
+        case $kindUint:
+        case $kindUintptr:
+            typ.convertFrom = (src) => $convertToNativeInt(src, typ);
+            break;
+        case $kindFloat32:
+        case $kindFloat64:
+            typ.convertFrom = (src) => $convertToFloat(src, typ);
+            break;
+        case $kindComplex128:
+        case $kindComplex64:
+            typ.convertFrom = (src) => $convertToComplex(src, typ);
+            break;
+        case $kindString:
+            typ.convertFrom = (src) => $convertToString(src, typ);
+            break;
+        case $kindUnsafePointer:
+            typ.convertFrom = (src) => $convertToUnsafePtr(src, typ);
+            break;
+        case $kindBool:
+            typ.convertFrom = (src) => $convertToBool(src, typ);
+            break;
+        case $kindInterface:
+            typ.convertFrom = (src) => $convertToInterface(src, typ);
+            break;
+        case $kindArray:
+        case $kindSlice:
+        case $kindMap:
+        case $kindChan:
+        case $kindPtr:
+        case $kindFunc:
+        case $kindStruct:
+            break;
         default:
             $panic(new $String("invalid kind: " + kind));
     }
@@ -791,4 +862,235 @@ var $assertType = (value, type, returnTuple) => {
         value = value.object;
     }
     return returnTuple ? [value, true] : value;
+};
+
+const $isSigned = (typ) => {
+    switch (typ.kind) {
+        case $kindInt:
+        case $kindInt8:
+        case $kindInt16:
+        case $kindInt32:
+        case $kindInt64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/**
+ * Truncate a JavaScript number `n` according to precision of the Go type `typ`
+ * it is supposed to represent.
+ */
+const $truncateNumber = (n, typ) => {
+    switch (typ.kind) {
+        case $kindInt8:
+            return n << 24 >> 24;
+        case $kindUint8:
+            return n << 24 >>> 24;
+        case $kindInt16:
+            return n << 16 >> 16;
+        case $kindUint16:
+            return n << 16 >>> 16;
+        case $kindInt32:
+        case $kindInt:
+            return n << 0 >> 0;
+        case $kindUint32:
+        case $kindUint:
+        case $kindUintptr:
+            return n << 0 >>> 0;
+        case $kindFloat32:
+            return $fround(n);
+        case $kindFloat64:
+            return n;
+        default:
+            $panic(new $String("invalid kind: " + kind));
+    }
+}
+
+/**
+ * Trivial type conversion function, which only accepts destination type identical to the src
+ * type.
+ * 
+ * For wrapped types, src value must be wrapped, and the return value will be unwrapped.
+ */
+const $convertIdentity = (src, dstType) => {
+    const srcType = src.constructor;
+    if (srcType === dstType) {
+        // Same type, no conversion necessary.
+        return srcType.wrapped ? src.$val : src;
+    }
+    throw new Error(`unsupported conversion from ${srcType.string} to ${dstType.string}`);
+};
+
+/**
+ * Conversion to int64 and uint64 variants.
+ *
+ * dstType.kind must be either $kindInt64 or $kindUint64. For wrapped types, src
+ * value must be wrapped. The returned value is an object instantiated by the
+ * `dstType` constructor.
+ */
+const $convertToInt64 = (src, dstType) => {
+    const srcType = src.constructor;
+    if (srcType === dstType) {
+        return src.$val;
+    }
+
+    switch (srcType.kind) {
+        case $kindInt64:
+        case $kindUint64:
+            return new dstType(src.$val.$high, src.$val.$low);
+        case $kindUintptr:
+            // GopherJS quirk: a uintptr value may be an object converted to
+            // uintptr from unsafe.Pointer. Since we don't have actual pointers,
+            // we pretend it's value is 1.
+            return new dstType(0, src.$val.constructor === Number ? src.$val : 1);
+        default:
+            return new dstType(0, src.$val);
+    }
+};
+
+/**
+ * Conversion to int and uint types of 32 bits or less.
+ * 
+ * dstType.kind must be $kindInt{8,16,32} or $kindUint{8,16,32}. For wrapped
+ * types, src value must be wrapped. The return value will always be a bare
+ * JavaScript number, since all 32-or-less integers in GopherJS are considered
+ * wrapped types.
+ */
+const $convertToNativeInt = (src, dstType) => {
+    const srcType = src.constructor;
+    // Since we are returning a bare number, identical kinds means no actual
+    // conversion is required.
+    if (srcType.kind === dstType.kind) {
+        return src.$val;
+    }
+
+    switch (srcType.kind) {
+        case $kindInt64:
+        case $kindUint64:
+            if ($isSigned(srcType) && $isSigned(dstType)) { // Carry over the sign.
+                return $truncateNumber(src.$val.$low + ((src.$val.$high >> 31) * 4294967296), dstType);
+            }
+            return $truncateNumber(src.$val.$low, dstType);
+        default:
+            return $truncateNumber(src.$val, dstType);
+    }
+};
+
+/**
+ * Conversion to floating point types.
+ *
+ * dstType.kind must be $kindFloat{32,64}. For wrapped types, src value must be
+ * wrapped. Returned value will always be a bare JavaScript number, since all
+ * floating point numbers in GopherJS are considered wrapped types.
+ */
+const $convertToFloat = (src, dstType) => {
+    const srcType = src.constructor;
+    // Since we are returning a bare number, identical kinds means no actual
+    // conversion is required.
+    if (srcType.kind === dstType.kind) {
+        return src.$val;
+    }
+
+    if (dstType.kind == $kindFloat32 && srcType.kind == $kindFloat64) {
+        return $fround(src.$val);
+    }
+
+    switch (srcType.kind) {
+        case $kindInt64:
+        case $kindUint64:
+            const val = $flatten64(src.$val);
+            return (dstType.kind == $kindFloat32) ? $fround(val) : val;
+        case $kindFloat64:
+            return (dstType.kind == $kindFloat32) ? $fround(src.$val) : src.$val;
+        default:
+            return src.$val;
+    }
+};
+
+/**
+ * Conversion to complex types.
+ * 
+ * dstType.kind must me $kindComplex{64,128}. Src must be another complex type.
+ * Returned value will always be an oject created by the dstType constructor.
+ */
+const $convertToComplex = (src, dstType) => {
+    const srcType = src.constructor;
+    if (srcType === dstType) {
+        return src;
+    }
+
+    return new dstType(src.$real, src.$imag);
+};
+
+/**
+ * Conversion to string types.
+ *
+ * dstType.kind must be $kindString. For wrapped types, src value must be
+ * wrapped. Returned value will always be a bare JavaScript string.
+ */
+const $convertToString = (src, dstType) => {
+    const srcType = src.constructor;
+    if (srcType === dstType) {
+        return src.$val;
+    }
+
+    switch (srcType.kind) {
+        case $kindInt64:
+        case $kindUint64:
+            return $encodeRune(src.$val.$low);
+        case $kindInt32:
+        case $kindInt16:
+        case $kindInt8:
+        case $kindInt:
+        case $kindUint32:
+        case $kindUint16:
+        case $kindUint8:
+        case $kindUint:
+        case $kindUintptr:
+            return $encodeRune(src.$val);
+        case $kindString:
+            return src.$val;
+        case $kindSlice:
+            if (srcType.elem.kind === $kindInt32) { // Runes are int32.
+                return $runesToString(src.$val);
+            } else if (srcType.elem.kind === $kindUint8) { // Bytes are uint8.
+                return $bytesToString(src.$val);
+            }
+            break;
+    }
+
+    throw new Error(`Unsupported conversion from ${srcType.string} to ${dstType.string}`);
+};
+
+/**
+ * Convert to unsafe.Pointer.
+ */
+const $convertToUnsafePtr = (src, dstType) => {
+    // Unsafe pointers are not well supported by GopherJS and whatever support
+    // exists is not well documented. Implementing this conversion will require
+    // a great deal of great reverse engineering, and I'm not sure anyone will
+    // ever need this.
+    throw new Error(`Conversion between a typeparam and unsafe.Pointer is not implemented.`)
+};
+
+/**
+ * Convert to boolean types.
+ *
+ * dstType.kind must be $kindBool. Src must be a wrapped boolean value. Returned
+ * value will always be a bare JavaScript boolean.
+ */
+const $convertToBool = (src, dstType) => {
+    return src.$val;
+};
+
+/**
+ * Convert any type to an interface value.
+ *
+ * dstType.kind must be $kindInterface. For wrapped types, src value must be
+ * wrapped. Since GopherJS represents interfaces as wrapped values of the original
+ * type, the returned value is always src.
+ */
+const $convertToInterface = (src, dstType) => {
+    return src;
 };

@@ -59,7 +59,7 @@ var $idKey = x => {
 };
 
 // Creates constructor functions for array pointer types. Returns a new function
-// instace each time to make sure each type is independent of the other.
+// instance each time to make sure each type is independent of the other.
 var $arrayPtrCtor = () => {
     return function (array) {
         this.$get = () => { return array; };
@@ -224,7 +224,10 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.keyFor = $idKey;
             typ.init = elem => {
                 typ.elem = elem;
-                typ.wrapped = (elem.kind === $kindArray);
+                if (elem.kind === $kindArray) {
+                    typ.wrapped = true;
+                    typ.wrap = (v) => ((v === typ.nil) ? v : new typ(v));
+                }
                 typ.nil = new typ($throwNilPointerError, $throwNilPointerError);
             };
             break;
@@ -459,10 +462,12 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
         case $kindSlice:
             typ.convertFrom = (src) => $convertToSlice(src, typ);
             break;
+        case $kindPtr:
+            typ.convertFrom = (src) => $convertToPointer(src, typ);
+            break;
         case $kindArray:
         case $kindMap:
         case $kindChan:
-        case $kindPtr:
         case $kindFunc:
         case $kindStruct:
             break;
@@ -1098,7 +1103,7 @@ const $convertToInterface = (src, dstType) => {
 };
 
 /**
- * Convert any type to a slice value.
+ * Convert to a slice value.
  * 
  * dstType.kind must be $kindSlice. For wrapped types, src value must be wrapped.
  * The returned value is always a slice type.
@@ -1122,4 +1127,39 @@ const $convertToSlice = (src, dstType) => {
             break;
     }
     throw new Error(`Unsupported conversion from ${srcType.string} to ${dstType.string}`);
+};
+
+/**
+* Convert to a pointer value.
+* 
+* dstType.kind must be $kindPtr. For wrapped types (specifically, pointers 
+* to an array), src value must be wrapped. The returned value is a bare JS
+* array (typed or untyped), or a pointer object.
+*/
+const $convertToPointer = (src, dstType) => {
+    const srcType = src.constructor;
+
+    if (srcType === dstType) {
+        return src;
+    }
+
+    // []T → *[N]T
+    if (srcType.kind == $kindSlice && dstType.elem.kind == $kindArray) {
+        return $sliceToGoArray(src, dstType);
+    }
+
+    if (src === srcType.nil) {
+        return dstType.nil;
+    }
+
+    switch (dstType.elem.kind) {
+        case $kindArray:
+            // Pointers to arrays are a wrapped type, represented by a native JS array,
+            // which we return directly.
+            return src.$val;
+        case $kindStruct:
+            return $pointerOfStructConversion(src, dstType);
+        default:
+            return new dstType(src.$get, src.$set, src.$target);
+    }
 };

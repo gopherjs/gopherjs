@@ -173,7 +173,6 @@ var knownFails = map[string]failReason{
 	"typeparam/issue48453.go":        {category: generics, desc: "make() doesn't support generic slice types"},
 	"typeparam/issue49295.go":        {category: generics, desc: "len() doesn't support generic pointer to array types"},
 	"typeparam/issue50193.go":        {category: generics, desc: "invalid print format for complex numbers"},
-	"typeparam/issue50833.go":        {category: generics, desc: "unsupported conversion from *main.S to main.PS"},
 	"typeparam/issue51303.go":        {category: generics, desc: "missing support for conversion into a parameterized type"},
 	"typeparam/issue51522a.go":       {category: generics, desc: "missing support for the comparable type constraint"},
 	"typeparam/issue51522b.go":       {category: generics, desc: "missing support for the comparable type constraint"},

@@ -5,6 +5,7 @@ import (
 	"math"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/gopherjs/gopherjs/js"
@@ -177,6 +178,40 @@ func (tc stringToSliceConversion[dstType]) Run(t *testing.T) {
 	checkConversion(t, tc.src, dstType(tc.src), tc.want)
 }
 
+type sliceToArrayPtrConversion[elType any, srcType ~[]elType, dstType ~*[3]elType | ~*[0]elType] struct {
+	src       srcType
+	want      dstType
+	wantPanic string
+}
+
+func (tc sliceToArrayPtrConversion[elType, srcType, dstType]) Run(t *testing.T) {
+	if tc.wantPanic == "" {
+		checkConversion(t, tc.src, dstType(tc.src), tc.want)
+		return
+	}
+
+	var got dstType
+	defer func() {
+		err := recover()
+		if err == nil {
+			t.Fatalf("Got: %T(%v) = %v. Want: panic.", got, tc.src, got)
+		}
+		if msg := fmt.Sprint(err); !strings.Contains(msg, tc.wantPanic) {
+			t.Fatalf("Got panic: %v. Want: panic containing %q.", err, tc.wantPanic)
+		}
+	}()
+	got = dstType(tc.src)
+}
+
+type ptrConversion[T any, srcType ~*T, dstType ~*T] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc ptrConversion[T, srcType, dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
 func TestConversion(t *testing.T) {
 	type i64 int64
 	type i32 int32
@@ -185,12 +220,20 @@ func TestConversion(t *testing.T) {
 	type c64 complex64
 	type c128 complex128
 	type str string
+	type strPtr *string
 	type b bool
 	type st struct {
 		s string
 		i int
 	}
+	type stPtr *st
 	type sl []byte
+	type arr [3]byte
+	type arrPtr *[3]byte
+
+	strVar := "abc"
+	stVar := st{s: "abc", i: 42}
+	arrVal := [3]byte{1, 2, 3}
 
 	tests := []conversionTest{
 		// $convertToInt64
@@ -269,6 +312,18 @@ func TestConversion(t *testing.T) {
 		sliceConversion[byte, sl, []byte]{src: sl(nil), want: []byte(nil)},
 		stringToSliceConversion[[]byte]{src: "🐞", want: []byte{240, 159, 144, 158}},
 		stringToSliceConversion[[]rune]{src: "🐞x", want: []rune{'🐞', 'x'}},
+		// $convertToPointer
+		sliceToArrayPtrConversion[byte, []byte, *[3]byte]{src: []byte{1, 2, 3}, want: &[3]byte{1, 2, 3}},
+		sliceToArrayPtrConversion[byte, sl, arrPtr]{src: []byte{1, 2, 3}, want: arrPtr(&[3]byte{1, 2, 3})},
+		sliceToArrayPtrConversion[byte, []byte, *[0]byte]{src: nil, want: nil},
+		sliceToArrayPtrConversion[byte, []byte, *[3]byte]{src: []byte{1, 2}, wantPanic: "length"},
+		sliceToArrayPtrConversion[byte, []byte, *[3]byte]{src: nil, wantPanic: "length"},
+		ptrConversion[string, *string, strPtr]{src: &strVar, want: strPtr(&strVar)},
+		ptrConversion[string, *string, strPtr]{src: nil, want: nil},
+		ptrConversion[[3]byte, *[3]byte, arrPtr]{src: &arrVal, want: arrPtr(&arrVal)},
+		ptrConversion[[3]byte, *[3]byte, arrPtr]{src: nil, want: nil},
+		ptrConversion[st, *st, stPtr]{src: &stVar, want: stPtr(&stVar)},
+		ptrConversion[st, *st, stPtr]{src: nil, want: nil},
 	}
 
 	for _, test := range tests {

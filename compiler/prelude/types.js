@@ -466,10 +466,14 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.convertFrom = (src) => $convertToPointer(src, typ);
             break;
         case $kindArray:
+            typ.convertFrom = (src) => $convertToArray(src, typ);
+            break;
+        case $kindStruct:
+            typ.convertFrom = (src) => $convertToStruct(src, typ);
+            break;
         case $kindMap:
         case $kindChan:
         case $kindFunc:
-        case $kindStruct:
             break;
         default:
             $panic(new $String("invalid kind: " + kind));
@@ -1162,4 +1166,28 @@ const $convertToPointer = (src, dstType) => {
         default:
             return new dstType(src.$get, src.$set, src.$target);
     }
+};
+
+/**
+ * Convert to struct types.
+ *
+ * dstType.kind must be $kindStruct. Src must be a wrapped struct value. Returned
+ * value will always be a bare JavaScript object representing the struct.
+ */
+const $convertToStruct = (src, dstType) => {
+    // Since structs are passed by value, the conversion result must be a copy
+    // of the original value, even if it is the same type.
+    return $clone(src.$val, dstType);
+};
+
+/**
+ * Convert to array types.
+ *
+ * dstType.kind must be $kindArray. Src must be a wrapped array value. Returned
+ * value will always be a bare JavaScript object representing the array.
+ */
+const $convertToArray = (src, dstType) => {
+    // Since arrays are passed by value, the conversion result must be a copy
+    // of the original value, even if it is the same type.
+    return $clone(src.$val, dstType);
 };

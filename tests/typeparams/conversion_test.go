@@ -37,6 +37,27 @@ type conversionTest interface {
 	Run(t *testing.T)
 }
 
+type ( // Named types for use in conversion test cases.
+	i64    int64
+	i32    int32
+	f64    float64
+	f32    float32
+	c64    complex64
+	c128   complex128
+	str    string
+	strPtr *string
+	b      bool
+	st     struct {
+		s string
+		i int
+	}
+	st2    st
+	stPtr  *st
+	sl     []byte
+	arr    [3]byte
+	arrPtr *[3]byte
+)
+
 type numeric interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
@@ -212,25 +233,31 @@ func (tc ptrConversion[T, srcType, dstType]) Run(t *testing.T) {
 	checkConversion(t, tc.src, dstType(tc.src), tc.want)
 }
 
-func TestConversion(t *testing.T) {
-	type i64 int64
-	type i32 int32
-	type f64 float64
-	type f32 float32
-	type c64 complex64
-	type c128 complex128
-	type str string
-	type strPtr *string
-	type b bool
-	type st struct {
-		s string
-		i int
-	}
-	type stPtr *st
-	type sl []byte
-	type arr [3]byte
-	type arrPtr *[3]byte
+type structConversion[srcType ~struct {
+	s string
+	i int
+}, dstType ~struct {
+	s string
+	i int
+}] struct {
+	src  srcType
+	want dstType
+}
 
+func (tc structConversion[srcType, dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
+type arrayConversion[srcType ~[3]byte, dstType ~[3]byte] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc arrayConversion[srcType, dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
+func TestConversion(t *testing.T) {
 	strVar := "abc"
 	stVar := st{s: "abc", i: 42}
 	arrVal := [3]byte{1, 2, 3}
@@ -324,6 +351,14 @@ func TestConversion(t *testing.T) {
 		ptrConversion[[3]byte, *[3]byte, arrPtr]{src: nil, want: nil},
 		ptrConversion[st, *st, stPtr]{src: &stVar, want: stPtr(&stVar)},
 		ptrConversion[st, *st, stPtr]{src: nil, want: nil},
+		// $convertToStruct
+		structConversion[st, st2]{src: st{i: 42, s: "abc"}, want: st2{s: "abc", i: 42}},
+		structConversion[st, struct {
+			s string
+			i int
+		}]{src: st{i: 42, s: "abc"}, want: st2{s: "abc", i: 42}},
+		// $convertToArray
+		arrayConversion[[3]byte, arr]{src: [3]byte{1, 2, 3}, want: arr{1, 2, 3}},
 	}
 
 	for _, test := range tests {

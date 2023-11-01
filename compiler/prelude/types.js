@@ -475,6 +475,8 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.convertFrom = (src) => $convertToMap(src, typ);
             break;
         case $kindChan:
+            typ.convertFrom = (src) => $convertToChan(src, typ);
+            break;
         case $kindFunc:
             break;
         default:
@@ -1201,5 +1203,15 @@ const $convertToArray = (src, dstType) => {
  * value will always be a bare JavaScript object representing the map.
  */
 const $convertToMap = (src, dstType) => {
+    return src.$val;
+};
+
+/**
+ * Convert to chan types.
+ *
+ * dstType.kind must be $kindChan. Src must be a wrapped chan value. Returned
+ * value will always be a bare $Chan object representing the channel.
+ */
+const $convertToChan = (src, dstType) => {
     return src.$val;
 };

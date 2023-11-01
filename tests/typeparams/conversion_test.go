@@ -57,6 +57,7 @@ type ( // Named types for use in conversion test cases.
 	arr    [3]byte
 	arrPtr *[3]byte
 	m      map[string]string
+	ch     chan string
 )
 
 type numeric interface {
@@ -267,10 +268,20 @@ func (tc mapConversion[srcType, dstType]) Run(t *testing.T) {
 	checkConversion(t, tc.src, dstType(tc.src), tc.want)
 }
 
+type chanConversion[srcType ~chan string, dstType ~chan string] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc chanConversion[srcType, dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
 func TestConversion(t *testing.T) {
 	strVar := "abc"
 	stVar := st{s: "abc", i: 42}
 	arrVal := [3]byte{1, 2, 3}
+	chanVal := make(chan string)
 
 	tests := []conversionTest{
 		// $convertToInt64
@@ -372,6 +383,9 @@ func TestConversion(t *testing.T) {
 		// $convertToMap
 		mapConversion[map[string]string, m]{src: map[string]string{"abc": "def"}, want: m{"abc": "def"}},
 		mapConversion[map[string]string, m]{src: nil, want: nil},
+		// $convertToChan
+		chanConversion[chan string, ch]{src: chanVal, want: ch(chanVal)},
+		chanConversion[chan string, ch]{src: nil, want: nil},
 	}
 
 	for _, test := range tests {

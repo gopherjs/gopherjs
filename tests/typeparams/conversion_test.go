@@ -58,6 +58,7 @@ type ( // Named types for use in conversion test cases.
 	arrPtr *[3]byte
 	m      map[string]string
 	ch     chan string
+	fun    func() int
 )
 
 type numeric interface {
@@ -277,11 +278,28 @@ func (tc chanConversion[srcType, dstType]) Run(t *testing.T) {
 	checkConversion(t, tc.src, dstType(tc.src), tc.want)
 }
 
+type funcConversion[srcType ~func() int, dstType ~func() int] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc funcConversion[srcType, dstType]) Run(t *testing.T) {
+	got := dstType(tc.src)
+	if reflect.TypeOf(got) != reflect.TypeOf(tc.want) {
+		t.Errorf("Got: %v. Want: converted type is: %v.", reflect.TypeOf(got), reflect.TypeOf(tc.want))
+	}
+
+	if js.InternalObject(got) != js.InternalObject(tc.want) {
+		t.Errorf("Got: %v != %v. Want: after type conversion function object should remain the same.", got, tc.want)
+	}
+}
+
 func TestConversion(t *testing.T) {
 	strVar := "abc"
 	stVar := st{s: "abc", i: 42}
 	arrVal := [3]byte{1, 2, 3}
 	chanVal := make(chan string)
+	funcVal := func() int { return 42 }
 
 	tests := []conversionTest{
 		// $convertToInt64
@@ -386,6 +404,9 @@ func TestConversion(t *testing.T) {
 		// $convertToChan
 		chanConversion[chan string, ch]{src: chanVal, want: ch(chanVal)},
 		chanConversion[chan string, ch]{src: nil, want: nil},
+		// $convertToFunc
+		funcConversion[func() int, fun]{src: funcVal, want: fun(funcVal)},
+		funcConversion[func() int, fun]{src: nil, want: nil},
 	}
 
 	for _, test := range tests {

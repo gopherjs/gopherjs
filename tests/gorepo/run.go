@@ -168,7 +168,6 @@ var knownFails = map[string]failReason{
 	"typeparam/index2.go":            {category: generics, desc: "missing index operator support for generic types"},
 	"typeparam/issue47258.go":        {category: generics, desc: "missing operator support for generic types"},
 	"typeparam/issue47716.go":        {category: generics, desc: "unsafe.Sizeof() doesn't work with generic types"},
-	"typeparam/issue48137.go":        {category: generics, desc: "unsupported conversion from func() main.Bar to main.Bar"},
 	"typeparam/issue48276a.go":       {category: generics, desc: "missing support for the comparable type constraint"},
 	"typeparam/issue48453.go":        {category: generics, desc: "make() doesn't support generic slice types"},
 	"typeparam/issue49295.go":        {category: generics, desc: "len() doesn't support generic pointer to array types"},

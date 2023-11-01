@@ -478,6 +478,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.convertFrom = (src) => $convertToChan(src, typ);
             break;
         case $kindFunc:
+            typ.convertFrom = (src) => $convertToFunc(src, typ);
             break;
         default:
             $panic(new $String("invalid kind: " + kind));
@@ -1213,5 +1214,15 @@ const $convertToMap = (src, dstType) => {
  * value will always be a bare $Chan object representing the channel.
  */
 const $convertToChan = (src, dstType) => {
+    return src.$val;
+};
+
+/**
+ * Convert to function types.
+ *
+ * dstType.kind must be $kindFunc. Src must be a wrapped function value. Returned
+ * value will always be a bare JavaScript function.
+ */
+const $convertToFunc = (src, dstType) => {
     return src.$val;
 };

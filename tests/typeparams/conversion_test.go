@@ -56,6 +56,7 @@ type ( // Named types for use in conversion test cases.
 	sl     []byte
 	arr    [3]byte
 	arrPtr *[3]byte
+	m      map[string]string
 )
 
 type numeric interface {
@@ -257,6 +258,15 @@ func (tc arrayConversion[srcType, dstType]) Run(t *testing.T) {
 	checkConversion(t, tc.src, dstType(tc.src), tc.want)
 }
 
+type mapConversion[srcType ~map[string]string, dstType ~map[string]string] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc mapConversion[srcType, dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
 func TestConversion(t *testing.T) {
 	strVar := "abc"
 	stVar := st{s: "abc", i: 42}
@@ -359,6 +369,9 @@ func TestConversion(t *testing.T) {
 		}]{src: st{i: 42, s: "abc"}, want: st2{s: "abc", i: 42}},
 		// $convertToArray
 		arrayConversion[[3]byte, arr]{src: [3]byte{1, 2, 3}, want: arr{1, 2, 3}},
+		// $convertToMap
+		mapConversion[map[string]string, m]{src: map[string]string{"abc": "def"}, want: m{"abc": "def"}},
+		mapConversion[map[string]string, m]{src: nil, want: nil},
 	}
 
 	for _, test := range tests {

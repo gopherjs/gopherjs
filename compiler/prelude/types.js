@@ -472,6 +472,8 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.convertFrom = (src) => $convertToStruct(src, typ);
             break;
         case $kindMap:
+            typ.convertFrom = (src) => $convertToMap(src, typ);
+            break;
         case $kindChan:
         case $kindFunc:
             break;
@@ -1190,4 +1192,14 @@ const $convertToArray = (src, dstType) => {
     // Since arrays are passed by value, the conversion result must be a copy
     // of the original value, even if it is the same type.
     return $clone(src.$val, dstType);
+};
+
+/**
+ * Convert to map types.
+ *
+ * dstType.kind must be $kindMap. Src must be a wrapped map value. Returned
+ * value will always be a bare JavaScript object representing the map.
+ */
+const $convertToMap = (src, dstType) => {
+    return src.$val;
 };

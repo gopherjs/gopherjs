@@ -80,3 +80,46 @@ jobs:
           $ErrorActionPreference = "Stop"
           # Run all tests except gorepo, which will be run separately in parallel.
           go test -v -race $(go list ./... | Where-Object { $_ -notmatch "github.com/gopherjs/gopherjs/tests/gorepo" })
+      - name: TodoMVC in GOPATH mode
+        if: matrix.os != 'windows-latest'
+        run: |
+          set -e
+          export GO111MODULE=off
+          export GOPATH=/tmp/gopath
+          mkdir -p $GOPATH/src/github.com/gopherjs/gopherjs
+          cp -r -p . $GOPATH/src/github.com/gopherjs/gopherjs/
+          go get -v github.com/gopherjs/todomvc
+          gopherjs build -v -o /tmp/todomvc_gopath.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+      - name: TodoMVC in GOPATH mode
+        if: matrix.os == 'windows-latest'
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:GO111MODULE = "off"
+          $env:GOPATH = "C:\tmp\gopath"
+          $destinationPath = "$env:GOPATH\src\github.com\gopherjs\gopherjs"
+          if (-not (Test-Path $destinationPath)) {
+            New-Item -ItemType Directory -Force -Path $destinationPath
+          }
+          Copy-Item -Recurse -Path . -Destination $destinationPath
+          go get -v github.com/gopherjs/todomvc
+          gopherjs build -v -o C:\tmp\todomvc_gopath.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+      - name: TodoMVC in Modules mode
+        if: matrix.os != 'windows-latest'
+        run: |
+          set -e
+          cd /tmp
+          git clone --depth=1 https://github.com/gopherjs/todomvc.git
+          cd /tmp/todomvc
+          gopherjs build -v -o /tmp/todomvc_gomod.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+      - name: TodoMVC in Modules mode
+        if: matrix.os == 'windows-latest'
+        run: |
+          $ErrorActionPreference = "Stop"
+          Set-Location C:\tmp
+          git clone --depth=1 https://github.com/gopherjs/todomvc.git
+          Set-Location C:\tmp\todomvc
+          gopherjs build -v -o C:\tmp\todomvc_gomod.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...

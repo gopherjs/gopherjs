@@ -123,3 +123,6 @@ jobs:
           Set-Location C:\tmp\todomvc
           gopherjs build -v -o C:\tmp\todomvc_gomod.js github.com/gopherjs/todomvc
           gopherjs test -v github.com/gopherjs/todomvc/...
+      - name: Go Repository tests
+        run: |
+          go test -v github.com/gopherjs/gopherjs/tests/gorepo

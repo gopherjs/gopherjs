@@ -126,3 +126,13 @@ jobs:
       - name: Go Repository tests
         run: |
           go test -v github.com/gopherjs/gopherjs/tests/gorepo
+      - name: gopherjs test ...
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          set -e
+          ulimit -s 10000
+          PACKAGE_NAMES=$( \
+            GOOS=js GOARCH=ecmascript go list std github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/... \
+            | grep -v -x -f .std_test_pkg_exclusions \
+          )
+          gopherjs test -p 2 --minify -v --short $PACKAGE_NAMES

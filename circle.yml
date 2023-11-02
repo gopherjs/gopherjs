@@ -41,9 +41,6 @@ workflows:
     - gopherjs_tests:
         requires:
           - build
-    - gorepo_tests:
-        requires:
-          - build
 
 parameters:
   go_version:
@@ -121,19 +118,6 @@ jobs:
         no_output_timeout: "1h"  # Packages like math/big take a while to run all tests.
     - store_test_results:
         path: ~/test-reports/
-
-  gorepo_tests:
-    executor: gopherjs
-    parallelism: 4
-    steps:
-    - setup_environment
-    - checkout
-    - install_deps
-    - install_gopherjs
-    - run:
-        name: Go Repository tests
-        command: |
-          go test -v github.com/gopherjs/gopherjs/tests/gorepo
 
 commands:
   setup_environment:

@@ -732,7 +732,6 @@ func TestReflection(t *testing.T) {
 	s := S{o}
 
 	v := reflect.ValueOf(&s).Elem()
-	println(v.Field(0).Interface())
 	if got := v.Field(0).Interface().(*js.Object).Get("answer").Int(); got != 42 {
 		t.Errorf("Got: Accessing JS object property via reflect.Value.Interface() returned %v. Want: 42.", got)
 	}

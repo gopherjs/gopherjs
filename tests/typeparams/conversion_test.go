@@ -5,6 +5,7 @@ import (
 	"math"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/gopherjs/gopherjs/js"
@@ -35,6 +36,30 @@ func checkConversion(t *testing.T, src, got, want any) {
 type conversionTest interface {
 	Run(t *testing.T)
 }
+
+type ( // Named types for use in conversion test cases.
+	i64    int64
+	i32    int32
+	f64    float64
+	f32    float32
+	c64    complex64
+	c128   complex128
+	str    string
+	strPtr *string
+	b      bool
+	st     struct {
+		s string
+		i int
+	}
+	st2    st
+	stPtr  *st
+	sl     []byte
+	arr    [3]byte
+	arrPtr *[3]byte
+	m      map[string]string
+	ch     chan string
+	fun    func() int
+)
 
 type numeric interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
@@ -159,19 +184,122 @@ func (tc interfaceConversion[srcType]) Run(t *testing.T) {
 	}
 }
 
-func TestConversion(t *testing.T) {
-	type i64 int64
-	type i32 int32
-	type f64 float64
-	type f32 float32
-	type c64 complex64
-	type c128 complex128
-	type str string
-	type b bool
-	type st struct {
-		s string
-		i int
+type sliceConversion[elType any, srcType ~[]elType, dstType ~[]elType] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc sliceConversion[elType, srcType, dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
+type stringToSliceConversion[dstType []byte | []rune] struct {
+	src  string
+	want dstType
+}
+
+func (tc stringToSliceConversion[dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
+type sliceToArrayPtrConversion[elType any, srcType ~[]elType, dstType ~*[3]elType | ~*[0]elType] struct {
+	src       srcType
+	want      dstType
+	wantPanic string
+}
+
+func (tc sliceToArrayPtrConversion[elType, srcType, dstType]) Run(t *testing.T) {
+	if tc.wantPanic == "" {
+		checkConversion(t, tc.src, dstType(tc.src), tc.want)
+		return
 	}
+
+	var got dstType
+	defer func() {
+		err := recover()
+		if err == nil {
+			t.Fatalf("Got: %T(%v) = %v. Want: panic.", got, tc.src, got)
+		}
+		if msg := fmt.Sprint(err); !strings.Contains(msg, tc.wantPanic) {
+			t.Fatalf("Got panic: %v. Want: panic containing %q.", err, tc.wantPanic)
+		}
+	}()
+	got = dstType(tc.src)
+}
+
+type ptrConversion[T any, srcType ~*T, dstType ~*T] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc ptrConversion[T, srcType, dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
+type structConversion[srcType ~struct {
+	s string
+	i int
+}, dstType ~struct {
+	s string
+	i int
+}] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc structConversion[srcType, dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
+type arrayConversion[srcType ~[3]byte, dstType ~[3]byte] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc arrayConversion[srcType, dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
+type mapConversion[srcType ~map[string]string, dstType ~map[string]string] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc mapConversion[srcType, dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
+type chanConversion[srcType ~chan string, dstType ~chan string] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc chanConversion[srcType, dstType]) Run(t *testing.T) {
+	checkConversion(t, tc.src, dstType(tc.src), tc.want)
+}
+
+type funcConversion[srcType ~func() int, dstType ~func() int] struct {
+	src  srcType
+	want dstType
+}
+
+func (tc funcConversion[srcType, dstType]) Run(t *testing.T) {
+	got := dstType(tc.src)
+	if reflect.TypeOf(got) != reflect.TypeOf(tc.want) {
+		t.Errorf("Got: %v. Want: converted type is: %v.", reflect.TypeOf(got), reflect.TypeOf(tc.want))
+	}
+
+	if js.InternalObject(got) != js.InternalObject(tc.want) {
+		t.Errorf("Got: %v != %v. Want: after type conversion function object should remain the same.", got, tc.want)
+	}
+}
+
+func TestConversion(t *testing.T) {
+	strVar := "abc"
+	stVar := st{s: "abc", i: 42}
+	arrVal := [3]byte{1, 2, 3}
+	chanVal := make(chan string)
+	funcVal := func() int { return 42 }
 
 	tests := []conversionTest{
 		// $convertToInt64
@@ -243,6 +371,42 @@ func TestConversion(t *testing.T) {
 		interfaceConversion[error]{src: fmt.Errorf("test error")},
 		interfaceConversion[*js.Object]{src: js.Global},
 		interfaceConversion[*int]{src: func(i int) *int { return &i }(1)},
+		// $convertToSlice
+		sliceConversion[byte, []byte, sl]{src: []byte{1, 2, 3}, want: sl{1, 2, 3}},
+		sliceConversion[byte, sl, []byte]{src: sl{1, 2, 3}, want: []byte{1, 2, 3}},
+		sliceConversion[byte, []byte, sl]{src: []byte(nil), want: sl(nil)},
+		sliceConversion[byte, sl, []byte]{src: sl(nil), want: []byte(nil)},
+		stringToSliceConversion[[]byte]{src: "🐞", want: []byte{240, 159, 144, 158}},
+		stringToSliceConversion[[]rune]{src: "🐞x", want: []rune{'🐞', 'x'}},
+		// $convertToPointer
+		sliceToArrayPtrConversion[byte, []byte, *[3]byte]{src: []byte{1, 2, 3}, want: &[3]byte{1, 2, 3}},
+		sliceToArrayPtrConversion[byte, sl, arrPtr]{src: []byte{1, 2, 3}, want: arrPtr(&[3]byte{1, 2, 3})},
+		sliceToArrayPtrConversion[byte, []byte, *[0]byte]{src: nil, want: nil},
+		sliceToArrayPtrConversion[byte, []byte, *[3]byte]{src: []byte{1, 2}, wantPanic: "length"},
+		sliceToArrayPtrConversion[byte, []byte, *[3]byte]{src: nil, wantPanic: "length"},
+		ptrConversion[string, *string, strPtr]{src: &strVar, want: strPtr(&strVar)},
+		ptrConversion[string, *string, strPtr]{src: nil, want: nil},
+		ptrConversion[[3]byte, *[3]byte, arrPtr]{src: &arrVal, want: arrPtr(&arrVal)},
+		ptrConversion[[3]byte, *[3]byte, arrPtr]{src: nil, want: nil},
+		ptrConversion[st, *st, stPtr]{src: &stVar, want: stPtr(&stVar)},
+		ptrConversion[st, *st, stPtr]{src: nil, want: nil},
+		// $convertToStruct
+		structConversion[st, st2]{src: st{i: 42, s: "abc"}, want: st2{s: "abc", i: 42}},
+		structConversion[st, struct {
+			s string
+			i int
+		}]{src: st{i: 42, s: "abc"}, want: st2{s: "abc", i: 42}},
+		// $convertToArray
+		arrayConversion[[3]byte, arr]{src: [3]byte{1, 2, 3}, want: arr{1, 2, 3}},
+		// $convertToMap
+		mapConversion[map[string]string, m]{src: map[string]string{"abc": "def"}, want: m{"abc": "def"}},
+		mapConversion[map[string]string, m]{src: nil, want: nil},
+		// $convertToChan
+		chanConversion[chan string, ch]{src: chanVal, want: ch(chanVal)},
+		chanConversion[chan string, ch]{src: nil, want: nil},
+		// $convertToFunc
+		funcConversion[func() int, fun]{src: funcVal, want: fun(funcVal)},
+		funcConversion[func() int, fun]{src: nil, want: nil},
 	}
 
 	for _, test := range tests {

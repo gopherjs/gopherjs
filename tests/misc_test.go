@@ -959,3 +959,31 @@ func TestFileSetSize(t *testing.T) {
 		t.Errorf("Got: unsafe.Sizeof(token.FileSet{}) %v, Want: %v", n2, n1)
 	}
 }
+
+func TestChanEquality(t *testing.T) {
+	type ch chan string
+
+	ch1 := make(chan string)
+	ch2 := make(ch)
+	ch3 := ch(ch1)
+
+	t.Run("equal", func(t *testing.T) {
+		if ch1 != ch3 {
+			t.Errorf("Got: ch1 != ch3. Want: channels created by the same call to make are equal.")
+		}
+		if runtime.Compiler != "gopherjs" {
+			t.Skip("https://github.com/golang/go/issues/63886")
+		}
+		if !reflect.DeepEqual(ch1, ch3) {
+			t.Errorf("Got: reflect.DeepEqual(ch1, ch3) == false. Want: channels created by the same call to make are equal.")
+		}
+	})
+	t.Run("not equal", func(t *testing.T) {
+		if ch1 == ch2 {
+			t.Errorf("Got: ch1 == ch2. Want: channels created by different calls to make are not equal.")
+		}
+		if reflect.DeepEqual(ch1, ch2) {
+			t.Errorf("Got: reflect.DeepEqual(ch1, ch2) == true. Want: channels created by different calls to make are not equal.")
+		}
+	})
+}

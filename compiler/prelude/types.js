@@ -59,7 +59,7 @@ var $idKey = x => {
 };
 
 // Creates constructor functions for array pointer types. Returns a new function
-// instace each time to make sure each type is independent of the other.
+// instance each time to make sure each type is independent of the other.
 var $arrayPtrCtor = () => {
     return function (array) {
         this.$get = () => { return array; };
@@ -224,7 +224,10 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.keyFor = $idKey;
             typ.init = elem => {
                 typ.elem = elem;
-                typ.wrapped = (elem.kind === $kindArray);
+                if (elem.kind === $kindArray) {
+                    typ.wrapped = true;
+                    typ.wrap = (v) => ((v === typ.nil) ? v : new typ(v));
+                }
                 typ.nil = new typ($throwNilPointerError, $throwNilPointerError);
             };
             break;
@@ -456,13 +459,26 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
         case $kindInterface:
             typ.convertFrom = (src) => $convertToInterface(src, typ);
             break;
-        case $kindArray:
         case $kindSlice:
-        case $kindMap:
-        case $kindChan:
+            typ.convertFrom = (src) => $convertToSlice(src, typ);
+            break;
         case $kindPtr:
-        case $kindFunc:
+            typ.convertFrom = (src) => $convertToPointer(src, typ);
+            break;
+        case $kindArray:
+            typ.convertFrom = (src) => $convertToArray(src, typ);
+            break;
         case $kindStruct:
+            typ.convertFrom = (src) => $convertToStruct(src, typ);
+            break;
+        case $kindMap:
+            typ.convertFrom = (src) => $convertToMap(src, typ);
+            break;
+        case $kindChan:
+            typ.convertFrom = (src) => $convertToChan(src, typ);
+            break;
+        case $kindFunc:
+            typ.convertFrom = (src) => $convertToFunc(src, typ);
             break;
         default:
             $panic(new $String("invalid kind: " + kind));
@@ -1093,4 +1109,120 @@ const $convertToBool = (src, dstType) => {
  */
 const $convertToInterface = (src, dstType) => {
     return src;
+};
+
+/**
+ * Convert to a slice value.
+ * 
+ * dstType.kind must be $kindSlice. For wrapped types, src value must be wrapped.
+ * The returned value is always a slice type.
+ */
+const $convertToSlice = (src, dstType) => {
+    const srcType = src.constructor;
+    if (srcType === dstType) {
+        return src;
+    }
+
+    switch (srcType.kind) {
+        case $kindString:
+            if (dstType.elem.kind === $kindInt32) { // Runes are int32.
+                return new dstType($stringToRunes(src.$val));
+            } else if (dstType.elem.kind === $kindUint8) { // Bytes are uint8.
+                return new dstType($stringToBytes(src.$val));
+            }
+            break;
+        case $kindSlice:
+            return $convertSliceType(src, dstType);
+            break;
+    }
+    throw new Error(`Unsupported conversion from ${srcType.string} to ${dstType.string}`);
+};
+
+/**
+* Convert to a pointer value.
+* 
+* dstType.kind must be $kindPtr. For wrapped types (specifically, pointers 
+* to an array), src value must be wrapped. The returned value is a bare JS
+* array (typed or untyped), or a pointer object.
+*/
+const $convertToPointer = (src, dstType) => {
+    const srcType = src.constructor;
+
+    if (srcType === dstType) {
+        return src;
+    }
+
+    // []T → *[N]T
+    if (srcType.kind == $kindSlice && dstType.elem.kind == $kindArray) {
+        return $sliceToGoArray(src, dstType);
+    }
+
+    if (src === srcType.nil) {
+        return dstType.nil;
+    }
+
+    switch (dstType.elem.kind) {
+        case $kindArray:
+            // Pointers to arrays are a wrapped type, represented by a native JS array,
+            // which we return directly.
+            return src.$val;
+        case $kindStruct:
+            return $pointerOfStructConversion(src, dstType);
+        default:
+            return new dstType(src.$get, src.$set, src.$target);
+    }
+};
+
+/**
+ * Convert to struct types.
+ *
+ * dstType.kind must be $kindStruct. Src must be a wrapped struct value. Returned
+ * value will always be a bare JavaScript object representing the struct.
+ */
+const $convertToStruct = (src, dstType) => {
+    // Since structs are passed by value, the conversion result must be a copy
+    // of the original value, even if it is the same type.
+    return $clone(src.$val, dstType);
+};
+
+/**
+ * Convert to array types.
+ *
+ * dstType.kind must be $kindArray. Src must be a wrapped array value. Returned
+ * value will always be a bare JavaScript object representing the array.
+ */
+const $convertToArray = (src, dstType) => {
+    // Since arrays are passed by value, the conversion result must be a copy
+    // of the original value, even if it is the same type.
+    return $clone(src.$val, dstType);
+};
+
+/**
+ * Convert to map types.
+ *
+ * dstType.kind must be $kindMap. Src must be a wrapped map value. Returned
+ * value will always be a bare JavaScript object representing the map.
+ */
+const $convertToMap = (src, dstType) => {
+    return src.$val;
+};
+
+/**
+ * Convert to chan types.
+ *
+ * dstType.kind must be $kindChan. Src must be a wrapped chan value. Returned
+ * value will always be a bare $Chan object representing the channel.
+ */
+const $convertToChan = (src, dstType) => {
+    return src.$val;
+};
+
+/**
+ * Convert to function types.
+ *
+ * dstType.kind must be $kindFunc. Src must be a wrapped function value. Returned
+ * value will always be a bare JavaScript function.
+ */
+const $convertToFunc = (src, dstType) => {
+    return src.$val;
 };

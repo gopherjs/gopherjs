@@ -60,6 +60,13 @@ func IsTypeExpr(expr ast.Expr, info *types.Info) bool {
 		}
 		_, ok = info.Uses[ident].(*types.TypeName)
 		return ok
+	case *ast.IndexListExpr:
+		ident, ok := e.X.(*ast.Ident)
+		if !ok {
+			return false
+		}
+		_, ok = info.Uses[ident].(*types.TypeName)
+		return ok
 	case *ast.ParenExpr:
 		return IsTypeExpr(e.X, info)
 	default:

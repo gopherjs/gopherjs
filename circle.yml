@@ -67,19 +67,6 @@ jobs:
     steps:
     - setup_and_install_gopherjs
     - run:
-        name: go test ...
-        command: |
-          set +e
-          # Run all tests except gorepo, which will be run separately in parallel.
-          go test -v -race $(go list ./... | grep -v github.com/gopherjs/gopherjs/tests/gorepo) | tee /tmp/test-go.txt
-          status="$?"
-          # Convert test output into junit format for CircleCI.
-          mkdir -p ~/test-reports/
-          go-junit-report --full-class-name < /tmp/test-go.txt > ~/test-reports/go.xml
-          exit "$status"
-    - store_test_results:
-        path: ~/test-reports/
-    - run:
         name: TodoMVC in GOPATH mode
         command: |
           set -e

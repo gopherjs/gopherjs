@@ -1,0 +1,71 @@
+name: tests
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    name: tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "1.18.10"
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "12"
+      - name: Set up environment
+        if: matrix.os != 'windows-latest'
+        run: |
+          echo "SOURCE_MAP_SUPPORT=true" >> $GITHUB_ENV
+          # Make nodejs able to require installed modules from any working path.
+          echo "NODE_PATH=$(npm root)" >> $GITHUB_ENV
+          echo ::notice::$(go version)
+          echo ::notice::$(node -v)
+          echo ::notice::$(npm -v)
+      - name: Set up environment
+        if: matrix.os == 'windows-latest'
+        run: |
+          # Fix TEMP variable, see https://github.com/actions/runner-images/issues/712#issuecomment-613004302
+          echo "TEMP=$env:USERPROFILE\AppData\Local\Temp" >> $env:GITHUB_ENV
+          echo "TMP=$env:USERPROFILE\AppData\Local\Temp" >> $env:GITHUB_ENV
+          echo "TMPDIR=$env:USERPROFILE\AppData\Local\Temp" >> $env:GITHUB_ENV
+          echo "NODE_PATH=$(npm root)" >> $env:GITHUB_ENV
+          echo "SOURCE_MAP_SUPPORT=false" >> $env:GITHUB_ENV
+          echo "::notice::$(npm root)"
+          echo "::notice::$(node -v)"
+          echo "::notice::$(npm -v)"
+      - uses: actions/checkout@v3
+      - name: Install required Node.js packages
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          npm ci
+      - name: Install required Node.js packages
+        if: matrix.os != 'ubuntu-latest'
+        run: |
+          # Extra flags to avoid installing node-syscall.
+          npm install --no-optional --no-package-lock
+      - name: Build and Install GopherJS
+        run: |
+          go install -v
+          echo ::notice::$(gopherjs version)
+
+      - name: Smoke tests
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          gopherjs build -v net/http
+          gopherjs test -v fmt log
+      - name: Smoke tests
+        if: matrix.os == 'macos-latest'
+        run: |
+          gopherjs build -v net/http
+          gopherjs test -v --short fmt log os ./tests
+      - name: Smoke tests
+        if: matrix.os == 'windows-latest'
+        run: |
+          gopherjs build -v net/http
+          gopherjs test -v --short fmt sort ./tests

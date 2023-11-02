@@ -69,3 +69,14 @@ jobs:
         run: |
           gopherjs build -v net/http
           gopherjs test -v --short fmt sort ./tests
+      - name: go test ...
+        if: matrix.os != 'windows-latest'
+        run: |
+          # Run all tests except gorepo, which will be run separately in parallel.
+          go test -v -race $(go list ./... | grep -v github.com/gopherjs/gopherjs/tests/gorepo)
+      - name: go test ...
+        if: matrix.os == 'windows-latest'
+        run: |
+          $ErrorActionPreference = "Stop"
+          # Run all tests except gorepo, which will be run separately in parallel.
+          go test -v -race $(go list ./... | Where-Object { $_ -notmatch "github.com/gopherjs/gopherjs/tests/gorepo" })

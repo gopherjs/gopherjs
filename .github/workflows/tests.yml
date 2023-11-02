@@ -10,6 +10,15 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            index: 0
+          - os: ubuntu-latest
+            index: 1
+          - os: ubuntu-latest
+            index: 2
+          - os: ubuntu-latest
+            index: 3
 
     steps:
       - uses: actions/setup-go@v3
@@ -126,13 +135,39 @@ jobs:
       - name: Go Repository tests
         run: |
           go test -v github.com/gopherjs/gopherjs/tests/gorepo
+
+      - name: Download JUnit Summary from Previous Workflow
+        if: matrix.index
+        id: download-artifact
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow_conclusion: success
+          name: junit-test-summary
+          if_no_artifact_found: warn
+          # Uncomment the next line before pushing to main branch, that way all branches can
+          # benefit from timing data once it's established there.
+          # branch: main
+
+      - name: Install gotestsum
+        if: matrix.index
+        run: go install gotest.tools/gotestsum@latest
+      - name: Generate go test Slice
+        if: matrix.index
+        id: test_split
+        env:
+          GOOS: js
+          GOARCH: ecmascript
+        uses: hashicorp-forge/go-test-split-action@v1
+        with:
+          total: 4
+          index: ${{ matrix.index }}
+          packages: "std github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/..."
       - name: gopherjs test ...
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.index
         run: |
           set -e
           ulimit -s 10000
-          PACKAGE_NAMES=$( \
-            GOOS=js GOARCH=ecmascript go list std github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/... \
-            | grep -v -x -f .std_test_pkg_exclusions \
-          )
-          gopherjs test -p 2 --minify -v --short $PACKAGE_NAMES
+
+          PACKAGE_NAMES=$(for pkg in ${{ steps.test_split.outputs.run }}; do echo "$pkg"; done | grep -v -x -f .std_test_pkg_exclusions)
+
+          gopherjs test -p 2 --minify -v --short "${{ steps.test_split.outputs.run }}"

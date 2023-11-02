@@ -23,3 +23,7 @@ jobs:
       - name: Check go.mod
         run: |
           go mod tidy && git diff --exit-code
+
+      - name: Check natives build tags
+        run: |
+          diff -u <(echo -n) <(go list ./compiler/natives/src/...) # All those packages should have // +build js.

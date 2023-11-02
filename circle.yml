@@ -73,9 +73,6 @@ jobs:
     steps:
     - setup_and_install_gopherjs
     - run:
-        name: Check natives build tags
-        command: diff -u <(echo -n) <(go list ./compiler/natives/src/...) # All those packages should have // +build js.
-    - run:
         name: Smoke tests
         command: |
           gopherjs build -v net/http # Should build successfully.

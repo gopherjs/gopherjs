@@ -316,8 +316,23 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 		t := fc.pkgCtx.TypeOf(e.X)
 		t2 := fc.pkgCtx.TypeOf(e.Y)
-		_, isInterface := t2.Underlying().(*types.Interface)
-		if isInterface || types.Identical(t, types.Typ[types.UntypedNil]) {
+
+		// Exact type param instantiations are not known at compile time, so
+		// some operators require special handling.
+		if (typesutil.IsTypeParam(t) || typesutil.IsTypeParam(t2)) &&
+			!(typesutil.IsInterface(t) || typesutil.IsInterface(t2)) { // == operator between an interface and other types is handled below.
+			if !types.Identical(t, t2) {
+				// This should never happen.
+				panic(bailout(fmt.Errorf("%s: binary operator %v is applied to different type param types %s and %s", fc.pkgCtx.fileSet.Position(e.Pos()), e.Op, t, t2)))
+			}
+
+			switch e.Op {
+			case token.EQL:
+				return fc.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, fc.typeName(t))
+			}
+		}
+
+		if typesutil.IsInterface(t2) || types.Identical(t, types.Typ[types.UntypedNil]) {
 			t = t2
 		}
 

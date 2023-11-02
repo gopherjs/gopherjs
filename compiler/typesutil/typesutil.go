@@ -130,6 +130,18 @@ func IsGeneric(t types.Type) bool {
 	}
 }
 
+// IsTypeParam returns true if the type is a type param.
+func IsTypeParam(t types.Type) bool {
+	_, ok := t.(*types.TypeParam)
+	return ok
+}
+
+// IsInterface returns true if the type is an interface.
+func IsInterface(t types.Type) bool {
+	_, ok := t.Underlying().(*types.Interface)
+	return ok && !IsTypeParam(t)
+}
+
 // IsMethod returns true if the passed object is a method.
 func IsMethod(o types.Object) bool {
 	f, ok := o.(*types.Func)

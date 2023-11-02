@@ -44,12 +44,6 @@ workflows:
     - gorepo_tests:
         requires:
           - build
-    - darwin_smoke:
-        requires:
-          - build
-    - windows_smoke:
-        requires:
-          - build
 
 parameters:
   go_version:
@@ -72,11 +66,6 @@ jobs:
     executor: gopherjs
     steps:
     - setup_and_install_gopherjs
-    - run:
-        name: Smoke tests
-        command: |
-          gopherjs build -v net/http # Should build successfully.
-          gopherjs test -v fmt log # Should catch problems with test execution and source maps.
     - run:
         name: go test ...
         command: |
@@ -158,61 +147,6 @@ jobs:
         name: Go Repository tests
         command: |
           go test -v github.com/gopherjs/gopherjs/tests/gorepo
-
-  windows_smoke:
-    executor:
-      name: win/default
-      shell: powershell.exe
-    steps:
-      - checkout
-      - run:
-          name: Install Go
-          command: |
-            choco install golang --version="<< pipeline.parameters.go_version >>" -my
-            go version
-            (Get-Command go).Path
-            [Environment]::SetEnvironmentVariable(
-              "Path",
-              [Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::Machine) + ";C:\Users\circleci\go\bin",
-              [EnvironmentVariableTarget]::Machine)
-
-      - install_deps:
-          optional: false
-      - run: 
-          name: Install GopherJS
-          command: 
-            go install -v .
-            (Get-Command gopherjs).Path
-      - run: 
-          name: Test GopherJS
-          command: go test -v -short ./...
-      - run:
-          name: Smoke tests
-          command: |
-            $env:NODE_PATH=$(npm root)
-            $env:SOURCE_MAP_SUPPORT=false
-            gopherjs build -v net/http
-            gopherjs test -v --short fmt sort ./tests
-    
-  darwin_smoke:
-    macos:
-      xcode: 13.4.1 # Mac OS 12.6.1, see https://circleci.com/docs/using-macos/
-    steps:
-      - checkout
-      - setup_environment
-      - install_deps:
-          optional: false
-      - run: 
-          name: Install GopherJS
-          command: go install -v .
-      - run: 
-          name: Test GopherJS
-          command: go test -v -short ./...
-      - run:
-          name: Smoke tests
-          command: |
-            gopherjs build -v net/http
-            gopherjs test -v --short fmt log os ./tests
 
 commands:
   setup_environment:

@@ -306,190 +306,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.BinaryExpr:
-		if e.Op == token.NEQ {
-			return fc.formatExpr("!(%s)", fc.translateExpr(&ast.BinaryExpr{
-				X:  e.X,
-				Op: token.EQL,
-				Y:  e.Y,
-			}))
-		}
-
-		t := fc.pkgCtx.TypeOf(e.X)
-		t2 := fc.pkgCtx.TypeOf(e.Y)
-
-		// Exact type param instantiations are not known at compile time, so
-		// some operators require special handling.
-		if (typesutil.IsTypeParam(t) || typesutil.IsTypeParam(t2)) &&
-			!(typesutil.IsInterface(t) || typesutil.IsInterface(t2)) { // == operator between an interface and other types is handled below.
-			if !types.Identical(t, t2) {
-				// This should never happen.
-				panic(bailout(fmt.Errorf("%s: binary operator %v is applied to different type param types %s and %s", fc.pkgCtx.fileSet.Position(e.Pos()), e.Op, t, t2)))
-			}
-
-			switch e.Op {
-			case token.EQL:
-				return fc.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, fc.typeName(t))
-			}
-		}
-
-		if typesutil.IsInterface(t2) || types.Identical(t, types.Typ[types.UntypedNil]) {
-			t = t2
-		}
-
-		if basic, isBasic := t.Underlying().(*types.Basic); isBasic && isNumeric(basic) {
-			if is64Bit(basic) {
-				switch e.Op {
-				case token.MUL:
-					return fc.formatExpr("$mul64(%e, %e)", e.X, e.Y)
-				case token.QUO:
-					return fc.formatExpr("$div64(%e, %e, false)", e.X, e.Y)
-				case token.REM:
-					return fc.formatExpr("$div64(%e, %e, true)", e.X, e.Y)
-				case token.SHL:
-					return fc.formatExpr("$shiftLeft64(%e, %f)", e.X, e.Y)
-				case token.SHR:
-					return fc.formatExpr("$shiftRight%s(%e, %f)", toJavaScriptType(basic), e.X, e.Y)
-				case token.EQL:
-					return fc.formatExpr("(%1h === %2h && %1l === %2l)", e.X, e.Y)
-				case token.LSS:
-					return fc.formatExpr("(%1h < %2h || (%1h === %2h && %1l < %2l))", e.X, e.Y)
-				case token.LEQ:
-					return fc.formatExpr("(%1h < %2h || (%1h === %2h && %1l <= %2l))", e.X, e.Y)
-				case token.GTR:
-					return fc.formatExpr("(%1h > %2h || (%1h === %2h && %1l > %2l))", e.X, e.Y)
-				case token.GEQ:
-					return fc.formatExpr("(%1h > %2h || (%1h === %2h && %1l >= %2l))", e.X, e.Y)
-				case token.ADD, token.SUB:
-					return fc.formatExpr("new %3s(%1h %4t %2h, %1l %4t %2l)", e.X, e.Y, fc.typeName(t), e.Op)
-				case token.AND, token.OR, token.XOR:
-					return fc.formatExpr("new %3s(%1h %4t %2h, (%1l %4t %2l) >>> 0)", e.X, e.Y, fc.typeName(t), e.Op)
-				case token.AND_NOT:
-					return fc.formatExpr("new %3s(%1h & ~%2h, (%1l & ~%2l) >>> 0)", e.X, e.Y, fc.typeName(t))
-				default:
-					panic(e.Op)
-				}
-			}
-
-			if isComplex(basic) {
-				switch e.Op {
-				case token.EQL:
-					return fc.formatExpr("(%1r === %2r && %1i === %2i)", e.X, e.Y)
-				case token.ADD, token.SUB:
-					return fc.formatExpr("new %3s(%1r %4t %2r, %1i %4t %2i)", e.X, e.Y, fc.typeName(t), e.Op)
-				case token.MUL:
-					return fc.formatExpr("new %3s(%1r * %2r - %1i * %2i, %1r * %2i + %1i * %2r)", e.X, e.Y, fc.typeName(t))
-				case token.QUO:
-					return fc.formatExpr("$divComplex(%e, %e)", e.X, e.Y)
-				default:
-					panic(e.Op)
-				}
-			}
-
-			switch e.Op {
-			case token.EQL:
-				return fc.formatParenExpr("%e === %e", e.X, e.Y)
-			case token.LSS, token.LEQ, token.GTR, token.GEQ:
-				return fc.formatExpr("%e %t %e", e.X, e.Op, e.Y)
-			case token.ADD, token.SUB:
-				return fc.fixNumber(fc.formatExpr("%e %t %e", e.X, e.Op, e.Y), basic)
-			case token.MUL:
-				switch basic.Kind() {
-				case types.Int32, types.Int:
-					return fc.formatParenExpr("$imul(%e, %e)", e.X, e.Y)
-				case types.Uint32, types.Uintptr:
-					return fc.formatParenExpr("$imul(%e, %e) >>> 0", e.X, e.Y)
-				}
-				return fc.fixNumber(fc.formatExpr("%e * %e", e.X, e.Y), basic)
-			case token.QUO:
-				if isInteger(basic) {
-					// cut off decimals
-					shift := ">>"
-					if isUnsigned(basic) {
-						shift = ">>>"
-					}
-					return fc.formatExpr(`(%1s = %2e / %3e, (%1s === %1s && %1s !== 1/0 && %1s !== -1/0) ? %1s %4s 0 : $throwRuntimeError("integer divide by zero"))`, fc.newLocalVariable("_q"), e.X, e.Y, shift)
-				}
-				if basic.Kind() == types.Float32 {
-					return fc.fixNumber(fc.formatExpr("%e / %e", e.X, e.Y), basic)
-				}
-				return fc.formatExpr("%e / %e", e.X, e.Y)
-			case token.REM:
-				return fc.formatExpr(`(%1s = %2e %% %3e, %1s === %1s ? %1s : $throwRuntimeError("integer divide by zero"))`, fc.newLocalVariable("_r"), e.X, e.Y)
-			case token.SHL, token.SHR:
-				op := e.Op.String()
-				if e.Op == token.SHR && isUnsigned(basic) {
-					op = ">>>"
-				}
-				if v := fc.pkgCtx.Types[e.Y].Value; v != nil {
-					i, _ := constant.Uint64Val(constant.ToInt(v))
-					if i >= 32 {
-						return fc.formatExpr("0")
-					}
-					return fc.fixNumber(fc.formatExpr("%e %s %s", e.X, op, strconv.FormatUint(i, 10)), basic)
-				}
-				if e.Op == token.SHR && !isUnsigned(basic) {
-					return fc.fixNumber(fc.formatParenExpr("%e >> $min(%f, 31)", e.X, e.Y), basic)
-				}
-				y := fc.newLocalVariable("y")
-				return fc.fixNumber(fc.formatExpr("(%s = %f, %s < 32 ? (%e %s %s) : 0)", y, e.Y, y, e.X, op, y), basic)
-			case token.AND, token.OR:
-				if isUnsigned(basic) {
-					return fc.formatParenExpr("(%e %t %e) >>> 0", e.X, e.Op, e.Y)
-				}
-				return fc.formatParenExpr("%e %t %e", e.X, e.Op, e.Y)
-			case token.AND_NOT:
-				return fc.fixNumber(fc.formatParenExpr("%e & ~%e", e.X, e.Y), basic)
-			case token.XOR:
-				return fc.fixNumber(fc.formatParenExpr("%e ^ %e", e.X, e.Y), basic)
-			default:
-				panic(e.Op)
-			}
-		}
-
-		switch e.Op {
-		case token.ADD, token.LSS, token.LEQ, token.GTR, token.GEQ:
-			return fc.formatExpr("%e %t %e", e.X, e.Op, e.Y)
-		case token.LAND:
-			if fc.Blocking[e.Y] {
-				skipCase := fc.caseCounter
-				fc.caseCounter++
-				resultVar := fc.newLocalVariable("_v")
-				fc.Printf("if (!(%s)) { %s = false; $s = %d; continue s; }", fc.translateExpr(e.X), resultVar, skipCase)
-				fc.Printf("%s = %s; case %d:", resultVar, fc.translateExpr(e.Y), skipCase)
-				return fc.formatExpr("%s", resultVar)
-			}
-			return fc.formatExpr("%e && %e", e.X, e.Y)
-		case token.LOR:
-			if fc.Blocking[e.Y] {
-				skipCase := fc.caseCounter
-				fc.caseCounter++
-				resultVar := fc.newLocalVariable("_v")
-				fc.Printf("if (%s) { %s = true; $s = %d; continue s; }", fc.translateExpr(e.X), resultVar, skipCase)
-				fc.Printf("%s = %s; case %d:", resultVar, fc.translateExpr(e.Y), skipCase)
-				return fc.formatExpr("%s", resultVar)
-			}
-			return fc.formatExpr("%e || %e", e.X, e.Y)
-		case token.EQL:
-			switch u := t.Underlying().(type) {
-			case *types.Array, *types.Struct:
-				return fc.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, fc.typeName(t))
-			case *types.Interface:
-				return fc.formatExpr("$interfaceIsEqual(%s, %s)", fc.translateImplicitConversion(e.X, t), fc.translateImplicitConversion(e.Y, t))
-			case *types.Basic:
-				if isBoolean(u) {
-					if b, ok := analysis.BoolValue(e.X, fc.pkgCtx.Info.Info); ok && b {
-						return fc.translateExpr(e.Y)
-					}
-					if b, ok := analysis.BoolValue(e.Y, fc.pkgCtx.Info.Info); ok && b {
-						return fc.translateExpr(e.X)
-					}
-				}
-			}
-			return fc.formatExpr("%s === %s", fc.translateImplicitConversion(e.X, t), fc.translateImplicitConversion(e.Y, t))
-		default:
-			panic(e.Op)
-		}
-
+		return fc.translateBinaryExpr(e)
 	case *ast.ParenExpr:
 		return fc.formatParenExpr("%e", e.X)
 
@@ -842,6 +659,192 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 	default:
 		panic(fmt.Sprintf("Unhandled expression: %T\n", e))
 
+	}
+}
+
+func (fc *funcContext) translateBinaryExpr(e *ast.BinaryExpr) *expression {
+	if e.Op == token.NEQ {
+		return fc.formatExpr("!(%s)", fc.translateExpr(&ast.BinaryExpr{
+			X:  e.X,
+			Op: token.EQL,
+			Y:  e.Y,
+		}))
+	}
+
+	t := fc.pkgCtx.TypeOf(e.X)
+	t2 := fc.pkgCtx.TypeOf(e.Y)
+
+	// Exact type param instantiations are not known at compile time, so
+	// some operators require special handling.
+	if (typesutil.IsTypeParam(t) || typesutil.IsTypeParam(t2)) &&
+		!(typesutil.IsInterface(t) || typesutil.IsInterface(t2)) { // == operator between an interface and other types is handled below.
+		if !types.Identical(t, t2) {
+			// This should never happen.
+			panic(bailout(fmt.Errorf("%s: binary operator %v is applied to different type param types %s and %s", fc.pkgCtx.fileSet.Position(e.Pos()), e.Op, t, t2)))
+		}
+
+		switch e.Op {
+		case token.EQL:
+			return fc.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, fc.typeName(t))
+		}
+	}
+
+	if typesutil.IsInterface(t2) || types.Identical(t, types.Typ[types.UntypedNil]) {
+		t = t2
+	}
+
+	if basic, isBasic := t.Underlying().(*types.Basic); isBasic && isNumeric(basic) {
+		if is64Bit(basic) {
+			switch e.Op {
+			case token.MUL:
+				return fc.formatExpr("$mul64(%e, %e)", e.X, e.Y)
+			case token.QUO:
+				return fc.formatExpr("$div64(%e, %e, false)", e.X, e.Y)
+			case token.REM:
+				return fc.formatExpr("$div64(%e, %e, true)", e.X, e.Y)
+			case token.SHL:
+				return fc.formatExpr("$shiftLeft64(%e, %f)", e.X, e.Y)
+			case token.SHR:
+				return fc.formatExpr("$shiftRight%s(%e, %f)", toJavaScriptType(basic), e.X, e.Y)
+			case token.EQL:
+				return fc.formatExpr("(%1h === %2h && %1l === %2l)", e.X, e.Y)
+			case token.LSS:
+				return fc.formatExpr("(%1h < %2h || (%1h === %2h && %1l < %2l))", e.X, e.Y)
+			case token.LEQ:
+				return fc.formatExpr("(%1h < %2h || (%1h === %2h && %1l <= %2l))", e.X, e.Y)
+			case token.GTR:
+				return fc.formatExpr("(%1h > %2h || (%1h === %2h && %1l > %2l))", e.X, e.Y)
+			case token.GEQ:
+				return fc.formatExpr("(%1h > %2h || (%1h === %2h && %1l >= %2l))", e.X, e.Y)
+			case token.ADD, token.SUB:
+				return fc.formatExpr("new %3s(%1h %4t %2h, %1l %4t %2l)", e.X, e.Y, fc.typeName(t), e.Op)
+			case token.AND, token.OR, token.XOR:
+				return fc.formatExpr("new %3s(%1h %4t %2h, (%1l %4t %2l) >>> 0)", e.X, e.Y, fc.typeName(t), e.Op)
+			case token.AND_NOT:
+				return fc.formatExpr("new %3s(%1h & ~%2h, (%1l & ~%2l) >>> 0)", e.X, e.Y, fc.typeName(t))
+			default:
+				panic(e.Op)
+			}
+		}
+
+		if isComplex(basic) {
+			switch e.Op {
+			case token.EQL:
+				return fc.formatExpr("(%1r === %2r && %1i === %2i)", e.X, e.Y)
+			case token.ADD, token.SUB:
+				return fc.formatExpr("new %3s(%1r %4t %2r, %1i %4t %2i)", e.X, e.Y, fc.typeName(t), e.Op)
+			case token.MUL:
+				return fc.formatExpr("new %3s(%1r * %2r - %1i * %2i, %1r * %2i + %1i * %2r)", e.X, e.Y, fc.typeName(t))
+			case token.QUO:
+				return fc.formatExpr("$divComplex(%e, %e)", e.X, e.Y)
+			default:
+				panic(e.Op)
+			}
+		}
+
+		switch e.Op {
+		case token.EQL:
+			return fc.formatParenExpr("%e === %e", e.X, e.Y)
+		case token.LSS, token.LEQ, token.GTR, token.GEQ:
+			return fc.formatExpr("%e %t %e", e.X, e.Op, e.Y)
+		case token.ADD, token.SUB:
+			return fc.fixNumber(fc.formatExpr("%e %t %e", e.X, e.Op, e.Y), basic)
+		case token.MUL:
+			switch basic.Kind() {
+			case types.Int32, types.Int:
+				return fc.formatParenExpr("$imul(%e, %e)", e.X, e.Y)
+			case types.Uint32, types.Uintptr:
+				return fc.formatParenExpr("$imul(%e, %e) >>> 0", e.X, e.Y)
+			}
+			return fc.fixNumber(fc.formatExpr("%e * %e", e.X, e.Y), basic)
+		case token.QUO:
+			if isInteger(basic) {
+				// cut off decimals
+				shift := ">>"
+				if isUnsigned(basic) {
+					shift = ">>>"
+				}
+				return fc.formatExpr(`(%1s = %2e / %3e, (%1s === %1s && %1s !== 1/0 && %1s !== -1/0) ? %1s %4s 0 : $throwRuntimeError("integer divide by zero"))`, fc.newLocalVariable("_q"), e.X, e.Y, shift)
+			}
+			if basic.Kind() == types.Float32 {
+				return fc.fixNumber(fc.formatExpr("%e / %e", e.X, e.Y), basic)
+			}
+			return fc.formatExpr("%e / %e", e.X, e.Y)
+		case token.REM:
+			return fc.formatExpr(`(%1s = %2e %% %3e, %1s === %1s ? %1s : $throwRuntimeError("integer divide by zero"))`, fc.newLocalVariable("_r"), e.X, e.Y)
+		case token.SHL, token.SHR:
+			op := e.Op.String()
+			if e.Op == token.SHR && isUnsigned(basic) {
+				op = ">>>"
+			}
+			if v := fc.pkgCtx.Types[e.Y].Value; v != nil {
+				i, _ := constant.Uint64Val(constant.ToInt(v))
+				if i >= 32 {
+					return fc.formatExpr("0")
+				}
+				return fc.fixNumber(fc.formatExpr("%e %s %s", e.X, op, strconv.FormatUint(i, 10)), basic)
+			}
+			if e.Op == token.SHR && !isUnsigned(basic) {
+				return fc.fixNumber(fc.formatParenExpr("%e >> $min(%f, 31)", e.X, e.Y), basic)
+			}
+			y := fc.newLocalVariable("y")
+			return fc.fixNumber(fc.formatExpr("(%s = %f, %s < 32 ? (%e %s %s) : 0)", y, e.Y, y, e.X, op, y), basic)
+		case token.AND, token.OR:
+			if isUnsigned(basic) {
+				return fc.formatParenExpr("(%e %t %e) >>> 0", e.X, e.Op, e.Y)
+			}
+			return fc.formatParenExpr("%e %t %e", e.X, e.Op, e.Y)
+		case token.AND_NOT:
+			return fc.fixNumber(fc.formatParenExpr("%e & ~%e", e.X, e.Y), basic)
+		case token.XOR:
+			return fc.fixNumber(fc.formatParenExpr("%e ^ %e", e.X, e.Y), basic)
+		default:
+			panic(e.Op)
+		}
+	}
+
+	switch e.Op {
+	case token.ADD, token.LSS, token.LEQ, token.GTR, token.GEQ:
+		return fc.formatExpr("%e %t %e", e.X, e.Op, e.Y)
+	case token.LAND:
+		if fc.Blocking[e.Y] {
+			skipCase := fc.caseCounter
+			fc.caseCounter++
+			resultVar := fc.newLocalVariable("_v")
+			fc.Printf("if (!(%s)) { %s = false; $s = %d; continue s; }", fc.translateExpr(e.X), resultVar, skipCase)
+			fc.Printf("%s = %s; case %d:", resultVar, fc.translateExpr(e.Y), skipCase)
+			return fc.formatExpr("%s", resultVar)
+		}
+		return fc.formatExpr("%e && %e", e.X, e.Y)
+	case token.LOR:
+		if fc.Blocking[e.Y] {
+			skipCase := fc.caseCounter
+			fc.caseCounter++
+			resultVar := fc.newLocalVariable("_v")
+			fc.Printf("if (%s) { %s = true; $s = %d; continue s; }", fc.translateExpr(e.X), resultVar, skipCase)
+			fc.Printf("%s = %s; case %d:", resultVar, fc.translateExpr(e.Y), skipCase)
+			return fc.formatExpr("%s", resultVar)
+		}
+		return fc.formatExpr("%e || %e", e.X, e.Y)
+	case token.EQL:
+		switch u := t.Underlying().(type) {
+		case *types.Array, *types.Struct:
+			return fc.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, fc.typeName(t))
+		case *types.Interface:
+			return fc.formatExpr("$interfaceIsEqual(%s, %s)", fc.translateImplicitConversion(e.X, t), fc.translateImplicitConversion(e.Y, t))
+		case *types.Basic:
+			if isBoolean(u) {
+				if b, ok := analysis.BoolValue(e.X, fc.pkgCtx.Info.Info); ok && b {
+					return fc.translateExpr(e.Y)
+				}
+				if b, ok := analysis.BoolValue(e.Y, fc.pkgCtx.Info.Info); ok && b {
+					return fc.translateExpr(e.X)
+				}
+			}
+		}
+		return fc.formatExpr("%s === %s", fc.translateImplicitConversion(e.X, t), fc.translateImplicitConversion(e.Y, t))
+	default:
+		panic(e.Op)
 	}
 }
 

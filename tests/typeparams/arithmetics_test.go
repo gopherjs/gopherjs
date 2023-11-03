@@ -3,6 +3,7 @@ package typeparams_test
 import (
 	"fmt"
 	"go/token"
+	"math/bits"
 	"testing"
 
 	"golang.org/x/exp/constraints"
@@ -362,6 +363,45 @@ func TestBitwiseAndNot(t *testing.T) {
 		andNotTC[uint32](0x0011, 0x0101, 0x0010),
 		andNotTC[int64](0x0000001100000011, 0x0000010100000101, 0x0000001000000010),
 		andNotTC[uint64](0x0000001100000011, 0x0000010100000101, 0x0000001000000010),
+	}
+
+	for _, test := range tests {
+		t.Run(test.String(), test.Run)
+	}
+}
+
+func leftShift[T constraints.Integer](x, y T) T {
+	return x << y
+}
+
+func leftShiftTC[T constraints.Integer](x, y, want T) *testCase[T] {
+	return &testCase[T]{
+		op:     leftShift[T],
+		opName: token.SHL,
+		x:      x,
+		y:      y,
+		want:   want,
+	}
+}
+
+func TestBitwiseShitLeft(t *testing.T) {
+	tests := []testCaseI{
+		leftShiftTC[int8](0x48, 1, -0x70),
+		leftShiftTC[int16](0x4008, 1, -0x7ff0),
+		leftShiftTC[int32](0x40000008, 1, -0x7ffffff0),
+		leftShiftTC[uint8](0x88, 1, 0x10),
+		leftShiftTC[uint16](0x8008, 1, 0x0010),
+		leftShiftTC[uint32](0x80000008, 1, 0x00000010),
+		leftShiftTC[int64](0x4000000000000008, 1, -0x7ffffffffffffff0),
+		leftShiftTC[uint64](0x8000000000000008, 1, 0x0000000000000010),
+	}
+
+	if bits.UintSize == 32 {
+		tests = append(tests,
+			leftShiftTC[int](0x40000008, 1, -0x7ffffff0),
+			leftShiftTC[uint](0x80000008, 1, 0x00000010),
+			leftShiftTC[uintptr](0x80000008, 1, 0x00000010),
+		)
 	}
 
 	for _, test := range tests {

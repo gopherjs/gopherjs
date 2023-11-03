@@ -30,7 +30,10 @@ var $floatKey = f => {
     return String(f);
 };
 
-var $flatten64 = x => {
+var $flatten64 = (x, typ) => {
+    if (typ && typ.kind != $kindInt64 && typ.kind != $kindUint64) {
+        return x; // Not a 64-bit number, no need to flatten.
+    }
     return x.$high * 4294967296 + x.$low;
 };
 

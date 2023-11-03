@@ -429,6 +429,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.or = (x, y) => (x | y);
             typ.xor = (x, y) => $truncateNumber(x ^ y, typ);
             typ.andNot = (x, y) => $truncateNumber(x & ~y, typ);
+            typ.shl = (x, y) => (y < 32) ? $truncateNumber(x << y, typ) : 0;
             break;
         case $kindUint8:
         case $kindUint16:
@@ -441,6 +442,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.or = (x, y) => (x | y) >>> 0;
             typ.xor = (x, y) => $truncateNumber(x ^ y, typ);
             typ.andNot = (x, y) => $truncateNumber(x & ~y, typ);
+            typ.shl = (x, y) => (y < 32) ? $truncateNumber(x << y, typ) : 0;
             break;
         case $kindUint:
         case $kindUint32:
@@ -454,6 +456,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.or = (x, y) => (x | y) >>> 0;
             typ.xor = (x, y) => $truncateNumber(x ^ y, typ);
             typ.andNot = (x, y) => $truncateNumber(x & ~y, typ);
+            typ.shl = (x, y) => (y < 32) ? $truncateNumber(x << y, typ) : 0;
             break;
         case $kindInt:
         case $kindInt32:
@@ -466,6 +469,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.or = (x, y) => (x | y);
             typ.xor = (x, y) => $truncateNumber(x ^ y, typ);
             typ.andNot = (x, y) => $truncateNumber(x & ~y, typ);
+            typ.shl = (x, y) => (y < 32) ? $truncateNumber(x << y, typ) : 0;
             break;
         case $kindInt64:
         case $kindUint64:
@@ -478,6 +482,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.or = (x, y) => new typ(x.$high | y.$high, (x.$low | y.$low) >>> 0);
             typ.xor = (x, y) => new typ(x.$high ^ y.$high, (x.$low ^ y.$low) >>> 0);
             typ.andNot = (x, y) => new typ(x.$high & ~y.$high, (x.$low & ~y.$low) >>> 0);
+            typ.shl = (x, y) => $shiftLeft64(x, y);
             break;
         case $kindFloat32:
         case $kindFloat64:

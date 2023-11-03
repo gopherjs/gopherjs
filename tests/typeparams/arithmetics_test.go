@@ -8,6 +8,14 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
+type arithmetic interface {
+	constraints.Integer | constraints.Float | constraints.Complex
+}
+
+type addable interface {
+	arithmetic | string
+}
+
 type testCaseI interface {
 	Run(t *testing.T)
 	String() string
@@ -30,10 +38,6 @@ func (tc *testCase[T]) Run(t *testing.T) {
 
 func (tc *testCase[T]) String() string {
 	return fmt.Sprintf("%T/%v%v%v", tc.x, tc.x, tc.opName, tc.y)
-}
-
-type addable interface {
-	constraints.Integer | constraints.Float | constraints.Complex | string
 }
 
 func add[T addable](x, y T) T {
@@ -77,15 +81,11 @@ func TestAdd(t *testing.T) {
 	}
 }
 
-type subtractable interface {
-	constraints.Integer | constraints.Float | constraints.Complex
-}
-
-func subtract[T subtractable](x, y T) T {
+func subtract[T arithmetic](x, y T) T {
 	return x - y
 }
 
-func subTC[T subtractable](x, y, want T) *testCase[T] {
+func subTC[T arithmetic](x, y, want T) *testCase[T] {
 	return &testCase[T]{
 		op:     subtract[T],
 		opName: token.SUB,
@@ -121,15 +121,11 @@ func TestSubtract(t *testing.T) {
 	}
 }
 
-type muiltipliable interface {
-	constraints.Integer | constraints.Float | constraints.Complex
-}
-
-func mul[T muiltipliable](x, y T) T {
+func mul[T arithmetic](x, y T) T {
 	return x * y
 }
 
-func mulTC[T muiltipliable](x, y, want T) *testCase[T] {
+func mulTC[T arithmetic](x, y, want T) *testCase[T] {
 	return &testCase[T]{
 		op:     mul[T],
 		opName: token.MUL,
@@ -158,6 +154,44 @@ func TestMul(t *testing.T) {
 		mulTC[uint64](0x0000003200000001, 0x0000000100000002, 0x0000006500000002),
 		mulTC[complex64](1+2i, 3+4i, -5+10i),
 		mulTC[complex128](1+2i, 3+4i, -5+10i),
+	}
+
+	for _, test := range tests {
+		t.Run(test.String(), test.Run)
+	}
+}
+
+func div[T arithmetic](x, y T) T {
+	return x / y
+}
+
+func divTC[T arithmetic](x, y, want T) *testCase[T] {
+	return &testCase[T]{
+		op:     div[T],
+		opName: token.QUO,
+		x:      x,
+		y:      y,
+		want:   want,
+	}
+}
+
+func TestDiv(t *testing.T) {
+	tests := []testCaseI{
+		divTC[int](7, 2, 3),
+		divTC[uint](7, 2, 3),
+		divTC[uintptr](7, 2, 3),
+		divTC[int8](7, 2, 3),
+		divTC[int16](7, 2, 3),
+		divTC[int32](7, 2, 3),
+		divTC[uint8](7, 2, 3),
+		divTC[uint16](7, 2, 3),
+		divTC[uint32](7, 2, 3),
+		divTC[float32](3.5, 2.5, 1.4),
+		divTC[float64](3.5, 2.5, 1.4),
+		divTC[int64](0x0000006500000003, 0x0000003200000001, 2),
+		divTC[uint64](0x0000006500000003, 0x0000003200000001, 2),
+		divTC[complex64](-5+10i, 1+2i, 3+4i),
+		divTC[complex128](-5+10i, 1+2i, 3+4i),
 	}
 
 	for _, test := range tests {

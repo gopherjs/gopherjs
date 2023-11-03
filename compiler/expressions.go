@@ -692,6 +692,8 @@ func (fc *funcContext) translateBinaryExpr(e *ast.BinaryExpr) *expression {
 			return fc.formatExpr("%s.sub(%e, %e)", fc.typeName(t), e.X, e.Y)
 		case token.MUL:
 			return fc.formatExpr("%s.mul(%e, %e)", fc.typeName(t), e.X, e.Y)
+		case token.QUO:
+			return fc.formatExpr("%s.div(%e, %e)", fc.typeName(t), e.X, e.Y)
 		}
 	}
 

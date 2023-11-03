@@ -266,3 +266,37 @@ func TestBitwiseAnd(t *testing.T) {
 		t.Run(test.String(), test.Run)
 	}
 }
+
+func or[T constraints.Integer](x, y T) T {
+	return x | y
+}
+
+func orTC[T constraints.Integer](x, y, want T) *testCase[T] {
+	return &testCase[T]{
+		op:     or[T],
+		opName: token.OR,
+		x:      x,
+		y:      y,
+		want:   want,
+	}
+}
+
+func TestBitwiseOr(t *testing.T) {
+	tests := []testCaseI{
+		orTC[int](0x0011, 0x0101, 0x0111),
+		orTC[uint](0x0011, 0x0101, 0x0111),
+		orTC[uintptr](0x0011, 0x0101, 0x0111),
+		orTC[int8](0x11, 0x01, 0x11),
+		orTC[int16](0x0011, 0x0101, 0x0111),
+		orTC[int32](0x0011, 0x0101, 0x0111),
+		orTC[uint8](0x11, 0x01, 0x11),
+		orTC[uint16](0x0011, 0x0101, 0x0111),
+		orTC[uint32](0x0011, 0x0101, 0x0111),
+		orTC[int64](0x0000001100000011, 0x0000010100000101, 0x0000011100000111),
+		orTC[uint64](0x0000001100000011, 0x0000010100000101, 0x0000011100000111),
+	}
+
+	for _, test := range tests {
+		t.Run(test.String(), test.Run)
+	}
+}

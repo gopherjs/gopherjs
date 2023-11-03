@@ -424,6 +424,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.sub = (x, y) => $truncateNumber(x - y, typ);
             typ.mul = (x, y) => $truncateNumber(x * y, typ);
             typ.div = (x, y) => $idiv(x, y) >> 0;
+            typ.rem = $irem;
             break;
         case $kindUint8:
         case $kindUint16:
@@ -431,13 +432,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.sub = (x, y) => $truncateNumber(x - y, typ);
             typ.mul = (x, y) => $truncateNumber(x * y, typ);
             typ.div = (x, y) => $idiv(x, y) >>> 0;
-            break;
-        case $kindFloat32:
-        case $kindFloat64:
-            typ.add = (x, y) => $truncateNumber(x + y, typ);
-            typ.sub = (x, y) => $truncateNumber(x - y, typ);
-            typ.mul = (x, y) => $truncateNumber(x * y, typ);
-            typ.div = (x, y) => $truncateNumber(x / y, typ);
+            typ.rem = $irem;
             break;
         case $kindUint:
         case $kindUint32:
@@ -446,6 +441,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.sub = (x, y) => $truncateNumber(x - y, typ);
             typ.mul = (x, y) => $imul(x, y) >>> 0;
             typ.div = (x, y) => $idiv(x, y) >>> 0;
+            typ.rem = $irem;
             break;
         case $kindInt:
         case $kindInt32:
@@ -453,6 +449,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.sub = (x, y) => $truncateNumber(x - y, typ);
             typ.mul = (x, y) => $imul(x, y);
             typ.div = (x, y) => $idiv(x, y) >> 0;
+            typ.rem = $irem;
             break;
         case $kindInt64:
         case $kindUint64:
@@ -460,6 +457,14 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.sub = (x, y) => new typ(x.$high - y.$high, x.$low - y.$low);
             typ.mul = (x, y) => $mul64(x, y);
             typ.div = (x, y) => $div64(x, y, false);
+            typ.rem = (x, y) => $div64(x, y, true);
+            break;
+        case $kindFloat32:
+        case $kindFloat64:
+            typ.add = (x, y) => $truncateNumber(x + y, typ);
+            typ.sub = (x, y) => $truncateNumber(x - y, typ);
+            typ.mul = (x, y) => $truncateNumber(x * y, typ);
+            typ.div = (x, y) => $truncateNumber(x / y, typ);
             break;
         case $kindComplex64:
         case $kindComplex128:

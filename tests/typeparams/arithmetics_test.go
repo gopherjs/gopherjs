@@ -198,3 +198,37 @@ func TestDiv(t *testing.T) {
 		t.Run(test.String(), test.Run)
 	}
 }
+
+func rem[T constraints.Integer](x, y T) T {
+	return x % y
+}
+
+func remTC[T constraints.Integer](x, y, want T) *testCase[T] {
+	return &testCase[T]{
+		op:     rem[T],
+		opName: token.REM,
+		x:      x,
+		y:      y,
+		want:   want,
+	}
+}
+
+func TestRemainder(t *testing.T) {
+	tests := []testCaseI{
+		remTC[int](7, 2, 1),
+		remTC[uint](7, 2, 1),
+		remTC[uintptr](7, 2, 1),
+		remTC[int8](7, 2, 1),
+		remTC[int16](7, 2, 1),
+		remTC[int32](7, 2, 1),
+		remTC[uint8](7, 2, 1),
+		remTC[uint16](7, 2, 1),
+		remTC[uint32](7, 2, 1),
+		remTC[int64](0x0000006500000003, 0x0000003200000001, 0x100000001),
+		remTC[uint64](0x0000006500000003, 0x0000003200000001, 0x100000001),
+	}
+
+	for _, test := range tests {
+		t.Run(test.String(), test.Run)
+	}
+}

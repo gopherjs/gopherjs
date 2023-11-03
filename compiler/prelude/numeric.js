@@ -125,6 +125,15 @@ const $idiv = (x, y) => {
     }
 };
 
+const $irem = (x, y) => {
+    const result = x % y;
+    if (result === result) {
+        return result;
+    } else {
+        $throwRuntimeError("integer divide by zero");
+    }
+};
+
 var $div64 = (x, y, returnRemainder) => {
     if (y.$high === 0 && y.$low === 0) {
         $throwRuntimeError("integer divide by zero");

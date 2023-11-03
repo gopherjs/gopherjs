@@ -394,6 +394,8 @@ func TestBitwiseShitLeft(t *testing.T) {
 		leftShiftTC[uint32](0x80000008, 1, 0x00000010),
 		leftShiftTC[int64](0x4000000000000008, 1, -0x7ffffffffffffff0),
 		leftShiftTC[uint64](0x8000000000000008, 1, 0x0000000000000010),
+		leftShiftTC[uint32](0xFFFFFFFF, 32, 0),
+		leftShiftTC[int32](-0x80000000, 32, 0),
 	}
 
 	if bits.UintSize == 32 {
@@ -401,6 +403,47 @@ func TestBitwiseShitLeft(t *testing.T) {
 			leftShiftTC[int](0x40000008, 1, -0x7ffffff0),
 			leftShiftTC[uint](0x80000008, 1, 0x00000010),
 			leftShiftTC[uintptr](0x80000008, 1, 0x00000010),
+		)
+	}
+
+	for _, test := range tests {
+		t.Run(test.String(), test.Run)
+	}
+}
+
+func rightShift[T constraints.Integer](x, y T) T {
+	return x >> y
+}
+
+func rightShiftTC[T constraints.Integer](x, y, want T) *testCase[T] {
+	return &testCase[T]{
+		op:     rightShift[T],
+		opName: token.SHR,
+		x:      x,
+		y:      y,
+		want:   want,
+	}
+}
+
+func TestBitwiseShitRight(t *testing.T) {
+	tests := []testCaseI{
+		rightShiftTC[int8](-0x70, 1, -0x38),
+		rightShiftTC[int16](-0x7ff0, 1, -0x3ff8),
+		rightShiftTC[int32](-0x7ffffff0, 1, -0x3ffffff8),
+		rightShiftTC[uint8](0x80, 1, 0x40),
+		rightShiftTC[uint16](0x8010, 1, 0x4008),
+		rightShiftTC[uint32](0x80000010, 1, 0x40000008),
+		rightShiftTC[int64](-0x7ffffffffffffff0, 1, -0x3ffffffffffffff8),
+		rightShiftTC[uint64](0x8000000000000010, 1, 0x4000000000000008),
+		rightShiftTC[uint32](0xFFFFFFFF, 32, 0),
+		rightShiftTC[int32](-0x80000000, 32, -1),
+	}
+
+	if bits.UintSize == 32 {
+		tests = append(tests,
+			rightShiftTC[int](-0x7ffffff0, 1, -0x3ffffff8),
+			rightShiftTC[uint](0x80000010, 1, 0x40000008),
+			rightShiftTC[uintptr](0x80000010, 1, 0x40000008),
 		)
 	}
 

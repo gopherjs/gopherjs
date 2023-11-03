@@ -706,6 +706,8 @@ func (fc *funcContext) translateBinaryExpr(e *ast.BinaryExpr) *expression {
 			return fc.formatExpr("%s.andNot(%e, %e)", fc.typeName(t), e.X, e.Y)
 		case token.SHL:
 			return fc.formatExpr("%s.shl(%e, $flatten64(%e, %s))", fc.typeName(t), e.X, e.Y, fc.typeName(t2))
+		case token.SHR:
+			return fc.formatExpr("%s.shr(%e, $flatten64(%e, %s))", fc.typeName(t), e.X, e.Y, fc.typeName(t2))
 		}
 	}
 

@@ -700,6 +700,8 @@ func (fc *funcContext) translateBinaryExpr(e *ast.BinaryExpr) *expression {
 			return fc.formatExpr("%s.and(%e, %e)", fc.typeName(t), e.X, e.Y)
 		case token.OR:
 			return fc.formatExpr("%s.or(%e, %e)", fc.typeName(t), e.X, e.Y)
+		case token.XOR:
+			return fc.formatExpr("%s.xor(%e, %e)", fc.typeName(t), e.X, e.Y)
 		}
 	}
 

@@ -427,6 +427,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.rem = $irem;
             typ.and = (x, y) => (x & y);
             typ.or = (x, y) => (x | y);
+            typ.xor = (x, y) => $truncateNumber(x ^ y, typ);
             break;
         case $kindUint8:
         case $kindUint16:
@@ -437,6 +438,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.rem = $irem;
             typ.and = (x, y) => (x & y) >>> 0;
             typ.or = (x, y) => (x | y) >>> 0;
+            typ.xor = (x, y) => $truncateNumber(x ^ y, typ);
             break;
         case $kindUint:
         case $kindUint32:
@@ -448,6 +450,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.rem = $irem;
             typ.and = (x, y) => (x & y) >>> 0;
             typ.or = (x, y) => (x | y) >>> 0;
+            typ.xor = (x, y) => $truncateNumber(x ^ y, typ);
             break;
         case $kindInt:
         case $kindInt32:
@@ -458,6 +461,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.rem = $irem;
             typ.and = (x, y) => (x & y);
             typ.or = (x, y) => (x | y);
+            typ.xor = (x, y) => $truncateNumber(x ^ y, typ);
             break;
         case $kindInt64:
         case $kindUint64:
@@ -468,6 +472,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.rem = (x, y) => $div64(x, y, true);
             typ.and = (x, y) => new typ(x.$high & y.$high, (x.$low & y.$low) >>> 0);
             typ.or = (x, y) => new typ(x.$high | y.$high, (x.$low | y.$low) >>> 0);
+            typ.xor = (x, y) => new typ(x.$high ^ y.$high, (x.$low ^ y.$low) >>> 0);
             break;
         case $kindFloat32:
         case $kindFloat64:

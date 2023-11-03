@@ -300,3 +300,37 @@ func TestBitwiseOr(t *testing.T) {
 		t.Run(test.String(), test.Run)
 	}
 }
+
+func xor[T constraints.Integer](x, y T) T {
+	return x ^ y
+}
+
+func xorTC[T constraints.Integer](x, y, want T) *testCase[T] {
+	return &testCase[T]{
+		op:     xor[T],
+		opName: token.XOR,
+		x:      x,
+		y:      y,
+		want:   want,
+	}
+}
+
+func TestBitwiseXor(t *testing.T) {
+	tests := []testCaseI{
+		xorTC[int](0x0011, 0x0101, 0x0110),
+		xorTC[uint](0x0011, 0x0101, 0x0110),
+		xorTC[uintptr](0x0011, 0x0101, 0x0110),
+		xorTC[int8](0x11, 0x01, 0x10),
+		xorTC[int16](0x0011, 0x0101, 0x0110),
+		xorTC[int32](0x0011, 0x0101, 0x0110),
+		xorTC[uint8](0x11, 0x01, 0x10),
+		xorTC[uint16](0x0011, 0x0101, 0x0110),
+		xorTC[uint32](0x0011, 0x0101, 0x0110),
+		xorTC[int64](0x0000001100000011, 0x0000010100000101, 0x0000011000000110),
+		xorTC[uint64](0x0000001100000011, 0x0000010100000101, 0x0000011000000110),
+	}
+
+	for _, test := range tests {
+		t.Run(test.String(), test.Run)
+	}
+}

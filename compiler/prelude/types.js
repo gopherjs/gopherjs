@@ -418,29 +418,40 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
     // This methods will be called when the exact type is not known at code generation time, for
     // example, when operands are type parameters.
     switch (kind) {
-        case $kindInt:
         case $kindInt8:
         case $kindInt16:
-        case $kindInt32:
         case $kindUint:
         case $kindUint8:
         case $kindUint16:
-        case $kindUint32:
-        case $kindUintptr:
         case $kindFloat32:
         case $kindFloat64:
             typ.add = (x, y) => $truncateNumber(x + y, typ);
             typ.sub = (x, y) => $truncateNumber(x - y, typ);
+            typ.mul = (x, y) => $truncateNumber(x * y, typ);
+            break;
+        case $kindUint32:
+        case $kindUintptr:
+            typ.add = (x, y) => $truncateNumber(x + y, typ);
+            typ.sub = (x, y) => $truncateNumber(x - y, typ);
+            typ.mul = (x, y) => $imul(x, y) >>> 0;
+            break;
+        case $kindInt:
+        case $kindInt32:
+            typ.add = (x, y) => $truncateNumber(x + y, typ);
+            typ.sub = (x, y) => $truncateNumber(x - y, typ);
+            typ.mul = (x, y) => $imul(x, y);
             break;
         case $kindInt64:
         case $kindUint64:
             typ.add = (x, y) => new typ(x.$high + y.$high, x.$low + y.$low);
             typ.sub = (x, y) => new typ(x.$high - y.$high, x.$low - y.$low);
+            typ.mul = (x, y) => $mul64(x, y);
             break;
         case $kindComplex64:
         case $kindComplex128:
             typ.add = (x, y) => new typ(x.$real + y.$real, x.$imag + y.$imag);
             typ.sub = (x, y) => new typ(x.$real - y.$real, x.$imag - y.$imag);
+            typ.mul = (x, y) => new typ(x.$real * y.$real - x.$imag * y.$imag, x.$real * y.$imag + x.$imag * y.$real);
             break;
         case $kindString:
             typ.add = (x, y) => x + y;

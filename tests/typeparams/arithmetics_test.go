@@ -120,3 +120,47 @@ func TestSubtract(t *testing.T) {
 		t.Run(test.String(), test.Run)
 	}
 }
+
+type muiltipliable interface {
+	constraints.Integer | constraints.Float | constraints.Complex
+}
+
+func mul[T muiltipliable](x, y T) T {
+	return x * y
+}
+
+func mulTC[T muiltipliable](x, y, want T) *testCase[T] {
+	return &testCase[T]{
+		op:     mul[T],
+		opName: token.MUL,
+		x:      x,
+		y:      y,
+		want:   want,
+	}
+}
+
+func TestMul(t *testing.T) {
+	tests := []testCaseI{
+		mulTC[int](2, 3, 6),
+		mulTC[uint](2, 3, 6),
+		mulTC[uintptr](2, 3, 6),
+		mulTC[int8](2, 3, 6),
+		mulTC[int16](2, 3, 6),
+		mulTC[int32](2, 3, 6),
+		mulTC[uint8](2, 3, 6),
+		mulTC[uint16](2, 3, 6),
+		mulTC[uint32](2, 3, 6),
+		mulTC[int8](127, 3, 125),  // Overflow.
+		mulTC[uint8](250, 3, 238), // Overflow.
+		mulTC[float32](2.5, 1.4, 3.5),
+		mulTC[float64](2.5, 1.4, 3.5),
+		mulTC[int64](0x0000003200000001, 0x0000000100000002, 0x0000006500000002),
+		mulTC[uint64](0x0000003200000001, 0x0000000100000002, 0x0000006500000002),
+		mulTC[complex64](1+2i, 3+4i, -5+10i),
+		mulTC[complex128](1+2i, 3+4i, -5+10i),
+	}
+
+	for _, test := range tests {
+		t.Run(test.String(), test.Run)
+	}
+}

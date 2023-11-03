@@ -1639,7 +1639,7 @@ func DeepEqual(a1, a2 interface{}) bool {
 	if i1 == i2 {
 		return true
 	}
-	if i1 == nil || i2 == nil {
+	if i1 == nil || i2 == nil || i1.Get("constructor") != i2.Get("constructor") {
 		return false
 	}
 	return deepValueEqualJs(ValueOf(a1), ValueOf(a2), nil)
@@ -1649,11 +1649,6 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	if !v1.IsValid() || !v2.IsValid() {
 		return !v1.IsValid() && !v2.IsValid()
 	}
-
-	if v1.Kind() == Chan && v2.Kind() == Chan {
-		return v1.object() == v2.object()
-	}
-
 	if v1.Type() != v2.Type() {
 		return false
 	}

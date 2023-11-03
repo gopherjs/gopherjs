@@ -430,14 +430,17 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
         case $kindFloat32:
         case $kindFloat64:
             typ.add = (x, y) => $truncateNumber(x + y, typ);
+            typ.sub = (x, y) => $truncateNumber(x - y, typ);
             break;
         case $kindInt64:
         case $kindUint64:
             typ.add = (x, y) => new typ(x.$high + y.$high, x.$low + y.$low);
+            typ.sub = (x, y) => new typ(x.$high - y.$high, x.$low - y.$low);
             break;
         case $kindComplex64:
         case $kindComplex128:
             typ.add = (x, y) => new typ(x.$real + y.$real, x.$imag + y.$imag);
+            typ.sub = (x, y) => new typ(x.$real - y.$real, x.$imag - y.$imag);
             break;
         case $kindString:
             typ.add = (x, y) => x + y;

@@ -76,3 +76,47 @@ func TestAdd(t *testing.T) {
 		t.Run(test.String(), test.Run)
 	}
 }
+
+type subtractable interface {
+	constraints.Integer | constraints.Float | constraints.Complex
+}
+
+func subtract[T subtractable](x, y T) T {
+	return x - y
+}
+
+func subTC[T subtractable](x, y, want T) *testCase[T] {
+	return &testCase[T]{
+		op:     subtract[T],
+		opName: token.SUB,
+		x:      x,
+		y:      y,
+		want:   want,
+	}
+}
+
+func TestSubtract(t *testing.T) {
+	tests := []testCaseI{
+		subTC[int](3, 1, 2),
+		subTC[uint](3, 1, 2),
+		subTC[uintptr](3, 1, 2),
+		subTC[int8](3, 1, 2),
+		subTC[int16](3, 1, 2),
+		subTC[int32](3, 1, 2),
+		subTC[uint8](3, 1, 2),
+		subTC[uint16](3, 1, 2),
+		subTC[uint32](3, 1, 2),
+		subTC[int8](-127, 2, 127), // Overflow.
+		subTC[uint8](1, 2, 255),   // Overflow.
+		subTC[float32](2.5, 1.4, 1.1),
+		subTC[float64](2.5, 1.4, 1.1),
+		subTC[int64](0x0000003200000001, 0x0000000100000002, 0x00000030FFFFFFFF),
+		subTC[uint64](0x0000003200000001, 0x0000000100000002, 0x00000030FFFFFFFF),
+		subTC[complex64](10+11i, 2+1i, 8+10i),
+		subTC[complex128](10+11i, 2+1i, 8+10i),
+	}
+
+	for _, test := range tests {
+		t.Run(test.String(), test.Run)
+	}
+}

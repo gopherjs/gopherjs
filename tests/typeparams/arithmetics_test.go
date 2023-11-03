@@ -334,3 +334,37 @@ func TestBitwiseXor(t *testing.T) {
 		t.Run(test.String(), test.Run)
 	}
 }
+
+func andNot[T constraints.Integer](x, y T) T {
+	return x &^ y
+}
+
+func andNotTC[T constraints.Integer](x, y, want T) *testCase[T] {
+	return &testCase[T]{
+		op:     andNot[T],
+		opName: token.AND_NOT,
+		x:      x,
+		y:      y,
+		want:   want,
+	}
+}
+
+func TestBitwiseAndNot(t *testing.T) {
+	tests := []testCaseI{
+		andNotTC[int](0x0011, 0x0101, 0x0010),
+		andNotTC[uint](0x0011, 0x0101, 0x0010),
+		andNotTC[uintptr](0x0011, 0x0101, 0x0010),
+		andNotTC[int8](0x11, 0x01, 0x10),
+		andNotTC[int16](0x0011, 0x0101, 0x0010),
+		andNotTC[int32](0x0011, 0x0101, 0x0010),
+		andNotTC[uint8](0x11, 0x01, 0x10),
+		andNotTC[uint16](0x0011, 0x0101, 0x0010),
+		andNotTC[uint32](0x0011, 0x0101, 0x0010),
+		andNotTC[int64](0x0000001100000011, 0x0000010100000101, 0x0000001000000010),
+		andNotTC[uint64](0x0000001100000011, 0x0000010100000101, 0x0000001000000010),
+	}
+
+	for _, test := range tests {
+		t.Run(test.String(), test.Run)
+	}
+}

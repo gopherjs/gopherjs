@@ -232,3 +232,37 @@ func TestRemainder(t *testing.T) {
 		t.Run(test.String(), test.Run)
 	}
 }
+
+func and[T constraints.Integer](x, y T) T {
+	return x & y
+}
+
+func andTC[T constraints.Integer](x, y, want T) *testCase[T] {
+	return &testCase[T]{
+		op:     and[T],
+		opName: token.AND,
+		x:      x,
+		y:      y,
+		want:   want,
+	}
+}
+
+func TestBitwiseAnd(t *testing.T) {
+	tests := []testCaseI{
+		andTC[int](0x0011, 0x0101, 0x0001),
+		andTC[uint](0x0011, 0x0101, 0x0001),
+		andTC[uintptr](0x0011, 0x0101, 0x0001),
+		andTC[int8](0x11, 0x01, 0x01),
+		andTC[int16](0x0011, 0x0101, 0x0001),
+		andTC[int32](0x0011, 0x0101, 0x0001),
+		andTC[uint8](0x11, 0x01, 0x01),
+		andTC[uint16](0x0011, 0x0101, 0x0001),
+		andTC[uint32](0x0011, 0x0101, 0x0001),
+		andTC[int64](0x0000001100000011, 0x0000010100000101, 0x0000000100000001),
+		andTC[uint64](0x0000001100000011, 0x0000010100000101, 0x0000000100000001),
+	}
+
+	for _, test := range tests {
+		t.Run(test.String(), test.Run)
+	}
+}

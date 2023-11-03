@@ -410,15 +410,48 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             $panic(new $String("invalid kind: " + kind));
     }
 
+    // Arithmetics operations for types that support it.
+    //
+    // Each operation accepts two operands and returns one result. For wrapped types operands are
+    // passed as bare values and a bare value is returned.
+    //
+    // This methods will be called when the exact type is not known at code generation time, for
+    // example, when operands are type parameters.
+    switch (kind) {
+        case $kindInt:
+        case $kindInt8:
+        case $kindInt16:
+        case $kindInt32:
+        case $kindUint:
+        case $kindUint8:
+        case $kindUint16:
+        case $kindUint32:
+        case $kindUintptr:
+        case $kindFloat32:
+        case $kindFloat64:
+            typ.add = (x, y) => $truncateNumber(x + y, typ);
+            break;
+        case $kindInt64:
+        case $kindUint64:
+            typ.add = (x, y) => new typ(x.$high + y.$high, x.$low + y.$low);
+            break;
+        case $kindComplex64:
+        case $kindComplex128:
+            typ.add = (x, y) => new typ(x.$real + y.$real, x.$imag + y.$imag);
+            break;
+        case $kindString:
+            typ.add = (x, y) => x + y;
+    }
+
     /**
      * convertFrom converts value src to the type typ.
-     * 
+     *
      * For wrapped types src must be a wrapped value, e.g. for int32 this must be an instance of
      * the $Int32 class, rather than the bare JavaScript number. This is required to determine
      * the original Go type to convert from.
-     * 
+     *
      * The returned value will be a representation of typ; for wrapped values it will be unwrapped;
-     * for example, conversion to int32 will return a bare JavaScript number. This is required 
+     * for example, conversion to int32 will return a bare JavaScript number. This is required
      * to make results of type conversion expression consistent with any other expressions of the
      * same type.
      */
@@ -926,7 +959,7 @@ const $truncateNumber = (n, typ) => {
 /**
  * Trivial type conversion function, which only accepts destination type identical to the src
  * type.
- * 
+ *
  * For wrapped types, src value must be wrapped, and the return value will be unwrapped.
  */
 const $convertIdentity = (src, dstType) => {
@@ -967,7 +1000,7 @@ const $convertToInt64 = (src, dstType) => {
 
 /**
  * Conversion to int and uint types of 32 bits or less.
- * 
+ *
  * dstType.kind must be $kindInt{8,16,32} or $kindUint{8,16,32}. For wrapped
  * types, src value must be wrapped. The return value will always be a bare
  * JavaScript number, since all 32-or-less integers in GopherJS are considered
@@ -1026,7 +1059,7 @@ const $convertToFloat = (src, dstType) => {
 
 /**
  * Conversion to complex types.
- * 
+ *
  * dstType.kind must me $kindComplex{64,128}. Src must be another complex type.
  * Returned value will always be an oject created by the dstType constructor.
  */
@@ -1113,7 +1146,7 @@ const $convertToInterface = (src, dstType) => {
 
 /**
  * Convert to a slice value.
- * 
+ *
  * dstType.kind must be $kindSlice. For wrapped types, src value must be wrapped.
  * The returned value is always a slice type.
  */
@@ -1140,8 +1173,8 @@ const $convertToSlice = (src, dstType) => {
 
 /**
 * Convert to a pointer value.
-* 
-* dstType.kind must be $kindPtr. For wrapped types (specifically, pointers 
+*
+* dstType.kind must be $kindPtr. For wrapped types (specifically, pointers
 * to an array), src value must be wrapped. The returned value is a bare JS
 * array (typed or untyped), or a pointer object.
 */

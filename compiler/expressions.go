@@ -686,6 +686,8 @@ func (fc *funcContext) translateBinaryExpr(e *ast.BinaryExpr) *expression {
 		switch e.Op {
 		case token.EQL:
 			return fc.formatExpr("$equal(%e, %e, %s)", e.X, e.Y, fc.typeName(t))
+		case token.ADD:
+			return fc.formatExpr("%s.add(%e, %e)", fc.typeName(t), e.X, e.Y)
 		}
 	}
 

@@ -1072,6 +1072,8 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			return fc.formatExpr("(%e ? %e.size : 0)", args[0], args[0])
 		case *types.Chan:
 			return fc.formatExpr("%e.$buffer.length", args[0])
+		case *types.Interface: // *types.TypeParam has interface as underlying type.
+			return fc.formatExpr("%s.$len(%e)", fc.typeName(fc.pkgCtx.TypeOf(args[0])), args[0])
 		// length of array is constant
 		default:
 			panic(fmt.Sprintf("Unhandled len type: %T\n", argType))

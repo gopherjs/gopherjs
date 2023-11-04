@@ -1049,26 +1049,16 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			return fc.formatExpr("$newDataPointer(%e, %s)", fc.zeroValue(t.Elem()), fc.typeName(t))
 		}
 	case "make":
-		switch argType := fc.pkgCtx.TypeOf(args[0]).Underlying().(type) {
-		case *types.Slice:
-			t := fc.typeName(fc.pkgCtx.TypeOf(args[0]))
-			if len(args) == 3 {
-				return fc.formatExpr("$makeSlice(%s, %f, %f)", t, args[1], args[2])
-			}
-			return fc.formatExpr("$makeSlice(%s, %f)", t, args[1])
-		case *types.Map:
-			if len(args) == 2 && fc.pkgCtx.Types[args[1]].Value == nil {
-				return fc.formatExpr(`((%1f < 0 || %1f > 2147483647) ? $throwRuntimeError("makemap: size out of range") : new $global.Map())`, args[1])
-			}
-			return fc.formatExpr("new $global.Map()")
-		case *types.Chan:
-			length := "0"
-			if len(args) == 2 {
-				length = fc.formatExpr("%f", args[1]).String()
-			}
-			return fc.formatExpr("new $Chan(%s, %s)", fc.typeName(fc.pkgCtx.TypeOf(args[0]).Underlying().(*types.Chan).Elem()), length)
+		typeName := fc.typeName(fc.pkgCtx.TypeOf(args[0]))
+		switch len(args) {
+		case 1:
+			return fc.formatExpr("%s.$make()", typeName)
+		case 2:
+			return fc.formatExpr("%s.$make(%f)", typeName, args[1])
+		case 3:
+			return fc.formatExpr("%s.$make(%f, %f)", typeName, args[1], args[2])
 		default:
-			panic(fmt.Sprintf("Unhandled make type: %T\n", argType))
+			panic(fmt.Errorf("builtin make(): invalid number of arguments: %d", len(args)))
 		}
 	case "len":
 		switch argType := fc.pkgCtx.TypeOf(args[0]).Underlying().(type) {

@@ -175,6 +175,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 typ.sendOnly = sendOnly;
                 typ.recvOnly = recvOnly;
             };
+            typ.$make = (bufsize) => new $Chan(typ.elem, bufsize ? bufsize : 0);
             break;
 
         case $kindFunc:
@@ -209,6 +210,11 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 typ.key = key;
                 typ.elem = elem;
                 typ.comparable = false;
+            };
+            typ.$make = (size) => {
+                if (size === undefined) { size = 0; }
+                if (size < 0 || size > 2147483647) { $throwRuntimeError("makemap: size out of range"); }
+                return new $global.Map();
             };
             break;
 
@@ -250,6 +256,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 typ.nativeArray = $nativeArray(elem.kind);
                 typ.nil = new typ([]);
             };
+            typ.$make = (size, capacity) => $makeSlice(typ, size, capacity);
             break;
 
         case $kindStruct:

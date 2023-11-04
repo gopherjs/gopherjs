@@ -30,7 +30,10 @@ var $floatKey = f => {
     return String(f);
 };
 
-var $flatten64 = x => {
+var $flatten64 = (x, typ) => {
+    if (typ && typ.kind != $kindInt64 && typ.kind != $kindUint64) {
+        return x; // Not a 64-bit number, no need to flatten.
+    }
     return x.$high * 4294967296 + x.$low;
 };
 
@@ -114,6 +117,24 @@ var $mul64 = (x, y) => {
 
     var r = new x.constructor(hi, lo);
     return r;
+};
+
+const $idiv = (x, y) => {
+    const result = x / y;
+    if (result === result && result != 1/0 && result != -1/0) {
+        return result;
+    } else {
+        $throwRuntimeError("integer divide by zero");
+    }
+};
+
+const $irem = (x, y) => {
+    const result = x % y;
+    if (result === result) {
+        return result;
+    } else {
+        $throwRuntimeError("integer divide by zero");
+    }
 };
 
 var $div64 = (x, y, returnRemainder) => {

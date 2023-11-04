@@ -1,7 +1,10 @@
 package astutil
 
 import (
+	"go/ast"
+	"go/constant"
 	"go/token"
+	"go/types"
 	"testing"
 
 	"github.com/gopherjs/gopherjs/internal/srctesting"
@@ -177,6 +180,44 @@ func TestEndsWithReturn(t *testing.T) {
 			got := EndsWithReturn(fdecl.Body.List)
 			if got != test.want {
 				t.Errorf("EndsWithReturn() returned %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestMakeTypedConstant(t *testing.T) {
+	tests := []struct {
+		value constant.Value
+		want  types.Type
+	}{{
+		value: constant.MakeString("abc"),
+		want:  types.Typ[types.String],
+	}, {
+		value: constant.MakeInt64(0xFFFFFFFF),
+		want:  types.Typ[types.Uint32],
+	}, {
+		value: constant.MakeInt64(-0x80000000),
+		want:  types.Typ[types.Int32],
+	}, {
+		value: constant.MakeUint64(0xFFFFFFFFFFFFFFFF),
+		want:  types.Typ[types.Uint64],
+	}, {
+		value: constant.MakeInt64(-0x8000000000000000),
+		want:  types.Typ[types.Int64],
+	}}
+
+	for _, test := range tests {
+		t.Run(test.value.ExactString(), func(t *testing.T) {
+			info := &types.Info{Types: map[ast.Expr]types.TypeAndValue{}}
+			e := MakeTypedConstant(info, test.value)
+			tv := info.Types[e]
+
+			if tv.Type != test.want {
+				t.Errorf("Got: constant %s assigned type %s. Want: %s", test.value, tv.Type, test.want)
+			}
+
+			if tv.Value != test.value {
+				t.Errorf("Got: associated constant value is %s. Want: %s (the same as original).", tv.Value, test.value)
 			}
 		})
 	}

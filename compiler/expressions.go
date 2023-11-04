@@ -1565,10 +1565,15 @@ func (fc *funcContext) formatExprInternal(format string, a []interface{}, parens
 				out.WriteString(strconv.FormatInt(d, 10))
 				return
 			}
-			if is64Bit(fc.pkgCtx.TypeOf(e).Underlying().(*types.Basic)) {
+			if t, ok := fc.pkgCtx.TypeOf(e).Underlying().(*types.Basic); ok && is64Bit(t) {
 				out.WriteString("$flatten64(")
 				writeExpr("")
 				out.WriteString(")")
+				return
+			} else if t, ok := fc.pkgCtx.TypeOf(e).(*types.TypeParam); ok {
+				out.WriteString("$flatten64(")
+				writeExpr("")
+				fmt.Fprintf(out, ", %s)", fc.typeName(t))
 				return
 			}
 			writeExpr("")

@@ -155,20 +155,18 @@ var knownFails = map[string]failReason{
 	// Failures related to the lack of generics support. Ideally, this section
 	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
 	// fixed.
-	"typeparam/absdiff2.go":          {category: generics, desc: "missing support for unary minus operator"},
-	"typeparam/absdiff3.go":          {category: generics, desc: "missing support for unary minus operator"},
-	"typeparam/boundmethod.go":       {category: generics, desc: "missing support for method expressions with a type param"},
-	"typeparam/dictionaryCapture.go": {category: generics, desc: "make() doesn't support generic slice types"},
-	"typeparam/double.go":            {category: generics, desc: "make() doesn't support generic slice types"},
-	"typeparam/index2.go":            {category: generics, desc: "missing index operator support for generic types"},
-	"typeparam/issue47716.go":        {category: generics, desc: "unsafe.Sizeof() doesn't work with generic types"},
-	"typeparam/issue48453.go":        {category: generics, desc: "make() doesn't support generic slice types"},
-	"typeparam/issue49295.go":        {category: generics, desc: "len() doesn't support generic pointer to array types"},
-	"typeparam/issue51303.go":        {category: generics, desc: "missing support for range over type parameter"},
-	"typeparam/nested.go":            {category: generics, desc: "missing comparison operator support for generic types"},
-	"typeparam/typeswitch2.go":       {category: generics, desc: "complex types have different print() format"},
-	"typeparam/typeswitch3.go":       {category: generics, desc: "missing support for type switching on generic types"},
-	"typeparam/typeswitch5.go":       {category: generics, desc: "different print() format for floating point types"},
+	"typeparam/absdiff2.go":    {category: generics, desc: "missing support for unary minus operator"},
+	"typeparam/absdiff3.go":    {category: generics, desc: "missing support for unary minus operator"},
+	"typeparam/boundmethod.go": {category: generics, desc: "missing support for method expressions with a type param"},
+	"typeparam/double.go":      {category: generics, desc: "missing support for range over type parameter"},
+	"typeparam/index2.go":      {category: generics, desc: "missing index operator support for generic types"},
+	"typeparam/issue47716.go":  {category: generics, desc: "unsafe.Sizeof() doesn't work with generic types"},
+	"typeparam/issue48453.go":  {category: generics, desc: "missing support for range over type parameter"},
+	"typeparam/issue51303.go":  {category: generics, desc: "missing support for range over type parameter"},
+	"typeparam/nested.go":      {category: generics, desc: "missing comparison operator support for generic types"},
+	"typeparam/typeswitch2.go": {category: generics, desc: "complex types have different print() format"},
+	"typeparam/typeswitch3.go": {category: generics, desc: "missing support for type switching on generic types"},
+	"typeparam/typeswitch5.go": {category: generics, desc: "different print() format for floating point types"},
 }
 
 type failCategory uint8

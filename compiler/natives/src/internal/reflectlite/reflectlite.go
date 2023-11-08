@@ -50,7 +50,7 @@ func reflectType(typ *js.Object) *rtype {
 		rt := &rtype{
 			size: uintptr(typ.Get("size").Int()),
 			kind: uint8(typ.Get("kind").Int()),
-			str:  newNameOff(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool())),
+			str:  newNameOff(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
 		}
 		js.InternalObject(rt).Set(idJsType, typ)
 		typ.Set(idReflectType, js.InternalObject(rt))
@@ -69,7 +69,7 @@ func reflectType(typ *js.Object) *rtype {
 					continue
 				}
 				reflectMethods = append(reflectMethods, method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", exported)),
+					name: newNameOff(newName(internalStr(m.Get("name")), "", exported, false)),
 					mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				})
 			}
@@ -81,12 +81,12 @@ func reflectType(typ *js.Object) *rtype {
 					continue
 				}
 				reflectMethods = append(reflectMethods, method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", exported)),
+					name: newNameOff(newName(internalStr(m.Get("name")), "", exported, false)),
 					mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				})
 			}
 			ut := &uncommonType{
-				pkgPath:  newNameOff(newName(internalStr(typ.Get("pkg")), "", false)),
+				pkgPath:  newNameOff(newName(internalStr(typ.Get("pkg")), "", false, false)),
 				mcount:   uint16(methodSet.Length()),
 				xcount:   xcount,
 				_methods: reflectMethods,
@@ -141,13 +141,13 @@ func reflectType(typ *js.Object) *rtype {
 			for i := range imethods {
 				m := methods.Index(i)
 				imethods[i] = imethod{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", internalStr(m.Get("pkg")) == "")),
+					name: newNameOff(newName(internalStr(m.Get("name")), "", internalStr(m.Get("pkg")) == "", false)),
 					typ:  newTypeOff(reflectType(m.Get("typ"))),
 				}
 			}
 			setKindType(rt, &interfaceType{
 				rtype:   *rt,
-				pkgPath: newName(internalStr(typ.Get("pkg")), "", false),
+				pkgPath: newName(internalStr(typ.Get("pkg")), "", false, false),
 				methods: imethods,
 			})
 		case Map:
@@ -168,19 +168,15 @@ func reflectType(typ *js.Object) *rtype {
 			reflectFields := make([]structField, fields.Length())
 			for i := range reflectFields {
 				f := fields.Index(i)
-				offsetEmbed := uintptr(i) << 1
-				if f.Get("embedded").Bool() {
-					offsetEmbed |= 1
-				}
 				reflectFields[i] = structField{
-					name:        newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool()),
-					typ:         reflectType(f.Get("typ")),
-					offsetEmbed: offsetEmbed,
+					name:   newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
+					typ:    reflectType(f.Get("typ")),
+					offset: uintptr(i),
 				}
 			}
 			setKindType(rt, &structType{
 				rtype:   *rt,
-				pkgPath: newName(internalStr(typ.Get("pkgPath")), "", false),
+				pkgPath: newName(internalStr(typ.Get("pkgPath")), "", false, false),
 				fields:  reflectFields,
 			})
 		}
@@ -242,6 +238,7 @@ type nameData struct {
 	name     string
 	tag      string
 	exported bool
+	embedded bool
 }
 
 var nameMap = make(map[*byte]*nameData)
@@ -250,13 +247,15 @@ func (n name) name() (s string) { return nameMap[n.bytes].name }
 func (n name) tag() (s string)  { return nameMap[n.bytes].tag }
 func (n name) pkgPath() string  { return "" }
 func (n name) isExported() bool { return nameMap[n.bytes].exported }
+func (n name) embedded() bool   { return nameMap[n.bytes].embedded }
 
-func newName(n, tag string, exported bool) name {
+func newName(n, tag string, exported, embedded bool) name {
 	b := new(byte)
 	nameMap[b] = &nameData{
 		name:     n,
 		tag:      tag,
 		exported: exported,
+		embedded: embedded,
 	}
 	return name{
 		bytes: b,

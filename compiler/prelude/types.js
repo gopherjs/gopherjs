@@ -855,7 +855,7 @@ var $ptrType = elem => {
 };
 
 var $newDataPointer = (data, constructor) => {
-    if (constructor.elem.kind === $kindStruct) {
+    if (constructor.elem.kind === $kindStruct || constructor.elem.kind === $kindArray) {
         return data;
     }
     return new constructor(() => { return data; }, v => { data = v; });

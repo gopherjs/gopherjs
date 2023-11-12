@@ -2,6 +2,7 @@ package typeparams_test
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 )
 
@@ -159,6 +160,40 @@ func TestCap(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			if test.got != test.want {
 				t.Errorf("Got: len() = %d. Want: %d.", test.got, test.want)
+			}
+		})
+	}
+}
+
+func _new[T any]() *T {
+	return new(T)
+}
+
+func TestNew(t *testing.T) {
+	type S struct{ i int }
+
+	tests := []struct {
+		desc string
+		got  any
+		want any
+	}{{
+		desc: "struct S",
+		got:  *_new[S](),
+		want: S{},
+	}, {
+		desc: "[3]int",
+		got:  *_new[[3]int](),
+		want: [3]int{},
+	}, {
+		desc: "int",
+		got:  *_new[int](),
+		want: int(0),
+	}}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			if !reflect.DeepEqual(test.got, test.want) {
+				t.Errorf("Got: new(%T) = %#v. Want: %#v.", test.want, test.got, test.want)
 			}
 		})
 	}

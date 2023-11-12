@@ -165,6 +165,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 Object.defineProperty(typ.ptr.nil, "nilCheck", { get: $throwNilPointerError });
             };
             typ.$len = (v) => typ.len;
+            typ.$cap = (v) => typ.len;
             break;
 
         case $kindChan:
@@ -179,6 +180,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             };
             typ.$make = (bufsize) => new $Chan(typ.elem, bufsize ? bufsize : 0);
             typ.$len = (v) => v.$buffer.length;
+            typ.$cap = (v) => v.$capacity;
             break;
 
         case $kindFunc:
@@ -241,6 +243,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 typ.nil = new typ($throwNilPointerError, $throwNilPointerError);
             };
             typ.$len = (v) => typ.elem.$len(typ.wrapped ? v : v.$get());
+            typ.$cap = (v) => typ.elem.$cap(typ.wrapped ? v : v.$get());
             break;
 
         case $kindSlice:
@@ -263,6 +266,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             };
             typ.$make = (size, capacity) => $makeSlice(typ, size, capacity);
             typ.$len = (v) => v.$length;
+            typ.$cap = (v) => v.$capacity;
             break;
 
         case $kindStruct:

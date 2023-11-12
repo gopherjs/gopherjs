@@ -124,3 +124,42 @@ func TestLen(t *testing.T) {
 		})
 	}
 }
+
+func _cap[T []int | *[3]int | [3]int | chan int](x T) int {
+	return cap(x)
+}
+
+func TestCap(t *testing.T) {
+	ch := make(chan int, 2)
+	ch <- 1
+
+	tests := []struct {
+		desc string
+		got  int
+		want int
+	}{{
+		desc: "[]int",
+		got:  _cap([]int{1, 2, 3}),
+		want: 3,
+	}, {
+		desc: "*[3]int",
+		got:  _cap(&[3]int{1}),
+		want: 3,
+	}, {
+		desc: "[3]int",
+		got:  _cap([3]int{1}),
+		want: 3,
+	}, {
+		desc: "chan int",
+		got:  _cap(ch),
+		want: 2,
+	}}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			if test.got != test.want {
+				t.Errorf("Got: len() = %d. Want: %d.", test.got, test.want)
+			}
+		})
+	}
+}

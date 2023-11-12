@@ -1084,9 +1084,13 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			return fc.formatExpr("%e.$capacity", args[0])
 		case *types.Pointer:
 			return fc.formatExpr("(%e, %d)", args[0], argType.Elem().(*types.Array).Len())
-		// capacity of array is constant
+		case *types.Array:
+			// This should never happen™
+			panic(fmt.Errorf("array capacity should have been inlined as constant"))
+		case *types.Interface: // *types.TypeParam has interface as underlying type.
+			return fc.formatExpr("%s.$cap(%e)", fc.typeName(fc.pkgCtx.TypeOf(args[0])), args[0])
 		default:
-			panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))
+			panic(fmt.Errorf("unhandled cap type: %T", argType))
 		}
 	case "panic":
 		return fc.formatExpr("$panic(%s)", fc.translateImplicitConversion(args[0], types.NewInterface(nil, nil)))

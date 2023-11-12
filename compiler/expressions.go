@@ -1099,11 +1099,11 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			argStr := fc.translateArgs(sig, args, ellipsis)
 			return fc.formatExpr("$appendSlice(%s, %s)", argStr[0], argStr[1])
 		}
-		sliceType := sig.Results().At(0).Type().Underlying().(*types.Slice)
-		return fc.formatExpr("$append(%e, %s)", args[0], strings.Join(fc.translateExprSlice(args[1:], sliceType.Elem()), ", "))
+		elType := sig.Params().At(1).Type().(*types.Slice).Elem()
+		return fc.formatExpr("$append(%e, %s)", args[0], strings.Join(fc.translateExprSlice(args[1:], elType), ", "))
 	case "delete":
 		args = fc.expandTupleArgs(args)
-		keyType := fc.pkgCtx.TypeOf(args[0]).Underlying().(*types.Map).Key()
+		keyType := sig.Params().At(1).Type()
 		return fc.formatExpr(
 			`$mapDelete(%1e, %2s.keyFor(%3s))`,
 			args[0],

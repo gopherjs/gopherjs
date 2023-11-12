@@ -198,3 +198,30 @@ func TestNew(t *testing.T) {
 		})
 	}
 }
+
+func _append[E any, S []E](s S, e E) S {
+	return append(s, e)
+}
+
+func TestAppend(t *testing.T) {
+	got := _append([]int{1, 2}, 3)
+	want := []int{1, 2, 3}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Got: append(...) = %#v. Want: %#v", got, want)
+	}
+}
+
+func _delete[K comparable, M map[K]string | map[K]int](m M, k K) {
+	delete(m, k)
+}
+
+func TestDelete(t *testing.T) {
+	got := map[int]string{1: "a", 2: "b"}
+	delete(got, 1)
+	want := map[int]string{2: "b"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Got: delete(...) = %#v. Want: %#v", got, want)
+	}
+}

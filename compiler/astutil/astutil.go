@@ -3,6 +3,7 @@ package astutil
 import (
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/token"
 	"go/types"
 	"strings"
@@ -22,6 +23,12 @@ func RemoveParens(e ast.Expr) ast.Expr {
 // SetType of the expression e to type t.
 func SetType(info *types.Info, t types.Type, e ast.Expr) ast.Expr {
 	info.Types[e] = types.TypeAndValue{Type: t}
+	return e
+}
+
+// SetTypeAndValue of the expression e to type t.
+func SetTypeAndValue(info *types.Info, t types.Type, val constant.Value, e ast.Expr) ast.Expr {
+	info.Types[e] = types.TypeAndValue{Type: t, Value: val}
 	return e
 }
 
@@ -225,4 +232,67 @@ func TakeAddress(info *types.Info, e ast.Expr) *ast.UnaryExpr {
 	}
 	SetType(info, ptrType, addrOf)
 	return addrOf
+}
+
+// MakeTypedConstant takes an untyped constant value and makes an AST expression
+// representing it with a concrete type that can represent the constant precisely.
+func MakeTypedConstant(info *types.Info, val constant.Value) ast.Expr {
+	switch val.Kind() {
+	case constant.String:
+		e := &ast.BasicLit{
+			Kind:  token.STRING,
+			Value: val.ExactString(),
+		}
+
+		return SetTypeAndValue(info, types.Typ[types.String], val, e)
+	case constant.Float:
+		e := &ast.BasicLit{
+			Kind:  token.FLOAT,
+			Value: val.ExactString(),
+		}
+
+		return SetTypeAndValue(info, types.Typ[types.Float64], val, e)
+	case constant.Int:
+		bits := constant.BitLen(val)
+		sign := constant.Sign(val)
+
+		var t types.Type
+		if bits <= 32 && sign >= 0 {
+			t = types.Typ[types.Uint32]
+		} else if bits <= 32 && sign < 0 {
+			t = types.Typ[types.Int32]
+		} else if sign >= 0 {
+			t = types.Typ[types.Uint64]
+		} else {
+			t = types.Typ[types.Int64]
+		}
+
+		e := &ast.BasicLit{
+			Kind:  token.INT,
+			Value: val.ExactString(),
+		}
+		return SetTypeAndValue(info, t, val, e)
+	case constant.Complex:
+		e := &ast.BasicLit{
+			Kind: token.IMAG,
+			// Cheat: don't bother with generating a plausible complex expression.
+			// We would have to construct a complicated expression to construct a
+			// complex value. However, when dealing with constants, GopherJS doesn't
+			// actually inspect the AST, only the types.TypeAndValue object it gets
+			// from type analyzer.
+			//
+			// All we really need here is an ast.Expr we can associate with a
+			// types.TypeAndValue instance, so we just do a token effort to return
+			// something.
+			Value: "",
+		}
+		return SetTypeAndValue(info, types.Typ[types.Complex128], val, e)
+	case constant.Bool:
+		e := &ast.Ident{
+			Name: val.ExactString(),
+		}
+		return SetTypeAndValue(info, types.Typ[types.Bool], val, e)
+	default:
+		panic(fmt.Errorf("unexpected constant kind %s: %v", val.Kind(), val))
+	}
 }

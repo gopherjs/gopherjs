@@ -1133,7 +1133,16 @@ const $convertToComplex = (src, dstType) => {
         return src;
     }
 
-    return new dstType(src.$real, src.$imag);
+    switch (srcType.kind) {
+        case $kindComplex64:
+        case $kindComplex128:
+            return new dstType(src.$real, src.$imag);
+        default:
+            // Although normally Go doesn't allow conversion from int/float types
+            // to complex, it does allow conversion from untyped constants.
+            const real = (srcType.kind === $kindUint64 || srcType.kind === $kindInt64) ? $flatten64(src) : src.$val;
+            return new dstType(real, 0);
+    }
 };
 
 /**

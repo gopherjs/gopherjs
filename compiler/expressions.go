@@ -35,6 +35,19 @@ func (e *expression) StringWithParens() string {
 func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 	exprType := fc.pkgCtx.TypeOf(expr)
 	if value := fc.pkgCtx.Types[expr].Value; value != nil {
+		if tParam, ok := exprType.(*types.TypeParam); ok {
+			// If we are dealing with a type param, we don't know which concrete type
+			// it will be instantiated with, so we don't know how to represent the
+			// constant value ahead of time. Instead, generate a typed constant and
+			// perform type conversion to the instantiated type at runtime.
+			return fc.translateExpr(
+				fc.typeCastExpr(
+					astutil.MakeTypedConstant(fc.pkgCtx.Info.Info, value),
+					fc.newIdentFor(tParam.Obj()),
+				),
+			)
+		}
+
 		basic := exprType.Underlying().(*types.Basic)
 		switch {
 		case isBoolean(basic):
@@ -633,7 +646,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			switch t := exprType.Underlying().(type) {
 			case *types.Basic:
 				if t.Kind() != types.UnsafePointer {
-					panic("unexpected basic type")
+					panic(fmt.Errorf("unexpected basic type: %v", t))
 				}
 				return fc.formatExpr("0")
 			case *types.Slice, *types.Pointer:
@@ -1178,6 +1191,9 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 	_, fromTypeParam := exprType.(*types.TypeParam)
 	_, toTypeParam := desiredType.(*types.TypeParam)
 	if fromTypeParam || toTypeParam {
+		if t, ok := exprType.Underlying().(*types.Basic); ok && t.Kind() == types.UntypedNil {
+			return fc.formatExpr("%s.zero()", fc.typeName(desiredType))
+		}
 		// Conversion from or to a type param can only be done at runtime, since the
 		// concrete type is not known to the compiler at compile time.
 		return fc.formatExpr("%s.convertFrom(%s.wrap(%e))", fc.typeName(desiredType), fc.typeName(exprType), expr)

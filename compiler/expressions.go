@@ -1112,10 +1112,8 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 		)
 	case "copy":
 		args = fc.expandTupleArgs(args)
-		if basic, isBasic := fc.pkgCtx.TypeOf(args[1]).Underlying().(*types.Basic); isBasic && isString(basic) {
-			return fc.formatExpr("$copyString(%e, %e)", args[0], args[1])
-		}
-		return fc.formatExpr("$copySlice(%e, %e)", args[0], args[1])
+		dst, src := args[0], args[1]
+		return fc.formatExpr("%s.$copy(%e, %e)", fc.typeName(fc.pkgCtx.TypeOf(src)), dst, src)
 	case "print":
 		args = fc.expandTupleArgs(args)
 		return fc.formatExpr("$print(%s)", strings.Join(fc.translateExprSlice(args, nil), ", "))

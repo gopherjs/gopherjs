@@ -94,6 +94,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.wrap = (v) => new typ(v);
             typ.keyFor = x => { return "$" + x; };
             typ.$len = (v) => v.length;
+            typ.$copy = (dst, src) => $copyString(dst, src);
             break;
 
         case $kindFloat32:
@@ -267,6 +268,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.$make = (size, capacity) => $makeSlice(typ, size, capacity);
             typ.$len = (v) => v.$length;
             typ.$cap = (v) => v.$capacity;
+            typ.$copy = (dst, src) => $copySlice(dst, src);
             break;
 
         case $kindStruct:

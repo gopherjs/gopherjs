@@ -704,6 +704,8 @@ func toJavaScriptType(t *types.Basic) string {
 		return "Int32"
 	case types.UnsafePointer:
 		return "UnsafePointer"
+	case types.UntypedString:
+		return "String"
 	default:
 		name := t.String()
 		return strings.ToUpper(name[:1]) + name[1:]

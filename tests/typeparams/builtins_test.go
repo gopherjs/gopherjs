@@ -225,3 +225,34 @@ func TestDelete(t *testing.T) {
 		t.Errorf("Got: delete(...) = %#v. Want: %#v", got, want)
 	}
 }
+
+func _copy[D []byte, S []byte | string](dst D, src S) int {
+	return copy(dst, src)
+}
+
+func TestCopy(t *testing.T) {
+	t.Run("string", func(t *testing.T) {
+		src := "abc"
+		got := make([]byte, 3)
+		n := _copy(got, src)
+		want := []byte{'a', 'b', 'c'}
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("Got: copy result: %v. Want: %v", got, want)
+		}
+		if n != 3 {
+			t.Errorf("Got: copied %d elements. Want: 3", n)
+		}
+	})
+	t.Run("slice", func(t *testing.T) {
+		src := []byte{'a', 'b', 'c', 'd'}
+		got := make([]byte, 3)
+		n := _copy(got, src)
+		want := []byte{'a', 'b', 'c'}
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("Got: copy result: %v. Want: %v", got, want)
+		}
+		if n != 3 {
+			t.Errorf("Got: copied %d elements. Want: 3", n)
+		}
+	})
+}

@@ -1049,26 +1049,16 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			return fc.formatExpr("$newDataPointer(%e, %s)", fc.zeroValue(t.Elem()), fc.typeName(t))
 		}
 	case "make":
-		switch argType := fc.pkgCtx.TypeOf(args[0]).Underlying().(type) {
-		case *types.Slice:
-			t := fc.typeName(fc.pkgCtx.TypeOf(args[0]))
-			if len(args) == 3 {
-				return fc.formatExpr("$makeSlice(%s, %f, %f)", t, args[1], args[2])
-			}
-			return fc.formatExpr("$makeSlice(%s, %f)", t, args[1])
-		case *types.Map:
-			if len(args) == 2 && fc.pkgCtx.Types[args[1]].Value == nil {
-				return fc.formatExpr(`((%1f < 0 || %1f > 2147483647) ? $throwRuntimeError("makemap: size out of range") : new $global.Map())`, args[1])
-			}
-			return fc.formatExpr("new $global.Map()")
-		case *types.Chan:
-			length := "0"
-			if len(args) == 2 {
-				length = fc.formatExpr("%f", args[1]).String()
-			}
-			return fc.formatExpr("new $Chan(%s, %s)", fc.typeName(fc.pkgCtx.TypeOf(args[0]).Underlying().(*types.Chan).Elem()), length)
+		typeName := fc.typeName(fc.pkgCtx.TypeOf(args[0]))
+		switch len(args) {
+		case 1:
+			return fc.formatExpr("%s.$make()", typeName)
+		case 2:
+			return fc.formatExpr("%s.$make(%f)", typeName, args[1])
+		case 3:
+			return fc.formatExpr("%s.$make(%f, %f)", typeName, args[1], args[2])
 		default:
-			panic(fmt.Sprintf("Unhandled make type: %T\n", argType))
+			panic(fmt.Errorf("builtin make(): invalid number of arguments: %d", len(args)))
 		}
 	case "len":
 		switch argType := fc.pkgCtx.TypeOf(args[0]).Underlying().(type) {
@@ -1082,6 +1072,8 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			return fc.formatExpr("(%e ? %e.size : 0)", args[0], args[0])
 		case *types.Chan:
 			return fc.formatExpr("%e.$buffer.length", args[0])
+		case *types.Interface: // *types.TypeParam has interface as underlying type.
+			return fc.formatExpr("%s.$len(%e)", fc.typeName(fc.pkgCtx.TypeOf(args[0])), args[0])
 		// length of array is constant
 		default:
 			panic(fmt.Sprintf("Unhandled len type: %T\n", argType))
@@ -1092,9 +1084,13 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			return fc.formatExpr("%e.$capacity", args[0])
 		case *types.Pointer:
 			return fc.formatExpr("(%e, %d)", args[0], argType.Elem().(*types.Array).Len())
-		// capacity of array is constant
+		case *types.Array:
+			// This should never happen™
+			panic(fmt.Errorf("array capacity should have been inlined as constant"))
+		case *types.Interface: // *types.TypeParam has interface as underlying type.
+			return fc.formatExpr("%s.$cap(%e)", fc.typeName(fc.pkgCtx.TypeOf(args[0])), args[0])
 		default:
-			panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))
+			panic(fmt.Errorf("unhandled cap type: %T", argType))
 		}
 	case "panic":
 		return fc.formatExpr("$panic(%s)", fc.translateImplicitConversion(args[0], types.NewInterface(nil, nil)))
@@ -1103,11 +1099,11 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			argStr := fc.translateArgs(sig, args, ellipsis)
 			return fc.formatExpr("$appendSlice(%s, %s)", argStr[0], argStr[1])
 		}
-		sliceType := sig.Results().At(0).Type().Underlying().(*types.Slice)
-		return fc.formatExpr("$append(%e, %s)", args[0], strings.Join(fc.translateExprSlice(args[1:], sliceType.Elem()), ", "))
+		elType := sig.Params().At(1).Type().(*types.Slice).Elem()
+		return fc.formatExpr("$append(%e, %s)", args[0], strings.Join(fc.translateExprSlice(args[1:], elType), ", "))
 	case "delete":
 		args = fc.expandTupleArgs(args)
-		keyType := fc.pkgCtx.TypeOf(args[0]).Underlying().(*types.Map).Key()
+		keyType := sig.Params().At(1).Type()
 		return fc.formatExpr(
 			`$mapDelete(%1e, %2s.keyFor(%3s))`,
 			args[0],
@@ -1116,10 +1112,8 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 		)
 	case "copy":
 		args = fc.expandTupleArgs(args)
-		if basic, isBasic := fc.pkgCtx.TypeOf(args[1]).Underlying().(*types.Basic); isBasic && isString(basic) {
-			return fc.formatExpr("$copyString(%e, %e)", args[0], args[1])
-		}
-		return fc.formatExpr("$copySlice(%e, %e)", args[0], args[1])
+		dst, src := args[0], args[1]
+		return fc.formatExpr("%s.$copy(%e, %e)", fc.typeName(fc.pkgCtx.TypeOf(src)), dst, src)
 	case "print":
 		args = fc.expandTupleArgs(args)
 		return fc.formatExpr("$print(%s)", strings.Join(fc.translateExprSlice(args, nil), ", "))
@@ -1573,10 +1567,15 @@ func (fc *funcContext) formatExprInternal(format string, a []interface{}, parens
 				out.WriteString(strconv.FormatInt(d, 10))
 				return
 			}
-			if is64Bit(fc.pkgCtx.TypeOf(e).Underlying().(*types.Basic)) {
+			if t, ok := fc.pkgCtx.TypeOf(e).Underlying().(*types.Basic); ok && is64Bit(t) {
 				out.WriteString("$flatten64(")
 				writeExpr("")
 				out.WriteString(")")
+				return
+			} else if t, ok := fc.pkgCtx.TypeOf(e).(*types.TypeParam); ok {
+				out.WriteString("$flatten64(")
+				writeExpr("")
+				fmt.Fprintf(out, ", %s)", fc.typeName(t))
 				return
 			}
 			writeExpr("")

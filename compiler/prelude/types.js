@@ -93,6 +93,8 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             typ.wrapped = true;
             typ.wrap = (v) => new typ(v);
             typ.keyFor = x => { return "$" + x; };
+            typ.$len = (v) => v.length;
+            typ.$copy = (dst, src) => $copyString(dst, src);
             break;
 
         case $kindFloat32:
@@ -163,6 +165,8 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 typ.ptr.init(typ);
                 Object.defineProperty(typ.ptr.nil, "nilCheck", { get: $throwNilPointerError });
             };
+            typ.$len = (v) => typ.len;
+            typ.$cap = (v) => typ.len;
             break;
 
         case $kindChan:
@@ -175,6 +179,9 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 typ.sendOnly = sendOnly;
                 typ.recvOnly = recvOnly;
             };
+            typ.$make = (bufsize) => new $Chan(typ.elem, bufsize ? bufsize : 0);
+            typ.$len = (v) => v.$buffer.length;
+            typ.$cap = (v) => v.$capacity;
             break;
 
         case $kindFunc:
@@ -210,6 +217,12 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 typ.elem = elem;
                 typ.comparable = false;
             };
+            typ.$make = (size) => {
+                if (size === undefined) { size = 0; }
+                if (size < 0 || size > 2147483647) { $throwRuntimeError("makemap: size out of range"); }
+                return new $global.Map();
+            };
+            typ.$len = (v) => v ? v.size : 0;
             break;
 
         case $kindPtr:
@@ -230,6 +243,8 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 }
                 typ.nil = new typ($throwNilPointerError, $throwNilPointerError);
             };
+            typ.$len = (v) => typ.elem.$len(typ.wrapped ? v : v.$get());
+            typ.$cap = (v) => typ.elem.$cap(typ.wrapped ? v : v.$get());
             break;
 
         case $kindSlice:
@@ -250,6 +265,10 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 typ.nativeArray = $nativeArray(elem.kind);
                 typ.nil = new typ([]);
             };
+            typ.$make = (size, capacity) => $makeSlice(typ, size, capacity);
+            typ.$len = (v) => v.$length;
+            typ.$cap = (v) => v.$capacity;
+            typ.$copy = (dst, src) => $copySlice(dst, src);
             break;
 
         case $kindStruct:
@@ -838,7 +857,7 @@ var $ptrType = elem => {
 };
 
 var $newDataPointer = (data, constructor) => {
-    if (constructor.elem.kind === $kindStruct) {
+    if (constructor.elem.kind === $kindStruct || constructor.elem.kind === $kindArray) {
         return data;
     }
     return new constructor(() => { return data; }, v => { data = v; });

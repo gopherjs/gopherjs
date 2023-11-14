@@ -63,7 +63,7 @@ func reflectType(typ *js.Object) *rtype {
 		rt := &rtype{
 			size: uintptr(typ.Get("size").Int()),
 			kind: uint8(typ.Get("kind").Int()),
-			str:  resolveReflectName(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool())),
+			str:  resolveReflectName(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
 		}
 		js.InternalObject(rt).Set("jsType", typ)
 		typ.Set("reflectType", js.InternalObject(rt))
@@ -99,7 +99,7 @@ func reflectType(typ *js.Object) *rtype {
 				})
 			}
 			ut := &uncommonType{
-				pkgPath:  resolveReflectName(newName(internalStr(typ.Get("pkg")), "", false)),
+				pkgPath:  resolveReflectName(newName(internalStr(typ.Get("pkg")), "", false, false)),
 				mcount:   uint16(methodSet.Length()),
 				xcount:   xcount,
 				_methods: reflectMethods,
@@ -160,7 +160,7 @@ func reflectType(typ *js.Object) *rtype {
 			}
 			setKindType(rt, &interfaceType{
 				rtype:   *rt,
-				pkgPath: newName(internalStr(typ.Get("pkg")), "", false),
+				pkgPath: newName(internalStr(typ.Get("pkg")), "", false, false),
 				methods: imethods,
 			})
 		case Map:
@@ -181,19 +181,15 @@ func reflectType(typ *js.Object) *rtype {
 			reflectFields := make([]structField, fields.Length())
 			for i := range reflectFields {
 				f := fields.Index(i)
-				offsetEmbed := uintptr(i) << 1
-				if f.Get("embedded").Bool() {
-					offsetEmbed |= 1
-				}
 				reflectFields[i] = structField{
-					name:        newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool()),
-					typ:         reflectType(f.Get("typ")),
-					offsetEmbed: offsetEmbed,
+					name:   newName(internalStr(f.Index.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
+					typ:    reflectType(f.Get("typ")),
+					offset: uintptr(i),
 				}
 			}
 			setKindType(rt, &structType{
 				rtype:   *rt,
-				pkgPath: newName(internalStr(typ.Get("pkgPath")), "", false),
+				pkgPath: newName(internalStr(typ.Get("pkgPath")), "", false, false),
 				fields:  reflectFields,
 			})
 		}
@@ -257,6 +253,7 @@ type nameData struct {
 	name     string
 	tag      string
 	exported bool
+	embedded bool
 	pkgPath  string
 }
 
@@ -266,16 +263,18 @@ func (n name) name() (s string) { return nameMap[n.bytes].name }
 func (n name) tag() (s string)  { return nameMap[n.bytes].tag }
 func (n name) pkgPath() string  { return nameMap[n.bytes].pkgPath }
 func (n name) isExported() bool { return nameMap[n.bytes].exported }
+func (n name) embedded() bool   { return nameMap[n.bytes].embedded }
 func (n name) setPkgPath(pkgpath string) {
 	nameMap[n.bytes].pkgPath = pkgpath
 }
 
-func newName(n, tag string, exported bool) name {
+func newName(n, tag string, exported, embedded bool) name {
 	b := new(byte)
 	nameMap[b] = &nameData{
 		name:     n,
 		tag:      tag,
 		exported: exported,
+		embedded: embedded,
 	}
 	return name{
 		bytes: b,

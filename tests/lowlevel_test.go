@@ -1,7 +1,7 @@
 package tests_test
 
 import (
-	"io/ioutil"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -26,7 +26,7 @@ func TestTimeInternalizationExternalization(t *testing.T) {
 		t.Fatalf("%v:\n%s", err, got)
 	}
 
-	wantb, err := ioutil.ReadFile(filepath.Join("testdata", "time_inexternalization.out"))
+	wantb, err := os.ReadFile(filepath.Join("testdata", "time_inexternalization.out"))
 	want := string(wantb)
 	if err != nil {
 		t.Fatalf("error reading .out file: %v", err)

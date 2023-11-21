@@ -10,7 +10,6 @@ import (
 	"go/token"
 	"go/types"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -35,8 +34,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/term"
 )
 
 var currentDirectory string
@@ -79,7 +78,7 @@ func main() {
 
 	compilerFlags := pflag.NewFlagSet("", 0)
 	compilerFlags.BoolVarP(&options.Minify, "minify", "m", false, "minify generated code")
-	compilerFlags.BoolVar(&options.Color, "color", terminal.IsTerminal(int(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb", "colored output")
+	compilerFlags.BoolVar(&options.Color, "color", term.IsTerminal(int(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb", "colored output")
 	compilerFlags.StringVar(&tags, "tags", "", "a list of build tags to consider satisfied during the build")
 	compilerFlags.BoolVar(&options.MapToLocalDisk, "localmap", false, "use local paths for sourcemap")
 	compilerFlags.BoolVarP(&options.NoCache, "no_cache", "a", false, "rebuild all packages from scratch")
@@ -280,9 +279,9 @@ func main() {
 			return fmt.Errorf("gopherjs run: no go files listed")
 		}
 
-		tempfile, err := ioutil.TempFile(currentDirectory, filepath.Base(args[0])+".")
+		tempfile, err := os.CreateTemp(currentDirectory, filepath.Base(args[0])+".")
 		if err != nil && strings.HasPrefix(currentDirectory, runtime.GOROOT()) {
-			tempfile, err = ioutil.TempFile("", filepath.Base(args[0])+".")
+			tempfile, err = os.CreateTemp("", filepath.Base(args[0])+".")
 		}
 		if err != nil {
 			return err

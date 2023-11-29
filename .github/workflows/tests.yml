@@ -1,0 +1,173 @@
+name: Tests
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    name: tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            index: 0
+          - os: ubuntu-latest
+            index: 1
+          - os: ubuntu-latest
+            index: 2
+          - os: ubuntu-latest
+            index: 3
+
+    steps:
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "1.18.10"
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "12"
+      - name: Set up environment
+        if: matrix.os != 'windows-latest'
+        run: |
+          echo "SOURCE_MAP_SUPPORT=true" >> $GITHUB_ENV
+          # Make nodejs able to require installed modules from any working path.
+          echo "NODE_PATH=$(npm root)" >> $GITHUB_ENV
+          echo ::notice::$(go version)
+          echo ::notice::$(node -v)
+          echo ::notice::$(npm -v)
+      - name: Set up environment
+        if: matrix.os == 'windows-latest'
+        run: |
+          # Fix TEMP variable, see https://github.com/actions/runner-images/issues/712#issuecomment-613004302
+          echo "TEMP=$env:USERPROFILE\AppData\Local\Temp" >> $env:GITHUB_ENV
+          echo "TMP=$env:USERPROFILE\AppData\Local\Temp" >> $env:GITHUB_ENV
+          echo "TMPDIR=$env:USERPROFILE\AppData\Local\Temp" >> $env:GITHUB_ENV
+          echo "NODE_PATH=$(npm root)" >> $env:GITHUB_ENV
+          echo "SOURCE_MAP_SUPPORT=false" >> $env:GITHUB_ENV
+          echo "::notice::$(npm root)"
+          echo "::notice::$(node -v)"
+          echo "::notice::$(npm -v)"
+      - uses: actions/checkout@v3
+      - name: Install required Node.js packages
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          npm ci
+      - name: Install required Node.js packages
+        if: matrix.os != 'ubuntu-latest'
+        run: |
+          # Extra flags to avoid installing node-syscall.
+          npm install --no-optional --no-package-lock
+      - name: Build and Install GopherJS
+        run: |
+          go install -v
+          echo ::notice::$(gopherjs version)
+
+      - name: Smoke tests
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          gopherjs build -v net/http
+          gopherjs test -v fmt log
+      - name: Smoke tests
+        if: matrix.os == 'macos-latest'
+        run: |
+          gopherjs build -v net/http
+          gopherjs test -v --short fmt log os ./tests
+      - name: Smoke tests
+        if: matrix.os == 'windows-latest'
+        run: |
+          gopherjs build -v net/http
+          gopherjs test -v --short fmt sort ./tests
+      - name: go test ...
+        if: matrix.os != 'windows-latest'
+        run: |
+          # Run all tests except gorepo, which will be run separately in parallel.
+          go test -v -race $(go list ./... | grep -v github.com/gopherjs/gopherjs/tests/gorepo)
+      - name: go test ...
+        if: matrix.os == 'windows-latest'
+        run: |
+          $ErrorActionPreference = "Stop"
+          # Run all tests except gorepo, which will be run separately in parallel.
+          go test -v -race $(go list ./... | Where-Object { $_ -notmatch "github.com/gopherjs/gopherjs/tests/gorepo" })
+      - name: TodoMVC in GOPATH mode
+        if: matrix.os != 'windows-latest'
+        run: |
+          set -e
+          export GO111MODULE=off
+          export GOPATH=/tmp/gopath
+          mkdir -p $GOPATH/src/github.com/gopherjs/gopherjs
+          cp -r -p . $GOPATH/src/github.com/gopherjs/gopherjs/
+          go get -v github.com/gopherjs/todomvc
+          gopherjs build -v -o /tmp/todomvc_gopath.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+      - name: TodoMVC in GOPATH mode
+        if: matrix.os == 'windows-latest'
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:GO111MODULE = "off"
+          $env:GOPATH = "C:\tmp\gopath"
+          $destinationPath = "$env:GOPATH\src\github.com\gopherjs\gopherjs"
+          if (-not (Test-Path $destinationPath)) {
+            New-Item -ItemType Directory -Force -Path $destinationPath
+          }
+          Copy-Item -Recurse -Path . -Destination $destinationPath
+          go get -v github.com/gopherjs/todomvc
+          gopherjs build -v -o C:\tmp\todomvc_gopath.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+      - name: TodoMVC in Modules mode
+        if: matrix.os != 'windows-latest'
+        run: |
+          set -e
+          cd /tmp
+          git clone --depth=1 https://github.com/gopherjs/todomvc.git
+          cd /tmp/todomvc
+          gopherjs build -v -o /tmp/todomvc_gomod.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+      - name: TodoMVC in Modules mode
+        if: matrix.os == 'windows-latest'
+        run: |
+          $ErrorActionPreference = "Stop"
+          Set-Location C:\tmp
+          git clone --depth=1 https://github.com/gopherjs/todomvc.git
+          Set-Location C:\tmp\todomvc
+          gopherjs build -v -o C:\tmp\todomvc_gomod.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+      - name: Go Repository tests
+        run: |
+          go test -v github.com/gopherjs/gopherjs/tests/gorepo
+
+      - name: Download JUnit Summary from Previous Workflow
+        if: matrix.index
+        id: download-artifact
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow_conclusion: success
+          name: junit-test-summary
+          if_no_artifact_found: warn
+          # Uncomment the next line before pushing to main branch, that way all branches can
+          # benefit from timing data once it's established there.
+          # branch: main
+
+      - name: Install gotestsum
+        if: matrix.index
+        run: go install gotest.tools/gotestsum@latest
+      - name: Generate go test Slice
+        if: matrix.index
+        id: test_split
+        env:
+          GOOS: js
+          GOARCH: ecmascript
+        uses: hashicorp-forge/go-test-split-action@v1
+        with:
+          total: 4
+          index: ${{ matrix.index }}
+          packages: "std github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/..."
+      - name: gopherjs test ...
+        if: matrix.index
+        run: |
+          set -e
+          ulimit -s 10000
+
+          PACKAGE_NAMES=$(for pkg in ${{ steps.test_split.outputs.run }}; do echo "$pkg"; done | grep -v -x -f .std_test_pkg_exclusions)
+
+          gopherjs test -p 2 --minify -v --short "${{ steps.test_split.outputs.run }}"

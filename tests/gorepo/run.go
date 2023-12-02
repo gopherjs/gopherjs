@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -109,9 +110,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue23188.go":  {desc: "incorrect order of evaluation of index operations"},
 	"fixedbugs/issue24547.go":  {desc: "incorrect computing method sets with shadowed methods"},
 
-	// These are new tests in Go 1.11.5
-	"fixedbugs/issue28688.go": {category: notApplicable, desc: "testing runtime optimisations"},
-
 	// These are new tests in Go 1.12.
 	"fixedbugs/issue23837.go":  {desc: "missing panic on nil pointer-to-empty-struct dereference"},
 	"fixedbugs/issue27201.go":  {desc: "incorrect stack trace for nil dereference in inlined function"},
@@ -121,7 +119,6 @@ var knownFails = map[string]failReason{
 	// These are new tests in Go 1.12.9.
 	"fixedbugs/issue30977.go": {category: neverTerminates, desc: "does for { runtime.GC() }"},
 	"fixedbugs/issue32477.go": {category: notApplicable, desc: "uses runtime.SetFinalizer and runtime.GC"},
-	"fixedbugs/issue32680.go": {category: notApplicable, desc: "uses -gcflags=-d=ssa/check/on flag"},
 
 	// These are new tests in Go 1.13-1.16.
 	"fixedbugs/issue19113.go":  {category: lowLevelRuntimeDifference, desc: "JavaScript bit shifts by negative amount don't cause an exception"},
@@ -134,7 +131,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue30116u.go": {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
 	"fixedbugs/issue34395.go":  {category: neverTerminates, desc: "https://github.com/gopherjs/gopherjs/issues/1007"},
 	"fixedbugs/issue35027.go":  {category: usesUnsupportedPackage, desc: "uses unsupported conversion to reflect.SliceHeader and -gcflags=-d=checkptr"},
-	"fixedbugs/issue35073.go":  {category: usesUnsupportedPackage, desc: "uses unsupported flag -gcflags=-d=checkptr"},
 	"fixedbugs/issue35576.go":  {category: lowLevelRuntimeDifference, desc: "GopherJS print/println format for floats differs from Go's"},
 	"fixedbugs/issue40917.go":  {category: notApplicable, desc: "uses pointer arithmetic and unsupported flag -gcflags=-d=checkptr"},
 
@@ -149,12 +145,131 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue50854.go": {category: lowLevelRuntimeDifference, desc: "negative int32 overflow behaves differently in JS"},
 
 	// These are new tests in Go 1.18
-	"fixedbugs/issue46938.go": {category: notApplicable, desc: "tests -d=checkptr compiler mode, which GopherJS doesn't support"},
 	"fixedbugs/issue47928.go": {category: notApplicable, desc: "//go:nointerface is a part of GOEXPERIMENT=fieldtrack and is not supported by GopherJS"},
-	"fixedbugs/issue49665.go": {category: other, desc: "attempts to pass -gcflags=-G=3 to enable generics, GopherJS doesn't expect the flag; re-enable in Go 1.19 where the flag is removed"},
 	"fixedbugs/issue48898.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
 	"fixedbugs/issue48536.go": {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
 	"fixedbugs/issue53600.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+	"typeparam/issue51733.go": {category: usesUnsupportedPackage, desc: "unsafe: uintptr to struct pointer conversion is unsupported"},
+
+	// Failures related to the lack of generics support. Ideally, this section
+	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
+	// fixed.
+	"typeparam/absdiff.go":                    {category: generics, desc: "missing operator support for generic types"},
+	"typeparam/absdiff2.go":                   {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/absdiff3.go":                   {category: generics, desc: "missing operator support for generic types"},
+	"typeparam/boundmethod.go":                {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/chans.go":                      {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/combine.go":                    {category: generics, desc: "undiagnosed: nil pointer panic in the compiler"},
+	"typeparam/cons.go":                       {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/dictionaryCapture-noinline.go": {category: generics, desc: "attempts to pass -gcflags=\"-G=3\" flag, incorrectly parsed by run.go"},
+	"typeparam/dictionaryCapture.go":          {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/dottype.go":                    {category: generics, desc: "not triaged"},
+	"typeparam/double.go":                     {category: generics, desc: "make() doesn't support generic slice types"},
+	"typeparam/eface.go":                      {category: generics, desc: "missing support for conversion into a parameterized type"},
+	"typeparam/equal.go":                      {category: generics, desc: "missing support for the comparable type constraint"},
+	"typeparam/fact.go":                       {category: generics, desc: "missing support for the comparable type constraint"},
+	"typeparam/genembed.go":                   {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/genembed2.go":                  {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/graph.go":                      {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/ifaceconv.go":                  {category: generics, desc: "not triaged"},
+	"typeparam/index.go":                      {category: generics, desc: "undiagnosed: runtime error: comparing uncomparable type undefined"},
+	"typeparam/index2.go":                     {category: generics, desc: "missing index operator support for generic types"},
+	"typeparam/interfacearg.go":               {category: generics, desc: "undiagnosed: nil pointer panic in the compiler"},
+	"typeparam/issue23536.go":                 {category: generics, desc: "missing support for generic byte/rune slice to string conversion"},
+	"typeparam/issue44688.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue45817.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue46591.go":                 {category: generics, desc: "undiagnosed: len() returns an invalid value when parameterized types are involved"},
+	"typeparam/issue47258.go":                 {category: generics, desc: "missing operator support for generic types"},
+	"typeparam/issue47272.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue47514.go":                 {category: generics, desc: "not triaged"},
+	"typeparam/issue47514b.go":                {category: generics, desc: "not triaged"},
+	"typeparam/issue47684.go":                 {category: generics, desc: "not triaged"},
+	"typeparam/issue47684b.go":                {category: generics, desc: "not triaged"},
+	"typeparam/issue47684c.go":                {category: generics, desc: "not triaged"},
+	"typeparam/issue47713.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue47716.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue47723.go":                 {category: generics, desc: "not triaged"},
+	"typeparam/issue47740.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue47740b.go":                {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue47775b.go":                {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue47877.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue47901.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue47925.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue47925b.go":                {category: generics, desc: "missing support for conversion into a parameterized type"},
+	"typeparam/issue47925c.go":                {category: generics, desc: "missing support for conversion into a parameterized type"},
+	"typeparam/issue47925d.go":                {category: generics, desc: "missing support for conversion into a parameterized type"},
+	"typeparam/issue48013.go":                 {category: generics, desc: "undiagnosed: nil pointer panic in the compiler"},
+	"typeparam/issue48016.go":                 {category: generics, desc: "not triaged"},
+	"typeparam/issue48030.go":                 {category: generics, desc: "not triaged"},
+	"typeparam/issue48042.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue48047.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue48049.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue48137.go":                 {category: generics, desc: "not triaged"},
+	"typeparam/issue48225.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue48253.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue48276a.go":                {category: generics, desc: "missing support for the comparable type constraint"},
+	"typeparam/issue48276b.go":                {category: generics, desc: "not triaged"},
+	"typeparam/issue48317.go":                 {category: generics, desc: "undiagnosed: nil pointer panic in the compiler"},
+	"typeparam/issue48318.go":                 {category: generics, desc: "undiagnosed: nil pointer panic in the compiler"},
+	"typeparam/issue48344.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue48453.go":                 {category: generics, desc: "make() doesn't support generic slice types"},
+	"typeparam/issue48598.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue48602.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue48617.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue48645a.go":                {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue48645b.go":                {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue48838.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue49049.go":                 {category: generics, desc: "not triaged"},
+	"typeparam/issue49295.go":                 {category: generics, desc: "len() doesn't support generic pointer to array types"},
+	"typeparam/issue49421.go":                 {category: generics, desc: "undiagnosed: nil pointer panic in the compiler"},
+	"typeparam/issue49547.go":                 {category: generics, desc: "incorrect type strings for parameterized types"},
+	"typeparam/issue49659b.go":                {category: generics, desc: "incorrect type strings for parameterized types"},
+	"typeparam/issue50002.go":                 {category: generics, desc: "missing support for conversion into a parameterized type"},
+	"typeparam/issue50109.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue50109b.go":                {category: generics, desc: "missing support for conversion into a parameterized type"},
+	"typeparam/issue50193.go":                 {category: generics, desc: "invalid print format for complex numbers"},
+	"typeparam/issue50264.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue50419.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue50642.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue50690a.go":                {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue50690b.go":                {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue50690c.go":                {category: generics, desc: "undiagnosed: nil pointer panic in the compiler"},
+	"typeparam/issue50833.go":                 {category: generics, desc: "undiagnosed: compiler panic triggered by a composite literal"},
+	"typeparam/issue51303.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue51522a.go":                {category: generics, desc: "missing support for the comparable type constraint"},
+	"typeparam/issue51522b.go":                {category: generics, desc: "missing support for the comparable type constraint"},
+	"typeparam/issue51700.go":                 {category: generics, desc: "not triaged"},
+	"typeparam/issue52026.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/issue52228.go":                 {category: generics, desc: "not triaged"},
+	"typeparam/issue53477.go":                 {category: generics, desc: "missing support for conversion into a parameterized type"},
+	"typeparam/list.go":                       {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/list2.go":                      {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/lockable.go":                   {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/map.go":                        {category: generics, desc: "not triaged"},
+	"typeparam/maps.go":                       {category: generics, desc: "missing support for the comparable type constraint"},
+	"typeparam/metrics.go":                    {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/min.go":                        {category: generics, desc: "not triaged"},
+	"typeparam/nested.go":                     {category: generics, desc: "missing comparison operator support for generic types"},
+	"typeparam/ordered.go":                    {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/orderedmap.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/pair.go":                       {category: generics, desc: "undiagnosed: nil pointer panic in the compiler"},
+	"typeparam/sets.go":                       {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/settable.go":                   {category: generics, desc: "undiagnosed: len() returns an invalid value on a generic function result"},
+	"typeparam/shape1.go":                     {category: generics, desc: "not triaged"},
+	"typeparam/slices.go":                     {category: generics, desc: "missing operator support for generic types"},
+	"typeparam/stringable.go":                 {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/stringer.go":                   {category: generics, desc: "not triaged"},
+	"typeparam/struct.go":                     {category: generics, desc: "undiagnosed: nil pointer panic in the compiler"},
+	"typeparam/subdict.go":                    {category: generics, desc: "missing support for parameterized type instantiation"},
+	"typeparam/sum.go":                        {category: generics, desc: "not triaged"},
+	"typeparam/typeswitch1.go":                {category: generics, desc: "not triaged"},
+	"typeparam/typeswitch2.go":                {category: generics, desc: "complex types have different print() format"},
+	"typeparam/typeswitch3.go":                {category: generics, desc: "missing support for type switching on generic types"},
+	"typeparam/typeswitch4.go":                {category: generics, desc: "not triaged"},
+	"typeparam/typeswitch5.go":                {category: generics, desc: "different print() format for floating point types"},
+	"typeparam/typeswitch6.go":                {category: generics, desc: "not triaged"},
+	"typeparam/typeswitch7.go":                {category: generics, desc: "not triaged"},
+	"typeparam/value.go":                      {category: generics, desc: "missing support for parameterized type instantiation"},
 }
 
 type failCategory uint8
@@ -168,6 +283,7 @@ const (
 	unsureIfGopherJSSupportsThisFeature
 	lowLevelRuntimeDifference // JavaScript runtime behaves differently from Go in ways that are difficult to work around.
 	notApplicable             // Test that doesn't need to run under GopherJS; it doesn't apply to the Go language in a general way.
+	generics                  // Test requires generics support.
 )
 
 type failReason struct {
@@ -195,7 +311,7 @@ var (
 
 	// dirs are the directories to look for *.go files in.
 	// TODO(bradfitz): just use all directories?
-	dirs = []string{".", "ken", "chan", "interface", "syntax", "dwarf", "fixedbugs"}
+	dirs = []string{".", "ken", "chan", "interface", "syntax", "dwarf", "fixedbugs", "typeparam"}
 
 	// ratec controls the max number of tests running at a time.
 	ratec chan bool
@@ -456,8 +572,8 @@ func (t *test) goDirName() string {
 	return filepath.Join(t.dir, strings.Replace(t.gofile, ".go", ".dir", -1))
 }
 
-func goDirFiles(longdir string) (filter []os.DirEntry, err error) {
-	files, dirErr := os.ReadDir(longdir)
+func goDirFiles(longdir string) (filter []os.FileInfo, err error) {
+	files, dirErr := ioutil.ReadDir(longdir)
 	if dirErr != nil {
 		return nil, dirErr
 	}
@@ -480,7 +596,7 @@ func goDirPackages(longdir string) ([][]string, error) {
 	m := make(map[string]int)
 	for _, file := range files {
 		name := file.Name()
-		data, err := os.ReadFile(filepath.Join(longdir, name))
+		data, err := ioutil.ReadFile(filepath.Join(longdir, name))
 		if err != nil {
 			return nil, err
 		}
@@ -592,7 +708,7 @@ func (t *test) run() {
 		return
 	}
 
-	srcBytes, err := os.ReadFile(t.goFileName())
+	srcBytes, err := ioutil.ReadFile(t.goFileName())
 	if err != nil {
 		t.err = err
 		return
@@ -633,16 +749,20 @@ func (t *test) run() {
 
 	var args, flags []string
 	wantError := false
-	f := strings.Fields(action)
+	f, err := splitQuoted(action)
+	if err != nil {
+		t.err = fmt.Errorf("invalid test recipe: %v", err)
+		return
+	}
 	if len(f) > 0 {
 		action = f[0]
 		args = f[1:]
 	}
 
-	// GOPHERJS: For now, only run with "run", "cmpout" actions, in "fixedbugs" dir. Skip all others.
+	// GOPHERJS: For now, only run with "run", "cmpout" actions, in "fixedbugs" and "typeparam" dirs. Skip all others.
 	switch action {
 	case "run", "cmpout":
-		if filepath.Clean(t.dir) != "fixedbugs" {
+		if d := filepath.Clean(t.dir); d != "fixedbugs" && d != "typeparam" {
 			action = "skip"
 		}
 	default:
@@ -681,7 +801,7 @@ func (t *test) run() {
 	t.makeTempDir()
 	defer os.RemoveAll(t.tempDir)
 
-	err = os.WriteFile(filepath.Join(t.tempDir, t.gofile), srcBytes, 0o644)
+	err = ioutil.WriteFile(filepath.Join(t.tempDir, t.gofile), srcBytes, 0o644)
 	check(err)
 
 	// A few tests (of things like the environment) require these to be set.
@@ -690,6 +810,19 @@ func (t *test) run() {
 	}
 	if os.Getenv("GOARCH") == "" {
 		os.Setenv("GOARCH", goarch)
+	}
+
+	{
+		// GopherJS: we don't support any of -gcflags, but for the most part they
+		// are not too relevant to the outcome of the test.
+		supportedArgs := []string{}
+		for _, a := range args {
+			if strings.HasPrefix(a, "-gcflags") {
+				continue
+			}
+			supportedArgs = append(supportedArgs, a)
+		}
+		args = supportedArgs
 	}
 
 	useTmp := true
@@ -853,7 +986,7 @@ func (t *test) run() {
 			return
 		}
 		tfile := filepath.Join(t.tempDir, "tmp__.go")
-		if err := os.WriteFile(tfile, out, 0o666); err != nil {
+		if err := ioutil.WriteFile(tfile, out, 0o666); err != nil {
 			t.err = fmt.Errorf("write tempfile:%s", err)
 			return
 		}
@@ -874,7 +1007,7 @@ func (t *test) run() {
 			return
 		}
 		tfile := filepath.Join(t.tempDir, "tmp__.go")
-		err = os.WriteFile(tfile, out, 0o666)
+		err = ioutil.WriteFile(tfile, out, 0o666)
 		if err != nil {
 			t.err = fmt.Errorf("write tempfile:%s", err)
 			return
@@ -922,7 +1055,7 @@ func (t *test) String() string {
 
 func (t *test) makeTempDir() {
 	var err error
-	t.tempDir, err = os.MkdirTemp("", "")
+	t.tempDir, err = ioutil.TempDir("", "")
 	check(err)
 }
 
@@ -930,7 +1063,7 @@ func (t *test) expectedOutput() string {
 	filename := filepath.Join(t.dir, t.gofile)
 	filename = filename[:len(filename)-len(".go")]
 	filename += ".out"
-	b, _ := os.ReadFile(filename)
+	b, _ := ioutil.ReadFile(filename)
 	return string(b)
 }
 
@@ -1022,7 +1155,7 @@ func (t *test) errorCheck(outStr string, fullshort ...string) (err error) {
 
 func (t *test) updateErrors(out string, file string) {
 	// Read in source file.
-	src, err := os.ReadFile(file)
+	src, err := ioutil.ReadFile(file)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
@@ -1077,7 +1210,7 @@ func (t *test) updateErrors(out string, file string) {
 		}
 	}
 	// Write new file.
-	err = os.WriteFile(file, []byte(strings.Join(lines, "\n")), 0o640)
+	err = ioutil.WriteFile(file, []byte(strings.Join(lines, "\n")), 0o640)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
@@ -1134,7 +1267,7 @@ var (
 func (t *test) wantedErrors(file, short string) (errs []wantedError) {
 	cache := make(map[string]*regexp.Regexp)
 
-	src, _ := os.ReadFile(file)
+	src, _ := ioutil.ReadFile(file)
 	for i, line := range strings.Split(string(src), "\n") {
 		lineNum := i + 1
 		if strings.Contains(line, "////") {
@@ -1255,4 +1388,66 @@ func getenv(key, def string) string {
 		return value
 	}
 	return def
+}
+
+// splitQuoted splits the string s around each instance of one or more consecutive
+// white space characters while taking into account quotes and escaping, and
+// returns an array of substrings of s or an empty list if s contains only white space.
+// Single quotes and double quotes are recognized to prevent splitting within the
+// quoted region, and are removed from the resulting substrings. If a quote in s
+// isn't closed err will be set and r will have the unclosed argument as the
+// last element. The backslash is used for escaping.
+//
+// For example, the following string:
+//
+//	a b:"c d" 'e''f'  "g\""
+//
+// Would be parsed as:
+//
+//	[]string{"a", "b:c d", "ef", `g"`}
+//
+// [copied from src/go/build/build.go]
+func splitQuoted(s string) (r []string, err error) {
+	var args []string
+	arg := make([]rune, len(s))
+	escaped := false
+	quoted := false
+	quote := '\x00'
+	i := 0
+	for _, rune := range s {
+		switch {
+		case escaped:
+			escaped = false
+		case rune == '\\':
+			escaped = true
+			continue
+		case quote != '\x00':
+			if rune == quote {
+				quote = '\x00'
+				continue
+			}
+		case rune == '"' || rune == '\'':
+			quoted = true
+			quote = rune
+			continue
+		case unicode.IsSpace(rune):
+			if quoted || i > 0 {
+				quoted = false
+				args = append(args, string(arg[:i]))
+				i = 0
+			}
+			continue
+		}
+		arg[i] = rune
+		i++
+	}
+	if quoted || i > 0 {
+		args = append(args, string(arg[:i]))
+	}
+	if quote != 0 {
+		err = errors.New("unclosed quote")
+	} else if escaped {
+		err = errors.New("unfinished escaping")
+	}
+	return args, err
 }

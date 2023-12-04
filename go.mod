@@ -13,14 +13,13 @@ require (
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
 	github.com/visualfc/goembed v0.3.3
-	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4
 	golang.org/x/sync v0.3.0
 	golang.org/x/sys v0.10.0
+	golang.org/x/term v0.0.0-20220411215600-e5f449aeb171
 	golang.org/x/tools v0.11.0
 )
 
 require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	golang.org/x/term v0.0.0-20220411215600-e5f449aeb171 // indirect
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 )

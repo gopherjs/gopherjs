@@ -326,6 +326,7 @@ func TestInternalizeStruct(t *testing.T) {
 		t.Errorf("Mismatch (-want +got):\n%s", diff)
 	}
 }
+
 func TestInternalizeStructUnexportedFields(t *testing.T) {
 	type Person struct {
 		Name string

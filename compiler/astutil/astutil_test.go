@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"strconv"
 	"testing"
 
 	"github.com/gopherjs/gopherjs/internal/srctesting"
@@ -61,24 +62,41 @@ func TestFuncKey(t *testing.T) {
 		want string
 	}{
 		{
-			desc: "top-level function",
-			src:  `package testpackage; func foo() {}`,
-			want: "foo",
+			desc: `top-level function`,
+			src:  `func foo() {}`,
+			want: `foo`,
 		}, {
-			desc: "top-level exported function",
-			src:  `package testpackage; func Foo() {}`,
-			want: "Foo",
+			desc: `top-level exported function`,
+			src:  `func Foo() {}`,
+			want: `Foo`,
 		}, {
-			desc: "method",
-			src:  `package testpackage; func (_ myType) bar() {}`,
-			want: "myType.bar",
+			desc: `method on reference`,
+			src:  `func (_ myType) bar() {}`,
+			want: `myType.bar`,
+		}, {
+			desc: `method on pointer`,
+			src:  ` func (_ *myType) bar() {}`,
+			want: `myType.bar`,
+		}, {
+			desc: `method on generic reference`,
+			src:  ` func (_ myType[T]) bar() {}`,
+			want: `myType.bar`,
+		}, {
+			desc: `method on generic pointer`,
+			src:  ` func (_ *myType[T]) bar() {}`,
+			want: `myType.bar`,
+		}, {
+			desc: `method on struct with multiple generics`,
+			src:  ` func (_ *myType[T1, T2, T3, T4]) bar() {}`,
+			want: `myType.bar`,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			fdecl := srctesting.ParseFuncDecl(t, test.src)
+			src := `package testpackage; ` + test.src
+			fdecl := srctesting.ParseFuncDecl(t, src)
 			if got := FuncKey(fdecl); got != test.want {
-				t.Errorf("Got %q, want %q", got, test.want)
+				t.Errorf(`Got %q, want %q`, got, test.want)
 			}
 		})
 	}
@@ -541,6 +559,64 @@ func TestEndsWithReturn(t *testing.T) {
 			got := EndsWithReturn(fdecl.Body.List)
 			if got != test.want {
 				t.Errorf("EndsWithReturn() returned %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestSqueezeIdents(t *testing.T) {
+	tests := []struct {
+		desc   string
+		count  int
+		assign []int
+	}{
+		{
+			desc:   `no squeezing`,
+			count:  5,
+			assign: []int{0, 1, 2, 3, 4},
+		}, {
+			desc:   `missing front`,
+			count:  5,
+			assign: []int{3, 4},
+		}, {
+			desc:   `missing back`,
+			count:  5,
+			assign: []int{0, 1, 2},
+		}, {
+			desc:   `missing several`,
+			count:  10,
+			assign: []int{1, 2, 3, 6, 8},
+		}, {
+			desc:   `empty`,
+			count:  0,
+			assign: []int{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			input := make([]*ast.Ident, test.count)
+			for _, i := range test.assign {
+				input[i] = ast.NewIdent(strconv.Itoa(i))
+			}
+
+			result := Squeeze(input)
+			if len(result) != len(test.assign) {
+				t.Errorf("Squeeze() returned a slice %d long, want %d", len(result), len(test.assign))
+			}
+			for i, id := range input {
+				if i < len(result) {
+					if id == nil {
+						t.Errorf(`Squeeze() returned a nil in result at %d`, i)
+					} else {
+						value, err := strconv.Atoi(id.Name)
+						if err != nil || value != test.assign[i] {
+							t.Errorf(`Squeeze() returned %s at %d instead of %d`, id.Name, i, test.assign[i])
+						}
+					}
+				} else if id != nil {
+					t.Errorf(`Squeeze() didn't clear out tail of slice, want %d nil`, i)
+				}
 			}
 		})
 	}

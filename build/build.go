@@ -117,6 +117,22 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 	return pkg, nil
 }
 
+// overrideInfo is used by parseAndAugment methods to manage
+// directives and how the overlay and original are merged.
+type overrideInfo struct {
+	// KeepOriginal indicates that the original code should be kept
+	// but the identifier will be prefixed by `_gopherjs_original_foo`.
+	keepOriginal bool
+
+	// pruneFuncBody indicates that the body of the function should
+	// be removed to prevent statements that are invalid in GopherJS.
+	pruneFuncBody bool
+
+	// purgeMethods indicates that this info is for a struct and
+	// if a method has this struct as a receiver should also be removed.
+	purgeMethods bool
+}
+
 // parseAndAugment parses and returns all .go files of given pkg.
 // Standard Go library packages are augmented with files in compiler/natives folder.
 // If isTest is true and pkg.ImportPath has no _test suffix, package is built for running internal tests.
@@ -125,31 +141,55 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 // The native packages are augmented by the contents of natives.FS in the following way.
 // The file names do not matter except the usual `_test` suffix. The files for
 // native overrides get added to the package (even if they have the same name
-// as an existing file from the standard library). For function identifiers that exist
-// in the original AND the overrides AND that include the following directive in their comment:
-// //gopherjs:keep-original, the original identifier in the AST gets prefixed by
-// `_gopherjs_original_`. For other identifiers that exist in the original AND the overrides,
-// the original identifier gets replaced by `_`. New identifiers that don't exist in original
-// package get added.
+// as an existing file from the standard library).
+//
+//   - For function identifiers that exist in the original and the overrides and have the
+//     directive `gopherjs:keep-original`, the original identifier in the AST gets
+//     prefixed by `_gopherjs_original_`.
+//   - For functions that exist in the original and the overrides and have the
+//     directive `gopherjs:prune-original`, the original function body in the AST
+//     is removed. This removes code that is invalid in GopherJS.
+//   - For identifiers that exist in the original and the overrides
+//     and have the directive `gopherjs:purge`, both the original and override are removed.
+//   - Otherwise for identifiers that exist in the original and the overrides,
+//     the original identifier is removed.
+//   - New identifiers that don't exist in original package get added.
 func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]*ast.File, []JSFile, error) {
-	var files []*ast.File
+	jsFiles, overlayFiles := parseOverlayFiles(xctx, pkg, isTest, fileSet)
 
-	type overrideInfo struct {
-		keepOriginal  bool
-		pruneOriginal bool
+	originalFiles, err := parserOriginalFiles(pkg, fileSet)
+	if err != nil {
+		return nil, nil, err
 	}
-	replacedDeclNames := make(map[string]overrideInfo)
 
+	replacedDeclNames := make(map[string]overrideInfo)
+	for _, file := range overlayFiles {
+		augmentOverlayFile(file, replacedDeclNames)
+		pruneImports(file)
+	}
+	delete(replacedDeclNames, "init")
+
+	for _, file := range originalFiles {
+		augmentOriginalImports(pkg.ImportPath, file)
+		augmentOriginalFile(file, replacedDeclNames)
+		pruneImports(file)
+	}
+
+	return append(overlayFiles, originalFiles...), jsFiles, nil
+}
+
+// parseOverlayFiles loads and parses overlay files
+// to augment the original files with.
+func parseOverlayFiles(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]JSFile, []*ast.File) {
 	isXTest := strings.HasSuffix(pkg.ImportPath, "_test")
 	importPath := pkg.ImportPath
 	if isXTest {
 		importPath = importPath[:len(importPath)-5]
 	}
 
-	jsFiles := []JSFile{}
-
+	var jsFiles []JSFile
+	var files []*ast.File
 	nativesContext := overlayCtx(xctx.Env())
-
 	if nativesPkg, err := nativesContext.Import(importPath, "", 0); err == nil {
 		jsFiles = nativesPkg.JSFiles
 		names := nativesPkg.GoFiles
@@ -159,6 +199,7 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 		if isXTest {
 			names = nativesPkg.XTestGoFiles
 		}
+
 		for _, name := range names {
 			fullPath := path.Join(nativesPkg.Dir, name)
 			r, err := nativesContext.bctx.OpenFile(fullPath)
@@ -173,34 +214,17 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 				panic(err)
 			}
 			r.Close()
-			for _, decl := range file.Decls {
-				switch d := decl.(type) {
-				case *ast.FuncDecl:
-					k := astutil.FuncKey(d)
-					replacedDeclNames[k] = overrideInfo{
-						keepOriginal:  astutil.KeepOriginal(d),
-						pruneOriginal: astutil.PruneOriginal(d),
-					}
-				case *ast.GenDecl:
-					switch d.Tok {
-					case token.TYPE:
-						for _, spec := range d.Specs {
-							replacedDeclNames[spec.(*ast.TypeSpec).Name.Name] = overrideInfo{}
-						}
-					case token.VAR, token.CONST:
-						for _, spec := range d.Specs {
-							for _, name := range spec.(*ast.ValueSpec).Names {
-								replacedDeclNames[name.Name] = overrideInfo{}
-							}
-						}
-					}
-				}
-			}
+
 			files = append(files, file)
 		}
 	}
-	delete(replacedDeclNames, "init")
 
+	return jsFiles, files
+}
+
+// parserOriginalFiles loads and parses the original files to augment.
+func parserOriginalFiles(pkg *PackageData, fileSet *token.FileSet) ([]*ast.File, error) {
+	var files []*ast.File
 	var errList compiler.ErrorList
 	for _, name := range pkg.GoFiles {
 		if !filepath.IsAbs(name) { // name might be absolute if specified directly. E.g., `gopherjs build /abs/file.go`.
@@ -208,7 +232,7 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 		}
 		r, err := buildutil.OpenFile(pkg.bctx, name)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		file, err := parser.ParseFile(fileSet, name, r, parser.ParseComments)
 		r.Close()
@@ -226,68 +250,155 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 			continue
 		}
 
-		switch pkg.ImportPath {
-		case "crypto/rand", "encoding/gob", "encoding/json", "expvar", "go/token", "log", "math/big", "math/rand", "regexp", "time":
-			for _, spec := range file.Imports {
-				path, _ := strconv.Unquote(spec.Path.Value)
-				if path == "sync" {
-					if spec.Name == nil {
-						spec.Name = ast.NewIdent("sync")
-					}
-					spec.Path.Value = `"github.com/gopherjs/gopherjs/nosync"`
-				}
-			}
-		}
-
-		for _, decl := range file.Decls {
-			switch d := decl.(type) {
-			case *ast.FuncDecl:
-				k := astutil.FuncKey(d)
-				if info, ok := replacedDeclNames[k]; ok {
-					if info.pruneOriginal {
-						// Prune function bodies, since it may contain code invalid for
-						// GopherJS and pin unwanted imports.
-						d.Body = nil
-					}
-					if info.keepOriginal {
-						// Allow overridden function calls
-						// The standard library implementation of foo() becomes _gopherjs_original_foo()
-						d.Name.Name = "_gopherjs_original_" + d.Name.Name
-					} else {
-						d.Name = ast.NewIdent("_")
-					}
-				}
-			case *ast.GenDecl:
-				switch d.Tok {
-				case token.TYPE:
-					for _, spec := range d.Specs {
-						s := spec.(*ast.TypeSpec)
-						if _, ok := replacedDeclNames[s.Name.Name]; ok {
-							s.Name = ast.NewIdent("_")
-							s.Type = &ast.StructType{Struct: s.Pos(), Fields: &ast.FieldList{}}
-							s.TypeParams = nil
-						}
-					}
-				case token.VAR, token.CONST:
-					for _, spec := range d.Specs {
-						s := spec.(*ast.ValueSpec)
-						for i, name := range s.Names {
-							if _, ok := replacedDeclNames[name.Name]; ok {
-								s.Names[i] = ast.NewIdent("_")
-							}
-						}
-					}
-				}
-			}
-		}
-
 		files = append(files, file)
 	}
 
 	if errList != nil {
-		return nil, nil, errList
+		return nil, errList
 	}
-	return files, jsFiles, nil
+	return files, nil
+}
+
+// augmentOverlayFile is the part of parseAndAugment that processes
+// an overlay file AST to collect information such as compiler directives and
+// perform any initial augmentation needed to the overlay.
+func augmentOverlayFile(file *ast.File, replacedDeclNames map[string]overrideInfo) {
+	for i, decl := range file.Decls {
+		purgeDecl := astutil.Purge(decl)
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			k := astutil.FuncKey(d)
+			replacedDeclNames[k] = overrideInfo{
+				keepOriginal:  astutil.KeepOriginal(d),
+				pruneFuncBody: astutil.PruneOriginal(d),
+			}
+		case *ast.GenDecl:
+			for j, spec := range d.Specs {
+				purgeSpec := purgeDecl || astutil.Purge(spec)
+				switch d.Tok {
+				case token.TYPE:
+					replacedDeclNames[spec.(*ast.TypeSpec).Name.Name] = overrideInfo{
+						purgeMethods: purgeSpec,
+					}
+				case token.VAR, token.CONST:
+					for _, name := range spec.(*ast.ValueSpec).Names {
+						replacedDeclNames[name.Name] = overrideInfo{}
+					}
+				}
+				if purgeSpec {
+					d.Specs[j] = nil
+				}
+			}
+			d.Specs = astutil.Squeeze(d.Specs)
+			if len(d.Specs) == 0 {
+				file.Decls[i] = nil
+			}
+		}
+		if purgeDecl {
+			file.Decls[i] = nil
+		}
+	}
+	file.Decls = astutil.Squeeze(file.Decls)
+}
+
+// augmentOriginalImports is the part of parseAndAugment that processes
+// an original file AST to modify the imports for that file.
+func augmentOriginalImports(importPath string, file *ast.File) {
+	switch importPath {
+	case "crypto/rand", "encoding/gob", "encoding/json", "expvar", "go/token", "log", "math/big", "math/rand", "regexp", "time":
+		for _, spec := range file.Imports {
+			path, _ := strconv.Unquote(spec.Path.Value)
+			if path == "sync" {
+				if spec.Name == nil {
+					spec.Name = ast.NewIdent("sync")
+				}
+				spec.Path.Value = `"github.com/gopherjs/gopherjs/nosync"`
+			}
+		}
+	}
+}
+
+// augmentOriginalFile is the part of parseAndAugment that processes
+// an original file AST to augment the source code using the directives
+// from the overlay.
+func augmentOriginalFile(file *ast.File, replacedDeclNames map[string]overrideInfo) {
+	for i, decl := range file.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			k := astutil.FuncKey(d)
+			if info, ok := replacedDeclNames[k]; ok {
+				if info.pruneFuncBody {
+					// Prune function bodies, since it may contain code invalid for
+					// GopherJS and pin unwanted imports.
+					d.Body = nil
+				}
+				if info.keepOriginal {
+					// Allow overridden function calls
+					// The standard library implementation of foo() becomes _gopherjs_original_foo()
+					d.Name.Name = "_gopherjs_original_" + d.Name.Name
+				} else {
+					file.Decls[i] = nil
+				}
+			} else if recvKey := astutil.FuncReceiverKey(d); len(recvKey) > 0 {
+				// check if the receiver has been purged, if so, remove the method too.
+				if info, ok := replacedDeclNames[recvKey]; ok && info.purgeMethods {
+					file.Decls[i] = nil
+				}
+			}
+		case *ast.GenDecl:
+			for j, spec := range d.Specs {
+				switch d.Tok {
+				case token.TYPE:
+					if _, ok := replacedDeclNames[spec.(*ast.TypeSpec).Name.Name]; ok {
+						d.Specs[j] = nil
+					}
+				case token.VAR, token.CONST:
+					s := spec.(*ast.ValueSpec)
+					for k, name := range s.Names {
+						if _, ok := replacedDeclNames[name.Name]; ok {
+							s.Names[k] = nil
+						}
+					}
+					s.Names = astutil.Squeeze(s.Names)
+					if len(s.Names) == 0 {
+						d.Specs[j] = nil
+					}
+				}
+			}
+			d.Specs = astutil.Squeeze(d.Specs)
+			if len(d.Specs) == 0 {
+				file.Decls[i] = nil
+			}
+		}
+	}
+	file.Decls = astutil.Squeeze(file.Decls)
+}
+
+// pruneImports will remove any unused imports from the file.
+//
+// This will not remove any unnamed (`.`) or unused (`_`) imports.
+func pruneImports(file *ast.File) {
+	unused := make(map[string]int, len(file.Imports))
+	for i, in := range file.Imports {
+		if name := astutil.ImportName(in); len(name) > 0 {
+			unused[name] = i
+		}
+	}
+
+	ast.Walk(astutil.NewCallbackVisitor(func(n ast.Node) bool {
+		if sel, ok := n.(*ast.SelectorExpr); ok {
+			if id, ok := sel.X.(*ast.Ident); ok && id.Obj == nil {
+				delete(unused, id.Name)
+			}
+		}
+		return len(unused) > 0
+	}), file)
+
+	for _, i := range unused {
+		file.Imports[i] = nil
+	}
+
+	file.Imports = astutil.Squeeze(file.Imports)
 }
 
 // Options controls build process behavior.
@@ -678,7 +789,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		archive := s.buildCache.LoadArchive(pkg.ImportPath)
 		if archive != nil && !pkg.SrcModTime.After(archive.BuildTime) {
 			if err := archive.RegisterTypes(s.Types); err != nil {
-				panic(fmt.Errorf("Failed to load type information from %v: %w", archive, err))
+				panic(fmt.Errorf("failed to load type information from %v: %w", archive, err))
 			}
 			s.UpToDateArchives[pkg.ImportPath] = archive
 			// Existing archive is up to date, no need to build it from scratch.

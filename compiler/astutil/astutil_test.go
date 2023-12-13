@@ -55,6 +55,47 @@ func TestImportsUnsafe(t *testing.T) {
 	}
 }
 
+func TestImportName(t *testing.T) {
+	tests := []struct {
+		desc string
+		src  string
+		want string
+	}{
+		{
+			desc: `named import`,
+			src:  `import foo "some/other/bar"`,
+			want: `foo`,
+		}, {
+			desc: `unnamed import`,
+			src:  `import "some/other/bar"`,
+			want: `bar`,
+		}, {
+			desc: `dot import`,
+			src:  `import . "some/other/bar"`,
+			want: ``,
+		}, {
+			desc: `blank import`,
+			src:  `import _ "some/other/bar"`,
+			want: ``,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			src := "package testpackage\n\n" + test.src
+			fset := token.NewFileSet()
+			file := srctesting.Parse(t, fset, src)
+			if len(file.Imports) != 1 {
+				t.Fatal(`expected one and only one import`)
+			}
+			importSpec := file.Imports[0]
+			got := ImportName(importSpec)
+			if got != test.want {
+				t.Fatalf(`ImportName() returned %q, want %q`, got, test.want)
+			}
+		})
+	}
+}
+
 func TestFuncKey(t *testing.T) {
 	tests := []struct {
 		desc string
@@ -102,7 +143,7 @@ func TestFuncKey(t *testing.T) {
 	}
 }
 
-func TestPruneOriginal(t *testing.T) {
+func TestKeepOriginal(t *testing.T) {
 	tests := []struct {
 		desc string
 		src  string
@@ -122,20 +163,20 @@ func TestPruneOriginal(t *testing.T) {
 		}, {
 			desc: "only directive",
 			src: `package testpackage;
-			//gopherjs:prune-original
+			//gopherjs:keep-original
 			func foo() {}`,
 			want: true,
 		}, {
 			desc: "directive with explanation",
 			src: `package testpackage;
-			//gopherjs:prune-original because reasons
+			//gopherjs:keep-original because reasons
 			func foo() {}`,
 			want: true,
 		}, {
 			desc: "directive in godoc",
 			src: `package testpackage;
 			// foo does something
-			//gopherjs:prune-original
+			//gopherjs:keep-original
 			func foo() {}`,
 			want: true,
 		},
@@ -143,8 +184,8 @@ func TestPruneOriginal(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			fdecl := srctesting.ParseFuncDecl(t, test.src)
-			if got := PruneOriginal(fdecl); got != test.want {
-				t.Errorf("PruneOriginal() returned %t, want %t", got, test.want)
+			if got := KeepOriginal(fdecl); got != test.want {
+				t.Errorf("KeepOriginal() returned %t, want %t", got, test.want)
 			}
 		})
 	}
@@ -499,7 +540,6 @@ func TestHasDirectiveBadCase(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			const action = `do-stuff`
-
 			var got string
 			func() {
 				defer func() { got = fmt.Sprint(recover()) }()

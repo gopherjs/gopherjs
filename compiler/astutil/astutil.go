@@ -53,6 +53,7 @@ func IsTypeExpr(expr ast.Expr, info *types.Info) bool {
 	}
 }
 
+// ImportsUnsafe determines if this file imports the "unsafe" package.
 func ImportsUnsafe(file *ast.File) bool {
 	for _, imp := range file.Imports {
 		if imp.Path.Value == `"unsafe"` {
@@ -66,7 +67,7 @@ func ImportsUnsafe(file *ast.File) bool {
 //
 // If the package name isn't specified then this will make a best
 // make a best guess using the import path.
-// If the import name is unnamed (`.`), unused (`_`), or there
+// If the import name is dot (`.`), blank (`_`), or there
 // was an issue determining the package name then empty is returned.
 func ImportName(spec *ast.ImportSpec) string {
 	if spec == nil {
@@ -77,12 +78,7 @@ func ImportName(spec *ast.ImportSpec) string {
 	if spec.Name != nil {
 		name = spec.Name.Name
 	} else {
-		// Package name is not specified so try to guess
-		// it based on the import path.
-		importPath, err := strconv.Unquote(spec.Path.Value)
-		if err != nil {
-			return ``
-		}
+		importPath, _ := strconv.Unquote(spec.Path.Value)
 		name = path.Base(importPath)
 	}
 
@@ -182,19 +178,6 @@ func hasDirective(node any, directiveAction string) bool {
 		m := directiveMatcher.FindStringSubmatch(line)
 		return len(m) == 2 && m[1] == directiveAction
 	})
-}
-
-// PruneOriginal returns true if gopherjs:prune-original directive is present
-// before a function decl.
-//
-// `//gopherjs:prune-original` is a GopherJS-specific directive, which can be
-// applied to functions in native overlays and will instruct the augmentation
-// logic to delete the body of a standard library function that was replaced.
-// This directive can be used to remove code that would be invalid in GopherJS,
-// such as code expecting ints to be 64-bit. It should be used with caution
-// since it may create unused imports in the original source file.
-func PruneOriginal(d *ast.FuncDecl) bool {
-	return hasDirective(d, `prune-original`)
 }
 
 // KeepOriginal returns true if gopherjs:keep-original directive is present

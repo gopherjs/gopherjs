@@ -1,12 +1,15 @@
 package build
 
 import (
+	"bytes"
 	"fmt"
 	gobuild "go/build"
+	"go/printer"
 	"go/token"
 	"strconv"
 	"testing"
 
+	"github.com/gopherjs/gopherjs/internal/srctesting"
 	"github.com/shurcooL/go/importgraphutil"
 )
 
@@ -126,4 +129,113 @@ func (m stringSet) String() string {
 		s = append(s, v)
 	}
 	return fmt.Sprintf("%q", s)
+}
+
+func TestOverlayAugmentation(t *testing.T) {
+	tests := []struct {
+		desc    string
+		src     string
+		want    string
+		expInfo map[string]overrideInfo
+	}{
+		{
+			desc:    `prune an unused import`,
+			src:     `import foo "some/other/bar"`,
+			want:    ``,
+			expInfo: map[string]overrideInfo{},
+		}, {
+			desc: `remove function`,
+			src: `func Foo(a, b int) int {
+					return a + b
+				}`,
+			want: `func Foo(a, b int) int {
+				return a + b
+			}`,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {},
+			},
+		}, {
+			desc: `keep function`,
+			src: `//gopherjs:keep-original
+				func Foo(a, b int) int {
+					return a + b
+				}`,
+			want: `//gopherjs:keep-original
+				func Foo(a, b int) int {
+					return a + b
+				}`,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {keepOriginal: true},
+			},
+		}, {
+			desc: `purge function`,
+			src: `//gopherjs:purge
+				func Foo(a, b int) int {
+					return a + b
+				}`,
+			want: ``,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {},
+			},
+		}, {
+			desc: `purge struct removes an import`,
+			src: `import "bytes"
+				import "math"
+			
+				//gopherjs:purge
+				type Foo struct {
+					bar *bytes.Buffer
+				}
+				
+				const Tau = math.Pi * 2.0`,
+			want: `import "math"
+					
+				const Tau = math.Pi * 2.0`,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {purgeMethods: true},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			pkgName := "package testpackage\n\n"
+			fsetSrc := token.NewFileSet()
+			fileSrc := srctesting.Parse(t, fsetSrc, pkgName+test.src)
+
+			overrides := map[string]overrideInfo{}
+			augmentOverlayFile(fsetSrc, fileSrc, overrides)
+			pruneImports(fsetSrc, fileSrc)
+
+			buf := &bytes.Buffer{}
+			_ = printer.Fprint(buf, fsetSrc, fileSrc)
+			got := buf.String()
+
+			fsetWant := token.NewFileSet()
+			fileWant := srctesting.Parse(t, fsetWant, pkgName+test.want)
+
+			buf.Reset()
+			_ = printer.Fprint(buf, fsetWant, fileWant)
+			want := buf.String()
+
+			if got != want {
+				t.Errorf("augmentOverlayFile and pruneImports got unexpected code:\n"+
+					"returned:\n\t%q\nwant:\n\t%q", got, want)
+			}
+
+			for key, expInfo := range test.expInfo {
+				if gotInfo, ok := overrides[key]; !ok {
+					t.Errorf(`%q was expected but not gotten`, key)
+				} else if expInfo != gotInfo {
+					t.Errorf(`%q had wrong info, got %+v`, key, gotInfo)
+				}
+			}
+			for key, gotInfo := range overrides {
+				if _, ok := test.expInfo[key]; !ok {
+					t.Errorf(`%q with %+v was not expected`, key, gotInfo)
+				}
+			}
+		})
+	}
+
 }

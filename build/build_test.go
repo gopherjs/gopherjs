@@ -193,6 +193,50 @@ func TestOverlayAugmentation(t *testing.T) {
 				const Tau = math.Pi * 2.0`,
 			expInfo: map[string]overrideInfo{
 				`Foo`: {purgeMethods: true},
+				`Tau`: {},
+			},
+		}, {
+			desc: `purge whole type decl`,
+			src: `//gopherjs:purge
+				type (
+					Foo struct {}
+					bar interface{}
+					bob int
+				)`,
+			want: ``,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {purgeMethods: true},
+				`bar`: {purgeMethods: true},
+				`bob`: {purgeMethods: true},
+			},
+		}, {
+			desc: `purge part of type decl`,
+			src: `type (
+					Foo struct {}
+					
+					//gopherjs:purge
+					bar interface{}
+
+					//gopherjs:purge
+					bob int
+				)`,
+			want: `type (
+					Foo struct {}
+				)`,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {},
+				`bar`: {purgeMethods: true},
+				`bob`: {purgeMethods: true},
+			},
+		}, {
+			desc: `purge all of a type decl`,
+			src: `type (
+					//gopherjs:purge
+					Foo struct {}
+				)`,
+			want: ``,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {purgeMethods: true},
 			},
 		},
 	}

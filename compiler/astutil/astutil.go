@@ -193,7 +193,7 @@ func KeepOriginal(d any) bool {
 }
 
 // Purge returns true if gopherjs:purge directive is present
-// on a struct, interface, variable, constant, or function.
+// on a struct, interface, type, variable, constant, or function.
 //
 // `//gopherjs:purge` is a GopherJS-specific directive, which can be
 // applied in native overlays and will instruct the augmentation logic to
@@ -201,7 +201,7 @@ func KeepOriginal(d any) bool {
 // can be used to remove code that would be invalid in GopherJS, such as code
 // using unsupported features (e.g. generic interfaces before generics were
 // fully supported). It should be used with caution since it may remove needed
-// dependencies. If a struct is purged, all methods using that struct as
+// dependencies. If a type is purged, all methods using that type as
 // a receiver will also be purged.
 func Purge(d any) bool {
 	return hasDirective(d, `purge`)
@@ -289,9 +289,9 @@ func NewCallbackVisitor(predicate func(node ast.Node) bool) *CallbackVisitor {
 }
 
 func (v *CallbackVisitor) Visit(node ast.Node) ast.Visitor {
-	if v.predicate == nil || node == nil || !v.predicate(node) {
-		v.predicate = nil
-		return nil
+	if v.predicate != nil && v.predicate(node) {
+		return v
 	}
-	return v
+	v.predicate = nil
+	return nil
 }

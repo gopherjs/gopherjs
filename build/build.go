@@ -124,8 +124,8 @@ type overrideInfo struct {
 	// but the identifier will be prefixed by `_gopherjs_original_foo`.
 	keepOriginal bool
 
-	// purgeMethods indicates that this info is for a struct and
-	// if a method has this struct as a receiver should also be removed.
+	// purgeMethods indicates that this info is for a type and
+	// if a method has this type as a receiver should also be removed.
 	// If the method is defined in the overlays and therefore has its
 	// own overrides, this will be ignored.
 	purgeMethods bool
@@ -147,6 +147,7 @@ type overrideInfo struct {
 //   - For identifiers that exist in the original and the overrides
 //     and have the directive `gopherjs:purge`, both the original and override are removed.
 //     This is for completely removing something which is currently invalid for GopherJS.
+//     For any purged types any methods with that type as the receiver are also removed.
 //   - Otherwise for identifiers that exist in the original and the overrides,
 //     the original identifier is removed.
 //   - New identifiers that don't exist in original package get added.
@@ -259,8 +260,6 @@ func parserOriginalFiles(pkg *PackageData, fileSet *token.FileSet) ([]*ast.File,
 // an overlay file AST to collect information such as compiler directives and
 // perform any initial augmentation needed to the overlay.
 func augmentOverlayFile(fileSet *token.FileSet, file *ast.File, overrides map[string]overrideInfo) {
-	commentMap := ast.NewCommentMap(fileSet, file, file.Comments)
-	fileChanged := false
 	for i, decl := range file.Decls {
 		purgeDecl := astutil.Purge(decl)
 		switch d := decl.(type) {
@@ -270,7 +269,6 @@ func augmentOverlayFile(fileSet *token.FileSet, file *ast.File, overrides map[st
 				keepOriginal: astutil.KeepOriginal(d),
 			}
 		case *ast.GenDecl:
-			declChange := false
 			for j, spec := range d.Specs {
 				purgeSpec := purgeDecl || astutil.Purge(spec)
 				switch s := spec.(type) {
@@ -284,27 +282,15 @@ func augmentOverlayFile(fileSet *token.FileSet, file *ast.File, overrides map[st
 					}
 				}
 				if purgeSpec {
-					declChange = true
 					d.Specs[j] = nil
-				}
-			}
-			if declChange {
-				d.Specs = astutil.Squeeze(d.Specs)
-				if len(d.Specs) == 0 {
-					fileChanged = true
-					file.Decls[i] = nil
 				}
 			}
 		}
 		if purgeDecl {
-			fileChanged = true
 			file.Decls[i] = nil
 		}
 	}
-	if fileChanged {
-		file.Decls = astutil.Squeeze(file.Decls)
-		file.Comments = commentMap.Filter(file).Comments()
-	}
+	finalizeRemovals(file)
 }
 
 // augmentOriginalImports is the part of parseAndAugment that processes
@@ -328,67 +314,41 @@ func augmentOriginalImports(importPath string, file *ast.File) {
 // original file AST to augment the source code using the overrides from
 // the overlay files.
 func augmentOriginalFile(fileSet *token.FileSet, file *ast.File, overrides map[string]overrideInfo) {
-	commentMap := ast.NewCommentMap(fileSet, file, file.Comments)
-	fileChanged := false
 	for i, decl := range file.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
-			k := astutil.FuncKey(d)
-			if info, ok := overrides[k]; ok {
+			if info, ok := overrides[astutil.FuncKey(d)]; ok {
 				if info.keepOriginal {
 					// Allow overridden function calls
 					// The standard library implementation of foo() becomes _gopherjs_original_foo()
 					d.Name.Name = `_gopherjs_original_` + d.Name.Name
 				} else {
-					fileChanged = true
 					file.Decls[i] = nil
 				}
 			} else if recvKey := astutil.FuncReceiverKey(d); len(recvKey) > 0 {
 				// check if the receiver has been purged, if so, remove the method too.
 				if info, ok := overrides[recvKey]; ok && info.purgeMethods {
-					fileChanged = true
 					file.Decls[i] = nil
 				}
 			}
 		case *ast.GenDecl:
-			declChanged := false
 			for j, spec := range d.Specs {
 				switch s := spec.(type) {
 				case *ast.TypeSpec:
 					if _, ok := overrides[s.Name.Name]; ok {
-						declChanged = true
 						d.Specs[j] = nil
 					}
 				case *ast.ValueSpec:
-					specChanged := false
 					for k, name := range s.Names {
 						if _, ok := overrides[name.Name]; ok {
-							specChanged = true
 							s.Names[k] = nil
 						}
 					}
-					if specChanged {
-						s.Names = astutil.Squeeze(s.Names)
-						if len(s.Names) == 0 {
-							declChanged = true
-							d.Specs[j] = nil
-						}
-					}
-				}
-			}
-			if declChanged {
-				d.Specs = astutil.Squeeze(d.Specs)
-				if len(d.Specs) == 0 {
-					fileChanged = true
-					file.Decls[i] = nil
 				}
 			}
 		}
 	}
-	if fileChanged {
-		file.Decls = astutil.Squeeze(file.Decls)
-		file.Comments = commentMap.Filter(file).Comments()
-	}
+	finalizeRemovals(file)
 }
 
 // pruneImports will remove any unused imports from the file.
@@ -412,43 +372,80 @@ func pruneImports(fileSet *token.FileSet, file *ast.File) {
 		return len(unused) > 0
 	}), file)
 
-	if len(unused) > 0 {
-		commentMap := ast.NewCommentMap(fileSet, file, file.Comments)
+	if len(unused) == 0 {
+		return
+	}
 
-		// Remove all import specifications
-		isUnusedSpec := map[*ast.ImportSpec]bool{}
-		for _, index := range unused {
-			isUnusedSpec[file.Imports[index]] = true
+	// Remove all import specifications
+	isUnusedSpec := map[*ast.ImportSpec]bool{}
+	for _, index := range unused {
+		isUnusedSpec[file.Imports[index]] = true
+	}
+	for _, decl := range file.Decls {
+		if d, ok := decl.(*ast.GenDecl); ok {
+			for i, spec := range d.Specs {
+				if other, ok := spec.(*ast.ImportSpec); ok && isUnusedSpec[other] {
+					d.Specs[i] = nil
+				}
+			}
 		}
-		for i, decl := range file.Decls {
-			if d, ok := decl.(*ast.GenDecl); ok {
-				declChanged := false
-				for j, spec := range d.Specs {
-					if other, ok := spec.(*ast.ImportSpec); ok {
-						if isUnusedSpec[other] {
+	}
+
+	// Remove the import copies in the file
+	for _, index := range unused {
+		file.Imports[index] = nil
+	}
+
+	finalizeRemovals(file)
+}
+
+// finalizeRemovals fully removes any declaration, specification, imports
+// that have been set to nil. This will also remove the file's top-level
+// comment group to remove any unassociated comments, including the comments
+// from removed code.
+func finalizeRemovals(file *ast.File) {
+	fileChanged := false
+	for i, decl := range file.Decls {
+		switch d := decl.(type) {
+		case nil:
+			fileChanged = true
+		case *ast.GenDecl:
+			declChanged := false
+			for j, spec := range d.Specs {
+				switch s := spec.(type) {
+				case nil:
+					declChanged = true
+				case *ast.ValueSpec:
+					specChanged := false
+					for _, name := range s.Names {
+						if name == nil {
+							specChanged = true
+							break
+						}
+					}
+					if specChanged {
+						s.Names = astutil.Squeeze(s.Names)
+						if len(s.Names) == 0 {
 							declChanged = true
 							d.Specs[j] = nil
 						}
 					}
 				}
-				if declChanged {
-					d.Specs = astutil.Squeeze(d.Specs)
-					if len(d.Specs) == 0 {
-						file.Decls[i] = nil
-					}
+			}
+			if declChanged {
+				d.Specs = astutil.Squeeze(d.Specs)
+				if len(d.Specs) == 0 {
+					fileChanged = true
+					file.Decls[i] = nil
 				}
 			}
 		}
-
-		// Remove the import copies in the file
-		for _, index := range unused {
-			file.Imports[index] = nil
-		}
-
-		file.Decls = astutil.Squeeze(file.Decls)
-		file.Imports = astutil.Squeeze(file.Imports)
-		file.Comments = commentMap.Filter(file).Comments()
 	}
+	if fileChanged {
+		file.Decls = astutil.Squeeze(file.Decls)
+	}
+	file.Imports = astutil.Squeeze(file.Imports)
+	file.Comments = nil
 }
 
 // Options controls build process behavior.

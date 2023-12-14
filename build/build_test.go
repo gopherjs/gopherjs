@@ -238,6 +238,45 @@ func TestOverlayAugmentation(t *testing.T) {
 			expInfo: map[string]overrideInfo{
 				`Foo`: {purgeMethods: true},
 			},
+		}, {
+			desc: `remove and purge values`,
+			src: `import "time"
+			
+				const (
+					foo = 42
+					//gopherjs:purge
+					bar = "gopherjs"
+				)
+				
+				//gopherjs:purge
+				var now = time.Now`,
+			want: `const (
+					foo = 42
+				)`,
+			expInfo: map[string]overrideInfo{
+				`foo`: {},
+				`bar`: {},
+				`now`: {},
+			},
+		}, {
+			desc: `purge generics`,
+			src: `import "cmp"
+			
+				//gopherjs:purge
+				type Pointer[T any] struct {}
+			
+				//gopherjs:purge
+				func Sort[S ~[]E, E cmp.Ordered](x S) {}
+
+				// stub for "func Equal[S ~[]E, E any](s1, s2 S) bool"
+				func Equal() {}`,
+			want: `// stub for "func Equal[S ~[]E, E any](s1, s2 S) bool"
+				func Equal() {}`,
+			expInfo: map[string]overrideInfo{
+				`Pointer`: {purgeMethods: true},
+				`Sort`:    {},
+				`Equal`:   {},
+			},
 		},
 	}
 
@@ -281,5 +320,172 @@ func TestOverlayAugmentation(t *testing.T) {
 			}
 		})
 	}
+}
 
+func TestOriginalAugmentation(t *testing.T) {
+	tests := []struct {
+		desc string
+		info map[string]overrideInfo
+		src  string
+		want string
+	}{
+		{
+			desc: `prune an unused import`,
+			info: map[string]overrideInfo{},
+			src:  `import foo "some/other/bar"`,
+			want: ``,
+		}, {
+			desc: `do not affect function`,
+			info: map[string]overrideInfo{},
+			src: `func Foo(a, b int) int {
+					return a + b
+				}`,
+			want: `func Foo(a, b int) int {
+					return a + b
+				}`,
+		}, {
+			desc: `change unnamed sync import`,
+			info: map[string]overrideInfo{},
+			src: `import "sync"
+
+				var _ = &sync.Mutex{}`,
+			want: `import sync "github.com/gopherjs/gopherjs/nosync"
+				
+				var _ = &sync.Mutex{}`,
+		}, {
+			desc: `change named sync import`,
+			info: map[string]overrideInfo{},
+			src: `import foo "sync"
+				
+				var _ = &foo.Mutex{}`,
+			want: `import foo "github.com/gopherjs/gopherjs/nosync"
+				
+				var _ = &foo.Mutex{}`,
+		}, {
+			desc: `remove function`,
+			info: map[string]overrideInfo{
+				`Foo`: {},
+			},
+			src: `func Foo(a, b int) int {
+					return a + b
+				}`,
+			want: ``,
+		}, {
+			desc: `keep original function`,
+			info: map[string]overrideInfo{
+				`Foo`: {keepOriginal: true},
+			},
+			src: `func Foo(a, b int) int {
+					return a + b
+				}`,
+			want: `func _gopherjs_original_Foo(a, b int) int {
+					return a + b
+				}`,
+		}, {
+			desc: `remove types and values`,
+			info: map[string]overrideInfo{
+				`Foo`:  {},
+				`now`:  {},
+				`bar1`: {},
+			},
+			src: `import "time"
+
+				type Foo interface{}
+				var now = time.Now
+				const bar1, bar2 = 21, 42`,
+			want: `const bar2 = 42`,
+		}, {
+			desc: `remove in multi-value context`,
+			info: map[string]overrideInfo{
+				`bar`: {},
+			},
+			src: `const foo, bar = func() (int, int) {
+					return 24, 12
+				}()`,
+			want: `const foo, _ = func() (int, int) {
+					return 24, 12
+				}()`,
+		}, {
+			desc: `full remove in multi-value context`,
+			info: map[string]overrideInfo{
+				`bar`: {},
+			},
+			src: `const _, bar = func() (int, int) {
+					return 24, 12
+				}()`,
+			want: ``,
+		}, {
+			desc: `purge struct and methods`,
+			info: map[string]overrideInfo{
+				`Foo`: {purgeMethods: true},
+			},
+			src: `type Foo struct{
+					bar int
+				}
+				
+				func (f Foo) GetBar() int {
+					return f.bar
+				}
+				
+				func (f *Foo) SetBar(bar int) {
+					f.bar = bar
+				}
+				
+				func NewFoo(bar int) *Foo {
+					return &Foo{bar: bar}
+				}`,
+			// NewFoo is not removed automatically since
+			// only functions with Foo as a receiver is removed.
+			want: `func NewFoo(bar int) *Foo {
+					return &Foo{bar: bar}
+				}`,
+		}, {
+			desc: `purge generics`,
+			info: map[string]overrideInfo{
+				`Pointer`: {purgeMethods: true},
+				`Sort`:    {},
+				`Equal`:   {},
+			},
+			src: `import "cmp"
+			
+				type Pointer[T any] struct {}
+				func (x *Pointer[T]) Load() *T {}
+				func (x *Pointer[T]) Store(val *T) {}
+			
+				func Sort[S ~[]E, E cmp.Ordered](x S) {}
+
+				// overlay had stub "func Equal() {}"
+				func Equal[S ~[]E, E any](s1, s2 S) bool {}`,
+			want: ``,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			pkgName := "package testpackage\n\n"
+			importPath := `math/rand`
+			fsetSrc := token.NewFileSet()
+			fileSrc := srctesting.Parse(t, fsetSrc, pkgName+test.src)
+
+			augmentOriginalImports(importPath, fileSrc)
+			augmentOriginalFile(fsetSrc, fileSrc, test.info)
+			pruneImports(fsetSrc, fileSrc)
+
+			buf := &bytes.Buffer{}
+			_ = printer.Fprint(buf, fsetSrc, fileSrc)
+			got := buf.String()
+
+			fsetWant := token.NewFileSet()
+			fileWant := srctesting.Parse(t, fsetWant, pkgName+test.want)
+
+			buf.Reset()
+			_ = printer.Fprint(buf, fsetWant, fileWant)
+			want := buf.String()
+
+			if got != want {
+				t.Errorf("augmentOriginalImports, augmentOriginalFile, and pruneImports got unexpected code:\n"+
+					"returned:\n\t%q\nwant:\n\t%q", got, want)
+			}
+		})
+	}
 }

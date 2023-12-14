@@ -339,9 +339,36 @@ func augmentOriginalFile(fileSet *token.FileSet, file *ast.File, overrides map[s
 						d.Specs[j] = nil
 					}
 				case *ast.ValueSpec:
-					for k, name := range s.Names {
-						if _, ok := overrides[name.Name]; ok {
-							s.Names[k] = nil
+					if len(s.Names) == len(s.Values) {
+						// multi-value context
+						// e.g. var a, b = 2, 3
+						for k, name := range s.Names {
+							if _, ok := overrides[name.Name]; ok {
+								s.Names[k] = nil
+								s.Values[k] = nil
+							}
+						}
+					} else {
+						// single-value context
+						// e.g. var a, b = func() (int, int) { return 2, 3 }()
+						nameRemoved := false
+						for _, name := range s.Names {
+							if _, ok := overrides[name.Name]; ok {
+								nameRemoved = true
+								name.Name = `_`
+							}
+						}
+						if nameRemoved {
+							removeSpec := true
+							for _, name := range s.Names {
+								if name.Name != `_` {
+									removeSpec = false
+									break
+								}
+							}
+							if removeSpec {
+								d.Specs[j] = nil
+							}
 						}
 					}
 				}
@@ -425,6 +452,7 @@ func finalizeRemovals(file *ast.File) {
 					}
 					if specChanged {
 						s.Names = astutil.Squeeze(s.Names)
+						s.Values = astutil.Squeeze(s.Values)
 						if len(s.Names) == 0 {
 							declChanged = true
 							d.Specs[j] = nil

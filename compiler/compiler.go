@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
 	"golang.org/x/tools/go/gcexportdata"
 )
@@ -112,7 +113,7 @@ type Decl struct {
 	// Go compiler/linker toolchain. Used by GopherJS to support go:linkname
 	// directives. Must be set for decls that are supported by go:linkname
 	// implementation.
-	LinkingName SymName
+	LinkingName symbol.Name
 	// A list of package-level JavaScript variable names this symbol needs to declare.
 	Vars []string
 	// NamedRecvType is method named recv declare.

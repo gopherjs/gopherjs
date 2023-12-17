@@ -14,6 +14,7 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/neelance/astrewrite"
 	"golang.org/x/tools/go/gcexportdata"
 	"golang.org/x/tools/go/types/typeutil"
@@ -404,7 +405,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			FullName: o.FullName(),
 			Blocking: len(funcInfo.Blocking) != 0,
 		}
-		d.LinkingName = newSymName(o)
+		d.LinkingName = symbol.New(o)
 		if fun.Recv == nil {
 			d.Vars = []string{funcCtx.objectName(o)}
 			d.DceObjectFilter = o.Name()

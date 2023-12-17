@@ -37,6 +37,7 @@ func Check(t *testing.T, fset *token.FileSet, files ...*ast.File) (*types.Info, 
 		Implicits:  make(map[ast.Node]types.Object),
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 		Scopes:     make(map[ast.Node]*types.Scope),
+		Instances:  make(map[*ast.Ident]types.Instance),
 	}
 	config := &types.Config{
 		Sizes: &types.StdSizes{WordSize: 4, MaxAlign: 8},

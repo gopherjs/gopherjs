@@ -117,6 +117,19 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 	return pkg, nil
 }
 
+// overrideInfo is used by parseAndAugment methods to manage
+// directives and how the overlay and original are merged.
+type overrideInfo struct {
+	// KeepOriginal indicates that the original code should be kept
+	// but the identifier will be prefixed by `_gopherjs_original_foo`.
+	// If false the original code is removed.
+	keepOriginal bool
+
+	// pruneMethodBody indicates that the body of the methods should be
+	// removed because they contain something that is invalid to GopherJS.
+	pruneMethodBody bool
+}
+
 // parseAndAugment parses and returns all .go files of given pkg.
 // Standard Go library packages are augmented with files in compiler/natives folder.
 // If isTest is true and pkg.ImportPath has no _test suffix, package is built for running internal tests.
@@ -132,84 +145,86 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 // the original identifier gets replaced by `_`. New identifiers that don't exist in original
 // package get added.
 func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]*ast.File, []JSFile, error) {
-	var files []*ast.File
+	jsFiles, overlayFiles := parseOverlayFiles(xctx, pkg, isTest, fileSet)
 
-	type overrideInfo struct {
-		keepOriginal  bool
-		pruneOriginal bool
+	originalFiles, err := parserOriginalFiles(pkg, fileSet)
+	if err != nil {
+		return nil, nil, err
 	}
-	replacedDeclNames := make(map[string]overrideInfo)
 
+	overrides := make(map[string]overrideInfo)
+	for _, file := range overlayFiles {
+		augmentOverlayFile(file, overrides)
+	}
+	delete(overrides, "init")
+
+	for _, file := range originalFiles {
+		augmentOriginalImports(pkg.ImportPath, file)
+		augmentOriginalFile(file, overrides)
+	}
+
+	return append(overlayFiles, originalFiles...), jsFiles, nil
+}
+
+// parseOverlayFiles loads and parses overlay files
+// to augment the original files with.
+func parseOverlayFiles(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]JSFile, []*ast.File) {
 	isXTest := strings.HasSuffix(pkg.ImportPath, "_test")
 	importPath := pkg.ImportPath
 	if isXTest {
 		importPath = importPath[:len(importPath)-5]
 	}
 
-	jsFiles := []JSFile{}
-
 	nativesContext := overlayCtx(xctx.Env())
-
-	if nativesPkg, err := nativesContext.Import(importPath, "", 0); err == nil {
-		jsFiles = nativesPkg.JSFiles
-		names := nativesPkg.GoFiles
-		if isTest {
-			names = append(names, nativesPkg.TestGoFiles...)
-		}
-		if isXTest {
-			names = nativesPkg.XTestGoFiles
-		}
-		for _, name := range names {
-			fullPath := path.Join(nativesPkg.Dir, name)
-			r, err := nativesContext.bctx.OpenFile(fullPath)
-			if err != nil {
-				panic(err)
-			}
-			// Files should be uniquely named and in the original package directory in order to be
-			// ordered correctly
-			newPath := path.Join(pkg.Dir, "gopherjs__"+name)
-			file, err := parser.ParseFile(fileSet, newPath, r, parser.ParseComments)
-			if err != nil {
-				panic(err)
-			}
-			r.Close()
-			for _, decl := range file.Decls {
-				switch d := decl.(type) {
-				case *ast.FuncDecl:
-					k := astutil.FuncKey(d)
-					replacedDeclNames[k] = overrideInfo{
-						keepOriginal:  astutil.KeepOriginal(d),
-						pruneOriginal: astutil.PruneOriginal(d),
-					}
-				case *ast.GenDecl:
-					switch d.Tok {
-					case token.TYPE:
-						for _, spec := range d.Specs {
-							replacedDeclNames[spec.(*ast.TypeSpec).Name.Name] = overrideInfo{}
-						}
-					case token.VAR, token.CONST:
-						for _, spec := range d.Specs {
-							for _, name := range spec.(*ast.ValueSpec).Names {
-								replacedDeclNames[name.Name] = overrideInfo{}
-							}
-						}
-					}
-				}
-			}
-			files = append(files, file)
-		}
+	nativesPkg, err := nativesContext.Import(importPath, "", 0)
+	if err != nil {
+		return nil, nil
 	}
-	delete(replacedDeclNames, "init")
 
+	jsFiles := nativesPkg.JSFiles
+	var files []*ast.File
+	names := nativesPkg.GoFiles
+	if isTest {
+		names = append(names, nativesPkg.TestGoFiles...)
+	}
+	if isXTest {
+		names = nativesPkg.XTestGoFiles
+	}
+
+	for _, name := range names {
+		fullPath := path.Join(nativesPkg.Dir, name)
+		r, err := nativesContext.bctx.OpenFile(fullPath)
+		if err != nil {
+			panic(err)
+		}
+		// Files should be uniquely named and in the original package directory in order to be
+		// ordered correctly
+		newPath := path.Join(pkg.Dir, "gopherjs__"+name)
+		file, err := parser.ParseFile(fileSet, newPath, r, parser.ParseComments)
+		if err != nil {
+			panic(err)
+		}
+		r.Close()
+
+		files = append(files, file)
+	}
+	return jsFiles, files
+}
+
+// parserOriginalFiles loads and parses the original files to augment.
+func parserOriginalFiles(pkg *PackageData, fileSet *token.FileSet) ([]*ast.File, error) {
+	var files []*ast.File
 	var errList compiler.ErrorList
 	for _, name := range pkg.GoFiles {
 		if !filepath.IsAbs(name) { // name might be absolute if specified directly. E.g., `gopherjs build /abs/file.go`.
 			name = filepath.Join(pkg.Dir, name)
 		}
+
 		r, err := buildutil.OpenFile(pkg.bctx, name)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
+
 		file, err := parser.ParseFile(fileSet, name, r, parser.ParseComments)
 		r.Close()
 		if err != nil {
@@ -226,68 +241,102 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 			continue
 		}
 
-		switch pkg.ImportPath {
-		case "crypto/rand", "encoding/gob", "encoding/json", "expvar", "go/token", "log", "math/big", "math/rand", "regexp", "time":
-			for _, spec := range file.Imports {
-				path, _ := strconv.Unquote(spec.Path.Value)
-				if path == "sync" {
-					if spec.Name == nil {
-						spec.Name = ast.NewIdent("sync")
-					}
-					spec.Path.Value = `"github.com/gopherjs/gopherjs/nosync"`
-				}
-			}
-		}
-
-		for _, decl := range file.Decls {
-			switch d := decl.(type) {
-			case *ast.FuncDecl:
-				k := astutil.FuncKey(d)
-				if info, ok := replacedDeclNames[k]; ok {
-					if info.pruneOriginal {
-						// Prune function bodies, since it may contain code invalid for
-						// GopherJS and pin unwanted imports.
-						d.Body = nil
-					}
-					if info.keepOriginal {
-						// Allow overridden function calls
-						// The standard library implementation of foo() becomes _gopherjs_original_foo()
-						d.Name.Name = "_gopherjs_original_" + d.Name.Name
-					} else {
-						d.Name = ast.NewIdent("_")
-					}
-				}
-			case *ast.GenDecl:
-				switch d.Tok {
-				case token.TYPE:
-					for _, spec := range d.Specs {
-						s := spec.(*ast.TypeSpec)
-						if _, ok := replacedDeclNames[s.Name.Name]; ok {
-							s.Name = ast.NewIdent("_")
-							s.Type = &ast.StructType{Struct: s.Pos(), Fields: &ast.FieldList{}}
-							s.TypeParams = nil
-						}
-					}
-				case token.VAR, token.CONST:
-					for _, spec := range d.Specs {
-						s := spec.(*ast.ValueSpec)
-						for i, name := range s.Names {
-							if _, ok := replacedDeclNames[name.Name]; ok {
-								s.Names[i] = ast.NewIdent("_")
-							}
-						}
-					}
-				}
-			}
-		}
-
 		files = append(files, file)
 	}
 
 	if errList != nil {
-		return nil, nil, errList
+		return nil, errList
 	}
-	return files, jsFiles, nil
+	return files, nil
+}
+
+// augmentOverlayFile is the part of parseAndAugment that processes
+// an overlay file AST to collect information such as compiler directives
+// and perform any initial augmentation needed to the overlay.
+func augmentOverlayFile(file *ast.File, overrides map[string]overrideInfo) {
+	for _, decl := range file.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			k := astutil.FuncKey(d)
+			overrides[k] = overrideInfo{
+				keepOriginal:    astutil.KeepOriginal(d),
+				pruneMethodBody: astutil.PruneOriginal(d),
+			}
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				switch s := spec.(type) {
+				case *ast.TypeSpec:
+					overrides[s.Name.Name] = overrideInfo{}
+				case *ast.ValueSpec:
+					for _, name := range s.Names {
+						overrides[name.Name] = overrideInfo{}
+					}
+				}
+			}
+		}
+	}
+}
+
+// augmentOriginalImports is the part of parseAndAugment that processes
+// an original file AST to modify the imports for that file.
+func augmentOriginalImports(importPath string, file *ast.File) {
+	switch importPath {
+	case "crypto/rand", "encoding/gob", "encoding/json", "expvar", "go/token", "log", "math/big", "math/rand", "regexp", "time":
+		for _, spec := range file.Imports {
+			path, _ := strconv.Unquote(spec.Path.Value)
+			if path == "sync" {
+				if spec.Name == nil {
+					spec.Name = ast.NewIdent("sync")
+				}
+				spec.Path.Value = `"github.com/gopherjs/gopherjs/nosync"`
+			}
+		}
+	}
+}
+
+// augmentOriginalFile is the part of parseAndAugment that processes an
+// original file AST to augment the source code using the overrides from
+// the overlay files.
+func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
+	for _, decl := range file.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			if info, ok := overrides[astutil.FuncKey(d)]; ok {
+				if info.pruneMethodBody {
+					// Prune function bodies, since it may contain code invalid for
+					// GopherJS and pin unwanted imports.
+					d.Body = nil
+				}
+				if info.keepOriginal {
+					// Allow overridden function calls
+					// The standard library implementation of foo() becomes _gopherjs_original_foo()
+					d.Name.Name = "_gopherjs_original_" + d.Name.Name
+				} else {
+					// By setting the name to an underscore, the method will
+					// not be outputted. Doing this will keep the dependencies the same.
+					d.Name = ast.NewIdent("_")
+				}
+			}
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				switch s := spec.(type) {
+				case *ast.TypeSpec:
+					if _, ok := overrides[s.Name.Name]; ok {
+						s.Name = ast.NewIdent("_")
+						// Change to struct type with no type body and not type parameters.
+						s.Type = &ast.StructType{Struct: s.Pos(), Fields: &ast.FieldList{}}
+						s.TypeParams = nil
+					}
+				case *ast.ValueSpec:
+					for i, name := range s.Names {
+						if _, ok := overrides[name.Name]; ok {
+							s.Names[i] = ast.NewIdent("_")
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 // Options controls build process behavior.

@@ -678,7 +678,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		archive := s.buildCache.LoadArchive(pkg.ImportPath)
 		if archive != nil && !pkg.SrcModTime.After(archive.BuildTime) {
 			if err := archive.RegisterTypes(s.Types); err != nil {
-				panic(fmt.Errorf("Failed to load type information from %v: %w", archive, err))
+				panic(fmt.Errorf("failed to load type information from %v: %w", archive, err))
 			}
 			s.UpToDateArchives[pkg.ImportPath] = archive
 			// Existing archive is up to date, no need to build it from scratch.

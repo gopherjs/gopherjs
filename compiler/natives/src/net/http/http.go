@@ -7,7 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/textproto"
 	"strconv"
 
@@ -68,7 +68,7 @@ func (t *XHRTransport) RoundTrip(req *Request) (*Response, error) {
 			StatusCode:    xhr.Get("status").Int(),
 			Header:        Header(header),
 			ContentLength: contentLength,
-			Body:          ioutil.NopCloser(bytes.NewReader(body)),
+			Body:          io.NopCloser(bytes.NewReader(body)),
 			Request:       req,
 		}
 	})
@@ -91,7 +91,7 @@ func (t *XHRTransport) RoundTrip(req *Request) (*Response, error) {
 	if req.Body == nil {
 		xhr.Call("send")
 	} else {
-		body, err := ioutil.ReadAll(req.Body)
+		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			req.Body.Close() // RoundTrip must always close the body, including on errors.
 			return nil, err

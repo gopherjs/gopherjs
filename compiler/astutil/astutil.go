@@ -5,7 +5,10 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"path"
+	"reflect"
 	"regexp"
+	"strconv"
 )
 
 func RemoveParens(e ast.Expr) ast.Expr {
@@ -59,6 +62,29 @@ func ImportsUnsafe(file *ast.File) bool {
 	return false
 }
 
+// ImportName tries to determine the package name for an import.
+//
+// If the package name isn't specified then this will make a best
+// make a best guess using the import path.
+// If the import name is dot (`.`), blank (`_`), or there
+// was an issue determining the package name then empty is returned.
+func ImportName(spec *ast.ImportSpec) string {
+	var name string
+	if spec.Name != nil {
+		name = spec.Name.Name
+	} else {
+		importPath, _ := strconv.Unquote(spec.Path.Value)
+		name = path.Base(importPath)
+	}
+
+	switch name {
+	case `_`, `.`, `/`:
+		return ``
+	default:
+		return name
+	}
+}
+
 // FuncKey returns a string, which uniquely identifies a top-level function or
 // method in a package.
 func FuncKey(d *ast.FuncDecl) string {
@@ -95,19 +121,6 @@ func FuncReceiverKey(d *ast.FuncDecl) string {
 	}
 }
 
-// PruneOriginal returns true if gopherjs:prune-original directive is present
-// before a function decl.
-//
-// `//gopherjs:prune-original` is a GopherJS-specific directive, which can be
-// applied to functions in native overlays and will instruct the augmentation
-// logic to delete the body of a standard library function that was replaced.
-// This directive can be used to remove code that would be invalid in GopherJS,
-// such as code expecting ints to be 64-bit. It should be used with caution
-// since it may create unused imports in the original source file.
-func PruneOriginal(d *ast.FuncDecl) bool {
-	return hasDirective(d, `prune-original`)
-}
-
 // KeepOriginal returns true if gopherjs:keep-original directive is present
 // before a function decl.
 //
@@ -118,6 +131,21 @@ func PruneOriginal(d *ast.FuncDecl) bool {
 // `_gopherjs_original_foo`.
 func KeepOriginal(d *ast.FuncDecl) bool {
 	return hasDirective(d, `keep-original`)
+}
+
+// Purge returns true if gopherjs:purge directive is present
+// on a struct, interface, type, variable, constant, or function.
+//
+// `//gopherjs:purge` is a GopherJS-specific directive, which can be
+// applied in native overlays and will instruct the augmentation logic to
+// delete part of the standard library without a replacement. This directive
+// can be used to remove code that would be invalid in GopherJS, such as code
+// using unsupported features (e.g. generic interfaces before generics were
+// fully supported). It should be used with caution since it may remove needed
+// dependencies. If a type is purged, all methods using that type as
+// a receiver will also be purged.
+func Purge(d any) bool {
+	return hasDirective(d, `purge`)
 }
 
 // anyDocLine calls the given predicate on all associated documentation
@@ -227,4 +255,38 @@ func EndsWithReturn(stmts []ast.Stmt) bool {
 	default:
 		return false
 	}
+}
+
+// Squeeze removes all nil nodes from the slice.
+//
+// The given slice will be modified. This is designed for squeezing
+// declaration, specification, imports, and identifier lists.
+func Squeeze[E ast.Node, S ~[]E](s S) S {
+	var zero E
+	count, dest := len(s), 0
+	for src := 0; src < count; src++ {
+		if !reflect.DeepEqual(s[src], zero) {
+			// Swap the values, this will put the nil values to the end
+			// of the slice so that the tail isn't holding onto pointers.
+			s[dest], s[src] = s[src], s[dest]
+			dest++
+		}
+	}
+	return s[:dest]
+}
+
+type CallbackVisitor struct {
+	predicate func(node ast.Node) bool
+}
+
+func NewCallbackVisitor(predicate func(node ast.Node) bool) *CallbackVisitor {
+	return &CallbackVisitor{predicate: predicate}
+}
+
+func (v *CallbackVisitor) Visit(node ast.Node) ast.Visitor {
+	if v.predicate != nil && v.predicate(node) {
+		return v
+	}
+	v.predicate = nil
+	return nil
 }

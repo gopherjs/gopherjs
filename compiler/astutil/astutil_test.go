@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"strconv"
 	"testing"
 
 	"github.com/gopherjs/gopherjs/internal/srctesting"
@@ -54,6 +55,47 @@ func TestImportsUnsafe(t *testing.T) {
 	}
 }
 
+func TestImportName(t *testing.T) {
+	tests := []struct {
+		desc string
+		src  string
+		want string
+	}{
+		{
+			desc: `named import`,
+			src:  `import foo "some/other/bar"`,
+			want: `foo`,
+		}, {
+			desc: `unnamed import`,
+			src:  `import "some/other/bar"`,
+			want: `bar`,
+		}, {
+			desc: `dot import`,
+			src:  `import . "some/other/bar"`,
+			want: ``,
+		}, {
+			desc: `blank import`,
+			src:  `import _ "some/other/bar"`,
+			want: ``,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			src := "package testpackage\n\n" + test.src
+			fset := token.NewFileSet()
+			file := srctesting.Parse(t, fset, src)
+			if len(file.Imports) != 1 {
+				t.Fatal(`expected one and only one import`)
+			}
+			importSpec := file.Imports[0]
+			got := ImportName(importSpec)
+			if got != test.want {
+				t.Fatalf(`ImportName() returned %q, want %q`, got, test.want)
+			}
+		})
+	}
+}
+
 func TestFuncKey(t *testing.T) {
 	tests := []struct {
 		desc string
@@ -96,54 +138,6 @@ func TestFuncKey(t *testing.T) {
 			fdecl := srctesting.ParseFuncDecl(t, src)
 			if got := FuncKey(fdecl); got != test.want {
 				t.Errorf(`Got %q, want %q`, got, test.want)
-			}
-		})
-	}
-}
-
-func TestPruneOriginal(t *testing.T) {
-	tests := []struct {
-		desc string
-		src  string
-		want bool
-	}{
-		{
-			desc: "no comment",
-			src: `package testpackage;
-			func foo() {}`,
-			want: false,
-		}, {
-			desc: "regular godoc",
-			src: `package testpackage;
-			// foo does something
-			func foo() {}`,
-			want: false,
-		}, {
-			desc: "only directive",
-			src: `package testpackage;
-			//gopherjs:prune-original
-			func foo() {}`,
-			want: true,
-		}, {
-			desc: "directive with explanation",
-			src: `package testpackage;
-			//gopherjs:prune-original because reasons
-			func foo() {}`,
-			want: true,
-		}, {
-			desc: "directive in godoc",
-			src: `package testpackage;
-			// foo does something
-			//gopherjs:prune-original
-			func foo() {}`,
-			want: true,
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.desc, func(t *testing.T) {
-			fdecl := srctesting.ParseFuncDecl(t, test.src)
-			if got := PruneOriginal(fdecl); got != test.want {
-				t.Errorf("PruneOriginal() returned %t, want %t", got, test.want)
 			}
 		})
 	}
@@ -557,6 +551,64 @@ func TestEndsWithReturn(t *testing.T) {
 			got := EndsWithReturn(fdecl.Body.List)
 			if got != test.want {
 				t.Errorf("EndsWithReturn() returned %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestSqueezeIdents(t *testing.T) {
+	tests := []struct {
+		desc   string
+		count  int
+		assign []int
+	}{
+		{
+			desc:   `no squeezing`,
+			count:  5,
+			assign: []int{0, 1, 2, 3, 4},
+		}, {
+			desc:   `missing front`,
+			count:  5,
+			assign: []int{3, 4},
+		}, {
+			desc:   `missing back`,
+			count:  5,
+			assign: []int{0, 1, 2},
+		}, {
+			desc:   `missing several`,
+			count:  10,
+			assign: []int{1, 2, 3, 6, 8},
+		}, {
+			desc:   `empty`,
+			count:  0,
+			assign: []int{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			input := make([]*ast.Ident, test.count)
+			for _, i := range test.assign {
+				input[i] = ast.NewIdent(strconv.Itoa(i))
+			}
+
+			result := Squeeze(input)
+			if len(result) != len(test.assign) {
+				t.Errorf("Squeeze() returned a slice %d long, want %d", len(result), len(test.assign))
+			}
+			for i, id := range input {
+				if i < len(result) {
+					if id == nil {
+						t.Errorf(`Squeeze() returned a nil in result at %d`, i)
+					} else {
+						value, err := strconv.Atoi(id.Name)
+						if err != nil || value != test.assign[i] {
+							t.Errorf(`Squeeze() returned %s at %d instead of %d`, id.Name, i, test.assign[i])
+						}
+					}
+				} else if id != nil {
+					t.Errorf(`Squeeze() didn't clear out tail of slice, want %d nil`, i)
+				}
 			}
 		})
 	}

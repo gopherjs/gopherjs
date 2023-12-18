@@ -125,9 +125,11 @@ type overrideInfo struct {
 	// If false the original code is removed.
 	keepOriginal bool
 
-	// pruneMethodBody indicates that the body of the methods should be
-	// removed because they contain something that is invalid to GopherJS.
-	pruneMethodBody bool
+	// purgeMethods indicates that this info is for a type and
+	// if a method has this type as a receiver should also be removed.
+	// If the method is defined in the overlays and therefore has its
+	// own overrides, this will be ignored.
+	purgeMethods bool
 }
 
 // parseAndAugment parses and returns all .go files of given pkg.
@@ -138,12 +140,19 @@ type overrideInfo struct {
 // The native packages are augmented by the contents of natives.FS in the following way.
 // The file names do not matter except the usual `_test` suffix. The files for
 // native overrides get added to the package (even if they have the same name
-// as an existing file from the standard library). For function identifiers that exist
-// in the original AND the overrides AND that include the following directive in their comment:
-// //gopherjs:keep-original, the original identifier in the AST gets prefixed by
-// `_gopherjs_original_`. For other identifiers that exist in the original AND the overrides,
-// the original identifier gets replaced by `_`. New identifiers that don't exist in original
-// package get added.
+// as an existing file from the standard library).
+//
+//   - For function identifiers that exist in the original and the overrides
+//     and have the directive `gopherjs:keep-original`, the original identifier
+//     in the AST gets prefixed by `_gopherjs_original_`.
+//   - For identifiers that exist in the original and the overrides and have
+//     the directive `gopherjs:purge`, both the original and override are
+//     removed. This is for completely removing something which is currently
+//     invalid for GopherJS. For any purged types any methods with that type as
+//     the receiver are also removed.
+//   - Otherwise for identifiers that exist in the original and the overrides,
+//     the original is removed.
+//   - New identifiers that don't exist in original package get added.
 func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]*ast.File, []JSFile, error) {
 	jsFiles, overlayFiles := parseOverlayFiles(xctx, pkg, isTest, fileSet)
 
@@ -155,12 +164,14 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 	overrides := make(map[string]overrideInfo)
 	for _, file := range overlayFiles {
 		augmentOverlayFile(file, overrides)
+		pruneImports(file)
 	}
 	delete(overrides, "init")
 
 	for _, file := range originalFiles {
 		augmentOriginalImports(pkg.ImportPath, file)
 		augmentOriginalFile(file, overrides)
+		pruneImports(file)
 	}
 
 	return append(overlayFiles, originalFiles...), jsFiles, nil
@@ -254,27 +265,37 @@ func parserOriginalFiles(pkg *PackageData, fileSet *token.FileSet) ([]*ast.File,
 // an overlay file AST to collect information such as compiler directives
 // and perform any initial augmentation needed to the overlay.
 func augmentOverlayFile(file *ast.File, overrides map[string]overrideInfo) {
-	for _, decl := range file.Decls {
+	for i, decl := range file.Decls {
+		purgeDecl := astutil.Purge(decl)
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			k := astutil.FuncKey(d)
 			overrides[k] = overrideInfo{
-				keepOriginal:    astutil.KeepOriginal(d),
-				pruneMethodBody: astutil.PruneOriginal(d),
+				keepOriginal: astutil.KeepOriginal(d),
 			}
 		case *ast.GenDecl:
-			for _, spec := range d.Specs {
+			for j, spec := range d.Specs {
+				purgeSpec := purgeDecl || astutil.Purge(spec)
 				switch s := spec.(type) {
 				case *ast.TypeSpec:
-					overrides[s.Name.Name] = overrideInfo{}
+					overrides[s.Name.Name] = overrideInfo{
+						purgeMethods: purgeSpec,
+					}
 				case *ast.ValueSpec:
 					for _, name := range s.Names {
 						overrides[name.Name] = overrideInfo{}
 					}
 				}
+				if purgeSpec {
+					d.Specs[j] = nil
+				}
 			}
 		}
+		if purgeDecl {
+			file.Decls[i] = nil
+		}
 	}
+	finalizeRemovals(file)
 }
 
 // augmentOriginalImports is the part of parseAndAugment that processes
@@ -298,45 +319,176 @@ func augmentOriginalImports(importPath string, file *ast.File) {
 // original file AST to augment the source code using the overrides from
 // the overlay files.
 func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
-	for _, decl := range file.Decls {
+	for i, decl := range file.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			if info, ok := overrides[astutil.FuncKey(d)]; ok {
-				if info.pruneMethodBody {
-					// Prune function bodies, since it may contain code invalid for
-					// GopherJS and pin unwanted imports.
-					d.Body = nil
-				}
 				if info.keepOriginal {
 					// Allow overridden function calls
 					// The standard library implementation of foo() becomes _gopherjs_original_foo()
 					d.Name.Name = "_gopherjs_original_" + d.Name.Name
 				} else {
-					// By setting the name to an underscore, the method will
-					// not be outputted. Doing this will keep the dependencies the same.
-					d.Name = ast.NewIdent("_")
+					file.Decls[i] = nil
+				}
+			} else if recvKey := astutil.FuncReceiverKey(d); len(recvKey) > 0 {
+				// check if the receiver has been purged, if so, remove the method too.
+				if info, ok := overrides[recvKey]; ok && info.purgeMethods {
+					file.Decls[i] = nil
 				}
 			}
 		case *ast.GenDecl:
-			for _, spec := range d.Specs {
+			for j, spec := range d.Specs {
 				switch s := spec.(type) {
 				case *ast.TypeSpec:
 					if _, ok := overrides[s.Name.Name]; ok {
-						s.Name = ast.NewIdent("_")
-						// Change to struct type with no type body and not type parameters.
-						s.Type = &ast.StructType{Struct: s.Pos(), Fields: &ast.FieldList{}}
-						s.TypeParams = nil
+						d.Specs[j] = nil
 					}
 				case *ast.ValueSpec:
-					for i, name := range s.Names {
-						if _, ok := overrides[name.Name]; ok {
-							s.Names[i] = ast.NewIdent("_")
+					if len(s.Names) == len(s.Values) {
+						// multi-value context
+						// e.g. var a, b = 2, foo[int]()
+						// A removal will also remove the value which may be from a
+						// function call. This allows us to remove unwanted statements.
+						// However, if that call has a side effect which still needs
+						// to be run, add the call into the overlay.
+						for k, name := range s.Names {
+							if _, ok := overrides[name.Name]; ok {
+								s.Names[k] = nil
+								s.Values[k] = nil
+							}
+						}
+					} else {
+						// single-value context
+						// e.g. var a, b = foo[int]()
+						// If a removal from the overlays makes all returned values unused,
+						// then remove the function call as well. This allows us to stop
+						// unwanted calls if needed. If that call has a side effect which
+						// still needs to be run, add the call into the overlay.
+						nameRemoved := false
+						for _, name := range s.Names {
+							if _, ok := overrides[name.Name]; ok {
+								nameRemoved = true
+								name.Name = `_`
+							}
+						}
+						if nameRemoved {
+							removeSpec := true
+							for _, name := range s.Names {
+								if name.Name != `_` {
+									removeSpec = false
+									break
+								}
+							}
+							if removeSpec {
+								d.Specs[j] = nil
+							}
 						}
 					}
 				}
 			}
 		}
 	}
+	finalizeRemovals(file)
+}
+
+// pruneImports will remove any unused imports from the file.
+//
+// This will not remove any dot (`.`) or blank (`_`) imports.
+// If the removal of code causes an import to be removed, the init's from that
+// import may not be run anymore. If we still need to run an init for an import
+// which is no longer used, add it to the overlay as a blank (`_`) import.
+func pruneImports(file *ast.File) {
+	unused := make(map[string]int, len(file.Imports))
+	for i, in := range file.Imports {
+		if name := astutil.ImportName(in); len(name) > 0 {
+			unused[name] = i
+		}
+	}
+
+	// Remove "unused import" for any import which is used.
+	ast.Walk(astutil.NewCallbackVisitor(func(n ast.Node) bool {
+		if sel, ok := n.(*ast.SelectorExpr); ok {
+			if id, ok := sel.X.(*ast.Ident); ok && id.Obj == nil {
+				delete(unused, id.Name)
+			}
+		}
+		return len(unused) > 0
+	}), file)
+	if len(unused) == 0 {
+		return
+	}
+
+	// Remove all unused import specifications
+	isUnusedSpec := map[*ast.ImportSpec]bool{}
+	for _, index := range unused {
+		isUnusedSpec[file.Imports[index]] = true
+	}
+	for _, decl := range file.Decls {
+		if d, ok := decl.(*ast.GenDecl); ok {
+			for i, spec := range d.Specs {
+				if other, ok := spec.(*ast.ImportSpec); ok && isUnusedSpec[other] {
+					d.Specs[i] = nil
+				}
+			}
+		}
+	}
+
+	// Remove the unused import copies in the file
+	for _, index := range unused {
+		file.Imports[index] = nil
+	}
+
+	finalizeRemovals(file)
+}
+
+// finalizeRemovals fully removes any declaration, specification, imports
+// that have been set to nil. This will also remove the file's top-level
+// comment group to remove any unassociated comments, including the comments
+// from removed code.
+func finalizeRemovals(file *ast.File) {
+	fileChanged := false
+	for i, decl := range file.Decls {
+		switch d := decl.(type) {
+		case nil:
+			fileChanged = true
+		case *ast.GenDecl:
+			declChanged := false
+			for j, spec := range d.Specs {
+				switch s := spec.(type) {
+				case nil:
+					declChanged = true
+				case *ast.ValueSpec:
+					specChanged := false
+					for _, name := range s.Names {
+						if name == nil {
+							specChanged = true
+							break
+						}
+					}
+					if specChanged {
+						s.Names = astutil.Squeeze(s.Names)
+						s.Values = astutil.Squeeze(s.Values)
+						if len(s.Names) == 0 {
+							declChanged = true
+							d.Specs[j] = nil
+						}
+					}
+				}
+			}
+			if declChanged {
+				d.Specs = astutil.Squeeze(d.Specs)
+				if len(d.Specs) == 0 {
+					fileChanged = true
+					file.Decls[i] = nil
+				}
+			}
+		}
+	}
+	if fileChanged {
+		file.Decls = astutil.Squeeze(file.Decls)
+	}
+	file.Imports = astutil.Squeeze(file.Imports)
+	file.Comments = nil
 }
 
 // Options controls build process behavior.

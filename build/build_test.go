@@ -259,6 +259,32 @@ func TestOverlayAugmentation(t *testing.T) {
 				`now`: {},
 			},
 		}, {
+			desc: `imports not confused by local variables`,
+			src: `import (
+					"cmp"
+					"time"
+				)
+			
+				//gopherjs:purge
+				func Sort[S ~[]E, E cmp.Ordered](x S) {}
+
+				func SecondsSince(start time.Time) int {
+					cmp := time.Now().Sub(start)
+					return int(cmp.Second())
+				}`,
+			want: `import (
+					"time"
+				)
+				
+				func SecondsSince(start time.Time) int {
+					cmp := time.Now().Sub(start)
+					return int(cmp.Second())
+				}`,
+			expInfo: map[string]overrideInfo{
+				`Sort`:         {},
+				`SecondsSince`: {},
+			},
+		}, {
 			desc: `purge generics`,
 			src: `import "cmp"
 			

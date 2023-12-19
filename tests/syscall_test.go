@@ -4,7 +4,6 @@
 package tests
 
 import (
-	"io/ioutil"
 	"os"
 	"syscall"
 	"testing"
@@ -20,7 +19,7 @@ func TestGetpid(t *testing.T) {
 }
 
 func TestOpen(t *testing.T) {
-	f, err := ioutil.TempFile("", "")
+	f, err := os.CreateTemp("", "")
 	if err != nil {
 		t.Fatalf("Failed to create a temp file: %s", err)
 	}

@@ -182,7 +182,7 @@ func reflectType(typ *js.Object) *rtype {
 			for i := range reflectFields {
 				f := fields.Index(i)
 				reflectFields[i] = structField{
-					name:   newName(internalStr(f.Index.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
+					name:   newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
 					typ:    reflectType(f.Get("typ")),
 					offset: uintptr(i),
 				}

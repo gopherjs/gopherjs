@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -457,8 +456,8 @@ func (t *test) goDirName() string {
 	return filepath.Join(t.dir, strings.Replace(t.gofile, ".go", ".dir", -1))
 }
 
-func goDirFiles(longdir string) (filter []os.FileInfo, err error) {
-	files, dirErr := ioutil.ReadDir(longdir)
+func goDirFiles(longdir string) (filter []os.DirEntry, err error) {
+	files, dirErr := os.ReadDir(longdir)
 	if dirErr != nil {
 		return nil, dirErr
 	}
@@ -481,7 +480,7 @@ func goDirPackages(longdir string) ([][]string, error) {
 	m := make(map[string]int)
 	for _, file := range files {
 		name := file.Name()
-		data, err := ioutil.ReadFile(filepath.Join(longdir, name))
+		data, err := os.ReadFile(filepath.Join(longdir, name))
 		if err != nil {
 			return nil, err
 		}
@@ -593,7 +592,7 @@ func (t *test) run() {
 		return
 	}
 
-	srcBytes, err := ioutil.ReadFile(t.goFileName())
+	srcBytes, err := os.ReadFile(t.goFileName())
 	if err != nil {
 		t.err = err
 		return
@@ -682,7 +681,7 @@ func (t *test) run() {
 	t.makeTempDir()
 	defer os.RemoveAll(t.tempDir)
 
-	err = ioutil.WriteFile(filepath.Join(t.tempDir, t.gofile), srcBytes, 0o644)
+	err = os.WriteFile(filepath.Join(t.tempDir, t.gofile), srcBytes, 0o644)
 	check(err)
 
 	// A few tests (of things like the environment) require these to be set.
@@ -854,7 +853,7 @@ func (t *test) run() {
 			return
 		}
 		tfile := filepath.Join(t.tempDir, "tmp__.go")
-		if err := ioutil.WriteFile(tfile, out, 0o666); err != nil {
+		if err := os.WriteFile(tfile, out, 0o666); err != nil {
 			t.err = fmt.Errorf("write tempfile:%s", err)
 			return
 		}
@@ -875,7 +874,7 @@ func (t *test) run() {
 			return
 		}
 		tfile := filepath.Join(t.tempDir, "tmp__.go")
-		err = ioutil.WriteFile(tfile, out, 0o666)
+		err = os.WriteFile(tfile, out, 0o666)
 		if err != nil {
 			t.err = fmt.Errorf("write tempfile:%s", err)
 			return
@@ -923,7 +922,7 @@ func (t *test) String() string {
 
 func (t *test) makeTempDir() {
 	var err error
-	t.tempDir, err = ioutil.TempDir("", "")
+	t.tempDir, err = os.MkdirTemp("", "")
 	check(err)
 }
 
@@ -931,7 +930,7 @@ func (t *test) expectedOutput() string {
 	filename := filepath.Join(t.dir, t.gofile)
 	filename = filename[:len(filename)-len(".go")]
 	filename += ".out"
-	b, _ := ioutil.ReadFile(filename)
+	b, _ := os.ReadFile(filename)
 	return string(b)
 }
 
@@ -1023,7 +1022,7 @@ func (t *test) errorCheck(outStr string, fullshort ...string) (err error) {
 
 func (t *test) updateErrors(out string, file string) {
 	// Read in source file.
-	src, err := ioutil.ReadFile(file)
+	src, err := os.ReadFile(file)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
@@ -1078,7 +1077,7 @@ func (t *test) updateErrors(out string, file string) {
 		}
 	}
 	// Write new file.
-	err = ioutil.WriteFile(file, []byte(strings.Join(lines, "\n")), 0o640)
+	err = os.WriteFile(file, []byte(strings.Join(lines, "\n")), 0o640)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
@@ -1135,7 +1134,7 @@ var (
 func (t *test) wantedErrors(file, short string) (errs []wantedError) {
 	cache := make(map[string]*regexp.Regexp)
 
-	src, _ := ioutil.ReadFile(file)
+	src, _ := os.ReadFile(file)
 	for i, line := range strings.Split(string(src), "\n") {
 		lineNum := i + 1
 		if strings.Contains(line, "////") {

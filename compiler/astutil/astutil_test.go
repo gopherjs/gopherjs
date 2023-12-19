@@ -59,24 +59,41 @@ func TestFuncKey(t *testing.T) {
 		want string
 	}{
 		{
-			desc: "top-level function",
-			src:  `package testpackage; func foo() {}`,
-			want: "foo",
+			desc: `top-level function`,
+			src:  `func foo() {}`,
+			want: `foo`,
 		}, {
-			desc: "top-level exported function",
-			src:  `package testpackage; func Foo() {}`,
-			want: "Foo",
+			desc: `top-level exported function`,
+			src:  `func Foo() {}`,
+			want: `Foo`,
 		}, {
-			desc: "method",
-			src:  `package testpackage; func (_ myType) bar() {}`,
-			want: "myType.bar",
+			desc: `method on reference`,
+			src:  `func (_ myType) bar() {}`,
+			want: `myType.bar`,
+		}, {
+			desc: `method on pointer`,
+			src:  ` func (_ *myType) bar() {}`,
+			want: `myType.bar`,
+		}, {
+			desc: `method on generic reference`,
+			src:  ` func (_ myType[T]) bar() {}`,
+			want: `myType.bar`,
+		}, {
+			desc: `method on generic pointer`,
+			src:  ` func (_ *myType[T]) bar() {}`,
+			want: `myType.bar`,
+		}, {
+			desc: `method on struct with multiple generics`,
+			src:  ` func (_ *myType[T1, T2, T3, T4]) bar() {}`,
+			want: `myType.bar`,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			fdecl := srctesting.ParseFuncDecl(t, test.src)
+			src := `package testpackage; ` + test.src
+			fdecl := srctesting.ParseFuncDecl(t, src)
 			if got := FuncKey(fdecl); got != test.want {
-				t.Errorf("Got %q, want %q", got, test.want)
+				t.Errorf(`Got %q, want %q`, got, test.want)
 			}
 		})
 	}

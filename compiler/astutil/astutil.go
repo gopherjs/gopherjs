@@ -62,14 +62,37 @@ func ImportsUnsafe(file *ast.File) bool {
 // FuncKey returns a string, which uniquely identifies a top-level function or
 // method in a package.
 func FuncKey(d *ast.FuncDecl) string {
-	if d.Recv == nil || len(d.Recv.List) == 0 {
-		return d.Name.Name
+	if recvKey := FuncReceiverKey(d); len(recvKey) > 0 {
+		return recvKey + "." + d.Name.Name
+	}
+	return d.Name.Name
+}
+
+// FuncReceiverKey returns a string that uniquely identifies the receiver
+// struct of the function or an empty string if there is no receiver.
+// This name will match the name of the struct in the struct's type spec.
+func FuncReceiverKey(d *ast.FuncDecl) string {
+	if d == nil || d.Recv == nil || len(d.Recv.List) == 0 {
+		return ``
 	}
 	recv := d.Recv.List[0].Type
-	if star, ok := recv.(*ast.StarExpr); ok {
-		recv = star.X
+	for {
+		switch r := recv.(type) {
+		case *ast.IndexListExpr:
+			recv = r.X
+			continue
+		case *ast.IndexExpr:
+			recv = r.X
+			continue
+		case *ast.StarExpr:
+			recv = r.X
+			continue
+		case *ast.Ident:
+			return r.Name
+		default:
+			panic(fmt.Errorf(`unexpected type %T in receiver of function: %v`, recv, d))
+		}
 	}
-	return recv.(*ast.Ident).Name + "." + d.Name.Name
 }
 
 // PruneOriginal returns true if gopherjs:prune-original directive is present

@@ -1,7 +1,6 @@
 package astutil
 
 import (
-	"fmt"
 	"go/ast"
 	"go/token"
 	"testing"
@@ -211,6 +210,16 @@ func TestHasDirectiveOnDecl(t *testing.T) {
 				type Foo int`,
 			want: true,
 		}, {
+			desc: `directive on specification, not on declaration`,
+			src: `package testpackage;
+				type (
+					Foo int
+
+					//gopherjs:do-stuff
+					Bar struct{}
+				)`,
+			want: false,
+		}, {
 			desc: `no directive on const declaration`,
 			src: `package testpackage;
 				const foo = 42`,
@@ -266,6 +275,12 @@ func TestHasDirectiveOnSpec(t *testing.T) {
 		{
 			desc: `no directive on type specification`,
 			src: `package testpackage;
+				type Foo int`,
+			want: false,
+		}, {
+			desc: `directive on declaration, not on specification`,
+			src: `package testpackage;
+				//gopherjs:do-stuff
 				type Foo int`,
 			want: false,
 		}, {
@@ -452,42 +467,6 @@ func TestHasDirectiveOnField(t *testing.T) {
 			}
 			if got := hasDirective(field, action); got != test.want {
 				t.Errorf(`hasDirective(%T, %q) returned %t, want %t`, field, action, got, test.want)
-			}
-		})
-	}
-}
-
-func TestHasDirectiveBadCase(t *testing.T) {
-	tests := []struct {
-		desc string
-		node any
-		want string
-	}{
-		{
-			desc: `untyped nil node`,
-			node: nil,
-			want: `unexpected node type to get doc from: <nil>`,
-		}, {
-			desc: `unexpected node type`,
-			node: &ast.ArrayType{},
-			want: `unexpected node type to get doc from: *ast.ArrayType`,
-		}, {
-			desc: `nil expected node type`,
-			node: (*ast.FuncDecl)(nil),
-			want: `<nil>`, // no panic
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.desc, func(t *testing.T) {
-			const action = `do-stuff`
-			var got string
-			func() {
-				defer func() { got = fmt.Sprint(recover()) }()
-				hasDirective(test.node, action)
-			}()
-			if got != test.want {
-				t.Errorf(`hasDirective(%T, %q) returned %s, want %s`, test.node, action, got, test.want)
 			}
 		})
 	}

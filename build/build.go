@@ -406,14 +406,14 @@ func pruneImports(file *ast.File) {
 	}
 
 	// Remove "unused import" for any import which is used.
-	ast.Walk(astutil.NewCallbackVisitor(func(n ast.Node) bool {
+	ast.Inspect(file, func(n ast.Node) bool {
 		if sel, ok := n.(*ast.SelectorExpr); ok {
 			if id, ok := sel.X.(*ast.Ident); ok && id.Obj == nil {
 				delete(unused, id.Name)
 			}
 		}
 		return len(unused) > 0
-	}), file)
+	})
 	if len(unused) == 0 {
 		return
 	}

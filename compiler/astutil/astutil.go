@@ -251,19 +251,3 @@ func Squeeze[E ast.Node, S ~[]E](s S) S {
 	}
 	return s[:dest]
 }
-
-type CallbackVisitor struct {
-	predicate func(node ast.Node) bool
-}
-
-func NewCallbackVisitor(predicate func(node ast.Node) bool) *CallbackVisitor {
-	return &CallbackVisitor{predicate: predicate}
-}
-
-func (v *CallbackVisitor) Visit(node ast.Node) ast.Visitor {
-	if v.predicate != nil && v.predicate(node) {
-		return v
-	}
-	v.predicate = nil
-	return nil
-}

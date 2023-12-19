@@ -1,10 +1,8 @@
 package build
 
 import (
-	"bytes"
 	"fmt"
 	gobuild "go/build"
-	"go/printer"
 	"go/token"
 	"strconv"
 	"testing"
@@ -390,16 +388,11 @@ func TestOverlayAugmentation(t *testing.T) {
 			augmentOverlayFile(fileSrc, overrides)
 			pruneImports(fileSrc)
 
-			buf := &bytes.Buffer{}
-			_ = printer.Fprint(buf, fsetSrc, fileSrc)
-			got := buf.String()
+			got := srctesting.Format(t, fsetSrc, fileSrc)
 
 			fsetWant := token.NewFileSet()
 			fileWant := srctesting.Parse(t, fsetWant, pkgName+test.want)
-
-			buf.Reset()
-			_ = printer.Fprint(buf, fsetWant, fileWant)
-			want := buf.String()
+			want := srctesting.Format(t, fsetWant, fileWant)
 
 			if got != want {
 				t.Errorf("augmentOverlayFile and pruneImports got unexpected code:\n"+
@@ -536,7 +529,7 @@ func TestOriginalAugmentation(t *testing.T) {
 
 				func NewFoo(bar int) *Foo { return &Foo{bar: bar} }`,
 			// NewFoo is not removed automatically since
-			// only functions with Foo as a receiver is removed.
+			// only functions with Foo as a receiver are removed.
 			want: `func NewFoo(bar int) *Foo { return &Foo{bar: bar} }`,
 		}, {
 			desc: `remove generics`,
@@ -591,16 +584,11 @@ func TestOriginalAugmentation(t *testing.T) {
 			augmentOriginalFile(fileSrc, test.info)
 			pruneImports(fileSrc)
 
-			buf := &bytes.Buffer{}
-			_ = printer.Fprint(buf, fsetSrc, fileSrc)
-			got := buf.String()
+			got := srctesting.Format(t, fsetSrc, fileSrc)
 
 			fsetWant := token.NewFileSet()
 			fileWant := srctesting.Parse(t, fsetWant, pkgName+test.want)
-
-			buf.Reset()
-			_ = printer.Fprint(buf, fsetWant, fileWant)
-			want := buf.String()
+			want := srctesting.Format(t, fsetWant, fileWant)
 
 			if got != want {
 				t.Errorf("augmentOriginalImports, augmentOriginalFile, and pruneImports got unexpected code:\n"+

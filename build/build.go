@@ -165,6 +165,9 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 	for _, file := range overlayFiles {
 		augmentOverlayFile(file, overrides)
 		pruneImports(file)
+		if err := preventGenerics(fileSet, file); err != nil {
+			return nil, nil, err
+		}
 	}
 	delete(overrides, "init")
 
@@ -172,6 +175,9 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 		augmentOriginalImports(pkg.ImportPath, file)
 		augmentOriginalFile(file, overrides)
 		pruneImports(file)
+		if err := preventGenerics(fileSet, file); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	return append(overlayFiles, originalFiles...), jsFiles, nil
@@ -489,6 +495,44 @@ func finalizeRemovals(file *ast.File) {
 	}
 	file.Imports = astutil.Squeeze(file.Imports)
 	file.Comments = nil
+}
+
+// preventGenerics checks that no generic functions or types are in the given file.
+// As part of go1.19 we are removing the generics from the runtime.
+func preventGenerics(fileSet *token.FileSet, file *ast.File) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf(`%v`, r)
+		}
+	}()
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		switch nt := n.(type) {
+		case *ast.FuncDecl:
+			if nt.Recv != nil && len(nt.Recv.List) > 0 {
+				recv := nt.Recv.List[0].Type
+				if star, ok := recv.(*ast.StarExpr); ok {
+					recv = star.X
+				}
+				switch recv.(type) {
+				case *ast.IndexListExpr, *ast.IndexExpr:
+					panic(fmt.Errorf(`method for generic type found at %s`, fileSet.Position(nt.Pos()).String()))
+				}
+			}
+			if nt.Type.TypeParams != nil && len(nt.Type.TypeParams.List) > 0 {
+				panic(fmt.Errorf(`generics function found at %s`, fileSet.Position(nt.Pos()).String()))
+			}
+
+			//case *ast.ValueSpec:
+			//	if nt.Type
+
+			//case *ast.TypeSpec:
+
+		}
+		return true
+	})
+
+	return nil
 }
 
 // Options controls build process behavior.

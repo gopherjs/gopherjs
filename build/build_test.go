@@ -597,3 +597,149 @@ func TestOriginalAugmentation(t *testing.T) {
 		})
 	}
 }
+
+func TestPreventGenerics(t *testing.T) {
+	tests := []struct {
+		desc string
+		src  string
+		want string
+	}{
+		{
+			desc: `non-generic function`,
+			src:  `func Foo(i int) int {}`,
+			want: `no error`,
+		}, {
+			desc: `method on non-generic type`,
+			src:  `func (b Bar) Foo(i int) int {}`,
+			want: `no error`,
+		}, {
+			desc: `method on non-generic type pointer`,
+			src:  `func (b *Bar) Foo(i int) int {}`,
+			want: `no error`,
+		}, {
+			desc: `variable type function`,
+			src:  `func Foo[any T](v T) T {}`,
+			want: `generics function found at test.go:3:1`,
+		}, {
+			desc: `method with single variable type receiver`,
+			src:  `func (b Bar[T]) Foo(v T) T {}`,
+			want: `method for generic type found at test.go:3:1`,
+		}, {
+			desc: `method with single variable type pointer receiver`,
+			src:  `func (b *Bar[T]) Foo(v T) T {}`,
+			want: `method for generic type found at test.go:3:1`,
+		}, {
+			desc: `method with multiple variable type receiver`,
+			src:  `func (b Bar[TOut, TIn]) Foo(v TIn) TOut {}`,
+			want: `method for generic type found at test.go:3:1`,
+		}, {
+			desc: `function with variable type parameter`,
+			src: `import "atomic"
+				func Foo(p atomic.Pointer[int]) int {}`,
+			want: `TODO!!`,
+		}, {
+			desc: `function with variable type return`,
+			src: `import "atomic"
+				func Foo(i int) atomic.Pointer[int] {}`,
+			want: `TODO!!`,
+		}, {
+			desc: `function with statement creating a generic-ish type`,
+			src: `import "atomic"
+				func Foo(i int) int {
+					p := map[int]string{}
+				}`,
+			want: `no error`,
+		}, {
+			desc: `function with statement creating a variable type`,
+			src: `import "atomic"
+				func Foo(i int) int {
+					p := atomic.Pointer[int]{}
+				}`,
+			want: `TODO!!`,
+		}, {
+			desc: `function with statement making a variable type`,
+			src: `import "atomic"
+				func Foo(i int) int {
+					p := make([]atomic.Pointer[int]{}, 3)
+				}`,
+			want: `TODO!!`,
+		}, {
+			desc: `function with statement calling a variable type function`,
+			src: `import "atomic"
+				func Foo(i int) int {
+					return bar[int](i)
+				}`,
+			want: `TODO!!`,
+		},
+		// Determine how to detect a call into a variable type function where
+		// the types are automatically determined.
+		{
+			desc: `value with non-generic type`,
+			src:  `var foo int`,
+			want: `no error`,
+		}, {
+			desc: `value with generic type`,
+			src: `import "atomic"
+				var foo atomic.Pointer[int]`,
+			want: `TODO!!`,
+		}, {
+			desc: `value with non-generic initial value`,
+			src:  `var foo = 42`,
+			want: `no error`,
+		}, {
+			desc: `value with generic initial value`,
+			src:  `var foo = atomic.Pointer[int]{}`,
+			want: `TODO!!`,
+		}, {
+			desc: `non-generic type`,
+			src:  `type foo int`,
+			want: `no error`,
+		}, {
+			desc: `type with non-generic variable type`,
+			src:  `type foo atomic.Pointer[int]`,
+			want: `TODO!!`,
+		}, {
+			desc: `struct with variable type`,
+			src:  `type foo[T any] struct { value T }`,
+			want: `TODO!!`,
+		}, {
+			desc: `struct with non-generic variable type embedded field`,
+			src:  `type foo struct { atomic.Pointer[int] }`,
+			want: `TODO!!`,
+		}, {
+			desc: `struct with non-generic variable type field`,
+			src:  `type foo struct { p *atomic.Pointer[int] }`,
+			want: `TODO!!`,
+		}, {
+			desc: `interface with non-generic variable type embedded field`,
+			src:  `type foo interface { Bar[int] }`,
+			want: `TODO!!`,
+		}, {
+			desc: `interface with non-generic variable type in method`,
+			src:  `type foo interface { Bar(p atomic.Pointer[int]) int }`,
+			want: `TODO!!`,
+		}, {
+			desc: `interface with variable type`,
+			src:  `type foo[T any] interface { Bar(v T) T }`,
+			want: `TODO!!`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			pkgName := "package testpackage\n\n"
+			fset := token.NewFileSet()
+			file := srctesting.Parse(t, fset, pkgName+test.src)
+
+			got := `no error`
+			if err := preventGenerics(fset, file); err != nil {
+				got = err.Error()
+			}
+
+			if got != test.want {
+				t.Errorf("preventGenerics got unexpected result:\n"+
+					"returned: %q\nwant:     %q", got, test.want)
+				//ast.Print(fset, file)
+			}
+		})
+	}
+}

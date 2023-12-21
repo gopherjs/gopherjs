@@ -5,7 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"strings"
+	"regexp"
 )
 
 func RemoveParens(e ast.Expr) ast.Expr {
@@ -105,15 +105,7 @@ func FuncReceiverKey(d *ast.FuncDecl) string {
 // such as code expecting ints to be 64-bit. It should be used with caution
 // since it may create unused imports in the original source file.
 func PruneOriginal(d *ast.FuncDecl) bool {
-	if d.Doc == nil {
-		return false
-	}
-	for _, c := range d.Doc.List {
-		if strings.HasPrefix(c.Text, "//gopherjs:prune-original") {
-			return true
-		}
-	}
-	return false
+	return hasDirective(d, `prune-original`)
 }
 
 // KeepOriginal returns true if gopherjs:keep-original directive is present
@@ -125,15 +117,38 @@ func PruneOriginal(d *ast.FuncDecl) bool {
 // function in the original called `foo`, it will be accessible by the name
 // `_gopherjs_original_foo`.
 func KeepOriginal(d *ast.FuncDecl) bool {
-	if d.Doc == nil {
-		return false
-	}
-	for _, c := range d.Doc.List {
-		if strings.HasPrefix(c.Text, "//gopherjs:keep-original") {
-			return true
+	return hasDirective(d, `keep-original`)
+}
+
+// directiveMatcher is a regex which matches a GopherJS directive
+// and finds the directive action.
+var directiveMatcher = regexp.MustCompile(`^\/(?:\/|\*)gopherjs:([\w-]+)`)
+
+// hasDirective returns true if the associated documentation
+// or line comments for the given node have the given directive action.
+//
+// All GopherJS-specific directives must start with `//gopherjs:` or
+// `/*gopherjs:` and followed by an action without any whitespace. The action
+// must be one or more letter, decimal, underscore, or hyphen.
+//
+// see https://pkg.go.dev/cmd/compile#hdr-Compiler_Directives
+func hasDirective(node ast.Node, directiveAction string) bool {
+	foundDirective := false
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch a := n.(type) {
+		case *ast.Comment:
+			m := directiveMatcher.FindStringSubmatch(a.Text)
+			if len(m) == 2 && m[1] == directiveAction {
+				foundDirective = true
+			}
+			return false
+		case *ast.CommentGroup:
+			return !foundDirective
+		default:
+			return n == node
 		}
-	}
-	return false
+	})
+	return foundDirective
 }
 
 // FindLoopStmt tries to find the loop statement among the AST nodes in the

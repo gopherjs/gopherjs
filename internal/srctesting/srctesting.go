@@ -54,16 +54,44 @@ func Check(t *testing.T, fset *token.FileSet, files ...*ast.File) (*types.Info, 
 // Fails the test if there isn't exactly one function declared in the source.
 func ParseFuncDecl(t *testing.T, src string) *ast.FuncDecl {
 	t.Helper()
+	decl := ParseDecl(t, src)
+	fdecl, ok := decl.(*ast.FuncDecl)
+	if !ok {
+		t.Fatalf("Got %T decl, expected *ast.FuncDecl", decl)
+	}
+	return fdecl
+}
+
+// ParseDecl parses source with a single declaration and
+// returns that declaration AST.
+//
+// Fails the test if there isn't exactly one declaration in the source.
+func ParseDecl(t *testing.T, src string) ast.Decl {
+	t.Helper()
 	fset := token.NewFileSet()
 	file := Parse(t, fset, src)
 	if l := len(file.Decls); l != 1 {
-		t.Fatalf("Got %d decls in the sources, expected exactly 1", l)
+		t.Fatalf(`Got %d decls in the sources, expected exactly 1`, l)
 	}
-	fdecl, ok := file.Decls[0].(*ast.FuncDecl)
+	return file.Decls[0]
+}
+
+// ParseSpec parses source with a single declaration containing
+// a single specification and returns that specification AST.
+//
+// Fails the test if there isn't exactly one declaration and
+// one specification in the source.
+func ParseSpec(t *testing.T, src string) ast.Spec {
+	t.Helper()
+	decl := ParseDecl(t, src)
+	gdecl, ok := decl.(*ast.GenDecl)
 	if !ok {
-		t.Fatalf("Got %T decl, expected *ast.FuncDecl", file.Decls[0])
+		t.Fatalf("Got %T decl, expected *ast.GenDecl", decl)
 	}
-	return fdecl
+	if l := len(gdecl.Specs); l != 1 {
+		t.Fatalf(`Got %d spec in the sources, expected exactly 1`, l)
+	}
+	return gdecl.Specs[0]
 }
 
 // Format AST node into a string.

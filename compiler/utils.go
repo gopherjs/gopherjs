@@ -19,8 +19,17 @@ import (
 	"unicode"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
+
+// root returns the topmost function context corresponding to the package scope.
+func (fc *funcContext) root() *funcContext {
+	if fc.parent == nil {
+		return fc
+	}
+	return fc.parent.root()
+}
 
 func (fc *funcContext) Write(b []byte) (int, error) {
 	fc.writePos()
@@ -283,7 +292,7 @@ func (fc *funcContext) newIdent(name string, t types.Type) *ast.Ident {
 	fc.setType(ident, t)
 	obj := types.NewVar(0, fc.pkgCtx.Pkg, name, t)
 	fc.pkgCtx.Uses[ident] = obj
-	fc.pkgCtx.objectNames[obj] = name
+	fc.objectNames[obj] = name
 	return ident
 }
 
@@ -322,6 +331,23 @@ func isPkgLevel(o types.Object) bool {
 	return o.Parent() != nil && o.Parent().Parent() == types.Universe
 }
 
+// assignedObjectName checks if the object has been previously assigned a name
+// in this or one of the parent contexts. If not, found will be false false.
+func (fc *funcContext) assignedObjectName(o types.Object) (name string, found bool) {
+	if fc == nil {
+		return "", false
+	}
+	if name, found := fc.parent.assignedObjectName(o); found {
+		return name, true
+	}
+
+	name, found = fc.objectNames[o]
+	return name, found
+}
+
+// objectName returns a JS expression that refers to the given object. If the
+// object hasn't been previously assigned a JS variable name, it will be
+// allocated as needed.
 func (fc *funcContext) objectName(o types.Object) string {
 	if isPkgLevel(o) {
 		fc.pkgCtx.dependencies[o] = true
@@ -331,16 +357,27 @@ func (fc *funcContext) objectName(o types.Object) string {
 		}
 	}
 
-	name, ok := fc.pkgCtx.objectNames[o]
+	name, ok := fc.assignedObjectName(o)
 	if !ok {
 		name = fc.newVariableWithLevel(o.Name(), isPkgLevel(o))
-		fc.pkgCtx.objectNames[o] = name
+		fc.objectNames[o] = name
 	}
 
 	if v, ok := o.(*types.Var); ok && fc.pkgCtx.escapingVars[v] {
 		return name + "[0]"
 	}
 	return name
+}
+
+// instName returns a JS expression that refers to the provided instance of a
+// function or type. Non-generic objects may be represented as an instance with
+// zero type arguments.
+func (fc *funcContext) instName(inst typeparams.Instance) string {
+	objName := fc.objectName(inst.Object)
+	if len(inst.TArgs) == 0 {
+		return objName
+	}
+	return fmt.Sprintf("%s[%q]", objName, inst.Key())
 }
 
 func (fc *funcContext) varPtrName(o *types.Var) string {
@@ -381,6 +418,17 @@ func (fc *funcContext) typeName(ty types.Type) string {
 	}
 	fc.pkgCtx.dependencies[anonType] = true
 	return anonType.Name()
+}
+
+// instanceOf constructs an instance description of the object the ident is
+// referring to. For non-generic objects, it will return a trivial instance with
+// no type arguments.
+func (fc *funcContext) instanceOf(ident *ast.Ident) typeparams.Instance {
+	inst := typeparams.Instance{Object: fc.pkgCtx.ObjectOf(ident)}
+	if i, ok := fc.pkgCtx.Instances[ident]; ok {
+		inst.TArgs = fc.typeResolver.SubstituteAll(i.TypeArgs)
+	}
+	return inst
 }
 
 func (fc *funcContext) externalize(s string, t types.Type) string {

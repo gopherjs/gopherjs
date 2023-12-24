@@ -24,7 +24,7 @@ func instanceOpts() cmp.Options {
 	}
 }
 
-func TestInstanceID(t *testing.T) {
+func TestInstanceKeyAndID(t *testing.T) {
 	const src = `package testcase
 
 	type Ints []int
@@ -45,55 +45,63 @@ func TestInstanceID(t *testing.T) {
 	tests := []struct {
 		descr    string
 		instance Instance
-		want     string
+		wantID   string
+		wantKey  string
 	}{{
 		descr: "exported type",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("Typ"),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		want: "test.Typ<int, string>",
+		wantID:  "test.Typ<int, string>",
+		wantKey: "int, string",
 	}, {
 		descr: "exported method",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("Typ").Type().(*types.Named).Method(0),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		want: "test.Typ.Method<int, string>",
+		wantID:  "test.Typ.Method<int, string>",
+		wantKey: "int, string",
 	}, {
 		descr: "exported function",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("Fun"),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		want: "test.Fun<int, string>",
+		wantID:  "test.Fun<int, string>",
+		wantKey: "int, string",
 	}, {
 		descr: "unexported type",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("typ"),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		want: "test.typ<int, string>",
+		wantID:  "test.typ<int, string>",
+		wantKey: "int, string",
 	}, {
 		descr: "unexported method",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("typ").Type().(*types.Named).Method(0),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		want: "test.typ.method<int, string>",
+		wantID:  "test.typ.method<int, string>",
+		wantKey: "int, string",
 	}, {
 		descr: "unexported function",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("fun"),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		want: "test.fun<int, string>",
+		wantID:  "test.fun<int, string>",
+		wantKey: "int, string",
 	}, {
 		descr: "no type params",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("Ints"),
 		},
-		want: "test.Ints",
+		wantID:  "test.Ints",
+		wantKey: "",
 	}, {
 		descr: "complex parameter type",
 		instance: Instance{
@@ -106,14 +114,19 @@ func TestInstanceID(t *testing.T) {
 				}, true)),
 			},
 		},
-		want: "test.fun<[]int, test.typ[int, string]>",
+		wantID:  "test.fun<[]int, test.typ[int, string]>",
+		wantKey: "[]int, test.typ[int, string]",
 	}}
 
 	for _, test := range tests {
 		t.Run(test.descr, func(t *testing.T) {
 			got := test.instance.ID()
-			if got != test.want {
-				t.Errorf("Got: instance ID %q. Want: %q.", got, test.want)
+			if got != test.wantID {
+				t.Errorf("Got: instance ID %q. Want: %q.", got, test.wantID)
+			}
+			got = test.instance.Key()
+			if got != test.wantKey {
+				t.Errorf("Got: instance key %q. Want: %q.", got, test.wantKey)
 			}
 		})
 	}

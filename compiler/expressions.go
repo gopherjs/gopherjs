@@ -13,6 +13,7 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
@@ -203,11 +204,16 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
-		_, fun := translateFunction(e.Type, nil, e.Body, fc, exprType.(*types.Signature), fc.pkgCtx.FuncLitInfos[e], "")
+		_, fun := translateFunction(e.Type, nil, e.Body, fc, exprType.(*types.Signature), fc.pkgCtx.FuncLitInfos[e], "", typeparams.Instance{})
 		if len(fc.pkgCtx.escapingVars) != 0 {
 			names := make([]string, 0, len(fc.pkgCtx.escapingVars))
 			for obj := range fc.pkgCtx.escapingVars {
-				names = append(names, fc.pkgCtx.objectNames[obj])
+				name, ok := fc.assignedObjectName(obj)
+				if !ok {
+					// This should never happen.
+					panic(fmt.Errorf("escaping variable %s hasn't been assigned a JS name", obj))
+				}
+				names = append(names, name)
 			}
 			sort.Strings(names)
 			list := strings.Join(names, ", ")
@@ -240,7 +246,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			case *ast.Ident:
 				obj := fc.pkgCtx.Uses[x].(*types.Var)
 				if fc.pkgCtx.escapingVars[obj] {
-					return fc.formatExpr("(%1s.$ptr || (%1s.$ptr = new %2s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %1s)))", fc.pkgCtx.objectNames[obj], fc.typeName(exprType))
+					return fc.formatExpr("(%1s.$ptr || (%1s.$ptr = new %2s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %1s)))", fc.objectName(obj), fc.typeName(exprType))
 				}
 				return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", elemType), false))
 			case *ast.SelectorExpr:
@@ -520,10 +526,18 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			)
 		case *types.Basic:
 			return fc.formatExpr("%e.charCodeAt(%f)", e.X, e.Index)
+		case *types.Signature:
+			return fc.formatExpr("%s", fc.instName(fc.instanceOf(e.X.(*ast.Ident))))
 		default:
 			panic(fmt.Sprintf("Unhandled IndexExpr: %T\n", t))
 		}
-
+	case *ast.IndexListExpr:
+		switch t := fc.pkgCtx.TypeOf(e.X).Underlying().(type) {
+		case *types.Signature:
+			return fc.formatExpr("%s", fc.instName(fc.instanceOf(e.X.(*ast.Ident))))
+		default:
+			panic(fmt.Errorf("unhandled IndexListExpr: %T", t))
+		}
 	case *ast.SliceExpr:
 		if b, isBasic := fc.pkgCtx.TypeOf(e.X).Underlying().(*types.Basic); isBasic && isString(b) {
 			switch {
@@ -777,7 +791,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Var, *types.Const:
 			return fc.formatExpr("%s", fc.objectName(o))
 		case *types.Func:
-			return fc.formatExpr("%s", fc.objectName(o))
+			return fc.formatExpr("%s", fc.instName(fc.instanceOf(e)))
 		case *types.TypeName:
 			return fc.formatExpr("%s", fc.typeName(o.Type()))
 		case *types.Nil:

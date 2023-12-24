@@ -166,6 +166,9 @@ type Collector struct {
 
 // Scan package files for generic instances.
 func (c *Collector) Scan(files ...*ast.File) {
+	if c.Info.Instances == nil || c.Info.Defs == nil {
+		panic(fmt.Errorf("types.Info must have Instances and Defs populated"))
+	}
 	objMap := map[types.Object]ast.Node{}
 
 	// Collect instances of generic objects in non-generic code in the package and

@@ -1,6 +1,7 @@
 package typeparams
 
 import (
+	"fmt"
 	"go/types"
 	"strings"
 
@@ -20,21 +21,33 @@ type Instance struct {
 // ID returns a string that uniquely identifies an instantiation of the generic
 // object with the provided type arguments.
 func (i *Instance) ID() string {
-	buf := strings.Builder{}
-	buf.WriteString(symbol.New(i.Object).String())
+	sym := symbol.New(i.Object).String()
 	if len(i.TArgs) == 0 {
-		return buf.String()
+		return sym
 	}
 
-	buf.WriteRune('<')
+	return fmt.Sprintf("%s<%s>", sym, i.Key())
+}
+
+// Key returns a string that uniquely identifies this instance among other
+// instances of this particular object.
+//
+// Although in practice it is derived from type arguments, no particular
+// guarantees are made about format of content of the string.
+func (i *Instance) Key() string {
+	buf := strings.Builder{}
 	for i, tArg := range i.TArgs {
 		if i != 0 {
 			buf.WriteString(", ")
 		}
 		buf.WriteString(types.TypeString(tArg, nil))
 	}
-	buf.WriteRune('>')
 	return buf.String()
+}
+
+// IsTrivial returns true if this is an instance of a non-generic object.
+func (i *Instance) IsTrivial() bool {
+	return len(i.TArgs) == 0
 }
 
 // InstanceSet allows collecting and processing unique Instances.

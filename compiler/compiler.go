@@ -116,6 +116,10 @@ type Decl struct {
 	LinkingName symbol.Name
 	// A list of package-level JavaScript variable names this symbol needs to declare.
 	Vars []string
+	// A JS expression by which the object represented by this decl may be
+	// referenced within the package context. Empty if the decl represents no such
+	// object.
+	RefExpr string
 	// NamedRecvType is method named recv declare.
 	NamedRecvType string
 	// JavaScript code that declares basic information about a symbol. For a type
@@ -327,7 +331,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			if recv, method, ok := d.LinkingName.IsMethod(); ok {
 				code = fmt.Sprintf("\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,%t);\n", d.LinkingName.String(), d.NamedRecvType, method, strings.HasPrefix(recv, "*"))
 			} else {
-				code = fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.Vars[0])
+				code = fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.RefExpr)
 			}
 			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
 				return err
@@ -358,7 +362,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			if !found {
 				continue // The symbol is not affected by a go:linkname directive.
 			}
-			lines = append(lines, fmt.Sprintf("\t\t%s = $linknames[%q];\n", d.Vars[0], impl.String()))
+			lines = append(lines, fmt.Sprintf("\t\t%s = $linknames[%q];\n", d.RefExpr, impl.String()))
 		}
 		if len(lines) > 0 {
 			code := fmt.Sprintf("\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, ""))

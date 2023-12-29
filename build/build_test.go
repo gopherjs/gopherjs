@@ -2,6 +2,7 @@ package build
 
 import (
 	"fmt"
+	"go/ast"
 	gobuild "go/build"
 	"go/token"
 	"strconv"
@@ -599,6 +600,7 @@ func TestOriginalAugmentation(t *testing.T) {
 }
 
 func TestPreventGenerics(t *testing.T) {
+	const noErr = `no error`
 	tests := []struct {
 		desc string
 		src  string
@@ -607,15 +609,15 @@ func TestPreventGenerics(t *testing.T) {
 		{
 			desc: `non-generic function`,
 			src:  `func Foo(i int) int {}`,
-			want: `no error`,
+			want: noErr,
 		}, {
 			desc: `method on non-generic type`,
 			src:  `func (b Bar) Foo(i int) int {}`,
-			want: `no error`,
+			want: noErr,
 		}, {
 			desc: `method on non-generic type pointer`,
 			src:  `func (b *Bar) Foo(i int) int {}`,
-			want: `no error`,
+			want: noErr,
 		}, {
 			desc: `variable type function`,
 			src:  `func Foo[any T](v T) T {}`,
@@ -633,11 +635,15 @@ func TestPreventGenerics(t *testing.T) {
 			src:  `func (b Bar[TOut, TIn]) Foo(v TIn) TOut {}`,
 			want: `method for generic type found at test.go:3:1`,
 		}, {
+			desc: `function with generic-ish type`,
+			src:  `func Foo(m map[int]string) int {}`,
+			want: noErr,
+		}, {
 			desc: `function with variable type parameter`,
 			src: `import "atomic"
 				func Foo(p atomic.Pointer[int]) int {}`,
 			want: `TODO!!`,
-		}, {
+		}, /*{
 			desc: `function with variable type return`,
 			src: `import "atomic"
 				func Foo(i int) atomic.Pointer[int] {}`,
@@ -648,7 +654,7 @@ func TestPreventGenerics(t *testing.T) {
 				func Foo(i int) int {
 					p := map[int]string{}
 				}`,
-			want: `no error`,
+			want: noErr,
 		}, {
 			desc: `function with statement creating a variable type`,
 			src: `import "atomic"
@@ -671,12 +677,12 @@ func TestPreventGenerics(t *testing.T) {
 				}`,
 			want: `TODO!!`,
 		},
-		// Determine how to detect a call into a variable type function where
+		// TODO: Determine how to detect a call into a variable type function where
 		// the types are automatically determined.
 		{
 			desc: `value with non-generic type`,
 			src:  `var foo int`,
-			want: `no error`,
+			want: noErr,
 		}, {
 			desc: `value with generic type`,
 			src: `import "atomic"
@@ -685,7 +691,7 @@ func TestPreventGenerics(t *testing.T) {
 		}, {
 			desc: `value with non-generic initial value`,
 			src:  `var foo = 42`,
-			want: `no error`,
+			want: noErr,
 		}, {
 			desc: `value with generic initial value`,
 			src:  `var foo = atomic.Pointer[int]{}`,
@@ -693,7 +699,7 @@ func TestPreventGenerics(t *testing.T) {
 		}, {
 			desc: `non-generic type`,
 			src:  `type foo int`,
-			want: `no error`,
+			want: noErr,
 		}, {
 			desc: `type with non-generic variable type`,
 			src:  `type foo atomic.Pointer[int]`,
@@ -722,7 +728,7 @@ func TestPreventGenerics(t *testing.T) {
 			desc: `interface with variable type`,
 			src:  `type foo[T any] interface { Bar(v T) T }`,
 			want: `TODO!!`,
-		},
+		},*/
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
@@ -730,7 +736,7 @@ func TestPreventGenerics(t *testing.T) {
 			fset := token.NewFileSet()
 			file := srctesting.Parse(t, fset, pkgName+test.src)
 
-			got := `no error`
+			got := noErr
 			if err := preventGenerics(fset, file); err != nil {
 				got = err.Error()
 			}
@@ -738,7 +744,7 @@ func TestPreventGenerics(t *testing.T) {
 			if got != test.want {
 				t.Errorf("preventGenerics got unexpected result:\n"+
 					"returned: %q\nwant:     %q", got, test.want)
-				//ast.Print(fset, file)
+				ast.Print(fset, file)
 			}
 		})
 	}

@@ -135,10 +135,10 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		}
 		fc.Printf("%s = %s;", refVar, fc.translateExpr(expr))
 		translateCond := func(cond ast.Expr) *expression {
-			if types.Identical(fc.pkgCtx.TypeOf(cond), types.Typ[types.UntypedNil]) {
+			if types.Identical(fc.typeOf(cond), types.Typ[types.UntypedNil]) {
 				return fc.formatExpr("%s === $ifaceNil", refVar)
 			}
-			return fc.formatExpr("$assertType(%s, %s, true)[1]", refVar, fc.typeName(fc.pkgCtx.TypeOf(cond)))
+			return fc.formatExpr("$assertType(%s, %s, true)[1]", refVar, fc.typeName(fc.typeOf(cond)))
 		}
 		var caseClauses []*ast.CaseClause
 		var defaultClause *ast.CaseClause
@@ -190,7 +190,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		refVar := fc.newVariable("_ref")
 		fc.Printf("%s = %s;", refVar, fc.translateExpr(s.X))
 
-		switch t := fc.pkgCtx.TypeOf(s.X).Underlying().(type) {
+		switch t := fc.typeOf(s.X).Underlying().(type) {
 		case *types.Basic:
 			iVar := fc.newVariable("_i")
 			fc.Printf("%s = 0;", iVar)
@@ -380,7 +380,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
 			lhs := astutil.RemoveParens(s.Lhs[0])
 			if isBlank(lhs) {
-				fc.Printf("$unused(%s);", fc.translateImplicitConversion(s.Rhs[0], fc.pkgCtx.TypeOf(s.Lhs[0])))
+				fc.Printf("$unused(%s);", fc.translateImplicitConversion(s.Rhs[0], fc.typeOf(s.Lhs[0])))
 				return
 			}
 			fc.Printf("%s", fc.translateAssign(lhs, s.Rhs[0], s.Tok == token.DEFINE))
@@ -388,7 +388,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
 			tupleVar := fc.newVariable("_tuple")
 			fc.Printf("%s = %s;", tupleVar, fc.translateExpr(s.Rhs[0]))
-			tuple := fc.pkgCtx.TypeOf(s.Rhs[0]).(*types.Tuple)
+			tuple := fc.typeOf(s.Rhs[0]).(*types.Tuple)
 			for i, lhs := range s.Lhs {
 				lhs = astutil.RemoveParens(lhs)
 				if !isBlank(lhs) {
@@ -403,12 +403,12 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 					fc.Printf("$unused(%s);", fc.translateExpr(rhs))
 					continue
 				}
-				fc.Printf("%s", fc.translateAssign(fc.newIdent(tmpVars[i], fc.pkgCtx.TypeOf(s.Lhs[i])), rhs, true))
+				fc.Printf("%s", fc.translateAssign(fc.newIdent(tmpVars[i], fc.typeOf(s.Lhs[i])), rhs, true))
 			}
 			for i, lhs := range s.Lhs {
 				lhs = astutil.RemoveParens(lhs)
 				if !isBlank(lhs) {
-					fc.Printf("%s", fc.translateAssign(lhs, fc.newIdent(tmpVars[i], fc.pkgCtx.TypeOf(lhs)), s.Tok == token.DEFINE))
+					fc.Printf("%s", fc.translateAssign(lhs, fc.newIdent(tmpVars[i], fc.typeOf(lhs)), s.Tok == token.DEFINE))
 				}
 			}
 
@@ -431,7 +431,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 				if len(rhs) == 0 {
 					rhs = make([]ast.Expr, len(lhs))
 					for i, e := range lhs {
-						rhs[i] = fc.zeroValue(fc.pkgCtx.TypeOf(e))
+						rhs[i] = fc.zeroValue(fc.typeOf(e))
 					}
 				}
 				fc.translateStmt(&ast.AssignStmt{
@@ -469,7 +469,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		fc.Printf("$go(%s, %s);", callable, arglist)
 
 	case *ast.SendStmt:
-		chanType := fc.pkgCtx.TypeOf(s.Chan).Underlying().(*types.Chan)
+		chanType := fc.typeOf(s.Chan).Underlying().(*types.Chan)
 		call := &ast.CallExpr{
 			Fun:  fc.newIdent("$send", types.NewSignature(nil, types.NewTuple(types.NewVar(0, nil, "", chanType), types.NewVar(0, nil, "", chanType.Elem())), nil, false)),
 			Args: []ast.Expr{s.Chan, fc.newIdent(fc.translateImplicitConversionWithCloning(s.Value, chanType.Elem()).String(), chanType.Elem())},
@@ -494,7 +494,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			case *ast.AssignStmt:
 				channels = append(channels, fc.formatExpr("[%e]", astutil.RemoveParens(comm.Rhs[0]).(*ast.UnaryExpr).X).String())
 			case *ast.SendStmt:
-				chanType := fc.pkgCtx.TypeOf(comm.Chan).Underlying().(*types.Chan)
+				chanType := fc.typeOf(comm.Chan).Underlying().(*types.Chan)
 				channels = append(channels, fc.formatExpr("[%e, %s]", comm.Chan, fc.translateImplicitConversionWithCloning(comm.Value, chanType.Elem())).String())
 			default:
 				panic(fmt.Sprintf("unhandled: %T", comm))
@@ -505,7 +505,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 
 			var bodyPrefix []ast.Stmt
 			if assign, ok := clause.Comm.(*ast.AssignStmt); ok {
-				switch rhsType := fc.pkgCtx.TypeOf(assign.Rhs[0]).(type) {
+				switch rhsType := fc.typeOf(assign.Rhs[0]).(type) {
 				case *types.Tuple:
 					bodyPrefix = []ast.Stmt{&ast.AssignStmt{Lhs: assign.Lhs, Rhs: []ast.Expr{fc.newIdent(selectionVar+"[1]", rhsType)}, Tok: assign.Tok}}
 				default:
@@ -700,8 +700,8 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 	}
 
 	if l, ok := lhs.(*ast.IndexExpr); ok {
-		if t, ok := fc.pkgCtx.TypeOf(l.X).Underlying().(*types.Map); ok {
-			if typesutil.IsJsObject(fc.pkgCtx.TypeOf(l.Index)) {
+		if t, ok := fc.typeOf(l.X).Underlying().(*types.Map); ok {
+			if typesutil.IsJsObject(fc.typeOf(l.Index)) {
 				fc.pkgCtx.errList = append(fc.pkgCtx.errList, types.Error{Fset: fc.pkgCtx.fileSet, Pos: l.Index.Pos(), Msg: "cannot use js.Object as map key"})
 			}
 			keyVar := fc.newVariable("_key")
@@ -718,7 +718,7 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 		}
 	}
 
-	lhsType := fc.pkgCtx.TypeOf(lhs)
+	lhsType := fc.typeOf(lhs)
 	rhsExpr := fc.translateConversion(rhs, lhsType)
 	if _, ok := rhs.(*ast.CompositeLit); ok && define {
 		return fmt.Sprintf("%s = %s;", fc.translateExpr(lhs), rhsExpr) // skip $copy
@@ -755,7 +755,7 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 	case *ast.StarExpr:
 		return fmt.Sprintf("%s.$set(%s);", fc.translateExpr(l.X), rhsExpr)
 	case *ast.IndexExpr:
-		switch t := fc.pkgCtx.TypeOf(l.X).Underlying().(type) {
+		switch t := fc.typeOf(l.X).Underlying().(type) {
 		case *types.Array, *types.Pointer:
 			pattern := rangeCheck("%1e[%2f] = %3s", fc.pkgCtx.Types[l.Index].Value != nil, true)
 			if _, ok := t.(*types.Pointer); ok { // check pointer for nil (attribute getter causes a panic)
@@ -787,7 +787,7 @@ func (fc *funcContext) translateResults(results []ast.Expr) string {
 		return " " + v.String()
 	default:
 		if len(results) == 1 {
-			resultTuple := fc.pkgCtx.TypeOf(results[0]).(*types.Tuple)
+			resultTuple := fc.typeOf(results[0]).(*types.Tuple)
 
 			if resultTuple.Len() != tuple.Len() {
 				panic("invalid tuple return assignment")

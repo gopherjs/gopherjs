@@ -110,7 +110,7 @@ func (fc *funcContext) expandTupleArgs(argExprs []ast.Expr) []ast.Expr {
 		return argExprs
 	}
 
-	tuple, isTuple := fc.pkgCtx.TypeOf(argExprs[0]).(*types.Tuple)
+	tuple, isTuple := fc.typeOf(argExprs[0]).(*types.Tuple)
 	if !isTuple {
 		return argExprs
 	}
@@ -429,6 +429,13 @@ func (fc *funcContext) instanceOf(ident *ast.Ident) typeparams.Instance {
 		inst.TArgs = fc.typeResolver.SubstituteAll(i.TypeArgs)
 	}
 	return inst
+}
+
+// typeOf returns a type associated with the given AST expression. For types
+// defined in terms of type parameters, it will substitute type parameters with
+// concrete types from the current set of type arguments.
+func (fc *funcContext) typeOf(expr ast.Expr) types.Type {
+	return fc.typeResolver.Substitute(fc.pkgCtx.TypeOf(expr))
 }
 
 func (fc *funcContext) externalize(s string, t types.Type) string {

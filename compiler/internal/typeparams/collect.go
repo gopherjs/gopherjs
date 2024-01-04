@@ -37,7 +37,7 @@ func NewResolver(tc *types.Context, tParams []*types.TypeParam, tArgs []types.Ty
 // Substitute replaces references to type params in the provided type definition
 // with the corresponding concrete types.
 func (r *Resolver) Substitute(typ types.Type) types.Type {
-	if r == nil || r.Map == nil {
+	if r == nil || r.Map == nil || typ == nil {
 		return typ // No substitutions to be made.
 	}
 	if concrete := r.memo.At(typ); concrete != nil {

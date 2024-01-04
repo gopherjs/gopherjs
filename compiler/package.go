@@ -418,9 +418,10 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var mainFunc *types.Func
 	for _, fun := range functions {
 		o := funcCtx.pkgCtx.Defs[fun.Name].(*types.Func)
+		sig := o.Type().(*types.Signature)
 
 		var instances []typeparams.Instance
-		if o.Type().(*types.Signature).TypeParams().Len() != 0 {
+		if sig.TypeParams().Len() != 0 {
 			instances = instancesByObj[symbol.New(o)]
 		} else {
 			instances = []typeparams.Instance{{Object: o}}
@@ -457,7 +458,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 					d.DceObjectFilter = ""
 				case "init":
 					d.InitCode = funcCtx.CatchOutput(1, func() {
-						id := funcCtx.newIdent("", types.NewSignature(nil, nil, nil, false))
+						id := funcCtx.newIdent("", types.NewSignatureType( /*recv=*/ nil /*rectTypeParams=*/, nil /*typeParams=*/, nil /*params=*/, nil /*results=*/, nil /*variadic=*/, false))
 						funcCtx.pkgCtx.Uses[id] = o
 						call := &ast.CallExpr{Fun: id}
 						if len(funcCtx.pkgCtx.FuncDeclInfos[o].Blocking) != 0 {
@@ -491,7 +492,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		if mainFunc == nil {
 			return nil, fmt.Errorf("missing main function")
 		}
-		id := funcCtx.newIdent("", types.NewSignature(nil, nil, nil, false))
+		id := funcCtx.newIdent("", types.NewSignatureType( /*recv=*/ nil /*rectTypeParams=*/, nil /*typeParams=*/, nil /*params=*/, nil /*results=*/, nil /*variadic=*/, false))
 		funcCtx.pkgCtx.Uses[id] = mainFunc
 		call := &ast.CallExpr{Fun: id}
 		ifStmt := &ast.IfStmt{
@@ -771,7 +772,6 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		FuncInfo:     info,
 		pkgCtx:       outerContext.pkgCtx,
 		parent:       outerContext,
-		sig:          sig,
 		allVars:      make(map[string]int, len(outerContext.allVars)),
 		localVars:    []string{},
 		flowDatas:    map[*types.Label]*flowData{nil: {}},
@@ -793,6 +793,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	if c.objectNames == nil {
 		c.objectNames = map[types.Object]string{}
 	}
+	c.sig = c.typeResolver.Substitute(sig).(*types.Signature)
 
 	var params []string
 	for _, param := range typ.Params.List {
@@ -828,7 +829,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 
 		if recv != nil && !isBlank(recv) {
 			this := "this"
-			if isWrapped(c.pkgCtx.TypeOf(recv)) {
+			if isWrapped(c.typeOf(recv)) {
 				this = "this.$val" // Unwrap receiver value.
 			}
 			c.Printf("%s = %s;", c.translateExpr(recv), this)

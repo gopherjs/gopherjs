@@ -4,7 +4,6 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -86,13 +85,7 @@ func TestVisitor(t *testing.T) {
 	info, pkg := srctesting.Check(t, fset, file)
 
 	lookupObj := func(name string) types.Object {
-		parts := strings.Split(name, ".")
-		obj := pkg.Scope().Lookup(parts[0])
-		if len(parts) == 1 {
-			return obj
-		}
-		obj, _, _ = types.LookupFieldOrMethod(obj.Type(), true, obj.Pkg(), parts[1])
-		return obj
+		return srctesting.LookupObj(pkg, name)
 	}
 	lookupType := func(name string) types.Type { return lookupObj(name).Type() }
 	lookupDecl := func(name string) ast.Node {
@@ -131,20 +124,35 @@ func TestVisitor(t *testing.T) {
 				Object: lookupObj("typ"),
 				TArgs:  []types.Type{types.Typ[types.Int], sentinel},
 			}, {
+				Object: lookupObj("typ.method"),
+				TArgs:  []types.Type{types.Typ[types.Int], sentinel},
+			}, {
 				// Function argument.
 				Object: lookupObj("typ"),
+				TArgs:  []types.Type{types.Typ[types.Int8], sentinel},
+			}, {
+				Object: lookupObj("typ.method"),
 				TArgs:  []types.Type{types.Typ[types.Int8], sentinel},
 			}, {
 				// Function return type.
 				Object: lookupObj("typ"),
 				TArgs:  []types.Type{types.Typ[types.Int16], sentinel},
 			}, {
+				Object: lookupObj("typ.method"),
+				TArgs:  []types.Type{types.Typ[types.Int16], sentinel},
+			}, {
 				// Method expression.
 				Object: lookupObj("typ"),
 				TArgs:  []types.Type{types.Typ[types.Int32], sentinel},
 			}, {
+				Object: lookupObj("typ.method"),
+				TArgs:  []types.Type{types.Typ[types.Int32], sentinel},
+			}, {
 				// Type decl statement.
 				Object: lookupObj("typ"),
+				TArgs:  []types.Type{types.Typ[types.Int64], sentinel},
+			}, {
+				Object: lookupObj("typ.method"),
 				TArgs:  []types.Type{types.Typ[types.Int64], sentinel},
 			},
 		}
@@ -160,7 +168,13 @@ func TestVisitor(t *testing.T) {
 				Object: lookupObj("typ"),
 				TArgs:  []types.Type{types.Typ[types.Int], sentinel},
 			}, {
+				Object: lookupObj("typ.method"),
+				TArgs:  []types.Type{types.Typ[types.Int], sentinel},
+			}, {
 				Object: lookupObj("typ"),
+				TArgs:  []types.Type{types.Typ[types.Int8], sentinel},
+			}, {
+				Object: lookupObj("typ.method"),
 				TArgs:  []types.Type{types.Typ[types.Int8], sentinel},
 			},
 		}
@@ -200,6 +214,10 @@ func TestVisitor(t *testing.T) {
 					Object: lookupObj("entry3"),
 					TArgs:  []types.Type{lookupType("C")},
 				},
+				Instance{
+					Object: lookupObj("entry3.method"),
+					TArgs:  []types.Type{lookupType("C")},
+				},
 			),
 		}, {
 			descr: "generic type declaration",
@@ -224,21 +242,27 @@ func TestVisitor(t *testing.T) {
 					Object: lookupObj("typ"),
 					TArgs:  []types.Type{types.Typ[types.Int], lookupType("F")},
 				},
+				{
+					Object: lookupObj("typ.method"),
+					TArgs:  []types.Type{types.Typ[types.Int], lookupType("F")},
+				},
 			},
 		},
 	}
 
 	for _, test := range tests {
-		v := visitor{
-			instances: &InstanceSet{},
-			resolver:  test.resolver,
-			info:      info,
-		}
-		ast.Walk(&v, test.node)
-		got := v.instances.Values()
-		if diff := cmp.Diff(test.want, got, instanceOpts()); diff != "" {
-			t.Errorf("Discovered instance diff (-want,+got):\n%s", diff)
-		}
+		t.Run(test.descr, func(t *testing.T) {
+			v := visitor{
+				instances: &InstanceSet{},
+				resolver:  test.resolver,
+				info:      info,
+			}
+			ast.Walk(&v, test.node)
+			got := v.instances.Values()
+			if diff := cmp.Diff(test.want, got, instanceOpts()); diff != "" {
+				t.Errorf("Discovered instance diff (-want,+got):\n%s", diff)
+			}
+		})
 	}
 }
 
@@ -270,18 +294,29 @@ func TestSeedVisitor(t *testing.T) {
 	}
 	ast.Walk(&sv, file)
 
-	inst := func(tArg types.Type) Instance {
+	tInst := func(tArg types.Type) Instance {
 		return Instance{
 			Object: pkg.Scope().Lookup("typ"),
 			TArgs:  []types.Type{tArg},
 		}
 	}
+	mInst := func(tArg types.Type) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, "typ.method"),
+			TArgs:  []types.Type{tArg},
+		}
+	}
 	want := []Instance{
-		inst(types.Typ[types.Int]),
-		inst(types.Typ[types.Int8]),
-		inst(types.Typ[types.Int16]),
-		inst(types.Typ[types.Int32]),
-		inst(types.Typ[types.Int64]),
+		tInst(types.Typ[types.Int]),
+		mInst(types.Typ[types.Int]),
+		tInst(types.Typ[types.Int8]),
+		mInst(types.Typ[types.Int8]),
+		tInst(types.Typ[types.Int16]),
+		mInst(types.Typ[types.Int16]),
+		tInst(types.Typ[types.Int32]),
+		mInst(types.Typ[types.Int32]),
+		tInst(types.Typ[types.Int64]),
+		mInst(types.Typ[types.Int64]),
 	}
 	got := sv.instances.Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != "" {
@@ -316,15 +351,18 @@ func TestCollector(t *testing.T) {
 
 	inst := func(name string, tArg types.Type) Instance {
 		return Instance{
-			Object: pkg.Scope().Lookup(name),
+			Object: srctesting.LookupObj(pkg, name),
 			TArgs:  []types.Type{tArg},
 		}
 	}
 	want := []Instance{
 		inst("typ", types.Typ[types.Int]),
+		inst("typ.method", types.Typ[types.Int]),
 		inst("fun", types.Typ[types.Int8]),
 		inst("typ", types.Typ[types.Int16]),
+		inst("typ.method", types.Typ[types.Int16]),
 		inst("typ", types.Typ[types.Int32]),
+		inst("typ.method", types.Typ[types.Int32]),
 		inst("fun", types.Typ[types.Int64]),
 	}
 	got := c.Instances.Values()

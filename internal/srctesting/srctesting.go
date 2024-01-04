@@ -9,6 +9,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"strings"
 	"testing"
 )
 
@@ -79,4 +80,17 @@ func Format(t *testing.T, fset *token.FileSet, node any) string {
 		t.Fatalf("Failed to format AST node %T: %s", node, err)
 	}
 	return buf.String()
+}
+
+// LookupObj returns a top-level object with the given name.
+//
+// Methods can be referred to as RecvTypeName.MethodName.
+func LookupObj(pkg *types.Package, name string) types.Object {
+	parts := strings.Split(name, ".")
+	obj := pkg.Scope().Lookup(parts[0])
+	if len(parts) == 1 {
+		return obj
+	}
+	obj, _, _ = types.LookupFieldOrMethod(obj.Type(), true, obj.Pkg(), parts[1])
+	return obj
 }

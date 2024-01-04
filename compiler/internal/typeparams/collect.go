@@ -7,6 +7,7 @@ import (
 	"go/types"
 
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
+	"golang.org/x/exp/typeparams"
 )
 
 // Resolver translates types defined in terms of type parameters into concrete
@@ -94,10 +95,21 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 		return
 	}
 
+	obj := c.info.ObjectOf(ident)
 	c.instances.Add(Instance{
-		Object: c.info.ObjectOf(ident),
+		Object: obj,
 		TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
 	})
+
+	if t, ok := obj.Type().(*types.Named); ok {
+		for i := 0; i < t.NumMethods(); i++ {
+			method := t.Method(i)
+			c.instances.Add(Instance{
+				Object: typeparams.OriginMethod(method), // TODO(nevkontakte): Can be replaced with method.Origin() in Go 1.19.
+				TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
+			})
+		}
+	}
 	return
 }
 
@@ -156,8 +168,8 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 // InstanceSet may contain unprocessed instances of generic types and functions,
 // which will be also scanned, for example found in depending packages.
 //
-// Note that methods of generic types are never added to the InstanceSet, since
-// they can be easily inferred from the receiver type instances.
+// Note that instanced of generic type methods are automatically added to the
+// set whenever their receiver type instance is encountered.
 type Collector struct {
 	TContext  *types.Context
 	Info      *types.Info
@@ -191,7 +203,7 @@ func (c *Collector) Scan(files ...*ast.File) {
 		case *types.Signature:
 			v := visitor{
 				instances: c.Instances,
-				resolver:  NewResolver(c.TContext, ToSlice(typ.TypeParams()), inst.TArgs),
+				resolver:  NewResolver(c.TContext, ToSlice(SignatureTypeParams(typ)), inst.TArgs),
 				info:      c.Info,
 			}
 			ast.Walk(&v, objMap[inst.Object])
@@ -203,12 +215,6 @@ func (c *Collector) Scan(files ...*ast.File) {
 				info:      c.Info,
 			}
 			ast.Walk(&v, objMap[obj])
-
-			for i := 0; i < typ.NumMethods(); i++ {
-				method := typ.Method(i)
-				v.resolver = NewResolver(c.TContext, ToSlice(method.Type().(*types.Signature).RecvTypeParams()), inst.TArgs)
-				ast.Walk(&v, objMap[method])
-			}
 		}
 	}
 }

@@ -328,7 +328,12 @@ func TestCollector(t *testing.T) {
 	src := `package test
 	type typ[T any] int
 	func (t typ[T]) method(arg T) { var _ typ[int]; fun[int8](0) }
-	func fun[T any](arg T) { var _ typ[int16] }
+	func fun[T any](arg T) { 
+		var _ typ[int16]
+
+		type nested[U any] struct{}
+		_ = nested[T]{}
+	}
 
 	type ignore = int
 
@@ -359,11 +364,13 @@ func TestCollector(t *testing.T) {
 		inst("typ", types.Typ[types.Int]),
 		inst("typ.method", types.Typ[types.Int]),
 		inst("fun", types.Typ[types.Int8]),
+		inst("fun.nested", types.Typ[types.Int8]),
 		inst("typ", types.Typ[types.Int16]),
 		inst("typ.method", types.Typ[types.Int16]),
 		inst("typ", types.Typ[types.Int32]),
 		inst("typ.method", types.Typ[types.Int32]),
 		inst("fun", types.Typ[types.Int64]),
+		inst("fun.nested", types.Typ[types.Int64]),
 	}
 	got := c.Instances.Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != "" {

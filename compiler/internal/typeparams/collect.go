@@ -122,7 +122,8 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 //  - Collects an initial set of generic instantiations in the non-generic code.
 type seedVisitor struct {
 	visitor
-	objMap map[types.Object]ast.Node
+	objMap  map[types.Object]ast.Node
+	mapOnly bool // Only build up objMap, ignore any instances.
 }
 
 var _ ast.Visitor = &seedVisitor{}
@@ -137,7 +138,11 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 		sig := obj.Type().(*types.Signature)
 		if sig.TypeParams().Len() != 0 || sig.RecvTypeParams().Len() != 0 {
 			c.objMap[obj] = n
-			return nil
+			return &seedVisitor{
+				visitor: c.visitor,
+				objMap:  c.objMap,
+				mapOnly: true,
+			}
 		}
 	case *ast.TypeSpec:
 		obj := c.info.Defs[n.Name]
@@ -151,9 +156,11 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 		}
 	}
 
-	// Otherwise check for fully defined instantiations and descend further into
-	// the AST tree.
-	c.visitor.Visit(n)
+	if !c.mapOnly {
+		// Otherwise check for fully defined instantiations and descend further into
+		// the AST tree.
+		c.visitor.Visit(n)
+	}
 	return c
 }
 

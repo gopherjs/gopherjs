@@ -86,11 +86,25 @@ func Format(t *testing.T, fset *token.FileSet, node any) string {
 //
 // Methods can be referred to as RecvTypeName.MethodName.
 func LookupObj(pkg *types.Package, name string) types.Object {
-	parts := strings.Split(name, ".")
-	obj := pkg.Scope().Lookup(parts[0])
-	if len(parts) == 1 {
-		return obj
+	path := strings.Split(name, ".")
+	scope := pkg.Scope()
+	var obj types.Object
+
+	for len(path) > 0 {
+		obj = scope.Lookup(path[0])
+		path = path[1:]
+
+		if fun, ok := obj.(*types.Func); ok {
+			scope = fun.Scope()
+			continue
+		}
+
+		// If we are here, the latest object is a named type. If there are more path
+		// elements left, they must refer to field or method.
+		if len(path) > 0 {
+			obj, _, _ = types.LookupFieldOrMethod(obj.Type(), true, obj.Pkg(), path[0])
+			path = path[1:]
+		}
 	}
-	obj, _, _ = types.LookupFieldOrMethod(obj.Type(), true, obj.Pkg(), parts[1])
 	return obj
 }

@@ -169,7 +169,7 @@ var knownFails = map[string]failReason{
 	"typeparam/issue50109b.go":       {category: generics, desc: "bug: Type$1 is not defined"},
 	"typeparam/issue50264.go":        {category: generics, desc: "bug: clone: Cannot read property 'zero' of undefined"},
 	"typeparam/metrics.go":           {category: generics, desc: "bug: append: Cannot read property '$array' of undefined"},
-	"typeparam/nested.go":            {category: generics, desc: "bug: compiler panic: ast.Walk: unexpected node type <nil>"},
+	"typeparam/nested.go":            {category: generics, desc: "bug: Cannot set property 'int' of undefined"},
 	"typeparam/orderedmap.go":        {category: generics, desc: "bug: Cannot read property 'ptr' of undefined"},
 	"typeparam/sets.go":              {category: generics, desc: "bug: clone: Cannot read property 'zero' of undefined"},
 	"typeparam/shape1.go":            {category: generics, desc: "bug: Cannot create property '$ptr' on XXX"},

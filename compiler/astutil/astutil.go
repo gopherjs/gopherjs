@@ -31,7 +31,15 @@ func NewIdent(name string, t types.Type, info *types.Info, pkg *types.Package) *
 	return ident
 }
 
+// IsTypeExpr returns true if expr denotes a type. This can be used to
+// distinguish between calls and type conversions.
 func IsTypeExpr(expr ast.Expr, info *types.Info) bool {
+	// Note that we could've used info.Types[expr].IsType() instead of doing our
+	// own analysis. However, that creates a problem because we synthesize some
+	// *ast.CallExpr nodes and, more importantly, *ast.Ident nodes that denote a
+	// type. Unfortunately, because the flag that controls
+	// types.TypeAndValue.IsType() return value is unexported we wouldn't be able
+	// to set it correctly. Thus, we can't rely on IsType().
 	switch e := expr.(type) {
 	case *ast.ArrayType, *ast.ChanType, *ast.FuncType, *ast.InterfaceType, *ast.MapType, *ast.StructType:
 		return true
@@ -42,6 +50,20 @@ func IsTypeExpr(expr ast.Expr, info *types.Info) bool {
 		return ok
 	case *ast.SelectorExpr:
 		_, ok := info.Uses[e.Sel].(*types.TypeName)
+		return ok
+	case *ast.IndexExpr:
+		ident, ok := e.X.(*ast.Ident)
+		if !ok {
+			return false
+		}
+		_, ok = info.Uses[ident].(*types.TypeName)
+		return ok
+	case *ast.IndexListExpr:
+		ident, ok := e.X.(*ast.Ident)
+		if !ok {
+			return false
+		}
+		_, ok = info.Uses[ident].(*types.TypeName)
 		return ok
 	case *ast.ParenExpr:
 		return IsTypeExpr(e.X, info)

@@ -343,8 +343,8 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 		return nil // No need to walk under this CallExpr, we already did it manually.
 	default:
 		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
-			// This is a type assertion, not a call. Type assertion itself is not
-			// blocking, but we will visit the expression itself.
+			// This is a type conversion, not a call. Type assertion itself is not
+			// blocking, but we will visit the input expression.
 		} else {
 			// The function is returned by a non-trivial expression. We have to be
 			// conservative and assume that function might be blocking.

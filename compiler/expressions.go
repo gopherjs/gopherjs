@@ -1455,7 +1455,7 @@ func (fc *funcContext) formatExprInternal(format string, a []interface{}, parens
 			}
 			out.WriteString(a[n].(string))
 		case 'd':
-			out.WriteString(strconv.Itoa(a[n].(int)))
+			fmt.Fprintf(out, "%d", a[n])
 		case 't':
 			out.WriteString(a[n].(token.Token).String())
 		case 'e':

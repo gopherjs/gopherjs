@@ -165,7 +165,6 @@ var knownFails = map[string]failReason{
 	"typeparam/issue47716.go":        {category: generics, desc: "bug: failed to call unsafe.Sizeof"},
 	"typeparam/issue48253.go":        {category: generics, desc: "bug: Type$1 is not defined"},
 	"typeparam/issue48645b.go":       {category: generics, desc: "bug: clone: Cannot read property 'zero' of undefined"},
-	"typeparam/issue49295.go":        {category: generics, desc: "bug: compiler panic: interface conversion: interface {} is int64, not int at compiler/expressions.go:1458"},
 	"typeparam/issue49547.go":        {category: generics, desc: "bug: incorrect type string"},
 	"typeparam/issue50109b.go":       {category: generics, desc: "bug: Type$1 is not defined"},
 	"typeparam/issue50264.go":        {category: generics, desc: "bug: clone: Cannot read property 'zero' of undefined"},

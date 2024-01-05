@@ -401,7 +401,11 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		if t.Obj().Name() == "error" {
 			return "$error"
 		}
-		return fc.objectName(t.Obj())
+		inst := typeparams.Instance{Object: t.Obj()}
+		for i := 0; i < t.TypeArgs().Len(); i++ {
+			inst.TArgs = append(inst.TArgs, t.TypeArgs().At(i))
+		}
+		return fc.instName(inst)
 	case *types.Interface:
 		if t.Empty() {
 			return "$emptyInterface"

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
+	"golang.org/x/exp/typeparams"
 )
 
 type continueStmt struct {
@@ -93,6 +94,9 @@ func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
 }
 
 func (info *Info) IsBlocking(fun *types.Func) bool {
+	if info.FuncDeclInfos[fun] == nil {
+		panic("nil info")
+	}
 	return len(info.FuncDeclInfos[fun].Blocking) > 0
 }
 
@@ -354,6 +358,7 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 func (fi *FuncInfo) callToNamedFunc(callee types.Object) {
 	switch o := callee.(type) {
 	case *types.Func:
+		o = typeparams.OriginMethod(o) // TODO(nevkontakte): Can be replaced with o.Origin() in Go 1.19.
 		if recv := o.Type().(*types.Signature).Recv(); recv != nil {
 			if _, ok := recv.Type().Underlying().(*types.Interface); ok {
 				// Conservatively assume that an interface implementation may be blocking.

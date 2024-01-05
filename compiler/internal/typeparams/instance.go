@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
+	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"golang.org/x/exp/maps"
 )
 
@@ -48,6 +49,24 @@ func (i *Instance) Key() string {
 // IsTrivial returns true if this is an instance of a non-generic object.
 func (i *Instance) IsTrivial() bool {
 	return len(i.TArgs) == 0
+}
+
+// Recv returns an instance of the receiver type of a method.
+//
+// Returns zero value if not a method.
+func (i *Instance) Recv() Instance {
+	sig, ok := i.Object.Type().(*types.Signature)
+	if !ok {
+		return Instance{}
+	}
+	recv := typesutil.RecvType(sig)
+	if recv == nil {
+		return Instance{}
+	}
+	return Instance{
+		Object: recv.Obj(),
+		TArgs:  i.TArgs,
+	}
 }
 
 // InstanceSet allows collecting and processing unique Instances.

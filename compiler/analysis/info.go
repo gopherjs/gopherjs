@@ -93,7 +93,11 @@ func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
 }
 
 func (info *Info) IsBlocking(fun *types.Func) bool {
-	return len(info.FuncDeclInfos[fun].Blocking) > 0
+	funInfo := info.FuncDeclInfos[fun]
+	if funInfo == nil {
+		panic(fmt.Errorf(`info did not have function declaration for %s`, fun.FullName()))
+	}
+	return len(funInfo.Blocking) > 0
 }
 
 func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(*types.Func) bool) *Info {

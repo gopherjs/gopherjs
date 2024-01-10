@@ -12,9 +12,6 @@ import (
 // p521, and p384 still function correctly without this generic struct
 //
 //gopherjs:purge for go1.19 without generics
-type nistCurve[Point nistPoint[Point]] struct{}
-
-//gopherjs:purge for go1.19 without generics
 type nistPoint[T any] interface{}
 
 type wrappedPoint struct {
@@ -89,37 +86,25 @@ func (w *wrappedPoint) ScalarBaseMult(scalar []byte) (*wrappedPoint, error) {
 	return newWrappedPoint(p), err
 }
 
-type wrappingNistCurve struct {
+type nistCurve struct {
 	newPoint func() *wrappedPoint
 	params   *CurveParams
 }
 
-var p224 = &wrappingNistCurve{
-	newPoint: newPointWrapper(func() any {
-		return nistec.NewP224Point()
-	}),
+func newNistCurve(newPoint func() any) *nistCurve {
+	return &nistCurve{newPoint: newPointWrapper(newPoint)}
 }
+
+var p224 = newNistCurve(func() any { return nistec.NewP224Point() })
 
 type p256Curve struct {
 	nistCurve
 }
 
 var p256 = &p256Curve{
-	nistCurve: wrappingNistCurve{
-		newPoint: newPointWrapper(func() any {
-			return nistec.NewP256Point()
-		}),
-	},
+	nistCurve: *newNistCurve(func() any { return nistec.NewP256Point() }),
 }
 
-var p521 = &wrappingNistCurve{
-	newPoint: newPointWrapper(func() any {
-		return nistec.NewP521Point()
-	}),
-}
+var p521 = newNistCurve(func() any { return nistec.NewP521Point() })
 
-var p384 = &wrappingNistCurve{
-	newPoint: newPointWrapper(func() any {
-		return nistec.NewP384Point()
-	}),
-}
+var p384 = newNistCurve(func() any { return nistec.NewP384Point() })

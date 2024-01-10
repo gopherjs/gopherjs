@@ -5,6 +5,7 @@ package elliptic
 
 import (
 	"crypto/internal/nistec"
+	"math/big"
 )
 
 // nistPoint uses generics so must be removed for generic-less GopherJS.
@@ -23,11 +24,48 @@ type wrappedPoint interface {
 	ScalarBaseMult(scalar []byte) (wrappedPoint, error)
 }
 
-// nistCurve replaces the generics
+// nistCurve replaces the generics with a version using the wrappedPoint
+// interface, then update all the method signatures to also use wrappedPoint.
 type nistCurve struct {
 	newPoint func() wrappedPoint
 	params   *CurveParams
 }
+
+//gopherjs:override-signature
+func (curve *nistCurve) Params() *CurveParams {}
+
+//gopherjs:override-signature
+func (curve *nistCurve) IsOnCurve(x, y *big.Int) bool {}
+
+//gopherjs:override-signature
+func (curve *nistCurve) pointFromAffine(x, y *big.Int) (p wrappedPoint, err error) {}
+
+//gopherjs:override-signature
+func (curve *nistCurve) pointToAffine(p wrappedPoint) (x, y *big.Int) {}
+
+//gopherjs:override-signature
+func (curve *nistCurve) Add(x1, y1, x2, y2 *big.Int) (*big.Int, *big.Int) {}
+
+//gopherjs:override-signature
+func (curve *nistCurve) Double(x1, y1 *big.Int) (*big.Int, *big.Int) {}
+
+//gopherjs:override-signature
+func (curve *nistCurve) normalizeScalar(scalar []byte) []byte {}
+
+//gopherjs:override-signature
+func (curve *nistCurve) ScalarMult(Bx, By *big.Int, scalar []byte) (*big.Int, *big.Int) {}
+
+//gopherjs:override-signature
+func (curve *nistCurve) ScalarBaseMult(scalar []byte) (*big.Int, *big.Int) {}
+
+//gopherjs:override-signature
+func (curve *nistCurve) CombinedMult(Px, Py *big.Int, s1, s2 []byte) (x, y *big.Int) {}
+
+//gopherjs:override-signature
+func (curve *nistCurve) Unmarshal(data []byte) (x, y *big.Int) {}
+
+//gopherjs:override-signature
+func (curve *nistCurve) UnmarshalCompressed(data []byte) (x, y *big.Int) {}
 
 var p224 = &nistCurve{
 	newPoint: newP224WrappedPoint,

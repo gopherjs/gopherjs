@@ -69,11 +69,8 @@ func runtime_canSpin(i int) bool {
 	return false
 }
 
-// Copy of time.runtimeNano.
-func runtime_nanotime() int64 {
-	const millisecond = 1000000
-	return js.Global.Get("Date").New().Call("getTime").Int64() * millisecond
-}
+//go:linkname runtime_nanotime runtime.nanotime
+func runtime_nanotime() int64
 
 // Implemented in runtime.
 func throw(s string) {

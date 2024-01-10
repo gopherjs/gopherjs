@@ -570,6 +570,48 @@ func TestOriginalAugmentation(t *testing.T) {
 			info: map[string]overrideInfo{},
 			src:  `import foo "some/other/bar"`,
 			want: ``,
+		}, {
+			desc: `override signature of function`,
+			info: map[string]overrideInfo{
+				`Foo`: {
+					overrideSignature: srctesting.ParseFuncDecl(t,
+						`package whatever
+						func Foo(a, b any) (any, bool) {}`),
+				},
+			},
+			src: `func Foo[T comparable](a, b T) (T, bool) {
+					if a == b {
+						return a, true
+					}
+					return b, false
+				}`,
+			want: `func Foo(a, b any) (any, bool) {
+				if a == b {
+					return a, true
+				}
+				return b, false
+			}`,
+		}, {
+			desc: `override signature of method`,
+			info: map[string]overrideInfo{
+				`Foo.Bar`: {
+					overrideSignature: srctesting.ParseFuncDecl(t,
+						`package whatever
+						func (r *Foo) Bar(a, b any) (any, bool) {}`),
+				},
+			},
+			src: `func (r *Foo[T]) Bar(a, b T) (T, bool) {
+					if r.isSame(a, b) {
+						return a, true
+					}
+					return b, false
+				}`,
+			want: `func (r *Foo) Bar(a, b any) (any, bool) {
+					if r.isSame(a, b) {
+						return a, true
+					}
+					return b, false
+				}`,
 		},
 	}
 

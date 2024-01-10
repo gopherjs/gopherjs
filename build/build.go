@@ -130,6 +130,11 @@ type overrideInfo struct {
 	// If the method is defined in the overlays and therefore has its
 	// own overrides, this will be ignored.
 	purgeMethods bool
+
+	// overrideSignature is the function definition given in the overlays
+	// that should be used to replace the signature in the originals.
+	// Only receivers, type parameters, parameters, and results will be used.
+	overrideSignature *ast.FuncDecl
 }
 
 // parseAndAugment parses and returns all .go files of given pkg.
@@ -270,9 +275,14 @@ func augmentOverlayFile(file *ast.File, overrides map[string]overrideInfo) {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			k := astutil.FuncKey(d)
-			overrides[k] = overrideInfo{
+			oi := overrideInfo{
 				keepOriginal: astutil.KeepOriginal(d),
 			}
+			if astutil.OverrideSignature(d) {
+				oi.overrideSignature = d
+				purgeDecl = true
+			}
+			overrides[k] = oi
 		case *ast.GenDecl:
 			for j, spec := range d.Specs {
 				purgeSpec := purgeDecl || astutil.Purge(spec)
@@ -323,11 +333,21 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			if info, ok := overrides[astutil.FuncKey(d)]; ok {
+				removeFunc := true
 				if info.keepOriginal {
 					// Allow overridden function calls
 					// The standard library implementation of foo() becomes _gopherjs_original_foo()
 					d.Name.Name = "_gopherjs_original_" + d.Name.Name
-				} else {
+					removeFunc = false
+				}
+				if overSig := info.overrideSignature; overSig != nil {
+					d.Recv = overSig.Recv
+					d.Type.TypeParams = overSig.Type.TypeParams
+					d.Type.Params = overSig.Type.Params
+					d.Type.Results = overSig.Type.Results
+					removeFunc = false
+				}
+				if removeFunc {
 					file.Decls[i] = nil
 				}
 			} else if recvKey := astutil.FuncReceiverKey(d); len(recvKey) > 0 {

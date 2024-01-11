@@ -411,6 +411,19 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 	finalizeRemovals(file)
 }
 
+// hasLinkName determines if any line in the given file is the //go:linkname directive.
+func hasLinkName(file *ast.File) bool {
+	const linkNamePrefix = `//go:linkname `
+	for _, cg := range file.Comments {
+		for _, c := range cg.List {
+			if strings.HasPrefix(c.Text, linkNamePrefix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // pruneImports will remove any unused imports from the file.
 //
 // This will not remove any dot (`.`) or blank (`_`) imports.
@@ -438,6 +451,19 @@ func pruneImports(file *ast.File) {
 		return
 	}
 
+	// If "unsafe" is still in unused, check for go:linkname directives.
+	for name, index := range unused {
+		in := file.Imports[index]
+		path, _ := strconv.Unquote(in.Path.Value)
+		if path == `unsafe` && hasLinkName(file) {
+			delete(unused, name)
+			if len(unused) == 0 {
+				return
+			}
+			break
+		}
+	}
+
 	// Remove all unused import specifications
 	isUnusedSpec := map[*ast.ImportSpec]bool{}
 	for _, index := range unused {
@@ -462,9 +488,7 @@ func pruneImports(file *ast.File) {
 }
 
 // finalizeRemovals fully removes any declaration, specification, imports
-// that have been set to nil. This will also remove the file's top-level
-// comment group to remove any unassociated comments, including the comments
-// from removed code.
+// that have been set to nil.
 func finalizeRemovals(file *ast.File) {
 	fileChanged := false
 	for i, decl := range file.Decls {
@@ -508,7 +532,6 @@ func finalizeRemovals(file *ast.File) {
 		file.Decls = astutil.Squeeze(file.Decls)
 	}
 	file.Imports = astutil.Squeeze(file.Imports)
-	file.Comments = nil
 }
 
 // Options controls build process behavior.

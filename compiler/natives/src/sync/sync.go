@@ -3,7 +3,11 @@
 
 package sync
 
-import "github.com/gopherjs/gopherjs/js"
+import (
+	_ "unsafe" // For go:linkname
+
+	"github.com/gopherjs/gopherjs/js"
+)
 
 var semWaiters = make(map[*uint32][]chan bool)
 

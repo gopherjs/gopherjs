@@ -130,6 +130,11 @@ type overrideInfo struct {
 	// If the method is defined in the overlays and therefore has its
 	// own overrides, this will be ignored.
 	purgeMethods bool
+
+	// overrideSignature is the function definition given in the overlays
+	// that should be used to replace the signature in the originals.
+	// Only receivers, type parameters, parameters, and results will be used.
+	overrideSignature *ast.FuncDecl
 }
 
 // parseAndAugment parses and returns all .go files of given pkg.
@@ -270,9 +275,14 @@ func augmentOverlayFile(file *ast.File, overrides map[string]overrideInfo) {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			k := astutil.FuncKey(d)
-			overrides[k] = overrideInfo{
+			oi := overrideInfo{
 				keepOriginal: astutil.KeepOriginal(d),
 			}
+			if astutil.OverrideSignature(d) {
+				oi.overrideSignature = d
+				purgeDecl = true
+			}
+			overrides[k] = oi
 		case *ast.GenDecl:
 			for j, spec := range d.Specs {
 				purgeSpec := purgeDecl || astutil.Purge(spec)
@@ -323,11 +333,21 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			if info, ok := overrides[astutil.FuncKey(d)]; ok {
+				removeFunc := true
 				if info.keepOriginal {
 					// Allow overridden function calls
 					// The standard library implementation of foo() becomes _gopherjs_original_foo()
 					d.Name.Name = "_gopherjs_original_" + d.Name.Name
-				} else {
+					removeFunc = false
+				}
+				if overSig := info.overrideSignature; overSig != nil {
+					d.Recv = overSig.Recv
+					d.Type.TypeParams = overSig.Type.TypeParams
+					d.Type.Params = overSig.Type.Params
+					d.Type.Results = overSig.Type.Results
+					removeFunc = false
+				}
+				if removeFunc {
 					file.Decls[i] = nil
 				}
 			} else if recvKey := astutil.FuncReceiverKey(d); len(recvKey) > 0 {
@@ -405,7 +425,7 @@ func pruneImports(file *ast.File) {
 		}
 	}
 
-	// Remove "unused import" for any import which is used.
+	// Remove "unused imports" for any import which is used.
 	ast.Inspect(file, func(n ast.Node) bool {
 		if sel, ok := n.(*ast.SelectorExpr); ok {
 			if id, ok := sel.X.(*ast.Ident); ok && id.Obj == nil {
@@ -416,6 +436,24 @@ func pruneImports(file *ast.File) {
 	})
 	if len(unused) == 0 {
 		return
+	}
+
+	// Remove "unused imports" for any import used for a directive.
+	directiveImports := map[string]string{
+		`unsafe`: `//go:linkname `,
+		`embed`:  `//go:embed `,
+	}
+	for name, index := range unused {
+		in := file.Imports[index]
+		path, _ := strconv.Unquote(in.Path.Value)
+		directivePrefix, hasPath := directiveImports[path]
+		if hasPath && astutil.HasDirectivePrefix(file, directivePrefix) {
+			delete(unused, name)
+			if len(unused) == 0 {
+				return
+			}
+			break
+		}
 	}
 
 	// Remove all unused import specifications
@@ -442,9 +480,8 @@ func pruneImports(file *ast.File) {
 }
 
 // finalizeRemovals fully removes any declaration, specification, imports
-// that have been set to nil. This will also remove the file's top-level
-// comment group to remove any unassociated comments, including the comments
-// from removed code.
+// that have been set to nil. This will also remove any unassociated comment
+// groups, including the comments from removed code.
 func finalizeRemovals(file *ast.File) {
 	fileChanged := false
 	for i, decl := range file.Decls {
@@ -487,8 +524,18 @@ func finalizeRemovals(file *ast.File) {
 	if fileChanged {
 		file.Decls = astutil.Squeeze(file.Decls)
 	}
+
 	file.Imports = astutil.Squeeze(file.Imports)
-	file.Comments = nil
+
+	file.Comments = nil // clear this first so ast.Inspect doesn't walk it.
+	remComments := []*ast.CommentGroup{}
+	ast.Inspect(file, func(n ast.Node) bool {
+		if cg, ok := n.(*ast.CommentGroup); ok {
+			remComments = append(remComments, cg)
+		}
+		return true
+	})
+	file.Comments = remComments
 }
 
 // Options controls build process behavior.

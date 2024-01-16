@@ -411,19 +411,6 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 	finalizeRemovals(file)
 }
 
-// hasLinkName determines if any line in the given file is the //go:linkname directive.
-func hasLinkName(file *ast.File) bool {
-	const linkNamePrefix = `//go:linkname `
-	for _, cg := range file.Comments {
-		for _, c := range cg.List {
-			if strings.HasPrefix(c.Text, linkNamePrefix) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // pruneImports will remove any unused imports from the file.
 //
 // This will not remove any dot (`.`) or blank (`_`) imports.
@@ -438,7 +425,7 @@ func pruneImports(file *ast.File) {
 		}
 	}
 
-	// Remove "unused import" for any import which is used.
+	// Remove "unused imports" for any import which is used.
 	ast.Inspect(file, func(n ast.Node) bool {
 		if sel, ok := n.(*ast.SelectorExpr); ok {
 			if id, ok := sel.X.(*ast.Ident); ok && id.Obj == nil {
@@ -451,11 +438,16 @@ func pruneImports(file *ast.File) {
 		return
 	}
 
-	// If "unsafe" is still in unused, check for go:linkname directives.
+	// Remove "unused imports" for any import used for a directive.
+	directiveImports := map[string]string{
+		`unsafe`: `//go:linkname `,
+		`embed`:  `//go:embed `,
+	}
 	for name, index := range unused {
 		in := file.Imports[index]
 		path, _ := strconv.Unquote(in.Path.Value)
-		if path == `unsafe` && hasLinkName(file) {
+		directivePrefix, hasPath := directiveImports[path]
+		if hasPath && astutil.HasDirectivePrefix(file, directivePrefix) {
 			delete(unused, name)
 			if len(unused) == 0 {
 				return
@@ -487,8 +479,9 @@ func pruneImports(file *ast.File) {
 	finalizeRemovals(file)
 }
 
-// finalizeRemovals fully removes any declaration, specification, imports
-// that have been set to nil.
+// finalizeRemovals fully removes any declaration, specification, and imports,
+// that have been set to nil. This also removes any floating comments of
+// things which were removed.
 func finalizeRemovals(file *ast.File) {
 	fileChanged := false
 	for i, decl := range file.Decls {
@@ -531,7 +524,18 @@ func finalizeRemovals(file *ast.File) {
 	if fileChanged {
 		file.Decls = astutil.Squeeze(file.Decls)
 	}
+
 	file.Imports = astutil.Squeeze(file.Imports)
+
+	file.Comments = nil // clear this first so ast.Inspect doesn't walk it.
+	remComments := []*ast.CommentGroup{}
+	ast.Inspect(file, func(n ast.Node) bool {
+		if cg, ok := n.(*ast.CommentGroup); ok {
+			remComments = append(remComments, cg)
+		}
+		return true
+	})
+	file.Comments = remComments
 }
 
 // Options controls build process behavior.

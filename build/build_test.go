@@ -371,6 +371,36 @@ func TestOverlayAugmentation(t *testing.T) {
 				`Sort`:    {},
 				`Equal`:   {},
 			},
+		}, {
+			desc: `remove unsafe and embed if not needed`,
+			src: `import "unsafe"
+				import "embed"
+
+				//gopherjs:purge
+				var eFile embed.FS
+
+				//gopherjs:purge
+				func SwapPointer(addr *unsafe.Pointer, new unsafe.Pointer) (old unsafe.Pointer)`,
+			want: ``,
+			expInfo: map[string]overrideInfo{
+				`SwapPointer`: {},
+				`eFile`:       {},
+			},
+		}, {
+			desc: `keep unsafe and embed for directives`,
+			src: `import "unsafe"
+				import "embed"
+
+				//go:embed hello.txt
+				var eFile embed.FS
+
+				//go:linkname runtimeNano runtime.nanotime
+				func runtimeNano() int64`,
+			noCodeChange: true,
+			expInfo: map[string]overrideInfo{
+				`eFile`:       {},
+				`runtimeNano`: {},
+			},
 		},
 	}
 

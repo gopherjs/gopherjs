@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 func RemoveParens(e ast.Expr) ast.Expr {
@@ -195,6 +196,19 @@ func hasDirective(node ast.Node, directiveAction string) bool {
 		}
 	})
 	return foundDirective
+}
+
+// HasDirectivePrefix determines if any line in the given file
+// has the given directive prefix in it.
+func HasDirectivePrefix(file *ast.File, prefix string) bool {
+	for _, cg := range file.Comments {
+		for _, c := range cg.List {
+			if strings.HasPrefix(c.Text, prefix) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // FindLoopStmt tries to find the loop statement among the AST nodes in the

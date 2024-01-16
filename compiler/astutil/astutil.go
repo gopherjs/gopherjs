@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 func RemoveParens(e ast.Expr) ast.Expr {
@@ -148,6 +149,24 @@ func Purge(d ast.Node) bool {
 	return hasDirective(d, `purge`)
 }
 
+// OverrideSignature returns true if gopherjs:override-signature directive is
+// present on a function.
+//
+// `//gopherjs:override-signature` is a GopherJS-specific directive, which can
+// be applied in native overlays and will instruct the augmentation logic to
+// replace the original function signature which has the same FuncKey with the
+// signature defined in the native overlays.
+// This directive can be used to remove generics from a function signature or
+// to replace a receiver of a function with another one. The given native
+// overlay function will be removed, so no method body is needed in the overlay.
+//
+// The new signature may not contain types which require a new import since
+// the imports will not be automatically added when needed, only removed.
+// Use a type alias in the overlay to deal manage imports.
+func OverrideSignature(d *ast.FuncDecl) bool {
+	return hasDirective(d, `override-signature`)
+}
+
 // directiveMatcher is a regex which matches a GopherJS directive
 // and finds the directive action.
 var directiveMatcher = regexp.MustCompile(`^\/(?:\/|\*)gopherjs:([\w-]+)`)
@@ -177,6 +196,19 @@ func hasDirective(node ast.Node, directiveAction string) bool {
 		}
 	})
 	return foundDirective
+}
+
+// HasDirectivePrefix determines if any line in the given file
+// has the given directive prefix in it.
+func HasDirectivePrefix(file *ast.File, prefix string) bool {
+	for _, cg := range file.Comments {
+		for _, c := range cg.List {
+			if strings.HasPrefix(c.Text, prefix) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // FindLoopStmt tries to find the loop statement among the AST nodes in the

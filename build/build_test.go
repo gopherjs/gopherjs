@@ -371,6 +371,36 @@ func TestOverlayAugmentation(t *testing.T) {
 				`Sort`:    {},
 				`Equal`:   {},
 			},
+		}, {
+			desc: `remove unsafe and embed if not needed`,
+			src: `import "unsafe"
+				import "embed"
+
+				//gopherjs:purge
+				var eFile embed.FS
+
+				//gopherjs:purge
+				func SwapPointer(addr *unsafe.Pointer, new unsafe.Pointer) (old unsafe.Pointer)`,
+			want: ``,
+			expInfo: map[string]overrideInfo{
+				`SwapPointer`: {},
+				`eFile`:       {},
+			},
+		}, {
+			desc: `keep unsafe and embed for directives`,
+			src: `import "unsafe"
+				import "embed"
+
+				//go:embed hello.txt
+				var eFile embed.FS
+
+				//go:linkname runtimeNano runtime.nanotime
+				func runtimeNano() int64`,
+			noCodeChange: true,
+			expInfo: map[string]overrideInfo{
+				`eFile`:       {},
+				`runtimeNano`: {},
+			},
 		},
 	}
 
@@ -539,6 +569,9 @@ func TestOriginalAugmentation(t *testing.T) {
 				`Equal`:   {},
 			},
 			src: `import "cmp"
+			
+				// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}
 
 				type Pointer[T any] struct {}
 
@@ -546,7 +579,8 @@ func TestOriginalAugmentation(t *testing.T) {
 
 				// overlay had stub "func Equal() {}"
 				func Equal[S ~[]E, E any](s1, s2 S) bool {}`,
-			want: ``,
+			want: `// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}`,
 		}, {
 			desc: `purge generics`,
 			info: map[string]overrideInfo{
@@ -556,6 +590,9 @@ func TestOriginalAugmentation(t *testing.T) {
 			},
 			src: `import "cmp"
 
+				// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}
+
 				type Pointer[T any] struct {}
 				func (x *Pointer[T]) Load() *T {}
 				func (x *Pointer[T]) Store(val *T) {}
@@ -564,12 +601,78 @@ func TestOriginalAugmentation(t *testing.T) {
 
 				// overlay had stub "func Equal() {}"
 				func Equal[S ~[]E, E any](s1, s2 S) bool {}`,
-			want: ``,
+			want: `// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}`,
 		}, {
 			desc: `prune an unused import`,
 			info: map[string]overrideInfo{},
-			src:  `import foo "some/other/bar"`,
+			src: `import foo "some/other/bar"
+			
+				// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}`,
+			want: `// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}`,
+		}, {
+			desc: `override signature of function`,
+			info: map[string]overrideInfo{
+				`Foo`: {
+					overrideSignature: srctesting.ParseFuncDecl(t,
+						`package whatever
+						func Foo(a, b any) (any, bool) {}`),
+				},
+			},
+			src: `func Foo[T comparable](a, b T) (T, bool) {
+					if a == b {
+						return a, true
+					}
+					return b, false
+				}`,
+			want: `func Foo(a, b any) (any, bool) {
+				if a == b {
+					return a, true
+				}
+				return b, false
+			}`,
+		}, {
+			desc: `override signature of method`,
+			info: map[string]overrideInfo{
+				`Foo.Bar`: {
+					overrideSignature: srctesting.ParseFuncDecl(t,
+						`package whatever
+						func (r *Foo) Bar(a, b any) (any, bool) {}`),
+				},
+			},
+			src: `func (r *Foo[T]) Bar(a, b T) (T, bool) {
+					if r.isSame(a, b) {
+						return a, true
+					}
+					return b, false
+				}`,
+			want: `func (r *Foo) Bar(a, b any) (any, bool) {
+					if r.isSame(a, b) {
+						return a, true
+					}
+					return b, false
+				}`,
+		}, {
+			desc: `empty file removes all imports`,
+			info: map[string]overrideInfo{
+				`foo`: {},
+			},
+			src: `import . "math/rand"
+				func foo() int {
+					return Int()
+				}`,
 			want: ``,
+		}, {
+			desc: `empty file with directive`,
+			info: map[string]overrideInfo{
+				`foo`: {},
+			},
+			src: `//go:linkname foo bar
+				import _ "unsafe"`,
+			want: `//go:linkname foo bar
+				import _ "unsafe"`,
 		},
 	}
 

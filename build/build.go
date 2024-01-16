@@ -479,9 +479,9 @@ func pruneImports(file *ast.File) {
 	finalizeRemovals(file)
 }
 
-// finalizeRemovals fully removes any declaration, specification, and imports,
-// that have been set to nil. This also removes any floating comments of
-// things which were removed.
+// finalizeRemovals fully removes any declaration, specification, imports
+// that have been set to nil. This will also remove any unassociated comment
+// groups, including the comments from removed code.
 func finalizeRemovals(file *ast.File) {
 	fileChanged := false
 	for i, decl := range file.Decls {

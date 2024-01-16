@@ -267,7 +267,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 		case token.ARROW:
 			call := &ast.CallExpr{
-				Fun:  fc.newIdent("$recv", types.NewSignature(nil, types.NewTuple(types.NewVar(0, nil, "", t)), types.NewTuple(types.NewVar(0, nil, "", exprType), types.NewVar(0, nil, "", types.Typ[types.Bool])), false)),
+				Fun:  fc.newIdent("$recv", types.NewSignatureType(nil, nil, nil, types.NewTuple(types.NewVar(0, nil, "", t)), types.NewTuple(types.NewVar(0, nil, "", exprType), types.NewVar(0, nil, "", types.Typ[types.Bool])), false)),
 				Args: []ast.Expr{e.X},
 			}
 			fc.Blocking[call] = true
@@ -520,8 +520,11 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			)
 		case *types.Basic:
 			return fc.formatExpr("%e.charCodeAt(%f)", e.X, e.Index)
+		case *types.Signature:
+			err := bailout(fmt.Errorf(`unsupported type parameters used at %s`, fc.pkgCtx.fileSet.Position(e.Pos())))
+			panic(err)
 		default:
-			panic(fmt.Sprintf("Unhandled IndexExpr: %T\n", t))
+			panic(fmt.Errorf(`unhandled IndexExpr: %T`, t))
 		}
 
 	case *ast.SliceExpr:
@@ -703,7 +706,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 					case "Float":
 						return fc.internalize(recv, types.Typ[types.Float64])
 					case "Interface":
-						return fc.internalize(recv, types.NewInterface(nil, nil))
+						return fc.internalize(recv, types.NewInterfaceType(nil, nil))
 					case "Unsafe":
 						return recv
 					default:
@@ -998,7 +1001,7 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			panic(fmt.Sprintf("Unhandled cap type: %T\n", argType))
 		}
 	case "panic":
-		return fc.formatExpr("$panic(%s)", fc.translateImplicitConversion(args[0], types.NewInterface(nil, nil)))
+		return fc.formatExpr("$panic(%s)", fc.translateImplicitConversion(args[0], types.NewInterfaceType(nil, nil)))
 	case "append":
 		if ellipsis || len(args) == 1 {
 			argStr := fc.translateArgs(sig, args, ellipsis)

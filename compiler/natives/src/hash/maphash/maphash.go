@@ -8,7 +8,7 @@ var hashkey [4]uint32
 
 func init() {
 	for i := range hashkey {
-		hashkey[i] = runtime_fastrand64()
+		hashkey[i] = uint32(runtime_fastrand64())
 	}
 	hashkey[0] |= 1 // make sure these numbers are odd
 	hashkey[1] |= 1

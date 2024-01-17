@@ -375,8 +375,10 @@ func TestOverlayAugmentation(t *testing.T) {
 			desc: `remove unsafe and embed if not needed`,
 			src: `import "unsafe"
 				import "embed"
+
 				//gopherjs:purge
 				var eFile embed.FS
+
 				//gopherjs:purge
 				func SwapPointer(addr *unsafe.Pointer, new unsafe.Pointer) (old unsafe.Pointer)`,
 			want: ``,
@@ -388,8 +390,10 @@ func TestOverlayAugmentation(t *testing.T) {
 			desc: `keep unsafe and embed for directives`,
 			src: `import "unsafe"
 				import "embed"
+
 				//go:embed hello.txt
 				var eFile embed.FS
+
 				//go:linkname runtimeNano runtime.nanotime
 				func runtimeNano() int64`,
 			noCodeChange: true,
@@ -564,15 +568,20 @@ func TestOriginalAugmentation(t *testing.T) {
 				`Sort`:    {},
 				`Equal`:   {},
 			},
-			src: `import "cmp"
+			src: `
+				import "cmp"
 
 				type Pointer[T any] struct {}
 
 				func Sort[S ~[]E, E cmp.Ordered](x S) {}
 
 				// overlay had stub "func Equal() {}"
-				func Equal[S ~[]E, E any](s1, s2 S) bool {}`,
-			want: ``,
+				func Equal[S ~[]E, E any](s1, s2 S) bool {}
+				
+				// keeps the isOnlyImports from skipping what we are trying to test.
+				func foo() {}`,
+			want: `// keeps the isOnlyImports from skipping what we are trying to test.
+				func foo() {}`,
 		}, {
 			desc: `purge generics`,
 			info: map[string]overrideInfo{
@@ -589,13 +598,21 @@ func TestOriginalAugmentation(t *testing.T) {
 				func Sort[S ~[]E, E cmp.Ordered](x S) {}
 
 				// overlay had stub "func Equal() {}"
-				func Equal[S ~[]E, E any](s1, s2 S) bool {}`,
-			want: ``,
+				func Equal[S ~[]E, E any](s1, s2 S) bool {}
+
+				// keeps the isOnlyImports from skipping what we are trying to test.
+				func foo() {}`,
+			want: `// keeps the isOnlyImports from skipping what we are trying to test.
+				func foo() {}`,
 		}, {
 			desc: `prune an unused import`,
 			info: map[string]overrideInfo{},
-			src:  `import foo "some/other/bar"`,
-			want: ``,
+			src: `import foo "some/other/bar"
+
+				// keeps the isOnlyImports from skipping what we are trying to test.
+				func foo() {}`,
+			want: `// keeps the isOnlyImports from skipping what we are trying to test.
+				func foo() {}`,
 		}, {
 			desc: `override signature of function`,
 			info: map[string]overrideInfo{
@@ -638,6 +655,26 @@ func TestOriginalAugmentation(t *testing.T) {
 					}
 					return b, false
 				}`,
+		}, {
+			desc: `empty file removes all imports`,
+			info: map[string]overrideInfo{
+				`foo`: {},
+			},
+			src: `import . "math/rand"
+
+				func foo() int {
+					return Int()
+				}`,
+			want: ``,
+		}, {
+			desc: `empty file with directive`,
+			info: map[string]overrideInfo{
+				`foo`: {},
+			},
+			src: `//go:linkname foo bar
+				import _ "unsafe"`,
+			want: `//go:linkname foo bar
+				import _ "unsafe"`,
 		},
 	}
 

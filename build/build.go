@@ -411,6 +411,16 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 	finalizeRemovals(file)
 }
 
+// isOnlyImports determines if this file is empty except for imports.
+func isOnlyImports(file *ast.File) bool {
+	for _, decl := range file.Decls {
+		if gen, ok := decl.(*ast.GenDecl); !ok || gen.Tok != token.IMPORT {
+			return false
+		}
+	}
+	return true
+}
+
 // pruneImports will remove any unused imports from the file.
 //
 // This will not remove any dot (`.`) or blank (`_`) imports, unless
@@ -420,11 +430,11 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 // import may not be run anymore. If we still need to run an init for an import
 // which is no longer used, add it to the overlay as a blank (`_`) import.
 func pruneImports(file *ast.File) {
-	if len(file.Decls) == 0 &&
-		!astutil.HasDirectivePrefix(file, `//go:linkname `) &&
-		!astutil.HasDirectivePrefix(file, `//go:embed `) {
+	if isOnlyImports(file) &&
+		!astutil.HasDirectivePrefix(file, `//go:linkname `) {
 		// The file is empty, remove all imports.
-		file.Imports = []*ast.ImportSpec{}
+		file.Imports = nil
+		file.Decls = nil
 		return
 	}
 

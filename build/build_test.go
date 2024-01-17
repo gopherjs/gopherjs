@@ -568,19 +568,18 @@ func TestOriginalAugmentation(t *testing.T) {
 				`Sort`:    {},
 				`Equal`:   {},
 			},
-			src: `
-				import "cmp"
+			src: `import "cmp"
+			
+				// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}
 
 				type Pointer[T any] struct {}
 
 				func Sort[S ~[]E, E cmp.Ordered](x S) {}
 
 				// overlay had stub "func Equal() {}"
-				func Equal[S ~[]E, E any](s1, s2 S) bool {}
-				
-				// keeps the isOnlyImports from skipping what we are trying to test.
-				func foo() {}`,
-			want: `// keeps the isOnlyImports from skipping what we are trying to test.
+				func Equal[S ~[]E, E any](s1, s2 S) bool {}`,
+			want: `// keeps the isOnlyImports from skipping what is being tested.
 				func foo() {}`,
 		}, {
 			desc: `purge generics`,
@@ -591,6 +590,9 @@ func TestOriginalAugmentation(t *testing.T) {
 			},
 			src: `import "cmp"
 
+				// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}
+
 				type Pointer[T any] struct {}
 				func (x *Pointer[T]) Load() *T {}
 				func (x *Pointer[T]) Store(val *T) {}
@@ -598,20 +600,17 @@ func TestOriginalAugmentation(t *testing.T) {
 				func Sort[S ~[]E, E cmp.Ordered](x S) {}
 
 				// overlay had stub "func Equal() {}"
-				func Equal[S ~[]E, E any](s1, s2 S) bool {}
-
-				// keeps the isOnlyImports from skipping what we are trying to test.
-				func foo() {}`,
-			want: `// keeps the isOnlyImports from skipping what we are trying to test.
+				func Equal[S ~[]E, E any](s1, s2 S) bool {}`,
+			want: `// keeps the isOnlyImports from skipping what is being tested.
 				func foo() {}`,
 		}, {
 			desc: `prune an unused import`,
 			info: map[string]overrideInfo{},
 			src: `import foo "some/other/bar"
-
-				// keeps the isOnlyImports from skipping what we are trying to test.
+			
+				// keeps the isOnlyImports from skipping what is being tested.
 				func foo() {}`,
-			want: `// keeps the isOnlyImports from skipping what we are trying to test.
+			want: `// keeps the isOnlyImports from skipping what is being tested.
 				func foo() {}`,
 		}, {
 			desc: `override signature of function`,
@@ -661,7 +660,6 @@ func TestOriginalAugmentation(t *testing.T) {
 				`foo`: {},
 			},
 			src: `import . "math/rand"
-
 				func foo() int {
 					return Int()
 				}`,

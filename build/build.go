@@ -430,9 +430,8 @@ func isOnlyImports(file *ast.File) bool {
 // import may not be run anymore. If we still need to run an init for an import
 // which is no longer used, add it to the overlay as a blank (`_`) import.
 func pruneImports(file *ast.File) {
-	if isOnlyImports(file) &&
-		!astutil.HasDirectivePrefix(file, `//go:linkname `) {
-		// The file is empty, remove all imports.
+	if isOnlyImports(file) && !astutil.HasDirectivePrefix(file, `//go:linkname `) {
+		// The file is empty, remove all imports including any `.` or `_` imports.
 		file.Imports = nil
 		file.Decls = nil
 		return

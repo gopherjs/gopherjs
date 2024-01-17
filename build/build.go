@@ -413,11 +413,21 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 
 // pruneImports will remove any unused imports from the file.
 //
-// This will not remove any dot (`.`) or blank (`_`) imports.
+// This will not remove any dot (`.`) or blank (`_`) imports, unless
+// there are no declarations or directives meaning that all the imports
+// should be cleared.
 // If the removal of code causes an import to be removed, the init's from that
 // import may not be run anymore. If we still need to run an init for an import
 // which is no longer used, add it to the overlay as a blank (`_`) import.
 func pruneImports(file *ast.File) {
+	if len(file.Decls) == 0 &&
+		!astutil.HasDirectivePrefix(file, `//go:linkname `) &&
+		!astutil.HasDirectivePrefix(file, `//go:embed `) {
+		// The file is empty, remove all imports.
+		file.Imports = []*ast.ImportSpec{}
+		return
+	}
+
 	unused := make(map[string]int, len(file.Imports))
 	for i, in := range file.Imports {
 		if name := astutil.ImportName(in); len(name) > 0 {

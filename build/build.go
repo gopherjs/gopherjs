@@ -150,11 +150,16 @@ type overrideInfo struct {
 //   - For function identifiers that exist in the original and the overrides
 //     and have the directive `gopherjs:keep-original`, the original identifier
 //     in the AST gets prefixed by `_gopherjs_original_`.
-//   - For identifiers that exist in the original and the overrides and have
+//   - For identifiers that exist in the original and the overrides, and have
 //     the directive `gopherjs:purge`, both the original and override are
 //     removed. This is for completely removing something which is currently
 //     invalid for GopherJS. For any purged types any methods with that type as
 //     the receiver are also removed.
+//   - For function identifiers that exist in the original and the overrides,
+//     and have the directive `gopherjs:override-signature`, the overridden
+//     function is removed and the original function's signature is changed
+//     to match the overridden function signature. This allows the receiver,
+//     type parameters, parameter, and return values to be modified as needed.
 //   - Otherwise for identifiers that exist in the original and the overrides,
 //     the original is removed.
 //   - New identifiers that don't exist in original package get added.
@@ -414,9 +419,12 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 // isOnlyImports determines if this file is empty except for imports.
 func isOnlyImports(file *ast.File) bool {
 	for _, decl := range file.Decls {
-		if gen, ok := decl.(*ast.GenDecl); !ok || gen.Tok != token.IMPORT {
-			return false
+		if gen, ok := decl.(*ast.GenDecl); ok && gen.Tok == token.IMPORT {
+			continue
 		}
+
+		// The decl was either a FuncDecl or a non-import GenDecl.
+		return false
 	}
 	return true
 }

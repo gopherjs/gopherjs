@@ -155,8 +155,6 @@ var knownFails = map[string]failReason{
 	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
 	// fixed.
 	"typeparam/chans.go":       {category: generics, desc: "bug: Cannot read property 'ptr' of undefined"},
-	"typeparam/dottype.go":     {category: generics, desc: "bug: type assertion: Cannot read property 'kind' of undefined"},
-	"typeparam/equal.go":       {category: generics, desc: "bug: equal: Cannot read property 'kind' of undefined"},
 	"typeparam/issue44688.go":  {category: generics, desc: "bug: Type$1 is not defined"},
 	"typeparam/issue46591.go":  {category: generics, desc: "undiagnosed: len() returns an invalid value when parameterized types are involved"},
 	"typeparam/issue47713.go":  {category: generics, desc: "bug: Cannot create property '$ptr' on XXX"},

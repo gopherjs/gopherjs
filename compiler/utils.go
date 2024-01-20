@@ -328,7 +328,11 @@ func isVarOrConst(o types.Object) bool {
 }
 
 func isPkgLevel(o types.Object) bool {
-	return o.Parent() != nil && o.Parent().Parent() == types.Universe
+	// Note: named types are always assigned a variable at package level to be
+	// initialized with the rest of the package types, even the types declared
+	// in a statement inside a function.
+	_, isType := o.(*types.TypeName)
+	return (o.Parent() != nil && o.Parent().Parent() == types.Universe) || isType
 }
 
 // assignedObjectName checks if the object has been previously assigned a name
@@ -359,8 +363,13 @@ func (fc *funcContext) objectName(o types.Object) string {
 
 	name, ok := fc.assignedObjectName(o)
 	if !ok {
-		name = fc.newVariableWithLevel(o.Name(), isPkgLevel(o))
-		fc.objectNames[o] = name
+		pkgLevel := isPkgLevel(o)
+		name = fc.newVariableWithLevel(o.Name(), pkgLevel)
+		if pkgLevel {
+			fc.root().objectNames[o] = name
+		} else {
+			fc.objectNames[o] = name
+		}
 	}
 
 	if v, ok := o.(*types.Var); ok && fc.pkgCtx.escapingVars[v] {

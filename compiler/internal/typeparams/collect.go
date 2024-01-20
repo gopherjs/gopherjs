@@ -16,7 +16,8 @@ type Resolver struct {
 	TContext *types.Context
 	Map      map[*types.TypeParam]types.Type
 
-	memo typesutil.Map[types.Type]
+	memo    typesutil.Map[types.Type]
+	selMemo map[typesutil.Selection]typesutil.Selection
 }
 
 // NewResolver creates a new Resolver with tParams entries mapping to tArgs
@@ -25,6 +26,7 @@ func NewResolver(tc *types.Context, tParams []*types.TypeParam, tArgs []types.Ty
 	r := &Resolver{
 		TContext: tc,
 		Map:      map[*types.TypeParam]types.Type{},
+		selMemo:  map[typesutil.Selection]typesutil.Selection{},
 	}
 	if len(tParams) != len(tArgs) {
 		panic(fmt.Errorf("len(tParams)=%d not equal len(tArgs)=%d", len(tParams), len(tArgs)))
@@ -57,6 +59,42 @@ func (r *Resolver) SubstituteAll(list *types.TypeList) []types.Type {
 		result[i] = r.Substitute(list.At(i))
 	}
 	return result
+}
+
+// SubstituteSelection replaces a method of field selection on a generic type
+// defined in terms of type parameters with a method selection on a concrete
+// instantiation of the type.
+func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Selection {
+	if r == nil || r.Map == nil || sel == nil {
+		return sel // No substitutions to be made.
+	}
+	if concrete, ok := r.selMemo[sel]; ok {
+		return concrete
+	}
+
+	switch sel.Kind() {
+	case types.FieldVal:
+		return sel
+	case types.MethodExpr, types.MethodVal:
+		recv := r.Substitute(sel.Recv())
+		if recv == sel.Recv() {
+			return sel // Non-generic receiver, no substitution necessary.
+		}
+
+		// Look up the method on the instantiated receiver.
+		pkg := sel.Obj().Pkg()
+		obj, index, _ := types.LookupFieldOrMethod(recv, true, pkg, sel.Obj().Name())
+		sig := obj.Type().(*types.Signature)
+
+		if sel.Kind() == types.MethodExpr {
+			sig = typesutil.RecvAsFirstArg(sig)
+		}
+		concrete := typesutil.NewSelection(sel.Kind(), recv, index, obj, sig)
+		r.selMemo[sel] = concrete
+		return concrete
+	default:
+		panic(fmt.Errorf("unexpected selection kind %v: %v", sel.Kind(), sel))
+	}
 }
 
 // ToSlice converts TypeParamList into a slice with the sale order of entries.

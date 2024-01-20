@@ -328,7 +328,7 @@ func TestCollector(t *testing.T) {
 	src := `package test
 	type typ[T any] int
 	func (t typ[T]) method(arg T) { var _ typ[int]; fun[int8](0) }
-	func fun[T any](arg T) { 
+	func fun[T any](arg T) {
 		var _ typ[int16]
 
 		type nested[U any] struct{}
@@ -375,5 +375,75 @@ func TestCollector(t *testing.T) {
 	got := c.Instances.Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != "" {
 		t.Errorf("Instances from initialSeeder contain diff (-want,+got):\n%s", diff)
+	}
+}
+
+func TestResolver_SubstituteSelection(t *testing.T) {
+	tests := []struct {
+		descr   string
+		src     string
+		wantObj string
+		wantSig string
+	}{{
+		descr: "type parameter method",
+		src: `package test
+		type stringer interface{ String() string }
+
+		type x struct{}
+		func (_ x) String() string { return "" }
+
+		type g[T stringer] struct{}
+		func (_ g[T]) Method(t T) string {
+			return t.String()
+		}`,
+		wantObj: "func (test.x).String() string",
+		wantSig: "func() string",
+	}, {
+		descr: "generic receiver type with type parameter",
+		src: `package test
+			type x struct{}
+
+			type g[T any] struct{}
+			func (_ g[T]) Method(t T) string {
+				return g[T]{}.Method(t)
+			}`,
+		wantObj: "func (test.g[test.x]).Method(t test.x) string",
+		wantSig: "func(t test.x) string",
+	}, {
+		descr: "method expression",
+		src: `package test
+				type x struct{}
+
+				type g[T any] struct{}
+				func (recv g[T]) Method(t T) string {
+					return g[T].Method(recv, t)
+				}`,
+		wantObj: "func (test.g[test.x]).Method(t test.x) string",
+		wantSig: "func(recv test.g[test.x], t test.x) string",
+	}}
+
+	for _, test := range tests {
+		t.Run(test.descr, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file := srctesting.Parse(t, fset, test.src)
+			info, pkg := srctesting.Check(t, fset, file)
+
+			method := srctesting.LookupObj(pkg, "g.Method").(*types.Func).Type().(*types.Signature)
+			resolver := NewResolver(nil, ToSlice(method.RecvTypeParams()), []types.Type{srctesting.LookupObj(pkg, "x").Type()})
+
+			if l := len(info.Selections); l != 1 {
+				t.Fatalf("Got: %d selections. Want: 1", l)
+			}
+			for _, sel := range info.Selections {
+				gotObj := types.ObjectString(resolver.SubstituteSelection(sel).Obj(), nil)
+				if gotObj != test.wantObj {
+					t.Fatalf("Got: resolver.SubstituteSelection().Obj() = %q. Want: %q.", gotObj, test.wantObj)
+				}
+				gotSig := types.TypeString(resolver.SubstituteSelection(sel).Type(), nil)
+				if gotSig != test.wantSig {
+					t.Fatalf("Got: resolver.SubstituteSelection().Type() = %q. Want: %q.", gotSig, test.wantSig)
+				}
+			}
+		})
 	}
 }

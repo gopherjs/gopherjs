@@ -247,7 +247,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				}
 				return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", elemType), false))
 			case *ast.SelectorExpr:
-				sel, ok := fc.pkgCtx.SelectionOf(x)
+				sel, ok := fc.selectionOf(x)
 				if !ok {
 					// qualified identifier
 					obj := fc.pkgCtx.Uses[x.Sel].(*types.Var)
@@ -567,7 +567,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.SelectorExpr:
-		sel, ok := fc.pkgCtx.SelectionOf(e)
+		sel, ok := fc.selectionOf(e)
 		if !ok {
 			// qualified identifier
 			return fc.formatExpr("%s", fc.instName(inst))
@@ -618,7 +618,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			return fc.translateCall(e, sig, fc.translateExpr(f))
 
 		case *ast.SelectorExpr:
-			sel, ok := fc.pkgCtx.SelectionOf(f)
+			sel, ok := fc.selectionOf(f)
 			if !ok {
 				// qualified identifier
 				obj := fc.pkgCtx.Uses[f.Sel]
@@ -902,7 +902,7 @@ func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, 
 }
 
 func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
-	sel, _ := fc.pkgCtx.SelectionOf(e)
+	sel, _ := fc.selectionOf(e)
 	if !sel.Obj().Exported() {
 		fc.pkgCtx.dependencies[sel.Obj()] = true
 	}
@@ -919,12 +919,7 @@ func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 		}
 
 		fakeSel := &ast.SelectorExpr{X: x, Sel: ast.NewIdent("o")}
-		fc.pkgCtx.additionalSelections[fakeSel] = &fakeSelection{
-			kind:  types.FieldVal,
-			recv:  sel.Recv(),
-			index: sel.Index()[:len(sel.Index())-1],
-			typ:   recvType,
-		}
+		fc.pkgCtx.additionalSelections[fakeSel] = typesutil.NewSelection(types.FieldVal, sel.Recv(), sel.Index()[:len(sel.Index())-1], nil, recvType)
 		x = fc.setType(fakeSel, recvType)
 	}
 

@@ -16,6 +16,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
+	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/neelance/astrewrite"
 	"golang.org/x/tools/go/gcexportdata"
 	"golang.org/x/tools/go/types/typeutil"
@@ -24,7 +25,7 @@ import (
 // pkgContext maintains compiler context for a specific package.
 type pkgContext struct {
 	*analysis.Info
-	additionalSelections map[*ast.SelectorExpr]selection
+	additionalSelections map[*ast.SelectorExpr]typesutil.Selection
 
 	typesCtx     *types.Context
 	typeNames    []*types.TypeName
@@ -39,38 +40,6 @@ type pkgContext struct {
 	fileSet      *token.FileSet
 	errList      ErrorList
 }
-
-func (p *pkgContext) SelectionOf(e *ast.SelectorExpr) (selection, bool) {
-	if sel, ok := p.Selections[e]; ok {
-		return sel, true
-	}
-	if sel, ok := p.additionalSelections[e]; ok {
-		return sel, true
-	}
-	return nil, false
-}
-
-type selection interface {
-	Kind() types.SelectionKind
-	Recv() types.Type
-	Index() []int
-	Obj() types.Object
-	Type() types.Type
-}
-
-type fakeSelection struct {
-	kind  types.SelectionKind
-	recv  types.Type
-	index []int
-	obj   types.Object
-	typ   types.Type
-}
-
-func (sel *fakeSelection) Kind() types.SelectionKind { return sel.kind }
-func (sel *fakeSelection) Recv() types.Type          { return sel.recv }
-func (sel *fakeSelection) Index() []int              { return sel.index }
-func (sel *fakeSelection) Obj() types.Object         { return sel.obj }
-func (sel *fakeSelection) Type() types.Type          { return sel.typ }
 
 // funcContext maintains compiler context for a specific function (lexical scope?).
 type funcContext struct {
@@ -253,7 +222,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		FuncInfo: pkgInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{
 			Info:                 pkgInfo,
-			additionalSelections: make(map[*ast.SelectorExpr]selection),
+			additionalSelections: make(map[*ast.SelectorExpr]typesutil.Selection),
 
 			typesCtx:     config.Context,
 			pkgVars:      make(map[string]string),

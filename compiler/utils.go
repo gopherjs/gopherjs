@@ -167,7 +167,7 @@ func (fc *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, 
 	return args
 }
 
-func (fc *funcContext) translateSelection(sel selection, pos token.Pos) ([]string, string) {
+func (fc *funcContext) translateSelection(sel typesutil.Selection, pos token.Pos) ([]string, string) {
 	var fields []string
 	t := sel.Recv()
 	for _, index := range sel.Index() {
@@ -440,6 +440,16 @@ func (fc *funcContext) instanceOf(ident *ast.Ident) typeparams.Instance {
 // concrete types from the current set of type arguments.
 func (fc *funcContext) typeOf(expr ast.Expr) types.Type {
 	return fc.typeResolver.Substitute(fc.pkgCtx.TypeOf(expr))
+}
+
+func (fc *funcContext) selectionOf(e *ast.SelectorExpr) (typesutil.Selection, bool) {
+	if sel, ok := fc.pkgCtx.Selections[e]; ok {
+		return fc.typeResolver.SubstituteSelection(sel), true
+	}
+	if sel, ok := fc.pkgCtx.additionalSelections[e]; ok {
+		return sel, true
+	}
+	return nil, false
 }
 
 func (fc *funcContext) externalize(s string, t types.Type) string {

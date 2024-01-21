@@ -134,6 +134,18 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 	}
 
 	obj := c.info.ObjectOf(ident)
+
+	// For types embedded in structs, the object the identifier resolves to is a
+	// *types.Var representing the implicitly declared struct field. However, the
+	// instance relates to the *types.TypeName behind the field type, which we
+	// obtain here.
+	typ := obj.Type()
+	if ptr, ok := typ.(*types.Pointer); ok {
+		typ = ptr.Elem()
+	}
+	if t, ok := typ.(*types.Named); ok {
+		obj = t.Obj()
+	}
 	c.instances.Add(Instance{
 		Object: obj,
 		TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),

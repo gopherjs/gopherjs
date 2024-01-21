@@ -155,16 +155,12 @@ var knownFails = map[string]failReason{
 	// Failures related to the lack of generics support. Ideally, this section
 	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
 	// fixed.
-	"typeparam/issue44688.go":  {category: generics, desc: "bug: C$1 is not defined"},
 	"typeparam/issue46591.go":  {category: generics, desc: "undiagnosed: len() returns an invalid value when parameterized types are involved"},
 	"typeparam/issue47716.go":  {category: generics, desc: "bug: failed to call unsafe.Sizeof"},
-	"typeparam/issue48253.go":  {category: generics, desc: "bug: A$1 is not defined"},
 	"typeparam/issue49547.go":  {category: generics, desc: "bug: incorrect type string"},
-	"typeparam/issue50109b.go": {category: generics, desc: "bug: S2$1 is not defined"},
 	"typeparam/metrics.go":     {category: generics, desc: "bug: append: Cannot read property '$array' of undefined"},
 	"typeparam/nested.go":      {category: generics, desc: "bug: Cannot set property 'main.Int' of undefined"},
 	"typeparam/orderedmap.go":  {category: generics, desc: "bug: Cannot set property 'key' of undefined"},
-	"typeparam/struct.go":      {category: generics, desc: "bug: E$1 is not defined"},
 	"typeparam/typeswitch2.go": {category: generics, desc: "undiagnosed: incorrect output"},
 	"typeparam/typeswitch3.go": {category: generics, desc: "undiagnosed: incorrect output"},
 	"typeparam/typeswitch5.go": {category: generics, desc: "undiagnosed: incorrect output"},

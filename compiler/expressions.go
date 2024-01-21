@@ -243,7 +243,12 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			case *ast.Ident:
 				obj := fc.pkgCtx.Uses[x].(*types.Var)
 				if fc.pkgCtx.escapingVars[obj] {
-					return fc.formatExpr("(%1s.$ptr || (%1s.$ptr = new %2s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %1s)))", fc.objectName(obj), fc.typeName(exprType))
+					name, ok := fc.assignedObjectName(obj)
+					if !ok {
+						// This should never happen.
+						panic(fmt.Errorf("escaping variable %s hasn't been assigned a JS name", obj))
+					}
+					return fc.formatExpr("(%1s.$ptr || (%1s.$ptr = new %2s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %1s)))", name, fc.typeName(exprType))
 				}
 				return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", elemType), false))
 			case *ast.SelectorExpr:

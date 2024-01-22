@@ -14,7 +14,14 @@ func fastrand() uint32 {
 	return uint32(js.Global.Get("Math").Call("random").Float() * (1<<32 - 1))
 }
 
+func fastrandn(n uint32) uint32 {
+	return fastrand() % n
+}
+
 func fastrand64() uint64 {
-	// Similar to fastrand, except for 64 bits
 	return uint64(fastrand())<<32 | uint64(fastrand())
+}
+
+func fastrandu() uint {
+	return uint(fastrand())
 }

@@ -8,4 +8,4 @@ import (
 )
 
 //go:linkname fastrandu runtime.fastrandu
-func fastrandu() uint32
+func fastrandu() uint

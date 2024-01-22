@@ -13,3 +13,8 @@ func fastrand() uint32 {
 	// similar distribution.
 	return uint32(js.Global.Get("Math").Call("random").Float() * (1<<32 - 1))
 }
+
+func fastrand64() uint64 {
+	// Similar to fastrand, except for 64 bits
+	return uint64(fastrand())<<32 | uint64(fastrand())
+}

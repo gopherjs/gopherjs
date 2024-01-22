@@ -33,7 +33,8 @@ func TestEquivalents(t *testing.T) {
 }
 
 //gopherjs:override-signature
-func testEquivalents(t *testing.T, newPoint, newGenerator func() WrappedPoint, c elliptic.Curve) {}
+func testEquivalents(t *testing.T, newPoint, newGenerator func() nistec.WrappedPoint, c elliptic.Curve) {
+}
 
 func TestScalarMult(t *testing.T) {
 	t.Run("P224", func(t *testing.T) {
@@ -51,14 +52,14 @@ func TestScalarMult(t *testing.T) {
 }
 
 //gopherjs:override-signature
-func testScalarMult(t *testing.T, newPoint, newGenerator func() WrappedPoint, c elliptic.Curve)
+func testScalarMult(t *testing.T, newPoint, newGenerator func() nistec.WrappedPoint, c elliptic.Curve)
 
 func BenchmarkScalarMult(b *testing.B) {
 	b.Run("P224", func(b *testing.B) {
 		benchmarkScalarMult(b, nistec.NewP224WrappedGenerator(), 28)
 	})
 	b.Run("P256", func(b *testing.B) {
-		benchmarkScalarMult(b, nistec.NewP256GWrappedenerator(), 32)
+		benchmarkScalarMult(b, nistec.NewP256WrappedGenerator(), 32)
 	})
 	b.Run("P384", func(b *testing.B) {
 		benchmarkScalarMult(b, nistec.NewP384WrappedGenerator(), 48)
@@ -69,11 +70,11 @@ func BenchmarkScalarMult(b *testing.B) {
 }
 
 //gopherjs:override-signature
-func benchmarkScalarMult(b *testing.B, p WrappedPoint, scalarSize int)
+func benchmarkScalarMult(b *testing.B, p nistec.WrappedPoint, scalarSize int)
 
 func BenchmarkScalarBaseMult(b *testing.B) {
 	b.Run("P224", func(b *testing.B) {
-		benchmarkScalarBaseMult(b, nistec.NewP22Wrapped4Generator(), 28)
+		benchmarkScalarBaseMult(b, nistec.NewP224Wrapped4Generator(), 28)
 	})
 	b.Run("P256", func(b *testing.B) {
 		benchmarkScalarBaseMult(b, nistec.NewP256WrappedGenerator(), 32)
@@ -82,9 +83,9 @@ func BenchmarkScalarBaseMult(b *testing.B) {
 		benchmarkScalarBaseMult(b, nistec.NewP384WrappedGenerator(), 48)
 	})
 	b.Run("P521", func(b *testing.B) {
-		benchmarkScalarBaseMult(b, nistec.NewP521GWrappedenerator(), 66)
+		benchmarkScalarBaseMult(b, nistec.NewP521WrappedGenerator(), 66)
 	})
 }
 
 //gopherjs:override-signature
-func benchmarkScalarBaseMult(b *testing.B, p WrappedPoint, scalarSize int)
+func benchmarkScalarBaseMult(b *testing.B, p nistec.WrappedPoint, scalarSize int)

@@ -74,7 +74,7 @@ func benchmarkScalarMult(b *testing.B, p nistec.WrappedPoint, scalarSize int)
 
 func BenchmarkScalarBaseMult(b *testing.B) {
 	b.Run("P224", func(b *testing.B) {
-		benchmarkScalarBaseMult(b, nistec.NewP224Wrapped4Generator(), 28)
+		benchmarkScalarBaseMult(b, nistec.NewP224WrappedGenerator(), 28)
 	})
 	b.Run("P256", func(b *testing.B) {
 		benchmarkScalarBaseMult(b, nistec.NewP256WrappedGenerator(), 32)

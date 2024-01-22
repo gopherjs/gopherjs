@@ -665,7 +665,7 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 		err := bailout(fmt.Errorf(`%v has unexpected generic type parameter %T`, ty, ty))
 		panic(err)
 	default:
-		err := bailout(fmt.Errorf(`%v has unexpected type %T`, ty, ty))
+		err := bailout(fmt.Errorf("%v has unexpected type %T", ty, ty))
 		panic(err)
 	}
 }

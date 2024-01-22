@@ -4,8 +4,10 @@
 package nistec_test
 
 import (
-	"crypto/elliptic"
 	"testing"
+
+	"crypto/elliptic"
+	"crypto/internal/nistec"
 )
 
 func TestAllocations(t *testing.T) {

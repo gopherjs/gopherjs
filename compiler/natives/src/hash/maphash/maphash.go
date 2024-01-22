@@ -3,6 +3,10 @@
 
 package maphash
 
+import (
+	_ "unsafe" // for linkname
+)
+
 // used in hash{32,64}.go to seed the hash function
 var hashkey [4]uint32
 
@@ -144,7 +148,7 @@ func (h *Hash) flush() {
 		panic("maphash: flush of partially full buffer")
 	}
 	h.initSeed()
-	h.state.s = rthash(h.buf, h.state.s)
+	h.state.s = rthash(h.buf[:], h.state.s)
 	h.n = 0
 }
 

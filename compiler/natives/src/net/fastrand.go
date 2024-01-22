@@ -7,5 +7,5 @@ import (
 	_ "unsafe" // For go:linkname
 )
 
-//go:linkname fastrand runtime.fastrand
-func fastrand() uint32
+//go:linkname fastrandu runtime.fastrandu
+func fastrandu() uint32

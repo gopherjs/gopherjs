@@ -155,15 +155,19 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue48898.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
 	"fixedbugs/issue48536.go": {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
 	"fixedbugs/issue53600.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+
+	// These are new tests in Go 1.19
+	"fixedbugs/issue53309.go": {category: usesUnsupportedTypeParameters, desc: "Checking switch type against nil type with unsupported type parameters"},
 }
 
 type failCategory uint8
 
 const (
-	other                    failCategory = iota
-	neverTerminates                       // Test never terminates (so avoid starting it).
-	usesUnsupportedPackage                // Test fails because it imports an unsupported package, e.g., "unsafe".
-	requiresSourceMapSupport              // Test fails without source map support (as configured in CI), because it tries to check filename/line number via runtime.Caller.
+	other                         failCategory = iota
+	neverTerminates                            // Test never terminates (so avoid starting it).
+	usesUnsupportedPackage                     // Test fails because it imports an unsupported package, e.g., "unsafe".
+	requiresSourceMapSupport                   // Test fails without source map support (as configured in CI), because it tries to check filename/line number via runtime.Caller.
+	usesUnsupportedTypeParameters              // Test uses type parameters that are not currently supported.
 	compilerPanic
 	unsureIfGopherJSSupportsThisFeature
 	lowLevelRuntimeDifference // JavaScript runtime behaves differently from Go in ways that are difficult to work around.

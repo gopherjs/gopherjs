@@ -3,6 +3,10 @@
 
 package maphash
 
+import (
+	_ "unsafe" // for linkname
+)
+
 // used in hash{32,64}.go to seed the hash function
 var hashkey [4]uint32
 

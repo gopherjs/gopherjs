@@ -41,39 +41,6 @@ func String(seed Seed, s string) uint64 {
 	return h.Sum64()
 }
 
-// Write and WriteString are a simplification from Go 1.19.13
-// with the call to rthash changed to not use unsafe pointers.
-// See https://cs.opensource.google/go/go/+/refs/tags/go1.19.13:src/hash/maphash/maphash.go;l=146
-func (h *Hash) Write(b []byte) (int, error) {
-	size := len(b)
-	if h.n+len(b) > bufSize {
-		h.initSeed()
-		for h.n+len(b) > bufSize {
-			k := copy(h.buf[h.n:], b)
-			h.state.s = rthash(h.buf[:bufSize], h.state.s)
-			b = b[k:]
-			h.n = 0
-		}
-	}
-	h.n += copy(h.buf[h.n:], b)
-	return size, nil
-}
-
-func (h *Hash) WriteString(s string) (int, error) {
-	size := len(s)
-	if h.n+len(s) > bufSize {
-		h.initSeed()
-		for h.n+len(s) > bufSize {
-			k := copy(h.buf[h.n:], s)
-			h.state.s = rthash(h.buf[:bufSize], h.state.s)
-			s = s[k:]
-			h.n = 0
-		}
-	}
-	h.n += copy(h.buf[h.n:], s)
-	return size, nil
-}
-
 // rthash is similar to the Go 1.19.13 version
 // with the call to memhash changed to not use unsafe pointers.
 func rthash(b []byte, seed uint64) uint64 {
@@ -139,6 +106,50 @@ func readUnaligned32(p []byte) uint32 {
 func mix32(a, b uint32) (uint32, uint32) {
 	c := uint64(a^uint32(hashkey[1])) * uint64(b^uint32(hashkey[2]))
 	return uint32(c), uint32(c >> 32)
+}
+
+/*
+	The following functions were modified in Go 1.17 to improve performance,
+	but at the expense of being unsafe, and thus incompatible with GopherJS.
+
+	See upstream issue https://github.com/golang/go/issues/47342 to implement
+	a purego version of this package, which should render this hack (and
+	likely this entire file) obsolete.
+*/
+
+// Write are a simplification from Go 1.19.13 similar to Go 1.16
+// with the call to rthash changed to not use unsafe pointers.
+// See https://cs.opensource.google/go/go/+/refs/tags/go1.19.13:src/hash/maphash/maphash.go;l=146
+func (h *Hash) Write(b []byte) (int, error) {
+	size := len(b)
+	if h.n+len(b) > bufSize {
+		h.initSeed()
+		for h.n+len(b) > bufSize {
+			k := copy(h.buf[h.n:], b)
+			h.state.s = rthash(h.buf[:bufSize], h.state.s)
+			b = b[k:]
+			h.n = 0
+		}
+	}
+	h.n += copy(h.buf[h.n:], b)
+	return size, nil
+}
+
+// WriteString are a simplification from Go 1.19.13 similar to Go 1.16
+// with the call to rthash changed to not use unsafe pointers.
+func (h *Hash) WriteString(s string) (int, error) {
+	size := len(s)
+	if h.n+len(s) > bufSize {
+		h.initSeed()
+		for h.n+len(s) > bufSize {
+			k := copy(h.buf[h.n:], s)
+			h.state.s = rthash(h.buf[:bufSize], h.state.s)
+			s = s[k:]
+			h.n = 0
+		}
+	}
+	h.n += copy(h.buf[h.n:], s)
+	return size, nil
 }
 
 // flush is the Go 1.19.13 version

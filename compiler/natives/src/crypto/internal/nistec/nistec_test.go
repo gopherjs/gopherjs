@@ -33,8 +33,7 @@ func TestEquivalents(t *testing.T) {
 }
 
 //gopherjs:override-signature
-func testEquivalents(t *testing.T, newPoint, newGenerator func() nistec.WrappedPoint, c elliptic.Curve) {
-}
+func testEquivalents(t *testing.T, newPoint, newGenerator func() nistec.WrappedPoint, c elliptic.Curve)
 
 func TestScalarMult(t *testing.T) {
 	t.Run("P224", func(t *testing.T) {

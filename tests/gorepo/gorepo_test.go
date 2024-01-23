@@ -33,8 +33,10 @@ func TestGoRepositoryCompilerTests(t *testing.T) {
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stdout
+	t.Logf(`Running %q`, cmd.String())
 	err := cmd.Run()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf(`Error: %q`, err.Error())
 	}
+	t.Log(`Done`)
 }

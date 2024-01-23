@@ -159,6 +159,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue53309.go": {category: usesUnsupportedTypeParameters, desc: "Checking unused type parameter in method call to interface"},
 	"fixedbugs/issue53635.go": {category: usesUnsupportedTypeParameters, desc: "Checking switch type against nil type with unsupported type parameters"},
 	"fixedbugs/issue53653.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format of int64 is different from Go's"},
+	"fixedbugs/issue50672.go": {category: usesUnsupportedTypeParameters, desc: "Checking function nesting with one function having a type parameter."},
 }
 
 type failCategory uint8

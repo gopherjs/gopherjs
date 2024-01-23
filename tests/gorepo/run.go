@@ -151,7 +151,6 @@ var knownFails = map[string]failReason{
 	// These are new tests in Go 1.18
 	"fixedbugs/issue46938.go": {category: notApplicable, desc: "tests -d=checkptr compiler mode, which GopherJS doesn't support"},
 	"fixedbugs/issue47928.go": {category: notApplicable, desc: "//go:nointerface is a part of GOEXPERIMENT=fieldtrack and is not supported by GopherJS"},
-	"fixedbugs/issue49665.go": {category: other, desc: "attempts to pass -gcflags=-G=3 to enable generics, GopherJS doesn't expect the flag; re-enable in Go 1.19 where the flag is removed"},
 	"fixedbugs/issue48898.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
 	"fixedbugs/issue48536.go": {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
 	"fixedbugs/issue53600.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},

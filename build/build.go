@@ -476,7 +476,7 @@ func pruneImports(file *ast.File) {
 		directivePrefix, hasPath := directiveImports[path]
 		if hasPath && astutil.HasDirectivePrefix(file, directivePrefix) {
 			// since the import is otherwise unused set the name to blank.
-			in.Name.Name = `_`
+			in.Name = ast.NewIdent(`_`)
 			delete(unused, name)
 			if len(unused) == 0 {
 				return

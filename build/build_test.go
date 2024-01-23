@@ -396,7 +396,14 @@ func TestOverlayAugmentation(t *testing.T) {
 
 				//go:linkname runtimeNano runtime.nanotime
 				func runtimeNano() int64`,
-			noCodeChange: true,
+			want: `import _ "unsafe"
+				import "embed"
+
+				//go:embed hello.txt
+				var eFile embed.FS
+
+				//go:linkname runtimeNano runtime.nanotime
+				func runtimeNano() int64`,
 			expInfo: map[string]overrideInfo{
 				`eFile`:       {},
 				`runtimeNano`: {},

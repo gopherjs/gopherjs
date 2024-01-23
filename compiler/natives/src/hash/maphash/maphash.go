@@ -23,8 +23,7 @@ func init() {
 //go:linkname runtime_fastrand runtime.fastrand
 func runtime_fastrand() uint32
 
-// Bytes is overwritten to avoid more efficient equivalent
-// using unsafe via original rthash.
+// Bytes uses less efficient equivalent to avoid using unsafe.
 func Bytes(seed Seed, b []byte) uint64 {
 	var h Hash
 	h.SetSeed(seed)
@@ -32,8 +31,7 @@ func Bytes(seed Seed, b []byte) uint64 {
 	return h.Sum64()
 }
 
-// String is overwritten to avoid more efficient equivalent
-// using unsafe via original rthash.
+// String uses less efficient equivalent to avoid using unsafe.
 func String(seed Seed, s string) uint64 {
 	var h Hash
 	h.SetSeed(seed)
@@ -111,22 +109,23 @@ func mix32(a, b uint32) (uint32, uint32) {
 /*
 	The following functions were modified in Go 1.17 to improve performance,
 	but at the expense of being unsafe, and thus incompatible with GopherJS.
+	See https://cs.opensource.google/go/go/+/refs/tags/go1.19.13:src/hash/maphash/maphash.go;
+	To compensate, we use a simplified version of each method from Go 1.19.13,
+	similar to Go 1.16's versions, with the call to rthash changed to not use unsafe pointers.
 
 	See upstream issue https://github.com/golang/go/issues/47342 to implement
 	a purego version of this package, which should render this hack (and
 	likely this entire file) obsolete.
 */
 
-// Write are a simplification from Go 1.19.13 similar to Go 1.16
-// with the call to rthash changed to not use unsafe pointers.
-// See https://cs.opensource.google/go/go/+/refs/tags/go1.19.13:src/hash/maphash/maphash.go;l=146
+// Write is a simplification from Go 1.19 changed to not use unsafe.
 func (h *Hash) Write(b []byte) (int, error) {
 	size := len(b)
 	if h.n+len(b) > bufSize {
 		h.initSeed()
 		for h.n+len(b) > bufSize {
 			k := copy(h.buf[h.n:], b)
-			h.state.s = rthash(h.buf[:bufSize], h.state.s)
+			h.state.s = rthash(h.buf[:], h.state.s)
 			b = b[k:]
 			h.n = 0
 		}
@@ -135,15 +134,14 @@ func (h *Hash) Write(b []byte) (int, error) {
 	return size, nil
 }
 
-// WriteString are a simplification from Go 1.19.13 similar to Go 1.16
-// with the call to rthash changed to not use unsafe pointers.
+// WriteString is a simplification from Go 1.19 changed to not use unsafe.
 func (h *Hash) WriteString(s string) (int, error) {
 	size := len(s)
 	if h.n+len(s) > bufSize {
 		h.initSeed()
 		for h.n+len(s) > bufSize {
 			k := copy(h.buf[h.n:], s)
-			h.state.s = rthash(h.buf[:bufSize], h.state.s)
+			h.state.s = rthash(h.buf[:], h.state.s)
 			s = s[k:]
 			h.n = 0
 		}
@@ -152,8 +150,7 @@ func (h *Hash) WriteString(s string) (int, error) {
 	return size, nil
 }
 
-// flush is the Go 1.19.13 version
-// with the call to rthash changed to not use unsafe pointers.
+// flush is the Go 1.19 version changed to not use unsafe.
 func (h *Hash) flush() {
 	if h.n != len(h.buf) {
 		panic("maphash: flush of partially full buffer")
@@ -163,8 +160,7 @@ func (h *Hash) flush() {
 	h.n = 0
 }
 
-// Sum64 is the Go 1.19.13 version
-// with the call to rthash changed to not use unsafe pointers.
+// Sum64 is the Go 1.19 version changed to not use unsafe.
 func (h *Hash) Sum64() uint64 {
 	h.initSeed()
 	return rthash(h.buf[:h.n], h.state.s)

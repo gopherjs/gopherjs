@@ -3,10 +3,6 @@
 
 package sync
 
-import (
-	_ "unsafe"
-)
-
 // A Pool is a set of temporary objects that may be individually saved and
 // retrieved.
 //

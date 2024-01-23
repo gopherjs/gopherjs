@@ -25,10 +25,10 @@ func TestNameBytesAreAligned(t *testing.T) {
 // `A` is used with `B[T any]` and is otherwise not needed.
 //
 //gopherjs:purge for go1.19 without generics
-type A struct{}
-
-//gopherjs:purge for go1.19 without generics
-type B[T any] struct{}
+type (
+	A        struct{}
+	B[T any] struct{}
+)
 
 // removing the name tests using `B[T any]` for go1.19 without generics
 var nameTests = []nameTest{

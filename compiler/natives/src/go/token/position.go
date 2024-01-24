@@ -5,8 +5,6 @@ package token
 
 import (
 	"sync"
-	"sync/atomic"
-	"unsafe"
 )
 
 type FileSet struct {
@@ -14,13 +12,13 @@ type FileSet struct {
 	base  int
 	files []*File
 
-	// replaced atomic.Pointer[File] for go1.19 without generics
+	// replaced atomic.Pointer[File] for go1.19 without generics.
 	last atomicFilePointer
 }
 
 type atomicFilePointer struct {
-	v unsafe.Pointer
+	v *File
 }
 
-func (x *atomicFilePointer) Load() *File     { return (*File)(atomic.LoadPointer(&x.v)) }
-func (x *atomicFilePointer) Store(val *File) { atomic.StorePointer(&x.v, unsafe.Pointer(val)) }
+func (x *atomicFilePointer) Load() *File     { return x.v }
+func (x *atomicFilePointer) Store(val *File) { x.v = val }

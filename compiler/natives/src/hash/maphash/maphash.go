@@ -7,17 +7,16 @@ import (
 	_ "unsafe" // for linkname
 )
 
-// used in hash{32,64}.go to seed the hash function
-var hashkey [4]uint32
+// hashkey is similar how it is defined in runtime/alg.go for Go 1.19
+// to be used in hash{32,64}.go to seed the hash function as part of
+// runtime_memhash. We're using locally defined memhash so it got moved here.
+var hashkey [3]uint32
 
 func init() {
 	for i := range hashkey {
-		hashkey[i] = runtime_fastrand()
+		hashkey[i] = runtime_fastrand() | 1
+		// The `| 1` is to make sure these numbers are odd
 	}
-	hashkey[0] |= 1 // make sure these numbers are odd
-	hashkey[1] |= 1
-	hashkey[2] |= 1
-	hashkey[3] |= 1
 }
 
 //go:linkname runtime_fastrand runtime.fastrand

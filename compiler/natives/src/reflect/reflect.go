@@ -5,7 +5,6 @@ package reflect
 
 import (
 	"errors"
-	"fmt"
 	"runtime"
 	"strconv"
 	"unsafe"
@@ -1018,7 +1017,7 @@ func (v Value) object() *js.Object {
 		val := js.InternalObject(v.ptr).Call("$get")
 
 		if val == js.Undefined {
-			fmt.Printf(">>>%s<<<\n", v.String())
+			print(">>>" + v.String() + "<<<\n")
 		}
 
 		if val != js.Global.Get("$ifaceNil") && val.Get("constructor") != jsType(v.typ) {

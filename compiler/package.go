@@ -28,7 +28,7 @@ type pkgContext struct {
 	additionalSelections map[*ast.SelectorExpr]typesutil.Selection
 
 	typesCtx     *types.Context
-	typeNames    []*types.TypeName
+	typeNames    typesutil.TypeNames
 	pkgVars      map[string]string
 	varPtrNames  map[*types.Var]string
 	anonTypes    []*types.TypeName
@@ -293,7 +293,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				case token.TYPE:
 					for _, spec := range d.Specs {
 						o := funcCtx.pkgCtx.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
-						funcCtx.pkgCtx.typeNames = append(funcCtx.pkgCtx.typeNames, o)
+						funcCtx.pkgCtx.typeNames.Add(o)
 						funcCtx.objectName(o) // register toplevel name
 					}
 				case token.VAR:
@@ -490,7 +490,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	// named types
 	var typeDecls []*Decl
-	for _, o := range funcCtx.pkgCtx.typeNames {
+	for _, o := range funcCtx.pkgCtx.typeNames.Slice() {
 		if o.IsAlias() {
 			continue
 		}

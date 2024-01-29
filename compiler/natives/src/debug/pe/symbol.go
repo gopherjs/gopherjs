@@ -4,36 +4,46 @@
 package pe
 
 import (
-	"bytes"
 	"debug/pe"
 	"encoding/binary"
 	"fmt"
 	"io"
 )
 
-func copyToAuxFormat5(sym *COFFSymbol) *COFFSymbolAuxFormat5 {
-	check := func(err error) {
-		if err != nil {
-			panic(err)
-		}
-	}
+// bytesBufferLite is a simplified bytes.Buffer to avoid
+// including `bytes` as a new import into the pe package.
+type bytesBufferLite struct {
+	data []byte
+	off  int
+}
 
+func (buf *bytesBufferLite) Write(p []byte) (int, error) {
+	buf.data = append(buf.data, p...)
+	return len(p), nil
+}
+
+func (buf *bytesBufferLite) Read(p []byte) (int, error) {
+	n := copy(p, buf.data[buf.off:])
+	buf.off += n
+	return n, nil
+}
+
+func copyToAuxFormat5(sym *COFFSymbol) *COFFSymbolAuxFormat5 {
 	order := binary.LittleEndian
-	buf := &bytes.Buffer{}
-	check(binary.Write(buf, order, sym.Name[:]))
-	check(binary.Write(buf, order, sym.Value))
-	check(binary.Write(buf, order, sym.SectionNumber))
-	check(binary.Write(buf, order, sym.Type))
-	check(binary.Write(buf, order, sym.StorageClass))
-	check(binary.Write(buf, order, sym.NumberOfAuxSymbols))
+	buf := &bytesBufferLite{data: make([]byte, 0, 16)}
+	_ = binary.Write(buf, order, sym.Name[:])
+	_ = binary.Write(buf, order, sym.Value)
+	_ = binary.Write(buf, order, sym.SectionNumber)
+	_ = binary.Write(buf, order, sym.Type)
+	// skip StorageClass and NumberOfAuxSymbols
 
 	aux := &pe.COFFSymbolAuxFormat5{}
-	check(binary.Read(buf, order, &aux.Size))
-	check(binary.Read(buf, order, &aux.NumRelocs))
-	check(binary.Read(buf, order, &aux.NumLineNumbers))
-	check(binary.Read(buf, order, &aux.Checksum))
-	check(binary.Read(buf, order, &aux.SecNum))
-	check(binary.Read(buf, order, &aux.Selection))
+	_ = binary.Read(buf, order, &aux.Size)
+	_ = binary.Read(buf, order, &aux.NumRelocs)
+	_ = binary.Read(buf, order, &aux.NumLineNumbers)
+	_ = binary.Read(buf, order, &aux.Checksum)
+	_ = binary.Read(buf, order, &aux.SecNum)
+	_ = binary.Read(buf, order, &aux.Selection)
 	return aux
 }
 

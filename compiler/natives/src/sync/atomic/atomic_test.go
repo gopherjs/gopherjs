@@ -4,8 +4,6 @@
 package atomic_test
 
 import (
-	"runtime"
-	"strings"
 	"testing"
 	"unsafe"
 )
@@ -70,67 +68,10 @@ func TestNilDeref(t *testing.T) {
 //gopherjs:purge for go1.19 without generics
 type List struct{}
 
-func TestHammer32(t *testing.T) { // TODO: REMOVE
-	const p = 4
-	n := 100000
-	if testing.Short() {
-		n = 1000
-	}
-	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(p))
-
-	for name, testf := range hammer32 {
-		c := make(chan int)
-		var val uint32
-		for i := 0; i < p; i++ {
-			go func() {
-				defer func() {
-					if err := recover(); err != nil {
-						t.Error(err)
-					}
-					c <- 1
-				}()
-				testf(&val, n)
-			}()
-		}
-		for i := 0; i < p; i++ {
-			<-c
-		}
-		if !strings.HasPrefix(name, "Swap") && val != uint32(n)*p {
-			t.Fatalf("%s: val=%d want %d", name, val, n*p)
-		}
-	}
+func TestHammer32(t *testing.T) {
+	t.Skip("use of unsafe")
 }
 
-func TestHammer64(t *testing.T) { // TODO: REMOVE
-	if test64err != nil {
-		t.Skipf("Skipping 64-bit tests: %v", test64err)
-	}
-	const p = 4
-	n := 100000
-	if testing.Short() {
-		n = 1000
-	}
-	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(p))
-
-	for name, testf := range hammer64 {
-		c := make(chan int)
-		var val uint64
-		for i := 0; i < p; i++ {
-			go func() {
-				defer func() {
-					if err := recover(); err != nil {
-						t.Error(err)
-					}
-					c <- 1
-				}()
-				testf(&val, n)
-			}()
-		}
-		for i := 0; i < p; i++ {
-			<-c
-		}
-		if !strings.HasPrefix(name, "Swap") && val != uint64(n)*p {
-			t.Fatalf("%s: val=%d want %d", name, val, n*p)
-		}
-	}
+func TestHammer64(t *testing.T) {
+	t.Skip("use of unsafe")
 }

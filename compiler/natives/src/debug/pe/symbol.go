@@ -4,7 +4,6 @@
 package pe
 
 import (
-	"debug/pe"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -37,7 +36,7 @@ func copyToAuxFormat5(sym *COFFSymbol) *COFFSymbolAuxFormat5 {
 	_ = binary.Write(buf, order, sym.Type)
 	// skip StorageClass and NumberOfAuxSymbols
 
-	aux := &pe.COFFSymbolAuxFormat5{}
+	aux := &COFFSymbolAuxFormat5{}
 	_ = binary.Read(buf, order, &aux.Size)
 	_ = binary.Read(buf, order, &aux.NumRelocs)
 	_ = binary.Read(buf, order, &aux.NumLineNumbers)

@@ -1015,11 +1015,6 @@ func (v Value) object() *js.Object {
 	}
 	if v.flag&flagIndir != 0 {
 		val := js.InternalObject(v.ptr).Call("$get")
-
-		if val == js.Undefined {
-			print(">>>" + v.String() + "<<<\n")
-		}
-
 		if val != js.Global.Get("$ifaceNil") && val.Get("constructor") != jsType(v.typ) {
 			switch v.typ.Kind() {
 			case Uint64, Int64:

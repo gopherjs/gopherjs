@@ -59,6 +59,10 @@ func TestUnaligned64(t *testing.T) {
 	t.Skip("GopherJS emulates atomics, which makes alignment irrelevant.")
 }
 
+func TestAutoAligned64(t *testing.T) {
+	t.Skip("GopherJS emulates atomics, which makes alignment irrelevant.")
+}
+
 func TestNilDeref(t *testing.T) {
 	t.Skip("GopherJS does not support generics yet.")
 }

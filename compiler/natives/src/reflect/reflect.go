@@ -1770,6 +1770,10 @@ func stringsLastIndex(s string, c byte) int {
 	return -1
 }
 
+func stringsHasPrefix(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
 func valueMethodName() string {
 	var pc [5]uintptr
 	n := runtime.Callers(1, pc[:])
@@ -1787,16 +1791,17 @@ func valueMethodName() string {
 		// This workaround may become obsolete after
 		// https://github.com/gopherjs/gopherjs/issues/1085 is resolved.
 
-		methodName := name
-		if idx := stringsLastIndex(methodName, '.'); idx >= 0 {
-			methodName = methodName[idx+1:]
-		}
-		if len(methodName) > 0 && 'A' <= methodName[0] && methodName[0] <= 'Z' {
-			return `reflect.Value.` + methodName
+		const prefix = `Object.$packages.reflect.`
+		if stringsHasPrefix(name, prefix) {
+			if idx := stringsLastIndex(name, '.'); idx >= 0 {
+				methodName := name[idx+1:]
+				if len(methodName) > 0 && 'A' <= methodName[0] && methodName[0] <= 'Z' {
+					return `reflect.Value.` + methodName
+				}
+			}
 		}
 	}
 	return "unknown method"
-
 }
 
 func verifyNotInHeapPtr(p uintptr) bool {

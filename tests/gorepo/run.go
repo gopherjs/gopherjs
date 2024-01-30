@@ -156,21 +156,21 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue53600.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
 
 	// These are new tests in Go 1.19
-	"fixedbugs/issue53309.go": {category: usesUnsupportedTypeParameters, desc: "Checking unused type parameter in method call to interface"},
-	"fixedbugs/issue53635.go": {category: usesUnsupportedTypeParameters, desc: "Checking switch type against nil type with unsupported type parameters"},
+	"fixedbugs/issue53309.go": {category: usesUnsupportedGenerics, desc: "Checking unused type parameter in method call to interface"},
+	"fixedbugs/issue53635.go": {category: usesUnsupportedGenerics, desc: "Checking switch type against nil type with unsupported type parameters"},
 	"fixedbugs/issue53653.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format of int64 is different from Go's"},
-	"fixedbugs/issue50672.go": {category: usesUnsupportedTypeParameters, desc: "Checking function nesting with one function having a type parameter."},
-	"fixedbugs/issue53137.go": {category: usesUnsupportedTypeParameters, desc: "Checking setting type parameter of struct in parameter of a generic function."},
+	"fixedbugs/issue50672.go": {category: usesUnsupportedGenerics, desc: "Checking function nesting with one function having a type parameter."},
+	"fixedbugs/issue53137.go": {category: usesUnsupportedGenerics, desc: "Checking setting type parameter of struct in parameter of a generic function."},
 }
 
 type failCategory uint8
 
 const (
-	other                         failCategory = iota
-	neverTerminates                            // Test never terminates (so avoid starting it).
-	usesUnsupportedPackage                     // Test fails because it imports an unsupported package, e.g., "unsafe".
-	requiresSourceMapSupport                   // Test fails without source map support (as configured in CI), because it tries to check filename/line number via runtime.Caller.
-	usesUnsupportedTypeParameters              // Test uses type parameters that are not currently supported.
+	other                    failCategory = iota
+	neverTerminates                       // Test never terminates (so avoid starting it).
+	usesUnsupportedPackage                // Test fails because it imports an unsupported package, e.g., "unsafe".
+	requiresSourceMapSupport              // Test fails without source map support (as configured in CI), because it tries to check filename/line number via runtime.Caller.
+	usesUnsupportedGenerics               // Test uses generics (type parameters) that are not currently supported.
 	compilerPanic
 	unsureIfGopherJSSupportsThisFeature
 	lowLevelRuntimeDifference // JavaScript runtime behaves differently from Go in ways that are difficult to work around.

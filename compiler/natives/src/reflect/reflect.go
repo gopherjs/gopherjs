@@ -1728,29 +1728,42 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	return js.Global.Call("$interfaceIsEqual", js.InternalObject(valueInterface(v1, false)), js.InternalObject(valueInterface(v2, false))).Bool()
 }
 
-func methodNameSkip() string {
-	pc, _, _, _ := runtime.Caller(3)
-	f := runtime.FuncForPC(pc)
-	if f == nil {
-		return "unknown method"
-	}
-	// Function name extracted from the call stack can be different from vanilla
-	// Go. Here we try to fix stuff like "Object.$packages.reflect.Q.ptr.SetIterKey"
-	// into "Value.SetIterKey".
-	// This workaround may become obsolete after https://github.com/gopherjs/gopherjs/issues/1085
-	// is resolved.
-	name := f.Name()
-	idx := len(name) - 1
-	for idx > 0 {
-		if name[idx] == '.' {
-			break
+func stringsLastIndex(s string, c byte) int {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == c {
+			return i
 		}
-		idx--
 	}
-	if idx < 0 {
-		return name
+	return -1
+}
+
+func valueMethodName() string {
+	var pc [5]uintptr
+	n := runtime.Callers(1, pc[:])
+	frames := runtime.CallersFrames(pc[:n])
+	var frame runtime.Frame
+	for more := true; more; {
+		frame, more = frames.Next()
+		name := frame.Function
+
+		// Function name extracted from the call stack can be different from
+		// vanilla Go, so is not prefixed by "reflect.Value." as needed by the original.
+		// See https://cs.opensource.google/go/go/+/refs/tags/go1.19.13:src/reflect/value.go;l=173-191
+		// Here we try to fix stuff like "Object.$packages.reflect.Q.ptr.SetIterKey"
+		// into "reflect.Value.SetIterKey".
+		// This workaround may become obsolete after
+		// https://github.com/gopherjs/gopherjs/issues/1085 is resolved.
+
+		methodName := name
+		if idx := stringsLastIndex(methodName, '.'); idx >= 0 {
+			methodName = methodName[idx+1:]
+		}
+		if len(methodName) > 0 && 'A' <= methodName[0] && methodName[0] <= 'Z' {
+			return `reflect.Value.` + methodName
+		}
 	}
-	return "Value" + name[idx:]
+	return "unknown method"
+
 }
 
 func verifyNotInHeapPtr(p uintptr) bool {

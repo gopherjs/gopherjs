@@ -1179,6 +1179,11 @@ func (v Value) Cap() int {
 		return v.typ.Len()
 	case Chan, Slice:
 		return v.object().Get("$capacity").Int()
+	case Ptr:
+		if v.typ.Elem().Kind() == Array {
+			return v.typ.Elem().Len()
+		}
+		panic("reflect: call of reflect.Value.Cap on ptr to non-array Value")
 	}
 	panic(&ValueError{"reflect.Value.Cap", k})
 }
@@ -1405,6 +1410,11 @@ func (v Value) Len() int {
 		return v.object().Get("$buffer").Get("length").Int()
 	case Map:
 		return v.object().Get("size").Int()
+	case Ptr:
+		if v.typ.Elem().Kind() == Array {
+			return v.typ.Elem().Len()
+		}
+		panic("reflect: call of reflect.Value.Len on ptr to non-array Value")
 	default:
 		panic(&ValueError{"reflect.Value.Len", k})
 	}
@@ -1448,6 +1458,29 @@ func (v Value) Set(x Value) {
 		return
 	}
 	v.ptr = x.ptr
+}
+
+func (v Value) bytesSlow() []byte {
+	switch v.kind() {
+	case Slice:
+		if v.typ.Elem().Kind() != Uint8 {
+			panic("reflect.Value.Bytes of non-byte slice")
+		}
+		return *(*[]byte)(v.ptr)
+	case Array:
+		if v.typ.Elem().Kind() != Uint8 {
+			panic("reflect.Value.Bytes of non-byte array")
+		}
+		if !v.CanAddr() {
+			panic("reflect.Value.Bytes of unaddressable byte array")
+		}
+		// Replace the following with JS to avoid using unsafe pointers.
+		//   p := (*byte)(v.ptr)
+		//   n := int((*arrayType)(unsafe.Pointer(v.typ)).len)
+		//   return unsafe.Slice(p, n)
+		return js.InternalObject(v.ptr).Interface().([]byte)
+	}
+	panic(&ValueError{"reflect.Value.Bytes", v.kind()})
 }
 
 func (v Value) SetBytes(x []byte) {

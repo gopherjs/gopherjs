@@ -57,7 +57,7 @@ func TestUnaligned64(t *testing.T) {
 	t.Skip("GopherJS emulates atomics, which makes alignment irrelevant.")
 }
 
-unc TestAutoAligned64(t *testing.T) {
+func TestAutoAligned64(t *testing.T) {
 	t.Skip("GopherJS emulates atomics, which makes alignment irrelevant.")
 }
 

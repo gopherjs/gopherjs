@@ -1,4 +1,5 @@
 //go:build js
+// +build js
 
 package netip
 
@@ -8,7 +9,6 @@ import (
 	"internal/intern"
 )
 
-//gopherjs:prune-original
 func MkAddr(u Uint128, z any) Addr {
 	switch z := z.(type) {
 	case *intern.Value:

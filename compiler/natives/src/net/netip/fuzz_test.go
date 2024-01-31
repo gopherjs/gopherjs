@@ -1,4 +1,5 @@
 //go:build js
+// +build js
 
 package netip_test
 

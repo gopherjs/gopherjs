@@ -3,9 +3,7 @@
 
 package token
 
-import (
-	"sync"
-)
+import "sync"
 
 type FileSet struct {
 	mutex sync.RWMutex

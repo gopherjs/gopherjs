@@ -156,11 +156,11 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue53600.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
 
 	// These are new tests in Go 1.19
+	"fixedbugs/issue50672.go": {category: usesUnsupportedGenerics, desc: "Checking function nesting with one function having a type parameter."},
+	"fixedbugs/issue53137.go": {category: usesUnsupportedGenerics, desc: "Checking setting type parameter of struct in parameter of a generic function."},
 	"fixedbugs/issue53309.go": {category: usesUnsupportedGenerics, desc: "Checking unused type parameter in method call to interface"},
 	"fixedbugs/issue53635.go": {category: usesUnsupportedGenerics, desc: "Checking switch type against nil type with unsupported type parameters"},
 	"fixedbugs/issue53653.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format of int64 is different from Go's"},
-	"fixedbugs/issue50672.go": {category: usesUnsupportedGenerics, desc: "Checking function nesting with one function having a type parameter."},
-	"fixedbugs/issue53137.go": {category: usesUnsupportedGenerics, desc: "Checking setting type parameter of struct in parameter of a generic function."},
 }
 
 type failCategory uint8

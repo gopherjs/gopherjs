@@ -401,7 +401,7 @@ func TestOverlayAugmentation(t *testing.T) {
 
 				//go:embed hello.txt
 				var eFile embed.FS
-
+				
 				//go:linkname runtimeNano runtime.nanotime
 				func runtimeNano() int64`,
 			expInfo: map[string]overrideInfo{

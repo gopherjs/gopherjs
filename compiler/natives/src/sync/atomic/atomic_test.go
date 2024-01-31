@@ -57,9 +57,21 @@ func TestUnaligned64(t *testing.T) {
 	t.Skip("GopherJS emulates atomics, which makes alignment irrelevant.")
 }
 
+unc TestAutoAligned64(t *testing.T) {
+	t.Skip("GopherJS emulates atomics, which makes alignment irrelevant.")
+}
+
 func TestNilDeref(t *testing.T) {
 	t.Skip("GopherJS does not support generics yet.")
 }
 
 //gopherjs:purge for go1.19 without generics
 type List struct{}
+
+func TestHammer32(t *testing.T) {
+	t.Skip("use of unsafe")
+}
+
+func TestHammer64(t *testing.T) {
+	t.Skip("use of unsafe")
+}

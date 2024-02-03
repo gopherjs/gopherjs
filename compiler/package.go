@@ -212,9 +212,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		Instances: &typeparams.InstanceSet{},
 	}
 	tc.Scan(simplifiedFiles...)
-	instancesByObj := map[symbol.Name][]typeparams.Instance{}
+	instancesByObj := map[types.Object][]typeparams.Instance{}
 	for _, inst := range tc.Instances.Values() {
-		instancesByObj[symbol.New(inst.Object)] = append(instancesByObj[symbol.New(inst.Object)], inst)
+		instancesByObj[inst.Object] = append(instancesByObj[inst.Object], inst)
 	}
 
 	pkgInfo := analysis.AnalyzePkg(simplifiedFiles, fileSet, typesInfo, typesPkg, isBlocking)
@@ -391,7 +391,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 		var instances []typeparams.Instance
 		if typeparams.SignatureTypeParams(sig) != nil {
-			instances = instancesByObj[symbol.New(o)]
+			instances = instancesByObj[o]
 		} else {
 			instances = []typeparams.Instance{{Object: o}}
 		}
@@ -497,7 +497,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		typ := o.Type().(*types.Named)
 		var instances []typeparams.Instance
 		if typ.TypeParams() != nil {
-			instances = instancesByObj[symbol.New(o)]
+			instances = instancesByObj[o]
 		} else {
 			instances = []typeparams.Instance{{Object: o}}
 		}

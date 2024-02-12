@@ -33,7 +33,7 @@ func Dec(b boring.BigInt) *big.Int {
 		return new(big.Int)
 	}
 	// Replacing original which uses unsafe:
-	//x := unsafe.Slice((*big.Word)(&b[0]), len(b))
+	// x := unsafe.Slice((*big.Word)(&b[0]), len(b))
 	x := make([]big.Word, len(b))
 	for i, w := range b {
 		x[i] = big.Word(w)

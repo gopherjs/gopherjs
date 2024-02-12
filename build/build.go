@@ -174,22 +174,12 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 	overrides := make(map[string]overrideInfo)
 	for _, file := range overlayFiles {
 		augmentOverlayFile(file, overrides)
-		pruneImports(file)
 	}
 	delete(overrides, "init")
 
-	// Adjust imports for all original files
 	for _, file := range originalFiles {
 		augmentOriginalImports(pkg.ImportPath, file)
-	}
-
-	// Augment original files if there are any overrides
-	if len(overrides) > 0 {
-		for _, file := range originalFiles {
-			if augmentOriginalFile(file, overrides) {
-				pruneImports(file)
-			}
-		}
+		augmentOriginalFile(file, overrides)
 	}
 
 	return append(overlayFiles, originalFiles...), jsFiles, nil
@@ -283,6 +273,7 @@ func parserOriginalFiles(pkg *PackageData, fileSet *token.FileSet) ([]*ast.File,
 // an overlay file AST to collect information such as compiler directives
 // and perform any initial augmentation needed to the overlay.
 func augmentOverlayFile(file *ast.File, overrides map[string]overrideInfo) {
+	anyChange := false
 	for i, decl := range file.Decls {
 		purgeDecl := astutil.Purge(decl)
 		switch d := decl.(type) {
@@ -310,15 +301,20 @@ func augmentOverlayFile(file *ast.File, overrides map[string]overrideInfo) {
 					}
 				}
 				if purgeSpec {
+					anyChange = true
 					d.Specs[j] = nil
 				}
 			}
 		}
 		if purgeDecl {
+			anyChange = true
 			file.Decls[i] = nil
 		}
 	}
-	finalizeRemovals(file)
+	if anyChange {
+		finalizeRemovals(file)
+		pruneImports(file)
+	}
 }
 
 // augmentOriginalImports is the part of parseAndAugment that processes
@@ -341,7 +337,12 @@ func augmentOriginalImports(importPath string, file *ast.File) {
 // augmentOriginalFile is the part of parseAndAugment that processes an
 // original file AST to augment the source code using the overrides from
 // the overlay files.
-func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) bool {
+func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
+	if len(overrides) <= 0 {
+		// If there are no overrides, there is nothing to augment here.
+		return
+	}
+
 	anyChange := false
 	for i, decl := range file.Decls {
 		switch d := decl.(type) {
@@ -430,9 +431,8 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) bool
 	}
 	if anyChange {
 		finalizeRemovals(file)
-		return true
+		pruneImports(file)
 	}
-	return false
 }
 
 // isOnlyImports determines if this file is empty except for imports.

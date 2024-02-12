@@ -338,6 +338,11 @@ func augmentOriginalImports(importPath string, file *ast.File) {
 // original file AST to augment the source code using the overrides from
 // the overlay files.
 func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
+	if len(overrides) <= 0 {
+		// If there are no overrides, there is nothing to augment here.
+		return
+	}
+
 	anyChange := false
 	for i, decl := range file.Decls {
 		switch d := decl.(type) {

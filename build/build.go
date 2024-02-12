@@ -178,10 +178,14 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 	}
 	delete(overrides, "init")
 
-	// If there are no overrides, don't augment original files
+	// Adjust imports for all original files
+	for _, file := range originalFiles {
+		augmentOriginalImports(pkg.ImportPath, file)
+	}
+
+	// Augment original files if there are any overrides
 	if len(overrides) > 0 {
 		for _, file := range originalFiles {
-			augmentOriginalImports(pkg.ImportPath, file)
 			if augmentOriginalFile(file, overrides) {
 				pruneImports(file)
 			}

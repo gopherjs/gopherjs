@@ -273,7 +273,7 @@ func parserOriginalFiles(pkg *PackageData, fileSet *token.FileSet) ([]*ast.File,
 // an overlay file AST to collect information such as compiler directives
 // and perform any initial augmentation needed to the overlay.
 func augmentOverlayFile(file *ast.File, overrides map[string]overrideInfo) {
-	anyChange := false
+	//anyChange := false
 	for i, decl := range file.Decls {
 		purgeDecl := astutil.Purge(decl)
 		switch d := decl.(type) {
@@ -301,20 +301,20 @@ func augmentOverlayFile(file *ast.File, overrides map[string]overrideInfo) {
 					}
 				}
 				if purgeSpec {
-					anyChange = true
+					//anyChange = true
 					d.Specs[j] = nil
 				}
 			}
 		}
 		if purgeDecl {
-			anyChange = true
+			//anyChange = true
 			file.Decls[i] = nil
 		}
 	}
-	if anyChange {
-		finalizeRemovals(file)
-		pruneImports(file)
-	}
+	//if anyChange {
+	finalizeRemovals(file)
+	pruneImports(file)
+	//}
 }
 
 // augmentOriginalImports is the part of parseAndAugment that processes
@@ -338,17 +338,17 @@ func augmentOriginalImports(importPath string, file *ast.File) {
 // original file AST to augment the source code using the overrides from
 // the overlay files.
 func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
-	if len(overrides) <= 0 {
-		// If there are no overrides, there is nothing to augment here.
-		return
-	}
+	//if len(overrides) == 0 {
+	//	// If there are no overrides, there is nothing to augment here.
+	//	return
+	//}
 
-	anyChange := false
+	//anyChange := false
 	for i, decl := range file.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			if info, ok := overrides[astutil.FuncKey(d)]; ok {
-				anyChange = true
+				//anyChange = true
 				removeFunc := true
 				if info.keepOriginal {
 					// Allow overridden function calls
@@ -369,7 +369,7 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 			} else if recvKey := astutil.FuncReceiverKey(d); len(recvKey) > 0 {
 				// check if the receiver has been purged, if so, remove the method too.
 				if info, ok := overrides[recvKey]; ok && info.purgeMethods {
-					anyChange = true
+					//anyChange = true
 					file.Decls[i] = nil
 				}
 			}
@@ -378,7 +378,7 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 				switch s := spec.(type) {
 				case *ast.TypeSpec:
 					if _, ok := overrides[s.Name.Name]; ok {
-						anyChange = true
+						//anyChange = true
 						d.Specs[j] = nil
 					}
 				case *ast.ValueSpec:
@@ -391,7 +391,7 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 						// to be run, add the call into the overlay.
 						for k, name := range s.Names {
 							if _, ok := overrides[name.Name]; ok {
-								anyChange = true
+								//anyChange = true
 								s.Names[k] = nil
 								s.Values[k] = nil
 							}
@@ -406,7 +406,7 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 						nameRemoved := false
 						for _, name := range s.Names {
 							if _, ok := overrides[name.Name]; ok {
-								anyChange = true
+								//anyChange = true
 								nameRemoved = true
 								name.Name = `_`
 							}
@@ -420,7 +420,7 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 								}
 							}
 							if removeSpec {
-								anyChange = true
+								//anyChange = true
 								d.Specs[j] = nil
 							}
 						}
@@ -429,10 +429,10 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo) {
 			}
 		}
 	}
-	if anyChange {
-		finalizeRemovals(file)
-		pruneImports(file)
-	}
+	//if anyChange {
+	finalizeRemovals(file)
+	pruneImports(file)
+	//}
 }
 
 // isOnlyImports determines if this file is empty except for imports.

@@ -50,8 +50,8 @@ func rtype_nameOff(r *rtype, off nameOff) name
 //go:linkname newName reflect.newName
 func newName(n, tag string, exported bool) name
 
-//go:linkname name_name reflect.(*name).name
-func name_name(n *name) string
+//go:linkname name_name reflect.name.name
+func name_name(name) string
 
 //go:linkname resolveReflectName reflect.resolveReflectName
 func resolveReflectName(n name) nameOff
@@ -60,7 +60,7 @@ func TestLinknameReflectName(t *testing.T) {
 	info := "myinfo"
 	off := resolveReflectName(newName(info, "", false))
 	n := rtype_nameOff(nil, off)
-	if s := name_name(&n); s != info {
+	if s := name_name(n); s != info {
 		t.Fatalf("to reflect.name got %q: want %q", s, info)
 	}
 }

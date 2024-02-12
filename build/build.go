@@ -486,10 +486,11 @@ func pruneImports(file *ast.File) {
 			// since the import is otherwise unused set the name to blank.
 			in.Name = ast.NewIdent(`_`)
 			delete(unused, name)
+			if len(unused) == 0 {
+				return
+			}
+			break
 		}
-	}
-	if len(unused) == 0 {
-		return
 	}
 
 	// Remove all unused import specifications

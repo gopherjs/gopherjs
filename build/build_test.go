@@ -680,6 +680,39 @@ func TestOriginalAugmentation(t *testing.T) {
 				import _ "unsafe"`,
 			want: `//go:linkname foo bar
 				import _ "unsafe"`,
+		}, {
+			desc: `multiple imports for directives`,
+			info: map[string]overrideInfo{
+				`A`: {},
+				`C`: {},
+			},
+			src: `import "unsafe"
+				import "embed"
+
+				//go:embed hello.txt
+				var A embed.FS
+
+				//go:embed goodbye.txt
+				var B string
+				
+				var C unsafe.Pointer
+				
+				// override Now with hardcoded time for testing
+				//go:linkname timeNow time.Now
+				func timeNow() time.Time {
+					return time.Date(2012, 8, 6, 0, 0, 0, 0, time.UTC)
+				}`,
+			want: `import _ "unsafe"
+				import _ "embed"
+
+				//go:embed goodbye.txt
+				var B string
+
+				// override Now with hardcoded time for testing
+				//go:linkname timeNow time.Now
+				func timeNow() time.Time {
+					return time.Date(2012, 8, 6, 0, 0, 0, 0, time.UTC)
+				}`,
 		},
 	}
 

@@ -175,7 +175,7 @@ jobs:
       - run:
           name: Install Go
           command: |
-            choco install golang --version="<< pipeline.parameters.chocolatey_go_version >>" -my
+            choco install golang --version="<< pipeline.parameters.chocolatey_go_version >>" -my --force
             go version
             (Get-Command go).Path
             [Environment]::SetEnvironmentVariable(

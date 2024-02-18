@@ -383,10 +383,10 @@ func (fc *funcContext) objectName(o types.Object) string {
 // zero type arguments.
 func (fc *funcContext) instName(inst typeparams.Instance) string {
 	objName := fc.objectName(inst.Object)
-	if len(inst.TArgs) == 0 {
+	if inst.IsTrivial() {
 		return objName
 	}
-	return fmt.Sprintf("%s[%q]", objName, inst.Key())
+	return fmt.Sprintf("%s[%d /* %v */]", objName, fc.pkgCtx.instanceSet.ID(inst), inst.Key())
 }
 
 func (fc *funcContext) varPtrName(o *types.Var) string {

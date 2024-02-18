@@ -39,6 +39,7 @@ type pkgContext struct {
 	minify       bool
 	fileSet      *token.FileSet
 	errList      ErrorList
+	instanceSet  *typeparams.InstanceSet
 }
 
 // funcContext maintains compiler context for a specific function (lexical scope?).
@@ -232,6 +233,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			dependencies: make(map[types.Object]bool),
 			minify:       minify,
 			fileSet:      fileSet,
+			instanceSet:  tc.Instances,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[*types.Label]*flowData{nil: {}},

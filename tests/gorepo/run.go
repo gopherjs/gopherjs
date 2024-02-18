@@ -159,7 +159,7 @@ var knownFails = map[string]failReason{
 	"typeparam/issue47716.go":  {category: generics, desc: "bug: failed to call unsafe.Sizeof"},
 	"typeparam/issue49547.go":  {category: generics, desc: "bug: incorrect type string"},
 	"typeparam/metrics.go":     {category: generics, desc: "bug: append: Cannot read property '$array' of undefined"},
-	"typeparam/nested.go":      {category: generics, desc: "bug: Cannot set property 'main.Int' of undefined"},
+	"typeparam/nested.go":      {category: generics, desc: "incomplete support for generic types inside generic functions"},
 	"typeparam/orderedmap.go":  {category: generics, desc: "bug: Cannot set property 'key' of undefined"},
 	"typeparam/typeswitch2.go": {category: generics, desc: "undiagnosed: incorrect output"},
 	"typeparam/typeswitch3.go": {category: generics, desc: "undiagnosed: incorrect output"},

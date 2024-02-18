@@ -7,7 +7,6 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
-	"golang.org/x/exp/maps"
 )
 
 // Instance of a generic type or function.
@@ -19,9 +18,11 @@ type Instance struct {
 	TArgs  []types.Type // Type params to instantiate with.
 }
 
-// ID returns a string that uniquely identifies an instantiation of the generic
-// object with the provided type arguments.
-func (i *Instance) ID() string {
+// String returns a string representation of the Instance.
+//
+// Two semantically different instances may have the same string representation
+// if the instantiated object or its type arguments shadow other types.
+func (i *Instance) String() string {
 	sym := symbol.New(i.Object).String()
 	if len(i.TArgs) == 0 {
 		return sym
@@ -74,8 +75,9 @@ func (i *Instance) Recv() Instance {
 // Each Instance may be added to the set any number of times, but it will be
 // returned for processing exactly once. Processing order is not specified.
 type InstanceSet struct {
-	unprocessed []Instance
-	seen        map[string]Instance
+	values      []Instance
+	unprocessed int              // Index in values for the next unprocessed element.
+	seen        InstanceMap[int] // Maps instance to a unique numeric id.
 }
 
 // Add instances to the set. Instances that have been previously added to the
@@ -83,17 +85,45 @@ type InstanceSet struct {
 // processed already.
 func (iset *InstanceSet) Add(instances ...Instance) *InstanceSet {
 	for _, inst := range instances {
-		if _, ok := iset.seen[inst.ID()]; ok {
+		if iset.seen.Has(inst) {
 			continue
 		}
-		if iset.seen == nil {
-			iset.seen = map[string]Instance{}
-		}
-		iset.unprocessed = append(iset.unprocessed, inst)
-
-		iset.seen[inst.ID()] = inst
+		iset.seen.Set(inst, iset.seen.Len())
+		iset.values = append(iset.values, inst)
 	}
 	return iset
+}
+
+// ID returns a unique numeric identifier assigned to an instance in the set.
+// The ID is guaranteed to be unique among all instances of the same object
+// within a given program. The ID will be consistent, as long as instances are
+// added to the set in the same order.
+//
+// In order to have an ID assigned, the instance must have been previously added
+// to the set.
+//
+// Note: we these ids are used in the generated code as keys to the specific
+// type/function instantiation in the type/function object. Using this has two
+// advantages:
+//
+// - More compact generated code compared to string keys derived from type args.
+//
+// - Collision avoidance in case of two different types having the same name due
+// to shadowing.
+//
+// Here's an example where it's very difficult to assign non-colliding
+// name-based keys to the two different types T:
+//
+//   func foo() {
+//       type T int
+//       { type T string } // Code block creates a new nested scope allowing for shadowing.
+//   }
+func (iset *InstanceSet) ID(inst Instance) int {
+	id, ok := iset.seen.get(inst)
+	if !ok {
+		panic(fmt.Errorf("requesting ID of instance %v that hasn't been added to the set", inst))
+	}
+	return id
 }
 
 // next returns the next Instance to be processed.
@@ -103,16 +133,15 @@ func (iset *InstanceSet) next() (Instance, bool) {
 	if iset.exhausted() {
 		return Instance{}, false
 	}
-	idx := len(iset.unprocessed) - 1
-	next := iset.unprocessed[idx]
-	iset.unprocessed = iset.unprocessed[0:idx]
+	next := iset.values[iset.unprocessed]
+	iset.unprocessed++
 	return next, true
 }
 
 // exhausted returns true if there are no unprocessed instances in the set.
-func (iset *InstanceSet) exhausted() bool { return len(iset.unprocessed) == 0 }
+func (iset *InstanceSet) exhausted() bool { return len(iset.values) <= iset.unprocessed }
 
 // Values returns instances that are currently in the set. Order is not specified.
 func (iset *InstanceSet) Values() []Instance {
-	return maps.Values(iset.seen)
+	return iset.values
 }

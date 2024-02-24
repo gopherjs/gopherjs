@@ -1,7 +1,9 @@
 package astutil
 
 import (
+	"go/ast"
 	"go/token"
+	"strconv"
 	"testing"
 
 	"github.com/gopherjs/gopherjs/internal/srctesting"
@@ -52,6 +54,47 @@ func TestImportsUnsafe(t *testing.T) {
 	}
 }
 
+func TestImportName(t *testing.T) {
+	tests := []struct {
+		desc string
+		src  string
+		want string
+	}{
+		{
+			desc: `named import`,
+			src:  `import foo "some/other/bar"`,
+			want: `foo`,
+		}, {
+			desc: `unnamed import`,
+			src:  `import "some/other/bar"`,
+			want: `bar`,
+		}, {
+			desc: `dot import`,
+			src:  `import . "some/other/bar"`,
+			want: ``,
+		}, {
+			desc: `blank import`,
+			src:  `import _ "some/other/bar"`,
+			want: ``,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			src := "package testpackage\n\n" + test.src
+			fset := token.NewFileSet()
+			file := srctesting.Parse(t, fset, src)
+			if len(file.Imports) != 1 {
+				t.Fatal(`expected one and only one import`)
+			}
+			importSpec := file.Imports[0]
+			got := ImportName(importSpec)
+			if got != test.want {
+				t.Fatalf(`ImportName() returned %q, want %q`, got, test.want)
+			}
+		})
+	}
+}
+
 func TestFuncKey(t *testing.T) {
 	tests := []struct {
 		desc string
@@ -59,72 +102,382 @@ func TestFuncKey(t *testing.T) {
 		want string
 	}{
 		{
-			desc: "top-level function",
-			src:  `package testpackage; func foo() {}`,
-			want: "foo",
+			desc: `top-level function`,
+			src:  `func foo() {}`,
+			want: `foo`,
 		}, {
-			desc: "top-level exported function",
-			src:  `package testpackage; func Foo() {}`,
-			want: "Foo",
+			desc: `top-level exported function`,
+			src:  `func Foo() {}`,
+			want: `Foo`,
 		}, {
-			desc: "method",
-			src:  `package testpackage; func (_ myType) bar() {}`,
-			want: "myType.bar",
+			desc: `method on reference`,
+			src:  `func (_ myType) bar() {}`,
+			want: `myType.bar`,
+		}, {
+			desc: `method on pointer`,
+			src:  ` func (_ *myType) bar() {}`,
+			want: `myType.bar`,
+		}, {
+			desc: `method on generic reference`,
+			src:  ` func (_ myType[T]) bar() {}`,
+			want: `myType.bar`,
+		}, {
+			desc: `method on generic pointer`,
+			src:  ` func (_ *myType[T]) bar() {}`,
+			want: `myType.bar`,
+		}, {
+			desc: `method on struct with multiple generics`,
+			src:  ` func (_ *myType[T1, T2, T3, T4]) bar() {}`,
+			want: `myType.bar`,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			fdecl := srctesting.ParseFuncDecl(t, test.src)
+			src := `package testpackage; ` + test.src
+			fdecl := srctesting.ParseFuncDecl(t, src)
 			if got := FuncKey(fdecl); got != test.want {
-				t.Errorf("Got %q, want %q", got, test.want)
+				t.Errorf(`Got %q, want %q`, got, test.want)
 			}
 		})
 	}
 }
 
-func TestPruneOriginal(t *testing.T) {
+func TestHasDirectiveOnDecl(t *testing.T) {
 	tests := []struct {
 		desc string
 		src  string
 		want bool
 	}{
 		{
-			desc: "no comment",
+			desc: `no comment on function`,
 			src: `package testpackage;
-			func foo() {}`,
+				func foo() {}`,
 			want: false,
 		}, {
-			desc: "regular godoc",
+			desc: `no directive on function with comment`,
 			src: `package testpackage;
-			// foo does something
-			func foo() {}`,
+				// foo has no directive
+				func foo() {}`,
 			want: false,
 		}, {
-			desc: "only directive",
+			desc: `wrong directive on function`,
 			src: `package testpackage;
-			//gopherjs:prune-original
-			func foo() {}`,
+				//gopherjs:wrong-directive
+				func foo() {}`,
+			want: false,
+		}, {
+			desc: `correct directive on function`,
+			src: `package testpackage;
+				//gopherjs:do-stuff
+				// foo has a directive to do stuff
+				func foo() {}`,
 			want: true,
 		}, {
-			desc: "directive with explanation",
+			desc: `correct directive in multiline comment on function`,
 			src: `package testpackage;
-			//gopherjs:prune-original because reasons
-			func foo() {}`,
+				/*gopherjs:do-stuff
+				  foo has a directive to do stuff
+				*/
+				func foo() {}`,
 			want: true,
 		}, {
-			desc: "directive in godoc",
+			desc: `invalid directive in multiline comment on function`,
 			src: `package testpackage;
-			// foo does something
-			//gopherjs:prune-original
-			func foo() {}`,
+				/*
+				gopherjs:do-stuff
+				*/
+				func foo() {}`,
+			want: false,
+		}, {
+			desc: `prefix directive on function`,
+			src: `package testpackage;
+				//gopherjs:do-stuffs
+				func foo() {}`,
+			want: false,
+		}, {
+			desc: `multiple directives on function`,
+			src: `package testpackage;
+				//gopherjs:wrong-directive
+				//gopherjs:do-stuff
+				//gopherjs:another-directive
+				func foo() {}`,
+			want: true,
+		}, {
+			desc: `directive with explanation on function`,
+			src: `package testpackage;
+				//gopherjs:do-stuff 'cause we can
+				func foo() {}`,
+			want: true,
+		}, {
+			desc: `no directive on type declaration`,
+			src: `package testpackage;
+				// Foo has a comment
+				type Foo int`,
+			want: false,
+		}, {
+			desc: `directive on type declaration`,
+			src: `package testpackage;
+				//gopherjs:do-stuff
+				type Foo int`,
+			want: true,
+		}, {
+			desc: `directive on specification, not on declaration`,
+			src: `package testpackage;
+				type (
+					Foo int
+
+					//gopherjs:do-stuff
+					Bar struct{}
+				)`,
+			want: false,
+		}, {
+			desc: `no directive on const declaration`,
+			src: `package testpackage;
+				const foo = 42`,
+			want: false,
+		}, {
+			desc: `directive on const documentation`,
+			src: `package testpackage;
+				//gopherjs:do-stuff
+				const foo = 42`,
+			want: true,
+		}, {
+			desc: `no directive on var declaration`,
+			src: `package testpackage;
+				var foo = 42`,
+			want: false,
+		}, {
+			desc: `directive on var documentation`,
+			src: `package testpackage;
+				//gopherjs:do-stuff
+				var foo = 42`,
+			want: true,
+		}, {
+			desc: `no directive on var declaration`,
+			src: `package testpackage;
+				import _ "embed"`,
+			want: false,
+		}, {
+			desc: `directive on var documentation`,
+			src: `package testpackage;
+				//gopherjs:do-stuff
+				import _ "embed"`,
 			want: true,
 		},
 	}
+
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			fdecl := srctesting.ParseFuncDecl(t, test.src)
-			if got := PruneOriginal(fdecl); got != test.want {
-				t.Errorf("PruneOriginal() returned %t, want %t", got, test.want)
+			const action = `do-stuff`
+			decl := srctesting.ParseDecl(t, test.src)
+			if got := hasDirective(decl, action); got != test.want {
+				t.Errorf(`hasDirective(%T, %q) returned %t, want %t`, decl, action, got, test.want)
+			}
+		})
+	}
+}
+
+func TestHasDirectiveOnSpec(t *testing.T) {
+	tests := []struct {
+		desc string
+		src  string
+		want bool
+	}{
+		{
+			desc: `no directive on type specification`,
+			src: `package testpackage;
+				type Foo int`,
+			want: false,
+		}, {
+			desc: `directive on declaration, not on specification`,
+			src: `package testpackage;
+				//gopherjs:do-stuff
+				type Foo int`,
+			want: false,
+		}, {
+			desc: `directive in doc on type specification`,
+			src: `package testpackage;
+				type (
+					//gopherjs:do-stuff
+					Foo int
+				)`,
+			want: true,
+		}, {
+			desc: `directive in line on type specification`,
+			src: `package testpackage;
+				type Foo int //gopherjs:do-stuff`,
+			want: true,
+		}, {
+			desc: `no directive on const specification`,
+			src: `package testpackage;
+				const foo = 42`,
+			want: false,
+		}, {
+			desc: `directive in doc on const specification`,
+			src: `package testpackage;
+				const (
+					//gopherjs:do-stuff
+					foo = 42
+				)`,
+			want: true,
+		}, {
+			desc: `directive in line on const specification`,
+			src: `package testpackage;
+				const foo = 42 //gopherjs:do-stuff`,
+			want: true,
+		}, {
+			desc: `no directive on var specification`,
+			src: `package testpackage;
+				var foo = 42`,
+			want: false,
+		}, {
+			desc: `directive in doc on var specification`,
+			src: `package testpackage;
+				var (
+					//gopherjs:do-stuff
+					foo = 42
+				)`,
+			want: true,
+		}, {
+			desc: `directive in line on var specification`,
+			src: `package testpackage;
+				var foo = 42 //gopherjs:do-stuff`,
+			want: true,
+		}, {
+			desc: `no directive on import specification`,
+			src: `package testpackage;
+				import _ "embed"`,
+			want: false,
+		}, {
+			desc: `directive in doc on import specification`,
+			src: `package testpackage;
+				import (
+					//gopherjs:do-stuff
+					_ "embed"
+				)`,
+			want: true,
+		}, {
+			desc: `directive in line on import specification`,
+			src: `package testpackage;
+				import _ "embed" //gopherjs:do-stuff`,
+			want: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			const action = `do-stuff`
+			spec := srctesting.ParseSpec(t, test.src)
+			if got := hasDirective(spec, action); got != test.want {
+				t.Errorf(`hasDirective(%T, %q) returned %t, want %t`, spec, action, got, test.want)
+			}
+		})
+	}
+}
+
+func TestHasDirectiveOnFile(t *testing.T) {
+	tests := []struct {
+		desc string
+		src  string
+		want bool
+	}{
+		{
+			desc: `no directive on file`,
+			src: `package testpackage;
+				//gopherjs:do-stuff
+				type Foo int`,
+			want: false,
+		}, {
+			desc: `directive on file`,
+			src: `//gopherjs:do-stuff
+				package testpackage;
+				type Foo int`,
+			want: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			const action = `do-stuff`
+			fset := token.NewFileSet()
+			file := srctesting.Parse(t, fset, test.src)
+			if got := hasDirective(file, action); got != test.want {
+				t.Errorf(`hasDirective(%T, %q) returned %t, want %t`, file, action, got, test.want)
+			}
+		})
+	}
+}
+
+func TestHasDirectiveOnField(t *testing.T) {
+	tests := []struct {
+		desc string
+		src  string
+		want bool
+	}{
+		{
+			desc: `no directive on struct field`,
+			src: `package testpackage;
+				type Foo struct {
+					bar int
+				}`,
+			want: false,
+		}, {
+			desc: `directive in doc on struct field`,
+			src: `package testpackage;
+				type Foo struct {
+					//gopherjs:do-stuff
+					bar int
+				}`,
+			want: true,
+		}, {
+			desc: `directive in line on struct field`,
+			src: `package testpackage;
+				type Foo struct {
+					bar int //gopherjs:do-stuff
+				}`,
+			want: true,
+		}, {
+			desc: `no directive on interface method`,
+			src: `package testpackage;
+				type Foo interface {
+					Bar(a int) int
+				}`,
+			want: false,
+		}, {
+			desc: `directive in doc on interface method`,
+			src: `package testpackage;
+				type Foo interface {
+					//gopherjs:do-stuff
+					Bar(a int) int
+				}`,
+			want: true,
+		}, {
+			desc: `directive in line on interface method`,
+			src: `package testpackage;
+				type Foo interface {
+					Bar(a int) int //gopherjs:do-stuff
+				}`,
+			want: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			const action = `do-stuff`
+			spec := srctesting.ParseSpec(t, test.src)
+			tspec := spec.(*ast.TypeSpec)
+			var field *ast.Field
+			switch typeNode := tspec.Type.(type) {
+			case *ast.StructType:
+				field = typeNode.Fields.List[0]
+			case *ast.InterfaceType:
+				field = typeNode.Methods.List[0]
+			default:
+				t.Errorf(`unexpected node type, %T, when finding field`, typeNode)
+				return
+			}
+			if got := hasDirective(field, action); got != test.want {
+				t.Errorf(`hasDirective(%T, %q) returned %t, want %t`, field, action, got, test.want)
 			}
 		})
 	}
@@ -177,6 +530,64 @@ func TestEndsWithReturn(t *testing.T) {
 			got := EndsWithReturn(fdecl.Body.List)
 			if got != test.want {
 				t.Errorf("EndsWithReturn() returned %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestSqueezeIdents(t *testing.T) {
+	tests := []struct {
+		desc   string
+		count  int
+		assign []int
+	}{
+		{
+			desc:   `no squeezing`,
+			count:  5,
+			assign: []int{0, 1, 2, 3, 4},
+		}, {
+			desc:   `missing front`,
+			count:  5,
+			assign: []int{3, 4},
+		}, {
+			desc:   `missing back`,
+			count:  5,
+			assign: []int{0, 1, 2},
+		}, {
+			desc:   `missing several`,
+			count:  10,
+			assign: []int{1, 2, 3, 6, 8},
+		}, {
+			desc:   `empty`,
+			count:  0,
+			assign: []int{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			input := make([]*ast.Ident, test.count)
+			for _, i := range test.assign {
+				input[i] = ast.NewIdent(strconv.Itoa(i))
+			}
+
+			result := Squeeze(input)
+			if len(result) != len(test.assign) {
+				t.Errorf("Squeeze() returned a slice %d long, want %d", len(result), len(test.assign))
+			}
+			for i, id := range input {
+				if i < len(result) {
+					if id == nil {
+						t.Errorf(`Squeeze() returned a nil in result at %d`, i)
+					} else {
+						value, err := strconv.Atoi(id.Name)
+						if err != nil || value != test.assign[i] {
+							t.Errorf(`Squeeze() returned %s at %d instead of %d`, id.Name, i, test.assign[i])
+						}
+					}
+				} else if id != nil {
+					t.Errorf(`Squeeze() didn't clear out tail of slice, want %d nil`, i)
+				}
 			}
 		})
 	}

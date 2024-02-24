@@ -63,7 +63,7 @@ func reflectType(typ *js.Object) *rtype {
 		rt := &rtype{
 			size: uintptr(typ.Get("size").Int()),
 			kind: uint8(typ.Get("kind").Int()),
-			str:  resolveReflectName(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool())),
+			str:  resolveReflectName(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
 		}
 		js.InternalObject(rt).Set("jsType", typ)
 		typ.Set("reflectType", js.InternalObject(rt))
@@ -99,7 +99,7 @@ func reflectType(typ *js.Object) *rtype {
 				})
 			}
 			ut := &uncommonType{
-				pkgPath:  resolveReflectName(newName(internalStr(typ.Get("pkg")), "", false)),
+				pkgPath:  resolveReflectName(newName(internalStr(typ.Get("pkg")), "", false, false)),
 				mcount:   uint16(methodSet.Length()),
 				xcount:   xcount,
 				_methods: reflectMethods,
@@ -160,7 +160,7 @@ func reflectType(typ *js.Object) *rtype {
 			}
 			setKindType(rt, &interfaceType{
 				rtype:   *rt,
-				pkgPath: newName(internalStr(typ.Get("pkg")), "", false),
+				pkgPath: newName(internalStr(typ.Get("pkg")), "", false, false),
 				methods: imethods,
 			})
 		case Map:
@@ -181,19 +181,15 @@ func reflectType(typ *js.Object) *rtype {
 			reflectFields := make([]structField, fields.Length())
 			for i := range reflectFields {
 				f := fields.Index(i)
-				offsetEmbed := uintptr(i) << 1
-				if f.Get("embedded").Bool() {
-					offsetEmbed |= 1
-				}
 				reflectFields[i] = structField{
-					name:        newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool()),
-					typ:         reflectType(f.Get("typ")),
-					offsetEmbed: offsetEmbed,
+					name:   newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
+					typ:    reflectType(f.Get("typ")),
+					offset: uintptr(i),
 				}
 			}
 			setKindType(rt, &structType{
 				rtype:   *rt,
-				pkgPath: newName(internalStr(typ.Get("pkgPath")), "", false),
+				pkgPath: newName(internalStr(typ.Get("pkgPath")), "", false, false),
 				fields:  reflectFields,
 			})
 		}
@@ -257,6 +253,7 @@ type nameData struct {
 	name     string
 	tag      string
 	exported bool
+	embedded bool
 	pkgPath  string
 }
 
@@ -266,16 +263,18 @@ func (n name) name() (s string) { return nameMap[n.bytes].name }
 func (n name) tag() (s string)  { return nameMap[n.bytes].tag }
 func (n name) pkgPath() string  { return nameMap[n.bytes].pkgPath }
 func (n name) isExported() bool { return nameMap[n.bytes].exported }
+func (n name) embedded() bool   { return nameMap[n.bytes].embedded }
 func (n name) setPkgPath(pkgpath string) {
 	nameMap[n.bytes].pkgPath = pkgpath
 }
 
-func newName(n, tag string, exported bool) name {
+func newName(n, tag string, exported, embedded bool) name {
 	b := new(byte)
 	nameMap[b] = &nameData{
 		name:     n,
 		tag:      tag,
 		exported: exported,
+		embedded: embedded,
 	}
 	return name{
 		bytes: b,
@@ -1180,6 +1179,11 @@ func (v Value) Cap() int {
 		return v.typ.Len()
 	case Chan, Slice:
 		return v.object().Get("$capacity").Int()
+	case Ptr:
+		if v.typ.Elem().Kind() == Array {
+			return v.typ.Elem().Len()
+		}
+		panic("reflect: call of reflect.Value.Cap on ptr to non-array Value")
 	}
 	panic(&ValueError{"reflect.Value.Cap", k})
 }
@@ -1406,6 +1410,11 @@ func (v Value) Len() int {
 		return v.object().Get("$buffer").Get("length").Int()
 	case Map:
 		return v.object().Get("size").Int()
+	case Ptr:
+		if v.typ.Elem().Kind() == Array {
+			return v.typ.Elem().Len()
+		}
+		panic("reflect: call of reflect.Value.Len on ptr to non-array Value")
 	default:
 		panic(&ValueError{"reflect.Value.Len", k})
 	}
@@ -1449,6 +1458,29 @@ func (v Value) Set(x Value) {
 		return
 	}
 	v.ptr = x.ptr
+}
+
+func (v Value) bytesSlow() []byte {
+	switch v.kind() {
+	case Slice:
+		if v.typ.Elem().Kind() != Uint8 {
+			panic("reflect.Value.Bytes of non-byte slice")
+		}
+		return *(*[]byte)(v.ptr)
+	case Array:
+		if v.typ.Elem().Kind() != Uint8 {
+			panic("reflect.Value.Bytes of non-byte array")
+		}
+		if !v.CanAddr() {
+			panic("reflect.Value.Bytes of unaddressable byte array")
+		}
+		// Replace the following with JS to avoid using unsafe pointers.
+		//   p := (*byte)(v.ptr)
+		//   n := int((*arrayType)(unsafe.Pointer(v.typ)).len)
+		//   return unsafe.Slice(p, n)
+		return js.InternalObject(v.ptr).Interface().([]byte)
+	}
+	panic(&ValueError{"reflect.Value.Bytes", v.kind()})
 }
 
 func (v Value) SetBytes(x []byte) {
@@ -1729,29 +1761,47 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	return js.Global.Call("$interfaceIsEqual", js.InternalObject(valueInterface(v1, false)), js.InternalObject(valueInterface(v2, false))).Bool()
 }
 
-func methodNameSkip() string {
-	pc, _, _, _ := runtime.Caller(3)
-	f := runtime.FuncForPC(pc)
-	if f == nil {
-		return "unknown method"
-	}
-	// Function name extracted from the call stack can be different from vanilla
-	// Go. Here we try to fix stuff like "Object.$packages.reflect.Q.ptr.SetIterKey"
-	// into "Value.SetIterKey".
-	// This workaround may become obsolete after https://github.com/gopherjs/gopherjs/issues/1085
-	// is resolved.
-	name := f.Name()
-	idx := len(name) - 1
-	for idx > 0 {
-		if name[idx] == '.' {
-			break
+func stringsLastIndex(s string, c byte) int {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == c {
+			return i
 		}
-		idx--
 	}
-	if idx < 0 {
-		return name
+	return -1
+}
+
+func stringsHasPrefix(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+func valueMethodName() string {
+	var pc [5]uintptr
+	n := runtime.Callers(1, pc[:])
+	frames := runtime.CallersFrames(pc[:n])
+	var frame runtime.Frame
+	for more := true; more; {
+		frame, more = frames.Next()
+		name := frame.Function
+
+		// Function name extracted from the call stack can be different from
+		// vanilla Go, so is not prefixed by "reflect.Value." as needed by the original.
+		// See https://cs.opensource.google/go/go/+/refs/tags/go1.19.13:src/reflect/value.go;l=173-191
+		// Here we try to fix stuff like "Object.$packages.reflect.Q.ptr.SetIterKey"
+		// into "reflect.Value.SetIterKey".
+		// This workaround may become obsolete after
+		// https://github.com/gopherjs/gopherjs/issues/1085 is resolved.
+
+		const prefix = `Object.$packages.reflect.`
+		if stringsHasPrefix(name, prefix) {
+			if idx := stringsLastIndex(name, '.'); idx >= 0 {
+				methodName := name[idx+1:]
+				if len(methodName) > 0 && 'A' <= methodName[0] && methodName[0] <= 'Z' {
+					return `reflect.Value.` + methodName
+				}
+			}
+		}
 	}
-	return "Value" + name[idx:]
+	return "unknown method"
 }
 
 func verifyNotInHeapPtr(p uintptr) bool {

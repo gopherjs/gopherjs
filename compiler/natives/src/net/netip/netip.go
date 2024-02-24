@@ -1,4 +1,5 @@
 //go:build js
+// +build js
 
 package netip
 
@@ -17,7 +18,6 @@ var (
 	z6noz = "\x00ipv6noz"
 )
 
-//gopherjs:prune-original
 func (ip Addr) Zone() string {
 	if ip.z == z4 || ip.z == z6noz {
 		return ""
@@ -25,7 +25,6 @@ func (ip Addr) Zone() string {
 	return ip.z
 }
 
-//gopherjs:prune-original
 func (ip Addr) WithZone(zone string) Addr {
 	if !ip.Is6() {
 		return ip

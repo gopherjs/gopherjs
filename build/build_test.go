@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/gopherjs/gopherjs/internal/srctesting"
 	"github.com/shurcooL/go/importgraphutil"
 )
 
@@ -126,4 +127,616 @@ func (m stringSet) String() string {
 		s = append(s, v)
 	}
 	return fmt.Sprintf("%q", s)
+}
+
+func TestOverlayAugmentation(t *testing.T) {
+	tests := []struct {
+		desc         string
+		src          string
+		noCodeChange bool
+		want         string
+		expInfo      map[string]overrideInfo
+	}{
+		{
+			desc: `remove function`,
+			src: `func Foo(a, b int) int {
+					return a + b
+				}`,
+			noCodeChange: true,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {},
+			},
+		}, {
+			desc: `keep function`,
+			src: `//gopherjs:keep-original
+				func Foo(a, b int) int {
+					return a + b
+				}`,
+			noCodeChange: true,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {keepOriginal: true},
+			},
+		}, {
+			desc: `remove constants and values`,
+			src: `import "time"
+
+				const (
+					foo = 42
+					bar = "gopherjs"
+				)
+
+				var now = time.Now`,
+			noCodeChange: true,
+			expInfo: map[string]overrideInfo{
+				`foo`: {},
+				`bar`: {},
+				`now`: {},
+			},
+		}, {
+			desc: `remove types`,
+			src: `type (
+					foo struct {}
+					bar int
+				)
+
+				type bob interface {}`,
+			noCodeChange: true,
+			expInfo: map[string]overrideInfo{
+				`foo`: {},
+				`bar`: {},
+				`bob`: {},
+			},
+		}, {
+			desc: `remove methods`,
+			src: `type Foo struct {
+					bar int
+				}
+
+				func (x *Foo) GetBar() int    { return x.bar }
+				func (x *Foo) SetBar(bar int) { x.bar = bar }`,
+			noCodeChange: true,
+			expInfo: map[string]overrideInfo{
+				`Foo`:        {},
+				`Foo.GetBar`: {},
+				`Foo.SetBar`: {},
+			},
+		}, {
+			desc: `remove generics`,
+			src: `import "cmp"
+
+				type Pointer[T any] struct {}
+
+				func Sort[S ~[]E, E cmp.Ordered](x S) {}
+
+				// this is a stub for "func Equal[S ~[]E, E any](s1, s2 S) bool {}"
+				func Equal[S ~[]E, E any](s1, s2 S) bool {}`,
+			noCodeChange: true,
+			expInfo: map[string]overrideInfo{
+				`Pointer`: {},
+				`Sort`:    {},
+				`Equal`:   {},
+			},
+		}, {
+			desc:    `prune an unused import`,
+			src:     `import foo "some/other/bar"`,
+			want:    ``,
+			expInfo: map[string]overrideInfo{},
+		}, {
+			desc: `purge function`,
+			src: `//gopherjs:purge
+				func Foo(a, b int) int {
+					return a + b
+				}`,
+			want: ``,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {},
+			},
+		}, {
+			desc: `purge struct removes an import`,
+			src: `import "bytes"
+				import "math"
+
+				//gopherjs:purge
+				type Foo struct {
+					bar *bytes.Buffer
+				}
+
+				const Tau = math.Pi * 2.0`,
+			want: `import "math"
+
+				const Tau = math.Pi * 2.0`,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {purgeMethods: true},
+				`Tau`: {},
+			},
+		}, {
+			desc: `purge whole type decl`,
+			src: `//gopherjs:purge
+				type (
+					Foo struct {}
+					bar interface{}
+					bob int
+				)`,
+			want: ``,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {purgeMethods: true},
+				`bar`: {purgeMethods: true},
+				`bob`: {purgeMethods: true},
+			},
+		}, {
+			desc: `purge part of type decl`,
+			src: `type (
+					Foo struct {}
+
+					//gopherjs:purge
+					bar interface{}
+
+					//gopherjs:purge
+					bob int
+				)`,
+			want: `type (
+					Foo struct {}
+				)`,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {},
+				`bar`: {purgeMethods: true},
+				`bob`: {purgeMethods: true},
+			},
+		}, {
+			desc: `purge all of a type decl`,
+			src: `type (
+					//gopherjs:purge
+					Foo struct {}
+				)`,
+			want: ``,
+			expInfo: map[string]overrideInfo{
+				`Foo`: {purgeMethods: true},
+			},
+		}, {
+			desc: `remove and purge values`,
+			src: `import "time"
+
+				const (
+					foo = 42
+					//gopherjs:purge
+					bar = "gopherjs"
+				)
+
+				//gopherjs:purge
+				var now = time.Now`,
+			want: `const (
+					foo = 42
+				)`,
+			expInfo: map[string]overrideInfo{
+				`foo`: {},
+				`bar`: {},
+				`now`: {},
+			},
+		}, {
+			desc: `purge all value names`,
+			src: `//gopherjs:purge
+				var foo, bar int
+
+				//gopherjs:purge
+				const bob, sal = 12, 42`,
+			want: ``,
+			expInfo: map[string]overrideInfo{
+				`foo`: {},
+				`bar`: {},
+				`bob`: {},
+				`sal`: {},
+			},
+		}, {
+			desc: `imports not confused by local variables`,
+			src: `import (
+					"cmp"
+					"time"
+				)
+
+				//gopherjs:purge
+				func Sort[S ~[]E, E cmp.Ordered](x S) {}
+
+				func SecondsSince(start time.Time) int {
+					cmp := time.Now().Sub(start)
+					return int(cmp.Second())
+				}`,
+			want: `import (
+					"time"
+				)
+
+				func SecondsSince(start time.Time) int {
+					cmp := time.Now().Sub(start)
+					return int(cmp.Second())
+				}`,
+			expInfo: map[string]overrideInfo{
+				`Sort`:         {},
+				`SecondsSince`: {},
+			},
+		}, {
+			desc: `purge generics`,
+			src: `import "cmp"
+
+				//gopherjs:purge
+				type Pointer[T any] struct {}
+
+				//gopherjs:purge
+				func Sort[S ~[]E, E cmp.Ordered](x S) {}
+
+				// stub for "func Equal[S ~[]E, E any](s1, s2 S) bool"
+				func Equal() {}`,
+			want: `// stub for "func Equal[S ~[]E, E any](s1, s2 S) bool"
+				func Equal() {}`,
+			expInfo: map[string]overrideInfo{
+				`Pointer`: {purgeMethods: true},
+				`Sort`:    {},
+				`Equal`:   {},
+			},
+		}, {
+			desc: `remove unsafe and embed if not needed`,
+			src: `import "unsafe"
+				import "embed"
+
+				//gopherjs:purge
+				var eFile embed.FS
+
+				//gopherjs:purge
+				func SwapPointer(addr *unsafe.Pointer, new unsafe.Pointer) (old unsafe.Pointer)`,
+			want: ``,
+			expInfo: map[string]overrideInfo{
+				`SwapPointer`: {},
+				`eFile`:       {},
+			},
+		}, {
+			desc: `keep unsafe and embed for directives`,
+			src: `import "unsafe"
+				import "embed"
+
+				//go:embed hello.txt
+				var eFile embed.FS
+
+				//go:linkname runtimeNano runtime.nanotime
+				func runtimeNano() int64`,
+			want: `import _ "unsafe"
+				import "embed"
+
+				//go:embed hello.txt
+				var eFile embed.FS
+				
+				//go:linkname runtimeNano runtime.nanotime
+				func runtimeNano() int64`,
+			expInfo: map[string]overrideInfo{
+				`eFile`:       {},
+				`runtimeNano`: {},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			const pkgName = "package testpackage\n\n"
+			if test.noCodeChange {
+				test.want = test.src
+			}
+
+			fsetSrc := token.NewFileSet()
+			fileSrc := srctesting.Parse(t, fsetSrc, pkgName+test.src)
+
+			overrides := map[string]overrideInfo{}
+			augmentOverlayFile(fileSrc, overrides)
+			pruneImports(fileSrc)
+
+			got := srctesting.Format(t, fsetSrc, fileSrc)
+
+			fsetWant := token.NewFileSet()
+			fileWant := srctesting.Parse(t, fsetWant, pkgName+test.want)
+			want := srctesting.Format(t, fsetWant, fileWant)
+
+			if got != want {
+				t.Errorf("augmentOverlayFile and pruneImports got unexpected code:\n"+
+					"returned:\n\t%q\nwant:\n\t%q", got, want)
+			}
+
+			for key, expInfo := range test.expInfo {
+				if gotInfo, ok := overrides[key]; !ok {
+					t.Errorf(`%q was expected but not gotten`, key)
+				} else if expInfo != gotInfo {
+					t.Errorf(`%q had wrong info, got %+v`, key, gotInfo)
+				}
+			}
+			for key, gotInfo := range overrides {
+				if _, ok := test.expInfo[key]; !ok {
+					t.Errorf(`%q with %+v was not expected`, key, gotInfo)
+				}
+			}
+		})
+	}
+}
+
+func TestOriginalAugmentation(t *testing.T) {
+	tests := []struct {
+		desc string
+		info map[string]overrideInfo
+		src  string
+		want string
+	}{
+		{
+			desc: `do not affect function`,
+			info: map[string]overrideInfo{},
+			src: `func Foo(a, b int) int {
+						return a + b
+					}`,
+			want: `func Foo(a, b int) int {
+						return a + b
+					}`,
+		}, {
+			desc: `change unnamed sync import`,
+			info: map[string]overrideInfo{},
+			src: `import "sync"
+
+				var _ = &sync.Mutex{}`,
+			want: `import sync "github.com/gopherjs/gopherjs/nosync"
+
+				var _ = &sync.Mutex{}`,
+		}, {
+			desc: `change named sync import`,
+			info: map[string]overrideInfo{},
+			src: `import foo "sync"
+
+				var _ = &foo.Mutex{}`,
+			want: `import foo "github.com/gopherjs/gopherjs/nosync"
+
+				var _ = &foo.Mutex{}`,
+		}, {
+			desc: `remove function`,
+			info: map[string]overrideInfo{
+				`Foo`: {},
+			},
+			src: `func Foo(a, b int) int {
+					return a + b
+				}`,
+			want: ``,
+		}, {
+			desc: `keep original function`,
+			info: map[string]overrideInfo{
+				`Foo`: {keepOriginal: true},
+			},
+			src: `func Foo(a, b int) int {
+					return a + b
+				}`,
+			want: `func _gopherjs_original_Foo(a, b int) int {
+					return a + b
+				}`,
+		}, {
+			desc: `remove types and values`,
+			info: map[string]overrideInfo{
+				`Foo`:  {},
+				`now`:  {},
+				`bar1`: {},
+			},
+			src: `import "time"
+
+				type Foo interface{
+					bob(a, b string) string
+				}
+
+				var now = time.Now
+				const bar1, bar2 = 21, 42`,
+			want: `const bar2 = 42`,
+		}, {
+			desc: `remove in multi-value context`,
+			info: map[string]overrideInfo{
+				`bar`: {},
+			},
+			src: `const foo, bar = func() (int, int) {
+					return 24, 12
+				}()`,
+			want: `const foo, _ = func() (int, int) {
+					return 24, 12
+				}()`,
+		}, {
+			desc: `full remove in multi-value context`,
+			info: map[string]overrideInfo{
+				`bar`: {},
+			},
+			src: `const _, bar = func() (int, int) {
+					return 24, 12
+				}()`,
+			want: ``,
+		}, {
+			desc: `remove methods`,
+			info: map[string]overrideInfo{
+				`Foo.GetBar`: {},
+				`Foo.SetBar`: {},
+			},
+			src: `
+				func (x Foo) GetBar() int     { return x.bar }
+				func (x *Foo) SetBar(bar int) { x.bar = bar }`,
+			want: ``,
+		}, {
+			desc: `purge struct and methods`,
+			info: map[string]overrideInfo{
+				`Foo`: {purgeMethods: true},
+			},
+			src: `type Foo struct{
+					bar int
+				}
+
+				func (f Foo) GetBar() int     { return f.bar }
+				func (f *Foo) SetBar(bar int) { f.bar = bar }
+
+				func NewFoo(bar int) *Foo { return &Foo{bar: bar} }`,
+			// NewFoo is not removed automatically since
+			// only functions with Foo as a receiver are removed.
+			want: `func NewFoo(bar int) *Foo { return &Foo{bar: bar} }`,
+		}, {
+			desc: `remove generics`,
+			info: map[string]overrideInfo{
+				`Pointer`: {},
+				`Sort`:    {},
+				`Equal`:   {},
+			},
+			src: `import "cmp"
+			
+				// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}
+
+				type Pointer[T any] struct {}
+
+				func Sort[S ~[]E, E cmp.Ordered](x S) {}
+
+				// overlay had stub "func Equal() {}"
+				func Equal[S ~[]E, E any](s1, s2 S) bool {}`,
+			want: `// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}`,
+		}, {
+			desc: `purge generics`,
+			info: map[string]overrideInfo{
+				`Pointer`: {purgeMethods: true},
+				`Sort`:    {},
+				`Equal`:   {},
+			},
+			src: `import "cmp"
+
+				// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}
+
+				type Pointer[T any] struct {}
+				func (x *Pointer[T]) Load() *T {}
+				func (x *Pointer[T]) Store(val *T) {}
+
+				func Sort[S ~[]E, E cmp.Ordered](x S) {}
+
+				// overlay had stub "func Equal() {}"
+				func Equal[S ~[]E, E any](s1, s2 S) bool {}`,
+			want: `// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}`,
+		}, {
+			desc: `prune an unused import`,
+			info: map[string]overrideInfo{},
+			src: `import foo "some/other/bar"
+			
+				// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}`,
+			want: `// keeps the isOnlyImports from skipping what is being tested.
+				func foo() {}`,
+		}, {
+			desc: `override signature of function`,
+			info: map[string]overrideInfo{
+				`Foo`: {
+					overrideSignature: srctesting.ParseFuncDecl(t,
+						`package whatever
+						func Foo(a, b any) (any, bool) {}`),
+				},
+			},
+			src: `func Foo[T comparable](a, b T) (T, bool) {
+					if a == b {
+						return a, true
+					}
+					return b, false
+				}`,
+			want: `func Foo(a, b any) (any, bool) {
+				if a == b {
+					return a, true
+				}
+				return b, false
+			}`,
+		}, {
+			desc: `override signature of method`,
+			info: map[string]overrideInfo{
+				`Foo.Bar`: {
+					overrideSignature: srctesting.ParseFuncDecl(t,
+						`package whatever
+						func (r *Foo) Bar(a, b any) (any, bool) {}`),
+				},
+			},
+			src: `func (r *Foo[T]) Bar(a, b T) (T, bool) {
+					if r.isSame(a, b) {
+						return a, true
+					}
+					return b, false
+				}`,
+			want: `func (r *Foo) Bar(a, b any) (any, bool) {
+					if r.isSame(a, b) {
+						return a, true
+					}
+					return b, false
+				}`,
+		}, {
+			desc: `empty file removes all imports`,
+			info: map[string]overrideInfo{
+				`foo`: {},
+			},
+			src: `import . "math/rand"
+				func foo() int {
+					return Int()
+				}`,
+			want: ``,
+		}, {
+			desc: `empty file with directive`,
+			info: map[string]overrideInfo{
+				`foo`: {},
+			},
+			src: `//go:linkname foo bar
+				import _ "unsafe"`,
+			want: `//go:linkname foo bar
+				import _ "unsafe"`,
+		}, {
+			desc: `multiple imports for directives`,
+			info: map[string]overrideInfo{
+				`A`: {},
+				`C`: {},
+			},
+			src: `import "unsafe"
+				import "embed"
+
+				//go:embed hello.txt
+				var A embed.FS
+
+				//go:embed goodbye.txt
+				var B string
+				
+				var C unsafe.Pointer
+				
+				// override Now with hardcoded time for testing
+				//go:linkname timeNow time.Now
+				func timeNow() time.Time {
+					return time.Date(2012, 8, 6, 0, 0, 0, 0, time.UTC)
+				}`,
+			want: `import _ "unsafe"
+				import _ "embed"
+
+				//go:embed goodbye.txt
+				var B string
+
+				// override Now with hardcoded time for testing
+				//go:linkname timeNow time.Now
+				func timeNow() time.Time {
+					return time.Date(2012, 8, 6, 0, 0, 0, 0, time.UTC)
+				}`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			pkgName := "package testpackage\n\n"
+			importPath := `math/rand`
+			fsetSrc := token.NewFileSet()
+			fileSrc := srctesting.Parse(t, fsetSrc, pkgName+test.src)
+
+			augmentOriginalImports(importPath, fileSrc)
+			augmentOriginalFile(fileSrc, test.info)
+			pruneImports(fileSrc)
+
+			got := srctesting.Format(t, fsetSrc, fileSrc)
+
+			fsetWant := token.NewFileSet()
+			fileWant := srctesting.Parse(t, fsetWant, pkgName+test.want)
+			want := srctesting.Format(t, fsetWant, fileWant)
+
+			if got != want {
+				t.Errorf("augmentOriginalImports, augmentOriginalFile, and pruneImports got unexpected code:\n"+
+					"returned:\n\t%q\nwant:\n\t%q", got, want)
+			}
+		})
+	}
 }

@@ -146,16 +146,17 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			clause := cc.(*ast.CaseClause)
 			var bodyPrefix []ast.Stmt
 			if implicit := fc.pkgCtx.Implicits[clause]; implicit != nil {
+				typ := fc.typeResolver.Substitute(implicit.Type())
 				value := refVar
-				if typesutil.IsJsObject(implicit.Type().Underlying()) {
+				if typesutil.IsJsObject(typ.Underlying()) {
 					value += ".$val.object"
-				} else if _, ok := implicit.Type().Underlying().(*types.Interface); !ok {
+				} else if _, ok := typ.Underlying().(*types.Interface); !ok {
 					value += ".$val"
 				}
 				bodyPrefix = []ast.Stmt{&ast.AssignStmt{
-					Lhs: []ast.Expr{fc.newIdent(fc.objectName(implicit), implicit.Type())},
+					Lhs: []ast.Expr{fc.newIdent(fc.objectName(implicit), typ)},
 					Tok: token.DEFINE,
-					Rhs: []ast.Expr{fc.newIdent(value, implicit.Type())},
+					Rhs: []ast.Expr{fc.newIdent(value, typ)},
 				}}
 			}
 			c := &ast.CaseClause{

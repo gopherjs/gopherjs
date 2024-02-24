@@ -145,21 +145,20 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue50854.go": {category: lowLevelRuntimeDifference, desc: "negative int32 overflow behaves differently in JS"},
 
 	// These are new tests in Go 1.18
-	"fixedbugs/issue47928.go": {category: notApplicable, desc: "//go:nointerface is a part of GOEXPERIMENT=fieldtrack and is not supported by GopherJS"},
-	"fixedbugs/issue48898.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
-	"fixedbugs/issue48536.go": {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
-	"fixedbugs/issue53600.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
-	"typeparam/issue51733.go": {category: usesUnsupportedPackage, desc: "unsafe: uintptr to struct pointer conversion is unsupported"},
-	"typeparam/chans.go":      {category: neverTerminates, desc: "uses runtime.SetFinalizer() and runtime.GC()."},
+	"fixedbugs/issue47928.go":  {category: notApplicable, desc: "//go:nointerface is a part of GOEXPERIMENT=fieldtrack and is not supported by GopherJS"},
+	"fixedbugs/issue48898.go":  {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
+	"fixedbugs/issue48536.go":  {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
+	"fixedbugs/issue53600.go":  {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+	"typeparam/issue51733.go":  {category: usesUnsupportedPackage, desc: "unsafe: uintptr to struct pointer conversion is unsupported"},
+	"typeparam/chans.go":       {category: neverTerminates, desc: "uses runtime.SetFinalizer() and runtime.GC()."},
+	"typeparam/typeswitch2.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+	"typeparam/typeswitch5.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
 
 	// Failures related to the lack of generics support. Ideally, this section
 	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
 	// fixed.
-	"typeparam/issue47716.go":  {category: generics, desc: "bug: failed to call unsafe.Sizeof"},
-	"typeparam/nested.go":      {category: generics, desc: "incomplete support for generic types inside generic functions"},
-	"typeparam/typeswitch2.go": {category: generics, desc: "undiagnosed: incorrect output"},
-	"typeparam/typeswitch3.go": {category: generics, desc: "undiagnosed: incorrect output"},
-	"typeparam/typeswitch5.go": {category: generics, desc: "undiagnosed: incorrect output"},
+	"typeparam/issue47716.go": {category: generics, desc: "bug: failed to call unsafe.Sizeof"},
+	"typeparam/nested.go":     {category: generics, desc: "incomplete support for generic types inside generic functions"},
 }
 
 type failCategory uint8

@@ -448,7 +448,15 @@ func (fc *funcContext) instanceOf(ident *ast.Ident) typeparams.Instance {
 // defined in terms of type parameters, it will substitute type parameters with
 // concrete types from the current set of type arguments.
 func (fc *funcContext) typeOf(expr ast.Expr) types.Type {
-	return fc.typeResolver.Substitute(fc.pkgCtx.TypeOf(expr))
+	typ := fc.pkgCtx.TypeOf(expr)
+	// If the expression is referring to an instance of a generic type or function,
+	// we want the instantiated type.
+	if ident, ok := expr.(*ast.Ident); ok {
+		if inst, ok := fc.pkgCtx.Instances[ident]; ok {
+			typ = inst.Type
+		}
+	}
+	return fc.typeResolver.Substitute(typ)
 }
 
 func (fc *funcContext) selectionOf(e *ast.SelectorExpr) (typesutil.Selection, bool) {

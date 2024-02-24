@@ -3,9 +3,9 @@ package typeparams
 import (
 	"fmt"
 	"go/ast"
-	"go/token"
 	"go/types"
 
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams/subst"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"golang.org/x/exp/typeparams"
 )
@@ -13,10 +13,7 @@ import (
 // Resolver translates types defined in terms of type parameters into concrete
 // types, given a mapping from type params to type arguments.
 type Resolver struct {
-	TContext *types.Context
-	Map      map[*types.TypeParam]types.Type
-
-	memo    typesutil.Map[types.Type]
+	subster *subst.Subster
 	selMemo map[typesutil.Selection]typesutil.Selection
 }
 
@@ -24,15 +21,11 @@ type Resolver struct {
 // entries with the same index.
 func NewResolver(tc *types.Context, tParams []*types.TypeParam, tArgs []types.Type) *Resolver {
 	r := &Resolver{
-		TContext: tc,
-		Map:      map[*types.TypeParam]types.Type{},
-		selMemo:  map[typesutil.Selection]typesutil.Selection{},
+		subster: subst.New(tc, tParams, tArgs),
+		selMemo: map[typesutil.Selection]typesutil.Selection{},
 	}
 	if len(tParams) != len(tArgs) {
 		panic(fmt.Errorf("len(tParams)=%d not equal len(tArgs)=%d", len(tParams), len(tArgs)))
-	}
-	for i := range tParams {
-		r.Map[tParams[i]] = tArgs[i]
 	}
 	return r
 }
@@ -40,15 +33,10 @@ func NewResolver(tc *types.Context, tParams []*types.TypeParam, tArgs []types.Ty
 // Substitute replaces references to type params in the provided type definition
 // with the corresponding concrete types.
 func (r *Resolver) Substitute(typ types.Type) types.Type {
-	if r == nil || r.Map == nil || typ == nil {
+	if r == nil || r.subster == nil || typ == nil {
 		return typ // No substitutions to be made.
 	}
-	if concrete := r.memo.At(typ); concrete != nil {
-		return concrete
-	}
-	concrete := goTypesCheckerSubst((*types.Checker)(nil), token.NoPos, typ, substMap(r.Map), r.TContext)
-	r.memo.Set(typ, concrete)
-	return concrete
+	return r.subster.Type(typ)
 }
 
 // SubstituteAll same as Substitute, but accepts a TypeList are returns
@@ -65,7 +53,7 @@ func (r *Resolver) SubstituteAll(list *types.TypeList) []types.Type {
 // defined in terms of type parameters with a method selection on a concrete
 // instantiation of the type.
 func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Selection {
-	if r == nil || r.Map == nil || sel == nil {
+	if r == nil || r.subster == nil || sel == nil {
 		return sel // No substitutions to be made.
 	}
 	if concrete, ok := r.selMemo[sel]; ok {
@@ -75,13 +63,16 @@ func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Select
 	switch sel.Kind() {
 	case types.MethodExpr, types.MethodVal, types.FieldVal:
 		recv := r.Substitute(sel.Recv())
-		if recv == sel.Recv() {
+		if types.Identical(recv, sel.Recv()) {
 			return sel // Non-generic receiver, no substitution necessary.
 		}
 
 		// Look up the method on the instantiated receiver.
 		pkg := sel.Obj().Pkg()
 		obj, index, _ := types.LookupFieldOrMethod(recv, true, pkg, sel.Obj().Name())
+		if obj == nil {
+			panic(fmt.Errorf("failed to lookup field %q in type %v", sel.Obj().Name(), recv))
+		}
 		typ := obj.Type()
 
 		if sel.Kind() == types.MethodExpr {
@@ -165,9 +156,9 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 // kickstart generic instantiation discovery.
 //
 // It serves double duty:
-//  - Builds a map from types.Object instances representing generic types,
-//    methods and functions to AST nodes that define them.
-//  - Collects an initial set of generic instantiations in the non-generic code.
+//   - Builds a map from types.Object instances representing generic types,
+//     methods and functions to AST nodes that define them.
+//   - Collects an initial set of generic instantiations in the non-generic code.
 type seedVisitor struct {
 	visitor
 	objMap  map[types.Object]ast.Node

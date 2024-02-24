@@ -3,7 +3,11 @@
 
 package sync
 
-import "github.com/gopherjs/gopherjs/js"
+import (
+	_ "unsafe" // For go:linkname
+
+	"github.com/gopherjs/gopherjs/js"
+)
 
 var semWaiters = make(map[*uint32][]chan bool)
 
@@ -69,11 +73,8 @@ func runtime_canSpin(i int) bool {
 	return false
 }
 
-// Copy of time.runtimeNano.
-func runtime_nanotime() int64 {
-	const millisecond = 1000000
-	return js.Global.Get("Date").New().Call("getTime").Int64() * millisecond
-}
+//go:linkname runtime_nanotime runtime.nanotime
+func runtime_nanotime() int64
 
 // Implemented in runtime.
 func throw(s string) {

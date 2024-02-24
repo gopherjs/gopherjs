@@ -109,6 +109,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		if fe, ok := bailingOut(e); ok {
 			// Orderly bailout, return whatever clues we already have.
+			fmt.Fprintf(fe, `building package %q`, importPath)
 			err = fe
 			return
 		}
@@ -263,7 +264,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 	sort.Strings(importedPaths)
 	for _, impPath := range importedPaths {
-		id := funcCtx.newIdent(fmt.Sprintf(`%s.$init`, funcCtx.pkgCtx.pkgVars[impPath]), types.NewSignature(nil, nil, nil, false))
+		id := funcCtx.newIdent(fmt.Sprintf(`%s.$init`, funcCtx.pkgCtx.pkgVars[impPath]), types.NewSignatureType(nil, nil, nil, nil, nil, false))
 		call := &ast.CallExpr{Fun: id}
 		funcCtx.Blocking[call] = true
 		funcCtx.Flattened[call] = true
@@ -281,13 +282,6 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
 				sig := funcCtx.pkgCtx.Defs[d.Name].(*types.Func).Type().(*types.Signature)
-				var recvType types.Type
-				if sig.Recv() != nil {
-					recvType = sig.Recv().Type()
-					if ptr, isPtr := recvType.(*types.Pointer); isPtr {
-						recvType = ptr.Elem()
-					}
-				}
 				if sig.Recv() == nil {
 					funcCtx.objectName(funcCtx.pkgCtx.Defs[d.Name].(*types.Func)) // register toplevel name
 				}
@@ -670,9 +664,9 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 	case *types.Map:
 		return fmt.Sprintf("%s, %s", fc.typeName(t.Key()), fc.typeName(t.Elem()))
 	case *types.Pointer:
-		return fmt.Sprintf("%s", fc.typeName(t.Elem()))
+		return fc.typeName(t.Elem())
 	case *types.Slice:
-		return fmt.Sprintf("%s", fc.typeName(t.Elem()))
+		return fc.typeName(t.Elem())
 	case *types.Signature:
 		params := make([]string, t.Params().Len())
 		for i := range params {
@@ -694,6 +688,9 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 			fields[i] = fmt.Sprintf(`{prop: "%s", name: %s, embedded: %t, exported: %t, typ: %s, tag: %s}`, fieldName(t, i), encodeString(field.Name()), field.Anonymous(), field.Exported(), fc.typeName(field.Type()), encodeString(t.Tag(i)))
 		}
 		return fmt.Sprintf(`"%s", [%s]`, pkgPath, strings.Join(fields, ", "))
+	case *types.TypeParam:
+		err := bailout(fmt.Errorf(`%v has unexpected generic type parameter %T`, ty, ty))
+		panic(err)
 	default:
 		err := bailout(fmt.Errorf("%v has unexpected type %T", ty, ty))
 		panic(err)

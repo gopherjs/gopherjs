@@ -5,6 +5,10 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"path"
+	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -81,45 +85,63 @@ func ImportsUnsafe(file *ast.File) bool {
 	return false
 }
 
+// ImportName tries to determine the package name for an import.
+//
+// If the package name isn't specified then this will make a best
+// make a best guess using the import path.
+// If the import name is dot (`.`), blank (`_`), or there
+// was an issue determining the package name then empty is returned.
+func ImportName(spec *ast.ImportSpec) string {
+	var name string
+	if spec.Name != nil {
+		name = spec.Name.Name
+	} else {
+		importPath, _ := strconv.Unquote(spec.Path.Value)
+		name = path.Base(importPath)
+	}
+
+	switch name {
+	case `_`, `.`, `/`:
+		return ``
+	default:
+		return name
+	}
+}
+
 // FuncKey returns a string, which uniquely identifies a top-level function or
 // method in a package.
 func FuncKey(d *ast.FuncDecl) string {
-	if d.Recv == nil || len(d.Recv.List) == 0 {
-		return d.Name.Name
+	if recvKey := FuncReceiverKey(d); len(recvKey) > 0 {
+		return recvKey + "." + d.Name.Name
 	}
-	// Each if-statement progressively unwraps receiver type expression.
-	recv := d.Recv.List[0].Type
-	if star, ok := recv.(*ast.StarExpr); ok {
-		recv = star.X
-	}
-	if index, ok := recv.(*ast.IndexExpr); ok {
-		recv = index.X
-	}
-	if index, ok := recv.(*ast.IndexListExpr); ok {
-		recv = index.X
-	}
-	return recv.(*ast.Ident).Name + "." + d.Name.Name
+	return d.Name.Name
 }
 
-// PruneOriginal returns true if gopherjs:prune-original directive is present
-// before a function decl.
-//
-// `//gopherjs:prune-original` is a GopherJS-specific directive, which can be
-// applied to functions in native overlays and will instruct the augmentation
-// logic to delete the body of a standard library function that was replaced.
-// This directive can be used to remove code that would be invalid in GopherJS,
-// such as code expecting ints to be 64-bit. It should be used with caution
-// since it may create unused imports in the original source file.
-func PruneOriginal(d *ast.FuncDecl) bool {
-	if d.Doc == nil {
-		return false
+// FuncReceiverKey returns a string that uniquely identifies the receiver
+// struct of the function or an empty string if there is no receiver.
+// This name will match the name of the struct in the struct's type spec.
+func FuncReceiverKey(d *ast.FuncDecl) string {
+	if d == nil || d.Recv == nil || len(d.Recv.List) == 0 {
+		return ``
 	}
-	for _, c := range d.Doc.List {
-		if strings.HasPrefix(c.Text, "//gopherjs:prune-original") {
-			return true
+	recv := d.Recv.List[0].Type
+	for {
+		switch r := recv.(type) {
+		case *ast.IndexListExpr:
+			recv = r.X
+			continue
+		case *ast.IndexExpr:
+			recv = r.X
+			continue
+		case *ast.StarExpr:
+			recv = r.X
+			continue
+		case *ast.Ident:
+			return r.Name
+		default:
+			panic(fmt.Errorf(`unexpected type %T in receiver of function: %v`, recv, d))
 		}
 	}
-	return false
 }
 
 // KeepOriginal returns true if gopherjs:keep-original directive is present
@@ -131,12 +153,81 @@ func PruneOriginal(d *ast.FuncDecl) bool {
 // function in the original called `foo`, it will be accessible by the name
 // `_gopherjs_original_foo`.
 func KeepOriginal(d *ast.FuncDecl) bool {
-	if d.Doc == nil {
-		return false
-	}
-	for _, c := range d.Doc.List {
-		if strings.HasPrefix(c.Text, "//gopherjs:keep-original") {
-			return true
+	return hasDirective(d, `keep-original`)
+}
+
+// Purge returns true if gopherjs:purge directive is present
+// on a struct, interface, type, variable, constant, or function.
+//
+// `//gopherjs:purge` is a GopherJS-specific directive, which can be
+// applied in native overlays and will instruct the augmentation logic to
+// delete part of the standard library without a replacement. This directive
+// can be used to remove code that would be invalid in GopherJS, such as code
+// using unsupported features (e.g. generic interfaces before generics were
+// fully supported). It should be used with caution since it may remove needed
+// dependencies. If a type is purged, all methods using that type as
+// a receiver will also be purged.
+func Purge(d ast.Node) bool {
+	return hasDirective(d, `purge`)
+}
+
+// OverrideSignature returns true if gopherjs:override-signature directive is
+// present on a function.
+//
+// `//gopherjs:override-signature` is a GopherJS-specific directive, which can
+// be applied in native overlays and will instruct the augmentation logic to
+// replace the original function signature which has the same FuncKey with the
+// signature defined in the native overlays.
+// This directive can be used to remove generics from a function signature or
+// to replace a receiver of a function with another one. The given native
+// overlay function will be removed, so no method body is needed in the overlay.
+//
+// The new signature may not contain types which require a new import since
+// the imports will not be automatically added when needed, only removed.
+// Use a type alias in the overlay to deal manage imports.
+func OverrideSignature(d *ast.FuncDecl) bool {
+	return hasDirective(d, `override-signature`)
+}
+
+// directiveMatcher is a regex which matches a GopherJS directive
+// and finds the directive action.
+var directiveMatcher = regexp.MustCompile(`^\/(?:\/|\*)gopherjs:([\w-]+)`)
+
+// hasDirective returns true if the associated documentation
+// or line comments for the given node have the given directive action.
+//
+// All GopherJS-specific directives must start with `//gopherjs:` or
+// `/*gopherjs:` and followed by an action without any whitespace. The action
+// must be one or more letter, decimal, underscore, or hyphen.
+//
+// see https://pkg.go.dev/cmd/compile#hdr-Compiler_Directives
+func hasDirective(node ast.Node, directiveAction string) bool {
+	foundDirective := false
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch a := n.(type) {
+		case *ast.Comment:
+			m := directiveMatcher.FindStringSubmatch(a.Text)
+			if len(m) == 2 && m[1] == directiveAction {
+				foundDirective = true
+			}
+			return false
+		case *ast.CommentGroup:
+			return !foundDirective
+		default:
+			return n == node
+		}
+	})
+	return foundDirective
+}
+
+// HasDirectivePrefix determines if any line in the given file
+// has the given directive prefix in it.
+func HasDirectivePrefix(file *ast.File, prefix string) bool {
+	for _, cg := range file.Comments {
+		for _, c := range cg.List {
+			if strings.HasPrefix(c.Text, prefix) {
+				return true
+			}
 		}
 	}
 	return false
@@ -195,4 +286,22 @@ func EndsWithReturn(stmts []ast.Stmt) bool {
 	default:
 		return false
 	}
+}
+
+// Squeeze removes all nil nodes from the slice.
+//
+// The given slice will be modified. This is designed for squeezing
+// declaration, specification, imports, and identifier lists.
+func Squeeze[E ast.Node, S ~[]E](s S) S {
+	var zero E
+	count, dest := len(s), 0
+	for src := 0; src < count; src++ {
+		if !reflect.DeepEqual(s[src], zero) {
+			// Swap the values, this will put the nil values to the end
+			// of the slice so that the tail isn't holding onto pointers.
+			s[dest], s[src] = s[src], s[dest]
+			dest++
+		}
+	}
+	return s[:dest]
 }

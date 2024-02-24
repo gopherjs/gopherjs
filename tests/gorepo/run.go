@@ -145,19 +145,27 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue50854.go": {category: lowLevelRuntimeDifference, desc: "negative int32 overflow behaves differently in JS"},
 
 	// These are new tests in Go 1.18
+	"fixedbugs/issue46938.go":  {category: notApplicable, desc: "tests -d=checkptr compiler mode, which GopherJS doesn't support"},
 	"fixedbugs/issue47928.go":  {category: notApplicable, desc: "//go:nointerface is a part of GOEXPERIMENT=fieldtrack and is not supported by GopherJS"},
-	"fixedbugs/issue48898.go":  {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
 	"fixedbugs/issue48536.go":  {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
+	"fixedbugs/issue48898.go":  {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
 	"fixedbugs/issue53600.go":  {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
-	"typeparam/issue51733.go":  {category: usesUnsupportedPackage, desc: "unsafe: uintptr to struct pointer conversion is unsupported"},
 	"typeparam/chans.go":       {category: neverTerminates, desc: "uses runtime.SetFinalizer() and runtime.GC()."},
+	"typeparam/issue51733.go":  {category: usesUnsupportedPackage, desc: "unsafe: uintptr to struct pointer conversion is unsupported"},
 	"typeparam/typeswitch2.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
 	"typeparam/typeswitch5.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
 
 	// Failures related to the lack of generics support. Ideally, this section
 	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
 	// fixed.
-	"typeparam/nested.go": {category: generics, desc: "incomplete support for generic types inside generic functions"},
+	"typeparam/nested.go": {category: usesUnsupportedGenerics, desc: "incomplete support for generic types inside generic functions"},
+
+	// These are new tests in Go 1.19
+	"fixedbugs/issue50672.go": {category: usesUnsupportedGenerics, desc: "Checking function nesting with one function having a type parameter."},
+	"fixedbugs/issue53137.go": {category: usesUnsupportedGenerics, desc: "Checking setting type parameter of struct in parameter of a generic function."},
+	"fixedbugs/issue53309.go": {category: usesUnsupportedGenerics, desc: "Checking unused type parameter in method call to interface"},
+	"fixedbugs/issue53635.go": {category: usesUnsupportedGenerics, desc: "Checking switch type against nil type with unsupported type parameters"},
+	"fixedbugs/issue53653.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format of int64 is different from Go's"},
 }
 
 type failCategory uint8
@@ -167,11 +175,11 @@ const (
 	neverTerminates                       // Test never terminates (so avoid starting it).
 	usesUnsupportedPackage                // Test fails because it imports an unsupported package, e.g., "unsafe".
 	requiresSourceMapSupport              // Test fails without source map support (as configured in CI), because it tries to check filename/line number via runtime.Caller.
+	usesUnsupportedGenerics               // Test uses generics (type parameters) that are not currently supported.
 	compilerPanic
 	unsureIfGopherJSSupportsThisFeature
 	lowLevelRuntimeDifference // JavaScript runtime behaves differently from Go in ways that are difficult to work around.
 	notApplicable             // Test that doesn't need to run under GopherJS; it doesn't apply to the Go language in a general way.
-	generics                  // Test requires generics support.
 )
 
 type failReason struct {

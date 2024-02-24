@@ -32,7 +32,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			panic(err) // Continue orderly bailout.
 		}
 
-		// Oh noes, we've tried to compile something so bad that compiler paniced
+		// Oh noes, we've tried to compile something so bad that compiler panicked
 		// and ran away. Let's gather some debugging clues.
 		bail := bailout(err)
 		pos := stmt.Pos()
@@ -471,7 +471,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 	case *ast.SendStmt:
 		chanType := fc.typeOf(s.Chan).Underlying().(*types.Chan)
 		call := &ast.CallExpr{
-			Fun:  fc.newIdent("$send", types.NewSignature(nil, types.NewTuple(types.NewVar(0, nil, "", chanType), types.NewVar(0, nil, "", chanType.Elem())), nil, false)),
+			Fun:  fc.newIdent("$send", types.NewSignatureType(nil, nil, nil, types.NewTuple(types.NewVar(0, nil, "", chanType), types.NewVar(0, nil, "", chanType.Elem())), nil, false)),
 			Args: []ast.Expr{s.Chan, fc.newIdent(fc.translateImplicitConversionWithCloning(s.Value, chanType.Elem()).String(), chanType.Elem())},
 		}
 		fc.Blocking[call] = true
@@ -522,8 +522,8 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		}
 
 		selectCall := fc.setType(&ast.CallExpr{
-			Fun:  fc.newIdent("$select", types.NewSignature(nil, types.NewTuple(types.NewVar(0, nil, "", types.NewInterface(nil, nil))), types.NewTuple(types.NewVar(0, nil, "", types.Typ[types.Int])), false)),
-			Args: []ast.Expr{fc.newIdent(fmt.Sprintf("[%s]", strings.Join(channels, ", ")), types.NewInterface(nil, nil))},
+			Fun:  fc.newIdent("$select", types.NewSignatureType(nil, nil, nil, types.NewTuple(types.NewVar(0, nil, "", types.NewInterfaceType(nil, nil))), types.NewTuple(types.NewVar(0, nil, "", types.Typ[types.Int])), false)),
+			Args: []ast.Expr{fc.newIdent(fmt.Sprintf("[%s]", strings.Join(channels, ", ")), types.NewInterfaceType(nil, nil))},
 		}, types.Typ[types.Int])
 		if !hasDefault {
 			fc.Blocking[selectCall] = true

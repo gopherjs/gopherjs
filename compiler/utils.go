@@ -596,13 +596,13 @@ func isBlank(expr ast.Expr) bool {
 //
 // For example, consider a Go type:
 //
-//			 type SecretInt int
-//	    func (_ SecretInt) String() string { return "<secret>" }
+//	type SecretInt int
+//	func (_ SecretInt) String() string { return "<secret>" }
 //
-//	    func main() {
-//	      var i SecretInt = 1
-//	      println(i.String())
-//	    }
+//	func main() {
+//	  var i SecretInt = 1
+//	  println(i.String())
+//	}
 //
 // For this example the compiler will generate code similar to the snippet below:
 //
@@ -843,7 +843,7 @@ func (st signatureTypes) Param(i int, ellipsis bool) types.Type {
 	}
 	if !st.Sig.Variadic() {
 		// This should never happen if the code was type-checked successfully.
-		panic(fmt.Errorf("Tried to access parameter %d of a non-variadic signature %s", i, st.Sig))
+		panic(fmt.Errorf("tried to access parameter %d of a non-variadic signature %s", i, st.Sig))
 	}
 	if ellipsis {
 		return st.VariadicType()

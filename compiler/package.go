@@ -45,8 +45,12 @@ type pkgContext struct {
 // funcContext maintains compiler context for a specific function (lexical scope?).
 type funcContext struct {
 	*analysis.FuncInfo
-	pkgCtx        *pkgContext
-	parent        *funcContext
+	pkgCtx *pkgContext
+	parent *funcContext
+	// Signature of the function this context corresponds to or nil. For generic
+	// functions it is the original generic signature to make sure result variable
+	// identity in the signature matches the variable objects referenced in the
+	// function body.
 	sig           *types.Signature
 	allVars       map[string]int
 	localVars     []string
@@ -774,6 +778,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		labelCases:   make(map[*types.Label]int),
 		typeResolver: outerContext.typeResolver,
 		objectNames:  map[types.Object]string{},
+		sig:          sig,
 	}
 	for k, v := range outerContext.allVars {
 		c.allVars[k] = v
@@ -788,7 +793,6 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	if c.objectNames == nil {
 		c.objectNames = map[types.Object]string{}
 	}
-	c.sig = c.typeResolver.Substitute(sig).(*types.Signature)
 
 	var params []string
 	for _, param := range typ.Params.List {
@@ -815,10 +819,11 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 			c.resultNames = make([]ast.Expr, c.sig.Results().Len())
 			for i := 0; i < c.sig.Results().Len(); i++ {
 				result := c.sig.Results().At(i)
-				c.Printf("%s = %s;", c.objectName(result), c.translateExpr(c.zeroValue(result.Type())).String())
+				typ := c.typeResolver.Substitute(result.Type())
+				c.Printf("%s = %s;", c.objectName(result), c.translateExpr(c.zeroValue(typ)).String())
 				id := ast.NewIdent("")
 				c.pkgCtx.Uses[id] = result
-				c.resultNames[i] = c.setType(id, result.Type())
+				c.resultNames[i] = c.setType(id, typ)
 			}
 		}
 

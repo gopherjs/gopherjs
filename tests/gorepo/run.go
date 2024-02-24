@@ -156,9 +156,7 @@ var knownFails = map[string]failReason{
 	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
 	// fixed.
 	"typeparam/issue47716.go":  {category: generics, desc: "bug: failed to call unsafe.Sizeof"},
-	"typeparam/metrics.go":     {category: generics, desc: "bug: append: Cannot read property '$array' of undefined"},
 	"typeparam/nested.go":      {category: generics, desc: "incomplete support for generic types inside generic functions"},
-	"typeparam/orderedmap.go":  {category: generics, desc: "bug: Cannot set property 'key' of undefined"},
 	"typeparam/typeswitch2.go": {category: generics, desc: "undiagnosed: incorrect output"},
 	"typeparam/typeswitch3.go": {category: generics, desc: "undiagnosed: incorrect output"},
 	"typeparam/typeswitch5.go": {category: generics, desc: "undiagnosed: incorrect output"},

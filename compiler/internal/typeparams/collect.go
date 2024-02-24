@@ -73,9 +73,7 @@ func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Select
 	}
 
 	switch sel.Kind() {
-	case types.FieldVal:
-		return sel
-	case types.MethodExpr, types.MethodVal:
+	case types.MethodExpr, types.MethodVal, types.FieldVal:
 		recv := r.Substitute(sel.Recv())
 		if recv == sel.Recv() {
 			return sel // Non-generic receiver, no substitution necessary.
@@ -84,12 +82,12 @@ func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Select
 		// Look up the method on the instantiated receiver.
 		pkg := sel.Obj().Pkg()
 		obj, index, _ := types.LookupFieldOrMethod(recv, true, pkg, sel.Obj().Name())
-		sig := obj.Type().(*types.Signature)
+		typ := obj.Type()
 
 		if sel.Kind() == types.MethodExpr {
-			sig = typesutil.RecvAsFirstArg(sig)
+			typ = typesutil.RecvAsFirstArg(typ.(*types.Signature))
 		}
-		concrete := typesutil.NewSelection(sel.Kind(), recv, index, obj, sig)
+		concrete := typesutil.NewSelection(sel.Kind(), recv, index, obj, typ)
 		r.selMemo[sel] = concrete
 		return concrete
 	default:

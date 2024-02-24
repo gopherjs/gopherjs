@@ -627,6 +627,9 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			if !ok {
 				// qualified identifier
 				obj := fc.pkgCtx.Uses[f.Sel]
+				if o, ok := obj.(*types.Builtin); ok {
+					return fc.translateBuiltin(o.Name(), sig, e.Args, e.Ellipsis.IsValid())
+				}
 				if typesutil.IsJsPackage(obj.Pkg()) {
 					switch obj.Name() {
 					case "Debugger":
@@ -1049,6 +1052,13 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 		return fc.formatExpr("$recover()")
 	case "close":
 		return fc.formatExpr(`$close(%e)`, args[0])
+	case "Sizeof":
+		return fc.formatExpr("%d", sizes32.Sizeof(fc.typeOf(args[0])))
+	case "Alignof":
+		return fc.formatExpr("%d", sizes32.Alignof(fc.typeOf(args[0])))
+	case "Offsetof":
+		sel, _ := fc.selectionOf(astutil.RemoveParens(args[0]).(*ast.SelectorExpr))
+		return fc.formatExpr("%d", typesutil.OffsetOf(sizes32, sel))
 	default:
 		panic(fmt.Sprintf("Unhandled builtin: %s\n", name))
 	}

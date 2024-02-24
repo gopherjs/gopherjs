@@ -157,8 +157,7 @@ var knownFails = map[string]failReason{
 	// Failures related to the lack of generics support. Ideally, this section
 	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
 	// fixed.
-	"typeparam/issue47716.go": {category: generics, desc: "bug: failed to call unsafe.Sizeof"},
-	"typeparam/nested.go":     {category: generics, desc: "incomplete support for generic types inside generic functions"},
+	"typeparam/nested.go": {category: generics, desc: "incomplete support for generic types inside generic functions"},
 }
 
 type failCategory uint8

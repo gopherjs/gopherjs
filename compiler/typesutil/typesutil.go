@@ -1,6 +1,9 @@
 package typesutil
 
-import "go/types"
+import (
+	"fmt"
+	"go/types"
+)
 
 func IsJsPackage(pkg *types.Package) bool {
 	return pkg != nil && pkg.Path() == "github.com/gopherjs/gopherjs/js"
@@ -77,3 +80,30 @@ func (sel *selectionImpl) Recv() types.Type          { return sel.recv }
 func (sel *selectionImpl) Index() []int              { return sel.index }
 func (sel *selectionImpl) Obj() types.Object         { return sel.obj }
 func (sel *selectionImpl) Type() types.Type          { return sel.typ }
+
+func fieldsOf(s *types.Struct) []*types.Var {
+	fields := make([]*types.Var, s.NumFields())
+	for i := 0; i < s.NumFields(); i++ {
+		fields[i] = s.Field(i)
+	}
+	return fields
+}
+
+// OffsetOf returns byte offset of a struct field specified by the provided
+// selection.
+//
+// Adapted from go/types.Config.offsetof().
+func OffsetOf(sizes types.Sizes, sel Selection) int64 {
+	if sel.Kind() != types.FieldVal {
+		panic(fmt.Errorf("byte offsets are only defined for struct fields"))
+	}
+	typ := sel.Recv()
+	var o int64
+	for _, idx := range sel.Index() {
+		s := typ.Underlying().(*types.Struct)
+		o += sizes.Offsetsof(fieldsOf(s))[idx]
+		typ = s.Field(idx).Type()
+	}
+
+	return o
+}

@@ -386,7 +386,7 @@ func (fc *funcContext) instName(inst typeparams.Instance) string {
 	if inst.IsTrivial() {
 		return objName
 	}
-	return fmt.Sprintf("%s[%d /* %v */]", objName, fc.pkgCtx.instanceSet.ID(inst), inst.Key())
+	return fmt.Sprintf("%s[%d /* %v */]", objName, fc.pkgCtx.instanceSet.ID(inst), inst.TArgs)
 }
 
 func (fc *funcContext) varPtrName(o *types.Var) string {

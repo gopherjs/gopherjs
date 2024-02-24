@@ -563,7 +563,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 							constructor = "$arrayPtrCtor()"
 						}
 					}
-					funcCtx.Printf(`%s = $newType(%d, %s, "%s.%s", %t, "%s", %t, %s);`, funcCtx.instName(inst), size, typeKind(typ), o.Pkg().Name(), o.Name(), o.Name() != "", o.Pkg().Path(), o.Exported(), constructor)
+					funcCtx.Printf(`%s = $newType(%d, %s, %q, %t, "%s", %t, %s);`, funcCtx.instName(inst), size, typeKind(typ), inst.TypeString(), o.Name() != "", o.Pkg().Path(), o.Exported(), constructor)
 				})
 				d.MethodListCode = funcCtx.CatchOutput(0, func() {
 					if _, ok := underlying.(*types.Interface); ok {

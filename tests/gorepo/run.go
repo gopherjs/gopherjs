@@ -155,9 +155,7 @@ var knownFails = map[string]failReason{
 	// Failures related to the lack of generics support. Ideally, this section
 	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
 	// fixed.
-	"typeparam/issue46591.go":  {category: generics, desc: "undiagnosed: len() returns an invalid value when parameterized types are involved"},
 	"typeparam/issue47716.go":  {category: generics, desc: "bug: failed to call unsafe.Sizeof"},
-	"typeparam/issue49547.go":  {category: generics, desc: "bug: incorrect type string"},
 	"typeparam/metrics.go":     {category: generics, desc: "bug: append: Cannot read property '$array' of undefined"},
 	"typeparam/nested.go":      {category: generics, desc: "incomplete support for generic types inside generic functions"},
 	"typeparam/orderedmap.go":  {category: generics, desc: "bug: Cannot set property 'key' of undefined"},

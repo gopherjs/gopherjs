@@ -3,7 +3,6 @@ package typeparams
 import (
 	"fmt"
 	"go/types"
-	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
@@ -14,8 +13,8 @@ import (
 // Non-generic objects can be represented as an Instance with zero type params,
 // they are instances of themselves.
 type Instance struct {
-	Object types.Object // Object to be instantiated.
-	TArgs  []types.Type // Type params to instantiate with.
+	Object types.Object       // Object to be instantiated.
+	TArgs  typesutil.TypeList // Type params to instantiate with.
 }
 
 // String returns a string representation of the Instance.
@@ -28,23 +27,16 @@ func (i *Instance) String() string {
 		return sym
 	}
 
-	return fmt.Sprintf("%s<%s>", sym, i.Key())
+	return fmt.Sprintf("%s<%s>", sym, i.TArgs)
 }
 
-// Key returns a string that uniquely identifies this instance among other
-// instances of this particular object.
-//
-// Although in practice it is derived from type arguments, no particular
-// guarantees are made about format of content of the string.
-func (i *Instance) Key() string {
-	buf := strings.Builder{}
-	for i, tArg := range i.TArgs {
-		if i != 0 {
-			buf.WriteString(", ")
-		}
-		buf.WriteString(types.TypeString(tArg, nil))
+// TypeString returns a Go type string representing the instance (suitable for %T verb).
+func (i *Instance) TypeString() string {
+	tArgs := ""
+	if len(i.TArgs) > 0 {
+		tArgs = "[" + i.TArgs.String() + "]"
 	}
-	return buf.String()
+	return fmt.Sprintf("%s.%s%s", i.Object.Pkg().Name(), i.Object.Name(), tArgs)
 }
 
 // IsTrivial returns true if this is an instance of a non-generic object.

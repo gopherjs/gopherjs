@@ -43,18 +43,18 @@ func TestInstanceString(t *testing.T) {
 	mustType := testingx.Must[types.Type](t)
 
 	tests := []struct {
-		descr    string
-		instance Instance
-		wantStr  string
-		wantKey  string
+		descr          string
+		instance       Instance
+		wantStr        string
+		wantTypeString string
 	}{{
 		descr: "exported type",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("Typ"),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		wantStr: "test.Typ<int, string>",
-		wantKey: "int, string",
+		wantStr:        "test.Typ<int, string>",
+		wantTypeString: "testcase.Typ[int, string]",
 	}, {
 		descr: "exported method",
 		instance: Instance{
@@ -62,7 +62,6 @@ func TestInstanceString(t *testing.T) {
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
 		wantStr: "test.Typ.Method<int, string>",
-		wantKey: "int, string",
 	}, {
 		descr: "exported function",
 		instance: Instance{
@@ -70,15 +69,14 @@ func TestInstanceString(t *testing.T) {
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
 		wantStr: "test.Fun<int, string>",
-		wantKey: "int, string",
 	}, {
 		descr: "unexported type",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("typ"),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		wantStr: "test.typ<int, string>",
-		wantKey: "int, string",
+		wantStr:        "test.typ<int, string>",
+		wantTypeString: "testcase.typ[int, string]",
 	}, {
 		descr: "unexported method",
 		instance: Instance{
@@ -86,7 +84,6 @@ func TestInstanceString(t *testing.T) {
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
 		wantStr: "test.typ.method<int, string>",
-		wantKey: "int, string",
 	}, {
 		descr: "unexported function",
 		instance: Instance{
@@ -94,14 +91,13 @@ func TestInstanceString(t *testing.T) {
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
 		wantStr: "test.fun<int, string>",
-		wantKey: "int, string",
 	}, {
 		descr: "no type params",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("Ints"),
 		},
-		wantStr: "test.Ints",
-		wantKey: "",
+		wantStr:        "test.Ints",
+		wantTypeString: "testcase.Ints",
 	}, {
 		descr: "complex parameter type",
 		instance: Instance{
@@ -115,7 +111,6 @@ func TestInstanceString(t *testing.T) {
 			},
 		},
 		wantStr: "test.fun<[]int, test.typ[int, string]>",
-		wantKey: "[]int, test.typ[int, string]",
 	}}
 
 	for _, test := range tests {
@@ -124,9 +119,11 @@ func TestInstanceString(t *testing.T) {
 			if got != test.wantStr {
 				t.Errorf("Got: instance string %q. Want: %q.", got, test.wantStr)
 			}
-			got = test.instance.Key()
-			if got != test.wantKey {
-				t.Errorf("Got: instance key %q. Want: %q.", got, test.wantKey)
+			if test.wantTypeString != "" {
+				got = test.instance.TypeString()
+				if got != test.wantTypeString {
+					t.Errorf("Got: instance type string %q. Want: %q.", got, test.wantTypeString)
+				}
 			}
 		})
 	}

@@ -160,7 +160,7 @@ var knownFails = map[string]failReason{
 
 	// These are new tests in Go 1.19
 	"typeparam/issue51521.go": {category: lowLevelRuntimeDifference, desc: "different panic message when calling a method on nil interface"},
-	"fixedbugs/issue50672.go": {category: usesUnsupportedGenerics, desc: "Checking function nesting with one function having a type parameter."},
+	"fixedbugs/issue50672.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1271"},
 	"fixedbugs/issue53653.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format of int64 is different from Go's"},
 }
 

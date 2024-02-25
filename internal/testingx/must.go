@@ -11,9 +11,9 @@ import "testing"
 // to check for test case conditions themselves because it provides a generic,
 // nondescript test error message.
 //
-//     func startServer(addr string) (*server, err)
-//     mustServer := testingx.Must[*server](t)
-//     mustServer(startServer(":8080"))
+//	func startServer(addr string) (*server, err)
+//	mustServer := testingx.Must[*server](t)
+//	mustServer(startServer(":8080"))
 func Must[T any](t *testing.T) func(v T, err error) T {
 	return func(v T, err error) T {
 		if err != nil {

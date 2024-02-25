@@ -106,10 +106,10 @@ func (iset *InstanceSet) Add(instances ...Instance) *InstanceSet {
 // Here's an example where it's very difficult to assign non-colliding
 // name-based keys to the two different types T:
 //
-//   func foo() {
-//       type T int
-//       { type T string } // Code block creates a new nested scope allowing for shadowing.
-//   }
+//	func foo() {
+//	    type T int
+//	    { type T string } // Code block creates a new nested scope allowing for shadowing.
+//	}
 func (iset *InstanceSet) ID(inst Instance) int {
 	id, ok := iset.seen.get(inst)
 	if !ok {

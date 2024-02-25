@@ -20,7 +20,4 @@ require (
 	golang.org/x/tools v0.16.0
 )
 
-require (
-	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	golang.org/x/exp v0.0.0-20231214170342-aacd6d4b4611
-)
+require github.com/inconshreveable/mousetrap v1.0.0 // indirect

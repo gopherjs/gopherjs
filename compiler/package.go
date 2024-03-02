@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/constant"
-	"go/scanner"
 	"go/token"
 	"go/types"
 	"sort"
@@ -15,6 +14,9 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
+	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/neelance/astrewrite"
 	"golang.org/x/tools/go/gcexportdata"
 	"golang.org/x/tools/go/types/typeutil"
@@ -23,11 +25,11 @@ import (
 // pkgContext maintains compiler context for a specific package.
 type pkgContext struct {
 	*analysis.Info
-	additionalSelections map[*ast.SelectorExpr]selection
+	additionalSelections map[*ast.SelectorExpr]typesutil.Selection
 
-	typeNames    []*types.TypeName
+	typesCtx     *types.Context
+	typeNames    typesutil.TypeNames
 	pkgVars      map[string]string
-	objectNames  map[types.Object]string
 	varPtrNames  map[*types.Var]string
 	anonTypes    []*types.TypeName
 	anonTypeMap  typeutil.Map
@@ -37,45 +39,18 @@ type pkgContext struct {
 	minify       bool
 	fileSet      *token.FileSet
 	errList      ErrorList
+	instanceSet  *typeparams.InstanceSet
 }
-
-func (p *pkgContext) SelectionOf(e *ast.SelectorExpr) (selection, bool) {
-	if sel, ok := p.Selections[e]; ok {
-		return sel, true
-	}
-	if sel, ok := p.additionalSelections[e]; ok {
-		return sel, true
-	}
-	return nil, false
-}
-
-type selection interface {
-	Kind() types.SelectionKind
-	Recv() types.Type
-	Index() []int
-	Obj() types.Object
-	Type() types.Type
-}
-
-type fakeSelection struct {
-	kind  types.SelectionKind
-	recv  types.Type
-	index []int
-	obj   types.Object
-	typ   types.Type
-}
-
-func (sel *fakeSelection) Kind() types.SelectionKind { return sel.kind }
-func (sel *fakeSelection) Recv() types.Type          { return sel.recv }
-func (sel *fakeSelection) Index() []int              { return sel.index }
-func (sel *fakeSelection) Obj() types.Object         { return sel.obj }
-func (sel *fakeSelection) Type() types.Type          { return sel.typ }
 
 // funcContext maintains compiler context for a specific function (lexical scope?).
 type funcContext struct {
 	*analysis.FuncInfo
-	pkgCtx        *pkgContext
-	parent        *funcContext
+	pkgCtx *pkgContext
+	parent *funcContext
+	// Signature of the function this context corresponds to or nil. For generic
+	// functions it is the original generic signature to make sure result variable
+	// identity in the signature matches the variable objects referenced in the
+	// function body.
 	sig           *types.Signature
 	allVars       map[string]int
 	localVars     []string
@@ -87,6 +62,9 @@ type funcContext struct {
 	delayedOutput []byte
 	posAvailable  bool
 	pos           token.Pos
+	typeResolver  *typeparams.Resolver
+	// Mapping from function-level objects to JS variable names they have been assigned.
+	objectNames map[types.Object]string
 }
 
 type flowData struct {
@@ -151,6 +129,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		Implicits:  make(map[ast.Node]types.Object),
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 		Scopes:     make(map[ast.Node]*types.Scope),
+		Instances:  make(map[*ast.Ident]types.Instance),
 	}
 
 	var errList ErrorList
@@ -172,6 +151,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var importError error
 	var previousErr error
 	config := &types.Config{
+		Context: types.NewContext(),
 		Importer: packageImporter{
 			importContext: importContext,
 			importError:   &importError,
@@ -231,26 +211,40 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		panic(fullName)
 	}
+
+	tc := typeparams.Collector{
+		TContext:  config.Context,
+		Info:      typesInfo,
+		Instances: &typeparams.InstanceSet{},
+	}
+	tc.Scan(simplifiedFiles...)
+	instancesByObj := map[types.Object][]typeparams.Instance{}
+	for _, inst := range tc.Instances.Values() {
+		instancesByObj[inst.Object] = append(instancesByObj[inst.Object], inst)
+	}
+
 	pkgInfo := analysis.AnalyzePkg(simplifiedFiles, fileSet, typesInfo, typesPkg, isBlocking)
 	funcCtx := &funcContext{
 		FuncInfo: pkgInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{
 			Info:                 pkgInfo,
-			additionalSelections: make(map[*ast.SelectorExpr]selection),
+			additionalSelections: make(map[*ast.SelectorExpr]typesutil.Selection),
 
+			typesCtx:     config.Context,
 			pkgVars:      make(map[string]string),
-			objectNames:  make(map[types.Object]string),
 			varPtrNames:  make(map[*types.Var]string),
 			escapingVars: make(map[*types.Var]bool),
 			indentation:  1,
 			dependencies: make(map[types.Object]bool),
 			minify:       minify,
 			fileSet:      fileSet,
+			instanceSet:  tc.Instances,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[*types.Label]*flowData{nil: {}},
 		caseCounter: 1,
 		labelCases:  make(map[*types.Label]int),
+		objectNames: map[types.Object]string{},
 	}
 	for name := range reservedKeywords {
 		funcCtx.allVars[name] = 1
@@ -299,7 +293,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				case token.TYPE:
 					for _, spec := range d.Specs {
 						o := funcCtx.pkgCtx.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
-						funcCtx.pkgCtx.typeNames = append(funcCtx.pkgCtx.typeNames, o)
+						funcCtx.pkgCtx.typeNames.Add(o)
 						funcCtx.objectName(o) // register toplevel name
 					}
 				case token.VAR:
@@ -393,69 +387,81 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	var mainFunc *types.Func
 	for _, fun := range functions {
 		o := funcCtx.pkgCtx.Defs[fun.Name].(*types.Func)
+		sig := o.Type().(*types.Signature)
 
-		if fun.Type.TypeParams.NumFields() > 0 {
-			return nil, scanner.Error{
-				Pos: fileSet.Position(fun.Type.TypeParams.Pos()),
-				Msg: fmt.Sprintf("function %s: type parameters are not supported by GopherJS: https://github.com/gopherjs/gopherjs/issues/1013", o.Name()),
-			}
-		}
-		funcInfo := funcCtx.pkgCtx.FuncDeclInfos[o]
-		d := Decl{
-			FullName: o.FullName(),
-			Blocking: len(funcInfo.Blocking) != 0,
-		}
-		d.LinkingName = newSymName(o)
-		if fun.Recv == nil {
-			d.Vars = []string{funcCtx.objectName(o)}
-			d.DceObjectFilter = o.Name()
-			switch o.Name() {
-			case "main":
-				mainFunc = o
-				d.DceObjectFilter = ""
-			case "init":
-				d.InitCode = funcCtx.CatchOutput(1, func() {
-					id := funcCtx.newIdent("", types.NewSignatureType(nil, nil, nil, nil, nil, false))
-					funcCtx.pkgCtx.Uses[id] = o
-					call := &ast.CallExpr{Fun: id}
-					if len(funcCtx.pkgCtx.FuncDeclInfos[o].Blocking) != 0 {
-						funcCtx.Blocking[call] = true
-					}
-					funcCtx.translateStmt(&ast.ExprStmt{X: call}, nil)
-				})
-				d.DceObjectFilter = ""
-			}
+		var instances []typeparams.Instance
+		if typeparams.SignatureTypeParams(sig) != nil {
+			instances = instancesByObj[o]
 		} else {
-			recvType := o.Type().(*types.Signature).Recv().Type()
-			ptr, isPointer := recvType.(*types.Pointer)
-			namedRecvType, _ := recvType.(*types.Named)
-			if isPointer {
-				namedRecvType = ptr.Elem().(*types.Named)
+			instances = []typeparams.Instance{{Object: o}}
+		}
+
+		if fun.Recv == nil {
+			// Auxiliary decl shared by all instances of the function that defines
+			// package-level variable by which they all are referenced.
+			// TODO(nevkontakte): Set DCE attributes such that it is eliminated if all
+			// instances are dead.
+			varDecl := Decl{}
+			varDecl.Vars = []string{funcCtx.objectName(o)}
+			if o.Type().(*types.Signature).TypeParams().Len() != 0 {
+				varDecl.DeclCode = funcCtx.CatchOutput(0, func() {
+					funcCtx.Printf("%s = {};", funcCtx.objectName(o))
+				})
 			}
-			if namedRecvType.TypeParams() != nil {
-				return nil, scanner.Error{
-					Pos: fileSet.Position(o.Pos()),
-					Msg: fmt.Sprintf("type %s: type parameters are not supported by GopherJS: https://github.com/gopherjs/gopherjs/issues/1013", o.FullName()),
+			funcDecls = append(funcDecls, &varDecl)
+		}
+
+		for _, inst := range instances {
+			funcInfo := funcCtx.pkgCtx.FuncDeclInfos[o]
+			d := Decl{
+				FullName: o.FullName(),
+				Blocking: len(funcInfo.Blocking) != 0,
+			}
+			d.LinkingName = symbol.New(o)
+			if fun.Recv == nil {
+				d.RefExpr = funcCtx.instName(inst)
+				d.DceObjectFilter = o.Name()
+				switch o.Name() {
+				case "main":
+					mainFunc = o
+					d.DceObjectFilter = ""
+				case "init":
+					d.InitCode = funcCtx.CatchOutput(1, func() {
+						id := funcCtx.newIdent("", types.NewSignatureType( /*recv=*/ nil /*rectTypeParams=*/, nil /*typeParams=*/, nil /*params=*/, nil /*results=*/, nil /*variadic=*/, false))
+						funcCtx.pkgCtx.Uses[id] = o
+						call := &ast.CallExpr{Fun: id}
+						if len(funcCtx.pkgCtx.FuncDeclInfos[o].Blocking) != 0 {
+							funcCtx.Blocking[call] = true
+						}
+						funcCtx.translateStmt(&ast.ExprStmt{X: call}, nil)
+					})
+					d.DceObjectFilter = ""
+				}
+			} else {
+				recvType := o.Type().(*types.Signature).Recv().Type()
+				ptr, isPointer := recvType.(*types.Pointer)
+				namedRecvType, _ := recvType.(*types.Named)
+				if isPointer {
+					namedRecvType = ptr.Elem().(*types.Named)
+				}
+				d.NamedRecvType = funcCtx.objectName(namedRecvType.Obj())
+				d.DceObjectFilter = namedRecvType.Obj().Name()
+				if !fun.Name.IsExported() {
+					d.DceMethodFilter = o.Name() + "~"
 				}
 			}
-			name := funcCtx.objectName(namedRecvType.Obj())
-			d.NamedRecvType = name
-			d.DceObjectFilter = namedRecvType.Obj().Name()
-			if !fun.Name.IsExported() {
-				d.DceMethodFilter = o.Name() + "~"
-			}
-		}
 
-		d.DceDeps = collectDependencies(func() {
-			d.DeclCode = funcCtx.translateToplevelFunction(fun, funcInfo)
-		})
-		funcDecls = append(funcDecls, &d)
+			d.DceDeps = collectDependencies(func() {
+				d.DeclCode = funcCtx.translateToplevelFunction(fun, funcInfo, inst)
+			})
+			funcDecls = append(funcDecls, &d)
+		}
 	}
 	if typesPkg.Name() == "main" {
 		if mainFunc == nil {
 			return nil, fmt.Errorf("missing main function")
 		}
-		id := funcCtx.newIdent("", types.NewSignatureType(nil, nil, nil, nil, nil, false))
+		id := funcCtx.newIdent("", types.NewSignatureType( /*recv=*/ nil /*rectTypeParams=*/, nil /*typeParams=*/, nil /*params=*/, nil /*results=*/, nil /*variadic=*/, false))
 		funcCtx.pkgCtx.Uses[id] = mainFunc
 		call := &ast.CallExpr{Fun: id}
 		ifStmt := &ast.IfStmt{
@@ -484,99 +490,120 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	// named types
 	var typeDecls []*Decl
-	for _, o := range funcCtx.pkgCtx.typeNames {
+	for _, o := range funcCtx.pkgCtx.typeNames.Slice() {
 		if o.IsAlias() {
 			continue
 		}
+		typ := o.Type().(*types.Named)
+		var instances []typeparams.Instance
+		if typ.TypeParams() != nil {
+			instances = instancesByObj[o]
+		} else {
+			instances = []typeparams.Instance{{Object: o}}
+		}
+
 		typeName := funcCtx.objectName(o)
 
-		if named, ok := o.Type().(*types.Named); ok && named.TypeParams().Len() > 0 {
-			return nil, scanner.Error{
-				Pos: fileSet.Position(o.Pos()),
-				Msg: fmt.Sprintf("type %s: type parameters are not supported by GopherJS: https://github.com/gopherjs/gopherjs/issues/1013", o.Name()),
-			}
+		varDecl := Decl{Vars: []string{typeName}}
+		if typ.TypeParams() != nil {
+			varDecl.DeclCode = funcCtx.CatchOutput(0, func() {
+				funcCtx.Printf("%s = {};", funcCtx.objectName(o))
+			})
 		}
+		if isPkgLevel(o) {
+			varDecl.TypeInitCode = funcCtx.CatchOutput(0, func() {
+				funcCtx.Printf("$pkg.%s = %s;", encodeIdent(o.Name()), funcCtx.objectName(o))
+			})
+		}
+		typeDecls = append(typeDecls, &varDecl)
 
-		d := Decl{
-			Vars:            []string{typeName},
-			DceObjectFilter: o.Name(),
-		}
-		d.DceDeps = collectDependencies(func() {
-			d.DeclCode = funcCtx.CatchOutput(0, func() {
-				typeName := funcCtx.objectName(o)
-				lhs := typeName
-				if isPkgLevel(o) {
-					lhs += " = $pkg." + encodeIdent(o.Name())
+		for _, inst := range instances {
+			funcCtx.typeResolver = typeparams.NewResolver(funcCtx.pkgCtx.typesCtx, typeparams.ToSlice(typ.TypeParams()), inst.TArgs)
+
+			named := typ
+			if !inst.IsTrivial() {
+				instantiated, err := types.Instantiate(funcCtx.pkgCtx.typesCtx, typ, inst.TArgs, true)
+				if err != nil {
+					return nil, fmt.Errorf("failed to instantiate type %v with args %v: %w", typ, inst.TArgs, err)
 				}
-				size := int64(0)
-				constructor := "null"
-				switch t := o.Type().Underlying().(type) {
-				case *types.Struct:
-					params := make([]string, t.NumFields())
-					for i := 0; i < t.NumFields(); i++ {
-						params[i] = fieldName(t, i) + "_"
-					}
-					constructor = fmt.Sprintf("function(%s) {\n\t\tthis.$val = this;\n\t\tif (arguments.length === 0) {\n", strings.Join(params, ", "))
-					for i := 0; i < t.NumFields(); i++ {
-						constructor += fmt.Sprintf("\t\t\tthis.%s = %s;\n", fieldName(t, i), funcCtx.translateExpr(funcCtx.zeroValue(t.Field(i).Type())).String())
-					}
-					constructor += "\t\t\treturn;\n\t\t}\n"
-					for i := 0; i < t.NumFields(); i++ {
-						constructor += fmt.Sprintf("\t\tthis.%[1]s = %[1]s_;\n", fieldName(t, i))
-					}
-					constructor += "\t}"
-				case *types.Basic, *types.Array, *types.Slice, *types.Chan, *types.Signature, *types.Interface, *types.Pointer, *types.Map:
-					size = sizes32.Sizeof(t)
-				}
-				if tPointer, ok := o.Type().Underlying().(*types.Pointer); ok {
-					if _, ok := tPointer.Elem().Underlying().(*types.Array); ok {
-						// Array pointers have non-default constructors to support wrapping
-						// of the native objects.
-						constructor = "$arrayPtrCtor()"
-					}
-				}
-				funcCtx.Printf(`%s = $newType(%d, %s, "%s.%s", %t, "%s", %t, %s);`, lhs, size, typeKind(o.Type()), o.Pkg().Name(), o.Name(), o.Name() != "", o.Pkg().Path(), o.Exported(), constructor)
-			})
-			d.MethodListCode = funcCtx.CatchOutput(0, func() {
-				named := o.Type().(*types.Named)
-				if _, ok := named.Underlying().(*types.Interface); ok {
-					return
-				}
-				var methods []string
-				var ptrMethods []string
-				for i := 0; i < named.NumMethods(); i++ {
-					method := named.Method(i)
-					name := method.Name()
-					if reservedKeywords[name] {
-						name += "$"
-					}
-					pkgPath := ""
-					if !method.Exported() {
-						pkgPath = method.Pkg().Path()
-					}
-					t := method.Type().(*types.Signature)
-					entry := fmt.Sprintf(`{prop: "%s", name: %s, pkg: "%s", typ: $funcType(%s)}`, name, encodeString(method.Name()), pkgPath, funcCtx.initArgs(t))
-					if _, isPtr := t.Recv().Type().(*types.Pointer); isPtr {
-						ptrMethods = append(ptrMethods, entry)
-						continue
-					}
-					methods = append(methods, entry)
-				}
-				if len(methods) > 0 {
-					funcCtx.Printf("%s.methods = [%s];", funcCtx.typeName(named), strings.Join(methods, ", "))
-				}
-				if len(ptrMethods) > 0 {
-					funcCtx.Printf("%s.methods = [%s];", funcCtx.typeName(types.NewPointer(named)), strings.Join(ptrMethods, ", "))
-				}
-			})
-			switch t := o.Type().Underlying().(type) {
-			case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
-				d.TypeInitCode = funcCtx.CatchOutput(0, func() {
-					funcCtx.Printf("%s.init(%s);", funcCtx.objectName(o), funcCtx.initArgs(t))
-				})
+				named = instantiated.(*types.Named)
 			}
-		})
-		typeDecls = append(typeDecls, &d)
+			underlying := named.Underlying()
+			d := Decl{
+				DceObjectFilter: o.Name(),
+			}
+			d.DceDeps = collectDependencies(func() {
+				d.DeclCode = funcCtx.CatchOutput(0, func() {
+					size := int64(0)
+					constructor := "null"
+					switch t := underlying.(type) {
+					case *types.Struct:
+						params := make([]string, t.NumFields())
+						for i := 0; i < t.NumFields(); i++ {
+							params[i] = fieldName(t, i) + "_"
+						}
+						constructor = fmt.Sprintf("function(%s) {\n\t\tthis.$val = this;\n\t\tif (arguments.length === 0) {\n", strings.Join(params, ", "))
+						for i := 0; i < t.NumFields(); i++ {
+							constructor += fmt.Sprintf("\t\t\tthis.%s = %s;\n", fieldName(t, i), funcCtx.translateExpr(funcCtx.zeroValue(t.Field(i).Type())).String())
+						}
+						constructor += "\t\t\treturn;\n\t\t}\n"
+						for i := 0; i < t.NumFields(); i++ {
+							constructor += fmt.Sprintf("\t\tthis.%[1]s = %[1]s_;\n", fieldName(t, i))
+						}
+						constructor += "\t}"
+					case *types.Basic, *types.Array, *types.Slice, *types.Chan, *types.Signature, *types.Interface, *types.Pointer, *types.Map:
+						size = sizes32.Sizeof(t)
+					}
+					if tPointer, ok := underlying.(*types.Pointer); ok {
+						if _, ok := tPointer.Elem().Underlying().(*types.Array); ok {
+							// Array pointers have non-default constructors to support wrapping
+							// of the native objects.
+							constructor = "$arrayPtrCtor()"
+						}
+					}
+					funcCtx.Printf(`%s = $newType(%d, %s, %q, %t, "%s", %t, %s);`, funcCtx.instName(inst), size, typeKind(typ), inst.TypeString(), o.Name() != "", o.Pkg().Path(), o.Exported(), constructor)
+				})
+				d.MethodListCode = funcCtx.CatchOutput(0, func() {
+					if _, ok := underlying.(*types.Interface); ok {
+						return
+					}
+					var methods []string
+					var ptrMethods []string
+					for i := 0; i < named.NumMethods(); i++ {
+						method := named.Method(i)
+						name := method.Name()
+						if reservedKeywords[name] {
+							name += "$"
+						}
+						pkgPath := ""
+						if !method.Exported() {
+							pkgPath = method.Pkg().Path()
+						}
+						t := method.Type().(*types.Signature)
+						entry := fmt.Sprintf(`{prop: "%s", name: %s, pkg: "%s", typ: $funcType(%s)}`, name, encodeString(method.Name()), pkgPath, funcCtx.initArgs(t))
+						if _, isPtr := t.Recv().Type().(*types.Pointer); isPtr {
+							ptrMethods = append(ptrMethods, entry)
+							continue
+						}
+						methods = append(methods, entry)
+					}
+					if len(methods) > 0 {
+						funcCtx.Printf("%s.methods = [%s];", funcCtx.instName(inst), strings.Join(methods, ", "))
+					}
+					if len(ptrMethods) > 0 {
+						funcCtx.Printf("%s.methods = [%s];", funcCtx.typeName(types.NewPointer(named)), strings.Join(ptrMethods, ", "))
+					}
+				})
+				switch t := underlying.(type) {
+				case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
+					d.TypeInitCode = funcCtx.CatchOutput(0, func() {
+						funcCtx.Printf("%s.init(%s);", funcCtx.instName(inst), funcCtx.initArgs(t))
+					})
+				}
+			})
+			typeDecls = append(typeDecls, &d)
+		}
+		funcCtx.typeResolver = nil
 	}
 
 	// anonymous types
@@ -670,8 +697,8 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 	}
 }
 
-func (fc *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysis.FuncInfo) []byte {
-	o := fc.pkgCtx.Defs[fun.Name].(*types.Func)
+func (fc *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analysis.FuncInfo, inst typeparams.Instance) []byte {
+	o := inst.Object.(*types.Func)
 	sig := o.Type().(*types.Signature)
 	var recv *ast.Ident
 	if fun.Recv != nil && fun.Recv.List[0].Names != nil {
@@ -684,7 +711,7 @@ func (fc *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analys
 			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t};\n", funcRef, o.FullName()))
 		}
 
-		params, fun := translateFunction(fun.Type, recv, fun.Body, fc, sig, info, funcRef)
+		params, fun := translateFunction(fun.Type, recv, fun.Body, fc, sig, info, funcRef, inst)
 		joinedParams = strings.Join(params, ", ")
 		return []byte(fmt.Sprintf("\t%s = %s;\n", funcRef, fun))
 	}
@@ -692,7 +719,7 @@ func (fc *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analys
 	code := bytes.NewBuffer(nil)
 
 	if fun.Recv == nil {
-		funcRef := fc.objectName(o)
+		funcRef := fc.instName(inst)
 		code.Write(primaryFunction(funcRef))
 		if fun.Name.IsExported() {
 			fmt.Fprintf(code, "\t$pkg.%s = %s;\n", encodeIdent(fun.Name.Name), funcRef)
@@ -700,62 +727,69 @@ func (fc *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analys
 		return code.Bytes()
 	}
 
-	recvType := sig.Recv().Type()
-	ptr, isPointer := recvType.(*types.Pointer)
-	namedRecvType, _ := recvType.(*types.Named)
-	if isPointer {
-		namedRecvType = ptr.Elem().(*types.Named)
-	}
-	typeName := fc.objectName(namedRecvType.Obj())
+	recvInst := inst.Recv()
+	recvInstName := fc.instName(recvInst)
+	recvType := recvInst.Object.Type().(*types.Named)
 	funName := fun.Name.Name
 	if reservedKeywords[funName] {
 		funName += "$"
 	}
 
-	if _, isStruct := namedRecvType.Underlying().(*types.Struct); isStruct {
-		code.Write(primaryFunction(typeName + ".ptr.prototype." + funName))
-		fmt.Fprintf(code, "\t%s.prototype.%s = function(%s) { return this.$val.%s(%s); };\n", typeName, funName, joinedParams, funName, joinedParams)
+	if _, isStruct := recvType.Underlying().(*types.Struct); isStruct {
+		code.Write(primaryFunction(recvInstName + ".ptr.prototype." + funName))
+		fmt.Fprintf(code, "\t%s.prototype.%s = function(%s) { return this.$val.%s(%s); };\n", recvInstName, funName, joinedParams, funName, joinedParams)
 		return code.Bytes()
 	}
 
-	if isPointer {
+	if ptr, isPointer := sig.Recv().Type().(*types.Pointer); isPointer {
 		if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
-			code.Write(primaryFunction(typeName + ".prototype." + funName))
-			fmt.Fprintf(code, "\t$ptrType(%s).prototype.%s = function(%s) { return (new %s(this.$get())).%s(%s); };\n", typeName, funName, joinedParams, typeName, funName, joinedParams)
+			code.Write(primaryFunction(recvInstName + ".prototype." + funName))
+			fmt.Fprintf(code, "\t$ptrType(%s).prototype.%s = function(%s) { return (new %s(this.$get())).%s(%s); };\n", recvInstName, funName, joinedParams, recvInstName, funName, joinedParams)
 			return code.Bytes()
 		}
-		return primaryFunction(fmt.Sprintf("$ptrType(%s).prototype.%s", typeName, funName))
+		return primaryFunction(fmt.Sprintf("$ptrType(%s).prototype.%s", recvInstName, funName))
 	}
 
 	value := "this.$get()"
 	if isWrapped(recvType) {
-		value = fmt.Sprintf("new %s(%s)", typeName, value)
+		value = fmt.Sprintf("new %s(%s)", recvInstName, value)
 	}
-	code.Write(primaryFunction(typeName + ".prototype." + funName))
-	fmt.Fprintf(code, "\t$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };\n", typeName, funName, joinedParams, value, funName, joinedParams)
+	code.Write(primaryFunction(recvInstName + ".prototype." + funName))
+	fmt.Fprintf(code, "\t$ptrType(%s).prototype.%s = function(%s) { return %s.%s(%s); };\n", recvInstName, funName, joinedParams, value, funName, joinedParams)
 	return code.Bytes()
 }
 
-func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, outerContext *funcContext, sig *types.Signature, info *analysis.FuncInfo, funcRef string) ([]string, string) {
+func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, outerContext *funcContext, sig *types.Signature, info *analysis.FuncInfo, funcRef string, inst typeparams.Instance) ([]string, string) {
 	if info == nil {
 		panic("nil info")
 	}
 
 	c := &funcContext{
-		FuncInfo:    info,
-		pkgCtx:      outerContext.pkgCtx,
-		parent:      outerContext,
-		sig:         sig,
-		allVars:     make(map[string]int, len(outerContext.allVars)),
-		localVars:   []string{},
-		flowDatas:   map[*types.Label]*flowData{nil: {}},
-		caseCounter: 1,
-		labelCases:  make(map[*types.Label]int),
+		FuncInfo:     info,
+		pkgCtx:       outerContext.pkgCtx,
+		parent:       outerContext,
+		allVars:      make(map[string]int, len(outerContext.allVars)),
+		localVars:    []string{},
+		flowDatas:    map[*types.Label]*flowData{nil: {}},
+		caseCounter:  1,
+		labelCases:   make(map[*types.Label]int),
+		typeResolver: outerContext.typeResolver,
+		objectNames:  map[types.Object]string{},
+		sig:          sig,
 	}
 	for k, v := range outerContext.allVars {
 		c.allVars[k] = v
 	}
 	prevEV := c.pkgCtx.escapingVars
+
+	if sig.TypeParams().Len() > 0 {
+		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, typeparams.ToSlice(sig.TypeParams()), inst.TArgs)
+	} else if sig.RecvTypeParams().Len() > 0 {
+		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, typeparams.ToSlice(sig.RecvTypeParams()), inst.TArgs)
+	}
+	if c.objectNames == nil {
+		c.objectNames = map[types.Object]string{}
+	}
 
 	var params []string
 	for _, param := range typ.Params.List {
@@ -782,16 +816,17 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 			c.resultNames = make([]ast.Expr, c.sig.Results().Len())
 			for i := 0; i < c.sig.Results().Len(); i++ {
 				result := c.sig.Results().At(i)
-				c.Printf("%s = %s;", c.objectName(result), c.translateExpr(c.zeroValue(result.Type())).String())
+				typ := c.typeResolver.Substitute(result.Type())
+				c.Printf("%s = %s;", c.objectName(result), c.translateExpr(c.zeroValue(typ)).String())
 				id := ast.NewIdent("")
 				c.pkgCtx.Uses[id] = result
-				c.resultNames[i] = c.setType(id, result.Type())
+				c.resultNames[i] = c.setType(id, typ)
 			}
 		}
 
 		if recv != nil && !isBlank(recv) {
 			this := "this"
-			if isWrapped(c.pkgCtx.TypeOf(recv)) {
+			if isWrapped(c.typeOf(recv)) {
 				this = "this.$val" // Unwrap receiver value.
 			}
 			c.Printf("%s = %s;", c.translateExpr(recv), this)

@@ -9,6 +9,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"strings"
 	"testing"
 )
 
@@ -37,6 +38,7 @@ func Check(t *testing.T, fset *token.FileSet, files ...*ast.File) (*types.Info, 
 		Implicits:  make(map[ast.Node]types.Object),
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 		Scopes:     make(map[ast.Node]*types.Scope),
+		Instances:  make(map[*ast.Ident]types.Instance),
 	}
 	config := &types.Config{
 		Sizes: &types.StdSizes{WordSize: 4, MaxAlign: 8},
@@ -106,4 +108,31 @@ func Format(t *testing.T, fset *token.FileSet, node any) string {
 		t.Fatalf("Failed to format AST node %T: %s", node, err)
 	}
 	return buf.String()
+}
+
+// LookupObj returns a top-level object with the given name.
+//
+// Methods can be referred to as RecvTypeName.MethodName.
+func LookupObj(pkg *types.Package, name string) types.Object {
+	path := strings.Split(name, ".")
+	scope := pkg.Scope()
+	var obj types.Object
+
+	for len(path) > 0 {
+		obj = scope.Lookup(path[0])
+		path = path[1:]
+
+		if fun, ok := obj.(*types.Func); ok {
+			scope = fun.Scope()
+			continue
+		}
+
+		// If we are here, the latest object is a named type. If there are more path
+		// elements left, they must refer to field or method.
+		if len(path) > 0 {
+			obj, _, _ = types.LookupFieldOrMethod(obj.Type(), true, obj.Pkg(), path[0])
+			path = path[1:]
+		}
+	}
+	return obj
 }

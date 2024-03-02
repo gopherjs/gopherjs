@@ -13,6 +13,7 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
@@ -33,7 +34,7 @@ func (e *expression) StringWithParens() string {
 }
 
 func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
-	exprType := fc.pkgCtx.TypeOf(expr)
+	exprType := fc.typeOf(expr)
 	if value := fc.pkgCtx.Types[expr].Value; value != nil {
 		basic := exprType.Underlying().(*types.Basic)
 		switch {
@@ -76,19 +77,16 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 	}
 
-	var obj types.Object
+	var inst typeparams.Instance
 	switch e := expr.(type) {
 	case *ast.SelectorExpr:
-		obj = fc.pkgCtx.Uses[e.Sel]
+		inst = fc.instanceOf(e.Sel)
 	case *ast.Ident:
-		obj = fc.pkgCtx.Defs[e]
-		if obj == nil {
-			obj = fc.pkgCtx.Uses[e]
-		}
+		inst = fc.instanceOf(e)
 	}
 
-	if obj != nil && typesutil.IsJsPackage(obj.Pkg()) {
-		switch obj.Name() {
+	if inst.Object != nil && typesutil.IsJsPackage(inst.Object.Pkg()) {
+		switch inst.Object.Name() {
 		case "Global":
 			return fc.formatExpr("$global")
 		case "Module":
@@ -203,11 +201,16 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
-		_, fun := translateFunction(e.Type, nil, e.Body, fc, exprType.(*types.Signature), fc.pkgCtx.FuncLitInfos[e], "")
+		_, fun := translateFunction(e.Type, nil, e.Body, fc, exprType.(*types.Signature), fc.pkgCtx.FuncLitInfos[e], "", typeparams.Instance{})
 		if len(fc.pkgCtx.escapingVars) != 0 {
 			names := make([]string, 0, len(fc.pkgCtx.escapingVars))
 			for obj := range fc.pkgCtx.escapingVars {
-				names = append(names, fc.pkgCtx.objectNames[obj])
+				name, ok := fc.assignedObjectName(obj)
+				if !ok {
+					// This should never happen.
+					panic(fmt.Errorf("escaping variable %s hasn't been assigned a JS name", obj))
+				}
+				names = append(names, name)
 			}
 			sort.Strings(names)
 			list := strings.Join(names, ", ")
@@ -216,7 +219,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		return fc.formatExpr("(%s)", fun)
 
 	case *ast.UnaryExpr:
-		t := fc.pkgCtx.TypeOf(e.X)
+		t := fc.typeOf(e.X)
 		switch e.Op {
 		case token.AND:
 			if typesutil.IsJsObject(exprType) {
@@ -236,26 +239,31 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 			switch x := astutil.RemoveParens(e.X).(type) {
 			case *ast.CompositeLit:
-				return fc.formatExpr("$newDataPointer(%e, %s)", x, fc.typeName(fc.pkgCtx.TypeOf(e)))
+				return fc.formatExpr("$newDataPointer(%e, %s)", x, fc.typeName(fc.typeOf(e)))
 			case *ast.Ident:
 				obj := fc.pkgCtx.Uses[x].(*types.Var)
 				if fc.pkgCtx.escapingVars[obj] {
-					return fc.formatExpr("(%1s.$ptr || (%1s.$ptr = new %2s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %1s)))", fc.pkgCtx.objectNames[obj], fc.typeName(exprType))
+					name, ok := fc.assignedObjectName(obj)
+					if !ok {
+						// This should never happen.
+						panic(fmt.Errorf("escaping variable %s hasn't been assigned a JS name", obj))
+					}
+					return fc.formatExpr("(%1s.$ptr || (%1s.$ptr = new %2s(function() { return this.$target[0]; }, function($v) { this.$target[0] = $v; }, %1s)))", name, fc.typeName(exprType))
 				}
 				return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", elemType), false))
 			case *ast.SelectorExpr:
-				sel, ok := fc.pkgCtx.SelectionOf(x)
+				sel, ok := fc.selectionOf(x)
 				if !ok {
 					// qualified identifier
 					obj := fc.pkgCtx.Uses[x.Sel].(*types.Var)
 					return fc.formatExpr(`(%1s || (%1s = new %2s(function() { return %3s; }, function($v) { %4s })))`, fc.varPtrName(obj), fc.typeName(exprType), fc.objectName(obj), fc.translateAssign(x, fc.newIdent("$v", elemType), false))
 				}
-				newSel := &ast.SelectorExpr{X: fc.newIdent("this.$target", fc.pkgCtx.TypeOf(x.X)), Sel: x.Sel}
+				newSel := &ast.SelectorExpr{X: fc.newIdent("this.$target", fc.typeOf(x.X)), Sel: x.Sel}
 				fc.setType(newSel, exprType)
 				fc.pkgCtx.additionalSelections[newSel] = sel
 				return fc.formatExpr("(%1e.$ptr_%2s || (%1e.$ptr_%2s = new %3s(function() { return %4e; }, function($v) { %5s }, %1e)))", x.X, x.Sel.Name, fc.typeName(exprType), newSel, fc.translateAssign(newSel, fc.newIdent("$v", exprType), false))
 			case *ast.IndexExpr:
-				if _, ok := fc.pkgCtx.TypeOf(x.X).Underlying().(*types.Slice); ok {
+				if _, ok := fc.typeOf(x.X).Underlying().(*types.Slice); ok {
 					return fc.formatExpr("$indexPtr(%1e.$array, %1e.$offset + %2e, %3s)", x.X, x.Index, fc.typeName(exprType))
 				}
 				return fc.formatExpr("$indexPtr(%e, %e, %s)", x.X, x.Index, fc.typeName(exprType))
@@ -312,8 +320,8 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			}))
 		}
 
-		t := fc.pkgCtx.TypeOf(e.X)
-		t2 := fc.pkgCtx.TypeOf(e.Y)
+		t := fc.typeOf(e.X)
+		t2 := fc.typeOf(e.Y)
 		_, isInterface := t2.Underlying().(*types.Interface)
 		if isInterface || types.Identical(t, types.Typ[types.UntypedNil]) {
 			t = t2
@@ -477,7 +485,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		return fc.formatParenExpr("%e", e.X)
 
 	case *ast.IndexExpr:
-		switch t := fc.pkgCtx.TypeOf(e.X).Underlying().(type) {
+		switch t := fc.typeOf(e.X).Underlying().(type) {
 		case *types.Pointer:
 			if _, ok := t.Elem().Underlying().(*types.Array); !ok {
 				// Should never happen in type-checked code.
@@ -498,7 +506,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Slice:
 			return fc.formatExpr(rangeCheck("%1e.$array[%1e.$offset + %2f]", fc.pkgCtx.Types[e.Index].Value != nil, false), e.X, e.Index)
 		case *types.Map:
-			if typesutil.IsJsObject(fc.pkgCtx.TypeOf(e.Index)) {
+			if typesutil.IsJsObject(fc.typeOf(e.Index)) {
 				fc.pkgCtx.errList = append(fc.pkgCtx.errList, types.Error{Fset: fc.pkgCtx.fileSet, Pos: e.Index.Pos(), Msg: "cannot use js.Object as map key"})
 			}
 			key := fmt.Sprintf("%s.keyFor(%s)", fc.typeName(t.Key()), fc.translateImplicitConversion(e.Index, t.Key()))
@@ -521,14 +529,19 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Basic:
 			return fc.formatExpr("%e.charCodeAt(%f)", e.X, e.Index)
 		case *types.Signature:
-			err := bailout(fmt.Errorf(`unsupported type parameters used at %s`, fc.pkgCtx.fileSet.Position(e.Pos())))
-			panic(err)
+			return fc.formatExpr("%s", fc.instName(fc.instanceOf(e.X.(*ast.Ident))))
 		default:
 			panic(fmt.Errorf(`unhandled IndexExpr: %T`, t))
 		}
-
+	case *ast.IndexListExpr:
+		switch t := fc.typeOf(e.X).Underlying().(type) {
+		case *types.Signature:
+			return fc.formatExpr("%s", fc.instName(fc.instanceOf(e.X.(*ast.Ident))))
+		default:
+			panic(fmt.Errorf("unhandled IndexListExpr: %T", t))
+		}
 	case *ast.SliceExpr:
-		if b, isBasic := fc.pkgCtx.TypeOf(e.X).Underlying().(*types.Basic); isBasic && isString(b) {
+		if b, isBasic := fc.typeOf(e.X).Underlying().(*types.Basic); isBasic && isString(b) {
 			switch {
 			case e.Low == nil && e.High == nil:
 				return fc.translateExpr(e.X)
@@ -559,10 +572,10 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.SelectorExpr:
-		sel, ok := fc.pkgCtx.SelectionOf(e)
+		sel, ok := fc.selectionOf(e)
 		if !ok {
 			// qualified identifier
-			return fc.formatExpr("%s", fc.objectName(obj))
+			return fc.formatExpr("%s", fc.instName(inst))
 		}
 
 		switch sel.Kind() {
@@ -593,10 +606,10 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		plainFun := astutil.RemoveParens(e.Fun)
 
 		if astutil.IsTypeExpr(plainFun, fc.pkgCtx.Info.Info) {
-			return fc.formatExpr("(%s)", fc.translateConversion(e.Args[0], fc.pkgCtx.TypeOf(plainFun)))
+			return fc.formatExpr("(%s)", fc.translateConversion(e.Args[0], fc.typeOf(plainFun)))
 		}
 
-		sig := fc.pkgCtx.TypeOf(plainFun).Underlying().(*types.Signature)
+		sig := fc.typeOf(plainFun).Underlying().(*types.Signature)
 
 		switch f := plainFun.(type) {
 		case *ast.Ident:
@@ -610,10 +623,13 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			return fc.translateCall(e, sig, fc.translateExpr(f))
 
 		case *ast.SelectorExpr:
-			sel, ok := fc.pkgCtx.SelectionOf(f)
+			sel, ok := fc.selectionOf(f)
 			if !ok {
 				// qualified identifier
 				obj := fc.pkgCtx.Uses[f.Sel]
+				if o, ok := obj.(*types.Builtin); ok {
+					return fc.translateBuiltin(o.Name(), sig, e.Args, e.Ellipsis.IsValid())
+				}
 				if typesutil.IsJsPackage(obj.Pkg()) {
 					switch obj.Name() {
 					case "Debugger":
@@ -626,7 +642,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 
 			externalizeExpr := func(e ast.Expr) string {
-				t := fc.pkgCtx.TypeOf(e)
+				t := fc.typeOf(e)
 				if types.Identical(t, types.Typ[types.UntypedNil]) {
 					return "null"
 				}
@@ -746,11 +762,11 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.StarExpr:
-		if typesutil.IsJsObject(fc.pkgCtx.TypeOf(e.X)) {
+		if typesutil.IsJsObject(fc.typeOf(e.X)) {
 			return fc.formatExpr("new $jsObjectPtr(%e)", e.X)
 		}
 		if c1, isCall := e.X.(*ast.CallExpr); isCall && len(c1.Args) == 1 {
-			if c2, isCall := c1.Args[0].(*ast.CallExpr); isCall && len(c2.Args) == 1 && types.Identical(fc.pkgCtx.TypeOf(c2.Fun), types.Typ[types.UnsafePointer]) {
+			if c2, isCall := c1.Args[0].(*ast.CallExpr); isCall && len(c2.Args) == 1 && types.Identical(fc.typeOf(c2.Fun), types.Typ[types.UnsafePointer]) {
 				if unary, isUnary := c2.Args[0].(*ast.UnaryExpr); isUnary && unary.Op == token.AND {
 					return fc.translateExpr(unary.X) // unsafe conversion
 				}
@@ -766,7 +782,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		if e.Type == nil {
 			return fc.translateExpr(e.X)
 		}
-		t := fc.pkgCtx.TypeOf(e.Type)
+		t := fc.typeOf(e.Type)
 		if _, isTuple := exprType.(*types.Tuple); isTuple {
 			return fc.formatExpr("$assertType(%e, %s, true)", e.X, fc.typeName(t))
 		}
@@ -776,11 +792,11 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		if e.Name == "_" {
 			panic("Tried to translate underscore identifier.")
 		}
-		switch o := obj.(type) {
+		switch o := inst.Object.(type) {
 		case *types.Var, *types.Const:
-			return fc.formatExpr("%s", fc.objectName(o))
+			return fc.formatExpr("%s", fc.instName(inst))
 		case *types.Func:
-			return fc.formatExpr("%s", fc.objectName(o))
+			return fc.formatExpr("%s", fc.instName(inst))
 		case *types.TypeName:
 			return fc.formatExpr("%s", fc.typeName(o.Type()))
 		case *types.Nil:
@@ -857,7 +873,7 @@ func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, 
 	case *ast.SelectorExpr:
 		isJs = typesutil.IsJsPackage(fc.pkgCtx.Uses[fun.Sel].Pkg())
 	}
-	sig := fc.pkgCtx.TypeOf(expr.Fun).Underlying().(*types.Signature)
+	sig := fc.typeOf(expr.Fun).Underlying().(*types.Signature)
 	sigTypes := signatureTypes{Sig: sig}
 	args := fc.translateArgs(sig, expr.Args, expr.Ellipsis.IsValid())
 
@@ -894,7 +910,7 @@ func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, 
 }
 
 func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
-	sel, _ := fc.pkgCtx.SelectionOf(e)
+	sel, _ := fc.selectionOf(e)
 	if !sel.Obj().Exported() {
 		fc.pkgCtx.dependencies[sel.Obj()] = true
 	}
@@ -911,12 +927,7 @@ func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 		}
 
 		fakeSel := &ast.SelectorExpr{X: x, Sel: ast.NewIdent("o")}
-		fc.pkgCtx.additionalSelections[fakeSel] = &fakeSelection{
-			kind:  types.FieldVal,
-			recv:  sel.Recv(),
-			index: sel.Index()[:len(sel.Index())-1],
-			typ:   recvType,
-		}
+		fc.pkgCtx.additionalSelections[fakeSel] = typesutil.NewSelection(types.FieldVal, sel.Recv(), sel.Index()[:len(sel.Index())-1], nil, recvType)
 		x = fc.setType(fakeSel, recvType)
 	}
 
@@ -953,9 +964,9 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			return fc.formatExpr("$newDataPointer(%e, %s)", fc.zeroValue(t.Elem()), fc.typeName(t))
 		}
 	case "make":
-		switch argType := fc.pkgCtx.TypeOf(args[0]).Underlying().(type) {
+		switch argType := fc.typeOf(args[0]).Underlying().(type) {
 		case *types.Slice:
-			t := fc.typeName(fc.pkgCtx.TypeOf(args[0]))
+			t := fc.typeName(fc.typeOf(args[0]))
 			if len(args) == 3 {
 				return fc.formatExpr("$makeSlice(%s, %f, %f)", t, args[1], args[2])
 			}
@@ -970,12 +981,12 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			if len(args) == 2 {
 				length = fc.formatExpr("%f", args[1]).String()
 			}
-			return fc.formatExpr("new $Chan(%s, %s)", fc.typeName(fc.pkgCtx.TypeOf(args[0]).Underlying().(*types.Chan).Elem()), length)
+			return fc.formatExpr("new $Chan(%s, %s)", fc.typeName(fc.typeOf(args[0]).Underlying().(*types.Chan).Elem()), length)
 		default:
 			panic(fmt.Sprintf("Unhandled make type: %T\n", argType))
 		}
 	case "len":
-		switch argType := fc.pkgCtx.TypeOf(args[0]).Underlying().(type) {
+		switch argType := fc.typeOf(args[0]).Underlying().(type) {
 		case *types.Basic:
 			return fc.formatExpr("%e.length", args[0])
 		case *types.Slice:
@@ -991,7 +1002,7 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 			panic(fmt.Sprintf("Unhandled len type: %T\n", argType))
 		}
 	case "cap":
-		switch argType := fc.pkgCtx.TypeOf(args[0]).Underlying().(type) {
+		switch argType := fc.typeOf(args[0]).Underlying().(type) {
 		case *types.Slice, *types.Chan:
 			return fc.formatExpr("%e.$capacity", args[0])
 		case *types.Pointer:
@@ -1011,7 +1022,7 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 		return fc.formatExpr("$append(%e, %s)", args[0], strings.Join(fc.translateExprSlice(args[1:], sliceType.Elem()), ", "))
 	case "delete":
 		args = fc.expandTupleArgs(args)
-		keyType := fc.pkgCtx.TypeOf(args[0]).Underlying().(*types.Map).Key()
+		keyType := fc.typeOf(args[0]).Underlying().(*types.Map).Key()
 		return fc.formatExpr(
 			`$mapDelete(%1e, %2s.keyFor(%3s))`,
 			args[0],
@@ -1020,7 +1031,7 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 		)
 	case "copy":
 		args = fc.expandTupleArgs(args)
-		if basic, isBasic := fc.pkgCtx.TypeOf(args[1]).Underlying().(*types.Basic); isBasic && isString(basic) {
+		if basic, isBasic := fc.typeOf(args[1]).Underlying().(*types.Basic); isBasic && isString(basic) {
 			return fc.formatExpr("$copyString(%e, %e)", args[0], args[1])
 		}
 		return fc.formatExpr("$copySlice(%e, %e)", args[0], args[1])
@@ -1041,6 +1052,13 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 		return fc.formatExpr("$recover()")
 	case "close":
 		return fc.formatExpr(`$close(%e)`, args[0])
+	case "Sizeof":
+		return fc.formatExpr("%d", sizes32.Sizeof(fc.typeOf(args[0])))
+	case "Alignof":
+		return fc.formatExpr("%d", sizes32.Alignof(fc.typeOf(args[0])))
+	case "Offsetof":
+		sel, _ := fc.selectionOf(astutil.RemoveParens(args[0]).(*ast.SelectorExpr))
+		return fc.formatExpr("%d", typesutil.OffsetOf(sizes32, sel))
 	default:
 		panic(fmt.Sprintf("Unhandled builtin: %s\n", name))
 	}
@@ -1072,13 +1090,13 @@ func (fc *funcContext) translateExprSlice(exprs []ast.Expr, desiredType types.Ty
 }
 
 func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type) *expression {
-	exprType := fc.pkgCtx.TypeOf(expr)
+	exprType := fc.typeOf(expr)
 	if types.Identical(exprType, desiredType) {
 		return fc.translateExpr(expr)
 	}
 
 	if fc.pkgCtx.Pkg.Path() == "reflect" || fc.pkgCtx.Pkg.Path() == "internal/reflectlite" {
-		if call, isCall := expr.(*ast.CallExpr); isCall && types.Identical(fc.pkgCtx.TypeOf(call.Fun), types.Typ[types.UnsafePointer]) {
+		if call, isCall := expr.(*ast.CallExpr); isCall && types.Identical(fc.typeOf(call.Fun), types.Typ[types.UnsafePointer]) {
 			if ptr, isPtr := desiredType.(*types.Pointer); isPtr {
 				if named, isNamed := ptr.Elem().(*types.Named); isNamed {
 					switch named.Obj().Name() {
@@ -1153,7 +1171,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 					return fc.formatExpr("new Uint8Array(0)")
 				}
 			}
-			if ptr, isPtr := fc.pkgCtx.TypeOf(expr).(*types.Pointer); fc.pkgCtx.Pkg.Path() == "syscall" && isPtr {
+			if ptr, isPtr := fc.typeOf(expr).(*types.Pointer); fc.pkgCtx.Pkg.Path() == "syscall" && isPtr {
 				if s, isStruct := ptr.Elem().Underlying().(*types.Struct); isStruct {
 					array := fc.newVariable("_array")
 					target := fc.newVariable("_struct")
@@ -1166,7 +1184,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 			}
 			if call, ok := expr.(*ast.CallExpr); ok {
 				if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "new" {
-					return fc.formatExpr("new Uint8Array(%d)", int(sizes32.Sizeof(fc.pkgCtx.TypeOf(call.Args[0]))))
+					return fc.formatExpr("new Uint8Array(%d)", int(sizes32.Sizeof(fc.typeOf(call.Args[0]))))
 				}
 			}
 		}
@@ -1255,7 +1273,7 @@ func (fc *funcContext) translateImplicitConversion(expr ast.Expr, desiredType ty
 		return fc.translateExpr(expr)
 	}
 
-	exprType := fc.pkgCtx.TypeOf(expr)
+	exprType := fc.typeOf(expr)
 	if types.Identical(exprType, desiredType) {
 		return fc.translateExpr(expr)
 	}
@@ -1286,7 +1304,7 @@ func (fc *funcContext) translateImplicitConversion(expr ast.Expr, desiredType ty
 }
 
 func (fc *funcContext) translateConversionToSlice(expr ast.Expr, desiredType types.Type) *expression {
-	switch fc.pkgCtx.TypeOf(expr).Underlying().(type) {
+	switch fc.typeOf(expr).Underlying().(type) {
 	case *types.Array, *types.Pointer:
 		return fc.formatExpr("new %s(%e)", fc.typeName(desiredType), expr)
 	}
@@ -1447,7 +1465,7 @@ func (fc *funcContext) formatExprInternal(format string, a []interface{}, parens
 			}
 			out.WriteString(a[n].(string))
 		case 'd':
-			out.WriteString(strconv.Itoa(a[n].(int)))
+			fmt.Fprintf(out, "%d", a[n])
 		case 't':
 			out.WriteString(a[n].(token.Token).String())
 		case 'e':
@@ -1464,7 +1482,7 @@ func (fc *funcContext) formatExprInternal(format string, a []interface{}, parens
 				out.WriteString(strconv.FormatInt(d, 10))
 				return
 			}
-			if is64Bit(fc.pkgCtx.TypeOf(e).Underlying().(*types.Basic)) {
+			if is64Bit(fc.typeOf(e).Underlying().(*types.Basic)) {
 				out.WriteString("$flatten64(")
 				writeExpr("")
 				out.WriteString(")")
@@ -1475,7 +1493,7 @@ func (fc *funcContext) formatExprInternal(format string, a []interface{}, parens
 			e := a[n].(ast.Expr)
 			if val := fc.pkgCtx.Types[e].Value; val != nil {
 				d, _ := constant.Uint64Val(constant.ToInt(val))
-				if fc.pkgCtx.TypeOf(e).Underlying().(*types.Basic).Kind() == types.Int64 {
+				if fc.typeOf(e).Underlying().(*types.Basic).Kind() == types.Int64 {
 					out.WriteString(strconv.FormatInt(int64(d)>>32, 10))
 					return
 				}

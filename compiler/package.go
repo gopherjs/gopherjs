@@ -399,7 +399,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		if fun.Recv == nil {
 			// Auxiliary decl shared by all instances of the function that defines
 			// package-level variable by which they all are referenced.
-			// TODO(nevkontakte): Set DCE attributes such that it is eliminated of all
+			// TODO(nevkontakte): Set DCE attributes such that it is eliminated if all
 			// instances are dead.
 			varDecl := Decl{}
 			varDecl.Vars = []string{funcCtx.objectName(o)}

@@ -24,9 +24,6 @@ func NewResolver(tc *types.Context, tParams []*types.TypeParam, tArgs []types.Ty
 		subster: subst.New(tc, tParams, tArgs),
 		selMemo: map[typesutil.Selection]typesutil.Selection{},
 	}
-	if len(tParams) != len(tArgs) {
-		panic(fmt.Errorf("len(tParams)=%d not equal len(tArgs)=%d", len(tParams), len(tArgs)))
-	}
 	return r
 }
 
@@ -86,7 +83,7 @@ func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Select
 	}
 }
 
-// ToSlice converts TypeParamList into a slice with the sale order of entries.
+// ToSlice converts TypeParamList into a slice with the same order of entries.
 func ToSlice(tpl *types.TypeParamList) []*types.TypeParam {
 	result := make([]*types.TypeParam, tpl.Len())
 	for i := range result {
@@ -214,7 +211,7 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 // InstanceSet may contain unprocessed instances of generic types and functions,
 // which will be also scanned, for example found in depending packages.
 //
-// Note that instanced of generic type methods are automatically added to the
+// Note that instances of generic type methods are automatically added to the
 // set whenever their receiver type instance is encountered.
 type Collector struct {
 	TContext  *types.Context

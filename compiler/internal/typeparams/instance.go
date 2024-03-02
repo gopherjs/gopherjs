@@ -94,7 +94,7 @@ func (iset *InstanceSet) Add(instances ...Instance) *InstanceSet {
 // In order to have an ID assigned, the instance must have been previously added
 // to the set.
 //
-// Note: we these ids are used in the generated code as keys to the specific
+// Note: these ids are used in the generated code as keys to the specific
 // type/function instantiation in the type/function object. Using this has two
 // advantages:
 //

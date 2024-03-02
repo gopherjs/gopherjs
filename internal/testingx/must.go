@@ -3,12 +3,12 @@ package testingx
 
 import "testing"
 
-// Must provides a concise way to handle handle returned error in tests that
+// Must provides a concise way to handle returned error in cases that
 // "should never happen"©.
 //
 // This function can be used in test case setup that can be presumed to be
 // correct, but technically may return an error. This function MUST NOT be used
-// to check for test case conditions themselves because it provides a generic,
+// to check for test case conditions themselves because it generates a generic,
 // nondescript test error message.
 //
 //	func startServer(addr string) (*server, err)

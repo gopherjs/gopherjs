@@ -10,7 +10,7 @@ type TypeNames struct {
 	order []*types.TypeName
 }
 
-// Add a type name to the test. If the type name has been previously added,
+// Add a type name to the set. If the type name has been previously added,
 // this operation is a no-op. Two type names are considered equal iff they have
 // the same memory address.
 func (tn *TypeNames) Add(name *types.TypeName) {

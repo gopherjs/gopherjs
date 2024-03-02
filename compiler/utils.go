@@ -336,7 +336,7 @@ func isPkgLevel(o types.Object) bool {
 }
 
 // assignedObjectName checks if the object has been previously assigned a name
-// in this or one of the parent contexts. If not, found will be false false.
+// in this or one of the parent contexts. If not, found will be false.
 func (fc *funcContext) assignedObjectName(o types.Object) (name string, found bool) {
 	if fc == nil {
 		return "", false

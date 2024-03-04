@@ -54,11 +54,11 @@ workflows:
 parameters:
   go_version:
     type: string
-    default: "1.19.13"
+    default: "1.20.14"
   chocolatey_go_version:
     type: string
-    # Chocolatey doesn't have 1.19.13, closest is 1.19.9
-    default: "1.19.9"
+    # Chocolatey doesn't have 1.20.14, closest is 1.20.7
+    default: "1.20.7"
   nvm_version:
     type: string
     default: "0.38.0"

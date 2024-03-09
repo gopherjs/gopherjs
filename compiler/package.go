@@ -39,7 +39,7 @@ type pkgContext struct {
 	minify       bool
 	fileSet      *token.FileSet
 	errList      ErrorList
-	instanceSet  *typeparams.InstanceSet
+	instanceSet  *typeparams.PackageInstanceSets
 }
 
 // funcContext maintains compiler context for a specific function (lexical scope?).
@@ -215,11 +215,11 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	tc := typeparams.Collector{
 		TContext:  config.Context,
 		Info:      typesInfo,
-		Instances: &typeparams.InstanceSet{},
+		Instances: &typeparams.PackageInstanceSets{},
 	}
-	tc.Scan(simplifiedFiles...)
+	tc.Scan(typesPkg, simplifiedFiles...)
 	instancesByObj := map[types.Object][]typeparams.Instance{}
-	for _, inst := range tc.Instances.Values() {
+	for _, inst := range tc.Instances.Pkg(typesPkg).Values() {
 		instancesByObj[inst.Object] = append(instancesByObj[inst.Object], inst)
 	}
 

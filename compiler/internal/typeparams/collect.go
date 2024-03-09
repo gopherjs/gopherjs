@@ -99,7 +99,7 @@ func ToSlice(tpl *types.TypeParamList) []*types.TypeParam {
 // function, Resolver must be provided mapping the type parameters into concrete
 // types.
 type visitor struct {
-	instances *InstanceSet
+	instances *PackageInstanceSets
 	resolver  *Resolver
 	info      *types.Info
 }
@@ -216,11 +216,11 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 type Collector struct {
 	TContext  *types.Context
 	Info      *types.Info
-	Instances *InstanceSet
+	Instances *PackageInstanceSets
 }
 
 // Scan package files for generic instances.
-func (c *Collector) Scan(files ...*ast.File) {
+func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 	if c.Info.Instances == nil || c.Info.Defs == nil {
 		panic(fmt.Errorf("types.Info must have Instances and Defs populated"))
 	}
@@ -240,8 +240,8 @@ func (c *Collector) Scan(files ...*ast.File) {
 		ast.Walk(&sc, file)
 	}
 
-	for !c.Instances.exhausted() {
-		inst, _ := c.Instances.next()
+	for iset := c.Instances.Pkg(pkg); !iset.exhausted(); {
+		inst, _ := iset.next()
 		switch typ := inst.Object.Type().(type) {
 		case *types.Signature:
 			v := visitor{

@@ -58,7 +58,7 @@ func Clear() error {
 // the cache. For example, any artifacts that were cached for a minified build
 // must not be reused for a non-minified build. GopherJS version change also
 // invalidates the cache. It is callers responsibility to ensure that artifacts
-// passed the the StoreArchive function were generated with the same build
+// passed the StoreArchive function were generated with the same build
 // parameters as the cache is configured.
 //
 // There is no upper limit for the total cache size. It can be cleared

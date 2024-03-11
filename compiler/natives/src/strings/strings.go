@@ -68,7 +68,7 @@ func (b *Builder) copyCheck() {
 }
 
 func Clone(s string) string {
-	// Since in the JavaScript runtime we don't have access the the string's
+	// Since in the JavaScript runtime we don't have access the string's
 	// baking memory, we let the engine's garbage collector deal with substring
 	// memory overheads and simply return the string as-is.
 	return s

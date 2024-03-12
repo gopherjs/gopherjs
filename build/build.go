@@ -729,19 +729,33 @@ func (p *PackageData) XTestPackage() *PackageData {
 
 // InstallPath returns the path where "gopherjs install" command should place the
 // generated output.
-func (p *PackageData) InstallPath() string {
+func (p *PackageData) InstallPath() (string, error) {
 	if p.IsCommand() {
 		name := filepath.Base(p.ImportPath) + ".js"
+
 		// For executable packages, mimic go tool behavior if possible.
 		if gobin := os.Getenv("GOBIN"); gobin != "" {
-			return filepath.Join(gobin, name)
-		} else if gopath := os.Getenv("GOPATH"); gopath != "" {
-			return filepath.Join(gopath, "bin", name)
-		} else if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, "go", "bin", name)
+			return filepath.Join(gobin, name), nil
+		}
+
+		if gopath := os.Getenv("GOPATH"); gopath != "" {
+			return filepath.Join(gopath, "bin", name), nil
+		}
+
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, "go", "bin", name), nil
 		}
 	}
-	return p.PkgObj
+
+	if p.PkgObj != "" {
+		return p.PkgObj, nil
+	}
+
+	// The build.Context.Import method stopped populating build.Package.PkgObj
+	// in 1.20 for packages found in the Goroot. Currently we don't use the
+	// build.Package.PkgObj except for a fallback when no other locations
+	// can be found for command packages to install.
+	return "", fmt.Errorf(`no install location available for %q`, p.ImportPath)
 }
 
 // Session manages internal state GopherJS requires to perform a build.

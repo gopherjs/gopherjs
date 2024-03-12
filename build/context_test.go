@@ -1,7 +1,6 @@
 package build
 
 import (
-	"fmt"
 	"go/build"
 	"net/http"
 	"path/filepath"
@@ -30,16 +29,19 @@ func TestSimpleCtx(t *testing.T) {
 
 	t.Run("exists", func(t *testing.T) {
 		tests := []struct {
+			name     string
 			buildCtx XContext
 			wantPkg  *PackageData
 		}{
 			{
+				name:     `embeddedCtx`,
 				buildCtx: ec,
 				wantPkg: &PackageData{
 					Package:   expectedPackage(&ec.bctx, "github.com/gopherjs/gopherjs/js", "wasm"),
 					IsVirtual: true,
 				},
 			}, {
+				name:     `goCtx`,
 				buildCtx: gc,
 				wantPkg: &PackageData{
 					Package:   expectedPackage(&gc.bctx, "fmt", "wasm"),
@@ -49,7 +51,7 @@ func TestSimpleCtx(t *testing.T) {
 		}
 
 		for _, test := range tests {
-			t.Run(fmt.Sprintf("%T", test.buildCtx), func(t *testing.T) {
+			t.Run(test.name, func(t *testing.T) {
 				importPath := test.wantPkg.ImportPath
 				got, err := test.buildCtx.Import(importPath, "", build.FindOnly)
 				if err != nil {
@@ -64,25 +66,27 @@ func TestSimpleCtx(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		tests := []struct {
+			name       string
 			buildCtx   XContext
 			importPath string
 		}{
 			{
+				name:       `embeddedCtx`,
 				buildCtx:   ec,
 				importPath: "package/not/found",
 			}, {
-				// Outside of the main module.
+				name:       `goCtx outside of the main module`,
 				buildCtx:   gc,
 				importPath: "package/not/found",
 			}, {
-				// In the main module.
+				name:       `goCtx in the main module`,
 				buildCtx:   gc,
 				importPath: "github.com/gopherjs/gopherjs/not/found",
 			},
 		}
 
 		for _, test := range tests {
-			t.Run(fmt.Sprintf("%T", test.buildCtx), func(t *testing.T) {
+			t.Run(test.name, func(t *testing.T) {
 				_, err := ec.Import(test.importPath, "", build.FindOnly)
 				want := "cannot find package"
 				if err == nil || !strings.Contains(err.Error(), want) {
@@ -209,6 +213,6 @@ func expectedPackage(bctx *build.Context, importPath string, goarch string) *bui
 		PkgTargetRoot: targetRoot,
 		BinDir:        filepath.Join(bctx.GOROOT, "bin"),
 		Goroot:        true,
-		PkgObj:        filepath.Join(targetRoot, importPath+".a"),
+		PkgObj:        ``, // not populated for Goroot packages since 1.20
 	}
 }

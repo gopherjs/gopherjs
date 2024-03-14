@@ -841,7 +841,7 @@ func (fc *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun 
 // and its arguments to be invoked elsewhere.
 //
 // This function is necessary in conjunction with keywords such as `go` and `defer`,
-// where we need to compute function and its arguments at the the keyword site,
+// where we need to compute function and its arguments at the keyword site,
 // but the call itself will happen elsewhere (hence "delegated").
 //
 // Built-in functions and cetrain `js.Object` methods don't translate into JS

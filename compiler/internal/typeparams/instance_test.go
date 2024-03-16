@@ -1,7 +1,6 @@
 package typeparams
 
 import (
-	"go/token"
 	"go/types"
 	"testing"
 
@@ -38,8 +37,8 @@ func TestInstanceString(t *testing.T) {
 	func Fun[U any, W any](x, y U) {}
 	func fun[U any, W any](x, y U) {}
 	`
-	fset := token.NewFileSet()
-	_, pkg := srctesting.Check(t, fset, srctesting.Parse(t, fset, src))
+	f := srctesting.New(t)
+	_, pkg := f.Check("pkg/test", f.Parse("test.go", src))
 	mustType := testingx.Must[types.Type](t)
 
 	tests := []struct {
@@ -53,7 +52,7 @@ func TestInstanceString(t *testing.T) {
 			Object: pkg.Scope().Lookup("Typ"),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		wantStr:        "test.Typ<int, string>",
+		wantStr:        "pkg/test.Typ<int, string>",
 		wantTypeString: "testcase.Typ[int, string]",
 	}, {
 		descr: "exported method",
@@ -61,21 +60,21 @@ func TestInstanceString(t *testing.T) {
 			Object: pkg.Scope().Lookup("Typ").Type().(*types.Named).Method(0),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		wantStr: "test.Typ.Method<int, string>",
+		wantStr: "pkg/test.Typ.Method<int, string>",
 	}, {
 		descr: "exported function",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("Fun"),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		wantStr: "test.Fun<int, string>",
+		wantStr: "pkg/test.Fun<int, string>",
 	}, {
 		descr: "unexported type",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("typ"),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		wantStr:        "test.typ<int, string>",
+		wantStr:        "pkg/test.typ<int, string>",
 		wantTypeString: "testcase.typ[int, string]",
 	}, {
 		descr: "unexported method",
@@ -83,20 +82,20 @@ func TestInstanceString(t *testing.T) {
 			Object: pkg.Scope().Lookup("typ").Type().(*types.Named).Method(0),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		wantStr: "test.typ.method<int, string>",
+		wantStr: "pkg/test.typ.method<int, string>",
 	}, {
 		descr: "unexported function",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("fun"),
 			TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.String]},
 		},
-		wantStr: "test.fun<int, string>",
+		wantStr: "pkg/test.fun<int, string>",
 	}, {
 		descr: "no type params",
 		instance: Instance{
 			Object: pkg.Scope().Lookup("Ints"),
 		},
-		wantStr:        "test.Ints",
+		wantStr:        "pkg/test.Ints",
 		wantTypeString: "testcase.Ints",
 	}, {
 		descr: "complex parameter type",
@@ -110,7 +109,7 @@ func TestInstanceString(t *testing.T) {
 				}, true)),
 			},
 		},
-		wantStr: "test.fun<[]int, test.typ[int, string]>",
+		wantStr: "pkg/test.fun<[]int, pkg/test.typ[int, string]>",
 	}}
 
 	for _, test := range tests {
@@ -134,8 +133,8 @@ func TestInstanceQueue(t *testing.T) {
 	type Typ[T any, V any] []T
 	func Fun[U any, W any](x, y U) {}
 	`
-	fset := token.NewFileSet()
-	_, pkg := srctesting.Check(t, fset, srctesting.Parse(t, fset, src))
+	f := srctesting.New(t)
+	_, pkg := f.Check("pkg/test", f.Parse("test.go", src))
 
 	i1 := Instance{
 		Object: pkg.Scope().Lookup("Typ"),

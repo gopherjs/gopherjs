@@ -1,7 +1,6 @@
 package typesutil
 
 import (
-	"go/token"
 	"go/types"
 	"testing"
 
@@ -24,8 +23,8 @@ func TestTypeNames(t *testing.T) {
 	type B int
 	type C int
 	`
-	fset := token.NewFileSet()
-	_, pkg := srctesting.Check(t, fset, srctesting.Parse(t, fset, src))
+	f := srctesting.New(t)
+	_, pkg := f.Check("pkg/test", f.Parse("test.go", src))
 	A := srctesting.LookupObj(pkg, "A").(*types.TypeName)
 	B := srctesting.LookupObj(pkg, "B").(*types.TypeName)
 	C := srctesting.LookupObj(pkg, "C").(*types.TypeName)

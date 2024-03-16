@@ -2,7 +2,6 @@ package astutil
 
 import (
 	"go/ast"
-	"go/token"
 	"strconv"
 	"testing"
 
@@ -44,8 +43,7 @@ func TestImportsUnsafe(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			src := "package testpackage\n\n" + test.imports
-			fset := token.NewFileSet()
-			file := srctesting.Parse(t, fset, src)
+			file := srctesting.New(t).Parse("test.go", src)
 			got := ImportsUnsafe(file)
 			if got != test.want {
 				t.Fatalf("ImportsUnsafe() returned %t, want %t", got, test.want)
@@ -81,8 +79,7 @@ func TestImportName(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			src := "package testpackage\n\n" + test.src
-			fset := token.NewFileSet()
-			file := srctesting.Parse(t, fset, src)
+			file := srctesting.New(t).Parse("test.go", src)
 			if len(file.Imports) != 1 {
 				t.Fatal(`expected one and only one import`)
 			}
@@ -399,8 +396,7 @@ func TestHasDirectiveOnFile(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			const action = `do-stuff`
-			fset := token.NewFileSet()
-			file := srctesting.Parse(t, fset, test.src)
+			file := srctesting.New(t).Parse("test.go", test.src)
 			if got := hasDirective(file, action); got != test.want {
 				t.Errorf(`hasDirective(%T, %q) returned %t, want %t`, file, action, got, test.want)
 			}

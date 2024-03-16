@@ -4,6 +4,7 @@ package srctesting
 
 import (
 	"bytes"
+	"fmt"
 	"go/ast"
 	"go/format"
 	"go/parser"
@@ -13,41 +14,67 @@ import (
 	"testing"
 )
 
-// Parse source from the string and return complete AST.
-//
-// Assumes source file name `test.go`. Fails the test on parsing error.
-func Parse(t *testing.T, fset *token.FileSet, src string) *ast.File {
-	t.Helper()
-	f, err := parser.ParseFile(fset, "test.go", src, parser.ParseComments)
-	if err != nil {
-		t.Fatalf("Failed to parse test source: %s", err)
+// Fixture provides utilities for parsing and type checking Go code in tests.
+type Fixture struct {
+	T        *testing.T
+	FileSet  *token.FileSet
+	Info     *types.Info
+	Packages map[string]*types.Package
+}
+
+// New creates a fresh Fixture.
+func New(t *testing.T) *Fixture {
+	return &Fixture{
+		T:       t,
+		FileSet: token.NewFileSet(),
+		Info: &types.Info{
+			Types:      make(map[ast.Expr]types.TypeAndValue),
+			Defs:       make(map[*ast.Ident]types.Object),
+			Uses:       make(map[*ast.Ident]types.Object),
+			Implicits:  make(map[ast.Node]types.Object),
+			Selections: make(map[*ast.SelectorExpr]*types.Selection),
+			Scopes:     make(map[ast.Node]*types.Scope),
+			Instances:  make(map[*ast.Ident]types.Instance),
+		},
+		Packages: map[string]*types.Package{},
 	}
-	return f
+}
+
+// Parse source from the string and return complete AST.
+func (f *Fixture) Parse(name, src string) *ast.File {
+	f.T.Helper()
+	file, err := parser.ParseFile(f.FileSet, name, src, parser.ParseComments)
+	if err != nil {
+		f.T.Fatalf("Failed to parse test source: %s", err)
+	}
+	return file
 }
 
 // Check type correctness of the provided AST.
 //
-// Assumes "test" package import path. Fails the test if type checking fails.
-// Provided AST is expected not to have any imports.
-func Check(t *testing.T, fset *token.FileSet, files ...*ast.File) (*types.Info, *types.Package) {
-	t.Helper()
-	typesInfo := &types.Info{
-		Types:      make(map[ast.Expr]types.TypeAndValue),
-		Defs:       make(map[*ast.Ident]types.Object),
-		Uses:       make(map[*ast.Ident]types.Object),
-		Implicits:  make(map[ast.Node]types.Object),
-		Selections: make(map[*ast.SelectorExpr]*types.Selection),
-		Scopes:     make(map[ast.Node]*types.Scope),
-		Instances:  make(map[*ast.Ident]types.Instance),
-	}
+// Fails the test if type checking fails. Provided AST is expected not to have
+// any imports.
+func (f *Fixture) Check(importPath string, files ...*ast.File) (*types.Info, *types.Package) {
+	f.T.Helper()
 	config := &types.Config{
-		Sizes: &types.StdSizes{WordSize: 4, MaxAlign: 8},
+		Sizes:    &types.StdSizes{WordSize: 4, MaxAlign: 8},
+		Importer: f,
 	}
-	typesPkg, err := config.Check("test", fset, files, typesInfo)
+	pkg, err := config.Check(importPath, f.FileSet, files, f.Info)
 	if err != nil {
-		t.Fatalf("Filed to type check test source: %s", err)
+		f.T.Fatalf("Filed to type check test source: %s", err)
 	}
-	return typesInfo, typesPkg
+	f.Packages[importPath] = pkg
+	return f.Info, pkg
+}
+
+// Import implements types.Importer.
+func (f *Fixture) Import(path string) (*types.Package, error) {
+	pkg, ok := f.Packages[path]
+	if !ok {
+		return nil, fmt.Errorf("missing type info for package %q", path)
+	}
+	return pkg, nil
 }
 
 // ParseFuncDecl parses source with a single function defined and returns the
@@ -70,8 +97,7 @@ func ParseFuncDecl(t *testing.T, src string) *ast.FuncDecl {
 // Fails the test if there isn't exactly one declaration in the source.
 func ParseDecl(t *testing.T, src string) ast.Decl {
 	t.Helper()
-	fset := token.NewFileSet()
-	file := Parse(t, fset, src)
+	file := New(t).Parse("test.go", src)
 	if l := len(file.Decls); l != 1 {
 		t.Fatalf(`Got %d decls in the sources, expected exactly 1`, l)
 	}

@@ -2,7 +2,6 @@ package typeparams
 
 import (
 	"go/ast"
-	"go/token"
 	"go/types"
 	"testing"
 
@@ -80,9 +79,9 @@ func TestVisitor(t *testing.T) {
 
 	type entry5 = typ[int, F]
 	`
-	fset := token.NewFileSet()
-	file := srctesting.Parse(t, fset, src)
-	info, pkg := srctesting.Check(t, fset, file)
+	f := srctesting.New(t)
+	file := f.Parse("test.go", src)
+	info, pkg := f.Check("pkg/test", file)
 
 	lookupObj := func(name string) types.Object {
 		return srctesting.LookupObj(pkg, name)
@@ -280,9 +279,9 @@ func TestSeedVisitor(t *testing.T) {
 	func e() { var _ typ[int64] }
 	`
 
-	fset := token.NewFileSet()
-	file := srctesting.Parse(t, fset, src)
-	info, pkg := srctesting.Check(t, fset, file)
+	f := srctesting.New(t)
+	file := f.Parse("test.go", src)
+	info, pkg := f.Check("pkg/test", file)
 
 	sv := seedVisitor{
 		visitor: visitor{
@@ -343,9 +342,9 @@ func TestCollector(t *testing.T) {
 	}
 	`
 
-	fset := token.NewFileSet()
-	file := srctesting.Parse(t, fset, src)
-	info, pkg := srctesting.Check(t, fset, file)
+	f := srctesting.New(t)
+	file := f.Parse("test.go", src)
+	info, pkg := f.Check("pkg/test", file)
 
 	c := Collector{
 		TContext:  types.NewContext(),
@@ -396,7 +395,7 @@ func TestResolver_SubstituteSelection(t *testing.T) {
 		func (_ g[T]) Method(t T) string {
 			return t.String()
 		}`,
-		wantObj: "func (test.x).String() string",
+		wantObj: "func (pkg/test.x).String() string",
 		wantSig: "func() string",
 	}, {
 		descr: "generic receiver type with type parameter",
@@ -407,8 +406,8 @@ func TestResolver_SubstituteSelection(t *testing.T) {
 			func (_ g[T]) Method(t T) string {
 				return g[T]{}.Method(t)
 			}`,
-		wantObj: "func (test.g[test.x]).Method(t test.x) string",
-		wantSig: "func(t test.x) string",
+		wantObj: "func (pkg/test.g[pkg/test.x]).Method(t pkg/test.x) string",
+		wantSig: "func(t pkg/test.x) string",
 	}, {
 		descr: "method expression",
 		src: `package test
@@ -418,15 +417,15 @@ func TestResolver_SubstituteSelection(t *testing.T) {
 				func (recv g[T]) Method(t T) string {
 					return g[T].Method(recv, t)
 				}`,
-		wantObj: "func (test.g[test.x]).Method(t test.x) string",
-		wantSig: "func(recv test.g[test.x], t test.x) string",
+		wantObj: "func (pkg/test.g[pkg/test.x]).Method(t pkg/test.x) string",
+		wantSig: "func(recv pkg/test.g[pkg/test.x], t pkg/test.x) string",
 	}}
 
 	for _, test := range tests {
 		t.Run(test.descr, func(t *testing.T) {
-			fset := token.NewFileSet()
-			file := srctesting.Parse(t, fset, test.src)
-			info, pkg := srctesting.Check(t, fset, file)
+			f := srctesting.New(t)
+			file := f.Parse("test.go", test.src)
+			info, pkg := f.Check("pkg/test", file)
 
 			method := srctesting.LookupObj(pkg, "g.Method").(*types.Func).Type().(*types.Signature)
 			resolver := NewResolver(nil, ToSlice(method.RecvTypeParams()), []types.Type{srctesting.LookupObj(pkg, "x").Type()})

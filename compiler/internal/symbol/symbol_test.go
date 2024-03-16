@@ -1,7 +1,6 @@
 package symbol
 
 import (
-	"go/token"
 	"go/types"
 	"testing"
 
@@ -18,8 +17,8 @@ func TestName(t *testing.T) {
 	var AVariable int32
 	`
 
-	fset := token.NewFileSet()
-	_, pkg := srctesting.Check(t, fset, srctesting.Parse(t, fset, src))
+	f := srctesting.New(t)
+	_, pkg := f.Check("pkg/test", f.Parse("test.go", src))
 
 	tests := []struct {
 		obj  types.Object
@@ -27,19 +26,19 @@ func TestName(t *testing.T) {
 	}{
 		{
 			obj:  pkg.Scope().Lookup("AFunction"),
-			want: Name{PkgPath: "test", Name: "AFunction"},
+			want: Name{PkgPath: "pkg/test", Name: "AFunction"},
 		}, {
 			obj:  pkg.Scope().Lookup("AType"),
-			want: Name{PkgPath: "test", Name: "AType"},
+			want: Name{PkgPath: "pkg/test", Name: "AType"},
 		}, {
 			obj:  types.NewMethodSet(pkg.Scope().Lookup("AType").Type()).Lookup(pkg, "AMethod").Obj(),
-			want: Name{PkgPath: "test", Name: "AType.AMethod"},
+			want: Name{PkgPath: "pkg/test", Name: "AType.AMethod"},
 		}, {
 			obj:  types.NewMethodSet(types.NewPointer(pkg.Scope().Lookup("AType").Type())).Lookup(pkg, "APointerMethod").Obj(),
-			want: Name{PkgPath: "test", Name: "(*AType).APointerMethod"},
+			want: Name{PkgPath: "pkg/test", Name: "(*AType).APointerMethod"},
 		}, {
 			obj:  pkg.Scope().Lookup("AVariable"),
-			want: Name{PkgPath: "test", Name: "AVariable"},
+			want: Name{PkgPath: "pkg/test", Name: "AVariable"},
 		},
 	}
 

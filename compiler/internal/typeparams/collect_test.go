@@ -252,12 +252,12 @@ func TestVisitor(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.descr, func(t *testing.T) {
 			v := visitor{
-				instances: &InstanceSet{},
+				instances: &PackageInstanceSets{},
 				resolver:  test.resolver,
 				info:      info,
 			}
 			ast.Walk(&v, test.node)
-			got := v.instances.Values()
+			got := v.instances.Pkg(pkg).Values()
 			if diff := cmp.Diff(test.want, got, instanceOpts()); diff != "" {
 				t.Errorf("Discovered instance diff (-want,+got):\n%s", diff)
 			}
@@ -285,7 +285,7 @@ func TestSeedVisitor(t *testing.T) {
 
 	sv := seedVisitor{
 		visitor: visitor{
-			instances: &InstanceSet{},
+			instances: &PackageInstanceSets{},
 			resolver:  nil,
 			info:      info,
 		},
@@ -317,7 +317,7 @@ func TestSeedVisitor(t *testing.T) {
 		tInst(types.Typ[types.Int64]),
 		mInst(types.Typ[types.Int64]),
 	}
-	got := sv.instances.Values()
+	got := sv.instances.Pkg(pkg).Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != "" {
 		t.Errorf("Instances from initialSeeder contain diff (-want,+got):\n%s", diff)
 	}
@@ -349,9 +349,9 @@ func TestCollector(t *testing.T) {
 	c := Collector{
 		TContext:  types.NewContext(),
 		Info:      info,
-		Instances: &InstanceSet{},
+		Instances: &PackageInstanceSets{},
 	}
-	c.Scan(file)
+	c.Scan(pkg, file)
 
 	inst := func(name string, tArg types.Type) Instance {
 		return Instance{
@@ -371,9 +371,73 @@ func TestCollector(t *testing.T) {
 		inst("fun", types.Typ[types.Int64]),
 		inst("fun.nested", types.Typ[types.Int64]),
 	}
-	got := c.Instances.Values()
+	got := c.Instances.Pkg(pkg).Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != "" {
 		t.Errorf("Instances from initialSeeder contain diff (-want,+got):\n%s", diff)
+	}
+}
+
+func TestCollector_CrossPackage(t *testing.T) {
+	f := srctesting.New(t)
+	const src = `package foo
+	type X[T any] struct {Value T}
+
+	func F[G any](g G) {
+		x := X[G]{}
+		println(x)
+	}
+
+	func DoFoo() {
+		F(int8(8))
+	}
+	`
+	fooFile := f.Parse("foo.go", src)
+	_, fooPkg := f.Check("pkg/foo", fooFile)
+
+	const src2 = `package bar
+	import "pkg/foo"
+	func FProxy[T any](t T) {
+		foo.F[T](t)
+	}
+	func DoBar() {
+		FProxy(int16(16))
+	}
+	`
+	barFile := f.Parse("bar.go", src2)
+	_, barPkg := f.Check("pkg/bar", barFile)
+
+	c := Collector{
+		TContext:  types.NewContext(),
+		Info:      f.Info,
+		Instances: &PackageInstanceSets{},
+	}
+	c.Scan(barPkg, barFile)
+	c.Scan(fooPkg, fooFile)
+
+	inst := func(pkg *types.Package, name string, tArg types.BasicKind) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TArgs:  []types.Type{types.Typ[tArg]},
+		}
+	}
+
+	wantFooInstances := []Instance{
+		inst(fooPkg, "F", types.Int16), // Found in "pkg/foo".
+		inst(fooPkg, "F", types.Int8),
+		inst(fooPkg, "X", types.Int16), // Found due to F[int16] found in "pkg/foo".
+		inst(fooPkg, "X", types.Int8),
+	}
+	gotFooInstances := c.Instances.Pkg(fooPkg).Values()
+	if diff := cmp.Diff(wantFooInstances, gotFooInstances, instanceOpts()); diff != "" {
+		t.Errorf("Instances from pkg/foo contain diff (-want,+got):\n%s", diff)
+	}
+
+	wantBarInstances := []Instance{
+		inst(barPkg, "FProxy", types.Int16),
+	}
+	gotBarInstances := c.Instances.Pkg(barPkg).Values()
+	if diff := cmp.Diff(wantBarInstances, gotBarInstances, instanceOpts()); diff != "" {
+		t.Errorf("Instances from pkg/foo contain diff (-want,+got):\n%s", diff)
 	}
 }
 

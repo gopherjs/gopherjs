@@ -137,3 +137,33 @@ func (iset *InstanceSet) exhausted() bool { return len(iset.values) <= iset.unpr
 func (iset *InstanceSet) Values() []Instance {
 	return iset.values
 }
+
+// PackageInstanceSets stores an InstanceSet for each package in a program, keyed
+// by import path.
+type PackageInstanceSets map[string]*InstanceSet
+
+// Pkg returns InstanceSet for objects defined in the given package.
+func (i PackageInstanceSets) Pkg(pkg *types.Package) *InstanceSet {
+	path := pkg.Path()
+	iset, ok := i[path]
+	if !ok {
+		iset = &InstanceSet{}
+		i[path] = iset
+	}
+	return iset
+}
+
+// Add instances to the appropriate package's set. Automatically initialized
+// new per-package sets upon a first encounter.
+func (i PackageInstanceSets) Add(instances ...Instance) {
+	for _, inst := range instances {
+		i.Pkg(inst.Object.Pkg()).Add(inst)
+	}
+}
+
+// ID returns a unique numeric identifier assigned to an instance in the set.
+//
+// See: InstanceSet.ID().
+func (i PackageInstanceSets) ID(inst Instance) int {
+	return i.Pkg(inst.Object.Pkg()).ID(inst)
+}

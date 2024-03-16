@@ -204,3 +204,63 @@ func TestInstanceQueue(t *testing.T) {
 		t.Errorf("set.Values() returned diff (-want,+got):\n%s", diff)
 	}
 }
+
+func TestInstancesByPackage(t *testing.T) {
+	f := srctesting.New(t)
+
+	const src1 = `package foo
+	type Typ[T any, V any] []T
+	`
+	_, foo := f.Check("pkg/foo", f.Parse("foo.go", src1))
+
+	const src2 = `package bar
+	func Fun[U any, W any](x, y U) {}
+	`
+	_, bar := f.Check("pkg/bar", f.Parse("bar.go", src2))
+
+	i1 := Instance{
+		Object: foo.Scope().Lookup("Typ"),
+		TArgs:  []types.Type{types.Typ[types.String], types.Typ[types.String]},
+	}
+	i2 := Instance{
+		Object: foo.Scope().Lookup("Typ"),
+		TArgs:  []types.Type{types.Typ[types.Int], types.Typ[types.Int]},
+	}
+	i3 := Instance{
+		Object: bar.Scope().Lookup("Fun"),
+		TArgs:  []types.Type{types.Typ[types.String], types.Typ[types.String]},
+	}
+
+	t.Run("Add", func(t *testing.T) {
+		instByPkg := PackageInstanceSets{}
+		instByPkg.Add(i1, i2, i3)
+
+		gotFooInstances := instByPkg.Pkg(foo).Values()
+		wantFooInstances := []Instance{i1, i2}
+		if diff := cmp.Diff(wantFooInstances, gotFooInstances, instanceOpts()); diff != "" {
+			t.Errorf("instByPkg.Pkg(foo).Values() returned diff (-want,+got):\n%s", diff)
+		}
+
+		gotValues := instByPkg.Pkg(bar).Values()
+		wantValues := []Instance{i3}
+		if diff := cmp.Diff(wantValues, gotValues, instanceOpts()); diff != "" {
+			t.Errorf("instByPkg.Pkg(bar).Values() returned diff (-want,+got):\n%s", diff)
+		}
+	})
+
+	t.Run("ID", func(t *testing.T) {
+		instByPkg := PackageInstanceSets{}
+		instByPkg.Add(i1, i2, i3)
+
+		got := []int{
+			instByPkg.ID(i1),
+			instByPkg.ID(i2),
+			instByPkg.ID(i3),
+		}
+		want := []int{0, 1, 0}
+
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("unexpected instance IDs assigned (-want,+got):\n%s", diff)
+		}
+	})
+}

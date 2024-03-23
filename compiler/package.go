@@ -17,6 +17,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
+	"github.com/gopherjs/gopherjs/internal/experiments"
 	"github.com/neelance/astrewrite"
 	"golang.org/x/tools/go/gcexportdata"
 	"golang.org/x/tools/go/types/typeutil"
@@ -181,6 +182,9 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 	if err != nil {
 		return nil, err
+	}
+	if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil && !experiments.Env.Generics {
+		return nil, fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", importPath, genErr)
 	}
 	importContext.Packages[importPath] = typesPkg
 

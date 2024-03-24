@@ -22,20 +22,24 @@ type Fixture struct {
 	Packages map[string]*types.Package
 }
 
+func newInfo() *types.Info {
+	return &types.Info{
+		Types:      make(map[ast.Expr]types.TypeAndValue),
+		Defs:       make(map[*ast.Ident]types.Object),
+		Uses:       make(map[*ast.Ident]types.Object),
+		Implicits:  make(map[ast.Node]types.Object),
+		Selections: make(map[*ast.SelectorExpr]*types.Selection),
+		Scopes:     make(map[ast.Node]*types.Scope),
+		Instances:  make(map[*ast.Ident]types.Instance),
+	}
+}
+
 // New creates a fresh Fixture.
 func New(t *testing.T) *Fixture {
 	return &Fixture{
-		T:       t,
-		FileSet: token.NewFileSet(),
-		Info: &types.Info{
-			Types:      make(map[ast.Expr]types.TypeAndValue),
-			Defs:       make(map[*ast.Ident]types.Object),
-			Uses:       make(map[*ast.Ident]types.Object),
-			Implicits:  make(map[ast.Node]types.Object),
-			Selections: make(map[*ast.SelectorExpr]*types.Selection),
-			Scopes:     make(map[ast.Node]*types.Scope),
-			Instances:  make(map[*ast.Ident]types.Instance),
-		},
+		T:        t,
+		FileSet:  token.NewFileSet(),
+		Info:     newInfo(),
 		Packages: map[string]*types.Package{},
 	}
 }
@@ -53,19 +57,24 @@ func (f *Fixture) Parse(name, src string) *ast.File {
 // Check type correctness of the provided AST.
 //
 // Fails the test if type checking fails. Provided AST is expected not to have
-// any imports.
+// any imports. If f.Info is nil, it will create a new types.Info instance
+// to store type checking results and return it, otherwise f.Info is used.
 func (f *Fixture) Check(importPath string, files ...*ast.File) (*types.Info, *types.Package) {
 	f.T.Helper()
 	config := &types.Config{
 		Sizes:    &types.StdSizes{WordSize: 4, MaxAlign: 8},
 		Importer: f,
 	}
-	pkg, err := config.Check(importPath, f.FileSet, files, f.Info)
+	info := f.Info
+	if info == nil {
+		info = newInfo()
+	}
+	pkg, err := config.Check(importPath, f.FileSet, files, info)
 	if err != nil {
 		f.T.Fatalf("Filed to type check test source: %s", err)
 	}
 	f.Packages[importPath] = pkg
-	return f.Info, pkg
+	return info, pkg
 }
 
 // Import implements types.Importer.

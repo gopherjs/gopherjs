@@ -75,6 +75,74 @@ func (n SymName) IsMethod() (recv string, method string, ok bool) {
 	return
 }
 
+// readLinknameFromComment reads the given comment to determine if it's a go:linkname
+// directive then returns the linkname information, otherwise returns nil.
+func readLinknameFromComment(pkgPath string, comment *ast.Comment) (*GoLinkname, error) {
+	if !strings.HasPrefix(comment.Text, `//go:linkname `) {
+		return nil, nil // Not a linkname compiler directive.
+	}
+
+	fields := strings.Fields(comment.Text)
+
+	// Check that the directive comment has both parts and is on the line by itself.
+	if len(fields) != 3 {
+		if len(fields) == 2 {
+			// Ignore one-argument form //go:linkname localname
+			// This is typically used with "insert"-style links to
+			// suppresses the usual error for a function that lacks a body.
+			// The "insert"-style links aren't supported by GopherJS so
+			// these bodiless functions have to be overridden in the native anyway.
+			return nil, nil
+		}
+		return nil, fmt.Errorf(`gopherjs: usage requires 2 arguments: //go:linkname localname importpath.extname`)
+	}
+
+	localPkg, localName := pkgPath, fields[1]
+	extPkg, extName := ``, fields[2]
+
+	pathOffset := 0
+	if pos := strings.LastIndexByte(extName, '/'); pos != -1 {
+		pathOffset = pos + 1
+	}
+
+	if idx := strings.IndexByte(extName[pathOffset:], '.'); idx != -1 {
+		extPkg, extName = extName[:pathOffset+idx], extName[pathOffset+idx+1:]
+	}
+
+	return &GoLinkname{
+		Reference:      SymName{PkgPath: localPkg, Name: localName},
+		Implementation: SymName{PkgPath: extPkg, Name: extName},
+	}, nil
+}
+
+// isMitigatedVarLinkname checks if the given go:linkname directive on
+// a variable, which GopherJS doesn't support, is known about.
+// We silently ignore such directives, since it doesn't seem to cause any problems.
+func isMitigatedVarLinkname(sym SymName) bool {
+	mitigatedLinks := map[string]bool{
+		`reflect.zeroVal`:         true,
+		`math/bits.overflowError`: true, // Defaults in bits_errors_bootstrap.go
+		`math/bits.divideError`:   true, // Defaults in bits_errors_bootstrap.go
+	}
+	return mitigatedLinks[sym.String()]
+}
+
+// isMitigatedInsertLinkname checks if the given go:linkname directive
+// on a function with a body is known about.
+// These are unsupported "insert"-style go:linkname directives,
+// that we ignore as a link and handle case-by-case in native overrides.
+func isMitigatedInsertLinkname(sym SymName) bool {
+	mitigatedPkg := map[string]bool{
+		`runtime`:       true, // Lots of "insert"-style links
+		`internal/fuzz`: true, // Defaults to no-op stubs
+	}
+	mitigatedLinks := map[string]bool{
+		`internal/bytealg.runtime_cmpstring`: true,
+		`os.net_newUnixFile`:                 true,
+	}
+	return mitigatedPkg[sym.PkgPath] || mitigatedLinks[sym.String()]
+}
+
 // parseGoLinknames processed comments in a source file and extracts //go:linkname
 // compiler directive from the comments.
 //
@@ -98,43 +166,22 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 	isUnsafe := astutil.ImportsUnsafe(file)
 
 	processComment := func(comment *ast.Comment) error {
-		if !strings.HasPrefix(comment.Text, "//go:linkname ") {
-			return nil // Not a linkname compiler directive.
+		link, err := readLinknameFromComment(pkgPath, comment)
+		if err != nil || link == nil {
+			return err
 		}
-
-		// TODO(nevkontakte): Ideally we should check that the directive comment
-		// is on a line by itself, line Go compiler does, but ast.Comment doesn't
-		// provide an easy way to find that out.
 
 		if !isUnsafe {
 			return fmt.Errorf(`//go:linkname is only allowed in Go files that import "unsafe"`)
 		}
 
-		fields := strings.Fields(comment.Text)
-		if len(fields) != 3 {
-			return fmt.Errorf(`usage (all fields required): //go:linkname localname importpath.extname`)
-		}
-
-		localPkg, localName := pkgPath, fields[1]
-		extPkg, extName := "", fields[2]
-		if pos := strings.LastIndexByte(extName, '/'); pos != -1 {
-			if idx := strings.IndexByte(extName[pos+1:], '.'); idx != -1 {
-				extPkg, extName = extName[0:pos+idx+1], extName[pos+idx+2:]
-			}
-		} else if idx := strings.IndexByte(extName, '.'); idx != -1 {
-			extPkg, extName = extName[0:idx], extName[idx+1:]
-		}
-
-		obj := file.Scope.Lookup(localName)
+		obj := file.Scope.Lookup(link.Reference.Name)
 		if obj == nil {
-			return fmt.Errorf("//go:linkname local symbol %q is not found in the current source file", localName)
+			return fmt.Errorf("//go:linkname local symbol %q is not found in the current source file", link.Reference.Name)
 		}
 
 		if obj.Kind != ast.Fun {
-			if pkgPath == "math/bits" || pkgPath == "reflect" {
-				// These standard library packages are known to use go:linkname with
-				// variables, which GopherJS doesn't support. We silently ignore such
-				// directives, since it doesn't seem to cause any problems.
+			if isMitigatedVarLinkname(link.Reference) {
 				return nil
 			}
 			return fmt.Errorf("gopherjs: //go:linkname is only supported for functions, got %q", obj.Kind)
@@ -142,19 +189,14 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 
 		decl := obj.Decl.(*ast.FuncDecl)
 		if decl.Body != nil {
-			if pkgPath == "runtime" || pkgPath == "internal/bytealg" || pkgPath == "internal/fuzz" {
-				// These standard library packages are known to use unsupported
-				// "insert"-style go:linkname directives, which we ignore here and handle
-				// case-by-case in native overrides.
+			if isMitigatedInsertLinkname(link.Reference) {
 				return nil
 			}
-			return fmt.Errorf("gopherjs: //go:linkname can not insert local implementation into an external package %q", extPkg)
+			return fmt.Errorf("gopherjs: //go:linkname can not insert local implementation into an external package %q", link.Implementation.PkgPath)
 		}
+
 		// Local function has no body, treat it as a reference to an external implementation.
-		directives = append(directives, GoLinkname{
-			Reference:      SymName{PkgPath: localPkg, Name: localName},
-			Implementation: SymName{PkgPath: extPkg, Name: extName},
-		})
+		directives = append(directives, *link)
 		return nil
 	}
 

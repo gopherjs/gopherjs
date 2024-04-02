@@ -28,3 +28,21 @@ func XORBytes(dst, x, y []byte) int {
 	}
 	return n
 }
+
+//gopherjs:purge
+const (
+	wordSize          = 0
+	supportsUnaligned = false
+)
+
+//gopherjs:purge
+func xorBytes(dstb, xb, yb *byte, n int)
+
+//gopherjs:purge
+func aligned(dst, x, y *byte) bool
+
+//gopherjs:purge
+func words(x []byte) []uintptr
+
+//gopherjs:purge
+func xorLoop[T byte | uintptr](dst, x, y []T) {}

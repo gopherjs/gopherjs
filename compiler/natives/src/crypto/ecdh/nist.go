@@ -8,6 +8,9 @@ import (
 	"io"
 )
 
+//gopherjs:purge for go1.20 without generics
+type nistPoint[T any] interface{}
+
 // temporarily replacement of `nistCurve[Point nistPoint[Point]]` for go1.20 without generics.
 type nistCurve struct {
 	name        string
@@ -32,9 +35,6 @@ func (c *nistCurve) NewPublicKey(key []byte) (*PublicKey, error)
 
 //gopherjs:override-signature
 func (c *nistCurve) ecdh(local *PrivateKey, remote *PublicKey) ([]byte, error)
-
-//gopherjs:purge for go1.20 without generics
-type nistPoint[T any] interface{}
 
 // temporarily replacement for go1.20 without generics.
 var p256 = &nistCurve{

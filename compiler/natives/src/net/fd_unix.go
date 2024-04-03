@@ -3,7 +3,10 @@
 
 package net
 
-import "os"
+import (
+	"os"
+	_ "unsafe"
+)
 
 // Reversing the linkname direction
 //

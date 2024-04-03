@@ -85,23 +85,26 @@ func readLinknameFromComment(pkgPath string, comment *ast.Comment) (*GoLinkname,
 	fields := strings.Fields(comment.Text)
 
 	// Check that the directive comment has both parts and is on the line by itself.
-	if len(fields) != 3 {
-		if len(fields) == 2 {
-			// Ignore one-argument form //go:linkname localname
-			// This is typically used with "insert"-style links to
-			// suppresses the usual error for a function that lacks a body.
-			// The "insert"-style links aren't supported by GopherJS so
-			// these bodiless functions have to be overridden in the natives anyway.
-			return nil, nil
-		}
-		return nil, fmt.Errorf(`gopherjs: usage requires 2 arguments: //go:linkname localname importpath.extname`)
+	switch len(fields) {
+	case 2:
+		// Ignore one-argument form //go:linkname localName
+		// This is typically used with "insert"-style links to
+		// suppresses the usual error for a function that lacks a body.
+		// The "insert"-style links aren't supported by GopherJS so
+		// these bodiless functions have to be overridden in the natives anyway.
+		return nil, nil
+	case 3:
+		// Continue for two-argument form //go:linkname localName importPath.extName
+		break
+	default:
+		return nil, fmt.Errorf(`gopherjs: usage requires 2 arguments: //go:linkname localName importPath.extName`)
 	}
 
 	localPkg, localName := pkgPath, fields[1]
 	extPkg, extName := ``, fields[2]
 
 	if localName == extName {
-		// Ignore self referencing links, //go:linkname <localname> <localname>
+		// Ignore self referencing links, //go:linkname localName localName
 		// These function similar to one-argument links.
 		return nil, nil
 	}
@@ -134,7 +137,7 @@ func isMitigatedVarLinkname(sym SymName) bool {
 }
 
 // isMitigatedInsertLinkname checks if the given go:linkname directive
-// on a function with a body is known about.
+// on a function, where the function has a body, is known about.
 // These are unsupported "insert"-style go:linkname directives,
 // that we ignore as a link and handle case-by-case in native overrides.
 func isMitigatedInsertLinkname(sym SymName) bool {

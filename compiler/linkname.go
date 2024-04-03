@@ -91,7 +91,7 @@ func readLinknameFromComment(pkgPath string, comment *ast.Comment) (*GoLinkname,
 			// This is typically used with "insert"-style links to
 			// suppresses the usual error for a function that lacks a body.
 			// The "insert"-style links aren't supported by GopherJS so
-			// these bodiless functions have to be overridden in the native anyway.
+			// these bodiless functions have to be overridden in the natives anyway.
 			return nil, nil
 		}
 		return nil, fmt.Errorf(`gopherjs: usage requires 2 arguments: //go:linkname localname importpath.extname`)
@@ -100,6 +100,12 @@ func readLinknameFromComment(pkgPath string, comment *ast.Comment) (*GoLinkname,
 	localPkg, localName := pkgPath, fields[1]
 	extPkg, extName := ``, fields[2]
 
+	if localName == extName {
+		// Ignore self referencing links, //go:linkname <localname> <localname>
+		// These function similar to one-argument links.
+		return nil, nil
+	}
+
 	pathOffset := 0
 	if pos := strings.LastIndexByte(extName, '/'); pos != -1 {
 		pathOffset = pos + 1
@@ -107,11 +113,6 @@ func readLinknameFromComment(pkgPath string, comment *ast.Comment) (*GoLinkname,
 
 	if idx := strings.IndexByte(extName[pathOffset:], '.'); idx != -1 {
 		extPkg, extName = extName[:pathOffset+idx], extName[pathOffset+idx+1:]
-	}
-
-	if extPkg == `` && localName == extName {
-		// Ignore self referencing links, e.g. //go:linkname foo foo
-		return nil, nil
 	}
 
 	return &GoLinkname{
@@ -192,8 +193,7 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 			return fmt.Errorf("gopherjs: //go:linkname is only supported for functions, got %q", obj.Kind)
 		}
 
-		decl := obj.Decl.(*ast.FuncDecl)
-		if decl.Body != nil {
+		if decl := obj.Decl.(*ast.FuncDecl); decl.Body != nil {
 			if isMitigatedInsertLinkname(link.Reference) {
 				return nil
 			}

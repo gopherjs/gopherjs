@@ -109,6 +109,11 @@ func readLinknameFromComment(pkgPath string, comment *ast.Comment) (*GoLinkname,
 		extPkg, extName = extName[:pathOffset+idx], extName[pathOffset+idx+1:]
 	}
 
+	if extPkg == `` && localName == extName {
+		// Ignore self referencing links, e.g. //go:linkname foo foo
+		return nil, nil
+	}
+
 	return &GoLinkname{
 		Reference:      SymName{PkgPath: localPkg, Name: localName},
 		Implementation: SymName{PkgPath: extPkg, Name: extName},

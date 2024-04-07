@@ -87,6 +87,7 @@ func TestSymName(t *testing.T) {
 func TestParseGoLinknames(t *testing.T) {
 	tests := []struct {
 		desc           string
+		pkgPath        string
 		src            string
 		wantError      string
 		wantDirectives []GoLinkname
@@ -148,12 +149,22 @@ func TestParseGoLinknames(t *testing.T) {
 			`,
 			wantError: `import "unsafe"`,
 		}, {
-			desc: "gopherjs: both parameters are required",
+			desc: "gopherjs: ignore one-argument linknames",
 			src: `package testcase
 			
 			import _ "unsafe"
 
 			//go:linkname a
+			func a()
+			`,
+			wantDirectives: []GoLinkname{},
+		}, {
+			desc: `gopherjs: linkname has too many arguments`,
+			src: `package testcase
+			
+			import _ "unsafe"
+
+			//go:linkname a other/package.a too/many.args
 			func a()
 			`,
 			wantError: "usage",
@@ -178,6 +189,17 @@ func TestParseGoLinknames(t *testing.T) {
 			`,
 			wantError: `is only supported for functions`,
 		}, {
+			desc:    `gopherjs: ignore know referenced variables`,
+			pkgPath: `reflect`,
+			src: `package reflect
+			
+			import _ "unsafe"
+
+			//go:linkname zeroVal other/package.zeroVal
+			var zeroVal []bytes
+			`,
+			wantDirectives: []GoLinkname{},
+		}, {
 			desc: "gopherjs: can not insert local implementation",
 			src: `package testcase
 			
@@ -187,13 +209,60 @@ func TestParseGoLinknames(t *testing.T) {
 			func a() { println("do a") }
 			`,
 			wantError: `can not insert local implementation`,
+		}, {
+			desc:    `gopherjs: ignore known local implementation insert`,
+			pkgPath: `runtime`, // runtime is known and ignored
+			src: `package runtime
+			
+			import _ "unsafe"
+
+			//go:linkname a other/package.a
+			func a() { println("do a") }
+			`,
+			wantDirectives: []GoLinkname{},
+		}, {
+			desc: `gopherjs: link to function with receiver`,
+			// //go:linkname <localname> <importpath>.<type>.<name>
+			src: `package testcase
+			
+			import _ "unsafe"
+
+			//go:linkname a other/package.b.a
+			func a()
+			`,
+			wantDirectives: []GoLinkname{
+				{
+					Reference:      SymName{PkgPath: `testcase`, Name: `a`},
+					Implementation: SymName{PkgPath: `other/package`, Name: `b.a`},
+				},
+			},
+		}, {
+			desc: `gopherjs: link to function with pointer receiver`,
+			// //go:linkname <localname> <importpath>.<(*type)>.<name>
+			src: `package testcase
+			
+			import _ "unsafe"
+
+			//go:linkname a other/package.*b.a
+			func a()
+			`,
+			wantDirectives: []GoLinkname{
+				{
+					Reference:      SymName{PkgPath: `testcase`, Name: `a`},
+					Implementation: SymName{PkgPath: `other/package`, Name: `*b.a`},
+				},
+			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			file, fset := parseSource(t, test.src)
-			directives, err := parseGoLinknames(fset, "testcase", file)
+			pkgPath := `testcase`
+			if len(test.pkgPath) > 0 {
+				pkgPath = test.pkgPath
+			}
+			directives, err := parseGoLinknames(fset, pkgPath, file)
 
 			if test.wantError != "" {
 				if err == nil {

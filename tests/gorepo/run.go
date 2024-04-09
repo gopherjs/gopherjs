@@ -161,6 +161,10 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue53309.go": {category: usesUnsupportedGenerics, desc: "Checking unused type parameter in method call to interface"},
 	"fixedbugs/issue53635.go": {category: usesUnsupportedGenerics, desc: "Checking switch type against nil type with unsupported type parameters"},
 	"fixedbugs/issue53653.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format of int64 is different from Go's"},
+
+	// These are new tests in Go 1.20
+	//"fixedbugs/issue13169.go":  {desc: "slow, > 20 secs"},
+	"fixedbugs/issue25897a.go": {category: neverTerminates, desc: "does for { runtime.GC() }"},
 }
 
 type failCategory uint8
@@ -506,7 +510,7 @@ func goDirPackages(longdir string) ([][]string, error) {
 	return pkgs, nil
 }
 
-type context struct {
+type envContext struct {
 	GOOS   string
 	GOARCH string
 }
@@ -530,7 +534,7 @@ func shouldTest(src string, goos, goarch string) (ok bool, whyNot string) {
 		if len(line) == 0 || line[0] != '+' {
 			continue
 		}
-		ctxt := &context{
+		ctxt := &envContext{
 			GOOS:   goos,
 			GOARCH: goarch,
 		}
@@ -553,7 +557,7 @@ func shouldTest(src string, goos, goarch string) (ok bool, whyNot string) {
 	return true, ""
 }
 
-func (ctxt *context) match(name string) bool {
+func (ctxt *envContext) match(name string) bool {
 	if name == "" {
 		return false
 	}
@@ -709,6 +713,18 @@ func (t *test) run() {
 			cmd.Dir = t.tempDir
 			cmd.Env = envForDir(cmd.Dir)
 		}
+
+		timeoutCh := make(chan bool)
+		defer close(timeoutCh)
+		go func() {
+			const wait = 30
+			select {
+			case <-time.After(wait * time.Second):
+				panic(fmt.Errorf(`test ran more than %d seconds: %v`, wait, args))
+			case <-timeoutCh:
+			}
+		}()
+
 		err := cmd.Run()
 		if err != nil {
 			err = fmt.Errorf("%s\n%s", err, buf.Bytes())

@@ -148,6 +148,7 @@ func isMitigatedInsertLinkname(sym SymName) bool {
 	mitigatedLinks := map[string]bool{
 		`internal/bytealg.runtime_cmpstring`: true,
 		`os.net_newUnixFile`:                 true,
+		`runtime/cgo._iscgo`:                 true,
 	}
 	return mitigatedPkg[sym.PkgPath] || mitigatedLinks[sym.String()]
 }

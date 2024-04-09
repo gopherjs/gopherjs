@@ -510,7 +510,7 @@ func goDirPackages(longdir string) ([][]string, error) {
 	return pkgs, nil
 }
 
-type envContext struct {
+type context struct {
 	GOOS   string
 	GOARCH string
 }
@@ -534,7 +534,7 @@ func shouldTest(src string, goos, goarch string) (ok bool, whyNot string) {
 		if len(line) == 0 || line[0] != '+' {
 			continue
 		}
-		ctxt := &envContext{
+		ctxt := &context{
 			GOOS:   goos,
 			GOARCH: goarch,
 		}
@@ -557,7 +557,7 @@ func shouldTest(src string, goos, goarch string) (ok bool, whyNot string) {
 	return true, ""
 }
 
-func (ctxt *envContext) match(name string) bool {
+func (ctxt *context) match(name string) bool {
 	if name == "" {
 		return false
 	}

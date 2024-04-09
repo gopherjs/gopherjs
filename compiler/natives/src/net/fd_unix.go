@@ -5,7 +5,7 @@ package net
 
 import (
 	"os"
-	_ "unsafe"
+	_ "unsafe" // for go:linkname
 )
 
 // Reversing the linkname direction

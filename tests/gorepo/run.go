@@ -22,6 +22,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"go/build"
+	"go/build/constraint"
 	"hash/fnv"
 	"io"
 	"log"
@@ -35,9 +37,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	gbuild "github.com/gopherjs/gopherjs/build"
-	"github.com/gopherjs/gopherjs/build/tags"
 )
 
 // -----------------------------------------------------------------------------
@@ -510,6 +512,73 @@ func goDirPackages(longdir string) ([][]string, error) {
 	return pkgs, nil
 }
 
+type context struct {
+	GOOS   string
+	GOARCH string
+}
+
+// shouldTest looks for build tags in a source file and returns
+// whether the file should be used according to the tags.
+func shouldTest(src string, goos, goarch string) (ok bool, whyNot string) {
+	// GOPHERJS: Custom rule, treat js as equivalent to nacl.
+	if goarch == "js" {
+		goarch = "nacl"
+	}
+
+	for _, line := range strings.Split(src, "\n") {
+		if strings.HasPrefix(line, "package ") {
+			break
+		}
+
+		if expr, err := constraint.Parse(line); err == nil {
+			ctxt := &context{
+				GOOS:   goos,
+				GOARCH: goarch,
+			}
+
+			if !expr.Eval(ctxt.match) {
+				return false, line
+			}
+		}
+	}
+	return true, ""
+}
+
+func (ctxt *context) match(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	// Tags must be letters, digits, underscores or dots.
+	// Unlike in Go identifiers, all digits are fine (e.g., "386").
+	for _, c := range name {
+		if !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '_' && c != '.' {
+			return false
+		}
+	}
+
+	if strings.HasPrefix(name, "goexperiment.") {
+		for _, tag := range build.Default.ToolTags {
+			if tag == name {
+				return true
+			}
+		}
+		return false
+	}
+
+	if name == ctxt.GOOS || name == ctxt.GOARCH {
+		return true
+	}
+
+	if name == "test_run" || name == "gcflags_noopt" {
+		return true
+	}
+
+	return false
+}
+
+func init() { checkShouldTest() }
+
 // run runs a test.
 func (t *test) run() {
 	start := time.Now()
@@ -536,22 +605,23 @@ func (t *test) run() {
 	}
 
 	// Execution recipe stops at first blank line.
-	pos := strings.Index(t.src, "\n\n")
-	if pos == -1 {
-		t.err = errors.New("double newline not found")
+	action, _, ok := strings.Cut(t.src, "\n\n")
+	if !ok {
+		t.err = fmt.Errorf("double newline ending execution recipe not found in %s", t.goFileName())
 		return
 	}
-	action := t.src[:pos]
-	if nl := strings.Index(action, "\n"); nl >= 0 && strings.Contains(action[:nl], "+build") {
+	if firstLine, rest, ok := strings.Cut(action, "\n"); ok && strings.Contains(firstLine, "+build") {
 		// skip first line
-		action = action[nl+1:]
+		action = rest
 	}
-	if strings.HasPrefix(action, "//") {
-		action = action[2:]
-	}
+	action = strings.TrimPrefix(action, "//")
 
-	// Check for build constraints
-	if ok, why := tags.Match(t.src, goos, goarch); !ok {
+	// Check for build constraints only up to the actual code.
+	header, _, ok := strings.Cut(t.src, "\npackage")
+	if !ok {
+		header = action // some files are intentionally malformed
+	}
+	if ok, why := shouldTest(header, goos, goarch); !ok {
 		t.action = "skip"
 		if *showSkips {
 			fmt.Printf("%-20s %-20s: %s\n", t.action, t.goFileName(), why)
@@ -1135,6 +1205,41 @@ func defaultRunOutputLimit() int {
 		cpu = maxArmCPU
 	}
 	return cpu
+}
+
+// checkShouldTest runs sanity checks on the shouldTest function.
+func checkShouldTest() {
+	assert := func(ok bool, _ string) {
+		if !ok {
+			panic("fail")
+		}
+	}
+	assertNot := func(ok bool, _ string) { assert(!ok, "") }
+
+	// Simple tests.
+	assert(shouldTest("// +build linux", "linux", "arm"))
+	assert(shouldTest("// +build !windows", "linux", "arm"))
+	assertNot(shouldTest("// +build !windows", "windows", "amd64"))
+
+	// A file with no build tags will always be tested.
+	assert(shouldTest("// This is a test.", "os", "arch"))
+
+	// Build tags separated by a space are OR-ed together.
+	assertNot(shouldTest("// +build arm 386", "linux", "amd64"))
+
+	// Build tags separated by a comma are AND-ed together.
+	assertNot(shouldTest("// +build !windows,!plan9", "windows", "amd64"))
+	assertNot(shouldTest("// +build !windows,!plan9", "plan9", "386"))
+
+	// Build tags on multiple lines are AND-ed together.
+	assert(shouldTest("// +build !windows\n// +build amd64", "linux", "amd64"))
+	assertNot(shouldTest("// +build !windows\n// +build amd64", "windows", "amd64"))
+
+	// Test that (!a OR !b) matches anything.
+	assert(shouldTest("// +build !windows !plan9", "windows", "amd64"))
+
+	// GOPHERJS: Custom rule, test that don't run on nacl should also not run on js.
+	assertNot(shouldTest("// +build !nacl,!plan9,!windows", "darwin", "js"))
 }
 
 // envForDir returns a copy of the environment

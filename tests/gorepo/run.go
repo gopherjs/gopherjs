@@ -35,9 +35,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	gbuild "github.com/gopherjs/gopherjs/build"
+	"github.com/gopherjs/gopherjs/build/tags"
 )
 
 // -----------------------------------------------------------------------------
@@ -510,85 +510,6 @@ func goDirPackages(longdir string) ([][]string, error) {
 	return pkgs, nil
 }
 
-type context struct {
-	GOOS   string
-	GOARCH string
-}
-
-// shouldTest looks for build tags in a source file and returns
-// whether the file should be used according to the tags.
-func shouldTest(src string, goos, goarch string) (ok bool, whyNot string) {
-	// Custom rule, treat js as equivalent to nacl.
-	if goarch == "js" {
-		goarch = "nacl"
-	}
-
-	for _, line := range strings.Split(src, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "//") {
-			line = line[2:]
-		} else {
-			continue
-		}
-		line = strings.TrimSpace(line)
-		if len(line) == 0 || line[0] != '+' {
-			continue
-		}
-		ctxt := &context{
-			GOOS:   goos,
-			GOARCH: goarch,
-		}
-		words := strings.Fields(line)
-		if words[0] == "+build" {
-			ok := false
-			for _, word := range words[1:] {
-				if ctxt.match(word) {
-					ok = true
-					break
-				}
-			}
-			if !ok {
-				// no matching tag found.
-				return false, line
-			}
-		}
-	}
-	// no build tags
-	return true, ""
-}
-
-func (ctxt *context) match(name string) bool {
-	if name == "" {
-		return false
-	}
-	if i := strings.Index(name, ","); i >= 0 {
-		// comma-separated list
-		return ctxt.match(name[:i]) && ctxt.match(name[i+1:])
-	}
-	if strings.HasPrefix(name, "!!") { // bad syntax, reject always
-		return false
-	}
-	if strings.HasPrefix(name, "!") { // negation
-		return len(name) > 1 && !ctxt.match(name[1:])
-	}
-
-	// Tags must be letters, digits, underscores or dots.
-	// Unlike in Go identifiers, all digits are fine (e.g., "386").
-	for _, c := range name {
-		if !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '_' && c != '.' {
-			return false
-		}
-	}
-
-	if name == ctxt.GOOS || name == ctxt.GOARCH {
-		return true
-	}
-
-	return false
-}
-
-func init() { checkShouldTest() }
-
 // run runs a test.
 func (t *test) run() {
 	start := time.Now()
@@ -629,12 +550,8 @@ func (t *test) run() {
 		action = action[2:]
 	}
 
-	// Check for build constraints only up to the actual code.
-	pkgPos := strings.Index(t.src, "\npackage")
-	if pkgPos == -1 {
-		pkgPos = pos // some files are intentionally malformed
-	}
-	if ok, why := shouldTest(t.src[:pkgPos], goos, goarch); !ok {
+	// Check for build constraints
+	if ok, why := tags.Match(t.src, goos, goarch); !ok {
 		t.action = "skip"
 		if *showSkips {
 			fmt.Printf("%-20s %-20s: %s\n", t.action, t.goFileName(), why)
@@ -1218,41 +1135,6 @@ func defaultRunOutputLimit() int {
 		cpu = maxArmCPU
 	}
 	return cpu
-}
-
-// checkShouldTest runs sanity checks on the shouldTest function.
-func checkShouldTest() {
-	assert := func(ok bool, _ string) {
-		if !ok {
-			panic("fail")
-		}
-	}
-	assertNot := func(ok bool, _ string) { assert(!ok, "") }
-
-	// Simple tests.
-	assert(shouldTest("// +build linux", "linux", "arm"))
-	assert(shouldTest("// +build !windows", "linux", "arm"))
-	assertNot(shouldTest("// +build !windows", "windows", "amd64"))
-
-	// A file with no build tags will always be tested.
-	assert(shouldTest("// This is a test.", "os", "arch"))
-
-	// Build tags separated by a space are OR-ed together.
-	assertNot(shouldTest("// +build arm 386", "linux", "amd64"))
-
-	// Build tags separated by a comma are AND-ed together.
-	assertNot(shouldTest("// +build !windows,!plan9", "windows", "amd64"))
-	assertNot(shouldTest("// +build !windows,!plan9", "plan9", "386"))
-
-	// Build tags on multiple lines are AND-ed together.
-	assert(shouldTest("// +build !windows\n// +build amd64", "linux", "amd64"))
-	assertNot(shouldTest("// +build !windows\n// +build amd64", "windows", "amd64"))
-
-	// Test that (!a OR !b) matches anything.
-	assert(shouldTest("// +build !windows !plan9", "windows", "amd64"))
-
-	// GOPHERJS: Custom rule, test that don't run on nacl should also not run on js.
-	assertNot(shouldTest("// +build !nacl,!plan9,!windows", "darwin", "js"))
 }
 
 // envForDir returns a copy of the environment

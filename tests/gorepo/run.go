@@ -26,7 +26,6 @@ import (
 	"go/build/constraint"
 	"hash/fnv"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -487,7 +486,7 @@ func goDirFiles(longdir string) (filter []os.DirEntry, err error) {
 var packageRE = regexp.MustCompile(`(?m)^package ([\p{Lu}\p{Ll}\w]+)`)
 
 func getPackageNameFromSource(fn string) (string, error) {
-	data, err := os.ReadFile(fn) // GOPHERJS: Updated to not use deprecated ioutil.ReadFile
+	data, err := os.ReadFile(fn)
 	if err != nil {
 		return "", err
 	}
@@ -889,29 +888,17 @@ func (t *test) run() {
 			t.err = err
 			return
 		}
-		// Split flags into gcflags and ldflags
-		ldflags := []string{}
-		for i, fl := range flags {
-			if fl == "-ldflags" {
-				ldflags = flags[i+1:]
-				flags = flags[0:i]
-				break
-			}
-		}
-
-		importcfgfile := importcfg(longdir, pkgs)
 
 		for i, pkg := range pkgs {
-			_, err := compileInDir(runcmd, longdir, flags, importcfgfile, pkg.name, pkg.files...)
+			_, err := compileInDir(runcmd, longdir, flags, pkg.name, pkg.files...)
 			// Allow this package compilation fail based on conditions below;
 			// its errors were checked in previous case.
-			if err != nil && !(wantError && action == "errorcheckandrundir" && i == len(pkgs)-2) {
+			if err != nil {
 				t.err = err
 				return
 			}
-
 			if i == len(pkgs)-1 {
-				err = linkFile(runcmd, pkg.files[0], importcfgfile, ldflags)
+				err = linkFile(runcmd, pkg.files[0])
 				if err != nil {
 					t.err = err
 					return
@@ -929,44 +916,14 @@ func (t *test) run() {
 			}
 		}
 
-	// GOPHERJS: Doesn't support case "runindir"
 	case "build":
-		// Build Go file.
-		cmd := []string{goTool(), "build"} // GOPHERJS: No goGcflags
-		cmd = append(cmd, flags...)
-		cmd = append(cmd, "-o", "a.exe", long)
-		_, err := runcmd(cmd...)
+		_, err := runcmd("go", "build", "-o", "a.exe", long)
 		if err != nil {
 			t.err = err
 		}
-
-	// GOPHERJS: Doesn't support case "builddir", "buildrundir"
-	case "buildrun":
-		// Build an executable from Go file, then run it, verify its output.
-		// Useful for timeout tests where failure mode is infinite loop.
-		// TODO: not supported on NaCl
-		cmd := []string{goTool(), "build", "-o", "a.exe"} // GOPHERJS: No goGcflags
-		if *linkshared {
-			cmd = append(cmd, "-linkshared")
-		}
-		longdirgofile := filepath.Join(filepath.Join(cwd, t.dir), t.gofile)
-		cmd = append(cmd, flags...)
-		cmd = append(cmd, longdirgofile)
-		_, err := runcmd(cmd...)
-		if err != nil {
-			t.err = err
-			return
-		}
-		cmd = []string{"./a.exe"}
-		out, err := runcmd(append(cmd, args...)...)
-		if err != nil {
-			t.err = err
-			return
-		}
-
-		t.checkExpectedOutput(out)
 
 	case "run":
+		useTmp = false
 		// GOPHERJS.
 		out, err := runcmd(append([]string{"gopherjs", "run", t.goFileName()}, args...)...)
 		if err != nil {
@@ -976,34 +933,22 @@ func (t *test) run() {
 		t.checkExpectedOutput(out)
 
 	case "runoutput":
-		// Run Go file and write its output into temporary Go file.
-		// Run generated Go file and verify its output.
 		rungatec <- true
 		defer func() {
 			<-rungatec
 		}()
-		runInDir = ""
-		cmd := []string{goTool(), "run"} // GOPHERJS: No goGcflags
-		if *linkshared {
-			cmd = append(cmd, "-linkshared")
-		}
-		cmd = append(cmd, t.goFileName())
-		out, err := runcmd(append(cmd, args...)...)
+		useTmp = false
+		out, err := runcmd(append([]string{"go", "run", t.goFileName()}, args...)...)
 		if err != nil {
 			t.err = err
 			return
 		}
 		tfile := filepath.Join(t.tempDir, "tmp__.go")
-		if err := os.WriteFile(tfile, out, 0o666); err != nil { // GOPHERJS: Update to not use deprecated ioutil.WriteFile
+		if err := os.WriteFile(tfile, out, 0o666); err != nil {
 			t.err = fmt.Errorf("write tempfile:%s", err)
 			return
 		}
-		cmd = []string{goTool(), "run"} // GOPHERJS: No goGcflags
-		if *linkshared {
-			cmd = append(cmd, "-linkshared")
-		}
-		cmd = append(cmd, tfile)
-		out, err = runcmd(cmd...)
+		out, err = runcmd("go", "run", tfile)
 		if err != nil {
 			t.err = err
 			return
@@ -1011,26 +956,19 @@ func (t *test) run() {
 		t.checkExpectedOutput(out)
 
 	case "errorcheckoutput":
-		// Run Go file and write its output into temporary Go file.
-		// Compile and errorCheck generated Go file.
-		runInDir = ""
-		cmd := []string{goTool(), "run"} // GOPHERJS: No goGcflags
-		if *linkshared {
-			cmd = append(cmd, "-linkshared")
-		}
-		cmd = append(cmd, t.goFileName())
-		out, err := runcmd(append(cmd, args...)...)
+		useTmp = false
+		out, err := runcmd(append([]string{"go", "run", t.goFileName()}, args...)...)
 		if err != nil {
 			t.err = err
 			return
 		}
 		tfile := filepath.Join(t.tempDir, "tmp__.go")
-		err = os.WriteFile(tfile, out, 0o666) // GOPHERJS: Update to not use deprecated ioutil.WriteFile
+		err = os.WriteFile(tfile, out, 0o666)
 		if err != nil {
 			t.err = fmt.Errorf("write tempfile:%s", err)
 			return
 		}
-		cmdline := []string{goTool(), "tool", "compile", "-importcfg=" + stdlibImportcfgFile(), "-p=p", "-d=panic", "-e", "-o", "a.o"}
+		cmdline := []string{"go", "tool", "compile", "-e", "-o", "a.o"}
 		cmdline = append(cmdline, flags...)
 		cmdline = append(cmdline, tfile)
 		out, err = runcmd(cmdline...)
@@ -1073,7 +1011,7 @@ func (t *test) String() string {
 
 func (t *test) makeTempDir() {
 	var err error
-	t.tempDir, err = os.MkdirTemp("", "") // GOPHERJS: Updated to not use deprecated ioutil.TempDir
+	t.tempDir, err = os.MkdirTemp("", "")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -1094,7 +1032,7 @@ func (t *test) checkExpectedOutput(gotBytes []byte) {
 	filename := filepath.Join(t.dir, t.gofile)
 	filename = filename[:len(filename)-len(".go")]
 	filename += ".out"
-	b, err := ioutil.ReadFile(filename)
+	b, err := os.ReadFile(filename)
 	// File is allowed to be missing (err != nil) in which case output should be empty.
 	got = strings.Replace(got, "\r\n", "\n", -1)
 	if got != string(b) {
@@ -1216,7 +1154,7 @@ func (t *test) errorCheck(outStr string, wantAuto bool, fullshort ...string) (er
 func (t *test) updateErrors(out, file string) {
 	base := path.Base(file)
 	// Read in source file.
-	src, err := os.ReadFile(file) // GOPHERJS: Updated to not use deprectated ioutil.ReadFile
+	src, err := os.ReadFile(file)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return

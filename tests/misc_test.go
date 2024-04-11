@@ -900,7 +900,7 @@ func TestReflectSetForEmbed(t *testing.T) {
 	f0 := e.Field(0)
 	e.Set(in)
 	if e.Field(0) != f0 {
-		t.Fatalf("relfect.Set got %v, want %v", f0, e.Field(0))
+		t.Fatalf("reflect.Set got %v, want %v", f0, e.Field(0))
 	}
 }
 

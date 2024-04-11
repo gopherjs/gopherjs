@@ -653,10 +653,9 @@ func (t *test) run() {
 		return
 	}
 
-	var args, flags, runenv []string
+	var args, flags []string
 	var tim int
 	wantError := false
-	wantAuto := false
 	singlefilepkgs := false
 	f, err := splitQuoted(action)
 	if err != nil {
@@ -687,13 +686,6 @@ func (t *test) run() {
 		fallthrough
 	case "compile", "compiledir", "build", "run", "runoutput", "rundir":
 		t.action = action
-	case "errorcheckandrundir":
-		t.action = "errorcheck"
-		wantError = false // should be no error if also will run
-	case "errorcheckwithauto":
-		t.action = "errorcheck"
-		wantAuto = true
-		wantError = true
 	case "errorcheck", "errorcheckdir", "errorcheckoutput":
 		t.action = action
 		wantError = true
@@ -739,14 +731,10 @@ func (t *test) run() {
 	}
 
 	t.makeTempDir()
-	if !*keep {
-		defer os.RemoveAll(t.tempDir)
-	}
+	defer os.RemoveAll(t.tempDir)
 
-	err = os.WriteFile(filepath.Join(t.tempDir, t.gofile), srcBytes, 0o644) // GOPHERJS: Updated to not use deprecated ioutil.WriteFile
-	if err != nil {
-		log.Fatal(err)
-	}
+	err = os.WriteFile(filepath.Join(t.tempDir, t.gofile), srcBytes, 0o644)
+	check(err)
 
 	// A few tests (of things like the environment) require these to be set.
 	if os.Getenv("GOOS") == "" {
@@ -756,45 +744,19 @@ func (t *test) run() {
 		os.Setenv("GOARCH", goarch)
 	}
 
-	var (
-		runInDir        = t.tempDir
-		tempDirIsGOPATH = false
-	)
+	useTmp := true
 	runcmd := func(args ...string) ([]byte, error) {
 		cmd := exec.Command(args[0], args[1:]...)
 		var buf bytes.Buffer
 		cmd.Stdout = &buf
 		cmd.Stderr = &buf
 		cmd.Env = append(os.Environ(), "GOENV=off", "GOFLAGS=")
-		if runInDir != "" {
-			cmd.Dir = runInDir
-			// Set PWD to match Dir to speed up os.Getwd in the child process.
-			cmd.Env = append(cmd.Env, "PWD="+cmd.Dir)
+		if useTmp {
+			cmd.Dir = t.tempDir
+			cmd.Env = envForDir(cmd.Dir)
 		}
-		if tempDirIsGOPATH {
-			cmd.Env = append(cmd.Env, "GOPATH="+t.tempDir)
-		}
-		cmd.Env = append(cmd.Env, "STDLIB_IMPORTCFG="+stdlibImportcfgFile())
-		// Put the bin directory of the GOROOT that built this program
-		// first in the path. This ensures that tests that use the "go"
-		// tool use the same one that built this program. This ensures
-		// that if you do "../bin/go run run.go" in this directory, all
-		// the tests that start subprocesses that "go tool compile" or
-		// whatever, use ../bin/go as their go tool, not whatever happens
-		// to be first in the user's path.
-		path := os.Getenv("PATH")
-		newdir := filepath.Join(runtime.GOROOT(), "bin")
-		if path != "" {
-			path = newdir + string(filepath.ListSeparator) + path
-		} else {
-			path = newdir
-		}
-		cmd.Env = append(cmd.Env, "PATH="+path)
-
-		cmd.Env = append(cmd.Env, runenv...)
 
 		var err error
-
 		if tim != 0 {
 			err = cmd.Start()
 			// This command-timeout code adapted from cmd/go/test.go
@@ -832,30 +794,13 @@ func (t *test) run() {
 		return buf.Bytes(), err
 	}
 
-	importcfg := func(dir string, pkgs []*goDirPkg) string {
-		cfg := stdlibImportcfg()
-		for _, pkg := range pkgs {
-			pkgpath := path.Join("test", strings.TrimSuffix(pkg.files[0], ".go"))
-			cfg += "\npackagefile " + pkgpath + "=" + filepath.Join(t.tempDir, pkgpath+".a")
-		}
-		filename := filepath.Join(t.tempDir, "importcfg")
-		os.WriteFile(filename, []byte(cfg), 0644)
-		return filename
-	}
-
 	long := filepath.Join(cwd, t.goFileName())
 	switch action {
 	default:
 		t.err = fmt.Errorf("unimplemented action %q", action)
 
-	// GOPHERJS: Doesn't support case "asmcheck"
 	case "errorcheck":
-		// Compile Go file.
-		// Fail if wantError is true and compilation was successful and vice versa.
-		// Match errors produced by gc against errors in comments.
-		// TODO(gri) remove need for -C (disable printing of columns in error messages)
-		cmdline := []string{goTool(), "tool", "compile", "-p=p", "-d=panic", "-C", "-e", "-importcfg=" + stdlibImportcfgFile(), "-o", "a.o"}
-		// No need to add -dynlink even if linkshared if we're just checking for errors...
+		cmdline := []string{"go", "tool", "compile", "-e", "-o", "a.o"}
 		cmdline = append(cmdline, flags...)
 		cmdline = append(cmdline, long)
 		out, err := runcmd(cmdline...)
@@ -877,11 +822,11 @@ func (t *test) run() {
 		if *updateErrors {
 			t.updateErrors(string(out), long)
 		}
-		t.err = t.errorCheck(string(out), wantAuto, long, t.gofile)
+		t.err = t.errorCheck(string(out), long, t.gofile)
+		return
 
 	case "compile":
-		// Compile Go file.
-		_, t.err = compileFile(runcmd, long, flags)
+		_, t.err = compileFile(runcmd, long)
 
 	case "compiledir":
 		// Compile all files in the directory as packages in lexicographic order.
@@ -891,10 +836,9 @@ func (t *test) run() {
 			t.err = err
 			return
 		}
-		importcfgfile := importcfg(longdir, pkgs)
 
 		for _, pkg := range pkgs {
-			_, t.err = compileInDir(runcmd, longdir, flags, importcfgfile, pkg.name, pkg.files...)
+			_, t.err = compileInDir(runcmd, longdir, flags, pkg.name, pkg.files...)
 			if t.err != nil {
 				return
 			}

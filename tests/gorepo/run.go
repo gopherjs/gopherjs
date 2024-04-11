@@ -844,11 +844,9 @@ func (t *test) run() {
 			}
 		}
 
-	case "errorcheckdir", "errorcheckandrundir":
-		flags = append(flags, "-d=panic")
-		// Compile and errorCheck all files in the directory as packages in lexicographic order.
-		// If errorcheckdir and wantError, compilation of the last package must fail.
-		// If errorcheckandrundir and wantError, compilation of the package prior the last must fail.
+	case "errorcheckdir":
+		// errorcheck all files in lexicographic order
+		// useful for finding importing errors
 		longdir := filepath.Join(cwd, t.goDirName())
 		pkgs, err := goDirPackages(longdir, singlefilepkgs)
 		if err != nil {
@@ -856,14 +854,8 @@ func (t *test) run() {
 			return
 		}
 		errPkg := len(pkgs) - 1
-		if wantError && action == "errorcheckandrundir" {
-			// The last pkg should compiled successfully and will be run in next case.
-			// Preceding pkg must return an error from compileInDir.
-			errPkg--
-		}
-		importcfgfile := importcfg(longdir, pkgs)
 		for i, pkg := range pkgs {
-			out, err := compileInDir(runcmd, longdir, flags, importcfgfile, pkg.name, pkg.files...)
+			out, err := compileInDir(runcmd, longdir, pkg.name, pkg.files...)
 			if i == errPkg {
 				if wantError && err == nil {
 					t.err = fmt.Errorf("compilation succeeded unexpectedly\n%s", out)
@@ -880,15 +872,11 @@ func (t *test) run() {
 			for _, name := range pkg.files {
 				fullshort = append(fullshort, filepath.Join(longdir, name), name)
 			}
-			t.err = t.errorCheck(string(out), wantAuto, fullshort...)
+			t.err = t.errorCheck(string(out), fullshort...)
 			if t.err != nil {
 				break
 			}
 		}
-		if action == "errorcheckdir" {
-			return
-		}
-		fallthrough
 
 	case "rundir":
 		// Compile all files in the directory as packages in lexicographic order.

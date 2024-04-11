@@ -26,6 +26,7 @@ import (
 	"go/build/constraint"
 	"hash/fnv"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -36,6 +37,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -191,11 +193,15 @@ type failReason struct {
 // -----------------------------------------------------------------------------
 
 var (
+	// GOPHERJS: Doesn't support `allCodegen` or `force`.
 	verbose        = flag.Bool("v", false, "verbose. if set, parallelism is set to 1.")
+	keep           = flag.Bool("k", false, "keep. keep temporary directory.")
 	numParallel    = flag.Int("n", runtime.NumCPU(), "number of parallel tests to run")
 	summary        = flag.Bool("summary", false, "show summary of results")
 	showSkips      = flag.Bool("show_skips", false, "show skipped tests")
-	showKnownFails = flag.Bool("show_known_fails", false, "show full error output of known fails")
+	runSkips       = flag.Bool("run_skips", false, "run skipped tests (ignore skip and build tags)")
+	linkshared     = flag.Bool("linkshared", false, "")
+	showKnownFails = flag.Bool("show_known_fails", false, "show full error output of known fails") // GOPHERJS: Added
 	updateErrors   = flag.Bool("update_errors", false, "update error messages in test file based on compiler output")
 	runoutputLimit = flag.Int("l", defaultRunOutputLimit(), "number of parallel runoutput tests to run")
 
@@ -208,7 +214,7 @@ var (
 
 	// dirs are the directories to look for *.go files in.
 	// TODO(bradfitz): just use all directories?
-	dirs = []string{".", "ken", "chan", "interface", "syntax", "dwarf", "fixedbugs"}
+	dirs = []string{".", "ken", "chan", "interface", "syntax", "dwarf", "fixedbugs", "codegen", "runtime", "abi", "typeparam", "typeparam/mdempsky"}
 
 	// ratec controls the max number of tests running at a time.
 	ratec chan bool
@@ -242,14 +248,16 @@ func main() {
 	findExecCmd()
 
 	// Disable parallelism if using a simulator.
-	// Do not disable parallelism in verbose mode, since Go's file IO had internal
+	// GOPHERJS: Do not disable parallelism in verbose mode, since Go's file IO had internal
 	// r/w locking, which should make significant output garbling very unlikely.
-	// GopherJS CI setup runs these tests in verbose mode, but it can benefit from
+	// GOPHERJS: CI setup runs these tests in verbose mode, but it can benefit from
 	// parallelism a lot.
 	if len(findExecCmd()) > 0 {
 		*numParallel = 1
+		*runoutputLimit = 1
 	}
 
+	// GOPHERJS: Additional verbose output
 	if *verbose {
 		fmt.Printf("goos: %q, goarch: %q\n", goos, goarch)
 		fmt.Printf("parallel: %d\n", *numParallel)
@@ -314,6 +322,7 @@ func main() {
 			status = "FAIL"
 		}
 		if test.err != nil {
+			// GOPHERJS: Ignore expectFail, see initExpectFail in original go/test/run.go
 			status = "FAIL"
 			errStr = test.err.Error()
 		}
@@ -325,6 +334,7 @@ func main() {
 			failed = true
 		}
 		resCount[status]++
+		// GOPHERJS.
 		if status == "skip" && !*verbose && !*showSkips {
 			continue
 		}
@@ -359,6 +369,22 @@ func main() {
 	}
 }
 
+// goTool reports the path of the go tool to use to run the tests.
+// If possible, use the same Go used to run run.go, otherwise
+// fallback to the go version found in the PATH.
+func goTool() string {
+	var exeSuffix string
+	if runtime.GOOS == "windows" {
+		exeSuffix = ".exe"
+	}
+	path := filepath.Join(runtime.GOROOT(), "bin", "go"+exeSuffix)
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	// Just run "go" from PATH
+	return "go"
+}
+
 func shardMatch(name string) bool {
 	if *shards == 0 {
 		return true
@@ -370,9 +396,14 @@ func shardMatch(name string) bool {
 
 func goFiles(dir string) []string {
 	f, err := os.Open(dir)
-	check(err)
+	if err != nil {
+		log.Fatal(err)
+	}
 	dirnames, err := f.Readdirnames(-1)
-	check(err)
+	f.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
 	names := []string{}
 	for _, name := range dirnames {
 		if !strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".go") && shardMatch(name) {
@@ -385,21 +416,80 @@ func goFiles(dir string) []string {
 
 type runCmd func(...string) ([]byte, error)
 
-func compileFile(runcmd runCmd, longname string) (out []byte, err error) {
-	return runcmd("go", "tool", "compile", "-e", longname)
+func compileFile(runcmd runCmd, longname string, flags []string) (out []byte, err error) {
+	cmd := []string{goTool(), "tool", "compile", "-e", "-p=p", "-importcfg=" + stdlibImportcfgFile()}
+	cmd = append(cmd, flags...)
+	if *linkshared {
+		cmd = append(cmd, "-dynlink", "-installsuffix=dynlink")
+	}
+	cmd = append(cmd, longname)
+	return runcmd(cmd...)
 }
 
-func compileInDir(runcmd runCmd, dir string, names ...string) (out []byte, err error) {
-	cmd := []string{"go", "tool", "compile", "-e", "-D", ".", "-I", "."}
+func compileInDir(runcmd runCmd, dir string, flags []string, importcfg string, pkgname string, names ...string) (out []byte, err error) {
+	if importcfg == "" {
+		importcfg = stdlibImportcfgFile()
+	}
+	cmd := []string{goTool(), "tool", "compile", "-e", "-D", "test", "-importcfg=" + importcfg}
+	if pkgname == "main" {
+		cmd = append(cmd, "-p=main")
+	} else {
+		pkgname = path.Join("test", strings.TrimSuffix(names[0], ".go"))
+		cmd = append(cmd, "-o", pkgname+".a", "-p", pkgname)
+	}
+	cmd = append(cmd, flags...)
+	if *linkshared {
+		cmd = append(cmd, "-dynlink", "-installsuffix=dynlink")
+	}
 	for _, name := range names {
 		cmd = append(cmd, filepath.Join(dir, name))
 	}
 	return runcmd(cmd...)
 }
 
-func linkFile(runcmd runCmd, goname string) (err error) {
+var stdlibImportcfgString string
+var stdlibImportcfgFilename string
+var cfgonce sync.Once
+var fileonce sync.Once
+
+func stdlibImportcfg() string {
+	cfgonce.Do(func() {
+		output, err := exec.Command(goTool(), "list", "-export", "-f", "{{if .Export}}packagefile {{.ImportPath}}={{.Export}}{{end}}", "std").Output()
+		if err != nil {
+			log.Fatal(err)
+		}
+		stdlibImportcfgString = string(output)
+	})
+	return stdlibImportcfgString
+}
+
+func stdlibImportcfgFile() string {
+	fileonce.Do(func() {
+		tmpdir, err := os.MkdirTemp("", "importcfg")
+		if err != nil {
+			log.Fatal(err)
+		}
+		filename := filepath.Join(tmpdir, "importcfg")
+		os.WriteFile(filename, []byte(stdlibImportcfg()), 0644)
+		stdlibImportcfgFilename = filename
+	})
+	return stdlibImportcfgFilename
+}
+
+func linkFile(runcmd runCmd, goname string, importcfg string, ldflags []string) (err error) {
+	if importcfg == "" {
+		importcfg = stdlibImportcfgFile()
+	}
 	pfile := strings.Replace(goname, ".go", ".o", -1)
-	_, err = runcmd("go", "tool", "link", "-w", "-o", "a.exe", "-L", ".", pfile)
+	cmd := []string{goTool(), "tool", "link", "-w", "-o", "a.exe", "-importcfg=" + importcfg}
+	if *linkshared {
+		cmd = append(cmd, "-linkshared", "-installsuffix=dynlink")
+	}
+	if ldflags != nil {
+		cmd = append(cmd, ldflags...)
+	}
+	cmd = append(cmd, pfile)
+	_, err = runcmd(cmd...)
 	return
 }
 
@@ -407,12 +497,6 @@ func linkFile(runcmd runCmd, goname string) (err error) {
 type skipError string
 
 func (s skipError) Error() string { return string(s) }
-
-func check(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
-}
 
 // test holds the state of a test.
 type test struct {
@@ -425,9 +509,10 @@ type test struct {
 
 	tempDir string
 	err     error
+
+	// GOPHERJS: Skipping expectFail, see initExpectFail in go/test/run.go
 }
 
-// startTest
 func startTest(dir, gofile string) *test {
 	t := &test{
 		dir:    dir,
@@ -470,7 +555,7 @@ func (t *test) goDirName() string {
 }
 
 func goDirFiles(longdir string) (filter []os.DirEntry, err error) {
-	files, dirErr := os.ReadDir(longdir)
+	files, dirErr := os.ReadDir(longdir) // GOPHERJS: Updated to not use deprecated ioutil.ReadDir
 	if dirErr != nil {
 		return nil, dirErr
 	}
@@ -482,32 +567,47 @@ func goDirFiles(longdir string) (filter []os.DirEntry, err error) {
 	return
 }
 
-var packageRE = regexp.MustCompile(`(?m)^package (\w+)`)
+var packageRE = regexp.MustCompile(`(?m)^package ([\p{Lu}\p{Ll}\w]+)`)
 
-func goDirPackages(longdir string) ([][]string, error) {
+func getPackageNameFromSource(fn string) (string, error) {
+	data, err := os.ReadFile(fn) // GOPHERJS: Updated to not use deprecated ioutil.ReadFile
+	if err != nil {
+		return "", err
+	}
+	pkgname := packageRE.FindStringSubmatch(string(data))
+	if pkgname == nil {
+		return "", fmt.Errorf("cannot find package name in %s", fn)
+	}
+	return pkgname[1], nil
+}
+
+type goDirPkg struct {
+	name  string
+	files []string
+}
+
+// If singlefilepkgs is set, each file is considered a separate package
+// even if the package names are the same.
+func goDirPackages(longdir string, singlefilepkgs bool) ([]*goDirPkg, error) {
 	files, err := goDirFiles(longdir)
 	if err != nil {
 		return nil, err
 	}
-	var pkgs [][]string
-	m := make(map[string]int)
+	var pkgs []*goDirPkg
+	m := make(map[string]*goDirPkg)
 	for _, file := range files {
 		name := file.Name()
-		data, err := os.ReadFile(filepath.Join(longdir, name))
+		pkgname, err := getPackageNameFromSource(filepath.Join(longdir, name))
 		if err != nil {
-			return nil, err
+			log.Fatal(err)
 		}
-		pkgname := packageRE.FindStringSubmatch(string(data))
-		if pkgname == nil {
-			return nil, fmt.Errorf("cannot find package name in %s", name)
+		p, ok := m[pkgname]
+		if singlefilepkgs || !ok {
+			p = &goDirPkg{name: pkgname}
+			pkgs = append(pkgs, p)
+			m[pkgname] = p
 		}
-		i, ok := m[pkgname[1]]
-		if !ok {
-			i = len(pkgs)
-			pkgs = append(pkgs, nil)
-			m[pkgname[1]] = i
-		}
-		pkgs[i] = append(pkgs[i], name)
+		p.files = append(p.files, name)
 	}
 	return pkgs, nil
 }
@@ -515,6 +615,8 @@ func goDirPackages(longdir string) ([][]string, error) {
 type context struct {
 	GOOS   string
 	GOARCH string
+	// GOPHERJS: Doesn't support `cgoEnabled` related to CGO_ENABLED
+	// GOPHERJS: Doesn't support `noOptEnv` related to GO_GCFLAGS
 }
 
 // shouldTest looks for build tags in a source file and returns
@@ -566,11 +668,16 @@ func (ctxt *context) match(name string) bool {
 		return false
 	}
 
+	// GOPHERJS: Don't match "cgo" since not supported
+
+	// GOPHERJS: Don't match "gc"
 	if name == ctxt.GOOS || name == ctxt.GOARCH {
 		return true
 	}
 
-	if name == "test_run" || name == "gcflags_noopt" {
+	// GOPHERJS: Don't match "gcflags_noopt"
+
+	if name == "test_run" {
 		return true
 	}
 
@@ -578,6 +685,8 @@ func (ctxt *context) match(name string) bool {
 }
 
 func init() { checkShouldTest() }
+
+var errTimeout = errors.New("command exceeded time limit")
 
 // run runs a test.
 func (t *test) run() {
@@ -593,7 +702,7 @@ func (t *test) run() {
 		return
 	}
 
-	srcBytes, err := os.ReadFile(t.goFileName())
+	srcBytes, err := os.ReadFile(t.goFileName()) // GOPHERJS: Updated to no use deprecated ioutil.ReadFile
 	if err != nil {
 		t.err = err
 		return
@@ -629,9 +738,16 @@ func (t *test) run() {
 		return
 	}
 
-	var args, flags []string
+	var args, flags, runenv []string
+	var tim int
 	wantError := false
-	f := strings.Fields(action)
+	wantAuto := false
+	singlefilepkgs := false
+	f, err := splitQuoted(action)
+	if err != nil {
+		t.err = fmt.Errorf("invalid test recipe: %v", err)
+		return
+	}
 	if len(f) > 0 {
 		action = f[0]
 		args = f[1:]
@@ -656,17 +772,16 @@ func (t *test) run() {
 		fallthrough
 	case "compile", "compiledir", "build", "run", "runoutput", "rundir":
 		t.action = action
+	case "errorcheckandrundir":
+		t.action = "errorcheck"
+		wantError = false // should be no error if also will run
+	case "errorcheckwithauto":
+		t.action = "errorcheck"
+		wantAuto = true
+		wantError = true
 	case "errorcheck", "errorcheckdir", "errorcheckoutput":
 		t.action = action
 		wantError = true
-		for len(args) > 0 && strings.HasPrefix(args[0], "-") {
-			if args[0] == "-0" {
-				wantError = false
-			} else {
-				flags = append(flags, args[0])
-			}
-			args = args[1:]
-		}
 	case "skip":
 		t.action = "skip"
 		return
@@ -676,11 +791,47 @@ func (t *test) run() {
 		return
 	}
 
-	t.makeTempDir()
-	defer os.RemoveAll(t.tempDir)
+	// collect flags
+	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
+		switch args[0] {
+		case "-1":
+			wantError = true
+		case "-0":
+			wantError = false
+		case "-s":
+			singlefilepkgs = true
+		case "-t": // timeout in seconds
+			args = args[1:]
+			var err error
+			tim, err = strconv.Atoi(args[0])
+			if err != nil {
+				t.err = fmt.Errorf("need number of seconds for -t timeout, got %s instead", args[0])
+			}
+			if s := os.Getenv("GO_TEST_TIMEOUT_SCALE"); s != "" {
+				timeoutScale, err := strconv.Atoi(s)
+				if err != nil {
+					log.Fatalf("failed to parse $GO_TEST_TIMEOUT_SCALE = %q as integer: %v", s, err)
+				}
+				tim *= timeoutScale
+			}
+		case "-goexperiment": // set GOEXPERIMENT environment
+			args = args[1:]
+			// GOPHERJS: Ignore GOEXPERIMENT
+		default:
+			flags = append(flags, args[0])
+		}
+		args = args[1:]
+	}
 
-	err = os.WriteFile(filepath.Join(t.tempDir, t.gofile), srcBytes, 0o644)
-	check(err)
+	t.makeTempDir()
+	if !*keep {
+		defer os.RemoveAll(t.tempDir)
+	}
+
+	err = os.WriteFile(filepath.Join(t.tempDir, t.gofile), srcBytes, 0o644) // GOPHERJS: Updated to not use deprecated ioutil.WriteFile
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// A few tests (of things like the environment) require these to be set.
 	if os.Getenv("GOOS") == "" {
@@ -690,33 +841,91 @@ func (t *test) run() {
 		os.Setenv("GOARCH", goarch)
 	}
 
-	useTmp := true
+	var (
+		runInDir        = t.tempDir
+		tempDirIsGOPATH = false
+	)
 	runcmd := func(args ...string) ([]byte, error) {
 		cmd := exec.Command(args[0], args[1:]...)
 		var buf bytes.Buffer
 		cmd.Stdout = &buf
 		cmd.Stderr = &buf
-		if useTmp {
-			cmd.Dir = t.tempDir
-			cmd.Env = envForDir(cmd.Dir)
+		cmd.Env = append(os.Environ(), "GOENV=off", "GOFLAGS=")
+		if runInDir != "" {
+			cmd.Dir = runInDir
+			// Set PWD to match Dir to speed up os.Getwd in the child process.
+			cmd.Env = append(cmd.Env, "PWD="+cmd.Dir)
 		}
+		if tempDirIsGOPATH {
+			cmd.Env = append(cmd.Env, "GOPATH="+t.tempDir)
+		}
+		cmd.Env = append(cmd.Env, "STDLIB_IMPORTCFG="+stdlibImportcfgFile())
+		// Put the bin directory of the GOROOT that built this program
+		// first in the path. This ensures that tests that use the "go"
+		// tool use the same one that built this program. This ensures
+		// that if you do "../bin/go run run.go" in this directory, all
+		// the tests that start subprocesses that "go tool compile" or
+		// whatever, use ../bin/go as their go tool, not whatever happens
+		// to be first in the user's path.
+		path := os.Getenv("PATH")
+		newdir := filepath.Join(runtime.GOROOT(), "bin")
+		if path != "" {
+			path = newdir + string(filepath.ListSeparator) + path
+		} else {
+			path = newdir
+		}
+		cmd.Env = append(cmd.Env, "PATH="+path)
 
-		timeoutCh := make(chan bool)
-		defer close(timeoutCh)
-		go func() {
-			const wait = 30
-			select {
-			case <-time.After(wait * time.Second):
-				panic(fmt.Errorf(`test ran more than %d seconds: %v`, wait, args))
-			case <-timeoutCh:
+		cmd.Env = append(cmd.Env, runenv...)
+
+		var err error
+
+		if tim != 0 {
+			err = cmd.Start()
+			// This command-timeout code adapted from cmd/go/test.go
+			// Note: the Go command uses a more sophisticated timeout
+			// strategy, first sending SIGQUIT (if appropriate for the
+			// OS in question) to try to trigger a stack trace, then
+			// finally much later SIGKILL. If timeouts prove to be a
+			// common problem here, it would be worth porting over
+			// that code as well. See https://do.dev/issue/50973
+			// for more discussion.
+			if err == nil {
+				tick := time.NewTimer(time.Duration(tim) * time.Second)
+				done := make(chan error)
+				go func() {
+					done <- cmd.Wait()
+				}()
+				select {
+				case err = <-done:
+					// ok
+				case <-tick.C:
+					cmd.Process.Signal(os.Interrupt)
+					time.Sleep(1 * time.Second)
+					cmd.Process.Kill()
+					<-done
+					err = errTimeout
+				}
+				tick.Stop()
 			}
-		}()
-
-		err := cmd.Run()
-		if err != nil {
+		} else {
+			err = cmd.Run()
+		}
+		if err != nil && err != errTimeout {
 			err = fmt.Errorf("%s\n%s", err, buf.Bytes())
 		}
 		return buf.Bytes(), err
+	}
+
+	importcfg := func(dir string, pkgs []*goDirPkg) string {
+		cfg := stdlibImportcfg()
+		for _, pkg := range pkgs {
+			pkgpath := path.Join("test", strings.TrimSuffix(pkg.files[0], ".go"))
+			cfg += "\npackagefile " + pkgpath + "=" + filepath.Join(t.tempDir, pkgpath+".a")
+		}
+		filename := filepath.Join(t.tempDir, "importcfg")
+		os.WriteFile(filename, []byte(cfg), 0644)
+		return filename
 	}
 
 	long := filepath.Join(cwd, t.goFileName())
@@ -724,14 +933,24 @@ func (t *test) run() {
 	default:
 		t.err = fmt.Errorf("unimplemented action %q", action)
 
+	// GOPHERJS: Doesn't support case "asmcheck"
 	case "errorcheck":
-		cmdline := []string{"go", "tool", "compile", "-e", "-o", "a.o"}
+		// Compile Go file.
+		// Fail if wantError is true and compilation was successful and vice versa.
+		// Match errors produced by gc against errors in comments.
+		// TODO(gri) remove need for -C (disable printing of columns in error messages)
+		cmdline := []string{goTool(), "tool", "compile", "-p=p", "-d=panic", "-C", "-e", "-importcfg=" + stdlibImportcfgFile(), "-o", "a.o"}
+		// No need to add -dynlink even if linkshared if we're just checking for errors...
 		cmdline = append(cmdline, flags...)
 		cmdline = append(cmdline, long)
 		out, err := runcmd(cmdline...)
 		if wantError {
 			if err == nil {
 				t.err = fmt.Errorf("compilation succeeded unexpectedly\n%s", out)
+				return
+			}
+			if err == errTimeout {
+				t.err = fmt.Errorf("compilation timed out")
 				return
 			}
 		} else {
@@ -743,39 +962,50 @@ func (t *test) run() {
 		if *updateErrors {
 			t.updateErrors(string(out), long)
 		}
-		t.err = t.errorCheck(string(out), long, t.gofile)
-		return
+		t.err = t.errorCheck(string(out), wantAuto, long, t.gofile)
 
 	case "compile":
-		_, t.err = compileFile(runcmd, long)
+		// Compile Go file.
+		_, t.err = compileFile(runcmd, long, flags)
 
 	case "compiledir":
-		// Compile all files in the directory in lexicographic order.
+		// Compile all files in the directory as packages in lexicographic order.
 		longdir := filepath.Join(cwd, t.goDirName())
-		pkgs, err := goDirPackages(longdir)
+		pkgs, err := goDirPackages(longdir, singlefilepkgs)
 		if err != nil {
 			t.err = err
 			return
 		}
-		for _, gofiles := range pkgs {
-			_, t.err = compileInDir(runcmd, longdir, gofiles...)
+		importcfgfile := importcfg(longdir, pkgs)
+
+		for _, pkg := range pkgs {
+			_, t.err = compileInDir(runcmd, longdir, flags, importcfgfile, pkg.name, pkg.files...)
 			if t.err != nil {
 				return
 			}
 		}
 
-	case "errorcheckdir":
-		// errorcheck all files in lexicographic order
-		// useful for finding importing errors
+	case "errorcheckdir", "errorcheckandrundir":
+		flags = append(flags, "-d=panic")
+		// Compile and errorCheck all files in the directory as packages in lexicographic order.
+		// If errorcheckdir and wantError, compilation of the last package must fail.
+		// If errorcheckandrundir and wantError, compilation of the package prior the last must fail.
 		longdir := filepath.Join(cwd, t.goDirName())
-		pkgs, err := goDirPackages(longdir)
+		pkgs, err := goDirPackages(longdir, singlefilepkgs)
 		if err != nil {
 			t.err = err
 			return
 		}
-		for i, gofiles := range pkgs {
-			out, err := compileInDir(runcmd, longdir, gofiles...)
-			if i == len(pkgs)-1 {
+		errPkg := len(pkgs) - 1
+		if wantError && action == "errorcheckandrundir" {
+			// The last pkg should compiled successfully and will be run in next case.
+			// Preceding pkg must return an error from compileInDir.
+			errPkg--
+		}
+		importcfgfile := importcfg(longdir, pkgs)
+		for i, pkg := range pkgs {
+			out, err := compileInDir(runcmd, longdir, flags, importcfgfile, pkg.name, pkg.files...)
+			if i == errPkg {
 				if wantError && err == nil {
 					t.err = fmt.Errorf("compilation succeeded unexpectedly\n%s", out)
 					return
@@ -788,32 +1018,53 @@ func (t *test) run() {
 				return
 			}
 			var fullshort []string
-			for _, name := range gofiles {
+			for _, name := range pkg.files {
 				fullshort = append(fullshort, filepath.Join(longdir, name), name)
 			}
-			t.err = t.errorCheck(string(out), fullshort...)
+			t.err = t.errorCheck(string(out), wantAuto, fullshort...)
 			if t.err != nil {
 				break
 			}
 		}
+		if action == "errorcheckdir" {
+			return
+		}
+		fallthrough
 
 	case "rundir":
-		// Compile all files in the directory in lexicographic order.
-		// then link as if the last file is the main package and run it
+		// Compile all files in the directory as packages in lexicographic order.
+		// In case of errorcheckandrundir, ignore failed compilation of the package before the last.
+		// Link as if the last file is the main package, run it.
+		// Verify the expected output.
 		longdir := filepath.Join(cwd, t.goDirName())
-		pkgs, err := goDirPackages(longdir)
+		pkgs, err := goDirPackages(longdir, singlefilepkgs)
 		if err != nil {
 			t.err = err
 			return
 		}
-		for i, gofiles := range pkgs {
-			_, err := compileInDir(runcmd, longdir, gofiles...)
-			if err != nil {
+		// Split flags into gcflags and ldflags
+		ldflags := []string{}
+		for i, fl := range flags {
+			if fl == "-ldflags" {
+				ldflags = flags[i+1:]
+				flags = flags[0:i]
+				break
+			}
+		}
+
+		importcfgfile := importcfg(longdir, pkgs)
+
+		for i, pkg := range pkgs {
+			_, err := compileInDir(runcmd, longdir, flags, importcfgfile, pkg.name, pkg.files...)
+			// Allow this package compilation fail based on conditions below;
+			// its errors were checked in previous case.
+			if err != nil && !(wantError && action == "errorcheckandrundir" && i == len(pkgs)-2) {
 				t.err = err
 				return
 			}
+
 			if i == len(pkgs)-1 {
-				err = linkFile(runcmd, gofiles[0])
+				err = linkFile(runcmd, pkg.files[0], importcfgfile, ldflags)
 				if err != nil {
 					t.err = err
 					return
@@ -827,69 +1078,112 @@ func (t *test) run() {
 					t.err = err
 					return
 				}
-				if strings.Replace(string(out), "\r\n", "\n", -1) != t.expectedOutput() {
-					t.err = fmt.Errorf("incorrect output\n%s", out)
-				}
+				t.checkExpectedOutput(out)
 			}
 		}
 
+	// GOPHERJS: Doesn't support case "runindir"
 	case "build":
-		_, err := runcmd("go", "build", "-o", "a.exe", long)
+		// Build Go file.
+		cmd := []string{goTool(), "build"} // GOPHERJS: No goGcflags
+		cmd = append(cmd, flags...)
+		cmd = append(cmd, "-o", "a.exe", long)
+		_, err := runcmd(cmd...)
 		if err != nil {
 			t.err = err
 		}
 
+	// GOPHERJS: Doesn't support case "builddir", "buildrundir"
+	case "buildrun":
+		// Build an executable from Go file, then run it, verify its output.
+		// Useful for timeout tests where failure mode is infinite loop.
+		// TODO: not supported on NaCl
+		cmd := []string{goTool(), "build", "-o", "a.exe"} // GOPHERJS: No goGcflags
+		if *linkshared {
+			cmd = append(cmd, "-linkshared")
+		}
+		longdirgofile := filepath.Join(filepath.Join(cwd, t.dir), t.gofile)
+		cmd = append(cmd, flags...)
+		cmd = append(cmd, longdirgofile)
+		_, err := runcmd(cmd...)
+		if err != nil {
+			t.err = err
+			return
+		}
+		cmd = []string{"./a.exe"}
+		out, err := runcmd(append(cmd, args...)...)
+		if err != nil {
+			t.err = err
+			return
+		}
+
+		t.checkExpectedOutput(out)
+
 	case "run":
-		useTmp = false
 		// GOPHERJS.
 		out, err := runcmd(append([]string{"gopherjs", "run", t.goFileName()}, args...)...)
 		if err != nil {
 			t.err = err
 			return
 		}
-		if strings.Replace(string(out), "\r\n", "\n", -1) != t.expectedOutput() {
-			t.err = fmt.Errorf("incorrect output\n%s", out)
-		}
+		t.checkExpectedOutput(out)
 
 	case "runoutput":
+		// Run Go file and write its output into temporary Go file.
+		// Run generated Go file and verify its output.
 		rungatec <- true
 		defer func() {
 			<-rungatec
 		}()
-		useTmp = false
-		out, err := runcmd(append([]string{"go", "run", t.goFileName()}, args...)...)
+		runInDir = ""
+		cmd := []string{goTool(), "run"} // GOPHERJS: No goGcflags
+		if *linkshared {
+			cmd = append(cmd, "-linkshared")
+		}
+		cmd = append(cmd, t.goFileName())
+		out, err := runcmd(append(cmd, args...)...)
 		if err != nil {
 			t.err = err
 			return
 		}
 		tfile := filepath.Join(t.tempDir, "tmp__.go")
-		if err := os.WriteFile(tfile, out, 0o666); err != nil {
+		if err := os.WriteFile(tfile, out, 0o666); err != nil { // GOPHERJS: Update to not use deprecated ioutil.WriteFile
 			t.err = fmt.Errorf("write tempfile:%s", err)
 			return
 		}
-		out, err = runcmd("go", "run", tfile)
+		cmd = []string{goTool(), "run"} // GOPHERJS: No goGcflags
+		if *linkshared {
+			cmd = append(cmd, "-linkshared")
+		}
+		cmd = append(cmd, tfile)
+		out, err = runcmd(cmd...)
 		if err != nil {
 			t.err = err
 			return
 		}
-		if string(out) != t.expectedOutput() {
-			t.err = fmt.Errorf("incorrect output\n%s", out)
-		}
+		t.checkExpectedOutput(out)
 
 	case "errorcheckoutput":
-		useTmp = false
-		out, err := runcmd(append([]string{"go", "run", t.goFileName()}, args...)...)
+		// Run Go file and write its output into temporary Go file.
+		// Compile and errorCheck generated Go file.
+		runInDir = ""
+		cmd := []string{goTool(), "run"} // GOPHERJS: No goGcflags
+		if *linkshared {
+			cmd = append(cmd, "-linkshared")
+		}
+		cmd = append(cmd, t.goFileName())
+		out, err := runcmd(append(cmd, args...)...)
 		if err != nil {
 			t.err = err
 			return
 		}
 		tfile := filepath.Join(t.tempDir, "tmp__.go")
-		err = os.WriteFile(tfile, out, 0o666)
+		err = os.WriteFile(tfile, out, 0o666) // GOPHERJS: Update to not use deprecated ioutil.WriteFile
 		if err != nil {
 			t.err = fmt.Errorf("write tempfile:%s", err)
 			return
 		}
-		cmdline := []string{"go", "tool", "compile", "-e", "-o", "a.o"}
+		cmdline := []string{goTool(), "tool", "compile", "-importcfg=" + stdlibImportcfgFile(), "-p=p", "-d=panic", "-e", "-o", "a.o"}
 		cmdline = append(cmdline, flags...)
 		cmdline = append(cmdline, tfile)
 		out, err = runcmd(cmdline...)
@@ -904,7 +1198,7 @@ func (t *test) run() {
 				return
 			}
 		}
-		t.err = t.errorCheck(string(out), tfile, "tmp__.go")
+		t.err = t.errorCheck(string(out), false, tfile, "tmp__.go")
 		return
 	}
 }
@@ -932,19 +1226,40 @@ func (t *test) String() string {
 
 func (t *test) makeTempDir() {
 	var err error
-	t.tempDir, err = os.MkdirTemp("", "")
-	check(err)
+	t.tempDir, err = os.MkdirTemp("", "") // GOPHERJS: Updated to not use deprecated ioutil.TempDir
+	if err != nil {
+		log.Fatal(err)
+	}
+	if *keep {
+		log.Printf("Temporary directory is %s", t.tempDir)
+	}
+	err = os.Mkdir(filepath.Join(t.tempDir, "test"), 0o755)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
-func (t *test) expectedOutput() string {
+// checkExpectedOutput compares the output from compiling and/or running with the contents
+// of the corresponding reference output file, if any (replace ".go" with ".out").
+// If they don't match, fail with an informative message.
+func (t *test) checkExpectedOutput(gotBytes []byte) {
+	got := string(gotBytes)
 	filename := filepath.Join(t.dir, t.gofile)
 	filename = filename[:len(filename)-len(".go")]
 	filename += ".out"
-	b, _ := os.ReadFile(filename)
-	return string(b)
+	b, err := ioutil.ReadFile(filename)
+	// File is allowed to be missing (err != nil) in which case output should be empty.
+	got = strings.Replace(got, "\r\n", "\n", -1)
+	if got != string(b) {
+		if err == nil {
+			t.err = fmt.Errorf("output does not match expected in %s. Instead saw\n%s", filename, got)
+		} else {
+			t.err = fmt.Errorf("output should be empty when (optional) expected-output file %s is not present. Instead saw\n%s", filename, got)
+		}
+	}
 }
 
-func splitOutput(out string) []string {
+func splitOutput(out string, wantAuto bool) []string {
 	// gc error messages continue onto additional lines with leading tabs.
 	// Split the output at the beginning of each line that doesn't begin with a tab.
 	// <autogenerated> lines are impossible to match so those are filtered out.
@@ -955,7 +1270,7 @@ func splitOutput(out string) []string {
 		}
 		if strings.HasPrefix(line, "\t") {
 			res[len(res)-1] += "\n" + line
-		} else if strings.HasPrefix(line, "go tool") || strings.HasPrefix(line, "<autogenerated>") {
+		} else if strings.HasPrefix(line, "go tool") || strings.HasPrefix(line, "#") || !wantAuto && strings.HasPrefix(line, "<autogenerated>") {
 			continue
 		} else if strings.TrimSpace(line) != "" {
 			res = append(res, line)
@@ -964,14 +1279,25 @@ func splitOutput(out string) []string {
 	return res
 }
 
-func (t *test) errorCheck(outStr string, fullshort ...string) (err error) {
+// errorCheck matches errors in outStr against comments in source files.
+// For each line of the source files which should generate an error,
+// there should be a comment of the form // ERROR "regexp".
+// If outStr has an error for a line which has no such comment,
+// this function will report an error.
+// Likewise if outStr does not have an error for a line which has a comment,
+// or if the error message does not match the <regexp>.
+// The <regexp> syntax is Perl but it's best to stick to egrep.
+//
+// Sources files are supplied as fullshort slice.
+// It consists of pairs: full path to source file and its base name.
+func (t *test) errorCheck(outStr string, wantAuto bool, fullshort ...string) (err error) {
 	defer func() {
 		if *verbose && err != nil {
 			log.Printf("%s gc output:\n%s", t, outStr)
 		}
 	}()
 	var errs []error
-	out := splitOutput(outStr)
+	out := splitOutput(outStr, wantAuto)
 
 	// Cut directory name.
 	for i := range out {
@@ -989,7 +1315,11 @@ func (t *test) errorCheck(outStr string, fullshort ...string) (err error) {
 
 	for _, we := range want {
 		var errmsgs []string
-		errmsgs, out = partitionStrings(we.prefix, out)
+		if we.auto {
+			errmsgs, out = partitionStrings("<autogenerated>", out)
+		} else {
+			errmsgs, out = partitionStrings(we.prefix, out)
+		}
 		if len(errmsgs) == 0 {
 			errs = append(errs, fmt.Errorf("%s:%d: missing error %q", we.file, we.lineNum, we.reStr))
 			continue
@@ -997,7 +1327,13 @@ func (t *test) errorCheck(outStr string, fullshort ...string) (err error) {
 		matched := false
 		n := len(out)
 		for _, errmsg := range errmsgs {
-			if we.re.MatchString(errmsg) {
+			// Assume errmsg says "file:line: foo".
+			// Cut leading "file:line: " to avoid accidental matching of file name instead of message.
+			text := errmsg
+			if _, suffix, ok := strings.Cut(text, " "); ok {
+				text = suffix
+			}
+			if we.re.MatchString(text) {
 				matched = true
 			} else {
 				out = append(out, errmsg)
@@ -1030,41 +1366,39 @@ func (t *test) errorCheck(outStr string, fullshort ...string) (err error) {
 	return errors.New(buf.String())
 }
 
-func (t *test) updateErrors(out string, file string) {
+func (t *test) updateErrors(out, file string) {
+	base := path.Base(file)
 	// Read in source file.
-	src, err := os.ReadFile(file)
+	src, err := os.ReadFile(file) // GOPHERJS: Updated to not use deprectated ioutil.ReadFile
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
 	}
 	lines := strings.Split(string(src), "\n")
 	// Remove old errors.
-	for i, ln := range lines {
-		pos := strings.Index(ln, " // ERROR ")
-		if pos >= 0 {
-			lines[i] = ln[:pos]
-		}
+	for i := range lines {
+		lines[i], _, _ = strings.Cut(lines[i], " // ERROR ")
 	}
 	// Parse new errors.
 	errors := make(map[int]map[string]bool)
-	tmpRe := regexp.MustCompile(`autotmp_[0-9]+`)
-	for _, errStr := range splitOutput(out) {
-		colon1 := strings.Index(errStr, ":")
-		if colon1 < 0 || errStr[:colon1] != file {
+	tmpRe := regexp.MustCompile(`autotmp_\d+`)
+	for _, errStr := range splitOutput(out, false) {
+		errFile, rest, ok := strings.Cut(errStr, ":")
+		if !ok || errFile != file {
 			continue
 		}
-		colon2 := strings.Index(errStr[colon1+1:], ":")
-		if colon2 < 0 {
+		lineStr, msg, ok := strings.Cut(rest, ":")
+		if !ok {
 			continue
 		}
-		colon2 += colon1 + 1
-		line, err := strconv.Atoi(errStr[colon1+1 : colon2])
+		line, err := strconv.Atoi(lineStr)
 		line--
 		if err != nil || line < 0 || line >= len(lines) {
 			continue
 		}
-		msg := errStr[colon2+2:]
-		for _, r := range []string{`\`, `*`, `+`, `[`, `]`, `(`, `)`} {
+		msg = strings.Replace(msg, file, base, -1) // normalize file mentions in error itself
+		msg = strings.TrimLeft(msg, " \t")
+		for _, r := range []string{`\`, `*`, `+`, `?`, `[`, `]`, `(`, `)`} {
 			msg = strings.Replace(msg, r, `\`+r, -1)
 		}
 		msg = strings.Replace(msg, `"`, `.`, -1)
@@ -1093,7 +1427,7 @@ func (t *test) updateErrors(out string, file string) {
 		return
 	}
 	// Polish.
-	exec.Command("go", "fmt", file).CombinedOutput()
+	exec.Command(goTool(), "fmt", file).CombinedOutput()
 }
 
 // matchPrefix reports whether s is of the form ^(.*/)?prefix(:|[),
@@ -1131,12 +1465,14 @@ type wantedError struct {
 	reStr   string
 	re      *regexp.Regexp
 	lineNum int
+	auto    bool // match <autogenerated> line
 	file    string
 	prefix  string
 }
 
 var (
 	errRx       = regexp.MustCompile(`// (?:GC_)?ERROR (.*)`)
+	errAutoRx   = regexp.MustCompile(`// (?:GC_)?ERRORAUTO (.*)`)
 	errQuotesRx = regexp.MustCompile(`"([^"]*)"`)
 	lineRx      = regexp.MustCompile(`LINE(([+-])([0-9]+))?`)
 )
@@ -1151,7 +1487,13 @@ func (t *test) wantedErrors(file, short string) (errs []wantedError) {
 			// double comment disables ERROR
 			continue
 		}
-		m := errRx.FindStringSubmatch(line)
+		var auto bool
+		m := errAutoRx.FindStringSubmatch(line)
+		if m != nil {
+			auto = true
+		} else {
+			m = errRx.FindStringSubmatch(line)
+		}
 		if m == nil {
 			continue
 		}
@@ -1186,6 +1528,7 @@ func (t *test) wantedErrors(file, short string) (errs []wantedError) {
 				reStr:   rx,
 				re:      re,
 				prefix:  prefix,
+				auto:    auto,
 				lineNum: lineNum,
 				file:    short,
 			})
@@ -1265,4 +1608,66 @@ func getenv(key, def string) string {
 		return value
 	}
 	return def
+}
+
+// splitQuoted splits the string s around each instance of one or more consecutive
+// white space characters while taking into account quotes and escaping, and
+// returns an array of substrings of s or an empty list if s contains only white space.
+// Single quotes and double quotes are recognized to prevent splitting within the
+// quoted region, and are removed from the resulting substrings. If a quote in s
+// isn't closed err will be set and r will have the unclosed argument as the
+// last element. The backslash is used for escaping.
+//
+// For example, the following string:
+//
+//	a b:"c d" 'e''f'  "g\""
+//
+// Would be parsed as:
+//
+//	[]string{"a", "b:c d", "ef", `g"`}
+//
+// [copied from src/go/build/build.go]
+func splitQuoted(s string) (r []string, err error) {
+	var args []string
+	arg := make([]rune, len(s))
+	escaped := false
+	quoted := false
+	quote := '\x00'
+	i := 0
+	for _, rune := range s {
+		switch {
+		case escaped:
+			escaped = false
+		case rune == '\\':
+			escaped = true
+			continue
+		case quote != '\x00':
+			if rune == quote {
+				quote = '\x00'
+				continue
+			}
+		case rune == '"' || rune == '\'':
+			quoted = true
+			quote = rune
+			continue
+		case unicode.IsSpace(rune):
+			if quoted || i > 0 {
+				quoted = false
+				args = append(args, string(arg[:i]))
+				i = 0
+			}
+			continue
+		}
+		arg[i] = rune
+		i++
+	}
+	if quoted || i > 0 {
+		args = append(args, string(arg[:i]))
+	}
+	if quote != 0 {
+		err = errors.New("unclosed quote")
+	} else if escaped {
+		err = errors.New("unfinished escaping")
+	}
+	return args, err
 }

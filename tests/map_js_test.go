@@ -69,7 +69,7 @@ func Test_MapStructObjectWrapper(t *testing.T) {
 
 	stringMap := map[string]string{"key": "value"}
 
-	// You cannot wrap a map directly, so put it in a stuct.
+	// You cannot wrap a map directly, so put it in a struct.
 	type StructWithMap struct {
 		Map map[string]string
 	}

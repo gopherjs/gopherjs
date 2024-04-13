@@ -297,7 +297,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			// but now we do it here to maintain previous behavior.
 			continue
 		}
-		funcCtx.pkgCtx.pkgVars[importedPkg.Path()] = funcCtx.newVariableWithLevel(importedPkg.Name(), true)
+		funcCtx.pkgCtx.pkgVars[importedPkg.Path()] = funcCtx.newVariable(importedPkg.Name(), true)
 		importedPaths = append(importedPaths, importedPkg.Path())
 	}
 	sort.Strings(importedPaths)
@@ -832,12 +832,12 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	var params []string
 	for _, param := range typ.Params.List {
 		if len(param.Names) == 0 {
-			params = append(params, c.newVariable("param"))
+			params = append(params, c.newLocalVariable("param"))
 			continue
 		}
 		for _, ident := range param.Names {
 			if isBlank(ident) {
-				params = append(params, c.newVariable("param"))
+				params = append(params, c.newLocalVariable("param"))
 				continue
 			}
 			params = append(params, c.objectName(c.pkgCtx.Defs[ident]))

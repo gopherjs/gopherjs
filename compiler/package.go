@@ -43,27 +43,61 @@ type pkgContext struct {
 	instanceSet  *typeparams.PackageInstanceSets
 }
 
-// funcContext maintains compiler context for a specific function (lexical scope?).
+// funcContext maintains compiler context for a specific function.
+//
+// An instance of this type roughly corresponds to a lexical scope for generated
+// JavaScript code (as defined for `var` declarations).
 type funcContext struct {
 	*analysis.FuncInfo
+	// Surrounding package context.
 	pkgCtx *pkgContext
+	// Function context, surrounding this function definition. For package-level
+	// functions or methods it is the package-level function context (even though
+	// it technically doesn't correspond to a function). nil for the package-level
+	// function context.
 	parent *funcContext
-	// Signature of the function this context corresponds to or nil. For generic
-	// functions it is the original generic signature to make sure result variable
-	// identity in the signature matches the variable objects referenced in the
-	// function body.
-	sig           *types.Signature
-	allVars       map[string]int
-	localVars     []string
-	resultNames   []ast.Expr
-	flowDatas     map[*types.Label]*flowData
-	caseCounter   int
-	labelCases    map[*types.Label]int
-	output        []byte
+	// Signature of the function this context corresponds to or nil for the
+	// package-level function context. For generic functions it is the original
+	// generic signature to make sure result variable identity in the signature
+	// matches the variable objects referenced in the function body.
+	sig *typesutil.Signature
+	// All variable names available in the current function scope. The key is a Go
+	// variable name and the value is the number of synonymous variable names
+	// visible from this scope (e.g. due to shadowing). This number is used to
+	// avoid conflicts when assigning JS variable names for Go variables.
+	allVars map[string]int
+	// Local JS variable names defined within this function context. This list
+	// contains JS variable names assigned to Go variables, as well as other
+	// auxiliary variables the compiler needs. It is used to generate `var`
+	// declaration at the top of the function, as well as context save/restore.
+	localVars []string
+	// AST expressions representing function's named return values. nil if the
+	// function has no return values or they are not named.
+	resultNames []ast.Expr
+	// Function's internal control flow graph used for generation of a "flattened"
+	// version of the function when the function is blocking or uses goto.
+	// TODO(nevkontakte): Describe the exact semantics of this map.
+	flowDatas map[*types.Label]*flowData
+	// Number of control flow blocks in a "flattened" function.
+	caseCounter int
+	// A mapping from Go labels statements (e.g. labelled loop) to the flow block
+	// id corresponding to it.
+	labelCases map[*types.Label]int
+	// Generated code buffer for the current function.
+	output []byte
+	// Generated code that should be emitted at the end of the JS statement.
 	delayedOutput []byte
-	posAvailable  bool
-	pos           token.Pos
-	typeResolver  *typeparams.Resolver
+	// Set to true if source position is available and should be emitted for the
+	// source map.
+	posAvailable bool
+	// Current position in the Go source code.
+	pos token.Pos
+	// For each instantiation of a generic function or method, contains the
+	// current mapping between type parameters and corresponding type arguments.
+	// The mapping is used to determine concrete types for expressions within the
+	// instance's context. Can be nil outside of the generic context, in which
+	// case calling its methods is safe and simply does no substitution.
+	typeResolver *typeparams.Resolver
 	// Mapping from function-level objects to JS variable names they have been assigned.
 	objectNames map[types.Object]string
 }
@@ -779,7 +813,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		labelCases:   make(map[*types.Label]int),
 		typeResolver: outerContext.typeResolver,
 		objectNames:  map[types.Object]string{},
-		sig:          sig,
+		sig:          &typesutil.Signature{Sig: sig},
 	}
 	for k, v := range outerContext.allVars {
 		c.allVars[k] = v
@@ -816,10 +850,10 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 			c.handleEscapingVars(body)
 		}
 
-		if c.sig != nil && c.sig.Results().Len() != 0 && c.sig.Results().At(0).Name() != "" {
-			c.resultNames = make([]ast.Expr, c.sig.Results().Len())
-			for i := 0; i < c.sig.Results().Len(); i++ {
-				result := c.sig.Results().At(i)
+		if c.sig != nil && c.sig.HasNamedResults() {
+			c.resultNames = make([]ast.Expr, c.sig.Sig.Results().Len())
+			for i := 0; i < c.sig.Sig.Results().Len(); i++ {
+				result := c.sig.Sig.Results().At(i)
 				typ := c.typeResolver.Substitute(result.Type())
 				c.Printf("%s = %s;", c.objectName(result), c.translateExpr(c.zeroValue(typ)).String())
 				id := ast.NewIdent("")
@@ -890,7 +924,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		if len(c.Blocking) != 0 {
 			deferSuffix += " $s = -1;"
 		}
-		if c.resultNames == nil && c.sig.Results().Len() > 0 {
+		if c.resultNames == nil && c.sig.HasResults() {
 			deferSuffix += fmt.Sprintf(" return%s;", c.translateResults(nil))
 		}
 		deferSuffix += " } finally { $callDeferred($deferred, $err);"

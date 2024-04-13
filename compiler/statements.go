@@ -773,7 +773,7 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 }
 
 func (fc *funcContext) translateResults(results []ast.Expr) string {
-	tuple := fc.typeResolver.Substitute(fc.sig.Results()).(*types.Tuple)
+	tuple := fc.typeResolver.Substitute(fc.sig.Sig.Results()).(*types.Tuple)
 	switch tuple.Len() {
 	case 0:
 		return ""

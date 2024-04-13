@@ -873,9 +873,8 @@ func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, 
 	case *ast.SelectorExpr:
 		isJs = typesutil.IsJsPackage(fc.pkgCtx.Uses[fun.Sel].Pkg())
 	}
-	sig := fc.typeOf(expr.Fun).Underlying().(*types.Signature)
-	sigTypes := signatureTypes{Sig: sig}
-	args := fc.translateArgs(sig, expr.Args, expr.Ellipsis.IsValid())
+	sig := typesutil.Signature{Sig: fc.typeOf(expr.Fun).Underlying().(*types.Signature)}
+	args := fc.translateArgs(sig.Sig, expr.Args, expr.Ellipsis.IsValid())
 
 	if !isBuiltin && !isJs {
 		// Normal function calls don't require wrappers.
@@ -897,7 +896,7 @@ func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, 
 		// Subtle: the proxy lambda argument needs to be assigned with the type
 		// that the original function expects, and not with the argument
 		// expression result type, or we may do implicit type conversion twice.
-		callArgs[i] = fc.newIdent(v, sigTypes.Param(i, ellipsis.IsValid()))
+		callArgs[i] = fc.newIdent(v, sig.Param(i, ellipsis.IsValid()))
 	}
 	wrapper := &ast.CallExpr{
 		Fun:      expr.Fun,

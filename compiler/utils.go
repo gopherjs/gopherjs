@@ -38,7 +38,7 @@ func (fc *funcContext) Write(b []byte) (int, error) {
 }
 
 func (fc *funcContext) Printf(format string, values ...interface{}) {
-	fc.Write([]byte(strings.Repeat("\t", fc.pkgCtx.indentation)))
+	fc.Write([]byte(fc.Indentation(0)))
 	fmt.Fprintf(fc, format, values...)
 	fc.Write([]byte{'\n'})
 	fc.Write(fc.delayedOutput)
@@ -66,10 +66,19 @@ func (fc *funcContext) writePos() {
 	}
 }
 
-func (fc *funcContext) Indent(f func()) {
+// Indented increases generated code indentation level by 1 for the code emitted
+// from the callback f.
+func (fc *funcContext) Indented(f func()) {
 	fc.pkgCtx.indentation++
 	f()
 	fc.pkgCtx.indentation--
+}
+
+// Indentation returns a sequence of "\t" characters appropriate to the current
+// generated code indentation level. The `extra` parameter provides relative
+// indentation adjustment.
+func (fc *funcContext) Indentation(extra int) string {
+	return strings.Repeat("\t", fc.pkgCtx.indentation+extra)
 }
 
 func (fc *funcContext) CatchOutput(indent int, f func()) []byte {
@@ -115,7 +124,7 @@ func (fc *funcContext) expandTupleArgs(argExprs []ast.Expr) []ast.Expr {
 		return argExprs
 	}
 
-	tupleVar := fc.newVariable("_tuple")
+	tupleVar := fc.newLocalVariable("_tuple")
 	fc.Printf("%s = %s;", tupleVar, fc.translateExpr(argExprs[0]))
 	argExprs = make([]ast.Expr, tuple.Len())
 	for i := range argExprs {
@@ -127,7 +136,7 @@ func (fc *funcContext) expandTupleArgs(argExprs []ast.Expr) []ast.Expr {
 func (fc *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, ellipsis bool) []string {
 	argExprs = fc.expandTupleArgs(argExprs)
 
-	sigTypes := signatureTypes{Sig: sig}
+	sigTypes := typesutil.Signature{Sig: sig}
 
 	if sig.Variadic() && len(argExprs) == 0 {
 		return []string{fmt.Sprintf("%s.nil", fc.typeName(sigTypes.VariadicType()))}
@@ -143,7 +152,7 @@ func (fc *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, 
 		arg := fc.translateImplicitConversionWithCloning(argExpr, sigTypes.Param(i, ellipsis)).String()
 
 		if preserveOrder && fc.pkgCtx.Types[argExpr].Value == nil {
-			argVar := fc.newVariable("_arg")
+			argVar := fc.newLocalVariable("_arg")
 			fc.Printf("%s = %s;", argVar, arg)
 			arg = argVar
 		}
@@ -238,11 +247,26 @@ func (fc *funcContext) newConst(t types.Type, value constant.Value) ast.Expr {
 	return id
 }
 
-func (fc *funcContext) newVariable(name string) string {
-	return fc.newVariableWithLevel(name, false)
+// newLocalVariable assigns a new JavaScript variable name for the given Go
+// local variable name. In this context "local" means "in scope of the current"
+// functionContext.
+func (fc *funcContext) newLocalVariable(name string) string {
+	return fc.newVariable(name, false)
 }
 
-func (fc *funcContext) newVariableWithLevel(name string, pkgLevel bool) string {
+// newVariable assigns a new JavaScript variable name for the given Go variable
+// or type.
+//
+// If there is already a variable with the same name visible in the current
+// function context (e.g. due to shadowing), the returned name will be suffixed
+// with a number to prevent conflict. This is necessary because Go name
+// resolution scopes differ from var declarations in JS.
+//
+// If pkgLevel is true, the variable is declared at the package level and added
+// to this functionContext, as well as all parents, but not to the list of local
+// variables. If false, it is added to this context only, as well as the list of
+// local vars.
+func (fc *funcContext) newVariable(name string, pkgLevel bool) string {
 	if name == "" {
 		panic("newVariable: empty name")
 	}
@@ -364,7 +388,7 @@ func (fc *funcContext) objectName(o types.Object) string {
 	name, ok := fc.assignedObjectName(o)
 	if !ok {
 		pkgLevel := isPkgLevel(o)
-		name = fc.newVariableWithLevel(o.Name(), pkgLevel)
+		name = fc.newVariable(o.Name(), pkgLevel)
 		if pkgLevel {
 			fc.root().objectNames[o] = name
 		} else {
@@ -396,12 +420,17 @@ func (fc *funcContext) varPtrName(o *types.Var) string {
 
 	name, ok := fc.pkgCtx.varPtrNames[o]
 	if !ok {
-		name = fc.newVariableWithLevel(o.Name()+"$ptr", isPkgLevel(o))
+		name = fc.newVariable(o.Name()+"$ptr", isPkgLevel(o))
 		fc.pkgCtx.varPtrNames[o] = name
 	}
 	return name
 }
 
+// typeName returns a JS identifier name for the given Go type.
+//
+// For the built-in types it returns identifiers declared in the prelude. For
+// all user-defined or composite types it creates a unique JS identifier and
+// will return it on all subsequent calls for the type.
 func (fc *funcContext) typeName(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Basic:
@@ -421,10 +450,14 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		}
 	}
 
+	// For anonymous composite types, generate a synthetic package-level type
+	// declaration, which will be reused for all instances of this time. This
+	// improves performance, since runtime won't have to synthesize the same type
+	// repeatedly.
 	anonType, ok := fc.pkgCtx.anonTypeMap.At(ty).(*types.TypeName)
 	if !ok {
 		fc.initArgs(ty) // cause all embedded types to be registered
-		varName := fc.newVariableWithLevel(strings.ToLower(typeKind(ty)[5:])+"Type", true)
+		varName := fc.newVariable(strings.ToLower(typeKind(ty)[5:])+"Type", true)
 		anonType = types.NewTypeName(token.NoPos, fc.pkgCtx.Pkg, varName, ty) // fake types.TypeName
 		fc.pkgCtx.anonTypes = append(fc.pkgCtx.anonTypes, anonType)
 		fc.pkgCtx.anonTypeMap.Set(ty, anonType)
@@ -807,56 +840,6 @@ func formatJSStructTagVal(jsTag string) string {
 	}
 	// Safe to use dot notation without any escaping.
 	return "." + jsTag
-}
-
-// signatureTypes is a helper that provides convenient access to function
-// signature type information.
-type signatureTypes struct {
-	Sig *types.Signature
-}
-
-// RequiredParams returns the number of required parameters in the function signature.
-func (st signatureTypes) RequiredParams() int {
-	l := st.Sig.Params().Len()
-	if st.Sig.Variadic() {
-		return l - 1 // Last parameter is a slice of variadic params.
-	}
-	return l
-}
-
-// VariadicType returns the slice-type corresponding to the signature's variadic
-// parameter, or nil of the signature is not variadic. With the exception of
-// the special-case `append([]byte{}, "string"...)`, the returned type is
-// `*types.Slice` and `.Elem()` method can be used to get the type of individual
-// arguments.
-func (st signatureTypes) VariadicType() types.Type {
-	if !st.Sig.Variadic() {
-		return nil
-	}
-	return st.Sig.Params().At(st.Sig.Params().Len() - 1).Type()
-}
-
-// Returns the expected argument type for the i'th argument position.
-//
-// This function is able to return correct expected types for variadic calls
-// both when ellipsis syntax (e.g. myFunc(requiredArg, optionalArgSlice...))
-// is used and when optional args are passed individually.
-//
-// The returned types may differ from the actual argument expression types if
-// there is an implicit type conversion involved (e.g. passing a struct into a
-// function that expects an interface).
-func (st signatureTypes) Param(i int, ellipsis bool) types.Type {
-	if i < st.RequiredParams() {
-		return st.Sig.Params().At(i).Type()
-	}
-	if !st.Sig.Variadic() {
-		// This should never happen if the code was type-checked successfully.
-		panic(fmt.Errorf("tried to access parameter %d of a non-variadic signature %s", i, st.Sig))
-	}
-	if ellipsis {
-		return st.VariadicType()
-	}
-	return st.VariadicType().(*types.Slice).Elem()
 }
 
 // ErrorAt annotates an error with a position in the source code.

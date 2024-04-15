@@ -112,7 +112,7 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 		}
 	}
 
-	return directives, errs.Normalize()
+	return directives, errs.ErrOrNil()
 }
 
 // goLinknameSet is a utility that enables quick lookup of whether a decl is

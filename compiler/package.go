@@ -18,7 +18,6 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/gopherjs/gopherjs/internal/experiments"
-	"github.com/neelance/astrewrite"
 	"golang.org/x/tools/go/gcexportdata"
 	"golang.org/x/tools/go/types/typeutil"
 )
@@ -43,27 +42,61 @@ type pkgContext struct {
 	instanceSet  *typeparams.PackageInstanceSets
 }
 
-// funcContext maintains compiler context for a specific function (lexical scope?).
+// funcContext maintains compiler context for a specific function.
+//
+// An instance of this type roughly corresponds to a lexical scope for generated
+// JavaScript code (as defined for `var` declarations).
 type funcContext struct {
 	*analysis.FuncInfo
+	// Surrounding package context.
 	pkgCtx *pkgContext
+	// Function context, surrounding this function definition. For package-level
+	// functions or methods it is the package-level function context (even though
+	// it technically doesn't correspond to a function). nil for the package-level
+	// function context.
 	parent *funcContext
-	// Signature of the function this context corresponds to or nil. For generic
-	// functions it is the original generic signature to make sure result variable
-	// identity in the signature matches the variable objects referenced in the
-	// function body.
-	sig           *types.Signature
-	allVars       map[string]int
-	localVars     []string
-	resultNames   []ast.Expr
-	flowDatas     map[*types.Label]*flowData
-	caseCounter   int
-	labelCases    map[*types.Label]int
-	output        []byte
+	// Signature of the function this context corresponds to or nil for the
+	// package-level function context. For generic functions it is the original
+	// generic signature to make sure result variable identity in the signature
+	// matches the variable objects referenced in the function body.
+	sig *typesutil.Signature
+	// All variable names available in the current function scope. The key is a Go
+	// variable name and the value is the number of synonymous variable names
+	// visible from this scope (e.g. due to shadowing). This number is used to
+	// avoid conflicts when assigning JS variable names for Go variables.
+	allVars map[string]int
+	// Local JS variable names defined within this function context. This list
+	// contains JS variable names assigned to Go variables, as well as other
+	// auxiliary variables the compiler needs. It is used to generate `var`
+	// declaration at the top of the function, as well as context save/restore.
+	localVars []string
+	// AST expressions representing function's named return values. nil if the
+	// function has no return values or they are not named.
+	resultNames []ast.Expr
+	// Function's internal control flow graph used for generation of a "flattened"
+	// version of the function when the function is blocking or uses goto.
+	// TODO(nevkontakte): Describe the exact semantics of this map.
+	flowDatas map[*types.Label]*flowData
+	// Number of control flow blocks in a "flattened" function.
+	caseCounter int
+	// A mapping from Go labels statements (e.g. labelled loop) to the flow block
+	// id corresponding to it.
+	labelCases map[*types.Label]int
+	// Generated code buffer for the current function.
+	output []byte
+	// Generated code that should be emitted at the end of the JS statement.
 	delayedOutput []byte
-	posAvailable  bool
-	pos           token.Pos
-	typeResolver  *typeparams.Resolver
+	// Set to true if source position is available and should be emitted for the
+	// source map.
+	posAvailable bool
+	// Current position in the Go source code.
+	pos token.Pos
+	// For each instantiation of a generic function or method, contains the
+	// current mapping between type parameters and corresponding type arguments.
+	// The mapping is used to determine concrete types for expressions within the
+	// instance's context. Can be nil outside of the generic context, in which
+	// case calling its methods is safe and simply does no substitution.
+	typeResolver *typeparams.Resolver
 	// Mapping from function-level objects to JS variable names they have been assigned.
 	objectNames map[types.Object]string
 }
@@ -74,34 +107,20 @@ type flowData struct {
 	endCase   int
 }
 
+// ImportContext provides access to information about imported packages.
 type ImportContext struct {
+	// Mapping for an absolute import path to the package type information.
 	Packages map[string]*types.Package
-	Import   func(string) (*Archive, error)
+	// Import returns a previously compiled Archive for a dependency package. If
+	// the Import() call was successful, the corresponding entry must be added to
+	// the Packages map.
+	Import func(importPath string) (*Archive, error)
 }
 
-// packageImporter implements go/types.Importer interface.
-type packageImporter struct {
-	importContext *ImportContext
-	importError   *error // A pointer to importError in Compile.
-}
-
-func (pi packageImporter) Import(path string) (*types.Package, error) {
-	if path == "unsafe" {
-		return types.Unsafe, nil
-	}
-
-	a, err := pi.importContext.Import(path)
-	if err != nil {
-		if *pi.importError == nil {
-			// If import failed, show first error of import only (https://github.com/gopherjs/gopherjs/issues/119).
-			*pi.importError = err
-		}
-		return nil, err
-	}
-
-	return pi.importContext.Packages[a.ImportPath], nil
-}
-
+// Compile the provided Go sources as a single package.
+//
+// Import path must be the absolute import path for a package. Provided sources
+// are always sorted by name to ensure reproducible JavaScript output.
 func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (_ *Archive, err error) {
 	defer func() {
 		e := recover()
@@ -118,89 +137,29 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", importPath, e))
 	}()
 
-	// Files must be in the same order to get reproducible JS
-	sort.Slice(files, func(i, j int) bool {
-		return fileSet.File(files[i].Pos()).Name() > fileSet.File(files[j].Pos()).Name()
-	})
+	srcs := sources{
+		ImportPath: importPath,
+		Files:      files,
+		FileSet:    fileSet,
+	}.Sort()
 
-	typesInfo := &types.Info{
-		Types:      make(map[ast.Expr]types.TypeAndValue),
-		Defs:       make(map[*ast.Ident]types.Object),
-		Uses:       make(map[*ast.Ident]types.Object),
-		Implicits:  make(map[ast.Node]types.Object),
-		Selections: make(map[*ast.SelectorExpr]*types.Selection),
-		Scopes:     make(map[ast.Node]*types.Scope),
-		Instances:  make(map[*ast.Ident]types.Instance),
-	}
-
-	var errList ErrorList
-
-	// Extract all go:linkname compiler directives from the package source.
-	goLinknames := []GoLinkname{}
-	for _, file := range files {
-		found, err := parseGoLinknames(fileSet, importPath, file)
-		if err != nil {
-			if errs, ok := err.(ErrorList); ok {
-				errList = append(errList, errs...)
-			} else {
-				errList = append(errList, err)
-			}
-		}
-		goLinknames = append(goLinknames, found...)
-	}
-
-	var importError error
-	var previousErr error
-	config := &types.Config{
-		Context: types.NewContext(),
-		Importer: packageImporter{
-			importContext: importContext,
-			importError:   &importError,
-		},
-		Sizes: sizes32,
-		Error: func(err error) {
-			if previousErr != nil && previousErr.Error() == err.Error() {
-				return
-			}
-			errList = append(errList, err)
-			previousErr = err
-		},
-	}
-	typesPkg, err := config.Check(importPath, fileSet, files, typesInfo)
-	if importError != nil {
-		return nil, importError
-	}
-	if errList != nil {
-		if len(errList) > 10 {
-			pos := token.NoPos
-			if last, ok := errList[9].(types.Error); ok {
-				pos = last.Pos
-			}
-			errList = append(errList[:10], types.Error{Fset: fileSet, Pos: pos, Msg: "too many errors"})
-		}
-		return nil, errList
-	}
+	tContext := types.NewContext()
+	typesInfo, typesPkg, err := srcs.TypeCheck(importContext, tContext)
 	if err != nil {
 		return nil, err
 	}
 	if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil && !experiments.Env.Generics {
 		return nil, fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", importPath, genErr)
 	}
-	importContext.Packages[importPath] = typesPkg
+	importContext.Packages[srcs.ImportPath] = typesPkg
 
-	exportData := new(bytes.Buffer)
-	if err := gcexportdata.Write(exportData, nil, typesPkg); err != nil {
-		return nil, fmt.Errorf("failed to write export data: %v", err)
-	}
-	encodedFileSet := new(bytes.Buffer)
-	if err := fileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
+	// Extract all go:linkname compiler directives from the package source.
+	goLinknames, err := srcs.ParseGoLinknames()
+	if err != nil {
 		return nil, err
 	}
 
-	simplifiedFiles := make([]*ast.File, len(files))
-	for i, file := range files {
-		simplifiedFiles[i] = astrewrite.Simplify(file, typesInfo, false)
-	}
+	srcs = srcs.Simplified(typesInfo)
 
 	isBlocking := func(f *types.Func) bool {
 		archive, err := importContext.Import(f.Pkg().Path())
@@ -217,31 +176,31 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 	}
 
 	tc := typeparams.Collector{
-		TContext:  config.Context,
+		TContext:  tContext,
 		Info:      typesInfo,
 		Instances: &typeparams.PackageInstanceSets{},
 	}
-	tc.Scan(typesPkg, simplifiedFiles...)
+	tc.Scan(typesPkg, srcs.Files...)
 	instancesByObj := map[types.Object][]typeparams.Instance{}
 	for _, inst := range tc.Instances.Pkg(typesPkg).Values() {
 		instancesByObj[inst.Object] = append(instancesByObj[inst.Object], inst)
 	}
 
-	pkgInfo := analysis.AnalyzePkg(simplifiedFiles, fileSet, typesInfo, typesPkg, isBlocking)
+	pkgInfo := analysis.AnalyzePkg(srcs.Files, fileSet, typesInfo, typesPkg, isBlocking)
 	funcCtx := &funcContext{
 		FuncInfo: pkgInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{
 			Info:                 pkgInfo,
 			additionalSelections: make(map[*ast.SelectorExpr]typesutil.Selection),
 
-			typesCtx:     config.Context,
+			typesCtx:     tContext,
 			pkgVars:      make(map[string]string),
 			varPtrNames:  make(map[*types.Var]string),
 			escapingVars: make(map[*types.Var]bool),
 			indentation:  1,
 			dependencies: make(map[types.Object]bool),
 			minify:       minify,
-			fileSet:      fileSet,
+			fileSet:      srcs.FileSet,
 			instanceSet:  tc.Instances,
 		},
 		allVars:     make(map[string]int),
@@ -263,7 +222,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			// but now we do it here to maintain previous behavior.
 			continue
 		}
-		funcCtx.pkgCtx.pkgVars[importedPkg.Path()] = funcCtx.newVariableWithLevel(importedPkg.Name(), true)
+		funcCtx.pkgCtx.pkgVars[importedPkg.Path()] = funcCtx.newVariable(importedPkg.Name(), true)
 		importedPaths = append(importedPaths, importedPkg.Path())
 	}
 	sort.Strings(importedPaths)
@@ -281,7 +240,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	var functions []*ast.FuncDecl
 	var vars []*types.Var
-	for _, file := range simplifiedFiles {
+	for _, file := range srcs.Files {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
@@ -635,8 +594,17 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		return nil, funcCtx.pkgCtx.errList
 	}
 
+	exportData := new(bytes.Buffer)
+	if err := gcexportdata.Write(exportData, nil, typesPkg); err != nil {
+		return nil, fmt.Errorf("failed to write export data: %w", err)
+	}
+	encodedFileSet := new(bytes.Buffer)
+	if err := srcs.FileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
+		return nil, err
+	}
+
 	return &Archive{
-		ImportPath:   importPath,
+		ImportPath:   srcs.ImportPath,
 		Name:         typesPkg.Name(),
 		Imports:      importedPaths,
 		ExportData:   exportData.Bytes(),
@@ -779,7 +747,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		labelCases:   make(map[*types.Label]int),
 		typeResolver: outerContext.typeResolver,
 		objectNames:  map[types.Object]string{},
-		sig:          sig,
+		sig:          &typesutil.Signature{Sig: sig},
 	}
 	for k, v := range outerContext.allVars {
 		c.allVars[k] = v
@@ -798,12 +766,12 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	var params []string
 	for _, param := range typ.Params.List {
 		if len(param.Names) == 0 {
-			params = append(params, c.newVariable("param"))
+			params = append(params, c.newLocalVariable("param"))
 			continue
 		}
 		for _, ident := range param.Names {
 			if isBlank(ident) {
-				params = append(params, c.newVariable("param"))
+				params = append(params, c.newLocalVariable("param"))
 				continue
 			}
 			params = append(params, c.objectName(c.pkgCtx.Defs[ident]))
@@ -816,10 +784,10 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 			c.handleEscapingVars(body)
 		}
 
-		if c.sig != nil && c.sig.Results().Len() != 0 && c.sig.Results().At(0).Name() != "" {
-			c.resultNames = make([]ast.Expr, c.sig.Results().Len())
-			for i := 0; i < c.sig.Results().Len(); i++ {
-				result := c.sig.Results().At(i)
+		if c.sig != nil && c.sig.HasNamedResults() {
+			c.resultNames = make([]ast.Expr, c.sig.Sig.Results().Len())
+			for i := 0; i < c.sig.Sig.Results().Len(); i++ {
+				result := c.sig.Sig.Results().At(i)
 				typ := c.typeResolver.Substitute(result.Type())
 				c.Printf("%s = %s;", c.objectName(result), c.translateExpr(c.zeroValue(typ)).String())
 				id := ast.NewIdent("")
@@ -890,7 +858,7 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 		if len(c.Blocking) != 0 {
 			deferSuffix += " $s = -1;"
 		}
-		if c.resultNames == nil && c.sig.Results().Len() > 0 {
+		if c.resultNames == nil && c.sig.HasResults() {
 			deferSuffix += fmt.Sprintf(" return%s;", c.translateResults(nil))
 		}
 		deferSuffix += " } finally { $callDeferred($deferred, $err);"
@@ -913,16 +881,16 @@ func translateFunction(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, 
 	}
 
 	if prefix != "" {
-		bodyOutput = strings.Repeat("\t", c.pkgCtx.indentation+1) + "/* */" + prefix + "\n" + bodyOutput
+		bodyOutput = c.Indentation(1) + "/* */" + prefix + "\n" + bodyOutput
 	}
 	if suffix != "" {
-		bodyOutput = bodyOutput + strings.Repeat("\t", c.pkgCtx.indentation+1) + "/* */" + suffix + "\n"
+		bodyOutput = bodyOutput + c.Indentation(1) + "/* */" + suffix + "\n"
 	}
 	if localVarDefs != "" {
-		bodyOutput = strings.Repeat("\t", c.pkgCtx.indentation+1) + localVarDefs + bodyOutput
+		bodyOutput = c.Indentation(1) + localVarDefs + bodyOutput
 	}
 
 	c.pkgCtx.escapingVars = prevEV
 
-	return params, fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(params, ", "), bodyOutput, strings.Repeat("\t", c.pkgCtx.indentation))
+	return params, fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(params, ", "), bodyOutput, c.Indentation(0))
 }

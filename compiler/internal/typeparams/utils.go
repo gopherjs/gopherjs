@@ -24,7 +24,7 @@ var (
 	errDefinesGenerics      = errors.New("defines generic type or function")
 )
 
-// RequiresGenericsSupport an error if the type-checked code depends on
+// RequiresGenericsSupport returns an error if the type-checked code depends on
 // generics support.
 func RequiresGenericsSupport(info *types.Info) error {
 	type withTypeParams interface{ TypeParams() *types.TypeParamList }

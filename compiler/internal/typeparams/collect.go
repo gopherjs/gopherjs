@@ -5,8 +5,8 @@ import (
 	"go/ast"
 	"go/types"
 
-	"github.com/gopherjs/gopherjs/compiler/internal/typeparams/subst"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
+	"github.com/gopherjs/gopherjs/internal/govendor/subst"
 	"golang.org/x/exp/typeparams"
 )
 

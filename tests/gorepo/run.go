@@ -22,6 +22,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"go/build/constraint"
 	"hash/fnv"
 	"io"
 	"log"
@@ -366,6 +367,7 @@ func goFiles(dir string) []string {
 	f, err := os.Open(dir)
 	check(err)
 	dirnames, err := f.Readdirnames(-1)
+	f.Close()
 	check(err)
 	names := []string{}
 	for _, name := range dirnames {
@@ -520,52 +522,25 @@ func shouldTest(src string, goos, goarch string) (ok bool, whyNot string) {
 	}
 
 	for _, line := range strings.Split(src, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "//") {
-			line = line[2:]
-		} else {
-			continue
+		if strings.HasPrefix(line, "package ") {
+			break
 		}
-		line = strings.TrimSpace(line)
-		if len(line) == 0 || line[0] != '+' {
-			continue
-		}
-		ctxt := &context{
-			GOOS:   goos,
-			GOARCH: goarch,
-		}
-		words := strings.Fields(line)
-		if words[0] == "+build" {
-			ok := false
-			for _, word := range words[1:] {
-				if ctxt.match(word) {
-					ok = true
-					break
-				}
+		if expr, err := constraint.Parse(line); err == nil {
+			ctxt := &context{
+				GOOS:   goos,
+				GOARCH: goarch,
 			}
-			if !ok {
-				// no matching tag found.
+			if !expr.Eval(ctxt.match) {
 				return false, line
 			}
 		}
 	}
-	// no build tags
 	return true, ""
 }
 
 func (ctxt *context) match(name string) bool {
 	if name == "" {
 		return false
-	}
-	if i := strings.Index(name, ","); i >= 0 {
-		// comma-separated list
-		return ctxt.match(name[:i]) && ctxt.match(name[i+1:])
-	}
-	if strings.HasPrefix(name, "!!") { // bad syntax, reject always
-		return false
-	}
-	if strings.HasPrefix(name, "!") { // negation
-		return len(name) > 1 && !ctxt.match(name[1:])
 	}
 
 	// Tags must be letters, digits, underscores or dots.
@@ -576,7 +551,15 @@ func (ctxt *context) match(name string) bool {
 		}
 	}
 
+	// GOPHERJS: Ignore "goexperiment." for now
+	// GOPHERJS: Don't match "cgo" since not supported
+	// GOPHERJS: Don't match "gc"
 	if name == ctxt.GOOS || name == ctxt.GOARCH {
+		return true
+	}
+
+	// GOPHERJS: Don't match "gcflags_noopt"
+	if name == "test_run" {
 		return true
 	}
 
@@ -611,26 +594,23 @@ func (t *test) run() {
 	}
 
 	// Execution recipe stops at first blank line.
-	pos := strings.Index(t.src, "\n\n")
-	if pos == -1 {
-		t.err = errors.New("double newline not found")
+	action, _, ok := strings.Cut(t.src, "\n\n")
+	if !ok {
+		t.err = fmt.Errorf("double newline ending execution recipe not found in %s", t.goFileName())
 		return
 	}
-	action := t.src[:pos]
-	if nl := strings.Index(action, "\n"); nl >= 0 && strings.Contains(action[:nl], "+build") {
+	if firstLine, rest, ok := strings.Cut(action, "\n"); ok && strings.Contains(firstLine, "+build") {
 		// skip first line
-		action = action[nl+1:]
+		action = rest
 	}
-	if strings.HasPrefix(action, "//") {
-		action = action[2:]
-	}
+	action = strings.TrimPrefix(action, "//")
 
 	// Check for build constraints only up to the actual code.
-	pkgPos := strings.Index(t.src, "\npackage")
-	if pkgPos == -1 {
-		pkgPos = pos // some files are intentionally malformed
+	header, _, ok := strings.Cut(t.src, "\npackage")
+	if !ok {
+		header = action // some files are intentionally malformed
 	}
-	if ok, why := shouldTest(t.src[:pkgPos], goos, goarch); !ok {
+	if ok, why := shouldTest(header, goos, goarch); !ok {
 		t.action = "skip"
 		if *showSkips {
 			fmt.Printf("%-20s %-20s: %s\n", t.action, t.goFileName(), why)

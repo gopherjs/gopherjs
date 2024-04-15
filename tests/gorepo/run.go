@@ -110,9 +110,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue23188.go":  {desc: "incorrect order of evaluation of index operations"},
 	"fixedbugs/issue24547.go":  {desc: "incorrect computing method sets with shadowed methods"},
 
-	// These are new tests in Go 1.11.5
-	"fixedbugs/issue28688.go": {category: notApplicable, desc: "testing runtime optimisations"},
-
 	// These are new tests in Go 1.12.
 	"fixedbugs/issue23837.go":  {desc: "missing panic on nil pointer-to-empty-struct dereference"},
 	"fixedbugs/issue27201.go":  {desc: "incorrect stack trace for nil dereference in inlined function"},
@@ -122,7 +119,6 @@ var knownFails = map[string]failReason{
 	// These are new tests in Go 1.12.9.
 	"fixedbugs/issue30977.go": {category: neverTerminates, desc: "does for { runtime.GC() }"},
 	"fixedbugs/issue32477.go": {category: notApplicable, desc: "uses runtime.SetFinalizer and runtime.GC"},
-	"fixedbugs/issue32680.go": {category: notApplicable, desc: "uses -gcflags=-d=ssa/check/on flag"},
 
 	// These are new tests in Go 1.13-1.16.
 	"fixedbugs/issue19113.go":  {category: lowLevelRuntimeDifference, desc: "JavaScript bit shifts by negative amount don't cause an exception"},
@@ -135,7 +131,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue30116u.go": {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
 	"fixedbugs/issue34395.go":  {category: neverTerminates, desc: "https://github.com/gopherjs/gopherjs/issues/1007"},
 	"fixedbugs/issue35027.go":  {category: usesUnsupportedPackage, desc: "uses unsupported conversion to reflect.SliceHeader and -gcflags=-d=checkptr"},
-	"fixedbugs/issue35073.go":  {category: usesUnsupportedPackage, desc: "uses unsupported flag -gcflags=-d=checkptr"},
 	"fixedbugs/issue35576.go":  {category: lowLevelRuntimeDifference, desc: "GopherJS print/println format for floats differs from Go's"},
 	"fixedbugs/issue40917.go":  {category: notApplicable, desc: "uses pointer arithmetic and unsupported flag -gcflags=-d=checkptr"},
 
@@ -150,17 +145,22 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue50854.go": {category: lowLevelRuntimeDifference, desc: "negative int32 overflow behaves differently in JS"},
 
 	// These are new tests in Go 1.18
-	"fixedbugs/issue46938.go": {category: notApplicable, desc: "tests -d=checkptr compiler mode, which GopherJS doesn't support"},
-	"fixedbugs/issue47928.go": {category: notApplicable, desc: "//go:nointerface is a part of GOEXPERIMENT=fieldtrack and is not supported by GopherJS"},
-	"fixedbugs/issue48898.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
-	"fixedbugs/issue48536.go": {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
-	"fixedbugs/issue53600.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+	"fixedbugs/issue47928.go":  {category: notApplicable, desc: "//go:nointerface is a part of GOEXPERIMENT=fieldtrack and is not supported by GopherJS"},
+	"fixedbugs/issue48536.go":  {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
+	"fixedbugs/issue48898.go":  {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
+	"fixedbugs/issue53600.go":  {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+	"typeparam/chans.go":       {category: neverTerminates, desc: "uses runtime.SetFinalizer() and runtime.GC()."},
+	"typeparam/issue51733.go":  {category: usesUnsupportedPackage, desc: "unsafe: uintptr to struct pointer conversion is unsupported"},
+	"typeparam/typeswitch5.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+
+	// Failures related to the lack of generics support. Ideally, this section
+	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
+	// fixed.
+	"typeparam/nested.go": {category: usesUnsupportedGenerics, desc: "incomplete support for generic types inside generic functions"},
 
 	// These are new tests in Go 1.19
-	"fixedbugs/issue50672.go": {category: usesUnsupportedGenerics, desc: "Checking function nesting with one function having a type parameter."},
-	"fixedbugs/issue53137.go": {category: usesUnsupportedGenerics, desc: "Checking setting type parameter of struct in parameter of a generic function."},
-	"fixedbugs/issue53309.go": {category: usesUnsupportedGenerics, desc: "Checking unused type parameter in method call to interface"},
-	"fixedbugs/issue53635.go": {category: usesUnsupportedGenerics, desc: "Checking switch type against nil type with unsupported type parameters"},
+	"typeparam/issue51521.go": {category: lowLevelRuntimeDifference, desc: "different panic message when calling a method on nil interface"},
+	"fixedbugs/issue50672.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1271"},
 	"fixedbugs/issue53653.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format of int64 is different from Go's"},
 }
 
@@ -203,7 +203,7 @@ var (
 
 	// dirs are the directories to look for *.go files in.
 	// TODO(bradfitz): just use all directories?
-	dirs = []string{".", "ken", "chan", "interface", "syntax", "dwarf", "fixedbugs"}
+	dirs = []string{".", "ken", "chan", "interface", "syntax", "dwarf", "fixedbugs", "typeparam"}
 
 	// ratec controls the max number of tests running at a time.
 	ratec chan bool
@@ -620,16 +620,20 @@ func (t *test) run() {
 
 	var args, flags []string
 	wantError := false
-	f := strings.Fields(action)
+	f, err := splitQuoted(action)
+	if err != nil {
+		t.err = fmt.Errorf("invalid test recipe: %v", err)
+		return
+	}
 	if len(f) > 0 {
 		action = f[0]
 		args = f[1:]
 	}
 
-	// GOPHERJS: For now, only run with "run", "cmpout" actions, in "fixedbugs" dir. Skip all others.
+	// GOPHERJS: For now, only run with "run", "cmpout" actions, in "fixedbugs" and "typeparam" dirs. Skip all others.
 	switch action {
 	case "run", "cmpout":
-		if filepath.Clean(t.dir) != "fixedbugs" {
+		if d := filepath.Clean(t.dir); d != "fixedbugs" && d != "typeparam" {
 			action = "skip"
 		}
 	default:
@@ -677,6 +681,19 @@ func (t *test) run() {
 	}
 	if os.Getenv("GOARCH") == "" {
 		os.Setenv("GOARCH", goarch)
+	}
+
+	{
+		// GopherJS: we don't support any of -gcflags, but for the most part they
+		// are not too relevant to the outcome of the test.
+		supportedArgs := []string{}
+		for _, a := range args {
+			if strings.HasPrefix(a, "-gcflags") {
+				continue
+			}
+			supportedArgs = append(supportedArgs, a)
+		}
+		args = supportedArgs
 	}
 
 	useTmp := true
@@ -1242,4 +1259,66 @@ func getenv(key, def string) string {
 		return value
 	}
 	return def
+}
+
+// splitQuoted splits the string s around each instance of one or more consecutive
+// white space characters while taking into account quotes and escaping, and
+// returns an array of substrings of s or an empty list if s contains only white space.
+// Single quotes and double quotes are recognized to prevent splitting within the
+// quoted region, and are removed from the resulting substrings. If a quote in s
+// isn't closed err will be set and r will have the unclosed argument as the
+// last element. The backslash is used for escaping.
+//
+// For example, the following string:
+//
+//	a b:"c d" 'e''f'  "g\""
+//
+// Would be parsed as:
+//
+//	[]string{"a", "b:c d", "ef", `g"`}
+//
+// [copied from src/go/build/build.go]
+func splitQuoted(s string) (r []string, err error) {
+	var args []string
+	arg := make([]rune, len(s))
+	escaped := false
+	quoted := false
+	quote := '\x00'
+	i := 0
+	for _, rune := range s {
+		switch {
+		case escaped:
+			escaped = false
+		case rune == '\\':
+			escaped = true
+			continue
+		case quote != '\x00':
+			if rune == quote {
+				quote = '\x00'
+				continue
+			}
+		case rune == '"' || rune == '\'':
+			quoted = true
+			quote = rune
+			continue
+		case unicode.IsSpace(rune):
+			if quoted || i > 0 {
+				quoted = false
+				args = append(args, string(arg[:i]))
+				i = 0
+			}
+			continue
+		}
+		arg[i] = rune
+		i++
+	}
+	if quoted || i > 0 {
+		args = append(args, string(arg[:i]))
+	}
+	if quote != 0 {
+		err = errors.New("unclosed quote")
+	} else if escaped {
+		err = errors.New("unfinished escaping")
+	}
+	return args, err
 }

@@ -4,48 +4,86 @@ package srctesting
 
 import (
 	"bytes"
+	"fmt"
 	"go/ast"
 	"go/format"
 	"go/parser"
 	"go/token"
 	"go/types"
+	"strings"
 	"testing"
 )
 
-// Parse source from the string and return complete AST.
-//
-// Assumes source file name `test.go`. Fails the test on parsing error.
-func Parse(t *testing.T, fset *token.FileSet, src string) *ast.File {
-	t.Helper()
-	f, err := parser.ParseFile(fset, "test.go", src, parser.ParseComments)
-	if err != nil {
-		t.Fatalf("Failed to parse test source: %s", err)
-	}
-	return f
+// Fixture provides utilities for parsing and type checking Go code in tests.
+type Fixture struct {
+	T        *testing.T
+	FileSet  *token.FileSet
+	Info     *types.Info
+	Packages map[string]*types.Package
 }
 
-// Check type correctness of the provided AST.
-//
-// Assumes "test" package import path. Fails the test if type checking fails.
-// Provided AST is expected not to have any imports.
-func Check(t *testing.T, fset *token.FileSet, files ...*ast.File) (*types.Info, *types.Package) {
-	t.Helper()
-	typesInfo := &types.Info{
+func newInfo() *types.Info {
+	return &types.Info{
 		Types:      make(map[ast.Expr]types.TypeAndValue),
 		Defs:       make(map[*ast.Ident]types.Object),
 		Uses:       make(map[*ast.Ident]types.Object),
 		Implicits:  make(map[ast.Node]types.Object),
 		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 		Scopes:     make(map[ast.Node]*types.Scope),
+		Instances:  make(map[*ast.Ident]types.Instance),
 	}
-	config := &types.Config{
-		Sizes: &types.StdSizes{WordSize: 4, MaxAlign: 8},
+}
+
+// New creates a fresh Fixture.
+func New(t *testing.T) *Fixture {
+	return &Fixture{
+		T:        t,
+		FileSet:  token.NewFileSet(),
+		Info:     newInfo(),
+		Packages: map[string]*types.Package{},
 	}
-	typesPkg, err := config.Check("test", fset, files, typesInfo)
+}
+
+// Parse source from the string and return complete AST.
+func (f *Fixture) Parse(name, src string) *ast.File {
+	f.T.Helper()
+	file, err := parser.ParseFile(f.FileSet, name, src, parser.ParseComments)
 	if err != nil {
-		t.Fatalf("Filed to type check test source: %s", err)
+		f.T.Fatalf("Failed to parse test source: %s", err)
 	}
-	return typesInfo, typesPkg
+	return file
+}
+
+// Check type correctness of the provided AST.
+//
+// Fails the test if type checking fails. Provided AST is expected not to have
+// any imports. If f.Info is nil, it will create a new types.Info instance
+// to store type checking results and return it, otherwise f.Info is used.
+func (f *Fixture) Check(importPath string, files ...*ast.File) (*types.Info, *types.Package) {
+	f.T.Helper()
+	config := &types.Config{
+		Sizes:    &types.StdSizes{WordSize: 4, MaxAlign: 8},
+		Importer: f,
+	}
+	info := f.Info
+	if info == nil {
+		info = newInfo()
+	}
+	pkg, err := config.Check(importPath, f.FileSet, files, info)
+	if err != nil {
+		f.T.Fatalf("Filed to type check test source: %s", err)
+	}
+	f.Packages[importPath] = pkg
+	return info, pkg
+}
+
+// Import implements types.Importer.
+func (f *Fixture) Import(path string) (*types.Package, error) {
+	pkg, ok := f.Packages[path]
+	if !ok {
+		return nil, fmt.Errorf("missing type info for package %q", path)
+	}
+	return pkg, nil
 }
 
 // ParseFuncDecl parses source with a single function defined and returns the
@@ -68,8 +106,7 @@ func ParseFuncDecl(t *testing.T, src string) *ast.FuncDecl {
 // Fails the test if there isn't exactly one declaration in the source.
 func ParseDecl(t *testing.T, src string) ast.Decl {
 	t.Helper()
-	fset := token.NewFileSet()
-	file := Parse(t, fset, src)
+	file := New(t).Parse("test.go", src)
 	if l := len(file.Decls); l != 1 {
 		t.Fatalf(`Got %d decls in the sources, expected exactly 1`, l)
 	}
@@ -106,4 +143,31 @@ func Format(t *testing.T, fset *token.FileSet, node any) string {
 		t.Fatalf("Failed to format AST node %T: %s", node, err)
 	}
 	return buf.String()
+}
+
+// LookupObj returns a top-level object with the given name.
+//
+// Methods can be referred to as RecvTypeName.MethodName.
+func LookupObj(pkg *types.Package, name string) types.Object {
+	path := strings.Split(name, ".")
+	scope := pkg.Scope()
+	var obj types.Object
+
+	for len(path) > 0 {
+		obj = scope.Lookup(path[0])
+		path = path[1:]
+
+		if fun, ok := obj.(*types.Func); ok {
+			scope = fun.Scope()
+			continue
+		}
+
+		// If we are here, the latest object is a named type. If there are more path
+		// elements left, they must refer to field or method.
+		if len(path) > 0 {
+			obj, _, _ = types.LookupFieldOrMethod(obj.Type(), true, obj.Pkg(), path[0])
+			path = path[1:]
+		}
+	}
+	return obj
 }

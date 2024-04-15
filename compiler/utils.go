@@ -19,8 +19,17 @@ import (
 	"unicode"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
+
+// root returns the topmost function context corresponding to the package scope.
+func (fc *funcContext) root() *funcContext {
+	if fc.parent == nil {
+		return fc
+	}
+	return fc.parent.root()
+}
 
 func (fc *funcContext) Write(b []byte) (int, error) {
 	fc.writePos()
@@ -101,7 +110,7 @@ func (fc *funcContext) expandTupleArgs(argExprs []ast.Expr) []ast.Expr {
 		return argExprs
 	}
 
-	tuple, isTuple := fc.pkgCtx.TypeOf(argExprs[0]).(*types.Tuple)
+	tuple, isTuple := fc.typeOf(argExprs[0]).(*types.Tuple)
 	if !isTuple {
 		return argExprs
 	}
@@ -158,7 +167,7 @@ func (fc *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, 
 	return args
 }
 
-func (fc *funcContext) translateSelection(sel selection, pos token.Pos) ([]string, string) {
+func (fc *funcContext) translateSelection(sel typesutil.Selection, pos token.Pos) ([]string, string) {
 	var fields []string
 	t := sel.Recv()
 	for _, index := range sel.Index() {
@@ -283,7 +292,7 @@ func (fc *funcContext) newIdent(name string, t types.Type) *ast.Ident {
 	fc.setType(ident, t)
 	obj := types.NewVar(0, fc.pkgCtx.Pkg, name, t)
 	fc.pkgCtx.Uses[ident] = obj
-	fc.pkgCtx.objectNames[obj] = name
+	fc.objectNames[obj] = name
 	return ident
 }
 
@@ -319,9 +328,30 @@ func isVarOrConst(o types.Object) bool {
 }
 
 func isPkgLevel(o types.Object) bool {
-	return o.Parent() != nil && o.Parent().Parent() == types.Universe
+	// Note: named types are always assigned a variable at package level to be
+	// initialized with the rest of the package types, even the types declared
+	// in a statement inside a function.
+	_, isType := o.(*types.TypeName)
+	return (o.Parent() != nil && o.Parent().Parent() == types.Universe) || isType
 }
 
+// assignedObjectName checks if the object has been previously assigned a name
+// in this or one of the parent contexts. If not, found will be false.
+func (fc *funcContext) assignedObjectName(o types.Object) (name string, found bool) {
+	if fc == nil {
+		return "", false
+	}
+	if name, found := fc.parent.assignedObjectName(o); found {
+		return name, true
+	}
+
+	name, found = fc.objectNames[o]
+	return name, found
+}
+
+// objectName returns a JS expression that refers to the given object. If the
+// object hasn't been previously assigned a JS variable name, it will be
+// allocated as needed.
 func (fc *funcContext) objectName(o types.Object) string {
 	if isPkgLevel(o) {
 		fc.pkgCtx.dependencies[o] = true
@@ -331,16 +361,32 @@ func (fc *funcContext) objectName(o types.Object) string {
 		}
 	}
 
-	name, ok := fc.pkgCtx.objectNames[o]
+	name, ok := fc.assignedObjectName(o)
 	if !ok {
-		name = fc.newVariableWithLevel(o.Name(), isPkgLevel(o))
-		fc.pkgCtx.objectNames[o] = name
+		pkgLevel := isPkgLevel(o)
+		name = fc.newVariableWithLevel(o.Name(), pkgLevel)
+		if pkgLevel {
+			fc.root().objectNames[o] = name
+		} else {
+			fc.objectNames[o] = name
+		}
 	}
 
 	if v, ok := o.(*types.Var); ok && fc.pkgCtx.escapingVars[v] {
 		return name + "[0]"
 	}
 	return name
+}
+
+// instName returns a JS expression that refers to the provided instance of a
+// function or type. Non-generic objects may be represented as an instance with
+// zero type arguments.
+func (fc *funcContext) instName(inst typeparams.Instance) string {
+	objName := fc.objectName(inst.Object)
+	if inst.IsTrivial() {
+		return objName
+	}
+	return fmt.Sprintf("%s[%d /* %v */]", objName, fc.pkgCtx.instanceSet.ID(inst), inst.TArgs)
 }
 
 func (fc *funcContext) varPtrName(o *types.Var) string {
@@ -364,7 +410,11 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		if t.Obj().Name() == "error" {
 			return "$error"
 		}
-		return fc.objectName(t.Obj())
+		inst := typeparams.Instance{Object: t.Obj()}
+		for i := 0; i < t.TypeArgs().Len(); i++ {
+			inst.TArgs = append(inst.TArgs, t.TypeArgs().At(i))
+		}
+		return fc.instName(inst)
 	case *types.Interface:
 		if t.Empty() {
 			return "$emptyInterface"
@@ -381,6 +431,42 @@ func (fc *funcContext) typeName(ty types.Type) string {
 	}
 	fc.pkgCtx.dependencies[anonType] = true
 	return anonType.Name()
+}
+
+// instanceOf constructs an instance description of the object the ident is
+// referring to. For non-generic objects, it will return a trivial instance with
+// no type arguments.
+func (fc *funcContext) instanceOf(ident *ast.Ident) typeparams.Instance {
+	inst := typeparams.Instance{Object: fc.pkgCtx.ObjectOf(ident)}
+	if i, ok := fc.pkgCtx.Instances[ident]; ok {
+		inst.TArgs = fc.typeResolver.SubstituteAll(i.TypeArgs)
+	}
+	return inst
+}
+
+// typeOf returns a type associated with the given AST expression. For types
+// defined in terms of type parameters, it will substitute type parameters with
+// concrete types from the current set of type arguments.
+func (fc *funcContext) typeOf(expr ast.Expr) types.Type {
+	typ := fc.pkgCtx.TypeOf(expr)
+	// If the expression is referring to an instance of a generic type or function,
+	// we want the instantiated type.
+	if ident, ok := expr.(*ast.Ident); ok {
+		if inst, ok := fc.pkgCtx.Instances[ident]; ok {
+			typ = inst.Type
+		}
+	}
+	return fc.typeResolver.Substitute(typ)
+}
+
+func (fc *funcContext) selectionOf(e *ast.SelectorExpr) (typesutil.Selection, bool) {
+	if sel, ok := fc.pkgCtx.Selections[e]; ok {
+		return fc.typeResolver.SubstituteSelection(sel), true
+	}
+	if sel, ok := fc.pkgCtx.additionalSelections[e]; ok {
+		return sel, true
+	}
+	return nil, false
 }
 
 func (fc *funcContext) externalize(s string, t types.Type) string {

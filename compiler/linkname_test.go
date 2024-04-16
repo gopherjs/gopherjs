@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 )
 
 func parseSource(t *testing.T, src string) (*ast.File, *token.FileSet) {
@@ -39,49 +40,6 @@ func makePackage(t *testing.T, src string) *types.Package {
 	}
 
 	return pkg
-}
-
-func TestSymName(t *testing.T) {
-	pkg := makePackage(t,
-		`package testcase
-
-	func AFunction() {}
-	type AType struct {}
-	func (AType) AMethod() {}
-	func (*AType) APointerMethod() {}
-	var AVariable int32
-	`)
-
-	tests := []struct {
-		obj  types.Object
-		want SymName
-	}{
-		{
-			obj:  pkg.Scope().Lookup("AFunction"),
-			want: SymName{PkgPath: "testcase", Name: "AFunction"},
-		}, {
-			obj:  pkg.Scope().Lookup("AType"),
-			want: SymName{PkgPath: "testcase", Name: "AType"},
-		}, {
-			obj:  types.NewMethodSet(pkg.Scope().Lookup("AType").Type()).Lookup(pkg, "AMethod").Obj(),
-			want: SymName{PkgPath: "testcase", Name: "AType.AMethod"},
-		}, {
-			obj:  types.NewMethodSet(types.NewPointer(pkg.Scope().Lookup("AType").Type())).Lookup(pkg, "APointerMethod").Obj(),
-			want: SymName{PkgPath: "testcase", Name: "(*AType).APointerMethod"},
-		}, {
-			obj:  pkg.Scope().Lookup("AVariable"),
-			want: SymName{PkgPath: "testcase", Name: "AVariable"},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.obj.Name(), func(t *testing.T) {
-			got := newSymName(test.obj)
-			if got != test.want {
-				t.Errorf("NewSymName(%q) returned %#v, want: %#v", test.obj.Name(), got, test.want)
-			}
-		})
-	}
 }
 
 func TestParseGoLinknames(t *testing.T) {
@@ -115,8 +73,8 @@ func TestParseGoLinknames(t *testing.T) {
 			`,
 			wantDirectives: []GoLinkname{
 				{
-					Reference:      SymName{PkgPath: "testcase", Name: "a"},
-					Implementation: SymName{PkgPath: "other/package", Name: "testcase_a"},
+					Reference:      symbol.Name{PkgPath: "testcase", Name: "a"},
+					Implementation: symbol.Name{PkgPath: "other/package", Name: "testcase_a"},
 				},
 			},
 		}, {
@@ -133,11 +91,11 @@ func TestParseGoLinknames(t *testing.T) {
 			`,
 			wantDirectives: []GoLinkname{
 				{
-					Reference:      SymName{PkgPath: "testcase", Name: "a"},
-					Implementation: SymName{PkgPath: "other/package", Name: "a"},
+					Reference:      symbol.Name{PkgPath: "testcase", Name: "a"},
+					Implementation: symbol.Name{PkgPath: "other/package", Name: "a"},
 				}, {
-					Reference:      SymName{PkgPath: "testcase", Name: "b"},
-					Implementation: SymName{PkgPath: "other/package", Name: "b"},
+					Reference:      symbol.Name{PkgPath: "testcase", Name: "b"},
+					Implementation: symbol.Name{PkgPath: "other/package", Name: "b"},
 				},
 			},
 		}, {

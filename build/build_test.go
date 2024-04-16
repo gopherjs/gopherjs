@@ -418,18 +418,17 @@ func TestOverlayAugmentation(t *testing.T) {
 				test.want = test.src
 			}
 
-			fsetSrc := token.NewFileSet()
-			fileSrc := srctesting.Parse(t, fsetSrc, pkgName+test.src)
+			f := srctesting.New(t)
+			fileSrc := f.Parse("test.go", pkgName+test.src)
 
 			overrides := map[string]overrideInfo{}
 			augmentOverlayFile(fileSrc, overrides)
 			pruneImports(fileSrc)
 
-			got := srctesting.Format(t, fsetSrc, fileSrc)
+			got := srctesting.Format(t, f.FileSet, fileSrc)
 
-			fsetWant := token.NewFileSet()
-			fileWant := srctesting.Parse(t, fsetWant, pkgName+test.want)
-			want := srctesting.Format(t, fsetWant, fileWant)
+			fileWant := f.Parse("test.go", pkgName+test.want)
+			want := srctesting.Format(t, f.FileSet, fileWant)
 
 			if got != want {
 				t.Errorf("augmentOverlayFile and pruneImports got unexpected code:\n"+
@@ -720,18 +719,17 @@ func TestOriginalAugmentation(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			pkgName := "package testpackage\n\n"
 			importPath := `math/rand`
-			fsetSrc := token.NewFileSet()
-			fileSrc := srctesting.Parse(t, fsetSrc, pkgName+test.src)
+			f := srctesting.New(t)
+			fileSrc := f.Parse("test.go", pkgName+test.src)
 
 			augmentOriginalImports(importPath, fileSrc)
 			augmentOriginalFile(fileSrc, test.info)
 			pruneImports(fileSrc)
 
-			got := srctesting.Format(t, fsetSrc, fileSrc)
+			got := srctesting.Format(t, f.FileSet, fileSrc)
 
-			fsetWant := token.NewFileSet()
-			fileWant := srctesting.Parse(t, fsetWant, pkgName+test.want)
-			want := srctesting.Format(t, fsetWant, fileWant)
+			fileWant := f.Parse("test.go", pkgName+test.want)
+			want := srctesting.Format(t, f.FileSet, fileWant)
 
 			if got != want {
 				t.Errorf("augmentOriginalImports, augmentOriginalFile, and pruneImports got unexpected code:\n"+

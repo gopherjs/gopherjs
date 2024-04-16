@@ -100,7 +100,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			data.endCase = fc.caseCounter
 			fc.caseCounter++
 
-			fc.Indent(func() {
+			fc.Indented(func() {
 				fc.translateStmtList(clause.Body)
 			})
 			fc.Printf("case %d:", data.endCase)
@@ -112,7 +112,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 				fc.Printf("%s:", label.Name())
 			}
 			fc.Printf("switch (0) { default:")
-			fc.Indent(func() {
+			fc.Indented(func() {
 				fc.translateStmtList(clause.Body)
 			})
 			fc.Printf("}")
@@ -125,7 +125,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		if s.Init != nil {
 			fc.translateStmt(s.Init, nil)
 		}
-		refVar := fc.newVariable("_ref")
+		refVar := fc.newLocalVariable("_ref")
 		var expr ast.Expr
 		switch a := s.Assign.(type) {
 		case *ast.AssignStmt:
@@ -135,10 +135,10 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		}
 		fc.Printf("%s = %s;", refVar, fc.translateExpr(expr))
 		translateCond := func(cond ast.Expr) *expression {
-			if types.Identical(fc.pkgCtx.TypeOf(cond), types.Typ[types.UntypedNil]) {
+			if types.Identical(fc.typeOf(cond), types.Typ[types.UntypedNil]) {
 				return fc.formatExpr("%s === $ifaceNil", refVar)
 			}
-			return fc.formatExpr("$assertType(%s, %s, true)[1]", refVar, fc.typeName(fc.pkgCtx.TypeOf(cond)))
+			return fc.formatExpr("$assertType(%s, %s, true)[1]", refVar, fc.typeName(fc.typeOf(cond)))
 		}
 		var caseClauses []*ast.CaseClause
 		var defaultClause *ast.CaseClause
@@ -146,16 +146,17 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			clause := cc.(*ast.CaseClause)
 			var bodyPrefix []ast.Stmt
 			if implicit := fc.pkgCtx.Implicits[clause]; implicit != nil {
+				typ := fc.typeResolver.Substitute(implicit.Type())
 				value := refVar
-				if typesutil.IsJsObject(implicit.Type().Underlying()) {
+				if typesutil.IsJsObject(typ.Underlying()) {
 					value += ".$val.object"
-				} else if _, ok := implicit.Type().Underlying().(*types.Interface); !ok {
+				} else if _, ok := typ.Underlying().(*types.Interface); !ok {
 					value += ".$val"
 				}
 				bodyPrefix = []ast.Stmt{&ast.AssignStmt{
-					Lhs: []ast.Expr{fc.newIdent(fc.objectName(implicit), implicit.Type())},
+					Lhs: []ast.Expr{fc.newIdent(fc.objectName(implicit), typ)},
 					Tok: token.DEFINE,
-					Rhs: []ast.Expr{fc.newIdent(value, implicit.Type())},
+					Rhs: []ast.Expr{fc.newIdent(value, typ)},
 				}}
 			}
 			c := &ast.CaseClause{
@@ -187,14 +188,14 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		}, label, fc.Flattened[s])
 
 	case *ast.RangeStmt:
-		refVar := fc.newVariable("_ref")
+		refVar := fc.newLocalVariable("_ref")
 		fc.Printf("%s = %s;", refVar, fc.translateExpr(s.X))
 
-		switch t := fc.pkgCtx.TypeOf(s.X).Underlying().(type) {
+		switch t := fc.typeOf(s.X).Underlying().(type) {
 		case *types.Basic:
-			iVar := fc.newVariable("_i")
+			iVar := fc.newLocalVariable("_i")
 			fc.Printf("%s = 0;", iVar)
-			runeVar := fc.newVariable("_rune")
+			runeVar := fc.newLocalVariable("_rune")
 			fc.translateLoopingStmt(func() string { return iVar + " < " + refVar + ".length" }, s.Body, func() {
 				fc.Printf("%s = $decodeRune(%s, %s);", runeVar, refVar, iVar)
 				if !isBlank(s.Key) {
@@ -208,16 +209,16 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			}, label, fc.Flattened[s])
 
 		case *types.Map:
-			iVar := fc.newVariable("_i")
+			iVar := fc.newLocalVariable("_i")
 			fc.Printf("%s = 0;", iVar)
-			keysVar := fc.newVariable("_keys")
+			keysVar := fc.newLocalVariable("_keys")
 			fc.Printf("%s = %s ? %s.keys() : undefined;", keysVar, refVar, refVar)
 
-			sizeVar := fc.newVariable("_size")
+			sizeVar := fc.newLocalVariable("_size")
 			fc.Printf("%s = %s ? %s.size : 0;", sizeVar, refVar, refVar)
 			fc.translateLoopingStmt(func() string { return iVar + " < " + sizeVar }, s.Body, func() {
-				keyVar := fc.newVariable("_key")
-				entryVar := fc.newVariable("_entry")
+				keyVar := fc.newLocalVariable("_key")
+				entryVar := fc.newLocalVariable("_entry")
 				fc.Printf("%s = %s.next().value;", keyVar, keysVar)
 				fc.Printf("%s = %s.get(%s);", entryVar, refVar, keyVar)
 				fc.translateStmt(&ast.IfStmt{
@@ -248,7 +249,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 				length = refVar + ".$length"
 				elemType = t2.Elem()
 			}
-			iVar := fc.newVariable("_i")
+			iVar := fc.newLocalVariable("_i")
 			fc.Printf("%s = 0;", iVar)
 			fc.translateLoopingStmt(func() string { return iVar + " < " + length }, s.Body, func() {
 				if !isBlank(s.Key) {
@@ -265,7 +266,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			}, label, fc.Flattened[s])
 
 		case *types.Chan:
-			okVar := fc.newIdent(fc.newVariable("_ok"), types.Typ[types.Bool])
+			okVar := fc.newIdent(fc.newLocalVariable("_ok"), types.Typ[types.Bool])
 			key := s.Key
 			tok := s.Tok
 			if key == nil {
@@ -354,7 +355,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		if rVal != "" {
 			// If returned expression is non empty, evaluate and store it in a
 			// variable to avoid double-execution in case a deferred function blocks.
-			rVar := fc.newVariable("$r")
+			rVar := fc.newLocalVariable("$r")
 			fc.Printf("%s =%s;", rVar, rVal)
 			rVal = " " + rVar
 		}
@@ -380,15 +381,15 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
 			lhs := astutil.RemoveParens(s.Lhs[0])
 			if isBlank(lhs) {
-				fc.Printf("$unused(%s);", fc.translateImplicitConversion(s.Rhs[0], fc.pkgCtx.TypeOf(s.Lhs[0])))
+				fc.Printf("$unused(%s);", fc.translateImplicitConversion(s.Rhs[0], fc.typeOf(s.Lhs[0])))
 				return
 			}
 			fc.Printf("%s", fc.translateAssign(lhs, s.Rhs[0], s.Tok == token.DEFINE))
 
 		case len(s.Lhs) > 1 && len(s.Rhs) == 1:
-			tupleVar := fc.newVariable("_tuple")
+			tupleVar := fc.newLocalVariable("_tuple")
 			fc.Printf("%s = %s;", tupleVar, fc.translateExpr(s.Rhs[0]))
-			tuple := fc.pkgCtx.TypeOf(s.Rhs[0]).(*types.Tuple)
+			tuple := fc.typeOf(s.Rhs[0]).(*types.Tuple)
 			for i, lhs := range s.Lhs {
 				lhs = astutil.RemoveParens(lhs)
 				if !isBlank(lhs) {
@@ -398,17 +399,17 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		case len(s.Lhs) == len(s.Rhs):
 			tmpVars := make([]string, len(s.Rhs))
 			for i, rhs := range s.Rhs {
-				tmpVars[i] = fc.newVariable("_tmp")
+				tmpVars[i] = fc.newLocalVariable("_tmp")
 				if isBlank(astutil.RemoveParens(s.Lhs[i])) {
 					fc.Printf("$unused(%s);", fc.translateExpr(rhs))
 					continue
 				}
-				fc.Printf("%s", fc.translateAssign(fc.newIdent(tmpVars[i], fc.pkgCtx.TypeOf(s.Lhs[i])), rhs, true))
+				fc.Printf("%s", fc.translateAssign(fc.newIdent(tmpVars[i], fc.typeOf(s.Lhs[i])), rhs, true))
 			}
 			for i, lhs := range s.Lhs {
 				lhs = astutil.RemoveParens(lhs)
 				if !isBlank(lhs) {
-					fc.Printf("%s", fc.translateAssign(lhs, fc.newIdent(tmpVars[i], fc.pkgCtx.TypeOf(lhs)), s.Tok == token.DEFINE))
+					fc.Printf("%s", fc.translateAssign(lhs, fc.newIdent(tmpVars[i], fc.typeOf(lhs)), s.Tok == token.DEFINE))
 				}
 			}
 
@@ -431,7 +432,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 				if len(rhs) == 0 {
 					rhs = make([]ast.Expr, len(lhs))
 					for i, e := range lhs {
-						rhs[i] = fc.zeroValue(fc.pkgCtx.TypeOf(e))
+						rhs[i] = fc.zeroValue(fc.typeOf(e))
 					}
 				}
 				fc.translateStmt(&ast.AssignStmt{
@@ -443,8 +444,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		case token.TYPE:
 			for _, spec := range decl.Specs {
 				o := fc.pkgCtx.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
-				fc.pkgCtx.typeNames = append(fc.pkgCtx.typeNames, o)
-				fc.pkgCtx.objectNames[o] = fc.newVariableWithLevel(o.Name(), true)
+				fc.pkgCtx.typeNames.Add(o)
 				fc.pkgCtx.dependencies[o] = true
 			}
 		case token.CONST:
@@ -469,7 +469,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		fc.Printf("$go(%s, %s);", callable, arglist)
 
 	case *ast.SendStmt:
-		chanType := fc.pkgCtx.TypeOf(s.Chan).Underlying().(*types.Chan)
+		chanType := fc.typeOf(s.Chan).Underlying().(*types.Chan)
 		call := &ast.CallExpr{
 			Fun:  fc.newIdent("$send", types.NewSignatureType(nil, nil, nil, types.NewTuple(types.NewVar(0, nil, "", chanType), types.NewVar(0, nil, "", chanType.Elem())), nil, false)),
 			Args: []ast.Expr{s.Chan, fc.newIdent(fc.translateImplicitConversionWithCloning(s.Value, chanType.Elem()).String(), chanType.Elem())},
@@ -478,7 +478,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		fc.translateStmt(&ast.ExprStmt{X: call}, label)
 
 	case *ast.SelectStmt:
-		selectionVar := fc.newVariable("_selection")
+		selectionVar := fc.newLocalVariable("_selection")
 		var channels []string
 		var caseClauses []*ast.CaseClause
 		flattened := false
@@ -494,7 +494,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			case *ast.AssignStmt:
 				channels = append(channels, fc.formatExpr("[%e]", astutil.RemoveParens(comm.Rhs[0]).(*ast.UnaryExpr).X).String())
 			case *ast.SendStmt:
-				chanType := fc.pkgCtx.TypeOf(comm.Chan).Underlying().(*types.Chan)
+				chanType := fc.typeOf(comm.Chan).Underlying().(*types.Chan)
 				channels = append(channels, fc.formatExpr("[%e, %s]", comm.Chan, fc.translateImplicitConversionWithCloning(comm.Value, chanType.Elem())).String())
 			default:
 				panic(fmt.Sprintf("unhandled: %T", comm))
@@ -505,7 +505,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 
 			var bodyPrefix []ast.Stmt
 			if assign, ok := clause.Comm.(*ast.AssignStmt); ok {
-				switch rhsType := fc.pkgCtx.TypeOf(assign.Rhs[0]).(type) {
+				switch rhsType := fc.typeOf(assign.Rhs[0]).(type) {
 				case *types.Tuple:
 					bodyPrefix = []ast.Stmt{&ast.AssignStmt{Lhs: assign.Lhs, Rhs: []ast.Expr{fc.newIdent(selectionVar+"[1]", rhsType)}, Tok: assign.Tok}}
 				default:
@@ -614,7 +614,7 @@ func (fc *funcContext) translateBranchingStmt(caseClauses []*ast.CaseClause, def
 	for i, clause := range caseClauses {
 		fc.SetPos(clause.Pos())
 		fc.PrintCond(!flatten, fmt.Sprintf("%sif (%s) {", prefix, condStrs[i]), fmt.Sprintf("case %d:", caseOffset+i))
-		fc.Indent(func() {
+		fc.Indented(func() {
 			fc.translateStmtList(clause.Body)
 			if flatten && (i < len(caseClauses)-1 || defaultClause != nil) && !astutil.EndsWithReturn(clause.Body) {
 				fc.Printf("$s = %d; continue;", endCase)
@@ -625,7 +625,7 @@ func (fc *funcContext) translateBranchingStmt(caseClauses []*ast.CaseClause, def
 
 	if defaultClause != nil {
 		fc.PrintCond(!flatten, prefix+"{", fmt.Sprintf("case %d:", caseOffset+len(caseClauses)))
-		fc.Indent(func() {
+		fc.Indented(func() {
 			fc.translateStmtList(defaultClause.Body)
 		})
 	}
@@ -655,7 +655,7 @@ func (fc *funcContext) translateLoopingStmt(cond func() string, body *ast.BlockS
 	}
 	isTerminated := false
 	fc.PrintCond(!flatten, "while (true) {", fmt.Sprintf("case %d:", data.beginCase))
-	fc.Indent(func() {
+	fc.Indented(func() {
 		condStr := cond()
 		if condStr != "true" {
 			fc.PrintCond(!flatten, fmt.Sprintf("if (!(%s)) { break; }", condStr), fmt.Sprintf("if(!(%s)) { $s = %d; continue; }", condStr, data.endCase))
@@ -700,11 +700,11 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 	}
 
 	if l, ok := lhs.(*ast.IndexExpr); ok {
-		if t, ok := fc.pkgCtx.TypeOf(l.X).Underlying().(*types.Map); ok {
-			if typesutil.IsJsObject(fc.pkgCtx.TypeOf(l.Index)) {
+		if t, ok := fc.typeOf(l.X).Underlying().(*types.Map); ok {
+			if typesutil.IsJsObject(fc.typeOf(l.Index)) {
 				fc.pkgCtx.errList = append(fc.pkgCtx.errList, types.Error{Fset: fc.pkgCtx.fileSet, Pos: l.Index.Pos(), Msg: "cannot use js.Object as map key"})
 			}
-			keyVar := fc.newVariable("_key")
+			keyVar := fc.newLocalVariable("_key")
 			return fmt.Sprintf(
 				`%s = %s; (%s || $throwRuntimeError("assignment to entry in nil map")).set(%s.keyFor(%s), { k: %s, v: %s });`,
 				keyVar,
@@ -718,7 +718,7 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 		}
 	}
 
-	lhsType := fc.pkgCtx.TypeOf(lhs)
+	lhsType := fc.typeOf(lhs)
 	rhsExpr := fc.translateConversion(rhs, lhsType)
 	if _, ok := rhs.(*ast.CompositeLit); ok && define {
 		return fmt.Sprintf("%s = %s;", fc.translateExpr(lhs), rhsExpr) // skip $copy
@@ -742,7 +742,7 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 	case *ast.Ident:
 		return fmt.Sprintf("%s = %s;", fc.objectName(fc.pkgCtx.ObjectOf(l)), rhsExpr)
 	case *ast.SelectorExpr:
-		sel, ok := fc.pkgCtx.SelectionOf(l)
+		sel, ok := fc.selectionOf(l)
 		if !ok {
 			// qualified identifier
 			return fmt.Sprintf("%s = %s;", fc.objectName(fc.pkgCtx.Uses[l.Sel]), rhsExpr)
@@ -755,7 +755,7 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 	case *ast.StarExpr:
 		return fmt.Sprintf("%s.$set(%s);", fc.translateExpr(l.X), rhsExpr)
 	case *ast.IndexExpr:
-		switch t := fc.pkgCtx.TypeOf(l.X).Underlying().(type) {
+		switch t := fc.typeOf(l.X).Underlying().(type) {
 		case *types.Array, *types.Pointer:
 			pattern := rangeCheck("%1e[%2f] = %3s", fc.pkgCtx.Types[l.Index].Value != nil, true)
 			if _, ok := t.(*types.Pointer); ok { // check pointer for nil (attribute getter causes a panic)
@@ -773,7 +773,7 @@ func (fc *funcContext) translateAssign(lhs, rhs ast.Expr, define bool) string {
 }
 
 func (fc *funcContext) translateResults(results []ast.Expr) string {
-	tuple := fc.sig.Results()
+	tuple := fc.typeResolver.Substitute(fc.sig.Sig.Results()).(*types.Tuple)
 	switch tuple.Len() {
 	case 0:
 		return ""
@@ -787,7 +787,7 @@ func (fc *funcContext) translateResults(results []ast.Expr) string {
 		return " " + v.String()
 	default:
 		if len(results) == 1 {
-			resultTuple := fc.pkgCtx.TypeOf(results[0]).(*types.Tuple)
+			resultTuple := fc.typeOf(results[0]).(*types.Tuple)
 
 			if resultTuple.Len() != tuple.Len() {
 				panic("invalid tuple return assignment")
@@ -799,7 +799,7 @@ func (fc *funcContext) translateResults(results []ast.Expr) string {
 				return " " + resultExpr
 			}
 
-			tmpVar := fc.newVariable("_returncast")
+			tmpVar := fc.newLocalVariable("_returncast")
 			fc.Printf("%s = %s;", tmpVar, resultExpr)
 
 			// Not all the return types matched, map everything out for implicit casting

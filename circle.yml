@@ -74,6 +74,8 @@ orbs:
 jobs:
   build:
     executor: gopherjs
+    environment:
+      GOPHERJS_EXPERIMENT: generics
     steps:
     - setup_and_install_gopherjs
     - run:
@@ -129,6 +131,8 @@ jobs:
   gopherjs_tests:
     executor: gopherjs
     parallelism: 4
+    environment:
+      GOPHERJS_EXPERIMENT: generics
     steps:
     - setup_and_install_gopherjs
     - run:
@@ -155,6 +159,8 @@ jobs:
 
   gorepo_tests:
     executor: gopherjs
+    environment:
+      GOPHERJS_EXPERIMENT: generics
     parallelism: 4
     steps:
     - setup_environment
@@ -170,6 +176,8 @@ jobs:
     executor:
       name: win/default
       shell: powershell.exe
+    environment:
+      GOPHERJS_EXPERIMENT: generics
     steps:
       - checkout
       - run:
@@ -204,6 +212,8 @@ jobs:
   darwin_smoke:
     macos:
       xcode: 13.4.1 # Mac OS 12.6.1, see https://circleci.com/docs/using-macos/
+    environment:
+      GOPHERJS_EXPERIMENT: generics
     steps:
       - checkout
       - setup_environment

@@ -2,7 +2,6 @@ package analysis
 
 import (
 	"go/ast"
-	"go/token"
 	"go/types"
 	"testing"
 
@@ -34,11 +33,11 @@ func notBlocking() {
 	func() { println() } ()
 }
 `
-	fset := token.NewFileSet()
-	file := srctesting.Parse(t, fset, src)
-	typesInfo, typesPkg := srctesting.Check(t, fset, file)
+	f := srctesting.New(t)
+	file := f.Parse("test.go", src)
+	typesInfo, typesPkg := f.Check("pkg/test", file)
 
-	pkgInfo := AnalyzePkg([]*ast.File{file}, fset, typesInfo, typesPkg, func(f *types.Func) bool {
+	pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, typesInfo, typesPkg, func(f *types.Func) bool {
 		panic("isBlocking() should be never called for imported functions in this test.")
 	})
 

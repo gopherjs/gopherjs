@@ -22,7 +22,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"go/build"
 	"go/build/constraint"
 	"hash/fnv"
 	"io"
@@ -111,9 +110,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue23188.go":  {desc: "incorrect order of evaluation of index operations"},
 	"fixedbugs/issue24547.go":  {desc: "incorrect computing method sets with shadowed methods"},
 
-	// These are new tests in Go 1.11.5
-	"fixedbugs/issue28688.go": {category: notApplicable, desc: "testing runtime optimisations"},
-
 	// These are new tests in Go 1.12.
 	"fixedbugs/issue23837.go":  {desc: "missing panic on nil pointer-to-empty-struct dereference"},
 	"fixedbugs/issue27201.go":  {desc: "incorrect stack trace for nil dereference in inlined function"},
@@ -123,7 +119,6 @@ var knownFails = map[string]failReason{
 	// These are new tests in Go 1.12.9.
 	"fixedbugs/issue30977.go": {category: neverTerminates, desc: "does for { runtime.GC() }"},
 	"fixedbugs/issue32477.go": {category: notApplicable, desc: "uses runtime.SetFinalizer and runtime.GC"},
-	"fixedbugs/issue32680.go": {category: notApplicable, desc: "uses -gcflags=-d=ssa/check/on flag"},
 
 	// These are new tests in Go 1.13-1.16.
 	"fixedbugs/issue19113.go":  {category: lowLevelRuntimeDifference, desc: "JavaScript bit shifts by negative amount don't cause an exception"},
@@ -136,7 +131,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue30116u.go": {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
 	"fixedbugs/issue34395.go":  {category: neverTerminates, desc: "https://github.com/gopherjs/gopherjs/issues/1007"},
 	"fixedbugs/issue35027.go":  {category: usesUnsupportedPackage, desc: "uses unsupported conversion to reflect.SliceHeader and -gcflags=-d=checkptr"},
-	"fixedbugs/issue35073.go":  {category: usesUnsupportedPackage, desc: "uses unsupported flag -gcflags=-d=checkptr"},
 	"fixedbugs/issue35576.go":  {category: lowLevelRuntimeDifference, desc: "GopherJS print/println format for floats differs from Go's"},
 	"fixedbugs/issue40917.go":  {category: notApplicable, desc: "uses pointer arithmetic and unsupported flag -gcflags=-d=checkptr"},
 
@@ -151,17 +145,22 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue50854.go": {category: lowLevelRuntimeDifference, desc: "negative int32 overflow behaves differently in JS"},
 
 	// These are new tests in Go 1.18
-	"fixedbugs/issue46938.go": {category: notApplicable, desc: "tests -d=checkptr compiler mode, which GopherJS doesn't support"},
-	"fixedbugs/issue47928.go": {category: notApplicable, desc: "//go:nointerface is a part of GOEXPERIMENT=fieldtrack and is not supported by GopherJS"},
-	"fixedbugs/issue48898.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
-	"fixedbugs/issue48536.go": {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
-	"fixedbugs/issue53600.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+	"fixedbugs/issue47928.go":  {category: notApplicable, desc: "//go:nointerface is a part of GOEXPERIMENT=fieldtrack and is not supported by GopherJS"},
+	"fixedbugs/issue48536.go":  {category: usesUnsupportedPackage, desc: "https://github.com/gopherjs/gopherjs/issues/1130"},
+	"fixedbugs/issue48898.go":  {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1128"},
+	"fixedbugs/issue53600.go":  {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+	"typeparam/chans.go":       {category: neverTerminates, desc: "uses runtime.SetFinalizer() and runtime.GC()."},
+	"typeparam/issue51733.go":  {category: usesUnsupportedPackage, desc: "unsafe: uintptr to struct pointer conversion is unsupported"},
+	"typeparam/typeswitch5.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
+
+	// Failures related to the lack of generics support. Ideally, this section
+	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
+	// fixed.
+	"typeparam/nested.go": {category: usesUnsupportedGenerics, desc: "incomplete support for generic types inside generic functions"},
 
 	// These are new tests in Go 1.19
-	"fixedbugs/issue50672.go": {category: usesUnsupportedGenerics, desc: "Checking function nesting with one function having a type parameter."},
-	"fixedbugs/issue53137.go": {category: usesUnsupportedGenerics, desc: "Checking setting type parameter of struct in parameter of a generic function."},
-	"fixedbugs/issue53309.go": {category: usesUnsupportedGenerics, desc: "Checking unused type parameter in method call to interface"},
-	"fixedbugs/issue53635.go": {category: usesUnsupportedGenerics, desc: "Checking switch type against nil type with unsupported type parameters"},
+	"typeparam/issue51521.go": {category: lowLevelRuntimeDifference, desc: "different panic message when calling a method on nil interface"},
+	"fixedbugs/issue50672.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1271"},
 	"fixedbugs/issue53653.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format of int64 is different from Go's"},
 
 	// These are new tests in Go 1.20
@@ -551,13 +550,11 @@ func shouldTest(src string, goos, goarch string) (ok bool, whyNot string) {
 		if strings.HasPrefix(line, "package ") {
 			break
 		}
-
 		if expr, err := constraint.Parse(line); err == nil {
 			ctxt := &context{
 				GOOS:   goos,
 				GOARCH: goarch,
 			}
-
 			if !expr.Eval(ctxt.match) {
 				return false, line
 			}
@@ -579,15 +576,7 @@ func (ctxt *context) match(name string) bool {
 		}
 	}
 
-	if strings.HasPrefix(name, "goexperiment.") {
-		for _, tag := range build.Default.ToolTags {
-			if tag == name {
-				return true
-			}
-		}
-		return false
-	}
-
+	// GOPHERJS: Ignore "goexperiment." for now
 	// GOPHERJS: Don't match "cgo" since not supported
 	// GOPHERJS: Don't match "gc"
 	if name == ctxt.GOOS || name == ctxt.GOARCH {
@@ -670,10 +659,10 @@ func (t *test) run() {
 		args = f[1:]
 	}
 
-	// GOPHERJS: For now, only run with "run", "cmpout" actions, in "fixedbugs" dir. Skip all others.
+	// GOPHERJS: For now, only run with "run", "cmpout" actions, in "fixedbugs" and "typeparam" dirs. Skip all others.
 	switch action {
 	case "run", "cmpout":
-		if filepath.Clean(t.dir) != "fixedbugs" {
+		if d := filepath.Clean(t.dir); d != "fixedbugs" && d != "typeparam" {
 			action = "skip"
 		}
 	default:
@@ -745,6 +734,19 @@ func (t *test) run() {
 	}
 	if os.Getenv("GOARCH") == "" {
 		os.Setenv("GOARCH", goarch)
+	}
+
+	{
+		// GopherJS: we don't support any of -gcflags, but for the most part they
+		// are not too relevant to the outcome of the test.
+		supportedArgs := []string{}
+		for _, a := range args {
+			if strings.HasPrefix(a, "-gcflags") {
+				continue
+			}
+			supportedArgs = append(supportedArgs, a)
+		}
+		args = supportedArgs
 	}
 
 	useTmp := true

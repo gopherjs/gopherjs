@@ -34,7 +34,7 @@ func (s sources) Sort() sources {
 	return s
 }
 
-// Simplify returns a new sources instance with each Files entry processed by
+// Simplified returns a new sources instance with each Files entry processed by
 // astrewrite.Simplify.
 func (s sources) Simplified(typesInfo *types.Info) sources {
 	simplified := sources{

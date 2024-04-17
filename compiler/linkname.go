@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"go/types"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 )
 
 // GoLinkname describes a go:linkname compiler directive found in the source code.
@@ -17,62 +17,8 @@ import (
 // symbols referencing it. This is subtly different from the upstream Go
 // implementation, which simply overrides symbol name the linker will use.
 type GoLinkname struct {
-	Implementation SymName
-	Reference      SymName
-}
-
-// SymName uniquely identifies a named submol within a program.
-//
-// This is a logical equivalent of a symbol name used by traditional linkers.
-// The following properties should hold true:
-//
-//   - Each named symbol within a program has a unique SymName.
-//   - Similarly named methods of different types will have different symbol names.
-//   - The string representation is opaque and should not be attempted to reversed
-//     to a struct form.
-type SymName struct {
-	PkgPath string // Full package import path.
-	Name    string // Symbol name.
-}
-
-// newSymName constructs SymName for a given named symbol.
-func newSymName(o types.Object) SymName {
-	if fun, ok := o.(*types.Func); ok {
-		sig := fun.Type().(*types.Signature)
-		if recv := sig.Recv(); recv != nil {
-			// Special case: disambiguate names for different types' methods.
-			typ := recv.Type()
-			if ptr, ok := typ.(*types.Pointer); ok {
-				return SymName{
-					PkgPath: o.Pkg().Path(),
-					Name:    "(*" + ptr.Elem().(*types.Named).Obj().Name() + ")." + o.Name(),
-				}
-			}
-			return SymName{
-				PkgPath: o.Pkg().Path(),
-				Name:    typ.(*types.Named).Obj().Name() + "." + o.Name(),
-			}
-		}
-	}
-	return SymName{
-		PkgPath: o.Pkg().Path(),
-		Name:    o.Name(),
-	}
-}
-
-func (n SymName) String() string { return n.PkgPath + "." + n.Name }
-
-func (n SymName) IsMethod() (recv string, method string, ok bool) {
-	pos := strings.IndexByte(n.Name, '.')
-	if pos == -1 {
-		return
-	}
-	recv, method, ok = n.Name[:pos], n.Name[pos+1:], true
-	size := len(recv)
-	if size > 2 && recv[0] == '(' && recv[size-1] == ')' {
-		recv = recv[1 : size-1]
-	}
-	return
+	Implementation symbol.Name
+	Reference      symbol.Name
 }
 
 // readLinknameFromComment reads the given comment to determine if it's a go:linkname
@@ -119,15 +65,15 @@ func readLinknameFromComment(pkgPath string, comment *ast.Comment) (*GoLinkname,
 	}
 
 	return &GoLinkname{
-		Reference:      SymName{PkgPath: localPkg, Name: localName},
-		Implementation: SymName{PkgPath: extPkg, Name: extName},
+		Reference:      symbol.Name{PkgPath: localPkg, Name: localName},
+		Implementation: symbol.Name{PkgPath: extPkg, Name: extName},
 	}, nil
 }
 
 // isMitigatedVarLinkname checks if the given go:linkname directive on
 // a variable, which GopherJS doesn't support, is known about.
 // We silently ignore such directives, since it doesn't seem to cause any problems.
-func isMitigatedVarLinkname(sym SymName) bool {
+func isMitigatedVarLinkname(sym symbol.Name) bool {
 	mitigatedLinks := map[string]bool{
 		`reflect.zeroVal`:         true,
 		`math/bits.overflowError`: true, // Defaults in bits_errors_bootstrap.go
@@ -140,7 +86,7 @@ func isMitigatedVarLinkname(sym SymName) bool {
 // on a function, where the function has a body, is known about.
 // These are unsupported "insert"-style go:linkname directives,
 // that we ignore as a link and handle case-by-case in native overrides.
-func isMitigatedInsertLinkname(sym SymName) bool {
+func isMitigatedInsertLinkname(sym symbol.Name) bool {
 	mitigatedPkg := map[string]bool{
 		`runtime`:       true, // Lots of "insert"-style links
 		`internal/fuzz`: true, // Defaults to no-op stubs
@@ -216,23 +162,23 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 		}
 	}
 
-	return directives, errs.Normalize()
+	return directives, errs.ErrOrNil()
 }
 
 // goLinknameSet is a utility that enables quick lookup of whether a decl is
 // affected by any go:linkname directive in the program.
 type goLinknameSet struct {
-	byImplementation map[SymName][]GoLinkname
-	byReference      map[SymName]GoLinkname
+	byImplementation map[symbol.Name][]GoLinkname
+	byReference      map[symbol.Name]GoLinkname
 }
 
 // Add more GoLinkname directives into the set.
 func (gls *goLinknameSet) Add(entries []GoLinkname) error {
 	if gls.byImplementation == nil {
-		gls.byImplementation = map[SymName][]GoLinkname{}
+		gls.byImplementation = map[symbol.Name][]GoLinkname{}
 	}
 	if gls.byReference == nil {
-		gls.byReference = map[SymName]GoLinkname{}
+		gls.byReference = map[symbol.Name]GoLinkname{}
 	}
 	for _, e := range entries {
 		gls.byImplementation[e.Implementation] = append(gls.byImplementation[e.Implementation], e)
@@ -247,7 +193,7 @@ func (gls *goLinknameSet) Add(entries []GoLinkname) error {
 
 // IsImplementation returns true if there is a directive referencing this symbol
 // as an implementation.
-func (gls *goLinknameSet) IsImplementation(sym SymName) bool {
+func (gls *goLinknameSet) IsImplementation(sym symbol.Name) bool {
 	_, found := gls.byImplementation[sym]
 	return found
 }
@@ -255,7 +201,7 @@ func (gls *goLinknameSet) IsImplementation(sym SymName) bool {
 // FindImplementation returns a symbol name, which provides the implementation
 // for the given symbol. The second value indicates whether the implementation
 // was found.
-func (gls *goLinknameSet) FindImplementation(sym SymName) (SymName, bool) {
+func (gls *goLinknameSet) FindImplementation(sym symbol.Name) (symbol.Name, bool) {
 	directive, found := gls.byReference[sym]
 	return directive.Implementation, found
 }

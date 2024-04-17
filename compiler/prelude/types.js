@@ -59,7 +59,7 @@ var $idKey = x => {
 };
 
 // Creates constructor functions for array pointer types. Returns a new function
-// instace each time to make sure each type is independent of the other.
+// instance each time to make sure each type is independent of the other.
 var $arrayPtrCtor = () => {
     return function (array) {
         this.$get = () => { return array; };

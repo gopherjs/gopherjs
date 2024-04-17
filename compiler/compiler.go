@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
 	"golang.org/x/tools/go/gcexportdata"
 )
@@ -30,22 +31,6 @@ func init() {
 	for _, keyword := range []string{"abstract", "arguments", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", "long", "native", "new", "null", "package", "private", "protected", "public", "return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof", "undefined", "var", "void", "volatile", "while", "with", "yield"} {
 		reservedKeywords[keyword] = true
 	}
-}
-
-type ErrorList []error
-
-func (err ErrorList) Error() string {
-	if len(err) == 0 {
-		return "<no errors>"
-	}
-	return fmt.Sprintf("%s (and %d more errors)", err[0].Error(), len(err[1:]))
-}
-
-func (err ErrorList) Normalize() error {
-	if len(err) == 0 {
-		return nil
-	}
-	return err
 }
 
 // Archive contains intermediate build outputs of a single package.
@@ -112,9 +97,13 @@ type Decl struct {
 	// Go compiler/linker toolchain. Used by GopherJS to support go:linkname
 	// directives. Must be set for decls that are supported by go:linkname
 	// implementation.
-	LinkingName SymName
+	LinkingName symbol.Name
 	// A list of package-level JavaScript variable names this symbol needs to declare.
 	Vars []string
+	// A JS expression by which the object represented by this decl may be
+	// referenced within the package context. Empty if the decl represents no such
+	// object.
+	RefExpr string
 	// NamedRecvType is method named recv declare.
 	NamedRecvType string
 	// JavaScript code that declares basic information about a symbol. For a type
@@ -326,7 +315,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			if recv, method, ok := d.LinkingName.IsMethod(); ok {
 				code = fmt.Sprintf("\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,%t);\n", d.LinkingName.String(), d.NamedRecvType, method, strings.HasPrefix(recv, "*"))
 			} else {
-				code = fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.Vars[0])
+				code = fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.RefExpr)
 			}
 			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
 				return err
@@ -357,7 +346,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			if !found {
 				continue // The symbol is not affected by a go:linkname directive.
 			}
-			lines = append(lines, fmt.Sprintf("\t\t%s = $linknames[%q];\n", d.Vars[0], impl.String()))
+			lines = append(lines, fmt.Sprintf("\t\t%s = $linknames[%q];\n", d.RefExpr, impl.String()))
 		}
 		if len(lines) > 0 {
 			code := fmt.Sprintf("\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, ""))

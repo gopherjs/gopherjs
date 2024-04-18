@@ -6,15 +6,10 @@ package http
 import (
 	"bufio"
 	"bytes"
-	"context"
-	"crypto/tls"
 	"errors"
 	"io"
-	"net"
 	"net/textproto"
 	"strconv"
-	"sync"
-	"sync/atomic"
 
 	"github.com/gopherjs/gopherjs/js"
 )
@@ -118,30 +113,3 @@ func (t *XHRTransport) CancelRequest(req *Request) {
 		xhr.Call("abort")
 	}
 }
-
-type conn struct {
-	server     *Server
-	cancelCtx  context.CancelFunc
-	rwc        net.Conn
-	remoteAddr string
-	tlsState   *tls.ConnectionState
-	werr       error
-	r          *connReader
-	bufr       *bufio.Reader
-	bufw       *bufio.Writer
-	lastMethod string
-
-	// temporarily replacement of `atomic.Pointer[response]` for go1.20 without generics.
-	curReq atomicResponsePointer
-
-	curState  atomic.Uint64
-	mu        sync.Mutex
-	hijackedv bool
-}
-
-type atomicResponsePointer struct {
-	v *response
-}
-
-func (x *atomicResponsePointer) Load() *response     { return x.v }
-func (x *atomicResponsePointer) Store(val *response) { x.v = val }

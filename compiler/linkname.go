@@ -78,7 +78,6 @@ func isMitigatedVarLinkname(sym symbol.Name) bool {
 		`reflect.zeroVal`:         true,
 		`math/bits.overflowError`: true, // Defaults in bits_errors_bootstrap.go
 		`math/bits.divideError`:   true, // Defaults in bits_errors_bootstrap.go
-		`runtime/cgo._iscgo`:      true, // Defaults in iscgo.go
 	}
 	return mitigatedLinks[sym.String()]
 }
@@ -133,21 +132,21 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 
 		obj := file.Scope.Lookup(link.Reference.Name)
 		if obj == nil {
-			return fmt.Errorf("//go:linkname local symbol %q is not found in the current source file", link.Reference.String())
+			return fmt.Errorf("//go:linkname local symbol %q is not found in the current source file", link.Reference.Name)
 		}
 
 		if obj.Kind != ast.Fun {
 			if isMitigatedVarLinkname(link.Reference) {
 				return nil
 			}
-			return fmt.Errorf("gopherjs: //go:linkname is only supported for functions, got %q for %q", obj.Kind, link.Reference.String())
+			return fmt.Errorf("gopherjs: //go:linkname is only supported for functions, got %q", obj.Kind)
 		}
 
 		if decl := obj.Decl.(*ast.FuncDecl); decl.Body != nil {
 			if isMitigatedInsertLinkname(link.Reference) {
 				return nil
 			}
-			return fmt.Errorf("gopherjs: //go:linkname can not insert local implementation into an external package %q from local %q", link.Implementation.String(), link.Reference.String())
+			return fmt.Errorf("gopherjs: //go:linkname can not insert local implementation into an external package %q", link.Implementation.PkgPath)
 		}
 
 		// Local function has no body, treat it as a reference to an external implementation.

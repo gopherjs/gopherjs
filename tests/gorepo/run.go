@@ -69,17 +69,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue7690.go":  {desc: "Error: runtime error: slice bounds out of range"},
 	"fixedbugs/issue8047b.go": {desc: "Error: [object Object]"},
 
-	// Failing due to use of os/exec.Command, which is unsupported. Now skipped via !nacl build tag.
-	/*"fixedbugs/bug248.go":        {desc: "os/exec.Command unsupported"},
-	"fixedbugs/bug302.go":        {desc: "os/exec.Command unsupported"},
-	"fixedbugs/bug345.go":        {desc: "os/exec.Command unsupported"},
-	"fixedbugs/bug369.go":        {desc: "os/exec.Command unsupported"},
-	"fixedbugs/bug429_run.go":    {desc: "os/exec.Command unsupported"},
-	"fixedbugs/issue9862_run.go": {desc: "os/exec.Command unsupported"},*/
-	"fixedbugs/issue10607.go": {desc: "os/exec.Command unsupported"},
-	"fixedbugs/issue13268.go": {desc: "os/exec.Command unsupported"},
-	"fixedbugs/issue14636.go": {desc: "os/exec.Command unsupported"},
-
 	// These are new tests in Go 1.7.
 	"fixedbugs/issue14646.go": {category: unsureIfGopherJSSupportsThisFeature, desc: "tests runtime.Caller behavior in a deferred func in SSA backend... does GopherJS even support runtime.Caller?"},
 	"fixedbugs/issue15039.go": {desc: "valid bug but deal with after Go 1.7 support is out? it's likely not a regression"},
@@ -100,15 +89,13 @@ var knownFails = map[string]failReason{
 	// These are new tests in Go 1.10.
 	"fixedbugs/issue21879.go": {desc: "incorrect output related to runtime.Callers, runtime.CallersFrames, etc."},
 	"fixedbugs/issue21887.go": {desc: "incorrect output (although within spec, not worth fixing) for println(^uint64(0)). got: { '$high': 4294967295, '$low': 4294967295, '$val': [Circular] } want: 18446744073709551615"},
-	"fixedbugs/issue22660.go": {category: notApplicable, desc: "test of gc compiler, uses os/exec.Command"},
 	"fixedbugs/issue23305.go": {desc: "GopherJS fails to compile println(0xffffffff), maybe because 32-bit arch"},
 
 	// These are new tests in Go 1.11.
-	"fixedbugs/issue21221.go":  {category: usesUnsupportedPackage, desc: "uses unsafe package and compares nil pointers"},
-	"fixedbugs/issue22662.go":  {desc: "line directives not fully working. Error: got /private/var/folders/b8/66r1c5856mqds1mrf2tjtq8w0000gn/T:1; want ??:1"},
-	"fixedbugs/issue22662b.go": {category: usesUnsupportedPackage, desc: "os/exec.Command unsupported"},
-	"fixedbugs/issue23188.go":  {desc: "incorrect order of evaluation of index operations"},
-	"fixedbugs/issue24547.go":  {desc: "incorrect computing method sets with shadowed methods"},
+	"fixedbugs/issue21221.go": {category: usesUnsupportedPackage, desc: "uses unsafe package and compares nil pointers"},
+	"fixedbugs/issue22662.go": {desc: "line directives not fully working. Error: got /private/var/folders/b8/66r1c5856mqds1mrf2tjtq8w0000gn/T:1; want ??:1"},
+	"fixedbugs/issue23188.go": {desc: "incorrect order of evaluation of index operations"},
+	"fixedbugs/issue24547.go": {desc: "incorrect computing method sets with shadowed methods"},
 
 	// These are new tests in Go 1.12.
 	"fixedbugs/issue23837.go":  {desc: "missing panic on nil pointer-to-empty-struct dereference"},
@@ -164,7 +151,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue53653.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format of int64 is different from Go's"},
 
 	// These are new tests in Go 1.20
-	//"fixedbugs/issue13169.go":  {desc: "slow, > 20 secs"},
 	"fixedbugs/issue25897a.go": {category: neverTerminates, desc: "does for { runtime.GC() }"},
 }
 
@@ -641,6 +627,9 @@ func (t *test) run() {
 		t.action = "skip"
 		if *showSkips {
 			fmt.Printf("%-20s %-20s: %s\n", t.action, t.goFileName(), why)
+		}
+		if _, ok := knownFails[filepath.ToSlash(t.goFileName())]; ok {
+			fmt.Printf("skipped test in knownFails: %-20s\n", t.goFileName())
 		}
 		return
 	}

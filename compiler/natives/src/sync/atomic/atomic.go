@@ -220,6 +220,3 @@ func sameType(x, y interface{}) bool {
 	// existing and differing for different types.
 	return js.InternalObject(x).Get("constructor") == js.InternalObject(y).Get("constructor")
 }
-
-//gopherjs:purge for go1.19 without generics
-type Pointer[T any] struct{}

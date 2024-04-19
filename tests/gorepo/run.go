@@ -150,6 +150,7 @@ var knownFails = map[string]failReason{
 
 	// These are new tests in Go 1.20
 	"fixedbugs/issue25897a.go": {category: neverTerminates, desc: "does for { runtime.GC() }"},
+	"fixedbugs/issue54343.go":  {category: notApplicable, desc: "uses runtime.SetFinalizer() and runtime.GC()."},
 }
 
 type failCategory uint8

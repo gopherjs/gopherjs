@@ -26,7 +26,6 @@ func runExample(eg InternalExample) (ok bool) {
 	finished := false
 	start := time.Now()
 
-	finished := false
 	// Clean up in a deferred call so we can recover if the example panics.
 	defer func() {
 		timeSpent := time.Since(start)

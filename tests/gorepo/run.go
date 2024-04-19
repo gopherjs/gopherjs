@@ -338,19 +338,6 @@ func main() {
 		}
 	}
 
-	testNames := map[string]bool{}
-	for _, test := range tests {
-		testNames[filepath.ToSlash(test.goFileName())] = true
-	}
-	unknown := make([]string, 0, len(knownFails))
-	for k := range knownFails {
-		if !testNames[k] {
-			unknown = append(unknown, k)
-		}
-	}
-	sort.Strings(unknown)
-	fmt.Println("unknown:\n - ", strings.Join(unknown, "\n - "))
-
 	if failed {
 		os.Exit(1)
 	}

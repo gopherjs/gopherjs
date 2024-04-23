@@ -151,6 +151,9 @@ var knownFails = map[string]failReason{
 	// These are new tests in Go 1.20
 	"fixedbugs/issue25897a.go": {category: neverTerminates, desc: "does for { runtime.GC() }"},
 	"fixedbugs/issue54343.go":  {category: notApplicable, desc: "uses runtime.SetFinalizer() and runtime.GC()."},
+	"fixedbugs/issue57823.go":  {category: notApplicable, desc: "uses runtime.SetFinalizer() and runtime.GC()."},
+	"fixedbugs/issue59293.go":  {category: usesUnsupportedPackage, desc: "uses unsafe.SliceData() and unsafe.StringData()."},
+	"fixedbugs/issue43942.go":  {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1126"},
 }
 
 type failCategory uint8

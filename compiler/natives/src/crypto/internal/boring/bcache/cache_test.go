@@ -5,7 +5,6 @@ package bcache
 
 import "testing"
 
-//gopherjs:purge
 var registeredCache Cache
 
 func TestCache(t *testing.T) {

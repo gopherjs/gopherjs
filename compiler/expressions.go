@@ -1059,8 +1059,9 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 		sel, _ := fc.selectionOf(astutil.RemoveParens(args[0]).(*ast.SelectorExpr))
 		return fc.formatExpr("%d", typesutil.OffsetOf(sizes32, sel))
 	case "SliceData":
-		elemPtrType := types.NewPointer(fc.typeOf(args[0]).Underlying().(*types.Slice).Elem())
-		return fc.formatExpr("$indexPtr(%1e.$array, %1e.$offset, %2s)", args[0], fc.typeName(elemPtrType))
+		t := fc.typeOf(args[0]).Underlying().(*types.Slice)
+		elemPtrType := types.NewPointer(t.Elem())
+		return fc.formatExpr("(%1e === %2s.nil) ? %3s.nil : $indexPtr(%1e.$array, %1e.$offset, %3s)", args[0], fc.typeName(t), fc.typeName(elemPtrType))
 	default:
 		panic(fmt.Sprintf("Unhandled builtin: %s\n", name))
 	}

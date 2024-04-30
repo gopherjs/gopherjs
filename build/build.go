@@ -174,7 +174,6 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 	overrides := make(map[string]overrideInfo)
 	for _, file := range overlayFiles {
 		augmentOverlayFile(file, overrides)
-		pruneImports(file)
 	}
 	delete(overrides, "init")
 

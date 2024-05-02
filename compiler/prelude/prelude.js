@@ -569,3 +569,10 @@ var $instanceOf = (x, y) => {
 var $typeOf = x => {
     return typeof (x);
 };
+
+var $sliceData = (slice, typ) => {
+    if (slice === typ.nil) {
+        return $ptrType(typ.elem).nil;
+    }
+    return $indexPtr(slice.$array, slice.$offset, typ.elem);
+};

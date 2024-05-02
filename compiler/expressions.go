@@ -1059,11 +1059,8 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 		sel, _ := fc.selectionOf(astutil.RemoveParens(args[0]).(*ast.SelectorExpr))
 		return fc.formatExpr("%d", typesutil.OffsetOf(sizes32, sel))
 	case "SliceData":
-		// SliceData returns nil if the slice is nil, otherwise returns a pointer to the first index of the array, &s[0].
-		// If the slice is empty (cap == 0), it returns an "unspecified memory address" or in our case, a pointer to the empty array.
 		t := fc.typeOf(args[0]).Underlying().(*types.Slice)
-		elemPtrType := types.NewPointer(t.Elem())
-		return fc.formatExpr("(%1e === %2s.nil) ? %3s.nil : $indexPtr(%1e.$array, %1e.$offset, %3s)", args[0], fc.typeName(t), fc.typeName(elemPtrType))
+		return fc.formatExpr(`$sliceData(%e, %s)`, args[0], fc.typeName(t))
 	default:
 		panic(fmt.Sprintf("Unhandled builtin: %s\n", name))
 	}

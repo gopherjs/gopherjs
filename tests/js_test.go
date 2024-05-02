@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/gopherjs/gopherjs/js"
@@ -934,5 +935,43 @@ func TestStructWithNonIdentifierJSTag(t *testing.T) {
 	got = s.Get("@&\"'<>//my name").String()
 	if want := "Paul"; got != want {
 		t.Errorf("value via js.Object.Get gave %q, want %q", got, want)
+	}
+}
+
+func TestSliceData(t *testing.T) {
+	var (
+		s0 = []int(nil)
+		s1 = []int{}
+		s2 = []int{1, 2, 3}
+		s3 = s2[1:]
+		s4 = []int{4, 5, 6}
+
+		sd0 = unsafe.SliceData(s0)
+		sd1 = unsafe.SliceData(s1)
+		sd2 = unsafe.SliceData(s2)
+		sd3 = unsafe.SliceData(s3)
+		sd4 = unsafe.SliceData(s4)
+	)
+
+	if sd0 != nil {
+		t.Errorf("slice data for nil slice was not nil")
+	}
+	if sd1 == nil {
+		t.Errorf("slice data for empty slice was nil")
+	}
+	if sd2 == nil {
+		t.Errorf("slice data for non-empty slice was nil")
+	}
+	if sd3 == nil {
+		t.Errorf("slice data for sub-slice was nil")
+	}
+	if sd1 == sd2 {
+		t.Errorf("slice data for empty and non-empty slices were the same")
+	}
+	if sd2 == sd3 {
+		t.Errorf("slice data for slice and sub-slice were the same")
+	}
+	if sd2 == sd4 {
+		t.Errorf("slice data for different slices were the same")
 	}
 }

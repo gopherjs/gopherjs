@@ -190,8 +190,8 @@ func TestParseGoLinknames(t *testing.T) {
 			`,
 			wantDirectives: []GoLinkname{
 				{
-					Reference:      SymName{PkgPath: `testcase`, Name: `a`},
-					Implementation: SymName{PkgPath: `other/package`, Name: `b.a`},
+					Reference:      symbol.Name{PkgPath: `testcase`, Name: `a`},
+					Implementation: symbol.Name{PkgPath: `other/package`, Name: `b.a`},
 				},
 			},
 		}, {
@@ -206,8 +206,8 @@ func TestParseGoLinknames(t *testing.T) {
 			`,
 			wantDirectives: []GoLinkname{
 				{
-					Reference:      SymName{PkgPath: `testcase`, Name: `a`},
-					Implementation: SymName{PkgPath: `other/package`, Name: `*b.a`},
+					Reference:      symbol.Name{PkgPath: `testcase`, Name: `a`},
+					Implementation: symbol.Name{PkgPath: `other/package`, Name: `*b.a`},
 				},
 			},
 		},

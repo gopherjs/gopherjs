@@ -829,6 +829,45 @@ func TestExternalize(t *testing.T) {
 	}
 }
 
+func TestInternalizeSlice(t *testing.T) {
+	tests := []struct {
+		name string
+		init []int
+		want string
+	}{
+		{
+			name: `nil slice`,
+			init: []int(nil),
+			want: `[]int(nil)`,
+		},
+		{
+			name: `empty slice`,
+			init: []int{},
+			want: `[]int{}`,
+		},
+		{
+			name: `non-empty slice`,
+			init: []int{42, 53, 64},
+			want: `[]int{42, 53, 64}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := struct {
+				*js.Object
+				V []int `js:"V"` // V is externalized
+			}{Object: js.Global.Get("Object").New()}
+			b.V = tt.init
+
+			result := fmt.Sprintf(`%#v`, b.V) // internalize b.V
+			if result != tt.want {
+				t.Errorf(`Unexpected result %q != %q`, result, tt.want)
+			}
+		})
+	}
+}
+
 func TestInternalizeExternalizeNull(t *testing.T) {
 	type S struct {
 		*js.Object

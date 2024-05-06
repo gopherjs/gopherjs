@@ -1128,8 +1128,6 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 					return fc.fixNumber(fc.formatParenExpr("%1l + ((%1h >> 31) * 4294967296)", expr), t)
 				}
 				return fc.fixNumber(fc.formatExpr("%s.$low", fc.translateExpr(expr)), t)
-			case isFloat(basicExprType):
-				return fc.formatParenExpr("%e >> 0", expr)
 			case types.Identical(exprType, types.Typ[types.UnsafePointer]):
 				return fc.translateExpr(expr)
 			default:

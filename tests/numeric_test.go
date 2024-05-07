@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"testing"
 	"testing/quick"
+
+	"github.com/gopherjs/gopherjs/js"
 )
 
 // naiveMul64 performs 64-bit multiplication without using the multiplication
@@ -90,6 +92,29 @@ func BenchmarkMul64(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			z := xS[i%size] * yS[i%size]
 			runtime.KeepAlive(z)
+		}
+	})
+}
+
+func TestIssue733(t *testing.T) {
+	if runtime.GOOS != "js" {
+		t.Skip("test uses GopherJS-specific features")
+	}
+
+	t.Run("sign", func(t *testing.T) {
+		f := float64(-1)
+		i := uint32(f)
+		underlying := js.InternalObject(i).Float() // Get the raw JS number behind i.
+		if want := float64(4294967295); underlying != want {
+			t.Errorf("Got: uint32(float64(%v)) = %v. Want: %v.", f, underlying, want)
+		}
+	})
+	t.Run("truncation", func(t *testing.T) {
+		f := float64(300)
+		i := uint8(f)
+		underlying := js.InternalObject(i).Float() // Get the raw JS number behind i.
+		if want := float64(44); underlying != want {
+			t.Errorf("Got: uint32(float64(%v)) = %v. Want: %v.", f, underlying, want)
 		}
 	})
 }

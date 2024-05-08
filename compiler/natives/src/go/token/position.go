@@ -10,7 +10,7 @@ type FileSet struct {
 	base  int
 	files []*File
 
-	// temporarily replacement of atomic.Pointer[File] for go1.20 without generics.
+	// replaced atomic.Pointer[File] for go1.19 without generics.
 	last atomicFilePointer
 }
 

@@ -5,6 +5,7 @@ package nistec
 
 // temporarily replacement of `nistPoint[T any]` for go1.20 without generics.
 type WrappedPoint interface {
+	SetGenerator() WrappedPoint
 	Bytes() []byte
 	BytesX() ([]byte, error)
 	SetBytes(b []byte) (WrappedPoint, error)
@@ -24,6 +25,10 @@ func wrapP224(point *P224Point) WrappedPoint {
 
 func NewP224WrappedPoint() WrappedPoint {
 	return wrapP224(NewP224Point())
+}
+
+func (w p224Wrapper) SetGenerator() WrappedPoint {
+	return wrapP224(w.point.SetGenerator())
 }
 
 func (w p224Wrapper) Bytes() []byte {
@@ -69,6 +74,10 @@ func NewP256WrappedPoint() WrappedPoint {
 	return wrapP256(NewP256Point())
 }
 
+func (w p256Wrapper) SetGenerator() WrappedPoint {
+	return wrapP256(w.point.SetGenerator())
+}
+
 func (w p256Wrapper) Bytes() []byte {
 	return w.point.Bytes()
 }
@@ -112,6 +121,10 @@ func NewP521WrappedPoint() WrappedPoint {
 	return wrapP521(NewP521Point())
 }
 
+func (w p521Wrapper) SetGenerator() WrappedPoint {
+	return wrapP521(w.point.SetGenerator())
+}
+
 func (w p521Wrapper) Bytes() []byte {
 	return w.point.Bytes()
 }
@@ -153,6 +166,10 @@ func wrapP384(point *P384Point) WrappedPoint {
 
 func NewP384WrappedPoint() WrappedPoint {
 	return wrapP384(NewP384Point())
+}
+
+func (w p384Wrapper) SetGenerator() WrappedPoint {
+	return wrapP384(w.point.SetGenerator())
 }
 
 func (w p384Wrapper) Bytes() []byte {

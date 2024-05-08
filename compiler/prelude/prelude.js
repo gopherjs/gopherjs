@@ -569,3 +569,14 @@ var $instanceOf = (x, y) => {
 var $typeOf = x => {
     return typeof (x);
 };
+
+// The builtin unsafe.SliceData returns nil if the slice is nil, otherwise
+// returns a pointer to the first index of the array, &s[0].
+// If the slice is empty (cap == 0), it returns an "unspecified memory address"
+// or for JS, a pointer to the empty array.
+var $sliceData = (slice, typ) => {
+    if (slice === typ.nil) {
+        return $ptrType(typ.elem).nil;
+    }
+    return $indexPtr(slice.$array, slice.$offset, typ.elem);
+};

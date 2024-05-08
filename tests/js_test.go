@@ -1004,7 +1004,7 @@ func TestSliceData(t *testing.T) {
 	if sd3 == nil {
 		t.Errorf("slice data for sub-slice was nil")
 	}
-	if sd1 != sd2 {
+	if sd1 == sd2 {
 		t.Errorf("slice data for empty and non-empty slices were the same")
 	}
 	if sd2 == sd3 {

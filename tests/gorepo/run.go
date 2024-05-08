@@ -560,6 +560,8 @@ func (ctxt *context) match(name string) bool {
 
 func init() { checkShouldTest() }
 
+var errTimeout = errors.New("command exceeded time limit")
+
 // run runs a test.
 func (t *test) run() {
 	start := time.Now()
@@ -611,6 +613,7 @@ func (t *test) run() {
 	}
 
 	var args, flags []string
+	var tim int
 	wantError := false
 	f, err := splitQuoted(action)
 	if err != nil {
@@ -644,14 +647,6 @@ func (t *test) run() {
 	case "errorcheck", "errorcheckdir", "errorcheckoutput":
 		t.action = action
 		wantError = true
-		for len(args) > 0 && strings.HasPrefix(args[0], "-") {
-			if args[0] == "-0" {
-				wantError = false
-			} else {
-				flags = append(flags, args[0])
-			}
-			args = args[1:]
-		}
 	case "skip":
 		t.action = "skip"
 		return
@@ -659,6 +654,38 @@ func (t *test) run() {
 		t.err = skipError("skipped; unknown pattern: " + action)
 		t.action = "??"
 		return
+	}
+
+	// collect flags
+	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
+		switch args[0] {
+		case "-1":
+			wantError = true
+		case "-0":
+			wantError = false
+		case "-s":
+			// GOPHERJS: Doesn't use singlefilepkgs in test yet.
+		case "-t": // timeout in seconds
+			args = args[1:]
+			var err error
+			tim, err = strconv.Atoi(args[0])
+			if err != nil {
+				t.err = fmt.Errorf("need number of seconds for -t timeout, got %s instead", args[0])
+			}
+			if s := os.Getenv("GO_TEST_TIMEOUT_SCALE"); s != "" {
+				timeoutScale, err := strconv.Atoi(s)
+				if err != nil {
+					log.Fatalf("failed to parse $GO_TEST_TIMEOUT_SCALE = %q as integer: %v", s, err)
+				}
+				tim *= timeoutScale
+			}
+		case "-goexperiment": // set GOEXPERIMENT environment
+			args = args[1:]
+			// GOPHERJS: Ignore GOEXPERIMENT for now
+		default:
+			flags = append(flags, args[0])
+		}
+		args = args[1:]
 	}
 
 	t.makeTempDir()
@@ -698,8 +725,40 @@ func (t *test) run() {
 			cmd.Dir = t.tempDir
 			cmd.Env = envForDir(cmd.Dir)
 		}
-		err := cmd.Run()
-		if err != nil {
+
+		var err error
+		if tim != 0 {
+			err = cmd.Start()
+			// This command-timeout code adapted from cmd/go/test.go
+			// Note: the Go command uses a more sophisticated timeout
+			// strategy, first sending SIGQUIT (if appropriate for the
+			// OS in question) to try to trigger a stack trace, then
+			// finally much later SIGKILL. If timeouts prove to be a
+			// common problem here, it would be worth porting over
+			// that code as well. See https://do.dev/issue/50973
+			// for more discussion.
+			if err == nil {
+				tick := time.NewTimer(time.Duration(tim) * time.Second)
+				done := make(chan error)
+				go func() {
+					done <- cmd.Wait()
+				}()
+				select {
+				case err = <-done:
+					// ok
+				case <-tick.C:
+					cmd.Process.Signal(os.Interrupt)
+					time.Sleep(1 * time.Second)
+					cmd.Process.Kill()
+					<-done
+					err = errTimeout
+				}
+				tick.Stop()
+			}
+		} else {
+			err = cmd.Run()
+		}
+		if err != nil && err != errTimeout {
 			err = fmt.Errorf("%s\n%s", err, buf.Bytes())
 		}
 		return buf.Bytes(), err
@@ -718,6 +777,10 @@ func (t *test) run() {
 		if wantError {
 			if err == nil {
 				t.err = fmt.Errorf("compilation succeeded unexpectedly\n%s", out)
+				return
+			}
+			if err == errTimeout {
+				t.err = fmt.Errorf("compilation timed out")
 				return
 			}
 		} else {

@@ -44,10 +44,9 @@ func (s *Setting) Value() string {
 // again each time the environment variable changes
 // (due to use of os.Setenv, for example).
 //
-// GOPHERJS: For JS we currently will not be able
-// to access $GODEBUG via process.env nor watch
-// for changes via syscall.runtimeSetenv and
-// syscall.runtimeUnsetenv
+// GOPHERJS: Currently we don't inject a proxy into process.env to watch
+// for changes via syscall.runtimeSetenv and syscall.runtimeUnsetenv.
+// We may want to look into this in the future.
 func setUpdate(update func(string, string)) {}
 
 func update(def, env string) {

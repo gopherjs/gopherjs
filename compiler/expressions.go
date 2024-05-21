@@ -387,7 +387,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				switch basic.Kind() {
 				case types.Int32, types.Int:
 					return fc.formatParenExpr("$imul(%e, %e)", e.X, e.Y)
-				case types.Uint32, types.Uintptr:
+				case types.Uint32, types.Uint, types.Uintptr:
 					return fc.formatParenExpr("$imul(%e, %e) >>> 0", e.X, e.Y)
 				}
 				return fc.fixNumber(fc.formatExpr("%e * %e", e.X, e.Y), basic)

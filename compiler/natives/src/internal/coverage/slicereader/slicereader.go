@@ -3,10 +3,7 @@
 
 package slicereader
 
+// Overwritten to avoid `unsafe.String`
 func toString(b []byte) string {
-	if len(b) == 0 {
-		return ``
-	}
-	// Overwritten to avoid `unsafe.String`
 	return string(b)
 }

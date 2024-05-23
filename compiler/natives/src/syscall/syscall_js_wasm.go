@@ -22,6 +22,14 @@ func runtime_envs() []string {
 	return envs
 }
 
+func runtimeSetenv(k, v string) {
+	setenv_c(k, v)
+}
+
+func runtimeUnsetenv(k string) {
+	unsetenv_c(k)
+}
+
 func setenv_c(k, v string) {
 	process := js.Global().Get("process")
 	if process.IsUndefined() {

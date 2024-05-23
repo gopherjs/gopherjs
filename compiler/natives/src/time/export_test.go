@@ -3,5 +3,7 @@
 
 package time
 
-// replaced for go1.20 temporarily without generics.
-var ParseRFC3339 = parseRFC3339
+// replaced `parseRFC3339[string]` for go1.20 temporarily without generics.
+var ParseRFC3339 = func(s string, local *Location) (Time, bool) {
+	return parseRFC3339(s, local)
+}

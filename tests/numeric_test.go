@@ -1,10 +1,14 @@
 package tests
 
 import (
+	"fmt"
+	"math/bits"
 	"math/rand"
 	"runtime"
 	"testing"
 	"testing/quick"
+
+	"github.com/gopherjs/gopherjs/js"
 )
 
 // naiveMul64 performs 64-bit multiplication without using the multiplication
@@ -92,4 +96,108 @@ func BenchmarkMul64(b *testing.B) {
 			runtime.KeepAlive(z)
 		}
 	})
+}
+
+func TestIssue733(t *testing.T) {
+	if runtime.GOOS != "js" {
+		t.Skip("test uses GopherJS-specific features")
+	}
+
+	t.Run("sign", func(t *testing.T) {
+		f := float64(-1)
+		i := uint32(f)
+		underlying := js.InternalObject(i).Float() // Get the raw JS number behind i.
+		if want := float64(4294967295); underlying != want {
+			t.Errorf("Got: uint32(float64(%v)) = %v. Want: %v.", f, underlying, want)
+		}
+	})
+	t.Run("truncation", func(t *testing.T) {
+		f := float64(300)
+		i := uint8(f)
+		underlying := js.InternalObject(i).Float() // Get the raw JS number behind i.
+		if want := float64(44); underlying != want {
+			t.Errorf("Got: uint32(float64(%v)) = %v. Want: %v.", f, underlying, want)
+		}
+	})
+}
+
+// Test_32BitEnvironment tests that GopherJS behaves correctly
+// as a 32-bit environment for integers. To simulate a 32 bit environment
+// we have to use `$imul` instead of `*` to get the correct result.
+func Test_32BitEnvironment(t *testing.T) {
+	if bits.UintSize != 32 {
+		t.Skip(`test is only relevant for 32-bit environment`)
+	}
+
+	tests := []struct {
+		x, y, exp uint64
+	}{
+		{
+			x:   65535,      // x = 2^16 - 1
+			y:   65535,      // same as x
+			exp: 4294836225, // x² works since it doesn't overflow 32 bits.
+		},
+		{
+			x:   134217729, // x = 2^27 + 1, x < 2^32 and x > sqrt(2^53), so x² overflows 53 bits.
+			y:   134217729, // same as x
+			exp: 268435457, // x² mod 2^32 = (2^27 + 1)² mod 2^32 = (2^54 + 2^28 + 1) mod 2^32 = 2^28 + 1
+			// In pure JS, `x * x >>> 0`, would result in 268,435,456 because it lost the least significant bit
+			// prior to being truncated, where in a real 32 bit environment, it would be 268,435,457 since
+			// the rollover removed the most significant bit and doesn't affect the least significant bit.
+		},
+		{
+			x:   4294967295, // x = 2^32 - 1 another case where x² overflows 53 bits causing a loss of precision.
+			y:   4294967295, // same as x
+			exp: 1,          // x² mod 2^32 = (2^32 - 1)² mod 2^32 = (2^64 - 2^33 + 1) mod 2^32 = 1
+			// In pure JS, `x * x >>> 0`, would result in 0 because it lost the least significant bits.
+		},
+		{
+			x:   4294967295, // x = 2^32 - 1
+			y:   3221225473, // y = 2^31 + 2^30 + 1
+			exp: 1073741823, // 2^32 - 1.
+			// In pure JS, `x * y >>> 0`, would result in 1,073,741,824.
+		},
+		{
+			x:   4294967295, // x = 2^32 - 1
+			y:   134217729,  // y = 2^27 + 1
+			exp: 4160749567, // In pure JS, `x * y >>> 0`, would result in 4,160,749,568.
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf(`#%d/uint32`, i), func(t *testing.T) {
+			x, y, exp := uint32(test.x), uint32(test.y), uint32(test.exp)
+			if got := x * y; got != exp {
+				t.Errorf("got: %d\nwant: %d.", got, exp)
+			}
+		})
+
+		t.Run(fmt.Sprintf(`#%d/uintptr`, i), func(t *testing.T) {
+			x, y, exp := uintptr(test.x), uintptr(test.y), uintptr(test.exp)
+			if got := x * y; got != exp {
+				t.Errorf("got: %d\nwant: %d.", got, exp)
+			}
+		})
+
+		t.Run(fmt.Sprintf(`#%d/uint`, i), func(t *testing.T) {
+			x, y, exp := uint(test.x), uint(test.y), uint(test.exp)
+			if got := x * y; got != exp {
+				t.Errorf("got: %d\nwant: %d.", got, exp)
+			}
+		})
+
+		t.Run(fmt.Sprintf(`#%d/int32`, i), func(t *testing.T) {
+			x, y, exp := int32(test.x), int32(test.y), int32(test.exp)
+			if got := x * y; got != exp {
+				t.Errorf("got: %d\nwant: %d.", got, exp)
+			}
+		})
+
+		t.Run(fmt.Sprintf(`#%d/int`, i), func(t *testing.T) {
+			x, y, exp := int(test.x), int(test.y), int(test.exp)
+			if got := x * y; got != exp {
+				t.Errorf("got: %d\nwant: %d.", got, exp)
+			}
+		})
+	}
 }

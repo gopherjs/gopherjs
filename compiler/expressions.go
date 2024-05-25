@@ -387,7 +387,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				switch basic.Kind() {
 				case types.Int32, types.Int:
 					return fc.formatParenExpr("$imul(%e, %e)", e.X, e.Y)
-				case types.Uint32, types.Uintptr:
+				case types.Uint32, types.Uint, types.Uintptr:
 					return fc.formatParenExpr("$imul(%e, %e) >>> 0", e.X, e.Y)
 				}
 				return fc.fixNumber(fc.formatExpr("%e * %e", e.X, e.Y), basic)
@@ -1131,8 +1131,6 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 					return fc.fixNumber(fc.formatParenExpr("%1l + ((%1h >> 31) * 4294967296)", expr), t)
 				}
 				return fc.fixNumber(fc.formatExpr("%s.$low", fc.translateExpr(expr)), t)
-			case isFloat(basicExprType):
-				return fc.formatParenExpr("%e >> 0", expr)
 			case types.Identical(exprType, types.Typ[types.UnsafePointer]):
 				return fc.translateExpr(expr)
 			default:

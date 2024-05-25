@@ -236,6 +236,9 @@ var $internalize = (v, t, recv, seen, makeWrapper) => {
         case $kindFloat64:
             return parseFloat(v);
         case $kindArray:
+            if (v === null || v === undefined) {
+                $throwRuntimeError("cannot internalize "+v+" as a "+t.string);
+            }
             if (v.length !== t.len) {
                 $throwRuntimeError("got array with wrong size from JavaScript native");
             }
@@ -331,6 +334,9 @@ var $internalize = (v, t, recv, seen, makeWrapper) => {
                 return $internalize(v, t.elem, makeWrapper);
             }
         case $kindSlice:
+            if (v == null) {
+                return t.zero();
+            }
             return new t($mapArray(v, e => { return $internalize(e, t.elem, makeWrapper); }));
         case $kindString:
             v = String(v);

@@ -5,6 +5,7 @@ package godebug
 
 import (
 	"sync"
+	"syscall/js"
 )
 
 type Setting struct {
@@ -37,17 +38,40 @@ func (s *Setting) Value() string {
 	return *s.value.Load()
 }
 
+var godebugUpdate func(string, string)
+
 // setUpdate is provided by package runtime.
 // It calls update(def, env), where def is the default GODEBUG setting
 // and env is the current value of the $GODEBUG environment variable.
 // After that first call, the runtime calls update(def, env)
 // again each time the environment variable changes
 // (due to use of os.Setenv, for example).
-//
-// GOPHERJS: Currently we don't inject a proxy into process.env to watch
-// for changes via syscall.runtimeSetenv and syscall.runtimeUnsetenv.
-// We may want to look into this in the future.
-func setUpdate(update func(string, string)) {}
+func setUpdate(update func(string, string)) {
+	js.Global().Invoke(`$injectGodebugProxy`, godebugNotify)
+	godebugUpdate = update
+}
+
+// godebugNotify is the function injected into process.env
+// and called anytime an environment variable is set.
+func godebugNotify(key, value string) {
+	if godebugUpdate == nil {
+		return
+	}
+
+	process := js.Global().Get("process")
+	if process.IsUndefined() {
+		return
+	}
+
+	env := process.Get("env")
+	if env.IsUndefined() {
+		return
+	}
+
+	goDebugEnv := env.Get("GODEBUG").String()
+	godebugDefault := ``
+	godebugUpdate(godebugDefault, goDebugEnv)
+}
 
 func update(def, env string) {
 	updateMu.Lock()

@@ -21,6 +21,9 @@ func (c *Cache) Put(k, v unsafe.Pointer)             {}
 func (c *Cache) table() *[cacheSize]unsafe.Pointer
 
 //gopherjs:purge
+type cacheTable struct{}
+
+//gopherjs:purge
 type cacheEntry struct{}
 
 //gopherjs:purge

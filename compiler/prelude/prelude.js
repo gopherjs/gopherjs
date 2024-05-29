@@ -578,7 +578,7 @@ var $sliceData = (slice, typ) => {
 };
 
 var $injectGodebugEnvWatcher = (onEnvChange) => {
-    if (process.env.$envWatcherForGodebug) {
+    if (process.env.$envWatcherForGodebug === true) {
         return // already injected
     }
     const handler = {

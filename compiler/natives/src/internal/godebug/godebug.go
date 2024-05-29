@@ -5,7 +5,8 @@ package godebug
 
 import (
 	"sync"
-	"syscall/js"
+
+	"github.com/gopherjs/gopherjs/js"
 )
 
 type Setting struct {
@@ -38,6 +39,8 @@ func (s *Setting) Value() string {
 	return *s.value.Load()
 }
 
+const godebugEnvKey = `GODEBUG`
+
 var godebugUpdate func(string, string)
 
 // setUpdate is provided by package runtime.
@@ -47,30 +50,32 @@ var godebugUpdate func(string, string)
 // again each time the environment variable changes
 // (due to use of os.Setenv, for example).
 func setUpdate(update func(string, string)) {
-	js.Global().Invoke(`$injectGodebugEnvWatcher`, godebugNotify)
+	js.Global.Call(`$injectGodebugEnvWatcher`, godebugNotify)
 	godebugUpdate = update
-	if godebugUpdate == nil {
-		return
+	if godebugUpdate != nil {
+		godebugEnv := getEnvString(godebugEnvKey)
+		godebugNotify(godebugEnvKey, godebugEnv)
+	}
+}
+
+func getEnvString(key string) string {
+	process := js.Global.Get(`process`)
+	if process == js.Undefined {
+		return ``
 	}
 
-	process := js.Global().Get("process")
-	if process.IsUndefined() {
-		return
+	env := process.Get(`env`)
+	if env == js.Undefined {
+		return ``
 	}
 
-	env := process.Get("env")
-	if env.IsUndefined() {
-		return
-	}
-
-	goDebugEnv := env.Get(`GODEBUG`).String()
-	godebugNotify(`GODEBUG`, goDebugEnv)
+	return env.Get(key).String()
 }
 
 // godebugNotify is the function injected into process.env
 // and called anytime an environment variable is set.
 func godebugNotify(key, value string) {
-	if godebugUpdate == nil || key != `GODEBUG` {
+	if godebugUpdate == nil || key != godebugEnvKey {
 		return
 	}
 

@@ -47,7 +47,7 @@ var godebugUpdate func(string, string)
 // again each time the environment variable changes
 // (due to use of os.Setenv, for example).
 func setUpdate(update func(string, string)) {
-	js.Global().Invoke(`$injectGodebugProxy`, godebugNotify)
+	js.Global().Invoke(`$injectGodebugEnvWatcher`, godebugNotify)
 	godebugUpdate = update
 }
 

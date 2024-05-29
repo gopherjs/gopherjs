@@ -49,11 +49,6 @@ var godebugUpdate func(string, string)
 func setUpdate(update func(string, string)) {
 	js.Global().Invoke(`$injectGodebugEnvWatcher`, godebugNotify)
 	godebugUpdate = update
-}
-
-// godebugNotify is the function injected into process.env
-// and called anytime an environment variable is set.
-func godebugNotify(key, value string) {
 	if godebugUpdate == nil {
 		return
 	}
@@ -68,9 +63,19 @@ func godebugNotify(key, value string) {
 		return
 	}
 
-	goDebugEnv := env.Get("GODEBUG").String()
+	goDebugEnv := env.Get(`GODEBUG`).String()
+	godebugNotify(`GODEBUG`, goDebugEnv)
+}
+
+// godebugNotify is the function injected into process.env
+// and called anytime an environment variable is set.
+func godebugNotify(key, value string) {
+	if godebugUpdate == nil || key != `GODEBUG` {
+		return
+	}
+
 	godebugDefault := ``
-	godebugUpdate(godebugDefault, goDebugEnv)
+	godebugUpdate(godebugDefault, value)
 }
 
 func update(def, env string) {

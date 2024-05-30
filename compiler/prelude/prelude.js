@@ -579,10 +579,10 @@ var $sliceData = (slice, typ) => {
 
 var $injectGoDebugEnvWatcher = (onEnvChange) => {
     process.env = new Proxy(process.env, {
-		set(target, key, value) {
+        set(target, key, value) {
             onEnvChange(key, value);
-			target[key] = value;
-			return true;
+            target[key] = value;
+            return true;
         }
     });
 };

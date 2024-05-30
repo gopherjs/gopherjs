@@ -41,7 +41,8 @@ func (s *Setting) Value() string {
 
 const godebugEnvKey = `GODEBUG`
 
-var godebugUpdate func(string, string)
+var injectWatcher sync.Once
+var godebugUpdate func(def, env string)
 
 // setUpdate is provided by package runtime.
 // It calls update(def, env), where def is the default GODEBUG setting
@@ -49,13 +50,13 @@ var godebugUpdate func(string, string)
 // After that first call, the runtime calls update(def, env)
 // again each time the environment variable changes
 // (due to use of os.Setenv, for example).
-func setUpdate(update func(string, string)) {
-	js.Global.Call(`$injectGodebugEnvWatcher`, godebugNotify)
+func setUpdate(update func(def, env string)) {
+	injectWatcher.Do(func() {
+		js.Global.Call(`$injectGoDebugEnvWatcher`, godebugNotify)
+	})
 	godebugUpdate = update
-	if godebugUpdate != nil {
-		godebugEnv := getEnvString(godebugEnvKey)
-		godebugNotify(godebugEnvKey, godebugEnv)
-	}
+	godebugEnv := getEnvString(godebugEnvKey)
+	godebugNotify(godebugEnvKey, godebugEnv)
 }
 
 func getEnvString(key string) string {
@@ -69,18 +70,24 @@ func getEnvString(key string) string {
 		return ``
 	}
 
-	return env.Get(key).String()
+	value := env.Get(key)
+	if value == js.Undefined {
+		return ``
+	}
+
+	return value.String()
 }
 
 // godebugNotify is the function injected into process.env
 // and called anytime an environment variable is set.
 func godebugNotify(key, value string) {
-	if godebugUpdate == nil || key != godebugEnvKey {
+	update := godebugUpdate
+	if update == nil || key != godebugEnvKey {
 		return
 	}
 
 	godebugDefault := ``
-	godebugUpdate(godebugDefault, value)
+	update(godebugDefault, value)
 }
 
 func update(def, env string) {

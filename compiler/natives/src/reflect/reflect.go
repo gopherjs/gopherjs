@@ -1325,6 +1325,36 @@ func getJsTag(tag string) string {
 	return ""
 }
 
+func (v Value) Grow(n int) {
+	v.mustBeAssignable()
+	v.mustBe(Slice)
+	v.grow(n)
+}
+
+func (v Value) grow(n int) {
+	if n < 0 {
+		panic(`reflect.Value.Grow: negative len`)
+	}
+
+	s := v.object()
+	len := s.Get(`$length`).Int()
+	if len+n < 0 {
+		panic(`reflect.Value.Grow: slice overflow`)
+	}
+
+	cap := s.Get(`$capacity`).Int()
+	if len+n > cap {
+
+		// TODO: Need to get correct array buffer type, create a bigger buffer,
+		// and copy the old buffer to the new buffer
+		//
+		// var newBuffer = new ArrayBuffer(n);
+		// new Uint8Array(newBuffer).set(oldBuffer);
+
+		s.Set(`$capacity`, n)
+	}
+}
+
 func (v Value) Index(i int) Value {
 	switch k := v.kind(); k {
 	case Array:

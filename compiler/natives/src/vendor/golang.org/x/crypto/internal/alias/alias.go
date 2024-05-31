@@ -1,12 +1,11 @@
 //go:build js
 // +build js
 
-package subtle
+package alias
 
 // This file duplicated is these two locations:
-// - src/crypto/internal/subtle/aliasing.go
-// - src/golang.org/x/crypto/internal/subtle/aliasing.go
-// - src/golang.org/x/crypto/internal/alias/alias.go
+// - src/crypto/internal/alias/
+// - src/golang.org/x/crypto/internal/alias/
 
 import "github.com/gopherjs/gopherjs/js"
 

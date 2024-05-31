@@ -5,6 +5,7 @@ package godebug
 
 import (
 	"sync"
+	_ "unsafe" // go:linkname
 )
 
 type Setting struct {
@@ -36,6 +37,9 @@ func (s *Setting) Value() string {
 	})
 	return *s.value.Load()
 }
+
+//go:linkname setUpdate runtime.godebug_setUpdate
+func setUpdate(update func(def, env string))
 
 func update(def, env string) {
 	updateMu.Lock()

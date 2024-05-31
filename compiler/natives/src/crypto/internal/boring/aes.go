@@ -3,8 +3,8 @@
 
 package boring
 
-import "github.com/gopherjs/gopherjs/compiler/natives/src/internal/alias"
+import "crypto/internal/alias"
 
 func anyOverlap(x, y []byte) bool {
-	return alias.AnyOverlap(x, y)
+	return alias.AnyOverlap()AnyOverlap(x, y)
 }

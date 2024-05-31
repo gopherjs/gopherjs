@@ -3,8 +3,12 @@
 
 package aes
 
-//go:linkname anyOverlap internal/alias.AnyOverlap
-func anyOverlap(x, y []byte) bool
+import "github.com/gopherjs/gopherjs/compiler/natives/src/internal/alias"
 
-//go:linkname inexactOverlap internal/alias.InexactOverlap
-func inexactOverlap(x, y []byte) bool
+func anyOverlap(x, y []byte) bool {
+	return alias.AnyOverlap(x, y)
+}
+
+func inexactOverlap(x, y []byte) bool {
+	return alias.InexactOverlap(x, y)
+}

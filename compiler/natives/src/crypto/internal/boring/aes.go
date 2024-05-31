@@ -6,5 +6,5 @@ package boring
 import "crypto/internal/alias"
 
 func anyOverlap(x, y []byte) bool {
-	return alias.AnyOverlap()AnyOverlap(x, y)
+	return alias.AnyOverlap(x, y)
 }

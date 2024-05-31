@@ -1,11 +1,7 @@
 //go:build js
 // +build js
 
-package subtle
-
-// This file duplicated is these two locations:
-// - src/crypto/internal/subtle/
-// - src/golang.org/x/crypto/internal/subtle/
+package alias
 
 import "github.com/gopherjs/gopherjs/js"
 
@@ -17,4 +13,8 @@ func AnyOverlap(x, y []byte) bool {
 		js.InternalObject(x).Get("$array") == js.InternalObject(y).Get("$array") &&
 		js.InternalObject(x).Get("$offset").Int() <= js.InternalObject(y).Get("$offset").Int()+len(y)-1 &&
 		js.InternalObject(y).Get("$offset").Int() <= js.InternalObject(x).Get("$offset").Int()+len(x)-1
+}
+
+func InexactOverlap(x, y []byte) bool {
+	return AnyOverlap(x, y)
 }

@@ -576,3 +576,13 @@ var $sliceData = (slice, typ) => {
     }
     return $indexPtr(slice.$array, slice.$offset, typ.elem);
 };
+
+var $injectGoDebugEnvWatcher = (onEnvChange) => {
+    process.env = new Proxy(process.env, {
+        set(target, key, value) {
+            onEnvChange(key, value);
+            target[key] = value;
+            return true;
+        }
+    });
+};

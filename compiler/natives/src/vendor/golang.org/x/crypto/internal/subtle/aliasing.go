@@ -4,9 +4,8 @@
 package subtle
 
 // This file duplicated is these two locations:
-// - src/crypto/internal/subtle/aliasing.go
-// - src/golang.org/x/crypto/internal/subtle/aliasing.go
-// - src/golang.org/x/crypto/internal/alias/alias.go
+// - src/crypto/internal/subtle/
+// - src/golang.org/x/crypto/internal/subtle/
 
 import "github.com/gopherjs/gopherjs/js"
 

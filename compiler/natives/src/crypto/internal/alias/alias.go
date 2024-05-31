@@ -3,6 +3,10 @@
 
 package alias
 
+// This file duplicated is these two locations:
+// - src/crypto/internal/alias/
+// - src/golang.org/x/crypto/internal/alias/
+
 import "github.com/gopherjs/gopherjs/js"
 
 // AnyOverlap reports whether x and y share memory at any (not necessarily

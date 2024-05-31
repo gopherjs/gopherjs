@@ -4,8 +4,8 @@
 package alias
 
 // This file duplicated is these two locations:
-// - src/crypto/internal/subtle/
-// - src/golang.org/x/crypto/internal/subtle/
+// - src/crypto/internal/alias/
+// - src/golang.org/x/crypto/internal/alias/
 
 import "github.com/gopherjs/gopherjs/js"
 

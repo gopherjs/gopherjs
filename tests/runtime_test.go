@@ -167,7 +167,7 @@ func TestCallers(t *testing.T) {
 // Need this to tunnel into `internal/godebug` and run a test
 // without causing a dependency cycle with the `testing` package.
 //
-//go:linkname godebug_setUpdate internal/godebug.setUpdate
+//go:linkname godebug_setUpdate runtime.godebug_setUpdate
 func godebug_setUpdate(update func(string, string))
 
 func Test_GoDebugInjection(t *testing.T) {

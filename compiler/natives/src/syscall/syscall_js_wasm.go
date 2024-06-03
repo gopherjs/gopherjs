@@ -2,6 +2,7 @@ package syscall
 
 import (
 	"syscall/js"
+	_ "unsafe" // go:linkname
 )
 
 func runtime_envs() []string {
@@ -36,6 +37,7 @@ func setenv_c(k, v string) {
 		return
 	}
 	process.Get("env").Set(k, v)
+	godebug_notify(k, v)
 }
 
 func unsetenv_c(k string) {
@@ -44,7 +46,11 @@ func unsetenv_c(k string) {
 		return
 	}
 	process.Get("env").Delete(k)
+	godebug_notify(k, ``)
 }
+
+//go:linkname godebug_notify runtime.godebug_notify
+func godebug_notify(key, value string)
 
 func setStat(st *Stat_t, jsSt js.Value) {
 	// This method is an almost-exact copy of upstream, except for 4 places where

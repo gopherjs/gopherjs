@@ -5,8 +5,7 @@ package godebug
 
 import (
 	"sync"
-
-	"github.com/gopherjs/gopherjs/js"
+	_ "unsafe" // go:linkname
 )
 
 type Setting struct {
@@ -39,56 +38,8 @@ func (s *Setting) Value() string {
 	return *s.value.Load()
 }
 
-const godebugEnvKey = `GODEBUG`
-
-var injectWatcher sync.Once
-var godebugUpdate func(def, env string)
-
-// setUpdate is provided by package runtime.
-// It calls update(def, env), where def is the default GODEBUG setting
-// and env is the current value of the $GODEBUG environment variable.
-// After that first call, the runtime calls update(def, env)
-// again each time the environment variable changes
-// (due to use of os.Setenv, for example).
-func setUpdate(update func(def, env string)) {
-	injectWatcher.Do(func() {
-		js.Global.Call(`$injectGoDebugEnvWatcher`, godebugNotify)
-	})
-	godebugUpdate = update
-	godebugEnv := getEnvString(godebugEnvKey)
-	godebugNotify(godebugEnvKey, godebugEnv)
-}
-
-func getEnvString(key string) string {
-	process := js.Global.Get(`process`)
-	if process == js.Undefined {
-		return ``
-	}
-
-	env := process.Get(`env`)
-	if env == js.Undefined {
-		return ``
-	}
-
-	value := env.Get(key)
-	if value == js.Undefined {
-		return ``
-	}
-
-	return value.String()
-}
-
-// godebugNotify is the function injected into process.env
-// and called anytime an environment variable is set.
-func godebugNotify(key, value string) {
-	update := godebugUpdate
-	if update == nil || key != godebugEnvKey {
-		return
-	}
-
-	godebugDefault := ``
-	update(godebugDefault, value)
-}
+//go:linkname setUpdate runtime.godebug_setUpdate
+func setUpdate(update func(def, env string))
 
 func update(def, env string) {
 	updateMu.Lock()

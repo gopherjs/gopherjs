@@ -434,7 +434,7 @@ var $internalAppend = (slice, array, offset, length) => {
     }
 
     var newLength = slice.$length + length;
-    slice = $growCapacity(slice, newLength);
+    slice = $growSlice(slice, newLength);
     
     var newArray = slice.$array;
     $copyArray(newArray, array, slice.$offset + slice.$length, offset, length, slice.constructor.elem);
@@ -446,7 +446,7 @@ var $internalAppend = (slice, array, offset, length) => {
     return newSlice;
 };
 
-var $growCapacity = (slice, minCapacity) => {
+var $growSlice = (slice, minCapacity) => {
     const oldCapacity = slice.$capacity;
     if (minCapacity > oldCapacity) {
         const newCapacity = Math.max(minCapacity, oldCapacity < 1024 ? oldCapacity * 2 : Math.floor(oldCapacity * 5 / 4));

@@ -1338,7 +1338,7 @@ func (v Value) grow(n int) {
 
 	cap := s.Get(`$capacity`).Int()
 	if len+n > cap {
-		ns := js.Global.Call("$growCapacity", s, len+n)
+		ns := js.Global.Call("$growSlice", s, len+n)
 		s.Set(`$capacity`, ns.Get(`$capacity`))
 		s.Set(`$array`, ns.Get(`$array`))
 		s.Set(`$offset`, ns.Get(`$offset`))

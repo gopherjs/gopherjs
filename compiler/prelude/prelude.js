@@ -436,10 +436,10 @@ var $internalAppend = (slice, array, offset, length) => {
     const newLength = slice.$length + length;
     slice = $growSlice(slice, newLength);
     
-    let newArray = slice.$array;
+    var newArray = slice.$array;
     $copyArray(newArray, array, slice.$offset + slice.$length, offset, length, slice.constructor.elem);
 
-    let newSlice = new slice.constructor(newArray);
+    var newSlice = new slice.constructor(newArray);
     newSlice.$offset = slice.$offset;
     newSlice.$length = newLength;
     newSlice.$capacity = slice.$capacity;
@@ -455,8 +455,8 @@ var $growSlice = (slice, minCapacity) => {
         if (slice.$array.constructor === Array) {
             newArray = slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
             newArray.length = newCapacity;
-            let zero = slice.constructor.elem.zero;
-            for (let i = slice.$length; i < newCapacity; i++) {
+            var zero = slice.constructor.elem.zero;
+            for (var i = slice.$length; i < newCapacity; i++) {
                 newArray[i] = zero();
             }
         } else {

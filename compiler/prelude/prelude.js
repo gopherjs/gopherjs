@@ -472,7 +472,11 @@ var $growSlice = (slice, minCapacity) => {
         slice.$capacity = newCapacity;
     }
     return slice;
+<<<<<<< HEAD
 }
+=======
+};
+>>>>>>> 5610925b875bedfe815aee786330b1305d8c5767
 
 var $equal = (a, b, type) => {
     if (type === $jsObjectPtr) {

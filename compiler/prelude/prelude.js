@@ -433,12 +433,27 @@ var $internalAppend = (slice, array, offset, length) => {
         return slice;
     }
 
-    const newLength = slice.$length + length;
-    slice = $growSlice(slice, newLength);
-    
     var newArray = slice.$array;
     var newOffset = slice.$offset;
+    var newLength = slice.$length + length;
     var newCapacity = slice.$capacity;
+    
+    if (newLength > newCapacity) {
+        newOffset = 0;
+        newCapacity = Math.max(newLength, slice.$capacity < 1024 ? slice.$capacity * 2 : Math.floor(slice.$capacity * 5 / 4));
+        if (slice.$array.constructor === Array) {
+            newArray = slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
+            newArray.length = newCapacity;
+            var zero = slice.constructor.elem.zero;
+            for (var i = slice.$length; i < newCapacity; i++) {
+                newArray[i] = zero();
+            }
+        } else {
+            newArray = new slice.$array.constructor(newCapacity);
+            newArray.set(slice.$array.subarray(slice.$offset, slice.$offset + slice.$length));
+        }
+    }
+    
     $copyArray(newArray, array, newOffset + slice.$length, offset, length, slice.constructor.elem);
 
     var newSlice = new slice.constructor(newArray);

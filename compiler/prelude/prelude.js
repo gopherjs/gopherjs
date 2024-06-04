@@ -437,12 +437,14 @@ var $internalAppend = (slice, array, offset, length) => {
     slice = $growSlice(slice, newLength);
     
     var newArray = slice.$array;
-    $copyArray(newArray, array, slice.$offset + slice.$length, offset, length, slice.constructor.elem);
+    var newOffset = slice.$offset;
+    var newCapacity = slice.$capacity;
+    $copyArray(newArray, array, newOffset + slice.$length, offset, length, slice.constructor.elem);
 
     var newSlice = new slice.constructor(newArray);
-    newSlice.$offset = slice.$offset;
+    newSlice.$offset = newOffset;
     newSlice.$length = newLength;
-    newSlice.$capacity = slice.$capacity;
+    newSlice.$capacity = newCapacity;
     return newSlice;
 };
 

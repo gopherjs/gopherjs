@@ -1325,6 +1325,26 @@ func getJsTag(tag string) string {
 	return ""
 }
 
+func (v Value) grow(n int) {
+	if n < 0 {
+		panic(`reflect.Value.Grow: negative len`)
+	}
+
+	s := v.object()
+	len := s.Get(`$length`).Int()
+	if len+n < 0 {
+		panic(`reflect.Value.Grow: slice overflow`)
+	}
+
+	cap := s.Get(`$capacity`).Int()
+	if len+n > cap {
+		ns := js.Global.Call("$growSlice", s, len+n)
+		s.Set(`$capacity`, ns.Get(`$capacity`))
+		s.Set(`$array`, ns.Get(`$array`))
+		s.Set(`$offset`, ns.Get(`$offset`))
+	}
+}
+
 func (v Value) Index(i int) Value {
 	switch k := v.kind(); k {
 	case Array:

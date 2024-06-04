@@ -433,35 +433,45 @@ var $internalAppend = (slice, array, offset, length) => {
         return slice;
     }
 
-    var newArray = slice.$array;
-    var newOffset = slice.$offset;
     var newLength = slice.$length + length;
-    var newCapacity = slice.$capacity;
+    slice = $growSlice(slice, newLength);
+    
+    var newArray = slice.$array;
+    $copyArray(newArray, array, slice.$offset + slice.$length, offset, length, slice.constructor.elem);
 
-    if (newLength > newCapacity) {
-        newOffset = 0;
-        newCapacity = Math.max(newLength, slice.$capacity < 1024 ? slice.$capacity * 2 : Math.floor(slice.$capacity * 5 / 4));
+    var newSlice = new slice.constructor(newArray);
+    newSlice.$offset = slice.$offset;
+    newSlice.$length = newLength;
+    newSlice.$capacity = slice.$capacity;
+    return newSlice;
+};
 
+var $growSlice = (slice, minCapacity) => {
+    const oldCapacity = slice.$capacity;
+    if (minCapacity > oldCapacity) {
+        const newCapacity = Math.max(minCapacity, oldCapacity < 1024 ? oldCapacity * 2 : Math.floor(oldCapacity * 5 / 4));
+
+        const oldOffset = slice.$offset;
+        const oldLength = slice.$length;
+        var newArray;
         if (slice.$array.constructor === Array) {
-            newArray = slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
+            newArray = slice.$array.slice(oldOffset, oldOffset + oldLength);
             newArray.length = newCapacity;
             var zero = slice.constructor.elem.zero;
-            for (var i = slice.$length; i < newCapacity; i++) {
+            for (var i = oldLength; i < newCapacity; i++) {
                 newArray[i] = zero();
             }
         } else {
             newArray = new slice.$array.constructor(newCapacity);
-            newArray.set(slice.$array.subarray(slice.$offset, slice.$offset + slice.$length));
+            newArray.set(slice.$array.subarray(oldOffset, oldOffset + oldLength));
         }
+
+        slice = new slice.constructor(newArray);
+        slice.$offset = 0;
+        slice.$length = oldLength;
+        slice.$capacity = newCapacity;
     }
-
-    $copyArray(newArray, array, newOffset + slice.$length, offset, length, slice.constructor.elem);
-
-    var newSlice = new slice.constructor(newArray);
-    newSlice.$offset = newOffset;
-    newSlice.$length = newLength;
-    newSlice.$capacity = newCapacity;
-    return newSlice;
+    return slice;
 };
 
 var $equal = (a, b, type) => {

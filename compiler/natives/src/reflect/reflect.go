@@ -1338,12 +1338,10 @@ func (v Value) grow(n int) {
 
 	cap := s.Get(`$capacity`).Int()
 	if len+n > cap {
-		nv := MakeSlice(v.Type(), len, len+n)
-		ns := nv.object()
-		js.Global.Call("$copySlice", ns, s)
+		ns := js.Global.Call("$growCapacity", s, len+n)
 		s.Set(`$capacity`, ns.Get(`$capacity`))
 		s.Set(`$array`, ns.Get(`$array`))
-		s.Set(`$offset`, 0)
+		s.Set(`$offset`, ns.Get(`$offset`))
 	}
 }
 

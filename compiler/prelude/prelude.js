@@ -433,13 +433,13 @@ var $internalAppend = (slice, array, offset, length) => {
         return slice;
     }
 
-    var newLength = slice.$length + length;
+    const newLength = slice.$length + length;
     slice = $growSlice(slice, newLength);
     
-    var newArray = slice.$array;
+    let newArray = slice.$array;
     $copyArray(newArray, array, slice.$offset + slice.$length, offset, length, slice.constructor.elem);
 
-    var newSlice = new slice.constructor(newArray);
+    let newSlice = new slice.constructor(newArray);
     newSlice.$offset = slice.$offset;
     newSlice.$length = newLength;
     newSlice.$capacity = slice.$capacity;
@@ -450,22 +450,21 @@ var $growSlice = (slice, minCapacity) => {
     const oldCapacity = slice.$capacity;
     if (minCapacity > oldCapacity) {
         const newCapacity = Math.max(minCapacity, oldCapacity < 1024 ? oldCapacity * 2 : Math.floor(oldCapacity * 5 / 4));
-
-        const oldOffset = slice.$offset;
-        const oldLength = slice.$length;
-        var newArray;
+        
+        let newArray;
         if (slice.$array.constructor === Array) {
-            newArray = slice.$array.slice(oldOffset, oldOffset + oldLength);
+            newArray = slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
             newArray.length = newCapacity;
-            var zero = slice.constructor.elem.zero;
-            for (var i = oldLength; i < newCapacity; i++) {
+            let zero = slice.constructor.elem.zero;
+            for (let i = slice.$length; i < newCapacity; i++) {
                 newArray[i] = zero();
             }
         } else {
             newArray = new slice.$array.constructor(newCapacity);
-            newArray.set(slice.$array.subarray(oldOffset, oldOffset + oldLength));
+            newArray.set(slice.$array.subarray(slice.$offset, slice.$offset + slice.$length));
         }
 
+        const oldLength = slice.length;
         slice = new slice.constructor(newArray);
         slice.$offset = 0;
         slice.$length = oldLength;

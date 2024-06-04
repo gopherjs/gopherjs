@@ -2,10 +2,65 @@ package typeparams
 
 import (
 	"errors"
+	"go/token"
+	"go/types"
 	"testing"
 
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
+
+func TestHasTypeParams(t *testing.T) {
+	pkg := types.NewPackage("test/pkg", "pkg")
+	empty := types.NewInterfaceType(nil, nil)
+	tParams := func() []*types.TypeParam {
+		return []*types.TypeParam{
+			types.NewTypeParam(types.NewTypeName(token.NoPos, pkg, "T", types.Typ[types.String]), empty),
+		}
+	}
+
+	tests := []struct {
+		descr string
+		typ   types.Type
+		want  bool
+	}{{
+		descr: "generic function",
+		typ:   types.NewSignatureType(nil, nil, tParams(), nil, nil, false),
+		want:  true,
+	}, {
+		descr: "generic method",
+		typ:   types.NewSignatureType(types.NewVar(token.NoPos, pkg, "t", nil), tParams(), nil, nil, nil, false),
+		want:  true,
+	}, {
+		descr: "regular function",
+		typ:   types.NewSignatureType(nil, nil, nil, nil, nil, false),
+		want:  false,
+	}, {
+		descr: "generic type",
+		typ: func() types.Type {
+			typ := types.NewNamed(types.NewTypeName(token.NoPos, pkg, "Typ", nil), types.Typ[types.String], nil)
+			typ.SetTypeParams(tParams())
+			return typ
+		}(),
+		want: true,
+	}, {
+		descr: "regular named type",
+		typ:   types.NewNamed(types.NewTypeName(token.NoPos, pkg, "Typ", nil), types.Typ[types.String], nil),
+		want:  false,
+	}, {
+		descr: "built-in type",
+		typ:   types.Typ[types.String],
+		want:  false,
+	}}
+
+	for _, test := range tests {
+		t.Run(test.descr, func(t *testing.T) {
+			got := HasTypeParams(test.typ)
+			if got != test.want {
+				t.Errorf("Got: HasTypeParams(%v) = %v. Want: %v.", test.typ, got, test.want)
+			}
+		})
+	}
+}
 
 func TestRequiresGenericsSupport(t *testing.T) {
 	t.Run("generic func", func(t *testing.T) {

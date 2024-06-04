@@ -1349,13 +1349,22 @@ func (v Value) extendSlice(n int) Value {
 	v.mustBeExported()
 	v.mustBe(Slice)
 
-	tt := (*arrayType)(unsafe.Pointer(v.typ))
+	s := v.object()
+	sNil := jsType(v.typ).Get(`nil`)
 	fl := flagIndir | flag(Slice)
-	v2 := makeValue(tt, wrapJsObject(tt, v.object()), fl)
+	if s == sNil && n <= 0 {
+		return makeValue(v.typ, wrapJsObject(v.typ, sNil), fl)
+	}
 
+	newSlice := jsType(v.typ).New(s.Get("$array"))
+	newSlice.Set("$offset", s.Get("$offset"))
+	newSlice.Set("$length", s.Get("$length"))
+	newSlice.Set("$capacity", s.Get("$capacity"))
+
+	v2 := makeValue(v.typ, wrapJsObject(v.typ, newSlice), fl)
 	v2.grow(n)
-	s := v2.object()
-	s.Set(`$length`, s.Get(`$length`).Int()+n)
+	s2 := v2.object()
+	s2.Set(`$length`, s2.Get(`$length`).Int()+n)
 	return v2
 }
 

@@ -433,61 +433,49 @@ var $internalAppend = (slice, array, offset, length) => {
         return slice;
     }
 
-    var newArray = slice.$array;
-    var newOffset = slice.$offset;
     var newLength = slice.$length + length;
-    var newCapacity = slice.$capacity;
-
-    if (newLength > newCapacity) {
-        newOffset = 0;
-        newCapacity = Math.max(newLength, slice.$capacity < 1024 ? slice.$capacity * 2 : Math.floor(slice.$capacity * 5 / 4));
-
-        if (slice.$array.constructor === Array) {
-            newArray = slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
-            newArray.length = newCapacity;
-            var zero = slice.constructor.elem.zero;
-            for (var i = slice.$length; i < newCapacity; i++) {
-                newArray[i] = zero();
-            }
-        } else {
-            newArray = new slice.$array.constructor(newCapacity);
-            newArray.set(slice.$array.subarray(slice.$offset, slice.$offset + slice.$length));
-        }
-    }
-
-    $copyArray(newArray, array, newOffset + slice.$length, offset, length, slice.constructor.elem);
+    slice = $growSlice(slice, newLength);
+    
+    var newArray = slice.$array;
+    $copyArray(newArray, array, slice.$offset + slice.$length, offset, length, slice.constructor.elem);
 
     var newSlice = new slice.constructor(newArray);
-    newSlice.$offset = newOffset;
+    newSlice.$offset = slice.$offset;
     newSlice.$length = newLength;
-    newSlice.$capacity = newCapacity;
+    newSlice.$capacity = slice.$capacity;
     return newSlice;
+};
+
+const $calculateNewCapacity = (minCapacity, oldCapacity) => {
+    return Math.max(minCapacity, oldCapacity < 1024 ? oldCapacity * 2 : Math.floor(oldCapacity * 5 / 4));
 };
 
 var $growSlice = (slice, minCapacity) => {
     const oldCapacity = slice.$capacity;
-    if (minCapacity > oldCapacity) {
-        const newCapacity = Math.max(minCapacity, oldCapacity < 1024 ? oldCapacity * 2 : Math.floor(oldCapacity * 5 / 4));
-        
-        let newArray;
-        if (slice.$array.constructor === Array) {
-            newArray = slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
-            newArray.length = newCapacity;
-            var zero = slice.constructor.elem.zero;
-            for (var i = slice.$length; i < newCapacity; i++) {
-                newArray[i] = zero();
-            }
-        } else {
-            newArray = new slice.$array.constructor(newCapacity);
-            newArray.set(slice.$array.subarray(slice.$offset, slice.$offset + slice.$length));
-        }
-
-        const oldLength = slice.length;
-        slice = new slice.constructor(newArray);
-        slice.$offset = 0;
-        slice.$length = oldLength;
-        slice.$capacity = newCapacity;
+    if (minCapacity <= oldCapacity) {
+        return slice
     }
+     
+    const newCapacity = $calculateNewCapacity(minCapacity, oldCapacity);
+    
+    let newArray;
+    if (slice.$array.constructor === Array) {
+        newArray = slice.$array.slice( slice.$offset,  slice.$offset + slice.$length);
+        newArray.length = newCapacity;
+        var zero = slice.constructor.elem.zero;
+        for (var i = slice.$length; i < newCapacity; i++) {
+            newArray[i] = zero();
+        }
+    } else {
+        newArray = new slice.$array.constructor(newCapacity);
+        newArray.set(slice.$array.subarray( slice.$offset,  slice.$offset + slice.$length));
+    }
+
+    const oldLength = slice.$length;
+    slice = new slice.constructor(newArray);
+    slice.$offset = 0;
+    slice.$length = oldLength;
+    slice.$capacity = newCapacity;
     return slice;
 };
 

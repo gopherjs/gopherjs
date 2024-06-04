@@ -1345,6 +1345,20 @@ func (v Value) grow(n int) {
 	}
 }
 
+func (v Value) extendSlice(n int) Value {
+	v.mustBeExported()
+	v.mustBe(Slice)
+
+	tt := (*arrayType)(unsafe.Pointer(v.typ))
+	fl := flagIndir | flag(Slice)
+	v2 := makeValue(tt, wrapJsObject(tt, v.object()), fl)
+
+	v2.grow(n)
+	s := v2.object()
+	s.Set(`$length`, s.Get(`$length`).Int()+n)
+	return v2
+}
+
 func (v Value) Index(i int) Value {
 	switch k := v.kind(); k {
 	case Array:

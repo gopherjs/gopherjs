@@ -462,8 +462,8 @@ var $growSlice = (slice, minCapacity) => {
     if (slice.$array.constructor === Array) {
         newArray = slice.$array.slice( slice.$offset,  slice.$offset + slice.$length);
         newArray.length = newCapacity;
-        var zero = slice.constructor.elem.zero;
-        for (var i = slice.$length; i < newCapacity; i++) {
+        let zero = slice.constructor.elem.zero;
+        for (let i = slice.$length; i < newCapacity; i++) {
             newArray[i] = zero();
         }
     } else {

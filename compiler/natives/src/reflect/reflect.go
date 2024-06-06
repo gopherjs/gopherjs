@@ -832,6 +832,11 @@ func cvtSliceArrayPtr(v Value, t Type) Value {
 	return Value{t.common(), unsafe.Pointer(array.Unsafe()), v.flag&^(flagIndir|flagAddr|flagKindMask) | flag(Ptr)}
 }
 
+// convertOp: []T -> [N]T
+func cvtSliceArray(v Value, t Type) Value {
+	return cvtSliceArrayPtr(v, t).Elem()
+}
+
 func Copy(dst, src Value) int {
 	dk := dst.kind()
 	if dk != Array && dk != Slice {
@@ -1325,6 +1330,10 @@ func getJsTag(tag string) string {
 	return ""
 }
 
+func (v Value) UnsafePointer() unsafe.Pointer {
+	return v.ptr
+}
+
 func (v Value) grow(n int) {
 	if n < 0 {
 		panic(`reflect.Value.Grow: negative len`)
@@ -1424,6 +1433,11 @@ func (v Value) InterfaceData() [2]uintptr {
 	panic(errors.New("InterfaceData is not supported by GopherJS"))
 }
 
+func (v Value) SetZero() {
+	v.mustBeAssignable()
+	v.Set(Zero(v.typ))
+}
+
 func (v Value) IsNil() bool {
 	switch k := v.kind(); k {
 	case Ptr, Slice:
@@ -1462,6 +1476,9 @@ func (v Value) Len() int {
 		panic(&ValueError{"reflect.Value.Len", k})
 	}
 }
+
+//gopherjs:purge
+func (v Value) lenNonSlice() int
 
 func (v Value) Pointer() uintptr {
 	switch k := v.kind(); k {
@@ -1853,3 +1870,13 @@ func verifyNotInHeapPtr(p uintptr) bool {
 	// always return true.
 	return true
 }
+
+// typedslicecopy is implemented in prelude.js as $copySlice
+//
+//gopherjs:purge
+func typedslicecopy(elemType *rtype, dst, src unsafeheader.Slice) int
+
+// growslice is implemented in prelude.js as $growSlice.
+//
+//gopherjs:purge
+func growslice(t *rtype, old unsafeheader.Slice, num int) unsafeheader.Slice

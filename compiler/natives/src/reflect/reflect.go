@@ -1830,3 +1830,13 @@ func verifyNotInHeapPtr(p uintptr) bool {
 	// always return true.
 	return true
 }
+
+// typedslicecopy is implemented in prelude.js as $copySlice
+//
+//gopherjs:purge
+func typedslicecopy(elemType *rtype, dst, src unsafeheader.Slice) int
+
+// growslice is implemented in prelude.js as $growSlice.
+//
+//gopherjs:purge
+func growslice(t *rtype, old unsafeheader.Slice, num int) unsafeheader.Slice

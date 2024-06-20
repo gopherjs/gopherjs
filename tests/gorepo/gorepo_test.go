@@ -24,7 +24,7 @@ func TestGoRepositoryCompilerTests(t *testing.T) {
 	shards := os.Getenv("CIRCLE_NODE_TOTAL")
 	shard := os.Getenv("CIRCLE_NODE_INDEX")
 	if shards != "" && shard != "" {
-		// We are running under CircleCI parallel test job, so we need to shard execution.
+		// When we are running under CircleCI parallel test job, we need to shard execution.
 		args = append(args, "-shard="+shard, "-shards="+shards)
 		// CircleCI reports a lot more cores than we can actually use, so we have to limit concurrency.
 		args = append(args, "-n=2", "-l=2")

@@ -1,8 +1,8 @@
 # Supported Packages
 
-On each commit, Circle CI automatically compiles all supported packages with GopherJS and runs their tests:
+On each commit, Github Actions CI automatically compiles all supported packages with GopherJS and runs their tests:
 
-[![Circle CI](https://circleci.com/gh/gopherjs/gopherjs.svg?style=svg)](https://circleci.com/gh/gopherjs/gopherjs)
+[![Github Actions CI](https://github.com/gopherjs/gopherjs/actions/workflows/ci.yaml/badge.svg)](https://github.com/gopherjs/gopherjs/actions/workflows/ci.yaml)
 
 | Name                | Supported    | Comment                                                                           |
 | ------------------- | ------------ | --------------------------------------------------------------------------------- |

@@ -1,0 +1,74 @@
+name: Setup GopherJS
+description: Sets up Go, Node.js, and GopherJS
+
+inputs:
+  includeSyscall:
+    description: Indicates that the node-syscall package should be installed.
+    required: true
+    default: 'false'
+
+  fixTemps:
+    description: Indicates that the Windows Temp variables should be fixed.
+    required: true
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Fix Windows Temp Variables
+      if: inputs.fixTemps == 'true'
+      shell: pwsh
+      run: |
+        # see https://github.com/actions/runner-images/issues/712#issuecomment-613004302
+        echo "TEMP=$env:USERPROFILE\AppData\Local\Temp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        echo "TMP=$env:USERPROFILE\AppData\Local\Temp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        echo "TMPDIR=$env:USERPROFILE\AppData\Local\Temp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Setup Go Environment
+      working-directory: ${{ env.GOPHERJS_PATH }}
+      shell: bash
+      run: echo "GOROOT=$(go env GOROOT)" >> $GITHUB_ENV
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Install Node.js for non-Linux
+      if: inputs.includeSyscall != 'true'
+      working-directory: ${{ env.GOPHERJS_PATH }}
+      shell: bash
+      # Install required Node.js packages without optional (node-syscall).
+      run: npm install --omit=optional --no-package-lock
+
+    - name: Install Node.js for Linux
+      if: inputs.includeSyscall == 'true'
+      working-directory: ${{ env.GOPHERJS_PATH }}
+      shell: bash
+      # Install required Node.js packages including optional (node-syscall).
+      run: |
+        npm install --include=optional --no-package-lock
+
+    - name: Setup Node.js Environment
+      working-directory: ${{ env.GOPHERJS_PATH }}
+      shell: bash
+      # Make nodejs able to require installed modules from any working path.
+      run: echo "NODE_PATH=$(npm root)" >> $GITHUB_ENV
+
+    - name: Install GopherJS
+      working-directory: ${{ env.GOPHERJS_PATH }}
+      shell: bash
+      run: go install -v
+
+    - name: Setup information
+      shell: bash
+      run: |
+        echo ::notice::go version: $(go version)
+        echo ::notice::node version: $(node -v)
+        echo ::notice::npm version: $(npm -v)
+        echo ::notice::gopherjs version: $(gopherjs version)

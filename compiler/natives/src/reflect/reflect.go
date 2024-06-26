@@ -832,6 +832,11 @@ func cvtSliceArrayPtr(v Value, t Type) Value {
 	return Value{t.common(), unsafe.Pointer(array.Unsafe()), v.flag&^(flagIndir|flagAddr|flagKindMask) | flag(Ptr)}
 }
 
+// convertOp: []T -> [N]T
+func cvtSliceArray(v Value, t Type) Value {
+	return cvtSliceArrayPtr(v, t).Elem()
+}
+
 func Copy(dst, src Value) int {
 	dk := dst.kind()
 	if dk != Array && dk != Slice {
@@ -1325,6 +1330,51 @@ func getJsTag(tag string) string {
 	return ""
 }
 
+func (v Value) UnsafePointer() unsafe.Pointer {
+	return v.ptr
+}
+
+func (v Value) grow(n int) {
+	if n < 0 {
+		panic(`reflect.Value.Grow: negative len`)
+	}
+
+	s := v.object()
+	len := s.Get(`$length`).Int()
+	if len+n < 0 {
+		panic(`reflect.Value.Grow: slice overflow`)
+	}
+
+	cap := s.Get(`$capacity`).Int()
+	if len+n > cap {
+		ns := js.Global.Call("$growSlice", s, len+n)
+		js.InternalObject(v.ptr).Call("$set", ns)
+	}
+}
+
+func (v Value) extendSlice(n int) Value {
+	v.mustBeExported()
+	v.mustBe(Slice)
+
+	s := v.object()
+	sNil := jsType(v.typ).Get(`nil`)
+	fl := flagIndir | flag(Slice)
+	if s == sNil && n <= 0 {
+		return makeValue(v.typ, wrapJsObject(v.typ, sNil), fl)
+	}
+
+	newSlice := jsType(v.typ).New(s.Get("$array"))
+	newSlice.Set("$offset", s.Get("$offset"))
+	newSlice.Set("$length", s.Get("$length"))
+	newSlice.Set("$capacity", s.Get("$capacity"))
+
+	v2 := makeValue(v.typ, wrapJsObject(v.typ, newSlice), fl)
+	v2.grow(n)
+	s2 := v2.object()
+	s2.Set(`$length`, s2.Get(`$length`).Int()+n)
+	return v2
+}
+
 func (v Value) Index(i int) Value {
 	switch k := v.kind(); k {
 	case Array:
@@ -1381,6 +1431,11 @@ func (v Value) InterfaceData() [2]uintptr {
 	panic(errors.New("InterfaceData is not supported by GopherJS"))
 }
 
+func (v Value) SetZero() {
+	v.mustBeAssignable()
+	v.Set(Zero(v.typ))
+}
+
 func (v Value) IsNil() bool {
 	switch k := v.kind(); k {
 	case Ptr, Slice:
@@ -1419,6 +1474,9 @@ func (v Value) Len() int {
 		panic(&ValueError{"reflect.Value.Len", k})
 	}
 }
+
+//gopherjs:purge
+func (v Value) lenNonSlice() int
 
 func (v Value) Pointer() uintptr {
 	switch k := v.kind(); k {
@@ -1810,3 +1868,13 @@ func verifyNotInHeapPtr(p uintptr) bool {
 	// always return true.
 	return true
 }
+
+// typedslicecopy is implemented in prelude.js as $copySlice
+//
+//gopherjs:purge
+func typedslicecopy(elemType *rtype, dst, src unsafeheader.Slice) int
+
+// growslice is implemented in prelude.js as $growSlice.
+//
+//gopherjs:purge
+func growslice(t *rtype, old unsafeheader.Slice, num int) unsafeheader.Slice

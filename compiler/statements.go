@@ -445,7 +445,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			for _, spec := range decl.Specs {
 				o := fc.pkgCtx.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
 				fc.pkgCtx.typeNames.Add(o)
-				fc.pkgCtx.dependencies[o] = true
+				fc.DeclareDCEDep(o)
 			}
 		case token.CONST:
 			// skip, constants are inlined

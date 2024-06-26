@@ -46,6 +46,14 @@ func runtime_SemacquireMutex(s *uint32, lifo bool, skipframes int) {
 	*s--
 }
 
+func runtime_SemacquireRWMutexR(s *uint32, lifo bool, skipframes int) {
+	runtime_SemacquireMutex(s, lifo, skipframes)
+}
+
+func runtime_SemacquireRWMutex(s *uint32, lifo bool, skipframes int) {
+	runtime_SemacquireMutex(s, lifo, skipframes)
+}
+
 func runtime_Semrelease(s *uint32, handoff bool, skipframes int) {
 	// TODO: Use handoff if needed/possible.
 	*s++

@@ -203,6 +203,15 @@ func TestInstanceQueue(t *testing.T) {
 	if diff := cmp.Diff(wantValues, gotValues, instanceOpts()); diff != "" {
 		t.Errorf("set.Values() returned diff (-want,+got):\n%s", diff)
 	}
+
+	gotByObj := set.ByObj()
+	wantByObj := map[types.Object][]Instance{
+		pkg.Scope().Lookup("Typ"): {i1, i2},
+		pkg.Scope().Lookup("Fun"): {i3},
+	}
+	if diff := cmp.Diff(wantByObj, gotByObj, instanceOpts()); diff != "" {
+		t.Errorf("set.ByObj() returned diff (-want,+got):\n%s", diff)
+	}
 }
 
 func TestInstancesByPackage(t *testing.T) {

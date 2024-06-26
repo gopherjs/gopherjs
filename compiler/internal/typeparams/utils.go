@@ -24,11 +24,24 @@ var (
 	errDefinesGenerics      = errors.New("defines generic type or function")
 )
 
+// HasTypeParams returns true if object defines type parameters.
+//
+// Note: this function doe not check if the object definition actually uses the
+// type parameters, neither its own, nor from the outer scope.
+func HasTypeParams(typ types.Type) bool {
+	switch typ := typ.(type) {
+	case *types.Signature:
+		return typ.RecvTypeParams().Len() > 0 || typ.TypeParams().Len() > 0
+	case *types.Named:
+		return typ.TypeParams().Len() > 0
+	default:
+		return false
+	}
+}
+
 // RequiresGenericsSupport returns an error if the type-checked code depends on
 // generics support.
 func RequiresGenericsSupport(info *types.Info) error {
-	type withTypeParams interface{ TypeParams() *types.TypeParamList }
-
 	for ident := range info.Instances {
 		// Any instantiation means dependency on generics.
 		return fmt.Errorf("%w: %v", errInstantiatesGenerics, info.ObjectOf(ident))
@@ -38,8 +51,7 @@ func RequiresGenericsSupport(info *types.Info) error {
 		if obj == nil {
 			continue
 		}
-		typ, ok := obj.Type().(withTypeParams)
-		if ok && typ.TypeParams().Len() > 0 {
+		if HasTypeParams(obj.Type()) {
 			return fmt.Errorf("%w: %v", errDefinesGenerics, obj)
 		}
 	}

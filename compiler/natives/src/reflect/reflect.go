@@ -1325,6 +1325,24 @@ func getJsTag(tag string) string {
 	return ""
 }
 
+func (v Value) grow(n int) {
+	if n < 0 {
+		panic(`reflect.Value.Grow: negative len`)
+	}
+
+	s := v.object()
+	len := s.Get(`$length`).Int()
+	if len+n < 0 {
+		panic(`reflect.Value.Grow: slice overflow`)
+	}
+
+	cap := s.Get(`$capacity`).Int()
+	if len+n > cap {
+		ns := js.Global.Call("$growSlice", s, len+n)
+		js.InternalObject(v.ptr).Call("$set", ns)
+	}
+}
+
 func (v Value) Index(i int) Value {
 	switch k := v.kind(); k {
 	case Array:
@@ -1810,3 +1828,13 @@ func verifyNotInHeapPtr(p uintptr) bool {
 	// always return true.
 	return true
 }
+
+// typedslicecopy is implemented in prelude.js as $copySlice
+//
+//gopherjs:purge
+func typedslicecopy(elemType *rtype, dst, src unsafeheader.Slice) int
+
+// growslice is implemented in prelude.js as $growSlice.
+//
+//gopherjs:purge
+func growslice(t *rtype, old unsafeheader.Slice, num int) unsafeheader.Slice

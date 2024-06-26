@@ -231,6 +231,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 typ.comparable = false;
                 typ.nativeArray = $nativeArray(elem.kind);
                 typ.nil = new typ([]);
+                Object.freeze(typ.nil);
             };
             break;
 

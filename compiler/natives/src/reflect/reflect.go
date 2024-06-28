@@ -834,7 +834,14 @@ func cvtSliceArrayPtr(v Value, t Type) Value {
 
 // convertOp: []T -> [N]T
 func cvtSliceArray(v Value, t Type) Value {
-	return cvtSliceArrayPtr(v, t).Elem()
+	if t.Len() > v.Len() {
+		panic("reflect: cannot convert slice with length " + itoa.Itoa(v.Len()) + " to array with length " + itoa.Itoa(t.Len()))
+	}
+	x := cvtSliceArrayPtr(v, PointerTo(t))
+	if x.IsNil() {
+		return Zero(t)
+	}
+	return x.Elem()
 }
 
 func Copy(dst, src Value) int {

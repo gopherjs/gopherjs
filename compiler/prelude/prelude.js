@@ -443,22 +443,12 @@ var $internalAppend = (slice, array, offset, length) => {
     }
 
     let newLength = slice.$length + length;
-    const grew = newLength > slice.$capacity;
-    slice = $growSlice(slice, newLength);
+    let newSlice = $growSlice(slice, newLength);
     
-    let newArray = slice.$array;
-    $copyArray(newArray, array, slice.$offset + slice.$length, offset, length, slice.constructor.elem);
-
-    if (grew) {
-        // Skip making a new slice since growSlice already creates a new slice.
-        slice.$length = newLength;
-        return slice;
-    }
-
-    let newSlice = new slice.constructor(newArray);
-    newSlice.$offset = slice.$offset;
+    let newArray = newSlice.$array;
+    $copyArray(newArray, array, newSlice.$offset + newSlice.$length, offset, length, newSlice.constructor.elem);
+   
     newSlice.$length = newLength;
-    newSlice.$capacity = slice.$capacity;
     return newSlice;
 };
 
@@ -471,37 +461,41 @@ const $calculateNewCapacity = (minCapacity, oldCapacity) => {
 
 // Potentially grows the slice to have a capacity of at least minCapacity.
 //
-// The given slice will be returned if it already has the required capacity.
-// Otherwise, a new slice, with the same length of the given slice, will be
-// created for a new array with the required minimum capacity. This will also
-// return a boolean to indicate if the slice was actually grown or not.
+// A new slice will always be returned, even if the given slice had the required capacity.
+// If the slice didn't have enough capacity, the new slice will have a
+// new array created for it with the required minimum capacity.
 //
 // This takes the place of the growSlice function in the reflect package.
 var $growSlice = (slice, minCapacity) => {
-    const oldCapacity = slice.$capacity;
-    if (minCapacity <= oldCapacity) {
-        return slice;
-    }
-     
-    const newCapacity = $calculateNewCapacity(minCapacity, oldCapacity);
-    
-    let newArray;
-    if (slice.$array.constructor === Array) {
-        newArray = slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
-        newArray.length = newCapacity;
-        let zero = slice.constructor.elem.zero;
-        for (let i = slice.$length; i < newCapacity; i++) {
-            newArray[i] = zero();
+    let array = slice.$array;
+    let offset = slice.$offset;
+    const length = slice.$length;
+    let capacity = slice.$capacity;
+
+    if (minCapacity > capacity) {
+        capacity = $calculateNewCapacity(minCapacity, capacity);
+        
+        let newArray;
+        if (array.constructor === Array) {
+            newArray = array.slice(offset, offset + length);
+            newArray.length = capacity;
+            const zero = slice.constructor.elem.zero;
+            for (let i = slice.$length; i < capacity; i++) {
+                newArray[i] = zero();
+            }
+        } else {
+            newArray = new array.constructor(capacity);
+            newArray.set(array.subarray(offset, offset + length));
         }
-    } else {
-        newArray = new slice.$array.constructor(newCapacity);
-        newArray.set(slice.$array.subarray(slice.$offset, slice.$offset + slice.$length));
+
+        array = newArray;
+        offset = 0;
     }
 
-    let newSlice = new slice.constructor(newArray);
-    newSlice.$offset = 0;
-    newSlice.$length = slice.$length;
-    newSlice.$capacity = newCapacity;
+    let newSlice = new slice.constructor(array);
+    newSlice.$offset = offset;
+    newSlice.$length = length;
+    newSlice.$capacity = capacity;
     return newSlice;
 };
 

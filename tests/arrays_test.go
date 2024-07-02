@@ -83,3 +83,41 @@ func TestReflectArraySize(t *testing.T) {
 		t.Errorf("array type size gave %v, want %v", got, want)
 	}
 }
+
+func TestNilPrototypeNotModifiedByPointer(t *testing.T) {
+	const growth = 3
+
+	s1 := []int(nil)
+	p1 := &s1
+	*p1 = make([]int, 0, growth)
+	if c := cap(s1); c != growth {
+		t.Errorf(`expected capacity of nil to increase to %d, got %d`, growth, c)
+		println("s1:", s1)
+	}
+
+	s2 := []int(nil)
+	if c := cap(s2); c != 0 {
+		t.Errorf(`the capacity of nil must always be zero, it was %d`, c)
+		println("s1:", s1)
+		println("s2:", s2)
+	}
+}
+
+func TestNilPrototypeNotModifiedByReflectGrow(t *testing.T) {
+	const growth = 3
+
+	s1 := []int(nil)
+	v1 := reflect.ValueOf(&s1).Elem()
+	v1.Grow(growth)
+	if c := cap(s1); c != growth {
+		t.Errorf(`expected capacity of nil to increase to %d, got %d`, growth, c)
+		println("s1:", s1)
+	}
+
+	s2 := []int(nil)
+	if c := cap(s2); c != 0 {
+		t.Errorf(`the capacity of nil must always be zero, it was %d`, c)
+		println("s1:", s1)
+		println("s2:", s2)
+	}
+}

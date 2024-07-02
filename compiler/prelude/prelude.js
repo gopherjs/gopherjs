@@ -428,39 +428,74 @@ var $appendSlice = (slice, toAppend) => {
     return $internalAppend(slice, toAppend.$array, toAppend.$offset, toAppend.$length);
 };
 
+// Internal helper function for appending to a slice.
+// The given slice will not be modified.
+//
+// If no values are being appended, the original slice will be returned.
+// Otherwise, a new slice will be created with the appended values.
+//
+// If the underlying array has enough capacity, it will be used.
+// Otherwise, a new array will be allocated with enough capacity to hold
+// the new values and the original array will not be modified.
 var $internalAppend = (slice, array, offset, length) => {
     if (length === 0) {
         return slice;
     }
 
-    var newArray = slice.$array;
-    var newOffset = slice.$offset;
-    var newLength = slice.$length + length;
-    var newCapacity = slice.$capacity;
+    let newLength = slice.$length + length;
+    let newSlice = $growSlice(slice, newLength);
+    
+    let newArray = newSlice.$array;
+    $copyArray(newArray, array, newSlice.$offset + newSlice.$length, offset, length, newSlice.constructor.elem);
+   
+    newSlice.$length = newLength;
+    return newSlice;
+};
 
-    if (newLength > newCapacity) {
-        newOffset = 0;
-        newCapacity = Math.max(newLength, slice.$capacity < 1024 ? slice.$capacity * 2 : Math.floor(slice.$capacity * 5 / 4));
+// Calculates the new capacity for a slice that is expected to grow to at least
+// the given minCapacity. This follows the Go runtime's growth strategy.
+// The oldCapacity is the current capacity of the slice that is being grown.
+const $calculateNewCapacity = (minCapacity, oldCapacity) => {
+    return Math.max(minCapacity, oldCapacity < 1024 ? oldCapacity * 2 : Math.floor(oldCapacity * 5 / 4));
+};
 
-        if (slice.$array.constructor === Array) {
-            newArray = slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
-            newArray.length = newCapacity;
-            var zero = slice.constructor.elem.zero;
-            for (var i = slice.$length; i < newCapacity; i++) {
+// Potentially grows the slice to have a capacity of at least minCapacity.
+//
+// A new slice will always be returned, even if the given slice had the required capacity.
+// If the slice didn't have enough capacity, the new slice will have a
+// new array created for it with the required minimum capacity.
+//
+// This takes the place of the growSlice function in the reflect package.
+var $growSlice = (slice, minCapacity) => {
+    let array = slice.$array;
+    let offset = slice.$offset;
+    const length = slice.$length;
+    let capacity = slice.$capacity;
+
+    if (minCapacity > capacity) {
+        capacity = $calculateNewCapacity(minCapacity, capacity);
+        
+        let newArray;
+        if (array.constructor === Array) {
+            newArray = array.slice(offset, offset + length);
+            newArray.length = capacity;
+            const zero = slice.constructor.elem.zero;
+            for (let i = slice.$length; i < capacity; i++) {
                 newArray[i] = zero();
             }
         } else {
-            newArray = new slice.$array.constructor(newCapacity);
-            newArray.set(slice.$array.subarray(slice.$offset, slice.$offset + slice.$length));
+            newArray = new array.constructor(capacity);
+            newArray.set(array.subarray(offset, offset + length));
         }
+
+        array = newArray;
+        offset = 0;
     }
 
-    $copyArray(newArray, array, newOffset + slice.$length, offset, length, slice.constructor.elem);
-
-    var newSlice = new slice.constructor(newArray);
-    newSlice.$offset = newOffset;
-    newSlice.$length = newLength;
-    newSlice.$capacity = newCapacity;
+    let newSlice = new slice.constructor(array);
+    newSlice.$offset = offset;
+    newSlice.$length = length;
+    newSlice.$capacity = capacity;
     return newSlice;
 };
 

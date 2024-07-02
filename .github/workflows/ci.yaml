@@ -154,6 +154,8 @@ jobs:
         run: cp -r ${{ env.GOPHERJS_PATH }}/.github .
       - name: Setup GopherJS
         uses: ./.github/actions/setup-gopherjs/
+      - name: Temp Test # TODO: Remove this step, it is just to fix the issue in  Example_compressingReader
+        run: gopherjs test -p 2 --minify -v --short compress/gzip
       - name: Run GopherJS tests 
         working-directory: ${{ env.GOPHERJS_PATH }}
         run: |

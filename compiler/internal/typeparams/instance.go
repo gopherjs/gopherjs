@@ -138,6 +138,15 @@ func (iset *InstanceSet) Values() []Instance {
 	return iset.values
 }
 
+// ByObj returns instances grouped by object they belong to. Order is not specified.
+func (iset *InstanceSet) ByObj() map[types.Object][]Instance {
+	result := map[types.Object][]Instance{}
+	for _, inst := range iset.values {
+		result[inst.Object] = append(result[inst.Object], inst)
+	}
+	return result
+}
+
 // PackageInstanceSets stores an InstanceSet for each package in a program, keyed
 // by import path.
 type PackageInstanceSets map[string]*InstanceSet

@@ -107,3 +107,9 @@ func OffsetOf(sizes types.Sizes, sel Selection) int64 {
 
 	return o
 }
+
+// IsMethod returns true if the passed object is a method.
+func IsMethod(o types.Object) bool {
+	f, ok := o.(*types.Func)
+	return ok && f.Type().(*types.Signature).Recv() != nil
+}

@@ -201,7 +201,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
-		_, fun := translateFunction(e.Type, nil, e.Body, fc, exprType.(*types.Signature), fc.pkgCtx.FuncLitInfos[e], "", typeparams.Instance{})
+		fun := fc.nestedFunctionContext(fc.pkgCtx.FuncLitInfos[e], exprType.(*types.Signature), typeparams.Instance{}).translateFunctionBody(e.Type, nil, e.Body, "")
 		if len(fc.pkgCtx.escapingVars) != 0 {
 			names := make([]string, 0, len(fc.pkgCtx.escapingVars))
 			for obj := range fc.pkgCtx.escapingVars {
@@ -592,7 +592,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			return fc.formatExpr(`$methodVal(%s, "%s")`, fc.makeReceiver(e), sel.Obj().(*types.Func).Name())
 		case types.MethodExpr:
 			if !sel.Obj().Exported() {
-				fc.pkgCtx.dependencies[sel.Obj()] = true
+				fc.DeclareDCEDep(sel.Obj())
 			}
 			if _, ok := sel.Recv().Underlying().(*types.Interface); ok {
 				return fc.formatExpr(`$ifaceMethodExpr("%s")`, sel.Obj().(*types.Func).Name())
@@ -911,7 +911,7 @@ func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, 
 func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 	sel, _ := fc.selectionOf(e)
 	if !sel.Obj().Exported() {
-		fc.pkgCtx.dependencies[sel.Obj()] = true
+		fc.DeclareDCEDep(sel.Obj())
 	}
 
 	x := e.X

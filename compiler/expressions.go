@@ -201,7 +201,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
-		_, fun := translateFunction(e.Type, nil, e.Body, fc, exprType.(*types.Signature), fc.pkgCtx.FuncLitInfos[e], "", typeparams.Instance{})
+		fun := fc.nestedFunctionContext(fc.pkgCtx.FuncLitInfos[e], exprType.(*types.Signature), typeparams.Instance{}).translateFunctionBody(e.Type, nil, e.Body, "")
 		if len(fc.pkgCtx.escapingVars) != 0 {
 			names := make([]string, 0, len(fc.pkgCtx.escapingVars))
 			for obj := range fc.pkgCtx.escapingVars {

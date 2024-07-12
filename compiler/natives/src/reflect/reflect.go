@@ -832,6 +832,21 @@ func cvtSliceArrayPtr(v Value, t Type) Value {
 	return Value{t.common(), unsafe.Pointer(array.Unsafe()), v.flag&^(flagIndir|flagAddr|flagKindMask) | flag(Ptr)}
 }
 
+// convertOp: []T -> [N]T
+func cvtSliceArray(v Value, t Type) Value {
+	n := t.Len()
+	if n > v.Len() {
+		panic("reflect: cannot convert slice with length " + itoa.Itoa(v.Len()) + " to array with length " + itoa.Itoa(n))
+	}
+
+	slice := v.object()
+	dst := MakeSlice(SliceOf(t.Elem()), n, n).object()
+	js.Global.Call("$copySlice", dst, slice)
+
+	arr := dst.Get("$array")
+	return Value{t.common(), unsafe.Pointer(arr.Unsafe()), v.flag&^(flagAddr|flagKindMask) | flag(Array)}
+}
+
 func Copy(dst, src Value) int {
 	dk := dst.kind()
 	if dk != Array && dk != Slice {

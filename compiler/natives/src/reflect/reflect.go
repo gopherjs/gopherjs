@@ -1341,7 +1341,7 @@ func getJsTag(tag string) string {
 }
 
 func (v Value) UnsafePointer() unsafe.Pointer {
-	return v.ptr
+	return unsafe.Pointer(v.Pointer())
 }
 
 func (v Value) grow(n int) {

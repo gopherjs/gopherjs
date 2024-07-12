@@ -843,7 +843,8 @@ func cvtSliceArray(v Value, t Type) Value {
 	dst := MakeSlice(SliceOf(t.Elem()), n, n).object()
 	js.Global.Call("$copySlice", dst, slice)
 
-	return Value{t.common(), unsafe.Pointer(dst.Unsafe()), v.flag&^(flagAddr|flagKindMask) | flag(Array)}
+	arr := dst.Get("$array")
+	return Value{t.common(), unsafe.Pointer(arr.Unsafe()), v.flag&^(flagAddr|flagKindMask) | flag(Array)}
 }
 
 func Copy(dst, src Value) int {

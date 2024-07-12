@@ -1362,6 +1362,9 @@ func (v Value) grow(n int) {
 	}
 }
 
+// extendSlice is used by native reflect.Append and reflect.AppendSlice
+// Overridden to avoid the use of `unsafeheader.Slice` since GopherJS
+// uses different slice implementation.
 func (v Value) extendSlice(n int) Value {
 	v.mustBeExported()
 	v.mustBe(Slice)
@@ -1485,7 +1488,7 @@ func (v Value) Len() int {
 	}
 }
 
-//gopherjs:purge
+//gopherjs:purge Not used since Len() is overridden.
 func (v Value) lenNonSlice() int
 
 func (v Value) Pointer() uintptr {

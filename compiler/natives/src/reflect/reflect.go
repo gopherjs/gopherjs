@@ -1325,6 +1325,10 @@ func getJsTag(tag string) string {
 	return ""
 }
 
+func (v Value) UnsafePointer() unsafe.Pointer {
+	return unsafe.Pointer(v.Pointer())
+}
+
 func (v Value) grow(n int) {
 	if n < 0 {
 		panic(`reflect.Value.Grow: negative len`)
@@ -1341,6 +1345,32 @@ func (v Value) grow(n int) {
 		ns := js.Global.Call("$growSlice", s, len+n)
 		js.InternalObject(v.ptr).Call("$set", ns)
 	}
+}
+
+// extendSlice is used by native reflect.Append and reflect.AppendSlice
+// Overridden to avoid the use of `unsafeheader.Slice` since GopherJS
+// uses different slice implementation.
+func (v Value) extendSlice(n int) Value {
+	v.mustBeExported()
+	v.mustBe(Slice)
+
+	s := v.object()
+	sNil := jsType(v.typ).Get(`nil`)
+	fl := flagIndir | flag(Slice)
+	if s == sNil && n <= 0 {
+		return makeValue(v.typ, wrapJsObject(v.typ, sNil), fl)
+	}
+
+	newSlice := jsType(v.typ).New(s.Get("$array"))
+	newSlice.Set("$offset", s.Get("$offset"))
+	newSlice.Set("$length", s.Get("$length"))
+	newSlice.Set("$capacity", s.Get("$capacity"))
+
+	v2 := makeValue(v.typ, wrapJsObject(v.typ, newSlice), fl)
+	v2.grow(n)
+	s2 := v2.object()
+	s2.Set(`$length`, s2.Get(`$length`).Int()+n)
+	return v2
 }
 
 func (v Value) Index(i int) Value {
@@ -1399,6 +1429,11 @@ func (v Value) InterfaceData() [2]uintptr {
 	panic(errors.New("InterfaceData is not supported by GopherJS"))
 }
 
+func (v Value) SetZero() {
+	v.mustBeAssignable()
+	v.Set(Zero(v.typ))
+}
+
 func (v Value) IsNil() bool {
 	switch k := v.kind(); k {
 	case Ptr, Slice:
@@ -1437,6 +1472,9 @@ func (v Value) Len() int {
 		panic(&ValueError{"reflect.Value.Len", k})
 	}
 }
+
+//gopherjs:purge Not used since Len() is overridden.
+func (v Value) lenNonSlice() int
 
 func (v Value) Pointer() uintptr {
 	switch k := v.kind(); k {

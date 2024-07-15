@@ -26,9 +26,9 @@ func (x *atomicEncEnginePointer) Store(val *encEngine) { x.v = val }
 
 // temporarily replacement of growSlice[E any] for go1.20 without generics.
 func growSlice(v reflect.Value, ps any, length int) {
-	vps := reflect.ValueOf(ps)
-	vs := vps.Elem()
-	zero := reflect.Zero(vs.Elem().Type())
+	vps := reflect.ValueOf(ps) // *[]E
+	vs := vps.Elem()           // []E
+	zero := reflect.Zero(vs.Type().Elem())
 	vs.Set(reflect.Append(vs, zero))
 	cp := vs.Cap()
 	if cp > length {
@@ -36,5 +36,4 @@ func growSlice(v reflect.Value, ps any, length int) {
 	}
 	vs.Set(vs.Slice(0, cp))
 	v.Set(vs)
-	vps.Set(vs.Addr())
 }

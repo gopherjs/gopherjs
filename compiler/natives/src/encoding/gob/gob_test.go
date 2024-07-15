@@ -105,3 +105,11 @@ func TestTypeRace(t *testing.T) {
 	// cannot succeed when nosync is used.
 	t.Skip("using nosync")
 }
+
+func TestCountEncodeMallocs(t *testing.T) {
+	t.Skip("testing.AllocsPerRun not supported in GopherJS")
+}
+
+func TestCountDecodeMallocs(t *testing.T) {
+	t.Skip("testing.AllocsPerRun not supported in GopherJS")
+}

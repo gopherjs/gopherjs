@@ -185,7 +185,7 @@ var $sliceToNativeArray = slice => {
     return slice.$array.slice(slice.$offset, slice.$offset + slice.$length);
 };
 
-// Convert Go slice to a pointer to an underlying Go array.
+// Convert Go slice to a pointer to an underlying Go array, `[]T -> *[N]T`.
 // 
 // Note that an array pointer can be represented by an "unwrapped" native array
 // type, and it will be wrapped back into its Go type when necessary.

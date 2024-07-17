@@ -181,10 +181,10 @@ jobs:
       fail-fast: false
       matrix:
         filter:
-          - name: "non-crypto"
-            pattern: "^(?!crypto)"
-          - name: "cypto"
-            pattern: "^crypto"
+          - name: non-crypto
+            pattern: '-Pve "^crypto"'
+          - name: cypto
+            pattern: '-Pe "^crypto"'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -199,7 +199,7 @@ jobs:
           PACKAGE_NAMES=$( \
               GOOS=js GOARCH=wasm go list std github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/... \
               | grep -v -x -f .std_test_pkg_exclusions \
-              | grep -Pe "${{ matrix.filter.pattern }}" \
+              | grep ${{ matrix.filter.pattern }} \
             )
           echo "Running tests for packages:"
           echo "$PACKAGE_NAMES"

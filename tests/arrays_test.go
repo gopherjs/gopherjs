@@ -121,3 +121,26 @@ func TestNilPrototypeNotModifiedByReflectGrow(t *testing.T) {
 		println("s2:", s2)
 	}
 }
+
+func TestConversionFromSliceToArray(t *testing.T) {
+	slice := []byte{12, 34, 56, 78}
+	array := [4]byte(slice)
+
+	areEqual := func(s []byte, a [4]byte) bool {
+		if len(s) != len(a) {
+			return false
+		}
+		for i, v := range s {
+			if v != a[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	if !areEqual(slice, array) {
+		t.Errorf("slice and array are not equal after conversion:")
+		t.Logf("\tslice: %#v", slice)
+		t.Logf("\tarray: %#v", array)
+	}
+}

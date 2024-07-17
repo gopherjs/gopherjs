@@ -73,3 +73,48 @@ func Clone(s string) string {
 	// memory overheads and simply return the string as-is.
 	return s
 }
+
+// Repeat is the go1.19 implementation of strings.Repeat.
+//
+// In the go1.20 implementation, the function was changed to use chunks that
+// are 8KB in size to improve speed and cache access. This change is faster
+// when running native Go code. However, for GopherJS, the change is much
+// slower than the go1.19 implementation.
+//
+// The go1.20 change made tests like encoding/pem TestCVE202224675 take
+// significantly longer to run for GopherJS.
+// go1.19 concatenates 24 times and the test takes about 8 seconds.
+// go1.20 concatenates about 15000 times and can take over a hour.
+//
+// We can't use `js.InternalObject(s).Call("repeat", count).String()`
+// because JS performs additional UTF-8 escapes meaning tests like
+// hash/adler32 TestGolden will fail because the wrong input is created.
+func Repeat(s string, count int) string {
+	if count == 0 {
+		return ""
+	}
+
+	// Since we cannot return an error on overflow,
+	// we should panic if the repeat will generate
+	// an overflow.
+	// See Issue golang.org/issue/16237
+	if count < 0 {
+		panic("strings: negative Repeat count")
+	} else if len(s)*count/count != len(s) {
+		panic("strings: Repeat count causes overflow")
+	}
+
+	n := len(s) * count
+	var b Builder
+	b.Grow(n)
+	b.WriteString(s)
+	for b.Len() < n {
+		if b.Len() <= n/2 {
+			b.WriteString(b.String())
+		} else {
+			b.WriteString(b.String()[:n-b.Len()])
+			break
+		}
+	}
+	return b.String()
+}

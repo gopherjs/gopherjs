@@ -178,6 +178,7 @@ jobs:
     name: GopherJS Tests (${{ matrix.filter.name }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         filter:
           - name: "non-crypto"

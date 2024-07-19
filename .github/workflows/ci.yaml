@@ -1,0 +1,221 @@
+name: CI
+
+on:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "*" ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: 1.20.14
+  NODE_VERSION: 12
+  GOLANGCI_VERSION: v1.53.3
+  GOPHERJS_EXPERIMENT: generics
+  SOURCE_MAP_SUPPORT: true
+  GOPATH: ${{ github.workspace }}/go
+  GOPHERJS_PATH: ${{ github.workspace }}/go/src/github.com/${{ github.repository }}
+
+jobs:
+  ubuntu_smoke:
+    name: Ubuntu Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ env.GOPHERJS_PATH }}
+      - name: Copy Actions
+        run: cp -r ${{ env.GOPHERJS_PATH }}/.github .
+      - name: Setup GopherJS
+        uses: ./.github/actions/setup-gopherjs/
+        with:
+          includeSyscall: 'true'
+      - name: Test GopherJS
+        working-directory: ${{ env.GOPHERJS_PATH }}
+        run: go test -v -short ./...
+      - name: Run Tests
+        working-directory: ${{ env.GOPHERJS_PATH }}
+        run: |
+          gopherjs build -v net/http
+          gopherjs test -v --short fmt log ./tests
+
+  windows_smoke:
+    name: Window Smoke
+    runs-on: windows-latest
+    env:
+      # Windows does not support source maps.
+      SOURCE_MAP_SUPPORT: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ env.GOPHERJS_PATH }}
+      - name: Copy Actions
+        run: cp -r ${{ env.GOPHERJS_PATH }}/.github .
+      - name: Setup GopherJS
+        uses: ./.github/actions/setup-gopherjs/
+        with:
+          fixTemps: 'true'
+      - name: Test GopherJS
+        working-directory: ${{ env.GOPHERJS_PATH }}
+        run: go test -v -short ./...
+      - name: Run Tests
+        working-directory: ${{ env.GOPHERJS_PATH }}
+        run: |
+          gopherjs build -v net/http
+          gopherjs test -v --short fmt sort ./tests
+
+  darwin_smoke:
+    name: Darwin Smoke
+    runs-on: macos-latest
+    env:
+      # Node version '12' is not found for darwin.
+      NODE_VERSION: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ env.GOPHERJS_PATH }}
+      - name: Copy Actions
+        run: cp -r ${{ env.GOPHERJS_PATH }}/.github .
+      - name: Setup GopherJS
+        uses: ./.github/actions/setup-gopherjs/
+      - name: Test GopherJS
+        working-directory: ${{ env.GOPHERJS_PATH }}
+        run: go test -v -short ./...
+      - name: Run Tests
+        working-directory: ${{ env.GOPHERJS_PATH }}
+        run: |
+          gopherjs build -v net/http
+          gopherjs test -v --short fmt log os ./tests
+
+  lint:
+    name: Lint Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ env.GOPHERJS_PATH }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          working-directory: ${{ env.GOPHERJS_PATH }}
+          version: ${{ env.GOLANGCI_VERSION }}
+          only-new-issues: true
+      - name: Check go.mod
+        working-directory: ${{ env.GOPHERJS_PATH }}
+        run: go mod tidy && git diff --exit-code
+      - name: Check natives build tags
+        working-directory: ${{ env.GOPHERJS_PATH }}
+        # All those packages should have // +build js.
+        run: diff -u <(echo -n) <(go list ./compiler/natives/src/...)
+
+  go_tests:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ env.GOPHERJS_PATH }}
+      - name: Copy Actions
+        run: cp -r ${{ env.GOPHERJS_PATH }}/.github .
+      - name: Setup GopherJS
+        uses: ./.github/actions/setup-gopherjs/
+      - name: Run Tests
+        working-directory: ${{ env.GOPHERJS_PATH }}
+        # Run all tests except gorepo tests.
+        run: go test -v -race $(go list ./... | grep -v github.com/gopherjs/gopherjs/tests/gorepo)
+
+  todomvc_check:
+    name: TodoMVC GO111MODULE Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ env.GOPHERJS_PATH }}
+      - name: Copy Actions
+        run: cp -r ${{ env.GOPHERJS_PATH }}/.github .
+      - name: Setup GopherJS
+        uses: ./.github/actions/setup-gopherjs/
+      - name: TodoMVC in GOPATH mode
+        working-directory: ${{ env.GOPHERJS_PATH }}
+        env:
+          GO111MODULE: off
+          GOPATH: /tmp/gopath
+        run: |
+          mkdir -p $GOPATH/src/github.com/gopherjs/gopherjs
+          cp -r -p ${{ env.GOPHERJS_PATH }}/. $GOPATH/src/github.com/gopherjs/gopherjs/
+          go get -v github.com/gopherjs/todomvc
+          gopherjs build -v -o /tmp/todomvc_gopath.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+          find $GOPATH
+      - name: TodoMVC in Go Modules mode
+        env:
+          GO111MODULE: on
+          GOPATH: /tmp/gmod
+        run: |
+          mkdir -p $GOPATH/src
+          cd /tmp
+          git clone --depth=1 https://github.com/gopherjs/todomvc.git
+          cd /tmp/todomvc
+          gopherjs build -v -o /tmp/todomvc_gomod.js github.com/gopherjs/todomvc
+          gopherjs test -v github.com/gopherjs/todomvc/...
+          find $GOPATH
+      - name: Compare GOPATH and Go Modules output
+        run: |
+          diff -u \
+            <(sed 's/todomvc_gomod.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gomod.js) \
+            <(sed 's/todomvc_gopath.js.map/todomvc_ignored.js.map/' /tmp/todomvc_gopath.js)
+
+  gopherjs_tests:
+    name: GopherJS Tests (${{ matrix.filter.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        filter:
+          - name: non-crypto
+            pattern: '-Pve "^crypto"'
+          - name: cypto
+            pattern: '-Pe "^crypto"'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ env.GOPHERJS_PATH }}
+      - name: Copy Actions
+        run: cp -r ${{ env.GOPHERJS_PATH }}/.github .
+      - name: Setup GopherJS
+        uses: ./.github/actions/setup-gopherjs/
+      - name: Run GopherJS tests 
+        working-directory: ${{ env.GOPHERJS_PATH }}
+        run: |
+          PACKAGE_NAMES=$( \
+              GOOS=js GOARCH=wasm go list std github.com/gopherjs/gopherjs/js/... github.com/gopherjs/gopherjs/tests/... \
+              | grep -v -x -f .std_test_pkg_exclusions \
+              | grep ${{ matrix.filter.pattern }} \
+            )
+          echo "Running tests for packages:"
+          echo "$PACKAGE_NAMES"
+          gopherjs test -p 4 --minify -v --short $PACKAGE_NAMES
+          
+  gorepo_tests:
+    name: Gorepo Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ env.GOPHERJS_PATH }}
+      - name: Copy Actions
+        run: cp -r ${{ env.GOPHERJS_PATH }}/.github .
+      - name: Setup GopherJS
+        uses: ./.github/actions/setup-gopherjs/
+      - name: Run GopherJS tests 
+        working-directory: ${{ env.GOPHERJS_PATH }}
+        run: go test -v github.com/gopherjs/gopherjs/tests/gorepo

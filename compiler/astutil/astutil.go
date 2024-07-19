@@ -189,6 +189,10 @@ func OverrideSignature(d *ast.FuncDecl) bool {
 	return hasDirective(d, `override-signature`)
 }
 
+func ForceNonBlocking(d *ast.FuncDecl) bool {
+	return hasDirective(d, `force-non-blocking`)
+}
+
 // directiveMatcher is a regex which matches a GopherJS directive
 // and finds the directive action.
 var directiveMatcher = regexp.MustCompile(`^\/(?:\/|\*)gopherjs:([\w-]+)`)

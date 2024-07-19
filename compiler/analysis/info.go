@@ -72,7 +72,7 @@ func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
 	// Register the function in the appropriate map.
 	switch n := n.(type) {
 	case *ast.FuncDecl:
-		if n.Body == nil {
+		if n.Body == nil && !astutil.ForceNonBlocking(n) {
 			// Function body comes from elsewhere (for example, from a go:linkname
 			// directive), conservatively assume that it may be blocking.
 			// TODO(nevkontakte): It is possible to improve accuracy of this detection.

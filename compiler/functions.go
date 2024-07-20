@@ -18,18 +18,21 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
-// newFunctionContext creates a new nested context for a function corresponding
+// nestedFunctionContext creates a new nested context for a function corresponding
 // to the provided info and instance.
-func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, sig *types.Signature, inst typeparams.Instance) *funcContext {
+func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, inst typeparams.Instance) *funcContext {
 	if info == nil {
 		panic(errors.New("missing *analysis.FuncInfo"))
 	}
-	if sig == nil {
-		panic(errors.New("missing *types.Signature"))
+	if inst.Object == nil {
+		panic(errors.New("missing inst.Object"))
 	}
+	o := inst.Object.(*types.Func)
+	sig := o.Type().(*types.Signature)
 
 	c := &funcContext{
 		FuncInfo:     info,
+		instance:     inst,
 		pkgCtx:       fc.pkgCtx,
 		parent:       fc,
 		allVars:      make(map[string]int, len(fc.allVars)),
@@ -54,43 +57,73 @@ func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, sig *types
 		c.objectNames = map[types.Object]string{}
 	}
 
+	// Synthesize an identifier by which the function may reference itself. Since
+	// it appears in the stack trace, it's useful to include the receiver type in
+	// it.
+	funcRef := o.Name()
+	if recvType := typesutil.RecvType(sig); recvType != nil {
+		funcRef = recvType.Obj().Name() + midDot + funcRef
+	}
+	c.funcRef = c.newVariable(funcRef, true /*pkgLevel*/)
+
+	return c
+}
+
+// namedFuncContext creates a new funcContext for a named Go function
+// (standalone or method).
+func (fc *funcContext) namedFuncContext(inst typeparams.Instance) *funcContext {
+	info := fc.pkgCtx.FuncDeclInfos[inst.Object.(*types.Func)]
+	c := fc.nestedFunctionContext(info, inst)
+
+	return c
+}
+
+// literalFuncContext creates a new funcContext for a function literal. Since
+// go/types doesn't generate *types.Func objects for function literals, we
+// generate a synthetic one for it.
+func (fc *funcContext) literalFuncContext(fun *ast.FuncLit) *funcContext {
+	info := fc.pkgCtx.FuncLitInfos[fun]
+	sig := fc.pkgCtx.TypeOf(fun).(*types.Signature)
+	o := types.NewFunc(fun.Pos(), fc.pkgCtx.Pkg, fc.newLitFuncName(), sig)
+	inst := typeparams.Instance{Object: o}
+
+	c := fc.nestedFunctionContext(info, inst)
 	return c
 }
 
 // translateTopLevelFunction translates a top-level function declaration
-// (standalone function or method) into a corresponding JS function.
+// (standalone function or method) into a corresponding JS function. Must be
+// called on the function context created for the function corresponding instance.
 //
 // Returns a string with JavaScript statements that define the function or
 // method. For methods it returns declarations for both value- and
 // pointer-receiver (if appropriate).
-func (fc *funcContext) translateTopLevelFunction(fun *ast.FuncDecl, inst typeparams.Instance) []byte {
+func (fc *funcContext) translateTopLevelFunction(fun *ast.FuncDecl) []byte {
 	if fun.Recv == nil {
-		return fc.translateStandaloneFunction(fun, inst)
+		return fc.translateStandaloneFunction(fun)
 	}
 
-	return fc.translateMethod(fun, inst)
+	return fc.translateMethod(fun)
 }
 
 // translateStandaloneFunction translates a package-level function.
 //
 // It returns JS statements which define the corresponding function in a
 // package context. Exported functions are also assigned to the `$pkg` object.
-func (fc *funcContext) translateStandaloneFunction(fun *ast.FuncDecl, inst typeparams.Instance) []byte {
-	o := inst.Object.(*types.Func)
-	info := fc.pkgCtx.FuncDeclInfos[o]
-	sig := o.Type().(*types.Signature)
+func (fc *funcContext) translateStandaloneFunction(fun *ast.FuncDecl) []byte {
+	o := fc.instance.Object.(*types.Func)
 
 	if fun.Recv != nil {
 		panic(fmt.Errorf("expected standalone function, got method: %s", o))
 	}
 
-	lvalue := fc.instName(inst)
+	lvalue := fc.instName(fc.instance)
 
 	if fun.Body == nil {
 		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fc.unimplementedFunction(o)))
 	}
 
-	body := fc.nestedFunctionContext(info, sig, inst).translateFunctionBody(fun.Type, nil, fun.Body, lvalue)
+	body := fc.translateFunctionBody(fun.Type, nil, fun.Body)
 	code := bytes.NewBuffer(nil)
 	fmt.Fprintf(code, "\t%s = %s;\n", lvalue, body)
 	if fun.Name.IsExported() {
@@ -103,12 +136,10 @@ func (fc *funcContext) translateStandaloneFunction(fun *ast.FuncDecl, inst typep
 //
 // It returns one or more JS statements which define the method. Methods with
 // non-pointer receiver are automatically defined for the pointer-receiver type.
-func (fc *funcContext) translateMethod(fun *ast.FuncDecl, inst typeparams.Instance) []byte {
-	o := inst.Object.(*types.Func)
-	info := fc.pkgCtx.FuncDeclInfos[o]
+func (fc *funcContext) translateMethod(fun *ast.FuncDecl) []byte {
+	o := fc.instance.Object.(*types.Func)
 	funName := fc.methodName(o)
 
-	sig := o.Type().(*types.Signature)
 	// primaryFunction generates a JS function equivalent of the current Go function
 	// and assigns it to the JS expression defined by lvalue.
 	primaryFunction := func(lvalue string) []byte {
@@ -120,11 +151,11 @@ func (fc *funcContext) translateMethod(fun *ast.FuncDecl, inst typeparams.Instan
 		if fun.Recv != nil && fun.Recv.List[0].Names != nil {
 			recv = fun.Recv.List[0].Names[0]
 		}
-		fun := fc.nestedFunctionContext(info, sig, inst).translateFunctionBody(fun.Type, recv, fun.Body, lvalue)
+		fun := fc.translateFunctionBody(fun.Type, recv, fun.Body)
 		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fun))
 	}
 
-	recvInst := inst.Recv()
+	recvInst := fc.instance.Recv()
 	recvInstName := fc.instName(recvInst)
 	recvType := recvInst.Object.Type().(*types.Named)
 
@@ -134,7 +165,7 @@ func (fc *funcContext) translateMethod(fun *ast.FuncDecl, inst typeparams.Instan
 	ptrPrototypeVar := fmt.Sprintf("$ptrType(%s).prototype.%s", recvInstName, funName)
 
 	// Methods with pointer-receiver are only attached to the pointer-receiver type.
-	if _, isPointer := sig.Recv().Type().(*types.Pointer); isPointer {
+	if _, isPointer := fc.sig.Sig.Recv().Type().(*types.Pointer); isPointer {
 		return primaryFunction(ptrPrototypeVar)
 	}
 
@@ -185,7 +216,7 @@ func (fc *funcContext) unimplementedFunction(o *types.Func) string {
 // It returns a JS function expression that represents the given Go function.
 // Function receiver must have been created with nestedFunctionContext() to have
 // required metadata set up.
-func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, funcRef string) string {
+func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt) string {
 	prevEV := fc.pkgCtx.escapingVars
 
 	// Generate a list of function argument variables. Since Go allows nameless
@@ -239,7 +270,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 
 	sort.Strings(fc.localVars)
 
-	var prefix, suffix, functionName string
+	var prefix, suffix string
 
 	if len(fc.Flattened) != 0 {
 		// $s contains an index of the switch case a blocking function reached
@@ -260,21 +291,19 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	localVarDefs := "" // Function-local var declaration at the top.
 
 	if len(fc.Blocking) != 0 {
-		if funcRef == "" {
-			funcRef = "$b"
-			functionName = " $b"
-		}
-
 		localVars := append([]string{}, fc.localVars...)
 		// There are several special variables involved in handling blocking functions:
 		// $r is sometimes used as a temporary variable to store blocking call result.
 		// $c indicates that a function is being resumed after a blocking call when set to true.
 		// $f is an object used to save and restore function context for blocking calls.
 		localVars = append(localVars, "$r")
+		// funcRef identifies the function object itself, so it doesn't need to be saved
+		// or restored.
+		localVars = removeMatching(localVars, fc.funcRef)
 		// If a blocking function is being resumed, initialize local variables from the saved context.
 		localVarDefs = fmt.Sprintf("var {%s, $c} = $restore(this, {%s});\n", strings.Join(localVars, ", "), strings.Join(args, ", "))
 		// If the function gets blocked, save local variables for future.
-		saveContext := fmt.Sprintf("var $f = {$blk: "+funcRef+", $c: true, $r, %s};", strings.Join(fc.localVars, ", "))
+		saveContext := fmt.Sprintf("var $f = {$blk: "+fc.funcRef+", $c: true, $r, %s};", strings.Join(fc.localVars, ", "))
 
 		suffix = " " + saveContext + "return $f;" + suffix
 	} else if len(fc.localVars) > 0 {
@@ -322,5 +351,5 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 
 	fc.pkgCtx.escapingVars = prevEV
 
-	return fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(args, ", "), bodyOutput, fc.Indentation(0))
+	return fmt.Sprintf("function %s(%s) {\n%s%s}", fc.funcRef, strings.Join(args, ", "), bodyOutput, fc.Indentation(0))
 }

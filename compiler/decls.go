@@ -345,7 +345,7 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 	}
 
 	d.DceDeps = fc.CollectDCEDeps(func() {
-		d.DeclCode = fc.translateTopLevelFunction(fun, inst)
+		d.DeclCode = fc.namedFuncContext(inst).translateTopLevelFunction(fun)
 	})
 	return d
 }

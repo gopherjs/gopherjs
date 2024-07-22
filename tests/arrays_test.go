@@ -126,21 +126,12 @@ func TestConversionFromSliceToArray(t *testing.T) {
 	slice := []byte{12, 34, 56, 78}
 	array := [4]byte(slice)
 
-	areEqual := func(s []byte, a [4]byte) bool {
-		if len(s) != len(a) {
-			return false
-		}
-		for i, v := range s {
-			if v != a[i] {
-				return false
-			}
-		}
-		return true
-	}
+	areEqual := len(slice) == 4 && len(array) == 4 &&
+		slice[0] == array[0] && slice[1] == array[1] &&
+		slice[2] == array[2] && slice[3] == array[3]
 
-	if !areEqual(slice, array) {
-		t.Errorf("slice and array are not equal after conversion:")
-		t.Logf("\tslice: %#v", slice)
-		t.Logf("\tarray: %#v", array)
+	if !areEqual {
+		t.Errorf("slice and array are not equal after conversion:\n"+
+			"\tslice: %#v\n\tarray: %#v", slice, array)
 	}
 }

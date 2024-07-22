@@ -7,14 +7,9 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <errno.h>
+#include <iostream>
 
 using namespace v8;
-
-#if NODE_MAJOR_VERSION == 0
-#define ARRAY_BUFFER_DATA_OFFSET 23
-#else
-#define ARRAY_BUFFER_DATA_OFFSET 31
-#endif
 
 // arena stores buffers we allocate for data passed to syscalls.
 //
@@ -22,15 +17,15 @@ using namespace v8;
 // frees all allocated buffers at the end. This is necessary to avoid memory
 // leaks on each call.
 class arena {
-  std::vector<std::unique_ptr<intptr_t[]>> allocs_;
+  std::vector<std::vector<uint8_t>> allocs_;
 public:
   arena() = default;
   virtual ~arena() = default;
   arena(const arena& a) = delete;
 
-  intptr_t* allocate(size_t n) {
-    allocs_.emplace_back(new intptr_t[n]);
-    return allocs_.end()->get();
+  void* allocate(size_t n) {
+    allocs_.emplace_back(n); // Allocate a new vector of n byte size.
+    return allocs_[allocs_.size() - 1].data(); // Return the pointer to its data buffer;
   }
 };
 
@@ -46,17 +41,20 @@ Local<Integer> integerOrDie(Local<Context> ctx, Local<Value> value) {
   throw std::runtime_error("expected integer, got something else");
 }
 
+// Transforms a JS value into a native value that can be passed to the syscall() call.
 intptr_t toNative(Local<Context> ctx, arena& a, Local<Value> value) {
   if (value.IsEmpty()) {
     return 0;
   }
   if (value->IsArrayBufferView()) {
     Local<ArrayBufferView> view = Local<ArrayBufferView>::Cast(value);
-    return *reinterpret_cast<intptr_t*>(*reinterpret_cast<char**>(*view->Buffer()) + ARRAY_BUFFER_DATA_OFFSET) + view->ByteOffset(); // ugly hack, because of https://codereview.chromium.org/25221002
+    void* native = a.allocate(view->ByteLength());
+    view->CopyContents(native, view->ByteLength());
+    return reinterpret_cast<intptr_t>(native);
   }
   if (value->IsArray()) {
     Local<Array> array = Local<Array>::Cast(value);
-    intptr_t* native = a.allocate(array->Length());
+    intptr_t* native = reinterpret_cast<intptr_t*>(a.allocate(array->Length() * sizeof(intptr_t)));
     for (uint32_t i = 0; i < array->Length(); i++) {
       native[i] = toNative(ctx, a, array->Get(ctx, i).ToLocalChecked());
     }
@@ -142,9 +140,10 @@ void Syscall6(const FunctionCallbackInfo<Value>& info) {
   }
 }
 
-void init(Local<Object> exports) {
+extern "C" NODE_MODULE_EXPORT void
+NODE_MODULE_INITIALIZER(Local<Object> exports,
+                        Local<Value> module,
+                        Local<Context> context) {
   NODE_SET_METHOD(exports, "Syscall", Syscall);
   NODE_SET_METHOD(exports, "Syscall6", Syscall6);
 }
-
-NODE_MODULE(syscall, init);

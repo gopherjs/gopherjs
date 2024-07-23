@@ -4,6 +4,7 @@ on: ['pull_request']
 
 env:
   GO_VERSION: '~1.20.14'
+  GOPHERJS_EXPERIMENT: generics
 
 jobs:
   measure:

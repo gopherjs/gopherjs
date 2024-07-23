@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 	"unsafe"
@@ -122,16 +123,111 @@ func TestNilPrototypeNotModifiedByReflectGrow(t *testing.T) {
 	}
 }
 
+// trySliceArrayCast tests if a slice can be converted to an array
+// and either checks if the conversion is successful or if it panics with an expected error.
+func trySliceArrayCast[S, A any](t *testing.T, name string, slice S, getArray func(slice S) A, expRuntimeError string) {
+	t.Run(name, func(t *testing.T) {
+		sv := reflect.ValueOf(slice)
+		if sv.Kind() != reflect.Slice {
+			t.Fatal(`expected a slice but got`, sv.Kind().String())
+		}
+
+		var array A
+		r := func() (r any) {
+			defer func() { r = recover() }()
+			array = getArray(slice)
+			return nil
+		}()
+		if r != nil {
+			if len(expRuntimeError) > 0 {
+				if rStr := fmt.Sprintf(`%v`, r); rStr != expRuntimeError {
+					t.Error(`unexpected panic message:`, r)
+					t.Log("\texpected:", expRuntimeError)
+				}
+			} else {
+				t.Error(`unexpected panic:`, r)
+			}
+			return
+		} else if len(expRuntimeError) > 0 {
+			t.Error(`did not get expected a panic`)
+			t.Log("\texpected:", expRuntimeError)
+		}
+
+		av := reflect.ValueOf(array)
+		if av.Kind() != reflect.Array {
+			t.Fatal(`expected an array but got`, av.Kind().String())
+		}
+
+		len := sv.Len()
+		if aLen := av.Len(); len > aLen {
+			len = aLen
+		}
+
+		for i := 0; i < len; i++ {
+			if !reflect.DeepEqual(sv.Index(i).Interface(), av.Index(i).Interface()) {
+				t.Errorf("slice and array are not equal after conversion (starting at %d):\n"+
+					"\tslice: %#v\n\tarray: %#v", i, slice, array)
+				return
+			}
+		}
+	})
+}
+
 func TestConversionFromSliceToArray(t *testing.T) {
-	slice := []byte{12, 34, 56, 78}
-	array := [4]byte(slice)
+	trySliceArrayCast(t, `4 byte slice to 4 byte array`,
+		[]byte{12, 34, 56, 78},
+		func(s []byte) [4]byte { return [4]byte(s) }, ``)
 
-	areEqual := len(slice) == 4 && len(array) == 4 &&
-		slice[0] == array[0] && slice[1] == array[1] &&
-		slice[2] == array[2] && slice[3] == array[3]
+	trySliceArrayCast(t, `5 byte slice to 5 byte array`,
+		[]byte{12, 34, 56, 78, 90},
+		func(s []byte) [5]byte { return [5]byte(s) }, ``)
 
-	if !areEqual {
-		t.Errorf("slice and array are not equal after conversion:\n"+
-			"\tslice: %#v\n\tarray: %#v", slice, array)
+	trySliceArrayCast(t, `3 byte slice to 3 byte array`,
+		[]byte{12, 34, 56},
+		func(s []byte) [3]byte { return [3]byte(s) }, ``)
+
+	trySliceArrayCast(t, `5 byte slice to 4 byte array`,
+		[]byte{12, 34, 56, 78, 90},
+		func(s []byte) [4]byte { return [4]byte(s) }, ``)
+
+	trySliceArrayCast(t, `3 byte slice to 4 byte array`,
+		[]byte{12, 34, 56},
+		func(s []byte) [4]byte { return [4]byte(s) },
+		`runtime error: cannot convert slice with length 3 to array or pointer to array with length 4`)
+
+	trySliceArrayCast(t, `4 byte slice to zero byte array`,
+		[]byte{12, 34, 56, 78},
+		func(s []byte) [0]byte { return [0]byte(s) }, ``)
+
+	type Cat struct {
+		name string
+		age  int
 	}
+	cats := []Cat{
+		{name: "Tom", age: 3},
+		{name: "Jonesy", age: 5},
+		{name: "Sylvester", age: 7},
+		{name: "Rita", age: 2},
+	}
+
+	trySliceArrayCast(t, `4 Cat slice to 4 Cat array`,
+		cats,
+		func(s []Cat) [4]Cat { return [4]Cat(s) }, ``)
+
+	trySliceArrayCast(t, `4 *Cat slice to 4 *Cat array`,
+		[]*Cat{&cats[0], &cats[1], &cats[2], &cats[3]},
+		func(s []*Cat) [4]*Cat { return [4]*Cat(s) }, ``)
+
+	trySliceArrayCast(t, `nil byte slice to zero byte array`,
+		[]byte(nil),
+		func(s []byte) [0]byte { return [0]byte(s) }, ``)
+
+	trySliceArrayCast(t, `empty byte slice to zero byte array`,
+		[]byte{},
+		func(s []byte) [0]byte { return [0]byte(s) }, ``)
+
+	trySliceArrayCast(t, `nil byte slice to 4 byte array`,
+		[]byte(nil),
+		func(s []byte) [4]byte { return [4]byte(s) },
+		`runtime error: cannot convert slice with length 0 to array or pointer to array with length 4`)
 }

@@ -151,8 +151,11 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 };
                 typ.copy = (dst, src) => {
                     if (src.length === undefined) {
-                        // copy from a slice
-                        $copyArray(dst, src.$array, 0, 0, src.$length, elem);
+                        // copy from a slice, the slice may be bigger but not smaller than the array
+                        if (src.$length < dst.length) {
+                            $throwRuntimeError("cannot convert slice with length "+src.$length+" to array or pointer to array with length "+dst.length);
+                        }
+                        $copyArray(dst, src.$array, 0, 0, Math.min(src.$length, dst.length), elem);
                     } else {
                         // copy from another array
                         $copyArray(dst, src, 0, 0, src.length, elem);

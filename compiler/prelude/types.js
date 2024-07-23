@@ -150,7 +150,13 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                     }), "$");
                 };
                 typ.copy = (dst, src) => {
-                    $copyArray(dst, src, 0, 0, src.length, elem);
+                    if (src.length === undefined) {
+                        // copy from a slice
+                        $copyArray(dst, src.$array, 0, 0, src.$length, elem);
+                    } else {
+                        // copy from another array
+                        $copyArray(dst, src, 0, 0, src.length, elem);
+                    }
                 };
                 typ.ptr.init(typ);
                 Object.defineProperty(typ.ptr.nil, "nilCheck", { get: $throwNilPointerError });

@@ -155,7 +155,7 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                         if (src.$length < dst.length) {
                             $throwRuntimeError("cannot convert slice with length "+src.$length+" to array or pointer to array with length "+dst.length);
                         }
-                        $copyArray(dst, src.$array, 0, 0, Math.min(src.$length, dst.length), elem);
+                        $copyArray(dst, src.$array, 0, 0, dst.length, elem);
                     } else {
                         // copy from another array
                         $copyArray(dst, src, 0, 0, src.length, elem);

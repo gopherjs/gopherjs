@@ -131,7 +131,7 @@ type conn struct {
 	bufw       *bufio.Writer
 	lastMethod string
 
-	// temporarily replacement of `atomic.Pointer[response]` for go1.20 without generics.
+	// replacing a `atomic.Pointer[response]` since GopherJS does not fully support generics for go1.20 yet.
 	curReq atomicResponsePointer
 
 	curState  atomic.Uint64

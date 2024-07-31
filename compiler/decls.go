@@ -52,7 +52,7 @@ type Decl struct {
 	// set the symbol up (e.g. initialize package-level variable value).
 	InitCode []byte
 	// Dce stores the information and helpers for dead code elimination.
-	Dce DceBadge
+	Dce dceBadge
 	// Set to true if a function performs a blocking operation (I/O or
 	// synchronization). The compiler will have to generate function code such
 	// that it can be resumed after a blocking operation completes without

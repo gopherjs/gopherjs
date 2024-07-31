@@ -108,7 +108,7 @@ func (fc *funcContext) Delayed(f func()) {
 //
 // Note that calling CollectDCEDeps() inside another CollectDCEDeps() call is
 // not allowed.
-func (fc *funcContext) CollectDCEDeps(dce *DceBadge, f func()) {
+func (fc *funcContext) CollectDCEDeps(dce *dceInfo, f func()) {
 	if fc.pkgCtx.dependencies != nil {
 		panic(bailout(fmt.Errorf("called funcContext.CollectDependencies() inside another funcContext.CollectDependencies() call")))
 	}

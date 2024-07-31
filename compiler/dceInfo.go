@@ -1,15 +1,13 @@
 package compiler
 
 import (
-	"fmt"
 	"go/types"
 	"sort"
-	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
-type DceBadge struct {
+type dceInfo struct {
 	// Symbol's identifier used by the dead-code elimination logic, not including
 	// package path. If empty, the symbol is assumed to be alive and will not be
 	// eliminated. For methods it is the same as its receiver type identifier.
@@ -23,12 +21,12 @@ type DceBadge struct {
 	deps []string
 }
 
-func (d *DceBadge) SetAsAlive() {
+func (d *dceInfo) SetAsAlive() {
 	d.objectFilter = ""
 	d.methodFilter = ""
 }
 
-func (d *DceBadge) SetName(o types.Object) {
+func (d *dceInfo) SetName(o types.Object) {
 	if typesutil.IsMethod(o) {
 		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
 		d.objectFilter = recv.Name()
@@ -40,7 +38,7 @@ func (d *DceBadge) SetName(o types.Object) {
 	}
 }
 
-func (d *DceBadge) SetDeps(objectSet map[types.Object]bool) {
+func (d *dceInfo) SetDeps(objectSet map[types.Object]bool) {
 	var deps []string
 	for o := range objectSet {
 		qualifiedName := o.Pkg().Path() + "." + o.Name()
@@ -53,14 +51,14 @@ func (d *DceBadge) SetDeps(objectSet map[types.Object]bool) {
 	d.deps = deps
 }
 
-type dceInfo struct {
-	decl         *Decl
-	objectFilter string
-	methodFilter string
-}
-
 func SelectAliveDecls(pkgs []*Archive, gls goLinknameSet) map[*Decl]struct{} {
-	byFilter := make(map[string][]*dceInfo)
+	type dceDeclInfo struct {
+		decl         *Decl
+		objectFilter string
+		methodFilter string
+	}
+
+	byFilter := make(map[string][]*dceDeclInfo)
 	var pendingDecls []*Decl // A queue of live decls to find other live decls.
 	for _, pkg := range pkgs {
 		for _, d := range pkg.Declarations {
@@ -77,7 +75,7 @@ func SelectAliveDecls(pkgs []*Archive, gls goLinknameSet) map[*Decl]struct{} {
 				// try and trace whether the referencing functions are actually live.
 				pendingDecls = append(pendingDecls, d)
 			}
-			info := &dceInfo{decl: d}
+			info := &dceDeclInfo{decl: d}
 			if d.Dce.objectFilter != "" {
 				info.objectFilter = pkg.ImportPath + "." + d.Dce.objectFilter
 				byFilter[info.objectFilter] = append(byFilter[info.objectFilter], info)
@@ -87,18 +85,6 @@ func SelectAliveDecls(pkgs []*Archive, gls goLinknameSet) map[*Decl]struct{} {
 				byFilter[info.methodFilter] = append(byFilter[info.methodFilter], info)
 			}
 		}
-	}
-
-	keys := make([]string, 0, len(byFilter)) // TODO(gn): REMOVE
-	for k := range byFilter {
-		if strings.HasPrefix(k, "main") {
-			keys = append(keys, k)
-		}
-	}
-	sort.Strings(keys) // TODO(gn): REMOVE
-	fmt.Println("byFilter:")
-	for _, k := range keys { // TODO(gn): REMOVE
-		fmt.Printf("\t%q\n", k) // TODO(gn): REMOVE
 	}
 
 	dceSelection := make(map[*Decl]struct{}) // Known live decls.

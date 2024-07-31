@@ -19,6 +19,7 @@ import (
 	"unicode"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
@@ -103,12 +104,12 @@ func (fc *funcContext) Delayed(f func()) {
 }
 
 // CollectDCEDeps captures a list of Go objects (types, functions, etc.)
-// the code translated inside f() depends on. The returned list of identifiers
-// can be used in dead-code elimination.
+// the code translated inside f() depends on. Then sets those objects
+// as dependencies of the given dead-code elimination info.
 //
 // Note that calling CollectDCEDeps() inside another CollectDCEDeps() call is
 // not allowed.
-func (fc *funcContext) CollectDCEDeps(f func()) []string {
+func (fc *funcContext) CollectDCEDeps(dce *dce.Info, f func()) {
 	if fc.pkgCtx.dependencies != nil {
 		panic(bailout(fmt.Errorf("called funcContext.CollectDependencies() inside another funcContext.CollectDependencies() call")))
 	}
@@ -118,16 +119,7 @@ func (fc *funcContext) CollectDCEDeps(f func()) []string {
 
 	f()
 
-	var deps []string
-	for o := range fc.pkgCtx.dependencies {
-		qualifiedName := o.Pkg().Path() + "." + o.Name()
-		if typesutil.IsMethod(o) {
-			qualifiedName += "~"
-		}
-		deps = append(deps, qualifiedName)
-	}
-	sort.Strings(deps)
-	return deps
+	dce.SetDeps(fc.pkgCtx.dependencies)
 }
 
 // DeclareDCEDep records that the code that is currently being transpiled

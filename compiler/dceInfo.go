@@ -7,11 +7,15 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
+// dceInfo contains information used by the dead-code elimination (DCE) logic to
+// determine whether a declaration is alive or dead.
 type dceInfo struct {
+
 	// Symbol's identifier used by the dead-code elimination logic, not including
 	// package path. If empty, the symbol is assumed to be alive and will not be
 	// eliminated. For methods it is the same as its receiver type identifier.
 	objectFilter string
+
 	// The second part of the identified used by dead-code elimination for methods.
 	// Empty for other types of symbols.
 	methodFilter string
@@ -58,6 +62,8 @@ func (d *dceInfo) SetDeps(objectSet map[types.Object]bool) {
 	d.deps = deps
 }
 
+// SelectAliveDecls returns a set of declarations that are still alive
+// after dead-code elimination.
 func SelectAliveDecls(pkgs []*Archive, gls goLinknameSet) map[*Decl]struct{} {
 	type dceDeclInfo struct {
 		decl         *Decl

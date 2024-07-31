@@ -233,7 +233,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 		}
 	}
 
-	d.Dce.Deps = fc.CollectDCEDeps(func() {
+	fc.CollectDCEDeps(&d.Dce, func() {
 		fc.localVars = nil
 		d.InitCode = fc.CatchOutput(1, func() {
 			fc.translateStmt(&ast.AssignStmt{
@@ -251,7 +251,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 
 	if len(init.Lhs) == 1 {
 		if !analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
-			d.Dce.ObjectFilter = init.Lhs[0].Name()
+			d.Dce.SetName(init.Lhs[0])
 		}
 	}
 	return &d
@@ -314,29 +314,25 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		Blocking:    fc.pkgCtx.IsBlocking(o),
 		LinkingName: symbol.New(o),
 	}
+	d.Dce.SetName(o)
 
 	if typesutil.IsMethod(o) {
 		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
 		d.NamedRecvType = fc.objectName(recv)
-		d.Dce.ObjectFilter = recv.Name()
-		if !fun.Name.IsExported() {
-			d.Dce.MethodFilter = o.Name() + "~"
-		}
 	} else {
 		d.RefExpr = fc.instName(inst)
-		d.Dce.ObjectFilter = o.Name()
 		switch o.Name() {
 		case "main":
 			if fc.pkgCtx.isMain() { // Found main() function of the program.
-				d.Dce.ObjectFilter = "" // Always reachable.
+				d.Dce.SetAsAlive() // Always reachable.
 			}
 		case "init":
 			d.InitCode = fc.CatchOutput(1, func() { fc.translateStmt(fc.callInitFunc(o), nil) })
-			d.Dce.ObjectFilter = "" // init() function is always reachable.
+			d.Dce.SetAsAlive() // init() function is always reachable.
 		}
 	}
 
-	d.Dce.Deps = fc.CollectDCEDeps(func() {
+	fc.CollectDCEDeps(&d.Dce, func() {
 		d.DeclCode = fc.translateTopLevelFunction(fun, inst)
 	})
 	return d
@@ -448,8 +444,8 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 
 	underlying := instanceType.Underlying()
 	d := &Decl{}
-	d.Dce.ObjectFilter = inst.Object.Name()
-	d.Dce.Deps = fc.CollectDCEDeps(func() {
+	d.Dce.SetName(inst.Object)
+	fc.CollectDCEDeps(&d.Dce, func() {
 		// Code that declares a JS type (i.e. prototype) for each Go type.
 		d.DeclCode = fc.CatchOutput(0, func() {
 			size := int64(0)
@@ -571,8 +567,8 @@ func (fc *funcContext) anonTypeDecls(anonTypes []*types.TypeName) []*Decl {
 		d := Decl{
 			Vars: []string{t.Name()},
 		}
-		d.Dce.ObjectFilter = t.Name()
-		d.Dce.Deps = fc.CollectDCEDeps(func() {
+		d.Dce.SetName(t)
+		fc.CollectDCEDeps(&d.Dce, func() {
 			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type())))
 		})
 		decls = append(decls, &d)

@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
@@ -51,16 +52,8 @@ type Decl struct {
 	// JavaScript code that needs to be executed during the package init phase to
 	// set the symbol up (e.g. initialize package-level variable value).
 	InitCode []byte
-	// Symbol's identifier used by the dead-code elimination logic, not including
-	// package path. If empty, the symbol is assumed to be alive and will not be
-	// eliminated. For methods it is the same as its receiver type identifier.
-	DceObjectFilter string
-	// The second part of the identified used by dead-code elimination for methods.
-	// Empty for other types of symbols.
-	DceMethodFilter string
-	// List of fully qualified (including package path) DCE symbol identifiers the
-	// symbol depends on for dead code elimination purposes.
-	DceDeps []string
+	// dce stores the information for dead-code elimination.
+	dce dce.Info
 	// Set to true if a function performs a blocking operation (I/O or
 	// synchronization). The compiler will have to generate function code such
 	// that it can be resumed after a blocking operation completes without
@@ -76,6 +69,11 @@ func (d Decl) minify() Decl {
 	d.TypeInitCode = removeWhitespace(d.TypeInitCode, true)
 	d.InitCode = removeWhitespace(d.InitCode, true)
 	return d
+}
+
+// Dce gets the information for dead-code elimination.
+func (d *Decl) Dce() *dce.Info {
+	return &d.dce
 }
 
 // topLevelObjects extracts package-level variables, functions and named types
@@ -161,11 +159,13 @@ func (fc *funcContext) importDecls() (importedPaths []string, importDecls []*Dec
 // newImportDecl registers the imported package and returns a Decl instance for it.
 func (fc *funcContext) newImportDecl(importedPkg *types.Package) *Decl {
 	pkgVar := fc.importedPkgVar(importedPkg)
-	return &Decl{
+	d := &Decl{
 		Vars:     []string{pkgVar},
 		DeclCode: []byte(fmt.Sprintf("\t%s = $packages[\"%s\"];\n", pkgVar, importedPkg.Path())),
 		InitCode: fc.CatchOutput(1, func() { fc.translateStmt(fc.importInitializer(importedPkg.Path()), nil) }),
 	}
+	d.Dce().SetAsAlive()
+	return d
 }
 
 // importInitializer calls the imported package $init() function to ensure it is
@@ -241,7 +241,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 		}
 	}
 
-	d.DceDeps = fc.CollectDCEDeps(func() {
+	fc.pkgCtx.CollectDCEDeps(&d, func() {
 		fc.localVars = nil
 		d.InitCode = fc.CatchOutput(1, func() {
 			fc.translateStmt(&ast.AssignStmt{
@@ -257,10 +257,9 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 		fc.localVars = nil // Clean up after ourselves.
 	})
 
-	if len(init.Lhs) == 1 {
-		if !analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
-			d.DceObjectFilter = init.Lhs[0].Name()
-		}
+	d.Dce().SetName(init.Lhs[0])
+	if len(init.Lhs) != 1 || analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
+		d.Dce().SetAsAlive()
 	}
 	return &d
 }
@@ -280,9 +279,8 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 		if fun.Recv == nil {
 			// Auxiliary decl shared by all instances of the function that defines
 			// package-level variable by which they all are referenced.
-			// TODO(nevkontakte): Set DCE attributes such that it is eliminated if all
-			// instances are dead.
 			varDecl := Decl{}
+			varDecl.Dce().SetName(o)
 			varDecl.Vars = []string{fc.objectName(o)}
 			if o.Type().(*types.Signature).TypeParams().Len() != 0 {
 				varDecl.DeclCode = fc.CatchOutput(0, func() {
@@ -322,29 +320,25 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		Blocking:    fc.pkgCtx.IsBlocking(o),
 		LinkingName: symbol.New(o),
 	}
+	d.Dce().SetName(o)
 
 	if typesutil.IsMethod(o) {
 		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
 		d.NamedRecvType = fc.objectName(recv)
-		d.DceObjectFilter = recv.Name()
-		if !fun.Name.IsExported() {
-			d.DceMethodFilter = o.Name() + "~"
-		}
 	} else {
 		d.RefExpr = fc.instName(inst)
-		d.DceObjectFilter = o.Name()
 		switch o.Name() {
 		case "main":
 			if fc.pkgCtx.isMain() { // Found main() function of the program.
-				d.DceObjectFilter = "" // Always reachable.
+				d.Dce().SetAsAlive() // Always reachable.
 			}
 		case "init":
 			d.InitCode = fc.CatchOutput(1, func() { fc.translateStmt(fc.callInitFunc(o), nil) })
-			d.DceObjectFilter = "" // init() function is always reachable.
+			d.Dce().SetAsAlive() // init() function is always reachable.
 		}
 	}
 
-	d.DceDeps = fc.CollectDCEDeps(func() {
+	fc.pkgCtx.CollectDCEDeps(d, func() {
 		d.DeclCode = fc.translateTopLevelFunction(fun, inst)
 	})
 	return d
@@ -455,10 +449,9 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 	}
 
 	underlying := instanceType.Underlying()
-	d := &Decl{
-		DceObjectFilter: inst.Object.Name(),
-	}
-	d.DceDeps = fc.CollectDCEDeps(func() {
+	d := &Decl{}
+	d.Dce().SetName(inst.Object)
+	fc.pkgCtx.CollectDCEDeps(d, func() {
 		// Code that declares a JS type (i.e. prototype) for each Go type.
 		d.DeclCode = fc.CatchOutput(0, func() {
 			size := int64(0)
@@ -577,14 +570,14 @@ func (fc *funcContext) anonTypeDecls(anonTypes []*types.TypeName) []*Decl {
 	}
 	decls := []*Decl{}
 	for _, t := range anonTypes {
-		d := Decl{
-			Vars:            []string{t.Name()},
-			DceObjectFilter: t.Name(),
+		d := &Decl{
+			Vars: []string{t.Name()},
 		}
-		d.DceDeps = fc.CollectDCEDeps(func() {
+		d.Dce().SetName(t)
+		fc.pkgCtx.CollectDCEDeps(d, func() {
 			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type())))
 		})
-		decls = append(decls, &d)
+		decls = append(decls, d)
 	}
 	return decls
 }

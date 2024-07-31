@@ -1,9 +1,6 @@
 {
   "name": "gopherjs",
   "license": "BSD-2-Clause",
-  "dependencies": {
-    "source-map-support": "^0.5.19"
-  },
   "optionalDependencies": {
     "syscall": "file:./node-syscall"
   }

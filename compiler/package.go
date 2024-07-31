@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/gopherjs/gopherjs/internal/experiments"
@@ -21,6 +22,7 @@ import (
 // pkgContext maintains compiler context for a specific package.
 type pkgContext struct {
 	*analysis.Info
+	dce.Collector
 	additionalSelections map[*ast.SelectorExpr]typesutil.Selection
 
 	typesCtx *types.Context
@@ -35,7 +37,6 @@ type pkgContext struct {
 	anonTypeMap  typeutil.Map
 	escapingVars map[*types.Var]bool
 	indentation  int
-	dependencies map[types.Object]bool
 	minify       bool
 	fileSet      *token.FileSet
 	errList      ErrorList
@@ -125,7 +126,6 @@ func newRootCtx(tContext *types.Context, srcs sources, typesInfo *types.Info, ty
 			varPtrNames:  make(map[*types.Var]string),
 			escapingVars: make(map[*types.Var]bool),
 			indentation:  1,
-			dependencies: nil,
 			minify:       minify,
 			fileSet:      srcs.FileSet,
 			instanceSet:  tc.Instances,

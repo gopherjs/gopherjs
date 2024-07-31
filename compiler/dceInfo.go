@@ -21,11 +21,15 @@ type dceInfo struct {
 	deps []string
 }
 
+// SetAsAlive marks the declaration as alive, meaning it will not be eliminated.
+// This must be done after the SetName method is called.
 func (d *dceInfo) SetAsAlive() {
 	d.objectFilter = ""
 	d.methodFilter = ""
 }
 
+// SetName sets the name used by DCE to represent the declaration
+// this DCE info is attached to.
 func (d *dceInfo) SetName(o types.Object) {
 	if typesutil.IsMethod(o) {
 		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
@@ -38,6 +42,9 @@ func (d *dceInfo) SetName(o types.Object) {
 	}
 }
 
+// SetDeps sets the declaration dependencies used by DCE
+// for the declaration this DCE info is attached to.
+// This overwrites any prior dependencies set so only call it once.
 func (d *dceInfo) SetDeps(objectSet map[types.Object]bool) {
 	var deps []string
 	for o := range objectSet {

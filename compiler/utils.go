@@ -103,8 +103,8 @@ func (fc *funcContext) Delayed(f func()) {
 }
 
 // CollectDCEDeps captures a list of Go objects (types, functions, etc.)
-// the code translated inside f() depends on. The sets the dependencies
-// on the given dead-code elimination badge.
+// the code translated inside f() depends on. Then sets those objects
+// as dependencies of the given dead-code elimination info.
 //
 // Note that calling CollectDCEDeps() inside another CollectDCEDeps() call is
 // not allowed.

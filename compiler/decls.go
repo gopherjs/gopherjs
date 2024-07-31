@@ -52,7 +52,7 @@ type Decl struct {
 	// set the symbol up (e.g. initialize package-level variable value).
 	InitCode []byte
 	// Dce stores the information and helpers for dead code elimination.
-	Dce dceInfo
+	dce dceInfo
 	// Set to true if a function performs a blocking operation (I/O or
 	// synchronization). The compiler will have to generate function code such
 	// that it can be resumed after a blocking operation completes without
@@ -233,7 +233,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 		}
 	}
 
-	fc.CollectDCEDeps(&d.Dce, func() {
+	fc.CollectDCEDeps(&d.dce, func() {
 		fc.localVars = nil
 		d.InitCode = fc.CatchOutput(1, func() {
 			fc.translateStmt(&ast.AssignStmt{
@@ -251,7 +251,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 
 	if len(init.Lhs) == 1 {
 		if !analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
-			d.Dce.SetName(init.Lhs[0])
+			d.dce.SetName(init.Lhs[0])
 		}
 	}
 	return &d
@@ -314,7 +314,7 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		Blocking:    fc.pkgCtx.IsBlocking(o),
 		LinkingName: symbol.New(o),
 	}
-	d.Dce.SetName(o)
+	d.dce.SetName(o)
 
 	if typesutil.IsMethod(o) {
 		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
@@ -324,15 +324,15 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		switch o.Name() {
 		case "main":
 			if fc.pkgCtx.isMain() { // Found main() function of the program.
-				d.Dce.SetAsAlive() // Always reachable.
+				d.dce.SetAsAlive() // Always reachable.
 			}
 		case "init":
 			d.InitCode = fc.CatchOutput(1, func() { fc.translateStmt(fc.callInitFunc(o), nil) })
-			d.Dce.SetAsAlive() // init() function is always reachable.
+			d.dce.SetAsAlive() // init() function is always reachable.
 		}
 	}
 
-	fc.CollectDCEDeps(&d.Dce, func() {
+	fc.CollectDCEDeps(&d.dce, func() {
 		d.DeclCode = fc.translateTopLevelFunction(fun, inst)
 	})
 	return d
@@ -444,8 +444,8 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 
 	underlying := instanceType.Underlying()
 	d := &Decl{}
-	d.Dce.SetName(inst.Object)
-	fc.CollectDCEDeps(&d.Dce, func() {
+	d.dce.SetName(inst.Object)
+	fc.CollectDCEDeps(&d.dce, func() {
 		// Code that declares a JS type (i.e. prototype) for each Go type.
 		d.DeclCode = fc.CatchOutput(0, func() {
 			size := int64(0)
@@ -567,8 +567,8 @@ func (fc *funcContext) anonTypeDecls(anonTypes []*types.TypeName) []*Decl {
 		d := Decl{
 			Vars: []string{t.Name()},
 		}
-		d.Dce.SetName(t)
-		fc.CollectDCEDeps(&d.Dce, func() {
+		d.dce.SetName(t)
+		fc.CollectDCEDeps(&d.dce, func() {
 			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type())))
 		})
 		decls = append(decls, &d)

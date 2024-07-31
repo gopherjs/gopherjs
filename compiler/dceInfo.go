@@ -62,7 +62,7 @@ func SelectAliveDecls(pkgs []*Archive, gls goLinknameSet) map[*Decl]struct{} {
 	var pendingDecls []*Decl // A queue of live decls to find other live decls.
 	for _, pkg := range pkgs {
 		for _, d := range pkg.Declarations {
-			if d.Dce.objectFilter == "" && d.Dce.methodFilter == "" {
+			if d.dce.objectFilter == "" && d.dce.methodFilter == "" {
 				// This is an entry point (like main() or init() functions) or a variable
 				// initializer which has a side effect, consider it live.
 				pendingDecls = append(pendingDecls, d)
@@ -76,12 +76,12 @@ func SelectAliveDecls(pkgs []*Archive, gls goLinknameSet) map[*Decl]struct{} {
 				pendingDecls = append(pendingDecls, d)
 			}
 			info := &dceDeclInfo{decl: d}
-			if d.Dce.objectFilter != "" {
-				info.objectFilter = pkg.ImportPath + "." + d.Dce.objectFilter
+			if d.dce.objectFilter != "" {
+				info.objectFilter = pkg.ImportPath + "." + d.dce.objectFilter
 				byFilter[info.objectFilter] = append(byFilter[info.objectFilter], info)
 			}
-			if d.Dce.methodFilter != "" {
-				info.methodFilter = pkg.ImportPath + "." + d.Dce.methodFilter
+			if d.dce.methodFilter != "" {
+				info.methodFilter = pkg.ImportPath + "." + d.dce.methodFilter
 				byFilter[info.methodFilter] = append(byFilter[info.methodFilter], info)
 			}
 		}
@@ -96,7 +96,7 @@ func SelectAliveDecls(pkgs []*Archive, gls goLinknameSet) map[*Decl]struct{} {
 
 		// Consider all decls the current one is known to depend on and possible add
 		// them to the live queue.
-		for _, dep := range d.Dce.deps {
+		for _, dep := range d.dce.deps {
 			if infos, ok := byFilter[dep]; ok {
 				delete(byFilter, dep)
 				for _, info := range infos {

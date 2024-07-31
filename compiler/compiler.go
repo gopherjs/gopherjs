@@ -125,12 +125,6 @@ func ImportDependencies(archive *Archive, importPkg func(string) (*Archive, erro
 	return deps, nil
 }
 
-type dceInfo struct {
-	decl         *Decl
-	objectFilter string
-	methodFilter string
-}
-
 func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified
@@ -141,61 +135,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 		gls.Add(pkg.GoLinknames)
 	}
 
-	byFilter := make(map[string][]*dceInfo)
-	var pendingDecls []*Decl // A queue of live decls to find other live decls.
-	for _, pkg := range pkgs {
-		for _, d := range pkg.Declarations {
-			if d.DceObjectFilter == "" && d.DceMethodFilter == "" {
-				// This is an entry point (like main() or init() functions) or a variable
-				// initializer which has a side effect, consider it live.
-				pendingDecls = append(pendingDecls, d)
-				continue
-			}
-			if gls.IsImplementation(d.LinkingName) {
-				// If a decl is referenced by a go:linkname directive, we just assume
-				// it's not dead.
-				// TODO(nevkontakte): This is a safe, but imprecise assumption. We should
-				// try and trace whether the referencing functions are actually live.
-				pendingDecls = append(pendingDecls, d)
-			}
-			info := &dceInfo{decl: d}
-			if d.DceObjectFilter != "" {
-				info.objectFilter = pkg.ImportPath + "." + d.DceObjectFilter
-				byFilter[info.objectFilter] = append(byFilter[info.objectFilter], info)
-			}
-			if d.DceMethodFilter != "" {
-				info.methodFilter = pkg.ImportPath + "." + d.DceMethodFilter
-				byFilter[info.methodFilter] = append(byFilter[info.methodFilter], info)
-			}
-		}
-	}
-
-	dceSelection := make(map[*Decl]struct{}) // Known live decls.
-	for len(pendingDecls) != 0 {
-		d := pendingDecls[len(pendingDecls)-1]
-		pendingDecls = pendingDecls[:len(pendingDecls)-1]
-
-		dceSelection[d] = struct{}{} // Mark the decl as live.
-
-		// Consider all decls the current one is known to depend on and possible add
-		// them to the live queue.
-		for _, dep := range d.DceDeps {
-			if infos, ok := byFilter[dep]; ok {
-				delete(byFilter, dep)
-				for _, info := range infos {
-					if info.objectFilter == dep {
-						info.objectFilter = ""
-					}
-					if info.methodFilter == dep {
-						info.methodFilter = ""
-					}
-					if info.objectFilter == "" && info.methodFilter == "" {
-						pendingDecls = append(pendingDecls, info.decl)
-					}
-				}
-			}
-		}
-	}
+	dceSelection := SelectAliveDecls(pkgs, gls)
 
 	if _, err := w.Write([]byte("\"use strict\";\n(function() {\n\n")); err != nil {
 		return err

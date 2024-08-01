@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
 	"golang.org/x/tools/go/gcexportdata"
 )
@@ -135,7 +136,20 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 		gls.Add(pkg.GoLinknames)
 	}
 
-	dceSelection := SelectAliveDecls(pkgs, gls)
+	sel := &dce.Selector[*Decl]{}
+	for _, pkg := range pkgs {
+		for _, d := range pkg.Declarations {
+			if gls.IsImplementation(d.LinkingName) {
+				// If a decl is referenced by a go:linkname directive, we just assume
+				// it's not dead.
+				// TODO(nevkontakte): This is a safe, but imprecise assumption. We should
+				// try and trace whether the referencing functions are actually live.
+				d.Dce().SetAsAlive()
+			}
+			sel.Include(d)
+		}
+	}
+	dceSelection := sel.AliveDecls()
 
 	if _, err := w.Write([]byte("\"use strict\";\n(function() {\n\n")); err != nil {
 		return err

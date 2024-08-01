@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
@@ -51,8 +52,8 @@ type Decl struct {
 	// JavaScript code that needs to be executed during the package init phase to
 	// set the symbol up (e.g. initialize package-level variable value).
 	InitCode []byte
-	// Dce stores the information and helpers for dead code elimination.
-	dce dceInfo
+	// dce stores the information for dead-code elimination.
+	dce dce.Info
 	// Set to true if a function performs a blocking operation (I/O or
 	// synchronization). The compiler will have to generate function code such
 	// that it can be resumed after a blocking operation completes without
@@ -68,6 +69,11 @@ func (d Decl) minify() Decl {
 	d.TypeInitCode = removeWhitespace(d.TypeInitCode, true)
 	d.InitCode = removeWhitespace(d.InitCode, true)
 	return d
+}
+
+// Dce gets the information for dead-code elimination.
+func (d *Decl) Dce() *dce.Info {
+	return &d.dce
 }
 
 // topLevelObjects extracts package-level variables, functions and named types
@@ -233,7 +239,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 		}
 	}
 
-	fc.CollectDCEDeps(&d.dce, func() {
+	fc.CollectDCEDeps(d.Dce(), func() {
 		fc.localVars = nil
 		d.InitCode = fc.CatchOutput(1, func() {
 			fc.translateStmt(&ast.AssignStmt{
@@ -251,7 +257,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 
 	if len(init.Lhs) == 1 {
 		if !analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
-			d.dce.SetName(init.Lhs[0])
+			d.Dce().SetName(init.Lhs[0])
 		}
 	}
 	return &d
@@ -314,7 +320,7 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		Blocking:    fc.pkgCtx.IsBlocking(o),
 		LinkingName: symbol.New(o),
 	}
-	d.dce.SetName(o)
+	d.Dce().SetName(o)
 
 	if typesutil.IsMethod(o) {
 		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
@@ -324,15 +330,15 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		switch o.Name() {
 		case "main":
 			if fc.pkgCtx.isMain() { // Found main() function of the program.
-				d.dce.SetAsAlive() // Always reachable.
+				d.Dce().SetAsAlive() // Always reachable.
 			}
 		case "init":
 			d.InitCode = fc.CatchOutput(1, func() { fc.translateStmt(fc.callInitFunc(o), nil) })
-			d.dce.SetAsAlive() // init() function is always reachable.
+			d.Dce().SetAsAlive() // init() function is always reachable.
 		}
 	}
 
-	fc.CollectDCEDeps(&d.dce, func() {
+	fc.CollectDCEDeps(d.Dce(), func() {
 		d.DeclCode = fc.translateTopLevelFunction(fun, inst)
 	})
 	return d
@@ -444,8 +450,8 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 
 	underlying := instanceType.Underlying()
 	d := &Decl{}
-	d.dce.SetName(inst.Object)
-	fc.CollectDCEDeps(&d.dce, func() {
+	d.Dce().SetName(inst.Object)
+	fc.CollectDCEDeps(d.Dce(), func() {
 		// Code that declares a JS type (i.e. prototype) for each Go type.
 		d.DeclCode = fc.CatchOutput(0, func() {
 			size := int64(0)
@@ -567,8 +573,8 @@ func (fc *funcContext) anonTypeDecls(anonTypes []*types.TypeName) []*Decl {
 		d := Decl{
 			Vars: []string{t.Name()},
 		}
-		d.dce.SetName(t)
-		fc.CollectDCEDeps(&d.dce, func() {
+		d.Dce().SetName(t)
+		fc.CollectDCEDeps(d.Dce(), func() {
 			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type())))
 		})
 		decls = append(decls, &d)

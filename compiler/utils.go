@@ -19,6 +19,7 @@ import (
 	"unicode"
 
 	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
@@ -108,7 +109,7 @@ func (fc *funcContext) Delayed(f func()) {
 //
 // Note that calling CollectDCEDeps() inside another CollectDCEDeps() call is
 // not allowed.
-func (fc *funcContext) CollectDCEDeps(dce *dceInfo, f func()) {
+func (fc *funcContext) CollectDCEDeps(dce *dce.Info, f func()) {
 	if fc.pkgCtx.dependencies != nil {
 		panic(bailout(fmt.Errorf("called funcContext.CollectDependencies() inside another funcContext.CollectDependencies() call")))
 	}

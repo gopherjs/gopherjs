@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 	"golang.org/x/tools/go/packages"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
@@ -846,11 +847,10 @@ func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPa
 	// the old recursive archive loading that is no longer used since it
 	// doesn't allow cross package analysis for generings.
 
-	buildTime := newTime(5.0)
 	serialized := map[string][]byte{}
 	for path, a := range archives {
 		buf := &bytes.Buffer{}
-		if err := WriteArchive(a, buildTime, buf); err != nil {
+		if err := WriteArchive(a, buf); err != nil {
 			t.Fatalf(`failed to write archive for %s: %v`, path, err)
 		}
 		serialized[path] = buf.Bytes()
@@ -903,7 +903,7 @@ func renderPackage(t *testing.T, archive *Archive, minify bool) string {
 
 	buf := &bytes.Buffer{}
 
-	if err := WritePkgCode(archive, selection, linkname.GoLinknameSet{}, minify, &SourceMapFilter{Writer: buf}); err != nil {
+	if err := WritePkgCode(archive, selection, linkname.GoLinknameSet{}, minify, &sourcemapx.Filter{Writer: buf}); err != nil {
 		t.Fatal(err)
 	}
 

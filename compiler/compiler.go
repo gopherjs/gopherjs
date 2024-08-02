@@ -7,7 +7,6 @@ package compiler
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
@@ -20,6 +19,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 	"golang.org/x/tools/go/gcexportdata"
 )
 
@@ -108,7 +108,13 @@ func ImportDependencies(archive *Archive, importPkg func(string) (*Archive, erro
 	return deps, nil
 }
 
-func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) error {
+type dceInfo struct {
+	decl         *Decl
+	objectFilter string
+	methodFilter string
+}
+
+func WriteProgramCode(pkgs []*Archive, w *sourcemapx.Filter, goVersion string) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified
 
@@ -165,9 +171,9 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	return nil
 }
 
-func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.GoLinknameSet, minify bool, w *SourceMapFilter) error {
+func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.GoLinknameSet, minify bool, w *sourcemapx.Filter) error {
 	if w.MappingCallback != nil && pkg.FileSet != nil {
-		w.fileSet = pkg.FileSet
+		w.FileSet = pkg.FileSet
 	}
 	if _, err := w.Write(pkg.IncJSCode); err != nil {
 		return err
@@ -316,77 +322,6 @@ func ReadArchive(importPath string, r io.Reader, srcModTime time.Time, imports m
 }
 
 // WriteArchive writes compiled package archive on disk for later reuse.
-//
-// The passed in buildTime is used to determine if the archive is out-of-date.
-// Typically it should be set to the srcModTime or time.Now() but it is exposed for testing purposes.
-func WriteArchive(a *Archive, buildTime time.Time, w io.Writer) error {
-	exportData := new(bytes.Buffer)
-	if a.Package != nil {
-		if err := gcexportdata.Write(exportData, nil, a.Package); err != nil {
-			return fmt.Errorf("failed to write export data: %w", err)
-		}
-	}
-
-	encodedFileSet := new(bytes.Buffer)
-	if a.FileSet != nil {
-		if err := a.FileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
-			return err
-		}
-	}
-
-	sa := serializableArchive{
-		ImportPath:   a.ImportPath,
-		Name:         a.Name,
-		Imports:      a.Imports,
-		ExportData:   exportData.Bytes(),
-		Declarations: a.Declarations,
-		IncJSCode:    a.IncJSCode,
-		FileSet:      encodedFileSet.Bytes(),
-		Minified:     a.Minified,
-		GoLinknames:  a.GoLinknames,
-		BuildTime:    buildTime,
-	}
-
-	return gob.NewEncoder(w).Encode(sa)
-}
-
-type SourceMapFilter struct {
-	Writer          io.Writer
-	MappingCallback func(generatedLine, generatedColumn int, originalPos token.Position)
-	line            int
-	column          int
-	fileSet         *token.FileSet
-}
-
-func (f *SourceMapFilter) Write(p []byte) (n int, err error) {
-	var n2 int
-	for {
-		i := bytes.IndexByte(p, '\b')
-		w := p
-		if i != -1 {
-			w = p[:i]
-		}
-
-		n2, err = f.Writer.Write(w)
-		n += n2
-		for {
-			i := bytes.IndexByte(w, '\n')
-			if i == -1 {
-				f.column += len(w)
-				break
-			}
-			f.line++
-			f.column = 0
-			w = w[i+1:]
-		}
-
-		if err != nil || i == -1 {
-			return
-		}
-		if f.MappingCallback != nil {
-			f.MappingCallback(f.line+1, f.column, f.fileSet.Position(token.Pos(binary.BigEndian.Uint32(p[i+1:i+5]))))
-		}
-		p = p[i+5:]
-		n += 5
-	}
+func WriteArchive(a *Archive, w io.Writer) error {
+	return gob.NewEncoder(w).Encode(a)
 }

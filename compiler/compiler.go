@@ -7,7 +7,6 @@ package compiler
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gopherjs/gopherjs/compiler/prelude"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 	"golang.org/x/tools/go/gcexportdata"
 )
 
@@ -131,7 +131,7 @@ type dceInfo struct {
 	methodFilter string
 }
 
-func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) error {
+func WriteProgramCode(pkgs []*Archive, w *sourcemapx.Filter, goVersion string) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified
 
@@ -228,10 +228,10 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	return nil
 }
 
-func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameSet, minify bool, w *SourceMapFilter) error {
+func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameSet, minify bool, w *sourcemapx.Filter) error {
 	if w.MappingCallback != nil && pkg.FileSet != nil {
-		w.fileSet = token.NewFileSet()
-		if err := w.fileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
+		w.FileSet = token.NewFileSet()
+		if err := w.FileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
 			panic(err)
 		}
 	}
@@ -335,45 +335,4 @@ func ReadArchive(path string, r io.Reader) (*Archive, error) {
 // WriteArchive writes compiled package archive on disk for later reuse.
 func WriteArchive(a *Archive, w io.Writer) error {
 	return gob.NewEncoder(w).Encode(a)
-}
-
-type SourceMapFilter struct {
-	Writer          io.Writer
-	MappingCallback func(generatedLine, generatedColumn int, originalPos token.Position)
-	line            int
-	column          int
-	fileSet         *token.FileSet
-}
-
-func (f *SourceMapFilter) Write(p []byte) (n int, err error) {
-	var n2 int
-	for {
-		i := bytes.IndexByte(p, '\b')
-		w := p
-		if i != -1 {
-			w = p[:i]
-		}
-
-		n2, err = f.Writer.Write(w)
-		n += n2
-		for {
-			i := bytes.IndexByte(w, '\n')
-			if i == -1 {
-				f.column += len(w)
-				break
-			}
-			f.line++
-			f.column = 0
-			w = w[i+1:]
-		}
-
-		if err != nil || i == -1 {
-			return
-		}
-		if f.MappingCallback != nil {
-			f.MappingCallback(f.line+1, f.column, f.fileSet.Position(token.Pos(binary.BigEndian.Uint32(p[i+1:i+5]))))
-		}
-		p = p[i+5:]
-		n += 5
-	}
 }

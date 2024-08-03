@@ -23,6 +23,11 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
+// We use this character as a separator in synthetic identifiers instead of a
+// regular dot. This character is safe for use in JS identifiers and helps to
+// visually separate components of the name when it appears in a stack trace.
+const midDot = "·"
+
 // root returns the topmost function context corresponding to the package scope.
 func (fc *funcContext) root() *funcContext {
 	if fc.isRoot() {
@@ -376,6 +381,25 @@ func (fc *funcContext) newTypeIdent(name string, obj types.Object) *ast.Ident {
 	return ident
 }
 
+// newLitFuncName generates a new synthetic name for a function literal.
+func (fc *funcContext) newLitFuncName() string {
+	fc.funcLitCounter++
+	name := &strings.Builder{}
+
+	// If function literal is defined inside another function, qualify its
+	// synthetic name with the outer function to make it easier to identify.
+	if fc.instance.Object != nil {
+		if recvType := typesutil.RecvType(fc.sig.Sig); recvType != nil {
+			name.WriteString(recvType.Obj().Name())
+			name.WriteString(midDot)
+		}
+		name.WriteString(fc.instance.Object.Name())
+		name.WriteString(midDot)
+	}
+	fmt.Fprintf(name, "func%d", fc.funcLitCounter)
+	return name.String()
+}
+
 func (fc *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
 	fc.pkgCtx.Types[e] = types.TypeAndValue{Type: t}
 	return e
@@ -472,6 +496,21 @@ func (fc *funcContext) instName(inst typeparams.Instance) string {
 		return objName
 	}
 	return fmt.Sprintf("%s[%d /* %v */]", objName, fc.pkgCtx.instanceSet.ID(inst), inst.TArgs)
+}
+
+// methodName returns a JS identifier (specifically, object property name)
+// corresponding to the given method.
+func (fc *funcContext) methodName(fun *types.Func) string {
+	if fun.Type().(*types.Signature).Recv() == nil {
+		panic(fmt.Errorf("expected a method, got a standalone function %v", fun))
+	}
+	name := fun.Name()
+	// Method names are scoped to their receiver type and guaranteed to be
+	// unique within that, so we only need to make sure it's not a reserved keyword
+	if reservedKeywords[name] {
+		name += "$"
+	}
+	return name
 }
 
 func (fc *funcContext) varPtrName(o *types.Var) string {
@@ -894,7 +933,15 @@ func rangeCheck(pattern string, constantIndex, array bool) string {
 }
 
 func encodeIdent(name string) string {
-	return strings.Replace(url.QueryEscape(name), "%", "$", -1)
+	// Quick-and-dirty way to make any string safe for use as an identifier in JS.
+	name = url.QueryEscape(name)
+	// We use unicode middle dot as a visual separator in synthetic identifiers.
+	// It is safe for use in a JS identifier, so we un-encode it for readability.
+	name = strings.ReplaceAll(name, "%C2%B7", midDot)
+	// QueryEscape uses '%' before hex-codes of escaped characters, which is not
+	// allowed in a JS identifier, use '$' instead.
+	name = strings.ReplaceAll(name, "%", "$")
+	return name
 }
 
 // formatJSStructTagVal returns JavaScript code for accessing an object's property
@@ -979,4 +1026,14 @@ func bailout(cause interface{}) *FatalError {
 func bailingOut(err interface{}) (*FatalError, bool) {
 	fe, ok := err.(*FatalError)
 	return fe, ok
+}
+
+func removeMatching[T comparable](haystack []T, needle T) []T {
+	var result []T
+	for _, el := range haystack {
+		if el != needle {
+			result = append(result, el)
+		}
+	}
+	return result
 }

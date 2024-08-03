@@ -359,10 +359,10 @@ func (fc *funcContext) newLitFuncName() string {
 	if fc.instance.Object != nil {
 		if recvType := typesutil.RecvType(fc.sig.Sig); recvType != nil {
 			name.WriteString(recvType.Obj().Name())
-			name.WriteString(midDot)
+			name.WriteString(".")
 		}
 		name.WriteString(fc.instance.Object.Name())
-		name.WriteString(midDot)
+		name.WriteString(".")
 	}
 	fmt.Fprintf(name, "func%d", fc.funcLitCounter)
 	return name.String()

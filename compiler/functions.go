@@ -61,13 +61,11 @@ func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, inst typep
 	// Synthesize an identifier by which the function may reference itself. Since
 	// it appears in the stack trace, it's useful to include the receiver type in
 	// it.
-	funcRef := o.Name()
-	if recvType := typesutil.RecvType(sig); recvType != nil {
-		funcRef = recvType.Obj().Name() + midDot + funcRef
-	}
+	funcRef := strings.ReplaceAll(o.Name(), ".", midDot)
 	c.funcRef = sourcemapx.Identifier{
-		Name:         c.newVariable(funcRef, true /*pkgLevel*/),
-		OriginalName: o.FullName(),
+		Name: c.newVariable(funcRef, true /*pkgLevel*/),
+		// o.FullName() decorates pointer receivers as `(*T).method`, we want simply `T.method`.
+		OriginalName: strings.NewReplacer("(", "", ")", "", "*", "").Replace(o.FullName()),
 		OriginalPos:  o.Pos(),
 	}
 
@@ -269,7 +267,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 
 		fc.translateStmtList(body.List)
 		if len(fc.Flattened) != 0 && !astutil.EndsWithReturn(body.List) {
-			fc.translateStmt(&ast.ReturnStmt{}, nil)
+			fc.translateStmt(&ast.ReturnStmt{Return: body.Rbrace}, nil)
 		}
 	}))
 

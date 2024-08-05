@@ -14,6 +14,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/gopherjs/gopherjs/internal/experiments"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 	"golang.org/x/tools/go/gcexportdata"
 	"golang.org/x/tools/go/types/typeutil"
 )
@@ -61,7 +62,7 @@ type funcContext struct {
 	// "function" keyword in the generated code). This identifier can be used
 	// within the function scope to reference the function object. It will also
 	// appear in the stack trace.
-	funcRef string
+	funcRef sourcemapx.Identifier
 	// Surrounding package context.
 	pkgCtx *pkgContext
 	// Function context, surrounding this function definition. For package-level

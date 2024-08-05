@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 	"golang.org/x/tools/go/loader"
 )
 
@@ -138,7 +139,7 @@ func renderPackage(archive *Archive) ([]byte, error) {
 
 	buf := &bytes.Buffer{}
 
-	if err := WritePkgCode(archive, selection, goLinknameSet{}, false, &SourceMapFilter{Writer: buf}); err != nil {
+	if err := WritePkgCode(archive, selection, goLinknameSet{}, false, &sourcemapx.Filter{Writer: buf}); err != nil {
 		return nil, err
 	}
 

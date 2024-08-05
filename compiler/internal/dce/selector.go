@@ -1,5 +1,11 @@
 package dce
 
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+
 // Decl is any code declaration that has dead-code elimination (DCE)
 // information attached to it.
 // Since this will be used in a set, it must also be comparable.
@@ -23,16 +29,24 @@ type declInfo[D Decl] struct {
 }
 
 // Include will add a new declaration to be checked as alive or not.
-func (s *Selector[D]) Include(decl D) {
+func (s *Selector[D]) Include(decl D, implementsLink bool) {
 	if s.byFilter == nil {
 		s.byFilter = make(map[string][]*declInfo[D])
 	}
 
 	dce := decl.Dce()
 
+	if dce.uninitialized() { // TOD(gn): Remove
+		fmt.Printf("dce: declaration is uninitialized: %#v\n", decl)
+	}
+
 	if dce.isAlive() {
 		s.pendingDecls = append(s.pendingDecls, decl)
 		return
+	}
+
+	if implementsLink {
+		s.pendingDecls = append(s.pendingDecls, decl)
 	}
 
 	info := &declInfo[D]{decl: decl}
@@ -85,5 +99,18 @@ func (s *Selector[D]) AliveDecls() map[D]struct{} {
 			}
 		}
 	}
+
+	// TODO(gn): Remove
+	strs := make([]string, 0, len(dceSelection))
+	for d := range dceSelection {
+		if len(d.Dce().fullName) > 0 {
+			strs = append(strs, d.Dce().String())
+		} else {
+			strs = append(strs, fmt.Sprintf(`%#v`, d))
+		}
+	}
+	sort.Strings(strs)
+	fmt.Println(strings.Join(strs, "\n"))
+
 	return dceSelection
 }

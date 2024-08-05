@@ -1,8 +1,10 @@
 package dce
 
 import (
+	"fmt"
 	"go/types"
 	"sort"
+	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
@@ -10,6 +12,8 @@ import (
 // Info contains information used by the dead-code elimination (DCE) logic to
 // determine whether a declaration is alive or dead.
 type Info struct {
+	alive    bool
+	fullName string
 
 	// importPath is the package path of the package the declaration is in.
 	importPath string
@@ -28,9 +32,17 @@ type Info struct {
 	deps []string
 }
 
+func (d *Info) String() string {
+	return fmt.Sprintf(`%s -> [%s]`, d.fullName, strings.Join(d.deps, `, `))
+}
+
+func (d *Info) uninitialized() bool {
+	return d.objectFilter == "" && d.methodFilter == "" && !d.alive
+}
+
 // isAlive returns true if the declaration is marked as alive.
 func (d *Info) isAlive() bool {
-	return d.objectFilter == "" && d.methodFilter == ""
+	return d.alive
 }
 
 // SetAsAlive marks the declaration as alive, meaning it will not be eliminated.
@@ -39,8 +51,9 @@ func (d *Info) isAlive() bool {
 // This should be called by an entry point (like main() or init() functions)
 // or a variable initializer which has a side effect, consider it live.
 func (d *Info) SetAsAlive() {
-	d.objectFilter = ""
-	d.methodFilter = ""
+	d.alive = true
+	//d.objectFilter = ""
+	//d.methodFilter = ""
 }
 
 // SetName sets the name used by DCE to represent the declaration
@@ -55,6 +68,11 @@ func (d *Info) SetName(o types.Object) {
 		}
 	} else {
 		d.objectFilter = o.Name()
+	}
+
+	d.fullName = d.importPath + "." + d.objectFilter
+	if len(d.methodFilter) > 0 {
+		d.fullName += `.` + d.methodFilter
 	}
 }
 

@@ -139,14 +139,15 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	sel := &dce.Selector[*Decl]{}
 	for _, pkg := range pkgs {
 		for _, d := range pkg.Declarations {
+			implementsLink := false
 			if gls.IsImplementation(d.LinkingName) {
 				// If a decl is referenced by a go:linkname directive, we just assume
 				// it's not dead.
 				// TODO(nevkontakte): This is a safe, but imprecise assumption. We should
 				// try and trace whether the referencing functions are actually live.
-				d.Dce().SetAsAlive()
+				implementsLink = true
 			}
-			sel.Include(d)
+			sel.Include(d, implementsLink)
 		}
 	}
 	dceSelection := sel.AliveDecls()

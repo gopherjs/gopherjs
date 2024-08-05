@@ -159,11 +159,14 @@ func (fc *funcContext) importDecls() (importedPaths []string, importDecls []*Dec
 // newImportDecl registers the imported package and returns a Decl instance for it.
 func (fc *funcContext) newImportDecl(importedPkg *types.Package) *Decl {
 	pkgVar := fc.importedPkgVar(importedPkg)
-	return &Decl{
+	//fmt.Println(`>>> newImportDecl:`, pkgVar) // TODO(gn): Remove
+	d := &Decl{
 		Vars:     []string{pkgVar},
 		DeclCode: []byte(fmt.Sprintf("\t%s = $packages[\"%s\"];\n", pkgVar, importedPkg.Path())),
 		InitCode: fc.CatchOutput(1, func() { fc.translateStmt(fc.importInitializer(importedPkg.Path()), nil) }),
 	}
+	d.Dce().SetAsAlive()
+	return d
 }
 
 // importInitializer calls the imported package $init() function to ensure it is
@@ -255,9 +258,10 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 		fc.localVars = nil // Clean up after ourselves.
 	})
 
+	d.Dce().SetName(init.Lhs[0])
 	if len(init.Lhs) == 1 {
-		if !analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
-			d.Dce().SetName(init.Lhs[0])
+		if analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
+			d.Dce().SetAsAlive()
 		}
 	}
 	return &d
@@ -278,9 +282,8 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 		if fun.Recv == nil {
 			// Auxiliary decl shared by all instances of the function that defines
 			// package-level variable by which they all are referenced.
-			// TODO(nevkontakte): Set DCE attributes such that it is eliminated if all
-			// instances are dead.
 			varDecl := Decl{}
+			varDecl.Dce().SetName(o)
 			varDecl.Vars = []string{fc.objectName(o)}
 			if o.Type().(*types.Signature).TypeParams().Len() != 0 {
 				varDecl.DeclCode = fc.CatchOutput(0, func() {

@@ -1,13 +1,7 @@
 package dce
 
-import (
-	"fmt"
-	"sort"
-	"strings"
-)
-
-// Decl is any code declaration that has dead-code elimination (DCE)
-// information attached to it.
+// Decl is type constraint for any code declaration that has
+// dead-code elimination (DCE) information attached to it.
 // Since this will be used in a set, it must also be comparable.
 type Decl interface {
 	Dce() *Info
@@ -36,10 +30,6 @@ func (s *Selector[D]) Include(decl D, implementsLink bool) {
 
 	dce := decl.Dce()
 
-	if dce.uninitialized() { // TOD(gn): Remove
-		fmt.Printf("dce: declaration is uninitialized: %#v\n", decl)
-	}
-
 	if dce.isAlive() {
 		s.pendingDecls = append(s.pendingDecls, decl)
 		return
@@ -51,13 +41,13 @@ func (s *Selector[D]) Include(decl D, implementsLink bool) {
 
 	info := &declInfo[D]{decl: decl}
 
-	if dce.objectFilter != "" {
-		info.objectFilter = dce.importPath + "." + dce.objectFilter
+	if dce.objectFilter != `` {
+		info.objectFilter = dce.importPath + `.` + dce.objectFilter
 		s.byFilter[info.objectFilter] = append(s.byFilter[info.objectFilter], info)
 	}
 
-	if dce.methodFilter != "" {
-		info.methodFilter = dce.importPath + "." + dce.methodFilter
+	if dce.methodFilter != `` {
+		info.methodFilter = dce.importPath + `.` + dce.methodFilter
 		s.byFilter[info.methodFilter] = append(s.byFilter[info.methodFilter], info)
 	}
 }
@@ -87,30 +77,17 @@ func (s *Selector[D]) AliveDecls() map[D]struct{} {
 				delete(s.byFilter, dep)
 				for _, info := range infos {
 					if info.objectFilter == dep {
-						info.objectFilter = ""
+						info.objectFilter = ``
 					}
 					if info.methodFilter == dep {
-						info.methodFilter = ""
+						info.methodFilter = ``
 					}
-					if info.objectFilter == "" && info.methodFilter == "" {
+					if info.objectFilter == `` && info.methodFilter == `` {
 						s.pendingDecls = append(s.pendingDecls, info.decl)
 					}
 				}
 			}
 		}
 	}
-
-	// TODO(gn): Remove
-	strs := make([]string, 0, len(dceSelection))
-	for d := range dceSelection {
-		if len(d.Dce().fullName) > 0 {
-			strs = append(strs, d.Dce().String())
-		} else {
-			strs = append(strs, fmt.Sprintf(`%#v`, d))
-		}
-	}
-	sort.Strings(strs)
-	fmt.Println(strings.Join(strs, "\n"))
-
 	return dceSelection
 }

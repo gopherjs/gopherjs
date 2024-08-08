@@ -159,7 +159,6 @@ func (fc *funcContext) importDecls() (importedPaths []string, importDecls []*Dec
 // newImportDecl registers the imported package and returns a Decl instance for it.
 func (fc *funcContext) newImportDecl(importedPkg *types.Package) *Decl {
 	pkgVar := fc.importedPkgVar(importedPkg)
-	//fmt.Println(`>>> newImportDecl:`, pkgVar) // TODO(gn): Remove
 	d := &Decl{
 		Vars:     []string{pkgVar},
 		DeclCode: []byte(fmt.Sprintf("\t%s = $packages[\"%s\"];\n", pkgVar, importedPkg.Path())),
@@ -242,7 +241,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 		}
 	}
 
-	fc.CollectDCEDeps(d.Dce(), func() {
+	fc.pkgCtx.CollectDCEDeps(d.Dce(), func() {
 		fc.localVars = nil
 		d.InitCode = fc.CatchOutput(1, func() {
 			fc.translateStmt(&ast.AssignStmt{
@@ -259,10 +258,8 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 	})
 
 	d.Dce().SetName(init.Lhs[0])
-	if len(init.Lhs) == 1 {
-		if analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
-			d.Dce().SetAsAlive()
-		}
+	if len(init.Lhs) != 1 || analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
+		d.Dce().SetAsAlive()
 	}
 	return &d
 }
@@ -341,7 +338,7 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		}
 	}
 
-	fc.CollectDCEDeps(d.Dce(), func() {
+	fc.pkgCtx.CollectDCEDeps(d.Dce(), func() {
 		d.DeclCode = fc.translateTopLevelFunction(fun, inst)
 	})
 	return d
@@ -454,7 +451,7 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 	underlying := instanceType.Underlying()
 	d := &Decl{}
 	d.Dce().SetName(inst.Object)
-	fc.CollectDCEDeps(d.Dce(), func() {
+	fc.pkgCtx.CollectDCEDeps(d.Dce(), func() {
 		// Code that declares a JS type (i.e. prototype) for each Go type.
 		d.DeclCode = fc.CatchOutput(0, func() {
 			size := int64(0)
@@ -577,7 +574,7 @@ func (fc *funcContext) anonTypeDecls(anonTypes []*types.TypeName) []*Decl {
 			Vars: []string{t.Name()},
 		}
 		d.Dce().SetName(t)
-		fc.CollectDCEDeps(d.Dce(), func() {
+		fc.pkgCtx.CollectDCEDeps(d.Dce(), func() {
 			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type())))
 		})
 		decls = append(decls, &d)

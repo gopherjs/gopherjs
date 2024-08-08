@@ -592,7 +592,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			return fc.formatExpr(`$methodVal(%s, "%s")`, fc.makeReceiver(e), sel.Obj().(*types.Func).Name())
 		case types.MethodExpr:
 			if !sel.Obj().Exported() {
-				fc.DeclareDCEDep(sel.Obj())
+				fc.pkgCtx.DeclareDCEDep(sel.Obj())
 			}
 			if _, ok := sel.Recv().Underlying().(*types.Interface); ok {
 				return fc.formatExpr(`$ifaceMethodExpr("%s")`, sel.Obj().(*types.Func).Name())
@@ -911,7 +911,7 @@ func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, 
 func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 	sel, _ := fc.selectionOf(e)
 	if !sel.Obj().Exported() {
-		fc.DeclareDCEDep(sel.Obj())
+		fc.pkgCtx.DeclareDCEDep(sel.Obj())
 	}
 
 	x := e.X

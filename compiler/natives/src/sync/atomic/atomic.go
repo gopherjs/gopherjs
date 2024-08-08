@@ -220,20 +220,3 @@ func sameType(x, y interface{}) bool {
 	// existing and differing for different types.
 	return js.InternalObject(x).Get("constructor") == js.InternalObject(y).Get("constructor")
 }
-
-// Override pointer so that the type check in the source code is satisfied
-// but remove the fields and methods for go1.20 without generics.
-// See https://cs.opensource.google/go/go/+/refs/tags/go1.20.14:src/sync/atomic/type.go;l=40
-type Pointer[T any] struct{}
-
-//gopherjs:purge for go1.20 without generics
-func (x *Pointer[T]) Load() *T
-
-//gopherjs:purge for go1.20 without generics
-func (x *Pointer[T]) Store(val *T)
-
-//gopherjs:purge for go1.20 without generics
-func (x *Pointer[T]) Swap(new *T) (old *T)
-
-//gopherjs:purge for go1.20 without generics
-func (x *Pointer[T]) CompareAndSwap(old, new *T) (swapped bool)

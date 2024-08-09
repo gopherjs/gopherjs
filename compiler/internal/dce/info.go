@@ -17,6 +17,9 @@ type Info struct {
 	// and will not be eliminated.
 	alive bool
 
+	// obj is the Go object the declaration this DCE is for.
+	obj types.Object
+
 	// importPath is the package path of the package the declaration is in.
 	importPath string
 
@@ -29,9 +32,8 @@ type Info struct {
 	// Empty for other types of symbols.
 	methodFilter string
 
-	// List of fully qualified (including package path) DCE symbol identifiers the
-	// symbol depends on for dead code elimination purposes.
-	deps []string
+	// deps is the set of DCE info objects that this DCE depends on.
+	deps map[*Info]struct{}
 }
 
 // String gets a human-readable representation of the DCE info.
@@ -91,18 +93,22 @@ func (d *Info) SetName(o types.Object) {
 	}
 }
 
-// setDeps sets the declaration dependencies used by DCE
-// for the declaration this DCE info is attached to.
-// This overwrites any prior set dependencies.
-func (d *Info) setDeps(objectSet map[types.Object]struct{}) {
-	deps := make([]string, 0, len(objectSet))
-	for o := range objectSet {
+func (d *Info) getDepNames() []string {
+	depNames := make([]string, 0, len(d.deps))
+	for dep := range d.deps {
+		o := dep.obj
 		qualifiedName := o.Pkg().Path() + "." + o.Name()
 		if typesutil.IsMethod(o) {
 			qualifiedName += "~"
 		}
-		deps = append(deps, qualifiedName)
+		depNames = append(depNames, qualifiedName)
 	}
-	sort.Strings(deps)
-	d.deps = deps
+	sort.Strings(depNames)
+	return depNames
+}
+
+// addDep adds a declaration dependency for the declaration this
+// DCE info is attached to.
+func (d *Info) addDep(dep *Info) {
+	d.deps[dep] = struct{}{}
 }

@@ -1,22 +1,28 @@
 package dce
 
-// Decl is type constraint for any code declaration that has
+// Decl is type for any code declaration that has
+// dead-code elimination (DCE) information attached to it.
+type Decl interface {
+	Dce() *Info
+}
+
+// DeclConstraint is type constraint for any code declaration that has
 // dead-code elimination (DCE) information attached to it.
 // Since this will be used in a set, it must also be comparable.
-type Decl interface {
+type DeclConstraint interface {
 	Dce() *Info
 	comparable
 }
 
 // Selector gathers all declarations that are still alive after dead-code elimination.
-type Selector[D Decl] struct {
+type Selector[D DeclConstraint] struct {
 	byFilter map[string][]*declInfo[D]
 
 	// A queue of live decls to find other live decls.
 	pendingDecls []D
 }
 
-type declInfo[D Decl] struct {
+type declInfo[D DeclConstraint] struct {
 	decl         D
 	objectFilter string
 	methodFilter string
@@ -72,7 +78,8 @@ func (s *Selector[D]) AliveDecls() map[D]struct{} {
 
 		// Consider all decls the current one is known to depend on and possible add
 		// them to the live queue.
-		for _, dep := range dce.deps {
+		depNames := dce.getDepNames()
+		for _, dep := range depNames {
 			if infos, ok := s.byFilter[dep]; ok {
 				delete(s.byFilter, dep)
 				for _, info := range infos {

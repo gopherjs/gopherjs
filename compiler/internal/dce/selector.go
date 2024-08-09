@@ -1,16 +1,10 @@
 package dce
 
-// Decl is type for any code declaration that has
-// dead-code elimination (DCE) information attached to it.
-type Decl interface {
-	Dce() *Info
-}
-
 // DeclConstraint is type constraint for any code declaration that has
-// dead-code elimination (DCE) information attached to it.
-// Since this will be used in a set, it must also be comparable.
+// dead-code elimination (DCE) information attached to it and will be
+// used in a set.
 type DeclConstraint interface {
-	Dce() *Info
+	Decl
 	comparable
 }
 

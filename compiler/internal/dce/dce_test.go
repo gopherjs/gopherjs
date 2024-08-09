@@ -18,8 +18,8 @@ func Test_Collector_CalledOnce(t *testing.T) {
 	decl2 := &testDecl{}
 
 	err := capturePanic(t, func() {
-		c.CollectDCEDeps(decl1.Dce(), func() {
-			c.CollectDCEDeps(decl2.Dce(), func() {
+		c.CollectDCEDeps(decl1, func() {
+			c.CollectDCEDeps(decl2, func() {
 				t.Fatal(`the nested collect function was called`)
 			})
 		})
@@ -45,7 +45,7 @@ func Test_Collector_Collecting(t *testing.T) {
 	depCount(t, decl1, 0)
 	depCount(t, decl2, 0)
 
-	c.CollectDCEDeps(decl1.Dce(), func() {
+	c.CollectDCEDeps(decl1, func() {
 		c.DeclareDCEDep(obj2)
 		c.DeclareDCEDep(obj3)
 		c.DeclareDCEDep(obj3) // already added so has no effect.
@@ -57,7 +57,7 @@ func Test_Collector_Collecting(t *testing.T) {
 	depCount(t, decl1, 2)
 	depCount(t, decl2, 0)
 
-	c.CollectDCEDeps(decl2.Dce(), func() {
+	c.CollectDCEDeps(decl2, func() {
 		c.DeclareDCEDep(obj5)
 		c.DeclareDCEDep(obj6)
 		c.DeclareDCEDep(obj7)
@@ -66,7 +66,7 @@ func Test_Collector_Collecting(t *testing.T) {
 	depCount(t, decl2, 3)
 
 	// The second collection overwrites the first collection.
-	c.CollectDCEDeps(decl2.Dce(), func() {
+	c.CollectDCEDeps(decl2, func() {
 		c.DeclareDCEDep(obj5)
 	})
 	depCount(t, decl1, 2)
@@ -313,24 +313,24 @@ func Test_Selector_JustVars(t *testing.T) {
 	}
 
 	c := Collector{}
-	c.CollectDCEDeps(frodo.Dce(), func() {
+	c.CollectDCEDeps(frodo, func() {
 		c.DeclareDCEDep(samwise.obj)
 		c.DeclareDCEDep(meri.obj)
 		c.DeclareDCEDep(pippin.obj)
 	})
-	c.CollectDCEDeps(pippin.Dce(), func() {
+	c.CollectDCEDeps(pippin, func() {
 		c.DeclareDCEDep(meri.obj)
 	})
-	c.CollectDCEDeps(aragorn.Dce(), func() {
+	c.CollectDCEDeps(aragorn, func() {
 		c.DeclareDCEDep(boromir.obj)
 	})
-	c.CollectDCEDeps(gimli.Dce(), func() {
+	c.CollectDCEDeps(gimli, func() {
 		c.DeclareDCEDep(legolas.obj)
 	})
-	c.CollectDCEDeps(legolas.Dce(), func() {
+	c.CollectDCEDeps(legolas, func() {
 		c.DeclareDCEDep(gimli.obj)
 	})
-	c.CollectDCEDeps(gandalf.Dce(), func() {
+	c.CollectDCEDeps(gandalf, func() {
 		c.DeclareDCEDep(frodo.obj)
 		c.DeclareDCEDep(aragorn.obj)
 		c.DeclareDCEDep(gimli.obj)
@@ -449,16 +449,16 @@ func Test_Selector_SpecificMethods(t *testing.T) {
 	allDecls := []*testDecl{rincewind, rincewindRun, rincewindHide, vimes, vimesRun, vimesRead, vetinari}
 
 	c := Collector{}
-	c.CollectDCEDeps(rincewindRun.Dce(), func() {
+	c.CollectDCEDeps(rincewindRun, func() {
 		c.DeclareDCEDep(rincewind.obj)
 	})
-	c.CollectDCEDeps(rincewindHide.Dce(), func() {
+	c.CollectDCEDeps(rincewindHide, func() {
 		c.DeclareDCEDep(rincewind.obj)
 	})
-	c.CollectDCEDeps(vimesRun.Dce(), func() {
+	c.CollectDCEDeps(vimesRun, func() {
 		c.DeclareDCEDep(vimes.obj)
 	})
-	c.CollectDCEDeps(vimesRead.Dce(), func() {
+	c.CollectDCEDeps(vimesRead, func() {
 		c.DeclareDCEDep(vimes.obj)
 	})
 	vetinari.Dce().SetAsAlive()
@@ -493,7 +493,7 @@ func Test_Selector_SpecificMethods(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c.CollectDCEDeps(vetinari.Dce(), func() {
+			c.CollectDCEDeps(vetinari, func() {
 				for _, decl := range tt.deps {
 					c.DeclareDCEDep(decl.obj)
 				}

@@ -241,7 +241,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 		}
 	}
 
-	fc.pkgCtx.CollectDCEDeps(d.Dce(), func() {
+	fc.pkgCtx.CollectDCEDeps(&d, func() {
 		fc.localVars = nil
 		d.InitCode = fc.CatchOutput(1, func() {
 			fc.translateStmt(&ast.AssignStmt{
@@ -338,8 +338,8 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		}
 	}
 
-	fc.pkgCtx.CollectDCEDeps(d.Dce(), func() {
-		d.DeclCode = fc.namedFuncContext(inst).translateTopLevelFunction(fun)
+	fc.pkgCtx.CollectDCEDeps(d, func() {
+		d.DeclCode = fc.translateTopLevelFunction(fun, inst)
 	})
 	return d
 }
@@ -451,7 +451,7 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 	underlying := instanceType.Underlying()
 	d := &Decl{}
 	d.Dce().SetName(inst.Object)
-	fc.pkgCtx.CollectDCEDeps(d.Dce(), func() {
+	fc.pkgCtx.CollectDCEDeps(d, func() {
 		// Code that declares a JS type (i.e. prototype) for each Go type.
 		d.DeclCode = fc.CatchOutput(0, func() {
 			size := int64(0)
@@ -570,14 +570,14 @@ func (fc *funcContext) anonTypeDecls(anonTypes []*types.TypeName) []*Decl {
 	}
 	decls := []*Decl{}
 	for _, t := range anonTypes {
-		d := Decl{
+		d := &Decl{
 			Vars: []string{t.Name()},
 		}
 		d.Dce().SetName(t)
-		fc.pkgCtx.CollectDCEDeps(d.Dce(), func() {
+		fc.pkgCtx.CollectDCEDeps(d, func() {
 			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type())))
 		})
-		decls = append(decls, &d)
+		decls = append(decls, d)
 	}
 	return decls
 }

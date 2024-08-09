@@ -54,6 +54,15 @@ func (pc *pkgContext) isMain() bool {
 // JavaScript code (as defined for `var` declarations).
 type funcContext struct {
 	*analysis.FuncInfo
+	// Function instance this context corresponds to, or zero if the context is
+	// top-level or doesn't correspond to a function. For function literals, this
+	// is a synthetic object that assigns a unique identity to the function.
+	instance typeparams.Instance
+	// JavaScript identifier assigned to the function object (the word after the
+	// "function" keyword in the generated code). This identifier can be used
+	// within the function scope to reference the function object. It will also
+	// appear in the stack trace.
+	funcRef string
 	// Surrounding package context.
 	pkgCtx *pkgContext
 	// Function context, surrounding this function definition. For package-level
@@ -105,6 +114,8 @@ type funcContext struct {
 	typeResolver *typeparams.Resolver
 	// Mapping from function-level objects to JS variable names they have been assigned.
 	objectNames map[types.Object]string
+	// Number of function literals encountered within the current function context.
+	funcLitCounter int
 }
 
 func newRootCtx(tContext *types.Context, srcs sources, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(*types.Func) bool, minify bool) *funcContext {

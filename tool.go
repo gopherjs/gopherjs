@@ -842,13 +842,7 @@ func sprintError(err error) string {
 func runNode(script string, args []string, dir string, quiet bool, out io.Writer) error {
 	var allArgs []string
 	if b, _ := strconv.ParseBool(os.Getenv("SOURCE_MAP_SUPPORT")); os.Getenv("SOURCE_MAP_SUPPORT") == "" || b {
-		allArgs = []string{"--require", "source-map-support/register"}
-		if err := exec.Command("node", "--require", "source-map-support/register", "--eval", "").Run(); err != nil {
-			if !quiet {
-				fmt.Fprintln(os.Stderr, "gopherjs: Source maps disabled. Install source-map-support module for nice stack traces. See https://github.com/gopherjs/gopherjs#gopherjs-run-gopherjs-test.")
-			}
-			allArgs = []string{}
-		}
+		allArgs = []string{"--enable-source-maps"}
 	}
 
 	if runtime.GOOS != "windows" {

@@ -75,43 +75,35 @@ func Test_Collector_Collecting(t *testing.T) {
 
 func Test_Info_SetNameAndDep(t *testing.T) {
 	tests := []struct {
-		name    string
-		obj     types.Object
-		want    Info   // expected Info after SetName
-		wantDep string // expected dep after addDep
+		name          string
+		obj           types.Object
+		wantObjFilter string // expected Info after SetName
+		wantMetFilter string // expected Info after SetName
+		wantDep       string // expected dep after addDep
 	}{
 		{
 			name: `package`,
 			obj: parseObject(t, `Sarah`,
 				`package jim
 				import Sarah "fmt"`),
-			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Sarah`,
-			},
-			wantDep: `jim.Sarah`,
+			wantObjFilter: `jim.Sarah`,
+			wantDep:       `jim.Sarah`,
 		},
 		{
 			name: `exposed var`,
 			obj: parseObject(t, `Toby`,
 				`package jim
 				var Toby float64`),
-			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Toby`,
-			},
-			wantDep: `jim.Toby`,
+			wantObjFilter: `jim.Toby`,
+			wantDep:       `jim.Toby`,
 		},
 		{
 			name: `exposed const`,
 			obj: parseObject(t, `Ludo`,
 				`package jim
 				const Ludo int = 42`),
-			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Ludo`,
-			},
-			wantDep: `jim.Ludo`,
+			wantObjFilter: `jim.Ludo`,
+			wantDep:       `jim.Ludo`,
 		},
 		{
 			name: `label`,
@@ -125,55 +117,40 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 						goto Gobo
 					}
 				}`),
-			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Gobo`,
-			},
-			wantDep: `jim.Gobo`,
+			wantObjFilter: `jim.Gobo`,
+			wantDep:       `jim.Gobo`,
 		},
 		{
 			name: `exposed specific type`,
 			obj: parseObject(t, `Jen`,
 				`package jim
 				type Jen struct{}`),
-			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Jen`,
-			},
-			wantDep: `jim.Jen`,
+			wantObjFilter: `jim.Jen`,
+			wantDep:       `jim.Jen`,
 		},
 		{
 			name: `exposed generic type`,
 			obj: parseObject(t, `Henson`,
 				`package jim
 				type Henson[T comparable] struct{}`),
-			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Henson`,
-			},
-			wantDep: `jim.Henson`,
+			wantObjFilter: `jim.Henson`,
+			wantDep:       `jim.Henson`,
 		},
 		{
 			name: `exposed specific function`,
 			obj: parseObject(t, `Jareth`,
 				`package jim
 				func Jareth() {}`),
-			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Jareth`,
-			},
-			wantDep: `jim.Jareth`,
+			wantObjFilter: `jim.Jareth`,
+			wantDep:       `jim.Jareth`,
 		},
 		{
 			name: `exposed generic function`,
 			obj: parseObject(t, `Didymus`,
 				`package jim
 				func Didymus[T comparable]() {}`),
-			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Didymus`,
-			},
-			wantDep: `jim.Didymus`,
+			wantObjFilter: `jim.Didymus`,
+			wantDep:       `jim.Didymus`,
 		},
 		{
 			name: `exposed specific method`,
@@ -181,11 +158,8 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				`package jim
 				type Fizzgig string
 				func (f Fizzgig) Kira() {}`),
-			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Fizzgig`,
-			},
-			wantDep: `jim.Kira~`,
+			wantObjFilter: `jim.Fizzgig`,
+			wantDep:       `jim.Kira~`,
 		},
 		{
 			name: `unexposed specific method`,
@@ -193,12 +167,9 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				`package jim
 				type Aughra int
 				func (a Aughra) frank() {}`),
-			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Aughra`,
-				methodFilter: `frank~`,
-			},
-			wantDep: `jim.frank~`,
+			wantObjFilter: `jim.Aughra`,
+			wantMetFilter: `jim.frank~`,
+			wantDep:       `jim.frank~`,
 		},
 		{
 			name: `specific method on unexposed type`,
@@ -206,11 +177,8 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				`package jim
 				type wembley struct{}
 				func (w wembley) Red() {}`),
-			want: Info{
-				importPath:   `jim`,
-				objectFilter: `wembley`,
-			},
-			wantDep: `jim.Red~`,
+			wantObjFilter: `jim.wembley`,
+			wantDep:       `jim.Red~`,
 		},
 	}
 
@@ -223,11 +191,10 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				t.Log(`object:`, types.ObjectString(tt.obj, nil))
 
 				d.Dce().SetName(tt.obj)
-				equal(t, d.Dce().unnamed(), tt.want.unnamed())
-				equal(t, d.Dce().importPath, tt.want.importPath)
-				equal(t, d.Dce().objectFilter, tt.want.objectFilter)
-				equal(t, d.Dce().methodFilter, tt.want.methodFilter)
-				equal(t, d.Dce().String(), tt.want.String())
+				equal(t, d.Dce().unnamed(), false)
+				objectFilter, methodFilter := d.Dce().getInfoNames()
+				equal(t, objectFilter, tt.wantObjFilter)
+				equal(t, methodFilter, tt.wantMetFilter)
 			})
 		}
 	})
@@ -235,14 +202,14 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 	t.Run(`addDep`, func(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				d := &testDecl{}
+				d1 := &testDecl{}
 				t.Log(`object:`, types.ObjectString(tt.obj, nil))
 
-				d.Dce().setDeps(map[types.Object]struct{}{
-					tt.obj: {},
-				})
-				equal(t, len(d.Dce().deps), 1)
-				equal(t, d.Dce().deps[0], tt.wantDep)
+				d1.Dce().addDep(tt.obj)
+				equal(t, len(d1.Dce().deps), 1)
+				depNames := d1.Dce().getDepNames()
+				equal(t, len(depNames), 1)
+				equal(t, depNames[0], tt.wantDep)
 			})
 		}
 	})

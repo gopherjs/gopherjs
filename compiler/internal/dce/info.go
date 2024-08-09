@@ -20,20 +20,8 @@ type Info struct {
 	// obj is the Go object the declaration this DCE is for.
 	obj types.Object
 
-	// importPath is the package path of the package the declaration is in.
-	importPath string
-
-	// Symbol's identifier used by the dead-code elimination logic, not including
-	// package path. If empty, the symbol is assumed to be alive and will not be
-	// eliminated. For methods it is the same as its receiver type identifier.
-	objectFilter string
-
-	// The second part of the identified used by dead-code elimination for methods.
-	// Empty for other types of symbols.
-	methodFilter string
-
-	// deps is the set of DCE info objects that this DCE depends on.
-	deps map[*Info]struct{}
+	// deps is the set of Go objects that this DCE depends on.
+	deps map[types.Object]struct{}
 }
 
 // String gets a human-readable representation of the DCE info.
@@ -45,17 +33,19 @@ func (d *Info) String() string {
 	if d.unnamed() {
 		tags += `[unnamed] `
 	}
-	fullName := d.importPath + `.` + d.objectFilter
-	if len(d.methodFilter) > 0 {
-		fullName += `.` + d.methodFilter
+	objectName, methodName := d.getInfoNames()
+	fullName := objectName
+	if len(methodName) > 0 {
+		objectName += ` &` + methodName
 	}
-	return tags + fullName + ` -> [` + strings.Join(d.deps, `, `) + `]`
+	depNames := `[` + strings.Join(d.getDepNames(), `, `) + `]`
+	return tags + fullName + ` -> ` + depNames
 }
 
 // unnamed returns true if SetName has not been called for this declaration.
 // This indicates that the DCE is not initialized.
 func (d *Info) unnamed() bool {
-	return d.objectFilter == `` && d.methodFilter == ``
+	return d.obj == nil
 }
 
 // isAlive returns true if the declaration is marked as alive.
@@ -80,23 +70,33 @@ func (d *Info) SetName(o types.Object) {
 	if !d.unnamed() {
 		panic(fmt.Errorf(`may only set the name once for %s`, d.String()))
 	}
+	d.obj = o
+}
 
-	d.importPath = o.Pkg().Path()
+// addDep adds a declaration dependency for the declaration this
+// DCE info is attached to.
+func (d *Info) addDep(dep types.Object) {
+	d.deps[dep] = struct{}{}
+}
+
+func (d *Info) getInfoNames() (objectFilter, methodFilter string) {
+	o := d.obj
+	importPath := o.Pkg().Path()
 	if typesutil.IsMethod(o) {
 		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
-		d.objectFilter = recv.Name()
+		objectFilter = importPath + `.` + recv.Name()
 		if !o.Exported() {
-			d.methodFilter = o.Name() + `~`
+			methodFilter = importPath + `.` + o.Name() + `~`
 		}
 	} else {
-		d.objectFilter = o.Name()
+		objectFilter = importPath + `.` + o.Name()
 	}
+	return
 }
 
 func (d *Info) getDepNames() []string {
 	depNames := make([]string, 0, len(d.deps))
-	for dep := range d.deps {
-		o := dep.obj
+	for o := range d.deps {
 		qualifiedName := o.Pkg().Path() + "." + o.Name()
 		if typesutil.IsMethod(o) {
 			qualifiedName += "~"
@@ -105,10 +105,4 @@ func (d *Info) getDepNames() []string {
 	}
 	sort.Strings(depNames)
 	return depNames
-}
-
-// addDep adds a declaration dependency for the declaration this
-// DCE info is attached to.
-func (d *Info) addDep(dep *Info) {
-	d.deps[dep] = struct{}{}
 }

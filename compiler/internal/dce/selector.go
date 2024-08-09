@@ -41,13 +41,14 @@ func (s *Selector[D]) Include(decl D, implementsLink bool) {
 
 	info := &declInfo[D]{decl: decl}
 
-	if dce.objectFilter != `` {
-		info.objectFilter = dce.importPath + `.` + dce.objectFilter
+	objectFilter, methodFilter := dce.getInfoNames()
+	if objectFilter != `` {
+		info.objectFilter = objectFilter
 		s.byFilter[info.objectFilter] = append(s.byFilter[info.objectFilter], info)
 	}
 
-	if dce.methodFilter != `` {
-		info.methodFilter = dce.importPath + `.` + dce.methodFilter
+	if methodFilter != `` {
+		info.methodFilter = methodFilter
 		s.byFilter[info.methodFilter] = append(s.byFilter[info.methodFilter], info)
 	}
 }

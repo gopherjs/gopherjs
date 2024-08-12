@@ -17,11 +17,21 @@ type Info struct {
 	// and will not be eliminated.
 	alive bool
 
-	// obj is the Go object the declaration this DCE is for.
-	obj types.Object
+	// importPath is the package path of the package the declaration is in.
+	importPath string
 
-	// deps is the set of Go objects that this DCE depends on.
-	deps map[types.Object]struct{}
+	// Symbol's identifier used by the dead-code elimination logic, not including
+	// package path. If empty, the symbol is assumed to be alive and will not be
+	// eliminated. For methods it is the same as its receiver type identifier.
+	objectFilter string
+
+	// The second part of the identified used by dead-code elimination for methods.
+	// Empty for other types of symbols.
+	methodFilter string
+
+	// List of fully qualified (including package path) DCE symbol identifiers the
+	// symbol depends on for dead code elimination purposes.
+	deps []string
 }
 
 // String gets a human-readable representation of the DCE info.
@@ -33,19 +43,17 @@ func (d *Info) String() string {
 	if d.unnamed() {
 		tags += `[unnamed] `
 	}
-	objectName, methodName := d.getInfoNames()
-	fullName := objectName
-	if len(methodName) > 0 {
-		objectName += ` &` + methodName
+	fullName := d.importPath + `.` + d.objectFilter
+	if len(d.methodFilter) > 0 {
+		fullName += `.` + d.methodFilter
 	}
-	depNames := `[` + strings.Join(d.getDepNames(), `, `) + `]`
-	return tags + fullName + ` -> ` + depNames
+	return tags + fullName + ` -> [` + strings.Join(d.deps, `, `) + `]`
 }
 
 // unnamed returns true if SetName has not been called for this declaration.
 // This indicates that the DCE is not initialized.
 func (d *Info) unnamed() bool {
-	return d.obj == nil
+	return d.objectFilter == `` && d.methodFilter == ``
 }
 
 // isAlive returns true if the declaration is marked as alive.
@@ -70,39 +78,31 @@ func (d *Info) SetName(o types.Object) {
 	if !d.unnamed() {
 		panic(fmt.Errorf(`may only set the name once for %s`, d.String()))
 	}
-	d.obj = o
-}
 
-// addDep adds a declaration dependency for the declaration this
-// DCE info is attached to.
-func (d *Info) addDep(dep types.Object) {
-	d.deps[dep] = struct{}{}
-}
-
-func (d *Info) getInfoNames() (objectFilter, methodFilter string) {
-	o := d.obj
-	importPath := o.Pkg().Path()
+	d.importPath = o.Pkg().Path()
 	if typesutil.IsMethod(o) {
 		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
-		objectFilter = importPath + `.` + recv.Name()
+		d.objectFilter = recv.Name()
 		if !o.Exported() {
-			methodFilter = importPath + `.` + o.Name() + `~`
+			d.methodFilter = o.Name() + `~`
 		}
 	} else {
-		objectFilter = importPath + `.` + o.Name()
+		d.objectFilter = o.Name()
 	}
-	return
 }
 
-func (d *Info) getDepNames() []string {
-	depNames := make([]string, 0, len(d.deps))
-	for o := range d.deps {
+// setDeps sets the declaration dependencies used by DCE
+// for the declaration this DCE info is attached to.
+// This overwrites any prior set dependencies.
+func (d *Info) setDeps(objectSet map[types.Object]struct{}) {
+	deps := make([]string, 0, len(objectSet))
+	for o := range objectSet {
 		qualifiedName := o.Pkg().Path() + "." + o.Name()
 		if typesutil.IsMethod(o) {
 			qualifiedName += "~"
 		}
-		depNames = append(depNames, qualifiedName)
+		deps = append(deps, qualifiedName)
 	}
-	sort.Strings(depNames)
-	return depNames
+	sort.Strings(deps)
+	d.deps = deps
 }

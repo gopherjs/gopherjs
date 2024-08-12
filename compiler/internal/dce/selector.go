@@ -41,14 +41,13 @@ func (s *Selector[D]) Include(decl D, implementsLink bool) {
 
 	info := &declInfo[D]{decl: decl}
 
-	objectFilter, methodFilter := dce.getInfoNames()
-	if objectFilter != `` {
-		info.objectFilter = objectFilter
+	if dce.objectFilter != `` {
+		info.objectFilter = dce.importPath + `.` + dce.objectFilter
 		s.byFilter[info.objectFilter] = append(s.byFilter[info.objectFilter], info)
 	}
 
-	if methodFilter != `` {
-		info.methodFilter = methodFilter
+	if dce.methodFilter != `` {
+		info.methodFilter = dce.importPath + `.` + dce.methodFilter
 		s.byFilter[info.methodFilter] = append(s.byFilter[info.methodFilter], info)
 	}
 }
@@ -73,8 +72,7 @@ func (s *Selector[D]) AliveDecls() map[D]struct{} {
 
 		// Consider all decls the current one is known to depend on and possible add
 		// them to the live queue.
-		depNames := dce.getDepNames()
-		for _, dep := range depNames {
+		for _, dep := range dce.deps {
 			if infos, ok := s.byFilter[dep]; ok {
 				delete(s.byFilter, dep)
 				for _, info := range infos {

@@ -514,7 +514,7 @@ func (fc *funcContext) typeName(ty types.Type) string {
 	}
 
 	// For anonymous composite types, generate a synthetic package-level type
-	// declaration, which will be reused for all instances of this time. This
+	// declaration, which will be reused for all instances of this type. This
 	// improves performance, since runtime won't have to synthesize the same type
 	// repeatedly.
 	anonType, ok := fc.pkgCtx.anonTypeMap.At(ty).(*types.TypeName)

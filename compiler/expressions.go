@@ -591,9 +591,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		case types.MethodVal:
 			return fc.formatExpr(`$methodVal(%s, "%s")`, fc.makeReceiver(e), sel.Obj().(*types.Func).Name())
 		case types.MethodExpr:
-			if !sel.Obj().Exported() {
-				fc.pkgCtx.DeclareDCEDep(sel.Obj())
-			}
+			fc.pkgCtx.DeclareDCEDep(sel.Obj(), inst.TArgs...)
 			if _, ok := sel.Recv().Underlying().(*types.Interface); ok {
 				return fc.formatExpr(`$ifaceMethodExpr("%s")`, sel.Obj().(*types.Func).Name())
 			}

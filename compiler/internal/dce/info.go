@@ -5,8 +5,6 @@ import (
 	"go/types"
 	"sort"
 	"strings"
-
-	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
 // Info contains information used by the dead-code elimination (DCE) logic to
@@ -17,21 +15,22 @@ type Info struct {
 	// and will not be eliminated.
 	alive bool
 
-	// importPath is the package path of the package the declaration is in.
-	importPath string
-
-	// Symbol's identifier used by the dead-code elimination logic, not including
-	// package path. If empty, the symbol is assumed to be alive and will not be
-	// eliminated. For methods it is the same as its receiver type identifier.
+	// objectFilter is the primary DCE name for a declaration.
+	// This will be the variable, function, or type identifier.
+	// For methods it is the receiver type identifier.
+	// If empty, the declaration is assumed to be alive.
 	objectFilter string
 
-	// The second part of the identified used by dead-code elimination for methods.
-	// Empty for other types of symbols.
+	// methodFilter is the secondary DCE name for a declaration.
+	// This will be empty if objectFilter is empty.
+	// This will be set to a qualified method name if the objectFilter
+	// can not determine if the declaration is alive on it's own.
+	// See ./README.md for more information.
 	methodFilter string
 
 	// List of fully qualified (including package path) DCE symbol identifiers the
 	// symbol depends on for dead code elimination purposes.
-	deps []string
+	deps map[string]struct{}
 }
 
 // String gets a human-readable representation of the DCE info.
@@ -43,17 +42,20 @@ func (d *Info) String() string {
 	if d.unnamed() {
 		tags += `[unnamed] `
 	}
-	fullName := d.importPath + `.` + d.objectFilter
-	if len(d.methodFilter) > 0 {
-		fullName += `.` + d.methodFilter
+	fullName := ``
+	if len(d.objectFilter) > 0 {
+		fullName += d.objectFilter + ` `
 	}
-	return tags + fullName + ` -> [` + strings.Join(d.deps, `, `) + `]`
+	if len(d.methodFilter) > 0 {
+		fullName += `& ` + d.methodFilter + ` `
+	}
+	return tags + fullName + `-> [` + strings.Join(d.getDeps(), `, `) + `]`
 }
 
 // unnamed returns true if SetName has not been called for this declaration.
 // This indicates that the DCE is not initialized.
 func (d *Info) unnamed() bool {
-	return d.objectFilter == `` && d.methodFilter == ``
+	return d.objectFilter == ``
 }
 
 // isAlive returns true if the declaration is marked as alive.
@@ -74,35 +76,56 @@ func (d *Info) SetAsAlive() {
 
 // SetName sets the name used by DCE to represent the declaration
 // this DCE info is attached to.
-func (d *Info) SetName(o types.Object) {
+//
+// The given optional type arguments are used to when the object is a
+// function with type parameters or anytime the object doesn't carry them.
+// If not given, this attempts to get the type arguments from the object.
+func (d *Info) SetName(o types.Object, tArgs ...types.Type) {
 	if !d.unnamed() {
 		panic(fmt.Errorf(`may only set the name once for %s`, d.String()))
 	}
 
-	d.importPath = o.Pkg().Path()
-	if typesutil.IsMethod(o) {
-		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
-		d.objectFilter = recv.Name()
-		if !o.Exported() {
-			d.methodFilter = o.Name() + `~`
+	// Determine name(s) for DCE.
+	d.objectFilter, d.methodFilter = getFilters(o, tArgs)
+
+	// Add automatic dependencies for unexported methods on interfaces.
+	if n, ok := o.Type().(*types.Named); ok {
+		if it, ok := n.Underlying().(*types.Interface); ok {
+			for i := it.NumMethods() - 1; i >= 0; i-- {
+				if m := it.Method(i); !m.Exported() {
+					d.addDepName(getMethodFilter(m, tArgs))
+				}
+			}
 		}
-	} else {
-		d.objectFilter = o.Name()
 	}
 }
 
-// setDeps sets the declaration dependencies used by DCE
+// addDep add a declaration dependencies used by DCE
 // for the declaration this DCE info is attached to.
-// This overwrites any prior set dependencies.
-func (d *Info) setDeps(objectSet map[types.Object]struct{}) {
-	deps := make([]string, 0, len(objectSet))
-	for o := range objectSet {
-		qualifiedName := o.Pkg().Path() + "." + o.Name()
-		if typesutil.IsMethod(o) {
-			qualifiedName += "~"
+func (d *Info) addDep(o types.Object, tArgs []types.Type) {
+	objectFilter, methodFilter := getFilters(o, tArgs)
+	d.addDepName(objectFilter)
+	d.addDepName(methodFilter)
+}
+
+// addDepName adds a declaration dependency by name.
+func (d *Info) addDepName(depName string) {
+	if len(depName) > 0 {
+		if d.deps == nil {
+			d.deps = make(map[string]struct{})
 		}
-		deps = append(deps, qualifiedName)
+		d.deps[depName] = struct{}{}
+	}
+}
+
+// getDeps gets the dependencies for the declaration sorted by name.
+func (id *Info) getDeps() []string {
+	deps := make([]string, len(id.deps))
+	i := 0
+	for dep := range id.deps {
+		deps[i] = dep
+		i++
 	}
 	sort.Strings(deps)
-	d.deps = deps
+	return deps
 }

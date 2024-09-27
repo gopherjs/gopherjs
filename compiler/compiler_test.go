@@ -204,9 +204,7 @@ func TestDeclSelection_RemoveUnusedFuncInstance(t *testing.T) {
 
 	sel.DeclCode.IsDead(`^\s*Foo = function`)
 	sel.DeclCode.IsDead(`^\s*sliceType(\$\d+)? = \$sliceType\(\$Int\)`)
-
-	// TODO(gn): This should not be alive because it is not used.
-	sel.DeclCode.IsAlive(`^\s*Sum\[\d+ /\* int \*/\]`)
+	sel.DeclCode.IsDead(`^\s*Sum\[\d+ /\* int \*/\]`)
 }
 
 func TestDeclSelection_RemoveUnusedStructTypeInstances(t *testing.T) {
@@ -229,9 +227,8 @@ func TestDeclSelection_RemoveUnusedStructTypeInstances(t *testing.T) {
 	sel.DeclCode.IsAlive(`^\s*Foo\[\d+ /\* int \*/\] = \$newType`)
 	sel.DeclCode.IsAlive(`^\s*\$ptrType\(Foo\[\d+ /\* int \*/\]\)\.prototype\.Bar`)
 
-	// TODO(gn): This should not be alive because it is not used.
-	sel.DeclCode.IsAlive(`^\s*Foo\[\d+ /\* float64 \*/\] = \$newType`)
-	sel.DeclCode.IsAlive(`^\s*\$ptrType\(Foo\[\d+ /\* float64 \*/\]\)\.prototype\.Bar`)
+	sel.DeclCode.IsDead(`^\s*Foo\[\d+ /\* float64 \*/\] = \$newType`)
+	sel.DeclCode.IsDead(`^\s*\$ptrType\(Foo\[\d+ /\* float64 \*/\]\)\.prototype\.Bar`)
 }
 
 func TestDeclSelection_RemoveUnusedInterfaceTypeInstances(t *testing.T) {
@@ -262,11 +259,12 @@ func TestDeclSelection_RemoveUnusedInterfaceTypeInstances(t *testing.T) {
 	sel.InitCode.IsDead(`\$pkg\.F64 = FooBar\[\d+ /\* float64 \*/\]`)
 
 	sel.DeclCode.IsAlive(`^\s*FooBar\[\d+ /\* int \*/\]`)
-	// TODO(gn): Below should be alive because it is an arg to FooBar[int].
+	// The Foo[int] instance is defined as a parameter in FooBar[int] that is alive.
+	// However, Foo[int] isn't used directly in the code so it can be removed.
+	// JS will simply duck-type the Baz object to Foo[int] without Foo[int] specifically defined.
 	sel.DeclCode.IsDead(`^\s*Foo\[\d+ /\* int \*/\] = \$newType`)
 
-	// TODO(gn): Below should be dead because it is only used by a dead init.
-	sel.DeclCode.IsAlive(`^\s*FooBar\[\d+ /\* float64 \*/\]`)
+	sel.DeclCode.IsDead(`^\s*FooBar\[\d+ /\* float64 \*/\]`)
 	sel.DeclCode.IsDead(`^\s*Foo\[\d+ /\* float64 \*/\] = \$newType`)
 }
 
@@ -295,9 +293,7 @@ func TestDeclSelection_RemoveUnusedMethodWithDifferentSignature(t *testing.T) {
 
 	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
 	sel.DeclCode.IsAlive(`\s*\$ptrType\(Foo\)\.prototype\.Bar`)
-	// TODO(gn): Below should be dead because it is not used even though
-	// its name matches a used unexported method.
-	sel.DeclCode.IsAlive(`\s*\$ptrType\(Foo\)\.prototype\.baz`)
+	sel.DeclCode.IsDead(`\s*\$ptrType\(Foo\)\.prototype\.baz`)
 
 	sel.DeclCode.IsAlive(`^\s*Foo2 = \$newType`)
 	sel.DeclCode.IsAlive(`\s*\$ptrType\(Foo2\)\.prototype\.Bar`)
@@ -334,10 +330,11 @@ func TestDeclSelection_RemoveUnusedUnexportedMethodInstance(t *testing.T) {
 
 	sel.DeclCode.IsAlive(`^\s*Foo\[\d+ /\* uint \*/\] = \$newType`)
 	sel.DeclCode.IsAlive(`\s*\$ptrType\(Foo\[\d+ /\* uint \*/\]\)\.prototype\.Bar`)
-	// TODO(gn): All three below should be dead because Foo[uint].baz is unused.
-	sel.DeclCode.IsAlive(`\s*\$ptrType\(Foo\[\d+ /\* uint \*/\]\)\.prototype\.baz`)
-	sel.DeclCode.IsAlive(`^\s*Baz\[\d+ /\* uint \*/\] = \$newType`)
-	sel.DeclCode.IsAlive(`\s*\$ptrType\(Baz\[\d+ /\* uint \*/\]\)\.prototype\.Bar`)
+
+	// All three below are dead because Foo[uint].baz is unused.
+	sel.DeclCode.IsDead(`\s*\$ptrType\(Foo\[\d+ /\* uint \*/\]\)\.prototype\.baz`)
+	sel.DeclCode.IsDead(`^\s*Baz\[\d+ /\* uint \*/\] = \$newType`)
+	sel.DeclCode.IsDead(`\s*\$ptrType\(Baz\[\d+ /\* uint \*/\]\)\.prototype\.Bar`)
 }
 
 func TestDeclSelection_RemoveUnusedTypeConstraint(t *testing.T) {

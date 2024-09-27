@@ -249,26 +249,6 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 			},
 		},
 		{
-			name: `interface with unexported methods setting dependencies`,
-			obj: parseObject(t, `Hoggle`,
-				`package jim
-				type Hoggle interface{
-					cowardly() bool
-					loyalTo(goblin string) bool
-					makePrinceOfTheBogOfEternalStench() error
-				}`),
-			want: Info{
-				objectFilter: `jim.Hoggle`,
-				// The automatically defined dependencies for unexported methods
-				// in the interface that match with the methodFilter of unexported methods.
-				deps: map[string]struct{}{
-					`jim.cowardly() bool`:                           {},
-					`jim.loyalTo(string) bool`:                      {},
-					`jim.makePrinceOfTheBogOfEternalStench() error`: {},
-				},
-			},
-		},
-		{
 			name: `unexported method resulting in an interface with exported methods`,
 			obj: parseObject(t, `bear`,
 				`package jim
@@ -440,54 +420,6 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 			},
 		},
 		{
-			name: `unexported method in interface from named embedded interface`,
-			obj: parseObject(t, `Waldorf`,
-				`package jim
-				type Statler interface{
-					boo()
-				}
-				type Waldorf interface{
-					Statler
-				}`),
-			want: Info{
-				objectFilter: `jim.Waldorf`,
-				deps: map[string]struct{}{
-					`jim.boo()`: {},
-				},
-			},
-		},
-		{
-			name: `unexported method in interface from unnamed embedded interface`,
-			obj: parseObject(t, `Waldorf`,
-				`package jim
-				type Waldorf interface{
-					interface{
-						boo()
-					}
-				}`),
-			want: Info{
-				objectFilter: `jim.Waldorf`,
-				deps: map[string]struct{}{
-					`jim.boo()`: {},
-				},
-			},
-		},
-		{
-			name: `unexported method on instance of generic interface`,
-			obj: parseObject(t, `Waldorf`,
-				`package jim
-				type Statler[T any] interface{
-					boo() T
-				}
-				type Waldorf Statler[string]`),
-			want: Info{
-				objectFilter: `jim.Waldorf`,
-				deps: map[string]struct{}{
-					`jim.boo() string`: {},
-				},
-			},
-		},
-		{
 			name: `struct with self referencing type parameter constraints`,
 			obj: parseObject(t, `Keys`,
 				`package jim
@@ -503,7 +435,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 			},
 		},
 		{
-			name: `struct with self referencing type parameter constraints`,
+			name: `interface with self referencing type parameter constraints`,
 			obj: parseObject(t, `ElectricMayhem`,
 				`package jim
 				type ElectricMayhem[K comparable, V any, M ~map[K]V] interface {
@@ -513,11 +445,6 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				}`),
 			want: Info{
 				objectFilter: `jim.ElectricMayhem[comparable, any, ~map[comparable]any]`,
-				deps: map[string]struct{}{
-					`jim.keys() []comparable`:         {},
-					`jim.values() []any`:              {},
-					`jim.asMap() ~map[comparable]any`: {},
-				},
 			},
 		},
 		{

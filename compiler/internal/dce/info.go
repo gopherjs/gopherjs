@@ -22,14 +22,14 @@ type Info struct {
 	objectFilter string
 
 	// methodFilter is the secondary DCE name for a declaration.
-	// This will be empty if objectFilter is empty.
+	// This usually will be empty if objectFilter is empty.
 	// This will be set to a qualified method name if the objectFilter
 	// can not determine if the declaration is alive on it's own.
 	// See ./README.md for more information.
 	methodFilter string
 
-	// List of fully qualified (including package path) DCE symbol identifiers the
-	// symbol depends on for dead code elimination purposes.
+	// Set of fully qualified (including package path) DCE symbol
+	// and/or method names that this DCE declaration depends on.
 	deps map[string]struct{}
 }
 
@@ -55,7 +55,7 @@ func (d *Info) String() string {
 // unnamed returns true if SetName has not been called for this declaration.
 // This indicates that the DCE is not initialized.
 func (d *Info) unnamed() bool {
-	return d.objectFilter == ``
+	return d.objectFilter == `` && d.methodFilter == ``
 }
 
 // isAlive returns true if the declaration is marked as alive.
@@ -87,17 +87,6 @@ func (d *Info) SetName(o types.Object, tArgs ...types.Type) {
 
 	// Determine name(s) for DCE.
 	d.objectFilter, d.methodFilter = getFilters(o, tArgs)
-
-	// Add automatic dependencies for unexported methods on interfaces.
-	if n, ok := o.Type().(*types.Named); ok {
-		if it, ok := n.Underlying().(*types.Interface); ok {
-			for i := it.NumMethods() - 1; i >= 0; i-- {
-				if m := it.Method(i); !m.Exported() {
-					d.addDepName(getMethodFilter(m, tArgs))
-				}
-			}
-		}
-	}
 }
 
 // addDep add a declaration dependencies used by DCE

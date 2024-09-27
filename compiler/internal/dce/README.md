@@ -35,9 +35,10 @@ may be safely eliminated, i.e. not outputted to the JS file(s).
 
 The following is the logic behind the DCE mechanism. Not all of the following
 is used since some conditions are difficult to determine even with a lot of
-additional information. To ensure that the JS output is fully functional,
-we bias the DCE towards things being alive. We'd rather keep something we
-don't need than remove something that is needed.
+additional information, and because GopherJS stores some additional information
+making some parts of DCE unnecessary. To ensure that the JS output is fully
+functional, we bias the DCE towards things being alive. We'd rather keep
+something we don't need than remove something that is needed.
 
 ### Package
 
@@ -92,10 +93,14 @@ All the types in the function signatures and embedded interfaces are the
 dependents of the interface.
 
 Interfaces may contain exported and unexported function signatures.
-If an interface is alive then all of the functions, even the unexported
-functions, are alive.
+If an interface is alive then all of the functions are alive.
 Since there are many ways to wrap a type with an interface, any alive type that
-duck-types to an interface must have all of the matching methods alive.
+duck-types to an interface must have all of the matching methods also alive.
+
+In theory the unexported functions are also alive however, for GopherJS there
+is an exception because duck-typing is handled separately the method
+definitions. Those difference are discussed in [Dependencies](#dependencies)
+but for this idea we discuss DCE more generally.
 
 Since the exported methods in an alive type will be alive, see
 [Named Types](#named-types), the only ones here that need to be considered
@@ -247,6 +252,13 @@ the unexported method alive. Since the unexported method is only visible in
 the package in which it is defined, the package path is included in the
 method name.
 
+To simplify the above for GopherJS, we don't look at the receiver for
+an unexported method before indicating it is alive. Meaning if there is no
+interface, only two named objects with identical unexported methods, the use
+of either will indicate a use of both. This will cause slightly more unexported
+method to be alive while reducing the complication of type checking which object
+or type of object is performing the call.
+
 | Declaration | exported | unexported | non-generic | generic | object name | method name |
 |:------------|:--------:|:----------:|:-----------:|:-------:|:------------|:------------|
 | variables  | █ | █ | █ | n/a | `<package>.<var name>` | |
@@ -324,18 +336,22 @@ is recursive, e.g. `Foo[Bar[Bar[...]]]`.
 
 ### Dependencies
 
-The dependencies are initialized via two paths.
-
-The first is dependencies that are specified in an expression.
+The dependencies that are specified in an expression.
 For example a function that invokes another function will be dependent on
 that invoked function. When a dependency is added it will be added as one
 or more names to the declaration that depends on it. It follows the
 [naming rules](#naming) so that the dependencies will match correctly.
 
-The second is structural dependencies that are specified automatically while
-the declaration is being named. When an interface is named, it will
-automatically add all unexported signatures as dependencies via
+In theory, structural dependencies would be needed to be added
+automatically while the declaration is being named. When an interface is named,
+it would automatically add all unexported signatures as dependencies via
 `<package path>.<method name>(<parameter type list>)(<result type list>)`.
+However, we do not need to do that in GopherJS because we aren't using
+the existence of realized methods in duck-typing. GopherJS stores full set
+of method information when describing the type so that even when things like
+unexported methods in interfaces are removed, duck-typing will still work
+correctly. This reduces the size of the code by not keeping a potentially
+long method body when the signature is all that is needed.
 
 Currently we don't filter unused packages so there is no need to automatically
 add dependencies on the packages themselves. This is also why the package

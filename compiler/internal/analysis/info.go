@@ -81,7 +81,10 @@ func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
 			// blocking, and we could check that.
 			funcInfo.Blocking[n] = true
 		}
-		info.FuncDeclInfos[info.Defs[n.Name].(*types.Func)] = funcInfo
+
+		fn := info.Defs[n.Name].(*types.Func)
+		info.FuncDeclInfos[fn] = funcInfo
+
 	case *ast.FuncLit:
 		info.FuncLitInfos[n] = funcInfo
 	}

@@ -76,7 +76,7 @@ func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
 			// Function body comes from elsewhere (for example, from a go:linkname
 			// directive), conservatively assume that it may be blocking.
 			// TODO(nevkontakte): It is possible to improve accuracy of this detection.
-			// Since GopherJS supports inly "import-style" go:linkname, at this stage
+			// Since GopherJS supports only "import-style" go:linkname, at this stage
 			// the compiler already determined whether the implementation function is
 			// blocking, and we could check that.
 			funcInfo.Blocking[n] = true
@@ -202,7 +202,7 @@ type FuncInfo struct {
 	// Blocking indicates that either the AST node itself or its descendant may
 	// block goroutine execution (for example, a channel operation).
 	Blocking map[ast.Node]bool
-	// GotoLavel indicates a label referenced by a goto statement, rather than a
+	// GotoLabel indicates a label referenced by a goto statement, rather than a
 	// named loop.
 	GotoLabel map[*types.Label]bool
 	// List of continue statements in the function.

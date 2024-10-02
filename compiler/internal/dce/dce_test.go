@@ -1209,7 +1209,7 @@ func depCount(t *testing.T, decl *testDecl, want int) {
 func equal[T comparable](t *testing.T, got, want T) {
 	t.Helper()
 	if got != want {
-		t.Errorf("Unexpected value was gotten:\t\nexp: %#v\t\ngot: %#v", want, got)
+		t.Errorf("Unexpected value was gotten:\n\texp: %#v\n\tgot: %#v", want, got)
 	}
 }
 

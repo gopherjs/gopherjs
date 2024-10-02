@@ -22,7 +22,7 @@ type Info struct {
 	objectFilter string
 
 	// methodFilter is the secondary DCE name for a declaration.
-	// This usually will be empty if objectFilter is empty.
+	// This will be empty if objectFilter is empty.
 	// This will be set to a qualified method name if the objectFilter
 	// can not determine if the declaration is alive on it's own.
 	// See ./README.md for more information.
@@ -42,14 +42,14 @@ func (d *Info) String() string {
 	if d.unnamed() {
 		tags += `[unnamed] `
 	}
-	fullName := ``
+	names := []string{}
 	if len(d.objectFilter) > 0 {
-		fullName += d.objectFilter + ` `
+		names = append(names, d.objectFilter+` `)
 	}
 	if len(d.methodFilter) > 0 {
-		fullName += `& ` + d.methodFilter + ` `
+		names = append(names, d.methodFilter+` `)
 	}
-	return tags + fullName + `-> [` + strings.Join(d.getDeps(), `, `) + `]`
+	return tags + strings.Join(names, `& `) + `-> [` + strings.Join(d.getDeps(), `, `) + `]`
 }
 
 // unnamed returns true if SetName has not been called for this declaration.

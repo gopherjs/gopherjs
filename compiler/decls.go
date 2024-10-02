@@ -320,7 +320,7 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		Blocking:    fc.pkgCtx.IsBlocking(o),
 		LinkingName: symbol.New(o),
 	}
-	d.Dce().SetName(o)
+	d.Dce().SetName(o, inst.TArgs...)
 
 	if typesutil.IsMethod(o) {
 		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
@@ -450,7 +450,7 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 
 	underlying := instanceType.Underlying()
 	d := &Decl{}
-	d.Dce().SetName(inst.Object)
+	d.Dce().SetName(inst.Object, inst.TArgs...)
 	fc.pkgCtx.CollectDCEDeps(d, func() {
 		// Code that declares a JS type (i.e. prototype) for each Go type.
 		d.DeclCode = fc.CatchOutput(0, func() {

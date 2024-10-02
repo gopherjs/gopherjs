@@ -7,7 +7,6 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/gopherjs/gopherjs/internal/govendor/subst"
-	"golang.org/x/exp/typeparams"
 )
 
 // Resolver translates types defined in terms of type parameters into concrete
@@ -141,7 +140,7 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 		for i := 0; i < t.NumMethods(); i++ {
 			method := t.Method(i)
 			c.instances.Add(Instance{
-				Object: typeparams.OriginMethod(method), // TODO(nevkontakte): Can be replaced with method.Origin() in Go 1.19.
+				Object: method.Origin(),
 				TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
 			})
 		}

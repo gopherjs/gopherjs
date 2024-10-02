@@ -55,7 +55,7 @@ func TestInstanceBlocking(t *testing.T) {
 		notBlocking []string
 	}{
 		{
-			name: "blocking instance",
+			name: `blocking instance`,
 			src: `package test
 				func blocking[T any]() {
 					c := make(chan T)
@@ -72,6 +72,48 @@ func TestInstanceBlocking(t *testing.T) {
 				}`,
 			blocking:    []string{`blocking`, `bInt`},
 			notBlocking: []string{`notBlocking`, `nbUint`},
+		},
+		{
+			name: `differentiate indexing`,
+			// Below calls notBlocking but since the function pointers
+			// are in the slice they will both be considered as blocking.
+			// This is just checking that the analysis can tell between
+			// indexing and instantiation of a generic.
+			src: `package test
+				func blocking() {
+					c := make(chan int)
+					<-c
+				}
+				func notBlocking() {
+					println()
+				}
+				var funcs = []func() { blocking, notBlocking }
+				func indexer() {
+					funcs[1]()
+				}`,
+			blocking:    []string{`blocking`, `indexer`},
+			notBlocking: []string{`notBlocking`},
+		},
+		{
+			name: `differentiate casting`,
+			// Below checks that casting to an instance type is treated as a
+			// cast an not accidentally treated as a function call.
+			src: `package test
+				type Foo[T any] interface {
+					Baz() T
+				}
+				type Bar struct {
+					name string
+				}
+				func (b Bar) Baz() string {
+					return b.name
+				}
+				func caster() {
+					a := Bar{"foo"}
+					b := Foo[string](a)
+					println(b.Baz())
+				}`,
+			notBlocking: []string{`caster`},
 		},
 	}
 

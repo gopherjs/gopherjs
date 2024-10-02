@@ -356,6 +356,11 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 		// Register literal function call site in case it is identified as blocking.
 		fi.literalFuncCallees[f] = append(fi.literalFuncCallees[f], fi.visitorStack.copy())
 		return nil // No need to walk under this CallExpr, we already did it manually.
+	case *ast.IndexExpr:
+		// Collect info about the instantiated type or function.
+
+		fmt.Printf(">> %[1]T %#[1]v\n", n) // TODO(gn): Finish implementing!
+
 	default:
 		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
 			// This is a type conversion, not a call. Type assertion itself is not

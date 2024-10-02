@@ -65,12 +65,13 @@ func Test_Collector_Collecting(t *testing.T) {
 	depCount(t, decl1, 2)
 	depCount(t, decl2, 3)
 
-	// The second collection overwrites the first collection.
+	// The second collection adds to existing dependencies.
 	c.CollectDCEDeps(decl2, func() {
+		c.DeclareDCEDep(obj4)
 		c.DeclareDCEDep(obj5)
 	})
 	depCount(t, decl1, 2)
-	depCount(t, decl2, 1)
+	depCount(t, decl2, 4)
 }
 
 func Test_Info_SetNameAndDep(t *testing.T) {
@@ -86,8 +87,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				`package jim
 				import Sarah "fmt"`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Sarah`,
+				objectFilter: `jim.Sarah`,
 			},
 			wantDep: `jim.Sarah`,
 		},
@@ -97,8 +97,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				`package jim
 				var Toby float64`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Toby`,
+				objectFilter: `jim.Toby`,
 			},
 			wantDep: `jim.Toby`,
 		},
@@ -108,8 +107,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				`package jim
 				const Ludo int = 42`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Ludo`,
+				objectFilter: `jim.Ludo`,
 			},
 			wantDep: `jim.Ludo`,
 		},
@@ -126,8 +124,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 					}
 				}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Gobo`,
+				objectFilter: `jim.Gobo`,
 			},
 			wantDep: `jim.Gobo`,
 		},
@@ -137,8 +134,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				`package jim
 				type Jen struct{}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Jen`,
+				objectFilter: `jim.Jen`,
 			},
 			wantDep: `jim.Jen`,
 		},
@@ -148,8 +144,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				`package jim
 				type Henson[T comparable] struct{}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Henson`,
+				objectFilter: `jim.Henson`,
 			},
 			wantDep: `jim.Henson`,
 		},
@@ -159,8 +154,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				`package jim
 				func Jareth() {}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Jareth`,
+				objectFilter: `jim.Jareth`,
 			},
 			wantDep: `jim.Jareth`,
 		},
@@ -170,8 +164,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				`package jim
 				func Didymus[T comparable]() {}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Didymus`,
+				objectFilter: `jim.Didymus`,
 			},
 			wantDep: `jim.Didymus`,
 		},
@@ -182,8 +175,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				type Fizzgig string
 				func (f Fizzgig) Kira() {}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Fizzgig`,
+				objectFilter: `jim.Fizzgig`,
 			},
 			wantDep: `jim.Kira~`,
 		},
@@ -194,9 +186,8 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				type Aughra int
 				func (a Aughra) frank() {}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Aughra`,
-				methodFilter: `frank~`,
+				objectFilter: `jim.Aughra`,
+				methodFilter: `jim.frank~`,
 			},
 			wantDep: `jim.frank~`,
 		},
@@ -207,8 +198,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				type wembley struct{}
 				func (w wembley) Red() {}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `wembley`,
+				objectFilter: `jim.wembley`,
 			},
 			wantDep: `jim.Red~`,
 		},
@@ -219,12 +209,11 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				d := &testDecl{}
 				equal(t, d.Dce().unnamed(), true)
-				equal(t, d.Dce().String(), `[unnamed] . -> []`)
+				equal(t, d.Dce().String(), `[unnamed] -> []`)
 				t.Log(`object:`, types.ObjectString(tt.obj, nil))
 
 				d.Dce().SetName(tt.obj)
 				equal(t, d.Dce().unnamed(), tt.want.unnamed())
-				equal(t, d.Dce().importPath, tt.want.importPath)
 				equal(t, d.Dce().objectFilter, tt.want.objectFilter)
 				equal(t, d.Dce().methodFilter, tt.want.methodFilter)
 				equal(t, d.Dce().String(), tt.want.String())
@@ -238,11 +227,17 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				d := &testDecl{}
 				t.Log(`object:`, types.ObjectString(tt.obj, nil))
 
-				d.Dce().setDeps(map[types.Object]struct{}{
-					tt.obj: {},
+				wantDeps := []string{}
+				if len(tt.wantDep) > 0 {
+					wantDeps = append(wantDeps, tt.wantDep)
+				}
+				sort.Strings(wantDeps)
+
+				c := Collector{}
+				c.CollectDCEDeps(d, func() {
+					c.DeclareDCEDep(tt.obj)
 				})
-				equal(t, len(d.Dce().deps), 1)
-				equal(t, d.Dce().deps[0], tt.wantDep)
+				equalSlices(t, d.Dce().getDeps(), wantDeps)
 			})
 		}
 	})
@@ -269,11 +264,11 @@ func Test_Info_SetAsAlive(t *testing.T) {
 		obj := quickVar(pkg, `Falkor`)
 		decl := &testDecl{}
 		equal(t, decl.Dce().isAlive(), true) // unnamed is automatically alive
-		equal(t, decl.Dce().String(), `[unnamed] . -> []`)
+		equal(t, decl.Dce().String(), `[unnamed] -> []`)
 
 		decl.Dce().SetAsAlive()
 		equal(t, decl.Dce().isAlive(), true) // still alive but now explicitly alive
-		equal(t, decl.Dce().String(), `[alive] [unnamed] . -> []`)
+		equal(t, decl.Dce().String(), `[alive] [unnamed] -> []`)
 
 		decl.Dce().SetName(obj)
 		equal(t, decl.Dce().isAlive(), true) // alive because SetAsAlive was called
@@ -284,7 +279,7 @@ func Test_Info_SetAsAlive(t *testing.T) {
 		obj := quickVar(pkg, `Artax`)
 		decl := &testDecl{}
 		equal(t, decl.Dce().isAlive(), true) // unnamed is automatically alive
-		equal(t, decl.Dce().String(), `[unnamed] . -> []`)
+		equal(t, decl.Dce().String(), `[unnamed] -> []`)
 
 		decl.Dce().SetName(obj)
 		equal(t, decl.Dce().isAlive(), false) // named so no longer automatically alive
@@ -493,6 +488,7 @@ func Test_Selector_SpecificMethods(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			vetinari.Dce().deps = nil // reset deps
 			c.CollectDCEDeps(vetinari, func() {
 				for _, decl := range tt.deps {
 					c.DeclareDCEDep(decl.obj)
@@ -626,6 +622,17 @@ func depCount(t *testing.T, decl *testDecl, want int) {
 func equal[T comparable](t *testing.T, got, want T) {
 	t.Helper()
 	if got != want {
-		t.Errorf(`expected %#v but got %#v`, want, got)
+		t.Errorf("Unexpected value was gotten:\n\texp: %#v\n\tgot: %#v", want, got)
+	}
+}
+
+func equalSlices[T comparable](t *testing.T, got, want []T) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Errorf("expected %d but got %d\n\texp: %#v\n\tgot: %#v", len(want), len(got), want, got)
+		return
+	}
+	for i, wantElem := range want {
+		equal(t, got[i], wantElem)
 	}
 }

@@ -47,6 +47,52 @@ func notBlocking() {
 	assertNotBlocking(t, file, pkgInfo, "notBlocking")
 }
 
+func TestInstanceBlocking(t *testing.T) {
+	tests := []struct {
+		name        string
+		src         string
+		blocking    []string
+		notBlocking []string
+	}{
+		{
+			name: "blocking instance",
+			src: `package test
+				func blocking[T any]() {
+					c := make(chan T)
+					<-c
+				}
+				func notBlocking[T any]() {
+					println()
+				}
+				func bInt() {
+					blocking[int]()
+				}
+				func nbUint() {
+					notBlocking[uint]()
+				}`,
+			blocking:    []string{`blocking`, `bInt`},
+			notBlocking: []string{`notBlocking`, `nbUint`},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			f := srctesting.New(t)
+			file := f.Parse(`test.go`, test.src)
+			typesInfo, typesPkg := f.Check(`pkg/test`, file)
+			pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, typesInfo, typesPkg, func(f *types.Func) bool {
+				panic(`isBlocking() should be never called for imported functions in this test.`)
+			})
+			for _, funcName := range test.blocking {
+				assertBlocking(t, file, pkgInfo, funcName)
+			}
+			for _, funcName := range test.notBlocking {
+				assertNotBlocking(t, file, pkgInfo, funcName)
+			}
+		})
+	}
+}
+
 func assertBlocking(t *testing.T, file *ast.File, pkgInfo *Info, funcName string) {
 	typesFunc := getTypesFunc(t, file, pkgInfo, funcName)
 	if !pkgInfo.IsBlocking(typesFunc) {

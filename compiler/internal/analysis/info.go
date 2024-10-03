@@ -357,9 +357,17 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 		fi.literalFuncCallees[f] = append(fi.literalFuncCallees[f], fi.visitorStack.copy())
 		return nil // No need to walk under this CallExpr, we already did it manually.
 	case *ast.IndexExpr:
-		// Collect info about the instantiated type or function.
+		// Collect info about the instantiated type or function, or index expression.
+		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
+			// This is a type conversion to an instance of a generic type,
+			// not a call. Type assertion itself is not blocking, but we will
+			// visit the input expression.
+		} else {
 
-		fmt.Printf(">> %[1]T %#[1]v\n", n) // TODO(gn): Finish implementing!
+			fmt.Printf(">> %[1]T %#[1]v\n", f)          // TODO(gn): Finish implementing!
+			fmt.Printf("   >> %[1]T %#[1]v\n", f.Index) // TODO(gn): Finish implementing!
+
+		}
 
 	default:
 		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {

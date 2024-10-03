@@ -10,95 +10,119 @@ import (
 
 // See: https://github.com/gopherjs/gopherjs/issues/955.
 func TestBlockingFunctionLiteral(t *testing.T) {
-	src := `
-package test
+	blockingTest(t, blockingTestArgs{
+		src: `package test
 
-func blocking() {
-	c := make(chan bool)
-	<-c
-}
+			func blocking() {
+				c := make(chan bool)
+				<-c
+			}
 
-func indirectlyBlocking() {
-	func() { blocking() }()
-}
+			func indirectlyBlocking() {
+				func() { blocking() }()
+			}
 
-func directlyBlocking() {
-	func() {
-		c := make(chan bool)
-		<-c
-	}()
-}
+			func directlyBlocking() {
+				func() {
+					c := make(chan bool)
+					<-c
+				}()
+			}
 
-func notBlocking() {
-	func() { println() } ()
-}
-`
-	f := srctesting.New(t)
-	file := f.Parse("test.go", src)
-	typesInfo, typesPkg := f.Check("pkg/test", file)
-
-	pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, typesInfo, typesPkg, func(f *types.Func) bool {
-		panic("isBlocking() should be never called for imported functions in this test.")
+			func notBlocking() {
+				func() { println() } ()
+			}`,
+		blocking:    []string{`blocking`, `indirectlyBlocking`, `directlyBlocking`},
+		notBlocking: []string{`notBlocking`},
 	})
-
-	assertBlocking(t, file, pkgInfo, "blocking")
-	assertBlocking(t, file, pkgInfo, "indirectlyBlocking")
-	assertBlocking(t, file, pkgInfo, "directlyBlocking")
-	assertNotBlocking(t, file, pkgInfo, "notBlocking")
 }
 
-func TestInstanceBlocking(t *testing.T) {
-	tests := []struct {
-		name        string
-		src         string
-		blocking    []string
-		notBlocking []string
-	}{
-		{
-			name: `blocking instance`,
-			src: `package test
-				func blocking[T any]() {
-					c := make(chan T)
-					<-c
-				}
-				func notBlocking[T any]() {
-					println()
-				}
-				func bInt() {
-					blocking[int]()
-				}
-				func nbUint() {
-					notBlocking[uint]()
-				}`,
-			blocking:    []string{`blocking`, `bInt`},
-			notBlocking: []string{`notBlocking`, `nbUint`},
-		},
-		{
-			name: `differentiate indexing`,
-			// Below calls notBlocking but since the function pointers
-			// are in the slice they will both be considered as blocking.
-			// This is just checking that the analysis can tell between
-			// indexing and instantiation of a generic.
-			src: `package test
-				func blocking() {
-					c := make(chan int)
-					<-c
-				}
-				func notBlocking() {
-					println()
-				}
-				var funcs = []func() { blocking, notBlocking }
-				func indexer() {
-					funcs[1]()
-				}`,
-			blocking:    []string{`blocking`, `indexer`},
-			notBlocking: []string{`notBlocking`},
-		},
-		{
-			name: `differentiate casting`,
-			// Below checks that casting to an instance type is treated as a
-			// cast an not accidentally treated as a function call.
-			src: `package test
+func TestBlockingLinkedFunction(t *testing.T) {
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+
+			// linked to some other function
+			func blocking()
+
+			func indirectlyBlocking() {
+				blocking()
+			}`,
+		blocking: []string{`blocking`, `indirectlyBlocking`},
+	})
+}
+
+func TestBlockingInstanceWithSingleTypeArgument(t *testing.T) {
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			func blocking[T any]() {
+				c := make(chan T)
+				<-c
+			}
+			func notBlocking[T any]() {
+				var v T
+				println(v)
+			}
+			func bInt() {
+				blocking[int]()
+			}
+			func nbUint() {
+				notBlocking[uint]()
+			}`,
+		blocking:    []string{`blocking`, `bInt`},
+		notBlocking: []string{`notBlocking`, `nbUint`},
+	})
+}
+
+func TestBlockingInstanceWithMultipleTypeArguments(t *testing.T) {
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			func blocking[K comparable, V any, M ~map[K]V]() {
+				c := make(chan M)
+				<-c
+			}
+			func notBlocking[K comparable, V any, M ~map[K]V]() {
+				var m M
+				println(m)
+			}
+			func bInt() {
+				blocking[string, int, map[string]int]()
+			}
+			func nbUint() {
+				notBlocking[string, uint, map[string]uint]()
+			}`,
+		blocking:    []string{`blocking`, `bInt`},
+		notBlocking: []string{`notBlocking`, `nbUint`},
+	})
+}
+
+func TestBlockingIndexedFromFunctionSlice(t *testing.T) {
+	// This calls notBlocking but since the function pointers
+	// are in the slice they will both be considered as blocking.
+	// This is just checking that the analysis can tell between
+	// indexing and instantiation of a generic.
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			func blocking() {
+				c := make(chan int)
+				<-c
+			}
+			func notBlocking() {
+				println()
+			}
+			var funcs = []func() { blocking, notBlocking }
+			func indexer(i int) {
+				funcs[i]()
+			}`,
+		blocking:    []string{`blocking`, `indexer`},
+		notBlocking: []string{`notBlocking`},
+	})
+}
+
+func TestBlockingCastingToAnInterfaceInstance(t *testing.T) {
+	// This checks that casting to an instance type is treated as a
+	// cast an not accidentally treated as a function call.
+	blockingTest(t, blockingTestArgs{
+		src: `package test
 				type Foo[T any] interface {
 					Baz() T
 				}
@@ -108,30 +132,58 @@ func TestInstanceBlocking(t *testing.T) {
 				func (b Bar) Baz() string {
 					return b.name
 				}
-				func caster() {
-					a := Bar{"foo"}
-					b := Foo[string](a)
-					println(b.Baz())
+				func caster() Foo[string] {
+					b := Bar{"foo"}
+					return Foo[string](b)
 				}`,
-			notBlocking: []string{`caster`},
-		},
+		notBlocking: []string{`caster`},
+	})
+}
+
+func TestBlockingCastingToAnInterface(t *testing.T) {
+	// This checks of non-generic casting of type is treated as a
+	// cast an not accidentally treated as a function call.
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			type Foo interface {
+				Baz() string
+			}
+			type Bar struct {
+				name string
+			}
+			func (b Bar) Baz() string {
+				return b.name
+			}
+			func caster() Foo {
+				b := Bar{"foo"}
+				return Foo(b)
+			}`,
+		notBlocking: []string{`caster`},
+	})
+}
+
+type blockingTestArgs struct {
+	src         string
+	blocking    []string
+	notBlocking []string
+}
+
+func blockingTest(t *testing.T, test blockingTestArgs) {
+	f := srctesting.New(t)
+
+	file := f.Parse(`test.go`, test.src)
+	typesInfo, typesPkg := f.Check(`pkg/test`, file)
+
+	pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, typesInfo, typesPkg, func(f *types.Func) bool {
+		panic(`isBlocking() should be never called for imported functions in this test.`)
+	})
+
+	for _, funcName := range test.blocking {
+		assertBlocking(t, file, pkgInfo, funcName)
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			f := srctesting.New(t)
-			file := f.Parse(`test.go`, test.src)
-			typesInfo, typesPkg := f.Check(`pkg/test`, file)
-			pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, typesInfo, typesPkg, func(f *types.Func) bool {
-				panic(`isBlocking() should be never called for imported functions in this test.`)
-			})
-			for _, funcName := range test.blocking {
-				assertBlocking(t, file, pkgInfo, funcName)
-			}
-			for _, funcName := range test.notBlocking {
-				assertNotBlocking(t, file, pkgInfo, funcName)
-			}
-		})
+	for _, funcName := range test.notBlocking {
+		assertNotBlocking(t, file, pkgInfo, funcName)
 	}
 }
 

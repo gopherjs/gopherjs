@@ -3,12 +3,14 @@ package analysis
 import (
 	"go/ast"
 	"go/types"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
-func TestBlockingSimplePrint(t *testing.T) {
+func TestBlockingSimple(t *testing.T) {
 	blockingTest(t, blockingTestArgs{
 		src: `package test
 			func notBlocking() {
@@ -18,10 +20,49 @@ func TestBlockingSimplePrint(t *testing.T) {
 	})
 }
 
+func TestBlockingRecursive(t *testing.T) {
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			func notBlocking(i int) {
+				if i > 0 {
+					println(i)
+					notBlocking(i - 1)
+				}
+			}`,
+		notBlocking: []string{`notBlocking`},
+	})
+}
+
+func TestBlockingAlternatingRecursive(t *testing.T) {
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			func near(i int) {
+				if i > 0 {
+					println(i)
+					far(i)
+				}
+			}
+
+			func far(i int) {
+				near(i - 1)
+			}`,
+		notBlocking: []string{`near`, `far`},
+	})
+}
+
 func TestBlockingChannels(t *testing.T) {
 	blockingTest(t, blockingTestArgs{
 		src: `package test
 			func readFromChannel(c chan bool) {
+				<-c
+			}
+
+			func readFromChannelAssign(c chan bool) {
+				v := <-c
+				println(v)
+			}
+
+			func readFromChannelAsArg(c chan bool) {
 				println(<-c)
 			}
 
@@ -40,7 +81,10 @@ func TestBlockingChannels(t *testing.T) {
 					println(v)
 				}
 			}`,
-		blocking:    []string{`readFromChannel`, `sendToChannel`, `rangeOnChannel`},
+		blocking: []string{
+			`readFromChannel`, `sendToChannel`, `rangeOnChannel`,
+			`readFromChannelAssign`, `readFromChannelAsArg`,
+		},
 		notBlocking: []string{`rangeOnSlice`},
 	})
 }
@@ -309,10 +353,44 @@ func TestBlockingCastingToAnInterface(t *testing.T) {
 	})
 }
 
+func TestBlockingInstantiationBlocking(t *testing.T) {
+	// This checks that the instantiation of a generic function
+	// is being used when checking for blocking.
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			type BazBlocker struct {
+				c chan bool
+			}
+			func (bb BazBlocker) Baz() {
+				println(<-bb.c)
+			}
+
+			type BazNotBlocker struct {}
+			func (bnb BazNotBlocker) Baz() {
+				println("hi")
+			}
+
+			type Foo interface { Baz() }
+			func FooBaz[T Foo](foo T) {
+				foo.Baz()
+			}
+
+			func blocking() {
+				FooBaz(BazBlocker{c: make(chan bool)})
+			}
+			func notBlocking() {
+				FooBaz(BazNotBlocker{})
+			}`,
+		blocking:    []string{`blocking`, `FooBaz`},
+		notBlocking: []string{`notBlocking`},
+	})
+}
+
 type blockingTestArgs struct {
 	src         string
 	blocking    []string
 	notBlocking []string
+	ignore      []string
 }
 
 func blockingTest(t *testing.T, test blockingTestArgs) {
@@ -325,12 +403,28 @@ func blockingTest(t *testing.T, test blockingTestArgs) {
 		panic(`isBlocking() should be never called for imported functions in this test.`)
 	})
 
+	allFuncs := setOfFuncs(file)
+	for _, funcName := range test.ignore {
+		delete(allFuncs, funcName)
+	}
+
 	for _, funcName := range test.blocking {
+		delete(allFuncs, funcName)
 		assertBlocking(t, file, pkgInfo, funcName)
 	}
 
 	for _, funcName := range test.notBlocking {
+		delete(allFuncs, funcName)
 		assertNotBlocking(t, file, pkgInfo, funcName)
+	}
+
+	if len(allFuncs) > 0 {
+		funcNames := make([]string, 0, len(allFuncs))
+		for funcName := range allFuncs {
+			funcNames = append(funcNames, funcName)
+		}
+		sort.Strings(funcNames)
+		t.Error(`The following functions are not tested: `, strings.Join(funcNames, `, `))
 	}
 }
 
@@ -346,6 +440,20 @@ func assertNotBlocking(t *testing.T, file *ast.File, pkgInfo *Info, funcName str
 	if pkgInfo.IsBlocking(typesFunc) {
 		t.Errorf("Got: %q is blocking. Want: %q is not blocking.", typesFunc, typesFunc)
 	}
+}
+
+func setOfFuncs(file *ast.File) map[string]*ast.Ident {
+	funcs := make(map[string]*ast.Ident)
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok {
+			name := fn.Name.Name
+			if fn.Recv != nil {
+				name = fn.Recv.List[0].Names[0].Name + `.` + name
+			}
+			funcs[name] = fn.Name
+		}
+	}
+	return funcs
 }
 
 func getTypesFunc(t *testing.T, file *ast.File, pkgInfo *Info, funcName string) *types.Func {

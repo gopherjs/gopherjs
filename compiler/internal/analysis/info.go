@@ -363,9 +363,12 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 			// not a call. Type assertion itself is not blocking, but we will
 			// visit the input expression.
 		} else if astutil.IsTypeExpr(f.Index, fi.pkgInfo.Info) {
+			// This is a call of an instantiation of a generic function,
+			// e.g. `func foo[T any]() { ... }; func main() { foo[int]() }`
 
-			fmt.Printf("1.>> %[1]T %#[1]v\n", f)         // TODO(gn): Finish implementing!
-			fmt.Printf("    >> %[1]T %#[1]v\n", f.Index) // TODO(gn): Finish implementing!
+			// TODO: Fix this. It is not taking into account the type argument
+			//       and the type argument may have a unique function body.
+			fi.callToNamedFunc(fi.pkgInfo.Uses[f.X.(*ast.Ident)])
 
 		} else {
 

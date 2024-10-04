@@ -3,287 +3,322 @@ package analysis
 import (
 	"go/ast"
 	"go/types"
-	"sort"
-	"strings"
 	"testing"
 
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
 func TestBlockingSimple(t *testing.T) {
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			func notBlocking() {
-				println("hi")
-			}`,
-		notBlocking: []string{`notBlocking`},
-	})
+	bt := newBlockingTest(t,
+		`package test
+
+		func notBlocking() {
+			println("hi")
+		}`)
+	bt.assertNotBlocking(`notBlocking`)
 }
 
 func TestBlockingRecursive(t *testing.T) {
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			func notBlocking(i int) {
-				if i > 0 {
-					println(i)
-					notBlocking(i - 1)
-				}
-			}`,
-		notBlocking: []string{`notBlocking`},
-	})
+	bt := newBlockingTest(t,
+		`package test
+
+		func notBlocking(i int) {
+			if i > 0 {
+				println(i)
+				notBlocking(i - 1)
+			}
+		}`)
+	bt.assertNotBlocking(`notBlocking`)
 }
 
 func TestBlockingAlternatingRecursive(t *testing.T) {
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			func near(i int) {
-				if i > 0 {
-					println(i)
-					far(i)
-				}
-			}
+	bt := newBlockingTest(t,
+		`package test
 
-			func far(i int) {
-				near(i - 1)
-			}`,
-		notBlocking: []string{`near`, `far`},
-	})
+		func near(i int) {
+			if i > 0 {
+				println(i)
+				far(i)
+			}
+		}
+
+		func far(i int) {
+			near(i - 1)
+		}`)
+	bt.assertNotBlocking(`near`)
+	bt.assertNotBlocking(`far`)
 }
 
 func TestBlockingChannels(t *testing.T) {
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			func readFromChannel(c chan bool) {
-				<-c
-			}
+	bt := newBlockingTest(t,
+		`package test
 
-			func readFromChannelAssign(c chan bool) {
-				v := <-c
+		func readFromChannel(c chan bool) {
+			<-c
+		}
+
+		func readFromChannelAssign(c chan bool) {
+			v := <-c
+			println(v)
+		}
+
+		func readFromChannelAsArg(c chan bool) {
+			println(<-c)
+		}
+
+		func sendToChannel(c chan bool) {
+			c <- true
+		}
+
+		func rangeOnChannel(c chan bool) {
+			for v := range c {
 				println(v)
 			}
+		}
 
-			func readFromChannelAsArg(c chan bool) {
-				println(<-c)
+		func rangeOnSlice(c []bool) {
+			for v := range c {
+				println(v)
 			}
-
-			func sendToChannel(c chan bool) {
-				c <- true
-			}
-
-			func rangeOnChannel(c chan bool) {
-				for v := range c {
-					println(v)
-				}
-			}
-
-			func rangeOnSlice(c []bool) {
-				for v := range c {
-					println(v)
-				}
-			}`,
-		blocking: []string{
-			`readFromChannel`, `sendToChannel`, `rangeOnChannel`,
-			`readFromChannelAssign`, `readFromChannelAsArg`,
-		},
-		notBlocking: []string{`rangeOnSlice`},
-	})
+		}`)
+	bt.assertBlocking(`readFromChannel`)
+	bt.assertBlocking(`sendToChannel`)
+	bt.assertBlocking(`rangeOnChannel`)
+	bt.assertBlocking(`readFromChannelAssign`)
+	bt.assertBlocking(`readFromChannelAsArg`)
+	bt.assertNotBlocking(`rangeOnSlice`)
 }
 
 func TestBlockingSelects(t *testing.T) {
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			func selectReadWithoutDefault(a, b chan bool) {
-				select {
-				case <-a:
-					println("a")
-				case v := <-b:
-					println("b", v)
-				}
-			}
+	bt := newBlockingTest(t,
+		`package test
 
-			func selectReadWithDefault(a, b chan bool) {
-				select {
-				case <-a:
-					println("a")
-				case v := <-b:
-					println("b", v)
-				default:
-					println("nothing")
-				}
+		func selectReadWithoutDefault(a, b chan bool) {
+			select {
+			case <-a:
+				println("a")
+			case v := <-b:
+				println("b", v)
 			}
+		}
 
-			func selectSendWithoutDefault(a, b chan bool) {
-				select {
-				case a <- true:
-					println("a")
-				case b <- false:
-					println("b")
-				}
+		func selectReadWithDefault(a, b chan bool) {
+			select {
+			case <-a:
+				println("a")
+			case v := <-b:
+				println("b", v)
+			default:
+				println("nothing")
 			}
+		}
 
-			func selectSendWithDefault(a, b chan bool) {
-				select {
-				case a <- true:
-					println("a")
-				case b <- false:
-					println("b")
-				default:
-					println("nothing")
-				}
-			}`,
-		blocking:    []string{`selectReadWithoutDefault`, `selectSendWithoutDefault`},
-		notBlocking: []string{`selectReadWithDefault`, `selectSendWithDefault`},
-	})
+		func selectSendWithoutDefault(a, b chan bool) {
+			select {
+			case a <- true:
+				println("a")
+			case b <- false:
+				println("b")
+			}
+		}
+
+		func selectSendWithDefault(a, b chan bool) {
+			select {
+			case a <- true:
+				println("a")
+			case b <- false:
+				println("b")
+			default:
+				println("nothing")
+			}
+		}`)
+	bt.assertBlocking(`selectReadWithoutDefault`)
+	bt.assertBlocking(`selectSendWithoutDefault`)
+	bt.assertNotBlocking(`selectReadWithDefault`)
+	bt.assertNotBlocking(`selectSendWithDefault`)
 }
 
 func TestBlockingGos(t *testing.T) {
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			func notBlocking(c chan bool) {
-				go func(c chan bool) {
-					println(<-c)
-				}(c)
-			}
+	bt := newBlockingTest(t,
+		`package test
 
-			func blocking(c chan bool) {
-				go func(v bool) {
-					println(v)
-				}(<-c)
-			}`,
-		blocking:    []string{`blocking`},
-		notBlocking: []string{`notBlocking`},
-	})
+		func notBlocking(c chan bool) {
+			go func(c chan bool) { // line 4
+				println(<-c)
+			}(c)
+		}
+
+		func blocking(c chan bool) {
+			go func(v bool) { // line 10
+				println(v)
+			}(<-c)
+		}`)
+
+	// TODO: Add go with non-lit func
+
+	bt.assertNotBlocking(`notBlocking`)
+	bt.assertBlockingLit(4)
+
+	bt.assertBlocking(`blocking`)
+	bt.assertNotBlockingLit(10)
 }
 
 func TestBlockingDefers(t *testing.T) {
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			func blockingBody(c chan bool) {
-				defer func(c chan bool) {
-					println(<-c)
-				}(c)
-			}
+	bt := newBlockingTest(t,
+		`package test
 
-			func blockingArg(c chan bool) {
-				defer func(v bool) {
-					println(v)
-				}(<-c)
-			}
+		func blockingBody(c chan bool) {
+			defer func(c chan bool) { // line 4
+				println(<-c)
+			}(c)
+		}
 
-			func notBlocking(c chan bool) {
-				defer func(v bool) {
-					println(v)
-				}(true)
-			}`,
-		blocking:    []string{`blockingBody`, `blockingArg`},
-		notBlocking: []string{`notBlocking`},
-	})
+		func blockingArg(c chan bool) {
+			defer func(v bool) { // line 10
+				println(v)
+			}(<-c)
+		}
+
+		func notBlocking(c chan bool) {
+			defer func(v bool) { // line 16
+				println(v)
+			}(true)
+		}`)
+
+	// TODO: Add defer with non-lit func
+
+	bt.assertBlocking(`blockingBody`)
+	bt.assertBlockingLit(4)
+
+	bt.assertBlocking(`blockingArg`)
+	bt.assertNotBlockingLit(10)
+
+	bt.assertNotBlocking(`notBlocking`)
+	bt.assertNotBlockingLit(16)
 }
 
 func TestBlockingReturns(t *testing.T) {
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			func blocking(c chan bool) bool {
-				return <-c
-			}
+	bt := newBlockingTest(t,
+		`package test
 
-			func indirectlyBlocking(c chan bool) bool {
-				return blocking(c)
-			}
+		func blocking(c chan bool) bool {
+			return <-c
+		}
 
-			func notBlocking(c chan bool) bool {
-				return true
-			}`,
-		blocking:    []string{`blocking`, `indirectlyBlocking`},
-		notBlocking: []string{`notBlocking`},
-	})
+		func indirectlyBlocking(c chan bool) bool {
+			return blocking(c)
+		}
+
+		func notBlocking(c chan bool) bool {
+			return true
+		}`)
+	bt.assertBlocking(`blocking`)
+	bt.assertBlocking(`indirectlyBlocking`)
+	bt.assertNotBlocking(`notBlocking`)
 }
 
 func TestBlockingFunctionLiteral(t *testing.T) {
 	// See: https://github.com/gopherjs/gopherjs/issues/955.
-	blockingTest(t, blockingTestArgs{
-		src: `package test
+	bt := newBlockingTest(t,
+		`package test
 
-			func blocking() {
+		func blocking() {
+			c := make(chan bool)
+			<-c
+		}
+
+		func indirectlyBlocking() {
+			func() { blocking() }() // line 9
+		}
+
+		func directlyBlocking() {
+			func() {  // line 13
 				c := make(chan bool)
 				<-c
-			}
+			}()
+		}
 
-			func indirectlyBlocking() {
-				func() { blocking() }()
-			}
+		func notBlocking() {
+			func() { println() } () // line 20
+		}`)
+	bt.assertBlocking(`blocking`)
 
-			func directlyBlocking() {
-				func() {
-					c := make(chan bool)
-					<-c
-				}()
-			}
+	bt.assertBlocking(`indirectlyBlocking`)
+	bt.assertBlockingLit(9)
 
-			func notBlocking() {
-				func() { println() } ()
-			}`,
-		blocking:    []string{`blocking`, `indirectlyBlocking`, `directlyBlocking`},
-		notBlocking: []string{`notBlocking`},
-	})
+	bt.assertBlocking(`directlyBlocking`)
+	bt.assertBlockingLit(13)
+
+	bt.assertNotBlocking(`notBlocking`)
+	bt.assertNotBlockingLit(20)
 }
 
 func TestBlockingLinkedFunction(t *testing.T) {
-	blockingTest(t, blockingTestArgs{
-		src: `package test
+	bt := newBlockingTest(t,
+		`package test
 
-			// linked to some other function
-			func blocking()
+		// linked to some other function
+		func blocking()
 
-			func indirectlyBlocking() {
-				blocking()
-			}`,
-		blocking: []string{`blocking`, `indirectlyBlocking`},
-	})
+		func indirectlyBlocking() {
+			blocking()
+		}`)
+	bt.assertBlocking(`blocking`)
+	bt.assertBlocking(`indirectlyBlocking`)
 }
 
 func TestBlockingInstanceWithSingleTypeArgument(t *testing.T) {
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			func blocking[T any]() {
-				c := make(chan T)
-				<-c
-			}
-			func notBlocking[T any]() {
-				var v T
-				println(v)
-			}
-			func bInt() {
-				blocking[int]()
-			}
-			func nbUint() {
-				notBlocking[uint]()
-			}`,
-		blocking:    []string{`blocking`, `bInt`},
-		notBlocking: []string{`notBlocking`, `nbUint`},
-	})
+	bt := newBlockingTest(t,
+		`package test
+
+		func blocking[T any]() {
+			c := make(chan T)
+			<-c
+		}
+
+		func notBlocking[T any]() {
+			var v T
+			println(v)
+		}
+
+		func bInt() {
+			blocking[int]()
+		}
+
+		func nbUint() {
+			notBlocking[uint]()
+		}`)
+	bt.assertBlocking(`blocking`)
+	bt.assertBlocking(`bInt`)
+	bt.assertNotBlocking(`notBlocking`)
+	bt.assertNotBlocking(`nbUint`)
 }
 
 func TestBlockingInstanceWithMultipleTypeArguments(t *testing.T) {
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			func blocking[K comparable, V any, M ~map[K]V]() {
-				c := make(chan M)
-				<-c
-			}
-			func notBlocking[K comparable, V any, M ~map[K]V]() {
-				var m M
-				println(m)
-			}
-			func bInt() {
-				blocking[string, int, map[string]int]()
-			}
-			func nbUint() {
-				notBlocking[string, uint, map[string]uint]()
-			}`,
-		blocking:    []string{`blocking`, `bInt`},
-		notBlocking: []string{`notBlocking`, `nbUint`},
-	})
+	bt := newBlockingTest(t,
+		`package test
+
+		func blocking[K comparable, V any, M ~map[K]V]() {
+			c := make(chan M)
+			<-c
+		}
+
+		func notBlocking[K comparable, V any, M ~map[K]V]() {
+			var m M
+			println(m)
+		}
+
+		func bInt() {
+			blocking[string, int, map[string]int]()
+		}
+
+		func nbUint() {
+			notBlocking[string, uint, map[string]uint]()
+		}`)
+	bt.assertBlocking(`blocking`)
+	bt.assertBlocking(`bInt`)
+	bt.assertNotBlocking(`notBlocking`)
+	bt.assertNotBlocking(`nbUint`)
 }
 
 func TestBlockingIndexedFromFunctionSlice(t *testing.T) {
@@ -291,183 +326,206 @@ func TestBlockingIndexedFromFunctionSlice(t *testing.T) {
 	// are in the slice they will both be considered as blocking.
 	// This is just checking that the analysis can tell between
 	// indexing and instantiation of a generic.
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			func blocking() {
-				c := make(chan int)
-				<-c
-			}
-			func notBlocking() {
-				println()
-			}
-			var funcs = []func() { blocking, notBlocking }
-			func indexer(i int) {
-				funcs[i]()
-			}`,
-		blocking:    []string{`blocking`, `indexer`},
-		notBlocking: []string{`notBlocking`},
-	})
+	bt := newBlockingTest(t,
+		`package test
+
+		func blocking() {
+			c := make(chan int)
+			<-c
+		}
+
+		func notBlocking() {
+			println()
+		}
+
+		var funcs = []func() { blocking, notBlocking }
+
+		func indexer(i int) {
+			funcs[i]()
+		}`)
+	bt.assertBlocking(`blocking`)
+	bt.assertBlocking(`indexer`)
+	bt.assertNotBlocking(`notBlocking`)
 }
 
 func TestBlockingCastingToAnInterfaceInstance(t *testing.T) {
 	// This checks that casting to an instance type is treated as a
 	// cast an not accidentally treated as a function call.
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-				type Foo[T any] interface {
-					Baz() T
-				}
-				type Bar struct {
-					name string
-				}
-				func (b Bar) Baz() string {
-					return b.name
-				}
-				func caster() Foo[string] {
-					b := Bar{"foo"}
-					return Foo[string](b)
-				}`,
-		notBlocking: []string{`caster`},
-	})
+	bt := newBlockingTest(t,
+		`package test
+
+		type Foo[T any] interface {
+			Baz() T
+		}
+
+		type Bar struct {
+			name string
+		}
+
+		func (b Bar) Baz() string {
+			return b.name
+		}
+
+		func caster() Foo[string] {
+			b := Bar{"foo"}
+			return Foo[string](b)
+		}`)
+	bt.assertNotBlocking(`caster`)
 }
 
 func TestBlockingCastingToAnInterface(t *testing.T) {
 	// This checks of non-generic casting of type is treated as a
 	// cast an not accidentally treated as a function call.
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			type Foo interface {
-				Baz() string
-			}
-			type Bar struct {
-				name string
-			}
-			func (b Bar) Baz() string {
-				return b.name
-			}
-			func caster() Foo {
-				b := Bar{"foo"}
-				return Foo(b)
-			}`,
-		notBlocking: []string{`caster`},
-	})
+	bt := newBlockingTest(t,
+		`package test
+	
+		type Foo interface {
+			Baz() string
+		}
+
+		type Bar struct {
+			name string
+		}
+
+		func (b Bar) Baz() string {
+			return b.name
+		}
+
+		func caster() Foo {
+			b := Bar{"foo"}
+			return Foo(b)
+		}`)
+	bt.assertNotBlocking(`caster`)
 }
 
 func TestBlockingInstantiationBlocking(t *testing.T) {
 	// This checks that the instantiation of a generic function
 	// is being used when checking for blocking.
-	blockingTest(t, blockingTestArgs{
-		src: `package test
-			type BazBlocker struct {
-				c chan bool
-			}
-			func (bb BazBlocker) Baz() {
-				println(<-bb.c)
-			}
+	bt := newBlockingTest(t,
+		`package test
+		
+		type BazBlocker struct {
+			c chan bool
+		}
+		func (bb BazBlocker) Baz() {
+			println(<-bb.c)
+		}
 
-			type BazNotBlocker struct {}
-			func (bnb BazNotBlocker) Baz() {
-				println("hi")
-			}
+		type BazNotBlocker struct {}
+		func (bnb BazNotBlocker) Baz() {
+			println("hi")
+		}
 
-			type Foo interface { Baz() }
-			func FooBaz[T Foo](foo T) {
-				foo.Baz()
-			}
+		type Foo interface { Baz() }
+		func FooBaz[T Foo](foo T) {
+			foo.Baz()
+		}
 
-			func blocking() {
-				FooBaz(BazBlocker{c: make(chan bool)})
-			}
-			func notBlocking() {
-				FooBaz(BazNotBlocker{})
-			}`,
-		blocking:    []string{`blocking`, `FooBaz`},
-		notBlocking: []string{`notBlocking`},
-	})
+		func blocking() {
+			FooBaz(BazBlocker{c: make(chan bool)})
+		}
+		
+		func notBlocking() {
+			FooBaz(BazNotBlocker{})
+		}`)
+	bt.assertBlocking(`FooBaz`) // generic instantiation is blocking
+	bt.assertBlocking(`BazBlocker.Baz`)
+	bt.assertBlocking(`blocking`)
+	bt.assertNotBlocking(`BazNotBlocker.Baz`)
+	bt.assertNotBlocking(`notBlocking`)
 }
 
-type blockingTestArgs struct {
-	src         string
-	blocking    []string
-	notBlocking []string
-	ignore      []string
+type blockingTest struct {
+	f       *srctesting.Fixture
+	file    *ast.File
+	pkgInfo *Info
 }
 
-func blockingTest(t *testing.T, test blockingTestArgs) {
+func newBlockingTest(t *testing.T, src string) *blockingTest {
 	f := srctesting.New(t)
 
-	file := f.Parse(`test.go`, test.src)
+	file := f.Parse(`test.go`, src)
 	typesInfo, typesPkg := f.Check(`pkg/test`, file)
 
 	pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, typesInfo, typesPkg, func(f *types.Func) bool {
 		panic(`isBlocking() should be never called for imported functions in this test.`)
 	})
 
-	allFuncs := setOfFuncs(file)
-	for _, funcName := range test.ignore {
-		delete(allFuncs, funcName)
-	}
-
-	for _, funcName := range test.blocking {
-		delete(allFuncs, funcName)
-		assertBlocking(t, file, pkgInfo, funcName)
-	}
-
-	for _, funcName := range test.notBlocking {
-		delete(allFuncs, funcName)
-		assertNotBlocking(t, file, pkgInfo, funcName)
-	}
-
-	if len(allFuncs) > 0 {
-		funcNames := make([]string, 0, len(allFuncs))
-		for funcName := range allFuncs {
-			funcNames = append(funcNames, funcName)
-		}
-		sort.Strings(funcNames)
-		t.Error(`The following functions are not tested: `, strings.Join(funcNames, `, `))
+	return &blockingTest{
+		f:       f,
+		file:    file,
+		pkgInfo: pkgInfo,
 	}
 }
 
-func assertBlocking(t *testing.T, file *ast.File, pkgInfo *Info, funcName string) {
-	typesFunc := getTypesFunc(t, file, pkgInfo, funcName)
-	if !pkgInfo.IsBlocking(typesFunc) {
-		t.Errorf("Got: %q is not blocking. Want: %q is blocking.", typesFunc, typesFunc)
+func (bt *blockingTest) assertBlocking(funcName string) {
+	if !bt.isTypesFuncBlocking(funcName) {
+		bt.f.T.Errorf(`Got: %q is not blocking. Want: %q is blocking.`, funcName, funcName)
 	}
 }
 
-func assertNotBlocking(t *testing.T, file *ast.File, pkgInfo *Info, funcName string) {
-	typesFunc := getTypesFunc(t, file, pkgInfo, funcName)
-	if pkgInfo.IsBlocking(typesFunc) {
-		t.Errorf("Got: %q is blocking. Want: %q is not blocking.", typesFunc, typesFunc)
+func (bt *blockingTest) assertNotBlocking(funcName string) {
+	if bt.isTypesFuncBlocking(funcName) {
+		bt.f.T.Errorf(`Got: %q is blocking. Want: %q is not blocking.`, funcName, funcName)
 	}
 }
 
-func setOfFuncs(file *ast.File) map[string]*ast.Ident {
-	funcs := make(map[string]*ast.Ident)
-	for _, decl := range file.Decls {
-		if fn, ok := decl.(*ast.FuncDecl); ok {
-			name := fn.Name.Name
-			if fn.Recv != nil {
-				name = fn.Recv.List[0].Names[0].Name + `.` + name
+func (bt *blockingTest) isTypesFuncBlocking(funcName string) bool {
+	var decl *ast.FuncDecl
+	ast.Inspect(bt.file, func(n ast.Node) bool {
+		if f, ok := n.(*ast.FuncDecl); ok {
+			name := f.Name.Name
+			if f.Recv != nil {
+				name = f.Recv.List[0].Type.(*ast.Ident).Name + `.` + name
 			}
-			funcs[name] = fn.Name
+			if name == funcName {
+				decl = f
+				return false
+			}
 		}
+		return decl == nil
+	})
+
+	if decl == nil {
+		bt.f.T.Fatalf(`Declaration of %q is not found in the AST.`, funcName)
 	}
-	return funcs
+	blockingType, ok := bt.pkgInfo.Defs[decl.Name]
+	if !ok {
+		bt.f.T.Fatalf(`No type information is found for %v.`, decl.Name)
+	}
+	return bt.pkgInfo.IsBlocking(blockingType.(*types.Func))
 }
 
-func getTypesFunc(t *testing.T, file *ast.File, pkgInfo *Info, funcName string) *types.Func {
-	obj := file.Scope.Lookup(funcName)
-	if obj == nil {
-		t.Fatalf("Declaration of %q is not found in the AST.", funcName)
+func (bt *blockingTest) assertBlockingLit(lineNo int) {
+	if !bt.isFuncLitBlocking(lineNo) {
+		bt.f.T.Errorf(`Got: FuncLit at line %d is not blocking. Want: FuncLit at line %d is blocking.`, lineNo, lineNo)
 	}
-	decl, ok := obj.Decl.(*ast.FuncDecl)
+}
+
+func (bt *blockingTest) assertNotBlockingLit(lineNo int) {
+	if bt.isFuncLitBlocking(lineNo) {
+		bt.f.T.Errorf(`Got: FuncLit at line %d is blocking. Want: FuncLit at line %d is not blocking.`, lineNo, lineNo)
+	}
+}
+
+func (bt *blockingTest) isFuncLitBlocking(lineNo int) bool {
+	var fnLit *ast.FuncLit
+	ast.Inspect(bt.file, func(n ast.Node) bool {
+		if fl, ok := n.(*ast.FuncLit); ok {
+			if bt.f.FileSet.Position(fl.Pos()).Line == lineNo {
+				fnLit = fl
+				return false
+			}
+		}
+		return fnLit == nil
+	})
+
+	if fnLit == nil {
+		bt.f.T.Fatalf(`FuncLit found on line %d not found in the AST.`, lineNo)
+	}
+	info, ok := bt.pkgInfo.FuncLitInfos[fnLit]
 	if !ok {
-		t.Fatalf("Got: %q is %v. Want: a function declaration.", funcName, obj.Kind)
+		bt.f.T.Fatalf(`No type information is found for FuncLit at line %d.`, lineNo)
 	}
-	blockingType, ok := pkgInfo.Defs[decl.Name]
-	if !ok {
-		t.Fatalf("No type information is found for %v.", decl.Name)
-	}
-	return blockingType.(*types.Func)
+	return len(info.Blocking) > 0
 }

@@ -8,8 +8,155 @@ import (
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
-// See: https://github.com/gopherjs/gopherjs/issues/955.
+func TestBlockingSimplePrint(t *testing.T) {
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			func notBlocking() {
+				println("hi")
+			}`,
+		notBlocking: []string{`notBlocking`},
+	})
+}
+
+func TestBlockingChannels(t *testing.T) {
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			func readFromChannel(c chan bool) {
+				println(<-c)
+			}
+
+			func sendToChannel(c chan bool) {
+				c <- true
+			}
+
+			func rangeOnChannel(c chan bool) {
+				for v := range c {
+					println(v)
+				}
+			}
+
+			func rangeOnSlice(c []bool) {
+				for v := range c {
+					println(v)
+				}
+			}`,
+		blocking:    []string{`readFromChannel`, `sendToChannel`, `rangeOnChannel`},
+		notBlocking: []string{`rangeOnSlice`},
+	})
+}
+
+func TestBlockingSelects(t *testing.T) {
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			func selectReadWithoutDefault(a, b chan bool) {
+				select {
+				case <-a:
+					println("a")
+				case v := <-b:
+					println("b", v)
+				}
+			}
+
+			func selectReadWithDefault(a, b chan bool) {
+				select {
+				case <-a:
+					println("a")
+				case v := <-b:
+					println("b", v)
+				default:
+					println("nothing")
+				}
+			}
+
+			func selectSendWithoutDefault(a, b chan bool) {
+				select {
+				case a <- true:
+					println("a")
+				case b <- false:
+					println("b")
+				}
+			}
+
+			func selectSendWithDefault(a, b chan bool) {
+				select {
+				case a <- true:
+					println("a")
+				case b <- false:
+					println("b")
+				default:
+					println("nothing")
+				}
+			}`,
+		blocking:    []string{`selectReadWithoutDefault`, `selectSendWithoutDefault`},
+		notBlocking: []string{`selectReadWithDefault`, `selectSendWithDefault`},
+	})
+}
+
+func TestBlockingGos(t *testing.T) {
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			func notBlocking(c chan bool) {
+				go func(c chan bool) {
+					println(<-c)
+				}(c)
+			}
+
+			func blocking(c chan bool) {
+				go func(v bool) {
+					println(v)
+				}(<-c)
+			}`,
+		blocking:    []string{`blocking`},
+		notBlocking: []string{`notBlocking`},
+	})
+}
+
+func TestBlockingDefers(t *testing.T) {
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			func blockingBody(c chan bool) {
+				defer func(c chan bool) {
+					println(<-c)
+				}(c)
+			}
+
+			func blockingArg(c chan bool) {
+				defer func(v bool) {
+					println(v)
+				}(<-c)
+			}
+
+			func notBlocking(c chan bool) {
+				defer func(v bool) {
+					println(v)
+				}(true)
+			}`,
+		blocking:    []string{`blockingBody`, `blockingArg`},
+		notBlocking: []string{`notBlocking`},
+	})
+}
+
+func TestBlockingReturns(t *testing.T) {
+	blockingTest(t, blockingTestArgs{
+		src: `package test
+			func blocking(c chan bool) bool {
+				return <-c
+			}
+
+			func indirectlyBlocking(c chan bool) bool {
+				return blocking(c)
+			}
+
+			func notBlocking(c chan bool) bool {
+				return true
+			}`,
+		blocking:    []string{`blocking`, `indirectlyBlocking`},
+		notBlocking: []string{`notBlocking`},
+	})
+}
+
 func TestBlockingFunctionLiteral(t *testing.T) {
+	// See: https://github.com/gopherjs/gopherjs/issues/955.
 	blockingTest(t, blockingTestArgs{
 		src: `package test
 

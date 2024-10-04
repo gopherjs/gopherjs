@@ -362,10 +362,15 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 			// This is a type conversion to an instance of a generic type,
 			// not a call. Type assertion itself is not blocking, but we will
 			// visit the input expression.
+		} else if astutil.IsTypeExpr(f.Index, fi.pkgInfo.Info) {
+
+			fmt.Printf("1.>> %[1]T %#[1]v\n", f)         // TODO(gn): Finish implementing!
+			fmt.Printf("    >> %[1]T %#[1]v\n", f.Index) // TODO(gn): Finish implementing!
+
 		} else {
 
-			fmt.Printf(">> %[1]T %#[1]v\n", f)          // TODO(gn): Finish implementing!
-			fmt.Printf("   >> %[1]T %#[1]v\n", f.Index) // TODO(gn): Finish implementing!
+			fmt.Printf("2.>> %[1]T %#[1]v\n", f)         // TODO(gn): Finish implementing!
+			fmt.Printf("    >> %[1]T %#[1]v\n", f.Index) // TODO(gn): Finish implementing!
 
 		}
 

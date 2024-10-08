@@ -338,6 +338,7 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 	switch f := astutil.RemoveParens(n.Fun).(type) {
 	case *ast.Ident:
 		fi.callToNamedFunc(fi.pkgInfo.Uses[f])
+
 	case *ast.SelectorExpr:
 		if sel := fi.pkgInfo.Selections[f]; sel != nil && typesutil.IsJsObject(sel.Recv()) {
 			// js.Object methods are known to be non-blocking, but we still must
@@ -345,6 +346,7 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 		} else {
 			fi.callToNamedFunc(fi.pkgInfo.Uses[f.Sel])
 		}
+
 	case *ast.FuncLit:
 		// Collect info about the function literal itself.
 		ast.Walk(fi, n.Fun)
@@ -356,6 +358,7 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 		// Register literal function call site in case it is identified as blocking.
 		fi.literalFuncCallees[f] = append(fi.literalFuncCallees[f], fi.visitorStack.copy())
 		return nil // No need to walk under this CallExpr, we already did it manually.
+
 	case *ast.IndexExpr:
 		// Collect info about the instantiated type or function, or index expression.
 		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
@@ -368,13 +371,35 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 
 			// TODO: Fix this. It is not taking into account the type argument
 			//       and the type argument may have a unique function body.
+			inst, ok := fi.pkgInfo.Info.Instances[f.X.(*ast.Ident)]
+			fmt.Printf("1.>> %t: %#v\n", ok, inst)
+
+			// TODO(gn): Fix and Finish implementing!
 			fi.callToNamedFunc(fi.pkgInfo.Uses[f.X.(*ast.Ident)])
+			fmt.Printf("2.>> %[1]T %#[1]v\n", f)
+			fmt.Printf("    >> %[1]T %#[1]v\n", f.Index)
 
 		} else {
+			// The called function is gotten with an index or key from a map, array, or slice.
+			// e.g. `m := map[string]func(){}; m["key"]()`, `s := []func(); s[0]()`.
+			// Since we can't predict if the returned function will be blocking
+			// or not, we have to be conservative and assume that function might be blocking.
+			fi.markBlocking(fi.visitorStack)
+		}
 
-			fmt.Printf("2.>> %[1]T %#[1]v\n", f)         // TODO(gn): Finish implementing!
-			fmt.Printf("    >> %[1]T %#[1]v\n", f.Index) // TODO(gn): Finish implementing!
+	case *ast.IndexListExpr:
+		// Collect info about the instantiated type or function.
+		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
+			// This is a type conversion to an instance of a generic type,
+			// not a call. Type assertion itself is not blocking, but we will
+			// visit the input expression.
+		} else {
 
+			// TODO: Finish implementing! This should match *ast.IndexExpr middle case.
+			fmt.Printf("3.>> %[1]T %#[1]v\n", f)
+			for i, index := range f.Indices {
+				fmt.Printf("    >> %[1]d) %[2]T %#[2]v\n", i, index)
+			}
 		}
 
 	default:

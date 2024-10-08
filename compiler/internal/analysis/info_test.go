@@ -8,7 +8,7 @@ import (
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
-func TestBlockingSimple(t *testing.T) {
+func TestBlocking_Simple(t *testing.T) {
 	bt := newBlockingTest(t,
 		`package test
 
@@ -18,7 +18,7 @@ func TestBlockingSimple(t *testing.T) {
 	bt.assertNotBlocking(`notBlocking`)
 }
 
-func TestBlockingRecursive(t *testing.T) {
+func TestBlocking_Recursive(t *testing.T) {
 	bt := newBlockingTest(t,
 		`package test
 
@@ -31,7 +31,7 @@ func TestBlockingRecursive(t *testing.T) {
 	bt.assertNotBlocking(`notBlocking`)
 }
 
-func TestBlockingAlternatingRecursive(t *testing.T) {
+func TestBlocking_AlternatingRecursive(t *testing.T) {
 	bt := newBlockingTest(t,
 		`package test
 
@@ -49,7 +49,7 @@ func TestBlockingAlternatingRecursive(t *testing.T) {
 	bt.assertNotBlocking(`far`)
 }
 
-func TestBlockingChannels(t *testing.T) {
+func TestBlocking_Channels(t *testing.T) {
 	bt := newBlockingTest(t,
 		`package test
 
@@ -89,7 +89,7 @@ func TestBlockingChannels(t *testing.T) {
 	bt.assertNotBlocking(`rangeOnSlice`)
 }
 
-func TestBlockingSelects(t *testing.T) {
+func TestBlocking_Selects(t *testing.T) {
 	bt := newBlockingTest(t,
 		`package test
 
@@ -138,7 +138,7 @@ func TestBlockingSelects(t *testing.T) {
 	bt.assertNotBlocking(`selectSendWithDefault`)
 }
 
-func TestBlockingGos(t *testing.T) {
+func TestBlocking_GoRoutines_WithFuncLiterals(t *testing.T) {
 	bt := newBlockingTest(t,
 		`package test
 
@@ -153,9 +153,6 @@ func TestBlockingGos(t *testing.T) {
 				println(v)
 			}(<-c)
 		}`)
-
-	// TODO: Add go with non-lit func
-
 	bt.assertNotBlocking(`notBlocking`)
 	bt.assertBlockingLit(4)
 
@@ -163,7 +160,33 @@ func TestBlockingGos(t *testing.T) {
 	bt.assertNotBlockingLit(10)
 }
 
-func TestBlockingDefers(t *testing.T) {
+func TestBlocking_GoRoutines_WithNamedFuncs(t *testing.T) {
+	bt := newBlockingTest(t,
+		`package test
+
+		func blockingRoutine(c chan bool) {
+			println(<-c)
+		}
+
+		func nonBlockingRoutine(v bool) {
+			println(v)
+		}
+
+		func notBlocking(c chan bool) {
+			go blockingRoutine(c)
+		}
+
+		func blocking(c chan bool) {
+			go nonBlockingRoutine(<-c)
+		}`)
+	bt.assertBlocking(`blockingRoutine`)
+	bt.assertNotBlocking(`nonBlockingRoutine`)
+
+	bt.assertNotBlocking(`notBlocking`)
+	bt.assertBlocking(`blocking`)
+}
+
+func TestBlocking_Defers_WithoutReturns_WithFuncLiterals(t *testing.T) {
 	bt := newBlockingTest(t,
 		`package test
 
@@ -184,9 +207,6 @@ func TestBlockingDefers(t *testing.T) {
 				println(v)
 			}(true)
 		}`)
-
-	// TODO: Add defer with non-lit func
-
 	bt.assertBlocking(`blockingBody`)
 	bt.assertBlockingLit(4)
 
@@ -197,7 +217,111 @@ func TestBlockingDefers(t *testing.T) {
 	bt.assertNotBlockingLit(16)
 }
 
-func TestBlockingReturns(t *testing.T) {
+func TestBlocking_Defers_WithoutReturns_WithNamedFuncs(t *testing.T) {
+	bt := newBlockingTest(t,
+		`package test
+
+		func blockingPrint(c chan bool) {
+			println(<-c)
+		}
+
+		func nonBlockingPrint(v bool) {
+			println(v)
+		}
+
+		func blockingBody(c chan bool) {
+			defer blockingPrint(c)
+		}
+
+		func blockingArg(c chan bool) {
+			defer nonBlockingPrint(<-c)
+		}
+
+		func notBlocking(c chan bool) {
+			defer nonBlockingPrint(true)
+		}`)
+	bt.assertBlocking(`blockingPrint`)
+	bt.assertNotBlocking(`nonBlockingPrint`)
+
+	bt.assertBlocking(`blockingBody`)
+	bt.assertBlocking(`blockingArg`)
+	bt.assertNotBlocking(`notBlocking`)
+}
+
+func TestBlocking_Defers_WithReturns_WithFuncLiterals(t *testing.T) {
+	bt := newBlockingTest(t,
+		`package test
+
+		func blockingBody(c chan bool) int {
+			defer func(c chan bool) { // line 4
+				println(<-c)
+			}(c)
+			return 42
+		}
+
+		func blockingArg(c chan bool) int {
+			defer func(v bool) { // line 11
+				println(v)
+			}(<-c)
+			return 42
+		}
+
+		func notBlocking(c chan bool) int {
+			defer func(v bool) { // line 18
+				println(v)
+			}(true)
+			return 42
+		}`)
+	bt.assertBlocking(`blockingBody`)
+	bt.assertBlockingLit(4)
+
+	bt.assertBlocking(`blockingArg`)
+	bt.assertNotBlockingLit(11)
+
+	// TODO: The following is blocking because currently any defer with a return
+	// is assumed to be blocking. This limitation should be fixed in the future.
+	bt.assertBlocking(`notBlocking`)
+	bt.assertNotBlockingLit(18)
+}
+
+func TestBlocking_Defers_WithReturns_WithNamedFuncs(t *testing.T) {
+	bt := newBlockingTest(t,
+		`package test
+
+		func blockingPrint(c chan bool) {
+			println(<-c)
+		}
+
+		func nonBlockingPrint(v bool) {
+			println(v)
+		}
+
+		func blockingBody(c chan bool) int {
+			defer blockingPrint(c)
+			return 42
+		}
+
+		func blockingArg(c chan bool) int {
+			defer nonBlockingPrint(<-c)
+			return 42
+		}
+
+		func notBlocking(c chan bool) int {
+			defer nonBlockingPrint(true)
+			return 42
+		}`)
+	bt.assertBlocking(`blockingPrint`)
+	bt.assertNotBlocking(`nonBlockingPrint`)
+
+	bt.assertBlocking(`blockingBody`)
+	bt.assertBlocking(`blockingArg`)
+
+	// TODO: The following is blocking because currently any defer with a return
+	// is assumed to be blocking. This limitation should be fixed in the future.
+	bt.assertBlocking(`notBlocking`)
+}
+
+func TestBlocking_Returns_WithoutDefers(t *testing.T) {
 	bt := newBlockingTest(t,
 		`package test
 
@@ -217,7 +341,7 @@ func TestBlockingReturns(t *testing.T) {
 	bt.assertNotBlocking(`notBlocking`)
 }
 
-func TestBlockingFunctionLiteral(t *testing.T) {
+func TestBlocking_FunctionLiteral(t *testing.T) {
 	// See: https://github.com/gopherjs/gopherjs/issues/955.
 	bt := newBlockingTest(t,
 		`package test
@@ -253,7 +377,7 @@ func TestBlockingFunctionLiteral(t *testing.T) {
 	bt.assertNotBlockingLit(20)
 }
 
-func TestBlockingLinkedFunction(t *testing.T) {
+func TestBlocking_LinkedFunction(t *testing.T) {
 	bt := newBlockingTest(t,
 		`package test
 
@@ -267,7 +391,7 @@ func TestBlockingLinkedFunction(t *testing.T) {
 	bt.assertBlocking(`indirectlyBlocking`)
 }
 
-func TestBlockingInstanceWithSingleTypeArgument(t *testing.T) {
+func TestBlocking_Instances_WithSingleTypeArg(t *testing.T) {
 	bt := newBlockingTest(t,
 		`package test
 
@@ -294,7 +418,7 @@ func TestBlockingInstanceWithSingleTypeArgument(t *testing.T) {
 	bt.assertNotBlocking(`nbUint`)
 }
 
-func TestBlockingInstanceWithMultipleTypeArguments(t *testing.T) {
+func TestBlocking_Instances_WithMultipleTypeArgs(t *testing.T) {
 	bt := newBlockingTest(t,
 		`package test
 
@@ -321,11 +445,9 @@ func TestBlockingInstanceWithMultipleTypeArguments(t *testing.T) {
 	bt.assertNotBlocking(`nbUint`)
 }
 
-func TestBlockingIndexedFromFunctionSlice(t *testing.T) {
+func TestBlocking_Indexed_FunctionSlice(t *testing.T) {
 	// This calls notBlocking but since the function pointers
 	// are in the slice they will both be considered as blocking.
-	// This is just checking that the analysis can tell between
-	// indexing and instantiation of a generic.
 	bt := newBlockingTest(t,
 		`package test
 
@@ -348,7 +470,60 @@ func TestBlockingIndexedFromFunctionSlice(t *testing.T) {
 	bt.assertNotBlocking(`notBlocking`)
 }
 
-func TestBlockingCastingToAnInterfaceInstance(t *testing.T) {
+func TestBlocking_Indexed_FunctionMap(t *testing.T) {
+	// This calls notBlocking but since the function pointers
+	// are in the map they will both be considered as blocking.
+	bt := newBlockingTest(t,
+		`package test
+
+		func blocking() {
+			c := make(chan int)
+			<-c
+		}
+
+		func notBlocking() {
+			println()
+		}
+
+		var funcs = map[string]func() {
+			"b":  blocking,
+			"nb": notBlocking,
+		}
+
+		func indexer(key string) {
+			funcs[key]()
+		}`)
+	bt.assertBlocking(`blocking`)
+	bt.assertBlocking(`indexer`)
+	bt.assertNotBlocking(`notBlocking`)
+}
+
+func TestBlocking_Indexed_FunctionArray(t *testing.T) {
+	// This calls notBlocking but since the function pointers
+	// are in the array they will both be considered as blocking.
+	bt := newBlockingTest(t,
+		`package test
+
+		func blocking() {
+			c := make(chan int)
+			<-c
+		}
+
+		func notBlocking() {
+			println()
+		}
+
+		var funcs = [2]func() { blocking, notBlocking }
+
+		func indexer(i int) {
+			funcs[i]()
+		}`)
+	bt.assertBlocking(`blocking`)
+	bt.assertBlocking(`indexer`)
+	bt.assertNotBlocking(`notBlocking`)
+}
+
+func TestBlocking_Casting_InterfaceInstance(t *testing.T) {
 	// This checks that casting to an instance type is treated as a
 	// cast an not accidentally treated as a function call.
 	bt := newBlockingTest(t,
@@ -373,7 +548,7 @@ func TestBlockingCastingToAnInterfaceInstance(t *testing.T) {
 	bt.assertNotBlocking(`caster`)
 }
 
-func TestBlockingCastingToAnInterface(t *testing.T) {
+func TestBlocking_Casting_Interface(t *testing.T) {
 	// This checks of non-generic casting of type is treated as a
 	// cast an not accidentally treated as a function call.
 	bt := newBlockingTest(t,
@@ -398,9 +573,9 @@ func TestBlockingCastingToAnInterface(t *testing.T) {
 	bt.assertNotBlocking(`caster`)
 }
 
-func TestBlockingInstantiationBlocking(t *testing.T) {
-	// This checks that the instantiation of a generic function
-	// is being used when checking for blocking.
+func TestBlocking_InstantiationBlocking(t *testing.T) {
+	// This checks that the instantiation of a generic function is
+	// being used when checking for blocking not the type argument interface.
 	bt := newBlockingTest(t,
 		`package test
 		
@@ -421,18 +596,30 @@ func TestBlockingInstantiationBlocking(t *testing.T) {
 			foo.Baz()
 		}
 
-		func blocking() {
+		func blockingViaExplicit() {
+			FooBaz[BazBlocker](BazBlocker{c: make(chan bool)})
+		}
+		
+		func notBlockingViaExplicit() {
+			FooBaz[BazNotBlocker](BazNotBlocker{})
+		}
+
+		func blockingViaImplicit() {
 			FooBaz(BazBlocker{c: make(chan bool)})
 		}
 		
-		func notBlocking() {
+		func notBlockingViaImplicit() {
 			FooBaz(BazNotBlocker{})
 		}`)
 	bt.assertBlocking(`FooBaz`) // generic instantiation is blocking
+
 	bt.assertBlocking(`BazBlocker.Baz`)
-	bt.assertBlocking(`blocking`)
+	bt.assertBlocking(`blockingViaExplicit`)
+	bt.assertBlocking(`blockingViaImplicit`)
+
 	bt.assertNotBlocking(`BazNotBlocker.Baz`)
-	bt.assertNotBlocking(`notBlocking`)
+	bt.assertNotBlocking(`notBlockingViaExplicit`)
+	bt.assertNotBlocking(`notBlockingViaImplicit`)
 }
 
 type blockingTest struct {

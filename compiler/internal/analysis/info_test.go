@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"fmt"
 	"go/ast"
 	"go/types"
 	"testing"
@@ -597,29 +598,33 @@ func TestBlocking_InstantiationBlocking(t *testing.T) {
 		}
 
 		func blockingViaExplicit() {
-			FooBaz[BazBlocker](BazBlocker{c: make(chan bool)})
+			FooBaz[BazBlocker](BazBlocker{c: make(chan bool)}) // line 21
 		}
 		
 		func notBlockingViaExplicit() {
-			FooBaz[BazNotBlocker](BazNotBlocker{})
+			FooBaz[BazNotBlocker](BazNotBlocker{}) // line 25
 		}
 
 		func blockingViaImplicit() {
-			FooBaz(BazBlocker{c: make(chan bool)})
+			FooBaz(BazBlocker{c: make(chan bool)}) // line 29
 		}
 		
 		func notBlockingViaImplicit() {
-			FooBaz(BazNotBlocker{})
+			FooBaz(BazNotBlocker{}) // line 33
 		}`)
 	bt.assertBlocking(`FooBaz`) // generic instantiation is blocking
 
 	bt.assertBlocking(`BazBlocker.Baz`)
 	bt.assertBlocking(`blockingViaExplicit`)
 	bt.assertBlocking(`blockingViaImplicit`)
+	bt.assertBlockingInst(`FooBaz`, 21)
+	bt.assertBlockingInst(`FooBaz`, 25) // should be the same instance as 21
 
 	bt.assertNotBlocking(`BazNotBlocker.Baz`)
 	bt.assertNotBlocking(`notBlockingViaExplicit`)
 	bt.assertNotBlocking(`notBlockingViaImplicit`)
+	bt.assertNotBlockingInst(`FooBaz`, 29)
+	bt.assertNotBlockingInst(`FooBaz`, 33) // should be the same instance as 33
 }
 
 type blockingTest struct {
@@ -647,13 +652,13 @@ func newBlockingTest(t *testing.T, src string) *blockingTest {
 
 func (bt *blockingTest) assertBlocking(funcName string) {
 	if !bt.isTypesFuncBlocking(funcName) {
-		bt.f.T.Errorf(`Got: %q is not blocking. Want: %q is blocking.`, funcName, funcName)
+		bt.f.T.Errorf(`Got %q as not blocking but expected it to be blocking.`, funcName)
 	}
 }
 
 func (bt *blockingTest) assertNotBlocking(funcName string) {
 	if bt.isTypesFuncBlocking(funcName) {
-		bt.f.T.Errorf(`Got: %q is blocking. Want: %q is not blocking.`, funcName, funcName)
+		bt.f.T.Errorf(`Got %q as blocking but expected it to be blocking.`, funcName)
 	}
 }
 
@@ -680,18 +685,18 @@ func (bt *blockingTest) isTypesFuncBlocking(funcName string) bool {
 	if !ok {
 		bt.f.T.Fatalf(`No type information is found for %v.`, decl.Name)
 	}
-	return bt.pkgInfo.IsBlocking(blockingType.(*types.Func))
+	return bt.pkgInfo.funcDeclInfos[blockingType.(*types.Func)].HasBlocking()
 }
 
 func (bt *blockingTest) assertBlockingLit(lineNo int) {
 	if !bt.isFuncLitBlocking(lineNo) {
-		bt.f.T.Errorf(`Got: FuncLit at line %d is not blocking. Want: FuncLit at line %d is blocking.`, lineNo, lineNo)
+		bt.f.T.Errorf(`Got FuncLit at line %d as not blocking but expected it to be blocking.`, lineNo)
 	}
 }
 
 func (bt *blockingTest) assertNotBlockingLit(lineNo int) {
 	if bt.isFuncLitBlocking(lineNo) {
-		bt.f.T.Errorf(`Got: FuncLit at line %d is blocking. Want: FuncLit at line %d is not blocking.`, lineNo, lineNo)
+		bt.f.T.Errorf(`Got FuncLit at line %d as blocking but expected it to be not blocking.`, lineNo)
 	}
 }
 
@@ -710,9 +715,56 @@ func (bt *blockingTest) isFuncLitBlocking(lineNo int) bool {
 	if fnLit == nil {
 		bt.f.T.Fatalf(`FuncLit found on line %d not found in the AST.`, lineNo)
 	}
-	info, ok := bt.pkgInfo.FuncLitInfos[fnLit]
+	info, ok := bt.pkgInfo.funcLitInfos[fnLit]
 	if !ok {
 		bt.f.T.Fatalf(`No type information is found for FuncLit at line %d.`, lineNo)
 	}
-	return len(info.Blocking) > 0
+	return info.HasBlocking()
+}
+
+func (bt *blockingTest) assertBlockingInst(funcName string, lineNo int) {
+	if !bt.isFuncInstBlocking(funcName, lineNo) {
+		bt.f.T.Errorf(`Got function instance of %s at line %d as not blocking but expected it to be blocking.`, funcName, lineNo)
+	}
+}
+
+func (bt *blockingTest) assertNotBlockingInst(funcName string, lineNo int) {
+	if bt.isFuncInstBlocking(funcName, lineNo) {
+		bt.f.T.Errorf(`Got function instance of %s at line %d as blocking but expected it to be not blocking.`, funcName, lineNo)
+	}
+}
+
+func (bt *blockingTest) isFuncInstBlocking(funcName string, lineNo int) bool {
+	var fnId *ast.Ident
+	ast.Inspect(bt.file, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok {
+			if id.Name == funcName && bt.f.FileSet.Position(id.NamePos).Line == lineNo {
+				fnId = id
+				return false
+			}
+		}
+		return fnId == nil
+	})
+
+	if fnId == nil {
+		bt.f.T.Errorf(`Function instance of %s at line %d was not found in AST.`, funcName, lineNo)
+		return false
+	}
+
+	fmt.Println("--------------------")
+	fmt.Printf("name: %s, lineNo: %d, fnId: %v\n", funcName, lineNo, fnId)
+	fmt.Printf("uses: %v\n", bt.pkgInfo.Uses[fnId])
+	fmt.Printf("defs: %v\n", bt.pkgInfo.Defs[fnId])
+	inst := bt.pkgInfo.Instances[fnId]
+	fmt.Printf("inst: %v\n", inst)
+	sig := inst.Type.(*types.Signature)
+	fmt.Printf("sig:  %v\n", sig)
+	for i := 0; i < inst.TypeArgs.Len(); i++ {
+		fmt.Printf("tp(%d) %v\n", i, inst.TypeArgs.At(i))
+	}
+
+	fun := types.NewFunc(fnId.Pos(), bt.pkgInfo.Pkg, funcName, sig)
+	fmt.Printf("fun:  %v\n", fun)
+
+	return true
 }

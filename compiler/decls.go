@@ -319,7 +319,7 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 	o := fc.pkgCtx.Defs[fun.Name].(*types.Func)
 	d := &Decl{
 		FullName:    o.FullName(),
-		Blocking:    fc.pkgCtx.IsBlocking(o),
+		Blocking:    fc.pkgCtx.IsBlocking(inst),
 		LinkingName: symbol.New(o),
 	}
 
@@ -355,7 +355,7 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 func (fc *funcContext) callInitFunc(init *types.Func) ast.Stmt {
 	id := fc.newIdentFor(init)
 	call := &ast.CallExpr{Fun: id}
-	if fc.pkgCtx.IsBlocking(init) {
+	if fc.pkgCtx.IsBlocking(typeparams.Instance{Object: init}) {
 		fc.Blocking[call] = true
 	}
 	return &ast.ExprStmt{X: call}
@@ -379,7 +379,7 @@ func (fc *funcContext) callMainFunc(main *types.Func) ast.Stmt {
 			},
 		},
 	}
-	if fc.pkgCtx.IsBlocking(main) {
+	if fc.pkgCtx.IsBlocking(typeparams.Instance{Object: main}) {
 		fc.Blocking[call] = true
 		fc.Flattened[ifStmt] = true
 	}

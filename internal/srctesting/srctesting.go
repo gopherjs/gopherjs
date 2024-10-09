@@ -10,8 +10,11 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"golang.org/x/tools/go/packages"
 )
 
 // Fixture provides utilities for parsing and type checking Go code in tests.
@@ -170,4 +173,75 @@ func LookupObj(pkg *types.Package, name string) types.Object {
 		}
 	}
 	return obj
+}
+
+type Source struct {
+	Name     string
+	Contents []byte
+}
+
+// ParseSources parses the given source files and returns the root package
+// that contains the given source files.
+//
+// The source file should all be from the same package as the files for the
+// root package. At least one source file must be given.
+// The root package's path will be `command-line-arguments`.
+//
+// The auxillary files can be for different packages but should have paths
+// added to the source name so that they can be grouped together by package.
+// To import an auxillary package, the path should be prepended by
+// `github.com/gopherjs/gopherjs/compiler`.
+func ParseSources(t *testing.T, sourceFiles []Source, auxFiles []Source) *packages.Package {
+	t.Helper()
+	const mode = packages.NeedName |
+		packages.NeedFiles |
+		packages.NeedImports |
+		packages.NeedDeps |
+		packages.NeedTypes |
+		packages.NeedSyntax
+
+	dir, err := filepath.Abs(`./`)
+	if err != nil {
+		t.Fatal(`error getting working directory:`, err)
+	}
+
+	patterns := make([]string, len(sourceFiles))
+	overlay := make(map[string][]byte, len(sourceFiles))
+	for i, src := range sourceFiles {
+		filename := src.Name
+		patterns[i] = filename
+		absName := filepath.Join(dir, filename)
+		overlay[absName] = []byte(src.Contents)
+	}
+	for _, src := range auxFiles {
+		absName := filepath.Join(dir, src.Name)
+		overlay[absName] = []byte(src.Contents)
+	}
+
+	config := &packages.Config{
+		Mode:    mode,
+		Overlay: overlay,
+		Dir:     dir,
+	}
+
+	pkgs, err := packages.Load(config, patterns...)
+	if err != nil {
+		t.Fatal(`error loading packages:`, err)
+	}
+
+	hasErrors := false
+	packages.Visit(pkgs, nil, func(pkg *packages.Package) {
+		for _, err := range pkg.Errors {
+			hasErrors = true
+			t.Error(err)
+		}
+	})
+	if hasErrors {
+		t.FailNow()
+	}
+
+	if len(pkgs) != 1 {
+		t.Fatal(`expected one and only one root package but got`, len(pkgs))
+	}
+	return pkgs[0]
 }

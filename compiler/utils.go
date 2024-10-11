@@ -107,43 +107,6 @@ func (fc *funcContext) Delayed(f func()) {
 	fc.delayedOutput = fc.CatchOutput(0, f)
 }
 
-// CollectDCEDeps captures a list of Go objects (types, functions, etc.)
-// the code translated inside f() depends on. The returned list of identifiers
-// can be used in dead-code elimination.
-//
-// Note that calling CollectDCEDeps() inside another CollectDCEDeps() call is
-// not allowed.
-func (fc *funcContext) CollectDCEDeps(f func()) []string {
-	if fc.pkgCtx.dependencies != nil {
-		panic(bailout(fmt.Errorf("called funcContext.CollectDependencies() inside another funcContext.CollectDependencies() call")))
-	}
-
-	fc.pkgCtx.dependencies = make(map[types.Object]bool)
-	defer func() { fc.pkgCtx.dependencies = nil }()
-
-	f()
-
-	var deps []string
-	for o := range fc.pkgCtx.dependencies {
-		qualifiedName := o.Pkg().Path() + "." + o.Name()
-		if typesutil.IsMethod(o) {
-			qualifiedName += "~"
-		}
-		deps = append(deps, qualifiedName)
-	}
-	sort.Strings(deps)
-	return deps
-}
-
-// DeclareDCEDep records that the code that is currently being transpiled
-// depends on a given Go object.
-func (fc *funcContext) DeclareDCEDep(o types.Object) {
-	if fc.pkgCtx.dependencies == nil {
-		return // Dependencies are not being collected.
-	}
-	fc.pkgCtx.dependencies[o] = true
-}
-
 // expandTupleArgs converts a function call which argument is a tuple returned
 // by another function into a set of individual call arguments corresponding to
 // tuple elements.
@@ -452,7 +415,7 @@ func (fc *funcContext) assignedObjectName(o types.Object) (name string, found bo
 // allocated as needed.
 func (fc *funcContext) objectName(o types.Object) string {
 	if isPkgLevel(o) {
-		fc.DeclareDCEDep(o)
+		fc.pkgCtx.DeclareDCEDep(o)
 
 		if o.Pkg() != fc.pkgCtx.Pkg || (isVarOrConst(o) && o.Exported()) {
 			return fc.pkgVar(o.Pkg()) + "." + o.Name()
@@ -562,7 +525,7 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		fc.pkgCtx.anonTypes = append(fc.pkgCtx.anonTypes, anonType)
 		fc.pkgCtx.anonTypeMap.Set(ty, anonType)
 	}
-	fc.DeclareDCEDep(anonType)
+	fc.pkgCtx.DeclareDCEDep(anonType)
 	return anonType.Name()
 }
 

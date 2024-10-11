@@ -34,23 +34,25 @@ type InstanceMap[V any] struct {
 	hasher typeutil.Hasher
 }
 
-// getBucket will return the bucket for the given key
-// or an empty bucket if no bucket for that key exists.
-func (im *InstanceMap[V]) getBucket(key Instance) mapBucket[V] {
-	if im == nil || im.data == nil {
-		return nil
+// findIndex returns bucket and index of the entry with the given key.
+// If the given key isn't found, an empty bucket and -1 are returned.
+func (im *InstanceMap[V]) findIndex(key Instance) (mapBucket[V], int) {
+	if im != nil && im.data != nil {
+		bucket := im.data[key.Object][typeHash(im.hasher, key.TArgs...)]
+		for i, candidate := range bucket {
+			if candidate != nil && typeArgsEq(candidate.key.TArgs, key.TArgs) {
+				return bucket, i
+			}
+		}
 	}
-	return im.data[key.Object][typeHash(im.hasher, key.TArgs...)]
+	return nil, -1
 }
 
 // get returns the stored value for the provided key and
 // a bool indicating whether the key was present in the map or not.
 func (im *InstanceMap[V]) get(key Instance) (V, bool) {
-	bucket := im.getBucket(key)
-	for _, candidate := range bucket {
-		if candidate != nil && typeArgsEq(candidate.key.TArgs, key.TArgs) {
-			return candidate.value, true
-		}
+	if bucket, i := im.findIndex(key); i >= 0 {
+		return bucket[i].value, true
 	}
 	var zero V
 	return zero, false
@@ -124,15 +126,12 @@ func (im *InstanceMap[V]) Len() int {
 // Delete removes the entry with the given key, if any.
 // It returns true if the entry was found.
 func (im *InstanceMap[V]) Delete(key Instance) bool {
-	bucket := im.getBucket(key)
-	for i, candidate := range bucket {
-		if candidate != nil && typeArgsEq(candidate.key.TArgs, key.TArgs) {
-			// We can't compact the bucket as it
-			// would disturb iterators.
-			bucket[i] = nil
-			im.len--
-			return true
-		}
+	if bucket, i := im.findIndex(key); i >= 0 {
+		// We can't compact the bucket as it
+		// would disturb iterators.
+		bucket[i] = nil
+		im.len--
+		return true
 	}
 	return false
 }
@@ -146,13 +145,13 @@ func (im *InstanceMap[V]) Delete(key Instance) bool {
 // f will not be invoked for it, but if f inserts a map entry that
 // Iterate has not yet reached, whether or not f will be invoked for
 // it is unspecified.
-func (im *InstanceMap[V]) Iterate(f func(key Instance, value V) bool) {
+func (im *InstanceMap[V]) Iterate(f func(key Instance, value V)) {
 	if im != nil && im.data != nil {
 		for _, mapBucket := range im.data {
 			for _, bucket := range mapBucket {
 				for _, e := range bucket {
-					if e != nil && !f(e.key, e.value) {
-						return
+					if e != nil {
+						f(e.key, e.value)
 					}
 				}
 			}
@@ -164,9 +163,8 @@ func (im *InstanceMap[V]) Iterate(f func(key Instance, value V) bool) {
 // The order is unspecified.
 func (im *InstanceMap[V]) Keys() []Instance {
 	keys := make([]Instance, 0, im.Len())
-	im.Iterate(func(key Instance, _ V) bool {
+	im.Iterate(func(key Instance, _ V) {
 		keys = append(keys, key)
-		return true
 	})
 	return keys
 }
@@ -175,9 +173,8 @@ func (im *InstanceMap[V]) Keys() []Instance {
 // The entries are sorted by string representation of the entry.
 func (im *InstanceMap[V]) String() string {
 	entries := make([]string, 0, im.Len())
-	im.Iterate(func(key Instance, value V) bool {
+	im.Iterate(func(key Instance, value V) {
 		entries = append(entries, fmt.Sprintf("%v:%v", key, value))
-		return true
 	})
 	sort.Strings(entries)
 	return `{` + strings.Join(entries, `, `) + `}`

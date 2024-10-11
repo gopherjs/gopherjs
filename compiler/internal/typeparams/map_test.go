@@ -221,7 +221,7 @@ func TestInstanceMap(t *testing.T) {
 		seen := []Instance{}
 		kept := []Instance{}
 		var skipped Instance
-		m.Iterate(func(key Instance, value string) bool {
+		m.Iterate(func(key Instance, value string) {
 			// update seen and not seen
 			seen = append(seen, key)
 			i := keyAt(notSeen, key)
@@ -244,7 +244,6 @@ func TestInstanceMap(t *testing.T) {
 				}
 				kept = append(kept, seen[1], notSeen[1])
 			}
-			return true
 		})
 
 		if got := len(seen); got != 4 {

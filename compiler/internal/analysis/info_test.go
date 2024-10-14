@@ -1,11 +1,11 @@
 package analysis
 
 import (
-	"fmt"
 	"go/ast"
 	"go/types"
 	"testing"
 
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
@@ -413,9 +413,13 @@ func TestBlocking_Instances_WithSingleTypeArg(t *testing.T) {
 		func nbUint() {
 			notBlocking[uint]()
 		}`)
-	bt.assertBlocking(`blocking`)
+	bt.assertFuncInstCount(4)
+	// blocking and notBlocking as generics do not have FuncInfo,
+	// only non-generic and instances have FuncInfo.
+
+	bt.assertBlockingInst(`test.blocking[int]`)
 	bt.assertBlocking(`bInt`)
-	bt.assertNotBlocking(`notBlocking`)
+	bt.assertNotBlockingInst(`test.notBlocking[uint]`)
 	bt.assertNotBlocking(`nbUint`)
 }
 
@@ -440,9 +444,13 @@ func TestBlocking_Instances_WithMultipleTypeArgs(t *testing.T) {
 		func nbUint() {
 			notBlocking[string, uint, map[string]uint]()
 		}`)
-	bt.assertBlocking(`blocking`)
+	bt.assertFuncInstCount(4)
+	// blocking and notBlocking as generics do not have FuncInfo,
+	// only non-generic and instances have FuncInfo.
+
+	bt.assertBlockingInst(`test.blocking[string, int, map[string]int]`)
 	bt.assertBlocking(`bInt`)
-	bt.assertNotBlocking(`notBlocking`)
+	bt.assertNotBlockingInst(`test.notBlocking[string, uint, map[string]uint]`)
 	bt.assertNotBlocking(`nbUint`)
 }
 
@@ -524,9 +532,9 @@ func TestBlocking_Indexed_FunctionArray(t *testing.T) {
 	bt.assertNotBlocking(`notBlocking`)
 }
 
-func TestBlocking_Casting_InterfaceInstance(t *testing.T) {
-	// This checks that casting to an instance type is treated as a
-	// cast an not accidentally treated as a function call.
+func TestBlocking_Casting_InterfaceInstanceWithSingleTypeParam(t *testing.T) {
+	// This checks that casting to an instance type with a single type parameter
+	// is treated as a cast and not accidentally treated as a function call.
 	bt := newBlockingTest(t,
 		`package test
 
@@ -543,15 +551,40 @@ func TestBlocking_Casting_InterfaceInstance(t *testing.T) {
 		}
 
 		func caster() Foo[string] {
-			b := Bar{"foo"}
+			b := Bar{name: "foo"}
 			return Foo[string](b)
 		}`)
 	bt.assertNotBlocking(`caster`)
 }
 
+func TestBlocking_Casting_InterfaceInstanceWithMultipleTypeParams(t *testing.T) {
+	// This checks that casting to an instance type with multiple type parameters
+	// is treated as a cast and not accidentally treated as a function call.
+	bt := newBlockingTest(t,
+		`package test
+
+		type Foo[K comparable, V any] interface {
+			Baz(K) V
+		}
+
+		type Bar struct {
+			dat map[string]int
+		}
+
+		func (b Bar) Baz(key string) int {
+			return b.dat[key]
+		}
+
+		func caster() Foo[string, int] {
+			b := Bar{ dat: map[string]int{ "foo": 2 }}
+			return Foo[string, int](b)
+		}`)
+	bt.assertNotBlocking(`caster`)
+}
+
 func TestBlocking_Casting_Interface(t *testing.T) {
-	// This checks of non-generic casting of type is treated as a
-	// cast an not accidentally treated as a function call.
+	// This checks that non-generic casting of type is treated as a
+	// cast and not accidentally treated as a function call.
 	bt := newBlockingTest(t,
 		`package test
 	
@@ -572,6 +605,186 @@ func TestBlocking_Casting_Interface(t *testing.T) {
 			return Foo(b)
 		}`)
 	bt.assertNotBlocking(`caster`)
+}
+
+func TestBlocking_ComplexCasting(t *testing.T) {
+	// This checks a complex casting to a type is treated as a
+	// cast and not accidentally treated as a function call.
+	bt := newBlockingTest(t,
+		`package test
+	
+		type Foo interface {
+			Bar() string
+		}
+		
+		func doNothing(f Foo) Foo  {
+			return interface{ Bar() string }(f)
+		}`)
+	bt.assertNotBlocking(`doNothing`)
+}
+
+func TestBlocking_ComplexCall(t *testing.T) {
+	// This checks a complex call of a function is defaulted to blocking.
+	bt := newBlockingTest(t,
+		`package test
+	
+		type Foo func() string
+		
+		func bar(f any) string  {
+			return f.(Foo)()
+		}`)
+	bt.assertBlocking(`bar`)
+}
+
+func TestBlocking_CallWithNamedInterfaceReceiver(t *testing.T) {
+	// This checks that calling a named interface function is defaulted to blocking.
+	bt := newBlockingTest(t,
+		`package test
+	
+		type Foo interface {
+			Baz()
+		}
+		
+		func bar(f Foo) {
+			f.Baz()
+		}`)
+	bt.assertBlocking(`bar`)
+}
+
+func TestBlocking_CallWithUnnamedInterfaceReceiver(t *testing.T) {
+	// This checks that calling an unnamed interface function is defaulted to blocking.
+	bt := newBlockingTest(t,
+		`package test
+			
+		func bar(f interface { Baz() }) {
+			f.Baz()
+		}`)
+	bt.assertBlocking(`bar`)
+}
+
+func TestBlocking_VarFunctionCall(t *testing.T) {
+	// This checks that calling a function in a var is defaulted to blocking.
+	bt := newBlockingTest(t,
+		`package test
+	
+		var foo = func() { // line 3
+			println("hi")
+		}
+		
+		func bar() {
+			foo()
+		}`)
+	bt.assertNotBlockingLit(3)
+	bt.assertBlocking(`bar`)
+}
+
+func TestBlocking_FieldFunctionCallOnNamed(t *testing.T) {
+	// This checks that calling a function in a field is defaulted to blocking.
+	// This should be the same as the previous test but with a field since
+	// all function pointers are treated as blocking.
+	bt := newBlockingTest(t,
+		`package test
+	
+		type foo struct {
+			Baz func()
+		}
+		
+		func bar(f foo) {
+			f.Baz()
+		}`)
+	bt.assertBlocking(`bar`)
+}
+
+func TestBlocking_FieldFunctionCallOnUnnamed(t *testing.T) {
+	// Same as previous test but with an unnamed struct.
+	bt := newBlockingTest(t,
+		`package test
+	
+		func bar(f struct { Baz func() }) {
+			f.Baz()
+		}`)
+	bt.assertBlocking(`bar`)
+}
+
+func TestBlocking_ParamFunctionCall(t *testing.T) {
+	// Same as previous test but with an unnamed function parameter.
+	bt := newBlockingTest(t,
+		`package test
+	
+		func bar(baz func()) {
+			baz()
+		}`)
+	bt.assertBlocking(`bar`)
+}
+
+func TestBlocking_FunctionUnwrapping(t *testing.T) {
+	// Test that calling a function that calls a function etc.
+	// is defaulted to blocking.
+	bt := newBlockingTest(t,
+		`package test
+	
+		func bar(baz func()func()func()) {
+			baz()()()
+		}`)
+	bt.assertBlocking(`bar`)
+}
+
+func TestBlocking_MethodCall_NonPointer(t *testing.T) {
+	// Test that calling a method on a non-pointer receiver.
+	bt := newBlockingTest(t,
+		`package test
+	
+		type Foo struct {}
+
+		func (f Foo) blocking() {
+			ch := make(chan bool)
+			<-ch
+		}
+
+		func (f Foo) notBlocking() {
+			println("hi")
+		}
+
+		func blocking(f Foo) {
+			f.blocking()
+		}
+			
+		func notBlocking(f Foo) {
+			f.notBlocking()
+		}`)
+	bt.assertBlocking(`Foo.blocking`)
+	bt.assertNotBlocking(`Foo.notBlocking`)
+	bt.assertBlocking(`blocking`)
+	bt.assertNotBlocking(`notBlocking`)
+}
+
+func TestBlocking_MethodCall_Pointer(t *testing.T) {
+	// Test that calling a method on a pointer receiver.
+	bt := newBlockingTest(t,
+		`package test
+	
+		type Foo struct {}
+
+		func (f *Foo) blocking() {
+			ch := make(chan bool)
+			<-ch
+		}
+
+		func (f *Foo) notBlocking() {
+			println("hi")
+		}
+
+		func blocking(f *Foo) {
+			f.blocking()
+		}
+			
+		func notBlocking(f *Foo) {
+			f.notBlocking()
+		}`)
+	bt.assertBlocking(`Foo.blocking`)
+	bt.assertNotBlocking(`Foo.notBlocking`)
+	bt.assertBlocking(`blocking`)
+	bt.assertNotBlocking(`notBlocking`)
 }
 
 func TestBlocking_InstantiationBlocking(t *testing.T) {
@@ -598,33 +811,248 @@ func TestBlocking_InstantiationBlocking(t *testing.T) {
 		}
 
 		func blockingViaExplicit() {
-			FooBaz[BazBlocker](BazBlocker{c: make(chan bool)}) // line 21
+			FooBaz[BazBlocker](BazBlocker{c: make(chan bool)})
 		}
 		
 		func notBlockingViaExplicit() {
-			FooBaz[BazNotBlocker](BazNotBlocker{}) // line 25
+			FooBaz[BazNotBlocker](BazNotBlocker{})
 		}
 
 		func blockingViaImplicit() {
-			FooBaz(BazBlocker{c: make(chan bool)}) // line 29
+			FooBaz(BazBlocker{c: make(chan bool)})
 		}
 		
 		func notBlockingViaImplicit() {
-			FooBaz(BazNotBlocker{}) // line 33
+			FooBaz(BazNotBlocker{})
 		}`)
-	bt.assertBlocking(`FooBaz`) // generic instantiation is blocking
+	bt.assertFuncInstCount(8)
+	// `FooBaz` as a generic function does not have FuncInfo for it,
+	// only non-generic or instantiations of a generic functions have FuncInfo.
 
 	bt.assertBlocking(`BazBlocker.Baz`)
 	bt.assertBlocking(`blockingViaExplicit`)
 	bt.assertBlocking(`blockingViaImplicit`)
-	bt.assertBlockingInst(`FooBaz`, 21)
-	bt.assertBlockingInst(`FooBaz`, 25) // should be the same instance as 21
+	bt.assertBlockingInst(`test.FooBaz[pkg/test.BazBlocker]`)
 
 	bt.assertNotBlocking(`BazNotBlocker.Baz`)
 	bt.assertNotBlocking(`notBlockingViaExplicit`)
 	bt.assertNotBlocking(`notBlockingViaImplicit`)
-	bt.assertNotBlockingInst(`FooBaz`, 29)
-	bt.assertNotBlockingInst(`FooBaz`, 33) // should be the same instance as 33
+	bt.assertNotBlockingInst(`test.FooBaz[pkg/test.BazNotBlocker]`)
+}
+
+func TestBlocking_NestedInstantiations(t *testing.T) {
+	// Checking that the type parameters are being propagated down into calls.
+	bt := newBlockingTest(t,
+		`package test
+		
+		func Foo[T any](t T) {
+			println(t)
+		}
+
+		func Bar[K comparable, V any, M ~map[K]V](m M) {
+			Foo(m)
+		}
+
+		func Baz[T any, S ~[]T](s S) {
+			m:= map[int]T{}
+			for i, v := range s {
+				m[i] = v
+			}
+			Bar(m)
+		}
+
+		func bazInt() {
+			Baz([]int{1, 2, 3})
+		}
+		
+		func bazString() {
+			Baz([]string{"one", "two", "three"})
+		}`)
+	bt.assertFuncInstCount(8)
+	bt.assertNotBlocking(`bazInt`)
+	bt.assertNotBlocking(`bazString`)
+	bt.assertNotBlockingInst(`test.Foo[map[int]int]`)
+	bt.assertNotBlockingInst(`test.Foo[map[int]string]`)
+	bt.assertNotBlockingInst(`test.Bar[int, int, map[int]int]`)
+	bt.assertNotBlockingInst(`test.Bar[int, string, map[int]string]`)
+	bt.assertNotBlockingInst(`test.Baz[int, []int]`)
+	bt.assertNotBlockingInst(`test.Baz[string, []string]`)
+}
+
+func TestBlocking_MethodSelection(t *testing.T) {
+	// This tests method selection using method expression (receiver as the first
+	// argument) selecting on type and method call selecting on a variable.
+	// This tests in both generic (FooBaz[T]) and non-generic contexts.
+	bt := newBlockingTest(t,
+		`package test
+
+		type Foo interface { Baz() }
+
+		type BazBlocker struct {
+			c chan bool
+		}
+		func (bb BazBlocker) Baz() {
+			println(<-bb.c)
+		}
+
+		type BazNotBlocker struct {}
+		func (bnb BazNotBlocker) Baz() {
+			println("hi")
+		}
+
+		type FooBaz[T Foo] struct {}
+		func (fb FooBaz[T]) ByMethodExpression() {
+			var foo T
+			T.Baz(foo)
+		}
+		func (fb FooBaz[T]) ByInstance() {
+			var foo T
+			foo.Baz()
+		}
+
+		func blocking() {
+			fb := FooBaz[BazBlocker]{}
+
+			FooBaz[BazBlocker].ByMethodExpression(fb)
+			FooBaz[BazBlocker].ByInstance(fb)
+
+			fb.ByMethodExpression()
+			fb.ByInstance()
+		}
+
+		func notBlocking() {
+			fb := FooBaz[BazNotBlocker]{}
+
+			FooBaz[BazNotBlocker].ByMethodExpression(fb)
+			FooBaz[BazNotBlocker].ByInstance(fb)
+
+			fb.ByMethodExpression()
+			fb.ByInstance()
+		}`)
+	bt.assertFuncInstCount(8)
+
+	bt.assertBlocking(`BazBlocker.Baz`)
+	bt.assertBlockingInst(`test.ByMethodExpression[pkg/test.BazBlocker]`)
+	bt.assertBlockingInst(`test.ByInstance[pkg/test.BazBlocker]`)
+	bt.assertBlocking(`blocking`)
+
+	bt.assertNotBlocking(`BazNotBlocker.Baz`)
+	bt.assertNotBlockingInst(`test.ByMethodExpression[pkg/test.BazNotBlocker]`)
+	bt.assertNotBlockingInst(`test.ByInstance[pkg/test.BazNotBlocker]`)
+	bt.assertNotBlocking(`notBlocking`)
+}
+
+func TestBlocking_IsImportBlocking_Simple(t *testing.T) {
+	otherSrc := `package other
+
+		func Blocking() {
+			ch := make(chan bool)
+			<-ch
+		}
+
+		func NotBlocking() {
+			println("hi")
+		}`
+
+	testSrc := `package test
+
+		import "pkg/other"
+
+		func blocking() {
+			other.Blocking()
+		}
+			
+		func notBlocking() {
+			other.NotBlocking()
+		}`
+
+	bt := newBlockingTestWithOtherPackage(t, testSrc, otherSrc)
+	bt.assertBlocking(`blocking`)
+	bt.assertNotBlocking(`notBlocking`)
+}
+
+func TestBlocking_IsImportBlocking_ForwardInstances(t *testing.T) {
+	otherSrc := `package other
+
+		type BazBlocker struct {
+			c chan bool
+		}
+		func (bb BazBlocker) Baz() {
+			println(<-bb.c)
+		}
+
+		type BazNotBlocker struct {}
+		func (bnb BazNotBlocker) Baz() {
+			println("hi")
+		}`
+
+	testSrc := `package test
+
+		import "pkg/other"
+
+		type Foo interface { Baz() }
+		func FooBaz[T Foo](f T) {
+			f.Baz()
+		}
+
+		func blocking() {
+			FooBaz(other.BazBlocker{})
+		}
+
+		func notBlocking() {
+			FooBaz(other.BazNotBlocker{})
+		}`
+
+	bt := newBlockingTestWithOtherPackage(t, testSrc, otherSrc)
+	bt.assertBlocking(`blocking`)
+	bt.assertNotBlocking(`notBlocking`)
+}
+
+func TestBlocking_IsImportBlocking_BackwardInstances(t *testing.T) {
+	t.Skip(`isImportedBlocking doesn't fully handle instances yet`)
+	// TODO(grantnelson-wf): This test is currently failing because the info
+	// for the test package is need while creating the instances for FooBaz
+	// while analyzing the other package. However the other package is analyzed
+	// first since the test package is dependent on it. One possible fix is that
+	// we add some mechanism similar to the localInstCallees but for remote
+	// instances then perform the blocking propagation steps for all packages
+	// including the localInstCallees propagation at the same time. After all the
+	// propagation of the calls then the flow control statements can be marked.
+
+	otherSrc := `package other
+
+		type Foo interface { Baz() }
+		func FooBaz[T Foo](f T) {
+			f.Baz()
+		}`
+
+	testSrc := `package test
+
+		import "pkg/other"
+
+		type BazBlocker struct {
+			c chan bool
+		}
+		func (bb BazBlocker) Baz() {
+			println(<-bb.c)
+		}
+
+		type BazNotBlocker struct {}
+		func (bnb BazNotBlocker) Baz() {
+			println("hi")
+		}
+
+		func blocking() {
+			other.FooBaz(BazBlocker{})
+		}
+
+		func notBlocking() {
+			other.FooBaz(BazNotBlocker{})
+		}`
+
+	bt := newBlockingTestWithOtherPackage(t, testSrc, otherSrc)
+	bt.assertBlocking(`blocking`)
+	bt.assertNotBlocking(`notBlocking`)
 }
 
 type blockingTest struct {
@@ -635,18 +1063,73 @@ type blockingTest struct {
 
 func newBlockingTest(t *testing.T, src string) *blockingTest {
 	f := srctesting.New(t)
+	tc := typeparams.Collector{
+		TContext:  types.NewContext(),
+		Info:      f.Info,
+		Instances: &typeparams.PackageInstanceSets{},
+	}
 
 	file := f.Parse(`test.go`, src)
-	typesInfo, typesPkg := f.Check(`pkg/test`, file)
+	testInfo, testPkg := f.Check(`pkg/test`, file)
+	tc.Scan(testPkg, file)
 
-	pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, typesInfo, typesPkg, func(f *types.Func) bool {
-		panic(`isBlocking() should be never called for imported functions in this test.`)
-	})
+	isImportBlocking := func(i typeparams.Instance) bool {
+		t.Fatalf(`isImportBlocking should not be called in this test, called with %v`, i)
+		return true
+	}
+	pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, testInfo, types.NewContext(), testPkg, tc.Instances, isImportBlocking)
 
 	return &blockingTest{
 		f:       f,
 		file:    file,
 		pkgInfo: pkgInfo,
+	}
+}
+
+func newBlockingTestWithOtherPackage(t *testing.T, testSrc string, otherSrc string) *blockingTest {
+	f := srctesting.New(t)
+	tc := typeparams.Collector{
+		TContext:  types.NewContext(),
+		Info:      f.Info,
+		Instances: &typeparams.PackageInstanceSets{},
+	}
+
+	pkgInfo := map[*types.Package]*Info{}
+	isImportBlocking := func(i typeparams.Instance) bool {
+		if info, ok := pkgInfo[i.Object.Pkg()]; ok {
+			return info.IsBlocking(i)
+		}
+		t.Fatalf(`unexpected package in isImportBlocking for %v`, i)
+		return true
+	}
+
+	otherFile := f.Parse(`other.go`, otherSrc)
+	_, otherPkg := f.Check(`pkg/other`, otherFile)
+	tc.Scan(otherPkg, otherFile)
+
+	testFile := f.Parse(`test.go`, testSrc)
+	_, testPkg := f.Check(`pkg/test`, testFile)
+	tc.Scan(testPkg, testFile)
+
+	otherPkgInfo := AnalyzePkg([]*ast.File{otherFile}, f.FileSet, f.Info, types.NewContext(), otherPkg, tc.Instances, isImportBlocking)
+	pkgInfo[otherPkg] = otherPkgInfo
+
+	testPkgInfo := AnalyzePkg([]*ast.File{testFile}, f.FileSet, f.Info, types.NewContext(), testPkg, tc.Instances, isImportBlocking)
+	pkgInfo[testPkg] = testPkgInfo
+
+	return &blockingTest{
+		f:       f,
+		file:    testFile,
+		pkgInfo: testPkgInfo,
+	}
+}
+
+func (bt *blockingTest) assertFuncInstCount(expCount int) {
+	if got := bt.pkgInfo.funcInstInfos.Len(); got != expCount {
+		bt.f.T.Errorf(`Got %d function infos but expected %d.`, got, expCount)
+		for i, inst := range bt.pkgInfo.funcInstInfos.Keys() {
+			bt.f.T.Logf(`  %d. %q`, i+1, inst.TypeString())
+		}
 	}
 }
 
@@ -658,7 +1141,7 @@ func (bt *blockingTest) assertBlocking(funcName string) {
 
 func (bt *blockingTest) assertNotBlocking(funcName string) {
 	if bt.isTypesFuncBlocking(funcName) {
-		bt.f.T.Errorf(`Got %q as blocking but expected it to be blocking.`, funcName)
+		bt.f.T.Errorf(`Got %q as blocking but expected it to be not blocking.`, funcName)
 	}
 }
 
@@ -668,7 +1151,13 @@ func (bt *blockingTest) isTypesFuncBlocking(funcName string) bool {
 		if f, ok := n.(*ast.FuncDecl); ok {
 			name := f.Name.Name
 			if f.Recv != nil {
-				name = f.Recv.List[0].Type.(*ast.Ident).Name + `.` + name
+				typ := f.Recv.List[0].Type
+				if p, ok := typ.(*ast.StarExpr); ok {
+					typ = p.X
+				}
+				if id, ok := typ.(*ast.Ident); ok {
+					name = id.Name + `.` + name
+				}
 			}
 			if name == funcName {
 				decl = f
@@ -681,11 +1170,14 @@ func (bt *blockingTest) isTypesFuncBlocking(funcName string) bool {
 	if decl == nil {
 		bt.f.T.Fatalf(`Declaration of %q is not found in the AST.`, funcName)
 	}
+
 	blockingType, ok := bt.pkgInfo.Defs[decl.Name]
 	if !ok {
-		bt.f.T.Fatalf(`No type information is found for %v.`, decl.Name)
+		bt.f.T.Fatalf(`No function declaration found for %q.`, decl.Name)
 	}
-	return bt.pkgInfo.funcDeclInfos[blockingType.(*types.Func)].HasBlocking()
+
+	inst := typeparams.Instance{Object: blockingType.(*types.Func)}
+	return bt.pkgInfo.IsBlocking(inst)
 }
 
 func (bt *blockingTest) assertBlockingLit(lineNo int) {
@@ -715,56 +1207,36 @@ func (bt *blockingTest) isFuncLitBlocking(lineNo int) bool {
 	if fnLit == nil {
 		bt.f.T.Fatalf(`FuncLit found on line %d not found in the AST.`, lineNo)
 	}
-	info, ok := bt.pkgInfo.funcLitInfos[fnLit]
-	if !ok {
-		bt.f.T.Fatalf(`No type information is found for FuncLit at line %d.`, lineNo)
-	}
-	return info.HasBlocking()
+	return bt.pkgInfo.FuncLitInfo(fnLit).HasBlocking()
 }
 
-func (bt *blockingTest) assertBlockingInst(funcName string, lineNo int) {
-	if !bt.isFuncInstBlocking(funcName, lineNo) {
-		bt.f.T.Errorf(`Got function instance of %s at line %d as not blocking but expected it to be blocking.`, funcName, lineNo)
+func (bt *blockingTest) assertBlockingInst(instanceStr string) {
+	if !bt.isFuncInstBlocking(instanceStr) {
+		bt.f.T.Errorf(`Got function instance of %q as not blocking but expected it to be blocking.`, instanceStr)
 	}
 }
 
-func (bt *blockingTest) assertNotBlockingInst(funcName string, lineNo int) {
-	if bt.isFuncInstBlocking(funcName, lineNo) {
-		bt.f.T.Errorf(`Got function instance of %s at line %d as blocking but expected it to be not blocking.`, funcName, lineNo)
+func (bt *blockingTest) assertNotBlockingInst(instanceStr string) {
+	if bt.isFuncInstBlocking(instanceStr) {
+		bt.f.T.Errorf(`Got function instance of %q as blocking but expected it to be not blocking.`, instanceStr)
 	}
 }
 
-func (bt *blockingTest) isFuncInstBlocking(funcName string, lineNo int) bool {
-	var fnId *ast.Ident
-	ast.Inspect(bt.file, func(n ast.Node) bool {
-		if id, ok := n.(*ast.Ident); ok {
-			if id.Name == funcName && bt.f.FileSet.Position(id.NamePos).Line == lineNo {
-				fnId = id
-				return false
+func (bt *blockingTest) isFuncInstBlocking(instanceStr string) bool {
+	instances := bt.pkgInfo.funcInstInfos.Keys()
+	for _, inst := range instances {
+		if inst.TypeString() == instanceStr {
+			funcInfo := bt.pkgInfo.funcInstInfos.Get(inst)
+			if funcInfo == nil {
+				bt.f.T.Fatalf(`No function instance info found for function instance %q in package info.`, instanceStr)
 			}
+			return funcInfo.HasBlocking()
 		}
-		return fnId == nil
-	})
-
-	if fnId == nil {
-		bt.f.T.Errorf(`Function instance of %s at line %d was not found in AST.`, funcName, lineNo)
-		return false
 	}
-
-	fmt.Println("--------------------")
-	fmt.Printf("name: %s, lineNo: %d, fnId: %v\n", funcName, lineNo, fnId)
-	fmt.Printf("uses: %v\n", bt.pkgInfo.Uses[fnId])
-	fmt.Printf("defs: %v\n", bt.pkgInfo.Defs[fnId])
-	inst := bt.pkgInfo.Instances[fnId]
-	fmt.Printf("inst: %v\n", inst)
-	sig := inst.Type.(*types.Signature)
-	fmt.Printf("sig:  %v\n", sig)
-	for i := 0; i < inst.TypeArgs.Len(); i++ {
-		fmt.Printf("tp(%d) %v\n", i, inst.TypeArgs.At(i))
+	bt.f.T.Logf(`Function instances found in package info:`)
+	for i, inst := range instances {
+		bt.f.T.Logf(`  %d. %s`, i+1, inst.TypeString())
 	}
-
-	fun := types.NewFunc(fnId.Pos(), bt.pkgInfo.Pkg, funcName, sig)
-	fmt.Printf("fun:  %v\n", fun)
-
-	return true
+	bt.f.T.Fatalf(`No function instance found for %q in package info.`, instanceStr)
+	return false
 }

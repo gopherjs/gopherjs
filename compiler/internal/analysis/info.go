@@ -168,15 +168,15 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		done := true
 		for _, caller := range info.allInfos {
 			// Check calls to named functions and function-typed variables.
-			for callee, callSites := range caller.localInstCallees {
-				if info.funcInstInfos[callee].HasBlocking() {
+			caller.localInstCallees.Iterate(func(callee typeparams.Instance, callSites []astPath) {
+				if info.funcInstInfos.Get(callee).HasBlocking() {
 					for _, callSite := range callSites {
 						caller.markBlocking(callSite)
 					}
-					delete(caller.localInstCallees, callee)
+					caller.localInstCallees.Delete(callee)
 					done = false
 				}
-			}
+			})
 
 			// Check direct calls to function literals.
 			for callee, callSites := range caller.literalFuncCallees {
@@ -452,7 +452,10 @@ func (fi *FuncInfo) callToNamedFunc(callee types.Object) {
 		}
 		// We probably don't know yet whether the callee function is blocking.
 		// Record the calls site for the later stage.
-		fi.localNamedCallees[o] = append(fi.localNamedCallees[o], fi.visitorStack.copy())
+		inst := typeparams.Instance{Object: o}
+		paths := fi.localInstCallees.Get(inst)
+		paths = append(paths, fi.visitorStack.copy())
+		fi.localInstCallees.Set(inst, paths)
 	case *types.Var:
 		// Conservatively assume that a function in a variable might be blocking.
 		fi.markBlocking(fi.visitorStack)

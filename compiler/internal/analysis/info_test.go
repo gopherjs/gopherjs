@@ -6,6 +6,7 @@ import (
 	"go/types"
 	"testing"
 
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
@@ -685,7 +686,8 @@ func (bt *blockingTest) isTypesFuncBlocking(funcName string) bool {
 	if !ok {
 		bt.f.T.Fatalf(`No type information is found for %v.`, decl.Name)
 	}
-	return bt.pkgInfo.funcDeclInfos[blockingType.(*types.Func)].HasBlocking()
+	inst := typeparams.Instance{Object: blockingType.(*types.Func)}
+	return bt.pkgInfo.funcInstInfos.Get(inst).HasBlocking()
 }
 
 func (bt *blockingTest) assertBlockingLit(lineNo int) {

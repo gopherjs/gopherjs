@@ -27,7 +27,7 @@ type (
 // instance equality, objects are compared by pointer equality, and type
 // arguments with types.Identical(). To reduce access complexity, we bucket
 // entries by a combined hash of type args. This type is generally inspired by
-// golang.org/x/tools/go/types/typeutil/map.go
+// [golang.org/x/tools/go/types/typeutil#Map]
 type InstanceMap[V any] struct {
 	data   map[types.Object]mapBuckets[V]
 	len    int

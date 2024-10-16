@@ -413,9 +413,13 @@ func TestBlocking_Instances_WithSingleTypeArg(t *testing.T) {
 		func nbUint() {
 			notBlocking[uint]()
 		}`)
-	bt.assertBlocking(`blocking`)
+	bt.assertFuncInstCount(4)
+	// blocking and notBlocking as generics do not have FuncInfo,
+	// only non-generic and instances have FuncInfo.
+
+	bt.assertBlockingInst(`test.blocking[int]`)
 	bt.assertBlocking(`bInt`)
-	bt.assertNotBlocking(`notBlocking`)
+	bt.assertNotBlockingInst(`test.notBlocking[uint]`)
 	bt.assertNotBlocking(`nbUint`)
 }
 
@@ -440,9 +444,13 @@ func TestBlocking_Instances_WithMultipleTypeArgs(t *testing.T) {
 		func nbUint() {
 			notBlocking[string, uint, map[string]uint]()
 		}`)
-	bt.assertBlocking(`blocking`)
+	bt.assertFuncInstCount(4)
+	// blocking and notBlocking as generics do not have FuncInfo,
+	// only non-generic and instances have FuncInfo.
+
+	bt.assertBlockingInst(`test.blocking[string, int, map[string]int]`)
 	bt.assertBlocking(`bInt`)
-	bt.assertNotBlocking(`notBlocking`)
+	bt.assertNotBlockingInst(`test.notBlocking[string, uint, map[string]uint]`)
 	bt.assertNotBlocking(`nbUint`)
 }
 
@@ -612,13 +620,9 @@ func TestBlocking_InstantiationBlocking(t *testing.T) {
 		func notBlockingViaImplicit() {
 			FooBaz(BazNotBlocker{}) // line 33
 		}`)
-
-	// TODO(grantnelson-wf): REMOVE
-	for _, inst := range bt.pkgInfo.funcInstInfos.Keys() {
-		t.Logf(`>>> %-5t => %q`, bt.pkgInfo.funcInstInfos.Get(inst).HasBlocking(), inst.TypeString())
-	}
-
-	bt.assertBlocking(`FooBaz`) // generic instantiation is blocking
+	bt.assertFuncInstCount(8)
+	// `FooBaz` as a generic function does not have FuncInfo for it,
+	// only non-generic or instantiations of a generic functions have FuncInfo.
 
 	bt.assertBlocking(`BazBlocker.Baz`)
 	bt.assertBlocking(`blockingViaExplicit`)
@@ -631,7 +635,45 @@ func TestBlocking_InstantiationBlocking(t *testing.T) {
 	bt.assertNotBlockingInst(`test.FooBaz[pkg/test.BazNotBlocker]`)
 }
 
-// TODO: Test Foo[T any]() { Baz[bool, T]() } where Foo[int] and Foo[string]
+func TestBlocking_NestedInstantiations(t *testing.T) {
+	// Checking that the type parameters are being propagated down into calls.
+	bt := newBlockingTest(t,
+		`package test
+		
+		func Foo[T any](t T) {
+			println(t)
+		}
+
+		func Bar[K comparable, V any, M ~map[K]V](m M) {
+			Foo(m)
+		}
+
+		func Baz[T any, S ~[]T](s S) {
+			m:= map[int]T{}
+			for i, v := range s {
+				m[i] = v
+			}
+			Bar(m)
+		}
+
+		func bazInt() {
+			Baz([]int{1, 2, 3})
+		}
+		
+		func bazString() {
+			Baz([]string{"one", "two", "three"})
+		}`)
+	bt.assertFuncInstCount(8)
+	bt.assertNotBlocking(`bazInt`)
+	bt.assertNotBlocking(`bazString`)
+	bt.assertNotBlockingInst(`test.Foo[map[int]int]`)
+	bt.assertNotBlockingInst(`test.Foo[map[int]string]`)
+	bt.assertNotBlockingInst(`test.Bar[int, int, map[int]int]`)
+	bt.assertNotBlockingInst(`test.Bar[int, string, map[int]string]`)
+	bt.assertNotBlockingInst(`test.Baz[int, []int]`)
+	bt.assertNotBlockingInst(`test.Baz[string, []string]`)
+}
+
 // TODO: Test Foo[string].Function() for func(Foo[string] recv)
 
 type blockingTest struct {
@@ -661,6 +703,15 @@ func newBlockingTest(t *testing.T, src string) *blockingTest {
 		f:       f,
 		file:    file,
 		pkgInfo: pkgInfo,
+	}
+}
+
+func (bt *blockingTest) assertFuncInstCount(expCount int) {
+	if got := bt.pkgInfo.funcInstInfos.Len(); got != expCount {
+		bt.f.T.Errorf(`Got %d function infos but expected %d.`, got, expCount)
+		for i, inst := range bt.pkgInfo.funcInstInfos.Keys() {
+			bt.f.T.Logf(`  %d. %q`, i+1, inst.TypeString())
+		}
 	}
 }
 
@@ -767,8 +818,8 @@ func (bt *blockingTest) isFuncInstBlocking(instanceStr string) bool {
 		}
 	}
 	bt.f.T.Logf(`Function instances found in package info:`)
-	for _, inst := range instances {
-		bt.f.T.Logf(`   %q`, inst.TypeString())
+	for i, inst := range instances {
+		bt.f.T.Logf(`  %d. %s`, i+1, inst.TypeString())
 	}
 	bt.f.T.Fatalf(`No function instance found for %q in package info.`, instanceStr)
 	return false

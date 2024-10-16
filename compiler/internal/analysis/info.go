@@ -108,11 +108,11 @@ func (info *Info) newFuncInfoInstances(n ast.Node) []*FuncInfo {
 
 	obj := info.Defs[fd.Name]
 	instances := info.instanceSets.Pkg(info.Pkg).ForObj(obj)
+	if len(instances) == 0 {
+		return []*FuncInfo{info.newFuncInfo(n, typeparams.Instance{})}
+	}
+
 	funcInfos := make([]*FuncInfo, 0, len(instances))
-
-	generic := info.newFuncInfo(n, typeparams.Instance{Object: obj})
-	funcInfos = append(funcInfos, generic)
-
 	for _, inst := range instances {
 		fi := info.newFuncInfo(n, inst)
 		if sig, ok := obj.Type().(*types.Signature); ok {
@@ -277,7 +277,7 @@ type FuncInfo struct {
 // For example, a channel operation in a function or a call to another
 // possibly blocking function may block the function.
 func (fi *FuncInfo) HasBlocking() bool {
-	return len(fi.Blocking) != 0
+	return fi == nil || len(fi.Blocking) != 0
 }
 
 func (fi *FuncInfo) Visit(node ast.Node) ast.Visitor {
@@ -293,8 +293,10 @@ func (fi *FuncInfo) Visit(node ast.Node) ast.Visitor {
 	case *ast.FuncDecl:
 		// Analyze the function in its own context.
 		fis := fi.pkgInfo.newFuncInfoInstances(n)
-		for _, fi := range fis {
-			ast.Walk(fi, n.Body)
+		if n.Body != nil {
+			for _, fi := range fis {
+				ast.Walk(fi, n.Body)
+			}
 		}
 		return nil
 	case *ast.FuncLit:
@@ -398,7 +400,7 @@ func (fi *FuncInfo) Visit(node ast.Node) ast.Visitor {
 func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 	switch f := astutil.RemoveParens(n.Fun).(type) {
 	case *ast.Ident:
-		fi.callToNamedFunc(typeparams.Instance{Object: fi.pkgInfo.Uses[f]})
+		fi.callToNamedFunc(fi.instanceForIdent(f))
 	case *ast.SelectorExpr:
 		if sel := fi.pkgInfo.Selections[f]; sel != nil {
 			if typesutil.IsJsObject(sel.Recv()) {
@@ -411,8 +413,7 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 				fi.callToNamedFunc(typeparams.Instance{Object: obj})
 			}
 		} else {
-			obj := fi.pkgInfo.Uses[f.Sel]
-			fi.callToNamedFunc(typeparams.Instance{Object: obj})
+			fi.callToNamedFunc(fi.instanceForIdent(f.Sel))
 		}
 	case *ast.FuncLit:
 		// Collect info about the function literal itself.
@@ -434,13 +435,7 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 		} else if astutil.IsTypeExpr(f.Index, fi.pkgInfo.Info) {
 			// This is a call of an instantiation of a generic function,
 			// e.g. `foo[int]` in `func foo[T any]() { ... }; func main() { foo[int]() }`
-			fnId := f.X.(*ast.Ident)
-			tArgs := fi.pkgInfo.Info.Instances[fnId].TypeArgs
-			inst := typeparams.Instance{
-				Object: fi.pkgInfo.Uses[fnId],
-				TArgs:  fi.resolver.SubstituteAll(tArgs),
-			}
-			fi.callToNamedFunc(inst)
+			fi.callToNamedFunc(fi.instanceForIdent(f.X.(*ast.Ident)))
 		} else {
 			// The called function is gotten with an index or key from a map, array, or slice.
 			// e.g. `m := map[string]func(){}; m["key"]()`, `s := []func(); s[0]()`.
@@ -457,13 +452,7 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 		} else {
 			// This is a call of an instantiation of a generic function,
 			// e.g. `foo[int, bool]` in `func foo[T1, T2 any]() { ... }; func main() { foo[int, bool]() }`
-			fnId := f.X.(*ast.Ident)
-			tArgs := fi.pkgInfo.Info.Instances[fnId].TypeArgs
-			inst := typeparams.Instance{
-				Object: fi.pkgInfo.Uses[fnId],
-				TArgs:  fi.resolver.SubstituteAll(tArgs),
-			}
-			fi.callToNamedFunc(inst)
+			fi.callToNamedFunc(fi.instanceForIdent(f.X.(*ast.Ident)))
 		}
 	default:
 		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
@@ -477,6 +466,14 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 	}
 
 	return fi
+}
+
+func (fi *FuncInfo) instanceForIdent(fnId *ast.Ident) typeparams.Instance {
+	tArgs := fi.pkgInfo.Info.Instances[fnId].TypeArgs
+	return typeparams.Instance{
+		Object: fi.pkgInfo.Uses[fnId],
+		TArgs:  fi.resolver.SubstituteAll(tArgs),
+	}
 }
 
 func (fi *FuncInfo) callToNamedFunc(callee typeparams.Instance) {

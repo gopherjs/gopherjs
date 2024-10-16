@@ -125,7 +125,7 @@ func newRootCtx(tContext *types.Context, srcs sources, typesInfo *types.Info, ty
 		Instances: &typeparams.PackageInstanceSets{},
 	}
 	tc.Scan(typesPkg, srcs.Files...)
-	pkgInfo := analysis.AnalyzePkg(srcs.Files, srcs.FileSet, typesInfo, typesPkg, isBlocking)
+	pkgInfo := analysis.AnalyzePkg(srcs.Files, srcs.FileSet, typesInfo, tContext, typesPkg, tc.Instances, isBlocking)
 	funcCtx := &funcContext{
 		FuncInfo: pkgInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{

@@ -1,7 +1,6 @@
 package analysis
 
 import (
-	"fmt"
 	"go/ast"
 	"go/types"
 	"testing"
@@ -613,20 +612,27 @@ func TestBlocking_InstantiationBlocking(t *testing.T) {
 		func notBlockingViaImplicit() {
 			FooBaz(BazNotBlocker{}) // line 33
 		}`)
+
+	// TODO(grantnelson-wf): REMOVE
+	for _, inst := range bt.pkgInfo.funcInstInfos.Keys() {
+		t.Logf(`>>> %-5t => %q`, bt.pkgInfo.funcInstInfos.Get(inst).HasBlocking(), inst.TypeString())
+	}
+
 	bt.assertBlocking(`FooBaz`) // generic instantiation is blocking
 
 	bt.assertBlocking(`BazBlocker.Baz`)
 	bt.assertBlocking(`blockingViaExplicit`)
 	bt.assertBlocking(`blockingViaImplicit`)
-	bt.assertBlockingInst(`FooBaz`, 21)
-	bt.assertBlockingInst(`FooBaz`, 25) // should be the same instance as 21
+	bt.assertBlockingInst(`test.FooBaz[pkg/test.BazBlocker]`)
 
 	bt.assertNotBlocking(`BazNotBlocker.Baz`)
 	bt.assertNotBlocking(`notBlockingViaExplicit`)
 	bt.assertNotBlocking(`notBlockingViaImplicit`)
-	bt.assertNotBlockingInst(`FooBaz`, 29)
-	bt.assertNotBlockingInst(`FooBaz`, 33) // should be the same instance as 33
+	bt.assertNotBlockingInst(`test.FooBaz[pkg/test.BazNotBlocker]`)
 }
+
+// TODO: Test Foo[T any]() { Baz[bool, T]() } where Foo[int] and Foo[string]
+// TODO: Test Foo[string].Function() for func(Foo[string] recv)
 
 type blockingTest struct {
 	f       *srctesting.Fixture
@@ -640,7 +646,14 @@ func newBlockingTest(t *testing.T, src string) *blockingTest {
 	file := f.Parse(`test.go`, src)
 	typesInfo, typesPkg := f.Check(`pkg/test`, file)
 
-	pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, typesInfo, typesPkg, func(f *types.Func) bool {
+	tc := typeparams.Collector{
+		TContext:  types.NewContext(),
+		Info:      typesInfo,
+		Instances: &typeparams.PackageInstanceSets{},
+	}
+	tc.Scan(typesPkg, file)
+
+	pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, typesInfo, types.NewContext(), typesPkg, tc.Instances, func(f *types.Func) bool {
 		panic(`isBlocking() should be never called for imported functions in this test.`)
 	})
 
@@ -659,7 +672,7 @@ func (bt *blockingTest) assertBlocking(funcName string) {
 
 func (bt *blockingTest) assertNotBlocking(funcName string) {
 	if bt.isTypesFuncBlocking(funcName) {
-		bt.f.T.Errorf(`Got %q as blocking but expected it to be blocking.`, funcName)
+		bt.f.T.Errorf(`Got %q as blocking but expected it to be not blocking.`, funcName)
 	}
 }
 
@@ -682,12 +695,18 @@ func (bt *blockingTest) isTypesFuncBlocking(funcName string) bool {
 	if decl == nil {
 		bt.f.T.Fatalf(`Declaration of %q is not found in the AST.`, funcName)
 	}
+
 	blockingType, ok := bt.pkgInfo.Defs[decl.Name]
 	if !ok {
-		bt.f.T.Fatalf(`No type information is found for %v.`, decl.Name)
+		bt.f.T.Fatalf(`No function declaration found for %q.`, decl.Name)
 	}
+
 	inst := typeparams.Instance{Object: blockingType.(*types.Func)}
-	return bt.pkgInfo.funcInstInfos.Get(inst).HasBlocking()
+	funcInfo := bt.pkgInfo.funcInstInfos.Get(inst)
+	if funcInfo == nil {
+		bt.f.T.Fatalf(`No function instance info found for %q in package info.`, funcName)
+	}
+	return funcInfo.HasBlocking()
 }
 
 func (bt *blockingTest) assertBlockingLit(lineNo int) {
@@ -724,49 +743,33 @@ func (bt *blockingTest) isFuncLitBlocking(lineNo int) bool {
 	return info.HasBlocking()
 }
 
-func (bt *blockingTest) assertBlockingInst(funcName string, lineNo int) {
-	if !bt.isFuncInstBlocking(funcName, lineNo) {
-		bt.f.T.Errorf(`Got function instance of %s at line %d as not blocking but expected it to be blocking.`, funcName, lineNo)
+func (bt *blockingTest) assertBlockingInst(instanceStr string) {
+	if !bt.isFuncInstBlocking(instanceStr) {
+		bt.f.T.Errorf(`Got function instance of %q as not blocking but expected it to be blocking.`, instanceStr)
 	}
 }
 
-func (bt *blockingTest) assertNotBlockingInst(funcName string, lineNo int) {
-	if bt.isFuncInstBlocking(funcName, lineNo) {
-		bt.f.T.Errorf(`Got function instance of %s at line %d as blocking but expected it to be not blocking.`, funcName, lineNo)
+func (bt *blockingTest) assertNotBlockingInst(instanceStr string) {
+	if bt.isFuncInstBlocking(instanceStr) {
+		bt.f.T.Errorf(`Got function instance of %q as blocking but expected it to be not blocking.`, instanceStr)
 	}
 }
 
-func (bt *blockingTest) isFuncInstBlocking(funcName string, lineNo int) bool {
-	var fnId *ast.Ident
-	ast.Inspect(bt.file, func(n ast.Node) bool {
-		if id, ok := n.(*ast.Ident); ok {
-			if id.Name == funcName && bt.f.FileSet.Position(id.NamePos).Line == lineNo {
-				fnId = id
-				return false
+func (bt *blockingTest) isFuncInstBlocking(instanceStr string) bool {
+	instances := bt.pkgInfo.funcInstInfos.Keys()
+	for _, inst := range instances {
+		if inst.TypeString() == instanceStr {
+			funcInfo := bt.pkgInfo.funcInstInfos.Get(inst)
+			if funcInfo == nil {
+				bt.f.T.Fatalf(`No function instance info found for function instance %q in package info.`, instanceStr)
 			}
+			return funcInfo.HasBlocking()
 		}
-		return fnId == nil
-	})
-
-	if fnId == nil {
-		bt.f.T.Errorf(`Function instance of %s at line %d was not found in AST.`, funcName, lineNo)
-		return false
 	}
-
-	fmt.Println("--------------------")
-	fmt.Printf("name: %s, lineNo: %d, fnId: %v\n", funcName, lineNo, fnId)
-	fmt.Printf("uses: %v\n", bt.pkgInfo.Uses[fnId])
-	fmt.Printf("defs: %v\n", bt.pkgInfo.Defs[fnId])
-	inst := bt.pkgInfo.Instances[fnId]
-	fmt.Printf("inst: %v\n", inst)
-	sig := inst.Type.(*types.Signature)
-	fmt.Printf("sig:  %v\n", sig)
-	for i := 0; i < inst.TypeArgs.Len(); i++ {
-		fmt.Printf("tp(%d) %v\n", i, inst.TypeArgs.At(i))
+	bt.f.T.Logf(`Function instances found in package info:`)
+	for _, inst := range instances {
+		bt.f.T.Logf(`   %q`, inst.TypeString())
 	}
-
-	fun := types.NewFunc(fnId.Pos(), bt.pkgInfo.Pkg, funcName, sig)
-	fmt.Printf("fun:  %v\n", fun)
-
-	return true
+	bt.f.T.Fatalf(`No function instance found for %q in package info.`, instanceStr)
+	return false
 }

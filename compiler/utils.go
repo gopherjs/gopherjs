@@ -447,7 +447,7 @@ func (fc *funcContext) knownInstances(o types.Object) []typeparams.Instance {
 		return []typeparams.Instance{{Object: o}}
 	}
 
-	return fc.pkgCtx.instanceSet.Pkg(o.Pkg()).ByObj()[o]
+	return fc.pkgCtx.instanceSet.Pkg(o.Pkg()).ForObj(o)
 }
 
 // instName returns a JS expression that refers to the provided instance of a
@@ -458,6 +458,7 @@ func (fc *funcContext) instName(inst typeparams.Instance) string {
 	if inst.IsTrivial() {
 		return objName
 	}
+	fc.pkgCtx.DeclareDCEDep(inst.Object, inst.TArgs...)
 	return fmt.Sprintf("%s[%d /* %v */]", objName, fc.pkgCtx.instanceSet.ID(inst), inst.TArgs)
 }
 
@@ -514,7 +515,7 @@ func (fc *funcContext) typeName(ty types.Type) string {
 	}
 
 	// For anonymous composite types, generate a synthetic package-level type
-	// declaration, which will be reused for all instances of this time. This
+	// declaration, which will be reused for all instances of this type. This
 	// improves performance, since runtime won't have to synthesize the same type
 	// repeatedly.
 	anonType, ok := fc.pkgCtx.anonTypeMap.At(ty).(*types.TypeName)

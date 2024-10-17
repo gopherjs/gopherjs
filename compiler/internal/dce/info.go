@@ -25,6 +25,7 @@ type Info struct {
 	// This will be empty if objectFilter is empty.
 	// This will be set to a qualified method name if the objectFilter
 	// can not determine if the declaration is alive on it's own.
+	// See ./README.md for more information.
 	methodFilter string
 
 	// Set of fully qualified (including package path) DCE symbol
@@ -75,20 +76,25 @@ func (d *Info) SetAsAlive() {
 
 // SetName sets the name used by DCE to represent the declaration
 // this DCE info is attached to.
-func (d *Info) SetName(o types.Object) {
+//
+// The given optional type arguments are used to when the object is a
+// function with type parameters or anytime the object doesn't carry them.
+// If not given, this attempts to get the type arguments from the object.
+func (d *Info) SetName(o types.Object, tArgs ...types.Type) {
 	if !d.unnamed() {
 		panic(fmt.Errorf(`may only set the name once for %s`, d.String()))
 	}
 
 	// Determine name(s) for DCE.
-	d.objectFilter, d.methodFilter = getFilters(o)
+	d.objectFilter, d.methodFilter = getFilters(o, tArgs)
 }
 
 // addDep add a declaration dependencies used by DCE
 // for the declaration this DCE info is attached to.
-func (d *Info) addDep(o types.Object) {
-	qualifiedName := getDepFilter(o)
-	d.addDepName(qualifiedName)
+func (d *Info) addDep(o types.Object, tArgs []types.Type) {
+	objectFilter, methodFilter := getFilters(o, tArgs)
+	d.addDepName(objectFilter)
+	d.addDepName(methodFilter)
 }
 
 // addDepName adds a declaration dependency by name.

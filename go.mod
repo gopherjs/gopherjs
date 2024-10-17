@@ -13,7 +13,6 @@ require (
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
 	github.com/visualfc/goembed v0.3.3
-	golang.org/x/exp/typeparams v0.0.0-20240119083558-1b970713d09a
 	golang.org/x/sync v0.5.0
 	golang.org/x/sys v0.10.0
 	golang.org/x/term v0.0.0-20220411215600-e5f449aeb171

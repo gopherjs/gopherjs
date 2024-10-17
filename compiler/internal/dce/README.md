@@ -8,7 +8,7 @@ something alive, is also considered alive.
 
 Once all dependencies are taken into consideration we have the set of alive
 declarations. Anything not considered alive is considered dead and
-may be safely eliminated, i.e. not outputted to the JS file(s).
+may be safely eliminated, i.e. not outputted to JS.
 
 - [Idea](#idea)
   - [Package](#package)
@@ -123,7 +123,13 @@ and therefore `Foo.y()` can not be called via a `Bar.y()`.
 
 We will try to reduce the false positives in alive unexported methods by using
 the parameter and result types of the methods. Meaning that
- `y()`, `y(int)`, `y() int`, etc won't match just because they are named `y`.
+`y()`, `y(int)`, `y() int`, etc won't match just because they are named `y`.
+This also helps with a generic type's unexported methods that use
+type parameters, e.g. `Foo.y(T)`. Since the generic type may be instantiated
+with `int` and `string`, the different instances of the method are `Foo.y(int)`
+and `Foo.y(string)`. By using the parameter and result types, it is possible
+to remove the unused unexported method instantiations even when some
+instantiations of the same method are used.
 
 ### Functions
 
@@ -156,19 +162,19 @@ For functions and types with generics, the definitions are split into
 unique instances. For example, `type StringKeys[T any] map[string]T`
 could be used in code as `StringKeys[int]` and `StringKeys[*Cat]`.
 We don't need all possible instances, only the ones which are realized
-in code. Each instance depends on the realized parameter types (instance types).
-In the example the instance types are `int` and `*Cat`.
+in code. Each instance depends on the realized parameter types (type arguments).
+In the example the type arguments are `int` and `*Cat`.
 
 The instance of the generic type also defines the code with the specific
-instance types (e.g. `map[string]int` and `map[string]*Cat`). When an
+type arguments (e.g. `map[string]int` and `map[string]*Cat`). When an
 instance is depended on by alive code, only that instance is alive, not the
 entire generic type. This means if `StringKey[*Cat]` is only used from dead
-code, it is also dead and can be safely eliminated.
+code then it is also dead and can be safely eliminated.
 
 The named generic types may have methods that are also copied for an instance
-with the parameter types replaced by the instance types. For example,
+with the parameter types replaced by the type arguments. For example,
 `func (sk StringKeys[T]) values() []T { ... }` becomes
-`func (sk StringKeys[int]) values() []int { ... }` when the instance type
+`func (sk StringKeys[int]) values() []int { ... }` when the type argument
 is `int`. This method in the instance now duck-types to
 `interface { values() []int }` and therefore must follow the rules for
 unexported methods.
@@ -176,7 +182,7 @@ See [Instance Duck-typing](#instance-duck-typing) example for more information.
 
 Functions and named types may be generic, but methods and unnamed types
 may not be. This makes somethings simpler. A method with a receiver is used,
-only the receiver's instance types are needed. The generic type or function
+only the receiver's type arguments are needed. The generic type or function
 may not be needed since only the instances are written out.
 
 This also means that inside of a generic function or named type there is only
@@ -190,12 +196,12 @@ than languages that allow a method of an object to have it's own type
 parameters, e.g. `class X<T> { void Y<U>() { ... } ... }`.
 
 However, generics mean that the same method, receiver, type, etc names
-will be used with different parameters types caused by different instance
-types. The instance types are the type arguments being passed into those
-parameter types for a specific instance.
+will be used with different parameters types caused by different type
+arguments. The type arguments are being passed into those parameter types
+for a specific instance.
 When an interface is alive, the signatures for unexported methods
 need to be instantiated with type arguments so that we know which instances
-the interface is duck-typing to.
+the interface is duck-typing to. See [Interfaces](#interfaces) for more detail.
 
 ### Links
 
@@ -227,7 +233,7 @@ simplifying the justifications down to a simple set of rules.
 - The `init` in every included file
 - Any variable initialization that has a side effect
 - Any linked function or variable
-- Anything not named
+- Anything not given a DCE named, e.g. packages
 
 ### Naming
 
@@ -256,7 +262,7 @@ To simplify the above for GopherJS, we don't look at the receiver for
 an unexported method before indicating it is alive. Meaning if there is no
 interface, only two named objects with identical unexported methods, the use
 of either will indicate a use of both. This will cause slightly more unexported
-method to be alive while reducing the complication of type checking which object
+methods to be alive while reducing the complication of type checking which object
 or type of object is performing the call.
 
 | Declaration | exported | unexported | non-generic | generic | object name | method name |
@@ -284,23 +290,25 @@ and be eliminated causing the application to not run.
 
 `<package>.<var name>`, `<package>.<func name>`, `<package>.<type name>`
 and `<package>.<receiver name>` all have the same form. They are
-the package path, if there is one, followed by a `.` and the object name
-or receiver name. For example [`rand.Shuffle`](https://pkg.go.dev/math/rand@go1.23.1#Shuffle)
+the package path followed by a `.`, if there is a package path,
+and the object name or receiver name.
+For example [`rand.Shuffle`](https://pkg.go.dev/math/rand@go1.23.1#Shuffle)
 will be named `math/rand.Shuffle`. The builtin [`error`](https://pkg.go.dev/builtin@go1.23.1#error)
 will be named `error` without a package path.
 
 `<package>.<func name>[<type args>]`, `<package>.<type name>[<type args>]`,
 and `<package>.<receiver name>[<type args>]` are the same as above
-except with comma separated type arguments in square brackets.
-The type arguments are either the instance types, or type parameters
-since the instance type could be a match for the type parameter on the
-generic. For example `type Foo[T any] struct{}; type Bar[B any] { f Foo[B] }`
+except with comma separated type parameters or type arguments in square brackets.
+The type parameter names are not used, instead the constraint types are since
+the names for type parameters may not match even if the constraints match.
+For example `type Foo[T any] struct{}; type Bar[B any] { f Foo[B] }`
 has `Foo[B]` used in `Bar` that is identical to `Foo[T]` even though
-technically `Foo[B]` is an instance of `Foo[T]` with `B` as the type argument.
+technically `Foo[B]` is an instance of `Foo[T]` with the `B` type parameter
+as the type argument.
 
 Command compiles, i.e. compiles with a `main` entry point, and test builds
-should not have any instance types that aren't resolved to concrete types,
-however to handle partial compiles of packages, instance types may still
+should not have any type parameters that aren't resolved to concrete types,
+however to handle partial compiles of packages, there may still
 be a type parameter, including unions of approximate constraints,
 i.e. `~int|~string`.
 
@@ -321,12 +329,12 @@ For the method name of unexposed methods,
 The rest contains the signature, `(<parameter types>)(<result types>)`.
 The signature is defined with only the types since
 `(v, u int)(ok bool, err error)` should match `(x, y int)(bool, error)`.
-To match both will have to be `(int, int)(bool, error)`.
+To match both, both will have to be `(int, int)(bool, error)`.
 Also the parameter types should include the veridic indicator,
-e.g. `sum(...int)int`, since that affects how the signature is matched.
+e.g. `sum(...int) int`, since that affects how the signature is matched.
 If there are no results then the results part is left off. Otherwise,
 the result types only need parenthesis if there are more than one result,
-e.g. `(int, int)`, `(int, int)bool`, and `(int, int)(bool, error)`.
+e.g. `(int, int)`, `(int, int) bool`, and `(int, int)(bool, error)`.
 
 In either the object name or method name, if there is a recursive
 type parameter, e.g. `func Foo[T Bar[T]]()` the second usage of the
@@ -336,7 +344,7 @@ is recursive, e.g. `Foo[Bar[Bar[...]]]`.
 
 ### Dependencies
 
-The dependencies that are specified in an expression.
+The dependencies are specified in an expression.
 For example a function that invokes another function will be dependent on
 that invoked function. When a dependency is added it will be added as one
 or more names to the declaration that depends on it. It follows the
@@ -348,7 +356,7 @@ it would automatically add all unexported signatures as dependencies via
 `<package path>.<method name>(<parameter type list>)(<result type list>)`.
 However, we do not need to do that in GopherJS because we aren't using
 the existence of realized methods in duck-typing. GopherJS stores full set
-of method information when describing the type so that even when things like
+of method information when describing the type so that, even when things like
 unexported methods in interfaces are removed, duck-typing will still work
 correctly. This reduces the size of the code by not keeping a potentially
 long method body when the signature is all that is needed.
@@ -419,7 +427,7 @@ import "point"
 func main() {
    a := point.Point{X: 10.2, Y: 45.3}
    b := point.Point{X: -23.0, Y: 7.7}
-   println(`Manhatten a to b:`, a.Manhattan(b))
+   println(`Manhattan a to b:`, a.Manhattan(b))
 }
 ```
 
@@ -476,7 +484,7 @@ func main() {
 ### Side Effects
 
 In this example unused variables are being initialized with expressions
-that have side effects. The `max` value is 8 by the time `main` is called
+that has side effects. The `max` value is 8 by the time `main` is called
 because each initialization calls `count()` that increments `max`.
 The expression doesn't have to have a function call and can be any combination
 of operations.
@@ -512,17 +520,17 @@ func main() {
 
 In this example the type `StringKeys[T any]` is a map that stores
 any kind of value with string keys. There is an interface `IntProvider`
-that `StringKeys` will duck-type to iff the instance type is `int`,
-i.e. `StringKeys[int]`. This exemplifies how the instance types used
+that `StringKeys` will duck-type to iff the type argument is `int`,
+i.e. `StringKeys[int]`. This exemplifies how the type arguments used
 in the type arguments affect the overall signature such that in some
 cases a generic object may match an interface and in others it may not.
 
 Also notice that the structure was typed with `T` as the parameter type's
 name whereas the methods use `S`. This shows that the name of the type
 doesn't matter in the instancing. Therefore, outputting a methods name
-(assuming it is unexported) should use the instance type not the parameter
-name, e.g. `value() []int` or `value() []any` instead of `value() []S` or
-`value() []T`.
+(assuming it is unexported) should use the type argument type,
+not the type parameter name, e.g. `value() []int` or `value() []any`
+instead of `value() []S` or `value() []T`.
 
 ```go
 package main
@@ -606,9 +614,10 @@ the higher level constructs not being used.
 Any variable internal to the body of a function or method that is unused or
 only used for computing new values for itself, are left as is.
 The Go compiler and linters have requirements that attempt to prevent this
-kind of dead-code in a function body (so long as an underscore isn't used to quite
-usage warnings) and prevent unreachable code. Therefore, we aren't going to
-worry about trying to DCE inside of function bodies or in variable initializers.
+kind of dead-code in a function body (unless an underscore is used to quite
+usage warnings, e.g. `_ = unusedVar`) and prevent unreachable code.
+Therefore, we aren't going to worry about trying to DCE inside of function
+bodies or in variable initializers.
 
 GopherJS does not implicitly perform JS Tree Shaking Algorithms, as discussed in
 [How Modern Javascript eliminate dead code](https://blog.stackademic.com/how-modern-javascript-eliminates-dead-code-tree-shaking-algorithm-d7861e48df40)

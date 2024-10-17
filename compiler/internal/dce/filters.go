@@ -82,7 +82,7 @@ func objectName(o types.Object) string {
 }
 
 // getTypeArgs gets the type arguments for the given type
-// wether they are instance types or type parameters.
+// wether they are type arguments or type parameters.
 func getTypeArgs(typ types.Type) []types.Type {
 	switch t := typ.(type) {
 	case *types.Pointer:
@@ -105,11 +105,11 @@ func getTypeArgs(typ types.Type) []types.Type {
 	return nil
 }
 
-// typeListToSlice returns the list of type arguments for the instance types.
-func typeListToSlice(instTypes *types.TypeList) []types.Type {
-	tArgs := make([]types.Type, instTypes.Len())
+// typeListToSlice returns the list of type arguments for the type arguments.
+func typeListToSlice(typeArgs *types.TypeList) []types.Type {
+	tArgs := make([]types.Type, typeArgs.Len())
 	for i := range tArgs {
-		tArgs[i] = instTypes.At(i)
+		tArgs[i] = typeArgs.At(i)
 	}
 	return tArgs
 }
@@ -141,9 +141,9 @@ func (p processingGroup) is(o types.Object, tArgs []types.Type) bool {
 }
 
 type filterGen struct {
-	// argTypeRemap is the instance types in the same order as the
+	// argTypeRemap is the type arguments in the same order as the
 	// type parameters in the top level object such that the type parameters
-	// index can be used to get the instance type.
+	// index can be used to get the type argument.
 	argTypeRemap []types.Type
 	inProgress   []processingGroup
 }

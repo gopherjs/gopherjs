@@ -98,7 +98,7 @@ Since there are many ways to wrap a type with an interface, any alive type that
 duck-types to an interface must have all of the matching methods also alive.
 
 In theory the unexported functions are also alive however, for GopherJS there
-is an exception because duck-typing is handled separately the method
+is an exception because duck-typing is handled separately from the method
 definitions. Those difference are discussed in [Dependencies](#dependencies)
 but for this idea we discuss DCE more generally.
 

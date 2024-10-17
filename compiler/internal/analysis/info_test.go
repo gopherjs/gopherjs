@@ -606,19 +606,19 @@ func TestBlocking_InstantiationBlocking(t *testing.T) {
 		}
 
 		func blockingViaExplicit() {
-			FooBaz[BazBlocker](BazBlocker{c: make(chan bool)}) // line 21
+			FooBaz[BazBlocker](BazBlocker{c: make(chan bool)})
 		}
 		
 		func notBlockingViaExplicit() {
-			FooBaz[BazNotBlocker](BazNotBlocker{}) // line 25
+			FooBaz[BazNotBlocker](BazNotBlocker{})
 		}
 
 		func blockingViaImplicit() {
-			FooBaz(BazBlocker{c: make(chan bool)}) // line 29
+			FooBaz(BazBlocker{c: make(chan bool)})
 		}
 		
 		func notBlockingViaImplicit() {
-			FooBaz(BazNotBlocker{}) // line 33
+			FooBaz(BazNotBlocker{})
 		}`)
 	bt.assertFuncInstCount(8)
 	// `FooBaz` as a generic function does not have FuncInfo for it,
@@ -674,7 +674,47 @@ func TestBlocking_NestedInstantiations(t *testing.T) {
 	bt.assertNotBlockingInst(`test.Baz[string, []string]`)
 }
 
-// TODO: Test Foo[string].Function() for func(Foo[string] recv)
+func TestBlocking_MethodExpressions(t *testing.T) {
+	bt := newBlockingTest(t,
+		`package test
+
+		type Foo interface { Baz() }
+
+		type BazBlocker struct {
+			c chan bool
+		}
+		func (bb BazBlocker) Baz() {
+			println(<-bb.c)
+		}
+
+		type BazNotBlocker struct {}
+		func (bnb BazNotBlocker) Baz() {
+			println("hi")
+		}
+
+		type FooBaz[T Foo] struct {}
+		func (fb FooBaz[T]) Baz() {
+			var foo T
+			foo.Baz()
+		}
+
+		func blocking() {
+			FooBaz[BazBlocker].Baz(FooBaz[BazBlocker]{})
+		}
+		
+		func notBlocking() {
+			FooBaz[BazNotBlocker].Baz(FooBaz[BazNotBlocker]{})
+		}`)
+	bt.assertFuncInstCount(6)
+
+	bt.assertBlocking(`BazBlocker.Baz`)
+	bt.assertBlockingInst(`test.Baz[pkg/test.BazBlocker]`)
+	bt.assertBlocking(`blocking`)
+
+	bt.assertNotBlocking(`BazNotBlocker.Baz`)
+	bt.assertNotBlockingInst(`test.Baz[pkg/test.BazNotBlocker]`)
+	bt.assertNotBlocking(`notBlocking`)
+}
 
 type blockingTest struct {
 	f       *srctesting.Fixture
@@ -733,7 +773,9 @@ func (bt *blockingTest) isTypesFuncBlocking(funcName string) bool {
 		if f, ok := n.(*ast.FuncDecl); ok {
 			name := f.Name.Name
 			if f.Recv != nil {
-				name = f.Recv.List[0].Type.(*ast.Ident).Name + `.` + name
+				if id, ok := f.Recv.List[0].Type.(*ast.Ident); ok {
+					name = id.Name + `.` + name
+				}
 			}
 			if name == funcName {
 				decl = f

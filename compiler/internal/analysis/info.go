@@ -198,6 +198,11 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		for _, caller := range info.allInfos {
 			// Check calls to named functions and function-typed variables.
 			caller.localInstCallees.Iterate(func(callee typeparams.Instance, callSites []astPath) {
+
+				if info.funcInstInfos.Get(callee) == nil { // TODO: REMOVE
+					panic(fmt.Errorf(`no function instance info found for %#v in package info`, callee)) // TODO: REMOVE
+				}
+
 				if info.funcInstInfos.Get(callee).HasBlocking() {
 					for _, callSite := range callSites {
 						caller.markBlocking(callSite)
@@ -410,6 +415,9 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 				// selection is a method call like `foo.Bar()`, where `foo` might
 				// be a type parameter and needs to be substituted with the type argument.
 				obj := fi.resolver.SubstituteSelection(sel).Obj()
+
+				fmt.Printf(">>>> obj: %v\n", obj) // TODO: REMOVE
+
 				fi.callToNamedFunc(typeparams.Instance{Object: obj})
 			}
 		} else {

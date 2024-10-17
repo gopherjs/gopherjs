@@ -2,9 +2,7 @@ package compiler
 
 import (
 	"bytes"
-	"fmt"
 	"go/types"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"testing"
@@ -13,38 +11,40 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
+	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
 func TestOrder(t *testing.T) {
 	fileA := `
-package foo
+		package foo
 
-var Avar = "a"
+		var Avar = "a"
 
-type Atype struct{}
+		type Atype struct{}
 
-func Afunc() int {
-	var varA = 1
-	var varB = 2
-	return varA+varB
-}
-`
+		func Afunc() int {
+			var varA = 1
+			var varB = 2
+			return varA+varB
+		}`
 
 	fileB := `
-package foo
+		package foo
 
-var Bvar = "b"
+		var Bvar = "b"
 
-type Btype struct{}
+		type Btype struct{}
 
-func Bfunc() int {
-	var varA = 1
-	var varB = 2
-	return varA+varB
-}
-`
+		func Bfunc() int {
+			var varA = 1
+			var varB = 2
+			return varA+varB
+		}`
 
-	files := []source{{"fileA.go", []byte(fileA)}, {"fileB.go", []byte(fileB)}}
+	files := []srctesting.Source{
+		{Name: "fileA.go", Contents: []byte(fileA)},
+		{Name: "fileB.go", Contents: []byte(fileB)},
+	}
 
 	compareOrder(t, files, false)
 	compareOrder(t, files, true)
@@ -64,7 +64,7 @@ func TestDeclSelection_KeepUnusedExportedMethods(t *testing.T) {
 			Foo{}.Bar()
 		}`
 
-	srcFiles := []source{{`main.go`, []byte(src)}}
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
 	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
@@ -86,7 +86,7 @@ func TestDeclSelection_RemoveUnusedUnexportedMethods(t *testing.T) {
 			Foo{}.Bar()
 		}`
 
-	srcFiles := []source{{`main.go`, []byte(src)}}
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
 	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
@@ -122,14 +122,14 @@ func TestDeclSelection_KeepUnusedUnexportedMethodForInterface(t *testing.T) {
 			}
 		}`
 
-	srcFiles := []source{{`main.go`, []byte(src)}}
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
 	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
 	sel.DeclCode.IsAlive(`^\s*\$ptrType\(Foo\)\.prototype\.Bar`)
 
-	// `baz` is used to duck-type (via method list) against IFoo
-	// but the method itself is not used so can be removed.
+	// `baz` signature metadata is used to check a type assertion against IFoo,
+	// but the method itself is never called, so it can be removed.
 	sel.DeclCode.IsDead(`^\s*\$ptrType\(Foo\)\.prototype\.baz`)
 	sel.MethodListCode.IsAlive(`^\s*Foo.methods = .* \{prop: "baz", name: "baz"`)
 }
@@ -152,7 +152,7 @@ func TestDeclSelection_KeepUnexportedMethodUsedViaInterfaceLit(t *testing.T) {
 			f.baz()
 		}`
 
-	srcFiles := []source{{`main.go`, []byte(src)}}
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
 	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
@@ -172,7 +172,7 @@ func TestDeclSelection_KeepAliveUnexportedMethodsUsedInMethodExpressions(t *test
 			fb(Foo{})
 		}`
 
-	srcFiles := []source{{`main.go`, []byte(src)}}
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
 	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
@@ -196,7 +196,7 @@ func TestDeclSelection_RemoveUnusedFuncInstance(t *testing.T) {
 			println(Sum(1.1, 2.2, 3.3))
 		}`
 
-	srcFiles := []source{{`main.go`, []byte(src)}}
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
 	sel.DeclCode.IsAlive(`^\s*Sum\[\d+ /\* float64 \*/\]`)
@@ -221,7 +221,7 @@ func TestDeclSelection_RemoveUnusedStructTypeInstances(t *testing.T) {
 			Foo[int]{v: 7}.Bar()
 		}`
 
-	srcFiles := []source{{`main.go`, []byte(src)}}
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
 	sel.DeclCode.IsAlive(`^\s*Foo\[\d+ /\* int \*/\] = \$newType`)
@@ -251,7 +251,7 @@ func TestDeclSelection_RemoveUnusedInterfaceTypeInstances(t *testing.T) {
 			FooBar[int](Baz(42), 12) // Baz implements Foo[int]
 		}`
 
-	srcFiles := []source{{`main.go`, []byte(src)}}
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
 	sel.DeclCode.IsAlive(`^\s*Baz = \$newType`)
@@ -288,7 +288,7 @@ func TestDeclSelection_RemoveUnusedMethodWithDifferentSignature(t *testing.T) {
 			f2.baz("foo")
 		}`
 
-	srcFiles := []source{{`main.go`, []byte(src)}}
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
 	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
@@ -319,7 +319,7 @@ func TestDeclSelection_RemoveUnusedUnexportedMethodInstance(t *testing.T) {
 			f2.Bar()
 		}`
 
-	srcFiles := []source{{`main.go`, []byte(src)}}
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
 	sel.DeclCode.IsAlive(`^\s*Foo\[\d+ /\* int \*/\] = \$newType`)
@@ -351,7 +351,7 @@ func TestDeclSelection_RemoveUnusedTypeConstraint(t *testing.T) {
 			println("do nothing")
 		}`
 
-	srcFiles := []source{{`main.go`, []byte(src)}}
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
 	sel.DeclCode.IsDead(`^\s*Foo = \$newType`)
@@ -360,7 +360,7 @@ func TestDeclSelection_RemoveUnusedTypeConstraint(t *testing.T) {
 	sel.InitCode.IsDead(`ghost = new Bar\[\d+ /\* int \*/\]\.ptr\(7\)`)
 }
 
-func compareOrder(t *testing.T, sourceFiles []source, minify bool) {
+func compareOrder(t *testing.T, sourceFiles []srctesting.Source, minify bool) {
 	t.Helper()
 	outputNormal := compile(t, sourceFiles, minify)
 
@@ -376,14 +376,9 @@ func compareOrder(t *testing.T, sourceFiles []source, minify bool) {
 	}
 }
 
-type source struct {
-	name     string
-	contents []byte
-}
-
-func compile(t *testing.T, sourceFiles []source, minify bool) []byte {
+func compile(t *testing.T, sourceFiles []srctesting.Source, minify bool) []byte {
 	t.Helper()
-	rootPkg := parseSources(t, sourceFiles, nil)
+	rootPkg := srctesting.ParseSources(t, sourceFiles, nil)
 	archives := compileProject(t, rootPkg, minify)
 
 	path := rootPkg.PkgPath
@@ -397,71 +392,6 @@ func compile(t *testing.T, sourceFiles []source, minify bool) []byte {
 		t.Fatal(`compile had no output`)
 	}
 	return b
-}
-
-// parseSources parses the given source files and returns the root package
-// that contains the given source files.
-//
-// The source file should all be from the same package as the files for the
-// root package. At least one source file must be given.
-//
-// The auxillary files can be for different packages but should have paths
-// added to the source name so that they can be grouped together by package.
-// To import an auxillary package, the path should be prepended by
-// `github.com/gopherjs/gopherjs/compiler`.
-func parseSources(t *testing.T, sourceFiles []source, auxFiles []source) *packages.Package {
-	t.Helper()
-	const mode = packages.NeedName |
-		packages.NeedFiles |
-		packages.NeedImports |
-		packages.NeedDeps |
-		packages.NeedTypes |
-		packages.NeedSyntax
-
-	dir, err := filepath.Abs(`./`)
-	if err != nil {
-		t.Fatal(`error getting working directory:`, err)
-	}
-
-	patterns := make([]string, len(sourceFiles))
-	overlay := make(map[string][]byte, len(sourceFiles))
-	for i, src := range sourceFiles {
-		filename := src.name
-		patterns[i] = filename
-		absName := filepath.Join(dir, filename)
-		overlay[absName] = []byte(src.contents)
-	}
-	for _, src := range auxFiles {
-		absName := filepath.Join(dir, src.name)
-		overlay[absName] = []byte(src.contents)
-	}
-
-	config := &packages.Config{
-		Mode:    mode,
-		Overlay: overlay,
-		Dir:     dir,
-	}
-
-	pkgs, err := packages.Load(config, patterns...)
-	if err != nil {
-		t.Fatal(`error loading packages:`, err)
-	}
-
-	hasErrors := false
-	packages.Visit(pkgs, nil, func(pkg *packages.Package) {
-		for _, err := range pkg.Errors {
-			hasErrors = true
-			fmt.Println(err)
-		}
-	})
-	if hasErrors {
-		t.FailNow()
-	}
-
-	if len(pkgs) != 1 {
-		t.Fatal(`expected one and only one root package but got`, len(pkgs))
-	}
-	return pkgs[0]
 }
 
 // compileProject compiles the given root package and all packages imported by the root.
@@ -534,9 +464,9 @@ type selectionTester struct {
 	MethodListCode *selectionCodeTester
 }
 
-func declSelection(t *testing.T, sourceFiles []source, auxFiles []source) *selectionTester {
+func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []srctesting.Source) *selectionTester {
 	t.Helper()
-	root := parseSources(t, sourceFiles, auxFiles)
+	root := srctesting.ParseSources(t, sourceFiles, auxFiles)
 	archives := compileProject(t, root, false)
 	mainPkg := archives[root.PkgPath]
 
@@ -545,7 +475,7 @@ func declSelection(t *testing.T, sourceFiles []source, auxFiles []source) *selec
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
-	packages := make([]*Archive, 0, len(archives)-1)
+	packages := make([]*Archive, 0, len(archives))
 	for _, path := range paths {
 		packages = append(packages, archives[path])
 	}
@@ -558,87 +488,105 @@ func declSelection(t *testing.T, sourceFiles []source, auxFiles []source) *selec
 	}
 	dceSelection := sel.AliveDecls()
 
-	st := &selectionTester{
+	return &selectionTester{
 		t:            t,
 		mainPkg:      mainPkg,
 		archives:     archives,
 		packages:     packages,
 		dceSelection: dceSelection,
+		DeclCode: &selectionCodeTester{
+			t:            t,
+			packages:     packages,
+			dceSelection: dceSelection,
+			codeName:     `DeclCode`,
+			getCode:      func(d *Decl) []byte { return d.DeclCode },
+		},
+		InitCode: &selectionCodeTester{
+			t:            t,
+			packages:     packages,
+			dceSelection: dceSelection,
+			codeName:     `InitCode`,
+			getCode:      func(d *Decl) []byte { return d.InitCode },
+		},
+		MethodListCode: &selectionCodeTester{
+			t:            t,
+			packages:     packages,
+			dceSelection: dceSelection,
+			codeName:     `MethodListCode`,
+			getCode:      func(d *Decl) []byte { return d.MethodListCode },
+		},
 	}
-
-	st.DeclCode = &selectionCodeTester{st, `DeclCode`, func(d *Decl) []byte { return d.DeclCode }}
-	st.InitCode = &selectionCodeTester{st, `InitCode`, func(d *Decl) []byte { return d.InitCode }}
-	st.MethodListCode = &selectionCodeTester{st, `MethodListCode`, func(d *Decl) []byte { return d.MethodListCode }}
-	return st
 }
 
 func (st *selectionTester) PrintDeclStatus() {
 	st.t.Helper()
 	for _, pkg := range st.packages {
-		fmt.Println(`Package`, pkg.ImportPath)
+		st.t.Logf(`Package %s`, pkg.ImportPath)
 		for _, decl := range pkg.Declarations {
 			if _, ok := st.dceSelection[decl]; ok {
-				fmt.Printf("  [Alive] %q\n", string(decl.FullName))
+				st.t.Logf(`  [Alive] %q`, decl.FullName)
 			} else {
-				fmt.Printf("  [Dead]  %q\n", string(decl.FullName))
+				st.t.Logf(`  [Dead]  %q`, decl.FullName)
 			}
 			if len(decl.DeclCode) > 0 {
-				fmt.Printf("     DeclCode: %q\n", string(decl.DeclCode))
+				st.t.Logf(`     DeclCode: %q`, string(decl.DeclCode))
 			}
 			if len(decl.InitCode) > 0 {
-				fmt.Printf("     InitCode: %q\n", string(decl.InitCode))
+				st.t.Logf(`     InitCode: %q`, string(decl.InitCode))
 			}
 			if len(decl.MethodListCode) > 0 {
-				fmt.Printf("     MethodListCode: %q\n", string(decl.MethodListCode))
+				st.t.Logf(`     MethodListCode: %q`, string(decl.MethodListCode))
 			}
 			if len(decl.TypeInitCode) > 0 {
-				fmt.Printf("     TypeInitCode: %q\n", string(decl.TypeInitCode))
+				st.t.Logf(`     TypeInitCode: %q`, string(decl.TypeInitCode))
 			}
 			if len(decl.Vars) > 0 {
-				fmt.Println(`     Vars:`, decl.Vars)
+				st.t.Logf(`     Vars: %v`, decl.Vars)
 			}
 		}
 	}
 }
 
 type selectionCodeTester struct {
-	st       *selectionTester
-	codeName string
-	getCode  func(*Decl) []byte
+	t            *testing.T
+	packages     []*Archive
+	dceSelection map[*Decl]struct{}
+	codeName     string
+	getCode      func(*Decl) []byte
 }
 
 func (ct *selectionCodeTester) IsAlive(pattern string) {
-	ct.st.t.Helper()
+	ct.t.Helper()
 	decl := ct.FindDeclMatch(pattern)
-	if _, ok := ct.st.dceSelection[decl]; !ok {
-		ct.st.t.Error(`expected the`, ct.codeName, `code to be alive:`, pattern)
+	if _, ok := ct.dceSelection[decl]; !ok {
+		ct.t.Error(`expected the`, ct.codeName, `code to be alive:`, pattern)
 	}
 }
 
 func (ct *selectionCodeTester) IsDead(pattern string) {
-	ct.st.t.Helper()
+	ct.t.Helper()
 	decl := ct.FindDeclMatch(pattern)
-	if _, ok := ct.st.dceSelection[decl]; ok {
-		ct.st.t.Error(`expected the`, ct.codeName, `code to be dead:`, pattern)
+	if _, ok := ct.dceSelection[decl]; ok {
+		ct.t.Error(`expected the`, ct.codeName, `code to be dead:`, pattern)
 	}
 }
 
 func (ct *selectionCodeTester) FindDeclMatch(pattern string) *Decl {
-	ct.st.t.Helper()
+	ct.t.Helper()
 	regex := regexp.MustCompile(pattern)
 	var found *Decl
-	for _, pkg := range ct.st.packages {
+	for _, pkg := range ct.packages {
 		for _, d := range pkg.Declarations {
 			if regex.Match(ct.getCode(d)) {
 				if found != nil {
-					ct.st.t.Fatal(`multiple`, ct.codeName, `found containing pattern:`, pattern)
+					ct.t.Fatal(`multiple`, ct.codeName, `found containing pattern:`, pattern)
 				}
 				found = d
 			}
 		}
 	}
 	if found == nil {
-		ct.st.t.Fatal(ct.codeName, `not found with pattern:`, pattern)
+		ct.t.Fatal(ct.codeName, `not found with pattern:`, pattern)
 	}
 	return found
 }

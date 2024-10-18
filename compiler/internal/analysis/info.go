@@ -62,7 +62,7 @@ type Info struct {
 	allInfos           []*FuncInfo
 }
 
-func (info *Info) newFuncInfo(n ast.Node, inst typeparams.Instance) *FuncInfo {
+func (info *Info) newFuncInfo(n ast.Node, inst *typeparams.Instance) *FuncInfo {
 	funcInfo := &FuncInfo{
 		pkgInfo:            info,
 		Flattened:          make(map[ast.Node]bool),
@@ -85,10 +85,10 @@ func (info *Info) newFuncInfo(n ast.Node, inst typeparams.Instance) *FuncInfo {
 			funcInfo.Blocking[n] = true
 		}
 
-		if inst.Object == nil {
-			inst.Object = info.Defs[n.Name]
+		if inst == nil {
+			inst = &typeparams.Instance{Object: info.Defs[n.Name]}
 		}
-		info.funcInstInfos.Set(inst, funcInfo)
+		info.funcInstInfos.Set(*inst, funcInfo)
 
 	case *ast.FuncLit:
 		info.funcLitInfos[n] = funcInfo
@@ -103,18 +103,20 @@ func (info *Info) newFuncInfo(n ast.Node, inst typeparams.Instance) *FuncInfo {
 func (info *Info) newFuncInfoInstances(n ast.Node) []*FuncInfo {
 	fd, ok := n.(*ast.FuncDecl)
 	if !ok {
-		return []*FuncInfo{info.newFuncInfo(n, typeparams.Instance{})}
+		// This is not a function declaration, so it has no instances.
+		return []*FuncInfo{info.newFuncInfo(n, nil)}
 	}
 
 	obj := info.Defs[fd.Name]
 	instances := info.instanceSets.Pkg(info.Pkg).ForObj(obj)
 	if len(instances) == 0 {
-		return []*FuncInfo{info.newFuncInfo(n, typeparams.Instance{})}
+		// No instances found, this is a non-generic function.
+		return []*FuncInfo{info.newFuncInfo(n, nil)}
 	}
 
 	funcInfos := make([]*FuncInfo, 0, len(instances))
 	for _, inst := range instances {
-		fi := info.newFuncInfo(n, inst)
+		fi := info.newFuncInfo(n, &inst)
 		if sig, ok := obj.Type().(*types.Signature); ok {
 			tp := typeparams.ToSlice(typeparams.SignatureTypeParams(sig))
 			fi.resolver = typeparams.NewResolver(info.typeCtx, tp, inst.TArgs)
@@ -166,7 +168,7 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		funcInstInfos:      new(typeparams.InstanceMap[*FuncInfo]),
 		funcLitInfos:       make(map[*ast.FuncLit]*FuncInfo),
 	}
-	info.InitFuncInfo = info.newFuncInfo(nil, typeparams.Instance{})
+	info.InitFuncInfo = info.newFuncInfo(nil, nil)
 
 	// Traverse the full AST of the package and collect information about existing
 	// functions.
@@ -199,9 +201,19 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 			// Check calls to named functions and function-typed variables.
 			caller.localInstCallees.Iterate(func(callee typeparams.Instance, callSites []astPath) {
 
-				if info.funcInstInfos.Get(callee) == nil { // TODO: REMOVE
-					panic(fmt.Errorf(`no function instance info found for %#v in package info`, callee)) // TODO: REMOVE
-				}
+				// TODO: REMOVE the following
+				/*
+					if info.funcInstInfos.Get(callee) == nil {
+						fmt.Printf(">> no info: %v\n", callee)
+						for i, inst := range info.funcInstInfos.Keys() {
+							fmt.Printf("  %d. %v[%v]\n", i+1, inst.Object, inst.TArgs)
+						}
+						fn := callee.Object.(*types.Func)
+						fmt.Printf(">> fn: %v\n", fn)
+						fmt.Printf(">> fn.Type: %v\n", fn.Type())
+						panic(fmt.Errorf(`no function instance info found for %#v in package info`, fn))
+					}
+				*/
 
 				if info.funcInstInfos.Get(callee).HasBlocking() {
 					for _, callSite := range callSites {
@@ -306,7 +318,7 @@ func (fi *FuncInfo) Visit(node ast.Node) ast.Visitor {
 		return nil
 	case *ast.FuncLit:
 		// Analyze the function literal in its own context.
-		return fi.pkgInfo.newFuncInfo(n, typeparams.Instance{})
+		return fi.pkgInfo.newFuncInfo(n, nil)
 	case *ast.BranchStmt:
 		switch n.Tok {
 		case token.GOTO:
@@ -413,12 +425,8 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 				// check its arguments.
 			} else {
 				// selection is a method call like `foo.Bar()`, where `foo` might
-				// be a type parameter and needs to be substituted with the type argument.
-				obj := fi.resolver.SubstituteSelection(sel).Obj()
-
-				fmt.Printf(">>>> obj: %v\n", obj) // TODO: REMOVE
-
-				fi.callToNamedFunc(typeparams.Instance{Object: obj})
+				// be generic and needs to be substituted with the type argument.
+				fi.callToNamedFunc(fi.instanceFoSelection(sel))
 			}
 		} else {
 			fi.callToNamedFunc(fi.instanceForIdent(f.Sel))
@@ -482,6 +490,23 @@ func (fi *FuncInfo) instanceForIdent(fnId *ast.Ident) typeparams.Instance {
 		Object: fi.pkgInfo.Uses[fnId],
 		TArgs:  fi.resolver.SubstituteAll(tArgs),
 	}
+}
+
+func (fi *FuncInfo) instanceFoSelection(sel *types.Selection) typeparams.Instance {
+	if sig, ok := sel.Obj().Type().(*types.Signature); ok {
+		if rt := typesutil.RecvType(sig); rt != nil {
+			origMethod, _, _ := types.LookupFieldOrMethod(rt.Origin(), true, rt.Obj().Pkg(), sel.Obj().Name())
+			if origMethod == nil {
+				panic(fmt.Errorf(`failed to lookup field %q in type %v`, sel.Obj().Name(), rt.Origin()))
+			}
+
+			return typeparams.Instance{
+				Object: origMethod,
+				TArgs:  fi.resolver.SubstituteAll(rt.TypeArgs()),
+			}
+		}
+	}
+	return typeparams.Instance{Object: sel.Obj()}
 }
 
 func (fi *FuncInfo) callToNamedFunc(callee typeparams.Instance) {

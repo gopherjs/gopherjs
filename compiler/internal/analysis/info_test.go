@@ -674,7 +674,10 @@ func TestBlocking_NestedInstantiations(t *testing.T) {
 	bt.assertNotBlockingInst(`test.Baz[string, []string]`)
 }
 
-func TestBlocking_MethodExpressions(t *testing.T) {
+func TestBlocking_MethodSelection(t *testing.T) {
+	// This test method selection using method expression (receiver as the first
+	// argument) selecting on type and method call selecting on a variable.
+	// This tests in both generic (FooBaz[T]) and non-generic contexts.
 	bt := newBlockingTest(t,
 		`package test
 
@@ -693,27 +696,47 @@ func TestBlocking_MethodExpressions(t *testing.T) {
 		}
 
 		type FooBaz[T Foo] struct {}
-		func (fb FooBaz[T]) Baz() {
+		func (fb FooBaz[T]) ByMethodExpression() {
+			var foo T
+			T.Baz(foo)
+		}
+		func (fb FooBaz[T]) ByInstance() {
 			var foo T
 			foo.Baz()
 		}
 
 		func blocking() {
-			FooBaz[BazBlocker].Baz(FooBaz[BazBlocker]{})
+			fb := FooBaz[BazBlocker]{}
+
+			FooBaz[BazBlocker].ByMethodExpression(fb)
+			FooBaz[BazBlocker].ByInstance(fb)
+
+			fb.ByMethodExpression()
+			fb.ByInstance()
 		}
-		
+
 		func notBlocking() {
-			FooBaz[BazNotBlocker].Baz(FooBaz[BazNotBlocker]{})
+			fb := FooBaz[BazNotBlocker]{}
+
+			FooBaz[BazNotBlocker].ByMethodExpression(fb)
+			FooBaz[BazNotBlocker].ByInstance(fb)
+
+			fb.ByMethodExpression()
+			fb.ByInstance()
 		}`)
-	bt.assertFuncInstCount(6)
+	bt.assertFuncInstCount(8)
 
 	bt.assertBlocking(`BazBlocker.Baz`)
-	bt.assertBlockingInst(`test.Baz[pkg/test.BazBlocker]`)
+	bt.assertBlockingInst(`test.ByMethodExpression[pkg/test.BazBlocker]`)
+	bt.assertBlockingInst(`test.ByInstance[pkg/test.BazBlocker]`)
 	bt.assertBlocking(`blocking`)
 
 	bt.assertNotBlocking(`BazNotBlocker.Baz`)
-	bt.assertNotBlockingInst(`test.Baz[pkg/test.BazNotBlocker]`)
+	bt.assertNotBlockingInst(`test.ByMethodExpression[pkg/test.BazNotBlocker]`)
+	bt.assertNotBlockingInst(`test.ByInstance[pkg/test.BazNotBlocker]`)
 	bt.assertNotBlocking(`notBlocking`)
+
+	bt.assertNotBlockingInst(`BOOM`) // TODO: REMOVE
 }
 
 type blockingTest struct {

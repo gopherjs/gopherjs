@@ -147,6 +147,18 @@ func (iset *InstanceSet) ByObj() map[types.Object][]Instance {
 	return result
 }
 
+// ForObj returns instances for a given object type belong to. Order is not specified.
+// This returns the same values as `ByObj()[obj]`.
+func (iset *InstanceSet) ForObj(obj types.Object) []Instance {
+	result := []Instance{}
+	for _, inst := range iset.values {
+		if inst.Object == obj {
+			result = append(result, inst)
+		}
+	}
+	return result
+}
+
 // PackageInstanceSets stores an InstanceSet for each package in a program, keyed
 // by import path.
 type PackageInstanceSets map[string]*InstanceSet

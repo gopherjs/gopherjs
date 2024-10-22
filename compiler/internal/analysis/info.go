@@ -193,7 +193,7 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		for _, caller := range info.allInfos {
 			// Check calls to named functions and function-typed variables.
 			caller.localInstCallees.Iterate(func(callee typeparams.Instance, callSites []astPath) {
-				if info.funcInstInfos.Get(callee).HasBlocking() {
+				if info.FuncInfo(callee).HasBlocking() {
 					for _, callSite := range callSites {
 						caller.markBlocking(callSite)
 					}
@@ -204,7 +204,7 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 
 			// Check direct calls to function literals.
 			for callee, callSites := range caller.literalFuncCallees {
-				if info.funcLitInfos[callee].HasBlocking() {
+				if info.FuncLitInfo(callee).HasBlocking() {
 					for _, callSite := range callSites {
 						caller.markBlocking(callSite)
 					}

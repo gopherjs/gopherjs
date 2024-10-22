@@ -128,16 +128,12 @@ func (info *Info) IsBlocking(inst typeparams.Instance) bool {
 	panic(fmt.Errorf(`info did not have function declaration instance for %q`, inst))
 }
 
-// FuncInfo returns information about the given function instance.
-// The object in the instance must be a function declaration.
-// If not information is found, nil is returned.
+// FuncInfo returns information about the given function declaration instance, or nil if not found.
 func (info *Info) FuncInfo(inst typeparams.Instance) *FuncInfo {
 	return info.funcInstInfos.Get(inst)
 }
 
-// FuncLitInfo returns information about the given function literal.
-// It panics if the function literal is not found in this package info.
-// If not information is found, nil is returned.
+// FuncLitInfo returns information about the given function literal, or nil if not found.
 func (info *Info) FuncLitInfo(fun *ast.FuncLit) *FuncInfo {
 	return info.funcLitInfos[fun]
 }

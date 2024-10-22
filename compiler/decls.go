@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"

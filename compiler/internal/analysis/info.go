@@ -25,8 +25,6 @@ func newContinueStmt(forStmt *ast.ForStmt, stack astPath) continueStmt {
 	return cs
 }
 
-type IsBlockingQuerier func(typeparams.Instance) bool
-
 // astPath is a list of AST nodes where each previous node is a parent of the
 // next node.
 type astPath []ast.Node
@@ -60,7 +58,7 @@ type Info struct {
 	funcLitInfos  map[*ast.FuncLit]*FuncInfo
 	InitFuncInfo  *FuncInfo // Context for package variable initialization.
 
-	isImportedBlocking IsBlockingQuerier // For functions from other packages.
+	isImportedBlocking func(typeparams.Instance) bool // For functions from other packages.
 	allInfos           []*FuncInfo
 }
 
@@ -122,23 +120,26 @@ func (info *Info) newFuncInfoInstances(fd *ast.FuncDecl) []*FuncInfo {
 	return funcInfos
 }
 
-func (info *Info) FuncInfo(inst typeparams.Instance) *FuncInfo {
-	if funInfo := info.funcInstInfos.Get(inst); funInfo != nil {
-		return funInfo
-	}
-	panic(fmt.Errorf(`Info did not have function declaration or instance for %v`, inst))
-}
-
 // IsBlocking returns true if the function may contain blocking calls or operations.
 func (info *Info) IsBlocking(inst typeparams.Instance) bool {
-	return info.FuncInfo(inst).HasBlocking()
+	if funInfo := info.FuncInfo(inst); funInfo != nil {
+		return funInfo.HasBlocking()
+	}
+	panic(fmt.Errorf(`info did not have function declaration instance for %q`, inst))
 }
 
+// FuncInfo returns information about the given function instance.
+// The object in the instance must be a function declaration.
+// If not information is found, nil is returned.
+func (info *Info) FuncInfo(inst typeparams.Instance) *FuncInfo {
+	return info.funcInstInfos.Get(inst)
+}
+
+// FuncLitInfo returns information about the given function literal.
+// It panics if the function literal is not found in this package info.
+// If not information is found, nil is returned.
 func (info *Info) FuncLitInfo(fun *ast.FuncLit) *FuncInfo {
-	if funInfo := info.funcLitInfos[fun]; funInfo != nil {
-		return funInfo
-	}
-	panic(fmt.Errorf(`Info did not have function literal for %v`, fun))
+	return info.funcLitInfos[fun]
 }
 
 // VarsWithInitializers returns a set of package-level variables that have
@@ -153,7 +154,7 @@ func (info *Info) VarsWithInitializers() map[*types.Var]bool {
 	return result
 }
 
-func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info, typeCtx *types.Context, typesPkg *types.Package, instanceSets *typeparams.PackageInstanceSets, isBlocking IsBlockingQuerier) *Info {
+func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info, typeCtx *types.Context, typesPkg *types.Package, instanceSets *typeparams.PackageInstanceSets, isBlocking func(typeparams.Instance) bool) *Info {
 	info := &Info{
 		Info:               typesInfo,
 		Pkg:                typesPkg,

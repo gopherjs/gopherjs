@@ -118,7 +118,7 @@ type funcContext struct {
 	funcLitCounter int
 }
 
-func newRootCtx(tContext *types.Context, srcs sources, typesInfo *types.Info, typesPkg *types.Package, isBlocking analysis.IsBlockingQuerier, minify bool) *funcContext {
+func newRootCtx(tContext *types.Context, srcs sources, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(typeparams.Instance) bool, minify bool) *funcContext {
 	tc := typeparams.Collector{
 		TContext:  tContext,
 		Info:      typesInfo,

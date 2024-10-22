@@ -1145,24 +1145,26 @@ func (bt *blockingTest) assertNotBlocking(funcName string) {
 	}
 }
 
+func getFuncDeclName(fd *ast.FuncDecl) string {
+	name := fd.Name.Name
+	if fd.Recv != nil && len(fd.Recv.List) == 1 && fd.Recv.List[0].Type != nil {
+		typ := fd.Recv.List[0].Type
+		if p, ok := typ.(*ast.StarExpr); ok {
+			typ = p.X
+		}
+		if id, ok := typ.(*ast.Ident); ok {
+			name = id.Name + `.` + name
+		}
+	}
+	return name
+}
+
 func (bt *blockingTest) isTypesFuncBlocking(funcName string) bool {
 	var decl *ast.FuncDecl
 	ast.Inspect(bt.file, func(n ast.Node) bool {
-		if f, ok := n.(*ast.FuncDecl); ok {
-			name := f.Name.Name
-			if f.Recv != nil {
-				typ := f.Recv.List[0].Type
-				if p, ok := typ.(*ast.StarExpr); ok {
-					typ = p.X
-				}
-				if id, ok := typ.(*ast.Ident); ok {
-					name = id.Name + `.` + name
-				}
-			}
-			if name == funcName {
-				decl = f
-				return false
-			}
+		if f, ok := n.(*ast.FuncDecl); ok && getFuncDeclName(f) == funcName {
+			decl = f
+			return false
 		}
 		return decl == nil
 	})
@@ -1192,14 +1194,16 @@ func (bt *blockingTest) assertNotBlockingLit(lineNo int) {
 	}
 }
 
+func (bt *blockingTest) getFuncLitLineNo(fl *ast.FuncLit) int {
+	return bt.f.FileSet.Position(fl.Pos()).Line
+}
+
 func (bt *blockingTest) isFuncLitBlocking(lineNo int) bool {
 	var fnLit *ast.FuncLit
 	ast.Inspect(bt.file, func(n ast.Node) bool {
-		if fl, ok := n.(*ast.FuncLit); ok {
-			if bt.f.FileSet.Position(fl.Pos()).Line == lineNo {
-				fnLit = fl
-				return false
-			}
+		if fl, ok := n.(*ast.FuncLit); ok && bt.getFuncLitLineNo(fl) == lineNo {
+			fnLit = fl
+			return false
 		}
 		return fnLit == nil
 	})
@@ -1226,11 +1230,7 @@ func (bt *blockingTest) isFuncInstBlocking(instanceStr string) bool {
 	instances := bt.pkgInfo.funcInstInfos.Keys()
 	for _, inst := range instances {
 		if inst.TypeString() == instanceStr {
-			funcInfo := bt.pkgInfo.funcInstInfos.Get(inst)
-			if funcInfo == nil {
-				bt.f.T.Fatalf(`No function instance info found for function instance %q in package info.`, instanceStr)
-			}
-			return funcInfo.HasBlocking()
+			return bt.pkgInfo.FuncInfo(inst).HasBlocking()
 		}
 	}
 	bt.f.T.Logf(`Function instances found in package info:`)

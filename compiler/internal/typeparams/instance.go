@@ -147,8 +147,8 @@ func (iset *InstanceSet) ByObj() map[types.Object][]Instance {
 	return result
 }
 
-// ForObj returns instances for a given object type belong to. Order is not specified.
-// This returns the same values as `ByObj()[obj]`.
+// ForObj returns the instances that belong to the given object type.
+// Order is not specified. This returns the same values as `ByObj()[obj]`.
 func (iset *InstanceSet) ForObj(obj types.Object) []Instance {
 	result := []Instance{}
 	for _, inst := range iset.values {

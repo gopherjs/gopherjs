@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
@@ -118,14 +118,14 @@ type funcContext struct {
 	funcLitCounter int
 }
 
-func newRootCtx(tContext *types.Context, srcs sources, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(*types.Func) bool, minify bool) *funcContext {
+func newRootCtx(tContext *types.Context, srcs sources, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(typeparams.Instance) bool, minify bool) *funcContext {
 	tc := typeparams.Collector{
 		TContext:  tContext,
 		Info:      typesInfo,
 		Instances: &typeparams.PackageInstanceSets{},
 	}
 	tc.Scan(typesPkg, srcs.Files...)
-	pkgInfo := analysis.AnalyzePkg(srcs.Files, srcs.FileSet, typesInfo, typesPkg, isBlocking)
+	pkgInfo := analysis.AnalyzePkg(srcs.Files, srcs.FileSet, typesInfo, tContext, typesPkg, tc.Instances, isBlocking)
 	funcCtx := &funcContext{
 		FuncInfo: pkgInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{
@@ -176,11 +176,20 @@ type ImportContext struct {
 // Note: see analysis.FuncInfo.Blocking if you need to determine if a function
 // in the _current_ package is blocking. Usually available via functionContext
 // object.
-func (ic *ImportContext) isBlocking(f *types.Func) bool {
+func (ic *ImportContext) isBlocking(inst typeparams.Instance) bool {
+	f, ok := inst.Object.(*types.Func)
+	if !ok {
+		panic(bailout(fmt.Errorf("can't determine if instance %v is blocking: instance isn't for a function object", inst)))
+	}
+
 	archive, err := ic.Import(f.Pkg().Path())
 	if err != nil {
 		panic(err)
 	}
+
+	// TODO(grantnelson-wf): f.FullName() does not differentiate between
+	// different instantiations of the same generic function. This needs to be
+	// fixed when the declaration names are updated to better support instances.
 	fullName := f.FullName()
 	for _, d := range archive.Declarations {
 		if string(d.FullName) == fullName {

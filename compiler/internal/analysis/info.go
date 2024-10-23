@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
@@ -50,22 +51,24 @@ func (ap astPath) String() string {
 type Info struct {
 	*types.Info
 	Pkg           *types.Package
+	typeCtx       *types.Context
+	instanceSets  *typeparams.PackageInstanceSets
 	HasPointer    map[*types.Var]bool
-	FuncDeclInfos map[*types.Func]*FuncInfo
-	FuncLitInfos  map[*ast.FuncLit]*FuncInfo
+	funcInstInfos *typeparams.InstanceMap[*FuncInfo]
+	funcLitInfos  map[*ast.FuncLit]*FuncInfo
 	InitFuncInfo  *FuncInfo // Context for package variable initialization.
 
-	isImportedBlocking func(*types.Func) bool // For functions from other packages.
+	isImportedBlocking func(typeparams.Instance) bool // For functions from other packages.
 	allInfos           []*FuncInfo
 }
 
-func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
+func (info *Info) newFuncInfo(n ast.Node, inst *typeparams.Instance) *FuncInfo {
 	funcInfo := &FuncInfo{
 		pkgInfo:            info,
 		Flattened:          make(map[ast.Node]bool),
 		Blocking:           make(map[ast.Node]bool),
 		GotoLabel:          make(map[*types.Label]bool),
-		localNamedCallees:  make(map[*types.Func][]astPath),
+		localInstCallees:   new(typeparams.InstanceMap[[]astPath]),
 		literalFuncCallees: make(map[*ast.FuncLit][]astPath),
 	}
 
@@ -76,14 +79,19 @@ func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
 			// Function body comes from elsewhere (for example, from a go:linkname
 			// directive), conservatively assume that it may be blocking.
 			// TODO(nevkontakte): It is possible to improve accuracy of this detection.
-			// Since GopherJS supports inly "import-style" go:linkname, at this stage
+			// Since GopherJS supports only "import-style" go:linkname, at this stage
 			// the compiler already determined whether the implementation function is
 			// blocking, and we could check that.
 			funcInfo.Blocking[n] = true
 		}
-		info.FuncDeclInfos[info.Defs[n.Name].(*types.Func)] = funcInfo
+
+		if inst == nil {
+			inst = &typeparams.Instance{Object: info.Defs[n.Name]}
+		}
+		info.funcInstInfos.Set(*inst, funcInfo)
+
 	case *ast.FuncLit:
-		info.FuncLitInfos[n] = funcInfo
+		info.funcLitInfos[n] = funcInfo
 	}
 
 	// And add it to the list of all functions.
@@ -92,12 +100,42 @@ func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
 	return funcInfo
 }
 
-// IsBlocking returns true if the function may contain blocking calls or operations.
-func (info *Info) IsBlocking(fun *types.Func) bool {
-	if funInfo := info.FuncDeclInfos[fun]; funInfo != nil {
-		return len(funInfo.Blocking) > 0
+func (info *Info) newFuncInfoInstances(fd *ast.FuncDecl) []*FuncInfo {
+	obj := info.Defs[fd.Name]
+	instances := info.instanceSets.Pkg(info.Pkg).ForObj(obj)
+	if len(instances) == 0 {
+		// No instances found, this is a non-generic function.
+		return []*FuncInfo{info.newFuncInfo(fd, nil)}
 	}
-	panic(fmt.Errorf(`info did not have function declaration for %s`, fun.FullName()))
+
+	funcInfos := make([]*FuncInfo, 0, len(instances))
+	for _, inst := range instances {
+		fi := info.newFuncInfo(fd, &inst)
+		if sig, ok := obj.Type().(*types.Signature); ok {
+			tp := typeparams.ToSlice(typeparams.SignatureTypeParams(sig))
+			fi.resolver = typeparams.NewResolver(info.typeCtx, tp, inst.TArgs)
+		}
+		funcInfos = append(funcInfos, fi)
+	}
+	return funcInfos
+}
+
+// IsBlocking returns true if the function may contain blocking calls or operations.
+func (info *Info) IsBlocking(inst typeparams.Instance) bool {
+	if funInfo := info.FuncInfo(inst); funInfo != nil {
+		return funInfo.IsBlocking()
+	}
+	panic(fmt.Errorf(`info did not have function declaration instance for %q`, inst))
+}
+
+// FuncInfo returns information about the given function declaration instance, or nil if not found.
+func (info *Info) FuncInfo(inst typeparams.Instance) *FuncInfo {
+	return info.funcInstInfos.Get(inst)
+}
+
+// FuncLitInfo returns information about the given function literal, or nil if not found.
+func (info *Info) FuncLitInfo(fun *ast.FuncLit) *FuncInfo {
+	return info.funcLitInfos[fun]
 }
 
 // VarsWithInitializers returns a set of package-level variables that have
@@ -112,16 +150,18 @@ func (info *Info) VarsWithInitializers() map[*types.Var]bool {
 	return result
 }
 
-func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(*types.Func) bool) *Info {
+func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info, typeCtx *types.Context, typesPkg *types.Package, instanceSets *typeparams.PackageInstanceSets, isBlocking func(typeparams.Instance) bool) *Info {
 	info := &Info{
 		Info:               typesInfo,
 		Pkg:                typesPkg,
+		typeCtx:            typeCtx,
+		instanceSets:       instanceSets,
 		HasPointer:         make(map[*types.Var]bool),
 		isImportedBlocking: isBlocking,
-		FuncDeclInfos:      make(map[*types.Func]*FuncInfo),
-		FuncLitInfos:       make(map[*ast.FuncLit]*FuncInfo),
+		funcInstInfos:      new(typeparams.InstanceMap[*FuncInfo]),
+		funcLitInfos:       make(map[*ast.FuncLit]*FuncInfo),
 	}
-	info.InitFuncInfo = info.newFuncInfo(nil)
+	info.InitFuncInfo = info.newFuncInfo(nil, nil)
 
 	// Traverse the full AST of the package and collect information about existing
 	// functions.
@@ -152,19 +192,19 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		done := true
 		for _, caller := range info.allInfos {
 			// Check calls to named functions and function-typed variables.
-			for callee, callSites := range caller.localNamedCallees {
-				if info.IsBlocking(callee) {
+			caller.localInstCallees.Iterate(func(callee typeparams.Instance, callSites []astPath) {
+				if info.FuncInfo(callee).IsBlocking() {
 					for _, callSite := range callSites {
 						caller.markBlocking(callSite)
 					}
-					delete(caller.localNamedCallees, callee)
+					caller.localInstCallees.Delete(callee)
 					done = false
 				}
-			}
+			})
 
 			// Check direct calls to function literals.
 			for callee, callSites := range caller.literalFuncCallees {
-				if len(info.FuncLitInfos[callee].Blocking) > 0 {
+				if info.FuncLitInfo(callee).IsBlocking() {
 					for _, callSite := range callSites {
 						caller.markBlocking(callSite)
 					}
@@ -202,7 +242,7 @@ type FuncInfo struct {
 	// Blocking indicates that either the AST node itself or its descendant may
 	// block goroutine execution (for example, a channel operation).
 	Blocking map[ast.Node]bool
-	// GotoLavel indicates a label referenced by a goto statement, rather than a
+	// GotoLabel indicates a label referenced by a goto statement, rather than a
 	// named loop.
 	GotoLabel map[*types.Label]bool
 	// List of continue statements in the function.
@@ -211,16 +251,28 @@ type FuncInfo struct {
 	returnStmts []astPath
 	// List of other named functions from the current package this function calls.
 	// If any of them are blocking, this function will become blocking too.
-	localNamedCallees map[*types.Func][]astPath
+	localInstCallees *typeparams.InstanceMap[[]astPath]
 	// List of function literals directly called from this function (for example:
 	// `func() { /* do stuff */ }()`). This is distinct from function literals
 	// assigned to named variables (for example: `doStuff := func() {};
 	// doStuff()`), which are handled by localNamedCallees. If any of them are
 	// identified as blocking, this function will become blocking too.
 	literalFuncCallees map[*ast.FuncLit][]astPath
+	// resolver is used by this function instance to resolve any type arguments
+	// for internal function calls.
+	// This may be nil if not an instance of a generic function.
+	resolver *typeparams.Resolver
 
 	pkgInfo      *Info // Function's parent package.
 	visitorStack astPath
+}
+
+// IsBlocking indicates if this function may block goroutine execution.
+//
+// For example, a channel operation in a function or a call to another
+// possibly blocking function may block the function.
+func (fi *FuncInfo) IsBlocking() bool {
+	return fi == nil || len(fi.Blocking) != 0
 }
 
 func (fi *FuncInfo) Visit(node ast.Node) ast.Visitor {
@@ -233,9 +285,19 @@ func (fi *FuncInfo) Visit(node ast.Node) ast.Visitor {
 	fi.visitorStack = append(fi.visitorStack, node)
 
 	switch n := node.(type) {
-	case *ast.FuncDecl, *ast.FuncLit:
-		// Analyze the function in its own context.
-		return fi.pkgInfo.newFuncInfo(n)
+	case *ast.FuncDecl:
+		// Analyze all the instances of the function declarations
+		// in their own context with their own type arguments.
+		fis := fi.pkgInfo.newFuncInfoInstances(n)
+		if n.Body != nil {
+			for _, fi := range fis {
+				ast.Walk(fi, n.Body)
+			}
+		}
+		return nil
+	case *ast.FuncLit:
+		// Analyze the function literal in its own context.
+		return fi.pkgInfo.newFuncInfo(n, nil)
 	case *ast.BranchStmt:
 		switch n.Tok {
 		case token.GOTO:
@@ -334,14 +396,23 @@ func (fi *FuncInfo) Visit(node ast.Node) ast.Visitor {
 func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 	switch f := astutil.RemoveParens(n.Fun).(type) {
 	case *ast.Ident:
-		fi.callToNamedFunc(fi.pkgInfo.Uses[f])
+		fi.callToNamedFunc(fi.instanceForIdent(f))
+		return fi
 	case *ast.SelectorExpr:
-		if sel := fi.pkgInfo.Selections[f]; sel != nil && typesutil.IsJsObject(sel.Recv()) {
-			// js.Object methods are known to be non-blocking, but we still must
-			// check its arguments.
-		} else {
-			fi.callToNamedFunc(fi.pkgInfo.Uses[f.Sel])
+		if sel := fi.pkgInfo.Selections[f]; sel != nil {
+			if typesutil.IsJsObject(sel.Recv()) {
+				// js.Object methods are known to be non-blocking, but we still must
+				// check its arguments.
+				return fi
+			}
+			// selection is a method call like `foo.Bar()`, where `foo` might
+			// be generic and needs to be substituted with the type argument.
+			fi.callToNamedFunc(fi.instanceForSelection(sel))
+			return fi
 		}
+
+		fi.callToNamedFunc(fi.instanceForIdent(f.Sel))
+		return fi
 	case *ast.FuncLit:
 		// Collect info about the function literal itself.
 		ast.Walk(fi, n.Fun)
@@ -353,22 +424,92 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 		// Register literal function call site in case it is identified as blocking.
 		fi.literalFuncCallees[f] = append(fi.literalFuncCallees[f], fi.visitorStack.copy())
 		return nil // No need to walk under this CallExpr, we already did it manually.
+	case *ast.IndexExpr:
+		// Collect info about the instantiated type or function, or index expression.
+		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
+			// This is a type conversion to an instance of a generic type,
+			// not a call. Type assertion itself is not blocking, but we will
+			// visit the input expression.
+			return fi
+		}
+		if astutil.IsTypeExpr(f.Index, fi.pkgInfo.Info) {
+			// This is a call of an instantiation of a generic function,
+			// e.g. `foo[int]` in `func foo[T any]() { ... }; func main() { foo[int]() }`
+			fi.callToNamedFunc(fi.instanceForIdent(f.X.(*ast.Ident)))
+			return fi
+		}
+		// The called function is gotten with an index or key from a map, array, or slice.
+		// e.g. `m := map[string]func(){}; m["key"]()`, `s := []func(); s[0]()`.
+		// Since we can't predict if the returned function will be blocking
+		// or not, we have to be conservative and assume that function might be blocking.
+		fi.markBlocking(fi.visitorStack)
+		return fi
+	case *ast.IndexListExpr:
+		// Collect info about the instantiated type or function.
+		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
+			// This is a type conversion to an instance of a generic type,
+			// not a call. Type assertion itself is not blocking, but we will
+			// visit the input expression.
+			return fi
+		}
+		// This is a call of an instantiation of a generic function,
+		// e.g. `foo[int, bool]` in `func foo[T1, T2 any]() { ... }; func main() { foo[int, bool]() }`
+		fi.callToNamedFunc(fi.instanceForIdent(f.X.(*ast.Ident)))
+		return fi
 	default:
 		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
 			// This is a type conversion, not a call. Type assertion itself is not
 			// blocking, but we will visit the input expression.
-		} else {
-			// The function is returned by a non-trivial expression. We have to be
-			// conservative and assume that function might be blocking.
-			fi.markBlocking(fi.visitorStack)
+			return fi
 		}
+		// The function is returned by a non-trivial expression. We have to be
+		// conservative and assume that function might be blocking.
+		fi.markBlocking(fi.visitorStack)
+		return fi
 	}
-
-	return fi
 }
 
-func (fi *FuncInfo) callToNamedFunc(callee types.Object) {
-	switch o := callee.(type) {
+func (fi *FuncInfo) instanceForIdent(fnId *ast.Ident) typeparams.Instance {
+	tArgs := fi.pkgInfo.Info.Instances[fnId].TypeArgs
+	return typeparams.Instance{
+		Object: fi.pkgInfo.Uses[fnId],
+		TArgs:  fi.resolver.SubstituteAll(tArgs),
+	}
+}
+
+func (fi *FuncInfo) instanceForSelection(sel *types.Selection) typeparams.Instance {
+	if _, ok := sel.Obj().Type().(*types.Signature); ok {
+		// Substitute the selection to ensure that the receiver has the correct
+		// type arguments propagated down from the caller.
+		resolved := fi.resolver.SubstituteSelection(sel)
+		sig := resolved.Obj().Type().(*types.Signature)
+
+		// Using the substituted receiver type, find the instance of this call.
+		// This does require looking up the original method in the receiver type
+		// that may or may not have been the receiver prior to the substitution.
+		if recv := sig.Recv(); recv != nil {
+			typ := recv.Type()
+			if ptrType, ok := typ.(*types.Pointer); ok {
+				typ = ptrType.Elem()
+			}
+
+			if rt, ok := typ.(*types.Named); ok {
+				origMethod, _, _ := types.LookupFieldOrMethod(rt.Origin(), true, rt.Obj().Pkg(), resolved.Obj().Name())
+				if origMethod == nil {
+					panic(fmt.Errorf(`failed to lookup field %q in type %v`, resolved.Obj().Name(), rt.Origin()))
+				}
+				return typeparams.Instance{
+					Object: origMethod,
+					TArgs:  fi.resolver.SubstituteAll(rt.TypeArgs()),
+				}
+			}
+		}
+	}
+	return typeparams.Instance{Object: sel.Obj()}
+}
+
+func (fi *FuncInfo) callToNamedFunc(callee typeparams.Instance) {
+	switch o := callee.Object.(type) {
 	case *types.Func:
 		o = o.Origin()
 		if recv := o.Type().(*types.Signature).Recv(); recv != nil {
@@ -379,14 +520,16 @@ func (fi *FuncInfo) callToNamedFunc(callee types.Object) {
 			}
 		}
 		if o.Pkg() != fi.pkgInfo.Pkg {
-			if fi.pkgInfo.isImportedBlocking(o) {
+			if fi.pkgInfo.isImportedBlocking(callee) {
 				fi.markBlocking(fi.visitorStack)
 			}
 			return
 		}
 		// We probably don't know yet whether the callee function is blocking.
 		// Record the calls site for the later stage.
-		fi.localNamedCallees[o] = append(fi.localNamedCallees[o], fi.visitorStack.copy())
+		paths := fi.localInstCallees.Get(callee)
+		paths = append(paths, fi.visitorStack.copy())
+		fi.localInstCallees.Set(callee, paths)
 	case *types.Var:
 		// Conservatively assume that a function in a variable might be blocking.
 		fi.markBlocking(fi.visitorStack)

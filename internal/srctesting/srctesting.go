@@ -74,7 +74,7 @@ func (f *Fixture) Check(importPath string, files ...*ast.File) (*types.Info, *ty
 	}
 	pkg, err := config.Check(importPath, f.FileSet, files, info)
 	if err != nil {
-		f.T.Fatalf("Filed to type check test source: %s", err)
+		f.T.Fatalf("Failed to type check test source: %s", err)
 	}
 	f.Packages[importPath] = pkg
 	return info, pkg

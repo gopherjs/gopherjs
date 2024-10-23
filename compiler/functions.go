@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
@@ -72,7 +72,7 @@ func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, inst typep
 // namedFuncContext creates a new funcContext for a named Go function
 // (standalone or method).
 func (fc *funcContext) namedFuncContext(inst typeparams.Instance) *funcContext {
-	info := fc.pkgCtx.FuncDeclInfos[inst.Object.(*types.Func)]
+	info := fc.pkgCtx.FuncInfo(inst)
 	c := fc.nestedFunctionContext(info, inst)
 
 	return c
@@ -82,7 +82,7 @@ func (fc *funcContext) namedFuncContext(inst typeparams.Instance) *funcContext {
 // go/types doesn't generate *types.Func objects for function literals, we
 // generate a synthetic one for it.
 func (fc *funcContext) literalFuncContext(fun *ast.FuncLit) *funcContext {
-	info := fc.pkgCtx.FuncLitInfos[fun]
+	info := fc.pkgCtx.FuncLitInfo(fun)
 	sig := fc.pkgCtx.TypeOf(fun).(*types.Signature)
 	o := types.NewFunc(fun.Pos(), fc.pkgCtx.Pkg, fc.newLitFuncName(), sig)
 	inst := typeparams.Instance{Object: o}
@@ -237,7 +237,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	}
 
 	bodyOutput := string(fc.CatchOutput(1, func() {
-		if len(fc.Blocking) != 0 {
+		if fc.IsBlocking() {
 			fc.pkgCtx.Scopes[body] = fc.pkgCtx.Scopes[typ]
 			fc.handleEscapingVars(body)
 		}
@@ -283,14 +283,14 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	if fc.HasDefer {
 		fc.localVars = append(fc.localVars, "$deferred")
 		suffix = " }" + suffix
-		if len(fc.Blocking) != 0 {
+		if fc.IsBlocking() {
 			suffix = " }" + suffix
 		}
 	}
 
 	localVarDefs := "" // Function-local var declaration at the top.
 
-	if len(fc.Blocking) != 0 {
+	if fc.IsBlocking() {
 		localVars := append([]string{}, fc.localVars...)
 		// There are several special variables involved in handling blocking functions:
 		// $r is sometimes used as a temporary variable to store blocking call result.
@@ -314,7 +314,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	if fc.HasDefer {
 		prefix = prefix + " var $err = null; try {"
 		deferSuffix := " } catch(err) { $err = err;"
-		if len(fc.Blocking) != 0 {
+		if fc.IsBlocking() {
 			deferSuffix += " $s = -1;"
 		}
 		if fc.resultNames == nil && fc.sig.HasResults() {
@@ -324,7 +324,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 		if fc.resultNames != nil {
 			deferSuffix += fmt.Sprintf(" if (!$curGoroutine.asleep) { return %s; }", fc.translateResults(fc.resultNames))
 		}
-		if len(fc.Blocking) != 0 {
+		if fc.IsBlocking() {
 			deferSuffix += " if($curGoroutine.asleep) {"
 		}
 		suffix = deferSuffix + suffix

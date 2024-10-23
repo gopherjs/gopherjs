@@ -237,7 +237,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	}
 
 	bodyOutput := string(fc.CatchOutput(1, func() {
-		if fc.HasBlocking() {
+		if fc.IsBlocking() {
 			fc.pkgCtx.Scopes[body] = fc.pkgCtx.Scopes[typ]
 			fc.handleEscapingVars(body)
 		}
@@ -283,14 +283,14 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	if fc.HasDefer {
 		fc.localVars = append(fc.localVars, "$deferred")
 		suffix = " }" + suffix
-		if fc.HasBlocking() {
+		if fc.IsBlocking() {
 			suffix = " }" + suffix
 		}
 	}
 
 	localVarDefs := "" // Function-local var declaration at the top.
 
-	if fc.HasBlocking() {
+	if fc.IsBlocking() {
 		localVars := append([]string{}, fc.localVars...)
 		// There are several special variables involved in handling blocking functions:
 		// $r is sometimes used as a temporary variable to store blocking call result.
@@ -314,7 +314,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	if fc.HasDefer {
 		prefix = prefix + " var $err = null; try {"
 		deferSuffix := " } catch(err) { $err = err;"
-		if fc.HasBlocking() {
+		if fc.IsBlocking() {
 			deferSuffix += " $s = -1;"
 		}
 		if fc.resultNames == nil && fc.sig.HasResults() {
@@ -324,7 +324,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 		if fc.resultNames != nil {
 			deferSuffix += fmt.Sprintf(" if (!$curGoroutine.asleep) { return %s; }", fc.translateResults(fc.resultNames))
 		}
-		if fc.HasBlocking() {
+		if fc.IsBlocking() {
 			deferSuffix += " if($curGoroutine.asleep) {"
 		}
 		suffix = deferSuffix + suffix

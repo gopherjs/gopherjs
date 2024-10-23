@@ -123,7 +123,7 @@ func (info *Info) newFuncInfoInstances(fd *ast.FuncDecl) []*FuncInfo {
 // IsBlocking returns true if the function may contain blocking calls or operations.
 func (info *Info) IsBlocking(inst typeparams.Instance) bool {
 	if funInfo := info.FuncInfo(inst); funInfo != nil {
-		return funInfo.HasBlocking()
+		return funInfo.IsBlocking()
 	}
 	panic(fmt.Errorf(`info did not have function declaration instance for %q`, inst))
 }
@@ -193,7 +193,7 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		for _, caller := range info.allInfos {
 			// Check calls to named functions and function-typed variables.
 			caller.localInstCallees.Iterate(func(callee typeparams.Instance, callSites []astPath) {
-				if info.FuncInfo(callee).HasBlocking() {
+				if info.FuncInfo(callee).IsBlocking() {
 					for _, callSite := range callSites {
 						caller.markBlocking(callSite)
 					}
@@ -204,7 +204,7 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 
 			// Check direct calls to function literals.
 			for callee, callSites := range caller.literalFuncCallees {
-				if info.FuncLitInfo(callee).HasBlocking() {
+				if info.FuncLitInfo(callee).IsBlocking() {
 					for _, callSite := range callSites {
 						caller.markBlocking(callSite)
 					}
@@ -267,11 +267,11 @@ type FuncInfo struct {
 	visitorStack astPath
 }
 
-// HasBlocking indicates if this function may block goroutine execution.
+// IsBlocking indicates if this function may block goroutine execution.
 //
 // For example, a channel operation in a function or a call to another
 // possibly blocking function may block the function.
-func (fi *FuncInfo) HasBlocking() bool {
+func (fi *FuncInfo) IsBlocking() bool {
 	return fi == nil || len(fi.Blocking) != 0
 }
 
@@ -397,19 +397,22 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 	switch f := astutil.RemoveParens(n.Fun).(type) {
 	case *ast.Ident:
 		fi.callToNamedFunc(fi.instanceForIdent(f))
+		return fi
 	case *ast.SelectorExpr:
 		if sel := fi.pkgInfo.Selections[f]; sel != nil {
 			if typesutil.IsJsObject(sel.Recv()) {
 				// js.Object methods are known to be non-blocking, but we still must
 				// check its arguments.
-			} else {
-				// selection is a method call like `foo.Bar()`, where `foo` might
-				// be generic and needs to be substituted with the type argument.
-				fi.callToNamedFunc(fi.instanceFoSelection(sel))
+				return fi
 			}
-		} else {
-			fi.callToNamedFunc(fi.instanceForIdent(f.Sel))
+			// selection is a method call like `foo.Bar()`, where `foo` might
+			// be generic and needs to be substituted with the type argument.
+			fi.callToNamedFunc(fi.instanceForSelection(sel))
+			return fi
 		}
+
+		fi.callToNamedFunc(fi.instanceForIdent(f.Sel))
+		return fi
 	case *ast.FuncLit:
 		// Collect info about the function literal itself.
 		ast.Walk(fi, n.Fun)
@@ -427,40 +430,43 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 			// This is a type conversion to an instance of a generic type,
 			// not a call. Type assertion itself is not blocking, but we will
 			// visit the input expression.
-		} else if astutil.IsTypeExpr(f.Index, fi.pkgInfo.Info) {
+			return fi
+		}
+		if astutil.IsTypeExpr(f.Index, fi.pkgInfo.Info) {
 			// This is a call of an instantiation of a generic function,
 			// e.g. `foo[int]` in `func foo[T any]() { ... }; func main() { foo[int]() }`
 			fi.callToNamedFunc(fi.instanceForIdent(f.X.(*ast.Ident)))
-		} else {
-			// The called function is gotten with an index or key from a map, array, or slice.
-			// e.g. `m := map[string]func(){}; m["key"]()`, `s := []func(); s[0]()`.
-			// Since we can't predict if the returned function will be blocking
-			// or not, we have to be conservative and assume that function might be blocking.
-			fi.markBlocking(fi.visitorStack)
+			return fi
 		}
+		// The called function is gotten with an index or key from a map, array, or slice.
+		// e.g. `m := map[string]func(){}; m["key"]()`, `s := []func(); s[0]()`.
+		// Since we can't predict if the returned function will be blocking
+		// or not, we have to be conservative and assume that function might be blocking.
+		fi.markBlocking(fi.visitorStack)
+		return fi
 	case *ast.IndexListExpr:
 		// Collect info about the instantiated type or function.
 		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
 			// This is a type conversion to an instance of a generic type,
 			// not a call. Type assertion itself is not blocking, but we will
 			// visit the input expression.
-		} else {
-			// This is a call of an instantiation of a generic function,
-			// e.g. `foo[int, bool]` in `func foo[T1, T2 any]() { ... }; func main() { foo[int, bool]() }`
-			fi.callToNamedFunc(fi.instanceForIdent(f.X.(*ast.Ident)))
+			return fi
 		}
+		// This is a call of an instantiation of a generic function,
+		// e.g. `foo[int, bool]` in `func foo[T1, T2 any]() { ... }; func main() { foo[int, bool]() }`
+		fi.callToNamedFunc(fi.instanceForIdent(f.X.(*ast.Ident)))
+		return fi
 	default:
 		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
 			// This is a type conversion, not a call. Type assertion itself is not
 			// blocking, but we will visit the input expression.
-		} else {
-			// The function is returned by a non-trivial expression. We have to be
-			// conservative and assume that function might be blocking.
-			fi.markBlocking(fi.visitorStack)
+			return fi
 		}
+		// The function is returned by a non-trivial expression. We have to be
+		// conservative and assume that function might be blocking.
+		fi.markBlocking(fi.visitorStack)
+		return fi
 	}
-
-	return fi
 }
 
 func (fi *FuncInfo) instanceForIdent(fnId *ast.Ident) typeparams.Instance {
@@ -471,7 +477,7 @@ func (fi *FuncInfo) instanceForIdent(fnId *ast.Ident) typeparams.Instance {
 	}
 }
 
-func (fi *FuncInfo) instanceFoSelection(sel *types.Selection) typeparams.Instance {
+func (fi *FuncInfo) instanceForSelection(sel *types.Selection) typeparams.Instance {
 	if _, ok := sel.Obj().Type().(*types.Signature); ok {
 		// Substitute the selection to ensure that the receiver has the correct
 		// type arguments propagated down from the caller.

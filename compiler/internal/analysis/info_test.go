@@ -1211,7 +1211,7 @@ func (bt *blockingTest) isFuncLitBlocking(lineNo int) bool {
 	if fnLit == nil {
 		bt.f.T.Fatalf(`FuncLit found on line %d not found in the AST.`, lineNo)
 	}
-	return bt.pkgInfo.FuncLitInfo(fnLit).HasBlocking()
+	return bt.pkgInfo.FuncLitInfo(fnLit).IsBlocking()
 }
 
 func (bt *blockingTest) assertBlockingInst(instanceStr string) {
@@ -1230,7 +1230,7 @@ func (bt *blockingTest) isFuncInstBlocking(instanceStr string) bool {
 	instances := bt.pkgInfo.funcInstInfos.Keys()
 	for _, inst := range instances {
 		if inst.TypeString() == instanceStr {
-			return bt.pkgInfo.FuncInfo(inst).HasBlocking()
+			return bt.pkgInfo.FuncInfo(inst).IsBlocking()
 		}
 	}
 	bt.f.T.Logf(`Function instances found in package info:`)

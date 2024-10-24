@@ -39,8 +39,8 @@ func (c *Collector) CollectDCEDeps(decl Decl, f func()) {
 // The given optional type arguments are used to when the object is a
 // function with type parameters or anytime the object doesn't carry them.
 // If not given, this attempts to get the type arguments from the object.
-func (c *Collector) DeclareDCEDep(o types.Object) {
+func (c *Collector) DeclareDCEDep(o types.Object, tArgs ...types.Type) {
 	if c.dce != nil {
-		c.dce.addDep(o)
+		c.dce.addDep(o, tArgs)
 	}
 }

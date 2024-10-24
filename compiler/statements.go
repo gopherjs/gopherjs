@@ -443,7 +443,8 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			}
 		case token.TYPE:
 			for _, spec := range decl.Specs {
-				o := fc.pkgCtx.Defs[spec.(*ast.TypeSpec).Name].(*types.TypeName)
+				id := spec.(*ast.TypeSpec).Name
+				o := fc.pkgCtx.Defs[id].(*types.TypeName)
 				fc.pkgCtx.typeNames.Add(o)
 				fc.pkgCtx.DeclareDCEDep(o)
 			}

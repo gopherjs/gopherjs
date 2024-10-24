@@ -26,7 +26,7 @@ func getFilters(o types.Object, tArgs []types.Type) (objectFilter, methodFilter 
 			if ptrType, ok := typ.(*types.Pointer); ok {
 				typ = ptrType.Elem()
 			}
-			if len(tArgs) <= 0 {
+			if len(tArgs) == 0 {
 				tArgs = getTypeArgs(typ)
 			}
 			if named, ok := typ.(*types.Named); ok {
@@ -48,17 +48,21 @@ func getFilters(o types.Object, tArgs []types.Type) (objectFilter, methodFilter 
 
 // getObjectFilter returns the object filter that functions as the primary
 // name when determining if a declaration is alive or not.
-// See [naming design](./README.md#naming) for more information.
+// See [naming design] for more information.
+//
+// [naming design]: https://github.com/gopherjs/gopherjs/compiler/internal/dce/README.md#naming
 func getObjectFilter(o types.Object, tArgs []types.Type) string {
 	return (&filterGen{argTypeRemap: tArgs}).Object(o, tArgs)
 }
 
 // getMethodFilter returns the method filter that functions as the secondary
 // name when determining if a declaration is alive or not.
-// See [naming design](./README.md#naming) for more information.
+// See [naming design] for more information.
+//
+// [naming design]: https://github.com/gopherjs/gopherjs/compiler/internal/dce/README.md#naming
 func getMethodFilter(o types.Object, tArgs []types.Type) string {
 	if sig, ok := o.Type().(*types.Signature); ok {
-		if len(tArgs) <= 0 {
+		if len(tArgs) == 0 {
 			if recv := sig.Recv(); recv != nil {
 				tArgs = getTypeArgs(recv.Type())
 			}
@@ -167,7 +171,7 @@ func (gen *filterGen) Object(o types.Object, tArgs []types.Type) string {
 	filter := objectName(o)
 
 	// Add additional type information for generics and instances.
-	if len(tArgs) <= 0 {
+	if len(tArgs) == 0 {
 		tArgs = getTypeArgs(o.Type())
 	}
 	if len(tArgs) > 0 {
@@ -298,10 +302,10 @@ func (gen *filterGen) Interface(inter *types.Interface) string {
 	// e.g. `interface { a(); b() }` is the same as `interface { b(); a() }`.
 	sort.Strings(parts)
 
-	if len(parts) <= 0 {
+	if len(parts) == 0 {
 		return `any`
 	}
-	if inter.NumMethods() <= 0 && len(parts) == 1 {
+	if inter.NumMethods() == 0 && len(parts) == 1 {
 		return parts[0] // single constraint union, i.e. `bool|~int|string`
 	}
 	return `interface{ ` + strings.Join(parts, `; `) + ` }`
@@ -309,7 +313,7 @@ func (gen *filterGen) Interface(inter *types.Interface) string {
 
 // Struct returns the filter part for a struct type.
 func (gen *filterGen) Struct(s *types.Struct) string {
-	if s.NumFields() <= 0 {
+	if s.NumFields() == 0 {
 		return `struct{}`
 	}
 	parts := make([]string, s.NumFields())

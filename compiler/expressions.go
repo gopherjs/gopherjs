@@ -982,6 +982,10 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 	case "len":
 		switch argType := fc.typeOf(args[0]).Underlying().(type) {
 		case *types.Basic:
+			// If the argument is a concatenation of strings, then add parentheses.
+			if _, ok := args[0].(*ast.BinaryExpr); ok {
+				return fc.formatExpr("(%e).length", args[0])
+			}
 			return fc.formatExpr("%e.length", args[0])
 		case *types.Slice:
 			return fc.formatExpr("%e.$length", args[0])

@@ -360,6 +360,51 @@ func TestDeclSelection_RemoveUnusedTypeConstraint(t *testing.T) {
 	sel.InitCode.IsDead(`ghost = new Bar\[\d+ /\* int \*/\]\.ptr\(7\)`)
 }
 
+func TestLengthParenthesizingIssue841(t *testing.T) {
+	// See issue https://github.com/gopherjs/gopherjs/issues/841
+	//
+	// Summary: Given `len(a+b)` where a and b are strings being concatenated
+	// together, the result was `a + b.length` instead of `(a+b).length`.
+	//
+	// The fix was to check if the expression in `len` is a binary
+	// expression or not. If it is, then the expression is parenthesized.
+	// This will work for concatenations any combination of variables and
+	// literals but won't pick up `len(Foo(a+b))` or `len(a[0:i+3])`.
+
+	src := `
+		package main
+
+		func main() {
+			a := "a"
+			b := "b"
+			ab := a + b
+			if len(a+b) != len(ab) {
+				panic("unreachable")
+			}
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+	archives := compileProject(t, root, false)
+	mainPkg := archives[root.PkgPath]
+
+	badRegex := regexp.MustCompile(`a\s*\+\s*b\.length`)
+	goodRegex := regexp.MustCompile(`\(a\s*\+\s*b\)\.length`)
+	goodFound := false
+	for i, decl := range mainPkg.Declarations {
+		if badRegex.Match(decl.DeclCode) {
+			t.Errorf("found length issue in decl #%d: %s", i, decl.FullName)
+			t.Logf("decl code:\n%s", string(decl.DeclCode))
+		}
+		if goodRegex.Match(decl.DeclCode) {
+			goodFound = true
+		}
+	}
+	if !goodFound {
+		t.Error("parenthesized length not found")
+	}
+}
+
 func compareOrder(t *testing.T, sourceFiles []srctesting.Source, minify bool) {
 	t.Helper()
 	outputNormal := compile(t, sourceFiles, minify)

@@ -245,3 +245,34 @@ func ParseSources(t *testing.T, sourceFiles []Source, auxFiles []Source) *packag
 	}
 	return pkgs[0]
 }
+
+// GetNodeAtLineNo returns the first node of type N that starts on the given
+// line in the given file. This helps lookup nodes that aren't named but
+// are needed by a specific test.
+func GetNodeAtLineNo[N ast.Node](file *ast.File, fSet *token.FileSet, lineNo int) N {
+	var node N
+	keepLooking := true
+	ast.Inspect(file, func(n ast.Node) bool {
+		if n == nil || !keepLooking {
+			return false
+		}
+		nodeLine := fSet.Position(n.Pos()).Line
+		switch {
+		case nodeLine < lineNo:
+			// We haven't reached the line yet, so check if we can skip over
+			// this whole node or if we should look inside it.
+			return fSet.Position(n.End()).Line >= lineNo
+		case nodeLine > lineNo:
+			// We went past it without finding it, so stop looking.
+			keepLooking = false
+			return false
+		default: // nodeLine == lineNo
+			if n, ok := n.(N); ok {
+				node = n
+				keepLooking = false
+			}
+			return keepLooking
+		}
+	})
+	return node
+}

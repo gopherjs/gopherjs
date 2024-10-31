@@ -3,6 +3,7 @@ package analysis
 import (
 	"go/ast"
 	"go/types"
+	"sort"
 	"testing"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
@@ -241,6 +242,9 @@ func TestBlocking_Defers_WithoutReturns_WithNamedFuncs(t *testing.T) {
 		func notBlocking(c chan bool) {
 			defer nonBlockingPrint(true)
 		}`)
+	bt.assertFuncInstCount(5)
+	bt.assertFuncLitCount(0)
+
 	bt.assertBlocking(`blockingPrint`)
 	bt.assertNotBlocking(`nonBlockingPrint`)
 
@@ -279,9 +283,7 @@ func TestBlocking_Defers_WithReturns_WithFuncLiterals(t *testing.T) {
 	bt.assertBlocking(`blockingArg`)
 	bt.assertNotBlockingLit(11)
 
-	// TODO: The following is blocking because currently any defer with a return
-	// is assumed to be blocking. This limitation should be fixed in the future.
-	bt.assertBlocking(`notBlocking`)
+	bt.assertNotBlocking(`notBlocking`)
 	bt.assertNotBlockingLit(18)
 }
 
@@ -299,27 +301,370 @@ func TestBlocking_Defers_WithReturns_WithNamedFuncs(t *testing.T) {
 
 		func blockingBody(c chan bool) int {
 			defer blockingPrint(c)
-			return 42
+			return 42 // line 13
 		}
 
 		func blockingArg(c chan bool) int {
 			defer nonBlockingPrint(<-c)
-			return 42
+			return 42 // line 18
 		}
 
 		func notBlocking(c chan bool) int {
 			defer nonBlockingPrint(true)
-			return 42
+			return 42 // line 23
 		}`)
 	bt.assertBlocking(`blockingPrint`)
 	bt.assertNotBlocking(`nonBlockingPrint`)
 
 	bt.assertBlocking(`blockingBody`)
-	bt.assertBlocking(`blockingArg`)
+	bt.assertBlockingReturn(13)
 
-	// TODO: The following is blocking because currently any defer with a return
-	// is assumed to be blocking. This limitation should be fixed in the future.
-	bt.assertBlocking(`notBlocking`)
+	bt.assertBlocking(`blockingArg`)
+	// The defer is non-blocking so the return is not blocking
+	// even though the function is blocking.
+	bt.assertNotBlockingReturn(18)
+
+	bt.assertNotBlocking(`notBlocking`)
+	bt.assertNotBlockingReturn(23)
+}
+
+func TestBlocking_Defers_WithMultipleReturns(t *testing.T) {
+	bt := newBlockingTest(t,
+		`package test
+
+		func foo(c chan int) bool {
+			defer func() { // line 4
+				if r := recover(); r != nil {
+					println("Error", r)
+				}
+			}()
+
+			if c == nil {
+				return false // line 11
+			}
+
+			defer func(v int) { // line 14
+				println(v)
+			}(<-c)
+
+			value := <-c
+			if value < 0 {
+				return false // line 20
+			}
+			
+			if value > 0 {
+				defer func() { // line 24
+					println(<-c)
+				}()
+
+				return false // line 28
+			}
+
+			return true // line 31
+		}`)
+	bt.assertBlocking(`foo`)
+	bt.assertNotBlockingLit(4)
+	// Early escape from function without blocking defers is not blocking.
+	bt.assertNotBlockingReturn(11)
+	bt.assertNotBlockingLit(14)
+	// Function has had blocking by this point but no blocking defers yet.
+	bt.assertNotBlockingReturn(20)
+	bt.assertBlockingLit(24)
+	// The return is blocking because of a blocking defer.
+	bt.assertBlockingReturn(28)
+	// Technically the return on line 31 is not blocking since the defer that
+	// is blocking can only exit through the return on line 28, but it would be
+	// difficult to determine which defers would only affect certain returns
+	// without doing full control flow analysis.
+	//
+	// TODO(grantnelson-wf): We could fix this at some point by keeping track
+	// of which flow control statements (e.g. if-statements) are terminating
+	// or not. Any defers added in a terminating control flow would not
+	// propagate to returns that are not in that block.
+	//
+	// For now we simply build up the list of defers as we go making
+	// the return on line 31 also blocking.
+	bt.assertBlockingReturn(31)
+}
+
+func TestBlocking_Defers_WithReturnsAndDefaultBlocking(t *testing.T) {
+	bt := newBlockingTest(t,
+		`package test
+
+		type foo struct {}
+		func (f foo) Bar() {
+			println("foo")
+		}
+
+		type stringer interface {
+			Bar()
+		}
+
+		var fb = foo{}.Bar
+
+		func deferInterfaceCall() bool {
+			var s stringer = foo{}
+			defer s.Bar()
+			return true // line 17
+		}
+
+		func deferVarCall() bool {
+			defer fb()
+			return true // line 22
+		}
+
+		func deferLocalVarCall() bool {
+			fp := foo{}.Bar
+			defer fp()
+			return true // line 28
+		}
+
+		func deferMethodExpressionCall() bool {
+			fp := foo.Bar
+			defer fp(foo{})
+			return true // line 34
+		}
+
+		func deferSlicedFuncCall() bool {
+			s := []func() { fb, foo{}.Bar }
+			defer s[0]()
+			return true // line 40
+		}
+
+		func deferMappedFuncCall() bool {
+			m := map[string]func() {
+				"fb": fb,
+				"fNew": foo{}.Bar,
+			}
+			defer m["fb"]()
+			return true // line 49
+		}`)
+
+	bt.assertFuncInstCount(7)
+	bt.assertNotBlocking(`foo.Bar`)
+
+	// None of these are actually blocking but we treat them like they are
+	// because the defers invoke functions via interfaces and function pointers.
+	bt.assertBlocking(`deferInterfaceCall`)
+	bt.assertBlocking(`deferVarCall`)
+	bt.assertBlocking(`deferLocalVarCall`)
+	bt.assertBlocking(`deferMethodExpressionCall`)
+	bt.assertBlocking(`deferSlicedFuncCall`)
+	bt.assertBlocking(`deferMappedFuncCall`)
+
+	// All of these returns are blocking because they have blocking defers.
+	bt.assertBlockingReturn(17)
+	bt.assertBlockingReturn(22)
+	bt.assertBlockingReturn(28)
+	bt.assertBlockingReturn(34)
+	bt.assertBlockingReturn(40)
+	bt.assertBlockingReturn(49)
+}
+
+func TestBlocking_Defers_WithReturnsAndDeferBuiltin(t *testing.T) {
+	bt := newBlockingTest(t,
+		`package test
+		
+		type strSet map[string]bool
+
+		func deferBuiltinCall() strSet {
+			m := strSet{
+				"foo": true,
+			}
+			defer delete(m, "foo")
+			return m // line 10
+		}`)
+
+	bt.assertFuncInstCount(1)
+	bt.assertNotBlocking(`deferBuiltinCall`)
+	bt.assertNotBlockingReturn(10)
+}
+
+func TestBlocking_Defers_WithReturnsInLoops(t *testing.T) {
+	// These are example of where a defer can affect the return that
+	// occurs prior to the defer in the function body.
+	bt := newBlockingTest(t,
+		`package test
+
+		func blocking(c chan int) {
+			println(<-c)
+		}
+
+		func deferInForLoop(c chan int) bool {
+			i := 1000
+			for {
+				i--
+				if i <= 0 {
+					return true // line 12
+				}
+				defer blocking(c)
+			}
+		}
+
+		func deferInForLoopReturnAfter(c chan int) bool {
+			for i := 1000; i > 0; i-- {
+				defer blocking(c)
+			}
+			return true // line 22
+		}
+
+		func deferInNamedForLoop(c chan int) bool {
+			i := 1000
+		Start:
+			for {
+				i--
+				if i <= 0 {
+					return true // line 31
+				}
+				defer blocking(c)
+				continue Start
+			}
+		}
+
+		func deferInNamedForLoopReturnAfter(c chan int) bool {
+		Start:
+			for i := 1000; i > 0; i-- {
+				defer blocking(c)
+				continue Start
+			}
+			return true // line 44
+		}
+
+		func deferInGotoLoop(c chan int) bool {
+			i := 1000
+		Start:
+			i--
+			if i <= 0 {
+				return true // line 52
+			}
+			defer blocking(c)
+			goto Start
+		}
+
+		func deferInGotoLoopReturnAfter(c chan int) bool {
+			i := 1000
+		Start:
+			defer blocking(c)
+			i--
+			if i > 0 {
+				goto Start
+			}
+			return true // line 66
+		}
+
+		func deferInRangeLoop(c chan int) bool {
+			s := []int{1, 2, 3}
+			for i := range s {
+				if i > 3 {
+					return true // line 73
+				}
+				defer blocking(c)
+			}
+			return false // line 77
+		}`)
+
+	bt.assertFuncInstCount(8)
+	bt.assertBlocking(`blocking`)
+	bt.assertBlocking(`deferInForLoop`)
+	bt.assertBlocking(`deferInForLoopReturnAfter`)
+	bt.assertBlocking(`deferInNamedForLoop`)
+	bt.assertBlocking(`deferInNamedForLoopReturnAfter`)
+	bt.assertBlocking(`deferInGotoLoop`)
+	bt.assertBlocking(`deferInGotoLoopReturnAfter`)
+	bt.assertBlocking(`deferInRangeLoop`)
+	// When the following 2 returns are defined there are no defers, however,
+	// because of the loop, the blocking defers defined after the return will
+	// block the returns.
+	bt.assertBlockingReturn(12)
+	bt.assertBlockingReturn(22)
+	bt.assertBlockingReturn(31)
+	bt.assertBlockingReturn(44)
+	bt.assertBlockingReturn(52)
+	bt.assertBlockingReturn(66)
+	bt.assertBlockingReturn(73)
+	bt.assertBlockingReturn(77)
+}
+
+func TestBlocking_Defers_WithReturnsInLoopsInLoops(t *testing.T) {
+	// These are example of where a defer can affect the return that
+	// occurs prior to the defer in the function body.
+	bt := newBlockingTest(t,
+		`package test
+
+		func blocking(c chan int) {
+			println(<-c)
+		}
+
+		func forLoopTheLoop(c chan int) bool {
+			if c == nil {
+				return false // line 9
+			}
+			for i := 0; i < 10; i++ {
+				if i > 3 {
+					return true // line 13
+				}
+				for j := 0; j < 10; j++ {
+					if j > 3 {
+						return true // line 17
+					}
+					defer blocking(c)
+					if j > 2 {
+						return false // line 21
+					}
+				}
+				if i > 2 {
+					return false // line 25
+				}
+			}
+			return false // line 28
+		}
+
+		func rangeLoopTheLoop(c chan int) bool {
+			data := []int{1, 2, 3}
+			for i := range data {
+				for j := range data {
+					if i + j > 3 {
+						return true // line 36
+					}
+				}
+				defer blocking(c)
+			}
+			return false // line 41
+		}
+
+		func noopThenLoop(c chan int) bool {
+			data := []int{1, 2, 3}
+			for i := range data {
+				if i > 13 {
+					return true // line 48
+				}
+				defer func() { println("hi") }()
+			}
+			for i := range data {
+				if i > 3 {
+					return true // line 54
+				}
+				defer blocking(c)
+			}
+			return false // line 58
+		}`)
+
+	bt.assertFuncInstCount(4)
+	bt.assertBlocking(`blocking`)
+	bt.assertBlocking(`forLoopTheLoop`)
+	bt.assertNotBlockingReturn(9)
+	bt.assertBlockingReturn(13)
+	bt.assertBlockingReturn(17)
+	bt.assertBlockingReturn(21)
+	bt.assertBlockingReturn(25)
+	bt.assertBlockingReturn(28)
+	bt.assertBlocking(`rangeLoopTheLoop`)
+	bt.assertBlockingReturn(36)
+	bt.assertBlockingReturn(41)
+	bt.assertBlocking(`noopThenLoop`)
+	bt.assertNotBlockingReturn(48)
+	bt.assertBlockingReturn(54)
+	bt.assertBlockingReturn(58)
 }
 
 func TestBlocking_Returns_WithoutDefers(t *testing.T) {
@@ -327,19 +672,40 @@ func TestBlocking_Returns_WithoutDefers(t *testing.T) {
 		`package test
 
 		func blocking(c chan bool) bool {
-			return <-c
+			return <-c // line 4
+		}
+
+		func blockingBeforeReturn(c chan bool) bool {
+			v := <-c
+			return v // line 9
 		}
 
 		func indirectlyBlocking(c chan bool) bool {
-			return blocking(c)
+			return blocking(c) // line 13
+		}
+
+		func indirectlyBlockingBeforeReturn(c chan bool) bool {
+			v := blocking(c)
+			return v // line 18
 		}
 
 		func notBlocking(c chan bool) bool {
-			return true
+			return true // line 22
 		}`)
 	bt.assertBlocking(`blocking`)
+	bt.assertBlockingReturn(4)
+
+	bt.assertBlocking(`blockingBeforeReturn`)
+	bt.assertNotBlockingReturn(9)
+
 	bt.assertBlocking(`indirectlyBlocking`)
+	bt.assertBlockingReturn(13)
+
+	bt.assertBlocking(`indirectlyBlockingBeforeReturn`)
+	bt.assertNotBlockingReturn(18)
+
 	bt.assertNotBlocking(`notBlocking`)
+	bt.assertNotBlockingReturn(22)
 }
 
 func TestBlocking_FunctionLiteral(t *testing.T) {
@@ -1126,9 +1492,23 @@ func newBlockingTestWithOtherPackage(t *testing.T, testSrc string, otherSrc stri
 
 func (bt *blockingTest) assertFuncInstCount(expCount int) {
 	if got := bt.pkgInfo.funcInstInfos.Len(); got != expCount {
-		bt.f.T.Errorf(`Got %d function infos but expected %d.`, got, expCount)
+		bt.f.T.Errorf(`Got %d function instance infos but expected %d.`, got, expCount)
 		for i, inst := range bt.pkgInfo.funcInstInfos.Keys() {
 			bt.f.T.Logf(`  %d. %q`, i+1, inst.TypeString())
+		}
+	}
+}
+
+func (bt *blockingTest) assertFuncLitCount(expCount int) {
+	if got := len(bt.pkgInfo.funcLitInfos); got != expCount {
+		bt.f.T.Errorf(`Got %d function literal infos but expected %d.`, got, expCount)
+		pos := make([]string, 0, len(bt.pkgInfo.funcLitInfos))
+		for fl := range bt.pkgInfo.funcLitInfos {
+			pos = append(pos, bt.f.FileSet.Position(fl.Pos()).String())
+		}
+		sort.Strings(pos)
+		for i := range pos {
+			bt.f.T.Logf(`  %d. %q`, i+1, pos)
 		}
 	}
 }
@@ -1194,22 +1574,10 @@ func (bt *blockingTest) assertNotBlockingLit(lineNo int) {
 	}
 }
 
-func (bt *blockingTest) getFuncLitLineNo(fl *ast.FuncLit) int {
-	return bt.f.FileSet.Position(fl.Pos()).Line
-}
-
 func (bt *blockingTest) isFuncLitBlocking(lineNo int) bool {
-	var fnLit *ast.FuncLit
-	ast.Inspect(bt.file, func(n ast.Node) bool {
-		if fl, ok := n.(*ast.FuncLit); ok && bt.getFuncLitLineNo(fl) == lineNo {
-			fnLit = fl
-			return false
-		}
-		return fnLit == nil
-	})
-
+	fnLit := srctesting.GetNodeAtLineNo[*ast.FuncLit](bt.file, bt.f.FileSet, lineNo)
 	if fnLit == nil {
-		bt.f.T.Fatalf(`FuncLit found on line %d not found in the AST.`, lineNo)
+		bt.f.T.Fatalf(`FuncLit on line %d not found in the AST.`, lineNo)
 	}
 	return bt.pkgInfo.FuncLitInfo(fnLit).IsBlocking()
 }
@@ -1238,5 +1606,31 @@ func (bt *blockingTest) isFuncInstBlocking(instanceStr string) bool {
 		bt.f.T.Logf(`  %d. %s`, i+1, inst.TypeString())
 	}
 	bt.f.T.Fatalf(`No function instance found for %q in package info.`, instanceStr)
+	return false
+}
+
+func (bt *blockingTest) assertBlockingReturn(lineNo int) {
+	if !bt.isReturnBlocking(lineNo) {
+		bt.f.T.Errorf(`Got return at line %d as not blocking but expected it to be blocking.`, lineNo)
+	}
+}
+
+func (bt *blockingTest) assertNotBlockingReturn(lineNo int) {
+	if bt.isReturnBlocking(lineNo) {
+		bt.f.T.Errorf(`Got return at line %d as blocking but expected it to be not blocking.`, lineNo)
+	}
+}
+
+func (bt *blockingTest) isReturnBlocking(lineNo int) bool {
+	ret := srctesting.GetNodeAtLineNo[*ast.ReturnStmt](bt.file, bt.f.FileSet, lineNo)
+	if ret == nil {
+		bt.f.T.Fatalf(`ReturnStmt on line %d not found in the AST.`, lineNo)
+	}
+	for _, info := range bt.pkgInfo.allInfos {
+		if blocking, found := info.Blocking[ret]; found {
+			return blocking
+		}
+	}
+	// If not found in any info.Blocking, then it is not blocking.
 	return false
 }

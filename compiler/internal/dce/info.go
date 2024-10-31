@@ -10,7 +10,6 @@ import (
 // Info contains information used by the dead-code elimination (DCE) logic to
 // determine whether a declaration is alive or dead.
 type Info struct {
-
 	// alive indicates if the declaration is marked as alive
 	// and will not be eliminated.
 	alive bool

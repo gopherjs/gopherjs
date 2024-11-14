@@ -170,46 +170,56 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		ast.Walk(info.InitFuncInfo, file)
 	}
 
-	// Propagate information about blocking calls to the caller functions.
-	// For each function we check all other functions it may call and if any of
-	// them are blocking, we mark the caller blocking as well. The process is
-	// repeated until no new blocking functions is detected.
-	for {
-		done := true
-		for _, caller := range info.allInfos {
-			// Check calls to named functions and function-typed variables.
-			caller.localInstCallees.Iterate(func(callee typeparams.Instance, callSites []astPath) {
-				if info.FuncInfo(callee).IsBlocking() {
-					for _, callSite := range callSites {
-						caller.markBlocking(callSite)
-					}
-					caller.localInstCallees.Delete(callee)
-					done = false
-				}
-			})
-
-			// Check direct calls to function literals.
-			for callee, callSite := range caller.literalFuncCallees {
-				if info.FuncLitInfo(callee).IsBlocking() {
-					caller.markBlocking(callSite)
-					delete(caller.literalFuncCallees, callee)
-					done = false
-				}
-			}
-		}
-		if done {
-			break
-		}
+	done := false
+	for !done {
+		done = info.propagateFunctionBlocking()
 	}
 
-	// After all function blocking information was propagated, mark flow control
-	// statements as blocking whenever they may lead to a blocking function call.
+	info.propagateControlStatementBlocking()
+	return info
+}
+
+// propagateFunctionBlocking propagates information about blocking calls
+// to the caller functions. Returns true if done, false if more iterations
+// are needed.
+//
+// For each function we check all other functions it may call and if any of
+// them are blocking, we mark the caller blocking as well. The process is
+// repeated until no new blocking functions is detected.
+func (info *Info) propagateFunctionBlocking() bool {
+	done := true
+	for _, caller := range info.allInfos {
+		// Check calls to named functions and function-typed variables.
+		caller.localInstCallees.Iterate(func(callee typeparams.Instance, callSites []astPath) {
+			if info.FuncInfo(callee).IsBlocking() {
+				for _, callSite := range callSites {
+					caller.markBlocking(callSite)
+				}
+				caller.localInstCallees.Delete(callee)
+				done = false
+			}
+		})
+
+		// Check direct calls to function literals.
+		for callee, callSite := range caller.literalFuncCallees {
+			if info.FuncLitInfo(callee).IsBlocking() {
+				caller.markBlocking(callSite)
+				delete(caller.literalFuncCallees, callee)
+				done = false
+			}
+		}
+	}
+	return done
+}
+
+// propagateControlStatementBlocking is called after all function blocking
+// information was propagated, mark flow control statements as blocking
+// whenever they may lead to a blocking function call.
+func (info *Info) propagateControlStatementBlocking() {
 	for _, funcInfo := range info.allInfos {
 		funcInfo.propagateReturnBlocking()
 		funcInfo.propagateContinueBlocking()
 	}
-
-	return info
 }
 
 type FuncInfo struct {
@@ -229,7 +239,7 @@ type FuncInfo struct {
 	continueStmts []continueStmt
 	// List of return statements in the function.
 	returnStmts []returnStmt
-	// List of most of the deferred function calls in the function.
+	// List of deferred function calls which could be blocking.
 	// This is built up as the function is analyzed so that we can mark all
 	// return statements with the defers that each return would need to call.
 	deferStmts []*deferStmt
@@ -459,27 +469,27 @@ func (fi *FuncInfo) Visit(node ast.Node) ast.Visitor {
 	// needs to be analyzed.
 }
 
-func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr, forDefer bool) ast.Visitor {
+func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr, deferredCall bool) ast.Visitor {
 	switch f := astutil.RemoveParens(n.Fun).(type) {
 	case *ast.Ident:
-		fi.callToNamedFunc(fi.instanceForIdent(f), forDefer)
+		fi.callToNamedFunc(fi.instanceForIdent(f), deferredCall)
 		return fi
 	case *ast.SelectorExpr:
 		if sel := fi.pkgInfo.Selections[f]; sel != nil {
 			if typesutil.IsJsObject(sel.Recv()) {
 				// js.Object methods are known to be non-blocking,
 				// but we still must check its arguments.
-				// We don't need to add a deferStmt when forDefer
-				// since that defer will always be non-blocking.
+				// We don't need to add a deferStmt when `deferredCall`
+				// is true, since that defer will always be non-blocking.
 				return fi
 			}
 			// selection is a method call like `foo.Bar()`, where `foo` might
 			// be generic and needs to be substituted with the type argument.
-			fi.callToNamedFunc(fi.instanceForSelection(sel), forDefer)
+			fi.callToNamedFunc(fi.instanceForSelection(sel), deferredCall)
 			return fi
 		}
 
-		fi.callToNamedFunc(fi.instanceForIdent(f.Sel), forDefer)
+		fi.callToNamedFunc(fi.instanceForIdent(f.Sel), deferredCall)
 		return fi
 	case *ast.FuncLit:
 		// Collect info about the function literal itself.
@@ -491,7 +501,7 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr, forDefer bool) ast.Visitor {
 		}
 		// Register literal function call site in case it is identified as blocking.
 		fi.literalFuncCallees[f] = fi.visitorStack.copy()
-		if forDefer {
+		if deferredCall {
 			fi.deferStmts = append(fi.deferStmts, newLitDefer(f))
 		}
 		return nil // No need to walk under this CallExpr, we already did it manually.
@@ -506,7 +516,7 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr, forDefer bool) ast.Visitor {
 		if astutil.IsTypeExpr(f.Index, fi.pkgInfo.Info) {
 			// This is a call of an instantiation of a generic function,
 			// e.g. `foo[int]` in `func foo[T any]() { ... }; func main() { foo[int]() }`
-			fi.callToNamedFunc(fi.instanceForIdent(f.X.(*ast.Ident)), forDefer)
+			fi.callToNamedFunc(fi.instanceForIdent(f.X.(*ast.Ident)), deferredCall)
 			return fi
 		}
 		// The called function is gotten with an index or key from a map, array, or slice.
@@ -514,8 +524,8 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr, forDefer bool) ast.Visitor {
 		// Since we can't predict if the returned function will be blocking
 		// or not, we have to be conservative and assume that function might be blocking.
 		fi.markBlocking(fi.visitorStack)
-		if forDefer {
-			fi.deferStmts = append(fi.deferStmts, newDefer(true))
+		if deferredCall {
+			fi.deferStmts = append(fi.deferStmts, newBlockingDefer())
 		}
 		return fi
 	case *ast.IndexListExpr:
@@ -528,7 +538,7 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr, forDefer bool) ast.Visitor {
 		}
 		// This is a call of an instantiation of a generic function,
 		// e.g. `foo[int, bool]` in `func foo[T1, T2 any]() { ... }; func main() { foo[int, bool]() }`
-		fi.callToNamedFunc(fi.instanceForIdent(f.X.(*ast.Ident)), forDefer)
+		fi.callToNamedFunc(fi.instanceForIdent(f.X.(*ast.Ident)), deferredCall)
 		return fi
 	default:
 		if astutil.IsTypeExpr(f, fi.pkgInfo.Info) {
@@ -539,8 +549,8 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr, forDefer bool) ast.Visitor {
 		// The function is returned by a non-trivial expression. We have to be
 		// conservative and assume that function might be blocking.
 		fi.markBlocking(fi.visitorStack)
-		if forDefer {
-			fi.deferStmts = append(fi.deferStmts, newDefer(true))
+		if deferredCall {
+			fi.deferStmts = append(fi.deferStmts, newBlockingDefer())
 		}
 		return fi
 	}
@@ -585,7 +595,7 @@ func (fi *FuncInfo) instanceForSelection(sel *types.Selection) typeparams.Instan
 	return typeparams.Instance{Object: sel.Obj()}
 }
 
-func (fi *FuncInfo) callToNamedFunc(callee typeparams.Instance, forDefer bool) {
+func (fi *FuncInfo) callToNamedFunc(callee typeparams.Instance, deferredCall bool) {
 	switch o := callee.Object.(type) {
 	case *types.Func:
 		o = o.Origin()
@@ -593,13 +603,13 @@ func (fi *FuncInfo) callToNamedFunc(callee typeparams.Instance, forDefer bool) {
 			if _, ok := recv.Type().Underlying().(*types.Interface); ok {
 				// Conservatively assume that an interface implementation may be blocking.
 				fi.markBlocking(fi.visitorStack)
-				if forDefer {
-					fi.deferStmts = append(fi.deferStmts, newDefer(true))
+				if deferredCall {
+					fi.deferStmts = append(fi.deferStmts, newBlockingDefer())
 				}
 				return
 			}
 		}
-		if forDefer {
+		if deferredCall {
 			fi.deferStmts = append(fi.deferStmts, newInstDefer(callee))
 		}
 		if o.Pkg() != fi.pkgInfo.Pkg {
@@ -616,8 +626,8 @@ func (fi *FuncInfo) callToNamedFunc(callee typeparams.Instance, forDefer bool) {
 	case *types.Var:
 		// Conservatively assume that a function in a variable might be blocking.
 		fi.markBlocking(fi.visitorStack)
-		if forDefer {
-			fi.deferStmts = append(fi.deferStmts, newDefer(true))
+		if deferredCall {
+			fi.deferStmts = append(fi.deferStmts, newBlockingDefer())
 		}
 	default:
 		// No need to add defers for other call types, such as *types.Builtin,

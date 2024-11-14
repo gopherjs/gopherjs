@@ -49,53 +49,43 @@ import (
 //
 // [CFG]: https://en.wikipedia.org/wiki/Control-flow_graph
 type deferStmt struct {
-	isBlocking func(info *Info) (bool, bool)
+	inst *typeparams.Instance
+	lit  *ast.FuncLit
 }
 
-// newBlockingDefer creates a new defer statement that is blocking or not.
+// newBlockingDefer creates a new defer statement that is blocking.
+//
 // If the defer is calling a js.Object method then the defer is non-blocking.
 // If the defers calling an interface method or function pointer in a var
 // then the defer is blocking.
-func newDefer(blocking bool) *deferStmt {
-	return &deferStmt{
-		isBlocking: func(info *Info) (bool, bool) {
-			return blocking, false
-		},
-	}
+func newBlockingDefer() *deferStmt {
+	return &deferStmt{}
 }
 
 // newInstDefer creates a new defer statement for an instances of a method.
 // The instance is used to look up the blocking information later.
 func newInstDefer(inst typeparams.Instance) *deferStmt {
-	return &deferStmt{
-		isBlocking: func(info *Info) (bool, bool) {
-			return info.FuncInfo(inst).IsBlocking(), true
-		},
-	}
+	return &deferStmt{inst: &inst}
 }
 
 // newLitDefer creates a new defer statement for a function literal.
 // The literal is used to look up the blocking information later.
 func newLitDefer(lit *ast.FuncLit) *deferStmt {
-	return &deferStmt{
-		isBlocking: func(info *Info) (bool, bool) {
-			return info.FuncLitInfo(lit).IsBlocking(), true
-		},
-	}
+	return &deferStmt{lit: lit}
 }
 
 // IsBlocking determines if the defer statement is blocking or not.
-//
-// The result will be cached for future calls since each return statement
-// will check the same defers (plus any new defers) of prior return statements.
 func (d *deferStmt) IsBlocking(info *Info) bool {
-	blocking, cacheResult := d.isBlocking(info)
-	if cacheResult {
-		d.isBlocking = func(info *Info) (bool, bool) {
-			return blocking, false
-		}
+	// If the instance or the literal is set then we can look up the blocking,
+	// otherwise assume blocking because otherwise the defer wouldn't
+	// have been recorded.
+	if d.inst != nil {
+		return info.FuncInfo(*d.inst).IsBlocking()
 	}
-	return blocking
+	if d.lit != nil {
+		return info.FuncLitInfo(d.lit).IsBlocking()
+	}
+	return true
 }
 
 func isAnyDeferBlocking(deferStmts []*deferStmt, info *Info) bool {

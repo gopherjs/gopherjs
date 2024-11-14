@@ -609,20 +609,25 @@ func (fi *FuncInfo) callToNamedFunc(callee typeparams.Instance, deferredCall boo
 				return
 			}
 		}
-		if deferredCall {
-			fi.deferStmts = append(fi.deferStmts, newInstDefer(callee))
-		}
+
 		if o.Pkg() != fi.pkgInfo.Pkg {
 			if fi.pkgInfo.isImportedBlocking(callee) {
 				fi.markBlocking(fi.visitorStack)
+				if deferredCall {
+					fi.deferStmts = append(fi.deferStmts, newBlockingDefer())
+				}
 			}
 			return
 		}
+
 		// We probably don't know yet whether the callee function is blocking.
 		// Record the calls site for the later stage.
 		paths := fi.localInstCallees.Get(callee)
 		paths = append(paths, fi.visitorStack.copy())
 		fi.localInstCallees.Set(callee, paths)
+		if deferredCall {
+			fi.deferStmts = append(fi.deferStmts, newInstDefer(callee))
+		}
 	case *types.Var:
 		// Conservatively assume that a function in a variable might be blocking.
 		fi.markBlocking(fi.visitorStack)

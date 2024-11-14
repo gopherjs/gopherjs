@@ -708,6 +708,41 @@ func TestBlocking_Returns_WithoutDefers(t *testing.T) {
 	bt.assertNotBlockingReturn(22)
 }
 
+func TestBlocking_Defers_WithReturnsAndOtherPackages(t *testing.T) {
+	otherSrc := `package other
+
+		func Blocking() {
+			c := make(chan int)
+			println(<-c)
+		}
+
+		func NotBlocking() {
+			println("Hello")
+		}`
+
+	testSrc := `package test
+
+		import "pkg/other"
+
+		func deferOtherBlocking() bool {
+			defer other.Blocking()
+			return true // line 7
+		}
+		
+		func deferOtherNotBlocking() bool {
+			defer other.NotBlocking()
+			return true // line 12
+		}`
+
+	bt := newBlockingTestWithOtherPackage(t, testSrc, otherSrc)
+
+	bt.assertBlocking(`deferOtherBlocking`)
+	bt.assertBlockingReturn(7)
+
+	bt.assertNotBlocking(`deferOtherNotBlocking`)
+	bt.assertNotBlockingReturn(12)
+}
+
 func TestBlocking_FunctionLiteral(t *testing.T) {
 	// See: https://github.com/gopherjs/gopherjs/issues/955.
 	bt := newBlockingTest(t,

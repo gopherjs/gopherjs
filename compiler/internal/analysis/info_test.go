@@ -156,10 +156,10 @@ func TestBlocking_GoRoutines_WithFuncLiterals(t *testing.T) {
 			}(<-c)
 		}`)
 	bt.assertNotBlocking(`notBlocking`)
-	bt.assertBlockingLit(4)
+	bt.assertBlockingLit(4, ``)
 
 	bt.assertBlocking(`blocking`)
-	bt.assertNotBlockingLit(10)
+	bt.assertNotBlockingLit(10, ``)
 }
 
 func TestBlocking_GoRoutines_WithNamedFuncs(t *testing.T) {
@@ -210,13 +210,13 @@ func TestBlocking_Defers_WithoutReturns_WithFuncLiterals(t *testing.T) {
 			}(true)
 		}`)
 	bt.assertBlocking(`blockingBody`)
-	bt.assertBlockingLit(4)
+	bt.assertBlockingLit(4, ``)
 
 	bt.assertBlocking(`blockingArg`)
-	bt.assertNotBlockingLit(10)
+	bt.assertNotBlockingLit(10, ``)
 
 	bt.assertNotBlocking(`notBlocking`)
-	bt.assertNotBlockingLit(16)
+	bt.assertNotBlockingLit(16, ``)
 }
 
 func TestBlocking_Defers_WithoutReturns_WithNamedFuncs(t *testing.T) {
@@ -278,13 +278,13 @@ func TestBlocking_Defers_WithReturns_WithFuncLiterals(t *testing.T) {
 			return 42
 		}`)
 	bt.assertBlocking(`blockingBody`)
-	bt.assertBlockingLit(4)
+	bt.assertBlockingLit(4, ``)
 
 	bt.assertBlocking(`blockingArg`)
-	bt.assertNotBlockingLit(11)
+	bt.assertNotBlockingLit(11, ``)
 
 	bt.assertNotBlocking(`notBlocking`)
-	bt.assertNotBlockingLit(18)
+	bt.assertNotBlockingLit(18, ``)
 }
 
 func TestBlocking_Defers_WithReturns_WithNamedFuncs(t *testing.T) {
@@ -363,13 +363,13 @@ func TestBlocking_Defers_WithMultipleReturns(t *testing.T) {
 			return true // line 31
 		}`)
 	bt.assertBlocking(`foo`)
-	bt.assertNotBlockingLit(4)
+	bt.assertNotBlockingLit(4, ``)
 	// Early escape from function without blocking defers is not blocking.
 	bt.assertNotBlockingReturn(11)
-	bt.assertNotBlockingLit(14)
+	bt.assertNotBlockingLit(14, ``)
 	// Function has had blocking by this point but no blocking defers yet.
 	bt.assertNotBlockingReturn(20)
-	bt.assertBlockingLit(24)
+	bt.assertBlockingLit(24, ``)
 	// The return is blocking because of a blocking defer.
 	bt.assertBlockingReturn(28)
 	// Technically the return on line 31 is not blocking since the defer that
@@ -770,13 +770,13 @@ func TestBlocking_FunctionLiteral(t *testing.T) {
 	bt.assertBlocking(`blocking`)
 
 	bt.assertBlocking(`indirectlyBlocking`)
-	bt.assertBlockingLit(9)
+	bt.assertBlockingLit(9, ``)
 
 	bt.assertBlocking(`directlyBlocking`)
-	bt.assertBlockingLit(13)
+	bt.assertBlockingLit(13, ``)
 
 	bt.assertNotBlocking(`notBlocking`)
-	bt.assertNotBlockingLit(20)
+	bt.assertNotBlockingLit(20, ``)
 }
 
 func TestBlocking_LinkedFunction(t *testing.T) {
@@ -818,9 +818,9 @@ func TestBlocking_Instances_WithSingleTypeArg(t *testing.T) {
 	// blocking and notBlocking as generics do not have FuncInfo,
 	// only non-generic and instances have FuncInfo.
 
-	bt.assertBlockingInst(`test.blocking[int]`)
+	bt.assertBlockingInst(`pkg/test.blocking<int>`)
 	bt.assertBlocking(`bInt`)
-	bt.assertNotBlockingInst(`test.notBlocking[uint]`)
+	bt.assertNotBlockingInst(`pkg/test.notBlocking<uint>`)
 	bt.assertNotBlocking(`nbUint`)
 }
 
@@ -849,9 +849,9 @@ func TestBlocking_Instances_WithMultipleTypeArgs(t *testing.T) {
 	// blocking and notBlocking as generics do not have FuncInfo,
 	// only non-generic and instances have FuncInfo.
 
-	bt.assertBlockingInst(`test.blocking[string, int, map[string]int]`)
+	bt.assertBlockingInst(`pkg/test.blocking<string, int, map[string]int>`)
 	bt.assertBlocking(`bInt`)
-	bt.assertNotBlockingInst(`test.notBlocking[string, uint, map[string]uint]`)
+	bt.assertNotBlockingInst(`pkg/test.notBlocking<string, uint, map[string]uint>`)
 	bt.assertNotBlocking(`nbUint`)
 }
 
@@ -1075,7 +1075,7 @@ func TestBlocking_VarFunctionCall(t *testing.T) {
 		func bar() {
 			foo()
 		}`)
-	bt.assertNotBlockingLit(3)
+	bt.assertNotBlockingLit(3, ``)
 	bt.assertBlocking(`bar`)
 }
 
@@ -1233,12 +1233,12 @@ func TestBlocking_InstantiationBlocking(t *testing.T) {
 	bt.assertBlocking(`BazBlocker.Baz`)
 	bt.assertBlocking(`blockingViaExplicit`)
 	bt.assertBlocking(`blockingViaImplicit`)
-	bt.assertBlockingInst(`test.FooBaz[pkg/test.BazBlocker]`)
+	bt.assertBlockingInst(`pkg/test.FooBaz<pkg/test.BazBlocker>`)
 
 	bt.assertNotBlocking(`BazNotBlocker.Baz`)
 	bt.assertNotBlocking(`notBlockingViaExplicit`)
 	bt.assertNotBlocking(`notBlockingViaImplicit`)
-	bt.assertNotBlockingInst(`test.FooBaz[pkg/test.BazNotBlocker]`)
+	bt.assertNotBlockingInst(`pkg/test.FooBaz<pkg/test.BazNotBlocker>`)
 }
 
 func TestBlocking_NestedInstantiations(t *testing.T) {
@@ -1272,12 +1272,129 @@ func TestBlocking_NestedInstantiations(t *testing.T) {
 	bt.assertFuncInstCount(8)
 	bt.assertNotBlocking(`bazInt`)
 	bt.assertNotBlocking(`bazString`)
-	bt.assertNotBlockingInst(`test.Foo[map[int]int]`)
-	bt.assertNotBlockingInst(`test.Foo[map[int]string]`)
-	bt.assertNotBlockingInst(`test.Bar[int, int, map[int]int]`)
-	bt.assertNotBlockingInst(`test.Bar[int, string, map[int]string]`)
-	bt.assertNotBlockingInst(`test.Baz[int, []int]`)
-	bt.assertNotBlockingInst(`test.Baz[string, []string]`)
+	bt.assertNotBlockingInst(`pkg/test.Foo<map[int]int>`)
+	bt.assertNotBlockingInst(`pkg/test.Foo<map[int]string>`)
+	bt.assertNotBlockingInst(`pkg/test.Bar<int, int, map[int]int>`)
+	bt.assertNotBlockingInst(`pkg/test.Bar<int, string, map[int]string>`)
+	bt.assertNotBlockingInst(`pkg/test.Baz<int, []int>`)
+	bt.assertNotBlockingInst(`pkg/test.Baz<string, []string>`)
+}
+
+func TestBlocking_UnusedGenericFunctions(t *testing.T) {
+	// Checking that the type parameters are being propagated down into callee.
+	// This is based off of go1.19.13/test/typeparam/orderedmap.go
+	bt := newBlockingTest(t,
+		`package test
+
+		type node[K, V any] struct {
+			key         K
+			val         V
+			left, right *node[K, V]
+		}
+
+		type Tree[K, V any] struct {
+			root *node[K, V]
+			eq   func(K, K) bool
+		}
+
+		func New[K, V any](eq func(K, K) bool) *Tree[K, V] {
+			return &Tree[K, V]{eq: eq}
+		}
+
+		func NewStrKey[K ~string, V any]() *Tree[K, V] { // unused
+			return New[K, V](func(k1, k2 K) bool {
+				return string(k1) == string(k2)
+			})
+		}
+
+		func NewStrStr[V any]() *Tree[string, V] { // unused
+			return NewStrKey[string, V]()
+		}
+
+		func main() {
+			t := New[int, string](func(k1, k2 int) bool {
+				return k1 == k2
+			})
+			println(t)
+		}`)
+	bt.assertFuncInstCount(2)
+	// Notice that `NewStrKey` and `NewStrStr` are not called so doesn't have
+	// any known instances and therefore they don't have any FuncInfos.
+	bt.assertNotBlockingInst(`pkg/test.New<int, string>`)
+	bt.assertNotBlocking(`main`)
+}
+
+func TestBlocking_LitInstanceCalls(t *testing.T) {
+	// Literals defined inside a generic function must inherit the
+	// type arguments (resolver) of the enclosing instance it is defined in
+	// so that things like calls to other generic functions create the
+	// call to the correct concrete instance.
+	bt := newBlockingTest(t,
+		`package test
+
+		func foo[T any](x T) {
+			println(x)
+		}
+
+		func bar[T any](x T) {
+			f := func(v T) { // line 8
+				foo[T](v)
+			}
+			f(x)
+		}
+
+		func main() {
+			bar[int](42)
+			bar[float64](3.14)
+		}`)
+	bt.assertFuncInstCount(5)
+
+	bt.assertNotBlockingInst(`pkg/test.foo<int>`)
+	bt.assertNotBlockingInst(`pkg/test.foo<float64>`)
+	bt.assertNotBlockingLit(8, `int`)
+	bt.assertNotBlockingLit(8, `float64`)
+	// The following are blocking because the function literal call.
+	bt.assertBlockingInst(`pkg/test.bar<int>`)
+	bt.assertBlockingInst(`pkg/test.bar<float64>`)
+}
+
+func TestBlocking_BlockingLitInstance(t *testing.T) {
+	bt := newBlockingTest(t,
+		`package test
+
+		type BazBlocker struct {
+			c chan bool
+		}
+		func (bb BazBlocker) Baz() {
+			println(<-bb.c)
+		}
+
+		type BazNotBlocker struct {}
+		func (bnb BazNotBlocker) Baz() {
+			println("hi")
+		}
+
+		type Foo interface { Baz() }
+		func FooBaz[T Foo](foo T) func() {
+			return func() { // line 17
+				foo.Baz()
+			}
+		}
+
+		func main() {
+			_ = FooBaz(BazBlocker{})
+			_ = FooBaz(BazNotBlocker{})
+		}`)
+	bt.assertFuncInstCount(5)
+
+	bt.assertBlocking(`BazBlocker.Baz`)
+	// THe following is not blocking because the function literal is not called.
+	bt.assertNotBlockingInst(`pkg/test.FooBaz<pkg/test.BazBlocker>`)
+	bt.assertBlockingLit(17, `pkg/test.BazBlocker`)
+
+	bt.assertNotBlocking(`BazNotBlocker.Baz`)
+	bt.assertNotBlockingInst(`pkg/test.FooBaz<pkg/test.BazNotBlocker>`)
+	bt.assertNotBlockingLit(17, `pkg/test.BazNotBlocker`)
 }
 
 func TestBlocking_MethodSelection(t *testing.T) {
@@ -1333,13 +1450,13 @@ func TestBlocking_MethodSelection(t *testing.T) {
 	bt.assertFuncInstCount(8)
 
 	bt.assertBlocking(`BazBlocker.Baz`)
-	bt.assertBlockingInst(`test.ByMethodExpression[pkg/test.BazBlocker]`)
-	bt.assertBlockingInst(`test.ByInstance[pkg/test.BazBlocker]`)
+	bt.assertBlockingInst(`pkg/test.FooBaz.ByMethodExpression<pkg/test.BazBlocker>`)
+	bt.assertBlockingInst(`pkg/test.FooBaz.ByInstance<pkg/test.BazBlocker>`)
 	bt.assertBlocking(`blocking`)
 
 	bt.assertNotBlocking(`BazNotBlocker.Baz`)
-	bt.assertNotBlockingInst(`test.ByMethodExpression[pkg/test.BazNotBlocker]`)
-	bt.assertNotBlockingInst(`test.ByInstance[pkg/test.BazNotBlocker]`)
+	bt.assertNotBlockingInst(`pkg/test.FooBaz.ByMethodExpression<pkg/test.BazNotBlocker>`)
+	bt.assertNotBlockingInst(`pkg/test.FooBaz.ByInstance<pkg/test.BazNotBlocker>`)
 	bt.assertNotBlocking(`notBlocking`)
 }
 
@@ -1529,7 +1646,7 @@ func (bt *blockingTest) assertFuncInstCount(expCount int) {
 	if got := bt.pkgInfo.funcInstInfos.Len(); got != expCount {
 		bt.f.T.Errorf(`Got %d function instance infos but expected %d.`, got, expCount)
 		for i, inst := range bt.pkgInfo.funcInstInfos.Keys() {
-			bt.f.T.Logf(`  %d. %q`, i+1, inst.TypeString())
+			bt.f.T.Logf(`  %d. %q`, i+1, inst.String())
 		}
 	}
 }
@@ -1597,24 +1714,41 @@ func (bt *blockingTest) isTypesFuncBlocking(funcName string) bool {
 	return bt.pkgInfo.IsBlocking(inst)
 }
 
-func (bt *blockingTest) assertBlockingLit(lineNo int) {
-	if !bt.isFuncLitBlocking(lineNo) {
-		bt.f.T.Errorf(`Got FuncLit at line %d as not blocking but expected it to be blocking.`, lineNo)
+func (bt *blockingTest) assertBlockingLit(lineNo int, typeArgsStr string) {
+	if !bt.isFuncLitBlocking(lineNo, typeArgsStr) {
+		bt.f.T.Errorf(`Got FuncLit at line %d  with type args %q as not blocking but expected it to be blocking.`, lineNo, typeArgsStr)
 	}
 }
 
-func (bt *blockingTest) assertNotBlockingLit(lineNo int) {
-	if bt.isFuncLitBlocking(lineNo) {
-		bt.f.T.Errorf(`Got FuncLit at line %d as blocking but expected it to be not blocking.`, lineNo)
+func (bt *blockingTest) assertNotBlockingLit(lineNo int, typeArgsStr string) {
+	if bt.isFuncLitBlocking(lineNo, typeArgsStr) {
+		bt.f.T.Errorf(`Got FuncLit at line %d  with type args %q as blocking but expected it to be not blocking.`, lineNo, typeArgsStr)
 	}
 }
 
-func (bt *blockingTest) isFuncLitBlocking(lineNo int) bool {
+func (bt *blockingTest) isFuncLitBlocking(lineNo int, typeArgsStr string) bool {
 	fnLit := srctesting.GetNodeAtLineNo[*ast.FuncLit](bt.file, bt.f.FileSet, lineNo)
 	if fnLit == nil {
 		bt.f.T.Fatalf(`FuncLit on line %d not found in the AST.`, lineNo)
 	}
-	return bt.pkgInfo.FuncLitInfo(fnLit).IsBlocking()
+
+	fis, ok := bt.pkgInfo.funcLitInfos[fnLit]
+	if !ok {
+		bt.f.T.Fatalf(`No FuncInfo found for FuncLit at line %d.`, lineNo)
+	}
+
+	for _, fi := range fis {
+		if fi.typeArgs.String() == typeArgsStr {
+			return fi.IsBlocking()
+		}
+	}
+
+	bt.f.T.Logf("FuncList instances:")
+	for i, fi := range fis {
+		bt.f.T.Logf("\t%d. %q\n", i, fi.typeArgs.String())
+	}
+	bt.f.T.Fatalf(`No FuncInfo found for FuncLit at line %d with type args %q.`, lineNo, typeArgsStr)
+	return false
 }
 
 func (bt *blockingTest) assertBlockingInst(instanceStr string) {
@@ -1632,13 +1766,13 @@ func (bt *blockingTest) assertNotBlockingInst(instanceStr string) {
 func (bt *blockingTest) isFuncInstBlocking(instanceStr string) bool {
 	instances := bt.pkgInfo.funcInstInfos.Keys()
 	for _, inst := range instances {
-		if inst.TypeString() == instanceStr {
+		if inst.String() == instanceStr {
 			return bt.pkgInfo.FuncInfo(inst).IsBlocking()
 		}
 	}
 	bt.f.T.Logf(`Function instances found in package info:`)
 	for i, inst := range instances {
-		bt.f.T.Logf(`  %d. %s`, i+1, inst.TypeString())
+		bt.f.T.Logf(`  %d. %s`, i+1, inst.String())
 	}
 	bt.f.T.Fatalf(`No function instance found for %q in package info.`, instanceStr)
 	return false

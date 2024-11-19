@@ -160,6 +160,7 @@ func (fc *funcContext) importDecls() (importedPaths []string, importDecls []*Dec
 func (fc *funcContext) newImportDecl(importedPkg *types.Package) *Decl {
 	pkgVar := fc.importedPkgVar(importedPkg)
 	d := &Decl{
+		FullName: importDeclFullName(importedPkg),
 		Vars:     []string{pkgVar},
 		DeclCode: []byte(fmt.Sprintf("\t%s = $packages[\"%s\"];\n", pkgVar, importedPkg.Path())),
 		InitCode: fc.CatchOutput(1, func() { fc.translateStmt(fc.importInitializer(importedPkg.Path()), nil) }),
@@ -224,7 +225,9 @@ func (fc *funcContext) varDecls(vars []*types.Var) []*Decl {
 // newVarDecl creates a new Decl describing a variable, given an explicit
 // initializer.
 func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
-	var d Decl
+	d := &Decl{
+		FullName: varDeclFullName(init),
+	}
 
 	assignLHS := []ast.Expr{}
 	for _, o := range init.Lhs {
@@ -241,7 +244,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 		}
 	}
 
-	fc.pkgCtx.CollectDCEDeps(&d, func() {
+	fc.pkgCtx.CollectDCEDeps(d, func() {
 		fc.localVars = nil
 		d.InitCode = fc.CatchOutput(1, func() {
 			fc.translateStmt(&ast.AssignStmt{
@@ -261,7 +264,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 	if len(init.Lhs) != 1 || analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
 		d.Dce().SetAsAlive()
 	}
-	return &d
+	return d
 }
 
 // funcDecls translates all package-level function and methods.
@@ -279,15 +282,18 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 		if fun.Recv == nil {
 			// Auxiliary decl shared by all instances of the function that defines
 			// package-level variable by which they all are referenced.
-			varDecl := Decl{}
+			objName := fc.objectName(o)
+			varDecl := &Decl{
+				FullName: funcVarDeclFullName(o),
+				Vars:     []string{objName},
+			}
 			varDecl.Dce().SetName(o)
-			varDecl.Vars = []string{fc.objectName(o)}
 			if o.Type().(*types.Signature).TypeParams().Len() != 0 {
 				varDecl.DeclCode = fc.CatchOutput(0, func() {
-					fc.Printf("%s = {};", fc.objectName(o))
+					fc.Printf("%s = {};", objName)
 				})
 			}
-			funcDecls = append(funcDecls, &varDecl)
+			funcDecls = append(funcDecls, varDecl)
 		}
 
 		for _, inst := range fc.knownInstances(o) {
@@ -306,6 +312,7 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 		// been initialized. It must come after all other functions, especially all
 		// init() functions, otherwise main() will be invoked too early.
 		funcDecls = append(funcDecls, &Decl{
+			FullName: mainFuncDeclFullName(),
 			InitCode: fc.CatchOutput(1, func() { fc.translateStmt(fc.callMainFunc(mainFunc), nil) }),
 		})
 	}
@@ -316,7 +323,7 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) *Decl {
 	o := fc.pkgCtx.Defs[fun.Name].(*types.Func)
 	d := &Decl{
-		FullName:    o.FullName(),
+		FullName:    funcDeclFullName(inst),
 		Blocking:    fc.pkgCtx.IsBlocking(inst),
 		LinkingName: symbol.New(o),
 	}
@@ -417,15 +424,19 @@ func (fc *funcContext) namedTypeDecls(typeNames typesutil.TypeNames) ([]*Decl, e
 // of the type, keyed by the type argument combination. Otherwise it contains
 // the type definition directly.
 func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
-	varDecl := &Decl{Vars: []string{fc.objectName(obj)}}
+	name := fc.objectName(obj)
+	varDecl := &Decl{
+		FullName: typeVarDeclFullName(obj),
+		Vars:     []string{name},
+	}
 	if typeparams.HasTypeParams(obj.Type()) {
 		varDecl.DeclCode = fc.CatchOutput(0, func() {
-			fc.Printf("%s = {};", fc.objectName(obj))
+			fc.Printf("%s = {};", name)
 		})
 	}
 	if isPkgLevel(obj) {
 		varDecl.TypeInitCode = fc.CatchOutput(0, func() {
-			fc.Printf("$pkg.%s = %s;", encodeIdent(obj.Name()), fc.objectName(obj))
+			fc.Printf("$pkg.%s = %s;", encodeIdent(obj.Name()), name)
 		})
 	}
 	return varDecl
@@ -449,7 +460,9 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 	}
 
 	underlying := instanceType.Underlying()
-	d := &Decl{}
+	d := &Decl{
+		FullName: typeDeclFullName(inst),
+	}
 	d.Dce().SetName(inst.Object, inst.TArgs...)
 	fc.pkgCtx.CollectDCEDeps(d, func() {
 		// Code that declares a JS type (i.e. prototype) for each Go type.
@@ -571,7 +584,8 @@ func (fc *funcContext) anonTypeDecls(anonTypes []*types.TypeName) []*Decl {
 	decls := []*Decl{}
 	for _, t := range anonTypes {
 		d := &Decl{
-			Vars: []string{t.Name()},
+			FullName: anonTypeDeclFullName(t),
+			Vars:     []string{t.Name()},
 		}
 		d.Dce().SetName(t)
 		fc.pkgCtx.CollectDCEDeps(d, func() {

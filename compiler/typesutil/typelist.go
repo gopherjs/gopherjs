@@ -18,3 +18,15 @@ func (tl TypeList) String() string {
 	}
 	return buf.String()
 }
+
+func (tl TypeList) Equal(other TypeList) bool {
+	if len(tl) != len(other) {
+		return false
+	}
+	for i := range tl {
+		if !types.Identical(tl[i], other[i]) {
+			return false
+		}
+	}
+	return true
+}

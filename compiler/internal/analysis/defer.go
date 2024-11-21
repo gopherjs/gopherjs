@@ -2,8 +2,10 @@ package analysis
 
 import (
 	"go/ast"
+	"go/types"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
+	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
 // deferStmt represents a defer statement that is blocking or not.
@@ -49,8 +51,9 @@ import (
 //
 // [CFG]: https://en.wikipedia.org/wiki/Control-flow_graph
 type deferStmt struct {
-	inst *typeparams.Instance
-	lit  *ast.FuncLit
+	obj      types.Object
+	lit      *ast.FuncLit
+	typeArgs typesutil.TypeList
 }
 
 // newBlockingDefer creates a new defer statement that is blocking.
@@ -65,13 +68,13 @@ func newBlockingDefer() *deferStmt {
 // newInstDefer creates a new defer statement for an instances of a method.
 // The instance is used to look up the blocking information later.
 func newInstDefer(inst typeparams.Instance) *deferStmt {
-	return &deferStmt{inst: &inst}
+	return &deferStmt{obj: inst.Object, typeArgs: inst.TArgs}
 }
 
 // newLitDefer creates a new defer statement for a function literal.
 // The literal is used to look up the blocking information later.
-func newLitDefer(lit *ast.FuncLit) *deferStmt {
-	return &deferStmt{lit: lit}
+func newLitDefer(lit *ast.FuncLit, typeArgs typesutil.TypeList) *deferStmt {
+	return &deferStmt{lit: lit, typeArgs: typeArgs}
 }
 
 // IsBlocking determines if the defer statement is blocking or not.
@@ -79,11 +82,11 @@ func (d *deferStmt) IsBlocking(info *Info) bool {
 	// If the instance or the literal is set then we can look up the blocking,
 	// otherwise assume blocking because otherwise the defer wouldn't
 	// have been recorded.
-	if d.inst != nil {
-		return info.FuncInfo(*d.inst).IsBlocking()
+	if d.obj != nil {
+		return info.IsBlocking(typeparams.Instance{Object: d.obj, TArgs: d.typeArgs})
 	}
 	if d.lit != nil {
-		return info.FuncLitInfo(d.lit).IsBlocking()
+		return info.FuncLitInfo(d.lit, d.typeArgs).IsBlocking()
 	}
 	return true
 }

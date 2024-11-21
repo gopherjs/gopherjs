@@ -40,7 +40,7 @@ func (im *InstanceMap[V]) findIndex(key Instance) (mapBucket[V], int) {
 	if im != nil && im.data != nil {
 		bucket := im.data[key.Object][typeHash(im.hasher, key.TArgs...)]
 		for i, candidate := range bucket {
-			if candidate != nil && typeArgsEq(candidate.key.TArgs, key.TArgs) {
+			if candidate != nil && candidate.key.TArgs.Equal(key.TArgs) {
 				return bucket, i
 			}
 		}
@@ -90,7 +90,7 @@ func (im *InstanceMap[V]) Set(key Instance, value V) V {
 	for i, candidate := range bucket {
 		if candidate == nil {
 			hole = i
-		} else if typeArgsEq(candidate.key.TArgs, key.TArgs) {
+		} else if candidate.key.TArgs.Equal(key.TArgs) {
 			old := candidate.value
 			candidate.value = value
 			return old
@@ -191,18 +191,4 @@ func typeHash(hasher typeutil.Hasher, types ...types.Type) uint32 {
 		hash ^= hasher.Hash(typ)
 	}
 	return hash
-}
-
-// typeArgsEq returns if both lists of type arguments are identical.
-func typeArgsEq(a, b []types.Type) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if !types.Identical(a[i], b[i]) {
-			return false
-		}
-	}
-
-	return true
 }

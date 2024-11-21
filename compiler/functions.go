@@ -82,7 +82,7 @@ func (fc *funcContext) namedFuncContext(inst typeparams.Instance) *funcContext {
 // go/types doesn't generate *types.Func objects for function literals, we
 // generate a synthetic one for it.
 func (fc *funcContext) literalFuncContext(fun *ast.FuncLit) *funcContext {
-	info := fc.pkgCtx.FuncLitInfo(fun)
+	info := fc.pkgCtx.FuncLitInfo(fun, fc.TypeArgs())
 	sig := fc.pkgCtx.TypeOf(fun).(*types.Signature)
 	o := types.NewFunc(fun.Pos(), fc.pkgCtx.Pkg, fc.newLitFuncName(), sig)
 	inst := typeparams.Instance{Object: o}

@@ -55,22 +55,24 @@ type Info struct {
 	instanceSets  *typeparams.PackageInstanceSets
 	HasPointer    map[*types.Var]bool
 	funcInstInfos *typeparams.InstanceMap[*FuncInfo]
-	funcLitInfos  map[*ast.FuncLit]*FuncInfo
+	funcLitInfos  map[*ast.FuncLit][]*FuncInfo
 	InitFuncInfo  *FuncInfo // Context for package variable initialization.
 
 	isImportedBlocking func(typeparams.Instance) bool // For functions from other packages.
 	allInfos           []*FuncInfo
 }
 
-func (info *Info) newFuncInfo(n ast.Node, inst *typeparams.Instance) *FuncInfo {
+func (info *Info) newFuncInfo(n ast.Node, obj types.Object, typeArgs typesutil.TypeList, resolver *typeparams.Resolver) *FuncInfo {
 	funcInfo := &FuncInfo{
 		pkgInfo:            info,
 		Flattened:          make(map[ast.Node]bool),
 		Blocking:           make(map[ast.Node]bool),
 		GotoLabel:          make(map[*types.Label]bool),
 		loopReturnIndex:    -1,
-		localInstCallees:   new(typeparams.InstanceMap[[]astPath]),
+		instCallees:        new(typeparams.InstanceMap[[]astPath]),
 		literalFuncCallees: make(map[*ast.FuncLit]astPath),
+		typeArgs:           typeArgs,
+		resolver:           resolver,
 	}
 
 	// Register the function in the appropriate map.
@@ -86,13 +88,14 @@ func (info *Info) newFuncInfo(n ast.Node, inst *typeparams.Instance) *FuncInfo {
 			funcInfo.Blocking[n] = true
 		}
 
-		if inst == nil {
-			inst = &typeparams.Instance{Object: info.Defs[n.Name]}
+		if obj == nil {
+			obj = info.Defs[n.Name]
 		}
-		info.funcInstInfos.Set(*inst, funcInfo)
+		inst := typeparams.Instance{Object: obj, TArgs: typeArgs}
+		info.funcInstInfos.Set(inst, funcInfo)
 
 	case *ast.FuncLit:
-		info.funcLitInfos[n] = funcInfo
+		info.funcLitInfos[n] = append(info.funcLitInfos[n], funcInfo)
 	}
 
 	// And add it to the list of all functions.
@@ -105,28 +108,40 @@ func (info *Info) newFuncInfoInstances(fd *ast.FuncDecl) []*FuncInfo {
 	obj := info.Defs[fd.Name]
 	instances := info.instanceSets.Pkg(info.Pkg).ForObj(obj)
 	if len(instances) == 0 {
-		// No instances found, this is a non-generic function.
-		return []*FuncInfo{info.newFuncInfo(fd, nil)}
+		if typeparams.HasTypeParams(obj.Type()) {
+			// This is a generic function, but no instances were found,
+			// this is an unused function, so skip over it.
+			return []*FuncInfo{}
+		}
+
+		// No instances found and this is a non-generic function.
+		return []*FuncInfo{info.newFuncInfo(fd, nil, nil, nil)}
 	}
 
 	funcInfos := make([]*FuncInfo, 0, len(instances))
 	for _, inst := range instances {
-		fi := info.newFuncInfo(fd, &inst)
+		var resolver *typeparams.Resolver
 		if sig, ok := obj.Type().(*types.Signature); ok {
 			tp := typeparams.ToSlice(typeparams.SignatureTypeParams(sig))
-			fi.resolver = typeparams.NewResolver(info.typeCtx, tp, inst.TArgs)
+			resolver = typeparams.NewResolver(info.typeCtx, tp, inst.TArgs)
 		}
+		fi := info.newFuncInfo(fd, inst.Object, inst.TArgs, resolver)
 		funcInfos = append(funcInfos, fi)
 	}
 	return funcInfos
 }
 
 // IsBlocking returns true if the function may contain blocking calls or operations.
+// If inst is from a different package, this will use the isImportedBlocking
+// to lookup the information from the other package.
 func (info *Info) IsBlocking(inst typeparams.Instance) bool {
+	if inst.Object.Pkg() != info.Pkg {
+		return info.isImportedBlocking(inst)
+	}
 	if funInfo := info.FuncInfo(inst); funInfo != nil {
 		return funInfo.IsBlocking()
 	}
-	panic(fmt.Errorf(`info did not have function declaration instance for %q`, inst))
+	panic(fmt.Errorf(`info did not have function declaration instance for %q`, inst.TypeString()))
 }
 
 // FuncInfo returns information about the given function declaration instance, or nil if not found.
@@ -135,8 +150,16 @@ func (info *Info) FuncInfo(inst typeparams.Instance) *FuncInfo {
 }
 
 // FuncLitInfo returns information about the given function literal, or nil if not found.
-func (info *Info) FuncLitInfo(fun *ast.FuncLit) *FuncInfo {
-	return info.funcLitInfos[fun]
+// The given type arguments are used to identify the correct instance of the
+// function literal in the case the literal was defined inside a generic function.
+func (info *Info) FuncLitInfo(fun *ast.FuncLit, typeArgs typesutil.TypeList) *FuncInfo {
+	lits := info.funcLitInfos[fun]
+	for _, fi := range lits {
+		if fi.typeArgs.Equal(typeArgs) {
+			return fi
+		}
+	}
+	return nil
 }
 
 // VarsWithInitializers returns a set of package-level variables that have
@@ -160,9 +183,9 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		HasPointer:         make(map[*types.Var]bool),
 		isImportedBlocking: isBlocking,
 		funcInstInfos:      new(typeparams.InstanceMap[*FuncInfo]),
-		funcLitInfos:       make(map[*ast.FuncLit]*FuncInfo),
+		funcLitInfos:       make(map[*ast.FuncLit][]*FuncInfo),
 	}
-	info.InitFuncInfo = info.newFuncInfo(nil, nil)
+	info.InitFuncInfo = info.newFuncInfo(nil, nil, nil, nil)
 
 	// Traverse the full AST of the package and collect information about existing
 	// functions.
@@ -190,19 +213,19 @@ func (info *Info) propagateFunctionBlocking() bool {
 	done := true
 	for _, caller := range info.allInfos {
 		// Check calls to named functions and function-typed variables.
-		caller.localInstCallees.Iterate(func(callee typeparams.Instance, callSites []astPath) {
-			if info.FuncInfo(callee).IsBlocking() {
+		caller.instCallees.Iterate(func(callee typeparams.Instance, callSites []astPath) {
+			if info.IsBlocking(callee) {
 				for _, callSite := range callSites {
 					caller.markBlocking(callSite)
 				}
-				caller.localInstCallees.Delete(callee)
+				caller.instCallees.Delete(callee)
 				done = false
 			}
 		})
 
 		// Check direct calls to function literals.
 		for callee, callSite := range caller.literalFuncCallees {
-			if info.FuncLitInfo(callee).IsBlocking() {
+			if info.FuncLitInfo(callee, caller.typeArgs).IsBlocking() {
 				caller.markBlocking(callSite)
 				delete(caller.literalFuncCallees, callee)
 				done = false
@@ -250,15 +273,18 @@ type FuncInfo struct {
 	// returns defined before any defers in a loop may still be affected by
 	// those defers because of the loop. See comment on [deferStmt].
 	loopReturnIndex int
-	// List of other named functions from the current package this function calls.
+	// List of other named functions in the current package or another package
+	// that this function calls.
 	// If any of them are blocking, this function will become blocking too.
-	localInstCallees *typeparams.InstanceMap[[]astPath]
+	instCallees *typeparams.InstanceMap[[]astPath]
 	// List of function literals directly called from this function (for example:
 	// `func() { /* do stuff */ }()`). This is distinct from function literals
 	// assigned to named variables (for example: `doStuff := func() {};
 	// doStuff()`), which are handled by localInstCallees. If any of them are
 	// identified as blocking, this function will become blocking too.
 	literalFuncCallees map[*ast.FuncLit]astPath
+	// typeArgs are the type arguments for the function instance.
+	typeArgs typesutil.TypeList
 	// resolver is used by this function instance to resolve any type arguments
 	// for internal function calls.
 	// This may be nil if not an instance of a generic function.
@@ -274,6 +300,12 @@ type FuncInfo struct {
 // possibly blocking function may block the function.
 func (fi *FuncInfo) IsBlocking() bool {
 	return fi == nil || len(fi.Blocking) != 0
+}
+
+// TypeArgs gets the type arguments of this inside of a function instance
+// or empty if not in a function instance.
+func (fi *FuncInfo) TypeArgs() typesutil.TypeList {
+	return fi.typeArgs
 }
 
 // propagateReturnBlocking updates the blocking on the return statements.
@@ -341,7 +373,7 @@ func (fi *FuncInfo) Visit(node ast.Node) ast.Visitor {
 		return nil
 	case *ast.FuncLit:
 		// Analyze the function literal in its own context.
-		return fi.pkgInfo.newFuncInfo(n, nil)
+		return fi.pkgInfo.newFuncInfo(n, nil, fi.typeArgs, fi.resolver)
 	case *ast.BranchStmt:
 		switch n.Tok {
 		case token.GOTO:
@@ -502,7 +534,7 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr, deferredCall bool) ast.Visito
 		// Register literal function call site in case it is identified as blocking.
 		fi.literalFuncCallees[f] = fi.visitorStack.copy()
 		if deferredCall {
-			fi.deferStmts = append(fi.deferStmts, newLitDefer(f))
+			fi.deferStmts = append(fi.deferStmts, newLitDefer(f, fi.typeArgs))
 		}
 		return nil // No need to walk under this CallExpr, we already did it manually.
 	case *ast.IndexExpr:
@@ -610,21 +642,11 @@ func (fi *FuncInfo) callToNamedFunc(callee typeparams.Instance, deferredCall boo
 			}
 		}
 
-		if o.Pkg() != fi.pkgInfo.Pkg {
-			if fi.pkgInfo.isImportedBlocking(callee) {
-				fi.markBlocking(fi.visitorStack)
-				if deferredCall {
-					fi.deferStmts = append(fi.deferStmts, newBlockingDefer())
-				}
-			}
-			return
-		}
-
 		// We probably don't know yet whether the callee function is blocking.
 		// Record the calls site for the later stage.
-		paths := fi.localInstCallees.Get(callee)
+		paths := fi.instCallees.Get(callee)
 		paths = append(paths, fi.visitorStack.copy())
-		fi.localInstCallees.Set(callee, paths)
+		fi.instCallees.Set(callee, paths)
 		if deferredCall {
 			fi.deferStmts = append(fi.deferStmts, newInstDefer(callee))
 		}

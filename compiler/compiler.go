@@ -46,43 +46,24 @@ type Archive struct {
 	// A list of full package import paths that the current package imports across
 	// all source files. See go/types.Package.Imports().
 	Imports []string
-	// Serialized contents of go/types.Package in a binary format. This information
-	// is used by the compiler to type-check packages that import this one. See
-	// gcexportdata.Write().
-	//
-	// TODO(nevkontakte): It would be more convenient to store go/types.Package
-	// itself and only serialize it when writing the archive onto disk.
-	ExportData []byte
+	// The package information is used by the compiler to type-check packages
+	// that import this one. See [gcexportdata.Write].
+	Package *types.Package
 	// Compiled package-level symbols.
 	Declarations []*Decl
 	// Concatenated contents of all raw .inc.js of the package.
 	IncJSCode []byte
-	// JSON-serialized contents of go/token.FileSet. This is used to obtain source
-	// code locations for various symbols (e.g. for sourcemap generation). See
-	// token.FileSet.Write().
-	//
-	// TODO(nevkontakte): This is also more convenient to store as the original
-	// object and only serialize before writing onto disk.
-	FileSet []byte
+	// The file set containing the source code locations for various symbols
+	// (e.g. for sourcemap generation). See [token.FileSet.Write].
+	FileSet *token.FileSet
 	// Whether or not the package was compiled with minification enabled.
 	Minified bool
 	// A list of go:linkname directives encountered in the package.
 	GoLinknames []GoLinkname
-	// Time when this archive was built.
-	BuildTime time.Time
 }
 
 func (a Archive) String() string {
 	return fmt.Sprintf("compiler.Archive{%s}", a.ImportPath)
-}
-
-// RegisterTypes adds package type information from the archive into the provided map.
-func (a *Archive) RegisterTypes(packages map[string]*types.Package) error {
-	var err error
-	// TODO(nevkontakte): Should this be shared throughout the build?
-	fset := token.NewFileSet()
-	packages[a.ImportPath], err = gcexportdata.Read(bytes.NewReader(a.ExportData), fset, packages, a.ImportPath)
-	return err
 }
 
 type Dependency struct {
@@ -185,10 +166,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 
 func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameSet, minify bool, w *SourceMapFilter) error {
 	if w.MappingCallback != nil && pkg.FileSet != nil {
-		w.fileSet = token.NewFileSet()
-		if err := w.fileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
-			panic(err)
-		}
+		w.fileSet = pkg.FileSet
 	}
 	if _, err := w.Write(pkg.IncJSCode); err != nil {
 		return err
@@ -277,19 +255,98 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 	return nil
 }
 
+type serializableArchive struct {
+	ImportPath   string
+	Name         string
+	Imports      []string
+	ExportData   []byte
+	Declarations []*Decl
+	IncJSCode    []byte
+	FileSet      []byte
+	Minified     bool
+	GoLinknames  []GoLinkname
+	BuildTime    time.Time
+}
+
 // ReadArchive reads serialized compiled archive of the importPath package.
-func ReadArchive(path string, r io.Reader) (*Archive, error) {
-	var a Archive
-	if err := gob.NewDecoder(r).Decode(&a); err != nil {
-		return nil, err
+//
+// The given srcModTime is used to determine if the archive is out-of-date.
+// If the archive is out-of-date, the returned archive is nil.
+// If there was not an error, the returned time is when the archive was built.
+//
+// The imports map is used to resolve package dependencies and may modify the
+// map to include the package from the read archive. See [gcexportdata.Read].
+func ReadArchive(importPath string, r io.Reader, srcModTime time.Time, imports map[string]*types.Package) (*Archive, time.Time, error) {
+	var sa serializableArchive
+	if err := gob.NewDecoder(r).Decode(&sa); err != nil {
+		return nil, time.Time{}, err
 	}
 
-	return &a, nil
+	if srcModTime.After(sa.BuildTime) {
+		// Archive is out-of-date.
+		return nil, sa.BuildTime, nil
+	}
+
+	var a Archive
+	fset := token.NewFileSet()
+	if len(sa.ExportData) > 0 {
+		pkg, err := gcexportdata.Read(bytes.NewReader(sa.ExportData), fset, imports, importPath)
+		if err != nil {
+			return nil, sa.BuildTime, err
+		}
+		a.Package = pkg
+	}
+
+	if len(sa.FileSet) > 0 {
+		a.FileSet = token.NewFileSet()
+		if err := a.FileSet.Read(json.NewDecoder(bytes.NewReader(sa.FileSet)).Decode); err != nil {
+			return nil, sa.BuildTime, err
+		}
+	}
+
+	a.ImportPath = sa.ImportPath
+	a.Name = sa.Name
+	a.Imports = sa.Imports
+	a.Declarations = sa.Declarations
+	a.IncJSCode = sa.IncJSCode
+	a.Minified = sa.Minified
+	a.GoLinknames = sa.GoLinknames
+	return &a, sa.BuildTime, nil
 }
 
 // WriteArchive writes compiled package archive on disk for later reuse.
-func WriteArchive(a *Archive, w io.Writer) error {
-	return gob.NewEncoder(w).Encode(a)
+//
+// The passed in buildTime is used to determine if the archive is out-of-date.
+// It should be set to time.Now() typically but it exposed for testing purposes.
+func WriteArchive(a *Archive, buildTime time.Time, w io.Writer) error {
+	exportData := new(bytes.Buffer)
+	if a.Package != nil {
+		if err := gcexportdata.Write(exportData, nil, a.Package); err != nil {
+			return fmt.Errorf("failed to write export data: %w", err)
+		}
+	}
+
+	encodedFileSet := new(bytes.Buffer)
+	if a.FileSet != nil {
+		if err := a.FileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
+			return err
+		}
+	}
+
+	sa := serializableArchive{
+		ImportPath:   a.ImportPath,
+		Name:         a.Name,
+		Imports:      a.Imports,
+		ExportData:   exportData.Bytes(),
+		Declarations: a.Declarations,
+		IncJSCode:    a.IncJSCode,
+		FileSet:      encodedFileSet.Bytes(),
+		Minified:     a.Minified,
+		GoLinknames:  a.GoLinknames,
+		BuildTime:    buildTime,
+	}
+
+	return gob.NewEncoder(w).Encode(sa)
 }
 
 type SourceMapFilter struct {

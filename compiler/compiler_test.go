@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/tools/go/packages"
@@ -109,7 +110,7 @@ func TestDeclSelection_KeepUnusedUnexportedMethodForInterface(t *testing.T) {
 			println("foo2")
 		}
 
- 		type IFoo interface {
+		type IFoo interface {
 			Bar()
 			baz()
 		}
@@ -405,6 +406,33 @@ func TestLengthParenthesizingIssue841(t *testing.T) {
 	}
 }
 
+func TestArchiveSelectionAfterSerialization(t *testing.T) {
+	src := `
+		package main
+		type Foo interface{ int | string }
+
+		type Bar[T Foo] struct{ v T }
+		func (b Bar[T]) Baz() { println(b.v) }
+
+		var ghost = Bar[int]{v: 7} // unused
+
+		func main() {
+			println("do nothing")
+		}`
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+	rootPath := root.PkgPath
+	origArchives := compileProject(t, root, false)
+	readArchives := reloadCompiledProject(t, origArchives, rootPath)
+
+	origJS := renderPackage(t, origArchives[rootPath], false)
+	readJS := renderPackage(t, readArchives[rootPath], false)
+
+	if diff := cmp.Diff(string(origJS), string(readJS)); diff != "" {
+		t.Errorf("the reloaded files produce different JS:\n%s", diff)
+	}
+}
+
 func compareOrder(t *testing.T, sourceFiles []srctesting.Source, minify bool) {
 	t.Helper()
 	outputNormal := compile(t, sourceFiles, minify)
@@ -481,12 +509,68 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 	return archiveCache
 }
 
+// newTime creates an arbitrary time.Time offset by the given number of seconds.
+// This is useful for quickly creating times that are before or after another.
+func newTime(seconds float64) time.Time {
+	return time.Date(1969, 7, 20, 20, 17, 0, 0, time.UTC).
+		Add(time.Duration(seconds * float64(time.Second)))
+}
+
+// reloadCompiledProject persists the given archives into memory then reloads
+// them from memory to simulate a cache reload of a precompiled project.
+func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPath string) map[string]*Archive {
+	t.Helper()
+
+	buildTime := newTime(5.0)
+	serialized := map[string][]byte{}
+	for path, a := range archives {
+		buf := &bytes.Buffer{}
+		if err := WriteArchive(a, buildTime, buf); err != nil {
+			t.Fatalf(`failed to write archive for %s: %v`, path, err)
+		}
+		serialized[path] = buf.Bytes()
+	}
+
+	srcModTime := newTime(0.0)
+	reloadCache := map[string]*Archive{}
+	var importContext *ImportContext
+	importContext = &ImportContext{
+		Packages: map[string]*types.Package{},
+		Import: func(path string) (*Archive, error) {
+			// find in local cache
+			if a, ok := reloadCache[path]; ok {
+				return a, nil
+			}
+
+			// deserialize archive
+			buf, ok := serialized[path]
+			if !ok {
+				t.Fatalf(`archive not found for %s`, path)
+			}
+			a, _, err := ReadArchive(path, bytes.NewReader(buf), srcModTime, importContext.Packages)
+			if err != nil {
+				t.Fatalf(`failed to read archive for %s: %v`, path, err)
+			}
+			reloadCache[path] = a
+			return a, nil
+		},
+	}
+
+	_, err := importContext.Import(rootPkgPath)
+	if err != nil {
+		t.Fatal(`failed to reload archives:`, err)
+	}
+	return reloadCache
+}
+
 func renderPackage(t *testing.T, archive *Archive, minify bool) []byte {
 	t.Helper()
-	selection := make(map[*Decl]struct{})
+
+	sel := &dce.Selector[*Decl]{}
 	for _, d := range archive.Declarations {
-		selection[d] = struct{}{}
+		sel.Include(d, false)
 	}
+	selection := sel.AliveDecls()
 
 	buf := &bytes.Buffer{}
 

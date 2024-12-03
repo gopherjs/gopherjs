@@ -6,9 +6,11 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"go/build"
+	"go/types"
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 
 	"github.com/gopherjs/gopherjs/compiler"
 	log "github.com/sirupsen/logrus"
@@ -90,7 +92,7 @@ func (bc BuildCache) String() string {
 
 // StoreArchive compiled archive in the cache. Any error inside this method
 // will cause the cache not to be persisted.
-func (bc *BuildCache) StoreArchive(a *compiler.Archive) {
+func (bc *BuildCache) StoreArchive(a *compiler.Archive, buildTime time.Time) {
 	if bc == nil {
 		return // Caching is disabled.
 	}
@@ -106,7 +108,7 @@ func (bc *BuildCache) StoreArchive(a *compiler.Archive) {
 		return
 	}
 	defer f.Close()
-	if err := compiler.WriteArchive(a, f); err != nil {
+	if err := compiler.WriteArchive(a, buildTime, f); err != nil {
 		log.Warningf("Failed to write build cache archive %q: %v", a, err)
 		// Make sure we don't leave a half-written archive behind.
 		os.Remove(f.Name())
@@ -125,7 +127,10 @@ func (bc *BuildCache) StoreArchive(a *compiler.Archive) {
 //
 // The returned archive would have been built with the same configuration as
 // the build cache was.
-func (bc *BuildCache) LoadArchive(importPath string) *compiler.Archive {
+//
+// The imports map is used to resolve package dependencies and may modify the
+// map to include the package from the read archive. See [gcexportdata.Read].
+func (bc *BuildCache) LoadArchive(importPath string, srcModTime time.Time, imports map[string]*types.Package) *compiler.Archive {
 	if bc == nil {
 		return nil // Caching is disabled.
 	}
@@ -140,12 +145,16 @@ func (bc *BuildCache) LoadArchive(importPath string) *compiler.Archive {
 		return nil // Cache miss.
 	}
 	defer f.Close()
-	a, err := compiler.ReadArchive(importPath, f)
+	a, buildTime, err := compiler.ReadArchive(importPath, f, srcModTime, imports)
 	if err != nil {
 		log.Warningf("Failed to read cached package archive for %q: %v", importPath, err)
 		return nil // Invalid/corrupted archive, cache miss.
 	}
-	log.Infof("Found cached package archive for %q, built at %v.", importPath, a.BuildTime)
+	if a == nil {
+		log.Infof("Found out-of-date package archive for %q, built at %v.", importPath, buildTime)
+		return nil // Archive is out-of-date, cache miss.
+	}
+	log.Infof("Found cached package archive for %q, built at %v.", importPath, buildTime)
 	return a
 }
 

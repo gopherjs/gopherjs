@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -938,23 +939,40 @@ func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*Packag
 	return pkg, archive, nil
 }
 
+// getExeModTime will determine the mod time of the GopherJS binary
+// the first time this is called and cache the result for subsequent calls.
+var getExeModTime = func() func() time.Time {
+	var (
+		once   sync.Once
+		result time.Time
+	)
+	getTime := func() {
+		gopherjsBinary, err := os.Executable()
+		if err == nil {
+			var fileInfo os.FileInfo
+			fileInfo, err = os.Stat(gopherjsBinary)
+			if err == nil {
+				result = fileInfo.ModTime()
+				return
+			}
+		}
+		os.Stderr.WriteString("Could not get GopherJS binary's modification timestamp. Please report issue.\n")
+		result = time.Now()
+	}
+	return func() time.Time {
+		once.Do(getTime)
+		return result
+	}
+}()
+
 // BuildPackage compiles an already loaded package.
 func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if archive, ok := s.UpToDateArchives[pkg.ImportPath]; ok {
 		return archive, nil
 	}
 
-	var fileInfo os.FileInfo
-	gopherjsBinary, err := os.Executable()
-	if err == nil {
-		fileInfo, err = os.Stat(gopherjsBinary)
-		if err == nil && fileInfo.ModTime().After(pkg.SrcModTime) {
-			pkg.SrcModTime = fileInfo.ModTime()
-		}
-	}
-	if err != nil {
-		os.Stderr.WriteString("Could not get GopherJS binary's modification timestamp. Please report issue.\n")
-		pkg.SrcModTime = time.Now()
+	if exeModTime := getExeModTime(); exeModTime.After(pkg.SrcModTime) {
+		pkg.SrcModTime = exeModTime
 	}
 
 	for _, importedPkgPath := range pkg.Imports {
@@ -966,22 +984,18 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			return nil, err
 		}
 
-		impModTime := importedPkg.SrcModTime
-		if impModTime.After(pkg.SrcModTime) {
+		if impModTime := importedPkg.SrcModTime; impModTime.After(pkg.SrcModTime) {
 			pkg.SrcModTime = impModTime
 		}
 	}
 
-	if pkg.FileModTime().After(pkg.SrcModTime) {
-		pkg.SrcModTime = pkg.FileModTime()
+	if fileModTime := pkg.FileModTime(); fileModTime.After(pkg.SrcModTime) {
+		pkg.SrcModTime = fileModTime
 	}
 
 	if !s.options.NoCache {
-		archive := s.buildCache.LoadArchive(pkg.ImportPath)
-		if archive != nil && !pkg.SrcModTime.After(archive.BuildTime) {
-			if err := archive.RegisterTypes(s.Types); err != nil {
-				panic(fmt.Errorf("failed to load type information from %v: %w", archive, err))
-			}
+		archive := s.buildCache.LoadArchive(pkg.ImportPath, pkg.SrcModTime, s.Types)
+		if archive != nil {
 			s.UpToDateArchives[pkg.ImportPath] = archive
 			// Existing archive is up to date, no need to build it from scratch.
 			return archive, nil
@@ -1021,7 +1035,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		fmt.Println(pkg.ImportPath)
 	}
 
-	s.buildCache.StoreArchive(archive)
+	s.buildCache.StoreArchive(archive, time.Now())
 	s.UpToDateArchives[pkg.ImportPath] = archive
 
 	return archive, nil

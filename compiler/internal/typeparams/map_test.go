@@ -317,7 +317,7 @@ func keysMatch(a, b []Instance) bool {
 
 func keyAt(keys []Instance, target Instance) int {
 	for i, v := range keys {
-		if v.Object == target.Object && typeArgsEq(v.TArgs, target.TArgs) {
+		if v.Object == target.Object && v.TArgs.Equal(target.TArgs) {
 			return i
 		}
 	}

@@ -67,9 +67,9 @@ func TestDeclSelection_KeepUnusedExportedMethods(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
-	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
-	sel.DeclCode.IsAlive(`^\s*\$ptrType\(Foo\)\.prototype\.Bar`)
-	sel.DeclCode.IsAlive(`^\s*\$ptrType\(Foo\)\.prototype\.Baz`)
+	sel.IsAlive(`type:command-line-arguments.Foo`)
+	sel.IsAlive(`func:command-line-arguments.Foo.Bar`)
+	sel.IsAlive(`func:command-line-arguments.Foo.Baz`)
 }
 
 func TestDeclSelection_RemoveUnusedUnexportedMethods(t *testing.T) {
@@ -89,10 +89,10 @@ func TestDeclSelection_RemoveUnusedUnexportedMethods(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
-	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
-	sel.DeclCode.IsAlive(`^\s*\$ptrType\(Foo\)\.prototype\.Bar`)
+	sel.IsAlive(`type:command-line-arguments.Foo`)
+	sel.IsAlive(`func:command-line-arguments.Foo.Bar`)
 
-	sel.DeclCode.IsDead(`^\s*\$ptrType\(Foo\)\.prototype\.baz`)
+	sel.IsDead(`func:command-line-arguments.Foo.baz`)
 }
 
 func TestDeclSelection_KeepUnusedUnexportedMethodForInterface(t *testing.T) {
@@ -109,7 +109,7 @@ func TestDeclSelection_KeepUnusedUnexportedMethodForInterface(t *testing.T) {
 			println("foo2")
 		}
 
- 		type IFoo interface {
+		type IFoo interface {
 			Bar()
 			baz()
 		}
@@ -125,13 +125,13 @@ func TestDeclSelection_KeepUnusedUnexportedMethodForInterface(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
-	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
-	sel.DeclCode.IsAlive(`^\s*\$ptrType\(Foo\)\.prototype\.Bar`)
+	sel.IsAlive(`type:command-line-arguments.Foo`)
+	sel.IsAlive(`func:command-line-arguments.Foo.Bar`)
 
 	// `baz` signature metadata is used to check a type assertion against IFoo,
 	// but the method itself is never called, so it can be removed.
-	sel.DeclCode.IsDead(`^\s*\$ptrType\(Foo\)\.prototype\.baz`)
-	sel.MethodListCode.IsAlive(`^\s*Foo.methods = .* \{prop: "baz", name: "baz"`)
+	// The method is kept in Foo's MethodList for type checking.
+	sel.IsDead(`func:command-line-arguments.Foo.baz`)
 }
 
 func TestDeclSelection_KeepUnexportedMethodUsedViaInterfaceLit(t *testing.T) {
@@ -155,9 +155,9 @@ func TestDeclSelection_KeepUnexportedMethodUsedViaInterfaceLit(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
-	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
-	sel.DeclCode.IsAlive(`^\s*\$ptrType\(Foo\)\.prototype\.Bar`)
-	sel.DeclCode.IsAlive(`^\s*\$ptrType\(Foo\)\.prototype\.baz`)
+	sel.IsAlive(`type:command-line-arguments.Foo`)
+	sel.IsAlive(`func:command-line-arguments.Foo.Bar`)
+	sel.IsAlive(`func:command-line-arguments.Foo.baz`)
 }
 
 func TestDeclSelection_KeepAliveUnexportedMethodsUsedInMethodExpressions(t *testing.T) {
@@ -175,8 +175,8 @@ func TestDeclSelection_KeepAliveUnexportedMethodsUsedInMethodExpressions(t *test
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
-	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
-	sel.DeclCode.IsAlive(`^\s*\$ptrType\(Foo\)\.prototype\.baz`)
+	sel.IsAlive(`type:command-line-arguments.Foo`)
+	sel.IsAlive(`func:command-line-arguments.Foo.baz`)
 }
 
 func TestDeclSelection_RemoveUnusedFuncInstance(t *testing.T) {
@@ -199,12 +199,12 @@ func TestDeclSelection_RemoveUnusedFuncInstance(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
-	sel.DeclCode.IsAlive(`^\s*Sum\[\d+ /\* float64 \*/\]`)
-	sel.DeclCode.IsAlive(`^\s*sliceType(\$\d+)? = \$sliceType\(\$Float64\)`)
+	sel.IsAlive(`func:command-line-arguments.Sum<float64>`)
+	sel.IsAlive(`anonType:command-line-arguments.sliceType$1`) // []float64
 
-	sel.DeclCode.IsDead(`^\s*Foo = function`)
-	sel.DeclCode.IsDead(`^\s*sliceType(\$\d+)? = \$sliceType\(\$Int\)`)
-	sel.DeclCode.IsDead(`^\s*Sum\[\d+ /\* int \*/\]`)
+	sel.IsDead(`func:command-line-arguments.Foo`)
+	sel.IsDead(`anonType:command-line-arguments.sliceType`) // []int
+	sel.IsDead(`func:command-line-arguments.Sum<int>`)
 }
 
 func TestDeclSelection_RemoveUnusedStructTypeInstances(t *testing.T) {
@@ -224,11 +224,11 @@ func TestDeclSelection_RemoveUnusedStructTypeInstances(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
-	sel.DeclCode.IsAlive(`^\s*Foo\[\d+ /\* int \*/\] = \$newType`)
-	sel.DeclCode.IsAlive(`^\s*\$ptrType\(Foo\[\d+ /\* int \*/\]\)\.prototype\.Bar`)
+	sel.IsAlive(`type:command-line-arguments.Foo<int>`)
+	sel.IsAlive(`func:command-line-arguments.Foo.Bar<int>`)
 
-	sel.DeclCode.IsDead(`^\s*Foo\[\d+ /\* float64 \*/\] = \$newType`)
-	sel.DeclCode.IsDead(`^\s*\$ptrType\(Foo\[\d+ /\* float64 \*/\]\)\.prototype\.Bar`)
+	sel.IsDead(`type:command-line-arguments.Foo<float64>`)
+	sel.IsDead(`func:command-line-arguments.Foo.Bar<float64>`)
 }
 
 func TestDeclSelection_RemoveUnusedInterfaceTypeInstances(t *testing.T) {
@@ -254,18 +254,18 @@ func TestDeclSelection_RemoveUnusedInterfaceTypeInstances(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
-	sel.DeclCode.IsAlive(`^\s*Baz = \$newType`)
-	sel.DeclCode.IsAlive(`^\s*Baz\.prototype\.Bar`)
-	sel.InitCode.IsDead(`\$pkg\.F64 = FooBar\[\d+ /\* float64 \*/\]`)
+	sel.IsAlive(`type:command-line-arguments.Baz`)
+	sel.IsAlive(`func:command-line-arguments.Baz.Bar`)
+	sel.IsDead(`var:command-line-arguments.F64`)
 
-	sel.DeclCode.IsAlive(`^\s*FooBar\[\d+ /\* int \*/\]`)
+	sel.IsAlive(`func:command-line-arguments.FooBar<int>`)
 	// The Foo[int] instance is defined as a parameter in FooBar[int] that is alive.
 	// However, Foo[int] isn't used directly in the code so it can be removed.
 	// JS will simply duck-type the Baz object to Foo[int] without Foo[int] specifically defined.
-	sel.DeclCode.IsDead(`^\s*Foo\[\d+ /\* int \*/\] = \$newType`)
+	sel.IsDead(`type:command-line-arguments.Foo<int>`)
 
-	sel.DeclCode.IsDead(`^\s*FooBar\[\d+ /\* float64 \*/\]`)
-	sel.DeclCode.IsDead(`^\s*Foo\[\d+ /\* float64 \*/\] = \$newType`)
+	sel.IsDead(`func:command-line-arguments.FooBar<float64>`)
+	sel.IsDead(`type:command-line-arguments.Foo<float64>`)
 }
 
 func TestDeclSelection_RemoveUnusedMethodWithDifferentSignature(t *testing.T) {
@@ -291,13 +291,13 @@ func TestDeclSelection_RemoveUnusedMethodWithDifferentSignature(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
-	sel.DeclCode.IsAlive(`^\s*Foo = \$newType`)
-	sel.DeclCode.IsAlive(`\s*\$ptrType\(Foo\)\.prototype\.Bar`)
-	sel.DeclCode.IsDead(`\s*\$ptrType\(Foo\)\.prototype\.baz`)
+	sel.IsAlive(`type:command-line-arguments.Foo`)
+	sel.IsAlive(`func:command-line-arguments.Foo.Bar`)
+	sel.IsDead(`func:command-line-arguments.Foo.baz`)
 
-	sel.DeclCode.IsAlive(`^\s*Foo2 = \$newType`)
-	sel.DeclCode.IsAlive(`\s*\$ptrType\(Foo2\)\.prototype\.Bar`)
-	sel.DeclCode.IsAlive(`\s*\$ptrType\(Foo2\)\.prototype\.baz`)
+	sel.IsAlive(`type:command-line-arguments.Foo2`)
+	sel.IsAlive(`func:command-line-arguments.Foo2.Bar`)
+	sel.IsAlive(`func:command-line-arguments.Foo2.baz`)
 }
 
 func TestDeclSelection_RemoveUnusedUnexportedMethodInstance(t *testing.T) {
@@ -322,19 +322,19 @@ func TestDeclSelection_RemoveUnusedUnexportedMethodInstance(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
-	sel.DeclCode.IsAlive(`^\s*Foo\[\d+ /\* int \*/\] = \$newType`)
-	sel.DeclCode.IsAlive(`\s*\$ptrType\(Foo\[\d+ /\* int \*/\]\)\.prototype\.Bar`)
-	sel.DeclCode.IsAlive(`\s*\$ptrType\(Foo\[\d+ /\* int \*/\]\)\.prototype\.baz`)
-	sel.DeclCode.IsAlive(`^\s*Baz\[\d+ /\* int \*/\] = \$newType`)
-	sel.DeclCode.IsAlive(`\s*\$ptrType\(Baz\[\d+ /\* int \*/\]\)\.prototype\.Bar`)
+	sel.IsAlive(`type:command-line-arguments.Foo<int>`)
+	sel.IsAlive(`func:command-line-arguments.Foo.Bar<int>`)
+	sel.IsAlive(`func:command-line-arguments.Foo.baz<int>`)
+	sel.IsAlive(`type:command-line-arguments.Baz<int>`)
+	sel.IsAlive(`func:command-line-arguments.Baz.Bar<int>`)
 
-	sel.DeclCode.IsAlive(`^\s*Foo\[\d+ /\* uint \*/\] = \$newType`)
-	sel.DeclCode.IsAlive(`\s*\$ptrType\(Foo\[\d+ /\* uint \*/\]\)\.prototype\.Bar`)
+	sel.IsAlive(`type:command-line-arguments.Foo<uint>`)
+	sel.IsAlive(`func:command-line-arguments.Foo.Bar<uint>`)
 
 	// All three below are dead because Foo[uint].baz is unused.
-	sel.DeclCode.IsDead(`\s*\$ptrType\(Foo\[\d+ /\* uint \*/\]\)\.prototype\.baz`)
-	sel.DeclCode.IsDead(`^\s*Baz\[\d+ /\* uint \*/\] = \$newType`)
-	sel.DeclCode.IsDead(`\s*\$ptrType\(Baz\[\d+ /\* uint \*/\]\)\.prototype\.Bar`)
+	sel.IsDead(`func:command-line-arguments.Foo.baz<uint>`)
+	sel.IsDead(`type:command-line-arguments.Baz<uint>`)
+	sel.IsDead(`func:command-line-arguments.Baz.Bar<uint>`)
 }
 
 func TestDeclSelection_RemoveUnusedTypeConstraint(t *testing.T) {
@@ -354,10 +354,10 @@ func TestDeclSelection_RemoveUnusedTypeConstraint(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
 
-	sel.DeclCode.IsDead(`^\s*Foo = \$newType`)
-	sel.DeclCode.IsDead(`^\s*Bar\[\d+ /\* int \*/\] = \$newType`)
-	sel.DeclCode.IsDead(`^\s*\$ptrType\(Bar\[\d+ /\* int \*/\]\)\.prototype\.Baz`)
-	sel.InitCode.IsDead(`ghost = new Bar\[\d+ /\* int \*/\]\.ptr\(7\)`)
+	sel.IsDead(`type:command-line-arguments.Foo`)
+	sel.IsDead(`type:command-line-arguments.Bar<int>`)
+	sel.IsDead(`func:command-line-arguments.Bar.Baz<int>`)
+	sel.IsDead(`var:command-line-arguments.ghost`)
 }
 
 func TestLengthParenthesizingIssue841(t *testing.T) {
@@ -403,6 +403,211 @@ func TestLengthParenthesizingIssue841(t *testing.T) {
 	if !goodFound {
 		t.Error("parenthesized length not found")
 	}
+}
+
+func TestDeclNaming_Import(t *testing.T) {
+	src1 := `
+		package main
+		
+		import (
+			newt "github.com/gopherjs/gopherjs/compiler/jorden"
+			"github.com/gopherjs/gopherjs/compiler/burke"
+			"github.com/gopherjs/gopherjs/compiler/hudson"
+		)
+
+		func main() {
+			newt.Quote()
+			burke.Quote()
+			hudson.Quote()
+		}`
+	src2 := `package jorden
+		func Quote() { println("They mostly come at night... mostly") }`
+	src3 := `package burke
+		func Quote() { println("Busy little creatures, huh?") }`
+	src4 := `package hudson
+		func Quote() { println("Game over, man! Game over!") }`
+
+	root := srctesting.ParseSources(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `jorden/rebecca.go`, Contents: []byte(src2)},
+			{Name: `burke/carter.go`, Contents: []byte(src3)},
+			{Name: `hudson/william.go`, Contents: []byte(src4)},
+		})
+
+	archives := compileProject(t, root, false)
+	checkForDeclFullNames(t, archives,
+		`import:github.com/gopherjs/gopherjs/compiler/burke`,
+		`import:github.com/gopherjs/gopherjs/compiler/hudson`,
+		`import:github.com/gopherjs/gopherjs/compiler/jorden`,
+	)
+}
+
+func TestDeclNaming_FuncAndFuncVar(t *testing.T) {
+	src := `
+		package main
+		
+		func Avasarala(value int) { println("Chrisjen", value) }
+
+		func Draper[T any](value T) { println("Bobbie", value) }
+
+		type Nagata struct{ value int }
+		func (n Nagata) Print() { println("Naomi", n.value) }
+
+		type Burton[T any] struct{ value T }
+		func (b Burton[T]) Print() { println("Amos", b.value) }
+
+		func main() {
+			Avasarala(10)
+			Draper(11)
+			Draper("Babs")
+			Nagata{value: 12}.Print()
+			Burton[int]{value: 13}.Print()
+			Burton[string]{value: "Timothy"}.Print()
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+	archives := compileProject(t, root, false)
+	checkForDeclFullNames(t, archives,
+		`funcVar:command-line-arguments.Avasarala`,
+		`func:command-line-arguments.Avasarala`,
+
+		`funcVar:command-line-arguments.Draper`,
+		`func:command-line-arguments.Draper<int>`,
+		`func:command-line-arguments.Draper<string>`,
+
+		`func:command-line-arguments.Nagata.Print`,
+
+		`typeVar:command-line-arguments.Burton`,
+		`type:command-line-arguments.Burton<int>`,
+		`type:command-line-arguments.Burton<string>`,
+		`func:command-line-arguments.Burton.Print<int>`,
+		`func:command-line-arguments.Burton.Print<string>`,
+
+		`funcVar:command-line-arguments.main`,
+		`func:command-line-arguments.main`,
+		`init:main`,
+	)
+}
+
+func TestDeclNaming_InitsAndVars(t *testing.T) {
+	src1 := `
+		package main
+		
+		import (
+			_ "github.com/gopherjs/gopherjs/compiler/spengler"
+			_ "github.com/gopherjs/gopherjs/compiler/barrett"
+			_ "github.com/gopherjs/gopherjs/compiler/tully"
+		)
+
+		var peck = "Walter"
+		func init() { println(peck) }
+
+		func main() {
+			println("Janosz Poha")
+		}`
+	src2 := `package spengler
+		func init() { println("Egon") }
+		var egie = func() { println("Dirt Farmer") }
+		func init() { egie() }`
+	src3 := `package barrett
+		func init() { println("Dana") }`
+	src4 := `package barrett
+		func init() { println("Zuul") }`
+	src5 := `package barrett
+		func init() { println("Gatekeeper") }`
+	src6 := `package tully
+		func init() { println("Louis") }`
+	src7 := `package tully
+		var keymaster = "Vinz Clortho"
+		func init() { println(keymaster) }`
+
+	root := srctesting.ParseSources(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `spengler/a.go`, Contents: []byte(src2)},
+			{Name: `barrett/a.go`, Contents: []byte(src3)},
+			{Name: `barrett/b.go`, Contents: []byte(src4)},
+			{Name: `barrett/c.go`, Contents: []byte(src5)},
+			{Name: `tully/a.go`, Contents: []byte(src6)},
+			{Name: `tully/b.go`, Contents: []byte(src7)},
+		})
+
+	archives := compileProject(t, root, false)
+	checkForDeclFullNames(t, archives,
+		// tully
+		`var:github.com/gopherjs/gopherjs/compiler/tully.keymaster`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/tully.init`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/tully.init`,
+		`func:github.com/gopherjs/gopherjs/compiler/tully.init`,
+		`func:github.com/gopherjs/gopherjs/compiler/tully.init`,
+
+		// spangler
+		`var:github.com/gopherjs/gopherjs/compiler/spengler.egie`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/spengler.init`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/spengler.init`,
+		`func:github.com/gopherjs/gopherjs/compiler/spengler.init`,
+		`func:github.com/gopherjs/gopherjs/compiler/spengler.init`,
+
+		// barrett
+		`funcVar:github.com/gopherjs/gopherjs/compiler/barrett.init`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/barrett.init`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/barrett.init`,
+		`func:github.com/gopherjs/gopherjs/compiler/barrett.init`,
+		`func:github.com/gopherjs/gopherjs/compiler/barrett.init`,
+		`func:github.com/gopherjs/gopherjs/compiler/barrett.init`,
+
+		// main
+		`var:command-line-arguments.peck`,
+		`funcVar:command-line-arguments.init`,
+		`func:command-line-arguments.init`,
+		`funcVar:command-line-arguments.main`,
+		`func:command-line-arguments.main`,
+		`init:main`,
+	)
+}
+
+func TestDeclNaming_VarsAndTypes(t *testing.T) {
+	src := `
+		package main
+		
+		var _, shawn, _ = func() (int, string, float64) {
+			return 1, "Vizzini", 3.14
+		}()
+
+		var _ = func() string {
+			return "Inigo Montoya"
+		}()
+
+		var fezzik = struct{ value int }{value: 7}
+		var inigo = struct{ value string }{value: "Montoya"}
+
+		type westley struct{ value string }
+
+		func main() {}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+
+	archives := compileProject(t, root, false)
+	checkForDeclFullNames(t, archives,
+		`var:command-line-arguments.shawn`,
+		`var:blank`,
+
+		`var:command-line-arguments.fezzik`,
+		`anonType:command-line-arguments.structType`,
+
+		`var:command-line-arguments.inigo`,
+		`anonType:command-line-arguments.structType$1`,
+
+		`typeVar:command-line-arguments.westley`,
+		`type:command-line-arguments.westley`,
+	)
 }
 
 func compareOrder(t *testing.T, sourceFiles []srctesting.Source, minify bool) {
@@ -503,10 +708,6 @@ type selectionTester struct {
 	archives     map[string]*Archive
 	packages     []*Archive
 	dceSelection map[*Decl]struct{}
-
-	DeclCode       *selectionCodeTester
-	InitCode       *selectionCodeTester
-	MethodListCode *selectionCodeTester
 }
 
 func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []srctesting.Source) *selectionTester {
@@ -539,27 +740,6 @@ func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []src
 		archives:     archives,
 		packages:     packages,
 		dceSelection: dceSelection,
-		DeclCode: &selectionCodeTester{
-			t:            t,
-			packages:     packages,
-			dceSelection: dceSelection,
-			codeName:     `DeclCode`,
-			getCode:      func(d *Decl) []byte { return d.DeclCode },
-		},
-		InitCode: &selectionCodeTester{
-			t:            t,
-			packages:     packages,
-			dceSelection: dceSelection,
-			codeName:     `InitCode`,
-			getCode:      func(d *Decl) []byte { return d.InitCode },
-		},
-		MethodListCode: &selectionCodeTester{
-			t:            t,
-			packages:     packages,
-			dceSelection: dceSelection,
-			codeName:     `MethodListCode`,
-			getCode:      func(d *Decl) []byte { return d.MethodListCode },
-		},
 	}
 }
 
@@ -573,65 +753,77 @@ func (st *selectionTester) PrintDeclStatus() {
 			} else {
 				st.t.Logf(`  [Dead]  %q`, decl.FullName)
 			}
-			if len(decl.DeclCode) > 0 {
-				st.t.Logf(`     DeclCode: %q`, string(decl.DeclCode))
-			}
-			if len(decl.InitCode) > 0 {
-				st.t.Logf(`     InitCode: %q`, string(decl.InitCode))
-			}
-			if len(decl.MethodListCode) > 0 {
-				st.t.Logf(`     MethodListCode: %q`, string(decl.MethodListCode))
-			}
-			if len(decl.TypeInitCode) > 0 {
-				st.t.Logf(`     TypeInitCode: %q`, string(decl.TypeInitCode))
-			}
-			if len(decl.Vars) > 0 {
-				st.t.Logf(`     Vars: %v`, decl.Vars)
-			}
 		}
 	}
 }
 
-type selectionCodeTester struct {
-	t            *testing.T
-	packages     []*Archive
-	dceSelection map[*Decl]struct{}
-	codeName     string
-	getCode      func(*Decl) []byte
-}
-
-func (ct *selectionCodeTester) IsAlive(pattern string) {
-	ct.t.Helper()
-	decl := ct.FindDeclMatch(pattern)
-	if _, ok := ct.dceSelection[decl]; !ok {
-		ct.t.Error(`expected the`, ct.codeName, `code to be alive:`, pattern)
+func (st *selectionTester) IsAlive(declFullName string) {
+	st.t.Helper()
+	decl := st.FindDecl(declFullName)
+	if _, ok := st.dceSelection[decl]; !ok {
+		st.t.Error(`expected the decl to be alive:`, declFullName)
 	}
 }
 
-func (ct *selectionCodeTester) IsDead(pattern string) {
-	ct.t.Helper()
-	decl := ct.FindDeclMatch(pattern)
-	if _, ok := ct.dceSelection[decl]; ok {
-		ct.t.Error(`expected the`, ct.codeName, `code to be dead:`, pattern)
+func (st *selectionTester) IsDead(declFullName string) {
+	st.t.Helper()
+	decl := st.FindDecl(declFullName)
+	if _, ok := st.dceSelection[decl]; ok {
+		st.t.Error(`expected the decl to be dead:`, declFullName)
 	}
 }
 
-func (ct *selectionCodeTester) FindDeclMatch(pattern string) *Decl {
-	ct.t.Helper()
-	regex := regexp.MustCompile(pattern)
+func (st *selectionTester) FindDecl(declFullName string) *Decl {
+	st.t.Helper()
 	var found *Decl
-	for _, pkg := range ct.packages {
+	for _, pkg := range st.packages {
 		for _, d := range pkg.Declarations {
-			if regex.Match(ct.getCode(d)) {
+			if d.FullName == declFullName {
 				if found != nil {
-					ct.t.Fatal(`multiple`, ct.codeName, `found containing pattern:`, pattern)
+					st.t.Fatal(`multiple decls found with the name`, declFullName)
 				}
 				found = d
 			}
 		}
 	}
 	if found == nil {
-		ct.t.Fatal(ct.codeName, `not found with pattern:`, pattern)
+		st.t.Fatal(`no decl found by the name`, declFullName)
 	}
 	return found
+}
+
+func checkForDeclFullNames(t *testing.T, archives map[string]*Archive, expectedFullNames ...string) {
+	t.Helper()
+
+	expected := map[string]int{}
+	counts := map[string]int{}
+	for _, name := range expectedFullNames {
+		expected[name]++
+		counts[name]++
+	}
+	for _, pkg := range archives {
+		for _, decl := range pkg.Declarations {
+			if found, has := expected[decl.FullName]; has {
+				if found <= 0 {
+					t.Errorf(`decl name existed more than %d time(s): %q`, counts[decl.FullName], decl.FullName)
+				} else {
+					expected[decl.FullName]--
+				}
+			}
+		}
+	}
+	for imp, found := range expected {
+		if found > 0 {
+			t.Errorf(`missing %d decl name(s): %q`, found, imp)
+		}
+	}
+	if t.Failed() {
+		t.Log("Declarations:")
+		for pkgName, pkg := range archives {
+			t.Logf("\t%q", pkgName)
+			for i, decl := range pkg.Declarations {
+				t.Logf("\t\t%d:\t%q", i, decl.FullName)
+			}
+		}
+	}
 }

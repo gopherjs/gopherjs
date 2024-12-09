@@ -1,6 +1,8 @@
 package dce
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"go/types"
 	"sort"
@@ -116,4 +118,40 @@ func (id *Info) getDeps() []string {
 	}
 	sort.Strings(deps)
 	return deps
+}
+
+type serializableInfo struct {
+	Alive        bool
+	ObjectFilter string
+	MethodFilter string
+	Deps         []string
+}
+
+func (id *Info) GobEncode() ([]byte, error) {
+	si := serializableInfo{
+		Alive:        id.alive,
+		ObjectFilter: id.objectFilter,
+		MethodFilter: id.methodFilter,
+		Deps:         id.getDeps(),
+	}
+
+	buf := &bytes.Buffer{}
+	err := gob.NewEncoder(buf).Encode(si)
+	return buf.Bytes(), err
+}
+
+func (id *Info) GobDecode(data []byte) error {
+	var si serializableInfo
+	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(&si); err != nil {
+		return err
+	}
+
+	id.alive = si.Alive
+	id.objectFilter = si.ObjectFilter
+	id.methodFilter = si.MethodFilter
+	id.deps = make(map[string]struct{}, len(si.Deps))
+	for _, dep := range si.Deps {
+		id.deps[dep] = struct{}{}
+	}
+	return nil
 }

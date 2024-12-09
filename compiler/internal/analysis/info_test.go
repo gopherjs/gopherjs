@@ -1691,6 +1691,7 @@ func newBlockingTestWithOtherPackage(t *testing.T, testSrc string, otherSrc stri
 }
 
 func (bt *blockingTest) assertFuncInstCount(expCount int) {
+	bt.f.T.Helper()
 	if got := bt.pkgInfo.funcInstInfos.Len(); got != expCount {
 		bt.f.T.Errorf(`Got %d function instance infos but expected %d.`, got, expCount)
 		for i, inst := range bt.pkgInfo.funcInstInfos.Keys() {
@@ -1700,6 +1701,7 @@ func (bt *blockingTest) assertFuncInstCount(expCount int) {
 }
 
 func (bt *blockingTest) assertFuncLitCount(expCount int) {
+	bt.f.T.Helper()
 	got := 0
 	for _, fis := range bt.pkgInfo.funcLitInfos {
 		got += len(fis)
@@ -1722,12 +1724,14 @@ func (bt *blockingTest) assertFuncLitCount(expCount int) {
 }
 
 func (bt *blockingTest) assertBlocking(funcName string) {
+	bt.f.T.Helper()
 	if !bt.isTypesFuncBlocking(funcName) {
 		bt.f.T.Errorf(`Got %q as not blocking but expected it to be blocking.`, funcName)
 	}
 }
 
 func (bt *blockingTest) assertNotBlocking(funcName string) {
+	bt.f.T.Helper()
 	if bt.isTypesFuncBlocking(funcName) {
 		bt.f.T.Errorf(`Got %q as blocking but expected it to be not blocking.`, funcName)
 	}
@@ -1748,6 +1752,7 @@ func getFuncDeclName(fd *ast.FuncDecl) string {
 }
 
 func (bt *blockingTest) isTypesFuncBlocking(funcName string) bool {
+	bt.f.T.Helper()
 	var decl *ast.FuncDecl
 	ast.Inspect(bt.file, func(n ast.Node) bool {
 		if f, ok := n.(*ast.FuncDecl); ok && getFuncDeclName(f) == funcName {
@@ -1771,18 +1776,21 @@ func (bt *blockingTest) isTypesFuncBlocking(funcName string) bool {
 }
 
 func (bt *blockingTest) assertBlockingLit(lineNo int, typeArgsStr string) {
+	bt.f.T.Helper()
 	if !bt.isFuncLitBlocking(lineNo, typeArgsStr) {
 		bt.f.T.Errorf(`Got FuncLit at line %d with type args %q as not blocking but expected it to be blocking.`, lineNo, typeArgsStr)
 	}
 }
 
 func (bt *blockingTest) assertNotBlockingLit(lineNo int, typeArgsStr string) {
+	bt.f.T.Helper()
 	if bt.isFuncLitBlocking(lineNo, typeArgsStr) {
 		bt.f.T.Errorf(`Got FuncLit at line %d with type args %q as blocking but expected it to be not blocking.`, lineNo, typeArgsStr)
 	}
 }
 
 func (bt *blockingTest) isFuncLitBlocking(lineNo int, typeArgsStr string) bool {
+	bt.f.T.Helper()
 	fnLit := srctesting.GetNodeAtLineNo[*ast.FuncLit](bt.file, bt.f.FileSet, lineNo)
 	if fnLit == nil {
 		bt.f.T.Fatalf(`FuncLit on line %d not found in the AST.`, lineNo)
@@ -1808,18 +1816,21 @@ func (bt *blockingTest) isFuncLitBlocking(lineNo int, typeArgsStr string) bool {
 }
 
 func (bt *blockingTest) assertBlockingInst(instanceStr string) {
+	bt.f.T.Helper()
 	if !bt.isFuncInstBlocking(instanceStr) {
 		bt.f.T.Errorf(`Got function instance of %q as not blocking but expected it to be blocking.`, instanceStr)
 	}
 }
 
 func (bt *blockingTest) assertNotBlockingInst(instanceStr string) {
+	bt.f.T.Helper()
 	if bt.isFuncInstBlocking(instanceStr) {
 		bt.f.T.Errorf(`Got function instance of %q as blocking but expected it to be not blocking.`, instanceStr)
 	}
 }
 
 func (bt *blockingTest) isFuncInstBlocking(instanceStr string) bool {
+	bt.f.T.Helper()
 	instances := bt.pkgInfo.funcInstInfos.Keys()
 	for _, inst := range instances {
 		if inst.String() == instanceStr {
@@ -1835,18 +1846,21 @@ func (bt *blockingTest) isFuncInstBlocking(instanceStr string) bool {
 }
 
 func (bt *blockingTest) assertBlockingReturn(lineNo int, typeArgsStr string) {
+	bt.f.T.Helper()
 	if !bt.isReturnBlocking(lineNo, typeArgsStr) {
 		bt.f.T.Errorf(`Got return at line %d (%q) as not blocking but expected it to be blocking.`, lineNo, typeArgsStr)
 	}
 }
 
 func (bt *blockingTest) assertNotBlockingReturn(lineNo int, typeArgsStr string) {
+	bt.f.T.Helper()
 	if bt.isReturnBlocking(lineNo, typeArgsStr) {
 		bt.f.T.Errorf(`Got return at line %d (%q) as blocking but expected it to be not blocking.`, lineNo, typeArgsStr)
 	}
 }
 
 func (bt *blockingTest) isReturnBlocking(lineNo int, typeArgsStr string) bool {
+	bt.f.T.Helper()
 	ret := srctesting.GetNodeAtLineNo[*ast.ReturnStmt](bt.file, bt.f.FileSet, lineNo)
 	if ret == nil {
 		bt.f.T.Fatalf(`ReturnStmt on line %d not found in the AST.`, lineNo)

@@ -428,7 +428,7 @@ func TestArchiveSelectionAfterSerialization(t *testing.T) {
 	origJS := renderPackage(t, origArchives[rootPath], false)
 	readJS := renderPackage(t, readArchives[rootPath], false)
 
-	if diff := cmp.Diff(string(origJS), string(readJS)); diff != "" {
+	if diff := cmp.Diff(origJS, readJS); diff != "" {
 		t.Errorf("the reloaded files produce different JS:\n%s", diff)
 	}
 }
@@ -444,12 +444,12 @@ func compareOrder(t *testing.T, sourceFiles []srctesting.Source, minify bool) {
 
 	outputReversed := compile(t, sourceFiles, minify)
 
-	if diff := cmp.Diff(string(outputNormal), string(outputReversed)); diff != "" {
+	if diff := cmp.Diff(outputNormal, outputReversed); diff != "" {
 		t.Errorf("files in different order produce different JS:\n%s", diff)
 	}
 }
 
-func compile(t *testing.T, sourceFiles []srctesting.Source, minify bool) []byte {
+func compile(t *testing.T, sourceFiles []srctesting.Source, minify bool) string {
 	t.Helper()
 	rootPkg := srctesting.ParseSources(t, sourceFiles, nil)
 	archives := compileProject(t, rootPkg, minify)
@@ -460,11 +460,7 @@ func compile(t *testing.T, sourceFiles []srctesting.Source, minify bool) []byte 
 		t.Fatalf(`root package not found in archives: %s`, path)
 	}
 
-	b := renderPackage(t, a, minify)
-	if len(b) == 0 {
-		t.Fatal(`compile had no output`)
-	}
-	return b
+	return renderPackage(t, a, minify)
 }
 
 // compileProject compiles the given root package and all packages imported by the root.
@@ -563,7 +559,7 @@ func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPa
 	return reloadCache
 }
 
-func renderPackage(t *testing.T, archive *Archive, minify bool) []byte {
+func renderPackage(t *testing.T, archive *Archive, minify bool) string {
 	t.Helper()
 
 	sel := &dce.Selector[*Decl]{}
@@ -578,7 +574,11 @@ func renderPackage(t *testing.T, archive *Archive, minify bool) []byte {
 		t.Fatal(err)
 	}
 
-	return buf.Bytes()
+	b := buf.String()
+	if len(b) == 0 {
+		t.Fatal(`render package had no output`)
+	}
+	return b
 }
 
 type selectionTester struct {

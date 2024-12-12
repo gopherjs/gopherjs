@@ -92,6 +92,9 @@ func (bc BuildCache) String() string {
 
 // StoreArchive compiled archive in the cache. Any error inside this method
 // will cause the cache not to be persisted.
+//
+// The passed in buildTime is used to determine if the archive is out-of-date when reloaded.
+// Typically it should be set to the srcModTime or time.Now().
 func (bc *BuildCache) StoreArchive(a *compiler.Archive, buildTime time.Time) {
 	if bc == nil {
 		return // Caching is disabled.

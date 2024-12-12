@@ -317,7 +317,7 @@ func ReadArchive(importPath string, r io.Reader, srcModTime time.Time, imports m
 // WriteArchive writes compiled package archive on disk for later reuse.
 //
 // The passed in buildTime is used to determine if the archive is out-of-date.
-// It should be set to time.Now() typically but it exposed for testing purposes.
+// Typically it should be set to the srcModTime or time.Now() but it is exposed for testing purposes.
 func WriteArchive(a *Archive, buildTime time.Time, w io.Writer) error {
 	exportData := new(bytes.Buffer)
 	if a.Package != nil {

@@ -1035,7 +1035,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		fmt.Println(pkg.ImportPath)
 	}
 
-	s.buildCache.StoreArchive(archive, pkg.SrcModTime)
+	s.buildCache.StoreArchive(archive, time.Now())
 	s.UpToDateArchives[pkg.ImportPath] = archive
 
 	return archive, nil

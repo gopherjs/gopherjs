@@ -1,21 +1,17 @@
 package compiler
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
 	"strings"
-	"time"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/gopherjs/gopherjs/internal/experiments"
-	"golang.org/x/tools/go/gcexportdata"
 	"golang.org/x/tools/go/types/typeutil"
 )
 
@@ -285,25 +281,15 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		return nil, rootCtx.pkgCtx.errList
 	}
 
-	exportData := new(bytes.Buffer)
-	if err := gcexportdata.Write(exportData, nil, typesPkg); err != nil {
-		return nil, fmt.Errorf("failed to write export data: %w", err)
-	}
-	encodedFileSet := new(bytes.Buffer)
-	if err := srcs.FileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
-		return nil, err
-	}
-
 	return &Archive{
 		ImportPath:   srcs.ImportPath,
 		Name:         typesPkg.Name(),
 		Imports:      importedPaths,
-		ExportData:   exportData.Bytes(),
+		Package:      typesPkg,
 		Declarations: allDecls,
-		FileSet:      encodedFileSet.Bytes(),
+		FileSet:      srcs.FileSet,
 		Minified:     minify,
 		GoLinknames:  goLinknames,
-		BuildTime:    time.Now(),
 	}, nil
 }
 

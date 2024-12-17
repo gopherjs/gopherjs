@@ -43,7 +43,7 @@ func mainFuncDeclFullName() string {
 
 // funcDeclFullName returns a name for a package-level function
 // declaration for the given instance of a function.
-// The name is unique except unless the function is an `init` function.
+// The name is unique unless the function is an `init` function.
 func funcDeclFullName(inst typeparams.Instance) string {
 	return `func:` + inst.String()
 }

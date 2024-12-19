@@ -79,7 +79,7 @@ func newLitDefer(lit *ast.FuncLit, typeArgs typesutil.TypeList) *deferStmt {
 
 // IsBlocking determines if the defer statement is blocking or not.
 func (d *deferStmt) IsBlocking(info *Info) bool {
-	// If the instance or the literal is set then we can look up the blocking,
+	// If the object or the literal is set then we can look up the blocking,
 	// otherwise assume blocking because otherwise the defer wouldn't
 	// have been recorded.
 	if d.obj != nil {

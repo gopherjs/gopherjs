@@ -183,12 +183,9 @@ func (ic *ImportContext) isBlocking(inst typeparams.Instance) bool {
 		panic(err)
 	}
 
-	// TODO(grantnelson-wf): f.FullName() does not differentiate between
-	// different instantiations of the same generic function. This needs to be
-	// fixed when the declaration names are updated to better support instances.
-	fullName := f.FullName()
+	fullName := funcDeclFullName(inst)
 	for _, d := range archive.Declarations {
-		if string(d.FullName) == fullName {
+		if d.FullName == fullName {
 			return d.Blocking
 		}
 	}

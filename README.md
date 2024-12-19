@@ -3,6 +3,7 @@
 [![GoDoc](https://godoc.org/github.com/gopherjs/gopherjs/js?status.svg)](https://godoc.org/github.com/gopherjs/gopherjs/js)
 [![Sourcegraph](https://sourcegraph.com/github.com/gopherjs/gopherjs/-/badge.svg)](https://sourcegraph.com/github.com/gopherjs/gopherjs?badge)
 [![Github Actions CI](https://github.com/gopherjs/gopherjs/actions/workflows/ci.yaml/badge.svg)](https://github.com/gopherjs/gopherjs/actions/workflows/ci.yaml)
+[![go-recipes](https://raw.githubusercontent.com/nikolaydubina/go-recipes/main/badge.svg?raw=true)](https://github.com/nikolaydubina/go-recipes)
 
 GopherJS compiles Go code ([go.dev](https://go.dev/)) to pure JavaScript code. Its main purpose is to give you the opportunity to write front-end code in Go which will still run in all browsers.
 

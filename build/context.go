@@ -320,7 +320,7 @@ func overlayCtx(e Env) *simpleCtx {
 // packages in case they are not present in the user's source tree.
 func gopherjsCtx(e Env) *simpleCtx {
 	gopherjsRoot := filepath.Join(e.GOROOT, "src", "github.com", "gopherjs", "gopherjs")
-	return embeddedCtx(&withPrefix{gopherjspkg.FS, gopherjsRoot}, e)
+	return embeddedCtx(&withPrefix{fs: gopherjspkg.FS, prefix: gopherjsRoot}, e)
 }
 
 // goCtx creates simpleCtx that imports from the real file system GOROOT, GOPATH

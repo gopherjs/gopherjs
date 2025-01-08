@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 	"github.com/shurcooL/go/importgraphutil"
 )
@@ -91,7 +92,7 @@ func TestNativesDontImportExtraPackages(t *testing.T) {
 
 				// Use parseAndAugment to get a list of augmented AST files.
 				fset := token.NewFileSet()
-				files, _, err := parseAndAugment(stdOnly, pkgVariant, pkgVariant.IsTest, fset)
+				files, _, err := parseAndAugment(stdOnly, pkgVariant, fset)
 				if err != nil {
 					t.Fatalf("github.com/gopherjs/gopherjs/build.parseAndAugment: %v", err)
 				}
@@ -423,7 +424,7 @@ func TestOverlayAugmentation(t *testing.T) {
 
 			overrides := map[string]overrideInfo{}
 			augmentOverlayFile(fileSrc, overrides)
-			pruneImports(fileSrc)
+			astutil.PruneImports(fileSrc)
 
 			got := srctesting.Format(t, f.FileSet, fileSrc)
 
@@ -724,7 +725,7 @@ func TestOriginalAugmentation(t *testing.T) {
 
 			augmentOriginalImports(importPath, fileSrc)
 			augmentOriginalFile(fileSrc, test.info)
-			pruneImports(fileSrc)
+			astutil.PruneImports(fileSrc)
 
 			got := srctesting.Format(t, f.FileSet, fileSrc)
 

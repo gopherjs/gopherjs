@@ -567,7 +567,7 @@ func TestSqueezeIdents(t *testing.T) {
 				input[i] = ast.NewIdent(strconv.Itoa(i))
 			}
 
-			result := Squeeze(input)
+			result := squeeze(input)
 			if len(result) != len(test.assign) {
 				t.Errorf("Squeeze() returned a slice %d long, want %d", len(result), len(test.assign))
 			}
@@ -584,6 +584,567 @@ func TestSqueezeIdents(t *testing.T) {
 				} else if id != nil {
 					t.Errorf(`Squeeze() didn't clear out tail of slice, want %d nil`, i)
 				}
+			}
+		})
+	}
+}
+
+func TestPruneImports(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: `no imports`,
+			src: `package testpackage
+				func foo() {}`,
+			want: `package testpackage
+				func foo() {}`,
+		}, {
+			name: `keep used imports`,
+			src: `package testpackage
+				import "fmt"
+				func foo() { fmt.Println("foo") }`,
+			want: `package testpackage
+				import "fmt"
+				func foo() { fmt.Println("foo") }`,
+		}, {
+			name: `remove imports that are not used`,
+			src: `package testpackage
+				import "fmt"
+				func foo() { }`,
+			want: `package testpackage
+				func foo() { }`,
+		}, {
+			name: `remove imports that are unused but masked by an object`,
+			src: `package testpackage
+				import "fmt"
+				var fmt = "format"
+				func foo() string { return fmt }`,
+			want: `package testpackage
+				var fmt = "format"
+				func foo() string { return fmt }`,
+		}, {
+			name: `remove imports from empty file`,
+			src: `package testpackage
+				import "fmt"
+				import _ "unsafe"`,
+			want: `package testpackage`,
+		}, {
+			name: `remove imports from empty file except for unsafe when linking`,
+			src: `package testpackage
+				import "fmt"
+				import "embed"
+
+				//go:linkname foo runtime.foo
+				import "unsafe"`,
+			want: `package testpackage
+
+				//go:linkname foo runtime.foo
+				import _ "unsafe"`,
+		}, {
+			name: `keep embed imports when embedding`,
+			src: `package testpackage
+				import "fmt"
+				import "embed"
+				import "unsafe"
+
+				//go:embed "foo.txt"
+				var foo string`,
+			want: `package testpackage
+				import _ "embed"
+
+				//go:embed "foo.txt"
+				var foo string`,
+		}, {
+			name: `keep imports that just needed an underscore`,
+			src: `package testpackage
+				import "embed"
+				//go:linkname foo runtime.foo
+				import "unsafe"
+				//go:embed "foo.txt"
+				var foo string`,
+			want: `package testpackage
+				import _ "embed"
+				//go:linkname foo runtime.foo
+				import _ "unsafe"
+				//go:embed "foo.txt"
+				var foo string`,
+		}, {
+			name: `keep imports without names`,
+			src: `package testpackage
+				import _ "fmt"
+				import "log"
+				import . "math"
+
+				var foo string`,
+			want: `package testpackage
+				import _ "fmt"
+
+				import . "math"
+
+				var foo string`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			st := srctesting.New(t)
+
+			srcFile := st.Parse(`testSrc.go`, test.src)
+			PruneImports(srcFile)
+			got := srctesting.Format(t, st.FileSet, srcFile)
+
+			// parse and format the expected result so that formatting matches
+			wantFile := st.Parse(`testWant.go`, test.want)
+			want := srctesting.Format(t, st.FileSet, wantFile)
+
+			if got != want {
+				t.Errorf("Unexpected resulting AST after PruneImports:\n\tgot:  %q\n\twant: %q", got, want)
+			}
+		})
+	}
+}
+
+func TestFinalizeRemovals(t *testing.T) {
+	tests := []struct {
+		name       string
+		src        string
+		perforator func(f *ast.File)
+		want       string
+	}{
+		{
+			name: `no removals`,
+			src: `package testpackage
+				// foo took a journey
+				func foo() {}
+				// bar went home
+				func bar[T any](v T) T { return v }
+				// baz is a mystery
+				var baz int = 42`,
+			perforator: func(f *ast.File) {},
+			want: `package testpackage
+				// foo took a journey
+				func foo() {}
+				// bar went home
+				func bar[T any](v T) T { return v }
+				// baz is a mystery
+				var baz int = 42`,
+		}, {
+			name: `removal first decl`,
+			src: `package testpackage
+				// foo took a journey
+				func foo() {}
+				// bar went home
+				func bar[T any](v T) T { return v }
+				// baz is a mystery
+				var baz int = 42`,
+			perforator: func(f *ast.File) {
+				f.Decls[0] = nil
+			},
+			want: `package testpackage
+				// bar went home
+				func bar[T any](v T) T { return v }
+				// baz is a mystery
+				var baz int = 42`,
+		}, {
+			name: `removal middle decl`,
+			src: `package testpackage
+				// foo took a journey
+				func foo() {}
+				// bar went home
+				func bar[T any](v T) T { return v }
+				// baz is a mystery
+				var baz int = 42`,
+			perforator: func(f *ast.File) {
+				f.Decls[1] = nil
+			},
+			want: `package testpackage
+				// foo took a journey
+				func foo() {}
+				// baz is a mystery
+				var baz int = 42`,
+		}, {
+			name: `removal last decl`,
+			src: `package testpackage
+				// foo took a journey
+				func foo() {}
+				// bar went home
+				func bar[T any](v T) T { return v }
+				// baz is a mystery
+				var baz int = 42`,
+			perforator: func(f *ast.File) {
+				f.Decls[len(f.Decls)-1] = nil
+			},
+			want: `package testpackage
+				// foo took a journey
+				func foo() {}
+				// bar went home
+				func bar[T any](v T) T { return v }`,
+		}, {
+			name: `removal one whole value spec`,
+			src: `package testpackage
+				var (
+					foo string   = "foo"
+					bar, baz int = 42, 36
+				)`,
+			perforator: func(f *ast.File) {
+				f.Decls[0].(*ast.GenDecl).Specs[1] = nil
+			},
+			want: `package testpackage
+				var (
+					foo string = "foo"
+				)`,
+		}, {
+			name: `removal part of one value spec`,
+			src: `package testpackage
+				var (
+					foo string   = "foo"
+					bar, baz int = 42, 36
+				)`,
+			perforator: func(f *ast.File) {
+				spec := f.Decls[0].(*ast.GenDecl).Specs[1].(*ast.ValueSpec)
+				spec.Names[1] = nil
+				spec.Values[1] = nil
+			},
+			want: `package testpackage
+				var (
+					foo string = "foo"
+					bar int    = 42
+				)`,
+		}, {
+			name: `removal all parts of one value spec`,
+			src: `package testpackage
+				var (
+					foo string   = "foo"
+					bar, baz int = 42, 36
+				)`,
+			perforator: func(f *ast.File) {
+				spec := f.Decls[0].(*ast.GenDecl).Specs[1].(*ast.ValueSpec)
+				spec.Names[0] = nil
+				spec.Values[0] = nil
+				spec.Names[1] = nil
+				spec.Values[1] = nil
+			},
+			want: `package testpackage
+				var (
+					foo string = "foo"
+				)`,
+		},
+		{
+			name: `removal all value specs`,
+			src: `package testpackage
+				var (
+					foo string   = "foo"
+					bar, baz int = 42, 36
+				)`,
+			perforator: func(f *ast.File) {
+				decl := f.Decls[0].(*ast.GenDecl)
+				decl.Specs[0] = nil
+				decl.Specs[1] = nil
+			},
+			want: `package testpackage`,
+		}, {
+			name: `removal one type spec`,
+			src: `package testpackage
+				type (
+					foo interface{ String() string }
+					bar struct{ baz int }
+				)`,
+			perforator: func(f *ast.File) {
+				decl := f.Decls[0].(*ast.GenDecl)
+				decl.Specs[0] = nil
+			},
+			want: `package testpackage
+				type (
+					bar struct{ baz int }
+				)`,
+		}, {
+			name: `removal all type specs`,
+			src: `package testpackage
+				type (
+					foo interface{ String() string }
+					bar struct{ baz int }
+				)`,
+			perforator: func(f *ast.File) {
+				decl := f.Decls[0].(*ast.GenDecl)
+				decl.Specs[0] = nil
+				decl.Specs[1] = nil
+			},
+			want: `package testpackage`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			st := srctesting.New(t)
+
+			srcFile := st.Parse(`testSrc.go`, test.src)
+			test.perforator(srcFile)
+			FinalizeRemovals(srcFile)
+			got := srctesting.Format(t, st.FileSet, srcFile)
+
+			// parse and format the expected result so that formatting matches
+			wantFile := st.Parse(`testWant.go`, test.want)
+			want := srctesting.Format(t, st.FileSet, wantFile)
+
+			if got != want {
+				t.Errorf("Unexpected resulting AST:\n\tgot:  %q\n\twant: %q", got, want)
+			}
+		})
+	}
+}
+
+func TestConcatenateFiles(t *testing.T) {
+	tests := []struct {
+		name    string
+		srcHead string
+		srcTail string
+		want    string
+		expErr  string
+	}{
+		{
+			name: `add a method with a comment`,
+			srcHead: `package testpackage
+					// foo is an original method.
+					func foo() {}`,
+			srcTail: `package testpackage
+					// bar is a concatenated method
+					// from an additional override file.
+					func bar() {}`,
+			want: `package testpackage
+					// foo is an original method.
+					func foo() {}
+					// bar is a concatenated method
+					// from an additional override file.
+					func bar() {}`,
+		}, {
+			name: `merge existing singular unnamed imports`,
+			srcHead: `package testpackage
+					import "fmt"
+					import "bytes"
+					
+					func prime(str fmt.Stringer) *bytes.Buffer {
+						return bytes.NewBufferString(str.String())
+					}`,
+			srcTail: `package testpackage
+					import "bytes"
+					import "fmt"
+					
+					func cat(strs ...fmt.Stringer) fmt.Stringer {
+						buf := &bytes.Buffer{}
+						for _, str := range strs {
+							buf.WriteString(str.String())
+						}
+						return buf
+					}`,
+			want: `package testpackage
+					import (
+						"bytes"
+						"fmt"
+					)
+					
+					func prime(str fmt.Stringer) *bytes.Buffer {
+						return bytes.NewBufferString(str.String())
+					}
+					func cat(strs ...fmt.Stringer) fmt.Stringer {
+						buf := &bytes.Buffer{}
+						for _, str := range strs {
+							buf.WriteString(str.String())
+						}
+						return buf
+					}`,
+		}, {
+			name: `merge existing named imports`,
+			srcHead: `package testpackage
+					import (
+						foo "fmt"
+						bar "bytes"
+					)
+					func prime(str foo.Stringer) *bar.Buffer {
+						return bar.NewBufferString(str.String())
+					}`,
+			srcTail: `package testpackage
+					import (
+						bar "bytes"
+						foo "fmt"
+					)
+					func cat(strs ...foo.Stringer) foo.Stringer {
+						buf := &bar.Buffer{}
+						for _, str := range strs {
+							buf.WriteString(str.String())
+						}
+						return buf
+					}`,
+			want: `package testpackage
+					import (
+						bar "bytes"
+						foo "fmt"
+					)
+					
+					func prime(str foo.Stringer) *bar.Buffer {
+						return bar.NewBufferString(str.String())
+					}
+					func cat(strs ...foo.Stringer) foo.Stringer {
+						buf := &bar.Buffer{}
+						for _, str := range strs {
+							buf.WriteString(str.String())
+						}
+						return buf
+					}`,
+		}, {
+			name: `merge imports that don't overlap`,
+			srcHead: `package testpackage
+					import (
+						"fmt"
+						"bytes"
+					)
+					func prime(str fmt.Stringer) *bytes.Buffer {
+						return bytes.NewBufferString(str.String())
+					}`,
+			srcTail: `package testpackage
+					import "math"
+					import "log"
+					func NaNaNaBatman(name string, value float64) {
+						if math.IsNaN(value) {
+							log.Println("Warning: "+name+" is NaN")
+						}
+					}`,
+			want: `package testpackage
+					import (
+						"bytes"
+						"fmt"
+						"log"
+						"math"
+					)
+					func prime(str fmt.Stringer) *bytes.Buffer {
+						return bytes.NewBufferString(str.String())
+					}
+					func NaNaNaBatman(name string, value float64) {
+						if math.IsNaN(value) {
+							log.Println("Warning: " + name + " is NaN")
+						}
+					}`,
+		}, {
+			name: `merge two package comments`,
+			srcHead: `// Original package comment
+					package testpackage
+					func foo() {}`,
+			srcTail: `// Additional package comment
+					package testpackage
+					var bar int`,
+			want: `// Original package comment
+
+					// Additional package comment
+					package testpackage
+					func foo() {}
+					var bar int`,
+		}, {
+			name: `take package comment from tail`,
+			srcHead: `package testpackage
+					func foo() {}`,
+			srcTail: `// Additional package comment
+					package testpackage
+					var bar int`,
+			want: `// Additional package comment
+					package testpackage
+					func foo() {}
+					var bar int`,
+		}, {
+			name: `packages with different package names`,
+			srcHead: `package testpackage
+					func foo() {}`,
+			srcTail: `package otherTestPackage
+					func bar() {}`,
+			expErr: `can not concatenate files with different package names: "testpackage" != "otherTestPackage"`,
+		}, {
+			name: `import mismatch with one named`,
+			srcHead: `package testpackage
+					import "fmt"
+					func foo() { fmt.Println("foo") }`,
+			srcTail: `package testpackage
+					import f1 "fmt"
+					func bar() { f1.Println("bar") }`,
+			expErr: `import from of "fmt" can not be concatenated with different name: "fmt" != "f1"`,
+		}, {
+			name: `import mismatch with both named`,
+			srcHead: `package testpackage
+					import f1 "fmt"
+					func foo() { f1.Println("foo") }`,
+			srcTail: `package testpackage
+					import f2 "fmt"
+					func bar() { f2.Println("bar") }`,
+			expErr: `import from of "fmt" can not be concatenated with different name: "f1" != "f2"`,
+		}, {
+			name: `import mismatch with old being blank`,
+			srcHead: `package testpackage
+					import _ "unsafe"
+					//go:linkname foo runtime.foo
+					func bar()`,
+			srcTail: `package testpackage
+					import "unsafe"
+					func foo() unsafe.Pointer { return nil }`,
+			want: `package testpackage
+					import "unsafe"
+					//go:linkname foo runtime.foo
+					func bar()
+					func foo() unsafe.Pointer { return nil }`,
+		}, {
+			name: `import mismatch with new being blank`,
+			srcHead: `package testpackage
+					import "unsafe"
+					func foo() unsafe.Pointer { return nil }`,
+			srcTail: `package testpackage
+					import _ "unsafe"
+					//go:linkname foo runtime.foo
+					func bar()`,
+			want: `package testpackage
+					import "unsafe"
+					func foo() unsafe.Pointer { return nil }
+					//go:linkname foo runtime.foo
+					func bar()`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			st := srctesting.New(t)
+			if (len(test.want) > 0) == (len(test.expErr) > 0) {
+				t.Fatal(`One and only one of "want" and "expErr" must be set`)
+			}
+
+			headFile := st.Parse(`testHead.go`, test.srcHead)
+			tailFile := st.Parse(`testTail.go`, test.srcTail)
+			err := ConcatenateFiles(headFile, tailFile)
+			if err != nil {
+				if len(test.expErr) == 0 {
+					t.Errorf(`Expected an AST but got an error: %v`, err)
+				} else if err.Error() != test.expErr {
+					t.Errorf("Unexpected error:\n\tgot:  %q\n\twant: %q", err.Error(), test.expErr)
+				}
+				return
+			}
+
+			// The formatter expects the comment line numbers to be consecutive
+			// so that layout is preserved. We can't guarantee that the line
+			// numbers are correct after appending the files, which is fine
+			// as long as we aren't trying to format it.
+			// Setting the file comments to nil will force the formatter to use
+			// the comments on the AST nodes when the node is reached which
+			// gives a more accurate view of the concatenated file.
+			headFile.Comments = nil
+			got := srctesting.Format(t, st.FileSet, headFile)
+			if len(test.want) == 0 {
+				t.Errorf("Expected an error but got AST:\n\tgot:  %q\n\twant: %q", got, test.expErr)
+				return
+			}
+
+			// parse and format the expected result so that formatting matches.
+			wantFile := st.Parse("testWant.go", test.want)
+			want := srctesting.Format(t, st.FileSet, wantFile)
+			if got != want {
+				t.Errorf("Unexpected resulting AST:\n\tgot:  %q\n\twant: %q", got, want)
 			}
 		})
 	}

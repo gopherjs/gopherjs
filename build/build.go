@@ -1044,6 +1044,10 @@ func (s *Session) BuildPackage(pkg *PackageData) (*ParsedPackage, error) {
 
 // CompilePackage compiles a previously prepared parsed package.
 func (s *Session) CompilePackage(pkg *ParsedPackage) (*compiler.Archive, error) {
+	if archive, ok := s.UpToDateArchives[pkg.ImportPath]; ok {
+		return archive, nil
+	}
+
 	importContext := &compiler.ImportContext{
 		Packages: s.Types,
 		Import:   s.ImportResolverFor(pkg.Dir),

@@ -143,14 +143,22 @@ func main() {
 						}
 						s.Watcher.Add(pkg.Dir)
 					}
+
 					pkg, err := xctx.Import(pkgPath, currentDirectory, 0)
 					if err != nil {
 						return err
 					}
-					archive, err := s.BuildPackage(pkg)
+
+					parsed, err := s.BuildPackage(pkg)
 					if err != nil {
 						return err
 					}
+
+					archive, err := s.CompilePackage(parsed)
+					if err != nil {
+						return err
+					}
+
 					if len(pkgs) == 1 { // Only consider writing output if single package specified.
 						if pkgObj == "" {
 							pkgObj = filepath.Base(pkg.Dir) + ".js"
@@ -215,7 +223,12 @@ func main() {
 						return err
 					}
 
-					archive, err := s.BuildPackage(pkg)
+					parsed, err := s.BuildPackage(pkg)
+					if err != nil {
+						return err
+					}
+
+					archive, err := s.CompilePackage(parsed)
 					if err != nil {
 						return err
 					}
@@ -389,7 +402,7 @@ func main() {
 			}
 			importContext := &compiler.ImportContext{
 				Packages: s.Types,
-				Import:   s.ImportResolverFor(mainPkg),
+				Import:   s.ImportResolverFor(mainPkg.Dir),
 			}
 			mainPkgArchive, err := compiler.Compile(mainPkg.ImportPath, []*ast.File{mainFile}, fset, importContext, options.Minify)
 			if err != nil {
@@ -664,7 +677,12 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 			buf := new(bytes.Buffer)
 			browserErrors := new(bytes.Buffer)
 			err := func() error {
-				archive, err := s.BuildPackage(pkg)
+				parsed, err := s.BuildPackage(pkg)
+				if err != nil {
+					return err
+				}
+
+				archive, err := s.CompilePackage(parsed)
 				if err != nil {
 					return err
 				}

@@ -744,6 +744,19 @@ func (p *PackageData) InstallPath() string {
 	return p.PkgObj
 }
 
+// ParsedPackage is the results from building a package before it is compiled.
+type ParsedPackage struct {
+	ImportPath string // import path of package ("" if unknown)
+	Dir        string // directory containing package sources
+
+	Imports []*ParsedPackage
+
+	// GoFiles is the parsed and augmented Go AST files for the package.
+	GoFiles []*ast.File
+	FSet    *token.FileSet
+	JSFiles []JSFile
+}
+
 // Session manages internal state GopherJS requires to perform a build.
 //
 // This is the main interface to GopherJS build system. Session lifetime is
@@ -758,6 +771,7 @@ type Session struct {
 	// must be cleared upon entering watching.
 	UpToDateArchives map[string]*compiler.Archive
 	Types            map[string]*types.Package
+	ParsedPackages   map[string]*ParsedPackage
 	Watcher          *fsnotify.Watcher
 }
 
@@ -768,6 +782,7 @@ func NewSession(options *Options) (*Session, error) {
 	s := &Session{
 		options:          options,
 		UpToDateArchives: make(map[string]*compiler.Archive),
+		ParsedPackages:   make(map[string]*ParsedPackage),
 	}
 	s.xctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
 	env := s.xctx.Env()
@@ -900,10 +915,16 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 		})
 	}
 
-	archive, err := s.BuildPackage(pkg)
+	parsed, err := s.BuildPackage(pkg)
 	if err != nil {
 		return err
 	}
+
+	archive, err := s.CompilePackage(parsed)
+	if err != nil {
+		return err
+	}
+
 	if s.Types["main"].Name() != "main" {
 		return fmt.Errorf("cannot build/run non-main package")
 	}
@@ -914,15 +935,14 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 //
 // Relative paths are interpreted relative to the current working dir.
 func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
-	_, archive, err := s.buildImportPathWithSrcDir(path, "")
-	return archive, err
+	return s.ImportResolverFor("")(path)
 }
 
 // buildImportPathWithSrcDir builds the package specified by the import path.
 //
 // Relative import paths are interpreted relative to the passed srcDir. If
 // srcDir is empty, current working directory is assumed.
-func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*PackageData, *compiler.Archive, error) {
+func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*PackageData, *ParsedPackage, error) {
 	pkg, err := s.xctx.Import(path, srcDir, 0)
 	if s.Watcher != nil && pkg != nil { // add watch even on error
 		s.Watcher.Add(pkg.Dir)
@@ -931,12 +951,12 @@ func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*Packag
 		return nil, nil, err
 	}
 
-	archive, err := s.BuildPackage(pkg)
+	parsed, err := s.BuildPackage(pkg)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return pkg, archive, nil
+	return pkg, parsed, nil
 }
 
 // getExeModTime will determine the mod time of the GopherJS binary
@@ -966,23 +986,26 @@ var getExeModTime = func() func() time.Time {
 }()
 
 // BuildPackage compiles an already loaded package.
-func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
-	if archive, ok := s.UpToDateArchives[pkg.ImportPath]; ok {
-		return archive, nil
+func (s *Session) BuildPackage(pkg *PackageData) (*ParsedPackage, error) {
+	// Check if the package is already built.
+	if parsed, ok := s.ParsedPackages[pkg.ImportPath]; ok {
+		return parsed, nil
 	}
 
 	if exeModTime := getExeModTime(); exeModTime.After(pkg.SrcModTime) {
 		pkg.SrcModTime = exeModTime
 	}
 
+	imports := make([]*ParsedPackage, 0, len(pkg.Imports))
 	for _, importedPkgPath := range pkg.Imports {
 		if importedPkgPath == "unsafe" {
 			continue
 		}
-		importedPkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
+		importedPkg, parsedImport, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
 		if err != nil {
 			return nil, err
 		}
+		imports = append(imports, parsedImport)
 
 		if impModTime := importedPkg.SrcModTime; impModTime.After(pkg.SrcModTime) {
 			pkg.SrcModTime = impModTime
@@ -991,15 +1014,6 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 
 	if fileModTime := pkg.FileModTime(); fileModTime.After(pkg.SrcModTime) {
 		pkg.SrcModTime = fileModTime
-	}
-
-	if !s.options.NoCache {
-		archive := s.buildCache.LoadArchive(pkg.ImportPath, pkg.SrcModTime, s.Types)
-		if archive != nil {
-			s.UpToDateArchives[pkg.ImportPath] = archive
-			// Existing archive is up to date, no need to build it from scratch.
-			return archive, nil
-		}
 	}
 
 	// Existing archive is out of date or doesn't exist, let's build the package.
@@ -1016,16 +1030,30 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		files = append(files, embed)
 	}
 
+	// Create the parsed package and cache it.
+	parsed := &ParsedPackage{
+		ImportPath: pkg.ImportPath,
+		Imports:    imports,
+		GoFiles:    files,
+		FSet:       fileSet,
+		JSFiles:    append(pkg.JSFiles, overlayJsFiles...),
+	}
+	s.ParsedPackages[pkg.ImportPath] = parsed
+	return parsed, nil
+}
+
+// CompilePackage compiles a previously prepared parsed package.
+func (s *Session) CompilePackage(pkg *ParsedPackage) (*compiler.Archive, error) {
 	importContext := &compiler.ImportContext{
 		Packages: s.Types,
-		Import:   s.ImportResolverFor(pkg),
+		Import:   s.ImportResolverFor(pkg.Dir),
 	}
-	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
+	archive, err := compiler.Compile(pkg.ImportPath, pkg.GoFiles, pkg.FSet, importContext, s.options.Minify)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, jsFile := range append(pkg.JSFiles, overlayJsFiles...) {
+	for _, jsFile := range pkg.JSFiles {
 		archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
 		archive.IncJSCode = append(archive.IncJSCode, jsFile.Content...)
 		archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
@@ -1043,20 +1071,32 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 
 // ImportResolverFor returns a function which returns a compiled package archive
 // given an import path.
-func (s *Session) ImportResolverFor(pkg *PackageData) func(string) (*compiler.Archive, error) {
+//
+// Relative import paths are interpreted relative to the passed srcDir. If
+// srcDir is empty, current working directory is assumed.
+func (s *Session) ImportResolverFor(srcDir string) func(string) (*compiler.Archive, error) {
 	return func(path string) (*compiler.Archive, error) {
 		if archive, ok := s.UpToDateArchives[path]; ok {
 			return archive, nil
 		}
-		_, archive, err := s.buildImportPathWithSrcDir(path, pkg.Dir)
-		return archive, err
+
+		_, parsed, err := s.buildImportPathWithSrcDir(path, srcDir)
+		if err != nil {
+			return nil, err
+		}
+
+		archive, err := s.CompilePackage(parsed)
+		if err != nil {
+			return nil, err
+		}
+		return archive, nil
 	}
 }
 
 // SourceMappingCallback returns a call back for compiler.SourceMapFilter
 // configured for the current build session.
 func (s *Session) SourceMappingCallback(m *sourcemap.Map) func(generatedLine, generatedColumn int, originalPos token.Position) {
-	return NewMappingCallback(m, s.xctx.Env().GOROOT, s.xctx.Env().GOPATH, s.options.MapToLocalDisk)
+	return newMappingCallback(m, s.xctx.Env().GOROOT, s.xctx.Env().GOPATH, s.options.MapToLocalDisk)
 }
 
 // WriteCommandPackage writes the final JavaScript output file at pkgObj path.
@@ -1087,21 +1127,15 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 		sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 	}
 
-	deps, err := compiler.ImportDependencies(archive, func(path string) (*compiler.Archive, error) {
-		if archive, ok := s.UpToDateArchives[path]; ok {
-			return archive, nil
-		}
-		_, archive, err := s.buildImportPathWithSrcDir(path, "")
-		return archive, err
-	})
+	deps, err := compiler.ImportDependencies(archive, s.ImportResolverFor(""))
 	if err != nil {
 		return err
 	}
 	return compiler.WriteProgramCode(deps, sourceMapFilter, s.GoRelease())
 }
 
-// NewMappingCallback creates a new callback for source map generation.
-func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localMap bool) func(generatedLine, generatedColumn int, originalPos token.Position) {
+// newMappingCallback creates a new callback for source map generation.
+func newMappingCallback(m *sourcemap.Map, goroot, gopath string, localMap bool) func(generatedLine, generatedColumn int, originalPos token.Position) {
 	return func(generatedLine, generatedColumn int, originalPos token.Position) {
 		if !originalPos.IsValid() {
 			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn})

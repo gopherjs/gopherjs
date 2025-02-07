@@ -389,7 +389,7 @@ func main() {
 			}
 			importContext := &compiler.ImportContext{
 				Packages: s.Types,
-				Import:   s.ImportResolverFor(mainPkg.Dir),
+				Import:   s.ImportResolverFor(mainPkg, mainPkg.Dir),
 			}
 			mainPkgArchive, err := compiler.Compile(mainPkg.ImportPath, []*ast.File{mainFile}, fset, importContext, options.Minify)
 			if err != nil {

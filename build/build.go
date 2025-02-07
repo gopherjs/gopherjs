@@ -1018,7 +1018,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 
 	importContext := &compiler.ImportContext{
 		Packages: s.Types,
-		Import:   s.ImportResolverFor(pkg.Dir),
+		Import:   s.ImportResolverFor(pkg, pkg.Dir),
 	}
 	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
 	if err != nil {
@@ -1043,12 +1043,16 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 
 // ImportResolverFor returns a function which returns a compiled package archive
 // given an import path.
-func (s *Session) ImportResolverFor(srcDir string) func(string) (*compiler.Archive, error) {
+func (s *Session) ImportResolverFor(pkg *PackageData, srcDir string) func(string) (*compiler.Archive, error) {
 	return func(path string) (*compiler.Archive, error) {
 		if archive, ok := s.UpToDateArchives[path]; ok {
 			return archive, nil
 		}
-		_, archive, err := s.buildImportPathWithSrcDir(path, srcDir)
+		if pkg.Dir != srcDir { // TODO(gn): REMOVE
+			panic("import resolver called with different srcDir: " + srcDir + " != " + pkg.Dir)
+		}
+
+		_, archive, err := s.buildImportPathWithSrcDir(path, pkg.Dir)
 		return archive, err
 	}
 }
@@ -1087,7 +1091,13 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 		sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 	}
 
-	deps, err := compiler.ImportDependencies(archive, s.ImportResolverFor(""))
+	deps, err := compiler.ImportDependencies(archive, func(path string) (*compiler.Archive, error) {
+		if archive, ok := s.UpToDateArchives[path]; ok {
+			return archive, nil
+		}
+		_, archive, err := s.buildImportPathWithSrcDir(path, "")
+		return archive, err
+	})
 	if err != nil {
 		return err
 	}

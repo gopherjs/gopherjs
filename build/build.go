@@ -1018,7 +1018,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 
 	importContext := &compiler.ImportContext{
 		Packages: s.Types,
-		Import:   s.ImportResolverFor(pkg, pkg.Dir),
+		Import:   s.ImportResolverFor(pkg),
 	}
 	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
 	if err != nil {
@@ -1043,14 +1043,12 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 
 // ImportResolverFor returns a function which returns a compiled package archive
 // given an import path.
-func (s *Session) ImportResolverFor(pkg *PackageData, srcDir string) func(string) (*compiler.Archive, error) {
+func (s *Session) ImportResolverFor(pkg *PackageData) func(string) (*compiler.Archive, error) {
 	return func(path string) (*compiler.Archive, error) {
 		if archive, ok := s.UpToDateArchives[path]; ok {
 			return archive, nil
 		}
-		if pkg.Dir != srcDir { // TODO(gn): REMOVE
-			panic("import resolver called with different srcDir: " + srcDir + " != " + pkg.Dir)
-		}
+		// TODO(gn): REMOVE: Grant waz here, this should not cause crypto to fail yet again, no changes, just a comment!!!
 
 		_, archive, err := s.buildImportPathWithSrcDir(path, pkg.Dir)
 		return archive, err

@@ -1048,8 +1048,6 @@ func (s *Session) ImportResolverFor(pkg *PackageData) func(string) (*compiler.Ar
 		if archive, ok := s.UpToDateArchives[path]; ok {
 			return archive, nil
 		}
-		// TODO(gn): REMOVE: Grant waz here, this should not cause crypto to fail yet again, no changes, just a comment!!!
-
 		_, archive, err := s.buildImportPathWithSrcDir(path, pkg.Dir)
 		return archive, err
 	}

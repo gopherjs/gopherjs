@@ -935,7 +935,11 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 //
 // Relative paths are interpreted relative to the current working dir.
 func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
-	return s.ImportResolverFor("")(path)
+	_, parsed, err := s.buildImportPathWithSrcDir(path, "")
+	if err != nil {
+		return nil, err
+	}
+	return s.CompilePackage(parsed)
 }
 
 // buildImportPathWithSrcDir builds the package specified by the import path.
@@ -1131,7 +1135,16 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 		sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 	}
 
-	deps, err := compiler.ImportDependencies(archive, s.ImportResolverFor(""))
+	deps, err := compiler.ImportDependencies(archive, func(path string) (*compiler.Archive, error) {
+		if archive, ok := s.UpToDateArchives[path]; ok {
+			return archive, nil
+		}
+		_, parsed, err := s.buildImportPathWithSrcDir(path, "")
+		if err != nil {
+			return nil, err
+		}
+		return s.CompilePackage(parsed)
+	})
 	if err != nil {
 		return err
 	}

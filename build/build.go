@@ -27,12 +27,11 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/internal/testmain"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/neelance/sourcemap"
 	"golang.org/x/tools/go/buildutil"
-
-	"github.com/gopherjs/gopherjs/build/cache"
 )
 
 // DefaultGOROOT is the default GOROOT value for builds.
@@ -744,14 +743,60 @@ func (p *PackageData) InstallPath() string {
 	return p.PkgObj
 }
 
+// ParsedPackage is the results from building a package before it is compiled.
+type ParsedPackage struct {
+	ImportPath string // import path of package ("" if unknown)
+	Dir        string // directory containing package sources
+
+	// GoFiles is the parsed and augmented Go AST files for the package.
+	GoFiles []*ast.File
+	FileSet *token.FileSet
+	JSFiles []JSFile
+}
+
+// Imports calculates the import paths of the package's dependencies
+// based on all the imports in the augmented files.
+//
+// The given skip paths will not be returned in the results.
+// This will not return any `*_test` packages in the results.
+func (p *ParsedPackage) Imports(skip ...string) []string {
+	seen := make(map[string]struct{})
+	for _, s := range skip {
+		seen[s] = struct{}{}
+	}
+	imports := []string{}
+	for _, file := range p.GoFiles {
+		for _, imp := range file.Imports {
+			path := strings.Trim(imp.Path.Value, `"`)
+			if _, ok := seen[path]; !ok {
+				if !strings.HasSuffix(path, "_test") {
+					imports = append(imports, path)
+				}
+				seen[path] = struct{}{}
+			}
+		}
+	}
+	sort.Strings(imports)
+	return imports
+}
+
 // Session manages internal state GopherJS requires to perform a build.
 //
 // This is the main interface to GopherJS build system. Session lifetime is
 // roughly equivalent to a single GopherJS tool invocation.
 type Session struct {
-	options    *Options
-	xctx       XContext
-	buildCache cache.BuildCache
+	options *Options
+	xctx    XContext
+
+	// importPaths is a map of the resolved import paths given the srcDir
+	// and path. This is used to avoid redetermining build packages during
+	// compilation when we're looking up parsed packages.
+	importPaths map[string]map[string]string
+
+	// parsePackage is a map of parsed packages that have been built and augmented.
+	// This is keyed using resolved import paths. This is used to avoid
+	// rebuilding and augmenting packages that are imported by several packages.
+	parsedPackages map[string]*ParsedPackage
 
 	// Binary archives produced during the current session and assumed to be
 	// up to date with input sources and dependencies. In the -w ("watch") mode
@@ -767,6 +812,8 @@ func NewSession(options *Options) (*Session, error) {
 
 	s := &Session{
 		options:          options,
+		importPaths:      make(map[string]map[string]string),
+		parsedPackages:   make(map[string]*ParsedPackage),
 		UpToDateArchives: make(map[string]*compiler.Archive),
 	}
 	s.xctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
@@ -777,15 +824,6 @@ func NewSession(options *Options) (*Session, error) {
 		return nil, err
 	}
 
-	s.buildCache = cache.BuildCache{
-		GOOS:          env.GOOS,
-		GOARCH:        env.GOARCH,
-		GOROOT:        env.GOROOT,
-		GOPATH:        env.GOPATH,
-		BuildTags:     append([]string{}, env.BuildTags...),
-		Minify:        options.Minify,
-		TestedPackage: options.TestedPackage,
-	}
 	s.Types = make(map[string]*types.Package)
 	if options.Watch {
 		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
@@ -900,7 +938,7 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 		})
 	}
 
-	archive, err := s.BuildPackage(pkg)
+	archive, err := s.BuildProject(pkg)
 	if err != nil {
 		return err
 	}
@@ -910,19 +948,76 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 	return s.WriteCommandPackage(archive, pkgObj)
 }
 
-// BuildImportPath loads and compiles package with the given import path.
-//
-// Relative paths are interpreted relative to the current working dir.
-func (s *Session) BuildImportPath(path string) (*compiler.Archive, error) {
-	_, archive, err := s.buildImportPathWithSrcDir(path, "")
-	return archive, err
+// BuildProject builds a command project (one with a main method) or
+// builds a test project (one with a synthesized test main package).
+func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
+	// ensure that runtime for gopherjs is imported
+	pkg.Imports = append(pkg.Imports, `runtime`)
+
+	// Build the project to get the parsed packages.
+	var parsed *ParsedPackage
+	var err error
+	if pkg.IsTest {
+		parsed, err = s.buildTestPackage(pkg)
+	} else {
+		parsed, err = s.buildPackages(pkg)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(grantnelson-wf): At this point we have all the parsed packages we
+	// need to compile the whole project, including testmain, if needed.
+	// We can perform analysis on the whole project at this point to propagate
+	// flatten, blocking, etc. information and check types to get the type info
+	// with all the instances for all generics in the whole project.
+
+	return s.compilePackages(parsed)
 }
 
-// buildImportPathWithSrcDir builds the package specified by the import path.
+func (s *Session) buildTestPackage(pkg *PackageData) (*ParsedPackage, error) {
+	_, err := s.buildPackages(pkg.TestPackage())
+	if err != nil {
+		return nil, err
+	}
+	_, err = s.buildPackages(pkg.XTestPackage())
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate a synthetic testmain package.
+	fset := token.NewFileSet()
+	tests := testmain.TestMain{Package: pkg.Package, Context: pkg.bctx}
+	tests.Scan(fset)
+	mainPkg, mainFile, err := tests.Synthesize(fset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate testmain package for %s: %w", pkg.ImportPath, err)
+	}
+
+	// Create a parsed package for the testmain package.
+	parsed := &ParsedPackage{
+		ImportPath: mainPkg.ImportPath,
+		Dir:        mainPkg.Dir,
+		GoFiles:    []*ast.File{mainFile},
+		FileSet:    fset,
+	}
+
+	// Import dependencies for the testmain package.
+	for _, importedPkgPath := range parsed.Imports() {
+		_, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return parsed, nil
+}
+
+// buildImportPathWithSrcDir builds the parsed package specified by the import path.
 //
 // Relative import paths are interpreted relative to the passed srcDir. If
 // srcDir is empty, current working directory is assumed.
-func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*PackageData, *compiler.Archive, error) {
+func (s *Session) buildImportPathWithSrcDir(path, srcDir string) (*PackageData, *ParsedPackage, error) {
 	pkg, err := s.xctx.Import(path, srcDir, 0)
 	if s.Watcher != nil && pkg != nil { // add watch even on error
 		s.Watcher.Add(pkg.Dir)
@@ -931,12 +1026,25 @@ func (s *Session) buildImportPathWithSrcDir(path string, srcDir string) (*Packag
 		return nil, nil, err
 	}
 
-	archive, err := s.BuildPackage(pkg)
+	parsed, err := s.buildPackages(pkg)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return pkg, archive, nil
+	s.cacheImportPath(path, srcDir, pkg.ImportPath)
+	return pkg, parsed, nil
+}
+
+// cacheImportPath stores the import path for the build package so we can look
+// it up later without getting the whole build package.
+// The given path and source directly are the ones passed into
+// XContext.Import to the get the build package originally.
+func (s *Session) cacheImportPath(path, srcDir, importPath string) {
+	if paths, ok := s.importPaths[srcDir]; ok {
+		paths[path] = importPath
+	} else {
+		s.importPaths[srcDir] = map[string]string{path: importPath}
+	}
 }
 
 // getExeModTime will determine the mod time of the GopherJS binary
@@ -965,10 +1073,9 @@ var getExeModTime = func() func() time.Time {
 	}
 }()
 
-// BuildPackage compiles an already loaded package.
-func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
-	if archive, ok := s.UpToDateArchives[pkg.ImportPath]; ok {
-		return archive, nil
+func (s *Session) buildPackages(pkg *PackageData) (*ParsedPackage, error) {
+	if parsed, ok := s.parsedPackages[pkg.ImportPath]; ok {
+		return parsed, nil
 	}
 
 	if exeModTime := getExeModTime(); exeModTime.After(pkg.SrcModTime) {
@@ -993,16 +1100,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		pkg.SrcModTime = fileModTime
 	}
 
-	if !s.options.NoCache {
-		archive := s.buildCache.LoadArchive(pkg.ImportPath, pkg.SrcModTime, s.Types)
-		if archive != nil {
-			s.UpToDateArchives[pkg.ImportPath] = archive
-			// Existing archive is up to date, no need to build it from scratch.
-			return archive, nil
-		}
-	}
-
-	// Existing archive is out of date or doesn't exist, let's build the package.
+	// Build the package by parsing and augmenting the original files with overlay files.
 	fileSet := token.NewFileSet()
 	files, overlayJsFiles, err := parseAndAugment(s.xctx, pkg, pkg.IsTest, fileSet)
 	if err != nil {
@@ -1016,16 +1114,42 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		files = append(files, embed)
 	}
 
+	parsed := &ParsedPackage{
+		ImportPath: pkg.ImportPath,
+		Dir:        pkg.Dir,
+		GoFiles:    files,
+		FileSet:    fileSet,
+		JSFiles:    append(pkg.JSFiles, overlayJsFiles...),
+	}
+	s.parsedPackages[pkg.ImportPath] = parsed
+
+	// Import dependencies from the augmented files,
+	// whilst skipping any that have been already imported.
+	for _, importedPkgPath := range parsed.Imports(pkg.Imports...) {
+		_, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return parsed, nil
+}
+
+func (s *Session) compilePackages(pkg *ParsedPackage) (*compiler.Archive, error) {
+	if archive, ok := s.UpToDateArchives[pkg.ImportPath]; ok {
+		return archive, nil
+	}
+
 	importContext := &compiler.ImportContext{
 		Packages: s.Types,
-		Import:   s.ImportResolverFor(pkg),
+		Import:   s.ImportResolverFor(pkg.Dir),
 	}
-	archive, err := compiler.Compile(pkg.ImportPath, files, fileSet, importContext, s.options.Minify)
+	archive, err := compiler.Compile(pkg.ImportPath, pkg.GoFiles, pkg.FileSet, importContext, s.options.Minify)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, jsFile := range append(pkg.JSFiles, overlayJsFiles...) {
+	for _, jsFile := range pkg.JSFiles {
 		archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
 		archive.IncJSCode = append(archive.IncJSCode, jsFile.Content...)
 		archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
@@ -1035,21 +1159,50 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		fmt.Println(pkg.ImportPath)
 	}
 
-	s.buildCache.StoreArchive(archive, time.Now())
 	s.UpToDateArchives[pkg.ImportPath] = archive
 
 	return archive, nil
 }
 
+func (s *Session) getImportPath(path, srcDir string) (string, error) {
+	// If path is for an xtest package, just return it.
+	if strings.HasSuffix(path, "_test") {
+		return path, nil
+	}
+
+	// Check if the import path is already cached.
+	if importPath, ok := s.importPaths[srcDir][path]; ok {
+		return importPath, nil
+	}
+
+	// Fall back to the slop import of the build package.
+	pkg, err := s.xctx.Import(path, srcDir, 0)
+	if err != nil {
+		return ``, err
+	}
+	s.cacheImportPath(path, srcDir, pkg.ImportPath)
+	return pkg.ImportPath, nil
+}
+
 // ImportResolverFor returns a function which returns a compiled package archive
 // given an import path.
-func (s *Session) ImportResolverFor(pkg *PackageData) func(string) (*compiler.Archive, error) {
+func (s *Session) ImportResolverFor(srcDir string) func(string) (*compiler.Archive, error) {
 	return func(path string) (*compiler.Archive, error) {
-		if archive, ok := s.UpToDateArchives[path]; ok {
+		importPath, err := s.getImportPath(path, srcDir)
+		if err != nil {
+			return nil, err
+		}
+
+		if archive, ok := s.UpToDateArchives[importPath]; ok {
 			return archive, nil
 		}
-		_, archive, err := s.buildImportPathWithSrcDir(path, pkg.Dir)
-		return archive, err
+
+		// The archive hasn't been compiled yet so compile it with the parsed package.
+		if parsed, ok := s.parsedPackages[importPath]; ok {
+			return s.compilePackages(parsed)
+		}
+
+		return nil, fmt.Errorf(`parsed package for %q not found`, importPath)
 	}
 }
 
@@ -1087,13 +1240,7 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 		sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 	}
 
-	deps, err := compiler.ImportDependencies(archive, func(path string) (*compiler.Archive, error) {
-		if archive, ok := s.UpToDateArchives[path]; ok {
-			return archive, nil
-		}
-		_, archive, err := s.buildImportPathWithSrcDir(path, "")
-		return archive, err
-	})
+	deps, err := compiler.ImportDependencies(archive, s.ImportResolverFor(""))
 	if err != nil {
 		return err
 	}

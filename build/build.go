@@ -1175,7 +1175,7 @@ func (s *Session) getImportPath(path, srcDir string) (string, error) {
 		return importPath, nil
 	}
 
-	// Fall back to the slop import of the build package.
+	// Fall back to the slow import of the build package.
 	pkg, err := s.xctx.Import(path, srcDir, 0)
 	if err != nil {
 		return ``, err

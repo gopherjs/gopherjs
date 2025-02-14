@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"go/ast"
 	"go/build"
 	"go/scanner"
-	"go/token"
 	"go/types"
 	"io"
 	"net"
@@ -29,7 +27,6 @@ import (
 	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
-	"github.com/gopherjs/gopherjs/internal/testmain"
 	"github.com/neelance/sourcemap"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -147,7 +144,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					archive, err := s.BuildPackage(pkg)
+					archive, err := s.BuildProject(pkg)
 					if err != nil {
 						return err
 					}
@@ -214,8 +211,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-
-					archive, err := s.BuildPackage(pkg)
+					archive, err := s.BuildProject(pkg)
 					if err != nil {
 						return err
 					}
@@ -371,27 +367,8 @@ func main() {
 				return err
 			}
 
-			_, err = s.BuildPackage(pkg.TestPackage())
-			if err != nil {
-				return err
-			}
-			_, err = s.BuildPackage(pkg.XTestPackage())
-			if err != nil {
-				return err
-			}
-
-			fset := token.NewFileSet()
-			tests := testmain.TestMain{Package: pkg}
-			tests.Scan(fset)
-			mainPkg, mainFile, err := tests.Synthesize(fset)
-			if err != nil {
-				return fmt.Errorf("failed to generate testmain package for %s: %w", pkg.ImportPath, err)
-			}
-			importContext := &compiler.ImportContext{
-				Packages: s.Types,
-				Import:   s.ImportResolverFor(mainPkg),
-			}
-			mainPkgArchive, err := compiler.Compile(mainPkg.ImportPath, []*ast.File{mainFile}, fset, importContext, options.Minify)
+			pkg.IsTest = true
+			mainPkgArchive, err := s.BuildProject(pkg)
 			if err != nil {
 				return fmt.Errorf("failed to compile testmain package for %s: %w", pkg.ImportPath, err)
 			}
@@ -664,7 +641,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 			buf := new(bytes.Buffer)
 			browserErrors := new(bytes.Buffer)
 			err := func() error {
-				archive, err := s.BuildPackage(pkg)
+				archive, err := s.BuildProject(pkg)
 				if err != nil {
 					return err
 				}
@@ -673,7 +650,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 				m := &sourcemap.Map{File: base + ".js"}
 				sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 
-				deps, err := compiler.ImportDependencies(archive, s.BuildImportPath)
+				deps, err := compiler.ImportDependencies(archive, s.ImportResolverFor(""))
 				if err != nil {
 					return err
 				}

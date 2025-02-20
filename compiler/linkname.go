@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/errorList"
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 )
 
@@ -38,7 +39,7 @@ type GoLinkname struct {
 //     words, it can only "import" an external function implementation into the
 //     local scope).
 func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]GoLinkname, error) {
-	var errs ErrorList = nil
+	var errs errorList.ErrorList = nil
 	var directives []GoLinkname
 
 	isUnsafe := astutil.ImportsUnsafe(file)

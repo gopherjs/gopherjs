@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
-	gobuild "go/build"
+	"go/build"
 	"go/doc"
 	"go/parser"
 	"go/token"
@@ -16,7 +16,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/gopherjs/gopherjs/build"
 	"golang.org/x/tools/go/buildutil"
 )
 
@@ -66,7 +65,8 @@ func (ef ExampleFunc) Executable() bool {
 
 // TestMain is a helper type responsible for generation of the test main package.
 type TestMain struct {
-	Package    *build.PackageData
+	Package    *build.Package
+	Context    *build.Context
 	Tests      []TestFunc
 	Benchmarks []TestFunc
 	Fuzz       []TestFunc
@@ -88,7 +88,7 @@ func (tm *TestMain) Scan(fset *token.FileSet) error {
 func (tm *TestMain) scanPkg(fset *token.FileSet, files []string, loc FuncLocation) error {
 	for _, name := range files {
 		srcPath := path.Join(tm.Package.Dir, name)
-		f, err := buildutil.OpenFile(tm.Package.InternalBuildContext(), srcPath)
+		f, err := buildutil.OpenFile(tm.Context, srcPath)
 		if err != nil {
 			return fmt.Errorf("failed to open source file %q: %w", srcPath, err)
 		}
@@ -158,7 +158,7 @@ func (tm *TestMain) scanFile(f *ast.File, loc FuncLocation) error {
 }
 
 // Synthesize main package for the tests.
-func (tm *TestMain) Synthesize(fset *token.FileSet) (*build.PackageData, *ast.File, error) {
+func (tm *TestMain) Synthesize(fset *token.FileSet) (*build.Package, *ast.File, error) {
 	buf := &bytes.Buffer{}
 	if err := testmainTmpl.Execute(buf, tm); err != nil {
 		return nil, nil, fmt.Errorf("failed to generate testmain source for package %s: %w", tm.Package.ImportPath, err)
@@ -167,12 +167,10 @@ func (tm *TestMain) Synthesize(fset *token.FileSet) (*build.PackageData, *ast.Fi
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse testmain source for package %s: %w", tm.Package.ImportPath, err)
 	}
-	pkg := &build.PackageData{
-		Package: &gobuild.Package{
-			ImportPath: tm.Package.ImportPath + ".testmain",
-			Name:       "main",
-			GoFiles:    []string{"_testmain.go"},
-		},
+	pkg := &build.Package{
+		ImportPath: tm.Package.ImportPath + ".testmain",
+		Name:       "main",
+		GoFiles:    []string{"_testmain.go"},
 	}
 	return pkg, src, nil
 }

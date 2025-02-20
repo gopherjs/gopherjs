@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+
 	"github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 	. "github.com/gopherjs/gopherjs/internal/testmain"
@@ -21,7 +22,10 @@ func TestScan(t *testing.T) {
 
 	fset := token.NewFileSet()
 
-	got := TestMain{Package: pkg}
+	got := TestMain{
+		Package: pkg.Package,
+		Context: pkg.InternalBuildContext(),
+	}
 	if err := got.Scan(fset); err != nil {
 		t.Fatalf("Got: tm.Scan() returned error: %s. Want: no error.", err)
 	}
@@ -47,6 +51,7 @@ func TestScan(t *testing.T) {
 	}
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(TestMain{}, "Package"), // Inputs.
+		cmpopts.IgnoreFields(TestMain{}, "Context"),
 	}
 	if diff := cmp.Diff(want, got, opts...); diff != "" {
 		t.Errorf("List of test function is different from expected (-want,+got):\n%s", diff)
@@ -54,9 +59,7 @@ func TestScan(t *testing.T) {
 }
 
 func TestSynthesize(t *testing.T) {
-	pkg := &build.PackageData{
-		Package: &gobuild.Package{ImportPath: "foo/bar"},
-	}
+	pkg := &gobuild.Package{ImportPath: "foo/bar"}
 
 	tests := []struct {
 		descr   string

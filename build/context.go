@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go/build"
 	"go/token"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -16,6 +15,7 @@ import (
 	_ "github.com/gopherjs/gopherjs/build/versionhack" // go/build release tags hack.
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
+	"github.com/gopherjs/gopherjs/compiler/jsFile"
 	"github.com/gopherjs/gopherjs/compiler/natives"
 	"golang.org/x/tools/go/buildutil"
 )
@@ -91,7 +91,7 @@ func (sc simpleCtx) Import(importPath string, srcDir string, mode build.ImportMo
 	if err != nil {
 		return nil, err
 	}
-	jsFiles, err := jsFilesFromDir(&sc.bctx, pkg.Dir)
+	jsFiles, err := jsFile.JSFilesFromDir(&sc.bctx, pkg.Dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to enumerate .inc.js files in %s: %w", pkg.Dir, err)
 	}
@@ -439,41 +439,4 @@ func updateImports(sources []string, importPos map[string][]token.Position) (new
 	}
 	sort.Strings(newImports)
 	return newImports, newImportPos
-}
-
-// jsFilesFromDir finds and loads any *.inc.js packages in the build context
-// directory.
-func jsFilesFromDir(bctx *build.Context, dir string) ([]JSFile, error) {
-	files, err := buildutil.ReadDir(bctx, dir)
-	if err != nil {
-		return nil, err
-	}
-	var jsFiles []JSFile
-	for _, file := range files {
-		if !strings.HasSuffix(file.Name(), ".inc.js") || file.IsDir() {
-			continue
-		}
-		if file.Name()[0] == '_' || file.Name()[0] == '.' {
-			continue // Skip "hidden" files that are typically ignored by the Go build system.
-		}
-
-		path := buildutil.JoinPath(bctx, dir, file.Name())
-		f, err := buildutil.OpenFile(bctx, path)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open %s from %v: %w", path, bctx, err)
-		}
-		defer f.Close()
-
-		content, err := io.ReadAll(f)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read %s from %v: %w", path, bctx, err)
-		}
-
-		jsFiles = append(jsFiles, JSFile{
-			Path:    path,
-			ModTime: file.ModTime(),
-			Content: content,
-		})
-	}
-	return jsFiles, nil
 }

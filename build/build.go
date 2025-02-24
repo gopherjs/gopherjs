@@ -788,9 +788,13 @@ type Session struct {
 	options *Options
 	xctx    XContext
 
-	// importPaths is a map of the resolved import paths given the srcDir
-	// and path. This is used to avoid redetermining build packages during
-	// compilation when we're looking up parsed packages.
+	// importPaths is a map of the resolved import paths given the
+	// source directory (first key) and the unresolved import path (second key).
+	// This is used to cache the resolved import returned from XContext.Import.
+	// XContent.Import can be slow, so we cache the resolved path that is used
+	// as the map key by parsedPackages and UpToDateArchives.
+	// This makes subsequent lookups faster during compilation when all we have
+	// is the unresolved import path and source directory.
 	importPaths map[string]map[string]string
 
 	// parsePackage is a map of parsed packages that have been built and augmented.
@@ -958,9 +962,9 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 	var parsed *ParsedPackage
 	var err error
 	if pkg.IsTest {
-		parsed, err = s.buildTestPackage(pkg)
+		parsed, err = s.loadTestPackage(pkg)
 	} else {
-		parsed, err = s.buildPackages(pkg)
+		parsed, err = s.loadPackages(pkg)
 	}
 	if err != nil {
 		return nil, err
@@ -975,12 +979,12 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 	return s.compilePackages(parsed)
 }
 
-func (s *Session) buildTestPackage(pkg *PackageData) (*ParsedPackage, error) {
-	_, err := s.buildPackages(pkg.TestPackage())
+func (s *Session) loadTestPackage(pkg *PackageData) (*ParsedPackage, error) {
+	_, err := s.loadPackages(pkg.TestPackage())
 	if err != nil {
 		return nil, err
 	}
-	_, err = s.buildPackages(pkg.XTestPackage())
+	_, err = s.loadPackages(pkg.XTestPackage())
 	if err != nil {
 		return nil, err
 	}
@@ -1004,7 +1008,7 @@ func (s *Session) buildTestPackage(pkg *PackageData) (*ParsedPackage, error) {
 
 	// Import dependencies for the testmain package.
 	for _, importedPkgPath := range parsed.Imports() {
-		_, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
+		_, _, err := s.loadImportPathWithSrcDir(importedPkgPath, pkg.Dir)
 		if err != nil {
 			return nil, err
 		}
@@ -1013,11 +1017,11 @@ func (s *Session) buildTestPackage(pkg *PackageData) (*ParsedPackage, error) {
 	return parsed, nil
 }
 
-// buildImportPathWithSrcDir builds the parsed package specified by the import path.
+// loadImportPathWithSrcDir gets the parsed package specified by the import path.
 //
-// Relative import paths are interpreted relative to the passed srcDir. If
-// srcDir is empty, current working directory is assumed.
-func (s *Session) buildImportPathWithSrcDir(path, srcDir string) (*PackageData, *ParsedPackage, error) {
+// Relative import paths are interpreted relative to the passed srcDir.
+// If srcDir is empty, current working directory is assumed.
+func (s *Session) loadImportPathWithSrcDir(path, srcDir string) (*PackageData, *ParsedPackage, error) {
 	pkg, err := s.xctx.Import(path, srcDir, 0)
 	if s.Watcher != nil && pkg != nil { // add watch even on error
 		s.Watcher.Add(pkg.Dir)
@@ -1026,7 +1030,7 @@ func (s *Session) buildImportPathWithSrcDir(path, srcDir string) (*PackageData, 
 		return nil, nil, err
 	}
 
-	parsed, err := s.buildPackages(pkg)
+	parsed, err := s.loadPackages(pkg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1035,8 +1039,8 @@ func (s *Session) buildImportPathWithSrcDir(path, srcDir string) (*PackageData, 
 	return pkg, parsed, nil
 }
 
-// cacheImportPath stores the import path for the build package so we can look
-// it up later without getting the whole build package.
+// cacheImportPath stores the resolved import path for the build package
+// so we can look it up later without getting the whole build package.
 // The given path and source directly are the ones passed into
 // XContext.Import to the get the build package originally.
 func (s *Session) cacheImportPath(path, srcDir, importPath string) {
@@ -1073,7 +1077,7 @@ var getExeModTime = func() func() time.Time {
 	}
 }()
 
-func (s *Session) buildPackages(pkg *PackageData) (*ParsedPackage, error) {
+func (s *Session) loadPackages(pkg *PackageData) (*ParsedPackage, error) {
 	if parsed, ok := s.parsedPackages[pkg.ImportPath]; ok {
 		return parsed, nil
 	}
@@ -1086,7 +1090,7 @@ func (s *Session) buildPackages(pkg *PackageData) (*ParsedPackage, error) {
 		if importedPkgPath == "unsafe" {
 			continue
 		}
-		importedPkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
+		importedPkg, _, err := s.loadImportPathWithSrcDir(importedPkgPath, pkg.Dir)
 		if err != nil {
 			return nil, err
 		}
@@ -1126,7 +1130,7 @@ func (s *Session) buildPackages(pkg *PackageData) (*ParsedPackage, error) {
 	// Import dependencies from the augmented files,
 	// whilst skipping any that have been already imported.
 	for _, importedPkgPath := range parsed.Imports(pkg.Imports...) {
-		_, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
+		_, _, err := s.loadImportPathWithSrcDir(importedPkgPath, pkg.Dir)
 		if err != nil {
 			return nil, err
 		}

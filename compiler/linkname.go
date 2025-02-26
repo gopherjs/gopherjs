@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/astutil"
-	"github.com/gopherjs/gopherjs/compiler/errorList"
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
+	"github.com/gopherjs/gopherjs/internal/errorList"
 )
 
 // GoLinkname describes a go:linkname compiler directive found in the source code.

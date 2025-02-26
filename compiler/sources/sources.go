@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gopherjs/gopherjs/compiler/errorList"
 	"github.com/gopherjs/gopherjs/compiler/jsFile"
+	"github.com/gopherjs/gopherjs/internal/errorList"
 	"github.com/neelance/astrewrite"
 )
 
@@ -114,12 +114,17 @@ func (s Sources) TypeCheck(importer types.Importer, sizes types.Sizes, tContext 
 	return typesInfo, typesPkg, nil
 }
 
-// Imports calculates the import paths of the package's dependencies
+// UnresolvedImports calculates the import paths of the package's dependencies
 // based on all the imports in the augmented Go AST files.
 //
-// The given skip paths will not be returned in the results.
+// This is used to determine the unresolved imports that weren't in the
+// PackageData.Imports slice since they were added during augmentation or
+// during template generation.
+//
+// The given skip paths (typically those imports from PackageData.Imports)
+// will not be returned in the results.
 // This will not return any `*_test` packages in the results.
-func (s Sources) Imports(skip ...string) []string {
+func (s Sources) UnresolvedImports(skip ...string) []string {
 	seen := make(map[string]struct{})
 	for _, sk := range skip {
 		seen[sk] = struct{}{}

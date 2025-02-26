@@ -3,7 +3,7 @@ package sources
 import (
 	"go/types"
 
-	"github.com/gopherjs/gopherjs/compiler/errorList"
+	"github.com/gopherjs/gopherjs/internal/errorList"
 )
 
 // errorCollectingImporter implements go/types.Importer interface and

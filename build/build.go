@@ -27,9 +27,9 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
-	"github.com/gopherjs/gopherjs/compiler/errorList"
 	"github.com/gopherjs/gopherjs/compiler/jsFile"
 	"github.com/gopherjs/gopherjs/compiler/sources"
+	"github.com/gopherjs/gopherjs/internal/errorList"
 	"github.com/gopherjs/gopherjs/internal/testmain"
 	log "github.com/sirupsen/logrus"
 
@@ -967,7 +967,7 @@ func (s *Session) loadTestPackage(pkg *PackageData) (*sources.Sources, error) {
 	}
 
 	// Import dependencies for the testmain package.
-	for _, importedPkgPath := range srcs.Imports() {
+	for _, importedPkgPath := range srcs.UnresolvedImports() {
 		_, _, err := s.loadImportPathWithSrcDir(importedPkgPath, pkg.Dir)
 		if err != nil {
 			return nil, err
@@ -1037,6 +1037,10 @@ var getExeModTime = func() func() time.Time {
 	}
 }()
 
+// loadPackages will recursively load and parse the given package and
+// its dependencies. This will return the sources for the given package.
+// The returned source and sources for the dependencies will be added
+// to the session's sources map.
 func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 	if srcs, ok := s.sources[pkg.ImportPath]; ok {
 		return srcs, nil
@@ -1089,7 +1093,7 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 
 	// Import dependencies from the augmented files,
 	// whilst skipping any that have been already imported.
-	for _, importedPkgPath := range srcs.Imports(pkg.Imports...) {
+	for _, importedPkgPath := range srcs.UnresolvedImports(pkg.Imports...) {
 		_, _, err := s.loadImportPathWithSrcDir(importedPkgPath, pkg.Dir)
 		if err != nil {
 			return nil, err

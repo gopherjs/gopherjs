@@ -26,7 +26,7 @@ import (
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler"
-	"github.com/gopherjs/gopherjs/compiler/errorList"
+	"github.com/gopherjs/gopherjs/internal/errorList"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
 	"github.com/neelance/sourcemap"
 	log "github.com/sirupsen/logrus"

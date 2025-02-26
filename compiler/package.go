@@ -9,12 +9,12 @@ import (
 
 	"golang.org/x/tools/go/types/typeutil"
 
-	"github.com/gopherjs/gopherjs/compiler/errorList"
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
+	"github.com/gopherjs/gopherjs/internal/errorList"
 	"github.com/gopherjs/gopherjs/internal/experiments"
 )
 

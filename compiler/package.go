@@ -210,8 +210,8 @@ func (ic *ImportContext) Import(path string) (*types.Package, error) {
 	return ic.Packages[a.ImportPath], nil
 }
 
-// parseAllGoLinknames extracts all //go:linkname compiler directive from the sources.
-func parseAllGoLinknames(s sources.Sources) ([]GoLinkname, error) {
+// ParseAllGoLinknames extracts all //go:linkname compiler directive from the sources.
+func ParseAllGoLinknames(s sources.Sources) ([]GoLinkname, error) {
 	goLinknames := []GoLinkname{}
 	var errs errorList.ErrorList
 	for _, file := range s.Files {
@@ -242,7 +242,8 @@ func Compile(srcs sources.Sources, importContext *ImportContext, minify bool) (_
 		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", srcs.ImportPath, e))
 	}()
 
-	// TODO(grantnelson-wf): Clean up this function and fetch information
+	// TODO(grantnelson-wf): Clean up this function and fetch information.
+	// TODO(grantnelson-wf): Remove importContext since it is not used.
 
 	importedPaths, importDecls := rootCtx.importDecls()
 

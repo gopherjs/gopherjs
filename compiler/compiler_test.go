@@ -12,6 +12,7 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
+	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
@@ -782,7 +783,7 @@ func renderPackage(t *testing.T, archive *Archive, minify bool) string {
 
 	buf := &bytes.Buffer{}
 
-	if err := WritePkgCode(archive, selection, goLinknameSet{}, minify, &SourceMapFilter{Writer: buf}); err != nil {
+	if err := WritePkgCode(archive, selection, linkname.GoLinknameSet{}, minify, &SourceMapFilter{Writer: buf}); err != nil {
 		t.Fatal(err)
 	}
 

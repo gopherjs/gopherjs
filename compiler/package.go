@@ -210,18 +210,6 @@ func (ic *ImportContext) Import(path string) (*types.Package, error) {
 	return ic.Packages[a.ImportPath], nil
 }
 
-// ParseAllGoLinknames extracts all //go:linkname compiler directive from the sources.
-func ParseAllGoLinknames(s sources.Sources) ([]GoLinkname, error) {
-	goLinknames := []GoLinkname{}
-	var errs errorList.ErrorList
-	for _, file := range s.Files {
-		found, err := parseGoLinknames(s.FileSet, s.ImportPath, file)
-		errs = errs.Append(err)
-		goLinknames = append(goLinknames, found...)
-	}
-	return goLinknames, errs.ErrOrNil()
-}
-
 // Compile the provided Go sources as a single package.
 //
 // Import path must be the absolute import path for a package. Provided sources

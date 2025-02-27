@@ -933,11 +933,6 @@ func formatJSStructTagVal(jsTag string) string {
 	return "." + jsTag
 }
 
-// ErrorAt annotates an error with a position in the source code.
-func ErrorAt(err error, fset *token.FileSet, pos token.Pos) error {
-	return fmt.Errorf("%s: %w", fset.Position(pos), err)
-}
-
 // FatalError is an error compiler panics with when it encountered a fatal error.
 //
 // FatalError implements io.Writer, which can be used to record any free-form

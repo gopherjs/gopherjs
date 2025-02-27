@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/jsFile"
+	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/internal/errorList"
 	"github.com/neelance/astrewrite"
 )
@@ -45,14 +46,9 @@ type Sources struct {
 // Note this function mutates the original slice.
 func (s Sources) Sort() Sources {
 	sort.Slice(s.Files, func(i, j int) bool {
-		return s.nameOfFileAtIndex(i) > s.nameOfFileAtIndex(j)
+		return s.FileSet.File(s.Files[i].Pos()).Name() > s.FileSet.File(s.Files[j].Pos()).Name()
 	})
 	return s
-}
-
-// nameOfFileAtIndex gets the name of the Go source file at the given index.
-func (s Sources) nameOfFileAtIndex(i int) string {
-	return s.FileSet.File(s.Files[i].Pos()).Name()
 }
 
 // Simplified returns a new sources instance with each Files entry processed by
@@ -113,6 +109,18 @@ func (s Sources) TypeCheck(importer types.Importer, sizes types.Sizes, tContext 
 		return nil, nil, err
 	}
 	return typesInfo, typesPkg, nil
+}
+
+// ParseGoLinknames extracts all //go:linkname compiler directive from the sources.
+func (s Sources) ParseGoLinknames() ([]linkname.GoLinkname, error) {
+	goLinknames := []linkname.GoLinkname{}
+	var errs errorList.ErrorList
+	for _, file := range s.Files {
+		found, err := linkname.ParseGoLinknames(s.FileSet, s.ImportPath, file)
+		errs = errs.Append(err)
+		goLinknames = append(goLinknames, found...)
+	}
+	return goLinknames, errs.ErrOrNil()
 }
 
 // UnresolvedImports calculates the import paths of the package's dependencies

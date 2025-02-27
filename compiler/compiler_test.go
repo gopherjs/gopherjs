@@ -699,6 +699,7 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 				Files:      pkg.Syntax,
 				FileSet:    pkg.Fset,
 			}
+			srcs.Sort()
 
 			// compile package
 			a, err := Compile(srcs, importContext, minify)

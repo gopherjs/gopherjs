@@ -68,6 +68,7 @@ func (s Sources) Simplified(typesInfo *types.Info) Sources {
 	for i, file := range s.Files {
 		simplified.Files[i] = astrewrite.Simplify(file, typesInfo, false)
 	}
+	simplified.Sort()
 	return simplified
 }
 

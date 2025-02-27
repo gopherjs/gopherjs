@@ -15,7 +15,6 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/gopherjs/gopherjs/internal/errorList"
-	"github.com/gopherjs/gopherjs/internal/experiments"
 )
 
 // pkgContext maintains compiler context for a specific package.
@@ -243,27 +242,7 @@ func Compile(srcs sources.Sources, importContext *ImportContext, minify bool) (_
 		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", srcs.ImportPath, e))
 	}()
 
-	srcs.Sort()
-
-	tContext := types.NewContext()
-	typesInfo, typesPkg, err := srcs.TypeCheck(importContext, sizes32, tContext)
-	if err != nil {
-		return nil, err
-	}
-	if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil && !experiments.Env.Generics {
-		return nil, fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", srcs.ImportPath, genErr)
-	}
-	importContext.Packages[srcs.ImportPath] = typesPkg
-
-	// Extract all go:linkname compiler directives from the package source.
-	goLinknames, err := parseAllGoLinknames(srcs)
-	if err != nil {
-		return nil, err
-	}
-
-	srcs = srcs.Simplified(typesInfo)
-
-	rootCtx := newRootCtx(tContext, srcs, typesInfo, typesPkg, importContext.isBlocking, minify)
+	// TODO(grantnelson-wf): Clean up this function and fetch information
 
 	importedPaths, importDecls := rootCtx.importDecls()
 

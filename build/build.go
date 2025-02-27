@@ -27,9 +27,11 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/jsFile"
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/internal/errorList"
+	"github.com/gopherjs/gopherjs/internal/experiments"
 	"github.com/gopherjs/gopherjs/internal/testmain"
 	log "github.com/sirupsen/logrus"
 
@@ -759,7 +761,7 @@ type Session struct {
 	// sources is a map of parsed packages that have been built and augmented.
 	// This is keyed using resolved import paths. This is used to avoid
 	// rebuilding and augmenting packages that are imported by several packages.
-	// These sources haven't been sorted nor simplified yet.
+	// These sources haven't been simplified yet.
 	sources map[string]*sources.Sources
 
 	// Binary archives produced during the current session and assumed to be
@@ -918,7 +920,7 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 	// ensure that runtime for gopherjs is imported
 	pkg.Imports = append(pkg.Imports, `runtime`)
 
-	// Build the project to get the sources for the parsed packages.
+	// Load the project to get the sources for the parsed packages.
 	var srcs *sources.Sources
 	var err error
 	if pkg.IsTest {
@@ -930,12 +932,12 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 		return nil, err
 	}
 
-	// TODO(grantnelson-wf): At this point we have all the parsed packages we
-	// need to compile the whole project, including testmain, if needed.
-	// We can perform analysis on the whole project at this point to propagate
-	// flatten, blocking, etc. information and check types to get the type info
-	// with all the instances for all generics in the whole project.
+	// Prepare and analyze the source code for compiling.
+	if err := s.prepareSources(); err != nil {
+		return nil, err
+	}
 
+	// Compile the project into Archives containing the generated JS.
 	return s.compilePackages(srcs)
 }
 
@@ -1089,6 +1091,7 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 		FileSet:    fileSet,
 		JSFiles:    append(pkg.JSFiles, overlayJsFiles...),
 	}
+	srcs.Sort()
 	s.sources[pkg.ImportPath] = srcs
 
 	// Import dependencies from the augmented files,
@@ -1101,6 +1104,34 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 	}
 
 	return srcs, nil
+}
+
+func (s *Session) prepareSources() error {
+	for importPath, srcs := range s.sources {
+
+		tContext := types.NewContext()
+		typesInfo, typesPkg, err := srcs.TypeCheck(importContext, sizes32, tContext)
+		if err != nil {
+			return err
+		}
+		if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil && !experiments.Env.Generics {
+			return fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", srcs.ImportPath, genErr)
+		}
+		s.Types[importPath] = typesPkg
+
+		// Extract all go:linkname compiler directives from the package source.
+		goLinknames, err := parseAllGoLinknames(srcs)
+		if err != nil {
+			return err
+		}
+
+		srcs = srcs.Simplified(typesInfo)
+		s.sources[importPath] = srcs
+
+		rootCtx := newRootCtx(tContext, srcs, typesInfo, typesPkg, importContext.isBlocking, minify)
+
+	}
+	return nil
 }
 
 func (s *Session) compilePackages(srcs *sources.Sources) (*compiler.Archive, error) {

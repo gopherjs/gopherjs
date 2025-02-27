@@ -1107,7 +1107,7 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 }
 
 func (s *Session) prepareSources() error {
-	for importPath, srcs := range s.sources {
+	for _, srcs := range s.sources {
 
 		tContext := types.NewContext()
 		typesInfo, typesPkg, err := srcs.TypeCheck(importContext, sizes32, tContext)
@@ -1117,16 +1117,15 @@ func (s *Session) prepareSources() error {
 		if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil && !experiments.Env.Generics {
 			return fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", srcs.ImportPath, genErr)
 		}
-		s.Types[importPath] = typesPkg
+		s.Types[srcs.ImportPath] = typesPkg
 
 		// Extract all go:linkname compiler directives from the package source.
-		goLinknames, err := parseAllGoLinknames(srcs)
+		goLinknames, err := srcs.ParseGoLinknames()
 		if err != nil {
 			return err
 		}
 
-		srcs = srcs.Simplified(typesInfo)
-		s.sources[importPath] = srcs
+		srcs.Simplify(typesInfo)
 
 		rootCtx := newRootCtx(tContext, srcs, typesInfo, typesPkg, importContext.isBlocking, minify)
 

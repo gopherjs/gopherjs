@@ -43,7 +43,7 @@ type Sources struct {
 // Sort the Go files slice by the original source name to ensure consistent order
 // of processing. This is required for reproducible JavaScript output.
 //
-// Note this function mutates the original slice.
+// Note this function mutates the original Files slice.
 func (s Sources) Sort() Sources {
 	sort.Slice(s.Files, func(i, j int) bool {
 		return s.FileSet.File(s.Files[i].Pos()).Name() > s.FileSet.File(s.Files[j].Pos()).Name()
@@ -51,21 +51,13 @@ func (s Sources) Sort() Sources {
 	return s
 }
 
-// Simplified returns a new sources instance with each Files entry processed by
-// astrewrite.Simplify. The JSFiles are copied unchanged.
-func (s Sources) Simplified(typesInfo *types.Info) Sources {
-	simplified := Sources{
-		ImportPath: s.ImportPath,
-		Dir:        s.Dir,
-		Files:      make([]*ast.File, len(s.Files)),
-		FileSet:    s.FileSet,
-		JSFiles:    s.JSFiles,
-	}
+// Simplify processed each Files entry with astrewrite.Simplify.
+//
+// Note this function mutates the original Files slice.
+func (s Sources) Simplify(typesInfo *types.Info) {
 	for i, file := range s.Files {
-		simplified.Files[i] = astrewrite.Simplify(file, typesInfo, false)
+		s.Files[i] = astrewrite.Simplify(file, typesInfo, false)
 	}
-	simplified.Sort()
-	return simplified
 }
 
 // TypeCheck the sources. Returns information about declared package types and

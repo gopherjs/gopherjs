@@ -58,9 +58,11 @@ type Info struct {
 	funcLitInfos  map[*ast.FuncLit][]*FuncInfo
 	InitFuncInfo  *FuncInfo // Context for package variable initialization.
 
-	isImportedBlocking func(typeparams.Instance) bool // For functions from other packages.
-	allInfos           []*FuncInfo
+	infoImporter InfoImporter // For functions from other packages.
+	allInfos     []*FuncInfo
 }
+
+type InfoImporter func(path string) (*Info, error)
 
 func (info *Info) newFuncInfo(n ast.Node, obj types.Object, typeArgs typesutil.TypeList, resolver *typeparams.Resolver) *FuncInfo {
 	funcInfo := &FuncInfo{
@@ -132,11 +134,16 @@ func (info *Info) newFuncInfoInstances(fd *ast.FuncDecl) []*FuncInfo {
 }
 
 // IsBlocking returns true if the function may contain blocking calls or operations.
-// If inst is from a different package, this will use the isImportedBlocking
+// If inst is from a different package, this will use the getImportInfo function
 // to lookup the information from the other package.
 func (info *Info) IsBlocking(inst typeparams.Instance) bool {
 	if inst.Object.Pkg() != info.Pkg {
-		return info.isImportedBlocking(inst)
+		path := inst.Object.Pkg().Path()
+		otherInfo, err := info.infoImporter(path)
+		if err != nil {
+			panic(fmt.Errorf(`failed to get info for package %q: %v`, path, err))
+		}
+		return otherInfo.IsBlocking(inst)
 	}
 	if funInfo := info.FuncInfo(inst); funInfo != nil {
 		return funInfo.IsBlocking()
@@ -174,16 +181,21 @@ func (info *Info) VarsWithInitializers() map[*types.Var]bool {
 	return result
 }
 
-func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info, typeCtx *types.Context, typesPkg *types.Package, instanceSets *typeparams.PackageInstanceSets, isBlocking func(typeparams.Instance) bool) *Info {
+// AnalyzePkg analyzes the given package for blocking calls, defers, etc.
+//
+// Note that at the end of this call the analysis information
+// has NOT been propagated across packages yet. Once all the packages
+// have been analyzed, call PropagateAnalysis to propagate the information.
+func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info, typeCtx *types.Context, typesPkg *types.Package, instanceSets *typeparams.PackageInstanceSets, infoImporter InfoImporter) *Info {
 	info := &Info{
-		Info:               typesInfo,
-		Pkg:                typesPkg,
-		typeCtx:            typeCtx,
-		instanceSets:       instanceSets,
-		HasPointer:         make(map[*types.Var]bool),
-		isImportedBlocking: isBlocking,
-		funcInstInfos:      new(typeparams.InstanceMap[*FuncInfo]),
-		funcLitInfos:       make(map[*ast.FuncLit][]*FuncInfo),
+		Info:          typesInfo,
+		Pkg:           typesPkg,
+		typeCtx:       typeCtx,
+		instanceSets:  instanceSets,
+		HasPointer:    make(map[*types.Var]bool),
+		infoImporter:  infoImporter,
+		funcInstInfos: new(typeparams.InstanceMap[*FuncInfo]),
+		funcLitInfos:  make(map[*ast.FuncLit][]*FuncInfo),
 	}
 	info.InitFuncInfo = info.newFuncInfo(nil, nil, nil, nil)
 
@@ -193,13 +205,25 @@ func AnalyzePkg(files []*ast.File, fileSet *token.FileSet, typesInfo *types.Info
 		ast.Walk(info.InitFuncInfo, file)
 	}
 
+	return info
+}
+
+// PropagateAnalysis will propagate analysis information across package
+// boundaries to finish the analysis of a whole project.
+func PropagateAnalysis(allInfo []*Info) {
 	done := false
 	for !done {
-		done = info.propagateFunctionBlocking()
+		done = true
+		for _, info := range allInfo {
+			if !info.propagateFunctionBlocking() {
+				done = false
+			}
+		}
 	}
 
-	info.propagateControlStatementBlocking()
-	return info
+	for _, info := range allInfo {
+		info.propagateControlStatementBlocking()
+	}
 }
 
 // propagateFunctionBlocking propagates information about blocking calls

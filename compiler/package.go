@@ -15,6 +15,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/gopherjs/gopherjs/internal/errorList"
+	"github.com/gopherjs/gopherjs/internal/experiments"
 )
 
 // pkgContext maintains compiler context for a specific package.
@@ -116,18 +117,11 @@ type funcContext struct {
 	funcLitCounter int
 }
 
-func newRootCtx(tContext *types.Context, srcs sources.Sources, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(typeparams.Instance) bool, minify bool) *funcContext {
-	tc := typeparams.Collector{
-		TContext:  tContext,
-		Info:      typesInfo,
-		Instances: &typeparams.PackageInstanceSets{},
-	}
-	tc.Scan(typesPkg, srcs.Files...)
-	pkgInfo := analysis.AnalyzePkg(srcs.Files, srcs.FileSet, typesInfo, tContext, typesPkg, tc.Instances, isBlocking)
+func newRootCtx(tContext *types.Context, srcs sources.Sources, minify bool) *funcContext {
 	funcCtx := &funcContext{
-		FuncInfo: pkgInfo.InitFuncInfo,
+		FuncInfo: srcs.TypeInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{
-			Info:                 pkgInfo,
+			Info:                 srcs.TypeInfo,
 			additionalSelections: make(map[*ast.SelectorExpr]typesutil.Selection),
 
 			typesCtx:     tContext,
@@ -137,7 +131,7 @@ func newRootCtx(tContext *types.Context, srcs sources.Sources, typesInfo *types.
 			indentation:  1,
 			minify:       minify,
 			fileSet:      srcs.FileSet,
-			instanceSet:  tc.Instances,
+			instanceSet:  srcs.Instances,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[*types.Label]*flowData{nil: {}},
@@ -157,63 +151,46 @@ type flowData struct {
 	endCase   int
 }
 
-// ImportContext provides access to information about imported packages.
-type ImportContext struct {
-	// Mapping for an absolute import path to the package type information.
-	Packages map[string]*types.Package
-	// ImportArchive returns a previously compiled Archive for a dependency
-	// package. If the Import() call was successful, the corresponding entry
-	// must be added to the Packages map.
-	ImportArchive func(importPath string) (*Archive, error)
-}
-
-// isBlocking returns true if an _imported_ function is blocking. It will panic
-// if the function decl is not found in the imported package or the package
-// hasn't been compiled yet.
+// PrepareSources recursively processes the provided sources and
+// prepares them for compilation by determining the type information,
+// go linknames, and simplifying the AST.
 //
-// Note: see analysis.FuncInfo.Blocking if you need to determine if a function
-// in the _current_ package is blocking. Usually available via functionContext
-// object.
-func (ic *ImportContext) isBlocking(inst typeparams.Instance) bool {
-	f, ok := inst.Object.(*types.Func)
-	if !ok {
-		panic(bailout(fmt.Errorf("can't determine if instance %v is blocking: instance isn't for a function object", inst)))
+// Note that at the end of this call the analysis information
+// has NOT been propagated across packages yet.
+func PrepareSources(srcs *sources.Sources, importer sources.SourcesImporter, tContext *types.Context) error {
+	if err := srcs.TypeCheck(importer, sizes32, tContext); err != nil {
+		return err
 	}
 
-	archive, err := ic.ImportArchive(f.Pkg().Path())
-	if err != nil {
-		panic(err)
+	if genErr := typeparams.RequiresGenericsSupport(srcs.TypeInfo.Info); genErr != nil && !experiments.Env.Generics {
+		return fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", srcs.ImportPath, genErr)
 	}
 
-	fullName := funcDeclFullName(inst)
-	for _, d := range archive.Declarations {
-		if d.FullName == fullName {
-			return d.Blocking
-		}
+	// Extract all go:linkname compiler directives from the package source.
+	if err := srcs.ParseGoLinknames(); err != nil {
+		return err
 	}
-	panic(bailout(fmt.Errorf("can't determine if function %s is blocking: decl not found in package archive", fullName)))
+
+	srcs.Simplify()
+	return nil
 }
 
-// Import implements go/types.Importer interface for ImportContext.
-func (ic *ImportContext) Import(path string) (*types.Package, error) {
-	if path == "unsafe" {
-		return types.Unsafe, nil
+// PropagateAnalysis the analysis information to all packages.
+//
+// The map of sources is keyed by the resolved import path of the package,
+// however that key is not used.
+func PropagateAnalysis(allSources map[string]*sources.Sources) {
+	allInfo := make([]*analysis.Info, 0, len(allSources))
+	for _, src := range allSources {
+		allInfo = append(allInfo, src.TypeInfo)
 	}
-
-	// By importing the archive, the package will compile if it hasn't been
-	// compiled yet and the package will be added to the Packages map.
-	a, err := ic.ImportArchive(path)
-	if err != nil {
-		return nil, err
-	}
-
-	return ic.Packages[a.ImportPath], nil
+	analysis.PropagateAnalysis(allInfo)
 }
 
 // Compile the provided Go sources as a single package.
 //
 // Provided sources must be sorted by name to ensure reproducible JavaScript output.
-func Compile(srcs sources.Sources, minify bool) (_ *Archive, err error) {
+func Compile(srcs sources.Sources, tContext *types.Context, minify bool) (_ *Archive, err error) {
 	defer func() {
 		e := recover()
 		if e == nil {
@@ -229,8 +206,7 @@ func Compile(srcs sources.Sources, minify bool) (_ *Archive, err error) {
 		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", srcs.ImportPath, e))
 	}()
 
-	// TODO(grantnelson-wf): Move rootCtx to a separate function to perform cross package analysis.
-	rootCtx := newRootCtx(tContext, srcs, typesInfo, typesPkg, importContext.isBlocking, minify)
+	rootCtx := newRootCtx(tContext, srcs, minify)
 
 	importedPaths, importDecls := rootCtx.importDecls()
 
@@ -274,13 +250,13 @@ func Compile(srcs sources.Sources, minify bool) (_ *Archive, err error) {
 
 	return &Archive{
 		ImportPath:   srcs.ImportPath,
-		Name:         typesPkg.Name(),
+		Name:         srcs.Package.Name(),
 		Imports:      importedPaths,
-		Package:      typesPkg,
+		Package:      srcs.Package,
 		Declarations: allDecls,
 		FileSet:      srcs.FileSet,
 		Minified:     minify,
-		GoLinknames:  goLinknames,
+		GoLinknames:  srcs.GoLinknames,
 	}, nil
 }
 

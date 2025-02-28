@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/jsFile"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/internal/errorList"
@@ -41,7 +43,11 @@ type Sources struct {
 
 	// TypeInfo is the type information this package.
 	// This is nil until TypeCheck is called.
-	TypeInfo *types.Info
+	TypeInfo *analysis.Info
+
+	// Instances is the type parameters instances for this package.
+	// This is nil until TypeCheck is called.
+	Instances *typeparams.PackageInstanceSets
 
 	// Package is the type-checked package.
 	// This is nil until TypeCheck is called.
@@ -51,6 +57,8 @@ type Sources struct {
 	// This is nil until ParseGoLinknames is called.
 	GoLinknames []linkname.GoLinkname
 }
+
+type SourcesImporter func(path string) (*Sources, error)
 
 // Sort the Go files slice by the original source name to ensure consistent order
 // of processing. This is required for reproducible JavaScript output.
@@ -68,7 +76,7 @@ func (s Sources) Sort() {
 // This must be called after TypeCheck.
 func (s Sources) Simplify() {
 	for i, file := range s.Files {
-		s.Files[i] = astrewrite.Simplify(file, s.TypeInfo, false)
+		s.Files[i] = astrewrite.Simplify(file, s.TypeInfo.Info, false)
 	}
 }
 
@@ -77,7 +85,9 @@ func (s Sources) Simplify() {
 //
 // This will set the Info and Package fields on the Sources struct.
 // This must be called prior to Simplify.
-func (s Sources) TypeCheck(importer types.Importer, sizes types.Sizes, tContext *types.Context) error {
+// Note that at the end of this call the analysis information
+// has NOT been propagated across packages yet.
+func (s Sources) TypeCheck(importer SourcesImporter, sizes types.Sizes, tContext *types.Context) error {
 	const errLimit = 10 // Max number of type checking errors to return.
 
 	typesInfo := &types.Info{
@@ -116,9 +126,30 @@ func (s Sources) TypeCheck(importer types.Importer, sizes types.Sizes, tContext 
 		return err
 	}
 
-	s.TypeInfo = typesInfo
+	tc := typeparams.Collector{
+		TContext:  tContext,
+		Info:      typesInfo,
+		Instances: &typeparams.PackageInstanceSets{},
+	}
+	tc.Scan(typesPkg, s.Files...)
+
+	infoImporter := getInfoImporter(importer)
+	anaInfo := analysis.AnalyzePkg(s.Files, s.FileSet, typesInfo, tContext, typesPkg, tc.Instances, infoImporter)
+
+	s.TypeInfo = anaInfo
+	s.Instances = tc.Instances
 	s.Package = typesPkg
 	return nil
+}
+
+func getInfoImporter(importer SourcesImporter) analysis.InfoImporter {
+	return func(path string) (*analysis.Info, error) {
+		srcs, err := importer(path)
+		if err != nil {
+			return nil, err
+		}
+		return srcs.TypeInfo, nil
+	}
 }
 
 // ParseGoLinknames extracts all //go:linkname compiler directive from the sources.

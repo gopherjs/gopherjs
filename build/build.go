@@ -27,11 +27,9 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
-	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/jsFile"
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/internal/errorList"
-	"github.com/gopherjs/gopherjs/internal/experiments"
 	"github.com/gopherjs/gopherjs/internal/testmain"
 	log "github.com/sirupsen/logrus"
 
@@ -938,10 +936,11 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 		return nil, err
 	}
 
-	// TODO(grantnelson-wf): Handle newRootCtx changes
+	// Propagate the analysis information to all packages.
+	compiler.PropagateAnalysis(s.sources)
 
 	// Compile the project into Archives containing the generated JS.
-	return s.compilePackages(srcs)
+	return s.compilePackages(srcs, tContext)
 }
 
 func (s *Session) loadTestPackage(pkg *PackageData) (*sources.Sources, error) {
@@ -1109,43 +1108,32 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 	return srcs, nil
 }
 
-type importContext struct {
-	s        *Session
-	dir      string
-	tContext *types.Context
-}
-
-func (ic *importContext) Import(path string) (*types.Package, error) {
-
-}
-
 func (s *Session) prepareSources(srcs *sources.Sources, tContext *types.Context) error {
-	ic := &importContext{
-		s:        s,
-		dir:      srcs.Dir,
-		tContext: tContext,
+	importer := func(path string) (*sources.Sources, error) {
+		importPath, err := s.getImportPath(path, srcs.Dir)
+		if err != nil {
+			return nil, err
+		}
+
+		if srcs, ok := s.sources[importPath]; ok {
+			if srcs.Package == nil {
+				err = s.prepareSources(srcs, tContext)
+				if err != nil {
+					return nil, err
+				}
+			}
+			return srcs, nil
+		}
+
+		return nil, fmt.Errorf(`sources for %q not found`, importPath)
 	}
 
-	if err := srcs.TypeCheck(ic, sizes32, tContext); err != nil {
-		return err
-	}
-
-	if genErr := typeparams.RequiresGenericsSupport(srcs.TypeInfo); genErr != nil && !experiments.Env.Generics {
-		return fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", srcs.ImportPath, genErr)
-	}
-
-	// Extract all go:linkname compiler directives from the package source.
-	if err := srcs.ParseGoLinknames(); err != nil {
-		return err
-	}
-
-	srcs.Simplify()
-	return nil
+	return compiler.PrepareSources(srcs, importer, tContext)
 }
 
-func (s *Session) compilePackages(rootSrcs *sources.Sources) (*compiler.Archive, error) {
+func (s *Session) compilePackages(rootSrcs *sources.Sources, tContext *types.Context) (*compiler.Archive, error) {
 	for _, srcs := range s.sources {
-		archive, err := compiler.Compile(*srcs, s.options.Minify)
+		archive, err := compiler.Compile(*srcs, tContext, s.options.Minify)
 		if err != nil {
 			return nil, err
 		}
@@ -1199,12 +1187,7 @@ func (s *Session) ImportResolverFor(srcDir string) func(string) (*compiler.Archi
 			return archive, nil
 		}
 
-		// The archive hasn't been compiled yet so compile it with the sources.
-		if srcs, ok := s.sources[importPath]; ok {
-			return s.compilePackages(srcs)
-		}
-
-		return nil, fmt.Errorf(`sources for %q not found`, importPath)
+		return nil, fmt.Errorf(`archive for %q not found`, importPath)
 	}
 }
 

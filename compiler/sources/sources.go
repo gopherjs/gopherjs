@@ -144,7 +144,7 @@ func (s Sources) typeCheck(importer types.Importer, sizes types.Sizes, tContext 
 
 	var typeErrs errorList.ErrorList
 
-	ecImporter := &errorCollectingImporter{Importer: importer}
+	ecImporter := &packageImporter{Importer: importer}
 
 	config := &types.Config{
 		Context:  tContext,
@@ -218,6 +218,18 @@ func (s Sources) parseGoLinknames() error {
 	return nil
 }
 
+// ParseGoLinknames extracts all //go:linkname compiler directive from the sources.
+func (s Sources) ParseGoLinknames() ([]linkname.GoLinkname, error) {
+	goLinknames := []linkname.GoLinkname{}
+	var errs errorList.ErrorList
+	for _, file := range s.Files {
+		found, err := linkname.ParseGoLinknames(s.FileSet, s.ImportPath, file)
+		errs = errs.Append(err)
+		goLinknames = append(goLinknames, found...)
+	}
+	return goLinknames, errs.ErrOrNil()
+}
+
 // UnresolvedImports calculates the import paths of the package's dependencies
 // based on all the imports in the augmented Go AST files.
 //
@@ -247,4 +259,25 @@ func (s Sources) UnresolvedImports(skip ...string) []string {
 	}
 	sort.Strings(imports)
 	return imports
+}
+
+// packageImporter implements go/types.Importer interface and
+// wraps it to collect import errors.
+type packageImporter struct {
+	Importer types.Importer
+	Errors   errorList.ErrorList
+}
+
+func (ei *packageImporter) Import(path string) (*types.Package, error) {
+	if path == "unsafe" {
+		return types.Unsafe, nil
+	}
+
+	pkg, err := ei.Importer.Import(path)
+	if err != nil {
+		ei.Errors = ei.Errors.AppendDistinct(err)
+		return nil, err
+	}
+
+	return pkg, nil
 }

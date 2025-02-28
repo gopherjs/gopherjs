@@ -932,7 +932,8 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 	// Prepare and analyze the source code.
 	// This will be performed recursively for all dependencies.
 	tContext := types.NewContext()
-	if err = s.prepareSources(srcs, tContext); err != nil {
+	err = compiler.PrepareAllSources(srcs, s.SourcesForImport, tContext)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1107,32 +1108,9 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 	return srcs, nil
 }
 
-func (s *Session) prepareSources(srcs *sources.Sources, tContext *types.Context) error {
-	importer := func(path string) (*sources.Sources, error) {
-		importPath, err := s.getImportPath(path, srcs.Dir)
-		if err != nil {
-			return nil, err
-		}
-
-		if srcs, ok := s.sources[importPath]; ok {
-			if srcs.Package == nil {
-				err = s.prepareSources(srcs, tContext)
-				if err != nil {
-					return nil, err
-				}
-			}
-			return srcs, nil
-		}
-
-		return nil, fmt.Errorf(`sources for %q not found`, importPath)
-	}
-
-	return srcs.Prepare(importer, sizes, tContext)
-}
-
 func (s *Session) compilePackages(rootSrcs *sources.Sources, tContext *types.Context) (*compiler.Archive, error) {
 	for _, srcs := range s.sources {
-		archive, err := compiler.Compile(*srcs, tContext, s.options.Minify)
+		archive, err := compiler.Compile(srcs, tContext, s.options.Minify)
 		if err != nil {
 			return nil, err
 		}

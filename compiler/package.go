@@ -116,7 +116,7 @@ type funcContext struct {
 	funcLitCounter int
 }
 
-func newRootCtx(tContext *types.Context, srcs sources.Sources, minify bool) *funcContext {
+func newRootCtx(tContext *types.Context, srcs *sources.Sources, minify bool) *funcContext {
 	funcCtx := &funcContext{
 		FuncInfo: srcs.TypeInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{
@@ -150,33 +150,8 @@ type flowData struct {
 	endCase   int
 }
 
-type SourcesImporter func(path, srcDir string) (*sources.Sources, error)
-
-func PrepareAllSources(root *sources.Sources, importer SourcesImporter, tContext *types.Context) error {
-
-}
-
-func prepareSources(srcs *sources.Sources, importer SourcesImporter, tContext *types.Context) {
-	importer := func(path string) (*sources.Sources, error) {
-		importPath, err := s.getImportPath(path, srcs.Dir)
-		if err != nil {
-			return nil, err
-		}
-
-		if srcs, ok := s.sources[importPath]; ok {
-			if srcs.Package == nil {
-				err = s.prepareSources(srcs, tContext)
-				if err != nil {
-					return nil, err
-				}
-			}
-			return srcs, nil
-		}
-
-		return nil, fmt.Errorf(`sources for %q not found`, importPath)
-	}
-
-	return srcs.Prepare(importer, sizes, tContext)
+func PrepareAllSources(root *sources.Sources, importer sources.Importer, tContext *types.Context) error {
+	return root.Prepare(importer, sizes32, tContext)
 }
 
 // PropagateAnalysis the analysis information to all packages.
@@ -194,7 +169,7 @@ func PropagateAnalysis(allSources map[string]*sources.Sources) {
 // Compile the provided Go sources as a single package.
 //
 // Provided sources must be sorted by name to ensure reproducible JavaScript output.
-func Compile(srcs sources.Sources, tContext *types.Context, minify bool) (_ *Archive, err error) {
+func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Archive, err error) {
 	defer func() {
 		e := recover()
 		if e == nil {

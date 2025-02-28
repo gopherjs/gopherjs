@@ -679,44 +679,40 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 		pkgMap[pkg.PkgPath] = pkg
 	})
 
-	archiveCache := map[string]*Archive{}
-	var importContext *ImportContext
-	importContext = &ImportContext{
-		Packages: map[string]*types.Package{},
-		ImportArchive: func(path string) (*Archive, error) {
-			// find in local cache
-			if a, ok := archiveCache[path]; ok {
-				return a, nil
-			}
-
-			pkg, ok := pkgMap[path]
-			if !ok {
-				t.Fatal(`package not found:`, path)
-			}
-			importContext.Packages[path] = pkg.Types
-
-			srcs := sources.Sources{
-				ImportPath: path,
-				Files:      pkg.Syntax,
-				FileSet:    pkg.Fset,
-			}
-			srcs.Sort()
-
-			// compile package
-			a, err := Compile(srcs, importContext, minify)
-			if err != nil {
-				return nil, err
-			}
-			archiveCache[path] = a
-			return a, nil
-		},
+	allSrcs := map[string]*sources.Sources{}
+	for _, pkg := range pkgMap {
+		srcs := &sources.Sources{
+			ImportPath: pkg.PkgPath,
+			Dir:        ``,
+			Files:      pkg.Syntax,
+			FileSet:    pkg.Fset,
+		}
+		allSrcs[pkg.PkgPath] = srcs
 	}
 
-	_, err := importContext.ImportArchive(root.PkgPath)
-	if err != nil {
-		t.Fatal(`failed to compile:`, err)
+	importer := func(path, srcDir string) (*sources.Sources, error) {
+		srcs, ok := allSrcs[path]
+		if !ok {
+			t.Fatal(`package not found:`, path)
+			return nil, nil
+		}
+		return srcs, nil
 	}
-	return archiveCache
+
+	tContext := types.NewContext()
+	PrepareAllSources(allSrcs[root.PkgPath], importer, tContext)
+	PropagateAnalysis(allSrcs)
+
+	archives := map[string]*Archive{}
+	for _, srcs := range allSrcs {
+		a, err := Compile(srcs, tContext, minify)
+		if err != nil {
+			t.Fatal(`failed to compile:`, err)
+		}
+		archives[srcs.ImportPath] = a
+	}
+
+	return archives
 }
 
 // newTime creates an arbitrary time.Time offset by the given number of seconds.

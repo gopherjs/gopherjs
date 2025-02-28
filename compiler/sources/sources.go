@@ -60,7 +60,7 @@ type Sources struct {
 	GoLinknames []linkname.GoLinkname
 }
 
-type SourcesImporter func(path, srcDir string) (*Sources, error)
+type Importer func(path, srcDir string) (*Sources, error)
 
 // Prepare recursively processes the provided sources and
 // prepares them for compilation by sorting the files by name,
@@ -73,17 +73,10 @@ type SourcesImporter func(path, srcDir string) (*Sources, error)
 //
 // Note that at the end of this call the analysis information
 // has NOT been propagated across packages yet.
-func (s *Sources) Prepare(importer SourcesImporter, sizes types.Sizes, tContext *types.Context) error {
+func (s *Sources) Prepare(importer Importer, sizes types.Sizes, tContext *types.Context) error {
 	s.sort()
 
-	typesImporter := func(path string) (*types.Package, error) {
-		if path == "unsafe" {
-			return types.Unsafe, nil
-		}
-
-	}
-
-	typesInfo, err := s.typeCheck(typesImporter, sizes, tContext)
+	typesInfo, err := s.typeCheck(importer, sizes, tContext)
 	if err != nil {
 		return err
 	}
@@ -109,7 +102,7 @@ func (s *Sources) Prepare(importer SourcesImporter, sizes types.Sizes, tContext 
 // of processing. This is required for reproducible JavaScript output.
 //
 // Note this function mutates the original Files slice.
-func (s Sources) sort() {
+func (s *Sources) sort() {
 	sort.Slice(s.Files, func(i, j int) bool {
 		return s.FileSet.File(s.Files[i].Pos()).Name() > s.FileSet.File(s.Files[j].Pos()).Name()
 	})
@@ -119,7 +112,7 @@ func (s Sources) sort() {
 //
 // Note this function mutates the original Files slice.
 // This must be called after TypeCheck.
-func (s Sources) simplify() {
+func (s *Sources) simplify() {
 	for i, file := range s.Files {
 		s.Files[i] = astrewrite.Simplify(file, s.TypeInfo.Info, false)
 	}
@@ -129,7 +122,7 @@ func (s Sources) simplify() {
 // type information for the supplied AST.
 //
 // This must be called prior to Simplify.
-func (s Sources) typeCheck(importer types.Importer, sizes types.Sizes, tContext *types.Context) (*types.Info, error) {
+func (s *Sources) typeCheck(importer Importer, sizes types.Sizes, tContext *types.Context) (*types.Info, error) {
 	const errLimit = 10 // Max number of type checking errors to return.
 
 	typesInfo := &types.Info{
@@ -144,11 +137,16 @@ func (s Sources) typeCheck(importer types.Importer, sizes types.Sizes, tContext 
 
 	var typeErrs errorList.ErrorList
 
-	ecImporter := &packageImporter{Importer: importer}
+	pkgImporter := &packageImporter{
+		srcDir:   s.Dir,
+		importer: importer,
+		sizes:    sizes,
+		tContext: tContext,
+	}
 
 	config := &types.Config{
 		Context:  tContext,
-		Importer: ecImporter,
+		Importer: pkgImporter,
 		Sizes:    sizes,
 		Error:    func(err error) { typeErrs = typeErrs.AppendDistinct(err) },
 	}
@@ -156,8 +154,8 @@ func (s Sources) typeCheck(importer types.Importer, sizes types.Sizes, tContext 
 	// If we encountered any import errors, it is likely that the other type errors
 	// are not meaningful and would be resolved by fixing imports. Return them
 	// separately, if any. https://github.com/gopherjs/gopherjs/issues/119.
-	if ecImporter.Errors.ErrOrNil() != nil {
-		return nil, ecImporter.Errors.Trim(errLimit).ErrOrNil()
+	if pkgImporter.Errors.ErrOrNil() != nil {
+		return nil, pkgImporter.Errors.Trim(errLimit).ErrOrNil()
 	}
 	// Return any other type errors.
 	if typeErrs.ErrOrNil() != nil {
@@ -178,7 +176,7 @@ func (s Sources) typeCheck(importer types.Importer, sizes types.Sizes, tContext 
 // This must be called prior to Simplify.
 // Note that at the end of this call the analysis information
 // has NOT been propagated across packages yet.
-func (s Sources) analyze(typesInfo *types.Info, importer SourcesImporter, tContext *types.Context) {
+func (s *Sources) analyze(typesInfo *types.Info, importer Importer, tContext *types.Context) {
 	tc := typeparams.Collector{
 		TContext:  tContext,
 		Info:      typesInfo,
@@ -187,7 +185,7 @@ func (s Sources) analyze(typesInfo *types.Info, importer SourcesImporter, tConte
 	tc.Scan(s.Package, s.Files...)
 
 	infoImporter := func(path string) (*analysis.Info, error) {
-		srcs, err := importer(path)
+		srcs, err := importer(path, s.Dir)
 		if err != nil {
 			return nil, err
 		}
@@ -203,7 +201,7 @@ func (s Sources) analyze(typesInfo *types.Info, importer SourcesImporter, tConte
 //
 // This will set the GoLinknames field on the Sources struct.
 // This must be called prior to Simplify.
-func (s Sources) parseGoLinknames() error {
+func (s *Sources) parseGoLinknames() error {
 	goLinknames := []linkname.GoLinkname{}
 	var errs errorList.ErrorList
 	for _, file := range s.Files {
@@ -218,18 +216,6 @@ func (s Sources) parseGoLinknames() error {
 	return nil
 }
 
-// ParseGoLinknames extracts all //go:linkname compiler directive from the sources.
-func (s Sources) ParseGoLinknames() ([]linkname.GoLinkname, error) {
-	goLinknames := []linkname.GoLinkname{}
-	var errs errorList.ErrorList
-	for _, file := range s.Files {
-		found, err := linkname.ParseGoLinknames(s.FileSet, s.ImportPath, file)
-		errs = errs.Append(err)
-		goLinknames = append(goLinknames, found...)
-	}
-	return goLinknames, errs.ErrOrNil()
-}
-
 // UnresolvedImports calculates the import paths of the package's dependencies
 // based on all the imports in the augmented Go AST files.
 //
@@ -240,7 +226,7 @@ func (s Sources) ParseGoLinknames() ([]linkname.GoLinkname, error) {
 // The given skip paths (typically those imports from PackageData.Imports)
 // will not be returned in the results.
 // This will not return any `*_test` packages in the results.
-func (s Sources) UnresolvedImports(skip ...string) []string {
+func (s *Sources) UnresolvedImports(skip ...string) []string {
 	seen := make(map[string]struct{})
 	for _, sk := range skip {
 		seen[sk] = struct{}{}
@@ -264,7 +250,10 @@ func (s Sources) UnresolvedImports(skip ...string) []string {
 // packageImporter implements go/types.Importer interface and
 // wraps it to collect import errors.
 type packageImporter struct {
-	Importer types.Importer
+	srcDir   string
+	importer Importer
+	sizes    types.Sizes
+	tContext *types.Context
 	Errors   errorList.ErrorList
 }
 
@@ -273,11 +262,19 @@ func (ei *packageImporter) Import(path string) (*types.Package, error) {
 		return types.Unsafe, nil
 	}
 
-	pkg, err := ei.Importer.Import(path)
+	srcs, err := ei.importer(path, ei.srcDir)
 	if err != nil {
 		ei.Errors = ei.Errors.AppendDistinct(err)
 		return nil, err
 	}
 
-	return pkg, nil
+	if srcs.Package == nil {
+		err := srcs.Prepare(ei.importer, ei.sizes, ei.tContext)
+		if err != nil {
+			ei.Errors = ei.Errors.AppendDistinct(err)
+			return nil, err
+		}
+	}
+
+	return srcs.Package, nil
 }

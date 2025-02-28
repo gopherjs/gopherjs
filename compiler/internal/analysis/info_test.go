@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"fmt"
 	"go/ast"
 	"go/types"
 	"sort"
@@ -1639,11 +1640,10 @@ func newBlockingTest(t *testing.T, src string) *blockingTest {
 	testInfo, testPkg := f.Check(`pkg/test`, file)
 	tc.Scan(testPkg, file)
 
-	isImportBlocking := func(i typeparams.Instance) bool {
-		t.Fatalf(`isImportBlocking should not be called in this test, called with %v`, i)
-		return true
+	getImportInfo := func(path string) (*Info, error) {
+		return nil, fmt.Errorf(`getImportInfo should not be called in this test, called with %v`, path)
 	}
-	pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, testInfo, types.NewContext(), testPkg, tc.Instances, isImportBlocking)
+	pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, testInfo, types.NewContext(), testPkg, tc.Instances, getImportInfo)
 
 	return &blockingTest{
 		f:       f,
@@ -1660,13 +1660,12 @@ func newBlockingTestWithOtherPackage(t *testing.T, testSrc string, otherSrc stri
 		Instances: &typeparams.PackageInstanceSets{},
 	}
 
-	pkgInfo := map[*types.Package]*Info{}
-	isImportBlocking := func(i typeparams.Instance) bool {
-		if info, ok := pkgInfo[i.Object.Pkg()]; ok {
-			return info.IsBlocking(i)
+	pkgInfo := map[string]*Info{}
+	getImportInfo := func(path string) (*Info, error) {
+		if info, ok := pkgInfo[path]; ok {
+			return info, nil
 		}
-		t.Fatalf(`unexpected package in isImportBlocking for %v`, i)
-		return true
+		return nil, fmt.Errorf(`unexpected package in getImportInfo for %v`, path)
 	}
 
 	otherFile := f.Parse(`other.go`, otherSrc)
@@ -1677,11 +1676,11 @@ func newBlockingTestWithOtherPackage(t *testing.T, testSrc string, otherSrc stri
 	_, testPkg := f.Check(`pkg/test`, testFile)
 	tc.Scan(testPkg, testFile)
 
-	otherPkgInfo := AnalyzePkg([]*ast.File{otherFile}, f.FileSet, f.Info, types.NewContext(), otherPkg, tc.Instances, isImportBlocking)
-	pkgInfo[otherPkg] = otherPkgInfo
+	otherPkgInfo := AnalyzePkg([]*ast.File{otherFile}, f.FileSet, f.Info, types.NewContext(), otherPkg, tc.Instances, getImportInfo)
+	pkgInfo[otherPkg.Path()] = otherPkgInfo
 
-	testPkgInfo := AnalyzePkg([]*ast.File{testFile}, f.FileSet, f.Info, types.NewContext(), testPkg, tc.Instances, isImportBlocking)
-	pkgInfo[testPkg] = testPkgInfo
+	testPkgInfo := AnalyzePkg([]*ast.File{testFile}, f.FileSet, f.Info, types.NewContext(), testPkg, tc.Instances, getImportInfo)
+	pkgInfo[testPkg.Path()] = testPkgInfo
 
 	return &blockingTest{
 		f:       f,

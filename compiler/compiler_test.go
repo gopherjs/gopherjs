@@ -12,6 +12,8 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
+	"github.com/gopherjs/gopherjs/compiler/linkname"
+	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
@@ -677,37 +679,40 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 		pkgMap[pkg.PkgPath] = pkg
 	})
 
-	archiveCache := map[string]*Archive{}
-	var importContext *ImportContext
-	importContext = &ImportContext{
-		Packages: map[string]*types.Package{},
-		Import: func(path string) (*Archive, error) {
-			// find in local cache
-			if a, ok := archiveCache[path]; ok {
-				return a, nil
-			}
-
-			pkg, ok := pkgMap[path]
-			if !ok {
-				t.Fatal(`package not found:`, path)
-			}
-			importContext.Packages[path] = pkg.Types
-
-			// compile package
-			a, err := Compile(path, pkg.Syntax, pkg.Fset, importContext, minify)
-			if err != nil {
-				return nil, err
-			}
-			archiveCache[path] = a
-			return a, nil
-		},
+	allSrcs := map[string]*sources.Sources{}
+	for _, pkg := range pkgMap {
+		srcs := &sources.Sources{
+			ImportPath: pkg.PkgPath,
+			Dir:        ``,
+			Files:      pkg.Syntax,
+			FileSet:    pkg.Fset,
+		}
+		allSrcs[pkg.PkgPath] = srcs
 	}
 
-	_, err := importContext.Import(root.PkgPath)
-	if err != nil {
-		t.Fatal(`failed to compile:`, err)
+	importer := func(path, srcDir string) (*sources.Sources, error) {
+		srcs, ok := allSrcs[path]
+		if !ok {
+			t.Fatal(`package not found:`, path)
+			return nil, nil
+		}
+		return srcs, nil
 	}
-	return archiveCache
+
+	tContext := types.NewContext()
+	PrepareAllSources(allSrcs[root.PkgPath], importer, tContext)
+	PropagateAnalysis(allSrcs)
+
+	archives := map[string]*Archive{}
+	for _, srcs := range allSrcs {
+		a, err := Compile(srcs, tContext, minify)
+		if err != nil {
+			t.Fatal(`failed to compile:`, err)
+		}
+		archives[srcs.ImportPath] = a
+	}
+
+	return archives
 }
 
 // newTime creates an arbitrary time.Time offset by the given number of seconds.
@@ -734,10 +739,14 @@ func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPa
 
 	srcModTime := newTime(0.0)
 	reloadCache := map[string]*Archive{}
+	type ImportContext struct {
+		Packages      map[string]*types.Package
+		ImportArchive func(path string) (*Archive, error)
+	}
 	var importContext *ImportContext
 	importContext = &ImportContext{
 		Packages: map[string]*types.Package{},
-		Import: func(path string) (*Archive, error) {
+		ImportArchive: func(path string) (*Archive, error) {
 			// find in local cache
 			if a, ok := reloadCache[path]; ok {
 				return a, nil
@@ -757,7 +766,7 @@ func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPa
 		},
 	}
 
-	_, err := importContext.Import(rootPkgPath)
+	_, err := importContext.ImportArchive(rootPkgPath)
 	if err != nil {
 		t.Fatal(`failed to reload archives:`, err)
 	}
@@ -775,7 +784,7 @@ func renderPackage(t *testing.T, archive *Archive, minify bool) string {
 
 	buf := &bytes.Buffer{}
 
-	if err := WritePkgCode(archive, selection, goLinknameSet{}, minify, &SourceMapFilter{Writer: buf}); err != nil {
+	if err := WritePkgCode(archive, selection, linkname.GoLinknameSet{}, minify, &SourceMapFilter{Writer: buf}); err != nil {
 		t.Fatal(err)
 	}
 

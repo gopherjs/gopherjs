@@ -1,4 +1,4 @@
-package compiler
+package linkname
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
+	"github.com/gopherjs/gopherjs/internal/errorList"
 )
 
 // GoLinkname describes a go:linkname compiler directive found in the source code.
@@ -21,7 +22,7 @@ type GoLinkname struct {
 	Reference      symbol.Name
 }
 
-// parseGoLinknames processed comments in a source file and extracts //go:linkname
+// ParseGoLinknames processed comments in a source file and extracts //go:linkname
 // compiler directive from the comments.
 //
 // The following directive format is supported:
@@ -37,8 +38,8 @@ type GoLinkname struct {
 //   - The local function referenced by the directive must have no body (in other
 //     words, it can only "import" an external function implementation into the
 //     local scope).
-func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]GoLinkname, error) {
-	var errs ErrorList = nil
+func ParseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]GoLinkname, error) {
+	var errs errorList.ErrorList = nil
 	var directives []GoLinkname
 
 	isUnsafe := astutil.ImportsUnsafe(file)
@@ -107,7 +108,7 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 	for _, cg := range file.Comments {
 		for _, c := range cg.List {
 			if err := processComment(c); err != nil {
-				errs = append(errs, ErrorAt(err, fset, c.Pos()))
+				errs = append(errs, errorAt(err, fset, c.Pos()))
 			}
 		}
 	}
@@ -115,15 +116,20 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 	return directives, errs.ErrOrNil()
 }
 
-// goLinknameSet is a utility that enables quick lookup of whether a decl is
+// errorAt annotates an error with a position in the source code.
+func errorAt(err error, fset *token.FileSet, pos token.Pos) error {
+	return fmt.Errorf("%s: %w", fset.Position(pos), err)
+}
+
+// GoLinknameSet is a utility that enables quick lookup of whether a decl is
 // affected by any go:linkname directive in the program.
-type goLinknameSet struct {
+type GoLinknameSet struct {
 	byImplementation map[symbol.Name][]GoLinkname
 	byReference      map[symbol.Name]GoLinkname
 }
 
 // Add more GoLinkname directives into the set.
-func (gls *goLinknameSet) Add(entries []GoLinkname) error {
+func (gls *GoLinknameSet) Add(entries []GoLinkname) error {
 	if gls.byImplementation == nil {
 		gls.byImplementation = map[symbol.Name][]GoLinkname{}
 	}
@@ -143,7 +149,7 @@ func (gls *goLinknameSet) Add(entries []GoLinkname) error {
 
 // IsImplementation returns true if there is a directive referencing this symbol
 // as an implementation.
-func (gls *goLinknameSet) IsImplementation(sym symbol.Name) bool {
+func (gls *GoLinknameSet) IsImplementation(sym symbol.Name) bool {
 	_, found := gls.byImplementation[sym]
 	return found
 }
@@ -151,7 +157,7 @@ func (gls *goLinknameSet) IsImplementation(sym symbol.Name) bool {
 // FindImplementation returns a symbol name, which provides the implementation
 // for the given symbol. The second value indicates whether the implementation
 // was found.
-func (gls *goLinknameSet) FindImplementation(sym symbol.Name) (symbol.Name, bool) {
+func (gls *GoLinknameSet) FindImplementation(sym symbol.Name) (symbol.Name, bool) {
 	directive, found := gls.byReference[sym]
 	return directive.Implementation, found
 }

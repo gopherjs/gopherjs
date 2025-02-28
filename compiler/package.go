@@ -7,12 +7,14 @@ import (
 	"go/types"
 	"strings"
 
+	"golang.org/x/tools/go/types/typeutil"
+
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
+	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
-	"github.com/gopherjs/gopherjs/internal/experiments"
-	"golang.org/x/tools/go/types/typeutil"
+	"github.com/gopherjs/gopherjs/internal/errorList"
 )
 
 // pkgContext maintains compiler context for a specific package.
@@ -35,7 +37,7 @@ type pkgContext struct {
 	indentation  int
 	minify       bool
 	fileSet      *token.FileSet
-	errList      ErrorList
+	errList      errorList.ErrorList
 	instanceSet  *typeparams.PackageInstanceSets
 }
 
@@ -114,18 +116,11 @@ type funcContext struct {
 	funcLitCounter int
 }
 
-func newRootCtx(tContext *types.Context, srcs sources, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(typeparams.Instance) bool, minify bool) *funcContext {
-	tc := typeparams.Collector{
-		TContext:  tContext,
-		Info:      typesInfo,
-		Instances: &typeparams.PackageInstanceSets{},
-	}
-	tc.Scan(typesPkg, srcs.Files...)
-	pkgInfo := analysis.AnalyzePkg(srcs.Files, srcs.FileSet, typesInfo, tContext, typesPkg, tc.Instances, isBlocking)
+func newRootCtx(tContext *types.Context, srcs *sources.Sources, minify bool) *funcContext {
 	funcCtx := &funcContext{
-		FuncInfo: pkgInfo.InitFuncInfo,
+		FuncInfo: srcs.TypeInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{
-			Info:                 pkgInfo,
+			Info:                 srcs.TypeInfo,
 			additionalSelections: make(map[*ast.SelectorExpr]typesutil.Selection),
 
 			typesCtx:     tContext,
@@ -135,7 +130,7 @@ func newRootCtx(tContext *types.Context, srcs sources, typesInfo *types.Info, ty
 			indentation:  1,
 			minify:       minify,
 			fileSet:      srcs.FileSet,
-			instanceSet:  tc.Instances,
+			instanceSet:  srcs.Instances,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[*types.Label]*flowData{nil: {}},
@@ -155,48 +150,26 @@ type flowData struct {
 	endCase   int
 }
 
-// ImportContext provides access to information about imported packages.
-type ImportContext struct {
-	// Mapping for an absolute import path to the package type information.
-	Packages map[string]*types.Package
-	// Import returns a previously compiled Archive for a dependency package. If
-	// the Import() call was successful, the corresponding entry must be added to
-	// the Packages map.
-	Import func(importPath string) (*Archive, error)
+func PrepareAllSources(root *sources.Sources, importer sources.Importer, tContext *types.Context) error {
+	return root.Prepare(importer, sizes32, tContext)
 }
 
-// isBlocking returns true if an _imported_ function is blocking. It will panic
-// if the function decl is not found in the imported package or the package
-// hasn't been compiled yet.
+// PropagateAnalysis the analysis information to all packages.
 //
-// Note: see analysis.FuncInfo.Blocking if you need to determine if a function
-// in the _current_ package is blocking. Usually available via functionContext
-// object.
-func (ic *ImportContext) isBlocking(inst typeparams.Instance) bool {
-	f, ok := inst.Object.(*types.Func)
-	if !ok {
-		panic(bailout(fmt.Errorf("can't determine if instance %v is blocking: instance isn't for a function object", inst)))
+// The map of sources is keyed by the resolved import path of the package,
+// however that key is not used.
+func PropagateAnalysis(allSources map[string]*sources.Sources) {
+	allInfo := make([]*analysis.Info, 0, len(allSources))
+	for _, src := range allSources {
+		allInfo = append(allInfo, src.TypeInfo)
 	}
-
-	archive, err := ic.Import(f.Pkg().Path())
-	if err != nil {
-		panic(err)
-	}
-
-	fullName := funcDeclFullName(inst)
-	for _, d := range archive.Declarations {
-		if d.FullName == fullName {
-			return d.Blocking
-		}
-	}
-	panic(bailout(fmt.Errorf("can't determine if function %s is blocking: decl not found in package archive", fullName)))
+	analysis.PropagateAnalysis(allInfo)
 }
 
 // Compile the provided Go sources as a single package.
 //
-// Import path must be the absolute import path for a package. Provided sources
-// are always sorted by name to ensure reproducible JavaScript output.
-func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (_ *Archive, err error) {
+// Provided sources must be sorted by name to ensure reproducible JavaScript output.
+func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Archive, err error) {
 	defer func() {
 		e := recover()
 		if e == nil {
@@ -204,39 +177,15 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		if fe, ok := bailingOut(e); ok {
 			// Orderly bailout, return whatever clues we already have.
-			fmt.Fprintf(fe, `building package %q`, importPath)
+			fmt.Fprintf(fe, `building package %q`, srcs.ImportPath)
 			err = fe
 			return
 		}
 		// Some other unexpected panic, catch the stack trace and return as an error.
-		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", importPath, e))
+		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", srcs.ImportPath, e))
 	}()
 
-	srcs := sources{
-		ImportPath: importPath,
-		Files:      files,
-		FileSet:    fileSet,
-	}.Sort()
-
-	tContext := types.NewContext()
-	typesInfo, typesPkg, err := srcs.TypeCheck(importContext, tContext)
-	if err != nil {
-		return nil, err
-	}
-	if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil && !experiments.Env.Generics {
-		return nil, fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", importPath, genErr)
-	}
-	importContext.Packages[srcs.ImportPath] = typesPkg
-
-	// Extract all go:linkname compiler directives from the package source.
-	goLinknames, err := srcs.ParseGoLinknames()
-	if err != nil {
-		return nil, err
-	}
-
-	srcs = srcs.Simplified(typesInfo)
-
-	rootCtx := newRootCtx(tContext, srcs, typesInfo, typesPkg, importContext.isBlocking, minify)
+	rootCtx := newRootCtx(tContext, srcs, minify)
 
 	importedPaths, importDecls := rootCtx.importDecls()
 
@@ -280,13 +229,13 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 
 	return &Archive{
 		ImportPath:   srcs.ImportPath,
-		Name:         typesPkg.Name(),
+		Name:         srcs.Package.Name(),
 		Imports:      importedPaths,
-		Package:      typesPkg,
+		Package:      srcs.Package,
 		Declarations: allDecls,
 		FileSet:      srcs.FileSet,
 		Minified:     minify,
-		GoLinknames:  goLinknames,
+		GoLinknames:  srcs.GoLinknames,
 	}, nil
 }
 

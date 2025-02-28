@@ -15,7 +15,6 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/gopherjs/gopherjs/internal/errorList"
-	"github.com/gopherjs/gopherjs/internal/experiments"
 )
 
 // pkgContext maintains compiler context for a specific package.
@@ -151,28 +150,33 @@ type flowData struct {
 	endCase   int
 }
 
-// PrepareSources recursively processes the provided sources and
-// prepares them for compilation by determining the type information,
-// go linknames, and simplifying the AST.
-//
-// Note that at the end of this call the analysis information
-// has NOT been propagated across packages yet.
-func PrepareSources(srcs *sources.Sources, importer sources.SourcesImporter, tContext *types.Context) error {
-	if err := srcs.TypeCheck(importer, sizes32, tContext); err != nil {
-		return err
+type SourcesImporter func(path, srcDir string) (*sources.Sources, error)
+
+func PrepareAllSources(root *sources.Sources, importer SourcesImporter, tContext *types.Context) error {
+
+}
+
+func prepareSources(srcs *sources.Sources, importer SourcesImporter, tContext *types.Context) {
+	importer := func(path string) (*sources.Sources, error) {
+		importPath, err := s.getImportPath(path, srcs.Dir)
+		if err != nil {
+			return nil, err
+		}
+
+		if srcs, ok := s.sources[importPath]; ok {
+			if srcs.Package == nil {
+				err = s.prepareSources(srcs, tContext)
+				if err != nil {
+					return nil, err
+				}
+			}
+			return srcs, nil
+		}
+
+		return nil, fmt.Errorf(`sources for %q not found`, importPath)
 	}
 
-	if genErr := typeparams.RequiresGenericsSupport(srcs.TypeInfo.Info); genErr != nil && !experiments.Env.Generics {
-		return fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", srcs.ImportPath, genErr)
-	}
-
-	// Extract all go:linkname compiler directives from the package source.
-	if err := srcs.ParseGoLinknames(); err != nil {
-		return err
-	}
-
-	srcs.Simplify()
-	return nil
+	return srcs.Prepare(importer, sizes, tContext)
 }
 
 // PropagateAnalysis the analysis information to all packages.

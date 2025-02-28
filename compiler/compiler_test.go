@@ -743,6 +743,10 @@ func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPa
 
 	srcModTime := newTime(0.0)
 	reloadCache := map[string]*Archive{}
+	type ImportContext struct {
+		Packages      map[string]*types.Package
+		ImportArchive func(path string) (*Archive, error)
+	}
 	var importContext *ImportContext
 	importContext = &ImportContext{
 		Packages: map[string]*types.Package{},

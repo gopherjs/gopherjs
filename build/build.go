@@ -1093,7 +1093,6 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 		FileSet:    fileSet,
 		JSFiles:    append(pkg.JSFiles, overlayJsFiles...),
 	}
-	srcs.Sort()
 	s.sources[pkg.ImportPath] = srcs
 
 	// Import dependencies from the augmented files,
@@ -1128,7 +1127,7 @@ func (s *Session) prepareSources(srcs *sources.Sources, tContext *types.Context)
 		return nil, fmt.Errorf(`sources for %q not found`, importPath)
 	}
 
-	return compiler.PrepareSources(srcs, importer, tContext)
+	return srcs.Prepare(importer, sizes, tContext)
 }
 
 func (s *Session) compilePackages(rootSrcs *sources.Sources, tContext *types.Context) (*compiler.Archive, error) {
@@ -1172,6 +1171,20 @@ func (s *Session) getImportPath(path, srcDir string) (string, error) {
 	}
 	s.cacheImportPath(path, srcDir, pkg.ImportPath)
 	return pkg.ImportPath, nil
+}
+
+func (s *Session) SourcesForImport(path, srcDir string) (*sources.Sources, error) {
+	importPath, err := s.getImportPath(path, srcDir)
+	if err != nil {
+		return nil, err
+	}
+
+	srcs, ok := s.sources[importPath]
+	if !ok {
+		return nil, fmt.Errorf(`sources for %q not found`, path)
+	}
+
+	return srcs, nil
 }
 
 // ImportResolverFor returns a function which returns a compiled package archive

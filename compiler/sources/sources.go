@@ -38,31 +38,46 @@ type Sources struct {
 
 	// JSFiles is the JavaScript files that are part of the package.
 	JSFiles []jsFile.JSFile
+
+	// TypeInfo is the type information this package.
+	// This is nil until TypeCheck is called.
+	TypeInfo *types.Info
+
+	// Package is the type-checked package.
+	// This is nil until TypeCheck is called.
+	Package *types.Package
+
+	// GoLinknames is the set of Go linknames for this package.
+	// This is nil until ParseGoLinknames is called.
+	GoLinknames []linkname.GoLinkname
 }
 
 // Sort the Go files slice by the original source name to ensure consistent order
 // of processing. This is required for reproducible JavaScript output.
 //
 // Note this function mutates the original Files slice.
-func (s Sources) Sort() Sources {
+func (s Sources) Sort() {
 	sort.Slice(s.Files, func(i, j int) bool {
 		return s.FileSet.File(s.Files[i].Pos()).Name() > s.FileSet.File(s.Files[j].Pos()).Name()
 	})
-	return s
 }
 
 // Simplify processed each Files entry with astrewrite.Simplify.
 //
 // Note this function mutates the original Files slice.
-func (s Sources) Simplify(typesInfo *types.Info) {
+// This must be called after TypeCheck.
+func (s Sources) Simplify() {
 	for i, file := range s.Files {
-		s.Files[i] = astrewrite.Simplify(file, typesInfo, false)
+		s.Files[i] = astrewrite.Simplify(file, s.TypeInfo, false)
 	}
 }
 
 // TypeCheck the sources. Returns information about declared package types and
 // type information for the supplied AST.
-func (s Sources) TypeCheck(importer types.Importer, sizes types.Sizes, tContext *types.Context) (*types.Info, *types.Package, error) {
+//
+// This will set the Info and Package fields on the Sources struct.
+// This must be called prior to Simplify.
+func (s Sources) TypeCheck(importer types.Importer, sizes types.Sizes, tContext *types.Context) error {
 	const errLimit = 10 // Max number of type checking errors to return.
 
 	typesInfo := &types.Info{
@@ -90,21 +105,27 @@ func (s Sources) TypeCheck(importer types.Importer, sizes types.Sizes, tContext 
 	// are not meaningful and would be resolved by fixing imports. Return them
 	// separately, if any. https://github.com/gopherjs/gopherjs/issues/119.
 	if ecImporter.Errors.ErrOrNil() != nil {
-		return nil, nil, ecImporter.Errors.Trim(errLimit).ErrOrNil()
+		return ecImporter.Errors.Trim(errLimit).ErrOrNil()
 	}
 	// Return any other type errors.
 	if typeErrs.ErrOrNil() != nil {
-		return nil, nil, typeErrs.Trim(errLimit).ErrOrNil()
+		return typeErrs.Trim(errLimit).ErrOrNil()
 	}
 	// Any general errors that may have occurred during type checking.
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-	return typesInfo, typesPkg, nil
+
+	s.TypeInfo = typesInfo
+	s.Package = typesPkg
+	return nil
 }
 
 // ParseGoLinknames extracts all //go:linkname compiler directive from the sources.
-func (s Sources) ParseGoLinknames() ([]linkname.GoLinkname, error) {
+//
+// This will set the GoLinknames field on the Sources struct.
+// This must be called prior to Simplify.
+func (s Sources) ParseGoLinknames() error {
 	goLinknames := []linkname.GoLinkname{}
 	var errs errorList.ErrorList
 	for _, file := range s.Files {
@@ -112,7 +133,11 @@ func (s Sources) ParseGoLinknames() ([]linkname.GoLinkname, error) {
 		errs = errs.Append(err)
 		goLinknames = append(goLinknames, found...)
 	}
-	return goLinknames, errs.ErrOrNil()
+	if err := errs.ErrOrNil(); err != nil {
+		return err
+	}
+	s.GoLinknames = goLinknames
+	return nil
 }
 
 // UnresolvedImports calculates the import paths of the package's dependencies

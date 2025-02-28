@@ -768,8 +768,8 @@ type Session struct {
 	// up to date with input sources and dependencies. In the -w ("watch") mode
 	// must be cleared upon entering watching.
 	UpToDateArchives map[string]*compiler.Archive
-	Types            map[string]*types.Package
-	Watcher          *fsnotify.Watcher
+
+	Watcher *fsnotify.Watcher
 }
 
 // NewSession creates a new GopherJS build session.
@@ -790,7 +790,6 @@ func NewSession(options *Options) (*Session, error) {
 		return nil, err
 	}
 
-	s.Types = make(map[string]*types.Package)
 	if options.Watch {
 		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
 			if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n < 1024 {
@@ -908,7 +907,7 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 	if err != nil {
 		return err
 	}
-	if s.Types["main"].Name() != "main" {
+	if s.sources["main"].Package.Name() != "main" {
 		return fmt.Errorf("cannot build/run non-main package")
 	}
 	return s.WriteCommandPackage(archive, pkgObj)
@@ -932,10 +931,14 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 		return nil, err
 	}
 
-	// Prepare and analyze the source code for compiling.
-	if err := s.prepareSources(); err != nil {
+	// Prepare and analyze the source code.
+	// This will be performed recursively for all dependencies.
+	tContext := types.NewContext()
+	if err = s.prepareSources(srcs, tContext); err != nil {
 		return nil, err
 	}
+
+	// TODO(grantnelson-wf): Handle newRootCtx changes
 
 	// Compile the project into Archives containing the generated JS.
 	return s.compilePackages(srcs)
@@ -1106,60 +1109,61 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 	return srcs, nil
 }
 
-func (s *Session) prepareSources() error {
-	for _, srcs := range s.sources {
+type importContext struct {
+	s        *Session
+	dir      string
+	tContext *types.Context
+}
 
-		tContext := types.NewContext()
-		typesInfo, typesPkg, err := srcs.TypeCheck(importContext, sizes32, tContext)
-		if err != nil {
-			return err
-		}
-		if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil && !experiments.Env.Generics {
-			return fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", srcs.ImportPath, genErr)
-		}
-		s.Types[srcs.ImportPath] = typesPkg
+func (ic *importContext) Import(path string) (*types.Package, error) {
 
-		// Extract all go:linkname compiler directives from the package source.
-		goLinknames, err := srcs.ParseGoLinknames()
-		if err != nil {
-			return err
-		}
+}
 
-		srcs.Simplify(typesInfo)
-
-		rootCtx := newRootCtx(tContext, srcs, typesInfo, typesPkg, importContext.isBlocking, minify)
-
+func (s *Session) prepareSources(srcs *sources.Sources, tContext *types.Context) error {
+	ic := &importContext{
+		s:        s,
+		dir:      srcs.Dir,
+		tContext: tContext,
 	}
+
+	if err := srcs.TypeCheck(ic, sizes32, tContext); err != nil {
+		return err
+	}
+
+	if genErr := typeparams.RequiresGenericsSupport(srcs.TypeInfo); genErr != nil && !experiments.Env.Generics {
+		return fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", srcs.ImportPath, genErr)
+	}
+
+	// Extract all go:linkname compiler directives from the package source.
+	if err := srcs.ParseGoLinknames(); err != nil {
+		return err
+	}
+
+	srcs.Simplify()
 	return nil
 }
 
-func (s *Session) compilePackages(srcs *sources.Sources) (*compiler.Archive, error) {
-	if archive, ok := s.UpToDateArchives[srcs.ImportPath]; ok {
-		return archive, nil
+func (s *Session) compilePackages(rootSrcs *sources.Sources) (*compiler.Archive, error) {
+	for _, srcs := range s.sources {
+		archive, err := compiler.Compile(*srcs, s.options.Minify)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, jsFile := range srcs.JSFiles {
+			archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
+			archive.IncJSCode = append(archive.IncJSCode, jsFile.Content...)
+			archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
+		}
+
+		if s.options.Verbose {
+			fmt.Println(srcs.ImportPath)
+		}
+
+		s.UpToDateArchives[srcs.ImportPath] = archive
 	}
 
-	importContext := &compiler.ImportContext{
-		Packages:      s.Types,
-		ImportArchive: s.ImportResolverFor(srcs.Dir),
-	}
-	archive, err := compiler.Compile(*srcs, importContext, s.options.Minify)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, jsFile := range srcs.JSFiles {
-		archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
-		archive.IncJSCode = append(archive.IncJSCode, jsFile.Content...)
-		archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
-	}
-
-	if s.options.Verbose {
-		fmt.Println(srcs.ImportPath)
-	}
-
-	s.UpToDateArchives[srcs.ImportPath] = archive
-
-	return archive, nil
+	return s.UpToDateArchives[rootSrcs.ImportPath], nil
 }
 
 func (s *Session) getImportPath(path, srcDir string) (string, error) {
@@ -1288,8 +1292,9 @@ func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) 
 func (s *Session) WaitForChange() {
 	// Will need to re-validate up-to-dateness of all archives, so flush them from
 	// memory.
+	s.importPaths = map[string]map[string]string{}
+	s.sources = map[string]*sources.Sources{}
 	s.UpToDateArchives = map[string]*compiler.Archive{}
-	s.Types = map[string]*types.Package{}
 
 	s.options.PrintSuccess("watching for changes...\n")
 	for {

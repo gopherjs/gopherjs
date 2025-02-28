@@ -212,9 +212,8 @@ func (ic *ImportContext) Import(path string) (*types.Package, error) {
 
 // Compile the provided Go sources as a single package.
 //
-// Import path must be the absolute import path for a package. Provided sources
-// are always sorted by name to ensure reproducible JavaScript output.
-func Compile(srcs sources.Sources, importContext *ImportContext, minify bool) (_ *Archive, err error) {
+// Provided sources must be sorted by name to ensure reproducible JavaScript output.
+func Compile(srcs sources.Sources, minify bool) (_ *Archive, err error) {
 	defer func() {
 		e := recover()
 		if e == nil {
@@ -230,8 +229,8 @@ func Compile(srcs sources.Sources, importContext *ImportContext, minify bool) (_
 		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", srcs.ImportPath, e))
 	}()
 
-	// TODO(grantnelson-wf): Clean up this function and fetch information.
-	// TODO(grantnelson-wf): Remove importContext since it is not used.
+	// TODO(grantnelson-wf): Move rootCtx to a separate function to perform cross package analysis.
+	rootCtx := newRootCtx(tContext, srcs, typesInfo, typesPkg, importContext.isBlocking, minify)
 
 	importedPaths, importDecls := rootCtx.importDecls()
 

@@ -7,12 +7,15 @@ import (
 	"go/types"
 	"strings"
 
+	"golang.org/x/tools/go/types/typeutil"
+
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
+	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
+	"github.com/gopherjs/gopherjs/internal/errorList"
 	"github.com/gopherjs/gopherjs/internal/experiments"
-	"golang.org/x/tools/go/types/typeutil"
 )
 
 // pkgContext maintains compiler context for a specific package.
@@ -35,7 +38,7 @@ type pkgContext struct {
 	indentation  int
 	minify       bool
 	fileSet      *token.FileSet
-	errList      ErrorList
+	errList      errorList.ErrorList
 	instanceSet  *typeparams.PackageInstanceSets
 }
 
@@ -114,7 +117,7 @@ type funcContext struct {
 	funcLitCounter int
 }
 
-func newRootCtx(tContext *types.Context, srcs sources, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(typeparams.Instance) bool, minify bool) *funcContext {
+func newRootCtx(tContext *types.Context, srcs sources.Sources, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(typeparams.Instance) bool, minify bool) *funcContext {
 	tc := typeparams.Collector{
 		TContext:  tContext,
 		Info:      typesInfo,
@@ -159,10 +162,10 @@ type flowData struct {
 type ImportContext struct {
 	// Mapping for an absolute import path to the package type information.
 	Packages map[string]*types.Package
-	// Import returns a previously compiled Archive for a dependency package. If
-	// the Import() call was successful, the corresponding entry must be added to
-	// the Packages map.
-	Import func(importPath string) (*Archive, error)
+	// ImportArchive returns a previously compiled Archive for a dependency
+	// package. If the Import() call was successful, the corresponding entry
+	// must be added to the Packages map.
+	ImportArchive func(importPath string) (*Archive, error)
 }
 
 // isBlocking returns true if an _imported_ function is blocking. It will panic
@@ -178,7 +181,7 @@ func (ic *ImportContext) isBlocking(inst typeparams.Instance) bool {
 		panic(bailout(fmt.Errorf("can't determine if instance %v is blocking: instance isn't for a function object", inst)))
 	}
 
-	archive, err := ic.Import(f.Pkg().Path())
+	archive, err := ic.ImportArchive(f.Pkg().Path())
 	if err != nil {
 		panic(err)
 	}
@@ -192,11 +195,27 @@ func (ic *ImportContext) isBlocking(inst typeparams.Instance) bool {
 	panic(bailout(fmt.Errorf("can't determine if function %s is blocking: decl not found in package archive", fullName)))
 }
 
+// Import implements go/types.Importer interface for ImportContext.
+func (ic *ImportContext) Import(path string) (*types.Package, error) {
+	if path == "unsafe" {
+		return types.Unsafe, nil
+	}
+
+	// By importing the archive, the package will compile if it hasn't been
+	// compiled yet and the package will be added to the Packages map.
+	a, err := ic.ImportArchive(path)
+	if err != nil {
+		return nil, err
+	}
+
+	return ic.Packages[a.ImportPath], nil
+}
+
 // Compile the provided Go sources as a single package.
 //
 // Import path must be the absolute import path for a package. Provided sources
 // are always sorted by name to ensure reproducible JavaScript output.
-func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (_ *Archive, err error) {
+func Compile(srcs sources.Sources, importContext *ImportContext, minify bool) (_ *Archive, err error) {
 	defer func() {
 		e := recover()
 		if e == nil {
@@ -204,27 +223,23 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		if fe, ok := bailingOut(e); ok {
 			// Orderly bailout, return whatever clues we already have.
-			fmt.Fprintf(fe, `building package %q`, importPath)
+			fmt.Fprintf(fe, `building package %q`, srcs.ImportPath)
 			err = fe
 			return
 		}
 		// Some other unexpected panic, catch the stack trace and return as an error.
-		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", importPath, e))
+		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", srcs.ImportPath, e))
 	}()
 
-	srcs := sources{
-		ImportPath: importPath,
-		Files:      files,
-		FileSet:    fileSet,
-	}.Sort()
+	srcs.Sort()
 
 	tContext := types.NewContext()
-	typesInfo, typesPkg, err := srcs.TypeCheck(importContext, tContext)
+	typesInfo, typesPkg, err := srcs.TypeCheck(importContext, sizes32, tContext)
 	if err != nil {
 		return nil, err
 	}
 	if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil && !experiments.Env.Generics {
-		return nil, fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", importPath, genErr)
+		return nil, fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", srcs.ImportPath, genErr)
 	}
 	importContext.Packages[srcs.ImportPath] = typesPkg
 

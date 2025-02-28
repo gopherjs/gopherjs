@@ -12,6 +12,8 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
+	"github.com/gopherjs/gopherjs/compiler/linkname"
+	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
@@ -681,7 +683,7 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 	var importContext *ImportContext
 	importContext = &ImportContext{
 		Packages: map[string]*types.Package{},
-		Import: func(path string) (*Archive, error) {
+		ImportArchive: func(path string) (*Archive, error) {
 			// find in local cache
 			if a, ok := archiveCache[path]; ok {
 				return a, nil
@@ -693,8 +695,14 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 			}
 			importContext.Packages[path] = pkg.Types
 
+			srcs := sources.Sources{
+				ImportPath: path,
+				Files:      pkg.Syntax,
+				FileSet:    pkg.Fset,
+			}
+
 			// compile package
-			a, err := Compile(path, pkg.Syntax, pkg.Fset, importContext, minify)
+			a, err := Compile(srcs, importContext, minify)
 			if err != nil {
 				return nil, err
 			}
@@ -703,7 +711,7 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 		},
 	}
 
-	_, err := importContext.Import(root.PkgPath)
+	_, err := importContext.ImportArchive(root.PkgPath)
 	if err != nil {
 		t.Fatal(`failed to compile:`, err)
 	}
@@ -737,7 +745,7 @@ func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPa
 	var importContext *ImportContext
 	importContext = &ImportContext{
 		Packages: map[string]*types.Package{},
-		Import: func(path string) (*Archive, error) {
+		ImportArchive: func(path string) (*Archive, error) {
 			// find in local cache
 			if a, ok := reloadCache[path]; ok {
 				return a, nil
@@ -757,7 +765,7 @@ func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPa
 		},
 	}
 
-	_, err := importContext.Import(rootPkgPath)
+	_, err := importContext.ImportArchive(rootPkgPath)
 	if err != nil {
 		t.Fatal(`failed to reload archives:`, err)
 	}
@@ -775,7 +783,7 @@ func renderPackage(t *testing.T, archive *Archive, minify bool) string {
 
 	buf := &bytes.Buffer{}
 
-	if err := WritePkgCode(archive, selection, goLinknameSet{}, minify, &SourceMapFilter{Writer: buf}); err != nil {
+	if err := WritePkgCode(archive, selection, linkname.GoLinknameSet{}, minify, &SourceMapFilter{Writer: buf}); err != nil {
 		t.Fatal(err)
 	}
 

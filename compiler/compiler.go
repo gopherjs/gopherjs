@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
+	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
 	"golang.org/x/tools/go/gcexportdata"
 )
@@ -59,7 +60,7 @@ type Archive struct {
 	// Whether or not the package was compiled with minification enabled.
 	Minified bool
 	// A list of go:linkname directives encountered in the package.
-	GoLinknames []GoLinkname
+	GoLinknames []linkname.GoLinkname
 }
 
 func (a Archive) String() string {
@@ -112,7 +113,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	minify := mainPkg.Minified
 
 	// Aggregate all go:linkname directives in the program together.
-	gls := goLinknameSet{}
+	gls := linkname.GoLinknameSet{}
 	for _, pkg := range pkgs {
 		gls.Add(pkg.GoLinknames)
 	}
@@ -164,7 +165,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	return nil
 }
 
-func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameSet, minify bool, w *SourceMapFilter) error {
+func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.GoLinknameSet, minify bool, w *SourceMapFilter) error {
 	if w.MappingCallback != nil && pkg.FileSet != nil {
 		w.fileSet = pkg.FileSet
 	}
@@ -264,7 +265,7 @@ type serializableArchive struct {
 	IncJSCode    []byte
 	FileSet      []byte
 	Minified     bool
-	GoLinknames  []GoLinkname
+	GoLinknames  []linkname.GoLinkname
 	BuildTime    time.Time
 }
 

@@ -150,20 +150,24 @@ type flowData struct {
 	endCase   int
 }
 
-func PrepareAllSources(root *sources.Sources, importer sources.Importer, tContext *types.Context) error {
-	return root.Prepare(importer, sizes32, tContext)
-}
+func PrepareAllSources(root *sources.Sources, allSources map[string]*sources.Sources, importer sources.Importer, tContext *types.Context) error {
+	// This will be performed recursively for all dependencies starting from the root.
+	if err := root.Prepare(importer, sizes32, tContext); err != nil {
+		return err
+	}
 
-// PropagateAnalysis the analysis information to all packages.
-//
-// The map of sources is keyed by the resolved import path of the package,
-// however that key is not used.
-func PropagateAnalysis(allSources map[string]*sources.Sources) {
+	// Propagate the analysis information to all packages.
 	allInfo := make([]*analysis.Info, 0, len(allSources))
 	for _, src := range allSources {
 		allInfo = append(allInfo, src.TypeInfo)
 	}
 	analysis.PropagateAnalysis(allInfo)
+
+	// Simplify the source files.
+	for _, srcs := range allSources {
+		srcs.Simplify()
+	}
+	return nil
 }
 
 // Compile the provided Go sources as a single package.

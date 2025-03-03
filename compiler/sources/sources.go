@@ -64,7 +64,7 @@ type Importer func(path, srcDir string) (*Sources, error)
 
 // Prepare recursively processes the provided sources and
 // prepares them for compilation by sorting the files by name,
-// determining the type information, go linknames, and simplifying the AST.
+// determining the type information, go linknames, etc.
 //
 // The importer function is used to import the sources of other packages
 // that are imported by the package being prepared. The other sources must
@@ -72,30 +72,31 @@ type Importer func(path, srcDir string) (*Sources, error)
 // information can be used.
 //
 // Note that at the end of this call the analysis information
-// has NOT been propagated across packages yet.
+// has NOT been propagated across packages yet
+// and the source files have not been simplified yet.
 func (s *Sources) Prepare(importer Importer, sizes types.Sizes, tContext *types.Context) error {
+	// Sort the files by name to ensure consistent order of processing.
 	s.sort()
 
+	// Type check the sources to determine the type information.
 	typesInfo, err := s.typeCheck(importer, sizes, tContext)
 	if err != nil {
 		return err
 	}
 
+	// If generics are not enabled, ensure the package does not requires generics support.
 	if !experiments.Env.Generics {
 		if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil {
 			return fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", s.ImportPath, genErr)
 		}
 	}
 
+	// Analyze the package to determine type parameters instances, blocking,
+	// and other type information. This will not populate the information.
 	s.analyze(typesInfo, importer, tContext)
 
 	// Extract all go:linkname compiler directives from the package source.
-	if err := s.parseGoLinknames(); err != nil {
-		return err
-	}
-
-	s.simplify()
-	return nil
+	return s.parseGoLinknames()
 }
 
 // sort the Go files slice by the original source name to ensure consistent order
@@ -112,7 +113,7 @@ func (s *Sources) sort() {
 //
 // Note this function mutates the original Files slice.
 // This must be called after TypeCheck.
-func (s *Sources) simplify() {
+func (s *Sources) Simplify() {
 	for i, file := range s.Files {
 		s.Files[i] = astrewrite.Simplify(file, s.TypeInfo.Info, false)
 	}

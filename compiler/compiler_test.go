@@ -700,8 +700,7 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 	}
 
 	tContext := types.NewContext()
-	PrepareAllSources(allSrcs[root.PkgPath], importer, tContext)
-	PropagateAnalysis(allSrcs)
+	PrepareAllSources(allSrcs[root.PkgPath], allSrcs, importer, tContext)
 
 	archives := map[string]*Archive{}
 	for _, srcs := range allSrcs {

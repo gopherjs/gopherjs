@@ -932,13 +932,10 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 	// Prepare and analyze the source code.
 	// This will be performed recursively for all dependencies.
 	tContext := types.NewContext()
-	err = compiler.PrepareAllSources(srcs, s.SourcesForImport, tContext)
+	err = compiler.PrepareAllSources(srcs, s.sources, s.SourcesForImport, tContext)
 	if err != nil {
 		return nil, err
 	}
-
-	// Propagate the analysis information to all packages.
-	compiler.PropagateAnalysis(s.sources)
 
 	// Compile the project into Archives containing the generated JS.
 	return s.compilePackages(srcs, tContext)

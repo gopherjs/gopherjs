@@ -26,6 +26,7 @@ import (
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/gopherjs/gopherjs/internal/errorList"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
 	"github.com/neelance/sourcemap"
 	log "github.com/sirupsen/logrus"
@@ -766,7 +767,7 @@ func handleError(err error, options *gbuild.Options, browserErrors *bytes.Buffer
 	switch err := err.(type) {
 	case nil:
 		return 0
-	case compiler.ErrorList:
+	case errorList.ErrorList:
 		for _, entry := range err {
 			printError(entry, options, browserErrors)
 		}

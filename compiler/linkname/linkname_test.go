@@ -1,4 +1,4 @@
-package compiler
+package linkname
 
 import (
 	"go/ast"
@@ -151,7 +151,7 @@ func TestParseGoLinknames(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			file, fset := parseSource(t, test.src)
-			directives, err := parseGoLinknames(fset, "testcase", file)
+			directives, err := ParseGoLinknames(fset, "testcase", file)
 
 			if test.wantError != "" {
 				if err == nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
+	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
@@ -81,7 +82,7 @@ func (d *Decl) Dce() *dce.Info {
 
 // topLevelObjects extracts package-level variables, functions and named types
 // from the package AST.
-func (fc *funcContext) topLevelObjects(srcs sources) (vars []*types.Var, functions []*ast.FuncDecl, typeNames typesutil.TypeNames) {
+func (fc *funcContext) topLevelObjects(srcs sources.Sources) (vars []*types.Var, functions []*ast.FuncDecl, typeNames typesutil.TypeNames) {
 	if !fc.isRoot() {
 		panic(bailout(fmt.Errorf("functionContext.discoverObjects() must be only called on the package-level context")))
 	}

@@ -1127,13 +1127,7 @@ func (s *Session) compilePackages(rootSrcs *sources.Sources, tContext *types.Con
 
 	rootArchive, ok := s.UpToDateArchives[rootSrcs.ImportPath]
 	if !ok {
-		// TODO(grantnelson-wf): Remove all but return
-		fmt.Printf(">> root package %q not found\n", rootSrcs.ImportPath)
-		fmt.Printf(">> sources contained:\n")
-		for _, srcs := range s.sources {
-			fmt.Printf(">>     source: %s\n", srcs.ImportPath)
-		}
-
+		// This is simply confirmation that the root package is in the sources map and got compiled.
 		return nil, fmt.Errorf(`root package %q not found`, rootSrcs.ImportPath)
 	}
 	return rootArchive, nil

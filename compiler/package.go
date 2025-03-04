@@ -150,7 +150,7 @@ type flowData struct {
 	endCase   int
 }
 
-func PrepareAllSources(allSources map[string]*sources.Sources, importer sources.Importer, tContext *types.Context) error {
+func PrepareAllSources(allSources []*sources.Sources, importer sources.Importer, tContext *types.Context) error {
 	// This will be performed recursively for all dependencies so
 	// most of these prepare calls will be no-ops. Since not all packages will
 	// be recursively reached via the root source, we need to prepare them
@@ -162,9 +162,9 @@ func PrepareAllSources(allSources map[string]*sources.Sources, importer sources.
 	}
 
 	// Propagate the analysis information to all packages.
-	allInfo := make([]*analysis.Info, 0, len(allSources))
-	for _, src := range allSources {
-		allInfo = append(allInfo, src.TypeInfo)
+	allInfo := make([]*analysis.Info, len(allSources))
+	for i, src := range allSources {
+		allInfo[i] = src.TypeInfo
 	}
 	analysis.PropagateAnalysis(allInfo)
 	return nil

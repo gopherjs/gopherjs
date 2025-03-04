@@ -932,13 +932,27 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 	// Prepare and analyze the source code.
 	// This will be performed recursively for all dependencies.
 	tContext := types.NewContext()
-	err = compiler.PrepareAllSources(srcs, s.sources, s.SourcesForImport, tContext)
+	allSources := s.getSortedSources()
+	err = compiler.PrepareAllSources(s.sources, s.SourcesForImport, tContext)
 	if err != nil {
 		return nil, err
 	}
 
 	// Compile the project into Archives containing the generated JS.
 	return s.compilePackages(srcs, tContext)
+}
+
+// getSortedSources returns the sources sorted by import path.
+// The files in the sources may still not be sorted yet.
+func (s *Session) getSortedSources() []*sources.Sources {
+	srcs := make([]*sources.Sources, 0, len(s.sources))
+	for _, src := range s.sources {
+		srcs = append(srcs, src)
+	}
+	sort.Slice(srcs, func(i, j int) bool {
+		return srcs[i].ImportPath < srcs[j].ImportPath
+	})
+	return srcs
 }
 
 func (s *Session) loadTestPackage(pkg *PackageData) (*sources.Sources, error) {

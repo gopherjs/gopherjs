@@ -156,9 +156,22 @@ func PrepareAllSources(root *sources.Sources, allSources map[string]*sources.Sou
 		return err
 	}
 
+	for _, srcs := range allSources {
+		if srcs.TypeInfo == nil {
+			fmt.Printf("PrepareAllSources: typeInfo is nil for %s\n", srcs.ImportPath)
+			if err := srcs.Prepare(importer, sizes32, tContext); err != nil {
+				return err
+			}
+		}
+	}
+
 	// Propagate the analysis information to all packages.
 	allInfo := make([]*analysis.Info, 0, len(allSources))
 	for _, src := range allSources {
+		typeInfo := src.TypeInfo
+		if typeInfo == nil {
+			panic(fmt.Errorf("PrepareAllSources: typeInfo is nil for %s", src.ImportPath))
+		}
 		allInfo = append(allInfo, src.TypeInfo)
 	}
 	analysis.PropagateAnalysis(allInfo)

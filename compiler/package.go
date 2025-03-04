@@ -150,28 +150,20 @@ type flowData struct {
 	endCase   int
 }
 
-func PrepareAllSources(root *sources.Sources, allSources map[string]*sources.Sources, importer sources.Importer, tContext *types.Context) error {
-	// This will be performed recursively for all dependencies starting from the root.
-	if err := root.Prepare(importer, sizes32, tContext); err != nil {
-		return err
-	}
-
+func PrepareAllSources(allSources map[string]*sources.Sources, importer sources.Importer, tContext *types.Context) error {
+	// This will be performed recursively for all dependencies so
+	// most of these prepare calls will be no-ops. Since not all packages will
+	// be recursively reached via the root source, we need to prepare them
+	// all here.
 	for _, srcs := range allSources {
-		if srcs.TypeInfo == nil {
-			fmt.Printf("PrepareAllSources: typeInfo is nil for %s\n", srcs.ImportPath)
-			if err := srcs.Prepare(importer, sizes32, tContext); err != nil {
-				return err
-			}
+		if err := srcs.Prepare(importer, sizes32, tContext); err != nil {
+			return err
 		}
 	}
 
 	// Propagate the analysis information to all packages.
 	allInfo := make([]*analysis.Info, 0, len(allSources))
 	for _, src := range allSources {
-		typeInfo := src.TypeInfo
-		if typeInfo == nil {
-			panic(fmt.Errorf("PrepareAllSources: typeInfo is nil for %s", src.ImportPath))
-		}
 		allInfo = append(allInfo, src.TypeInfo)
 	}
 	analysis.PropagateAnalysis(allInfo)

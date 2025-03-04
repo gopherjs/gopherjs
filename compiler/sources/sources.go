@@ -75,6 +75,11 @@ type Importer func(path, srcDir string) (*Sources, error)
 // has NOT been propagated across packages yet
 // and the source files have not been simplified yet.
 func (s *Sources) Prepare(importer Importer, sizes types.Sizes, tContext *types.Context) error {
+	// Skip if the sources have already been prepared.
+	if s.isPrepared() {
+		return nil
+	}
+
 	// Sort the files by name to ensure consistent order of processing.
 	s.sort()
 
@@ -105,6 +110,10 @@ func (s *Sources) Prepare(importer Importer, sizes types.Sizes, tContext *types.
 	s.analyze(typesInfo, importer, tContext)
 
 	return nil
+}
+
+func (s *Sources) isPrepared() bool {
+	return s.TypeInfo != nil && s.Package != nil
 }
 
 // sort the Go files slice by the original source name to ensure consistent order

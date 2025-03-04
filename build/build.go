@@ -933,7 +933,7 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 	// This will be performed recursively for all dependencies.
 	tContext := types.NewContext()
 	allSources := s.getSortedSources()
-	err = compiler.PrepareAllSources(s.sources, s.SourcesForImport, tContext)
+	err = compiler.PrepareAllSources(allSources, s.SourcesForImport, tContext)
 	if err != nil {
 		return nil, err
 	}

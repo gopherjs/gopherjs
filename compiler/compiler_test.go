@@ -700,7 +700,14 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 	}
 
 	tContext := types.NewContext()
-	PrepareAllSources(allSrcs[root.PkgPath], allSrcs, importer, tContext)
+	sortedSources := make([]*sources.Sources, 0, len(allSrcs))
+	for _, srcs := range allSrcs {
+		sortedSources = append(sortedSources, srcs)
+	}
+	sort.Slice(sortedSources, func(i, j int) bool {
+		return sortedSources[i].ImportPath < sortedSources[j].ImportPath
+	})
+	PrepareAllSources(sortedSources, importer, tContext)
 
 	archives := map[string]*Archive{}
 	for _, srcs := range allSrcs {

@@ -945,14 +945,14 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 // getSortedSources returns the sources sorted by import path.
 // The files in the sources may still not be sorted yet.
 func (s *Session) getSortedSources() []*sources.Sources {
-	srcs := make([]*sources.Sources, 0, len(s.sources))
-	for _, src := range s.sources {
-		srcs = append(srcs, src)
+	allSources := make([]*sources.Sources, 0, len(s.sources))
+	for _, srcs := range s.sources {
+		allSources = append(allSources, srcs)
 	}
-	sort.Slice(srcs, func(i, j int) bool {
-		return srcs[i].ImportPath < srcs[j].ImportPath
+	sort.Slice(allSources, func(i, j int) bool {
+		return allSources[i].ImportPath < allSources[j].ImportPath
 	})
-	return srcs
+	return allSources
 }
 
 func (s *Session) loadTestPackage(pkg *PackageData) (*sources.Sources, error) {

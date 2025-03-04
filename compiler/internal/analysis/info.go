@@ -1,10 +1,8 @@
 package analysis
 
 import (
-	"bytes"
 	"fmt"
 	"go/ast"
-	"go/printer"
 	"go/token"
 	"go/types"
 	"strings"
@@ -100,13 +98,6 @@ func (info *Info) newFuncInfo(n ast.Node, obj types.Object, typeArgs typesutil.T
 
 	case *ast.FuncLit:
 		info.funcLitInfos[n] = append(info.funcLitInfos[n], funcInfo)
-
-		// TODO(grantnelson-wf): Remove below
-		buf := &bytes.Buffer{}
-		fSet := token.NewFileSet()
-		printer.Fprint(buf, fSet, n)
-		fmt.Printf(">>|<< Adding %q with [%v] in package %s\n", buf.String(), typeArgs, info.Pkg.Path())
-		fmt.Printf(">>|<< \tHad: %v\n", info.funcLitInfos[n])
 	}
 
 	// And add it to the list of all functions.
@@ -175,15 +166,7 @@ func (info *Info) FuncLitInfo(fun *ast.FuncLit, typeArgs typesutil.TypeList) *Fu
 			return fi
 		}
 	}
-
-	// TODO(grantnelson-wf): Remove below
-	buf := &bytes.Buffer{}
-	fSet := token.NewFileSet()
-	printer.Fprint(buf, fSet, fun)
-	fmt.Printf(">>|<< Failed to find %q (%p) with [%v] in package %s\n", buf.String(), fun, typeArgs, info.Pkg.Path())
-	fmt.Printf(">>|<< \tHad: %v\n\n", lits)
-	panic("BOOM!")
-	//return nil
+	return nil
 }
 
 // VarsWithInitializers returns a set of package-level variables that have
@@ -273,11 +256,6 @@ func (info *Info) propagateFunctionBlocking() bool {
 			}
 		}
 	}
-
-	// TODO(grantnelson-wf): Remove below
-	fmt.Printf(">>|<< propagateFunctionBlocking package %s\n", info.Pkg.Path())
-	fmt.Printf(">>|<< \tHad: %v\n", info.funcLitInfos)
-
 	return done
 }
 

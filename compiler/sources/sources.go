@@ -91,12 +91,20 @@ func (s *Sources) Prepare(importer Importer, sizes types.Sizes, tContext *types.
 		}
 	}
 
+	// Extract all go:linkname compiler directives from the package source.
+	err = s.parseGoLinknames()
+	if err != nil {
+		return err
+	}
+
+	// Simply the source files.
+	s.simplify(typesInfo)
+
 	// Analyze the package to determine type parameters instances, blocking,
 	// and other type information. This will not populate the information.
 	s.analyze(typesInfo, importer, tContext)
 
-	// Extract all go:linkname compiler directives from the package source.
-	return s.parseGoLinknames()
+	return nil
 }
 
 // sort the Go files slice by the original source name to ensure consistent order
@@ -112,17 +120,20 @@ func (s *Sources) sort() {
 // simplify processed each Files entry with astrewrite.Simplify.
 //
 // Note this function mutates the original Files slice.
-// This must be called after TypeCheck.
-func (s *Sources) Simplify() {
+// This must be called after TypeCheck and before analyze since
+// this will change the pointers in the AST, for example the pointers
+// to function literals will change making it impossible to find them
+// in the type information if analyze is called first.
+func (s *Sources) simplify(typesInfo *types.Info) {
 	for i, file := range s.Files {
-		s.Files[i] = astrewrite.Simplify(file, s.TypeInfo.Info, false)
+		s.Files[i] = astrewrite.Simplify(file, typesInfo, false)
 	}
 }
 
 // typeCheck the sources. Returns information about declared package types and
 // type information for the supplied AST.
 //
-// This must be called prior to Simplify.
+// This must be called prior to simplify.
 func (s *Sources) typeCheck(importer Importer, sizes types.Sizes, tContext *types.Context) (*types.Info, error) {
 	const errLimit = 10 // Max number of type checking errors to return.
 
@@ -174,7 +185,7 @@ func (s *Sources) typeCheck(importer Importer, sizes types.Sizes, tContext *type
 // analyze will determine the type parameters instances, blocking,
 // and other type information for the package.
 //
-// This must be called prior to Simplify.
+// This must be called after to simplify.
 // Note that at the end of this call the analysis information
 // has NOT been propagated across packages yet.
 func (s *Sources) analyze(typesInfo *types.Info, importer Importer, tContext *types.Context) {
@@ -201,7 +212,7 @@ func (s *Sources) analyze(typesInfo *types.Info, importer Importer, tContext *ty
 // parseGoLinknames extracts all //go:linkname compiler directive from the sources.
 //
 // This will set the GoLinknames field on the Sources struct.
-// This must be called prior to Simplify.
+// This must be called prior to simplify.
 func (s *Sources) parseGoLinknames() error {
 	goLinknames := []linkname.GoLinkname{}
 	var errs errorList.ErrorList

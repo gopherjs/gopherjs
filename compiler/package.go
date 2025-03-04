@@ -162,11 +162,6 @@ func PrepareAllSources(root *sources.Sources, allSources map[string]*sources.Sou
 		allInfo = append(allInfo, src.TypeInfo)
 	}
 	analysis.PropagateAnalysis(allInfo)
-
-	// Simplify the source files.
-	for _, srcs := range allSources {
-		srcs.Simplify()
-	}
 	return nil
 }
 

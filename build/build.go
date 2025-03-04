@@ -981,6 +981,7 @@ func (s *Session) loadTestPackage(pkg *PackageData) (*sources.Sources, error) {
 		Files:      []*ast.File{mainFile},
 		FileSet:    fset,
 	}
+	s.sources[srcs.ImportPath] = srcs
 
 	// Import dependencies for the testmain package.
 	for _, importedPkgPath := range srcs.UnresolvedImports() {
@@ -1159,6 +1160,7 @@ func (s *Session) compilePackage(srcs *sources.Sources, tContext *types.Context)
 	}
 
 	s.UpToDateArchives[srcs.ImportPath] = archive
+	return archive, nil
 }
 
 func (s *Session) getImportPath(path, srcDir string) (string, error) {

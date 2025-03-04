@@ -67,9 +67,10 @@ type Importer func(path, srcDir string) (*Sources, error)
 // determining the type information, go linknames, etc.
 //
 // The importer function is used to import the sources of other packages
-// that are imported by the package being prepared. The other sources must
-// be prepared prior to being returned by the importer so that the type
-// information can be used.
+// that are imported by this package being prepared. If the other sources
+// are not prepared when returned by the importer, that package will be
+// prepared as well before continuing on with the current package.
+// This is where the recursive nature of the Prepare function comes in.
 //
 // Note that at the end of this call the analysis information
 // has NOT been propagated across packages yet
@@ -278,21 +279,21 @@ type packageImporter struct {
 	Errors   errorList.ErrorList
 }
 
-func (ei *packageImporter) Import(path string) (*types.Package, error) {
+func (pi *packageImporter) Import(path string) (*types.Package, error) {
 	if path == "unsafe" {
 		return types.Unsafe, nil
 	}
 
-	srcs, err := ei.importer(path, ei.srcDir)
+	srcs, err := pi.importer(path, pi.srcDir)
 	if err != nil {
-		ei.Errors = ei.Errors.AppendDistinct(err)
+		pi.Errors = pi.Errors.AppendDistinct(err)
 		return nil, err
 	}
 
-	if srcs.Package == nil {
-		err := srcs.Prepare(ei.importer, ei.sizes, ei.tContext)
+	if !srcs.isPrepared() {
+		err := srcs.Prepare(pi.importer, pi.sizes, pi.tContext)
 		if err != nil {
-			ei.Errors = ei.Errors.AppendDistinct(err)
+			pi.Errors = pi.Errors.AppendDistinct(err)
 			return nil, err
 		}
 	}

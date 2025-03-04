@@ -1121,25 +1121,44 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 
 func (s *Session) compilePackages(rootSrcs *sources.Sources, tContext *types.Context) (*compiler.Archive, error) {
 	for _, srcs := range s.sources {
-		archive, err := compiler.Compile(srcs, tContext, s.options.Minify)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, jsFile := range srcs.JSFiles {
-			archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
-			archive.IncJSCode = append(archive.IncJSCode, jsFile.Content...)
-			archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
-		}
-
-		if s.options.Verbose {
-			fmt.Println(srcs.ImportPath)
-		}
-
-		s.UpToDateArchives[srcs.ImportPath] = archive
+		s.compilePackage(srcs, tContext)
 	}
 
-	return s.UpToDateArchives[rootSrcs.ImportPath], nil
+	rootArchive, ok := s.UpToDateArchives[rootSrcs.ImportPath]
+	if !ok {
+		// TODO(grantnelson-wf): Remove all but return
+		fmt.Printf(">> root package %q not found\n", rootSrcs.ImportPath)
+		fmt.Printf(">> sources contained:\n")
+		for _, srcs := range s.sources {
+			fmt.Printf(">>     source: %s\n", srcs.ImportPath)
+		}
+
+		return nil, fmt.Errorf(`root package %q not found`, rootSrcs.ImportPath)
+	}
+	return rootArchive, nil
+}
+
+func (s *Session) compilePackage(srcs *sources.Sources, tContext *types.Context) (*compiler.Archive, error) {
+	if archive, ok := s.UpToDateArchives[srcs.ImportPath]; ok {
+		return archive, nil
+	}
+
+	archive, err := compiler.Compile(srcs, tContext, s.options.Minify)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, jsFile := range srcs.JSFiles {
+		archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
+		archive.IncJSCode = append(archive.IncJSCode, jsFile.Content...)
+		archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
+	}
+
+	if s.options.Verbose {
+		fmt.Println(srcs.ImportPath)
+	}
+
+	s.UpToDateArchives[srcs.ImportPath] = archive
 }
 
 func (s *Session) getImportPath(path, srcDir string) (string, error) {

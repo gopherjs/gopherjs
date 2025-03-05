@@ -704,9 +704,7 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 	for _, srcs := range allSrcs {
 		sortedSources = append(sortedSources, srcs)
 	}
-	sort.Slice(sortedSources, func(i, j int) bool {
-		return sortedSources[i].ImportPath < sortedSources[j].ImportPath
-	})
+	sources.SortedSourcesSlice(sortedSources)
 	PrepareAllSources(sortedSources, importer, tContext)
 
 	archives := map[string]*Archive{}
@@ -732,6 +730,13 @@ func newTime(seconds float64) time.Time {
 // them from memory to simulate a cache reload of a precompiled project.
 func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPath string) map[string]*Archive {
 	t.Helper()
+
+	// TODO(grantnelson-wf): The tests using this function are out-of-date
+	// since they are testing the old archive caching that has been disabled.
+	// At some point, these tests should be updated to test any new caching
+	// mechanism that is implemented or removed. As is this function is faking
+	// the old recursive archive loading that is no longer used since it
+	// doesn't allow cross package analysis for generings.
 
 	buildTime := newTime(5.0)
 	serialized := map[string][]byte{}

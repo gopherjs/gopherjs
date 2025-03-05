@@ -766,8 +766,7 @@ type Session struct {
 	// up to date with input sources and dependencies. In the -w ("watch") mode
 	// must be cleared upon entering watching.
 	UpToDateArchives map[string]*compiler.Archive
-
-	Watcher *fsnotify.Watcher
+	Watcher          *fsnotify.Watcher
 }
 
 // NewSession creates a new GopherJS build session.
@@ -949,9 +948,7 @@ func (s *Session) getSortedSources() []*sources.Sources {
 	for _, srcs := range s.sources {
 		allSources = append(allSources, srcs)
 	}
-	sort.Slice(allSources, func(i, j int) bool {
-		return allSources[i].ImportPath < allSources[j].ImportPath
-	})
+	sources.SortedSourcesSlice(allSources)
 	return allSources
 }
 
@@ -1122,12 +1119,14 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 
 func (s *Session) compilePackages(rootSrcs *sources.Sources, tContext *types.Context) (*compiler.Archive, error) {
 	for _, srcs := range s.sources {
-		s.compilePackage(srcs, tContext)
+		if _, err := s.compilePackage(srcs, tContext); err != nil {
+			return nil, err
+		}
 	}
 
 	rootArchive, ok := s.UpToDateArchives[rootSrcs.ImportPath]
 	if !ok {
-		// This is simply confirmation that the root package is in the sources map and got compiled.
+		// This is confirmation that the root package is in the sources map and got compiled.
 		return nil, fmt.Errorf(`root package %q not found`, rootSrcs.ImportPath)
 	}
 	return rootArchive, nil
@@ -1154,6 +1153,7 @@ func (s *Session) compilePackage(srcs *sources.Sources, tContext *types.Context)
 	}
 
 	s.UpToDateArchives[srcs.ImportPath] = archive
+
 	return archive, nil
 }
 

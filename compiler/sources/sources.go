@@ -44,19 +44,19 @@ type Sources struct {
 	JSFiles []jsFile.JSFile
 
 	// TypeInfo is the type information this package.
-	// This is nil until PrepareInfo is called.
+	// This is nil until Prepare is called.
 	TypeInfo *analysis.Info
 
 	// Instances is the type parameters instances for this package.
-	// This is nil until PrepareInfo is called.
+	// This is nil until Prepare is called.
 	Instances *typeparams.PackageInstanceSets
 
 	// Package is the type-PrepareInfo package.
-	// This is nil until PrepareInfo is called.
+	// This is nil until Prepare is called.
 	Package *types.Package
 
 	// GoLinknames is the set of Go linknames for this package.
-	// This is nil until PrepareInfo is called.
+	// This is nil until Prepare is called.
 	GoLinknames []linkname.GoLinkname
 }
 
@@ -67,14 +67,13 @@ type Importer func(path, srcDir string) (*Sources, error)
 // determining the type information, go linknames, etc.
 //
 // The importer function is used to import the sources of other packages
-// that are imported by this package being prepared. If the other sources
-// are not prepared when returned by the importer, that package will be
-// prepared as well before continuing on with the current package.
+// that the package being prepared depends on. If the other sources
+// are not prepared when returned by the importer, then that package
+// will be prepared before continuing on with the current package.
 // This is where the recursive nature of the Prepare function comes in.
 //
 // Note that at the end of this call the analysis information
-// has NOT been propagated across packages yet
-// and the source files have not been simplified yet.
+// has NOT been propagated across packages yet.
 func (s *Sources) Prepare(importer Importer, sizes types.Sizes, tContext *types.Context) error {
 	// Skip if the sources have already been prepared.
 	if s.isPrepared() {
@@ -113,6 +112,12 @@ func (s *Sources) Prepare(importer Importer, sizes types.Sizes, tContext *types.
 	return nil
 }
 
+// isPrepared returns true if this sources have had Prepare called on it.
+//
+// This can not determine if the type information has been propagated
+// across packages yet, but usually would only be called prior to that.
+// For the source to be fully prepared for compilation, the type information
+// must be propagated across packages as well.
 func (s *Sources) isPrepared() bool {
 	return s.TypeInfo != nil && s.Package != nil
 }
@@ -132,8 +137,8 @@ func (s *Sources) sort() {
 // Note this function mutates the original Files slice.
 // This must be called after TypeCheck and before analyze since
 // this will change the pointers in the AST, for example the pointers
-// to function literals will change making it impossible to find them
-// in the type information if analyze is called first.
+// to function literals will change, making it impossible to find them
+// in the type information, if analyze is called first.
 func (s *Sources) simplify(typesInfo *types.Info) {
 	for i, file := range s.Files {
 		s.Files[i] = astrewrite.Simplify(file, typesInfo, false)
@@ -143,7 +148,7 @@ func (s *Sources) simplify(typesInfo *types.Info) {
 // typeCheck the sources. Returns information about declared package types and
 // type information for the supplied AST.
 //
-// This must be called prior to simplify.
+// This must be called prior to simplify to get the types.Info used by simplify.
 func (s *Sources) typeCheck(importer Importer, sizes types.Sizes, tContext *types.Context) (*types.Info, error) {
 	const errLimit = 10 // Max number of type checking errors to return.
 
@@ -195,7 +200,9 @@ func (s *Sources) typeCheck(importer Importer, sizes types.Sizes, tContext *type
 // analyze will determine the type parameters instances, blocking,
 // and other type information for the package.
 //
-// This must be called after to simplify.
+// This must be called after to simplify to ensure the pointers
+// in the AST are still valid.
+//
 // Note that at the end of this call the analysis information
 // has NOT been propagated across packages yet.
 func (s *Sources) analyze(typesInfo *types.Info, importer Importer, tContext *types.Context) {
@@ -222,7 +229,6 @@ func (s *Sources) analyze(typesInfo *types.Info, importer Importer, tContext *ty
 // parseGoLinknames extracts all //go:linkname compiler directive from the sources.
 //
 // This will set the GoLinknames field on the Sources struct.
-// This must be called prior to simplify.
 func (s *Sources) parseGoLinknames() error {
 	goLinknames := []linkname.GoLinkname{}
 	var errs errorList.ErrorList
@@ -290,13 +296,22 @@ func (pi *packageImporter) Import(path string) (*types.Package, error) {
 		return nil, err
 	}
 
-	if !srcs.isPrepared() {
-		err := srcs.Prepare(pi.importer, pi.sizes, pi.tContext)
-		if err != nil {
-			pi.Errors = pi.Errors.AppendDistinct(err)
-			return nil, err
-		}
+	// If the source hasn't been prepared yet, prepare it now.
+	// This will recursively prepare all of it's dependencies too.
+	// If the source is already prepared, this will be a no-op.
+	err = srcs.Prepare(pi.importer, pi.sizes, pi.tContext)
+	if err != nil {
+		pi.Errors = pi.Errors.AppendDistinct(err)
+		return nil, err
 	}
 
 	return srcs.Package, nil
+}
+
+// SortedSourcesSlice in place sorts the given slice of Sources by ImportPath.
+// This will not change the order of the files within any Sources.
+func SortedSourcesSlice(sourcesSlice []*Sources) {
+	sort.Slice(sourcesSlice, func(i, j int) bool {
+		return sourcesSlice[i].ImportPath < sourcesSlice[j].ImportPath
+	})
 }

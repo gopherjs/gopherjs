@@ -58,10 +58,12 @@ type Info struct {
 	funcLitInfos  map[*ast.FuncLit][]*FuncInfo
 	InitFuncInfo  *FuncInfo // Context for package variable initialization.
 
-	infoImporter InfoImporter // For functions from other packages.
+	infoImporter InfoImporter // To get `Info` for other packages.
 	allInfos     []*FuncInfo
 }
 
+// InfoImporter is used to get the `Info` for another package.
+// The path is the resolved import path of the package to get the `Info` for.
 type InfoImporter func(path string) (*Info, error)
 
 func (info *Info) newFuncInfo(n ast.Node, obj types.Object, typeArgs typesutil.TypeList, resolver *typeparams.Resolver) *FuncInfo {

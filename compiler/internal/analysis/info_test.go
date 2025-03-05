@@ -1576,7 +1576,7 @@ func TestBlocking_IsImportBlocking_ForwardInstances(t *testing.T) {
 }
 
 func TestBlocking_IsImportBlocking_BackwardInstances(t *testing.T) {
-	// This is tests propagation of information across package boundaries.
+	// This tests propagation of information across package boundaries.
 	// `FooBaz` has no instances in it until it is referenced in the `test` package.
 	// That instance information needs to propagate back across the package
 	// boundary to the `other` package. The information for `BazBlocker` and

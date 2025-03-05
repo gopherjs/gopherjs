@@ -150,11 +150,18 @@ type flowData struct {
 	endCase   int
 }
 
+// PrepareAllSources prepares all sources for compilation by
+// parsing go linknames, type checking, sorting, simplifying, and
+// performing cross package analysis.
+// The results are stored in the provided sources.
+//
+// All sources must be given at the same time for cross package analysis to
+// work correctly. For consistency, the sources should be sorted by import path.
 func PrepareAllSources(allSources []*sources.Sources, importer sources.Importer, tContext *types.Context) error {
 	// This will be performed recursively for all dependencies so
-	// most of these prepare calls will be no-ops. Since not all packages will
-	// be recursively reached via the root source, we need to prepare them
-	// all here.
+	// most of these prepare calls will be no-ops.
+	// Since some packages might not be recursively reached via the root source,
+	// e.g. runtime, we need to try to prepare them all here.
 	for _, srcs := range allSources {
 		if err := srcs.Prepare(importer, sizes32, tContext); err != nil {
 			return err

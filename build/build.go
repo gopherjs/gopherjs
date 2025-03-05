@@ -759,14 +759,13 @@ type Session struct {
 	// sources is a map of parsed packages that have been built and augmented.
 	// This is keyed using resolved import paths. This is used to avoid
 	// rebuilding and augmenting packages that are imported by several packages.
-	// These sources haven't been sorted nor simplified yet.
+	// The files in these sources haven't been sorted nor simplified yet.
 	sources map[string]*sources.Sources
 
 	// Binary archives produced during the current session and assumed to be
 	// up to date with input sources and dependencies. In the -w ("watch") mode
 	// must be cleared upon entering watching.
 	UpToDateArchives map[string]*compiler.Archive
-	Types            map[string]*types.Package
 	Watcher          *fsnotify.Watcher
 }
 
@@ -788,7 +787,6 @@ func NewSession(options *Options) (*Session, error) {
 		return nil, err
 	}
 
-	s.Types = make(map[string]*types.Package)
 	if options.Watch {
 		if out, err := exec.Command("ulimit", "-n").Output(); err == nil {
 			if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n < 1024 {
@@ -906,7 +904,7 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 	if err != nil {
 		return err
 	}
-	if s.Types["main"].Name() != "main" {
+	if s.sources["main"].Package.Name() != "main" {
 		return fmt.Errorf("cannot build/run non-main package")
 	}
 	return s.WriteCommandPackage(archive, pkgObj)
@@ -918,25 +916,38 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 	// ensure that runtime for gopherjs is imported
 	pkg.Imports = append(pkg.Imports, `runtime`)
 
-	// Build the project to get the sources for the parsed packages.
-	var srcs *sources.Sources
+	// Load the project to get the sources for the parsed packages.
+	var rootSrcs *sources.Sources
 	var err error
 	if pkg.IsTest {
-		srcs, err = s.loadTestPackage(pkg)
+		rootSrcs, err = s.loadTestPackage(pkg)
 	} else {
-		srcs, err = s.loadPackages(pkg)
+		rootSrcs, err = s.loadPackages(pkg)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(grantnelson-wf): At this point we have all the parsed packages we
-	// need to compile the whole project, including testmain, if needed.
-	// We can perform analysis on the whole project at this point to propagate
-	// flatten, blocking, etc. information and check types to get the type info
-	// with all the instances for all generics in the whole project.
+	// TODO(grantnelson-wf): We could investigate caching the results of
+	// the sources prior to preparing them to avoid re-parsing the same
+	// sources and augmenting them when the files on disk haven't changed.
+	// This would require a way to determine if the sources are up-to-date
+	// which could be done with the left over srcModTime from when the archives
+	// were being cached.
 
-	return s.compilePackages(srcs)
+	// Compile the project into Archives containing the generated JS.
+	return s.prepareAndCompilePackages(rootSrcs)
+}
+
+// getSortedSources returns the sources sorted by import path.
+// The files in the sources may still not be sorted yet.
+func (s *Session) getSortedSources() []*sources.Sources {
+	allSources := make([]*sources.Sources, 0, len(s.sources))
+	for _, srcs := range s.sources {
+		allSources = append(allSources, srcs)
+	}
+	sources.SortedSourcesSlice(allSources)
+	return allSources
 }
 
 func (s *Session) loadTestPackage(pkg *PackageData) (*sources.Sources, error) {
@@ -965,6 +976,7 @@ func (s *Session) loadTestPackage(pkg *PackageData) (*sources.Sources, error) {
 		Files:      []*ast.File{mainFile},
 		FileSet:    fset,
 	}
+	s.sources[srcs.ImportPath] = srcs
 
 	// Import dependencies for the testmain package.
 	for _, importedPkgPath := range srcs.UnresolvedImports() {
@@ -1103,16 +1115,37 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 	return srcs, nil
 }
 
-func (s *Session) compilePackages(srcs *sources.Sources) (*compiler.Archive, error) {
+func (s *Session) prepareAndCompilePackages(rootSrcs *sources.Sources) (*compiler.Archive, error) {
+	tContext := types.NewContext()
+	allSources := s.getSortedSources()
+
+	// Prepare and analyze the source code.
+	// This will be performed recursively for all dependencies.
+	if err := compiler.PrepareAllSources(allSources, s.SourcesForImport, tContext); err != nil {
+		return nil, err
+	}
+
+	// Compile all the sources into archives.
+	for _, srcs := range allSources {
+		if _, err := s.compilePackage(srcs, tContext); err != nil {
+			return nil, err
+		}
+	}
+
+	rootArchive, ok := s.UpToDateArchives[rootSrcs.ImportPath]
+	if !ok {
+		// This is confirmation that the root package is in the sources map and got compiled.
+		return nil, fmt.Errorf(`root package %q was not found in archives`, rootSrcs.ImportPath)
+	}
+	return rootArchive, nil
+}
+
+func (s *Session) compilePackage(srcs *sources.Sources, tContext *types.Context) (*compiler.Archive, error) {
 	if archive, ok := s.UpToDateArchives[srcs.ImportPath]; ok {
 		return archive, nil
 	}
 
-	importContext := &compiler.ImportContext{
-		Packages:      s.Types,
-		ImportArchive: s.ImportResolverFor(srcs.Dir),
-	}
-	archive, err := compiler.Compile(*srcs, importContext, s.options.Minify)
+	archive, err := compiler.Compile(srcs, tContext, s.options.Minify)
 	if err != nil {
 		return nil, err
 	}
@@ -1152,6 +1185,20 @@ func (s *Session) getImportPath(path, srcDir string) (string, error) {
 	return pkg.ImportPath, nil
 }
 
+func (s *Session) SourcesForImport(path, srcDir string) (*sources.Sources, error) {
+	importPath, err := s.getImportPath(path, srcDir)
+	if err != nil {
+		return nil, err
+	}
+
+	srcs, ok := s.sources[importPath]
+	if !ok {
+		return nil, fmt.Errorf(`sources for %q not found`, path)
+	}
+
+	return srcs, nil
+}
+
 // ImportResolverFor returns a function which returns a compiled package archive
 // given an import path.
 func (s *Session) ImportResolverFor(srcDir string) func(string) (*compiler.Archive, error) {
@@ -1165,12 +1212,7 @@ func (s *Session) ImportResolverFor(srcDir string) func(string) (*compiler.Archi
 			return archive, nil
 		}
 
-		// The archive hasn't been compiled yet so compile it with the sources.
-		if srcs, ok := s.sources[importPath]; ok {
-			return s.compilePackages(srcs)
-		}
-
-		return nil, fmt.Errorf(`sources for %q not found`, importPath)
+		return nil, fmt.Errorf(`archive for %q not found`, importPath)
 	}
 }
 
@@ -1258,8 +1300,9 @@ func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) 
 func (s *Session) WaitForChange() {
 	// Will need to re-validate up-to-dateness of all archives, so flush them from
 	// memory.
+	s.importPaths = map[string]map[string]string{}
+	s.sources = map[string]*sources.Sources{}
 	s.UpToDateArchives = map[string]*compiler.Archive{}
-	s.Types = map[string]*types.Package{}
 
 	s.options.PrintSuccess("watching for changes...\n")
 	for {

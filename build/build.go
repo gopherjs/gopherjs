@@ -759,7 +759,7 @@ type Session struct {
 	// sources is a map of parsed packages that have been built and augmented.
 	// This is keyed using resolved import paths. This is used to avoid
 	// rebuilding and augmenting packages that are imported by several packages.
-	// These sources haven't been simplified yet.
+	// The files in these sources haven't been sorted nor simplified yet.
 	sources map[string]*sources.Sources
 
 	// Binary archives produced during the current session and assumed to be
@@ -927,6 +927,13 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO(grantnelson-wf): We could investigate caching the results of
+	// the sources prior to preparing them to avoid re-parsing the same
+	// sources and augmenting them when the files on disk haven't changed.
+	// This would require a way to determine if the sources are up-to-date
+	// which could be done with the left over srcModTime from when the archives
+	// were being cached.
 
 	// Prepare and analyze the source code.
 	// This will be performed recursively for all dependencies.

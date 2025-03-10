@@ -220,3 +220,31 @@ func sameType(x, y interface{}) bool {
 	// existing and differing for different types.
 	return js.InternalObject(x).Get("constructor") == js.InternalObject(y).Get("constructor")
 }
+
+type Pointer[T any] struct {
+	_ [0]*T
+	_ noCopy
+
+	// Below changed from unsafe.Pointer to *T since unsafe.Pointer wasn't
+	// being initialized and left as undefined instead of nil.
+	v *T
+}
+
+func (x *Pointer[T]) Load() *T { return x.v }
+
+func (x *Pointer[T]) Store(val *T) { x.v = val }
+
+func (x *Pointer[T]) Swap(new *T) (old *T) {
+	old = x.v
+	x.v = new
+	return old
+}
+
+// CompareAndSwap executes the compare-and-swap operation for x.
+func (x *Pointer[T]) CompareAndSwap(old, new *T) (swapped bool) {
+	if x.v == old {
+		x.v = new
+		return true
+	}
+	return false
+}

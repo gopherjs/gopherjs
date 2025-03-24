@@ -153,11 +153,6 @@ var knownFails = map[string]failReason{
 	"typeparam/issue51733.go":  {category: usesUnsupportedPackage, desc: "unsafe: uintptr to struct pointer conversion is unsupported"},
 	"typeparam/typeswitch5.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
 
-	// Failures related to the lack of generics support. Ideally, this section
-	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
-	// fixed.
-	"typeparam/nested.go": {category: usesUnsupportedGenerics, desc: "incomplete support for generic types inside generic functions"},
-
 	// These are new tests in Go 1.19
 	"typeparam/issue51521.go": {category: lowLevelRuntimeDifference, desc: "different panic message when calling a method on nil interface"},
 	"fixedbugs/issue50672.go": {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1271"},

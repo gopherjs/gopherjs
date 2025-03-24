@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"fmt"
 	"go/ast"
 	"go/types"
 	"sort"
@@ -1575,15 +1576,13 @@ func TestBlocking_IsImportBlocking_ForwardInstances(t *testing.T) {
 }
 
 func TestBlocking_IsImportBlocking_BackwardInstances(t *testing.T) {
-	t.Skip(`isImportedBlocking doesn't fully handle instances yet`)
-	// TODO(grantnelson-wf): This test is currently failing because the info
-	// for the test package is need while creating the instances for FooBaz
-	// while analyzing the other package. However the other package is analyzed
-	// first since the test package is dependent on it. One possible fix is that
-	// we add some mechanism similar to the localInstCallees but for remote
-	// instances then perform the blocking propagation steps for all packages
-	// including the localInstCallees propagation at the same time. After all the
-	// propagation of the calls then the flow control statements can be marked.
+	// This tests propagation of information across package boundaries.
+	// `FooBaz` has no instances in it until it is referenced in the `test` package.
+	// That instance information needs to propagate back across the package
+	// boundary to the `other` package. The information for `BazBlocker` and
+	// `BazNotBlocker` is propagated back to `FooBaz[BazBlocker]` and
+	// `FooBaz[BazNotBlocker]`. That information is then propagated forward
+	// to the `blocking` and `notBlocking` functions in the `test` package.
 
 	otherSrc := `package other
 
@@ -1629,8 +1628,9 @@ type blockingTest struct {
 
 func newBlockingTest(t *testing.T, src string) *blockingTest {
 	f := srctesting.New(t)
+	tContext := types.NewContext()
 	tc := typeparams.Collector{
-		TContext:  types.NewContext(),
+		TContext:  tContext,
 		Info:      f.Info,
 		Instances: &typeparams.PackageInstanceSets{},
 	}
@@ -1639,11 +1639,11 @@ func newBlockingTest(t *testing.T, src string) *blockingTest {
 	testInfo, testPkg := f.Check(`pkg/test`, file)
 	tc.Scan(testPkg, file)
 
-	isImportBlocking := func(i typeparams.Instance) bool {
-		t.Fatalf(`isImportBlocking should not be called in this test, called with %v`, i)
-		return true
+	getImportInfo := func(path string) (*Info, error) {
+		return nil, fmt.Errorf(`getImportInfo should not be called in this test, called with %v`, path)
 	}
-	pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, testInfo, types.NewContext(), testPkg, tc.Instances, isImportBlocking)
+	pkgInfo := AnalyzePkg([]*ast.File{file}, f.FileSet, testInfo, tContext, testPkg, tc.Instances, getImportInfo)
+	PropagateAnalysis([]*Info{pkgInfo})
 
 	return &blockingTest{
 		f:       f,
@@ -1654,19 +1654,19 @@ func newBlockingTest(t *testing.T, src string) *blockingTest {
 
 func newBlockingTestWithOtherPackage(t *testing.T, testSrc string, otherSrc string) *blockingTest {
 	f := srctesting.New(t)
+	tContext := types.NewContext()
 	tc := typeparams.Collector{
-		TContext:  types.NewContext(),
+		TContext:  tContext,
 		Info:      f.Info,
 		Instances: &typeparams.PackageInstanceSets{},
 	}
 
-	pkgInfo := map[*types.Package]*Info{}
-	isImportBlocking := func(i typeparams.Instance) bool {
-		if info, ok := pkgInfo[i.Object.Pkg()]; ok {
-			return info.IsBlocking(i)
+	pkgInfo := map[string]*Info{}
+	getImportInfo := func(path string) (*Info, error) {
+		if info, ok := pkgInfo[path]; ok {
+			return info, nil
 		}
-		t.Fatalf(`unexpected package in isImportBlocking for %v`, i)
-		return true
+		return nil, fmt.Errorf(`unexpected package in getImportInfo for %v`, path)
 	}
 
 	otherFile := f.Parse(`other.go`, otherSrc)
@@ -1677,11 +1677,13 @@ func newBlockingTestWithOtherPackage(t *testing.T, testSrc string, otherSrc stri
 	_, testPkg := f.Check(`pkg/test`, testFile)
 	tc.Scan(testPkg, testFile)
 
-	otherPkgInfo := AnalyzePkg([]*ast.File{otherFile}, f.FileSet, f.Info, types.NewContext(), otherPkg, tc.Instances, isImportBlocking)
-	pkgInfo[otherPkg] = otherPkgInfo
+	otherPkgInfo := AnalyzePkg([]*ast.File{otherFile}, f.FileSet, f.Info, tContext, otherPkg, tc.Instances, getImportInfo)
+	pkgInfo[otherPkg.Path()] = otherPkgInfo
 
-	testPkgInfo := AnalyzePkg([]*ast.File{testFile}, f.FileSet, f.Info, types.NewContext(), testPkg, tc.Instances, isImportBlocking)
-	pkgInfo[testPkg] = testPkgInfo
+	testPkgInfo := AnalyzePkg([]*ast.File{testFile}, f.FileSet, f.Info, tContext, testPkg, tc.Instances, getImportInfo)
+	pkgInfo[testPkg.Path()] = testPkgInfo
+
+	PropagateAnalysis([]*Info{otherPkgInfo, testPkgInfo})
 
 	return &blockingTest{
 		f:       f,

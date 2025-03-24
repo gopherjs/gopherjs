@@ -1,16 +1,21 @@
 package sources
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
 	"sort"
 	"strings"
 
+	"github.com/neelance/astrewrite"
+
+	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/jsFile"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/internal/errorList"
-	"github.com/neelance/astrewrite"
+	"github.com/gopherjs/gopherjs/internal/experiments"
 )
 
 // Sources is a slice of parsed Go sources and additional data for a package.
@@ -38,38 +43,67 @@ type Sources struct {
 
 	// JSFiles is the JavaScript files that are part of the package.
 	JSFiles []jsFile.JSFile
+
+	// TypeInfo is the type information this package.
+	// This is nil until set by Analyze.
+	TypeInfo *analysis.Info
+
+	// baseInfo is the base type information this package.
+	// This is nil until set by TypeCheck.
+	baseInfo *types.Info
+
+	// Package is the types package for these source files.
+	// This is nil until set by TypeCheck.
+	Package *types.Package
+
+	// GoLinknames is the set of Go linknames for this package.
+	// This is nil until set by ParseGoLinknames.
+	GoLinknames []linkname.GoLinkname
 }
 
-// Sort the Go files slice by the original source name to ensure consistent order
+type Importer func(path, srcDir string) (*Sources, error)
+
+// sort the Go files slice by the original source name to ensure consistent order
 // of processing. This is required for reproducible JavaScript output.
 //
-// Note this function mutates the original slice.
-func (s Sources) Sort() Sources {
+// Note this function mutates the original Files slice.
+func (s *Sources) Sort() {
 	sort.Slice(s.Files, func(i, j int) bool {
-		return s.FileSet.File(s.Files[i].Pos()).Name() > s.FileSet.File(s.Files[j].Pos()).Name()
+		return s.getFileName(s.Files[i]) > s.getFileName(s.Files[j])
 	})
-	return s
 }
 
-// Simplified returns a new sources instance with each Files entry processed by
-// astrewrite.Simplify. The JSFiles are copied unchanged.
-func (s Sources) Simplified(typesInfo *types.Info) Sources {
-	simplified := Sources{
-		ImportPath: s.ImportPath,
-		Dir:        s.Dir,
-		Files:      make([]*ast.File, len(s.Files)),
-		FileSet:    s.FileSet,
-		JSFiles:    s.JSFiles,
-	}
+func (s *Sources) getFileName(file *ast.File) string {
+	return s.FileSet.File(file.Pos()).Name()
+}
+
+// Simplify processed each Files entry with astrewrite.Simplify.
+//
+// Note this function mutates the original Files slice.
+// This must be called after TypeCheck and before analyze since
+// this will change the pointers in the AST. For example, the pointers
+// to function literals will change, making it impossible to find them
+// in the type information, if analyze is called first.
+func (s *Sources) Simplify() {
 	for i, file := range s.Files {
-		simplified.Files[i] = astrewrite.Simplify(file, typesInfo, false)
+		s.Files[i] = astrewrite.Simplify(file, s.baseInfo, false)
 	}
-	return simplified
 }
 
 // TypeCheck the sources. Returns information about declared package types and
 // type information for the supplied AST.
-func (s Sources) TypeCheck(importer types.Importer, sizes types.Sizes, tContext *types.Context) (*types.Info, *types.Package, error) {
+// This will set the Package field on the Sources.
+//
+// If the Package field is not nil, e.g. this function has already been run,
+// this will be a no-op.
+//
+// This must be called prior to simplify to get the types.Info used by simplify.
+func (s *Sources) TypeCheck(importer Importer, sizes types.Sizes, tContext *types.Context) error {
+	if s.Package != nil && s.baseInfo != nil {
+		// type checking has already been done so return early.
+		return nil
+	}
+
 	const errLimit = 10 // Max number of type checking errors to return.
 
 	typesInfo := &types.Info{
@@ -84,11 +118,16 @@ func (s Sources) TypeCheck(importer types.Importer, sizes types.Sizes, tContext 
 
 	var typeErrs errorList.ErrorList
 
-	ecImporter := &packageImporter{Importer: importer}
+	pkgImporter := &packageImporter{
+		srcDir:   s.Dir,
+		importer: importer,
+		sizes:    sizes,
+		tContext: tContext,
+	}
 
 	config := &types.Config{
 		Context:  tContext,
-		Importer: ecImporter,
+		Importer: pkgImporter,
 		Sizes:    sizes,
 		Error:    func(err error) { typeErrs = typeErrs.AppendDistinct(err) },
 	}
@@ -96,22 +135,68 @@ func (s Sources) TypeCheck(importer types.Importer, sizes types.Sizes, tContext 
 	// If we encountered any import errors, it is likely that the other type errors
 	// are not meaningful and would be resolved by fixing imports. Return them
 	// separately, if any. https://github.com/gopherjs/gopherjs/issues/119.
-	if ecImporter.Errors.ErrOrNil() != nil {
-		return nil, nil, ecImporter.Errors.Trim(errLimit).ErrOrNil()
+	if pkgImporter.Errors.ErrOrNil() != nil {
+		return pkgImporter.Errors.Trim(errLimit).ErrOrNil()
 	}
 	// Return any other type errors.
 	if typeErrs.ErrOrNil() != nil {
-		return nil, nil, typeErrs.Trim(errLimit).ErrOrNil()
+		return typeErrs.Trim(errLimit).ErrOrNil()
 	}
 	// Any general errors that may have occurred during type checking.
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-	return typesInfo, typesPkg, nil
+
+	// If generics are not enabled, ensure the package does not requires generics support.
+	if !experiments.Env.Generics {
+		if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil {
+			return fmt.Errorf("some packages requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", genErr)
+		}
+	}
+
+	s.baseInfo = typesInfo
+	s.Package = typesPkg
+	return nil
+}
+
+// CollectInstances will determine the type parameters instances for the package.
+//
+// This must be called before Analyze to have the type parameters instances
+// needed during analysis.
+func (s *Sources) CollectInstances(tContext *types.Context, instances *typeparams.PackageInstanceSets) {
+	tc := typeparams.Collector{
+		TContext:  tContext,
+		Info:      s.baseInfo,
+		Instances: instances,
+	}
+	tc.Scan(s.Package, s.Files...)
+}
+
+// Analyze will determine the type parameters instances, blocking,
+// and other type information for the package.
+// This will set the TypeInfo and Instances fields on the Sources.
+//
+// This must be called after to simplify to ensure the pointers
+// in the AST are still valid.
+// The instances must be collected prior to this call.
+//
+// Note that at the end of this call the analysis information
+// has NOT been propagated across packages yet.
+func (s *Sources) Analyze(importer Importer, tContext *types.Context, instances *typeparams.PackageInstanceSets) {
+	infoImporter := func(path string) (*analysis.Info, error) {
+		srcs, err := importer(path, s.Dir)
+		if err != nil {
+			return nil, err
+		}
+		return srcs.TypeInfo, nil
+	}
+	s.TypeInfo = analysis.AnalyzePkg(s.Files, s.FileSet, s.baseInfo, tContext, s.Package, instances, infoImporter)
 }
 
 // ParseGoLinknames extracts all //go:linkname compiler directive from the sources.
-func (s Sources) ParseGoLinknames() ([]linkname.GoLinkname, error) {
+//
+// This will set the GoLinknames field on the Sources.
+func (s *Sources) ParseGoLinknames() error {
 	goLinknames := []linkname.GoLinkname{}
 	var errs errorList.ErrorList
 	for _, file := range s.Files {
@@ -119,7 +204,11 @@ func (s Sources) ParseGoLinknames() ([]linkname.GoLinkname, error) {
 		errs = errs.Append(err)
 		goLinknames = append(goLinknames, found...)
 	}
-	return goLinknames, errs.ErrOrNil()
+	if err := errs.ErrOrNil(); err != nil {
+		return err
+	}
+	s.GoLinknames = goLinknames
+	return nil
 }
 
 // UnresolvedImports calculates the import paths of the package's dependencies
@@ -132,7 +221,7 @@ func (s Sources) ParseGoLinknames() ([]linkname.GoLinkname, error) {
 // The given skip paths (typically those imports from PackageData.Imports)
 // will not be returned in the results.
 // This will not return any `*_test` packages in the results.
-func (s Sources) UnresolvedImports(skip ...string) []string {
+func (s *Sources) UnresolvedImports(skip ...string) []string {
 	seen := make(map[string]struct{})
 	for _, sk := range skip {
 		seen[sk] = struct{}{}
@@ -156,20 +245,40 @@ func (s Sources) UnresolvedImports(skip ...string) []string {
 // packageImporter implements go/types.Importer interface and
 // wraps it to collect import errors.
 type packageImporter struct {
-	Importer types.Importer
+	srcDir   string
+	importer Importer
+	sizes    types.Sizes
+	tContext *types.Context
 	Errors   errorList.ErrorList
 }
 
-func (ei *packageImporter) Import(path string) (*types.Package, error) {
+func (pi *packageImporter) Import(path string) (*types.Package, error) {
 	if path == "unsafe" {
 		return types.Unsafe, nil
 	}
 
-	pkg, err := ei.Importer.Import(path)
+	srcs, err := pi.importer(path, pi.srcDir)
 	if err != nil {
-		ei.Errors = ei.Errors.AppendDistinct(err)
+		pi.Errors = pi.Errors.AppendDistinct(err)
 		return nil, err
 	}
 
-	return pkg, nil
+	// If the sources doesn't have the package determined yet, get it now,
+	// otherwise this will be a no-op.
+	// This will recursively get the packages for all of it's dependencies too.
+	err = srcs.TypeCheck(pi.importer, pi.sizes, pi.tContext)
+	if err != nil {
+		pi.Errors = pi.Errors.AppendDistinct(err)
+		return nil, err
+	}
+
+	return srcs.Package, nil
+}
+
+// SortedSourcesSlice in place sorts the given slice of Sources by ImportPath.
+// This will not change the order of the files within any Sources.
+func SortedSourcesSlice(sourcesSlice []*Sources) {
+	sort.Slice(sourcesSlice, func(i, j int) bool {
+		return sourcesSlice[i].ImportPath < sourcesSlice[j].ImportPath
+	})
 }

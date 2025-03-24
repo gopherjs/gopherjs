@@ -187,9 +187,9 @@ type Source struct {
 // root package. At least one source file must be given.
 // The root package's path will be `command-line-arguments`.
 //
-// The auxillary files can be for different packages but should have paths
+// The auxiliary files can be for different packages but should have paths
 // added to the source name so that they can be grouped together by package.
-// To import an auxillary package, the path should be prepended by
+// To import an auxiliary package, the path should be prepended by
 // `github.com/gopherjs/gopherjs/compiler`.
 func ParseSources(t *testing.T, sourceFiles []Source, auxFiles []Source) *packages.Package {
 	t.Helper()

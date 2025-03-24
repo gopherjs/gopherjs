@@ -613,6 +613,115 @@ func TestDeclNaming_VarsAndTypes(t *testing.T) {
 	)
 }
 
+func Test_CrossPackageAnalysis(t *testing.T) {
+	src1 := `
+		package main
+		import "github.com/gopherjs/gopherjs/compiler/stable"
+
+		func main() {
+			m := map[string]int{
+				"one":   1,
+				"two":   2,
+				"three": 3,
+			}
+			stable.Print(m)
+		}`
+	src2 := `
+		package collections
+		import "github.com/gopherjs/gopherjs/compiler/cmp"
+		
+		func Keys[K cmp.Ordered, V any, M ~map[K]V](m M) []K {
+			keys := make([]K, 0, len(m))
+			for k := range m {
+				keys = append(keys, k)
+			}
+			return keys
+		}`
+	src3 := `
+		package collections
+		import "github.com/gopherjs/gopherjs/compiler/cmp"
+			
+		func Values[K cmp.Ordered, V any, M ~map[K]V](m M) []V {
+			values := make([]V, 0, len(m))
+			for _, v := range m {
+				values = append(values, v)
+			}
+			return values
+		}`
+	src4 := `
+		package sorts
+		import "github.com/gopherjs/gopherjs/compiler/cmp"
+		
+		func Pair[K cmp.Ordered, V any, SK ~[]K, SV ~[]V](k SK, v SV) {
+			Bubble(len(k),
+				func(i, j int) bool { return k[i] < k[j] },
+				func(i, j int) { k[i], v[i], k[j], v[j] = k[j], v[j], k[i], v[i] })
+		}
+
+		func Bubble(length int, less func(i, j int) bool, swap func(i, j int)) {
+			for i := 0; i < length; i++ {
+				for j := i + 1; j < length; j++ {
+					if less(j, i) {
+						swap(i, j)
+					}
+				}
+			}
+		}`
+	src5 := `
+		package stable
+		import (
+			"github.com/gopherjs/gopherjs/compiler/collections"
+			"github.com/gopherjs/gopherjs/compiler/sorts"
+			"github.com/gopherjs/gopherjs/compiler/cmp"
+		)
+
+		func Print[K cmp.Ordered, V any, M ~map[K]V](m M) {
+			keys := collections.Keys(m)
+			values := collections.Values(m)
+			sorts.Pair(keys, values)
+			for i, k := range keys {
+				println(i, k, values[i])
+			}
+		}`
+	src6 := `
+		package cmp
+		type Ordered interface { ~int | ~uint | ~float64 | ~string }`
+
+	root := srctesting.ParseSources(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `collections/keys.go`, Contents: []byte(src2)},
+			{Name: `collections/values.go`, Contents: []byte(src3)},
+			{Name: `sorts/sorts.go`, Contents: []byte(src4)},
+			{Name: `stable/print.go`, Contents: []byte(src5)},
+			{Name: `cmp/ordered.go`, Contents: []byte(src6)},
+		})
+
+	archives := compileProject(t, root, false)
+	checkForDeclFullNames(t, archives,
+		// collections
+		`funcVar:github.com/gopherjs/gopherjs/compiler/collections.Values`,
+		`func:github.com/gopherjs/gopherjs/compiler/collections.Values<string, int, map[string]int>`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/collections.Keys`,
+		`func:github.com/gopherjs/gopherjs/compiler/collections.Keys<string, int, map[string]int>`,
+
+		// sorts
+		`funcVar:github.com/gopherjs/gopherjs/compiler/sorts.Pair`,
+		`func:github.com/gopherjs/gopherjs/compiler/sorts.Pair<string, int, []string, []int>`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/sorts.Bubble`,
+		`func:github.com/gopherjs/gopherjs/compiler/sorts.Bubble`,
+
+		// stable
+		`funcVar:github.com/gopherjs/gopherjs/compiler/stable.Print`,
+		`func:github.com/gopherjs/gopherjs/compiler/stable.Print<string, int, map[string]int>`,
+
+		// main
+		`init:main`,
+	)
+}
+
 func TestArchiveSelectionAfterSerialization(t *testing.T) {
 	src := `
 		package main
@@ -679,43 +788,43 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 		pkgMap[pkg.PkgPath] = pkg
 	})
 
-	archiveCache := map[string]*Archive{}
-	var importContext *ImportContext
-	importContext = &ImportContext{
-		Packages: map[string]*types.Package{},
-		ImportArchive: func(path string) (*Archive, error) {
-			// find in local cache
-			if a, ok := archiveCache[path]; ok {
-				return a, nil
-			}
-
-			pkg, ok := pkgMap[path]
-			if !ok {
-				t.Fatal(`package not found:`, path)
-			}
-			importContext.Packages[path] = pkg.Types
-
-			srcs := sources.Sources{
-				ImportPath: path,
-				Files:      pkg.Syntax,
-				FileSet:    pkg.Fset,
-			}
-
-			// compile package
-			a, err := Compile(srcs, importContext, minify)
-			if err != nil {
-				return nil, err
-			}
-			archiveCache[path] = a
-			return a, nil
-		},
+	allSrcs := map[string]*sources.Sources{}
+	for _, pkg := range pkgMap {
+		srcs := &sources.Sources{
+			ImportPath: pkg.PkgPath,
+			Dir:        ``,
+			Files:      pkg.Syntax,
+			FileSet:    pkg.Fset,
+		}
+		allSrcs[pkg.PkgPath] = srcs
 	}
 
-	_, err := importContext.ImportArchive(root.PkgPath)
-	if err != nil {
-		t.Fatal(`failed to compile:`, err)
+	importer := func(path, srcDir string) (*sources.Sources, error) {
+		srcs, ok := allSrcs[path]
+		if !ok {
+			t.Fatal(`package not found:`, path)
+			return nil, nil
+		}
+		return srcs, nil
 	}
-	return archiveCache
+
+	tContext := types.NewContext()
+	sortedSources := make([]*sources.Sources, 0, len(allSrcs))
+	for _, srcs := range allSrcs {
+		sortedSources = append(sortedSources, srcs)
+	}
+	sources.SortedSourcesSlice(sortedSources)
+	PrepareAllSources(sortedSources, importer, tContext)
+
+	archives := map[string]*Archive{}
+	for _, srcs := range allSrcs {
+		a, err := Compile(srcs, tContext, minify)
+		if err != nil {
+			t.Fatal(`failed to compile:`, err)
+		}
+		archives[srcs.ImportPath] = a
+	}
+	return archives
 }
 
 // newTime creates an arbitrary time.Time offset by the given number of seconds.
@@ -730,6 +839,13 @@ func newTime(seconds float64) time.Time {
 func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPath string) map[string]*Archive {
 	t.Helper()
 
+	// TODO(grantnelson-wf): The tests using this function are out-of-date
+	// since they are testing the old archive caching that has been disabled.
+	// At some point, these tests should be updated to test any new caching
+	// mechanism that is implemented or removed. As is this function is faking
+	// the old recursive archive loading that is no longer used since it
+	// doesn't allow cross package analysis for generings.
+
 	buildTime := newTime(5.0)
 	serialized := map[string][]byte{}
 	for path, a := range archives {
@@ -742,6 +858,10 @@ func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPa
 
 	srcModTime := newTime(0.0)
 	reloadCache := map[string]*Archive{}
+	type ImportContext struct {
+		Packages      map[string]*types.Package
+		ImportArchive func(path string) (*Archive, error)
+	}
 	var importContext *ImportContext
 	importContext = &ImportContext{
 		Packages: map[string]*types.Package{},

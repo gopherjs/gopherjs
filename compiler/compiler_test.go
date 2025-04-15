@@ -5,6 +5,7 @@ import (
 	"go/types"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -746,6 +747,62 @@ func TestArchiveSelectionAfterSerialization(t *testing.T) {
 
 	if diff := cmp.Diff(origJS, readJS); diff != "" {
 		t.Errorf("the reloaded files produce different JS:\n%s", diff)
+	}
+}
+
+func TestNestedTypesDuplicateDecls(t *testing.T) {
+	// This is a subset of the type param nested test.
+	// See https://github.com/golang/go/blob/go1.19.13/test/typeparam/nested.go
+	// The test is failing because nested types aren't being typed differently.
+	// For example the type of `T[int]` below is different based on `F[X]`
+	// instance for different `X` type parameters, hence Go prints the type as
+	// `T[X;int]` instead of `T[int]`.
+
+	src := `
+		package main
+
+		type intish interface { ~int }
+
+		func F[A intish]() {
+			type T[B intish] struct{}
+			print(T[int]{})
+		}
+
+		func main() {
+			type Int int
+
+			F[int]()
+			F[Int]()
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+	archives := compileProject(t, root, false)
+	mainPkg := archives[root.PkgPath]
+
+	// Regex to match strings like `Foo[42 /* bar */] =` and capture
+	// the name (`Foo`), the index (`42`), and the instance type (`bar`).
+	rex := regexp.MustCompile(`^\s*(\w+)\s*\[\s*(\d+)\s*\/\*(.+)\*\/\s*\]\s*\=`)
+
+	// Collect all instances of generics (i.e. `Foo[bar]`) written to the decl code.
+	insts := []string{}
+	for _, decl := range mainPkg.Declarations {
+		if match := rex.FindAllStringSubmatch(string(decl.DeclCode), 1); len(match) > 0 {
+			instance := match[0][1] + `[` + strings.TrimSpace(match[0][3]) + `]`
+			instance = strings.ReplaceAll(instance, `command-line-arguments.`, ``)
+			insts = append(insts, instance)
+		}
+	}
+	sort.Strings(insts)
+
+	exp := []string{
+		`F[Int]`,
+		`F[int]`,
+		`T[Int;int]`,
+		`T[int;int]`,
+	}
+	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
+		t.Errorf("the instances of generics are different:\n%s", diff)
 	}
 }
 

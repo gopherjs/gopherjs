@@ -38,9 +38,11 @@ type InstanceMap[V any] struct {
 // If the given key isn't found, an empty bucket and -1 are returned.
 func (im *InstanceMap[V]) findIndex(key Instance) (mapBucket[V], int) {
 	if im != nil && im.data != nil {
-		bucket := im.data[key.Object][typeHash(im.hasher, key.TArgs...)]
+		bucket := im.data[key.Object][typeHash(im.hasher, key.TNest, key.TArgs)]
 		for i, candidate := range bucket {
-			if candidate != nil && candidate.key.TArgs.Equal(key.TArgs) {
+			if candidate != nil &&
+				candidate.key.TNest.Equal(key.TNest) &&
+				candidate.key.TArgs.Equal(key.TArgs) {
 				return bucket, i
 			}
 		}
@@ -82,7 +84,7 @@ func (im *InstanceMap[V]) Set(key Instance, value V) V {
 	if _, ok := im.data[key.Object]; !ok {
 		im.data[key.Object] = mapBuckets[V]{}
 	}
-	bucketID := typeHash(im.hasher, key.TArgs...)
+	bucketID := typeHash(im.hasher, key.TNest, key.TArgs)
 
 	// If there is already an identical key in the map, override the entry value.
 	hole := -1
@@ -90,7 +92,7 @@ func (im *InstanceMap[V]) Set(key Instance, value V) V {
 	for i, candidate := range bucket {
 		if candidate == nil {
 			hole = i
-		} else if candidate.key.TArgs.Equal(key.TArgs) {
+		} else if candidate.key.TNest.Equal(key.TNest) && candidate.key.TArgs.Equal(key.TArgs) {
 			old := candidate.value
 			candidate.value = value
 			return old
@@ -185,8 +187,11 @@ func (im *InstanceMap[V]) String() string {
 // Provided hasher is used to compute hashes of individual types, which are
 // xor'ed together. Xor preserves bit distribution property, so the combined
 // hash should be as good for bucketing, as the original.
-func typeHash(hasher typeutil.Hasher, types ...types.Type) uint32 {
+func typeHash(hasher typeutil.Hasher, nestTypes []types.Type, types []types.Type) uint32 {
 	var hash uint32
+	for _, typ := range nestTypes {
+		hash ^= hasher.Hash(typ)
+	}
 	for _, typ := range types {
 		hash ^= hasher.Hash(typ)
 	}

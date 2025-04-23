@@ -5,6 +5,7 @@
 package subst
 
 import (
+	"fmt"
 	"go/types"
 )
 
@@ -159,6 +160,13 @@ func (subst *subster) tuple(t *types.Tuple) *types.Tuple {
 		}
 	}
 	return t
+}
+
+func (subst *subster) String() string { // TODO(grantnelson-wf): remove
+	if subst == nil {
+		return `<nil subster>`
+	}
+	return fmt.Sprint(subst.replacements)
 }
 
 type varlist interface {

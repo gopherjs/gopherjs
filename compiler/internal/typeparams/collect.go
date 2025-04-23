@@ -82,6 +82,13 @@ func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Select
 	}
 }
 
+func (r *Resolver) String() string { // TODO(grantnelson-wf): remove
+	if r == nil || r.subster == nil {
+		return "<nil Resolver>"
+	}
+	return r.subster.String()
+}
+
 // ToSlice converts TypeParamList into a slice with the same order of entries.
 func ToSlice(tpl *types.TypeParamList) []*types.TypeParam {
 	result := make([]*types.TypeParam, tpl.Len())
@@ -114,10 +121,21 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 	}
 
 	instance, ok := c.info.Instances[ident]
-	if !ok {
+	if ok {
+		c.addNamedInstance(ident, instance)
 		return
 	}
 
+	def, ok := c.info.Defs[ident]
+	if ok && def != nil {
+		c.addNestedNamed(ident, def)
+		return
+	}
+
+	return
+}
+
+func (c *visitor) addNamedInstance(ident *ast.Ident, instance types.Instance) {
 	obj := c.info.ObjectOf(ident)
 
 	// For types embedded in structs, the object the identifier resolves to is a
@@ -145,7 +163,21 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 			})
 		}
 	}
-	return
+
+	fmt.Printf(">>>[X] %s => %v\n", ident.Name, obj) // TODO(grantnelson-wf): remove
+}
+
+// TODO(grantnelson-wf): finish or remove
+func (c *visitor) addNestedNamed(ident *ast.Ident, obj types.Object) {
+	typ := obj.Type()
+	if ptr, ok := typ.(*types.Pointer); ok {
+		typ = ptr.Elem()
+	}
+	if t, ok := typ.(*types.Named); ok {
+		obj = t.Obj()
+	}
+
+	fmt.Printf(">>>[Y] %s => %v\n", ident.Name, obj) // TODO(grantnelson-wf): remove
 }
 
 // seedVisitor implements ast.Visitor that collects information necessary to
@@ -173,11 +205,11 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 		sig := obj.Type().(*types.Signature)
 		if sig.TypeParams().Len() != 0 || sig.RecvTypeParams().Len() != 0 {
 			c.objMap[obj] = n
-			return &seedVisitor{
+			return newPrinter(&seedVisitor{
 				visitor: c.visitor,
 				objMap:  c.objMap,
 				mapOnly: true,
-			}
+			}, "FuncDeclSeed")
 		}
 	case *ast.TypeSpec:
 		obj := c.info.Defs[n.Name]
@@ -236,7 +268,7 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 		objMap: objMap,
 	}
 	for _, file := range files {
-		ast.Walk(&sc, file)
+		ast.Walk(newPrinter(&sc, "Seed"), file)
 	}
 
 	for iset := c.Instances.Pkg(pkg); !iset.exhausted(); {
@@ -248,7 +280,7 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 				resolver:  NewResolver(c.TContext, ToSlice(SignatureTypeParams(typ)), inst.TArgs),
 				info:      c.Info,
 			}
-			ast.Walk(&v, objMap[inst.Object])
+			ast.Walk(newPrinter(&v, "Signature"), objMap[inst.Object])
 		case *types.Named:
 			obj := typ.Obj()
 			v := visitor{
@@ -256,7 +288,51 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 				resolver:  NewResolver(c.TContext, ToSlice(typ.TypeParams()), inst.TArgs),
 				info:      c.Info,
 			}
-			ast.Walk(&v, objMap[obj])
+			ast.Walk(newPrinter(&v, "Named"), objMap[obj])
 		}
 	}
+}
+
+type printer struct { // TODO(grantnelson-wf): remove
+	inner  ast.Visitor
+	title  string
+	indent string
+}
+
+func newPrinter(inner ast.Visitor, title string) *printer {
+	return &printer{
+		inner:  inner,
+		title:  title,
+		indent: ``,
+	}
+}
+
+func (p *printer) Visit(n ast.Node) (w ast.Visitor) {
+	if n == nil {
+		if len(p.indent) >= 2 {
+			p.indent = p.indent[:len(p.indent)-2]
+		}
+	} else {
+		p.indent += "  "
+		if id, ok := n.(*ast.Ident); ok {
+			fmt.Printf("%s%s(%T)%q\n", p.title, p.indent, n, id.Name)
+		} else {
+			fmt.Printf("%s%s(%T)\n", p.title, p.indent, n)
+		}
+	}
+	v2 := p.inner.Visit(n)
+	if v2 != nil {
+		if v2 == p.inner {
+			return p
+		}
+		if _, ok := v2.(*printer); ok {
+			return v2
+		}
+		v2 = &printer{
+			inner:  v2,
+			title:  p.title,
+			indent: p.indent,
+		}
+	}
+	return v2
 }

@@ -47,3 +47,10 @@ func (s *Subster) Type(typ types.Type) types.Type {
 	}
 	return s.impl.typ(typ)
 }
+
+func (s *Subster) String() string { // TODO(grantnelson-wf): remove
+	if s == nil || s.impl == nil {
+		return `<nil Subster>`
+	}
+	return s.impl.String()
+}

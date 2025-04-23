@@ -327,7 +327,19 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 		}
 		return fmt.Sprintf(`"%s", [%s]`, pkgPath, strings.Join(fields, ", "))
 	case *types.TypeParam:
-		err := bailout(fmt.Errorf(`%v has unexpected generic type parameter %T`, ty, ty))
+		tr := fc.typeResolver.Substitute(ty)
+
+		fmt.Printf(">>>[1] ty: (%[1]T): %[1]v\n", ty) // TODO(grantnelson-wf): remove
+		fmt.Printf(">>>[1] tr: (%[1]T): %[1]v\n", tr)
+		fmt.Printf(">>>[1] funcRef: %q\n", fc.funcRef)
+		fmt.Printf(">>>[1]-----------------\n")
+		fmt.Printf("%s\n", fc.typeResolver.String())
+		fmt.Printf(">>>[1]-----------------\n")
+
+		if tr != ty {
+			return fc.initArgs(tr)
+		}
+		err := bailout(fmt.Errorf(`"%v" has unexpected generic type parameter %T`, ty, ty))
 		panic(err)
 	default:
 		err := bailout(fmt.Errorf("%v has unexpected type %T", ty, ty))

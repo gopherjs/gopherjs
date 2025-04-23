@@ -15,6 +15,11 @@ import (
 type Instance struct {
 	Object types.Object       // Object to be instantiated.
 	TArgs  typesutil.TypeList // Type params to instantiate with.
+
+	// TNest is the type params of the function this object was nested with-in.
+	// e.g. In `func A[X any]() { type B[Y any] struct {} }` the `X`
+	// from `A` is the context of `B[Y]` thus creating `B[X;Y]`.
+	TNest typesutil.TypeList
 }
 
 // String returns a string representation of the Instance.
@@ -32,11 +37,29 @@ func (i *Instance) String() string {
 
 // TypeString returns a Go type string representing the instance (suitable for %T verb).
 func (i *Instance) TypeString() string {
+	return fmt.Sprintf("%s.%s%s", i.Object.Pkg().Name(), i.Object.Name(), i.typeParamsString())
+}
+
+// typeParamsString returns part of a Go type string that represents the type
+// parameters of the instance including the nesting type parameters, e.g. [X;Y,Z].
+func (i *Instance) typeParamsString() string {
+	hasNest := len(i.TNest) > 0
+	hasArgs := len(i.TArgs) > 0
 	tArgs := ""
-	if len(i.TArgs) > 0 {
-		tArgs = "[" + i.TArgs.String() + "]"
+	if hasNest || hasArgs {
+		tArgs = "["
+		if hasNest {
+			tArgs = i.TNest.String()
+			if hasArgs {
+				tArgs += ";"
+			}
+		}
+		if hasArgs {
+			tArgs = i.TArgs.String()
+		}
+		tArgs += "]"
 	}
-	return fmt.Sprintf("%s.%s%s", i.Object.Pkg().Name(), i.Object.Name(), tArgs)
+	return tArgs
 }
 
 // IsTrivial returns true if this is an instance of a non-generic object.

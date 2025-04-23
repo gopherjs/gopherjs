@@ -518,6 +518,9 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 		// initialize themselves.
 		switch t := underlying.(type) {
 		case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
+
+			fmt.Printf(">>>[A] (%[1]T): %[1]v\n", t) // TODO(grantnelson-wf): remove
+
 			d.TypeInitCode = fc.CatchOutput(0, func() {
 				fc.Printf("%s.init(%s);", fc.instName(inst), fc.initArgs(t))
 			})

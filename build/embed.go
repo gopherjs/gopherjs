@@ -8,7 +8,7 @@ import (
 	"go/token"
 	"strconv"
 
-	"github.com/visualfc/goembed"
+	"github.com/msvitok77/goembed"
 )
 
 func buildIdent(name string) string {

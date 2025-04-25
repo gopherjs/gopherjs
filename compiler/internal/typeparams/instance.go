@@ -37,7 +37,13 @@ func (i *Instance) String() string {
 
 // TypeString returns a Go type string representing the instance (suitable for %T verb).
 func (i *Instance) TypeString() string {
-	return fmt.Sprintf("%s.%s%s", i.Object.Pkg().Name(), i.Object.Name(), i.typeParamsString())
+	return i.qualifiedName() + i.typeParamsString()
+}
+
+// qualifiedName returns a string representation of the instance's name
+// including the package name but excluding the type parameters.
+func (i *Instance) qualifiedName() string {
+	return fmt.Sprintf("%s.%s", i.Object.Pkg().Name(), i.Object.Name())
 }
 
 // typeParamsString returns part of a Go type string that represents the type

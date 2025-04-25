@@ -329,12 +329,13 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 	case *types.TypeParam:
 		tr := fc.typeResolver.Substitute(ty)
 
-		fmt.Printf(">>>[1] ty: (%[1]T): %[1]v\n", ty) // TODO(grantnelson-wf): remove
-		fmt.Printf(">>>[1] tr: (%[1]T): %[1]v\n", tr)
-		fmt.Printf(">>>[1] funcRef: %q\n", fc.funcRef)
-		fmt.Printf(">>>[1]-----------------\n")
-		fmt.Printf("%s\n", fc.typeResolver.String())
-		fmt.Printf(">>>[1]-----------------\n")
+		// TODO(grantnelson-wf): remove the following prints
+		fmt.Printf(">>>[package.initArgs]-----------------\n")
+		fmt.Printf("\tty: (%[1]T): %[1]v\n", ty)
+		fmt.Printf("\ttr: (%[1]T): %[1]v\n", tr)
+		fmt.Printf("\tfuncRef: %q\n", fc.funcRef)
+		fmt.Printf("\t%s\n", fc.typeResolver.String())
+		fmt.Printf("<<<[package.initArgs]-----------------\n")
 
 		if tr != ty {
 			return fc.initArgs(tr)

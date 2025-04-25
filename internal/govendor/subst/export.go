@@ -48,9 +48,18 @@ func (s *Subster) Type(typ types.Type) types.Type {
 	return s.impl.typ(typ)
 }
 
-func (s *Subster) String() string { // TODO(grantnelson-wf): remove
-	if s == nil || s.impl == nil {
-		return `<nil Subster>`
+// Params returns the type parameters to replace in the order they were declared.
+func (s *Subster) Params() []*types.TypeParam {
+	if s == nil {
+		return nil
 	}
-	return s.impl.String()
+	return s.impl.Params()
+}
+
+// Args returns the type arguments in the same order as the type parameters.
+func (s *Subster) Args() []types.Type {
+	if s == nil {
+		return nil
+	}
+	return s.impl.Args()
 }

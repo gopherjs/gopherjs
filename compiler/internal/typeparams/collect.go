@@ -82,11 +82,24 @@ func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Select
 	}
 }
 
-func (r *Resolver) String() string { // TODO(grantnelson-wf): remove
-	if r == nil || r.subster == nil {
-		return "<nil Resolver>"
+// Params returns the type parameters to replace in the order they were declared.
+func (r *Resolver) Params() []*types.TypeParam {
+	if r == nil {
+		return nil
 	}
-	return r.subster.String()
+	return r.subster.Params()
+}
+
+// Args returns the type arguments in the same order as the type parameters.
+func (r *Resolver) Args() []types.Type {
+	if r == nil {
+		return nil
+	}
+	return r.subster.Args()
+}
+
+func (r *Resolver) String() string {
+	return fmt.Sprintf("Resolver: %v->%v", r.Params(), r.Args())
 }
 
 // ToSlice converts TypeParamList into a slice with the same order of entries.
@@ -149,18 +162,22 @@ func (c *visitor) addNamedInstance(ident *ast.Ident, instance types.Instance) {
 	if t, ok := typ.(*types.Named); ok {
 		obj = t.Obj()
 	}
-	c.instances.Add(Instance{
+	inst := Instance{
 		Object: obj,
 		TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
-	})
+	}
+	fmt.Printf(">>>[B1] add: %v\n", inst) // TODO(grantnelson-wf): remove
+	c.instances.Add(inst)
 
 	if t, ok := obj.Type().(*types.Named); ok {
 		for i := 0; i < t.NumMethods(); i++ {
 			method := t.Method(i)
-			c.instances.Add(Instance{
+			inst2 := Instance{
 				Object: method.Origin(),
 				TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
-			})
+			}
+			fmt.Printf(">>>[B2] add: %v\n", inst2) // TODO(grantnelson-wf): remove
+			c.instances.Add(inst2)
 		}
 	}
 
@@ -177,7 +194,9 @@ func (c *visitor) addNestedNamed(ident *ast.Ident, obj types.Object) {
 		obj = t.Obj()
 	}
 
-	fmt.Printf(">>>[Y] %s => %v\n", ident.Name, obj) // TODO(grantnelson-wf): remove
+	if t, ok := obj.(*types.TypeName); ok {
+		fmt.Printf(">>>[Y] %s => %v\n\t%v\n", ident.Name, t, c.resolver) // TODO(grantnelson-wf): remove
+	}
 }
 
 // seedVisitor implements ast.Visitor that collects information necessary to
@@ -204,6 +223,7 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 		obj := c.info.Defs[n.Name]
 		sig := obj.Type().(*types.Signature)
 		if sig.TypeParams().Len() != 0 || sig.RecvTypeParams().Len() != 0 {
+			fmt.Printf(">>>[A1] %s => %v\n", obj.Name(), n) // TODO(grantnelson-wf): remove
 			c.objMap[obj] = n
 			return newPrinter(&seedVisitor{
 				visitor: c.visitor,
@@ -218,6 +238,7 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 			break
 		}
 		if named.TypeParams().Len() != 0 && named.TypeArgs().Len() == 0 {
+			fmt.Printf(">>>[A2] %s => %v\n", obj.Name(), n) // TODO(grantnelson-wf): remove
 			c.objMap[obj] = n
 			return nil
 		}

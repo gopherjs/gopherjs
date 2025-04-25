@@ -5,7 +5,6 @@
 package subst
 
 import (
-	"fmt"
 	"go/types"
 )
 
@@ -17,6 +16,8 @@ import (
 //
 // Not concurrency-safe.
 type subster struct {
+	tparams      []*types.TypeParam              // type params to be replaced
+	targs        []types.Type                    // type args to replace with
 	replacements map[*types.TypeParam]types.Type // values should contain no type params
 	cache        map[types.Type]types.Type       // cache of subst results
 	ctxt         *types.Context                  // cache for instantiation
@@ -34,6 +35,8 @@ func makeSubster(ctxt *types.Context, scope *types.Scope, tparams *types.TypePar
 	assert(tparams.Len() == len(targs), "makeSubster argument count must match")
 
 	subst := &subster{
+		tparams:      make([]*types.TypeParam, 0, tparams.Len()),
+		targs:        targs,
 		replacements: make(map[*types.TypeParam]types.Type, tparams.Len()),
 		cache:        make(map[types.Type]types.Type),
 		ctxt:         ctxt,
@@ -42,6 +45,7 @@ func makeSubster(ctxt *types.Context, scope *types.Scope, tparams *types.TypePar
 	}
 	for i := 0; i < tparams.Len(); i++ {
 		subst.replacements[tparams.At(i)] = targs[i]
+		subst.tparams = append(subst.tparams, tparams.At(i))
 	}
 	if subst.debug {
 		subst.wellFormed()
@@ -162,11 +166,20 @@ func (subst *subster) tuple(t *types.Tuple) *types.Tuple {
 	return t
 }
 
-func (subst *subster) String() string { // TODO(grantnelson-wf): remove
+// Params returns the type parameters to replace in the order they were declared.
+func (subst *subster) Params() []*types.TypeParam {
 	if subst == nil {
-		return `<nil subster>`
+		return nil
 	}
-	return fmt.Sprint(subst.replacements)
+	return subst.tparams
+}
+
+// Args returns the type arguments in the same order as the type parameters.
+func (subst *subster) Args() []types.Type {
+	if subst == nil {
+		return nil
+	}
+	return subst.targs
 }
 
 type varlist interface {

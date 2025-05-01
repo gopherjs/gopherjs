@@ -20,7 +20,7 @@ type Resolver struct {
 // entries with the same index.
 func NewResolver(tc *types.Context, tParams []*types.TypeParam, tArgs []types.Type) *Resolver {
 	r := &Resolver{
-		subster: subst.New(tc, tParams, tArgs),
+		subster: subst.New(tc, nil, tParams, tArgs),
 		selMemo: map[typesutil.Selection]typesutil.Selection{},
 	}
 	return r
@@ -80,26 +80,6 @@ func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Select
 	default:
 		panic(fmt.Errorf("unexpected selection kind %v: %v", sel.Kind(), sel))
 	}
-}
-
-// Params returns the type parameters to replace in the order they were declared.
-func (r *Resolver) Params() []*types.TypeParam {
-	if r == nil {
-		return nil
-	}
-	return r.subster.Params()
-}
-
-// Args returns the type arguments in the same order as the type parameters.
-func (r *Resolver) Args() []types.Type {
-	if r == nil {
-		return nil
-	}
-	return r.subster.Args()
-}
-
-func (r *Resolver) String() string {
-	return fmt.Sprintf("Resolver: %v->%v", r.Params(), r.Args())
 }
 
 // ToSlice converts TypeParamList into a slice with the same order of entries.
@@ -166,7 +146,7 @@ func (c *visitor) addNamedInstance(ident *ast.Ident, instance types.Instance) {
 		Object: obj,
 		TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
 	}
-	fmt.Printf(">>>[B1] add: %v\n", inst) // TODO(grantnelson-wf): remove
+	fmt.Printf(">>>[addNamedInstance] %v\n", inst) // TODO(grantnelson-wf): remove
 	c.instances.Add(inst)
 
 	if t, ok := obj.Type().(*types.Named); ok {
@@ -176,12 +156,10 @@ func (c *visitor) addNamedInstance(ident *ast.Ident, instance types.Instance) {
 				Object: method.Origin(),
 				TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
 			}
-			fmt.Printf(">>>[B2] add: %v\n", inst2) // TODO(grantnelson-wf): remove
+			fmt.Printf(">>>[addNamedInstance-Method] %v\n", inst2) // TODO(grantnelson-wf): remove
 			c.instances.Add(inst2)
 		}
 	}
-
-	fmt.Printf(">>>[X] %s => %v\n", ident.Name, obj) // TODO(grantnelson-wf): remove
 }
 
 // TODO(grantnelson-wf): finish or remove
@@ -195,7 +173,7 @@ func (c *visitor) addNestedNamed(ident *ast.Ident, obj types.Object) {
 	}
 
 	if t, ok := obj.(*types.TypeName); ok {
-		fmt.Printf(">>>[Y] %s => %v\n\t%v\n", ident.Name, t, c.resolver) // TODO(grantnelson-wf): remove
+		fmt.Printf(">>>[addNestedNamed] %s => %v\n\t%v\n", ident.Name, t, c.resolver) // TODO(grantnelson-wf): remove
 	}
 }
 
@@ -223,7 +201,7 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 		obj := c.info.Defs[n.Name]
 		sig := obj.Type().(*types.Signature)
 		if sig.TypeParams().Len() != 0 || sig.RecvTypeParams().Len() != 0 {
-			fmt.Printf(">>>[A1] %s => %v\n", obj.Name(), n) // TODO(grantnelson-wf): remove
+			fmt.Printf(">>>[map Signature] %s => %v\n", obj.Name(), n) // TODO(grantnelson-wf): remove
 			c.objMap[obj] = n
 			return newPrinter(&seedVisitor{
 				visitor: c.visitor,
@@ -238,7 +216,7 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 			break
 		}
 		if named.TypeParams().Len() != 0 && named.TypeArgs().Len() == 0 {
-			fmt.Printf(">>>[A2] %s => %v\n", obj.Name(), n) // TODO(grantnelson-wf): remove
+			fmt.Printf(">>>[map TypeSpec] %s => %v\n", obj.Name(), n) // TODO(grantnelson-wf): remove
 			c.objMap[obj] = n
 			return nil
 		}
@@ -289,19 +267,25 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 		objMap: objMap,
 	}
 	for _, file := range files {
+		fmt.Printf("[Start] Seed: %s\n", file.Name.Name) // TODO(grantnelson-wf): remove
 		ast.Walk(newPrinter(&sc, "Seed"), file)
+		fmt.Printf("[Stop] Seed: %s\n\n", file.Name.Name) // TODO(grantnelson-wf): remove
 	}
 
 	for iset := c.Instances.Pkg(pkg); !iset.exhausted(); {
 		inst, _ := iset.next()
 		switch typ := inst.Object.Type().(type) {
 		case *types.Signature:
+			tParams := ToSlice(SignatureTypeParams(typ))
 			v := visitor{
 				instances: c.Instances,
-				resolver:  NewResolver(c.TContext, ToSlice(SignatureTypeParams(typ)), inst.TArgs),
+				resolver:  NewResolver(c.TContext, tParams, inst.TArgs),
 				info:      c.Info,
 			}
+			fmt.Printf("[Start] Signature: %s\n\t%v\n", inst.TypeString(), v.resolver) // TODO(grantnelson-wf): remove
+			fmt.Printf("\t%v\n", tParams)                                              // TODO(grantnelson-wf): remove
 			ast.Walk(newPrinter(&v, "Signature"), objMap[inst.Object])
+			fmt.Printf("[Stop] Signature: %s\n\n", inst.TypeString()) // TODO(grantnelson-wf): remove
 		case *types.Named:
 			obj := typ.Obj()
 			v := visitor{
@@ -309,7 +293,9 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 				resolver:  NewResolver(c.TContext, ToSlice(typ.TypeParams()), inst.TArgs),
 				info:      c.Info,
 			}
+			fmt.Printf("[Start] Named: %s\n", inst.TypeString()) // TODO(grantnelson-wf): remove
 			ast.Walk(newPrinter(&v, "Named"), objMap[obj])
+			fmt.Printf("[Stop] Named: %s\n\n", inst.TypeString()) // TODO(grantnelson-wf): remove
 		}
 	}
 }

@@ -838,6 +838,42 @@ func TestNestedGenericTypeInGenericFunc(t *testing.T) {
 	}
 }
 
+func TestNestedGenericTypeInGenericFuncWithSharedTArgs(t *testing.T) {
+	src := `
+		package main
+
+		func F[A any]() any {
+			type T[B any] struct {
+				b B
+			}
+			return T[A]{}
+		}
+
+		func main() {
+			type Int int
+
+			print(F[int]())
+			print(F[Int]())
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+	archives := compileProject(t, root, false)
+	mainPkg := archives[root.PkgPath]
+	insts := collectDeclInstances(t, mainPkg)
+
+	exp := []string{
+		`F[Int]`,
+		`F[int]`,
+		`T[Int;Int]`,
+		`T[int;int]`,
+		// Make sure that T[int;Int] and T[Int;int] aren't created.
+	}
+	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
+		t.Errorf("the instances of generics are different:\n%s", diff)
+	}
+}
+
 func collectDeclInstances(t *testing.T, pkg *Archive) []string {
 	t.Helper()
 

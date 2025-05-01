@@ -55,13 +55,13 @@ func (i *Instance) typeParamsString() string {
 	if hasNest || hasArgs {
 		tArgs = "["
 		if hasNest {
-			tArgs = i.TNest.String()
+			tArgs += i.TNest.String()
 			if hasArgs {
 				tArgs += ";"
 			}
 		}
 		if hasArgs {
-			tArgs = i.TArgs.String()
+			tArgs += i.TArgs.String()
 		}
 		tArgs += "]"
 	}

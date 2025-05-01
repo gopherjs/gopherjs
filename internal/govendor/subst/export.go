@@ -4,6 +4,7 @@
 package subst
 
 import (
+	"go/token"
 	"go/types"
 )
 
@@ -17,23 +18,25 @@ type Subster struct {
 }
 
 // New creates a new Subster with a given list of type parameters and matching args.
-func New(tc *types.Context, tParams []*types.TypeParam, tArgs []types.Type) *Subster {
-	assert(len(tParams) == len(tArgs), "New() argument count must match")
-
-	if len(tParams) == 0 {
+//
+//   - This may return a nil if there is no substitution to be done.
+//     Using a nil Subster will always return the original type.
+//   - The given context must be non-nil to cache types.
+//   - The given function may be nil for any package level types.
+//     It must be non-nil for any types nested within a generic function.
+//   - Given type arguments should not contain any types in the type parameters.
+//   - The internal implementation is not concurrency-safe.
+func New(tc *types.Context, fn *types.Func, tParams *types.TypeParamList, tArgs []types.Type) *Subster {
+	if tParams.Len() == 0 && len(tArgs) == 0 {
 		return nil
 	}
 
-	subst := &subster{
-		replacements: make(map[*types.TypeParam]types.Type, len(tParams)),
-		cache:        make(map[types.Type]types.Type),
-		ctxt:         tc,
-		scope:        nil,
-		debug:        false,
+	if fn == nil {
+		fn = types.NewFunc(token.NoPos, nil, "$substPseudoFunc",
+			types.NewSignatureType(nil, nil, nil, nil, nil, false))
 	}
-	for i := 0; i < len(tParams); i++ {
-		subst.replacements[tParams[i]] = tArgs[i]
-	}
+
+	subst := makeSubster(tc, fn, tParams, tArgs, false)
 	return &Subster{
 		impl: subst,
 	}
@@ -46,20 +49,4 @@ func (s *Subster) Type(typ types.Type) types.Type {
 		return typ
 	}
 	return s.impl.typ(typ)
-}
-
-// Params returns the type parameters to replace in the order they were declared.
-func (s *Subster) Params() []*types.TypeParam {
-	if s == nil {
-		return nil
-	}
-	return s.impl.Params()
-}
-
-// Args returns the type arguments in the same order as the type parameters.
-func (s *Subster) Args() []types.Type {
-	if s == nil {
-		return nil
-	}
-	return s.impl.Args()
 }

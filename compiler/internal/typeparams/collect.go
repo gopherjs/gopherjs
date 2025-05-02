@@ -18,7 +18,7 @@ type Resolver struct {
 
 // NewResolver creates a new Resolver with tParams entries mapping to tArgs
 // entries with the same index.
-func NewResolver(tc *types.Context, tParams []*types.TypeParam, tArgs []types.Type) *Resolver {
+func NewResolver(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type) *Resolver {
 	r := &Resolver{
 		subster: subst.New(tc, nil, tParams, tArgs),
 		selMemo: map[typesutil.Selection]typesutil.Selection{},
@@ -80,6 +80,13 @@ func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Select
 	default:
 		panic(fmt.Errorf("unexpected selection kind %v: %v", sel.Kind(), sel))
 	}
+}
+
+func (r *Resolver) String() string {
+	if r == nil || r.subster == nil {
+		return "nil"
+	}
+	return r.subster.String()
 }
 
 // ToSlice converts TypeParamList into a slice with the same order of entries.
@@ -276,7 +283,7 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 		inst, _ := iset.next()
 		switch typ := inst.Object.Type().(type) {
 		case *types.Signature:
-			tParams := ToSlice(SignatureTypeParams(typ))
+			tParams := SignatureTypeParams(typ)
 			v := visitor{
 				instances: c.Instances,
 				resolver:  NewResolver(c.TContext, tParams, inst.TArgs),
@@ -290,7 +297,7 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 			obj := typ.Obj()
 			v := visitor{
 				instances: c.Instances,
-				resolver:  NewResolver(c.TContext, ToSlice(typ.TypeParams()), inst.TArgs),
+				resolver:  NewResolver(c.TContext, typ.TypeParams(), inst.TArgs),
 				info:      c.Info,
 			}
 			fmt.Printf("[Start] Named: %s\n", inst.TypeString()) // TODO(grantnelson-wf): remove

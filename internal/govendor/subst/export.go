@@ -4,6 +4,7 @@
 package subst
 
 import (
+	"fmt"
 	"go/token"
 	"go/types"
 )
@@ -14,7 +15,9 @@ import (
 
 // Subster performs type parameter substitution.
 type Subster struct {
-	impl *subster
+	impl    *subster
+	tParams []*types.TypeParam
+	tArgs   []types.Type
 }
 
 // New creates a new Subster with a given list of type parameters and matching args.
@@ -27,6 +30,8 @@ type Subster struct {
 //   - Given type arguments should not contain any types in the type parameters.
 //   - The internal implementation is not concurrency-safe.
 func New(tc *types.Context, fn *types.Func, tParams *types.TypeParamList, tArgs []types.Type) *Subster {
+	assert(tParams.Len() == len(tArgs), "New() argument count must match")
+
 	if tParams.Len() == 0 && len(tArgs) == 0 {
 		return nil
 	}
@@ -49,4 +54,25 @@ func (s *Subster) Type(typ types.Type) types.Type {
 		return typ
 	}
 	return s.impl.typ(typ)
+}
+
+// Params returns the type parameters being substituted.
+func (s *Subster) Params() []*types.TypeParam {
+	if s == nil {
+		return nil
+	}
+	return s.tParams
+}
+
+// Args returns the type arguments to substitute for the
+// corresponding type parameter at the same index.
+func (s *Subster) Args() []types.Type {
+	if s == nil {
+		return nil
+	}
+	return s.tArgs
+}
+
+func (s *Subster) String() string {
+	return fmt.Sprintf("%v->%v", s.Params(), s.Args())
 }

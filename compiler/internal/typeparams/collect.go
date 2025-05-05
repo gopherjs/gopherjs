@@ -20,7 +20,7 @@ type Resolver struct {
 // entries with the same index.
 func NewResolver(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type) *Resolver {
 	r := &Resolver{
-		subster: subst.New(tc, nil, tParams, tArgs),
+		subster: subst.New(tc, tParams, tArgs),
 		selMemo: map[typesutil.Selection]typesutil.Selection{},
 	}
 	return r
@@ -83,8 +83,8 @@ func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Select
 }
 
 func (r *Resolver) String() string {
-	if r == nil || r.subster == nil {
-		return "nil"
+	if r == nil {
+		return `{}`
 	}
 	return r.subster.String()
 }

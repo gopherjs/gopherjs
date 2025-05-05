@@ -50,10 +50,11 @@ func (s *Subster) Type(typ types.Type) types.Type {
 	if s == nil {
 		return typ
 	}
+	typ = s.impl.typ(typ)
 	if s.nest != nil {
 		typ = s.nest.Type(typ)
 	}
-	return s.impl.typ(typ)
+	return typ
 }
 
 // String gets a strings representation of the replacement for debugging.

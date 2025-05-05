@@ -196,6 +196,7 @@ func TestVisitor(t *testing.T) {
 				types.NewContext(),
 				lookupType("entry2").(*types.Signature).TypeParams(),
 				[]types.Type{lookupType("B")},
+				nil,
 			),
 			node: lookupDecl("entry2"),
 			want: instancesInFunc(lookupType("B")),
@@ -205,6 +206,7 @@ func TestVisitor(t *testing.T) {
 				types.NewContext(),
 				lookupType("entry3.method").(*types.Signature).RecvTypeParams(),
 				[]types.Type{lookupType("C")},
+				nil,
 			),
 			node: lookupDecl("entry3.method"),
 			want: append(
@@ -224,6 +226,7 @@ func TestVisitor(t *testing.T) {
 				types.NewContext(),
 				lookupType("entry3").(*types.Named).TypeParams(),
 				[]types.Type{lookupType("D")},
+				nil,
 			),
 			node: lookupDecl("entry3"),
 			want: instancesInType(lookupType("D")),
@@ -492,7 +495,7 @@ func TestResolver_SubstituteSelection(t *testing.T) {
 			info, pkg := f.Check("pkg/test", file)
 
 			method := srctesting.LookupObj(pkg, "g.Method").(*types.Func).Type().(*types.Signature)
-			resolver := NewResolver(nil, method.RecvTypeParams(), []types.Type{srctesting.LookupObj(pkg, "x").Type()})
+			resolver := NewResolver(nil, method.RecvTypeParams(), []types.Type{srctesting.LookupObj(pkg, "x").Type()}, nil)
 
 			if l := len(info.Selections); l != 1 {
 				t.Fatalf("Got: %d selections. Want: 1", l)

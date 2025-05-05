@@ -25,7 +25,7 @@ func TestNestedSubstInGenericFunction(t *testing.T) {
 		`
 
 	fSet := token.NewFileSet()
-	f, err := parser.ParseFile(fSet, "hello.go", source, 0)
+	f, err := parser.ParseFile(fSet, `hello.go`, source, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,46 +41,59 @@ func TestNestedSubstInGenericFunction(t *testing.T) {
 		args []string // type expressions of args for the named type
 	}
 
-	for _, test := range []struct {
-		nesting []namedType
-		want    string // expected underlying value after substitution
+	for i, test := range []struct {
+		nesting   []namedType
+		want      string // expected underlying value after substitution
+		substWant string // expected string value of the Subster
 	}{
-		{
-			nesting: []namedType{
-				{name: `A`, args: []string{`int`}},
-			},
-			want: `struct{X int}`,
-		},
+		// "Substituting types.Signatures with generic functions are currently unsupported."
+		// since we should be getting back concrete functions from the type checker.
+		//{
+		//	nesting: []namedType{
+		//		{name: `A`, args: []string{`int`}},
+		//	},
+		//},
 		{
 			nesting: []namedType{
 				{name: `A`, args: []string{`int`}},
 				{name: `B`},
 			},
-			want: `struct{X int}`,
+			want:      `struct{X int}`,
+			substWant: `{T->int}`,
 		},
 		{
 			nesting: []namedType{
 				{name: `A`, args: []string{`int`}},
 				{name: `C`, args: []string{`bool`}},
 			},
-			want: "struct{X int; Y bool}",
+			want:      `struct{X int; Y bool}`,
+			substWant: `{T->int}:{U->bool}`,
+		},
+		{
+			nesting: []namedType{
+				{name: `D`},
+			},
+			want:      `func()`,
+			substWant: `{}`,
 		},
 		{
 			nesting: []namedType{
 				{name: `D`},
 				{name: `E`, args: []string{`int`}},
 			},
-			want: "struct{X int}",
+			want:      `struct{X int}`,
+			substWant: `{V->int}`,
 		},
 		{
 			nesting: []namedType{
 				{name: `F`, args: []string{`int`}},
 			},
-			want: `struct{X int}`,
+			want:      `struct{X int}`,
+			substWant: `{W->int}`,
 		},
 	} {
 		if len(test.nesting) == 0 {
-			t.Fatal(`Must have at least one names type to instantiate`)
+			t.Fatalf(`Test %d: Must have at least one names type to instantiate`, i)
 		}
 
 		ctxt := types.NewContext()
@@ -90,7 +103,7 @@ func TestNestedSubstInGenericFunction(t *testing.T) {
 		for _, nt := range test.nesting {
 			obj = scope.Lookup(nt.name)
 			if obj == nil {
-				t.Fatalf(`Failed to find %s in package scope`, nt.name)
+				t.Fatalf(`Test %d: Failed to find %s in package scope`, i, nt.name)
 			}
 			if fn, ok := obj.(*types.Func); ok {
 				scope = fn.Scope()
@@ -100,23 +113,22 @@ func TestNestedSubstInGenericFunction(t *testing.T) {
 			subst = New(ctxt, tp, args, subst)
 		}
 
-		shouldNotPanic(t, func() {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf(`Test %d: panicked: %v`, i, r)
+				}
+			}()
+
 			stInst := subst.Type(obj.Type().Underlying())
 			if got := stInst.String(); got != test.want {
-				t.Errorf("%s.typ(%s) = %v, want %v", subst, obj.Type().Underlying(), got, test.want)
+				t.Errorf("Test %d: %s.typ(%s): got %v, want %v", i, subst, obj.Type().Underlying(), got, test.want)
 			}
-		})
+			if got := subst.String(); got != test.substWant {
+				t.Errorf("Test %d: subst string got %v, want %v", i, got, test.substWant)
+			}
+		}()
 	}
-}
-
-func shouldNotPanic(t *testing.T, f func()) {
-	t.Helper()
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf(`panicked: %v`, r)
-		}
-	}()
-	f()
 }
 
 func getTypeParams(t *testing.T, typ types.Type) *types.TypeParamList {
@@ -140,7 +152,7 @@ func getTypeParams(t *testing.T, typ types.Type) *types.TypeParamList {
 func evalType(t *testing.T, fSet *token.FileSet, pkg *types.Package, expr string) types.Type {
 	tv, err := types.Eval(fSet, pkg, 0, expr)
 	if err != nil {
-		t.Fatalf("Eval(%s) failed: %v", expr, err)
+		t.Fatalf(`Eval(%s) failed: %v`, expr, err)
 	}
 	return tv.Type
 }

@@ -18,9 +18,13 @@ type Resolver struct {
 
 // NewResolver creates a new Resolver with tParams entries mapping to tArgs
 // entries with the same index.
-func NewResolver(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type) *Resolver {
+func NewResolver(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type, parent *Resolver) *Resolver {
+	var nest *subst.Subster
+	if parent != nil {
+		nest = parent.subster
+	}
 	r := &Resolver{
-		subster: subst.New(tc, tParams, tArgs),
+		subster: subst.New(tc, tParams, tArgs, nest),
 		selMemo: map[typesutil.Selection]typesutil.Selection{},
 	}
 	return r
@@ -286,7 +290,7 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 			tParams := SignatureTypeParams(typ)
 			v := visitor{
 				instances: c.Instances,
-				resolver:  NewResolver(c.TContext, tParams, inst.TArgs),
+				resolver:  NewResolver(c.TContext, tParams, inst.TArgs, nil),
 				info:      c.Info,
 			}
 			fmt.Printf("[Start] Signature: %s\n\t%v\n", inst.TypeString(), v.resolver) // TODO(grantnelson-wf): remove
@@ -297,7 +301,7 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 			obj := typ.Obj()
 			v := visitor{
 				instances: c.Instances,
-				resolver:  NewResolver(c.TContext, typ.TypeParams(), inst.TArgs),
+				resolver:  NewResolver(c.TContext, typ.TypeParams(), inst.TArgs, nil),
 				info:      c.Info,
 			}
 			fmt.Printf("[Start] Named: %s\n", inst.TypeString()) // TODO(grantnelson-wf): remove

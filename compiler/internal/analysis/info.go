@@ -127,7 +127,7 @@ func (info *Info) newFuncInfoInstances(fd *ast.FuncDecl) []*FuncInfo {
 		var resolver *typeparams.Resolver
 		if sig, ok := obj.Type().(*types.Signature); ok {
 			tp := typeparams.SignatureTypeParams(sig)
-			resolver = typeparams.NewResolver(info.typeCtx, tp, inst.TArgs)
+			resolver = typeparams.NewResolver(info.typeCtx, tp, inst.TArgs, nil)
 		}
 		fi := info.newFuncInfo(fd, inst.Object, inst.TArgs, resolver)
 		funcInfos = append(funcInfos, fi)

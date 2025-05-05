@@ -66,10 +66,16 @@ type subster struct {
 func makeSubster(ctxt *types.Context, fn *types.Func, tparams *types.TypeParamList, targs []types.Type, debug bool) *subster {
 	assert(tparams.Len() == len(targs), "makeSubster argument count must match")
 
+	// GOPHERJS change: Made the fn nil-able.
+	var origin *types.Func
+	if fn != nil {
+		origin = fn.Origin()
+	}
+
 	subst := &subster{
 		replacements: make(map[*types.TypeParam]types.Type, tparams.Len()),
 		cache:        make(map[types.Type]types.Type),
-		origin:       fn.Origin(),
+		origin:       origin,
 		ctxt:         ctxt,
 	}
 	for i := 0; i < tparams.Len(); i++ {

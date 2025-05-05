@@ -19,7 +19,10 @@ func TestNestedSubstInGenericFunction(t *testing.T) {
 			
 		func D(){
 			type E[V any] struct{X V}
-		}`
+		}
+		
+		type F[W any] struct{X W}
+		`
 
 	fSet := token.NewFileSet()
 	f, err := parser.ParseFile(fSet, "hello.go", source, 0)
@@ -33,51 +36,105 @@ func TestNestedSubstInGenericFunction(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	type namedType struct {
+		name string   // the name of the named type
+		args []string // type expressions of args for the named type
+	}
+
 	for _, test := range []struct {
-		fnName string   // the name of the nesting function
-		fnArgs []string // type expressions of args for the nesting function
-		stName string   // the name of the named type
-		stArgs []string // type expressions of args for the named type
-		want   string   // expected underlying value after substitution
+		nesting []namedType
+		want    string // expected underlying value after substitution
 	}{
 		{
-			fnName: `A`, fnArgs: []string{`int`},
-			stName: `B`, stArgs: []string{},
+			nesting: []namedType{
+				{name: `A`, args: []string{`int`}},
+			},
 			want: `struct{X int}`,
 		},
 		{
-			fnName: `A`, fnArgs: []string{`int`},
-			stName: `C`, stArgs: []string{`bool`},
+			nesting: []namedType{
+				{name: `A`, args: []string{`int`}},
+				{name: `B`},
+			},
+			want: `struct{X int}`,
+		},
+		{
+			nesting: []namedType{
+				{name: `A`, args: []string{`int`}},
+				{name: `C`, args: []string{`bool`}},
+			},
 			want: "struct{X int; Y bool}",
 		},
 		{
-			fnName: `D`, fnArgs: []string{},
-			stName: `E`, stArgs: []string{`int`},
+			nesting: []namedType{
+				{name: `D`},
+				{name: `E`, args: []string{`int`}},
+			},
 			want: "struct{X int}",
 		},
+		{
+			nesting: []namedType{
+				{name: `F`, args: []string{`int`}},
+			},
+			want: `struct{X int}`,
+		},
 	} {
+		if len(test.nesting) == 0 {
+			t.Fatal(`Must have at least one names type to instantiate`)
+		}
+
 		ctxt := types.NewContext()
-
-		fnGen, _ := pkg.Scope().Lookup(test.fnName).(*types.Func)
-		if fnGen == nil {
-			t.Fatal("Failed to find the function " + test.fnName)
+		var subst *Subster
+		var obj types.Object
+		scope := pkg.Scope()
+		for _, nt := range test.nesting {
+			obj = scope.Lookup(nt.name)
+			if obj == nil {
+				t.Fatalf(`Failed to find %s in package scope`, nt.name)
+			}
+			if fn, ok := obj.(*types.Func); ok {
+				scope = fn.Scope()
+			}
+			args := evalTypeList(t, fSet, pkg, nt.args)
+			tp := getTypeParams(t, obj.Type())
+			subst = New(ctxt, tp, args, subst)
 		}
-		fnArgs := evalTypeList(t, fSet, pkg, test.fnArgs)
-		fnFunc := types.NewFunc(fnGen.Pos(), pkg, fnGen.Name(), fnGen.Type().(*types.Signature))
 
-		stType, _ := fnFunc.Scope().Lookup(test.stName).Type().(*types.Named)
-		if stType == nil {
-			t.Fatal("Failed to find the object " + test.fnName + " in function " + test.fnName)
-		}
-		stArgs := evalTypeList(t, fSet, pkg, test.stArgs)
-
-		stSubst := NewNested(ctxt, fnFunc, fnArgs, stType.TypeParams(), stArgs)
-		stInst := stSubst.Type(stType.Underlying())
-
-		if got := stInst.String(); got != test.want {
-			t.Errorf("subst{%v->%v}.typ(%s) = %v, want %v", test.stName, test.stArgs, stType.Underlying(), got, test.want)
-		}
+		shouldNotPanic(t, func() {
+			stInst := subst.Type(obj.Type().Underlying())
+			if got := stInst.String(); got != test.want {
+				t.Errorf("%s.typ(%s) = %v, want %v", subst, obj.Type().Underlying(), got, test.want)
+			}
+		})
 	}
+}
+
+func shouldNotPanic(t *testing.T, f func()) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf(`panicked: %v`, r)
+		}
+	}()
+	f()
+}
+
+func getTypeParams(t *testing.T, typ types.Type) *types.TypeParamList {
+	switch typ := typ.(type) {
+	case *types.Named:
+		return typ.TypeParams()
+	case *types.Signature:
+		if tp := typ.RecvTypeParams(); tp != nil && tp.Len() > 0 {
+			return tp
+		}
+		return typ.TypeParams()
+	case interface{ Elem() types.Type }:
+		// Pointer, slice, array, map, and channel types.
+		return getTypeParams(t, typ.Elem())
+	default:
+		t.Fatalf(`getTypeParams(%v) hit unexpected type`, typ)
+	}
+	return nil
 }
 
 func evalType(t *testing.T, fSet *token.FileSet, pkg *types.Package, expr string) types.Type {

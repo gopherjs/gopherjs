@@ -5,7 +5,6 @@ package subst
 
 import (
 	"fmt"
-	"go/token"
 	"go/types"
 	"sort"
 	"strings"
@@ -17,6 +16,7 @@ import (
 
 // Subster performs type parameter substitution.
 type Subster struct {
+	nest *Subster
 	impl *subster
 }
 
@@ -26,69 +26,22 @@ type Subster struct {
 //     Using a nil Subster will always return the original type.
 //   - Given type arguments should not contain any types in the type parameters.
 //   - The internal implementation is not concurrency-safe.
-func New(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type) *Subster {
-	return NewNested(tc, nil, nil, tParams, tArgs)
-}
-
-// NewNested creates a new Subster with a given list of type parameters and
-// matching args for types nested within a function.
-//
-//   - This may return a nil if there is no substitution to be done.
-//     Using a nil Subster will always return the original type.
-//   - The given context must be non-nil to cache types.
-//   - The given function may be nil for any package level types.
-//     It must be non-nil for any types nested within a function.
-//   - The given function type arguments will instantiate the function
-//     and be used on any nested types.
-//   - Given type arguments should not contain any types in the type parameters.
-//   - The internal implementation is not concurrency-safe.
-func NewNested(tc *types.Context, fn *types.Func, fnArgs []types.Type, tParams *types.TypeParamList, tArgs []types.Type) *Subster {
-	assert(safeLen(tParams) == len(tArgs), "New() argument count must match")
-
-	fnParams := getFuncTypeParams(fn)
-	assert(fnParams.Len() == len(fnArgs), "New() function argument count must match")
-
-	if safeLen(tParams) == 0 && len(tArgs) == 0 && safeLen(fnParams) == 0 && len(fnArgs) == 0 {
-		return nil
+//   - If a non-nil nest is given, this subster will use that nest to
+//     perform substitution as well to allow for nested types.
+func New(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type, nest *Subster) *Subster {
+	tpLen := 0
+	if tParams != nil {
+		tpLen = tParams.Len()
 	}
 
-	if fn == nil {
-		fn = types.NewFunc(token.NoPos, nil, "$substPseudoFunc",
-			types.NewSignatureType(nil, nil, nil, nil, nil, false))
+	assert(tpLen == len(tArgs), "New() argument count must match")
+
+	if tpLen == 0 && len(tArgs) == 0 {
+		return nest
 	}
 
-	subst := makeSubster(tc, fn, tParams, tArgs, false)
-	for i := 0; i < fnParams.Len(); i++ {
-		subst.replacements[fnParams.At(i)] = fnArgs[i]
-	}
-	return &Subster{impl: subst}
-}
-
-func safeLen(tp interface{ Len() int }) int {
-	if tp == nil {
-		return 0
-	}
-	return tp.Len()
-}
-
-// getFuncTypeParams gets the type parameters of the given function.
-// It will return either the receiver type parameters,
-// the function type parameters, or nil if none found.
-func getFuncTypeParams(fn *types.Func) *types.TypeParamList {
-	if fn == nil {
-		return nil
-	}
-	sig := fn.Type().(*types.Signature)
-	if sig == nil {
-		return nil
-	}
-	if tps := sig.RecvTypeParams(); tps != nil && tps.Len() > 0 {
-		return tps
-	}
-	if tps := sig.TypeParams(); tps != nil && tps.Len() > 0 {
-		return tps
-	}
-	return nil
+	subst := makeSubster(tc, nil, tParams, tArgs, false)
+	return &Subster{nest: nest, impl: subst}
 }
 
 // Type returns a version of typ with all references to type parameters replaced
@@ -96,6 +49,9 @@ func getFuncTypeParams(fn *types.Func) *types.TypeParamList {
 func (s *Subster) Type(typ types.Type) types.Type {
 	if s == nil {
 		return typ
+	}
+	if s.nest != nil {
+		typ = s.nest.Type(typ)
 	}
 	return s.impl.typ(typ)
 }
@@ -112,5 +68,9 @@ func (s *Subster) String() string {
 		parts = append(parts, fmt.Sprintf("%s->%s", tp, ta))
 	}
 	sort.Strings(parts)
-	return `{` + strings.Join(parts, `, `) + `}`
+	nestStr := ``
+	if s.nest != nil {
+		nestStr = s.nest.String() + `:`
+	}
+	return nestStr + `{` + strings.Join(parts, `, `) + `}`
 }

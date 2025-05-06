@@ -99,17 +99,45 @@ func (r *Resolver) String() string {
 // When traversing an AST subtree corresponding to a generic type, method or
 // function, Resolver must be provided mapping the type parameters into concrete
 // types.
+//
+// seedVisitor implements ast.Visitor that collects information necessary to
+// kickstart generic instantiation discovery.
+//
+// It serves double duty:
+//   - Builds a map from types.Object instances representing generic types,
+//     methods and functions to AST nodes that define them.
+//   - Collects an initial set of generic instantiations in the non-generic code.
 type visitor struct {
-	instances *PackageInstanceSets
-	resolver  *Resolver
-	info      *types.Info
+	instances   *PackageInstanceSets
+	resolver    *Resolver
+	info        *types.Info
+	objMap      map[types.Object]ast.Node
+	collectInst bool
+	mapObjects  bool
 }
 
 var _ ast.Visitor = &visitor{}
 
-func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
-	w = c // Always traverse the full depth of the AST tree.
+func (c *visitor) Visit(n ast.Node) ast.Visitor {
+	if c.mapObjects {
+		// Generic functions, methods and types require type arguments
+		// to scan for generic instantiations, remember their node for
+		// later and do not descend further.
+		if v, stop := c.collectObjMap(n); stop {
+			return v
+		}
+	}
 
+	if c.collectInst {
+		// Check for fully defined instantiations and descend further into
+		// the AST tree.
+		c.collectInstances(n)
+	}
+
+	return c
+}
+
+func (c *visitor) collectInstances(n ast.Node) {
 	ident, ok := n.(*ast.Ident)
 	if !ok {
 		return
@@ -147,40 +175,25 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 			})
 		}
 	}
-	return
 }
 
-// seedVisitor implements ast.Visitor that collects information necessary to
-// kickstart generic instantiation discovery.
-//
-// It serves double duty:
-//   - Builds a map from types.Object instances representing generic types,
-//     methods and functions to AST nodes that define them.
-//   - Collects an initial set of generic instantiations in the non-generic code.
-type seedVisitor struct {
-	visitor
-	objMap  map[types.Object]ast.Node
-	mapOnly bool // Only build up objMap, ignore any instances.
-}
-
-var _ ast.Visitor = &seedVisitor{}
-
-func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
-	// Generic functions, methods and types require type arguments to scan for
-	// generic instantiations, remember their node for later and do not descend
-	// further.
+func (c *visitor) collectObjMap(n ast.Node) (ast.Visitor, bool) {
 	switch n := n.(type) {
 	case *ast.FuncDecl:
 		obj := c.info.Defs[n.Name]
 		sig := obj.Type().(*types.Signature)
 		if sig.TypeParams().Len() != 0 || sig.RecvTypeParams().Len() != 0 {
 			c.objMap[obj] = n
-			return &seedVisitor{
-				visitor: c.visitor,
-				objMap:  c.objMap,
-				mapOnly: true,
-			}
+			return &visitor{
+				instances:   c.instances,
+				resolver:    c.resolver,
+				info:        c.info,
+				objMap:      c.objMap,
+				collectInst: false,
+				mapObjects:  true,
+			}, true
 		}
+
 	case *ast.TypeSpec:
 		obj := c.info.Defs[n.Name]
 		named, ok := obj.Type().(*types.Named)
@@ -189,16 +202,11 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 		}
 		if named.TypeParams().Len() != 0 && named.TypeArgs().Len() == 0 {
 			c.objMap[obj] = n
-			return nil
+			return nil, true
 		}
 	}
 
-	if !c.mapOnly {
-		// Otherwise check for fully defined instantiations and descend further into
-		// the AST tree.
-		c.visitor.Visit(n)
-	}
-	return c
+	return nil, false
 }
 
 // Collector scans type-checked AST tree and adds discovered generic type and
@@ -229,13 +237,13 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 
 	// Collect instances of generic objects in non-generic code in the package and
 	// add then to the existing InstanceSet.
-	sc := seedVisitor{
-		visitor: visitor{
-			instances: c.Instances,
-			resolver:  nil,
-			info:      c.Info,
-		},
-		objMap: objMap,
+	sc := visitor{
+		instances:   c.Instances,
+		resolver:    nil,
+		info:        c.Info,
+		objMap:      objMap,
+		collectInst: true,
+		mapObjects:  true,
 	}
 	for _, file := range files {
 		fmt.Printf("[Start] Seed: %s\n", file.Name.Name) // TODO(grantnelson-wf): remove
@@ -249,9 +257,11 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 		case *types.Signature:
 			tParams := SignatureTypeParams(typ)
 			v := visitor{
-				instances: c.Instances,
-				resolver:  NewResolver(c.TContext, tParams, inst.TArgs, nil),
-				info:      c.Info,
+				instances:   c.Instances,
+				resolver:    NewResolver(c.TContext, tParams, inst.TArgs, nil),
+				info:        c.Info,
+				collectInst: true,
+				mapObjects:  false,
 			}
 			fmt.Printf("[Start] Signature: %s\n\t%v\n", inst.TypeString(), v.resolver) // TODO(grantnelson-wf): remove
 			fmt.Printf("\t%v\n", tParams)                                              // TODO(grantnelson-wf): remove
@@ -260,9 +270,11 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 		case *types.Named:
 			obj := typ.Obj()
 			v := visitor{
-				instances: c.Instances,
-				resolver:  NewResolver(c.TContext, typ.TypeParams(), inst.TArgs, nil),
-				info:      c.Info,
+				instances:   c.Instances,
+				resolver:    NewResolver(c.TContext, typ.TypeParams(), inst.TArgs, nil),
+				info:        c.Info,
+				collectInst: true,
+				mapObjects:  false,
 			}
 			fmt.Printf("[Start] Named: %s\n", inst.TypeString()) // TODO(grantnelson-wf): remove
 			ast.Walk(&v, objMap[obj])

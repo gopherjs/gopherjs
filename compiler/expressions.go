@@ -801,7 +801,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			switch t := exprType.Underlying().(type) {
 			case *types.Basic:
 				if t.Kind() != types.UnsafePointer {
-					panic("unexpected basic type")
+					panic(fmt.Errorf(`unexpected basic type: %v in %v`, t, inst))
 				}
 				return fc.formatExpr("0")
 			case *types.Slice, *types.Pointer:

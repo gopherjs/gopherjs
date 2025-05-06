@@ -70,7 +70,7 @@ func (i *Instance) typeParamsString() string {
 
 // IsTrivial returns true if this is an instance of a non-generic object.
 func (i *Instance) IsTrivial() bool {
-	return len(i.TArgs) == 0
+	return len(i.TArgs) == 0 && len(i.TNest) == 0
 }
 
 // Recv returns an instance of the receiver type of a method.

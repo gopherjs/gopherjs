@@ -29,14 +29,9 @@ type Subster struct {
 //   - If a non-nil nest is given, this subster will use that nest to
 //     perform substitution as well to allow for nested types.
 func New(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type, nest *Subster) *Subster {
-	tpLen := 0
-	if tParams != nil {
-		tpLen = tParams.Len()
-	}
+	assert(tParams.Len() == len(tArgs), "New() argument count must match")
 
-	assert(tpLen == len(tArgs), "New() argument count must match")
-
-	if tpLen == 0 && len(tArgs) == 0 {
+	if tParams.Len() == 0 && len(tArgs) == 0 {
 		return nest
 	}
 
@@ -50,6 +45,7 @@ func (s *Subster) Type(typ types.Type) types.Type {
 	if s == nil {
 		return typ
 	}
+
 	typ = s.impl.typ(typ)
 	if s.nest != nil {
 		typ = s.nest.Type(typ)
@@ -69,6 +65,7 @@ func (s *Subster) String() string {
 		parts = append(parts, fmt.Sprintf("%s->%s", tp, ta))
 	}
 	sort.Strings(parts)
+
 	nestStr := ``
 	if s.nest != nil {
 		nestStr = s.nest.String() + `:`

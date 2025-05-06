@@ -93,15 +93,6 @@ func (r *Resolver) String() string {
 	return r.subster.String()
 }
 
-// ToSlice converts TypeParamList into a slice with the same order of entries.
-func ToSlice(tpl *types.TypeParamList) []*types.TypeParam {
-	result := make([]*types.TypeParam, tpl.Len())
-	for i := range result {
-		result[i] = tpl.At(i)
-	}
-	return result
-}
-
 // visitor implements ast.Visitor and collects instances of generic types and
 // functions into an InstanceSet.
 //
@@ -157,7 +148,7 @@ func (c *visitor) addNamedInstance(ident *ast.Ident, instance types.Instance) {
 		Object: obj,
 		TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
 	}
-	fmt.Printf(">>>[addNamedInstance] %v\n", inst) // TODO(grantnelson-wf): remove
+	fmt.Printf(">>>[add Named instance] %v\n", inst) // TODO(grantnelson-wf): remove
 	c.instances.Add(inst)
 
 	if t, ok := obj.Type().(*types.Named); ok {
@@ -167,7 +158,7 @@ func (c *visitor) addNamedInstance(ident *ast.Ident, instance types.Instance) {
 				Object: method.Origin(),
 				TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
 			}
-			fmt.Printf(">>>[addNamedInstance-Method] %v\n", inst2) // TODO(grantnelson-wf): remove
+			fmt.Printf(">>>[add Named instance's method] %v\n", inst2) // TODO(grantnelson-wf): remove
 			c.instances.Add(inst2)
 		}
 	}
@@ -184,7 +175,7 @@ func (c *visitor) addNestedNamed(ident *ast.Ident, obj types.Object) {
 	}
 
 	if t, ok := obj.(*types.TypeName); ok {
-		fmt.Printf(">>>[addNestedNamed] %s => %v\n\t%v\n", ident.Name, t, c.resolver) // TODO(grantnelson-wf): remove
+		fmt.Printf(">>>[add Nested named] %s => %v\n\t%v\n", ident.Name, t, c.resolver) // TODO(grantnelson-wf): remove
 	}
 }
 
@@ -214,11 +205,11 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 		if sig.TypeParams().Len() != 0 || sig.RecvTypeParams().Len() != 0 {
 			fmt.Printf(">>>[map Signature] %s => %v\n", obj.Name(), n) // TODO(grantnelson-wf): remove
 			c.objMap[obj] = n
-			return newPrinter(&seedVisitor{
+			return &seedVisitor{
 				visitor: c.visitor,
 				objMap:  c.objMap,
 				mapOnly: true,
-			}, "FuncDeclSeed")
+			}
 		}
 	case *ast.TypeSpec:
 		obj := c.info.Defs[n.Name]
@@ -226,6 +217,7 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 		if !ok {
 			break
 		}
+		fmt.Printf(">>>[found TypeSpec] %s => %v\n", obj.Name(), n) // TODO(grantnelson-wf): remove
 		if named.TypeParams().Len() != 0 && named.TypeArgs().Len() == 0 {
 			fmt.Printf(">>>[map TypeSpec] %s => %v\n", obj.Name(), n) // TODO(grantnelson-wf): remove
 			c.objMap[obj] = n
@@ -279,7 +271,7 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 	}
 	for _, file := range files {
 		fmt.Printf("[Start] Seed: %s\n", file.Name.Name) // TODO(grantnelson-wf): remove
-		ast.Walk(newPrinter(&sc, "Seed"), file)
+		ast.Walk(&sc, file)
 		fmt.Printf("[Stop] Seed: %s\n\n", file.Name.Name) // TODO(grantnelson-wf): remove
 	}
 
@@ -295,7 +287,7 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 			}
 			fmt.Printf("[Start] Signature: %s\n\t%v\n", inst.TypeString(), v.resolver) // TODO(grantnelson-wf): remove
 			fmt.Printf("\t%v\n", tParams)                                              // TODO(grantnelson-wf): remove
-			ast.Walk(newPrinter(&v, "Signature"), objMap[inst.Object])
+			ast.Walk(&v, objMap[inst.Object])
 			fmt.Printf("[Stop] Signature: %s\n\n", inst.TypeString()) // TODO(grantnelson-wf): remove
 		case *types.Named:
 			obj := typ.Obj()
@@ -305,52 +297,8 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 				info:      c.Info,
 			}
 			fmt.Printf("[Start] Named: %s\n", inst.TypeString()) // TODO(grantnelson-wf): remove
-			ast.Walk(newPrinter(&v, "Named"), objMap[obj])
+			ast.Walk(&v, objMap[obj])
 			fmt.Printf("[Stop] Named: %s\n\n", inst.TypeString()) // TODO(grantnelson-wf): remove
 		}
 	}
-}
-
-type printer struct { // TODO(grantnelson-wf): remove
-	inner  ast.Visitor
-	title  string
-	indent string
-}
-
-func newPrinter(inner ast.Visitor, title string) *printer {
-	return &printer{
-		inner:  inner,
-		title:  title,
-		indent: ``,
-	}
-}
-
-func (p *printer) Visit(n ast.Node) (w ast.Visitor) {
-	if n == nil {
-		if len(p.indent) >= 2 {
-			p.indent = p.indent[:len(p.indent)-2]
-		}
-	} else {
-		p.indent += "  "
-		if id, ok := n.(*ast.Ident); ok {
-			fmt.Printf("%s%s(%T)%q\n", p.title, p.indent, n, id.Name)
-		} else {
-			fmt.Printf("%s%s(%T)\n", p.title, p.indent, n)
-		}
-	}
-	v2 := p.inner.Visit(n)
-	if v2 != nil {
-		if v2 == p.inner {
-			return p
-		}
-		if _, ok := v2.(*printer); ok {
-			return v2
-		}
-		v2 = &printer{
-			inner:  v2,
-			title:  p.title,
-			indent: p.indent,
-		}
-	}
-	return v2
 }

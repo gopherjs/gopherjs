@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
+	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/gopherjs/gopherjs/internal/govendor/subst"
@@ -12,31 +13,60 @@ import (
 // Resolver translates types defined in terms of type parameters into concrete
 // types, given a mapping from type params to type arguments.
 type Resolver struct {
+	tParams *types.TypeParamList
+	tArgs   []types.Type
 	subster *subst.Subster
 	selMemo map[typesutil.Selection]typesutil.Selection
+	parent  *Resolver
 }
 
 // NewResolver creates a new Resolver with tParams entries mapping to tArgs
 // entries with the same index.
 func NewResolver(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type, parent *Resolver) *Resolver {
-	var nest *subst.Subster
-	if parent != nil {
-		nest = parent.subster
-	}
 	r := &Resolver{
-		subster: subst.New(tc, tParams, tArgs, nest),
+		tParams: tParams,
+		tArgs:   tArgs,
+		subster: subst.New(tc, tParams, tArgs),
 		selMemo: map[typesutil.Selection]typesutil.Selection{},
+		parent:  parent,
 	}
 	return r
+}
+
+func (r *Resolver) TypeParams() *types.TypeParamList {
+	if r == nil {
+		return nil
+	}
+	return r.tParams
+}
+
+func (r *Resolver) TypeArgs() []types.Type {
+	if r == nil {
+		return nil
+	}
+	return r.tArgs
+}
+
+func (r *Resolver) Parent() *Resolver {
+	if r == nil {
+		return nil
+	}
+	return r.parent
 }
 
 // Substitute replaces references to type params in the provided type definition
 // with the corresponding concrete types.
 func (r *Resolver) Substitute(typ types.Type) types.Type {
-	if r == nil || r.subster == nil || typ == nil {
+	if r == nil || typ == nil {
 		return typ // No substitutions to be made.
 	}
-	return r.subster.Type(typ)
+	if r.subster != nil {
+		typ = r.subster.Type(typ)
+	}
+	if r.parent != nil {
+		typ = r.parent.Substitute(typ)
+	}
+	return typ
 }
 
 // SubstituteAll same as Substitute, but accepts a TypeList are returns
@@ -53,7 +83,7 @@ func (r *Resolver) SubstituteAll(list *types.TypeList) []types.Type {
 // defined in terms of type parameters with a method selection on a concrete
 // instantiation of the type.
 func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Selection {
-	if r == nil || r.subster == nil || sel == nil {
+	if r == nil || sel == nil {
 		return sel // No substitutions to be made.
 	}
 	if concrete, ok := r.selMemo[sel]; ok {
@@ -86,14 +116,25 @@ func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Select
 	}
 }
 
+// String gets a strings representation of the resolver for debugging.
 func (r *Resolver) String() string {
 	if r == nil {
 		return `{}`
 	}
-	return r.subster.String()
+
+	parts := make([]string, 0, len(r.tArgs))
+	for i, ta := range r.tArgs {
+		parts = append(parts, fmt.Sprintf("%s->%s", r.tParams.At(i), ta))
+	}
+
+	nestStr := ``
+	if r.parent != nil {
+		nestStr = r.parent.String() + `:`
+	}
+	return nestStr + `{` + strings.Join(parts, `, `) + `}`
 }
 
-// visitor implements ast.Visitor and collects instances of generic types and
+// visitor implements ast.Visitor to collect instances of generic types and
 // functions into an InstanceSet.
 //
 // When traversing an AST subtree corresponding to a generic type, method or
@@ -115,13 +156,25 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 		return
 	}
 
-	instance, ok := c.info.Instances[ident]
-	if !ok {
+	if instance, ok := c.info.Instances[ident]; ok {
+		// Found instance of a generic type or function.
+		obj := c.info.ObjectOf(ident)
+		c.addInstance(obj, instance.TypeArgs)
 		return
 	}
 
-	obj := c.info.ObjectOf(ident)
+	if len(c.resolver.TypeArgs()) > 0 {
+		if obj, ok := c.info.Uses[ident]; ok {
+			// Found instance of a concrete type or function in a generic context.
+			c.addInstance(obj, nil)
+			return
+		}
+	}
 
+	return
+}
+
+func (c *visitor) addInstance(obj types.Object, tArgs *types.TypeList) {
 	// For types embedded in structs, the object the identifier resolves to is a
 	// *types.Var representing the implicitly declared struct field. However, the
 	// instance relates to the *types.TypeName behind the field type, which we
@@ -135,7 +188,8 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 	}
 	c.instances.Add(Instance{
 		Object: obj,
-		TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
+		TArgs:  c.resolver.SubstituteAll(tArgs),
+		TNest:  c.resolver.TypeArgs(),
 	})
 
 	if t, ok := obj.Type().(*types.Named); ok {
@@ -143,11 +197,11 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 			method := t.Method(i)
 			c.instances.Add(Instance{
 				Object: method.Origin(),
-				TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
+				TArgs:  c.resolver.SubstituteAll(tArgs),
+				TNest:  c.resolver.TypeArgs(),
 			})
 		}
 	}
-	return
 }
 
 // seedVisitor implements ast.Visitor that collects information necessary to

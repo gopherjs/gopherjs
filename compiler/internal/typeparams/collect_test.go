@@ -2,7 +2,9 @@ package typeparams
 
 import (
 	"go/ast"
+	"go/token"
 	"go/types"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -378,6 +380,89 @@ func TestCollector(t *testing.T) {
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != "" {
 		t.Errorf("Instances from initialSeeder contain diff (-want,+got):\n%s", diff)
 	}
+}
+
+func TestCollectorNesting(t *testing.T) {
+	src := `package test
+
+	func fun[T any]() {
+		type nestedCon struct{ X T }
+		_ = nestedCon{}
+
+		type nestedGen[U any] struct{ Y T; Z U }
+		_ = nestedGen[T]{}
+		_ = nestedGen[int8]{}
+
+		type nestedCover[T any] struct{ W T }
+		_ = nestedCover[T]{}
+		_ = nestedCover[int16]{}
+	}
+
+	func a() {
+		fun[int32]()
+		fun[int64]()
+	}
+	`
+
+	f := srctesting.New(t)
+	file := f.Parse(`test.go`, src)
+	info, pkg := f.Check(`pkg/test`, file)
+
+	c := Collector{
+		TContext:  types.NewContext(),
+		Info:      info,
+		Instances: &PackageInstanceSets{},
+	}
+	c.Scan(pkg, file)
+
+	inst := func(name string, tNest string, tArg string) Instance {
+		obj := srctesting.LookupObj(pkg, name)
+		if obj == nil {
+			t.Fatalf(`Object %q not found in package %q`, name, pkg.Name())
+		}
+		return Instance{
+			Object: obj,
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
+	want := []Instance{
+		inst(`fun`, ``, `int32`),
+		inst(`fun`, ``, `int64`),
+
+		inst(`fun.nestedCon`, `int32`, ``),
+		inst(`fun.nestedCon`, `int64`, ``),
+
+		inst(`fun.nestedGen`, `int32`, `int32`),
+		inst(`fun.nestedGen`, `int32`, `int8`),
+		inst(`fun.nestedGen`, `int64`, `int64`),
+		inst(`fun.nestedGen`, `int64`, `int8`),
+
+		inst(`fun.nestedCover`, `int32`, `int32`),
+		inst(`fun.nestedCover`, `int32`, `int16`),
+		inst(`fun.nestedCover`, `int64`, `int64`),
+		inst(`fun.nestedCover`, `int64`, `int16`),
+	}
+	got := c.Instances.Pkg(pkg).Values()
+	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+		t.Errorf("Instances from initialSeeder contain diff (-want,+got):\n%s", diff)
+	}
+}
+
+func evalTypeArgs(t *testing.T, fSet *token.FileSet, pkg *types.Package, expr string) []types.Type {
+	if len(expr) == 0 {
+		return nil
+	}
+	args := strings.Split(expr, ",")
+	targs := make([]types.Type, 0, len(args))
+	for _, astr := range args {
+		tv, err := types.Eval(fSet, pkg, 0, astr)
+		if err != nil {
+			t.Fatalf("Eval(%s) failed: %v", astr, err)
+		}
+		targs = append(targs, tv.Type)
+	}
+	return targs
 }
 
 func TestCollector_CrossPackage(t *testing.T) {

@@ -27,33 +27,36 @@ type Instance struct {
 // Two semantically different instances may have the same string representation
 // if the instantiated object or its type arguments shadow other types.
 func (i *Instance) String() string {
-	sym := symbol.New(i.Object).String()
-	if len(i.TArgs) == 0 {
-		return sym
-	}
-
-	return fmt.Sprintf("%s<%s>", sym, i.TArgs)
+	return i.symbolicName() + i.typeParamsString(`<`, `>`)
 }
 
 // TypeString returns a Go type string representing the instance (suitable for %T verb).
 func (i *Instance) TypeString() string {
-	return i.qualifiedName() + i.typeParamsString()
+	return i.qualifiedName() + i.typeParamsString(`[`, `]`)
+}
+
+// symbolicName returns a string representation of the instance's name
+// including the package name and pointer indicators but
+// excluding the type parameters.
+func (i *Instance) symbolicName() string {
+	return symbol.New(i.Object).String()
 }
 
 // qualifiedName returns a string representation of the instance's name
-// including the package name but excluding the type parameters.
+// including the package name but
+// excluding the type parameters and pointer indicators.
 func (i *Instance) qualifiedName() string {
 	return fmt.Sprintf("%s.%s", i.Object.Pkg().Name(), i.Object.Name())
 }
 
 // typeParamsString returns part of a Go type string that represents the type
 // parameters of the instance including the nesting type parameters, e.g. [X;Y,Z].
-func (i *Instance) typeParamsString() string {
+func (i *Instance) typeParamsString(open, close string) string {
 	hasNest := len(i.TNest) > 0
 	hasArgs := len(i.TArgs) > 0
 	tArgs := ""
 	if hasNest || hasArgs {
-		tArgs = "["
+		tArgs = open
 		if hasNest {
 			tArgs += i.TNest.String()
 			if hasArgs {
@@ -63,7 +66,7 @@ func (i *Instance) typeParamsString() string {
 		if hasArgs {
 			tArgs += i.TArgs.String()
 		}
-		tArgs += "]"
+		tArgs += close
 	}
 	return tArgs
 }

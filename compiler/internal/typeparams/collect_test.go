@@ -255,11 +255,9 @@ func TestVisitor(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.descr, func(t *testing.T) {
 			v := visitor{
-				instances:   &PackageInstanceSets{},
-				resolver:    test.resolver,
-				info:        info,
-				collectInst: true,
-				mapObjects:  false,
+				instances: &PackageInstanceSets{},
+				resolver:  test.resolver,
+				info:      info,
 			}
 			ast.Walk(&v, test.node)
 			got := v.instances.Pkg(pkg).Values()
@@ -288,13 +286,13 @@ func TestSeedVisitor(t *testing.T) {
 	file := f.Parse("test.go", src)
 	info, pkg := f.Check("pkg/test", file)
 
-	sv := visitor{
-		instances:   &PackageInstanceSets{},
-		resolver:    nil,
-		info:        info,
-		objMap:      map[types.Object]ast.Node{},
-		collectInst: true,
-		mapObjects:  true,
+	sv := seedVisitor{
+		visitor: visitor{
+			instances: &PackageInstanceSets{},
+			resolver:  nil,
+			info:      info,
+		},
+		objMap: map[types.Object]ast.Node{},
 	}
 	ast.Walk(&sv, file)
 

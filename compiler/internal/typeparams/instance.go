@@ -3,6 +3,7 @@ package typeparams
 import (
 	"fmt"
 	"go/types"
+	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
@@ -54,21 +55,19 @@ func (i *Instance) qualifiedName() string {
 func (i *Instance) typeParamsString(open, close string) string {
 	hasNest := len(i.TNest) > 0
 	hasArgs := len(i.TArgs) > 0
-	tArgs := ""
+	buf := strings.Builder{}
 	if hasNest || hasArgs {
-		tArgs = open
+		buf.WriteString(open)
 		if hasNest {
-			tArgs += i.TNest.String()
-			if hasArgs {
-				tArgs += ";"
-			}
+			buf.WriteString(i.TNest.String())
+			buf.WriteRune(';')
 		}
 		if hasArgs {
-			tArgs += i.TArgs.String()
+			buf.WriteString(i.TArgs.String())
 		}
-		tArgs += close
+		buf.WriteString(close)
 	}
-	return tArgs
+	return buf.String()
 }
 
 // IsTrivial returns true if this is an instance of a non-generic object.

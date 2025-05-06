@@ -3,7 +3,10 @@
 // type arguments.
 package subst
 
-import "go/types"
+import (
+	"fmt"
+	"go/types"
+)
 
 // To simplify future updates of the borrowed code, we minimize modifications
 // to it as much as possible. This file implements an exported interface to the
@@ -16,7 +19,9 @@ type Subster struct {
 
 // New creates a new Subster with a given list of type parameters and matching args.
 func New(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type) *Subster {
-	assert(tParams.Len() == len(tArgs), "New() argument count must match")
+	if tParams.Len() != len(tArgs) {
+		panic(fmt.Errorf(`New() argument count must match (%d != %d)`, tParams.Len(), len(tArgs)))
+	}
 
 	if tParams.Len() == 0 && len(tArgs) == 0 {
 		return nil

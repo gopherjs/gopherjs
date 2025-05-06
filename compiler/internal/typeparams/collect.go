@@ -156,22 +156,36 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 		return
 	}
 
-	if instance, ok := c.info.Instances[ident]; ok {
+	if inst, ok := c.info.Instances[ident]; ok {
 		// Found instance of a generic type or function.
 		obj := c.info.ObjectOf(ident)
-		c.addInstance(obj, instance.TypeArgs)
+		c.addInstance(obj, inst.TypeArgs)
 		return
 	}
 
 	if len(c.resolver.TypeArgs()) > 0 {
-		if obj, ok := c.info.Uses[ident]; ok {
-			// Found instance of a concrete type or function in a generic context.
+		if obj, ok := c.info.Defs[ident]; ok && isConcreteType(obj) {
+			// Found instance of a concrete type defined inside a generic context.
 			c.addInstance(obj, nil)
 			return
 		}
 	}
 
 	return
+}
+
+// isConcreteType returns true if the object is a non-generic named type.
+func isConcreteType(obj types.Object) bool {
+	if obj == nil {
+		return false
+	}
+	typ := obj.Type()
+	if ptr, ok := typ.(*types.Pointer); ok {
+		typ = ptr.Elem()
+	}
+
+	t, ok := typ.(*types.Named)
+	return ok && t.TypeParams().Len() == 0
 }
 
 func (c *visitor) addInstance(obj types.Object, tArgs *types.TypeList) {
@@ -297,6 +311,7 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 
 	for iset := c.Instances.Pkg(pkg); !iset.exhausted(); {
 		inst, _ := iset.next()
+
 		switch typ := inst.Object.Type().(type) {
 		case *types.Signature:
 			tParams := SignatureTypeParams(typ)
@@ -306,14 +321,22 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 				info:      c.Info,
 			}
 			ast.Walk(&v, objMap[inst.Object])
+
 		case *types.Named:
 			obj := typ.Obj()
+			node := objMap[obj]
+			if node == nil {
+				// Types without an entry in objMap are concrete types
+				// that are defined in a generic context. Skip them.
+				continue
+			}
+
 			v := visitor{
 				instances: c.Instances,
 				resolver:  NewResolver(c.TContext, typ.TypeParams(), inst.TArgs, nil),
 				info:      c.Info,
 			}
-			ast.Walk(&v, objMap[obj])
+			ast.Walk(&v, node)
 		}
 	}
 }

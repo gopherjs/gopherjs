@@ -147,7 +147,6 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 			})
 		}
 	}
-
 	return
 }
 
@@ -175,7 +174,6 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 		obj := c.info.Defs[n.Name]
 		sig := obj.Type().(*types.Signature)
 		if sig.TypeParams().Len() != 0 || sig.RecvTypeParams().Len() != 0 {
-			fmt.Printf(">>>[map Signature] %s => %v\n", obj.Name(), n) // TODO(grantnelson-wf): remove
 			c.objMap[obj] = n
 			return &seedVisitor{
 				visitor: c.visitor,
@@ -189,9 +187,7 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 		if !ok {
 			break
 		}
-		fmt.Printf(">>>[found TypeSpec] %s => %v\n", obj.Name(), n) // TODO(grantnelson-wf): remove
 		if named.TypeParams().Len() != 0 && named.TypeArgs().Len() == 0 {
-			fmt.Printf(">>>[map TypeSpec] %s => %v\n", obj.Name(), n) // TODO(grantnelson-wf): remove
 			c.objMap[obj] = n
 			return nil
 		}

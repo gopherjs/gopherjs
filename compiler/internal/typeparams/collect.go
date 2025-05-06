@@ -116,21 +116,10 @@ func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
 	}
 
 	instance, ok := c.info.Instances[ident]
-	if ok {
-		c.addNamedInstance(ident, instance)
+	if !ok {
 		return
 	}
 
-	def, ok := c.info.Defs[ident]
-	if ok && def != nil {
-		c.addNestedNamed(ident, def)
-		return
-	}
-
-	return
-}
-
-func (c *visitor) addNamedInstance(ident *ast.Ident, instance types.Instance) {
 	obj := c.info.ObjectOf(ident)
 
 	// For types embedded in structs, the object the identifier resolves to is a
@@ -144,39 +133,22 @@ func (c *visitor) addNamedInstance(ident *ast.Ident, instance types.Instance) {
 	if t, ok := typ.(*types.Named); ok {
 		obj = t.Obj()
 	}
-	inst := Instance{
+	c.instances.Add(Instance{
 		Object: obj,
 		TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
-	}
-	fmt.Printf(">>>[add Named instance] %v\n", inst) // TODO(grantnelson-wf): remove
-	c.instances.Add(inst)
+	})
 
 	if t, ok := obj.Type().(*types.Named); ok {
 		for i := 0; i < t.NumMethods(); i++ {
 			method := t.Method(i)
-			inst2 := Instance{
+			c.instances.Add(Instance{
 				Object: method.Origin(),
 				TArgs:  c.resolver.SubstituteAll(instance.TypeArgs),
-			}
-			fmt.Printf(">>>[add Named instance's method] %v\n", inst2) // TODO(grantnelson-wf): remove
-			c.instances.Add(inst2)
+			})
 		}
 	}
-}
 
-// TODO(grantnelson-wf): finish or remove
-func (c *visitor) addNestedNamed(ident *ast.Ident, obj types.Object) {
-	typ := obj.Type()
-	if ptr, ok := typ.(*types.Pointer); ok {
-		typ = ptr.Elem()
-	}
-	if t, ok := typ.(*types.Named); ok {
-		obj = t.Obj()
-	}
-
-	if t, ok := obj.(*types.TypeName); ok {
-		fmt.Printf(">>>[add Nested named] %s => %v\n\t%v\n", ident.Name, t, c.resolver) // TODO(grantnelson-wf): remove
-	}
+	return
 }
 
 // seedVisitor implements ast.Visitor that collects information necessary to

@@ -170,6 +170,9 @@ func LookupObj(pkg *types.Package, name string) types.Object {
 		if len(path) > 0 {
 			obj, _, _ = types.LookupFieldOrMethod(obj.Type(), true, obj.Pkg(), path[0])
 			path = path[1:]
+			if fun, ok := obj.(*types.Func); ok {
+				scope = fun.Scope()
+			}
 		}
 	}
 	return obj

@@ -37,7 +37,11 @@ func TestVisitor(t *testing.T) {
 		t := typ[int, A]{}
 		t.method(0)
 		(*typ[int32, A]).method(nil, 0)
+
 		type x struct{ T []typ[int64, A] }
+		type y[X any] struct{ T []typ[A, X] }
+		_ = y[int8]{}
+		_ = y[A]{}
 
 		return
 	}
@@ -51,7 +55,11 @@ func TestVisitor(t *testing.T) {
 		t := typ[int, T]{}
 		t.method(0)
 		(*typ[int32, T]).method(nil, 0)
+
 		type x struct{ T []typ[int64, T] }
+		type y[X any] struct{ T []typ[T, X] }
+		_ = y[int8]{}
+		_ = y[T]{}
 
 		return
 	}
@@ -69,7 +77,11 @@ func TestVisitor(t *testing.T) {
 		t := typ[int, T]{}
 		t.method(0)
 		(*typ[int32, T]).method(nil, 0)
+
 		type x struct{ T []typ[int64, T] }
+		type y[X any] struct{ T []typ[T, X] }
+		_ = y[int8]{}
+		_ = y[T]{}
 
 		return
 	}
@@ -86,7 +98,11 @@ func TestVisitor(t *testing.T) {
 	info, pkg := f.Check("pkg/test", file)
 
 	lookupObj := func(name string) types.Object {
-		return srctesting.LookupObj(pkg, name)
+		obj := srctesting.LookupObj(pkg, name)
+		if obj == nil {
+			t.Fatalf("Object %q not found", name)
+		}
+		return obj
 	}
 	lookupType := func(name string) types.Type { return lookupObj(name).Type() }
 	lookupDecl := func(name string) ast.Node {
@@ -191,7 +207,17 @@ func TestVisitor(t *testing.T) {
 			descr:    "non-generic function",
 			resolver: nil,
 			node:     lookupDecl("entry1"),
-			want:     instancesInFunc(lookupType("A")),
+			want: append(
+				instancesInFunc(lookupType("A")),
+				Instance{
+					Object: lookupObj("entry1.y"),
+					TArgs:  []types.Type{types.Typ[types.Int8]},
+				},
+				Instance{
+					Object: lookupObj("entry1.y"),
+					TArgs:  []types.Type{lookupType("A")},
+				},
+			),
 		}, {
 			descr: "generic function",
 			resolver: NewResolver(
@@ -201,7 +227,23 @@ func TestVisitor(t *testing.T) {
 				nil,
 			),
 			node: lookupDecl("entry2"),
-			want: instancesInFunc(lookupType("B")),
+			want: append(
+				instancesInFunc(lookupType("B")),
+				Instance{
+					Object: lookupObj("entry2.x"),
+					TNest:  []types.Type{lookupType("B")},
+				},
+				Instance{
+					Object: lookupObj("entry1.y"),
+					TNest:  []types.Type{lookupType("B")},
+					TArgs:  []types.Type{types.Typ[types.Int8]},
+				},
+				Instance{
+					Object: lookupObj("entry2.y"),
+					TNest:  []types.Type{lookupType("B")},
+					TArgs:  []types.Type{lookupType("B")},
+				},
+			),
 		}, {
 			descr: "generic method",
 			resolver: NewResolver(
@@ -219,6 +261,20 @@ func TestVisitor(t *testing.T) {
 				},
 				Instance{
 					Object: lookupObj("entry3.method"),
+					TArgs:  []types.Type{lookupType("C")},
+				},
+				Instance{
+					Object: lookupObj("entry3.method.x"),
+					TNest:  []types.Type{lookupType("C")},
+				},
+				Instance{
+					Object: lookupObj("entry3.method.y"),
+					TNest:  []types.Type{lookupType("C")},
+					TArgs:  []types.Type{types.Typ[types.Int8]},
+				},
+				Instance{
+					Object: lookupObj("entry3.method.y"),
+					TNest:  []types.Type{lookupType("C")},
 					TArgs:  []types.Type{lookupType("C")},
 				},
 			),

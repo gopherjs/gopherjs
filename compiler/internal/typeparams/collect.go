@@ -148,47 +148,31 @@ type visitor struct {
 
 var _ ast.Visitor = &visitor{}
 
-func (c *visitor) Visit(n ast.Node) (w ast.Visitor) {
-	w = c // Always traverse the full depth of the AST tree.
-
-	ident, ok := n.(*ast.Ident)
-	if !ok {
-		return
+func (c *visitor) Visit(n ast.Node) ast.Visitor {
+	if ident, ok := n.(*ast.Ident); ok {
+		c.visitIdent(ident)
 	}
+	return c
+}
 
+func (c *visitor) visitIdent(ident *ast.Ident) {
 	if inst, ok := c.info.Instances[ident]; ok {
-		// Found instance of a generic type or function.
-		obj := c.info.ObjectOf(ident)
-		c.addInstance(obj, inst.TypeArgs)
-		return
+		// Found the use of a generic type or function.
+		c.visitInstance(ident, inst)
 	}
 
 	if len(c.resolver.TypeArgs()) > 0 {
-		if obj, ok := c.info.Defs[ident]; ok && isConcreteType(obj) {
-			// Found instance of a concrete type defined inside a generic context.
-			c.addInstance(obj, nil)
-			return
+		if obj, ok := c.info.Defs[ident]; ok && obj != nil {
+			// Found instance of a type defined inside a generic context.
+			c.visitNestedType(obj)
 		}
 	}
-
-	return
 }
 
-// isConcreteType returns true if the object is a non-generic named type.
-func isConcreteType(obj types.Object) bool {
-	if obj == nil {
-		return false
-	}
-	typ := obj.Type()
-	if ptr, ok := typ.(*types.Pointer); ok {
-		typ = ptr.Elem()
-	}
+func (c *visitor) visitInstance(ident *ast.Ident, inst types.Instance) {
+	obj := c.info.Uses[ident]
+	tArgs := inst.TypeArgs
 
-	t, ok := typ.(*types.Named)
-	return ok && t.TypeParams().Len() == 0
-}
-
-func (c *visitor) addInstance(obj types.Object, tArgs *types.TypeList) {
 	// For types embedded in structs, the object the identifier resolves to is a
 	// *types.Var representing the implicitly declared struct field. However, the
 	// instance relates to the *types.TypeName behind the field type, which we
@@ -200,10 +184,55 @@ func (c *visitor) addInstance(obj types.Object, tArgs *types.TypeList) {
 	if t, ok := typ.(*types.Named); ok {
 		obj = t.Obj()
 	}
+
+	// If the object is defined in the same scope as the instance,
+	// then we apply the current type arguments.
+	// If there are no type arguments then the type is defined at the
+	// package level, or in a concrete function or method.
+	// Otherwise, the type is in a generic function or method
+	// and we need to apply the nested type arguments for the instance of the
+	// generic function or method the type is defined in.
+	var tNest []types.Type
+	if obj.Parent().Contains(ident.Pos()) {
+		tNest = c.resolver.TypeArgs()
+	}
+
+	c.addInstance(obj, tArgs, tNest)
+}
+
+func (c *visitor) visitNestedType(obj types.Object) {
+	typ := obj.Type()
+	if ptr, ok := typ.(*types.Pointer); ok {
+		typ = ptr.Elem()
+	}
+
+	t, ok := typ.(*types.Named)
+	if !ok || t.TypeParams().Len() > 0 {
+		// Found a generic type or not a named type (e.g. type parameter).
+		// Don't add generic types yet because they
+		// will be added when we find an instance of them.
+		return
+	}
+
+	c.addInstance(obj, nil, c.resolver.TypeArgs())
+}
+
+func (c *visitor) addInstance(obj types.Object, tArgList *types.TypeList, tNest []types.Type) {
+	tArgs := c.resolver.SubstituteAll(tArgList)
+	for _, ta := range tArgs {
+		if _, ok := ta.(*types.TypeParam); ok {
+			// Skip any instances that still have type parameters
+			// in them. This occurs when a type is defined in a generic
+			// context and is not fully instantiated yet.
+			// We need to wait until we find a full instantiation of the type.
+			return
+		}
+	}
+
 	c.instances.Add(Instance{
 		Object: obj,
-		TArgs:  c.resolver.SubstituteAll(tArgs),
-		TNest:  c.resolver.TypeArgs(),
+		TArgs:  tArgs,
+		TNest:  tNest,
 	})
 
 	if t, ok := obj.Type().(*types.Named); ok {
@@ -211,8 +240,8 @@ func (c *visitor) addInstance(obj types.Object, tArgs *types.TypeList) {
 			method := t.Method(i)
 			c.instances.Add(Instance{
 				Object: method.Origin(),
-				TArgs:  c.resolver.SubstituteAll(tArgs),
-				TNest:  c.resolver.TypeArgs(),
+				TArgs:  tArgs,
+				TNest:  tNest,
 			})
 		}
 	}

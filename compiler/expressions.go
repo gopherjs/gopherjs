@@ -85,8 +85,6 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		inst = fc.instanceOf(e)
 	}
 
-	fmt.Printf(">> (%T) %v => %q => %v\n", expr, expr, fc.pkgCtx.fileSet.Position(expr.Pos()), inst) // TODO(grantnelson-wf): REMOVE
-
 	if inst.Object != nil && typesutil.IsJsPackage(inst.Object.Pkg()) {
 		switch inst.Object.Name() {
 		case "Global":

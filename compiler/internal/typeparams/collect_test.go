@@ -414,23 +414,24 @@ func TestCollector(t *testing.T) {
 	}
 	c.Scan(pkg, file)
 
-	inst := func(name string, tArg types.Type) Instance {
+	inst := func(name, tNest, tArg string) Instance {
 		return Instance{
 			Object: srctesting.LookupObj(pkg, name),
-			TArgs:  []types.Type{tArg},
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
 		}
 	}
 	want := []Instance{
-		inst("typ", types.Typ[types.Int]),
-		inst("typ.method", types.Typ[types.Int]),
-		inst("fun", types.Typ[types.Int8]),
-		inst("fun.nested", types.Typ[types.Int8]),
-		inst("typ", types.Typ[types.Int16]),
-		inst("typ.method", types.Typ[types.Int16]),
-		inst("typ", types.Typ[types.Int32]),
-		inst("typ.method", types.Typ[types.Int32]),
-		inst("fun", types.Typ[types.Int64]),
-		inst("fun.nested", types.Typ[types.Int64]),
+		inst(`typ`, ``, `int`),
+		inst(`typ.method`, ``, `int`),
+		inst(`fun`, ``, `int8`),
+		inst(`fun.nested`, `int8`, `int8`),
+		inst(`typ`, ``, `int16`),
+		inst(`typ.method`, ``, `int16`),
+		inst(`typ`, ``, `int32`),
+		inst(`typ.method`, ``, `int32`),
+		inst(`fun`, ``, `int64`),
+		inst(`fun.nested`, `int64`, `int64`),
 	}
 	got := c.Instances.Pkg(pkg).Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != "" {
@@ -438,7 +439,7 @@ func TestCollector(t *testing.T) {
 	}
 }
 
-func TestCollectorNesting(t *testing.T) {
+func TestCollector_MoreNesting(t *testing.T) {
 	src := `package test
 
 	func fun[T any]() {
@@ -471,7 +472,7 @@ func TestCollectorNesting(t *testing.T) {
 	}
 	c.Scan(pkg, file)
 
-	inst := func(name string, tNest string, tArg string) Instance {
+	inst := func(name, tNest, tArg string) Instance {
 		obj := srctesting.LookupObj(pkg, name)
 		if obj == nil {
 			t.Fatalf(`Object %q not found in package %q`, name, pkg.Name())

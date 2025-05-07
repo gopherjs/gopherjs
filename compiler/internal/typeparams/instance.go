@@ -27,12 +27,12 @@ type Instance struct {
 //
 // Two semantically different instances may have the same string representation
 // if the instantiated object or its type arguments shadow other types.
-func (i *Instance) String() string {
+func (i Instance) String() string {
 	return i.symbolicName() + i.typeParamsString(`<`, `>`)
 }
 
 // TypeString returns a Go type string representing the instance (suitable for %T verb).
-func (i *Instance) TypeString() string {
+func (i Instance) TypeString() string {
 	return i.qualifiedName() + i.typeParamsString(`[`, `]`)
 }
 
@@ -46,13 +46,13 @@ func (i *Instance) symbolicName() string {
 // qualifiedName returns a string representation of the instance's name
 // including the package name but
 // excluding the type parameters and pointer indicators.
-func (i *Instance) qualifiedName() string {
+func (i Instance) qualifiedName() string {
 	return fmt.Sprintf("%s.%s", i.Object.Pkg().Name(), i.Object.Name())
 }
 
 // typeParamsString returns part of a Go type string that represents the type
 // parameters of the instance including the nesting type parameters, e.g. [X;Y,Z].
-func (i *Instance) typeParamsString(open, close string) string {
+func (i Instance) typeParamsString(open, close string) string {
 	hasNest := len(i.TNest) > 0
 	hasArgs := len(i.TArgs) > 0
 	buf := strings.Builder{}
@@ -71,14 +71,14 @@ func (i *Instance) typeParamsString(open, close string) string {
 }
 
 // IsTrivial returns true if this is an instance of a non-generic object.
-func (i *Instance) IsTrivial() bool {
+func (i Instance) IsTrivial() bool {
 	return len(i.TArgs) == 0 && len(i.TNest) == 0
 }
 
 // Recv returns an instance of the receiver type of a method.
 //
 // Returns zero value if not a method.
-func (i *Instance) Recv() Instance {
+func (i Instance) Recv() Instance {
 	sig, ok := i.Object.Type().(*types.Signature)
 	if !ok {
 		return Instance{}

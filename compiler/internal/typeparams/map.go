@@ -174,7 +174,7 @@ func (im *InstanceMap[V]) Keys() []Instance {
 func (im *InstanceMap[V]) String() string {
 	entries := make([]string, 0, im.Len())
 	im.Iterate(func(key Instance, value V) {
-		entries = append(entries, fmt.Sprintf("%v:%v", key, value))
+		entries = append(entries, fmt.Sprintf("%v:%v", key.String(), value))
 	})
 	sort.Strings(entries)
 	return `{` + strings.Join(entries, `, `) + `}`

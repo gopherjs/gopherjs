@@ -221,9 +221,9 @@ func (c *visitor) addInstance(obj types.Object, tArgList *types.TypeList, tNest 
 	tArgs := c.resolver.SubstituteAll(tArgList)
 	for _, ta := range tArgs {
 		if _, ok := ta.(*types.TypeParam); ok {
-			// Skip any instances that still have type parameters
-			// in them. This occurs when a type is defined in a generic
-			// context and is not fully instantiated yet.
+			// Skip any instances that still have type parameters in them after
+			// substitution. This occurs when a type is defined while nested
+			// in a generic context and is not fully instantiated yet.
 			// We need to wait until we find a full instantiation of the type.
 			return
 		}

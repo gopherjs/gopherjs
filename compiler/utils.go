@@ -512,6 +512,8 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		if t.Empty() {
 			return "$emptyInterface"
 		}
+	case *types.TypeParam:
+		panic(fmt.Errorf("unexpected type parameter: %v", t))
 	}
 
 	// For anonymous composite types, generate a synthetic package-level type

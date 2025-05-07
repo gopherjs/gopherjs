@@ -452,6 +452,7 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 	originType := inst.Object.Type().(*types.Named)
 
 	// TODO(grantnelson-wf): Need to handle nested type parameters instances.
+
 	fc.typeResolver = typeparams.NewResolver(fc.pkgCtx.typesCtx, originType.TypeParams(), inst.TArgs, nil)
 	defer func() { fc.typeResolver = nil }()
 

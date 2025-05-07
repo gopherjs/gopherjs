@@ -323,20 +323,12 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 			if !field.Exported() {
 				pkgPath = field.Pkg().Path()
 			}
-			fields[i] = fmt.Sprintf(`{prop: "%s", name: %s, embedded: %t, exported: %t, typ: %s, tag: %s}`, fieldName(t, i), encodeString(field.Name()), field.Anonymous(), field.Exported(), fc.typeName(field.Type()), encodeString(t.Tag(i)))
+			fields[i] = fmt.Sprintf(`{prop: "%s", name: %s, embedded: %t, exported: %t, typ: %s, tag: %s}`,
+				fieldName(t, i), encodeString(field.Name()), field.Anonymous(), field.Exported(), fc.typeName(fc.fieldType(t, i)), encodeString(t.Tag(i)))
 		}
 		return fmt.Sprintf(`"%s", [%s]`, pkgPath, strings.Join(fields, ", "))
 	case *types.TypeParam:
 		tr := fc.typeResolver.Substitute(ty)
-
-		// TODO(grantnelson-wf): remove the following prints
-		fmt.Printf(">>>[package.initArgs]-----------------\n")
-		fmt.Printf("\tty: (%[1]T): %[1]v\n", ty)
-		fmt.Printf("\ttr: (%[1]T): %[1]v\n", tr)
-		fmt.Printf("\tfuncRef: %q\n", fc.funcRef)
-		fmt.Printf("\t%s\n", fc.typeResolver.String())
-		fmt.Printf("<<<[package.initArgs]-----------------\n")
-
 		if tr != ty {
 			return fc.initArgs(tr)
 		}

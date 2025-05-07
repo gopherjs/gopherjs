@@ -542,7 +542,8 @@ func (fc *funcContext) structConstructor(t *types.Struct) string {
 	// If no arguments were passed, zero-initialize all fields.
 	fmt.Fprintf(constructor, "\t\tif (arguments.length === 0) {\n")
 	for i := 0; i < t.NumFields(); i++ {
-		fmt.Fprintf(constructor, "\t\t\tthis.%s = %s;\n", fieldName(t, i), fc.translateExpr(fc.zeroValue(t.Field(i).Type())).String())
+		zeroValue := fc.zeroValue(fc.fieldType(t, i))
+		fmt.Fprintf(constructor, "\t\t\tthis.%s = %s;\n", fieldName(t, i), fc.translateExpr(zeroValue).String())
 	}
 	fmt.Fprintf(constructor, "\t\t\treturn;\n")
 	fmt.Fprintf(constructor, "\t\t}\n")

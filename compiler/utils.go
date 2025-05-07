@@ -198,7 +198,7 @@ func (fc *funcContext) translateSelection(sel typesutil.Selection, pos token.Pos
 			jsFieldName := s.Field(index).Name()
 			for {
 				fields = append(fields, fieldName(s, 0))
-				ft := s.Field(0).Type()
+				ft := fc.fieldType(s, 0)
 				if typesutil.IsJsObject(ft) {
 					return fields, jsTag
 				}
@@ -215,7 +215,7 @@ func (fc *funcContext) translateSelection(sel typesutil.Selection, pos token.Pos
 			}
 		}
 		fields = append(fields, fieldName(s, index))
-		t = s.Field(index).Type()
+		t = fc.fieldType(s, index)
 	}
 	return fields, ""
 }
@@ -573,6 +573,12 @@ func (fc *funcContext) typeOf(expr ast.Expr) types.Type {
 		}
 	}
 	return fc.typeResolver.Substitute(typ)
+}
+
+// fieldType returns the type of the i-th field of the given struct
+// after substituting type parameters with concrete types for nested context.
+func (fc *funcContext) fieldType(t *types.Struct, i int) types.Type {
+	return fc.typeResolver.Substitute(t.Field(i).Type())
 }
 
 func (fc *funcContext) selectionOf(e *ast.SelectorExpr) (typesutil.Selection, bool) {

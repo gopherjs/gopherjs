@@ -102,6 +102,7 @@ func OffsetOf(sizes types.Sizes, sel Selection) int64 {
 	for _, idx := range sel.Index() {
 		s := typ.Underlying().(*types.Struct)
 		o += sizes.Offsetsof(fieldsOf(s))[idx]
+		// TODO(grantnelson-wf): Determine if this field type needs to be resolved for nesting.
 		typ = s.Field(idx).Type()
 	}
 

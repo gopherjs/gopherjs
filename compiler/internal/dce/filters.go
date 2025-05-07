@@ -322,6 +322,7 @@ func (gen *filterGen) Struct(s *types.Struct) string {
 		// The field name and order is required to be part of the filter since
 		// struct matching rely on field names too. Tags are not needed.
 		// See https://go.dev/ref/spec#Conversions
+		// TODO(grantnelson-wf): Determine if this field type needs to be resolved for nesting.
 		parts[i] = f.Id() + ` ` + gen.Type(f.Type())
 	}
 	return `struct{ ` + strings.Join(parts, `; `) + ` }`

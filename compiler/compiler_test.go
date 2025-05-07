@@ -776,7 +776,8 @@ func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
 
 			print(F[int]())
 			print(F[Int]())
-		}`
+		}
+		`
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)

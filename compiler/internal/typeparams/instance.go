@@ -40,6 +40,9 @@ func (i Instance) TypeString() string {
 // including the package name and pointer indicators but
 // excluding the type parameters.
 func (i *Instance) symbolicName() string {
+	if i.Object == nil {
+		return `<nil>`
+	}
 	return symbol.New(i.Object).String()
 }
 
@@ -47,6 +50,12 @@ func (i *Instance) symbolicName() string {
 // including the package name but
 // excluding the type parameters and pointer indicators.
 func (i Instance) qualifiedName() string {
+	if i.Object == nil {
+		return `<nil>`
+	}
+	if i.Object.Pkg() == nil {
+		return i.Object.Name()
+	}
 	return fmt.Sprintf("%s.%s", i.Object.Pkg().Name(), i.Object.Name())
 }
 

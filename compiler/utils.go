@@ -511,6 +511,18 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		for i := 0; i < t.TypeArgs().Len(); i++ {
 			inst.TArgs = append(inst.TArgs, t.TypeArgs().At(i))
 		}
+
+		// TODO(grantnelson-wf): Handle nested type parameters.
+		if fn := typeparams.FindNestingFunc(t.Obj()); fn != nil {
+			if fn.Scope().Contains(t.Obj().Pos()) {
+				fmt.Printf(">> FindNestingFunc(%v) = %v\n", t.Obj(), fn) // TODO(grantnelson-wf): REMOVE
+				fmt.Printf("\t\tresolver: %v\n", fc.typeResolver)        // TODO(grantnelson-wf): REMOVE
+				fmt.Printf("\t\tfunc: %v\n", fc.sig.Sig)                 // TODO(grantnelson-wf): REMOVE
+
+				inst.TNest = fc.typeResolver.TypeArgs()
+			}
+		}
+
 		return fc.instName(inst)
 	case *types.Interface:
 		if t.Empty() {

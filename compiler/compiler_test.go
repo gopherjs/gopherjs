@@ -786,10 +786,10 @@ func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
 	insts := collectDeclInstances(t, mainPkg)
 
 	exp := []string{
-		`F[main.Int·2]`,
+		`F[_.Int]`, // Go prints `F[main.Int·2]`
 		`F[int]`,
-		`T[main.Int·2]`, // `T` from `F[main.Int·2]`
-		`T[int]`,        // `T` from `F[Int]`
+		`T[_.Int;]`, // `T` from `F[_.Int]` (Go prints `T[main.Int·2]`)
+		`T[int;]`,   // `T` from `F[int]`   (Go prints `T[int]`)
 	}
 	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
 		t.Errorf("the instances of generics are different:\n%s", diff)

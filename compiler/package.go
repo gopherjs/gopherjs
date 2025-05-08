@@ -324,12 +324,6 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 				pkgPath = field.Pkg().Path()
 			}
 			ft := fc.fieldType(t, i)
-
-			fmt.Printf("funcContext: %s\n", fc.funcRef)                        // TODO(grantnelson-wf): REMOVE
-			fmt.Printf("  type  %d: (%T) %v\n", i, ty, ty)                     // TODO(grantnelson-wf): REMOVE
-			fmt.Printf("  field %d: %s => (%T) %v\n", i, field.Name(), ft, ft) // TODO(grantnelson-wf): REMOVE
-			fmt.Printf("  resolver: %v\n", fc.typeResolver)                    // TODO(grantnelson-wf): REMOVE
-
 			fields[i] = fmt.Sprintf(`{prop: "%s", name: %s, embedded: %t, exported: %t, typ: %s, tag: %s}`,
 				fieldName(t, i), encodeString(field.Name()), field.Anonymous(), field.Exported(), fc.typeName(ft), encodeString(t.Tag(i)))
 		}

@@ -322,7 +322,6 @@ func (gen *filterGen) Struct(s *types.Struct) string {
 		// The field name and order is required to be part of the filter since
 		// struct matching rely on field names too. Tags are not needed.
 		// See https://go.dev/ref/spec#Conversions
-		// TODO(grantnelson-wf): Determine if this field type needs to be resolved for nesting.
 		parts[i] = f.Id() + ` ` + gen.Type(f.Type())
 	}
 	return `struct{ ` + strings.Join(parts, `; `) + ` }`
@@ -332,6 +331,7 @@ func (gen *filterGen) Struct(s *types.Struct) string {
 // If there is an argument remap, it will use the remapped type
 // so long as it doesn't map to itself.
 func (gen *filterGen) TypeParam(t *types.TypeParam) string {
+	// TODO(grantnelson-wf): This needs to be resolving for nesting types too.
 	index := t.Index()
 	if index >= 0 && index < len(gen.argTypeRemap) {
 		if inst := gen.argTypeRemap[index]; inst != t {

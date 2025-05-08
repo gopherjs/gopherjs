@@ -882,12 +882,12 @@ func collectDeclInstances(t *testing.T, pkg *Archive) []string {
 	// the name (`Foo`), the index (`42`), and the instance type (`bar`).
 	rex := regexp.MustCompile(`^\s*(\w+)\s*\[\s*(\d+)\s*\/\*(.+)\*\/\s*\]\s*\=`)
 
-	// Collect all instances of generics (e.g. `Foo[bar]`) written to the decl code.
+	// Collect all instances of generics (e.g. `Foo[bar] @ 2`) written to the decl code.
 	insts := []string{}
 	for _, decl := range pkg.Declarations {
 		if match := rex.FindAllStringSubmatch(string(decl.DeclCode), 1); len(match) > 0 {
-			instance := match[0][1] + `[` + strings.TrimSpace(match[0][3]) + `]`
-			instance = strings.ReplaceAll(instance, `command-line-arguments.`, ``)
+			instance := match[0][1] + `[` + strings.TrimSpace(match[0][3]) + `] @ ` + match[0][2]
+			instance = strings.ReplaceAll(instance, `command-line-arguments.`, `_.`)
 			insts = append(insts, instance)
 		}
 	}

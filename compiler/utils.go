@@ -443,11 +443,11 @@ func (fc *funcContext) objectName(o types.Object) string {
 //
 // For objects without type params always returns a single trivial instance.
 func (fc *funcContext) knownInstances(o types.Object) []typeparams.Instance {
-	if !typeparams.HasTypeParams(o.Type()) {
+	instances := fc.pkgCtx.instanceSet.Pkg(o.Pkg()).ForObj(o)
+	if len(instances) == 0 {
 		return []typeparams.Instance{{Object: o}}
 	}
-
-	return fc.pkgCtx.instanceSet.Pkg(o.Pkg()).ForObj(o)
+	return instances
 }
 
 // instName returns a JS expression that refers to the provided instance of a

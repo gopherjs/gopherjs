@@ -3,6 +3,7 @@ package typeparams
 import (
 	"errors"
 	"fmt"
+	"go/token"
 	"go/types"
 )
 
@@ -17,6 +18,31 @@ func SignatureTypeParams(sig *types.Signature) *types.TypeParamList {
 	} else {
 		return nil
 	}
+}
+
+// FindNestingFunc returns the function or method that the given object
+// is nested in, or nil if the object was defined at the package level.
+func FindNestingFunc(obj types.Object) *types.Func {
+	objPos := obj.Pos()
+	if objPos == token.NoPos {
+		return nil
+	}
+
+	scope := obj.Parent()
+	for scope != nil {
+		// Iterate over all declarations in the scope.
+		for _, name := range scope.Names() {
+			decl := scope.Lookup(name)
+			if fn, ok := decl.(*types.Func); ok {
+				// Check if the object's position is within the function's scope.
+				if objPos >= fn.Pos() && objPos <= fn.Scope().End() {
+					return fn
+				}
+			}
+		}
+		scope = scope.Parent()
+	}
+	return nil
 }
 
 var (

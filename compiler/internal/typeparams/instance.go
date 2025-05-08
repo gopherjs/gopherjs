@@ -199,6 +199,17 @@ func (iset *InstanceSet) ForObj(obj types.Object) []Instance {
 	return result
 }
 
+// ObjHasInstances returns true if there are any instances (either trivial
+// or non-trivial) that belong to the given object type, otherwise false.
+func (iset *InstanceSet) ObjHasInstances(obj types.Object) bool {
+	for _, inst := range iset.values {
+		if inst.Object == obj {
+			return true
+		}
+	}
+	return false
+}
+
 // PackageInstanceSets stores an InstanceSet for each package in a program, keyed
 // by import path.
 type PackageInstanceSets map[string]*InstanceSet

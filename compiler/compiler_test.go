@@ -886,7 +886,7 @@ func collectDeclInstances(t *testing.T, pkg *Archive) []string {
 	insts := []string{}
 	for _, decl := range pkg.Declarations {
 		if match := rex.FindAllStringSubmatch(string(decl.DeclCode), 1); len(match) > 0 {
-			instance := match[0][1] + `[` + strings.TrimSpace(match[0][3]) + `] @ ` + match[0][2]
+			instance := match[0][1] + `[` + strings.TrimSpace(match[0][3]) + `]`
 			instance = strings.ReplaceAll(instance, `command-line-arguments.`, `_.`)
 			insts = append(insts, instance)
 		}

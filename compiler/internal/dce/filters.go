@@ -16,7 +16,7 @@ import (
 // the object filter will be empty and only the method filter will be set.
 // The later shouldn't happen when naming a declaration but only when creating
 // dependencies.
-func getFilters(o types.Object, tArgs []types.Type) (objectFilter, methodFilter string) {
+func getFilters(o types.Object, tNest, tArgs []types.Type) (objectFilter, methodFilter string) {
 	if f, ok := o.(*types.Func); ok {
 		sig := f.Type().(*types.Signature)
 		if recv := sig.Recv(); recv != nil {
@@ -30,7 +30,7 @@ func getFilters(o types.Object, tArgs []types.Type) (objectFilter, methodFilter 
 				tArgs = getTypeArgs(typ)
 			}
 			if named, ok := typ.(*types.Named); ok {
-				objectFilter = getObjectFilter(named.Obj(), tArgs)
+				objectFilter = getObjectFilter(named.Obj(), tNest, tArgs)
 			}
 
 			// The method is not exported so we only need the method filter.
@@ -42,7 +42,7 @@ func getFilters(o types.Object, tArgs []types.Type) (objectFilter, methodFilter 
 	}
 
 	// The object is not a method so we only need the object filter.
-	objectFilter = getObjectFilter(o, tArgs)
+	objectFilter = getObjectFilter(o, tNest, tArgs)
 	return
 }
 
@@ -51,7 +51,8 @@ func getFilters(o types.Object, tArgs []types.Type) (objectFilter, methodFilter 
 // See [naming design] for more information.
 //
 // [naming design]: https://github.com/gopherjs/gopherjs/compiler/internal/dce/README.md#naming
-func getObjectFilter(o types.Object, tArgs []types.Type) string {
+func getObjectFilter(o types.Object, tNest, tArgs []types.Type) string {
+	// TODO(grantnelson-wf): This needs to be resolving for nesting types too.
 	return (&filterGen{argTypeRemap: tArgs}).Object(o, tArgs)
 }
 

@@ -415,7 +415,7 @@ func (fc *funcContext) assignedObjectName(o types.Object) (name string, found bo
 // allocated as needed.
 func (fc *funcContext) objectName(o types.Object) string {
 	if isPkgLevel(o) {
-		fc.pkgCtx.DeclareDCEDep(o)
+		fc.pkgCtx.DeclareDCEDep(o, nil, nil)
 
 		if o.Pkg() != fc.pkgCtx.Pkg || (isVarOrConst(o) && o.Exported()) {
 			return fc.pkgVar(o.Pkg()) + "." + o.Name()
@@ -458,8 +458,12 @@ func (fc *funcContext) instName(inst typeparams.Instance) string {
 	if inst.IsTrivial() {
 		return objName
 	}
-	fc.pkgCtx.DeclareDCEDep(inst.Object, inst.TArgs...)
-	return fmt.Sprintf("%s[%d /* %v */]", objName, fc.pkgCtx.instanceSet.ID(inst), inst.TArgs)
+	fc.pkgCtx.DeclareDCEDep(inst.Object, inst.TNest, inst.TArgs)
+	label := fmt.Sprintf(`%v`, inst.TArgs)
+	if len(inst.TNest) > 0 {
+		label = fmt.Sprintf(`%v;%s`, inst.TNest, label)
+	}
+	return fmt.Sprintf("%s[%d /* %v */]", objName, fc.pkgCtx.instanceSet.ID(inst), label)
 }
 
 // methodName returns a JS identifier (specifically, object property name)
@@ -528,7 +532,8 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		fc.pkgCtx.anonTypes = append(fc.pkgCtx.anonTypes, anonType)
 		fc.pkgCtx.anonTypeMap.Set(ty, anonType)
 	}
-	fc.pkgCtx.DeclareDCEDep(anonType)
+	// TODO(grantnelson-wf): How should we handle anonymous types that are in a generic nested context?
+	fc.pkgCtx.DeclareDCEDep(anonType, nil, nil)
 	return anonType.Name()
 }
 

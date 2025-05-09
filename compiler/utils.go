@@ -441,10 +441,11 @@ func (fc *funcContext) objectName(o types.Object) string {
 
 // knownInstances returns a list of known instantiations of the object.
 //
-// For objects without type params always returns a single trivial instance.
+// For objects without type params and not nested in a generic function or
+// method, this always returns a single trivial instance.
 func (fc *funcContext) knownInstances(o types.Object) []typeparams.Instance {
 	instances := fc.pkgCtx.instanceSet.Pkg(o.Pkg()).ForObj(o)
-	if len(instances) == 0 {
+	if len(instances) == 0 && !typeparams.HasTypeParams(o.Type()) {
 		return []typeparams.Instance{{Object: o}}
 	}
 	return instances

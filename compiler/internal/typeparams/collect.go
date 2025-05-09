@@ -13,11 +13,22 @@ import (
 // Resolver translates types defined in terms of type parameters into concrete
 // types, given a mapping from type params to type arguments.
 type Resolver struct {
+	// tParams is the list of type parameters that this resolver will substitute.
 	tParams *types.TypeParamList
-	tArgs   []types.Type
+
+	// tArgs is the list of type arguments that this resolver will resolve to.
+	tArgs []types.Type
+
+	// subster is the substitution helper that will perform the actual
+	// substitutions. This maybe nil when there are no substitutions but
+	// will still usable when nil.
 	subster *subst.Subster
 	selMemo map[typesutil.Selection]typesutil.Selection
-	parent  *Resolver
+
+	// parent is the function or method that this resolver is nested in.
+	// This may be nil if the context for this resolver is not nested in
+	// another generic function or method.
+	parent *Resolver
 }
 
 // NewResolver creates a new Resolver with tParams entries mapping to tArgs
@@ -60,12 +71,8 @@ func (r *Resolver) Substitute(typ types.Type) types.Type {
 	if r == nil || typ == nil {
 		return typ // No substitutions to be made.
 	}
-	if r.subster != nil {
-		typ = r.subster.Type(typ)
-	}
-	if r.parent != nil {
-		typ = r.parent.Substitute(typ)
-	}
+	typ = r.subster.Type(typ)
+	typ = r.parent.Substitute(typ)
 	return typ
 }
 

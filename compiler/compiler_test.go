@@ -786,10 +786,10 @@ func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
 	insts := collectDeclInstances(t, mainPkg)
 
 	exp := []string{
-		`F[_.Int]`, // Go prints `F[main.Int·2]`
 		`F[int]`,
-		`T[_.Int;]`, // `T` from `F[_.Int]` (Go prints `T[main.Int·2]`)
-		`T[int;]`,   // `T` from `F[int]`   (Go prints `T[int]`)
+		`F[main.Int]`,  // Go prints `F[main.Int·2]`
+		`T[int;]`,      // `T` from `F[int]`      (Go prints `T[int]`)
+		`T[main.Int;]`, // `T` from `F[main.Int]` (Go prints `T[main.Int·2]`)
 	}
 	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
 		t.Errorf("the instances of generics are different:\n%s", diff)
@@ -820,7 +820,8 @@ func TestNestedGenericTypeInGenericFunc(t *testing.T) {
 
 			print(F[int]())
 			print(F[Int]())
-		}`
+		}
+		`
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
@@ -829,10 +830,10 @@ func TestNestedGenericTypeInGenericFunc(t *testing.T) {
 	insts := collectDeclInstances(t, mainPkg)
 
 	exp := []string{
-		`F[Int]`,
 		`F[int]`,
-		`T[Int;int]`,
+		`F[main.Int]`,
 		`T[int;int]`,
+		`T[main.Int;int]`,
 	}
 	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
 		t.Errorf("the instances of generics are different:\n%s", diff)
@@ -864,11 +865,11 @@ func TestNestedGenericTypeInGenericFuncWithSharedTArgs(t *testing.T) {
 	insts := collectDeclInstances(t, mainPkg)
 
 	exp := []string{
-		`F[Int]`,
 		`F[int]`,
-		`T[Int;Int]`,
+		`F[main.Int]`,
 		`T[int;int]`,
-		// Make sure that T[int;Int] and T[Int;int] aren't created.
+		`T[main.Int;main.Int]`,
+		// Make sure that T[int;main.Int] and T[main.Int;int] aren't created.
 	}
 	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
 		t.Errorf("the instances of generics are different:\n%s", diff)
@@ -887,7 +888,7 @@ func collectDeclInstances(t *testing.T, pkg *Archive) []string {
 	for _, decl := range pkg.Declarations {
 		if match := rex.FindAllStringSubmatch(string(decl.DeclCode), 1); len(match) > 0 {
 			instance := match[0][1] + `[` + strings.TrimSpace(match[0][3]) + `]`
-			instance = strings.ReplaceAll(instance, `command-line-arguments.`, `_.`)
+			instance = strings.ReplaceAll(instance, `command-line-arguments`, pkg.Name)
 			insts = append(insts, instance)
 		}
 	}

@@ -508,18 +508,21 @@ func (fc *funcContext) typeName(ty types.Type) string {
 			return "$error"
 		}
 		inst := typeparams.Instance{Object: t.Obj()}
+
+		// Get type arguments for the type if there are any.
 		for i := 0; i < t.TypeArgs().Len(); i++ {
 			inst.TArgs = append(inst.TArgs, t.TypeArgs().At(i))
 		}
 
-		// TODO(grantnelson-wf): Handle nested type parameters.
+		// Get the nesting type arguments if there are any.
 		if fn := typeparams.FindNestingFunc(t.Obj()); fn != nil {
 			if fn.Scope().Contains(t.Obj().Pos()) {
-				fmt.Printf(">> FindNestingFunc(%v) = %v\n", t.Obj(), fn) // TODO(grantnelson-wf): REMOVE
-				fmt.Printf("\t\tresolver: %v\n", fc.typeResolver)        // TODO(grantnelson-wf): REMOVE
-				fmt.Printf("\t\tfunc: %v\n", fc.sig.Sig)                 // TODO(grantnelson-wf): REMOVE
-
-				inst.TNest = fc.typeResolver.TypeArgs()
+				tp := typeparams.SignatureTypeParams(fn.Type().(*types.Signature))
+				tNest := make([]types.Type, tp.Len())
+				for i := 0; i < tp.Len(); i++ {
+					tNest[i] = fc.typeResolver.Substitute(tp.At(i))
+				}
+				inst.TNest = typesutil.TypeList(tNest)
 			}
 		}
 

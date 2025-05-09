@@ -27,6 +27,7 @@ import (
 	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/internal/errorList"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
 	"github.com/neelance/sourcemap"
 	log "github.com/sirupsen/logrus"
@@ -647,7 +648,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 					return err
 				}
 
-				sourceMapFilter := &compiler.SourceMapFilter{Writer: buf}
+				sourceMapFilter := &sourcemapx.Filter{Writer: buf}
 				m := &sourcemap.Map{File: base + ".js"}
 				sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 

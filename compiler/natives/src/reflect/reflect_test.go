@@ -298,23 +298,3 @@ func TestIssue50208(t *testing.T) {
 func TestStructOfTooLarge(t *testing.T) {
 	t.Skip("This test is dependent on field alignment to determine if a struct size would exceed virtual address space.")
 }
-
-func TestSetLenCap(t *testing.T) {
-	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
-}
-
-func TestSetPanic(t *testing.T) {
-	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
-}
-
-func TestCallPanic(t *testing.T) {
-	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
-}
-
-func TestValuePanic(t *testing.T) {
-	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
-}
-
-func TestSetIter(t *testing.T) {
-	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
-}

@@ -101,21 +101,11 @@ func (c *callStack) capture() {
 }
 
 func TestCallers(t *testing.T) {
-	got := callStack{}
-
 	// Some of the GopherJS function names don't match upstream Go, or even the
 	// function names in the Go source when minified.
 	// Until https://github.com/gopherjs/gopherjs/issues/1085 is resolved, the
 	// mismatch is difficult to avoid, but we can at least use "masked" frames to
 	// make sure the number of frames matches expected.
-	want := callStack{
-		masked("runtime.Callers"),
-		masked("github.com/gopherjs/gopherjs/tests.(*callerNames).capture"),
-		masked("github.com/gopherjs/gopherjs/tests.TestCallers.func{1,2}"),
-		masked("testing.tRunner"),
-		"runtime.goexit",
-	}
-
 	opts := cmp.Comparer(func(a, b funcName) bool {
 		if a == masked("") || b == masked("") {
 			return true
@@ -124,6 +114,15 @@ func TestCallers(t *testing.T) {
 	})
 
 	t.Run("Normal", func(t *testing.T) {
+		got := callStack{}
+		want := callStack{
+			"runtime.Callers",
+			"github.com/gopherjs/gopherjs/tests.callStack.capture",
+			"github.com/gopherjs/gopherjs/tests.TestCallers.func2",
+			"testing.tRunner",
+			"runtime.goexit",
+		}
+
 		got.capture()
 		if diff := cmp.Diff(want, got, opts); diff != "" {
 			t.Errorf("runtime.Callers() returned a diff (-want,+got):\n%s", diff)
@@ -131,6 +130,18 @@ func TestCallers(t *testing.T) {
 	})
 
 	t.Run("Deferred", func(t *testing.T) {
+		got := callStack{}
+		want := callStack{
+			"runtime.Callers",
+			"github.com/gopherjs/gopherjs/tests.callStack.capture",
+			// For some reason function epilog where deferred calls are invoked doesn't
+			// get source-mapped to the original source properly, which causes node
+			// not to map the function name to the original.
+			masked("github.com/gopherjs/gopherjs/tests.TestCallers.func3"),
+			"testing.tRunner",
+			"runtime.goexit",
+		}
+
 		defer func() {
 			if diff := cmp.Diff(want, got, opts); diff != "" {
 				t.Errorf("runtime.Callers() returned a diff (-want,+got):\n%s", diff)
@@ -140,17 +151,18 @@ func TestCallers(t *testing.T) {
 	})
 
 	t.Run("Recover", func(t *testing.T) {
+		got := callStack{}
 		defer func() {
 			recover()
 			got.capture()
 
 			want := callStack{
-				masked("runtime.Callers"),
-				masked("github.com/gopherjs/gopherjs/tests.(*callerNames).capture"),
-				masked("github.com/gopherjs/gopherjs/tests.TestCallers.func3.1"),
+				"runtime.Callers",
+				"github.com/gopherjs/gopherjs/tests.callStack.capture",
+				"github.com/gopherjs/gopherjs/tests.TestCallers.func4.func1",
 				"runtime.gopanic",
-				masked("github.com/gopherjs/gopherjs/tests.TestCallers.func{1,2}"),
-				masked("testing.tRunner"),
+				"github.com/gopherjs/gopherjs/tests.TestCallers.func4",
+				"testing.tRunner",
 				"runtime.goexit",
 			}
 			if diff := cmp.Diff(want, got, opts); diff != "" {

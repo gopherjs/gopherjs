@@ -264,7 +264,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 		fc.localVars = nil // Clean up after ourselves.
 	})
 
-	d.Dce().SetName(init.Lhs[0])
+	d.Dce().SetName(init.Lhs[0], nil, nil)
 	if len(init.Lhs) != 1 || analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
 		d.Dce().SetAsAlive()
 	}
@@ -291,7 +291,7 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 				FullName: funcVarDeclFullName(o),
 				Vars:     []string{objName},
 			}
-			varDecl.Dce().SetName(o)
+			varDecl.Dce().SetName(o, nil, nil)
 			if o.Type().(*types.Signature).TypeParams().Len() != 0 {
 				varDecl.DeclCode = fc.CatchOutput(0, func() {
 					fc.Printf("%s = {};", objName)
@@ -331,7 +331,7 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		Blocking:    fc.pkgCtx.IsBlocking(inst),
 		LinkingName: symbol.New(o),
 	}
-	d.Dce().SetName(o, inst.TArgs...)
+	d.Dce().SetName(o, inst.TNest, inst.TArgs)
 
 	if typesutil.IsMethod(o) {
 		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
@@ -433,7 +433,8 @@ func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
 		FullName: typeVarDeclFullName(obj),
 		Vars:     []string{name},
 	}
-	if typeparams.HasTypeParams(obj.Type()) {
+
+	if fc.pkgCtx.instanceSet.Pkg(obj.Pkg()).ObjHasInstances(obj) {
 		varDecl.DeclCode = fc.CatchOutput(0, func() {
 			fc.Printf("%s = {};", name)
 		})
@@ -451,23 +452,35 @@ func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
 func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, error) {
 	originType := inst.Object.Type().(*types.Named)
 
-	fc.typeResolver = typeparams.NewResolver(fc.pkgCtx.typesCtx, typeparams.ToSlice(originType.TypeParams()), inst.TArgs)
+	var nestResolver *typeparams.Resolver
+	if len(inst.TNest) > 0 {
+		fn := typeparams.FindNestingFunc(inst.Object)
+		tp := typeparams.SignatureTypeParams(fn.Type().(*types.Signature))
+		nestResolver = typeparams.NewResolver(fc.pkgCtx.typesCtx, tp, inst.TNest, nil)
+	}
+	fc.typeResolver = typeparams.NewResolver(fc.pkgCtx.typesCtx, originType.TypeParams(), inst.TArgs, nestResolver)
 	defer func() { fc.typeResolver = nil }()
 
 	instanceType := originType
 	if !inst.IsTrivial() {
-		instantiated, err := types.Instantiate(fc.pkgCtx.typesCtx, originType, inst.TArgs, true)
-		if err != nil {
-			return nil, fmt.Errorf("failed to instantiate type %v with args %v: %w", originType, inst.TArgs, err)
+		if len(inst.TArgs) > 0 {
+			instantiated, err := types.Instantiate(fc.pkgCtx.typesCtx, originType, inst.TArgs, true)
+			if err != nil {
+				return nil, fmt.Errorf("failed to instantiate type %v with args %v: %w", originType, inst.TArgs, err)
+			}
+			instanceType = instantiated.(*types.Named)
 		}
-		instanceType = instantiated.(*types.Named)
+		if len(inst.TNest) > 0 {
+			instantiated := nestResolver.Substitute(instanceType)
+			instanceType = instantiated.(*types.Named)
+		}
 	}
 
 	underlying := instanceType.Underlying()
 	d := &Decl{
 		FullName: typeDeclFullName(inst),
 	}
-	d.Dce().SetName(inst.Object, inst.TArgs...)
+	d.Dce().SetName(inst.Object, inst.TNest, inst.TArgs)
 	fc.pkgCtx.CollectDCEDeps(d, func() {
 		// Code that declares a JS type (i.e. prototype) for each Go type.
 		d.DeclCode = fc.CatchOutput(0, func() {
@@ -541,7 +554,8 @@ func (fc *funcContext) structConstructor(t *types.Struct) string {
 	// If no arguments were passed, zero-initialize all fields.
 	fmt.Fprintf(constructor, "\t\tif (arguments.length === 0) {\n")
 	for i := 0; i < t.NumFields(); i++ {
-		fmt.Fprintf(constructor, "\t\t\tthis.%s = %s;\n", fieldName(t, i), fc.translateExpr(fc.zeroValue(t.Field(i).Type())).String())
+		zeroValue := fc.zeroValue(fc.fieldType(t, i))
+		fmt.Fprintf(constructor, "\t\t\tthis.%s = %s;\n", fieldName(t, i), fc.translateExpr(zeroValue).String())
 	}
 	fmt.Fprintf(constructor, "\t\t\treturn;\n")
 	fmt.Fprintf(constructor, "\t\t}\n")
@@ -591,7 +605,7 @@ func (fc *funcContext) anonTypeDecls(anonTypes []*types.TypeName) []*Decl {
 			FullName: anonTypeDeclFullName(t),
 			Vars:     []string{t.Name()},
 		}
-		d.Dce().SetName(t)
+		d.Dce().SetName(t, nil, nil)
 		fc.pkgCtx.CollectDCEDeps(d, func() {
 			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type())))
 		})

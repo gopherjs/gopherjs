@@ -21,6 +21,11 @@ type Name struct {
 
 // New constructs SymName for a given named symbol.
 func New(o types.Object) Name {
+	pkgPath := `_`
+	if pkg := o.Pkg(); pkg != nil {
+		pkgPath = pkg.Path()
+	}
+
 	if fun, ok := o.(*types.Func); ok {
 		sig := fun.Type().(*types.Signature)
 		if recv := sig.Recv(); recv != nil {
@@ -28,18 +33,18 @@ func New(o types.Object) Name {
 			typ := recv.Type()
 			if ptr, ok := typ.(*types.Pointer); ok {
 				return Name{
-					PkgPath: o.Pkg().Path(),
+					PkgPath: pkgPath,
 					Name:    "(*" + ptr.Elem().(*types.Named).Obj().Name() + ")." + o.Name(),
 				}
 			}
 			return Name{
-				PkgPath: o.Pkg().Path(),
+				PkgPath: pkgPath,
 				Name:    typ.(*types.Named).Obj().Name() + "." + o.Name(),
 			}
 		}
 	}
 	return Name{
-		PkgPath: o.Pkg().Path(),
+		PkgPath: pkgPath,
 		Name:    o.Name(),
 	}
 }

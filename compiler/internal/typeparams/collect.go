@@ -30,9 +30,9 @@ func NewResolver(tc *types.Context, tParams *types.TypeParamList, tArgs []types.
 	r := &Resolver{
 		tParams: tParams,
 		tArgs:   tArgs,
+		parent:  parent,
 		subster: subst.New(tc, tParams, tArgs),
 		selMemo: map[typesutil.Selection]typesutil.Selection{},
-		parent:  parent,
 	}
 	return r
 }
@@ -55,9 +55,9 @@ func (r *Resolver) TypeArgs() []types.Type {
 	return r.tArgs
 }
 
-// Parent is the function or method that this resolver is nested in.
-// This may be nil if the context for this resolver is not nested in
-// another generic function or method.
+// Parent is the resolver for the function or method that this resolver
+// is nested in. This may be nil if the context for this resolver is not
+// nested in another generic function or method.
 func (r *Resolver) Parent() *Resolver {
 	if r == nil {
 		return nil

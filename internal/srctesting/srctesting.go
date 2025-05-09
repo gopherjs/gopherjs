@@ -151,7 +151,6 @@ func Format(t *testing.T, fset *token.FileSet, node any) string {
 // LookupObj returns a top-level object with the given name.
 //
 // Methods can be referred to as RecvTypeName.MethodName.
-// If part of the path is not found, this returns nil.
 func LookupObj(pkg *types.Package, name string) types.Object {
 	path := strings.Split(name, ".")
 	scope := pkg.Scope()
@@ -160,7 +159,7 @@ func LookupObj(pkg *types.Package, name string) types.Object {
 	for len(path) > 0 {
 		obj = scope.Lookup(path[0])
 		if obj == nil {
-			return nil
+			panic(fmt.Sprintf("failed to find %q in %q", path[0], name))
 		}
 		path = path[1:]
 

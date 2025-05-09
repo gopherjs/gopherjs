@@ -415,7 +415,11 @@ func TestCollector(t *testing.T) {
 	c.Scan(pkg, file)
 
 	inst := func(name, tNest, tArg string) Instance {
-		return createInstance(t, pkg, f.FileSet, name, tNest, tArg)
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
 	}
 	want := []Instance{
 		inst(`typ`, ``, `int`),
@@ -469,7 +473,11 @@ func TestCollector_MoreNesting(t *testing.T) {
 	c.Scan(pkg, file)
 
 	inst := func(name, tNest, tArg string) Instance {
-		return createInstance(t, pkg, f.FileSet, name, tNest, tArg)
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
 	}
 	want := []Instance{
 		inst(`fun`, ``, `int32`),
@@ -534,7 +542,11 @@ func TestCollector_NestingWithVars(t *testing.T) {
 	c.Scan(pkg, file)
 
 	inst := func(name, tNest, tArg string) Instance {
-		return createInstance(t, pkg, f.FileSet, name, tNest, tArg)
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
 	}
 	want := []Instance{
 		inst(`S`, ``, `int`),
@@ -543,18 +555,6 @@ func TestCollector_NestingWithVars(t *testing.T) {
 	got := c.Instances.Pkg(pkg).Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
 		t.Errorf("Instances from initialSeeder contain diff (-want,+got):\n%s", diff)
-	}
-}
-
-func createInstance(t *testing.T, pkg *types.Package, fSet *token.FileSet, name, tNest, tArg string) Instance {
-	obj := srctesting.LookupObj(pkg, name)
-	if obj == nil {
-		t.Fatalf(`Object %q not found in package %q`, name, pkg.Name())
-	}
-	return Instance{
-		Object: srctesting.LookupObj(pkg, name),
-		TNest:  evalTypeArgs(t, fSet, pkg, tNest),
-		TArgs:  evalTypeArgs(t, fSet, pkg, tArg),
 	}
 }
 

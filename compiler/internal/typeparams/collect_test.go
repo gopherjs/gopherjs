@@ -494,6 +494,58 @@ func TestCollector_MoreNesting(t *testing.T) {
 	}
 }
 
+func TestCollector_NestingWithVars(t *testing.T) {
+	// This is loosely based off of go1.19.13/test/typeparam/issue47740b.go
+	// I was getting an error where `Q.print[int;]` was showing up when
+	// `Q.print` is not in a nesting context with `int` and this helped debug
+	// it. The problem was that `q` was being treated like a type not a var.
+	src := `package test
+
+	type Q struct{ v any }
+	func (q Q) print() {
+		println(q.v)
+	}
+
+	func newQ(v any) Q {
+		return Q{v}
+	}
+
+	type S[T any] struct{ x T }
+	func (s S[T]) echo() {
+		q := newQ(s.x)
+		q.print()
+	}
+
+	func a() {
+		s := S[int]{x: 0}
+		s.echo()
+	}
+	`
+
+	f := srctesting.New(t)
+	file := f.Parse(`test.go`, src)
+	info, pkg := f.Check(`pkg/test`, file)
+
+	c := Collector{
+		TContext:  types.NewContext(),
+		Info:      info,
+		Instances: &PackageInstanceSets{},
+	}
+	c.Scan(pkg, file)
+
+	inst := func(name, tNest, tArg string) Instance {
+		return createInstance(t, pkg, f.FileSet, name, tNest, tArg)
+	}
+	want := []Instance{
+		inst(`S`, ``, `int`),
+		inst(`S.echo`, ``, `int`),
+	}
+	got := c.Instances.Pkg(pkg).Values()
+	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+		t.Errorf("Instances from initialSeeder contain diff (-want,+got):\n%s", diff)
+	}
+}
+
 func createInstance(t *testing.T, pkg *types.Package, fSet *token.FileSet, name, tNest, tArg string) Instance {
 	obj := srctesting.LookupObj(pkg, name)
 	if obj == nil {

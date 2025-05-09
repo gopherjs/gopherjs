@@ -208,6 +208,11 @@ func (c *visitor) visitInstance(ident *ast.Ident, inst types.Instance) {
 }
 
 func (c *visitor) visitNestedType(obj types.Object) {
+	if _, ok := obj.(*types.TypeName); !ok {
+		// Found a variable or function, not a type, so skip it.
+		return
+	}
+
 	typ := obj.Type()
 	if ptr, ok := typ.(*types.Pointer); ok {
 		typ = ptr.Elem()
@@ -331,6 +336,8 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 	}
 	objMap := map[types.Object]ast.Node{}
 
+	fmt.Printf("Scan %v\n", c.Instances) // TODO(grantnelson-wf): REMOVE
+
 	// Collect instances of generic objects in non-generic code in the package and
 	// add then to the existing InstanceSet.
 	sc := seedVisitor{
@@ -356,6 +363,9 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 				resolver:  NewResolver(c.TContext, tParams, inst.TArgs, nil),
 				info:      c.Info,
 			}
+
+			fmt.Printf("visiting %s\n", inst.String()) // TODO(grantnelson-wf): REMOVE
+
 			ast.Walk(&v, objMap[inst.Object])
 
 		case *types.Named:

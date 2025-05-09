@@ -547,7 +547,6 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		fc.pkgCtx.anonTypes = append(fc.pkgCtx.anonTypes, anonType)
 		fc.pkgCtx.anonTypeMap.Set(ty, anonType)
 	}
-	// TODO(grantnelson-wf): How should we handle anonymous types that are in a generic nested context?
 	fc.pkgCtx.DeclareDCEDep(anonType, nil, nil)
 	return anonType.Name()
 }

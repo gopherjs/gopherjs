@@ -446,7 +446,6 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 				id := spec.(*ast.TypeSpec).Name
 				o := fc.pkgCtx.Defs[id].(*types.TypeName)
 				fc.pkgCtx.typeNames.Add(o)
-				// TODO(grantnelson-wf): How should the nesting type be handled?
 				fc.pkgCtx.DeclareDCEDep(o, nil, nil)
 			}
 		case token.CONST:

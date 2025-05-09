@@ -4,7 +4,6 @@
 package subst
 
 import (
-	"fmt"
 	"go/types"
 )
 
@@ -19,10 +18,6 @@ type Subster struct {
 
 // New creates a new Subster with a given list of type parameters and matching args.
 func New(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type) *Subster {
-	if tParams.Len() != len(tArgs) {
-		panic(fmt.Errorf(`New() argument count must match (%d != %d)`, tParams.Len(), len(tArgs)))
-	}
-
 	if tParams.Len() == 0 && len(tArgs) == 0 {
 		return nil
 	}
@@ -31,11 +26,20 @@ func New(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type) *S
 	return &Subster{impl: subst}
 }
 
-// Type returns a version of typ with all references to type parameters replaced
-// with the corresponding type arguments.
+// Type returns a version of typ with all references to type parameters
+// replaced with the corresponding type arguments.
 func (s *Subster) Type(typ types.Type) types.Type {
 	if s == nil {
 		return typ
 	}
 	return s.impl.typ(typ)
+}
+
+// Types returns a version of ts with all references to type parameters
+// replaced with the corresponding type arguments.
+func (s *Subster) Types(ts []types.Type) []types.Type {
+	if s == nil {
+		return ts
+	}
+	return s.impl.types(ts)
 }

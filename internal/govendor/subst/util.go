@@ -17,8 +17,7 @@ func assert(p bool, msg string) {
 	}
 }
 
-// From https://cs.opensource.google/go/x/tools/+/refs/tags/v0.32.0:go/ssa/wrappers.go;l=262
-// I pulled a newer version that uses NewSignatureType instead of NewSignature.
+// From https://cs.opensource.google/go/x/tools/+/refs/tags/v0.33.0:go/ssa/wrappers.go;l=262
 func changeRecv(s *types.Signature, recv *types.Var) *types.Signature {
 	return types.NewSignatureType(recv, nil, nil, s.Params(), s.Results(), s.Variadic())
 }

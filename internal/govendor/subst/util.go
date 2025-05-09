@@ -4,9 +4,7 @@
 
 package subst
 
-import (
-	"go/types"
-)
+import "go/types"
 
 // assert panics with the mesage msg if p is false.
 // Avoid combining with expensive string formatting.

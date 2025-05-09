@@ -4,6 +4,7 @@
 package subst
 
 import (
+	"fmt"
 	"go/types"
 )
 
@@ -18,6 +19,10 @@ type Subster struct {
 
 // New creates a new Subster with a given list of type parameters and matching args.
 func New(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type) *Subster {
+	if tParams.Len() != len(tArgs) {
+		panic(fmt.Errorf("number of type parameters and arguments must match: %d != %d", tParams.Len(), len(tArgs)))
+	}
+
 	if tParams.Len() == 0 && len(tArgs) == 0 {
 		return nil
 	}

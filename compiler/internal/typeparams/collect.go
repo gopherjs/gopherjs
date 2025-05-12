@@ -151,6 +151,7 @@ type visitor struct {
 	instances *PackageInstanceSets
 	resolver  *Resolver
 	info      *types.Info
+	tNest     []types.Type // The type arguments for a nested context.
 }
 
 var _ ast.Visitor = &visitor{}
@@ -193,15 +194,10 @@ func (c *visitor) visitInstance(ident *ast.Ident, inst types.Instance) {
 	}
 
 	// If the object is defined in the same scope as the instance,
-	// then we apply the current type arguments.
-	// If there are no type arguments then the type is defined at the
-	// package level, or in a concrete function or method.
-	// Otherwise, the type is in a generic function or method
-	// and we need to apply the nested type arguments for the instance of the
-	// generic function or method the type is defined in.
+	// then we apply the current nested type arguments.
 	var tNest []types.Type
 	if obj.Parent().Contains(ident.Pos()) {
-		tNest = c.resolver.TypeArgs()
+		tNest = c.tNest
 	}
 
 	c.addInstance(obj, tArgs, tNest)
@@ -220,7 +216,7 @@ func (c *visitor) visitNestedType(obj types.Object) {
 
 	t, ok := typ.(*types.Named)
 	if !ok || t.TypeParams().Len() > 0 {
-		// Found a generic type or not a named type (e.g. type parameter).
+		// Found a generic type or an unnamed type (e.g. type parameter).
 		// Don't add generic types yet because they
 		// will be added when we find an instance of them.
 		return
@@ -231,15 +227,20 @@ func (c *visitor) visitNestedType(obj types.Object) {
 
 func (c *visitor) addInstance(obj types.Object, tArgList *types.TypeList, tNest []types.Type) {
 	tArgs := c.resolver.SubstituteAll(tArgList)
-	for _, ta := range tArgs {
-		if _, ok := ta.(*types.TypeParam); ok {
-			// Skip any instances that still have type parameters in them after
-			// substitution. This occurs when a type is defined while nested
-			// in a generic context and is not fully instantiated yet.
-			// We need to wait until we find a full instantiation of the type.
-			return
-		}
+	if isGeneric(tArgs...) {
+		// Skip any instances that still have type parameters in them after
+		// substitution. This occurs when a type is defined while nested
+		// in a generic context and is not fully instantiated yet.
+		// We need to wait until we find a full instantiation of the type.
+		return
 	}
+
+	fmt.Printf(">> add instance: %s\n", Instance{
+		Object: obj,
+		TArgs:  tArgs,
+		TNest:  tNest,
+	}.String()) // TODO(grantnelson-wf): REMOVE
+	fmt.Printf("\t%d: %s\n", obj.Pos(), c.resolver.String()) // TODO(grantnelson-wf): REMOVE
 
 	c.instances.Add(Instance{
 		Object: obj,
@@ -355,29 +356,46 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 
 		switch typ := inst.Object.Type().(type) {
 		case *types.Signature:
-			tParams := SignatureTypeParams(typ)
-			v := visitor{
-				instances: c.Instances,
-				resolver:  NewResolver(c.TContext, tParams, inst.TArgs, nil),
-				info:      c.Info,
-			}
-			ast.Walk(&v, objMap[inst.Object])
+			c.scanSignature(inst, typ, objMap)
 
 		case *types.Named:
-			obj := typ.Obj()
-			node := objMap[obj]
-			if node == nil {
-				// Types without an entry in objMap are concrete types
-				// that are defined in a generic context. Skip them.
-				continue
-			}
-
-			v := visitor{
-				instances: c.Instances,
-				resolver:  NewResolver(c.TContext, typ.TypeParams(), inst.TArgs, nil),
-				info:      c.Info,
-			}
-			ast.Walk(&v, node)
+			c.scanNamed(inst, typ, objMap)
 		}
 	}
+}
+
+func (c *Collector) scanSignature(inst Instance, typ *types.Signature, objMap map[types.Object]ast.Node) {
+	tParams := SignatureTypeParams(typ)
+	v := visitor{
+		instances: c.Instances,
+		resolver:  NewResolver(c.TContext, tParams, inst.TArgs, nil),
+		info:      c.Info,
+		tNest:     inst.TArgs,
+	}
+	ast.Walk(&v, objMap[inst.Object])
+}
+
+func (c *Collector) scanNamed(inst Instance, typ *types.Named, objMap map[types.Object]ast.Node) {
+	obj := typ.Obj()
+	node := objMap[obj]
+	if node == nil {
+		// Types without an entry in objMap are concrete types
+		// that are defined in a generic context. Skip them.
+		return
+	}
+
+	var nestResolver *Resolver
+	if len(inst.TNest) > 0 {
+		fn := FindNestingFunc(inst.Object)
+		tp := SignatureTypeParams(fn.Type().(*types.Signature))
+		nestResolver = NewResolver(c.TContext, tp, inst.TNest, nil)
+	}
+
+	v := visitor{
+		instances: c.Instances,
+		resolver:  NewResolver(c.TContext, typ.TypeParams(), inst.TArgs, nestResolver),
+		info:      c.Info,
+		tNest:     inst.TNest,
+	}
+	ast.Walk(&v, node)
 }

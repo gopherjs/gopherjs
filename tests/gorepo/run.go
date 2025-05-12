@@ -153,10 +153,10 @@ var knownFails = map[string]failReason{
 	"typeparam/issue51733.go":  {category: usesUnsupportedPackage, desc: "unsafe: uintptr to struct pointer conversion is unsupported"},
 	"typeparam/typeswitch5.go": {category: lowLevelRuntimeDifference, desc: "GopherJS println format is different from Go's"},
 
-	// Failures related to the lack of generics support. Ideally, this section
-	// should be emptied once https://github.com/gopherjs/gopherjs/issues/1013 is
-	// fixed.
-	"typeparam/nested.go": {category: usesUnsupportedGenerics, desc: "incomplete support for generic types inside generic functions"},
+	// Failures related to the lack of nested type number indicators.
+	// For example, this test outputs `4,7: main.T·2[int;main.U·3[int;int]]` in Go (see "typeparam/nested.out" for example output)
+	// but `4,7: main.T[int;main.U[int;int]]` in GopherJS because we doesn't currently add the `·2` and `·3` indicators to the type names.
+	"typeparam/nested.go": {category: other, desc: "incomplete support for nested type numbering"},
 
 	// These are new tests in Go 1.19
 	"typeparam/issue51521.go": {category: lowLevelRuntimeDifference, desc: "different panic message when calling a method on nil interface"},
@@ -171,7 +171,6 @@ const (
 	neverTerminates                       // Test never terminates (so avoid starting it).
 	usesUnsupportedPackage                // Test fails because it imports an unsupported package, e.g., "unsafe".
 	requiresSourceMapSupport              // Test fails without source map support (as configured in CI), because it tries to check filename/line number via runtime.Caller.
-	usesUnsupportedGenerics               // Test uses generics (type parameters) that are not currently supported.
 	compilerPanic
 	unsureIfGopherJSSupportsThisFeature
 	lowLevelRuntimeDifference // JavaScript runtime behaves differently from Go in ways that are difficult to work around.

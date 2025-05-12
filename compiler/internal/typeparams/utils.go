@@ -84,3 +84,58 @@ func RequiresGenericsSupport(info *types.Info) error {
 
 	return nil
 }
+
+// isGeneric will search all the given types and their subtypes for a
+// *types.TypeParam. This will not check if a type could be generic,
+// but if each instantiation is not completely concrete yet.
+//
+// This is useful to check for generics types like `X[B[T]]`, where
+// `X` appears concrete because it is instantiated with the type argument `B[T]`,
+// however the `T` inside `B[T]` is a type parameter making `X[B[T]]` a generic
+// type since it required instantiation to a concrete type, e.g. `X[B[int]]`.
+func isGeneric(typ ...types.Type) bool {
+	var containsTypeParam func(t types.Type) bool
+
+	foreach := func(count int, getter func(index int) types.Type) bool {
+		for i := 0; i < count; i++ {
+			if containsTypeParam(getter(i)) {
+				return true
+			}
+		}
+		return false
+	}
+
+	seen := make(map[types.Type]struct{})
+	containsTypeParam = func(t types.Type) bool {
+		if _, ok := seen[t]; ok {
+			return false
+		}
+		seen[t] = struct{}{}
+
+		switch t := t.(type) {
+		case *types.TypeParam:
+			return true
+		case *types.Named:
+			return t.TypeParams().Len() != t.TypeArgs().Len() ||
+				foreach(t.TypeArgs().Len(), func(i int) types.Type { return t.TypeArgs().At(i) }) ||
+				containsTypeParam(t.Underlying())
+		case *types.Struct:
+			return foreach(t.NumFields(), func(i int) types.Type { return t.Field(i).Type() })
+		case *types.Interface:
+			return foreach(t.NumMethods(), func(i int) types.Type { return t.Method(i).Type() })
+		case *types.Signature:
+			return foreach(t.Params().Len(), func(i int) types.Type { return t.Params().At(i).Type() }) ||
+				foreach(t.Results().Len(), func(i int) types.Type { return t.Results().At(i).Type() })
+		case *types.Map:
+			return containsTypeParam(t.Key()) || containsTypeParam(t.Elem())
+		case interface{ Elem() types.Type }:
+			// Handles *types.Pointer, *types.Slice, *types.Array, *types.Chan
+			return containsTypeParam(t.Elem())
+		default:
+			// Other types (e.g., basic types) do not contain type parameters.
+			return false
+		}
+	}
+
+	return foreach(len(typ), func(i int) types.Type { return typ[i] })
+}

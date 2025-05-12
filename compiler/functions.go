@@ -49,9 +49,9 @@ func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, inst typep
 	}
 
 	if sig.TypeParams().Len() > 0 {
-		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, typeparams.ToSlice(sig.TypeParams()), inst.TArgs)
+		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, sig.TypeParams(), inst.TArgs, nil)
 	} else if sig.RecvTypeParams().Len() > 0 {
-		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, typeparams.ToSlice(sig.RecvTypeParams()), inst.TArgs)
+		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, sig.RecvTypeParams(), inst.TArgs, nil)
 	}
 	if c.objectNames == nil {
 		c.objectNames = map[types.Object]string{}

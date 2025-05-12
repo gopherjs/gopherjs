@@ -754,6 +754,7 @@ func Test_Info_SpecificCasesDeps(t *testing.T) {
 	tests := []struct {
 		name     string
 		obj      types.Object
+		tNest    []types.Type
 		tArgs    []types.Type
 		wantDeps []string
 	}{
@@ -808,16 +809,48 @@ func Test_Info_SpecificCasesDeps(t *testing.T) {
 				`astoria.shuffle(string) int`,
 			},
 		},
+		{
+			name: `a generic method with a nested concrete type instance`,
+			obj: parseObject(t, `quan`,
+				`package astoria
+				func data[T any](v T) any {
+					type quan struct { V T }
+					return quan{ V: v }
+				}`),
+			tNest: []types.Type{types.Typ[types.Int]},
+			// TODO(grantnelson-wf): This should take into account the nested type.
+			//wantDeps: []string{`astoria.quan[int;]`},
+			wantDeps: []string{`astoria.quan`},
+		},
+		{
+			name: `a generic method with a nested generic type instance`,
+			obj: parseObject(t, `matuszak`,
+				`package astoria
+				func sloth[T any]() any {
+					type matuszak[U any] struct { X T; Y U }
+					return matuszak[T]{}
+				}`),
+			tNest: []types.Type{types.Typ[types.String]},
+			tArgs: []types.Type{types.Typ[types.Bool]},
+			// TODO(grantnelson-wf): This should take into account the nested type.
+			//wantDeps: []string{`astoria.matuszak[string;bool]`},
+			wantDeps: []string{`astoria.matuszak[bool]`},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &testDecl{}
-			t.Logf(`object: %s with [%s]`, types.ObjectString(tt.obj, nil), (typesutil.TypeList)(tt.tArgs).String())
+			tail := ``
+			if len(tt.tNest) > 0 {
+				tail += (typesutil.TypeList)(tt.tNest).String() + `;`
+			}
+			tail += (typesutil.TypeList)(tt.tArgs).String()
+			t.Logf(`object: %s with [%s]`, types.ObjectString(tt.obj, nil), tail)
 
 			c := Collector{}
 			c.CollectDCEDeps(d, func() {
-				c.DeclareDCEDep(tt.obj, nil, tt.tArgs)
+				c.DeclareDCEDep(tt.obj, tt.tNest, tt.tArgs)
 			})
 			equalSlices(t, d.Dce().getDeps(), tt.wantDeps)
 		})

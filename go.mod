@@ -3,7 +3,7 @@ module github.com/gopherjs/gopherjs
 go 1.18
 
 require (
-	github.com/evanw/esbuild v0.18.0
+	github.com/evanw/esbuild v0.25.4
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/google/go-cmp v0.5.8
 	github.com/msvitok77/goembed v0.3.5
@@ -11,8 +11,8 @@ require (
 	github.com/neelance/sourcemap v0.0.0-20200213170602-2833bce08e4c
 	github.com/shurcooL/go v0.0.0-20200502201357-93f07166e636
 	github.com/sirupsen/logrus v1.8.1
-	github.com/spf13/cobra v1.2.1
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/cobra v1.9.1
+	github.com/spf13/pflag v1.0.6
 	golang.org/x/sync v0.5.0
 	golang.org/x/sys v0.10.0
 	golang.org/x/term v0.0.0-20220411215600-e5f449aeb171
@@ -20,6 +20,6 @@ require (
 )
 
 require (
-	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	golang.org/x/mod v0.14.0 // indirect
 )

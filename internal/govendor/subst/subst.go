@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// Copy of https://cs.opensource.google/go/x/tools/+/refs/tags/v0.17.0:go/ssa/subst.go
+// Any changes to this copy are labelled with GOPHERJS.
 package subst
 
 import (
@@ -81,9 +83,12 @@ func (subst *subster) typ(t types.Type) (res types.Type) {
 	// fall through if result r will be identical to t, types.Identical(r, t).
 	switch t := t.(type) {
 	case *types.TypeParam:
-		r := subst.replacements[t]
-		assert(r != nil, "type param without replacement encountered")
-		return r
+		// GOPHERJS: Replaced an assert that was causing a panic for nested types with code from
+		// https://cs.opensource.google/go/x/tools/+/refs/tags/v0.33.0:go/ssa/subst.go;l=92
+		if r := subst.replacements[t]; r != nil {
+			return r
+		}
+		return t
 
 	case *types.Basic:
 		return t

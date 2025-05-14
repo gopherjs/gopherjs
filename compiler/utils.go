@@ -198,7 +198,7 @@ func (fc *funcContext) translateSelection(sel typesutil.Selection, pos token.Pos
 			jsFieldName := s.Field(index).Name()
 			for {
 				fields = append(fields, fieldName(s, 0))
-				ft := s.Field(0).Type()
+				ft := fc.fieldType(s, 0)
 				if typesutil.IsJsObject(ft) {
 					return fields, jsTag
 				}
@@ -215,7 +215,7 @@ func (fc *funcContext) translateSelection(sel typesutil.Selection, pos token.Pos
 			}
 		}
 		fields = append(fields, fieldName(s, index))
-		t = s.Field(index).Type()
+		t = fc.fieldType(s, index)
 	}
 	return fields, ""
 }
@@ -441,13 +441,16 @@ func (fc *funcContext) objectName(o types.Object) string {
 
 // knownInstances returns a list of known instantiations of the object.
 //
-// For objects without type params always returns a single trivial instance.
+// For objects without type params and not nested in a generic function or
+// method, this always returns a single trivial instance.
+// If the object is generic, or in a generic function or method, but there are
+// no instances, then the object is unused and an empty list is returned.
 func (fc *funcContext) knownInstances(o types.Object) []typeparams.Instance {
-	if !typeparams.HasTypeParams(o.Type()) {
+	instances := fc.pkgCtx.instanceSet.Pkg(o.Pkg()).ForObj(o)
+	if len(instances) == 0 && !typeparams.HasTypeParams(o.Type()) {
 		return []typeparams.Instance{{Object: o}}
 	}
-
-	return fc.pkgCtx.instanceSet.Pkg(o.Pkg()).ForObj(o)
+	return instances
 }
 
 // instName returns a JS expression that refers to the provided instance of a
@@ -459,7 +462,8 @@ func (fc *funcContext) instName(inst typeparams.Instance) string {
 		return objName
 	}
 	fc.pkgCtx.DeclareDCEDep(inst.Object, inst.TArgs...)
-	return fmt.Sprintf("%s[%d /* %v */]", objName, fc.pkgCtx.instanceSet.ID(inst), inst.TArgs)
+	label := inst.TypeParamsString(` /* `, ` */`)
+	return fmt.Sprintf("%s[%d%s]", objName, fc.pkgCtx.instanceSet.ID(inst), label)
 }
 
 // methodName returns a JS identifier (specifically, object property name)
@@ -504,14 +508,31 @@ func (fc *funcContext) typeName(ty types.Type) string {
 			return "$error"
 		}
 		inst := typeparams.Instance{Object: t.Obj()}
+
+		// Get type arguments for the type if there are any.
 		for i := 0; i < t.TypeArgs().Len(); i++ {
 			inst.TArgs = append(inst.TArgs, t.TypeArgs().At(i))
 		}
+
+		// Get the nesting type arguments if there are any.
+		if fn := typeparams.FindNestingFunc(t.Obj()); fn != nil {
+			if fn.Scope().Contains(t.Obj().Pos()) {
+				tp := typeparams.SignatureTypeParams(fn.Type().(*types.Signature))
+				tNest := make([]types.Type, tp.Len())
+				for i := 0; i < tp.Len(); i++ {
+					tNest[i] = fc.typeResolver.Substitute(tp.At(i))
+				}
+				inst.TNest = typesutil.TypeList(tNest)
+			}
+		}
+
 		return fc.instName(inst)
 	case *types.Interface:
 		if t.Empty() {
 			return "$emptyInterface"
 		}
+	case *types.TypeParam:
+		panic(fmt.Errorf("unexpected type parameter: %v", t))
 	}
 
 	// For anonymous composite types, generate a synthetic package-level type
@@ -573,6 +594,12 @@ func (fc *funcContext) typeOf(expr ast.Expr) types.Type {
 		}
 	}
 	return fc.typeResolver.Substitute(typ)
+}
+
+// fieldType returns the type of the i-th field of the given struct
+// after substituting type parameters with concrete types for nested context.
+func (fc *funcContext) fieldType(t *types.Struct, i int) types.Type {
+	return fc.typeResolver.Substitute(t.Field(i).Type())
 }
 
 func (fc *funcContext) selectionOf(e *ast.SelectorExpr) (typesutil.Selection, bool) {

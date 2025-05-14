@@ -7,8 +7,10 @@ import (
 )
 
 func TestInstanceMap(t *testing.T) {
+	pkg := types.NewPackage(`testPkg`, `testPkg`)
+
 	i1 := Instance{
-		Object: types.NewTypeName(token.NoPos, nil, "i1", nil),
+		Object: types.NewTypeName(token.NoPos, pkg, "i1", nil),
 		TArgs: []types.Type{
 			types.Typ[types.Int],
 			types.Typ[types.Int8],
@@ -23,7 +25,7 @@ func TestInstanceMap(t *testing.T) {
 	}
 
 	i2 := Instance{
-		Object: types.NewTypeName(token.NoPos, nil, "i2", nil), // Different pointer.
+		Object: types.NewTypeName(token.NoPos, pkg, "i2", nil), // Different pointer.
 		TArgs: []types.Type{
 			types.Typ[types.Int],
 			types.Typ[types.Int8],
@@ -70,7 +72,7 @@ func TestInstanceMap(t *testing.T) {
 		if got := m.Len(); got != 1 {
 			t.Errorf("Got: map length %d. Want: 1.", got)
 		}
-		if got, want := m.String(), `{{type i1 int, int8}:abc}`; got != want {
+		if got, want := m.String(), `{testPkg.i1<int, int8>:abc}`; got != want {
 			t.Errorf("Got: map string %q. Want: map string %q.", got, want)
 		}
 		if got, want := m.Keys(), []Instance{i1}; !keysMatch(got, want) {
@@ -95,7 +97,7 @@ func TestInstanceMap(t *testing.T) {
 		if got := m.Get(i1clone); got != "def" {
 			t.Errorf(`Got: getting set key returned %q. Want: "def"`, got)
 		}
-		if got, want := m.String(), `{{type i1 int, int8}:def}`; got != want {
+		if got, want := m.String(), `{testPkg.i1<int, int8>:def}`; got != want {
 			t.Errorf("Got: map string %q. Want: map string %q.", got, want)
 		}
 		if got, want := m.Keys(), []Instance{i1}; !keysMatch(got, want) {
@@ -165,7 +167,7 @@ func TestInstanceMap(t *testing.T) {
 		if got := m.Len(); got != 5 {
 			t.Errorf("Got: map length %d. Want: 5.", got)
 		}
-		if got, want := m.String(), `{{type i1 int, int8}:def, {type i1 int, int}:456, {type i1 string, string}:789, {type i1 }:ghi, {type i2 int, int8}:123}`; got != want {
+		if got, want := m.String(), `{testPkg.i1:ghi, testPkg.i1<int, int8>:def, testPkg.i1<int, int>:456, testPkg.i1<string, string>:789, testPkg.i2<int, int8>:123}`; got != want {
 			t.Errorf("Got: map string %q. Want: map string %q.", got, want)
 		}
 		if got, want := m.Keys(), []Instance{i1, i2, i3, i4, i5}; !keysMatch(got, want) {

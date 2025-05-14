@@ -158,6 +158,9 @@ func LookupObj(pkg *types.Package, name string) types.Object {
 
 	for len(path) > 0 {
 		obj = scope.Lookup(path[0])
+		if obj == nil {
+			panic(fmt.Sprintf("failed to find %q in %q", path[0], name))
+		}
 		path = path[1:]
 
 		if fun, ok := obj.(*types.Func); ok {
@@ -170,6 +173,9 @@ func LookupObj(pkg *types.Package, name string) types.Object {
 		if len(path) > 0 {
 			obj, _, _ = types.LookupFieldOrMethod(obj.Type(), true, obj.Pkg(), path[0])
 			path = path[1:]
+			if fun, ok := obj.(*types.Func); ok {
+				scope = fun.Scope()
+			}
 		}
 	}
 	return obj

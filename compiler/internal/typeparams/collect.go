@@ -19,7 +19,7 @@ type Resolver struct {
 
 	// subster is the substitution helper that will perform the actual
 	// substitutions. This maybe nil when there are no substitutions but
-	// will still usable when nil.
+	// will still be usable when nil.
 	subster *subst.Subster
 	selMemo map[typesutil.Selection]typesutil.Selection
 }

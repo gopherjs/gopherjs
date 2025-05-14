@@ -323,11 +323,17 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 			if !field.Exported() {
 				pkgPath = field.Pkg().Path()
 			}
-			fields[i] = fmt.Sprintf(`{prop: "%s", name: %s, embedded: %t, exported: %t, typ: %s, tag: %s}`, fieldName(t, i), encodeString(field.Name()), field.Anonymous(), field.Exported(), fc.typeName(field.Type()), encodeString(t.Tag(i)))
+			ft := fc.fieldType(t, i)
+			fields[i] = fmt.Sprintf(`{prop: "%s", name: %s, embedded: %t, exported: %t, typ: %s, tag: %s}`,
+				fieldName(t, i), encodeString(field.Name()), field.Anonymous(), field.Exported(), fc.typeName(ft), encodeString(t.Tag(i)))
 		}
 		return fmt.Sprintf(`"%s", [%s]`, pkgPath, strings.Join(fields, ", "))
 	case *types.TypeParam:
-		err := bailout(fmt.Errorf(`%v has unexpected generic type parameter %T`, ty, ty))
+		tr := fc.typeResolver.Substitute(ty)
+		if tr != ty {
+			return fc.initArgs(tr)
+		}
+		err := bailout(fmt.Errorf(`"%v" has unexpected generic type parameter %T`, ty, ty))
 		panic(err)
 	default:
 		err := bailout(fmt.Errorf("%v has unexpected type %T", ty, ty))

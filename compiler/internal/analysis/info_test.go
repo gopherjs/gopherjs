@@ -382,6 +382,7 @@ func TestBlocking_Defers_WithMultipleReturns(t *testing.T) {
 	// of which flow control statements (e.g. if-statements) are terminating
 	// or not. Any defers added in a terminating control flow would not
 	// propagate to returns that are not in that block.
+	// See golang.org/x/tools/go/ssa for flow control analysis.
 	//
 	// For now we simply build up the list of defers as we go making
 	// the return on line 31 also blocking.

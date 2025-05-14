@@ -461,7 +461,7 @@ func (fc *funcContext) instName(inst typeparams.Instance) string {
 	if inst.IsTrivial() {
 		return objName
 	}
-	fc.pkgCtx.DeclareDCEDep(inst.Object, inst.TArgs...)
+	fc.pkgCtx.DeclareDCEDep(inst.Object, nil, inst.TArgs)
 	label := inst.TypeParamsString(` /* `, ` */`)
 	return fmt.Sprintf("%s[%d%s]", objName, fc.pkgCtx.instanceSet.ID(inst), label)
 }

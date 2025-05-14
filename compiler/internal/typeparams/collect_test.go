@@ -611,7 +611,6 @@ func TestCollector_RecursiveTypeParams(t *testing.T) {
 }
 
 func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
-	t.Skip(`Skipping test due to known issue with nested recursive type parameters.`)
 	// TODO(grantnelson-wf): This test is failing because the type parameters
 	// inside of U are not being resolved to concrete types. This is because
 	// when instantiating X in the collector, we are not resolving the
@@ -672,7 +671,6 @@ func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
 }
 
 func TestCollector_NestedTypeParams(t *testing.T) {
-	t.Skip(`Skipping test due to known issue with nested recursive type parameters.`)
 	// TODO(grantnelson-wf): This test is failing because the type parameters
 	// inside of U are not being resolved to concrete types. This is because
 	// when instantiating X in the collector, we are not resolving the

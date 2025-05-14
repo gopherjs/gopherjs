@@ -193,7 +193,7 @@ func candidateArgsMatch[V any](key Instance, candidate *mapEntry[V]) bool {
 // Provided hasher is used to compute hashes of individual types, which are
 // xor'ed together. Xor preserves bit distribution property, so the combined
 // hash should be as good for bucketing, as the original.
-func typeHash(hasher typeutil.Hasher, nestTypes []types.Type, types []types.Type) uint32 {
+func typeHash(hasher typeutil.Hasher, nestTypes, types []types.Type) uint32 {
 	var hash uint32
 	for _, typ := range nestTypes {
 		hash ^= hasher.Hash(typ)

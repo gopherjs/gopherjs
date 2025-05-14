@@ -443,6 +443,8 @@ func (fc *funcContext) objectName(o types.Object) string {
 //
 // For objects without type params and not nested in a generic function or
 // method, this always returns a single trivial instance.
+// If the object is generic, or in a generic function or method, but there are
+// no instances, then the object is unused and an empty list is returned.
 func (fc *funcContext) knownInstances(o types.Object) []typeparams.Instance {
 	instances := fc.pkgCtx.instanceSet.Pkg(o.Pkg()).ForObj(o)
 	if len(instances) == 0 && !typeparams.HasTypeParams(o.Type()) {
@@ -459,12 +461,9 @@ func (fc *funcContext) instName(inst typeparams.Instance) string {
 	if inst.IsTrivial() {
 		return objName
 	}
-	fc.pkgCtx.DeclareDCEDep(inst.Object, inst.TNest, inst.TArgs)
-	label := fmt.Sprintf(`%v`, inst.TArgs)
-	if len(inst.TNest) > 0 {
-		label = fmt.Sprintf(`%v;%s`, inst.TNest, label)
-	}
-	return fmt.Sprintf("%s[%d /* %v */]", objName, fc.pkgCtx.instanceSet.ID(inst), label)
+	fc.pkgCtx.DeclareDCEDep(inst.Object, inst.TArgs...)
+	label := inst.TypeParamsString(` /* `, ` */`)
+	return fmt.Sprintf("%s[%d%s]", objName, fc.pkgCtx.instanceSet.ID(inst), label)
 }
 
 // methodName returns a JS identifier (specifically, object property name)

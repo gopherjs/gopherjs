@@ -763,17 +763,14 @@ func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
 
 	src := `
 		package main
-
 		func F[A any]() any {
 			type T struct{
 				a A
 			}
 			return T{}
 		}
-
 		func main() {
 			type Int int
-
 			print(F[int]())
 			print(F[Int]())
 		}
@@ -806,7 +803,6 @@ func TestNestedGenericTypeInGenericFunc(t *testing.T) {
 
 	src := `
 		package main
-
 		func F[A any]() any {
 			type T[B any] struct{
 				a A
@@ -814,10 +810,8 @@ func TestNestedGenericTypeInGenericFunc(t *testing.T) {
 			}
 			return T[int]{}
 		}
-
 		func main() {
 			type Int int
-
 			print(F[int]())
 			print(F[Int]())
 		}
@@ -832,8 +826,8 @@ func TestNestedGenericTypeInGenericFunc(t *testing.T) {
 	exp := []string{
 		`F[int]`,
 		`F[main.Int]`,
-		`T[int;int]`,
-		`T[main.Int;int]`,
+		`T[int; int]`,
+		`T[main.Int; int]`,
 	}
 	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
 		t.Errorf("the instances of generics are different:\n%s", diff)
@@ -843,17 +837,14 @@ func TestNestedGenericTypeInGenericFunc(t *testing.T) {
 func TestNestedGenericTypeInGenericFuncWithSharedTArgs(t *testing.T) {
 	src := `
 		package main
-
 		func F[A any]() any {
 			type T[B any] struct {
 				b B
 			}
 			return T[A]{}
 		}
-
 		func main() {
 			type Int int
-
 			print(F[int]())
 			print(F[Int]())
 		}`
@@ -867,8 +858,8 @@ func TestNestedGenericTypeInGenericFuncWithSharedTArgs(t *testing.T) {
 	exp := []string{
 		`F[int]`,
 		`F[main.Int]`,
-		`T[int;int]`,
-		`T[main.Int;main.Int]`,
+		`T[int; int]`,
+		`T[main.Int; main.Int]`,
 		// Make sure that T[int;main.Int] and T[main.Int;int] aren't created.
 	}
 	if diff := cmp.Diff(exp, insts); len(diff) > 0 {

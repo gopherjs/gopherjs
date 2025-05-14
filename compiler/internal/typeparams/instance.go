@@ -28,18 +28,18 @@ type Instance struct {
 // Two semantically different instances may have the same string representation
 // if the instantiated object or its type arguments shadow other types.
 func (i Instance) String() string {
-	return i.symbolicName() + i.typeParamsString(`<`, `>`)
+	return i.symbolicName() + i.TypeParamsString(`<`, `>`)
 }
 
 // TypeString returns a Go type string representing the instance (suitable for %T verb).
 func (i Instance) TypeString() string {
-	return i.qualifiedName() + i.typeParamsString(`[`, `]`)
+	return i.qualifiedName() + i.TypeParamsString(`[`, `]`)
 }
 
 // symbolicName returns a string representation of the instance's name
 // including the package name and pointer indicators but
 // excluding the type parameters.
-func (i *Instance) symbolicName() string {
+func (i Instance) symbolicName() string {
 	if i.Object == nil {
 		return `<nil>`
 	}
@@ -59,9 +59,9 @@ func (i Instance) qualifiedName() string {
 	return fmt.Sprintf("%s.%s", i.Object.Pkg().Name(), i.Object.Name())
 }
 
-// typeParamsString returns part of a Go type string that represents the type
+// TypeParamsString returns part of a Go type string that represents the type
 // parameters of the instance including the nesting type parameters, e.g. [X;Y,Z].
-func (i Instance) typeParamsString(open, close string) string {
+func (i Instance) TypeParamsString(open, close string) string {
 	hasNest := len(i.TNest) > 0
 	hasArgs := len(i.TArgs) > 0
 	buf := strings.Builder{}
@@ -70,6 +70,9 @@ func (i Instance) typeParamsString(open, close string) string {
 		if hasNest {
 			buf.WriteString(i.TNest.String())
 			buf.WriteRune(';')
+			if hasArgs {
+				buf.WriteRune(' ')
+			}
 		}
 		if hasArgs {
 			buf.WriteString(i.TArgs.String())
@@ -79,7 +82,8 @@ func (i Instance) typeParamsString(open, close string) string {
 	return buf.String()
 }
 
-// IsTrivial returns true if this is an instance of a non-generic object.
+// IsTrivial returns true if this is an instance of a non-generic object
+// and it is not nested in a generic function.
 func (i Instance) IsTrivial() bool {
 	return len(i.TArgs) == 0 && len(i.TNest) == 0
 }

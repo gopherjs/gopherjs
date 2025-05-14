@@ -433,7 +433,6 @@ func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
 		FullName: typeVarDeclFullName(obj),
 		Vars:     []string{name},
 	}
-
 	if fc.pkgCtx.instanceSet.Pkg(obj.Pkg()).ObjHasInstances(obj) {
 		varDecl.DeclCode = fc.CatchOutput(0, func() {
 			fc.Printf("%s = {};", name)

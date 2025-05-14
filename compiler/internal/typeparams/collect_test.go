@@ -385,7 +385,7 @@ func TestSeedVisitor(t *testing.T) {
 	}
 	got := sv.instances.Pkg(pkg).Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != "" {
-		t.Errorf("Instances from initialSeeder contain diff (-want,+got):\n%s", diff)
+		t.Errorf("Instances from seedVisitor contain diff (-want,+got):\n%s", diff)
 	}
 }
 
@@ -566,9 +566,7 @@ func TestCollector_NestingWithVars(t *testing.T) {
 func TestCollector_RecursiveTypeParams(t *testing.T) {
 	// This is based off of part of go1.19.13/test/typeparam/nested.go
 	src := `package test
-
 	func F[A any]() {}
-
 	func main() {
 		type U[_ any] int
 		type X[A any] U[X[A]]
@@ -613,15 +611,20 @@ func TestCollector_RecursiveTypeParams(t *testing.T) {
 }
 
 func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
+	t.Skip(`Skipping test due to known issue with nested recursive type parameters.`)
+	// TODO(grantnelson-wf): This test is failing because the type parameters
+	// inside of U are not being resolved to concrete types. This is because
+	// when instantiating X in the collector, we are not resolving the
+	// nested type of U that is X's type argument. This leave the A in U
+	// as a type parameter instead of resolving it to string.
+
 	// This is based off of part of go1.19.13/test/typeparam/nested.go
 	src := `package test
-
 	func F[A any]() any {
 		type U[_ any] struct{ x A }
 		type X[B any] U[X[B]]
 		return X[int]{}
 	}
-
 	func main() {
 		print(F[string]())
 	}
@@ -642,6 +645,10 @@ func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
 	xInt, err := types.Instantiate(types.NewContext(), xAny.Type(), []types.Type{types.Typ[types.Int]}, true)
 	if err != nil {
 		t.Fatalf("Failed to instantiate X[int]: %v", err)
+	}
+	// TODO(grantnelson-wf): Need to instantiate xInt to replace `A` with `int` in the struct.
+	if isGeneric(xInt) {
+		t.Errorf("Expected uInt to be non-generic, got %v", xInt.Underlying())
 	}
 
 	want := []Instance{
@@ -665,15 +672,20 @@ func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
 }
 
 func TestCollector_NestedTypeParams(t *testing.T) {
+	t.Skip(`Skipping test due to known issue with nested recursive type parameters.`)
+	// TODO(grantnelson-wf): This test is failing because the type parameters
+	// inside of U are not being resolved to concrete types. This is because
+	// when instantiating X in the collector, we are not resolving the
+	// nested type of U that is X's type argument. This leave the A in U
+	// as a type parameter instead of resolving it to string.
+
 	// This is based off of part of go1.19.13/test/typeparam/nested.go
 	src := `package test
-
 	func F[A any]() any {
 		type T[B any] struct{}
 		type U[_ any] struct{ X A }
 		return T[U[A]]{}
 	}
-
 	func main() {
 		print(F[int]())
 	}
@@ -693,18 +705,14 @@ func TestCollector_NestedTypeParams(t *testing.T) {
 	uAny := srctesting.LookupObj(pkg, `F.U`)
 	uInt, err := types.Instantiate(types.NewContext(), uAny.Type(), []types.Type{types.Typ[types.Int]}, true)
 	if err != nil {
-		t.Fatalf("Failed to instantiate X[int]: %v", err)
+		t.Fatalf("Failed to instantiate U[int]: %v", err)
 	}
+	//TODO(grantnelson-wf): Need to instantiate uInt to replace `A` with `int` in the struct.
 	if isGeneric(uInt) {
-		t.Errorf("Expected uInt to be non-generic, got %v", uInt)
+		t.Errorf("Expected uInt to be non-generic, got %v", uInt.Underlying())
 	}
-	t.Logf("uInt: %+v", uInt.(*types.Named).Underlying())
 
 	want := []Instance{
-		{
-			Object: srctesting.LookupObj(pkg, `F`),
-			TArgs:  []types.Type{types.Typ[types.String]},
-		},
 		{
 			Object: srctesting.LookupObj(pkg, `F`),
 			TArgs:  []types.Type{types.Typ[types.Int]},

@@ -22,13 +22,6 @@ func New(tc *types.Context, fn *types.Func, replacements map[*types.TypeParam]ty
 		return nil
 	}
 
-	if fn == nil {
-		// If `fn` is nil, we create a fake function to avoid nil pointer dereference.
-		// `fn` can be nil when we are substituting with a generic type at the package level.
-		sig := types.NewSignatureType(nil, nil, nil, nil, nil, false)
-		fn = types.NewFunc(0, nil, `*fakeFn*`, sig)
-	}
-
 	subst := makeSubster(tc, fn, nil, nil, false)
 	subst.replacements = replacements
 	return &Subster{impl: subst}

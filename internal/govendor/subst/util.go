@@ -28,6 +28,11 @@ func changeRecv(s *types.Signature, recv *types.Var) *types.Signature {
 // obj must not be a method or a field.
 // From https://cs.opensource.google/go/x/tools/+/refs/tags/v0.33.0:go/ssa/util.go;l=145
 func declaredWithin(obj types.Object, fn *types.Func) bool {
+	// GOPHERJS: Made `fn` optional so that we can use this on package level types too.
+	if fn == nil {
+		return false
+	}
+
 	if obj.Pos() != token.NoPos {
 		return fn.Scope().Contains(obj.Pos()) // trust the positions if they exist.
 	}

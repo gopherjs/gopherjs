@@ -15,6 +15,7 @@ import (
 type Resolver struct {
 	tParams *types.TypeParamList
 	tArgs   []types.Type
+	root    Instance // The root instance that this resolver is based on.
 
 	// subster is the substitution helper that will perform the actual
 	// substitutions. This maybe nil when there are no substitutions but
@@ -34,6 +35,7 @@ func NewResolver(tc *types.Context, root Instance) *Resolver {
 
 	switch typ := root.Object.Type().(type) {
 	case *types.Signature:
+		fn = root.Object.(*types.Func)
 		tParams = SignatureTypeParams(typ)
 
 	case *types.Named:
@@ -65,6 +67,7 @@ func NewResolver(tc *types.Context, root Instance) *Resolver {
 	return &Resolver{
 		tParams: tParams,
 		tArgs:   root.TArgs,
+		root:    root,
 		subster: subst.New(tc, fn, replacements),
 		selMemo: map[typesutil.Selection]typesutil.Selection{},
 	}
@@ -254,7 +257,11 @@ func (c *visitor) addInstance(obj types.Object, tArgList *types.TypeList, tNest 
 			TArgs:  tArgs,
 			TNest:  tNest,
 		}.String()) // TODO(grantnelson-wf): REMOVE
-		fmt.Printf("\t%d: %s\n", obj.Pos(), c.resolver.String()) // TODO(grantnelson-wf): REMOVE
+		fmt.Printf("\tresolver: %s\n", c.resolver.String())  // TODO(grantnelson-wf): REMOVE
+		fmt.Printf("\troot: %s\n", c.resolver.root.String()) // TODO(grantnelson-wf): REMOVE
+		for i := 0; i < len(tArgs); i++ {
+			fmt.Printf("\t%d: (%T) %s => %s\n", i, tArgs[i], tArgs[i], tArgs[i].Underlying()) // TODO(grantnelson-wf): REMOVE
+		}
 
 		return
 	}

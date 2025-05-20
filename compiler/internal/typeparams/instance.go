@@ -3,6 +3,7 @@ package typeparams
 import (
 	"fmt"
 	"go/types"
+	"sort"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
@@ -242,4 +243,24 @@ func (i PackageInstanceSets) Add(instances ...Instance) {
 // See: InstanceSet.ID().
 func (i PackageInstanceSets) ID(inst Instance) int {
 	return i.Pkg(inst.Object.Pkg()).ID(inst)
+}
+
+func (i PackageInstanceSets) String() string {
+	pkgName := make([]string, 0, len(i))
+	for pkg := range i {
+		pkgName = append(pkgName, pkg)
+	}
+	sort.Strings(pkgName)
+	buf := strings.Builder{}
+	for _, pkg := range pkgName {
+		buf.WriteString(pkg)
+		buf.WriteString(":\n")
+		iset := i[pkg]
+		for _, inst := range iset.values {
+			buf.WriteString("\t")
+			buf.WriteString(inst.String())
+			buf.WriteString("\n")
+		}
+	}
+	return buf.String()
 }

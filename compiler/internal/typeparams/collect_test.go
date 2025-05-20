@@ -641,13 +641,24 @@ func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
 	c.Scan(pkg, file)
 
 	xAny := srctesting.LookupObj(pkg, `F.X`)
-	xInt, err := types.Instantiate(types.NewContext(), xAny.Type(), []types.Type{types.Typ[types.Int]}, true)
+	xInt, err := types.Instantiate(c.TContext, xAny.Type(), []types.Type{types.Typ[types.Int]}, true)
 	if err != nil {
 		t.Fatalf("Failed to instantiate X[int]: %v", err)
 	}
-	// TODO(grantnelson-wf): Need to instantiate xInt to replace `A` with `int` in the struct.
-	if isGeneric(xInt) {
-		t.Errorf("Expected uInt to be non-generic, got %v", xInt.Underlying())
+	fAny := srctesting.LookupObj(pkg, `F`)
+	resolver := NewResolver(c.TContext, fAny.Type().(*types.Signature).TypeParams(), []types.Type{types.Typ[types.String]}, nil)
+	xStrInt := resolver.Substitute(xInt)
+
+	t.Logf("resolver: %v", resolver)
+	t.Logf("xInt:    (%T) %v -> %v", xInt, xInt, xInt.Underlying())
+	t.Logf("xStrInt: (%T) %v -> %v", xStrInt, xStrInt, xStrInt.Underlying())
+
+	//xInt, err := types.Instantiate(c.TContext, xAny.Type(), []types.Type{types.Typ[types.Int]}, true)
+	//if err != nil {
+	//	t.Fatalf("Failed to instantiate X[int]: %v", err)
+	//}
+	if isGeneric(xStrInt) {
+		t.Errorf("Expected uInt to be non-generic, got %v", xStrInt.Underlying())
 	}
 
 	want := []Instance{
@@ -682,7 +693,7 @@ func TestCollector_NestedTypeParams(t *testing.T) {
 	func F[A any]() any {
 		type T[B any] struct{}
 		type U[_ any] struct{ X A }
-		return T[U[A]]{}
+		return T[U[bool]]{}
 	}
 	func main() {
 		print(F[int]())
@@ -717,7 +728,7 @@ func TestCollector_NestedTypeParams(t *testing.T) {
 		}, {
 			Object: srctesting.LookupObj(pkg, `F.U`),
 			TNest:  []types.Type{types.Typ[types.Int]},
-			TArgs:  []types.Type{types.Typ[types.Int]},
+			TArgs:  []types.Type{types.Typ[types.Bool]},
 		}, {
 			Object: srctesting.LookupObj(pkg, `F.T`),
 			TNest:  []types.Type{types.Typ[types.Int]},

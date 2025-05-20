@@ -2,69 +2,77 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Copy of https://cs.opensource.google/go/x/tools/+/refs/tags/v0.17.0:go/ssa/subst.go
+// Copy of https://cs.opensource.google/go/x/tools/+/refs/tags/v0.33.0:go/ssa/subst.go
 // Any changes to this copy are labelled with GOPHERJS.
 package subst
 
 import (
 	"go/types"
+
+	"golang.org/x/tools/go/types/typeutil"
 )
 
-// Type substituter for a fixed set of replacement types.
+// subster defines a type substitution operation of a set of type parameters
+// to type parameter free replacement types. Substitution is done within
+// the context of a package-level function instantiation. *Named types
+// declared in the function are unique to the instantiation.
 //
-// A nil *subster is an valid, empty substitution map. It always acts as
+// For example, given a parameterized function F
+//
+//	  func F[S, T any]() any {
+//	    type X struct{ s S; next *X }
+//		var p *X
+//	    return p
+//	  }
+//
+// calling the instantiation F[string, int]() returns an interface
+// value (*X[string,int], nil) where the underlying value of
+// X[string,int] is a struct{s string; next *X[string,int]}.
+//
+// A nil *subster is a valid, empty substitution map. It always acts as
 // the identity function. This allows for treating parameterized and
 // non-parameterized functions identically while compiling to ssa.
 //
 // Not concurrency-safe.
+//
+// Note: Some may find it helpful to think through some of the most
+// complex substitution cases using lambda calculus inspired notation.
+// subst.typ() solves evaluating a type expression E
+// within the body of a function Fn[m] with the type parameters m
+// once we have applied the type arguments N.
+// We can succinctly write this as a function application:
+//
+//	((λm. E) N)
+//
+// go/types does not provide this interface directly.
+// So what subster provides is a type substitution operation
+//
+//	E[m:=N]
 type subster struct {
 	replacements map[*types.TypeParam]types.Type // values should contain no type params
 	cache        map[types.Type]types.Type       // cache of subst results
-	ctxt         *types.Context                  // cache for instantiation
-	scope        *types.Scope                    // *types.Named declared within this scope can be substituted (optional)
-	debug        bool                            // perform extra debugging checks
+	origin       *types.Func                     // types.Objects declared within this origin function are unique within this context
+	ctxt         *types.Context                  // speeds up repeated instantiations
+	uniqueness   typeutil.Map                    // determines the uniqueness of the instantiations within the function
 	// TODO(taking): consider adding Pos
-	// TODO(zpavlinovic): replacements can contain type params
-	// when generating instances inside of a generic function body.
 }
 
 // Returns a subster that replaces tparams[i] with targs[i]. Uses ctxt as a cache.
 // targs should not contain any types in tparams.
-// scope is the (optional) lexical block of the generic function for which we are substituting.
-func makeSubster(ctxt *types.Context, scope *types.Scope, tparams *types.TypeParamList, targs []types.Type, debug bool) *subster {
+// fn is the generic function for which we are substituting.
+func makeSubster(ctxt *types.Context, fn *types.Func, tparams *types.TypeParamList, targs []types.Type, debug bool) *subster {
 	assert(tparams.Len() == len(targs), "makeSubster argument count must match")
 
 	subst := &subster{
 		replacements: make(map[*types.TypeParam]types.Type, tparams.Len()),
 		cache:        make(map[types.Type]types.Type),
+		origin:       fn.Origin(),
 		ctxt:         ctxt,
-		scope:        scope,
-		debug:        debug,
 	}
 	for i := 0; i < tparams.Len(); i++ {
 		subst.replacements[tparams.At(i)] = targs[i]
 	}
-	if subst.debug {
-		subst.wellFormed()
-	}
 	return subst
-}
-
-// wellFormed asserts that subst was properly initialized.
-func (subst *subster) wellFormed() {
-	if subst == nil {
-		return
-	}
-	// Check that all of the type params do not appear in the arguments.
-	s := make(map[types.Type]bool, len(subst.replacements))
-	for tparam := range subst.replacements {
-		s[tparam] = true
-	}
-	for _, r := range subst.replacements {
-		if reaches(r, s) {
-			panic(subst)
-		}
-	}
 }
 
 // typ returns the type of t with the type parameter tparams[i] substituted
@@ -80,11 +88,8 @@ func (subst *subster) typ(t types.Type) (res types.Type) {
 		subst.cache[t] = res
 	}()
 
-	// fall through if result r will be identical to t, types.Identical(r, t).
 	switch t := t.(type) {
 	case *types.TypeParam:
-		// GOPHERJS: Replaced an assert that was causing a panic for nested types with code from
-		// https://cs.opensource.google/go/x/tools/+/refs/tags/v0.33.0:go/ssa/subst.go;l=92
 		if r := subst.replacements[t]; r != nil {
 			return r
 		}
@@ -140,8 +145,16 @@ func (subst *subster) typ(t types.Type) (res types.Type) {
 	case *types.Interface:
 		return subst.interface_(t)
 
+	// GOPHERJS: Removed following case since types.Alias is not supported until go1.22.
+	//case *types.Alias:
+	//	return subst.alias(t)
+
 	case *types.Named:
 		return subst.named(t)
+
+	// GOPHERJS: Removed following case since the opaque type is specific to the SSA builder.
+	//case *opaqueType:
+	//	return t // opaque types are never substituted
 
 	default:
 		panic("unreachable")
@@ -192,7 +205,7 @@ func (subst *subster) struct_(t *types.Struct) *types.Struct {
 	return t
 }
 
-// varlist reutrns subst(in[i]) or return nils if subst(v[i]) == v[i] for all i.
+// varlist returns subst(in[i]) or return nils if subst(v[i]) == v[i] for all i.
 func (subst *subster) varlist(in varlist) []*types.Var {
 	var out []*types.Var // nil => no updates
 	for i, n := 0, in.Len(); i < n; i++ {
@@ -217,7 +230,7 @@ func (subst *subster) var_(v *types.Var) *types.Var {
 			if v.IsField() {
 				return types.NewField(v.Pos(), v.Pkg(), v.Name(), typ, v.Embedded())
 			}
-			return types.NewVar(v.Pos(), v.Pkg(), v.Name(), typ)
+			return types.NewParam(v.Pos(), v.Pkg(), v.Name(), typ)
 		}
 	}
 	return v
@@ -256,6 +269,8 @@ func (subst *subster) interface_(iface *types.Interface) *types.Interface {
 	var methods []*types.Func
 	initMethods := func(n int) { // copy first n explicit methods
 		methods = make([]*types.Func, iface.NumExplicitMethods())
+		// GOPHERJS: Replaced a range over count since that's not supported in go1.22
+		//for i := range n {
 		for i := 0; i < n; i++ {
 			f := iface.ExplicitMethod(i)
 			norecv := changeRecv(f.Type().(*types.Signature), nil)
@@ -280,6 +295,8 @@ func (subst *subster) interface_(iface *types.Interface) *types.Interface {
 	var embeds []types.Type
 	initEmbeds := func(n int) { // copy first n embedded types
 		embeds = make([]types.Type, iface.NumEmbeddeds())
+		// GOPHERJS: Replaced a range over count since that's not supported in go1.22
+		//for i := range n {
 		for i := 0; i < n; i++ {
 			embeds[i] = iface.EmbeddedType(i)
 		}
@@ -307,72 +324,150 @@ func (subst *subster) interface_(iface *types.Interface) *types.Interface {
 	return types.NewInterfaceType(methods, embeds).Complete()
 }
 
+// GOPHERJS: removed alias substitution since types.Alias is not supported until go1.22
+//func (subst *subster) alias(t *types.Alias) types.Type { ... }
+
 func (subst *subster) named(t *types.Named) types.Type {
-	// A named type may be:
-	// (1) ordinary named type (non-local scope, no type parameters, no type arguments),
-	// (2) locally scoped type,
-	// (3) generic (type parameters but no type arguments), or
-	// (4) instantiated (type parameters and type arguments).
-	tparams := t.TypeParams()
-	if tparams.Len() == 0 {
-		if subst.scope != nil && !subst.scope.Contains(t.Obj().Pos()) {
-			// Outside the current function scope?
-			return t // case (1) ordinary
+	// A Named type is a user defined type.
+	// Ignoring generics, Named types are canonical: they are identical if
+	// and only if they have the same defining symbol.
+	// Generics complicate things, both if the type definition itself is
+	// parameterized, and if the type is defined within the scope of a
+	// parameterized function. In this case, two named types are identical if
+	// and only if their identifying symbols are identical, and all type
+	// arguments bindings in scope of the named type definition (including the
+	// type parameters of the definition itself) are equivalent.
+	//
+	// Notably:
+	// 1. For type definition type T[P1 any] struct{}, T[A] and T[B] are identical
+	//    only if A and B are identical.
+	// 2. Inside the generic func Fn[m any]() any { type T struct{}; return T{} },
+	//    the result of Fn[A] and Fn[B] have identical type if and only if A and
+	//    B are identical.
+	// 3. Both 1 and 2 could apply, such as in
+	//    func F[m any]() any { type T[x any] struct{}; return T{} }
+	//
+	// A subster replaces type parameters within a function scope, and therefore must
+	// also replace free type parameters in the definitions of local types.
+	//
+	// Note: There are some detailed notes sprinkled throughout that borrow from
+	// lambda calculus notation. These contain some over simplifying math.
+	//
+	// LC: One way to think about subster is that it is  a way of evaluating
+	//   ((λm. E) N) as E[m:=N].
+	// Each Named type t has an object *TypeName within a scope S that binds an
+	// underlying type expression U. U can refer to symbols within S (+ S's ancestors).
+	// Let x = t.TypeParams() and A = t.TypeArgs().
+	// Each Named type t is then either:
+	//   U              where len(x) == 0 && len(A) == 0
+	//   λx. U          where len(x) != 0 && len(A) == 0
+	//   ((λx. U) A)    where len(x) == len(A)
+	// In each case, we will evaluate t[m:=N].
+	tparams := t.TypeParams() // x
+	targs := t.TypeArgs()     // A
+
+	if !declaredWithin(t.Obj(), subst.origin) {
+		// t is declared outside of Fn[m].
+		//
+		// In this case, we can skip substituting t.Underlying().
+		// The underlying type cannot refer to the type parameters.
+		//
+		// LC: Let free(E) be the set of free type parameters in an expression E.
+		// Then whenever m ∉ free(E), then E = E[m:=N].
+		// t ∉ Scope(fn) so therefore m ∉ free(U) and m ∩ x = ∅.
+		if targs.Len() == 0 {
+			// t has no type arguments. So it does not need to be instantiated.
+			//
+			// This is the normal case in real Go code, where t is not parameterized,
+			// declared at some package scope, and m is a TypeParam from a parameterized
+			// function F[m] or method.
+			//
+			// LC: m ∉ free(A) lets us conclude m ∉ free(t). So t=t[m:=N].
+			return t
 		}
 
-		// case (2) locally scoped type.
-		// Create a new named type to represent this instantiation.
-		// We assume that local types of distinct instantiations of a
-		// generic function are distinct, even if they don't refer to
-		// type parameters, but the spec is unclear; see golang/go#58573.
+		// t is declared outside of Fn[m] and has type arguments.
+		// The type arguments may contain type parameters m so
+		// substitute the type arguments, and instantiate the substituted
+		// type arguments.
+		//
+		// LC: Evaluate this as ((λx. U) A') where A' = A[m := N].
+		newTArgs := subst.typelist(targs)
+		return subst.instantiate(t.Origin(), newTArgs)
+	}
+
+	// t is declared within Fn[m].
+
+	if targs.Len() == 0 { // no type arguments?
+		assert(t == t.Origin(), "local parameterized type abstraction must be an origin type")
+
+		// t has no type arguments.
+		// The underlying type of t may contain the function's type parameters,
+		// replace these, and create a new type.
 		//
 		// Subtle: We short circuit substitution and use a newly created type in
-		// subst, i.e. cache[t]=n, to pre-emptively replace t with n in recursive
-		// types during traversal. This both breaks infinite cycles and allows for
-		// constructing types with the replacement applied in subst.typ(under).
+		// subst, i.e. cache[t]=fresh, to preemptively replace t with fresh
+		// in recursive types during traversal. This both breaks infinite cycles
+		// and allows for constructing types with the replacement applied in
+		// subst.typ(U).
 		//
-		// Example:
-		// func foo[T any]() {
-		//   type linkedlist struct {
-		//     next *linkedlist
-		//     val T
-		//   }
-		// }
+		// A new copy of the Named and Typename (and constraints) per function
+		// instantiation matches the semantics of Go, which treats all function
+		// instantiations F[N] as having distinct local types.
 		//
-		// When the field `next *linkedlist` is visited during subst.typ(under),
-		// we want the substituted type for the field `next` to be `*n`.
-		n := types.NewNamed(t.Obj(), nil, nil)
-		subst.cache[t] = n
-		subst.cache[n] = n
-		n.SetUnderlying(subst.typ(t.Underlying()))
-		return n
+		// LC: x.Len()=0 can be thought of as a special case of λx. U.
+		// LC: Evaluate (λx. U)[m:=N] as (λx'. U') where U'=U[x:=x',m:=N].
+		tname := t.Obj()
+		obj := types.NewTypeName(tname.Pos(), tname.Pkg(), tname.Name(), nil)
+		fresh := types.NewNamed(obj, nil, nil)
+		var newTParams []*types.TypeParam
+		for i := 0; i < tparams.Len(); i++ {
+			cur := tparams.At(i)
+			cobj := cur.Obj()
+			cname := types.NewTypeName(cobj.Pos(), cobj.Pkg(), cobj.Name(), nil)
+			ntp := types.NewTypeParam(cname, nil)
+			subst.cache[cur] = ntp
+			newTParams = append(newTParams, ntp)
+		}
+		fresh.SetTypeParams(newTParams)
+		subst.cache[t] = fresh
+		subst.cache[fresh] = fresh
+		fresh.SetUnderlying(subst.typ(t.Underlying()))
+		// Substitute into all of the constraints after they are created.
+		for i, ntp := range newTParams {
+			bound := tparams.At(i).Constraint()
+			ntp.SetConstraint(subst.typ(bound))
+		}
+		return fresh
 	}
-	targs := t.TypeArgs()
 
-	// insts are arguments to instantiate using.
-	insts := make([]types.Type, tparams.Len())
+	// t is defined within Fn[m] and t has type arguments (an instantiation).
+	// We reduce this to the two cases above:
+	// (1) substitute the function's type parameters into t.Origin().
+	// (2) substitute t's type arguments A and instantiate the updated t.Origin() with these.
+	//
+	// LC: Evaluate ((λx. U) A)[m:=N] as (t' A') where t' = (λx. U)[m:=N] and A'=A [m:=N]
+	subOrigin := subst.typ(t.Origin())
+	subTArgs := subst.typelist(targs)
+	return subst.instantiate(subOrigin, subTArgs)
+}
 
-	// case (3) generic ==> targs.Len() == 0
-	// Instantiating a generic with no type arguments should be unreachable.
-	// Please report a bug if you encounter this.
-	assert(targs.Len() != 0, "substition into a generic Named type is currently unsupported")
-
-	// case (4) instantiated.
-	// Substitute into the type arguments and instantiate the replacements/
-	// Example:
-	//    type N[A any] func() A
-	//    func Foo[T](g N[T]) {}
-	//  To instantiate Foo[string], one goes through {T->string}. To get the type of g
-	//  one subsitutes T with string in {N with typeargs == {T} and typeparams == {A} }
-	//  to get {N with TypeArgs == {string} and typeparams == {A} }.
-	assert(targs.Len() == tparams.Len(), "typeargs.Len() must match typeparams.Len() if present")
-	for i, n := 0, targs.Len(); i < n; i++ {
-		inst := subst.typ(targs.At(i)) // TODO(generic): Check with rfindley for mutual recursion
-		insts[i] = inst
+func (subst *subster) instantiate(orig types.Type, targs []types.Type) types.Type {
+	i, err := types.Instantiate(subst.ctxt, orig, targs, false)
+	assert(err == nil, "failed to Instantiate named (Named or Alias) type")
+	if c, _ := subst.uniqueness.At(i).(types.Type); c != nil {
+		return c.(types.Type)
 	}
-	r, err := types.Instantiate(subst.ctxt, t.Origin(), insts, false)
-	assert(err == nil, "failed to Instantiate Named type")
-	return r
+	subst.uniqueness.Set(i, i)
+	return i
+}
+
+func (subst *subster) typelist(l *types.TypeList) []types.Type {
+	res := make([]types.Type, l.Len())
+	for i := 0; i < l.Len(); i++ {
+		res[i] = subst.typ(l.At(i))
+	}
+	return res
 }
 
 func (subst *subster) signature(t *types.Signature) types.Type {
@@ -471,6 +566,8 @@ func reaches(t types.Type, c map[types.Type]bool) (res bool) {
 				return true
 			}
 		}
+	// GOPHERJS: Removed types.Alias from following case since it's not supported until go1.22.
+	//case *types.Named, *types.Alias:
 	case *types.Named:
 		return reaches(t.Underlying(), c)
 	default:

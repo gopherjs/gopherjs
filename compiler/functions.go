@@ -48,10 +48,8 @@ func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, inst typep
 		c.allVars[k] = v
 	}
 
-	if sig.TypeParams().Len() > 0 {
-		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, sig.TypeParams(), inst.TArgs, nil)
-	} else if sig.RecvTypeParams().Len() > 0 {
-		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, sig.RecvTypeParams(), inst.TArgs, nil)
+	if tp := typeparams.SignatureTypeParams(sig); tp.Len() > 0 {
+		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, tp, inst.TArgs, nil)
 	}
 	if c.objectNames == nil {
 		c.objectNames = map[types.Object]string{}

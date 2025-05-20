@@ -40,19 +40,12 @@ func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, inst typep
 		flowDatas:    map[*types.Label]*flowData{nil: {}},
 		caseCounter:  1,
 		labelCases:   make(map[*types.Label]int),
-		typeResolver: fc.typeResolver,
+		typeResolver: typeparams.NewResolver(fc.pkgCtx.typesCtx, inst),
 		objectNames:  map[types.Object]string{},
 		sig:          &typesutil.Signature{Sig: sig},
 	}
 	for k, v := range fc.allVars {
 		c.allVars[k] = v
-	}
-
-	if tp := typeparams.SignatureTypeParams(sig); tp.Len() > 0 {
-		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, tp, inst.TArgs, nil)
-	}
-	if c.objectNames == nil {
-		c.objectNames = map[types.Object]string{}
 	}
 
 	// Synthesize an identifier by which the function may reference itself. Since

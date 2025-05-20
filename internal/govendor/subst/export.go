@@ -3,10 +3,7 @@
 // type arguments.
 package subst
 
-import (
-	"fmt"
-	"go/types"
-)
+import "go/types"
 
 // To simplify future updates of the borrowed code, we minimize modifications
 // to it as much as possible. This file implements an exported interface to the
@@ -17,17 +14,23 @@ type Subster struct {
 	impl *subster
 }
 
-// New creates a new Subster with a given list of type parameters and matching args.
-func New(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type) *Subster {
-	if tParams.Len() != len(tArgs) {
-		panic(fmt.Errorf("number of type parameters and arguments must match: %d => %d", tParams.Len(), len(tArgs)))
-	}
-
-	if tParams.Len() == 0 && len(tArgs) == 0 {
+// New creates a new Subster with a given a map from type parameters and the arguments
+// that should be used to replace them. If the map is empty, nil is returned.
+// The function `fn` is used to determine the nesting context of the substitution.
+func New(tc *types.Context, fn *types.Func, replacements map[*types.TypeParam]types.Type) *Subster {
+	if len(replacements) == 0 {
 		return nil
 	}
 
-	subst := makeSubster(tc, nil, tParams, tArgs, false)
+	if fn == nil {
+		// If `fn` is nil, we create a fake function to avoid nil pointer dereference.
+		// `fn` can be nil when we are substituting with a generic type at the package level.
+		sig := types.NewSignatureType(nil, nil, nil, nil, nil, false)
+		fn = types.NewFunc(0, nil, `*fakeFn*`, sig)
+	}
+
+	subst := makeSubster(tc, fn, nil, nil, false)
+	subst.replacements = replacements
 	return &Subster{impl: subst}
 }
 

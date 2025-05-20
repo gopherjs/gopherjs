@@ -23,17 +23,51 @@ type Resolver struct {
 	selMemo map[typesutil.Selection]typesutil.Selection
 }
 
-// NewResolver creates a new Resolver with tParams entries mapping to tArgs
-// entries with the same index.
-func NewResolver(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type, parent *Resolver) *Resolver {
-	r := &Resolver{
+// NewResolver creates a new Resolver that will substitute type parameters
+// with the type arguments as defined in the provided Instance.
+func NewResolver(tc *types.Context, root Instance) *Resolver {
+	var (
+		fn           *types.Func
+		tParams      *types.TypeParamList
+		replacements = map[*types.TypeParam]types.Type{}
+	)
+
+	switch typ := root.Object.Type().(type) {
+	case *types.Signature:
+		tParams = SignatureTypeParams(typ)
+
+	case *types.Named:
+		tParams = typ.TypeParams()
+
+		var nestTP *types.TypeParamList
+		if fn = FindNestingFunc(root.Object); fn != nil {
+			nestTP = SignatureTypeParams(fn.Type().(*types.Signature))
+		}
+		if nestTP.Len() != len(root.TNest) {
+			panic(fmt.Errorf(`number of nesting type parameters and arguments must match: %d => %d`, nestTP.Len(), len(root.TNest)))
+		}
+		for i := 0; i < nestTP.Len(); i++ {
+			replacements[nestTP.At(i)] = root.TNest[i]
+		}
+
+	default:
+		panic(fmt.Errorf("unexpected type %T for object %s", typ, root.Object))
+	}
+
+	// Check the root's type parameters and arguments match, then add them.
+	if tParams.Len() != len(root.TArgs) {
+		panic(fmt.Errorf(`number of type parameters and arguments must match: %d => %d`, tParams.Len(), len(root.TArgs)))
+	}
+	for i := 0; i < tParams.Len(); i++ {
+		replacements[tParams.At(i)] = root.TArgs[i]
+	}
+
+	return &Resolver{
 		tParams: tParams,
-		tArgs:   tArgs,
-		parent:  parent,
-		subster: subst.New(tc, tParams, tArgs),
+		tArgs:   root.TArgs,
+		subster: subst.New(tc, fn, replacements),
 		selMemo: map[typesutil.Selection]typesutil.Selection{},
 	}
-	return r
 }
 
 // TypeParams is the list of type parameters that this resolver will substitute.
@@ -60,11 +94,7 @@ func (r *Resolver) Substitute(typ types.Type) types.Type {
 	if r == nil || typ == nil {
 		return typ // No substitutions to be made.
 	}
-	// Perform parent second so that the type can be made locally concrete
-	// prior to the internal types being modified.
-	typ = r.subster.Type(typ)
-	typ = r.parent.Type(typ)
-	return typ
+	return r.subster.Type(typ)
 }
 
 // SubstituteAll same as Substitute, but accepts a TypeList are returns
@@ -124,12 +154,7 @@ func (r *Resolver) String() string {
 	for i, ta := range r.tArgs {
 		parts = append(parts, fmt.Sprintf("%s->%s", r.tParams.At(i), ta))
 	}
-
-	nestStr := ``
-	if r.parent != nil {
-		nestStr = r.parent.String() + `:`
-	}
-	return nestStr + `{` + strings.Join(parts, `, `) + `}`
+	return `{` + strings.Join(parts, `, `) + `}`
 }
 
 // visitor implements ast.Visitor to collect instances of generic types and
@@ -366,10 +391,9 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 }
 
 func (c *Collector) scanSignature(inst Instance, typ *types.Signature, objMap map[types.Object]ast.Node) {
-	tParams := SignatureTypeParams(typ)
 	v := visitor{
 		instances: c.Instances,
-		resolver:  NewResolver(c.TContext, tParams, inst.TArgs, nil),
+		resolver:  NewResolver(c.TContext, inst),
 		info:      c.Info,
 		tNest:     inst.TArgs,
 	}
@@ -385,19 +409,11 @@ func (c *Collector) scanNamed(inst Instance, typ *types.Named, objMap map[types.
 		return
 	}
 
-	var nestResolver *Resolver
-	if len(inst.TNest) > 0 {
-		fn := FindNestingFunc(inst.Object)
-		tp := SignatureTypeParams(fn.Type().(*types.Signature))
-		nestResolver = NewResolver(c.TContext, tp, inst.TNest, nil)
-	}
-
 	fmt.Printf(">> scan named: %s\n", inst.String()) // TODO(grantnelson-wf): REMOVE
-	fmt.Printf("\t%s\n", nestResolver)               // TODO(grantnelson-wf): REMOVE
 
 	v := visitor{
 		instances: c.Instances,
-		resolver:  NewResolver(c.TContext, typ.TypeParams(), inst.TArgs, nestResolver),
+		resolver:  NewResolver(c.TContext, inst),
 		info:      c.Info,
 		tNest:     inst.TNest,
 	}

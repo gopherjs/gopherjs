@@ -222,10 +222,10 @@ func TestVisitor(t *testing.T) {
 			descr: "generic function",
 			resolver: NewResolver(
 				types.NewContext(),
-				lookupType("entry2").(*types.Signature).TypeParams(),
-				[]types.Type{lookupType("B")},
-				nil,
-			),
+				Instance{
+					Object: lookupObj("entry2"),
+					TArgs:  []types.Type{lookupType("B")},
+				}),
 			node: lookupDecl("entry2"),
 			want: append(
 				instancesInFunc(lookupType("B")),
@@ -248,10 +248,10 @@ func TestVisitor(t *testing.T) {
 			descr: "generic method",
 			resolver: NewResolver(
 				types.NewContext(),
-				lookupType("entry3.method").(*types.Signature).RecvTypeParams(),
-				[]types.Type{lookupType("C")},
-				nil,
-			),
+				Instance{
+					Object: lookupObj("entry3.method"),
+					TArgs:  []types.Type{lookupType("C")},
+				}),
 			node: lookupDecl("entry3.method"),
 			want: append(
 				instancesInFunc(lookupType("C")),
@@ -282,10 +282,10 @@ func TestVisitor(t *testing.T) {
 			descr: "generic type declaration",
 			resolver: NewResolver(
 				types.NewContext(),
-				lookupType("entry3").(*types.Named).TypeParams(),
-				[]types.Type{lookupType("D")},
-				nil,
-			),
+				Instance{
+					Object: lookupObj("entry3"),
+					TArgs:  []types.Type{lookupType("D")},
+				}),
 			node: lookupDecl("entry3"),
 			want: instancesInType(lookupType("D")),
 		}, {
@@ -646,7 +646,10 @@ func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
 		t.Fatalf("Failed to instantiate X[int]: %v", err)
 	}
 	fAny := srctesting.LookupObj(pkg, `F`)
-	resolver := NewResolver(c.TContext, fAny.Type().(*types.Signature).TypeParams(), []types.Type{types.Typ[types.String]}, nil)
+	resolver := NewResolver(c.TContext, Instance{
+		Object: fAny,
+		TArgs:  []types.Type{types.Typ[types.String]},
+	})
 	xStrInt := resolver.Substitute(xInt)
 
 	t.Logf("resolver: %v", resolver)
@@ -871,8 +874,10 @@ func TestResolver_SubstituteSelection(t *testing.T) {
 			file := f.Parse("test.go", test.src)
 			info, pkg := f.Check("pkg/test", file)
 
-			method := srctesting.LookupObj(pkg, "g.Method").(*types.Func).Type().(*types.Signature)
-			resolver := NewResolver(nil, method.RecvTypeParams(), []types.Type{srctesting.LookupObj(pkg, "x").Type()}, nil)
+			resolver := NewResolver(nil, Instance{
+				Object: srctesting.LookupObj(pkg, "g.Method"),
+				TArgs:  []types.Type{srctesting.LookupObj(pkg, "x").Type()},
+			})
 
 			if l := len(info.Selections); l != 1 {
 				t.Fatalf("Got: %d selections. Want: 1", l)

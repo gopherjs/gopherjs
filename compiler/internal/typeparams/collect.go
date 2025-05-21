@@ -12,10 +12,21 @@ import (
 
 // Resolver translates types defined in terms of type parameters into concrete
 // types, given a mapping from type params to type arguments.
+//
+// Generic types that have no type arguments applied will have the type parameters
+// substituted, however the type arguments will not be applied to instantiate
+// the type. For example, given `func Foo[T any]() { type Bar[U *T] struct { x T; y U } }`,
+// and if `Foo[int]` is used as the root for the resolver, then `Bar[U *T]` will
+// be substituted to create the generic `Bar[U *int] struct { x int; y U }`,
+// and the generic (because of the `T`) `Bar[bool] struct { x T; y bool}` will
+// be substituted to create the concrete `Bar[bool] struct { x int; y bool }`.
+// Typically the instantiated type from `info.Instances` should be substituted
+// to get the concrete type.
 type Resolver struct {
+	tc      *types.Context
 	tParams *types.TypeParamList
 	tArgs   []types.Type
-	root    Instance // The root instance that this resolver is based on.
+	root    Instance
 
 	// subster is the substitution helper that will perform the actual
 	// substitutions. This maybe nil when there are no substitutions but
@@ -65,6 +76,7 @@ func NewResolver(tc *types.Context, root Instance) *Resolver {
 	}
 
 	return &Resolver{
+		tc:      tc,
 		tParams: tParams,
 		tArgs:   root.TArgs,
 		root:    root,
@@ -257,8 +269,7 @@ func (c *visitor) addInstance(obj types.Object, tArgList *types.TypeList, tNest 
 			TArgs:  tArgs,
 			TNest:  tNest,
 		}.String()) // TODO(grantnelson-wf): REMOVE
-		fmt.Printf("\tresolver: %s\n", c.resolver.String())  // TODO(grantnelson-wf): REMOVE
-		fmt.Printf("\troot: %s\n", c.resolver.root.String()) // TODO(grantnelson-wf): REMOVE
+		fmt.Printf("\tresolver: %s\n", c.resolver.String()) // TODO(grantnelson-wf): REMOVE
 		for i := 0; i < len(tArgs); i++ {
 			fmt.Printf("\t%d: (%T) %s => %s\n", i, tArgs[i], tArgs[i], tArgs[i].Underlying()) // TODO(grantnelson-wf): REMOVE
 		}

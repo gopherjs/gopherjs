@@ -611,12 +611,6 @@ func TestCollector_RecursiveTypeParams(t *testing.T) {
 }
 
 func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
-	// TODO(grantnelson-wf): This test is failing because the type parameters
-	// inside of U are not being resolved to concrete types. This is because
-	// when instantiating X in the collector, we are not resolving the
-	// nested type of U that is X's type argument. This leave the A in U
-	// as a type parameter instead of resolving it to string.
-
 	// This is based off of part of go1.19.13/test/typeparam/nested.go
 	src := `package test
 	func F[A any]() any {
@@ -630,38 +624,30 @@ func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
 	`
 
 	f := srctesting.New(t)
+	tc := types.NewContext()
 	file := f.Parse(`test.go`, src)
 	info, pkg := f.Check(`test`, file)
 
 	c := Collector{
-		TContext:  types.NewContext(),
+		TContext:  tc,
 		Info:      info,
 		Instances: &PackageInstanceSets{},
 	}
 	c.Scan(pkg, file)
 
+	// Instantiate an `X[int]` then substitute the `A` in `U` with `string`.
 	xAny := srctesting.LookupObj(pkg, `F.X`)
-	xInt, err := types.Instantiate(c.TContext, xAny.Type(), []types.Type{types.Typ[types.Int]}, true)
+	xInt, err := types.Instantiate(tc, xAny.Type(), []types.Type{types.Typ[types.Int]}, true)
 	if err != nil {
 		t.Fatalf("Failed to instantiate X[int]: %v", err)
 	}
-	fAny := srctesting.LookupObj(pkg, `F`)
-	resolver := NewResolver(c.TContext, Instance{
-		Object: fAny,
+	resolver := NewResolver(tc, Instance{
+		Object: srctesting.LookupObj(pkg, `F`),
 		TArgs:  []types.Type{types.Typ[types.String]},
 	})
 	xStrInt := resolver.Substitute(xInt)
-
-	t.Logf("resolver: %v", resolver)
-	t.Logf("xInt:    (%T) %v -> %v", xInt, xInt, xInt.Underlying())
-	t.Logf("xStrInt: (%T) %v -> %v", xStrInt, xStrInt, xStrInt.Underlying())
-
-	//xInt, err := types.Instantiate(c.TContext, xAny.Type(), []types.Type{types.Typ[types.Int]}, true)
-	//if err != nil {
-	//	t.Fatalf("Failed to instantiate X[int]: %v", err)
-	//}
 	if isGeneric(xStrInt) {
-		t.Errorf("Expected uInt to be non-generic, got %v", xStrInt.Underlying())
+		t.Errorf("Expected xStrInt to be non-generic, got %v:%v", xStrInt, xStrInt.Underlying())
 	}
 
 	want := []Instance{
@@ -677,6 +663,68 @@ func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
 			TNest:  []types.Type{types.Typ[types.String]},
 			TArgs:  []types.Type{types.Typ[types.Int]},
 		},
+	}
+	got := c.Instances.Pkg(pkg).Values()
+	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
+	}
+}
+
+func TestCollector_LooselyRecursiveTypeParams(t *testing.T) {
+	// This is based off of part of go1.19.13/test/typeparam/nested.go
+	src := `package test
+	func main() {
+		type U[B any] struct{ y *B }
+		type X[C any] struct{ p U[X[C]] }
+		print(X[int]{})
+	}
+	`
+
+	f := srctesting.New(t)
+	tc := types.NewContext()
+	file := f.Parse(`test.go`, src)
+	info, pkg := f.Check(`test`, file)
+
+	c := Collector{
+		TContext:  tc,
+		Info:      info,
+		Instances: &PackageInstanceSets{},
+	}
+	c.Scan(pkg, file)
+
+	/*
+		// Instantiate an `X[int]` then substitute the `A` in `U` with `string`.
+		xAny := srctesting.LookupObj(pkg, `F.X`)
+		resolver := NewResolver(tc, Instance{
+			Object: xAny,
+			TNest:  []types.Type{types.Typ[types.String]},
+			TArgs:  []types.Type{types.Typ[types.Int]},
+		})
+		xInt, err := types.Instantiate(tc, xAny.Type(), resolver.TypeArgs(), true)
+		if err != nil {
+			t.Fatalf("Failed to instantiate X[int]: %v", err)
+		}
+		xStrInt := resolver.Substitute(xInt)
+		fmt.Printf("----------------------\n") // TODO(grantnelson-wf): REMOVE
+		fmt.Printf("resolver: %v\n", resolver) // TODO(grantnelson-wf): REMOVE
+		if isGeneric(xStrInt) {
+			t.Errorf("Expected xStrInt to be non-generic, got %v:%v", xStrInt, xStrInt.Underlying())
+		}
+	*/
+
+	want := []Instance{
+		{
+			Object: srctesting.LookupObj(pkg, `F`),
+			TArgs:  []types.Type{types.Typ[types.String]},
+		}, {
+			Object: srctesting.LookupObj(pkg, `F.U`),
+			TNest:  []types.Type{types.Typ[types.String]},
+			//TArgs:  []types.Type{xStrInt},
+		}, /*{
+			Object: xAny,
+			TNest:  []types.Type{types.Typ[types.String]},
+			TArgs:  []types.Type{types.Typ[types.Int]},
+		},*/
 	}
 	got := c.Instances.Pkg(pkg).Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
@@ -745,8 +793,6 @@ func TestCollector_NestedTypeParams(t *testing.T) {
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
 		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
 	}
-
-	t.Fail()
 }
 
 func evalTypeArgs(t *testing.T, fSet *token.FileSet, pkg *types.Package, expr string) []types.Type {

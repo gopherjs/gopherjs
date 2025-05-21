@@ -11,17 +11,22 @@ import (
 )
 
 // Resolver translates types defined in terms of type parameters into concrete
-// types, given a mapping from type params to type arguments.
+// types, given a root instance. The root instance provides context for mapping
+// from type parameters to type arguments so that the resolver can substitute
+// any type parameters used in types to the corresponding type arguments.
 //
-// Generic types that have no type arguments applied will have the type parameters
-// substituted, however the type arguments will not be applied to instantiate
-// the type. For example, given `func Foo[T any]() { type Bar[U *T] struct { x T; y U } }`,
+// In some cases, a generic type may not be able to be fully instantiated.
+// Generic named types that have no type arguments applied will have the
+// type parameters substituted, however the type arguments will not be
+// applied to instantiate the named type.
+// For example, given `func Foo[T any]() { type Bar[U *T] struct { x T; y U } }`,
 // and if `Foo[int]` is used as the root for the resolver, then `Bar[U *T]` will
 // be substituted to create the generic `Bar[U *int] struct { x int; y U }`,
 // and the generic (because of the `T`) `Bar[bool] struct { x T; y bool}` will
 // be substituted to create the concrete `Bar[bool] struct { x int; y bool }`.
 // Typically the instantiated type from `info.Instances` should be substituted
-// to get the concrete type.
+// to resolve the implicit nesting types and create a concrete type.
+// See internal/govendor/subst/subst.go for more details.
 type Resolver struct {
 	tc      *types.Context
 	tParams *types.TypeParamList
@@ -40,6 +45,7 @@ type Resolver struct {
 func NewResolver(tc *types.Context, root Instance) *Resolver {
 	var (
 		fn           *types.Func
+		nestTParams  *types.TypeParamList
 		tParams      *types.TypeParamList
 		replacements = map[*types.TypeParam]types.Type{}
 	)
@@ -48,26 +54,27 @@ func NewResolver(tc *types.Context, root Instance) *Resolver {
 	case *types.Signature:
 		fn = root.Object.(*types.Func)
 		tParams = SignatureTypeParams(typ)
-
 	case *types.Named:
+		fn = FindNestingFunc(root.Object)
 		tParams = typ.TypeParams()
-
-		var nestTP *types.TypeParamList
-		if fn = FindNestingFunc(root.Object); fn != nil {
-			nestTP = SignatureTypeParams(fn.Type().(*types.Signature))
+		if fn != nil {
+			nestTParams = SignatureTypeParams(fn.Type().(*types.Signature))
 		}
-		if nestTP.Len() != len(root.TNest) {
-			panic(fmt.Errorf(`number of nesting type parameters and arguments must match: %d => %d`, nestTP.Len(), len(root.TNest)))
-		}
-		for i := 0; i < nestTP.Len(); i++ {
-			replacements[nestTP.At(i)] = root.TNest[i]
-		}
-
 	default:
 		panic(fmt.Errorf("unexpected type %T for object %s", typ, root.Object))
 	}
 
-	// Check the root's type parameters and arguments match, then add them.
+	// Check the root's implicit nesting type parameters and arguments match,
+	// then add them to the replacements.
+	if nestTParams.Len() != len(root.TNest) {
+		panic(fmt.Errorf(`number of nesting type parameters and arguments must match: %d => %d`, nestTParams.Len(), len(root.TNest)))
+	}
+	for i := 0; i < nestTParams.Len(); i++ {
+		replacements[nestTParams.At(i)] = root.TNest[i]
+	}
+
+	// Check the root's type parameters and arguments match,
+	// then add them to the replacements.
 	if tParams.Len() != len(root.TArgs) {
 		panic(fmt.Errorf(`number of type parameters and arguments must match: %d => %d`, tParams.Len(), len(root.TArgs)))
 	}
@@ -263,26 +270,8 @@ func (c *visitor) addInstance(obj types.Object, tArgList *types.TypeList, tNest 
 		// substitution. This occurs when a type is defined while nested
 		// in a generic context and is not fully instantiated yet.
 		// We need to wait until we find a full instantiation of the type.
-
-		fmt.Printf(">> SKIP instance: %s\n", Instance{
-			Object: obj,
-			TArgs:  tArgs,
-			TNest:  tNest,
-		}.String()) // TODO(grantnelson-wf): REMOVE
-		fmt.Printf("\tresolver: %s\n", c.resolver.String()) // TODO(grantnelson-wf): REMOVE
-		for i := 0; i < len(tArgs); i++ {
-			fmt.Printf("\t%d: (%T) %s => %s\n", i, tArgs[i], tArgs[i], tArgs[i].Underlying()) // TODO(grantnelson-wf): REMOVE
-		}
-
 		return
 	}
-
-	fmt.Printf(">> add instance: %s\n", Instance{
-		Object: obj,
-		TArgs:  tArgs,
-		TNest:  tNest,
-	}.String()) // TODO(grantnelson-wf): REMOVE
-	fmt.Printf("\t%d: %s\n", obj.Pos(), c.resolver.String()) // TODO(grantnelson-wf): REMOVE
 
 	c.instances.Add(Instance{
 		Object: obj,
@@ -404,8 +393,6 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 			c.scanNamed(inst, typ, objMap)
 		}
 	}
-
-	fmt.Printf(">> instances: %v\n", c.Instances) // TODO(grantnelson-wf): REMOVE
 }
 
 func (c *Collector) scanSignature(inst Instance, typ *types.Signature, objMap map[types.Object]ast.Node) {
@@ -426,8 +413,6 @@ func (c *Collector) scanNamed(inst Instance, typ *types.Named, objMap map[types.
 		// that are defined in a generic context. Skip them.
 		return
 	}
-
-	fmt.Printf(">> scan named: %s\n", inst.String()) // TODO(grantnelson-wf): REMOVE
 
 	v := visitor{
 		instances: c.Instances,

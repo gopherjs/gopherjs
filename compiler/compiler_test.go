@@ -5,6 +5,7 @@ import (
 	"go/types"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -747,6 +748,143 @@ func TestArchiveSelectionAfterSerialization(t *testing.T) {
 	if diff := cmp.Diff(origJS, readJS); diff != "" {
 		t.Errorf("the reloaded files produce different JS:\n%s", diff)
 	}
+}
+
+func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
+	// This is a test of a type defined inside a generic function
+	// that uses the type parameter of the function as a field type.
+	// The `T` type is unique for each instance of `F`.
+	// The use of `A` as a field is do demonstrate the difference in the types
+	// however even if T had no fields, the type would still be different.
+	//
+	// Change `print(F[?]())` to `fmt.Printf("%T\n", F[?]())` for
+	// golang playground to print the type of T in the different F instances.
+	// (I just didn't want this test to depend on `fmt` when it doesn't need to.)
+
+	src := `
+		package main
+		func F[A any]() any {
+			type T struct{
+				a A
+			}
+			return T{}
+		}
+		func main() {
+			type Int int
+			print(F[int]())
+			print(F[Int]())
+		}
+		`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+	archives := compileProject(t, root, false)
+	mainPkg := archives[root.PkgPath]
+	insts := collectDeclInstances(t, mainPkg)
+
+	exp := []string{
+		`F[int]`,
+		`F[main.Int]`,  // Go prints `F[main.Int·2]`
+		`T[int;]`,      // `T` from `F[int]`      (Go prints `T[int]`)
+		`T[main.Int;]`, // `T` from `F[main.Int]` (Go prints `T[main.Int·2]`)
+	}
+	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
+		t.Errorf("the instances of generics are different:\n%s", diff)
+	}
+}
+
+func TestNestedGenericTypeInGenericFunc(t *testing.T) {
+	// This is a subset of the type param nested test from the go repo.
+	// See https://github.com/golang/go/blob/go1.19.13/test/typeparam/nested.go
+	// The test is failing because nested types aren't being typed differently.
+	// For example the type of `T[int]` below is different based on `F[X]`
+	// instance for different `X` type parameters, hence Go prints the type as
+	// `T[X;int]` instead of `T[int]`.
+
+	src := `
+		package main
+		func F[A any]() any {
+			type T[B any] struct{
+				a A
+				b B
+			}
+			return T[int]{}
+		}
+		func main() {
+			type Int int
+			print(F[int]())
+			print(F[Int]())
+		}
+		`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+	archives := compileProject(t, root, false)
+	mainPkg := archives[root.PkgPath]
+	insts := collectDeclInstances(t, mainPkg)
+
+	exp := []string{
+		`F[int]`,
+		`F[main.Int]`,
+		`T[int; int]`,
+		`T[main.Int; int]`,
+	}
+	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
+		t.Errorf("the instances of generics are different:\n%s", diff)
+	}
+}
+
+func TestNestedGenericTypeInGenericFuncWithSharedTArgs(t *testing.T) {
+	src := `
+		package main
+		func F[A any]() any {
+			type T[B any] struct {
+				b B
+			}
+			return T[A]{}
+		}
+		func main() {
+			type Int int
+			print(F[int]())
+			print(F[Int]())
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+	archives := compileProject(t, root, false)
+	mainPkg := archives[root.PkgPath]
+	insts := collectDeclInstances(t, mainPkg)
+
+	exp := []string{
+		`F[int]`,
+		`F[main.Int]`,
+		`T[int; int]`,
+		`T[main.Int; main.Int]`,
+		// Make sure that T[int;main.Int] and T[main.Int;int] aren't created.
+	}
+	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
+		t.Errorf("the instances of generics are different:\n%s", diff)
+	}
+}
+
+func collectDeclInstances(t *testing.T, pkg *Archive) []string {
+	t.Helper()
+
+	// Regex to match strings like `Foo[42 /* bar */] =` and capture
+	// the name (`Foo`), the index (`42`), and the instance type (`bar`).
+	rex := regexp.MustCompile(`^\s*(\w+)\s*\[\s*(\d+)\s*\/\*(.+)\*\/\s*\]\s*\=`)
+
+	// Collect all instances of generics (e.g. `Foo[bar] @ 2`) written to the decl code.
+	insts := []string{}
+	for _, decl := range pkg.Declarations {
+		if match := rex.FindAllStringSubmatch(string(decl.DeclCode), 1); len(match) > 0 {
+			instance := match[0][1] + `[` + strings.TrimSpace(match[0][3]) + `]`
+			instance = strings.ReplaceAll(instance, `command-line-arguments`, pkg.Name)
+			insts = append(insts, instance)
+		}
+	}
+	sort.Strings(insts)
+	return insts
 }
 
 func compareOrder(t *testing.T, sourceFiles []srctesting.Source, minify bool) {

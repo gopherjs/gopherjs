@@ -692,39 +692,26 @@ func TestCollector_LooselyRecursiveTypeParams(t *testing.T) {
 	}
 	c.Scan(pkg, file)
 
-	/*
-		// Instantiate an `X[int]` then substitute the `A` in `U` with `string`.
-		xAny := srctesting.LookupObj(pkg, `F.X`)
-		resolver := NewResolver(tc, Instance{
-			Object: xAny,
-			TNest:  []types.Type{types.Typ[types.String]},
-			TArgs:  []types.Type{types.Typ[types.Int]},
-		})
-		xInt, err := types.Instantiate(tc, xAny.Type(), resolver.TypeArgs(), true)
-		if err != nil {
-			t.Fatalf("Failed to instantiate X[int]: %v", err)
-		}
-		xStrInt := resolver.Substitute(xInt)
-		fmt.Printf("----------------------\n") // TODO(grantnelson-wf): REMOVE
-		fmt.Printf("resolver: %v\n", resolver) // TODO(grantnelson-wf): REMOVE
-		if isGeneric(xStrInt) {
-			t.Errorf("Expected xStrInt to be non-generic, got %v:%v", xStrInt, xStrInt.Underlying())
-		}
-	*/
+	xAny := srctesting.LookupObj(pkg, `main.X`)
+	xIntInst := Instance{
+		Object: xAny,
+		TArgs:  []types.Type{types.Typ[types.Int]},
+	}
+	xInt, err := types.Instantiate(tc, xAny.Type(), xIntInst.TArgs, true)
+	if err != nil {
+		t.Fatalf("Failed to instantiate X[int]: %v", err)
+	}
+	xInt = NewResolver(tc, xIntInst).Substitute(xInt)
+	if isGeneric(xInt) {
+		t.Errorf("Expected xStrInt to be non-generic, got %v:%v", xInt, xInt.Underlying())
+	}
 
 	want := []Instance{
-		/*{
-			Object: srctesting.LookupObj(pkg, `main.X`),
-			TArgs:  []types.Type{types.Typ[types.Int]},
-		}, {
-			Object: srctesting.LookupObj(pkg, `F.U`),
-			TNest:  []types.Type{types.Typ[types.String]},
-			//TArgs:  []types.Type{xStrInt},
-		}, {
-			Object: xAny,
-			TNest:  []types.Type{types.Typ[types.String]},
-			TArgs:  []types.Type{types.Typ[types.Int]},
-		},*/
+		xIntInst,
+		{
+			Object: srctesting.LookupObj(pkg, `main.U`),
+			TArgs:  []types.Type{xInt},
+		},
 	}
 	got := c.Instances.Pkg(pkg).Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {

@@ -415,7 +415,7 @@ func (fc *funcContext) assignedObjectName(o types.Object) (name string, found bo
 // allocated as needed.
 func (fc *funcContext) objectName(o types.Object) string {
 	if isPkgLevel(o) {
-		fc.pkgCtx.DeclareDCEDep(o)
+		fc.pkgCtx.DeclareDCEDep(o, nil, nil)
 
 		if o.Pkg() != fc.pkgCtx.Pkg || (isVarOrConst(o) && o.Exported()) {
 			return fc.pkgVar(o.Pkg()) + "." + o.Name()
@@ -461,7 +461,7 @@ func (fc *funcContext) instName(inst typeparams.Instance) string {
 	if inst.IsTrivial() {
 		return objName
 	}
-	fc.pkgCtx.DeclareDCEDep(inst.Object, inst.TArgs...)
+	fc.pkgCtx.DeclareDCEDep(inst.Object, nil, inst.TArgs)
 	label := inst.TypeParamsString(` /* `, ` */`)
 	return fmt.Sprintf("%s[%d%s]", objName, fc.pkgCtx.instanceSet.ID(inst), label)
 }
@@ -547,7 +547,7 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		fc.pkgCtx.anonTypes = append(fc.pkgCtx.anonTypes, anonType)
 		fc.pkgCtx.anonTypeMap.Set(ty, anonType)
 	}
-	fc.pkgCtx.DeclareDCEDep(anonType)
+	fc.pkgCtx.DeclareDCEDep(anonType, nil, nil)
 	return anonType.Name()
 }
 

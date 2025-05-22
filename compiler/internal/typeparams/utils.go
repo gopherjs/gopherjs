@@ -106,7 +106,7 @@ func isGeneric(typ ...types.Type) bool {
 	}
 
 	seen := make(map[types.Type]struct{})
-	containsTypeParam = func(t types.Type) bool {
+	containsTypeParam = func(t types.Type) (result bool) {
 		if _, ok := seen[t]; ok {
 			return false
 		}

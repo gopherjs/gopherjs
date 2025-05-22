@@ -105,15 +105,8 @@ func isGeneric(typ ...types.Type) bool {
 		return false
 	}
 
-	trace := `` // TODO(grantnelson-wf): REMOVE
 	seen := make(map[types.Type]struct{})
 	containsTypeParam = func(t types.Type) (result bool) {
-		defer func() {
-			if result {
-				trace += fmt.Sprintf("\tin %v\n", t) // TODO(grantnelson-wf): REMOVE
-			}
-		}()
-
 		if _, ok := seen[t]; ok {
 			return false
 		}
@@ -144,9 +137,5 @@ func isGeneric(typ ...types.Type) bool {
 		}
 	}
 
-	result := foreach(len(typ), func(i int) types.Type { return typ[i] })
-	if result {
-		fmt.Println("isGeneric:\n" + trace) // TODO(grantnelson-wf): REMOVE
-	}
-	return result
+	return foreach(len(typ), func(i int) types.Type { return typ[i] })
 }

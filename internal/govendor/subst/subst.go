@@ -459,8 +459,31 @@ func (subst *subster) named(t *types.Named) types.Type {
 	// (2) substitute t's type arguments A and instantiate the updated t.Origin() with these.
 	//
 	// LC: Evaluate ((λx. U) A)[m:=N] as (t' A') where t' = (λx. U)[m:=N] and A'=A [m:=N]
-	subOrigin := subst.typ(t.Origin())
+
+	// GOPHERJS: The following causes problems in recursive types. This is because,
+	// as the types.Instantiate method states, named types are "substituted lazily".
+	// This means if we have a recursive type with the type parameter `T` and
+	// they recreate the type, it will not substitute `T` with the new type argument
+	// inside of the type because `T` is not in the replacement map.
+	// The following changes make the substitution right away by temporarily
+	// adding the `subTArgs` to the replacement map.
+	// Original code:
+	//subOrigin := subst.typ(t.Origin())
+	//subTArgs := subst.typelist(targs)
+	//return subst.instantiate(subOrigin, subTArgs)
 	subTArgs := subst.typelist(targs)
+	oldReplacemets := subst.replacements
+	defer func() {
+		subst.replacements = oldReplacemets
+	}()
+	subst.replacements = make(map[*types.TypeParam]types.Type, tparams.Len())
+	for k, v := range oldReplacemets {
+		subst.replacements[k] = v
+	}
+	for i := 0; i < tparams.Len(); i++ {
+		subst.replacements[tparams.At(i)] = subTArgs[i]
+	}
+	subOrigin := subst.typ(t.Origin())
 	return subst.instantiate(subOrigin, subTArgs)
 }
 

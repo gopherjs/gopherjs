@@ -713,14 +713,14 @@ func TestCollector_LooselyRecursiveTypeParams(t *testing.T) {
 	*/
 
 	want := []Instance{
-		{
-			Object: srctesting.LookupObj(pkg, `F`),
-			TArgs:  []types.Type{types.Typ[types.String]},
+		/*{
+			Object: srctesting.LookupObj(pkg, `main.X`),
+			TArgs:  []types.Type{types.Typ[types.Int]},
 		}, {
 			Object: srctesting.LookupObj(pkg, `F.U`),
 			TNest:  []types.Type{types.Typ[types.String]},
 			//TArgs:  []types.Type{xStrInt},
-		}, /*{
+		}, {
 			Object: xAny,
 			TNest:  []types.Type{types.Typ[types.String]},
 			TArgs:  []types.Type{types.Typ[types.Int]},

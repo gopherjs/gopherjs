@@ -3,7 +3,9 @@
 // type arguments.
 package subst
 
-import "go/types"
+import (
+	"go/types"
+)
 
 // To simplify future updates of the borrowed code, we minimize modifications
 // to it as much as possible. This file implements an exported interface to the

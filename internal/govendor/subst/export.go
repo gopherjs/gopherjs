@@ -3,10 +3,7 @@
 // type arguments.
 package subst
 
-import (
-	"fmt"
-	"go/types"
-)
+import "go/types"
 
 // To simplify future updates of the borrowed code, we minimize modifications
 // to it as much as possible. This file implements an exported interface to the
@@ -17,17 +14,15 @@ type Subster struct {
 	impl *subster
 }
 
-// New creates a new Subster with a given list of type parameters and matching args.
-func New(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type) *Subster {
-	if tParams.Len() != len(tArgs) {
-		panic(fmt.Errorf("number of type parameters and arguments must match: %d => %d", tParams.Len(), len(tArgs)))
-	}
-
-	if tParams.Len() == 0 && len(tArgs) == 0 {
+// New creates a new Subster with a given a map from type parameters and the arguments
+// that should be used to replace them. If the map is empty, nil is returned.
+func New(tc *types.Context, replacements map[*types.TypeParam]types.Type) *Subster {
+	if len(replacements) == 0 {
 		return nil
 	}
 
-	subst := makeSubster(tc, nil, tParams, tArgs, false)
+	subst := makeSubster(tc, nil, nil, nil, false)
+	subst.replacements = replacements
 	return &Subster{impl: subst}
 }
 

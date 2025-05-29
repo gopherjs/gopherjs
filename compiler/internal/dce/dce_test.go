@@ -817,10 +817,8 @@ func Test_Info_SpecificCasesDeps(t *testing.T) {
 					type quan struct { V T }
 					return quan{ V: v }
 				}`),
-			tNest: []types.Type{types.Typ[types.Int]},
-			// TODO(grantnelson-wf): This should take into account the nested type.
-			//wantDeps: []string{`astoria.quan[int;]`},
-			wantDeps: []string{`astoria.quan`},
+			tNest:    []types.Type{types.Typ[types.Int]},
+			wantDeps: []string{`astoria.quan[int;]`},
 		},
 		{
 			name: `a generic method with a nested generic type instance`,
@@ -830,11 +828,9 @@ func Test_Info_SpecificCasesDeps(t *testing.T) {
 					type matuszak[U any] struct { X T; Y U }
 					return matuszak[T]{}
 				}`),
-			tNest: []types.Type{types.Typ[types.String]},
-			tArgs: []types.Type{types.Typ[types.Bool]},
-			// TODO(grantnelson-wf): This should take into account the nested type.
-			//wantDeps: []string{`astoria.matuszak[string;bool]`},
-			wantDeps: []string{`astoria.matuszak[bool]`},
+			tNest:    []types.Type{types.Typ[types.String]},
+			tArgs:    []types.Type{types.Typ[types.Bool]},
+			wantDeps: []string{`astoria.matuszak[string; bool]`},
 		},
 	}
 

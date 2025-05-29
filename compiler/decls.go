@@ -451,13 +451,7 @@ func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
 func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, error) {
 	originType := inst.Object.Type().(*types.Named)
 
-	var nestResolver *typeparams.Resolver
-	if len(inst.TNest) > 0 {
-		fn := typeparams.FindNestingFunc(inst.Object)
-		tp := typeparams.SignatureTypeParams(fn.Type().(*types.Signature))
-		nestResolver = typeparams.NewResolver(fc.pkgCtx.typesCtx, tp, inst.TNest, nil)
-	}
-	fc.typeResolver = typeparams.NewResolver(fc.pkgCtx.typesCtx, originType.TypeParams(), inst.TArgs, nestResolver)
+	fc.typeResolver = typeparams.NewResolver(fc.pkgCtx.typesCtx, inst)
 	defer func() { fc.typeResolver = nil }()
 
 	instanceType := originType
@@ -469,10 +463,7 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 			}
 			instanceType = instantiated.(*types.Named)
 		}
-		if len(inst.TNest) > 0 {
-			instantiated := nestResolver.Substitute(instanceType)
-			instanceType = instantiated.(*types.Named)
-		}
+		instanceType = fc.typeResolver.Substitute(instanceType).(*types.Named)
 	}
 
 	underlying := instanceType.Underlying()

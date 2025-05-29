@@ -320,7 +320,8 @@ func TestVisitor(t *testing.T) {
 			if test.resolver != nil {
 				// Since we know all the tests are for functions and methods,
 				// set the nested type to the type parameter from the resolver.
-				v.tNest = test.resolver.tArgs
+				v.nestTParams = test.resolver.tParams
+				v.nestTArgs = test.resolver.tArgs
 			}
 			ast.Walk(&v, test.node)
 			got := v.instances.Pkg(pkg).Values()
@@ -538,6 +539,12 @@ func TestCollector_NestingWithVars(t *testing.T) {
 	f := srctesting.New(t)
 	file := f.Parse(`test.go`, src)
 	info, pkg := f.Check(`pkg/test`, file)
+	inst := func(name, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
 
 	c := Collector{
 		TContext:  types.NewContext(),
@@ -546,16 +553,9 @@ func TestCollector_NestingWithVars(t *testing.T) {
 	}
 	c.Scan(pkg, file)
 
-	inst := func(name, tNest, tArg string) Instance {
-		return Instance{
-			Object: srctesting.LookupObj(pkg, name),
-			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
-			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
-		}
-	}
 	want := []Instance{
-		inst(`S`, ``, `int`),
-		inst(`S.echo`, ``, `int`),
+		inst(`S`, `int`),
+		inst(`S.echo`, `int`),
 	}
 	got := c.Instances.Pkg(pkg).Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
@@ -575,33 +575,34 @@ func TestCollector_RecursiveTypeParams(t *testing.T) {
 	`
 
 	f := srctesting.New(t)
+	tc := types.NewContext()
 	file := f.Parse(`test.go`, src)
 	info, pkg := f.Check(`test`, file)
+	inst := func(name, tNest, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
 
 	c := Collector{
-		TContext:  types.NewContext(),
+		TContext:  tc,
 		Info:      info,
 		Instances: &PackageInstanceSets{},
 	}
 	c.Scan(pkg, file)
 
-	tInt := types.Typ[types.Int]
-	xAny := srctesting.LookupObj(pkg, `main.X`)
-	xInt, err := types.Instantiate(types.NewContext(), xAny.Type(), []types.Type{tInt}, true)
-	if err != nil {
-		t.Fatalf("Failed to instantiate X[int]: %v", err)
-	}
-
+	xInst := inst(`main.X`, ``, `int`)
+	xInt := xInst.Resolve(tc)
 	want := []Instance{
+		xInst,
 		{
 			Object: srctesting.LookupObj(pkg, `F`),
 			TArgs:  []types.Type{xInt},
 		}, {
 			Object: srctesting.LookupObj(pkg, `main.U`),
 			TArgs:  []types.Type{xInt},
-		}, {
-			Object: xAny,
-			TArgs:  []types.Type{tInt},
 		},
 	}
 	got := c.Instances.Pkg(pkg).Values()
@@ -627,6 +628,13 @@ func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
 	tc := types.NewContext()
 	file := f.Parse(`test.go`, src)
 	info, pkg := f.Check(`test`, file)
+	inst := func(name, tNest, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
 
 	c := Collector{
 		TContext:  tc,
@@ -635,33 +643,15 @@ func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
 	}
 	c.Scan(pkg, file)
 
-	// Instantiate an `X[int]` then substitute the `A` in `U` with `string`.
-	xAny := srctesting.LookupObj(pkg, `F.X`)
-	xInt, err := types.Instantiate(tc, xAny.Type(), []types.Type{types.Typ[types.Int]}, true)
-	if err != nil {
-		t.Fatalf("Failed to instantiate X[int]: %v", err)
-	}
-	resolver := NewResolver(tc, Instance{
-		Object: srctesting.LookupObj(pkg, `F`),
-		TArgs:  []types.Type{types.Typ[types.String]},
-	})
-	xStrInt := resolver.Substitute(xInt)
-	if isGeneric(xStrInt) {
-		t.Errorf("Expected xStrInt to be non-generic, got %v:%v", xStrInt, xStrInt.Underlying())
-	}
-
+	xInst := inst(`F.X`, `string`, `int`)
+	xInt := xInst.Resolve(tc)
 	want := []Instance{
+		inst(`F`, ``, `string`),
+		xInst,
 		{
-			Object: srctesting.LookupObj(pkg, `F`),
-			TArgs:  []types.Type{types.Typ[types.String]},
-		}, {
 			Object: srctesting.LookupObj(pkg, `F.U`),
 			TNest:  []types.Type{types.Typ[types.String]},
 			TArgs:  []types.Type{xInt},
-		}, {
-			Object: xAny,
-			TNest:  []types.Type{types.Typ[types.String]},
-			TArgs:  []types.Type{types.Typ[types.Int]},
 		},
 	}
 	got := c.Instances.Pkg(pkg).Values()
@@ -669,7 +659,6 @@ func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
 		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
 	}
 }
-
 func TestCollector_LooselyRecursiveTypeParams(t *testing.T) {
 	// This is based off of part of go1.19.13/test/typeparam/nested.go
 	src := `package test
@@ -692,22 +681,13 @@ func TestCollector_LooselyRecursiveTypeParams(t *testing.T) {
 	}
 	c.Scan(pkg, file)
 
-	xAny := srctesting.LookupObj(pkg, `main.X`)
-	xIntInst := Instance{
-		Object: xAny,
+	xInst := Instance{
+		Object: srctesting.LookupObj(pkg, `main.X`),
 		TArgs:  []types.Type{types.Typ[types.Int]},
 	}
-	xInt, err := types.Instantiate(tc, xAny.Type(), xIntInst.TArgs, true)
-	if err != nil {
-		t.Fatalf("Failed to instantiate X[int]: %v", err)
-	}
-	xInt = NewResolver(tc, xIntInst).Substitute(xInt)
-	if isGeneric(xInt) {
-		t.Errorf("Expected xStrInt to be non-generic, got %v:%v", xInt, xInt.Underlying())
-	}
-
+	xInt := xInst.Resolve(tc)
 	want := []Instance{
-		xIntInst,
+		xInst,
 		{
 			Object: srctesting.LookupObj(pkg, `main.U`),
 			TArgs:  []types.Type{xInt},
@@ -736,6 +716,13 @@ func TestCollector_NestedTypeParams(t *testing.T) {
 	tc := types.NewContext()
 	file := f.Parse(`test.go`, src)
 	info, pkg := f.Check(`test`, file)
+	inst := func(name, tNest, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
 
 	c := Collector{
 		TContext:  tc,
@@ -744,33 +731,12 @@ func TestCollector_NestedTypeParams(t *testing.T) {
 	}
 	c.Scan(pkg, file)
 
-	uAny := srctesting.LookupObj(pkg, `F.U`)
-	resolver := NewResolver(tc, Instance{
-		Object: uAny,
-		TNest:  []types.Type{types.Typ[types.Int]},
-		TArgs:  []types.Type{types.Typ[types.Bool]},
-	})
-	// Substitute will only substitute type parameters in generic types but
-	// will not instantiate any generic type by applying the type arguments,
-	// therefore we need to instantiate first.
-	uBool, err := types.Instantiate(tc, uAny.Type(), []types.Type{types.Typ[types.Bool]}, true)
-	if err != nil {
-		t.Fatalf("Failed to instantiate U[bool]: %v", err)
-	}
-	uIntBool := resolver.Substitute(uBool)
-	if isGeneric(uIntBool) {
-		t.Errorf("Expected uInt to be concrete, got %v:%v", uIntBool, uIntBool.Underlying())
-	}
-
+	uInst := inst(`F.U`, `int`, `bool`)
+	uIntBool := uInst.Resolve(tc)
 	want := []Instance{
+		inst(`F`, ``, `int`),
+		inst(`F.U`, `int`, `bool`),
 		{
-			Object: srctesting.LookupObj(pkg, `F`),
-			TArgs:  []types.Type{types.Typ[types.Int]},
-		}, {
-			Object: srctesting.LookupObj(pkg, `F.U`),
-			TNest:  []types.Type{types.Typ[types.Int]},
-			TArgs:  []types.Type{types.Typ[types.Bool]},
-		}, {
 			Object: srctesting.LookupObj(pkg, `F.T`),
 			TNest:  []types.Type{types.Typ[types.Int]},
 			TArgs:  []types.Type{uIntBool},

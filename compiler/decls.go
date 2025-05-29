@@ -456,8 +456,14 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 
 	instanceType := originType
 	if !inst.IsTrivial() {
-		instantiated := fc.typeResolver.Substitute(instanceType)
-		instanceType = instantiated.(*types.Named)
+		if len(inst.TArgs) > 0 {
+			instantiated, err := types.Instantiate(fc.pkgCtx.typesCtx, originType, inst.TArgs, true)
+			if err != nil {
+				return nil, fmt.Errorf("failed to instantiate type %v with args %v: %w", originType, inst.TArgs, err)
+			}
+			instanceType = instantiated.(*types.Named)
+		}
+		instanceType = fc.typeResolver.Substitute(instanceType).(*types.Named)
 	}
 
 	underlying := instanceType.Underlying()

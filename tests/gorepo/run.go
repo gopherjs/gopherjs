@@ -173,6 +173,7 @@ const (
 	neverTerminates                       // Test never terminates (so avoid starting it).
 	usesUnsupportedPackage                // Test fails because it imports an unsupported package, e.g., "unsafe".
 	requiresSourceMapSupport              // Test fails without source map support (as configured in CI), because it tries to check filename/line number via runtime.Caller.
+	usesUnsupportedGenerics               // Test uses generics (type parameters) that are not currently supported.
 	compilerPanic
 	unsureIfGopherJSSupportsThisFeature
 	lowLevelRuntimeDifference // JavaScript runtime behaves differently from Go in ways that are difficult to work around.

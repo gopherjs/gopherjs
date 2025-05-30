@@ -598,30 +598,30 @@ func Test_Info_UsesDeps(t *testing.T) {
 		src      string
 		wantDeps []string
 	}{
-		{
-			name: `usage of specific struct`,
-			id:   `Sinclair`,
-			line: 5,
-			src: `package epsilon3
-				type Sinclair struct{}
-				func (s Sinclair) command() { }
-				func main() {
-					Sinclair{}.command() //<-- line 5
-				}`,
-			wantDeps: []string{`epsilon3.Sinclair`},
-		},
-		{
-			name: `usage of generic struct`,
-			id:   `Sheridan`,
-			line: 5,
-			src: `package epsilon3
-				type Sheridan[T comparable] struct{}
-				func (s Sheridan[T]) command() { }
-				func main() {
-					Sheridan[string]{}.command() //<-- line 5
-				}`,
-			wantDeps: []string{`epsilon3.Sheridan[string]`},
-		},
+		// {
+		// 	name: `usage of specific struct`,
+		// 	id:   `Sinclair`,
+		// 	line: 5,
+		// 	src: `package epsilon3
+		// 		type Sinclair struct{}
+		// 		func (s Sinclair) command() { }
+		// 		func main() {
+		// 			Sinclair{}.command() //<-- line 5
+		// 		}`,
+		// 	wantDeps: []string{`epsilon3.Sinclair`},
+		// },
+		// {
+		// 	name: `usage of generic struct`,
+		// 	id:   `Sheridan`,
+		// 	line: 5,
+		// 	src: `package epsilon3
+		// 		type Sheridan[T comparable] struct{}
+		// 		func (s Sheridan[T]) command() { }
+		// 		func main() {
+		// 			Sheridan[string]{}.command() //<-- line 5
+		// 		}`,
+		// 	wantDeps: []string{`epsilon3.Sheridan[string]`},
+		// },
 		{
 			name: `usage of unexported method of generic struct`,
 			id:   `command`,

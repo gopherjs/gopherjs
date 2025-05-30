@@ -29,6 +29,9 @@ func getFilters(o types.Object, tNest, tArgs []types.Type) (objectFilter, method
 			if ptrType, ok := typ.(*types.Pointer); ok {
 				typ = ptrType.Elem()
 			}
+			if len(tArgs) == 0 {
+				tArgs = getTypeArgs(typ)
+			}
 			if named, ok := typ.(*types.Named); ok {
 				objectFilter = getObjectFilter(named.Obj(), nil, tArgs)
 			}

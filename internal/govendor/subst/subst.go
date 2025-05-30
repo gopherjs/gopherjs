@@ -436,8 +436,9 @@ func (subst *subster) named(t *types.Named) types.Type {
 			// problem for recursive types, e.g. `type X[T any] Q[X[T]]`.
 			// When it sees the `X[T]` in `Q[X[T]]`, it creates a `subOrigin`
 			// (seen below) which caches the old `T` to the new `T'`.
-			// Then when creating `subTArgs` (seen below), it will return
-			// `T'` via the cache instead of substituting `T` with `string`.
+			// Then when creating `subTArgs` (also below), it will return
+			// `T'` via the cache instead of substituting `T` with the
+			// correct type argument.
 			//subst.cache[cur] = ntp
 			newTParams = append(newTParams, ntp)
 		}

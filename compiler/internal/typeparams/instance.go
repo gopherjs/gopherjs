@@ -3,6 +3,7 @@ package typeparams
 import (
 	"fmt"
 	"go/types"
+	"sort"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
@@ -104,6 +105,33 @@ func (i Instance) Recv() Instance {
 		Object: recv.Obj(),
 		TArgs:  i.TArgs,
 	}
+}
+
+// Resolve instantiates and performs a substitution of the instance
+// to get the concrete type or function.
+// This will panic if the instance is not valid, e.g. if there are a different
+// number of type arguments than the type parameters.
+//
+// If `tc` is non-nil, it de-duplicates the instance against previous
+// instances with the same identity. See types.Instantiate for more info.
+//
+// Instances of named types may be lazily substituted, meaning the underlying
+// type may not be fully substituted with the type arguments when returned.
+//
+// This is useful for quickly resolving an instance for a test or for debugging
+// but this uses a temporary Resolver that will not be reused.
+// When resolving several instances in the same context, it is more efficient
+// to use NewResolver to take advantage of caching.
+func (i Instance) Resolve(tc *types.Context) types.Type {
+	instType := i.Object.Type()
+	if len(i.TArgs) > 0 {
+		var err error
+		instType, err = types.Instantiate(tc, instType, i.TArgs, true)
+		if err != nil {
+			panic(fmt.Errorf("failed to instantiate %v: %w", i, err))
+		}
+	}
+	return NewResolver(tc, i).Substitute(instType)
 }
 
 // InstanceSet allows collecting and processing unique Instances.
@@ -242,4 +270,24 @@ func (i PackageInstanceSets) Add(instances ...Instance) {
 // See: InstanceSet.ID().
 func (i PackageInstanceSets) ID(inst Instance) int {
 	return i.Pkg(inst.Object.Pkg()).ID(inst)
+}
+
+func (i PackageInstanceSets) String() string {
+	pkgName := make([]string, 0, len(i))
+	for pkg := range i {
+		pkgName = append(pkgName, pkg)
+	}
+	sort.Strings(pkgName)
+	buf := strings.Builder{}
+	for _, pkg := range pkgName {
+		buf.WriteString(pkg)
+		buf.WriteString(":\n")
+		iset := i[pkg]
+		for _, inst := range iset.values {
+			buf.WriteString("\t")
+			buf.WriteString(inst.String())
+			buf.WriteString("\n")
+		}
+	}
+	return buf.String()
 }

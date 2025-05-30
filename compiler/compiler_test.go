@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"bytes"
+	"fmt"
 	"go/types"
 	"regexp"
 	"sort"
@@ -362,6 +363,39 @@ func TestDeclSelection_RemoveUnusedTypeConstraint(t *testing.T) {
 	sel.IsDead(`type:command-line-arguments.Bar<int>`)
 	sel.IsDead(`func:command-line-arguments.Bar.Baz<int>`)
 	sel.IsDead(`var:command-line-arguments.ghost`)
+}
+
+func TestDeclSelection_RemoveUnusedNestedTypes(t *testing.T) {
+	src := `
+		package main
+		func Foo[T any](u T) any {
+			type Bar struct { v T }
+			return Bar{v: u}
+		}
+
+		func deadCode() {
+			println(Foo[int](42))
+		}
+
+		func main() {
+			println(Foo[string]("cat"))
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+
+	sel.IsAlive(`func:command-line-arguments.main`)
+
+	sel.IsAlive(`funcVar:command-line-arguments.Foo`)
+	sel.IsAlive(`func:command-line-arguments.Foo<string>`)
+	sel.IsDead(`func:command-line-arguments.Foo<int>`)
+
+	sel.IsAlive(`typeVar:command-line-arguments.Bar`)
+	sel.IsAlive(`type:command-line-arguments.Bar<string;>`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+
+	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
+	sel.IsDead(`func:command-line-arguments.deadCode`)
 }
 
 func TestLengthParenthesizingIssue841(t *testing.T) {
@@ -1079,6 +1113,7 @@ func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []src
 	sel := &dce.Selector[*Decl]{}
 	for _, pkg := range packages {
 		for _, d := range pkg.Declarations {
+			fmt.Printf(">> decl: %s => %s\n", d.FullName, d.Dce().String()) // TODO: REMOVE
 			sel.Include(d, false)
 		}
 	}

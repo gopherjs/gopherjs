@@ -1,10 +1,13 @@
 package dce
 
 import (
+	"fmt"
 	"go/types"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 )
 
 // getFilters determines the DCE filters for the given object.
@@ -16,7 +19,7 @@ import (
 // the object filter will be empty and only the method filter will be set.
 // The later shouldn't happen when naming a declaration but only when creating
 // dependencies.
-func getFilters(o types.Object, tArgs []types.Type) (objectFilter, methodFilter string) {
+func getFilters(o types.Object, tNest, tArgs []types.Type) (objectFilter, methodFilter string) {
 	if f, ok := o.(*types.Func); ok {
 		sig := f.Type().(*types.Signature)
 		if recv := sig.Recv(); recv != nil {
@@ -30,7 +33,7 @@ func getFilters(o types.Object, tArgs []types.Type) (objectFilter, methodFilter 
 				tArgs = getTypeArgs(typ)
 			}
 			if named, ok := typ.(*types.Named); ok {
-				objectFilter = getObjectFilter(named.Obj(), tArgs)
+				objectFilter = getObjectFilter(named.Obj(), nil, tArgs)
 			}
 
 			// The method is not exported so we only need the method filter.
@@ -42,7 +45,7 @@ func getFilters(o types.Object, tArgs []types.Type) (objectFilter, methodFilter 
 	}
 
 	// The object is not a method so we only need the object filter.
-	objectFilter = getObjectFilter(o, tArgs)
+	objectFilter = getObjectFilter(o, tNest, tArgs)
 	return
 }
 
@@ -51,8 +54,8 @@ func getFilters(o types.Object, tArgs []types.Type) (objectFilter, methodFilter 
 // See [naming design] for more information.
 //
 // [naming design]: https://github.com/gopherjs/gopherjs/compiler/internal/dce/README.md#naming
-func getObjectFilter(o types.Object, tArgs []types.Type) string {
-	return (&filterGen{argTypeRemap: tArgs}).Object(o, tArgs)
+func getObjectFilter(o types.Object, tNest, tArgs []types.Type) string {
+	return (&filterGen{}).Object(o, tNest, tArgs)
 }
 
 // getMethodFilter returns the method filter that functions as the secondary
@@ -62,12 +65,16 @@ func getObjectFilter(o types.Object, tArgs []types.Type) string {
 // [naming design]: https://github.com/gopherjs/gopherjs/compiler/internal/dce/README.md#naming
 func getMethodFilter(o types.Object, tArgs []types.Type) string {
 	if sig, ok := o.Type().(*types.Signature); ok {
+		gen := &filterGen{}
+		tParams := getTypeParams(o.Type())
 		if len(tArgs) == 0 {
-			if recv := sig.Recv(); recv != nil {
-				tArgs = getTypeArgs(recv.Type())
-			}
+			tArgs = getTypeArgs(sig)
 		}
-		gen := &filterGen{argTypeRemap: tArgs}
+		if len(tArgs) > 0 {
+			gen.addReplacements(tParams, tArgs)
+		} else {
+			tArgs = tParams
+		}
 		return objectName(o) + gen.Signature(sig)
 	}
 	return ``
@@ -85,16 +92,42 @@ func objectName(o types.Object) string {
 	return o.Name()
 }
 
+// getNestTypeParams gets the type parameters for the nesting function
+// or nil if the object is not nested in a function or
+// the given object is a function itself.
+func getNestTypeParams(o types.Object) []types.Type {
+	fn := typeparams.FindNestingFunc(o)
+	if fn == nil || fn == o {
+		return nil
+	}
+
+	tp := typeparams.SignatureTypeParams(fn.Type().(*types.Signature))
+	nestTParams := make([]types.Type, tp.Len())
+	for i := 0; i < tp.Len(); i++ {
+		nestTParams[i] = tp.At(i)
+	}
+	return nestTParams
+}
+
 // getTypeArgs gets the type arguments for the given type
-// wether they are type arguments or type parameters.
+// or nil if the type does not have type arguments.
 func getTypeArgs(typ types.Type) []types.Type {
 	switch t := typ.(type) {
 	case *types.Pointer:
 		return getTypeArgs(t.Elem())
 	case *types.Named:
-		if typeArgs := t.TypeArgs(); typeArgs != nil {
-			return typeListToSlice(typeArgs)
-		}
+		return typeListToSlice(t.TypeArgs())
+	}
+	return nil
+}
+
+// getTypeParams gets the type parameters for the given type
+// or nil if the type does not have type parameters.
+func getTypeParams(typ types.Type) []types.Type {
+	switch t := typ.(type) {
+	case *types.Pointer:
+		return getTypeParams(t.Elem())
+	case *types.Named:
 		if typeParams := t.TypeParams(); typeParams != nil {
 			return typeParamListToSlice(typeParams)
 		}
@@ -129,15 +162,21 @@ func typeParamListToSlice(typeParams *types.TypeParamList) []types.Type {
 
 type processingGroup struct {
 	o     types.Object
+	tNest []types.Type
 	tArgs []types.Type
 }
 
-func (p processingGroup) is(o types.Object, tArgs []types.Type) bool {
-	if len(p.tArgs) != len(tArgs) || p.o != o {
+func (p processingGroup) is(o types.Object, tNest, tArgs []types.Type) bool {
+	if len(p.tNest) != len(tNest) || len(p.tArgs) != len(tArgs) || p.o != o {
 		return false
 	}
-	for i, tArg := range tArgs {
-		if p.tArgs[i] != tArg {
+	for i, ta := range tNest {
+		if p.tNest[i] != ta {
+			return false
+		}
+	}
+	for i, ta := range tArgs {
+		if p.tArgs[i] != ta {
 			return false
 		}
 	}
@@ -145,20 +184,85 @@ func (p processingGroup) is(o types.Object, tArgs []types.Type) bool {
 }
 
 type filterGen struct {
-	// argTypeRemap is the type arguments in the same order as the
-	// type parameters in the top level object such that the type parameters
-	// index can be used to get the type argument.
-	argTypeRemap []types.Type
-	inProgress   []processingGroup
+	// replacement is used to use another type in place of a given type
+	// this is typically used for type parameters to type arguments.
+	replacement map[types.Type]types.Type
+	inProgress  []processingGroup
 }
 
-func (gen *filterGen) startProcessing(o types.Object, tArgs []types.Type) bool {
+// String is used for debugging purposes to print the filter generator replacement map.
+func (gen *filterGen) String() string {
+	parts := make([]string, 0, len(gen.replacement))
+	for k, v := range gen.replacement {
+		parts = append(parts, fmt.Sprintf("(%[1]T)%[1]s->(%[2]T)%[2]s", k, v))
+	}
+	sort.Strings(parts)
+	return `{` + strings.Join(parts, `, `) + `}`
+}
+
+// addReplacements adds a mapping from one type to another.
+// The slices should be the same length but will ignore any extra types.
+// Any replacement where the key and value are the same will be ignored.
+func (gen *filterGen) addReplacements(from []types.Type, to []types.Type) {
+	if len(from) == 0 || len(to) == 0 {
+		return
+	}
+
+	if gen.replacement == nil {
+		gen.replacement = map[types.Type]types.Type{}
+	}
+
+	count := len(from)
+	if count > len(to) {
+		count = len(to)
+	}
+	for i := 0; i < count; i++ {
+		if from[i] != to[i] {
+			gen.replacement[from[i]] = to[i]
+		}
+	}
+}
+
+func (gen *filterGen) prepareForGenerics(o types.Object, tNest, tArgs []types.Type) ([]types.Type, []types.Type, func()) {
+	// Create a new replacement map and copy the old one into it.
+	oldReplacement := gen.replacement
+	gen.replacement = map[types.Type]types.Type{}
+	for tp, ta := range oldReplacement {
+		gen.replacement[tp] = ta
+	}
+
+	// Prepare the nested context for the object.
+	nestTParams := getNestTypeParams(o)
+	if len(tNest) > 0 {
+		gen.addReplacements(nestTParams, tNest)
+	} else {
+		tNest = nestTParams
+	}
+
+	// Prepare the type arguments for the object.
+	tParams := getTypeParams(o.Type())
+	if len(tArgs) == 0 {
+		tArgs = getTypeArgs(o.Type())
+	}
+	if len(tArgs) > 0 {
+		gen.addReplacements(tParams, tArgs)
+	} else {
+		tArgs = tParams
+	}
+
+	// Return a function to restore the old replacement map.
+	return tNest, tArgs, func() {
+		gen.replacement = oldReplacement
+	}
+}
+
+func (gen *filterGen) startProcessing(o types.Object, tNest, tArgs []types.Type) bool {
 	for _, p := range gen.inProgress {
-		if p.is(o, tArgs) {
+		if p.is(o, tNest, tArgs) {
 			return false
 		}
 	}
-	gen.inProgress = append(gen.inProgress, processingGroup{o, tArgs})
+	gen.inProgress = append(gen.inProgress, processingGroup{o: o, tNest: tNest, tArgs: tArgs})
 	return true
 }
 
@@ -167,19 +271,19 @@ func (gen *filterGen) stopProcessing() {
 }
 
 // Object returns an object filter or filter part for an object.
-func (gen *filterGen) Object(o types.Object, tArgs []types.Type) string {
+func (gen *filterGen) Object(o types.Object, tNest, tArgs []types.Type) string {
 	filter := objectName(o)
 
 	// Add additional type information for generics and instances.
-	if len(tArgs) == 0 {
-		tArgs = getTypeArgs(o.Type())
-	}
-	if len(tArgs) > 0 {
+	tNest, tArgs, restore := gen.prepareForGenerics(o, tNest, tArgs)
+	defer restore()
+
+	if len(tArgs) > 0 || len(tNest) > 0 {
 		// Avoid infinite recursion in type arguments by
 		// tracking the current object and type arguments being processed
 		// and skipping if already in progress.
-		if gen.startProcessing(o, tArgs) {
-			filter += gen.TypeArgs(tArgs)
+		if gen.startProcessing(o, tNest, tArgs) {
+			filter += gen.TypeArgs(tNest, tArgs)
 			gen.stopProcessing()
 		} else {
 			filter += `[...]`
@@ -205,13 +309,24 @@ func (gen *filterGen) Signature(sig *types.Signature) string {
 }
 
 // TypeArgs returns the filter part containing the type
-// arguments, e.g. `[any,int|string]`.
-func (gen *filterGen) TypeArgs(tArgs []types.Type) string {
-	parts := make([]string, len(tArgs))
-	for i, tArg := range tArgs {
-		parts[i] = gen.Type(tArg)
+// arguments, e.g. `[bool;any,int|string]`.
+func (gen *filterGen) TypeArgs(tNest, tArgs []types.Type) string {
+	toStr := func(t []types.Type) string {
+		parts := make([]string, len(t))
+		for i, ta := range t {
+			parts[i] = gen.Type(ta)
+		}
+		return strings.Join(parts, `, `)
 	}
-	return `[` + strings.Join(parts, `, `) + `]`
+
+	head := `[`
+	if len(tNest) > 0 {
+		head += toStr(tNest) + `;`
+		if len(tArgs) > 0 {
+			head += ` `
+		}
+	}
+	return head + toStr(tArgs) + `]`
 }
 
 // Tuple returns the filter part containing parameter or result
@@ -236,9 +351,6 @@ func (gen *filterGen) Tuple(t *types.Tuple, variadic bool) string {
 // Type returns the filter part for a single type.
 func (gen *filterGen) Type(typ types.Type) string {
 	switch t := typ.(type) {
-	case types.Object:
-		return gen.Object(t, nil)
-
 	case *types.Array:
 		return `[` + strconv.FormatInt(t.Len(), 10) + `]` + gen.Type(t.Elem())
 	case *types.Chan:
@@ -248,8 +360,8 @@ func (gen *filterGen) Type(typ types.Type) string {
 	case *types.Map:
 		return `map[` + gen.Type(t.Key()) + `]` + gen.Type(t.Elem())
 	case *types.Named:
-		// Get type args from named instance not generic object
-		return gen.Object(t.Obj(), getTypeArgs(t))
+		// Get type args from named instance not generic object.
+		return gen.Object(t.Obj(), nil, typeListToSlice(t.TypeArgs()))
 	case *types.Pointer:
 		return `*` + gen.Type(t.Elem())
 	case *types.Signature:
@@ -328,14 +440,10 @@ func (gen *filterGen) Struct(s *types.Struct) string {
 }
 
 // TypeParam returns the filter part for a type parameter.
-// If there is an argument remap, it will use the remapped type
-// so long as it doesn't map to itself.
+// If there is an argument remap, it will use the remapped type.
 func (gen *filterGen) TypeParam(t *types.TypeParam) string {
-	index := t.Index()
-	if index >= 0 && index < len(gen.argTypeRemap) {
-		if inst := gen.argTypeRemap[index]; inst != t {
-			return gen.Type(inst)
-		}
+	if inst, exists := gen.replacement[t]; exists {
+		return gen.Type(inst)
 	}
 	if t.Constraint() == nil {
 		return `any`

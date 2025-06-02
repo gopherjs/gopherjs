@@ -2,7 +2,6 @@ package compiler
 
 import (
 	"bytes"
-	"fmt"
 	"go/types"
 	"regexp"
 	"sort"
@@ -383,7 +382,6 @@ func TestDeclSelection_RemoveUnusedNestedTypes(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
-	sel.PrintDeclStatus() // TODO(grantnelson-wf): REMOVE
 
 	sel.IsAlive(`func:command-line-arguments.main`)
 
@@ -398,6 +396,37 @@ func TestDeclSelection_RemoveUnusedNestedTypes(t *testing.T) {
 	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
 	sel.IsDead(`func:command-line-arguments.deadCode`)
 }
+
+func TestDeclSelection_CompletelyRemoveNestedType(t *testing.T) {
+	src := `
+		package main
+		func Foo[T any](u T) any {
+			type Bar struct { v T }
+			return Bar{v: u}
+		}
+
+		func deadCode() {
+			println(Foo[int](42))
+		}
+
+		func main() {}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+
+	sel.IsAlive(`func:command-line-arguments.main`)
+
+	sel.IsDead(`funcVar:command-line-arguments.Foo`)
+	sel.IsDead(`func:command-line-arguments.Foo<int>`)
+
+	sel.IsDead(`typeVar:command-line-arguments.Bar`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+
+	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
+	sel.IsDead(`func:command-line-arguments.deadCode`)
+}
+
+// TODO(grantnelson-wf): Add a test for when none of a nested type is used, check typeVar is removed.
 
 func TestLengthParenthesizingIssue841(t *testing.T) {
 	// See issue https://github.com/gopherjs/gopherjs/issues/841
@@ -1114,7 +1143,6 @@ func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []src
 	sel := &dce.Selector[*Decl]{}
 	for _, pkg := range packages {
 		for _, d := range pkg.Declarations {
-			fmt.Printf(">> decl: %s => %s\n", d.FullName, d.Dce().String()) // TODO(grantnelson-wf): REMOVE
 			sel.Include(d, false)
 		}
 	}

@@ -446,7 +446,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 				id := spec.(*ast.TypeSpec).Name
 				o := fc.pkgCtx.Defs[id].(*types.TypeName)
 				fc.pkgCtx.typeNames.Add(o)
-				fc.pkgCtx.DeclareDCEDep(o, nil, nil)
+				fc.pkgCtx.DeclareDCEDep(o, fc.instance.TArgs, nil)
 			}
 		case token.CONST:
 			// skip, constants are inlined

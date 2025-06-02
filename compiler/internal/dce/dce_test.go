@@ -752,11 +752,11 @@ func Test_Info_UsesDeps(t *testing.T) {
 
 func Test_Info_SpecificCasesDeps(t *testing.T) {
 	tests := []struct {
-		name     string
-		obj      types.Object
-		tNest    []types.Type
-		tArgs    []types.Type
-		wantDeps []string
+		name      string
+		obj       types.Object
+		nestTArgs []types.Type
+		tArgs     []types.Type
+		wantDeps  []string
 	}{
 		{
 			name: `struct instantiation with generic object`,
@@ -810,27 +810,96 @@ func Test_Info_SpecificCasesDeps(t *testing.T) {
 			},
 		},
 		{
-			name: `a generic method with a nested concrete type instance`,
-			obj: parseObject(t, `quan`,
+			name: `a concrete function with a nested concrete type instance`,
+			obj: parseObject(t, `davi`,
 				`package astoria
-				func data[T any](v T) any {
-					type quan struct { V T }
-					return quan{ V: v }
+				func jake(v int) any {
+					type davi struct { V int }
+					return davi{ V: v }
 				}`),
-			tNest:    []types.Type{types.Typ[types.Int]},
-			wantDeps: []string{`astoria.quan[int;]`},
+			wantDeps: []string{`astoria.jake:davi`},
+		},
+		{
+			name: `a concrete function with a nested generic type instance`,
+			obj: parseObject(t, `pantoliano`,
+				`package astoria
+				func francis(v int) any {
+					type pantoliano[T any] struct { V int }
+					return pantoliano[int]{ V: v }
+				}`),
+			tArgs:    []types.Type{types.Typ[types.Int]},
+			wantDeps: []string{`astoria.francis:pantoliano[int]`},
+		},
+		{
+			name: `a generic function with a nested concrete type instance`,
+			obj: parseObject(t, `ramsey`,
+				`package astoria
+				func mama[T any](v T) any {
+					type ramsey struct { V T }
+					return ramsey{ V: v }
+				}`),
+			nestTArgs: []types.Type{types.Typ[types.Int]},
+			wantDeps:  []string{`astoria.mama:ramsey[int;]`},
+		},
+		{
+			name: `a generic function with a nested generic type instance`,
+			obj: parseObject(t, `matuszak`,
+				`package astoria
+				func sloth[T any]() any {
+					type matuszak[U any] struct { X T; Y U }
+					return matuszak[bool]{}
+				}`),
+			nestTArgs: []types.Type{types.Typ[types.String]},
+			tArgs:     []types.Type{types.Typ[types.Bool]},
+			wantDeps:  []string{`astoria.sloth:matuszak[string; bool]`},
+		},
+		{
+			name: `a concrete method with a nested concrete type instance`,
+			obj: parseObject(t, `davi`,
+				`package astoria
+				type fratelli struct { V int }
+				func (m *fratelli) jake() any {
+					type davi struct { V int }
+					return davi{ V: m.V }
+				}`),
+			wantDeps: []string{`astoria.fratelli:jake:davi`},
+		},
+		{
+			name: `a concrete method with a nested generic type instance`,
+			obj: parseObject(t, `pantoliano`,
+				`package astoria
+				type fratelli struct { V int }
+				func (f *fratelli) francis(v int) any {
+					type pantoliano[T any] struct { V int }
+					return pantoliano[int]{ V: v }
+				}`),
+			tArgs:    []types.Type{types.Typ[types.Int]},
+			wantDeps: []string{`astoria.fratelli:francis:pantoliano[int]`},
+		},
+		{
+			name: `a generic method with a nested concrete type instance`,
+			obj: parseObject(t, `ramsey`,
+				`package astoria
+				type fratelli[T any] struct { v T }
+				func (f *fratelli[T]) mama() any {
+					type ramsey struct { V T }
+					return ramsey{ V: f.v }
+				}`),
+			nestTArgs: []types.Type{types.Typ[types.Int]},
+			wantDeps:  []string{`astoria.fratelli:mama:ramsey[int;]`},
 		},
 		{
 			name: `a generic method with a nested generic type instance`,
 			obj: parseObject(t, `matuszak`,
 				`package astoria
-				func sloth[T any]() any {
+				type fratelli[T any] struct {}
+				func (f *fratelli[T]) sloth() any {
 					type matuszak[U any] struct { X T; Y U }
-					return matuszak[T]{}
+					return matuszak[bool]{}
 				}`),
-			tNest:    []types.Type{types.Typ[types.String]},
-			tArgs:    []types.Type{types.Typ[types.Bool]},
-			wantDeps: []string{`astoria.matuszak[string; bool]`},
+			nestTArgs: []types.Type{types.Typ[types.String]},
+			tArgs:     []types.Type{types.Typ[types.Bool]},
+			wantDeps:  []string{`astoria.fratelli:sloth:matuszak[string; bool]`},
 		},
 	}
 
@@ -838,15 +907,15 @@ func Test_Info_SpecificCasesDeps(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &testDecl{}
 			tail := ``
-			if len(tt.tNest) > 0 {
-				tail += (typesutil.TypeList)(tt.tNest).String() + `;`
+			if len(tt.nestTArgs) > 0 {
+				tail += (typesutil.TypeList)(tt.nestTArgs).String() + `;`
 			}
 			tail += (typesutil.TypeList)(tt.tArgs).String()
 			t.Logf(`object: %s with [%s]`, types.ObjectString(tt.obj, nil), tail)
 
 			c := Collector{}
 			c.CollectDCEDeps(d, func() {
-				c.DeclareDCEDep(tt.obj, tt.tNest, tt.tArgs)
+				c.DeclareDCEDep(tt.obj, tt.nestTArgs, tt.tArgs)
 			})
 			equalSlices(t, d.Dce().getDeps(), tt.wantDeps)
 		})

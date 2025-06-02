@@ -383,6 +383,7 @@ func TestDeclSelection_RemoveUnusedNestedTypes(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
+	sel.PrintDeclStatus() // TODO(grantnelson-wf): REMOVE
 
 	sel.IsAlive(`func:command-line-arguments.main`)
 
@@ -1113,7 +1114,7 @@ func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []src
 	sel := &dce.Selector[*Decl]{}
 	for _, pkg := range packages {
 		for _, d := range pkg.Declarations {
-			fmt.Printf(">> decl: %s => %s\n", d.FullName, d.Dce().String()) // TODO: REMOVE
+			fmt.Printf(">> decl: %s => %s\n", d.FullName, d.Dce().String()) // TODO(grantnelson-wf): REMOVE
 			sel.Include(d, false)
 		}
 	}

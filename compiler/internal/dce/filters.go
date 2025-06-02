@@ -1,13 +1,13 @@
 package dce
 
 import (
-	"fmt"
 	"go/types"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
+	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
 // getFilters determines the DCE filters for the given object.
@@ -19,7 +19,7 @@ import (
 // the object filter will be empty and only the method filter will be set.
 // The later shouldn't happen when naming a declaration but only when creating
 // dependencies.
-func getFilters(o types.Object, tNest, tArgs []types.Type) (objectFilter, methodFilter string) {
+func getFilters(o types.Object, nestTArgs, tArgs []types.Type) (objectFilter, methodFilter string) {
 	if f, ok := o.(*types.Func); ok {
 		sig := f.Type().(*types.Signature)
 		if recv := sig.Recv(); recv != nil {
@@ -45,7 +45,7 @@ func getFilters(o types.Object, tNest, tArgs []types.Type) (objectFilter, method
 	}
 
 	// The object is not a method so we only need the object filter.
-	objectFilter = getObjectFilter(o, tNest, tArgs)
+	objectFilter = getObjectFilter(o, nestTArgs, tArgs)
 	return
 }
 
@@ -54,8 +54,8 @@ func getFilters(o types.Object, tNest, tArgs []types.Type) (objectFilter, method
 // See [naming design] for more information.
 //
 // [naming design]: https://github.com/gopherjs/gopherjs/compiler/internal/dce/README.md#naming
-func getObjectFilter(o types.Object, tNest, tArgs []types.Type) string {
-	return (&filterGen{}).Object(o, tNest, tArgs)
+func getObjectFilter(o types.Object, nestTArgs, tArgs []types.Type) string {
+	return (&filterGen{}).Object(o, nestTArgs, tArgs)
 }
 
 // getMethodFilter returns the method filter that functions as the secondary
@@ -72,8 +72,6 @@ func getMethodFilter(o types.Object, tArgs []types.Type) string {
 		}
 		if len(tArgs) > 0 {
 			gen.addReplacements(tParams, tArgs)
-		} else {
-			tArgs = tParams
 		}
 		return objectName(o) + gen.Signature(sig)
 	}
@@ -81,15 +79,22 @@ func getMethodFilter(o types.Object, tArgs []types.Type) string {
 }
 
 // objectName returns the name part of a filter name,
-// including the package path, if available.
+// including the package path and nest names, if available.
 //
 // This is different from `o.Id` since it always includes the package path
 // when available and doesn't add "_." when not available.
 func objectName(o types.Object) string {
+	prefix := ``
 	if o.Pkg() != nil {
-		return o.Pkg().Path() + `.` + o.Name()
+		prefix += o.Pkg().Path() + `.`
 	}
-	return o.Name()
+	if nest := typeparams.FindNestingFunc(o); nest != nil && nest != o {
+		if recv := typesutil.RecvType(nest.Type().(*types.Signature)); recv != nil {
+			prefix += recv.Obj().Name() + `:`
+		}
+		prefix += nest.Name() + `:`
+	}
+	return prefix + o.Name()
 }
 
 // getNestTypeParams gets the type parameters for the nesting function
@@ -155,23 +160,23 @@ func typeListToSlice(typeArgs *types.TypeList) []types.Type {
 func typeParamListToSlice(typeParams *types.TypeParamList) []types.Type {
 	tParams := make([]types.Type, typeParams.Len())
 	for i := range tParams {
-		tParams[i] = typeParams.At(i).Constraint()
+		tParams[i] = typeParams.At(i)
 	}
 	return tParams
 }
 
 type processingGroup struct {
-	o     types.Object
-	tNest []types.Type
-	tArgs []types.Type
+	o         types.Object
+	nestTArgs []types.Type
+	tArgs     []types.Type
 }
 
-func (p processingGroup) is(o types.Object, tNest, tArgs []types.Type) bool {
-	if len(p.tNest) != len(tNest) || len(p.tArgs) != len(tArgs) || p.o != o {
+func (p processingGroup) is(o types.Object, nestTArgs, tArgs []types.Type) bool {
+	if len(p.nestTArgs) != len(nestTArgs) || len(p.tArgs) != len(tArgs) || p.o != o {
 		return false
 	}
-	for i, ta := range tNest {
-		if p.tNest[i] != ta {
+	for i, ta := range nestTArgs {
+		if p.nestTArgs[i] != ta {
 			return false
 		}
 	}
@@ -188,16 +193,6 @@ type filterGen struct {
 	// this is typically used for type parameters to type arguments.
 	replacement map[types.Type]types.Type
 	inProgress  []processingGroup
-}
-
-// String is used for debugging purposes to print the filter generator replacement map.
-func (gen *filterGen) String() string {
-	parts := make([]string, 0, len(gen.replacement))
-	for k, v := range gen.replacement {
-		parts = append(parts, fmt.Sprintf("(%[1]T)%[1]s->(%[2]T)%[2]s", k, v))
-	}
-	sort.Strings(parts)
-	return `{` + strings.Join(parts, `, `) + `}`
 }
 
 // addReplacements adds a mapping from one type to another.
@@ -223,7 +218,11 @@ func (gen *filterGen) addReplacements(from []types.Type, to []types.Type) {
 	}
 }
 
-func (gen *filterGen) prepareForGenerics(o types.Object, tNest, tArgs []types.Type) ([]types.Type, []types.Type, func()) {
+// pushGenerics prepares the filter generator for processing an object
+// by setting any generic information and nesting information needed for it.
+// It returns the type arguments for the object and a function to restore
+// the previous state of the filter generator.
+func (gen *filterGen) pushGenerics(o types.Object, nestTArgs, tArgs []types.Type) ([]types.Type, []types.Type, func()) {
 	// Create a new replacement map and copy the old one into it.
 	oldReplacement := gen.replacement
 	gen.replacement = map[types.Type]types.Type{}
@@ -233,10 +232,10 @@ func (gen *filterGen) prepareForGenerics(o types.Object, tNest, tArgs []types.Ty
 
 	// Prepare the nested context for the object.
 	nestTParams := getNestTypeParams(o)
-	if len(tNest) > 0 {
-		gen.addReplacements(nestTParams, tNest)
+	if len(nestTArgs) > 0 {
+		gen.addReplacements(nestTParams, nestTArgs)
 	} else {
-		tNest = nestTParams
+		nestTArgs = nestTParams
 	}
 
 	// Prepare the type arguments for the object.
@@ -251,18 +250,18 @@ func (gen *filterGen) prepareForGenerics(o types.Object, tNest, tArgs []types.Ty
 	}
 
 	// Return a function to restore the old replacement map.
-	return tNest, tArgs, func() {
+	return nestTArgs, tArgs, func() {
 		gen.replacement = oldReplacement
 	}
 }
 
-func (gen *filterGen) startProcessing(o types.Object, tNest, tArgs []types.Type) bool {
+func (gen *filterGen) startProcessing(o types.Object, nestTArgs, tArgs []types.Type) bool {
 	for _, p := range gen.inProgress {
-		if p.is(o, tNest, tArgs) {
+		if p.is(o, nestTArgs, tArgs) {
 			return false
 		}
 	}
-	gen.inProgress = append(gen.inProgress, processingGroup{o: o, tNest: tNest, tArgs: tArgs})
+	gen.inProgress = append(gen.inProgress, processingGroup{o: o, nestTArgs: nestTArgs, tArgs: tArgs})
 	return true
 }
 
@@ -271,19 +270,19 @@ func (gen *filterGen) stopProcessing() {
 }
 
 // Object returns an object filter or filter part for an object.
-func (gen *filterGen) Object(o types.Object, tNest, tArgs []types.Type) string {
+func (gen *filterGen) Object(o types.Object, nestTArgs, tArgs []types.Type) string {
 	filter := objectName(o)
 
 	// Add additional type information for generics and instances.
-	tNest, tArgs, restore := gen.prepareForGenerics(o, tNest, tArgs)
-	defer restore()
+	nestTArgs, tArgs, popGenerics := gen.pushGenerics(o, nestTArgs, tArgs)
+	defer popGenerics()
 
-	if len(tArgs) > 0 || len(tNest) > 0 {
+	if len(tArgs) > 0 || len(nestTArgs) > 0 {
 		// Avoid infinite recursion in type arguments by
 		// tracking the current object and type arguments being processed
 		// and skipping if already in progress.
-		if gen.startProcessing(o, tNest, tArgs) {
-			filter += gen.TypeArgs(tNest, tArgs)
+		if gen.startProcessing(o, nestTArgs, tArgs) {
+			filter += gen.TypeArgs(nestTArgs, tArgs)
 			gen.stopProcessing()
 		} else {
 			filter += `[...]`
@@ -310,7 +309,7 @@ func (gen *filterGen) Signature(sig *types.Signature) string {
 
 // TypeArgs returns the filter part containing the type
 // arguments, e.g. `[bool;any,int|string]`.
-func (gen *filterGen) TypeArgs(tNest, tArgs []types.Type) string {
+func (gen *filterGen) TypeArgs(nestTArgs, tArgs []types.Type) string {
 	toStr := func(t []types.Type) string {
 		parts := make([]string, len(t))
 		for i, ta := range t {
@@ -320,8 +319,8 @@ func (gen *filterGen) TypeArgs(tNest, tArgs []types.Type) string {
 	}
 
 	head := `[`
-	if len(tNest) > 0 {
-		head += toStr(tNest) + `;`
+	if len(nestTArgs) > 0 {
+		head += toStr(nestTArgs) + `;`
 		if len(tArgs) > 0 {
 			head += ` `
 		}

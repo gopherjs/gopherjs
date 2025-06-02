@@ -21,23 +21,41 @@ func SignatureTypeParams(sig *types.Signature) *types.TypeParamList {
 }
 
 // FindNestingFunc returns the function or method that the given object
-// is nested in, or nil if the object was defined at the package level.
+// is nested in. Returns nil if the object was defined at the package level,
+// the position is invalid, or if the object is a function or method.
 func FindNestingFunc(obj types.Object) *types.Func {
 	objPos := obj.Pos()
 	if objPos == token.NoPos {
 		return nil
 	}
 
-	// We can't use `obj.Parent()` here since some types don't have a set
-	// parent, such as types created with `types.NewTypeName`. Instead find
-	// the innermost scope from the package to use as the object's parent scope.
-	scope := obj.Pkg().Scope().Innermost(objPos)
+	if _, ok := obj.(*types.Func); ok {
+		// Functions and methods are not nested in any other function.
+		return nil
+	}
+
+	scope := obj.Parent()
+	if scope == nil {
+		// Some types have a nil parent scope, such as types created with
+		// `types.NewTypeName`. Instead find the innermost scope from the
+		// package to use as the object's parent scope.
+		scope = obj.Pkg().Scope().Innermost(objPos)
+	}
 	for scope != nil {
-		// Iterate over all declarations in the scope.
+		// Iterate over all objects declared in the scope.
 		for _, name := range scope.Names() {
-			decl := scope.Lookup(name)
-			if fn, ok := decl.(*types.Func); ok && fn.Scope().Contains(objPos) {
+			d := scope.Lookup(name)
+			if fn, ok := d.(*types.Func); ok && fn.Scope().Contains(objPos) {
 				return fn
+			}
+
+			if named, ok := d.Type().(*types.Named); ok {
+				// Iterate over all methods of an object.
+				for i := 0; i < named.NumMethods(); i++ {
+					if m := named.Method(i); m.Scope().Contains(objPos) {
+						return m
+					}
+				}
 			}
 		}
 		scope = scope.Parent()

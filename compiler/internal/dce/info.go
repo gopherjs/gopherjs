@@ -99,9 +99,8 @@ func (d *Info) addDep(o types.Object, tNest, tArgs []types.Type) {
 }
 
 // addDepName adds a declaration dependency by name.
-// Will have no effect if the name is empty or one of the filters.
 func (d *Info) addDepName(depName string) {
-	if len(depName) > 0 && depName != d.objectFilter && depName != d.methodFilter {
+	if len(depName) > 0 {
 		if d.deps == nil {
 			d.deps = make(map[string]struct{})
 		}

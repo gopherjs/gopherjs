@@ -1,5 +1,7 @@
 package dce
 
+import "fmt"
+
 // DeclConstraint is type constraint for any code declaration that has
 // dead-code elimination (DCE) information attached to it and will be
 // used in a set.
@@ -14,6 +16,8 @@ type Selector[D DeclConstraint] struct {
 
 	// A queue of live decls to find other live decls.
 	pendingDecls []D
+
+	allDecls []D // TODO(grantnelson-wf): REMOVE
 }
 
 type declInfo[D DeclConstraint] struct {
@@ -29,6 +33,8 @@ func (s *Selector[D]) Include(decl D, implementsLink bool) {
 	}
 
 	dce := decl.Dce()
+
+	s.allDecls = append(s.allDecls, decl) // TODO(grantnelson-wf): REMOVE
 
 	if dce.isAlive() {
 		s.pendingDecls = append(s.pendingDecls, decl)
@@ -89,5 +95,16 @@ func (s *Selector[D]) AliveDecls() map[D]struct{} {
 			}
 		}
 	}
+
+	fmt.Printf("-------------------------------\n")                                         // TODO(grantnelson-wf): REMOVE
+	fmt.Printf("%d Alive, %d Dead\n", len(dceSelection), len(s.allDecls)-len(dceSelection)) // TODO(grantnelson-wf): REMOVE
+	for _, decl := range s.allDecls {
+		state := `[Dead] `
+		if _, ok := dceSelection[decl]; ok {
+			state = `[Alive]`
+		}
+		fmt.Printf("%s %v\n", state, decl.Dce().String()) // TODO(grantnelson-wf): REMOVE
+	}
+
 	return dceSelection
 }

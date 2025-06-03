@@ -416,7 +416,7 @@ func (fc *funcContext) assignedObjectName(o types.Object) (name string, found bo
 func (fc *funcContext) objectName(o types.Object) string {
 	if isPkgLevel(o) {
 		var nestTArgs []types.Type
-		if _, ok := o.(*types.Func); !ok {
+		if _, ok := o.(*types.Func); !ok && o != fc.instance.Object {
 			// Only set the nest type arguments for non-function objects.
 			// If this is a package level object, the nest type arguments will be empty.
 			nestTArgs = fc.instance.TArgs

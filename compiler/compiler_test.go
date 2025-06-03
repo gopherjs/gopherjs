@@ -495,7 +495,30 @@ func TestDeclSelection_CompletelyRemoveNestedType(t *testing.T) {
 	sel.IsDead(`func:command-line-arguments.deadCode`)
 }
 
-// TODO(grantnelson-wf): Add a test for when none of a nested type is used, check typeVar is removed.
+func TestDeclSelection_RemoveAnonNestedTypes(t *testing.T) {
+	// Based on test/fixedbugs/issue53635.go
+	// This checks that if an anon type (e.g. []T) is used in a function
+	// that is not used, the type is removed, otherwise it is kept.
+
+	src := `
+		package main
+		func Foo[T any](u T) any {
+			return []T(nil)
+		}
+
+		func deadCode() {
+			println(Foo[string]("cat"))
+		}
+
+		func main() {
+			println(Foo[int](42))
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+	sel.IsDead(`anonType:command-line-arguments.sliceType`)    // []string
+	sel.IsAlive(`anonType:command-line-arguments.sliceType$1`) // []int
+}
 
 func TestLengthParenthesizingIssue841(t *testing.T) {
 	// See issue https://github.com/gopherjs/gopherjs/issues/841

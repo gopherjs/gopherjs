@@ -551,7 +551,9 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		fc.pkgCtx.anonTypes = append(fc.pkgCtx.anonTypes, anonType)
 		fc.pkgCtx.anonTypeMap.Set(ty, anonType)
 	}
-	fc.pkgCtx.DeclareDCEDep(anonType, fc.instance.TArgs, nil)
+	// Since anonymous types are always package-level so they can be shared,
+	// don't pass in the function context (nest type parameters) to the DCE.
+	fc.pkgCtx.DeclareDCEDep(anonType, nil, nil)
 	return anonType.Name()
 }
 

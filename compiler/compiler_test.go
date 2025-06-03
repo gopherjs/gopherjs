@@ -520,6 +520,37 @@ func TestDeclSelection_RemoveAnonNestedTypes(t *testing.T) {
 	sel.IsAlive(`anonType:command-line-arguments.sliceType$1`) // []int
 }
 
+func TestDeclSelection_NoNestAppliedToFuncCallInMethod(t *testing.T) {
+	// Checks an case where a bug was being labelling a function in the
+	// DCE as part of a nest when it wasn't part of.
+	src := `
+		package main
+		func foo(a any) {
+			println(a)
+		}
+
+		type Bar[T any] struct { u T }
+
+		func (b *Bar[T]) Baz() {
+			foo(b.u)
+		}
+
+		func main() {
+			b := &Bar[int]{u: 42}
+			b.Baz()
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+	sel.IsAlive(`init:main`)
+
+	sel.IsAlive(`typeVar:command-line-arguments.Bar`)
+	sel.IsAlive(`type:command-line-arguments.Bar<int>`)
+	sel.IsAlive(`func:command-line-arguments.(*Bar).Baz<int>`)
+
+	sel.IsAlive(`func:command-line-arguments.foo`)
+}
+
 func TestLengthParenthesizingIssue841(t *testing.T) {
 	// See issue https://github.com/gopherjs/gopherjs/issues/841
 	//

@@ -73,6 +73,10 @@ func FindNestingFunc(obj types.Object) *types.Func {
 				}
 			}
 		}
+		if scope == pkgScope {
+			// If we reached the package scope, stop searching.
+			break
+		}
 		scope = scope.Parent()
 	}
 	return nil

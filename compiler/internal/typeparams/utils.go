@@ -24,6 +24,9 @@ func SignatureTypeParams(sig *types.Signature) *types.TypeParamList {
 // is nested in. Returns nil if the object was defined at the package level,
 // the position is invalid, or if the object is a function or method.
 func FindNestingFunc(obj types.Object) *types.Func {
+	if obj == nil {
+		return nil
+	}
 	objPos := obj.Pos()
 	if objPos == token.NoPos {
 		return nil
@@ -40,9 +43,9 @@ func FindNestingFunc(obj types.Object) *types.Func {
 	}
 	scope := obj.Parent()
 	if scope == nil {
-		// Some types have a nil parent scope, such as types created with
-		// `types.NewTypeName`. Instead find the innermost scope from the
-		// package to use as the object's parent scope.
+		// Some types have a nil parent scope, such as methods and field, and
+		// types created with `types.NewTypeName`. Instead find the innermost
+		// scope from the package to use as the object's parent scope.
 		if pkgScope == nil {
 			return nil
 		}

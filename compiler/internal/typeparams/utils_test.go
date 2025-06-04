@@ -2,10 +2,13 @@ package typeparams
 
 import (
 	"errors"
+	"fmt"
+	"go/ast"
 	"go/token"
 	"go/types"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
@@ -117,4 +120,179 @@ func TestRequiresGenericsSupport(t *testing.T) {
 			t.Errorf("Got: RequiresGenericsSupport() = %v. Want: nil", err)
 		}
 	})
+}
+
+func Test_FindNestingFunc(t *testing.T) {
+	src := `package main
+
+		type bob int
+		func (a bob) riker() any {
+			type bill struct{ b int }
+			return bill{b: int(a)}
+		}
+
+		type milo[T any] struct{}
+		func (c *milo[U]) mario() any {
+			type homer struct{ d U }
+			return homer{}
+		}
+
+		func bart() any {
+			e := []milo[int]{{}}
+			f := &e[0]
+			return f.mario()
+		}
+
+		func jack() any {
+			type linus interface{
+				interface {
+					marvin()
+				}
+				luke()
+			}
+			type owen interface {
+				linus
+				isaac()
+			}
+			return owen(nil)
+		}
+
+		func bender() any {
+			charles := func() any {
+				type arthur struct{ h int }
+				return arthur{h: 42}
+			}
+			return charles()
+		}
+		
+		var ned = func() any {
+			type elmer struct{ i int }
+			return elmer{i: 42}
+		}()
+
+		func garfield(count int) {
+			calvin:
+			for j := 0; j < count; j++ {
+				if j == 5 {
+					break calvin
+				}
+			}
+		}`
+
+	f := srctesting.New(t)
+	file := f.Parse("main.go", src)
+	info, _ := f.Check("test", file)
+
+	// Collect all objects and find nesting functions.
+	// The results will be ordered by position in the file.
+	results := []string{}
+	ast.Inspect(file, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok {
+			obj := info.ObjectOf(id)
+			fn := FindNestingFunc(obj)
+			fnName := ``
+			if fn != nil {
+				fnName = fn.FullName()
+			}
+			results = append(results, fmt.Sprintf("%3d) %s => %s", id.Pos(), id.Name, fnName))
+		}
+		return true
+	})
+
+	diff := cmp.Diff(results, []string{
+		// package main (nil object)
+		`  9) main => `,
+
+		// type bob int
+		` 22) bob => `,
+		` 26) int => `, // use of basic
+
+		// func (a bob) riker() any { ... }
+		` 38) a => (test.bob).riker`, // receiver def
+		` 40) bob => `,
+		` 45) riker => `,
+		` 53) any => `,
+		` 67) bill => (test.bob).riker`, // def
+		` 80) b => (test.bob).riker`,    // field def
+		` 82) int => `,
+		` 98) bill => (test.bob).riker`, // use
+		`103) b => (test.bob).riker`,    // field use
+		`106) int => `,
+		`110) a => (test.bob).riker`, // receiver use
+
+		// type milo[T any] struct {}
+		`126) milo => `,
+		`131) T => `,
+		`133) any => `,
+
+		// func (c *milo[U]) mario() any { ... }
+		`155) c => (*test.milo[U]).mario`, // receiver def
+		`158) milo => `,
+		`163) U => (*test.milo[U]).mario`, // type param specific to this method
+		`167) mario => `,
+		`175) any => `,
+		`189) homer => (*test.milo[U]).mario`, // def
+		`203) d => (*test.milo[U]).mario`,     // field def
+		`205) U => (*test.milo[U]).mario`,     // use
+		`219) homer => (*test.milo[U]).mario`, // use
+
+		// func bart() any { ... }
+		`239) bart => `,
+		`246) any => `,
+		`255) e => test.bart`, // local var def
+		`262) milo => `,       // use
+		`267) int => `,
+		`279) f => test.bart`, // local var def
+		`285) e => test.bart`, // use
+		`300) f => test.bart`, // use
+		`302) mario => `,      // use
+
+		// func jack() any { ... }
+		`322) jack => `,
+		`329) any => `,
+		`343) linus => test.jack`, // def
+		`381) marvin => `,         // method def
+		`400) luke => `,           // method def
+		`420) owen => test.jack`,  // def
+		`441) linus => test.jack`, // use
+		`451) isaac => `,          // method def
+		`474) owen => test.jack`,  // use
+		`479) nil => `,            // use of nil
+
+		// func bender() any { ... }
+		`496) bender => `,
+		`505) any => `,
+		`514) charles => test.bender`, // local func lit def
+		`532) any => `,
+		`547) arthur => test.bender`, // def inside func lit
+		`562) h => test.bender`,      // field def
+		`564) int => `,
+		`581) arthur => test.bender`,  // use
+		`588) h => test.bender`,       // use
+		`610) charles => test.bender`, // use of local func lit
+
+		// var ned = func() any { ... }
+		`633) ned => `, // var def
+		`646) any => `,
+		`660) elmer => `, // def inside package-level func lit
+		`674) i => `,     // field def
+		`676) int => `,
+		`692) elmer => `, // use
+		`698) i => `,     // use
+
+		// func garfield(count int) { ... }
+		`719) garfield => `,
+		`728) count => test.garfield`, // param def
+		`734) int => `,
+		`744) calvin => `,             // local label def
+		`759) j => test.garfield`,     // local var def
+		`767) j => test.garfield`,     // use
+		`771) count => test.garfield`, // use
+		`778) j => test.garfield`,     // use
+		`791) j => test.garfield`,     // use
+		`811) calvin => `,             // label break
+	})
+	if len(diff) > 0 {
+		t.Errorf("FindNestingFunc() mismatch (-want +got):\n%s", diff)
+	}
 }

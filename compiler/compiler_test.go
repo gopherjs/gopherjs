@@ -521,8 +521,8 @@ func TestDeclSelection_RemoveAnonNestedTypes(t *testing.T) {
 }
 
 func TestDeclSelection_NoNestAppliedToFuncCallInMethod(t *testing.T) {
-	// Checks an case where a bug was being labelling a function in the
-	// DCE as part of a nest when it wasn't part of.
+	// Checks that a function call to a non-local function isn't
+	// being labeled as a nested function call.
 	src := `
 		package main
 		func foo(a any) {

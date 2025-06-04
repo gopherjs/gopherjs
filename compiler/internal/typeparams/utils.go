@@ -56,7 +56,7 @@ func FindNestingFunc(obj types.Object) *types.Func {
 
 	// Walk up the scope chain to find the function or method that contains
 	// the object at the given position.
-	for scope != nil && scope != pkgScope {
+	for scope != nil || scope != pkgScope {
 		// Iterate over all objects declared in the scope.
 		for _, name := range scope.Names() {
 			d := scope.Lookup(name)

@@ -34,17 +34,29 @@ func FindNestingFunc(obj types.Object) *types.Func {
 		return nil
 	}
 
+	var pkgScope *types.Scope
+	if obj.Pkg() != nil {
+		pkgScope = obj.Pkg().Scope()
+	}
 	scope := obj.Parent()
-	if scope == nil {
+	if scope != nil {
+		if scope == pkgScope {
+			// If the object is defined at the package level, return nil.
+			return nil
+		}
+	} else {
 		// Some types have a nil parent scope, such as types created with
 		// `types.NewTypeName`. Instead find the innermost scope from the
 		// package to use as the object's parent scope.
-		if obj.Pkg() == nil || obj.Pkg().Scope() == nil {
+		if pkgScope == nil {
 			return nil
 		}
-		scope = obj.Pkg().Scope().Innermost(objPos)
+		scope = pkgScope.Innermost(objPos)
 	}
-	for scope != nil {
+
+	// Walk up the scope chain to find the function or method that contains
+	// the object at the given position.
+	for scope != nil && scope != pkgScope {
 		// Iterate over all objects declared in the scope.
 		for _, name := range scope.Names() {
 			d := scope.Lookup(name)

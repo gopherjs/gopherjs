@@ -23,6 +23,11 @@ func SignatureTypeParams(sig *types.Signature) *types.TypeParamList {
 // FindNestingFunc returns the function or method that the given object
 // is nested in. Returns nil if the object was defined at the package level,
 // the position is invalid, or if the object is a function or method.
+//
+// This may get different results for some specific object types
+// (e.g. receivers, type parameters) depending on the Go version.
+// In go1.19 and earlier, some objects are not nested in the function
+// they are part of the definition of, but in later versions they are.
 func FindNestingFunc(obj types.Object) *types.Func {
 	if obj == nil {
 		return nil

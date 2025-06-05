@@ -81,19 +81,19 @@ func (d *Info) SetAsAlive() {
 // The given optional type arguments are used to when the object is a
 // function with type parameters or anytime the object doesn't carry them.
 // If not given, this attempts to get the type arguments from the object.
-func (d *Info) SetName(o types.Object, tArgs ...types.Type) {
+func (d *Info) SetName(o types.Object, tNest, tArgs []types.Type) {
 	if !d.unnamed() {
 		panic(fmt.Errorf(`may only set the name once for %s`, d.String()))
 	}
 
 	// Determine name(s) for DCE.
-	d.objectFilter, d.methodFilter = getFilters(o, tArgs)
+	d.objectFilter, d.methodFilter = getFilters(o, tNest, tArgs)
 }
 
 // addDep add a declaration dependencies used by DCE
 // for the declaration this DCE info is attached to.
-func (d *Info) addDep(o types.Object, tArgs []types.Type) {
-	objectFilter, methodFilter := getFilters(o, tArgs)
+func (d *Info) addDep(o types.Object, tNest, tArgs []types.Type) {
+	objectFilter, methodFilter := getFilters(o, tNest, tArgs)
 	d.addDepName(objectFilter)
 	d.addDepName(methodFilter)
 }

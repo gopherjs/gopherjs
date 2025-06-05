@@ -21,24 +21,71 @@ func SignatureTypeParams(sig *types.Signature) *types.TypeParamList {
 }
 
 // FindNestingFunc returns the function or method that the given object
-// is nested in, or nil if the object was defined at the package level.
+// is nested in. Returns nil if the object was defined at the package level,
+// the position is invalid, or if the object is a function or method.
+//
+// This may get different results for some specific object types
+// (e.g. receivers, type parameters) depending on the Go version.
+// In go1.19 and earlier, some objects are not nested in the function
+// they are part of the definition of, but in later versions they are.
 func FindNestingFunc(obj types.Object) *types.Func {
+	if obj == nil {
+		return nil
+	}
 	objPos := obj.Pos()
 	if objPos == token.NoPos {
 		return nil
 	}
 
-	// We can't use `obj.Parent()` here since some types don't have a set
-	// parent, such as types created with `types.NewTypeName`. Instead find
-	// the innermost scope from the package to use as the object's parent scope.
-	scope := obj.Pkg().Scope().Innermost(objPos)
+	if _, ok := obj.(*types.Func); ok {
+		// Functions and methods are not nested in any other function.
+		return nil
+	}
+
+	var pkgScope *types.Scope
+	if obj.Pkg() != nil {
+		pkgScope = obj.Pkg().Scope()
+	}
+	scope := obj.Parent()
+	if scope == nil {
+		// Some types have a nil parent scope, such as methods and field, and
+		// types created with `types.NewTypeName`. Instead find the innermost
+		// scope from the package to use as the object's parent scope.
+		if pkgScope == nil {
+			return nil
+		}
+		scope = pkgScope.Innermost(objPos)
+	}
+
+	if scope == pkgScope {
+		// If the object is defined at the package level,
+		// we can shortcut this check and just return nil.
+		return nil
+	}
+
+	// Walk up the scope chain to find the function or method that contains
+	// the object at the given position.
 	for scope != nil {
-		// Iterate over all declarations in the scope.
+		// Iterate over all objects declared in the scope.
 		for _, name := range scope.Names() {
-			decl := scope.Lookup(name)
-			if fn, ok := decl.(*types.Func); ok && fn.Scope().Contains(objPos) {
+			d := scope.Lookup(name)
+			if fn, ok := d.(*types.Func); ok && fn.Scope() != nil && fn.Scope().Contains(objPos) {
 				return fn
 			}
+
+			if named, ok := d.Type().(*types.Named); ok {
+				// Iterate over all methods of an object.
+				for i := 0; i < named.NumMethods(); i++ {
+					if m := named.Method(i); m != nil && m.Scope() != nil && m.Scope().Contains(objPos) {
+						return m
+					}
+				}
+			}
+		}
+		if scope == pkgScope {
+			// If we reached the package scope, stop searching.
+			// We don't need to check the universal scope.
+			break
 		}
 		scope = scope.Parent()
 	}

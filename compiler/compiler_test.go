@@ -364,6 +364,179 @@ func TestDeclSelection_RemoveUnusedTypeConstraint(t *testing.T) {
 	sel.IsDead(`var:command-line-arguments.ghost`)
 }
 
+func TestDeclSelection_RemoveUnusedNestedTypesInFunction(t *testing.T) {
+	src := `
+		package main
+		func Foo[T any](u T) any {
+			type Bar struct { v T }
+			return Bar{v: u}
+		}
+		func deadCode() {
+			println(Foo[int](42))
+		}
+		func main() {
+			println(Foo[string]("cat"))
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+	sel.IsAlive(`func:command-line-arguments.main`)
+
+	sel.IsAlive(`funcVar:command-line-arguments.Foo`)
+	sel.IsAlive(`func:command-line-arguments.Foo<string>`)
+	sel.IsDead(`func:command-line-arguments.Foo<int>`)
+
+	sel.IsAlive(`typeVar:command-line-arguments.Bar`)
+	sel.IsAlive(`type:command-line-arguments.Bar<string;>`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+
+	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
+	sel.IsDead(`func:command-line-arguments.deadCode`)
+}
+
+func TestDeclSelection_RemoveUnusedNestedTypesInMethod(t *testing.T) {
+	src := `
+		package main
+		type Baz[T any] struct{}
+		func (b *Baz[T]) Foo(u T) any {
+			type Bar struct { v T }
+			return Bar{v: u}
+		}
+		func deadCode() {
+			b := Baz[int]{}
+			println(b.Foo(42))
+		}
+		func main() {
+			b := Baz[string]{}
+			println(b.Foo("cat"))
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+	sel.IsAlive(`func:command-line-arguments.main`)
+
+	sel.IsAlive(`typeVar:command-line-arguments.Baz`)
+	sel.IsDead(`type:command-line-arguments.Baz<int>`)
+	sel.IsAlive(`type:command-line-arguments.Baz<string>`)
+
+	sel.IsDead(`func:command-line-arguments.(*Baz).Foo<int>`)
+	sel.IsAlive(`func:command-line-arguments.(*Baz).Foo<string>`)
+
+	sel.IsAlive(`typeVar:command-line-arguments.Bar`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+	sel.IsAlive(`type:command-line-arguments.Bar<string;>`)
+
+	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
+	sel.IsDead(`func:command-line-arguments.deadCode`)
+}
+
+func TestDeclSelection_RemoveAllUnusedNestedTypes(t *testing.T) {
+	src := `
+		package main
+		func Foo[T any](u T) any {
+			type Bar struct { v T }
+			return Bar{v: u}
+		}
+		func deadCode() {
+			println(Foo[int](42))
+			println(Foo[string]("cat"))
+		}
+		func main() {}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+	sel.IsAlive(`func:command-line-arguments.main`)
+
+	sel.IsDead(`funcVar:command-line-arguments.Foo`)
+	sel.IsDead(`func:command-line-arguments.Foo<string>`)
+	sel.IsDead(`func:command-line-arguments.Foo<int>`)
+
+	sel.IsDead(`typeVar:command-line-arguments.Bar`)
+	sel.IsDead(`type:command-line-arguments.Bar<string;>`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+
+	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
+	sel.IsDead(`func:command-line-arguments.deadCode`)
+}
+
+func TestDeclSelection_CompletelyRemoveNestedType(t *testing.T) {
+	src := `
+		package main
+		func Foo[T any](u T) any {
+			type Bar struct { v T }
+			return Bar{v: u}
+		}
+		func deadCode() {
+			println(Foo[int](42))
+		}
+		func main() {}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+
+	sel.IsAlive(`func:command-line-arguments.main`)
+
+	sel.IsDead(`funcVar:command-line-arguments.Foo`)
+	sel.IsDead(`func:command-line-arguments.Foo<int>`)
+
+	sel.IsDead(`typeVar:command-line-arguments.Bar`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+
+	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
+	sel.IsDead(`func:command-line-arguments.deadCode`)
+}
+
+func TestDeclSelection_RemoveAnonNestedTypes(t *testing.T) {
+	// Based on test/fixedbugs/issue53635.go
+	// This checks that if an anon type (e.g. []T) is used in a function
+	// that is not used, the type is removed, otherwise it is kept.
+
+	src := `
+		package main
+		func Foo[T any](u T) any {
+			return []T(nil)
+		}
+		func deadCode() {
+			println(Foo[string]("cat"))
+		}
+		func main() {
+			println(Foo[int](42))
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+	sel.IsDead(`anonType:command-line-arguments.sliceType`)    // []string
+	sel.IsAlive(`anonType:command-line-arguments.sliceType$1`) // []int
+}
+
+func TestDeclSelection_NoNestAppliedToFuncCallInMethod(t *testing.T) {
+	// Checks that a function call to a non-local function isn't
+	// being labeled as a nested function call.
+	src := `
+		package main
+		func foo(a any) {
+			println(a)
+		}
+		type Bar[T any] struct { u T }
+		func (b *Bar[T]) Baz() {
+			foo(b.u)
+		}
+		func main() {
+			b := &Bar[int]{u: 42}
+			b.Baz()
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+	sel.IsAlive(`init:main`)
+
+	sel.IsAlive(`typeVar:command-line-arguments.Bar`)
+	sel.IsAlive(`type:command-line-arguments.Bar<int>`)
+	sel.IsAlive(`func:command-line-arguments.(*Bar).Baz<int>`)
+
+	sel.IsAlive(`func:command-line-arguments.foo`)
+}
+
 func TestLengthParenthesizingIssue841(t *testing.T) {
 	// See issue https://github.com/gopherjs/gopherjs/issues/841
 	//

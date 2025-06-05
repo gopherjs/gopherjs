@@ -43,34 +43,34 @@ func Test_Collector_Collecting(t *testing.T) {
 	decl2 := quickTestDecl(obj2)
 	var c Collector
 
-	c.DeclareDCEDep(obj1) // no effect since a collection isn't running.
+	c.DeclareDCEDep(obj1, nil, nil) // no effect since a collection isn't running.
 	depCount(t, decl1, 0)
 	depCount(t, decl2, 0)
 
 	c.CollectDCEDeps(decl1, func() {
-		c.DeclareDCEDep(obj2)
-		c.DeclareDCEDep(obj3)
-		c.DeclareDCEDep(obj3) // already added so has no effect.
+		c.DeclareDCEDep(obj2, nil, nil)
+		c.DeclareDCEDep(obj3, nil, nil)
+		c.DeclareDCEDep(obj3, nil, nil) // already added so has no effect.
 	})
 	depCount(t, decl1, 2)
 	depCount(t, decl2, 0)
 
-	c.DeclareDCEDep(obj4) // no effect since a collection isn't running.
+	c.DeclareDCEDep(obj4, nil, nil) // no effect since a collection isn't running.
 	depCount(t, decl1, 2)
 	depCount(t, decl2, 0)
 
 	c.CollectDCEDeps(decl2, func() {
-		c.DeclareDCEDep(obj5)
-		c.DeclareDCEDep(obj6)
-		c.DeclareDCEDep(obj7)
+		c.DeclareDCEDep(obj5, nil, nil)
+		c.DeclareDCEDep(obj6, nil, nil)
+		c.DeclareDCEDep(obj7, nil, nil)
 	})
 	depCount(t, decl1, 2)
 	depCount(t, decl2, 3)
 
 	// The second collection adds to existing dependencies.
 	c.CollectDCEDeps(decl2, func() {
-		c.DeclareDCEDep(obj4)
-		c.DeclareDCEDep(obj5)
+		c.DeclareDCEDep(obj4, nil, nil)
+		c.DeclareDCEDep(obj5, nil, nil)
 	})
 	depCount(t, decl1, 2)
 	depCount(t, decl2, 4)
@@ -541,7 +541,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				equal(t, d.Dce().String(), `[unnamed] -> []`)
 				t.Log(`object:`, types.ObjectString(tt.obj, nil))
 
-				d.Dce().SetName(tt.obj)
+				d.Dce().SetName(tt.obj, nil, nil)
 				equal(t, d.Dce().unnamed(), tt.want.unnamed())
 				equal(t, d.Dce().objectFilter, tt.want.objectFilter)
 				equal(t, d.Dce().methodFilter, tt.want.methodFilter)
@@ -568,7 +568,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 
 				c := Collector{}
 				c.CollectDCEDeps(d, func() {
-					c.DeclareDCEDep(tt.obj)
+					c.DeclareDCEDep(tt.obj, nil, nil)
 				})
 				equalSlices(t, d.Dce().getDeps(), wantDeps)
 			})
@@ -582,10 +582,10 @@ func Test_Info_SetNameOnlyOnce(t *testing.T) {
 	obj2 := quickVar(pkg, `Stripe`)
 
 	decl := &testDecl{}
-	decl.Dce().SetName(obj1)
+	decl.Dce().SetName(obj1, nil, nil)
 
 	err := capturePanic(t, func() {
-		decl.Dce().SetName(obj2)
+		decl.Dce().SetName(obj2, nil, nil)
 	})
 	errorMatches(t, err, `^may only set the name once for path/to/mogwai\.Gizmo .*$`)
 }
@@ -743,7 +743,7 @@ func Test_Info_UsesDeps(t *testing.T) {
 
 			c := Collector{}
 			c.CollectDCEDeps(d, func() {
-				c.DeclareDCEDep(uses, tArgs...)
+				c.DeclareDCEDep(uses, nil, tArgs)
 			})
 			equalSlices(t, d.Dce().getDeps(), tt.wantDeps)
 		})
@@ -752,10 +752,11 @@ func Test_Info_UsesDeps(t *testing.T) {
 
 func Test_Info_SpecificCasesDeps(t *testing.T) {
 	tests := []struct {
-		name     string
-		obj      types.Object
-		tArgs    []types.Type
-		wantDeps []string
+		name      string
+		obj       types.Object
+		nestTArgs []types.Type
+		tArgs     []types.Type
+		wantDeps  []string
 	}{
 		{
 			name: `struct instantiation with generic object`,
@@ -808,16 +809,113 @@ func Test_Info_SpecificCasesDeps(t *testing.T) {
 				`astoria.shuffle(string) int`,
 			},
 		},
+		{
+			name: `a concrete function with a nested concrete type instance`,
+			obj: parseObject(t, `davi`,
+				`package astoria
+				func jake(v int) any {
+					type davi struct { V int }
+					return davi{ V: v }
+				}`),
+			wantDeps: []string{`astoria.jake:davi`},
+		},
+		{
+			name: `a concrete function with a nested generic type instance`,
+			obj: parseObject(t, `pantoliano`,
+				`package astoria
+				func francis(v int) any {
+					type pantoliano[T any] struct { V int }
+					return pantoliano[int]{ V: v }
+				}`),
+			tArgs:    []types.Type{types.Typ[types.Int]},
+			wantDeps: []string{`astoria.francis:pantoliano[int]`},
+		},
+		{
+			name: `a generic function with a nested concrete type instance`,
+			obj: parseObject(t, `ramsey`,
+				`package astoria
+				func mama[T any](v T) any {
+					type ramsey struct { V T }
+					return ramsey{ V: v }
+				}`),
+			nestTArgs: []types.Type{types.Typ[types.Int]},
+			wantDeps:  []string{`astoria.mama:ramsey[int;]`},
+		},
+		{
+			name: `a generic function with a nested generic type instance`,
+			obj: parseObject(t, `matuszak`,
+				`package astoria
+				func sloth[T any]() any {
+					type matuszak[U any] struct { X T; Y U }
+					return matuszak[bool]{}
+				}`),
+			nestTArgs: []types.Type{types.Typ[types.String]},
+			tArgs:     []types.Type{types.Typ[types.Bool]},
+			wantDeps:  []string{`astoria.sloth:matuszak[string; bool]`},
+		},
+		{
+			name: `a concrete method with a nested concrete type instance`,
+			obj: parseObject(t, `davi`,
+				`package astoria
+				type fratelli struct { V int }
+				func (m *fratelli) jake() any {
+					type davi struct { V int }
+					return davi{ V: m.V }
+				}`),
+			wantDeps: []string{`astoria.fratelli:jake:davi`},
+		},
+		{
+			name: `a concrete method with a nested generic type instance`,
+			obj: parseObject(t, `pantoliano`,
+				`package astoria
+				type fratelli struct { V int }
+				func (f *fratelli) francis(v int) any {
+					type pantoliano[T any] struct { V int }
+					return pantoliano[int]{ V: v }
+				}`),
+			tArgs:    []types.Type{types.Typ[types.Int]},
+			wantDeps: []string{`astoria.fratelli:francis:pantoliano[int]`},
+		},
+		{
+			name: `a generic method with a nested concrete type instance`,
+			obj: parseObject(t, `ramsey`,
+				`package astoria
+				type fratelli[T any] struct { v T }
+				func (f *fratelli[T]) mama() any {
+					type ramsey struct { V T }
+					return ramsey{ V: f.v }
+				}`),
+			nestTArgs: []types.Type{types.Typ[types.Int]},
+			wantDeps:  []string{`astoria.fratelli:mama:ramsey[int;]`},
+		},
+		{
+			name: `a generic method with a nested generic type instance`,
+			obj: parseObject(t, `matuszak`,
+				`package astoria
+				type fratelli[T any] struct {}
+				func (f *fratelli[T]) sloth() any {
+					type matuszak[U any] struct { X T; Y U }
+					return matuszak[bool]{}
+				}`),
+			nestTArgs: []types.Type{types.Typ[types.String]},
+			tArgs:     []types.Type{types.Typ[types.Bool]},
+			wantDeps:  []string{`astoria.fratelli:sloth:matuszak[string; bool]`},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &testDecl{}
-			t.Logf(`object: %s with [%s]`, types.ObjectString(tt.obj, nil), (typesutil.TypeList)(tt.tArgs).String())
+			tail := ``
+			if len(tt.nestTArgs) > 0 {
+				tail += (typesutil.TypeList)(tt.nestTArgs).String() + `;`
+			}
+			tail += (typesutil.TypeList)(tt.tArgs).String()
+			t.Logf(`object: %s with [%s]`, types.ObjectString(tt.obj, nil), tail)
 
 			c := Collector{}
 			c.CollectDCEDeps(d, func() {
-				c.DeclareDCEDep(tt.obj, tt.tArgs...)
+				c.DeclareDCEDep(tt.obj, tt.nestTArgs, tt.tArgs)
 			})
 			equalSlices(t, d.Dce().getDeps(), tt.wantDeps)
 		})
@@ -837,7 +935,7 @@ func Test_Info_SetAsAlive(t *testing.T) {
 		equal(t, decl.Dce().isAlive(), true) // still alive but now explicitly alive
 		equal(t, decl.Dce().String(), `[alive] [unnamed] -> []`)
 
-		decl.Dce().SetName(obj)
+		decl.Dce().SetName(obj, nil, nil)
 		equal(t, decl.Dce().isAlive(), true) // alive because SetAsAlive was called
 		equal(t, decl.Dce().String(), `[alive] path/to/fantasia.Falkor -> []`)
 	})
@@ -848,7 +946,7 @@ func Test_Info_SetAsAlive(t *testing.T) {
 		equal(t, decl.Dce().isAlive(), true) // unnamed is automatically alive
 		equal(t, decl.Dce().String(), `[unnamed] -> []`)
 
-		decl.Dce().SetName(obj)
+		decl.Dce().SetName(obj, nil, nil)
 		equal(t, decl.Dce().isAlive(), false) // named so no longer automatically alive
 		equal(t, decl.Dce().String(), `path/to/fantasia.Artax -> []`)
 
@@ -876,27 +974,27 @@ func Test_Selector_JustVars(t *testing.T) {
 
 	c := Collector{}
 	c.CollectDCEDeps(frodo, func() {
-		c.DeclareDCEDep(samwise.obj)
-		c.DeclareDCEDep(meri.obj)
-		c.DeclareDCEDep(pippin.obj)
+		c.DeclareDCEDep(samwise.obj, nil, nil)
+		c.DeclareDCEDep(meri.obj, nil, nil)
+		c.DeclareDCEDep(pippin.obj, nil, nil)
 	})
 	c.CollectDCEDeps(pippin, func() {
-		c.DeclareDCEDep(meri.obj)
+		c.DeclareDCEDep(meri.obj, nil, nil)
 	})
 	c.CollectDCEDeps(aragorn, func() {
-		c.DeclareDCEDep(boromir.obj)
+		c.DeclareDCEDep(boromir.obj, nil, nil)
 	})
 	c.CollectDCEDeps(gimli, func() {
-		c.DeclareDCEDep(legolas.obj)
+		c.DeclareDCEDep(legolas.obj, nil, nil)
 	})
 	c.CollectDCEDeps(legolas, func() {
-		c.DeclareDCEDep(gimli.obj)
+		c.DeclareDCEDep(gimli.obj, nil, nil)
 	})
 	c.CollectDCEDeps(gandalf, func() {
-		c.DeclareDCEDep(frodo.obj)
-		c.DeclareDCEDep(aragorn.obj)
-		c.DeclareDCEDep(gimli.obj)
-		c.DeclareDCEDep(legolas.obj)
+		c.DeclareDCEDep(frodo.obj, nil, nil)
+		c.DeclareDCEDep(aragorn.obj, nil, nil)
+		c.DeclareDCEDep(gimli.obj, nil, nil)
+		c.DeclareDCEDep(legolas.obj, nil, nil)
 	})
 
 	for _, decl := range fellowship {
@@ -1012,16 +1110,16 @@ func Test_Selector_SpecificMethods(t *testing.T) {
 
 	c := Collector{}
 	c.CollectDCEDeps(rincewindRun, func() {
-		c.DeclareDCEDep(rincewind.obj)
+		c.DeclareDCEDep(rincewind.obj, nil, nil)
 	})
 	c.CollectDCEDeps(rincewindHide, func() {
-		c.DeclareDCEDep(rincewind.obj)
+		c.DeclareDCEDep(rincewind.obj, nil, nil)
 	})
 	c.CollectDCEDeps(vimesRun, func() {
-		c.DeclareDCEDep(vimes.obj)
+		c.DeclareDCEDep(vimes.obj, nil, nil)
 	})
 	c.CollectDCEDeps(vimesRead, func() {
-		c.DeclareDCEDep(vimes.obj)
+		c.DeclareDCEDep(vimes.obj, nil, nil)
 	})
 	vetinari.Dce().SetAsAlive()
 
@@ -1058,7 +1156,7 @@ func Test_Selector_SpecificMethods(t *testing.T) {
 			vetinari.Dce().deps = nil // reset deps
 			c.CollectDCEDeps(vetinari, func() {
 				for _, decl := range tt.deps {
-					c.DeclareDCEDep(decl.obj)
+					c.DeclareDCEDep(decl.obj, nil, nil)
 				}
 			})
 
@@ -1095,7 +1193,7 @@ func testPackage(name string) *types.Package {
 
 func quickTestDecl(o types.Object) *testDecl {
 	d := &testDecl{obj: o}
-	d.Dce().SetName(o)
+	d.Dce().SetName(o, nil, nil)
 	return d
 }
 

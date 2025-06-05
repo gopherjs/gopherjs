@@ -106,6 +106,33 @@ func (i Instance) Recv() Instance {
 	}
 }
 
+// Resolve instantiates and performs a substitution of the instance
+// to get the concrete type or function.
+// This will panic if the instance is not valid, e.g. if there are a different
+// number of type arguments than the type parameters.
+//
+// If `tc` is non-nil, it de-duplicates the instance against previous
+// instances with the same identity. See types.Instantiate for more info.
+//
+// Instances of named types may be lazily substituted, meaning the underlying
+// type may not be fully substituted with the type arguments when returned.
+//
+// This is useful for quickly resolving an instance for a test or for debugging
+// but this uses a temporary Resolver that will not be reused.
+// When resolving several instances in the same context, it is more efficient
+// to use NewResolver to take advantage of caching.
+func (i Instance) Resolve(tc *types.Context) types.Type {
+	instType := i.Object.Type()
+	if len(i.TArgs) > 0 {
+		var err error
+		instType, err = types.Instantiate(tc, instType, i.TArgs, true)
+		if err != nil {
+			panic(fmt.Errorf("failed to instantiate %v: %w", i, err))
+		}
+	}
+	return NewResolver(tc, i).Substitute(instType)
+}
+
 // InstanceSet allows collecting and processing unique Instances.
 //
 // Each Instance may be added to the set any number of times, but it will be

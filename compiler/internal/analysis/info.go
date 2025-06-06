@@ -570,7 +570,21 @@ func (fi *FuncInfo) visitCallExpr(n *ast.CallExpr, deferredCall bool) ast.Visito
 		if astutil.IsTypeExpr(f.Index, fi.pkgInfo.Info) {
 			// This is a call of an instantiation of a generic function,
 			// e.g. `foo[int]` in `func foo[T any]() { ... }; func main() { foo[int]() }`
-			fi.callToNamedFunc(fi.instanceForIdent(f.X.(*ast.Ident)), deferredCall)
+			var inst typeparams.Instance
+			switch fxt := f.X.(type) {
+			case *ast.Ident:
+				inst = fi.instanceForIdent(fxt)
+			case *ast.SelectorExpr:
+				if sel := fi.pkgInfo.Selections[fxt]; sel != nil {
+					inst = fi.instanceForSelection(sel)
+				} else {
+					// For qualified identifiers like `pkg.Foo`
+					inst = fi.instanceForIdent(fxt.Sel)
+				}
+			default:
+				panic(fmt.Errorf(`unexpected type %T for index expression %s`, f.X, f.X))
+			}
+			fi.callToNamedFunc(inst, deferredCall)
 			return fi
 		}
 		// The called function is gotten with an index or key from a map, array, or slice.

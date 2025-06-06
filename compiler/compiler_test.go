@@ -896,7 +896,150 @@ func Test_CrossPackageAnalysis(t *testing.T) {
 	)
 }
 
-func Test_OrderOfTypeInit_BadHash(t *testing.T) {
+func Test_IndexedSelectors(t *testing.T) {
+	src1 := `
+		package main
+		import "github.com/gopherjs/gopherjs/compiler/other"
+
+		type Foo struct { ops []func() }
+
+		func main() {
+			other.PrintZero[int]()
+			other.PrintZero[string]()
+			other.PrintZeroZero[int, string]()
+
+			f := Foo{ops: []func() {
+				other.PrintZero[int],
+				other.PrintZero[string],
+				other.PrintZeroZero[int, string],
+			}}
+			f.ops[0]()
+			f.ops[1]()
+		}`
+	src2 := `
+		package other
+
+		func PrintZero[T any]() {
+			var zero T
+			println("Zero is ", zero)
+		}
+			
+		func PrintZeroZero[T any, U any]() {
+			PrintZero[T]()
+			PrintZero[U]()
+		}`
+
+	root := srctesting.ParseSources(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `other/other.go`, Contents: []byte(src2)},
+		})
+
+	archives := compileProject(t, root, false)
+	checkForDeclFullNames(t, archives,
+		`typeVar:github.com/gopherjs/gopherjs/compiler/collections.Stack`,
+	)
+}
+
+func Test_OrderOfTypeInit_Simple(t *testing.T) {
+	src1 := `
+		package main
+		import "github.com/gopherjs/gopherjs/compiler/collections"
+		import "github.com/gopherjs/gopherjs/compiler/cat"
+		import "github.com/gopherjs/gopherjs/compiler/box"
+
+		func main() {
+			s := collections.NewStack[box.Unboxer[cat.Cat]]()
+			s.Push(box.Box(cat.Cat{Name: "Erwin"}))
+			s.Push(box.Box(cat.Cat{Name: "Dirac"}))
+			println(s.Pop().Unbox().Name)
+		}`
+	src2 := `
+		package collections
+
+		type Stack[T any] struct { values []T }
+
+		func NewStack[T any]() *Stack[T] {
+			return &Stack[T]{}
+		}
+
+		func (s *Stack[T]) Count() int {
+			return len(s.values)
+		}
+
+		func (s *Stack[T]) Push(value T) {
+			s.values = append(s.values, value)
+		}
+
+		func (s *Stack[T]) Pop() (value T) {
+			if len(s.values) > 0 {
+				maxIndex := len(s.values) - 1
+				s.values, value = s.values[:maxIndex], s.values[maxIndex]
+			}
+			return
+		}`
+	src3 := `
+		package cat
+
+		type Cat struct { Name string }`
+	src4 := `
+		package box
+
+		type Unboxer[T any] interface { Unbox() T }
+
+		type boxImp[T any] struct { whatsInTheBox T }
+
+		func Box[T any](value T) Unboxer[T] {
+			return &boxImp[T]{whatsInTheBox: value}
+		}
+
+		func (b *boxImp[T]) Unbox() T { return b.whatsInTheBox }`
+
+	root := srctesting.ParseSources(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `collections/stack.go`, Contents: []byte(src2)},
+			{Name: `cat/cat.go`, Contents: []byte(src3)},
+			{Name: `box/box.go`, Contents: []byte(src4)},
+		})
+
+	archives := compileProject(t, root, false)
+	checkForDeclFullNames(t, archives,
+		// collections
+		`typeVar:github.com/gopherjs/gopherjs/compiler/collections.Stack`,
+		`type:github.com/gopherjs/gopherjs/compiler/collections.Stack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`,
+		`anonType:github.com/gopherjs/gopherjs/compiler/collections.sliceType`, // []box.Unboxer[cat.Cat]
+		`anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`,   // *collections.Stack[box.Unboxer[cat.Cat]]
+		`func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Count<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`,
+		`func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Push<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`,
+		`func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Pop<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`,
+
+		// cat
+		`typeVar:github.com/gopherjs/gopherjs/compiler/cat.Cat`,
+		`type:github.com/gopherjs/gopherjs/compiler/cat.Cat`,
+
+		// box
+		`typeVar:github.com/gopherjs/gopherjs/compiler/box.Unboxer`,
+		`type:github.com/gopherjs/gopherjs/compiler/box.Unboxer<github.com/gopherjs/gopherjs/compiler/cat.Cat>`,
+
+		`funcVar:github.com/gopherjs/gopherjs/compiler/box.Box`,
+		`func:github.com/gopherjs/gopherjs/compiler/box.Box<github.com/gopherjs/gopherjs/compiler/cat.Cat>`,
+
+		`typeVar:github.com/gopherjs/gopherjs/compiler/box.boxImp`,
+		`type:github.com/gopherjs/gopherjs/compiler/box.boxImp<github.com/gopherjs/gopherjs/compiler/cat.Cat>`,
+		`anonType:github.com/gopherjs/gopherjs/compiler/box.ptrType`, // *boxImp[cat.Cat]
+		`func:github.com/gopherjs/gopherjs/compiler/box.(*boxImp).Unbox<github.com/gopherjs/gopherjs/compiler/cat.Cat>`,
+
+		// main
+		`init:main`,
+	)
+}
+
+func Test_OrderOfTypeInit_PingPong(t *testing.T) {
 	src1 := `
 		package main
 		import "github.com/gopherjs/gopherjs/compiler/collections"

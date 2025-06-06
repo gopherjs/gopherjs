@@ -21,24 +21,71 @@ func SignatureTypeParams(sig *types.Signature) *types.TypeParamList {
 }
 
 // FindNestingFunc returns the function or method that the given object
-// is nested in, or nil if the object was defined at the package level.
+// is nested in. Returns nil if the object was defined at the package level,
+// the position is invalid, or if the object is a function or method.
+//
+// This may get different results for some specific object types
+// (e.g. receivers, type parameters) depending on the Go version.
+// In go1.19 and earlier, some objects are not nested in the function
+// they are part of the definition of, but in later versions they are.
 func FindNestingFunc(obj types.Object) *types.Func {
+	if obj == nil {
+		return nil
+	}
 	objPos := obj.Pos()
 	if objPos == token.NoPos {
 		return nil
 	}
 
+	if _, ok := obj.(*types.Func); ok {
+		// Functions and methods are not nested in any other function.
+		return nil
+	}
+
+	var pkgScope *types.Scope
+	if obj.Pkg() != nil {
+		pkgScope = obj.Pkg().Scope()
+	}
 	scope := obj.Parent()
+	if scope == nil {
+		// Some types have a nil parent scope, such as methods and field, and
+		// types created with `types.NewTypeName`. Instead find the innermost
+		// scope from the package to use as the object's parent scope.
+		if pkgScope == nil {
+			return nil
+		}
+		scope = pkgScope.Innermost(objPos)
+	}
+
+	if scope == pkgScope {
+		// If the object is defined at the package level,
+		// we can shortcut this check and just return nil.
+		return nil
+	}
+
+	// Walk up the scope chain to find the function or method that contains
+	// the object at the given position.
 	for scope != nil {
-		// Iterate over all declarations in the scope.
+		// Iterate over all objects declared in the scope.
 		for _, name := range scope.Names() {
-			decl := scope.Lookup(name)
-			if fn, ok := decl.(*types.Func); ok {
-				// Check if the object's position is within the function's scope.
-				if objPos >= fn.Pos() && objPos <= fn.Scope().End() {
-					return fn
+			d := scope.Lookup(name)
+			if fn, ok := d.(*types.Func); ok && fn.Scope() != nil && fn.Scope().Contains(objPos) {
+				return fn
+			}
+
+			if named, ok := d.Type().(*types.Named); ok {
+				// Iterate over all methods of an object.
+				for i := 0; i < named.NumMethods(); i++ {
+					if m := named.Method(i); m != nil && m.Scope() != nil && m.Scope().Contains(objPos) {
+						return m
+					}
 				}
 			}
+		}
+		if scope == pkgScope {
+			// If we reached the package scope, stop searching.
+			// We don't need to check the universal scope.
+			break
 		}
 		scope = scope.Parent()
 	}
@@ -85,15 +132,22 @@ func RequiresGenericsSupport(info *types.Info) error {
 	return nil
 }
 
-// isGeneric will search all the given types and their subtypes for a
+// isGeneric will search all the given types in `typ` and their subtypes for a
 // *types.TypeParam. This will not check if a type could be generic,
 // but if each instantiation is not completely concrete yet.
+// The given `ignore` slice is used to ignore type params that are known not
+// to be substituted yet, typically the nest type parameters.
+//
+// This does allow for named types to have lazily substituted underlying types,
+// as returned by methods like `types.Instantiate`,
+// meaning that the type `B[T]` may be instantiated to `B[int]` but still have
+// the underlying type of `struct { t T }` instead of `struct { t int }`.
 //
 // This is useful to check for generics types like `X[B[T]]`, where
 // `X` appears concrete because it is instantiated with the type argument `B[T]`,
 // however the `T` inside `B[T]` is a type parameter making `X[B[T]]` a generic
 // type since it required instantiation to a concrete type, e.g. `X[B[int]]`.
-func isGeneric(typ ...types.Type) bool {
+func isGeneric(ignore *types.TypeParamList, typ []types.Type) bool {
 	var containsTypeParam func(t types.Type) bool
 
 	foreach := func(count int, getter func(index int) types.Type) bool {
@@ -106,19 +160,34 @@ func isGeneric(typ ...types.Type) bool {
 	}
 
 	seen := make(map[types.Type]struct{})
+	managed := make(map[types.Type]struct{})
+	for i := ignore.Len() - 1; i >= 0; i-- {
+		managed[ignore.At(i)] = struct{}{}
+	}
 	containsTypeParam = func(t types.Type) bool {
 		if _, ok := seen[t]; ok {
 			return false
 		}
 		seen[t] = struct{}{}
 
+		if _, ok := managed[t]; ok {
+			return false
+		}
+
 		switch t := t.(type) {
 		case *types.TypeParam:
 			return true
 		case *types.Named:
-			return t.TypeParams().Len() != t.TypeArgs().Len() ||
-				foreach(t.TypeArgs().Len(), func(i int) types.Type { return t.TypeArgs().At(i) }) ||
-				containsTypeParam(t.Underlying())
+			if t.TypeParams().Len() != t.TypeArgs().Len() ||
+				foreach(t.TypeArgs().Len(), func(i int) types.Type { return t.TypeArgs().At(i) }) {
+				return true
+			}
+			// Add type parameters to managed so that if they are encountered
+			// we know that they are just lazy substitutions for the checked type arguments.
+			for i := t.TypeParams().Len() - 1; i >= 0; i-- {
+				managed[t.TypeParams().At(i)] = struct{}{}
+			}
+			return containsTypeParam(t.Underlying())
 		case *types.Struct:
 			return foreach(t.NumFields(), func(i int) types.Type { return t.Field(i).Type() })
 		case *types.Interface:

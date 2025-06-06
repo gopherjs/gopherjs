@@ -1,5 +1,7 @@
 package dce
 
+import "fmt"
+
 // DeclConstraint is type constraint for any code declaration that has
 // dead-code elimination (DCE) information attached to it and will be
 // used in a set.
@@ -64,11 +66,20 @@ func (s *Selector[D]) popPending() D {
 // This should only be called once all declarations have been included.
 func (s *Selector[D]) AliveDecls() map[D]struct{} {
 	dceSelection := make(map[D]struct{}) // Known live decls.
+	selectedOrder := []D{}
+
 	for len(s.pendingDecls) != 0 {
 		d := s.popPending()
 		dce := d.Dce()
 
+		if _, exists := dceSelection[d]; exists {
+			// If dependencies are setup correctly, this should not be reached,
+			// however, if it is, we can skip this decl.
+			continue
+		}
 		dceSelection[d] = struct{}{} // Mark the decl as live.
+
+		selectedOrder = append(selectedOrder, d) // Keep the order of selection.
 
 		// Consider all decls the current one is known to depend on and possible add
 		// them to the live queue.
@@ -89,5 +100,12 @@ func (s *Selector[D]) AliveDecls() map[D]struct{} {
 			}
 		}
 	}
+
+	fmt.Printf("Selected declarations in order (%d):\n", len(selectedOrder)) // TODO(grantnelson-wf): REMOVE
+	width := len(fmt.Sprintf("%d", len(selectedOrder)))
+	for i, d := range selectedOrder {
+		fmt.Printf("\t%*d: %v\n", width, i+1, d)
+	}
+
 	return dceSelection
 }

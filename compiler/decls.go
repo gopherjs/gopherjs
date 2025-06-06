@@ -80,6 +80,11 @@ func (d *Decl) Dce() *dce.Info {
 	return &d.DCEInfo
 }
 
+func (d *Decl) String() string { // TODO(grantnelson-wf): REMOVE
+	return fmt.Sprintf("Decl{FullName: %s, Vars: %v, RefExpr: %s, Blocking: %t}",
+		d.FullName, d.Vars, d.RefExpr, d.Blocking)
+}
+
 // topLevelObjects extracts package-level variables, functions and named types
 // from the package AST.
 func (fc *funcContext) topLevelObjects(srcs *sources.Sources) (vars []*types.Var, functions []*ast.FuncDecl, typeNames typesutil.TypeNames) {

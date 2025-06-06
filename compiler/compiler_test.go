@@ -723,6 +723,99 @@ func Test_CrossPackageAnalysis(t *testing.T) {
 	)
 }
 
+func Test_OrderOfTypeInit_BadHash(t *testing.T) {
+	src1 := `
+		package main
+		import "github.com/gopherjs/gopherjs/compiler/collections"
+		import "github.com/gopherjs/gopherjs/compiler/cat"
+
+		func main() {
+			s := collections.NewHashSet[cat.Cat[collections.BadHasher]]()
+			s.Add(cat.Cat[collections.BadHasher]{Name: "Fluffy"})
+			s.Add(cat.Cat[collections.BadHasher]{Name: "Mittens"})
+			s.Add(cat.Cat[collections.BadHasher]{Name: "Whiskers"})
+			println(s.Count(), "elements")
+		}`
+	src2 := `
+		package collections
+
+		// HashSet keeps a set of non-nil elements that have unique hashes.
+		type HashSet[E Hashable] struct { data map[uint]E }
+
+		func NewHashSet[E Hashable]() *HashSet[E] {
+			return &HashSet[E]{ data: map[uint]E{} }
+		}
+
+		func (s *HashSet[E]) Add(e E) {
+			s.data[e.Hash()] = e
+		}
+
+		func (s *HashSet[E]) Count() int {
+			return len(s.data)
+		}`
+	src3 := `
+		package collections
+
+		type Hasher interface {
+			Add(value uint)
+			Sum() uint
+		}
+		
+		type Hashable interface {
+			Hash() uint
+		}
+		
+		type BadHasher struct { value uint }
+
+		func (h BadHasher) Add(value uint) { h.value += value }
+		func (h BadHasher) Sum() uint      { return h.value }`
+	src4 := `
+		package cat
+		import "github.com/gopherjs/gopherjs/compiler/collections"
+
+		type Cat[H collections.Hasher] struct { Name string }
+
+		func (c Cat[H]) Hash() uint {
+			var h H
+			for _, v := range []rune(c.Name) {
+				h.Add(uint(v))
+			}
+			return h.Sum()
+		}`
+
+	root := srctesting.ParseSources(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `collections/hashmap.go`, Contents: []byte(src2)},
+			{Name: `collections/hashes.go`, Contents: []byte(src3)},
+			{Name: `cat/cat.go`, Contents: []byte(src4)},
+		})
+
+	archives := compileProject(t, root, false)
+	checkForDeclFullNames(t, archives,
+		// collections
+		`funcVar:github.com/gopherjs/gopherjs/compiler/collections.Values`,
+		`func:github.com/gopherjs/gopherjs/compiler/collections.Values<string, int, map[string]int>`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/collections.Keys`,
+		`func:github.com/gopherjs/gopherjs/compiler/collections.Keys<string, int, map[string]int>`,
+
+		// sorts
+		`funcVar:github.com/gopherjs/gopherjs/compiler/sorts.Pair`,
+		`func:github.com/gopherjs/gopherjs/compiler/sorts.Pair<string, int, []string, []int>`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/sorts.Bubble`,
+		`func:github.com/gopherjs/gopherjs/compiler/sorts.Bubble`,
+
+		// stable
+		`funcVar:github.com/gopherjs/gopherjs/compiler/stable.Print`,
+		`func:github.com/gopherjs/gopherjs/compiler/stable.Print<string, int, map[string]int>`,
+
+		// main
+		`init:main`,
+	)
+}
+
 func TestArchiveSelectionAfterSerialization(t *testing.T) {
 	src := `
 		package main
@@ -1052,6 +1145,33 @@ func renderPackage(t *testing.T, archive *Archive, minify bool) string {
 	return b
 }
 
+// getPackageList returns the list of archives sorted by import path.
+func getPackageList(archives map[string]*Archive) []*Archive {
+	paths := make([]string, 0, len(archives))
+	for path := range archives {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+
+	packages := make([]*Archive, 0, len(archives))
+	for _, path := range paths {
+		packages = append(packages, archives[path])
+	}
+	return packages
+}
+
+// getDceSelection returns the set of declarations that are alive after
+// dead code elimination.
+func getDceSelection(packages []*Archive) map[*Decl]struct{} {
+	sel := &dce.Selector[*Decl]{}
+	for _, pkg := range packages {
+		for _, d := range pkg.Declarations {
+			sel.Include(d, false)
+		}
+	}
+	return sel.AliveDecls()
+}
+
 type selectionTester struct {
 	t            *testing.T
 	mainPkg      *Archive
@@ -1065,24 +1185,8 @@ func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []src
 	root := srctesting.ParseSources(t, sourceFiles, auxFiles)
 	archives := compileProject(t, root, false)
 	mainPkg := archives[root.PkgPath]
-
-	paths := make([]string, 0, len(archives))
-	for path := range archives {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	packages := make([]*Archive, 0, len(archives))
-	for _, path := range paths {
-		packages = append(packages, archives[path])
-	}
-
-	sel := &dce.Selector[*Decl]{}
-	for _, pkg := range packages {
-		for _, d := range pkg.Declarations {
-			sel.Include(d, false)
-		}
-	}
-	dceSelection := sel.AliveDecls()
+	packages := getPackageList(archives)
+	dceSelection := getDceSelection(packages)
 
 	return &selectionTester{
 		t:            t,

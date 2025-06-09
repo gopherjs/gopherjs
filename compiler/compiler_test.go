@@ -901,20 +901,32 @@ func Test_IndexedSelectors(t *testing.T) {
 		package main
 		import "github.com/gopherjs/gopherjs/compiler/other"
 
-		type Foo struct { ops []func() }
-
 		func main() {
+			// Instance IndexExpr with a package SelectorExpr for a function call.
 			other.PrintZero[int]()
 			other.PrintZero[string]()
+
+			// Instance IndexListExpr with a package SelectorExpr for a function call.
 			other.PrintZeroZero[int, string]()
 
-			f := Foo{ops: []func() {
+			f := other.Foo{Ops: []func() {
 				other.PrintZero[int],
 				other.PrintZero[string],
 				other.PrintZeroZero[int, string],
 			}}
-			f.ops[0]()
-			f.ops[1]()
+			// Index IndexExpr with a struct SelectorExpr for a function call.
+			f.Ops[0]()
+			f.Ops[1]()
+
+			// Index IndexExpr with a package/var SelectorExpr for a function call.
+			other.Bar.Ops[0]()
+			other.Baz[0]()
+
+			// IndexExpr with a SelectorExpr for a cast
+			_ = other.ZHandle[int](other.PrintZero[int])
+
+			// IndexListExpr with a SelectorExpr for a cast
+			_ = other.ZZHandle[int, string](other.PrintZeroZero[int, string])
 		}`
 	src2 := `
 		package other
@@ -927,7 +939,17 @@ func Test_IndexedSelectors(t *testing.T) {
 		func PrintZeroZero[T any, U any]() {
 			PrintZero[T]()
 			PrintZero[U]()
-		}`
+		}
+
+		type ZHandle[T any] func()
+		type ZZHandle[T any, U any] func()
+		type Foo struct { Ops []func() }
+
+		var Bar = Foo{Ops: []func() {
+			PrintZero[int],
+			PrintZero[string],
+		}}
+		var Baz = Bar.Ops`
 
 	root := srctesting.ParseSources(t,
 		[]srctesting.Source{
@@ -938,8 +960,13 @@ func Test_IndexedSelectors(t *testing.T) {
 		})
 
 	archives := compileProject(t, root, false)
+	// We mostly are checking that the code was turned into decls correctly,
+	// since the issue was that indexed selectors were not being handled correctly,
+	// so if it didn't panic by this point, it should be fine.
 	checkForDeclFullNames(t, archives,
-		`typeVar:github.com/gopherjs/gopherjs/compiler/collections.Stack`,
+		`func:command-line-arguments.main`,
+		`type:github.com/gopherjs/gopherjs/compiler/other.ZHandle<int>`,
+		`type:github.com/gopherjs/gopherjs/compiler/other.ZZHandle<int, string>`,
 	)
 }
 

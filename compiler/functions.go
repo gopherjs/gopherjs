@@ -126,7 +126,7 @@ func (fc *funcContext) translateStandaloneFunction(fun *ast.FuncDecl) []byte {
 	body := fc.translateFunctionBody(fun.Type, nil, fun.Body)
 	code := bytes.NewBuffer(nil)
 	fmt.Fprintf(code, "\t%s = %s;\n", lvalue, body)
-	if fun.Name.IsExported() {
+	if fun.Name.IsExported() && fc.instance.IsTrivial() {
 		fmt.Fprintf(code, "\t$pkg.%s = %s;\n", encodeIdent(fun.Name.Name), lvalue)
 	}
 	return code.Bytes()

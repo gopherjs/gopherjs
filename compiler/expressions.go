@@ -531,7 +531,6 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Signature:
 			switch u := e.X.(type) {
 			case *ast.Ident:
-				// Handles `f[i](...)`
 				return fc.formatExpr("%s", fc.instName(fc.instanceOf(u)))
 			case *ast.SelectorExpr:
 				return fc.formatExpr("%s", fc.instName(fc.instanceOf(u.Sel)))

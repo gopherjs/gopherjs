@@ -287,25 +287,34 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 	var mainFunc *types.Func
 	for _, fun := range functions {
 		o := fc.pkgCtx.Defs[fun.Name].(*types.Func)
+		instances := fc.knownInstances(o)
+		if len(instances) == 0 {
+			// No instances of the function, skip it.
+			continue
+		}
 
 		if fun.Recv == nil {
 			// Auxiliary decl shared by all instances of the function that defines
-			// package-level variable by which they all are referenced.
+			// package-level variable by which they all are referenced,
+			// e.g. init functions and instances of generic functions.
 			objName := fc.objectName(o)
 			varDecl := &Decl{
 				FullName: funcVarDeclFullName(o),
 				Vars:     []string{objName},
 			}
 			varDecl.Dce().SetName(o, nil, nil)
-			if o.Type().(*types.Signature).TypeParams().Len() != 0 {
+			if len(instances) > 1 || !instances[0].IsTrivial() {
 				varDecl.DeclCode = fc.CatchOutput(0, func() {
 					fc.Printf("%s = {};", objName)
+					if o.Exported() {
+						fc.Printf("$pkg.%s = %s;", encodeIdent(fun.Name.Name), objName)
+					}
 				})
 			}
 			funcDecls = append(funcDecls, varDecl)
 		}
 
-		for _, inst := range fc.knownInstances(o) {
+		for _, inst := range instances {
 			funcDecls = append(funcDecls, fc.newFuncDecl(fun, inst))
 
 			if o.Name() == "main" {

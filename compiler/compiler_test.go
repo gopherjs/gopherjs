@@ -900,7 +900,6 @@ func Test_IndexedSelectors(t *testing.T) {
 	src1 := `
 		package main
 		import "github.com/gopherjs/gopherjs/compiler/other"
-
 		func main() {
 			// Instance IndexExpr with a package SelectorExpr for a function call.
 			other.PrintZero[int]()
@@ -909,12 +908,12 @@ func Test_IndexedSelectors(t *testing.T) {
 			// Instance IndexListExpr with a package SelectorExpr for a function call.
 			other.PrintZeroZero[int, string]()
 
+			// Index IndexExpr with a struct SelectorExpr for a function call.
 			f := other.Foo{Ops: []func() {
 				other.PrintZero[int],
 				other.PrintZero[string],
 				other.PrintZeroZero[int, string],
 			}}
-			// Index IndexExpr with a struct SelectorExpr for a function call.
 			f.Ops[0]()
 			f.Ops[1]()
 
@@ -930,12 +929,10 @@ func Test_IndexedSelectors(t *testing.T) {
 		}`
 	src2 := `
 		package other
-
 		func PrintZero[T any]() {
 			var zero T
 			println("Zero is ", zero)
 		}
-			
 		func PrintZeroZero[T any, U any]() {
 			PrintZero[T]()
 			PrintZero[U]()
@@ -943,8 +940,8 @@ func Test_IndexedSelectors(t *testing.T) {
 
 		type ZHandle[T any] func()
 		type ZZHandle[T any, U any] func()
-		type Foo struct { Ops []func() }
 
+		type Foo struct { Ops []func() }
 		var Bar = Foo{Ops: []func() {
 			PrintZero[int],
 			PrintZero[string],

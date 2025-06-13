@@ -2,6 +2,7 @@ package sequencer
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -18,9 +19,11 @@ type Sequencer[T comparable] interface {
 	Has(item T) bool
 
 	// Dependents returns the items that are dependent on the given item.
+	// Each time this is called it creates a new slice.
 	Dependents(item T) []T
 
 	// Dependencies returns the items that given item depends on.
+	// Each time this is called it creates a new slice.
 	Dependencies(item T) []T
 
 	// Depth returns the depth of the item in the dependency graph.
@@ -40,6 +43,7 @@ type Sequencer[T comparable] interface {
 	// Group returns all the items at the given depth.
 	// If the depth is out of bounds, it returns an empty slice.
 	// The depth is zero-based, so depth 0 is the root items.
+	// Each time this is called it creates a new slice.
 	//
 	// This may have to perform sequencing of the items, so
 	// this may panic if a cycle is detected.
@@ -58,6 +62,8 @@ func New[T comparable]() Sequencer[T] {
 		groups:   map[int]vertexSet[T]{},
 	}
 }
+
+var ErrCycleDetected = errors.New(`cycle detected in the dependency graph`)
 
 type sequencerImp[T comparable] struct {
 	// vertices is a set of all vertices indexed by the item they represent.
@@ -241,7 +247,7 @@ func (s *sequencerImp[T]) propagateDepth(waiting map[*vertex[T]]int, ready []*ve
 func (s *sequencerImp[T]) checkForCycles(waiting map[*vertex[T]]int) {
 	if len(waiting) > 0 {
 		// TODO: Add more information about the cycle.
-		panic(fmt.Errorf(`cycle detected in the dependency graph`))
+		panic(ErrCycleDetected)
 	}
 }
 

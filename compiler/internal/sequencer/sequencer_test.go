@@ -2,6 +2,7 @@ package sequencer
 
 import (
 	"fmt"
+	"sort"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -10,23 +11,26 @@ import (
 func TestSequencingStrings(t *testing.T) {
 	s := New[string]()
 
-	// TODO: Improve test input
-
-	s.Add(`a`, `ant`, `apple`)
-	s.Add(`p`, `pepper`, `apple`)
-	s.Add(`t`, `cat`, `ant`, `catnip`)
-	s.Add(`cat`, `catnip`)
+	s.Add(`Bob`, `Rad`, `Stripe`, `Bandit`)
+	s.Add(`Chris`, `Rad`, `Stripe`, `Bandit`)
+	s.Add(`Stripe`, `Muffin`, `Socks`)
+	s.Add(`Trixie`, `Muffin`, `Socks`)
+	s.Add(`Mort`, `Brandy`, `Chili`)
+	s.Add(`Bandit`, `Bluey`, `Bingo`)
+	s.Add(`Chili`, `Bluey`, `Bingo`)
 
 	count := s.DepthCount()
 	got := make([][]string, count)
 	for i := 0; i < s.DepthCount(); i++ {
-		got[i] = s.Group(i)
+		group := s.Group(i)
+		sort.Strings(group)
+		got[i] = group
 	}
 
 	exp := [][]string{
-		{`catnip`, `ant`, `apple`},
-		{`cat`, `pepper`, `ant`},
-		{`t`, `p`, `a`},
+		{`Bingo`, `Bluey`, `Brandy`, `Muffin`, `Rad`, `Socks`},
+		{`Bandit`, `Chili`, `Stripe`, `Trixie`},
+		{`Bob`, `Chris`, `Mort`},
 	}
 	if diff := cmp.Diff(got, exp); len(diff) > 0 {
 		fmt.Println(s.ToMermaid())

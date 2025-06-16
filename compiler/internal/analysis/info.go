@@ -124,11 +124,7 @@ func (info *Info) newFuncInfoInstances(fd *ast.FuncDecl) []*FuncInfo {
 
 	funcInfos := make([]*FuncInfo, 0, len(instances))
 	for _, inst := range instances {
-		var resolver *typeparams.Resolver
-		if sig, ok := obj.Type().(*types.Signature); ok {
-			tp := typeparams.SignatureTypeParams(sig)
-			resolver = typeparams.NewResolver(info.typeCtx, tp, inst.TArgs, nil)
-		}
+		resolver := typeparams.NewResolver(info.typeCtx, inst)
 		fi := info.newFuncInfo(fd, inst.Object, inst.TArgs, resolver)
 		funcInfos = append(funcInfos, fi)
 	}

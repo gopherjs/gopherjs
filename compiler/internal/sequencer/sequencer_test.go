@@ -8,7 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestSequencingStrings(t *testing.T) {
+func TestBasicSequencing(t *testing.T) {
 	s := New[string]()
 	s.Add(`Rad`, `Bob`, `Chris`)
 	s.Add(`Stripe`, `Bob`, `Chris`)
@@ -68,6 +68,37 @@ func TestSequencingStrings(t *testing.T) {
 		{`Bob`, `Chris`, `Frisky`, `Mort`, `Trixie`},
 		{`Bandit`, `Brandy`, `Chili`, `Rad`, `Stripe`},
 		{`Bingo`, `Bluey`, `Muffin`, `Socks`},
+	}
+	if diff := cmp.Diff(got, exp); len(diff) > 0 {
+		t.Errorf("unexpected sequencing (-got +exp):\n%s", diff)
+	}
+}
+
+func TestDiamonds(t *testing.T) {
+	s := New[string]()
+	// This makes several diamonds in the graph to check that vertices
+	// are only processed once all the parents are processed.
+	s.Add(`A`, `B`, `C`, `D`, `G`)
+	s.Add(`B`, `D`, `E`)
+	s.Add(`C`, `D`, `F`)
+	s.Add(`D`, `G`)
+	s.Add(`E`, `G`)
+	s.Add(`F`, `G`)
+
+	t.Log(s.ToMermaid())
+
+	count := s.DepthCount()
+	got := make([][]string, count)
+	for i := 0; i < s.DepthCount(); i++ {
+		group := s.Group(i)
+		sort.Strings(group)
+		got[i] = group
+	}
+	exp := [][]string{
+		{`G`},
+		{`D`, `E`, `F`},
+		{`B`, `C`},
+		{`A`},
 	}
 	if diff := cmp.Diff(got, exp); len(diff) > 0 {
 		t.Errorf("unexpected sequencing (-got +exp):\n%s", diff)

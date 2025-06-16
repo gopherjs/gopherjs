@@ -260,9 +260,7 @@ func (s *sequencerImp[T]) performSequencing(panicOnCycle bool) {
 	s.clearGroups()
 	waiting, ready := s.prepareWaitingAndReady()
 	s.propagateDepth(waiting, ready)
-	if s.checkForCycles(waiting, panicOnCycle) {
-		return
-	}
+	s.checkForCycles(waiting, panicOnCycle)
 }
 
 // clearGroups resets the sequencer state, clearing the groups and depth count.
@@ -366,11 +364,10 @@ func reduceToCycles[T comparable](waiting map[*vertex[T]]int, ready *vertexStack
 // it means there is a cycle since some of them are waiting for parents that
 // eventually depend on them.
 //
-// If `panicOnCycle` is true, it panics with `ErrCycleDetected`, otherwise
-// this will return true if a cycle was detected and false otherwise.
-func (s *sequencerImp[T]) checkForCycles(waiting map[*vertex[T]]int, panicOnCycle bool) bool {
+// If `panicOnCycle` is true, it panics with `ErrCycleDetected`.
+func (s *sequencerImp[T]) checkForCycles(waiting map[*vertex[T]]int, panicOnCycle bool) {
 	if len(waiting) == 0 {
-		return false
+		return
 	}
 
 	// If there are still waiting vertices, it means there is a cycle.
@@ -387,5 +384,4 @@ func (s *sequencerImp[T]) checkForCycles(waiting map[*vertex[T]]int, panicOnCycl
 	if panicOnCycle {
 		panic(ErrCycleDetected)
 	}
-	return true
 }

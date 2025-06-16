@@ -896,6 +896,78 @@ func Test_CrossPackageAnalysis(t *testing.T) {
 	)
 }
 
+func Test_IndexedSelectors(t *testing.T) {
+	src1 := `
+		package main
+		import "github.com/gopherjs/gopherjs/compiler/other"
+		func main() {
+			// Instance IndexExpr with a package SelectorExpr for a function call.
+			other.PrintZero[int]()
+			other.PrintZero[string]()
+
+			// Instance IndexListExpr with a package SelectorExpr for a function call.
+			other.PrintZeroZero[int, string]()
+
+			// Index IndexExpr with a struct SelectorExpr for a function call.
+			f := other.Foo{Ops: []func() {
+				other.PrintZero[int],
+				other.PrintZero[string],
+				other.PrintZeroZero[int, string],
+			}}
+			f.Ops[0]()
+			f.Ops[1]()
+
+			// Index IndexExpr with a package/var SelectorExpr for a function call.
+			other.Bar.Ops[0]()
+			other.Baz[0]()
+
+			// IndexExpr with a SelectorExpr for a cast
+			_ = other.ZHandle[int](other.PrintZero[int])
+
+			// IndexListExpr with a SelectorExpr for a cast
+			_ = other.ZZHandle[int, string](other.PrintZeroZero[int, string])
+		}`
+	src2 := `
+		package other
+		func PrintZero[T any]() {
+			var zero T
+			println("Zero is ", zero)
+		}
+
+		func PrintZeroZero[T any, U any]() {
+			PrintZero[T]()
+			PrintZero[U]()
+		}
+
+		type ZHandle[T any] func()
+		type ZZHandle[T any, U any] func()
+
+		type Foo struct { Ops []func() }
+		var Bar = Foo{Ops: []func() {
+			PrintZero[int],
+			PrintZero[string],
+		}}
+		var Baz = Bar.Ops`
+
+	root := srctesting.ParseSources(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `other/other.go`, Contents: []byte(src2)},
+		})
+
+	archives := compileProject(t, root, false)
+	// We mostly are checking that the code was turned into decls correctly,
+	// since the issue was that indexed selectors were not being handled correctly,
+	// so if it didn't panic by this point, it should be fine.
+	checkForDeclFullNames(t, archives,
+		`func:command-line-arguments.main`,
+		`type:github.com/gopherjs/gopherjs/compiler/other.ZHandle<int>`,
+		`type:github.com/gopherjs/gopherjs/compiler/other.ZZHandle<int, string>`,
+	)
+}
+
 func TestArchiveSelectionAfterSerialization(t *testing.T) {
 	src := `
 		package main

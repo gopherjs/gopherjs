@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -23,13 +24,13 @@ type Sequencer[T comparable] interface {
 	// Has checks if an item exists in the sequencer.
 	Has(item T) bool
 
-	// Dependents returns the items that are dependent on the given item.
+	// Children returns the items that are dependent on the given item.
 	// Each time this is called it creates a new slice.
-	Dependents(item T) []T
+	Children(item T) []T
 
-	// Dependencies returns the items that given item depends on.
+	// Parents returns the items that given item depends on.
 	// Each time this is called it creates a new slice.
-	Dependencies(item T) []T
+	Parents(item T) []T
 
 	// Depth returns the depth of the item in the dependency graph.
 	// Zero indicates the item is a root item with no dependencies.
@@ -114,14 +115,14 @@ func (s *sequencerImp[T]) Has(item T) bool {
 	return s.vertices.has(item)
 }
 
-func (s *sequencerImp[T]) Dependents(item T) []T {
+func (s *sequencerImp[T]) Children(item T) []T {
 	if v, exists := s.vertices[item]; exists {
 		return v.children.toSlice()
 	}
 	return nil
 }
 
-func (s *sequencerImp[T]) Dependencies(item T) []T {
+func (s *sequencerImp[T]) Parents(item T) []T {
 	if v, exists := s.vertices[item]; exists {
 		return v.parents.toSlice()
 	}
@@ -151,6 +152,24 @@ func (s *sequencerImp[T]) GetCycles() []T {
 	return s.dependencyCycles.toSlice()
 }
 
+type sortByName[T comparable] struct {
+	vertices []*vertex[T]
+	names    []string
+}
+
+func (s *sortByName[T]) Len() int {
+	return len(s.vertices)
+}
+
+func (s *sortByName[T]) Less(i, j int) bool {
+	return s.names[i] < s.names[j]
+}
+
+func (s *sortByName[T]) Swap(i, j int) {
+	s.vertices[i], s.vertices[j] = s.vertices[j], s.vertices[i]
+	s.names[i], s.names[j] = s.names[j], s.names[i]
+}
+
 func (s *sequencerImp[T]) ToMermaid() string {
 	s.performSequencing(false)
 
@@ -159,29 +178,36 @@ func (s *sequencerImp[T]) ToMermaid() string {
 		// Ignore the error since we are writing to a buffer.
 		_, _ = buf.WriteString(fmt.Sprintf(format, args...))
 	}
-	ids := make(map[*vertex[T]]string, len(s.vertices))
-	getId := func(v *vertex[T]) string {
-		if id, exists := ids[v]; exists {
-			return id
-		}
-		id := fmt.Sprintf(`v%d`, len(ids)+1)
-		ids[v] = id
-		return id
+
+	// Sort the output to make it easier to read and compare consecutive runs.
+	vertices := make([]*vertex[T], 0, len(s.vertices))
+	names := make([]string, 0, len(vertices))
+	for _, v := range s.vertices {
+		vertices = append(vertices, v)
+		names = append(names, fmt.Sprintf("%v", v.item))
 	}
+	sort.Sort(&sortByName[T]{vertices: vertices, names: names})
+
+	ids := make(map[*vertex[T]]string, len(s.vertices))
+	for i, v := range vertices {
+		ids[v] = fmt.Sprintf(`v%d`, i)
+	}
+
 	toIds := func(vs vertexSet[T]) string {
-		ids := make([]string, 0, len(vs))
+		rs := make([]string, 0, len(vs))
 		for _, v := range vs {
-			ids = append(ids, getId(v))
+			rs = append(rs, ids[v])
 		}
-		return strings.Join(ids, ` & `)
+		sort.Strings(rs)
+		return strings.Join(rs, ` & `)
 	}
 
 	write("flowchart TB\n")
 	if len(s.dependencyCycles) > 0 {
 		write("  classDef partOfCycle stroke:#f00\n")
 	}
-	for _, v := range s.vertices {
-		write(`  %s["%v"]`, getId(v), v.item)
+	for i, v := range vertices {
+		write(`  %s["%v"]`, ids[v], names[i])
 		if s.dependencyCycles.has(v.item) {
 			write(`:::partOfCycle`)
 		}

@@ -10,15 +10,52 @@ import (
 
 func TestSequencingStrings(t *testing.T) {
 	s := New[string]()
-
-	s.Add(`Bob`, `Rad`, `Stripe`, `Bandit`)
-	s.Add(`Chris`, `Rad`, `Stripe`, `Bandit`)
-	s.Add(`Stripe`, `Muffin`, `Socks`)
-	s.Add(`Trixie`, `Muffin`, `Socks`)
-	s.Add(`Mort`, `Brandy`, `Chili`)
-	s.Add(`Bandit`, `Bluey`, `Bingo`)
-	s.Add(`Chili`, `Bluey`, `Bingo`)
+	s.Add(`Rad`, `Bob`, `Chris`)
+	s.Add(`Stripe`, `Bob`, `Chris`)
+	s.Add(`Bandit`, `Bob`, `Chris`)
+	s.Add(`Brandy`, `Mort`)
+	s.Add(`Chili`, `Mort`)
+	s.Add(`Muffin`, `Stripe`, `Trixie`)
+	s.Add(`Socks`, `Stripe`, `Trixie`)
+	s.Add(`Bluey`, `Bandit`, `Chili`)
+	s.Add(`Bingo`, `Bandit`, `Chili`)
 	s.Add(`Frisky`)
+
+	if !s.Has(`Bob`) {
+		t.Errorf(`expected to find Bob in sequencer, but did not`)
+	}
+	if s.Has(`Ted`) {
+		t.Errorf(`expected to not find Ted in sequencer, but did not`)
+	}
+
+	gotC := s.Children(`Bandit`)
+	sort.Strings(gotC)
+	expC := []string{`Bingo`, `Bluey`}
+	if diff := cmp.Diff(gotC, expC); len(diff) > 0 {
+		t.Errorf("unexpected children (-got +exp):\n%s", diff)
+	}
+	if gotC := s.Children(`Ted`); len(gotC) != 0 {
+		t.Errorf("expected no children for an item not in the sequencer, got: %v", gotC)
+	}
+
+	gotP := s.Parents(`Bandit`)
+	sort.Strings(gotP)
+	expP := []string{`Bob`, `Chris`}
+	if diff := cmp.Diff(gotP, expP); len(diff) > 0 {
+		t.Errorf("unexpected parents (-got +exp):\n%s", diff)
+	}
+	if gotP := s.Parents(`Ted`); len(gotP) != 0 {
+		t.Errorf("expected no parents for an item not in the sequencer, got: %v", gotP)
+	}
+
+	if depth := s.Depth(`Bandit`); depth != 1 {
+		t.Errorf("expected depth of Bandit to be 1, got: %d", depth)
+	}
+	if depth := s.Depth(`Ted`); depth != -1 {
+		t.Errorf("expected depth of an item not in the sequencer to be -1, got: %d", depth)
+	}
+
+	t.Log(s.ToMermaid())
 
 	count := s.DepthCount()
 	got := make([][]string, count)
@@ -27,13 +64,10 @@ func TestSequencingStrings(t *testing.T) {
 		sort.Strings(group)
 		got[i] = group
 	}
-
-	t.Log(s.ToMermaid())
-
 	exp := [][]string{
-		{`Bingo`, `Bluey`, `Brandy`, `Frisky`, `Muffin`, `Rad`, `Socks`},
-		{`Bandit`, `Chili`, `Stripe`, `Trixie`},
-		{`Bob`, `Chris`, `Mort`},
+		{`Bob`, `Chris`, `Frisky`, `Mort`, `Trixie`},
+		{`Bandit`, `Brandy`, `Chili`, `Rad`, `Stripe`},
+		{`Bingo`, `Bluey`, `Muffin`, `Socks`},
 	}
 	if diff := cmp.Diff(got, exp); len(diff) > 0 {
 		t.Errorf("unexpected sequencing (-got +exp):\n%s", diff)
@@ -46,9 +80,11 @@ func TestCycleDetection(t *testing.T) {
 	s.Add(`B`, `C`, `D`)
 	s.Add(`C`, `A`) // This creates a cycle A-> B->C->A
 	s.Add(`E`, `A`) // E is a branch not part of the cycle
-	s.Add(`F`, `E`) // F is a leaf via E not part of the cycle
 
 	t.Log(s.ToMermaid()) // Should not panic
+
+	// Add more to reset the sequencer state
+	s.Add(`F`, `E`) // F is a leaf via E not part of the cycle
 
 	expectPanic := func(h func()) {
 		defer func() {
@@ -65,6 +101,8 @@ func TestCycleDetection(t *testing.T) {
 	expectPanic(func() { s.DepthCount() })
 	expectPanic(func() { s.Depth(`A`) })
 	expectPanic(func() { s.Group(2) })
+
+	t.Log(s.ToMermaid()) // Should not panic
 
 	cycles := s.GetCycles()
 	sort.Strings(cycles)

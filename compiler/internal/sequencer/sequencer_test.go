@@ -18,6 +18,7 @@ func TestSequencingStrings(t *testing.T) {
 	s.Add(`Mort`, `Brandy`, `Chili`)
 	s.Add(`Bandit`, `Bluey`, `Bingo`)
 	s.Add(`Chili`, `Bluey`, `Bingo`)
+	s.Add(`Frisky`)
 
 	count := s.DepthCount()
 	got := make([][]string, count)
@@ -30,7 +31,7 @@ func TestSequencingStrings(t *testing.T) {
 	t.Log(s.ToMermaid())
 
 	exp := [][]string{
-		{`Bingo`, `Bluey`, `Brandy`, `Muffin`, `Rad`, `Socks`},
+		{`Bingo`, `Bluey`, `Brandy`, `Frisky`, `Muffin`, `Rad`, `Socks`},
 		{`Bandit`, `Chili`, `Stripe`, `Trixie`},
 		{`Bob`, `Chris`, `Mort`},
 	}

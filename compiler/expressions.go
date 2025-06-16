@@ -531,7 +531,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Signature:
 			return fc.formatExpr("%s", fc.instName(fc.instanceOf(e.X.(*ast.Ident))))
 		default:
-			panic(fmt.Errorf(`unhandled IndexExpr: %T`, t))
+			panic(fmt.Errorf(`unhandled IndexExpr: %T in %T`, t, fc.typeOf(e.X)))
 		}
 	case *ast.IndexListExpr:
 		switch t := fc.typeOf(e.X).Underlying().(type) {

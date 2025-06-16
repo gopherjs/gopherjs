@@ -4,142 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
-	"strings"
-
-	"github.com/gopherjs/gopherjs/compiler/typesutil"
-	"github.com/gopherjs/gopherjs/internal/govendor/subst"
 )
-
-// Resolver translates types defined in terms of type parameters into concrete
-// types, given a mapping from type params to type arguments.
-type Resolver struct {
-	tParams *types.TypeParamList
-	tArgs   []types.Type
-	parent  *Resolver
-
-	// subster is the substitution helper that will perform the actual
-	// substitutions. This maybe nil when there are no substitutions but
-	// will still usable when nil.
-	subster *subst.Subster
-	selMemo map[typesutil.Selection]typesutil.Selection
-}
-
-// NewResolver creates a new Resolver with tParams entries mapping to tArgs
-// entries with the same index.
-func NewResolver(tc *types.Context, tParams *types.TypeParamList, tArgs []types.Type, parent *Resolver) *Resolver {
-	r := &Resolver{
-		tParams: tParams,
-		tArgs:   tArgs,
-		parent:  parent,
-		subster: subst.New(tc, tParams, tArgs),
-		selMemo: map[typesutil.Selection]typesutil.Selection{},
-	}
-	return r
-}
-
-// TypeParams is the list of type parameters that this resolver
-// (not any parent) will substitute.
-func (r *Resolver) TypeParams() *types.TypeParamList {
-	if r == nil {
-		return nil
-	}
-	return r.tParams
-}
-
-// TypeArgs is the list of type arguments that this resolver
-// (not any parent) will resolve to.
-func (r *Resolver) TypeArgs() []types.Type {
-	if r == nil {
-		return nil
-	}
-	return r.tArgs
-}
-
-// Parent is the resolver for the function or method that this resolver
-// is nested in. This may be nil if the context for this resolver is not
-// nested in another generic function or method.
-func (r *Resolver) Parent() *Resolver {
-	if r == nil {
-		return nil
-	}
-	return r.parent
-}
-
-// Substitute replaces references to type params in the provided type definition
-// with the corresponding concrete types.
-func (r *Resolver) Substitute(typ types.Type) types.Type {
-	if r == nil || typ == nil {
-		return typ // No substitutions to be made.
-	}
-	typ = r.subster.Type(typ)
-	typ = r.parent.Substitute(typ)
-	return typ
-}
-
-// SubstituteAll same as Substitute, but accepts a TypeList are returns
-// substitution results as a slice in the same order.
-func (r *Resolver) SubstituteAll(list *types.TypeList) []types.Type {
-	result := make([]types.Type, list.Len())
-	for i := range result {
-		result[i] = r.Substitute(list.At(i))
-	}
-	return result
-}
-
-// SubstituteSelection replaces a method of field selection on a generic type
-// defined in terms of type parameters with a method selection on a concrete
-// instantiation of the type.
-func (r *Resolver) SubstituteSelection(sel typesutil.Selection) typesutil.Selection {
-	if r == nil || sel == nil {
-		return sel // No substitutions to be made.
-	}
-	if concrete, ok := r.selMemo[sel]; ok {
-		return concrete
-	}
-
-	switch sel.Kind() {
-	case types.MethodExpr, types.MethodVal, types.FieldVal:
-		recv := r.Substitute(sel.Recv())
-		if types.Identical(recv, sel.Recv()) {
-			return sel // Non-generic receiver, no substitution necessary.
-		}
-
-		// Look up the method on the instantiated receiver.
-		pkg := sel.Obj().Pkg()
-		obj, index, _ := types.LookupFieldOrMethod(recv, true, pkg, sel.Obj().Name())
-		if obj == nil {
-			panic(fmt.Errorf("failed to lookup field %q in type %v", sel.Obj().Name(), recv))
-		}
-		typ := obj.Type()
-
-		if sel.Kind() == types.MethodExpr {
-			typ = typesutil.RecvAsFirstArg(typ.(*types.Signature))
-		}
-		concrete := typesutil.NewSelection(sel.Kind(), recv, index, obj, typ)
-		r.selMemo[sel] = concrete
-		return concrete
-	default:
-		panic(fmt.Errorf("unexpected selection kind %v: %v", sel.Kind(), sel))
-	}
-}
-
-// String gets a strings representation of the resolver for debugging.
-func (r *Resolver) String() string {
-	if r == nil {
-		return `{}`
-	}
-
-	parts := make([]string, 0, len(r.tArgs))
-	for i, ta := range r.tArgs {
-		parts = append(parts, fmt.Sprintf("%s->%s", r.tParams.At(i), ta))
-	}
-
-	nestStr := ``
-	if r.parent != nil {
-		nestStr = r.parent.String() + `:`
-	}
-	return nestStr + `{` + strings.Join(parts, `, `) + `}`
-}
 
 // visitor implements ast.Visitor and collects instances of generic types and
 // functions into an InstanceSet.
@@ -151,7 +16,9 @@ type visitor struct {
 	instances *PackageInstanceSets
 	resolver  *Resolver
 	info      *types.Info
-	tNest     []types.Type // The type arguments for a nested context.
+
+	nestTParams *types.TypeParamList // The type parameters for a nested context.
+	nestTArgs   []types.Type         // The type arguments for a nested context.
 }
 
 var _ ast.Visitor = &visitor{}
@@ -195,12 +62,14 @@ func (c *visitor) visitInstance(ident *ast.Ident, inst types.Instance) {
 
 	// If the object is defined in the same scope as the instance,
 	// then we apply the current nested type arguments.
-	var tNest []types.Type
+	var nestTParams *types.TypeParamList
+	var nestTArgs []types.Type
 	if obj.Parent().Contains(ident.Pos()) {
-		tNest = c.tNest
+		nestTParams = c.nestTParams
+		nestTArgs = c.nestTArgs
 	}
 
-	c.addInstance(obj, tArgs, tNest)
+	c.addInstance(obj, tArgs, nestTParams, nestTArgs)
 }
 
 func (c *visitor) visitNestedType(obj types.Object) {
@@ -222,12 +91,12 @@ func (c *visitor) visitNestedType(obj types.Object) {
 		return
 	}
 
-	c.addInstance(obj, nil, c.resolver.TypeArgs())
+	c.addInstance(obj, nil, c.resolver.TypeParams(), c.resolver.TypeArgs())
 }
 
-func (c *visitor) addInstance(obj types.Object, tArgList *types.TypeList, tNest []types.Type) {
+func (c *visitor) addInstance(obj types.Object, tArgList *types.TypeList, nestTParams *types.TypeParamList, nestTArgs []types.Type) {
 	tArgs := c.resolver.SubstituteAll(tArgList)
-	if isGeneric(tArgs...) {
+	if isGeneric(nestTParams, tArgs) {
 		// Skip any instances that still have type parameters in them after
 		// substitution. This occurs when a type is defined while nested
 		// in a generic context and is not fully instantiated yet.
@@ -238,7 +107,7 @@ func (c *visitor) addInstance(obj types.Object, tArgList *types.TypeList, tNest 
 	c.instances.Add(Instance{
 		Object: obj,
 		TArgs:  tArgs,
-		TNest:  tNest,
+		TNest:  nestTArgs,
 	})
 
 	if t, ok := obj.Type().(*types.Named); ok {
@@ -247,7 +116,7 @@ func (c *visitor) addInstance(obj types.Object, tArgList *types.TypeList, tNest 
 			c.instances.Add(Instance{
 				Object: method.Origin(),
 				TArgs:  tArgs,
-				TNest:  tNest,
+				TNest:  nestTArgs,
 			})
 		}
 	}
@@ -358,12 +227,13 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 }
 
 func (c *Collector) scanSignature(inst Instance, typ *types.Signature, objMap map[types.Object]ast.Node) {
-	tParams := SignatureTypeParams(typ)
 	v := visitor{
 		instances: c.Instances,
-		resolver:  NewResolver(c.TContext, tParams, inst.TArgs, nil),
+		resolver:  NewResolver(c.TContext, inst),
 		info:      c.Info,
-		tNest:     inst.TArgs,
+
+		nestTParams: SignatureTypeParams(typ),
+		nestTArgs:   inst.TArgs,
 	}
 	ast.Walk(&v, objMap[inst.Object])
 }
@@ -377,18 +247,19 @@ func (c *Collector) scanNamed(inst Instance, typ *types.Named, objMap map[types.
 		return
 	}
 
-	var nestResolver *Resolver
-	if len(inst.TNest) > 0 {
-		fn := FindNestingFunc(inst.Object)
-		tp := SignatureTypeParams(fn.Type().(*types.Signature))
-		nestResolver = NewResolver(c.TContext, tp, inst.TNest, nil)
+	var nestTParams *types.TypeParamList
+	nest := FindNestingFunc(obj)
+	if nest != nil {
+		nestTParams = SignatureTypeParams(nest.Type().(*types.Signature))
 	}
 
 	v := visitor{
 		instances: c.Instances,
-		resolver:  NewResolver(c.TContext, typ.TypeParams(), inst.TArgs, nestResolver),
+		resolver:  NewResolver(c.TContext, inst),
 		info:      c.Info,
-		tNest:     inst.TNest,
+
+		nestTParams: nestTParams,
+		nestTArgs:   inst.TNest,
 	}
 	ast.Walk(&v, node)
 }

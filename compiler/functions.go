@@ -48,13 +48,9 @@ func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, inst typep
 		c.allVars[k] = v
 	}
 
-	if sig.TypeParams().Len() > 0 {
-		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, sig.TypeParams(), inst.TArgs, nil)
-	} else if sig.RecvTypeParams().Len() > 0 {
-		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, sig.RecvTypeParams(), inst.TArgs, nil)
-	}
-	if c.objectNames == nil {
-		c.objectNames = map[types.Object]string{}
+	// Use the parent function's resolver unless the function has it's own type arguments.
+	if !inst.IsTrivial() {
+		c.typeResolver = typeparams.NewResolver(fc.pkgCtx.typesCtx, inst)
 	}
 
 	// Synthesize an identifier by which the function may reference itself. Since

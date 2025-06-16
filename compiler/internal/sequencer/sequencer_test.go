@@ -42,21 +42,34 @@ func TestSequencingStrings(t *testing.T) {
 
 func TestCycleDetection(t *testing.T) {
 	s := New[string]()
-	s.Add(`A`, `B`, `D`)
+	s.Add(`A`, `B`, `D`) // D is a root not part of the cycle
 	s.Add(`B`, `C`, `D`)
-	s.Add(`C`, `A`) // This creates a cycle
-	s.Add(`E`, `A`) // D and E are not part of the cycle
+	s.Add(`C`, `A`) // This creates a cycle A-> B->C->A
+	s.Add(`E`, `A`) // E is a branch not part of the cycle
+	s.Add(`F`, `E`) // F is a leaf via E not part of the cycle
 
 	t.Log(s.ToMermaid()) // Should not panic
 
-	func() {
+	expectPanic := func(h func()) {
 		defer func() {
 			r := recover().(error)
 			if !errors.Is(r, ErrCycleDetected) {
 				t.Errorf(`expected panic due to cycle, but got: %v`, r)
 			}
 		}()
+		h()
 		s.DepthCount()
 		t.Errorf(`expected panic due to cycle, but did not panic`)
-	}()
+	}
+
+	expectPanic(func() { s.DepthCount() })
+	expectPanic(func() { s.Depth(`A`) })
+	expectPanic(func() { s.Group(2) })
+
+	cycles := s.GetCycles()
+	sort.Strings(cycles)
+	exp := []string{`A`, `B`, `C`}
+	if diff := cmp.Diff(cycles, exp); len(diff) > 0 {
+		t.Errorf("unexpected cycles (-got +exp):\n%s", diff)
+	}
 }

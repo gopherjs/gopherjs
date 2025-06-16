@@ -15,29 +15,14 @@ func newVertex[T comparable](item T) *vertex[T] {
 	}
 }
 
-func (v *vertex[T]) hasParent(parent T) bool {
-	_, exists := v.parents[parent]
-	return exists
-}
-
 func (v *vertex[T]) addDependency(p *vertex[T]) {
 	if p.children == nil {
 		p.children = vertexSet[T]{}
 	}
-	p.children[v.item] = v
+	p.children.add(v)
 
 	if v.parents == nil {
 		v.parents = vertexSet[T]{}
 	}
-	v.parents[p.item] = p
-}
-
-func (v *vertex[T]) maxParentDepth() int {
-	maxDepth := -1
-	for _, parent := range v.parents {
-		if parent.depth > maxDepth {
-			maxDepth = parent.depth
-		}
-	}
-	return maxDepth
+	v.parents.add(p)
 }

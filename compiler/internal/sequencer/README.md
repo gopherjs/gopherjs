@@ -7,7 +7,7 @@
 
 ## Overview
 
-The sequencer is a tool used to determine order the steps to process
+The sequencer is a tool used to determine the order of steps to process
 a set of items based on each items' dependencies.
 This can group items together if they can all be processed in the same step.
 This assumes there are no circular dependencies and will error if any
@@ -18,9 +18,8 @@ The sequencer _could_ be used to solve several problems[^1], such as:
 - Ordering type initialization
 - Ordering constant resolution
 - Ordering packages for parallel parsing
-- Ordering computations for update propagation
-- Dead code elimination (DCE)
 - Explicit super-type determination to solidify implicit duck-typing
+- Checking for cycles in dependencies
 
 [^1]: We don't use the sequencer for all of those problems. Some are solved
 with other tools and some are solutions we don't currently support. Several
@@ -29,7 +28,7 @@ of them would need an additional value tagging system added.
 ## Limitations
 
 > [!IMPORTANT]
-> The sequencer can only sequence a collection of items that don't have
+> The sequencer can only sequence a collection of items that do _not_ have
 > dependency cycles.
 
 <!---->

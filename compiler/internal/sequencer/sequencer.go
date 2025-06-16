@@ -7,6 +7,11 @@ import (
 	"strings"
 )
 
+// ErrCycleDetected is panicked from a method performing sequencing
+// (e.g. `Depth`, `DepthCount`, and `Group`) to indicate that a cycle
+// was detected in the dependency graph.
+var ErrCycleDetected = errors.New(`cycle detected in the dependency graph`)
+
 // Sequencer is a tool for determining the groups and ordering of the groups
 // of items based on their dependencies.
 type Sequencer[T comparable] interface {
@@ -31,13 +36,13 @@ type Sequencer[T comparable] interface {
 	// If this item doesn't exist -1 is returned.
 	//
 	// This may have to perform sequencing of the items, so
-	// this may panic if a cycle is detected.
+	// this may panic with `ErrCycleDetected` if a cycle is detected.
 	Depth(item T) int
 
 	// DepthCount returns the number of unique depths in the dependency graph.
 	//
 	// This may have to perform sequencing of the items, so
-	// this may panic if a cycle is detected.
+	// this may panic with `ErrCycleDetected` if a cycle is detected.
 	DepthCount() int
 
 	// Group returns all the items at the given depth.
@@ -46,8 +51,21 @@ type Sequencer[T comparable] interface {
 	// Each time this is called it creates a new slice.
 	//
 	// This may have to perform sequencing of the items, so
-	// this may panic if a cycle is detected.
+	// this may panic with `ErrCycleDetected` if a cycle is detected.
 	Group(depth int) []T
+
+	// GetCycles returns the items that were unable to be sequenced
+	// due to a cycle in the dependency graph.
+	// The returned items may participate in one or more cycles or
+	// depends on an item in a cycle.
+	// Otherwise nil is returned if there are no cycles.
+	//
+	// These is no need to call this method before calling other methods.
+	// If this returns a non-empty slice, other methods that perform sequencing
+	// (e.g. `Depth`, `DepthCount`, and `Group`) will panic with `ErrCycleDetected`.
+	//
+	// This may have to perform sequencing of the items.
+	GetCycles() []T
 
 	// ToMermaid returns a string representation of the dependency graph in
 	// Mermaid syntax. This is useful for visualizing the dependencies and
@@ -59,11 +77,8 @@ type Sequencer[T comparable] interface {
 func New[T comparable]() Sequencer[T] {
 	return &sequencerImp[T]{
 		vertices: vertexSet[T]{},
-		groups:   map[int]vertexSet[T]{},
 	}
 }
-
-var ErrCycleDetected = errors.New(`cycle detected in the dependency graph`)
 
 type sequencerImp[T comparable] struct {
 	// vertices is a set of all vertices indexed by the item they represent.
@@ -79,12 +94,16 @@ type sequencerImp[T comparable] struct {
 	// groups is the map of groups indexed by their depth.
 	// This may contain valid groups if sequencing needs to be performed.
 	groups map[int]vertexSet[T]
+
+	// dependencyCycles is the list of items that are part of any cycle
+	// or depend on an item in a cycle.
+	dependencyCycles vertexSet[T]
 }
 
 func (s *sequencerImp[T]) Add(child T, parents ...T) {
 	c := s.getOrAdd(child)
 	for _, parent := range parents {
-		if !c.hasParent(parent) {
+		if !c.parents.has(parent) {
 			p := s.getOrAdd(parent)
 			c.addDependency(p)
 		}
@@ -110,7 +129,7 @@ func (s *sequencerImp[T]) Dependencies(item T) []T {
 }
 
 func (s *sequencerImp[T]) Depth(item T) int {
-	s.performSequencing()
+	s.performSequencing(true)
 	if v, exists := s.vertices[item]; exists {
 		return v.depth
 	}
@@ -118,29 +137,27 @@ func (s *sequencerImp[T]) Depth(item T) int {
 }
 
 func (s *sequencerImp[T]) DepthCount() int {
-	s.performSequencing()
+	s.performSequencing(true)
 	return s.depthCount
 }
 
 func (s *sequencerImp[T]) Group(depth int) []T {
-	s.performSequencing()
+	s.performSequencing(true)
 	return s.groups[depth].toSlice()
 }
 
+func (s *sequencerImp[T]) GetCycles() []T {
+	s.performSequencing(false)
+	return s.dependencyCycles.toSlice()
+}
+
 func (s *sequencerImp[T]) ToMermaid() string {
-	// Try to perform sequencing but ignore if it panics.
-	func() {
-		defer func() {
-			_ = recover()
-		}()
-		s.performSequencing()
-	}()
+	s.performSequencing(false)
 
 	buf := &bytes.Buffer{}
 	write := func(format string, args ...any) {
-		if _, err := buf.WriteString(fmt.Sprintf(format, args...)); err != nil {
-			panic(fmt.Errorf(`failed to write to buffer: %w`, err))
-		}
+		// Ignore the error since we are writing to a buffer.
+		_, _ = buf.WriteString(fmt.Sprintf(format, args...))
 	}
 	ids := make(map[*vertex[T]]string, len(s.vertices))
 	getId := func(v *vertex[T]) string {
@@ -160,8 +177,14 @@ func (s *sequencerImp[T]) ToMermaid() string {
 	}
 
 	write("flowchart TB\n")
+	if len(s.dependencyCycles) > 0 {
+		write("  classDef partOfCycle stroke:#f00\n")
+	}
 	for _, v := range s.vertices {
 		write(`  %s["%v"]`, getId(v), v.item)
+		if s.dependencyCycles.has(v.item) {
+			write(`:::partOfCycle`)
+		}
 		if len(v.parents) > 0 {
 			write(` --> %s`, toIds(v.parents))
 		}
@@ -186,36 +209,69 @@ func (s *sequencerImp[T]) getOrAdd(item T) *vertex[T] {
 // performSequencing performs a full sequencing of the items in the
 // dependency graph. It calculates the depth of each item and groups
 // them by their depth. If a cycle is detected, it panics.
-func (s *sequencerImp[T]) performSequencing() {
+//
+// This assumes that the sequencing is not called often and is typically
+// only called after all the items have been added. Because of this,
+// it always performs a full sequencing of the items without using any
+// previous solved information. Although this is slower for the few cases
+// where sequencing happens often with only a few new items added at a time,
+// it is much simpler to implement and maintain than implementing both
+// incremental and full sequencing.
+//
+// `panicOnCycle“ indicates whether to panic if a cycle is detected,
+// or to exit gracefully setting the `dependencyCycles` field.
+func (s *sequencerImp[T]) performSequencing(panicOnCycle bool) {
 	if !s.needSequencing {
+		// If a sequencing was already performed and determined that there
+		// was a cycle, panic if `panicOnCycle` is true.
+		if len(s.dependencyCycles) > 0 && panicOnCycle {
+			panic(ErrCycleDetected)
+		}
 		return
 	}
+	s.needSequencing = false
 
 	s.clearGroups()
 	waiting, ready := s.prepareWaitingAndReady()
 	s.propagateDepth(waiting, ready)
-	s.checkForCycles(waiting)
-	s.writeGroups()
-	s.needSequencing = false
+	if s.checkForCycles(waiting, panicOnCycle) {
+		return
+	}
 }
 
+// clearGroups resets the sequencer state, clearing the groups and depth count.
+// This is performed before performing a full sequencing since all those
+// values will be recalculated.
 func (s *sequencerImp[T]) clearGroups() {
 	s.depthCount = 0
 	s.groups = map[int]vertexSet[T]{}
+	s.dependencyCycles = nil
+}
+
+// writeDepth updates the sequencer state with the depth of the given vertex.
+func (s *sequencerImp[T]) writeDepth(v *vertex[T], depth int) {
+	v.depth = depth
+	if _, exists := s.groups[depth]; !exists {
+		s.groups[depth] = vertexSet[T]{}
+		if depth >= s.depthCount {
+			s.depthCount = depth + 1
+		}
+	}
+	s.groups[depth].add(v)
 }
 
 // prepareWaitingAndReady prepare the waiting and ready sets so that any root vertex
 // is ready to be processed and any waiting vertex has its parent count.
-func (s *sequencerImp[T]) prepareWaitingAndReady() (waiting map[*vertex[T]]int, ready []*vertex[T]) {
+func (s *sequencerImp[T]) prepareWaitingAndReady() (waiting map[*vertex[T]]int, ready *vertexStack[T]) {
 	waiting = make(map[*vertex[T]]int, len(s.vertices))
-	ready = make([]*vertex[T], 0, len(s.vertices))
+	ready = newVertexStack[T](len(s.vertices))
 	for _, v := range s.vertices {
-		parentCount := len(v.parents)
-		if parentCount <= 0 {
-			v.depth = 0
-			ready = append(ready, v)
+		count := len(v.parents)
+		if count <= 0 {
+			s.writeDepth(v, 0)
+			ready.push(v)
 		} else {
-			waiting[v] = parentCount
+			waiting[v] = count
 		}
 	}
 	return waiting, ready
@@ -224,18 +280,57 @@ func (s *sequencerImp[T]) prepareWaitingAndReady() (waiting map[*vertex[T]]int, 
 // propagateDepth processes the ready vertices, assigning them a depth and
 // updating the waiting vertices. If a waiting vertex has all its
 // parents processed, move it to the ready list.
-func (s *sequencerImp[T]) propagateDepth(waiting map[*vertex[T]]int, ready []*vertex[T]) {
-	for len(ready) > 0 {
-		maxIndex := len(ready) - 1
-		v := ready[maxIndex]
-		ready = ready[:maxIndex]
-
-		v.depth = v.maxParentDepth() + 1
+// This continues until all ready vertices are processed.
+func (s *sequencerImp[T]) propagateDepth(waiting map[*vertex[T]]int, ready *vertexStack[T]) {
+	for ready.hasMore() {
+		v := ready.pop()
+		s.writeDepth(v, v.parents.maxDepth()+1)
 		for _, c := range v.children {
 			waiting[c]--
 			if waiting[c] <= 0 {
-				ready = append(ready, c)
+				ready.push(c)
 				delete(waiting, c)
+			}
+		}
+	}
+}
+
+// prepareReduceToCycles prepares the waiting map for reducing to cycles
+// by replacing the waiting value with the number of waiting children.
+// It returns a slice of ready vertices that have no children.
+func prepareReduceToCycles[T comparable](waiting map[*vertex[T]]int) (ready *vertexStack[T]) {
+	ready = newVertexStack[T](len(waiting))
+	for v := range waiting {
+		count := 0
+		for _, c := range v.children {
+			if _, exists := waiting[c]; exists {
+				count++
+			}
+		}
+		if count <= 0 {
+			ready.push(v)
+			delete(waiting, v)
+		} else {
+			waiting[v] = count
+		}
+	}
+	return ready
+}
+
+// reduceToCycles processes the ready vertices and updating the waiting
+// vertices. If a waiting vertex has all its waiting children processed,
+// move it to the ready list.
+// This continues until all ready vertices are processed.
+func reduceToCycles[T comparable](waiting map[*vertex[T]]int, ready *vertexStack[T]) {
+	for ready.hasMore() {
+		v := ready.pop()
+		for _, p := range v.parents {
+			if _, exists := waiting[p]; exists {
+				waiting[p]--
+				if waiting[p] <= 0 {
+					ready.push(p)
+					delete(waiting, p)
+				}
 			}
 		}
 	}
@@ -244,35 +339,27 @@ func (s *sequencerImp[T]) propagateDepth(waiting map[*vertex[T]]int, ready []*ve
 // checkForCycles checks if there are still waiting vertices. If there are
 // it means there is a cycle since some of them are waiting for parents that
 // eventually depend on them.
-func (s *sequencerImp[T]) checkForCycles(waiting map[*vertex[T]]int) {
-	if len(waiting) > 0 {
-		// TODO: Add more information about the cycle.
+//
+// If `panicOnCycle` is true, it panics with `ErrCycleDetected`, otherwise
+// this will return true if a cycle was detected and false otherwise.
+func (s *sequencerImp[T]) checkForCycles(waiting map[*vertex[T]]int, panicOnCycle bool) bool {
+	if len(waiting) == 0 {
+		return false
+	}
+
+	// If there are still waiting vertices, it means there is a cycle.
+	// Prune off any branches to leaves that are not part of the cycles
+	// using the same logic except starting from the leaves.
+	// This will not be able to remove branches that go between two cycles
+	// even if vertices in that branch can not reach themselves via a cycle.
+	ready := prepareReduceToCycles(waiting)
+	reduceToCycles(waiting, ready)
+	s.dependencyCycles = make(vertexSet[T], len(waiting))
+	for v := range waiting {
+		s.dependencyCycles.add(v)
+	}
+	if panicOnCycle {
 		panic(ErrCycleDetected)
 	}
-}
-
-// writeGroups update the sequencer state with the new depths and groups.
-func (s *sequencerImp[T]) writeGroups() {
-	for _, v := range s.vertices {
-		depth := v.depth
-		if depth < 0 {
-			panic(fmt.Errorf(`vertex %v has no depth assigned`, v.item))
-		}
-		if _, exists := s.groups[depth]; !exists {
-			s.groups[depth] = vertexSet[T]{}
-		}
-		s.groups[depth][v.item] = v
-	}
-
-	s.depthCount = len(s.groups)
-
-	// Validate the groups to ensure they are correctly formed.
-	for depth, group := range s.groups {
-		if depth < 0 && depth >= s.depthCount {
-			panic(fmt.Errorf(`depth %d is out of bounds, depth count is %d`, depth, s.depthCount))
-		}
-		if len(group) == 0 {
-			panic(fmt.Errorf(`group at depth %d is empty`, depth))
-		}
-	}
+	return true
 }

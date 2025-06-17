@@ -70,7 +70,8 @@ type Sequencer[T comparable] interface {
 
 	// ToMermaid returns a string representation of the dependency graph in
 	// Mermaid syntax. This is useful for visualizing the dependencies and
-	// debugging dependency issues.
+	// debugging dependency issues. When a cycle is detected, the items
+	// will be marked with red and the groups may be incorrect.
 	ToMermaid() string
 }
 
@@ -257,10 +258,32 @@ func (s *sequencerImp[T]) performSequencing(panicOnCycle bool) {
 	}
 	s.needSequencing = false
 
+	// Perform a full sequencing of the items.
 	s.clearGroups()
-	waiting, ready := s.prepareWaitingAndReady()
-	s.propagateDepth(waiting, ready)
-	s.checkForCycles(waiting, panicOnCycle)
+	ready := newVertexStack[T](len(s.vertices))
+	waiting := s.prepareWaitingAndReady(true, s.vertices, ready)
+	waiting = s.propagateDepth(true, waiting, ready)
+	if waiting == 0 {
+		return
+	}
+
+	// If there are still waiting vertices, it means there is a cycle.
+	// Prune off any branches to leaves that are not part of the cycles
+	// using the same logic except starting from the leaves.
+	// This will not be able to remove branches that go between two cycles
+	// even if vertices in that branch can not reach themselves via a cycle.
+	wv := s.vertices.waitingVertices(waiting)
+	waiting = s.prepareWaitingAndReady(false, wv, ready)
+	waiting = s.propagateDepth(false, waiting, ready)
+	s.dependencyCycles = make(vertexSet[T], waiting)
+	for _, v := range s.vertices {
+		if !v.isReady() {
+			s.dependencyCycles.add(v)
+		}
+	}
+	if panicOnCycle {
+		panic(ErrCycleDetected)
+	}
 }
 
 // clearGroups resets the sequencer state, clearing the groups and depth count.
@@ -273,7 +296,8 @@ func (s *sequencerImp[T]) clearGroups() {
 }
 
 // writeDepth updates the sequencer state with the depth of the given vertex.
-func (s *sequencerImp[T]) writeDepth(v *vertex[T], depth int) {
+func (s *sequencerImp[T]) writeDepth(v *vertex[T]) {
+	depth := v.parents.maxDepth() + 1
 	v.depth = depth
 	if _, exists := s.groups[depth]; !exists {
 		s.groups[depth] = vertexSet[T]{}
@@ -284,104 +308,53 @@ func (s *sequencerImp[T]) writeDepth(v *vertex[T], depth int) {
 	s.groups[depth].add(v)
 }
 
-// prepareWaitingAndReady prepare the waiting and ready sets so that any root vertex
+// prepareWaitingAndReady prepare the ready sets so that any root (or leaf) vertex
 // is ready to be processed and any waiting vertex has its parent count.
-func (s *sequencerImp[T]) prepareWaitingAndReady() (waiting map[*vertex[T]]int, ready *vertexStack[T]) {
-	waiting = make(map[*vertex[T]]int, len(s.vertices))
-	ready = newVertexStack[T](len(s.vertices))
-	for _, v := range s.vertices {
-		count := len(v.parents)
-		if count <= 0 {
-			s.writeDepth(v, 0)
+// This returns the number of waiting vertices and a stack of ready vertices.
+//
+// If `forward` is true, it prepares the vertices for sequencing by starting with the roots.
+// If `forward` is false, it prepares the vertices for reducing to cycles by starting with the leaves.
+func (s *sequencerImp[T]) prepareWaitingAndReady(forward bool, vs vertexSet[T], ready *vertexStack[T]) int {
+	waiting := 0
+	for _, v := range vs {
+		if forward {
+			v.waiting = len(v.parents)
+		} else {
+			// For reducing to cycles, count the number of children that are still waiting.
+			count := 0
+			for _, c := range v.children {
+				if vs.has(c.item) {
+					count++
+				}
+			}
+			v.waiting = count
+		}
+
+		if v.isReady() {
+			s.writeDepth(v)
 			ready.push(v)
 		} else {
-			waiting[v] = count
+			waiting++
 		}
 	}
-	return waiting, ready
+	return waiting
 }
 
 // propagateDepth processes the ready vertices, assigning them a depth and
-// updating the waiting vertices. If a waiting vertex has all its
-// parents processed, move it to the ready list.
+// updating the waiting vertices. If a waiting vertex has all of its
+// parents (or children) processed, then move it to the ready list.
 // This continues until all ready vertices are processed.
-func (s *sequencerImp[T]) propagateDepth(waiting map[*vertex[T]]int, ready *vertexStack[T]) {
+func (s *sequencerImp[T]) propagateDepth(forward bool, waiting int, ready *vertexStack[T]) int {
 	for ready.hasMore() {
 		v := ready.pop()
-		s.writeDepth(v, v.parents.maxDepth()+1)
-		for _, c := range v.children {
-			waiting[c]--
-			if waiting[c] <= 0 {
+		s.writeDepth(v)
+		for _, c := range v.edges(forward) {
+			c.decWaiting()
+			if c.isReady() {
 				ready.push(c)
-				delete(waiting, c)
+				waiting--
 			}
 		}
 	}
-}
-
-// prepareReduceToCycles prepares the waiting map for reducing to cycles
-// by replacing the waiting value with the number of waiting children.
-// It returns a slice of ready vertices that have no children.
-func prepareReduceToCycles[T comparable](waiting map[*vertex[T]]int) (ready *vertexStack[T]) {
-	ready = newVertexStack[T](len(waiting))
-	for v := range waiting {
-		count := 0
-		for _, c := range v.children {
-			if _, exists := waiting[c]; exists {
-				count++
-			}
-		}
-		if count <= 0 {
-			ready.push(v)
-			delete(waiting, v)
-		} else {
-			waiting[v] = count
-		}
-	}
-	return ready
-}
-
-// reduceToCycles processes the ready vertices and updating the waiting
-// vertices. If a waiting vertex has all its waiting children processed,
-// move it to the ready list.
-// This continues until all ready vertices are processed.
-func reduceToCycles[T comparable](waiting map[*vertex[T]]int, ready *vertexStack[T]) {
-	for ready.hasMore() {
-		v := ready.pop()
-		for _, p := range v.parents {
-			if _, exists := waiting[p]; exists {
-				waiting[p]--
-				if waiting[p] <= 0 {
-					ready.push(p)
-					delete(waiting, p)
-				}
-			}
-		}
-	}
-}
-
-// checkForCycles checks if there are still waiting vertices. If there are
-// it means there is a cycle since some of them are waiting for parents that
-// eventually depend on them.
-//
-// If `panicOnCycle` is true, it panics with `ErrCycleDetected`.
-func (s *sequencerImp[T]) checkForCycles(waiting map[*vertex[T]]int, panicOnCycle bool) {
-	if len(waiting) == 0 {
-		return
-	}
-
-	// If there are still waiting vertices, it means there is a cycle.
-	// Prune off any branches to leaves that are not part of the cycles
-	// using the same logic except starting from the leaves.
-	// This will not be able to remove branches that go between two cycles
-	// even if vertices in that branch can not reach themselves via a cycle.
-	ready := prepareReduceToCycles(waiting)
-	reduceToCycles(waiting, ready)
-	s.dependencyCycles = make(vertexSet[T], len(waiting))
-	for v := range waiting {
-		s.dependencyCycles.add(v)
-	}
-	if panicOnCycle {
-		panic(ErrCycleDetected)
-	}
+	return waiting
 }

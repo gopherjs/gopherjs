@@ -36,6 +36,16 @@ func (vs vertexSet[T]) maxDepth() int {
 	return maxDepth
 }
 
+func (vs vertexSet[T]) waitingVertices(waiting int) vertexSet[T] {
+	wvs := make(vertexSet[T], waiting)
+	for _, v := range vs {
+		if !v.isReady() {
+			wvs.add(v)
+		}
+	}
+	return wvs
+}
+
 func (vs vertexSet[T]) toSlice() []T {
 	items := make([]T, 0, len(vs))
 	for item := range vs {

@@ -49,38 +49,62 @@ The sequencer does not:
 
 ## Design
 
-The sequencer uses a DAG (directed acyclic graph) where the vertices are the
-items being ordered and the directed edge starts from a vertex, the parent, and
-ends on a vertex, child, dependent of that parent.
-This result is a tangled forest (a forest were branches may have more than
-one parent branch).
+The sequencer uses a type of
+[DAG](https://en.wikipedia.org/wiki/Directed_acyclic_graph)
+called a [polyforest](https://en.wikipedia.org/wiki/Polytree).
+A polyforest is an acyclic forest were branches may have more than one parent
+branch and those parents may be from the same or different trees.
+
+The polyforest, like any graph, is made up of vertices and edges.
+The vertices are the items being ordered and the directed edge starts from a
+vertex, the parent, and ends on a vertex, child, dependent of that parent.
 Each vertex may have zero or more parents and zero or more children.
 Any vertex that has no children (other vertices depending on it) is a leaf.
 Any vertex that has no parents (dependencies) is a root.
+A vertex may be a leaf and root at the same time.
 The graph flows from the root towards the leaves via parent to child.
+There may be zero or more paths from any root to any leaf.
 
 ## Ordering and Grouping
 
 All the root vertices will receive a depth of zero value.
-All other nodes will receive the maximum value of its parents' depths plus one.
+All other vertices will receive the maximum value of its parents' depths plus one.
 All the vertices with the same depth value are in a group and may be processed
 together. The depth values provide the ordering of those groups.
+
+For example if there are three depth groups. Depth 0 will contain all
+the leaf vertices with no dependencies.
+Depth 1 will contain all the vertices that only depend on vertices in depth 0.
+Depth 2 will contain all vertices that depend on vertices in depth 0 and 1.
+At each depth, the vertices must depend on at least one vertex in the prior
+depth, otherwise that vertex would have been put into that prior depth itself.
+
+There are several ways to perform the grouping and depth determination.
+One way is to set all the vertices to zero, not just the roots, then update
+each vertex with the maximum of their parents plus one until no more changes
+are made. That would take $n*d$ amount of time, where $n$ is the number of
+vertices and $d$ is the maximum depth. This can be improved by propagating
+starting from each root down the children. However, this is still slow because
+the same children depths will be recalculated each time a parent
+is changed and it could still get stuck in an infinite loop if there is a cycle.
 
 To keep from having to recalculate a child's depth, each vertex will
 keep a count of parents it is waiting on. When a vertex has its depth
 assigned, that vertex's children will have that parent count decremented.
 When that parent count is zero, the vertex will be put into the set of
 vertices that need to be calculated.
+The set of vertices to be calculated is initially populated with
+the roots since they aren't waiting on any parents.
 If all the set of vertices pending calculation is empty and there are no
 more vertices waiting on parents, then the depth determination is done.
 
 However, if the set of vertices pending calculation is empty but there
 are still vertices waiting on parents, then a cycle exists within those
-vertices still waiting. Some of the vertices waiting my not participate
+vertices still waiting. Some of the vertices waiting may not participate
 in the cycle but instead simply depend on vertices in the cycle.
 There might also be multiple cycles. Cycles indicate the dependency
 information given to the sequencer was bad so the sequencer will return
-an error containing information about the cycle.
+an error and provide information about any cycle.
 
 > [!NOTE]
 > This assumes that the sequencing will be performed only once

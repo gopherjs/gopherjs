@@ -216,10 +216,10 @@ func (s *sequencerImp[T]) performSequencing(panicOnCycle bool) {
 	wv := s.vertices.getWaiting(waitingCount)
 	waitingCount = s.prepareWaitingAndReady(false, wv, ready)
 	waitingCount = s.propagateDepth(false, waitingCount, ready)
+
+	// Sanity check that we have waiting vertices left and we didn't
+	// somehow prune away the vertices participating in the cycles.
 	if waitingCount <= 0 {
-		// After reducing to cycles there are no vertices still waiting,
-		// i.e. no vertices left in the cycles so where were the cycles?
-		// This should never happen unless there is a bug in the sequencer logic.
 		panic(fmt.Errorf(`%w: pruning cycles resulting in no items in the cycles`, errSequencerLogic))
 	}
 
@@ -325,7 +325,7 @@ func (s *sequencerImp[T]) validateGroups() {
 				}
 				hasPrior = hasPrior || p.depth == v.depth-1
 			}
-			if !hasPrior {
+			if depth > 0 && !hasPrior {
 				panic(fmt.Errorf(`%w: vertex %v in group %d has no parent with depth %d`, errSequencerLogic, v.item, depth, v.depth-1))
 			}
 		}

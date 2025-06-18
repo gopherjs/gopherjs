@@ -2,6 +2,7 @@ package sequencer
 
 import (
 	"errors"
+	"math/rand"
 	"sort"
 	"testing"
 
@@ -57,6 +58,7 @@ func TestBasicSequencing(t *testing.T) {
 
 	t.Log(s.ToMermaid())
 
+	// Check getting the groups individually.
 	count := s.DepthCount()
 	got := make([][]string, count)
 	for i := 0; i < s.DepthCount(); i++ {
@@ -68,6 +70,15 @@ func TestBasicSequencing(t *testing.T) {
 		{`Bob`, `Chris`, `Frisky`, `Mort`, `Trixie`},
 		{`Bandit`, `Brandy`, `Chili`, `Rad`, `Stripe`},
 		{`Bingo`, `Bluey`, `Muffin`, `Socks`},
+	}
+	if diff := cmp.Diff(got, exp); len(diff) > 0 {
+		t.Errorf("unexpected sequencing (-got +exp):\n%s", diff)
+	}
+
+	// Using AllGroups should return the same result as reading the groups individually.
+	got = s.AllGroups()
+	for _, group := range got {
+		sort.Strings(group)
 	}
 	if diff := cmp.Diff(got, exp); len(diff) > 0 {
 		t.Errorf("unexpected sequencing (-got +exp):\n%s", diff)
@@ -87,12 +98,9 @@ func TestDiamonds(t *testing.T) {
 
 	t.Log(s.ToMermaid())
 
-	count := s.DepthCount()
-	got := make([][]string, count)
-	for i := 0; i < s.DepthCount(); i++ {
-		group := s.Group(i)
+	got := s.AllGroups()
+	for _, group := range got {
 		sort.Strings(group)
-		got[i] = group
 	}
 	exp := [][]string{
 		{`G`},
@@ -140,5 +148,41 @@ func TestCycleDetection(t *testing.T) {
 	exp := []string{`A`, `B`, `C`}
 	if diff := cmp.Diff(cycles, exp); len(diff) > 0 {
 		t.Errorf("unexpected cycles (-got +exp):\n%s", diff)
+	}
+}
+
+func TestLargeGraph(t *testing.T) {
+	const itemCount = 1000
+	const maxDeps = 100
+
+	items := make([]int, itemCount)
+	for i := 0; i < itemCount; i++ {
+		items[i] = i
+	}
+
+	r := rand.New(rand.NewSource(0))
+	r.Shuffle(itemCount, func(i, j int) {
+		items[i], items[j] = items[j], items[i]
+	})
+
+	s := New[int]()
+	for i := 0; i < maxDeps; i++ {
+		s.Add(items[i]) // Add root items with no dependencies
+	}
+	for i := maxDeps; i < itemCount; i++ {
+		s.Add(items[i])
+
+		// Randomly add dependencies to previous items, since only previous
+		// items are chosen from no cycles should occur.
+		// If the same item is chosen multiple times it should have no effect.
+		depCount := r.Intn(maxDeps)
+		for j := 0; j < depCount; j++ {
+			s.Add(items[i], items[r.Intn(i)])
+		}
+	}
+
+	s.DepthCount() // This should not panic and internal validation should pass.
+	if len(s.GetCycles()) > 0 {
+		t.Errorf(`expected no cycles in the large graph, but found some`)
 	}
 }

@@ -17,7 +17,7 @@ func (vs vertexSet[T]) getOrAdd(item T) (*vertex[T], bool) {
 	}
 
 	v := newVertex(item)
-	vs[item] = v
+	vs.add(v)
 	return v, true
 }
 
@@ -36,8 +36,8 @@ func (vs vertexSet[T]) maxDepth() int {
 	return maxDepth
 }
 
-func (vs vertexSet[T]) waitingVertices(waiting int) vertexSet[T] {
-	wvs := make(vertexSet[T], waiting)
+func (vs vertexSet[T]) getWaiting(capacity int) vertexSet[T] {
+	wvs := make(vertexSet[T], capacity)
 	for _, v := range vs {
 		if !v.isReady() {
 			wvs.add(v)

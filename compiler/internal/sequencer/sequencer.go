@@ -275,12 +275,12 @@ func (s *sequencerImp[T]) performSequencing(panicOnCycle bool) {
 	wv := s.vertices.waitingVertices(waiting)
 	waiting = s.prepareWaitingAndReady(false, wv, ready)
 	waiting = s.propagateDepth(false, waiting, ready)
-	s.dependencyCycles = make(vertexSet[T], waiting)
-	for _, v := range s.vertices {
-		if !v.isReady() {
-			s.dependencyCycles.add(v)
-		}
-	}
+
+	// Anything still waiting is part of a cycle or depends on an item in a
+	// cycle that wasn't able to be pruned.
+	// If there are no waiting left at this point there is a problem with
+	// setting up the parent/child pointers or a bug in the sequencer logic.
+	s.dependencyCycles = s.vertices.waitingVertices(waiting)
 	if panicOnCycle {
 		panic(ErrCycleDetected)
 	}

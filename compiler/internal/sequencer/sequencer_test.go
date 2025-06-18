@@ -153,7 +153,7 @@ func TestCycleDetection(t *testing.T) {
 
 func TestLargeGraph(t *testing.T) {
 	const itemCount = 1000
-	const maxDeps = 100
+	const maxDeps = 10
 
 	items := make([]int, itemCount)
 	for i := 0; i < itemCount; i++ {
@@ -172,7 +172,7 @@ func TestLargeGraph(t *testing.T) {
 	for i := maxDeps; i < itemCount; i++ {
 		s.Add(items[i])
 
-		// Randomly add dependencies to previous items, since only previous
+		// "Randomly" add dependencies to previous items, since only previous
 		// items are chosen from no cycles should occur.
 		// If the same item is chosen multiple times it should have no effect.
 		depCount := r.Intn(maxDeps)

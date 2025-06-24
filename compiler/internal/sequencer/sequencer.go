@@ -20,15 +20,17 @@ type Sequencer[T comparable] interface {
 	// Children returns the items that are dependent on the given item.
 	// If the given item doesn't exist then nil is returned.
 	// Each time this is called it creates a new slice.
+	// The items in the slice are in random order.
 	Children(item T) []T
 
 	// Parents returns the items that the given item depends on.
 	// If the given item doesn't exist then nil is returned.
 	// Each time this is called it creates a new slice.
+	// The items in the slice are in random order.
 	Parents(item T) []T
 
 	// Depth returns the depth of the item in the dependency graph.
-	// Zero indicates the item is a root item with no dependencies.
+	// Zero indicates the item is a leaf item with no dependencies.
 	// If the given item doesn't exist then -1 is returned.
 	//
 	// This may have to perform sequencing of the items, so
@@ -43,8 +45,9 @@ type Sequencer[T comparable] interface {
 
 	// Group returns all the items at the given depth.
 	// If the depth is out-of-bounds, it returns an empty slice.
-	// The depth is zero-based, so depth 0 is the root items.
+	// The depth is zero-based, so the depth 0 group is the leaf items.
 	// Each time this is called it creates a new slice.
+	// The items in the slice are in random order.
 	//
 	// This may have to perform sequencing of the items, so
 	// this may panic with `ErrCycleDetected` if a cycle is detected.
@@ -52,8 +55,9 @@ type Sequencer[T comparable] interface {
 
 	// AllGroups returns all the items grouped by their depth.
 	// Each group is a slice of items at the same depth.
-	// The depth is zero-based, so the first group is the root items.
+	// The depth is zero-based, so the first group is the leaf items.
 	// Each time this is called it creates a new slices.
+	// The items in the slices are in random order.
 	//
 	// This may have to perform sequencing of the items, so
 	// this may panic with `ErrCycleDetected` if a cycle is detected.

@@ -115,7 +115,7 @@ func TestDiamonds(t *testing.T) {
 
 func TestCycleDetection(t *testing.T) {
 	s := New[string]()
-	s.Add(`A`, `B`, `D`) // D is a root not part of the cycle
+	s.Add(`A`, `B`, `D`) // D is a leaf not part of the cycle
 	s.Add(`B`, `C`, `D`)
 	s.Add(`C`, `A`) // This creates a cycle A-> B->C->A
 	s.Add(`E`, `A`) // E is a branch not part of the cycle
@@ -123,7 +123,7 @@ func TestCycleDetection(t *testing.T) {
 	t.Log(s.ToMermaid()) // Should not panic
 
 	// Add more to reset the sequencer state
-	s.Add(`F`, `E`) // F is a leaf via E not part of the cycle
+	s.Add(`F`, `E`) // F is a root via E not part of the cycle
 
 	expectPanic := func(h func()) {
 		defer func() {
@@ -167,7 +167,7 @@ func TestLargeGraph(t *testing.T) {
 
 	s := New[int]()
 	for i := 0; i < maxDeps; i++ {
-		s.Add(items[i]) // Add root items with no dependencies
+		s.Add(items[i]) // Add leaf items with no dependencies
 	}
 	for i := maxDeps; i < itemCount; i++ {
 		s.Add(items[i])

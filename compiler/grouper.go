@@ -5,6 +5,7 @@ import (
 	"go/types"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/sequencer"
+	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 )
 
 func SetInitGroups(tc *types.Context, alive map[*Decl]struct{}) {
@@ -12,15 +13,14 @@ func SetInitGroups(tc *types.Context, alive map[*Decl]struct{}) {
 	typeMap := make(map[types.Type]string, len(alive))
 	index := 0
 	for d := range alive {
-		inst := d.Instance
-		if inst == nil {
+		typ := getTypeForGrouping(tc, d.Instance)
+		if typ == nil {
 			d.InitGroup = 0
 			continue
 		}
 
-		fmt.Printf(">> Decl: %v\n\tinst: %v\n", d.FullName, inst) // TODO(grantnelson-wf): REMOVE
+		fmt.Printf(">> Decl: %v\n\tinst: %v\n\ttype: %v\n", d.FullName, d.Instance, typ) // TODO(grantnelson-wf): REMOVE
 
-		typ := inst.Resolve(tc)
 		if id, ok := typeMap[typ]; ok {
 			declMap[id] = append(declMap[id], d)
 		} else {
@@ -37,7 +37,10 @@ func SetInitGroups(tc *types.Context, alive map[*Decl]struct{}) {
 	seq := sequencer.New[string]()
 	for typ, id := range typeMap {
 		seq.Add(id)
-		deps := getTypeDeps(typ)
+		deps := make(map[types.Type]struct{})
+		for _, decl := range declMap[id] {
+			getTypeGroupingDeps(decl.Instance, deps)
+		}
 		for dep := range deps {
 			if depId, ok := typeMap[dep]; ok {
 				seq.Add(id, depId)
@@ -62,10 +65,42 @@ func SetInitGroups(tc *types.Context, alive map[*Decl]struct{}) {
 	}
 }
 
-func getTypeDeps(typ types.Type) map[types.Type]struct{} {
-	deps := map[types.Type]struct{}{}
+func getTypeForGrouping(tc *types.Context, inst *typeparams.Instance) types.Type {
+	if inst == nil || inst.Object == nil {
+		return nil
+	}
 
-	switch t := typ.(type) {
+	switch t := inst.Object.Type().(type) {
+	case *types.Named:
+		return inst.Resolve(tc)
+	case *types.Basic:
+		return nil
+	default:
+		return t
+	}
+}
+
+func addTypeToTypeGroupingDeps(t types.Type, deps map[types.Type]struct{}) {
+	switch t := t.(type) {
+	case nil, *types.Basic:
+		// Nil and Basic types aren't used as dependencies
+		// since they don't have unique declarations.
+		return
+
+	default:
+		deps[t] = struct{}{}
+	}
+}
+
+func getTypeGroupingDeps(inst *typeparams.Instance, deps map[types.Type]struct{}) {
+	for _, nestArg := range inst.TNest {
+		addTypeToTypeGroupingDeps(nestArg, deps)
+	}
+	for _, tArg := range inst.TArgs {
+		addTypeToTypeGroupingDeps(tArg, deps)
+	}
+
+	switch t := inst.Object.Type().(type) {
 	case interface{ TypeArgs() *types.TypeList }:
 		// Handles *type.Named and *types.Alias (in go1.22)
 		for i := 0; i < t.TypeArgs().Len(); i++ {
@@ -80,6 +115,4 @@ func getTypeDeps(typ types.Type) map[types.Type]struct{} {
 		// Handles *types.Pointer, *types.Slice, *types.Array, and *types.Chan
 		deps[t.Elem()] = struct{}{}
 	}
-
-	return deps
 }

@@ -157,7 +157,7 @@ func (s *sequencerImp[T]) ToMermaid() string {
 		}
 		write("\n")
 	}
-	for depth := 0; depth < s.depthCount; depth++ {
+	for depth := s.depthCount - 1; depth >= 0; depth-- {
 		if group := s.groups[depth]; len(group) > 0 {
 			write("  subgraph Depth %d\n", depth)
 			write("    %s\n", toIds(group))
@@ -209,8 +209,9 @@ func (s *sequencerImp[T]) performSequencing(panicOnCycle bool) {
 	}
 
 	// If there are still waiting vertices, it means there is a cycle.
-	// Prune off any branches to leaves that are not part of the cycles
-	// using the same logic except starting from the leaves.
+	// Prune off any branches to roots that are not part of the cycles
+	// using the same logic that starts from the leaves except starting
+	// from the roots and working backwards.
 	// This will not be able to remove branches that go between two cycles
 	// even if vertices in that branch can not reach themselves via a cycle.
 	wv := s.vertices.getWaiting(waitingCount)
@@ -251,12 +252,12 @@ func (s *sequencerImp[T]) writeDepth(v *vertex[T]) {
 	s.groups[depth].add(v)
 }
 
-// prepareWaitingAndReady prepare the ready sets so that any root (or leaf) vertex
+// prepareWaitingAndReady prepare the ready sets so that any leaf (or root) vertex
 // is ready to be processed and any waiting vertex has its parent count.
 // This returns the number of waiting vertices.
 //
-// If `forward` is true, it prepares the vertices for sequencing by starting with the roots.
-// If `forward` is false, it prepares the vertices for reducing to cycles by starting with the leaves.
+// If `forward` is true, it prepares the vertices for sequencing by starting with the leaves.
+// If `forward` is false, it prepares the vertices for reducing to cycles by starting with the roots.
 func (s *sequencerImp[T]) prepareWaitingAndReady(forward bool, vs vertexSet[T], ready *vertexStack[T]) int {
 	waitingCount := 0
 	for _, v := range vs {

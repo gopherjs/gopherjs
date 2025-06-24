@@ -82,7 +82,11 @@ type Sequencer[T comparable] interface {
 	// debugging dependency issues. When a cycle is detected, the items
 	// participating in the cycle or depending on an item in a cycle
 	// will be marked with red and the groups may be incorrect.
-	ToMermaid() string
+	//
+	// The `itemToString` function is used to convert the item to a string
+	// representation for the Mermaid graph. It should return a unique string.
+	// If nil, then `%v` will be used to convert the item to a string.
+	ToMermaid(itemToString func(item T) string) string
 }
 
 // New creates a new sequencer for the given item type T.

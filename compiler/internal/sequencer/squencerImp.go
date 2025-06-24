@@ -111,13 +111,19 @@ func (s *sortByName[T]) Swap(i, j int) {
 	s.names[i], s.names[j] = s.names[j], s.names[i]
 }
 
-func (s *sequencerImp[T]) ToMermaid() string {
+func (s *sequencerImp[T]) ToMermaid(itemToString func(item T) string) string {
 	s.performSequencing(false)
+
+	if itemToString == nil {
+		itemToString = func(item T) string {
+			return fmt.Sprintf("%v", item)
+		}
+	}
 
 	buf := &bytes.Buffer{}
 	write := func(format string, args ...any) {
 		// Ignore the error since we are writing to a buffer.
-		_, _ = buf.WriteString(fmt.Sprintf(format, args...))
+		_, _ = fmt.Fprintf(buf, format, args...)
 	}
 
 	// Sort the output to make it easier to read and compare consecutive runs.
@@ -125,7 +131,7 @@ func (s *sequencerImp[T]) ToMermaid() string {
 	names := make([]string, 0, len(vertices))
 	for _, v := range s.vertices {
 		vertices = append(vertices, v)
-		names = append(names, fmt.Sprintf("%v", v.item))
+		names = append(names, itemToString(v.item))
 	}
 	sort.Sort(&sortByName[T]{vertices: vertices, names: names})
 

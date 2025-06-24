@@ -3,23 +3,29 @@ package compiler
 import (
 	"fmt"
 	"go/types"
+	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/sequencer"
 )
 
 func SetInitGroups(tc *types.Context, decls map[*Decl]struct{}) {
 	g := &grouper{
-		tc:        tc,
-		idDeclMap: make(map[int][]*Decl, len(decls)),
-		typeIdMap: make(map[types.Type]int, len(decls)),
-		seq:       sequencer.New[int](),
+		tc:      tc,
+		typeMap: make(map[types.Type][]*Decl, len(decls)),
+		seq:     sequencer.New[*Decl](),
 	}
 	for d := range decls {
 		g.addDecl(d)
 	}
-	g.addTypeDeps()
-	fmt.Println(g.seq.ToMermaid()) // TODO(grantnelson-wf): REMOVE
-	g.assignDepths()
+	for d := range decls {
+		g.addDeclDeps(d)
+	}
+	fmt.Println(g.seq.ToMermaid(func(d *Decl) string { // TODO(grantnelson-wf): REMOVE
+		return strings.ReplaceAll(d.FullName, `github.com/gopherjs/gopherjs/compiler/`, ``)
+	}))
+	for d := range decls {
+		g.assignGroup(d)
+	}
 }
 
 // grouper is a helper for SetInitGroups
@@ -28,28 +34,21 @@ func SetInitGroups(tc *types.Context, decls map[*Decl]struct{}) {
 // "types.Type to satisfy comparable requires go1.20 or later", but the types
 // still work as a map key, just not as the type argument in sequencer.
 type grouper struct {
-	tc        *types.Context
-	idDeclMap map[int][]*Decl
-	typeIdMap map[types.Type]int
-	seq       sequencer.Sequencer[int]
+	tc      *types.Context
+	typeMap map[types.Type][]*Decl
+	seq     sequencer.Sequencer[*Decl]
 }
 
 func (g *grouper) addDecl(d *Decl) {
 	typ := g.getDeclType(d)
 	if typ == nil {
+		// If the declaration has no instance or the type isn't one that
+		// needs to be ordered, we can skip it.
 		d.InitGroup = 0
 		return
 	}
-
-	if id, ok := g.typeIdMap[typ]; ok {
-		g.idDeclMap[id] = append(g.idDeclMap[id], d)
-		return
-	}
-
-	id := len(g.idDeclMap)
-	g.idDeclMap[id] = []*Decl{d}
-	g.typeIdMap[typ] = id
-	g.seq.Add(id)
+	g.typeMap[typ] = append(g.typeMap[typ], d)
+	g.seq.Add(d)
 }
 
 func (g *grouper) getDeclType(d *Decl) types.Type {
@@ -66,78 +65,63 @@ func (g *grouper) getDeclType(d *Decl) types.Type {
 	}
 }
 
-func (g *grouper) addTypeDeps() {
-	for typ, id := range g.typeIdMap {
-		deps := make(map[types.Type]struct{})
-		for _, d := range g.idDeclMap[id] {
-			g.collectDeclDeps(d, deps)
-		}
-
-		for dep := range deps {
-			if depId, ok := g.typeIdMap[dep]; ok {
-				g.seq.Add(id, depId)
-			} else {
-				panic(fmt.Errorf(`missing dependency id for %v from %v`, dep, typ))
-			}
-		}
+func (g *grouper) addDeclDeps(d *Decl) {
+	if !g.seq.Has(d) {
+		// If the sequencer doesn't have this decl, then it wasn't a type
+		// that needed to be ordered, so we can skip it.
+		return
 	}
-}
 
-func (g *grouper) collectDeclDeps(d *Decl, deps map[types.Type]struct{}) {
-	fmt.Printf(">> Adding %s\n", d.FullName) // TODO(grantnelson-wf): REMOVE
 	inst := d.Instance
-
 	for _, nestArg := range inst.TNest {
-		g.collectDep(nestArg, deps)
+		g.addDepType(d, nestArg)
 	}
-
 	for _, tArg := range inst.TArgs {
-		g.collectDep(tArg, deps)
+		g.addDepType(d, tArg)
 	}
 
 	switch t := inst.Object.Type().(type) {
 	case interface{ TypeArgs() *types.TypeList }:
 		// Handles *type.Named and *types.Alias (in go1.22)
 		for i := t.TypeArgs().Len() - 1; i >= 0; i-- {
-			g.collectDep(t.TypeArgs().At(i), deps)
+			g.addDepType(d, t.TypeArgs().At(i))
 		}
 
 	case *types.Signature:
 		if r := t.Recv(); r != nil {
-			fmt.Printf(">> Recv: %s in %v\n", r.Type(), inst) // TODO(grantnelson-wf): REMOVE
 			//g.collectDep(r.Type(), deps)
 		}
 
 	case *types.Map:
-		g.collectDep(t.Key(), deps)
-		g.collectDep(t.Elem(), deps)
+		g.addDepType(d, t.Key())
+		g.addDepType(d, t.Elem())
 
 	case interface{ Elem() types.Type }:
 		// Handles *types.Pointer, *types.Slice, *types.Array, and *types.Chan
-		g.collectDep(t.Elem(), deps)
+		g.addDepType(d, t.Elem())
 	}
 }
 
-func (g *grouper) collectDep(typ types.Type, deps map[types.Type]struct{}) {
-	switch t := typ.(type) {
+func (g *grouper) addDepType(d *Decl, depTyp types.Type) {
+	switch depTyp.(type) {
 	case nil, *types.Basic:
 		// Nil and Basic types aren't used as dependencies
 		// since they don't have unique declarations.
-	default:
-		deps[t] = struct{}{}
+		return
+	}
+
+	if depDecls, ok := g.typeMap[depTyp]; ok {
+		g.seq.Add(d, depDecls...)
+	} else {
+		panic(fmt.Errorf(`missing dependency id for %v from %v`, depTyp, d))
 	}
 }
 
-func (g *grouper) assignDepths() {
-	for depth := g.seq.DepthCount() - 1; depth >= 0; depth-- {
-		fmt.Printf(">> Grouping depth: %d\n", depth) // TODO(grantnelson-wf): REMOVE
-		group := g.seq.Group(depth)
-		for _, id := range group {
-			decls := g.idDeclMap[id]
-			for _, d := range decls {
-				fmt.Printf("\t%s\n\t\t%v\n", d.FullName, d.Instance.Object.Type()) // TODO(grantnelson-wf): REMOVE
-				d.InitGroup = depth
-			}
-		}
+func (g *grouper) assignGroup(d *Decl) {
+	depth := g.seq.Depth(d)
+	// If the depth is negative, then decl was not in the sequencer
+	// and was already assigned to group 0.
+	if depth >= 0 {
+		d.InitGroup = depth
 	}
 }

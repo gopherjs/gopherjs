@@ -63,6 +63,12 @@ type Decl struct {
 	// that it can be resumed after a blocking operation completes without
 	// blocking the main thread in the meantime.
 	Blocking bool
+	// InitGroup is the group number for initializing this declaration.
+	InitGroup int
+	// Instance is set for decls that represent a type instance or method.
+	// This is used to determine the type dependencies for the declaration.
+	// This may be nil for decls types that dependencies don't need to be tracked.
+	Instance *typeparams.Instance
 }
 
 // minify returns a copy of Decl with unnecessary whitespace removed from the
@@ -78,11 +84,6 @@ func (d Decl) minify() Decl {
 // Dce gets the information for dead-code elimination.
 func (d *Decl) Dce() *dce.Info {
 	return &d.DCEInfo
-}
-
-func (d *Decl) String() string { // TODO(grantnelson-wf): REMOVE
-	return fmt.Sprintf("Decl{FullName: %s, Vars: %v, RefExpr: %s, Blocking: %t}",
-		d.FullName, d.Vars, d.RefExpr, d.Blocking)
 }
 
 // topLevelObjects extracts package-level variables, functions and named types
@@ -344,6 +345,7 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		FullName:    funcDeclFullName(inst),
 		Blocking:    fc.pkgCtx.IsBlocking(inst),
 		LinkingName: symbol.New(o),
+		Instance:    &inst,
 	}
 	d.Dce().SetName(o, inst.TNest, inst.TArgs)
 
@@ -484,6 +486,7 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 	underlying := instanceType.Underlying()
 	d := &Decl{
 		FullName: typeDeclFullName(inst),
+		Instance: &inst,
 	}
 	d.Dce().SetName(inst.Object, inst.TNest, inst.TArgs)
 	fc.pkgCtx.CollectDCEDeps(d, func() {
@@ -609,6 +612,7 @@ func (fc *funcContext) anonTypeDecls(anonTypes []*types.TypeName) []*Decl {
 		d := &Decl{
 			FullName: anonTypeDeclFullName(t),
 			Vars:     []string{t.Name()},
+			Instance: &typeparams.Instance{Object: t},
 		}
 		d.Dce().SetName(t, nil, nil)
 		fc.pkgCtx.CollectDCEDeps(d, func() {

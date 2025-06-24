@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/tools/go/packages"
@@ -562,7 +561,7 @@ func TestLengthParenthesizingIssue841(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	mainPkg := archives[root.PkgPath]
 
 	badRegex := regexp.MustCompile(`a\s*\+\s*b\.length`)
@@ -614,7 +613,7 @@ func TestDeclNaming_Import(t *testing.T) {
 			{Name: `hudson/william.go`, Contents: []byte(src4)},
 		})
 
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	checkForDeclFullNames(t, archives,
 		`import:github.com/gopherjs/gopherjs/compiler/burke`,
 		`import:github.com/gopherjs/gopherjs/compiler/hudson`,
@@ -647,7 +646,7 @@ func TestDeclNaming_FuncAndFuncVar(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	checkForDeclFullNames(t, archives,
 		`funcVar:command-line-arguments.Avasarala`,
 		`func:command-line-arguments.Avasarala`,
@@ -715,7 +714,7 @@ func TestDeclNaming_InitsAndVars(t *testing.T) {
 			{Name: `tully/b.go`, Contents: []byte(src7)},
 		})
 
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	checkForDeclFullNames(t, archives,
 		// tully
 		`var:github.com/gopherjs/gopherjs/compiler/tully.keymaster`,
@@ -771,7 +770,7 @@ func TestDeclNaming_VarsAndTypes(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
 
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	checkForDeclFullNames(t, archives,
 		`var:command-line-arguments.shawn`,
 		`var:blank`,
@@ -873,7 +872,7 @@ func Test_CrossPackageAnalysis(t *testing.T) {
 			{Name: `cmp/ordered.go`, Contents: []byte(src6)},
 		})
 
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	checkForDeclFullNames(t, archives,
 		// collections
 		`funcVar:github.com/gopherjs/gopherjs/compiler/collections.Values`,
@@ -956,7 +955,7 @@ func Test_IndexedSelectors(t *testing.T) {
 			{Name: `other/other.go`, Contents: []byte(src2)},
 		})
 
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	// We mostly are checking that the code was turned into decls correctly,
 	// since the issue was that indexed selectors were not being handled correctly,
 	// so if it didn't panic by this point, it should be fine.
@@ -1031,7 +1030,7 @@ func Test_OrderOfTypeInit_Simple(t *testing.T) {
 			{Name: `box/box.go`, Contents: []byte(src4)},
 		})
 
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	checkForDeclFullNames(t, archives,
 		// collections
 		`typeVar:github.com/gopherjs/gopherjs/compiler/collections.Stack`,
@@ -1123,7 +1122,7 @@ func Test_OrderOfTypeInit_PingPong(t *testing.T) {
 			return h.Sum()
 		}`
 
-	root := srctesting.ParseSources(t,
+	sel := declSelection(t,
 		[]srctesting.Source{
 			{Name: `main.go`, Contents: []byte(src1)},
 		},
@@ -1133,54 +1132,9 @@ func Test_OrderOfTypeInit_PingPong(t *testing.T) {
 			{Name: `cat/cat.go`, Contents: []byte(src4)},
 		})
 
-	archives := compileProject(t, root, false)
-	checkForDeclFullNames(t, archives,
-		// collections
-		`funcVar:github.com/gopherjs/gopherjs/compiler/collections.Values`,
-		`func:github.com/gopherjs/gopherjs/compiler/collections.Values<string, int, map[string]int>`,
-		`funcVar:github.com/gopherjs/gopherjs/compiler/collections.Keys`,
-		`func:github.com/gopherjs/gopherjs/compiler/collections.Keys<string, int, map[string]int>`,
+	sel.PrintDeclStatus()
+	t.Fail() // TODO(grantnelson-wf): REMOVE
 
-		// sorts
-		`funcVar:github.com/gopherjs/gopherjs/compiler/sorts.Pair`,
-		`func:github.com/gopherjs/gopherjs/compiler/sorts.Pair<string, int, []string, []int>`,
-		`funcVar:github.com/gopherjs/gopherjs/compiler/sorts.Bubble`,
-		`func:github.com/gopherjs/gopherjs/compiler/sorts.Bubble`,
-
-		// stable
-		`funcVar:github.com/gopherjs/gopherjs/compiler/stable.Print`,
-		`func:github.com/gopherjs/gopherjs/compiler/stable.Print<string, int, map[string]int>`,
-
-		// main
-		`init:main`,
-	)
-}
-
-func TestArchiveSelectionAfterSerialization(t *testing.T) {
-	src := `
-		package main
-		type Foo interface{ int | string }
-
-		type Bar[T Foo] struct{ v T }
-		func (b Bar[T]) Baz() { println(b.v) }
-
-		var ghost = Bar[int]{v: 7} // unused
-
-		func main() {
-			println("do nothing")
-		}`
-	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
-	root := srctesting.ParseSources(t, srcFiles, nil)
-	rootPath := root.PkgPath
-	origArchives := compileProject(t, root, false)
-	readArchives := reloadCompiledProject(t, origArchives, rootPath)
-
-	origJS := renderPackage(t, origArchives[rootPath], false)
-	readJS := renderPackage(t, readArchives[rootPath], false)
-
-	if diff := cmp.Diff(origJS, readJS); diff != "" {
-		t.Errorf("the reloaded files produce different JS:\n%s", diff)
-	}
 }
 
 func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
@@ -1211,7 +1165,7 @@ func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	mainPkg := archives[root.PkgPath]
 	insts := collectDeclInstances(t, mainPkg)
 
@@ -1252,7 +1206,7 @@ func TestNestedGenericTypeInGenericFunc(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	mainPkg := archives[root.PkgPath]
 	insts := collectDeclInstances(t, mainPkg)
 
@@ -1284,7 +1238,7 @@ func TestNestedGenericTypeInGenericFuncWithSharedTArgs(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	mainPkg := archives[root.PkgPath]
 	insts := collectDeclInstances(t, mainPkg)
 
@@ -1339,7 +1293,7 @@ func compareOrder(t *testing.T, sourceFiles []srctesting.Source, minify bool) {
 func compile(t *testing.T, sourceFiles []srctesting.Source, minify bool) string {
 	t.Helper()
 	rootPkg := srctesting.ParseSources(t, sourceFiles, nil)
-	archives := compileProject(t, rootPkg, minify)
+	archives := compileProject(t, rootPkg, nil, minify)
 
 	path := rootPkg.PkgPath
 	a, ok := archives[path]
@@ -1352,7 +1306,7 @@ func compile(t *testing.T, sourceFiles []srctesting.Source, minify bool) string 
 
 // compileProject compiles the given root package and all packages imported by the root.
 // This returns the compiled archives of all packages keyed by their import path.
-func compileProject(t *testing.T, root *packages.Package, minify bool) map[string]*Archive {
+func compileProject(t *testing.T, root *packages.Package, tContext *types.Context, minify bool) map[string]*Archive {
 	t.Helper()
 	pkgMap := map[string]*packages.Package{}
 	packages.Visit([]*packages.Package{root}, nil, func(pkg *packages.Package) {
@@ -1379,7 +1333,9 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 		return srcs, nil
 	}
 
-	tContext := types.NewContext()
+	if tContext == nil {
+		tContext = types.NewContext()
+	}
 	sortedSources := make([]*sources.Sources, 0, len(allSrcs))
 	for _, srcs := range allSrcs {
 		sortedSources = append(sortedSources, srcs)
@@ -1396,71 +1352,6 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 		archives[srcs.ImportPath] = a
 	}
 	return archives
-}
-
-// newTime creates an arbitrary time.Time offset by the given number of seconds.
-// This is useful for quickly creating times that are before or after another.
-func newTime(seconds float64) time.Time {
-	return time.Date(1969, 7, 20, 20, 17, 0, 0, time.UTC).
-		Add(time.Duration(seconds * float64(time.Second)))
-}
-
-// reloadCompiledProject persists the given archives into memory then reloads
-// them from memory to simulate a cache reload of a precompiled project.
-func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPath string) map[string]*Archive {
-	t.Helper()
-
-	// TODO(grantnelson-wf): The tests using this function are out-of-date
-	// since they are testing the old archive caching that has been disabled.
-	// At some point, these tests should be updated to test any new caching
-	// mechanism that is implemented or removed. As is this function is faking
-	// the old recursive archive loading that is no longer used since it
-	// doesn't allow cross package analysis for generings.
-
-	buildTime := newTime(5.0)
-	serialized := map[string][]byte{}
-	for path, a := range archives {
-		buf := &bytes.Buffer{}
-		if err := WriteArchive(a, buildTime, buf); err != nil {
-			t.Fatalf(`failed to write archive for %s: %v`, path, err)
-		}
-		serialized[path] = buf.Bytes()
-	}
-
-	srcModTime := newTime(0.0)
-	reloadCache := map[string]*Archive{}
-	type ImportContext struct {
-		Packages      map[string]*types.Package
-		ImportArchive func(path string) (*Archive, error)
-	}
-	var importContext *ImportContext
-	importContext = &ImportContext{
-		Packages: map[string]*types.Package{},
-		ImportArchive: func(path string) (*Archive, error) {
-			// find in local cache
-			if a, ok := reloadCache[path]; ok {
-				return a, nil
-			}
-
-			// deserialize archive
-			buf, ok := serialized[path]
-			if !ok {
-				t.Fatalf(`archive not found for %s`, path)
-			}
-			a, _, err := ReadArchive(path, bytes.NewReader(buf), srcModTime, importContext.Packages)
-			if err != nil {
-				t.Fatalf(`failed to read archive for %s: %v`, path, err)
-			}
-			reloadCache[path] = a
-			return a, nil
-		},
-	}
-
-	_, err := importContext.ImportArchive(rootPkgPath)
-	if err != nil {
-		t.Fatal(`failed to reload archives:`, err)
-	}
-	return reloadCache
 }
 
 func renderPackage(t *testing.T, archive *Archive, minify bool) string {
@@ -1523,10 +1414,12 @@ type selectionTester struct {
 func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []srctesting.Source) *selectionTester {
 	t.Helper()
 	root := srctesting.ParseSources(t, sourceFiles, auxFiles)
-	archives := compileProject(t, root, false)
+	tc := types.NewContext()
+	archives := compileProject(t, root, tc, false)
 	mainPkg := archives[root.PkgPath]
 	packages := getPackageList(archives)
 	dceSelection := getDceSelection(packages)
+	SetInitGroups(tc, dceSelection)
 
 	return &selectionTester{
 		t:            t,
@@ -1543,9 +1436,9 @@ func (st *selectionTester) PrintDeclStatus() {
 		st.t.Logf(`Package %s`, pkg.ImportPath)
 		for _, decl := range pkg.Declarations {
 			if _, ok := st.dceSelection[decl]; ok {
-				st.t.Logf(`  [Alive] %q`, decl.FullName)
+				st.t.Logf(`  [Alive] [%d] %q`, decl.InitGroup, decl.FullName)
 			} else {
-				st.t.Logf(`  [Dead]  %q`, decl.FullName)
+				st.t.Logf(`  [Dead]  [%d] %q`, decl.InitGroup, decl.FullName)
 			}
 		}
 	}

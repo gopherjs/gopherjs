@@ -53,7 +53,7 @@ type Sequencer[T comparable] interface {
 	// AllGroups returns all the items grouped by their depth.
 	// Each group is a slice of items at the same depth.
 	// The depth is zero-based, so the first group is the root items.
-	// Each time this is called it creates new slices.
+	// Each time this is called it creates a new slices.
 	//
 	// This may have to perform sequencing of the items, so
 	// this may panic with `ErrCycleDetected` if a cycle is detected.

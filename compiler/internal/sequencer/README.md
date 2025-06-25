@@ -129,8 +129,8 @@ In the above example:
 There are several ways to perform the grouping and depth determination.
 One way is to set all the vertices to zero (not just the leaves) then update
 each vertex with the maximum of their parents plus one until no more changes
-are made. That would take $n \cdot d$ amount of time, where $n$ is the number of
-vertices and $d$ is the maximum depth. This can be improved by propagating
+are made. That would take $n \cdot d$ amount of time, where $n$ is the number
+of vertices and $d$ is the maximum depth. This can be improved by propagating
 starting from each leaf heading towards the roots. Anytime a vertex depth
 changes recalculate all the children vertices.
 However, this is still slow because the same children depths will be

@@ -12,6 +12,7 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
+	"github.com/gopherjs/gopherjs/compiler/internal/grouper"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
@@ -1134,7 +1135,6 @@ func Test_OrderOfTypeInit_PingPong(t *testing.T) {
 
 	sel.PrintDeclStatus()
 	t.Fail() // TODO(grantnelson-wf): REMOVE
-
 }
 
 func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
@@ -1419,7 +1419,7 @@ func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []src
 	mainPkg := archives[root.PkgPath]
 	packages := getPackageList(archives)
 	dceSelection := getDceSelection(packages)
-	SetInitGroups(tc, dceSelection)
+	grouper.Group(dceSelection)
 
 	return &selectionTester{
 		t:            t,
@@ -1435,11 +1435,12 @@ func (st *selectionTester) PrintDeclStatus() {
 	for _, pkg := range st.packages {
 		st.t.Logf(`Package %s`, pkg.ImportPath)
 		for _, decl := range pkg.Declarations {
+			status := `[Dead] `
 			if _, ok := st.dceSelection[decl]; ok {
-				st.t.Logf(`  [Alive] [%d] %q`, decl.InitGroup, decl.FullName)
-			} else {
-				st.t.Logf(`  [Dead]  [%d] %q`, decl.InitGroup, decl.FullName)
+				status = `[Alive]`
 			}
+			group := decl.Grouper().Group
+			st.t.Logf(`  %s [%d] %q`, status, group, decl.FullName)
 		}
 	}
 }

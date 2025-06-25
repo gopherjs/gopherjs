@@ -1021,7 +1021,7 @@ func Test_OrderOfTypeInit_Simple(t *testing.T) {
 
 		func (b *boxImp[T]) Unbox() T { return b.whatsInTheBox }`
 
-	root := srctesting.ParseSources(t,
+	sel := declSelection(t,
 		[]srctesting.Source{
 			{Name: `main.go`, Contents: []byte(src1)},
 		},
@@ -1030,37 +1030,46 @@ func Test_OrderOfTypeInit_Simple(t *testing.T) {
 			{Name: `cat/cat.go`, Contents: []byte(src3)},
 			{Name: `box/box.go`, Contents: []byte(src4)},
 		})
+	sel.PrintDeclStatus()
 
-	archives := compileProject(t, root, nil, false)
-	checkForDeclFullNames(t, archives,
-		// collections
-		`typeVar:github.com/gopherjs/gopherjs/compiler/collections.Stack`,
-		`type:github.com/gopherjs/gopherjs/compiler/collections.Stack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`,
-		`anonType:github.com/gopherjs/gopherjs/compiler/collections.sliceType`, // []box.Unboxer[cat.Cat]
-		`anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`,   // *collections.Stack[box.Unboxer[cat.Cat]]
-		`func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Count<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`,
-		`func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Push<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`,
-		`func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Pop<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`,
+	// Group 0
+	// (imports, typeVars, funcVars, and init:main are defaulted into group 0)
+	// box
+	sel.InGroup(0, `typeVar:github.com/gopherjs/gopherjs/compiler/box.Unboxer`) // type box.Unboxer[T]
+	sel.InGroup(0, `typeVar:github.com/gopherjs/gopherjs/compiler/box.boxImp`)  // type box.boxImp[T]
+	sel.InGroup(0, `funcVar:github.com/gopherjs/gopherjs/compiler/box.Box`)     // func box.Box[T]
+	// cat
+	sel.InGroup(0, `typeVar:github.com/gopherjs/gopherjs/compiler/cat.Cat`) // type cat.Cat
+	sel.InGroup(0, `type:github.com/gopherjs/gopherjs/compiler/cat.Cat`)    // type cat.Cat
+	// collections
+	sel.InGroup(0, `typeVar:github.com/gopherjs/gopherjs/compiler/collections.Stack`)    // type collections.Stack[T]
+	sel.InGroup(0, `funcVar:github.com/gopherjs/gopherjs/compiler/collections.NewStack`) // func collections.NewStack[T]
+	// main
+	sel.InGroup(0, `init:main`)
+	sel.InGroup(0, `funcVar:command-line-arguments.main`)
+	sel.InGroup(0, `func:command-line-arguments.main`)
 
-		// cat
-		`typeVar:github.com/gopherjs/gopherjs/compiler/cat.Cat`,
-		`type:github.com/gopherjs/gopherjs/compiler/cat.Cat`,
+	// Group 1
+	// box
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/box.Unboxer<github.com/gopherjs/gopherjs/compiler/cat.Cat>`) // box.Unboxer[cat.Cat]
+	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/box.Box<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)     // box.Box[cat.Cat]
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/box.boxImp<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)  // box.boxImp[cat.Cat]
 
-		// box
-		`typeVar:github.com/gopherjs/gopherjs/compiler/box.Unboxer`,
-		`type:github.com/gopherjs/gopherjs/compiler/box.Unboxer<github.com/gopherjs/gopherjs/compiler/cat.Cat>`,
+	// Group 2
+	// box
+	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/box.ptrType`)                                                    // *boxImp[cat.Cat]
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/box.(*boxImp).Unbox<github.com/gopherjs/gopherjs/compiler/cat.Cat>`) // box.boxImp[cat.Cat].Unbox
+	// collections
+	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.sliceType`)                                                                                           // []box.Unboxer[cat.Cat]
+	sel.InGroup(2, `type:github.com/gopherjs/gopherjs/compiler/collections.Stack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`) // collections.Stack[box.Unboxer[cat.Cat]]
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.NewStack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
 
-		`funcVar:github.com/gopherjs/gopherjs/compiler/box.Box`,
-		`func:github.com/gopherjs/gopherjs/compiler/box.Box<github.com/gopherjs/gopherjs/compiler/cat.Cat>`,
-
-		`typeVar:github.com/gopherjs/gopherjs/compiler/box.boxImp`,
-		`type:github.com/gopherjs/gopherjs/compiler/box.boxImp<github.com/gopherjs/gopherjs/compiler/cat.Cat>`,
-		`anonType:github.com/gopherjs/gopherjs/compiler/box.ptrType`, // *boxImp[cat.Cat]
-		`func:github.com/gopherjs/gopherjs/compiler/box.(*boxImp).Unbox<github.com/gopherjs/gopherjs/compiler/cat.Cat>`,
-
-		// main
-		`init:main`,
-	)
+	// Group 3
+	// collections
+	sel.InGroup(3, `anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`) // *collections.Stack[box.Unboxer[cat.Cat]]
+	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Count<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Push<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Pop<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
 }
 
 func Test_OrderOfTypeInit_PingPong(t *testing.T) {
@@ -1133,8 +1142,27 @@ func Test_OrderOfTypeInit_PingPong(t *testing.T) {
 			{Name: `cat/cat.go`, Contents: []byte(src4)},
 		})
 
-	sel.PrintDeclStatus()
-	t.Fail() // TODO(grantnelson-wf): REMOVE
+	// Group 0
+	// imports, funcVars, typevars, and init:main are in group 0 by default.
+	sel.InGroup(0, `func:command-line-arguments.main`)
+	sel.InGroup(0, `anonType:github.com/gopherjs/gopherjs/compiler/cat.sliceType`) // []rune
+	sel.InGroup(0, `type:github.com/gopherjs/gopherjs/compiler/collections.BadHasher`)
+
+	// Group 1
+	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/collections.BadHasher.Add`)
+	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/collections.BadHasher.Sum`)
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/cat.Cat<github.com/gopherjs/gopherjs/compiler/collections.BadHasher>`)
+
+	// Group 2
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/cat.Cat.Hash<github.com/gopherjs/gopherjs/compiler/collections.BadHasher>`)
+	sel.InGroup(2, `type:github.com/gopherjs/gopherjs/compiler/collections.HashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.mapType`) // map[uint]cat.Cat[collections.BadHasher]
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.NewHashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+
+	// Group 3
+	sel.InGroup(3, `anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`) // *collections.HashSet[cat.Cat[collections.BadHasher]]
+	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*HashSet).Add<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*HashSet).Count<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
 }
 
 func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
@@ -1442,6 +1470,15 @@ func (st *selectionTester) PrintDeclStatus() {
 			group := decl.Grouper().Group
 			st.t.Logf(`  %s [%d] %q`, status, group, decl.FullName)
 		}
+	}
+}
+
+func (st *selectionTester) InGroup(group int, declFullName string) {
+	st.t.Helper()
+	decl := st.FindDecl(declFullName)
+	got := decl.Grouper().Group
+	if got != group {
+		st.t.Errorf(`expected the decl %q to be in group %d, but it is in group %d`, declFullName, group, got)
 	}
 }
 

@@ -4,10 +4,14 @@ import (
 	"go/types"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
+	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
 type Info struct {
 	// Group is the group number for initializing this declaration.
+	// Since parameter types and field types aren't taken into account when
+	// ordering the groups, the declarations in the same group should still
+	// be initialized in the same order as they were declared based on imports.
 	Group int
 
 	// typ is the concrete type this declaration is associated with.
@@ -56,16 +60,13 @@ func (i *Info) setAllDeps(tc *types.Context, inst typeparams.Instance) {
 		}
 
 	case *types.Signature:
-		if r := t.Recv(); r != nil {
-			switch rTyp := r.Type().(type) {
-			case *types.Named:
-				recvInst := typeparams.Instance{
-					Object: rTyp.Obj(),
-					TNest:  inst.TNest,
-					TArgs:  inst.TArgs,
-				}
-				i.addDep(recvInst.Resolve(tc))
+		if recv := typesutil.RecvType(t); recv != nil {
+			recvInst := typeparams.Instance{
+				Object: recv.Obj(),
+				TNest:  inst.TNest,
+				TArgs:  inst.TArgs,
 			}
+			i.addDep(recvInst.Resolve(tc))
 		}
 
 	case *types.Map:

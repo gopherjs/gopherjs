@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/tools/go/packages"
@@ -967,6 +968,33 @@ func Test_IndexedSelectors(t *testing.T) {
 	)
 }
 
+func TestArchiveSelectionAfterSerialization(t *testing.T) {
+	src := `
+		package main
+		type Foo interface{ int | string }
+
+		type Bar[T Foo] struct{ v T }
+		func (b Bar[T]) Baz() { println(b.v) }
+
+		var ghost = Bar[int]{v: 7} // unused
+
+		func main() {
+			println("do nothing")
+		}`
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+	rootPath := root.PkgPath
+	origArchives := compileProject(t, root, nil, false)
+	readArchives := reloadCompiledProject(t, origArchives, rootPath)
+
+	origJS := renderPackage(t, origArchives[rootPath], false)
+	readJS := renderPackage(t, readArchives[rootPath], false)
+
+	if diff := cmp.Diff(origJS, readJS); diff != "" {
+		t.Errorf("the reloaded files produce different JS:\n%s", diff)
+	}
+}
+
 func Test_OrderOfTypeInit_Simple(t *testing.T) {
 	src1 := `
 		package main
@@ -1382,6 +1410,71 @@ func compileProject(t *testing.T, root *packages.Package, tContext *types.Contex
 	return archives
 }
 
+// newTime creates an arbitrary time.Time offset by the given number of seconds.
+// This is useful for quickly creating times that are before or after another.
+func newTime(seconds float64) time.Time {
+	return time.Date(1969, 7, 20, 20, 17, 0, 0, time.UTC).
+		Add(time.Duration(seconds * float64(time.Second)))
+}
+
+// reloadCompiledProject persists the given archives into memory then reloads
+// them from memory to simulate a cache reload of a precompiled project.
+func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPath string) map[string]*Archive {
+	t.Helper()
+
+	// TODO(grantnelson-wf): The tests using this function are out-of-date
+	// since they are testing the old archive caching that has been disabled.
+	// At some point, these tests should be updated to test any new caching
+	// mechanism that is implemented or removed. As is this function is faking
+	// the old recursive archive loading that is no longer used since it
+	// doesn't allow cross package analysis for generings.
+
+	buildTime := newTime(5.0)
+	serialized := map[string][]byte{}
+	for path, a := range archives {
+		buf := &bytes.Buffer{}
+		if err := WriteArchive(a, buildTime, buf); err != nil {
+			t.Fatalf(`failed to write archive for %s: %v`, path, err)
+		}
+		serialized[path] = buf.Bytes()
+	}
+
+	srcModTime := newTime(0.0)
+	reloadCache := map[string]*Archive{}
+	type ImportContext struct {
+		Packages      map[string]*types.Package
+		ImportArchive func(path string) (*Archive, error)
+	}
+	var importContext *ImportContext
+	importContext = &ImportContext{
+		Packages: map[string]*types.Package{},
+		ImportArchive: func(path string) (*Archive, error) {
+			// find in local cache
+			if a, ok := reloadCache[path]; ok {
+				return a, nil
+			}
+
+			// deserialize archive
+			buf, ok := serialized[path]
+			if !ok {
+				t.Fatalf(`archive not found for %s`, path)
+			}
+			a, _, err := ReadArchive(path, bytes.NewReader(buf), srcModTime, importContext.Packages)
+			if err != nil {
+				t.Fatalf(`failed to read archive for %s: %v`, path, err)
+			}
+			reloadCache[path] = a
+			return a, nil
+		},
+	}
+
+	_, err := importContext.ImportArchive(rootPkgPath)
+	if err != nil {
+		t.Fatal(`failed to reload archives:`, err)
+	}
+	return reloadCache
+}
+
 func renderPackage(t *testing.T, archive *Archive, minify bool) string {
 	t.Helper()
 
@@ -1404,33 +1497,6 @@ func renderPackage(t *testing.T, archive *Archive, minify bool) string {
 	return b
 }
 
-// getPackageList returns the list of archives sorted by import path.
-func getPackageList(archives map[string]*Archive) []*Archive {
-	paths := make([]string, 0, len(archives))
-	for path := range archives {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-
-	packages := make([]*Archive, 0, len(archives))
-	for _, path := range paths {
-		packages = append(packages, archives[path])
-	}
-	return packages
-}
-
-// getDceSelection returns the set of declarations that are alive after
-// dead code elimination.
-func getDceSelection(packages []*Archive) map[*Decl]struct{} {
-	sel := &dce.Selector[*Decl]{}
-	for _, pkg := range packages {
-		for _, d := range pkg.Declarations {
-			sel.Include(d, false)
-		}
-	}
-	return sel.AliveDecls()
-}
-
 type selectionTester struct {
 	t            *testing.T
 	mainPkg      *Archive
@@ -1445,8 +1511,24 @@ func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []src
 	tc := types.NewContext()
 	archives := compileProject(t, root, tc, false)
 	mainPkg := archives[root.PkgPath]
-	packages := getPackageList(archives)
-	dceSelection := getDceSelection(packages)
+
+	paths := make([]string, 0, len(archives))
+	for path := range archives {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	packages := make([]*Archive, 0, len(archives))
+	for _, path := range paths {
+		packages = append(packages, archives[path])
+	}
+
+	sel := &dce.Selector[*Decl]{}
+	for _, pkg := range packages {
+		for _, d := range pkg.Declarations {
+			sel.Include(d, false)
+		}
+	}
+	dceSelection := sel.AliveDecls()
 	grouper.Group(dceSelection)
 
 	return &selectionTester{

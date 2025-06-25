@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
+	"github.com/gopherjs/gopherjs/compiler/internal/grouper"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
 	"golang.org/x/tools/go/gcexportdata"
@@ -118,6 +119,8 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 		gls.Add(pkg.GoLinknames)
 	}
 
+	// Perform dead code elimination (DCE) on the declarations
+	// to get the selection of the declarations that are actually used.
 	sel := &dce.Selector[*Decl]{}
 	for _, pkg := range pkgs {
 		for _, d := range pkg.Declarations {
@@ -133,6 +136,10 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 		}
 	}
 	dceSelection := sel.AliveDecls()
+
+	// Set the Decl.Grouper().Group values for each declaration.
+	// The group number is used to determine the type initialization order.
+	grouper.Group(dceSelection)
 
 	if _, err := w.Write([]byte("\"use strict\";\n(function() {\n\n")); err != nil {
 		return err

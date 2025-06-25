@@ -13,6 +13,7 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
+	"github.com/gopherjs/gopherjs/compiler/internal/grouper"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
@@ -562,7 +563,7 @@ func TestLengthParenthesizingIssue841(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	mainPkg := archives[root.PkgPath]
 
 	badRegex := regexp.MustCompile(`a\s*\+\s*b\.length`)
@@ -614,7 +615,7 @@ func TestDeclNaming_Import(t *testing.T) {
 			{Name: `hudson/william.go`, Contents: []byte(src4)},
 		})
 
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	checkForDeclFullNames(t, archives,
 		`import:github.com/gopherjs/gopherjs/compiler/burke`,
 		`import:github.com/gopherjs/gopherjs/compiler/hudson`,
@@ -647,7 +648,7 @@ func TestDeclNaming_FuncAndFuncVar(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	checkForDeclFullNames(t, archives,
 		`funcVar:command-line-arguments.Avasarala`,
 		`func:command-line-arguments.Avasarala`,
@@ -715,7 +716,7 @@ func TestDeclNaming_InitsAndVars(t *testing.T) {
 			{Name: `tully/b.go`, Contents: []byte(src7)},
 		})
 
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	checkForDeclFullNames(t, archives,
 		// tully
 		`var:github.com/gopherjs/gopherjs/compiler/tully.keymaster`,
@@ -771,7 +772,7 @@ func TestDeclNaming_VarsAndTypes(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
 
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	checkForDeclFullNames(t, archives,
 		`var:command-line-arguments.shawn`,
 		`var:blank`,
@@ -873,7 +874,7 @@ func Test_CrossPackageAnalysis(t *testing.T) {
 			{Name: `cmp/ordered.go`, Contents: []byte(src6)},
 		})
 
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	checkForDeclFullNames(t, archives,
 		// collections
 		`funcVar:github.com/gopherjs/gopherjs/compiler/collections.Values`,
@@ -933,7 +934,6 @@ func Test_IndexedSelectors(t *testing.T) {
 			var zero T
 			println("Zero is ", zero)
 		}
-
 		func PrintZeroZero[T any, U any]() {
 			PrintZero[T]()
 			PrintZero[U]()
@@ -957,7 +957,7 @@ func Test_IndexedSelectors(t *testing.T) {
 			{Name: `other/other.go`, Contents: []byte(src2)},
 		})
 
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	// We mostly are checking that the code was turned into decls correctly,
 	// since the issue was that indexed selectors were not being handled correctly,
 	// so if it didn't panic by this point, it should be fine.
@@ -984,7 +984,7 @@ func TestArchiveSelectionAfterSerialization(t *testing.T) {
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
 	rootPath := root.PkgPath
-	origArchives := compileProject(t, root, false)
+	origArchives := compileProject(t, root, nil, false)
 	readArchives := reloadCompiledProject(t, origArchives, rootPath)
 
 	origJS := renderPackage(t, origArchives[rootPath], false)
@@ -993,6 +993,204 @@ func TestArchiveSelectionAfterSerialization(t *testing.T) {
 	if diff := cmp.Diff(origJS, readJS); diff != "" {
 		t.Errorf("the reloaded files produce different JS:\n%s", diff)
 	}
+}
+
+func Test_OrderOfTypeInit_Simple(t *testing.T) {
+	src1 := `
+		package main
+		import "github.com/gopherjs/gopherjs/compiler/collections"
+		import "github.com/gopherjs/gopherjs/compiler/cat"
+		import "github.com/gopherjs/gopherjs/compiler/box"
+
+		func main() {
+			s := collections.NewStack[box.Unboxer[cat.Cat]]()
+			s.Push(box.Box(cat.Cat{Name: "Erwin"}))
+			s.Push(box.Box(cat.Cat{Name: "Dirac"}))
+			println(s.Pop().Unbox().Name)
+		}`
+	src2 := `
+		package collections
+
+		type Stack[T any] struct { values []T }
+
+		func NewStack[T any]() *Stack[T] {
+			return &Stack[T]{}
+		}
+
+		func (s *Stack[T]) Count() int {
+			return len(s.values)
+		}
+
+		func (s *Stack[T]) Push(value T) {
+			s.values = append(s.values, value)
+		}
+
+		func (s *Stack[T]) Pop() (value T) {
+			if len(s.values) > 0 {
+				maxIndex := len(s.values) - 1
+				s.values, value = s.values[:maxIndex], s.values[maxIndex]
+			}
+			return
+		}`
+	src3 := `
+		package cat
+
+		type Cat struct { Name string }`
+	src4 := `
+		package box
+
+		type Unboxer[T any] interface { Unbox() T }
+
+		type boxImp[T any] struct { whatsInTheBox T }
+
+		func Box[T any](value T) Unboxer[T] {
+			return &boxImp[T]{whatsInTheBox: value}
+		}
+
+		func (b *boxImp[T]) Unbox() T { return b.whatsInTheBox }`
+
+	sel := declSelection(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `collections/stack.go`, Contents: []byte(src2)},
+			{Name: `cat/cat.go`, Contents: []byte(src3)},
+			{Name: `box/box.go`, Contents: []byte(src4)},
+		})
+	sel.PrintDeclStatus()
+
+	// Group 0
+	// (imports, typeVars, funcVars, and init:main are defaulted into group 0)
+	// box
+	sel.InGroup(0, `typeVar:github.com/gopherjs/gopherjs/compiler/box.Unboxer`) // type box.Unboxer[T]
+	sel.InGroup(0, `typeVar:github.com/gopherjs/gopherjs/compiler/box.boxImp`)  // type box.boxImp[T]
+	sel.InGroup(0, `funcVar:github.com/gopherjs/gopherjs/compiler/box.Box`)     // func box.Box[T]
+	// cat
+	sel.InGroup(0, `typeVar:github.com/gopherjs/gopherjs/compiler/cat.Cat`) // type cat.Cat
+	sel.InGroup(0, `type:github.com/gopherjs/gopherjs/compiler/cat.Cat`)    // type cat.Cat
+	// collections
+	sel.InGroup(0, `typeVar:github.com/gopherjs/gopherjs/compiler/collections.Stack`)    // type collections.Stack[T]
+	sel.InGroup(0, `funcVar:github.com/gopherjs/gopherjs/compiler/collections.NewStack`) // func collections.NewStack[T]
+	// main
+	sel.InGroup(0, `init:main`)
+	sel.InGroup(0, `funcVar:command-line-arguments.main`)
+	sel.InGroup(0, `func:command-line-arguments.main`)
+
+	// Group 1
+	// box
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/box.Unboxer<github.com/gopherjs/gopherjs/compiler/cat.Cat>`) // box.Unboxer[cat.Cat]
+	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/box.Box<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)     // box.Box[cat.Cat]
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/box.boxImp<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)  // box.boxImp[cat.Cat]
+
+	// Group 2
+	// box
+	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/box.ptrType`)                                                    // *boxImp[cat.Cat]
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/box.(*boxImp).Unbox<github.com/gopherjs/gopherjs/compiler/cat.Cat>`) // box.boxImp[cat.Cat].Unbox
+	// collections
+	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.sliceType`)                                                                                           // []box.Unboxer[cat.Cat]
+	sel.InGroup(2, `type:github.com/gopherjs/gopherjs/compiler/collections.Stack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`) // collections.Stack[box.Unboxer[cat.Cat]]
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.NewStack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+
+	// Group 3
+	// collections
+	sel.InGroup(3, `anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`) // *collections.Stack[box.Unboxer[cat.Cat]]
+	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Count<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Push<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Pop<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+}
+
+func Test_OrderOfTypeInit_PingPong(t *testing.T) {
+	src1 := `
+		package main
+		import "github.com/gopherjs/gopherjs/compiler/collections"
+		import "github.com/gopherjs/gopherjs/compiler/cat"
+
+		func main() {
+			s := collections.NewHashSet[cat.Cat[collections.BadHasher]]()
+			s.Add(cat.Cat[collections.BadHasher]{Name: "Fluffy"})
+			s.Add(cat.Cat[collections.BadHasher]{Name: "Mittens"})
+			s.Add(cat.Cat[collections.BadHasher]{Name: "Whiskers"})
+			println(s.Count(), "elements")
+		}`
+	src2 := `
+		package collections
+
+		// HashSet keeps a set of non-nil elements that have unique hashes.
+		type HashSet[E Hashable] struct { data map[uint]E }
+
+		func NewHashSet[E Hashable]() *HashSet[E] {
+			return &HashSet[E]{ data: map[uint]E{} }
+		}
+
+		func (s *HashSet[E]) Add(e E) {
+			s.data[e.Hash()] = e
+		}
+
+		func (s *HashSet[E]) Count() int {
+			return len(s.data)
+		}`
+	src3 := `
+		package collections
+
+		type Hasher interface {
+			Add(value uint)
+			Sum() uint
+		}
+		
+		type Hashable interface {
+			Hash() uint
+		}
+		
+		type BadHasher struct { value uint }
+
+		func (h BadHasher) Add(value uint) { h.value += value }
+		func (h BadHasher) Sum() uint      { return h.value }`
+	src4 := `
+		package cat
+		import "github.com/gopherjs/gopherjs/compiler/collections"
+
+		type Cat[H collections.Hasher] struct { Name string }
+
+		func (c Cat[H]) Hash() uint {
+			var h H
+			for _, v := range []rune(c.Name) {
+				h.Add(uint(v))
+			}
+			return h.Sum()
+		}`
+
+	sel := declSelection(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `collections/hashmap.go`, Contents: []byte(src2)},
+			{Name: `collections/hashes.go`, Contents: []byte(src3)},
+			{Name: `cat/cat.go`, Contents: []byte(src4)},
+		})
+
+	// Group 0
+	// imports, funcVars, typevars, and init:main are in group 0 by default.
+	sel.InGroup(0, `func:command-line-arguments.main`)
+	sel.InGroup(0, `anonType:github.com/gopherjs/gopherjs/compiler/cat.sliceType`) // []rune
+	sel.InGroup(0, `type:github.com/gopherjs/gopherjs/compiler/collections.BadHasher`)
+
+	// Group 1
+	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/collections.BadHasher.Add`)
+	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/collections.BadHasher.Sum`)
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/cat.Cat<github.com/gopherjs/gopherjs/compiler/collections.BadHasher>`)
+
+	// Group 2
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/cat.Cat.Hash<github.com/gopherjs/gopherjs/compiler/collections.BadHasher>`)
+	sel.InGroup(2, `type:github.com/gopherjs/gopherjs/compiler/collections.HashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.mapType`) // map[uint]cat.Cat[collections.BadHasher]
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.NewHashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+
+	// Group 3
+	sel.InGroup(3, `anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`) // *collections.HashSet[cat.Cat[collections.BadHasher]]
+	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*HashSet).Add<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*HashSet).Count<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
 }
 
 func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
@@ -1023,7 +1221,7 @@ func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	mainPkg := archives[root.PkgPath]
 	insts := collectDeclInstances(t, mainPkg)
 
@@ -1064,7 +1262,7 @@ func TestNestedGenericTypeInGenericFunc(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	mainPkg := archives[root.PkgPath]
 	insts := collectDeclInstances(t, mainPkg)
 
@@ -1096,7 +1294,7 @@ func TestNestedGenericTypeInGenericFuncWithSharedTArgs(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
-	archives := compileProject(t, root, false)
+	archives := compileProject(t, root, nil, false)
 	mainPkg := archives[root.PkgPath]
 	insts := collectDeclInstances(t, mainPkg)
 
@@ -1151,7 +1349,7 @@ func compareOrder(t *testing.T, sourceFiles []srctesting.Source, minify bool) {
 func compile(t *testing.T, sourceFiles []srctesting.Source, minify bool) string {
 	t.Helper()
 	rootPkg := srctesting.ParseSources(t, sourceFiles, nil)
-	archives := compileProject(t, rootPkg, minify)
+	archives := compileProject(t, rootPkg, nil, minify)
 
 	path := rootPkg.PkgPath
 	a, ok := archives[path]
@@ -1164,7 +1362,7 @@ func compile(t *testing.T, sourceFiles []srctesting.Source, minify bool) string 
 
 // compileProject compiles the given root package and all packages imported by the root.
 // This returns the compiled archives of all packages keyed by their import path.
-func compileProject(t *testing.T, root *packages.Package, minify bool) map[string]*Archive {
+func compileProject(t *testing.T, root *packages.Package, tContext *types.Context, minify bool) map[string]*Archive {
 	t.Helper()
 	pkgMap := map[string]*packages.Package{}
 	packages.Visit([]*packages.Package{root}, nil, func(pkg *packages.Package) {
@@ -1191,7 +1389,9 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 		return srcs, nil
 	}
 
-	tContext := types.NewContext()
+	if tContext == nil {
+		tContext = types.NewContext()
+	}
 	sortedSources := make([]*sources.Sources, 0, len(allSrcs))
 	for _, srcs := range allSrcs {
 		sortedSources = append(sortedSources, srcs)
@@ -1308,7 +1508,8 @@ type selectionTester struct {
 func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []srctesting.Source) *selectionTester {
 	t.Helper()
 	root := srctesting.ParseSources(t, sourceFiles, auxFiles)
-	archives := compileProject(t, root, false)
+	tc := types.NewContext()
+	archives := compileProject(t, root, tc, false)
 	mainPkg := archives[root.PkgPath]
 
 	paths := make([]string, 0, len(archives))
@@ -1328,6 +1529,7 @@ func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []src
 		}
 	}
 	dceSelection := sel.AliveDecls()
+	grouper.Group(dceSelection)
 
 	return &selectionTester{
 		t:            t,
@@ -1343,12 +1545,22 @@ func (st *selectionTester) PrintDeclStatus() {
 	for _, pkg := range st.packages {
 		st.t.Logf(`Package %s`, pkg.ImportPath)
 		for _, decl := range pkg.Declarations {
+			status := `[Dead] `
 			if _, ok := st.dceSelection[decl]; ok {
-				st.t.Logf(`  [Alive] %q`, decl.FullName)
-			} else {
-				st.t.Logf(`  [Dead]  %q`, decl.FullName)
+				status = `[Alive]`
 			}
+			group := decl.Grouper().Group
+			st.t.Logf(`  %s [%d] %q`, status, group, decl.FullName)
 		}
+	}
+}
+
+func (st *selectionTester) InGroup(group int, declFullName string) {
+	st.t.Helper()
+	decl := st.FindDecl(declFullName)
+	got := decl.Grouper().Group
+	if got != group {
+		st.t.Errorf(`expected the decl %q to be in group %d, but it is in group %d`, declFullName, group, got)
 	}
 }
 

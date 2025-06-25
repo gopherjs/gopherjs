@@ -68,11 +68,6 @@ func (s *Selector[D]) AliveDecls() map[D]struct{} {
 		d := s.popPending()
 		dce := d.Dce()
 
-		if _, exists := dceSelection[d]; exists {
-			// If dependencies are setup correctly, this should not be reached,
-			// however, if it is, we can skip this decl.
-			continue
-		}
 		dceSelection[d] = struct{}{} // Mark the decl as live.
 
 		// Consider all decls the current one is known to depend on and possible add

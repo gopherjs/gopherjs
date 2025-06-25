@@ -56,7 +56,9 @@ func TestBasicSequencing(t *testing.T) {
 		t.Errorf("expected depth of an item not in the sequencer to be -1, got: %d", depth)
 	}
 
-	t.Log(s.ToMermaid(nil))
+	if mmd := s.ToMermaid(nil); len(mmd) == 0 {
+		t.Errorf(`expected non-empty mermaid output, but got empty`)
+	}
 
 	// Check getting the groups individually.
 	count := s.DepthCount()
@@ -96,7 +98,9 @@ func TestDiamonds(t *testing.T) {
 	s.Add(`E`, `G`)
 	s.Add(`F`, `G`)
 
-	t.Log(s.ToMermaid(nil))
+	if mmd := s.ToMermaid(nil); len(mmd) == 0 {
+		t.Errorf(`expected non-empty mermaid output, but got empty`)
+	}
 
 	got := s.AllGroups()
 	for _, group := range got {
@@ -141,7 +145,9 @@ func TestCycleDetection(t *testing.T) {
 	expectPanic(func() { s.Depth(`A`) })
 	expectPanic(func() { s.Group(2) })
 
-	t.Log(s.ToMermaid(nil)) // Should not panic
+	if mmd := s.ToMermaid(nil); len(mmd) == 0 { // Should not panic
+		t.Errorf(`expected non-empty mermaid output, but got empty`)
+	}
 
 	cycles := s.GetCycles()
 	sort.Strings(cycles)

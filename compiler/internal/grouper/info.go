@@ -80,11 +80,16 @@ func (i *Info) setAllDeps(tc *types.Context, inst typeparams.Instance) {
 }
 
 func (i *Info) addDep(t types.Type) {
-	switch t.(type) {
+	switch t := t.(type) {
 	case nil, *types.Basic:
 		// Nil and Basic types aren't used as dependencies
 		// since they don't have unique declarations.
 		return
+	case *types.Named:
+		// Skip types in the Universe scope (e.g. `any`, `error`)
+		if t.Obj().Pkg() == nil {
+			return
+		}
 	}
 
 	if i.dep == nil {

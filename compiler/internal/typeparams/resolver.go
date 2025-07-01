@@ -66,6 +66,14 @@ func NewResolver(tc *types.Context, root Instance) *Resolver {
 		if nest != nil {
 			nestTParams = SignatureTypeParams(nest.Type().(*types.Signature))
 		}
+		// If no type arguments are provided, check if the named type already has
+		// type arguments. This is the case for instantiated objects in the instance.
+		if tParams.Len() > 0 && len(root.TArgs) == 0 && typ.TypeArgs().Len() > 0 {
+			root.TArgs = make(typesutil.TypeList, typ.TypeArgs().Len())
+			for i := 0; i < typ.TypeArgs().Len(); i++ {
+				root.TArgs[i] = typ.TypeArgs().At(i)
+			}
+		}
 	default:
 		panic(fmt.Errorf("unexpected type %T for object %s", typ, root.Object))
 	}

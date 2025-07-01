@@ -16,7 +16,7 @@ type Info struct {
 
 	// typ is the concrete type this declaration is associated with.
 	// This may be nil for declarations that do not have an associated
-	// concrete type.
+	// concrete type or is a method or function declaration.
 	typ types.Type
 
 	// dep is a set of types that this declaration depends on.
@@ -33,6 +33,12 @@ func (i *Info) SetInstance(tc *types.Context, inst typeparams.Instance) {
 
 func (i *Info) setType(tc *types.Context, inst typeparams.Instance) {
 	if inst.Object == nil {
+		return
+	}
+
+	switch inst.Object.(type) {
+	case *types.Builtin, *types.Func:
+		// Nothing can depend on a function so we don't need to set a type.
 		return
 	}
 
@@ -68,6 +74,8 @@ func (i *Info) setAllDeps(tc *types.Context, inst typeparams.Instance) {
 			}
 			i.addDep(recvInst.Resolve(tc))
 		}
+		// The signature parameters and results are not added as dependencies
+		// because they are not used in initialization.
 
 	case *types.Map:
 		i.addDep(t.Key())
@@ -86,9 +94,16 @@ func (i *Info) addDep(t types.Type) {
 		// since they don't have unique declarations.
 		return
 	case *types.Named:
-		// Skip types in the Universe scope (e.g. `any`, `error`)
-		if t.Obj().Pkg() == nil {
-			return
+		if t.Obj() == nil || t.Obj().Pkg() == nil {
+			return // skip objects in universal scope, e.g. `error`
+		}
+	case *types.Struct:
+		if t.NumFields() == 0 {
+			return // skip empty structs
+		}
+	case *types.Interface:
+		if t.Empty() {
+			return // skip `any`
 		}
 	}
 

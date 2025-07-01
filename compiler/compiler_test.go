@@ -1555,6 +1555,18 @@ func (st *selectionTester) PrintDeclStatus() {
 	}
 }
 
+func (st *selectionTester) PrintOrderMermaid() {
+	st.t.Helper()
+	mermaid := grouper.ToMermaid(st.dceSelection, func(d *Decl) string {
+		text := d.FullName
+		text = strings.ReplaceAll(text, `github.com/gopherjs/gopherjs/compiler/`, ``)
+		text = strings.ReplaceAll(text, `<`, `[`)
+		text = strings.ReplaceAll(text, `>`, `]`)
+		return text
+	})
+	st.t.Logf(`Mermaid:\n%s`, mermaid)
+}
+
 func (st *selectionTester) InGroup(group int, declFullName string) {
 	st.t.Helper()
 	decl := st.FindDecl(declFullName)

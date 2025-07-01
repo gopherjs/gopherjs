@@ -41,16 +41,21 @@ func (i *Info) setType(tc *types.Context, inst typeparams.Instance) {
 	}
 }
 
+// setAllDeps sets the named type dependencies for the instance.
+//
+// skipSamePkg indicates whether to skip dependencies in the same package as
+// the instance's name. This is to simplify testing, however to ensure that
+// there are no cycles in the dependency graph, when not testing, types from
+// the same package must be excluded.
 func (i *Info) setAllDeps(tc *types.Context, inst typeparams.Instance, skipSamePkg bool) {
 	var pending []types.Type
 	pending = append(pending, inst.TNest...)
 	pending = append(pending, inst.TArgs...)
 
-	switch {
-	case inst.Object == nil:
+	if inst.Object == nil {
 		// shouldn't happen, but if it does, just check the type args.
 
-	case i.name != nil:
+	} else if i.name != nil {
 		// If `i.name`` is set then we know we have a named type
 		// that we have to dig into to find its dependencies.
 		// By using `i.name` we know that the type has been resolved.
@@ -58,23 +63,31 @@ func (i *Info) setAllDeps(tc *types.Context, inst typeparams.Instance, skipSameP
 		for j := tArgs.Len() - 1; j >= 0; j-- {
 			pending = append(pending, tArgs.At(j))
 		}
-		pending = append(pending, i.name.Underlying())
 
-	case typesutil.IsMethod(inst.Object):
-		// If the instance is a method, we need to resolve the receiver type
-		// and the signature of the method to find its dependencies.
-		sig := inst.Object.Type().(*types.Signature)
+		r := typeparams.NewResolver(tc, inst)
+		pending = append(pending, r.Substitute(i.name.Underlying()))
+
+	} else if fn, ok := inst.Object.(*types.Func); ok {
+		sig := fn.Type().(*types.Signature)
 		if recv := typesutil.RecvType(sig); recv != nil {
+			// The instance is a method, resolve the receiver type
+			// and the signature of the method to find its dependencies.
 			recvInst := typeparams.Instance{
 				Object: recv.Obj(),
 				TNest:  inst.TNest,
 				TArgs:  inst.TArgs,
 			}
 			pending = append(pending, recvInst.Resolve(tc))
-		}
-		pending = append(pending, sig)
 
-	default:
+			r := typeparams.NewResolver(tc, recvInst)
+			pending = append(pending, r.Substitute(sig))
+		} else {
+
+			// The instance is a function, resolve the signature.
+			pending = append(pending, inst.Resolve(tc))
+		}
+
+	} else {
 		// If `i.name` is not set and it isn't a method, we can add the type
 		// as a dependency directly without needing to resolve it further.
 		// This will take a type like `[]Cat` and add `Cat` as a dependency.

@@ -105,125 +105,131 @@ func TestInstanceDecomposition(t *testing.T) {
 				expDeps: tg.NamedSet(`Foo`),
 			}
 		}(),
-		// func() testData {
-		// 	tg := readTypes(t, `
-		// 		type Foo struct {}
-		// 		type Bar struct {}
-		// 		var m map[Bar]Foo`)
-		// 	return testData{
-		// 		name:    `depend on map key and element`,
-		// 		context: tg.tf.Context,
-		// 		instance: typeparams.Instance{
-		// 			Object: tg.Object(`m`),
-		// 		},
-		// 		expName: tg.Type(`map[Bar]Foo`),
-		// 		expDeps: tg.TypeList(`Bar`, `Foo`),
-		// 	}
-		// }(),
-		// func() testData {
-		// 	tg := readTypes(t, `
-		// 		type Foo struct { X Bar }
-		// 		type Bar struct {}`)
-		// 	return testData{
-		// 		name:    `do not need to depend on fields`,
-		// 		context: tg.tf.Context,
-		// 		instance: typeparams.Instance{
-		// 			Object: tg.Object(`Foo`),
-		// 		},
-		// 		expName: tg.Type(`Foo`),
-		// 		expDeps: nil,
-		// 	}
-		// }(),
-		// func() testData {
-		// 	tg := readTypes(t, `
-		// 		type Foo struct {}
-		// 		func (f Foo) Bar(x int, y int) {}`)
-		// 	return testData{
-		// 		name:    `depend on receiver type and do not type methods`,
-		// 		context: tg.tf.Context,
-		// 		instance: typeparams.Instance{
-		// 			Object: tg.Object(`Foo.Bar`),
-		// 		},
-		// 		expName: nil,
-		// 		expDeps: tg.TypeList(`Foo`),
-		// 	}
-		// }(),
-		// func() testData {
-		// 	tg := readTypes(t, `
-		// 		type Foo struct {}
-		// 		func (f *Foo) Bar(x int, y int) {}`)
-		// 	return testData{
-		// 		name:    `depend on receiver type without the pointer`,
-		// 		context: tg.tf.Context,
-		// 		instance: typeparams.Instance{
-		// 			Object: tg.Object(`Foo.Bar`),
-		// 		},
-		// 		expName: nil,
-		// 		expDeps: tg.TypeList(`Foo`),
-		// 	}
-		// }(),
-		// func() testData {
-		// 	tg := readTypes(t, `
-		// 		type Foo[T any] struct {}
-		// 		func Bar[T any](x *Foo[T]) []*Foo[T] { return nil }
-		// 		type Baz struct {}`)
-		// 	return testData{
-		// 		name:    `depend on type arguments but not parameters nor results`,
-		// 		context: tg.tf.Context,
-		// 		instance: typeparams.Instance{
-		// 			Object: tg.Object(`Bar`),
-		// 			TArgs:  tg.TypeList(`Baz`),
-		// 		},
-		// 		expName: nil,
-		// 		expDeps: tg.TypeList(`Baz`),
-		// 	}
-		// }(),
-		// func() testData {
-		// 	tg := readTypes(t, `
-		// 		type Foo[T any] struct {}
-		// 		type Bar struct {}
-		// 		var Baz = Foo[Bar]{}`)
-		// 	return testData{
-		// 		name:    `variables get typed and depend on their type parts`,
-		// 		context: tg.tf.Context,
-		// 		instance: typeparams.Instance{
-		// 			Object: tg.Object(`Baz`),
-		// 		},
-		// 		expName: tg.Type(`Foo[Bar]`),
-		// 		expDeps: tg.TypeList(`Bar`),
-		// 	}
-		// }(),
-		// func() testData {
-		// 	tg := readTypes(t, `
-		// 		var Foo []struct{}`)
-		// 	return testData{
-		// 		name:    `do not depend on empty structs`,
-		// 		context: tg.tf.Context,
-		// 		instance: typeparams.Instance{
-		// 			Object: tg.Object(`Foo`),
-		// 		},
-		// 		expName: tg.Type(`[]struct{}`),
-		// 		expDeps: nil,
-		// 	}
-		// }(),
-		// func() testData {
-		// 	tg := readTypes(t, `
-		// 		func Foo[T any]() any {
-		// 			type Bar struct{ x T}
-		// 			return Bar{}
-		// 		}
-		// 		type Baz struct{}`)
-		// 	return testData{
-		// 		name:    `depend on implicit nesting type arguments`,
-		// 		context: tg.tf.Context,
-		// 		instance: typeparams.Instance{
-		// 			Object: tg.Object(`Foo.Bar`),
-		// 			TNest:  tg.TypeList(`Baz`),
-		// 		},
-		// 		expName: tg.Object(`Foo.Bar`).Type(),
-		// 		expDeps: tg.TypeList(`Baz`),
-		// 	}
-		// }(),
+		func() testData {
+			tg := readTypes(t, `
+				type Foo struct {}
+				type Bar struct {}
+				var m map[Bar]Foo`)
+			return testData{
+				name:    `depend on map key and element`,
+				context: tg.tf.Context,
+				instance: typeparams.Instance{
+					Object: tg.Object(`m`),
+				},
+				expName: nil, // `map[Bar]Foo` is not named
+				expDeps: tg.NamedSet(`Bar`, `Foo`),
+			}
+		}(),
+		func() testData {
+			tg := readTypes(t, `
+				type Foo struct { X Bar[Baz] }
+				type Bar[T any] struct {}
+				type Baz struct {}`)
+			return testData{
+				name:    `depend on fields`,
+				context: tg.tf.Context,
+				instance: typeparams.Instance{
+					Object: tg.Object(`Foo`),
+				},
+				expName: tg.Named(`Foo`),
+				expDeps: tg.NamedSet(`Bar[Baz]`),
+			}
+		}(),
+		func() testData {
+			tg := readTypes(t, `
+				type Foo struct {}
+				func (f Foo) Bar(p *Baz) []*Taz { return nil}
+				type Baz struct {}
+				type Taz struct {}`)
+			return testData{
+				name:    `depend on receiver, parameter, and result types`,
+				context: tg.tf.Context,
+				instance: typeparams.Instance{
+					Object: tg.Object(`Foo.Bar`),
+				},
+				expName: nil, // methods are not named
+				expDeps: tg.NamedSet(`Foo`, `Baz`, `Taz`),
+			}
+		}(),
+		func() testData {
+			tg := readTypes(t, `
+				type Foo[T any] struct {}
+				func (f *Foo[T]) Bar(x int, y int) {}`)
+			return testData{
+				name:    `depend on complex receiver types`,
+				context: tg.tf.Context,
+				instance: typeparams.Instance{
+					Object: tg.Object(`Foo.Bar`),
+					TArgs:  tg.TypeList(`int`),
+				},
+				expName: nil,
+				expDeps: tg.NamedSet(`Foo[int]`),
+			}
+		}(),
+		func() testData {
+			tg := readTypes(t, `
+				type Foo[T any] struct {}
+				func Bar[T any](x []*Foo[T]) map[string]*Foo[T] { return nil }
+				type Baz struct {}`)
+			return testData{
+				name:    `depend on resolved parameters and results`,
+				context: tg.tf.Context,
+				instance: typeparams.Instance{
+					Object: tg.Object(`Bar`),
+					TArgs:  tg.TypeList(`Baz`),
+				},
+				expName: nil,
+				expDeps: tg.NamedSet(`Baz`, `Foo[Baz]`),
+			}
+		}(),
+		func() testData {
+			tg := readTypes(t, `
+				type Foo[T any] struct {}
+				type Bar struct {}
+				var Baz = Foo[Bar]{}`)
+			return testData{
+				name:    `variables depend on the named in their type`,
+				context: tg.tf.Context,
+				instance: typeparams.Instance{
+					Object: tg.Object(`Baz`),
+				},
+				expName: tg.Named(`Foo[Bar]`),
+				expDeps: tg.NamedSet(`Bar`),
+			}
+		}(),
+		func() testData {
+			tg := readTypes(t, `
+				type Foo []struct{ b Bar }
+				type Bar struct {}
+				type Baz Foo`)
+			return testData{
+				name:    `dependency on underlying types for aliased types`,
+				context: tg.tf.Context,
+				instance: typeparams.Instance{
+					Object: tg.Object(`Baz`),
+				},
+				expName: tg.Named(`Baz`),
+				expDeps: tg.NamedSet(`Bar`),
+			}
+		}(),
+		func() testData {
+			tg := readTypes(t, `
+				func Foo[T any]() any {
+					type Bar struct{ x T}
+					return Bar{}
+				}
+				type Baz struct{}`)
+			return testData{
+				name:    `depend on implicit nesting type arguments`,
+				context: tg.tf.Context,
+				instance: typeparams.Instance{
+					Object: tg.Object(`Foo.Bar`),
+					TNest:  tg.TypeList(`Baz`),
+				},
+				expName: tg.Object(`Foo.Bar`).Type().(*types.Named),
+				expDeps: tg.NamedSet(`Baz`),
+			}
+		}(),
 	}
 
 	for _, test := range tests {

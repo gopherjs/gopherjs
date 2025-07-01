@@ -9,126 +9,138 @@ import (
 
 type Info struct {
 	// Group is the group number for initializing this declaration.
-	// Since parameter types and field types aren't taken into account when
-	// ordering the groups, the declarations in the same group should still
-	// be initialized in the same order as they were declared based on imports.
+	// The declarations in the same group should still be initialized in the
+	// same order as they were declared based on imports first.
 	Group int
 
-	// typ is the concrete type this declaration is associated with.
+	// name is the concrete named type that this declaration is associated with.
 	// This may be nil for declarations that do not have an associated
-	// concrete type or is a method or function declaration.
-	typ types.Type
+	// concrete named type, such as functions and methods.
+	name *types.Named
 
-	// dep is a set of types that this declaration depends on.
-	// This may be empty if there are no dependencies.
-	dep map[types.Type]struct{}
+	// dep is a set of named types from other packages that this declaration
+	// depends on. This may be empty if there are no dependencies.
+	dep map[*types.Named]struct{}
 }
 
 // SetInstance sets the types and dependencies used by the grouper to represent
 // the declaration this grouper info is attached to.
 func (i *Info) SetInstance(tc *types.Context, inst typeparams.Instance) {
 	i.setType(tc, inst)
-	i.setAllDeps(tc, inst)
+	i.setAllDeps(tc, inst, true)
 }
 
 func (i *Info) setType(tc *types.Context, inst typeparams.Instance) {
 	if inst.Object == nil {
 		return
 	}
-
-	switch inst.Object.(type) {
-	case *types.Builtin, *types.Func:
-		// Nothing can depend on a function so we don't need to set a type.
-		return
-	}
-
-	switch t := inst.Object.Type().(type) {
+	switch inst.Object.Type().(type) {
+	// TODO(grantnelson-wf): Determine how to handle *types.Alias in go1.22
 	case *types.Named:
-		i.typ = inst.Resolve(tc)
-	default:
-		i.typ = t
+		i.name = inst.Resolve(tc).(*types.Named)
 	}
 }
 
-func (i *Info) setAllDeps(tc *types.Context, inst typeparams.Instance) {
-	for _, nestArg := range inst.TNest {
-		i.addDep(nestArg)
-	}
-	for _, tArg := range inst.TArgs {
-		i.addDep(tArg)
-	}
+func (i *Info) setAllDeps(tc *types.Context, inst typeparams.Instance, skipSamePkg bool) {
+	var pending []types.Type
+	pending = append(pending, inst.TNest...)
+	pending = append(pending, inst.TArgs...)
 
-	switch t := inst.Object.Type().(type) {
-	case interface{ TypeArgs() *types.TypeList }:
-		// Handles *type.Named and *types.Alias (in go1.22)
-		for j := t.TypeArgs().Len() - 1; j >= 0; j-- {
-			i.addDep(t.TypeArgs().At(j))
+	switch {
+	case inst.Object == nil:
+		// shouldn't happen, but if it does, just check the type args.
+
+	case i.name != nil:
+		// If `i.name`` is set then we know we have a named type
+		// that we have to dig into to find its dependencies.
+		// By using `i.name` we know that the type has been resolved.
+		tArgs := i.name.TypeArgs()
+		for j := tArgs.Len() - 1; j >= 0; j-- {
+			pending = append(pending, tArgs.At(j))
 		}
+		pending = append(pending, i.name.Underlying())
 
-	case *types.Signature:
-		if recv := typesutil.RecvType(t); recv != nil {
+	case typesutil.IsMethod(inst.Object):
+		// If the instance is a method, we need to resolve the receiver type
+		// and the signature of the method to find its dependencies.
+		sig := inst.Object.Type().(*types.Signature)
+		if recv := typesutil.RecvType(sig); recv != nil {
 			recvInst := typeparams.Instance{
 				Object: recv.Obj(),
 				TNest:  inst.TNest,
 				TArgs:  inst.TArgs,
 			}
-			i.addDep(recvInst.Resolve(tc))
+			pending = append(pending, recvInst.Resolve(tc))
 		}
-		// The signature parameters and results are not added as dependencies
-		// because they are not used in initialization.
+		pending = append(pending, sig)
 
-	case *types.Map:
-		i.addDep(t.Key())
-		i.addDep(t.Elem())
+	default:
+		// If `i.name` is not set and it isn't a method, we can add the type
+		// as a dependency directly without needing to resolve it further.
+		// This will take a type like `[]Cat` and add `Cat` as a dependency.
+		pending = append(pending, inst.Object.Type())
+	}
 
-	case interface{ Elem() types.Type }:
-		// Handles *types.Pointer, *types.Slice, *types.Array, and *types.Chan
-		i.addDep(t.Elem())
+	i.seekDeps(pending, skipSamePkg)
+}
+
+func (i *Info) seekDeps(pending []types.Type, skipSamePkg bool) {
+	touched := make(map[types.Type]struct{})
+	for len(pending) > 0 {
+		max := len(pending) - 1
+		t := pending[max]
+		pending = pending[:max]
+		if _, ok := touched[t]; ok {
+			continue // already processed this type
+		}
+		touched[t] = struct{}{}
+
+		switch t := t.(type) {
+		case *types.Basic:
+			// ignore basic types like int, string, unsafe.Pointer, etc.
+
+		case *types.Named:
+			i.addDep(t, skipSamePkg)
+
+		case *types.Struct:
+			for j := t.NumFields() - 1; j >= 0; j-- {
+				pending = append(pending, t.Field(j).Type())
+			}
+
+		case *types.Signature:
+			for j := t.Params().Len() - 1; j >= 0; j-- {
+				pending = append(pending, t.Params().At(j).Type())
+			}
+			for j := t.Results().Len() - 1; j >= 0; j-- {
+				pending = append(pending, t.Results().At(j).Type())
+			}
+
+		case *types.Map:
+			pending = append(pending, t.Key())
+			pending = append(pending, t.Elem())
+
+		case interface{ Elem() types.Type }:
+			// Handles *types.Pointer, *types.Slice, *types.Array, and *types.Chan
+			pending = append(pending, t.Elem())
+		}
 	}
 }
 
-func (i *Info) skipDep(t types.Type) bool {
-	if t == nil {
-		return true // skip nil types
+func (i *Info) addDep(t *types.Named, skipSamePkg bool) {
+	if t.Obj() == nil || t.Obj().Pkg() == nil {
+		return // skip objects in universal scope, e.g. `error`
 	}
-	if typesutil.IsJsObject(t) {
-		return true // skip *js.Object
+	if typesutil.IsJsPackage(t.Obj().Pkg()) && t.Obj().Name() == "Object" {
+		return // skip *js.Object
+	}
+	if skipSamePkg && i.name != nil && i.name.Obj() != nil &&
+		i.name.Obj().Pkg() == t.Obj().Pkg() {
+		return // skip dependencies in the same package
 	}
 
-	switch t := t.(type) {
-	case *types.Basic:
-		return true // skip basic types like `int`, `string`, `unsafe.Pointer` etc.
-
-	case *types.Named:
-		if t.Obj() == nil || t.Obj().Pkg() == nil {
-			return true // skip objects in universal scope, e.g. `error`
-		}
-
-	case *types.Struct:
-		if t.NumFields() == 0 {
-			return true // skip `struct{}`
-		}
-
-	case *types.Interface:
-		if t.Empty() {
-			return true // skip `any`
-		}
-
-	case *types.Pointer:
-		if tn, ok := t.Elem().(*types.Named); ok && tn.Obj() != nil && tn.Obj().Pkg() != nil &&
-			tn.Obj().Pkg().Path() == "internal/reflectlite" && tn.Obj().Name() == "rtype" {
-			return true // skip `*internal/reflectlite.rtype`
-		}
-	}
-	return false
-}
-
-func (i *Info) addDep(t types.Type) {
-	if i.skipDep(t) {
-		return
-	}
+	// add the dependency to the set
 	if i.dep == nil {
-		i.dep = make(map[types.Type]struct{})
+		i.dep = make(map[*types.Named]struct{})
 	}
 	i.dep[t] = struct{}{}
 }

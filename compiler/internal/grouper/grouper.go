@@ -70,14 +70,14 @@ type grouper[D Decl] struct {
 
 func (g *grouper[D]) addDecl(d D) {
 	info := d.Grouper()
-	if info == nil || (info.typ == nil && len(info.dep) == 0) {
-		// If the decl has no type or deps set, then it was a type
+	if info == nil || (info.name == nil && len(info.dep) == 0) {
+		// If the decl has no name and no deps, then it was a type
 		// that doesn't needed to be ordered, so we can skip it.
 		info.Group = 0
 		return
 	}
-	if info.typ != nil {
-		g.typeMap[info.typ] = append(g.typeMap[info.typ], info)
+	if info.name != nil {
+		g.typeMap[info.name] = append(g.typeMap[info.name], info)
 	}
 	g.seq.Add(info)
 }

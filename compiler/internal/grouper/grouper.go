@@ -94,7 +94,7 @@ func (g *grouper[D]) addDeps(d D) {
 		if depInfos, ok := g.typeMap[dep]; ok {
 			g.seq.Add(info, depInfos...)
 		} else {
-			panic(fmt.Errorf(`missing dependency id for %v from %v`, dep, d))
+			panic(fmt.Errorf(`unable to find dependency %v for %v`, dep, d))
 		}
 	}
 }

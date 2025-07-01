@@ -116,8 +116,8 @@ func (i *Info) skipDep(t types.Type) bool {
 
 	case *types.Pointer:
 		if tn, ok := t.Elem().(*types.Named); ok && tn.Obj() != nil && tn.Obj().Pkg() != nil &&
-			tn.Obj().Pkg().Path() == "internal/reflectlit" && tn.Obj().Name() == "rtype" {
-			return true // skip `*reflect.rtype`
+			tn.Obj().Pkg().Path() == "internal/reflectlite" && tn.Obj().Name() == "rtype" {
+			return true // skip `*internal/reflectlite.rtype`
 		}
 	}
 	return false

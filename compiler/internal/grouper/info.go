@@ -88,12 +88,16 @@ func (i *Info) setAllDeps(tc *types.Context, inst typeparams.Instance) {
 }
 
 func (i *Info) skipDep(t types.Type) bool {
-	const jsPath = "github.com/gopherjs/gopherjs/js"
+	if t == nil {
+		return true // skip nil types
+	}
+	if typesutil.IsJsObject(t) {
+		return true // skip *js.Object
+	}
+
 	switch t := t.(type) {
-	case nil, *types.Basic:
-		// Nil and Basic types aren't used as dependencies
-		// since they don't have unique declarations.
-		return true
+	case *types.Basic:
+		return true // skip basic types like `int`, `string`, etc.
 
 	case *types.Named:
 		if t.Obj() == nil || t.Obj().Pkg() == nil {
@@ -102,26 +106,15 @@ func (i *Info) skipDep(t types.Type) bool {
 		if t.Obj().Pkg().Path() == "unsafe" {
 			return true // skip unsafe.Pointer
 		}
-		if t.Obj().Pkg().Path() == jsPath {
-			return true // skip js.Object
-		}
 
 	case *types.Struct:
 		if t.NumFields() == 0 {
-			return true // skip empty structs
+			return true // skip `struct{}`
 		}
 
 	case *types.Interface:
 		if t.Empty() {
 			return true // skip `any`
-		}
-
-	case *types.Pointer:
-		switch t2 := t.Elem().(type) {
-		case *types.Named:
-			if t2.Obj() != nil && t2.Obj().Pkg() != nil && t2.Obj().Pkg().Path() == jsPath {
-				return true // skip *js.Object
-			}
 		}
 	}
 	return false

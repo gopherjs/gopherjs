@@ -87,26 +87,50 @@ func (i *Info) setAllDeps(tc *types.Context, inst typeparams.Instance) {
 	}
 }
 
-func (i *Info) addDep(t types.Type) {
+func (i *Info) skipDep(t types.Type) bool {
+	const jsPath = "github.com/gopherjs/gopherjs/js"
 	switch t := t.(type) {
 	case nil, *types.Basic:
 		// Nil and Basic types aren't used as dependencies
 		// since they don't have unique declarations.
-		return
+		return true
+
 	case *types.Named:
 		if t.Obj() == nil || t.Obj().Pkg() == nil {
-			return // skip objects in universal scope, e.g. `error`
+			return true // skip objects in universal scope, e.g. `error`
 		}
+		if t.Obj().Pkg().Path() == "unsafe" {
+			return true // skip unsafe.Pointer
+		}
+		if t.Obj().Pkg().Path() == jsPath {
+			return true // skip js.Object
+		}
+
 	case *types.Struct:
 		if t.NumFields() == 0 {
-			return // skip empty structs
+			return true // skip empty structs
 		}
+
 	case *types.Interface:
 		if t.Empty() {
-			return // skip `any`
+			return true // skip `any`
+		}
+
+	case *types.Pointer:
+		switch t2 := t.Elem().(type) {
+		case *types.Named:
+			if t2.Obj() != nil && t2.Obj().Pkg() != nil && t2.Obj().Pkg().Path() == jsPath {
+				return true // skip *js.Object
+			}
 		}
 	}
+	return false
+}
 
+func (i *Info) addDep(t types.Type) {
+	if i.skipDep(t) {
+		return
+	}
 	if i.dep == nil {
 		i.dep = make(map[types.Type]struct{})
 	}

@@ -97,14 +97,11 @@ func (i *Info) skipDep(t types.Type) bool {
 
 	switch t := t.(type) {
 	case *types.Basic:
-		return true // skip basic types like `int`, `string`, etc.
+		return true // skip basic types like `int`, `string`, `unsafe.Pointer` etc.
 
 	case *types.Named:
 		if t.Obj() == nil || t.Obj().Pkg() == nil {
 			return true // skip objects in universal scope, e.g. `error`
-		}
-		if t.Obj().Pkg().Path() == "unsafe" {
-			return true // skip unsafe.Pointer
 		}
 
 	case *types.Struct:
@@ -115,6 +112,12 @@ func (i *Info) skipDep(t types.Type) bool {
 	case *types.Interface:
 		if t.Empty() {
 			return true // skip `any`
+		}
+
+	case *types.Pointer:
+		if tn, ok := t.Elem().(*types.Named); ok && tn.Obj() != nil && tn.Obj().Pkg() != nil &&
+			tn.Obj().Pkg().Path() == "internal/reflectlit" && tn.Obj().Name() == "rtype" {
+			return true // skip `*reflect.rtype`
 		}
 	}
 	return false

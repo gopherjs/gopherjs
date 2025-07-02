@@ -79,6 +79,17 @@ func NewResolver(tc *types.Context, root Instance) *Resolver {
 		replacements[nestTParams.At(i)] = root.TNest[i]
 	}
 
+	// If no type arguments are provided, check if the type already has
+	// type arguments. This is the case for instantiated objects in the instance.
+	if tParams.Len() > 0 && len(root.TArgs) == 0 {
+		if typ, ok := root.Object.Type().(interface{ TypeArgs() *types.TypeList }); ok {
+			root.TArgs = make(typesutil.TypeList, typ.TypeArgs().Len())
+			for i := 0; i < typ.TypeArgs().Len(); i++ {
+				root.TArgs[i] = typ.TypeArgs().At(i)
+			}
+		}
+	}
+
 	// Check the root's type parameters and arguments match,
 	// then add them to the replacements.
 	if tParams.Len() != len(root.TArgs) {

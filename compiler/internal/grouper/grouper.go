@@ -91,12 +91,8 @@ func (g *grouper[D]) addDeps(d D) {
 	}
 
 	for dep := range info.dep {
-		// If a type (typically an interface) is only used as a parameter or
-		// result in top-level functions it will not be a DCE dependency
-		// of any other declaration and therefore be considered dead. Because
-		// of how JS works, this causes no problem for the JS output, but it
-		// means that the type will not show up in the typeMap.
-		// Since dead/non-existent types aren't initialized, they can ignored.
+		// If a type can not be found it doesn't exist so isn't initialized.
+		// So we can skip adding any dependencies for it.
 		if depInfos, ok := g.typeMap[dep]; ok {
 			g.seq.Add(info, depInfos...)
 		}

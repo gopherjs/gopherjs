@@ -1058,7 +1058,6 @@ func Test_OrderOfTypeInit_Simple(t *testing.T) {
 			{Name: `cat/cat.go`, Contents: []byte(src3)},
 			{Name: `box/box.go`, Contents: []byte(src4)},
 		})
-	sel.PrintDeclStatus()
 
 	// Group 0
 	// (imports, typeVars, funcVars, and init:main are defaulted into group 0)
@@ -1080,20 +1079,20 @@ func Test_OrderOfTypeInit_Simple(t *testing.T) {
 	// Group 1
 	// box
 	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/box.Unboxer<github.com/gopherjs/gopherjs/compiler/cat.Cat>`) // box.Unboxer[cat.Cat]
-	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/box.Box<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)     // box.Box[cat.Cat]
 	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/box.boxImp<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)  // box.boxImp[cat.Cat]
 
 	// Group 2
 	// box
 	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/box.ptrType`)                                                    // *boxImp[cat.Cat]
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/box.Box<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)             // box.Box[cat.Cat]() box.Unboxer[cat.Cat]
 	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/box.(*boxImp).Unbox<github.com/gopherjs/gopherjs/compiler/cat.Cat>`) // box.boxImp[cat.Cat].Unbox
 	// collections
 	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.sliceType`)                                                                                           // []box.Unboxer[cat.Cat]
 	sel.InGroup(2, `type:github.com/gopherjs/gopherjs/compiler/collections.Stack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`) // collections.Stack[box.Unboxer[cat.Cat]]
-	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.NewStack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
 
 	// Group 3
 	// collections
+	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.NewStack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
 	sel.InGroup(3, `anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`) // *collections.Stack[box.Unboxer[cat.Cat]]
 	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Count<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
 	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Push<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
@@ -1185,12 +1184,96 @@ func Test_OrderOfTypeInit_PingPong(t *testing.T) {
 	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/cat.Cat.Hash<github.com/gopherjs/gopherjs/compiler/collections.BadHasher>`)
 	sel.InGroup(2, `type:github.com/gopherjs/gopherjs/compiler/collections.HashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
 	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.mapType`) // map[uint]cat.Cat[collections.BadHasher]
-	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.NewHashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
 
 	// Group 3
+	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.NewHashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
 	sel.InGroup(3, `anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`) // *collections.HashSet[cat.Cat[collections.BadHasher]]
 	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*HashSet).Add<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
 	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*HashSet).Count<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+}
+
+func Test_OrderOfTypeInit_HiddenParamMissingInterface(t *testing.T) {
+	// If a type (typically an interface) is only used as a parameter or
+	// a result in top-level functions, it will not be a DCE dependency
+	// of any other declaration and therefore be considered dead.
+	// Because of how JS works, this will not cause a problem when calling
+	// the function.
+	// If a function pointer to a top-level function (like done when using
+	// reflections), the function pointer will define the parameters
+	// and results, so that type will be alive.
+	//
+	// This test checks that the dead and missing type parameter will
+	// not cause a problem with the type initialization ordering.
+	src1 := `
+		package main
+		import "github.com/gopherjs/gopherjs/compiler/dragon"
+		import "github.com/gopherjs/gopherjs/compiler/drawer"
+
+		func main() {
+			t := dragon.Trogdor[drawer.Cottages]{}
+			t.Target = drawer.Cottages{}
+			
+			drawer.Draw(t)
+		}`
+	src2 := `
+		package drawer
+		import "github.com/gopherjs/gopherjs/compiler/dragon"
+
+		type Cottages struct {}
+
+		func (c Cottages) String() string {
+			return "thatched-roof cottage"
+		}
+
+		func Draw[D dragon.Dragon](d D) {
+			d.Burninate()
+		}`
+	src3 := `
+		package dragon
+		
+		type Target interface{
+			String() string
+		}
+
+		type Dragon interface {
+			Burninate()
+		}
+			
+		type Trogdor[T Target] struct { Target T }
+		
+		func (t Trogdor[T]) Burninate() {
+			println("burninating the " + t.Target.String())
+		}`
+
+	sel := declSelection(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `drawer/drawer.go`, Contents: []byte(src2)},
+			{Name: `dragon/dragon.go`, Contents: []byte(src3)},
+		})
+	sel.PrintDeclStatus()
+
+	// command-line-arguments
+	sel.IsAlive(`func:command-line-arguments.main`)
+	sel.InGroup(0, `funcVar:command-line-arguments.main`)
+
+	// drawer
+	sel.IsAlive(`type:github.com/gopherjs/gopherjs/compiler/drawer.Cottages`)
+	sel.InGroup(0, `type:github.com/gopherjs/gopherjs/compiler/drawer.Cottages`)
+
+	sel.IsAlive(`funcVar:github.com/gopherjs/gopherjs/compiler/drawer.Draw`)
+	sel.IsAlive(`func:github.com/gopherjs/gopherjs/compiler/drawer.Draw<github.com/gopherjs/gopherjs/compiler/dragon.Trogdor[github.com/gopherjs/gopherjs/compiler/drawer.Cottages]>`)
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/drawer.Draw<github.com/gopherjs/gopherjs/compiler/dragon.Trogdor[github.com/gopherjs/gopherjs/compiler/drawer.Cottages]>`)
+
+	// dragon
+	sel.IsDead(`type:github.com/gopherjs/gopherjs/compiler/dragon.Target`)
+	sel.IsDead(`type:github.com/gopherjs/gopherjs/compiler/dragon.Dragon`)
+
+	sel.IsAlive(`typeVar:github.com/gopherjs/gopherjs/compiler/dragon.Trogdor`)
+	sel.IsAlive(`type:github.com/gopherjs/gopherjs/compiler/dragon.Trogdor<github.com/gopherjs/gopherjs/compiler/drawer.Cottages>`)
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/dragon.Trogdor<github.com/gopherjs/gopherjs/compiler/drawer.Cottages>`)
 }
 
 func TestNestedConcreteTypeInGenericFunc(t *testing.T) {

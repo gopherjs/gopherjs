@@ -235,10 +235,12 @@ func TestInstanceDecomposition(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			info := &Info{}
-			// Instead of calling SetInstance, we manually set the type and dependencies
-			// so that we can tell it to not skip the same package dependencies.
+			// Instead of calling SetInstance, we manually set the type and
+			// dependencies so that we can tell it to not skip the same package
+			// dependencies (via passing in a nil package to addAllDeps).
+			// This will make testing Info a lot easier.
 			info.setType(test.context, test.instance)
-			info.setAllDeps(test.context, test.instance, false)
+			info.addAllDeps(test.context, test.instance, nil)
 
 			if info.name != test.expName {
 				t.Errorf("expected type %v, got %v", test.expName, info.name)

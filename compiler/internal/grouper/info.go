@@ -27,7 +27,13 @@ type Info struct {
 // the declaration this grouper info is attached to.
 func (i *Info) SetInstance(tc *types.Context, inst typeparams.Instance) {
 	i.setType(tc, inst)
-	i.setAllDeps(tc, inst, true)
+
+	var pkg *types.Package
+	if inst.Object != nil {
+		pkg = inst.Object.Pkg()
+	}
+
+	i.addAllDeps(tc, inst, pkg)
 }
 
 func (i *Info) setType(tc *types.Context, inst typeparams.Instance) {
@@ -41,21 +47,17 @@ func (i *Info) setType(tc *types.Context, inst typeparams.Instance) {
 	}
 }
 
-// setAllDeps sets the named type dependencies for the instance.
-//
-// skipSamePkg indicates whether to skip dependencies in the same package as
-// the instance's name. This is to simplify testing, however to ensure that
-// there are no cycles in the dependency graph, when not testing, types from
-// the same package must be excluded.
-func (i *Info) setAllDeps(tc *types.Context, inst typeparams.Instance, skipSamePkg bool) {
+func (i *Info) initPendingDeps(tc *types.Context, inst typeparams.Instance) []types.Type {
 	var pending []types.Type
 	pending = append(pending, inst.TNest...)
 	pending = append(pending, inst.TArgs...)
 
 	if inst.Object == nil {
 		// shouldn't happen, but if it does, just check the type args.
+		return pending
+	}
 
-	} else if i.name != nil {
+	if i.name != nil {
 		// If `i.name`` is set then we know we have a named type
 		// that we have to dig into to find its dependencies.
 		// By using `i.name` we know that the type has been resolved.
@@ -66,8 +68,10 @@ func (i *Info) setAllDeps(tc *types.Context, inst typeparams.Instance, skipSameP
 
 		r := typeparams.NewResolver(tc, inst)
 		pending = append(pending, r.Substitute(i.name.Underlying()))
+		return pending
+	}
 
-	} else if fn, ok := inst.Object.(*types.Func); ok {
+	if fn, ok := inst.Object.(*types.Func); ok {
 		sig := fn.Type().(*types.Signature)
 		if recv := typesutil.RecvType(sig); recv != nil {
 			// The instance is a method, resolve the receiver type
@@ -81,23 +85,23 @@ func (i *Info) setAllDeps(tc *types.Context, inst typeparams.Instance, skipSameP
 
 			r := typeparams.NewResolver(tc, recvInst)
 			pending = append(pending, r.Substitute(sig))
-		} else {
-
-			// The instance is a function, resolve the signature.
-			pending = append(pending, inst.Resolve(tc))
+			return pending
 		}
 
-	} else {
-		// If `i.name` is not set and it isn't a method, we can add the type
-		// as a dependency directly without needing to resolve it further.
-		// This will take a type like `[]Cat` and add `Cat` as a dependency.
-		pending = append(pending, inst.Object.Type())
+		// The instance is a function, resolve the signature.
+		pending = append(pending, inst.Resolve(tc))
+		return pending
 	}
 
-	i.seekDeps(pending, skipSamePkg)
+	// If `i.name` is not set and it isn't a method, we can add the type
+	// as a dependency directly without needing to resolve it further.
+	// This will take a type like `[]Cat` and add `Cat` as a dependency.
+	pending = append(pending, inst.Object.Type())
+	return pending
 }
 
-func (i *Info) seekDeps(pending []types.Type, skipSamePkg bool) {
+func (i *Info) addAllDeps(tc *types.Context, inst typeparams.Instance, pkg *types.Package) {
+	pending := i.initPendingDeps(tc, inst)
 	touched := make(map[types.Type]struct{})
 	for len(pending) > 0 {
 		max := len(pending) - 1
@@ -113,7 +117,7 @@ func (i *Info) seekDeps(pending []types.Type, skipSamePkg bool) {
 			// ignore basic types like int, string, unsafe.Pointer, etc.
 
 		case *types.Named:
-			i.addDep(t, skipSamePkg)
+			i.addDep(t, pkg)
 
 		case *types.Struct:
 			for j := t.NumFields() - 1; j >= 0; j-- {
@@ -139,15 +143,14 @@ func (i *Info) seekDeps(pending []types.Type, skipSamePkg bool) {
 	}
 }
 
-func (i *Info) addDep(t *types.Named, skipSamePkg bool) {
+func (i *Info) addDep(t *types.Named, pkg *types.Package) {
 	if t.Obj() == nil || t.Obj().Pkg() == nil {
 		return // skip objects in universal scope, e.g. `error`
 	}
 	if typesutil.IsJsPackage(t.Obj().Pkg()) && t.Obj().Name() == "Object" {
 		return // skip *js.Object
 	}
-	if skipSamePkg && i.name != nil && i.name.Obj() != nil &&
-		i.name.Obj().Pkg() == t.Obj().Pkg() {
+	if pkg != nil && pkg == t.Obj().Pkg() {
 		return // skip dependencies in the same package
 	}
 

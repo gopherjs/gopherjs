@@ -1078,25 +1078,21 @@ func Test_OrderOfTypeInit_Simple(t *testing.T) {
 
 	// Group 1
 	// box
-	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/box.Unboxer<github.com/gopherjs/gopherjs/compiler/cat.Cat>`) // box.Unboxer[cat.Cat]
-	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/box.boxImp<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)  // box.boxImp[cat.Cat]
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/box.Unboxer<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)         // box.Unboxer[cat.Cat]
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/box.boxImp<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)          // box.boxImp[cat.Cat]
+	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/box.Box<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)             // box.Box[cat.Cat]() box.Unboxer[cat.Cat]
+	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/box.(*boxImp).Unbox<github.com/gopherjs/gopherjs/compiler/cat.Cat>`) // box.boxImp[cat.Cat].Unbox
+	sel.InGroup(1, `anonType:github.com/gopherjs/gopherjs/compiler/box.ptrType`)                                                    // *boxImp[cat.Cat]
 
 	// Group 2
-	// box
-	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/box.ptrType`)                                                    // *boxImp[cat.Cat]
-	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/box.Box<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)             // box.Box[cat.Cat]() box.Unboxer[cat.Cat]
-	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/box.(*boxImp).Unbox<github.com/gopherjs/gopherjs/compiler/cat.Cat>`) // box.boxImp[cat.Cat].Unbox
 	// collections
 	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.sliceType`)                                                                                           // []box.Unboxer[cat.Cat]
 	sel.InGroup(2, `type:github.com/gopherjs/gopherjs/compiler/collections.Stack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`) // collections.Stack[box.Unboxer[cat.Cat]]
-
-	// Group 3
-	// collections
-	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.NewStack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
-	sel.InGroup(3, `anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`) // *collections.Stack[box.Unboxer[cat.Cat]]
-	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Count<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
-	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Push<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
-	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Pop<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`)                                                                                             // *collections.Stack[box.Unboxer[cat.Cat]]
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.NewStack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Count<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Push<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Pop<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
 }
 
 func Test_OrderOfTypeInit_PingPong(t *testing.T) {
@@ -1174,22 +1170,20 @@ func Test_OrderOfTypeInit_PingPong(t *testing.T) {
 	sel.InGroup(0, `func:command-line-arguments.main`)
 	sel.InGroup(0, `anonType:github.com/gopherjs/gopherjs/compiler/cat.sliceType`) // []rune
 	sel.InGroup(0, `type:github.com/gopherjs/gopherjs/compiler/collections.BadHasher`)
+	sel.InGroup(0, `func:github.com/gopherjs/gopherjs/compiler/collections.BadHasher.Add`)
+	sel.InGroup(0, `func:github.com/gopherjs/gopherjs/compiler/collections.BadHasher.Sum`)
 
 	// Group 1
-	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/collections.BadHasher.Add`)
-	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/collections.BadHasher.Sum`)
 	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/cat.Cat<github.com/gopherjs/gopherjs/compiler/collections.BadHasher>`)
+	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/cat.Cat.Hash<github.com/gopherjs/gopherjs/compiler/collections.BadHasher>`)
 
 	// Group 2
-	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/cat.Cat.Hash<github.com/gopherjs/gopherjs/compiler/collections.BadHasher>`)
-	sel.InGroup(2, `type:github.com/gopherjs/gopherjs/compiler/collections.HashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
 	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.mapType`) // map[uint]cat.Cat[collections.BadHasher]
-
-	// Group 3
-	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.NewHashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
-	sel.InGroup(3, `anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`) // *collections.HashSet[cat.Cat[collections.BadHasher]]
-	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*HashSet).Add<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
-	sel.InGroup(3, `func:github.com/gopherjs/gopherjs/compiler/collections.(*HashSet).Count<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+	sel.InGroup(2, `type:github.com/gopherjs/gopherjs/compiler/collections.HashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.(*HashSet).Add<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.(*HashSet).Count<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`) // *collections.HashSet[cat.Cat[collections.BadHasher]]
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.NewHashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
 }
 
 func Test_OrderOfTypeInit_HiddenParamMissingInterface(t *testing.T) {

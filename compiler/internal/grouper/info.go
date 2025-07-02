@@ -117,7 +117,36 @@ func (i *Info) addAllDeps(tc *types.Context, inst typeparams.Instance, pkg *type
 			// ignore basic types like int, string, unsafe.Pointer, etc.
 
 		case *types.Named:
-			i.addDep(t, pkg)
+			if t.Obj() == nil || t.Obj().Pkg() == nil {
+				continue // skip objects in universal scope, e.g. `error`
+			}
+			if typesutil.IsJsPackage(t.Obj().Pkg()) && t.Obj().Name() == "Object" {
+				continue // skip *js.Object
+			}
+			if pkg != nil && pkg == t.Obj().Pkg() {
+				// skip over named types from the same package,
+				// continue into them to depend on the same dependencies as they do.
+				// This prevents circular dependencies from being added.
+				tArgs := t.TypeArgs()
+				for j := tArgs.Len() - 1; j >= 0; j-- {
+					pending = append(pending, tArgs.At(j))
+				}
+
+				inst2 := typeparams.Instance{Object: t.Obj()}
+				inst2.TArgs = make(typesutil.TypeList, t.TypeArgs().Len())
+				for j := 0; j < t.TypeArgs().Len(); j++ {
+					inst2.TArgs[j] = t.TypeArgs().At(j)
+				}
+				r := typeparams.NewResolver(tc, inst2)
+				pending = append(pending, r.Substitute(t.Underlying()))
+				continue
+			}
+
+			// add the dependency to the set
+			if i.dep == nil {
+				i.dep = make(map[*types.Named]struct{})
+			}
+			i.dep[t] = struct{}{}
 
 		case *types.Struct:
 			for j := t.NumFields() - 1; j >= 0; j-- {
@@ -141,22 +170,4 @@ func (i *Info) addAllDeps(tc *types.Context, inst typeparams.Instance, pkg *type
 			pending = append(pending, t.Elem())
 		}
 	}
-}
-
-func (i *Info) addDep(t *types.Named, pkg *types.Package) {
-	if t.Obj() == nil || t.Obj().Pkg() == nil {
-		return // skip objects in universal scope, e.g. `error`
-	}
-	if typesutil.IsJsPackage(t.Obj().Pkg()) && t.Obj().Name() == "Object" {
-		return // skip *js.Object
-	}
-	if pkg != nil && pkg == t.Obj().Pkg() {
-		return // skip dependencies in the same package
-	}
-
-	// add the dependency to the set
-	if i.dep == nil {
-		i.dep = make(map[*types.Named]struct{})
-	}
-	i.dep[t] = struct{}{}
 }

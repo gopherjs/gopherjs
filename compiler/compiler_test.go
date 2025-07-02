@@ -1253,7 +1253,6 @@ func Test_OrderOfTypeInit_HiddenParamMissingInterface(t *testing.T) {
 			{Name: `drawer/drawer.go`, Contents: []byte(src2)},
 			{Name: `dragon/dragon.go`, Contents: []byte(src3)},
 		})
-	sel.PrintDeclStatus()
 
 	// command-line-arguments
 	sel.IsAlive(`func:command-line-arguments.main`)

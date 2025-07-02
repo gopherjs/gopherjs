@@ -1220,7 +1220,6 @@ func Test_OrderOfTypeInit_HiddenParamMissingInterface(t *testing.T) {
 		import "github.com/gopherjs/gopherjs/compiler/dragon"
 
 		type Cottages struct {}
-
 		func (c Cottages) String() string {
 			return "thatched-roof cottage"
 		}
@@ -1230,17 +1229,10 @@ func Test_OrderOfTypeInit_HiddenParamMissingInterface(t *testing.T) {
 		}`
 	src3 := `
 		package dragon
-		
-		type Target interface{
-			String() string
-		}
+		type Target interface{ String() string }
+		type Dragon interface { Burninate() }
 
-		type Dragon interface {
-			Burninate()
-		}
-			
 		type Trogdor[T Target] struct { Target T }
-		
 		func (t Trogdor[T]) Burninate() {
 			println("burninating the " + t.Target.String())
 		}`

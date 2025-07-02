@@ -13,6 +13,7 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
+	"github.com/gopherjs/gopherjs/compiler/internal/grouper"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
@@ -995,6 +996,254 @@ func TestArchiveSelectionAfterSerialization(t *testing.T) {
 	}
 }
 
+func Test_OrderOfTypeInit_Simple(t *testing.T) {
+	src1 := `
+		package main
+		import "github.com/gopherjs/gopherjs/compiler/collections"
+		import "github.com/gopherjs/gopherjs/compiler/cat"
+		import "github.com/gopherjs/gopherjs/compiler/box"
+
+		func main() {
+			s := collections.NewStack[box.Unboxer[cat.Cat]]()
+			s.Push(box.Box(cat.Cat{Name: "Erwin"}))
+			s.Push(box.Box(cat.Cat{Name: "Dirac"}))
+			println(s.Pop().Unbox().Name)
+		}`
+	src2 := `
+		package collections
+		type Stack[T any] struct { values []T }
+		func NewStack[T any]() *Stack[T] {
+			return &Stack[T]{}
+		}
+		func (s *Stack[T]) Count() int {
+			return len(s.values)
+		}
+		func (s *Stack[T]) Push(value T) {
+			s.values = append(s.values, value)
+		}
+		func (s *Stack[T]) Pop() (value T) {
+			if len(s.values) > 0 {
+				maxIndex := len(s.values) - 1
+				s.values, value = s.values[:maxIndex], s.values[maxIndex]
+			}
+			return
+		}`
+	src3 := `
+		package cat
+		type Cat struct { Name string }`
+	src4 := `
+		package box
+		type Unboxer[T any] interface { Unbox() T }
+		type boxImp[T any] struct { whatsInTheBox T }
+		func Box[T any](value T) Unboxer[T] {
+			return &boxImp[T]{whatsInTheBox: value}
+		}
+		func (b *boxImp[T]) Unbox() T { return b.whatsInTheBox }`
+
+	sel := declSelection(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `collections/stack.go`, Contents: []byte(src2)},
+			{Name: `cat/cat.go`, Contents: []byte(src3)},
+			{Name: `box/box.go`, Contents: []byte(src4)},
+		})
+
+	// Group 0
+	// (imports, typeVars, funcVars, and init:main are defaulted into group 0)
+	// box
+	sel.InGroup(0, `typeVar:github.com/gopherjs/gopherjs/compiler/box.Unboxer`) // type box.Unboxer[T]
+	sel.InGroup(0, `typeVar:github.com/gopherjs/gopherjs/compiler/box.boxImp`)  // type box.boxImp[T]
+	sel.InGroup(0, `funcVar:github.com/gopherjs/gopherjs/compiler/box.Box`)     // func box.Box[T]
+	// cat
+	sel.InGroup(0, `typeVar:github.com/gopherjs/gopherjs/compiler/cat.Cat`) // type cat.Cat
+	sel.InGroup(0, `type:github.com/gopherjs/gopherjs/compiler/cat.Cat`)    // type cat.Cat
+	// collections
+	sel.InGroup(0, `typeVar:github.com/gopherjs/gopherjs/compiler/collections.Stack`)    // type collections.Stack[T]
+	sel.InGroup(0, `funcVar:github.com/gopherjs/gopherjs/compiler/collections.NewStack`) // func collections.NewStack[T]
+	// main
+	sel.InGroup(0, `init:main`)
+	sel.InGroup(0, `funcVar:command-line-arguments.main`)
+	sel.InGroup(0, `func:command-line-arguments.main`)
+
+	// Group 1
+	// box
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/box.Unboxer<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)         // box.Unboxer[cat.Cat]
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/box.boxImp<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)          // box.boxImp[cat.Cat]
+	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/box.Box<github.com/gopherjs/gopherjs/compiler/cat.Cat>`)             // box.Box[cat.Cat]() box.Unboxer[cat.Cat]
+	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/box.(*boxImp).Unbox<github.com/gopherjs/gopherjs/compiler/cat.Cat>`) // box.boxImp[cat.Cat].Unbox
+	sel.InGroup(1, `anonType:github.com/gopherjs/gopherjs/compiler/box.ptrType`)                                                    // *boxImp[cat.Cat]
+
+	// Group 2
+	// collections
+	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.sliceType`)                                                                                           // []box.Unboxer[cat.Cat]
+	sel.InGroup(2, `type:github.com/gopherjs/gopherjs/compiler/collections.Stack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`) // collections.Stack[box.Unboxer[cat.Cat]]
+	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`)                                                                                             // *collections.Stack[box.Unboxer[cat.Cat]]
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.NewStack<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Count<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Push<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.(*Stack).Pop<github.com/gopherjs/gopherjs/compiler/box.Unboxer[github.com/gopherjs/gopherjs/compiler/cat.Cat]>`)
+}
+
+func Test_OrderOfTypeInit_PingPong(t *testing.T) {
+	src1 := `
+		package main
+		import "github.com/gopherjs/gopherjs/compiler/collections"
+		import "github.com/gopherjs/gopherjs/compiler/cat"
+
+		func main() {
+			s := collections.NewHashSet[cat.Cat[collections.BadHasher]]()
+			s.Add(cat.Cat[collections.BadHasher]{Name: "Fluffy"})
+			s.Add(cat.Cat[collections.BadHasher]{Name: "Mittens"})
+			s.Add(cat.Cat[collections.BadHasher]{Name: "Whiskers"})
+			println(s.Count(), "elements")
+		}`
+	src2 := `
+		package collections
+		// HashSet keeps a set of non-nil elements that have unique hashes.
+		type HashSet[E Hashable] struct { data map[uint]E }
+		func NewHashSet[E Hashable]() *HashSet[E] {
+			return &HashSet[E]{ data: map[uint]E{} }
+		}
+		func (s *HashSet[E]) Add(e E) {
+			s.data[e.Hash()] = e
+		}
+		func (s *HashSet[E]) Count() int {
+			return len(s.data)
+		}`
+	src3 := `
+		package collections
+		type Hasher interface {
+			Add(value uint)
+			Sum() uint
+		}
+
+		type Hashable interface {
+			Hash() uint
+		}
+
+		type BadHasher struct { value uint }
+		func (h BadHasher) Add(value uint) { h.value += value }
+		func (h BadHasher) Sum() uint      { return h.value }`
+	src4 := `
+		package cat
+		import "github.com/gopherjs/gopherjs/compiler/collections"
+
+		type Cat[H collections.Hasher] struct { Name string }
+		func (c Cat[H]) Hash() uint {
+			var h H
+			for _, v := range []rune(c.Name) {
+				h.Add(uint(v))
+			}
+			return h.Sum()
+		}`
+
+	sel := declSelection(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `collections/hashmap.go`, Contents: []byte(src2)},
+			{Name: `collections/hashes.go`, Contents: []byte(src3)},
+			{Name: `cat/cat.go`, Contents: []byte(src4)},
+		})
+
+	// Group 0
+	// imports, funcVars, typevars, and init:main are in group 0 by default.
+	sel.InGroup(0, `func:command-line-arguments.main`)
+	sel.InGroup(0, `anonType:github.com/gopherjs/gopherjs/compiler/cat.sliceType`) // []rune
+	sel.InGroup(0, `type:github.com/gopherjs/gopherjs/compiler/collections.BadHasher`)
+	sel.InGroup(0, `func:github.com/gopherjs/gopherjs/compiler/collections.BadHasher.Add`)
+	sel.InGroup(0, `func:github.com/gopherjs/gopherjs/compiler/collections.BadHasher.Sum`)
+
+	// Group 1
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/cat.Cat<github.com/gopherjs/gopherjs/compiler/collections.BadHasher>`)
+	sel.InGroup(1, `func:github.com/gopherjs/gopherjs/compiler/cat.Cat.Hash<github.com/gopherjs/gopherjs/compiler/collections.BadHasher>`)
+
+	// Group 2
+	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.mapType`) // map[uint]cat.Cat[collections.BadHasher]
+	sel.InGroup(2, `type:github.com/gopherjs/gopherjs/compiler/collections.HashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.(*HashSet).Add<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.(*HashSet).Count<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+	sel.InGroup(2, `anonType:github.com/gopherjs/gopherjs/compiler/collections.ptrType`) // *collections.HashSet[cat.Cat[collections.BadHasher]]
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/collections.NewHashSet<github.com/gopherjs/gopherjs/compiler/cat.Cat[github.com/gopherjs/gopherjs/compiler/collections.BadHasher]>`)
+}
+
+func Test_OrderOfTypeInit_HiddenParamMissingInterface(t *testing.T) {
+	// If a type (typically an interface) is only used as a parameter or
+	// a result in top-level functions, it will not be a DCE dependency
+	// of any other declaration and therefore be considered dead.
+	// Because of how JS works, this will not cause a problem when calling
+	// the function.
+	// If a function pointer to a top-level function (like done when using
+	// reflections), the function pointer will define the parameters
+	// and results, so that type will be alive.
+	//
+	// This test checks that the dead and missing type parameter will
+	// not cause a problem with the type initialization ordering.
+	src1 := `
+		package main
+		import "github.com/gopherjs/gopherjs/compiler/dragon"
+		import "github.com/gopherjs/gopherjs/compiler/drawer"
+
+		func main() {
+			t := dragon.Trogdor[drawer.Cottages]{}
+			t.Target = drawer.Cottages{}
+			drawer.Draw(t)
+		}`
+	src2 := `
+		package drawer
+		import "github.com/gopherjs/gopherjs/compiler/dragon"
+
+		type Cottages struct {}
+		func (c Cottages) String() string {
+			return "thatched-roof cottage"
+		}
+
+		func Draw[D dragon.Dragon](d D) {
+			d.Burninate()
+		}`
+	src3 := `
+		package dragon
+		type Target interface{ String() string }
+		type Dragon interface { Burninate() }
+
+		type Trogdor[T Target] struct { Target T }
+		func (t Trogdor[T]) Burninate() {
+			println("burninating the " + t.Target.String())
+		}`
+
+	sel := declSelection(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `drawer/drawer.go`, Contents: []byte(src2)},
+			{Name: `dragon/dragon.go`, Contents: []byte(src3)},
+		})
+
+	// command-line-arguments
+	sel.IsAlive(`func:command-line-arguments.main`)
+	sel.InGroup(0, `funcVar:command-line-arguments.main`)
+
+	// drawer
+	sel.IsAlive(`type:github.com/gopherjs/gopherjs/compiler/drawer.Cottages`)
+	sel.InGroup(0, `type:github.com/gopherjs/gopherjs/compiler/drawer.Cottages`)
+
+	sel.IsAlive(`funcVar:github.com/gopherjs/gopherjs/compiler/drawer.Draw`)
+	sel.IsAlive(`func:github.com/gopherjs/gopherjs/compiler/drawer.Draw<github.com/gopherjs/gopherjs/compiler/dragon.Trogdor[github.com/gopherjs/gopherjs/compiler/drawer.Cottages]>`)
+	sel.InGroup(2, `func:github.com/gopherjs/gopherjs/compiler/drawer.Draw<github.com/gopherjs/gopherjs/compiler/dragon.Trogdor[github.com/gopherjs/gopherjs/compiler/drawer.Cottages]>`)
+
+	// dragon
+	sel.IsDead(`type:github.com/gopherjs/gopherjs/compiler/dragon.Target`)
+	sel.IsDead(`type:github.com/gopherjs/gopherjs/compiler/dragon.Dragon`)
+
+	sel.IsAlive(`typeVar:github.com/gopherjs/gopherjs/compiler/dragon.Trogdor`)
+	sel.IsAlive(`type:github.com/gopherjs/gopherjs/compiler/dragon.Trogdor<github.com/gopherjs/gopherjs/compiler/drawer.Cottages>`)
+	sel.InGroup(1, `type:github.com/gopherjs/gopherjs/compiler/dragon.Trogdor<github.com/gopherjs/gopherjs/compiler/drawer.Cottages>`)
+}
+
 func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
 	// This is a test of a type defined inside a generic function
 	// that uses the type parameter of the function as a field type.
@@ -1165,6 +1414,10 @@ func compile(t *testing.T, sourceFiles []srctesting.Source, minify bool) string 
 // compileProject compiles the given root package and all packages imported by the root.
 // This returns the compiled archives of all packages keyed by their import path.
 func compileProject(t *testing.T, root *packages.Package, minify bool) map[string]*Archive {
+	return compileProjectWithContext(t, root, types.NewContext(), minify)
+}
+
+func compileProjectWithContext(t *testing.T, root *packages.Package, tContext *types.Context, minify bool) map[string]*Archive {
 	t.Helper()
 	pkgMap := map[string]*packages.Package{}
 	packages.Visit([]*packages.Package{root}, nil, func(pkg *packages.Package) {
@@ -1191,7 +1444,6 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 		return srcs, nil
 	}
 
-	tContext := types.NewContext()
 	sortedSources := make([]*sources.Sources, 0, len(allSrcs))
 	for _, srcs := range allSrcs {
 		sortedSources = append(sortedSources, srcs)
@@ -1308,7 +1560,8 @@ type selectionTester struct {
 func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []srctesting.Source) *selectionTester {
 	t.Helper()
 	root := srctesting.ParseSources(t, sourceFiles, auxFiles)
-	archives := compileProject(t, root, false)
+	tc := types.NewContext()
+	archives := compileProjectWithContext(t, root, tc, false)
 	mainPkg := archives[root.PkgPath]
 
 	paths := make([]string, 0, len(archives))
@@ -1328,6 +1581,7 @@ func declSelection(t *testing.T, sourceFiles []srctesting.Source, auxFiles []src
 		}
 	}
 	dceSelection := sel.AliveDecls()
+	grouper.Group(dceSelection)
 
 	return &selectionTester{
 		t:            t,
@@ -1343,12 +1597,22 @@ func (st *selectionTester) PrintDeclStatus() {
 	for _, pkg := range st.packages {
 		st.t.Logf(`Package %s`, pkg.ImportPath)
 		for _, decl := range pkg.Declarations {
+			group := decl.Grouper().Group
 			if _, ok := st.dceSelection[decl]; ok {
-				st.t.Logf(`  [Alive] %q`, decl.FullName)
+				st.t.Logf(`  [Alive] [%d] %q`, group, decl.FullName)
 			} else {
-				st.t.Logf(`  [Dead]  %q`, decl.FullName)
+				st.t.Logf(`  [Dead]  [%d] %q`, group, decl.FullName)
 			}
 		}
+	}
+}
+
+func (st *selectionTester) InGroup(group int, declFullName string) {
+	st.t.Helper()
+	decl := st.FindDecl(declFullName)
+	got := decl.Grouper().Group
+	if got != group {
+		st.t.Errorf(`expected the decl %q to be in group %d, but it is in group %d`, declFullName, group, got)
 	}
 }
 

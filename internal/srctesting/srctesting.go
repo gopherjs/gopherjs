@@ -20,6 +20,7 @@ import (
 // Fixture provides utilities for parsing and type checking Go code in tests.
 type Fixture struct {
 	T        *testing.T
+	Context  *types.Context
 	FileSet  *token.FileSet
 	Info     *types.Info
 	Packages map[string]*types.Package
@@ -41,6 +42,7 @@ func newInfo() *types.Info {
 func New(t *testing.T) *Fixture {
 	return &Fixture{
 		T:        t,
+		Context:  types.NewContext(),
 		FileSet:  token.NewFileSet(),
 		Info:     newInfo(),
 		Packages: map[string]*types.Package{},
@@ -65,6 +67,7 @@ func (f *Fixture) Parse(name, src string) *ast.File {
 func (f *Fixture) Check(importPath string, files ...*ast.File) (*types.Info, *types.Package) {
 	f.T.Helper()
 	config := &types.Config{
+		Context:  f.Context,
 		Sizes:    &types.StdSizes{WordSize: 4, MaxAlign: 8},
 		Importer: f,
 	}
@@ -148,7 +151,7 @@ func Format(t *testing.T, fset *token.FileSet, node any) string {
 	return buf.String()
 }
 
-// LookupObj returns a top-level object with the given name.
+// LookupObj returns a top-level or nested object with the given name.
 //
 // Methods can be referred to as RecvTypeName.MethodName.
 func LookupObj(pkg *types.Package, name string) types.Object {

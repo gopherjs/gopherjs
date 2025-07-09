@@ -14,6 +14,7 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
+	"github.com/gopherjs/gopherjs/compiler/internal/grouper"
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/sources"
@@ -58,6 +59,9 @@ type Decl struct {
 	InitCode []byte
 	// DCEInfo stores the information for dead-code elimination.
 	DCEInfo dce.Info
+	// GroupInfo stores the information for grouping and ordering the
+	// initialization of this declaration relative to other declarations.
+	GroupInfo grouper.Info
 	// Set to true if a function performs a blocking operation (I/O or
 	// synchronization). The compiler will have to generate function code such
 	// that it can be resumed after a blocking operation completes without
@@ -65,19 +69,14 @@ type Decl struct {
 	Blocking bool
 }
 
-// minify returns a copy of Decl with unnecessary whitespace removed from the
-// JS code.
-func (d Decl) minify() Decl {
-	d.DeclCode = removeWhitespace(d.DeclCode, true)
-	d.MethodListCode = removeWhitespace(d.MethodListCode, true)
-	d.TypeInitCode = removeWhitespace(d.TypeInitCode, true)
-	d.InitCode = removeWhitespace(d.InitCode, true)
-	return d
-}
-
 // Dce gets the information for dead-code elimination.
 func (d *Decl) Dce() *dce.Info {
 	return &d.DCEInfo
+}
+
+// Grouper gets the information for grouping and ordering for the type initialization.
+func (d *Decl) Grouper() *grouper.Info {
+	return &d.GroupInfo
 }
 
 // topLevelObjects extracts package-level variables, functions and named types
@@ -341,6 +340,7 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		LinkingName: symbol.New(o),
 	}
 	d.Dce().SetName(o, inst.TNest, inst.TArgs)
+	d.Grouper().SetInstance(fc.pkgCtx.typesCtx, inst)
 
 	if typesutil.IsMethod(o) {
 		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
@@ -481,6 +481,7 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 		FullName: typeDeclFullName(inst),
 	}
 	d.Dce().SetName(inst.Object, inst.TNest, inst.TArgs)
+	d.Grouper().SetInstance(fc.pkgCtx.typesCtx, inst)
 	fc.pkgCtx.CollectDCEDeps(d, func() {
 		// Code that declares a JS type (i.e. prototype) for each Go type.
 		d.DeclCode = fc.CatchOutput(0, func() {
@@ -606,6 +607,7 @@ func (fc *funcContext) anonTypeDecls(anonTypes []*types.TypeName) []*Decl {
 			Vars:     []string{t.Name()},
 		}
 		d.Dce().SetName(t, nil, nil)
+		d.Grouper().SetInstance(fc.pkgCtx.typesCtx, typeparams.Instance{Object: t})
 		fc.pkgCtx.CollectDCEDeps(d, func() {
 			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type())))
 		})

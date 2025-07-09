@@ -202,12 +202,6 @@ func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Ar
 	// final program.
 	allDecls := append(append(append(importDecls, typeDecls...), varDecls...), funcDecls...)
 
-	if minify {
-		for _, d := range allDecls {
-			*d = d.minify()
-		}
-	}
-
 	if len(rootCtx.pkgCtx.errList) != 0 {
 		return nil, rootCtx.pkgCtx.errList
 	}

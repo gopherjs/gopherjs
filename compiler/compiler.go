@@ -7,20 +7,24 @@ package compiler
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"go/token"
 	"go/types"
 	"io"
+	"os"
+	"sort"
 	"strings"
 	"time"
 
+	"golang.org/x/tools/go/gcexportdata"
+
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
+	"github.com/gopherjs/gopherjs/compiler/internal/grouper"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
-	"golang.org/x/tools/go/gcexportdata"
+	"github.com/gopherjs/gopherjs/compiler/sourceWriter"
 )
 
 var (
@@ -108,9 +112,8 @@ func ImportDependencies(archive *Archive, importPkg func(string) (*Archive, erro
 	return deps, nil
 }
 
-func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) error {
+func WriteProgramCode(pkgs []*Archive, w *sourceWriter.SourceWriter, goVersion string) error {
 	mainPkg := pkgs[len(pkgs)-1]
-	minify := mainPkg.Minified
 
 	// Aggregate all go:linkname directives in the program together.
 	gls := linkname.GoLinknameSet{}
@@ -118,6 +121,8 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 		gls.Add(pkg.GoLinknames)
 	}
 
+	// Perform dead code elimination (DCE) on the declarations
+	// to get the selection of the declarations that are actually used.
 	sel := &dce.Selector[*Decl]{}
 	for _, pkg := range pkgs {
 		for _, d := range pkg.Declarations {
@@ -134,84 +139,138 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	}
 	dceSelection := sel.AliveDecls()
 
-	if _, err := w.Write([]byte("\"use strict\";\n(function() {\n\n")); err != nil {
+	// Set the Decl.Grouper().Group values for each declaration.
+	// The group number is used to determine the type initialization order.
+	grouper.Group(dceSelection)
+
+	// TODO(grantnelson-wf): REMOVE
+	dot := grouper.ToDot(dceSelection, func(d *Decl) string { return d.FullName })
+	if err := os.WriteFile("./dot.gv", []byte(dot), 0644); err != nil {
+		panic(fmt.Errorf(`failed to write dot.gv: %w`, err))
+	}
+
+	// open a closure for the generated code
+	if _, err := w.WriteString("\"use strict\";\n(function() {\n\n"); err != nil {
 		return err
 	}
-	if _, err := w.Write([]byte(fmt.Sprintf("var $goVersion = %q;\n", goVersion))); err != nil {
+	if _, err := w.WriteF("var $goVersion = %q;\n", goVersion); err != nil {
 		return err
 	}
 
+	// write the prelude
 	preludeJS := prelude.Prelude
-	if minify {
+	if mainPkg.Minified {
 		preludeJS = prelude.Minified()
 	}
 	if _, err := io.WriteString(w, preludeJS); err != nil {
 		return err
 	}
-	if _, err := w.Write([]byte("\n")); err != nil {
+	if _, err := w.WriteString("\n"); err != nil {
 		return err
 	}
 
 	// write packages
 	for _, pkg := range pkgs {
-		if err := WritePkgCode(pkg, dceSelection, gls, minify, w); err != nil {
+		if err := WritePkgCode(pkg, dceSelection, gls, w); err != nil {
 			return err
 		}
 	}
 
-	if _, err := w.Write([]byte("$synthesizeMethods();\n$initAllLinknames();\nvar $mainPkg = $packages[\"" + string(mainPkg.ImportPath) + "\"];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
+	// write the entry point code
+	if _, err := w.WriteString("$initializeTypes();\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("$synthesizeMethods();\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("$initAllLinknames();\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF("var $mainPkg = $packages[\"%s\"];\n", mainPkg.ImportPath); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("$packages[\"runtime\"].$init();\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("$go($mainPkg.$init, []);\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("$flushConsole();\n"); err != nil {
+		return err
+	}
+
+	// write close to the generated code closure and its invocation
+	if _, err := w.Write([]byte("\n}).call(this);\n")); err != nil {
 		return err
 	}
 	return nil
 }
 
-func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.GoLinknameSet, minify bool, w *SourceMapFilter) error {
-	if w.MappingCallback != nil && pkg.FileSet != nil {
-		w.fileSet = pkg.FileSet
-	}
+func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.GoLinknameSet, w *sourceWriter.SourceWriter) error {
+	w.SetFileSet(pkg.FileSet)
 	if _, err := w.Write(pkg.IncJSCode); err != nil {
 		return err
 	}
-	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify)); err != nil {
+	if _, err := w.WriteF("$packages[\"%s\"] = (function() {\n", pkg.ImportPath); err != nil {
 		return err
 	}
+
 	vars := []string{"$pkg = {}", "$init"}
 	var filteredDecls []*Decl
+	groupMap := make(map[int][]*Decl)
 	for _, d := range pkg.Declarations {
 		if _, ok := dceSelection[d]; ok {
 			vars = append(vars, d.Vars...)
 			filteredDecls = append(filteredDecls, d)
+			group := d.Grouper().Group
+			groupMap[group] = append(groupMap[group], d)
 		}
 	}
-	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
+	if _, err := w.WriteF("\tvar %s;\n", strings.Join(vars, ", ")); err != nil {
 		return err
 	}
-	for _, d := range filteredDecls {
-		if _, err := w.Write(d.DeclCode); err != nil {
+
+	groups := make([]int, 0, len(groupMap))
+	for group := range groupMap {
+		groups = append(groups, group)
+	}
+	sort.Ints(groups)
+
+	for _, group := range groups {
+		groupDecls := groupMap[group]
+		if _, err := w.WriteF("\t$addTypeInit(%d, this, function() {\n", group); err != nil {
 			return err
 		}
-		if gls.IsImplementation(d.LinkingName) {
-			// This decl is referenced by a go:linkname directive, expose it to external
-			// callers via $linkname object (declared in prelude). We are not using
-			// $pkg to avoid clashes with exported symbols.
-			var code string
-			if recv, method, ok := d.LinkingName.IsMethod(); ok {
-				code = fmt.Sprintf("\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,%t);\n", d.LinkingName.String(), d.NamedRecvType, method, strings.HasPrefix(recv, "*"))
-			} else {
-				code = fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.RefExpr)
+		for _, d := range groupDecls {
+			if _, err := w.Write(d.DeclCode); err != nil {
+				return err
 			}
-			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
+			if gls.IsImplementation(d.LinkingName) {
+				// This decl is referenced by a go:linkname directive, expose it to external
+				// callers via $linkname object (declared in prelude). We are not using
+				// $pkg to avoid clashes with exported symbols.
+				if recv, method, ok := d.LinkingName.IsMethod(); ok {
+					if _, err := w.WriteF("\t\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,%t);\n", d.LinkingName.String(), d.NamedRecvType, method, strings.HasPrefix(recv, "*")); err != nil {
+						return err
+					}
+				} else {
+					if _, err := w.WriteF("\t\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.RefExpr); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		for _, d := range groupDecls {
+			if _, err := w.Write(d.MethodListCode); err != nil {
 				return err
 			}
 		}
-	}
-	for _, d := range filteredDecls {
-		if _, err := w.Write(d.MethodListCode); err != nil {
-			return err
+		for _, d := range groupDecls {
+			if _, err := w.Write(d.TypeInitCode); err != nil {
+				return err
+			}
 		}
-	}
-	for _, d := range filteredDecls {
-		if _, err := w.Write(d.TypeInitCode); err != nil {
+		if _, err := w.WriteF("\t});\n"); err != nil {
 			return err
 		}
 	}
@@ -232,14 +291,19 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			lines = append(lines, fmt.Sprintf("\t\t%s = $linknames[%q];\n", d.RefExpr, impl.String()))
 		}
 		if len(lines) > 0 {
-			code := fmt.Sprintf("\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, ""))
-			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
+			if _, err := w.WriteF("\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, "")); err != nil {
 				return err
 			}
 		}
 	}
 
-	if _, err := w.Write(removeWhitespace([]byte("\t$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
+	if _, err := w.WriteString("\t$init = function() {\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("\t\t$pkg.$init = function() {};\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"); err != nil {
 		return err
 	}
 	for _, d := range filteredDecls {
@@ -247,10 +311,19 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			return err
 		}
 	}
-	if _, err := w.Write(removeWhitespace([]byte("\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n\t};\n\t$pkg.$init = $init;\n\treturn $pkg;\n})();"), minify)); err != nil {
+	if _, err := w.WriteString("\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n"); err != nil {
 		return err
 	}
-	if _, err := w.Write([]byte("\n")); err != nil { // keep this \n even when minified
+	if _, err := w.WriteString("\t};\n\t$pkg.$init = $init;\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("\treturn $pkg;\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("})();"); err != nil {
+		return err
+	}
+	if _, err := w.WriteUnminified("\n"); err != nil { // keep this \n even when minified
 		return err
 	}
 	return nil
@@ -348,45 +421,4 @@ func WriteArchive(a *Archive, buildTime time.Time, w io.Writer) error {
 	}
 
 	return gob.NewEncoder(w).Encode(sa)
-}
-
-type SourceMapFilter struct {
-	Writer          io.Writer
-	MappingCallback func(generatedLine, generatedColumn int, originalPos token.Position)
-	line            int
-	column          int
-	fileSet         *token.FileSet
-}
-
-func (f *SourceMapFilter) Write(p []byte) (n int, err error) {
-	var n2 int
-	for {
-		i := bytes.IndexByte(p, '\b')
-		w := p
-		if i != -1 {
-			w = p[:i]
-		}
-
-		n2, err = f.Writer.Write(w)
-		n += n2
-		for {
-			i := bytes.IndexByte(w, '\n')
-			if i == -1 {
-				f.column += len(w)
-				break
-			}
-			f.line++
-			f.column = 0
-			w = w[i+1:]
-		}
-
-		if err != nil || i == -1 {
-			return
-		}
-		if f.MappingCallback != nil {
-			f.MappingCallback(f.line+1, f.column, f.fileSet.Position(token.Pos(binary.BigEndian.Uint32(p[i+1:i+5]))))
-		}
-		p = p[i+5:]
-		n += 5
-	}
 }

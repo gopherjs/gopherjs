@@ -168,7 +168,7 @@ func WriteProgramCode(pkgs []*Archive, w *sourceWriter.SourceWriter, goVersion s
 		}
 	}
 
-	// write the main package code
+	// write the entry point code
 	if _, err := w.WriteString("$initializeTypes();\n"); err != nil {
 		return err
 	}
@@ -206,6 +206,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 	if _, err := w.WriteF("$packages[\"%s\"] = (function() {\n", pkg.ImportPath); err != nil {
 		return err
 	}
+
 	vars := []string{"$pkg = {}", "$init"}
 	var filteredDecls []*Decl
 	for _, d := range pkg.Declarations {
@@ -217,6 +218,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 	if _, err := w.WriteF("\tvar %s;\n", strings.Join(vars, ", ")); err != nil {
 		return err
 	}
+
 	for _, d := range filteredDecls {
 		if _, err := w.Write(d.DeclCode); err != nil {
 			return err
@@ -269,7 +271,13 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 		}
 	}
 
-	if _, err := w.WriteString("\t$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"); err != nil {
+	if _, err := w.WriteString("\t$init = function() {\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("\t\t$pkg.$init = function() {};\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"); err != nil {
 		return err
 	}
 	for _, d := range filteredDecls {
@@ -277,7 +285,16 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			return err
 		}
 	}
-	if _, err := w.WriteString("\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n\t};\n\t$pkg.$init = $init;\n\treturn $pkg;\n})();"); err != nil {
+	if _, err := w.WriteString("\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("\t};\n\t$pkg.$init = $init;\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("\treturn $pkg;\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("})();"); err != nil {
 		return err
 	}
 	if _, err := w.WriteUnminified("\n"); err != nil { // keep this \n even when minified

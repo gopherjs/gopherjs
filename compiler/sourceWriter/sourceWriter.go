@@ -41,8 +41,8 @@ func (f *SourceWriter) Minify() bool {
 
 func (f *SourceWriter) WriteUnminified(s string) (int, error) {
 	if f.Minify() {
-		f.minifier.SetMinify(false)
-		defer f.minifier.SetMinify(true)
+		f.SetMinify(false)
+		defer f.SetMinify(true)
 	}
 	return f.WriteString(s)
 }

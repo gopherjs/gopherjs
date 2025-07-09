@@ -220,8 +220,10 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 	}
 
 	for _, d := range filteredDecls {
-		if _, err := w.Write(d.DeclCode); err != nil {
-			return err
+		if len(d.DeclCode) > 0 { // TODO(grantnelson-wf): Clean up
+			if _, err := w.WriteF("/*>> DeclCode: %d %s */\n%s/*DeclCode <<*/\n\n", d.Grouper().Group, d.FullName, string(d.DeclCode)); err != nil {
+				return err
+			}
 		}
 		if gls.IsImplementation(d.LinkingName) {
 			// This decl is referenced by a go:linkname directive, expose it to external
@@ -239,13 +241,17 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 		}
 	}
 	for _, d := range filteredDecls {
-		if _, err := w.Write(d.MethodListCode); err != nil {
-			return err
+		if len(d.MethodListCode) > 0 { // TODO(grantnelson-wf): Clean up
+			if _, err := w.WriteF("/*>> MethodListCode: %d %s */\n%s/*MethodListCode <<*/\n\n", d.Grouper().Group, d.FullName, string(d.MethodListCode)); err != nil {
+				return err
+			}
 		}
 	}
 	for _, d := range filteredDecls {
-		if _, err := w.Write(d.TypeInitCode); err != nil {
-			return err
+		if len(d.TypeInitCode) > 0 { // TODO(grantnelson-wf): Clean up
+			if _, err := w.WriteF("/*>> TypeInitCode: %d %s */\n%s/*TypeInitCode <<*/\n\n", d.Grouper().Group, d.FullName, string(d.TypeInitCode)); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -281,8 +287,10 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 		return err
 	}
 	for _, d := range filteredDecls {
-		if _, err := w.Write(d.InitCode); err != nil {
-			return err
+		if len(d.InitCode) > 0 { // TODO(grantnelson-wf): Clean up
+			if _, err := w.WriteF("/*>> InitCode: %d %s */\n%s/*InitCode <<*/\n\n", d.Grouper().Group, d.FullName, string(d.InitCode)); err != nil {
+				return err
+			}
 		}
 	}
 	if _, err := w.WriteString("\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n"); err != nil {

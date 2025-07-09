@@ -53,17 +53,17 @@ func (f *sourceMapFilter) Write(p []byte) (n int, err error) {
 	for {
 		i := bytes.IndexByte(p, posPrefix)
 		w := p
-		if i != -1 {
+		if i >= 0 {
 			w = p[:i]
 		}
 
 		n2, err = f.out.Write(w)
 		n += n2
+		f.updateOutputPos(w)
 		if err != nil || i < 0 {
 			return n, err
 		}
 
-		f.updateOutputPos(w)
 		f.writePosToMapping(p[i:])
 		p = p[i+5:]
 		n += 5

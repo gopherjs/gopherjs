@@ -10,7 +10,6 @@ var _ io.Writer = (*SourceWriter)(nil)
 var _ io.StringWriter = (*SourceWriter)(nil)
 
 type SourceWriter struct {
-	out      io.Writer
 	filter   *sourceMapFilter
 	minifier *minifier
 }
@@ -21,7 +20,6 @@ func New(out io.Writer, mappingCallback MappingCallbackHandle, minify bool) *Sou
 	minifier := newMinifier(out, minify)
 	filter := newSourceMapFilter(minifier, mappingCallback)
 	return &SourceWriter{
-		out:      out,
 		filter:   filter,
 		minifier: minifier,
 	}
@@ -48,7 +46,7 @@ func (f *SourceWriter) WriteUnminified(s string) (int, error) {
 }
 
 func (f *SourceWriter) WriteF(format string, args ...any) (int, error) {
-	return fmt.Fprintf(f.out, format, args...)
+	return fmt.Fprintf(f, format, args...)
 }
 
 func (f *SourceWriter) WriteString(s string) (int, error) {

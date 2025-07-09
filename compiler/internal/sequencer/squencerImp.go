@@ -173,6 +173,69 @@ func (s *sequencerImp[T]) ToMermaid(itemToString func(item T) string) string {
 	return buf.String()
 }
 
+func (s *sequencerImp[T]) ToDot(itemToString func(item T) string) string {
+	s.performSequencing(false)
+
+	if itemToString == nil {
+		itemToString = func(item T) string {
+			return fmt.Sprintf("%v", item)
+		}
+	}
+
+	buf := &bytes.Buffer{}
+	write := func(format string, args ...any) {
+		// Ignore the error since we are writing to a buffer.
+		_, _ = fmt.Fprintf(buf, format, args...)
+	}
+
+	// Sort the output to make it easier to read and compare consecutive runs.
+	vertices := make([]*vertex[T], 0, len(s.vertices))
+	names := make([]string, 0, len(vertices))
+	for _, v := range s.vertices {
+		vertices = append(vertices, v)
+		names = append(names, itemToString(v.item))
+	}
+	sort.Sort(&sortByName[T]{vertices: vertices, names: names})
+
+	ids := make(map[*vertex[T]]string, len(s.vertices))
+	for i, v := range vertices {
+		ids[v] = fmt.Sprintf(`v%d`, i)
+	}
+
+	toIds := func(vs vertexSet[T]) []string {
+		rs := make([]string, 0, len(vs))
+		for _, v := range vs {
+			rs = append(rs, ids[v])
+		}
+		sort.Strings(rs)
+		return rs
+	}
+
+	write("digraph G {\n")
+	for i, v := range vertices {
+		write("\t%s[label=%q", ids[v], names[i])
+		if s.dependencyCycles.has(v.item) {
+			write(`,color=red`)
+		}
+		write("]\n")
+	}
+	for _, v := range vertices {
+		if len(v.parents) > 0 {
+			write("\t%s -> {%s}\n", ids[v], strings.Join(toIds(v.parents), ` `))
+		}
+	}
+	for depth := s.depthCount - 1; depth >= 0; depth-- {
+		if group := s.groups[depth]; len(group) > 0 {
+			write("\tsubgraph depth_%d {\n", depth)
+			write("\t\tlabel = \"Depth %d\"\n", depth)
+			write("\t\t%s;\n", strings.Join(toIds(group), `; `))
+			write("\t}\n")
+		}
+	}
+	write("}\n")
+	return buf.String()
+}
+
 func (s *sequencerImp[T]) getOrAdd(item T) *vertex[T] {
 	v, added := s.vertices.getOrAdd(item)
 	s.needSequencing = s.needSequencing || added

@@ -38,9 +38,7 @@ func (f *minifier) Write(b []byte) (n int, err error) {
 		if n < stop {
 			n2, err = f.out.Write(b[n:stop])
 			n += n2
-			if err != nil {
-				return true
-			}
+			return err != nil
 		}
 		return false
 	}

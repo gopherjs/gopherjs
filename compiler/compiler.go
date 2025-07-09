@@ -13,6 +13,7 @@ import (
 	"go/token"
 	"go/types"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -141,6 +142,12 @@ func WriteProgramCode(pkgs []*Archive, w *sourceWriter.SourceWriter, goVersion s
 	// Set the Decl.Grouper().Group values for each declaration.
 	// The group number is used to determine the type initialization order.
 	grouper.Group(dceSelection)
+
+	// TODO(grantnelson-wf): REMOVE
+	dot := grouper.ToDot(dceSelection, func(d *Decl) string { return d.FullName })
+	if err := os.WriteFile("./dot.gv", []byte(dot), 0644); err != nil {
+		panic(fmt.Errorf(`failed to write dot.gv: %w`, err))
+	}
 
 	// open a closure for the generated code
 	if _, err := w.WriteString("\"use strict\";\n(function() {\n\n"); err != nil {

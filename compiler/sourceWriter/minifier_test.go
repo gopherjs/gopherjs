@@ -200,7 +200,7 @@ func originalRemoveWhitespace(b []byte, minify bool) []byte {
 func generateRandomInput(r *rand.Rand) []byte {
 	b := &bytes.Buffer{}
 	prevPick := -1
-	partCount := r.Intn(100) + 10
+	partCount := r.Intn(1000) + 1000
 	gens := []func(r *rand.Rand) []byte{
 		generateRandomWhitespace,
 		generateRandomSymbol,
@@ -232,14 +232,13 @@ func generateRandomSymbol(r *rand.Rand) []byte {
 	const symbols = `+-*/%&|^!=<>:;,.()[]{}?@~`
 	sym := generateRandomChunk(r, symbols, r.Intn(4)+1)
 	// avoid generating a comment start
-	sym = bytes.ReplaceAll(sym, []byte(`/*`), []byte(`/ *`))
-	sym = bytes.ReplaceAll(sym, []byte(`//`), []byte(`/ /`))
+	sym = bytes.ReplaceAll(sym, []byte(`/`), []byte(`/ `))
 	return sym
 }
 
 func generateRandomString(r *rand.Rand) []byte {
 	const stringParts = `abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 "\`
-	str := generateRandomChunk(r, stringParts, r.Intn(20)+5)
+	str := generateRandomChunk(r, stringParts, r.Intn(50)+5)
 	str = bytes.ReplaceAll(str, []byte(`\`), []byte(`\\`))
 	str = bytes.ReplaceAll(str, []byte(`"`), []byte(`\"`))
 	str = append(append([]byte{'"'}, str...), '"')
@@ -247,7 +246,7 @@ func generateRandomString(r *rand.Rand) []byte {
 }
 func generateRandomComment(r *rand.Rand) []byte {
 	const stringParts = `abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 "\-+&`
-	str := generateRandomChunk(r, stringParts, r.Intn(20)+5)
+	str := generateRandomChunk(r, stringParts, r.Intn(50)+5)
 	str = append(append([]byte(`/*`), str...), '*', '/')
 	return str
 }

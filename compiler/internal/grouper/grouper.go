@@ -49,6 +49,11 @@ func ToMermaid[D Decl](decl map[D]struct{}, toString func(d D) string) string {
 	return g.toMermaid(decl, toString)
 }
 
+func ToDot[D Decl](decl map[D]struct{}, toString func(d D) string) string {
+	g := prepareGrouper(decl)
+	return g.toDot(decl, toString)
+}
+
 func prepareGrouper[D Decl](decl map[D]struct{}) *grouper[D] {
 	g := &grouper[D]{
 		typeMap: make(map[types.Type][]*Info, len(decl)),
@@ -132,6 +137,29 @@ func (g *grouper[D]) toMermaid(decl map[D]struct{}, toString func(d D) string) s
 	}
 
 	return g.seq.ToMermaid(func(info *Info) string {
+		if decl, ok := infoMap[info]; ok {
+			return toString(decl)
+		}
+		// This shouldn't happen, but handle it gracefully anyway.
+		return `unknown decl`
+	})
+}
+
+func (g *grouper[D]) toDot(decl map[D]struct{}, toString func(d D) string) string {
+	if toString == nil {
+		toString = func(d D) string {
+			return fmt.Sprintf("%v", d)
+		}
+	}
+
+	infoMap := make(map[*Info]D, len(decl))
+	for d := range decl {
+		if info := d.Grouper(); g.seq.Has(info) {
+			infoMap[info] = d
+		}
+	}
+
+	return g.seq.ToDot(func(info *Info) string {
 		if decl, ok := infoMap[info]; ok {
 			return toString(decl)
 		}

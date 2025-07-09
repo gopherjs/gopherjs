@@ -87,6 +87,8 @@ type Sequencer[T comparable] interface {
 	// representation for the Mermaid graph. It should return a unique string.
 	// If nil, then `%v` will be used to convert the item to a string.
 	ToMermaid(itemToString func(item T) string) string
+
+	ToDot(itemToString func(item T) string) string
 }
 
 // New creates a new sequencer for the given item type T.

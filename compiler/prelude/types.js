@@ -25,12 +25,14 @@ var $kindString = 24;
 var $kindStruct = 25;
 var $kindUnsafePointer = 26;
 
-var $typeInit = []; // An array indexed by group number containing arrays of type initializer functions.
-var $addTypeInit = (group, f) => {
+// This is an array indexed by group number containing arrays of type initializer
+// functions and package closure reference for invocation of the function.
+var $typeInit = [];
+var $addTypeInit = (group, pkg, fn) => {
     if ($typeInit[group] === undefined) {
         $typeInit[group] = [];
     }
-    $typeInit[group].push(f);
+    $typeInit[group].push({pkg: pkg, fn: fn});
 };
 var $initializeTypes = () => {
     for (var i = 0; i < $typeInit.length; i++) {
@@ -39,7 +41,7 @@ var $initializeTypes = () => {
             continue;
         }
         for (var j = 0; j < group.length; j++) {
-            group[j]();
+            group[j].fn.call(group[j].pkg);
         }
     }
     $typeInit = null;

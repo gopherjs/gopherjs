@@ -13,6 +13,7 @@ import (
 	"go/token"
 	"go/types"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -209,49 +210,61 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 
 	vars := []string{"$pkg = {}", "$init"}
 	var filteredDecls []*Decl
+	groupMap := make(map[int][]*Decl)
 	for _, d := range pkg.Declarations {
 		if _, ok := dceSelection[d]; ok {
 			vars = append(vars, d.Vars...)
 			filteredDecls = append(filteredDecls, d)
+			group := d.Grouper().Group
+			groupMap[group] = append(groupMap[group], d)
 		}
 	}
 	if _, err := w.WriteF("\tvar %s;\n", strings.Join(vars, ", ")); err != nil {
 		return err
 	}
 
-	for _, d := range filteredDecls {
-		if len(d.DeclCode) > 0 { // TODO(grantnelson-wf): Clean up
-			if _, err := w.WriteF("/*>> DeclCode: %d %s */\n%s/*DeclCode <<*/\n\n", d.Grouper().Group, d.FullName, string(d.DeclCode)); err != nil {
-				return err
-			}
-		}
-		if gls.IsImplementation(d.LinkingName) {
-			// This decl is referenced by a go:linkname directive, expose it to external
-			// callers via $linkname object (declared in prelude). We are not using
-			// $pkg to avoid clashes with exported symbols.
-			if recv, method, ok := d.LinkingName.IsMethod(); ok {
-				if _, err := w.WriteF("\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,%t);\n", d.LinkingName.String(), d.NamedRecvType, method, strings.HasPrefix(recv, "*")); err != nil {
-					return err
-				}
-			} else {
-				if _, err := w.WriteF("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.RefExpr); err != nil {
-					return err
-				}
-			}
-		}
+	groups := make([]int, 0, len(groupMap))
+	for group := range groupMap {
+		groups = append(groups, group)
 	}
-	for _, d := range filteredDecls {
-		if len(d.MethodListCode) > 0 { // TODO(grantnelson-wf): Clean up
-			if _, err := w.WriteF("/*>> MethodListCode: %d %s */\n%s/*MethodListCode <<*/\n\n", d.Grouper().Group, d.FullName, string(d.MethodListCode)); err != nil {
+	sort.Ints(groups)
+
+	for _, group := range groups {
+		groupDecls := groupMap[group]
+		if _, err := w.WriteF("\t$addTypeInit(%d, this, function() {\n", group); err != nil {
+			return err
+		}
+		for _, d := range groupDecls {
+			if _, err := w.Write(d.DeclCode); err != nil {
+				return err
+			}
+			if gls.IsImplementation(d.LinkingName) {
+				// This decl is referenced by a go:linkname directive, expose it to external
+				// callers via $linkname object (declared in prelude). We are not using
+				// $pkg to avoid clashes with exported symbols.
+				if recv, method, ok := d.LinkingName.IsMethod(); ok {
+					if _, err := w.WriteF("\t\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,%t);\n", d.LinkingName.String(), d.NamedRecvType, method, strings.HasPrefix(recv, "*")); err != nil {
+						return err
+					}
+				} else {
+					if _, err := w.WriteF("\t\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.RefExpr); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		for _, d := range groupDecls {
+			if _, err := w.Write(d.MethodListCode); err != nil {
 				return err
 			}
 		}
-	}
-	for _, d := range filteredDecls {
-		if len(d.TypeInitCode) > 0 { // TODO(grantnelson-wf): Clean up
-			if _, err := w.WriteF("/*>> TypeInitCode: %d %s */\n%s/*TypeInitCode <<*/\n\n", d.Grouper().Group, d.FullName, string(d.TypeInitCode)); err != nil {
+		for _, d := range groupDecls {
+			if _, err := w.Write(d.TypeInitCode); err != nil {
 				return err
 			}
+		}
+		if _, err := w.WriteF("\t});\n"); err != nil {
+			return err
 		}
 	}
 
@@ -287,10 +300,8 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 		return err
 	}
 	for _, d := range filteredDecls {
-		if len(d.InitCode) > 0 { // TODO(grantnelson-wf): Clean up
-			if _, err := w.WriteF("/*>> InitCode: %d %s */\n%s/*InitCode <<*/\n\n", d.Grouper().Group, d.FullName, string(d.InitCode)); err != nil {
-				return err
-			}
+		if _, err := w.Write(d.InitCode); err != nil {
+			return err
 		}
 	}
 	if _, err := w.WriteString("\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n"); err != nil {

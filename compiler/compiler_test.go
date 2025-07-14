@@ -1609,15 +1609,15 @@ func (st *selectionTester) PrintDeclStatus() {
 	}
 }
 
-func (st *selectionTester) PrintOrderMermaid() {
+func (st *selectionTester) PrintOrderGraph() {
 	st.t.Helper()
-	mermaid := grouper.ToMermaid(st.dceSelection, func(d *Decl) string {
+	mermaid := grouper.ToGraph(st.dceSelection, func(d *Decl) string {
 		text := d.FullName
 		text = strings.ReplaceAll(text, `github.com/gopherjs/gopherjs/compiler/`, ``)
 		text = strings.ReplaceAll(text, `<`, `[`)
 		text = strings.ReplaceAll(text, `>`, `]`)
 		return text
-	})
+	}, nil)
 	st.t.Logf(`Mermaid:\n%s`, mermaid)
 }
 

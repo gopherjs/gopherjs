@@ -1,7 +1,6 @@
 package grouper
 
 import (
-	"fmt"
 	"go/types"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/sequencer"
@@ -34,7 +33,7 @@ func Group[D Decl](decl map[D]struct{}) int {
 	return g.count()
 }
 
-// ToMermaid generates a mermaid diagram string for the given declarations.
+// ToGraph generates a Dot diagram string for the given declarations.
 // This is useful for visualizing the dependency graph of the declarations
 // any any possible cycles while debugging the type initialization order.
 //
@@ -44,14 +43,12 @@ func Group[D Decl](decl map[D]struct{}) int {
 //
 // The `toString` function is used to convert the declaration to a string
 // for the mermaid diagram. If `toString` is nil, then `%v` is used.
-func ToMermaid[D Decl](decl map[D]struct{}, toString func(d D) string) string {
+//
+// The `filter` function is used to filter the declarations in the graph.
+// If `filter` is nil, then all declarations are included in the graph.
+func ToGraph[D Decl](decl map[D]struct{}, toString func(d D) string, filter func(d D) bool) string {
 	g := prepareGrouper(decl)
-	return g.toMermaid(decl, toString)
-}
-
-func ToDot[D Decl](decl map[D]struct{}, toString func(d D) string) string {
-	g := prepareGrouper(decl)
-	return g.toDot(decl, toString)
+	return g.toGraph(decl, toString, filter)
 }
 
 func prepareGrouper[D Decl](decl map[D]struct{}) *grouper[D] {
@@ -122,13 +119,7 @@ func (g *grouper[D]) assignGroup(d D) {
 	}
 }
 
-func (g *grouper[D]) toMermaid(decl map[D]struct{}, toString func(d D) string) string {
-	if toString == nil {
-		toString = func(d D) string {
-			return fmt.Sprintf("%v", d)
-		}
-	}
-
+func (g *grouper[D]) toGraph(decl map[D]struct{}, toString func(d D) string, filter func(d D) bool) string {
 	infoMap := make(map[*Info]D, len(decl))
 	for d := range decl {
 		if info := d.Grouper(); g.seq.Has(info) {
@@ -136,34 +127,27 @@ func (g *grouper[D]) toMermaid(decl map[D]struct{}, toString func(d D) string) s
 		}
 	}
 
-	return g.seq.ToMermaid(func(info *Info) string {
-		if decl, ok := infoMap[info]; ok {
-			return toString(decl)
-		}
-		// This shouldn't happen, but handle it gracefully anyway.
-		return `unknown decl`
-	})
-}
-
-func (g *grouper[D]) toDot(decl map[D]struct{}, toString func(d D) string) string {
-	if toString == nil {
-		toString = func(d D) string {
-			return fmt.Sprintf("%v", d)
+	var itemToString func(info *Info) string
+	if toString != nil {
+		itemToString = func(info *Info) string {
+			if decl, ok := infoMap[info]; ok {
+				return toString(decl)
+			}
+			// This shouldn't happen, but handle it gracefully anyway.
+			return `unknown decl`
 		}
 	}
 
-	infoMap := make(map[*Info]D, len(decl))
-	for d := range decl {
-		if info := d.Grouper(); g.seq.Has(info) {
-			infoMap[info] = d
+	var infoFilter func(info *Info) bool
+	if filter != nil {
+		infoFilter = func(info *Info) bool {
+			decl, ok := infoMap[info]
+			return ok && filter(decl)
 		}
 	}
 
-	return g.seq.ToDot(func(info *Info) string {
-		if decl, ok := infoMap[info]; ok {
-			return toString(decl)
-		}
-		// This shouldn't happen, but handle it gracefully anyway.
-		return `unknown decl`
+	return g.seq.ToGraph(sequencer.GraphOptions[*Info]{
+		ItemToString: itemToString,
+		ItemFilter:   infoFilter,
 	})
 }

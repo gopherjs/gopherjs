@@ -56,8 +56,8 @@ func TestBasicSequencing(t *testing.T) {
 		t.Errorf("expected depth of an item not in the sequencer to be -1, got: %d", depth)
 	}
 
-	if mmd := s.ToMermaid(nil); len(mmd) == 0 {
-		t.Errorf(`expected non-empty mermaid output, but got empty`)
+	if mmd := s.ToGraph(GraphOptions[string]{}); len(mmd) == 0 {
+		t.Errorf(`expected non-empty graph output, but got empty`)
 	}
 
 	// Check getting the groups individually.
@@ -98,8 +98,8 @@ func TestDiamonds(t *testing.T) {
 	s.Add(`E`, `G`)
 	s.Add(`F`, `G`)
 
-	if mmd := s.ToMermaid(nil); len(mmd) == 0 {
-		t.Errorf(`expected non-empty mermaid output, but got empty`)
+	if mmd := s.ToGraph(GraphOptions[string]{}); len(mmd) == 0 {
+		t.Errorf(`expected non-empty graph output, but got empty`)
 	}
 
 	got := s.AllGroups()
@@ -124,7 +124,7 @@ func TestCycleDetection(t *testing.T) {
 	s.Add(`C`, `A`) // This creates a cycle A-> B->C->A
 	s.Add(`E`, `A`) // E is a branch not part of the cycle
 
-	t.Log(s.ToMermaid(nil)) // Should not panic
+	_ = s.ToGraph(GraphOptions[string]{}) // Should not panic
 
 	// Add more to reset the sequencer state
 	s.Add(`F`, `E`) // F is a root via E not part of the cycle
@@ -145,8 +145,8 @@ func TestCycleDetection(t *testing.T) {
 	expectPanic(func() { s.Depth(`A`) })
 	expectPanic(func() { s.Group(2) })
 
-	if mmd := s.ToMermaid(nil); len(mmd) == 0 { // Should not panic
-		t.Errorf(`expected non-empty mermaid output, but got empty`)
+	if mmd := s.ToGraph(GraphOptions[string]{}); len(mmd) == 0 { // Should not panic
+		t.Errorf(`expected non-empty graph output, but got empty`)
 	}
 
 	cycles := s.GetCycles()

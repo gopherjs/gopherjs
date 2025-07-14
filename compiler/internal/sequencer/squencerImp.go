@@ -111,76 +111,45 @@ func (s *sortByName[T]) Swap(i, j int) {
 	s.names[i], s.names[j] = s.names[j], s.names[i]
 }
 
-func (s *sequencerImp[T]) ToMermaid(itemToString func(item T) string) string {
-	s.performSequencing(false)
-
-	if itemToString == nil {
-		itemToString = func(item T) string {
-			return fmt.Sprintf("%v", item)
-		}
+func (opt GraphOptions[T]) getName(v *vertex[T]) string {
+	var name string
+	if opt.ItemToString == nil {
+		name = fmt.Sprintf("%v", v.item)
+	} else {
+		name = opt.ItemToString(v.item)
 	}
-
-	buf := &bytes.Buffer{}
-	write := func(format string, args ...any) {
-		// Ignore the error since we are writing to a buffer.
-		_, _ = fmt.Fprintf(buf, format, args...)
+	if opt.LabelItemsWithGroupNumber {
+		name = fmt.Sprintf("%s @ %d", name, v.depth)
 	}
-
-	// Sort the output to make it easier to read and compare consecutive runs.
-	vertices := make([]*vertex[T], 0, len(s.vertices))
-	names := make([]string, 0, len(vertices))
-	for _, v := range s.vertices {
-		vertices = append(vertices, v)
-		names = append(names, itemToString(v.item))
-	}
-	sort.Sort(&sortByName[T]{vertices: vertices, names: names})
-
-	ids := make(map[*vertex[T]]string, len(s.vertices))
-	for i, v := range vertices {
-		ids[v] = fmt.Sprintf(`v%d`, i)
-	}
-
-	toIds := func(vs vertexSet[T]) string {
-		rs := make([]string, 0, len(vs))
-		for _, v := range vs {
-			rs = append(rs, ids[v])
-		}
-		sort.Strings(rs)
-		return strings.Join(rs, ` & `)
-	}
-
-	write("flowchart TB\n")
-	if len(s.dependencyCycles) > 0 {
-		write("  classDef partOfCycle stroke:#f00\n")
-	}
-	for i, v := range vertices {
-		write(`  %s["%v"]`, ids[v], names[i])
-		if s.dependencyCycles.has(v.item) {
-			write(`:::partOfCycle`)
-		}
-		if len(v.parents) > 0 {
-			write(` --> %s`, toIds(v.parents))
-		}
-		write("\n")
-	}
-	for depth := s.depthCount - 1; depth >= 0; depth-- {
-		if group := s.groups[depth]; len(group) > 0 {
-			write("  subgraph Depth %d\n", depth)
-			write("    %s\n", toIds(group))
-			write("  end\n")
-		}
-	}
-	return buf.String()
+	return name
 }
 
-func (s *sequencerImp[T]) ToDot(itemToString func(item T) string) string {
-	s.performSequencing(false)
-
-	if itemToString == nil {
-		itemToString = func(item T) string {
-			return fmt.Sprintf("%v", item)
+func (opt GraphOptions[T]) filterVertices(vs vertexSet[T]) vertexSet[T] {
+	if opt.ItemFilter == nil {
+		return vs
+	}
+	filtered := vertexSet[T]{}
+	for _, v := range vs {
+		if !opt.ItemFilter(v.item) {
+			continue
+		}
+		filtered[v.item] = v
+		if !opt.StrictFilter {
+			for _, c := range v.children {
+				filtered[c.item] = c
+			}
+			for _, p := range v.parents {
+				filtered[p.item] = p
+			}
 		}
 	}
+	return filtered
+}
+
+func (s *sequencerImp[T]) ToGraph(options GraphOptions[T]) string {
+	s.performSequencing(false)
+
+	vertMap := options.filterVertices(s.vertices)
 
 	buf := &bytes.Buffer{}
 	write := func(format string, args ...any) {
@@ -189,15 +158,15 @@ func (s *sequencerImp[T]) ToDot(itemToString func(item T) string) string {
 	}
 
 	// Sort the output to make it easier to read and compare consecutive runs.
-	vertices := make([]*vertex[T], 0, len(s.vertices))
+	vertices := make([]*vertex[T], 0, len(vertMap))
 	names := make([]string, 0, len(vertices))
-	for _, v := range s.vertices {
+	for _, v := range vertMap {
 		vertices = append(vertices, v)
-		names = append(names, itemToString(v.item))
+		names = append(names, options.getName(v))
 	}
 	sort.Sort(&sortByName[T]{vertices: vertices, names: names})
 
-	ids := make(map[*vertex[T]]string, len(s.vertices))
+	ids := make(map[*vertex[T]]string, len(vertices))
 	for i, v := range vertices {
 		ids[v] = fmt.Sprintf(`v%d`, i)
 	}
@@ -205,34 +174,68 @@ func (s *sequencerImp[T]) ToDot(itemToString func(item T) string) string {
 	toIds := func(vs vertexSet[T]) []string {
 		rs := make([]string, 0, len(vs))
 		for _, v := range vs {
-			rs = append(rs, ids[v])
+			if _, has := vertMap[v.item]; has {
+				rs = append(rs, ids[v])
+			}
 		}
 		sort.Strings(rs)
 		return rs
 	}
 
-	write("digraph G {\n")
-	for i, v := range vertices {
-		write("\t%s[label=%q", ids[v], names[i])
-		if s.dependencyCycles.has(v.item) {
-			write(`,color=red`)
+	if options.Mermaid {
+		write("flowchart TB\n")
+		if len(s.dependencyCycles) > 0 {
+			write("  classDef partOfCycle stroke:#f00\n")
 		}
-		write("]\n")
-	}
-	for _, v := range vertices {
-		if len(v.parents) > 0 {
-			write("\t%s -> {%s}\n", ids[v], strings.Join(toIds(v.parents), ` `))
+		for i, v := range vertices {
+			write(`  %s["%v"]`, ids[v], names[i])
+			if s.dependencyCycles.has(v.item) {
+				write(`:::partOfCycle`)
+			}
+			if parents := toIds(v.parents); len(parents) > 0 {
+				write(` --> %s`, parents)
+			}
+			write("\n")
 		}
-	}
-	for depth := s.depthCount - 1; depth >= 0; depth-- {
-		if group := s.groups[depth]; len(group) > 0 {
-			write("\tsubgraph depth_%d {\n", depth)
-			write("\t\tlabel = \"Depth %d\"\n", depth)
-			write("\t\t%s;\n", strings.Join(toIds(group), `; `))
-			write("\t}\n")
+		if !options.HideGroups {
+			for depth := s.depthCount - 1; depth >= 0; depth-- {
+				if group := toIds(s.groups[depth]); len(group) > 0 {
+					write("  subgraph Depth %d\n", depth)
+					write("    %s\n", group)
+					write("  end\n")
+				}
+			}
 		}
+	} else {
+		write("digraph G {\n")
+		write("\trankdir=LR;\n")
+		write("\tranksep=2.0;\n")
+		for i, v := range vertices {
+			write("\t%s[label=%q", ids[v], names[i])
+			if s.dependencyCycles.has(v.item) {
+				write(`,color=red`)
+			}
+			write("]\n")
+		}
+		for _, v := range vertices {
+			if parents := toIds(v.parents); len(parents) > 0 {
+				write("\t%s -> {%s}\n", ids[v], strings.Join(parents, ` `))
+			}
+		}
+		if !options.HideGroups {
+			for depth := s.depthCount - 1; depth >= 0; depth-- {
+				if group := toIds(s.groups[depth]); len(group) > 0 {
+					write("\tsubgraph cluster_%d {\n", depth)
+					write("\t\tcolor=grey;\n")
+					write("\t\trank=same;\n")
+					write("\t\tlabel=\"Depth %d\"\n", depth)
+					write("\t\t%s;\n", strings.Join(group, `; `))
+					write("\t}\n")
+				}
+			}
+		}
+		write("}\n")
 	}
-	write("}\n")
 	return buf.String()
 }
 

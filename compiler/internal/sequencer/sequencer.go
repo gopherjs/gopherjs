@@ -77,18 +77,44 @@ type Sequencer[T comparable] interface {
 	// This may have to perform sequencing of the items.
 	GetCycles() []T
 
-	// ToMermaid returns a string representation of the dependency graph in
-	// Mermaid syntax. This is useful for visualizing the dependencies and
+	// ToGraph returns a string representation of the dependency graph.
+	// This is useful for visualizing the dependencies and
 	// debugging dependency issues. When a cycle is detected, the items
 	// participating in the cycle or depending on an item in a cycle
 	// will be marked with red and the groups may be incorrect.
-	//
-	// The `itemToString` function is used to convert the item to a string
-	// representation for the Mermaid graph. It should return a unique string.
-	// If nil, then `%v` will be used to convert the item to a string.
-	ToMermaid(itemToString func(item T) string) string
+	ToGraph(options GraphOptions[T]) string
+}
 
-	ToDot(itemToString func(item T) string) string
+// GraphOptions contains options for the graph generation.
+type GraphOptions[T comparable] struct {
+
+	// ItemToString is used to convert the item to a string
+	// representation for the graph nodes. It should return a unique string.
+	// If nil, then `%v` will be used to convert the item to a string.
+	ItemToString func(item T) string
+
+	// ItemFilter is used to reduce the items in the graph to only
+	// those that match the filter and any of their children or parents.
+	// If nil, then all items will be included in the graph.
+	ItemFilter func(item T) bool
+
+	// StrictFilter indicates that the graph should only include items
+	// that match the filter and not their children or parents.
+	StrictFilter bool
+
+	// Mermaid indicates the graph should be output as a Mermaid graph
+	// which can be used in Markdown files on Github but is limited in size.
+	// Otherwise, the graph will be output as a DOT graph which can be used
+	// with Graphviz and can handle larger graphs.
+	Mermaid bool
+
+	// HideGroups indicates that the groups should not be shown in the graph.
+	// This is useful for large graphs where the groups are causing clutter.
+	HideGroups bool
+
+	// LabelItemsWithGroupNumber indicates that the items should be labeled
+	// with their group number in the graph.
+	LabelItemsWithGroupNumber bool
 }
 
 // New creates a new sequencer for the given item type T.

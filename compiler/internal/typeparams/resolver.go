@@ -58,7 +58,7 @@ func NewResolver(tc *types.Context, root Instance) *Resolver {
 
 	switch typ := root.Object.Type().(type) {
 	case *types.Signature:
-		nest = root.Object.(*types.Func)
+		nest, _ = root.Object.(*types.Func)
 		tParams = SignatureTypeParams(typ)
 	case *types.Named:
 		tParams = typ.TypeParams()

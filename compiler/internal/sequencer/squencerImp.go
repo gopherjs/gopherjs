@@ -149,8 +149,6 @@ func (opt GraphOptions[T]) filterVertices(vs vertexSet[T]) vertexSet[T] {
 func (s *sequencerImp[T]) ToGraph(options GraphOptions[T]) string {
 	s.performSequencing(false)
 
-	vertMap := options.filterVertices(s.vertices)
-
 	buf := &bytes.Buffer{}
 	write := func(format string, args ...any) {
 		// Ignore the error since we are writing to a buffer.
@@ -158,6 +156,7 @@ func (s *sequencerImp[T]) ToGraph(options GraphOptions[T]) string {
 	}
 
 	// Sort the output to make it easier to read and compare consecutive runs.
+	vertMap := options.filterVertices(s.vertices)
 	vertices := make([]*vertex[T], 0, len(vertMap))
 	names := make([]string, 0, len(vertices))
 	for _, v := range vertMap {

@@ -34,8 +34,8 @@ var $addTypeInit = (group, pkg, fn) => {
     }
     $typeInit[group].push({pkg: pkg, fn: fn});
 };
-var $initializeTypes = () => {
-    for (var i = 0; i < $typeInit.length; i++) {
+var $initializeTypes = (count) => {
+    for (var i = 0; i < count; i++) {
         var group = $typeInit[i];
         if (group === undefined) {
             continue;

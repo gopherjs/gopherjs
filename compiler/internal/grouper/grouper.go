@@ -2,6 +2,7 @@ package grouper
 
 import (
 	"go/types"
+	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/sequencer"
 )
@@ -53,7 +54,8 @@ func ToGraph[D Decl](decl map[D]struct{}, toString func(d D) string, filter func
 
 func prepareGrouper[D Decl](decl map[D]struct{}) *grouper[D] {
 	g := &grouper[D]{
-		typeMap: make(map[types.Type][]*Info, len(decl)),
+		typeMap: map[types.Type]*Info{},
+		alias:   map[*Info]*Info{},
 		seq:     sequencer.New[*Info](),
 	}
 	for d := range decl {
@@ -66,39 +68,65 @@ func prepareGrouper[D Decl](decl map[D]struct{}) *grouper[D] {
 }
 
 type grouper[D Decl] struct {
-	typeMap map[types.Type][]*Info
+	typeMap map[types.Type]*Info
+	alias   map[*Info]*Info
 	seq     sequencer.Sequencer[*Info]
 }
 
 func (g *grouper[D]) addDecl(d D) {
 	info := d.Grouper()
-	if info == nil || (info.name == nil && len(info.dep) == 0) {
+	if info == nil {
+		return
+	}
+	if info.name == nil && len(info.dep) == 0 {
 		// If the decl has no name and no deps, then it was a type
 		// that doesn't needed to be ordered, so we can skip it.
 		info.Group = 0
 		return
 	}
 	if info.name != nil {
-		g.typeMap[info.name] = append(g.typeMap[info.name], info)
+		if rep, has := g.typeMap[info.name]; has {
+			// A representative for the named type already exists
+			// so this info will alias to it.
+			g.alias[info] = rep
+		} else {
+			// If the name doesn't exist then this info will become
+			// the representative for the named type.
+			g.typeMap[info.name] = info
+			g.seq.Add(info)
+		}
+	} else {
+		// Add any unnamed info to the sequencer.
+		g.seq.Add(info)
 	}
-	g.seq.Add(info)
 }
 
 func (g *grouper[D]) addDeps(d D) {
 	info := d.Grouper()
-	if !g.seq.Has(info) {
+	rep := g.unalias(info)
+	if !g.seq.Has(rep) {
 		// If the sequencer doesn't have this decl, then it was a type
 		// that doesn't needed to be ordered, so we can skip it.
 		return
 	}
 
+	// Add the dependencies from this info to the representative item.
 	for dep := range info.dep {
 		// If a type can not be found it doesn't exist so isn't initialized.
 		// So we can skip adding any dependencies for it.
-		if depInfos, ok := g.typeMap[dep]; ok {
-			g.seq.Add(info, depInfos...)
+		if depInfo, ok := g.typeMap[dep]; ok {
+			g.seq.Add(rep, depInfo)
 		}
 	}
+}
+
+// unalias returns the representative info for the given info,
+// otherwise it returns the given info.
+func (g *grouper[D]) unalias(info *Info) *Info {
+	if rep, has := g.alias[info]; has {
+		return rep
+	}
+	return info
 }
 
 func (g *grouper[D]) count() int {
@@ -111,7 +139,7 @@ func (g *grouper[D]) assignGroup(d D) {
 	// It may cause a panic if a cycle is detected,
 	// but the cycle might not involve the current declaration and the panic
 	// would have occurred with any other declaration too.
-	depth := g.seq.Depth(info)
+	depth := g.seq.Depth(g.unalias(info))
 	// If the depth is negative, then decl was not in the sequencer
 	// and was already assigned to group 0.
 	if depth >= 0 {
@@ -120,18 +148,24 @@ func (g *grouper[D]) assignGroup(d D) {
 }
 
 func (g *grouper[D]) toGraph(decl map[D]struct{}, toString func(d D) string, filter func(d D) bool) string {
-	infoMap := make(map[*Info]D, len(decl))
+	infoMap := make(map[*Info][]D, len(decl))
 	for d := range decl {
-		if info := d.Grouper(); g.seq.Has(info) {
-			infoMap[info] = d
+		info := d.Grouper()
+		rep := g.unalias(info)
+		if g.seq.Has(rep) {
+			infoMap[rep] = append(infoMap[rep], d)
 		}
 	}
 
 	var itemToString func(info *Info) string
 	if toString != nil {
 		itemToString = func(info *Info) string {
-			if decl, ok := infoMap[info]; ok {
-				return toString(decl)
+			if decls, ok := infoMap[info]; ok {
+				parts := make([]string, len(decls))
+				for i, d := range decls {
+					parts[i] = toString(d)
+				}
+				return strings.Join(parts, "\n")
 			}
 			// This shouldn't happen, but handle it gracefully anyway.
 			return `unknown decl`
@@ -141,8 +175,14 @@ func (g *grouper[D]) toGraph(decl map[D]struct{}, toString func(d D) string, fil
 	var infoFilter func(info *Info) bool
 	if filter != nil {
 		infoFilter = func(info *Info) bool {
-			decl, ok := infoMap[info]
-			return ok && filter(decl)
+			if decls, ok := infoMap[info]; ok {
+				for _, d := range decls {
+					if filter(d) {
+						return true
+					}
+				}
+			}
+			return false
 		}
 	}
 

@@ -69,6 +69,16 @@ type Decl struct {
 	Blocking bool
 }
 
+// minify returns a copy of Decl with unnecessary whitespace removed from the
+// JS code.
+func (d Decl) minify() Decl {
+	d.DeclCode = removeWhitespace(d.DeclCode, true)
+	d.MethodListCode = removeWhitespace(d.MethodListCode, true)
+	d.TypeInitCode = removeWhitespace(d.TypeInitCode, true)
+	d.InitCode = removeWhitespace(d.InitCode, true)
+	return d
+}
+
 // Dce gets the information for dead-code elimination.
 func (d *Decl) Dce() *dce.Info {
 	return &d.DCEInfo

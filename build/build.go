@@ -28,7 +28,6 @@ import (
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/jsFile"
-	"github.com/gopherjs/gopherjs/compiler/sourceWriter"
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/internal/errorList"
 	"github.com/gopherjs/gopherjs/internal/testmain"
@@ -1234,7 +1233,7 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 	}
 	defer codeFile.Close()
 
-	var mappingCallback sourceWriter.MappingCallbackHandle
+	sourceMapFilter := &compiler.SourceMapFilter{Writer: codeFile}
 	if s.options.CreateMapFile {
 		m := &sourcemap.Map{File: filepath.Base(pkgObj)}
 		mapFile, err := os.Create(pkgObj + ".map")
@@ -1248,9 +1247,8 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 			fmt.Fprintf(codeFile, "//# sourceMappingURL=%s.map\n", filepath.Base(pkgObj))
 		}()
 
-		mappingCallback = s.SourceMappingCallback(m)
+		sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 	}
-	sourceMapFilter := sourceWriter.New(codeFile, mappingCallback, s.options.Minify)
 
 	deps, err := compiler.ImportDependencies(archive, s.ImportResolverFor(""))
 	if err != nil {

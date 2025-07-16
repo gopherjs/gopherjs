@@ -26,7 +26,6 @@ import (
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler"
-	"github.com/gopherjs/gopherjs/compiler/sourceWriter"
 	"github.com/gopherjs/gopherjs/internal/errorList"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
 	"github.com/neelance/sourcemap"
@@ -648,8 +647,9 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 					return err
 				}
 
+				sourceMapFilter := &compiler.SourceMapFilter{Writer: buf}
 				m := &sourcemap.Map{File: base + ".js"}
-				sourceMapFilter := sourceWriter.New(buf, s.SourceMappingCallback(m), fs.options.Minify)
+				sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 
 				deps, err := compiler.ImportDependencies(archive, s.ImportResolverFor(""))
 				if err != nil {

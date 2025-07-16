@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -19,7 +20,6 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
-	"github.com/gopherjs/gopherjs/compiler/sourceWriter"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
@@ -71,7 +71,8 @@ func (fc *funcContext) SetPos(pos token.Pos) {
 func (fc *funcContext) writePos() {
 	if fc.posAvailable {
 		fc.posAvailable = false
-		fc.Write(sourceWriter.EncodePos(fc.pos))
+		fc.Write([]byte{'\b'})
+		binary.Write(fc, binary.BigEndian, uint32(fc.pos))
 	}
 }
 
@@ -862,6 +863,56 @@ func getJsTag(tag string) string {
 		}
 	}
 	return ""
+}
+
+func needsSpace(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$'
+}
+
+func removeWhitespace(b []byte, minify bool) []byte {
+	if !minify {
+		return b
+	}
+
+	var out []byte
+	var previous byte
+	for len(b) > 0 {
+		switch b[0] {
+		case '\b':
+			out = append(out, b[:5]...)
+			b = b[5:]
+			continue
+		case ' ', '\t', '\n':
+			if (!needsSpace(previous) || !needsSpace(b[1])) && !(previous == '-' && b[1] == '-') {
+				b = b[1:]
+				continue
+			}
+		case '"':
+			out = append(out, '"')
+			b = b[1:]
+			for {
+				i := bytes.IndexAny(b, "\"\\")
+				out = append(out, b[:i]...)
+				b = b[i:]
+				if b[0] == '"' {
+					break
+				}
+				// backslash
+				out = append(out, b[:2]...)
+				b = b[2:]
+			}
+		case '/':
+			if b[1] == '*' {
+				i := bytes.Index(b[2:], []byte("*/"))
+				b = b[i+4:]
+				continue
+			}
+		}
+		out = append(out, b[0])
+		previous = b[0]
+		b = b[1:]
+	}
+	return out
 }
 
 func rangeCheck(pattern string, constantIndex, array bool) string {

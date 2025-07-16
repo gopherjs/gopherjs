@@ -50,8 +50,8 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-					type Foo[T, U any] struct {}
-					type Baz[V any] struct {}`)
+				type Foo[T, U any] struct {}
+				type Baz[V any] struct {}`)
 			return testData{
 				name:    `depend on type parameters`,
 				context: tg.tf.Context,
@@ -65,8 +65,8 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-					type Foo struct {}
-					var f *Foo`)
+				type Foo struct {}
+				var f *Foo`)
 			return testData{
 				name:    `depend on pointer element`,
 				context: tg.tf.Context,
@@ -79,8 +79,8 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-					type Foo struct {}
-					var s []Foo`)
+				type Foo struct {}
+				var s []Foo`)
 			return testData{
 				name:    `depend on slice element`,
 				context: tg.tf.Context,
@@ -93,8 +93,8 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-					type Foo struct {}
-					var c chan Foo`)
+				type Foo struct {}
+				var c chan Foo`)
 			return testData{
 				name:    `depend on chan element`,
 				context: tg.tf.Context,
@@ -107,9 +107,9 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-					type Foo struct {}
-					type Bar struct {}
-					var m map[Bar]Foo`)
+				type Foo struct {}
+				type Bar struct {}
+				var m map[Bar]Foo`)
 			return testData{
 				name:    `depend on map key and element`,
 				context: tg.tf.Context,
@@ -122,9 +122,9 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-					type Foo struct { X Bar[Baz] }
-					type Bar[T any] struct {}
-					type Baz struct {}`)
+				type Foo struct { X Bar[Baz] }
+				type Bar[T any] struct {}
+				type Baz struct {}`)
 			return testData{
 				name:    `depend on fields`,
 				context: tg.tf.Context,
@@ -137,10 +137,10 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-					type Foo struct {}
-					func (f Foo) Bar(p *Baz) []*Taz { return nil}
-					type Baz struct {}
-					type Taz struct {}`)
+				type Foo struct {}
+				func (f Foo) Bar(p *Baz) []*Taz { return nil}
+				type Baz struct {}
+				type Taz struct {}`)
 			return testData{
 				name:    `depend on receiver, parameter, and result types`,
 				context: tg.tf.Context,
@@ -154,8 +154,8 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-					type Foo[T any] struct {}
-					func (f *Foo[T]) Bar(x int, y int) {}`)
+				type Foo[T any] struct {}
+				func (f *Foo[T]) Bar(x int, y int) {}`)
 			return testData{
 				name:    `depend on complex receiver types`,
 				context: tg.tf.Context,
@@ -170,9 +170,9 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-					type Foo[T any] struct {}
-					func Bar[T any](x []*Foo[T]) map[string]*Foo[T] { return nil }
-					type Baz struct {}`)
+				type Foo[T any] struct {}
+				func Bar[T any](x []*Foo[T]) map[string]*Foo[T] { return nil }
+				type Baz struct {}`)
 			return testData{
 				name:    `depend on resolved parameters and results`,
 				context: tg.tf.Context,
@@ -201,9 +201,9 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-					type Foo []struct{ b Bar }
-					type Bar struct {}
-					type Baz Foo`)
+				type Foo []struct{ b Bar }
+				type Bar struct {}
+				type Baz Foo`)
 			return testData{
 				name:    `dependency on underlying types for aliased types`,
 				context: tg.tf.Context,

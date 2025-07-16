@@ -241,7 +241,7 @@ func TestInstanceDecomposition(t *testing.T) {
 			// dependencies so that we can tell it to not skip the same package
 			// dependencies (via passing in a nil package to addAllDeps).
 			// This will make testing Info a lot easier.
-			info.setType(test.context, test.instance)
+			info.setType(test.context, test.instance, nil)
 			info.addAllDeps(test.context, test.instance, nil)
 
 			if info.name != test.expName {

@@ -124,13 +124,13 @@ func (opt GraphOptions[T]) getName(v *vertex[T]) string {
 	return name
 }
 
-func (opt GraphOptions[T]) filterVertices(vs vertexSet[T]) vertexSet[T] {
-	if opt.ItemFilter == nil {
-		return vs
-	}
-	filtered := vertexSet[T]{}
+func (opt GraphOptions[T]) filterVertices(vs, depCycles vertexSet[T]) vertexSet[T] {
+	filtered := make(vertexSet[T], len(vs))
 	for _, v := range vs {
-		if !opt.ItemFilter(v.item) {
+		if opt.FilterCycles && !depCycles.has(v.item) {
+			continue
+		}
+		if opt.ItemFilter != nil && !opt.ItemFilter(v.item) {
 			continue
 		}
 		filtered[v.item] = v
@@ -156,7 +156,7 @@ func (s *sequencerImp[T]) ToGraph(options GraphOptions[T]) string {
 	}
 
 	// Sort the output to make it easier to read and compare consecutive runs.
-	vertMap := options.filterVertices(s.vertices)
+	vertMap := options.filterVertices(s.vertices, s.dependencyCycles)
 	vertices := make([]*vertex[T], 0, len(vertMap))
 	names := make([]string, 0, len(vertices))
 	for _, v := range vertMap {
@@ -208,11 +208,11 @@ func (s *sequencerImp[T]) ToGraph(options GraphOptions[T]) string {
 	} else {
 		write("digraph G {\n")
 		write("\trankdir=LR;\n")
-		write("\tranksep=2.0;\n")
+		write("\tranksep=20.0;\n") // adds extra space between depths
 		for i, v := range vertices {
 			write("\t%s[label=%q", ids[v], names[i])
 			if s.dependencyCycles.has(v.item) {
-				write(`,color=red`)
+				write(`,style=filled,color=red`)
 			}
 			write("]\n")
 		}
@@ -225,7 +225,8 @@ func (s *sequencerImp[T]) ToGraph(options GraphOptions[T]) string {
 			for depth := s.depthCount - 1; depth >= 0; depth-- {
 				if group := toIds(s.groups[depth]); len(group) > 0 {
 					write("\tsubgraph cluster_%d {\n", depth)
-					write("\t\tcolor=grey;\n")
+					write("\t\tstyle=filled;\n")
+					write("\t\tcolor=lightblue;\n")
 					write("\t\trank=same;\n")
 					write("\t\tlabel=\"Depth %d\"\n", depth)
 					write("\t\t%s;\n", strings.Join(group, `; `))
@@ -364,10 +365,12 @@ func (s *sequencerImp[T]) propagateDepth(forward bool, waitingCount int, ready *
 		v := ready.pop()
 		s.writeDepth(v)
 		for _, c := range v.edges(forward) {
-			c.decWaiting()
-			if c.isReady() {
-				ready.push(c)
-				waitingCount--
+			if !c.isReady() {
+				c.decWaiting()
+				if c.isReady() {
+					ready.push(c)
+					waitingCount--
+				}
 			}
 		}
 	}

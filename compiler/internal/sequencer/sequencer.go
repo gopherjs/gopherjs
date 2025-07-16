@@ -93,6 +93,12 @@ type GraphOptions[T comparable] struct {
 	// If nil, then `%v` will be used to convert the item to a string.
 	ItemToString func(item T) string
 
+	// FilterCycles indicates that the graph should only include
+	// items that are part of a cycle or (if StrictFilter is false)
+	// depend on an item in a cycle.
+	// This will still run any item filter on the items in the cycle.
+	FilterCycles bool
+
 	// ItemFilter is used to reduce the items in the graph to only
 	// those that match the filter and any of their children or parents.
 	// If nil, then all items will be included in the graph.

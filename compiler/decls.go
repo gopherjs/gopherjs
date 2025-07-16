@@ -264,6 +264,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 	})
 
 	d.Dce().SetName(init.Lhs[0], nil, nil)
+	d.Grouper().SetInstance(fc.pkgCtx.typesCtx, typeparams.Instance{Object: init.Lhs[0]})
 	if len(init.Lhs) != 1 || analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
 		d.Dce().SetAsAlive()
 	}
@@ -297,6 +298,7 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 				Vars:     []string{objName},
 			}
 			varDecl.Dce().SetName(o, nil, nil)
+			varDecl.Grouper().SetInstance(fc.pkgCtx.typesCtx, typeparams.Instance{Object: o})
 			if len(instances) > 1 || !instances[0].IsTrivial() {
 				varDecl.DeclCode = fc.CatchOutput(0, func() {
 					fc.Printf("%s = {};", objName)
@@ -443,6 +445,7 @@ func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
 		Vars:     []string{name},
 	}
 	varDecl.Dce().SetName(obj, nil, nil)
+	varDecl.Grouper().SetInstance(fc.pkgCtx.typesCtx, typeparams.Instance{Object: obj})
 	if fc.pkgCtx.instanceSet.Pkg(obj.Pkg()).ObjHasInstances(obj) {
 		varDecl.DeclCode = fc.CatchOutput(0, func() {
 			fc.Printf("%s = {};", name)

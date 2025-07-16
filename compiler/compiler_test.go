@@ -1609,18 +1609,6 @@ func (st *selectionTester) PrintDeclStatus() {
 	}
 }
 
-func (st *selectionTester) PrintOrderGraph() {
-	st.t.Helper()
-	graph := grouper.ToGraph(st.dceSelection, func(d *Decl) string {
-		text := d.FullName
-		text = strings.ReplaceAll(text, `github.com/gopherjs/gopherjs/compiler/`, ``)
-		text = strings.ReplaceAll(text, `<`, `[`)
-		text = strings.ReplaceAll(text, `>`, `]`)
-		return text
-	}, nil)
-	st.t.Logf("Graph:\n%s", graph)
-}
-
 func (st *selectionTester) InGroup(group int, declFullName string) {
 	st.t.Helper()
 	decl := st.FindDecl(declFullName)

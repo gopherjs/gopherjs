@@ -2,6 +2,7 @@ package grouper
 
 import (
 	"go/types"
+	"sort"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/sequencer"
@@ -41,15 +42,20 @@ func Group[D Decl](decl map[D]struct{}) int {
 // This will not panic if a cycle is detected in the dependency graph,
 // instead it will indicate the declarations involved in the cycle with red
 // but the depth groups may be incorrect.
-//
-// The `toString` function is used to convert the declaration to a string
-// for the mermaid diagram. If `toString` is nil, then `%v` is used.
-//
-// The `filter` function is used to filter the declarations in the graph.
-// If `filter` is nil, then all declarations are included in the graph.
-func ToGraph[D Decl](decl map[D]struct{}, toString func(d D) string, filter func(d D) bool) string {
+func ToGraph[D Decl](decl map[D]struct{}, options sequencer.GraphOptions[D]) string {
 	g := prepareGrouper(decl)
-	return g.toGraph(decl, toString, filter)
+	return g.toGraph(decl, options)
+}
+
+// CyclesToString returns a string representation of the cycles detected in the
+// dependency graph of the given declarations.
+// This returns an empty string if no cycles are detected.
+//
+// If `toString` is not nil it is used to convert the declaration to a string
+// representation for additional context in the output.
+func CyclesToString[D Decl](decl map[D]struct{}, toString func(d D) string) string {
+	g := prepareGrouper(decl)
+	return g.toCycleString(decl, toString)
 }
 
 func prepareGrouper[D Decl](decl map[D]struct{}) *grouper[D] {
@@ -129,6 +135,16 @@ func (g *grouper[D]) unalias(info *Info) *Info {
 	return info
 }
 
+func (g *grouper[D]) getUnaliasMap(decl map[D]struct{}) map[*Info][]D {
+	infoMap := make(map[*Info][]D, len(decl))
+	for d := range decl {
+		if rep := g.unalias(d.Grouper()); g.seq.Has(rep) {
+			infoMap[rep] = append(infoMap[rep], d)
+		}
+	}
+	return infoMap
+}
+
 func (g *grouper[D]) count() int {
 	return g.seq.DepthCount()
 }
@@ -147,23 +163,23 @@ func (g *grouper[D]) assignGroup(d D) {
 	}
 }
 
-func (g *grouper[D]) toGraph(decl map[D]struct{}, toString func(d D) string, filter func(d D) bool) string {
-	infoMap := make(map[*Info][]D, len(decl))
-	for d := range decl {
-		info := d.Grouper()
-		rep := g.unalias(info)
-		if g.seq.Has(rep) {
-			infoMap[rep] = append(infoMap[rep], d)
-		}
+func (g *grouper[D]) toGraph(decl map[D]struct{}, declOpts sequencer.GraphOptions[D]) string {
+	seqOpts := sequencer.GraphOptions[*Info]{
+		FilterCycles:              declOpts.FilterCycles,
+		StrictFilter:              declOpts.StrictFilter,
+		Mermaid:                   declOpts.Mermaid,
+		HideGroups:                declOpts.HideGroups,
+		LabelItemsWithGroupNumber: declOpts.LabelItemsWithGroupNumber,
 	}
 
-	var itemToString func(info *Info) string
-	if toString != nil {
-		itemToString = func(info *Info) string {
+	infoMap := g.getUnaliasMap(decl)
+
+	if declOpts.ItemToString != nil {
+		seqOpts.ItemToString = func(info *Info) string {
 			if decls, ok := infoMap[info]; ok {
 				parts := make([]string, len(decls))
 				for i, d := range decls {
-					parts[i] = toString(d)
+					parts[i] = declOpts.ItemToString(d)
 				}
 				return strings.Join(parts, "\n")
 			}
@@ -172,12 +188,11 @@ func (g *grouper[D]) toGraph(decl map[D]struct{}, toString func(d D) string, fil
 		}
 	}
 
-	var infoFilter func(info *Info) bool
-	if filter != nil {
-		infoFilter = func(info *Info) bool {
+	if declOpts.ItemFilter != nil {
+		seqOpts.ItemFilter = func(info *Info) bool {
 			if decls, ok := infoMap[info]; ok {
 				for _, d := range decls {
-					if filter(d) {
+					if declOpts.ItemFilter(d) {
 						return true
 					}
 				}
@@ -186,8 +201,42 @@ func (g *grouper[D]) toGraph(decl map[D]struct{}, toString func(d D) string, fil
 		}
 	}
 
-	return g.seq.ToGraph(sequencer.GraphOptions[*Info]{
-		ItemToString: itemToString,
-		ItemFilter:   infoFilter,
-	})
+	return g.seq.ToGraph(seqOpts)
+}
+
+func (g *grouper[D]) toCycleString(decl map[D]struct{}, toString func(d D) string) string {
+	cycles := g.seq.GetCycles()
+	if len(cycles) == 0 {
+		return `` // No cycles detected.
+	}
+
+	fullToString := func(d D) string {
+		if toString != nil {
+			return toString(d) + ` ` + d.Grouper().String()
+		}
+		return d.Grouper().String()
+	}
+
+	infoMap := g.getUnaliasMap(decl)
+	parts := make([]string, 0, len(cycles))
+	for _, cycle := range cycles {
+		decl := infoMap[cycle]
+		if len(decl) == 1 {
+			parts = append(parts, "-- "+fullToString(decl[0]))
+			continue
+		}
+
+		subParts := make([]string, len(decl))
+		for j, d := range decl {
+			subParts[j] = fullToString(d)
+		}
+		sort.Strings(subParts)
+		maxIndex := len(subParts) - 1
+		part := ",- " + subParts[0] + "\n|  " +
+			strings.Join(subParts[1:maxIndex], "\n|  ") +
+			"\n`- " + subParts[maxIndex]
+		parts = append(parts, part)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "\n")
 }

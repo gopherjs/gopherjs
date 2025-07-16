@@ -93,7 +93,7 @@ func NewResolver(tc *types.Context, root Instance) *Resolver {
 	// Check the root's type parameters and arguments match,
 	// then add them to the replacements.
 	if tParams.Len() != len(root.TArgs) {
-		panic(fmt.Errorf(`number of type parameters and arguments must match: %d => %d`, tParams.Len(), len(root.TArgs)))
+		panic(fmt.Errorf(`number of type parameters and arguments must match: %d => %d for %s`, tParams.Len(), len(root.TArgs), root.String()))
 	}
 	for i := 0; i < tParams.Len(); i++ {
 		replacements[tParams.At(i)] = root.TArgs[i]

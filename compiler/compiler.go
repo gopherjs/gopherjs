@@ -13,7 +13,6 @@ import (
 	"go/token"
 	"go/types"
 	"io"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -139,15 +138,24 @@ func WriteProgramCode(pkgs []*Archive, w *sourceWriter.SourceWriter, goVersion s
 	}
 	dceSelection := sel.AliveDecls()
 
+	// TODO(grantnelson-wf): REMOVE
+	/*
+		dot := grouper.ToGraph(dceSelection, sequencer.GraphOptions[*Decl]{
+			ItemToString: func(d *Decl) string { return d.FullName },
+			FilterCycles: true,
+			StrictFilter: true,
+		})
+		if err := os.WriteFile("./dot.gv", []byte(dot), 0644); err != nil {
+			panic(fmt.Errorf(`failed to write dot.gv: %w`, err))
+		}
+		if cs := grouper.CyclesToString(dceSelection, func(d *Decl) string { return d.FullName }); cs != "" {
+			fmt.Printf("Cycles detected in the dependency graph:\n%s\n", cs)
+		}
+	*/
+
 	// Set the Decl.Grouper().Group values for each declaration.
 	// The group number is used to determine the type initialization order.
 	groupCount := grouper.Group(dceSelection)
-
-	// TODO(grantnelson-wf): REMOVE
-	dot := grouper.ToGraph(dceSelection, func(d *Decl) string { return d.FullName }, nil)
-	if err := os.WriteFile("./dot.gv", []byte(dot), 0644); err != nil {
-		panic(fmt.Errorf(`failed to write dot.gv: %w`, err))
-	}
 
 	// open a closure for the generated code
 	if _, err := w.WriteString("\"use strict\";\n(function() {\n\n"); err != nil {
@@ -236,15 +244,10 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 	}
 	sort.Ints(groups)
 
-	// Write the type initialization code for each group.
-	// The groups are nested in the lower groups to allow access to the earlier groups' scopes.
-	// The zeroth group doesn't need to be in a closure since it is always initialized first.
 	for _, group := range groups {
 		groupDecls := groupMap[group]
-		if group > 0 {
-			if _, err := w.WriteF("\t$addTypeInit(%d, this, function() {\n", group); err != nil {
-				return err
-			}
+		if _, err := w.WriteF("\t$addTypeInit(%d, this, function() {\n", group); err != nil {
+			return err
 		}
 		for _, d := range groupDecls {
 			if _, err := w.Write(d.DeclCode); err != nil {
@@ -275,12 +278,8 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 				return err
 			}
 		}
-	}
-	for _, group := range groups {
-		if group > 0 {
-			if _, err := w.WriteF("\t}); // group %d\n", group); err != nil {
-				return err
-			}
+		if _, err := w.WriteF("\t});\n"); err != nil {
+			return err
 		}
 	}
 

@@ -69,7 +69,9 @@ func (i *Info) setType(tc *types.Context, inst typeparams.Instance, pkg *types.P
 	var name *types.Named
 	switch t := inst.Object.Type().(type) {
 	case *types.Named:
-		name = inst.Resolve(tc).(*types.Named)
+		if typeparams.CanResolve(inst) {
+			name = inst.Resolve(tc).(*types.Named)
+		}
 	case *types.Signature:
 		if recv := typesutil.RecvType(t); recv != nil {
 			inst2 := typeparams.Instance{
@@ -77,7 +79,9 @@ func (i *Info) setType(tc *types.Context, inst typeparams.Instance, pkg *types.P
 				TNest:  inst.TNest,
 				TArgs:  inst.TArgs,
 			}
-			name = inst2.Resolve(tc).(*types.Named)
+			if typeparams.CanResolve(inst2) {
+				name = inst2.Resolve(tc).(*types.Named)
+			}
 		}
 	}
 
@@ -135,14 +139,16 @@ func (i *Info) initPendingDeps(tc *types.Context, inst typeparams.Instance) *ded
 
 	switch t := inst.Object.Type().(type) {
 	case *types.Named:
-		r := typeparams.NewResolver(tc, inst)
-		tArgs := r.Substitute(t).(*types.Named).TypeArgs()
-		for j := tArgs.Len() - 1; j >= 0; j-- {
-			pending.push(tArgs.At(j))
-		}
-		pending.push(r.Substitute(t.Underlying()))
-		for j := t.NumMethods() - 1; j >= 0; j-- {
-			pending.push(r.Substitute(t.Method(j).Type()))
+		if typeparams.CanResolve(inst) {
+			r := typeparams.NewResolver(tc, inst)
+			tArgs := r.Substitute(t).(*types.Named).TypeArgs()
+			for j := tArgs.Len() - 1; j >= 0; j-- {
+				pending.push(tArgs.At(j))
+			}
+			pending.push(r.Substitute(t.Underlying()))
+			for j := t.NumMethods() - 1; j >= 0; j-- {
+				pending.push(r.Substitute(t.Method(j).Type()))
+			}
 		}
 		return pending
 
@@ -155,13 +161,17 @@ func (i *Info) initPendingDeps(tc *types.Context, inst typeparams.Instance) *ded
 				TNest:  inst.TNest,
 				TArgs:  inst.TArgs,
 			}
-			r := typeparams.NewResolver(tc, recvInst)
-			pending.push(r.Substitute(t))
+			if typeparams.CanResolve(recvInst) {
+				r := typeparams.NewResolver(tc, recvInst)
+				pending.push(r.Substitute(t))
+			}
 			return pending
 		}
 
 		// The instance is a function, resolve the signature.
-		pending.push(inst.Resolve(tc))
+		if typeparams.CanResolve(inst) {
+			pending.push(inst.Resolve(tc))
+		}
 		return pending
 
 	default:
@@ -194,9 +204,12 @@ func (i *Info) addAllDeps(tc *types.Context, inst typeparams.Instance, pkg *type
 			for j := tArgs.Len() - 1; j >= 0; j-- {
 				inst2.TArgs[j] = tArgs.At(j)
 			}
-			r := typeparams.NewResolver(tc, inst2)
-			for j := t.NumMethods() - 1; j >= 0; j-- {
-				pending.push(r.Substitute(t.Method(j).Type()))
+			var r *typeparams.Resolver
+			if typeparams.CanResolve(inst2) {
+				r = typeparams.NewResolver(tc, inst2)
+				for j := t.NumMethods() - 1; j >= 0; j-- {
+					pending.push(r.Substitute(t.Method(j).Type()))
+				}
 			}
 
 			if pkg != nil && pkg == t.Obj().Pkg() {
@@ -206,7 +219,9 @@ func (i *Info) addAllDeps(tc *types.Context, inst typeparams.Instance, pkg *type
 				for j := tArgs.Len() - 1; j >= 0; j-- {
 					pending.push(tArgs.At(j))
 				}
-				pending.push(r.Substitute(t.Underlying()))
+				if r != nil {
+					pending.push(r.Substitute(t.Underlying()))
+				}
 				continue
 			}
 

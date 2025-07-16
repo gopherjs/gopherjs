@@ -93,7 +93,7 @@ func NewResolver(tc *types.Context, root Instance) *Resolver {
 	// Check the root's type parameters and arguments match,
 	// then add them to the replacements.
 	if tParams.Len() != len(root.TArgs) {
-		panic(fmt.Errorf(`number of type parameters and arguments must match: %d => %d for %s`, tParams.Len(), len(root.TArgs), root.String()))
+		panic(fmt.Errorf(`number of type parameters and arguments must match: %d => %d`, tParams.Len(), len(root.TArgs)))
 	}
 	for i := 0; i < tParams.Len(); i++ {
 		replacements[tParams.At(i)] = root.TArgs[i]
@@ -110,6 +110,43 @@ func NewResolver(tc *types.Context, root Instance) *Resolver {
 		subster:      subst.New(tc, replacements),
 		selMemo:      map[typesutil.Selection]typesutil.Selection{},
 	}
+}
+
+// CanResolve checks if the given instance can be used in a NewResolver call.
+func CanResolve(root Instance) bool {
+	nestTParamsCount := 0
+	tParamsCount := 0
+	switch typ := root.Object.Type().(type) {
+	case *types.Signature:
+		tParamsCount = SignatureTypeParams(typ).Len()
+	case *types.Named:
+		tParamsCount = typ.TypeParams().Len()
+		if nest := FindNestingFunc(root.Object); nest != nil {
+			nestTParamsCount = SignatureTypeParams(nest.Type().(*types.Signature)).Len()
+		}
+	default:
+		return false // not a named type or method, cannot resolve
+	}
+
+	// Check the root's implicit nesting type parameters and arguments match.
+	if nestTParamsCount != len(root.TNest) {
+		return false // number of nesting type parameters and arguments must match
+	}
+
+	// If no type arguments are provided, check if the type already has
+	// type arguments. This is the case for instantiated objects in the instance.
+	tArgCount := len(root.TArgs)
+	if tParamsCount > 0 && tArgCount == 0 {
+		if typ, ok := root.Object.Type().(interface{ TypeArgs() *types.TypeList }); ok {
+			tArgCount = typ.TypeArgs().Len()
+		}
+	}
+
+	// Check the root's type parameters and arguments match.
+	if tParamsCount != tArgCount {
+		return false // number of type parameters and arguments must match
+	}
+	return true
 }
 
 // TypeParams is the list of type parameters that this resolver will substitute.

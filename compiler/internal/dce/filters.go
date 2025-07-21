@@ -107,10 +107,7 @@ func getNestTypeParams(o types.Object) []types.Type {
 	}
 
 	tp := typeparams.SignatureTypeParams(fn.Type().(*types.Signature))
-	nestTParams := make([]types.Type, tp.Len())
-	for i := 0; i < tp.Len(); i++ {
-		nestTParams[i] = tp.At(i)
-	}
+	nestTParams := typeParamListToSlice(tp)
 	return nestTParams
 }
 

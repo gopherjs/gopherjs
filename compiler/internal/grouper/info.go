@@ -100,17 +100,23 @@ type dedupStack struct {
 
 func (s *dedupStack) push(t ...types.Type) {
 	for _, t := range t {
-		if t == nil {
-			continue
-		}
-		if _, ok := s.seen[t]; !ok {
-			if s.seen == nil {
-				s.seen = make(map[types.Type]struct{})
-			}
-			s.seen[t] = struct{}{}
+		if s.markAsSeen(t) {
 			s.stack = append(s.stack, t)
 		}
 	}
+}
+
+// markAsSeen returns true if the type was not seen before and is now marked
+// as seen. If the type is nil or was already seen, it returns false.
+func (s *dedupStack) markAsSeen(t types.Type) bool {
+	if _, dup := s.seen[t]; t == nil || dup {
+		return false
+	}
+	if s.seen == nil {
+		s.seen = make(map[types.Type]struct{})
+	}
+	s.seen[t] = struct{}{}
+	return true
 }
 
 func (s *dedupStack) pop() types.Type {
@@ -201,7 +207,7 @@ func (i *Info) addAllDeps(tc *types.Context, inst typeparams.Instance, pkg *type
 			inst2 := typeparams.Instance{Object: t.Obj()}
 			tArgs := t.TypeArgs()
 			inst2.TArgs = make(typesutil.TypeList, tArgs.Len())
-			for j := tArgs.Len() - 1; j >= 0; j-- {
+			for j := range inst2.TArgs {
 				inst2.TArgs[j] = tArgs.At(j)
 			}
 			var r *typeparams.Resolver

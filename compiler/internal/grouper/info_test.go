@@ -3,10 +3,12 @@ package grouper
 import (
 	"go/ast"
 	"go/types"
+	"path"
 	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
@@ -17,6 +19,7 @@ func TestInstanceDecomposition(t *testing.T) {
 		name     string
 		context  *types.Context
 		instance typeparams.Instance
+		usePkg   bool
 		expName  *types.Named
 		expDeps  map[*types.Named]struct{}
 	}
@@ -154,8 +157,8 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-				type Foo[T any] struct {}
-				func (f *Foo[T]) Bar(x int, y int) {}`)
+					type Foo[T any] struct {}
+					func (f *Foo[T]) Bar(x int, y int) {}`)
 			return testData{
 				name:    `depend on complex receiver types`,
 				context: tg.tf.Context,
@@ -170,9 +173,9 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-				type Foo[T any] struct {}
-				func Bar[T any](x []*Foo[T]) map[string]*Foo[T] { return nil }
-				type Baz struct {}`)
+					type Foo[T any] struct {}
+					func Bar[T any](x []*Foo[T]) map[string]*Foo[T] { return nil }
+					type Baz struct {}`)
 			return testData{
 				name:    `depend on resolved parameters and results`,
 				context: tg.tf.Context,
@@ -186,9 +189,9 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-				type Foo[T any] struct {}
-				type Bar struct {}
-				var Baz = Foo[Bar]{}`)
+					type Foo[T any] struct {}
+					type Bar struct {}
+					var Baz = Foo[Bar]{}`)
 			return testData{
 				name:    `variables depend on the named in their type`,
 				context: tg.tf.Context,
@@ -201,9 +204,9 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-				type Foo []struct{ b Bar }
-				type Bar struct {}
-				type Baz Foo`)
+					type Foo []struct{ b Bar }
+					type Bar struct {}
+					type Baz Foo`)
 			return testData{
 				name:    `dependency on underlying types for aliased types`,
 				context: tg.tf.Context,
@@ -232,17 +235,127 @@ func TestInstanceDecomposition(t *testing.T) {
 				expDeps: tg.NamedSet(`Baz`),
 			}
 		}(),
+		func() testData {
+			tg := readPackages(t, []srctesting.Source{{
+				Name: `test.go`,
+				Contents: []byte(
+					`package testcase
+						import "other"
+						type Bar struct {
+							x []*other.Foo
+							y *Baz
+						}
+						type Baz struct{
+							z Bar
+						}`),
+			}, {
+				Name: `other/other.go`,
+				Contents: []byte(
+					`package other
+						type Foo struct{}`),
+			}})
+			return testData{
+				name:    `depend on field types from other packages`,
+				context: tg.tf.Context,
+				usePkg:  true,
+				instance: typeparams.Instance{
+					Object: tg.Object(`Baz`),
+				},
+				expName: tg.Named(`Baz`),
+				// skip Bar since it is in the same package and could cause cycles,
+				// but dig into it to find dependencies from other packages.
+				expDeps: tg.NamedSet(`other.Foo`),
+			}
+		}(),
+		func() testData {
+			tg := readPackages(t, []srctesting.Source{{
+				Name: `test.go`,
+				Contents: []byte(
+					`package testcase
+						import "other"
+						type Bar struct {}
+						func (b *Bar) Baz()(*Bar, bool, *other.Foo, error) {
+							return b, true, nil, nil
+						}`),
+			}, {
+				Name: `other/other.go`,
+				Contents: []byte(
+					`package other
+						type Foo struct{}`),
+			}})
+			return testData{
+				name:    `depend on method results from other packages`,
+				context: tg.tf.Context,
+				usePkg:  true,
+				instance: typeparams.Instance{
+					Object: tg.Object(`Bar`),
+				},
+				expName: tg.Named(`Bar`),
+				expDeps: tg.NamedSet(`other.Foo`),
+			}
+		}(),
+		func() testData {
+			tg := readPackages(t, []srctesting.Source{{
+				Name: `main.go`,
+				Contents: []byte(
+					`package main
+						import "foo"
+						func main() {
+							e := foo.Entity{}
+							println(e.Ref.Next)
+						}`),
+			}, {
+				Name: `foo/foo.go`,
+				Contents: []byte(
+					`package foo
+					import "bar"
+					type Entity struct {
+						Ref bar.Bar[Entity]
+					}`),
+			}, {
+				Name: `bar/bar.go`,
+				Contents: []byte(
+					`package bar
+					type Bar[G any] struct {
+						Next *G
+					}`),
+			}})
+			return testData{
+				name:    `gencicrle test`,
+				context: tg.tf.Context,
+				usePkg:  true,
+				instance: typeparams.Instance{
+					Object: tg.Object(`foo.Entity`),
+				},
+				expName: tg.Named(`foo.Entity`),
+				expDeps: tg.NamedSet(`bar.Bar[foo.Entity]`),
+				// This causes a cycle because bar.Bar[foo.Entity] depends on foo.Entity,
+				// and foo.Entity depends on bar.Bar[foo.Entity].
+			}
+		}(),
+
+		// TODO(grantnelson-wf): Add tests for:
+		// - generic methods
+		// - generic functions
+		// - generic structs
+		// - concrete interfaces with methods
+		// - generic interfaces
+		// - interfaces with embedded types
+		// - `type x[T any] int` with methods that use `T`
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			info := &Info{}
 			// Instead of calling SetInstance, we manually set the type and
-			// dependencies so that we can tell it to not skip the same package
-			// dependencies (via passing in a nil package to addAllDeps).
-			// This will make testing Info a lot easier.
-			info.setType(test.context, test.instance, nil)
-			info.addAllDeps(test.context, test.instance, nil)
+			// dependencies so that we can use nil for the package, which will
+			// disable the same package checks and make it easier to test.
+			var pkg *types.Package
+			if test.usePkg {
+				pkg = test.instance.Object.Pkg()
+			}
+			info.setType(test.context, test.instance, pkg)
+			info.addAllDeps(test.context, test.instance, pkg)
 
 			if info.name != test.expName {
 				t.Errorf("expected type %v, got %v", test.expName, info.name)
@@ -254,6 +367,8 @@ func TestInstanceDecomposition(t *testing.T) {
 	}
 }
 
+const defaultImportPath = `pkg/test`
+
 type typeGetter struct {
 	tf    *srctesting.Fixture
 	cache map[string]types.Type
@@ -261,17 +376,65 @@ type typeGetter struct {
 
 func readTypes(t *testing.T, src string) typeGetter {
 	t.Helper()
+	return readPackages(t, []srctesting.Source{
+		{Name: `test.go`, Contents: []byte("package testcase\n" + src)},
+	})
+}
+
+func readPackages(t *testing.T, sources []srctesting.Source) typeGetter {
+	t.Helper()
 	tf := srctesting.New(t)
-	tf.Check(`pkg/test`, tf.Parse(`test.go`, "package testcase\n"+src))
+
+	// Parse all source files.
+	pkgFiles := map[string][]*ast.File{}
+	for _, s := range sources {
+		importPath, filename := path.Split(s.Name)
+		if len(importPath) == 0 {
+			importPath = defaultImportPath
+		}
+		importPath = strings.TrimSuffix(importPath, `/`)
+		file := tf.Parse(filename, string(s.Contents))
+		pkgFiles[importPath] = append(pkgFiles[importPath], file)
+	}
+
+	// Create packages from parsed files.
+	done := false
+	for !done {
+		done = true
+		for importPath, files := range pkgFiles {
+			if importsReady(tf, files) {
+				tf.Check(importPath, files...)
+				delete(pkgFiles, importPath)
+				done = false
+			}
+		}
+		if done && len(pkgFiles) > 0 {
+			t.Fatalf("Failed to resolve imports for packages: %v", pkgFiles)
+		}
+	}
+
 	return typeGetter{
 		tf:    tf,
 		cache: make(map[string]types.Type),
 	}
 }
 
+func importsReady(tf *srctesting.Fixture, files []*ast.File) bool {
+	tf.T.Helper()
+	for _, file := range files {
+		for _, imp := range file.Imports {
+			path := strings.Trim(imp.Path.Value, `"`)
+			if _, exists := tf.Packages[path]; !exists {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (tg typeGetter) Object(name string) types.Object {
 	tg.tf.T.Helper()
-	importPath := `pkg/test`
+	importPath := defaultImportPath
 	if path, remainder, found := strings.Cut(name, `.`); found {
 		if _, has := tg.tf.Packages[path]; has {
 			importPath, name = path, remainder
@@ -286,34 +449,67 @@ func (tg typeGetter) Object(name string) types.Object {
 
 func (tg typeGetter) Type(expr string) types.Type {
 	tg.tf.T.Helper()
-	if typ, ok := tg.cache[expr]; ok {
-		return typ
-	}
-
-	f := tg.tf.Parse(`eval`, "package testcase\nvar _ "+expr)
-	config := &types.Config{
-		Context:  tg.tf.Context,
-		Sizes:    &types.StdSizes{WordSize: 4, MaxAlign: 8},
-		Importer: tg.tf,
-	}
-	pkg := tg.tf.Packages[`pkg/test`]
-	ck := types.NewChecker(config, tg.tf.FileSet, pkg, tg.tf.Info)
-	if err := ck.Files([]*ast.File{f}); err != nil {
-		tg.tf.T.Fatalf("failed to type check expression %q: %v", expr, err)
-	}
-
-	node := f.Decls[0].(*ast.GenDecl).Specs[0].(*ast.ValueSpec).Type
-	typ := tg.tf.Info.Types[node].Type
-	tg.cache[expr] = typ
-	return typ
+	return tg.TypeList(expr)[0]
 }
 
-func (tg typeGetter) TypeList(expr ...string) typesutil.TypeList {
+func (tg typeGetter) TypeList(exprs ...string) typesutil.TypeList {
 	tg.tf.T.Helper()
-	result := make([]types.Type, len(expr))
-	for i, expr := range expr {
-		result[i] = tg.Type(expr)
+
+	// Check the cache and determine which expressions need to be type-checked.
+	result := make([]types.Type, len(exprs))
+	missing := []int{}
+	for i, e := range exprs {
+		if typ, ok := tg.cache[e]; ok {
+			result[i] = typ
+		} else {
+			missing = append(missing, i)
+		}
 	}
+	if len(missing) == 0 {
+		return result
+	}
+
+	// Create a faux file to type-check the expressions with.
+	// The expressions are checked from the perspective of the root package.
+	pkg := tg.tf.Packages[defaultImportPath]
+	imports := []string{}
+	for paths := range tg.tf.Packages {
+		if paths != defaultImportPath {
+			imports = append(imports, paths)
+		}
+	}
+	faux := []string{`package ` + pkg.Name()}
+	for _, path := range imports {
+		faux = append(faux, `import "`+path+`"`)
+	}
+	for _, i := range missing {
+		faux = append(faux, `var _ `+exprs[i])
+	}
+	f := tg.tf.Parse(`faux`, strings.Join(faux, "\n"))
+	config := &types.Config{
+		Context:                  tg.tf.Context,
+		Sizes:                    &types.StdSizes{WordSize: 4, MaxAlign: 8},
+		Importer:                 tg.tf,
+		DisableUnusedImportCheck: true,
+	}
+	ck := types.NewChecker(config, tg.tf.FileSet, pkg, tg.tf.Info)
+	if err := ck.Files([]*ast.File{f}); err != nil {
+		tg.tf.T.Fatalf(`failed to type check expressions %v: %v`, missing, err)
+	}
+
+	// Extract the types from the type-checked file to fill in the result.
+	index := 0
+	ast.Inspect(f, func(node ast.Node) bool {
+		if spec, ok := node.(*ast.ValueSpec); ok {
+			typ := tg.tf.Info.Types[spec.Type].Type
+			i := missing[index]
+			tg.cache[exprs[i]] = typ
+			result[i] = typ
+			index++
+			return false
+		}
+		return true
+	})
 	return result
 }
 
@@ -324,9 +520,10 @@ func (tg typeGetter) Named(expr string) *types.Named {
 
 func (tg typeGetter) NamedSet(exprs ...string) map[*types.Named]struct{} {
 	tg.tf.T.Helper()
+	tl := tg.TypeList(exprs...)
 	result := make(map[*types.Named]struct{}, len(exprs))
-	for _, expr := range exprs {
-		result[tg.Named(expr)] = struct{}{}
+	for _, t := range tl {
+		result[t.(*types.Named)] = struct{}{}
 	}
 	return result
 }

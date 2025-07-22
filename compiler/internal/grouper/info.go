@@ -11,7 +11,7 @@ import (
 )
 
 type Info struct {
-	// Group is the group number for initializing this declaration.
+	// Group is the group number for initializing this declaration's DeclCode.
 	// The declarations in the same group should still be initialized in the
 	// same order as they were declared based on imports first.
 	Group int
@@ -19,7 +19,6 @@ type Info struct {
 	// name is the concrete named type that this declaration is associated with.
 	// This may be nil for declarations that do not have an associated concrete
 	// named type, such as functions, or have a skipped type, like `error`.
-	// Methods will use their receiver as the named type.
 	name *types.Named
 
 	// dep is a set of named types from other packages that this declaration
@@ -30,11 +29,12 @@ type Info struct {
 // SetInstance sets the types and dependencies used by the grouper to represent
 // the declaration this grouper info is attached to.
 func (i *Info) SetInstance(tc *types.Context, inst typeparams.Instance) {
+	i.setType(tc, inst)
+
 	var pkg *types.Package
 	if inst.Object != nil {
 		pkg = inst.Object.Pkg()
 	}
-	i.setType(tc, inst, pkg)
 	i.addAllDeps(tc, inst, pkg)
 }
 
@@ -61,36 +61,19 @@ func skipType(t *types.Named) bool {
 	return false
 }
 
-func (i *Info) setType(tc *types.Context, inst typeparams.Instance, pkg *types.Package) {
+func (i *Info) setType(tc *types.Context, inst typeparams.Instance) {
 	if inst.Object == nil {
 		return
 	}
-
-	var name *types.Named
-	switch t := inst.Object.Type().(type) {
-	case *types.Named:
-		if typeparams.CanResolve(inst) {
-			name = inst.Resolve(tc).(*types.Named)
-		}
-	case *types.Signature:
-		if recv := typesutil.RecvType(t); recv != nil {
-			inst2 := typeparams.Instance{
-				Object: recv.Obj(),
-				TNest:  inst.TNest,
-				TArgs:  inst.TArgs,
-			}
-			if typeparams.CanResolve(inst2) {
-				name = inst2.Resolve(tc).(*types.Named)
-			}
-		}
+	_, ok := inst.Object.Type().(*types.Named)
+	if !ok {
+		return
 	}
-
-	if name != nil && !skipType(name) {
-		if pkg == nil || pkg == name.Obj().Pkg() {
-			// Found the named type to use to represent this declaration.
-			i.name = name
-		}
+	name := inst.Resolve(tc).(*types.Named)
+	if name == nil || skipType(name) {
+		return
 	}
+	i.name = name
 }
 
 type dedupStack struct {
@@ -100,97 +83,52 @@ type dedupStack struct {
 
 func (s *dedupStack) push(t ...types.Type) {
 	for _, t := range t {
-		if s.markAsSeen(t) {
+		if _, dup := s.seen[t]; t != nil && !dup {
+			s.seen[t] = struct{}{}
 			s.stack = append(s.stack, t)
 		}
 	}
 }
 
-// markAsSeen returns true if the type was not seen before and is now marked
-// as seen. If the type is nil or was already seen, it returns false.
-func (s *dedupStack) markAsSeen(t types.Type) bool {
-	if _, dup := s.seen[t]; t == nil || dup {
-		return false
-	}
-	if s.seen == nil {
-		s.seen = make(map[types.Type]struct{})
-	}
-	s.seen[t] = struct{}{}
-	return true
-}
-
 func (s *dedupStack) pop() types.Type {
-	maxIndex := len(s.stack) - 1
-	if maxIndex < 0 {
-		return nil
+	if maxIndex := len(s.stack) - 1; maxIndex >= 0 {
+		t := s.stack[maxIndex]
+		s.stack = s.stack[:maxIndex]
+		return t
 	}
-	t := s.stack[maxIndex]
-	s.stack = s.stack[:maxIndex]
-	return t
+	return nil
 }
 
 func (s *dedupStack) hasMore() bool {
 	return len(s.stack) > 0
 }
 
-func (i *Info) initPendingDeps(tc *types.Context, inst typeparams.Instance) *dedupStack {
-	pending := &dedupStack{}
+func (i *Info) addAllDeps(tc *types.Context, inst typeparams.Instance, pkg *types.Package) {
+	if inst.Object == nil {
+		return
+	}
+
+	pending := &dedupStack{
+		seen: make(map[types.Type]struct{}),
+	}
 	pending.push(inst.TNest...)
 	pending.push(inst.TArgs...)
 
-	if inst.Object == nil {
-		// shouldn't happen, but if it does, just check the type args.
-		return pending
-	}
-
 	switch t := inst.Object.Type().(type) {
 	case *types.Named:
-		if typeparams.CanResolve(inst) {
-			r := typeparams.NewResolver(tc, inst)
-			tArgs := r.Substitute(t).(*types.Named).TypeArgs()
-			for j := tArgs.Len() - 1; j >= 0; j-- {
-				pending.push(tArgs.At(j))
-			}
-			pending.push(r.Substitute(t.Underlying()))
-			for j := t.NumMethods() - 1; j >= 0; j-- {
-				pending.push(r.Substitute(t.Method(j).Type()))
-			}
+		r := typeparams.NewResolver(tc, inst)
+		tArgs := r.Substitute(t).(*types.Named).TypeArgs()
+		for j := tArgs.Len() - 1; j >= 0; j-- {
+			pending.push(tArgs.At(j))
 		}
-		return pending
-
-	case *types.Signature:
-		if recv := typesutil.RecvType(t); recv != nil {
-			// The instance is a method, resolve the receiver type
-			// and the signature of the method to find its dependencies.
-			recvInst := typeparams.Instance{
-				Object: recv.Obj(),
-				TNest:  inst.TNest,
-				TArgs:  inst.TArgs,
-			}
-			if typeparams.CanResolve(recvInst) {
-				r := typeparams.NewResolver(tc, recvInst)
-				pending.push(r.Substitute(t))
-			}
-			return pending
-		}
-
-		// The instance is a function, resolve the signature.
-		if typeparams.CanResolve(inst) {
-			pending.push(inst.Resolve(tc))
-		}
-		return pending
-
+		pending.push(r.Substitute(t.Underlying()))
 	default:
 		// If not a named type or method, we can add the type
 		// as a dependency directly without needing to resolve it further.
 		// This will take a type like `[]Cat` and add `Cat` as a dependency.
 		pending.push(inst.Object.Type())
-		return pending
 	}
-}
 
-func (i *Info) addAllDeps(tc *types.Context, inst typeparams.Instance, pkg *types.Package) {
-	pending := i.initPendingDeps(tc, inst)
 	for pending.hasMore() {
 		t := pending.pop()
 
@@ -203,31 +141,20 @@ func (i *Info) addAllDeps(tc *types.Context, inst typeparams.Instance, pkg *type
 				continue
 			}
 
-			// Add the basics for this object including methods.
-			inst2 := typeparams.Instance{Object: t.Obj()}
-			tArgs := t.TypeArgs()
-			inst2.TArgs = make(typesutil.TypeList, tArgs.Len())
-			for j := range inst2.TArgs {
-				inst2.TArgs[j] = tArgs.At(j)
-			}
-			var r *typeparams.Resolver
-			if typeparams.CanResolve(inst2) {
-				r = typeparams.NewResolver(tc, inst2)
-				for j := t.NumMethods() - 1; j >= 0; j-- {
-					pending.push(r.Substitute(t.Method(j).Type()))
-				}
-			}
-
 			if pkg != nil && pkg == t.Obj().Pkg() {
 				// Skip over named types from the same package,
 				// continue into them to depend on the same dependencies as they do.
-				// This prevents circular dependencies from being added.
-				for j := tArgs.Len() - 1; j >= 0; j-- {
+				// This prevents circular dependencies in one package from being added.
+
+				inst2 := typeparams.Instance{Object: t.Obj()}
+				tArgs := t.TypeArgs()
+				inst2.TArgs = make(typesutil.TypeList, tArgs.Len())
+				for j := range inst2.TArgs {
+					inst2.TArgs[j] = tArgs.At(j)
 					pending.push(tArgs.At(j))
 				}
-				if r != nil {
-					pending.push(r.Substitute(t.Underlying()))
-				}
+				r := typeparams.NewResolver(tc, inst2)
+				pending.push(r.Substitute(t.Underlying()))
 				continue
 			}
 
@@ -237,18 +164,18 @@ func (i *Info) addAllDeps(tc *types.Context, inst typeparams.Instance, pkg *type
 			}
 			i.dep[t] = struct{}{}
 
-		case *types.Interface:
-			for j := t.NumExplicitMethods() - 1; j >= 0; j-- {
-				pending.push(t.ExplicitMethod(j).Type())
-			}
-			for j := t.NumEmbeddeds() - 1; j >= 0; j-- {
-				pending.push(t.EmbeddedType(j))
-			}
+		//case *types.Interface:
+		//	for j := t.NumExplicitMethods() - 1; j >= 0; j-- {
+		//		pending.push(t.ExplicitMethod(j).Type())
+		//	}
+		//	for j := t.NumEmbeddeds() - 1; j >= 0; j-- {
+		//		pending.push(t.EmbeddedType(j))
+		//	}
 
-		case *types.Struct:
-			for j := t.NumFields() - 1; j >= 0; j-- {
-				pending.push(t.Field(j).Type())
-			}
+		//case *types.Struct:
+		//	for j := t.NumFields() - 1; j >= 0; j-- {
+		//		pending.push(t.Field(j).Type())
+		//	}
 
 		case *types.Signature:
 			for j := t.Params().Len() - 1; j >= 0; j-- {

@@ -129,61 +129,42 @@ func TestInstanceDecomposition(t *testing.T) {
 				type Bar[T any] struct {}
 				type Baz struct {}`)
 			return testData{
-				name:    `depend on fields`,
+				name:    `do not depend on fields`,
 				context: tg.tf.Context,
 				instance: typeparams.Instance{
 					Object: tg.Object(`Foo`),
 				},
 				expName: tg.Named(`Foo`),
-				expDeps: tg.NamedSet(`Bar[Baz]`),
+				expDeps: nil,
 			}
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-				type Foo struct {}
-				func (f Foo) Bar(p *Baz) []*Taz { return nil}
+				type Foo func(p *Baz) []*Taz
 				type Baz struct {}
 				type Taz struct {}`)
 			return testData{
-				name:    `depend on receiver, parameter, and result types`,
+				name:    `depend on parameter and result types`,
 				context: tg.tf.Context,
 				instance: typeparams.Instance{
-					Object: tg.Object(`Foo.Bar`),
+					Object: tg.Object(`Foo`),
 				},
-				// methods are named with their receiver
 				expName: tg.Named(`Foo`),
 				expDeps: tg.NamedSet(`Baz`, `Taz`),
 			}
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-					type Foo[T any] struct {}
-					func (f *Foo[T]) Bar(x int, y int) {}`)
-			return testData{
-				name:    `depend on complex receiver types`,
-				context: tg.tf.Context,
-				instance: typeparams.Instance{
-					Object: tg.Object(`Foo.Bar`),
-					TArgs:  tg.TypeList(`int`),
-				},
-				// methods are named with their receiver
-				expName: tg.Named(`Foo[int]`),
-				expDeps: nil,
-			}
-		}(),
-		func() testData {
-			tg := readTypes(t, `
-					type Foo[T any] struct {}
-					func Bar[T any](x []*Foo[T]) map[string]*Foo[T] { return nil }
+					type Foo[T any] func(x []*Foo[T]) map[string]*Foo[T]
 					type Baz struct {}`)
 			return testData{
 				name:    `depend on resolved parameters and results`,
 				context: tg.tf.Context,
 				instance: typeparams.Instance{
-					Object: tg.Object(`Bar`),
+					Object: tg.Object(`Foo`),
 					TArgs:  tg.TypeList(`Baz`),
 				},
-				expName: nil,
+				expName: tg.Named(`Foo[Baz]`),
 				expDeps: tg.NamedSet(`Baz`, `Foo[Baz]`),
 			}
 		}(),
@@ -204,9 +185,9 @@ func TestInstanceDecomposition(t *testing.T) {
 		}(),
 		func() testData {
 			tg := readTypes(t, `
-					type Foo []struct{ b Bar }
-					type Bar struct {}
-					type Baz Foo`)
+					type Foo struct{}
+					type Bar []*Foo
+					type Baz Bar`)
 			return testData{
 				name:    `dependency on underlying types for aliased types`,
 				context: tg.tf.Context,
@@ -214,7 +195,7 @@ func TestInstanceDecomposition(t *testing.T) {
 					Object: tg.Object(`Baz`),
 				},
 				expName: tg.Named(`Baz`),
-				expDeps: tg.NamedSet(`Bar`),
+				expDeps: tg.NamedSet(`Foo`),
 			}
 		}(),
 		func() testData {
@@ -241,13 +222,8 @@ func TestInstanceDecomposition(t *testing.T) {
 				Contents: []byte(
 					`package testcase
 						import "other"
-						type Bar struct {
-							x []*other.Foo
-							y *Baz
-						}
-						type Baz struct{
-							z Bar
-						}`),
+						type Bar map[*other.Foo]int
+						type Baz []Bar`),
 			}, {
 				Name: `other/other.go`,
 				Contents: []byte(
@@ -255,15 +231,15 @@ func TestInstanceDecomposition(t *testing.T) {
 						type Foo struct{}`),
 			}})
 			return testData{
-				name:    `depend on field types from other packages`,
+				name:    `depend on types from other packages`,
 				context: tg.tf.Context,
 				usePkg:  true,
 				instance: typeparams.Instance{
 					Object: tg.Object(`Baz`),
 				},
 				expName: tg.Named(`Baz`),
-				// skip Bar since it is in the same package and could cause cycles,
-				// but dig into it to find dependencies from other packages.
+				// skip Bar since it is in the same package, instead dig into
+				// Bar to find dependencies from other packages.
 				expDeps: tg.NamedSet(`other.Foo`),
 			}
 		}(),
@@ -273,72 +249,26 @@ func TestInstanceDecomposition(t *testing.T) {
 				Contents: []byte(
 					`package testcase
 						import "other"
-						type Bar struct {}
-						func (b *Bar) Baz()(*Bar, bool, *other.Foo, error) {
-							return b, true, nil, nil
-						}`),
+						var Foo *other.Bar`),
 			}, {
 				Name: `other/other.go`,
 				Contents: []byte(
 					`package other
-						type Foo struct{}`),
+						type Bar struct{}`),
 			}})
 			return testData{
-				name:    `depend on method results from other packages`,
+				name:    `depend on types behind pointers`,
 				context: tg.tf.Context,
 				usePkg:  true,
 				instance: typeparams.Instance{
-					Object: tg.Object(`Bar`),
+					Object: tg.Object(`Foo`),
 				},
-				expName: tg.Named(`Bar`),
-				expDeps: tg.NamedSet(`other.Foo`),
+				expName: nil,
+				expDeps: tg.NamedSet(`other.Bar`),
 			}
 		}(),
-		func() testData {
-			tg := readPackages(t, []srctesting.Source{{
-				Name: `main.go`,
-				Contents: []byte(
-					`package main
-						import "foo"
-						func main() {
-							e := foo.Entity{}
-							println(e.Ref.Next)
-						}`),
-			}, {
-				Name: `foo/foo.go`,
-				Contents: []byte(
-					`package foo
-					import "bar"
-					type Entity struct {
-						Ref bar.Bar[Entity]
-					}`),
-			}, {
-				Name: `bar/bar.go`,
-				Contents: []byte(
-					`package bar
-					type Bar[G any] struct {
-						Next *G
-					}`),
-			}})
-			return testData{
-				name:    `gencicrle test`,
-				context: tg.tf.Context,
-				usePkg:  true,
-				instance: typeparams.Instance{
-					Object: tg.Object(`foo.Entity`),
-				},
-				expName: tg.Named(`foo.Entity`),
-				expDeps: tg.NamedSet(`bar.Bar[foo.Entity]`),
-				// This causes a cycle because bar.Bar[foo.Entity] depends on foo.Entity,
-				// and foo.Entity depends on bar.Bar[foo.Entity].
-			}
-		}(),
-
 		// TODO(grantnelson-wf): Add tests for:
-		// - generic methods
-		// - generic functions
-		// - generic structs
-		// - concrete interfaces with methods
+		// - concrete interfaces
 		// - generic interfaces
 		// - interfaces with embedded types
 		// - `type x[T any] int` with methods that use `T`
@@ -354,7 +284,7 @@ func TestInstanceDecomposition(t *testing.T) {
 			if test.usePkg {
 				pkg = test.instance.Object.Pkg()
 			}
-			info.setType(test.context, test.instance, pkg)
+			info.setType(test.context, test.instance)
 			info.addAllDeps(test.context, test.instance, pkg)
 
 			if info.name != test.expName {

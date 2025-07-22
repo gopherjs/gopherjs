@@ -1538,7 +1538,7 @@ func renderPackage(t *testing.T, archive *Archive, minify bool) string {
 
 	buf := &bytes.Buffer{}
 
-	if err := WritePkgCode(archive, selection, linkname.GoLinknameSet{}, minify, &SourceMapFilter{Writer: buf}); err != nil {
+	if err := WritePkgCode(archive, selection, linkname.GoLinknameSet{}, 1, minify, &SourceMapFilter{Writer: buf}); err != nil {
 		t.Fatal(err)
 	}
 

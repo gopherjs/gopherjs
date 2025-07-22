@@ -232,8 +232,7 @@ func (g *grouper[D]) toCycleString(decl map[D]struct{}, toString func(d D) strin
 		}
 		sort.Strings(subParts)
 		maxIndex := len(subParts) - 1
-		part := ",- " + subParts[0] + "\n|  " +
-			strings.Join(subParts[1:maxIndex], "\n|  ") +
+		part := ",- " + strings.Join(subParts[:maxIndex], "\n|  ") +
 			"\n`- " + subParts[maxIndex]
 		parts = append(parts, part)
 	}

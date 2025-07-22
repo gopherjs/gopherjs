@@ -55,8 +55,8 @@ func skipType(t *types.Named) bool {
 	if t.Obj() == nil || t.Obj().Pkg() == nil {
 		return true // skip objects in universal scope, e.g. `error`
 	}
-	if typesutil.IsJsPackage(t.Obj().Pkg()) && t.Obj().Name() == "Object" {
-		return true // skip *js.Object
+	if typesutil.IsJsPackage(t.Obj().Pkg()) {
+		return true // skip js.Object and js.Error
 	}
 	return false
 }
@@ -65,15 +65,11 @@ func (i *Info) setType(tc *types.Context, inst typeparams.Instance) {
 	if inst.Object == nil {
 		return
 	}
-	_, ok := inst.Object.Type().(*types.Named)
-	if !ok {
-		return
+	if _, ok := inst.Object.Type().(*types.Named); ok {
+		if name := inst.Resolve(tc).(*types.Named); name != nil && !skipType(name) {
+			i.name = name
+		}
 	}
-	name := inst.Resolve(tc).(*types.Named)
-	if name == nil || skipType(name) {
-		return
-	}
-	i.name = name
 }
 
 type dedupStack struct {
@@ -164,6 +160,7 @@ func (i *Info) addAllDeps(tc *types.Context, inst typeparams.Instance, pkg *type
 			}
 			i.dep[t] = struct{}{}
 
+		// TODO(grantnelson-wf): REMOVE OR KEEP (check anonTypes)
 		//case *types.Interface:
 		//	for j := t.NumExplicitMethods() - 1; j >= 0; j-- {
 		//		pending.push(t.ExplicitMethod(j).Type())
@@ -172,11 +169,13 @@ func (i *Info) addAllDeps(tc *types.Context, inst typeparams.Instance, pkg *type
 		//		pending.push(t.EmbeddedType(j))
 		//	}
 
+		// TODO(grantnelson-wf): REMOVE OR KEEP (check anonTypes)
 		//case *types.Struct:
 		//	for j := t.NumFields() - 1; j >= 0; j-- {
 		//		pending.push(t.Field(j).Type())
 		//	}
 
+		// TODO(grantnelson-wf): REMOVE OR KEEP (check anonTypes)
 		case *types.Signature:
 			for j := t.Params().Len() - 1; j >= 0; j-- {
 				pending.push(t.Params().At(j).Type())

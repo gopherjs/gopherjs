@@ -141,8 +141,20 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 
 	// Set the Decl.Grouper().Group values for each declaration.
 	// The group number is used to determine the type initialization order.
-	fmt.Println(grouper.CyclesToString(dceSelection, func(d *Decl) string { return d.FullName }))
+	fmt.Println(grouper.CyclesToString(dceSelection, func(d *Decl) string { return d.FullName })) // TODO(grantnelson-wf): REMOVE
 	groupCount := grouper.Group(dceSelection)
+
+	// TODO(grantnelson-wf): REMOVE the following debug prints
+	//fmt.Println(`-------------------------->>`)
+	//for _, pkg := range pkgs {
+	//	fmt.Println(`--[`, pkg.Name, `]--`)
+	//	for _, d := range pkg.Declarations {
+	//		if _, ok := dceSelection[d]; ok {
+	//			fmt.Println("\t", d.FullName, `=>`, d.Grouper().String())
+	//		}
+	//	}
+	//}
+	//fmt.Println(`<<--------------------------`)
 
 	if _, err := w.Write([]byte("\"use strict\";\n(function() {\n\n")); err != nil {
 		return err
@@ -207,12 +219,13 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 	}
 	sort.Ints(groups)
 
-	firstPrint := true
+	var firstPrint bool
 	for _, group := range groups {
 		groupDecls := groupMap[group]
 		if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\t$addTypeInit(%d, this, function() {\n", group)), minify)); err != nil {
 			return err
 		}
+		firstPrint = true
 		for _, d := range groupDecls {
 			if len(d.DeclCode) > 0 {
 				if firstPrint { // TODO(grantnelson-wf): CLEAN UP
@@ -224,11 +237,30 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 				if _, err := fmt.Fprintf(w, "\t// %s\n", d.FullName); err != nil {
 					return err
 				}
-				if _, err := w.Write(d.DeclCode); err != nil {
+				if _, err := w.Write(bytes.ReplaceAll(d.DeclCode, []byte("\n"), []byte("\n\t"))); err != nil {
 					return err
 				}
 			}
 		}
+
+		firstPrint = true
+		for _, d := range groupDecls {
+			if len(d.TypeInitCode) > 0 {
+				if firstPrint { // TODO(grantnelson-wf): CLEAN UP
+					firstPrint = false
+					if _, err := w.Write([]byte("\n\t// ---[ Type Init Code ]---\n")); err != nil {
+						return err
+					}
+				}
+				if _, err := fmt.Fprintf(w, "\t// %s\n", d.FullName); err != nil {
+					return err
+				}
+				if _, err := w.Write(bytes.ReplaceAll(d.TypeInitCode, []byte("\n"), []byte("\n\t"))); err != nil {
+					return err
+				}
+			}
+		}
+
 		if _, err := w.Write([]byte("\t});\n")); err != nil {
 			return err
 		}
@@ -267,25 +299,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			if _, err := fmt.Fprintf(w, "\t// %s\n", d.FullName); err != nil {
 				return err
 			}
-			if _, err := w.Write(d.MethodListCode); err != nil {
-				return err
-			}
-		}
-	}
-
-	firstPrint = true
-	for _, d := range filteredDecls {
-		if len(d.TypeInitCode) > 0 {
-			if firstPrint { // TODO(grantnelson-wf): CLEAN UP
-				firstPrint = false
-				if _, err := w.Write([]byte("\n\t// ---[ Type Init Code ]---\n")); err != nil {
-					return err
-				}
-			}
-			if _, err := fmt.Fprintf(w, "\t// %s\n", d.FullName); err != nil {
-				return err
-			}
-			if _, err := w.Write(d.TypeInitCode); err != nil {
+			if _, err := w.Write(bytes.ReplaceAll(d.MethodListCode, []byte("\n"), []byte("\n\t"))); err != nil {
 				return err
 			}
 		}

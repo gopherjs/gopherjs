@@ -14,7 +14,6 @@ import (
 	"go/token"
 	"go/types"
 	"io"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -23,7 +22,6 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/grouper"
-	"github.com/gopherjs/gopherjs/compiler/internal/sequencer"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
 )
@@ -142,14 +140,14 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	dceSelection := sel.AliveDecls()
 
 	// TODO(grantnelson-wf): REMOVE the following debug prints
-	dot := grouper.ToGraph(dceSelection, sequencer.GraphOptions[*Decl]{
-		ItemToString: func(d *Decl) string { return d.FullName },
-		FilterCycles: true,
-		StrictFilter: true,
-	})
-	if err := os.WriteFile("./dot.gv", []byte(dot), 0644); err != nil {
-		panic(fmt.Errorf(`failed to write dot.gv: %w`, err))
-	}
+	//dot := grouper.ToGraph(dceSelection, sequencer.GraphOptions[*Decl]{
+	//	ItemToString: func(d *Decl) string { return d.FullName },
+	//	FilterCycles: true,
+	//	StrictFilter: true,
+	//})
+	//if err := os.WriteFile("./dot.gv", []byte(dot), 0644); err != nil {
+	//	panic(fmt.Errorf(`failed to write dot.gv: %w`, err))
+	//}
 	if cs := grouper.CyclesToString(dceSelection, func(d *Decl) string { return d.FullName }); cs != "" {
 		fmt.Printf("Cycles detected in the dependency graph:\n%s\n", cs)
 	}

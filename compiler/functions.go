@@ -116,14 +116,14 @@ func (fc *funcContext) translateStandaloneFunction(fun *ast.FuncDecl) []byte {
 	lvalue := fc.instName(fc.instance)
 
 	if fun.Body == nil {
-		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fc.unimplementedFunction(o)))
+		return []byte(fmt.Sprintf("\t\t%s = %s;\n", lvalue, fc.unimplementedFunction(o)))
 	}
 
 	body := fc.translateFunctionBody(fun.Type, nil, fun.Body)
 	code := bytes.NewBuffer(nil)
-	fmt.Fprintf(code, "\t%s = %s;\n", lvalue, body)
+	fmt.Fprintf(code, "\t\t%s = %s;\n", lvalue, body)
 	if fun.Name.IsExported() && fc.instance.IsTrivial() {
-		fmt.Fprintf(code, "\t$pkg.%s = %s;\n", encodeIdent(fun.Name.Name), lvalue)
+		fmt.Fprintf(code, "\t\t$pkg.%s = %s;\n", encodeIdent(fun.Name.Name), lvalue)
 	}
 	return code.Bytes()
 }
@@ -140,7 +140,7 @@ func (fc *funcContext) translateMethod(fun *ast.FuncDecl) []byte {
 	// and assigns it to the JS expression defined by lvalue.
 	primaryFunction := func(lvalue string) []byte {
 		if fun.Body == nil {
-			return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fc.unimplementedFunction(o)))
+			return []byte(fmt.Sprintf("\t\t%s = %s;\n", lvalue, fc.unimplementedFunction(o)))
 		}
 
 		var recv *ast.Ident
@@ -148,7 +148,7 @@ func (fc *funcContext) translateMethod(fun *ast.FuncDecl) []byte {
 			recv = fun.Recv.List[0].Names[0]
 		}
 		fun := fc.translateFunctionBody(fun.Type, recv, fun.Body)
-		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fun))
+		return []byte(fmt.Sprintf("\t\t%s = %s;\n", lvalue, fun))
 	}
 
 	recvInst := fc.instance.Recv()
@@ -172,7 +172,7 @@ func (fc *funcContext) translateMethod(fun *ast.FuncDecl) []byte {
 	// and forwards the call to the primary implementation.
 	proxyFunction := func(lvalue, receiver string) []byte {
 		fun := fmt.Sprintf("function(...$args) { return %s.%s(...$args); }", receiver, funName)
-		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fun))
+		return []byte(fmt.Sprintf("\t\t%s = %s;\n", lvalue, fun))
 	}
 
 	// Structs are a special case: they are represented by JS objects and their
@@ -232,7 +232,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 		}
 	}
 
-	bodyOutput := string(fc.CatchOutput(1, func() {
+	bodyOutput := string(fc.CatchOutput(2, func() {
 		if fc.IsBlocking() {
 			fc.pkgCtx.Scopes[body] = fc.pkgCtx.Scopes[typ]
 			fc.handleEscapingVars(body)
@@ -336,16 +336,16 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	}
 
 	if prefix != "" {
-		bodyOutput = fc.Indentation(1) + "/* */" + prefix + "\n" + bodyOutput
+		bodyOutput = fc.Indentation(2) + "/* */" + prefix + "\n" + bodyOutput
 	}
 	if suffix != "" {
-		bodyOutput = bodyOutput + fc.Indentation(1) + "/* */" + suffix + "\n"
+		bodyOutput = bodyOutput + fc.Indentation(2) + "/* */" + suffix + "\n"
 	}
 	if localVarDefs != "" {
-		bodyOutput = fc.Indentation(1) + localVarDefs + bodyOutput
+		bodyOutput = fc.Indentation(2) + localVarDefs + bodyOutput
 	}
 
 	fc.pkgCtx.escapingVars = prevEV
 
-	return fmt.Sprintf("function %s(%s) {\n%s%s}", fc.funcRef, strings.Join(args, ", "), bodyOutput, fc.Indentation(0))
+	return fmt.Sprintf("function %s(%s) {\n%s%s}", fc.funcRef, strings.Join(args, ", "), bodyOutput, fc.Indentation(1))
 }

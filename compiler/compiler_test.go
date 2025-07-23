@@ -569,11 +569,11 @@ func TestLengthParenthesizingIssue841(t *testing.T) {
 	goodRegex := regexp.MustCompile(`\(a\s*\+\s*b\)\.length`)
 	goodFound := false
 	for i, decl := range mainPkg.Declarations {
-		if badRegex.Match(decl.DeclCode) {
+		if badRegex.Match(decl.FuncDeclCode) {
 			t.Errorf("found length issue in decl #%d: %s", i, decl.FullName)
-			t.Logf("decl code:\n%s", string(decl.DeclCode))
+			t.Logf("decl code:\n%s", string(decl.FuncDeclCode))
 		}
-		if goodRegex.Match(decl.DeclCode) {
+		if goodRegex.Match(decl.FuncDeclCode) {
 			goodFound = true
 		}
 	}
@@ -1121,12 +1121,16 @@ func collectDeclInstances(t *testing.T, pkg *Archive) []string {
 
 	// Collect all instances of generics (e.g. `Foo[bar] @ 2`) written to the decl code.
 	insts := []string{}
-	for _, decl := range pkg.Declarations {
-		if match := rex.FindAllStringSubmatch(string(decl.DeclCode), 1); len(match) > 0 {
+	checkCode := func(code []byte) {
+		if match := rex.FindAllStringSubmatch(string(code), 1); len(match) > 0 {
 			instance := match[0][1] + `[` + strings.TrimSpace(match[0][3]) + `]`
 			instance = strings.ReplaceAll(instance, `command-line-arguments`, pkg.Name)
 			insts = append(insts, instance)
 		}
+	}
+	for _, decl := range pkg.Declarations {
+		checkCode(decl.TypeDeclCode)
+		checkCode(decl.FuncDeclCode)
 	}
 	sort.Strings(insts)
 	return insts

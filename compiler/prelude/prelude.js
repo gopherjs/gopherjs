@@ -75,10 +75,10 @@ if (($global.process !== undefined) && $global.require) {
 }
 var $println = console.log
 
-var $initAllLinknames = () => {
+var $callForAllPackages = (methodName) => {
     var names = $keys($packages);
     for (var i = 0; i < names.length; i++) {
-        var f = $packages[names[i]]["$initLinknames"];
+        var f = $packages[names[i]][methodName];
         if (typeof f == 'function') {
             f();
         }

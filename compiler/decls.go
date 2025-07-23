@@ -447,20 +447,27 @@ func (fc *funcContext) namedTypeDecls(typeNames typesutil.TypeNames) ([]*Decl, e
 // the type definition directly.
 func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
 	name := fc.objectName(obj)
+	generic := fc.pkgCtx.instanceSet.Pkg(obj.Pkg()).ObjHasInstances(obj)
+	typeVar := name
+	if generic {
+		typeVar += " = []"
+	}
 	varDecl := &Decl{
 		FullName: typeVarDeclFullName(obj),
-		Vars:     []string{name},
+		Vars:     []string{typeVar},
 	}
 	varDecl.Dce().SetName(obj, nil, nil)
-	if fc.pkgCtx.instanceSet.Pkg(obj.Pkg()).ObjHasInstances(obj) {
-		varDecl.DeclCode = fc.CatchOutput(0, func() {
-			fc.Printf("%s = {};", name)
-		})
-	}
 	if isPkgLevel(obj) {
 		varDecl.TypeInitCode = fc.CatchOutput(0, func() {
 			fc.Printf("$pkg.%s = %s;", encodeIdent(obj.Name()), name)
 		})
+		if !generic {
+			// If this decl is generic then the variable has already been initialized as an array
+			// so adding the variable to the package can be done in the first group.
+			// However, if not generic the type may still rely on generic types so set the grouper instance
+			// so that this type init code can come after the type is defined in the same group as the type.
+			varDecl.Grouper().SetInstance(fc.pkgCtx.typesCtx, typeparams.Instance{Object: obj})
+		}
 	}
 	return varDecl
 }

@@ -159,7 +159,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 		}
 	}
 
-	if _, err := w.Write([]byte("$synthesizeMethods();\n$initAllLinknames();\nvar $mainPkg = $packages[\"" + string(mainPkg.ImportPath) + "\"];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
+	if _, err := w.Write([]byte("$callForAllPackages(\"$finishSetup\");\n$synthesizeMethods();\n$callForAllPackages(\"$initLinknames\");\nvar $mainPkg = $packages[\"" + string(mainPkg.ImportPath) + "\"];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
 		return err
 	}
 	return nil
@@ -183,13 +183,68 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			filteredDecls = append(filteredDecls, d)
 		}
 	}
+	// Write variable names
 	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
 		return err
 	}
+	// Write imports
 	for _, d := range filteredDecls {
-		if _, err := w.Write(d.DeclCode); err != nil {
+		if _, err := w.Write(d.ImportCode); err != nil {
 			return err
 		}
+	}
+	// Write named type declarations
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.TypeDeclCode); err != nil {
+			return err
+		}
+	}
+	// Write exports for named type declarations
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.ExportTypeCode); err != nil {
+			return err
+		}
+	}
+
+	// The following parts have to be run after all packages have been added
+	// to handle generics that use named types defined in a package that
+	// is defined after this package has been defined.
+	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$finishSetup = function() {\n"), minify)); err != nil {
+		return err
+	}
+
+	// Write anonymous type declarations
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.AnonTypeDeclCode); err != nil {
+			return err
+		}
+	}
+	// Write function declarations
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.FuncDeclCode); err != nil {
+			return err
+		}
+	}
+	// Write exports for function declarations
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.ExportFuncCode); err != nil {
+			return err
+		}
+	}
+	// Write reflection metadata for types' methods
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.MethodListCode); err != nil {
+			return err
+		}
+	}
+	// Write the calls to finish initialization of types
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.TypeInitCode); err != nil {
+			return err
+		}
+	}
+
+	for _, d := range filteredDecls {
 		if gls.IsImplementation(d.LinkingName) {
 			// This decl is referenced by a go:linkname directive, expose it to external
 			// callers via $linkname object (declared in prelude). We are not using
@@ -203,16 +258,6 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
 				return err
 			}
-		}
-	}
-	for _, d := range filteredDecls {
-		if _, err := w.Write(d.MethodListCode); err != nil {
-			return err
-		}
-	}
-	for _, d := range filteredDecls {
-		if _, err := w.Write(d.TypeInitCode); err != nil {
-			return err
 		}
 	}
 
@@ -229,16 +274,23 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			if !found {
 				continue // The symbol is not affected by a go:linkname directive.
 			}
-			lines = append(lines, fmt.Sprintf("\t\t%s = $linknames[%q];\n", d.RefExpr, impl.String()))
+			lines = append(lines, fmt.Sprintf("\t\t\t%s = $linknames[%q];\n", d.RefExpr, impl.String()))
 		}
 		if len(lines) > 0 {
-			code := fmt.Sprintf("\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, ""))
+			code := fmt.Sprintf("\t\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, ""))
 			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
 				return err
 			}
 		}
 	}
 
+	// Write the end of the `$finishSetup` function.
+	if _, err := w.Write(removeWhitespace([]byte("\t};\n"), minify)); err != nil {
+		return err
+	}
+
+	// Write the initialization function that will initialize this package
+	// (e.g. initialize package-level variable value).
 	if _, err := w.Write(removeWhitespace([]byte("\t$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
 		return err
 	}

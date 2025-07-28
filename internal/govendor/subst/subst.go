@@ -152,14 +152,14 @@ func (subst *subster) typ(t types.Type) (res types.Type) {
 		return subst.interface_(t)
 
 	// GOPHERJS: Removed following case since types.Alias is not supported until go1.22.
-	//case *types.Alias:
+	// case *types.Alias:
 	//	return subst.alias(t)
 
 	case *types.Named:
 		return subst.named(t)
 
 	// GOPHERJS: Removed following case since the opaque type is specific to the SSA builder.
-	//case *opaqueType:
+	// case *opaqueType:
 	//	return t // opaque types are never substituted
 
 	default:
@@ -276,7 +276,7 @@ func (subst *subster) interface_(iface *types.Interface) *types.Interface {
 	initMethods := func(n int) { // copy first n explicit methods
 		methods = make([]*types.Func, iface.NumExplicitMethods())
 		// GOPHERJS: Replaced a range over count since that's not supported in go1.22
-		//for i := range n {
+		// for i := range n {
 		for i := 0; i < n; i++ {
 			f := iface.ExplicitMethod(i)
 			norecv := changeRecv(f.Type().(*types.Signature), nil)
@@ -302,7 +302,7 @@ func (subst *subster) interface_(iface *types.Interface) *types.Interface {
 	initEmbeds := func(n int) { // copy first n embedded types
 		embeds = make([]types.Type, iface.NumEmbeddeds())
 		// GOPHERJS: Replaced a range over count since that's not supported in go1.22
-		//for i := range n {
+		// for i := range n {
 		for i := 0; i < n; i++ {
 			embeds[i] = iface.EmbeddedType(i)
 		}
@@ -331,8 +331,7 @@ func (subst *subster) interface_(iface *types.Interface) *types.Interface {
 }
 
 // GOPHERJS: removed alias substitution since types.Alias is not supported until go1.22
-//func (subst *subster) alias(t *types.Alias) types.Type { ... }
-
+// func (subst *subster) alias(t *types.Alias) types.Type { ... }
 func (subst *subster) named(t *types.Named) types.Type {
 	// A Named type is a user defined type.
 	// Ignoring generics, Named types are canonical: they are identical if
@@ -439,7 +438,7 @@ func (subst *subster) named(t *types.Named) types.Type {
 			// Then when creating `subTArgs` (also below), it will return
 			// `T'` via the cache instead of substituting `T` with the
 			// correct type argument.
-			//subst.cache[cur] = ntp
+			// subst.cache[cur] = ntp
 			newTParams = append(newTParams, ntp)
 		}
 		fresh.SetTypeParams(newTParams)
@@ -580,7 +579,7 @@ func reaches(t types.Type, c map[types.Type]bool) (res bool) {
 			}
 		}
 	// GOPHERJS: Removed types.Alias from following case since it's not supported until go1.22.
-	//case *types.Named, *types.Alias:
+	// case *types.Named, *types.Alias:
 	case *types.Named:
 		return reaches(t.Underlying(), c)
 	default:

@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/tools/go/ast/astutil"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
-	"golang.org/x/tools/go/ast/astutil"
 )
 
 func TestVisitor(t *testing.T) {
@@ -596,7 +597,8 @@ func TestCollector_RecursiveTypeParams(t *testing.T) {
 		{
 			Object: srctesting.LookupObj(pkg, `F`),
 			TArgs:  []types.Type{xInt},
-		}, {
+		},
+		{
 			Object: srctesting.LookupObj(pkg, `main.U`),
 			TArgs:  []types.Type{xInt},
 		},
@@ -655,6 +657,7 @@ func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
 		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
 	}
 }
+
 func TestCollector_LooselyRecursiveTypeParams(t *testing.T) {
 	// This is based off of part of go1.19.13/test/typeparam/nested.go
 	src := `package test

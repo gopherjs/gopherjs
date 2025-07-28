@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"go/types"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
@@ -51,23 +52,23 @@ type Decl struct {
 	TypeDeclCode []byte
 	// JavaScript code that assigns exposed named types to the package.
 	ExportTypeCode []byte
-	// JavaScript code that declares basic information about an anonymous types.
+	// JavaScript code that declares basic information about an anonymous type.
 	// It configures basic information about the type.
-	// This is added to the finish setup phase to has access to all packages.
+	// This is added to the finish setup phase to have access to all packages.
 	AnonTypeDeclCode []byte
 	// JavaScript code that declares basic information about a function or
 	// method symbol. This contains the function's or method's compiled body.
-	// This is added to the finish setup phase to has access to all packages.
+	// This is added to the finish setup phase to have access to all packages.
 	FuncDeclCode []byte
 	// JavaScript code that assigns exposed functions to the package.
-	// This is added to the finish setup phase to has access to all packages.
+	// This is added to the finish setup phase to have access to all packages.
 	ExportFuncCode []byte
-	// JavaScript code that initializes reflection metadata about type's method list.
-	// This is added to the finish setup phase to has access to all packages.
+	// JavaScript code that initializes reflection metadata about a type's method list.
+	// This is added to the finish setup phase to have access to all packages.
 	MethodListCode []byte
 	// JavaScript code that initializes the rest of reflection metadata about a type
 	// (e.g. struct fields, array type sizes, element types, etc.).
-	// This is added to the finish setup phase to has access to all packages.
+	// This is added to the finish setup phase to have access to all packages.
 	TypeInitCode []byte
 	// JavaScript code that needs to be executed during the package init phase to
 	// set the symbol up (e.g. initialize package-level variable value).
@@ -184,11 +185,12 @@ func (fc *funcContext) importDecls() (importedPaths []string, importDecls []*Dec
 // newImportDecl registers the imported package and returns a Decl instance for it.
 func (fc *funcContext) newImportDecl(importedPkg *types.Package) *Decl {
 	pkgVar := fc.importedPkgVar(importedPkg)
+	pkgPath := fc.getPkgPathVar(importedPkg)
 	d := &Decl{
 		FullName:   importDeclFullName(importedPkg),
 		Vars:       []string{pkgVar},
-		ImportCode: []byte(fmt.Sprintf("\t%s = $packages[\"%s\"];\n", pkgVar, importedPkg.Path())),
-		InitCode:   fc.CatchOutput(1, func() { fc.translateStmt(fc.importInitializer(importedPkg.Path()), nil) }),
+		ImportCode: []byte(fmt.Sprintf("\t%s = $packages[%s];\n", pkgVar, pkgPath)),
+		InitCode:   fc.CatchOutput(1, func() { fc.translateStmt(fc.importInitializer(pkgVar), nil) }),
 	}
 	d.Dce().SetAsAlive()
 	return d
@@ -196,8 +198,7 @@ func (fc *funcContext) newImportDecl(importedPkg *types.Package) *Decl {
 
 // importInitializer calls the imported package $init() function to ensure it is
 // initialized before any code in the importer package runs.
-func (fc *funcContext) importInitializer(impPath string) ast.Stmt {
-	pkgVar := fc.pkgCtx.pkgVars[impPath]
+func (fc *funcContext) importInitializer(pkgVar string) ast.Stmt {
 	id := fc.newIdent(fmt.Sprintf(`%s.$init`, pkgVar), types.NewSignatureType(nil, nil, nil, nil, nil, false))
 	call := &ast.CallExpr{Fun: id}
 	fc.Blocking[call] = true
@@ -523,8 +524,27 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 					constructor = "$arrayPtrCtor()"
 				}
 			}
-			fc.Printf(`%s = $newType(%d, %s, %q, %t, "%s", %t, %s);`,
-				fc.instName(inst), size, typeKind(originType), inst.TypeString(), inst.Object.Name() != "", inst.Object.Pkg().Path(), inst.Object.Exported(), constructor)
+
+			// Since types can have quotes in them for tags on struct fields,
+			// we need to inject the concatination after quoting the string.
+			typeStrArgs := []any{}
+			typeStr := inst.TypeString(func(pkg *types.Package) string {
+				v := fc.getPkgPathVar(pkg)
+				if strings.HasPrefix(v, `"`) {
+					// The returned path is already quoted so Strip off the quotes.
+					v = strings.TrimPrefix(strings.TrimSuffix(v, `"`), `"`)
+				} else {
+					// Setup to concat the package path into the type.
+					v = `" + ` + v + ` + "`
+				}
+				typeStrArgs = append(typeStrArgs, v)
+				return `%s`
+			})
+			typeStr = fmt.Sprintf(strconv.Quote(typeStr), typeStrArgs...)
+			pkgPathVar := fc.getPkgPathVar(inst.Object.Pkg())
+
+			fc.Printf(`%s = $newType(%d, %s, %s, %t, %s, %t, %s);`,
+				fc.instName(inst), size, typeKind(originType), typeStr, inst.Object.Name() != "", pkgPathVar, inst.Object.Exported(), constructor)
 		})
 
 		// Reflection metadata about methods the type has.
@@ -603,12 +623,12 @@ func (fc *funcContext) methodListEntry(method *types.Func) (entry string, isPtr 
 	if reservedKeywords[name] {
 		name += "$"
 	}
-	pkgPath := ""
+	pkgPath := `""`
 	if !method.Exported() {
-		pkgPath = method.Pkg().Path()
+		pkgPath = fc.getPkgPathVar(method.Pkg())
 	}
 	t := method.Type().(*types.Signature)
-	entry = fmt.Sprintf(`{prop: "%s", name: %s, pkg: "%s", typ: $funcType(%s)}`,
+	entry = fmt.Sprintf(`{prop: "%s", name: %s, pkg: %s, typ: $funcType(%s)}`,
 		name, encodeString(method.Name()), pkgPath, fc.initArgs(t))
 	_, isPtr = t.Recv().Type().(*types.Pointer)
 	return entry, isPtr

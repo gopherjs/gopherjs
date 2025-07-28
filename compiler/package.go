@@ -27,6 +27,12 @@ type pkgContext struct {
 	// List of type names declared in the package, including those defined inside
 	// functions.
 	typeNames typesutil.TypeNames
+	// pkgPathVars is a mapping from package import paths to package-unique ids
+	// for string constants that are assigned to the package import path.
+	// This is to reduce the number of times a package name is written
+	// to the JS. This will skip short paths, e.g. `"math"` and `"fmt"`, that
+	// are about the length of or shorter than identifier.
+	pkgPathVars map[string]string
 	// Mapping from package import paths to JS variables that were assigned to an
 	// imported package and can be used to access it.
 	pkgVars      map[string]string
@@ -124,6 +130,7 @@ func newRootCtx(tContext *types.Context, srcs *sources.Sources, minify bool) *fu
 			additionalSelections: make(map[*ast.SelectorExpr]typesutil.Selection),
 
 			typesCtx:     tContext,
+			pkgPathVars:  make(map[string]string),
 			pkgVars:      make(map[string]string),
 			varPtrNames:  make(map[*types.Var]string),
 			escapingVars: make(map[*types.Var]bool),
@@ -221,6 +228,7 @@ func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Ar
 		FileSet:      srcs.FileSet,
 		Minified:     minify,
 		GoLinknames:  srcs.GoLinknames,
+		PkgPathVars:  rootCtx.pkgCtx.pkgPathVars,
 	}, nil
 }
 
@@ -282,6 +290,25 @@ func PrepareAllSources(allSources []*sources.Sources, importer sources.Importer,
 	return nil
 }
 
+const smallPathLength = 20
+
+// getPkgPathVar will return a quoted string for the given package's import path
+// or return an identifier for a constant that contains the import path.
+// Allocates a new variable identifier, if one is needed.
+func (fc *funcContext) getPkgPathVar(pkg *types.Package) string {
+	path := pkg.Path()
+	if id, has := fc.pkgCtx.pkgPathVars[path]; has {
+		return id
+	}
+	const idHead = `$pkgPath`
+	if len(path) <= smallPathLength {
+		return fmt.Sprintf(`%q`, path)
+	}
+	id := fmt.Sprintf(idHead+`%d`, len(fc.pkgCtx.pkgPathVars))
+	fc.pkgCtx.pkgPathVars[path] = id
+	return id
+}
+
 func (fc *funcContext) initArgs(ty types.Type) string {
 	switch t := ty.(type) {
 	case *types.Array:
@@ -292,11 +319,11 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 		methods := make([]string, t.NumMethods())
 		for i := range methods {
 			method := t.Method(i)
-			pkgPath := ""
+			pkgPath := `""`
 			if !method.Exported() {
-				pkgPath = method.Pkg().Path()
+				pkgPath = fc.getPkgPathVar(method.Pkg())
 			}
-			methods[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: "%s", typ: $funcType(%s)}`, method.Name(), method.Name(), pkgPath, fc.initArgs(method.Type()))
+			methods[i] = fmt.Sprintf(`{prop: "%s", name: "%s", pkg: %s, typ: $funcType(%s)}`, method.Name(), method.Name(), pkgPath, fc.initArgs(method.Type()))
 		}
 		return fmt.Sprintf("[%s]", strings.Join(methods, ", "))
 	case *types.Map:

@@ -9,12 +9,16 @@ import (
 type TypeList []types.Type
 
 func (tl TypeList) String() string {
+	return tl.TypesString(nil)
+}
+
+func (tl TypeList) TypesString(qt types.Qualifier) string {
 	buf := strings.Builder{}
 	for i, typ := range tl {
 		if i != 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(types.TypeString(typ, nil))
+		buf.WriteString(types.TypeString(typ, qt))
 	}
 	return buf.String()
 }

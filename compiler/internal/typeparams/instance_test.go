@@ -119,7 +119,7 @@ func TestInstanceString(t *testing.T) {
 				t.Errorf("Got: instance string %q. Want: %q.", got, test.wantStr)
 			}
 			if test.wantTypeString != "" {
-				got = test.instance.TypeString()
+				got = test.instance.TypeString(nil)
 				if got != test.wantTypeString {
 					t.Errorf("Got: instance type string %q. Want: %q.", got, test.wantTypeString)
 				}

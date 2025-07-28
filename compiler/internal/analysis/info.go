@@ -146,7 +146,7 @@ func (info *Info) IsBlocking(inst typeparams.Instance) bool {
 	if funInfo := info.FuncInfo(inst); funInfo != nil {
 		return funInfo.IsBlocking()
 	}
-	panic(fmt.Errorf(`info did not have function declaration instance for %q`, inst.TypeString()))
+	panic(fmt.Errorf(`info did not have function declaration instance for %q`, inst.TypeString(nil)))
 }
 
 // FuncInfo returns information about the given function declaration instance, or nil if not found.

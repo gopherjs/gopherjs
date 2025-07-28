@@ -375,7 +375,7 @@ func (fc *funcContext) pkgVar(pkg *types.Package) string {
 
 	pkgVar, found := fc.pkgCtx.pkgVars[pkg.Path()]
 	if !found {
-		pkgVar = fmt.Sprintf(`$packages["%s"]`, pkg.Path())
+		pkgVar = fmt.Sprintf(`$packages[%s]`, fc.getPkgPathVar(pkg))
 	}
 	return pkgVar
 }
@@ -467,7 +467,10 @@ func (fc *funcContext) instName(inst typeparams.Instance) string {
 		return objName
 	}
 	fc.pkgCtx.DeclareDCEDep(inst.Object, inst.TNest, inst.TArgs)
-	label := inst.TypeParamsString(` /* `, ` */`)
+
+	// Reduce the size of the comment by only using the package names instead of paths.
+	// This should make it easier to read but risks confusion when multiple packages have the same name.
+	label := inst.TypeParamsString(` /* `, ` */`, (*types.Package).Name)
 	return fmt.Sprintf("%s[%d%s]", objName, fc.pkgCtx.instanceSet.ID(inst), label)
 }
 

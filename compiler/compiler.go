@@ -14,6 +14,7 @@ import (
 	"go/token"
 	"go/types"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -61,6 +62,12 @@ type Archive struct {
 	Minified bool
 	// A list of go:linkname directives encountered in the package.
 	GoLinknames []linkname.GoLinkname
+	// PkgPathVars is a mapping from package import paths to package-unique ids
+	// for string constants that are assigned to the package import path.
+	// This is to reduce the number of times a package name is written
+	// to the JS. This will skip short paths, e.g. `"math"` and `"fmt"`, that
+	// are about the length of or shorter than identifier.
+	PkgPathVars map[string]string
 }
 
 func (a Archive) String() string {
@@ -152,27 +159,47 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 		return err
 	}
 
-	// write packages
+	// Write the program paths for all the packages.
+	progPathVars := make(map[string]string, len(pkgs))
+	for i, pkg := range pkgs {
+		if len(pkg.ImportPath) < smallPathLength {
+			continue
+		}
+		id := fmt.Sprintf("$progPath%d", i)
+		progPathVars[pkg.ImportPath] = id
+		if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("const %s = %q;\n", id, pkg.ImportPath)), minify)); err != nil {
+			return err
+		}
+	}
+	// Write packages
 	for _, pkg := range pkgs {
-		if err := WritePkgCode(pkg, dceSelection, gls, minify, w); err != nil {
+		if err := WritePkgCode(pkg, dceSelection, gls, minify, w, progPathVars); err != nil {
 			return err
 		}
 	}
 
-	if _, err := w.Write([]byte("$callForAllPackages(\"$finishSetup\");\n$synthesizeMethods();\n$callForAllPackages(\"$initLinknames\");\nvar $mainPkg = $packages[\"" + string(mainPkg.ImportPath) + "\"];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
+	mainPkgPath := getPkgPathCode(progPathVars, mainPkg.ImportPath)
+	if _, err := w.Write([]byte("$callForAllPackages(\"$finishSetup\");\n$synthesizeMethods();\n$callForAllPackages(\"$initLinknames\");\nvar $mainPkg = $packages[" + mainPkgPath + "];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
 		return err
 	}
 	return nil
 }
 
-func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.GoLinknameSet, minify bool, w *SourceMapFilter) error {
+func getPkgPathCode(progPathVars map[string]string, path string) string {
+	if id, ok := progPathVars[path]; ok {
+		return id
+	}
+	return fmt.Sprintf("%q", path)
+}
+
+func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.GoLinknameSet, minify bool, w *SourceMapFilter, progPathVars map[string]string) error {
 	if w.MappingCallback != nil && pkg.FileSet != nil {
 		w.fileSet = pkg.FileSet
 	}
 	if _, err := w.Write(pkg.IncJSCode); err != nil {
 		return err
 	}
-	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify)); err != nil {
+	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[%s] = (function() { /* %s */\n", getPkgPathCode(progPathVars, pkg.ImportPath), pkg.ImportPath)), minify)); err != nil {
 		return err
 	}
 	vars := []string{"$pkg = {}", "$init"}
@@ -186,6 +213,17 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 	// Write variable names
 	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
 		return err
+	}
+	// Write package path name constants
+	pkgPaths := make([]string, 0, len(pkg.PkgPathVars))
+	for pkgPath, pkgPathVar := range pkg.PkgPathVars {
+		pkgPaths = append(pkgPaths, fmt.Sprintf("%s = %s", pkgPathVar, getPkgPathCode(progPathVars, pkgPath)))
+	}
+	if len(pkgPaths) > 0 {
+		sort.Strings(pkgPaths)
+		if _, err := w.Write(removeWhitespace([]byte("\tconst "+strings.Join(pkgPaths, `, `)+";\n"), minify)); err != nil {
+			return err
+		}
 	}
 	// Write imports
 	for _, d := range filteredDecls {
@@ -319,6 +357,7 @@ type serializableArchive struct {
 	Minified     bool
 	GoLinknames  []linkname.GoLinkname
 	BuildTime    time.Time
+	PkgPathVars  map[string]string
 }
 
 // ReadArchive reads serialized compiled archive of the importPath package.
@@ -364,6 +403,7 @@ func ReadArchive(importPath string, r io.Reader, srcModTime time.Time, imports m
 	a.IncJSCode = sa.IncJSCode
 	a.Minified = sa.Minified
 	a.GoLinknames = sa.GoLinknames
+	a.PkgPathVars = sa.PkgPathVars
 	return &a, sa.BuildTime, nil
 }
 
@@ -397,6 +437,7 @@ func WriteArchive(a *Archive, buildTime time.Time, w io.Writer) error {
 		Minified:     a.Minified,
 		GoLinknames:  a.GoLinknames,
 		BuildTime:    buildTime,
+		PkgPathVars:  a.PkgPathVars,
 	}
 
 	return gob.NewEncoder(w).Encode(sa)

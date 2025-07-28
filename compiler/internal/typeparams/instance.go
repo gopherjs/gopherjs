@@ -28,12 +28,12 @@ type Instance struct {
 // Two semantically different instances may have the same string representation
 // if the instantiated object or its type arguments shadow other types.
 func (i Instance) String() string {
-	return i.symbolicName() + i.TypeParamsString(`<`, `>`)
+	return i.symbolicName() + i.TypeParamsString(`<`, `>`, nil)
 }
 
 // TypeString returns a Go type string representing the instance (suitable for %T verb).
-func (i Instance) TypeString() string {
-	return i.qualifiedName() + i.TypeParamsString(`[`, `]`)
+func (i Instance) TypeString(qt types.Qualifier) string {
+	return i.qualifiedName() + i.TypeParamsString(`[`, `]`, qt)
 }
 
 // symbolicName returns a string representation of the instance's name
@@ -61,21 +61,21 @@ func (i Instance) qualifiedName() string {
 
 // TypeParamsString returns part of a Go type string that represents the type
 // parameters of the instance including the nesting type parameters, e.g. [X;Y,Z].
-func (i Instance) TypeParamsString(open, close string) string {
+func (i Instance) TypeParamsString(open, close string, qt types.Qualifier) string {
 	hasNest := len(i.TNest) > 0
 	hasArgs := len(i.TArgs) > 0
 	buf := strings.Builder{}
 	if hasNest || hasArgs {
 		buf.WriteString(open)
 		if hasNest {
-			buf.WriteString(i.TNest.String())
+			buf.WriteString(i.TNest.TypesString(qt))
 			buf.WriteRune(';')
 			if hasArgs {
 				buf.WriteRune(' ')
 			}
 		}
 		if hasArgs {
-			buf.WriteString(i.TArgs.String())
+			buf.WriteString(i.TArgs.TypesString(qt))
 		}
 		buf.WriteString(close)
 	}

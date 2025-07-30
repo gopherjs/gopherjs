@@ -179,10 +179,8 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	}
 
 	mainPkgPath := getPkgPathCode(progPathVars, mainPkg.ImportPath)
-	if _, err := w.Write([]byte("$callForAllPackages(\"$finishSetup\");\n$synthesizeMethods();\n$callForAllPackages(\"$initLinknames\");\nvar $mainPkg = $packages[" + mainPkgPath + "];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
-		return err
-	}
-	return nil
+	_, err := w.Write([]byte("$callForAllPackages(\"$finishSetup\");\n$synthesizeMethods();\n$callForAllPackages(\"$initLinknames\");\nvar $mainPkg = $packages[" + mainPkgPath + "];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n"))
+	return err
 }
 
 func getPkgPathCode(progPathVars map[string]string, path string) string {
@@ -215,11 +213,11 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 		return err
 	}
 	// Write package path name constants
-	pkgPaths := make([]string, 0, len(pkg.PkgPathVars))
-	for pkgPath, pkgPathVar := range pkg.PkgPathVars {
-		pkgPaths = append(pkgPaths, fmt.Sprintf("%s = %s", pkgPathVar, getPkgPathCode(progPathVars, pkgPath)))
-	}
-	if len(pkgPaths) > 0 {
+	if len(pkg.PkgPathVars) > 0 {
+		pkgPaths := make([]string, 0, len(pkg.PkgPathVars))
+		for pkgPath, pkgPathVar := range pkg.PkgPathVars {
+			pkgPaths = append(pkgPaths, fmt.Sprintf("%s = %s", pkgPathVar, getPkgPathCode(progPathVars, pkgPath)))
+		}
 		sort.Strings(pkgPaths)
 		if _, err := w.Write(removeWhitespace([]byte("\tconst "+strings.Join(pkgPaths, `, `)+";\n"), minify)); err != nil {
 			return err

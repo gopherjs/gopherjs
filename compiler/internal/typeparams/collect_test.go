@@ -412,10 +412,10 @@ func TestCollector(t *testing.T) {
 
 	c := Collector{
 		TContext:  types.NewContext(),
-		Info:      info,
 		Instances: &PackageInstanceSets{},
 	}
-	c.Scan(pkg, file)
+	c.Scan(info, pkg, file)
+	c.Finish()
 
 	inst := func(name, tNest, tArg string) Instance {
 		return Instance{
@@ -470,10 +470,10 @@ func TestCollector_MoreNesting(t *testing.T) {
 
 	c := Collector{
 		TContext:  types.NewContext(),
-		Info:      info,
 		Instances: &PackageInstanceSets{},
 	}
-	c.Scan(pkg, file)
+	c.Scan(info, pkg, file)
+	c.Finish()
 
 	inst := func(name, tNest, tArg string) Instance {
 		return Instance{
@@ -545,10 +545,10 @@ func TestCollector_NestingWithVars(t *testing.T) {
 
 	c := Collector{
 		TContext:  types.NewContext(),
-		Info:      info,
 		Instances: &PackageInstanceSets{},
 	}
-	c.Scan(pkg, file)
+	c.Scan(info, pkg, file)
+	c.Finish()
 
 	want := []Instance{
 		inst(`S`, `int`),
@@ -585,10 +585,10 @@ func TestCollector_RecursiveTypeParams(t *testing.T) {
 
 	c := Collector{
 		TContext:  tc,
-		Info:      info,
 		Instances: &PackageInstanceSets{},
 	}
-	c.Scan(pkg, file)
+	c.Scan(info, pkg, file)
+	c.Finish()
 
 	xInst := inst(`main.X`, ``, `int`)
 	xInt := xInst.Resolve(tc)
@@ -636,10 +636,10 @@ func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
 
 	c := Collector{
 		TContext:  tc,
-		Info:      info,
 		Instances: &PackageInstanceSets{},
 	}
-	c.Scan(pkg, file)
+	c.Scan(info, pkg, file)
+	c.Finish()
 
 	xInst := inst(`F.X`, `string`, `int`)
 	xInt := xInst.Resolve(tc)
@@ -675,10 +675,10 @@ func TestCollector_LooselyRecursiveTypeParams(t *testing.T) {
 
 	c := Collector{
 		TContext:  tc,
-		Info:      info,
 		Instances: &PackageInstanceSets{},
 	}
-	c.Scan(pkg, file)
+	c.Scan(info, pkg, file)
+	c.Finish()
 
 	xInst := Instance{
 		Object: srctesting.LookupObj(pkg, `main.X`),
@@ -725,10 +725,10 @@ func TestCollector_NestedTypeParams(t *testing.T) {
 
 	c := Collector{
 		TContext:  tc,
-		Info:      info,
 		Instances: &PackageInstanceSets{},
 	}
-	c.Scan(pkg, file)
+	c.Scan(info, pkg, file)
+	c.Finish()
 
 	uInst := inst(`F.U`, `int`, `bool`)
 	uIntBool := uInst.Resolve(tc)
@@ -745,6 +745,129 @@ func TestCollector_NestedTypeParams(t *testing.T) {
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
 		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
 	}
+}
+
+func TestCollector_ImplicitTypeInstance(t *testing.T) {
+	f := srctesting.New(t)
+	tc := types.NewContext()
+	inst := func(pkg *types.Package, name, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
+
+	fooSrc := `package foo
+	type Foo[T any] struct{}
+	func NewFoo[T any]() *Foo[T] {
+		return &Foo[T]{}
+	}`
+	fooFile := f.Parse(`foo/foo.go`, fooSrc)
+	_, fooPkg := f.Check(`foo`, fooFile)
+
+	mainSrc := `package test
+	import "foo"
+	func main() {
+		print(foo.NewFoo[int]())
+	}`
+	mainFile := f.Parse(`main.go`, mainSrc)
+	_, mainPkg := f.Check(`test`, mainFile)
+
+	c := Collector{
+		TContext:  tc,
+		Instances: &PackageInstanceSets{},
+	}
+	// The issue which caused this test to be written only occurred when
+	// fooFile was scanned before mainFile, otherwise it would work fine.
+	// The problem was that `foo.Foo[int]` was not being collected in this
+	// order because mainFile adds an instance into the instance set for "foo"
+	// after "foo" was already propagated. This was fixed by performing
+	// propagation after all the packages are scanned via `Finish`.
+	c.Scan(f.Info, fooPkg, fooFile)
+	c.Scan(f.Info, mainPkg, mainFile)
+	c.Finish()
+
+	want := []Instance{
+		inst(fooPkg, `NewFoo`, `int`),
+		inst(fooPkg, `Foo`, `int`),
+	}
+	got := c.Instances.Pkg(fooPkg).Values()
+	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
+	}
+}
+
+func TestCollector_MoreImplicitTypeInstance(t *testing.T) {
+	f := srctesting.New(t)
+	tc := types.NewContext()
+	inst := func(pkg *types.Package, name, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
+
+	fooSrc := `package foo
+	type Foo[T, U any] struct{}
+	func NewFoo[T, U any]() *Foo[T, U] {
+		return &Foo[T, U]{}
+	}`
+	fooFile := f.Parse(`foo/foo.go`, fooSrc)
+	_, fooPkg := f.Check(`foo`, fooFile)
+
+	barSrc := `package bar
+	import "foo"
+	func Bar[T, U any](f *foo.Foo[T, U]) *foo.Foo[U, T] {
+		return foo.NewFoo[U, T]()
+	}`
+	barFile := f.Parse(`bar/bar.go`, barSrc)
+	_, barPkg := f.Check(`bar`, barFile)
+
+	mainSrc := `package test
+	import "foo"
+	import "bar"
+	func main() {
+		f := foo.NewFoo[int, string]()
+		print(bar.Bar[int, string](f))
+	}`
+	mainFile := f.Parse(`main.go`, mainSrc)
+	_, mainPkg := f.Check(`test`, mainFile)
+
+	want := []Instance{
+		inst(fooPkg, `NewFoo`, `int, string`),
+		inst(fooPkg, `NewFoo`, `string, int`),
+		inst(fooPkg, `Foo`, `int, string`),
+		inst(fooPkg, `Foo`, `string, int`),
+	}
+	trial := func(order ...int) {
+		c := Collector{
+			TContext:  tc,
+			Instances: &PackageInstanceSets{},
+		}
+		for _, i := range order {
+			switch i {
+			case 1:
+				c.Scan(f.Info, fooPkg, fooFile)
+			case 2:
+				c.Scan(f.Info, barPkg, barFile)
+			case 3:
+				c.Scan(f.Info, mainPkg, mainFile)
+			}
+		}
+		c.Finish()
+
+		got := c.Instances.Pkg(fooPkg).Values()
+		if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+			t.Errorf("Instances from Collector trial %v contain diff (-want,+got):\n%s", order, diff)
+		}
+	}
+
+	trial(1, 2, 3)
+	trial(1, 3, 2)
+	trial(2, 1, 3)
+	trial(2, 3, 1)
+	trial(3, 1, 2)
+	trial(3, 2, 1)
 }
 
 func evalTypeArgs(t *testing.T, fSet *token.FileSet, pkg *types.Package, expr string) []types.Type {
@@ -794,11 +917,11 @@ func TestCollector_CrossPackage(t *testing.T) {
 
 	c := Collector{
 		TContext:  types.NewContext(),
-		Info:      f.Info,
 		Instances: &PackageInstanceSets{},
 	}
-	c.Scan(barPkg, barFile)
-	c.Scan(fooPkg, fooFile)
+	c.Scan(f.Info, barPkg, barFile)
+	c.Scan(f.Info, fooPkg, fooFile)
+	c.Finish()
 
 	inst := func(pkg *types.Package, name string, tArg types.BasicKind) Instance {
 		return Instance{

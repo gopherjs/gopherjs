@@ -51,23 +51,23 @@ type Decl struct {
 	TypeDeclCode []byte
 	// JavaScript code that assigns exposed named types to the package.
 	ExportTypeCode []byte
-	// JavaScript code that declares basic information about an anonymous types.
+	// JavaScript code that declares basic information about an anonymous type.
 	// It configures basic information about the type.
-	// This is added to the finish setup phase to has access to all packages.
+	// This is added to the finish setup phase to have access to all packages.
 	AnonTypeDeclCode []byte
 	// JavaScript code that declares basic information about a function or
 	// method symbol. This contains the function's or method's compiled body.
-	// This is added to the finish setup phase to has access to all packages.
+	// This is added to the finish setup phase to have access to all packages.
 	FuncDeclCode []byte
 	// JavaScript code that assigns exposed functions to the package.
-	// This is added to the finish setup phase to has access to all packages.
+	// This is added to the finish setup phase to have access to all packages.
 	ExportFuncCode []byte
-	// JavaScript code that initializes reflection metadata about type's method list.
-	// This is added to the finish setup phase to has access to all packages.
+	// JavaScript code that initializes reflection metadata about a type's method list.
+	// This is added to the finish setup phase to have access to all packages.
 	MethodListCode []byte
 	// JavaScript code that initializes the rest of reflection metadata about a type
 	// (e.g. struct fields, array type sizes, element types, etc.).
-	// This is added to the finish setup phase to has access to all packages.
+	// This is added to the finish setup phase to have access to all packages.
 	TypeInitCode []byte
 	// JavaScript code that needs to be executed during the package init phase to
 	// set the symbol up (e.g. initialize package-level variable value).

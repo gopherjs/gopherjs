@@ -263,9 +263,14 @@ func PrepareAllSources(allSources []*sources.Sources, importer sources.Importer,
 	// Collect all the generic type instances from all the packages.
 	// This must be done for all sources prior to any analysis.
 	instances := &typeparams.PackageInstanceSets{}
-	for _, srcs := range allSources {
-		srcs.CollectInstances(tContext, instances)
+	tc := &typeparams.Collector{
+		TContext:  tContext,
+		Instances: instances,
 	}
+	for _, srcs := range allSources {
+		srcs.CollectInstances(tc)
+	}
+	tc.Finish()
 
 	// Analyze the package to determine type parameters instances, blocking,
 	// and other type information. This will not populate the information.

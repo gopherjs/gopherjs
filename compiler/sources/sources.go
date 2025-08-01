@@ -44,11 +44,11 @@ type Sources struct {
 	// JSFiles is the JavaScript files that are part of the package.
 	JSFiles []jsFile.JSFile
 
-	// TypeInfo is the type information this package.
+	// TypeInfo is the type information for this package.
 	// This is nil until set by Analyze.
 	TypeInfo *analysis.Info
 
-	// baseInfo is the base type information this package.
+	// baseInfo is the base type information for this package.
 	// This is nil until set by TypeCheck.
 	baseInfo *types.Info
 
@@ -163,13 +163,11 @@ func (s *Sources) TypeCheck(importer Importer, sizes types.Sizes, tContext *type
 //
 // This must be called before Analyze to have the type parameters instances
 // needed during analysis.
-func (s *Sources) CollectInstances(tContext *types.Context, instances *typeparams.PackageInstanceSets) {
-	tc := typeparams.Collector{
-		TContext:  tContext,
-		Info:      s.baseInfo,
-		Instances: instances,
-	}
-	tc.Scan(s.Package, s.Files...)
+//
+// Note that once all the sources are collected, the collector needs to be
+// finished to ensure all the instances are collected.
+func (s *Sources) CollectInstances(tc *typeparams.Collector) {
+	tc.Scan(s.baseInfo, s.Package, s.Files...)
 }
 
 // Analyze will determine the type parameters instances, blocking,

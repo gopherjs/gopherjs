@@ -202,7 +202,9 @@ func (iset *InstanceSet) next() (Instance, bool) {
 }
 
 // exhausted returns true if there are no unprocessed instances in the set.
-func (iset *InstanceSet) exhausted() bool { return len(iset.values) <= iset.unprocessed }
+func (iset *InstanceSet) exhausted() bool {
+	return len(iset.values) <= iset.unprocessed
+}
 
 // Values returns instances that are currently in the set. Order is not specified.
 func (iset *InstanceSet) Values() []Instance {
@@ -244,6 +246,17 @@ func (iset *InstanceSet) ObjHasInstances(obj types.Object) bool {
 // PackageInstanceSets stores an InstanceSet for each package in a program, keyed
 // by import path.
 type PackageInstanceSets map[string]*InstanceSet
+
+// allExhausted returns true if there are no unprocessed instances in
+// any of the instance sets.
+func (i PackageInstanceSets) allExhausted() bool {
+	for _, iset := range i {
+		if !iset.exhausted() {
+			return false
+		}
+	}
+	return true
+}
 
 // Pkg returns InstanceSet for objects defined in the given package.
 func (i PackageInstanceSets) Pkg(pkg *types.Package) *InstanceSet {

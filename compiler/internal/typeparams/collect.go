@@ -188,16 +188,26 @@ func (c *seedVisitor) Visit(n ast.Node) ast.Visitor {
 // set whenever their receiver type instance is encountered.
 type Collector struct {
 	TContext  *types.Context
-	Info      *types.Info
 	Instances *PackageInstanceSets
+
+	objMap  map[types.Object]ast.Node
+	infoMap map[string]*types.Info
 }
 
 // Scan package files for generic instances.
-func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
-	if c.Info.Instances == nil || c.Info.Defs == nil {
+func (c *Collector) Scan(info *types.Info, pkg *types.Package, files ...*ast.File) {
+	if c.objMap == nil {
+		c.objMap = map[types.Object]ast.Node{}
+	}
+	if c.infoMap == nil {
+		c.infoMap = map[string]*types.Info{}
+	}
+
+	// Check the info for this package then record it for later use.
+	if info.Instances == nil || info.Defs == nil {
 		panic(fmt.Errorf("types.Info must have Instances and Defs populated"))
 	}
-	objMap := map[types.Object]ast.Node{}
+	c.infoMap[pkg.Path()] = info
 
 	// Collect instances of generic objects in non-generic code in the package and
 	// add then to the existing InstanceSet.
@@ -205,42 +215,58 @@ func (c *Collector) Scan(pkg *types.Package, files ...*ast.File) {
 		visitor: visitor{
 			instances: c.Instances,
 			resolver:  nil,
-			info:      c.Info,
+			info:      info,
 		},
-		objMap: objMap,
+		objMap: c.objMap,
 	}
 	for _, file := range files {
 		ast.Walk(&sc, file)
 	}
+}
 
-	for iset := c.Instances.Pkg(pkg); !iset.exhausted(); {
-		inst, _ := iset.next()
-
-		switch typ := inst.Object.Type().(type) {
-		case *types.Signature:
-			c.scanSignature(inst, typ, objMap)
-
-		case *types.Named:
-			c.scanNamed(inst, typ, objMap)
+// Finish will finish the collecting instances by propagating instances of
+// generic types and functions found in generic code. The generic code is
+// rescanned with in an instances context to find internally defined instances.
+//
+// This should only be called after all the files are scanned.
+func (c *Collector) Finish() {
+	for !c.Instances.allExhausted() {
+		for pkgPath, instances := range *c.Instances {
+			c.propagate(pkgPath, instances)
 		}
 	}
 }
 
-func (c *Collector) scanSignature(inst Instance, typ *types.Signature, objMap map[types.Object]ast.Node) {
+func (c *Collector) propagate(pkgPath string, instances *InstanceSet) {
+	info := c.infoMap[pkgPath]
+	for iset := instances; !iset.exhausted(); {
+		inst, _ := iset.next()
+
+		switch typ := inst.Object.Type().(type) {
+		case *types.Signature:
+			c.scanSignature(inst, typ, info)
+
+		case *types.Named:
+			c.scanNamed(inst, typ, info)
+		}
+	}
+}
+
+func (c *Collector) scanSignature(inst Instance, typ *types.Signature, info *types.Info) {
 	v := visitor{
 		instances: c.Instances,
 		resolver:  NewResolver(c.TContext, inst),
-		info:      c.Info,
+		info:      info,
 
 		nestTParams: SignatureTypeParams(typ),
 		nestTArgs:   inst.TArgs,
 	}
-	ast.Walk(&v, objMap[inst.Object])
+	ast.Walk(&v, c.objMap[inst.Object])
 }
 
-func (c *Collector) scanNamed(inst Instance, typ *types.Named, objMap map[types.Object]ast.Node) {
+func (c *Collector) scanNamed(inst Instance, typ *types.Named, info *types.Info) {
 	obj := typ.Obj()
-	node := objMap[obj]
+	node := c.objMap[obj]
 	if node == nil {
 		// Types without an entry in objMap are concrete types
 		// that are defined in a generic context. Skip them.
@@ -256,7 +282,7 @@ func (c *Collector) scanNamed(inst Instance, typ *types.Named, objMap map[types.
 	v := visitor{
 		instances: c.Instances,
 		resolver:  NewResolver(c.TContext, inst),
-		info:      c.Info,
+		info:      info,
 
 		nestTParams: nestTParams,
 		nestTArgs:   inst.TNest,

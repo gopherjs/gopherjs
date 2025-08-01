@@ -18,27 +18,7 @@ func Test_GenCircle_PingPong(t *testing.T) { runGenCircleTest(t, `pingpong`) }
 
 func Test_GenCircle_Burninate(t *testing.T) { runGenCircleTest(t, `burninate`) }
 
-func Test_GenCircle_CatBox(t *testing.T) {
-	// TODO(grantnelson-wf): This test hits an error similar to
-	// `panic: info did not have function declaration instance for
-	// "collections.Push[box.Unboxer[cat.Cat]]"` from `analysis/Info:IsBlocking`.
-	//
-	// This is because no instance of `Stack` is used explicitly in code,
-	// i.e. the code doesn't have an `ast.Ident` for `Stack` found in `types.Info.Instances`
-	// since the only `Stack` identifiers are the ones for the generic declaration.
-	// `Stack[box.Unboxer[cat.Cat]]` is implicitly defined via the call
-	// `collections.NewStack[box.Unboxer[cat.Cat]]()` in main.go.
-	//
-	// We need to update the `typeparams.collector` to add these implicit types
-	// to the `PackageInstanceSets` so that `analysis/info` has the implicit
-	// instances of `Stack`.
-	//
-	// Simply adding `_ = collections.Stack[box.Unboxer[cat.Cat]]{}` is a
-	// work around for `Stack` issue but the code gets tripped up on `boxImp[T]`
-	// via `Box[T]` not being defined since again `boxImp` has not been collected.
-	t.Skip(`Implicit Instance Not Yet Collected`)
-	runGenCircleTest(t, `catbox`)
-}
+func Test_GenCircle_CatBox(t *testing.T) { runGenCircleTest(t, `catbox`) }
 
 // Cache buster: Keeping the tests from using cached results when only
 // the test application files are changed.

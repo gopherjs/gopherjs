@@ -212,6 +212,32 @@ func (v *Value) checkNew(op string, new interface{}) {
 	}
 }
 
+type Pointer[T any] struct {
+	v *T
+}
+
+func (x *Pointer[T]) Load() *T {
+	return x.v
+}
+
+func (x *Pointer[T]) Store(val *T) {
+	x.v = val
+}
+
+func (x *Pointer[T]) Swap(new *T) (old *T) {
+	old = x.v
+	x.v = new
+	return old
+}
+
+func (x *Pointer[T]) CompareAndSwap(old, new *T) bool {
+	if x.v == old {
+		x.v = new
+		return true
+	}
+	return false
+}
+
 // sameType returns true if x and y contain the same concrete Go types.
 func sameType(x, y interface{}) bool {
 	// This relies upon the fact that an interface in GopherJS is represented

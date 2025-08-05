@@ -177,8 +177,11 @@ type overrideInfo struct {
 //     to match the overridden function signature. This allows the receiver,
 //     type parameters, parameter, and return values to be modified as needed.
 //   - Otherwise for identifiers that exist in the original and the overrides,
-//     the original is removed.
+//     the original is removed. Use `gopherjs:replace` to ensure that the
+//     original existed so that a replace is made.
 //   - New identifiers that don't exist in original package get added.
+//     Use `gopherjs:new` to ensure that the identifier is new and there was
+//     no original code for it.
 func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]*ast.File, []jsFile.JSFile, error) {
 	jsFiles, overlayFiles := parseOverlayFiles(xctx, pkg, isTest, fileSet)
 

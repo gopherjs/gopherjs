@@ -1,12 +1,10 @@
 //go:build js
-// +build js
 
 package token
 
-import (
-	"testing"
-)
+import "testing"
 
+//gopherjs:replace
 func TestFileSetRace(t *testing.T) {
-	t.Skip()
+	t.Skip("Fails with: WaitGroup counter not zero")
 }

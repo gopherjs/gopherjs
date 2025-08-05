@@ -1,15 +1,17 @@
 //go:build js
-// +build js
 
 package maphash
 
 import (
+	"testing"
 	_ "unsafe" // for linkname
 )
 
 // hashkey is similar how it is defined in runtime/alg.go for Go 1.19
 // to be used in hash{32,64}.go to seed the hash function as part of
 // runtime_memhash. We're using locally defined memhash so it got moved here.
+//
+//gopherjs:new
 var hashkey [3]uint32
 
 func init() {
@@ -20,9 +22,12 @@ func init() {
 }
 
 //go:linkname runtime_fastrand runtime.fastrand
+//gopherjs:new
 func runtime_fastrand() uint32
 
 // Bytes uses less efficient equivalent to avoid using unsafe.
+//
+//gopherjs:replace
 func Bytes(seed Seed, b []byte) uint64 {
 	var h Hash
 	h.SetSeed(seed)
@@ -31,6 +36,8 @@ func Bytes(seed Seed, b []byte) uint64 {
 }
 
 // String uses less efficient equivalent to avoid using unsafe.
+//
+//gopherjs:replace
 func String(seed Seed, s string) uint64 {
 	var h Hash
 	h.SetSeed(seed)
@@ -40,6 +47,8 @@ func String(seed Seed, s string) uint64 {
 
 // rthash is similar to the Go 1.19.13 version
 // with the call to memhash changed to not use unsafe pointers.
+//
+//gopherjs:replace
 func rthash(b []byte, seed uint64) uint64 {
 	if len(b) == 0 {
 		return seed
@@ -65,6 +74,8 @@ func runtime_memhash()
 //
 // Hashing algorithm inspired by wyhash:
 // https://github.com/wangyi-fudan/wyhash/blob/ceb019b530e2c1c14d70b79bfa2bc49de7d95bc1/Modern%20Non-Cryptographic%20Hash%20Function%20and%20Pseudorandom%20Number%20Generator.pdf
+//
+//gopherjs:new
 func memhash(p []byte, seed uint32) uintptr {
 	s := len(p)
 	a, b := mix32(uint32(seed), uint32(s)^hashkey[0])
@@ -91,15 +102,19 @@ func memhash(p []byte, seed uint32) uintptr {
 	return uintptr(a ^ b)
 }
 
+//gopherjs:new
 func add(p []byte, x int) []byte {
 	return p[x:]
 }
 
 // Note: These routines perform the read in little endian.
+//
+//gopherjs:new
 func readUnaligned32(p []byte) uint32 {
 	return uint32(p[0]) | uint32(p[1])<<8 | uint32(p[2])<<16 | uint32(p[3])<<24
 }
 
+//gopherjs:new
 func mix32(a, b uint32) (uint32, uint32) {
 	c := uint64(a^uint32(hashkey[1])) * uint64(b^uint32(hashkey[2]))
 	return uint32(c), uint32(c >> 32)
@@ -118,6 +133,8 @@ func mix32(a, b uint32) (uint32, uint32) {
 */
 
 // Write is a simplification from Go 1.19 changed to not use unsafe.
+//
+//gopherjs:replace
 func (h *Hash) Write(b []byte) (int, error) {
 	size := len(b)
 	if h.n+len(b) > bufSize {
@@ -134,6 +151,8 @@ func (h *Hash) Write(b []byte) (int, error) {
 }
 
 // WriteString is a simplification from Go 1.19 changed to not use unsafe.
+//
+//gopherjs:replace
 func (h *Hash) WriteString(s string) (int, error) {
 	size := len(s)
 	if h.n+len(s) > bufSize {
@@ -150,6 +169,8 @@ func (h *Hash) WriteString(s string) (int, error) {
 }
 
 // flush is the Go 1.19 version changed to not use unsafe.
+//
+//gopherjs:replace
 func (h *Hash) flush() {
 	if h.n != len(h.buf) {
 		panic("maphash: flush of partially full buffer")
@@ -160,7 +181,25 @@ func (h *Hash) flush() {
 }
 
 // Sum64 is the Go 1.19 version changed to not use unsafe.
+//
+//gopherjs:replace
 func (h *Hash) Sum64() uint64 {
 	h.initSeed()
 	return rthash(h.buf[:h.n], h.state.s)
+}
+
+//gopherjs:keep-original
+func TestSmhasherSmallKeys(t *testing.T) {
+	if !testing.Short() {
+		t.Skip("Causes a heap overflow in GopherJS when running long test")
+	}
+	_gopherjs_original_TestSmhasherSmallKeys(t)
+}
+
+//gopherjs:keep-original
+func TestSmhasherZeros(t *testing.T) {
+	if !testing.Short() {
+		t.Skip("Takes a very long time when running long test")
+	}
+	_gopherjs_original_TestSmhasherZeros(t)
 }

@@ -12,6 +12,8 @@ import "github.com/gopherjs/gopherjs/js"
 
 // AnyOverlap reports whether x and y share memory at any (not necessarily
 // corresponding) index. The memory beyond the slice length is ignored.
+//
+//gopherjs:replace
 func AnyOverlap(x, y []byte) bool {
 	// GopherJS: We can't rely on pointer arithmetic, so use GopherJS slice internals.
 	return len(x) > 0 && len(y) > 0 &&

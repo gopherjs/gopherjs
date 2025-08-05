@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package pe
 
@@ -11,22 +10,27 @@ import (
 
 // bytesBufferLite is a simplified bytes.Buffer to avoid
 // including `bytes` as a new import into the pe package.
+//
+// gopherjs:new
 type bytesBufferLite struct {
 	data []byte
 	off  int
 }
 
+// gopherjs:new
 func (buf *bytesBufferLite) Write(p []byte) (int, error) {
 	buf.data = append(buf.data, p...)
 	return len(p), nil
 }
 
+// gopherjs:new
 func (buf *bytesBufferLite) Read(p []byte) (int, error) {
 	n := copy(p, buf.data[buf.off:])
 	buf.off += n
 	return n, nil
 }
 
+// gopherjs:replace
 func copyToAuxFormat5(sym *COFFSymbol) (*COFFSymbolAuxFormat5, error) {
 	buf := &bytesBufferLite{data: make([]byte, 0, 20)}
 	if err := binary.Write(buf, binary.LittleEndian, sym); err != nil {
@@ -39,6 +43,7 @@ func copyToAuxFormat5(sym *COFFSymbol) (*COFFSymbolAuxFormat5, error) {
 	return aux, nil
 }
 
+// gopherjs:replace
 func copyFromAuxFormat5(aux *COFFSymbolAuxFormat5) (*COFFSymbol, error) {
 	buf := &bytesBufferLite{data: make([]byte, 0, 20)}
 	if err := binary.Write(buf, binary.LittleEndian, aux); err != nil {
@@ -51,6 +56,7 @@ func copyFromAuxFormat5(aux *COFFSymbolAuxFormat5) (*COFFSymbol, error) {
 	return sym, nil
 }
 
+// gopherjs:replace
 func readCOFFSymbols(fh *FileHeader, r io.ReadSeeker) ([]COFFSymbol, error) {
 	if fh.PointerToSymbolTable == 0 {
 		return nil, nil
@@ -96,6 +102,7 @@ func readCOFFSymbols(fh *FileHeader, r io.ReadSeeker) ([]COFFSymbol, error) {
 	return syms, nil
 }
 
+// gopherjs:replace
 func (f *File) COFFSymbolReadSectionDefAux(idx int) (*COFFSymbolAuxFormat5, error) {
 	var rv *COFFSymbolAuxFormat5
 	if idx < 0 || idx >= len(f.COFFSymbols) {

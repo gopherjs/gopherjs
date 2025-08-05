@@ -123,18 +123,18 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 // overrideInfo is used by parseAndAugment methods to manage
 // directives and how the overlay and original are merged.
 type overrideInfo struct {
-	// mustOverride indicates that the original code is expected to exist.
+	// replace indicates that the original code is expected to exist.
 	// If the original code is not present, then error to let us know
 	// the original code has been removed or renamed.
 	// This will be set to false once the original code has been found.
-	mustOverride bool
+	replace bool
 
-	// mustNotOverride indicates that the override code is expected to be new.
+	// new indicates that the override code is expected to be new.
 	// If the original code is present, then error to let us know
 	// that we are overriding something that we did not expect to replace.
 	// This lets us know of new or renamed code in the original that happens
 	// to collide with our overrides.
-	mustNotOverride bool
+	new bool
 
 	// keepOriginal indicates that the original code should be kept
 	// but the identifier will be prefixed by `_gopherjs_original_foo`.
@@ -202,7 +202,10 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 		for _, file := range originalFiles {
 			augmentOriginalFile(file, overrides, found)
 		}
-		checkOverrides(overrides, found, pkg.ImportPath)
+		err := checkOverrides(overrides, found, pkg.ImportPath)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	return append(overlayFiles, originalFiles...), jsFiles, nil
@@ -298,17 +301,17 @@ func parserOriginalFiles(pkg *PackageData, fileSet *token.FileSet) ([]*ast.File,
 func augmentOverlayFile(file *ast.File, overrides map[string]overrideInfo) {
 	anyChange := false
 	for i, decl := range file.Decls {
-		mustOverrideDecl := astutil.MustOverride(decl)
-		mustNotOverrideDecl := astutil.MustNotOverride(decl)
+		replaceDecl := astutil.DirectiveReplace(decl)
+		newDecl := astutil.DirectiveNew(decl)
 		purgeDecl := astutil.Purge(decl)
 
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			k := astutil.FuncKey(d)
 			oi := overrideInfo{
-				keepOriginal:    astutil.KeepOriginal(d),
-				mustOverride:    mustOverrideDecl,
-				mustNotOverride: mustNotOverrideDecl,
+				keepOriginal: astutil.KeepOriginal(d),
+				replace:      replaceDecl,
+				new:          newDecl,
 			}
 			if astutil.OverrideSignature(d) {
 				oi.overrideSignature = d
@@ -318,20 +321,20 @@ func augmentOverlayFile(file *ast.File, overrides map[string]overrideInfo) {
 		case *ast.GenDecl:
 			for j, spec := range d.Specs {
 				purgeSpec := purgeDecl || astutil.Purge(spec)
-				mustOverrideSpec := mustOverrideDecl || astutil.MustOverride(decl)
-				mustNotOverrideSpec := mustNotOverrideDecl || astutil.MustNotOverride(decl)
+				replaceSpec := replaceDecl || astutil.DirectiveReplace(spec)
+				newSpec := newDecl || astutil.DirectiveNew(spec)
 				switch s := spec.(type) {
 				case *ast.TypeSpec:
 					overrides[s.Name.Name] = overrideInfo{
-						purgeMethods:    purgeSpec,
-						mustOverride:    mustOverrideSpec,
-						mustNotOverride: mustNotOverrideSpec,
+						purgeMethods: purgeSpec,
+						replace:      replaceSpec,
+						new:          newSpec,
 					}
 				case *ast.ValueSpec:
 					for _, name := range s.Names {
 						overrides[name.Name] = overrideInfo{
-							mustOverride:    mustOverrideSpec,
-							mustNotOverride: mustNotOverrideSpec,
+							replace: replaceSpec,
+							new:     newSpec,
 						}
 					}
 				}
@@ -476,15 +479,18 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo, foun
 func checkOverrides(overrides map[string]overrideInfo, found map[string]struct{}, pkgPath string) error {
 	el := errorList.ErrorList{}
 	for name, info := range overrides {
-		if info.mustOverride || info.keepOriginal || info.purgeMethods || info.overrideSignature != nil {
-			if _, ok := found[name]; !ok {
-				el.Append(fmt.Errorf("gopherjs: original code for %q in package %q was not found, but it was expected to be there", name, pkgPath))
-			}
-		}
-		if info.mustNotOverride {
-			if _, ok := found[name]; ok {
-				el.Append(fmt.Errorf("gopherjs: original code for %q in package %q was found, but it was expected to not be there", name, pkgPath))
-			}
+		_, wasFound := found[name]
+		switch {
+		case wasFound && info.new:
+			el = el.Append(fmt.Errorf("gopherjs: original code for %s.%s was found, but override had `new` directive", pkgPath, name))
+		case !wasFound && info.replace:
+			el = el.Append(fmt.Errorf("gopherjs: original code for %s.%s was not found, but override had `replace` directive", pkgPath, name))
+		case !wasFound && info.keepOriginal:
+			el = el.Append(fmt.Errorf("gopherjs: original code for %s.%s was not found, but override had `keep-original` directive", pkgPath, name))
+		case !wasFound && info.purgeMethods:
+			el = el.Append(fmt.Errorf("gopherjs: original code for %s.%s was not found, but override had `purge` directive", pkgPath, name))
+		case !wasFound && info.overrideSignature != nil:
+			el = el.Append(fmt.Errorf("gopherjs: original code for %s.%s was not found, but override had `override-signature` directive", pkgPath, name))
 		}
 	}
 	return el.ErrOrNil()

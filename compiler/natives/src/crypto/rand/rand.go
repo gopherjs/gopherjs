@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package rand
 
@@ -9,8 +8,10 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+//gopherjs:replace
 type reader struct{}
 
+//gopherjs:replace
 func (r *reader) Read(b []byte) (n int, err error) {
 	array := js.InternalObject(b).Get("$array")
 	offset := js.InternalObject(b).Get("$offset").Int()

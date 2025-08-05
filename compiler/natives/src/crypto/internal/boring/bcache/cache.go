@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package bcache
 
@@ -10,6 +9,8 @@ import "unsafe"
 // register this cache with the GC.
 // Without this cache Boring crypto, in particular public and private
 // RSA and ECDSA keys, will be slower because the cache will always miss.
+//
+//gopherjs:replace
 type Cache struct{}
 
 func (c *Cache) Register()                           {}

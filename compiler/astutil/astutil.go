@@ -133,26 +133,26 @@ func FuncReceiverKey(d *ast.FuncDecl) string {
 	}
 }
 
-// MustOverride returns true if gopherjs:must-override directive is present
+// DirectiveReplace returns true if gopherjs:replace directive is present
 // on a struct, interface, type, variable, constant, or function.
 //
-// `//gopherjs:must-override` is a GopherJS-specific directive, which can be
+// `//gopherjs:replace` is a GopherJS-specific directive, which can be
 // applied in native overlays and will instruct the augmentation logic to
-// ensure that the original code is present and has not been removed or renamed,
+// ensure that the original code is present and has not been removed nor renamed,
 // otherwise an error will be raised.
-func MustOverride(d ast.Node) bool {
-	return hasDirective(d, `must-override`)
+func DirectiveReplace(d ast.Node) bool {
+	return hasDirective(d, `replace`)
 }
 
-// MustNotOverride returns true if gopherjs:must-not-override directive is
+// DirectiveNew returns true if gopherjs:new directive is
 // present on a struct, interface, type, variable, constant, or function.
 //
-// `//gopherjs:must-not-override` is a GopherJS-specific directive, which can be
+// `//gopherjs:new` is a GopherJS-specific directive, which can be
 // applied in native overlays and will instruct the augmentation logic to
 // ensure that the original code is not present so that this code does not
 // override any original code, otherwise an error will be raised.
-func MustNotOverride(d ast.Node) bool {
-	return hasDirective(d, `must-not-override`)
+func DirectiveNew(d ast.Node) bool {
+	return hasDirective(d, `new`)
 }
 
 // KeepOriginal returns true if gopherjs:keep-original directive is present
@@ -163,6 +163,9 @@ func MustNotOverride(d ast.Node) bool {
 // logic to expose the original function such that it can be called. For a
 // function in the original called `foo`, it will be accessible by the name
 // `_gopherjs_original_foo`.
+//
+// This will also ensure that the original function exists and hasn't been
+// removed or renamed, otherwise an error will be raised.
 func KeepOriginal(d *ast.FuncDecl) bool {
 	return hasDirective(d, `keep-original`)
 }
@@ -178,6 +181,9 @@ func KeepOriginal(d *ast.FuncDecl) bool {
 // fully supported). It should be used with caution since it may remove needed
 // dependencies. If a type is purged, all methods using that type as
 // a receiver will also be purged.
+//
+// This will also ensure that the original code exists and hasn't been
+// removed or renamed, otherwise an error will be raised.
 func Purge(d ast.Node) bool {
 	return hasDirective(d, `purge`)
 }
@@ -189,6 +195,7 @@ func Purge(d ast.Node) bool {
 // be applied in native overlays and will instruct the augmentation logic to
 // replace the original function signature which has the same FuncKey with the
 // signature defined in the native overlays.
+//
 // This directive can be used to remove generics from a function signature or
 // to replace a receiver of a function with another one. The given native
 // overlay function will be removed, so no method body is needed in the overlay.
@@ -196,6 +203,9 @@ func Purge(d ast.Node) bool {
 // The new signature may not contain types which require a new import since
 // the imports will not be automatically added when needed, only removed.
 // Use a type alias in the overlay to deal manage imports.
+//
+// This will also ensure that the original code exists and hasn't been
+// removed or renamed, otherwise an error will be raised.
 func OverrideSignature(d *ast.FuncDecl) bool {
 	return hasDirective(d, `override-signature`)
 }

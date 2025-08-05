@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package gob
 
@@ -10,6 +9,8 @@ import (
 )
 
 // TODO: TestEndToEnd override can be removed once the bug with Marr field is fixed.
+//
+//gopherjs:replace
 func TestEndToEnd(t *testing.T) {
 	type T2 struct {
 		T string
@@ -100,6 +101,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 }
 
+//gopherjs:replace
 func TestTypeRace(t *testing.T) {
 	// encoding/gob currently uses nosync. This test uses sync.WaitGroup and
 	// cannot succeed when nosync is used.

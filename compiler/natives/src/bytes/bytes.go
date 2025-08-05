@@ -1,8 +1,8 @@
 //go:build js
-// +build js
 
 package bytes
 
+//gopherjs:replace
 func IndexByte(s []byte, c byte) int {
 	for i, b := range s {
 		if b == c {
@@ -12,6 +12,7 @@ func IndexByte(s []byte, c byte) int {
 	return -1
 }
 
+//gopherjs:replace
 func Equal(a, b []byte) bool {
 	if len(a) != len(b) {
 		return false
@@ -24,6 +25,7 @@ func Equal(a, b []byte) bool {
 	return true
 }
 
+//gopherjs:replace
 func Compare(a, b []byte) int {
 	for i, ca := range a {
 		if i >= len(b) {

@@ -1,8 +1,8 @@
 //go:build js
-// +build js
 
 package embed
 
+//gopherjs:new used by gopherjs/build/embed.go
 func buildFS(list []struct {
 	name string
 	data string

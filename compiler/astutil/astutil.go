@@ -133,6 +133,28 @@ func FuncReceiverKey(d *ast.FuncDecl) string {
 	}
 }
 
+// MustOverride returns true if gopherjs:must-override directive is present
+// on a struct, interface, type, variable, constant, or function.
+//
+// `//gopherjs:must-override` is a GopherJS-specific directive, which can be
+// applied in native overlays and will instruct the augmentation logic to
+// ensure that the original code is present and has not been removed or renamed,
+// otherwise an error will be raised.
+func MustOverride(d ast.Node) bool {
+	return hasDirective(d, `must-override`)
+}
+
+// MustNotOverride returns true if gopherjs:must-not-override directive is
+// present on a struct, interface, type, variable, constant, or function.
+//
+// `//gopherjs:must-not-override` is a GopherJS-specific directive, which can be
+// applied in native overlays and will instruct the augmentation logic to
+// ensure that the original code is not present so that this code does not
+// override any original code, otherwise an error will be raised.
+func MustNotOverride(d ast.Node) bool {
+	return hasDirective(d, `must-not-override`)
+}
+
 // KeepOriginal returns true if gopherjs:keep-original directive is present
 // before a function decl.
 //

@@ -12,6 +12,8 @@ import (
 )
 
 // needsSkip reports whether the kind doesn't work for sorting on GopherJS.
+//
+// gopherjs:new
 func needsSkip(k reflect.Kind) bool {
 	switch k {
 	case reflect.Ptr, reflect.Chan, reflect.UnsafePointer:
@@ -21,6 +23,8 @@ func needsSkip(k reflect.Kind) bool {
 }
 
 // Note: sync with the original TestCompare.
+//
+// gopherjs:replace
 func TestCompare(t *testing.T) {
 	for _, test := range compareTests {
 		for i, v0 := range test {
@@ -54,6 +58,7 @@ func TestCompare(t *testing.T) {
 	}
 }
 
+// gopherjs:replace
 func TestOrder(t *testing.T) {
 	t.Skip("known issue: nil key doesn't work")
 }

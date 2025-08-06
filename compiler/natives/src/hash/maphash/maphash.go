@@ -3,7 +3,6 @@
 package maphash
 
 import (
-	"testing"
 	_ "unsafe" // for linkname
 )
 
@@ -186,20 +185,4 @@ func (h *Hash) flush() {
 func (h *Hash) Sum64() uint64 {
 	h.initSeed()
 	return rthash(h.buf[:h.n], h.state.s)
-}
-
-//gopherjs:keep-original
-func TestSmhasherSmallKeys(t *testing.T) {
-	if !testing.Short() {
-		t.Skip("Causes a heap overflow in GopherJS when running long test")
-	}
-	_gopherjs_original_TestSmhasherSmallKeys(t)
-}
-
-//gopherjs:keep-original
-func TestSmhasherZeros(t *testing.T) {
-	if !testing.Short() {
-		t.Skip("Takes a very long time when running long test")
-	}
-	_gopherjs_original_TestSmhasherZeros(t)
 }

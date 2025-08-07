@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+//gopherjs:replace
 func testClientTimeout(t *testing.T, h2 bool) {
 	// The original test expects Client.Timeout error to be returned, but under
 	// GopherJS an "i/o timeout" error is frequently returned. Otherwise the test
@@ -13,6 +14,7 @@ func testClientTimeout(t *testing.T, h2 bool) {
 	t.Skip("Flaky test under GopherJS.")
 }
 
+//gopherjs:replace
 func testClientTimeout_Headers(t *testing.T, h2 bool) {
 	// The original test expects Client.Timeout error to be returned, but under
 	// GopherJS an "i/o timeout" error is frequently returned. Otherwise the test

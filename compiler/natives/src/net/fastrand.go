@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package net
 
@@ -8,4 +7,5 @@ import (
 )
 
 //go:linkname fastrandu runtime.fastrandu
+//gopherjs:replace
 func fastrandu() uint

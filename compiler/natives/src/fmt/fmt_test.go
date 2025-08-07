@@ -1,6 +1,6 @@
 //go:build js
-// +build js
 
 package fmt_test
 
+//gopherjs:replace
 const intCount = 100

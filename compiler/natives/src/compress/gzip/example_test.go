@@ -1,13 +1,12 @@
 //go:build js && wasm
-// +build js,wasm
 
 package gzip_test
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // The test relies on a local HTTP server, which is not supported under NodeJS.
+//
+//gopherjs:replace
 func Example_compressingReader() {
 	fmt.Println("the data to be compressed")
 }

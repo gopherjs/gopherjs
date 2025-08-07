@@ -1,14 +1,13 @@
 //go:build js
-// +build js
 
 package reflectlite
 
-import (
-	"unsafe"
-)
+import "unsafe"
 
 // Field returns the i'th field of the struct v.
 // It panics if v's Kind is not Struct or i is out of range.
+//
+//gopherjs:replace
 func Field(v Value, i int) Value {
 	if v.kind() != Struct {
 		panic(&ValueError{"reflect.Value.Field", v.kind()})
@@ -16,6 +15,7 @@ func Field(v Value, i int) Value {
 	return v.Field(i)
 }
 
+//gopherjs:replace
 func TField(typ Type, i int) Type {
 	t := typ.(*rtype)
 	if t.Kind() != Struct {
@@ -26,6 +26,8 @@ func TField(typ Type, i int) Type {
 }
 
 // Field returns the i'th struct field.
+//
+//gopherjs:replace
 func StructFieldType(t *structType, i int) Type {
 	if i < 0 || i >= len(t.fields) {
 		panic("reflect: Field index out of bounds")

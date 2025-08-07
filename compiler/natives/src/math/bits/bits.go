@@ -1,8 +1,8 @@
 //go:build js
-// +build js
 
 package bits
 
+//gopherjs:add
 type _err string
 
 func (e _err) Error() string {
@@ -13,11 +13,13 @@ func (e _err) Error() string {
 func (e _err) RuntimeError() {
 }
 
+//gopherjs:replace
 var (
 	overflowError error = _err("runtime error: integer overflow")
 	divideError   error = _err("runtime error: integer divide by zero")
 )
 
+//gopherjs:replace
 func Mul32(x, y uint32) (hi, lo uint32) {
 	// Avoid slow 64-bit integers for better performance. Adapted from Mul64().
 	const mask16 = 1<<16 - 1
@@ -35,6 +37,7 @@ func Mul32(x, y uint32) (hi, lo uint32) {
 	return
 }
 
+//gopherjs:replace
 func Add32(x, y, carry uint32) (sum, carryOut uint32) {
 	// Avoid slow 64-bit integers for better performance. Adapted from Add64().
 	sum = x + y + carry
@@ -42,6 +45,7 @@ func Add32(x, y, carry uint32) (sum, carryOut uint32) {
 	return
 }
 
+//gopherjs:replace
 func Div32(hi, lo, y uint32) (quo, rem uint32) {
 	// Avoid slow 64-bit integers for better performance. Adapted from Div64().
 	const (
@@ -90,6 +94,7 @@ func Div32(hi, lo, y uint32) (quo, rem uint32) {
 	return q1*two16 + q0, (un21*two16 + un0 - q0*y) >> s
 }
 
+//gopherjs:replace
 func Rem32(hi, lo, y uint32) uint32 {
 	// We scale down hi so that hi < y, then use Div32 to compute the
 	// rem with the guarantee that it won't panic on quotient overflow.

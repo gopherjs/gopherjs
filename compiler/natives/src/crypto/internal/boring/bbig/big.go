@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package bbig
 
@@ -8,6 +7,7 @@ import (
 	"math/big"
 )
 
+//gopherjs:replace
 func Enc(b *big.Int) boring.BigInt {
 	if b == nil {
 		return nil
@@ -25,6 +25,7 @@ func Enc(b *big.Int) boring.BigInt {
 	return b2
 }
 
+//gopherjs:replace
 func Dec(b boring.BigInt) *big.Int {
 	if b == nil {
 		return nil

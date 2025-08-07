@@ -2,10 +2,9 @@
 
 package parser
 
-import (
-	"testing"
-)
+import "testing"
 
+//gopherjs:replace
 func TestParseDepthLimit(t *testing.T) {
 	t.Skip("causes call stack exhaustion on js/ecmascript")
 }

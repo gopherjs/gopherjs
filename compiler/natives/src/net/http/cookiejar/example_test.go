@@ -1,10 +1,10 @@
 //go:build js
-// +build js
 
 package cookiejar_test
 
 import "fmt"
 
+//gopherjs:replace
 func ExampleNew() {
 	// network access not supported by GopherJS, and this test depends on httptest.NewServer
 

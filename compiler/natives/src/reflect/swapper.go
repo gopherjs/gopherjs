@@ -1,10 +1,10 @@
 //go:build js
-// +build js
 
 package reflect
 
 import "github.com/gopherjs/gopherjs/js"
 
+//gopher:replace
 func Swapper(slice interface{}) func(i, j int) {
 	v := ValueOf(slice)
 	if v.Kind() != Slice {

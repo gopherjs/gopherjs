@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package runtime
 
@@ -27,6 +26,8 @@ type Error interface {
 // TODO(nevkontakte): In the upstream, this struct is meant to be compatible
 // with reflect.rtype, but here we use a minimal stub that satisfies the API
 // TypeAssertionError expects, which we dynamically instantiate in $assertType().
+//
+//gopherjs:replace
 type _type struct{ str string }
 
 func (t *_type) string() string  { return t.str }
@@ -109,6 +110,7 @@ var (
 	positionCounters = []*Func{}
 )
 
+//gopher:replace
 func registerPosition(funcName string, file string, line int, col int) uintptr {
 	key := file + ":" + itoa(line) + ":" + itoa(col)
 	if pc, found := knownPositions[key]; found {
@@ -133,6 +135,8 @@ func itoa(i int) string {
 }
 
 // basicFrame contains stack trace information extracted from JS stack trace.
+//
+//gopher:replace
 type basicFrame struct {
 	FuncName string
 	File     string
@@ -140,6 +144,7 @@ type basicFrame struct {
 	Col      int
 }
 
+//gopher:replace
 func callstack(skip, limit int) []basicFrame {
 	skip = skip + 1 /*skip error message*/ + 1 /*skip callstack's own frame*/
 	lines := js.Global.Get("Error").New().Get("stack").Call("split", "\n").Call("slice", skip, skip+limit)
@@ -162,6 +167,7 @@ var (
 	}
 )
 
+//gopher:replace
 func parseCallstack(lines *js.Object) []basicFrame {
 	frames := []basicFrame{}
 	l := lines.Length()
@@ -488,6 +494,7 @@ func throw(s string) {
 	panic(errorString(s))
 }
 
+//gopher:replace
 func nanotime() int64 {
 	const millisecond = 1_000_000
 	return js.Global.Get("Date").New().Call("getTime").Int64() * millisecond

@@ -1,9 +1,10 @@
 //go:build js
-// +build js
 
 package os
 
 // WriteString copied from Go 1.16, before it was made more performant, and unsafe.
+//
+//gopherjs:replace
 func (f *File) WriteString(s string) (n int, err error) {
 	return f.Write([]byte(s))
 }

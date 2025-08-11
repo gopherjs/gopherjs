@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package os
 
@@ -10,8 +9,10 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+//gopherjs:replace
 const isBigEndian = false
 
+//gopherjs:replace
 func runtime_args() []string { // not called on Windows
 	return Args
 }
@@ -30,11 +31,14 @@ func init() {
 	}
 }
 
+//gopherjs:replace
 func runtime_beforeExit() {}
 
+//gopherjs:replace
 func executable() (string, error) {
 	return "", errors.New("Executable not implemented for GOARCH=js")
 }
 
 //go:linkname fastrand runtime.fastrand
+//gopherjs:replace
 func fastrand() uint32

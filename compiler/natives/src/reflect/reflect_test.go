@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package reflect_test
 
@@ -9,42 +8,52 @@ import (
 	"testing"
 )
 
+//gopher:replace
 func TestAlignment(t *testing.T) {
 	t.Skip()
 }
 
+//gopher:replace
 func TestSliceOverflow(t *testing.T) {
 	t.Skip()
 }
 
+//gopher:replace
 func TestFuncLayout(t *testing.T) {
 	t.Skip()
 }
 
+//gopher:replace
 func TestArrayOfDirectIface(t *testing.T) {
 	t.Skip()
 }
 
+//gopher:replace
 func TestTypelinksSorted(t *testing.T) {
 	t.Skip()
 }
 
+//gopher:replace
 func TestGCBits(t *testing.T) {
 	t.Skip()
 }
 
+//gopher:replace
 func TestChanAlloc(t *testing.T) {
 	t.Skip()
 }
 
+//gopher:replace
 func TestNameBytesAreAligned(t *testing.T) {
 	t.Skip()
 }
 
+//gopher:replace
 func TestOffsetLock(t *testing.T) {
 	t.Skip()
 }
 
+//gopher:replace
 func TestSelectOnInvalid(t *testing.T) {
 	Select([]SelectCase{
 		{
@@ -60,10 +69,12 @@ func TestSelectOnInvalid(t *testing.T) {
 	})
 }
 
+//gopher:replace
 func TestStructOfDirectIface(t *testing.T) {
 	t.Skip("reflect.Value.InterfaceData is not supported by GopherJS.")
 }
 
+//gopher:replace
 func TestStructOfWithInterface(t *testing.T) {
 	// TODO(nevkontakte) Most of this test actually passes, but there is something
 	// about embedding fields with methods that can or can't be stored in an
@@ -76,6 +87,7 @@ func TestStructOfWithInterface(t *testing.T) {
 	t.Skip("GopherJS doesn't support storing types directly in interfaces.")
 }
 
+//gopher:replace
 var deepEqualTests = []DeepEqualTest{
 	// Equalities
 	{nil, nil, true},
@@ -143,6 +155,8 @@ var deepEqualTests = []DeepEqualTest{
 }
 
 // TODO: Fix this. See https://github.com/gopherjs/gopherjs/issues/763.
+//
+//gopher:replace
 func TestIssue22073(t *testing.T) {
 	m := ValueOf(NonExportedFirst(0)).Method(0)
 
@@ -160,6 +174,7 @@ func TestIssue22073(t *testing.T) {
 	// m.Call(nil)
 }
 
+//gopher:replace
 func TestCallReturnsEmpty(t *testing.T) {
 	t.Skip("test uses runtime.SetFinalizer, which is not supported by GopherJS")
 }
@@ -169,6 +184,7 @@ func init() {
 	typeTests = append(typeTests[:31], typeTests[32:]...) // skip test case #31
 }
 
+//gopher:replace
 func TestConvertNaNs(t *testing.T) {
 	// This test is exactly the same as the upstream, except it uses a "quiet NaN"
 	// value instead of "signalling NaN". JavaScript appears to coerce all NaNs
@@ -184,6 +200,7 @@ func TestConvertNaNs(t *testing.T) {
 	}
 }
 
+//gopher:replace
 func TestMapIterSet(t *testing.T) {
 	m := make(map[string]any, len(valueTests))
 	for _, tt := range valueTests {
@@ -227,6 +244,7 @@ type outer struct {
 func (*inner) M() int { return 1 }
 func (*outer) M() int { return 2 }
 
+//gopher:replace
 func TestNestedMethods(t *testing.T) {
 	// This test is similar to the upstream, but avoids using the unsupported
 	// Value.UnsafePointer() method.
@@ -249,6 +267,7 @@ func TestNestedMethods(t *testing.T) {
 	}
 }
 
+//gopher:replace
 func TestEmbeddedMethods(t *testing.T) {
 	// This test is similar to the upstream, but avoids using the unsupported
 	// Value.UnsafePointer() method.
@@ -277,34 +296,42 @@ func TestEmbeddedMethods(t *testing.T) {
 	}
 }
 
+//gopher:replace
 func TestNotInHeapDeref(t *testing.T) {
 	t.Skip("GopherJS doesn't support //go:notinheap")
 }
 
+//gopher:replace
 func TestMethodCallValueCodePtr(t *testing.T) {
 	t.Skip("methodValueCallCodePtr() is not applicable in GopherJS")
 }
 
+//gopher:replace
 func TestStructOfTooLarge(t *testing.T) {
 	t.Skip("This test is dependent on field alignment to determine if a struct size would exceed virtual address space.")
 }
 
+//gopher:replace
 func TestSetLenCap(t *testing.T) {
 	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
 }
 
+//gopher:replace
 func TestSetPanic(t *testing.T) {
 	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
 }
 
+//gopher:replace
 func TestCallPanic(t *testing.T) {
 	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
 }
 
+//gopher:replace
 func TestValuePanic(t *testing.T) {
 	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
 }
 
+//gopher:replace
 func TestSetIter(t *testing.T) {
 	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
 }

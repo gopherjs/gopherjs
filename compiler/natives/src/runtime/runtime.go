@@ -27,7 +27,7 @@ type Error interface {
 // with reflect.rtype, but here we use a minimal stub that satisfies the API
 // TypeAssertionError expects, which we dynamically instantiate in $assertType().
 //
-//gopherjs:replace
+//gopherjs:new
 type _type struct{ str string }
 
 func (t *_type) string() string  { return t.str }

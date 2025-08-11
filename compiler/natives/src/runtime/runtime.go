@@ -26,8 +26,6 @@ type Error interface {
 // TODO(nevkontakte): In the upstream, this struct is meant to be compatible
 // with reflect.rtype, but here we use a minimal stub that satisfies the API
 // TypeAssertionError expects, which we dynamically instantiate in $assertType().
-//
-//gopherjs:new
 type _type struct{ str string }
 
 func (t *_type) string() string  { return t.str }

@@ -1,3 +1,5 @@
+//go:build js
+
 package debug_test
 
 import "testing"

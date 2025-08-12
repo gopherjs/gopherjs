@@ -115,7 +115,7 @@ jobs:
         run: go mod tidy && git diff --exit-code
       - name: Check natives build tags
         working-directory: ${{ env.GOPHERJS_PATH }}
-        # All those packages should have // +build js.
+        # Any returned packages have files that are missing `//go:build js`.
         run: diff -u <(echo -n) <(go list ./compiler/natives/src/...)
 
   go_tests:

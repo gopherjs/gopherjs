@@ -1,8 +1,11 @@
 //go:build js
+// +build js
 
 package runtime
 
-import "github.com/gopherjs/gopherjs/js"
+import (
+	"github.com/gopherjs/gopherjs/js"
+)
 
 const (
 	GOOS     = "js"
@@ -106,7 +109,6 @@ var (
 	positionCounters = []*Func{}
 )
 
-//gopher:replace
 func registerPosition(funcName string, file string, line int, col int) uintptr {
 	key := file + ":" + itoa(line) + ":" + itoa(col)
 	if pc, found := knownPositions[key]; found {
@@ -131,8 +133,6 @@ func itoa(i int) string {
 }
 
 // basicFrame contains stack trace information extracted from JS stack trace.
-//
-//gopher:replace
 type basicFrame struct {
 	FuncName string
 	File     string
@@ -140,7 +140,6 @@ type basicFrame struct {
 	Col      int
 }
 
-//gopher:replace
 func callstack(skip, limit int) []basicFrame {
 	skip = skip + 1 /*skip error message*/ + 1 /*skip callstack's own frame*/
 	lines := js.Global.Get("Error").New().Get("stack").Call("split", "\n").Call("slice", skip, skip+limit)
@@ -163,7 +162,6 @@ var (
 	}
 )
 
-//gopher:replace
 func parseCallstack(lines *js.Object) []basicFrame {
 	frames := []basicFrame{}
 	l := lines.Length()

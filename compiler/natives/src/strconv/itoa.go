@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package strconv
 
@@ -9,6 +8,8 @@ import (
 
 // Itoa in gopherjs is always a 32bit int so the native toString
 // always handles it successfully.
+//
+//gopherjs:replace
 func Itoa(i int) string {
 	return js.InternalObject(i).Call("toString").String()
 }

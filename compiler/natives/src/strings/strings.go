@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package strings
 
@@ -9,18 +8,22 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+//gopherjs:replace
 func IndexByte(s string, c byte) int {
 	return js.InternalObject(s).Call("indexOf", js.Global.Get("String").Call("fromCharCode", c)).Int()
 }
 
+//gopherjs:replace
 func Index(s, sep string) int {
 	return js.InternalObject(s).Call("indexOf", js.InternalObject(sep)).Int()
 }
 
+//gopherjs:replace
 func LastIndex(s, sep string) int {
 	return js.InternalObject(s).Call("lastIndexOf", js.InternalObject(sep)).Int()
 }
 
+//gopherjs:replace
 func Count(s, sep string) int {
 	n := 0
 	// special cases
@@ -47,6 +50,7 @@ func Count(s, sep string) int {
 	return n
 }
 
+//gopherjs:replace
 func (b *Builder) String() string {
 	// Upstream Builder.String relies on package unsafe. We can't do that.
 	// TODO: It's possible that the entire strings.Builder API can be implemented
@@ -57,6 +61,7 @@ func (b *Builder) String() string {
 	return string(b.buf)
 }
 
+//gopherjs:replace
 func (b *Builder) copyCheck() {
 	if b.addr == nil {
 		// Upstream copyCheck uses noescape, which performs unsafe.Pointer manipulation.
@@ -67,6 +72,7 @@ func (b *Builder) copyCheck() {
 	}
 }
 
+//gopherjs:replace
 func Clone(s string) string {
 	// Since in the JavaScript runtime we don't have access the string's
 	// baking memory, we let the engine's garbage collector deal with substring

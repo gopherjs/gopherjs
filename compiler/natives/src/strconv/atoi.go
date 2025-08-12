@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package strconv
 
@@ -13,6 +12,8 @@ const (
 )
 
 // Atoi returns the result of ParseInt(s, 10, 0) converted to type int.
+//
+//gopherjs:replace
 func Atoi(s string) (int, error) {
 	const fnAtoi = "Atoi"
 	if len(s) == 0 {

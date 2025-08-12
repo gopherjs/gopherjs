@@ -1,12 +1,13 @@
 //go:build js
-// +build js
 
 package testing
 
+//gopherjs:replace
 func TestBenchmarkReadMemStatsBeforeFirstRun(t *T) {
 	t.Skip("runtime.ReadMemStats() is not supported by GopherJS.")
 }
 
+//gopherjs:replace
 func TestTRun(t *T) {
 	// TODO(nevkontakte): This test performs string comparisons expecting to find
 	// sub_test.go in the output, but GopherJS currently reports caller
@@ -14,6 +15,7 @@ func TestTRun(t *T) {
 	t.Skip("GopherJS doesn't support source maps sufficiently.")
 }
 
+//gopherjs:replace
 func TestBRun(t *T) {
 	// TODO(nevkontakte): This test performs string comparisons expecting to find
 	// sub_test.go in the output, but GopherJS currently reports caller

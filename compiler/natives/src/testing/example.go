@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package testing
 
@@ -10,6 +9,7 @@ import (
 	"time"
 )
 
+//gopherjs:replace
 func runExample(eg InternalExample) (ok bool) {
 	if *chatty {
 		fmt.Printf("=== RUN   %s\n", eg.Name)

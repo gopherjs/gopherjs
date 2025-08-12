@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package sync
 
@@ -22,6 +21,7 @@ var semWaiters = make(map[*uint32][]chan bool)
 // See https://github.com/gopherjs/gopherjs/issues/736.
 var semAwoken = make(map[*uint32]uint32)
 
+//gopherjs:replace
 func runtime_Semacquire(s *uint32) {
 	runtime_SemacquireMutex(s, false, 1)
 }
@@ -29,6 +29,8 @@ func runtime_Semacquire(s *uint32) {
 // SemacquireMutex is like Semacquire, but for profiling contended Mutexes.
 // Mutex profiling is not supported, so just use the same implementation as runtime_Semacquire.
 // TODO: Investigate this. If it's possible to implement, consider doing so, otherwise remove this comment.
+//
+//gopherjs:replace
 func runtime_SemacquireMutex(s *uint32, lifo bool, skipframes int) {
 	if (*s - semAwoken[s]) == 0 {
 		ch := make(chan bool)
@@ -46,6 +48,7 @@ func runtime_SemacquireMutex(s *uint32, lifo bool, skipframes int) {
 	*s--
 }
 
+//gopherjs:replace
 func runtime_Semrelease(s *uint32, handoff bool, skipframes int) {
 	// TODO: Use handoff if needed/possible.
 	*s++
@@ -67,16 +70,22 @@ func runtime_Semrelease(s *uint32, handoff bool, skipframes int) {
 	ch <- true
 }
 
+//gopherjs:replace
 func runtime_notifyListCheck(size uintptr) {}
 
+//gopherjs:replace
 func runtime_canSpin(i int) bool {
 	return false
 }
 
+//
 //go:linkname runtime_nanotime runtime.nanotime
+//gopherjs:replace
 func runtime_nanotime() int64
 
 // Implemented in runtime.
+//
+//gopherjs:replace
 func throw(s string) {
 	js.Global.Call("$throwRuntimeError", s)
 }

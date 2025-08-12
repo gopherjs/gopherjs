@@ -2,9 +2,7 @@
 
 package regexp
 
-import (
-	"testing"
-)
+import "testing"
 
 //gopherjs:keep-original
 func TestOnePassCutoff(t *testing.T) {

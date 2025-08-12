@@ -1,11 +1,8 @@
 //go:build js
-// +build js
 
 package reflectlite
 
-import (
-	"unsafe"
-)
+import "unsafe"
 
 type ChanDir int
 

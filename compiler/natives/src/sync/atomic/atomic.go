@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package atomic
 
@@ -202,6 +201,7 @@ func (v *Value) CompareAndSwap(old, new interface{}) (swapped bool) {
 	return true
 }
 
+//gopherjs:add
 func (v *Value) checkNew(op string, new interface{}) {
 	if new == nil {
 		panic("sync/atomic: " + op + " of nil value into Value")
@@ -239,6 +239,8 @@ func (x *Pointer[T]) CompareAndSwap(old, new *T) bool {
 }
 
 // sameType returns true if x and y contain the same concrete Go types.
+//
+//gopherjs:add
 func sameType(x, y interface{}) bool {
 	// This relies upon the fact that an interface in GopherJS is represented
 	// by the instance of the underlying Go type. Primitive values (e.g. bools)

@@ -2,9 +2,7 @@
 
 package syscall
 
-import (
-	"github.com/gopherjs/gopherjs/js"
-)
+import "github.com/gopherjs/gopherjs/js"
 
 var (
 	syscallModule      *js.Object

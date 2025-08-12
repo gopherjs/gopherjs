@@ -2,9 +2,7 @@
 
 package http_test
 
-import (
-	"testing"
-)
+import "testing"
 
 //gopherjs:replace
 func testClientTimeout(t *testing.T, h2 bool) {

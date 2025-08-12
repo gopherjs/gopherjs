@@ -8,6 +8,7 @@ import "github.com/gopherjs/gopherjs/js"
 // The code below is based on the upstream zoneinfo_js.go to closer match
 // WebAssembly behavior.
 
+//gopherjs:replace
 func initLocal() {
 	localLoc.name = "Local"
 
@@ -37,6 +38,8 @@ func initLocal() {
 
 // itoa is like strconv.Itoa but only works for values of i in range [0,99].
 // It panics if i is out of range.
+//
+//gopherjs:replace
 func itoa(i int) string {
 	if i < 10 {
 		return digits[i : i+1]

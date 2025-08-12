@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package time
 
@@ -16,6 +15,7 @@ func init() {
 	var _ Time = Unix(0, 0)
 }
 
+//gopherjs:replace
 type runtimeTimer struct {
 	i       int32
 	when    int64

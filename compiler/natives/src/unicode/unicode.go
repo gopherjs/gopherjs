@@ -1,8 +1,8 @@
 //go:build js
-// +build js
 
 package unicode
 
+//gopherjs:replace
 func to(_case int, r rune, caseRange []CaseRange) (mappedRune rune, foundMapping bool) {
 	if _case < 0 || MaxCase <= _case {
 		return ReplacementChar, false

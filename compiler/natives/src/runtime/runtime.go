@@ -490,7 +490,6 @@ func throw(s string) {
 	panic(errorString(s))
 }
 
-//gopher:replace
 func nanotime() int64 {
 	const millisecond = 1_000_000
 	return js.Global.Get("Date").New().Call("getTime").Int64() * millisecond

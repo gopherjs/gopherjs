@@ -2,25 +2,6 @@
 
 package reflectlite_test
 
-import (
-	"testing"
-
-	. "internal/reflectlite"
-)
-
-func TestTypes(t *testing.T) {
-	for i, tt := range typeTests {
-		if i == 30 {
-			continue
-		}
-		testReflectType(t, i, Field(ValueOf(tt.i), 0).Type(), tt.s)
-	}
-}
-
-func TestNameBytesAreAligned(t *testing.T) {
-	t.Skip("TestNameBytesAreAligned")
-}
-
 // `A` is used with `B[T any]` and is otherwise not needed.
 //
 //gopherjs:purge for go1.19 without generics

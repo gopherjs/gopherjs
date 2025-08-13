@@ -5,5 +5,5 @@ package token
 import "testing"
 
 func TestFileSetRace(t *testing.T) {
-	t.Skip()
+	t.Skip("Fails with: WaitGroup counter not zero")
 }

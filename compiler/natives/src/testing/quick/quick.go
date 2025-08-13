@@ -13,12 +13,11 @@ var maxCountCap int = 0
 // reasonable amount of time. This is a better compromise than disabling a slow
 // test entirely.
 //
-//     //gopherjs:keep-original
-//     func TestFoo(t *testing.T) {
-//         t.Cleanup(quick.GopherJSInternalMaxCountCap(100))
-//         _gopherjs_original_TestFoo(t)
-//     }
-
+//	//gopherjs:keep-original
+//	func TestFoo(t *testing.T) {
+//	    t.Cleanup(quick.GopherJSInternalMaxCountCap(100))
+//	    _gopherjs_original_TestFoo(t)
+//	}
 func GopherJSInternalMaxCountCap(newCap int) (restore func()) {
 	previousCap := maxCountCap
 	maxCountCap = newCap

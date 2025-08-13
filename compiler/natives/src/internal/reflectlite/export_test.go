@@ -2,9 +2,7 @@
 
 package reflectlite
 
-import (
-	"unsafe"
-)
+import "unsafe"
 
 // Field returns the i'th field of the struct v.
 // It panics if v's Kind is not Struct or i is out of range.

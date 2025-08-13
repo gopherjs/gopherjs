@@ -2,9 +2,7 @@
 
 package token
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestFileSetRace(t *testing.T) {
 	t.Skip()

@@ -2,9 +2,7 @@
 
 package io_test
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestMultiWriter_WriteStringSingleAlloc(t *testing.T) {
 	t.Skip()

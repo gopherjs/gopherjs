@@ -2,9 +2,7 @@
 
 package math_test
 
-import (
-	"testing"
-)
+import "testing"
 
 // Slightly higher tolerances than upstream, otherwise TestGamma fails.
 // TODO: Is there a better way to fix TestGamma? It's weird that only one test

@@ -2,9 +2,7 @@
 
 package strconv
 
-import (
-	"github.com/gopherjs/gopherjs/js"
-)
+import "github.com/gopherjs/gopherjs/js"
 
 const (
 	maxInt32 float64 = 1<<31 - 1

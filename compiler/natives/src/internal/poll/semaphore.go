@@ -2,9 +2,7 @@
 
 package poll
 
-import (
-	_ "unsafe" // For go:linkname
-)
+import _ "unsafe" // For go:linkname
 
 //go:linkname runtime_Semacquire sync.runtime_Semacquire
 func runtime_Semacquire(s *uint32)

@@ -2,9 +2,7 @@
 
 package http_test
 
-import (
-	"testing"
-)
+import "testing"
 
 func testTransportGCRequest(t *testing.T, h2, body bool) {
 	t.Skip("The test relies on runtime.SetFinalizer(), which is not supported by GopherJS.")

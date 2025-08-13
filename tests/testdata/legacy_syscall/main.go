@@ -1,5 +1,4 @@
 //go:build legacy_syscall && gopherjs
-// +build legacy_syscall,gopherjs
 
 // This program tests GopherJS's ability to perform raw syscalls using the
 // deprecated node_syscall extension. See TestLegacySyscall.

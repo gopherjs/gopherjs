@@ -2,9 +2,7 @@
 
 package http_test
 
-import (
-	"testing"
-)
+import "testing"
 
 //gopherjs:replace
 func testTransportGCRequest(t *testing.T, h2, body bool) {

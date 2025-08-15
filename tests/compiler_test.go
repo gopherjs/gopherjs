@@ -1,8 +1,6 @@
 package tests
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestVariadicNil(t *testing.T) {
 	t.Run("only variadic", func(t *testing.T) {

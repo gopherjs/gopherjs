@@ -116,7 +116,7 @@ jobs:
       - name: Check natives build tags
         working-directory: ${{ env.GOPHERJS_PATH }}
         run: |
-          echo "The following packages have at least one file that is missing //go:build js"
+          echo "Any following packages have at least one file that is missing //go:build js"
           diff -u <(echo -n) <(go list ./compiler/natives/src/...)
 
   go_tests:

@@ -1,8 +1,6 @@
 package gopherjspkg
 
-import (
-	"net/http"
-)
+import "net/http"
 
 // FS is a virtual filesystem that contains core GopherJS packages.
 var FS http.FileSystem

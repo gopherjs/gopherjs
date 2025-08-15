@@ -20,6 +20,8 @@ func Test_GenCircle_Burninate(t *testing.T) { runGenCircleTest(t, `burninate`) }
 
 func Test_GenCircle_CatBox(t *testing.T) { runGenCircleTest(t, `catbox`) }
 
+func Test_GenCircle_Trammel(t *testing.T) { runGenCircleTest(t, `trammel`) }
+
 // Cache buster: Keeping the tests from using cached results when only
 // the test application files are changed.
 //

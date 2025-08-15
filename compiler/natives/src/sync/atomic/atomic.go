@@ -220,5 +220,28 @@ func sameType(x, y interface{}) bool {
 	return js.InternalObject(x).Get("constructor") == js.InternalObject(y).Get("constructor")
 }
 
-//gopherjs:purge for go1.19 without generics
-type Pointer[T any] struct{}
+type Pointer[T any] struct {
+	v *T
+}
+
+func (x *Pointer[T]) Load() *T {
+	return x.v
+}
+
+func (x *Pointer[T]) Store(val *T) {
+	x.v = val
+}
+
+func (x *Pointer[T]) Swap(new *T) (old *T) {
+	old = x.v
+	x.v = new
+	return old
+}
+
+func (x *Pointer[T]) CompareAndSwap(old, new *T) bool {
+	if x.v == old {
+		x.v = new
+		return true
+	}
+	return false
+}

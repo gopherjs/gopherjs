@@ -1,7 +1,6 @@
 package sources
 
 import (
-	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -15,7 +14,6 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/jsFile"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/internal/errorList"
-	"github.com/gopherjs/gopherjs/internal/experiments"
 )
 
 // Sources is a slice of parsed Go sources and additional data for a package.
@@ -145,13 +143,6 @@ func (s *Sources) TypeCheck(importer Importer, sizes types.Sizes, tContext *type
 	// Any general errors that may have occurred during type checking.
 	if err != nil {
 		return err
-	}
-
-	// If generics are not enabled, ensure the package does not requires generics support.
-	if !experiments.Env.Generics {
-		if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil {
-			return fmt.Errorf("some packages requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", genErr)
-		}
 	}
 
 	s.baseInfo = typesInfo

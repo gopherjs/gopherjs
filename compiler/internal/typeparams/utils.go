@@ -1,8 +1,6 @@
 package typeparams
 
 import (
-	"errors"
-	"fmt"
 	"go/token"
 	"go/types"
 )
@@ -92,11 +90,6 @@ func FindNestingFunc(obj types.Object) *types.Func {
 	return nil
 }
 
-var (
-	errInstantiatesGenerics = errors.New("instantiates generic type or function")
-	errDefinesGenerics      = errors.New("defines generic type or function")
-)
-
 // HasTypeParams returns true if object defines type parameters.
 //
 // Note: this function doe not check if the object definition actually uses the
@@ -110,26 +103,6 @@ func HasTypeParams(typ types.Type) bool {
 	default:
 		return false
 	}
-}
-
-// RequiresGenericsSupport returns an error if the type-checked code depends on
-// generics support.
-func RequiresGenericsSupport(info *types.Info) error {
-	for ident := range info.Instances {
-		// Any instantiation means dependency on generics.
-		return fmt.Errorf("%w: %v", errInstantiatesGenerics, info.ObjectOf(ident))
-	}
-
-	for _, obj := range info.Defs {
-		if obj == nil {
-			continue
-		}
-		if HasTypeParams(obj.Type()) {
-			return fmt.Errorf("%w: %v", errDefinesGenerics, obj)
-		}
-	}
-
-	return nil
 }
 
 // isGeneric will search all the given types in `typ` and their subtypes for a

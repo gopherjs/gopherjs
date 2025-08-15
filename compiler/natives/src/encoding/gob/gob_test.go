@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package gob
 
@@ -104,4 +103,8 @@ func TestTypeRace(t *testing.T) {
 	// encoding/gob currently uses nosync. This test uses sync.WaitGroup and
 	// cannot succeed when nosync is used.
 	t.Skip("using nosync")
+}
+
+func TestCountDecodeMallocs(t *testing.T) {
+	t.Skip("testing.AllocsPerRun not supported in GopherJS")
 }

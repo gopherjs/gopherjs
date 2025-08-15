@@ -2,9 +2,7 @@
 
 package parser
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestParseDepthLimit(t *testing.T) {
 	t.Skip("causes call stack exhaustion on js/ecmascript")

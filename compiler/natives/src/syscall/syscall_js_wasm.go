@@ -1,8 +1,6 @@
 package syscall
 
-import (
-	"syscall/js"
-)
+import "syscall/js"
 
 func runtime_envs() []string {
 	process := js.Global().Get("process")

@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"sort"
 	"testing"
+
+	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
 func Test_Collector_CalledOnce(t *testing.T) {
@@ -41,44 +43,44 @@ func Test_Collector_Collecting(t *testing.T) {
 	decl2 := quickTestDecl(obj2)
 	var c Collector
 
-	c.DeclareDCEDep(obj1) // no effect since a collection isn't running.
+	c.DeclareDCEDep(obj1, nil, nil) // no effect since a collection isn't running.
 	depCount(t, decl1, 0)
 	depCount(t, decl2, 0)
 
 	c.CollectDCEDeps(decl1, func() {
-		c.DeclareDCEDep(obj2)
-		c.DeclareDCEDep(obj3)
-		c.DeclareDCEDep(obj3) // already added so has no effect.
+		c.DeclareDCEDep(obj2, nil, nil)
+		c.DeclareDCEDep(obj3, nil, nil)
+		c.DeclareDCEDep(obj3, nil, nil) // already added so has no effect.
 	})
 	depCount(t, decl1, 2)
 	depCount(t, decl2, 0)
 
-	c.DeclareDCEDep(obj4) // no effect since a collection isn't running.
+	c.DeclareDCEDep(obj4, nil, nil) // no effect since a collection isn't running.
 	depCount(t, decl1, 2)
 	depCount(t, decl2, 0)
 
 	c.CollectDCEDeps(decl2, func() {
-		c.DeclareDCEDep(obj5)
-		c.DeclareDCEDep(obj6)
-		c.DeclareDCEDep(obj7)
+		c.DeclareDCEDep(obj5, nil, nil)
+		c.DeclareDCEDep(obj6, nil, nil)
+		c.DeclareDCEDep(obj7, nil, nil)
 	})
 	depCount(t, decl1, 2)
 	depCount(t, decl2, 3)
 
-	// The second collection overwrites the first collection.
+	// The second collection adds to existing dependencies.
 	c.CollectDCEDeps(decl2, func() {
-		c.DeclareDCEDep(obj5)
+		c.DeclareDCEDep(obj4, nil, nil)
+		c.DeclareDCEDep(obj5, nil, nil)
 	})
 	depCount(t, decl1, 2)
-	depCount(t, decl2, 1)
+	depCount(t, decl2, 4)
 }
 
 func Test_Info_SetNameAndDep(t *testing.T) {
 	tests := []struct {
-		name    string
-		obj     types.Object
-		want    Info   // expected Info after SetName
-		wantDep string // expected dep after addDep
+		name string
+		obj  types.Object
+		want Info // expected Info after SetName
 	}{
 		{
 			name: `package`,
@@ -86,32 +88,26 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				`package jim
 				import Sarah "fmt"`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Sarah`,
+				objectFilter: `jim.Sarah`,
 			},
-			wantDep: `jim.Sarah`,
 		},
 		{
-			name: `exposed var`,
+			name: `exported var`,
 			obj: parseObject(t, `Toby`,
 				`package jim
 				var Toby float64`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Toby`,
+				objectFilter: `jim.Toby`,
 			},
-			wantDep: `jim.Toby`,
 		},
 		{
-			name: `exposed const`,
+			name: `exported const`,
 			obj: parseObject(t, `Ludo`,
 				`package jim
 				const Ludo int = 42`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Ludo`,
+				objectFilter: `jim.Ludo`,
 			},
-			wantDep: `jim.Ludo`,
 		},
 		{
 			name: `label`,
@@ -126,91 +122,414 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 					}
 				}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Gobo`,
+				objectFilter: `jim.Gobo`,
 			},
-			wantDep: `jim.Gobo`,
 		},
 		{
-			name: `exposed specific type`,
+			name: `exported specific type`,
 			obj: parseObject(t, `Jen`,
 				`package jim
 				type Jen struct{}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Jen`,
+				objectFilter: `jim.Jen`,
 			},
-			wantDep: `jim.Jen`,
 		},
 		{
-			name: `exposed generic type`,
+			name: `exported generic type`,
 			obj: parseObject(t, `Henson`,
 				`package jim
 				type Henson[T comparable] struct{}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Henson`,
+				objectFilter: `jim.Henson[comparable]`,
 			},
-			wantDep: `jim.Henson`,
 		},
 		{
-			name: `exposed specific function`,
+			name: `exported specific function`,
 			obj: parseObject(t, `Jareth`,
 				`package jim
 				func Jareth() {}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Jareth`,
+				objectFilter: `jim.Jareth`,
 			},
-			wantDep: `jim.Jareth`,
 		},
 		{
-			name: `exposed generic function`,
+			name: `exported generic function`,
 			obj: parseObject(t, `Didymus`,
 				`package jim
 				func Didymus[T comparable]() {}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Didymus`,
+				objectFilter: `jim.Didymus[comparable]`,
 			},
-			wantDep: `jim.Didymus`,
 		},
 		{
-			name: `exposed specific method`,
+			name: `exported specific method`,
 			obj: parseObject(t, `Kira`,
 				`package jim
 				type Fizzgig string
 				func (f Fizzgig) Kira() {}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Fizzgig`,
+				objectFilter: `jim.Fizzgig`,
 			},
-			wantDep: `jim.Kira~`,
 		},
 		{
-			name: `unexposed specific method`,
+			name: `unexported specific method without parameters or results`,
 			obj: parseObject(t, `frank`,
 				`package jim
 				type Aughra int
 				func (a Aughra) frank() {}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `Aughra`,
-				methodFilter: `frank~`,
+				objectFilter: `jim.Aughra`,
+				methodFilter: `jim.frank()`,
 			},
-			wantDep: `jim.frank~`,
 		},
 		{
-			name: `specific method on unexposed type`,
+			name: `unexported specific method with parameters and results`,
+			obj: parseObject(t, `frank`,
+				`package jim
+				type Aughra int
+				func (a Aughra) frank(other Aughra) (bool, error) {
+					return a == other, nil
+				}`),
+			want: Info{
+				objectFilter: `jim.Aughra`,
+				methodFilter: `jim.frank(jim.Aughra)(bool, error)`,
+			},
+		},
+		{
+			name: `unexported specific method with variadic parameter`,
+			obj: parseObject(t, `frank`,
+				`package jim
+				type Aughra int
+				func (a Aughra) frank(others ...Aughra) int {
+					return len(others) + 1
+				}`),
+			want: Info{
+				objectFilter: `jim.Aughra`,
+				methodFilter: `jim.frank(...jim.Aughra) int`,
+			},
+		},
+		{
+			name: `unexported generic method with type parameters and instance argument`,
+			obj: parseObject(t, `frank`,
+				`package jim
+				type Aughra[T ~float64] struct {
+					value T
+				}
+				func (a *Aughra[T]) frank(other *Aughra[float64]) bool {
+					return float64(a.value) == other.value
+				}`),
+			want: Info{
+				objectFilter: `jim.Aughra[~float64]`,
+				methodFilter: `jim.frank(*jim.Aughra[float64]) bool`,
+			},
+		},
+		{
+			name: `unexported generic method with type parameters and generic argument`,
+			obj: parseObject(t, `frank`,
+				`package jim
+				type Aughra[T ~float64] struct {
+					value T
+				}
+				func (a *Aughra[T]) frank(other *Aughra[T]) bool {
+					return a.value == other.value
+				}`),
+			want: Info{
+				objectFilter: `jim.Aughra[~float64]`,
+				methodFilter: `jim.frank(*jim.Aughra[~float64]) bool`,
+			},
+		},
+		{
+			name: `specific method on unexported type`,
 			obj: parseObject(t, `Red`,
 				`package jim
 				type wembley struct{}
 				func (w wembley) Red() {}`),
 			want: Info{
-				importPath:   `jim`,
-				objectFilter: `wembley`,
+				objectFilter: `jim.wembley`,
 			},
-			wantDep: `jim.Red~`,
+		},
+		{
+			name: `unexported method resulting in an interface with exported methods`,
+			obj: parseObject(t, `bear`,
+				`package jim
+				type Fozzie struct{}
+				func (f *Fozzie) bear() interface{
+					WakkaWakka(joke string)(landed bool)
+					Firth()(string, error)
+				}`),
+			want: Info{
+				objectFilter: `jim.Fozzie`,
+				methodFilter: `jim.bear() interface{ Firth()(string, error); WakkaWakka(string) bool }`,
+			},
+		},
+		{
+			name: `unexported method resulting in an interface with unexported methods`,
+			obj: parseObject(t, `bear`,
+				`package jim
+				type Fozzie struct{}
+				func (f *Fozzie) bear() interface{
+					wakkaWakka(joke string)(landed bool)
+					firth()(string, error)
+				}`),
+			want: Info{
+				objectFilter: `jim.Fozzie`,
+				// The package path, i.e. `jim.`, is used on unexported methods
+				// to ensure the filter will not match another package's method.
+				methodFilter: `jim.bear() interface{ jim.firth()(string, error); jim.wakkaWakka(string) bool }`,
+			},
+		},
+		{
+			name: `unexported method resulting in an empty interface `,
+			obj: parseObject(t, `bear`,
+				`package jim
+				type Fozzie struct{}
+				func (f *Fozzie) bear() interface{}`),
+			want: Info{
+				objectFilter: `jim.Fozzie`,
+				methodFilter: `jim.bear() any`,
+			},
+		},
+		{
+			name: `unexported method resulting in a function`,
+			obj: parseObject(t, `bear`,
+				`package jim
+				type Fozzie struct{}
+				func (f *Fozzie) bear() func(joke string)(landed bool)`),
+			want: Info{
+				objectFilter: `jim.Fozzie`,
+				methodFilter: `jim.bear() func(string) bool`,
+			},
+		},
+		{
+			name: `unexported method resulting in a struct`,
+			obj: parseObject(t, `bear`,
+				`package jim
+				type Fozzie struct{}
+				func (f *Fozzie) bear() struct{
+					Joke string
+					WakkaWakka bool
+				}`),
+			want: Info{
+				objectFilter: `jim.Fozzie`,
+				methodFilter: `jim.bear() struct{ Joke string; WakkaWakka bool }`,
+			},
+		},
+		{
+			name: `unexported method resulting in a struct with type parameter`,
+			obj: parseObject(t, `bear`,
+				`package jim
+				type Fozzie[T ~string|~int] struct{}
+				func (f *Fozzie[T]) bear() struct{
+					Joke T
+					wakkaWakka bool
+				}`),
+			want: Info{
+				objectFilter: `jim.Fozzie[~int|~string]`,
+				// The `Joke ~int|~string` part will likely not match other methods
+				// such as methods with `Joke string` or `Joke int`, however the
+				// interface should be defined for the instantiations of this type
+				// and those should have the correct field type for `Joke`.
+				methodFilter: `jim.bear() struct{ Joke ~int|~string; jim.wakkaWakka bool }`,
+			},
+		},
+		{
+			name: `unexported method resulting in an empty struct`,
+			obj: parseObject(t, `bear`,
+				`package jim
+				type Fozzie struct{}
+				func (f *Fozzie) bear() struct{}`),
+			want: Info{
+				objectFilter: `jim.Fozzie`,
+				methodFilter: `jim.bear() struct{}`,
+			},
+		},
+		{
+			name: `unexported method resulting in a slice`,
+			obj: parseObject(t, `bear`,
+				`package jim
+				type Fozzie struct{}
+				func (f *Fozzie) bear()(jokes []string)`),
+			want: Info{
+				objectFilter: `jim.Fozzie`,
+				methodFilter: `jim.bear() []string`,
+			},
+		},
+		{
+			name: `unexported method resulting in an array`,
+			obj: parseObject(t, `bear`,
+				`package jim
+				type Fozzie struct{}
+				func (f *Fozzie) bear()(jokes [2]string)`),
+			want: Info{
+				objectFilter: `jim.Fozzie`,
+				methodFilter: `jim.bear() [2]string`,
+			},
+		},
+		{
+			name: `unexported method resulting in a map`,
+			obj: parseObject(t, `bear`,
+				`package jim
+				type Fozzie struct{}
+				func (f *Fozzie) bear()(jokes map[string]bool)`),
+			want: Info{
+				objectFilter: `jim.Fozzie`,
+				methodFilter: `jim.bear() map[string]bool`,
+			},
+		},
+		{
+			name: `unexported method resulting in a channel`,
+			obj: parseObject(t, `bear`,
+				`package jim
+				type Fozzie struct{}
+				func (f *Fozzie) bear() chan string`),
+			want: Info{
+				objectFilter: `jim.Fozzie`,
+				methodFilter: `jim.bear() chan string`,
+			},
+		},
+		{
+			name: `unexported method resulting in a complex compound named type`,
+			obj: parseObject(t, `packRat`,
+				`package jim
+				type Gonzo[T any] struct{
+					v T
+				}
+				func (g Gonzo[T]) Get() T { return g.v }
+				type Rizzo struct{}
+				func (r Rizzo) packRat(v int) Gonzo[Gonzo[Gonzo[int]]] {
+					return Gonzo[Gonzo[Gonzo[int]]]{v: Gonzo[Gonzo[int]]{v: Gonzo[int]{v: v}}}
+				}
+				var _ int = Rizzo{}.packRat(42).Get().Get().Get()`),
+			want: Info{
+				objectFilter: `jim.Rizzo`,
+				methodFilter: `jim.packRat(int) jim.Gonzo[jim.Gonzo[jim.Gonzo[int]]]`,
+			},
+		},
+		{
+			name: `unexported method resulting in an instance with same type parameter`,
+			obj: parseObject(t, `sidekick`,
+				`package jim
+				type Beaker[T any] struct{}
+				type Honeydew[S any] struct{}
+				func (hd Honeydew[S]) sidekick() Beaker[S] {
+					return Beaker[S]{}
+				}`),
+			want: Info{
+				objectFilter: `jim.Honeydew[any]`,
+				methodFilter: `jim.sidekick() jim.Beaker[any]`,
+			},
+		},
+		{
+			name: `struct with self referencing type parameter constraints`,
+			obj: parseObject(t, `Keys`,
+				`package jim
+				func Keys[K comparable, V any, M ~map[K]V](m M) []K {
+					keys := make([]K, 0, len(m))
+					for k := range m {
+						keys = append(keys, k)
+					}
+					return keys
+				}`),
+			want: Info{
+				objectFilter: `jim.Keys[comparable, any, ~map[comparable]any]`,
+			},
+		},
+		{
+			name: `interface with self referencing type parameter constraints`,
+			obj: parseObject(t, `ElectricMayhem`,
+				`package jim
+				type ElectricMayhem[K comparable, V any, M ~map[K]V] interface {
+					keys() []K
+					values() []V
+					asMap() M
+				}`),
+			want: Info{
+				objectFilter: `jim.ElectricMayhem[comparable, any, ~map[comparable]any]`,
+			},
+		},
+		{
+			name: `function with recursive referencing type parameter constraints`,
+			obj: parseObject(t, `doWork`,
+				`package jim
+				type Doozer[T any] interface {
+					comparable
+					Work() T
+				}
+
+				func doWork[T Doozer[T]](a T) T {
+					return a.Work()
+				}`),
+			want: Info{
+				objectFilter: `jim.doWork[jim.Doozer[jim.Doozer[...]]]`,
+			},
+		},
+		{
+			name: `function with recursive referencing multiple type parameter constraints`,
+			obj: parseObject(t, `doWork`,
+				`package jim
+				type Doozer[T, U any] interface {
+					Work() T
+					Play() U
+				}
+
+				func doWork[T Doozer[T, U], U any](a T) T {
+					return a.Work()
+				}`),
+			want: Info{
+				objectFilter: `jim.doWork[jim.Doozer[jim.Doozer[...], any], any]`,
+			},
+		},
+		{
+			name: `function with multiple recursive referencing multiple type parameter constraints`,
+			obj: parseObject(t, `doWork`,
+				`package jim
+				type Doozer[T, U any] interface {
+					Work() T
+					Play() U
+				}
+
+				func doWork[T Doozer[T, U], U Doozer[T, U]](a T) T {
+					return a.Work()
+				}`),
+			want: Info{
+				objectFilter: `jim.doWork[jim.Doozer[jim.Doozer[...], jim.Doozer[...]], jim.Doozer[jim.Doozer[...], jim.Doozer[...]]]`,
+			},
+		},
+		{
+			name: `function with multiple recursive referencing type parameter constraints`,
+			obj: parseObject(t, `doWork`,
+				`package jim
+				type Doozer[T any] interface {
+					Work() T
+				}
+
+				type Fraggle[U any] interface {
+					Play() U
+				}
+
+				func doWork[T Doozer[T], U Fraggle[U]](a T) T {
+					return a.Work()
+				}`),
+			want: Info{
+				objectFilter: `jim.doWork[jim.Doozer[jim.Doozer[...]], jim.Fraggle[jim.Fraggle[...]]]`,
+			},
+		},
+		{
+			name: `function with osculating recursive referencing type parameter constraints`,
+			obj: parseObject(t, `doWork`,
+				`package jim
+				type Doozer[T any] interface {
+					Work() T
+				}
+
+				type Fraggle[U any] interface {
+					Play() U
+				}
+
+				func doWork[T Doozer[U], U Fraggle[T]]() {}`),
+			want: Info{
+				objectFilter: `jim.doWork[jim.Doozer[jim.Fraggle[jim.Doozer[...]]], jim.Fraggle[jim.Doozer[jim.Fraggle[...]]]]`,
+			},
 		},
 	}
 
@@ -219,14 +538,14 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				d := &testDecl{}
 				equal(t, d.Dce().unnamed(), true)
-				equal(t, d.Dce().String(), `[unnamed] . -> []`)
+				equal(t, d.Dce().String(), `[unnamed] -> []`)
 				t.Log(`object:`, types.ObjectString(tt.obj, nil))
 
-				d.Dce().SetName(tt.obj)
+				d.Dce().SetName(tt.obj, nil, nil)
 				equal(t, d.Dce().unnamed(), tt.want.unnamed())
-				equal(t, d.Dce().importPath, tt.want.importPath)
 				equal(t, d.Dce().objectFilter, tt.want.objectFilter)
 				equal(t, d.Dce().methodFilter, tt.want.methodFilter)
+				equalSlices(t, d.Dce().getDeps(), tt.want.getDeps())
 				equal(t, d.Dce().String(), tt.want.String())
 			})
 		}
@@ -238,11 +557,20 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 				d := &testDecl{}
 				t.Log(`object:`, types.ObjectString(tt.obj, nil))
 
-				d.Dce().setDeps(map[types.Object]struct{}{
-					tt.obj: {},
+				wantDeps := []string{}
+				if len(tt.want.objectFilter) > 0 {
+					wantDeps = append(wantDeps, tt.want.objectFilter)
+				}
+				if len(tt.want.methodFilter) > 0 {
+					wantDeps = append(wantDeps, tt.want.methodFilter)
+				}
+				sort.Strings(wantDeps)
+
+				c := Collector{}
+				c.CollectDCEDeps(d, func() {
+					c.DeclareDCEDep(tt.obj, nil, nil)
 				})
-				equal(t, len(d.Dce().deps), 1)
-				equal(t, d.Dce().deps[0], tt.wantDep)
+				equalSlices(t, d.Dce().getDeps(), wantDeps)
 			})
 		}
 	})
@@ -254,12 +582,344 @@ func Test_Info_SetNameOnlyOnce(t *testing.T) {
 	obj2 := quickVar(pkg, `Stripe`)
 
 	decl := &testDecl{}
-	decl.Dce().SetName(obj1)
+	decl.Dce().SetName(obj1, nil, nil)
 
 	err := capturePanic(t, func() {
-		decl.Dce().SetName(obj2)
+		decl.Dce().SetName(obj2, nil, nil)
 	})
 	errorMatches(t, err, `^may only set the name once for path/to/mogwai\.Gizmo .*$`)
+}
+
+func Test_Info_UsesDeps(t *testing.T) {
+	tests := []struct {
+		name     string
+		id       string // identifier to check for usage and instance
+		line     int    // line number to find the identifier on
+		src      string
+		wantDeps []string
+	}{
+		{
+			name: `usage of specific struct`,
+			id:   `Sinclair`,
+			line: 5,
+			src: `package epsilon3
+				type Sinclair struct{}
+				func (s Sinclair) command() { }
+				func main() {
+					Sinclair{}.command() //<-- line 5
+				}`,
+			wantDeps: []string{`epsilon3.Sinclair`},
+		},
+		{
+			name: `usage of generic struct`,
+			id:   `Sheridan`,
+			line: 5,
+			src: `package epsilon3
+				type Sheridan[T comparable] struct{}
+				func (s Sheridan[T]) command() { }
+				func main() {
+					Sheridan[string]{}.command() //<-- line 5
+				}`,
+			wantDeps: []string{`epsilon3.Sheridan[string]`},
+		},
+		{
+			name: `usage of unexported method of generic struct`,
+			id:   `command`,
+			line: 5,
+			src: `package epsilon3
+				type Sheridan[T comparable] struct{}
+				func (s Sheridan[T]) command() { }
+				func main() {
+					Sheridan[string]{}.command() //<-- line 5
+				}`,
+			// unexported methods need the method filter for matching with
+			// unexported methods on interfaces.
+			wantDeps: []string{
+				`epsilon3.Sheridan[string]`,
+				`epsilon3.command()`,
+			},
+		},
+		{
+			name: `usage of unexported method of generic struct pointer`,
+			id:   `command`,
+			line: 5,
+			src: `package epsilon3
+				type Sheridan[T comparable] struct{}
+				func (s *Sheridan[T]) command() { }
+				func main() {
+					(&Sheridan[string]{}).command() //<-- line 5
+				}`,
+			// unexported methods need the method filter for matching with
+			// unexported methods on interfaces.
+			wantDeps: []string{
+				`epsilon3.Sheridan[string]`,
+				`epsilon3.command()`,
+			},
+		},
+		{
+			name: `invocation of function with implicit type arguments`,
+			id:   `Move`,
+			line: 5,
+			src: `package epsilon3
+				type Ivanova[T any] struct{}
+				func Move[T ~string|~int](i Ivanova[T]) { }
+				func main() {
+					Move(Ivanova[string]{}) //<-- line 5
+				}`,
+			wantDeps: []string{`epsilon3.Move[string]`},
+		},
+		{
+			name: `exported method on a complex generic type`,
+			id:   `Get`,
+			line: 6,
+			src: `package epsilon3
+				type Garibaldi[T any] struct{ v T }
+				func (g Garibaldi[T]) Get() T { return g.v }
+				func main() {
+					michael := Garibaldi[Garibaldi[Garibaldi[int]]]{v: Garibaldi[Garibaldi[int]]{v: Garibaldi[int]{v: 42}}}
+					_ = michael.Get() // <-- line 6
+				}`,
+			wantDeps: []string{`epsilon3.Garibaldi[epsilon3.Garibaldi[epsilon3.Garibaldi[int]]]`},
+		},
+		{
+			name: `unexported method on a complex generic type`,
+			id:   `get`,
+			line: 6,
+			src: `package epsilon3
+				type Garibaldi[T any] struct{ v T }
+				func (g Garibaldi[T]) get() T { return g.v }
+				func main() {
+					michael := Garibaldi[Garibaldi[Garibaldi[int]]]{v: Garibaldi[Garibaldi[int]]{v: Garibaldi[int]{v: 42}}}
+					_ = michael.get() // <-- line 6
+				}`,
+			wantDeps: []string{
+				`epsilon3.Garibaldi[epsilon3.Garibaldi[epsilon3.Garibaldi[int]]]`,
+				`epsilon3.get() epsilon3.Garibaldi[epsilon3.Garibaldi[int]]`,
+			},
+		},
+		{
+			name: `invoke of method with an unnamed interface receiver`,
+			id:   `heal`,
+			line: 8,
+			src: `package epsilon3
+				type Franklin struct{}
+				func (g Franklin) heal() {}
+				func main() {
+					var stephen interface{
+						heal()
+					} = Franklin{}
+					stephen.heal() // <-- line 8
+				}`,
+			wantDeps: []string{
+				`epsilon3.heal()`,
+			},
+		},
+		{
+			name: `invoke a method with a generic return type via instance`,
+			// Based on go/1.19.13/x64/test/dictionaryCapture-noinline.go
+			id:   `lennier`,
+			line: 6,
+			src: `package epsilon3								
+				type delenn[T any] struct { a T }
+				func (d delenn[T]) lennier() T { return d.a }
+				func cocoon() int {
+					x := delenn[int]{a: 7}
+					f := delenn[int].lennier // <-- line 6
+					return f(x)
+				}`,
+			wantDeps: []string{
+				`epsilon3.delenn[int]`,
+				`epsilon3.lennier() int`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := &testDecl{}
+			uses, inst := parseInstanceUse(t, tt.line, tt.id, tt.src)
+			tArgs := typeListToSlice(inst.TypeArgs)
+			t.Logf(`object: %s with [%s]`, types.ObjectString(uses, nil), (typesutil.TypeList)(tArgs).String())
+
+			c := Collector{}
+			c.CollectDCEDeps(d, func() {
+				c.DeclareDCEDep(uses, nil, tArgs)
+			})
+			equalSlices(t, d.Dce().getDeps(), tt.wantDeps)
+		})
+	}
+}
+
+func Test_Info_SpecificCasesDeps(t *testing.T) {
+	tests := []struct {
+		name      string
+		obj       types.Object
+		nestTArgs []types.Type
+		tArgs     []types.Type
+		wantDeps  []string
+	}{
+		{
+			name: `struct instantiation with generic object`,
+			obj: parseObject(t, `Mikey`,
+				`package astoria;
+				type Mikey[T comparable] struct{}
+				`),
+			tArgs:    []types.Type{types.Typ[types.String]},
+			wantDeps: []string{`astoria.Mikey[string]`},
+		},
+		{
+			name: `method instantiation with generic object`,
+			obj: parseObject(t, `brand`,
+				`package astoria;
+				type Mikey[T comparable] struct{ a T}
+				func (m Mikey[T]) brand() T {
+					return m.a
+				}`),
+			tArgs: []types.Type{types.Typ[types.String]},
+			wantDeps: []string{
+				`astoria.Mikey[string]`,
+				`astoria.brand() string`,
+			},
+		},
+		{
+			name: `method instantiation with generic object and multiple type parameters`,
+			obj: parseObject(t, `shuffle`,
+				`package astoria;
+				type Chunk[K comparable, V any] struct{ data map[K]V }
+				func (c Chunk[K, V]) shuffle(k K) V {
+					return c.data[k]
+				}`),
+			tArgs: []types.Type{types.Typ[types.String], types.Typ[types.Int]},
+			wantDeps: []string{
+				`astoria.Chunk[string, int]`,
+				`astoria.shuffle(string) int`,
+			},
+		},
+		{
+			name: `method instantiation with generic object renamed type parameters`,
+			obj: parseObject(t, `shuffle`,
+				`package astoria;
+				type Chunk[K comparable, V any] struct{ data map[K]V }
+				func (c Chunk[T, K]) shuffle(k T) K {
+					return c.data[k]
+				}`),
+			tArgs: []types.Type{types.Typ[types.String], types.Typ[types.Int]},
+			wantDeps: []string{
+				`astoria.Chunk[string, int]`,
+				`astoria.shuffle(string) int`,
+			},
+		},
+		{
+			name: `a concrete function with a nested concrete type instance`,
+			obj: parseObject(t, `davi`,
+				`package astoria
+				func jake(v int) any {
+					type davi struct { V int }
+					return davi{ V: v }
+				}`),
+			wantDeps: []string{`astoria.jake:davi`},
+		},
+		{
+			name: `a concrete function with a nested generic type instance`,
+			obj: parseObject(t, `pantoliano`,
+				`package astoria
+				func francis(v int) any {
+					type pantoliano[T any] struct { V int }
+					return pantoliano[int]{ V: v }
+				}`),
+			tArgs:    []types.Type{types.Typ[types.Int]},
+			wantDeps: []string{`astoria.francis:pantoliano[int]`},
+		},
+		{
+			name: `a generic function with a nested concrete type instance`,
+			obj: parseObject(t, `ramsey`,
+				`package astoria
+				func mama[T any](v T) any {
+					type ramsey struct { V T }
+					return ramsey{ V: v }
+				}`),
+			nestTArgs: []types.Type{types.Typ[types.Int]},
+			wantDeps:  []string{`astoria.mama:ramsey[int;]`},
+		},
+		{
+			name: `a generic function with a nested generic type instance`,
+			obj: parseObject(t, `matuszak`,
+				`package astoria
+				func sloth[T any]() any {
+					type matuszak[U any] struct { X T; Y U }
+					return matuszak[bool]{}
+				}`),
+			nestTArgs: []types.Type{types.Typ[types.String]},
+			tArgs:     []types.Type{types.Typ[types.Bool]},
+			wantDeps:  []string{`astoria.sloth:matuszak[string; bool]`},
+		},
+		{
+			name: `a concrete method with a nested concrete type instance`,
+			obj: parseObject(t, `davi`,
+				`package astoria
+				type fratelli struct { V int }
+				func (m *fratelli) jake() any {
+					type davi struct { V int }
+					return davi{ V: m.V }
+				}`),
+			wantDeps: []string{`astoria.fratelli:jake:davi`},
+		},
+		{
+			name: `a concrete method with a nested generic type instance`,
+			obj: parseObject(t, `pantoliano`,
+				`package astoria
+				type fratelli struct { V int }
+				func (f *fratelli) francis(v int) any {
+					type pantoliano[T any] struct { V int }
+					return pantoliano[int]{ V: v }
+				}`),
+			tArgs:    []types.Type{types.Typ[types.Int]},
+			wantDeps: []string{`astoria.fratelli:francis:pantoliano[int]`},
+		},
+		{
+			name: `a generic method with a nested concrete type instance`,
+			obj: parseObject(t, `ramsey`,
+				`package astoria
+				type fratelli[T any] struct { v T }
+				func (f *fratelli[T]) mama() any {
+					type ramsey struct { V T }
+					return ramsey{ V: f.v }
+				}`),
+			nestTArgs: []types.Type{types.Typ[types.Int]},
+			wantDeps:  []string{`astoria.fratelli:mama:ramsey[int;]`},
+		},
+		{
+			name: `a generic method with a nested generic type instance`,
+			obj: parseObject(t, `matuszak`,
+				`package astoria
+				type fratelli[T any] struct {}
+				func (f *fratelli[T]) sloth() any {
+					type matuszak[U any] struct { X T; Y U }
+					return matuszak[bool]{}
+				}`),
+			nestTArgs: []types.Type{types.Typ[types.String]},
+			tArgs:     []types.Type{types.Typ[types.Bool]},
+			wantDeps:  []string{`astoria.fratelli:sloth:matuszak[string; bool]`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := &testDecl{}
+			tail := ``
+			if len(tt.nestTArgs) > 0 {
+				tail += (typesutil.TypeList)(tt.nestTArgs).String() + `;`
+			}
+			tail += (typesutil.TypeList)(tt.tArgs).String()
+			t.Logf(`object: %s with [%s]`, types.ObjectString(tt.obj, nil), tail)
+
+			c := Collector{}
+			c.CollectDCEDeps(d, func() {
+				c.DeclareDCEDep(tt.obj, tt.nestTArgs, tt.tArgs)
+			})
+			equalSlices(t, d.Dce().getDeps(), tt.wantDeps)
+		})
+	}
 }
 
 func Test_Info_SetAsAlive(t *testing.T) {
@@ -269,13 +929,13 @@ func Test_Info_SetAsAlive(t *testing.T) {
 		obj := quickVar(pkg, `Falkor`)
 		decl := &testDecl{}
 		equal(t, decl.Dce().isAlive(), true) // unnamed is automatically alive
-		equal(t, decl.Dce().String(), `[unnamed] . -> []`)
+		equal(t, decl.Dce().String(), `[unnamed] -> []`)
 
 		decl.Dce().SetAsAlive()
 		equal(t, decl.Dce().isAlive(), true) // still alive but now explicitly alive
-		equal(t, decl.Dce().String(), `[alive] [unnamed] . -> []`)
+		equal(t, decl.Dce().String(), `[alive] [unnamed] -> []`)
 
-		decl.Dce().SetName(obj)
+		decl.Dce().SetName(obj, nil, nil)
 		equal(t, decl.Dce().isAlive(), true) // alive because SetAsAlive was called
 		equal(t, decl.Dce().String(), `[alive] path/to/fantasia.Falkor -> []`)
 	})
@@ -284,9 +944,9 @@ func Test_Info_SetAsAlive(t *testing.T) {
 		obj := quickVar(pkg, `Artax`)
 		decl := &testDecl{}
 		equal(t, decl.Dce().isAlive(), true) // unnamed is automatically alive
-		equal(t, decl.Dce().String(), `[unnamed] . -> []`)
+		equal(t, decl.Dce().String(), `[unnamed] -> []`)
 
-		decl.Dce().SetName(obj)
+		decl.Dce().SetName(obj, nil, nil)
 		equal(t, decl.Dce().isAlive(), false) // named so no longer automatically alive
 		equal(t, decl.Dce().String(), `path/to/fantasia.Artax -> []`)
 
@@ -314,27 +974,27 @@ func Test_Selector_JustVars(t *testing.T) {
 
 	c := Collector{}
 	c.CollectDCEDeps(frodo, func() {
-		c.DeclareDCEDep(samwise.obj)
-		c.DeclareDCEDep(meri.obj)
-		c.DeclareDCEDep(pippin.obj)
+		c.DeclareDCEDep(samwise.obj, nil, nil)
+		c.DeclareDCEDep(meri.obj, nil, nil)
+		c.DeclareDCEDep(pippin.obj, nil, nil)
 	})
 	c.CollectDCEDeps(pippin, func() {
-		c.DeclareDCEDep(meri.obj)
+		c.DeclareDCEDep(meri.obj, nil, nil)
 	})
 	c.CollectDCEDeps(aragorn, func() {
-		c.DeclareDCEDep(boromir.obj)
+		c.DeclareDCEDep(boromir.obj, nil, nil)
 	})
 	c.CollectDCEDeps(gimli, func() {
-		c.DeclareDCEDep(legolas.obj)
+		c.DeclareDCEDep(legolas.obj, nil, nil)
 	})
 	c.CollectDCEDeps(legolas, func() {
-		c.DeclareDCEDep(gimli.obj)
+		c.DeclareDCEDep(gimli.obj, nil, nil)
 	})
 	c.CollectDCEDeps(gandalf, func() {
-		c.DeclareDCEDep(frodo.obj)
-		c.DeclareDCEDep(aragorn.obj)
-		c.DeclareDCEDep(gimli.obj)
-		c.DeclareDCEDep(legolas.obj)
+		c.DeclareDCEDep(frodo.obj, nil, nil)
+		c.DeclareDCEDep(aragorn.obj, nil, nil)
+		c.DeclareDCEDep(gimli.obj, nil, nil)
+		c.DeclareDCEDep(legolas.obj, nil, nil)
 	})
 
 	for _, decl := range fellowship {
@@ -450,16 +1110,16 @@ func Test_Selector_SpecificMethods(t *testing.T) {
 
 	c := Collector{}
 	c.CollectDCEDeps(rincewindRun, func() {
-		c.DeclareDCEDep(rincewind.obj)
+		c.DeclareDCEDep(rincewind.obj, nil, nil)
 	})
 	c.CollectDCEDeps(rincewindHide, func() {
-		c.DeclareDCEDep(rincewind.obj)
+		c.DeclareDCEDep(rincewind.obj, nil, nil)
 	})
 	c.CollectDCEDeps(vimesRun, func() {
-		c.DeclareDCEDep(vimes.obj)
+		c.DeclareDCEDep(vimes.obj, nil, nil)
 	})
 	c.CollectDCEDeps(vimesRead, func() {
-		c.DeclareDCEDep(vimes.obj)
+		c.DeclareDCEDep(vimes.obj, nil, nil)
 	})
 	vetinari.Dce().SetAsAlive()
 
@@ -480,12 +1140,12 @@ func Test_Selector_SpecificMethods(t *testing.T) {
 			want: []*testDecl{rincewind, rincewindRun, vimes, vimesRun, vimesRead, vetinari},
 		},
 		{
-			name: `exposed method`,
+			name: `exported method`,
 			deps: []*testDecl{rincewind, rincewindRun},
 			want: []*testDecl{rincewind, rincewindRun, vetinari},
 		},
 		{
-			name: `unexposed method`,
+			name: `unexported method`,
 			deps: []*testDecl{rincewind, rincewindHide},
 			want: []*testDecl{rincewind, rincewindRun, rincewindHide, vetinari},
 		},
@@ -493,9 +1153,10 @@ func Test_Selector_SpecificMethods(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			vetinari.Dce().deps = nil // reset deps
 			c.CollectDCEDeps(vetinari, func() {
 				for _, decl := range tt.deps {
-					c.DeclareDCEDep(decl.obj)
+					c.DeclareDCEDep(decl.obj, nil, nil)
 				}
 			})
 
@@ -532,12 +1193,20 @@ func testPackage(name string) *types.Package {
 
 func quickTestDecl(o types.Object) *testDecl {
 	d := &testDecl{obj: o}
-	d.Dce().SetName(o)
+	d.Dce().SetName(o, nil, nil)
 	return d
 }
 
 func quickVar(pkg *types.Package, name string) *types.Var {
 	return types.NewVar(token.NoPos, pkg, name, types.Typ[types.Int])
+}
+
+func newTypeInfo() *types.Info {
+	return &types.Info{
+		Defs:      map[*ast.Ident]types.Object{},
+		Uses:      map[*ast.Ident]types.Object{},
+		Instances: map[*ast.Ident]types.Instance{},
+	}
 }
 
 func parseObject(t *testing.T, name, source string) types.Object {
@@ -554,10 +1223,9 @@ func parseObject(t *testing.T, name, source string) types.Object {
 
 func parseObjects(t *testing.T, source string) []types.Object {
 	t.Helper()
-	info := &types.Info{
-		Defs: map[*ast.Ident]types.Object{},
-	}
-	parseInfo(t, source, info)
+	fset := token.NewFileSet()
+	info := newTypeInfo()
+	parsePackage(t, source, fset, info)
 	objects := make([]types.Object, 0, len(info.Defs))
 	for _, obj := range info.Defs {
 		if obj != nil {
@@ -570,9 +1238,22 @@ func parseObjects(t *testing.T, source string) []types.Object {
 	return objects
 }
 
-func parseInfo(t *testing.T, source string, info *types.Info) *types.Package {
+func parseInstanceUse(t *testing.T, lineNo int, idName, source string) (types.Object, types.Instance) {
 	t.Helper()
 	fset := token.NewFileSet()
+	info := newTypeInfo()
+	parsePackage(t, source, fset, info)
+	for id, obj := range info.Uses {
+		if id.Name == idName && fset.Position(id.Pos()).Line == lineNo {
+			return obj, info.Instances[id]
+		}
+	}
+	t.Fatalf(`failed to find %s on line %d`, idName, lineNo)
+	return nil, types.Instance{}
+}
+
+func parsePackage(t *testing.T, source string, fset *token.FileSet, info *types.Info) *types.Package {
+	t.Helper()
 	f, err := parser.ParseFile(fset, `test.go`, source, 0)
 	if err != nil {
 		t.Fatal(`parsing source:`, err)
@@ -626,6 +1307,17 @@ func depCount(t *testing.T, decl *testDecl, want int) {
 func equal[T comparable](t *testing.T, got, want T) {
 	t.Helper()
 	if got != want {
-		t.Errorf(`expected %#v but got %#v`, want, got)
+		t.Errorf("Unexpected value was gotten:\n\texp: %#v\n\tgot: %#v", want, got)
+	}
+}
+
+func equalSlices[T comparable](t *testing.T, got, want []T) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Errorf("expected %d but got %d\n\texp: %#v\n\tgot: %#v", len(want), len(got), want, got)
+		return
+	}
+	for i, wantElem := range want {
+		equal(t, got[i], wantElem)
 	}
 }

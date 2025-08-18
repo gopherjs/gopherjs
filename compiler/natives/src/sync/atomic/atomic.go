@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package atomic
 
@@ -219,4 +218,30 @@ func sameType(x, y interface{}) bool {
 	// are still wrapped into a Go type object, so we can rely upon constructors
 	// existing and differing for different types.
 	return js.InternalObject(x).Get("constructor") == js.InternalObject(y).Get("constructor")
+}
+
+type Pointer[T any] struct {
+	v *T
+}
+
+func (x *Pointer[T]) Load() *T {
+	return x.v
+}
+
+func (x *Pointer[T]) Store(val *T) {
+	x.v = val
+}
+
+func (x *Pointer[T]) Swap(new *T) (old *T) {
+	old = x.v
+	x.v = new
+	return old
+}
+
+func (x *Pointer[T]) CompareAndSwap(old, new *T) bool {
+	if x.v == old {
+		x.v = new
+		return true
+	}
+	return false
 }

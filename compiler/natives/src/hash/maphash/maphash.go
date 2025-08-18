@@ -1,11 +1,8 @@
 //go:build js
-// +build js
 
 package maphash
 
-import (
-	_ "unsafe" // for linkname
-)
+import _ "unsafe" // for linkname
 
 // hashkey is similar how it is defined in runtime/alg.go for Go 1.19
 // to be used in hash{32,64}.go to seed the hash function as part of

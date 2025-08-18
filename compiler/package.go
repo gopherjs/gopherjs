@@ -1,22 +1,20 @@
 package compiler
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
 	"strings"
-	"time"
 
-	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"golang.org/x/tools/go/types/typeutil"
+
+	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
+	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
-	"github.com/gopherjs/gopherjs/internal/experiments"
-	"golang.org/x/tools/go/gcexportdata"
-	"golang.org/x/tools/go/types/typeutil"
+	"github.com/gopherjs/gopherjs/internal/errorList"
 )
 
 // pkgContext maintains compiler context for a specific package.
@@ -39,7 +37,7 @@ type pkgContext struct {
 	indentation  int
 	minify       bool
 	fileSet      *token.FileSet
-	errList      ErrorList
+	errList      errorList.ErrorList
 	instanceSet  *typeparams.PackageInstanceSets
 }
 
@@ -118,18 +116,11 @@ type funcContext struct {
 	funcLitCounter int
 }
 
-func newRootCtx(tContext *types.Context, srcs sources, typesInfo *types.Info, typesPkg *types.Package, isBlocking func(*types.Func) bool, minify bool) *funcContext {
-	tc := typeparams.Collector{
-		TContext:  tContext,
-		Info:      typesInfo,
-		Instances: &typeparams.PackageInstanceSets{},
-	}
-	tc.Scan(typesPkg, srcs.Files...)
-	pkgInfo := analysis.AnalyzePkg(srcs.Files, srcs.FileSet, typesInfo, typesPkg, isBlocking)
+func newRootCtx(tContext *types.Context, srcs *sources.Sources, minify bool) *funcContext {
 	funcCtx := &funcContext{
-		FuncInfo: pkgInfo.InitFuncInfo,
+		FuncInfo: srcs.TypeInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{
-			Info:                 pkgInfo,
+			Info:                 srcs.TypeInfo,
 			additionalSelections: make(map[*ast.SelectorExpr]typesutil.Selection),
 
 			typesCtx:     tContext,
@@ -139,7 +130,7 @@ func newRootCtx(tContext *types.Context, srcs sources, typesInfo *types.Info, ty
 			indentation:  1,
 			minify:       minify,
 			fileSet:      srcs.FileSet,
-			instanceSet:  tc.Instances,
+			instanceSet:  srcs.TypeInfo.InstanceSets,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[*types.Label]*flowData{nil: {}},
@@ -159,42 +150,11 @@ type flowData struct {
 	endCase   int
 }
 
-// ImportContext provides access to information about imported packages.
-type ImportContext struct {
-	// Mapping for an absolute import path to the package type information.
-	Packages map[string]*types.Package
-	// Import returns a previously compiled Archive for a dependency package. If
-	// the Import() call was successful, the corresponding entry must be added to
-	// the Packages map.
-	Import func(importPath string) (*Archive, error)
-}
-
-// isBlocking returns true if an _imported_ function is blocking. It will panic
-// if the function decl is not found in the imported package or the package
-// hasn't been compiled yet.
-//
-// Note: see analysis.FuncInfo.Blocking if you need to determine if a function
-// in the _current_ package is blocking. Usually available via functionContext
-// object.
-func (ic *ImportContext) isBlocking(f *types.Func) bool {
-	archive, err := ic.Import(f.Pkg().Path())
-	if err != nil {
-		panic(err)
-	}
-	fullName := f.FullName()
-	for _, d := range archive.Declarations {
-		if string(d.FullName) == fullName {
-			return d.Blocking
-		}
-	}
-	panic(bailout(fmt.Errorf("can't determine if function %s is blocking: decl not found in package archive", fullName)))
-}
-
 // Compile the provided Go sources as a single package.
 //
-// Import path must be the absolute import path for a package. Provided sources
-// are always sorted by name to ensure reproducible JavaScript output.
-func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, importContext *ImportContext, minify bool) (_ *Archive, err error) {
+// Provided sources must be prepared so that the type information has been determined,
+// and the source files have been sorted by name to ensure reproducible JavaScript output.
+func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Archive, err error) {
 	defer func() {
 		e := recover()
 		if e == nil {
@@ -202,39 +162,15 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		}
 		if fe, ok := bailingOut(e); ok {
 			// Orderly bailout, return whatever clues we already have.
-			fmt.Fprintf(fe, `building package %q`, importPath)
+			fmt.Fprintf(fe, `building package %q`, srcs.ImportPath)
 			err = fe
 			return
 		}
 		// Some other unexpected panic, catch the stack trace and return as an error.
-		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", importPath, e))
+		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", srcs.ImportPath, e))
 	}()
 
-	srcs := sources{
-		ImportPath: importPath,
-		Files:      files,
-		FileSet:    fileSet,
-	}.Sort()
-
-	tContext := types.NewContext()
-	typesInfo, typesPkg, err := srcs.TypeCheck(importContext, tContext)
-	if err != nil {
-		return nil, err
-	}
-	if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil && !experiments.Env.Generics {
-		return nil, fmt.Errorf("package %s requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", importPath, genErr)
-	}
-	importContext.Packages[srcs.ImportPath] = typesPkg
-
-	// Extract all go:linkname compiler directives from the package source.
-	goLinknames, err := srcs.ParseGoLinknames()
-	if err != nil {
-		return nil, err
-	}
-
-	srcs = srcs.Simplified(typesInfo)
-
-	rootCtx := newRootCtx(tContext, srcs, typesInfo, typesPkg, importContext.isBlocking, minify)
+	rootCtx := newRootCtx(tContext, srcs, minify)
 
 	importedPaths, importDecls := rootCtx.importDecls()
 
@@ -276,26 +212,79 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		return nil, rootCtx.pkgCtx.errList
 	}
 
-	exportData := new(bytes.Buffer)
-	if err := gcexportdata.Write(exportData, nil, typesPkg); err != nil {
-		return nil, fmt.Errorf("failed to write export data: %w", err)
-	}
-	encodedFileSet := new(bytes.Buffer)
-	if err := srcs.FileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
-		return nil, err
-	}
-
 	return &Archive{
 		ImportPath:   srcs.ImportPath,
-		Name:         typesPkg.Name(),
+		Name:         srcs.Package.Name(),
 		Imports:      importedPaths,
-		ExportData:   exportData.Bytes(),
+		Package:      srcs.Package,
 		Declarations: allDecls,
-		FileSet:      encodedFileSet.Bytes(),
+		FileSet:      srcs.FileSet,
 		Minified:     minify,
-		GoLinknames:  goLinknames,
-		BuildTime:    time.Now(),
+		GoLinknames:  srcs.GoLinknames,
 	}, nil
+}
+
+// PrepareAllSources prepares all sources for compilation by
+// parsing go linknames, type checking, sorting, simplifying, and
+// performing cross package analysis.
+// The results are stored in the provided sources.
+//
+// All sources must be given at the same time for cross package analysis to
+// work correctly. For consistency, the sources should be sorted by import path.
+func PrepareAllSources(allSources []*sources.Sources, importer sources.Importer, tContext *types.Context) error {
+	// Sort the files by name in each source to ensure consistent order of processing.
+	for _, srcs := range allSources {
+		srcs.Sort()
+	}
+
+	// This will be performed recursively for all dependencies
+	// to get the packages for the sources.
+	// Since some packages might not be recursively reached via the root sources,
+	// e.g. runtime, we need to try to TypeCheck all of them here.
+	// Any sources that have already been type checked will no-op.
+	for _, srcs := range allSources {
+		if err := srcs.TypeCheck(importer, sizes32, tContext); err != nil {
+			return err
+		}
+	}
+
+	// Extract all go:linkname compiler directives from the package source.
+	for _, srcs := range allSources {
+		if err := srcs.ParseGoLinknames(); err != nil {
+			return err
+		}
+	}
+
+	// Simply the source files.
+	for _, srcs := range allSources {
+		srcs.Simplify()
+	}
+
+	// Collect all the generic type instances from all the packages.
+	// This must be done for all sources prior to any analysis.
+	instances := &typeparams.PackageInstanceSets{}
+	tc := &typeparams.Collector{
+		TContext:  tContext,
+		Instances: instances,
+	}
+	for _, srcs := range allSources {
+		srcs.CollectInstances(tc)
+	}
+	tc.Finish()
+
+	// Analyze the package to determine type parameters instances, blocking,
+	// and other type information. This will not populate the information.
+	for _, srcs := range allSources {
+		srcs.Analyze(importer, tContext, instances)
+	}
+
+	// Propagate the analysis information across all packages.
+	allInfo := make([]*analysis.Info, len(allSources))
+	for i, src := range allSources {
+		allInfo[i] = src.TypeInfo
+	}
+	analysis.PropagateAnalysis(allInfo)
+	return nil
 }
 
 func (fc *funcContext) initArgs(ty types.Type) string {
@@ -339,11 +328,17 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 			if !field.Exported() {
 				pkgPath = field.Pkg().Path()
 			}
-			fields[i] = fmt.Sprintf(`{prop: "%s", name: %s, embedded: %t, exported: %t, typ: %s, tag: %s}`, fieldName(t, i), encodeString(field.Name()), field.Anonymous(), field.Exported(), fc.typeName(field.Type()), encodeString(t.Tag(i)))
+			ft := fc.fieldType(t, i)
+			fields[i] = fmt.Sprintf(`{prop: "%s", name: %s, embedded: %t, exported: %t, typ: %s, tag: %s}`,
+				fieldName(t, i), encodeString(field.Name()), field.Anonymous(), field.Exported(), fc.typeName(ft), encodeString(t.Tag(i)))
 		}
 		return fmt.Sprintf(`"%s", [%s]`, pkgPath, strings.Join(fields, ", "))
 	case *types.TypeParam:
-		err := bailout(fmt.Errorf(`%v has unexpected generic type parameter %T`, ty, ty))
+		tr := fc.typeResolver.Substitute(ty)
+		if tr != ty {
+			return fc.initArgs(tr)
+		}
+		err := bailout(fmt.Errorf(`"%v" has unexpected generic type parameter %T`, ty, ty))
 		panic(err)
 	default:
 		err := bailout(fmt.Errorf("%v has unexpected type %T", ty, ty))

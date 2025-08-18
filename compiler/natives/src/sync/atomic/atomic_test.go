@@ -1,15 +1,10 @@
 //go:build js
-// +build js
 
 package atomic_test
 
 import (
 	"testing"
 )
-
-func TestSwapPointerMethod(t *testing.T) {
-	t.Skip("GopherJS does not fully support generics for go1.20 yet.")
-}
 
 func TestHammerStoreLoad(t *testing.T) {
 	t.Skip("use of unsafe")

@@ -1,9 +1,6 @@
 package syscall
 
-import (
-	"syscall/js"
-	_ "unsafe" // go:linkname
-)
+import "syscall/js"
 
 func runtime_envs() []string {
 	process := js.Global().Get("process")

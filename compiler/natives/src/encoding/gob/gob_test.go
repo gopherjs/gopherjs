@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package gob
 
@@ -106,6 +105,7 @@ func TestTypeRace(t *testing.T) {
 	t.Skip("using nosync")
 }
 
+// TODO(grantnelson-wf): Check
 func TestCountEncodeMallocs(t *testing.T) {
 	t.Skip("testing.AllocsPerRun not supported in GopherJS")
 }

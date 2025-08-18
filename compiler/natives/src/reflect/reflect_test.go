@@ -307,3 +307,7 @@ func TestValuePanic(t *testing.T) {
 func TestSetIter(t *testing.T) {
 	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
 }
+
+func TestGrow(t *testing.T) {
+	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
+}

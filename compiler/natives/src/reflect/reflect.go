@@ -1860,8 +1860,12 @@ func valueMethodName() string {
 		// https://github.com/gopherjs/gopherjs/issues/1085 is resolved.
 
 		methodName := name
-		if idx := stringsLastIndex(name, '.'); idx >= 0 {
-			methodName = name[idx+1:]
+		if idx := stringsLastIndex(methodName, '.'); idx >= 0 {
+			methodName = methodName[idx+1:]
+		}
+		const midDot = '·' // This is same `midDot` as in gopherjs/compiler/utils.go
+		if idx := stringsLastIndex(methodName, midDot); idx >= 0 {
+			methodName = methodName[idx+1:]
 		}
 
 		// Since function name in the call stack doesn't contain receiver name,

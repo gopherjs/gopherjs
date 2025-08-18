@@ -220,7 +220,7 @@ func TestParseGoLinknames(t *testing.T) {
 			if len(test.pkgPath) > 0 {
 				pkgPath = test.pkgPath
 			}
-			directives, err := parseGoLinknames(fset, pkgPath, file)
+			directives, err := ParseGoLinknames(fset, pkgPath, file)
 
 			if test.wantError != "" {
 				if err == nil {

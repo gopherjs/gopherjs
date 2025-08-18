@@ -3,9 +3,7 @@
 // type arguments.
 package subst
 
-import (
-	"go/types"
-)
+import "go/types"
 
 // To simplify future updates of the borrowed code, we minimize modifications
 // to it as much as possible. This file implements an exported interface to the
@@ -16,34 +14,32 @@ type Subster struct {
 	impl *subster
 }
 
-// New creates a new Subster with a given list of type parameters and matching args.
-func New(tc *types.Context, tParams []*types.TypeParam, tArgs []types.Type) *Subster {
-	assert(len(tParams) == len(tArgs), "New() argument count must match")
-
-	if len(tParams) == 0 {
+// New creates a new Subster with a given a map from type parameters and the arguments
+// that should be used to replace them. If the map is empty, nil is returned.
+func New(tc *types.Context, replacements map[*types.TypeParam]types.Type) *Subster {
+	if len(replacements) == 0 {
 		return nil
 	}
 
-	subst := &subster{
-		replacements: make(map[*types.TypeParam]types.Type, len(tParams)),
-		cache:        make(map[types.Type]types.Type),
-		ctxt:         tc,
-		scope:        nil,
-		debug:        false,
-	}
-	for i := 0; i < len(tParams); i++ {
-		subst.replacements[tParams[i]] = tArgs[i]
-	}
-	return &Subster{
-		impl: subst,
-	}
+	subst := makeSubster(tc, nil, nil, nil, false)
+	subst.replacements = replacements
+	return &Subster{impl: subst}
 }
 
-// Type returns a version of typ with all references to type parameters replaced
-// with the corresponding type arguments.
+// Type returns a version of typ with all references to type parameters
+// replaced with the corresponding type arguments.
 func (s *Subster) Type(typ types.Type) types.Type {
 	if s == nil {
 		return typ
 	}
 	return s.impl.typ(typ)
+}
+
+// Types returns a version of ts with all references to type parameters
+// replaced with the corresponding type arguments.
+func (s *Subster) Types(ts []types.Type) []types.Type {
+	if s == nil {
+		return ts
+	}
+	return s.impl.types(ts)
 }

@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package sync_test
 

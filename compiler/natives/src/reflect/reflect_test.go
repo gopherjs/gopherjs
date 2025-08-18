@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package reflect_test
 
@@ -285,16 +284,26 @@ func TestMethodCallValueCodePtr(t *testing.T) {
 	t.Skip("methodValueCallCodePtr() is not applicable in GopherJS")
 }
 
-//gopherjs:purge for go1.19 without generics
-type (
-	A        struct{}
-	B[T any] struct{}
-)
-
-func TestIssue50208(t *testing.T) {
-	t.Skip("This test required generics, which are not yet supported: https://github.com/gopherjs/gopherjs/issues/1013")
-}
-
 func TestStructOfTooLarge(t *testing.T) {
 	t.Skip("This test is dependent on field alignment to determine if a struct size would exceed virtual address space.")
+}
+
+func TestSetLenCap(t *testing.T) {
+	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
+}
+
+func TestSetPanic(t *testing.T) {
+	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
+}
+
+func TestCallPanic(t *testing.T) {
+	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
+}
+
+func TestValuePanic(t *testing.T) {
+	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
+}
+
+func TestSetIter(t *testing.T) {
+	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
 }

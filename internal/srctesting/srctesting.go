@@ -10,8 +10,11 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"golang.org/x/tools/go/packages"
 )
 
 // Fixture provides utilities for parsing and type checking Go code in tests.
@@ -71,7 +74,7 @@ func (f *Fixture) Check(importPath string, files ...*ast.File) (*types.Info, *ty
 	}
 	pkg, err := config.Check(importPath, f.FileSet, files, info)
 	if err != nil {
-		f.T.Fatalf("Filed to type check test source: %s", err)
+		f.T.Fatalf("Failed to type check test source: %s", err)
 	}
 	f.Packages[importPath] = pkg
 	return info, pkg
@@ -155,6 +158,9 @@ func LookupObj(pkg *types.Package, name string) types.Object {
 
 	for len(path) > 0 {
 		obj = scope.Lookup(path[0])
+		if obj == nil {
+			panic(fmt.Sprintf("failed to find %q in %q", path[0], name))
+		}
 		path = path[1:]
 
 		if fun, ok := obj.(*types.Func); ok {
@@ -167,7 +173,112 @@ func LookupObj(pkg *types.Package, name string) types.Object {
 		if len(path) > 0 {
 			obj, _, _ = types.LookupFieldOrMethod(obj.Type(), true, obj.Pkg(), path[0])
 			path = path[1:]
+			if fun, ok := obj.(*types.Func); ok {
+				scope = fun.Scope()
+			}
 		}
 	}
 	return obj
+}
+
+type Source struct {
+	Name     string
+	Contents []byte
+}
+
+// ParseSources parses the given source files and returns the root package
+// that contains the given source files.
+//
+// The source file should all be from the same package as the files for the
+// root package. At least one source file must be given.
+// The root package's path will be `command-line-arguments`.
+//
+// The auxiliary files can be for different packages but should have paths
+// added to the source name so that they can be grouped together by package.
+// To import an auxiliary package, the path should be prepended by
+// `github.com/gopherjs/gopherjs/compiler`.
+func ParseSources(t *testing.T, sourceFiles []Source, auxFiles []Source) *packages.Package {
+	t.Helper()
+	const mode = packages.NeedName |
+		packages.NeedFiles |
+		packages.NeedImports |
+		packages.NeedDeps |
+		packages.NeedTypes |
+		packages.NeedSyntax
+
+	dir, err := filepath.Abs(`./`)
+	if err != nil {
+		t.Fatal(`error getting working directory:`, err)
+	}
+
+	patterns := make([]string, len(sourceFiles))
+	overlay := make(map[string][]byte, len(sourceFiles))
+	for i, src := range sourceFiles {
+		filename := src.Name
+		patterns[i] = filename
+		absName := filepath.Join(dir, filename)
+		overlay[absName] = []byte(src.Contents)
+	}
+	for _, src := range auxFiles {
+		absName := filepath.Join(dir, src.Name)
+		overlay[absName] = []byte(src.Contents)
+	}
+
+	config := &packages.Config{
+		Mode:    mode,
+		Overlay: overlay,
+		Dir:     dir,
+	}
+
+	pkgs, err := packages.Load(config, patterns...)
+	if err != nil {
+		t.Fatal(`error loading packages:`, err)
+	}
+
+	hasErrors := false
+	packages.Visit(pkgs, nil, func(pkg *packages.Package) {
+		for _, err := range pkg.Errors {
+			hasErrors = true
+			t.Error(err)
+		}
+	})
+	if hasErrors {
+		t.FailNow()
+	}
+
+	if len(pkgs) != 1 {
+		t.Fatal(`expected one and only one root package but got`, len(pkgs))
+	}
+	return pkgs[0]
+}
+
+// GetNodeAtLineNo returns the first node of type N that starts on the given
+// line in the given file. This helps lookup nodes that aren't named but
+// are needed by a specific test.
+func GetNodeAtLineNo[N ast.Node](file *ast.File, fSet *token.FileSet, lineNo int) N {
+	var node N
+	keepLooking := true
+	ast.Inspect(file, func(n ast.Node) bool {
+		if n == nil || !keepLooking {
+			return false
+		}
+		nodeLine := fSet.Position(n.Pos()).Line
+		switch {
+		case nodeLine < lineNo:
+			// We haven't reached the line yet, so check if we can skip over
+			// this whole node or if we should look inside it.
+			return fSet.Position(n.End()).Line >= lineNo
+		case nodeLine > lineNo:
+			// We went past it without finding it, so stop looking.
+			keepLooking = false
+			return false
+		default: // nodeLine == lineNo
+			if n, ok := n.(N); ok {
+				node = n
+				keepLooking = false
+			}
+			return keepLooking
+		}
+	})
+	return node
 }

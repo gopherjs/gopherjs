@@ -3,6 +3,7 @@ package typeparams
 import (
 	"fmt"
 	"go/types"
+	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
@@ -15,39 +16,82 @@ import (
 type Instance struct {
 	Object types.Object       // Object to be instantiated.
 	TArgs  typesutil.TypeList // Type params to instantiate with.
+
+	// TNest is the type params of the function this object was nested with-in.
+	// e.g. In `func A[X any]() { type B[Y any] struct {} }` the `X`
+	// from `A` is the context of `B[Y]` thus creating `B[X;Y]`.
+	TNest typesutil.TypeList
 }
 
 // String returns a string representation of the Instance.
 //
 // Two semantically different instances may have the same string representation
 // if the instantiated object or its type arguments shadow other types.
-func (i *Instance) String() string {
-	sym := symbol.New(i.Object).String()
-	if len(i.TArgs) == 0 {
-		return sym
-	}
-
-	return fmt.Sprintf("%s<%s>", sym, i.TArgs)
+func (i Instance) String() string {
+	return i.symbolicName() + i.TypeParamsString(`<`, `>`)
 }
 
 // TypeString returns a Go type string representing the instance (suitable for %T verb).
-func (i *Instance) TypeString() string {
-	tArgs := ""
-	if len(i.TArgs) > 0 {
-		tArgs = "[" + i.TArgs.String() + "]"
-	}
-	return fmt.Sprintf("%s.%s%s", i.Object.Pkg().Name(), i.Object.Name(), tArgs)
+func (i Instance) TypeString() string {
+	return i.qualifiedName() + i.TypeParamsString(`[`, `]`)
 }
 
-// IsTrivial returns true if this is an instance of a non-generic object.
-func (i *Instance) IsTrivial() bool {
-	return len(i.TArgs) == 0
+// symbolicName returns a string representation of the instance's name
+// including the package name and pointer indicators but
+// excluding the type parameters.
+func (i Instance) symbolicName() string {
+	if i.Object == nil {
+		return `<nil>`
+	}
+	return symbol.New(i.Object).String()
+}
+
+// qualifiedName returns a string representation of the instance's name
+// including the package name but
+// excluding the type parameters and pointer indicators.
+func (i Instance) qualifiedName() string {
+	if i.Object == nil {
+		return `<nil>`
+	}
+	if i.Object.Pkg() == nil {
+		return i.Object.Name()
+	}
+	return fmt.Sprintf("%s.%s", i.Object.Pkg().Name(), i.Object.Name())
+}
+
+// TypeParamsString returns part of a Go type string that represents the type
+// parameters of the instance including the nesting type parameters, e.g. [X;Y,Z].
+func (i Instance) TypeParamsString(open, close string) string {
+	hasNest := len(i.TNest) > 0
+	hasArgs := len(i.TArgs) > 0
+	buf := strings.Builder{}
+	if hasNest || hasArgs {
+		buf.WriteString(open)
+		if hasNest {
+			buf.WriteString(i.TNest.String())
+			buf.WriteRune(';')
+			if hasArgs {
+				buf.WriteRune(' ')
+			}
+		}
+		if hasArgs {
+			buf.WriteString(i.TArgs.String())
+		}
+		buf.WriteString(close)
+	}
+	return buf.String()
+}
+
+// IsTrivial returns true if this is an instance of a non-generic object
+// and it is not nested in a generic function.
+func (i Instance) IsTrivial() bool {
+	return len(i.TArgs) == 0 && len(i.TNest) == 0
 }
 
 // Recv returns an instance of the receiver type of a method.
 //
 // Returns zero value if not a method.
-func (i *Instance) Recv() Instance {
+func (i Instance) Recv() Instance {
 	sig, ok := i.Object.Type().(*types.Signature)
 	if !ok {
 		return Instance{}
@@ -60,6 +104,33 @@ func (i *Instance) Recv() Instance {
 		Object: recv.Obj(),
 		TArgs:  i.TArgs,
 	}
+}
+
+// Resolve instantiates and performs a substitution of the instance
+// to get the concrete type or function.
+// This will panic if the instance is not valid, e.g. if there are a different
+// number of type arguments than the type parameters.
+//
+// If `tc` is non-nil, it de-duplicates the instance against previous
+// instances with the same identity. See types.Instantiate for more info.
+//
+// Instances of named types may be lazily substituted, meaning the underlying
+// type may not be fully substituted with the type arguments when returned.
+//
+// This is useful for quickly resolving an instance for a test or for debugging
+// but this uses a temporary Resolver that will not be reused.
+// When resolving several instances in the same context, it is more efficient
+// to use NewResolver to take advantage of caching.
+func (i Instance) Resolve(tc *types.Context) types.Type {
+	instType := i.Object.Type()
+	if len(i.TArgs) > 0 {
+		var err error
+		instType, err = types.Instantiate(tc, instType, i.TArgs, true)
+		if err != nil {
+			panic(fmt.Errorf("failed to instantiate %v: %w", i, err))
+		}
+	}
+	return NewResolver(tc, i).Substitute(instType)
 }
 
 // InstanceSet allows collecting and processing unique Instances.
@@ -131,7 +202,9 @@ func (iset *InstanceSet) next() (Instance, bool) {
 }
 
 // exhausted returns true if there are no unprocessed instances in the set.
-func (iset *InstanceSet) exhausted() bool { return len(iset.values) <= iset.unprocessed }
+func (iset *InstanceSet) exhausted() bool {
+	return len(iset.values) <= iset.unprocessed
+}
 
 // Values returns instances that are currently in the set. Order is not specified.
 func (iset *InstanceSet) Values() []Instance {
@@ -147,9 +220,43 @@ func (iset *InstanceSet) ByObj() map[types.Object][]Instance {
 	return result
 }
 
+// ForObj returns the instances that belong to the given object type.
+// Order is not specified. This returns the same values as `ByObj()[obj]`.
+func (iset *InstanceSet) ForObj(obj types.Object) []Instance {
+	result := []Instance{}
+	for _, inst := range iset.values {
+		if inst.Object == obj {
+			result = append(result, inst)
+		}
+	}
+	return result
+}
+
+// ObjHasInstances returns true if there are any instances (either trivial
+// or non-trivial) that belong to the given object type, otherwise false.
+func (iset *InstanceSet) ObjHasInstances(obj types.Object) bool {
+	for _, inst := range iset.values {
+		if inst.Object == obj {
+			return true
+		}
+	}
+	return false
+}
+
 // PackageInstanceSets stores an InstanceSet for each package in a program, keyed
 // by import path.
 type PackageInstanceSets map[string]*InstanceSet
+
+// allExhausted returns true if there are no unprocessed instances in
+// any of the instance sets.
+func (i PackageInstanceSets) allExhausted() bool {
+	for _, iset := range i {
+		if !iset.exhausted() {
+			return false
+		}
+	}
+	return true
+}
 
 // Pkg returns InstanceSet for objects defined in the given package.
 func (i PackageInstanceSets) Pkg(pkg *types.Package) *InstanceSet {

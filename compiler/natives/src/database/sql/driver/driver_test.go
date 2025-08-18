@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package driver
 
@@ -24,10 +23,10 @@ var valueConverterTests = []valueConverterTest{
 	{DefaultParameterConverter, (*int64)(nil), nil, ""},
 	{DefaultParameterConverter, &answer, answer, ""},
 	{DefaultParameterConverter, &now, now, ""},
-	//{DefaultParameterConverter, i(9), int64(9), ""}, // TODO: Fix.
+	//{DefaultParameterConverter, i(9), int64(9), ""}, // TODO: Fix. Errors with `driver.defaultConverter(driver.i(9)) = 9 (driver.i); want 9 (int64)`
 	{DefaultParameterConverter, f(0.1), float64(0.1), ""},
 	{DefaultParameterConverter, b(true), true, ""},
-	//{DefaultParameterConverter, bs{1}, []byte{1}, ""}, // TODO: Fix.
+	//{DefaultParameterConverter, bs{1}, []byte{1}, ""}, // TODO: Fix. Errors with `driver.defaultConverter(driver.bs([1])) = [1] (driver.bs); want [1] ([]uint8)`
 	{DefaultParameterConverter, s("a"), "a", ""},
 	{DefaultParameterConverter, is{1}, nil, "unsupported type driver.is, a slice of int"},
 }

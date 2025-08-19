@@ -57,11 +57,7 @@ _Note: GopherJS will try to write compiled object files of the core packages to 
 
 #### gopherjs run, gopherjs test
 
-If you want to use `gopherjs run` or `gopherjs test` to run the generated code locally, install Node.js 10.0.0 (or newer), and the `source-map-support` module:
-
-```
-npm install --global source-map-support
-```
+If you want to use `gopherjs run` or `gopherjs test` to run the generated code locally, install Node.js 18 (or newer).
 
 On supported `GOOS` platforms, it's possible to make system calls (file system access, etc.) available. See [doc/syscalls.md](https://github.com/gopherjs/gopherjs/blob/master/doc/syscalls.md) for instructions on how to do so.
 

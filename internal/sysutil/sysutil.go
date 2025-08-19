@@ -1,5 +1,4 @@
 //go:build !windows
-// +build !windows
 
 // Package sysutil contains system-specific utilities.
 package sysutil

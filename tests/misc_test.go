@@ -959,3 +959,28 @@ func TestFileSetSize(t *testing.T) {
 		t.Errorf("Got: unsafe.Sizeof(token.FileSet{}) %v, Want: %v", n2, n1)
 	}
 }
+
+// TestCrossPackageGenericFuncCalls ensures that generic functions from other
+// packages can be called correctly.
+func TestCrossPackageGenericFuncCalls(t *testing.T) {
+	var wantInt int
+	if got := otherpkg.Zero[int](); got != wantInt {
+		t.Errorf(`Got: otherpkg.Zero[int]() = %v, Want: %v`, got, wantInt)
+	}
+
+	var wantStr string
+	if got := otherpkg.Zero[string](); got != wantStr {
+		t.Errorf(`Got: otherpkg.Zero[string]() = %q, Want: %q`, got, wantStr)
+	}
+}
+
+// TestCrossPackageGenericCasting ensures that generic types from other
+// packages can be used in a type cast.
+// The cast looks like a function call but should be treated as a type conversion.
+func TestCrossPackageGenericCasting(t *testing.T) {
+	fn := otherpkg.GetterHandle[int](otherpkg.Zero[int])
+	var wantInt int
+	if got := fn(); got != wantInt {
+		t.Errorf(`Got: otherpkg.GetterHandle[int](otherpkg.Zero[int]) = %v, Want: %v`, got, wantInt)
+	}
+}

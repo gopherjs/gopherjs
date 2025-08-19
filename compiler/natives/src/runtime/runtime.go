@@ -1,11 +1,8 @@
 //go:build js
-// +build js
 
 package runtime
 
-import (
-	"github.com/gopherjs/gopherjs/js"
-)
+import "github.com/gopherjs/gopherjs/js"
 
 const (
 	GOOS     = "js"

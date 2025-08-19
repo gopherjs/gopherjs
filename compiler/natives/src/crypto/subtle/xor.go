@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package subtle
 
@@ -74,5 +73,7 @@ const supportsUnaligned = false
 //gopherjs:purge
 func xorBytes(dstb, xb, yb *byte, n int)
 
+// TODO(grantnelson-wf): Check if this should be removed or not with generics.
+//
 //gopherjs:purge
 func xorLoop[T byte | uintptr](dst, x, y []T) {}

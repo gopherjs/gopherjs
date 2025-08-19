@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package bufio_test
 

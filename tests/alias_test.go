@@ -1,8 +1,6 @@
 package tests
 
-import (
-	"testing"
-)
+import "testing"
 
 type foo struct {
 	a int

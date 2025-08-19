@@ -5,30 +5,34 @@ package compiler
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/types"
 	"sort"
 	"strings"
 
-	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
-// newFunctionContext creates a new nested context for a function corresponding
+// nestedFunctionContext creates a new nested context for a function corresponding
 // to the provided info and instance.
-func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, sig *types.Signature, inst typeparams.Instance) *funcContext {
+func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, inst typeparams.Instance) *funcContext {
 	if info == nil {
-		panic(fmt.Errorf("missing *analysis.FuncInfo"))
+		panic(errors.New("missing *analysis.FuncInfo"))
 	}
-	if sig == nil {
-		panic(fmt.Errorf("missing *types.Signature"))
+	if inst.Object == nil {
+		panic(errors.New("missing inst.Object"))
 	}
+	o := inst.Object.(*types.Func)
+	sig := o.Type().(*types.Signature)
 
 	c := &funcContext{
 		FuncInfo:     info,
+		instance:     inst,
 		pkgCtx:       fc.pkgCtx,
 		parent:       fc,
 		allVars:      make(map[string]int, len(fc.allVars)),
@@ -44,62 +48,110 @@ func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, sig *types
 		c.allVars[k] = v
 	}
 
-	if sig.TypeParams().Len() > 0 {
-		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, typeparams.ToSlice(sig.TypeParams()), inst.TArgs)
-	} else if sig.RecvTypeParams().Len() > 0 {
-		c.typeResolver = typeparams.NewResolver(c.pkgCtx.typesCtx, typeparams.ToSlice(sig.RecvTypeParams()), inst.TArgs)
+	// Use the parent function's resolver unless the function has it's own type arguments.
+	if !inst.IsTrivial() {
+		c.typeResolver = typeparams.NewResolver(fc.pkgCtx.typesCtx, inst)
 	}
-	if c.objectNames == nil {
-		c.objectNames = map[types.Object]string{}
+
+	// Synthesize an identifier by which the function may reference itself. Since
+	// it appears in the stack trace, it's useful to include the receiver type in
+	// it.
+	funcRef := o.Name()
+	if recvType := typesutil.RecvType(sig); recvType != nil {
+		funcRef = recvType.Obj().Name() + midDot + funcRef
 	}
+	c.funcRef = c.newVariable(funcRef, true /*pkgLevel*/)
 
 	return c
 }
 
+// namedFuncContext creates a new funcContext for a named Go function
+// (standalone or method).
+func (fc *funcContext) namedFuncContext(inst typeparams.Instance) *funcContext {
+	info := fc.pkgCtx.FuncInfo(inst)
+	c := fc.nestedFunctionContext(info, inst)
+
+	return c
+}
+
+// literalFuncContext creates a new funcContext for a function literal. Since
+// go/types doesn't generate *types.Func objects for function literals, we
+// generate a synthetic one for it.
+func (fc *funcContext) literalFuncContext(fun *ast.FuncLit) *funcContext {
+	info := fc.pkgCtx.FuncLitInfo(fun, fc.TypeArgs())
+	sig := fc.pkgCtx.TypeOf(fun).(*types.Signature)
+	o := types.NewFunc(fun.Pos(), fc.pkgCtx.Pkg, fc.newLitFuncName(), sig)
+	inst := typeparams.Instance{Object: o}
+
+	c := fc.nestedFunctionContext(info, inst)
+	return c
+}
+
 // translateTopLevelFunction translates a top-level function declaration
-// (standalone function or method) into a corresponding JS function.
+// (standalone function or method) into a corresponding JS function. Must be
+// called on the function context created for the function corresponding instance.
 //
-// Returns a string with a JavaScript statements that define the function or
+// Returns a string with JavaScript statements that define the function or
 // method. For methods it returns declarations for both value- and
 // pointer-receiver (if appropriate).
-func (fc *funcContext) translateTopLevelFunction(fun *ast.FuncDecl, inst typeparams.Instance) []byte {
+func (fc *funcContext) translateTopLevelFunction(fun *ast.FuncDecl) []byte {
 	if fun.Recv == nil {
-		return fc.translateStandaloneFunction(fun, inst)
+		return fc.translateStandaloneFunction(fun)
 	}
 
-	o := inst.Object.(*types.Func)
-	info := fc.pkgCtx.FuncDeclInfos[o]
+	return fc.translateMethod(fun)
+}
 
-	sig := o.Type().(*types.Signature)
+// translateStandaloneFunction translates a package-level function.
+//
+// It returns JS statements which define the corresponding function in a
+// package context. Exported functions are also assigned to the `$pkg` object.
+func (fc *funcContext) translateStandaloneFunction(fun *ast.FuncDecl) []byte {
+	o := fc.instance.Object.(*types.Func)
+
+	if fun.Recv != nil {
+		panic(fmt.Errorf("expected standalone function, got method: %s", o))
+	}
+
+	lvalue := fc.instName(fc.instance)
+
+	if fun.Body == nil {
+		return []byte(fmt.Sprintf("\t\t%s = %s;\n", lvalue, fc.unimplementedFunction(o)))
+	}
+
+	body := fc.translateFunctionBody(fun.Type, nil, fun.Body)
+	code := bytes.NewBuffer(nil)
+	fmt.Fprintf(code, "\t\t%s = %s;\n", lvalue, body)
+	if fun.Name.IsExported() && fc.instance.IsTrivial() {
+		fmt.Fprintf(code, "\t\t$pkg.%s = %s;\n", encodeIdent(fun.Name.Name), lvalue)
+	}
+	return code.Bytes()
+}
+
+// translateMethod translates a named type method.
+//
+// It returns one or more JS statements which define the method. Methods with
+// non-pointer receiver are automatically defined for the pointer-receiver type.
+func (fc *funcContext) translateMethod(fun *ast.FuncDecl) []byte {
+	o := fc.instance.Object.(*types.Func)
+	funName := fc.methodName(o)
+
 	// primaryFunction generates a JS function equivalent of the current Go function
 	// and assigns it to the JS expression defined by lvalue.
 	primaryFunction := func(lvalue string) []byte {
 		if fun.Body == nil {
-			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t};\n", lvalue, o.FullName()))
+			return []byte(fmt.Sprintf("\t\t%s = %s;\n", lvalue, fc.unimplementedFunction(o)))
 		}
 
 		var recv *ast.Ident
 		if fun.Recv != nil && fun.Recv.List[0].Names != nil {
 			recv = fun.Recv.List[0].Names[0]
 		}
-		fun := fc.nestedFunctionContext(info, sig, inst).translateFunctionBody(fun.Type, recv, fun.Body, lvalue)
-		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fun))
+		fun := fc.translateFunctionBody(fun.Type, recv, fun.Body)
+		return []byte(fmt.Sprintf("\t\t%s = %s;\n", lvalue, fun))
 	}
 
-	funName := fun.Name.Name
-	if reservedKeywords[funName] {
-		funName += "$"
-	}
-
-	// proxyFunction generates a JS function that forwards the call to the actual
-	// method implementation for the alternate receiver (e.g. pointer vs
-	// non-pointer).
-	proxyFunction := func(lvalue, receiver string) []byte {
-		fun := fmt.Sprintf("function(...$args) { return %s.%s(...$args); }", receiver, funName)
-		return []byte(fmt.Sprintf("\t%s = %s;\n", lvalue, fun))
-	}
-
-	recvInst := inst.Recv()
+	recvInst := fc.instance.Recv()
 	recvInstName := fc.instName(recvInst)
 	recvType := recvInst.Object.Type().(*types.Named)
 
@@ -108,70 +160,51 @@ func (fc *funcContext) translateTopLevelFunction(fun *ast.FuncDecl, inst typepar
 	prototypeVar := fmt.Sprintf("%s.prototype.%s", recvInstName, funName)
 	ptrPrototypeVar := fmt.Sprintf("$ptrType(%s).prototype.%s", recvInstName, funName)
 
-	code := bytes.NewBuffer(nil)
+	// Methods with pointer-receiver are only attached to the pointer-receiver type.
+	if _, isPointer := fc.sig.Sig.Recv().Type().(*types.Pointer); isPointer {
+		return primaryFunction(ptrPrototypeVar)
+	}
 
+	// Methods with non-pointer receivers must be defined both for the pointer
+	// and non-pointer types. To minimize generated code size, we generate a
+	// complete implementation for only one receiver (non-pointer for most types)
+	// and define a proxy function on the other, which converts the receiver type
+	// and forwards the call to the primary implementation.
+	proxyFunction := func(lvalue, receiver string) []byte {
+		fun := fmt.Sprintf("function(...$args) { return %s.%s(...$args); }", receiver, funName)
+		return []byte(fmt.Sprintf("\t\t%s = %s;\n", lvalue, fun))
+	}
+
+	// Structs are a special case: they are represented by JS objects and their
+	// methods are the underlying object's methods. Due to reference semantics of
+	// the JS variables, the actual backing object is considered to represent the
+	// pointer-to-struct type, and methods are attacher to it first and foremost.
 	if _, isStruct := recvType.Underlying().(*types.Struct); isStruct {
-		// Structs are a special case: they are represented by JS objects and their
-		// methods are the underlying object's methods. Due to reference semantics
-		// of the JS variables, the actual backing object is considered to represent
-		// the pointer-to-struct type, and methods are attacher to it first and
-		// foremost.
+		code := bytes.Buffer{}
 		code.Write(primaryFunction(ptrPrototypeVar))
 		code.Write(proxyFunction(prototypeVar, "this.$val"))
 		return code.Bytes()
 	}
 
-	if ptr, isPointer := sig.Recv().Type().(*types.Pointer); isPointer {
-		if _, isArray := ptr.Elem().Underlying().(*types.Array); isArray {
-			// Pointer-to-array is another special case.
-			// TODO(nevkontakte) Find out and document why.
-			code.Write(primaryFunction(prototypeVar))
-			code.Write(proxyFunction(ptrPrototypeVar, fmt.Sprintf("(new %s(this.$get()))", recvInstName)))
-			return code.Bytes()
-		}
-
-		// Methods with pointer-receiver are only attached to the pointer-receiver
-		// type.
-		return primaryFunction(ptrPrototypeVar)
-	}
-
 	// Methods defined for non-pointer receiver are attached to both pointer- and
 	// non-pointer-receiver types.
-	recvExpr := "this.$get()"
+	proxyRecvExpr := "this.$get()"
 	if isWrapped(recvType) {
-		recvExpr = fmt.Sprintf("new %s(%s)", recvInstName, recvExpr)
+		proxyRecvExpr = fmt.Sprintf("new %s(%s)", recvInstName, proxyRecvExpr)
 	}
+	code := bytes.Buffer{}
 	code.Write(primaryFunction(prototypeVar))
-	code.Write(proxyFunction(ptrPrototypeVar, recvExpr))
+	code.Write(proxyFunction(ptrPrototypeVar, proxyRecvExpr))
 	return code.Bytes()
 }
 
-// translateStandaloneFunction translates a package-level function.
+// unimplementedFunction returns a JS function expression for a Go function
+// without a body, which would throw an exception if called.
 //
-// It returns a JS statements which define the corresponding function in a
-// package context. Exported functions are also assigned to the `$pkg` object.
-func (fc *funcContext) translateStandaloneFunction(fun *ast.FuncDecl, inst typeparams.Instance) []byte {
-	o := inst.Object.(*types.Func)
-	info := fc.pkgCtx.FuncDeclInfos[o]
-	sig := o.Type().(*types.Signature)
-
-	if fun.Recv != nil {
-		panic(fmt.Errorf("expected standalone function, got method: %s", o))
-	}
-
-	lvalue := fc.instName(inst)
-
-	if fun.Body == nil {
-		return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t};\n", lvalue, o.FullName()))
-	}
-
-	body := fc.nestedFunctionContext(info, sig, inst).translateFunctionBody(fun.Type, nil, fun.Body, lvalue)
-	code := bytes.NewBuffer(nil)
-	fmt.Fprintf(code, "\t%s = %s;\n", lvalue, body)
-	if fun.Name.IsExported() {
-		fmt.Fprintf(code, "\t$pkg.%s = %s;\n", encodeIdent(fun.Name.Name), lvalue)
-	}
-	return code.Bytes()
+// In Go such functions are either used with a //go:linkname directive or with
+// assembler intrinsics, only former of which is supported by GopherJS.
+func (fc *funcContext) unimplementedFunction(o *types.Func) string {
+	return fmt.Sprintf("function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t}", o.FullName())
 }
 
 // translateFunctionBody translates body of a top-level or literal function.
@@ -179,7 +212,7 @@ func (fc *funcContext) translateStandaloneFunction(fun *ast.FuncDecl, inst typep
 // It returns a JS function expression that represents the given Go function.
 // Function receiver must have been created with nestedFunctionContext() to have
 // required metadata set up.
-func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt, funcRef string) string {
+func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident, body *ast.BlockStmt) string {
 	prevEV := fc.pkgCtx.escapingVars
 
 	// Generate a list of function argument variables. Since Go allows nameless
@@ -199,8 +232,8 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 		}
 	}
 
-	bodyOutput := string(fc.CatchOutput(1, func() {
-		if len(fc.Blocking) != 0 {
+	bodyOutput := string(fc.CatchOutput(2, func() {
+		if fc.IsBlocking() {
 			fc.pkgCtx.Scopes[body] = fc.pkgCtx.Scopes[typ]
 			fc.handleEscapingVars(body)
 		}
@@ -233,7 +266,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 
 	sort.Strings(fc.localVars)
 
-	var prefix, suffix, functionName string
+	var prefix, suffix string
 
 	if len(fc.Flattened) != 0 {
 		// $s contains an index of the switch case a blocking function reached
@@ -246,29 +279,27 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	if fc.HasDefer {
 		fc.localVars = append(fc.localVars, "$deferred")
 		suffix = " }" + suffix
-		if len(fc.Blocking) != 0 {
+		if fc.IsBlocking() {
 			suffix = " }" + suffix
 		}
 	}
 
 	localVarDefs := "" // Function-local var declaration at the top.
 
-	if len(fc.Blocking) != 0 {
-		if funcRef == "" {
-			funcRef = "$b"
-			functionName = " $b"
-		}
-
+	if fc.IsBlocking() {
 		localVars := append([]string{}, fc.localVars...)
 		// There are several special variables involved in handling blocking functions:
 		// $r is sometimes used as a temporary variable to store blocking call result.
 		// $c indicates that a function is being resumed after a blocking call when set to true.
 		// $f is an object used to save and restore function context for blocking calls.
 		localVars = append(localVars, "$r")
+		// funcRef identifies the function object itself, so it doesn't need to be saved
+		// or restored.
+		localVars = removeMatching(localVars, fc.funcRef)
 		// If a blocking function is being resumed, initialize local variables from the saved context.
 		localVarDefs = fmt.Sprintf("var {%s, $c} = $restore(this, {%s});\n", strings.Join(localVars, ", "), strings.Join(args, ", "))
 		// If the function gets blocked, save local variables for future.
-		saveContext := fmt.Sprintf("var $f = {$blk: "+funcRef+", $c: true, $r, %s};", strings.Join(fc.localVars, ", "))
+		saveContext := fmt.Sprintf("var $f = {$blk: "+fc.funcRef+", $c: true, $r, %s};", strings.Join(fc.localVars, ", "))
 
 		suffix = " " + saveContext + "return $f;" + suffix
 	} else if len(fc.localVars) > 0 {
@@ -279,7 +310,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	if fc.HasDefer {
 		prefix = prefix + " var $err = null; try {"
 		deferSuffix := " } catch(err) { $err = err;"
-		if len(fc.Blocking) != 0 {
+		if fc.IsBlocking() {
 			deferSuffix += " $s = -1;"
 		}
 		if fc.resultNames == nil && fc.sig.HasResults() {
@@ -289,7 +320,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 		if fc.resultNames != nil {
 			deferSuffix += fmt.Sprintf(" if (!$curGoroutine.asleep) { return %s; }", fc.translateResults(fc.resultNames))
 		}
-		if len(fc.Blocking) != 0 {
+		if fc.IsBlocking() {
 			deferSuffix += " if($curGoroutine.asleep) {"
 		}
 		suffix = deferSuffix + suffix
@@ -305,16 +336,16 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 	}
 
 	if prefix != "" {
-		bodyOutput = fc.Indentation(1) + "/* */" + prefix + "\n" + bodyOutput
+		bodyOutput = fc.Indentation(2) + "/* */" + prefix + "\n" + bodyOutput
 	}
 	if suffix != "" {
-		bodyOutput = bodyOutput + fc.Indentation(1) + "/* */" + suffix + "\n"
+		bodyOutput = bodyOutput + fc.Indentation(2) + "/* */" + suffix + "\n"
 	}
 	if localVarDefs != "" {
-		bodyOutput = fc.Indentation(1) + localVarDefs + bodyOutput
+		bodyOutput = fc.Indentation(2) + localVarDefs + bodyOutput
 	}
 
 	fc.pkgCtx.escapingVars = prevEV
 
-	return fmt.Sprintf("function%s(%s) {\n%s%s}", functionName, strings.Join(args, ", "), bodyOutput, fc.Indentation(0))
+	return fmt.Sprintf("function %s(%s) {\n%s%s}", fc.funcRef, strings.Join(args, ", "), bodyOutput, fc.Indentation(1))
 }

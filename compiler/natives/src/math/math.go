@@ -1,11 +1,8 @@
 //go:build js
-// +build js
 
 package math
 
-import (
-	"github.com/gopherjs/gopherjs/js"
-)
+import "github.com/gopherjs/gopherjs/js"
 
 var (
 	math           = js.Global.Get("Math")

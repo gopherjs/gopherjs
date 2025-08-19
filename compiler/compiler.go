@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gopherjs/gopherjs/compiler/internal/dce"
+	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
 	"golang.org/x/tools/go/gcexportdata"
 )
@@ -45,43 +47,24 @@ type Archive struct {
 	// A list of full package import paths that the current package imports across
 	// all source files. See go/types.Package.Imports().
 	Imports []string
-	// Serialized contents of go/types.Package in a binary format. This information
-	// is used by the compiler to type-check packages that import this one. See
-	// gcexportdata.Write().
-	//
-	// TODO(nevkontakte): It would be more convenient to store go/types.Package
-	// itself and only serialize it when writing the archive onto disk.
-	ExportData []byte
+	// The package information is used by the compiler to type-check packages
+	// that import this one. See [gcexportdata.Write].
+	Package *types.Package
 	// Compiled package-level symbols.
 	Declarations []*Decl
 	// Concatenated contents of all raw .inc.js of the package.
 	IncJSCode []byte
-	// JSON-serialized contents of go/token.FileSet. This is used to obtain source
-	// code locations for various symbols (e.g. for sourcemap generation). See
-	// token.FileSet.Write().
-	//
-	// TODO(nevkontakte): This is also more convenient to store as the original
-	// object and only serialize before writing onto disk.
-	FileSet []byte
+	// The file set containing the source code locations for various symbols
+	// (e.g. for sourcemap generation). See [token.FileSet.Write].
+	FileSet *token.FileSet
 	// Whether or not the package was compiled with minification enabled.
 	Minified bool
 	// A list of go:linkname directives encountered in the package.
-	GoLinknames []GoLinkname
-	// Time when this archive was built.
-	BuildTime time.Time
+	GoLinknames []linkname.GoLinkname
 }
 
 func (a Archive) String() string {
 	return fmt.Sprintf("compiler.Archive{%s}", a.ImportPath)
-}
-
-// RegisterTypes adds package type information from the archive into the provided map.
-func (a *Archive) RegisterTypes(packages map[string]*types.Package) error {
-	var err error
-	// TODO(nevkontakte): Should this be shared throughout the build?
-	fset := token.NewFileSet()
-	packages[a.ImportPath], err = gcexportdata.Read(bytes.NewReader(a.ExportData), fset, packages, a.ImportPath)
-	return err
 }
 
 type Dependency struct {
@@ -125,77 +108,31 @@ func ImportDependencies(archive *Archive, importPkg func(string) (*Archive, erro
 	return deps, nil
 }
 
-type dceInfo struct {
-	decl         *Decl
-	objectFilter string
-	methodFilter string
-}
-
 func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified
 
 	// Aggregate all go:linkname directives in the program together.
-	gls := goLinknameSet{}
+	gls := linkname.GoLinknameSet{}
 	for _, pkg := range pkgs {
 		gls.Add(pkg.GoLinknames)
 	}
 
-	byFilter := make(map[string][]*dceInfo)
-	var pendingDecls []*Decl // A queue of live decls to find other live decls.
+	sel := &dce.Selector[*Decl]{}
 	for _, pkg := range pkgs {
 		for _, d := range pkg.Declarations {
-			if d.DceObjectFilter == "" && d.DceMethodFilter == "" {
-				// This is an entry point (like main() or init() functions) or a variable
-				// initializer which has a side effect, consider it live.
-				pendingDecls = append(pendingDecls, d)
-				continue
-			}
+			implementsLink := false
 			if gls.IsImplementation(d.LinkingName) {
 				// If a decl is referenced by a go:linkname directive, we just assume
 				// it's not dead.
 				// TODO(nevkontakte): This is a safe, but imprecise assumption. We should
 				// try and trace whether the referencing functions are actually live.
-				pendingDecls = append(pendingDecls, d)
+				implementsLink = true
 			}
-			info := &dceInfo{decl: d}
-			if d.DceObjectFilter != "" {
-				info.objectFilter = pkg.ImportPath + "." + d.DceObjectFilter
-				byFilter[info.objectFilter] = append(byFilter[info.objectFilter], info)
-			}
-			if d.DceMethodFilter != "" {
-				info.methodFilter = pkg.ImportPath + "." + d.DceMethodFilter
-				byFilter[info.methodFilter] = append(byFilter[info.methodFilter], info)
-			}
+			sel.Include(d, implementsLink)
 		}
 	}
-
-	dceSelection := make(map[*Decl]struct{}) // Known live decls.
-	for len(pendingDecls) != 0 {
-		d := pendingDecls[len(pendingDecls)-1]
-		pendingDecls = pendingDecls[:len(pendingDecls)-1]
-
-		dceSelection[d] = struct{}{} // Mark the decl as live.
-
-		// Consider all decls the current one is known to depend on and possible add
-		// them to the live queue.
-		for _, dep := range d.DceDeps {
-			if infos, ok := byFilter[dep]; ok {
-				delete(byFilter, dep)
-				for _, info := range infos {
-					if info.objectFilter == dep {
-						info.objectFilter = ""
-					}
-					if info.methodFilter == dep {
-						info.methodFilter = ""
-					}
-					if info.objectFilter == "" && info.methodFilter == "" {
-						pendingDecls = append(pendingDecls, info.decl)
-					}
-				}
-			}
-		}
-	}
+	dceSelection := sel.AliveDecls()
 
 	if _, err := w.Write([]byte("\"use strict\";\n(function() {\n\n")); err != nil {
 		return err
@@ -222,18 +159,15 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 		}
 	}
 
-	if _, err := w.Write([]byte("$synthesizeMethods();\n$initAllLinknames();\nvar $mainPkg = $packages[\"" + string(mainPkg.ImportPath) + "\"];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
+	if _, err := w.Write([]byte("$callForAllPackages(\"$finishSetup\");\n$synthesizeMethods();\n$callForAllPackages(\"$initLinknames\");\nvar $mainPkg = $packages[\"" + string(mainPkg.ImportPath) + "\"];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
 		return err
 	}
 	return nil
 }
 
-func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameSet, minify bool, w *SourceMapFilter) error {
+func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.GoLinknameSet, minify bool, w *SourceMapFilter) error {
 	if w.MappingCallback != nil && pkg.FileSet != nil {
-		w.fileSet = token.NewFileSet()
-		if err := w.fileSet.Read(json.NewDecoder(bytes.NewReader(pkg.FileSet)).Decode); err != nil {
-			panic(err)
-		}
+		w.fileSet = pkg.FileSet
 	}
 	if _, err := w.Write(pkg.IncJSCode); err != nil {
 		return err
@@ -249,13 +183,68 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			filteredDecls = append(filteredDecls, d)
 		}
 	}
+	// Write variable names
 	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
 		return err
 	}
+	// Write imports
 	for _, d := range filteredDecls {
-		if _, err := w.Write(d.DeclCode); err != nil {
+		if _, err := w.Write(d.ImportCode); err != nil {
 			return err
 		}
+	}
+	// Write named type declarations
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.TypeDeclCode); err != nil {
+			return err
+		}
+	}
+	// Write exports for named type declarations
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.ExportTypeCode); err != nil {
+			return err
+		}
+	}
+
+	// The following parts have to be run after all packages have been added
+	// to handle generics that use named types defined in a package that
+	// is defined after this package has been defined.
+	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$finishSetup = function() {\n"), minify)); err != nil {
+		return err
+	}
+
+	// Write anonymous type declarations
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.AnonTypeDeclCode); err != nil {
+			return err
+		}
+	}
+	// Write function declarations
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.FuncDeclCode); err != nil {
+			return err
+		}
+	}
+	// Write exports for function declarations
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.ExportFuncCode); err != nil {
+			return err
+		}
+	}
+	// Write reflection metadata for types' methods
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.MethodListCode); err != nil {
+			return err
+		}
+	}
+	// Write the calls to finish initialization of types
+	for _, d := range filteredDecls {
+		if _, err := w.Write(d.TypeInitCode); err != nil {
+			return err
+		}
+	}
+
+	for _, d := range filteredDecls {
 		if gls.IsImplementation(d.LinkingName) {
 			// This decl is referenced by a go:linkname directive, expose it to external
 			// callers via $linkname object (declared in prelude). We are not using
@@ -269,16 +258,6 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
 				return err
 			}
-		}
-	}
-	for _, d := range filteredDecls {
-		if _, err := w.Write(d.MethodListCode); err != nil {
-			return err
-		}
-	}
-	for _, d := range filteredDecls {
-		if _, err := w.Write(d.TypeInitCode); err != nil {
-			return err
 		}
 	}
 
@@ -295,16 +274,23 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			if !found {
 				continue // The symbol is not affected by a go:linkname directive.
 			}
-			lines = append(lines, fmt.Sprintf("\t\t%s = $linknames[%q];\n", d.RefExpr, impl.String()))
+			lines = append(lines, fmt.Sprintf("\t\t\t%s = $linknames[%q];\n", d.RefExpr, impl.String()))
 		}
 		if len(lines) > 0 {
-			code := fmt.Sprintf("\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, ""))
+			code := fmt.Sprintf("\t\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, ""))
 			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
 				return err
 			}
 		}
 	}
 
+	// Write the end of the `$finishSetup` function.
+	if _, err := w.Write(removeWhitespace([]byte("\t};\n"), minify)); err != nil {
+		return err
+	}
+
+	// Write the initialization function that will initialize this package
+	// (e.g. initialize package-level variable value).
 	if _, err := w.Write(removeWhitespace([]byte("\t$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
 		return err
 	}
@@ -322,19 +308,98 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 	return nil
 }
 
+type serializableArchive struct {
+	ImportPath   string
+	Name         string
+	Imports      []string
+	ExportData   []byte
+	Declarations []*Decl
+	IncJSCode    []byte
+	FileSet      []byte
+	Minified     bool
+	GoLinknames  []linkname.GoLinkname
+	BuildTime    time.Time
+}
+
 // ReadArchive reads serialized compiled archive of the importPath package.
-func ReadArchive(path string, r io.Reader) (*Archive, error) {
-	var a Archive
-	if err := gob.NewDecoder(r).Decode(&a); err != nil {
-		return nil, err
+//
+// The given srcModTime is used to determine if the archive is out-of-date.
+// If the archive is out-of-date, the returned archive is nil.
+// If there was not an error, the returned time is when the archive was built.
+//
+// The imports map is used to resolve package dependencies and may modify the
+// map to include the package from the read archive. See [gcexportdata.Read].
+func ReadArchive(importPath string, r io.Reader, srcModTime time.Time, imports map[string]*types.Package) (*Archive, time.Time, error) {
+	var sa serializableArchive
+	if err := gob.NewDecoder(r).Decode(&sa); err != nil {
+		return nil, time.Time{}, err
 	}
 
-	return &a, nil
+	if srcModTime.After(sa.BuildTime) {
+		// Archive is out-of-date.
+		return nil, sa.BuildTime, nil
+	}
+
+	var a Archive
+	fset := token.NewFileSet()
+	if len(sa.ExportData) > 0 {
+		pkg, err := gcexportdata.Read(bytes.NewReader(sa.ExportData), fset, imports, importPath)
+		if err != nil {
+			return nil, sa.BuildTime, err
+		}
+		a.Package = pkg
+	}
+
+	if len(sa.FileSet) > 0 {
+		a.FileSet = token.NewFileSet()
+		if err := a.FileSet.Read(json.NewDecoder(bytes.NewReader(sa.FileSet)).Decode); err != nil {
+			return nil, sa.BuildTime, err
+		}
+	}
+
+	a.ImportPath = sa.ImportPath
+	a.Name = sa.Name
+	a.Imports = sa.Imports
+	a.Declarations = sa.Declarations
+	a.IncJSCode = sa.IncJSCode
+	a.Minified = sa.Minified
+	a.GoLinknames = sa.GoLinknames
+	return &a, sa.BuildTime, nil
 }
 
 // WriteArchive writes compiled package archive on disk for later reuse.
-func WriteArchive(a *Archive, w io.Writer) error {
-	return gob.NewEncoder(w).Encode(a)
+//
+// The passed in buildTime is used to determine if the archive is out-of-date.
+// Typically it should be set to the srcModTime or time.Now() but it is exposed for testing purposes.
+func WriteArchive(a *Archive, buildTime time.Time, w io.Writer) error {
+	exportData := new(bytes.Buffer)
+	if a.Package != nil {
+		if err := gcexportdata.Write(exportData, nil, a.Package); err != nil {
+			return fmt.Errorf("failed to write export data: %w", err)
+		}
+	}
+
+	encodedFileSet := new(bytes.Buffer)
+	if a.FileSet != nil {
+		if err := a.FileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
+			return err
+		}
+	}
+
+	sa := serializableArchive{
+		ImportPath:   a.ImportPath,
+		Name:         a.Name,
+		Imports:      a.Imports,
+		ExportData:   exportData.Bytes(),
+		Declarations: a.Declarations,
+		IncJSCode:    a.IncJSCode,
+		FileSet:      encodedFileSet.Bytes(),
+		Minified:     a.Minified,
+		GoLinknames:  a.GoLinknames,
+		BuildTime:    buildTime,
+	}
+
+	return gob.NewEncoder(w).Encode(sa)
 }
 
 type SourceMapFilter struct {

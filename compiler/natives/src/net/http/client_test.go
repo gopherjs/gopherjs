@@ -2,9 +2,7 @@
 
 package http_test
 
-import (
-	"testing"
-)
+import "testing"
 
 func testClientTimeout(t *testing.T, mode testMode) {
 	// The original test expects Client.Timeout error to be returned, but under

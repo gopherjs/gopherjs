@@ -2,9 +2,7 @@
 
 package syscall
 
-import (
-	"syscall/js"
-)
+import "syscall/js"
 
 // fsCall emulates a file system-related syscall via a corresponding NodeJS fs
 // API.

@@ -7,6 +7,7 @@ import (
 	_ "unsafe"
 
 	"github.com/google/go-cmp/cmp"
+
 	"github.com/gopherjs/gopherjs/tests/testdata/linkname/method"
 	"github.com/gopherjs/gopherjs/tests/testdata/linkname/one"
 )

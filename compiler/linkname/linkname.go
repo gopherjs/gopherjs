@@ -8,7 +8,7 @@ import (
 
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
-	"github.com/gopherjs/gopherjs/internal/errorList"
+	"github.com/gopherjs/gopherjs/internal/errlist"
 )
 
 // GoLinkname describes a go:linkname compiler directive found in the source code.
@@ -39,7 +39,7 @@ type GoLinkname struct {
 //     words, it can only "import" an external function implementation into the
 //     local scope).
 func ParseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]GoLinkname, error) {
-	var errs errorList.ErrorList = nil
+	var errs errlist.ErrorList = nil
 	var directives []GoLinkname
 
 	isUnsafe := astutil.ImportsUnsafe(file)

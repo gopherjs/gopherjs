@@ -9,11 +9,11 @@ import (
 
 	"github.com/neelance/astrewrite"
 
+	"github.com/gopherjs/gopherjs/compiler/incjs"
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
-	"github.com/gopherjs/gopherjs/compiler/jsFile"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
-	"github.com/gopherjs/gopherjs/internal/errorList"
+	"github.com/gopherjs/gopherjs/internal/errlist"
 )
 
 // Sources is a slice of parsed Go sources and additional data for a package.
@@ -40,7 +40,7 @@ type Sources struct {
 	FileSet *token.FileSet
 
 	// JSFiles is the JavaScript files that are part of the package.
-	JSFiles []jsFile.JSFile
+	JSFiles []incjs.File
 
 	// TypeInfo is the type information for this package.
 	// This is nil until set by Analyze.
@@ -61,7 +61,7 @@ type Sources struct {
 
 type Importer func(path, srcDir string) (*Sources, error)
 
-// sort the Go files slice by the original source name to ensure consistent order
+// Sort sorts the Go files slice by the original source name to ensure consistent order
 // of processing. This is required for reproducible JavaScript output.
 //
 // Note this function mutates the original Files slice.
@@ -114,7 +114,7 @@ func (s *Sources) TypeCheck(importer Importer, sizes types.Sizes, tContext *type
 		Instances:  make(map[*ast.Ident]types.Instance),
 	}
 
-	var typeErrs errorList.ErrorList
+	var typeErrs errlist.ErrorList
 
 	pkgImporter := &packageImporter{
 		srcDir:   s.Dir,
@@ -187,7 +187,7 @@ func (s *Sources) Analyze(importer Importer, tContext *types.Context, instances 
 // This will set the GoLinknames field on the Sources.
 func (s *Sources) ParseGoLinknames() error {
 	goLinknames := []linkname.GoLinkname{}
-	var errs errorList.ErrorList
+	var errs errlist.ErrorList
 	for _, file := range s.Files {
 		found, err := linkname.ParseGoLinknames(s.FileSet, s.ImportPath, file)
 		errs = errs.Append(err)
@@ -238,7 +238,7 @@ type packageImporter struct {
 	importer Importer
 	sizes    types.Sizes
 	tContext *types.Context
-	Errors   errorList.ErrorList
+	Errors   errlist.ErrorList
 }
 
 func (pi *packageImporter) Import(path string) (*types.Package, error) {

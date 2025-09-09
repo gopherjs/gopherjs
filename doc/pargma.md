@@ -130,7 +130,7 @@ var data string
 type dataType struct {}
 
 //gopherjs:purge
-type interfaceType interface{}
+type interfaceType any
 
 //gopherjs:purge
 func doThing[T ~string](value T)

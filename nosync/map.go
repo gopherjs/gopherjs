@@ -7,21 +7,21 @@ package nosync
 //
 // A Map must not be copied after first use.
 type Map struct {
-	m map[interface{}]interface{}
+	m map[any]any
 }
 
 // Load returns the value stored in the map for a key, or nil if no
 // value is present.
 // The ok result indicates whether value was found in the map.
-func (m *Map) Load(key interface{}) (value interface{}, ok bool) {
+func (m *Map) Load(key any) (value any, ok bool) {
 	value, ok = m.m[key]
 	return value, ok
 }
 
 // Store sets the value for a key.
-func (m *Map) Store(key, value interface{}) {
+func (m *Map) Store(key, value any) {
 	if m.m == nil {
-		m.m = make(map[interface{}]interface{})
+		m.m = make(map[any]any)
 	}
 	m.m[key] = value
 }
@@ -29,19 +29,19 @@ func (m *Map) Store(key, value interface{}) {
 // LoadOrStore returns the existing value for the key if present.
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
-func (m *Map) LoadOrStore(key, value interface{}) (actual interface{}, loaded bool) {
+func (m *Map) LoadOrStore(key, value any) (actual any, loaded bool) {
 	if value, ok := m.m[key]; ok {
 		return value, true
 	}
 	if m.m == nil {
-		m.m = make(map[interface{}]interface{})
+		m.m = make(map[any]any)
 	}
 	m.m[key] = value
 	return value, false
 }
 
 // Delete deletes the value for a key.
-func (m *Map) Delete(key interface{}) {
+func (m *Map) Delete(key any) {
 	if m.m == nil {
 		return
 	}
@@ -58,7 +58,7 @@ func (m *Map) Delete(key interface{}) {
 //
 // Range may be O(N) with the number of elements in the map even if f returns
 // false after a constant number of calls.
-func (m *Map) Range(f func(key, value interface{}) bool) {
+func (m *Map) Range(f func(key, value any) bool) {
 	for k, v := range m.m {
 		if !f(k, v) {
 			break

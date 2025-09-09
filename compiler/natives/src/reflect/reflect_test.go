@@ -130,7 +130,7 @@ var deepEqualTests = []DeepEqualTest{
 	{int32(1), int64(1), false},
 	{0.5, "hello", false},
 	{[]int{1, 2, 3}, [3]int{1, 2, 3}, false},
-	{&[3]interface{}{1, 2, 4}, &[3]interface{}{1, 2, "s"}, false},
+	{&[3]any{1, 2, 4}, &[3]any{1, 2, "s"}, false},
 	{Basic{1, 0.5}, NotBasic{1, 0.5}, false},
 	{map[uint]string{1: "one", 2: "two"}, map[int]string{2: "two", 1: "one"}, false},
 

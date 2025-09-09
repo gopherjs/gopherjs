@@ -25,16 +25,16 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/neelance/sourcemap"
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/tools/go/buildutil"
+
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
-	"github.com/gopherjs/gopherjs/compiler/jsFile"
+	"github.com/gopherjs/gopherjs/compiler/incjs"
 	"github.com/gopherjs/gopherjs/compiler/sources"
-	"github.com/gopherjs/gopherjs/internal/errorList"
+	"github.com/gopherjs/gopherjs/internal/errlist"
 	"github.com/gopherjs/gopherjs/internal/testmain"
-	log "github.com/sirupsen/logrus"
-
-	"github.com/neelance/sourcemap"
-	"golang.org/x/tools/go/buildutil"
 )
 
 // DefaultGOROOT is the default GOROOT value for builds.
@@ -123,7 +123,7 @@ func ImportDir(dir string, mode build.ImportMode, installSuffix string, buildTag
 // overrideInfo is used by parseAndAugment methods to manage
 // directives and how the overlay and original are merged.
 type overrideInfo struct {
-	// KeepOriginal indicates that the original code should be kept
+	// keepOriginal indicates that the original code should be kept
 	// but the identifier will be prefixed by `_gopherjs_original_foo`.
 	// If false the original code is removed.
 	keepOriginal bool
@@ -166,7 +166,7 @@ type overrideInfo struct {
 //   - Otherwise for identifiers that exist in the original and the overrides,
 //     the original is removed.
 //   - New identifiers that don't exist in original package get added.
-func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]*ast.File, []jsFile.JSFile, error) {
+func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]*ast.File, []incjs.File, error) {
 	jsFiles, overlayFiles := parseOverlayFiles(xctx, pkg, isTest, fileSet)
 
 	originalFiles, err := parserOriginalFiles(pkg, fileSet)
@@ -195,7 +195,7 @@ func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *toke
 
 // parseOverlayFiles loads and parses overlay files
 // to augment the original files with.
-func parseOverlayFiles(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]jsFile.JSFile, []*ast.File) {
+func parseOverlayFiles(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]incjs.File, []*ast.File) {
 	isXTest := strings.HasSuffix(pkg.ImportPath, "_test")
 	importPath := pkg.ImportPath
 	if isXTest {
@@ -241,7 +241,7 @@ func parseOverlayFiles(xctx XContext, pkg *PackageData, isTest bool, fileSet *to
 // parserOriginalFiles loads and parses the original files to augment.
 func parserOriginalFiles(pkg *PackageData, fileSet *token.FileSet) ([]*ast.File, error) {
 	var files []*ast.File
-	var errList errorList.ErrorList
+	var errList errlist.ErrorList
 	for _, name := range pkg.GoFiles {
 		if !filepath.IsAbs(name) { // name might be absolute if specified directly. E.g., `gopherjs build /abs/file.go`.
 			name = filepath.Join(pkg.Dir, name)
@@ -610,7 +610,7 @@ type Options struct {
 }
 
 // PrintError message to the terminal.
-func (o *Options) PrintError(format string, a ...interface{}) {
+func (o *Options) PrintError(format string, a ...any) {
 	if o.Color {
 		format = "\x1B[31m" + format + "\x1B[39m"
 	}
@@ -618,7 +618,7 @@ func (o *Options) PrintError(format string, a ...interface{}) {
 }
 
 // PrintSuccess message to the terminal.
-func (o *Options) PrintSuccess(format string, a ...interface{}) {
+func (o *Options) PrintSuccess(format string, a ...any) {
 	if o.Color {
 		format = "\x1B[32m" + format + "\x1B[39m"
 	}
@@ -629,7 +629,7 @@ func (o *Options) PrintSuccess(format string, a ...interface{}) {
 // GopherJS requires.
 type PackageData struct {
 	*build.Package
-	JSFiles []jsFile.JSFile
+	JSFiles []incjs.File
 	// IsTest is true if the package is being built for running tests.
 	IsTest     bool
 	SrcModTime time.Time
@@ -881,23 +881,14 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 	}
 
 	for _, file := range filenames {
-		if !strings.HasSuffix(file, ".inc.js") {
-			continue
-		}
-
-		content, err := os.ReadFile(file)
+		jsFile, err := incjs.FromFilename(file)
 		if err != nil {
-			return fmt.Errorf("failed to read %s: %w", file, err)
+			return err
 		}
-		info, err := os.Stat(file)
-		if err != nil {
-			return fmt.Errorf("failed to stat %s: %w", file, err)
+		if jsFile != nil {
+			jsFile.Path = filepath.Join(pkg.Dir, filepath.Base(file))
+			pkg.JSFiles = append(pkg.JSFiles, *jsFile)
 		}
-		pkg.JSFiles = append(pkg.JSFiles, jsFile.JSFile{
-			Path:    filepath.Join(pkg.Dir, filepath.Base(file)),
-			ModTime: info.ModTime(),
-			Content: content,
-		})
 	}
 
 	archive, err := s.BuildProject(pkg)
@@ -1311,7 +1302,7 @@ func (s *Session) WaitForChange() {
 			if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove|fsnotify.Rename) == 0 || filepath.Base(ev.Name)[0] == '.' {
 				continue
 			}
-			if !strings.HasSuffix(ev.Name, ".go") && !strings.HasSuffix(ev.Name, ".inc.js") {
+			if !strings.HasSuffix(ev.Name, ".go") && !strings.HasSuffix(ev.Name, incjs.Ext) {
 				continue
 			}
 			s.options.PrintSuccess("change detected: %s\n", ev.Name)

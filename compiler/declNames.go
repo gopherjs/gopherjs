@@ -35,7 +35,7 @@ func funcVarDeclFullName(o *types.Func) string {
 	return `funcVar:` + symbol.New(o).String()
 }
 
-// mainFuncFullName returns the name for the declaration used to invoke the
+// mainFuncDeclFullName returns the name for the declaration used to invoke the
 // main function of the program. There should only be one decl with this name.
 func mainFuncDeclFullName() string {
 	return `init:main`

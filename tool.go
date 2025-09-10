@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"go/ast"
 	"go/build"
 	"go/scanner"
-	"go/token"
 	"go/types"
 	"io"
 	"net"
@@ -28,8 +26,8 @@ import (
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/gopherjs/gopherjs/internal/errorList"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
-	"github.com/gopherjs/gopherjs/internal/testmain"
 	"github.com/neelance/sourcemap"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -147,7 +145,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					archive, err := s.BuildPackage(pkg)
+					archive, err := s.BuildProject(pkg)
 					if err != nil {
 						return err
 					}
@@ -214,8 +212,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-
-					archive, err := s.BuildPackage(pkg)
+					archive, err := s.BuildProject(pkg)
 					if err != nil {
 						return err
 					}
@@ -375,27 +372,8 @@ func main() {
 				return err
 			}
 
-			_, err = s.BuildPackage(pkg.TestPackage())
-			if err != nil {
-				return err
-			}
-			_, err = s.BuildPackage(pkg.XTestPackage())
-			if err != nil {
-				return err
-			}
-
-			fset := token.NewFileSet()
-			tests := testmain.TestMain{Package: pkg}
-			tests.Scan(fset)
-			mainPkg, mainFile, err := tests.Synthesize(fset)
-			if err != nil {
-				return fmt.Errorf("failed to generate testmain package for %s: %w", pkg.ImportPath, err)
-			}
-			importContext := &compiler.ImportContext{
-				Packages: s.Types,
-				Import:   s.ImportResolverFor(mainPkg),
-			}
-			mainPkgArchive, err := compiler.Compile(mainPkg.ImportPath, []*ast.File{mainFile}, fset, importContext, options.Minify)
+			pkg.IsTest = true
+			mainPkgArchive, err := s.BuildProject(pkg)
 			if err != nil {
 				return fmt.Errorf("failed to compile testmain package for %s: %w", pkg.ImportPath, err)
 			}
@@ -668,7 +646,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 			buf := new(bytes.Buffer)
 			browserErrors := new(bytes.Buffer)
 			err := func() error {
-				archive, err := s.BuildPackage(pkg)
+				archive, err := s.BuildProject(pkg)
 				if err != nil {
 					return err
 				}
@@ -677,7 +655,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 				m := &sourcemap.Map{File: base + ".js"}
 				sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 
-				deps, err := compiler.ImportDependencies(archive, s.BuildImportPath)
+				deps, err := compiler.ImportDependencies(archive, s.ImportResolverFor(""))
 				if err != nil {
 					return err
 				}
@@ -793,7 +771,7 @@ func handleError(err error, options *gbuild.Options, browserErrors *bytes.Buffer
 	switch err := err.(type) {
 	case nil:
 		return 0
-	case compiler.ErrorList:
+	case errorList.ErrorList:
 		for _, entry := range err {
 			printError(entry, options, browserErrors)
 		}
@@ -842,13 +820,7 @@ func sprintError(err error) string {
 func runNode(script string, args []string, dir string, quiet bool, out io.Writer) error {
 	var allArgs []string
 	if b, _ := strconv.ParseBool(os.Getenv("SOURCE_MAP_SUPPORT")); os.Getenv("SOURCE_MAP_SUPPORT") == "" || b {
-		allArgs = []string{"--require", "source-map-support/register"}
-		if err := exec.Command("node", "--require", "source-map-support/register", "--eval", "").Run(); err != nil {
-			if !quiet {
-				fmt.Fprintln(os.Stderr, "gopherjs: Source maps disabled. Install source-map-support module for nice stack traces. See https://github.com/gopherjs/gopherjs#gopherjs-run-gopherjs-test.")
-			}
-			allArgs = []string{}
-		}
+		allArgs = []string{"--enable-source-maps"}
 	}
 
 	if runtime.GOOS != "windows" {

@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gopherjs/gopherjs/compiler/analysis"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
@@ -178,18 +178,18 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			}
 			if !isKeyValue {
 				for i, element := range e.Elts {
-					elements[i] = fc.translateImplicitConversionWithCloning(element, t.Field(i).Type()).String()
+					elements[i] = fc.translateImplicitConversionWithCloning(element, fc.fieldType(t, i)).String()
 				}
 			}
 			if isKeyValue {
 				for i := range elements {
-					elements[i] = fc.translateExpr(fc.zeroValue(t.Field(i).Type())).String()
+					elements[i] = fc.translateExpr(fc.zeroValue(fc.fieldType(t, i))).String()
 				}
 				for _, element := range e.Elts {
 					kve := element.(*ast.KeyValueExpr)
 					for j := range elements {
 						if kve.Key.(*ast.Ident).Name == t.Field(j).Name() {
-							elements[j] = fc.translateImplicitConversionWithCloning(kve.Value, t.Field(j).Type()).String()
+							elements[j] = fc.translateImplicitConversionWithCloning(kve.Value, fc.fieldType(t, j)).String()
 							break
 						}
 					}
@@ -201,7 +201,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 
 	case *ast.FuncLit:
-		fun := fc.nestedFunctionContext(fc.pkgCtx.FuncLitInfos[e], exprType.(*types.Signature), typeparams.Instance{}).translateFunctionBody(e.Type, nil, e.Body, "")
+		fun := fc.literalFuncContext(e).translateFunctionBody(e.Type, nil, e.Body)
 		if len(fc.pkgCtx.escapingVars) != 0 {
 			names := make([]string, 0, len(fc.pkgCtx.escapingVars))
 			for obj := range fc.pkgCtx.escapingVars {
@@ -529,14 +529,28 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		case *types.Basic:
 			return fc.formatExpr("%e.charCodeAt(%f)", e.X, e.Index)
 		case *types.Signature:
-			return fc.formatExpr("%s", fc.instName(fc.instanceOf(e.X.(*ast.Ident))))
+			switch u := e.X.(type) {
+			case *ast.Ident:
+				return fc.formatExpr("%s", fc.instName(fc.instanceOf(u)))
+			case *ast.SelectorExpr:
+				return fc.formatExpr("%s", fc.instName(fc.instanceOf(u.Sel)))
+			default:
+				panic(fmt.Errorf("unhandled IndexExpr of a Signature: %T in %T", u, fc.typeOf(e.X)))
+			}
 		default:
-			panic(fmt.Errorf(`unhandled IndexExpr: %T`, t))
+			panic(fmt.Errorf(`unhandled IndexExpr: %T in %T`, t, fc.typeOf(e.X)))
 		}
 	case *ast.IndexListExpr:
 		switch t := fc.typeOf(e.X).Underlying().(type) {
 		case *types.Signature:
-			return fc.formatExpr("%s", fc.instName(fc.instanceOf(e.X.(*ast.Ident))))
+			switch u := e.X.(type) {
+			case *ast.Ident:
+				return fc.formatExpr("%s", fc.instName(fc.instanceOf(u)))
+			case *ast.SelectorExpr:
+				return fc.formatExpr("%s", fc.instName(fc.instanceOf(u.Sel)))
+			default:
+				panic(fmt.Errorf("unhandled IndexListExpr of a Signature: %T in %T", u, fc.typeOf(e.X)))
+			}
 		default:
 			panic(fmt.Errorf("unhandled IndexListExpr: %T", t))
 		}
@@ -591,9 +605,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		case types.MethodVal:
 			return fc.formatExpr(`$methodVal(%s, "%s")`, fc.makeReceiver(e), sel.Obj().(*types.Func).Name())
 		case types.MethodExpr:
-			if !sel.Obj().Exported() {
-				fc.DeclareDCEDep(sel.Obj())
-			}
+			fc.pkgCtx.DeclareDCEDep(sel.Obj(), inst.TNest, inst.TArgs)
 			if _, ok := sel.Recv().Underlying().(*types.Interface); ok {
 				return fc.formatExpr(`$ifaceMethodExpr("%s")`, sel.Obj().(*types.Func).Name())
 			}
@@ -730,10 +742,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 					}
 				}
 
-				methodName := sel.Obj().Name()
-				if reservedKeywords[methodName] {
-					methodName += "$"
-				}
+				methodName := fc.methodName(sel.Obj().(*types.Func))
 				return fc.translateCall(e, sig, fc.formatExpr("%s.%s", recv, methodName))
 
 			case types.FieldVal:
@@ -806,7 +815,7 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			switch t := exprType.Underlying().(type) {
 			case *types.Basic:
 				if t.Kind() != types.UnsafePointer {
-					panic("unexpected basic type")
+					panic(fmt.Errorf(`unexpected basic type: %v in %v`, t, e.Name))
 				}
 				return fc.formatExpr("0")
 			case *types.Slice, *types.Pointer:
@@ -911,7 +920,7 @@ func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, 
 func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 	sel, _ := fc.selectionOf(e)
 	if !sel.Obj().Exported() {
-		fc.DeclareDCEDep(sel.Obj())
+		fc.pkgCtx.DeclareDCEDep(sel.Obj(), nil, nil)
 	}
 
 	x := e.X
@@ -922,7 +931,7 @@ func (fc *funcContext) makeReceiver(e *ast.SelectorExpr) *expression {
 				recvType = ptr.Elem()
 			}
 			s := recvType.Underlying().(*types.Struct)
-			recvType = s.Field(index).Type()
+			recvType = fc.fieldType(s, index)
 		}
 
 		fakeSel := &ast.SelectorExpr{X: x, Sel: ast.NewIdent("o")}
@@ -987,6 +996,10 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 	case "len":
 		switch argType := fc.typeOf(args[0]).Underlying().(type) {
 		case *types.Basic:
+			// If the argument is a concatenation of strings, then add parentheses.
+			if _, ok := args[0].(*ast.BinaryExpr); ok {
+				return fc.formatExpr("(%e).length", args[0])
+			}
 			return fc.formatExpr("%e.length", args[0])
 		case *types.Slice:
 			return fc.formatExpr("%e.$length", args[0])
@@ -1318,12 +1331,13 @@ func (fc *funcContext) loadStruct(array, target string, s *types.Struct) string 
 	var collectFields func(s *types.Struct, path string)
 	collectFields = func(s *types.Struct, path string) {
 		for i := 0; i < s.NumFields(); i++ {
-			field := s.Field(i)
-			if fs, isStruct := field.Type().Underlying().(*types.Struct); isStruct {
-				collectFields(fs, path+"."+fieldName(s, i))
+			fieldName := path + "." + fieldName(s, i)
+			fieldType := fc.fieldType(s, i)
+			if fs, isStruct := fieldType.Underlying().(*types.Struct); isStruct {
+				collectFields(fs, fieldName)
 				continue
 			}
-			fields = append(fields, types.NewVar(0, nil, path+"."+fieldName(s, i), field.Type()))
+			fields = append(fields, types.NewVar(0, nil, fieldName, fieldType))
 		}
 	}
 	collectFields(s, target)

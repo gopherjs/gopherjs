@@ -18,10 +18,15 @@ import (
 	"text/template"
 	"unicode"
 
-	"github.com/gopherjs/gopherjs/compiler/analysis"
+	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
+
+// We use this character as a separator in synthetic identifiers instead of a
+// regular dot. This character is safe for use in JS identifiers and helps to
+// visually separate components of the name when it appears in a stack trace.
+const midDot = "·"
 
 // root returns the topmost function context corresponding to the package scope.
 func (fc *funcContext) root() *funcContext {
@@ -100,43 +105,6 @@ func (fc *funcContext) CatchOutput(indent int, f func()) []byte {
 
 func (fc *funcContext) Delayed(f func()) {
 	fc.delayedOutput = fc.CatchOutput(0, f)
-}
-
-// CollectDCEDeps captures a list of Go objects (types, functions, etc.)
-// the code translated inside f() depends on. The returned list of identifiers
-// can be used in dead-code elimination.
-//
-// Note that calling CollectDCEDeps() inside another CollectDCEDeps() call is
-// not allowed.
-func (fc *funcContext) CollectDCEDeps(f func()) []string {
-	if fc.pkgCtx.dependencies != nil {
-		panic(bailout(fmt.Errorf("called funcContext.CollectDependencies() inside another funcContext.CollectDependencies() call")))
-	}
-
-	fc.pkgCtx.dependencies = make(map[types.Object]bool)
-	defer func() { fc.pkgCtx.dependencies = nil }()
-
-	f()
-
-	var deps []string
-	for o := range fc.pkgCtx.dependencies {
-		qualifiedName := o.Pkg().Path() + "." + o.Name()
-		if typesutil.IsMethod(o) {
-			qualifiedName += "~"
-		}
-		deps = append(deps, qualifiedName)
-	}
-	sort.Strings(deps)
-	return deps
-}
-
-// DeclareDCEDep records that the code that is currently being transpiled
-// depends on a given Go object.
-func (fc *funcContext) DeclareDCEDep(o types.Object) {
-	if fc.pkgCtx.dependencies == nil {
-		return // Dependencies are not being collected.
-	}
-	fc.pkgCtx.dependencies[o] = true
 }
 
 // expandTupleArgs converts a function call which argument is a tuple returned
@@ -230,7 +198,7 @@ func (fc *funcContext) translateSelection(sel typesutil.Selection, pos token.Pos
 			jsFieldName := s.Field(index).Name()
 			for {
 				fields = append(fields, fieldName(s, 0))
-				ft := s.Field(0).Type()
+				ft := fc.fieldType(s, 0)
 				if typesutil.IsJsObject(ft) {
 					return fields, jsTag
 				}
@@ -247,7 +215,7 @@ func (fc *funcContext) translateSelection(sel typesutil.Selection, pos token.Pos
 			}
 		}
 		fields = append(fields, fieldName(s, index))
-		t = s.Field(index).Type()
+		t = fc.fieldType(s, index)
 	}
 	return fields, ""
 }
@@ -376,6 +344,25 @@ func (fc *funcContext) newTypeIdent(name string, obj types.Object) *ast.Ident {
 	return ident
 }
 
+// newLitFuncName generates a new synthetic name for a function literal.
+func (fc *funcContext) newLitFuncName() string {
+	fc.funcLitCounter++
+	name := &strings.Builder{}
+
+	// If function literal is defined inside another function, qualify its
+	// synthetic name with the outer function to make it easier to identify.
+	if fc.instance.Object != nil {
+		if recvType := typesutil.RecvType(fc.sig.Sig); recvType != nil {
+			name.WriteString(recvType.Obj().Name())
+			name.WriteString(midDot)
+		}
+		name.WriteString(fc.instance.Object.Name())
+		name.WriteString(midDot)
+	}
+	fmt.Fprintf(name, "func%d", fc.funcLitCounter)
+	return name.String()
+}
+
 func (fc *funcContext) setType(e ast.Expr, t types.Type) ast.Expr {
 	fc.pkgCtx.Types[e] = types.TypeAndValue{Type: t}
 	return e
@@ -428,7 +415,12 @@ func (fc *funcContext) assignedObjectName(o types.Object) (name string, found bo
 // allocated as needed.
 func (fc *funcContext) objectName(o types.Object) string {
 	if isPkgLevel(o) {
-		fc.DeclareDCEDep(o)
+		var nestTArgs []types.Type
+		if typeparams.FindNestingFunc(o) == fc.instance.Object {
+			// Only set the nest type arguments for objects nested in this funcContext.
+			nestTArgs = fc.instance.TArgs
+		}
+		fc.pkgCtx.DeclareDCEDep(o, nestTArgs, nil)
 
 		if o.Pkg() != fc.pkgCtx.Pkg || (isVarOrConst(o) && o.Exported()) {
 			return fc.pkgVar(o.Pkg()) + "." + o.Name()
@@ -454,13 +446,16 @@ func (fc *funcContext) objectName(o types.Object) string {
 
 // knownInstances returns a list of known instantiations of the object.
 //
-// For objects without type params always returns a single trivial instance.
+// For objects without type params and not nested in a generic function or
+// method, this always returns a single trivial instance.
+// If the object is generic, or in a generic function or method, but there are
+// no instances, then the object is unused and an empty list is returned.
 func (fc *funcContext) knownInstances(o types.Object) []typeparams.Instance {
-	if !typeparams.HasTypeParams(o.Type()) {
+	instances := fc.pkgCtx.instanceSet.Pkg(o.Pkg()).ForObj(o)
+	if len(instances) == 0 && !typeparams.HasTypeParams(o.Type()) {
 		return []typeparams.Instance{{Object: o}}
 	}
-
-	return fc.pkgCtx.instanceSet.Pkg(o.Pkg()).ByObj()[o]
+	return instances
 }
 
 // instName returns a JS expression that refers to the provided instance of a
@@ -471,7 +466,24 @@ func (fc *funcContext) instName(inst typeparams.Instance) string {
 	if inst.IsTrivial() {
 		return objName
 	}
-	return fmt.Sprintf("%s[%d /* %v */]", objName, fc.pkgCtx.instanceSet.ID(inst), inst.TArgs)
+	fc.pkgCtx.DeclareDCEDep(inst.Object, inst.TNest, inst.TArgs)
+	label := inst.TypeParamsString(` /* `, ` */`)
+	return fmt.Sprintf("%s[%d%s]", objName, fc.pkgCtx.instanceSet.ID(inst), label)
+}
+
+// methodName returns a JS identifier (specifically, object property name)
+// corresponding to the given method.
+func (fc *funcContext) methodName(fun *types.Func) string {
+	if fun.Type().(*types.Signature).Recv() == nil {
+		panic(fmt.Errorf("expected a method, got a standalone function %v", fun))
+	}
+	name := fun.Name()
+	// Method names are scoped to their receiver type and guaranteed to be
+	// unique within that, so we only need to make sure it's not a reserved keyword
+	if reservedKeywords[name] {
+		name += "$"
+	}
+	return name
 }
 
 func (fc *funcContext) varPtrName(o *types.Var) string {
@@ -501,18 +513,35 @@ func (fc *funcContext) typeName(ty types.Type) string {
 			return "$error"
 		}
 		inst := typeparams.Instance{Object: t.Obj()}
+
+		// Get type arguments for the type if there are any.
 		for i := 0; i < t.TypeArgs().Len(); i++ {
 			inst.TArgs = append(inst.TArgs, t.TypeArgs().At(i))
 		}
+
+		// Get the nesting type arguments if there are any.
+		if fn := typeparams.FindNestingFunc(t.Obj()); fn != nil {
+			if fn.Scope().Contains(t.Obj().Pos()) {
+				tp := typeparams.SignatureTypeParams(fn.Type().(*types.Signature))
+				tNest := make([]types.Type, tp.Len())
+				for i := 0; i < tp.Len(); i++ {
+					tNest[i] = fc.typeResolver.Substitute(tp.At(i))
+				}
+				inst.TNest = typesutil.TypeList(tNest)
+			}
+		}
+
 		return fc.instName(inst)
 	case *types.Interface:
 		if t.Empty() {
 			return "$emptyInterface"
 		}
+	case *types.TypeParam:
+		panic(fmt.Errorf("unexpected type parameter: %v", t))
 	}
 
 	// For anonymous composite types, generate a synthetic package-level type
-	// declaration, which will be reused for all instances of this time. This
+	// declaration, which will be reused for all instances of this type. This
 	// improves performance, since runtime won't have to synthesize the same type
 	// repeatedly.
 	anonType, ok := fc.pkgCtx.anonTypeMap.At(ty).(*types.TypeName)
@@ -523,7 +552,9 @@ func (fc *funcContext) typeName(ty types.Type) string {
 		fc.pkgCtx.anonTypes = append(fc.pkgCtx.anonTypes, anonType)
 		fc.pkgCtx.anonTypeMap.Set(ty, anonType)
 	}
-	fc.DeclareDCEDep(anonType)
+	// Since anonymous types are always package-level so they can be shared,
+	// don't pass in the function context (nest type parameters) to the DCE.
+	fc.pkgCtx.DeclareDCEDep(anonType, nil, nil)
 	return anonType.Name()
 }
 
@@ -570,6 +601,12 @@ func (fc *funcContext) typeOf(expr ast.Expr) types.Type {
 		}
 	}
 	return fc.typeResolver.Substitute(typ)
+}
+
+// fieldType returns the type of the i-th field of the given struct
+// after substituting type parameters with concrete types for nested context.
+func (fc *funcContext) fieldType(t *types.Struct, i int) types.Type {
+	return fc.typeResolver.Substitute(t.Field(i).Type())
 }
 
 func (fc *funcContext) selectionOf(e *ast.SelectorExpr) (typesutil.Selection, bool) {
@@ -894,7 +931,15 @@ func rangeCheck(pattern string, constantIndex, array bool) string {
 }
 
 func encodeIdent(name string) string {
-	return strings.Replace(url.QueryEscape(name), "%", "$", -1)
+	// Quick-and-dirty way to make any string safe for use as an identifier in JS.
+	name = url.QueryEscape(name)
+	// We use unicode middle dot as a visual separator in synthetic identifiers.
+	// It is safe for use in a JS identifier, so we un-encode it for readability.
+	name = strings.ReplaceAll(name, "%C2%B7", midDot)
+	// QueryEscape uses '%' before hex-codes of escaped characters, which is not
+	// allowed in a JS identifier, use '$' instead.
+	name = strings.ReplaceAll(name, "%", "$")
+	return name
 }
 
 // formatJSStructTagVal returns JavaScript code for accessing an object's property
@@ -920,11 +965,6 @@ func formatJSStructTagVal(jsTag string) string {
 	}
 	// Safe to use dot notation without any escaping.
 	return "." + jsTag
-}
-
-// ErrorAt annotates an error with a position in the source code.
-func ErrorAt(err error, fset *token.FileSet, pos token.Pos) error {
-	return fmt.Errorf("%s: %w", fset.Position(pos), err)
 }
 
 // FatalError is an error compiler panics with when it encountered a fatal error.
@@ -979,4 +1019,14 @@ func bailout(cause interface{}) *FatalError {
 func bailingOut(err interface{}) (*FatalError, bool) {
 	fe, ok := err.(*FatalError)
 	return fe, ok
+}
+
+func removeMatching[T comparable](haystack []T, needle T) []T {
+	var result []T
+	for _, el := range haystack {
+		if el != needle {
+			result = append(result, el)
+		}
+	}
+	return result
 }

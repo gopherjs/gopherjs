@@ -2,25 +2,25 @@
 //
 // Use MakeWrapper to expose methods to JavaScript. Use MakeFullWrapper to expose methods AND fields to JavaScript. When passing values directly, the following type conversions are performed:
 //
-//	| Go type               | JavaScript type       | Conversions back to interface{} |
-//	| --------------------- | --------------------- | ------------------------------- |
-//	| bool                  | Boolean               | bool                            |
-//	| integers and floats   | Number                | float64                         |
-//	| string                | String                | string                          |
-//	| []int8                | Int8Array             | []int8                          |
-//	| []int16               | Int16Array            | []int16                         |
-//	| []int32, []int        | Int32Array            | []int                           |
-//	| []uint8               | Uint8Array            | []uint8                         |
-//	| []uint16              | Uint16Array           | []uint16                        |
-//	| []uint32, []uint      | Uint32Array           | []uint                          |
-//	| []float32             | Float32Array          | []float32                       |
-//	| []float64             | Float64Array          | []float64                       |
-//	| all other slices      | Array                 | []interface{}                   |
-//	| arrays                | see slice type        | see slice type                  |
-//	| functions             | Function              | func(...interface{}) *js.Object |
-//	| time.Time             | Date                  | time.Time                       |
-//	| -                     | instanceof Node       | *js.Object                      |
-//	| maps, structs         | instanceof Object     | map[string]interface{}          |
+//	| Go type               | JavaScript type       | Conversions back to any |
+//	| --------------------- | --------------------- | ----------------------- |
+//	| bool                  | Boolean               | bool                    |
+//	| integers and floats   | Number                | float64                 |
+//	| string                | String                | string                  |
+//	| []int8                | Int8Array             | []int8                  |
+//	| []int16               | Int16Array            | []int16                 |
+//	| []int32, []int        | Int32Array            | []int                   |
+//	| []uint8               | Uint8Array            | []uint8                 |
+//	| []uint16              | Uint16Array           | []uint16                |
+//	| []uint32, []uint      | Uint32Array           | []uint                  |
+//	| []float32             | Float32Array          | []float32               |
+//	| []float64             | Float64Array          | []float64               |
+//	| all other slices      | Array                 | []any                   |
+//	| arrays                | see slice type        | see slice type          |
+//	| functions             | Function              | func(...any) *js.Object |
+//	| time.Time             | Date                  | time.Time               |
+//	| -                     | instanceof Node       | *js.Object              |
+//	| maps, structs         | instanceof Object     | map[string]any          |
 //
 // Additionally, for a struct containing a *js.Object field, only the content of the field will be passed to JavaScript and vice versa.
 package js
@@ -32,7 +32,7 @@ type Object struct{ object *Object }
 func (o *Object) Get(key string) *Object { return o.object.Get(key) }
 
 // Set assigns the value to the object's property with the given key.
-func (o *Object) Set(key string, value interface{}) { o.object.Set(key, value) }
+func (o *Object) Set(key string, value any) { o.object.Set(key, value) }
 
 // Delete removes the object's property with the given key.
 func (o *Object) Delete(key string) { o.object.Delete(key) }
@@ -44,16 +44,16 @@ func (o *Object) Length() int { return o.object.Length() }
 func (o *Object) Index(i int) *Object { return o.object.Index(i) }
 
 // SetIndex sets the i'th element of an array.
-func (o *Object) SetIndex(i int, value interface{}) { o.object.SetIndex(i, value) }
+func (o *Object) SetIndex(i int, value any) { o.object.SetIndex(i, value) }
 
 // Call calls the object's method with the given name.
-func (o *Object) Call(name string, args ...interface{}) *Object { return o.object.Call(name, args...) }
+func (o *Object) Call(name string, args ...any) *Object { return o.object.Call(name, args...) }
 
 // Invoke calls the object itself. This will fail if it is not a function.
-func (o *Object) Invoke(args ...interface{}) *Object { return o.object.Invoke(args...) }
+func (o *Object) Invoke(args ...any) *Object { return o.object.Invoke(args...) }
 
 // New creates a new instance of this type object. This will fail if it not a function (constructor).
-func (o *Object) New(args ...interface{}) *Object { return o.object.New(args...) }
+func (o *Object) New(args ...any) *Object { return o.object.New(args...) }
 
 // Bool returns the object converted to bool according to JavaScript type conversions.
 func (o *Object) Bool() bool { return o.object.Bool() }
@@ -73,8 +73,8 @@ func (o *Object) Uint64() uint64 { return o.object.Uint64() }
 // Float returns the object converted to float64 according to JavaScript type conversions (parseFloat).
 func (o *Object) Float() float64 { return o.object.Float() }
 
-// Interface returns the object converted to interface{}. See table in package comment for details.
-func (o *Object) Interface() interface{} { return o.object.Interface() }
+// Interface returns the object converted to any. See table in package comment for details.
+func (o *Object) Interface() any { return o.object.Interface() }
 
 // Unsafe returns the object as an uintptr, which can be converted via unsafe.Pointer. Not intended for public use.
 func (o *Object) Unsafe() uintptr { return o.object.Unsafe() }
@@ -113,12 +113,12 @@ var Undefined *Object
 func Debugger() {}
 
 // InternalObject returns the internal JavaScript object that represents i. Not intended for public use.
-func InternalObject(i interface{}) *Object {
+func InternalObject(i any) *Object {
 	return nil
 }
 
 // MakeFunc wraps a function and gives access to the values of JavaScript's "this" and "arguments" keywords.
-func MakeFunc(fn func(this *Object, arguments []*Object) interface{}) *Object {
+func MakeFunc(fn func(this *Object, arguments []*Object) any) *Object {
 	return Global.Call("$makeFunc", InternalObject(fn))
 }
 
@@ -136,7 +136,7 @@ func Keys(o *Object) []string {
 }
 
 // MakeWrapper creates a JavaScript object which has wrappers for the exported methods of i. Use explicit getter and setter methods to expose struct fields to JavaScript.
-func MakeWrapper(i interface{}) *Object {
+func MakeWrapper(i any) *Object {
 	v := InternalObject(i)
 	o := Global.Get("Object").New()
 	o.Set("__internal_object__", v)
@@ -160,7 +160,7 @@ func MakeWrapper(i interface{}) *Object {
 // for the non-embedded exported fields of i. Values accessed via these methods
 // and getters are themselves wrapped when accessed, but an important point to
 // note is that a new wrapped value is created on each access.
-func MakeFullWrapper(i interface{}) *Object {
+func MakeFullWrapper(i any) *Object {
 	internalObj := InternalObject(i)
 	constructor := internalObj.Get("constructor")
 
@@ -255,10 +255,10 @@ func NewArrayBuffer(b []byte) *Object {
 }
 
 // M is a simple map type. It is intended as a shorthand for JavaScript objects (before conversion).
-type M map[string]interface{}
+type M map[string]any
 
 // S is a simple slice type. It is intended as a shorthand for JavaScript arrays (before conversion).
-type S []interface{}
+type S []any
 
 func init() {
 	// Avoid dead code elimination.

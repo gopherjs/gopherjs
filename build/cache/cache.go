@@ -12,8 +12,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/gopherjs/gopherjs/compiler"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/gopherjs/gopherjs/compiler"
 )
 
 // cacheRoot is the base path for GopherJS's own build cache.

@@ -28,10 +28,9 @@ package versionhack
 
 import (
 	"go/build" // Must be initialized before this package.
+	_ "unsafe" // For go:linkname
 
 	"github.com/gopherjs/gopherjs/compiler"
-
-	_ "unsafe" // For go:linkname
 )
 
 //go:linkname releaseTags go/build.defaultReleaseTags

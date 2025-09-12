@@ -283,7 +283,7 @@ func Test_Info_SetNameAndDep(t *testing.T) {
 			obj: parseObject(t, `bear`,
 				`package jim
 				type Fozzie struct{}
-				func (f *Fozzie) bear() interface{}`),
+				func (f *Fozzie) bear() any`),
 			want: Info{
 				objectFilter: `jim.Fozzie`,
 				methodFilter: `jim.bear() any`,

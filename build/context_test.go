@@ -10,8 +10,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
 	"golang.org/x/tools/go/buildutil"
+
+	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
 )
 
 func init() {

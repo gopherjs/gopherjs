@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 

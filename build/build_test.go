@@ -7,8 +7,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/gopherjs/gopherjs/internal/srctesting"
 	"github.com/shurcooL/go/importgraphutil"
+
+	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
 // Natives augment the standard library with GopherJS-specific changes.
@@ -254,7 +255,7 @@ func TestOverlayAugmentation(t *testing.T) {
 			src: `//gopherjs:purge
 				type (
 					Foo struct {}
-					bar interface{}
+					bar any
 					bob int
 				)`,
 			want: ``,
@@ -269,7 +270,7 @@ func TestOverlayAugmentation(t *testing.T) {
 					Foo struct {}
 
 					//gopherjs:purge
-					bar interface{}
+					bar any
 
 					//gopherjs:purge
 					bob int

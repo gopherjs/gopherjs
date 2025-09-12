@@ -17,7 +17,7 @@ var initialized = false
 
 func init() {
 	// avoid dead code elimination
-	used := func(i interface{}) {}
+	used := func(i any) {}
 	used(rtype{})
 	used(uncommonType{})
 	used(method{})
@@ -197,7 +197,7 @@ func reflectType(typ *js.Object) *rtype {
 	return (*rtype)(unsafe.Pointer(typ.Get("reflectType").Unsafe()))
 }
 
-func setKindType(rt *rtype, kindType interface{}) {
+func setKindType(rt *rtype, kindType any) {
 	js.InternalObject(rt).Set("kindType", js.InternalObject(kindType))
 	js.InternalObject(kindType).Set("rtype", js.InternalObject(rt))
 }
@@ -371,7 +371,7 @@ func MakeSlice(typ Type, len, cap int) Value {
 	return makeValue(typ, js.Global.Call("$makeSlice", jsType(typ), len, cap, js.InternalObject(func() *js.Object { return jsType(typ.Elem()).Call("zero") })), 0)
 }
 
-func TypeOf(i interface{}) Type {
+func TypeOf(i any) Type {
 	if !initialized { // avoid error of uint8Type
 		return &rtype{}
 	}
@@ -381,7 +381,7 @@ func TypeOf(i interface{}) Type {
 	return reflectType(js.InternalObject(i).Get("constructor"))
 }
 
-func ValueOf(i interface{}) Value {
+func ValueOf(i any) Value {
 	if i == nil {
 		return Value{}
 	}
@@ -570,7 +570,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	t := typ.common()
 	ftyp := (*funcType)(unsafe.Pointer(t))
 
-	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
+	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		// Convert raw JS arguments into []Value the user-supplied function expects.
 		args := make([]Value, ftyp.NumIn())
 		for i := range args {
@@ -904,7 +904,7 @@ func methodReceiver(op string, v Value, i int) (_ *rtype, t *funcType, fn unsafe
 	return
 }
 
-func valueInterface(v Value, safe bool) interface{} {
+func valueInterface(v Value, safe bool) any {
 	if v.flag == 0 {
 		panic(&ValueError{"reflect.Value.Interface", 0})
 	}
@@ -919,14 +919,14 @@ func valueInterface(v Value, safe bool) interface{} {
 		if v.flag&flagIndir != 0 && v.Kind() == Struct {
 			cv := jsType(v.typ).Call("zero")
 			copyStruct(cv, v.object(), v.typ)
-			return interface{}(unsafe.Pointer(jsType(v.typ).New(cv).Unsafe()))
+			return any(unsafe.Pointer(jsType(v.typ).New(cv).Unsafe()))
 		}
-		return interface{}(unsafe.Pointer(jsType(v.typ).New(v.object()).Unsafe()))
+		return any(unsafe.Pointer(jsType(v.typ).New(v.object()).Unsafe()))
 	}
-	return interface{}(unsafe.Pointer(v.object().Unsafe()))
+	return any(unsafe.Pointer(v.object().Unsafe()))
 }
 
-func ifaceE2I(t *rtype, src interface{}, dst unsafe.Pointer) {
+func ifaceE2I(t *rtype, src any, dst unsafe.Pointer) {
 	js.InternalObject(dst).Call("$set", js.InternalObject(src))
 }
 
@@ -940,7 +940,7 @@ func makeMethodValue(op string, v Value) Value {
 	if isWrapped(v.typ) {
 		rcvr = jsType(v.typ).New(rcvr)
 	}
-	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
+	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		return js.InternalObject(fn).Call("apply", rcvr, arguments)
 	})
 	return Value{v.Type().common(), unsafe.Pointer(fv.Unsafe()), v.flag.ro() | flag(Func)}
@@ -998,7 +998,7 @@ func (t *rtype) Method(i int) (m Method) {
 	mt := FuncOf(in, out, ft.IsVariadic())
 	m.Type = mt
 	prop := js.Global.Call("$methodSet", js.InternalObject(t).Get("jsType")).Index(i).Get("prop").String()
-	fn := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
+	fn := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		rcvr := arguments[0]
 		return rcvr.Get(prop).Call("apply", rcvr, arguments[1:])
 	})
@@ -1059,7 +1059,7 @@ func (v Value) assignTo(context string, dst *rtype, target unsafe.Pointer) Value
 		//           to run, given its custom implementation.
 		x := valueInterface(v, false)
 		if dst.NumMethod() == 0 {
-			*(*interface{})(target) = x
+			*(*any)(target) = x
 		} else {
 			ifaceE2I(dst, x, target)
 		}
@@ -1070,7 +1070,7 @@ func (v Value) assignTo(context string, dst *rtype, target unsafe.Pointer) Value
 	panic(context + ": value of type " + v.typ.String() + " is not assignable to type " + dst.String())
 }
 
-var callHelper = js.Global.Get("$call").Interface().(func(...interface{}) *js.Object)
+var callHelper = js.Global.Get("$call").Interface().(func(...any) *js.Object)
 
 func (v Value) call(op string, in []Value) []Value {
 	var (
@@ -1604,7 +1604,7 @@ func (v Value) Close() {
 	js.Global.Call("$close", v.object())
 }
 
-var selectHelper = js.Global.Get("$select").Interface().(func(...interface{}) *js.Object)
+var selectHelper = js.Global.Get("$select").Interface().(func(...any) *js.Object)
 
 func chanrecv(ch unsafe.Pointer, nb bool, val unsafe.Pointer) (selected, received bool) {
 	comms := [][]*js.Object{{js.InternalObject(ch)}}
@@ -1664,7 +1664,7 @@ func rselect(rselects []runtimeSelect) (chosen int, recvOK bool) {
 	return c, false
 }
 
-func DeepEqual(a1, a2 interface{}) bool {
+func DeepEqual(a1, a2 any) bool {
 	i1 := js.InternalObject(a1)
 	i2 := js.InternalObject(a2)
 	if i1 == i2 {

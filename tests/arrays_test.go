@@ -63,7 +63,7 @@ func TestArrayPointer(t *testing.T) {
 		}}
 		for _, test := range tests {
 			a1 := test.a
-			i := interface{}(a1)
+			i := any(a1)
 			a2 := i.(arr)
 
 			if a1 != a2 {

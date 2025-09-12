@@ -47,7 +47,7 @@ func (fc *funcContext) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (fc *funcContext) Printf(format string, values ...interface{}) {
+func (fc *funcContext) Printf(format string, values ...any) {
 	fc.Write([]byte(fc.Indentation(0)))
 	fmt.Fprintf(fc, format, values...)
 	fc.Write([]byte{'\n'})
@@ -973,7 +973,7 @@ func formatJSStructTagVal(jsTag string) string {
 // debugging details for human consumption. This information will be included
 // into String() result along with the rest.
 type FatalError struct {
-	cause interface{}
+	cause any
 	stack []byte
 	clues strings.Builder
 }
@@ -1008,7 +1008,7 @@ func (b FatalError) Error() string {
 	return buf.String()
 }
 
-func bailout(cause interface{}) *FatalError {
+func bailout(cause any) *FatalError {
 	b := &FatalError{
 		cause: cause,
 		stack: debug.Stack(),
@@ -1016,7 +1016,7 @@ func bailout(cause interface{}) *FatalError {
 	return b
 }
 
-func bailingOut(err interface{}) (*FatalError, bool) {
+func bailingOut(err any) (*FatalError, bool) {
 	fe, ok := err.(*FatalError)
 	return fe, ok
 }

@@ -17,10 +17,11 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/tools/go/gcexportdata"
+
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
-	"golang.org/x/tools/go/gcexportdata"
 )
 
 var (
@@ -29,7 +30,15 @@ var (
 )
 
 func init() {
-	for _, keyword := range []string{"abstract", "arguments", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", "long", "native", "new", "null", "package", "private", "protected", "public", "return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof", "undefined", "var", "void", "volatile", "while", "with", "yield"} {
+	keywords := []string{
+		"abstract", "arguments", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue",
+		"debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false",
+		"final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof",
+		"int", "interface", "let", "long", "native", "new", "null", "package", "private", "protected", "public",
+		"return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient",
+		"true", "try", "typeof", "undefined", "var", "void", "volatile", "while", "with", "yield",
+	}
+	for _, keyword := range keywords {
 		reservedKeywords[keyword] = true
 	}
 }
@@ -134,10 +143,10 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	}
 	dceSelection := sel.AliveDecls()
 
-	if _, err := w.Write([]byte("\"use strict\";\n(function() {\n\n")); err != nil {
+	if _, err := w.WriteF(false, "\"use strict\";\n(function() {\n\n"); err != nil {
 		return err
 	}
-	if _, err := w.Write([]byte(fmt.Sprintf("var $goVersion = %q;\n", goVersion))); err != nil {
+	if _, err := w.WriteF(false, "var $goVersion = %q;\n", goVersion); err != nil {
 		return err
 	}
 
@@ -148,7 +157,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	if _, err := io.WriteString(w, preludeJS); err != nil {
 		return err
 	}
-	if _, err := w.Write([]byte("\n")); err != nil {
+	if _, err := w.WriteF(false, "\n"); err != nil {
 		return err
 	}
 
@@ -159,7 +168,28 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 		}
 	}
 
-	if _, err := w.Write([]byte("$callForAllPackages(\"$finishSetup\");\n$synthesizeMethods();\n$callForAllPackages(\"$initLinknames\");\nvar $mainPkg = $packages[\"" + string(mainPkg.ImportPath) + "\"];\n$packages[\"runtime\"].$init();\n$go($mainPkg.$init, []);\n$flushConsole();\n\n}).call(this);\n")); err != nil {
+	if _, err := w.WriteF(false, "$callForAllPackages(\"$finishSetup\");\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(false, "$synthesizeMethods();\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(false, "$callForAllPackages(\"$initLinknames\");\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(false, "var $mainPkg = $packages[\"%s\"];\n", mainPkg.ImportPath); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(false, "$packages[\"runtime\"].$init();\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(false, "$go($mainPkg.$init, []);\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(false, "$flushConsole();\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(false, "\n}).call(this);\n"); err != nil {
 		return err
 	}
 	return nil
@@ -172,7 +202,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 	if _, err := w.Write(pkg.IncJSCode); err != nil {
 		return err
 	}
-	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify)); err != nil {
+	if _, err := w.WriteF(minify, "$packages[\"%s\"] = (function() {\n", pkg.ImportPath); err != nil {
 		return err
 	}
 	vars := []string{"$pkg = {}", "$init"}
@@ -184,7 +214,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 		}
 	}
 	// Write variable names
-	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
+	if _, err := w.WriteF(minify, "\tvar %s;\n", strings.Join(vars, ", ")); err != nil {
 		return err
 	}
 	// Write imports
@@ -209,7 +239,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 	// The following parts have to be run after all packages have been added
 	// to handle generics that use named types defined in a package that
 	// is defined after this package has been defined.
-	if _, err := w.Write(removeWhitespace([]byte("\t$pkg.$finishSetup = function() {\n"), minify)); err != nil {
+	if _, err := w.WriteF(minify, "\t$pkg.$finishSetup = function() {\n"); err != nil {
 		return err
 	}
 
@@ -249,14 +279,14 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			// This decl is referenced by a go:linkname directive, expose it to external
 			// callers via $linkname object (declared in prelude). We are not using
 			// $pkg to avoid clashes with exported symbols.
-			var code string
 			if recv, method, ok := d.LinkingName.IsMethod(); ok {
-				code = fmt.Sprintf("\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,%t);\n", d.LinkingName.String(), d.NamedRecvType, method, strings.HasPrefix(recv, "*"))
+				if _, err := w.WriteF(minify, "\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,%t);\n", d.LinkingName.String(), d.NamedRecvType, method, strings.HasPrefix(recv, "*")); err != nil {
+					return err
+				}
 			} else {
-				code = fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.RefExpr)
-			}
-			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
-				return err
+				if _, err := w.WriteF(minify, "\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.RefExpr); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -277,21 +307,26 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			lines = append(lines, fmt.Sprintf("\t\t\t%s = $linknames[%q];\n", d.RefExpr, impl.String()))
 		}
 		if len(lines) > 0 {
-			code := fmt.Sprintf("\t\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, ""))
-			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
+			if _, err := w.WriteF(minify, "\t\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, "")); err != nil {
 				return err
 			}
 		}
 	}
 
 	// Write the end of the `$finishSetup` function.
-	if _, err := w.Write(removeWhitespace([]byte("\t};\n"), minify)); err != nil {
+	if _, err := w.WriteF(minify, "\t};\n"); err != nil {
 		return err
 	}
 
 	// Write the initialization function that will initialize this package
 	// (e.g. initialize package-level variable value).
-	if _, err := w.Write(removeWhitespace([]byte("\t$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
+	if _, err := w.WriteF(minify, "\t$init = function() {\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(minify, "\t\t$pkg.$init = function() {};\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(minify, "\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"); err != nil {
 		return err
 	}
 	for _, d := range filteredDecls {
@@ -299,10 +334,22 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			return err
 		}
 	}
-	if _, err := w.Write(removeWhitespace([]byte("\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n\t};\n\t$pkg.$init = $init;\n\treturn $pkg;\n})();"), minify)); err != nil {
+	if _, err := w.WriteF(minify, "\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n"); err != nil {
 		return err
 	}
-	if _, err := w.Write([]byte("\n")); err != nil { // keep this \n even when minified
+	if _, err := w.WriteF(minify, "\t};\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(minify, "\t$pkg.$init = $init;\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(minify, "\treturn $pkg;\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(minify, "})();"); err != nil {
+		return err
+	}
+	if _, err := w.WriteF(false, "\n"); err != nil { // keep this \n even when minified
 		return err
 	}
 	return nil
@@ -408,6 +455,10 @@ type SourceMapFilter struct {
 	line            int
 	column          int
 	fileSet         *token.FileSet
+}
+
+func (f *SourceMapFilter) WriteF(minify bool, format string, args ...any) (n int, err error) {
+	return f.Write(removeWhitespace([]byte(fmt.Sprintf(format, args...)), minify))
 }
 
 func (f *SourceMapFilter) Write(p []byte) (n int, err error) {

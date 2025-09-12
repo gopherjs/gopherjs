@@ -14,7 +14,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
-	"github.com/gopherjs/gopherjs/internal/errorList"
+	"github.com/gopherjs/gopherjs/internal/errlist"
 )
 
 // pkgContext maintains compiler context for a specific package.
@@ -37,7 +37,7 @@ type pkgContext struct {
 	indentation  int
 	minify       bool
 	fileSet      *token.FileSet
-	errList      errorList.ErrorList
+	errList      errlist.ErrorList
 	instanceSet  *typeparams.PackageInstanceSets
 }
 

@@ -8,16 +8,11 @@ package compiler
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/gob"
-	"encoding/json"
 	"fmt"
 	"go/token"
 	"go/types"
 	"io"
 	"strings"
-	"time"
-
-	"golang.org/x/tools/go/gcexportdata"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
@@ -353,100 +348,6 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 		return err
 	}
 	return nil
-}
-
-type serializableArchive struct {
-	ImportPath   string
-	Name         string
-	Imports      []string
-	ExportData   []byte
-	Declarations []*Decl
-	IncJSCode    []byte
-	FileSet      []byte
-	Minified     bool
-	GoLinknames  []linkname.GoLinkname
-	BuildTime    time.Time
-}
-
-// ReadArchive reads serialized compiled archive of the importPath package.
-//
-// The given srcModTime is used to determine if the archive is out-of-date.
-// If the archive is out-of-date, the returned archive is nil.
-// If there was not an error, the returned time is when the archive was built.
-//
-// The imports map is used to resolve package dependencies and may modify the
-// map to include the package from the read archive. See [gcexportdata.Read].
-func ReadArchive(importPath string, r io.Reader, srcModTime time.Time, imports map[string]*types.Package) (*Archive, time.Time, error) {
-	var sa serializableArchive
-	if err := gob.NewDecoder(r).Decode(&sa); err != nil {
-		return nil, time.Time{}, err
-	}
-
-	if srcModTime.After(sa.BuildTime) {
-		// Archive is out-of-date.
-		return nil, sa.BuildTime, nil
-	}
-
-	var a Archive
-	fset := token.NewFileSet()
-	if len(sa.ExportData) > 0 {
-		pkg, err := gcexportdata.Read(bytes.NewReader(sa.ExportData), fset, imports, importPath)
-		if err != nil {
-			return nil, sa.BuildTime, err
-		}
-		a.Package = pkg
-	}
-
-	if len(sa.FileSet) > 0 {
-		a.FileSet = token.NewFileSet()
-		if err := a.FileSet.Read(json.NewDecoder(bytes.NewReader(sa.FileSet)).Decode); err != nil {
-			return nil, sa.BuildTime, err
-		}
-	}
-
-	a.ImportPath = sa.ImportPath
-	a.Name = sa.Name
-	a.Imports = sa.Imports
-	a.Declarations = sa.Declarations
-	a.IncJSCode = sa.IncJSCode
-	a.Minified = sa.Minified
-	a.GoLinknames = sa.GoLinknames
-	return &a, sa.BuildTime, nil
-}
-
-// WriteArchive writes compiled package archive on disk for later reuse.
-//
-// The passed in buildTime is used to determine if the archive is out-of-date.
-// Typically it should be set to the srcModTime or time.Now() but it is exposed for testing purposes.
-func WriteArchive(a *Archive, buildTime time.Time, w io.Writer) error {
-	exportData := new(bytes.Buffer)
-	if a.Package != nil {
-		if err := gcexportdata.Write(exportData, nil, a.Package); err != nil {
-			return fmt.Errorf("failed to write export data: %w", err)
-		}
-	}
-
-	encodedFileSet := new(bytes.Buffer)
-	if a.FileSet != nil {
-		if err := a.FileSet.Write(json.NewEncoder(encodedFileSet).Encode); err != nil {
-			return err
-		}
-	}
-
-	sa := serializableArchive{
-		ImportPath:   a.ImportPath,
-		Name:         a.Name,
-		Imports:      a.Imports,
-		ExportData:   exportData.Bytes(),
-		Declarations: a.Declarations,
-		IncJSCode:    a.IncJSCode,
-		FileSet:      encodedFileSet.Bytes(),
-		Minified:     a.Minified,
-		GoLinknames:  a.GoLinknames,
-		BuildTime:    buildTime,
-	}
-
-	return gob.NewEncoder(w).Encode(sa)
 }
 
 type SourceMapFilter struct {

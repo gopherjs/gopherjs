@@ -1,0 +1,8 @@
+reservedLoopLabel: [1 3 5 7]
+reservedGotoLabel: [1 2 3 4 5]
+reservedSwitchCaseLabel: [0 1 42]
+reservedSwitchLabelInCase: [99 99 42 3 4]
+reservedLabelledSwitch: [4]
+reservedLabelledBranch: [3]
+reservedSelectLabel: [42 1 2]
+reservedTypeSwitchLabel: [42 1 2]

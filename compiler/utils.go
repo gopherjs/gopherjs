@@ -57,7 +57,7 @@ func (fc *funcContext) Printf(format string, values ...any) {
 
 func (fc *funcContext) PrintCond(cond bool, onTrue, onFalse string) {
 	if !cond {
-		fc.Printf("/* %s */ %s", strings.Replace(onTrue, "*/", "<star>/", -1), onFalse)
+		fc.Printf("/* %s */ %s", strings.ReplaceAll(onTrue, "*/", "<star>/"), onFalse)
 		return
 	}
 	fc.Printf("%s", onTrue)
@@ -477,13 +477,9 @@ func (fc *funcContext) methodName(fun *types.Func) string {
 	if fun.Type().(*types.Signature).Recv() == nil {
 		panic(fmt.Errorf("expected a method, got a standalone function %v", fun))
 	}
-	name := fun.Name()
 	// Method names are scoped to their receiver type and guaranteed to be
 	// unique within that, so we only need to make sure it's not a reserved keyword
-	if reservedKeywords[name] {
-		name += "$"
-	}
-	return name
+	return sanitizeName(fun.Name())
 }
 
 func (fc *funcContext) varPtrName(o *types.Var) string {

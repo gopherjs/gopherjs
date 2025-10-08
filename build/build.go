@@ -29,6 +29,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/tools/go/buildutil"
 
+	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
 	"github.com/gopherjs/gopherjs/compiler/incjs"
@@ -744,8 +745,9 @@ func (p *PackageData) InstallPath() string {
 // This is the main interface to GopherJS build system. Session lifetime is
 // roughly equivalent to a single GopherJS tool invocation.
 type Session struct {
-	options *Options
-	xctx    XContext
+	options    *Options
+	xctx       XContext
+	buildCache cache.Cache
 
 	// importPaths is a map of the resolved import paths given the
 	// source directory (first key) and the unresolved import path (second key).
@@ -785,6 +787,25 @@ func NewSession(options *Options) (*Session, error) {
 	// Go distribution version check.
 	if err := compiler.CheckGoVersion(env.GOROOT); err != nil {
 		return nil, err
+	}
+
+	// If the cache is enabled, initialize the build cache.
+	// Disable caching by leaving buildCache set to nil.
+	//
+	// TODO(grantnelson-wf): Currently the build cache is slower than
+	// parsing and augmenting the files, so we disable it for now.
+	// Re-enable it once the cache performance is improved.
+	const disableDefaultCache = true
+	if !s.options.NoCache && !disableDefaultCache {
+		s.buildCache = &cache.BuildCache{
+			GOOS:          env.GOOS,
+			GOARCH:        env.GOARCH,
+			GOROOT:        env.GOROOT,
+			GOPATH:        env.GOPATH,
+			BuildTags:     append([]string{}, env.BuildTags...),
+			TestedPackage: options.TestedPackage,
+			Version:       compiler.Version,
+		}
 	}
 
 	if options.Watch {
@@ -913,26 +934,19 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 	if pkg.IsTest {
 		rootSrcs, err = s.loadTestPackage(pkg)
 	} else {
-		rootSrcs, err = s.loadPackages(pkg)
+		rootSrcs, err = s.LoadPackages(pkg)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(grantnelson-wf): We could investigate caching the results of
-	// the sources prior to preparing them to avoid re-parsing the same
-	// sources and augmenting them when the files on disk haven't changed.
-	// This would require a way to determine if the sources are up-to-date
-	// which could be done with the left over srcModTime from when the archives
-	// were being cached.
-
 	// Compile the project into Archives containing the generated JS.
 	return s.prepareAndCompilePackages(rootSrcs)
 }
 
-// getSortedSources returns the sources sorted by import path.
+// GetSortedSources returns the sources sorted by import path.
 // The files in the sources may still not be sorted yet.
-func (s *Session) getSortedSources() []*sources.Sources {
+func (s *Session) GetSortedSources() []*sources.Sources {
 	allSources := make([]*sources.Sources, 0, len(s.sources))
 	for _, srcs := range s.sources {
 		allSources = append(allSources, srcs)
@@ -942,11 +956,11 @@ func (s *Session) getSortedSources() []*sources.Sources {
 }
 
 func (s *Session) loadTestPackage(pkg *PackageData) (*sources.Sources, error) {
-	_, err := s.loadPackages(pkg.TestPackage())
+	_, err := s.LoadPackages(pkg.TestPackage())
 	if err != nil {
 		return nil, err
 	}
-	_, err = s.loadPackages(pkg.XTestPackage())
+	_, err = s.LoadPackages(pkg.XTestPackage())
 	if err != nil {
 		return nil, err
 	}
@@ -993,7 +1007,7 @@ func (s *Session) loadImportPathWithSrcDir(path, srcDir string) (*PackageData, *
 		return nil, nil, err
 	}
 
-	srcs, err := s.loadPackages(pkg)
+	srcs, err := s.LoadPackages(pkg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1040,11 +1054,11 @@ var getExeModTime = func() func() time.Time {
 	}
 }()
 
-// loadPackages will recursively load and parse the given package and
+// LoadPackages will recursively load and parse the given package and
 // its dependencies. This will return the sources for the given package.
 // The returned source and sources for the dependencies will be added
 // to the session's sources map.
-func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
+func (s *Session) LoadPackages(pkg *PackageData) (*sources.Sources, error) {
 	if srcs, ok := s.sources[pkg.ImportPath]; ok {
 		return srcs, nil
 	}
@@ -1071,27 +1085,46 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 		pkg.SrcModTime = fileModTime
 	}
 
-	// Build the package by parsing and augmenting the original files with overlay files.
-	fileSet := token.NewFileSet()
-	files, overlayJsFiles, err := parseAndAugment(s.xctx, pkg, pkg.IsTest, fileSet)
-	if err != nil {
-		return nil, err
-	}
-	embed, err := embedFiles(pkg, fileSet, files)
-	if err != nil {
-		return nil, err
-	}
-	if embed != nil {
-		files = append(files, embed)
+	// Try to load the package from the build cache.
+	var srcs *sources.Sources
+	if s.buildCache != nil {
+		cachedSrcs := &sources.Sources{}
+		if s.buildCache.Load(cachedSrcs, pkg.ImportPath, pkg.SrcModTime) {
+			srcs = cachedSrcs
+		}
 	}
 
-	srcs := &sources.Sources{
-		ImportPath: pkg.ImportPath,
-		Dir:        pkg.Dir,
-		Files:      files,
-		FileSet:    fileSet,
-		JSFiles:    append(pkg.JSFiles, overlayJsFiles...),
+	// If the package was not found in the cache, build the package
+	// by parsing and augmenting the original files with overlay files.
+	if srcs == nil {
+		fileSet := token.NewFileSet()
+		files, overlayJsFiles, err := parseAndAugment(s.xctx, pkg, pkg.IsTest, fileSet)
+		if err != nil {
+			return nil, err
+		}
+		embed, err := embedFiles(pkg, fileSet, files)
+		if err != nil {
+			return nil, err
+		}
+		if embed != nil {
+			files = append(files, embed)
+		}
+
+		srcs = &sources.Sources{
+			ImportPath: pkg.ImportPath,
+			Dir:        pkg.Dir,
+			Files:      files,
+			FileSet:    fileSet,
+			JSFiles:    append(pkg.JSFiles, overlayJsFiles...),
+		}
+
+		// Store the built package in the cache for future use.
+		if s.buildCache != nil {
+			s.buildCache.Store(srcs, srcs.ImportPath, time.Now())
+		}
 	}
+
+	// Add the sources to the session's sources map.
 	s.sources[pkg.ImportPath] = srcs
 
 	// Import dependencies from the augmented files,
@@ -1108,7 +1141,7 @@ func (s *Session) loadPackages(pkg *PackageData) (*sources.Sources, error) {
 
 func (s *Session) prepareAndCompilePackages(rootSrcs *sources.Sources) (*compiler.Archive, error) {
 	tContext := types.NewContext()
-	allSources := s.getSortedSources()
+	allSources := s.GetSortedSources()
 
 	// Prepare and analyze the source code.
 	// This will be performed recursively for all dependencies.

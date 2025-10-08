@@ -72,22 +72,22 @@ func ParseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 			extPkg, extName = extName[0:idx], extName[idx+1:]
 		}
 
-		obj := file.Scope.Lookup(localName)
-		if obj == nil {
+		node := lookupTopNode(file, localName)
+		if node == nil {
 			return fmt.Errorf("//go:linkname local symbol %q is not found in the current source file", localName)
 		}
 
-		if obj.Kind != ast.Fun {
+		decl, isFunc := node.(*ast.FuncDecl)
+		if !isFunc {
 			if pkgPath == "math/bits" || pkgPath == "reflect" {
 				// These standard library packages are known to use go:linkname with
 				// variables, which GopherJS doesn't support. We silently ignore such
 				// directives, since it doesn't seem to cause any problems.
 				return nil
 			}
-			return fmt.Errorf("gopherjs: //go:linkname is only supported for functions, got %q", obj.Kind)
+			return fmt.Errorf("gopherjs: //go:linkname is only supported for functions, got %T", node)
 		}
 
-		decl := obj.Decl.(*ast.FuncDecl)
 		if decl.Body != nil {
 			if pkgPath == "runtime" || pkgPath == "internal/bytealg" || pkgPath == "internal/fuzz" {
 				// These standard library packages are known to use unsupported
@@ -114,6 +114,41 @@ func ParseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 	}
 
 	return directives, errs.ErrOrNil()
+}
+
+// lookupTopNode looks up a top-level declaration or specification with the
+// given name in the file and returns the corresponding AST node.
+// If no such declaration or specification is found, nil is returned.
+//
+// This replaced our need for the deprecated file.Scope.Lookup method.
+// It doesn't look up imports, packages, labels, etc. It only looks up
+// nodes that can have a go:linkname directive targeting them.
+func lookupTopNode(file *ast.File, name string) ast.Node {
+	for _, decl := range file.Decls {
+		switch d := decl.(type) {
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				switch s := spec.(type) {
+				case *ast.TypeSpec:
+					if s.Name.Name == name {
+						return s
+					}
+				case *ast.ValueSpec:
+					for _, n := range s.Names {
+						if n.Name == name {
+							// Return the whole ValueSpec, not just the Ident.
+							return s
+						}
+					}
+				}
+			}
+		case *ast.FuncDecl:
+			if d.Name.Name == name {
+				return d
+			}
+		}
+	}
+	return nil
 }
 
 // errorAt annotates an error with a position in the source code.

@@ -36,7 +36,7 @@ type Sources struct {
 	// Files is the parsed and augmented Go AST files for the package.
 	Files []*ast.File
 
-	// FileSet is the file set for the parsed files.
+	// FileSet is the file set for the parsed files for this source.
 	FileSet *token.FileSet
 
 	// JSFiles is the JavaScript files that are part of the package.

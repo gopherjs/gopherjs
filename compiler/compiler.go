@@ -43,6 +43,15 @@ func init() {
 	}
 }
 
+// sanitizeName returns the given name unless it is a reserved JavaScript keyword
+// then it will append a '$' suffix to it to keep it from causing syntax errors in JS.
+func sanitizeName(name string) string {
+	if reservedKeywords[name] {
+		name += "$"
+	}
+	return name
+}
+
 // Archive contains intermediate build outputs of a single package.
 //
 // This is a logical equivalent of an object file in traditional compilers.

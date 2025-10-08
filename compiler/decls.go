@@ -599,10 +599,7 @@ func (fc *funcContext) structConstructor(t *types.Struct) string {
 // function for runtime reflection. It returns isPtr=true if the method belongs
 // to the pointer-receiver method list.
 func (fc *funcContext) methodListEntry(method *types.Func) (entry string, isPtr bool) {
-	name := method.Name()
-	if reservedKeywords[name] {
-		name += "$"
-	}
+	name := sanitizeName(method.Name())
 	pkgPath := ""
 	if !method.Exported() {
 		pkgPath = method.Pkg().Path()

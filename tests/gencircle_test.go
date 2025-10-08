@@ -30,12 +30,17 @@ var _ embed.FS
 
 func runGenCircleTest(t *testing.T, testPkg string) {
 	t.Helper()
+	const basePath = `testdata/gencircle`
+	runOutputTest(t, basePath, testPkg)
+}
+
+func runOutputTest(t *testing.T, basePath, testPkg string) {
+	t.Helper()
 	if runtime.GOOS == `js` {
 		t.Skip(`test meant to be run using normal Go compiler (needs os/exec)`)
 	}
 
 	const (
-		basePath = `testdata/gencircle`
 		mainFile = `main.go`
 		outFile  = `main.out`
 	)

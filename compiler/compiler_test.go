@@ -5,8 +5,8 @@ import (
 	"go/types"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/gopherjs/gopherjs/internal/sourcemapx"
@@ -364,6 +364,179 @@ func TestDeclSelection_RemoveUnusedTypeConstraint(t *testing.T) {
 	sel.IsDead(`var:command-line-arguments.ghost`)
 }
 
+func TestDeclSelection_RemoveUnusedNestedTypesInFunction(t *testing.T) {
+	src := `
+		package main
+		func Foo[T any](u T) any {
+			type Bar struct { v T }
+			return Bar{v: u}
+		}
+		func deadCode() {
+			println(Foo[int](42))
+		}
+		func main() {
+			println(Foo[string]("cat"))
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+	sel.IsAlive(`func:command-line-arguments.main`)
+
+	sel.IsAlive(`funcVar:command-line-arguments.Foo`)
+	sel.IsAlive(`func:command-line-arguments.Foo<string>`)
+	sel.IsDead(`func:command-line-arguments.Foo<int>`)
+
+	sel.IsAlive(`typeVar:command-line-arguments.Bar`)
+	sel.IsAlive(`type:command-line-arguments.Bar<string;>`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+
+	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
+	sel.IsDead(`func:command-line-arguments.deadCode`)
+}
+
+func TestDeclSelection_RemoveUnusedNestedTypesInMethod(t *testing.T) {
+	src := `
+		package main
+		type Baz[T any] struct{}
+		func (b *Baz[T]) Foo(u T) any {
+			type Bar struct { v T }
+			return Bar{v: u}
+		}
+		func deadCode() {
+			b := Baz[int]{}
+			println(b.Foo(42))
+		}
+		func main() {
+			b := Baz[string]{}
+			println(b.Foo("cat"))
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+	sel.IsAlive(`func:command-line-arguments.main`)
+
+	sel.IsAlive(`typeVar:command-line-arguments.Baz`)
+	sel.IsDead(`type:command-line-arguments.Baz<int>`)
+	sel.IsAlive(`type:command-line-arguments.Baz<string>`)
+
+	sel.IsDead(`func:command-line-arguments.(*Baz).Foo<int>`)
+	sel.IsAlive(`func:command-line-arguments.(*Baz).Foo<string>`)
+
+	sel.IsAlive(`typeVar:command-line-arguments.Bar`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+	sel.IsAlive(`type:command-line-arguments.Bar<string;>`)
+
+	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
+	sel.IsDead(`func:command-line-arguments.deadCode`)
+}
+
+func TestDeclSelection_RemoveAllUnusedNestedTypes(t *testing.T) {
+	src := `
+		package main
+		func Foo[T any](u T) any {
+			type Bar struct { v T }
+			return Bar{v: u}
+		}
+		func deadCode() {
+			println(Foo[int](42))
+			println(Foo[string]("cat"))
+		}
+		func main() {}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+	sel.IsAlive(`func:command-line-arguments.main`)
+
+	sel.IsDead(`funcVar:command-line-arguments.Foo`)
+	sel.IsDead(`func:command-line-arguments.Foo<string>`)
+	sel.IsDead(`func:command-line-arguments.Foo<int>`)
+
+	sel.IsDead(`typeVar:command-line-arguments.Bar`)
+	sel.IsDead(`type:command-line-arguments.Bar<string;>`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+
+	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
+	sel.IsDead(`func:command-line-arguments.deadCode`)
+}
+
+func TestDeclSelection_CompletelyRemoveNestedType(t *testing.T) {
+	src := `
+		package main
+		func Foo[T any](u T) any {
+			type Bar struct { v T }
+			return Bar{v: u}
+		}
+		func deadCode() {
+			println(Foo[int](42))
+		}
+		func main() {}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+
+	sel.IsAlive(`func:command-line-arguments.main`)
+
+	sel.IsDead(`funcVar:command-line-arguments.Foo`)
+	sel.IsDead(`func:command-line-arguments.Foo<int>`)
+
+	sel.IsDead(`typeVar:command-line-arguments.Bar`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+
+	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
+	sel.IsDead(`func:command-line-arguments.deadCode`)
+}
+
+func TestDeclSelection_RemoveAnonNestedTypes(t *testing.T) {
+	// Based on test/fixedbugs/issue53635.go
+	// This checks that if an anon type (e.g. []T) is used in a function
+	// that is not used, the type is removed, otherwise it is kept.
+
+	src := `
+		package main
+		func Foo[T any](u T) any {
+			return []T(nil)
+		}
+		func deadCode() {
+			println(Foo[string]("cat"))
+		}
+		func main() {
+			println(Foo[int](42))
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+	sel.IsDead(`anonType:command-line-arguments.sliceType`)    // []string
+	sel.IsAlive(`anonType:command-line-arguments.sliceType$1`) // []int
+}
+
+func TestDeclSelection_NoNestAppliedToFuncCallInMethod(t *testing.T) {
+	// Checks that a function call to a non-local function isn't
+	// being labeled as a nested function call.
+	src := `
+		package main
+		func foo(a any) {
+			println(a)
+		}
+		type Bar[T any] struct { u T }
+		func (b *Bar[T]) Baz() {
+			foo(b.u)
+		}
+		func main() {
+			b := &Bar[int]{u: 42}
+			b.Baz()
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	sel := declSelection(t, srcFiles, nil)
+	sel.IsAlive(`init:main`)
+
+	sel.IsAlive(`typeVar:command-line-arguments.Bar`)
+	sel.IsAlive(`type:command-line-arguments.Bar<int>`)
+	sel.IsAlive(`func:command-line-arguments.(*Bar).Baz<int>`)
+
+	sel.IsAlive(`func:command-line-arguments.foo`)
+}
+
 func TestLengthParenthesizingIssue841(t *testing.T) {
 	// See issue https://github.com/gopherjs/gopherjs/issues/841
 	//
@@ -396,11 +569,11 @@ func TestLengthParenthesizingIssue841(t *testing.T) {
 	goodRegex := regexp.MustCompile(`\(a\s*\+\s*b\)\.length`)
 	goodFound := false
 	for i, decl := range mainPkg.Declarations {
-		if badRegex.Match(decl.DeclCode) {
+		if badRegex.Match(decl.FuncDeclCode) {
 			t.Errorf("found length issue in decl #%d: %s", i, decl.FullName)
-			t.Logf("decl code:\n%s", string(decl.DeclCode))
+			t.Logf("decl code:\n%s", string(decl.FuncDeclCode))
 		}
-		if goodRegex.Match(decl.DeclCode) {
+		if goodRegex.Match(decl.FuncDeclCode) {
 			goodFound = true
 		}
 	}
@@ -723,31 +896,217 @@ func Test_CrossPackageAnalysis(t *testing.T) {
 	)
 }
 
-func TestArchiveSelectionAfterSerialization(t *testing.T) {
+func Test_IndexedSelectors(t *testing.T) {
+	src1 := `
+		package main
+		import "github.com/gopherjs/gopherjs/compiler/other"
+		func main() {
+			// Instance IndexExpr with a package SelectorExpr for a function call.
+			other.PrintZero[int]()
+			other.PrintZero[string]()
+
+			// Instance IndexListExpr with a package SelectorExpr for a function call.
+			other.PrintZeroZero[int, string]()
+
+			// Index IndexExpr with a struct SelectorExpr for a function call.
+			f := other.Foo{Ops: []func() {
+				other.PrintZero[int],
+				other.PrintZero[string],
+				other.PrintZeroZero[int, string],
+			}}
+			f.Ops[0]()
+			f.Ops[1]()
+
+			// Index IndexExpr with a package/var SelectorExpr for a function call.
+			other.Bar.Ops[0]()
+			other.Baz[0]()
+
+			// IndexExpr with a SelectorExpr for a cast
+			_ = other.ZHandle[int](other.PrintZero[int])
+
+			// IndexListExpr with a SelectorExpr for a cast
+			_ = other.ZZHandle[int, string](other.PrintZeroZero[int, string])
+		}`
+	src2 := `
+		package other
+		func PrintZero[T any]() {
+			var zero T
+			println("Zero is ", zero)
+		}
+
+		func PrintZeroZero[T any, U any]() {
+			PrintZero[T]()
+			PrintZero[U]()
+		}
+
+		type ZHandle[T any] func()
+		type ZZHandle[T any, U any] func()
+
+		type Foo struct { Ops []func() }
+		var Bar = Foo{Ops: []func() {
+			PrintZero[int],
+			PrintZero[string],
+		}}
+		var Baz = Bar.Ops`
+
+	root := srctesting.ParseSources(t,
+		[]srctesting.Source{
+			{Name: `main.go`, Contents: []byte(src1)},
+		},
+		[]srctesting.Source{
+			{Name: `other/other.go`, Contents: []byte(src2)},
+		})
+
+	archives := compileProject(t, root, false)
+	// We mostly are checking that the code was turned into decls correctly,
+	// since the issue was that indexed selectors were not being handled correctly,
+	// so if it didn't panic by this point, it should be fine.
+	checkForDeclFullNames(t, archives,
+		`func:command-line-arguments.main`,
+		`type:github.com/gopherjs/gopherjs/compiler/other.ZHandle<int>`,
+		`type:github.com/gopherjs/gopherjs/compiler/other.ZZHandle<int, string>`,
+	)
+}
+
+func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
+	// This is a test of a type defined inside a generic function
+	// that uses the type parameter of the function as a field type.
+	// The `T` type is unique for each instance of `F`.
+	// The use of `A` as a field is do demonstrate the difference in the types
+	// however even if T had no fields, the type would still be different.
+	//
+	// Change `print(F[?]())` to `fmt.Printf("%T\n", F[?]())` for
+	// golang playground to print the type of T in the different F instances.
+	// (I just didn't want this test to depend on `fmt` when it doesn't need to.)
+
 	src := `
 		package main
-		type Foo interface{ int | string }
-
-		type Bar[T Foo] struct{ v T }
-		func (b Bar[T]) Baz() { println(b.v) }
-
-		var ghost = Bar[int]{v: 7} // unused
-
+		func F[A any]() any {
+			type T struct{
+				a A
+			}
+			return T{}
+		}
 		func main() {
-			println("do nothing")
-		}`
+			type Int int
+			print(F[int]())
+			print(F[Int]())
+		}
+		`
+
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	root := srctesting.ParseSources(t, srcFiles, nil)
-	rootPath := root.PkgPath
-	origArchives := compileProject(t, root, false)
-	readArchives := reloadCompiledProject(t, origArchives, rootPath)
+	archives := compileProject(t, root, false)
+	mainPkg := archives[root.PkgPath]
+	insts := collectDeclInstances(t, mainPkg)
 
-	origJS := renderPackage(t, origArchives[rootPath], false)
-	readJS := renderPackage(t, readArchives[rootPath], false)
-
-	if diff := cmp.Diff(origJS, readJS); diff != "" {
-		t.Errorf("the reloaded files produce different JS:\n%s", diff)
+	exp := []string{
+		`F[int]`,
+		`F[main.Int]`,  // Go prints `F[main.Int·2]`
+		`T[int;]`,      // `T` from `F[int]`      (Go prints `T[int]`)
+		`T[main.Int;]`, // `T` from `F[main.Int]` (Go prints `T[main.Int·2]`)
 	}
+	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
+		t.Errorf("the instances of generics are different:\n%s", diff)
+	}
+}
+
+func TestNestedGenericTypeInGenericFunc(t *testing.T) {
+	// This is a subset of the type param nested test from the go repo.
+	// See https://github.com/golang/go/blob/go1.19.13/test/typeparam/nested.go
+	// The test is failing because nested types aren't being typed differently.
+	// For example the type of `T[int]` below is different based on `F[X]`
+	// instance for different `X` type parameters, hence Go prints the type as
+	// `T[X;int]` instead of `T[int]`.
+
+	src := `
+		package main
+		func F[A any]() any {
+			type T[B any] struct{
+				a A
+				b B
+			}
+			return T[int]{}
+		}
+		func main() {
+			type Int int
+			print(F[int]())
+			print(F[Int]())
+		}
+		`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+	archives := compileProject(t, root, false)
+	mainPkg := archives[root.PkgPath]
+	insts := collectDeclInstances(t, mainPkg)
+
+	exp := []string{
+		`F[int]`,
+		`F[main.Int]`,
+		`T[int; int]`,
+		`T[main.Int; int]`,
+	}
+	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
+		t.Errorf("the instances of generics are different:\n%s", diff)
+	}
+}
+
+func TestNestedGenericTypeInGenericFuncWithSharedTArgs(t *testing.T) {
+	src := `
+		package main
+		func F[A any]() any {
+			type T[B any] struct {
+				b B
+			}
+			return T[A]{}
+		}
+		func main() {
+			type Int int
+			print(F[int]())
+			print(F[Int]())
+		}`
+
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+	archives := compileProject(t, root, false)
+	mainPkg := archives[root.PkgPath]
+	insts := collectDeclInstances(t, mainPkg)
+
+	exp := []string{
+		`F[int]`,
+		`F[main.Int]`,
+		`T[int; int]`,
+		`T[main.Int; main.Int]`,
+		// Make sure that T[int;main.Int] and T[main.Int;int] aren't created.
+	}
+	if diff := cmp.Diff(exp, insts); len(diff) > 0 {
+		t.Errorf("the instances of generics are different:\n%s", diff)
+	}
+}
+
+func collectDeclInstances(t *testing.T, pkg *Archive) []string {
+	t.Helper()
+
+	// Regex to match strings like `Foo[42 /* bar */] =` and capture
+	// the name (`Foo`), the index (`42`), and the instance type (`bar`).
+	rex := regexp.MustCompile(`^\s*(\w+)\s*\[\s*(\d+)\s*\/\*(.+)\*\/\s*\]\s*\=`)
+
+	// Collect all instances of generics (e.g. `Foo[bar] @ 2`) written to the decl code.
+	insts := []string{}
+	checkCode := func(code []byte) {
+		if match := rex.FindAllStringSubmatch(string(code), 1); len(match) > 0 {
+			instance := match[0][1] + `[` + strings.TrimSpace(match[0][3]) + `]`
+			instance = strings.ReplaceAll(instance, `command-line-arguments`, pkg.Name)
+			insts = append(insts, instance)
+		}
+	}
+	for _, decl := range pkg.Declarations {
+		checkCode(decl.TypeDeclCode)
+		checkCode(decl.FuncDeclCode)
+	}
+	sort.Strings(insts)
+	return insts
 }
 
 func compareOrder(t *testing.T, sourceFiles []srctesting.Source, minify bool) {
@@ -826,70 +1185,6 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 		archives[srcs.ImportPath] = a
 	}
 	return archives
-}
-
-// newTime creates an arbitrary time.Time offset by the given number of seconds.
-// This is useful for quickly creating times that are before or after another.
-func newTime(seconds float64) time.Time {
-	return time.Date(1969, 7, 20, 20, 17, 0, 0, time.UTC).
-		Add(time.Duration(seconds * float64(time.Second)))
-}
-
-// reloadCompiledProject persists the given archives into memory then reloads
-// them from memory to simulate a cache reload of a precompiled project.
-func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPath string) map[string]*Archive {
-	t.Helper()
-
-	// TODO(grantnelson-wf): The tests using this function are out-of-date
-	// since they are testing the old archive caching that has been disabled.
-	// At some point, these tests should be updated to test any new caching
-	// mechanism that is implemented or removed. As is this function is faking
-	// the old recursive archive loading that is no longer used since it
-	// doesn't allow cross package analysis for generings.
-
-	serialized := map[string][]byte{}
-	for path, a := range archives {
-		buf := &bytes.Buffer{}
-		if err := WriteArchive(a, buf); err != nil {
-			t.Fatalf(`failed to write archive for %s: %v`, path, err)
-		}
-		serialized[path] = buf.Bytes()
-	}
-
-	srcModTime := newTime(0.0)
-	reloadCache := map[string]*Archive{}
-	type ImportContext struct {
-		Packages      map[string]*types.Package
-		ImportArchive func(path string) (*Archive, error)
-	}
-	var importContext *ImportContext
-	importContext = &ImportContext{
-		Packages: map[string]*types.Package{},
-		ImportArchive: func(path string) (*Archive, error) {
-			// find in local cache
-			if a, ok := reloadCache[path]; ok {
-				return a, nil
-			}
-
-			// deserialize archive
-			buf, ok := serialized[path]
-			if !ok {
-				t.Fatalf(`archive not found for %s`, path)
-			}
-			a, _, err := ReadArchive(path, bytes.NewReader(buf), srcModTime, importContext.Packages)
-			if err != nil {
-				t.Fatalf(`failed to read archive for %s: %v`, path, err)
-			}
-			reloadCache[path] = a
-			return a, nil
-		},
-	}
-
-	_, err := importContext.ImportArchive(rootPkgPath)
-	if err != nil {
-		t.Fatal(`failed to reload archives:`, err)
-	}
-	return reloadCache
 }
 
 func renderPackage(t *testing.T, archive *Archive, minify bool) string {

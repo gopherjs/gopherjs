@@ -265,17 +265,32 @@ of either will indicate a use of both. This will cause slightly more unexported
 methods to be alive while reducing the complication of type checking which object
 or type of object is performing the call.
 
-| Declaration | exported | unexported | non-generic | generic | object name | method name |
-|:------------|:--------:|:----------:|:-----------:|:-------:|:------------|:------------|
-| variables  | █ | █ | █ | n/a | `<package>.<var name>` | |
-| functions  | █ | █ | █ |     | `<package>.<func name>` | |
-| functions  | █ | █ |   |  █  | `<package>.<func name>[<type args>]` | |
-| named type | █ | █ | █ |     | `<package>.<type name>` | |
-| named type | █ | █ |   |  █  | `<package>.<type name>[<type args>]` | |
-| method     | █ |   | █ |     | `<package>.<receiver name>` | |
-| method     | █ |   |   |  █  | `<package>.<receiver name>[<type args>]` | |
-| method     |   | █ | █ |     | `<package>.<receiver name>` | `<package>.<method name>(<parameter types>)(<result types>)` |
-| method     |   | █ |   |  █  | `<package>.<receiver name>[<type args>]` | `<package>.<method name>(<parameter types>)(<result types>)` |
+| Declaration | exported | unexported | generic | object name | method name |
+|:------------|:--------:|:----------:|:-------:|:------------|:------------|
+| variables  | █ | █ |   | `<package>.<var name>` | |
+| functions  | █ | █ |   | `<package>.<func name>` | |
+| functions  | █ | █ | █ | `<package>.<func name>[<type args>]` | |
+| named type | █ | █ |   | `<package>.<type name>` | |
+| named type | █ | █ | █ | `<package>.<type name>[<type args>]` | |
+| method     | █ |   |   | `<package>.<receiver name>` | |
+| method     | █ |   | █ | `<package>.<receiver name>[<type args>]` | |
+| method     |   | █ |   | `<package>.<receiver name>` | `<package>.<method name>(<parameter types>)(<result types>)` |
+| method     |   | █ | █ | `<package>.<receiver name>[<type args>]` | `<package>.<method name>(<parameter types>)(<result types>)` |
+
+For nested types, the nest (the function or method in which the type is
+declared) needs to be taken into consideration to differentiate types with
+the same name but different nests.
+
+| Nest type | generic nest | generic object | object name |
+|:----------|:------------:|:--------------:|:------------|
+| function |   |   | `<package>.<func name>:<type name>`  |
+| function | █ |   | `<package>.<func name>:<type name>[<nest args>;]` |
+| function |   | █ | `<package>.<func name>:<type name>[<type args>]` |
+| function | █ | █ | `<package>.<func name>:<type name>[<nest args>;<type args>]` |
+| method   |   |   | `<package>.<receiver name>:<method name>:<type name>`  |
+| method   | █ |   | `<package>.<receiver name>:<method name>:<type name>[<nest args>;]` |
+| method   |   | █ | `<package>.<receiver name>:<method name>:<type name>[<type args>]` |
+| method   | █ | █ | `<package>.<receiver name>:<method name>:<type name>[<nest args>;<type args>]` |
 
 #### Name Specifics
 

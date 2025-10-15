@@ -44,14 +44,30 @@ type Decl struct {
 	RefExpr string
 	// NamedRecvType is method named recv declare.
 	NamedRecvType string
-	// JavaScript code that declares basic information about a symbol. For a type
-	// it configures basic information about the type and its identity. For a function
-	// or method it contains its compiled body.
-	DeclCode []byte
-	// JavaScript code that initializes reflection metadata about type's method list.
+	// JavaScript code that declares a local variable for an imported package.
+	ImportCode []byte
+	// JavaScript code that declares basic information about a named type symbol.
+	// It configures basic information about the type and its identity.
+	TypeDeclCode []byte
+	// JavaScript code that assigns exposed named types to the package.
+	ExportTypeCode []byte
+	// JavaScript code that declares basic information about an anonymous type.
+	// It configures basic information about the type.
+	// This is added to the finish setup phase to have access to all packages.
+	AnonTypeDeclCode []byte
+	// JavaScript code that declares basic information about a function or
+	// method symbol. This contains the function's or method's compiled body.
+	// This is added to the finish setup phase to have access to all packages.
+	FuncDeclCode []byte
+	// JavaScript code that assigns exposed functions to the package.
+	// This is added to the finish setup phase to have access to all packages.
+	ExportFuncCode []byte
+	// JavaScript code that initializes reflection metadata about a type's method list.
+	// This is added to the finish setup phase to have access to all packages.
 	MethodListCode []byte
 	// JavaScript code that initializes the rest of reflection metadata about a type
 	// (e.g. struct fields, array type sizes, element types, etc.).
+	// This is added to the finish setup phase to have access to all packages.
 	TypeInitCode []byte
 	// JavaScript code that needs to be executed during the package init phase to
 	// set the symbol up (e.g. initialize package-level variable value).
@@ -68,7 +84,12 @@ type Decl struct {
 // minify returns a copy of Decl with unnecessary whitespace removed from the
 // JS code.
 func (d Decl) minify() Decl {
-	d.DeclCode = removeWhitespace(d.DeclCode, true)
+	d.ImportCode = removeWhitespace(d.ImportCode, true)
+	d.TypeDeclCode = removeWhitespace(d.TypeDeclCode, true)
+	d.ExportTypeCode = removeWhitespace(d.ExportTypeCode, true)
+	d.AnonTypeDeclCode = removeWhitespace(d.AnonTypeDeclCode, true)
+	d.FuncDeclCode = removeWhitespace(d.FuncDeclCode, true)
+	d.ExportFuncCode = removeWhitespace(d.ExportFuncCode, true)
 	d.MethodListCode = removeWhitespace(d.MethodListCode, true)
 	d.TypeInitCode = removeWhitespace(d.TypeInitCode, true)
 	d.InitCode = removeWhitespace(d.InitCode, true)
@@ -164,10 +185,10 @@ func (fc *funcContext) importDecls() (importedPaths []string, importDecls []*Dec
 func (fc *funcContext) newImportDecl(importedPkg *types.Package) *Decl {
 	pkgVar := fc.importedPkgVar(importedPkg)
 	d := &Decl{
-		FullName: importDeclFullName(importedPkg),
-		Vars:     []string{pkgVar},
-		DeclCode: []byte(fmt.Sprintf("\t%s = $packages[\"%s\"];\n", pkgVar, importedPkg.Path())),
-		InitCode: fc.CatchOutput(1, func() { fc.translateStmt(fc.importInitializer(importedPkg.Path()), nil) }),
+		FullName:   importDeclFullName(importedPkg),
+		Vars:       []string{pkgVar},
+		ImportCode: []byte(fmt.Sprintf("\t%s = $packages[\"%s\"];\n", pkgVar, importedPkg.Path())),
+		InitCode:   fc.CatchOutput(1, func() { fc.translateStmt(fc.importInitializer(importedPkg.Path()), nil) }),
 	}
 	d.Dce().SetAsAlive()
 	return d
@@ -264,7 +285,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 		fc.localVars = nil // Clean up after ourselves.
 	})
 
-	d.Dce().SetName(init.Lhs[0])
+	d.Dce().SetName(init.Lhs[0], nil, nil)
 	if len(init.Lhs) != 1 || analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
 		d.Dce().SetAsAlive()
 	}
@@ -282,25 +303,36 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 	var mainFunc *types.Func
 	for _, fun := range functions {
 		o := fc.pkgCtx.Defs[fun.Name].(*types.Func)
+		instances := fc.knownInstances(o)
+		if len(instances) == 0 {
+			// No instances of the function, skip it.
+			continue
+		}
 
 		if fun.Recv == nil {
 			// Auxiliary decl shared by all instances of the function that defines
-			// package-level variable by which they all are referenced.
+			// package-level variable by which they all are referenced,
+			// e.g. init functions and instances of generic functions.
 			objName := fc.objectName(o)
+			generic := len(instances) > 1 || !instances[0].IsTrivial()
+			varName := objName
+			if generic {
+				varName += ` = []`
+			}
 			varDecl := &Decl{
 				FullName: funcVarDeclFullName(o),
-				Vars:     []string{objName},
+				Vars:     []string{varName},
 			}
-			varDecl.Dce().SetName(o)
-			if o.Type().(*types.Signature).TypeParams().Len() != 0 {
-				varDecl.DeclCode = fc.CatchOutput(0, func() {
-					fc.Printf("%s = {};", objName)
+			varDecl.Dce().SetName(o, nil, nil)
+			if generic && o.Exported() {
+				varDecl.ExportFuncCode = fc.CatchOutput(1, func() {
+					fc.Printf("$pkg.%s = %s;", encodeIdent(fun.Name.Name), objName)
 				})
 			}
 			funcDecls = append(funcDecls, varDecl)
 		}
 
-		for _, inst := range fc.knownInstances(o) {
+		for _, inst := range instances {
 			funcDecls = append(funcDecls, fc.newFuncDecl(fun, inst))
 
 			if o.Name() == "main" {
@@ -331,7 +363,7 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 		Blocking:    fc.pkgCtx.IsBlocking(inst),
 		LinkingName: symbol.New(o),
 	}
-	d.Dce().SetName(o, inst.TArgs...)
+	d.Dce().SetName(o, inst.TNest, inst.TArgs)
 
 	if typesutil.IsMethod(o) {
 		recv := typesutil.RecvType(o.Type().(*types.Signature)).Obj()
@@ -350,7 +382,7 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 	}
 
 	fc.pkgCtx.CollectDCEDeps(d, func() {
-		d.DeclCode = fc.namedFuncContext(inst).translateTopLevelFunction(fun)
+		d.FuncDeclCode = fc.namedFuncContext(inst).translateTopLevelFunction(fun)
 	})
 	return d
 }
@@ -429,17 +461,18 @@ func (fc *funcContext) namedTypeDecls(typeNames typesutil.TypeNames) ([]*Decl, e
 // the type definition directly.
 func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
 	name := fc.objectName(obj)
+	generic := fc.pkgCtx.instanceSet.Pkg(obj.Pkg()).ObjHasInstances(obj)
+	varName := name
+	if generic {
+		varName += ` = []`
+	}
 	varDecl := &Decl{
 		FullName: typeVarDeclFullName(obj),
-		Vars:     []string{name},
+		Vars:     []string{varName},
 	}
-	if typeparams.HasTypeParams(obj.Type()) {
-		varDecl.DeclCode = fc.CatchOutput(0, func() {
-			fc.Printf("%s = {};", name)
-		})
-	}
+	varDecl.Dce().SetName(obj, nil, nil)
 	if isPkgLevel(obj) {
-		varDecl.TypeInitCode = fc.CatchOutput(0, func() {
+		varDecl.ExportTypeCode = fc.CatchOutput(0, func() {
 			fc.Printf("$pkg.%s = %s;", encodeIdent(obj.Name()), name)
 		})
 	}
@@ -451,26 +484,29 @@ func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
 func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, error) {
 	originType := inst.Object.Type().(*types.Named)
 
-	fc.typeResolver = typeparams.NewResolver(fc.pkgCtx.typesCtx, typeparams.ToSlice(originType.TypeParams()), inst.TArgs)
+	fc.typeResolver = typeparams.NewResolver(fc.pkgCtx.typesCtx, inst)
 	defer func() { fc.typeResolver = nil }()
 
 	instanceType := originType
 	if !inst.IsTrivial() {
-		instantiated, err := types.Instantiate(fc.pkgCtx.typesCtx, originType, inst.TArgs, true)
-		if err != nil {
-			return nil, fmt.Errorf("failed to instantiate type %v with args %v: %w", originType, inst.TArgs, err)
+		if len(inst.TArgs) > 0 {
+			instantiated, err := types.Instantiate(fc.pkgCtx.typesCtx, originType, inst.TArgs, true)
+			if err != nil {
+				return nil, fmt.Errorf("failed to instantiate type %v with args %v: %w", originType, inst.TArgs, err)
+			}
+			instanceType = instantiated.(*types.Named)
 		}
-		instanceType = instantiated.(*types.Named)
+		instanceType = fc.typeResolver.Substitute(instanceType).(*types.Named)
 	}
 
 	underlying := instanceType.Underlying()
 	d := &Decl{
 		FullName: typeDeclFullName(inst),
 	}
-	d.Dce().SetName(inst.Object, inst.TArgs...)
+	d.Dce().SetName(inst.Object, inst.TNest, inst.TArgs)
 	fc.pkgCtx.CollectDCEDeps(d, func() {
 		// Code that declares a JS type (i.e. prototype) for each Go type.
-		d.DeclCode = fc.CatchOutput(0, func() {
+		d.TypeDeclCode = fc.CatchOutput(0, func() {
 			size := int64(0)
 			constructor := "null"
 
@@ -492,7 +528,7 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 		})
 
 		// Reflection metadata about methods the type has.
-		d.MethodListCode = fc.CatchOutput(0, func() {
+		d.MethodListCode = fc.CatchOutput(1, func() {
 			if _, ok := underlying.(*types.Interface); ok {
 				return
 			}
@@ -518,7 +554,7 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 		// initialize themselves.
 		switch t := underlying.(type) {
 		case *types.Array, *types.Chan, *types.Interface, *types.Map, *types.Pointer, *types.Slice, *types.Signature, *types.Struct:
-			d.TypeInitCode = fc.CatchOutput(0, func() {
+			d.TypeInitCode = fc.CatchOutput(1, func() {
 				fc.Printf("%s.init(%s);", fc.instName(inst), fc.initArgs(t))
 			})
 		}
@@ -528,6 +564,10 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 
 // structConstructor returns JS constructor function for a struct type.
 func (fc *funcContext) structConstructor(t *types.Struct) string {
+	if t.NumFields() == 0 {
+		return `function() { this.$val = this; }`
+	}
+
 	constructor := &strings.Builder{}
 
 	ctrArgs := make([]string, t.NumFields())
@@ -541,7 +581,8 @@ func (fc *funcContext) structConstructor(t *types.Struct) string {
 	// If no arguments were passed, zero-initialize all fields.
 	fmt.Fprintf(constructor, "\t\tif (arguments.length === 0) {\n")
 	for i := 0; i < t.NumFields(); i++ {
-		fmt.Fprintf(constructor, "\t\t\tthis.%s = %s;\n", fieldName(t, i), fc.translateExpr(fc.zeroValue(t.Field(i).Type())).String())
+		zeroValue := fc.zeroValue(fc.fieldType(t, i))
+		fmt.Fprintf(constructor, "\t\t\tthis.%s = %s;\n", fieldName(t, i), fc.translateExpr(zeroValue).String())
 	}
 	fmt.Fprintf(constructor, "\t\t\treturn;\n")
 	fmt.Fprintf(constructor, "\t\t}\n")
@@ -558,10 +599,7 @@ func (fc *funcContext) structConstructor(t *types.Struct) string {
 // function for runtime reflection. It returns isPtr=true if the method belongs
 // to the pointer-receiver method list.
 func (fc *funcContext) methodListEntry(method *types.Func) (entry string, isPtr bool) {
-	name := method.Name()
-	if reservedKeywords[name] {
-		name += "$"
-	}
+	name := sanitizeName(method.Name())
 	pkgPath := ""
 	if !method.Exported() {
 		pkgPath = method.Pkg().Path()
@@ -591,9 +629,9 @@ func (fc *funcContext) anonTypeDecls(anonTypes []*types.TypeName) []*Decl {
 			FullName: anonTypeDeclFullName(t),
 			Vars:     []string{t.Name()},
 		}
-		d.Dce().SetName(t)
+		d.Dce().SetName(t, nil, nil)
 		fc.pkgCtx.CollectDCEDeps(d, func() {
-			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type())))
+			d.AnonTypeDeclCode = []byte(fmt.Sprintf("\t\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type())))
 		})
 		decls = append(decls, d)
 	}

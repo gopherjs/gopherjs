@@ -382,6 +382,7 @@ func TestBlocking_Defers_WithMultipleReturns(t *testing.T) {
 	// of which flow control statements (e.g. if-statements) are terminating
 	// or not. Any defers added in a terminating control flow would not
 	// propagate to returns that are not in that block.
+	// See golang.org/x/tools/go/ssa for flow control analysis.
 	//
 	// For now we simply build up the list of defers as we go making
 	// the return on line 31 also blocking.
@@ -1631,13 +1632,13 @@ func newBlockingTest(t *testing.T, src string) *blockingTest {
 	tContext := types.NewContext()
 	tc := typeparams.Collector{
 		TContext:  tContext,
-		Info:      f.Info,
 		Instances: &typeparams.PackageInstanceSets{},
 	}
 
 	file := f.Parse(`test.go`, src)
 	testInfo, testPkg := f.Check(`pkg/test`, file)
-	tc.Scan(testPkg, file)
+	tc.Scan(testInfo, testPkg, file)
+	tc.Finish()
 
 	getImportInfo := func(path string) (*Info, error) {
 		return nil, fmt.Errorf(`getImportInfo should not be called in this test, called with %v`, path)
@@ -1657,7 +1658,6 @@ func newBlockingTestWithOtherPackage(t *testing.T, testSrc string, otherSrc stri
 	tContext := types.NewContext()
 	tc := typeparams.Collector{
 		TContext:  tContext,
-		Info:      f.Info,
 		Instances: &typeparams.PackageInstanceSets{},
 	}
 
@@ -1671,11 +1671,12 @@ func newBlockingTestWithOtherPackage(t *testing.T, testSrc string, otherSrc stri
 
 	otherFile := f.Parse(`other.go`, otherSrc)
 	_, otherPkg := f.Check(`pkg/other`, otherFile)
-	tc.Scan(otherPkg, otherFile)
+	tc.Scan(f.Info, otherPkg, otherFile)
 
 	testFile := f.Parse(`test.go`, testSrc)
 	_, testPkg := f.Check(`pkg/test`, testFile)
-	tc.Scan(testPkg, testFile)
+	tc.Scan(f.Info, testPkg, testFile)
+	tc.Finish()
 
 	otherPkgInfo := AnalyzePkg([]*ast.File{otherFile}, f.FileSet, f.Info, tContext, otherPkg, tc.Instances, getImportInfo)
 	pkgInfo[otherPkg.Path()] = otherPkgInfo

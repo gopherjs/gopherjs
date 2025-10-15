@@ -73,7 +73,7 @@ func TestStructKey(t *testing.T) {
 		t.Fail()
 	}
 
-	m2 := make(map[interface{}]int)
+	m2 := make(map[any]int)
 	m2[SingleValue{Value: 1}] = 42
 	m2[SingleValue{Value: 2}] = 43
 	m2[OtherSingleValue{Value: 1}] = 44
@@ -214,7 +214,7 @@ func TestCompareStruct(t *testing.T) {
 	}
 
 	a := A{42}
-	var b interface{} = a
+	var b any = a
 	x := A{0}
 
 	if a != b || a == x || b == x {
@@ -327,7 +327,7 @@ func TestMapAssign(t *testing.T) {
 
 func TestSwitchStatement(t *testing.T) {
 	zero := 0
-	var interfaceZero interface{} = zero
+	var interfaceZero any = zero
 	switch {
 	case interfaceZero:
 		t.Fail()
@@ -465,7 +465,7 @@ func TestPkgVarPointers(t *testing.T) {
 }
 
 func TestStringMap(t *testing.T) {
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 	if m["__proto__"] != nil {
 		t.Fail()
 	}
@@ -544,7 +544,7 @@ func TestTrivialSwitch(t *testing.T) {
 
 func TestTupleFnReturnImplicitCast(t *testing.T) {
 	var ycalled int = 0
-	x := func(fn func() (int, error)) (interface{}, error) {
+	x := func(fn func() (int, error)) (any, error) {
 		return fn()
 	}
 	y, _ := x(func() (int, error) {
@@ -558,7 +558,7 @@ func TestTupleFnReturnImplicitCast(t *testing.T) {
 
 var tuple2called = 0
 
-func tuple1() (interface{}, error) {
+func tuple1() (any, error) {
 	return tuple2()
 }
 
@@ -580,7 +580,7 @@ func TestDeferNamedTupleReturnImplicitCast(t *testing.T) {
 	z := func() {
 		zcalled++
 	}
-	x := func(fn func() (int, error)) (i interface{}, e error) {
+	x := func(fn func() (int, error)) (i any, e error) {
 		defer z()
 		i, e = fn()
 		return
@@ -719,7 +719,7 @@ func TestInterfaceConversionRuntimeError(t *testing.T) {
 	type I interface {
 		Get() int
 	}
-	e := (interface{})(0)
+	e := (any)(0)
 	_ = e.(I)
 }
 
@@ -749,7 +749,7 @@ func TestUntypedNil(t *testing.T) {
 	var _ []byte = nil
 	var _ map[int]int = nil
 	var _ chan int = nil
-	var _ interface{} = nil
+	var _ any = nil
 
 	{
 		var (
@@ -783,8 +783,8 @@ func TestUntypedNil(t *testing.T) {
 	}
 	{
 		var (
-			x interface{} = nil
-			_             = x
+			x any = nil
+			_     = x
 		)
 	}
 
@@ -820,7 +820,7 @@ func TestUntypedNil(t *testing.T) {
 	}
 	{
 		var (
-			x interface{}
+			x any
 			_ = x == nil
 		)
 	}
@@ -829,7 +829,7 @@ func TestUntypedNil(t *testing.T) {
 	_ = ([]byte)(nil)
 	_ = (map[int]int)(nil)
 	_ = (chan int)(nil)
-	_ = (interface{})(nil)
+	_ = (any)(nil)
 	{
 		f := func(*int) {}
 		f(nil)
@@ -851,7 +851,7 @@ func TestUntypedNil(t *testing.T) {
 		f(nil)
 	}
 	{
-		f := func(interface{}) {}
+		f := func(any) {}
 		f(nil)
 	}
 	{
@@ -957,5 +957,30 @@ func TestFileSetSize(t *testing.T) {
 	n2 := unsafe.Sizeof(token.FileSet{})
 	if n1 != n2 {
 		t.Errorf("Got: unsafe.Sizeof(token.FileSet{}) %v, Want: %v", n2, n1)
+	}
+}
+
+// TestCrossPackageGenericFuncCalls ensures that generic functions from other
+// packages can be called correctly.
+func TestCrossPackageGenericFuncCalls(t *testing.T) {
+	var wantInt int
+	if got := otherpkg.Zero[int](); got != wantInt {
+		t.Errorf(`Got: otherpkg.Zero[int]() = %v, Want: %v`, got, wantInt)
+	}
+
+	var wantStr string
+	if got := otherpkg.Zero[string](); got != wantStr {
+		t.Errorf(`Got: otherpkg.Zero[string]() = %q, Want: %q`, got, wantStr)
+	}
+}
+
+// TestCrossPackageGenericCasting ensures that generic types from other
+// packages can be used in a type cast.
+// The cast looks like a function call but should be treated as a type conversion.
+func TestCrossPackageGenericCasting(t *testing.T) {
+	fn := otherpkg.GetterHandle[int](otherpkg.Zero[int])
+	var wantInt int
+	if got := fn(); got != wantInt {
+		t.Errorf(`Got: otherpkg.GetterHandle[int](otherpkg.Zero[int]) = %v, Want: %v`, got, wantInt)
 	}
 }

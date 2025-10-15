@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package time
 
@@ -20,8 +19,8 @@ type runtimeTimer struct {
 	i       int32
 	when    int64
 	period  int64
-	f       func(interface{}, uintptr)
-	arg     interface{}
+	f       func(any, uintptr)
+	arg     any
 	seq     uintptr
 	timeout *js.Object
 	active  bool
@@ -64,7 +63,7 @@ func stopTimer(t *runtimeTimer) bool {
 	return wasActive
 }
 
-func modTimer(t *runtimeTimer, when, period int64, f func(interface{}, uintptr), arg interface{}, seq uintptr) {
+func modTimer(t *runtimeTimer, when, period int64, f func(any, uintptr), arg any, seq uintptr) {
 	stopTimer(t)
 	t.when = when
 	t.period = period

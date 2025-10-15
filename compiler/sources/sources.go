@@ -1,7 +1,6 @@
 package sources
 
 import (
-	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -10,12 +9,11 @@ import (
 
 	"github.com/neelance/astrewrite"
 
+	"github.com/gopherjs/gopherjs/compiler/incjs"
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
-	"github.com/gopherjs/gopherjs/compiler/jsFile"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
-	"github.com/gopherjs/gopherjs/internal/errorList"
-	"github.com/gopherjs/gopherjs/internal/experiments"
+	"github.com/gopherjs/gopherjs/internal/errlist"
 )
 
 // Sources is a slice of parsed Go sources and additional data for a package.
@@ -38,17 +36,17 @@ type Sources struct {
 	// Files is the parsed and augmented Go AST files for the package.
 	Files []*ast.File
 
-	// FileSet is the file set for the parsed files.
+	// FileSet is the file set for the parsed files for this source.
 	FileSet *token.FileSet
 
 	// JSFiles is the JavaScript files that are part of the package.
-	JSFiles []jsFile.JSFile
+	JSFiles []incjs.File
 
-	// TypeInfo is the type information this package.
+	// TypeInfo is the type information for this package.
 	// This is nil until set by Analyze.
 	TypeInfo *analysis.Info
 
-	// baseInfo is the base type information this package.
+	// baseInfo is the base type information for this package.
 	// This is nil until set by TypeCheck.
 	baseInfo *types.Info
 
@@ -63,7 +61,7 @@ type Sources struct {
 
 type Importer func(path, srcDir string) (*Sources, error)
 
-// sort the Go files slice by the original source name to ensure consistent order
+// Sort sorts the Go files slice by the original source name to ensure consistent order
 // of processing. This is required for reproducible JavaScript output.
 //
 // Note this function mutates the original Files slice.
@@ -116,7 +114,7 @@ func (s *Sources) TypeCheck(importer Importer, sizes types.Sizes, tContext *type
 		Instances:  make(map[*ast.Ident]types.Instance),
 	}
 
-	var typeErrs errorList.ErrorList
+	var typeErrs errlist.ErrorList
 
 	pkgImporter := &packageImporter{
 		srcDir:   s.Dir,
@@ -147,13 +145,6 @@ func (s *Sources) TypeCheck(importer Importer, sizes types.Sizes, tContext *type
 		return err
 	}
 
-	// If generics are not enabled, ensure the package does not requires generics support.
-	if !experiments.Env.Generics {
-		if genErr := typeparams.RequiresGenericsSupport(typesInfo); genErr != nil {
-			return fmt.Errorf("some packages requires generics support (https://github.com/gopherjs/gopherjs/issues/1013): %w", genErr)
-		}
-	}
-
 	s.baseInfo = typesInfo
 	s.Package = typesPkg
 	return nil
@@ -163,13 +154,11 @@ func (s *Sources) TypeCheck(importer Importer, sizes types.Sizes, tContext *type
 //
 // This must be called before Analyze to have the type parameters instances
 // needed during analysis.
-func (s *Sources) CollectInstances(tContext *types.Context, instances *typeparams.PackageInstanceSets) {
-	tc := typeparams.Collector{
-		TContext:  tContext,
-		Info:      s.baseInfo,
-		Instances: instances,
-	}
-	tc.Scan(s.Package, s.Files...)
+//
+// Note that once all the sources are collected, the collector needs to be
+// finished to ensure all the instances are collected.
+func (s *Sources) CollectInstances(tc *typeparams.Collector) {
+	tc.Scan(s.baseInfo, s.Package, s.Files...)
 }
 
 // Analyze will determine the type parameters instances, blocking,
@@ -198,7 +187,7 @@ func (s *Sources) Analyze(importer Importer, tContext *types.Context, instances 
 // This will set the GoLinknames field on the Sources.
 func (s *Sources) ParseGoLinknames() error {
 	goLinknames := []linkname.GoLinkname{}
-	var errs errorList.ErrorList
+	var errs errlist.ErrorList
 	for _, file := range s.Files {
 		found, err := linkname.ParseGoLinknames(s.FileSet, s.ImportPath, file)
 		errs = errs.Append(err)
@@ -249,7 +238,7 @@ type packageImporter struct {
 	importer Importer
 	sizes    types.Sizes
 	tContext *types.Context
-	Errors   errorList.ErrorList
+	Errors   errlist.ErrorList
 }
 
 func (pi *packageImporter) Import(path string) (*types.Package, error) {

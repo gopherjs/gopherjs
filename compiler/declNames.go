@@ -35,7 +35,7 @@ func funcVarDeclFullName(o *types.Func) string {
 	return `funcVar:` + symbol.New(o).String()
 }
 
-// mainFuncFullName returns the name for the declaration used to invoke the
+// mainFuncDeclFullName returns the name for the declaration used to invoke the
 // main function of the program. There should only be one decl with this name.
 func mainFuncDeclFullName() string {
 	return `init:main`
@@ -49,7 +49,7 @@ func funcDeclFullName(inst typeparams.Instance) string {
 }
 
 // typeVarDeclFullName returns a unique name for a package-level variable
-// that is used for a named type declaration.
+// that is used for a named type declaration or a named nested type declaration.
 // If the type is generic, this declaration name is also for the list
 // of instantiations of the type.
 func typeVarDeclFullName(o *types.TypeName) string {
@@ -57,7 +57,9 @@ func typeVarDeclFullName(o *types.TypeName) string {
 }
 
 // typeDeclFullName returns a unique name for a package-level type declaration
-// for the given instance of a type. Names are only unique per package.
+// for the given instance of a type. Names are only unique per scope package
+// unless the type is a nested type then the name is only unique per the
+// function or method it is declared in.
 func typeDeclFullName(inst typeparams.Instance) string {
 	return `type:` + inst.String()
 }

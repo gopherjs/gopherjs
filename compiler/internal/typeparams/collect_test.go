@@ -2,12 +2,15 @@ package typeparams
 
 import (
 	"go/ast"
+	"go/token"
 	"go/types"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/gopherjs/gopherjs/internal/srctesting"
 	"golang.org/x/tools/go/ast/astutil"
+
+	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 
 func TestVisitor(t *testing.T) {
@@ -35,7 +38,11 @@ func TestVisitor(t *testing.T) {
 		t := typ[int, A]{}
 		t.method(0)
 		(*typ[int32, A]).method(nil, 0)
+
 		type x struct{ T []typ[int64, A] }
+		type y[X any] struct{ T []typ[A, X] }
+		_ = y[int8]{}
+		_ = y[A]{}
 
 		return
 	}
@@ -49,7 +56,11 @@ func TestVisitor(t *testing.T) {
 		t := typ[int, T]{}
 		t.method(0)
 		(*typ[int32, T]).method(nil, 0)
+
 		type x struct{ T []typ[int64, T] }
+		type y[X any] struct{ T []typ[T, X] }
+		_ = y[int8]{}
+		_ = y[T]{}
 
 		return
 	}
@@ -67,7 +78,11 @@ func TestVisitor(t *testing.T) {
 		t := typ[int, T]{}
 		t.method(0)
 		(*typ[int32, T]).method(nil, 0)
+
 		type x struct{ T []typ[int64, T] }
+		type y[X any] struct{ T []typ[T, X] }
+		_ = y[int8]{}
+		_ = y[T]{}
 
 		return
 	}
@@ -189,23 +204,51 @@ func TestVisitor(t *testing.T) {
 			descr:    "non-generic function",
 			resolver: nil,
 			node:     lookupDecl("entry1"),
-			want:     instancesInFunc(lookupType("A")),
+			want: append(
+				instancesInFunc(lookupType("A")),
+				Instance{
+					Object: lookupObj("entry1.y"),
+					TArgs:  []types.Type{types.Typ[types.Int8]},
+				},
+				Instance{
+					Object: lookupObj("entry1.y"),
+					TArgs:  []types.Type{lookupType("A")},
+				},
+			),
 		}, {
 			descr: "generic function",
 			resolver: NewResolver(
 				types.NewContext(),
-				ToSlice(lookupType("entry2").(*types.Signature).TypeParams()),
-				[]types.Type{lookupType("B")},
-			),
+				Instance{
+					Object: lookupObj("entry2"),
+					TArgs:  []types.Type{lookupType("B")},
+				}),
 			node: lookupDecl("entry2"),
-			want: instancesInFunc(lookupType("B")),
+			want: append(
+				instancesInFunc(lookupType("B")),
+				Instance{
+					Object: lookupObj("entry2.x"),
+					TNest:  []types.Type{lookupType("B")},
+				},
+				Instance{
+					Object: lookupObj("entry1.y"),
+					TNest:  []types.Type{lookupType("B")},
+					TArgs:  []types.Type{types.Typ[types.Int8]},
+				},
+				Instance{
+					Object: lookupObj("entry2.y"),
+					TNest:  []types.Type{lookupType("B")},
+					TArgs:  []types.Type{lookupType("B")},
+				},
+			),
 		}, {
 			descr: "generic method",
 			resolver: NewResolver(
 				types.NewContext(),
-				ToSlice(lookupType("entry3.method").(*types.Signature).RecvTypeParams()),
-				[]types.Type{lookupType("C")},
-			),
+				Instance{
+					Object: lookupObj("entry3.method"),
+					TArgs:  []types.Type{lookupType("C")},
+				}),
 			node: lookupDecl("entry3.method"),
 			want: append(
 				instancesInFunc(lookupType("C")),
@@ -217,14 +260,29 @@ func TestVisitor(t *testing.T) {
 					Object: lookupObj("entry3.method"),
 					TArgs:  []types.Type{lookupType("C")},
 				},
+				Instance{
+					Object: lookupObj("entry3.method.x"),
+					TNest:  []types.Type{lookupType("C")},
+				},
+				Instance{
+					Object: lookupObj("entry3.method.y"),
+					TNest:  []types.Type{lookupType("C")},
+					TArgs:  []types.Type{types.Typ[types.Int8]},
+				},
+				Instance{
+					Object: lookupObj("entry3.method.y"),
+					TNest:  []types.Type{lookupType("C")},
+					TArgs:  []types.Type{lookupType("C")},
+				},
 			),
 		}, {
 			descr: "generic type declaration",
 			resolver: NewResolver(
 				types.NewContext(),
-				ToSlice(lookupType("entry3").(*types.Named).TypeParams()),
-				[]types.Type{lookupType("D")},
-			),
+				Instance{
+					Object: lookupObj("entry3"),
+					TArgs:  []types.Type{lookupType("D")},
+				}),
 			node: lookupDecl("entry3"),
 			want: instancesInType(lookupType("D")),
 		}, {
@@ -255,6 +313,12 @@ func TestVisitor(t *testing.T) {
 				instances: &PackageInstanceSets{},
 				resolver:  test.resolver,
 				info:      info,
+			}
+			if test.resolver != nil {
+				// Since we know all the tests are for functions and methods,
+				// set the nested type to the type parameter from the resolver.
+				v.nestTParams = test.resolver.tParams
+				v.nestTArgs = test.resolver.tArgs
 			}
 			ast.Walk(&v, test.node)
 			got := v.instances.Pkg(pkg).Values()
@@ -319,7 +383,7 @@ func TestSeedVisitor(t *testing.T) {
 	}
 	got := sv.instances.Pkg(pkg).Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != "" {
-		t.Errorf("Instances from initialSeeder contain diff (-want,+got):\n%s", diff)
+		t.Errorf("Instances from seedVisitor contain diff (-want,+got):\n%s", diff)
 	}
 }
 
@@ -348,33 +412,478 @@ func TestCollector(t *testing.T) {
 
 	c := Collector{
 		TContext:  types.NewContext(),
-		Info:      info,
 		Instances: &PackageInstanceSets{},
 	}
-	c.Scan(pkg, file)
+	c.Scan(info, pkg, file)
+	c.Finish()
 
-	inst := func(name string, tArg types.Type) Instance {
+	inst := func(name, tNest, tArg string) Instance {
 		return Instance{
 			Object: srctesting.LookupObj(pkg, name),
-			TArgs:  []types.Type{tArg},
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
 		}
 	}
 	want := []Instance{
-		inst("typ", types.Typ[types.Int]),
-		inst("typ.method", types.Typ[types.Int]),
-		inst("fun", types.Typ[types.Int8]),
-		inst("fun.nested", types.Typ[types.Int8]),
-		inst("typ", types.Typ[types.Int16]),
-		inst("typ.method", types.Typ[types.Int16]),
-		inst("typ", types.Typ[types.Int32]),
-		inst("typ.method", types.Typ[types.Int32]),
-		inst("fun", types.Typ[types.Int64]),
-		inst("fun.nested", types.Typ[types.Int64]),
+		inst(`typ`, ``, `int`),
+		inst(`typ.method`, ``, `int`),
+		inst(`fun`, ``, `int8`),
+		inst(`fun.nested`, `int8`, `int8`),
+		inst(`typ`, ``, `int16`),
+		inst(`typ.method`, ``, `int16`),
+		inst(`typ`, ``, `int32`),
+		inst(`typ.method`, ``, `int32`),
+		inst(`fun`, ``, `int64`),
+		inst(`fun.nested`, `int64`, `int64`),
 	}
 	got := c.Instances.Pkg(pkg).Values()
 	if diff := cmp.Diff(want, got, instanceOpts()); diff != "" {
-		t.Errorf("Instances from initialSeeder contain diff (-want,+got):\n%s", diff)
+		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
 	}
+}
+
+func TestCollector_MoreNesting(t *testing.T) {
+	src := `package test
+
+	func fun[T any]() {
+		type nestedCon struct{ X T }
+		_ = nestedCon{}
+
+		type nestedGen[U any] struct{ Y T; Z U }
+		_ = nestedGen[T]{}
+		_ = nestedGen[int8]{}
+
+		type nestedCover[T any] struct{ W T }
+		_ = nestedCover[T]{}
+		_ = nestedCover[int16]{}
+	}
+
+	func a() {
+		fun[int32]()
+		fun[int64]()
+	}
+	`
+
+	f := srctesting.New(t)
+	file := f.Parse(`test.go`, src)
+	info, pkg := f.Check(`pkg/test`, file)
+
+	c := Collector{
+		TContext:  types.NewContext(),
+		Instances: &PackageInstanceSets{},
+	}
+	c.Scan(info, pkg, file)
+	c.Finish()
+
+	inst := func(name, tNest, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
+	want := []Instance{
+		inst(`fun`, ``, `int32`),
+		inst(`fun`, ``, `int64`),
+
+		inst(`fun.nestedCon`, `int32`, ``),
+		inst(`fun.nestedCon`, `int64`, ``),
+
+		inst(`fun.nestedGen`, `int32`, `int32`),
+		inst(`fun.nestedGen`, `int32`, `int8`),
+		inst(`fun.nestedGen`, `int64`, `int64`),
+		inst(`fun.nestedGen`, `int64`, `int8`),
+
+		inst(`fun.nestedCover`, `int32`, `int32`),
+		inst(`fun.nestedCover`, `int32`, `int16`),
+		inst(`fun.nestedCover`, `int64`, `int64`),
+		inst(`fun.nestedCover`, `int64`, `int16`),
+	}
+	got := c.Instances.Pkg(pkg).Values()
+	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
+	}
+}
+
+func TestCollector_NestingWithVars(t *testing.T) {
+	// This is loosely based off of go1.19.13/test/typeparam/issue47740b.go
+	// I was getting an error where `Q.print[int;]` was showing up when
+	// `Q.print` is not in a nesting context with `int` and this helped debug
+	// it. The problem was that `q` was being treated like a type not a var.
+	src := `package test
+
+	type Q struct{ v any }
+	func (q Q) print() {
+		println(q.v)
+	}
+
+	func newQ(v any) Q {
+		return Q{v}
+	}
+
+	type S[T any] struct{ x T }
+	func (s S[T]) echo() {
+		q := newQ(s.x)
+		q.print()
+	}
+
+	func a() {
+		s := S[int]{x: 0}
+		s.echo()
+	}
+	`
+
+	f := srctesting.New(t)
+	file := f.Parse(`test.go`, src)
+	info, pkg := f.Check(`pkg/test`, file)
+	inst := func(name, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
+
+	c := Collector{
+		TContext:  types.NewContext(),
+		Instances: &PackageInstanceSets{},
+	}
+	c.Scan(info, pkg, file)
+	c.Finish()
+
+	want := []Instance{
+		inst(`S`, `int`),
+		inst(`S.echo`, `int`),
+	}
+	got := c.Instances.Pkg(pkg).Values()
+	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
+	}
+}
+
+func TestCollector_RecursiveTypeParams(t *testing.T) {
+	// This is based off of part of go1.19.13/test/typeparam/nested.go
+	src := `package test
+	func F[A any]() {}
+	func main() {
+		type U[_ any] int
+		type X[A any] U[X[A]]
+		F[X[int]]()
+	}
+	`
+
+	f := srctesting.New(t)
+	tc := types.NewContext()
+	file := f.Parse(`test.go`, src)
+	info, pkg := f.Check(`test`, file)
+	inst := func(name, tNest, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
+
+	c := Collector{
+		TContext:  tc,
+		Instances: &PackageInstanceSets{},
+	}
+	c.Scan(info, pkg, file)
+	c.Finish()
+
+	xInst := inst(`main.X`, ``, `int`)
+	xInt := xInst.Resolve(tc)
+	want := []Instance{
+		xInst,
+		{
+			Object: srctesting.LookupObj(pkg, `F`),
+			TArgs:  []types.Type{xInt},
+		},
+		{
+			Object: srctesting.LookupObj(pkg, `main.U`),
+			TArgs:  []types.Type{xInt},
+		},
+	}
+	got := c.Instances.Pkg(pkg).Values()
+	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
+	}
+}
+
+func TestCollector_NestedRecursiveTypeParams(t *testing.T) {
+	// This is based off of part of go1.19.13/test/typeparam/nested.go
+	src := `package test
+	func F[A any]() any {
+		type U[_ any] struct{ x A }
+		type X[B any] U[X[B]]
+		return X[int]{}
+	}
+	func main() {
+		print(F[string]())
+	}
+	`
+
+	f := srctesting.New(t)
+	tc := types.NewContext()
+	file := f.Parse(`test.go`, src)
+	info, pkg := f.Check(`test`, file)
+	inst := func(name, tNest, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
+
+	c := Collector{
+		TContext:  tc,
+		Instances: &PackageInstanceSets{},
+	}
+	c.Scan(info, pkg, file)
+	c.Finish()
+
+	xInst := inst(`F.X`, `string`, `int`)
+	xInt := xInst.Resolve(tc)
+	want := []Instance{
+		inst(`F`, ``, `string`),
+		xInst,
+		{
+			Object: srctesting.LookupObj(pkg, `F.U`),
+			TNest:  []types.Type{types.Typ[types.String]},
+			TArgs:  []types.Type{xInt},
+		},
+	}
+	got := c.Instances.Pkg(pkg).Values()
+	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
+	}
+}
+
+func TestCollector_LooselyRecursiveTypeParams(t *testing.T) {
+	// This is based off of part of go1.19.13/test/typeparam/nested.go
+	src := `package test
+	func main() {
+		type U[B any] struct{ y *B }
+		type X[C any] struct{ p U[X[C]] }
+		print(X[int]{})
+	}
+	`
+
+	f := srctesting.New(t)
+	tc := types.NewContext()
+	file := f.Parse(`test.go`, src)
+	info, pkg := f.Check(`test`, file)
+
+	c := Collector{
+		TContext:  tc,
+		Instances: &PackageInstanceSets{},
+	}
+	c.Scan(info, pkg, file)
+	c.Finish()
+
+	xInst := Instance{
+		Object: srctesting.LookupObj(pkg, `main.X`),
+		TArgs:  []types.Type{types.Typ[types.Int]},
+	}
+	xInt := xInst.Resolve(tc)
+	want := []Instance{
+		xInst,
+		{
+			Object: srctesting.LookupObj(pkg, `main.U`),
+			TArgs:  []types.Type{xInt},
+		},
+	}
+	got := c.Instances.Pkg(pkg).Values()
+	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
+	}
+}
+
+func TestCollector_NestedTypeParams(t *testing.T) {
+	// This is based off of part of go1.19.13/test/typeparam/nested.go
+	src := `package test
+	func F[A any]() any {
+		type T[B any] struct{}
+		type U[_ any] struct{ X A }
+		return T[U[bool]]{}
+	}
+	func main() {
+		print(F[int]())
+	}
+	`
+
+	f := srctesting.New(t)
+	tc := types.NewContext()
+	file := f.Parse(`test.go`, src)
+	info, pkg := f.Check(`test`, file)
+	inst := func(name, tNest, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TNest:  evalTypeArgs(t, f.FileSet, pkg, tNest),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
+
+	c := Collector{
+		TContext:  tc,
+		Instances: &PackageInstanceSets{},
+	}
+	c.Scan(info, pkg, file)
+	c.Finish()
+
+	uInst := inst(`F.U`, `int`, `bool`)
+	uIntBool := uInst.Resolve(tc)
+	want := []Instance{
+		inst(`F`, ``, `int`),
+		inst(`F.U`, `int`, `bool`),
+		{
+			Object: srctesting.LookupObj(pkg, `F.T`),
+			TNest:  []types.Type{types.Typ[types.Int]},
+			TArgs:  []types.Type{uIntBool},
+		},
+	}
+	got := c.Instances.Pkg(pkg).Values()
+	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
+	}
+}
+
+func TestCollector_ImplicitTypeInstance(t *testing.T) {
+	f := srctesting.New(t)
+	tc := types.NewContext()
+	inst := func(pkg *types.Package, name, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
+
+	fooSrc := `package foo
+	type Foo[T any] struct{}
+	func NewFoo[T any]() *Foo[T] {
+		return &Foo[T]{}
+	}`
+	fooFile := f.Parse(`foo/foo.go`, fooSrc)
+	_, fooPkg := f.Check(`foo`, fooFile)
+
+	mainSrc := `package test
+	import "foo"
+	func main() {
+		print(foo.NewFoo[int]())
+	}`
+	mainFile := f.Parse(`main.go`, mainSrc)
+	_, mainPkg := f.Check(`test`, mainFile)
+
+	c := Collector{
+		TContext:  tc,
+		Instances: &PackageInstanceSets{},
+	}
+	// The issue which caused this test to be written only occurred when
+	// fooFile was scanned before mainFile, otherwise it would work fine.
+	// The problem was that `foo.Foo[int]` was not being collected in this
+	// order because mainFile adds an instance into the instance set for "foo"
+	// after "foo" was already propagated. This was fixed by performing
+	// propagation after all the packages are scanned via `Finish`.
+	c.Scan(f.Info, fooPkg, fooFile)
+	c.Scan(f.Info, mainPkg, mainFile)
+	c.Finish()
+
+	want := []Instance{
+		inst(fooPkg, `NewFoo`, `int`),
+		inst(fooPkg, `Foo`, `int`),
+	}
+	got := c.Instances.Pkg(fooPkg).Values()
+	if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+		t.Errorf("Instances from Collector contain diff (-want,+got):\n%s", diff)
+	}
+}
+
+func TestCollector_MoreImplicitTypeInstance(t *testing.T) {
+	f := srctesting.New(t)
+	tc := types.NewContext()
+	inst := func(pkg *types.Package, name, tArg string) Instance {
+		return Instance{
+			Object: srctesting.LookupObj(pkg, name),
+			TArgs:  evalTypeArgs(t, f.FileSet, pkg, tArg),
+		}
+	}
+
+	fooSrc := `package foo
+	type Foo[T, U any] struct{}
+	func NewFoo[T, U any]() *Foo[T, U] {
+		return &Foo[T, U]{}
+	}`
+	fooFile := f.Parse(`foo/foo.go`, fooSrc)
+	_, fooPkg := f.Check(`foo`, fooFile)
+
+	barSrc := `package bar
+	import "foo"
+	func Bar[T, U any](f *foo.Foo[T, U]) *foo.Foo[U, T] {
+		return foo.NewFoo[U, T]()
+	}`
+	barFile := f.Parse(`bar/bar.go`, barSrc)
+	_, barPkg := f.Check(`bar`, barFile)
+
+	mainSrc := `package test
+	import "foo"
+	import "bar"
+	func main() {
+		f := foo.NewFoo[int, string]()
+		print(bar.Bar[int, string](f))
+	}`
+	mainFile := f.Parse(`main.go`, mainSrc)
+	_, mainPkg := f.Check(`test`, mainFile)
+
+	want := []Instance{
+		inst(fooPkg, `NewFoo`, `int, string`),
+		inst(fooPkg, `NewFoo`, `string, int`),
+		inst(fooPkg, `Foo`, `int, string`),
+		inst(fooPkg, `Foo`, `string, int`),
+	}
+	trial := func(order ...int) {
+		c := Collector{
+			TContext:  tc,
+			Instances: &PackageInstanceSets{},
+		}
+		for _, i := range order {
+			switch i {
+			case 1:
+				c.Scan(f.Info, fooPkg, fooFile)
+			case 2:
+				c.Scan(f.Info, barPkg, barFile)
+			case 3:
+				c.Scan(f.Info, mainPkg, mainFile)
+			}
+		}
+		c.Finish()
+
+		got := c.Instances.Pkg(fooPkg).Values()
+		if diff := cmp.Diff(want, got, instanceOpts()); diff != `` {
+			t.Errorf("Instances from Collector trial %v contain diff (-want,+got):\n%s", order, diff)
+		}
+	}
+
+	trial(1, 2, 3)
+	trial(1, 3, 2)
+	trial(2, 1, 3)
+	trial(2, 3, 1)
+	trial(3, 1, 2)
+	trial(3, 2, 1)
+}
+
+func evalTypeArgs(t *testing.T, fSet *token.FileSet, pkg *types.Package, expr string) []types.Type {
+	if len(expr) == 0 {
+		return nil
+	}
+	args := strings.Split(expr, ",")
+	targs := make([]types.Type, 0, len(args))
+	for _, astr := range args {
+		tv, err := types.Eval(fSet, pkg, 0, astr)
+		if err != nil {
+			t.Fatalf("Eval(%s) failed: %v", astr, err)
+		}
+		targs = append(targs, tv.Type)
+	}
+	return targs
 }
 
 func TestCollector_CrossPackage(t *testing.T) {
@@ -408,11 +917,11 @@ func TestCollector_CrossPackage(t *testing.T) {
 
 	c := Collector{
 		TContext:  types.NewContext(),
-		Info:      f.Info,
 		Instances: &PackageInstanceSets{},
 	}
-	c.Scan(barPkg, barFile)
-	c.Scan(fooPkg, fooFile)
+	c.Scan(f.Info, barPkg, barFile)
+	c.Scan(f.Info, fooPkg, fooFile)
+	c.Finish()
 
 	inst := func(pkg *types.Package, name string, tArg types.BasicKind) Instance {
 		return Instance{
@@ -491,8 +1000,10 @@ func TestResolver_SubstituteSelection(t *testing.T) {
 			file := f.Parse("test.go", test.src)
 			info, pkg := f.Check("pkg/test", file)
 
-			method := srctesting.LookupObj(pkg, "g.Method").(*types.Func).Type().(*types.Signature)
-			resolver := NewResolver(nil, ToSlice(method.RecvTypeParams()), []types.Type{srctesting.LookupObj(pkg, "x").Type()})
+			resolver := NewResolver(nil, Instance{
+				Object: srctesting.LookupObj(pkg, "g.Method"),
+				TArgs:  []types.Type{srctesting.LookupObj(pkg, "x").Type()},
+			})
 
 			if l := len(info.Selections); l != 1 {
 				t.Fatalf("Got: %d selections. Want: 1", l)

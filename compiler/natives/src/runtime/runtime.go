@@ -1,11 +1,8 @@
 //go:build js
-// +build js
 
 package runtime
 
-import (
-	"github.com/gopherjs/gopherjs/js"
-)
+import "github.com/gopherjs/gopherjs/js"
 
 const (
 	GOOS     = "js"
@@ -388,7 +385,7 @@ func ReadMemStats(m *MemStats) {
 	// lead to silent unexpected behaviors. Consider panicing explicitly.
 }
 
-func SetFinalizer(x, f interface{}) {
+func SetFinalizer(x, f any) {
 	// TODO(nevkontakte): This function is effectively unimplemented and may
 	// lead to silent unexpected behaviors. Consider panicing explicitly.
 }
@@ -473,7 +470,7 @@ func NumCgoCall() int64 {
 	return 0
 }
 
-func KeepAlive(interface{}) {}
+func KeepAlive(any) {}
 
 // An errorString represents a runtime error described by a single string.
 type errorString string

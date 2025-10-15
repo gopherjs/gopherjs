@@ -35,7 +35,7 @@ func init() {
 
 // Flags contains flags for currently supported experiments.
 type Flags struct {
-	Generics bool `flag:"generics"`
+	// e.g. Generics bool `flag:"generics"`
 }
 
 // parseFlags parses the `raw` flags string and populates flag values in the

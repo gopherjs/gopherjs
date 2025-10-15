@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package js
 
@@ -66,12 +65,12 @@ func (f Func) Release() {
 	f.Value = Null()
 }
 
-func FuncOf(fn func(this Value, args []Value) interface{}) Func {
+func FuncOf(fn func(this Value, args []Value) any) Func {
 	// Existence of a wrapped function means that an external event may awaken the
 	// program and we need to suppress deadlock detection.
 	js.Global.Set("$exportedFunctions", js.Global.Get("$exportedFunctions").Int()+1)
 	return Func{
-		Value: objectToValue(js.MakeFunc(func(this *js.Object, args []*js.Object) interface{} {
+		Value: objectToValue(js.MakeFunc(func(this *js.Object, args []*js.Object) any {
 			vargs := make([]Value, len(args))
 			for i, a := range args {
 				vargs[i] = objectToValue(a)
@@ -132,7 +131,7 @@ func getValueType(obj *js.Object) Type {
 	return TypeObject
 }
 
-func ValueOf(x interface{}) Value {
+func ValueOf(x any) Value {
 	switch x := x.(type) {
 	case Value:
 		return x
@@ -140,7 +139,7 @@ func ValueOf(x interface{}) Value {
 		return x.Value
 	case nil:
 		return Null()
-	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, unsafe.Pointer, string, map[string]interface{}, []interface{}:
+	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, unsafe.Pointer, string, map[string]any, []any:
 		return objectToValue(id.Invoke(x))
 	default:
 		panic("ValueOf: invalid value")
@@ -162,8 +161,8 @@ func (v Value) Bool() bool {
 }
 
 // convertArgs converts arguments into values for GopherJS arguments.
-func convertArgs(args ...interface{}) []interface{} {
-	newArgs := []interface{}{}
+func convertArgs(args ...any) []any {
+	newArgs := []any{}
 	for _, arg := range args {
 		v := ValueOf(arg)
 		newArgs = append(newArgs, v.internal())
@@ -187,7 +186,7 @@ func convertJSError() {
 	panic(err)
 }
 
-func (v Value) Call(m string, args ...interface{}) Value {
+func (v Value) Call(m string, args ...any) Value {
 	if vType := v.Type(); vType != TypeObject && vType != TypeFunction {
 		panic(&ValueError{"Value.Call", vType})
 	}
@@ -230,7 +229,7 @@ func (v Value) InstanceOf(t Value) bool {
 	return instanceOf.Invoke(v.internal(), t.internal()).Bool()
 }
 
-func (v Value) Invoke(args ...interface{}) Value {
+func (v Value) Invoke(args ...any) Value {
 	if vType := v.Type(); vType != TypeFunction {
 		panic(&ValueError{"Value.Invoke", vType})
 	}
@@ -245,7 +244,7 @@ func (v Value) Length() int {
 	return v.internal().Length()
 }
 
-func (v Value) New(args ...interface{}) Value {
+func (v Value) New(args ...any) Value {
 	defer func() {
 		err := recover()
 		if err == nil {
@@ -262,14 +261,14 @@ func (v Value) New(args ...interface{}) Value {
 	return objectToValue(v.internal().New(convertArgs(args...)...))
 }
 
-func (v Value) Set(p string, x interface{}) {
+func (v Value) Set(p string, x any) {
 	if vType := v.Type(); !vType.isObject() {
 		panic(&ValueError{"Value.Set", vType})
 	}
 	v.internal().Set(p, convertArgs(x)[0])
 }
 
-func (v Value) SetIndex(i int, x interface{}) {
+func (v Value) SetIndex(i int, x any) {
 	if vType := v.Type(); !vType.isObject() {
 		panic(&ValueError{"Value.SetIndex", vType})
 	}

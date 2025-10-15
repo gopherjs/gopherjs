@@ -23,18 +23,20 @@ import (
 	"text/template"
 	"time"
 
-	gbuild "github.com/gopherjs/gopherjs/build"
-	"github.com/gopherjs/gopherjs/build/cache"
-	"github.com/gopherjs/gopherjs/compiler"
-	"github.com/gopherjs/gopherjs/internal/errorList"
-	"github.com/gopherjs/gopherjs/internal/sourcemapx"
-	"github.com/gopherjs/gopherjs/internal/sysutil"
 	"github.com/neelance/sourcemap"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/term"
+
+	gbuild "github.com/gopherjs/gopherjs/build"
+	"github.com/gopherjs/gopherjs/build/cache"
+	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/gopherjs/gopherjs/compiler/incjs"
+	"github.com/gopherjs/gopherjs/internal/errlist"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
+	"github.com/gopherjs/gopherjs/internal/sysutil"
 )
 
 var currentDirectory string
@@ -106,10 +108,10 @@ func main() {
 
 			err = func() error {
 				// Handle "gopherjs build [files]" ad-hoc package mode.
-				if len(args) > 0 && (strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".inc.js")) {
+				if len(args) > 0 && (strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], incjs.Ext)) {
 					for _, arg := range args {
-						if !strings.HasSuffix(arg, ".go") && !strings.HasSuffix(arg, ".inc.js") {
-							return fmt.Errorf("named files must be .go or .inc.js files")
+						if !strings.HasSuffix(arg, ".go") && !strings.HasSuffix(arg, incjs.Ext) {
+							return fmt.Errorf("named files must be .go or %s files", incjs.Ext)
 						}
 					}
 					if pkgObj == "" {
@@ -268,7 +270,7 @@ func main() {
 		options.BuildTags = strings.Fields(tags)
 		lastSourceArg := 0
 		for {
-			if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {
+			if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], incjs.Ext)) {
 				break
 			}
 			lastSourceArg++
@@ -758,7 +760,7 @@ func (f *fakeFile) IsDir() bool {
 	return false
 }
 
-func (f *fakeFile) Sys() interface{} {
+func (f *fakeFile) Sys() any {
 	return nil
 }
 
@@ -768,7 +770,7 @@ func handleError(err error, options *gbuild.Options, browserErrors *bytes.Buffer
 	switch err := err.(type) {
 	case nil:
 		return 0
-	case errorList.ErrorList:
+	case errlist.ErrorList:
 		for _, entry := range err {
 			printError(entry, options, browserErrors)
 		}

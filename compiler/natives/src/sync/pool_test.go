@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package sync_test
 
@@ -17,7 +16,7 @@ func TestPool(t *testing.T) {
 	p.Put("a")
 	p.Put("b")
 
-	want := []interface{}{"b", "a", nil}
+	want := []any{"b", "a", nil}
 	for i := range want {
 		got := p.Get()
 		if got != want[i] {

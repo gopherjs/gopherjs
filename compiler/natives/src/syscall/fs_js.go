@@ -2,9 +2,7 @@
 
 package syscall
 
-import (
-	"syscall/js"
-)
+import "syscall/js"
 
 // fsCall emulates a file system-related syscall via a corresponding NodeJS fs
 // API.
@@ -12,14 +10,14 @@ import (
 // This version is similar to the upstream, but it gracefully handles missing fs
 // methods (allowing for smaller prelude) and removes a workaround for an
 // obsolete NodeJS version.
-func fsCall(name string, args ...interface{}) (js.Value, error) {
+func fsCall(name string, args ...any) (js.Value, error) {
 	type callResult struct {
 		val js.Value
 		err error
 	}
 
 	c := make(chan callResult, 1)
-	f := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+	f := js.FuncOf(func(this js.Value, args []js.Value) any {
 		var res callResult
 
 		// Check that args has at least one element, then check both IsUndefined() and IsNull() on

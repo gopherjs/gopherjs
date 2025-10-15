@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package http_test
 
@@ -10,4 +9,9 @@ func TestTimeoutHandlerSuperfluousLogs(t *testing.T) {
 	// bug GopherJS generates "Foo.func1.func2". Otherwise the test works as
 	// expected.
 	t.Skip("GopherJS uses different synthetic function names.")
+}
+
+func TestHTTP2WriteDeadlineExtendedOnNewRequest(t *testing.T) {
+	// Test depends on httptest.NewUnstartedServer
+	t.Skip("Network access not supported by GopherJS.")
 }

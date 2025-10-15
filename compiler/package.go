@@ -14,7 +14,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
-	"github.com/gopherjs/gopherjs/internal/errorList"
+	"github.com/gopherjs/gopherjs/internal/errlist"
 	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 )
 
@@ -38,7 +38,7 @@ type pkgContext struct {
 	indentation  int
 	minify       bool
 	fileSet      *token.FileSet
-	errList      errorList.ErrorList
+	errList      errlist.ErrorList
 	instanceSet  *typeparams.PackageInstanceSets
 }
 
@@ -264,9 +264,14 @@ func PrepareAllSources(allSources []*sources.Sources, importer sources.Importer,
 	// Collect all the generic type instances from all the packages.
 	// This must be done for all sources prior to any analysis.
 	instances := &typeparams.PackageInstanceSets{}
-	for _, srcs := range allSources {
-		srcs.CollectInstances(tContext, instances)
+	tc := &typeparams.Collector{
+		TContext:  tContext,
+		Instances: instances,
 	}
+	for _, srcs := range allSources {
+		srcs.CollectInstances(tc)
+	}
+	tc.Finish()
 
 	// Analyze the package to determine type parameters instances, blocking,
 	// and other type information. This will not populate the information.
@@ -324,11 +329,17 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 			if !field.Exported() {
 				pkgPath = field.Pkg().Path()
 			}
-			fields[i] = fmt.Sprintf(`{prop: "%s", name: %s, embedded: %t, exported: %t, typ: %s, tag: %s}`, fieldName(t, i), encodeString(field.Name()), field.Anonymous(), field.Exported(), fc.typeName(field.Type()), encodeString(t.Tag(i)))
+			ft := fc.fieldType(t, i)
+			fields[i] = fmt.Sprintf(`{prop: "%s", name: %s, embedded: %t, exported: %t, typ: %s, tag: %s}`,
+				fieldName(t, i), encodeString(field.Name()), field.Anonymous(), field.Exported(), fc.typeName(ft), encodeString(t.Tag(i)))
 		}
 		return fmt.Sprintf(`"%s", [%s]`, pkgPath, strings.Join(fields, ", "))
 	case *types.TypeParam:
-		err := bailout(fmt.Errorf(`%v has unexpected generic type parameter %T`, ty, ty))
+		tr := fc.typeResolver.Substitute(ty)
+		if tr != ty {
+			return fc.initArgs(tr)
+		}
+		err := bailout(fmt.Errorf(`"%v" has unexpected generic type parameter %T`, ty, ty))
 		panic(err)
 	default:
 		err := bailout(fmt.Errorf("%v has unexpected type %T", ty, ty))

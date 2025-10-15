@@ -3,18 +3,48 @@
 package cache
 
 import (
+	"compress/gzip"
 	"crypto/sha256"
+	"encoding/gob"
 	"fmt"
 	"go/build"
-	"go/types"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"time"
 
-	"github.com/gopherjs/gopherjs/compiler"
 	log "github.com/sirupsen/logrus"
 )
+
+// Cacheable defines methods to serialize and deserialize cachable objects.
+// This object should represent a package's build artifact.
+//
+// The encode and decode functions are typically wrappers around gob.Encoder.Encode
+// and gob.Decoder.Decode, but other formats are possible as well, the same way
+// as FileSet.Write and FileSet.Read work with any encode/decode functions.
+type Cacheable interface {
+	Write(encode func(any) error) error
+	Read(decode func(any) error) error
+}
+
+// Cache defines methods to store and load cacheable objects.
+type Cache interface {
+
+	// Store stores the package with the given import path in the cache.
+	// Any error inside this method will cause the cache not to be persisted.
+	//
+	// The passed in buildTime is used to determine if the package is out-of-date when reloaded.
+	// Typically it should be set to the srcModTime or time.Now().
+	Store(c Cacheable, importPath string, buildTime time.Time) bool
+
+	// Load reads a previously cached package at the given import path,
+	// if it was previously stored.
+	//
+	// The loaded package would have been built with the same configuration as
+	// the build cache was.
+	Load(c Cacheable, importPath string, srcModTime time.Time) bool
+}
 
 // cacheRoot is the base path for GopherJS's own build cache.
 //
@@ -50,6 +80,8 @@ func Clear() error {
 	return os.RemoveAll(cacheRoot)
 }
 
+var _ Cache = (*BuildCache)(nil)
+
 // BuildCache manages build artifacts that are cached for incremental builds.
 //
 // Cache is designed to be non-durable: any store and load errors are swallowed
@@ -57,32 +89,38 @@ func Clear() error {
 // misses. Nil pointer to BuildCache is valid and simply disables caching.
 //
 // BuildCache struct fields represent build parameters which change invalidates
-// the cache. For example, any artifacts that were cached for a minified build
-// must not be reused for a non-minified build. GopherJS version change also
+// the cache. For example, any artifacts that were cached for a Linux build
+// must not be reused for a non-Linux build. GopherJS version change also
 // invalidates the cache. It is callers responsibility to ensure that artifacts
-// passed the StoreArchive function were generated with the same build
+// passed the Store function were generated with the same build
 // parameters as the cache is configured.
 //
 // There is no upper limit for the total cache size. It can be cleared
 // programmatically via the Clear() function, or the user can just delete the
 // directory if it grows too big.
 //
+// The cached files are gzip compressed, therefore each file uses the gzip
+// checksum as a basic integrity check performed after reading the file.
+//
 // TODO(nevkontakte): changes in the input sources or dependencies doesn't
 // currently invalidate the cache. This is handled at the higher level by
-// checking cached archive timestamp against loaded package modification time.
-//
-// TODO(nevkontakte): this cache could benefit from checksum integrity checks.
+// checking cached package timestamp against loaded package modification time.
 type BuildCache struct {
 	GOOS      string
 	GOARCH    string
 	GOROOT    string
 	GOPATH    string
 	BuildTags []string
-	Minify    bool
-	// When building for tests, import path of the package being tested. The
-	// package under test is built with *_test.go sources included, and since it
-	// may be imported by other packages in the binary we can't reuse the "normal"
-	// cache.
+
+	// Version should be set to compiler.Version
+	Version string
+
+	// TestedPackage is the import path of the package being tested, or
+	// empty when not building for tests. The package under test is built
+	// with *_test.go sources included so we should always skip reading
+	// and writing cache in that case. Since we are caching prior to
+	// type-checking for generics, any package importing the package under
+	// test should be unaffected.
 	TestedPackage string
 }
 
@@ -90,84 +128,148 @@ func (bc BuildCache) String() string {
 	return fmt.Sprintf("%#v", bc)
 }
 
-// StoreArchive compiled archive in the cache. Any error inside this method
-// will cause the cache not to be persisted.
-//
-// The passed in buildTime is used to determine if the archive is out-of-date when reloaded.
-// Typically it should be set to the srcModTime or time.Now().
-func (bc *BuildCache) StoreArchive(a *compiler.Archive, buildTime time.Time) {
+func (bc *BuildCache) isTestPackage(importPath string) bool {
+	return bc != nil && len(importPath) > 0 &&
+		(importPath == bc.TestedPackage || importPath == bc.TestedPackage+"_test")
+}
+
+func (bc *BuildCache) Store(c Cacheable, importPath string, buildTime time.Time) bool {
 	if bc == nil {
-		return // Caching is disabled.
+		return false // Caching is disabled.
 	}
-	path := cachedPath(bc.archiveKey(a.ImportPath))
+	if bc.isTestPackage(importPath) {
+		log.Infof("Skipped storing cache of test package for %q.", importPath)
+		return false // Don't use cache when building the package under test.
+	}
+
+	start := time.Now()
+	path := cachedPath(bc.packageKey(importPath))
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		log.Warningf("Failed to create build cache directory: %v", err)
-		return
+		return false
 	}
-	// Write the archive in a temporary file first to avoid concurrency errors.
+	// Write the package in a temporary file first to avoid concurrency errors.
 	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path))
 	if err != nil {
 		log.Warningf("Failed to temporary build cache file: %v", err)
-		return
+		return false
 	}
 	defer f.Close()
-	if err := compiler.WriteArchive(a, buildTime, f); err != nil {
-		log.Warningf("Failed to write build cache archive %q: %v", a, err)
-		// Make sure we don't leave a half-written archive behind.
+	if err := bc.serialize(c, buildTime, f); err != nil {
+		log.Warningf("Failed to write build cache package %q: %v", importPath, err)
+		// Make sure we don't leave a half-written package behind.
 		os.Remove(f.Name())
-		return
+		return false
 	}
 	f.Close()
 	// Rename fully written file into its permanent name.
 	if err := os.Rename(f.Name(), path); err != nil {
-		log.Warningf("Failed to rename build cache archive to %q: %v", path, err)
+		log.Warningf("Failed to rename build cache package %q to %q: %v", importPath, path, err)
+		return false
 	}
-	log.Infof("Successfully stored build archive %q as %q.", a, path)
+	dur := time.Since(start).Round(time.Millisecond)
+	log.Infof("Successfully stored build package %q as %q (%v).", importPath, path, dur)
+	return true
 }
 
-// LoadArchive returns a previously cached archive of the given package or nil
-// if it wasn't previously stored.
-//
-// The returned archive would have been built with the same configuration as
-// the build cache was.
-//
-// The imports map is used to resolve package dependencies and may modify the
-// map to include the package from the read archive. See [gcexportdata.Read].
-func (bc *BuildCache) LoadArchive(importPath string, srcModTime time.Time, imports map[string]*types.Package) *compiler.Archive {
+func (bc *BuildCache) Load(c Cacheable, importPath string, srcModTime time.Time) bool {
 	if bc == nil {
-		return nil // Caching is disabled.
+		return false // Caching is disabled.
 	}
-	path := cachedPath(bc.archiveKey(importPath))
+	if bc.isTestPackage(importPath) {
+		log.Infof("Skipped loading cache of test package for %q.", importPath)
+		return false // Don't use cache when building the package under test.
+	}
+
+	start := time.Now()
+	path := cachedPath(bc.packageKey(importPath))
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Infof("No cached package archive for %q.", importPath)
+			log.Infof("No cached package for %q at %q.", importPath, path)
 		} else {
-			log.Warningf("Failed to open cached package archive for %q: %v", importPath, err)
+			log.Warningf("Failed to open cached package for %q at %q: %v", importPath, path, err)
 		}
-		return nil // Cache miss.
+		return false // Cache miss.
 	}
 	defer f.Close()
-	a, buildTime, err := compiler.ReadArchive(importPath, f, srcModTime, imports)
+	buildTime, old, err := bc.deserialize(c, srcModTime, f)
 	if err != nil {
-		log.Warningf("Failed to read cached package archive for %q: %v", importPath, err)
-		return nil // Invalid/corrupted archive, cache miss.
+		log.Warningf("Failed to read cached package for %q at %q: %v", importPath, path, err)
+		return false // Invalid/corrupted package, cache miss.
 	}
-	if a == nil {
-		log.Infof("Found out-of-date package archive for %q, built at %v.", importPath, buildTime)
-		return nil // Archive is out-of-date, cache miss.
+	if old {
+		log.Infof("Found out-of-date package for %q, built at %v.", importPath, buildTime)
+		return false // Cache miss, package is out-of-date.
 	}
-	log.Infof("Found cached package archive for %q, built at %v.", importPath, buildTime)
-	return a
+	dur := time.Since(start).Round(time.Millisecond)
+	log.Infof("Found cached package for %q, built at %v (%v).", importPath, buildTime, dur)
+	return true
+}
+
+func (bc *BuildCache) serialize(c Cacheable, buildTime time.Time, w io.Writer) (err error) {
+	zw := gzip.NewWriter(w)
+	defer func() {
+		// This close flushes the gzip but does not close the given writer.
+		if closeErr := zw.Close(); err == nil {
+			err = closeErr
+		}
+	}()
+
+	ge := gob.NewEncoder(zw)
+	if err := ge.Encode(buildTime); err != nil {
+		return err
+	}
+	return c.Write(ge.Encode)
+}
+
+func (bc *BuildCache) deserialize(c Cacheable, srcModTime time.Time, r io.Reader) (buildTime time.Time, old bool, err error) {
+	zr, err := gzip.NewReader(r)
+	if err != nil {
+		return buildTime, false, err
+	}
+	defer func() {
+		// This close checks the gzip checksum but does not close the given reader.
+		if closeErr := zr.Close(); err == nil {
+			err = closeErr
+		}
+	}()
+
+	gd := gob.NewDecoder(zr)
+	if err := gd.Decode(&buildTime); err != nil {
+		return buildTime, false, err
+	}
+	if srcModTime.After(buildTime) {
+		return buildTime, true, nil // Package is out-of-date, cache miss.
+	}
+	return buildTime, false, c.Read(gd.Decode)
 }
 
 // commonKey returns a part of the cache key common for all artifacts generated
 // under a given BuildCache configuration.
 func (bc *BuildCache) commonKey() string {
-	return fmt.Sprintf("%#v + %v", *bc, compiler.Version)
+	type commonKey struct {
+		GOOS      string
+		GOARCH    string
+		GOROOT    string
+		GOPATH    string
+		BuildTags []string
+		Version   string
+	}
+	// These are the values that affect the files that are included into a
+	// package's source via build constraints.
+	ck := commonKey{
+		GOOS:      bc.GOOS,
+		GOARCH:    bc.GOARCH,
+		GOROOT:    bc.GOROOT,
+		GOPATH:    bc.GOPATH,
+		BuildTags: bc.BuildTags,
+		Version:   bc.Version,
+	}
+	return fmt.Sprintf("%#v", ck)
 }
 
-// archiveKey returns a full cache key for a package's compiled archive.
-func (bc *BuildCache) archiveKey(importPath string) string {
-	return path.Join("archive", bc.commonKey(), importPath)
+// packageKey returns a full cache key for a package's cache.
+func (bc *BuildCache) packageKey(importPath string) string {
+	return path.Join("package", bc.commonKey(), importPath)
 }

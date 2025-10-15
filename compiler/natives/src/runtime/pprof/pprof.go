@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package pprof
 
@@ -11,7 +10,7 @@ import (
 type Profile struct {
 	name  string
 	mu    sync.Mutex
-	m     map[interface{}][]uintptr
+	m     map[any][]uintptr
 	count func() int
 	write func(io.Writer, int) error
 }
@@ -28,10 +27,10 @@ func (p *Profile) Name() string {
 	return ""
 }
 
-func (p *Profile) Add(value interface{}, skip int) {
+func (p *Profile) Add(value any, skip int) {
 }
 
-func (p *Profile) Remove(value interface{}) {
+func (p *Profile) Remove(value any) {
 }
 
 func StartCPUProfile(w io.Writer) error {

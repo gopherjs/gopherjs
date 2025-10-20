@@ -23,7 +23,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/neelance/sourcemap"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -651,8 +650,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 				}
 
 				sourceMapFilter := &sourcemapx.Filter{Writer: buf}
-				m := &sourcemap.Map{File: base + ".js"}
-				sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
+				s.EnableMapping(sourceMapFilter, base+`.js`)
 
 				deps, err := compiler.ImportDependencies(archive, s.ImportResolverFor(""))
 				if err != nil {
@@ -663,7 +661,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 				}
 
 				mapBuf := new(bytes.Buffer)
-				m.WriteTo(mapBuf)
+				sourceMapFilter.WriteMappingTo(mapBuf)
 				buf.WriteString("//# sourceMappingURL=" + base + ".js.map\n")
 				fs.sourceMaps[name+".map"] = mapBuf.Bytes()
 

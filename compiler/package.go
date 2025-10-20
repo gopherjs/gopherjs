@@ -222,6 +222,7 @@ func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Ar
 		FileSet:      srcs.FileSet,
 		Minified:     minify,
 		GoLinknames:  srcs.GoLinknames,
+		IncJSCode:    srcs.JSFiles,
 	}, nil
 }
 

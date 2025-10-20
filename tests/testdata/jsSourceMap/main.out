@@ -1,0 +1,4 @@
+doJSThing	(gopherjs/tests/testdata/jsSourceMap/helper/helper.inc.js:4)
+helper.DoGoThing	(gopherjs/tests/testdata/jsSourceMap/helper/helper.go:6)
+main.main	(gopherjs/tests/testdata/jsSourceMap/main.go:12)
+$goroutine	(gopherjs/compiler/prelude/goroutines.js:134)

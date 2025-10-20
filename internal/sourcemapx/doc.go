@@ -1,5 +1,7 @@
 // Package sourcemapx contains utilities for passing source map information
-// around, intended to work with github.com/neelance/sourcemap.
+// around, intended to work with a [neelance sourcemap].
+//
+// # Mapping Go source coude
 //
 // GopherJS code generator outputs hints about correspondence between the
 // generated code and original sources inline. Such hints are marked by the
@@ -13,7 +15,7 @@
 // The hinting mechanism is designed to be extensible, the Hint type able to
 // wrap different types containing different information:
 //
-//   - go/token.Pos indicates position in the original source the current
+//   - [go/token.Pos] indicates position in the original source the current
 //     location in the generated code corresponds to.
 //   - Identifier maps a JS identifier to the original Go identifier it
 //     represents.
@@ -23,4 +25,14 @@
 // Filter type is used to extract the hints from the written code stream and
 // pass them into source map generator. It also ensures that the encoded inline
 // hints don't make it into the final output, since they are not valid JS.
+//
+// # Mapping JS source code
+//
+// The filter also provides a WriteJS methods that can be used to write pure JS
+// code (without hints) through the filter. While it is passing through the filter,
+// it will produce a source map for the JS code and pass that source map
+// information to a [neelance sourcemap]. This uses [esbuild]
+//
+// [neelance sourcemap]:github.com/neelance/sourcemap
+// [esbuild]: https://esbuild.github.io/
 package sourcemapx

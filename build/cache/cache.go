@@ -30,7 +30,6 @@ type Cacheable interface {
 
 // Cache defines methods to store and load cacheable objects.
 type Cache interface {
-
 	// Store stores the package with the given import path in the cache.
 	// Any error inside this method will cause the cache not to be persisted.
 	//

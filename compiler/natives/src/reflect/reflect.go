@@ -4,7 +4,6 @@ package reflect
 
 import (
 	"errors"
-	"runtime"
 	"strconv"
 	"unsafe"
 
@@ -1771,38 +1770,6 @@ func stringsLastIndex(s string, c byte) int {
 
 func stringsHasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
-}
-
-func valueMethodName() string {
-	var pc [5]uintptr
-	n := runtime.Callers(1, pc[:])
-	frames := runtime.CallersFrames(pc[:n])
-	valueTyp := TypeOf(Value{})
-	var frame runtime.Frame
-	for more := true; more; {
-		frame, more = frames.Next()
-		name := frame.Function
-		// Function name extracted from the call stack can be different from
-		// vanilla Go, so is not prefixed by "reflect.Value." as needed by the original.
-		// See https://cs.opensource.google/go/go/+/refs/tags/go1.19.13:src/reflect/value.go;l=173-191
-		// This workaround may become obsolete after
-		// https://github.com/gopherjs/gopherjs/issues/1085 is resolved.
-
-		methodName := name
-		if idx := stringsLastIndex(name, '.'); idx >= 0 {
-			methodName = name[idx+1:]
-		}
-
-		// Since function name in the call stack doesn't contain receiver name,
-		// we are looking for the first exported function name that matches a
-		// known Value method.
-		if _, ok := valueTyp.MethodByName(methodName); ok {
-			if len(methodName) > 0 && 'A' <= methodName[0] && methodName[0] <= 'Z' {
-				return `reflect.Value.` + methodName
-			}
-		}
-	}
-	return "unknown method"
 }
 
 func verifyNotInHeapPtr(p uintptr) bool {

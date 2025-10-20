@@ -48,9 +48,6 @@ jobs:
   windows_smoke:
     name: Window Smoke
     runs-on: windows-latest
-    env:
-      # Windows does not support source maps.
-      SOURCE_MAP_SUPPORT: false
     steps:
       - uses: actions/checkout@v4
         with:

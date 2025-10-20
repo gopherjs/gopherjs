@@ -35,6 +35,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/incjs"
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/internal/errlist"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 	"github.com/gopherjs/gopherjs/internal/testmain"
 )
 
@@ -1240,9 +1241,9 @@ func (s *Session) ImportResolverFor(srcDir string) func(string) (*compiler.Archi
 	}
 }
 
-// SourceMappingCallback returns a call back for compiler.SourceMapFilter
+// SourceMappingCallback returns a callback for [github.com/gopherjs/gopherjs/compiler.SourceMapFilter]
 // configured for the current build session.
-func (s *Session) SourceMappingCallback(m *sourcemap.Map) func(generatedLine, generatedColumn int, originalPos token.Position) {
+func (s *Session) SourceMappingCallback(m *sourcemap.Map) func(generatedLine, generatedColumn int, originalPos token.Position, originalName string) {
 	return NewMappingCallback(m, s.xctx.Env().GOROOT, s.xctx.Env().GOPATH, s.options.MapToLocalDisk)
 }
 
@@ -1257,7 +1258,7 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 	}
 	defer codeFile.Close()
 
-	sourceMapFilter := &compiler.SourceMapFilter{Writer: codeFile}
+	sourceMapFilter := &sourcemapx.Filter{Writer: codeFile}
 	if s.options.CreateMapFile {
 		m := &sourcemap.Map{File: filepath.Base(pkgObj)}
 		mapFile, err := os.Create(pkgObj + ".map")
@@ -1282,27 +1283,33 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 }
 
 // NewMappingCallback creates a new callback for source map generation.
-func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localMap bool) func(generatedLine, generatedColumn int, originalPos token.Position) {
-	return func(generatedLine, generatedColumn int, originalPos token.Position) {
-		if !originalPos.IsValid() {
-			m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn})
-			return
+func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localMap bool) func(generatedLine, generatedColumn int, originalPos token.Position, originalName string) {
+	return func(generatedLine, generatedColumn int, originalPos token.Position, originalName string) {
+		mapping := &sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn}
+
+		if originalPos.IsValid() {
+			file := originalPos.Filename
+
+			switch hasGopathPrefix, prefixLen := hasGopathPrefix(file, gopath); {
+			case localMap:
+				// no-op:  keep file as-is
+			case hasGopathPrefix:
+				file = filepath.ToSlash(file[prefixLen+4:])
+			case strings.HasPrefix(file, goroot):
+				file = filepath.ToSlash(file[len(goroot)+4:])
+			default:
+				file = filepath.Base(file)
+			}
+			mapping.OriginalFile = file
+			mapping.OriginalLine = originalPos.Line
+			mapping.OriginalColumn = originalPos.Column
 		}
 
-		file := originalPos.Filename
-
-		switch hasGopathPrefix, prefixLen := hasGopathPrefix(file, gopath); {
-		case localMap:
-			// no-op:  keep file as-is
-		case hasGopathPrefix:
-			file = filepath.ToSlash(file[prefixLen+4:])
-		case strings.HasPrefix(file, goroot):
-			file = filepath.ToSlash(file[len(goroot)+4:])
-		default:
-			file = filepath.Base(file)
+		if originalName != "" {
+			mapping.OriginalName = originalName
 		}
 
-		m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: originalPos.Line, OriginalColumn: originalPos.Column})
+		m.AddMapping(mapping)
 	}
 }
 

@@ -6,8 +6,6 @@
 package compiler
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"go/token"
 	"go/types"
@@ -17,6 +15,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 )
 
 var (
@@ -121,7 +120,13 @@ func ImportDependencies(archive *Archive, importPkg func(string) (*Archive, erro
 	return deps, nil
 }
 
-func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) error {
+type dceInfo struct {
+	decl         *Decl
+	objectFilter string
+	methodFilter string
+}
+
+func WriteProgramCode(pkgs []*Archive, w *sourcemapx.Filter, goVersion string) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified
 
@@ -147,10 +152,10 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	}
 	dceSelection := sel.AliveDecls()
 
-	if _, err := w.WriteF(false, "\"use strict\";\n(function() {\n\n"); err != nil {
+	if _, err := writeF(w, false, "\"use strict\";\n(function() {\n\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(false, "var $goVersion = %q;\n", goVersion); err != nil {
+	if _, err := writeF(w, false, "var $goVersion = %q;\n", goVersion); err != nil {
 		return err
 	}
 
@@ -161,7 +166,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	if _, err := io.WriteString(w, preludeJS); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(false, "\n"); err != nil {
+	if _, err := writeF(w, false, "\n"); err != nil {
 		return err
 	}
 
@@ -172,41 +177,41 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 		}
 	}
 
-	if _, err := w.WriteF(false, "$callForAllPackages(\"$finishSetup\");\n"); err != nil {
+	if _, err := writeF(w, false, "$callForAllPackages(\"$finishSetup\");\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(false, "$synthesizeMethods();\n"); err != nil {
+	if _, err := writeF(w, false, "$synthesizeMethods();\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(false, "$callForAllPackages(\"$initLinknames\");\n"); err != nil {
+	if _, err := writeF(w, false, "$callForAllPackages(\"$initLinknames\");\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(false, "var $mainPkg = $packages[\"%s\"];\n", mainPkg.ImportPath); err != nil {
+	if _, err := writeF(w, false, "var $mainPkg = $packages[\"%s\"];\n", mainPkg.ImportPath); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(false, "$packages[\"runtime\"].$init();\n"); err != nil {
+	if _, err := writeF(w, false, "$packages[\"runtime\"].$init();\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(false, "$go($mainPkg.$init, []);\n"); err != nil {
+	if _, err := writeF(w, false, "$go($mainPkg.$init, []);\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(false, "$flushConsole();\n"); err != nil {
+	if _, err := writeF(w, false, "$flushConsole();\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(false, "\n}).call(this);\n"); err != nil {
+	if _, err := writeF(w, false, "\n}).call(this);\n"); err != nil {
 		return err
 	}
 	return nil
 }
 
-func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.GoLinknameSet, minify bool, w *SourceMapFilter) error {
+func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.GoLinknameSet, minify bool, w *sourcemapx.Filter) error {
 	if w.MappingCallback != nil && pkg.FileSet != nil {
-		w.fileSet = pkg.FileSet
+		w.FileSet = pkg.FileSet
 	}
 	if _, err := w.Write(pkg.IncJSCode); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(minify, "$packages[\"%s\"] = (function() {\n", pkg.ImportPath); err != nil {
+	if _, err := writeF(w, minify, "$packages[\"%s\"] = (function() {\n", pkg.ImportPath); err != nil {
 		return err
 	}
 	vars := []string{"$pkg = {}", "$init"}
@@ -218,7 +223,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 		}
 	}
 	// Write variable names
-	if _, err := w.WriteF(minify, "\tvar %s;\n", strings.Join(vars, ", ")); err != nil {
+	if _, err := writeF(w, minify, "\tvar %s;\n", strings.Join(vars, ", ")); err != nil {
 		return err
 	}
 	// Write imports
@@ -243,7 +248,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 	// The following parts have to be run after all packages have been added
 	// to handle generics that use named types defined in a package that
 	// is defined after this package has been defined.
-	if _, err := w.WriteF(minify, "\t$pkg.$finishSetup = function() {\n"); err != nil {
+	if _, err := writeF(w, minify, "\t$pkg.$finishSetup = function() {\n"); err != nil {
 		return err
 	}
 
@@ -284,11 +289,11 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			// callers via $linkname object (declared in prelude). We are not using
 			// $pkg to avoid clashes with exported symbols.
 			if recv, method, ok := d.LinkingName.IsMethod(); ok {
-				if _, err := w.WriteF(minify, "\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,%t);\n", d.LinkingName.String(), d.NamedRecvType, method, strings.HasPrefix(recv, "*")); err != nil {
+				if _, err := writeF(w, minify, "\t$linknames[%q] = $unsafeMethodToFunction(%v,%q,%t);\n", d.LinkingName.String(), d.NamedRecvType, method, strings.HasPrefix(recv, "*")); err != nil {
 					return err
 				}
 			} else {
-				if _, err := w.WriteF(minify, "\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.RefExpr); err != nil {
+				if _, err := writeF(w, minify, "\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.RefExpr); err != nil {
 					return err
 				}
 			}
@@ -311,26 +316,26 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			lines = append(lines, fmt.Sprintf("\t\t\t%s = $linknames[%q];\n", d.RefExpr, impl.String()))
 		}
 		if len(lines) > 0 {
-			if _, err := w.WriteF(minify, "\t\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, "")); err != nil {
+			if _, err := writeF(w, minify, "\t\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, "")); err != nil {
 				return err
 			}
 		}
 	}
 
 	// Write the end of the `$finishSetup` function.
-	if _, err := w.WriteF(minify, "\t};\n"); err != nil {
+	if _, err := writeF(w, minify, "\t};\n"); err != nil {
 		return err
 	}
 
 	// Write the initialization function that will initialize this package
 	// (e.g. initialize package-level variable value).
-	if _, err := w.WriteF(minify, "\t$init = function() {\n"); err != nil {
+	if _, err := writeF(w, minify, "\t$init = function() {\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(minify, "\t\t$pkg.$init = function() {};\n"); err != nil {
+	if _, err := writeF(w, minify, "\t\t$pkg.$init = function() {};\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(minify, "\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"); err != nil {
+	if _, err := writeF(w, minify, "\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"); err != nil {
 		return err
 	}
 	for _, d := range filteredDecls {
@@ -338,68 +343,27 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			return err
 		}
 	}
-	if _, err := w.WriteF(minify, "\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n"); err != nil {
+	if _, err := writeF(w, minify, "\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(minify, "\t};\n"); err != nil {
+	if _, err := writeF(w, minify, "\t};\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(minify, "\t$pkg.$init = $init;\n"); err != nil {
+	if _, err := writeF(w, minify, "\t$pkg.$init = $init;\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(minify, "\treturn $pkg;\n"); err != nil {
+	if _, err := writeF(w, minify, "\treturn $pkg;\n"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(minify, "})();"); err != nil {
+	if _, err := writeF(w, minify, "})();"); err != nil {
 		return err
 	}
-	if _, err := w.WriteF(false, "\n"); err != nil { // keep this \n even when minified
+	if _, err := writeF(w, false, "\n"); err != nil { // keep this \n even when minified
 		return err
 	}
 	return nil
 }
 
-type SourceMapFilter struct {
-	Writer          io.Writer
-	MappingCallback func(generatedLine, generatedColumn int, originalPos token.Position)
-	line            int
-	column          int
-	fileSet         *token.FileSet
-}
-
-func (f *SourceMapFilter) WriteF(minify bool, format string, args ...any) (n int, err error) {
-	return f.Write(removeWhitespace([]byte(fmt.Sprintf(format, args...)), minify))
-}
-
-func (f *SourceMapFilter) Write(p []byte) (n int, err error) {
-	var n2 int
-	for {
-		i := bytes.IndexByte(p, '\b')
-		w := p
-		if i != -1 {
-			w = p[:i]
-		}
-
-		n2, err = f.Writer.Write(w)
-		n += n2
-		for {
-			i := bytes.IndexByte(w, '\n')
-			if i == -1 {
-				f.column += len(w)
-				break
-			}
-			f.line++
-			f.column = 0
-			w = w[i+1:]
-		}
-
-		if err != nil || i == -1 {
-			return
-		}
-		if f.MappingCallback != nil {
-			f.MappingCallback(f.line+1, f.column, f.fileSet.Position(token.Pos(binary.BigEndian.Uint32(p[i+1:i+5]))))
-		}
-		p = p[i+5:]
-		n += 5
-	}
+func writeF(w io.Writer, minify bool, format string, args ...any) (n int, err error) {
+	return w.Write(removeWhitespace([]byte(fmt.Sprintf(format, args...)), minify))
 }

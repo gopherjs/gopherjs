@@ -2,7 +2,6 @@ package compiler
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -21,6 +20,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 )
 
 // We use this character as a separator in synthetic identifiers instead of a
@@ -71,8 +71,13 @@ func (fc *funcContext) SetPos(pos token.Pos) {
 func (fc *funcContext) writePos() {
 	if fc.posAvailable {
 		fc.posAvailable = false
-		fc.Write([]byte{'\b'})
-		binary.Write(fc, binary.BigEndian, uint32(fc.pos))
+		h := sourcemapx.Hint{}
+		if err := h.Pack(fc.pos); err != nil {
+			panic(bailout(fmt.Errorf("failed to pack source map position: %w", err)))
+		}
+		if _, err := h.WriteTo(fc); err != nil {
+			panic(bailout(fmt.Errorf("failed to write source map hint: %w", err)))
+		}
 	}
 }
 
@@ -354,10 +359,10 @@ func (fc *funcContext) newLitFuncName() string {
 	if fc.instance.Object != nil {
 		if recvType := typesutil.RecvType(fc.sig.Sig); recvType != nil {
 			name.WriteString(recvType.Obj().Name())
-			name.WriteString(midDot)
+			name.WriteString(".")
 		}
 		name.WriteString(fc.instance.Object.Name())
-		name.WriteString(midDot)
+		name.WriteString(".")
 	}
 	fmt.Fprintf(name, "func%d", fc.funcLitCounter)
 	return name.String()
@@ -862,7 +867,7 @@ func getJsTag(tag string) string {
 }
 
 func needsSpace(c byte) bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$'
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$' || c == '\b'
 }
 
 func removeWhitespace(b []byte, minify bool) []byte {
@@ -875,8 +880,9 @@ func removeWhitespace(b []byte, minify bool) []byte {
 	for len(b) > 0 {
 		switch b[0] {
 		case '\b':
-			out = append(out, b[:5]...)
-			b = b[5:]
+			_, length := sourcemapx.ReadHint(b)
+			out = append(out, b[:length]...)
+			b = b[length:]
 			continue
 		case ' ', '\t', '\n':
 			if (!needsSpace(previous) || !needsSpace(b[1])) && !(previous == '-' && b[1] == '-') {

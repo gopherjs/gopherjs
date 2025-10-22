@@ -12,6 +12,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/gopherjs/gopherjs/compiler/incjs"
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
 	"github.com/gopherjs/gopherjs/compiler/prelude"
@@ -65,7 +66,7 @@ type Archive struct {
 	// Compiled package-level symbols.
 	Declarations []*Decl
 	// Concatenated contents of all raw .inc.js of the package.
-	IncJSCode []byte
+	IncJSCode []incjs.File
 	// The file set containing the source code locations for various symbols
 	// (e.g. for sourcemap generation). See [token.FileSet.Write].
 	FileSet *token.FileSet
@@ -120,12 +121,6 @@ func ImportDependencies(archive *Archive, importPkg func(string) (*Archive, erro
 	return deps, nil
 }
 
-type dceInfo struct {
-	decl         *Decl
-	objectFilter string
-	methodFilter string
-}
-
 func WriteProgramCode(pkgs []*Archive, w *sourcemapx.Filter, goVersion string) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified
@@ -158,13 +153,10 @@ func WriteProgramCode(pkgs []*Archive, w *sourcemapx.Filter, goVersion string) e
 	if _, err := writeF(w, false, "var $goVersion = %q;\n", goVersion); err != nil {
 		return err
 	}
-
-	preludeJS := prelude.Prelude
-	if minify {
-		preludeJS = prelude.Minified()
-	}
-	if _, err := io.WriteString(w, preludeJS); err != nil {
-		return err
+	for _, preludeFile := range prelude.PreludeFiles() {
+		if _, err := w.WriteJS(preludeFile.Source, preludeFile.Name, minify); err != nil {
+			return err
+		}
 	}
 	if _, err := writeF(w, false, "\n"); err != nil {
 		return err
@@ -205,12 +197,22 @@ func WriteProgramCode(pkgs []*Archive, w *sourcemapx.Filter, goVersion string) e
 }
 
 func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.GoLinknameSet, minify bool, w *sourcemapx.Filter) error {
-	if w.MappingCallback != nil && pkg.FileSet != nil {
+	if w.IsMapping() && pkg.FileSet != nil {
 		w.FileSet = pkg.FileSet
 	}
-	if _, err := w.Write(pkg.IncJSCode); err != nil {
-		return err
+
+	for _, jsFile := range pkg.IncJSCode {
+		if _, err := writeF(w, minify, "\t(function() {\n"); err != nil {
+			return err
+		}
+		if _, err := w.WriteJS(string(jsFile.Content), jsFile.Path, minify); err != nil {
+			return err
+		}
+		if _, err := writeF(w, minify, "\n\t}).call($global);\n"); err != nil {
+			return err
+		}
 	}
+
 	if _, err := writeF(w, minify, "$packages[\"%s\"] = (function() {\n", pkg.ImportPath); err != nil {
 		return err
 	}

@@ -34,7 +34,7 @@ func runGenCircleTest(t *testing.T, testPkg string) {
 	runOutputTest(t, basePath, testPkg)
 }
 
-func runOutputTest(t *testing.T, basePath, testPkg string) {
+func runOutputTest(t *testing.T, basePath, testPkg string, extraArgs ...string) {
 	t.Helper()
 	if runtime.GOOS == `js` {
 		t.Skip(`test meant to be run using normal Go compiler (needs os/exec)`)
@@ -46,16 +46,19 @@ func runOutputTest(t *testing.T, basePath, testPkg string) {
 	)
 
 	mainPath := filepath.Join(basePath, testPkg, mainFile)
-	gotBytes, err := exec.Command(`gopherjs`, `run`, mainPath).CombinedOutput()
+	args := append([]string{`run`, mainPath}, extraArgs...)
+	gotBytes, err := exec.Command(`gopherjs`, args...).CombinedOutput()
 	got := normalizeOut(gotBytes)
 	if err != nil {
-		t.Fatalf("error from exec: %v:\n%s", err, got)
+		if _, ok := err.(*exec.ExitError); !ok {
+			t.Fatalf("unexpected error from exec: %v:\n%s", err, got)
+		}
 	}
 
 	outPath := filepath.Join(basePath, testPkg, outFile)
 	wantBytes, err := os.ReadFile(outPath)
 	if err != nil {
-		t.Fatalf(`error reading .out file: %v`, err)
+		t.Fatalf(`error reading %s file: %v`, outFile, err)
 	}
 	want := normalizeOut(wantBytes)
 
@@ -64,9 +67,9 @@ func runOutputTest(t *testing.T, basePath, testPkg string) {
 	}
 }
 
-func normalizeOut(b []byte) string {
+func normalizeOut(b []byte) []string {
 	s := string(b)
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "\n")
-	return s
+	return strings.Split(s, "\n")
 }

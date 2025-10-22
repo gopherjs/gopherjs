@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/neelance/sourcemap"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/tools/go/buildutil"
 
@@ -1175,12 +1174,6 @@ func (s *Session) compilePackage(srcs *sources.Sources, tContext *types.Context)
 		return nil, err
 	}
 
-	for _, jsFile := range srcs.JSFiles {
-		archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
-		archive.IncJSCode = append(archive.IncJSCode, jsFile.Content...)
-		archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
-	}
-
 	if s.options.Verbose {
 		fmt.Println(srcs.ImportPath)
 	}
@@ -1243,8 +1236,8 @@ func (s *Session) ImportResolverFor(srcDir string) func(string) (*compiler.Archi
 
 // SourceMappingCallback returns a callback for [github.com/gopherjs/gopherjs/compiler.SourceMapFilter]
 // configured for the current build session.
-func (s *Session) SourceMappingCallback(m *sourcemap.Map) func(generatedLine, generatedColumn int, originalPos token.Position, originalName string) {
-	return NewMappingCallback(m, s.xctx.Env().GOROOT, s.xctx.Env().GOPATH, s.options.MapToLocalDisk)
+func (s *Session) EnableMapping(filter *sourcemapx.Filter, jsFileName string) {
+	filter.EnableMapping(jsFileName, s.xctx.Env().GOROOT, s.xctx.Env().GOPATH, s.options.MapToLocalDisk)
 }
 
 // WriteCommandPackage writes the final JavaScript output file at pkgObj path.
@@ -1260,19 +1253,18 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 
 	sourceMapFilter := &sourcemapx.Filter{Writer: codeFile}
 	if s.options.CreateMapFile {
-		m := &sourcemap.Map{File: filepath.Base(pkgObj)}
+		s.EnableMapping(sourceMapFilter, filepath.Base(pkgObj))
+
 		mapFile, err := os.Create(pkgObj + ".map")
 		if err != nil {
 			return err
 		}
 
 		defer func() {
-			m.WriteTo(mapFile)
+			sourceMapFilter.WriteMappingTo(mapFile)
 			mapFile.Close()
 			fmt.Fprintf(codeFile, "//# sourceMappingURL=%s.map\n", filepath.Base(pkgObj))
 		}()
-
-		sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
 	}
 
 	deps, err := compiler.ImportDependencies(archive, s.ImportResolverFor(""))
@@ -1280,50 +1272,6 @@ func (s *Session) WriteCommandPackage(archive *compiler.Archive, pkgObj string) 
 		return err
 	}
 	return compiler.WriteProgramCode(deps, sourceMapFilter, s.GoRelease())
-}
-
-// NewMappingCallback creates a new callback for source map generation.
-func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localMap bool) func(generatedLine, generatedColumn int, originalPos token.Position, originalName string) {
-	return func(generatedLine, generatedColumn int, originalPos token.Position, originalName string) {
-		mapping := &sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn}
-
-		if originalPos.IsValid() {
-			file := originalPos.Filename
-
-			switch hasGopathPrefix, prefixLen := hasGopathPrefix(file, gopath); {
-			case localMap:
-				// no-op:  keep file as-is
-			case hasGopathPrefix:
-				file = filepath.ToSlash(file[prefixLen+4:])
-			case strings.HasPrefix(file, goroot):
-				file = filepath.ToSlash(file[len(goroot)+4:])
-			default:
-				file = filepath.Base(file)
-			}
-			mapping.OriginalFile = file
-			mapping.OriginalLine = originalPos.Line
-			mapping.OriginalColumn = originalPos.Column
-		}
-
-		if originalName != "" {
-			mapping.OriginalName = originalName
-		}
-
-		m.AddMapping(mapping)
-	}
-}
-
-// hasGopathPrefix returns true and the length of the matched GOPATH workspace,
-// iff file has a prefix that matches one of the GOPATH workspaces.
-func hasGopathPrefix(file, gopath string) (hasGopathPrefix bool, prefixLen int) {
-	gopathWorkspaces := filepath.SplitList(gopath)
-	for _, gopathWorkspace := range gopathWorkspaces {
-		gopathWorkspace = filepath.Clean(gopathWorkspace)
-		if strings.HasPrefix(file, gopathWorkspace) {
-			return true, len(gopathWorkspace)
-		}
-	}
-	return false, 0
 }
 
 // WaitForChange watches file system events and returns if either when one of

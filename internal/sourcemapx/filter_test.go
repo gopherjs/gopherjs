@@ -23,7 +23,7 @@ func TestFilter(t *testing.T) {
 
 	filter := &Filter{
 		Writer: code,
-		MappingCallback: func(generatedLine, generatedColumn int, originalPos token.Position, originalName string) {
+		goMappingCallback: func(generatedLine, generatedColumn int, originalPos token.Position, originalName string) {
 			entries = append(entries, entry{
 				GenLine:  generatedLine,
 				GenCol:   generatedColumn,

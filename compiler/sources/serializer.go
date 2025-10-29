@@ -128,7 +128,6 @@ func unpackFile(file *ast.File) {
 // an interface field in the AST.
 var prepareGob = func() func() {
 	registerTypes := func() {
-
 		// Register expression nodes.
 		gob.Register(&ast.BadExpr{})
 		gob.Register(&ast.Ident{})

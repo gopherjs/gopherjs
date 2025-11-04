@@ -121,6 +121,13 @@ func ImportDependencies(archive *Archive, importPkg func(string) (*Archive, erro
 	return deps, nil
 }
 
+// DefaultFilter creates a new sourcemapx.Filter that writes to the given writer.
+// This is not in the internal package so that tools like the playground can
+// use it when calling things like the exported WriteProgramCode function.
+func DefaultFilter(w io.Writer) *sourcemapx.Filter {
+	return &sourcemapx.Filter{Writer: w}
+}
+
 func WriteProgramCode(pkgs []*Archive, w *sourcemapx.Filter, goVersion string) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified

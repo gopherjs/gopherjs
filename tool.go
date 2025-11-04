@@ -613,11 +613,27 @@ type serveCommandFileSystem struct {
 }
 
 func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
-	name := path.Join(fs.serveRoot, requestName[1:]) // requestName[0] == '/'
-	log.Printf("Request: %s", name)
+	requestName = strings.TrimPrefix(requestName, `/`) // Strip leading '/'
+	name := path.Join(fs.serveRoot, requestName)
+	log.WithField(`request`, requestName).
+		Print(`Request`)
+
+	// Check if the file is reachable from the serve root.
+	if f, err := http.Dir(fs.serveRoot).Open(requestName); err == nil {
+		log.WithField(`request`, requestName).
+			Print(`Found in serve root`)
+		return f, nil
+	}
+
+	if strings.HasPrefix(requestName, `.well-known/`) {
+		// Ignore ".well-known/" requests since they are probes.
+		// See https://en.wikipedia.org/wiki/Well-known_URI
+		return nil, os.ErrNotExist
+	}
 
 	dir, file := path.Split(name)
-	base := path.Base(dir) // base is parent folder name, which becomes the output file name.
+	dir = strings.TrimSuffix(dir, `/`) // Strip tailing '/'
+	base := path.Base(dir)             // base is parent folder name, which becomes the output file name.
 
 	isPkg := file == base+".js"
 	isMap := file == base+".js.map"
@@ -627,7 +643,40 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 	// TODO(dmitshur): might be possible to get a single session to detect changes to source code on disk
 	s, err := gbuild.NewSession(fs.options)
 	if err != nil {
+		log.WithField(`request`, requestName).WithError(err).
+			Error(`Failed to creates a session`)
 		return nil, err
+	}
+
+	// Check if the file is reachable from the Go path.
+	if f, err := http.Dir(path.Join(s.XContext().Env().GOPATH, `src`)).Open(requestName); err == nil {
+		log.WithField(`request`, requestName).
+			Print(`Found in Go path`)
+		return f, nil
+	}
+
+	// Check if the file is reachable from the Go root.
+	if f, err := http.Dir(path.Join(s.XContext().Env().GOROOT, `src`)).Open(requestName); err == nil {
+		log.WithField(`request`, requestName).
+			Print(`Found in Go root`)
+		return f, nil
+	}
+
+	// Check if the request's dir is an import path.
+	if pkg, err := s.XContext().Import(dir, fs.serveRoot, build.FindOnly); err == nil {
+		f, err := http.Dir(pkg.Dir).Open(file)
+		if err == nil {
+			log.WithField(`request`, requestName).
+				Print(`Found in import path`)
+			return f, nil
+		}
+
+		if !os.IsNotExist(err) {
+			log.WithField(`request`, requestName).
+				WithError(err).
+				Error(`Failed to open file in import path`)
+			return nil, err
+		}
 	}
 
 	if isPkg || isMap || isIndex {
@@ -646,6 +695,10 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 			err := func() error {
 				archive, err := s.BuildProject(pkg)
 				if err != nil {
+					log.WithField(`request`, requestName).
+						WithField(`package`, pkg.ImportPath).
+						WithError(err).
+						Error(`Failed to build project`)
 					return err
 				}
 
@@ -654,9 +707,17 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 				deps, err := compiler.ImportDependencies(archive, s.ImportResolverFor(""))
 				if err != nil {
+					log.WithField(`request`, requestName).
+						WithField(`package`, pkg.ImportPath).
+						WithError(err).
+						Error(`Failed to import dependencies`)
 					return err
 				}
 				if err := compiler.WriteProgramCode(deps, sourceMapFilter, s.GoRelease()); err != nil {
+					log.WithField(`request`, requestName).
+						WithField(`package`, pkg.ImportPath).
+						WithError(err).
+						Error(`Failed to write program code`)
 					return err
 				}
 
@@ -671,10 +732,14 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 			if err != nil {
 				buf = browserErrors
 			}
+			log.WithField(`request`, requestName).
+				Print(`Created faked JS file for package`)
 			return newFakeFile(base+".js", buf.Bytes()), nil
 
 		case isMap:
 			if content, ok := fs.sourceMaps[name]; ok {
+				log.WithField(`request`, requestName).
+					Print(`Found source map for faked JS file`)
 				return newFakeFile(base+".js.map", content), nil
 			}
 		}
@@ -682,19 +747,27 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 	// First try to serve the request with a root prefix supplied in the CLI.
 	if f, err := fs.serveSourceTree(s.XContext(), name); err == nil {
+		log.WithField(`request`, requestName).
+			Print(`Found with root prefix`)
 		return f, nil
 	}
 
 	// If that didn't work, try without the prefix.
 	if f, err := fs.serveSourceTree(s.XContext(), requestName); err == nil {
+		log.WithField(`request`, requestName).
+			Print(`Found without prefix`)
 		return f, nil
 	}
 
 	if isIndex {
 		// If there was no index.html file in any dirs, supply our own.
+		log.WithField(`request`, requestName).
+			Print(`Created faked index.html file`)
 		return newFakeFile("index.html", []byte(`<html><head><meta charset="utf-8"><script src="`+base+`.js"></script></head><body></body></html>`)), nil
 	}
 
+	log.WithField(`request`, requestName).
+		Error(`Failed to find`)
 	return nil, os.ErrNotExist
 }
 

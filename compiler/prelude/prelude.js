@@ -38,8 +38,8 @@ if (!$global.fs) {
             outputBuf += decoder.decode(buf);
             var nl = outputBuf.lastIndexOf("\n");
             if (nl != -1) {
-                console.log(outputBuf.substr(0, nl));
-                outputBuf = outputBuf.substr(nl + 1);
+                console.log(outputBuf.substring(0, nl));
+                outputBuf = outputBuf.substring(nl + 1);
             }
             return buf.length;
         },

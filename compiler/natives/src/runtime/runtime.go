@@ -448,7 +448,7 @@ func Stack(buf []byte, all bool) int {
 	if s == js.Undefined {
 		return 0
 	}
-	return copy(buf, s.Call("substr", s.Call("indexOf", "\n").Int()+1).String())
+	return copy(buf, s.Call("substring", s.Call("indexOf", "\n").Int()+1).String())
 }
 
 func LockOSThread() {}

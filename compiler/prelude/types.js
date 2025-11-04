@@ -565,7 +565,7 @@ var $funcType = (params, results, variadic) => {
     if (typ === undefined) {
         var paramTypes = $mapArray(params, p => { return p.string; });
         if (variadic) {
-            paramTypes[paramTypes.length - 1] = "..." + paramTypes[paramTypes.length - 1].substr(2);
+            paramTypes[paramTypes.length - 1] = "..." + paramTypes[paramTypes.length - 1].substring(2);
         }
         var string = "func(" + paramTypes.join(", ") + ")";
         if (results.length === 1) {
@@ -588,7 +588,7 @@ var $interfaceType = methods => {
         var string = "interface {}";
         if (methods.length !== 0) {
             string = "interface { " + $mapArray(methods, m => {
-                return (m.pkg !== "" ? m.pkg + "." : "") + m.name + m.typ.string.substr(4);
+                return (m.pkg !== "" ? m.pkg + "." : "") + m.name + m.typ.string.substring(4);
             }).join("; ") + " }";
         }
         typ = $newType(8, $kindInterface, string, false, "", false, null);

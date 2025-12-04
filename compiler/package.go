@@ -40,6 +40,7 @@ type pkgContext struct {
 	fileSet      *token.FileSet
 	errList      errlist.ErrorList
 	instanceSet  *typeparams.PackageInstanceSets
+	declCache    *DeclCache
 }
 
 // isMain returns true if this is the main package of the program.
@@ -132,6 +133,7 @@ func newRootCtx(tContext *types.Context, srcs *sources.Sources, minify bool) *fu
 			minify:       minify,
 			fileSet:      srcs.FileSet,
 			instanceSet:  srcs.TypeInfo.InstanceSets,
+			declCache:    srcs.CacheData.(*DeclCache),
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[*types.Label]*flowData{nil: {}},

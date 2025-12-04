@@ -791,12 +791,7 @@ func NewSession(options *Options) (*Session, error) {
 
 	// If the cache is enabled, initialize the build cache.
 	// Disable caching by leaving buildCache set to nil.
-	//
-	// TODO(grantnelson-wf): Currently the build cache is slower than
-	// parsing and augmenting the files, so we disable it for now.
-	// Re-enable it once the cache performance is improved.
-	const disableDefaultCache = true
-	if !s.options.NoCache && !disableDefaultCache {
+	if !s.options.NoCache {
 		s.buildCache = &cache.BuildCache{
 			GOOS:          env.GOOS,
 			GOARCH:        env.GOARCH,
@@ -941,7 +936,7 @@ func (s *Session) BuildProject(pkg *PackageData) (*compiler.Archive, error) {
 	}
 
 	// Compile the project into Archives containing the generated JS.
-	return s.prepareAndCompilePackages(rootSrcs)
+	return s.PrepareAndCompilePackages(rootSrcs)
 }
 
 // GetSortedSources returns the sources sorted by import path.
@@ -1088,7 +1083,9 @@ func (s *Session) LoadPackages(pkg *PackageData) (*sources.Sources, error) {
 	// Try to load the package from the build cache.
 	var srcs *sources.Sources
 	if s.buildCache != nil {
-		cachedSrcs := &sources.Sources{}
+		cachedSrcs := &sources.Sources{
+			CacheData: compiler.NewDeclCache(true),
+		}
 		if s.buildCache.Load(cachedSrcs, pkg.ImportPath, pkg.SrcModTime) {
 			srcs = cachedSrcs
 		}
@@ -1116,11 +1113,7 @@ func (s *Session) LoadPackages(pkg *PackageData) (*sources.Sources, error) {
 			Files:      files,
 			FileSet:    fileSet,
 			JSFiles:    append(pkg.JSFiles, overlayJsFiles...),
-		}
-
-		// Store the built package in the cache for future use.
-		if s.buildCache != nil {
-			s.buildCache.Store(srcs, srcs.ImportPath, time.Now())
+			CacheData:  compiler.NewDeclCache(s.buildCache != nil),
 		}
 	}
 
@@ -1139,7 +1132,10 @@ func (s *Session) LoadPackages(pkg *PackageData) (*sources.Sources, error) {
 	return srcs, nil
 }
 
-func (s *Session) prepareAndCompilePackages(rootSrcs *sources.Sources) (*compiler.Archive, error) {
+// PrepareAndCompilePackages prepares and compiles all packages in the session.
+// Thia assumes that all packages including dependencies have already been loaded already.
+// This will return the compiled archive for the rootSrcs package.
+func (s *Session) PrepareAndCompilePackages(rootSrcs *sources.Sources) (*compiler.Archive, error) {
 	tContext := types.NewContext()
 	allSources := s.GetSortedSources()
 
@@ -1151,7 +1147,7 @@ func (s *Session) prepareAndCompilePackages(rootSrcs *sources.Sources) (*compile
 
 	// Compile all the sources into archives.
 	for _, srcs := range allSources {
-		if _, err := s.compilePackage(srcs, tContext); err != nil {
+		if _, err := s.CompilePackage(srcs, tContext); err != nil {
 			return nil, err
 		}
 	}
@@ -1164,7 +1160,9 @@ func (s *Session) prepareAndCompilePackages(rootSrcs *sources.Sources) (*compile
 	return rootArchive, nil
 }
 
-func (s *Session) compilePackage(srcs *sources.Sources, tContext *types.Context) (*compiler.Archive, error) {
+// CompilePackage compiles the given package sources into an archive.
+// This assumes that the sources have already been prepared.
+func (s *Session) CompilePackage(srcs *sources.Sources, tContext *types.Context) (*compiler.Archive, error) {
 	if archive, ok := s.UpToDateArchives[srcs.ImportPath]; ok {
 		return archive, nil
 	}
@@ -1176,6 +1174,12 @@ func (s *Session) compilePackage(srcs *sources.Sources, tContext *types.Context)
 
 	if s.options.Verbose {
 		fmt.Println(srcs.ImportPath)
+	}
+
+	// Store the built package sources in the cache for future use.
+	// The sources should contain all cachable declarations at this point.
+	if s.buildCache != nil {
+		s.buildCache.Store(srcs, srcs.ImportPath, time.Now())
 	}
 
 	s.UpToDateArchives[srcs.ImportPath] = archive

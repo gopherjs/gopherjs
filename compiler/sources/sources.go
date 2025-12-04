@@ -9,6 +9,7 @@ import (
 
 	"github.com/neelance/astrewrite"
 
+	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler/incjs"
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
@@ -57,6 +58,17 @@ type Sources struct {
 	// GoLinknames is the set of Go linknames for this package.
 	// This is nil until set by ParseGoLinknames.
 	GoLinknames []linkname.GoLinkname
+
+	// CacheData is a object that holds any additional cacheable data
+	// for these sources. This must be set to a non-nil instances of the
+	// additional cache prior to encoding/decoding.
+	//
+	// Mainly this is used to store precompiled declarations,
+	// see [compiler/declCache.go].
+	//
+	// Warning: Make sure that any data stored here has had its types
+	// registered with the gob package for Gob encoding/decoding.
+	CacheData cache.Cacheable
 }
 
 type Importer func(path, srcDir string) (*Sources, error)

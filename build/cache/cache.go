@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"go/build"
 	"io"
@@ -91,7 +92,7 @@ var _ Cache = (*BuildCache)(nil)
 // the cache. For example, any artifacts that were cached for a Linux build
 // must not be reused for a non-Linux build. GopherJS version change also
 // invalidates the cache. It is callers responsibility to ensure that artifacts
-// passed the Store function were generated with the same build
+// passed to the Store function were generated with the same build
 // parameters as the cache is configured.
 //
 // There is no upper limit for the total cache size. It can be cleared
@@ -121,6 +122,9 @@ type BuildCache struct {
 	// type-checking for generics, any package importing the package under
 	// test should be unaffected.
 	TestedPackage string
+
+	serializer   serializeHandle
+	deserializer deserializeHandle
 }
 
 func (bc BuildCache) String() string {
@@ -154,7 +158,10 @@ func (bc *BuildCache) Store(c Cacheable, importPath string, buildTime time.Time)
 		return false
 	}
 	defer f.Close()
-	if err := bc.serialize(c, buildTime, f); err != nil {
+	if bc.serializer == nil {
+		bc.serializer = bc.getSerializer()
+	}
+	if err := bc.serializer(c, buildTime, f); err != nil {
 		log.Warningf("Failed to write build cache package %q: %v", importPath, err)
 		// Make sure we don't leave a half-written package behind.
 		os.Remove(f.Name())
@@ -192,7 +199,10 @@ func (bc *BuildCache) Load(c Cacheable, importPath string, srcModTime time.Time)
 		return false // Cache miss.
 	}
 	defer f.Close()
-	buildTime, old, err := bc.deserialize(c, srcModTime, f)
+	if bc.deserializer == nil {
+		bc.deserializer = bc.getDeserializer()
+	}
+	buildTime, old, err := bc.deserializer(c, srcModTime, f)
 	if err != nil {
 		log.Warningf("Failed to read cached package for %q at %q: %v", importPath, path, err)
 		return false // Invalid/corrupted package, cache miss.
@@ -206,35 +216,83 @@ func (bc *BuildCache) Load(c Cacheable, importPath string, srcModTime time.Time)
 	return true
 }
 
-func (bc *BuildCache) serialize(c Cacheable, buildTime time.Time, w io.Writer) (err error) {
-	zw := gzip.NewWriter(w)
-	defer func() {
-		// This close flushes the gzip but does not close the given writer.
-		if closeErr := zw.Close(); err == nil {
-			err = closeErr
-		}
-	}()
+// encoding is the encoding to use when serializing and deserializing the cache.
+// Possible values are seen in `getSerializer` and `getDeserializer`.
+// Using zip provides a CRC check for the data and reduces the file size but it is slightly slower.
+var encoding = `json`
 
-	ge := gob.NewEncoder(zw)
+type serializeHandle func(c Cacheable, buildTime time.Time, w io.Writer) (err error)
+type deserializeHandle func(c Cacheable, srcModTime time.Time, r io.Reader) (buildTime time.Time, old bool, err error)
+
+func (bc *BuildCache) getSerializer() serializeHandle {
+	switch encoding {
+	case `json`:
+		return bc.jsonSerialize
+	case `gob`:
+		return bc.gobSerialize
+	case `zipJson`:
+		return zipGobSerialize(bc.jsonSerialize)
+	case `zipGob`:
+		return zipGobSerialize(bc.gobSerialize)
+	default:
+		panic(fmt.Errorf(`unknown encoding for serialization: %q`, encoding))
+	}
+}
+
+func (bc *BuildCache) getDeserializer() deserializeHandle {
+	switch encoding {
+	case `json`:
+		return bc.jsonDeserialize
+	case `gob`:
+		return bc.gobDeserialize
+	case `zipJson`:
+		return zipGobDeserialize(bc.jsonDeserialize)
+	case `zipGob`:
+		return zipGobDeserialize(bc.gobDeserialize)
+	default:
+		panic(fmt.Errorf(`unknown encoding for serialization: %q`, encoding))
+	}
+}
+
+func zipGobSerialize(inner serializeHandle) serializeHandle {
+	return func(c Cacheable, buildTime time.Time, w io.Writer) (err error) {
+		zw := gzip.NewWriter(w)
+		defer func() {
+			// This close flushes the gzip but does not close the given writer.
+			if closeErr := zw.Close(); err == nil {
+				err = closeErr
+			}
+		}()
+		return inner(c, buildTime, zw)
+	}
+}
+
+func zipGobDeserialize(inner deserializeHandle) deserializeHandle {
+	return func(c Cacheable, srcModTime time.Time, r io.Reader) (buildTime time.Time, old bool, err error) {
+		zr, err := gzip.NewReader(r)
+		if err != nil {
+			return buildTime, false, err
+		}
+		defer func() {
+			// This close checks the gzip checksum but does not close the given reader.
+			if closeErr := zr.Close(); err == nil {
+				err = closeErr
+			}
+		}()
+		return inner(c, srcModTime, zr)
+	}
+}
+
+func (bc *BuildCache) gobSerialize(c Cacheable, buildTime time.Time, w io.Writer) error {
+	ge := gob.NewEncoder(w)
 	if err := ge.Encode(buildTime); err != nil {
 		return err
 	}
 	return c.Write(ge.Encode)
 }
 
-func (bc *BuildCache) deserialize(c Cacheable, srcModTime time.Time, r io.Reader) (buildTime time.Time, old bool, err error) {
-	zr, err := gzip.NewReader(r)
-	if err != nil {
-		return buildTime, false, err
-	}
-	defer func() {
-		// This close checks the gzip checksum but does not close the given reader.
-		if closeErr := zr.Close(); err == nil {
-			err = closeErr
-		}
-	}()
-
-	gd := gob.NewDecoder(zr)
+func (bc *BuildCache) gobDeserialize(c Cacheable, srcModTime time.Time, r io.Reader) (buildTime time.Time, old bool, err error) {
+	gd := gob.NewDecoder(r)
 	if err := gd.Decode(&buildTime); err != nil {
 		return buildTime, false, err
 	}
@@ -242,6 +300,25 @@ func (bc *BuildCache) deserialize(c Cacheable, srcModTime time.Time, r io.Reader
 		return buildTime, true, nil // Package is out-of-date, cache miss.
 	}
 	return buildTime, false, c.Read(gd.Decode)
+}
+
+func (bc *BuildCache) jsonSerialize(c Cacheable, buildTime time.Time, w io.Writer) (err error) {
+	encode := json.NewEncoder(w).Encode
+	if err := encode(buildTime); err != nil {
+		return err
+	}
+	return c.Write(encode)
+}
+
+func (bc *BuildCache) jsonDeserialize(c Cacheable, srcModTime time.Time, r io.Reader) (buildTime time.Time, old bool, err error) {
+	decode := json.NewDecoder(r).Decode
+	if err := decode(&buildTime); err != nil {
+		return buildTime, false, err
+	}
+	if srcModTime.After(buildTime) {
+		return buildTime, true, nil // Package is out-of-date, cache miss.
+	}
+	return buildTime, false, c.Read(decode)
 }
 
 // commonKey returns a part of the cache key common for all artifacts generated

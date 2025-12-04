@@ -37,41 +37,41 @@ type Decl struct {
 	// implementation.
 	LinkingName symbol.Name
 	// A list of package-level JavaScript variable names this symbol needs to declare.
-	Vars []string
+	Vars []string `json:",omitempty"`
 	// A JS expression by which the object represented by this decl may be
 	// referenced within the package context. Empty if the decl represents no such
 	// object.
-	RefExpr string
+	RefExpr string `json:",omitempty"`
 	// NamedRecvType is method named recv declare.
-	NamedRecvType string
+	NamedRecvType string `json:",omitempty"`
 	// JavaScript code that declares a local variable for an imported package.
-	ImportCode []byte
+	ImportCode []byte `json:",omitempty"`
 	// JavaScript code that declares basic information about a named type symbol.
 	// It configures basic information about the type and its identity.
-	TypeDeclCode []byte
+	TypeDeclCode []byte `json:",omitempty"`
 	// JavaScript code that assigns exposed named types to the package.
-	ExportTypeCode []byte
+	ExportTypeCode []byte `json:",omitempty"`
 	// JavaScript code that declares basic information about an anonymous type.
 	// It configures basic information about the type.
 	// This is added to the finish setup phase to have access to all packages.
-	AnonTypeDeclCode []byte
+	AnonTypeDeclCode []byte `json:",omitempty"`
 	// JavaScript code that declares basic information about a function or
 	// method symbol. This contains the function's or method's compiled body.
 	// This is added to the finish setup phase to have access to all packages.
-	FuncDeclCode []byte
+	FuncDeclCode []byte `json:",omitempty"`
 	// JavaScript code that assigns exposed functions to the package.
 	// This is added to the finish setup phase to have access to all packages.
-	ExportFuncCode []byte
+	ExportFuncCode []byte `json:",omitempty"`
 	// JavaScript code that initializes reflection metadata about a type's method list.
 	// This is added to the finish setup phase to have access to all packages.
-	MethodListCode []byte
+	MethodListCode []byte `json:",omitempty"`
 	// JavaScript code that initializes the rest of reflection metadata about a type
 	// (e.g. struct fields, array type sizes, element types, etc.).
 	// This is added to the finish setup phase to have access to all packages.
-	TypeInitCode []byte
+	TypeInitCode []byte `json:",omitempty"`
 	// JavaScript code that needs to be executed during the package init phase to
 	// set the symbol up (e.g. initialize package-level variable value).
-	InitCode []byte
+	InitCode []byte `json:",omitempty"`
 	// DCEInfo stores the information for dead-code elimination.
 	DCEInfo dce.Info
 	// Set to true if a function performs a blocking operation (I/O or
@@ -253,7 +253,6 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 	d := &Decl{
 		FullName: varDeclFullName(init),
 	}
-
 	assignLHS := []ast.Expr{}
 	for _, o := range init.Lhs {
 		assignLHS = append(assignLHS, fc.newIdentFor(o))
@@ -292,15 +291,15 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 	return d
 }
 
-// funcDecls translates all package-level function and methods.
-//
-// `functions` must contain all package-level function and method declarations
-// found in the AST. The function returns Decls that define corresponding JS
-// functions at runtime. For special functions like init() and main() decls will
-// also contain code necessary to invoke them.
-func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
-	var funcDecls []*Decl
-	var mainFunc *types.Func
+type funcGroup struct {
+	fun       *ast.FuncDecl
+	o         *types.Func
+	instances []typeparams.Instance
+}
+
+// groupFuncDecls groups all the package-level function and methods
+// into generic or non-generic groups.
+func (fc *funcContext) groupFuncDecls(functions []*ast.FuncDecl) (mainFunc *funcGroup, fns, expGenFns []*funcGroup) {
 	for _, fun := range functions {
 		o := fc.pkgCtx.Defs[fun.Name].(*types.Func)
 		instances := fc.knownInstances(o)
@@ -309,50 +308,84 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 			continue
 		}
 
-		if fun.Recv == nil {
+		fg := &funcGroup{
+			fun:       fun,
+			o:         o,
+			instances: instances,
+		}
+
+		generic := len(instances) > 1 || !instances[0].IsTrivial()
+		if generic && fun.Name.IsExported() {
+			// function is an exported generic function so it must be processed later
+			// since it may have instances with type arguments from packages depending
+			// on the current package.
+			expGenFns = append(expGenFns, fg)
+			continue
+		}
+
+		fns = append(fns, fg)
+
+		if fg.o.Name() == "main" {
+			mainFunc = fg // main() function candidate.
+		}
+	}
+
+	return mainFunc, fns, expGenFns
+}
+
+// funcDecls translates all package-level function and methods.
+//
+// `functions` must contain all package-level function and method declarations
+// found in the AST. The function returns Decls that define corresponding JS
+// functions at runtime. For special functions like init() and main() decls will
+// also contain code necessary to invoke them.
+func (fc *funcContext) funcDecls(functions []*funcGroup) ([]*Decl, error) {
+	var funcDecls []*Decl
+	for _, fg := range functions {
+		if fg.fun.Recv == nil {
 			// Auxiliary decl shared by all instances of the function that defines
 			// package-level variable by which they all are referenced,
 			// e.g. init functions and instances of generic functions.
-			objName := fc.objectName(o)
-			generic := len(instances) > 1 || !instances[0].IsTrivial()
-			varName := objName
-			if generic {
-				varName += ` = []`
-			}
-			varDecl := &Decl{
-				FullName: funcVarDeclFullName(o),
-				Vars:     []string{varName},
-			}
-			varDecl.Dce().SetName(o, nil, nil)
-			if generic && o.Exported() {
-				varDecl.ExportFuncCode = fc.CatchOutput(1, func() {
-					fc.Printf("$pkg.%s = %s;", encodeIdent(fun.Name.Name), objName)
-				})
-			}
-			funcDecls = append(funcDecls, varDecl)
+			funcDecls = append(funcDecls, fc.newFuncVarDecl(fg.fun, fg.o, fg.instances))
 		}
 
-		for _, inst := range instances {
-			funcDecls = append(funcDecls, fc.newFuncDecl(fun, inst))
-
-			if o.Name() == "main" {
-				mainFunc = o // main() function candidate.
-			}
+		for _, inst := range fg.instances {
+			funcDecls = append(funcDecls, fc.newFuncDecl(fg.fun, inst))
 		}
-	}
-	if fc.pkgCtx.isMain() {
-		if mainFunc == nil {
-			return nil, fmt.Errorf("missing main function")
-		}
-		// Add a special Decl for invoking main() function after the program has
-		// been initialized. It must come after all other functions, especially all
-		// init() functions, otherwise main() will be invoked too early.
-		funcDecls = append(funcDecls, &Decl{
-			FullName: mainFuncDeclFullName(),
-			InitCode: fc.CatchOutput(1, func() { fc.translateStmt(fc.callMainFunc(mainFunc), nil) }),
-		})
 	}
 	return funcDecls, nil
+}
+
+func (fc *funcContext) newFuncVarDecl(fun *ast.FuncDecl, o *types.Func, instances []typeparams.Instance) *Decl {
+	fullName := funcVarDeclFullName(o)
+	objName := fc.objectName(o)
+	generic := len(instances) > 1 || !instances[0].IsTrivial()
+
+	varName := objName
+	if generic {
+		varName += ` = []`
+	}
+
+	varDecl := &Decl{
+		FullName: fullName,
+		Vars:     []string{varName},
+	}
+	varDecl.Dce().SetName(o, nil, nil)
+
+	if generic && o.Exported() {
+		varDecl.ExportFuncCode = fc.CatchOutput(1, func() {
+			fc.Printf("$pkg.%s = %s;", encodeIdent(fun.Name.Name), objName)
+		})
+	}
+	return varDecl
+}
+
+func (fc *funcContext) newCallMainFuncDecl(mainFunc *types.Func) *Decl {
+	d := &Decl{
+		FullName: mainFuncDeclFullName(),
+		InitCode: fc.CatchOutput(1, func() { fc.translateStmt(fc.callMainFunc(mainFunc), nil) }),
+	}
+	return d
 }
 
 // newFuncDecl returns a Decl that defines a package-level function or a method.
@@ -422,6 +455,36 @@ func (fc *funcContext) callMainFunc(main *types.Func) ast.Stmt {
 	}
 
 	return ifStmt
+}
+
+func (fc *funcContext) groupNamedTypeDecls(typeNames typesutil.TypeNames) (typs, expGenTyps typesutil.TypeNames) {
+	if !fc.isRoot() {
+		panic(bailout(fmt.Errorf("functionContext.groupNamedTypeDecls() must be only called on the package-level context")))
+	}
+
+	for _, o := range typeNames.Slice() {
+		if o.IsAlias() {
+			continue
+		}
+
+		instances := fc.knownInstances(o)
+		if len(instances) == 0 {
+			// No instances of the type, skip it.
+			continue
+		}
+
+		generic := len(instances) > 1 || !instances[0].IsTrivial()
+		if generic && o.Exported() {
+			// type is an exported generic type so it must be processed later
+			// since it may have instances with type arguments from packages depending
+			// on the current package.
+			expGenTyps.Add(o)
+			continue
+		}
+
+		typs.Add(o)
+	}
+	return typs, expGenTyps
 }
 
 // namedTypeDecls returns Decls that define all names Go types.

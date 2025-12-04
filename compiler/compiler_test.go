@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"bytes"
+	"encoding/gob"
 	"go/types"
 	"regexp"
 	"sort"
@@ -380,6 +381,7 @@ func TestDeclSelection_RemoveUnusedNestedTypesInFunction(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
+	sel.PrintDeclStatus()
 	sel.IsAlive(`func:command-line-arguments.main`)
 
 	sel.IsAlive(`funcVar:command-line-arguments.Foo`)
@@ -413,6 +415,7 @@ func TestDeclSelection_RemoveUnusedNestedTypesInMethod(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
+	sel.PrintDeclStatus()
 	sel.IsAlive(`func:command-line-arguments.main`)
 
 	sel.IsAlive(`typeVar:command-line-arguments.Baz`)
@@ -445,6 +448,7 @@ func TestDeclSelection_RemoveAllUnusedNestedTypes(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
+	sel.PrintDeclStatus()
 	sel.IsAlive(`func:command-line-arguments.main`)
 
 	sel.IsDead(`funcVar:command-line-arguments.Foo`)
@@ -473,6 +477,7 @@ func TestDeclSelection_CompletelyRemoveNestedType(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
+	sel.PrintDeclStatus()
 
 	sel.IsAlive(`func:command-line-arguments.main`)
 
@@ -968,6 +973,49 @@ func Test_IndexedSelectors(t *testing.T) {
 	)
 }
 
+func TestArchiveSelectionAfterReadingFromCache(t *testing.T) {
+	src := `package main
+		type Foo interface{ int | string }
+
+		type Bar[T Foo] struct{ v T }
+		func (b Bar[T]) Baz() { println(b.v) }
+
+		var ghost = Bar[int]{v: 7} // unused
+
+		func main() {
+			println("do nothing")
+		}`
+	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
+	root := srctesting.ParseSources(t, srcFiles, nil)
+	rootPath := root.PkgPath
+
+	cachedDecls := map[string]*DeclCache{}
+	emptyCacheArchives := compileProjectWithCache(t, root, cachedDecls, false)
+
+	reloadedCahcedDecls := map[string]*DeclCache{}
+	for impPath, dc := range cachedDecls {
+		buf := bytes.Buffer{}
+		if err := dc.Write(gob.NewEncoder(&buf).Encode); err != nil {
+			t.Fatalf(`failed to write cache for %q: %v`, impPath, err)
+		}
+
+		dc2 := &DeclCache{}
+		if err := dc2.Read(gob.NewDecoder(bytes.NewReader(buf.Bytes())).Decode); err != nil {
+			t.Fatalf(`failed to read cache for %q: %v`, impPath, err)
+		}
+		reloadedCahcedDecls[impPath] = dc2
+	}
+
+	fullCacheArchives := compileProjectWithCache(t, root, reloadedCahcedDecls, false)
+
+	emptyCacheJS := renderPackage(t, emptyCacheArchives[rootPath], false)
+	fullCachedJS := renderPackage(t, fullCacheArchives[rootPath], false)
+
+	if diff := cmp.Diff(emptyCacheJS, fullCachedJS); diff != "" {
+		t.Errorf("the reloaded files produce different JS:\n%s", diff)
+	}
+}
+
 func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
 	// This is a test of a type defined inside a generic function
 	// that uses the type parameter of the function as a field type.
@@ -1142,6 +1190,12 @@ func compile(t *testing.T, sourceFiles []srctesting.Source, minify bool) string 
 // compileProject compiles the given root package and all packages imported by the root.
 // This returns the compiled archives of all packages keyed by their import path.
 func compileProject(t *testing.T, root *packages.Package, minify bool) map[string]*Archive {
+	return compileProjectWithCache(t, root, nil, minify)
+}
+
+// compileProjectWithCache is similar to compile project excepts allows decls to
+// be read from DeclCaches key'ed with import paths instead of compiling all of them.
+func compileProjectWithCache(t *testing.T, root *packages.Package, cachedDecls map[string]*DeclCache, minify bool) map[string]*Archive {
 	t.Helper()
 	pkgMap := map[string]*packages.Package{}
 	packages.Visit([]*packages.Package{root}, nil, func(pkg *packages.Package) {
@@ -1178,7 +1232,12 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 
 	archives := map[string]*Archive{}
 	for _, srcs := range allSrcs {
-		a, err := Compile(srcs, tContext, minify)
+		declCache := cachedDecls[srcs.ImportPath]
+		if cachedDecls != nil && declCache == nil {
+			declCache = &DeclCache{}
+			cachedDecls[srcs.ImportPath] = declCache
+		}
+		a, err := Compile(srcs, declCache, tContext, minify)
 		if err != nil {
 			t.Fatal(`failed to compile:`, err)
 		}

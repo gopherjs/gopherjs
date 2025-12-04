@@ -155,7 +155,7 @@ type flowData struct {
 //
 // Provided sources must be prepared so that the type information has been determined,
 // and the source files have been sorted by name to ensure reproducible JavaScript output.
-func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Archive, err error) {
+func Compile(srcs *sources.Sources, declCache *DeclCache, tContext *types.Context, minify bool) (_ *Archive, err error) {
 	defer func() {
 		e := recover()
 		if e == nil {
@@ -173,26 +173,78 @@ func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Ar
 
 	rootCtx := newRootCtx(tContext, srcs, minify)
 
-	importedPaths, importDecls := rootCtx.importDecls()
-
+	// Collect top-level objects and group them by if they are exported generics or not.
 	vars, functions, typeNames := rootCtx.topLevelObjects(srcs)
-	// More named types may be added to the list when function bodies are processed.
-	rootCtx.pkgCtx.typeNames = typeNames
+	mainFunc, fns, expGenFns := rootCtx.groupFuncDecls(functions)
+	typs, expGenTyps := rootCtx.groupNamedTypeDecls(typeNames)
 
-	// Translate functions and variables.
-	varDecls := rootCtx.varDecls(vars)
-	funcDecls, err := rootCtx.funcDecls(functions)
+	// Try to load the cachable decls from the cache.
+	var importedPaths []string
+	var importDecls, varDecls, funcDecls, typeDecls []*Decl
+	if declCache.HasCache() {
+		importedPaths, importDecls, typeDecls, varDecls, funcDecls = declCache.GetDecls()
+	} else {
+		importedPaths, importDecls = rootCtx.importDecls()
+
+		// More named types may be added to the list when function bodies are processed.
+		rootCtx.pkgCtx.typeNames = typs
+
+		// Translate variables.
+		varDecls = rootCtx.varDecls(vars)
+
+		// Translate concrete functions.
+		funcDecls, err = rootCtx.funcDecls(fns)
+		if err != nil {
+			return nil, err
+		}
+
+		if rootCtx.pkgCtx.isMain() {
+			if mainFunc == nil {
+				return nil, fmt.Errorf("missing main function")
+			}
+			// Add a special Decl for invoking main() function after the program has
+			// been initialized. It must come after all other functions, especially all
+			// init() functions, otherwise main() will be invoked too early.
+			funcDecls = append(funcDecls, rootCtx.newCallMainFuncDecl(mainFunc.o))
+		}
+
+		// It is important that we translate current types *after* we've processed all
+		// current functions to make sure we've discovered all types declared inside function
+		// bodies.
+		typeDecls, err = rootCtx.namedTypeDecls(rootCtx.pkgCtx.typeNames)
+		if err != nil {
+			return nil, err
+		}
+
+		// Finally, anonymous types are translated the last, to make sure we've
+		// discovered all of them referenced in functions, variable and type
+		// declarations.
+		typeDecls = append(typeDecls, rootCtx.anonTypeDecls(rootCtx.pkgCtx.anonTypes)...)
+
+		// Store all the currently created decls in the cache.
+		declCache.SetDecls(importedPaths, importDecls, typeDecls, varDecls, funcDecls)
+	}
+
+	// Reset before processing exported generic types.
+	// There may be some duplicated anon types but with unique named from the generics.
+	rootCtx.pkgCtx.typeNames = expGenTyps
+	rootCtx.pkgCtx.anonTypes = nil
+
+	// Translate exported generic functions.
+	expGenfuncDecls, err := rootCtx.funcDecls(expGenFns)
 	if err != nil {
 		return nil, err
 	}
+	funcDecls = append(funcDecls, expGenfuncDecls...)
 
-	// It is important that we translate types *after* we've processed all
-	// functions to make sure we've discovered all types declared inside function
+	// It is important that we translate remaining types *after* we've processed all
+	// remaining functions to make sure we've discovered all types declared inside function
 	// bodies.
-	typeDecls, err := rootCtx.namedTypeDecls(rootCtx.pkgCtx.typeNames)
+	expGenTypeDecls, err := rootCtx.namedTypeDecls(rootCtx.pkgCtx.typeNames)
 	if err != nil {
 		return nil, err
 	}
+	typeDecls = append(typeDecls, expGenTypeDecls...)
 
 	// Finally, anonymous types are translated the last, to make sure we've
 	// discovered all of them referenced in functions, variable and type

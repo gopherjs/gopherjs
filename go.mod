@@ -10,7 +10,7 @@ require (
 	github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86
 	github.com/neelance/sourcemap v0.0.0-20200213170602-2833bce08e4c
 	github.com/shurcooL/go v0.0.0-20200502201357-93f07166e636
-	github.com/sirupsen/logrus v1.8.1
+	github.com/sirupsen/logrus v1.8.3
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	golang.org/x/sync v0.5.0

@@ -1,23 +1,43 @@
 package compiler
 
+import (
+	"encoding/gob"
+	"fmt"
+)
+
 type DeclCache struct {
 	enabled bool
-	// TODO: Implement decl cache.
+	decls   map[string]*Decl
+}
+
+func init() {
+	gob.Register(&DeclCache{})
 }
 
 func NewDeclCache(enable bool) *DeclCache {
 	return &DeclCache{
 		enabled: enable,
+		decls:   map[string]*Decl{},
 	}
 }
 
-// TODO: May need a more unique key since some decls may not have unique names.
 func (dc *DeclCache) GetDecl(fullname string) *Decl {
-	return nil
+	return dc.decls[fullname]
 }
 
 func (dc *DeclCache) PutDecl(decl *Decl) {
+	if !dc.enabled {
+		// If not enabled, do nothing since the cache is not being stored.
+		return
+	}
 
+	if existing, ok := dc.decls[decl.FullName]; ok {
+		if existing != decl {
+			panic(fmt.Errorf(`decl cache conflict: different decls with same name: %q`, decl.FullName))
+		}
+		return
+	}
+	dc.decls[decl.FullName] = decl
 }
 
 func (dc *DeclCache) Read(decode func(any) error) error {

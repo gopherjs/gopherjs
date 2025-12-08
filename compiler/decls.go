@@ -266,12 +266,14 @@ func (fc *funcContext) varDecls(vars []*types.Var) []*Decl {
 // newVarDecl creates a new Decl describing a variable, given an explicit
 // initializer.
 func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
-	fullName := varDeclFullName(init)
+	fullName := varDeclFullName(init, fc.pkgCtx.fileSet)
 	if d := fc.getCachedDecl(fullName); d != nil {
 		return d
 	}
 
-	d := &Decl{FullName: fullName}
+	d := &Decl{
+		FullName: fullName,
+	}
 	assignLHS := []ast.Expr{}
 	for _, o := range init.Lhs {
 		assignLHS = append(assignLHS, fc.newIdentFor(o))
@@ -356,7 +358,7 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 }
 
 func (fc *funcContext) newFuncVarDecl(fun *ast.FuncDecl, o *types.Func, instances []typeparams.Instance) *Decl {
-	fullName := funcVarDeclFullName(o)
+	fullName := funcVarDeclFullName(o, fc.pkgCtx.fileSet)
 	if varDecl := fc.getCachedDecl(fullName); varDecl != nil {
 		return varDecl
 	}
@@ -402,7 +404,7 @@ func (fc *funcContext) newCallMainFuncDecl(mainFunc *types.Func) *Decl {
 
 // newFuncDecl returns a Decl that defines a package-level function or a method.
 func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) *Decl {
-	fullName := funcDeclFullName(inst)
+	fullName := funcDeclFullName(inst, fc.pkgCtx.fileSet)
 	if d := fc.getCachedDecl(fullName); d != nil {
 		return d
 	}
@@ -543,7 +545,7 @@ func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
 // newNamedTypeInstDecl returns a Decl that represents an instantiation of a
 // named Go type.
 func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, error) {
-	fullName := typeDeclFullName(inst)
+	fullName := typeDeclFullName(inst, fc.pkgCtx.fileSet)
 	if d := fc.getCachedDecl(fullName); d != nil {
 		return d, nil
 	}

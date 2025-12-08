@@ -119,6 +119,11 @@ type funcContext struct {
 }
 
 func newRootCtx(tContext *types.Context, srcs *sources.Sources, minify bool) *funcContext {
+	declCache, ok := srcs.CacheData.(*DeclCache)
+	if !ok {
+		declCache = NewDeclCache(false)
+	}
+
 	funcCtx := &funcContext{
 		FuncInfo: srcs.TypeInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{
@@ -133,7 +138,7 @@ func newRootCtx(tContext *types.Context, srcs *sources.Sources, minify bool) *fu
 			minify:       minify,
 			fileSet:      srcs.FileSet,
 			instanceSet:  srcs.TypeInfo.InstanceSets,
-			declCache:    srcs.CacheData.(*DeclCache),
+			declCache:    declCache,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[*types.Label]*flowData{nil: {}},

@@ -387,8 +387,8 @@ func TestDeclSelection_RemoveUnusedNestedTypesInFunction(t *testing.T) {
 	sel.IsDead(`func:command-line-arguments.Foo<int>`)
 
 	sel.IsAlive(`typeVar:command-line-arguments.Bar`)
-	sel.IsAlive(`type:command-line-arguments.Bar<string;>`)
-	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+	sel.IsAlive(`type:command-line-arguments.Bar<string;>@main.go:4:9`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>@main.go:4:9`)
 
 	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
 	sel.IsDead(`func:command-line-arguments.deadCode`)
@@ -423,8 +423,8 @@ func TestDeclSelection_RemoveUnusedNestedTypesInMethod(t *testing.T) {
 	sel.IsAlive(`func:command-line-arguments.(*Baz).Foo<string>`)
 
 	sel.IsAlive(`typeVar:command-line-arguments.Bar`)
-	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
-	sel.IsAlive(`type:command-line-arguments.Bar<string;>`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>@main.go:5:9`)
+	sel.IsAlive(`type:command-line-arguments.Bar<string;>@main.go:5:9`)
 
 	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
 	sel.IsDead(`func:command-line-arguments.deadCode`)
@@ -445,6 +445,7 @@ func TestDeclSelection_RemoveAllUnusedNestedTypes(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
+	sel.PrintDeclStatus()
 	sel.IsAlive(`func:command-line-arguments.main`)
 
 	sel.IsDead(`funcVar:command-line-arguments.Foo`)
@@ -452,8 +453,8 @@ func TestDeclSelection_RemoveAllUnusedNestedTypes(t *testing.T) {
 	sel.IsDead(`func:command-line-arguments.Foo<int>`)
 
 	sel.IsDead(`typeVar:command-line-arguments.Bar`)
-	sel.IsDead(`type:command-line-arguments.Bar<string;>`)
-	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+	sel.IsDead(`type:command-line-arguments.Bar<string;>@main.go:4:9`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>@main.go:4:9`)
 
 	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
 	sel.IsDead(`func:command-line-arguments.deadCode`)
@@ -473,6 +474,7 @@ func TestDeclSelection_CompletelyRemoveNestedType(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
+	sel.PrintDeclStatus()
 
 	sel.IsAlive(`func:command-line-arguments.main`)
 
@@ -480,7 +482,7 @@ func TestDeclSelection_CompletelyRemoveNestedType(t *testing.T) {
 	sel.IsDead(`func:command-line-arguments.Foo<int>`)
 
 	sel.IsDead(`typeVar:command-line-arguments.Bar`)
-	sel.IsDead(`type:command-line-arguments.Bar<int;>`)
+	sel.IsDead(`type:command-line-arguments.Bar<int;>@main.go:4:9`)
 
 	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
 	sel.IsDead(`func:command-line-arguments.deadCode`)
@@ -719,30 +721,30 @@ func TestDeclNaming_InitsAndVars(t *testing.T) {
 	checkForDeclFullNames(t, archives,
 		// tully
 		`var:github.com/gopherjs/gopherjs/compiler/tully.keymaster`,
-		`funcVar:github.com/gopherjs/gopherjs/compiler/tully.init`,
-		`funcVar:github.com/gopherjs/gopherjs/compiler/tully.init`,
-		`func:github.com/gopherjs/gopherjs/compiler/tully.init`,
-		`func:github.com/gopherjs/gopherjs/compiler/tully.init`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/tully.init@b.go:3:8`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/tully.init@a.go:2:8`,
+		`func:github.com/gopherjs/gopherjs/compiler/tully.init@b.go:3:8`,
+		`func:github.com/gopherjs/gopherjs/compiler/tully.init@a.go:2:8`,
 
 		// spangler
 		`var:github.com/gopherjs/gopherjs/compiler/spengler.egie`,
-		`funcVar:github.com/gopherjs/gopherjs/compiler/spengler.init`,
-		`funcVar:github.com/gopherjs/gopherjs/compiler/spengler.init`,
-		`func:github.com/gopherjs/gopherjs/compiler/spengler.init`,
-		`func:github.com/gopherjs/gopherjs/compiler/spengler.init`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/spengler.init@a.go:2:8`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/spengler.init@a.go:4:8`,
+		`func:github.com/gopherjs/gopherjs/compiler/spengler.init@a.go:2:8`,
+		`func:github.com/gopherjs/gopherjs/compiler/spengler.init@a.go:4:8`,
 
 		// barrett
-		`funcVar:github.com/gopherjs/gopherjs/compiler/barrett.init`,
-		`funcVar:github.com/gopherjs/gopherjs/compiler/barrett.init`,
-		`funcVar:github.com/gopherjs/gopherjs/compiler/barrett.init`,
-		`func:github.com/gopherjs/gopherjs/compiler/barrett.init`,
-		`func:github.com/gopherjs/gopherjs/compiler/barrett.init`,
-		`func:github.com/gopherjs/gopherjs/compiler/barrett.init`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/barrett.init@c.go:2:8`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/barrett.init@b.go:2:8`,
+		`funcVar:github.com/gopherjs/gopherjs/compiler/barrett.init@a.go:2:8`,
+		`func:github.com/gopherjs/gopherjs/compiler/barrett.init@c.go:2:8`,
+		`func:github.com/gopherjs/gopherjs/compiler/barrett.init@b.go:2:8`,
+		`func:github.com/gopherjs/gopherjs/compiler/barrett.init@a.go:2:8`,
 
 		// main
 		`var:command-line-arguments.peck`,
-		`funcVar:command-line-arguments.init`,
-		`func:command-line-arguments.init`,
+		`funcVar:command-line-arguments.init@main.go:11:8`,
+		`func:command-line-arguments.init@main.go:11:8`,
 		`funcVar:command-line-arguments.main`,
 		`func:command-line-arguments.main`,
 		`init:main`,
@@ -774,7 +776,7 @@ func TestDeclNaming_VarsAndTypes(t *testing.T) {
 	archives := compileProject(t, root, false)
 	checkForDeclFullNames(t, archives,
 		`var:command-line-arguments.shawn`,
-		`var:blank`,
+		`var:blank@main.go:8:7`,
 
 		`var:command-line-arguments.fezzik`,
 		`anonType:command-line-arguments.structType`,

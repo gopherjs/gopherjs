@@ -111,6 +111,15 @@ func declFullNameDiscriminator(pos token.Pos, fSet *token.FileSet) string {
 	if !pos.IsValid() {
 		return ``
 	}
+	if fSet.File(pos) == nil {
+		// TODO(grantnelson-wf): Figure out why this happens sometimes.
+		// Occationally the position is valid but the file can not be found so would
+		// panic when getting `p`.
+		// I've seen it happen in some file like `goarch_js.go` while testing but
+		// I haven't tracked it down yet. It should be simple to reproduce though.
+		fmt.Printf(`Warning: declFullNameDiscriminator called with invalid fSet for pos %v\n`, pos)
+		return ``
+	}
 	p := fSet.Position(pos)
 	return fmt.Sprintf("@%s:%d:%d", path.Base(p.Filename), p.Line, p.Column)
 }

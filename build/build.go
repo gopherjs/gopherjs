@@ -1084,7 +1084,7 @@ func (s *Session) LoadPackages(pkg *PackageData) (*sources.Sources, error) {
 	var srcs *sources.Sources
 	if s.buildCache != nil {
 		cachedSrcs := &sources.Sources{
-			CacheData: compiler.NewDeclCache(true),
+			DeclCache: compiler.NewDeclCache(true),
 		}
 		if s.buildCache.Load(cachedSrcs, pkg.ImportPath, pkg.SrcModTime) {
 			srcs = cachedSrcs
@@ -1113,7 +1113,7 @@ func (s *Session) LoadPackages(pkg *PackageData) (*sources.Sources, error) {
 			Files:      files,
 			FileSet:    fileSet,
 			JSFiles:    append(pkg.JSFiles, overlayJsFiles...),
-			CacheData:  compiler.NewDeclCache(s.buildCache != nil),
+			DeclCache:  compiler.NewDeclCache(s.buildCache != nil),
 		}
 	}
 
@@ -1178,7 +1178,8 @@ func (s *Session) CompilePackage(srcs *sources.Sources, tContext *types.Context)
 
 	// Store the built package sources in the cache for future use.
 	// The sources should contain all cachable declarations at this point.
-	if s.buildCache != nil {
+	// Skip storing cache if the sources haven't changed since read from cache.
+	if s.buildCache != nil && srcs.Changed() {
 		s.buildCache.Store(srcs, srcs.ImportPath, time.Now())
 	}
 

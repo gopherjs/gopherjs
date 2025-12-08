@@ -45,7 +45,7 @@ func TestRoundTrip(t *testing.T) {
 		Files:      pkgs.Syntax,
 		FileSet:    pkgs.Fset,
 		JSFiles:    jsFiles,
-		CacheData:  &cacheDataStub{},
+		DeclCache:  &cacheDataStub{},
 	}
 
 	// Serialize sources
@@ -56,7 +56,7 @@ func TestRoundTrip(t *testing.T) {
 
 	// Deserialize sources
 	srcs1 := &Sources{
-		CacheData: &cacheDataStub{},
+		DeclCache: &cacheDataStub{},
 	}
 	if err := srcs1.Read(gob.NewDecoder(buf).Decode); err != nil {
 		t.Fatalf("failed to deserialize sources: %v", err)
@@ -129,6 +129,10 @@ func checkSourcesAreEqual(t *testing.T, orig, other *Sources) {
 }
 
 type cacheDataStub struct{}
+
+func (t *cacheDataStub) Changed() bool {
+	return false
+}
 
 func (t *cacheDataStub) Write(encode func(any) error) error {
 	return nil

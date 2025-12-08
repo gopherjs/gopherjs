@@ -119,11 +119,7 @@ type funcContext struct {
 }
 
 func newRootCtx(tContext *types.Context, srcs *sources.Sources, minify bool) *funcContext {
-	declCache, ok := srcs.CacheData.(*DeclCache)
-	if !ok {
-		declCache = NewDeclCache(false)
-	}
-
+	declCache, _ := srcs.DeclCache.(*DeclCache)
 	funcCtx := &funcContext{
 		FuncInfo: srcs.TypeInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{

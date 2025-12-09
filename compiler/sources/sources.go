@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -137,6 +138,21 @@ func (s *Sources) TypeCheck(importer Importer, sizes types.Sizes, tContext *type
 		Sizes:    sizes,
 		Error:    func(err error) { typeErrs = typeErrs.AppendDistinct(err) },
 	}
+
+	if s.ImportPath == `internal/goarch` { // TODO(grantnelson-wf): Remove
+		fmt.Println("Type checking package:", s.ImportPath)
+		s.FileSet.Iterate(func(f *token.File) bool {
+			fmt.Println(`   File:`, f.Name(), `Base:`, f.Base(), `Size:`, f.Size())
+			return true
+		})
+		for _, f := range s.Files {
+			fmt.Println(`   Pos:`, f.Pos(), `End:`, f.End())
+			if s.FileSet.File(f.Pos()) == nil {
+				fmt.Println(`      Failed to find file`)
+			}
+		}
+	}
+
 	typesPkg, err := config.Check(s.ImportPath, s.FileSet, s.Files, typesInfo)
 	// If we encountered any import errors, it is likely that the other type errors
 	// are not meaningful and would be resolved by fixing imports. Return them

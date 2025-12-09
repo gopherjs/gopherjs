@@ -69,10 +69,8 @@ func (dc *DeclCache) Read(decode func(any) error) error {
 		if err := decode(decl); err != nil {
 			return err
 		}
-		fmt.Printf("Read decl from cache: %s\n", decl.FullName) // TODO(grantnelson-wf): REMOVE
 		dc.decls[decl.FullName] = decl
 	}
-
 	return nil
 }
 
@@ -93,7 +91,6 @@ func (dc *DeclCache) Write(encode func(any) error) error {
 	sort.Strings(names)
 
 	for _, name := range names {
-		fmt.Printf("Wrote decl to cache: %s\n", name) // TODO(grantnelson-wf): REMOVE
 		if err := encode(dc.decls[name]); err != nil {
 			return err
 		}

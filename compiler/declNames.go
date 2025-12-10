@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"go/token"
 	"go/types"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/symbol"
@@ -129,7 +129,8 @@ func declFullNameDiscriminator(pos token.Pos, fSet *token.FileSet) string {
 		return ``
 	}
 	p := fSet.Position(pos)
-	return fmt.Sprintf("@%s:%d:%d", path.Base(p.Filename), p.Line, p.Column)
+	fileName := filepath.Base(filepath.ToSlash(p.Filename))
+	return fmt.Sprintf("@%s:%d:%d", fileName, p.Line, p.Column)
 }
 
 // isUnqueDeclFullName reports whether the given declaration full name is unique.

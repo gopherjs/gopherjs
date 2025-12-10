@@ -632,8 +632,15 @@ type PackageData struct {
 	*build.Package
 	JSFiles []incjs.File
 	// IsTest is true if the package is being built for running tests.
-	IsTest     bool
-	SrcModTime time.Time
+	IsTest bool
+	// NoCache indicates that the package should not be cached because
+	// it is being built for running tests or depends on a package being
+	// run for tests. Should be true if IsTest is true.
+	NoCache bool
+	// StaleCache is true if the cached of the package is stale, i.e.,
+	// needs to be rebuilt since sources have been updated, dependencies have
+	// stale caches, or the gopherjs executable has been updated.
+	StaleCache bool
 	UpToDate   bool
 	// If true, the package does not have a corresponding physical directory on disk.
 	IsVirtual bool
@@ -702,6 +709,7 @@ func (p *PackageData) TestPackage() *PackageData {
 			EmbedPatternPos: joinEmbedPatternPos(p.EmbedPatternPos, p.TestEmbedPatternPos),
 		},
 		IsTest:  true,
+		NoCache: true,
 		JSFiles: p.JSFiles,
 		bctx:    p.bctx,
 	}
@@ -718,8 +726,9 @@ func (p *PackageData) XTestPackage() *PackageData {
 			Imports:         p.XTestImports,
 			EmbedPatternPos: p.XTestEmbedPatternPos,
 		},
-		IsTest: true,
-		bctx:   p.bctx,
+		IsTest:  true,
+		NoCache: true,
+		bctx:    p.bctx,
 	}
 }
 
@@ -897,8 +906,8 @@ func (s *Session) BuildFiles(filenames []string, pkgObj string, cwd string) erro
 		Package: p,
 		// This ephemeral package doesn't have a unique import path to be used as a
 		// build cache key, so we never cache it.
-		SrcModTime: time.Now().Add(time.Hour),
-		bctx:       &goCtx(s.xctx.Env()).bctx,
+		NoCache: true,
+		bctx:    &goCtx(s.xctx.Env()).bctx,
 	}
 
 	for _, file := range filenames {
@@ -1063,10 +1072,6 @@ func (s *Session) LoadPackages(pkg *PackageData) (*sources.Sources, error) {
 		return srcs, nil // already loaded
 	}
 
-	if exeModTime := getExeModTime(); exeModTime.After(pkg.SrcModTime) {
-		pkg.SrcModTime = exeModTime
-	}
-
 	for _, importedPkgPath := range pkg.Imports {
 		if importedPkgPath == "unsafe" {
 			continue
@@ -1076,13 +1081,12 @@ func (s *Session) LoadPackages(pkg *PackageData) (*sources.Sources, error) {
 			return nil, err
 		}
 
-		if impModTime := importedPkg.SrcModTime; impModTime.After(pkg.SrcModTime) {
-			pkg.SrcModTime = impModTime
+		if importedPkg.NoCache {
+			pkg.NoCache = true
 		}
-	}
-
-	if fileModTime := pkg.FileModTime(); fileModTime.After(pkg.SrcModTime) {
-		pkg.SrcModTime = fileModTime
+		if importedPkg.StaleCache {
+			pkg.StaleCache = true
+		}
 	}
 
 	// If the package was not found in the cache, build the package
@@ -1112,9 +1116,30 @@ func (s *Session) LoadPackages(pkg *PackageData) (*sources.Sources, error) {
 	s.sources[pkg.ImportPath] = srcs
 
 	// Try to load the cached decls from the build cache.
-	if s.buildCache != nil {
+	if s.buildCache != nil && !pkg.NoCache {
 		declCache := &compiler.DeclCache{}
-		s.buildCache.Load(declCache, pkg.ImportPath, pkg.SrcModTime)
+
+		// If none of the dependencies were stale, then try to populate the cache.
+		// Calculate the most recent mod time of the package's sources
+		// and the gopherjs executable.
+		// If the cache is older than that or fails to load, then the cache is stale.
+		if !pkg.StaleCache {
+			var srcModTime time.Time
+			if exeModTime := getExeModTime(); exeModTime.After(srcModTime) {
+				srcModTime = exeModTime
+			}
+			if fileModTime := pkg.FileModTime(); fileModTime.After(srcModTime) {
+				srcModTime = fileModTime
+			}
+
+			if !s.buildCache.Load(declCache, pkg.ImportPath, srcModTime) {
+				pkg.StaleCache = true
+				// set a new empty declCache incase the Load left it in a
+				// partially filled state.
+				declCache = &compiler.DeclCache{}
+			}
+		}
+
 		s.cachedDecls[pkg.ImportPath] = declCache
 	}
 
@@ -1177,10 +1202,10 @@ func (s *Session) CompilePackage(srcs *sources.Sources, tContext *types.Context)
 
 	// Store the built package sources in the cache for future use.
 	// The sources should contain all cachable declarations at this point.
-	// Skip storing cache if the sources haven't changed since read from cache.
+	// Skip storing cache if the sources haven't changed since read from cache
+	// or the cache is disabled for this package (i.e. `dc` is nil).
 	if s.buildCache != nil {
-		dc := s.cachedDecls[srcs.ImportPath]
-		if dc != nil && dc.Changed() {
+		if dc := s.cachedDecls[srcs.ImportPath]; dc != nil && dc.Changed() {
 			s.buildCache.Store(dc, srcs.ImportPath, time.Now())
 		}
 	}

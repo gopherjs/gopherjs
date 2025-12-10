@@ -371,6 +371,7 @@ func main() {
 			}
 
 			pkg.IsTest = true
+			pkg.NoCache = true
 			mainPkgArchive, err := s.BuildProject(pkg)
 			if err != nil {
 				return fmt.Errorf("failed to compile testmain package for %s: %w", pkg.ImportPath, err)

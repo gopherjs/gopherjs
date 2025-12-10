@@ -57,14 +57,6 @@ type Sources struct {
 	// GoLinknames is the set of Go linknames for this package.
 	// This is nil until set by ParseGoLinknames.
 	GoLinknames []linkname.GoLinkname
-
-	// loadedFromCache indicates whether the sources were loaded from cache.
-	loadedFromCache bool
-
-	// DeclCache is a object that holds any additional cacheable data,
-	// such as precompiled declarations, for these sources.
-	// See [compiler/declCache.go].
-	DeclCache DeclCache
 }
 
 type Importer func(path, srcDir string) (*Sources, error)

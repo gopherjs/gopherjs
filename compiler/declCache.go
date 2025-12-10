@@ -1,37 +1,55 @@
 package compiler
 
 import (
-	"encoding/gob"
 	"fmt"
 	"sort"
 )
 
 type DeclCache struct {
-	enabled bool
 	decls   map[string]*Decl
 	changed bool
 }
 
-func init() {
-	// Register any types that are referenced by an interface so that
-	// the gob encoder/decoder can handle them.
-	gob.Register(&DeclCache{})
-}
-
-func NewDeclCache(enabled bool) *DeclCache {
-	return &DeclCache{enabled: enabled}
+// Chacnged reports whether the cache has had declarations added to it since
+// it was created or last read from storage or created empty.
+//
+// If there have been no changes, the cache does not need to be written back
+// to storage. Typically declarations will only be added when the cache is
+// empty and not loaded from storage since otherwise all the needed declarations
+// (other than those not being cached) would already be present.
+func (dc *DeclCache) Changed() bool {
+	return dc != nil && dc.changed
 }
 
 func (dc *DeclCache) GetDecl(fullname string) *Decl {
-	if dc == nil || !dc.enabled {
+	if dc == nil {
 		return nil // cache is disabled
 	}
 	return dc.decls[fullname]
 }
 
 func (dc *DeclCache) PutDecl(decl *Decl) {
-	if dc == nil || !dc.enabled {
+	if dc == nil {
 		return // cache is disabled
+	}
+
+	if decl.ForGeneric {
+		// Do not cache declarations for generic instantiations.
+		// The type arguments may come from a package depending on this one
+		// and not on one of this package's dependencies.
+		//
+		// If one of this package's dependencies changes, the cache will not be used.
+		// However, currently, changes to packages depending on this one
+		// may change and this package's cache may still be used.
+		// Therefore, if the package depending on this one changes a type from
+		// being blocking to non-blocking or vice versa, the cached declaration
+		// may be invalid.
+		return
+	}
+
+	if isUnqueDeclFullName(decl.FullName) {
+		// Only cache declarations with unique names.
+		return
 	}
 
 	if dc.decls == nil {
@@ -47,12 +65,8 @@ func (dc *DeclCache) PutDecl(decl *Decl) {
 	dc.changed = true
 }
 
-func (dc *DeclCache) Changed() bool {
-	return dc != nil && dc.changed
-}
-
 func (dc *DeclCache) Read(decode func(any) error) error {
-	if dc == nil || !dc.enabled {
+	if dc == nil {
 		return nil // cache is disabled
 	}
 
@@ -75,7 +89,7 @@ func (dc *DeclCache) Read(decode func(any) error) error {
 }
 
 func (dc *DeclCache) Write(encode func(any) error) error {
-	if dc == nil || !dc.enabled {
+	if dc == nil {
 		return nil // cache is disabled
 	}
 

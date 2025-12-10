@@ -118,8 +118,7 @@ type funcContext struct {
 	funcLitCounter int
 }
 
-func newRootCtx(tContext *types.Context, srcs *sources.Sources, minify bool) *funcContext {
-	declCache, _ := srcs.DeclCache.(*DeclCache)
+func newRootCtx(tContext *types.Context, srcs *sources.Sources, declCache *DeclCache, minify bool) *funcContext {
 	funcCtx := &funcContext{
 		FuncInfo: srcs.TypeInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{
@@ -158,7 +157,7 @@ type flowData struct {
 //
 // Provided sources must be prepared so that the type information has been determined,
 // and the source files have been sorted by name to ensure reproducible JavaScript output.
-func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Archive, err error) {
+func Compile(srcs *sources.Sources, declCache *DeclCache, tContext *types.Context, minify bool) (_ *Archive, err error) {
 	defer func() {
 		e := recover()
 		if e == nil {
@@ -174,7 +173,7 @@ func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Ar
 		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", srcs.ImportPath, e))
 	}()
 
-	rootCtx := newRootCtx(tContext, srcs, minify)
+	rootCtx := newRootCtx(tContext, srcs, declCache, minify)
 
 	importedPaths, importDecls := rootCtx.importDecls()
 

@@ -764,6 +764,10 @@ type Session struct {
 	// The files in these sources haven't been sorted nor simplified yet.
 	sources map[string]*sources.Sources
 
+	// cachedDecls is a map of cached declarations.
+	// This is keyed using resolved import paths.
+	cachedDecls map[string]*compiler.DeclCache
+
 	// Binary archives produced during the current session and assumed to be
 	// up to date with input sources and dependencies. In the -w ("watch") mode
 	// must be cleared upon entering watching.
@@ -779,6 +783,7 @@ func NewSession(options *Options) (*Session, error) {
 		options:          options,
 		importPaths:      make(map[string]map[string]string),
 		sources:          make(map[string]*sources.Sources),
+		cachedDecls:      make(map[string]*compiler.DeclCache),
 		UpToDateArchives: make(map[string]*compiler.Archive),
 	}
 	s.xctx = NewBuildContext(s.InstallSuffix(), s.options.BuildTags)
@@ -1055,7 +1060,7 @@ var getExeModTime = func() func() time.Time {
 // to the session's sources map.
 func (s *Session) LoadPackages(pkg *PackageData) (*sources.Sources, error) {
 	if srcs, ok := s.sources[pkg.ImportPath]; ok {
-		return srcs, nil
+		return srcs, nil // already loaded
 	}
 
 	if exeModTime := getExeModTime(); exeModTime.After(pkg.SrcModTime) {
@@ -1080,45 +1085,38 @@ func (s *Session) LoadPackages(pkg *PackageData) (*sources.Sources, error) {
 		pkg.SrcModTime = fileModTime
 	}
 
-	// Try to load the package from the build cache.
-	var srcs *sources.Sources
-	if s.buildCache != nil {
-		cachedSrcs := &sources.Sources{
-			DeclCache: compiler.NewDeclCache(true),
-		}
-		if s.buildCache.Load(cachedSrcs, pkg.ImportPath, pkg.SrcModTime) {
-			srcs = cachedSrcs
-		}
-	}
-
 	// If the package was not found in the cache, build the package
 	// by parsing and augmenting the original files with overlay files.
-	if srcs == nil {
-		fileSet := token.NewFileSet()
-		files, overlayJsFiles, err := parseAndAugment(s.xctx, pkg, pkg.IsTest, fileSet)
-		if err != nil {
-			return nil, err
-		}
-		embed, err := embedFiles(pkg, fileSet, files)
-		if err != nil {
-			return nil, err
-		}
-		if embed != nil {
-			files = append(files, embed)
-		}
+	fileSet := token.NewFileSet()
+	files, overlayJsFiles, err := parseAndAugment(s.xctx, pkg, pkg.IsTest, fileSet)
+	if err != nil {
+		return nil, err
+	}
+	embed, err := embedFiles(pkg, fileSet, files)
+	if err != nil {
+		return nil, err
+	}
+	if embed != nil {
+		files = append(files, embed)
+	}
 
-		srcs = &sources.Sources{
-			ImportPath: pkg.ImportPath,
-			Dir:        pkg.Dir,
-			Files:      files,
-			FileSet:    fileSet,
-			JSFiles:    append(pkg.JSFiles, overlayJsFiles...),
-			DeclCache:  compiler.NewDeclCache(s.buildCache != nil),
-		}
+	srcs := &sources.Sources{
+		ImportPath: pkg.ImportPath,
+		Dir:        pkg.Dir,
+		Files:      files,
+		FileSet:    fileSet,
+		JSFiles:    append(pkg.JSFiles, overlayJsFiles...),
 	}
 
 	// Add the sources to the session's sources map.
 	s.sources[pkg.ImportPath] = srcs
+
+	// Try to load the cached decls from the build cache.
+	if s.buildCache != nil {
+		declCache := &compiler.DeclCache{}
+		s.buildCache.Load(declCache, pkg.ImportPath, pkg.SrcModTime)
+		s.cachedDecls[pkg.ImportPath] = declCache
+	}
 
 	// Import dependencies from the augmented files,
 	// whilst skipping any that have been already imported.
@@ -1167,7 +1165,8 @@ func (s *Session) CompilePackage(srcs *sources.Sources, tContext *types.Context)
 		return archive, nil
 	}
 
-	archive, err := compiler.Compile(srcs, tContext, s.options.Minify)
+	declCache := s.cachedDecls[srcs.ImportPath]
+	archive, err := compiler.Compile(srcs, declCache, tContext, s.options.Minify)
 	if err != nil {
 		return nil, err
 	}
@@ -1179,8 +1178,11 @@ func (s *Session) CompilePackage(srcs *sources.Sources, tContext *types.Context)
 	// Store the built package sources in the cache for future use.
 	// The sources should contain all cachable declarations at this point.
 	// Skip storing cache if the sources haven't changed since read from cache.
-	if s.buildCache != nil && srcs.Changed() {
-		s.buildCache.Store(srcs, srcs.ImportPath, time.Now())
+	if s.buildCache != nil {
+		dc := s.cachedDecls[srcs.ImportPath]
+		if dc != nil && dc.Changed() {
+			s.buildCache.Store(dc, srcs.ImportPath, time.Now())
+		}
 	}
 
 	s.UpToDateArchives[srcs.ImportPath] = archive

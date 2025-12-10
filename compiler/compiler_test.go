@@ -1180,7 +1180,7 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 
 	archives := map[string]*Archive{}
 	for _, srcs := range allSrcs {
-		a, err := Compile(srcs, tContext, minify)
+		a, err := Compile(srcs, nil, tContext, minify)
 		if err != nil {
 			t.Fatal(`failed to compile:`, err)
 		}

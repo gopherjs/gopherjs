@@ -91,7 +91,7 @@ var _ Cache = (*BuildCache)(nil)
 // the cache. For example, any artifacts that were cached for a Linux build
 // must not be reused for a non-Linux build. GopherJS version change also
 // invalidates the cache. It is callers responsibility to ensure that artifacts
-// passed the Store function were generated with the same build
+// passed to the Store function were generated with the same build
 // parameters as the cache is configured.
 //
 // There is no upper limit for the total cache size. It can be cleared
@@ -117,9 +117,7 @@ type BuildCache struct {
 	// TestedPackage is the import path of the package being tested, or
 	// empty when not building for tests. The package under test is built
 	// with *_test.go sources included so we should always skip reading
-	// and writing cache in that case. Since we are caching prior to
-	// type-checking for generics, any package importing the package under
-	// test should be unaffected.
+	// and writing cache in that case.
 	TestedPackage string
 }
 

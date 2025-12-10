@@ -3,36 +3,10 @@ package sources
 import (
 	"bytes"
 	"encoding/gob"
-	"errors"
 	"go/ast"
 	"go/token"
 	"sync"
-
-	"github.com/gopherjs/gopherjs/build/cache"
 )
-
-// DeclCache represents additional data, a collection of precompiled
-// declarations, to be cached along with the sources.
-//
-// The interface is used to prevent circular dependencies between packages.
-type DeclCache interface {
-	cache.Cacheable
-
-	// Changed indicates whether the cache data has changed since it was loaded.
-	Changed() bool
-}
-
-// Changed indicates whether the sources was loaded from the cache and
-// if it has been modified since then.
-// The cache will not check this automatically, so that the sources can be
-// stored even if it hasn't changed.
-// This should check this before calling cache.Store to avoid unnecessary work.
-//
-// This does not include changes to the type information or other information
-// that is not part of the cached data.
-func (s *Sources) Changed() bool {
-	return s != nil && (!s.loadedFromCache || s.DeclCache.Changed())
-}
 
 func (s *Sources) GobEncode() ([]byte, error) {
 	buf := &bytes.Buffer{}
@@ -77,12 +51,6 @@ func (s *Sources) Write(encode func(any) error) error {
 	if err := encode(s.JSFiles); err != nil {
 		return err
 	}
-	if s.DeclCache == nil {
-		return errors.New(`may not write the sources' DeclCache with a nil DeclCache`)
-	}
-	if err := s.DeclCache.Write(encode); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -116,13 +84,6 @@ func (s *Sources) Read(decode func(any) error) error {
 	if err := decode(&s.JSFiles); err != nil {
 		return err
 	}
-	if s.DeclCache == nil {
-		return errors.New(`may not read the sources' DeclCache with a nil DeclCache`)
-	}
-	if err := s.DeclCache.Read(decode); err != nil {
-		return err
-	}
-	s.loadedFromCache = true
 	return nil
 }
 

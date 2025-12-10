@@ -83,6 +83,10 @@ func (dc *DeclCache) Read(decode func(any) error) error {
 		if err := decode(decl); err != nil {
 			return err
 		}
+		if decl.ForGeneric || isUnqueDeclFullName(decl.FullName) {
+			// These declarations should not have been cached.
+			continue
+		}
 		dc.decls[decl.FullName] = decl
 	}
 	return nil

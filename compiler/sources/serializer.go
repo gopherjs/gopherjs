@@ -1,22 +1,11 @@
 package sources
 
 import (
-	"bytes"
 	"encoding/gob"
 	"go/ast"
 	"go/token"
 	"sync"
 )
-
-func (s *Sources) GobEncode() ([]byte, error) {
-	buf := &bytes.Buffer{}
-	err := s.Write(gob.NewEncoder(buf).Encode)
-	return buf.Bytes(), err
-}
-
-func (s *Sources) GobDecode(data []byte) error {
-	return s.Read(gob.NewDecoder(bytes.NewReader(data)).Decode)
-}
 
 // Write will call encode multiple times to write the various fields
 // of the sources. This is designed to be used with a gob.Encoder.

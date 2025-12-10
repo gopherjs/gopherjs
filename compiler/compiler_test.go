@@ -380,6 +380,7 @@ func TestDeclSelection_RemoveUnusedNestedTypesInFunction(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
+	sel.PrintDeclStatus()
 	sel.IsAlive(`func:command-line-arguments.main`)
 
 	sel.IsAlive(`funcVar:command-line-arguments.Foo`)
@@ -387,8 +388,8 @@ func TestDeclSelection_RemoveUnusedNestedTypesInFunction(t *testing.T) {
 	sel.IsDead(`func:command-line-arguments.Foo<int>`)
 
 	sel.IsAlive(`typeVar:command-line-arguments.Bar`)
-	sel.IsAlive(`type:command-line-arguments.Bar<string;>@main.go:4:9`)
-	sel.IsDead(`type:command-line-arguments.Bar<int;>@main.go:4:9`)
+	sel.IsAlive(`type:nested:command-line-arguments.Bar<string;>@main.go:4:9`)
+	sel.IsDead(`type:nested:command-line-arguments.Bar<int;>@main.go:4:9`)
 
 	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
 	sel.IsDead(`func:command-line-arguments.deadCode`)
@@ -413,6 +414,7 @@ func TestDeclSelection_RemoveUnusedNestedTypesInMethod(t *testing.T) {
 
 	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
 	sel := declSelection(t, srcFiles, nil)
+	sel.PrintDeclStatus()
 	sel.IsAlive(`func:command-line-arguments.main`)
 
 	sel.IsAlive(`typeVar:command-line-arguments.Baz`)
@@ -423,8 +425,8 @@ func TestDeclSelection_RemoveUnusedNestedTypesInMethod(t *testing.T) {
 	sel.IsAlive(`func:command-line-arguments.(*Baz).Foo<string>`)
 
 	sel.IsAlive(`typeVar:command-line-arguments.Bar`)
-	sel.IsDead(`type:command-line-arguments.Bar<int;>@main.go:5:9`)
-	sel.IsAlive(`type:command-line-arguments.Bar<string;>@main.go:5:9`)
+	sel.IsDead(`type:nested:command-line-arguments.Bar<int;>@main.go:5:9`)
+	sel.IsAlive(`type:nested:command-line-arguments.Bar<string;>@main.go:5:9`)
 
 	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
 	sel.IsDead(`func:command-line-arguments.deadCode`)
@@ -453,8 +455,8 @@ func TestDeclSelection_RemoveAllUnusedNestedTypes(t *testing.T) {
 	sel.IsDead(`func:command-line-arguments.Foo<int>`)
 
 	sel.IsDead(`typeVar:command-line-arguments.Bar`)
-	sel.IsDead(`type:command-line-arguments.Bar<string;>@main.go:4:9`)
-	sel.IsDead(`type:command-line-arguments.Bar<int;>@main.go:4:9`)
+	sel.IsDead(`type:nested:command-line-arguments.Bar<string;>@main.go:4:9`)
+	sel.IsDead(`type:nested:command-line-arguments.Bar<int;>@main.go:4:9`)
 
 	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
 	sel.IsDead(`func:command-line-arguments.deadCode`)
@@ -482,7 +484,7 @@ func TestDeclSelection_CompletelyRemoveNestedType(t *testing.T) {
 	sel.IsDead(`func:command-line-arguments.Foo<int>`)
 
 	sel.IsDead(`typeVar:command-line-arguments.Bar`)
-	sel.IsDead(`type:command-line-arguments.Bar<int;>@main.go:4:9`)
+	sel.IsDead(`type:nested:command-line-arguments.Bar<int;>@main.go:4:9`)
 
 	sel.IsDead(`funcVar:command-line-arguments.deadCode`)
 	sel.IsDead(`func:command-line-arguments.deadCode`)

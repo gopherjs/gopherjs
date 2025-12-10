@@ -40,6 +40,7 @@ type pkgContext struct {
 	fileSet      *token.FileSet
 	errList      errlist.ErrorList
 	instanceSet  *typeparams.PackageInstanceSets
+	declCache    *DeclCache
 }
 
 // isMain returns true if this is the main package of the program.
@@ -117,7 +118,7 @@ type funcContext struct {
 	funcLitCounter int
 }
 
-func newRootCtx(tContext *types.Context, srcs *sources.Sources, minify bool) *funcContext {
+func newRootCtx(tContext *types.Context, srcs *sources.Sources, declCache *DeclCache, minify bool) *funcContext {
 	funcCtx := &funcContext{
 		FuncInfo: srcs.TypeInfo.InitFuncInfo,
 		pkgCtx: &pkgContext{
@@ -132,6 +133,7 @@ func newRootCtx(tContext *types.Context, srcs *sources.Sources, minify bool) *fu
 			minify:       minify,
 			fileSet:      srcs.FileSet,
 			instanceSet:  srcs.TypeInfo.InstanceSets,
+			declCache:    declCache,
 		},
 		allVars:     make(map[string]int),
 		flowDatas:   map[*types.Label]*flowData{nil: {}},
@@ -155,7 +157,7 @@ type flowData struct {
 //
 // Provided sources must be prepared so that the type information has been determined,
 // and the source files have been sorted by name to ensure reproducible JavaScript output.
-func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Archive, err error) {
+func Compile(srcs *sources.Sources, declCache *DeclCache, tContext *types.Context, minify bool) (_ *Archive, err error) {
 	defer func() {
 		e := recover()
 		if e == nil {
@@ -171,7 +173,7 @@ func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Ar
 		err = bailout(fmt.Errorf("unexpected compiler panic while building package %q: %v", srcs.ImportPath, e))
 	}()
 
-	rootCtx := newRootCtx(tContext, srcs, minify)
+	rootCtx := newRootCtx(tContext, srcs, declCache, minify)
 
 	importedPaths, importDecls := rootCtx.importDecls()
 

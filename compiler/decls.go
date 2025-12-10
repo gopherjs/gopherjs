@@ -79,6 +79,8 @@ type Decl struct {
 	// that it can be resumed after a blocking operation completes without
 	// blocking the main thread in the meantime.
 	Blocking bool
+	// ForGeneric inidicates this decl is for a generic function or type.
+	ForGeneric bool
 }
 
 // minify returns a copy of Decl with unnecessary whitespace removed from the
@@ -99,6 +101,14 @@ func (d Decl) minify() Decl {
 // Dce gets the information for dead-code elimination.
 func (d *Decl) Dce() *dce.Info {
 	return &d.DCEInfo
+}
+
+func (fc *funcContext) getCachedDecl(fullname string) *Decl {
+	return fc.pkgCtx.declCache.GetDecl(fullname)
+}
+
+func (fc *funcContext) putCachedDecl(d *Decl) {
+	fc.pkgCtx.declCache.PutDecl(d)
 }
 
 // topLevelObjects extracts package-level variables, functions and named types
@@ -183,14 +193,20 @@ func (fc *funcContext) importDecls() (importedPaths []string, importDecls []*Dec
 
 // newImportDecl registers the imported package and returns a Decl instance for it.
 func (fc *funcContext) newImportDecl(importedPkg *types.Package) *Decl {
+	fullName := importDeclFullName(importedPkg)
+	if d := fc.getCachedDecl(fullName); d != nil {
+		return d
+	}
+
 	pkgVar := fc.importedPkgVar(importedPkg)
 	d := &Decl{
-		FullName:   importDeclFullName(importedPkg),
+		FullName:   fullName,
 		Vars:       []string{pkgVar},
 		ImportCode: []byte(fmt.Sprintf("\t%s = $packages[\"%s\"];\n", pkgVar, importedPkg.Path())),
 		InitCode:   fc.CatchOutput(1, func() { fc.translateStmt(fc.importInitializer(importedPkg.Path()), nil) }),
 	}
 	d.Dce().SetAsAlive()
+	fc.putCachedDecl(d)
 	return d
 }
 
@@ -250,10 +266,14 @@ func (fc *funcContext) varDecls(vars []*types.Var) []*Decl {
 // newVarDecl creates a new Decl describing a variable, given an explicit
 // initializer.
 func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
-	d := &Decl{
-		FullName: varDeclFullName(init),
+	fullName := varDeclFullName(init, fc.pkgCtx.fileSet)
+	if d := fc.getCachedDecl(fullName); d != nil {
+		return d
 	}
 
+	d := &Decl{
+		FullName: fullName,
+	}
 	assignLHS := []ast.Expr{}
 	for _, o := range init.Lhs {
 		assignLHS = append(assignLHS, fc.newIdentFor(o))
@@ -289,6 +309,7 @@ func (fc *funcContext) newVarDecl(init *types.Initializer) *Decl {
 	if len(init.Lhs) != 1 || analysis.HasSideEffect(init.Rhs, fc.pkgCtx.Info.Info) {
 		d.Dce().SetAsAlive()
 	}
+	fc.putCachedDecl(d)
 	return d
 }
 
@@ -313,31 +334,15 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 			// Auxiliary decl shared by all instances of the function that defines
 			// package-level variable by which they all are referenced,
 			// e.g. init functions and instances of generic functions.
-			objName := fc.objectName(o)
-			generic := len(instances) > 1 || !instances[0].IsTrivial()
-			varName := objName
-			if generic {
-				varName += ` = []`
-			}
-			varDecl := &Decl{
-				FullName: funcVarDeclFullName(o),
-				Vars:     []string{varName},
-			}
-			varDecl.Dce().SetName(o, nil, nil)
-			if generic && o.Exported() {
-				varDecl.ExportFuncCode = fc.CatchOutput(1, func() {
-					fc.Printf("$pkg.%s = %s;", encodeIdent(fun.Name.Name), objName)
-				})
-			}
-			funcDecls = append(funcDecls, varDecl)
+			funcDecls = append(funcDecls, fc.newFuncVarDecl(fun, o, instances))
 		}
 
 		for _, inst := range instances {
 			funcDecls = append(funcDecls, fc.newFuncDecl(fun, inst))
+		}
 
-			if o.Name() == "main" {
-				mainFunc = o // main() function candidate.
-			}
+		if o.Name() == "main" {
+			mainFunc = o // main() function candidate.
 		}
 	}
 	if fc.pkgCtx.isMain() {
@@ -347,21 +352,69 @@ func (fc *funcContext) funcDecls(functions []*ast.FuncDecl) ([]*Decl, error) {
 		// Add a special Decl for invoking main() function after the program has
 		// been initialized. It must come after all other functions, especially all
 		// init() functions, otherwise main() will be invoked too early.
-		funcDecls = append(funcDecls, &Decl{
-			FullName: mainFuncDeclFullName(),
-			InitCode: fc.CatchOutput(1, func() { fc.translateStmt(fc.callMainFunc(mainFunc), nil) }),
-		})
+		funcDecls = append(funcDecls, fc.newCallMainFuncDecl(mainFunc))
 	}
 	return funcDecls, nil
 }
 
+func (fc *funcContext) newFuncVarDecl(fun *ast.FuncDecl, o *types.Func, instances []typeparams.Instance) *Decl {
+	fullName := funcVarDeclFullName(o, fc.pkgCtx.fileSet)
+	if varDecl := fc.getCachedDecl(fullName); varDecl != nil {
+		return varDecl
+	}
+
+	objName := fc.objectName(o)
+	generic := len(instances) > 1 || !instances[0].IsTrivial()
+
+	varName := objName
+	if generic {
+		varName += ` = []`
+	}
+
+	varDecl := &Decl{
+		FullName:   fullName,
+		Vars:       []string{varName},
+		ForGeneric: generic,
+	}
+	varDecl.Dce().SetName(o, nil, nil)
+
+	if generic && o.Exported() {
+		varDecl.ExportFuncCode = fc.CatchOutput(1, func() {
+			fc.Printf("$pkg.%s = %s;", encodeIdent(fun.Name.Name), objName)
+		})
+	}
+
+	fc.putCachedDecl(varDecl)
+	return varDecl
+}
+
+func (fc *funcContext) newCallMainFuncDecl(mainFunc *types.Func) *Decl {
+	fullName := mainFuncDeclFullName()
+	if d := fc.getCachedDecl(fullName); d != nil {
+		return d
+	}
+
+	d := &Decl{
+		FullName: fullName,
+		InitCode: fc.CatchOutput(1, func() { fc.translateStmt(fc.callMainFunc(mainFunc), nil) }),
+	}
+	fc.putCachedDecl(d)
+	return d
+}
+
 // newFuncDecl returns a Decl that defines a package-level function or a method.
 func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) *Decl {
+	fullName := funcDeclFullName(inst, fc.pkgCtx.fileSet)
+	if d := fc.getCachedDecl(fullName); d != nil {
+		return d
+	}
+
 	o := fc.pkgCtx.Defs[fun.Name].(*types.Func)
 	d := &Decl{
-		FullName:    funcDeclFullName(inst),
+		FullName:    fullName,
 		Blocking:    fc.pkgCtx.IsBlocking(inst),
 		LinkingName: symbol.New(o),
+		ForGeneric:  !inst.IsTrivial(),
 	}
 	d.Dce().SetName(o, inst.TNest, inst.TArgs)
 
@@ -384,6 +437,8 @@ func (fc *funcContext) newFuncDecl(fun *ast.FuncDecl, inst typeparams.Instance) 
 	fc.pkgCtx.CollectDCEDeps(d, func() {
 		d.FuncDeclCode = fc.namedFuncContext(inst).translateTopLevelFunction(fun)
 	})
+
+	fc.putCachedDecl(d)
 	return d
 }
 
@@ -460,6 +515,11 @@ func (fc *funcContext) namedTypeDecls(typeNames typesutil.TypeNames) ([]*Decl, e
 // of the type, keyed by the type argument combination. Otherwise it contains
 // the type definition directly.
 func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
+	fullName := typeVarDeclFullName(obj)
+	if varDecl := fc.getCachedDecl(fullName); varDecl != nil {
+		return varDecl
+	}
+
 	name := fc.objectName(obj)
 	generic := fc.pkgCtx.instanceSet.Pkg(obj.Pkg()).ObjHasInstances(obj)
 	varName := name
@@ -467,8 +527,9 @@ func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
 		varName += ` = []`
 	}
 	varDecl := &Decl{
-		FullName: typeVarDeclFullName(obj),
-		Vars:     []string{varName},
+		FullName:   fullName,
+		Vars:       []string{varName},
+		ForGeneric: generic,
 	}
 	varDecl.Dce().SetName(obj, nil, nil)
 	if isPkgLevel(obj) {
@@ -476,12 +537,19 @@ func (fc *funcContext) newNamedTypeVarDecl(obj *types.TypeName) *Decl {
 			fc.Printf("$pkg.%s = %s;", encodeIdent(obj.Name()), name)
 		})
 	}
+
+	fc.putCachedDecl(varDecl)
 	return varDecl
 }
 
 // newNamedTypeInstDecl returns a Decl that represents an instantiation of a
 // named Go type.
 func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, error) {
+	fullName := typeDeclFullName(inst, fc.pkgCtx.fileSet)
+	if d := fc.getCachedDecl(fullName); d != nil {
+		return d, nil
+	}
+
 	originType := inst.Object.Type().(*types.Named)
 
 	fc.typeResolver = typeparams.NewResolver(fc.pkgCtx.typesCtx, inst)
@@ -501,7 +569,8 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 
 	underlying := instanceType.Underlying()
 	d := &Decl{
-		FullName: typeDeclFullName(inst),
+		FullName:   fullName,
+		ForGeneric: !inst.IsTrivial(),
 	}
 	d.Dce().SetName(inst.Object, inst.TNest, inst.TArgs)
 	fc.pkgCtx.CollectDCEDeps(d, func() {
@@ -559,6 +628,8 @@ func (fc *funcContext) newNamedTypeInstDecl(inst typeparams.Instance) (*Decl, er
 			})
 		}
 	})
+
+	fc.putCachedDecl(d)
 	return d, nil
 }
 
@@ -625,14 +696,21 @@ func (fc *funcContext) anonTypeDecls(anonTypes []*types.TypeName) []*Decl {
 	}
 	decls := []*Decl{}
 	for _, t := range anonTypes {
+		fullName := anonTypeDeclFullName(t)
+		if d := fc.getCachedDecl(fullName); d != nil {
+			decls = append(decls, d)
+			continue
+		}
+
 		d := &Decl{
-			FullName: anonTypeDeclFullName(t),
+			FullName: fullName,
 			Vars:     []string{t.Name()},
 		}
 		d.Dce().SetName(t, nil, nil)
 		fc.pkgCtx.CollectDCEDeps(d, func() {
 			d.AnonTypeDeclCode = []byte(fmt.Sprintf("\t\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), fc.initArgs(t.Type())))
 		})
+		fc.putCachedDecl(d)
 		decls = append(decls, d)
 	}
 	return decls

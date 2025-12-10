@@ -61,16 +61,19 @@ func (s *Sources) Read(decode func(any) error) error {
 	if err := decode(&s.Files); err != nil {
 		return err
 	}
-	for _, f := range s.Files {
-		unpackFile(f)
-	}
 	if s.FileSet == nil {
 		s.FileSet = token.NewFileSet()
 	}
 	if err := s.FileSet.Read(decode); err != nil {
 		return err
 	}
-	return decode(&s.JSFiles)
+	for _, f := range s.Files {
+		unpackFile(f, s.FileSet)
+	}
+	if err := decode(&s.JSFiles); err != nil {
+		return err
+	}
+	return nil
 }
 
 // prepareFile is run when serializing a source to remove fields that can be
@@ -100,9 +103,14 @@ func prepareFile(file *ast.File) *ast.File {
 	return file
 }
 
+// finishUnpackingFile is an optional function that is run after unpacking
+// a file during deserialization to perform any additional processing needed
+// for specific Go versions.
+var finishUnpackingFile func(f *ast.File, fs *token.FileSet)
+
 // unpackFile is run when deserializing a source to reconstruct the
 // Imports and Comments fields that were cleared when serializing the file.
-func unpackFile(file *ast.File) {
+func unpackFile(file *ast.File, fs *token.FileSet) {
 	var imports []*ast.ImportSpec
 	var comments []*ast.CommentGroup
 	ast.Inspect(file, func(n ast.Node) bool {
@@ -116,6 +124,9 @@ func unpackFile(file *ast.File) {
 	})
 	file.Imports = imports
 	file.Comments = comments
+	if finishUnpackingFile != nil {
+		finishUnpackingFile(file, fs)
+	}
 }
 
 // prepareGob registers the AST node types with the gob package
@@ -128,6 +139,13 @@ func unpackFile(file *ast.File) {
 // an interface field in the AST.
 var prepareGob = func() func() {
 	registerTypes := func() {
+		gob.Register(token.NoPos)
+		gob.Register(&ast.File{})
+		gob.Register(&ast.Comment{})
+		gob.Register(&ast.CommentGroup{})
+		gob.Register(&ast.Field{})
+		gob.Register(&ast.FieldList{})
+
 		// Register expression nodes.
 		gob.Register(&ast.BadExpr{})
 		gob.Register(&ast.Ident{})

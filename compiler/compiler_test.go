@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 	"golang.org/x/tools/go/packages"
 
 	"github.com/gopherjs/gopherjs/compiler/internal/dce"
@@ -968,33 +968,6 @@ func Test_IndexedSelectors(t *testing.T) {
 	)
 }
 
-func TestArchiveSelectionAfterSerialization(t *testing.T) {
-	src := `
-		package main
-		type Foo interface{ int | string }
-
-		type Bar[T Foo] struct{ v T }
-		func (b Bar[T]) Baz() { println(b.v) }
-
-		var ghost = Bar[int]{v: 7} // unused
-
-		func main() {
-			println("do nothing")
-		}`
-	srcFiles := []srctesting.Source{{Name: `main.go`, Contents: []byte(src)}}
-	root := srctesting.ParseSources(t, srcFiles, nil)
-	rootPath := root.PkgPath
-	origArchives := compileProject(t, root, false)
-	readArchives := reloadCompiledProject(t, origArchives, rootPath)
-
-	origJS := renderPackage(t, origArchives[rootPath], false)
-	readJS := renderPackage(t, readArchives[rootPath], false)
-
-	if diff := cmp.Diff(origJS, readJS); diff != "" {
-		t.Errorf("the reloaded files produce different JS:\n%s", diff)
-	}
-}
-
 func TestNestedConcreteTypeInGenericFunc(t *testing.T) {
 	// This is a test of a type defined inside a generic function
 	// that uses the type parameter of the function as a field type.
@@ -1214,71 +1187,6 @@ func compileProject(t *testing.T, root *packages.Package, minify bool) map[strin
 	return archives
 }
 
-// newTime creates an arbitrary time.Time offset by the given number of seconds.
-// This is useful for quickly creating times that are before or after another.
-func newTime(seconds float64) time.Time {
-	return time.Date(1969, 7, 20, 20, 17, 0, 0, time.UTC).
-		Add(time.Duration(seconds * float64(time.Second)))
-}
-
-// reloadCompiledProject persists the given archives into memory then reloads
-// them from memory to simulate a cache reload of a precompiled project.
-func reloadCompiledProject(t *testing.T, archives map[string]*Archive, rootPkgPath string) map[string]*Archive {
-	t.Helper()
-
-	// TODO(grantnelson-wf): The tests using this function are out-of-date
-	// since they are testing the old archive caching that has been disabled.
-	// At some point, these tests should be updated to test any new caching
-	// mechanism that is implemented or removed. As is this function is faking
-	// the old recursive archive loading that is no longer used since it
-	// doesn't allow cross package analysis for generings.
-
-	buildTime := newTime(5.0)
-	serialized := map[string][]byte{}
-	for path, a := range archives {
-		buf := &bytes.Buffer{}
-		if err := WriteArchive(a, buildTime, buf); err != nil {
-			t.Fatalf(`failed to write archive for %s: %v`, path, err)
-		}
-		serialized[path] = buf.Bytes()
-	}
-
-	srcModTime := newTime(0.0)
-	reloadCache := map[string]*Archive{}
-	type ImportContext struct {
-		Packages      map[string]*types.Package
-		ImportArchive func(path string) (*Archive, error)
-	}
-	var importContext *ImportContext
-	importContext = &ImportContext{
-		Packages: map[string]*types.Package{},
-		ImportArchive: func(path string) (*Archive, error) {
-			// find in local cache
-			if a, ok := reloadCache[path]; ok {
-				return a, nil
-			}
-
-			// deserialize archive
-			buf, ok := serialized[path]
-			if !ok {
-				t.Fatalf(`archive not found for %s`, path)
-			}
-			a, _, err := ReadArchive(path, bytes.NewReader(buf), srcModTime, importContext.Packages)
-			if err != nil {
-				t.Fatalf(`failed to read archive for %s: %v`, path, err)
-			}
-			reloadCache[path] = a
-			return a, nil
-		},
-	}
-
-	_, err := importContext.ImportArchive(rootPkgPath)
-	if err != nil {
-		t.Fatal(`failed to reload archives:`, err)
-	}
-	return reloadCache
-}
-
 func renderPackage(t *testing.T, archive *Archive, minify bool) string {
 	t.Helper()
 
@@ -1290,7 +1198,7 @@ func renderPackage(t *testing.T, archive *Archive, minify bool) string {
 
 	buf := &bytes.Buffer{}
 
-	if err := WritePkgCode(archive, selection, linkname.GoLinknameSet{}, minify, &SourceMapFilter{Writer: buf}); err != nil {
+	if err := WritePkgCode(archive, selection, linkname.GoLinknameSet{}, minify, &sourcemapx.Filter{Writer: buf}); err != nil {
 		t.Fatal(err)
 	}
 

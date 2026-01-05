@@ -91,7 +91,7 @@ func (t *rtype) Method(i int) (m Method) {
 	mt := FuncOf(in, out, ft.IsVariadic())
 	m.Type = mt
 	prop := js.Global.Call("$methodSet", js.InternalObject(t).Get(idJsType)).Index(i).Get("prop").String()
-	fn := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
+	fn := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		rcvr := arguments[0]
 		return rcvr.Get(prop).Call("apply", rcvr, arguments[1:])
 	})

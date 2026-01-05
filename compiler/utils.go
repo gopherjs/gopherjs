@@ -2,7 +2,6 @@ package compiler
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -21,6 +20,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 )
 
 // We use this character as a separator in synthetic identifiers instead of a
@@ -47,7 +47,7 @@ func (fc *funcContext) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (fc *funcContext) Printf(format string, values ...interface{}) {
+func (fc *funcContext) Printf(format string, values ...any) {
 	fc.Write([]byte(fc.Indentation(0)))
 	fmt.Fprintf(fc, format, values...)
 	fc.Write([]byte{'\n'})
@@ -57,7 +57,7 @@ func (fc *funcContext) Printf(format string, values ...interface{}) {
 
 func (fc *funcContext) PrintCond(cond bool, onTrue, onFalse string) {
 	if !cond {
-		fc.Printf("/* %s */ %s", strings.Replace(onTrue, "*/", "<star>/", -1), onFalse)
+		fc.Printf("/* %s */ %s", strings.ReplaceAll(onTrue, "*/", "<star>/"), onFalse)
 		return
 	}
 	fc.Printf("%s", onTrue)
@@ -71,8 +71,13 @@ func (fc *funcContext) SetPos(pos token.Pos) {
 func (fc *funcContext) writePos() {
 	if fc.posAvailable {
 		fc.posAvailable = false
-		fc.Write([]byte{'\b'})
-		binary.Write(fc, binary.BigEndian, uint32(fc.pos))
+		h := sourcemapx.Hint{}
+		if err := h.Pack(fc.pos); err != nil {
+			panic(bailout(fmt.Errorf("failed to pack source map position: %w", err)))
+		}
+		if _, err := h.WriteTo(fc); err != nil {
+			panic(bailout(fmt.Errorf("failed to write source map hint: %w", err)))
+		}
 	}
 }
 
@@ -354,10 +359,10 @@ func (fc *funcContext) newLitFuncName() string {
 	if fc.instance.Object != nil {
 		if recvType := typesutil.RecvType(fc.sig.Sig); recvType != nil {
 			name.WriteString(recvType.Obj().Name())
-			name.WriteString(midDot)
+			name.WriteString(".")
 		}
 		name.WriteString(fc.instance.Object.Name())
-		name.WriteString(midDot)
+		name.WriteString(".")
 	}
 	fmt.Fprintf(name, "func%d", fc.funcLitCounter)
 	return name.String()
@@ -477,13 +482,9 @@ func (fc *funcContext) methodName(fun *types.Func) string {
 	if fun.Type().(*types.Signature).Recv() == nil {
 		panic(fmt.Errorf("expected a method, got a standalone function %v", fun))
 	}
-	name := fun.Name()
 	// Method names are scoped to their receiver type and guaranteed to be
 	// unique within that, so we only need to make sure it's not a reserved keyword
-	if reservedKeywords[name] {
-		name += "$"
-	}
-	return name
+	return sanitizeName(fun.Name())
 }
 
 func (fc *funcContext) varPtrName(o *types.Var) string {
@@ -866,7 +867,7 @@ func getJsTag(tag string) string {
 }
 
 func needsSpace(c byte) bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$'
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$' || c == '\b'
 }
 
 func removeWhitespace(b []byte, minify bool) []byte {
@@ -879,8 +880,9 @@ func removeWhitespace(b []byte, minify bool) []byte {
 	for len(b) > 0 {
 		switch b[0] {
 		case '\b':
-			out = append(out, b[:5]...)
-			b = b[5:]
+			_, length := sourcemapx.ReadHint(b)
+			out = append(out, b[:length]...)
+			b = b[length:]
 			continue
 		case ' ', '\t', '\n':
 			if (!needsSpace(previous) || !needsSpace(b[1])) && !(previous == '-' && b[1] == '-') {
@@ -973,7 +975,7 @@ func formatJSStructTagVal(jsTag string) string {
 // debugging details for human consumption. This information will be included
 // into String() result along with the rest.
 type FatalError struct {
-	cause interface{}
+	cause any
 	stack []byte
 	clues strings.Builder
 }
@@ -1008,7 +1010,7 @@ func (b FatalError) Error() string {
 	return buf.String()
 }
 
-func bailout(cause interface{}) *FatalError {
+func bailout(cause any) *FatalError {
 	b := &FatalError{
 		cause: cause,
 		stack: debug.Stack(),
@@ -1016,7 +1018,7 @@ func bailout(cause interface{}) *FatalError {
 	return b
 }
 
-func bailingOut(err interface{}) (*FatalError, bool) {
+func bailingOut(err any) (*FatalError, bool) {
 	fe, ok := err.(*FatalError)
 	return fe, ok
 }

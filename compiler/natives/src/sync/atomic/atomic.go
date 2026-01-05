@@ -170,22 +170,22 @@ func StorePointer(addr *unsafe.Pointer, val unsafe.Pointer) {
 	*addr = val
 }
 
-func (v *Value) Load() (x interface{}) {
+func (v *Value) Load() (x any) {
 	return v.v
 }
 
-func (v *Value) Store(new interface{}) {
+func (v *Value) Store(new any) {
 	v.checkNew("store", new)
 	v.v = new
 }
 
-func (v *Value) Swap(new interface{}) (old interface{}) {
+func (v *Value) Swap(new any) (old any) {
 	v.checkNew("swap", new)
 	old, v.v = v.v, new
 	return old
 }
 
-func (v *Value) CompareAndSwap(old, new interface{}) (swapped bool) {
+func (v *Value) CompareAndSwap(old, new any) (swapped bool) {
 	v.checkNew("compare and swap", new)
 
 	if !(v.v == nil && old == nil) && !sameType(old, new) {
@@ -201,7 +201,7 @@ func (v *Value) CompareAndSwap(old, new interface{}) (swapped bool) {
 	return true
 }
 
-func (v *Value) checkNew(op string, new interface{}) {
+func (v *Value) checkNew(op string, new any) {
 	if new == nil {
 		panic("sync/atomic: " + op + " of nil value into Value")
 	}
@@ -212,7 +212,7 @@ func (v *Value) checkNew(op string, new interface{}) {
 }
 
 // sameType returns true if x and y contain the same concrete Go types.
-func sameType(x, y interface{}) bool {
+func sameType(x, y any) bool {
 	// This relies upon the fact that an interface in GopherJS is represented
 	// by the instance of the underlying Go type. Primitive values (e.g. bools)
 	// are still wrapped into a Go type object, so we can rely upon constructors

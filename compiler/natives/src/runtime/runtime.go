@@ -385,7 +385,7 @@ func ReadMemStats(m *MemStats) {
 	// lead to silent unexpected behaviors. Consider panicing explicitly.
 }
 
-func SetFinalizer(x, f interface{}) {
+func SetFinalizer(x, f any) {
 	// TODO(nevkontakte): This function is effectively unimplemented and may
 	// lead to silent unexpected behaviors. Consider panicing explicitly.
 }
@@ -448,7 +448,7 @@ func Stack(buf []byte, all bool) int {
 	if s == js.Undefined {
 		return 0
 	}
-	return copy(buf, s.Call("substr", s.Call("indexOf", "\n").Int()+1).String())
+	return copy(buf, s.Call("substring", s.Call("indexOf", "\n").Int()+1).String())
 }
 
 func LockOSThread() {}
@@ -470,7 +470,7 @@ func NumCgoCall() int64 {
 	return 0
 }
 
-func KeepAlive(interface{}) {}
+func KeepAlive(any) {}
 
 // An errorString represents a runtime error described by a single string.
 type errorString string

@@ -85,7 +85,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue19246.go": {desc: "expected nil pointer dereference panic"}, // Issue https://golang.org/issues/19246: Failed to evaluate some zero-sized values when converting them to interfaces.
 
 	// These are new tests in Go 1.10.
-	"fixedbugs/issue21879.go": {desc: "incorrect output related to runtime.Callers, runtime.CallersFrames, etc."},
 	"fixedbugs/issue21887.go": {desc: "incorrect output (although within spec, not worth fixing) for println(^uint64(0)). got: { '$high': 4294967295, '$low': 4294967295, '$val': [Circular] } want: 18446744073709551615"},
 	"fixedbugs/issue23305.go": {desc: "GopherJS fails to compile println(0xffffffff), maybe because 32-bit arch"},
 
@@ -110,8 +109,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue24491a.go": {category: notApplicable, desc: "tests interaction between unsafe and GC; uses runtime.SetFinalizer()"},
 	"fixedbugs/issue24491b.go": {category: notApplicable, desc: "tests interaction between unsafe and GC; uses runtime.SetFinalizer()"},
 	"fixedbugs/issue29504.go":  {category: notApplicable, desc: "requires source map support beyond what GopherJS currently provides"},
-	// This test incorrectly passes because main function's name is returned as "main" and not "main.main". Even number of bugs cancel each other out ¯\_(ツ)_/¯
-	// "fixedbugs/issue29735.go":  {category: usesUnsupportedPackage, desc: "GopherJS only supports runtime.FuncForPC() with position counters previously returned by runtime.Callers() or runtime.Caller()"},
+	"fixedbugs/issue29735.go":  {category: lowLevelRuntimeDifference, desc: "GopherJS only supports runtime.FuncForPC() with position counters previously returned by runtime.Callers() or runtime.Caller()"},
 	"fixedbugs/issue30116.go":  {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
 	"fixedbugs/issue30116u.go": {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
 	"fixedbugs/issue34395.go":  {category: neverTerminates, desc: "https://github.com/gopherjs/gopherjs/issues/1007"},

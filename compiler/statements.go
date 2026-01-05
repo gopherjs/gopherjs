@@ -109,7 +109,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 
 		if label != nil || analysis.HasBreak(clause) {
 			if label != nil {
-				fc.Printf("%s:", label.Name())
+				fc.Printf("%s:", sanitizeName(label.Name()))
 			}
 			fc.Printf("switch (0) { default:")
 			fc.Indented(func() {
@@ -306,7 +306,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		blockingLabel := ""
 		data := fc.flowDatas[nil]
 		if s.Label != nil {
-			normalLabel = " " + s.Label.Name
+			normalLabel = " " + sanitizeName(s.Label.Name)
 			blockingLabel = " s" // use explicit label "s", because surrounding loop may not be flattened
 			data = fc.flowDatas[fc.pkgCtx.Uses[s.Label].(*types.Label)]
 		}
@@ -317,7 +317,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			data.postStmt()
 			fc.PrintCond(data.beginCase == 0, fmt.Sprintf("continue%s;", normalLabel), fmt.Sprintf("$s = %d; continue%s;", data.beginCase, blockingLabel))
 		case token.GOTO:
-			fc.PrintCond(false, "goto "+s.Label.Name, fmt.Sprintf("$s = %d; continue;", fc.labelCase(fc.pkgCtx.Uses[s.Label].(*types.Label))))
+			fc.PrintCond(false, "goto"+normalLabel, fmt.Sprintf("$s = %d; continue;", fc.labelCase(fc.pkgCtx.Uses[s.Label].(*types.Label))))
 		case token.FALLTHROUGH:
 			// handled in CaseClause
 		default:
@@ -461,7 +461,7 @@ func (fc *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 	case *ast.LabeledStmt:
 		label := fc.pkgCtx.Defs[s.Label].(*types.Label)
 		if fc.GotoLabel[label] {
-			fc.PrintCond(false, s.Label.Name+":", fmt.Sprintf("case %d:", fc.labelCase(label)))
+			fc.PrintCond(false, sanitizeName(s.Label.Name)+":", fmt.Sprintf("case %d:", fc.labelCase(label)))
 		}
 		fc.translateStmt(s.Stmt, label)
 
@@ -586,7 +586,7 @@ func (fc *funcContext) translateBranchingStmt(caseClauses []*ast.CaseClause, def
 	}
 
 	if label != nil && !flatten {
-		fc.Printf("%s:", label.Name())
+		fc.Printf("%s:", sanitizeName(label.Name()))
 	}
 
 	condStrs := make([]string, len(caseClauses))
@@ -652,7 +652,7 @@ func (fc *funcContext) translateLoopingStmt(cond func() string, body *ast.BlockS
 	}()
 
 	if !flatten && label != nil {
-		fc.Printf("%s:", label.Name())
+		fc.Printf("%s:", sanitizeName(label.Name()))
 	}
 	isTerminated := false
 	fc.PrintCond(!flatten, "while (true) {", fmt.Sprintf("case %d:", data.beginCase))

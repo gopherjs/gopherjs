@@ -14,7 +14,8 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/sources"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
-	"github.com/gopherjs/gopherjs/internal/errorList"
+	"github.com/gopherjs/gopherjs/internal/errlist"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 )
 
 // pkgContext maintains compiler context for a specific package.
@@ -37,7 +38,7 @@ type pkgContext struct {
 	indentation  int
 	minify       bool
 	fileSet      *token.FileSet
-	errList      errorList.ErrorList
+	errList      errlist.ErrorList
 	instanceSet  *typeparams.PackageInstanceSets
 }
 
@@ -60,7 +61,7 @@ type funcContext struct {
 	// "function" keyword in the generated code). This identifier can be used
 	// within the function scope to reference the function object. It will also
 	// appear in the stack trace.
-	funcRef string
+	funcRef sourcemapx.Identifier
 	// Surrounding package context.
 	pkgCtx *pkgContext
 	// Function context, surrounding this function definition. For package-level
@@ -221,6 +222,7 @@ func Compile(srcs *sources.Sources, tContext *types.Context, minify bool) (_ *Ar
 		FileSet:      srcs.FileSet,
 		Minified:     minify,
 		GoLinknames:  srcs.GoLinknames,
+		IncJSCode:    srcs.JSFiles,
 	}, nil
 }
 

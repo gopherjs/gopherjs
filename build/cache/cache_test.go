@@ -1,40 +1,46 @@
 package cache
 
 import (
-	"go/types"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/gopherjs/gopherjs/compiler"
 )
+
+type CacheableMock struct{ Data string }
+
+func (m *CacheableMock) Write(encode func(any) error) error { return encode(m.Data) }
+func (m *CacheableMock) Read(decode func(any) error) error  { return decode(&m.Data) }
 
 func TestStore(t *testing.T) {
 	cacheForTest(t)
 
-	want := &compiler.Archive{
-		ImportPath: "fake/package",
-		Imports:    []string{"fake/dep"},
-	}
-
+	const data = `fake/data`
+	const importPath = `fake/package`
+	want := &CacheableMock{Data: data}
 	srcModTime := newTime(0.0)
 	buildTime := newTime(5.0)
-	imports := map[string]*types.Package{}
 	bc := BuildCache{}
-	if got := bc.LoadArchive(want.ImportPath, srcModTime, imports); got != nil {
-		t.Errorf("Got: %s was found in the cache. Want: empty cache.", got.ImportPath)
+	if bc.Load(want, importPath, srcModTime) {
+		t.Errorf("Got: %s was found in the cache with %q. Want: empty cache.", importPath, want.Data)
 	}
-	bc.StoreArchive(want, buildTime)
-	got := bc.LoadArchive(want.ImportPath, srcModTime, imports)
-	if got == nil {
-		t.Errorf("Got: %s was not found in the cache. Want: archive is can be loaded after store.", want.ImportPath)
+
+	if !bc.Store(want, importPath, buildTime) {
+		t.Errorf("Failed to store %s with %q.", importPath, want.Data)
 	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Loaded archive is different from stored (-want,+got):\n%s", diff)
+
+	got := &CacheableMock{}
+	if !bc.Load(got, importPath, srcModTime) {
+		t.Errorf("Got: %s was not found in the cache. Want: package found.", importPath)
+	} else {
+		if diff := cmp.Diff(want, got); len(diff) > 0 {
+			t.Errorf("Loaded package is different from stored (-want,+got):\n%s", diff)
+		}
 	}
 
 	// Make sure the package names are a part of the cache key.
-	if got := bc.LoadArchive("fake/other", srcModTime, imports); got != nil {
+	got = &CacheableMock{}
+	if bc.Load(got, "fake/other", srcModTime) {
 		t.Errorf("Got: fake/other was found in cache: %#v. Want: nil for packages that weren't cached.", got)
 	}
 }
@@ -47,9 +53,6 @@ func TestInvalidation(t *testing.T) {
 		cache2 BuildCache
 	}{
 		{
-			cache1: BuildCache{Minify: true},
-			cache2: BuildCache{Minify: false},
-		}, {
 			cache1: BuildCache{GOOS: "dos"},
 			cache2: BuildCache{GOOS: "amiga"},
 		}, {
@@ -61,46 +64,94 @@ func TestInvalidation(t *testing.T) {
 		}, {
 			cache1: BuildCache{GOPATH: "home"},
 			cache2: BuildCache{GOPATH: "away"},
+		}, {
+			cache1: BuildCache{Version: "1.19.0-beta2+go1.19.13"},
+			cache2: BuildCache{Version: "1.18.0+go1.18.10"},
 		},
 	}
 
 	srcModTime := newTime(0.0)
 	buildTime := newTime(5.0)
-	imports := map[string]*types.Package{}
 	for _, test := range tests {
-		a := &compiler.Archive{ImportPath: "package/fake"}
-		test.cache1.StoreArchive(a, buildTime)
+		const data = `fake/data`
+		const importPath = `fake/package`
+		s0 := &CacheableMock{Data: data}
+		if !test.cache1.Store(s0, importPath, buildTime) {
+			t.Errorf("Failed to store cache for cache1: %#v", test.cache1)
+			continue
+		}
 
-		if got := test.cache2.LoadArchive(a.ImportPath, srcModTime, imports); got != nil {
+		s1 := &CacheableMock{}
+		if test.cache2.Load(s1, importPath, srcModTime) {
 			t.Logf("-cache1,+cache2:\n%s", cmp.Diff(test.cache1, test.cache2))
-			t.Errorf("Got: %v loaded from cache. Want: build parameter change invalidates cache.", got)
+			t.Errorf("Got: %v loaded from cache. Want: build parameter change invalidates cache.", s1)
 		}
 	}
 }
 
-func TestOldArchive(t *testing.T) {
+func TestOldCache(t *testing.T) {
 	cacheForTest(t)
 
-	want := &compiler.Archive{
-		ImportPath: "fake/package",
-		Imports:    []string{"fake/dep"},
-	}
-
+	const data = `fake/data`
+	const importPath = "fake/package"
+	want := &CacheableMock{Data: data}
 	buildTime := newTime(5.0)
-	imports := map[string]*types.Package{}
 	bc := BuildCache{}
-	bc.StoreArchive(want, buildTime)
-
-	oldSrcModTime := newTime(2.0) // older than archive build time, so archive is up-to-date
-	got := bc.LoadArchive(want.ImportPath, oldSrcModTime, imports)
-	if got == nil {
-		t.Errorf("Got: %s was nil. Want: up-to-date archive to be loaded.", want.ImportPath)
+	if !bc.Store(want, importPath, buildTime) {
+		t.Errorf("Failed to store %s with %q.", importPath, want.Data)
 	}
 
-	newerSrcModTime := newTime(7.0) // newer than archive build time, so archive is stale
-	got = bc.LoadArchive(want.ImportPath, newerSrcModTime, imports)
-	if got != nil {
-		t.Errorf("Got: %s was not nil. Want: stale archive to not be loaded.", want.ImportPath)
+	oldSrcModTime := newTime(2.0) // older than cache build time, so cache is up-to-date
+	got := &CacheableMock{}
+	if !bc.Load(got, importPath, oldSrcModTime) || got.Data != want.Data {
+		t.Errorf("Got: cache with %q. Want: up-to-date package cache to be loaded with %q.", got.Data, want.Data)
+	}
+
+	newerSrcModTime := newTime(7.0) // newer than cache build time, so cache is stale
+	got = &CacheableMock{}
+	if bc.Load(got, importPath, newerSrcModTime) || len(got.Data) != 0 {
+		t.Errorf("Got: cache was not nil with %q. Want: stale package cache with %q to not be loaded with.", got.Data, want.Data)
+	}
+}
+
+func TestSkipOfTestPackage(t *testing.T) {
+	cacheForTest(t)
+
+	const data = `fake/data`
+	const importPath = "fake/package"
+	want := &CacheableMock{Data: data}
+	srcModTime := newTime(0.0)
+	buildTime := newTime(5.0)
+
+	bc := BuildCache{}
+	if !bc.Store(want, importPath, buildTime) {
+		t.Errorf("Failed to store %s with %q.", importPath, want.Data)
+	}
+
+	// Simulate writing a cache for a pacakge under test.
+	bc.TestedPackage = importPath
+	if bc.Store(want, importPath, buildTime) {
+		t.Errorf("Got: cache stored for %q. Want: test packages to not write to cache.", importPath)
+	}
+	if bc.Store(want, importPath+"_test", buildTime) {
+		t.Errorf("Got: cache stored for %q. Want: test packages to not write to cache.", importPath+"_test")
+	}
+
+	// Simulate reading the cache for a pacakge under test.
+	got := &CacheableMock{}
+	if bc.Load(got, importPath, srcModTime) {
+		t.Errorf("Got: cache with %q. Want: test package cache to not be loaded for %q.", got.Data, importPath)
+	}
+	got = &CacheableMock{}
+	if bc.Load(got, importPath+"_test", srcModTime) {
+		t.Errorf("Got: cache with %q. Want: test package cache to not be loaded for %q.", got.Data, importPath+"_test")
+	}
+
+	// No package under test, cache should work normally and load previously stored non-test package.
+	bc.TestedPackage = ""
+	got = &CacheableMock{}
+	if !bc.Load(got, importPath, srcModTime) || got.Data != want.Data {
+		t.Errorf("Got: cache with %q. Want: up-to-date package cache to be loaded with %q.", got.Data, want.Data)
 	}
 }
 
@@ -112,6 +163,6 @@ func cacheForTest(t *testing.T) {
 }
 
 func newTime(seconds float64) time.Time {
-	return time.Date(1969, 7, 20, 20, 17, 0, 0, time.UTC).
+	return time.Date(1969, time.July, 20, 20, 17, 0, 0, time.UTC).
 		Add(time.Duration(seconds * float64(time.Second)))
 }

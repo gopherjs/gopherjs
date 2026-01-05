@@ -15,6 +15,7 @@ GopherJS compiles Go code ([go.dev](https://go.dev/)) to pure JavaScript code. I
 
 ### What's new?
 
+- 2025-08-19: Go 1.19 beta2 is [released](https://github.com/gopherjs/gopherjs/releases/tag/v1.19.0-beta2), with full generics support!
 - 2024-02-24: Go 1.19 support is [available](https://github.com/gopherjs/gopherjs/releases/tag/v1.19.0-beta1)!
 - 2022-08-18: Go 1.18 support is [available](https://github.com/gopherjs/gopherjs/releases/tag/v1.18.0-beta2%2Bgo1.18.5)!
 - 2021-09-19: Go 1.17 support is available!
@@ -124,7 +125,7 @@ package main
 import "github.com/gopherjs/gopherjs/js"
 
 func main() {
-	js.Global.Set("pet", map[string]interface{}{
+	js.Global.Set("pet", map[string]any{
 		"New": New,
 	})
 }

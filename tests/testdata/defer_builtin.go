@@ -1,7 +1,7 @@
 package main
 
 type (
-	set map[interface{}]struct{}
+	set map[any]struct{}
 	key struct{ a int }
 )
 

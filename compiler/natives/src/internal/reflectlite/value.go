@@ -58,7 +58,7 @@ func (v Value) assignTo(context string, dst *rtype, target unsafe.Pointer) Value
 		//           to run, given its custom implementation.
 		x := valueInterface(v)
 		if dst.NumMethod() == 0 {
-			*(*interface{})(target) = x
+			*(*any)(target) = x
 		} else {
 			ifaceE2I(dst, x, target)
 		}
@@ -69,7 +69,7 @@ func (v Value) assignTo(context string, dst *rtype, target unsafe.Pointer) Value
 	panic(context + ": value of type " + v.typ.String() + " is not assignable to type " + dst.String())
 }
 
-var callHelper = js.Global.Get("$call").Interface().(func(...interface{}) *js.Object)
+var callHelper = js.Global.Get("$call").Interface().(func(...any) *js.Object)
 
 func (v Value) call(op string, in []Value) []Value {
 	var (

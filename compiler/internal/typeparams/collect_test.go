@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"golang.org/x/tools/go/ast/astutil"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 )
 

@@ -4,7 +4,7 @@ package reflectlite
 
 import "github.com/gopherjs/gopherjs/js"
 
-func Swapper(slice interface{}) func(i, j int) {
+func Swapper(slice any) func(i, j int) {
 	v := ValueOf(slice)
 	if v.Kind() != Slice {
 		panic(&ValueError{Method: "Swapper", Kind: v.Kind()})

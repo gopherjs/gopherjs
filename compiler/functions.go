@@ -16,6 +16,7 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 )
 
 // nestedFunctionContext creates a new nested context for a function corresponding
@@ -56,11 +57,13 @@ func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, inst typep
 	// Synthesize an identifier by which the function may reference itself. Since
 	// it appears in the stack trace, it's useful to include the receiver type in
 	// it.
-	funcRef := o.Name()
-	if recvType := typesutil.RecvType(sig); recvType != nil {
-		funcRef = recvType.Obj().Name() + midDot + funcRef
+	funcRef := strings.ReplaceAll(o.Name(), ".", midDot)
+	c.funcRef = sourcemapx.Identifier{
+		Name: c.newVariable(funcRef, true /*pkgLevel*/),
+		// o.FullName() decorates pointer receivers as `(*T).method`, we want simply `T.method`.
+		OriginalName: strings.NewReplacer("(", "", ")", "", "*", "").Replace(o.FullName()),
+		OriginalPos:  o.Pos(),
 	}
-	c.funcRef = c.newVariable(funcRef, true /*pkgLevel*/)
 
 	return c
 }
@@ -260,7 +263,7 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 
 		fc.translateStmtList(body.List)
 		if len(fc.Flattened) != 0 && !astutil.EndsWithReturn(body.List) {
-			fc.translateStmt(&ast.ReturnStmt{}, nil)
+			fc.translateStmt(&ast.ReturnStmt{Return: body.Rbrace}, nil)
 		}
 	}))
 
@@ -295,11 +298,11 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 		localVars = append(localVars, "$r")
 		// funcRef identifies the function object itself, so it doesn't need to be saved
 		// or restored.
-		localVars = removeMatching(localVars, fc.funcRef)
+		localVars = removeMatching(localVars, fc.funcRef.Name)
 		// If a blocking function is being resumed, initialize local variables from the saved context.
 		localVarDefs = fmt.Sprintf("var {%s, $c} = $restore(this, {%s});\n", strings.Join(localVars, ", "), strings.Join(args, ", "))
 		// If the function gets blocked, save local variables for future.
-		saveContext := fmt.Sprintf("var $f = {$blk: "+fc.funcRef+", $c: true, $r, %s};", strings.Join(fc.localVars, ", "))
+		saveContext := fmt.Sprintf("var $f = {$blk: %s, $c: true, $r, %s};", fc.funcRef, strings.Join(fc.localVars, ", "))
 
 		suffix = " " + saveContext + "return $f;" + suffix
 	} else if len(fc.localVars) > 0 {
@@ -347,5 +350,5 @@ func (fc *funcContext) translateFunctionBody(typ *ast.FuncType, recv *ast.Ident,
 
 	fc.pkgCtx.escapingVars = prevEV
 
-	return fmt.Sprintf("function %s(%s) {\n%s%s}", fc.funcRef, strings.Join(args, ", "), bodyOutput, fc.Indentation(1))
+	return fmt.Sprintf("%sfunction %s(%s) {\n%s%s}", fc.funcRef.EncodeHint(), fc.funcRef, strings.Join(args, ", "), bodyOutput, fc.Indentation(1))
 }

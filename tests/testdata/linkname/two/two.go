@@ -14,6 +14,7 @@ func DoTwo() string {
 
 // The function below can't be imported from the package one the normal way because
 // that would create an import cycle.
+//
 //go:linkname doInternalOne github.com/gopherjs/gopherjs/tests/testdata/linkname/one.doInternalOne
 func doInternalOne() string
 

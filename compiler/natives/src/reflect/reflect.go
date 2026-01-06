@@ -4,7 +4,6 @@ package reflect
 
 import (
 	"errors"
-	"runtime"
 	"strconv"
 	"unsafe"
 
@@ -17,7 +16,7 @@ var initialized = false
 
 func init() {
 	// avoid dead code elimination
-	used := func(i interface{}) {}
+	used := func(i any) {}
 	used(rtype{})
 	used(uncommonType{})
 	used(method{})
@@ -197,7 +196,7 @@ func reflectType(typ *js.Object) *rtype {
 	return (*rtype)(unsafe.Pointer(typ.Get("reflectType").Unsafe()))
 }
 
-func setKindType(rt *rtype, kindType interface{}) {
+func setKindType(rt *rtype, kindType any) {
 	js.InternalObject(rt).Set("kindType", js.InternalObject(kindType))
 	js.InternalObject(kindType).Set("rtype", js.InternalObject(rt))
 }
@@ -371,7 +370,7 @@ func MakeSlice(typ Type, len, cap int) Value {
 	return makeValue(typ, js.Global.Call("$makeSlice", jsType(typ), len, cap, js.InternalObject(func() *js.Object { return jsType(typ.Elem()).Call("zero") })), 0)
 }
 
-func TypeOf(i interface{}) Type {
+func TypeOf(i any) Type {
 	if !initialized { // avoid error of uint8Type
 		return &rtype{}
 	}
@@ -381,7 +380,7 @@ func TypeOf(i interface{}) Type {
 	return reflectType(js.InternalObject(i).Get("constructor"))
 }
 
-func ValueOf(i interface{}) Value {
+func ValueOf(i any) Value {
 	if i == nil {
 		return Value{}
 	}
@@ -570,7 +569,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	t := typ.common()
 	ftyp := (*funcType)(unsafe.Pointer(t))
 
-	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
+	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		// Convert raw JS arguments into []Value the user-supplied function expects.
 		args := make([]Value, ftyp.NumIn())
 		for i := range args {
@@ -919,7 +918,7 @@ func methodReceiver(op string, v Value, i int) (_ *rtype, t *funcType, fn unsafe
 	return
 }
 
-func valueInterface(v Value, safe bool) interface{} {
+func valueInterface(v Value, safe bool) any {
 	if v.flag == 0 {
 		panic(&ValueError{"reflect.Value.Interface", 0})
 	}
@@ -934,14 +933,14 @@ func valueInterface(v Value, safe bool) interface{} {
 		if v.flag&flagIndir != 0 && v.Kind() == Struct {
 			cv := jsType(v.typ).Call("zero")
 			copyStruct(cv, v.object(), v.typ)
-			return interface{}(unsafe.Pointer(jsType(v.typ).New(cv).Unsafe()))
+			return any(unsafe.Pointer(jsType(v.typ).New(cv).Unsafe()))
 		}
-		return interface{}(unsafe.Pointer(jsType(v.typ).New(v.object()).Unsafe()))
+		return any(unsafe.Pointer(jsType(v.typ).New(v.object()).Unsafe()))
 	}
-	return interface{}(unsafe.Pointer(v.object().Unsafe()))
+	return any(unsafe.Pointer(v.object().Unsafe()))
 }
 
-func ifaceE2I(t *rtype, src interface{}, dst unsafe.Pointer) {
+func ifaceE2I(t *rtype, src any, dst unsafe.Pointer) {
 	js.InternalObject(dst).Call("$set", js.InternalObject(src))
 }
 
@@ -955,7 +954,7 @@ func makeMethodValue(op string, v Value) Value {
 	if isWrapped(v.typ) {
 		rcvr = jsType(v.typ).New(rcvr)
 	}
-	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
+	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		return js.InternalObject(fn).Call("apply", rcvr, arguments)
 	})
 	return Value{v.Type().common(), unsafe.Pointer(fv.Unsafe()), v.flag.ro() | flag(Func)}
@@ -1013,7 +1012,7 @@ func (t *rtype) Method(i int) (m Method) {
 	mt := FuncOf(in, out, ft.IsVariadic())
 	m.Type = mt
 	prop := js.Global.Call("$methodSet", js.InternalObject(t).Get("jsType")).Index(i).Get("prop").String()
-	fn := js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
+	fn := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		rcvr := arguments[0]
 		return rcvr.Get(prop).Call("apply", rcvr, arguments[1:])
 	})
@@ -1074,7 +1073,7 @@ func (v Value) assignTo(context string, dst *rtype, target unsafe.Pointer) Value
 		//           to run, given its custom implementation.
 		x := valueInterface(v, false)
 		if dst.NumMethod() == 0 {
-			*(*interface{})(target) = x
+			*(*any)(target) = x
 		} else {
 			ifaceE2I(dst, x, target)
 		}
@@ -1085,7 +1084,7 @@ func (v Value) assignTo(context string, dst *rtype, target unsafe.Pointer) Value
 	panic(context + ": value of type " + v.typ.String() + " is not assignable to type " + dst.String())
 }
 
-var callHelper = js.Global.Get("$call").Interface().(func(...interface{}) *js.Object)
+var callHelper = js.Global.Get("$call").Interface().(func(...any) *js.Object)
 
 func (v Value) call(op string, in []Value) []Value {
 	var (
@@ -1675,7 +1674,7 @@ func (v Value) Close() {
 	js.Global.Call("$close", v.object())
 }
 
-var selectHelper = js.Global.Get("$select").Interface().(func(...interface{}) *js.Object)
+var selectHelper = js.Global.Get("$select").Interface().(func(...any) *js.Object)
 
 func chanrecv(ch unsafe.Pointer, nb bool, val unsafe.Pointer) (selected, received bool) {
 	comms := [][]*js.Object{{js.InternalObject(ch)}}
@@ -1735,7 +1734,7 @@ func rselect(rselects []runtimeSelect) (chosen int, recvOK bool) {
 	return c, false
 }
 
-func DeepEqual(a1, a2 interface{}) bool {
+func DeepEqual(a1, a2 any) bool {
 	i1 := js.InternalObject(a1)
 	i2 := js.InternalObject(a2)
 	if i1 == i2 {
@@ -1842,42 +1841,6 @@ func stringsLastIndex(s string, c byte) int {
 
 func stringsHasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
-}
-
-func valueMethodName() string {
-	var pc [5]uintptr
-	n := runtime.Callers(1, pc[:])
-	frames := runtime.CallersFrames(pc[:n])
-	valueTyp := TypeOf(Value{})
-	var frame runtime.Frame
-	for more := true; more; {
-		frame, more = frames.Next()
-		name := frame.Function
-		// Function name extracted from the call stack can be different from
-		// vanilla Go, so is not prefixed by "reflect.Value." as needed by the original.
-		// See https://cs.opensource.google/go/go/+/refs/tags/go1.19.13:src/reflect/value.go;l=173-191
-		// This workaround may become obsolete after
-		// https://github.com/gopherjs/gopherjs/issues/1085 is resolved.
-
-		methodName := name
-		if idx := stringsLastIndex(methodName, '.'); idx >= 0 {
-			methodName = methodName[idx+1:]
-		}
-		const midDot = '·' // This is same `midDot` as in gopherjs/compiler/utils.go
-		if idx := stringsLastIndex(methodName, midDot); idx >= 0 {
-			methodName = methodName[idx+1:]
-		}
-
-		// Since function name in the call stack doesn't contain receiver name,
-		// we are looking for the first exported function name that matches a
-		// known Value method.
-		if _, ok := valueTyp.MethodByName(methodName); ok {
-			if len(methodName) > 0 && 'A' <= methodName[0] && methodName[0] <= 'Z' {
-				return `reflect.Value.` + methodName
-			}
-		}
-	}
-	return "unknown method"
 }
 
 func verifyNotInHeapPtr(p uintptr) bool {

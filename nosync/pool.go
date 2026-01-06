@@ -29,8 +29,8 @@ package nosync
 // that scenario. It is more efficient to have such objects implement their own
 // free list.
 type Pool struct {
-	store []interface{}
-	New   func() interface{}
+	store []any
+	New   func() any
 }
 
 // Get selects an arbitrary item from the Pool, removes it from the
@@ -41,7 +41,7 @@ type Pool struct {
 //
 // If Get would otherwise return nil and p.New is non-nil, Get returns
 // the result of calling p.New.
-func (p *Pool) Get() interface{} {
+func (p *Pool) Get() any {
 	if len(p.store) == 0 {
 		if p.New != nil {
 			return p.New()
@@ -54,7 +54,7 @@ func (p *Pool) Get() interface{} {
 }
 
 // Put adds x to the pool.
-func (p *Pool) Put(x interface{}) {
+func (p *Pool) Put(x any) {
 	if x == nil {
 		return
 	}

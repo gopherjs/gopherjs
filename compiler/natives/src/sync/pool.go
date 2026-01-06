@@ -21,11 +21,11 @@ package sync
 // out all original Pool implementation in order to avoid awkward unused fields
 // referenced by dead code.
 type Pool struct {
-	store []interface{}
-	New   func() interface{}
+	store []any
+	New   func() any
 }
 
-func (p *Pool) Get() interface{} {
+func (p *Pool) Get() any {
 	if len(p.store) == 0 {
 		if p.New != nil {
 			return p.New()
@@ -37,7 +37,7 @@ func (p *Pool) Get() interface{} {
 	return x
 }
 
-func (p *Pool) Put(x interface{}) {
+func (p *Pool) Put(x any) {
 	if x == nil {
 		return
 	}

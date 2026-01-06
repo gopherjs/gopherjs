@@ -11,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/google/go-cmp/cmp"
+
 	"github.com/gopherjs/gopherjs/js"
 )
 
@@ -274,7 +275,7 @@ func TestFunc(t *testing.T) {
 		t.Fail()
 	}
 
-	add := dummys.Get("add").Interface().(func(...interface{}) *js.Object)
+	add := dummys.Get("add").Interface().(func(...any) *js.Object)
 	var i int64 = 40
 	if add(i, 2).Int() != 42 {
 		t.Fail()
@@ -414,7 +415,7 @@ func TestEquality(t *testing.T) {
 }
 
 func TestUndefinedEquality(t *testing.T) {
-	var ui interface{} = js.Undefined
+	var ui any = js.Undefined
 	if ui != js.Undefined {
 		t.Fail()
 	}
@@ -422,14 +423,14 @@ func TestUndefinedEquality(t *testing.T) {
 
 func TestInterfaceEquality(t *testing.T) {
 	o := js.Global.Get("Object").New()
-	var i interface{} = o
+	var i any = o
 	if i != o {
 		t.Fail()
 	}
 }
 
 func TestUndefinedInternalization(t *testing.T) {
-	undefinedEqualsJsUndefined := func(i interface{}) bool {
+	undefinedEqualsJsUndefined := func(i any) bool {
 		return i == js.Undefined
 	}
 	js.Global.Set("undefinedEqualsJsUndefined", undefinedEqualsJsUndefined)
@@ -511,7 +512,7 @@ func TestMakeFunc(t *testing.T) {
 		if i == 4 {
 			break
 		}
-		o.Set("f", js.MakeFunc(func(this *js.Object, arguments []*js.Object) interface{} {
+		o.Set("f", js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 			if this != o {
 				t.Fail()
 			}
@@ -535,8 +536,8 @@ type M struct {
 	f       int
 }
 
-func (m *M) Method(a interface{}) map[string]string {
-	if a.(map[string]interface{})["x"].(float64) != 1 || m.f != 42 {
+func (m *M) Method(a any) map[string]string {
+	if a.(map[string]any)["x"].(float64) != 1 || m.f != 42 {
 		return nil
 	}
 	return map[string]string{
@@ -602,16 +603,16 @@ func TestMakeFullWrapperGettersAndSetters(t *testing.T) {
 
 	const globalVar = "TestMakeFullWrapper_w1"
 
-	eval := func(s string, v ...interface{}) *js.Object {
+	eval := func(s string, v ...any) *js.Object {
 		return js.Global.Call("eval", s).Invoke(v...)
 	}
-	call := func(s string, v ...interface{}) *js.Object {
+	call := func(s string, v ...any) *js.Object {
 		return eval(fmt.Sprintf(`(function(g) { return g["%v"]%v; })`, globalVar, s), js.Global).Invoke(v...)
 	}
 	get := func(s string) *js.Object {
 		return eval(fmt.Sprintf(`(function(g) { return g["%v"]%v; })`, globalVar, s), js.Global)
 	}
-	set := func(s string, v interface{}) {
+	set := func(s string, v any) {
 		eval(fmt.Sprintf(`(function(g, v) { g["%v"]%v = v; })`, globalVar, s), js.Global, v)
 	}
 
@@ -774,7 +775,7 @@ func TestExternalize(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		input interface{}
+		input any
 		want  string
 	}{
 		{
@@ -937,7 +938,7 @@ func TestTypeSwitchJSObject(t *testing.T) {
 		t.Errorf("Direct access to *js.Object field gave %q, want %q", got, want)
 	}
 
-	var x interface{} = obj
+	var x any = obj
 
 	switch x := x.(type) {
 	case *js.Object:

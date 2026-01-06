@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+
 	"github.com/gopherjs/gopherjs/internal/srctesting"
 	"github.com/gopherjs/gopherjs/internal/testingx"
 )

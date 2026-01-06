@@ -23,17 +23,19 @@ import (
 	"text/template"
 	"time"
 
-	gbuild "github.com/gopherjs/gopherjs/build"
-	"github.com/gopherjs/gopherjs/build/cache"
-	"github.com/gopherjs/gopherjs/compiler"
-	"github.com/gopherjs/gopherjs/internal/errorList"
-	"github.com/gopherjs/gopherjs/internal/sysutil"
-	"github.com/neelance/sourcemap"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/term"
+
+	gbuild "github.com/gopherjs/gopherjs/build"
+	"github.com/gopherjs/gopherjs/build/cache"
+	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/gopherjs/gopherjs/compiler/incjs"
+	"github.com/gopherjs/gopherjs/internal/errlist"
+	"github.com/gopherjs/gopherjs/internal/sourcemapx"
+	"github.com/gopherjs/gopherjs/internal/sysutil"
 )
 
 var currentDirectory string
@@ -105,10 +107,10 @@ func main() {
 
 			err = func() error {
 				// Handle "gopherjs build [files]" ad-hoc package mode.
-				if len(args) > 0 && (strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".inc.js")) {
+				if len(args) > 0 && (strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], incjs.Ext)) {
 					for _, arg := range args {
-						if !strings.HasSuffix(arg, ".go") && !strings.HasSuffix(arg, ".inc.js") {
-							return fmt.Errorf("named files must be .go or .inc.js files")
+						if !strings.HasSuffix(arg, ".go") && !strings.HasSuffix(arg, incjs.Ext) {
+							return fmt.Errorf("named files must be .go or %s files", incjs.Ext)
 						}
 					}
 					if pkgObj == "" {
@@ -271,7 +273,7 @@ func main() {
 		options.BuildTags = strings.Fields(tags)
 		lastSourceArg := 0
 		for {
-			if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {
+			if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], incjs.Ext)) {
 				break
 			}
 			lastSourceArg++
@@ -615,11 +617,27 @@ type serveCommandFileSystem struct {
 }
 
 func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
-	name := path.Join(fs.serveRoot, requestName[1:]) // requestName[0] == '/'
-	log.Printf("Request: %s", name)
+	requestName = strings.TrimPrefix(requestName, `/`) // Strip leading '/'
+	name := path.Join(fs.serveRoot, requestName)
+	log.WithField(`request`, requestName).
+		Print(`Request`)
+
+	// Check if the file is reachable from the serve root.
+	if f, err := http.Dir(fs.serveRoot).Open(requestName); err == nil {
+		log.WithField(`request`, requestName).
+			Print(`Found in serve root`)
+		return f, nil
+	}
+
+	if strings.HasPrefix(requestName, `.well-known/`) {
+		// Ignore ".well-known/" requests since they are probes.
+		// See https://en.wikipedia.org/wiki/Well-known_URI
+		return nil, os.ErrNotExist
+	}
 
 	dir, file := path.Split(name)
-	base := path.Base(dir) // base is parent folder name, which becomes the output file name.
+	dir = strings.TrimSuffix(dir, `/`) // Strip tailing '/'
+	base := path.Base(dir)             // base is parent folder name, which becomes the output file name.
 
 	isPkg := file == base+".js"
 	isMap := file == base+".js.map"
@@ -629,7 +647,40 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 	// TODO(dmitshur): might be possible to get a single session to detect changes to source code on disk
 	s, err := gbuild.NewSession(fs.options)
 	if err != nil {
+		log.WithField(`request`, requestName).WithError(err).
+			Error(`Failed to creates a session`)
 		return nil, err
+	}
+
+	// Check if the file is reachable from the Go path.
+	if f, err := http.Dir(path.Join(s.XContext().Env().GOPATH, `src`)).Open(requestName); err == nil {
+		log.WithField(`request`, requestName).
+			Print(`Found in Go path`)
+		return f, nil
+	}
+
+	// Check if the file is reachable from the Go root.
+	if f, err := http.Dir(path.Join(s.XContext().Env().GOROOT, `src`)).Open(requestName); err == nil {
+		log.WithField(`request`, requestName).
+			Print(`Found in Go root`)
+		return f, nil
+	}
+
+	// Check if the request's dir is an import path.
+	if pkg, err := s.XContext().Import(dir, fs.serveRoot, build.FindOnly); err == nil {
+		f, err := http.Dir(pkg.Dir).Open(file)
+		if err == nil {
+			log.WithField(`request`, requestName).
+				Print(`Found in import path`)
+			return f, nil
+		}
+
+		if !os.IsNotExist(err) {
+			log.WithField(`request`, requestName).
+				WithError(err).
+				Error(`Failed to open file in import path`)
+			return nil, err
+		}
 	}
 
 	if isPkg || isMap || isIndex {
@@ -648,23 +699,34 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 			err := func() error {
 				archive, err := s.BuildProject(pkg)
 				if err != nil {
+					log.WithField(`request`, requestName).
+						WithField(`package`, pkg.ImportPath).
+						WithError(err).
+						Error(`Failed to build project`)
 					return err
 				}
 
-				sourceMapFilter := &compiler.SourceMapFilter{Writer: buf}
-				m := &sourcemap.Map{File: base + ".js"}
-				sourceMapFilter.MappingCallback = s.SourceMappingCallback(m)
+				sourceMapFilter := &sourcemapx.Filter{Writer: buf}
+				s.EnableMapping(sourceMapFilter, base+`.js`)
 
 				deps, err := compiler.ImportDependencies(archive, s.ImportResolverFor(""))
 				if err != nil {
+					log.WithField(`request`, requestName).
+						WithField(`package`, pkg.ImportPath).
+						WithError(err).
+						Error(`Failed to import dependencies`)
 					return err
 				}
 				if err := compiler.WriteProgramCode(deps, sourceMapFilter, s.GoRelease()); err != nil {
+					log.WithField(`request`, requestName).
+						WithField(`package`, pkg.ImportPath).
+						WithError(err).
+						Error(`Failed to write program code`)
 					return err
 				}
 
 				mapBuf := new(bytes.Buffer)
-				m.WriteTo(mapBuf)
+				sourceMapFilter.WriteMappingTo(mapBuf)
 				buf.WriteString("//# sourceMappingURL=" + base + ".js.map\n")
 				fs.sourceMaps[name+".map"] = mapBuf.Bytes()
 
@@ -674,10 +736,14 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 			if err != nil {
 				buf = browserErrors
 			}
+			log.WithField(`request`, requestName).
+				Print(`Created faked JS file for package`)
 			return newFakeFile(base+".js", buf.Bytes()), nil
 
 		case isMap:
 			if content, ok := fs.sourceMaps[name]; ok {
+				log.WithField(`request`, requestName).
+					Print(`Found source map for faked JS file`)
 				return newFakeFile(base+".js.map", content), nil
 			}
 		}
@@ -685,19 +751,27 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 	// First try to serve the request with a root prefix supplied in the CLI.
 	if f, err := fs.serveSourceTree(s.XContext(), name); err == nil {
+		log.WithField(`request`, requestName).
+			Print(`Found with root prefix`)
 		return f, nil
 	}
 
 	// If that didn't work, try without the prefix.
 	if f, err := fs.serveSourceTree(s.XContext(), requestName); err == nil {
+		log.WithField(`request`, requestName).
+			Print(`Found without prefix`)
 		return f, nil
 	}
 
 	if isIndex {
 		// If there was no index.html file in any dirs, supply our own.
+		log.WithField(`request`, requestName).
+			Print(`Created faked index.html file`)
 		return newFakeFile("index.html", []byte(`<html><head><meta charset="utf-8"><script src="`+base+`.js"></script></head><body></body></html>`)), nil
 	}
 
+	log.WithField(`request`, requestName).
+		Error(`Failed to find`)
 	return nil, os.ErrNotExist
 }
 
@@ -761,7 +835,7 @@ func (f *fakeFile) IsDir() bool {
 	return false
 }
 
-func (f *fakeFile) Sys() interface{} {
+func (f *fakeFile) Sys() any {
 	return nil
 }
 
@@ -771,7 +845,7 @@ func handleError(err error, options *gbuild.Options, browserErrors *bytes.Buffer
 	switch err := err.(type) {
 	case nil:
 		return 0
-	case errorList.ErrorList:
+	case errlist.ErrorList:
 		for _, entry := range err {
 			printError(entry, options, browserErrors)
 		}

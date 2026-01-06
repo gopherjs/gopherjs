@@ -130,7 +130,7 @@ var deepEqualTests = []DeepEqualTest{
 	{int32(1), int64(1), false},
 	{0.5, "hello", false},
 	{[]int{1, 2, 3}, [3]int{1, 2, 3}, false},
-	{&[3]interface{}{1, 2, 4}, &[3]interface{}{1, 2, "s"}, false},
+	{&[3]any{1, 2, 4}, &[3]any{1, 2, "s"}, false},
 	{Basic{1, 0.5}, NotBasic{1, 0.5}, false},
 	{map[uint]string{1: "one", 2: "two"}, map[int]string{2: "two", 1: "one"}, false},
 
@@ -286,28 +286,4 @@ func TestMethodCallValueCodePtr(t *testing.T) {
 
 func TestStructOfTooLarge(t *testing.T) {
 	t.Skip("This test is dependent on field alignment to determine if a struct size would exceed virtual address space.")
-}
-
-func TestSetLenCap(t *testing.T) {
-	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
-}
-
-func TestSetPanic(t *testing.T) {
-	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
-}
-
-func TestCallPanic(t *testing.T) {
-	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
-}
-
-func TestValuePanic(t *testing.T) {
-	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
-}
-
-func TestSetIter(t *testing.T) {
-	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
-}
-
-func TestGrow(t *testing.T) {
-	t.Skip("Test depends on call stack function names: https://github.com/gopherjs/gopherjs/issues/1085")
 }

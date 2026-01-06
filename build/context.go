@@ -12,12 +12,13 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/tools/go/buildutil"
+
 	_ "github.com/gopherjs/gopherjs/build/versionhack" // go/build release tags hack.
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/gopherjspkg"
-	"github.com/gopherjs/gopherjs/compiler/jsFile"
+	"github.com/gopherjs/gopherjs/compiler/incjs"
 	"github.com/gopherjs/gopherjs/compiler/natives"
-	"golang.org/x/tools/go/buildutil"
 )
 
 // Env contains build environment configuration required to define an instance
@@ -91,9 +92,9 @@ func (sc simpleCtx) Import(importPath string, srcDir string, mode build.ImportMo
 	if err != nil {
 		return nil, err
 	}
-	jsFiles, err := jsFile.JSFilesFromDir(&sc.bctx, pkg.Dir)
+	jsFiles, err := incjs.FromDir(&sc.bctx, pkg.Dir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to enumerate .inc.js files in %s: %w", pkg.Dir, err)
+		return nil, fmt.Errorf("failed to enumerate %s files in %s: %w", incjs.Ext, pkg.Dir, err)
 	}
 	if !path.IsAbs(pkg.Dir) {
 		pkg.Dir = mustAbs(pkg.Dir)

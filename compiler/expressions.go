@@ -1401,15 +1401,15 @@ func (fc *funcContext) internalize(s *expression, t types.Type) *expression {
 	return fc.formatExpr("$internalize(%s, %s)", s, fc.typeName(t))
 }
 
-func (fc *funcContext) formatExpr(format string, a ...interface{}) *expression {
+func (fc *funcContext) formatExpr(format string, a ...any) *expression {
 	return fc.formatExprInternal(format, a, false)
 }
 
-func (fc *funcContext) formatParenExpr(format string, a ...interface{}) *expression {
+func (fc *funcContext) formatParenExpr(format string, a ...any) *expression {
 	return fc.formatExprInternal(format, a, true)
 }
 
-func (fc *funcContext) formatExprInternal(format string, a []interface{}, parens bool) *expression {
+func (fc *funcContext) formatExprInternal(format string, a []any, parens bool) *expression {
 	processFormat := func(f func(uint8, uint8, int)) {
 		n := 0
 		for i := 0; i < len(format); i++ {

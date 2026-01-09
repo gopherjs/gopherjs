@@ -18,7 +18,7 @@ func XORBytes(dst, x, y []byte) int {
 		panic("subtle.XORBytes: dst too short")
 	}
 
-	// The original uses unsafe and uintptr for specific architecture
+	// GOPHERJS: The original uses unsafe and uintptr for specific architecture
 	// to pack registers full instead of doing one byte at a time.
 	// We can't do the unsafe conversions from []byte to []uintptr
 	// but we can convert a Uint8Array into a Uint32Array,
@@ -73,7 +73,5 @@ const supportsUnaligned = false
 //gopherjs:purge
 func xorBytes(dstb, xb, yb *byte, n int)
 
-// TODO(grantnelson-wf): Check if this should be removed or not with generics.
-//
 //gopherjs:purge
 func xorLoop[T byte | uintptr](dst, x, y []T) {}

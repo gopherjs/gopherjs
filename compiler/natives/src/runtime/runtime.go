@@ -489,3 +489,45 @@ func nanotime() int64 {
 	const millisecond = 1_000_000
 	return js.Global.Get("Date").New().Call("getTime").Int64() * millisecond
 }
+
+const godebugEnvKey = `GODEBUG`
+
+var godebugUpdate func(def, env string)
+
+// godebug_setUpdate implements the setUpdate in src/internal/godebug/godebug.go
+func godebug_setUpdate(update func(def, env string)) {
+	godebugUpdate = update
+	godebugEnv := getEnvString(godebugEnvKey)
+	godebug_notify(godebugEnvKey, godebugEnv)
+}
+
+func getEnvString(key string) string {
+	process := js.Global.Get(`process`)
+	if process == js.Undefined {
+		return ``
+	}
+
+	env := process.Get(`env`)
+	if env == js.Undefined {
+		return ``
+	}
+
+	value := env.Get(key)
+	if value == js.Undefined {
+		return ``
+	}
+
+	return value.String()
+}
+
+// godebug_notify is the function is called by syscall anytime an environment
+// variable is set or unset. It emit the GODEBUG setting if it was changed.
+func godebug_notify(key, value string) {
+	update := godebugUpdate
+	if update == nil || key != godebugEnvKey {
+		return
+	}
+
+	godebugDefault := ``
+	update(godebugDefault, value)
+}

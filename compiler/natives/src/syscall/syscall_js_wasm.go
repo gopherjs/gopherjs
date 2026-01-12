@@ -1,6 +1,9 @@
 package syscall
 
-import "syscall/js"
+import (
+	"syscall/js"
+	_ "unsafe" // go:linkname
+)
 
 func runtime_envs() []string {
 	process := js.Global().Get("process")
@@ -20,12 +23,21 @@ func runtime_envs() []string {
 	return envs
 }
 
+func runtimeSetenv(k, v string) {
+	setenv_c(k, v)
+}
+
+func runtimeUnsetenv(k string) {
+	unsetenv_c(k)
+}
+
 func setenv_c(k, v string) {
 	process := js.Global().Get("process")
 	if process.IsUndefined() {
 		return
 	}
 	process.Get("env").Set(k, v)
+	godebug_notify(k, v)
 }
 
 func unsetenv_c(k string) {
@@ -34,7 +46,11 @@ func unsetenv_c(k string) {
 		return
 	}
 	process.Get("env").Delete(k)
+	godebug_notify(k, ``)
 }
+
+//go:linkname godebug_notify runtime.godebug_notify
+func godebug_notify(key, value string)
 
 func setStat(st *Stat_t, jsSt js.Value) {
 	// This method is an almost-exact copy of upstream, except for 4 places where

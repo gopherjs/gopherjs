@@ -5,7 +5,10 @@ package tests
 import (
 	"fmt"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
+	_ "unsafe"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -172,4 +175,43 @@ func TestCallers(t *testing.T) {
 		}()
 		panic("panic")
 	})
+}
+
+// Need this to tunnel into `internal/godebug` and run a test
+// without causing a dependency cycle with the `testing` package.
+//
+//go:linkname godebug_setUpdate runtime.godebug_setUpdate
+func godebug_setUpdate(update func(string, string))
+
+func Test_GoDebugInjection(t *testing.T) {
+	buf := []string{}
+	update := func(def, env string) {
+		if def != `` {
+			t.Errorf(`Expected the default value to be empty but got %q`, def)
+		}
+		buf = append(buf, strconv.Quote(env))
+	}
+	check := func(want string) {
+		if got := strings.Join(buf, `, `); got != want {
+			t.Errorf(`Unexpected result: got: %q, want: %q`, got, want)
+		}
+		buf = buf[:0]
+	}
+
+	// Call it multiple times to ensure that the watcher is only injected once.
+	// Each one of these calls should emit an update first, then when GODEBUG is set.
+	godebug_setUpdate(update)
+	godebug_setUpdate(update)
+	check(`"", ""`) // two empty strings for initial update calls.
+
+	t.Setenv(`GODEBUG`, `gopherJSTest=ben`)
+	check(`"gopherJSTest=ben"`) // must only be once for update for new value.
+
+	godebug_setUpdate(update)
+	check(`"gopherJSTest=ben"`) // must only be once for initial update with already set value.
+
+	t.Setenv(`GODEBUG`, `gopherJSTest=tom`)
+	t.Setenv(`GODEBUG`, `gopherJSTest=sam`)
+	t.Setenv(`NOT_GODEBUG`, `gopherJSTest=bob`)
+	check(`"gopherJSTest=tom", "gopherJSTest=sam"`)
 }

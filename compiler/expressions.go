@@ -1071,6 +1071,9 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 	case "Offsetof":
 		sel, _ := fc.selectionOf(astutil.RemoveParens(args[0]).(*ast.SelectorExpr))
 		return fc.formatExpr("%d", typesutil.OffsetOf(sizes32, sel))
+	case "SliceData":
+		t := fc.typeOf(args[0]).Underlying().(*types.Slice)
+		return fc.formatExpr(`$sliceData(%e, %s)`, args[0], fc.typeName(t))
 	default:
 		panic(fmt.Sprintf("Unhandled builtin: %s\n", name))
 	}

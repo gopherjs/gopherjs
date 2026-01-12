@@ -368,11 +368,18 @@ func (cc chainedCtx) Import(importPath string, srcDir string, mode build.ImportM
 	pkg, err := cc.primary.Import(importPath, srcDir, mode)
 	if err == nil {
 		return pkg, nil
-	} else if IsPkgNotFound(err) {
-		return cc.secondary.Import(importPath, srcDir, mode)
-	} else {
-		return nil, err
 	}
+
+	if IsPkgNotFound(err) {
+		if pkg, err2 := cc.secondary.Import(importPath, srcDir, mode); err2 == nil {
+			return pkg, nil
+		}
+		// if err2 != nil, return the original error that occurred in primary
+		// context since the secondary is for the virtual gopherjs context,
+		// meaning err2 will say that GOPATH is not set which is misleading.
+	}
+
+	return nil, err
 }
 
 func (cc chainedCtx) Env() Env { return cc.primary.Env() }

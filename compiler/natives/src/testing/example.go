@@ -5,12 +5,11 @@ package testing
 import (
 	"fmt"
 	"os"
-	"strings"
 	"time"
 )
 
 func runExample(eg InternalExample) (ok bool) {
-	if *chatty {
+	if chatty.on {
 		fmt.Printf("=== RUN   %s\n", eg.Name)
 	}
 
@@ -23,12 +22,12 @@ func runExample(eg InternalExample) (ok bool) {
 	}
 	os.Stdout = w
 
+	finished := false
 	start := time.Now()
-	ok = true
 
 	// Clean up in a deferred call so we can recover if the example panics.
 	defer func() {
-		dstr := fmtDuration(time.Now().Sub(start))
+		timeSpent := time.Since(start)
 
 		// Close file, restore stdout, get output.
 		w.Close()
@@ -40,31 +39,12 @@ func runExample(eg InternalExample) (ok bool) {
 			os.Exit(1)
 		}
 
-		var fail string
 		err := recover()
-		got := strings.TrimSpace(string(out))
-		want := strings.TrimSpace(eg.Output)
-		if eg.Unordered {
-			if sortLines(got) != sortLines(want) && err == nil {
-				fail = fmt.Sprintf("got:\n%s\nwant (unordered):\n%s\n", string(out), eg.Output)
-			}
-		} else {
-			if got != want && err == nil {
-				fail = fmt.Sprintf("got:\n%s\nwant:\n%s\n", got, want)
-			}
-		}
-		if fail != "" || err != nil {
-			fmt.Printf("--- FAIL: %s (%s)\n%s", eg.Name, dstr, fail)
-			ok = false
-		} else if *chatty {
-			fmt.Printf("--- PASS: %s (%s)\n", eg.Name, dstr)
-		}
-		if err != nil {
-			panic(err)
-		}
+		ok = eg.processRunResult(string(out), timeSpent, finished, err)
 	}()
 
 	// Run example.
 	eg.F()
+	finished = true
 	return
 }

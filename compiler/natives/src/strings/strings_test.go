@@ -17,5 +17,9 @@ func TestCompareStrings(t *testing.T) {
 }
 
 func TestClone(t *testing.T) {
-	t.Skip("conversion to reflect.StringHeader is not supported in GopherJS")
+	t.Skip("conversion to unsafe.StringData is not supported in GopherJS")
+}
+
+func TestMap(t *testing.T) {
+	t.Skip("identity test uses unsafe.StringData is not supported in GopherJS")
 }

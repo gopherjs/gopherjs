@@ -220,7 +220,11 @@ func main() {
 					}
 
 					if pkg.IsCommand() && !pkg.UpToDate {
-						if err := s.WriteCommandPackage(archive, pkg.InstallPath()); err != nil {
+						pkgObj, err := pkg.InstallPath()
+						if err != nil {
+							return err
+						}
+						if err := s.WriteCommandPackage(archive, pkgObj); err != nil {
 							return err
 						}
 					}

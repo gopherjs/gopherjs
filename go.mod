@@ -1,6 +1,6 @@
 module github.com/gopherjs/gopherjs
 
-go 1.20
+go 1.21
 
 require (
 	github.com/evanw/esbuild v0.25.4

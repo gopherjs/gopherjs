@@ -33,21 +33,21 @@ Nearly everything, including Goroutines ([compatibility documentation](https://g
 
 ### Installation and Usage
 
-GopherJS [requires Go 1.20 or newer](https://github.com/gopherjs/gopherjs/blob/master/doc/compatibility.md#go-version-compatibility). If you need an older Go
+GopherJS [requires Go 1.21 or newer](https://github.com/gopherjs/gopherjs/blob/master/doc/compatibility.md#go-version-compatibility). If you need an older Go
 version, you can use an [older GopherJS release](https://github.com/gopherjs/gopherjs/releases).
 
 Install GopherJS with `go install`:
 
 ```
-go install github.com/gopherjs/gopherjs@v1.20.0-beta1  # Or replace 'v1.20.0-beta1' with another version.
+go install github.com/gopherjs/gopherjs@v1.21.0-beta1  # Or replace 'v1.21.0-beta1' with another version.
 ```
 
-If your local Go distribution as reported by `go version` is newer than Go 1.20, then you need to set the `GOPHERJS_GOROOT` environment variable to a directory that contains a Go 1.20 distribution. For example:
+If your local Go distribution as reported by `go version` is newer than Go 1.21, then you need to set the `GOPHERJS_GOROOT` environment variable to a directory that contains a Go 1.21 distribution. For example:
 
 ```
-go install golang.org/dl/go1.20.14@latest
-go1.20.14 download
-export GOPHERJS_GOROOT="$(go1.20.14 env GOROOT)"  # Also add this line to your .profile or equivalent.
+go install golang.org/dl/go1.21.13@latest
+go1.21.13 download
+export GOPHERJS_GOROOT="$(go1.21.13 env GOROOT)"  # Also add this line to your .profile or equivalent.
 ```
 
 Now you can use `gopherjs build [package]`, `gopherjs build [files]` or `gopherjs install [package]` which behave similar to the `go` tool. For `main` packages, these commands create a `.js` file and `.js.map` source map in the current directory or in `$GOPATH/bin`. The generated JavaScript file can be used as usual in a website. Use `gopherjs help [command]` to get a list of possible command line flags, e.g. for minification and automatically watching for changes.

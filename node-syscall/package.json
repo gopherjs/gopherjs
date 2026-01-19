@@ -10,6 +10,6 @@
   "license": "BSD-2-Clause",
   "gypfile": true,
   "dependencies": {
-    "node-gyp": "^8.1.0"
+    "node-gyp": "^12.1.0"
   }
 }

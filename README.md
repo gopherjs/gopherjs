@@ -39,7 +39,7 @@ version, you can use an [older GopherJS release](https://github.com/gopherjs/gop
 Install GopherJS with `go install`:
 
 ```
-go install github.com/gopherjs/gopherjs@v1.21.0-beta1  # Or replace 'v1.21.0-beta1' with another version.
+go install github.com/gopherjs/gopherjs@v1.21.0  # Or replace 'v1.21.0' with another version.
 ```
 
 If your local Go distribution as reported by `go version` is newer than Go 1.21, then you need to set the `GOPHERJS_GOROOT` environment variable to a directory that contains a Go 1.21 distribution. For example:

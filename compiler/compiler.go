@@ -26,12 +26,12 @@ var (
 
 func init() {
 	keywords := []string{
-		"abstract", "arguments", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue",
-		"debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false",
+		"abstract", "arguments", "await", "async", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
+		"continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false",
 		"final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof",
 		"int", "interface", "let", "long", "native", "new", "null", "package", "private", "protected", "public",
 		"return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient",
-		"true", "try", "typeof", "undefined", "var", "void", "volatile", "while", "with", "yield",
+		"true", "try", "typeof", "undefined", "using", "var", "void", "volatile", "while", "with", "yield",
 	}
 	for _, keyword := range keywords {
 		reservedKeywords[keyword] = true

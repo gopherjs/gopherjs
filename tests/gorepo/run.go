@@ -153,6 +153,9 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue57823.go":  {category: notApplicable, desc: "uses runtime.SetFinalizer() and runtime.GC()."},
 	"fixedbugs/issue59293.go":  {category: usesUnsupportedPackage, desc: "uses unsafe.SliceData() and unsafe.StringData()."},
 	"fixedbugs/issue43942.go":  {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1126"},
+
+	// These are new tests in Go 1.21
+	// TODO(grantnelson-wf): Fill out
 }
 
 type failCategory uint8

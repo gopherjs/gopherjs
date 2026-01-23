@@ -31,9 +31,9 @@ import (
 	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler"
 	"github.com/gopherjs/gopherjs/compiler/astutil"
+	"github.com/gopherjs/gopherjs/compiler/errlist"
 	"github.com/gopherjs/gopherjs/compiler/incjs"
 	"github.com/gopherjs/gopherjs/compiler/sources"
-	"github.com/gopherjs/gopherjs/internal/errlist"
 	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 	"github.com/gopherjs/gopherjs/internal/testmain"
 )

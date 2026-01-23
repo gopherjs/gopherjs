@@ -869,7 +869,7 @@ func (fc *funcContext) translateCall(e *ast.CallExpr, sig *types.Signature, fun 
 // where we need to compute function and its arguments at the keyword site,
 // but the call itself will happen elsewhere (hence "delegated").
 //
-// Built-in functions and cetrain `js.Object` methods don't translate into JS
+// Built-in functions and certain `js.Object` methods don't translate into JS
 // function calls, and need to be wrapped before they can be delegated, which
 // this function handles and returns JS expressions that are safe to delegate
 // and behave like a regular JS function and a list of its argument values.
@@ -912,7 +912,7 @@ func (fc *funcContext) delegatedCall(expr *ast.CallExpr) (callable *expression, 
 		Args:     callArgs,
 		Ellipsis: expr.Ellipsis,
 	}
-	callable = fc.formatExpr("function(%s) { %e; }", strings.Join(vars, ", "), wrapper)
+	callable = fc.formatExpr("function(%s) { $stackDepthOffset--; %e; }", strings.Join(vars, ", "), wrapper)
 	arglist = fc.formatExpr("[%s]", strings.Join(args, ", "))
 	return callable, arglist
 }

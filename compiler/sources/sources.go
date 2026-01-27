@@ -9,11 +9,11 @@ import (
 
 	"github.com/neelance/astrewrite"
 
+	"github.com/gopherjs/gopherjs/compiler/errlist"
 	"github.com/gopherjs/gopherjs/compiler/incjs"
 	"github.com/gopherjs/gopherjs/compiler/internal/analysis"
 	"github.com/gopherjs/gopherjs/compiler/internal/typeparams"
 	"github.com/gopherjs/gopherjs/compiler/linkname"
-	"github.com/gopherjs/gopherjs/internal/errlist"
 )
 
 // Sources is a slice of parsed Go sources and additional data for a package.

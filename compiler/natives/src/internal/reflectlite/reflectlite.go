@@ -39,8 +39,12 @@ var (
 	idRtype       = "_rtype"
 )
 
-func jsType(typ Type) *js.Object {
+func jsType(typ *abi.Type) *js.Object {
 	return js.InternalObject(typ).Get(idJsType)
+}
+
+func jsPtrTo(typ *abi.Type) *js.Object {
+	return jsType(PtrTo(toRType(typ)).(*rtype).Type)
 }
 
 func reflectType(typ *js.Object) *rtype {
@@ -223,11 +227,11 @@ func internalStr(strObj *js.Object) string {
 	return c.str
 }
 
-func isWrapped(typ Type) bool {
+func isWrapped(typ *abi.Type) bool {
 	return jsType(typ).Get("wrapped").Bool()
 }
 
-func copyStruct(dst, src *js.Object, typ Type) {
+func copyStruct(dst, src *js.Object, typ *abi.Type) {
 	fields := jsType(typ).Get("fields")
 	for i := 0; i < fields.Length(); i++ {
 		prop := fields.Index(i).Get("prop").String()
@@ -235,7 +239,7 @@ func copyStruct(dst, src *js.Object, typ Type) {
 	}
 }
 
-func makeValue(t Type, v *js.Object, fl flag) Value {
+func makeValue(t *abi.Type, v *js.Object, fl flag) Value {
 	rt := t.common()
 	switch t.Kind() {
 	case abi.Array, abi.Struct, abi.Pointer:
@@ -422,7 +426,7 @@ func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
 	if entry == js.Undefined {
 		return nil
 	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", entry.Get("v"), jsType(PtrTo(t.Elem()))).Unsafe())
+	return unsafe.Pointer(js.Global.Call("$newDataPointer", entry.Get("v"), jsPtrTo(t.Elem())).Unsafe())
 }
 
 func mapassign(t *rtype, m, key, val unsafe.Pointer) {
@@ -493,7 +497,7 @@ func mapiterkey(it unsafe.Pointer) unsafe.Pointer {
 		// Record the key-value pair for later accesses.
 		iter.last = kv
 	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("k"), jsType(PtrTo(iter.t.(TypeEx).Key()))).Unsafe())
+	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("k"), jsPtrTo(iter.t.(TypeEx).Key())).Unsafe())
 }
 
 func mapiternext(it unsafe.Pointer) {
@@ -519,7 +523,7 @@ func cvtDirect(v Value, typ Type) Value {
 		slice.Set("$offset", srcVal.Get("$offset"))
 		slice.Set("$length", srcVal.Get("$length"))
 		slice.Set("$capacity", srcVal.Get("$capacity"))
-		val = js.Global.Call("$newDataPointer", slice, jsType(PtrTo(typ)))
+		val = js.Global.Call("$newDataPointer", slice, jsPtrTo(typ))
 	case abi.Pointer:
 		if typ.Elem().Kind() == abi.Struct {
 			if typ.Elem() == v.typ.Elem() {
@@ -635,7 +639,7 @@ func valueInterface(v Value) any {
 	return any(unsafe.Pointer(v.object().Unsafe()))
 }
 
-func ifaceE2I(t *rtype, src any, dst unsafe.Pointer) {
+func ifaceE2I(t *abi.Type, src any, dst unsafe.Pointer) {
 	js.InternalObject(dst).Call("$set", js.InternalObject(src))
 }
 

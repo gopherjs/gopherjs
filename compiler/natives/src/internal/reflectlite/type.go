@@ -36,11 +36,11 @@ func newTypeOff(t *rtype) typeOff {
 
 func (t rtype) Comparable() bool {
 	switch t.Kind() {
-	case Func, Slice, Map:
+	case abi.Func, abi.Slice, abi.Map:
 		return false
-	case Array:
+	case abi.Array:
 		return t.Elem().Comparable()
-	case Struct:
+	case abi.Struct:
 		for i := 0; i < t.NumField(); i++ {
 			ft := t.Field(i)
 			if !ft.typ.Comparable() {
@@ -52,7 +52,7 @@ func (t rtype) Comparable() bool {
 }
 
 func (t *rtype) IsVariadic() bool {
-	if t.Kind() != Func {
+	if t.Kind() != abi.Func {
 		panic("reflect: IsVariadic of non-func type")
 	}
 	tt := (*funcType)(unsafe.Pointer(t))
@@ -64,7 +64,7 @@ func (t *rtype) kindType() *rtype {
 }
 
 func (t *rtype) Key() Type {
-	if t.Kind() != Map {
+	if t.Kind() != abi.Map {
 		panic("reflect: Key of non-map type")
 	}
 	tt := (*mapType)(unsafe.Pointer(t))
@@ -72,7 +72,7 @@ func (t *rtype) Key() Type {
 }
 
 func (t *rtype) NumField() int {
-	if t.Kind() != Struct {
+	if t.Kind() != abi.Struct {
 		panic("reflect: NumField of non-struct type")
 	}
 	tt := (*structType)(unsafe.Pointer(t))
@@ -80,7 +80,7 @@ func (t *rtype) NumField() int {
 }
 
 func (t *rtype) Method(i int) (m Method) {
-	if t.Kind() == Interface {
+	if t.Kind() == abi.Interface {
 		tt := (*interfaceType)(unsafe.Pointer(t))
 		return tt.Method(i)
 	}

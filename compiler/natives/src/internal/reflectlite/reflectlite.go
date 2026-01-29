@@ -94,12 +94,12 @@ func reflectType(typ *js.Object) *rtype {
 		}
 
 		switch rt.Kind() {
-		case Array:
+		case abi.Array:
 			setKindType(rt, &arrayType{
 				elem: reflectType(typ.Get("elem")),
 				len:  uintptr(typ.Get("len").Int()),
 			})
-		case Chan:
+		case abi.Chan:
 			dir := BothDir
 			if typ.Get("sendOnly").Bool() {
 				dir = SendDir
@@ -111,7 +111,7 @@ func reflectType(typ *js.Object) *rtype {
 				elem: reflectType(typ.Get("elem")),
 				dir:  uintptr(dir),
 			})
-		case Func:
+		case abi.Func:
 			params := typ.Get("params")
 			in := make([]*rtype, params.Length())
 			for i := range in {
@@ -126,14 +126,14 @@ func reflectType(typ *js.Object) *rtype {
 			if typ.Get("variadic").Bool() {
 				outCount |= 1 << 15
 			}
-			setKindType(rt, &funcType{
-				rtype:    *rt,
-				inCount:  uint16(params.Length()),
-				outCount: outCount,
-				_in:      in,
-				_out:     out,
+			setKindType(rt, &abi.FuncType{
+				Type:     *rt,
+				InCount:  uint16(params.Length()),
+				OutCount: outCount,
+				In_:      in,
+				Out_:     out,
 			})
-		case Interface:
+		case abi.Interface:
 			methods := typ.Get("methods")
 			imethods := make([]imethod, methods.Length())
 			for i := range imethods {
@@ -148,20 +148,20 @@ func reflectType(typ *js.Object) *rtype {
 				pkgPath: newName(internalStr(typ.Get("pkg")), "", false, false),
 				methods: imethods,
 			})
-		case Map:
+		case abi.Map:
 			setKindType(rt, &mapType{
 				key:  reflectType(typ.Get("key")),
 				elem: reflectType(typ.Get("elem")),
 			})
-		case Ptr:
+		case abi.Pointer:
 			setKindType(rt, &ptrType{
 				elem: reflectType(typ.Get("elem")),
 			})
-		case Slice:
+		case abi.Slice:
 			setKindType(rt, &sliceType{
 				elem: reflectType(typ.Get("elem")),
 			})
-		case Struct:
+		case abi.Struct:
 			fields := typ.Get("fields")
 			reflectFields := make([]abi.StructField, fields.Length())
 			for i := range reflectFields {
@@ -186,23 +186,6 @@ func reflectType(typ *js.Object) *rtype {
 func setKindType(rt *rtype, kindType any) {
 	js.InternalObject(rt).Set(idKindType, js.InternalObject(kindType))
 	js.InternalObject(kindType).Set(idRtype, js.InternalObject(rt))
-}
-
-type funcType struct {
-	rtype    `reflect:"func"`
-	inCount  uint16
-	outCount uint16
-
-	_in  []*rtype
-	_out []*rtype
-}
-
-func (t *funcType) in() []*rtype {
-	return t._in
-}
-
-func (t *funcType) out() []*rtype {
-	return t._out
 }
 
 type nameData struct {
@@ -254,14 +237,15 @@ func copyStruct(dst, src *js.Object, typ Type) {
 
 func makeValue(t Type, v *js.Object, fl flag) Value {
 	rt := t.common()
-	if t.Kind() == Array || t.Kind() == Struct || t.Kind() == Ptr {
+	switch t.Kind() {
+	case abi.Array, abi.Struct, abi.Pointer:
 		return Value{rt, unsafe.Pointer(v.Unsafe()), fl | flag(t.Kind())}
 	}
 	return Value{rt, unsafe.Pointer(js.Global.Call("$newDataPointer", v, jsType(rt.ptrTo())).Unsafe()), fl | flag(t.Kind()) | flagIndir}
 }
 
 func MakeSlice(typ Type, len, cap int) Value {
-	if typ.Kind() != Slice {
+	if typ.Kind() != abi.Slice {
 		panic("reflect.MakeSlice of non-slice type")
 	}
 	if len < 0 {
@@ -303,7 +287,7 @@ func ChanOf(dir ChanDir, t Type) Type {
 }
 
 func FuncOf(in, out []Type, variadic bool) Type {
-	if variadic && (len(in) == 0 || in[len(in)-1].Kind() != Slice) {
+	if variadic && (len(in) == 0 || in[len(in)-1].Kind() != abi.Slice) {
 		panic("reflect.FuncOf: last arg of variadic func must be slice")
 	}
 
@@ -320,7 +304,7 @@ func FuncOf(in, out []Type, variadic bool) Type {
 
 func MapOf(key, elem Type) Type {
 	switch key.Kind() {
-	case Func, Map, Slice:
+	case abi.Func, abi.Map, abi.Slice:
 		panic("reflect.MapOf: invalid key type " + key.String())
 	}
 
@@ -341,9 +325,9 @@ func Zero(typ Type) Value {
 
 func unsafe_New(typ *abi.Type) unsafe.Pointer {
 	switch typ.Kind() {
-	case Struct:
+	case abi.Struct:
 		return unsafe.Pointer(jsType(typ).Get("ptr").New().Unsafe())
-	case Array:
+	case abi.Array:
 		return unsafe.Pointer(jsType(typ).Call("zero").Unsafe())
 	default:
 		return unsafe.Pointer(js.Global.Call("$newDataPointer", jsType(typ).Call("zero"), jsType(typ.ptrTo())).Unsafe())
@@ -354,28 +338,28 @@ func makeInt(f flag, bits uint64, t Type) Value {
 	typ := t.common()
 	ptr := unsafe_New(typ)
 	switch typ.Kind() {
-	case Int8:
+	case abi.Int8:
 		*(*int8)(ptr) = int8(bits)
-	case Int16:
+	case abi.Int16:
 		*(*int16)(ptr) = int16(bits)
-	case Int, Int32:
+	case abi.Int, abi.Int32:
 		*(*int32)(ptr) = int32(bits)
-	case Int64:
+	case abi.Int64:
 		*(*int64)(ptr) = int64(bits)
-	case Uint8:
+	case abi.Uint8:
 		*(*uint8)(ptr) = uint8(bits)
-	case Uint16:
+	case abi.Uint16:
 		*(*uint16)(ptr) = uint16(bits)
-	case Uint, Uint32, Uintptr:
+	case abi.Uint, abi.Uint32, abi.Uintptr:
 		*(*uint32)(ptr) = uint32(bits)
-	case Uint64:
+	case abi.Uint64:
 		*(*uint64)(ptr) = uint64(bits)
 	}
 	return Value{typ, ptr, f | flagIndir | flag(typ.Kind())}
 }
 
 func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
-	if typ.Kind() != Func {
+	if typ.Kind() != abi.Func {
 		panic("reflect: call of MakeFunc with non-Func type")
 	}
 
@@ -445,7 +429,7 @@ func mapassign(t *rtype, m, key, val unsafe.Pointer) {
 	kv, k := keyFor(t, key)
 	jsVal := js.InternalObject(val).Call("$get")
 	et := t.Elem()
-	if et.Kind() == Struct {
+	if et.Kind() == abi.Struct {
 		newVal := jsType(et).Call("zero")
 		copyStruct(newVal, jsVal, et)
 		jsVal = newVal
@@ -530,14 +514,14 @@ func cvtDirect(v Value, typ Type) Value {
 
 	var val *js.Object
 	switch k := typ.Kind(); k {
-	case Slice:
+	case abi.Slice:
 		slice := jsType(typ).New(srcVal.Get("$array"))
 		slice.Set("$offset", srcVal.Get("$offset"))
 		slice.Set("$length", srcVal.Get("$length"))
 		slice.Set("$capacity", srcVal.Get("$capacity"))
 		val = js.Global.Call("$newDataPointer", slice, jsType(PtrTo(typ)))
-	case Ptr:
-		if typ.Elem().Kind() == Struct {
+	case abi.Pointer:
+		if typ.Elem().Kind() == abi.Struct {
 			if typ.Elem() == v.typ.Elem() {
 				val = srcVal
 				break
@@ -547,10 +531,10 @@ func cvtDirect(v Value, typ Type) Value {
 			break
 		}
 		val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"))
-	case Struct:
+	case abi.Struct:
 		val = jsType(typ).Get("ptr").New()
 		copyStruct(val, srcVal, typ)
-	case Array, Bool, Chan, Func, Interface, Map, String:
+	case abi.Array, abi.Bool, abi.Chan, abi.Func, abi.Interface, abi.Map, abi.String:
 		val = js.InternalObject(v.ptr)
 	default:
 		panic(&ValueError{"reflect.Convert", k})
@@ -560,18 +544,18 @@ func cvtDirect(v Value, typ Type) Value {
 
 func Copy(dst, src Value) int {
 	dk := dst.kind()
-	if dk != Array && dk != Slice {
+	if dk != abi.Array && dk != abi.Slice {
 		panic(&ValueError{"reflect.Copy", dk})
 	}
-	if dk == Array {
+	if dk == abi.Array {
 		dst.mustBeAssignable()
 	}
 	dst.mustBeExported()
 
 	sk := src.kind()
 	var stringCopy bool
-	if sk != Array && sk != Slice {
-		stringCopy = sk == String && dst.typ.Elem().Kind() == Uint8
+	if sk != abi.Array && sk != abi.Slice {
+		stringCopy = sk == abi.String && dst.typ.Elem().Kind() == abi.Uint8
 		if !stringCopy {
 			panic(&ValueError{"reflect.Copy", sk})
 		}
@@ -583,12 +567,12 @@ func Copy(dst, src Value) int {
 	}
 
 	dstVal := dst.object()
-	if dk == Array {
+	if dk == abi.Array {
 		dstVal = jsType(SliceOf(dst.typ.Elem())).New(dstVal)
 	}
 
 	srcVal := src.object()
-	if sk == Array {
+	if sk == abi.Array {
 		srcVal = jsType(SliceOf(src.typ.Elem())).New(srcVal)
 	}
 
@@ -600,7 +584,7 @@ func Copy(dst, src Value) int {
 
 func methodReceiver(op string, v Value, i int) (_ *rtype, t *funcType, fn unsafe.Pointer) {
 	var prop string
-	if v.typ.Kind() == Interface {
+	if v.typ.Kind() == abi.Interface {
 		tt := (*interfaceType)(unsafe.Pointer(v.typ))
 		if i < 0 || i >= len(tt.methods) {
 			panic("reflect: internal error: invalid method index")
@@ -641,7 +625,7 @@ func valueInterface(v Value) any {
 	}
 
 	if isWrapped(v.typ) {
-		if v.flag&flagIndir != 0 && v.Kind() == Struct {
+		if v.flag&flagIndir != 0 && v.Kind() == abi.Struct {
 			cv := jsType(v.typ).Call("zero")
 			copyStruct(cv, v.object(), v.typ)
 			return any(unsafe.Pointer(jsType(v.typ).New(cv).Unsafe()))
@@ -840,7 +824,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	}
 
 	switch v1.Kind() {
-	case Array, Map, Slice, Struct:
+	case abi.Array, abi.Map, abi.Slice, abi.Struct:
 		for _, entry := range visited {
 			if v1.ptr == entry[0] && v2.ptr == entry[1] {
 				return true
@@ -850,8 +834,8 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	}
 
 	switch v1.Kind() {
-	case Array, Slice:
-		if v1.Kind() == Slice {
+	case abi.Array, abi.Slice:
+		if v1.Kind() == abi.Slice {
 			if v1.IsNil() != v2.IsNil() {
 				return false
 			}
@@ -869,14 +853,14 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 			}
 		}
 		return true
-	case Interface:
+	case abi.Interface:
 		if v1.IsNil() || v2.IsNil() {
 			return v1.IsNil() && v2.IsNil()
 		}
 		return deepValueEqualJs(v1.Elem(), v2.Elem(), visited)
-	case Ptr:
+	case abi.Pointer:
 		return deepValueEqualJs(v1.Elem(), v2.Elem(), visited)
-	case Struct:
+	case abi.Struct:
 		n := v1.NumField()
 		for i := 0; i < n; i++ {
 			if !deepValueEqualJs(v1.Field(i), v2.Field(i), visited) {
@@ -884,7 +868,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 			}
 		}
 		return true
-	case Map:
+	case abi.Map:
 		if v1.IsNil() != v2.IsNil() {
 			return false
 		}
@@ -903,9 +887,9 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 			}
 		}
 		return true
-	case Func:
+	case abi.Func:
 		return v1.IsNil() && v2.IsNil()
-	case UnsafePointer:
+	case abi.UnsafePointer:
 		return v1.object() == v2.object()
 	}
 

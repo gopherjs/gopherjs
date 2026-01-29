@@ -5,6 +5,8 @@ package reflectlite
 import (
 	"unsafe"
 
+	"internal/abi"
+
 	"github.com/gopherjs/gopherjs/js"
 )
 
@@ -14,8 +16,6 @@ func init() {
 	// avoid dead code elimination
 	used := func(i any) {}
 	used(rtype{})
-	used(uncommonType{})
-	used(method{})
 	used(arrayType{})
 	used(chanType{})
 	used(funcType{})
@@ -25,7 +25,6 @@ func init() {
 	used(sliceType{})
 	used(structType{})
 	used(imethod{})
-	used(structField{})
 
 	initialized = true
 	uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
@@ -47,29 +46,29 @@ func jsType(typ Type) *js.Object {
 func reflectType(typ *js.Object) *rtype {
 	if typ.Get(idReflectType) == js.Undefined {
 		rt := &rtype{
-			size: uintptr(typ.Get("size").Int()),
-			kind: uint8(typ.Get("kind").Int()),
-			str:  newNameOff(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
+			Size: uintptr(typ.Get("size").Int()),
+			Kind: uint8(typ.Get("kind").Int()),
+			Str:  newNameOff(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
 		}
 		js.InternalObject(rt).Set(idJsType, typ)
 		typ.Set(idReflectType, js.InternalObject(rt))
 
 		methodSet := js.Global.Call("$methodSet", typ)
 		if methodSet.Length() != 0 || typ.Get("named").Bool() {
-			rt.tflag |= tflagUncommon
+			rt.TFlag |= abi.TFlagUncommon
 			if typ.Get("named").Bool() {
-				rt.tflag |= tflagNamed
+				rt.TFlag |= abi.TFlagNamed
 			}
-			var reflectMethods []method
+			var reflectMethods []abi.Method
 			for i := 0; i < methodSet.Length(); i++ { // Exported methods first.
 				m := methodSet.Index(i)
 				exported := internalStr(m.Get("pkg")) == ""
 				if !exported {
 					continue
 				}
-				reflectMethods = append(reflectMethods, method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", exported, false)),
-					mtyp: newTypeOff(reflectType(m.Get("typ"))),
+				reflectMethods = append(reflectMethods, abi.Method{
+					Name: newNameOff(newName(internalStr(m.Get("name")), "", exported, false)),
+					Mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				})
 			}
 			xcount := uint16(len(reflectMethods))
@@ -79,18 +78,18 @@ func reflectType(typ *js.Object) *rtype {
 				if exported {
 					continue
 				}
-				reflectMethods = append(reflectMethods, method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", exported, false)),
-					mtyp: newTypeOff(reflectType(m.Get("typ"))),
+				reflectMethods = append(reflectMethods, abi.Method{
+					Name: newNameOff(newName(internalStr(m.Get("name")), "", exported, false)),
+					Mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				})
 			}
-			ut := &uncommonType{
-				pkgPath:  newNameOff(newName(internalStr(typ.Get("pkg")), "", false, false)),
-				mcount:   uint16(methodSet.Length()),
-				xcount:   xcount,
-				_methods: reflectMethods,
+			ut := &abi.UncommonType{
+				PkgPath:  newNameOff(newName(internalStr(typ.Get("pkg")), "", false, false)),
+				Mcount:   uint16(methodSet.Length()),
+				Xcount:   xcount,
+				Methods_: reflectMethods,
 			}
-			uncommonTypeMap[rt] = ut
+			abi.UncommonTypeMap[rt] = ut
 			js.InternalObject(ut).Set(idJsType, typ)
 		}
 
@@ -164,13 +163,13 @@ func reflectType(typ *js.Object) *rtype {
 			})
 		case Struct:
 			fields := typ.Get("fields")
-			reflectFields := make([]structField, fields.Length())
+			reflectFields := make([]abi.StructField, fields.Length())
 			for i := range reflectFields {
 				f := fields.Index(i)
-				reflectFields[i] = structField{
-					name:   newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
-					typ:    reflectType(f.Get("typ")),
-					offset: uintptr(i),
+				reflectFields[i] = abi.StructField{
+					Name:   newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
+					Typ:    reflectType(f.Get("typ")),
+					Offset: uintptr(i),
 				}
 			}
 			setKindType(rt, &structType{
@@ -187,29 +186,6 @@ func reflectType(typ *js.Object) *rtype {
 func setKindType(rt *rtype, kindType any) {
 	js.InternalObject(rt).Set(idKindType, js.InternalObject(kindType))
 	js.InternalObject(kindType).Set(idRtype, js.InternalObject(rt))
-}
-
-type uncommonType struct {
-	pkgPath nameOff
-	mcount  uint16
-	xcount  uint16
-	moff    uint32
-
-	_methods []method
-}
-
-func (t *uncommonType) methods() []method {
-	return t._methods
-}
-
-func (t *uncommonType) exportedMethods() []method {
-	return t._methods[:t.xcount:t.xcount]
-}
-
-var uncommonTypeMap = make(map[*rtype]*uncommonType)
-
-func (t *rtype) uncommon() *uncommonType {
-	return uncommonTypeMap[t]
 }
 
 type funcType struct {
@@ -229,10 +205,6 @@ func (t *funcType) out() []*rtype {
 	return t._out
 }
 
-type name struct {
-	bytes *byte
-}
-
 type nameData struct {
 	name     string
 	tag      string
@@ -244,7 +216,6 @@ var nameMap = make(map[*byte]*nameData)
 
 func (n name) name() (s string) { return nameMap[n.bytes].name }
 func (n name) tag() (s string)  { return nameMap[n.bytes].tag }
-func (n name) pkgPath() string  { return "" }
 func (n name) isExported() bool { return nameMap[n.bytes].exported }
 func (n name) embedded() bool   { return nameMap[n.bytes].embedded }
 
@@ -261,29 +232,7 @@ func newName(n, tag string, exported, embedded bool) name {
 	}
 }
 
-var nameOffList []name
-
-func (t *rtype) nameOff(off nameOff) name {
-	return nameOffList[int(off)]
-}
-
-func newNameOff(n name) nameOff {
-	i := len(nameOffList)
-	nameOffList = append(nameOffList, n)
-	return nameOff(i)
-}
-
-var typeOffList []*rtype
-
-func (t *rtype) typeOff(off typeOff) *rtype {
-	return typeOffList[int(off)]
-}
-
-func newTypeOff(t *rtype) typeOff {
-	i := len(typeOffList)
-	typeOffList = append(typeOffList, t)
-	return typeOff(i)
-}
+func pkgPath(n abi.Name) string { return "" }
 
 func internalStr(strObj *js.Object) string {
 	var c struct{ str string }
@@ -390,7 +339,7 @@ func Zero(typ Type) Value {
 	return makeValue(typ, jsType(typ).Call("zero"), 0)
 }
 
-func unsafe_New(typ *rtype) unsafe.Pointer {
+func unsafe_New(typ *abi.Type) unsafe.Pointer {
 	switch typ.Kind() {
 	case Struct:
 		return unsafe.Pointer(jsType(typ).Get("ptr").New().Unsafe())
@@ -457,7 +406,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	return Value{t, unsafe.Pointer(fv.Unsafe()), flag(Func)}
 }
 
-func typedmemmove(t *rtype, dst, src unsafe.Pointer) {
+func typedmemmove(t *abi.Type, dst, src unsafe.Pointer) {
 	js.InternalObject(dst).Call("$set", js.InternalObject(src).Call("$get"))
 }
 

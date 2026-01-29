@@ -62,6 +62,6 @@ func TestLinknameReflectName(t *testing.T) {
 	off := resolveReflectName(newName(info, "", false))
 	n := rtype_nameOff(nil, off)
 	if s := name_name(n); s != info {
-		t.Fatalf("to reflect.name got %q: want %q", s, info)
+		t.Fatalf("to reflect's abi.Name got %q: want %q", s, info)
 	}
 }

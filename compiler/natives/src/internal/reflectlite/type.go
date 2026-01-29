@@ -5,10 +5,36 @@ package reflectlite
 import (
 	"unsafe"
 
+	"internal/abi"
+
 	"github.com/gopherjs/gopherjs/js"
 )
 
-func (t *rtype) Comparable() bool {
+var nameOffList []abi.Name
+
+func (t rtype) nameOff(off nameOff) abi.Name {
+	return nameOffList[int(off)]
+}
+
+func newNameOff(n abi.Name) nameOff {
+	i := len(nameOffList)
+	nameOffList = append(nameOffList, n)
+	return nameOff(i)
+}
+
+var typeOffList []*abi.Type
+
+func (t *rtype) typeOff(off typeOff) *abi.Type {
+	return typeOffList[int(off)]
+}
+
+func newTypeOff(t *rtype) typeOff {
+	i := len(typeOffList)
+	typeOffList = append(typeOffList, t)
+	return typeOff(i)
+}
+
+func (t rtype) Comparable() bool {
 	switch t.Kind() {
 	case Func, Slice, Map:
 		return false
@@ -35,17 +61,6 @@ func (t *rtype) IsVariadic() bool {
 
 func (t *rtype) kindType() *rtype {
 	return (*rtype)(unsafe.Pointer(js.InternalObject(t).Get(idKindType)))
-}
-
-func (t *rtype) Field(i int) structField {
-	if t.Kind() != Struct {
-		panic("reflect: Field of non-struct type")
-	}
-	tt := (*structType)(unsafe.Pointer(t))
-	if i < 0 || i >= len(tt.fields) {
-		panic("reflect: Field index out of bounds")
-	}
-	return tt.fields[i]
 }
 
 func (t *rtype) Key() Type {

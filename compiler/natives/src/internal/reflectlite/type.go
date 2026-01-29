@@ -24,11 +24,11 @@ func newNameOff(n abi.Name) nameOff {
 
 var typeOffList []*abi.Type
 
-func (t *rtype) typeOff(off typeOff) *abi.Type {
+func (t rtype) typeOff(off typeOff) *abi.Type {
 	return typeOffList[int(off)]
 }
 
-func newTypeOff(t *rtype) typeOff {
+func newTypeOff(t rtype) typeOff {
 	i := len(typeOffList)
 	typeOffList = append(typeOffList, t)
 	return typeOff(i)
@@ -51,7 +51,7 @@ func (t rtype) Comparable() bool {
 	return true
 }
 
-func (t *rtype) IsVariadic() bool {
+func (t rtype) IsVariadic() bool {
 	if t.Kind() != abi.Func {
 		panic("reflect: IsVariadic of non-func type")
 	}
@@ -59,11 +59,11 @@ func (t *rtype) IsVariadic() bool {
 	return tt.outCount&(1<<15) != 0
 }
 
-func (t *rtype) kindType() *rtype {
-	return (*rtype)(unsafe.Pointer(js.InternalObject(t).Get(idKindType)))
+func (t rtype) kindType() rtype {
+	return (rtype)(unsafe.Pointer(js.InternalObject(t).Get(idKindType)))
 }
 
-func (t *rtype) Key() Type {
+func (t rtype) Key() Type {
 	if t.Kind() != abi.Map {
 		panic("reflect: Key of non-map type")
 	}
@@ -71,7 +71,7 @@ func (t *rtype) Key() Type {
 	return toType(tt.key)
 }
 
-func (t *rtype) NumField() int {
+func (t rtype) NumField() int {
 	if t.Kind() != abi.Struct {
 		panic("reflect: NumField of non-struct type")
 	}
@@ -79,7 +79,7 @@ func (t *rtype) NumField() int {
 	return len(tt.fields)
 }
 
-func (t *rtype) Method(i int) (m Method) {
+func (t rtype) Method(i int) (m Method) {
 	if t.Kind() == abi.Interface {
 		tt := (*interfaceType)(unsafe.Pointer(t))
 		return tt.Method(i)
@@ -110,7 +110,11 @@ func (t *rtype) Method(i int) (m Method) {
 		rcvr := arguments[0]
 		return rcvr.Get(prop).Call("apply", rcvr, arguments[1:])
 	})
-	m.Func = Value{mt.(*rtype), unsafe.Pointer(fn.Unsafe()), fl}
+	m.Func = Value{
+		typ:  toAbiType(mt),
+		ptr:  unsafe.Pointer(fn.Unsafe()),
+		flag: fl,
+	}
 
 	m.Index = i
 	return m

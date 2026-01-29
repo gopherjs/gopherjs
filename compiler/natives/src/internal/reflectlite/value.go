@@ -182,7 +182,7 @@ func (v Value) Cap() int {
 	case abi.Chan, abi.Slice:
 		return v.object().Get("$capacity").Int()
 	}
-	panic(&ValueError{"reflect.Value.Cap", k})
+	panic(&ValueError{Method: "reflect.Value.Cap", Kind: k})
 }
 
 func (v Value) Index(i int) Value {
@@ -196,13 +196,18 @@ func (v Value) Index(i int) Value {
 		fl := v.flag&(flagIndir|flagAddr) | v.flag.ro() | flag(typ.Kind())
 
 		a := js.InternalObject(v.ptr)
+		rtyp := toRType(typ)
 		if fl&flagIndir != 0 && typ.Kind() != abi.Array && typ.Kind() != abi.Struct {
-			return Value{typ, unsafe.Pointer(jsPtrTo(typ).New(
-				js.InternalObject(func() *js.Object { return wrapJsObject(typ, a.Index(i)) }),
-				js.InternalObject(func(x *js.Object) { a.SetIndex(i, unwrapJsObject(typ, x)) }),
-			).Unsafe()), fl}
+			return Value{
+				typ: typ,
+				ptr: unsafe.Pointer(jsPtrTo(typ).New(
+					js.InternalObject(func() *js.Object { return wrapJsObject(rtyp, a.Index(i)) }),
+					js.InternalObject(func(x *js.Object) { a.SetIndex(i, unwrapJsObject(rtyp, x)) }),
+				).Unsafe()),
+				flag: fl,
+			}
 		}
-		return makeValue(typ, wrapJsObject(typ, a.Index(i)), fl)
+		return makeValue(typ, wrapJsObject(rtyp, a.Index(i)), fl)
 
 	case abi.Slice:
 		s := v.object()
@@ -210,30 +215,39 @@ func (v Value) Index(i int) Value {
 			panic("reflect: slice index out of range")
 		}
 		tt := (*sliceType)(unsafe.Pointer(v.typ))
-		typ := tt.elem
+		typ := tt.Elem
 		fl := flagAddr | flagIndir | v.flag.ro() | flag(typ.Kind())
 
 		i += s.Get("$offset").Int()
 		a := s.Get("$array")
+		rtyp := toRType(typ)
 		if fl&flagIndir != 0 && typ.Kind() != abi.Array && typ.Kind() != abi.Struct {
-			return Value{typ, unsafe.Pointer(jsPtrTo(typ).New(
-				js.InternalObject(func() *js.Object { return wrapJsObject(typ, a.Index(i)) }),
-				js.InternalObject(func(x *js.Object) { a.SetIndex(i, unwrapJsObject(typ, x)) }),
-			).Unsafe()), fl}
+			return Value{
+				typ: typ,
+				ptr: unsafe.Pointer(jsPtrTo(typ).New(
+					js.InternalObject(func() *js.Object { return wrapJsObject(rtyp, a.Index(i)) }),
+					js.InternalObject(func(x *js.Object) { a.SetIndex(i, unwrapJsObject(rtyp, x)) }),
+				).Unsafe()),
+				flag: fl,
+			}
 		}
-		return makeValue(typ, wrapJsObject(typ, a.Index(i)), fl)
+		return makeValue(typ, wrapJsObject(rtyp, a.Index(i)), fl)
 
 	case abi.String:
 		str := *(*string)(v.ptr)
 		if i < 0 || i >= len(str) {
 			panic("reflect: string index out of range")
 		}
-		fl := v.flag.ro() | flag(Uint8) | flagIndir
+		fl := v.flag.ro() | flag(abi.Uint8) | flagIndir
 		c := str[i]
-		return Value{uint8Type, unsafe.Pointer(&c), fl}
+		return Value{
+			typ:  uint8Type.Type,
+			ptr:  unsafe.Pointer(&c),
+			flag: fl,
+		}
 
 	default:
-		panic(&ValueError{"reflect.Value.Index", k})
+		panic(&ValueError{Method: "reflect.Value.Index", Kind: k})
 	}
 }
 
@@ -256,7 +270,7 @@ func (v Value) IsNil() bool {
 	case abi.UnsafePointer:
 		return v.object().Unsafe() == 0
 	default:
-		panic(&ValueError{"reflect.Value.IsNil", k})
+		panic(&ValueError{Method: "reflect.Value.IsNil", Kind: k})
 	}
 }
 
@@ -271,7 +285,7 @@ func (v Value) Len() int {
 	case abi.Map:
 		return v.object().Get("size").Int()
 	default:
-		panic(&ValueError{"reflect.Value.Len", k})
+		panic(&ValueError{Method: "reflect.Value.Len", Kind: k})
 	}
 }
 
@@ -293,7 +307,7 @@ func (v Value) Pointer() uintptr {
 		}
 		return v.object().Get("$array").Unsafe()
 	default:
-		panic(&ValueError{"reflect.Value.Pointer", k})
+		panic(&ValueError{Method: "reflect.Value.Pointer", Kind: k})
 	}
 }
 
@@ -320,11 +334,12 @@ func (v Value) Set(x Value) {
 func (v Value) SetBytes(x []byte) {
 	v.mustBeAssignable()
 	v.mustBe(abi.Slice)
-	if v.typ.Elem().Kind() != abi.Uint8 {
+	rtyp := toRType(v.typ)
+	if rtyp.Elem().Kind() != abi.Uint8 {
 		panic("reflect.Value.SetBytes of non-byte slice")
 	}
 	slice := js.InternalObject(x)
-	if v.typ.Name() != "" || v.typ.Elem().Name() != "" {
+	if rtyp.Name() != "" || rtyp.Elem().Name() != "" {
 		typedSlice := jsType(v.typ).New(slice.Get("$array"))
 		typedSlice.Set("$offset", slice.Get("$offset"))
 		typedSlice.Set("$length", slice.Get("$length"))
@@ -374,12 +389,12 @@ func (v Value) Slice(i, j int) Value {
 			panic("reflect.Value.Slice: slice of unaddressable array")
 		}
 		tt := (*arrayType)(unsafe.Pointer(v.typ))
-		cap = int(tt.len)
-		typ = SliceOf(tt.elem)
-		s = jsType(typ).New(v.object())
+		cap = int(tt.Len)
+		typ = SliceOf(toRType(tt.Elem))
+		s = jsType(toAbiType(typ)).New(v.object())
 
 	case abi.Slice:
-		typ = v.typ
+		typ = toRType(v.typ)
 		s = v.object()
 		cap = s.Get("$capacity").Int()
 
@@ -391,14 +406,14 @@ func (v Value) Slice(i, j int) Value {
 		return ValueOf(str[i:j])
 
 	default:
-		panic(&ValueError{"reflect.Value.Slice", kind})
+		panic(&ValueError{Method: "reflect.Value.Slice", Kind: kind})
 	}
 
 	if i < 0 || j < i || j > cap {
 		panic("reflect.Value.Slice: slice index out of bounds")
 	}
 
-	return makeValue(typ, js.Global.Call("$subslice", s, i, j), v.flag.ro())
+	return makeValue(toAbiType(typ), js.Global.Call("$subslice", s, i, j), v.flag.ro())
 }
 
 func (v Value) Slice3(i, j, k int) Value {
@@ -413,8 +428,8 @@ func (v Value) Slice3(i, j, k int) Value {
 			panic("reflect.Value.Slice: slice of unaddressable array")
 		}
 		tt := (*arrayType)(unsafe.Pointer(v.typ))
-		cap = int(tt.len)
-		typ = SliceOf(tt.elem)
+		cap = int(tt.Len)
+		typ = SliceOf(tt.Elem)
 		s = jsType(typ).New(v.object())
 
 	case abi.Slice:
@@ -423,7 +438,7 @@ func (v Value) Slice3(i, j, k int) Value {
 		cap = s.Get("$capacity").Int()
 
 	default:
-		panic(&ValueError{"reflect.Value.Slice3", kind})
+		panic(&ValueError{Method: "reflect.Value.Slice3", Kind: kind})
 	}
 
 	if i < 0 || j < i || k < j || k > cap {
@@ -457,10 +472,14 @@ func (v Value) Elem() Value {
 		tt := (*ptrType)(unsafe.Pointer(v.typ))
 		fl := v.flag&flagRO | flagIndir | flagAddr
 		fl |= flag(tt.elem.Kind())
-		return Value{tt.elem, unsafe.Pointer(wrapJsObject(tt.elem, val).Unsafe()), fl}
+		return Value{
+			typ:  tt.elem,
+			ptr:  unsafe.Pointer(wrapJsObject(tt.elem, val).Unsafe()),
+			flag: fl,
+		}
 
 	default:
-		panic(&ValueError{"reflect.Value.Elem", k})
+		panic(&ValueError{Method: "reflect.Value.Elem", Kind: k})
 	}
 }
 
@@ -540,7 +559,7 @@ func (v Value) MapIndex(key Value) Value {
 
 func (v Value) Field(i int) Value {
 	if v.kind() != Struct {
-		panic(&ValueError{"reflect.Value.Field", v.kind()})
+		panic(&ValueError{Method: "reflect.Value.Field", Kind: v.kind()})
 	}
 	tt := (*structType)(unsafe.Pointer(v.typ))
 	if uint(i) >= uint(len(tt.fields)) {
@@ -566,12 +585,16 @@ func (v Value) Field(i int) Value {
 				v = v.Field(0)
 				if v.typ == jsObjectPtr {
 					o := v.object().Get("object")
-					return Value{typ, unsafe.Pointer(jsPtrTo(typ).New(
-						js.InternalObject(func() *js.Object { return js.Global.Call("$internalize", o.Get(jsTag), jsType(typ)) }),
-						js.InternalObject(func(x *js.Object) { o.Set(jsTag, js.Global.Call("$externalize", x, jsType(typ))) }),
-					).Unsafe()), fl}
+					return Value{
+						typ: typ,
+						ptr: unsafe.Pointer(jsPtrTo(typ).New(
+							js.InternalObject(func() *js.Object { return js.Global.Call("$internalize", o.Get(jsTag), jsType(typ)) }),
+							js.InternalObject(func(x *js.Object) { o.Set(jsTag, js.Global.Call("$externalize", x, jsType(typ))) }),
+						).Unsafe()),
+						flag: fl,
+					}
 				}
-				if v.typ.Kind() == Ptr {
+				if v.typ.Kind() == abi.Pointer {
 					v = v.Elem()
 				}
 			}
@@ -580,10 +603,14 @@ func (v Value) Field(i int) Value {
 
 	s := js.InternalObject(v.ptr)
 	if fl&flagIndir != 0 && typ.Kind() != abi.Array && typ.Kind() != abi.Struct {
-		return Value{typ, unsafe.Pointer(jsPtrTo(typ).New(
-			js.InternalObject(func() *js.Object { return wrapJsObject(typ, s.Get(prop)) }),
-			js.InternalObject(func(x *js.Object) { s.Set(prop, unwrapJsObject(typ, x)) }),
-		).Unsafe()), fl}
+		return Value{
+			typ: typ,
+			ptr: unsafe.Pointer(jsPtrTo(typ).New(
+				js.InternalObject(func() *js.Object { return wrapJsObject(typ, s.Get(prop)) }),
+				js.InternalObject(func(x *js.Object) { s.Set(prop, unwrapJsObject(typ, x)) }),
+			).Unsafe()),
+			flag: fl,
+		}
 	}
 	return makeValue(typ, wrapJsObject(typ, s.Get(prop)), fl)
 }

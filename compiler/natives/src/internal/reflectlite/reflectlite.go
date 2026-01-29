@@ -27,10 +27,10 @@ func init() {
 	used(imethod{})
 
 	initialized = true
-	uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
+	uint8Type = TypeOf(uint8(0)).(rtype) // set for real
 }
 
-var uint8Type *rtype
+var uint8Type rtype
 
 var (
 	idJsType      = "_jsType"
@@ -44,15 +44,21 @@ func jsType(typ *abi.Type) *js.Object {
 }
 
 func jsPtrTo(typ *abi.Type) *js.Object {
-	return jsType(PtrTo(toRType(typ)).(*rtype).Type)
+	return jsType(toAbiType(PtrTo(toRType(typ))))
 }
 
-func reflectType(typ *js.Object) *rtype {
+func toAbiType(typ Type) *abi.Type {
+	return typ.(rtype).Type
+}
+
+func reflectType(typ *js.Object) rtype {
 	if typ.Get(idReflectType) == js.Undefined {
-		rt := &rtype{
-			Size: uintptr(typ.Get("size").Int()),
-			Kind: uint8(typ.Get("kind").Int()),
-			Str:  newNameOff(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
+		rt := rtype{
+			Type: &abi.Type{
+				Size: uintptr(typ.Get("size").Int()),
+				Kind: uint8(typ.Get("kind").Int()),
+				Str:  newNameOff(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
+			},
 		}
 		js.InternalObject(rt).Set(idJsType, typ)
 		typ.Set(idReflectType, js.InternalObject(rt))
@@ -117,12 +123,12 @@ func reflectType(typ *js.Object) *rtype {
 			})
 		case abi.Func:
 			params := typ.Get("params")
-			in := make([]*rtype, params.Length())
+			in := make([]rtype, params.Length())
 			for i := range in {
 				in[i] = reflectType(params.Index(i))
 			}
 			results := typ.Get("results")
-			out := make([]*rtype, results.Length())
+			out := make([]rtype, results.Length())
 			for i := range out {
 				out[i] = reflectType(results.Index(i))
 			}
@@ -184,10 +190,10 @@ func reflectType(typ *js.Object) *rtype {
 		}
 	}
 
-	return (*rtype)(unsafe.Pointer(typ.Get(idReflectType).Unsafe()))
+	return (rtype)(unsafe.Pointer(typ.Get(idReflectType).Unsafe()))
 }
 
-func setKindType(rt *rtype, kindType any) {
+func setKindType(rt rtype, kindType any) {
 	js.InternalObject(rt).Set(idKindType, js.InternalObject(kindType))
 	js.InternalObject(kindType).Set(idRtype, js.InternalObject(rt))
 }
@@ -315,7 +321,7 @@ func MapOf(key, elem Type) Type {
 	return reflectType(js.Global.Call("$mapType", jsType(key), jsType(elem)))
 }
 
-func (t *rtype) ptrTo() *rtype {
+func (t rtype) ptrTo() rtype {
 	return reflectType(js.Global.Call("$ptrType", jsType(t)))
 }
 
@@ -402,16 +408,16 @@ func loadScalar(p unsafe.Pointer, n uintptr) uintptr {
 	return js.InternalObject(p).Call("$get").Unsafe()
 }
 
-func makechan(typ *rtype, size int) (ch unsafe.Pointer) {
+func makechan(typ rtype, size int) (ch unsafe.Pointer) {
 	ctyp := (*chanType)(unsafe.Pointer(typ))
 	return unsafe.Pointer(js.Global.Get("$Chan").New(jsType(ctyp.elem), size).Unsafe())
 }
 
-func makemap(t *rtype, cap int) (m unsafe.Pointer) {
+func makemap(t rtype, cap int) (m unsafe.Pointer) {
 	return unsafe.Pointer(js.Global.Get("Map").New().Unsafe())
 }
 
-func keyFor(t *rtype, key unsafe.Pointer) (*js.Object, string) {
+func keyFor(t rtype, key unsafe.Pointer) (*js.Object, string) {
 	kv := js.InternalObject(key)
 	if kv.Get("$get") != js.Undefined {
 		kv = kv.Call("$get")
@@ -420,7 +426,7 @@ func keyFor(t *rtype, key unsafe.Pointer) (*js.Object, string) {
 	return kv, k
 }
 
-func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
+func mapaccess(t rtype, m, key unsafe.Pointer) unsafe.Pointer {
 	_, k := keyFor(t, key)
 	entry := js.InternalObject(m).Call("get", k)
 	if entry == js.Undefined {
@@ -429,7 +435,7 @@ func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
 	return unsafe.Pointer(js.Global.Call("$newDataPointer", entry.Get("v"), jsPtrTo(t.Elem())).Unsafe())
 }
 
-func mapassign(t *rtype, m, key, val unsafe.Pointer) {
+func mapassign(t rtype, m, key, val unsafe.Pointer) {
 	kv, k := keyFor(t, key)
 	jsVal := js.InternalObject(val).Call("$get")
 	et := t.Elem()
@@ -444,7 +450,7 @@ func mapassign(t *rtype, m, key, val unsafe.Pointer) {
 	js.InternalObject(m).Call("set", k, entry)
 }
 
-func mapdelete(t *rtype, m unsafe.Pointer, key unsafe.Pointer) {
+func mapdelete(t rtype, m unsafe.Pointer, key unsafe.Pointer) {
 	_, k := keyFor(t, key)
 	js.InternalObject(m).Call("delete", k)
 }
@@ -472,7 +478,7 @@ func (iter *mapIter) skipUntilValidKey() {
 	}
 }
 
-func mapiterinit(t *rtype, m unsafe.Pointer) unsafe.Pointer {
+func mapiterinit(t rtype, m unsafe.Pointer) unsafe.Pointer {
 	return unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Get("Array").Call("from", js.InternalObject(m).Call("keys")), 0, nil})
 }
 
@@ -586,7 +592,7 @@ func Copy(dst, src Value) int {
 	return js.Global.Call("$copySlice", dstVal, srcVal).Int()
 }
 
-func methodReceiver(op string, v Value, i int) (_ *rtype, t *funcType, fn unsafe.Pointer) {
+func methodReceiver(op string, v Value, i int) (_ rtype, t *funcType, fn unsafe.Pointer) {
 	var prop string
 	if v.typ.Kind() == abi.Interface {
 		tt := (*interfaceType)(unsafe.Pointer(v.typ))
@@ -728,12 +734,12 @@ func getJsTag(tag string) string {
 // PtrTo returns the pointer type with element t.
 // For example, if t represents type Foo, PtrTo(t) represents *Foo.
 func PtrTo(t Type) Type {
-	return t.(*rtype).ptrTo()
+	return t.(rtype).ptrTo()
 }
 
 // copyVal returns a Value containing the map key or value at ptr,
 // allocating a new variable as needed.
-func copyVal(typ *rtype, fl flag, ptr unsafe.Pointer) Value {
+func copyVal(typ rtype, fl flag, ptr unsafe.Pointer) Value {
 	if ifaceIndir(typ) {
 		// Copy result so future changes to the map
 		// won't change the underlying value.

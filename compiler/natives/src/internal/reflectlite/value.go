@@ -429,11 +429,11 @@ func (v Value) Slice3(i, j, k int) Value {
 		}
 		tt := (*arrayType)(unsafe.Pointer(v.typ))
 		cap = int(tt.Len)
-		typ = SliceOf(tt.Elem)
-		s = jsType(typ).New(v.object())
+		typ = SliceOf(toRType(tt.Elem))
+		s = jsType(toAbiType(typ)).New(v.object())
 
 	case abi.Slice:
-		typ = v.typ
+		typ = toRType(v.typ)
 		s = v.object()
 		cap = s.Get("$capacity").Int()
 
@@ -445,11 +445,11 @@ func (v Value) Slice3(i, j, k int) Value {
 		panic("reflect.Value.Slice3: slice index out of bounds")
 	}
 
-	return makeValue(typ, js.Global.Call("$subslice", s, i, j, k), v.flag.ro())
+	return makeValue(toAbiType(typ), js.Global.Call("$subslice", s, i, j, k), v.flag.ro())
 }
 
 func (v Value) Close() {
-	v.mustBe(Chan)
+	v.mustBe(abi.Chan)
 	v.mustBeExported()
 	js.Global.Call("$close", v.object())
 }
@@ -462,7 +462,7 @@ func (v Value) Elem() Value {
 			return Value{}
 		}
 		typ := reflectType(val.Get("constructor"))
-		return makeValue(typ, val.Get("$val"), v.flag.ro())
+		return makeValue(toAbiType(typ), val.Get("$val"), v.flag.ro())
 
 	case abi.Pointer:
 		if v.IsNil() {
@@ -471,10 +471,10 @@ func (v Value) Elem() Value {
 		val := v.object()
 		tt := (*ptrType)(unsafe.Pointer(v.typ))
 		fl := v.flag&flagRO | flagIndir | flagAddr
-		fl |= flag(tt.elem.Kind())
+		fl |= flag(tt.Elem.Kind())
 		return Value{
-			typ:  tt.elem,
-			ptr:  unsafe.Pointer(wrapJsObject(tt.elem, val).Unsafe()),
+			typ:  tt.Elem,
+			ptr:  unsafe.Pointer(wrapJsObject(toRType(tt.Elem), val).Unsafe()),
 			flag: fl,
 		}
 
@@ -488,7 +488,7 @@ func (v Value) Elem() Value {
 func (v Value) NumField() int {
 	v.mustBe(abi.Struct)
 	tt := (*structType)(unsafe.Pointer(v.typ))
-	return len(tt.fields)
+	return len(tt.Fields)
 }
 
 // MapKeys returns a slice containing all the keys present in the map,
@@ -498,7 +498,7 @@ func (v Value) NumField() int {
 func (v Value) MapKeys() []Value {
 	v.mustBe(abi.Map)
 	tt := (*mapType)(unsafe.Pointer(v.typ))
-	keyType := tt.key
+	keyType := tt.Key
 
 	fl := v.flag.ro() | flag(keyType.Kind())
 
@@ -507,7 +507,7 @@ func (v Value) MapKeys() []Value {
 	if m != nil {
 		mlen = maplen(m)
 	}
-	it := mapiterinit(v.typ, m)
+	it := mapiterinit(toRType(v.typ), m)
 	a := make([]Value, mlen)
 	var i int
 	for i = 0; i < len(a); i++ {
@@ -518,7 +518,7 @@ func (v Value) MapKeys() []Value {
 			// we can do about it.
 			break
 		}
-		a[i] = copyVal(keyType, fl, key)
+		a[i] = copyVal(toRType(keyType), fl, key)
 		mapiternext(it)
 	}
 	return a[:i]
@@ -539,7 +539,7 @@ func (v Value) MapIndex(key Value) Value {
 	// considered unexported. This is consistent with the
 	// behavior for structs, which allow read but not write
 	// of unexported fields.
-	key = key.assignTo("reflect.Value.MapIndex", tt.key, nil)
+	key = key.assignTo("reflect.Value.MapIndex", tt.Key, nil)
 
 	var k unsafe.Pointer
 	if key.flag&flagIndir != 0 {
@@ -547,14 +547,14 @@ func (v Value) MapIndex(key Value) Value {
 	} else {
 		k = unsafe.Pointer(&key.ptr)
 	}
-	e := mapaccess(v.typ, v.pointer(), k)
+	e := mapaccess(toRType(v.typ), v.pointer(), k)
 	if e == nil {
 		return Value{}
 	}
-	typ := tt.elem
+	typ := tt.Elem
 	fl := (v.flag | key.flag).ro()
 	fl |= flag(typ.Kind())
-	return copyVal(typ, fl, e)
+	return copyVal(toRType(typ), fl, e)
 }
 
 func (v Value) Field(i int) Value {
@@ -562,12 +562,12 @@ func (v Value) Field(i int) Value {
 		panic(&ValueError{Method: "reflect.Value.Field", Kind: v.kind()})
 	}
 	tt := (*structType)(unsafe.Pointer(v.typ))
-	if uint(i) >= uint(len(tt.fields)) {
+	if uint(i) >= uint(len(tt.Fields)) {
 		panic("reflect: Field index out of range")
 	}
 
 	prop := jsType(v.typ).Get("fields").Index(i).Get("prop").String()
-	field := &tt.fields[i]
+	field := &tt.Fields[i]
 	typ := field.typ
 
 	fl := v.flag&(flagStickyRO|flagIndir|flagAddr) | flag(typ.Kind())

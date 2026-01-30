@@ -40,7 +40,7 @@ func TestLinknameMethods(t *testing.T) {
 }
 
 type (
-	name    struct{ bytes *byte }
+	name    struct{ Bytes *byte }
 	nameOff int32
 	rtype   struct{}
 )
@@ -51,7 +51,7 @@ func rtype_nameOff(r *rtype, off nameOff) name
 //go:linkname newName reflect.newName
 func newName(n, tag string, exported bool) name
 
-//go:linkname name_name reflect.name.name
+//go:linkname name_name internal/abi.Name.Name
 func name_name(name) string
 
 //go:linkname resolveReflectName reflect.resolveReflectName
@@ -62,6 +62,6 @@ func TestLinknameReflectName(t *testing.T) {
 	off := resolveReflectName(newName(info, "", false))
 	n := rtype_nameOff(nil, off)
 	if s := name_name(n); s != info {
-		t.Fatalf("to reflect.name got %q: want %q", s, info)
+		t.Fatalf("to reflect's abi.Name got %q: want %q", s, info)
 	}
 }

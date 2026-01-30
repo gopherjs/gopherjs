@@ -5,6 +5,8 @@ package reflectlite
 import (
 	"unsafe"
 
+	"internal/abi"
+
 	"github.com/gopherjs/gopherjs/js"
 )
 
@@ -14,8 +16,6 @@ func init() {
 	// avoid dead code elimination
 	used := func(i any) {}
 	used(rtype{})
-	used(uncommonType{})
-	used(method{})
 	used(arrayType{})
 	used(chanType{})
 	used(funcType{})
@@ -25,51 +25,59 @@ func init() {
 	used(sliceType{})
 	used(structType{})
 	used(imethod{})
-	used(structField{})
 
 	initialized = true
-	uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
+	uint8Type = TypeOf(uint8(0)).(rtype) // set for real
 }
 
-var uint8Type *rtype
+var uint8Type rtype
 
 var (
 	idJsType      = "_jsType"
 	idReflectType = "_reflectType"
-	idKindType    = "kindType"
 	idRtype       = "_rtype"
 )
 
-func jsType(typ Type) *js.Object {
+func jsType(typ *abi.Type) *js.Object {
 	return js.InternalObject(typ).Get(idJsType)
 }
 
-func reflectType(typ *js.Object) *rtype {
+func jsPtrTo(typ *abi.Type) *js.Object {
+	return jsType(toAbiType(PtrTo(toRType(typ))))
+}
+
+func toAbiType(typ Type) *abi.Type {
+	return typ.(rtype).Type
+}
+
+func reflectType(typ *js.Object) rtype {
 	if typ.Get(idReflectType) == js.Undefined {
-		rt := &rtype{
-			size: uintptr(typ.Get("size").Int()),
-			kind: uint8(typ.Get("kind").Int()),
-			str:  newNameOff(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
+		rt := rtype{
+			Type: &abi.Type{
+				Size: uintptr(typ.Get("size").Int()),
+				Kind: uint8(typ.Get("kind").Int()),
+				Str:  newNameOff(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
+			},
 		}
 		js.InternalObject(rt).Set(idJsType, typ)
 		typ.Set(idReflectType, js.InternalObject(rt))
 
 		methodSet := js.Global.Call("$methodSet", typ)
 		if methodSet.Length() != 0 || typ.Get("named").Bool() {
-			rt.tflag |= tflagUncommon
+			rt.TFlag |= abi.TFlagUncommon
 			if typ.Get("named").Bool() {
-				rt.tflag |= tflagNamed
+				rt.TFlag |= abi.TFlagNamed
 			}
-			var reflectMethods []method
+			var reflectMethods []abi.Method
 			for i := 0; i < methodSet.Length(); i++ { // Exported methods first.
 				m := methodSet.Index(i)
 				exported := internalStr(m.Get("pkg")) == ""
 				if !exported {
 					continue
 				}
-				reflectMethods = append(reflectMethods, method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", exported, false)),
-					mtyp: newTypeOff(reflectType(m.Get("typ"))),
+				reflectMethods = append(reflectMethods, abi.Method{
+					Name: newNameOff(newName(internalStr(m.Get("name")), "", exported, false)),
+					Mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				})
 			}
 			xcount := uint16(len(reflectMethods))
@@ -79,28 +87,28 @@ func reflectType(typ *js.Object) *rtype {
 				if exported {
 					continue
 				}
-				reflectMethods = append(reflectMethods, method{
-					name: newNameOff(newName(internalStr(m.Get("name")), "", exported, false)),
-					mtyp: newTypeOff(reflectType(m.Get("typ"))),
+				reflectMethods = append(reflectMethods, abi.Method{
+					Name: newNameOff(newName(internalStr(m.Get("name")), "", exported, false)),
+					Mtyp: newTypeOff(reflectType(m.Get("typ"))),
 				})
 			}
-			ut := &uncommonType{
-				pkgPath:  newNameOff(newName(internalStr(typ.Get("pkg")), "", false, false)),
-				mcount:   uint16(methodSet.Length()),
-				xcount:   xcount,
-				_methods: reflectMethods,
+			ut := &abi.UncommonType{
+				PkgPath:  newNameOff(newName(internalStr(typ.Get("pkg")), "", false, false)),
+				Mcount:   uint16(methodSet.Length()),
+				Xcount:   xcount,
+				Methods_: reflectMethods,
 			}
-			uncommonTypeMap[rt] = ut
+			abi.UncommonTypeMap[rt] = ut
 			js.InternalObject(ut).Set(idJsType, typ)
 		}
 
 		switch rt.Kind() {
-		case Array:
+		case abi.Array:
 			setKindType(rt, &arrayType{
 				elem: reflectType(typ.Get("elem")),
 				len:  uintptr(typ.Get("len").Int()),
 			})
-		case Chan:
+		case abi.Chan:
 			dir := BothDir
 			if typ.Get("sendOnly").Bool() {
 				dir = SendDir
@@ -112,14 +120,14 @@ func reflectType(typ *js.Object) *rtype {
 				elem: reflectType(typ.Get("elem")),
 				dir:  uintptr(dir),
 			})
-		case Func:
+		case abi.Func:
 			params := typ.Get("params")
-			in := make([]*rtype, params.Length())
+			in := make([]rtype, params.Length())
 			for i := range in {
 				in[i] = reflectType(params.Index(i))
 			}
 			results := typ.Get("results")
-			out := make([]*rtype, results.Length())
+			out := make([]rtype, results.Length())
 			for i := range out {
 				out[i] = reflectType(results.Index(i))
 			}
@@ -127,14 +135,14 @@ func reflectType(typ *js.Object) *rtype {
 			if typ.Get("variadic").Bool() {
 				outCount |= 1 << 15
 			}
-			setKindType(rt, &funcType{
-				rtype:    *rt,
-				inCount:  uint16(params.Length()),
-				outCount: outCount,
-				_in:      in,
-				_out:     out,
+			setKindType(rt, &abi.FuncType{
+				Type:     *rt,
+				InCount:  uint16(params.Length()),
+				OutCount: outCount,
+				In_:      in,
+				Out_:     out,
 			})
-		case Interface:
+		case abi.Interface:
 			methods := typ.Get("methods")
 			imethods := make([]imethod, methods.Length())
 			for i := range imethods {
@@ -149,28 +157,28 @@ func reflectType(typ *js.Object) *rtype {
 				pkgPath: newName(internalStr(typ.Get("pkg")), "", false, false),
 				methods: imethods,
 			})
-		case Map:
+		case abi.Map:
 			setKindType(rt, &mapType{
 				key:  reflectType(typ.Get("key")),
 				elem: reflectType(typ.Get("elem")),
 			})
-		case Ptr:
+		case abi.Pointer:
 			setKindType(rt, &ptrType{
 				elem: reflectType(typ.Get("elem")),
 			})
-		case Slice:
+		case abi.Slice:
 			setKindType(rt, &sliceType{
 				elem: reflectType(typ.Get("elem")),
 			})
-		case Struct:
+		case abi.Struct:
 			fields := typ.Get("fields")
-			reflectFields := make([]structField, fields.Length())
+			reflectFields := make([]abi.StructField, fields.Length())
 			for i := range reflectFields {
 				f := fields.Index(i)
-				reflectFields[i] = structField{
-					name:   newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
-					typ:    reflectType(f.Get("typ")),
-					offset: uintptr(i),
+				reflectFields[i] = abi.StructField{
+					Name:   newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
+					Typ:    reflectType(f.Get("typ")),
+					Offset: uintptr(i),
 				}
 			}
 			setKindType(rt, &structType{
@@ -181,108 +189,7 @@ func reflectType(typ *js.Object) *rtype {
 		}
 	}
 
-	return (*rtype)(unsafe.Pointer(typ.Get(idReflectType).Unsafe()))
-}
-
-func setKindType(rt *rtype, kindType any) {
-	js.InternalObject(rt).Set(idKindType, js.InternalObject(kindType))
-	js.InternalObject(kindType).Set(idRtype, js.InternalObject(rt))
-}
-
-type uncommonType struct {
-	pkgPath nameOff
-	mcount  uint16
-	xcount  uint16
-	moff    uint32
-
-	_methods []method
-}
-
-func (t *uncommonType) methods() []method {
-	return t._methods
-}
-
-func (t *uncommonType) exportedMethods() []method {
-	return t._methods[:t.xcount:t.xcount]
-}
-
-var uncommonTypeMap = make(map[*rtype]*uncommonType)
-
-func (t *rtype) uncommon() *uncommonType {
-	return uncommonTypeMap[t]
-}
-
-type funcType struct {
-	rtype    `reflect:"func"`
-	inCount  uint16
-	outCount uint16
-
-	_in  []*rtype
-	_out []*rtype
-}
-
-func (t *funcType) in() []*rtype {
-	return t._in
-}
-
-func (t *funcType) out() []*rtype {
-	return t._out
-}
-
-type name struct {
-	bytes *byte
-}
-
-type nameData struct {
-	name     string
-	tag      string
-	exported bool
-	embedded bool
-}
-
-var nameMap = make(map[*byte]*nameData)
-
-func (n name) name() (s string) { return nameMap[n.bytes].name }
-func (n name) tag() (s string)  { return nameMap[n.bytes].tag }
-func (n name) pkgPath() string  { return "" }
-func (n name) isExported() bool { return nameMap[n.bytes].exported }
-func (n name) embedded() bool   { return nameMap[n.bytes].embedded }
-
-func newName(n, tag string, exported, embedded bool) name {
-	b := new(byte)
-	nameMap[b] = &nameData{
-		name:     n,
-		tag:      tag,
-		exported: exported,
-		embedded: embedded,
-	}
-	return name{
-		bytes: b,
-	}
-}
-
-var nameOffList []name
-
-func (t *rtype) nameOff(off nameOff) name {
-	return nameOffList[int(off)]
-}
-
-func newNameOff(n name) nameOff {
-	i := len(nameOffList)
-	nameOffList = append(nameOffList, n)
-	return nameOff(i)
-}
-
-var typeOffList []*rtype
-
-func (t *rtype) typeOff(off typeOff) *rtype {
-	return typeOffList[int(off)]
-}
-
-func newTypeOff(t *rtype) typeOff {
-	i := len(typeOffList)
-	typeOffList = append(typeOffList, t)
-	return typeOff(i)
+	return (rtype)(unsafe.Pointer(typ.Get(idReflectType).Unsafe()))
 }
 
 func internalStr(strObj *js.Object) string {
@@ -291,11 +198,11 @@ func internalStr(strObj *js.Object) string {
 	return c.str
 }
 
-func isWrapped(typ Type) bool {
+func isWrapped(typ *abi.Type) bool {
 	return jsType(typ).Get("wrapped").Bool()
 }
 
-func copyStruct(dst, src *js.Object, typ Type) {
+func copyStruct(dst, src *js.Object, typ *abi.Type) {
 	fields := jsType(typ).Get("fields")
 	for i := 0; i < fields.Length(); i++ {
 		prop := fields.Index(i).Get("prop").String()
@@ -303,16 +210,17 @@ func copyStruct(dst, src *js.Object, typ Type) {
 	}
 }
 
-func makeValue(t Type, v *js.Object, fl flag) Value {
+func makeValue(t *abi.Type, v *js.Object, fl flag) Value {
 	rt := t.common()
-	if t.Kind() == Array || t.Kind() == Struct || t.Kind() == Ptr {
+	switch t.Kind() {
+	case abi.Array, abi.Struct, abi.Pointer:
 		return Value{rt, unsafe.Pointer(v.Unsafe()), fl | flag(t.Kind())}
 	}
 	return Value{rt, unsafe.Pointer(js.Global.Call("$newDataPointer", v, jsType(rt.ptrTo())).Unsafe()), fl | flag(t.Kind()) | flagIndir}
 }
 
 func MakeSlice(typ Type, len, cap int) Value {
-	if typ.Kind() != Slice {
+	if typ.Kind() != abi.Slice {
 		panic("reflect.MakeSlice of non-slice type")
 	}
 	if len < 0 {
@@ -354,7 +262,7 @@ func ChanOf(dir ChanDir, t Type) Type {
 }
 
 func FuncOf(in, out []Type, variadic bool) Type {
-	if variadic && (len(in) == 0 || in[len(in)-1].Kind() != Slice) {
+	if variadic && (len(in) == 0 || in[len(in)-1].Kind() != abi.Slice) {
 		panic("reflect.FuncOf: last arg of variadic func must be slice")
 	}
 
@@ -371,15 +279,11 @@ func FuncOf(in, out []Type, variadic bool) Type {
 
 func MapOf(key, elem Type) Type {
 	switch key.Kind() {
-	case Func, Map, Slice:
+	case abi.Func, abi.Map, abi.Slice:
 		panic("reflect.MapOf: invalid key type " + key.String())
 	}
 
 	return reflectType(js.Global.Call("$mapType", jsType(key), jsType(elem)))
-}
-
-func (t *rtype) ptrTo() *rtype {
-	return reflectType(js.Global.Call("$ptrType", jsType(t)))
 }
 
 func SliceOf(t Type) Type {
@@ -390,11 +294,11 @@ func Zero(typ Type) Value {
 	return makeValue(typ, jsType(typ).Call("zero"), 0)
 }
 
-func unsafe_New(typ *rtype) unsafe.Pointer {
+func unsafe_New(typ *abi.Type) unsafe.Pointer {
 	switch typ.Kind() {
-	case Struct:
+	case abi.Struct:
 		return unsafe.Pointer(jsType(typ).Get("ptr").New().Unsafe())
-	case Array:
+	case abi.Array:
 		return unsafe.Pointer(jsType(typ).Call("zero").Unsafe())
 	default:
 		return unsafe.Pointer(js.Global.Call("$newDataPointer", jsType(typ).Call("zero"), jsType(typ.ptrTo())).Unsafe())
@@ -405,33 +309,31 @@ func makeInt(f flag, bits uint64, t Type) Value {
 	typ := t.common()
 	ptr := unsafe_New(typ)
 	switch typ.Kind() {
-	case Int8:
+	case abi.Int8:
 		*(*int8)(ptr) = int8(bits)
-	case Int16:
+	case abi.Int16:
 		*(*int16)(ptr) = int16(bits)
-	case Int, Int32:
+	case abi.Int, abi.Int32:
 		*(*int32)(ptr) = int32(bits)
-	case Int64:
+	case abi.Int64:
 		*(*int64)(ptr) = int64(bits)
-	case Uint8:
+	case abi.Uint8:
 		*(*uint8)(ptr) = uint8(bits)
-	case Uint16:
+	case abi.Uint16:
 		*(*uint16)(ptr) = uint16(bits)
-	case Uint, Uint32, Uintptr:
+	case abi.Uint, abi.Uint32, abi.Uintptr:
 		*(*uint32)(ptr) = uint32(bits)
-	case Uint64:
+	case abi.Uint64:
 		*(*uint64)(ptr) = uint64(bits)
 	}
 	return Value{typ, ptr, f | flagIndir | flag(typ.Kind())}
 }
 
 func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
-	if typ.Kind() != Func {
+	ftyp := typ.FuncType()
+	if ftyp == nil {
 		panic("reflect: call of MakeFunc with non-Func type")
 	}
-
-	t := typ.common()
-	ftyp := (*funcType)(unsafe.Pointer(t))
 
 	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		args := make([]Value, ftyp.NumIn())
@@ -457,120 +359,12 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	return Value{t, unsafe.Pointer(fv.Unsafe()), flag(Func)}
 }
 
-func typedmemmove(t *rtype, dst, src unsafe.Pointer) {
+func typedmemmove(t *abi.Type, dst, src unsafe.Pointer) {
 	js.InternalObject(dst).Call("$set", js.InternalObject(src).Call("$get"))
 }
 
 func loadScalar(p unsafe.Pointer, n uintptr) uintptr {
 	return js.InternalObject(p).Call("$get").Unsafe()
-}
-
-func makechan(typ *rtype, size int) (ch unsafe.Pointer) {
-	ctyp := (*chanType)(unsafe.Pointer(typ))
-	return unsafe.Pointer(js.Global.Get("$Chan").New(jsType(ctyp.elem), size).Unsafe())
-}
-
-func makemap(t *rtype, cap int) (m unsafe.Pointer) {
-	return unsafe.Pointer(js.Global.Get("Map").New().Unsafe())
-}
-
-func keyFor(t *rtype, key unsafe.Pointer) (*js.Object, string) {
-	kv := js.InternalObject(key)
-	if kv.Get("$get") != js.Undefined {
-		kv = kv.Call("$get")
-	}
-	k := jsType(t.Key()).Call("keyFor", kv).String()
-	return kv, k
-}
-
-func mapaccess(t *rtype, m, key unsafe.Pointer) unsafe.Pointer {
-	_, k := keyFor(t, key)
-	entry := js.InternalObject(m).Call("get", k)
-	if entry == js.Undefined {
-		return nil
-	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", entry.Get("v"), jsType(PtrTo(t.Elem()))).Unsafe())
-}
-
-func mapassign(t *rtype, m, key, val unsafe.Pointer) {
-	kv, k := keyFor(t, key)
-	jsVal := js.InternalObject(val).Call("$get")
-	et := t.Elem()
-	if et.Kind() == Struct {
-		newVal := jsType(et).Call("zero")
-		copyStruct(newVal, jsVal, et)
-		jsVal = newVal
-	}
-	entry := js.Global.Get("Object").New()
-	entry.Set("k", kv)
-	entry.Set("v", jsVal)
-	js.InternalObject(m).Call("set", k, entry)
-}
-
-func mapdelete(t *rtype, m unsafe.Pointer, key unsafe.Pointer) {
-	_, k := keyFor(t, key)
-	js.InternalObject(m).Call("delete", k)
-}
-
-type mapIter struct {
-	t    Type
-	m    *js.Object
-	keys *js.Object
-	i    int
-
-	// last is the last object the iterator indicates. If this object exists, the functions that return the
-	// current key or value returns this object, regardless of the current iterator. It is because the current
-	// iterator might be stale due to key deletion in a loop.
-	last *js.Object
-}
-
-func (iter *mapIter) skipUntilValidKey() {
-	for iter.i < iter.keys.Length() {
-		k := iter.keys.Index(iter.i)
-		if iter.m.Call("get", k) != js.Undefined {
-			break
-		}
-		// The key is already deleted. Move on the next item.
-		iter.i++
-	}
-}
-
-func mapiterinit(t *rtype, m unsafe.Pointer) unsafe.Pointer {
-	return unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Get("Array").Call("from", js.InternalObject(m).Call("keys")), 0, nil})
-}
-
-type TypeEx interface {
-	Type
-	Key() Type
-}
-
-func mapiterkey(it unsafe.Pointer) unsafe.Pointer {
-	iter := (*mapIter)(it)
-	var kv *js.Object
-	if iter.last != nil {
-		kv = iter.last
-	} else {
-		iter.skipUntilValidKey()
-		if iter.i == iter.keys.Length() {
-			return nil
-		}
-		k := iter.keys.Index(iter.i)
-		kv = iter.m.Call("get", k)
-
-		// Record the key-value pair for later accesses.
-		iter.last = kv
-	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("k"), jsType(PtrTo(iter.t.(TypeEx).Key()))).Unsafe())
-}
-
-func mapiternext(it unsafe.Pointer) {
-	iter := (*mapIter)(it)
-	iter.last = nil
-	iter.i++
-}
-
-func maplen(m unsafe.Pointer) int {
-	return js.InternalObject(m).Get("size").Int()
 }
 
 func cvtDirect(v Value, typ Type) Value {
@@ -581,14 +375,14 @@ func cvtDirect(v Value, typ Type) Value {
 
 	var val *js.Object
 	switch k := typ.Kind(); k {
-	case Slice:
+	case abi.Slice:
 		slice := jsType(typ).New(srcVal.Get("$array"))
 		slice.Set("$offset", srcVal.Get("$offset"))
 		slice.Set("$length", srcVal.Get("$length"))
 		slice.Set("$capacity", srcVal.Get("$capacity"))
-		val = js.Global.Call("$newDataPointer", slice, jsType(PtrTo(typ)))
-	case Ptr:
-		if typ.Elem().Kind() == Struct {
+		val = js.Global.Call("$newDataPointer", slice, jsPtrTo(typ))
+	case abi.Pointer:
+		if typ.Elem().Kind() == abi.Struct {
 			if typ.Elem() == v.typ.Elem() {
 				val = srcVal
 				break
@@ -598,33 +392,37 @@ func cvtDirect(v Value, typ Type) Value {
 			break
 		}
 		val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"))
-	case Struct:
+	case abi.Struct:
 		val = jsType(typ).Get("ptr").New()
 		copyStruct(val, srcVal, typ)
-	case Array, Bool, Chan, Func, Interface, Map, String:
+	case abi.Array, abi.Bool, abi.Chan, abi.Func, abi.Interface, abi.Map, abi.String:
 		val = js.InternalObject(v.ptr)
 	default:
 		panic(&ValueError{"reflect.Convert", k})
 	}
-	return Value{typ.common(), unsafe.Pointer(val.Unsafe()), v.flag.ro() | v.flag&flagIndir | flag(typ.Kind())}
+	return Value{
+		typ:  typ.common(),
+		ptr:  unsafe.Pointer(val.Unsafe()),
+		flag: v.flag.ro() | v.flag&flagIndir | flag(typ.Kind()),
+	}
 }
 
 func Copy(dst, src Value) int {
 	dk := dst.kind()
-	if dk != Array && dk != Slice {
+	if dk != abi.Array && dk != abi.Slice {
 		panic(&ValueError{"reflect.Copy", dk})
 	}
-	if dk == Array {
+	if dk == abi.Array {
 		dst.mustBeAssignable()
 	}
 	dst.mustBeExported()
 
 	sk := src.kind()
 	var stringCopy bool
-	if sk != Array && sk != Slice {
-		stringCopy = sk == String && dst.typ.Elem().Kind() == Uint8
+	if sk != abi.Array && sk != abi.Slice {
+		stringCopy = sk == abi.String && dst.typ.Elem().Kind() == abi.Uint8
 		if !stringCopy {
-			panic(&ValueError{"reflect.Copy", sk})
+			panic(&ValueError{Method: "reflect.Copy", Kind: sk})
 		}
 	}
 	src.mustBeExported()
@@ -634,12 +432,12 @@ func Copy(dst, src Value) int {
 	}
 
 	dstVal := dst.object()
-	if dk == Array {
+	if dk == abi.Array {
 		dstVal = jsType(SliceOf(dst.typ.Elem())).New(dstVal)
 	}
 
 	srcVal := src.object()
-	if sk == Array {
+	if sk == abi.Array {
 		srcVal = jsType(SliceOf(src.typ.Elem())).New(srcVal)
 	}
 
@@ -649,10 +447,10 @@ func Copy(dst, src Value) int {
 	return js.Global.Call("$copySlice", dstVal, srcVal).Int()
 }
 
-func methodReceiver(op string, v Value, i int) (_ *rtype, t *funcType, fn unsafe.Pointer) {
+func methodReceiver(op string, v Value, i int) (_ rtype, t *funcType, fn unsafe.Pointer) {
 	var prop string
-	if v.typ.Kind() == Interface {
-		tt := (*interfaceType)(unsafe.Pointer(v.typ))
+	if v.typ.Kind() == abi.Interface {
+		tt := v.typ.InterfaceType()
 		if i < 0 || i >= len(tt.methods) {
 			panic("reflect: internal error: invalid method index")
 		}
@@ -660,7 +458,7 @@ func methodReceiver(op string, v Value, i int) (_ *rtype, t *funcType, fn unsafe
 		if !tt.nameOff(m.name).isExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		t = (*funcType)(unsafe.Pointer(tt.typeOff(m.typ)))
+		t = tt.typeOff(m.typ).FuncType()
 		prop = tt.nameOff(m.name).name()
 	} else {
 		ms := v.typ.exportedMethods()
@@ -671,7 +469,7 @@ func methodReceiver(op string, v Value, i int) (_ *rtype, t *funcType, fn unsafe
 		if !v.typ.nameOff(m.name).isExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		t = (*funcType)(unsafe.Pointer(v.typ.typeOff(m.mtyp)))
+		t = v.typ.typeOff(m.mtyp).FuncType()
 		prop = js.Global.Call("$methodSet", jsType(v.typ)).Index(i).Get("prop").String()
 	}
 	rcvr := v.object()
@@ -684,7 +482,7 @@ func methodReceiver(op string, v Value, i int) (_ *rtype, t *funcType, fn unsafe
 
 func valueInterface(v Value) any {
 	if v.flag == 0 {
-		panic(&ValueError{"reflect.Value.Interface", 0})
+		panic(&ValueError{Method: "reflect.Value.Interface", Kind: 0})
 	}
 
 	if v.flag&flagMethod != 0 {
@@ -692,7 +490,7 @@ func valueInterface(v Value) any {
 	}
 
 	if isWrapped(v.typ) {
-		if v.flag&flagIndir != 0 && v.Kind() == Struct {
+		if v.flag&flagIndir != 0 && v.Kind() == abi.Struct {
 			cv := jsType(v.typ).Call("zero")
 			copyStruct(cv, v.object(), v.typ)
 			return any(unsafe.Pointer(jsType(v.typ).New(cv).Unsafe()))
@@ -702,11 +500,13 @@ func valueInterface(v Value) any {
 	return any(unsafe.Pointer(v.object().Unsafe()))
 }
 
-func ifaceE2I(t *rtype, src any, dst unsafe.Pointer) {
+func ifaceE2I(t *abi.Type, src any, dst unsafe.Pointer) {
 	js.InternalObject(dst).Call("$set", js.InternalObject(src))
 }
 
 func methodName() string {
+	// TODO(grantnelson-wf): methodName returns the name of the calling method,
+	// assumed to be two stack frames above.
 	return "?FIXME?"
 }
 
@@ -791,12 +591,12 @@ func getJsTag(tag string) string {
 // PtrTo returns the pointer type with element t.
 // For example, if t represents type Foo, PtrTo(t) represents *Foo.
 func PtrTo(t Type) Type {
-	return t.(*rtype).ptrTo()
+	return t.(rtype).ptrTo()
 }
 
 // copyVal returns a Value containing the map key or value at ptr,
 // allocating a new variable as needed.
-func copyVal(typ *rtype, fl flag, ptr unsafe.Pointer) Value {
+func copyVal(typ rtype, fl flag, ptr unsafe.Pointer) Value {
 	if ifaceIndir(typ) {
 		// Copy result so future changes to the map
 		// won't change the underlying value.
@@ -891,7 +691,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	}
 
 	switch v1.Kind() {
-	case Array, Map, Slice, Struct:
+	case abi.Array, abi.Map, abi.Slice, abi.Struct:
 		for _, entry := range visited {
 			if v1.ptr == entry[0] && v2.ptr == entry[1] {
 				return true
@@ -901,8 +701,8 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	}
 
 	switch v1.Kind() {
-	case Array, Slice:
-		if v1.Kind() == Slice {
+	case abi.Array, abi.Slice:
+		if v1.Kind() == abi.Slice {
 			if v1.IsNil() != v2.IsNil() {
 				return false
 			}
@@ -920,14 +720,14 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 			}
 		}
 		return true
-	case Interface:
+	case abi.Interface:
 		if v1.IsNil() || v2.IsNil() {
 			return v1.IsNil() && v2.IsNil()
 		}
 		return deepValueEqualJs(v1.Elem(), v2.Elem(), visited)
-	case Ptr:
+	case abi.Pointer:
 		return deepValueEqualJs(v1.Elem(), v2.Elem(), visited)
-	case Struct:
+	case abi.Struct:
 		n := v1.NumField()
 		for i := 0; i < n; i++ {
 			if !deepValueEqualJs(v1.Field(i), v2.Field(i), visited) {
@@ -935,7 +735,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 			}
 		}
 		return true
-	case Map:
+	case abi.Map:
 		if v1.IsNil() != v2.IsNil() {
 			return false
 		}
@@ -954,9 +754,9 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 			}
 		}
 		return true
-	case Func:
+	case abi.Func:
 		return v1.IsNil() && v2.IsNil()
-	case UnsafePointer:
+	case abi.UnsafePointer:
 		return v1.object() == v2.object()
 	}
 

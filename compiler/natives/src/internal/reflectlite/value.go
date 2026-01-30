@@ -568,22 +568,22 @@ func (v Value) Field(i int) Value {
 
 	prop := jsType(v.typ).Get("fields").Index(i).Get("prop").String()
 	field := &tt.Fields[i]
-	typ := field.typ
+	typ := field.Typ
 
 	fl := v.flag&(flagStickyRO|flagIndir|flagAddr) | flag(typ.Kind())
-	if !field.name.isExported() {
-		if field.embedded() {
+	if !field.Name.IsExported() {
+		if field.Embedded() {
 			fl |= flagEmbedRO
 		} else {
 			fl |= flagStickyRO
 		}
 	}
 
-	if tag := tt.fields[i].name.tag(); tag != "" && i != 0 {
+	if tag := tt.Fields[i].Name.Tag(); tag != "" && i != 0 {
 		if jsTag := getJsTag(tag); jsTag != "" {
 			for {
 				v = v.Field(0)
-				if v.typ == jsObjectPtr {
+				if toRType(v.typ) == jsObjectPtr {
 					o := v.object().Get("object")
 					return Value{
 						typ: typ,
@@ -606,11 +606,11 @@ func (v Value) Field(i int) Value {
 		return Value{
 			typ: typ,
 			ptr: unsafe.Pointer(jsPtrTo(typ).New(
-				js.InternalObject(func() *js.Object { return wrapJsObject(typ, s.Get(prop)) }),
-				js.InternalObject(func(x *js.Object) { s.Set(prop, unwrapJsObject(typ, x)) }),
+				js.InternalObject(func() *js.Object { return wrapJsObject(toRType(typ), s.Get(prop)) }),
+				js.InternalObject(func(x *js.Object) { s.Set(prop, unwrapJsObject(toRType(typ), x)) }),
 			).Unsafe()),
 			flag: fl,
 		}
 	}
-	return makeValue(typ, wrapJsObject(typ, s.Get(prop)), fl)
+	return makeValue(typ, wrapJsObject(toRType(typ), s.Get(prop)), fl)
 }

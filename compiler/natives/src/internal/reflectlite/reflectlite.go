@@ -35,7 +35,6 @@ var uint8Type rtype
 var (
 	idJsType      = "_jsType"
 	idReflectType = "_reflectType"
-	idKindType    = "kindType"
 	idRtype       = "_rtype"
 )
 
@@ -193,40 +192,6 @@ func reflectType(typ *js.Object) rtype {
 	return (rtype)(unsafe.Pointer(typ.Get(idReflectType).Unsafe()))
 }
 
-func setKindType(rt rtype, kindType any) {
-	js.InternalObject(rt).Set(idKindType, js.InternalObject(kindType))
-	js.InternalObject(kindType).Set(idRtype, js.InternalObject(rt))
-}
-
-type nameData struct {
-	name     string
-	tag      string
-	exported bool
-	embedded bool
-}
-
-var nameMap = make(map[*byte]*nameData)
-
-func (n name) name() (s string) { return nameMap[n.bytes].name }
-func (n name) tag() (s string)  { return nameMap[n.bytes].tag }
-func (n name) isExported() bool { return nameMap[n.bytes].exported }
-func (n name) embedded() bool   { return nameMap[n.bytes].embedded }
-
-func newName(n, tag string, exported, embedded bool) name {
-	b := new(byte)
-	nameMap[b] = &nameData{
-		name:     n,
-		tag:      tag,
-		exported: exported,
-		embedded: embedded,
-	}
-	return name{
-		bytes: b,
-	}
-}
-
-func pkgPath(n abi.Name) string { return "" }
-
 func internalStr(strObj *js.Object) string {
 	var c struct{ str string }
 	js.InternalObject(c).Set("str", strObj) // get string without internalizing
@@ -321,10 +286,6 @@ func MapOf(key, elem Type) Type {
 	return reflectType(js.Global.Call("$mapType", jsType(key), jsType(elem)))
 }
 
-func (t rtype) ptrTo() rtype {
-	return reflectType(js.Global.Call("$ptrType", jsType(t)))
-}
-
 func SliceOf(t Type) Type {
 	return reflectType(js.Global.Call("$sliceType", jsType(t)))
 }
@@ -369,12 +330,10 @@ func makeInt(f flag, bits uint64, t Type) Value {
 }
 
 func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
-	if typ.Kind() != abi.Func {
+	ftyp := typ.FuncType()
+	if ftyp == nil {
 		panic("reflect: call of MakeFunc with non-Func type")
 	}
-
-	t := typ.common()
-	ftyp := (*funcType)(unsafe.Pointer(t))
 
 	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		args := make([]Value, ftyp.NumIn())
@@ -406,114 +365,6 @@ func typedmemmove(t *abi.Type, dst, src unsafe.Pointer) {
 
 func loadScalar(p unsafe.Pointer, n uintptr) uintptr {
 	return js.InternalObject(p).Call("$get").Unsafe()
-}
-
-func makechan(typ rtype, size int) (ch unsafe.Pointer) {
-	ctyp := (*chanType)(unsafe.Pointer(typ))
-	return unsafe.Pointer(js.Global.Get("$Chan").New(jsType(ctyp.elem), size).Unsafe())
-}
-
-func makemap(t rtype, cap int) (m unsafe.Pointer) {
-	return unsafe.Pointer(js.Global.Get("Map").New().Unsafe())
-}
-
-func keyFor(t rtype, key unsafe.Pointer) (*js.Object, string) {
-	kv := js.InternalObject(key)
-	if kv.Get("$get") != js.Undefined {
-		kv = kv.Call("$get")
-	}
-	k := jsType(t.Key()).Call("keyFor", kv).String()
-	return kv, k
-}
-
-func mapaccess(t rtype, m, key unsafe.Pointer) unsafe.Pointer {
-	_, k := keyFor(t, key)
-	entry := js.InternalObject(m).Call("get", k)
-	if entry == js.Undefined {
-		return nil
-	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", entry.Get("v"), jsPtrTo(t.Elem())).Unsafe())
-}
-
-func mapassign(t rtype, m, key, val unsafe.Pointer) {
-	kv, k := keyFor(t, key)
-	jsVal := js.InternalObject(val).Call("$get")
-	et := t.Elem()
-	if et.Kind() == abi.Struct {
-		newVal := jsType(et).Call("zero")
-		copyStruct(newVal, jsVal, et)
-		jsVal = newVal
-	}
-	entry := js.Global.Get("Object").New()
-	entry.Set("k", kv)
-	entry.Set("v", jsVal)
-	js.InternalObject(m).Call("set", k, entry)
-}
-
-func mapdelete(t rtype, m unsafe.Pointer, key unsafe.Pointer) {
-	_, k := keyFor(t, key)
-	js.InternalObject(m).Call("delete", k)
-}
-
-type mapIter struct {
-	t    Type
-	m    *js.Object
-	keys *js.Object
-	i    int
-
-	// last is the last object the iterator indicates. If this object exists, the functions that return the
-	// current key or value returns this object, regardless of the current iterator. It is because the current
-	// iterator might be stale due to key deletion in a loop.
-	last *js.Object
-}
-
-func (iter *mapIter) skipUntilValidKey() {
-	for iter.i < iter.keys.Length() {
-		k := iter.keys.Index(iter.i)
-		if iter.m.Call("get", k) != js.Undefined {
-			break
-		}
-		// The key is already deleted. Move on the next item.
-		iter.i++
-	}
-}
-
-func mapiterinit(t rtype, m unsafe.Pointer) unsafe.Pointer {
-	return unsafe.Pointer(&mapIter{t, js.InternalObject(m), js.Global.Get("Array").Call("from", js.InternalObject(m).Call("keys")), 0, nil})
-}
-
-type TypeEx interface {
-	Type
-	Key() Type
-}
-
-func mapiterkey(it unsafe.Pointer) unsafe.Pointer {
-	iter := (*mapIter)(it)
-	var kv *js.Object
-	if iter.last != nil {
-		kv = iter.last
-	} else {
-		iter.skipUntilValidKey()
-		if iter.i == iter.keys.Length() {
-			return nil
-		}
-		k := iter.keys.Index(iter.i)
-		kv = iter.m.Call("get", k)
-
-		// Record the key-value pair for later accesses.
-		iter.last = kv
-	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("k"), jsPtrTo(iter.t.(TypeEx).Key())).Unsafe())
-}
-
-func mapiternext(it unsafe.Pointer) {
-	iter := (*mapIter)(it)
-	iter.last = nil
-	iter.i++
-}
-
-func maplen(m unsafe.Pointer) int {
-	return js.InternalObject(m).Get("size").Int()
 }
 
 func cvtDirect(v Value, typ Type) Value {
@@ -549,7 +400,11 @@ func cvtDirect(v Value, typ Type) Value {
 	default:
 		panic(&ValueError{"reflect.Convert", k})
 	}
-	return Value{typ.common(), unsafe.Pointer(val.Unsafe()), v.flag.ro() | v.flag&flagIndir | flag(typ.Kind())}
+	return Value{
+		typ:  typ.common(),
+		ptr:  unsafe.Pointer(val.Unsafe()),
+		flag: v.flag.ro() | v.flag&flagIndir | flag(typ.Kind()),
+	}
 }
 
 func Copy(dst, src Value) int {
@@ -567,7 +422,7 @@ func Copy(dst, src Value) int {
 	if sk != abi.Array && sk != abi.Slice {
 		stringCopy = sk == abi.String && dst.typ.Elem().Kind() == abi.Uint8
 		if !stringCopy {
-			panic(&ValueError{"reflect.Copy", sk})
+			panic(&ValueError{Method: "reflect.Copy", Kind: sk})
 		}
 	}
 	src.mustBeExported()
@@ -595,7 +450,7 @@ func Copy(dst, src Value) int {
 func methodReceiver(op string, v Value, i int) (_ rtype, t *funcType, fn unsafe.Pointer) {
 	var prop string
 	if v.typ.Kind() == abi.Interface {
-		tt := (*interfaceType)(unsafe.Pointer(v.typ))
+		tt := v.typ.InterfaceType()
 		if i < 0 || i >= len(tt.methods) {
 			panic("reflect: internal error: invalid method index")
 		}
@@ -603,7 +458,7 @@ func methodReceiver(op string, v Value, i int) (_ rtype, t *funcType, fn unsafe.
 		if !tt.nameOff(m.name).isExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		t = (*funcType)(unsafe.Pointer(tt.typeOff(m.typ)))
+		t = tt.typeOff(m.typ).FuncType()
 		prop = tt.nameOff(m.name).name()
 	} else {
 		ms := v.typ.exportedMethods()
@@ -614,7 +469,7 @@ func methodReceiver(op string, v Value, i int) (_ rtype, t *funcType, fn unsafe.
 		if !v.typ.nameOff(m.name).isExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		t = (*funcType)(unsafe.Pointer(v.typ.typeOff(m.mtyp)))
+		t = v.typ.typeOff(m.mtyp).FuncType()
 		prop = js.Global.Call("$methodSet", jsType(v.typ)).Index(i).Get("prop").String()
 	}
 	rcvr := v.object()
@@ -627,7 +482,7 @@ func methodReceiver(op string, v Value, i int) (_ rtype, t *funcType, fn unsafe.
 
 func valueInterface(v Value) any {
 	if v.flag == 0 {
-		panic(&ValueError{"reflect.Value.Interface", 0})
+		panic(&ValueError{Method: "reflect.Value.Interface", Kind: 0})
 	}
 
 	if v.flag&flagMethod != 0 {
@@ -650,6 +505,8 @@ func ifaceE2I(t *abi.Type, src any, dst unsafe.Pointer) {
 }
 
 func methodName() string {
+	// TODO(grantnelson-wf): methodName returns the name of the calling method,
+	// assumed to be two stack frames above.
 	return "?FIXME?"
 }
 

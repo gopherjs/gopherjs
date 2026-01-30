@@ -491,39 +491,6 @@ func (v Value) NumField() int {
 	return len(tt.Fields)
 }
 
-// MapKeys returns a slice containing all the keys present in the map,
-// in unspecified order.
-// It panics if v's Kind is not Map.
-// It returns an empty slice if v represents a nil map.
-func (v Value) MapKeys() []Value {
-	v.mustBe(abi.Map)
-	tt := (*mapType)(unsafe.Pointer(v.typ))
-	keyType := tt.Key
-
-	fl := v.flag.ro() | flag(keyType.Kind())
-
-	m := v.pointer()
-	mlen := int(0)
-	if m != nil {
-		mlen = maplen(m)
-	}
-	it := mapiterinit(toRType(v.typ), m)
-	a := make([]Value, mlen)
-	var i int
-	for i = 0; i < len(a); i++ {
-		key := mapiterkey(it)
-		if key == nil {
-			// Someone deleted an entry from the map since we
-			// called maplen above. It's a data race, but nothing
-			// we can do about it.
-			break
-		}
-		a[i] = copyVal(toRType(keyType), fl, key)
-		mapiternext(it)
-	}
-	return a[:i]
-}
-
 // MapIndex returns the value associated with key in the map v.
 // It panics if v's Kind is not Map.
 // It returns the zero Value if key is not found in the map or if v represents a nil map.

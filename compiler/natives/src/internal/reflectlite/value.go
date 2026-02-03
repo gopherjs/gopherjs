@@ -10,6 +10,282 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+//gopherjs:replace
+func methodName() string {
+	// TODO(grantnelson-wf): methodName returns the name of the calling method,
+	// assumed to be two stack frames above.
+	return "?FIXME?"
+}
+
+//gopherjs:replace
+func (v Value) Elem() Value {
+	switch k := v.kind(); k {
+	case abi.Interface:
+		val := v.object()
+		if val == js.Global.Get("$ifaceNil") {
+			return Value{}
+		}
+		typ := abi.ReflectType(val.Get("constructor"))
+		return makeValue(typ, val.Get("$val"), v.flag.ro())
+
+	case abi.Pointer:
+		if v.IsNil() {
+			return Value{}
+		}
+		val := v.object()
+		tt := (*ptrType)(unsafe.Pointer(v.typ))
+		fl := v.flag&flagRO | flagIndir | flagAddr
+		fl |= flag(tt.Elem.Kind())
+		return Value{
+			typ:  tt.Elem,
+			ptr:  unsafe.Pointer(wrapJsObject(tt.Elem, val).Unsafe()),
+			flag: fl,
+		}
+
+	default:
+		panic(&ValueError{Method: "reflect.Value.Elem", Kind: k})
+	}
+}
+
+//gopherjs:replace
+func valueInterface(v Value) any {
+	if v.flag == 0 {
+		panic(&ValueError{Method: "reflect.Value.Interface", Kind: 0})
+	}
+
+	if v.flag&flagMethod != 0 {
+		v = makeMethodValue("Interface", v)
+	}
+
+	if v.typ.IsWrapped() {
+		if v.flag&flagIndir != 0 && v.Kind() == abi.Struct {
+			cv := v.typ.JsType().Call("zero")
+			copyStruct(cv, v.object(), v.typ)
+			return any(unsafe.Pointer(v.typ.JsType().New(cv).Unsafe()))
+		}
+		return any(unsafe.Pointer(v.typ.JsType().New(v.object()).Unsafe()))
+	}
+	return any(unsafe.Pointer(v.object().Unsafe()))
+}
+
+//gopherjs:new
+func copyStruct(dst, src *js.Object, typ *abi.Type) {
+	fields := typ.JsType().Get("fields")
+	for i := 0; i < fields.Length(); i++ {
+		prop := fields.Index(i).Get("prop").String()
+		dst.Set(prop, src.Get(prop))
+	}
+}
+
+//gopherjs:new This is new but there are commented out references in the original code.
+func makeMethodValue(op string, v Value) Value {
+	if v.flag&flagMethod == 0 {
+		panic("reflect: internal error: invalid use of makePartialFunc")
+	}
+
+	_, _, fn := methodReceiver(op, v, int(v.flag)>>flagMethodShift)
+	rcvr := v.object()
+	if v.typ.IsWrapped() {
+		rcvr = v.typ.JsType().New(rcvr)
+	}
+	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
+		return js.InternalObject(fn).Call("apply", rcvr, arguments)
+	})
+	return Value{
+		typ:  v.Type().common(),
+		ptr:  unsafe.Pointer(fv.Unsafe()),
+		flag: v.flag.ro() | flag(abi.Func),
+	}
+}
+
+//gopherjs:new
+func methodReceiver(op string, v Value, i int) (_ rtype, t *funcType, fn unsafe.Pointer) {
+	var prop string
+	if v.typ.Kind() == abi.Interface {
+		tt := v.typ.InterfaceType()
+		if i < 0 || i >= len(tt.Methods) {
+			panic("reflect: internal error: invalid method index")
+		}
+		m := &tt.Methods[i]
+		if !tt.NameOff(m.Name).IsExported() {
+			panic("reflect: " + op + " of unexported method")
+		}
+		t = tt.TypeOff(m.Typ).FuncType()
+		prop = tt.NameOff(m.Name).Name()
+	} else {
+		ms := v.typ.ExportedMethods()
+		if uint(i) >= uint(len(ms)) {
+			panic("reflect: internal error: invalid method index")
+		}
+		m := ms[i]
+		if !v.typ.NameOff(m.Name).IsExported() {
+			panic("reflect: " + op + " of unexported method")
+		}
+		t = v.typ.TypeOff(m.Mtyp).FuncType()
+		prop = js.Global.Call("$methodSet", v.typ.JsType()).Index(i).Get("prop").String()
+	}
+	rcvr := v.object()
+	if v.typ.IsWrapped() {
+		rcvr = v.typ.JsType().New(rcvr)
+	}
+	fn = unsafe.Pointer(rcvr.Get(prop).Unsafe())
+	return
+}
+
+//gopherjs:replace
+func (v Value) IsNil() bool {
+	switch k := v.kind(); k {
+	case abi.Pointer, abi.Slice:
+		return v.object() == v.typ.JsType().Get("nil")
+	case abi.Chan:
+		return v.object() == js.Global.Get("$chanNil")
+	case abi.Func:
+		return v.object() == js.Global.Get("$throwNilPointerError")
+	case abi.Map:
+		return v.object() == js.InternalObject(false)
+	case abi.Interface:
+		return v.object() == js.Global.Get("$ifaceNil")
+	case abi.UnsafePointer:
+		return v.object().Unsafe() == 0
+	default:
+		panic(&ValueError{Method: "reflect.Value.IsNil", Kind: k})
+	}
+}
+
+//gopherjs:replace
+func (v Value) Len() int {
+	switch k := v.kind(); k {
+	case abi.Array, abi.String:
+		return v.object().Length()
+	case abi.Slice:
+		return v.object().Get("$length").Int()
+	case abi.Chan:
+		return v.object().Get("$buffer").Get("length").Int()
+	case abi.Map:
+		return v.object().Get("size").Int()
+	default:
+		panic(&ValueError{Method: "reflect.Value.Len", Kind: k})
+	}
+}
+
+//gopherjs:replace
+func (v Value) Set(x Value) {
+	v.mustBeAssignable()
+	x.mustBeExported()
+	x = x.assignTo("reflect.Set", v.typ, nil)
+	if v.flag&flagIndir != 0 {
+		switch v.typ.Kind() {
+		case abi.Array:
+			v.typ.JsType().Call("copy", js.InternalObject(v.ptr), js.InternalObject(x.ptr))
+		case abi.Interface:
+			js.InternalObject(v.ptr).Call("$set", js.InternalObject(valueInterface(x)))
+		case abi.Struct:
+			copyStruct(js.InternalObject(v.ptr), js.InternalObject(x.ptr), v.typ)
+		default:
+			js.InternalObject(v.ptr).Call("$set", x.object())
+		}
+		return
+	}
+	v.ptr = x.ptr
+}
+
+//gopherjs:new This is added for export_test but is otherwise unused.
+func (v Value) Field(i int) Value {
+	tt := v.typ.StructType()
+	if tt == nil {
+		panic(&ValueError{Method: "reflect.Value.Field", Kind: v.kind()})
+	}
+	if uint(i) >= uint(len(tt.Fields)) {
+		panic("reflect: Field index out of range")
+	}
+
+	prop := v.typ.JsType().Get("fields").Index(i).Get("prop").String()
+	field := &tt.Fields[i]
+	typ := field.Typ
+
+	fl := v.flag&(flagStickyRO|flagIndir|flagAddr) | flag(typ.Kind())
+	if !field.Name.IsExported() {
+		if field.Embedded() {
+			fl |= flagEmbedRO
+		} else {
+			fl |= flagStickyRO
+		}
+	}
+
+	if tag := tt.Fields[i].Name.Tag(); tag != "" && i != 0 {
+		if jsTag := getJsTag(tag); jsTag != "" {
+			for {
+				v = v.Field(0)
+				if v.typ == jsObjectPtr {
+					o := v.object().Get("object")
+					return Value{
+						typ: typ,
+						ptr: unsafe.Pointer(typ.JsPtrTo().New(
+							js.InternalObject(func() *js.Object { return js.Global.Call("$internalize", o.Get(jsTag), typ.JsType()) }),
+							js.InternalObject(func(x *js.Object) { o.Set(jsTag, js.Global.Call("$externalize", x, typ.JsType())) }),
+						).Unsafe()),
+						flag: fl,
+					}
+				}
+				if v.typ.Kind() == abi.Pointer {
+					v = v.Elem()
+				}
+			}
+		}
+	}
+
+	s := js.InternalObject(v.ptr)
+	if fl&flagIndir != 0 && typ.Kind() != abi.Array && typ.Kind() != abi.Struct {
+		return Value{
+			typ: typ,
+			ptr: unsafe.Pointer(typ.JsPtrTo().New(
+				js.InternalObject(func() *js.Object { return wrapJsObject(typ, s.Get(prop)) }),
+				js.InternalObject(func(x *js.Object) { s.Set(prop, unwrapJsObject(typ, x)) }),
+			).Unsafe()),
+			flag: fl,
+		}
+	}
+	return makeValue(typ, wrapJsObject(typ, s.Get(prop)), fl)
+}
+
+//gopherjs:replace
+func unsafe_New(typ *abi.Type) unsafe.Pointer {
+	switch typ.Kind() {
+	case abi.Struct:
+		return unsafe.Pointer(typ.JsType().Get("ptr").New().Unsafe())
+	case abi.Array:
+		return unsafe.Pointer(typ.JsType().Call("zero").Unsafe())
+	default:
+		return unsafe.Pointer(js.Global.Call("$newDataPointer", typ.JsType().Call("zero"), typ.JsPtrTo()).Unsafe())
+	}
+}
+
+//gopherjs:replace
+func ValueOf(i any) Value {
+	if i == nil {
+		return Value{}
+	}
+	return makeValue(abi.ReflectType(js.InternalObject(i).Get("constructor")), js.InternalObject(i).Get("$val"), 0)
+}
+
+//gopherjs:new
+func makeValue(t *abi.Type, v *js.Object, fl flag) Value {
+	switch t.Kind() {
+	case abi.Array, abi.Struct, abi.Pointer:
+		return Value{
+			typ:  t,
+			ptr:  unsafe.Pointer(v.Unsafe()),
+			flag: fl | flag(t.Kind()),
+		}
+	}
+	return Value{
+		typ:  t,
+		ptr:  unsafe.Pointer(js.Global.Call("$newDataPointer", v, t.JsPtrTo()).Unsafe()),
+		flag: fl | flag(t.Kind()) | flagIndir,
+	}
+}
+
+//gopherjs:new
 func (v Value) object() *js.Object {
 	if v.typ.Kind() == abi.Array || v.typ.Kind() == abi.Struct {
 		return js.InternalObject(v.ptr)
@@ -40,6 +316,7 @@ func (v Value) object() *js.Object {
 	return js.InternalObject(v.ptr)
 }
 
+//gopherjs:replace
 func (v Value) assignTo(context string, dst *abi.Type, target unsafe.Pointer) Value {
 	if v.flag&flagMethod != 0 {
 		v = makeMethodValue(context, v)
@@ -80,85 +357,12 @@ func (v Value) assignTo(context string, dst *abi.Type, target unsafe.Pointer) Va
 	panic(context + ": value of type " + toRType(v.typ).String() + " is not assignable to type " + toRType(dst).String())
 }
 
-func (v Value) IsNil() bool {
-	switch k := v.kind(); k {
-	case abi.Pointer, abi.Slice:
-		return v.object() == v.typ.JsType().Get("nil")
-	case abi.Chan:
-		return v.object() == js.Global.Get("$chanNil")
-	case abi.Func:
-		return v.object() == js.Global.Get("$throwNilPointerError")
-	case abi.Map:
-		return v.object() == js.InternalObject(false)
-	case abi.Interface:
-		return v.object() == js.Global.Get("$ifaceNil")
-	case abi.UnsafePointer:
-		return v.object().Unsafe() == 0
-	default:
-		panic(&ValueError{Method: "reflect.Value.IsNil", Kind: k})
-	}
+//gopherjs:replace
+func ifaceE2I(t *abi.Type, src any, dst unsafe.Pointer) {
+	js.InternalObject(dst).Call("$set", js.InternalObject(src))
 }
 
-func (v Value) Len() int {
-	switch k := v.kind(); k {
-	case abi.Array, abi.String:
-		return v.object().Length()
-	case abi.Slice:
-		return v.object().Get("$length").Int()
-	case abi.Chan:
-		return v.object().Get("$buffer").Get("length").Int()
-	case abi.Map:
-		return v.object().Get("size").Int()
-	default:
-		panic(&ValueError{Method: "reflect.Value.Len", Kind: k})
-	}
-}
-
-func (v Value) Set(x Value) {
-	v.mustBeAssignable()
-	x.mustBeExported()
-	x = x.assignTo("reflect.Set", v.typ, nil)
-	if v.flag&flagIndir != 0 {
-		switch v.typ.Kind() {
-		case abi.Array:
-			v.typ.JsType().Call("copy", js.InternalObject(v.ptr), js.InternalObject(x.ptr))
-		case abi.Interface:
-			js.InternalObject(v.ptr).Call("$set", js.InternalObject(valueInterface(x)))
-		case abi.Struct:
-			copyStruct(js.InternalObject(v.ptr), js.InternalObject(x.ptr), v.typ)
-		default:
-			js.InternalObject(v.ptr).Call("$set", x.object())
-		}
-		return
-	}
-	v.ptr = x.ptr
-}
-
-func (v Value) Elem() Value {
-	switch k := v.kind(); k {
-	case abi.Interface:
-		val := v.object()
-		if val == js.Global.Get("$ifaceNil") {
-			return Value{}
-		}
-		typ := abi.ReflectType(val.Get("constructor"))
-		return makeValue(typ, val.Get("$val"), v.flag.ro())
-
-	case abi.Pointer:
-		if v.IsNil() {
-			return Value{}
-		}
-		val := v.object()
-		tt := (*ptrType)(unsafe.Pointer(v.typ))
-		fl := v.flag&flagRO | flagIndir | flagAddr
-		fl |= flag(tt.Elem.Kind())
-		return Value{
-			typ:  tt.Elem,
-			ptr:  unsafe.Pointer(wrapJsObject(toRType(tt.Elem), val).Unsafe()),
-			flag: fl,
-		}
-
-	default:
-		panic(&ValueError{Method: "reflect.Value.Elem", Kind: k})
-	}
+//gopherjs:replace
+func typedmemmove(t *abi.Type, dst, src unsafe.Pointer) {
+	js.InternalObject(dst).Call("$set", js.InternalObject(src).Call("$get"))
 }

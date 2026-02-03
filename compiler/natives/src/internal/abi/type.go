@@ -32,6 +32,9 @@ type UncommonType struct {
 	Methods_ []Method
 }
 
+//gopherjs:purge Used for pointer arthmatic
+func addChecked(p unsafe.Pointer, x uintptr, whySafe string) unsafe.Pointer
+
 //gopherjs:replace
 func (t *UncommonType) Methods() []Method {
 	return t.Methods_

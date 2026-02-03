@@ -4,14 +4,6 @@ package reflectlite
 
 import "unsafe"
 
-type ChanDir int
-
-const (
-	RecvDir ChanDir             = 1 << iota // <-chan
-	SendDir                                 // chan<-
-	BothDir = RecvDir | SendDir             // chan
-)
-
 type errorString struct {
 	s string
 }
@@ -36,7 +28,7 @@ func unquote(s string) (string, error) {
 }
 
 // Method represents a single method.
-type Method struct {
+type Method struct { // TODO(grantnelson-wf): Should this be moved to ABI?
 	// Name is the method name.
 	// PkgPath is the package path that qualifies a lower case (unexported)
 	// method name. It is empty for upper case (exported) method names.
@@ -78,16 +70,6 @@ func (f flag) mustBe(expected Kind) {
 		panic(&ValueError{methodName(), f.kind()})
 	}
 }
-
-// A StructTag is the tag string in a struct field.
-//
-// By convention, tag strings are a concatenation of
-// optionally space-separated key:"value" pairs.
-// Each key is a non-empty string consisting of non-control
-// characters other than space (U+0020 ' '), quote (U+0022 '"'),
-// and colon (U+003A ':').  Each value is quoted using U+0022 '"'
-// characters and Go string literal syntax.
-type StructTag string
 
 func typesMustMatch(what string, t1, t2 Type) {
 	if t1 != t2 {

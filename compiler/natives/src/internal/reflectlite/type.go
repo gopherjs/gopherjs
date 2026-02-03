@@ -3,38 +3,10 @@
 package reflectlite
 
 import (
+	"unsafe"
+
 	"internal/abi"
-
-	"github.com/gopherjs/gopherjs/js"
 )
-
-var nameOffList []abi.Name
-
-func (t rtype) nameOff(off nameOff) abi.Name {
-	return nameOffList[int(off)]
-}
-
-func newNameOff(n abi.Name) nameOff {
-	i := len(nameOffList)
-	nameOffList = append(nameOffList, n)
-	return nameOff(i)
-}
-
-var typeOffList []*abi.Type
-
-func (t rtype) typeOff(off typeOff) *abi.Type {
-	return typeOffList[int(off)]
-}
-
-func newTypeOff(t *abi.Type) typeOff {
-	i := len(typeOffList)
-	typeOffList = append(typeOffList, t)
-	return typeOff(i)
-}
-
-func (t rtype) ptrTo() rtype {
-	return reflectType(js.Global.Call("$ptrType", jsType(t.Type)))
-}
 
 func (t rtype) Comparable() bool {
 	switch t.Kind() {
@@ -43,9 +15,9 @@ func (t rtype) Comparable() bool {
 	case abi.Array:
 		return t.Elem().Comparable()
 	case abi.Struct:
-		for i := 0; i < t.NumField(); i++ {
-			ft := t.Field(i)
-			if !toRType(ft.Typ).Comparable() {
+		st := t.StructType()
+		for i := 0; i < len(st.Fields); i++ {
+			if !toRType(st.Fields[i].Typ).Comparable() {
 				return false
 			}
 		}
@@ -56,4 +28,18 @@ func (t rtype) Comparable() bool {
 //gopherjs:purge The name type is mostly unused, replaced by abi.Name, except in pkgPath which we don't implement.
 type name struct{}
 
+func (t rtype) nameOff(off nameOff) abi.Name {
+	return t.NameOff(off)
+}
+
+func (t rtype) typeOff(off typeOff) *abi.Type {
+	return t.TypeOff(off)
+}
+
 func pkgPath(n abi.Name) string { return "" }
+
+//gopherjs:purge Unused function because of nameOffList in internal/abi overrides
+func resolveNameOff(ptrInModule unsafe.Pointer, off int32) unsafe.Pointer
+
+//gopherjs:purge Unused function because of typeOffList in internal/abi overrides
+func resolveTypeOff(rtype unsafe.Pointer, off int32) unsafe.Pointer

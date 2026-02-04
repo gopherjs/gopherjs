@@ -9,6 +9,7 @@ import (
 
 	"internal/itoa"
 
+	"github.com/gopherjs/gopherjs/compiler/natives/src/internal/abi"
 	"github.com/gopherjs/gopherjs/js"
 )
 
@@ -52,280 +53,54 @@ func New(typ Type) Value {
 	return Value{pt, ptr, fl}
 }
 
+//gopherjs:new
+func toAbiType(typ Type) *abi.Type {
+	return typ.(*rtype).common()
+}
+
+//gopherjs:new
 func jsType(typ Type) *js.Object {
-	return js.InternalObject(typ).Get("jsType")
+	return toAbiType(typ).JsType()
 }
 
-func reflectType(typ *js.Object) *rtype {
-	if typ.Get("reflectType") == js.Undefined {
-		rt := &rtype{
-			size: uintptr(typ.Get("size").Int()),
-			kind: uint8(typ.Get("kind").Int()),
-			str:  resolveReflectName(newName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
-		}
-		js.InternalObject(rt).Set("jsType", typ)
-		typ.Set("reflectType", js.InternalObject(rt))
+//gopherjs:purge
+func addReflectOff(ptr unsafe.Pointer) int32
 
-		methodSet := js.Global.Call("$methodSet", typ)
-		if methodSet.Length() != 0 || typ.Get("named").Bool() {
-			rt.tflag |= tflagUncommon
-			if typ.Get("named").Bool() {
-				rt.tflag |= tflagNamed
-			}
-			var reflectMethods []method
-			for i := 0; i < methodSet.Length(); i++ { // Exported methods first.
-				m := methodSet.Index(i)
-				exported := internalStr(m.Get("pkg")) == ""
-				if !exported {
-					continue
-				}
-				reflectMethods = append(reflectMethods, method{
-					name: resolveReflectName(newMethodName(m)),
-					mtyp: newTypeOff(reflectType(m.Get("typ"))),
-				})
-			}
-			xcount := uint16(len(reflectMethods))
-			for i := 0; i < methodSet.Length(); i++ { // Unexported methods second.
-				m := methodSet.Index(i)
-				exported := internalStr(m.Get("pkg")) == ""
-				if exported {
-					continue
-				}
-				reflectMethods = append(reflectMethods, method{
-					name: resolveReflectName(newMethodName(m)),
-					mtyp: newTypeOff(reflectType(m.Get("typ"))),
-				})
-			}
-			ut := &uncommonType{
-				pkgPath:  resolveReflectName(newName(internalStr(typ.Get("pkg")), "", false, false)),
-				mcount:   uint16(methodSet.Length()),
-				xcount:   xcount,
-				_methods: reflectMethods,
-			}
-			js.InternalObject(ut).Set("jsType", typ)
-			js.InternalObject(rt).Set("uncommonType", js.InternalObject(ut))
-		}
-
-		switch rt.Kind() {
-		case Array:
-			setKindType(rt, &arrayType{
-				elem: reflectType(typ.Get("elem")),
-				len:  uintptr(typ.Get("len").Int()),
-			})
-		case Chan:
-			dir := BothDir
-			if typ.Get("sendOnly").Bool() {
-				dir = SendDir
-			}
-			if typ.Get("recvOnly").Bool() {
-				dir = RecvDir
-			}
-			setKindType(rt, &chanType{
-				elem: reflectType(typ.Get("elem")),
-				dir:  uintptr(dir),
-			})
-		case Func:
-			params := typ.Get("params")
-			in := make([]*rtype, params.Length())
-			for i := range in {
-				in[i] = reflectType(params.Index(i))
-			}
-			results := typ.Get("results")
-			out := make([]*rtype, results.Length())
-			for i := range out {
-				out[i] = reflectType(results.Index(i))
-			}
-			outCount := uint16(results.Length())
-			if typ.Get("variadic").Bool() {
-				outCount |= 1 << 15
-			}
-			setKindType(rt, &funcType{
-				rtype:    *rt,
-				inCount:  uint16(params.Length()),
-				outCount: outCount,
-				_in:      in,
-				_out:     out,
-			})
-		case Interface:
-			methods := typ.Get("methods")
-			imethods := make([]imethod, methods.Length())
-			for i := range imethods {
-				m := methods.Index(i)
-				imethods[i] = imethod{
-					name: resolveReflectName(newMethodName(m)),
-					typ:  newTypeOff(reflectType(m.Get("typ"))),
-				}
-			}
-			setKindType(rt, &interfaceType{
-				rtype:   *rt,
-				pkgPath: newName(internalStr(typ.Get("pkg")), "", false, false),
-				methods: imethods,
-			})
-		case Map:
-			setKindType(rt, &mapType{
-				key:  reflectType(typ.Get("key")),
-				elem: reflectType(typ.Get("elem")),
-			})
-		case Ptr:
-			setKindType(rt, &ptrType{
-				elem: reflectType(typ.Get("elem")),
-			})
-		case Slice:
-			setKindType(rt, &sliceType{
-				elem: reflectType(typ.Get("elem")),
-			})
-		case Struct:
-			fields := typ.Get("fields")
-			reflectFields := make([]structField, fields.Length())
-			for i := range reflectFields {
-				f := fields.Index(i)
-				reflectFields[i] = structField{
-					name:   newName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
-					typ:    reflectType(f.Get("typ")),
-					offset: uintptr(i),
-				}
-			}
-			setKindType(rt, &structType{
-				rtype:   *rt,
-				pkgPath: newName(internalStr(typ.Get("pkgPath")), "", false, false),
-				fields:  reflectFields,
-			})
-		}
-	}
-
-	return (*rtype)(unsafe.Pointer(typ.Get("reflectType").Unsafe()))
+//gopherjs:replace
+func (t *rtype) nameOff(off aNameOff) name {
+	return t.NameOff(off)
 }
 
-func setKindType(rt *rtype, kindType any) {
-	js.InternalObject(rt).Set("kindType", js.InternalObject(kindType))
-	js.InternalObject(kindType).Set("rtype", js.InternalObject(rt))
+//gopherjs:replace
+func resolveReflectName(n abi.Name) aNameOff {
+	return abi.ResolveReflectName(n)
 }
 
-type uncommonType struct {
-	pkgPath nameOff
-	mcount  uint16
-	xcount  uint16
-	moff    uint32
-
-	_methods []method
+//gopherjs:replace
+func (t *rtype) typeOff(off aTypeOff) *rtype {
+	return t.TypeOff(off)
 }
 
-func (t *uncommonType) methods() []method {
-	return t._methods
+//gopherjs:replace
+func resolveReflectType(t *abi.Type) aTypeOff {
+	return abi.ResolveReflectType(t)
 }
 
-func (t *uncommonType) exportedMethods() []method {
-	return t._methods[:t.xcount:t.xcount]
+//gopherjs:replace
+func (t *rtype) textOff(off aTextOff) unsafe.Pointer {
+	return t.TextOff(off)
 }
 
-func (t *rtype) uncommon() *uncommonType {
-	obj := js.InternalObject(t).Get("uncommonType")
-	if obj == js.Undefined {
-		return nil
-	}
-	return (*uncommonType)(unsafe.Pointer(obj.Unsafe()))
+//gopherjs:replace
+func resolveReflectText(ptr unsafe.Pointer) aTextOff {
+	return abi.ResolveReflectText(ptr)
 }
 
-type funcType struct {
-	rtype    `reflect:"func"`
-	inCount  uint16
-	outCount uint16
-
-	_in  []*rtype
-	_out []*rtype
-}
-
-func (t *funcType) in() []*rtype {
-	return t._in
-}
-
-func (t *funcType) out() []*rtype {
-	return t._out
-}
-
-type name struct {
-	bytes *byte
-}
-
-type nameData struct {
-	name     string
-	tag      string
-	exported bool
-	embedded bool
-	pkgPath  string
-}
-
-var nameMap = make(map[*byte]*nameData)
-
-func (n name) name() (s string) { return nameMap[n.bytes].name }
-func (n name) tag() (s string)  { return nameMap[n.bytes].tag }
-func (n name) pkgPath() string  { return nameMap[n.bytes].pkgPath }
-func (n name) isExported() bool { return nameMap[n.bytes].exported }
-func (n name) embedded() bool   { return nameMap[n.bytes].embedded }
-func (n name) setPkgPath(pkgpath string) {
-	nameMap[n.bytes].pkgPath = pkgpath
-}
-
-func newName(n, tag string, exported, embedded bool) name {
-	b := new(byte)
-	nameMap[b] = &nameData{
-		name:     n,
-		tag:      tag,
-		exported: exported,
-		embedded: embedded,
-	}
-	return name{
-		bytes: b,
-	}
-}
-
-// newMethodName creates name instance for a method.
-//
-// Input object is expected to be an entry of the "methods" list of the
-// corresponding JS type.
-func newMethodName(m *js.Object) name {
-	b := new(byte)
-	nameMap[b] = &nameData{
-		name:     internalStr(m.Get("name")),
-		tag:      "",
-		pkgPath:  internalStr(m.Get("pkg")),
-		exported: internalStr(m.Get("pkg")) == "",
-	}
-	return name{bytes: b}
-}
-
-var nameOffList []name
-
-func (t *rtype) nameOff(off nameOff) name {
-	return nameOffList[int(off)]
-}
-
-func resolveReflectName(n name) nameOff {
-	i := len(nameOffList)
-	nameOffList = append(nameOffList, n)
-	return nameOff(i)
-}
-
-var typeOffList []*rtype
-
-func (t *rtype) typeOff(off typeOff) *rtype {
-	return typeOffList[int(off)]
-}
-
-func newTypeOff(t *rtype) typeOff {
-	i := len(typeOffList)
-	typeOffList = append(typeOffList, t)
-	return typeOff(i)
-}
-
-// addReflectOff adds a pointer to the reflection lookup map in the runtime.
-// It returns a new ID that can be used as a typeOff or textOff, and will
-// be resolved correctly. Implemented in the runtime package.
-func addReflectOff(ptr unsafe.Pointer) int32 {
-	i := len(typeOffList)
-	typeOffList = append(typeOffList, (*rtype)(ptr))
-	return int32(i)
-}
+// ====================================================================
+// ====================================================================
+// TODO: Continue Updating ============================================
+// ====================================================================
+// ====================================================================
 
 func internalStr(strObj *js.Object) string {
 	var c struct{ str string }

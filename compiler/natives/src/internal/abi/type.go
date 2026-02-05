@@ -1,3 +1,5 @@
+//go:build js
+
 package abi
 
 import (
@@ -231,6 +233,25 @@ func (typ *Type) IsWrapped() bool {
 }
 
 //gopherjs:new
+var jsObjectPtr = ReflectType(js.Global.Get("$jsObjectPtr"))
+
+//gopherjs:new
+func WrapJsObject(typ *Type, val *js.Object) *js.Object {
+	if typ == jsObjectPtr {
+		return jsObjectPtr.JsType().New(val)
+	}
+	return val
+}
+
+//gopherjs:new
+func UnwrapJsObject(typ *Type, val *js.Object) *js.Object {
+	if typ == jsObjectPtr {
+		return val.Get("object")
+	}
+	return val
+}
+
+//gopherjs:new
 func internalStr(strObj *js.Object) string {
 	var c struct{ str string }
 	js.InternalObject(c).Set("str", strObj) // get string without internalizing
@@ -385,4 +406,13 @@ func ReflectType(typ *js.Object) *Type {
 //gopherjs:new
 func setKindType(abiTyp *Type, kindType any) {
 	js.InternalObject(abiTyp).Set(idKindType, js.InternalObject(kindType))
+}
+
+//gopherjs:new
+func CopyStruct(dst, src *js.Object, typ *Type) {
+	fields := typ.JsType().Get("fields")
+	for i := 0; i < fields.Length(); i++ {
+		prop := fields.Index(i).Get("prop").String()
+		dst.Set(prop, src.Get(prop))
+	}
 }

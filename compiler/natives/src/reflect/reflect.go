@@ -102,24 +102,6 @@ func resolveReflectText(ptr unsafe.Pointer) aTextOff {
 // ====================================================================
 // ====================================================================
 
-func internalStr(strObj *js.Object) string {
-	var c struct{ str string }
-	js.InternalObject(c).Set("str", strObj) // get string without internalizing
-	return c.str
-}
-
-func isWrapped(typ Type) bool {
-	return jsType(typ).Get("wrapped").Bool()
-}
-
-func copyStruct(dst, src *js.Object, typ Type) {
-	fields := jsType(typ).Get("fields")
-	for i := 0; i < fields.Length(); i++ {
-		prop := fields.Index(i).Get("prop").String()
-		dst.Set(prop, src.Get(prop))
-	}
-}
-
 func makeValue(t Type, v *js.Object, fl flag) Value {
 	rt := t.common()
 	if t.Kind() == Array || t.Kind() == Struct || t.Kind() == Ptr {
@@ -976,22 +958,6 @@ func (v Value) Cap() int {
 	panic(&ValueError{"reflect.Value.Cap", k})
 }
 
-var jsObjectPtr = reflectType(js.Global.Get("$jsObjectPtr"))
-
-func wrapJsObject(typ Type, val *js.Object) *js.Object {
-	if typ == jsObjectPtr {
-		return jsType(jsObjectPtr).New(val)
-	}
-	return val
-}
-
-func unwrapJsObject(typ Type, val *js.Object) *js.Object {
-	if typ == jsObjectPtr {
-		return val.Get("object")
-	}
-	return val
-}
-
 func (v Value) Elem() Value {
 	switch k := v.kind(); k {
 	case Interface:
@@ -1065,52 +1031,6 @@ func (v Value) Field(i int) Value {
 		).Unsafe()), fl}
 	}
 	return makeValue(typ, wrapJsObject(typ, s.Get(prop)), fl)
-}
-
-func getJsTag(tag string) string {
-	for tag != "" {
-		// skip leading space
-		i := 0
-		for i < len(tag) && tag[i] == ' ' {
-			i++
-		}
-		tag = tag[i:]
-		if tag == "" {
-			break
-		}
-
-		// scan to colon.
-		// a space or a quote is a syntax error
-		i = 0
-		for i < len(tag) && tag[i] != ' ' && tag[i] != ':' && tag[i] != '"' {
-			i++
-		}
-		if i+1 >= len(tag) || tag[i] != ':' || tag[i+1] != '"' {
-			break
-		}
-		name := string(tag[:i])
-		tag = tag[i+1:]
-
-		// scan quoted string to find value
-		i = 1
-		for i < len(tag) && tag[i] != '"' {
-			if tag[i] == '\\' {
-				i++
-			}
-			i++
-		}
-		if i >= len(tag) {
-			break
-		}
-		qvalue := string(tag[:i+1])
-		tag = tag[i+1:]
-
-		if name == "js" {
-			value, _ := strconv.Unquote(qvalue)
-			return value
-		}
-	}
-	return ""
 }
 
 func (v Value) UnsafePointer() unsafe.Pointer {

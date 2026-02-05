@@ -38,7 +38,7 @@ func (v Value) Elem() Value {
 		fl |= flag(tt.Elem.Kind())
 		return Value{
 			typ:  tt.Elem,
-			ptr:  unsafe.Pointer(wrapJsObject(tt.Elem, val).Unsafe()),
+			ptr:  unsafe.Pointer(abi.WrapJsObject(tt.Elem, val).Unsafe()),
 			flag: fl,
 		}
 
@@ -60,21 +60,12 @@ func valueInterface(v Value) any {
 	if v.typ.IsWrapped() {
 		if v.flag&flagIndir != 0 && v.Kind() == abi.Struct {
 			cv := v.typ.JsType().Call("zero")
-			copyStruct(cv, v.object(), v.typ)
+			abi.CopyStruct(cv, v.object(), v.typ)
 			return any(unsafe.Pointer(v.typ.JsType().New(cv).Unsafe()))
 		}
 		return any(unsafe.Pointer(v.typ.JsType().New(v.object()).Unsafe()))
 	}
 	return any(unsafe.Pointer(v.object().Unsafe()))
-}
-
-//gopherjs:new
-func copyStruct(dst, src *js.Object, typ *abi.Type) {
-	fields := typ.JsType().Get("fields")
-	for i := 0; i < fields.Length(); i++ {
-		prop := fields.Index(i).Get("prop").String()
-		dst.Set(prop, src.Get(prop))
-	}
 }
 
 //gopherjs:new This is new but there are commented out references in the original code.
@@ -180,7 +171,7 @@ func (v Value) Set(x Value) {
 		case abi.Interface:
 			js.InternalObject(v.ptr).Call("$set", js.InternalObject(valueInterface(x)))
 		case abi.Struct:
-			copyStruct(js.InternalObject(v.ptr), js.InternalObject(x.ptr), v.typ)
+			abi.CopyStruct(js.InternalObject(v.ptr), js.InternalObject(x.ptr), v.typ)
 		default:
 			js.InternalObject(v.ptr).Call("$set", x.object())
 		}
@@ -239,13 +230,13 @@ func (v Value) Field(i int) Value {
 		return Value{
 			typ: typ,
 			ptr: unsafe.Pointer(typ.JsPtrTo().New(
-				js.InternalObject(func() *js.Object { return wrapJsObject(typ, s.Get(prop)) }),
-				js.InternalObject(func(x *js.Object) { s.Set(prop, unwrapJsObject(typ, x)) }),
+				js.InternalObject(func() *js.Object { return abi.WrapJsObject(typ, s.Get(prop)) }),
+				js.InternalObject(func(x *js.Object) { s.Set(prop, abi.UnwrapJsObject(typ, x)) }),
 			).Unsafe()),
 			flag: fl,
 		}
 	}
-	return makeValue(typ, wrapJsObject(typ, s.Get(prop)), fl)
+	return makeValue(typ, abi.WrapJsObject(typ, s.Get(prop)), fl)
 }
 
 //gopherjs:replace

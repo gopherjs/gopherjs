@@ -5,98 +5,92 @@ package reflectlite
 import (
 	"unsafe"
 
+	"internal/abi"
+
 	"github.com/gopherjs/gopherjs/js"
 )
 
-func (t *rtype) Comparable() bool {
+func init() {
+	// avoid dead code elimination
+	used := func(i any) {}
+	used(rtype{})
+	used(uncommonType{})
+	used(arrayType{})
+	used(chanType{})
+	used(funcType{})
+	used(interfaceType{})
+	used(mapType{})
+	used(ptrType{})
+	used(sliceType{})
+	used(structType{})
+}
+
+//gopherjs:new
+func toAbiType(t Type) *abi.Type {
+	return t.(rtype).common()
+}
+
+//gopherjs:new
+func jsType(t Type) *js.Object {
+	return toAbiType(t).JsType()
+}
+
+//gopherjs:new
+func jsPtrTo(t Type) *js.Object {
+	return toAbiType(t).JsPtrTo()
+}
+
+// GOPHERJS: For some reason the original code left mapType and aliased the rest
+// to the ABI version. mapType is not used so this is an alias to override the
+// left over refactor cruft.
+//
+//gopherjs:replace
+type mapType = abi.MapType
+
+//gopherjs:purge The name type is mostly unused, replaced by abi.Name, except in pkgPath which we don't implement.
+type name struct{}
+
+//gopherjs:replace
+func pkgPath(n abi.Name) string { return "" }
+
+//gopherjs:purge Unused function because of nameOffList in internal/abi overrides
+func resolveNameOff(ptrInModule unsafe.Pointer, off int32) unsafe.Pointer
+
+//gopherjs:purge Unused function because of typeOffList in internal/abi overrides
+func resolveTypeOff(rtype unsafe.Pointer, off int32) unsafe.Pointer
+
+//gopherjs:replace
+func (t rtype) nameOff(off nameOff) abi.Name {
+	return t.NameOff(off)
+}
+
+//gopherjs:replace
+func (t rtype) typeOff(off typeOff) *abi.Type {
+	return t.TypeOff(off)
+}
+
+//gopherjs:replace
+func TypeOf(i any) Type {
+	if i == nil {
+		return nil
+	}
+	return toRType(abi.ReflectType(js.InternalObject(i).Get("constructor")))
+}
+
+//gopherjs:replace
+func (t rtype) Comparable() bool {
 	switch t.Kind() {
-	case Func, Slice, Map:
+	case abi.Func, abi.Slice, abi.Map:
 		return false
-	case Array:
+	case abi.Array:
 		return t.Elem().Comparable()
-	case Struct:
-		for i := 0; i < t.NumField(); i++ {
-			ft := t.Field(i)
-			if !ft.typ.Comparable() {
+	case abi.Struct:
+		st := t.StructType()
+		for i := 0; i < len(st.Fields); i++ {
+			if !toRType(st.Fields[i].Typ).Comparable() {
 				return false
 			}
 		}
 	}
 	return true
-}
-
-func (t *rtype) IsVariadic() bool {
-	if t.Kind() != Func {
-		panic("reflect: IsVariadic of non-func type")
-	}
-	tt := (*funcType)(unsafe.Pointer(t))
-	return tt.outCount&(1<<15) != 0
-}
-
-func (t *rtype) kindType() *rtype {
-	return (*rtype)(unsafe.Pointer(js.InternalObject(t).Get(idKindType)))
-}
-
-func (t *rtype) Field(i int) structField {
-	if t.Kind() != Struct {
-		panic("reflect: Field of non-struct type")
-	}
-	tt := (*structType)(unsafe.Pointer(t))
-	if i < 0 || i >= len(tt.fields) {
-		panic("reflect: Field index out of bounds")
-	}
-	return tt.fields[i]
-}
-
-func (t *rtype) Key() Type {
-	if t.Kind() != Map {
-		panic("reflect: Key of non-map type")
-	}
-	tt := (*mapType)(unsafe.Pointer(t))
-	return toType(tt.key)
-}
-
-func (t *rtype) NumField() int {
-	if t.Kind() != Struct {
-		panic("reflect: NumField of non-struct type")
-	}
-	tt := (*structType)(unsafe.Pointer(t))
-	return len(tt.fields)
-}
-
-func (t *rtype) Method(i int) (m Method) {
-	if t.Kind() == Interface {
-		tt := (*interfaceType)(unsafe.Pointer(t))
-		return tt.Method(i)
-	}
-	methods := t.exportedMethods()
-	if i < 0 || i >= len(methods) {
-		panic("reflect: Method index out of range")
-	}
-	p := methods[i]
-	pname := t.nameOff(p.name)
-	m.Name = pname.name()
-	fl := flag(Func)
-	mtyp := t.typeOff(p.mtyp)
-	ft := (*funcType)(unsafe.Pointer(mtyp))
-	in := make([]Type, 0, 1+len(ft.in()))
-	in = append(in, t)
-	for _, arg := range ft.in() {
-		in = append(in, arg)
-	}
-	out := make([]Type, 0, len(ft.out()))
-	for _, ret := range ft.out() {
-		out = append(out, ret)
-	}
-	mt := FuncOf(in, out, ft.IsVariadic())
-	m.Type = mt
-	prop := js.Global.Call("$methodSet", js.InternalObject(t).Get(idJsType)).Index(i).Get("prop").String()
-	fn := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
-		rcvr := arguments[0]
-		return rcvr.Get(prop).Call("apply", rcvr, arguments[1:])
-	})
-	m.Func = Value{mt.(*rtype), unsafe.Pointer(fn.Unsafe()), fl}
-
-	m.Index = i
-	return m
 }

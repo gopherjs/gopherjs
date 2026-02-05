@@ -325,7 +325,7 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls linkname.Go
 			lines = append(lines, fmt.Sprintf("\t\t\t%s = $linknames[%q];\n", d.RefExpr, impl.String()))
 		}
 		if len(lines) > 0 {
-			if _, err := writeF(w, minify, "\t\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, "")); err != nil {
+			if _, err := writeF(w, minify, "\t\t$pkg.$initLinknames = function() {\n%s\t\t};\n", strings.Join(lines, "")); err != nil {
 				return err
 			}
 		}

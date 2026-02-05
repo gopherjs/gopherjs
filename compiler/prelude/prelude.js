@@ -35,6 +35,19 @@ if (!$global.fs) {
     $global.fs = {
         constants: { O_WRONLY: -1, O_RDWR: -1, O_CREAT: -1, O_TRUNC: -1, O_APPEND: -1, O_EXCL: -1 }, // unused
         writeSync: function writeSync(fd, buf) {
+            // check for a hook to redirect `os.Stdout` and `os.Stderr` to a different output
+            // instead of the default `console.log`. This is useful for redirecting methods like
+            // fmt.Println to write to a text box, like we do for the GopherJS playground.
+            // `fd` is 1 for os.Stdout ("/dev/stdout") and 2 for os.Stderr ("/dev/stderr").
+            // This will not work when running in node.js or another `fs` is present.
+            // This will not effect the built-in `print` methods.
+            if ($global.gopherjsWriteSyncHook) {
+                outputBuf += decoder.decode(buf);
+                $global.gopherjsWriteSyncHook(fd, outputBuf);
+                outputBuf = "";
+                return buf.length;
+            }
+
             outputBuf += decoder.decode(buf);
             var nl = outputBuf.lastIndexOf("\n");
             if (nl != -1) {
@@ -105,7 +118,9 @@ var $mapDelete = (m, key) => {
 // standalone function. Bound function is cached for later reuse.
 var $methodVal = (recv, name) => {
     var vals = recv.$methodVals || {};
-    recv.$methodVals = vals; /* noop for primitives */
+    if (Object.isExtensible(recv)) {
+      recv.$methodVals = vals; /* noop for primitives */
+    }
     var f = vals[name];
     if (f !== undefined) {
         return f;

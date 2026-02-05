@@ -236,8 +236,13 @@ func (typ *Type) IsWrapped() bool {
 var jsObjectPtr = ReflectType(js.Global.Get("$jsObjectPtr"))
 
 //gopherjs:new
+func IsJsObjectPtr(typ *Type) bool {
+	return typ == jsObjectPtr
+}
+
+//gopherjs:new
 func WrapJsObject(typ *Type, val *js.Object) *js.Object {
-	if typ == jsObjectPtr {
+	if IsJsObjectPtr(typ) {
 		return jsObjectPtr.JsType().New(val)
 	}
 	return val
@@ -245,7 +250,7 @@ func WrapJsObject(typ *Type, val *js.Object) *js.Object {
 
 //gopherjs:new
 func UnwrapJsObject(typ *Type, val *js.Object) *js.Object {
-	if typ == jsObjectPtr {
+	if IsJsObjectPtr(typ) {
 		return val.Get("object")
 	}
 	return val

@@ -2,6 +2,12 @@
 
 package abi
 
+import (
+	"unsafe"
+
+	"github.com/gopherjs/gopherjs/js"
+)
+
 // GOPHERJS: These utils are being added because they are common between
 // reflect and reflectlite.
 
@@ -77,4 +83,26 @@ func GetJsTag(tag string) string {
 		}
 	}
 	return ""
+}
+
+//gopherjs:new
+func UnsafeNew(typ *Type) unsafe.Pointer {
+	switch typ.Kind() {
+	case Struct:
+		return unsafe.Pointer(typ.JsType().Get("ptr").New().Unsafe())
+	case Array:
+		return unsafe.Pointer(typ.JsType().Call("zero").Unsafe())
+	default:
+		return unsafe.Pointer(js.Global.Call("$newDataPointer", typ.JsType().Call("zero"), typ.JsPtrTo()).Unsafe())
+	}
+}
+
+//gopherjs:new
+func IfaceE2I(t *Type, src any, dst unsafe.Pointer) {
+	js.InternalObject(dst).Call("$set", js.InternalObject(src))
+}
+
+//gopherjs:new
+func TypedMemMove(t *Type, dst, src unsafe.Pointer) {
+	js.InternalObject(dst).Call("$set", js.InternalObject(src).Call("$get"))
 }

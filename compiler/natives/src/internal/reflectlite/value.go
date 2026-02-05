@@ -204,10 +204,10 @@ func (v Value) Field(i int) Value {
 	}
 
 	if tag := tt.Fields[i].Name.Tag(); tag != "" && i != 0 {
-		if jsTag := getJsTag(tag); jsTag != "" {
+		if jsTag := abi.GetJsTag(tag); jsTag != "" {
 			for {
 				v = v.Field(0)
-				if v.typ == jsObjectPtr {
+				if abi.IsJsObjectPtr(v.typ) {
 					o := v.object().Get("object")
 					return Value{
 						typ: typ,
@@ -241,14 +241,7 @@ func (v Value) Field(i int) Value {
 
 //gopherjs:replace
 func unsafe_New(typ *abi.Type) unsafe.Pointer {
-	switch typ.Kind() {
-	case abi.Struct:
-		return unsafe.Pointer(typ.JsType().Get("ptr").New().Unsafe())
-	case abi.Array:
-		return unsafe.Pointer(typ.JsType().Call("zero").Unsafe())
-	default:
-		return unsafe.Pointer(js.Global.Call("$newDataPointer", typ.JsType().Call("zero"), typ.JsPtrTo()).Unsafe())
-	}
+	return abi.UnsafeNew(typ)
 }
 
 //gopherjs:replace
@@ -350,10 +343,10 @@ func (v Value) assignTo(context string, dst *abi.Type, target unsafe.Pointer) Va
 
 //gopherjs:replace
 func ifaceE2I(t *abi.Type, src any, dst unsafe.Pointer) {
-	js.InternalObject(dst).Call("$set", js.InternalObject(src))
+	abi.IfaceE2I(t, src, dst)
 }
 
 //gopherjs:replace
 func typedmemmove(t *abi.Type, dst, src unsafe.Pointer) {
-	js.InternalObject(dst).Call("$set", js.InternalObject(src).Call("$get"))
+	abi.TypedMemMove(t, dst, src)
 }

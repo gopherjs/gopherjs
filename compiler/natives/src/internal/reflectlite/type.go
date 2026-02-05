@@ -10,6 +10,36 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+func init() {
+	// avoid dead code elimination
+	used := func(i any) {}
+	used(rtype{})
+	used(uncommonType{})
+	used(arrayType{})
+	used(chanType{})
+	used(funcType{})
+	used(interfaceType{})
+	used(mapType{})
+	used(ptrType{})
+	used(sliceType{})
+	used(structType{})
+}
+
+//gopherjs:new
+func toAbiType(t Type) *abi.Type {
+	return t.(rtype).common()
+}
+
+//gopherjs:new
+func jsType(t Type) *js.Object {
+	return toAbiType(t).JsType()
+}
+
+//gopherjs:new
+func jsPtrTo(t Type) *js.Object {
+	return toAbiType(t).JsPtrTo()
+}
+
 // GOPHERJS: For some reason the original code left mapType and aliased the rest
 // to the ABI version. mapType is not used so this is an alias to override the
 // left over refactor cruft.

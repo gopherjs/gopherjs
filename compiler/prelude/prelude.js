@@ -118,7 +118,9 @@ var $mapDelete = (m, key) => {
 // standalone function. Bound function is cached for later reuse.
 var $methodVal = (recv, name) => {
     var vals = recv.$methodVals || {};
-    recv.$methodVals = vals; /* noop for primitives */
+    if (Object.isExtensible(recv)) {
+      recv.$methodVals = vals; /* noop for primitives */
+    }
     var f = vals[name];
     if (f !== undefined) {
         return f;

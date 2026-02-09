@@ -68,13 +68,13 @@ func valueInterface(v Value) any {
 	return any(unsafe.Pointer(v.object().Unsafe()))
 }
 
-//gopherjs:new This is new but there are commented out references in the original code.
+//gopherjs:new This is new to reflectlite but there are commented out references in the native code and a copy in reflect.
 func makeMethodValue(op string, v Value) Value {
 	if v.flag&flagMethod == 0 {
 		panic("reflect: internal error: invalid use of makePartialFunc")
 	}
 
-	_, _, fn := methodReceiver(op, v, int(v.flag)>>flagMethodShift)
+	fn := methodReceiver(op, v, int(v.flag)>>flagMethodShift)
 	rcvr := v.object()
 	if v.typ.IsWrapped() {
 		rcvr = v.typ.JsType().New(rcvr)
@@ -89,8 +89,8 @@ func makeMethodValue(op string, v Value) Value {
 	}
 }
 
-//gopherjs:new
-func methodReceiver(op string, v Value, i int) (_ rtype, t *funcType, fn unsafe.Pointer) {
+//gopherjs:new This is a simplified copy of the version in reflect.
+func methodReceiver(op string, v Value, i int) (fn unsafe.Pointer) {
 	var prop string
 	if v.typ.Kind() == abi.Interface {
 		tt := v.typ.InterfaceType()
@@ -101,7 +101,6 @@ func methodReceiver(op string, v Value, i int) (_ rtype, t *funcType, fn unsafe.
 		if !tt.NameOff(m.Name).IsExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		t = tt.TypeOff(m.Typ).FuncType()
 		prop = tt.NameOff(m.Name).Name()
 	} else {
 		ms := v.typ.ExportedMethods()
@@ -112,7 +111,6 @@ func methodReceiver(op string, v Value, i int) (_ rtype, t *funcType, fn unsafe.
 		if !v.typ.NameOff(m.Name).IsExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		t = v.typ.TypeOff(m.Mtyp).FuncType()
 		prop = js.Global.Call("$methodSet", v.typ.JsType()).Index(i).Get("prop").String()
 	}
 	rcvr := v.object()

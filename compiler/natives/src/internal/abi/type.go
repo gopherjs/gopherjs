@@ -30,6 +30,14 @@ func (t *Type) setUncommon(ut *UncommonType) {
 	js.InternalObject(t).Set(idUncommonType, js.InternalObject(ut))
 }
 
+//gopherjs:add This is the same as ArrayType(), MapType(), etc but they didn't have one for ChanType.
+func (t *Type) ChanType() *ChanType {
+	if t.Kind() != Chan {
+		return nil
+	}
+	return (*ChanType)(unsafe.Pointer(t))
+}
+
 //gopherjs:replace
 type UncommonType struct {
 	PkgPath NameOff // import path

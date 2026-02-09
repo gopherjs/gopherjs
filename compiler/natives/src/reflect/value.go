@@ -12,6 +12,9 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+//gopherjs:purge This is the header for an interface value with methods and not needed for GopherJS.
+type nonEmptyInterface struct{}
+
 // New returns a Value representing a pointer to a new zero value
 // for the specified type. That is, the returned Value's Type is PtrTo(typ).
 //
@@ -24,11 +27,11 @@ func New(typ Type) Value {
 	if typ == nil {
 		panic("reflect: New(nil)")
 	}
-	t := typ.(*rtype)
-	pt := t.ptrTo()
+	t := toAbiType(typ)
+	pt := t.PtrTo()
 	ptr := unsafe_New(t)
 	fl := flag(Pointer)
-	return Value{typ: pt, ptr: ptr, flag: fl}
+	return Value{typ_: pt, ptr: ptr, flag: fl}
 }
 
 //gopherjs:replace
@@ -44,12 +47,20 @@ func unsafe_New(typ *abi.Type) unsafe.Pointer {
 	return abi.UnsafeNew(typ)
 }
 
-func makeValue(t Type, v *js.Object, fl flag) Value {
-	rt := t.common()
-	if t.Kind() == Array || t.Kind() == Struct || t.Kind() == Ptr {
-		return Value{rt, unsafe.Pointer(v.Unsafe()), fl | flag(t.Kind())}
+func makeValue(t *abi.Type, v *js.Object, fl flag) Value {
+	switch t.Kind() {
+	case abi.Array, abi.Struct, abi.Pointer:
+		return Value{
+			typ_: t,
+			ptr:  unsafe.Pointer(v.Unsafe()),
+			flag: fl | flag(t.Kind()),
+		}
 	}
-	return Value{rt, unsafe.Pointer(js.Global.Call("$newDataPointer", v, jsType(rt.ptrTo())).Unsafe()), fl | flag(t.Kind()) | flagIndir}
+	return Value{
+		typ_: t,
+		ptr:  unsafe.Pointer(js.Global.Call("$newDataPointer", v, t.JsPtrTo()).Unsafe()),
+		flag: fl | flag(t.Kind()) | flagIndir,
+	}
 }
 
 func MakeSlice(typ Type, len, cap int) Value {
@@ -66,72 +77,89 @@ func MakeSlice(typ Type, len, cap int) Value {
 		panic("reflect.MakeSlice: len > cap")
 	}
 
-	return makeValue(typ, js.Global.Call("$makeSlice", jsType(typ), len, cap, js.InternalObject(func() *js.Object { return jsType(typ.Elem()).Call("zero") })), 0)
+	return makeValue(toAbiType(typ), js.Global.Call("$makeSlice", jsType(typ), len, cap, js.InternalObject(func() *js.Object { return jsType(typ.Elem()).Call("zero") })), 0)
 }
 
 func Zero(typ Type) Value {
-	return makeValue(typ, jsType(typ).Call("zero"), 0)
+	return makeValue(toAbiType(typ), jsType(typ).Call("zero"), 0)
 }
 
 func makeInt(f flag, bits uint64, t Type) Value {
 	typ := t.common()
 	ptr := unsafe_New(typ)
 	switch typ.Kind() {
-	case Int8:
+	case abi.Int8:
 		*(*int8)(ptr) = int8(bits)
-	case Int16:
+	case abi.Int16:
 		*(*int16)(ptr) = int16(bits)
-	case Int, Int32:
+	case abi.Int, abi.Int32:
 		*(*int32)(ptr) = int32(bits)
-	case Int64:
+	case abi.Int64:
 		*(*int64)(ptr) = int64(bits)
-	case Uint8:
+	case abi.Uint8:
 		*(*uint8)(ptr) = uint8(bits)
-	case Uint16:
+	case abi.Uint16:
 		*(*uint16)(ptr) = uint16(bits)
-	case Uint, Uint32, Uintptr:
+	case abi.Uint, abi.Uint32, abi.Uintptr:
 		*(*uint32)(ptr) = uint32(bits)
-	case Uint64:
+	case abi.Uint64:
 		*(*uint64)(ptr) = uint64(bits)
 	}
-	return Value{typ, ptr, f | flagIndir | flag(typ.Kind())}
+	return Value{
+		typ_: typ,
+		ptr:  ptr,
+		flag: f | flagIndir | flag(typ.Kind()),
+	}
 }
 
 //gopherjs:replace
 func methodReceiver(op string, v Value, methodIndex int) (rcvrtype *abi.Type, t *funcType, fn unsafe.Pointer) {
 	i := methodIndex
 	var prop string
-	if v.typ.Kind() == Interface {
-		tt := (*interfaceType)(unsafe.Pointer(v.typ))
-		if i < 0 || i >= len(tt.methods) {
+	if tt := v.typ().InterfaceType(); tt != nil {
+		if i < 0 || i >= len(tt.Methods) {
 			panic("reflect: internal error: invalid method index")
 		}
-		m := &tt.methods[i]
-		if !tt.nameOff(m.name).isExported() {
+		m := &tt.Methods[i]
+		if !tt.NameOff(m.Name).IsExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		rcvrtype = iface.itab.typ
-		t = (*funcType)(unsafe.Pointer(tt.typeOff(m.typ)))
-		prop = tt.nameOff(m.name).name()
+		// TODO(grantnelson-wf): Set rcvrtype to the type the interface is holding onto.
+		t = tt.TypeOff(m.typ).FuncType()
+		prop = tt.NameOff(m.Name).Name()
 	} else {
 		rcvrtype = v.typ()
-		ms := v.typ.exportedMethods()
+		ms := v.typ().ExportedMethods()
 		if uint(i) >= uint(len(ms)) {
 			panic("reflect: internal error: invalid method index")
 		}
 		m := ms[i]
-		if !v.typ.nameOff(m.name).isExported() {
+		if !v.typ().NameOff(m.Name).IsExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		t = (*funcType)(unsafe.Pointer(v.typ.typeOff(m.mtyp)))
+		t = v.typ().TypeOff(m.mtyp).FuncType()
 		prop = js.Global.Call("$methodSet", jsType(v.typ)).Index(i).Get("prop").String()
 	}
 	rcvr := v.object()
-	if isWrapped(v.typ) {
+	if v.typ().IsWrapped() {
 		rcvr = jsType(v.typ).New(rcvr)
 	}
 	fn = unsafe.Pointer(rcvr.Get(prop).Unsafe())
 	return
+}
+
+//gopherjs:replace
+func storeRcvr(v Value, p unsafe.Pointer) {
+	t := v.typ()
+	if t.Kind() == abi.Interface {
+		// the interface data word becomes the receiver word
+		iface := (*nonEmptyInterface)(v.ptr)
+		*(*unsafe.Pointer)(p) = iface.word
+	} else if v.flag&flagIndir != 0 && !ifaceIndir(t) {
+		*(*unsafe.Pointer)(p) = *(*unsafe.Pointer)(v.ptr)
+	} else {
+		*(*unsafe.Pointer)(p) = v.ptr
+	}
 }
 
 func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
@@ -193,7 +221,7 @@ func typedmemmove(t *abi.Type, dst, src unsafe.Pointer) {
 
 //gopherjs:replace
 func makechan(typ *abi.Type, size int) (ch unsafe.Pointer) {
-	ctyp := (*abi.ChanType)(unsafe.Pointer(typ))
+	ctyp := typ.ChanType()
 	return unsafe.Pointer(js.Global.Get("$Chan").New(jsType(ctyp.Elem), size).Unsafe())
 }
 

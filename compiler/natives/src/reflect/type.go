@@ -34,11 +34,6 @@ func init() {
 	uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
 }
 
-//gopherjd:replace
-func pkgPath(n abi.Name) string {
-	return n.PkgPath()
-}
-
 //gopherjs:new
 func toAbiType(typ Type) *abi.Type {
 	return typ.(*rtype).common()
@@ -84,6 +79,11 @@ func (t *rtype) textOff(off aTextOff) unsafe.Pointer {
 //gopherjs:replace
 func resolveReflectText(ptr unsafe.Pointer) aTextOff {
 	return abi.ResolveReflectText(ptr)
+}
+
+//gopherjd:replace
+func pkgPath(n abi.Name) string {
+	return n.PkgPath()
 }
 
 func TypeOf(i any) Type {

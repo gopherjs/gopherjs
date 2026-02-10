@@ -207,7 +207,11 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 		}
 	})
 
-	return Value{t, unsafe.Pointer(fv.Unsafe()), flag(Func)}
+	return Value{
+		typ_: t,
+		ptr:  unsafe.Pointer(fv.Unsafe()),
+		flag: flag(Func),
+	}
 }
 
 //gopherjs:replace
@@ -273,7 +277,7 @@ func (v Value) assignTo(context string, dst *abi.Type, target unsafe.Pointer) Va
 		// Same memory layout, so no harm done.
 		fl := v.flag&(flagAddr|flagIndir) | v.flag.ro()
 		fl |= flag(dst.Kind())
-		return Value{dst, v.ptr, fl}
+		return Value{typ_: dst, ptr: v.ptr, flag: fl}
 
 	case implements(dst, v.typ()):
 		if target == nil {
@@ -288,7 +292,7 @@ func (v Value) assignTo(context string, dst *abi.Type, target unsafe.Pointer) Va
 		} else {
 			ifaceE2I(dst, x, target)
 		}
-		return Value{dst, target, flagIndir | flag(Interface)}
+		return Value{typ_: dst, ptr: target, flag: flagIndir | flag(Interface)}
 	}
 
 	// Failed.
@@ -752,7 +756,7 @@ func (v Value) bytesSlow() []byte {
 		//   return unsafe.Slice(p, n)
 		return js.InternalObject(v.ptr).Interface().([]byte)
 	}
-	panic(&ValueError{"reflect.Value.Bytes", v.kind()})
+	panic(&ValueError{Method: "reflect.Value.Bytes", Kind: v.kind()})
 }
 
 func (v Value) SetBytes(x []byte) {

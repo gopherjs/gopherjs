@@ -30,7 +30,7 @@ func (t *Type) setUncommon(ut *UncommonType) {
 	js.InternalObject(t).Set(idUncommonType, js.InternalObject(ut))
 }
 
-//gopherjs:add This is the same as ArrayType(), MapType(), etc but for ChanType.
+//gopherjs:add Same as ArrayType(), MapType(), etc but for ChanType.
 func (t *Type) ChanType() *ChanType {
 	if t.Kind() != Chan {
 		return nil
@@ -38,7 +38,7 @@ func (t *Type) ChanType() *ChanType {
 	return (*ChanType)(unsafe.Pointer(t))
 }
 
-//gopherjs:add This is the same as ArrayType(), MapType(), etc but for PtrType.
+//gopherjs:add Same as ArrayType(), MapType(), etc but for PtrType.
 func (t *Type) PtrType() *PtrType {
 	if t.Kind() != Pointer {
 		return nil
@@ -46,12 +46,20 @@ func (t *Type) PtrType() *PtrType {
 	return (*PtrType)(unsafe.Pointer(t))
 }
 
-//gopherjs:add This is the same as ArrayType(), MapType(), etc but for SliceType.
+//gopherjs:add Same as ArrayType(), MapType(), etc but for SliceType
 func (t *Type) SliceType() *SliceType {
 	if t.Kind() != Slice {
 		return nil
 	}
 	return (*SliceType)(unsafe.Pointer(t))
+}
+
+//gopherjs:add Same as ArrayType(), MapType(), etc but for InterfaceType
+func (t *Type) InterfaceType() *InterfaceType {
+	if t.Kind() != Interface {
+		return nil
+	}
+	return (*InterfaceType)(unsafe.Pointer(t))
 }
 
 //gopherjs:add Shared by reflect and reflectlite rtypes
@@ -266,17 +274,17 @@ func (typ *Type) IsWrapped() bool {
 }
 
 //gopherjs:new
-var jsObjectPtr = ReflectType(js.Global.Get("$jsObjectPtr"))
+var JsObjectPtr = ReflectType(js.Global.Get("$jsObjectPtr"))
 
 //gopherjs:new
 func IsJsObjectPtr(typ *Type) bool {
-	return typ == jsObjectPtr
+	return typ == JsObjectPtr
 }
 
 //gopherjs:new
 func WrapJsObject(typ *Type, val *js.Object) *js.Object {
 	if IsJsObjectPtr(typ) {
-		return jsObjectPtr.JsType().New(val)
+		return JsObjectPtr.JsType().New(val)
 	}
 	return val
 }

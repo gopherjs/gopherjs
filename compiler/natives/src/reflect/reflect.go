@@ -5,15 +5,17 @@ package reflect
 import (
 	"unsafe"
 
+	"internal/abi"
 	"internal/itoa"
 
 	"github.com/gopherjs/gopherjs/js"
 )
 
+//gopherjs:add
 func cvtDirect(v Value, typ Type) Value {
 	srcVal := v.object()
-	if srcVal == jsType(v.typ).Get("nil") {
-		return makeValue(typ, jsType(typ).Get("nil"), v.flag)
+	if srcVal == v.typ().JsType().Get("nil") {
+		return makeValue(toAbiType(typ), jsType(typ).Get("nil"), v.flag)
 	}
 
 	var val *js.Object
@@ -27,12 +29,12 @@ func cvtDirect(v Value, typ Type) Value {
 	case Ptr:
 		switch typ.Elem().Kind() {
 		case Struct:
-			if typ.Elem() == v.typ.Elem() {
+			if toAbiType(typ.Elem()) == v.typ().Elem() {
 				val = srcVal
 				break
 			}
 			val = jsType(typ).New()
-			copyStruct(val, srcVal, typ.Elem())
+			abi.CopyStruct(val, srcVal, toAbiType(typ.Elem()))
 		case Array:
 			// Unlike other pointers, array pointers are "wrapped" types (see
 			// isWrapped() in the compiler package), and are represented by a native
@@ -43,16 +45,22 @@ func cvtDirect(v Value, typ Type) Value {
 		}
 	case Struct:
 		val = jsType(typ).Get("ptr").New()
-		copyStruct(val, srcVal, typ)
+		abi.CopyStruct(val, srcVal, toAbiType(typ))
 	case Array, Bool, Chan, Func, Interface, Map, String, UnsafePointer:
 		val = js.InternalObject(v.ptr)
 	default:
-		panic(&ValueError{"reflect.Convert", k})
+		panic(&ValueError{Method: "reflect.Convert", Kind: k})
 	}
-	return Value{typ.common(), unsafe.Pointer(val.Unsafe()), v.flag.ro() | v.flag&flagIndir | flag(typ.Kind())}
+	return Value{
+		typ_: typ.common(),
+		ptr:  unsafe.Pointer(val.Unsafe()),
+		flag: v.flag.ro() | v.flag&flagIndir | flag(typ.Kind()),
+	}
 }
 
 // convertOp: []T -> *[N]T
+//
+//gopherjs:add
 func cvtSliceArrayPtr(v Value, t Type) Value {
 	slice := v.object()
 
@@ -62,10 +70,16 @@ func cvtSliceArrayPtr(v Value, t Type) Value {
 		panic("reflect: cannot convert slice with length " + itoa.Itoa(slen) + " to pointer to array with length " + itoa.Itoa(alen))
 	}
 	array := js.Global.Call("$sliceToGoArray", slice, jsType(t))
-	return Value{t.common(), unsafe.Pointer(array.Unsafe()), v.flag&^(flagIndir|flagAddr|flagKindMask) | flag(Ptr)}
+	return Value{
+		typ_: t.common(),
+		ptr:  unsafe.Pointer(array.Unsafe()),
+		flag: v.flag&^(flagIndir|flagAddr|flagKindMask) | flag(Ptr),
+	}
 }
 
 // convertOp: []T -> [N]T
+//
+//gopherjs:add
 func cvtSliceArray(v Value, t Type) Value {
 	n := t.Len()
 	if n > v.Len() {
@@ -77,13 +91,18 @@ func cvtSliceArray(v Value, t Type) Value {
 	js.Global.Call("$copySlice", dst, slice)
 
 	arr := dst.Get("$array")
-	return Value{t.common(), unsafe.Pointer(arr.Unsafe()), v.flag&^(flagAddr|flagKindMask) | flag(Array)}
+	return Value{
+		typ_: t.common(),
+		ptr:  unsafe.Pointer(arr.Unsafe()),
+		flag: v.flag&^(flagAddr|flagKindMask) | flag(Array),
+	}
 }
 
+//gopherjs:replace
 func Copy(dst, src Value) int {
 	dk := dst.kind()
 	if dk != Array && dk != Slice {
-		panic(&ValueError{"reflect.Copy", dk})
+		panic(&ValueError{Method: "reflect.Copy", Kind: dk})
 	}
 	if dk == Array {
 		dst.mustBeAssignable()
@@ -93,25 +112,25 @@ func Copy(dst, src Value) int {
 	sk := src.kind()
 	var stringCopy bool
 	if sk != Array && sk != Slice {
-		stringCopy = sk == String && dst.typ.Elem().Kind() == Uint8
+		stringCopy = sk == String && dst.typ().Elem().Kind() == abi.Uint8
 		if !stringCopy {
-			panic(&ValueError{"reflect.Copy", sk})
+			panic(&ValueError{Method: "reflect.Copy", Kind: sk})
 		}
 	}
 	src.mustBeExported()
 
 	if !stringCopy {
-		typesMustMatch("reflect.Copy", dst.typ.Elem(), src.typ.Elem())
+		typesMustMatch("reflect.Copy", toRType(dst.typ().Elem()), toRType(src.typ().Elem()))
 	}
 
 	dstVal := dst.object()
 	if dk == Array {
-		dstVal = jsType(SliceOf(dst.typ.Elem())).New(dstVal)
+		dstVal = jsType(SliceOf(toRType(dst.typ().Elem()))).New(dstVal)
 	}
 
 	srcVal := src.object()
 	if sk == Array {
-		srcVal = jsType(SliceOf(src.typ.Elem())).New(srcVal)
+		srcVal = jsType(SliceOf(toRType(src.typ().Elem()))).New(srcVal)
 	}
 
 	if stringCopy {
@@ -120,9 +139,10 @@ func Copy(dst, src Value) int {
 	return js.Global.Call("$copySlice", dstVal, srcVal).Int()
 }
 
+//gopherjs:add
 func valueInterface(v Value, safe bool) any {
 	if v.flag == 0 {
-		panic(&ValueError{"reflect.Value.Interface", 0})
+		panic(&ValueError{Method: "reflect.Value.Interface", Kind: 0})
 	}
 	if safe && v.flag&flagRO != 0 {
 		panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")
@@ -131,17 +151,19 @@ func valueInterface(v Value, safe bool) any {
 		v = makeMethodValue("Interface", v)
 	}
 
-	if isWrapped(v.typ) {
+	if v.typ().IsWrapped() {
+		jsTyp := v.typ().JsType()
 		if v.flag&flagIndir != 0 && v.Kind() == Struct {
-			cv := jsType(v.typ).Call("zero")
-			copyStruct(cv, v.object(), v.typ)
-			return any(unsafe.Pointer(jsType(v.typ).New(cv).Unsafe()))
+			cv := jsTyp.Call("zero")
+			abi.CopyStruct(cv, v.object(), v.typ())
+			return any(unsafe.Pointer(jsTyp.New(cv).Unsafe()))
 		}
-		return any(unsafe.Pointer(jsType(v.typ).New(v.object()).Unsafe()))
+		return any(unsafe.Pointer(jsTyp.New(v.object()).Unsafe()))
 	}
 	return any(unsafe.Pointer(v.object().Unsafe()))
 }
 
+//gopherjs:add
 func (t *rtype) pointers() bool {
 	switch t.Kind() {
 	case Ptr, Map, Chan, Func, Struct, Array:
@@ -151,6 +173,7 @@ func (t *rtype) pointers() bool {
 	}
 }
 
+//gopherjs:replace
 func (t *rtype) Comparable() bool {
 	switch t.Kind() {
 	case Func, Slice, Map:
@@ -167,6 +190,7 @@ func (t *rtype) Comparable() bool {
 	return true
 }
 
+//gopherjs:replace
 func (t *rtype) Method(i int) (m Method) {
 	if t.Kind() == Interface {
 		tt := (*interfaceType)(unsafe.Pointer(t))
@@ -177,19 +201,19 @@ func (t *rtype) Method(i int) (m Method) {
 		panic("reflect: Method index out of range")
 	}
 	p := methods[i]
-	pname := t.nameOff(p.name)
-	m.Name = pname.name()
+	pname := t.nameOff(p.Name)
+	m.Name = pname.Name()
 	fl := flag(Func)
-	mtyp := t.typeOff(p.mtyp)
-	ft := (*funcType)(unsafe.Pointer(mtyp))
-	in := make([]Type, 0, 1+len(ft.in()))
+	mtyp := t.typeOff(p.Mtyp)
+	ft := mtyp.FuncType()
+	in := make([]Type, 0, 1+ft.NumIn())
 	in = append(in, t)
-	for _, arg := range ft.in() {
-		in = append(in, arg)
+	for _, arg := range ft.InSlice() {
+		in = append(in, toRType(arg))
 	}
-	out := make([]Type, 0, len(ft.out()))
-	for _, ret := range ft.out() {
-		out = append(out, ret)
+	out := make([]Type, 0, ft.NumOut())
+	for _, ret := range ft.OutSlice() {
+		out = append(out, toRType(ret))
 	}
 	mt := FuncOf(in, out, ft.IsVariadic())
 	m.Type = mt
@@ -198,14 +222,20 @@ func (t *rtype) Method(i int) (m Method) {
 		rcvr := arguments[0]
 		return rcvr.Get(prop).Call("apply", rcvr, arguments[1:])
 	})
-	m.Func = Value{mt.(*rtype), unsafe.Pointer(fn.Unsafe()), fl}
+	m.Func = Value{
+		typ_: toAbiType(mt),
+		ptr:  unsafe.Pointer(fn.Unsafe()),
+		flag: fl,
+	}
 
 	m.Index = i
 	return m
 }
 
+//gopherjs:add
 var selectHelper = js.Global.Get("$select").Interface().(func(...any) *js.Object)
 
+//gopherjs:add
 func chanrecv(ch unsafe.Pointer, nb bool, val unsafe.Pointer) (selected, received bool) {
 	comms := [][]*js.Object{{js.InternalObject(ch)}}
 	if nb {
@@ -220,6 +250,7 @@ func chanrecv(ch unsafe.Pointer, nb bool, val unsafe.Pointer) (selected, receive
 	return true, recvRes.Index(1).Bool()
 }
 
+//gopherjs:add
 func chansend(ch unsafe.Pointer, val unsafe.Pointer, nb bool) bool {
 	comms := [][]*js.Object{{js.InternalObject(ch), js.InternalObject(val).Call("$get")}}
 	if nb {
@@ -232,6 +263,7 @@ func chansend(ch unsafe.Pointer, val unsafe.Pointer, nb bool) bool {
 	return true
 }
 
+//gopherjs:add
 func rselect(rselects []runtimeSelect) (chosen int, recvOK bool) {
 	comms := make([][]*js.Object, len(rselects))
 	for i, s := range rselects {
@@ -264,6 +296,7 @@ func rselect(rselects []runtimeSelect) (chosen int, recvOK bool) {
 	return c, false
 }
 
+//gopherjs:replace
 func DeepEqual(a1, a2 any) bool {
 	i1 := js.InternalObject(a1)
 	i2 := js.InternalObject(a2)
@@ -276,6 +309,7 @@ func DeepEqual(a1, a2 any) bool {
 	return deepValueEqualJs(ValueOf(a1), ValueOf(a2), nil)
 }
 
+//gopherjs:add
 func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	if !v1.IsValid() || !v2.IsValid() {
 		return !v1.IsValid() && !v2.IsValid()
@@ -283,8 +317,8 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	if v1.Type() != v2.Type() {
 		return false
 	}
-	if v1.Type() == jsObjectPtr {
-		return unwrapJsObject(jsObjectPtr, v1.object()) == unwrapJsObject(jsObjectPtr, v2.object())
+	if abi.IsJsObjectPtr(v1.typ()) {
+		return abi.UnwrapJsObject(abi.JsObjectPtr, v1.object()) == abi.UnwrapJsObject(abi.JsObjectPtr, v2.object())
 	}
 
 	switch v1.Kind() {
@@ -360,6 +394,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	return js.Global.Call("$interfaceIsEqual", js.InternalObject(valueInterface(v1, false)), js.InternalObject(valueInterface(v2, false))).Bool()
 }
 
+//gopherjs:add
 func stringsLastIndex(s string, c byte) int {
 	for i := len(s) - 1; i >= 0; i-- {
 		if s[i] == c {
@@ -369,10 +404,12 @@ func stringsLastIndex(s string, c byte) int {
 	return -1
 }
 
+//gopherjs:add
 func stringsHasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
 
+//gopherjs:add
 func verifyNotInHeapPtr(p uintptr) bool {
 	// Go runtime uses this method to make sure that a uintptr won't crash GC if
 	// interpreted as a heap pointer. This is not relevant for GopherJS, so we can

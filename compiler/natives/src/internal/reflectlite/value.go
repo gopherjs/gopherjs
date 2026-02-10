@@ -33,7 +33,7 @@ func (v Value) Elem() Value {
 			return Value{}
 		}
 		val := v.object()
-		tt := (*ptrType)(unsafe.Pointer(v.typ))
+		tt := v.typ.PtrType()
 		fl := v.flag&flagRO | flagIndir | flagAddr
 		fl |= flag(tt.Elem.Kind())
 		return Value{

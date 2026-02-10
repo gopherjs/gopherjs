@@ -11,14 +11,11 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-var initialized = false
-
 func init() {
 	// avoid dead code elimination
 	used := func(i any) {}
 	used(rtype{})
 	used(uncommonType{})
-	used(method{})
 	used(arrayType{})
 	used(chanType{})
 	used(funcType{})
@@ -27,11 +24,7 @@ func init() {
 	used(ptrType{})
 	used(sliceType{})
 	used(structType{})
-	used(imethod{})
 	used(structField{})
-
-	initialized = true
-	uint8Type = TypeOf(uint8(0)).(*rtype) // set for real
 }
 
 //gopherjs:new
@@ -44,6 +37,7 @@ func jsType(typ Type) *js.Object {
 	return toAbiType(typ).JsType()
 }
 
+//gopherjs:replace
 func (t *rtype) ptrTo() *abi.Type {
 	return toAbiType(t).PtrTo()
 }
@@ -53,7 +47,7 @@ func addReflectOff(ptr unsafe.Pointer) int32
 
 //gopherjs:replace
 func (t *rtype) nameOff(off aNameOff) abi.Name {
-	return t.NameOff(off)
+	return toAbiType(t).NameOff(off)
 }
 
 //gopherjs:replace
@@ -63,7 +57,7 @@ func resolveReflectName(n abi.Name) aNameOff {
 
 //gopherjs:replace
 func (t *rtype) typeOff(off aTypeOff) *abi.Type {
-	return t.TypeOff(off)
+	return toAbiType(t).TypeOff(off)
 }
 
 //gopherjs:replace
@@ -73,7 +67,7 @@ func resolveReflectType(t *abi.Type) aTypeOff {
 
 //gopherjs:replace
 func (t *rtype) textOff(off aTextOff) unsafe.Pointer {
-	return t.TextOff(off)
+	return toAbiType(t).TextOff(off)
 }
 
 //gopherjs:replace
@@ -88,13 +82,10 @@ func pkgPath(n abi.Name) string {
 
 //gopherjs:replace
 func TypeOf(i any) Type {
-	if !initialized { // avoid error of uint8Type
-		return &rtype{}
-	}
 	if i == nil {
 		return nil
 	}
-	return reflectType(js.InternalObject(i).Get("constructor"))
+	return toRType(rtypeOf(i))
 }
 
 //gopherjs:replace
@@ -102,18 +93,21 @@ func rtypeOf(i any) *abi.Type {
 	return abi.ReflectType(js.InternalObject(i).Get("constructor"))
 }
 
+//gopherjs:replace
 func ArrayOf(count int, elem Type) Type {
 	if count < 0 {
 		panic("reflect: negative length passed to ArrayOf")
 	}
 
-	return reflectType(js.Global.Call("$arrayType", jsType(elem), count))
+	return toRType(abi.ReflectType(js.Global.Call("$arrayType", jsType(elem), count)))
 }
 
+//gopherjs:replace
 func ChanOf(dir ChanDir, t Type) Type {
-	return reflectType(js.Global.Call("$chanType", jsType(t), dir == SendDir, dir == RecvDir))
+	return toRType(abi.ReflectType(js.Global.Call("$chanType", jsType(t), dir == SendDir, dir == RecvDir)))
 }
 
+//gopherjs:replace
 func FuncOf(in, out []Type, variadic bool) Type {
 	if variadic && (len(in) == 0 || in[len(in)-1].Kind() != Slice) {
 		panic("reflect.FuncOf: last arg of variadic func must be slice")
@@ -127,22 +121,25 @@ func FuncOf(in, out []Type, variadic bool) Type {
 	for i, v := range out {
 		jsOut[i] = jsType(v)
 	}
-	return reflectType(js.Global.Call("$funcType", jsIn, jsOut, variadic))
+	return toRType(abi.ReflectType(js.Global.Call("$funcType", jsIn, jsOut, variadic)))
 }
 
+//gopherjs:replace
 func MapOf(key, elem Type) Type {
 	switch key.Kind() {
 	case Func, Map, Slice:
 		panic("reflect.MapOf: invalid key type " + key.String())
 	}
 
-	return reflectType(js.Global.Call("$mapType", jsType(key), jsType(elem)))
+	return toRType(abi.ReflectType(js.Global.Call("$mapType", jsType(key), jsType(elem))))
 }
 
+//gopherjs:replace
 func SliceOf(t Type) Type {
-	return reflectType(js.Global.Call("$sliceType", jsType(t)))
+	return toRType(abi.ReflectType(js.Global.Call("$sliceType", jsType(t))))
 }
 
+//gopherjs:replace
 func StructOf(fields []StructField) Type {
 	var (
 		jsFields  = make([]*js.Object, len(fields))
@@ -161,8 +158,8 @@ func StructOf(fields []StructField) Type {
 			panic("reflect.StructOf: field " + strconv.Itoa(i) + " has no type")
 		}
 		f, fpkgpath := runtimeStructField(field)
-		ft := f.typ
-		if ft.kind&kindGCProg != 0 {
+		ft := f.Typ
+		if ft.Kind()&kindGCProg != 0 {
 			hasGCProg = true
 		}
 		if fpkgpath != "" {
@@ -173,7 +170,7 @@ func StructOf(fields []StructField) Type {
 			}
 		}
 		name := field.Name
-		if f.embedded() {
+		if f.Embedded() {
 			// Embedded field
 			if field.Type.Kind() == Ptr {
 				// Embedded ** and *interface{} are illegal
@@ -185,9 +182,9 @@ func StructOf(fields []StructField) Type {
 			switch field.Type.Kind() {
 			case Interface:
 			case Ptr:
-				ptr := (*ptrType)(unsafe.Pointer(ft))
-				if unt := ptr.uncommon(); unt != nil {
-					if i > 0 && unt.mcount > 0 {
+				ptr := ft.PtrType()
+				if unt := ptr.Uncommon(); unt != nil {
+					if i > 0 && unt.Mcount > 0 {
 						// Issue 15924.
 						panic("reflect: embedded type with methods not implemented if type is not first field")
 					}
@@ -196,12 +193,12 @@ func StructOf(fields []StructField) Type {
 					}
 				}
 			default:
-				if unt := ft.uncommon(); unt != nil {
-					if i > 0 && unt.mcount > 0 {
+				if unt := ft.Uncommon(); unt != nil {
+					if i > 0 && unt.Mcount > 0 {
 						// Issue 15924.
 						panic("reflect: embedded type with methods not implemented if type is not first field")
 					}
-					if len(fields) > 1 && ft.kind&kindDirectIface != 0 {
+					if len(fields) > 1 && ft.Kind()&kindDirectIface != 0 {
 						panic("reflect: embedded type with methods not implemented for non-pointer type")
 					}
 				}
@@ -219,7 +216,7 @@ func StructOf(fields []StructField) Type {
 		// The rest is set through the js.Object() interface, which the compiler will
 		// externalize for us.
 		jsf.Set("prop", name)
-		jsf.Set("exported", f.name.isExported())
+		jsf.Set("exported", f.Name.IsExported())
 		jsf.Set("typ", jsType(field.Type))
 		jsf.Set("tag", field.Tag)
 		jsf.Set("embedded", field.Anonymous)
@@ -230,5 +227,5 @@ func StructOf(fields []StructField) Type {
 	if pkgpath != "" {
 		typ.Set("pkgPath", pkgpath)
 	}
-	return reflectType(typ)
+	return toRType(abi.ReflectType(typ))
 }

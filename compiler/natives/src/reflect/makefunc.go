@@ -16,13 +16,17 @@ func makeMethodValue(op string, v Value) Value {
 
 	_, _, fn := methodReceiver(op, v, int(v.flag)>>flagMethodShift)
 	rcvr := v.object()
-	if isWrapped(v.typ) {
-		rcvr = jsType(v.typ).New(rcvr)
+	if v.typ().IsWrapped() {
+		rcvr = v.typ().JsType().New(rcvr)
 	}
 	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		return js.InternalObject(fn).Call("apply", rcvr, arguments)
 	})
-	return Value{v.Type().common(), unsafe.Pointer(fv.Unsafe()), v.flag.ro() | flag(Func)}
+	return Value{
+		typ_: v.Type().common(),
+		ptr:  unsafe.Pointer(fv.Unsafe()),
+		flag: v.flag.ro() | flag(Func),
+	}
 }
 
 //gopherjs:purge

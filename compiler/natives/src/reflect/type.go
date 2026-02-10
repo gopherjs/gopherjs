@@ -86,6 +86,7 @@ func pkgPath(n abi.Name) string {
 	return n.PkgPath()
 }
 
+//gopherjs:replace
 func TypeOf(i any) Type {
 	if !initialized { // avoid error of uint8Type
 		return &rtype{}
@@ -94,6 +95,11 @@ func TypeOf(i any) Type {
 		return nil
 	}
 	return reflectType(js.InternalObject(i).Get("constructor"))
+}
+
+//gopherjs:replace
+func rtypeOf(i any) *abi.Type {
+	return abi.ReflectType(js.InternalObject(i).Get("constructor"))
 }
 
 func ArrayOf(count int, elem Type) Type {

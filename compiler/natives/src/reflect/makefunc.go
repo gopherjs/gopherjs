@@ -8,6 +8,7 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
+//gopherjs:replace
 func makeMethodValue(op string, v Value) Value {
 	if v.flag&flagMethod == 0 {
 		panic("reflect: internal error: invalid use of makePartialFunc")
@@ -23,3 +24,6 @@ func makeMethodValue(op string, v Value) Value {
 	})
 	return Value{v.Type().common(), unsafe.Pointer(fv.Unsafe()), v.flag.ro() | flag(Func)}
 }
+
+//gopherjs:purge
+func makeFuncStub()

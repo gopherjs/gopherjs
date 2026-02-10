@@ -38,6 +38,31 @@ func (t *Type) ChanType() *ChanType {
 	return (*ChanType)(unsafe.Pointer(t))
 }
 
+//gopherjs:add This is the same as ArrayType(), MapType(), etc but they didn't have one for PtrType.
+func (t *Type) PtrType() *PtrType {
+	if t.Kind() != Pointer {
+		return nil
+	}
+	return (*PtrType)(unsafe.Pointer(t))
+}
+
+//gopherjs:add This is the same as ArrayType(), MapType(), etc but they didn't have one for SliceType.
+func (t *Type) SliceType() *SliceType {
+	if t.Kind() != Slice {
+		return nil
+	}
+	return (*SliceType)(unsafe.Pointer(t))
+}
+
+//gopherjs:add Shared by reflect and reflectlite rtypes
+func (t *Type) String() string {
+	s := t.NameOff(t.Str).Name()
+	if t.TFlag&TFlagExtraStar != 0 {
+		return s[1:]
+	}
+	return s
+}
+
 //gopherjs:replace
 type UncommonType struct {
 	PkgPath NameOff // import path

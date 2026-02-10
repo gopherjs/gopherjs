@@ -229,3 +229,15 @@ func StructOf(fields []StructField) Type {
 	}
 	return toRType(abi.ReflectType(typ))
 }
+
+//gopherjs:purge Used in original MapOf and not used in override MapOf by GopherJS
+func bucketOf(ktyp, etyp *abi.Type) *abi.Type
+
+//gopherjs:purge Relates to GC programs not valid for GopherJS
+func (t *rtype) gcSlice(begin, end uintptr) []byte
+
+//gopherjs:purge Relates to GC programs not valid for GopherJS
+func emitGCMask(out []byte, base uintptr, typ *abi.Type, n uintptr)
+
+//gopherjs:purge Relates to GC programs not valid for GopherJS
+func appendGCProg(dst []byte, typ *abi.Type) []byte

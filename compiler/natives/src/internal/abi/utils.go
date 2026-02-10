@@ -9,7 +9,10 @@ import (
 )
 
 // GOPHERJS: These utils are being added because they are common between
-// reflect and reflectlite.
+// reflect and reflectlite. The [Go proverb](https://go-proverbs.github.io/),
+// "A little copying is better than a little dependency," isn't applicable
+// when both reflect and reflectlite already depend on ABI. We can reduce
+// our native overrides in both locations by putting common code here.
 
 //gopherjs:new
 type errorString struct {

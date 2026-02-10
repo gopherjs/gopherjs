@@ -462,3 +462,12 @@ func CopyStruct(dst, src *js.Object, typ *Type) {
 		dst.Set(prop, src.Get(prop))
 	}
 }
+
+//gopherjs:purge Uses unsafeSliceFor
+func (t *Type) GcSlice(begin, end uintptr) []byte
+
+//gopherjs:purge Uses unsafe.String or stringHeader
+func unsafeStringFor(b *byte, l int) string
+
+//gopherjs:purge Uses unsafe.Slice or sliceHeader
+func unsafeSliceFor(b *byte, l int) []byte

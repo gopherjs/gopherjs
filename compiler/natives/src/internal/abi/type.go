@@ -30,7 +30,7 @@ func (t *Type) setUncommon(ut *UncommonType) {
 	js.InternalObject(t).Set(idUncommonType, js.InternalObject(ut))
 }
 
-//gopherjs:add This is the same as ArrayType(), MapType(), etc but they didn't have one for ChanType.
+//gopherjs:add This is the same as ArrayType(), MapType(), etc but for ChanType.
 func (t *Type) ChanType() *ChanType {
 	if t.Kind() != Chan {
 		return nil
@@ -38,7 +38,7 @@ func (t *Type) ChanType() *ChanType {
 	return (*ChanType)(unsafe.Pointer(t))
 }
 
-//gopherjs:add This is the same as ArrayType(), MapType(), etc but they didn't have one for PtrType.
+//gopherjs:add This is the same as ArrayType(), MapType(), etc but for PtrType.
 func (t *Type) PtrType() *PtrType {
 	if t.Kind() != Pointer {
 		return nil
@@ -46,7 +46,7 @@ func (t *Type) PtrType() *PtrType {
 	return (*PtrType)(unsafe.Pointer(t))
 }
 
-//gopherjs:add This is the same as ArrayType(), MapType(), etc but they didn't have one for SliceType.
+//gopherjs:add This is the same as ArrayType(), MapType(), etc but for SliceType.
 func (t *Type) SliceType() *SliceType {
 	if t.Kind() != Slice {
 		return nil

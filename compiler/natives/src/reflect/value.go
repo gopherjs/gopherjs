@@ -779,7 +779,7 @@ func (v Value) SetCap(n int) {
 	if n < s.Get("$length").Int() || n > s.Get("$capacity").Int() {
 		panic("reflect: slice capacity out of range in SetCap")
 	}
-	newSlice := jsType(v.typ).New(s.Get("$array"))
+	newSlice := v.typ().JsType().New(s.Get("$array"))
 	newSlice.Set("$offset", s.Get("$offset"))
 	newSlice.Set("$length", s.Get("$length"))
 	newSlice.Set("$capacity", n)
@@ -793,7 +793,7 @@ func (v Value) SetLen(n int) {
 	if n < 0 || n > s.Get("$capacity").Int() {
 		panic("reflect: slice length out of range in SetLen")
 	}
-	newSlice := jsType(v.typ).New(s.Get("$array"))
+	newSlice := v.typ().JsType().New(s.Get("$array"))
 	newSlice.Set("$offset", s.Get("$offset"))
 	newSlice.Set("$length", n)
 	newSlice.Set("$capacity", s.Get("$capacity"))
@@ -803,7 +803,7 @@ func (v Value) SetLen(n int) {
 func (v Value) Slice(i, j int) Value {
 	var (
 		cap int
-		typ Type
+		typ *abi.Type
 		s   *js.Object
 	)
 	switch kind := v.kind(); kind {
@@ -811,13 +811,13 @@ func (v Value) Slice(i, j int) Value {
 		if v.flag&flagAddr == 0 {
 			panic("reflect.Value.Slice: slice of unaddressable array")
 		}
-		tt := (*arrayType)(unsafe.Pointer(v.typ))
-		cap = int(tt.len)
-		typ = SliceOf(tt.elem)
-		s = jsType(typ).New(v.object())
+		tt := v.typ().ArrayType()
+		cap = int(tt.Len)
+		typ = SliceOf(toRType(tt.Elem)).common()
+		s = typ.JsType().New(v.object())
 
 	case Slice:
-		typ = v.typ
+		typ = v.typ()
 		s = v.object()
 		cap = s.Get("$capacity").Int()
 
@@ -829,7 +829,7 @@ func (v Value) Slice(i, j int) Value {
 		return ValueOf(str[i:j])
 
 	default:
-		panic(&ValueError{"reflect.Value.Slice", kind})
+		panic(&ValueError{Method: "reflect.Value.Slice", Kind: kind})
 	}
 
 	if i < 0 || j < i || j > cap {
@@ -842,7 +842,7 @@ func (v Value) Slice(i, j int) Value {
 func (v Value) Slice3(i, j, k int) Value {
 	var (
 		cap int
-		typ Type
+		typ *abi.Type
 		s   *js.Object
 	)
 	switch kind := v.kind(); kind {
@@ -850,18 +850,18 @@ func (v Value) Slice3(i, j, k int) Value {
 		if v.flag&flagAddr == 0 {
 			panic("reflect.Value.Slice: slice of unaddressable array")
 		}
-		tt := (*arrayType)(unsafe.Pointer(v.typ))
-		cap = int(tt.len)
-		typ = SliceOf(tt.elem)
-		s = jsType(typ).New(v.object())
+		tt := v.typ().ArrayType()
+		cap = int(tt.Len)
+		typ = SliceOf(toRType(tt.Elem)).common()
+		s = typ.JsType().New(v.object())
 
 	case Slice:
-		typ = v.typ
+		typ = v.typ()
 		s = v.object()
 		cap = s.Get("$capacity").Int()
 
 	default:
-		panic(&ValueError{"reflect.Value.Slice3", kind})
+		panic(&ValueError{Method: "reflect.Value.Slice3", Kind: kind})
 	}
 
 	if i < 0 || j < i || k < j || k > cap {
@@ -888,12 +888,12 @@ func typedslicecopy(t *abi.Type, dst, src unsafeheader.Slice) int
 func growslice(t *abi.Type, old unsafeheader.Slice, num int) unsafeheader.Slice
 
 //gopherjs:new
-func keyFor(t *rtype, key unsafe.Pointer) (*js.Object, *js.Object) {
+func keyFor(t *abi.Type, key unsafe.Pointer) (*js.Object, *js.Object) {
 	kv := js.InternalObject(key)
 	if kv.Get("$get") != js.Undefined {
 		kv = kv.Call("$get")
 	}
-	k := jsType(t.Key()).Call("keyFor", kv)
+	k := t.Key().JsType().Call("keyFor", kv)
 	return kv, k
 }
 
@@ -907,7 +907,7 @@ func mapaccess(t *abi.Type, m, key unsafe.Pointer) unsafe.Pointer {
 	if entry == js.Undefined {
 		return nil
 	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", entry.Get("v"), jsType(PtrTo(t.Elem()))).Unsafe())
+	return unsafe.Pointer(js.Global.Call("$newDataPointer", entry.Get("v"), t.Elem().JsPtrTo()).Unsafe())
 }
 
 //gopherjs:replace
@@ -915,9 +915,9 @@ func mapassign(t *abi.Type, m, key, val unsafe.Pointer) {
 	kv, k := keyFor(t, key)
 	jsVal := js.InternalObject(val).Call("$get")
 	et := t.Elem()
-	if et.Kind() == Struct {
-		newVal := jsType(et).Call("zero")
-		copyStruct(newVal, jsVal, et)
+	if et.Kind() == abi.Struct {
+		newVal := et.JsType().Call("zero")
+		abi.CopyStruct(newVal, jsVal, et)
 		jsVal = newVal
 	}
 	entry := js.Global.Get("Object").New()
@@ -959,7 +959,7 @@ func mapdelete_faststr(t *abi.Type, m unsafe.Pointer, key string) {
 
 //gopherjs:replace
 type hiter struct {
-	t    Type
+	t    *abi.Type
 	m    *js.Object // Underlying map object.
 	keys *js.Object
 	i    int
@@ -1020,7 +1020,7 @@ func mapiterkey(it *hiter) unsafe.Pointer {
 		// Record the key-value pair for later accesses.
 		it.last = kv
 	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("k"), jsType(PtrTo(it.t.Key()))).Unsafe())
+	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("k"), it.t.Key().JsPtrTo()).Unsafe())
 }
 
 //gopherjs:replace
@@ -1037,7 +1037,7 @@ func mapiterelem(it *hiter) unsafe.Pointer {
 		kv = it.m.Call("get", k)
 		it.last = kv
 	}
-	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("v"), jsType(PtrTo(it.t.Elem()))).Unsafe())
+	return unsafe.Pointer(js.Global.Call("$newDataPointer", kv.Get("v"), it.t.Elem().JsPtrTo()).Unsafe())
 }
 
 //gopherjs:replace

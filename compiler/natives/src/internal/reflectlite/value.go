@@ -52,11 +52,7 @@ func (v Value) assignTo(context string, dst *abi.Type, target unsafe.Pointer) Va
 		// Same memory layout, so no harm done.
 		fl := v.flag&(flagAddr|flagIndir) | v.flag.ro()
 		fl |= flag(dst.Kind())
-		return Value{
-			typ:  dst,
-			ptr:  v.ptr,
-			flag: fl,
-		}
+		return Value{dst, v.ptr, fl}
 
 	case implements(dst, v.typ):
 		if target == nil {
@@ -71,11 +67,7 @@ func (v Value) assignTo(context string, dst *abi.Type, target unsafe.Pointer) Va
 		} else {
 			ifaceE2I(dst, x, target)
 		}
-		return Value{
-			typ:  dst,
-			ptr:  target,
-			flag: flagIndir | flag(Interface),
-		}
+		return Value{dst, target, flagIndir | flag(Interface)}
 	}
 
 	// Failed.
@@ -130,7 +122,7 @@ func (v Value) Set(x Value) {
 		case abi.Interface:
 			js.InternalObject(v.ptr).Call("$set", js.InternalObject(valueInterface(x)))
 		case abi.Struct:
-			abi.CopyStruct(js.InternalObject(v.ptr), js.InternalObject(x.ptr), v.typ)
+			copyStruct(js.InternalObject(v.ptr), js.InternalObject(x.ptr), v.typ)
 		default:
 			js.InternalObject(v.ptr).Call("$set", x.object())
 		}
@@ -147,7 +139,7 @@ func (v Value) Elem() Value {
 		if val == js.Global.Get("$ifaceNil") {
 			return Value{}
 		}
-		typ := abi.ReflectType(val.Get("constructor"))
+		typ := reflectType(val.Get("constructor"))
 		return makeValue(typ, val.Get("$val"), v.flag.ro())
 
 	case abi.Pointer:
@@ -180,7 +172,7 @@ func (v Value) Field(i int) Value {
 		panic("reflect: Field index out of range")
 	}
 
-	prop := v.typ.JsType().Get("fields").Index(i).Get("prop").String()
+	prop := jsType(v.typ).Get("fields").Index(i).Get("prop").String()
 	field := &tt.Fields[i]
 	typ := field.Typ
 
@@ -199,14 +191,10 @@ func (v Value) Field(i int) Value {
 				v = v.Field(0)
 				if v.typ == abi.JsObjectPtr {
 					o := v.object().Get("object")
-					return Value{
-						typ: typ,
-						ptr: unsafe.Pointer(typ.JsPtrTo().New(
-							js.InternalObject(func() *js.Object { return js.Global.Call("$internalize", o.Get(jsTag), typ.JsType()) }),
-							js.InternalObject(func(x *js.Object) { o.Set(jsTag, js.Global.Call("$externalize", x, typ.JsType())) }),
-						).Unsafe()),
-						flag: fl,
-					}
+					return Value{typ, unsafe.Pointer(typ.JsPtrTo().New(
+						js.InternalObject(func() *js.Object { return js.Global.Call("$internalize", o.Get(jsTag), jsType(typ)) }),
+						js.InternalObject(func(x *js.Object) { o.Set(jsTag, js.Global.Call("$externalize", x, jsType(typ))) }),
+					).Unsafe()), fl}
 				}
 				if v.typ.Kind() == abi.Pointer {
 					v = v.Elem()
@@ -217,14 +205,10 @@ func (v Value) Field(i int) Value {
 
 	s := js.InternalObject(v.ptr)
 	if fl&flagIndir != 0 && typ.Kind() != abi.Array && typ.Kind() != abi.Struct {
-		return Value{
-			typ: typ,
-			ptr: unsafe.Pointer(typ.JsPtrTo().New(
-				js.InternalObject(func() *js.Object { return abi.WrapJsObject(typ, s.Get(prop)) }),
-				js.InternalObject(func(x *js.Object) { s.Set(prop, abi.UnwrapJsObject(typ, x)) }),
-			).Unsafe()),
-			flag: fl,
-		}
+		return Value{typ, unsafe.Pointer(typ.JsPtrTo().New(
+			js.InternalObject(func() *js.Object { return abi.WrapJsObject(typ, s.Get(prop)) }),
+			js.InternalObject(func(x *js.Object) { s.Set(prop, abi.UnwrapJsObject(typ, x)) }),
+		).Unsafe()), fl}
 	}
-	return makeValue(typ, abi.WrapJsObject(typ, s.Get(prop)), fl)
+	return makeValue(toRType(typ), abi.WrapJsObject(typ, s.Get(prop)), fl)
 }

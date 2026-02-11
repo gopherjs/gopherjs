@@ -184,6 +184,7 @@ func (v Value) Field(i int) Value {
 	if tt == nil {
 		panic(&ValueError{Method: "reflect.Value.Field", Kind: v.kind()})
 	}
+
 	if uint(i) >= uint(len(tt.Fields)) {
 		panic("reflect: Field index out of range")
 	}

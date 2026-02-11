@@ -471,7 +471,7 @@ func (v Value) Field(i int) Value {
 		if jsTag := abi.GetJsTag(tag); jsTag != "" {
 			for {
 				v = v.Field(0)
-				if abi.IsJsObjectPtr(v.typ()) {
+				if v.typ() == abi.JsObjectPtr {
 					o := v.object().Get("object")
 					return Value{
 						typ_: typ,

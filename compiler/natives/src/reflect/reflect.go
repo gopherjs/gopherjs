@@ -11,7 +11,7 @@ import (
 	"github.com/gopherjs/gopherjs/js"
 )
 
-//gopherjs:add
+//gopherjs:replace
 func cvtDirect(v Value, typ Type) Value {
 	srcVal := v.object()
 	if srcVal == v.typ().JsType().Get("nil") {
@@ -60,7 +60,7 @@ func cvtDirect(v Value, typ Type) Value {
 
 // convertOp: []T -> *[N]T
 //
-//gopherjs:add
+//gopherjs:replace
 func cvtSliceArrayPtr(v Value, t Type) Value {
 	slice := v.object()
 
@@ -79,7 +79,7 @@ func cvtSliceArrayPtr(v Value, t Type) Value {
 
 // convertOp: []T -> [N]T
 //
-//gopherjs:add
+//gopherjs:replace
 func cvtSliceArray(v Value, t Type) Value {
 	n := t.Len()
 	if n > v.Len() {
@@ -139,7 +139,7 @@ func Copy(dst, src Value) int {
 	return js.Global.Call("$copySlice", dstVal, srcVal).Int()
 }
 
-//gopherjs:add
+//gopherjs:replace
 func valueInterface(v Value, safe bool) any {
 	if v.flag == 0 {
 		panic(&ValueError{Method: "reflect.Value.Interface", Kind: 0})
@@ -163,7 +163,7 @@ func valueInterface(v Value, safe bool) any {
 	return any(unsafe.Pointer(v.object().Unsafe()))
 }
 
-//gopherjs:add
+//gopherjs:new
 func (t *rtype) pointers() bool {
 	switch t.Kind() {
 	case Ptr, Map, Chan, Func, Struct, Array:
@@ -232,10 +232,10 @@ func (t *rtype) Method(i int) (m Method) {
 	return m
 }
 
-//gopherjs:add
+//gopherjs:new
 var selectHelper = js.Global.Get("$select").Interface().(func(...any) *js.Object)
 
-//gopherjs:add
+//gopherjs:replace
 func chanrecv(ch unsafe.Pointer, nb bool, val unsafe.Pointer) (selected, received bool) {
 	comms := [][]*js.Object{{js.InternalObject(ch)}}
 	if nb {
@@ -250,7 +250,7 @@ func chanrecv(ch unsafe.Pointer, nb bool, val unsafe.Pointer) (selected, receive
 	return true, recvRes.Index(1).Bool()
 }
 
-//gopherjs:add
+//gopherjs:replace
 func chansend(ch unsafe.Pointer, val unsafe.Pointer, nb bool) bool {
 	comms := [][]*js.Object{{js.InternalObject(ch), js.InternalObject(val).Call("$get")}}
 	if nb {
@@ -263,7 +263,7 @@ func chansend(ch unsafe.Pointer, val unsafe.Pointer, nb bool) bool {
 	return true
 }
 
-//gopherjs:add
+//gopherjs:replace
 func rselect(rselects []runtimeSelect) (chosen int, recvOK bool) {
 	comms := make([][]*js.Object, len(rselects))
 	for i, s := range rselects {
@@ -309,7 +309,7 @@ func DeepEqual(a1, a2 any) bool {
 	return deepValueEqualJs(ValueOf(a1), ValueOf(a2), nil)
 }
 
-//gopherjs:add
+//gopherjs:new
 func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	if !v1.IsValid() || !v2.IsValid() {
 		return !v1.IsValid() && !v2.IsValid()
@@ -317,7 +317,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	if v1.Type() != v2.Type() {
 		return false
 	}
-	if abi.IsJsObjectPtr(v1.typ()) {
+	if v1.typ() == abi.JsObjectPtr {
 		return abi.UnwrapJsObject(abi.JsObjectPtr, v1.object()) == abi.UnwrapJsObject(abi.JsObjectPtr, v2.object())
 	}
 
@@ -394,7 +394,7 @@ func deepValueEqualJs(v1, v2 Value, visited [][2]unsafe.Pointer) bool {
 	return js.Global.Call("$interfaceIsEqual", js.InternalObject(valueInterface(v1, false)), js.InternalObject(valueInterface(v2, false))).Bool()
 }
 
-//gopherjs:add
+//gopherjs:new
 func stringsLastIndex(s string, c byte) int {
 	for i := len(s) - 1; i >= 0; i-- {
 		if s[i] == c {
@@ -404,12 +404,12 @@ func stringsLastIndex(s string, c byte) int {
 	return -1
 }
 
-//gopherjs:add
+//gopherjs:new
 func stringsHasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
 
-//gopherjs:add
+//gopherjs:replace
 func verifyNotInHeapPtr(p uintptr) bool {
 	// Go runtime uses this method to make sure that a uintptr won't crash GC if
 	// interpreted as a heap pointer. This is not relevant for GopherJS, so we can

@@ -2,8 +2,18 @@
 
 package reflectlite
 
+import "internal/abi"
+
+// Field returns the i'th field of the struct v.
+// It panics if v's Kind is not Struct or i is out of range.
+//
 //gopherjs:replace
-func Field(v Value, i int) Value { return v.Field(i) }
+func Field(v Value, i int) Value {
+	if v.kind() != abi.Struct {
+		panic(&ValueError{"reflect.Value.Field", v.kind()})
+	}
+	return v.Field(i)
+}
 
 //gopherjs:purge Used in FirstMethodNameBytes
 type EmbedWithUnexpMeth struct{}

@@ -88,6 +88,21 @@ func GetJsTag(tag string) string {
 	return ""
 }
 
+// NewMethodName creates name instance for a method.
+//
+// Input object is expected to be an entry of the "methods" list of the
+// corresponding JS type.
+//
+//gopherjs:new
+func NewMethodName(m *js.Object) Name {
+	return Name{
+		name:     internalStr(m.Get("name")),
+		tag:      "",
+		pkgPath:  internalStr(m.Get("pkg")),
+		exported: internalStr(m.Get("pkg")) == "",
+	}
+}
+
 //gopherjs:new
 func UnsafeNew(typ *Type) unsafe.Pointer {
 	switch typ.Kind() {

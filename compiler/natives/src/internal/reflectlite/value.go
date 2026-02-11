@@ -77,7 +77,7 @@ func (v Value) assignTo(context string, dst *abi.Type, target unsafe.Pointer) Va
 func (v Value) IsNil() bool {
 	switch k := v.kind(); k {
 	case abi.Pointer, abi.Slice:
-		return v.object() == v.typ.JsType().Get("nil")
+		return v.object() == jsType(v.typ).Get("nil")
 	case abi.Chan:
 		return v.object() == js.Global.Get("$chanNil")
 	case abi.Func:
@@ -112,16 +112,16 @@ func (v Value) Len() int {
 //gopherjs:replace
 func (v Value) Set(x Value) {
 	v.mustBeAssignable()
-	x.mustBeExported()
+	x.mustBeExported() // TODO(grantnelson-wf): This uses the unimplemented `methodName()`. When methodName is fixed we can use Set to test.
 	x = x.assignTo("reflect.Set", v.typ, nil)
 	if v.flag&flagIndir != 0 {
 		switch v.typ.Kind() {
 		case abi.Array:
-			v.typ.JsType().Call("copy", js.InternalObject(v.ptr), js.InternalObject(x.ptr))
+			jsType(v.typ).Call("copy", js.InternalObject(v.ptr), js.InternalObject(x.ptr))
 		case abi.Interface:
 			js.InternalObject(v.ptr).Call("$set", js.InternalObject(valueInterface(x)))
 		case abi.Struct:
-			copyStruct(js.InternalObject(v.ptr), js.InternalObject(x.ptr), v.typ)
+			abi.CopyStruct(js.InternalObject(v.ptr), js.InternalObject(x.ptr), v.typ)
 		default:
 			js.InternalObject(v.ptr).Call("$set", x.object())
 		}
@@ -138,7 +138,7 @@ func (v Value) Elem() Value {
 		if val == js.Global.Get("$ifaceNil") {
 			return Value{}
 		}
-		typ := reflectType(val.Get("constructor"))
+		typ := abi.ReflectType(val.Get("constructor"))
 		return makeValue(typ, val.Get("$val"), v.flag.ro())
 
 	case abi.Pointer:
@@ -149,18 +149,14 @@ func (v Value) Elem() Value {
 		tt := v.typ.PtrType()
 		fl := v.flag&flagRO | flagIndir | flagAddr
 		fl |= flag(tt.Elem.Kind())
-		return Value{
-			typ:  tt.Elem,
-			ptr:  unsafe.Pointer(abi.WrapJsObject(tt.Elem, val).Unsafe()),
-			flag: fl,
-		}
+		return Value{tt.Elem, unsafe.Pointer(abi.WrapJsObject(tt.Elem, val).Unsafe()), fl}
 
 	default:
 		panic(&ValueError{"reflect.Value.Elem", k})
 	}
 }
 
-//gopherjs:new This is added for export_test but is otherwise unused.
+// TODO(grantnelson-wf): Move this to export_test since it is defined there in the original code and only used for tests.
 func (v Value) Field(i int) Value {
 	tt := v.typ.StructType()
 	if tt == nil {
@@ -209,5 +205,5 @@ func (v Value) Field(i int) Value {
 			js.InternalObject(func(x *js.Object) { s.Set(prop, abi.UnwrapJsObject(typ, x)) }),
 		).Unsafe()), fl}
 	}
-	return makeValue(toRType(typ), abi.WrapJsObject(typ, s.Get(prop)), fl)
+	return makeValue(typ, abi.WrapJsObject(typ, s.Get(prop)), fl)
 }

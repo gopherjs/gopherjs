@@ -25,7 +25,7 @@ func init() {
 	used(structType{})
 }
 
-// TODO(grantnelson-wf): After this is in the go1.21 branch, remove it, this is just to minimize diffs.
+// TODO(grantnelson-wf): This is just to minimize diffs. After this is merged into the go1.21 branch, remove it.
 func jsType(typ *abi.Type) *js.Object {
 	return typ.JsType()
 }
@@ -38,11 +38,6 @@ func toAbiType(t Type) *abi.Type {
 //gopherjs:new
 func jsPtrTo(t Type) *js.Object {
 	return toAbiType(t).JsPtrTo()
-}
-
-// TODO(grantnelson-wf): After this is in the go1.21 branch, remove it, this is just to minimize diffs.
-func reflectType(typ *js.Object) rtype {
-	return toRType(abi.ReflectType(typ))
 }
 
 //gopherjs:purge The name type is mostly unused, replaced by abi.Name, except in pkgPath which we don't implement.
@@ -69,24 +64,13 @@ func (t rtype) typeOff(off typeOff) *abi.Type {
 	return t.TypeOff(off)
 }
 
-// TODO(grantnelson-wf): After this is in the go1.21 branch, remove it, this is just to minimize diffs.
-func isWrapped(typ *abi.Type) bool {
-	return typ.IsWrapped()
-}
-
-// TODO(grantnelson-wf): After this is in the go1.21 branch, remove it, this is just to minimize diffs.
-func copyStruct(dst, src *js.Object, typ *abi.Type) {
-	abi.CopyStruct(dst, src, typ)
-}
-
 //gopherjs:new
-func makeValue(t Type, v *js.Object, fl flag) Value {
-	rt := t.common()
+func makeValue(t *abi.Type, v *js.Object, fl flag) Value {
 	switch t.Kind() {
 	case abi.Array, abi.Struct, abi.Pointer:
-		return Value{rt, unsafe.Pointer(v.Unsafe()), fl | flag(t.Kind())}
+		return Value{t, unsafe.Pointer(v.Unsafe()), fl | flag(t.Kind())}
 	}
-	return Value{rt, unsafe.Pointer(js.Global.Call("$newDataPointer", v, rt.JsPtrTo()).Unsafe()), fl | flag(t.Kind()) | flagIndir}
+	return Value{t, unsafe.Pointer(js.Global.Call("$newDataPointer", v, t.JsPtrTo()).Unsafe()), fl | flag(t.Kind()) | flagIndir}
 }
 
 //gopherjs:replace
@@ -94,7 +78,7 @@ func TypeOf(i any) Type {
 	if i == nil {
 		return nil
 	}
-	return reflectType(js.InternalObject(i).Get("constructor"))
+	return toRType(abi.ReflectType(js.InternalObject(i).Get("constructor")))
 }
 
 //gopherjs:replace
@@ -102,7 +86,7 @@ func ValueOf(i any) Value {
 	if i == nil {
 		return Value{}
 	}
-	return makeValue(reflectType(js.InternalObject(i).Get("constructor")), js.InternalObject(i).Get("$val"), 0)
+	return makeValue(abi.ReflectType(js.InternalObject(i).Get("constructor")), js.InternalObject(i).Get("$val"), 0)
 }
 
 //gopherjs:replace
@@ -140,7 +124,7 @@ func methodReceiver(op string, v Value, i int) (fn unsafe.Pointer) {
 		prop = js.Global.Call("$methodSet", jsType(v.typ)).Index(i).Get("prop").String()
 	}
 	rcvr := v.object()
-	if isWrapped(v.typ) {
+	if v.typ.IsWrapped() {
 		rcvr = jsType(v.typ).New(rcvr)
 	}
 	fn = unsafe.Pointer(rcvr.Get(prop).Unsafe())
@@ -157,10 +141,10 @@ func valueInterface(v Value) any {
 		v = makeMethodValue("Interface", v)
 	}
 
-	if isWrapped(v.typ) {
+	if v.typ.IsWrapped() {
 		if v.flag&flagIndir != 0 && v.Kind() == abi.Struct {
 			cv := jsType(v.typ).Call("zero")
-			copyStruct(cv, v.object(), v.typ)
+			abi.CopyStruct(cv, v.object(), v.typ)
 			return any(unsafe.Pointer(jsType(v.typ).New(cv).Unsafe()))
 		}
 		return any(unsafe.Pointer(jsType(v.typ).New(v.object()).Unsafe()))
@@ -173,10 +157,12 @@ func ifaceE2I(t *abi.Type, src any, dst unsafe.Pointer) {
 	abi.IfaceE2I(t, src, dst)
 }
 
+// TODO(grantnelson-wf): methodName returns the name of the calling method,
+// assumed to be two stack frames above. Determine if we can get this value now
+// and if methodName is needed
+//
 //gopherjs:replace
 func methodName() string {
-	// TODO(grantnelson-wf): methodName returns the name of the calling method,
-	// assumed to be two stack frames above.
 	return "?FIXME?"
 }
 
@@ -188,7 +174,7 @@ func makeMethodValue(op string, v Value) Value {
 
 	fn := methodReceiver(op, v, int(v.flag)>>flagMethodShift)
 	rcvr := v.object()
-	if isWrapped(v.typ) {
+	if v.typ.IsWrapped() {
 		rcvr = jsType(v.typ).New(rcvr)
 	}
 	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {

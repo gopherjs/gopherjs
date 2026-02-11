@@ -23,7 +23,8 @@ func (t rtype) Comparable() bool {
 	case abi.Struct:
 		st := t.StructType()
 		for i := 0; i < len(st.Fields); i++ {
-			if !toRType(st.Fields[i].Typ).Comparable() {
+			ft := st.Fields[i]
+			if !toRType(ft.Typ).Comparable() {
 				return false
 			}
 		}

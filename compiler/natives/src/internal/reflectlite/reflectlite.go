@@ -140,7 +140,7 @@ func methodReceiver(op string, v Value, i int) (fn unsafe.Pointer) {
 //gopherjs:replace
 func valueInterface(v Value) any {
 	if v.flag == 0 {
-		panic(&ValueError{Method: "reflect.Value.Interface", Kind: 0})
+		panic(&ValueError{"reflect.Value.Interface", 0})
 	}
 
 	if v.flag&flagMethod != 0 {

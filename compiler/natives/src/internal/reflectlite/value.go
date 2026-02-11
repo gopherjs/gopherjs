@@ -17,19 +17,18 @@ func (v Value) object() *js.Object {
 	}
 	if v.flag&flagIndir != 0 {
 		val := js.InternalObject(v.ptr).Call("$get")
-		jsTyp := v.typ.JsType()
-		if val != js.Global.Get("$ifaceNil") && val.Get("constructor") != jsTyp {
+		if val != js.Global.Get("$ifaceNil") && val.Get("constructor") != jsType(v.typ) {
 			switch v.typ.Kind() {
 			case abi.Uint64, abi.Int64:
-				val = jsTyp.New(val.Get("$high"), val.Get("$low"))
+				val = jsType(v.typ).New(val.Get("$high"), val.Get("$low"))
 			case abi.Complex64, abi.Complex128:
-				val = jsTyp.New(val.Get("$real"), val.Get("$imag"))
+				val = jsType(v.typ).New(val.Get("$real"), val.Get("$imag"))
 			case abi.Slice:
 				if val == val.Get("constructor").Get("nil") {
-					val = jsTyp.Get("nil")
+					val = jsType(v.typ).Get("nil")
 					break
 				}
-				newVal := jsTyp.New(val.Get("$array"))
+				newVal := jsType(v.typ).New(val.Get("$array"))
 				newVal.Set("$offset", val.Get("$offset"))
 				newVal.Set("$length", val.Get("$length"))
 				newVal.Set("$capacity", val.Get("$capacity"))
@@ -71,7 +70,7 @@ func (v Value) assignTo(context string, dst *abi.Type, target unsafe.Pointer) Va
 	}
 
 	// Failed.
-	panic(context + ": value of type " + toRType(v.typ).String() + " is not assignable to type " + toRType(dst).String())
+	panic(context + ": value of type " + v.typ.String() + " is not assignable to type " + dst.String())
 }
 
 //gopherjs:replace

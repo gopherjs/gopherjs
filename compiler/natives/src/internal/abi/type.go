@@ -439,6 +439,25 @@ func CopyStruct(dst, src *js.Object, typ *Type) {
 	}
 }
 
+//gopherjs:new
+func (t *Type) Comparable() bool {
+	switch t.Kind() {
+	case Func, Slice, Map:
+		return false
+	case Array:
+		return t.Elem().Comparable()
+	case Struct:
+		st := t.StructType()
+		for i := 0; i < len(st.Fields); i++ {
+			ft := st.Fields[i]
+			if !ft.Typ.Comparable() {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 //gopherjs:purge Used for pointer arthmatic
 func addChecked(p unsafe.Pointer, x uintptr, whySafe string) unsafe.Pointer
 

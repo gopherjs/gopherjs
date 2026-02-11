@@ -175,19 +175,7 @@ func (t *rtype) pointers() bool {
 
 //gopherjs:replace
 func (t *rtype) Comparable() bool {
-	switch t.Kind() {
-	case Func, Slice, Map:
-		return false
-	case Array:
-		return t.Elem().Comparable()
-	case Struct:
-		for i := 0; i < t.NumField(); i++ {
-			if !t.Field(i).Type.Comparable() {
-				return false
-			}
-		}
-	}
-	return true
+	return toAbiType(t).Comparable()
 }
 
 //gopherjs:replace

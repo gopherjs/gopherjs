@@ -238,6 +238,23 @@ func (typ *Type) JsPtrTo() *js.Object {
 //=================================================================================
 
 //gophejs:replace
+func (t *Type) Elem() *Type {
+	switch t.Kind() {
+	case Array:
+		return t.ArrayType().Elem
+	case Chan:
+		return t.ChanType().Elem
+	case Map:
+		return t.MapType().Elem
+	case Pointer:
+		return t.PtrType().Elem
+	case Slice:
+		return t.SliceType().Elem
+	}
+	return nil
+}
+
+//gophejs:replace
 func (t *Type) StructType() *StructType {
 	return getKindType[StructType](Struct, t)
 }

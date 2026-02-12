@@ -166,9 +166,16 @@ func setKindType(abiTyp *Type, kindType any) {
 	js.InternalObject(abiTyp).Set(idKindType, js.InternalObject(kindType))
 }
 
+// getKindType will get the type specific to the kind if this type.
+// For example `getKindType[StructType](Struct, t)` returns t cast to a
+// [*StructType], or nil if the type's kind is not a [Struct].
+//
 //gopherjs:new
-func (t *Type) KindType() *Type {
-	return (*Type)(unsafe.Pointer(js.InternalObject(t).Get(idKindType)))
+func getKindType[T any](kind Kind, t *Type) *T {
+	if t.Kind() != kind {
+		return nil
+	}
+	return (*T)(unsafe.Pointer(js.InternalObject(t).Get(idKindType)))
 }
 
 //gopherjs:replace
@@ -225,28 +232,49 @@ func (typ *Type) JsPtrTo() *js.Object {
 	return typ.PtrTo().JsType()
 }
 
+//=================================================================================
+// TODO(grantnelson-wf): Test out overriding the cast of pointer types to Work for typeKinds.
+// If the override works, find all unsafe pointer casts still being done and override them, e.g. Elem().
+//=================================================================================
+
+//gophejs:replace
+func (t *Type) StructType() *StructType {
+	return getKindType[StructType](Struct, t)
+}
+
+//gophejs:replace
+func (t *Type) MapType() *MapType {
+	return getKindType[MapType](Map, t)
+}
+
+//gophejs:replace
+func (t *Type) ArrayType() *ArrayType {
+	return getKindType[ArrayType](Array, t)
+}
+
+//gophejs:replace
+func (t *Type) FuncType() *FuncType {
+	return getKindType[FuncType](Func, t)
+}
+
+//gophejs:replace
+func (t *Type) InterfaceType() *InterfaceType {
+	return getKindType[InterfaceType](Interface, t)
+}
+
 //gopherjs:new Same as ArrayType(), MapType(), etc but for ChanType.
 func (t *Type) ChanType() *ChanType {
-	if t.Kind() != Chan {
-		return nil
-	}
-	return (*ChanType)(unsafe.Pointer(t))
+	return getKindType[ChanType](Chan, t)
 }
 
 //gopherjs:new Same as ArrayType(), MapType(), etc but for PtrType.
 func (t *Type) PtrType() *PtrType {
-	if t.Kind() != Pointer {
-		return nil
-	}
-	return (*PtrType)(unsafe.Pointer(t))
+	return getKindType[PtrType](Pointer, t)
 }
 
 //gopherjs:new Same as ArrayType(), MapType(), etc but for SliceType
 func (t *Type) SliceType() *SliceType {
-	if t.Kind() != Slice {
-		return nil
-	}
-	return (*SliceType)(unsafe.Pointer(t))
+	return getKindType[SliceType](Slice, t)
 }
 
 //gopherjs:new Shared by reflect and reflectlite rtypes

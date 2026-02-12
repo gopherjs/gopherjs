@@ -294,6 +294,40 @@ func (t *Type) SliceType() *SliceType {
 	return getKindType[SliceType](Slice, t)
 }
 
+// Len returns the length of t if t is an array type, otherwise 0
+//
+//gopherjs:replace Used a pointer cast to get the array kind type.
+func (t *Type) Len() int {
+	if arr := t.ArrayType(); arr != nil {
+		return int(arr.Len)
+	}
+	return 0
+}
+
+//gopherjs:replace Used a pointer cast to get the chan kind type.
+func (t *Type) ChanDir() ChanDir {
+	if ch := t.ChanType(); ch != nil {
+		return ch.Dir
+	}
+	return InvalidDir
+}
+
+//gopherjs:replace Used a pointer cast to get the interface kind type.
+func (t *Type) NumMethod() int {
+	if tt := t.InterfaceType(); tt != nil {
+		return tt.NumMethod()
+	}
+	return len(t.ExportedMethods())
+}
+
+//gopherjs:replace Used a pointer cast to get the map kind type.
+func (t *Type) Key() *Type {
+	if mt := t.MapType(); mt != nil {
+		return mt.Key
+	}
+	return nil
+}
+
 //gopherjs:new Shared by reflect and reflectlite rtypes
 func (t *Type) String() string {
 	s := t.NameOff(t.Str).Name()

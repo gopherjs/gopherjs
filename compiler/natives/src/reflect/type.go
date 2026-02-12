@@ -27,6 +27,22 @@ func init() {
 	used(structField{})
 }
 
+// GOPHERJS: In Go the rtype and ABI Type share a memory footprint so a pointer
+// to one is a pointer to the other. This doesn't work in JS so instead we construct
+// a new rtype with a `*abi.Type` inside of it but that means the pointers are
+// different and multiple `*rtypes` may point to the same ABI type.
+// (reflectlite does this better by having the rtype not be a pointer.)
+//
+//gopherjs:replace
+type rtype struct {
+	t *abi.Type
+}
+
+//gopherjs:replace
+func (t *rtype) common() *abi.Type {
+	return t.t
+}
+
 //gopherjs:new
 func toAbiType(typ Type) *abi.Type {
 	return typ.(*rtype).common()
@@ -40,6 +56,16 @@ func jsType(typ Type) *js.Object {
 //gopherjs:replace
 func (t *rtype) ptrTo() *abi.Type {
 	return toAbiType(t).PtrTo()
+}
+
+//gopherjs:replace
+func toRType(t *abi.Type) *rtype {
+	return &rtype{t: t}
+}
+
+//gopherjs:replace
+func (t *rtype) String() string {
+	return toAbiType(t).String()
 }
 
 //gopherjs:purge
@@ -91,6 +117,19 @@ func TypeOf(i any) Type {
 //gopherjs:replace
 func rtypeOf(i any) *abi.Type {
 	return abi.ReflectType(js.InternalObject(i).Get("constructor"))
+}
+
+// GOPHERJS: reflect defined instance of interface type has the same issue
+// that rtype has with assuming the pointers can be the same for.
+//
+//gopherjs:replace
+type interfaceType struct {
+	*abi.InterfaceType
+}
+
+//gopherjs:new
+func toInterfaceType(typ *abi.Type) *interfaceType {
+	return &interfaceType{InterfaceType: typ.InterfaceType()}
 }
 
 //gopherjs:replace

@@ -15,3 +15,8 @@ type mapType = abi.MapType
 func (t rtype) Comparable() bool {
 	return toAbiType(t).Comparable()
 }
+
+//gopherjs:replace
+func (t rtype) String() string {
+	return toAbiType(t).String()
+}

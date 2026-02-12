@@ -117,7 +117,7 @@ func makeInt(f flag, bits uint64, t Type) Value {
 func methodReceiver(op string, v Value, methodIndex int) (rcvrtype *abi.Type, t *funcType, fn unsafe.Pointer) {
 	i := methodIndex
 	var prop string
-	if tt := v.typ().InterfaceType(); tt != nil {
+	if tt := toInterfaceType(v.typ()); tt != nil {
 		if i < 0 || i >= len(tt.Methods) {
 			panic("reflect: internal error: invalid method index")
 		}
@@ -433,7 +433,7 @@ func (v Value) Elem() Value {
 			return Value{}
 		}
 		val := v.object()
-		tt := v.typ().PtrType()
+		tt := toPtrType(v.typ())
 		fl := v.flag&flagRO | flagIndir | flagAddr
 		fl |= flag(tt.Elem.Kind())
 		return Value{tt.Elem, unsafe.Pointer(abi.WrapJsObject(tt.Elem, val).Unsafe()), fl}
@@ -446,13 +446,13 @@ func (v Value) Elem() Value {
 //gopherjs:replace
 func (v Value) NumField() int {
 	v.mustBe(Struct)
-	tt := v.typ().StructType()
+	tt := toStructType(v.typ())
 	return len(tt.Fields)
 }
 
 //gopherjs:replace
 func (v Value) Field(i int) Value {
-	tt := v.typ().StructType()
+	tt := toStructType(v.typ())
 	if tt == nil {
 		panic(&ValueError{"reflect.Value.Field", v.kind()})
 	}
@@ -565,7 +565,7 @@ func typedarrayclear(elemType *abi.Type, ptr unsafe.Pointer, len int)
 func (v Value) Clear() {
 	switch v.Kind() {
 	case Slice:
-		elem := v.typ().SliceType().Elem
+		elem := toSliceType(v.typ()).Elem
 		zeroFn := elem.JsType().Get("zero")
 		a := js.InternalObject(v.ptr)
 		offset := a.Get("$offset").Int()
@@ -606,7 +606,7 @@ func (v Value) Index(i int) Value {
 		if i < 0 || i >= s.Get("$length").Int() {
 			panic("reflect: slice index out of range")
 		}
-		tt := v.typ().SliceType()
+		tt := toSliceType(v.typ())
 		typ := tt.Elem
 		fl := flagAddr | flagIndir | v.flag.ro() | flag(typ.Kind())
 

@@ -178,14 +178,6 @@ func (t *rtype) Comparable() bool {
 	return toAbiType(t).Comparable()
 }
 
-//gopherjs:replace Used pointer cast to interface kind type.
-func (t *rtype) NumMethod() int {
-	if tt := t.common().InterfaceType(); tt != nil {
-		return tt.NumMethod()
-	}
-	return len(t.exportedMethods())
-}
-
 //gopherjs:replace
 func (t *rtype) Method(i int) (m Method) {
 	if t.Kind() == Interface {

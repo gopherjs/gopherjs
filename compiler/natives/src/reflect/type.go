@@ -29,8 +29,9 @@ func init() {
 
 // GOPHERJS: In Go the rtype and ABI Type share a memory footprint so a pointer
 // to one is a pointer to the other. This doesn't work in JS so instead we construct
-// a new rtype with a `*abi.Type` inside of it but that means the pointers are
-// different and multiple `*rtypes` may point to the same ABI type.
+// a new rtype with a `*abi.Type` inside of it. However, that means the pointers are
+// different and multiple `*rtypes` may point to the same ABI type, so we have to
+// take that into account when overriding code or leaving the original code.
 // (reflectlite does this better by having the rtype not be a pointer.)
 //
 //gopherjs:replace
@@ -119,17 +120,72 @@ func rtypeOf(i any) *abi.Type {
 	return abi.ReflectType(js.InternalObject(i).Get("constructor"))
 }
 
-// GOPHERJS: reflect defined instance of interface type has the same issue
-// that rtype has with assuming the pointers can be the same for.
-//
-//gopherjs:replace
+//gopherjs:purge Unused type
+type common struct{}
+
+//gopherjs:replace Same issue as rtype
 type interfaceType struct {
 	*abi.InterfaceType
 }
 
 //gopherjs:new
 func toInterfaceType(typ *abi.Type) *interfaceType {
-	return &interfaceType{InterfaceType: typ.InterfaceType()}
+	if tt := typ.InterfaceType(); tt != nil {
+		return &interfaceType{InterfaceType: tt}
+	}
+	return nil
+}
+
+//gopherjs:replace Same issue as rtype
+type mapType struct {
+	*abi.MapType
+}
+
+//gopherjs:new
+func toMapType(typ *abi.Type) *mapType {
+	if tt := typ.MapType(); tt != nil {
+		return &mapType{MapType: tt}
+	}
+	return nil
+}
+
+//gopherjs:replace Same issue as rtype
+type ptrType struct {
+	*abi.PtrType
+}
+
+//gopherjs:new
+func toPtrType(typ *abi.Type) *ptrType {
+	if tt := typ.PtrType(); tt != nil {
+		return &ptrType{PtrType: tt}
+	}
+	return nil
+}
+
+//gopherjs:replace Same issue as rtype
+type sliceType struct {
+	*abi.SliceType
+}
+
+//gopherjs:new
+func toSliceType(typ *abi.Type) *sliceType {
+	if tt := typ.SliceType(); tt != nil {
+		return &sliceType{SliceType: tt}
+	}
+	return nil
+}
+
+//gopherjs:replace Same issue as rtype
+type structType struct {
+	*abi.StructType
+}
+
+//gopherjs:new
+func toStructType(typ *abi.Type) *structType {
+	if tt := typ.StructType(); tt != nil {
+		return &structType{StructType: tt}
+	}
+	return nil
 }
 
 //gopherjs:replace
@@ -221,7 +277,7 @@ func StructOf(fields []StructField) Type {
 			switch field.Type.Kind() {
 			case Interface:
 			case Ptr:
-				ptr := ft.PtrType()
+				ptr := toPtrType(ft)
 				if unt := ptr.Uncommon(); unt != nil {
 					if i > 0 && unt.Mcount > 0 {
 						// Issue 15924.
@@ -280,3 +336,107 @@ func emitGCMask(out []byte, base uintptr, typ *abi.Type, n uintptr)
 
 //gopherjs:purge Relates to GC programs not valid for GopherJS
 func appendGCProg(dst []byte, typ *abi.Type) []byte
+
+//gopherjs:replace Used pointer cast to interface kind type.
+func (t *rtype) NumMethod() int {
+	if tt := toInterfaceType(t.common()); tt != nil {
+		return tt.NumMethod()
+	}
+	return len(t.exportedMethods())
+}
+
+//gopherjs:replace Used pointer cast to struct kind type.
+func (t *rtype) Field(i int) StructField {
+	if tt := toStructType(t.common()); tt != nil {
+		return tt.Field(i)
+	}
+	panic("reflect: Field of non-struct type " + t.String())
+}
+
+//gopherjs:replace Used pointer cast to struct kind type.
+func (t *rtype) FieldByIndex(index []int) StructField {
+	if tt := toStructType(t.common()); tt != nil {
+		return tt.FieldByIndex(index)
+	}
+	panic("reflect: FieldByIndex of non-struct type " + t.String())
+}
+
+//gopherjs:replace Used pointer cast to struct kind type.
+func (t *rtype) FieldByName(name string) (StructField, bool) {
+	if tt := toStructType(t.common()); tt != nil {
+		return tt.FieldByName(name)
+	}
+	panic("reflect: FieldByName of non-struct type " + t.String())
+}
+
+//gopherjs:replace Used pointer cast to struct kind type.
+func (t *rtype) FieldByNameFunc(match func(string) bool) (StructField, bool) {
+	if tt := toStructType(t.common()); tt != nil {
+		return tt.FieldByNameFunc(match)
+	}
+	panic("reflect: FieldByNameFunc of non-struct type " + t.String())
+}
+
+//gopherjs:replace Used pointer cast to map kind type.
+func (t *rtype) Key() Type {
+	if tt := toMapType(t.common()); tt != nil {
+		return toType(tt.Key)
+	}
+	panic("reflect: Key of non-map type " + t.String())
+}
+
+//gopherjs:replace Used pointer cast to array kind type.
+func (t *rtype) Len() int {
+	if tt := t.common().ArrayType(); tt != nil {
+		return int(tt.Len)
+	}
+	panic("reflect: Len of non-array type " + t.String())
+}
+
+//gopherjs:replace Used pointer cast to struct kind type.
+func (t *rtype) NumField() int {
+	if tt := toStructType(t.common()); tt != nil {
+		return len(tt.Fields)
+	}
+	panic("reflect: NumField of non-struct type " + t.String())
+}
+
+//gopherjs:replace Used pointer cast to func kind type.
+func (t *rtype) In(i int) Type {
+	if tt := t.common().FuncType(); tt != nil {
+		return toType(tt.InSlice()[i])
+	}
+	panic("reflect: In of non-func type " + t.String())
+}
+
+//gopherjs:replace Used pointer cast to fun kind type.
+func (t *rtype) NumIn() int {
+	if tt := t.common().FuncType(); tt != nil {
+		return tt.NumIn()
+	}
+	panic("reflect: NumIn of non-func type " + t.String())
+}
+
+//gopherjs:replace Used pointer cast to func kind type.
+func (t *rtype) NumOut() int {
+	if tt := t.common().FuncType(); tt != nil {
+		return tt.NumOut()
+	}
+	panic("reflect: NumOut of non-func type " + t.String())
+}
+
+//gopherjs:replace Used pointer cast to func kind type.
+func (t *rtype) Out(i int) Type {
+	if tt := t.common().FuncType(); tt != nil {
+		return toType(tt.OutSlice()[i])
+	}
+	panic("reflect: Out of non-func type " + t.String())
+}
+
+//gopherjs:replace Used pointer cast to func kind type.
+func (t *rtype) IsVariadic() bool {
+	if tt := t.common().FuncType(); tt != nil {
+		return tt.IsVariadic()
+	}
+	panic("reflect: IsVariadic of non-func type " + t.String())
+}

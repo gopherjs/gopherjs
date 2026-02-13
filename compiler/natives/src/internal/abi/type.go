@@ -18,164 +18,153 @@ const (
 
 //gopherjs:new
 func ReflectType(typ *js.Object) *Type {
-	if typ.Get(idReflectType) == js.Undefined {
-		abiTyp := &Type{
-			Size_: uintptr(typ.Get("size").Int()),
-			Kind_: uint8(typ.Get("kind").Int()),
-			Str:   ResolveReflectName(NewName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
-		}
-		js.InternalObject(abiTyp).Set(idJsType, typ)
-		typ.Set(idReflectType, js.InternalObject(abiTyp))
+	// If the object already had the reflect type determined, return it.
+	if typ.Get(idReflectType) != js.Undefined {
+		return (*Type)(unsafe.Pointer(typ.Get(idReflectType).Unsafe()))
+	}
 
-		methodSet := js.Global.Call("$methodSet", typ)
-		if methodSet.Length() != 0 || typ.Get("named").Bool() {
-			abiTyp.TFlag |= TFlagUncommon
-			if typ.Get("named").Bool() {
-				abiTyp.TFlag |= TFlagNamed
-			}
-			var reflectMethods []Method
-			for i := 0; i < methodSet.Length(); i++ { // Exported methods first.
-				m := methodSet.Index(i)
-				exported := internalStr(m.Get("pkg")) == ""
-				if !exported {
-					continue
-				}
-				reflectMethods = append(reflectMethods, Method{
-					Name: ResolveReflectName(NewName(internalStr(m.Get("name")), "", exported, false)),
-					Mtyp: ResolveReflectType(ReflectType(m.Get("typ"))),
-				})
-			}
-			xcount := uint16(len(reflectMethods))
-			for i := 0; i < methodSet.Length(); i++ { // Unexported methods second.
-				m := methodSet.Index(i)
-				exported := internalStr(m.Get("pkg")) == ""
-				if exported {
-					continue
-				}
-				reflectMethods = append(reflectMethods, Method{
-					Name: ResolveReflectName(NewName(internalStr(m.Get("name")), "", exported, false)),
-					Mtyp: ResolveReflectType(ReflectType(m.Get("typ"))),
-				})
-			}
-			ut := &UncommonType{
-				PkgPath:  ResolveReflectName(NewName(internalStr(typ.Get("pkg")), "", false, false)),
-				Mcount:   uint16(methodSet.Length()),
-				Xcount:   xcount,
-				Methods_: reflectMethods,
-			}
-			abiTyp.setUncommon(ut)
-		}
+	// Create new ABI type.
+	abiTyp := &Type{
+		Size_: uintptr(typ.Get("size").Int()),
+		Kind_: uint8(typ.Get("kind").Int()),
+		Str:   ResolveReflectName(NewName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
+	}
+	js.InternalObject(abiTyp).Set(idJsType, typ)
+	typ.Set(idReflectType, js.InternalObject(abiTyp))
 
-		switch abiTyp.Kind() {
-		case Array:
-			setKindType(abiTyp, &ArrayType{
-				Type: *abiTyp,
-				Elem: ReflectType(typ.Get("elem")),
-				Len:  uintptr(typ.Get("len").Int()),
-			})
-		case Chan:
-			dir := BothDir
-			if typ.Get("sendOnly").Bool() {
-				dir = SendDir
+	// Add the UncommonType to ABI type if the type has methods.
+	methodSet := js.Global.Call("$methodSet", typ)
+	if methodSet.Length() != 0 || typ.Get("named").Bool() {
+		abiTyp.TFlag |= TFlagUncommon
+		if typ.Get("named").Bool() {
+			abiTyp.TFlag |= TFlagNamed
+		}
+		var reflectMethods []Method
+		for i := 0; i < methodSet.Length(); i++ { // Exported methods first.
+			m := methodSet.Index(i)
+			exported := internalStr(m.Get("pkg")) == ""
+			if !exported {
+				continue
 			}
-			if typ.Get("recvOnly").Bool() {
-				dir = RecvDir
+			reflectMethods = append(reflectMethods, Method{
+				Name: ResolveReflectName(NewName(internalStr(m.Get("name")), "", exported, false)),
+				Mtyp: ResolveReflectType(ReflectType(m.Get("typ"))),
+			})
+		}
+		xcount := uint16(len(reflectMethods))
+		for i := 0; i < methodSet.Length(); i++ { // Unexported methods second.
+			m := methodSet.Index(i)
+			exported := internalStr(m.Get("pkg")) == ""
+			if exported {
+				continue
 			}
-			setKindType(abiTyp, &ChanType{
-				Type: *abiTyp,
-				Elem: ReflectType(typ.Get("elem")),
-				Dir:  dir,
+			reflectMethods = append(reflectMethods, Method{
+				Name: ResolveReflectName(NewName(internalStr(m.Get("name")), "", exported, false)),
+				Mtyp: ResolveReflectType(ReflectType(m.Get("typ"))),
 			})
-		case Func:
-			params := typ.Get("params")
-			in := make([]*Type, params.Length())
-			for i := range in {
-				in[i] = ReflectType(params.Index(i))
+		}
+		ut := &UncommonType{
+			PkgPath:  ResolveReflectName(NewName(internalStr(typ.Get("pkg")), "", false, false)),
+			Mcount:   uint16(methodSet.Length()),
+			Xcount:   xcount,
+			Methods_: reflectMethods,
+		}
+		js.InternalObject(abiTyp).Set(idUncommonType, js.InternalObject(ut))
+	}
+
+	// Create the kind type for the ABI type if the kind has additional information.
+	switch abiTyp.Kind() {
+	case Array:
+		abiTyp.kindType = &ArrayType{
+			Type: abiTyp,
+			Elem: ReflectType(typ.Get("elem")),
+			Len:  uintptr(typ.Get("len").Int()),
+		}
+	case Chan:
+		dir := BothDir
+		if typ.Get("sendOnly").Bool() {
+			dir = SendDir
+		}
+		if typ.Get("recvOnly").Bool() {
+			dir = RecvDir
+		}
+		abiTyp.kindType = &ChanType{
+			Type: abiTyp,
+			Elem: ReflectType(typ.Get("elem")),
+			Dir:  dir,
+		}
+	case Func:
+		params := typ.Get("params")
+		in := make([]*Type, params.Length())
+		for i := range in {
+			in[i] = ReflectType(params.Index(i))
+		}
+		results := typ.Get("results")
+		out := make([]*Type, results.Length())
+		for i := range out {
+			out[i] = ReflectType(results.Index(i))
+		}
+		outCount := uint16(results.Length())
+		if typ.Get("variadic").Bool() {
+			outCount |= 1 << 15
+		}
+		abiTyp.kindType = &FuncType{
+			Type:     abiTyp,
+			InCount:  uint16(params.Length()),
+			OutCount: outCount,
+			In_:      in,
+			Out_:     out,
+		}
+	case Interface:
+		methods := typ.Get("methods")
+		imethods := make([]Imethod, methods.Length())
+		for i := range imethods {
+			m := methods.Index(i)
+			imethods[i] = Imethod{
+				Name: ResolveReflectName(NewName(internalStr(m.Get("name")), "", internalStr(m.Get("pkg")) == "", false)),
+				Typ:  ResolveReflectType(ReflectType(m.Get("typ"))),
 			}
-			results := typ.Get("results")
-			out := make([]*Type, results.Length())
-			for i := range out {
-				out[i] = ReflectType(results.Index(i))
+		}
+		abiTyp.kindType = &InterfaceType{
+			Type:    abiTyp,
+			PkgPath: NewName(internalStr(typ.Get("pkg")), "", false, false),
+			Methods: imethods,
+		}
+	case Map:
+		abiTyp.kindType = &MapType{
+			Type: abiTyp,
+			Key:  ReflectType(typ.Get("key")),
+			Elem: ReflectType(typ.Get("elem")),
+		}
+	case Pointer:
+		abiTyp.kindType = &PtrType{
+			Type: abiTyp,
+			Elem: ReflectType(typ.Get("elem")),
+		}
+	case Slice:
+		abiTyp.kindType = &SliceType{
+			Type: abiTyp,
+			Elem: ReflectType(typ.Get("elem")),
+		}
+	case Struct:
+		fields := typ.Get("fields")
+		reflectFields := make([]StructField, fields.Length())
+		for i := range reflectFields {
+			f := fields.Index(i)
+			reflectFields[i] = StructField{
+				Name:   NewName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
+				Typ:    ReflectType(f.Get("typ")),
+				Offset: uintptr(i),
 			}
-			outCount := uint16(results.Length())
-			if typ.Get("variadic").Bool() {
-				outCount |= 1 << 15
-			}
-			setKindType(abiTyp, &FuncType{
-				Type:     *abiTyp,
-				InCount:  uint16(params.Length()),
-				OutCount: outCount,
-				In_:      in,
-				Out_:     out,
-			})
-		case Interface:
-			methods := typ.Get("methods")
-			imethods := make([]Imethod, methods.Length())
-			for i := range imethods {
-				m := methods.Index(i)
-				imethods[i] = Imethod{
-					Name: ResolveReflectName(NewName(internalStr(m.Get("name")), "", internalStr(m.Get("pkg")) == "", false)),
-					Typ:  ResolveReflectType(ReflectType(m.Get("typ"))),
-				}
-			}
-			setKindType(abiTyp, &InterfaceType{
-				Type:    *abiTyp,
-				PkgPath: NewName(internalStr(typ.Get("pkg")), "", false, false),
-				Methods: imethods,
-			})
-		case Map:
-			setKindType(abiTyp, &MapType{
-				Type: *abiTyp,
-				Key:  ReflectType(typ.Get("key")),
-				Elem: ReflectType(typ.Get("elem")),
-			})
-		case Pointer:
-			setKindType(abiTyp, &PtrType{
-				Type: *abiTyp,
-				Elem: ReflectType(typ.Get("elem")),
-			})
-		case Slice:
-			setKindType(abiTyp, &SliceType{
-				Type: *abiTyp,
-				Elem: ReflectType(typ.Get("elem")),
-			})
-		case Struct:
-			fields := typ.Get("fields")
-			reflectFields := make([]StructField, fields.Length())
-			for i := range reflectFields {
-				f := fields.Index(i)
-				reflectFields[i] = StructField{
-					Name:   NewName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
-					Typ:    ReflectType(f.Get("typ")),
-					Offset: uintptr(i),
-				}
-			}
-			setKindType(abiTyp, &StructType{
-				Type:    *abiTyp,
-				PkgPath: NewName(internalStr(typ.Get("pkgPath")), "", false, false),
-				Fields:  reflectFields,
-			})
+		}
+		abiTyp.kindType = &StructType{
+			Type:    abiTyp,
+			PkgPath: NewName(internalStr(typ.Get("pkgPath")), "", false, false),
+			Fields:  reflectFields,
 		}
 	}
 
-	return (*Type)(unsafe.Pointer(typ.Get(idReflectType).Unsafe()))
-}
-
-//gopherjs:new
-func setKindType(abiTyp *Type, kindType any) {
-	js.InternalObject(abiTyp).Set(idKindType, js.InternalObject(kindType))
-}
-
-// getKindType will get the type specific to the kind if this type.
-// For example `getKindType[StructType](Struct, t)` returns t cast to a
-// [*StructType], or nil if the type's kind is not a [Struct].
-//
-//gopherjs:new
-func getKindType[T any](kind Kind, t *Type) *T {
-	if t.Kind() != kind {
-		return nil
-	}
-	return (*T)(unsafe.Pointer(js.InternalObject(t).Get(idKindType)))
+	return abiTyp
 }
 
 //gopherjs:replace
@@ -208,18 +197,8 @@ func (t *Type) Uncommon() *UncommonType {
 }
 
 //gopherjs:new
-func (t *Type) setUncommon(ut *UncommonType) {
-	js.InternalObject(t).Set(idUncommonType, js.InternalObject(ut))
-}
-
-//gopherjs:new
 func (typ *Type) JsType() *js.Object {
 	return js.InternalObject(typ).Get(idJsType)
-}
-
-//gopherjs:new
-func (typ *Type) setJsType(t *js.Object) {
-	js.InternalObject(typ).Set(idJsType, typ)
 }
 
 //gopherjs:new
@@ -232,102 +211,6 @@ func (typ *Type) JsPtrTo() *js.Object {
 	return typ.PtrTo().JsType()
 }
 
-//=================================================================================
-// TODO(grantnelson-wf): Test out overriding the cast of pointer types to Work for typeKinds.
-// If the override works, find all unsafe pointer casts still being done and override them, e.g. Elem().
-//=================================================================================
-
-//gophejs:replace
-func (t *Type) Elem() *Type {
-	switch t.Kind() {
-	case Array:
-		return t.ArrayType().Elem
-	case Chan:
-		return t.ChanType().Elem
-	case Map:
-		return t.MapType().Elem
-	case Pointer:
-		return t.PtrType().Elem
-	case Slice:
-		return t.SliceType().Elem
-	}
-	return nil
-}
-
-//gophejs:replace
-func (t *Type) StructType() *StructType {
-	return getKindType[StructType](Struct, t)
-}
-
-//gophejs:replace
-func (t *Type) MapType() *MapType {
-	return getKindType[MapType](Map, t)
-}
-
-//gophejs:replace
-func (t *Type) ArrayType() *ArrayType {
-	return getKindType[ArrayType](Array, t)
-}
-
-//gophejs:replace
-func (t *Type) FuncType() *FuncType {
-	return getKindType[FuncType](Func, t)
-}
-
-//gophejs:replace
-func (t *Type) InterfaceType() *InterfaceType {
-	return getKindType[InterfaceType](Interface, t)
-}
-
-//gopherjs:new Same as ArrayType(), MapType(), etc but for ChanType.
-func (t *Type) ChanType() *ChanType {
-	return getKindType[ChanType](Chan, t)
-}
-
-//gopherjs:new Same as ArrayType(), MapType(), etc but for PtrType.
-func (t *Type) PtrType() *PtrType {
-	return getKindType[PtrType](Pointer, t)
-}
-
-//gopherjs:new Same as ArrayType(), MapType(), etc but for SliceType
-func (t *Type) SliceType() *SliceType {
-	return getKindType[SliceType](Slice, t)
-}
-
-// Len returns the length of t if t is an array type, otherwise 0
-//
-//gopherjs:replace Used a pointer cast to get the array kind type.
-func (t *Type) Len() int {
-	if arr := t.ArrayType(); arr != nil {
-		return int(arr.Len)
-	}
-	return 0
-}
-
-//gopherjs:replace Used a pointer cast to get the chan kind type.
-func (t *Type) ChanDir() ChanDir {
-	if ch := t.ChanType(); ch != nil {
-		return ch.Dir
-	}
-	return InvalidDir
-}
-
-//gopherjs:replace Used a pointer cast to get the interface kind type.
-func (t *Type) NumMethod() int {
-	if tt := t.InterfaceType(); tt != nil {
-		return tt.NumMethod()
-	}
-	return len(t.ExportedMethods())
-}
-
-//gopherjs:replace Used a pointer cast to get the map kind type.
-func (t *Type) Key() *Type {
-	if mt := t.MapType(); mt != nil {
-		return mt.Key
-	}
-	return nil
-}
-
 //gopherjs:new Shared by reflect and reflectlite rtypes
 func (t *Type) String() string {
 	s := t.NameOff(t.Str).Name()
@@ -337,9 +220,12 @@ func (t *Type) String() string {
 	return s
 }
 
+//gopherjs:purge Uncommon types are stored differently.
+type structTypeUncommon struct{}
+
 //gopherjs:replace
 type FuncType struct {
-	Type     `reflect:"func"`
+	Type
 	InCount  uint16
 	OutCount uint16
 
@@ -415,63 +301,63 @@ func NewName(n, tag string, exported, embedded bool) Name {
 	}
 }
 
-// Instead of using this as an offset from a pointer to look up a name,
+// GOPHERJS: Instead of using this as an offset from a pointer to look up a name,
 // just store the name as a pointer.
 //
 //gopherjs:replace
 type NameOff *Name
 
-// Added to mirror the rtype's nameOff method to keep how the nameOff is
-// created and read in one spot of the code.
+// GOPHERJS: Added to mirror the rtype's nameOff method to keep how
+// the nameOff is created and read in one spot of the code.
 //
 //gopherjs:new
 func (typ *Type) NameOff(off NameOff) Name {
 	return *off
 }
 
-// Added to mirror the resolveReflectName method in reflect
+// GOPHERJS: Added to mirror the resolveReflectName method in reflect
 //
 //gopherjs:new
 func ResolveReflectName(n Name) NameOff {
 	return &n
 }
 
-// Instead of using this as an offset from a pointer to look up a type,
+// GOPHERJS: Instead of using this as an offset from a pointer to look up a type,
 // just store the type as a pointer.
 //
 //gopherjs:replace
 type TypeOff *Type
 
-// Added to mirror the rtype's typeOff method to keep how the typeOff is
-// created and read in one spot of the code.
+// GOPHERJS: Added to mirror the rtype's typeOff method to keep how
+// the typeOff is created and read in one spot of the code.
 //
 //gopherjs:new
 func (typ *Type) TypeOff(off TypeOff) *Type {
 	return off
 }
 
-// Added to mirror the resolveReflectType method in reflect
+// GOPHERJS: Added to mirror the resolveReflectType method in reflect
 //
 //gopherjs:new
 func ResolveReflectType(t *Type) TypeOff {
 	return t
 }
 
-// Instead of using this as an offset from a pointer to look up a pointer,
+// GOPHERJS: Instead of using this as an offset from a pointer to look up a pointer,
 // just store the paointer itself.
 //
 //gopherjs:replace
 type TextOff unsafe.Pointer
 
-// Added to mirror the rtype's textOff method to keep how the textOff is
-// created and read in one spot of the code.
+// GOPHERJS: Added to mirror the rtype's textOff method to keep how
+// the textOff is created and read in one spot of the code.
 //
 //gopherjs:new
 func (typ *Type) TextOff(off TextOff) unsafe.Pointer {
 	return unsafe.Pointer(off)
 }
 
-// Added to mirror the resolveReflectText method in reflect
+// GOPHERJS: Added to mirror the resolveReflectText method in reflect
 //
 //gopherjs:new
 func ResolveReflectText(ptr unsafe.Pointer) TextOff {

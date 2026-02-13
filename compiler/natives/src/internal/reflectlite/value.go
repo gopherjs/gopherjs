@@ -146,7 +146,7 @@ func (v Value) Elem() Value {
 			return Value{}
 		}
 		val := v.object()
-		tt := v.typ.PtrType()
+		tt := (*abi.PtrType)(unsafe.Pointer(v.typ))
 		fl := v.flag&flagRO | flagIndir | flagAddr
 		fl |= flag(tt.Elem.Kind())
 		return Value{tt.Elem, unsafe.Pointer(abi.WrapJsObject(tt.Elem, val).Unsafe()), fl}

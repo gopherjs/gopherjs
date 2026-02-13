@@ -4,6 +4,7 @@ package reflect
 
 import "github.com/gopherjs/gopherjs/js"
 
+//gopherjs:replace
 func Swapper(slice any) func(i, j int) {
 	v := ValueOf(slice)
 	if v.Kind() != Slice {

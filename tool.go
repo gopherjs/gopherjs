@@ -32,8 +32,8 @@ import (
 	gbuild "github.com/gopherjs/gopherjs/build"
 	"github.com/gopherjs/gopherjs/build/cache"
 	"github.com/gopherjs/gopherjs/compiler"
+	"github.com/gopherjs/gopherjs/compiler/errlist"
 	"github.com/gopherjs/gopherjs/compiler/incjs"
-	"github.com/gopherjs/gopherjs/internal/errlist"
 	"github.com/gopherjs/gopherjs/internal/sourcemapx"
 	"github.com/gopherjs/gopherjs/internal/sysutil"
 )

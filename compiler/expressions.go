@@ -1104,20 +1104,53 @@ func (fc *funcContext) translateExprSlice(exprs []ast.Expr, desiredType types.Ty
 	return parts
 }
 
+// packageAllowsKindTypeConversion determines if the current package should
+// be checked for a special type of casts, `kindType` conversions.
+func (fc *funcContext) packageAllowsKindTypeConversion() bool {
+	switch fc.pkgCtx.Pkg.Path() {
+	case `reflect`, `internal/reflectlite`, `internal/abi`:
+		return true
+	}
+	return false
+}
+
+// typeAllowsKindTypeConversion determines if the given object ID for a desired type of an unsafe pointer conversion
+// is a type we know should have been added as a `kindType` field to the type pointed at by the unsafe pointer.
+func typeAllowsKindTypeConversion(desiredTypeID string) bool {
+	fmt.Printf("!!BANG!! %q\n", desiredTypeID) // TODO(grantnelson-wf): Remove
+
+	switch desiredTypeID {
+	case "arrayType", "chanType", "funcType", "interfaceType", "mapType", "ptrType", "sliceType", "structType":
+		return true
+	}
+	return false
+}
+
 func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type) *expression {
 	exprType := fc.typeOf(expr)
 	if types.Identical(exprType, desiredType) {
 		return fc.translateExpr(expr)
 	}
 
-	if fc.pkgCtx.Pkg.Path() == "reflect" || fc.pkgCtx.Pkg.Path() == "internal/reflectlite" {
+	// For some specific packages, e.g. reflect, the Go code performs casts between different sized memory footprints
+	// and leverages that the pointer to the first field is the same as the pointer to the full struct. These conversions
+	// are normally not allowed by GopherJS. However, in specific packages, the original code does this kind of cast
+	// so often, that to avoid them would cause massive amounts of native overrides. To simplify the native overrides
+	// for these specific packages we will allow casts between specific types by looking up the `kindType` that is
+	// assigned when creating them.
+	//
+	// The structures are `type K struct{T; additional fields}`. In Go the untyped pointer to `K` is also the untypes
+	// pointer to the first field, i.e. `T`. These packages will hold onto `t *T` then cast to the kind type like
+	// `k = (*K)unsafe.Pointer(t)`. Normally this isn't allowed in JS because `K` is larger with additional fields,
+	// but when we created `t` in the native overrides, we assign `k` as the `t.kindType` and translate those specific
+	// casts to get that `kindType`, thus greatly reducing the amount of overrides we have to add to those packages.
+	if fc.packageAllowsKindTypeConversion() {
 		if call, isCall := expr.(*ast.CallExpr); isCall && types.Identical(fc.typeOf(call.Fun), types.Typ[types.UnsafePointer]) {
 			if ptr, isPtr := desiredType.(*types.Pointer); isPtr {
 				if named, isNamed := ptr.Elem().(*types.Named); isNamed {
-					switch named.Obj().Name() {
-					case "arrayType", "chanType", "funcType", "interfaceType", "mapType", "ptrType", "sliceType", "structType":
+					if typeAllowsKindTypeConversion(named.Obj().Id()) {
 						return fc.formatExpr("%e.kindType", call.Args[0]) // unsafe conversion
-					default:
+					} else {
 						return fc.translateExpr(expr)
 					}
 				}

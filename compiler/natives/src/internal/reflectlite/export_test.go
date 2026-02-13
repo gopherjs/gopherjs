@@ -2,10 +2,10 @@
 
 package reflectlite
 
-import "unsafe"
-
 // Field returns the i'th field of the struct v.
 // It panics if v's Kind is not Struct or i is out of range.
+//
+//gopherjs:replace
 func Field(v Value, i int) Value {
 	if v.kind() != Struct {
 		panic(&ValueError{"reflect.Value.Field", v.kind()})
@@ -13,20 +13,23 @@ func Field(v Value, i int) Value {
 	return v.Field(i)
 }
 
+//gopherjs:replace Used a pointer cast for the struct kind type.
 func TField(typ Type, i int) Type {
-	t := typ.(*rtype)
-	if t.Kind() != Struct {
+	tt := toAbiType(typ).StructType()
+	if tt == nil {
 		panic("reflect: Field of non-struct type")
 	}
-	tt := (*structType)(unsafe.Pointer(t))
 	return StructFieldType(tt, i)
 }
 
-// Field returns the i'th struct field.
-func StructFieldType(t *structType, i int) Type {
-	if i < 0 || i >= len(t.fields) {
-		panic("reflect: Field index out of bounds")
-	}
-	p := &t.fields[i]
-	return toType(p.typ)
-}
+//gopherjs:purge Used in FirstMethodNameBytes
+type EmbedWithUnexpMeth struct{}
+
+//gopherjs:purge Used in FirstMethodNameBytes
+type pinUnexpMeth interface{}
+
+//gopherjs:purge Used in FirstMethodNameBytes
+var pinUnexpMethI pinUnexpMeth
+
+//gopherjs:purge Uses pointer arithmetic for names
+func FirstMethodNameBytes(t Type) *byte

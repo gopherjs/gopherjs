@@ -112,7 +112,7 @@ func (v Value) Len() int {
 //gopherjs:replace
 func (v Value) Set(x Value) {
 	v.mustBeAssignable()
-	x.mustBeExported() // TODO(grantnelson-wf): This uses the unimplemented `methodName()`. When methodName is fixed we can use Set to test.
+	x.mustBeExported()
 	x = x.assignTo("reflect.Set", v.typ, nil)
 	if v.flag&flagIndir != 0 {
 		switch v.typ.Kind() {
@@ -156,7 +156,7 @@ func (v Value) Elem() Value {
 	}
 }
 
-// TODO(grantnelson-wf): Move this to export_test since it is defined there in the original code and only used for tests.
+// TODO(grantnelson-wf): To minimize diffs, this was not moved to export_test. After this is merged into the go1.21 branch, move it.
 func (v Value) Field(i int) Value {
 	tt := v.typ.StructType()
 	if tt == nil {
@@ -207,3 +207,12 @@ func (v Value) Field(i int) Value {
 	}
 	return makeValue(typ, abi.WrapJsObject(typ, s.Get(prop)), fl)
 }
+
+//gopherjs:purge Unused type
+type emptyInterface struct{}
+
+//gopherjs:purge Unused method for emptyInterface
+func unpackEface(i any) Value
+
+//gopherjs:purge Unused method for emptyInterface
+func packEface(v Value) any

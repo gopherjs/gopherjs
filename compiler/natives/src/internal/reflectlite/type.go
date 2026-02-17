@@ -2,21 +2,27 @@
 
 package reflectlite
 
-import "internal/abi"
+//gopherjs:purge Unused in reflectlite, abi.ArrayType is used instead
+type arrayType struct{}
 
-// GOPHERJS: For some reason the original code left mapType and aliased the rest
-// to the ABI version. mapType is not used so this is an alias to override the
-// left over refactor cruft.
-//
-//gopherjs:replace
-type mapType = abi.MapType
+//gopherjs:purge Unused in reflectlite, abi.ChanType is used instead
+type chanType struct{}
+
+//gopherjs:purge Unused in reflectlite, abi.MapType is used instead
+type mapType struct{}
+
+//gopherjs:purge Unused in reflectlite, abi.PtrType is used instead
+type ptrType struct{}
+
+//gopherjs:purge Unused in reflectlite, abi.SliceType is used instead
+type sliceType struct{}
 
 //gopherjs:replace
 func (t rtype) Comparable() bool {
-	return toAbiType(t).Comparable()
+	return t.common().Comparable()
 }
 
 //gopherjs:replace
 func (t rtype) String() string {
-	return toAbiType(t).String()
+	return t.common().String()
 }

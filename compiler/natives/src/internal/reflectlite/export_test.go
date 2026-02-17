@@ -13,15 +13,6 @@ func Field(v Value, i int) Value {
 	return v.Field(i)
 }
 
-//gopherjs:replace Used a pointer cast for the struct kind type.
-func TField(typ Type, i int) Type {
-	tt := toAbiType(typ).StructType()
-	if tt == nil {
-		panic("reflect: Field of non-struct type")
-	}
-	return StructFieldType(tt, i)
-}
-
 //gopherjs:purge Used in FirstMethodNameBytes
 type EmbedWithUnexpMeth struct{}
 

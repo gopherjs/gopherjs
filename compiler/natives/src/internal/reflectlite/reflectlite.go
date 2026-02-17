@@ -15,13 +15,8 @@ func init() {
 	used := func(i any) {}
 	used(rtype{})
 	used(uncommonType{})
-	used(arrayType{})
-	used(chanType{})
 	used(funcType{})
 	used(interfaceType{})
-	used(mapType{})
-	used(ptrType{})
-	used(sliceType{})
 	used(structType{})
 }
 
@@ -30,23 +25,15 @@ func jsType(typ *abi.Type) *js.Object {
 	return typ.JsType()
 }
 
-//gopherjs:new
-func toAbiType(t Type) *abi.Type {
-	return t.(rtype).common()
-}
-
-//gopherjs:new
-func jsPtrTo(t Type) *js.Object {
-	return toAbiType(t).JsPtrTo()
-}
-
-//gopherjs:purge The name type is mostly unused, replaced by abi.Name, except in pkgPath which we don't implement.
+//gopherjs:purge Unused, replaced by abi.Name.
 type name struct {
 	bytes *byte
 }
 
 //gopherjs:replace
-func pkgPath(n abi.Name) string { return "" }
+func pkgPath(n abi.Name) string {
+	return n.PkgPath()
+}
 
 //gopherjs:purge Unused function because of nameOffList in internal/abi overrides
 func resolveNameOff(ptrInModule unsafe.Pointer, off int32) unsafe.Pointer
@@ -166,7 +153,7 @@ func methodName() string {
 	return "?FIXME?"
 }
 
-//gopherjs:new This is new to reflectlite but there are commented out references in the native code and a copy in reflect.
+//gopherjs:new
 func makeMethodValue(op string, v Value) Value {
 	if v.flag&flagMethod == 0 {
 		panic("reflect: internal error: invalid use of makePartialFunc")
@@ -182,12 +169,3 @@ func makeMethodValue(op string, v Value) Value {
 	})
 	return Value{v.Type().common(), unsafe.Pointer(fv.Unsafe()), v.flag.ro() | flag(abi.Func)}
 }
-
-//gopherjs:purge
-type emptyInterface struct{}
-
-//gopherjs:purge
-func unpackEface(i any) Value
-
-//gopherjs:purge
-func packEface(v Value) any

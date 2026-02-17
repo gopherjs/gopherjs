@@ -1108,7 +1108,7 @@ func (fc *funcContext) translateExprSlice(exprs []ast.Expr, desiredType types.Ty
 // be checked for a special type of casts, `kindType` conversions.
 func (fc *funcContext) packageAllowsKindTypeConversion() bool {
 	switch fc.pkgCtx.Pkg.Path() {
-	case `reflect`, `internal/reflectlite`, `internal/abi`:
+	case `internal/abi`, `internal/reflectlite`, `reflect`:
 		return true
 	}
 	return false
@@ -1116,12 +1116,19 @@ func (fc *funcContext) packageAllowsKindTypeConversion() bool {
 
 // typeAllowsKindTypeConversion determines if the given object ID for a desired type of an unsafe pointer conversion
 // is a type we know should have been added as a `kindType` field to the type pointed at by the unsafe pointer.
-func typeAllowsKindTypeConversion(desiredTypeID string) bool {
-	fmt.Printf("!!BANG!! %q\n", desiredTypeID) // TODO(grantnelson-wf): Remove
-
-	switch desiredTypeID {
-	case "arrayType", "chanType", "funcType", "interfaceType", "mapType", "ptrType", "sliceType", "structType":
-		return true
+func typeAllowsKindTypeConversion(desiredPkgPath, desiredName string) bool {
+	switch desiredPkgPath {
+	case `internal/abi`:
+		switch desiredName {
+		case `ArrayType`, `ChanType`, `FuncType`, `InterfaceType`, `MapType`, `PtrType`, `SliceType`, `StructType`:
+			return true
+		}
+	case `reflect`:
+		switch desiredName {
+		// The following are extensions of the ABI equivalent type to add more methods.
+		case `interfaceType`, `mapType`, `ptrType`, `sliceType`, `structType`:
+			return true
+		}
 	}
 	return false
 }
@@ -1148,7 +1155,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		if call, isCall := expr.(*ast.CallExpr); isCall && types.Identical(fc.typeOf(call.Fun), types.Typ[types.UnsafePointer]) {
 			if ptr, isPtr := desiredType.(*types.Pointer); isPtr {
 				if named, isNamed := ptr.Elem().(*types.Named); isNamed {
-					if typeAllowsKindTypeConversion(named.Obj().Id()) {
+					if typeAllowsKindTypeConversion(named.Obj().Pkg().Path(), named.Obj().Name()) {
 						return fc.formatExpr("%e.kindType", call.Args[0]) // unsafe conversion
 					} else {
 						return fc.translateExpr(expr)

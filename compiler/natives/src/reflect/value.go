@@ -9,6 +9,7 @@ import (
 
 	"internal/abi"
 
+	"github.com/gopherjs/gopherjs/compiler/natives/src/internal/unsafeheader"
 	"github.com/gopherjs/gopherjs/js"
 )
 
@@ -117,7 +118,8 @@ func makeInt(f flag, bits uint64, t Type) Value {
 func methodReceiver(op string, v Value, methodIndex int) (rcvrtype *abi.Type, t *funcType, fn unsafe.Pointer) {
 	i := methodIndex
 	var prop string
-	if tt := toInterfaceType(v.typ()); tt != nil {
+	if v.typ().Kind() == abi.Interface {
+		tt := (*interfaceType)(unsafe.Pointer(v.typ()))
 		if i < 0 || i >= len(tt.Methods) {
 			panic("reflect: internal error: invalid method index")
 		}
@@ -125,8 +127,7 @@ func methodReceiver(op string, v Value, methodIndex int) (rcvrtype *abi.Type, t 
 		if !tt.NameOff(m.Name).IsExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		// TODO(grantnelson-wf): Set rcvrtype to the type the interface is holding onto.
-		t = tt.TypeOff(m.Typ).FuncType()
+		t = (*funcType)(unsafe.Pointer(tt.typeOff(m.Typ)))
 		prop = tt.NameOff(m.Name).Name()
 	} else {
 		rcvrtype = v.typ()
@@ -138,7 +139,7 @@ func methodReceiver(op string, v Value, methodIndex int) (rcvrtype *abi.Type, t 
 		if !v.typ().NameOff(m.Name).IsExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		t = v.typ().TypeOff(m.Mtyp).FuncType()
+		t = (*funcType)(unsafe.Pointer(v.typ().TypeOff(m.Mtyp)))
 		prop = js.Global.Call("$methodSet", v.typ().JsType()).Index(i).Get("prop").String()
 	}
 	rcvr := v.object()
@@ -215,7 +216,7 @@ func typedmemmove(t *abi.Type, dst, src unsafe.Pointer) {
 
 //gopherjs:replace
 func makechan(typ *abi.Type, size int) (ch unsafe.Pointer) {
-	ctyp := typ.ChanType()
+	ctyp := (*chanType)(unsafe.Pointer(typ))
 	return unsafe.Pointer(js.Global.Get("$Chan").New(ctyp.Elem.JsType(), size).Unsafe())
 }
 
@@ -433,7 +434,7 @@ func (v Value) Elem() Value {
 			return Value{}
 		}
 		val := v.object()
-		tt := toPtrType(v.typ())
+		tt := (*ptrType)(unsafe.Pointer(v.typ()))
 		fl := v.flag&flagRO | flagIndir | flagAddr
 		fl |= flag(tt.Elem.Kind())
 		return Value{tt.Elem, unsafe.Pointer(abi.WrapJsObject(tt.Elem, val).Unsafe()), fl}
@@ -444,18 +445,11 @@ func (v Value) Elem() Value {
 }
 
 //gopherjs:replace
-func (v Value) NumField() int {
-	v.mustBe(Struct)
-	tt := toStructType(v.typ())
-	return len(tt.Fields)
-}
-
-//gopherjs:replace
 func (v Value) Field(i int) Value {
-	tt := toStructType(v.typ())
-	if tt == nil {
+	if v.kind() != Struct {
 		panic(&ValueError{"reflect.Value.Field", v.kind()})
 	}
+	tt := (*structType)(unsafe.Pointer(v.typ()))
 	if uint(i) >= uint(len(tt.Fields)) {
 		panic("reflect: Field index out of range")
 	}
@@ -565,7 +559,8 @@ func typedarrayclear(elemType *abi.Type, ptr unsafe.Pointer, len int)
 func (v Value) Clear() {
 	switch v.Kind() {
 	case Slice:
-		elem := toSliceType(v.typ()).Elem
+		st := (*sliceType)(unsafe.Pointer(v.typ()))
+		elem := st.Elem
 		zeroFn := elem.JsType().Get("zero")
 		a := js.InternalObject(v.ptr)
 		offset := a.Get("$offset").Int()
@@ -606,7 +601,7 @@ func (v Value) Index(i int) Value {
 		if i < 0 || i >= s.Get("$length").Int() {
 			panic("reflect: slice index out of range")
 		}
-		tt := toSliceType(v.typ())
+		tt := (*sliceType)(unsafe.Pointer(v.typ()))
 		typ := tt.Elem
 		fl := flagAddr | flagIndir | v.flag.ro() | flag(typ.Kind())
 
@@ -746,7 +741,7 @@ func (v Value) bytesSlow() []byte {
 		if !v.CanAddr() {
 			panic("reflect.Value.Bytes of unaddressable byte array")
 		}
-		// Replace the following with JS to avoid using unsafe pointers.
+		// GOPHERJS: Replace the following with JS to avoid using unsafe pointers.
 		//   p := (*byte)(v.ptr)
 		//   n := int((*arrayType)(unsafe.Pointer(v.typ)).len)
 		//   return unsafe.Slice(p, n)

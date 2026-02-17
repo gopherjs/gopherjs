@@ -182,3 +182,12 @@ func makeMethodValue(op string, v Value) Value {
 	})
 	return Value{v.Type().common(), unsafe.Pointer(fv.Unsafe()), v.flag.ro() | flag(abi.Func)}
 }
+
+//gopherjs:purge
+type emptyInterface struct{}
+
+//gopherjs:purge
+func unpackEface(i any) Value
+
+//gopherjs:purge
+func packEface(v Value) any

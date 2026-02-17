@@ -75,11 +75,10 @@ func ReflectType(typ *js.Object) *Type {
 	// Create the kind type for the ABI type if the kind has additional information.
 	switch abiTyp.Kind() {
 	case Array:
-		abiTyp.kindType = &ArrayType{
-			Type: abiTyp,
+		setKindType(abiTyp, &ArrayType{
 			Elem: ReflectType(typ.Get("elem")),
 			Len:  uintptr(typ.Get("len").Int()),
-		}
+		})
 	case Chan:
 		dir := BothDir
 		if typ.Get("sendOnly").Bool() {
@@ -88,11 +87,10 @@ func ReflectType(typ *js.Object) *Type {
 		if typ.Get("recvOnly").Bool() {
 			dir = RecvDir
 		}
-		abiTyp.kindType = &ChanType{
-			Type: abiTyp,
+		setKindType(abiTyp, &ChanType{
 			Elem: ReflectType(typ.Get("elem")),
 			Dir:  dir,
-		}
+		})
 	case Func:
 		params := typ.Get("params")
 		in := make([]*Type, params.Length())
@@ -108,13 +106,12 @@ func ReflectType(typ *js.Object) *Type {
 		if typ.Get("variadic").Bool() {
 			outCount |= 1 << 15
 		}
-		abiTyp.kindType = &FuncType{
-			Type:     abiTyp,
+		setKindType(abiTyp, &FuncType{
 			InCount:  uint16(params.Length()),
 			OutCount: outCount,
 			In_:      in,
 			Out_:     out,
-		}
+		})
 	case Interface:
 		methods := typ.Get("methods")
 		imethods := make([]Imethod, methods.Length())
@@ -125,27 +122,23 @@ func ReflectType(typ *js.Object) *Type {
 				Typ:  ResolveReflectType(ReflectType(m.Get("typ"))),
 			}
 		}
-		abiTyp.kindType = &InterfaceType{
-			Type:    abiTyp,
+		setKindType(abiTyp, &InterfaceType{
 			PkgPath: NewName(internalStr(typ.Get("pkg")), "", false, false),
 			Methods: imethods,
-		}
+		})
 	case Map:
-		abiTyp.kindType = &MapType{
-			Type: abiTyp,
+		setKindType(abiTyp, &MapType{
 			Key:  ReflectType(typ.Get("key")),
 			Elem: ReflectType(typ.Get("elem")),
-		}
+		})
 	case Pointer:
-		abiTyp.kindType = &PtrType{
-			Type: abiTyp,
+		setKindType(abiTyp, &PtrType{
 			Elem: ReflectType(typ.Get("elem")),
-		}
+		})
 	case Slice:
-		abiTyp.kindType = &SliceType{
-			Type: abiTyp,
+		setKindType(abiTyp, &SliceType{
 			Elem: ReflectType(typ.Get("elem")),
-		}
+		})
 	case Struct:
 		fields := typ.Get("fields")
 		reflectFields := make([]StructField, fields.Length())
@@ -157,14 +150,30 @@ func ReflectType(typ *js.Object) *Type {
 				Offset: uintptr(i),
 			}
 		}
-		abiTyp.kindType = &StructType{
-			Type:    abiTyp,
+		setKindType(abiTyp, &StructType{
 			PkgPath: NewName(internalStr(typ.Get("pkgPath")), "", false, false),
 			Fields:  reflectFields,
-		}
+		})
 	}
 
 	return abiTyp
+}
+
+//gopherjs:new
+func setKindType(abiTyp *Type, kindType any) {
+	// Add the kindType to the abiTyp object so that when a cast is performed
+	// from the abiTyp into the kind type, a custom cast in `translateConversion`
+	// in compiler/expressions.go will use this kindType to cast.
+	// This makes it so we don't have to override all of the kind type casts,
+	// e.g. `tt := (*chanType)(unsafe.Pointer(typ))`, and the compiler
+	// will replace that automatically with `typ.kindType`.
+	js.InternalObject(abiTyp).Set(idKindType, js.InternalObject(kindType))
+
+	// Assign Type to the abiType. The abiType is a `*Type` and the Type
+	// field on the kind types are `Type`. However, this is valid because of how
+	// pointers and references work in JS. We set this so that the Type
+	// isn't a copy but the actual abiType object.
+	js.InternalObject(kindType).Set("Type", js.InternalObject(abiTyp))
 }
 
 //gopherjs:replace

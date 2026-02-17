@@ -181,7 +181,7 @@ func (t *rtype) Comparable() bool {
 //gopherjs:replace
 func (t *rtype) Method(i int) (m Method) {
 	if t.Kind() == Interface {
-		tt := toInterfaceType(t.common())
+		tt := (*interfaceType)(unsafe.Pointer(t))
 		return tt.Method(i)
 	}
 	methods := t.exportedMethods()

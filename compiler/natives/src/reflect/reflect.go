@@ -376,11 +376,6 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 }
 
 //gopherjs:replace
-func ifaceE2I(t *abi.Type, src any, dst unsafe.Pointer) {
-	abi.IfaceE2I(t, src, dst)
-}
-
-//gopherjs:replace
 func typedmemmove(t *abi.Type, dst, src unsafe.Pointer) {
 	abi.TypedMemMove(t, dst, src)
 }
@@ -674,6 +669,68 @@ func Copy(dst, src Value) int {
 		return js.Global.Call("$copyString", dstVal, srcVal).Int()
 	}
 	return js.Global.Call("$copySlice", dstVal, srcVal).Int()
+}
+
+//gopherjs:replace
+func methodReceiver(op string, v Value, methodIndex int) (rcvrtype *abi.Type, t *funcType, fn unsafe.Pointer) {
+	i := methodIndex
+	var prop string
+	if v.typ().Kind() == abi.Interface {
+		tt := (*interfaceType)(unsafe.Pointer(v.typ()))
+		if i < 0 || i >= len(tt.Methods) {
+			panic("reflect: internal error: invalid method index")
+		}
+		m := &tt.Methods[i]
+		if !tt.NameOff(m.Name).IsExported() {
+			panic("reflect: " + op + " of unexported method")
+		}
+		t = (*funcType)(unsafe.Pointer(tt.typeOff(m.Typ)))
+		prop = tt.NameOff(m.Name).Name()
+	} else {
+		rcvrtype = v.typ()
+		ms := v.typ().ExportedMethods()
+		if uint(i) >= uint(len(ms)) {
+			panic("reflect: internal error: invalid method index")
+		}
+		m := ms[i]
+		if !v.typ().NameOff(m.Name).IsExported() {
+			panic("reflect: " + op + " of unexported method")
+		}
+		t = (*funcType)(unsafe.Pointer(v.typ().TypeOff(m.Mtyp)))
+		prop = js.Global.Call("$methodSet", v.typ().JsType()).Index(i).Get("prop").String()
+	}
+	rcvr := v.object()
+	if v.typ().IsWrapped() {
+		rcvr = v.typ().JsType().New(rcvr)
+	}
+	fn = unsafe.Pointer(rcvr.Get(prop).Unsafe())
+	return
+}
+
+//gopherjs:replace
+func ifaceE2I(t *abi.Type, src any, dst unsafe.Pointer) {
+	abi.IfaceE2I(t, src, dst)
+}
+
+//gopherjs:replace
+func makeMethodValue(op string, v Value) Value {
+	if v.flag&flagMethod == 0 {
+		panic("reflect: internal error: invalid use of makePartialFunc")
+	}
+
+	_, _, fn := methodReceiver(op, v, int(v.flag)>>flagMethodShift)
+	rcvr := v.object()
+	if v.typ().IsWrapped() {
+		rcvr = v.typ().JsType().New(rcvr)
+	}
+	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
+		return js.InternalObject(fn).Call("apply", rcvr, arguments)
+	})
+	return Value{
+		typ_: v.Type().common(),
+		ptr:  unsafe.Pointer(fv.Unsafe()),
+		flag: v.flag.ro() | flag(Func),
+	}
 }
 
 //gopherjs:replace

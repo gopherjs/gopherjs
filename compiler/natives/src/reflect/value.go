@@ -24,42 +24,6 @@ func packEface(v Value) any
 //gopherjs:purge
 func unpackEface(i any) Value
 
-//gopherjs:replace
-func methodReceiver(op string, v Value, methodIndex int) (rcvrtype *abi.Type, t *funcType, fn unsafe.Pointer) {
-	i := methodIndex
-	var prop string
-	if v.typ().Kind() == abi.Interface {
-		tt := (*interfaceType)(unsafe.Pointer(v.typ()))
-		if i < 0 || i >= len(tt.Methods) {
-			panic("reflect: internal error: invalid method index")
-		}
-		m := &tt.Methods[i]
-		if !tt.NameOff(m.Name).IsExported() {
-			panic("reflect: " + op + " of unexported method")
-		}
-		t = (*funcType)(unsafe.Pointer(tt.typeOff(m.Typ)))
-		prop = tt.NameOff(m.Name).Name()
-	} else {
-		rcvrtype = v.typ()
-		ms := v.typ().ExportedMethods()
-		if uint(i) >= uint(len(ms)) {
-			panic("reflect: internal error: invalid method index")
-		}
-		m := ms[i]
-		if !v.typ().NameOff(m.Name).IsExported() {
-			panic("reflect: " + op + " of unexported method")
-		}
-		t = (*funcType)(unsafe.Pointer(v.typ().TypeOff(m.Mtyp)))
-		prop = js.Global.Call("$methodSet", v.typ().JsType()).Index(i).Get("prop").String()
-	}
-	rcvr := v.object()
-	if v.typ().IsWrapped() {
-		rcvr = v.typ().JsType().New(rcvr)
-	}
-	fn = unsafe.Pointer(rcvr.Get(prop).Unsafe())
-	return
-}
-
 //gopherjs:purge
 func storeRcvr(v Value, p unsafe.Pointer)
 
@@ -733,3 +697,6 @@ func growslice(t *abi.Type, old unsafeheader.Slice, num int) unsafeheader.Slice
 func noescape(p unsafe.Pointer) unsafe.Pointer {
 	return p
 }
+
+//gopherjs:purge
+func makeFuncStub()

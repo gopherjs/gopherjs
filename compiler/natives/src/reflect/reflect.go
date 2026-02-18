@@ -708,6 +708,30 @@ func methodReceiver(op string, v Value, methodIndex int) (rcvrtype *abi.Type, t 
 }
 
 //gopherjs:replace
+func valueInterface(v Value, safe bool) any {
+	if v.flag == 0 {
+		panic(&ValueError{"reflect.Value.Interface", 0})
+	}
+	if safe && v.flag&flagRO != 0 {
+		panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")
+	}
+	if v.flag&flagMethod != 0 {
+		v = makeMethodValue("Interface", v)
+	}
+
+	if v.typ().IsWrapped() {
+		jsTyp := v.typ().JsType()
+		if v.flag&flagIndir != 0 && v.Kind() == Struct {
+			cv := jsTyp.Call("zero")
+			abi.CopyStruct(cv, v.object(), v.typ())
+			return any(unsafe.Pointer(jsTyp.New(cv).Unsafe()))
+		}
+		return any(unsafe.Pointer(jsTyp.New(v.object()).Unsafe()))
+	}
+	return any(unsafe.Pointer(v.object().Unsafe()))
+}
+
+//gopherjs:replace
 func ifaceE2I(t *abi.Type, src any, dst unsafe.Pointer) {
 	abi.IfaceE2I(t, src, dst)
 }
@@ -731,30 +755,6 @@ func makeMethodValue(op string, v Value) Value {
 		ptr:  unsafe.Pointer(fv.Unsafe()),
 		flag: v.flag.ro() | flag(Func),
 	}
-}
-
-//gopherjs:replace
-func valueInterface(v Value, safe bool) any {
-	if v.flag == 0 {
-		panic(&ValueError{"reflect.Value.Interface", 0})
-	}
-	if safe && v.flag&flagRO != 0 {
-		panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")
-	}
-	if v.flag&flagMethod != 0 {
-		v = makeMethodValue("Interface", v)
-	}
-
-	if v.typ().IsWrapped() {
-		jsTyp := v.typ().JsType()
-		if v.flag&flagIndir != 0 && v.Kind() == Struct {
-			cv := jsTyp.Call("zero")
-			abi.CopyStruct(cv, v.object(), v.typ())
-			return any(unsafe.Pointer(jsTyp.New(cv).Unsafe()))
-		}
-		return any(unsafe.Pointer(jsTyp.New(v.object()).Unsafe()))
-	}
-	return any(unsafe.Pointer(v.object().Unsafe()))
 }
 
 //gopherjs:new

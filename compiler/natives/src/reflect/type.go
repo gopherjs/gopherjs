@@ -25,6 +25,7 @@ func init() {
 	used(sliceType{})
 	used(structType{})
 	used(structField{})
+	used(toKindTypeExt)
 }
 
 //gopherjs:new
@@ -261,18 +262,59 @@ func emitGCMask(out []byte, base uintptr, typ *abi.Type, n uintptr)
 //gopherjs:purge Relates to GC programs not valid for GopherJS
 func appendGCProg(dst []byte, typ *abi.Type) []byte
 
-// ===========================================================================
-// ===========================================================================
-// TODO(grantnelson-wf): REMOVE
-// ===========================================================================
-// ===========================================================================
+// toKindTypeExt will be automatically called when a cast to one of the
+// extended kind types is performed.
 //
-//gopherjs:replace
-func (v Value) NumField() int {
-	v.mustBe(Struct)
+// This is similar to `kindType` except that the reflect package has
+// extended several of the kind types to have additional methods added to them.
+// To get access to those methods, the `kindTypeExt` is checked or created.
+// The automatic cast is handled in compiler/expressions.go
+//
+// gopherjs:new
+func toKindTypeExt(src any) *js.Object {
+	var abiTyp *abi.Type
+	switch t := src.(type) {
+	case *rtype:
+		abiTyp = t.common()
+	case Type:
+		abiTyp = toAbiType(t)
+	case *abi.Type:
+		abiTyp = t
+	default:
+		panic(`unexpected type in toKindTypeExt`)
+	}
 
-	println(`>> v.typ >>`, v.typ())
+	const (
+		idKindType    = `kindType`
+		idKindTypeExt = `kindTypeExt`
+	)
+	// Check if a kindTypeExt has already been created for this type.
+	ext := js.InternalObject(abiTyp).Get(idKindTypeExt)
+	if ext != js.Undefined {
+		return ext
+	}
 
-	tt := (*structType)(unsafe.Pointer(v.typ()))
-	return len(tt.Fields)
+	// Constructe a new kindTypeExt for this type.
+	kindType := js.InternalObject(abiTyp).Get(idKindType)
+	switch abiTyp.Kind() {
+	case abi.Interface:
+		ext = js.InternalObject(&interfaceType{})
+		ext.Set(`InterfaceType`, js.InternalObject(kindType))
+	case abi.Map:
+		ext = js.InternalObject(&mapType{})
+		ext.Set(`MapType`, js.InternalObject(kindType))
+	case abi.Pointer:
+		ext = js.InternalObject(&ptrType{})
+		ext.Set(`PtrType`, js.InternalObject(kindType))
+	case abi.Slice:
+		ext = js.InternalObject(&sliceType{})
+		ext.Set(`SliceType`, js.InternalObject(kindType))
+	case abi.Struct:
+		ext = js.InternalObject(&structType{})
+		ext.Set(`StructType`, js.InternalObject(kindType))
+	default:
+		panic(`unexpected kind in toKindTypeExt`)
+	}
+	js.InternalObject(abiTyp).Set(idKindTypeExt, ext)
+	return ext
 }

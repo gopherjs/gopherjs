@@ -1114,26 +1114,6 @@ func (fc *funcContext) packageAllowsKindTypeConversion() bool {
 	return false
 }
 
-// typeAllowsKindTypeConversion determines if the given object ID for a desired type of an unsafe pointer conversion
-// is a type we know should have been added as a `kindType` or `kindTypeExt` field to the type pointed at by the unsafe pointer.
-func typeAllowsKindTypeConversion(desiredPkgPath, desiredName string) (bool, string) {
-	switch desiredPkgPath {
-	case `internal/abi`:
-		switch desiredName {
-		case `ArrayType`, `ChanType`, `FuncType`, `InterfaceType`, `MapType`, `PtrType`, `SliceType`, `StructType`:
-			return true, `kindType`
-		}
-	case `reflect`:
-		switch desiredName {
-		// The following are extensions of the ABI equivalent type to add more methods.
-		// e.g. `type structType struct { abi.StructType }`
-		case `interfaceType`, `mapType`, `ptrType`, `sliceType`, `structType`:
-			return true, `kindTypeExt`
-		}
-	}
-	return false, ``
-}
-
 func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type) *expression {
 	exprType := fc.typeOf(expr)
 	if types.Identical(exprType, desiredType) {
@@ -1156,12 +1136,21 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		if call, isCall := expr.(*ast.CallExpr); isCall && types.Identical(fc.typeOf(call.Fun), types.Typ[types.UnsafePointer]) {
 			if ptr, isPtr := desiredType.(*types.Pointer); isPtr {
 				if named, isNamed := ptr.Elem().(*types.Named); isNamed {
-					doKindTypeCast, fieldName := typeAllowsKindTypeConversion(named.Obj().Pkg().Path(), named.Obj().Name())
-					if doKindTypeCast {
-						return fc.formatExpr("%e.%s", call.Args[0], fieldName) // unsafe conversion
-					} else {
-						return fc.translateExpr(expr)
+					switch named.Obj().Pkg().Path() {
+					case `internal/abi`:
+						switch named.Obj().Name() {
+						case `ArrayType`, `ChanType`, `FuncType`, `InterfaceType`, `MapType`, `PtrType`, `SliceType`, `StructType`:
+							return fc.formatExpr("%e.kindType", call.Args[0]) // unsafe conversion
+						}
+					case `reflect`:
+						switch named.Obj().Name() {
+						// The following are extensions of the ABI equivalent type to add more methods.
+						// e.g. `type structType struct { abi.StructType }`
+						case `interfaceType`, `mapType`, `ptrType`, `sliceType`, `structType`:
+							return fc.formatExpr("toKindTypeExt(%e)", call.Args[0]) // unsafe conversion
+						}
 					}
+					return fc.translateExpr(expr)
 				}
 			}
 		}

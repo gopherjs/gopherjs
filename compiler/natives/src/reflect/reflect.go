@@ -49,13 +49,13 @@ func New(typ Type) Value {
 }
 
 //gopherjs:new
-func toAbiType(typ Type) *abi.Type {
-	return typ.(*rtype).common()
+func jsType(typ Type) *js.Object {
+	return toAbiType(typ).JsType()
 }
 
 //gopherjs:new
-func jsType(typ Type) *js.Object {
-	return toAbiType(typ).JsType()
+func toAbiType(typ Type) *abi.Type {
+	return typ.(*rtype).common()
 }
 
 //gopherjs:replace
@@ -334,7 +334,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	}
 
 	t := typ.common()
-	ftyp := t.FuncType()
+	ftyp := (*funcType)(unsafe.Pointer(t))
 
 	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		// Convert raw JS arguments into []Value the user-supplied function expects.
@@ -598,13 +598,9 @@ func cvtDirect(v Value, typ Type) Value {
 	case Array, Bool, Chan, Func, Interface, Map, String, UnsafePointer:
 		val = js.InternalObject(v.ptr)
 	default:
-		panic(&ValueError{Method: "reflect.Convert", Kind: k})
+		panic(&ValueError{"reflect.Convert", k})
 	}
-	return Value{
-		typ_: typ.common(),
-		ptr:  unsafe.Pointer(val.Unsafe()),
-		flag: v.flag.ro() | v.flag&flagIndir | flag(typ.Kind()),
-	}
+	return Value{typ.common(), unsafe.Pointer(val.Unsafe()), v.flag.ro() | v.flag&flagIndir | flag(typ.Kind())}
 }
 
 // convertOp: []T -> *[N]T
@@ -619,11 +615,7 @@ func cvtSliceArrayPtr(v Value, t Type) Value {
 		panic("reflect: cannot convert slice with length " + itoa.Itoa(slen) + " to pointer to array with length " + itoa.Itoa(alen))
 	}
 	array := js.Global.Call("$sliceToGoArray", slice, jsType(t))
-	return Value{
-		typ_: t.common(),
-		ptr:  unsafe.Pointer(array.Unsafe()),
-		flag: v.flag&^(flagIndir|flagAddr|flagKindMask) | flag(Ptr),
-	}
+	return Value{t.common(), unsafe.Pointer(array.Unsafe()), v.flag&^(flagIndir|flagAddr|flagKindMask) | flag(Ptr)}
 }
 
 // convertOp: []T -> [N]T
@@ -640,18 +632,14 @@ func cvtSliceArray(v Value, t Type) Value {
 	js.Global.Call("$copySlice", dst, slice)
 
 	arr := dst.Get("$array")
-	return Value{
-		typ_: t.common(),
-		ptr:  unsafe.Pointer(arr.Unsafe()),
-		flag: v.flag&^(flagAddr|flagKindMask) | flag(Array),
-	}
+	return Value{t.common(), unsafe.Pointer(arr.Unsafe()), v.flag&^(flagAddr|flagKindMask) | flag(Array)}
 }
 
 //gopherjs:replace
 func Copy(dst, src Value) int {
 	dk := dst.kind()
 	if dk != Array && dk != Slice {
-		panic(&ValueError{Method: "reflect.Copy", Kind: dk})
+		panic(&ValueError{"reflect.Copy", dk})
 	}
 	if dk == Array {
 		dst.mustBeAssignable()
@@ -663,7 +651,7 @@ func Copy(dst, src Value) int {
 	if sk != Array && sk != Slice {
 		stringCopy = sk == String && dst.typ().Elem().Kind() == abi.Uint8
 		if !stringCopy {
-			panic(&ValueError{Method: "reflect.Copy", Kind: sk})
+			panic(&ValueError{"reflect.Copy", sk})
 		}
 	}
 	src.mustBeExported()
@@ -691,7 +679,7 @@ func Copy(dst, src Value) int {
 //gopherjs:replace
 func valueInterface(v Value, safe bool) any {
 	if v.flag == 0 {
-		panic(&ValueError{Method: "reflect.Value.Interface", Kind: 0})
+		panic(&ValueError{"reflect.Value.Interface", 0})
 	}
 	if safe && v.flag&flagRO != 0 {
 		panic("reflect.Value.Interface: cannot return value obtained from unexported field or method")

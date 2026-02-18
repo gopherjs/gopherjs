@@ -20,7 +20,7 @@ func init() {
 	used(structType{})
 }
 
-// TODO(grantnelson-wf): This is just to minimize diffs. After this is merged into the go1.21 branch, remove it.
+// gopherjs:new
 func jsType(typ *abi.Type) *js.Object {
 	return typ.JsType()
 }

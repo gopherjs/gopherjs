@@ -10,6 +10,7 @@ import (
 	"internal/abi"
 	"internal/itoa"
 
+	"github.com/gopherjs/gopherjs/compiler/natives/src/internal/unsafeheader"
 	"github.com/gopherjs/gopherjs/js"
 )
 
@@ -68,6 +69,16 @@ func toRType(t *abi.Type) *rtype {
 	// isn't a copy but the actual abiType object.
 	js.InternalObject(rtyp).Set("t", js.InternalObject(t))
 	return rtyp
+}
+
+//gopherjs:replace
+func (t *rtype) String() string {
+	return toAbiType(t).String()
+}
+
+//gopherjs:replace
+func rtypeOf(i any) *abi.Type {
+	return abi.ReflectType(js.InternalObject(i).Get("constructor"))
 }
 
 //gopherjs:purge
@@ -788,7 +799,7 @@ func (t *rtype) Method(i int) (m Method) {
 	m.Name = pname.Name()
 	fl := flag(Func)
 	mtyp := t.typeOff(p.Mtyp)
-	ft := mtyp.FuncType()
+	ft := (*funcType)(unsafe.Pointer(mtyp))
 	in := make([]Type, 0, 1+ft.NumIn())
 	in = append(in, t)
 	for _, arg := range ft.InSlice() {
@@ -893,7 +904,7 @@ func (v Value) call(op string, in []Value) []Value {
 			rcvr = v.typ().JsType().New(rcvr)
 		}
 	} else {
-		t = v.typ().FuncType()
+		t = (*funcType)(unsafe.Pointer(v.typ))
 		fn = unsafe.Pointer(v.object().Unsafe())
 		rcvr = js.Undefined
 	}
@@ -979,7 +990,7 @@ func (v Value) call(op string, in []Value) []Value {
 	}
 }
 
-//gopherjs:replace Used a pointer cast to get *rtype that doesn't work in JS.
+//gopherjs:replace
 func (v Value) Type() Type {
 	if v.flag != 0 && v.flag&flagMethod == 0 {
 		return toRType(v.typ_)
@@ -1327,7 +1338,7 @@ func (v Value) bytesSlow() []byte {
 		if !v.CanAddr() {
 			panic("reflect.Value.Bytes of unaddressable byte array")
 		}
-		// GOPHERJS: Replace the following with JS to avoid using unsafe pointers.
+		// Replace the following with JS to avoid using unsafe pointers.
 		//   p := (*byte)(v.ptr)
 		//   n := int((*arrayType)(unsafe.Pointer(v.typ)).len)
 		//   return unsafe.Slice(p, n)
@@ -1396,7 +1407,7 @@ func (v Value) Slice(i, j int) Value {
 		if v.flag&flagAddr == 0 {
 			panic("reflect.Value.Slice: slice of unaddressable array")
 		}
-		tt := v.typ().ArrayType()
+		tt := (*arrayType)(unsafe.Pointer(v.typ))
 		cap = int(tt.Len)
 		typ = SliceOf(toRType(tt.Elem)).common()
 		s = typ.JsType().New(v.object())
@@ -1436,7 +1447,7 @@ func (v Value) Slice3(i, j, k int) Value {
 		if v.flag&flagAddr == 0 {
 			panic("reflect.Value.Slice: slice of unaddressable array")
 		}
-		tt := v.typ().ArrayType()
+		tt := (*arrayType)(unsafe.Pointer(v.typ))
 		cap = int(tt.Len)
 		typ = SliceOf(toRType(tt.Elem)).common()
 		s = typ.JsType().New(v.object())
@@ -1647,4 +1658,112 @@ func verifyNotInHeapPtr(p uintptr) bool {
 	// interpreted as a heap pointer. This is not relevant for GopherJS, so we can
 	// always return true.
 	return true
+}
+
+// typedslicecopy is implemented in prelude.js as $copySlice
+//
+//gopherjs:purge
+func typedslicecopy(t *abi.Type, dst, src unsafeheader.Slice) int
+
+// growslice is implemented in prelude.js as $growSlice.
+//
+//gopherjs:purge
+func growslice(t *abi.Type, old unsafeheader.Slice, num int) unsafeheader.Slice
+
+//gopherjs:purge This is the header for an any interface and invalid for GopherJS.
+type emptyInterface struct{}
+
+//gopherjs:purge This is the header for an interface value with methods and invalid for GopherJS.
+type nonEmptyInterface struct{}
+
+//gopherjs:purge
+func packEface(v Value) any
+
+//gopherjs:purge
+func unpackEface(i any) Value
+
+//gopherjs:purge
+func storeRcvr(v Value, p unsafe.Pointer)
+
+//gopherjs:purge
+func callMethod(ctxt *methodValue, frame unsafe.Pointer, retValid *bool, regs *abi.RegArgs)
+
+// gopherjs:replace
+func noescape(p unsafe.Pointer) unsafe.Pointer {
+	return p
+}
+
+//gopherjs:purge
+func makeFuncStub()
+
+//gopherjs:purge Unused type
+type common struct{}
+
+//gopherjs:purge Used in original MapOf and not used in override MapOf by GopherJS
+func bucketOf(ktyp, etyp *abi.Type) *abi.Type
+
+//gopherjs:purge Relates to GC programs not valid for GopherJS
+func (t *rtype) gcSlice(begin, end uintptr) []byte
+
+//gopherjs:purge Relates to GC programs not valid for GopherJS
+func emitGCMask(out []byte, base uintptr, typ *abi.Type, n uintptr)
+
+//gopherjs:purge Relates to GC programs not valid for GopherJS
+func appendGCProg(dst []byte, typ *abi.Type) []byte
+
+// toKindTypeExt will be automatically called when a cast to one of the
+// extended kind types is performed.
+//
+// This is similar to `kindType` except that the reflect package has
+// extended several of the kind types to have additional methods added to them.
+// To get access to those methods, the `kindTypeExt` is checked or created.
+// The automatic cast is handled in compiler/expressions.go
+//
+// gopherjs:new
+func toKindTypeExt(src any) *js.Object {
+	var abiTyp *abi.Type
+	switch t := src.(type) {
+	case *rtype:
+		abiTyp = t.common()
+	case Type:
+		abiTyp = toAbiType(t)
+	case *abi.Type:
+		abiTyp = t
+	default:
+		panic(`unexpected type in toKindTypeExt`)
+	}
+
+	const (
+		idKindType    = `kindType`
+		idKindTypeExt = `kindTypeExt`
+	)
+	// Check if a kindTypeExt has already been created for this type.
+	ext := js.InternalObject(abiTyp).Get(idKindTypeExt)
+	if ext != js.Undefined {
+		return ext
+	}
+
+	// Constructe a new kindTypeExt for this type.
+	kindType := js.InternalObject(abiTyp).Get(idKindType)
+	switch abiTyp.Kind() {
+	case abi.Interface:
+		ext = js.InternalObject(&interfaceType{})
+		ext.Set(`InterfaceType`, js.InternalObject(kindType))
+	case abi.Map:
+		ext = js.InternalObject(&mapType{})
+		ext.Set(`MapType`, js.InternalObject(kindType))
+	case abi.Pointer:
+		ext = js.InternalObject(&ptrType{})
+		ext.Set(`PtrType`, js.InternalObject(kindType))
+	case abi.Slice:
+		ext = js.InternalObject(&sliceType{})
+		ext.Set(`SliceType`, js.InternalObject(kindType))
+	case abi.Struct:
+		ext = js.InternalObject(&structType{})
+		ext.Set(`StructType`, js.InternalObject(kindType))
+	default:
+		panic(`unexpected kind in toKindTypeExt`)
+	}
+	js.InternalObject(abiTyp).Set(idKindTypeExt, ext)
+	return ext
 }

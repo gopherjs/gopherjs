@@ -260,3 +260,19 @@ func emitGCMask(out []byte, base uintptr, typ *abi.Type, n uintptr)
 
 //gopherjs:purge Relates to GC programs not valid for GopherJS
 func appendGCProg(dst []byte, typ *abi.Type) []byte
+
+// ===========================================================================
+// ===========================================================================
+// TODO(grantnelson-wf): REMOVE
+// ===========================================================================
+// ===========================================================================
+//
+//gopherjs:replace
+func (v Value) NumField() int {
+	v.mustBe(Struct)
+
+	println(`>> v.typ >>`, v.typ())
+
+	tt := (*structType)(unsafe.Pointer(v.typ()))
+	return len(tt.Fields)
+}

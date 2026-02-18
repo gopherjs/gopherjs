@@ -1105,7 +1105,7 @@ func (fc *funcContext) translateExprSlice(exprs []ast.Expr, desiredType types.Ty
 }
 
 // packageAllowsKindTypeConversion determines if the current package should
-// be checked for a special type of casts, `kindType` conversions.
+// be checked for a special type of casts, `kindType` or `kindTypeExt` conversions.
 func (fc *funcContext) packageAllowsKindTypeConversion() bool {
 	switch fc.pkgCtx.Pkg.Path() {
 	case `internal/abi`, `internal/reflectlite`, `reflect`:
@@ -1115,22 +1115,23 @@ func (fc *funcContext) packageAllowsKindTypeConversion() bool {
 }
 
 // typeAllowsKindTypeConversion determines if the given object ID for a desired type of an unsafe pointer conversion
-// is a type we know should have been added as a `kindType` field to the type pointed at by the unsafe pointer.
-func typeAllowsKindTypeConversion(desiredPkgPath, desiredName string) bool {
+// is a type we know should have been added as a `kindType` or `kindTypeExt` field to the type pointed at by the unsafe pointer.
+func typeAllowsKindTypeConversion(desiredPkgPath, desiredName string) (bool, string) {
 	switch desiredPkgPath {
 	case `internal/abi`:
 		switch desiredName {
 		case `ArrayType`, `ChanType`, `FuncType`, `InterfaceType`, `MapType`, `PtrType`, `SliceType`, `StructType`:
-			return true
+			return true, `kindType`
 		}
 	case `reflect`:
 		switch desiredName {
 		// The following are extensions of the ABI equivalent type to add more methods.
+		// e.g. `type structType struct { abi.StructType }`
 		case `interfaceType`, `mapType`, `ptrType`, `sliceType`, `structType`:
-			return true
+			return true, `kindTypeExt`
 		}
 	}
-	return false
+	return false, ``
 }
 
 func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type) *expression {
@@ -1155,8 +1156,9 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		if call, isCall := expr.(*ast.CallExpr); isCall && types.Identical(fc.typeOf(call.Fun), types.Typ[types.UnsafePointer]) {
 			if ptr, isPtr := desiredType.(*types.Pointer); isPtr {
 				if named, isNamed := ptr.Elem().(*types.Named); isNamed {
-					if typeAllowsKindTypeConversion(named.Obj().Pkg().Path(), named.Obj().Name()) {
-						return fc.formatExpr("%e.kindType", call.Args[0]) // unsafe conversion
+					doKindTypeCast, fieldName := typeAllowsKindTypeConversion(named.Obj().Pkg().Path(), named.Obj().Name())
+					if doKindTypeCast {
+						return fc.formatExpr("%e.%s", call.Args[0], fieldName) // unsafe conversion
 					} else {
 						return fc.translateExpr(expr)
 					}

@@ -13,6 +13,7 @@ const (
 	idJsType       = `jsType`
 	idReflectType  = `reflectType`
 	idKindType     = `kindType`
+	idKindTypeExt  = `kindTypeExt`
 	idUncommonType = `uncommonType`
 )
 
@@ -126,19 +127,23 @@ func ReflectType(typ *js.Object) *Type {
 			PkgPath: NewName(internalStr(typ.Get("pkg")), "", false, false),
 			Methods: imethods,
 		})
+		setKindTypeExt(abiTyp, `InterfaceType`, &struct{ InterfaceType }{})
 	case Map:
 		setKindType(abiTyp, &MapType{
 			Key:  ReflectType(typ.Get("key")),
 			Elem: ReflectType(typ.Get("elem")),
 		})
+		setKindTypeExt(abiTyp, `MapType`, &struct{ MapType }{})
 	case Pointer:
 		setKindType(abiTyp, &PtrType{
 			Elem: ReflectType(typ.Get("elem")),
 		})
+		setKindTypeExt(abiTyp, `PtrType`, &struct{ PtrType }{})
 	case Slice:
 		setKindType(abiTyp, &SliceType{
 			Elem: ReflectType(typ.Get("elem")),
 		})
+		setKindTypeExt(abiTyp, `SliceType`, &struct{ SliceType }{})
 	case Struct:
 		fields := typ.Get("fields")
 		reflectFields := make([]StructField, fields.Length())
@@ -154,6 +159,7 @@ func ReflectType(typ *js.Object) *Type {
 			PkgPath: NewName(internalStr(typ.Get("pkgPath")), "", false, false),
 			Fields:  reflectFields,
 		})
+		setKindTypeExt(abiTyp, `StructType`, &struct{ StructType }{})
 	}
 
 	return abiTyp
@@ -173,7 +179,19 @@ func setKindType(abiTyp *Type, kindType any) {
 	// field on the kind types are `Type`. However, this is valid because of how
 	// pointers and references work in JS. We set this so that the Type
 	// isn't a copy but the actual abiType object.
-	js.InternalObject(kindType).Set("Type", js.InternalObject(abiTyp))
+	js.InternalObject(kindType).Set(`Type`, js.InternalObject(abiTyp))
+}
+
+//gopherjs:new
+func setKindTypeExt(abiTyp *Type, kindTypeName string, kindTypeExt any) {
+	kindType := js.InternalObject(abiTyp).Get(idKindType)
+	js.InternalObject(kindTypeExt).Set(kindTypeName, kindType)
+
+	// Add the kindTypeExt to the abiTyp object. The type extensions in
+	// reflect embed a kindType into an object that can have additional methods
+	// added to it. To handle those kinds we automatically change the cast to
+	// those types to look up the kindTypeExt value.
+	js.InternalObject(abiTyp).Set(idKindTypeExt, js.InternalObject(kindTypeExt))
 }
 
 //gopherjs:replace

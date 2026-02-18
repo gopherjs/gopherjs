@@ -22,5 +22,5 @@ type pinUnexpMeth interface{}
 //gopherjs:purge Used in FirstMethodNameBytes
 var pinUnexpMethI pinUnexpMeth
 
-//gopherjs:purge Uses pointer arithmetic for names
+//gopherjs:purge Unused method that uses pointer arithmetic for names
 func FirstMethodNameBytes(t Type) *byte

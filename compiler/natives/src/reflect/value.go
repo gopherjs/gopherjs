@@ -49,7 +49,7 @@ func ValueOf(i any) Value {
 	if i == nil {
 		return Value{}
 	}
-	return makeValue(abi.ReflectType(js.InternalObject(i).Get("constructor")), js.InternalObject(i).Get("$val"), 0)
+	return makeValue(rtypeOf(i), js.InternalObject(i).Get("$val"), 0)
 }
 
 //gopherjs:replace

@@ -73,6 +73,7 @@ func ReflectType(typ *js.Object) *Type {
 	}
 
 	// Create the kind type for the ABI type if the kind has additional information.
+	// Also set `PtrBytes` to a non-zero number for types with Pointer() values.
 	switch abiTyp.Kind() {
 	case Array:
 		setKindType(abiTyp, &ArrayType{
@@ -87,6 +88,7 @@ func ReflectType(typ *js.Object) *Type {
 		if typ.Get("recvOnly").Bool() {
 			dir = RecvDir
 		}
+		abiTyp.PtrBytes = 4
 		setKindType(abiTyp, &ChanType{
 			Elem: ReflectType(typ.Get("elem")),
 			Dir:  dir,
@@ -106,6 +108,7 @@ func ReflectType(typ *js.Object) *Type {
 		if typ.Get("variadic").Bool() {
 			outCount |= 1 << 15
 		}
+		abiTyp.PtrBytes = 4
 		setKindType(abiTyp, &FuncType{
 			InCount:  uint16(params.Length()),
 			OutCount: outCount,
@@ -127,15 +130,18 @@ func ReflectType(typ *js.Object) *Type {
 			Methods: imethods,
 		})
 	case Map:
+		abiTyp.PtrBytes = 4
 		setKindType(abiTyp, &MapType{
 			Key:  ReflectType(typ.Get("key")),
 			Elem: ReflectType(typ.Get("elem")),
 		})
 	case Pointer:
+		abiTyp.PtrBytes = 4
 		setKindType(abiTyp, &PtrType{
 			Elem: ReflectType(typ.Get("elem")),
 		})
 	case Slice:
+		abiTyp.PtrBytes = 4
 		setKindType(abiTyp, &SliceType{
 			Elem: ReflectType(typ.Get("elem")),
 		})
@@ -154,6 +160,8 @@ func ReflectType(typ *js.Object) *Type {
 			PkgPath: NewName(internalStr(typ.Get("pkgPath")), "", false, false),
 			Fields:  reflectFields,
 		})
+	case UnsafePointer:
+		abiTyp.PtrBytes = 4
 	}
 
 	return abiTyp

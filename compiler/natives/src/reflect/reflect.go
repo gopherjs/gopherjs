@@ -904,7 +904,7 @@ func (v Value) call(op string, in []Value) []Value {
 			rcvr = v.typ().JsType().New(rcvr)
 		}
 	} else {
-		t = (*funcType)(unsafe.Pointer(v.typ))
+		t = (*funcType)(unsafe.Pointer(v.typ()))
 		fn = unsafe.Pointer(v.object().Unsafe())
 		rcvr = js.Undefined
 	}
@@ -1407,7 +1407,7 @@ func (v Value) Slice(i, j int) Value {
 		if v.flag&flagAddr == 0 {
 			panic("reflect.Value.Slice: slice of unaddressable array")
 		}
-		tt := (*arrayType)(unsafe.Pointer(v.typ))
+		tt := (*arrayType)(unsafe.Pointer(v.typ()))
 		cap = int(tt.Len)
 		typ = SliceOf(toRType(tt.Elem)).common()
 		s = typ.JsType().New(v.object())
@@ -1447,7 +1447,7 @@ func (v Value) Slice3(i, j, k int) Value {
 		if v.flag&flagAddr == 0 {
 			panic("reflect.Value.Slice: slice of unaddressable array")
 		}
-		tt := (*arrayType)(unsafe.Pointer(v.typ))
+		tt := (*arrayType)(unsafe.Pointer(v.typ()))
 		cap = int(tt.Len)
 		typ = SliceOf(toRType(tt.Elem)).common()
 		s = typ.JsType().New(v.object())
@@ -1701,6 +1701,9 @@ type common struct{}
 
 //gopherjs:purge Used in original MapOf and not used in override MapOf by GopherJS
 func bucketOf(ktyp, etyp *abi.Type) *abi.Type
+
+//gopherjs:purge Unused type
+const debugReflectCall = false
 
 //gopherjs:purge Relates to GC programs not valid for GopherJS
 func (t *rtype) gcSlice(begin, end uintptr) []byte

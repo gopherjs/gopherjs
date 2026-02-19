@@ -62,12 +62,18 @@ func toAbiType(typ Type) *abi.Type {
 
 //gopherjs:replace
 func toRType(t *abi.Type) *rtype {
+	const idRType = `rType_`
+	// rtypes are stored so that two types can be compared with `==`.
+	if jrt := js.InternalObject(t).Get(idRType); jrt != js.Undefined {
+		return (*rtype)(unsafe.Pointer(jrt.Unsafe()))
+	}
+
 	rtyp := &rtype{}
-	// Assign t to the abiType. The abiType is a `*Type` and the t
-	// field on `rtype` is `Type`. However, this is valid because of how
-	// pointers and references work in JS. We set this so that the t
-	// isn't a copy but the actual abiType object.
+	// Assign t to the abiType. The abiType is a `*Type` and the t field on `rtype` is `Type`.
+	// However, this is valid because of how pointers and references work in JS.
+	// We set this so that the t isn't a copy but the actual abiType object.
 	js.InternalObject(rtyp).Set("t", js.InternalObject(t))
+	js.InternalObject(t).Set(idRType, js.InternalObject(rtyp))
 	return rtyp
 }
 
@@ -1166,7 +1172,7 @@ func (v Value) Clear() {
 			a.SetIndex(i+offset, zeroFn.Invoke())
 		}
 	// case Map:
-	// TODO(grantnelson-wf): Finish implementing
+	// TODO(grantnelson-wf): Finish implementing for go1.21
 	// mapclear(v.typ(), v.pointer())
 	default:
 		panic(&ValueError{"reflect.Value.Clear", v.Kind()})

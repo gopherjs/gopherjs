@@ -11,7 +11,7 @@ import (
 //gopherjs:new
 const (
 	idJsType       = `jsType`
-	idReflectType  = `reflectType`
+	idAbiType      = `abiType`
 	idKindType     = `kindType`
 	idUncommonType = `uncommonType`
 )
@@ -19,8 +19,8 @@ const (
 //gopherjs:new
 func ReflectType(typ *js.Object) *Type {
 	// If the object already had the reflect type determined, return it.
-	if typ.Get(idReflectType) != js.Undefined {
-		return (*Type)(unsafe.Pointer(typ.Get(idReflectType).Unsafe()))
+	if jrt := typ.Get(idAbiType); jrt != js.Undefined {
+		return (*Type)(unsafe.Pointer(jrt.Unsafe()))
 	}
 
 	// Create new ABI type.
@@ -30,7 +30,7 @@ func ReflectType(typ *js.Object) *Type {
 		Str:   ResolveReflectName(NewName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
 	}
 	js.InternalObject(abiTyp).Set(idJsType, typ)
-	typ.Set(idReflectType, js.InternalObject(abiTyp))
+	typ.Set(idAbiType, js.InternalObject(abiTyp))
 
 	// Add the UncommonType to ABI type if the type has methods.
 	methodSet := js.Global.Call("$methodSet", typ)

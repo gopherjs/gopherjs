@@ -1,3 +1,5 @@
+//go:build js
+
 package reflect
 
 //gopherjs:purge Uses GC, stack, and funcLayout

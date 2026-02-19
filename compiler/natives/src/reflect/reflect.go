@@ -62,7 +62,11 @@ func toAbiType(typ Type) *abi.Type {
 
 //gopherjs:replace
 func toRType(t *abi.Type) *rtype {
-	const idRType = `rType_`
+	const (
+		idRType    = `rType`
+		idKindType = `kindType`
+	)
+
 	// rtypes are stored so that two types can be compared with `==`.
 	if jrt := js.InternalObject(t).Get(idRType); jrt != js.Undefined {
 		return (*rtype)(unsafe.Pointer(jrt.Unsafe()))
@@ -74,6 +78,8 @@ func toRType(t *abi.Type) *rtype {
 	// We set this so that the t isn't a copy but the actual abiType object.
 	js.InternalObject(rtyp).Set("t", js.InternalObject(t))
 	js.InternalObject(t).Set(idRType, js.InternalObject(rtyp))
+	// Also copy over kindType to rtype so casts can be made directly from rtype to kindType.
+	js.InternalObject(rtyp).Set(idKindType, js.InternalObject(t).Get(idKindType))
 	return rtyp
 }
 
@@ -1734,8 +1740,6 @@ func toKindTypeExt(src any) *js.Object {
 	switch t := src.(type) {
 	case *rtype:
 		abiTyp = t.common()
-	case Type:
-		abiTyp = toAbiType(t)
 	case *abi.Type:
 		abiTyp = t
 	default:

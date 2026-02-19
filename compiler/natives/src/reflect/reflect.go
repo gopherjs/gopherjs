@@ -774,11 +774,7 @@ func makeMethodValue(op string, v Value) Value {
 	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		return js.InternalObject(fn).Call("apply", rcvr, arguments)
 	})
-	return Value{
-		typ_: v.Type().common(),
-		ptr:  unsafe.Pointer(fv.Unsafe()),
-		flag: v.flag.ro() | flag(Func),
-	}
+	return Value{v.Type().common(), unsafe.Pointer(fv.Unsafe()), v.flag.ro() | flag(Func)}
 }
 
 //gopherjs:new
@@ -823,7 +819,7 @@ func (t *rtype) Method(i int) (m Method) {
 	}
 	mt := FuncOf(in, out, ft.IsVariadic())
 	m.Type = mt
-	prop := js.Global.Call("$methodSet", js.InternalObject(t).Get("jsType")).Index(i).Get("prop").String()
+	prop := js.Global.Call("$methodSet", jsType(t)).Index(i).Get("prop").String()
 	fn := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		rcvr := arguments[0]
 		return rcvr.Get(prop).Call("apply", rcvr, arguments[1:])
@@ -1156,14 +1152,12 @@ func (v Value) extendSlice(n int) Value {
 	return v2
 }
 
-//gopherjs:purge
+//gopherjs:purge Unused because handled inside of Clear
 func mapclear(t *abi.Type, m unsafe.Pointer)
 
-//gopherjs:purge
+//gopherjs:purge Unused because handled inside of Clear
 func typedarrayclear(elemType *abi.Type, ptr unsafe.Pointer, len int)
 
-// TODO(grantnelson-wf): Make sure this is tested since it is new.
-//
 //gopherjs:replace
 func (v Value) Clear() {
 	switch v.Kind() {
@@ -1171,15 +1165,16 @@ func (v Value) Clear() {
 		st := (*sliceType)(unsafe.Pointer(v.typ()))
 		elem := st.Elem
 		zeroFn := elem.JsType().Get("zero")
-		a := js.InternalObject(v.ptr)
+		a := js.InternalObject(v.ptr).Call("$get")
 		offset := a.Get("$offset").Int()
 		length := a.Get("$length").Int()
+		array := a.Get("$array")
 		for i := 0; i < length; i++ {
-			a.SetIndex(i+offset, zeroFn.Invoke())
+			array.SetIndex(i+offset, zeroFn.Invoke())
 		}
-	// case Map:
-	// TODO(grantnelson-wf): Finish implementing for go1.21
-	// mapclear(v.typ(), v.pointer())
+	case Map:
+		mapObj := js.InternalObject(v.ptr).Call("$get")
+		mapObj.Call("clear")
 	default:
 		panic(&ValueError{"reflect.Value.Clear", v.Kind()})
 	}

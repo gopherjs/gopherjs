@@ -120,8 +120,12 @@ func ReflectType(typ *js.Object) *Type {
 		imethods := make([]Imethod, methods.Length())
 		for i := range imethods {
 			m := methods.Index(i)
+			mPkg := internalStr(m.Get("pkg"))
+			exported := mPkg == ""
+			name := NewName(internalStr(m.Get("name")), "", exported, false)
+			name.SetPkgPath(mPkg)
 			imethods[i] = Imethod{
-				Name: ResolveReflectName(NewName(internalStr(m.Get("name")), "", internalStr(m.Get("pkg")) == "", false)),
+				Name: ResolveReflectName(name),
 				Typ:  ResolveReflectType(ReflectType(m.Get("typ"))),
 			}
 		}
@@ -304,9 +308,7 @@ func (n Name) ReadVarint(off int) (int, int)
 func (n Name) PkgPath() string { return n.pkgPath }
 
 //gopherjs:new
-func (n Name) SetPkgPath(pkgpath string) {
-	n.pkgPath = pkgpath
-}
+func (n *Name) SetPkgPath(pkgpath string) { n.pkgPath = pkgpath }
 
 //gopherjs:replace
 func NewName(n, tag string, exported, embedded bool) Name {

@@ -501,6 +501,11 @@ func godebug_setUpdate(update func(def, env string)) {
 	godebug_notify(godebugEnvKey, godebugEnv)
 }
 
+// godebug_setUpdate implements the setNewIncNonDefault in src/internal/godebug/godebug.go
+func godebug_setNewIncNonDefault(newIncNonDefault func(string) func()) {
+	// TODO(grantnelson-wf): Figure out what to do for this method.
+}
+
 func getEnvString(key string) string {
 	process := js.Global.Get(`process`)
 	if process == js.Undefined {

@@ -1104,22 +1104,53 @@ func (fc *funcContext) translateExprSlice(exprs []ast.Expr, desiredType types.Ty
 	return parts
 }
 
+// packageAllowsKindTypeConversion determines if the current package should
+// be checked for a special type of casts, `kindType` or `kindTypeExt` conversions.
+func (fc *funcContext) packageAllowsKindTypeConversion() bool {
+	switch fc.pkgCtx.Pkg.Path() {
+	case `internal/abi`, `internal/reflectlite`, `reflect`:
+		return true
+	}
+	return false
+}
+
 func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type) *expression {
 	exprType := fc.typeOf(expr)
 	if types.Identical(exprType, desiredType) {
 		return fc.translateExpr(expr)
 	}
 
-	if fc.pkgCtx.Pkg.Path() == "reflect" || fc.pkgCtx.Pkg.Path() == "internal/reflectlite" {
+	// For some specific packages, e.g. reflect, the Go code performs casts between different sized memory footprints
+	// and leverages that the pointer to the first field is the same as the pointer to the full struct. These conversions
+	// are normally not allowed by GopherJS. However, in specific packages, the original code does this kind of cast
+	// so often, that to avoid them would cause massive amounts of native overrides. To simplify the native overrides
+	// for these specific packages we will allow casts between specific types by looking up the `kindType` that is
+	// assigned when creating them.
+	//
+	// The structures are `type K struct{T; additional fields}`. In Go the untyped pointer to `K` is also the untypes
+	// pointer to the first field, i.e. `T`. These packages will hold onto `t *T` then cast to the kind type like
+	// `k = (*K)unsafe.Pointer(t)`. Normally this isn't allowed in JS because `K` is larger with additional fields,
+	// but when we created `t` in the native overrides, we assign `k` as the `t.kindType` and translate those specific
+	// casts to get that `kindType`, thus greatly reducing the amount of overrides we have to add to those packages.
+	if fc.packageAllowsKindTypeConversion() {
 		if call, isCall := expr.(*ast.CallExpr); isCall && types.Identical(fc.typeOf(call.Fun), types.Typ[types.UnsafePointer]) {
 			if ptr, isPtr := desiredType.(*types.Pointer); isPtr {
 				if named, isNamed := ptr.Elem().(*types.Named); isNamed {
-					switch named.Obj().Name() {
-					case "arrayType", "chanType", "funcType", "interfaceType", "mapType", "ptrType", "sliceType", "structType":
-						return fc.formatExpr("%e.kindType", call.Args[0]) // unsafe conversion
-					default:
-						return fc.translateExpr(expr)
+					switch named.Obj().Pkg().Path() {
+					case `internal/abi`:
+						switch named.Obj().Name() {
+						case `ArrayType`, `ChanType`, `FuncType`, `InterfaceType`, `MapType`, `PtrType`, `SliceType`, `StructType`:
+							return fc.formatExpr("%e.kindType", call.Args[0]) // unsafe conversion
+						}
+					case `reflect`:
+						switch named.Obj().Name() {
+						// The following are extensions of the ABI equivalent type to add more methods.
+						// e.g. `type structType struct { abi.StructType }`
+						case `interfaceType`, `mapType`, `ptrType`, `sliceType`, `structType`:
+							return fc.formatExpr("toKindTypeExt(%e)", call.Args[0]) // unsafe conversion
+						}
 					}
+					return fc.translateExpr(expr)
 				}
 			}
 		}

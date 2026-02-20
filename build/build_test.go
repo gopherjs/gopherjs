@@ -724,7 +724,11 @@ func TestOriginalAugmentation(t *testing.T) {
 			fileSrc := f.Parse("test.go", pkgName+test.src)
 
 			augmentOriginalImports(importPath, fileSrc)
-			augmentOriginalFile(fileSrc, test.info)
+			found := make(map[string]struct{})
+			augmentOriginalFile(fileSrc, test.info, found)
+			if err := checkOverrides(test.info, found, importPath); err != nil {
+				t.Errorf("check overrides: %v", err)
+			}
 			pruneImports(fileSrc)
 
 			got := srctesting.Format(t, f.FileSet, fileSrc)

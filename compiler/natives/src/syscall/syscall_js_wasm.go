@@ -1,6 +1,7 @@
 package syscall
 
 import (
+	"sync"
 	"syscall/js"
 	_ "unsafe" // go:linkname
 )
@@ -51,6 +52,14 @@ func unsetenv_c(k string) {
 
 //go:linkname godebug_notify runtime.godebug_notify
 func godebug_notify(key, value string)
+
+// GOPHERJS: This was replaced so that we could add the go:linkname since
+// sync.syscall_hasWaitingReaders had a link we can't handle right now,
+// "can not insert local implementation..."
+// TODO(grantnelson-wf): Remove once linking works both directions.
+//
+//go:linkname hasWaitingReaders sync.syscall_hasWaitingReaders
+func hasWaitingReaders(rw *sync.RWMutex) bool
 
 func setStat(st *Stat_t, jsSt js.Value) {
 	// This method is an almost-exact copy of upstream, except for 4 places where

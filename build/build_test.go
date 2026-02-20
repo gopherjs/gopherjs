@@ -726,6 +726,9 @@ func TestOriginalAugmentation(t *testing.T) {
 			augmentOriginalImports(importPath, fileSrc)
 			found := make(map[string]struct{})
 			augmentOriginalFile(fileSrc, test.info, found)
+			if err := checkOverrides(test.info, found, importPath); err != nil {
+				t.Errorf("check overrides: %v", err)
+			}
 			pruneImports(fileSrc)
 
 			got := srctesting.Format(t, f.FileSet, fileSrc)

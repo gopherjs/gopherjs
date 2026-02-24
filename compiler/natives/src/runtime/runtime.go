@@ -501,10 +501,12 @@ func godebug_setUpdate(update func(def, env string)) {
 	godebug_notify(godebugEnvKey, godebugEnv)
 }
 
-// godebug_setUpdate implements the setNewIncNonDefault in src/internal/godebug/godebug.go
-func godebug_setNewIncNonDefault(newIncNonDefault func(string) func()) {
-	// TODO(grantnelson-wf): Figure out what to do for this method.
-}
+// godebug_setNewIncNonDefault implements the setNewIncNonDefault in
+// src/internal/godebug/godebug.go.
+// GOPHERJS: The GopherJS runtime doesn't need this function so we can remove it.
+//
+//gopherjs:puge
+func godebug_setNewIncNonDefault(newIncNonDefault func(string) func())
 
 func getEnvString(key string) string {
 	process := js.Global.Get(`process`)

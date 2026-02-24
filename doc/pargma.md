@@ -9,6 +9,8 @@ GopherJS compiler supports the following directives:
 
 - [go:linkname](#golinkname)
 - [go:embed](#goembed)
+- [gopherjs:new](#gopherjsnew)
+- [gopherjs:replace](#gopherjsreplace)
 - [gopherjs:keep-original](#gopherjskeep-original)
 - [gopherjs:purge](#gopherjspurge)
 - [gopherjs:override-signature](#gopherjsoverride-signature)
@@ -82,6 +84,81 @@ of `embed.FS`, several embedded files will be accessible.
 See [pkg.go.dev/embed](https://pkg.go.dev/embed#hdr-Directives)
 for more information.
 
+## `gopherjs:new`
+
+This directive is custom to GopherJS. This directive can be added
+to most declarations and specification in the native file overrides as
+part of the build step. This does not work on imports.
+
+This is an optional directive to help check for issues when upgrading to
+newer versions of Go. This will indicate that the code it is on, is new code
+being added to the package via the overrides.
+
+When the overrides are being applied, if an identifier matches then the
+code is replaced with the override, otherwise the code is added as new code.
+If this directive is added to the override, it will raise an error when some
+code by the same identifier exists. This allows the developer to indicate
+they intended to add code without it being used as a replacement.
+
+This is useful when upgrading to new Go versions. The changes to the Go code
+could change or add an identifier that matches. Instead of the override
+unexpectantly becoming a replacement, this will prevent that and let the
+developers performing the upgrade know that they need to rename the override
+to keep is as new code and not replace the Go code.
+
+In the following example, suppose we added a function `clearData` for
+go1.X. When upgrating to go1.Y, the developers of Go add thier own function
+called `clearData`. Instead of quietly replacing the new Go code, this
+directive would error to indicate we need to rename our new code to something
+like `jsClearData` to prevent our code from replacing the Go code unintentinally.
+
+```Go
+//gopherjs:new
+func clearData(obj *js.Object) { ... }
+
+//gopherjs:new
+var listOfData = []string { ... }
+```
+
+## `gopherjs:replace`
+
+This directive is custom to GopherJS. This directive can be added
+to most declarations and specification in the native file overrides as
+part of the build step. This does not work on imports.
+
+This is an optional directive to help check for issues when upgrading to
+newer versions of Go. This will indicate that the code it is on, is replacing
+code in a package.
+
+When the overrides are being applied, if an identifier matches then the
+code is replaced with the override, otherwise the code is added as new code.
+If this directive is added to the override, it will raise an error when
+some code by the same identifier does not exist. This allows the developer
+to indicate they intende to replcae native code with this override and
+prevent it from being added as new code.
+
+This is useful when upgrading to new Go versions. The changes to the Go code
+could change or remove an identifier that matches. Instead of the override
+unexpectantly becoming new code, this will prevent that and let the developers
+performing the upgrade know that they need to rename or remove the override
+to keep the override replacing the correct Go code.
+
+In the following example, suppose we were replacing a function `clearData` for
+go1.X. When upgrading to go1.Y, the developers of Go renamed thier own
+`clearData` function to `clearTableData`. Instead of quietly adding `clearData`
+as a new function (which will likely just be removed with dead code elimination)
+and not providing the intended override of the `clearTableData` function,
+this directive would error to indicate we need to rename our override to match
+the changes in Go.
+
+```Go
+//gopherjs:replace
+func clearData(obj *js.Object) { ... }
+
+//gopherjs:replace
+var listOfData = []string { ... }
+```
+
 ## `gopherjs:keep-original`
 
 This directive is custom to GopherJS. This directive can be added to a
@@ -100,6 +177,12 @@ func foo(a, b int) int {
   return _gopherjs_original_foo(a+1, b+1) - 1
 }
 ```
+
+This will work like a `gopherjs:replace` as well, where if the native code
+does not have this identifier, an error will occur. That helps a developer
+know why the `_gopherjs_original_` code would be missing during an upgrade
+to a new version of Go where the Go developers may have renamed or removed
+the original code.
 
 ## `gopherjs:purge`
 
@@ -135,6 +218,13 @@ type interfaceType any
 //gopherjs:purge
 func doThing[T ~string](value T)
 ```
+
+This will work like a `gopherjs:replace` as well, where if the native code
+does not have this identifier, an error will occur. This helps developers
+during an upgrade of Go versions that the Go developers may have renamed or
+removed the original code being purged. If the code has been removed
+we can remove unused override code. If the code was renamed, we can move the
+purge to the new identifier.
 
 ## `gopherjs:override-signature`
 
@@ -194,3 +284,8 @@ func (f *Foo) Bar(a int, b jsTypeA) (jsTypeA, error) {
   //...
 }
 ```
+
+This will work like a `gopherjs:replace` as well, where if the native code
+does not have this identifier, an error will occur. This helps developers
+during an upgrade of Go versions that the Go developers may have renamed or
+removed the original code being overridden.

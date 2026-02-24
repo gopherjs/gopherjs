@@ -1121,17 +1121,18 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 	}
 
 	// For some specific packages, e.g. reflect, the Go code performs casts between different sized memory footprints
-	// and leverages that the pointer to the first field is the same as the pointer to the full struct. These conversions
-	// are normally not allowed by GopherJS. However, in specific packages, the original code does this kind of cast
-	// so often, that to avoid them would cause massive amounts of native overrides. To simplify the native overrides
-	// for these specific packages we will allow casts between specific types by looking up the `kindType` that is
-	// assigned when creating them.
+	// and leverages the fact that the pointer to the first field is the same as the pointer to the full struct in Go.
+	// These conversions are normally not allowed by GopherJS. However, in those specific packages, the original code
+	// does this kind of cast so often, that to avoid them would cause massive amounts of native overrides.
+	// To simplify the native overrides we will allow casts between specific types for specific packages by looking up
+	// the `kindType` that is assigned when creating them.
 	//
-	// The structures are `type K struct{T; additional fields}`. In Go the untyped pointer to `K` is also the untypes
-	// pointer to the first field, i.e. `T`. These packages will hold onto `t *T` then cast to the kind type like
-	// `k = (*K)unsafe.Pointer(t)`. Normally this isn't allowed in JS because `K` is larger with additional fields,
-	// but when we created `t` in the native overrides, we assign `k` as the `t.kindType` and translate those specific
-	// casts to get that `kindType`, thus greatly reducing the amount of overrides we have to add to those packages.
+	// Given the structure `type K struct{T; additional fields}` the untyped pointer to `K` is also the untyped pointer
+	// to the first field, i.e. `T`. An example of this is `abi.MapType` with `abi.Type` as its first field.
+	// These packages will hold onto `t *T` then cast to the kind type with `k = (*K)unsafe.Pointer(t)`.
+	// Normally this isn't allowed in JS because `K` is larger with additional fields, but when we created `t` in the
+	// native overrides, we assign `k` as the `t.kindType` then we translate those specific casts to get that `kindType`,
+	// thus greatly reducing the amount of overrides we have to add to those packages.
 	if fc.packageAllowsKindTypeConversion() {
 		if call, isCall := expr.(*ast.CallExpr); isCall && types.Identical(fc.typeOf(call.Fun), types.Typ[types.UnsafePointer]) {
 			if ptr, isPtr := desiredType.(*types.Pointer); isPtr {
@@ -1145,7 +1146,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 					case `reflect`:
 						switch named.Obj().Name() {
 						// The following are extensions of the ABI equivalent type to add more methods.
-						// e.g. `type structType struct { abi.StructType }`
+						// e.g. `type structType struct { abi.StructType }`.
 						case `interfaceType`, `mapType`, `ptrType`, `sliceType`, `structType`:
 							return fc.formatExpr("toKindTypeExt(%e)", call.Args[0]) // unsafe conversion
 						}

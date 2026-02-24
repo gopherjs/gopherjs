@@ -117,8 +117,8 @@ func structTagGet(tag, key string) string {
 		tag = tag[i+1:]
 
 		if key == name {
-			value, syntaxErr := unquote(qvalue)
-			if syntaxErr {
+			value, hadSyntaxErr := unquote(qvalue)
+			if hadSyntaxErr {
 				break
 			}
 			return value

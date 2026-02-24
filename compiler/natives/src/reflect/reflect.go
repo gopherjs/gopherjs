@@ -1751,7 +1751,7 @@ func toKindTypeExt(src any) *js.Object {
 		return ext
 	}
 
-	// Constructe a new kindTypeExt for this type.
+	// Construct a new kindTypeExt for this type.
 	kindType := js.InternalObject(abiTyp).Get(idKindType)
 	switch abiTyp.Kind() {
 	case abi.Interface:

@@ -378,8 +378,10 @@ func augmentOriginalImports(importPath string, file *ast.File) {
 
 // augmentOriginalFile is the part of parseAndAugment that processes an
 // original file AST to augment the source code using the overrides from
-// the overlay files. The overrides and found maps key with an identifer
-// that uniquely identifies the top-level object being augmented.
+// the overlay files.
+//
+// The overrides and found maps key with an identifier that uniquely identifies
+// the top-level object being augmented.
 // The overrides map should be populated with the overrides to apply.
 // Found will be populated with the objects that had an override applied.
 func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo, found map[string]struct{}) {
@@ -484,7 +486,7 @@ func augmentOriginalFile(file *ast.File, overrides map[string]overrideInfo, foun
 // all overrides that were expected to be found were found and all overrides
 // that were not expected to be found were not found.
 //
-// The overrides and found maps key with an identifer
+// The overrides and found maps key with an identifier
 // that uniquely identifies the top-level object being augmented.
 // Found is populated with the objects that had an override applied
 // so the found keys should be a subset of the keys in the overrides map.

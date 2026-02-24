@@ -156,58 +156,6 @@ func (v Value) Elem() Value {
 	}
 }
 
-// TODO(grantnelson-wf): To minimize diffs, this was not moved to export_test. After this is merged into the go1.21 branch, move it.
-func (v Value) Field(i int) Value {
-	tt := v.typ.StructType()
-	if tt == nil {
-		panic(&ValueError{"reflect.Value.Field", v.kind()})
-	}
-
-	if uint(i) >= uint(len(tt.Fields)) {
-		panic("reflect: Field index out of range")
-	}
-
-	prop := jsType(v.typ).Get("fields").Index(i).Get("prop").String()
-	field := &tt.Fields[i]
-	typ := field.Typ
-
-	fl := v.flag&(flagStickyRO|flagIndir|flagAddr) | flag(typ.Kind())
-	if !field.Name.IsExported() {
-		if field.Embedded() {
-			fl |= flagEmbedRO
-		} else {
-			fl |= flagStickyRO
-		}
-	}
-
-	if tag := tt.Fields[i].Name.Tag(); tag != "" && i != 0 {
-		if jsTag := abi.GetJsTag(tag); jsTag != "" {
-			for {
-				v = v.Field(0)
-				if v.typ == abi.JsObjectPtr {
-					o := v.object().Get("object")
-					return Value{typ, unsafe.Pointer(typ.JsPtrTo().New(
-						js.InternalObject(func() *js.Object { return js.Global.Call("$internalize", o.Get(jsTag), jsType(typ)) }),
-						js.InternalObject(func(x *js.Object) { o.Set(jsTag, js.Global.Call("$externalize", x, jsType(typ))) }),
-					).Unsafe()), fl}
-				}
-				if v.typ.Kind() == abi.Pointer {
-					v = v.Elem()
-				}
-			}
-		}
-	}
-
-	s := js.InternalObject(v.ptr)
-	if fl&flagIndir != 0 && typ.Kind() != abi.Array && typ.Kind() != abi.Struct {
-		return Value{typ, unsafe.Pointer(typ.JsPtrTo().New(
-			js.InternalObject(func() *js.Object { return abi.WrapJsObject(typ, s.Get(prop)) }),
-			js.InternalObject(func(x *js.Object) { s.Set(prop, abi.UnwrapJsObject(typ, x)) }),
-		).Unsafe()), fl}
-	}
-	return makeValue(typ, abi.WrapJsObject(typ, s.Get(prop)), fl)
-}
-
 //gopherjs:purge Unused type
 type emptyInterface struct{}
 

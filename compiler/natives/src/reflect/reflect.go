@@ -1073,7 +1073,7 @@ func (v Value) Field(i int) Value {
 	}
 
 	if tag := tt.Fields[i].Name.Tag(); tag != "" && i != 0 {
-		if jsTag := abi.GetJsTag(tag); jsTag != "" {
+		if jsTag := StructTag(tag).Get(`js`); jsTag != "" {
 			for {
 				v = v.Field(0)
 				if v.typ() == abi.JsObjectPtr {

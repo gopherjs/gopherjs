@@ -1,0 +1,455 @@
+//go:build js
+
+package abi
+
+import (
+	"unsafe"
+
+	"github.com/gopherjs/gopherjs/js"
+)
+
+//gopherjs:new
+const (
+	idJsType       = `jsType`
+	idAbiType      = `abiType`
+	idKindType     = `kindType`
+	idUncommonType = `uncommonType`
+)
+
+//gopherjs:new
+func ReflectType(typ *js.Object) *Type {
+	// If the object already had the reflect type determined, return it.
+	if jrt := typ.Get(idAbiType); jrt != js.Undefined {
+		return (*Type)(unsafe.Pointer(jrt.Unsafe()))
+	}
+
+	// Create new ABI type.
+	abiTyp := &Type{
+		Size_: uintptr(typ.Get("size").Int()),
+		Kind_: uint8(typ.Get("kind").Int()),
+		Str:   ResolveReflectName(NewName(internalStr(typ.Get("string")), "", typ.Get("exported").Bool(), false)),
+	}
+	js.InternalObject(abiTyp).Set(idJsType, typ)
+	typ.Set(idAbiType, js.InternalObject(abiTyp))
+
+	// Add the UncommonType to ABI type if the type has methods.
+	methodSet := js.Global.Call("$methodSet", typ)
+	if methodSet.Length() != 0 || typ.Get("named").Bool() {
+		abiTyp.TFlag |= TFlagUncommon
+		if typ.Get("named").Bool() {
+			abiTyp.TFlag |= TFlagNamed
+		}
+		var reflectMethods []Method
+		for i := 0; i < methodSet.Length(); i++ { // Exported methods first.
+			m := methodSet.Index(i)
+			exported := internalStr(m.Get("pkg")) == ""
+			if !exported {
+				continue
+			}
+			reflectMethods = append(reflectMethods, Method{
+				Name: ResolveReflectName(NewName(internalStr(m.Get("name")), "", exported, false)),
+				Mtyp: ResolveReflectType(ReflectType(m.Get("typ"))),
+			})
+		}
+		xcount := uint16(len(reflectMethods))
+		for i := 0; i < methodSet.Length(); i++ { // Unexported methods second.
+			m := methodSet.Index(i)
+			exported := internalStr(m.Get("pkg")) == ""
+			if exported {
+				continue
+			}
+			reflectMethods = append(reflectMethods, Method{
+				Name: ResolveReflectName(NewName(internalStr(m.Get("name")), "", exported, false)),
+				Mtyp: ResolveReflectType(ReflectType(m.Get("typ"))),
+			})
+		}
+		ut := &UncommonType{
+			PkgPath:  ResolveReflectName(NewName(internalStr(typ.Get("pkg")), "", false, false)),
+			Mcount:   uint16(methodSet.Length()),
+			Xcount:   xcount,
+			Methods_: reflectMethods,
+		}
+		js.InternalObject(abiTyp).Set(idUncommonType, js.InternalObject(ut))
+	}
+
+	// Create the kind type for the ABI type if the kind has additional information.
+	// Also set `PtrBytes` to a non-zero number for types with Pointer() values.
+	switch abiTyp.Kind() {
+	case Array:
+		setKindType(abiTyp, &ArrayType{
+			Elem: ReflectType(typ.Get("elem")),
+			Len:  uintptr(typ.Get("len").Int()),
+		})
+	case Chan:
+		dir := BothDir
+		if typ.Get("sendOnly").Bool() {
+			dir = SendDir
+		}
+		if typ.Get("recvOnly").Bool() {
+			dir = RecvDir
+		}
+		abiTyp.PtrBytes = 4
+		setKindType(abiTyp, &ChanType{
+			Elem: ReflectType(typ.Get("elem")),
+			Dir:  dir,
+		})
+	case Func:
+		params := typ.Get("params")
+		in := make([]*Type, params.Length())
+		for i := range in {
+			in[i] = ReflectType(params.Index(i))
+		}
+		results := typ.Get("results")
+		out := make([]*Type, results.Length())
+		for i := range out {
+			out[i] = ReflectType(results.Index(i))
+		}
+		outCount := uint16(results.Length())
+		if typ.Get("variadic").Bool() {
+			outCount |= 1 << 15
+		}
+		abiTyp.PtrBytes = 4
+		setKindType(abiTyp, &FuncType{
+			InCount:  uint16(params.Length()),
+			OutCount: outCount,
+			In_:      in,
+			Out_:     out,
+		})
+	case Interface:
+		methods := typ.Get("methods")
+		imethods := make([]Imethod, methods.Length())
+		for i := range imethods {
+			m := methods.Index(i)
+			mPkg := internalStr(m.Get("pkg"))
+			exported := mPkg == ""
+			name := NewName(internalStr(m.Get("name")), "", exported, false)
+			name.SetPkgPath(mPkg)
+			imethods[i] = Imethod{
+				Name: ResolveReflectName(name),
+				Typ:  ResolveReflectType(ReflectType(m.Get("typ"))),
+			}
+		}
+		setKindType(abiTyp, &InterfaceType{
+			PkgPath: NewName(internalStr(typ.Get("pkg")), "", false, false),
+			Methods: imethods,
+		})
+	case Map:
+		abiTyp.PtrBytes = 4
+		setKindType(abiTyp, &MapType{
+			Key:  ReflectType(typ.Get("key")),
+			Elem: ReflectType(typ.Get("elem")),
+		})
+	case Pointer:
+		abiTyp.PtrBytes = 4
+		setKindType(abiTyp, &PtrType{
+			Elem: ReflectType(typ.Get("elem")),
+		})
+	case Slice:
+		abiTyp.PtrBytes = 4
+		setKindType(abiTyp, &SliceType{
+			Elem: ReflectType(typ.Get("elem")),
+		})
+	case Struct:
+		fields := typ.Get("fields")
+		reflectFields := make([]StructField, fields.Length())
+		for i := range reflectFields {
+			f := fields.Index(i)
+			reflectFields[i] = StructField{
+				Name:   NewName(internalStr(f.Get("name")), internalStr(f.Get("tag")), f.Get("exported").Bool(), f.Get("embedded").Bool()),
+				Typ:    ReflectType(f.Get("typ")),
+				Offset: uintptr(i),
+			}
+		}
+		setKindType(abiTyp, &StructType{
+			PkgPath: NewName(internalStr(typ.Get("pkgPath")), "", false, false),
+			Fields:  reflectFields,
+		})
+	case UnsafePointer:
+		abiTyp.PtrBytes = 4
+	}
+
+	return abiTyp
+}
+
+//gopherjs:new
+func setKindType(abiTyp *Type, kindType any) {
+	// Add the kindType to the abiTyp object so that when a cast is performed
+	// from the abiTyp into the kind type, a custom cast in `translateConversion`
+	// in compiler/expressions.go will use this kindType to cast.
+	// This makes it so we don't have to override all of the kind type casts,
+	// e.g. `tt := (*chanType)(unsafe.Pointer(typ))`, and the compiler
+	// will replace that automatically with `typ.kindType`.
+	js.InternalObject(abiTyp).Set(idKindType, js.InternalObject(kindType))
+
+	// Assign Type to the abiType. The abiType is a `*Type` and the Type
+	// field on the kind types are `Type`. However, this is valid because of how
+	// pointers and references work in JS. We set this so that the Type
+	// isn't a copy but the actual abiType object.
+	js.InternalObject(kindType).Set(`Type`, js.InternalObject(abiTyp))
+}
+
+//gopherjs:replace
+type UncommonType struct {
+	PkgPath NameOff // import path
+	Mcount  uint16  // method count
+	Xcount  uint16  // exported method count
+
+	// GOPHERJS: Added access to methods
+	Methods_ []Method
+}
+
+//gopherjs:replace
+func (t *UncommonType) Methods() []Method {
+	return t.Methods_
+}
+
+//gopherjs:replace
+func (t *UncommonType) ExportedMethods() []Method {
+	return t.Methods_[:t.Xcount:t.Xcount]
+}
+
+//gopherjs:replace
+func (t *Type) Uncommon() *UncommonType {
+	obj := js.InternalObject(t).Get(idUncommonType)
+	if obj == js.Undefined {
+		return nil
+	}
+	return (*UncommonType)(unsafe.Pointer(obj.Unsafe()))
+}
+
+//gopherjs:new
+func (typ *Type) JsType() *js.Object {
+	return js.InternalObject(typ).Get(idJsType)
+}
+
+//gopherjs:new
+func (typ *Type) PtrTo() *Type {
+	return ReflectType(js.Global.Call("$ptrType", typ.JsType()))
+}
+
+//gopherjs:new
+func (typ *Type) JsPtrTo() *js.Object {
+	return typ.PtrTo().JsType()
+}
+
+//gopherjs:new Shared by reflect and reflectlite rtypes
+func (t *Type) String() string {
+	s := t.NameOff(t.Str).Name()
+	if t.TFlag&TFlagExtraStar != 0 {
+		return s[1:]
+	}
+	return s
+}
+
+//gopherjs:purge Uncommon types are stored differently.
+type structTypeUncommon struct{}
+
+//gopherjs:replace
+type FuncType struct {
+	Type
+	InCount  uint16
+	OutCount uint16
+
+	// GOPHERJS: Add references to in and out args
+	In_  []*Type
+	Out_ []*Type
+}
+
+//gopherjs:replace
+func (t *FuncType) InSlice() []*Type {
+	return t.In_
+}
+
+//gopherjs:replace
+func (t *FuncType) OutSlice() []*Type {
+	return t.Out_
+}
+
+//gopherjs:replace
+type Name struct {
+	name     string
+	tag      string
+	exported bool
+	embedded bool
+	pkgPath  string
+}
+
+//gopherjs:replace
+func (n Name) IsExported() bool { return n.exported }
+
+//gopherjs:replace
+func (n Name) HasTag() bool { return len(n.tag) > 0 }
+
+//gopherjs:replace
+func (n Name) IsEmbedded() bool { return n.embedded }
+
+//gopherjs:replace
+func (n Name) IsBlank() bool { return n.Name() == `_` }
+
+//gopherjs:replace
+func (n Name) Name() string { return n.name }
+
+//gopherjs:replace
+func (n Name) Tag() string { return n.tag }
+
+//gopherjs:purge Used for byte encoding of name, not used in JS
+func writeVarint(buf []byte, n int) int
+
+//gopherjs:purge Used for byte encoding of name, not used in JS
+func (n Name) DataChecked(off int, whySafe string) *byte
+
+//gopherjs:purge Used for byte encoding of name, not used in JS
+func (n Name) Data(off int) *byte
+
+//gopherjs:purge Used for byte encoding of name, not used in JS
+func (n Name) ReadVarint(off int) (int, int)
+
+//gopherjs:new
+func (n Name) PkgPath() string { return n.pkgPath }
+
+//gopherjs:new
+func (n *Name) SetPkgPath(pkgpath string) { n.pkgPath = pkgpath }
+
+//gopherjs:replace
+func NewName(n, tag string, exported, embedded bool) Name {
+	return Name{
+		name:     n,
+		tag:      tag,
+		exported: exported,
+		embedded: embedded,
+	}
+}
+
+// GOPHERJS: Instead of using this as an offset from a pointer to look up a name,
+// just store the name as a pointer.
+//
+//gopherjs:replace
+type NameOff *Name
+
+// GOPHERJS: Added to mirror the rtype's nameOff method to keep how
+// the nameOff is created and read in one spot of the code.
+//
+//gopherjs:new
+func (typ *Type) NameOff(off NameOff) Name {
+	return *off
+}
+
+// GOPHERJS: Added to mirror the resolveReflectName method in reflect
+//
+//gopherjs:new
+func ResolveReflectName(n Name) NameOff {
+	return &n
+}
+
+// GOPHERJS: Instead of using this as an offset from a pointer to look up a type,
+// just store the type as a pointer.
+//
+//gopherjs:replace
+type TypeOff *Type
+
+// GOPHERJS: Added to mirror the rtype's typeOff method to keep how
+// the typeOff is created and read in one spot of the code.
+//
+//gopherjs:new
+func (typ *Type) TypeOff(off TypeOff) *Type {
+	return off
+}
+
+// GOPHERJS: Added to mirror the resolveReflectType method in reflect
+//
+//gopherjs:new
+func ResolveReflectType(t *Type) TypeOff {
+	return t
+}
+
+// GOPHERJS: Instead of using this as an offset from a pointer to look up a pointer,
+// just store the paointer itself.
+//
+//gopherjs:replace
+type TextOff unsafe.Pointer
+
+// GOPHERJS: Added to mirror the rtype's textOff method to keep how
+// the textOff is created and read in one spot of the code.
+//
+//gopherjs:new
+func (typ *Type) TextOff(off TextOff) unsafe.Pointer {
+	return unsafe.Pointer(off)
+}
+
+// GOPHERJS: Added to mirror the resolveReflectText method in reflect
+//
+//gopherjs:new
+func ResolveReflectText(ptr unsafe.Pointer) TextOff {
+	return TextOff(ptr)
+}
+
+//gopherjs:new
+func internalStr(strObj *js.Object) string {
+	var c struct{ str string }
+	js.InternalObject(c).Set("str", strObj) // get string without internalizing
+	return c.str
+}
+
+//gopherjs:new
+func (typ *Type) IsWrapped() bool {
+	return typ.JsType().Get("wrapped").Bool()
+}
+
+//gopherjs:new
+var JsObjectPtr = ReflectType(js.Global.Get("$jsObjectPtr"))
+
+//gopherjs:new
+func WrapJsObject(typ *Type, val *js.Object) *js.Object {
+	if typ == JsObjectPtr {
+		return JsObjectPtr.JsType().New(val)
+	}
+	return val
+}
+
+//gopherjs:new
+func UnwrapJsObject(typ *Type, val *js.Object) *js.Object {
+	if typ == JsObjectPtr {
+		return val.Get("object")
+	}
+	return val
+}
+
+//gopherjs:new
+func CopyStruct(dst, src *js.Object, typ *Type) {
+	fields := typ.JsType().Get("fields")
+	for i := 0; i < fields.Length(); i++ {
+		prop := fields.Index(i).Get("prop").String()
+		dst.Set(prop, src.Get(prop))
+	}
+}
+
+//gopherjs:new
+func (t *Type) Comparable() bool {
+	switch t.Kind() {
+	case Func, Slice, Map:
+		return false
+	case Array:
+		return t.Elem().Comparable()
+	case Struct:
+		st := t.StructType()
+		for i := 0; i < len(st.Fields); i++ {
+			ft := st.Fields[i]
+			if !ft.Typ.Comparable() {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+//gopherjs:purge Used for pointer arthmatic
+func addChecked(p unsafe.Pointer, x uintptr, whySafe string) unsafe.Pointer
+
+//gopherjs:purge Uses unsafeSliceFor
+func (t *Type) GcSlice(begin, end uintptr) []byte
+
+//gopherjs:purge Uses unsafe.String or stringHeader
+func unsafeStringFor(b *byte, l int) string
+
+//gopherjs:purge Uses unsafe.Slice or sliceHeader
+func unsafeSliceFor(b *byte, l int) []byte

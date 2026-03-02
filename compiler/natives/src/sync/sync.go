@@ -87,3 +87,13 @@ func runtime_nanotime() int64
 func throw(s string) {
 	js.Global.Call("$throwRuntimeError", s)
 }
+
+// GOPHERJS: This is identical to the original but without the go:linkname
+// that can not be handled right now, "can not insert local implementation..."
+// TODO(grantnelson-wf): Remove once linking works both directions.
+//
+//gopherjs:replace
+func syscall_hasWaitingReaders(rw *RWMutex) bool {
+	r := rw.readerCount.Load()
+	return r < 0 && r+rwmutexMaxReaders > 0
+}

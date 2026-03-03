@@ -126,6 +126,18 @@ func Test_MapDelete(t *testing.T) {
 	delete(m, "key") // noop
 }
 
+func Test_MapClear(t *testing.T) {
+	var nilMap map[string]string
+	m := map[string]string{"key": "value"}
+
+	clear(nilMap) // noop
+	clear(m)
+	if len(m) != 0 {
+		t.Error("Got: entries still set, Want: map should be cleared")
+	}
+	clear(m) // noop
+}
+
 func assertMapApi(t *testing.T, myMap map[string]int) {
 	if len(myMap) != 3 {
 		t.Errorf("initial len of map Got: %d, Want: 3", len(myMap))

@@ -1172,7 +1172,8 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 						// The following are extensions of the ABI equivalent type to add more methods.
 						// e.g. `type structType struct { abi.StructType }`.
 						case `interfaceType`, `mapType`, `ptrType`, `sliceType`, `structType`:
-							return fc.formatExpr("toKindTypeExt(%e)", call.Args[0]) // unsafe conversion
+							obj := fc.pkgCtx.Pkg.Scope().Lookup(`toKindTypeExt`)
+							return fc.formatExpr("%s(%e)", fc.objectName(obj), call.Args[0]) // unsafe conversion
 						}
 					}
 					return fc.translateExpr(expr)

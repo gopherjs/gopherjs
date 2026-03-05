@@ -1064,6 +1064,26 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 		return fc.formatExpr("$recover()")
 	case "close":
 		return fc.formatExpr(`$close(%e)`, args[0])
+	case "min", "max":
+		if basic, isBasic := fc.typeOf(args[0]).Underlying().(*types.Basic); isBasic && isOrdered(basic) {
+			fnName := `$` + name
+			if is64Bit(basic) {
+				fnName += `64`
+			} else if isString(basic) {
+				fnName += `Str`
+			}
+			return fc.formatExpr("%s(%e, %s)", fnName, args[0], strings.Join(fc.translateExprSlice(args[1:], basic), `, `))
+		}
+		panic(fmt.Sprintf("Unhandled type for %s: %T\n", name, args[0]))
+	case "clear":
+		switch argType := fc.typeOf(args[0]).Underlying().(type) {
+		case *types.Slice:
+			return fc.formatExpr("$clearSlice(%e)", args[0])
+		case *types.Map:
+			return fc.formatExpr("$clearMap(%e)", args[0])
+		default:
+			panic(fmt.Sprintf("Unhandled clear type: %T\n", argType))
+		}
 	case "Sizeof":
 		return fc.formatExpr("%d", sizes32.Sizeof(fc.typeOf(args[0])))
 	case "Alignof":

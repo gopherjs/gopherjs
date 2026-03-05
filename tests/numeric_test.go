@@ -1,7 +1,9 @@
 package tests
 
 import (
+	"cmp"
 	"fmt"
+	"math"
 	"math/bits"
 	"math/rand"
 	"runtime"
@@ -199,5 +201,114 @@ func Test_32BitEnvironment(t *testing.T) {
 				t.Errorf("got: %d\nwant: %d.", got, exp)
 			}
 		})
+	}
+}
+
+// checkMinMax2 is a helper for Test_MinMax that checks the builtin min
+// and max methods. The x value must be less than y.
+func checkMinMax2[T cmp.Ordered](t *testing.T, x, y T) {
+	t.Helper()
+	check := func(a, b T) {
+		if got, want := min(a, b), x; got != want {
+			t.Errorf("min[%T](%v, %v): got: %v, want: %v", want, a, b, got, want)
+		}
+		if got, want := max(a, b), y; got != want {
+			t.Errorf("max[%T](%v, %v): got: %v, want: %v", want, a, b, got, want)
+		}
+	}
+	check(x, y)
+	check(y, x)
+}
+
+// checkMinMax4 is a helper for Test_MinMax that checks the builtin min
+// and max methods. The builtin min and max are not actually veriadic,
+// so cannot be tested via `min(first, rest...)`, but they do allow 1 or more
+// arguments, so this one checks 4 arguments. v1 must be the actual min,
+// and v4 must be the actual max.
+func checkMinMax4[T cmp.Ordered](t *testing.T, v1, v2, v3, v4 T) {
+	t.Helper()
+	check := func(a, b, c, d T) {
+		if got, want := min(a, b, c, d), v1; got != want {
+			t.Errorf("min[%T](%v, %v, %v, %v): got: %v, want: %v", want, a, b, c, d, got, want)
+		}
+		if got, want := max(a, b, c, d), v4; got != want {
+			t.Errorf("max[%T](%v, %v, %v, %v): got: %v, want: %v", want, a, b, c, d, got, want)
+		}
+	}
+	check(v1, v2, v3, v4)
+	check(v1, v2, v4, v3)
+	check(v1, v4, v2, v3)
+	check(v1, v4, v3, v2)
+	check(v2, v1, v3, v4)
+	check(v2, v1, v4, v3)
+	check(v2, v4, v1, v3)
+	check(v2, v4, v3, v1)
+	check(v3, v1, v2, v4)
+	check(v3, v1, v4, v2)
+	check(v3, v4, v1, v2)
+	check(v3, v4, v2, v1)
+	check(v4, v1, v2, v3)
+	check(v4, v1, v3, v2)
+	check(v4, v3, v1, v2)
+	check(v4, v3, v2, v1)
+}
+
+// checkMinMax1 is a helper for Test_MinMax that checks the builtin min
+// and max methods. This checks the edge case with 1 argument.
+func checkMinMax1[T cmp.Ordered](t *testing.T, x T) {
+	t.Helper()
+	if got := min(x); got != x {
+		t.Errorf("min[%T](%v): got: %v, want: %v", x, x, got, x)
+	}
+	if got := max(x); got != x {
+		t.Errorf("max[%T](%v): got: %v, want: %v", x, x, got, x)
+	}
+}
+
+func Test_MinMax(t *testing.T) {
+	checkMinMax2(t, 0, 1)     // int
+	checkMinMax2(t, -1, 0)    // int
+	checkMinMax2(t, 12, 42)   // int
+	checkMinMax2(t, -42, -12) // int
+	checkMinMax2[int8](t, -9, 13)
+	checkMinMax2[int16](t, 0, 23)
+	checkMinMax2[int32](t, -87, 1234)
+	checkMinMax2[int64](t, -0xDEAD_BEEF, 0x7FFF_FFFF_FFFF_FFFF)
+	checkMinMax2[uint8](t, 9, 13)
+	checkMinMax2[uint16](t, 0, 23)
+	checkMinMax2[uint32](t, 87, 1234)
+	checkMinMax2[uint64](t, 0xDEAD_BEEF, 0x7FFF_FFFF_FFFF_FFFF)
+	checkMinMax2[uintptr](t, 12345, 54321)
+	checkMinMax2[float32](t, 1.41421356237, 3.14159265359)
+	checkMinMax2(t, -3.14159265359, 1.41421356237) // float64
+	checkMinMax2(t, ``, `a`)                       // string
+	checkMinMax2(t, `a`, `z`)                      // string
+	checkMinMax2(t, `a`, `aa`)                     // string
+	checkMinMax2(t, `banana`, `cat`)               // string
+	checkMinMax2(t, `Dog`, `dog`)                  // string
+
+	checkMinMax4(t, -4, -3, -2, -1) // int
+	checkMinMax4(t, 1, 2, 3, 4)     // int
+	checkMinMax4[int64](t, -4, -3, -2, -1)
+	checkMinMax4[int64](t, 1, 2, 3, 4)
+	checkMinMax4[uint64](t, 1, 2, 3, 4)
+	checkMinMax4(t, `apple`, `banana`, `carrot`, `durian`) // string
+
+	checkMinMax1(t, 1) // int
+	checkMinMax1[int64](t, -19)
+	checkMinMax1[uint64](t, 244)
+	checkMinMax1(t, 2.3)    // float64
+	checkMinMax1(t, `Ludo`) // string
+
+	// Note that math.Min and math.Max act differently for NaN than max and min,
+	// see [https://github.com/golang/go/issues/60616]
+	// Fortunelty the builtin max and min act like JS's Math.max and Math.min,
+	// see [https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/min]
+	// If any argument is NaN, then NaN will be returned.
+	if got := min(42, math.NaN(), -81); !math.IsNaN(got) {
+		t.Errorf("min(..NaN..): got: %v, want: %v", got, math.NaN())
+	}
+	if got := max(42, math.NaN(), -81); !math.IsNaN(got) {
+		t.Errorf("max(..NaN..): got: %v, want: %v", got, math.NaN())
 	}
 }

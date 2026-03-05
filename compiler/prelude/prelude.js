@@ -640,3 +640,20 @@ var $sliceData = (slice, typ) => {
     }
     return $indexPtr(slice.$array, slice.$offset, typ.elem);
 };
+
+var $clearSlice = (slice) => {
+    const n = slice.$length;
+    if (n === 0) {
+        return
+    }
+    const arr = slice.$array;
+    const off = slice.$offset;
+    const zeroFn = slice.constructor.elem.zero;
+    for (let i = 0; i < n; i++) {
+        arr[off + i] = zeroFn();
+    }
+};
+
+var $clearMap = (m) => {
+    typeof m.clear === "function" && m.clear()
+};

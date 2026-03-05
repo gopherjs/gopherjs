@@ -1,4 +1,12 @@
 var $min = Math.min;
+var $max = Math.max;
+
+var $less64 = (x, y) => x.$high < y.$high || (x.$high === y.$high && x.$low < y.$low);
+var $min64 = (first, ...rest) => rest.reduce((m, x) => $less64(x, m) ? x : m, first);
+var $max64 = (first, ...rest) => rest.reduce((m, x) => $less64(m, x) ? x : m, first);
+var $minStr = (first, ...rest) => rest.reduce((m, x) => x < m ? x : m, first);
+var $maxStr = (first, ...rest) => rest.reduce((m, x) => m < x ? x : m, first);
+
 var $mod = (x, y) => { return x % y; };
 var $parseInt = parseInt;
 var $parseFloat = f => {

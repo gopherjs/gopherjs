@@ -728,6 +728,10 @@ func isNumeric(t *types.Basic) bool {
 	return t.Info()&types.IsNumeric != 0
 }
 
+func isOrdered(t *types.Basic) bool {
+	return t.Info()&types.IsOrdered != 0
+}
+
 func isString(t *types.Basic) bool {
 	return t.Info()&types.IsString != 0
 }

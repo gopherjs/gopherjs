@@ -579,7 +579,7 @@ var $unsafeMethodToFunction = (typ, name, isPtr) => {
                         r = new ptrType(r);
                         break;
                     default:
-                        r = new ptrType(r.$get, r.$set, r.$target);
+                        r = new ptrType(r.$get, r.$set, r.$target, r.$index);
                 }
             }
             return r[name](...args);
@@ -620,11 +620,49 @@ var $typeOf = x => {
     return typeof (x);
 };
 
-var $sliceData = (slice, typ) => {
-    if (slice === typ.nil) {
-        return $ptrType(typ.elem).nil;
+var $unsafeString = (ptr, len) => {
+    var byteSliceType = $sliceType($Uint8);
+    return $bytesToString($unsafeSlice(ptr, len, byteSliceType, "String"));
+};
+
+var $unsafeStringData = str => {
+    if (str.length === 0) {
+        return $ptrType($Uint8).nil;
     }
-    return $indexPtr(slice.$array, slice.$offset, typ.elem);
+    var byteSliceType = $sliceType($Uint8);
+    var b = new byteSliceType($stringToBytes(str));
+    return $unsafeSliceData(b, byteSliceType);
+};
+
+var $unsafeSlice = (ptr, len, typ, methodName = "Slice") => {
+    if (len < 0) {
+        $throwRuntimeError("unsafe."+methodName+": len out of range");
+    }
+    var ptrType = $ptrType(typ.elem);
+    if (ptr === ptrType.nil || ptr.$target === undefined) {
+        if (len > 0) {
+            $throwRuntimeError("unsafe."+methodName+": ptr is nil and len is not zero");
+        }
+        return typ.nil;
+    }
+    if (ptr.$index + len > ptr.$target.length) {
+        // Go can grab abritraty footprints of memory, JS can not. Instead of trying
+        // to grow the target, which would only work for Array, just always error.
+        $throwRuntimeError("unsafe." + methodName + ": len out of range");
+    }
+    var s = new typ(ptr.$target);
+    s.$offset = ptr.$index;
+    s.$length = len;
+    s.$capacity = len;
+    return s;
+};
+
+var $unsafeSliceData = (slice, typ) => {
+    var ptrType = $ptrType(typ.elem);
+    if (slice === typ.nil) {
+        return ptrType.nil;
+    }
+    return $indexPtr(slice.$array, slice.$offset, ptrType);
 };
 
 var $clearSlice = (slice) => {

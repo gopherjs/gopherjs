@@ -978,39 +978,306 @@ func TestStructWithNonIdentifierJSTag(t *testing.T) {
 }
 
 func TestSliceData(t *testing.T) {
-	var (
-		s0 = []int(nil)
-		s1 = []int{}
-		s2 = []int{1, 2, 3}
-		s3 = s2[1:]
-		s4 = []int{4, 5, 6}
+	t.Run(`nil slice`, func(t *testing.T) {
+		s0 := []int(nil)
+		sd0 := unsafe.SliceData(s0)
+		if sd0 != nil {
+			t.Error(`slice data for nil slice was not nil`)
+		}
+		sx0 := unsafe.Slice(sd0, 0)
+		if sx0 != nil {
+			t.Error(`expected nil slice data to create a nil slice`)
+		}
+	})
 
-		sd0 = unsafe.SliceData(s0)
-		sd1 = unsafe.SliceData(s1)
-		sd2 = unsafe.SliceData(s2)
-		sd3 = unsafe.SliceData(s3)
-		sd4 = unsafe.SliceData(s4)
-	)
+	t.Run(`empty slice`, func(t *testing.T) {
+		s1 := []int{}
+		sd1 := unsafe.SliceData(s1)
+		if sd1 == nil {
+			t.Error(`slice data for empty slice was nil`)
+		}
+		sx1 := unsafe.Slice(sd1, 0)
+		if sx1 == nil {
+			t.Error(`expected an empty slice data to create an empty slice, not a nil slice`)
+		}
+		if got := len(sx1); got != 0 {
+			t.Errorf(`expected the empty slice to have a length of zero but got %d`, got)
+		}
+	})
 
-	if sd0 != nil {
-		t.Errorf("slice data for nil slice was not nil")
+	t.Run(`variable offset`, func(t *testing.T) {
+		s2 := []int{1, 2, 3}
+		for off := range s2 {
+			s2b := s2[off:]
+			sd2 := unsafe.SliceData(s2b)
+			if sd2 == nil {
+				t.Errorf(`slice data for non-empty slice offset to %d was nil`, off)
+			}
+			ln := len(s2) - off
+			sx2 := unsafe.Slice(sd2, ln)
+			if got := len(sx2); ln != got {
+				t.Errorf(`expected slice offset to %d to have a length of %d but got %d`, off, ln, got)
+			}
+			for i, got := range sx2 {
+				if want := s2b[i]; want != got {
+					t.Errorf(`expected slice offset to %d and set to length %d to have %d at index %d but got %d`, off, ln, want, i, got)
+				}
+			}
+		}
+	})
+
+	t.Run(`variable length`, func(t *testing.T) {
+		s3 := []int{4, 5, 6}
+		sd3 := unsafe.SliceData(s3)
+		if sd3 == nil {
+			t.Error(`slice data for non-empty slice was nil`)
+		}
+		for ln := range s3 {
+			sx3 := unsafe.Slice(sd3, ln)
+			if got := len(sx3); got != ln {
+				t.Errorf(`expected [s3] slice set to length %d to have a length of 1 but got %d`, ln, got)
+			}
+			for i, got := range sx3 {
+				if want := s3[i]; want != got {
+					t.Errorf(`expected [s3] slice set to length %d to have %d at index %d but got %d`, ln, want, i, got)
+				}
+			}
+		}
+	})
+}
+
+func TestSliceDataFromPointer(t *testing.T) {
+	t.Run(`nil slice`, func(t *testing.T) {
+		sd0 := (*int)(nil)
+		sx0 := unsafe.Slice(sd0, 0)
+		if sx0 != nil {
+			t.Error(`expected nil slice data to create a nil slice`)
+		}
+	})
+
+	t.Run(`empty slice`, func(t *testing.T) {
+		s1 := []int{}
+		sd1 := &s1
+		sx1 := unsafe.Slice(sd1, 0)
+		if sx1 == nil {
+			t.Error(`expected an empty slice data to create an empty slice, not a nil slice`)
+		}
+		if got := len(sx1); got != 0 {
+			t.Errorf(`expected the empty slice to have a length of zero but got %d`, got)
+		}
+	})
+
+	t.Run(`variable offset`, func(t *testing.T) {
+		s2 := []int{1, 2, 3}
+		for off := range s2 {
+			ln := len(s2) - off
+			sd2 := &s2[off]
+			sx2 := unsafe.Slice(sd2, ln)
+			if got := len(sx2); got != ln {
+				t.Errorf(`expected [s2] slice offset by %d and set to length %d to have a length of 1 but got %d`, off, ln, got)
+			}
+			for i, got := range sx2 {
+				if want := s2[i+off]; want != got {
+					t.Errorf(`expected [s2] slice offset by %d and set to length %d to have %d at index %d but got %d`, off, ln, want, i, got)
+				}
+			}
+		}
+	})
+
+	t.Run(`variable length`, func(t *testing.T) {
+		s3 := []int{4, 5, 6}
+		sd3 := &s3[0]
+		for ln := range s3 {
+			sx3 := unsafe.Slice(sd3, ln)
+			if got := len(sx3); got != ln {
+				t.Errorf(`expected [s3] slice set to length %d to have a length of 1 but got %d`, ln, got)
+			}
+			for i, got := range sx3 {
+				if want := s3[i]; want != got {
+					t.Errorf(`expected [s3] slice set to length %d to have %d at index %d but got %d`, ln, want, i, got)
+				}
+			}
+		}
+	})
+}
+
+func TestSliceDataWithDifferentTypes(t *testing.T) {
+	checkSliceDataRoundTrip(t, []bool(nil))
+	checkSliceDataRoundTrip(t, []bool{})
+	checkSliceDataRoundTrip(t, []bool{false})
+	checkSliceDataRoundTrip(t, []bool{false, true, true, false})
+
+	checkSliceDataRoundTrip(t, []int(nil))
+	checkSliceDataRoundTrip(t, []int{})
+	checkSliceDataRoundTrip(t, []int{1})
+	checkSliceDataRoundTrip(t, []int{1, 2, 3, 4})
+
+	checkSliceDataRoundTrip(t, []uint64(nil))
+	checkSliceDataRoundTrip(t, []uint64{})
+	checkSliceDataRoundTrip(t, []uint64{11})
+	checkSliceDataRoundTrip(t, []uint64{11, 12, 13, 14})
+
+	checkSliceDataRoundTrip(t, []string(nil))
+	checkSliceDataRoundTrip(t, []string{})
+	checkSliceDataRoundTrip(t, []string{``})
+	checkSliceDataRoundTrip(t, []string{`cat`, `dog`, `ardvark`})
+
+	type librarian struct{ says string }
+	checkSliceDataRoundTrip(t, []librarian(nil))
+	checkSliceDataRoundTrip(t, []librarian{})
+	checkSliceDataRoundTrip(t, []librarian{{says: `ook`}})
+
+	checkSliceDataRoundTrip(t, []*librarian(nil))
+	checkSliceDataRoundTrip(t, []*librarian{})
+	checkSliceDataRoundTrip(t, []*librarian{{says: `ook`}})
+}
+
+func checkSliceDataRoundTrip[T comparable, S ~[]T](t *testing.T, s S) {
+	name := fmt.Sprintf("%T(nil)", s)
+	if s != nil {
+		name = fmt.Sprintf("%T[len=%d]", s, len(s))
 	}
-	if sd1 == nil {
-		t.Errorf("slice data for empty slice was nil")
+
+	t.Run(`data `+name, func(t *testing.T) {
+		p := unsafe.SliceData(s)
+		s2 := unsafe.Slice(p, len(s))
+		if want, got := fmt.Sprintf("%#v", s), fmt.Sprintf("%#v", s2); got != want {
+			t.Errorf(`wanted slice from sliceData syntax to be %q but got %q`, want, got)
+		}
+		for i, want := range s {
+			if got := s2[i]; got != want {
+				t.Errorf(`wanted element in slice from sliceData at index %d to be %v but got %v`, i, want, got)
+			}
+		}
+	})
+
+	if len(s) > 0 {
+		t.Run(`ptr `+name, func(t *testing.T) {
+			p := &s[0]
+			s2 := unsafe.Slice(p, len(s))
+			if want, got := fmt.Sprintf("%#v", s), fmt.Sprintf("%#v", s2); got != want {
+				t.Errorf(`wanted slice from sliceData syntax to be %q but got %q`, want, got)
+			}
+			for i, want := range s {
+				if got := s2[i]; got != want {
+					t.Errorf(`wanted element in slice from sliceData at index %d to be %v but got %v`, i, want, got)
+				}
+			}
+		})
 	}
-	if sd2 == nil {
-		t.Errorf("slice data for non-empty slice was nil")
+}
+
+func TestSliceDataEdgeCases(t *testing.T) {
+	catch := func(h func()) (r string) {
+		defer func() { r = fmt.Sprint(recover()) }()
+		h()
+		return
 	}
-	if sd3 == nil {
-		t.Errorf("slice data for sub-slice was nil")
-	}
-	if sd1 == sd2 {
-		t.Errorf("slice data for empty and non-empty slices were the same")
-	}
-	if sd2 == sd3 {
-		t.Errorf("slice data for slice and sub-slice were the same")
-	}
-	if sd2 == sd4 {
-		t.Errorf("slice data for different slices were the same")
-	}
+
+	t.Run(`nil with length`, func(t *testing.T) {
+		got := catch(func() {
+			p := (*int)(nil)
+			_ = unsafe.Slice(p, 4)
+		})
+		if want := `runtime error: unsafe.Slice: ptr is nil and len is not zero`; want != got {
+			t.Errorf(`expected panic to be %q but got %q`, want, got)
+		}
+	})
+
+	t.Run(`length is negative`, func(t *testing.T) {
+		got := catch(func() {
+			len := func() int { return -1 }()
+			s := []int{7, 5, 3}
+			_ = unsafe.Slice(&s[0], len)
+		})
+		if want := `runtime error: unsafe.Slice: len out of range`; want != got {
+			t.Errorf(`expected panic to be %q but got %q`, want, got)
+		}
+	})
+
+	// Go allows grabing extra memory but that is unsafe and not something we
+	// can support with TypedArrays so instead it should panic for GropherJS.
+	t.Run(`length too big`, func(t *testing.T) {
+		got := catch(func() {
+			len := func() int { return 8 }()
+			s := []int{13, 11, 7}
+			_ = unsafe.Slice(&s[0], len)
+		})
+		if want := `runtime error: unsafe.Slice: len out of range`; want != got {
+			t.Errorf(`expected panic to be %q but got %q`, want, got)
+		}
+	})
+
+	t.Run(`cast pointer`, func(t *testing.T) {
+		type customPtr *int
+		s := []int{22, 33, 55}
+		p := customPtr(unsafe.SliceData(s))
+		s2 := unsafe.Slice(p, len(s))
+		if want, got := fmt.Sprintf("%#v", s), fmt.Sprintf("%#v", s2); got != want {
+			t.Errorf(`wanted slice from sliceData syntax to be %q but got %q`, want, got)
+		}
+		for i, want := range s {
+			if got := s2[i]; got != want {
+				t.Errorf(`wanted element in slice from sliceData at index %d to be %v but got %v`, i, want, got)
+			}
+		}
+	})
+}
+
+func TestStringData(t *testing.T) {
+	t.Run(`empty string`, func(t *testing.T) {
+		str := ``
+		p := unsafe.StringData(str)
+		s2 := unsafe.Slice(p, 0)
+		if got := len(s2); got != 0 {
+			t.Errorf(`expected the empty slice to have a length of zero but got %d`, got)
+		}
+	})
+
+	const quote = `I have a lot of growing up to do. I realized that the other day inside my fort.`
+	t.Run(`variable offset`, func(t *testing.T) {
+		for off := 0; off < len(quote); off += 7 {
+			sub := quote[off:]
+			p := unsafe.StringData(sub)
+			s2 := unsafe.String(p, len(sub))
+			if s2 != sub {
+				t.Errorf(`expected the string offset by %d with length %d to be %q but it was %q`, off, len(sub), sub, s2)
+			}
+		}
+	})
+
+	t.Run(`variable length`, func(t *testing.T) {
+		for ln := 1; ln < len(quote); ln += 7 {
+			sub := quote[:ln]
+			p := unsafe.StringData(sub)
+			s2 := unsafe.String(p, len(sub))
+			if s2 != sub {
+				t.Errorf(`expected the string with length %d to be %q but it was %q`, len(sub), sub, s2)
+			}
+		}
+	})
+
+	t.Run(`cast byte pointer`, func(t *testing.T) {
+		type stringptr *byte
+		p := stringptr(unsafe.StringData(quote))
+		s2 := unsafe.String(p, len(quote))
+		if s2 != quote {
+			t.Errorf(`expected the string to be %q but it was %q`, quote, s2)
+		}
+		type data struct{ ptr any }
+		d := data{ptr: p}
+		s3 := unsafe.String(d.ptr.(stringptr), len(quote))
+		if s3 != quote {
+			t.Errorf(`expected the string to be %q but it was %q`, quote, s3)
+		}
+	})
+
+	t.Run(`non-int length`, func(t *testing.T) {
+		p := unsafe.StringData(quote)
+		var length int64 = int64(len(quote))
+		s2 := unsafe.String(p, length)
+		if s2 != quote {
+			t.Errorf(`expected the string to be %q but it was %q`, quote, s2)
+		}
+	})
 }

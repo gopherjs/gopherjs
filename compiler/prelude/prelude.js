@@ -620,6 +620,20 @@ var $typeOf = x => {
     return typeof (x);
 };
 
+var $unsafeSlice = (ptr, len, typ) => {
+    if (ptr === typ.nil || ptr.$isNil) {
+        if (len > 0) {
+            $throwRuntimeError("unsafe.Slice: ptr is nil and len is not zero");
+        }
+        return typ.nil;
+    }
+    var s = new typ(ptr.$target);
+    s.$offset = ptr.$index;
+    s.$length = len;
+    s.$capacity = len;
+    return s;
+};
+
 var $sliceData = (slice, typ) => {
     if (slice === typ.nil) {
         return $ptrType(typ.elem).nil;

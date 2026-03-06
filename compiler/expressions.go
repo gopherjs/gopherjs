@@ -1091,6 +1091,10 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 	case "Offsetof":
 		sel, _ := fc.selectionOf(astutil.RemoveParens(args[0]).(*ast.SelectorExpr))
 		return fc.formatExpr("%d", typesutil.OffsetOf(sizes32, sel))
+	case "Slice":
+		ptrType := fc.typeOf(args[0]).Underlying().(*types.Pointer)
+		sliceType := types.NewSlice(ptrType.Elem())
+		return fc.formatExpr("$unsafeSlice(%e, %e, %s)", args[0], args[1], fc.typeName(sliceType))
 	case "SliceData":
 		t := fc.typeOf(args[0]).Underlying().(*types.Slice)
 		return fc.formatExpr(`$sliceData(%e, %s)`, args[0], fc.typeName(t))
@@ -1168,7 +1172,8 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 						// The following are extensions of the ABI equivalent type to add more methods.
 						// e.g. `type structType struct { abi.StructType }`.
 						case `interfaceType`, `mapType`, `ptrType`, `sliceType`, `structType`:
-							return fc.formatExpr("toKindTypeExt(%e)", call.Args[0]) // unsafe conversion
+							obj := fc.pkgCtx.Pkg.Scope().Lookup(`toKindTypeExt`)
+							return fc.formatExpr("%s(%e)", fc.objectName(obj), call.Args[0]) // unsafe conversion
 						}
 					}
 					return fc.translateExpr(expr)

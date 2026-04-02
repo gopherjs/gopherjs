@@ -226,14 +226,12 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				return fc.formatExpr("%e.object", e.X)
 			}
 
-			switch t.Underlying().(type) {
-			case *types.Struct, *types.Array:
-				// JavaScript's pass-by-reference semantics makes passing array's or
-				// struct's object semantically equivalent to passing a pointer
-				// TODO(nevkontakte): Evaluate if performance gain justifies complexity
-				// introduced by the special case.
-				return fc.translateExpr(e.X)
-			}
+			// JavaScript's pass-by-reference semantics makes passing array's or
+			// struct's object semantically equivalent to passing a pointer
+			// However, to allow a slice to be recreated from a `&s[i]`
+			// (where `s` is a slice of structs) via casting a pointer back into
+			// the slice or using `unsafe.Slice`, we still have to create specific pointers,
+			// e.g. `$indexPtr`, even when slightly slower to keep its "source" information.
 
 			elemType := exprType.(*types.Pointer).Elem()
 
@@ -1091,13 +1089,17 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 	case "Offsetof":
 		sel, _ := fc.selectionOf(astutil.RemoveParens(args[0]).(*ast.SelectorExpr))
 		return fc.formatExpr("%d", typesutil.OffsetOf(sizes32, sel))
+	case "String":
+		return fc.formatExpr("$unsafeString(%e, %e, %s)", args[0], args[1])
+	case "StringData":
+		return fc.formatExpr(`$unsafeStringData(%e, %s)`, args[0])
 	case "Slice":
 		ptrType := fc.typeOf(args[0]).Underlying().(*types.Pointer)
 		sliceType := types.NewSlice(ptrType.Elem())
 		return fc.formatExpr("$unsafeSlice(%e, %e, %s)", args[0], args[1], fc.typeName(sliceType))
 	case "SliceData":
 		t := fc.typeOf(args[0]).Underlying().(*types.Slice)
-		return fc.formatExpr(`$sliceData(%e, %s)`, args[0], fc.typeName(t))
+		return fc.formatExpr(`$unsafeSliceData(%e, %s)`, args[0], fc.typeName(t))
 	default:
 		panic(fmt.Sprintf("Unhandled builtin: %s\n", name))
 	}

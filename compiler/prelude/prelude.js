@@ -620,10 +620,28 @@ var $typeOf = x => {
     return typeof (x);
 };
 
-var $unsafeSlice = (ptr, len, typ) => {
-    if (ptr === typ.nil || ptr.$isNil) {
+var $unsafeString = (ptr, len) => {
+    var byteSliceType = $sliceType($Uint8);
+    return $bytesToString($unsafeSlice(ptr, len, byteSliceType, "String"));
+};
+
+var $unsafeStringData = str => {
+    if (str.length === 0) {
+        return $ptrType($Uint8).nil;
+    }
+    var byteSliceType = $sliceType($Uint8);
+    var b = new byteSliceType($stringToBytes(str));
+    return $unsafeSliceData(b, byteSliceType);
+};
+
+var $unsafeSlice = (ptr, len, typ, methodName = "Slice") => {
+    if (len < 0) {
+        $throwRuntimeError("unsafe."+methodName+": len out of range");
+    }
+    var ptrType = $ptrType(typ.elem);
+    if (ptr === ptrType.nil || ptr.$target === undefined) {
         if (len > 0) {
-            $throwRuntimeError("unsafe.Slice: ptr is nil and len is not zero");
+            $throwRuntimeError("unsafe."+methodName+": ptr is nil and len is not zero");
         }
         return typ.nil;
     }
@@ -634,11 +652,12 @@ var $unsafeSlice = (ptr, len, typ) => {
     return s;
 };
 
-var $sliceData = (slice, typ) => {
+var $unsafeSliceData = (slice, typ) => {
+    var ptrType = $ptrType(typ.elem);
     if (slice === typ.nil) {
-        return $ptrType(typ.elem).nil;
+        return ptrType.nil;
     }
-    return $indexPtr(slice.$array, slice.$offset, typ.elem);
+    return $indexPtr(slice.$array, slice.$offset, ptrType);
 };
 
 var $clearSlice = (slice) => {

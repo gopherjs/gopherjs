@@ -579,7 +579,7 @@ var $unsafeMethodToFunction = (typ, name, isPtr) => {
                         r = new ptrType(r);
                         break;
                     default:
-                        r = new ptrType(r.$get, r.$set, r.$target);
+                        r = new ptrType(r.$get, r.$set, r.$target, r.$index);
                 }
             }
             return r[name](...args);

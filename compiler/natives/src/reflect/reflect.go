@@ -609,7 +609,7 @@ func cvtDirect(v Value, typ Type) Value {
 			// javascript array object here.
 			val = srcVal
 		default:
-			val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"))
+			val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"), srcVal.Get("$target"), srcVal.Get("$index"))
 		}
 	case Struct:
 		val = jsType(typ).Get("ptr").New()

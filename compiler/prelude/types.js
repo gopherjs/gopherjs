@@ -210,10 +210,11 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             break;
 
         case $kindPtr:
-            typ = constructor || function (getter, setter, target) {
+            typ = constructor || function (getter, setter, target, index) {
                 this.$get = getter;
                 this.$set = setter;
                 this.$target = target;
+                if (index !== undefined) this.$index = index;
                 this.$val = this;
             };
             typ.keyFor = $idKey;
@@ -652,7 +653,7 @@ var $newDataPointer = (data, constructor) => {
 var $indexPtrGet = function () { return this.$target[this.$index]; };
 var $indexPtrSet = function (v) { this.$target[this.$index] = v; };
 var $indexPtr = (array, index, constructor) => {
-    var makePtr = () => {
+    var makeIndexPtr = () => {
         if (constructor.elem.kind === $kindStruct) {
             var ptr = array[index];
             if (ptr === undefined) {
@@ -665,11 +666,7 @@ var $indexPtr = (array, index, constructor) => {
             ptr.$set = $indexPtrSet;
             return ptr
         }
-        // This constructor should be the default pointer constructor meaning
-        // that $get, $set, and $target will be set, so we just have to set $index.
-        var ptr = new constructor($indexPtrGet, $indexPtrSet, array);
-        ptr.$index = index;
-        return ptr;
+        return new constructor($indexPtrGet, $indexPtrSet, array, index);
     };
 
     if (array.buffer) {
@@ -680,14 +677,14 @@ var $indexPtr = (array, index, constructor) => {
         var cacheIdx = array.BYTES_PER_ELEMENT * index + array.byteOffset;
         var ptr = typeCache[cacheIdx];
         if (!ptr) {
-            typeCache[cacheIdx] = ptr = makePtr();
+            typeCache[cacheIdx] = ptr = makeIndexPtr();
         }
         return ptr;
     } else {
         array.$ptr = array.$ptr || {};
         var ptr = array.$ptr[index];
         if (!ptr) {
-            array.$ptr[index] = ptr = makePtr();
+            array.$ptr[index] = ptr = makeIndexPtr();
         }
         return ptr;
     }

@@ -1195,6 +1195,8 @@ func TestSliceDataEdgeCases(t *testing.T) {
 		}
 	})
 
+	// Go allows grabing extra memory but that is unsafe and not something we
+	// can support with TypedArrays so instead it should panic for GropherJS.
 	t.Run(`length too big`, func(t *testing.T) {
 		got := catch(func() {
 			len := func() int { return 8 }()
@@ -1203,6 +1205,79 @@ func TestSliceDataEdgeCases(t *testing.T) {
 		})
 		if want := `runtime error: unsafe.Slice: len out of range`; want != got {
 			t.Errorf(`expected panic to be %q but got %q`, want, got)
+		}
+	})
+
+	t.Run(`cast pointer`, func(t *testing.T) {
+		type customPtr *int
+		s := []int{22, 33, 55}
+		p := customPtr(unsafe.SliceData(s))
+		s2 := unsafe.Slice(p, len(s))
+		if want, got := fmt.Sprintf("%#v", s), fmt.Sprintf("%#v", s2); got != want {
+			t.Errorf(`wanted slice from sliceData syntax to be %q but got %q`, want, got)
+		}
+		for i, want := range s {
+			if got := s2[i]; got != want {
+				t.Errorf(`wanted element in slice from sliceData at index %d to be %v but got %v`, i, want, got)
+			}
+		}
+	})
+}
+
+func TestStringData(t *testing.T) {
+	t.Run(`empty string`, func(t *testing.T) {
+		str := ``
+		p := unsafe.StringData(str)
+		s2 := unsafe.Slice(p, 0)
+		if got := len(s2); got != 0 {
+			t.Errorf(`expected the empty slice to have a length of zero but got %d`, got)
+		}
+	})
+
+	const quote = `I have a lot of growing up to do. I realized that the other day inside my fort.`
+	t.Run(`variable offset`, func(t *testing.T) {
+		for off := 0; off < len(quote); off += 7 {
+			sub := quote[off:]
+			p := unsafe.StringData(sub)
+			s2 := unsafe.String(p, len(sub))
+			if s2 != sub {
+				t.Errorf(`expected the string offset by %d with length %d to be %q but it was %q`, off, len(sub), sub, s2)
+			}
+		}
+	})
+
+	t.Run(`variable length`, func(t *testing.T) {
+		for ln := 1; ln < len(quote); ln += 7 {
+			sub := quote[:ln]
+			p := unsafe.StringData(sub)
+			s2 := unsafe.String(p, len(sub))
+			if s2 != sub {
+				t.Errorf(`expected the string with length %d to be %q but it was %q`, len(sub), sub, s2)
+			}
+		}
+	})
+
+	t.Run(`cast byte pointer`, func(t *testing.T) {
+		type stringptr *byte
+		p := stringptr(unsafe.StringData(quote))
+		s2 := unsafe.String(p, len(quote))
+		if s2 != quote {
+			t.Errorf(`expected the string to be %q but it was %q`, quote, s2)
+		}
+		type data struct{ ptr any }
+		d := data{ptr: p}
+		s3 := unsafe.String(d.ptr.(stringptr), len(quote))
+		if s3 != quote {
+			t.Errorf(`expected the string to be %q but it was %q`, quote, s3)
+		}
+	})
+
+	t.Run(`non-int length`, func(t *testing.T) {
+		p := unsafe.StringData(quote)
+		var length int64 = int64(len(quote))
+		s2 := unsafe.String(p, length)
+		if s2 != quote {
+			t.Errorf(`expected the string to be %q but it was %q`, quote, s2)
 		}
 	})
 }

@@ -1106,13 +1106,13 @@ func (fc *funcContext) translateBuiltin(name string, sig *types.Signature, args 
 		sel, _ := fc.selectionOf(astutil.RemoveParens(args[0]).(*ast.SelectorExpr))
 		return fc.formatExpr("%d", typesutil.OffsetOf(sizes32, sel))
 	case "String":
-		return fc.formatExpr("$unsafeString(%e, %e, %s)", args[0], args[1])
+		return fc.formatExpr("$unsafeString(%e, %f)", args[0], args[1])
 	case "StringData":
-		return fc.formatExpr(`$unsafeStringData(%e, %s)`, args[0])
+		return fc.formatExpr(`$unsafeStringData(%e)`, args[0])
 	case "Slice":
 		ptrType := fc.typeOf(args[0]).Underlying().(*types.Pointer)
 		sliceType := types.NewSlice(ptrType.Elem())
-		return fc.formatExpr("$unsafeSlice(%e, %e, %s)", args[0], args[1], fc.typeName(sliceType))
+		return fc.formatExpr("$unsafeSlice(%e, %f, %s)", args[0], args[1], fc.typeName(sliceType))
 	case "SliceData":
 		t := fc.typeOf(args[0]).Underlying().(*types.Slice)
 		return fc.formatExpr(`$unsafeSliceData(%e, %s)`, args[0], fc.typeName(t))
@@ -1336,7 +1336,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 		ptrVar := fc.newLocalVariable("_ptr")
 		getterConv := fc.translateConversion(fc.setType(&ast.StarExpr{X: fc.newIdent(ptrVar, exprType)}, exprTypeElem), t.Elem())
 		setterConv := fc.translateConversion(fc.newIdent("$v", t.Elem()), exprTypeElem)
-		return fc.formatExpr("(%1s = %2e, new %3s(function() { return %4s; }, function($v) { %1s.$set(%5s); }, %1s.$target))", ptrVar, expr, fc.typeName(desiredType), getterConv, setterConv)
+		return fc.formatExpr("(%1s = %2e, new %3s(function() { return %4s; }, function($v) { %1s.$set(%5s); }, %1s.$target, %1s.$index))", ptrVar, expr, fc.typeName(desiredType), getterConv, setterConv)
 
 	case *types.Interface:
 		if types.Identical(exprType, types.Typ[types.UnsafePointer]) {

@@ -649,7 +649,29 @@ var $newDataPointer = (data, constructor) => {
     return new constructor(() => { return data; }, v => { data = v; });
 };
 
+var $indexPtrGet = function () { return this.$target[this.$index]; };
+var $indexPtrSet = function (v) { this.$target[this.$index] = v; };
 var $indexPtr = (array, index, constructor) => {
+    var makePtr = () => {
+        if (constructor.elem.kind === $kindStruct) {
+            var ptr = array[index];
+            if (ptr === undefined) {
+                  ptr = array[index] = constructor.elem.zero();
+            }
+            ptr.$val = ptr;
+            ptr.$target = array;
+            ptr.$index = index;
+            ptr.$get = $indexPtrGet;
+            ptr.$set = $indexPtrSet;
+            return ptr
+        }
+        // This constructor should be the default pointer constructor meaning
+        // that $get, $set, and $target will be set, so we just have to set $index.
+        var ptr = new constructor($indexPtrGet, $indexPtrSet, array);
+        ptr.$index = index;
+        return ptr;
+    };
+
     if (array.buffer) {
         // Pointers to the same underlying ArrayBuffer share cache.
         var cache = array.buffer.$ptr = array.buffer.$ptr || {};
@@ -658,18 +680,14 @@ var $indexPtr = (array, index, constructor) => {
         var cacheIdx = array.BYTES_PER_ELEMENT * index + array.byteOffset;
         var ptr = typeCache[cacheIdx];
         if (!ptr) {
-            ptr = new constructor(() => { return array[index]; }, v => { array[index] = v; }, array);
-            ptr.$index = index;
-            typeCache[cacheIdx] = ptr;
+            typeCache[cacheIdx] = ptr = makePtr();
         }
         return ptr;
     } else {
         array.$ptr = array.$ptr || {};
         var ptr = array.$ptr[index];
         if (!ptr) {
-            ptr = new constructor(() => { return array[index]; }, v => { array[index] = v; }, array);
-            ptr.$index = index;
-            array.$ptr[index] = ptr;
+            array.$ptr[index] = ptr = makePtr();
         }
         return ptr;
     }
@@ -684,6 +702,7 @@ var $sliceType = elem => {
     }
     return typ;
 };
+
 var $makeSlice = (typ, length, capacity = length) => {
     if (length < 0 || length > 2147483647) {
         $throwRuntimeError("makeslice: len out of range");

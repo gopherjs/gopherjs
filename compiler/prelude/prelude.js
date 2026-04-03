@@ -645,6 +645,11 @@ var $unsafeSlice = (ptr, len, typ, methodName = "Slice") => {
         }
         return typ.nil;
     }
+    if (ptr.$index + len > ptr.$target.length) {
+        // Go can grab abritraty footprints of memory, JS can not. Instead of trying
+        // to grow the target, which would only work for Array, just always error.
+        $throwRuntimeError("unsafe." + methodName + ": len out of range");
+    }
     var s = new typ(ptr.$target);
     s.$offset = ptr.$index;
     s.$length = len;

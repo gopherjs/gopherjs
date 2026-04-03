@@ -978,113 +978,231 @@ func TestStructWithNonIdentifierJSTag(t *testing.T) {
 }
 
 func TestSliceData(t *testing.T) {
-	var (
-		s0 = []int(nil)
-		s1 = []int{}
-		s2 = []int{1, 2, 3}
-		s3 = s2[1:]
-		s4 = []int{4, 5, 6}
-
-		sd0 = unsafe.SliceData(s0)
-		sd1 = unsafe.SliceData(s1)
-		sd2 = unsafe.SliceData(s2)
-		sd3 = unsafe.SliceData(s3)
-		sd4 = unsafe.SliceData(s4)
-	)
-
-	if sd0 != nil {
-		t.Errorf("slice data for nil slice was not nil")
-	}
-	if sd1 == nil {
-		t.Errorf("slice data for empty slice was nil")
-	}
-	if sd2 == nil {
-		t.Errorf("slice data for non-empty slice was nil")
-	}
-	if sd3 == nil {
-		t.Errorf("slice data for sub-slice was nil")
-	}
-	if sd1 == sd2 {
-		t.Errorf("slice data for empty and non-empty slices were the same")
-	}
-	if sd2 == sd3 {
-		t.Errorf("slice data for slice and sub-slice were the same")
-	}
-	if sd2 == sd4 {
-		t.Errorf("slice data for different slices were the same")
-	}
-
-	sx0 := unsafe.Slice(sd0, 0)
-	if sx0 != nil {
-		t.Errorf("expected nil slice data to create a nil slice")
-	}
-
-	sx1 := unsafe.Slice(sd1, 0)
-	if sx1 == nil {
-		t.Errorf("expected an empty slice data to create an empty slice, not a nil slice")
-	}
-	if got := len(sx1); got != 0 {
-		t.Errorf("expected the empty slice to have a length of zero but got %d", got)
-	}
-
-	sx2 := unsafe.Slice(sd2, 3)
-	if want, got := len(s2), len(sx2); want != got {
-		t.Errorf("expected [s2] slice to have a length of %d but got %d", want, got)
-	}
-
-	sx3 := unsafe.Slice(sd3, 2)
-	if want, got := len(s3), len(sx3); want != got {
-		t.Errorf("expected [s3] slice to have a length of %d but got %d", want, got)
-	}
-
-	for ln := range s4 {
-		sx4 := unsafe.Slice(sd4, ln)
-		if got := len(sx4); got != ln {
-			t.Errorf("expected [s4] slice set to length %d to have a length of 1 but got %d", ln, got)
+	t.Run(`nil slice`, func(t *testing.T) {
+		s0 := []int(nil)
+		sd0 := unsafe.SliceData(s0)
+		if sd0 != nil {
+			t.Error(`slice data for nil slice was not nil`)
 		}
-		for i, got := range sx4 {
-			if want := s4[i]; want != got {
-				t.Errorf("expected [s4] slice set to length %d to have %d at index %d but got %d", ln, want, i, got)
+		sx0 := unsafe.Slice(sd0, 0)
+		if sx0 != nil {
+			t.Error(`expected nil slice data to create a nil slice`)
+		}
+	})
+
+	t.Run(`empty slice`, func(t *testing.T) {
+		s1 := []int{}
+		sd1 := unsafe.SliceData(s1)
+		if sd1 == nil {
+			t.Error(`slice data for empty slice was nil`)
+		}
+		sx1 := unsafe.Slice(sd1, 0)
+		if sx1 == nil {
+			t.Error(`expected an empty slice data to create an empty slice, not a nil slice`)
+		}
+		if got := len(sx1); got != 0 {
+			t.Errorf(`expected the empty slice to have a length of zero but got %d`, got)
+		}
+	})
+
+	t.Run(`variable offset`, func(t *testing.T) {
+		s2 := []int{1, 2, 3}
+		for off := range s2 {
+			s2b := s2[off:]
+			sd2 := unsafe.SliceData(s2b)
+			if sd2 == nil {
+				t.Errorf(`slice data for non-empty slice offset to %d was nil`, off)
+			}
+			ln := len(s2) - off
+			sx2 := unsafe.Slice(sd2, ln)
+			if got := len(sx2); ln != got {
+				t.Errorf(`expected slice offset to %d to have a length of %d but got %d`, off, ln, got)
+			}
+			for i, got := range sx2 {
+				if want := s2b[i]; want != got {
+					t.Errorf(`expected slice offset to %d and set to length %d to have %d at index %d but got %d`, off, ln, want, i, got)
+				}
 			}
 		}
-	}
+	})
+
+	t.Run(`variable length`, func(t *testing.T) {
+		s3 := []int{4, 5, 6}
+		sd3 := unsafe.SliceData(s3)
+		if sd3 == nil {
+			t.Error(`slice data for non-empty slice was nil`)
+		}
+		for ln := range s3 {
+			sx3 := unsafe.Slice(sd3, ln)
+			if got := len(sx3); got != ln {
+				t.Errorf(`expected [s3] slice set to length %d to have a length of 1 but got %d`, ln, got)
+			}
+			for i, got := range sx3 {
+				if want := s3[i]; want != got {
+					t.Errorf(`expected [s3] slice set to length %d to have %d at index %d but got %d`, ln, want, i, got)
+				}
+			}
+		}
+	})
 }
 
-func TestSliceDataRoundTrip(t *testing.T) {
+func TestSliceDataFromPointer(t *testing.T) {
+	t.Run(`nil slice`, func(t *testing.T) {
+		sd0 := (*int)(nil)
+		sx0 := unsafe.Slice(sd0, 0)
+		if sx0 != nil {
+			t.Error(`expected nil slice data to create a nil slice`)
+		}
+	})
+
+	t.Run(`empty slice`, func(t *testing.T) {
+		s1 := []int{}
+		sd1 := &s1
+		sx1 := unsafe.Slice(sd1, 0)
+		if sx1 == nil {
+			t.Error(`expected an empty slice data to create an empty slice, not a nil slice`)
+		}
+		if got := len(sx1); got != 0 {
+			t.Errorf(`expected the empty slice to have a length of zero but got %d`, got)
+		}
+	})
+
+	t.Run(`variable offset`, func(t *testing.T) {
+		s2 := []int{1, 2, 3}
+		for off := range s2 {
+			ln := len(s2) - off
+			sd2 := &s2[off]
+			sx2 := unsafe.Slice(sd2, ln)
+			if got := len(sx2); got != ln {
+				t.Errorf(`expected [s2] slice offset by %d and set to length %d to have a length of 1 but got %d`, off, ln, got)
+			}
+			for i, got := range sx2 {
+				if want := s2[i+off]; want != got {
+					t.Errorf(`expected [s2] slice offset by %d and set to length %d to have %d at index %d but got %d`, off, ln, want, i, got)
+				}
+			}
+		}
+	})
+
+	t.Run(`variable length`, func(t *testing.T) {
+		s3 := []int{4, 5, 6}
+		sd3 := &s3[0]
+		for ln := range s3 {
+			sx3 := unsafe.Slice(sd3, ln)
+			if got := len(sx3); got != ln {
+				t.Errorf(`expected [s3] slice set to length %d to have a length of 1 but got %d`, ln, got)
+			}
+			for i, got := range sx3 {
+				if want := s3[i]; want != got {
+					t.Errorf(`expected [s3] slice set to length %d to have %d at index %d but got %d`, ln, want, i, got)
+				}
+			}
+		}
+	})
+}
+
+func TestSliceDataWithDifferentTypes(t *testing.T) {
+	checkSliceDataRoundTrip(t, []bool(nil))
+	checkSliceDataRoundTrip(t, []bool{})
+	checkSliceDataRoundTrip(t, []bool{false})
+	checkSliceDataRoundTrip(t, []bool{false, true, true, false})
+
 	checkSliceDataRoundTrip(t, []int(nil))
 	checkSliceDataRoundTrip(t, []int{})
 	checkSliceDataRoundTrip(t, []int{1})
 	checkSliceDataRoundTrip(t, []int{1, 2, 3, 4})
 
+	checkSliceDataRoundTrip(t, []uint64(nil))
+	checkSliceDataRoundTrip(t, []uint64{})
+	checkSliceDataRoundTrip(t, []uint64{11})
+	checkSliceDataRoundTrip(t, []uint64{11, 12, 13, 14})
+
 	checkSliceDataRoundTrip(t, []string(nil))
 	checkSliceDataRoundTrip(t, []string{})
-	checkSliceDataRoundTrip(t, []string{""})
-	checkSliceDataRoundTrip(t, []string{"cat", "dog", "ardvark"})
+	checkSliceDataRoundTrip(t, []string{``})
+	checkSliceDataRoundTrip(t, []string{`cat`, `dog`, `ardvark`})
 
-	type librarian struct{ name string }
+	type librarian struct{ says string }
 	checkSliceDataRoundTrip(t, []librarian(nil))
 	checkSliceDataRoundTrip(t, []librarian{})
-	checkSliceDataRoundTrip(t, []librarian{{name: "ook"}})
+	checkSliceDataRoundTrip(t, []librarian{{says: `ook`}})
 
 	checkSliceDataRoundTrip(t, []*librarian(nil))
 	checkSliceDataRoundTrip(t, []*librarian{})
-	checkSliceDataRoundTrip(t, []*librarian{{name: "ook"}})
+	checkSliceDataRoundTrip(t, []*librarian{{says: `ook`}})
 }
 
-func checkSliceDataRoundTrip[T any, S ~[]T](t *testing.T, s S) {
-	want := fmt.Sprintf("%#v\n", s)
-	t.Run(want, func(t *testing.T) {
+func checkSliceDataRoundTrip[T comparable, S ~[]T](t *testing.T, s S) {
+	name := fmt.Sprintf("%T(nil)", s)
+	if s != nil {
+		name = fmt.Sprintf("%T[len=%d]", s, len(s))
+	}
+
+	t.Run(`data `+name, func(t *testing.T) {
 		p := unsafe.SliceData(s)
 		s2 := unsafe.Slice(p, len(s))
-		// Compare Go-syntax strings since Go doesn't allow slice comparison directly.
-		if got := fmt.Sprintf("%#v\n", s2); got != want {
-			t.Errorf("slice round trip wanted: %q but got %q", want, got)
+		if want, got := fmt.Sprintf("%#v", s), fmt.Sprintf("%#v", s2); got != want {
+			t.Errorf(`wanted slice from sliceData syntax to be %q but got %q`, want, got)
+		}
+		for i, want := range s {
+			if got := s2[i]; got != want {
+				t.Errorf(`wanted element in slice from sliceData at index %d to be %v but got %v`, i, want, got)
+			}
 		}
 	})
+
+	if len(s) > 0 {
+		t.Run(`ptr `+name, func(t *testing.T) {
+			p := &s[0]
+			s2 := unsafe.Slice(p, len(s))
+			if want, got := fmt.Sprintf("%#v", s), fmt.Sprintf("%#v", s2); got != want {
+				t.Errorf(`wanted slice from sliceData syntax to be %q but got %q`, want, got)
+			}
+			for i, want := range s {
+				if got := s2[i]; got != want {
+					t.Errorf(`wanted element in slice from sliceData at index %d to be %v but got %v`, i, want, got)
+				}
+			}
+		})
+	}
 }
 
 func TestSliceDataEdgeCases(t *testing.T) {
-	// TODO(grantnelson-wf): Test nil with len != 0
-	// TODO(grantnelson-wf): Test with len being too big
-	// TODO(grantnelson-wf): Test with len being negative
+	catch := func(h func()) (r string) {
+		defer func() { r = fmt.Sprint(recover()) }()
+		h()
+		return
+	}
+
+	t.Run(`nil with length`, func(t *testing.T) {
+		got := catch(func() {
+			p := (*int)(nil)
+			_ = unsafe.Slice(p, 4)
+		})
+		if want := `runtime error: unsafe.Slice: ptr is nil and len is not zero`; want != got {
+			t.Errorf(`expected panic to be %q but got %q`, want, got)
+		}
+	})
+
+	t.Run(`length is negative`, func(t *testing.T) {
+		got := catch(func() {
+			len := func() int { return -1 }()
+			s := []int{7, 5, 3}
+			_ = unsafe.Slice(&s[0], len)
+		})
+		if want := `runtime error: unsafe.Slice: len out of range`; want != got {
+			t.Errorf(`expected panic to be %q but got %q`, want, got)
+		}
+	})
+
+	t.Run(`length too big`, func(t *testing.T) {
+		got := catch(func() {
+			len := func() int { return 8 }()
+			s := []int{13, 11, 7}
+			_ = unsafe.Slice(&s[0], len)
+		})
+		if want := `runtime error: unsafe.Slice: len out of range`; want != got {
+			t.Errorf(`expected panic to be %q but got %q`, want, got)
+		}
+	})
 }

@@ -675,18 +675,10 @@ var $indexPtr = (array, index, constructor) => {
         // Pointers of different primitive types are non-comparable and stored in different caches.
         var typeCache = cache[array.name] = cache[array.name] || {};
         var cacheIdx = array.BYTES_PER_ELEMENT * index + array.byteOffset;
-        var ptr = typeCache[cacheIdx];
-        if (!ptr) {
-            typeCache[cacheIdx] = ptr = makeIndexPtr();
-        }
-        return ptr;
+        return typeCache[cacheIdx] || (typeCache[cacheIdx] = makeIndexPtr());
     } else {
         array.$ptr = array.$ptr || {};
-        var ptr = array.$ptr[index];
-        if (!ptr) {
-            array.$ptr[index] = ptr = makeIndexPtr();
-        }
-        return ptr;
+        return array.$ptr[index] || (array.$ptr[index] = makeIndexPtr());
     }
 };
 

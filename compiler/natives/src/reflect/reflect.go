@@ -609,6 +609,9 @@ func cvtDirect(v Value, typ Type) Value {
 			// javascript array object here.
 			val = srcVal
 		default:
+			// When creating a new pointer, copy the get, set, and target.
+			// Not all pointers have index, only those pointing to slice or array,
+			// so if index is undefined or not, copy it too.
 			val = jsType(typ).New(srcVal.Get("$get"), srcVal.Get("$set"), srcVal.Get("$target"), srcVal.Get("$index"))
 		}
 	case Struct:

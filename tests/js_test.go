@@ -1101,6 +1101,12 @@ func TestSliceDataFromPointer(t *testing.T) {
 	})
 }
 
+// TODO(grantnelson-wf): When calling into `unsafe.Slice` the type checker does
+// not understand that `[]T` or `~[]T` is slice. This is a known issue,
+// https://github.com/golang/go/issues/64406 in go1.21. The type checker was
+// fixed in go1.22. Until then the following will only work if gopherjs was
+// built with a go version above go1.21. Once on go1.22, this test can be restored.
+/*
 func TestSliceDataWithDifferentTypes(t *testing.T) {
 	checkSliceDataRoundTrip(t, []bool(nil))
 	checkSliceDataRoundTrip(t, []bool{})
@@ -1166,6 +1172,7 @@ func checkSliceDataRoundTrip[T comparable, S ~[]T](t *testing.T, s S) {
 		})
 	}
 }
+*/
 
 func TestSliceDataEdgeCases(t *testing.T) {
 	catch := func(h func()) (r string) {

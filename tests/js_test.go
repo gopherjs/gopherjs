@@ -1132,7 +1132,7 @@ func TestSliceDataWithDifferentTypes(t *testing.T) {
 	checkSliceDataRoundTrip(t, []*librarian{{says: `ook`}})
 }
 
-func checkSliceDataRoundTrip[T comparable, S ~[]T](t *testing.T, s S) {
+func checkSliceDataRoundTrip[T comparable, S []T](t *testing.T, s S) {
 	name := fmt.Sprintf("%T(nil)", s)
 	if s != nil {
 		name = fmt.Sprintf("%T[len=%d]", s, len(s))

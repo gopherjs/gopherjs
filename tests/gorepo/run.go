@@ -155,6 +155,9 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue43942.go":  {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1126"},
 
 	// These are new tests in Go 1.21
+	"fixedbugs/issue58300.go":  {category: usesUnsupportedPackage, desc: "runtime.FuncForPC from outside of Caller() or Callers() which is not supported yet"},
+	"fixedbugs/issue58300b.go": {category: usesUnsupportedPackage, desc: "runtime.FuncForPC from outside of Caller() or Callers() which is not supported yet"},
+
 	// TODO(grantnelson-wf): Fill out
 }
 

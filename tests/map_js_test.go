@@ -3,6 +3,8 @@
 package tests
 
 import (
+	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/gopherjs/gopherjs/js"
@@ -109,5 +111,72 @@ func Test_MapEmbeddedObject(t *testing.T) {
 	}
 	if d.Props["two"] != 2 {
 		t.Errorf("key 'two' value Got: %d, Want: %d", d.Props["two"], 2)
+	}
+}
+
+func mapCloneViaJS[M ~map[K]V, K comparable, V any](m M) M {
+	mptr := &M{}
+	cloned := js.Global.Get("Map").New(js.InternalObject(m))
+	js.InternalObject(mptr).Call(`$set`, cloned)
+	return *mptr
+}
+
+func mapCloneViaGo[M ~map[K]V, K comparable, V any](m M) M {
+	mcopy := make(M, len(m))
+	for k, v := range m {
+		mcopy[k] = v
+	}
+	return mcopy
+}
+
+func BenchmarkMapClone(b *testing.B) {
+	// Results from 2026/4/6 running go1.21.13 on darwin/arm64 with Node.js v20.9.0.
+	//
+	// The results show that mapCloneViaJS is faster than the mapCloneViaGo
+	// after 5 key/value pairs. However, the speed is fast enough that for
+	// smaller maps, mapCloneViaJS should still be fine. I'm guessing people
+	// will clone larger maps that cloning tons of smaller maps, but if we need
+	// to we can add a switch based on the size of the map.
+	//
+	// | size  | mapCloneViaGo (ns/op) | mapCloneViaJS (ns/op) | Go/JS (%) |
+	// |------:|----------------------:|----------------------:|----------:|
+	// |     0 |                 19.23 |                 96.00 |     20.03 |
+	// |     1 |                 42.67 |                116.40 |     36.66 |
+	// |     2 |                 82.14 |                138.10 |     59.48 |
+	// |     3 |                111.60 |                167.90 |     66.47 |
+	// |     5 |                232.50 |                245.80 |     94.59 |
+	// |    10 |                469.60 |                408.70 |    114.90 |
+	// |    50 |               2554.00 |               1712.00 |    149.18 |
+	// |   100 |               5262.00 |               3630.00 |    144.96 |
+	// |  1000 |              67155.00 |              38843.00 |    172.89 |
+	// | 10000 |             956229.00 |             590539.00 |    161.92 |
+
+	for _, size := range []int{0, 1, 2, 3, 5, 10, 50, 100, 1000, 10000} {
+		m := make(map[string][]byte, size)
+		for i := 0; i < size; i++ {
+			key := fmt.Sprintf(`k%d`, i)
+			value := []byte(fmt.Sprintf(`v%d`, i))
+			m[key] = value
+		}
+
+		mcopy1 := (map[string][]byte)(nil)
+		b.Run(fmt.Sprintf(`mapCloneViaJS(%d)`, size), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				mcopy1 = mapCloneViaJS(m)
+			}
+		})
+		if !reflect.DeepEqual(m, mcopy1) {
+			b.Errorf(`deep equal indicated mapCloneViaJS of size %d did not return expected copy`, size)
+		}
+
+		mcopy2 := (map[string][]byte)(nil)
+		b.Run(fmt.Sprintf(`mapCloneViaGo(%d)`, size), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				mcopy2 = mapCloneViaGo(m)
+			}
+		})
+		if !reflect.DeepEqual(m, mcopy2) {
+			b.Errorf(`deep equal indicated mapCloneViaGo of size %d did not return expected copy`, size)
+		}
 	}
 }

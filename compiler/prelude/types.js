@@ -654,7 +654,8 @@ var $indexPtrGet = function () { return this.$target[this.$index]; };
 var $indexPtrSet = function (v) { this.$target[this.$index] = v; };
 var $indexPtr = (array, index, constructor) => {
     var makeIndexPtr = () => {
-        if (constructor.elem.kind === $kindStruct) {
+        if (constructor.elem.kind === $kindStruct ||
+            constructor.elem.kind === $kindArray) {
             var ptr = array[index];
             if (ptr === undefined) {
                   ptr = array[index] = constructor.elem.zero();
@@ -663,7 +664,7 @@ var $indexPtr = (array, index, constructor) => {
             ptr.$target = array;
             ptr.$index = index;
             ptr.$get = $indexPtrGet;
-            ptr.$set = $indexPtrSet;
+            ptr.$set = (v) => { constructor.elem.copy(array[index], v); };
             return ptr
         }
         return new constructor($indexPtrGet, $indexPtrSet, array, index);

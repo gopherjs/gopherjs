@@ -180,3 +180,70 @@ func BenchmarkMapClone(b *testing.B) {
 		}
 	}
 }
+
+type myMap[K comparable] map[K]string
+
+func (m myMap[K]) getOneKey() (key K, found bool) {
+	for k := range m {
+		return k, true
+	}
+	return
+}
+
+// TestMapCloneExtendedMap checks that the clone methods work on
+// approxomate maps, i.e. `M ~map[K]V`, that have methods attached to it.
+func TestMapCloneExtendedMap(t *testing.T) {
+	m := myMap[int]{}
+	key, found := m.getOneKey()
+	if found {
+		t.Errorf("expected a key to not be found but found a key of %v", key)
+	}
+	m[5] = "five"
+	key, found = m.getOneKey()
+	if !found {
+		t.Errorf("expected a key to be found but it was not")
+	}
+	if key != 5 {
+		t.Errorf("expected a key to be 5 but got %v", key)
+	}
+	m[2] = "two"
+	m[42] = "answer"
+
+	tests := []struct {
+		name  string
+		clone func(myMap[int]) myMap[int]
+	}{
+		{
+			name:  `mapCloneViaJS`,
+			clone: mapCloneViaJS[myMap[int]],
+		}, {
+			name:  `mapCloneViaGo`,
+			clone: mapCloneViaGo[myMap[int]],
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mClone := test.clone(m)
+			if want, got := len(m), len(mClone); got != want {
+				t.Errorf("expected the cloned map to have length %d but got %d", want, got)
+			}
+			for key, want := range m {
+				got, ok := mClone[key]
+				if !ok {
+					t.Errorf("expected the cloned map to have the key %v but it was not found", key)
+				}
+				if !ok {
+					t.Errorf("expected the cloned map to have %v for key %v but got %v", want, key, got)
+				}
+			}
+			key, found = mClone.getOneKey()
+			if !found {
+				t.Errorf("expected the cloned map to find a key but it did not")
+			}
+			if _, ok := m[key]; !ok {
+				t.Errorf("expected the key %v from the cloned map to be a key found in the original but it was not", key)
+			}
+		})
+	}
+}

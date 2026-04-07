@@ -1288,3 +1288,49 @@ func TestStringData(t *testing.T) {
 		}
 	})
 }
+
+// TestPointerToFieldOfNilStruct points out an errof found by fixedbugs/issue63657.go
+// where a pointer was being made to a field on a nil struct.
+// It should panic on creation of the pointer.
+func TestPointerToFieldOfNilStruct(t *testing.T) {
+	type X struct{ a, b int }
+
+	r := func() (r any) {
+		defer func() { r = recover() }()
+
+		var x *X
+		x = nil
+		p := &x.b // should panic
+		println(p)
+		return
+	}()
+
+	want := `runtime error: invalid memory address or nil pointer dereference`
+	got := fmt.Sprint(r)
+	if got != want {
+		t.Errorf("expected a panic for reading a field from a nil structure"+
+			"\n\twant: %v\n\tgot:  %v", want, got)
+	}
+}
+
+func TestPointerToStructFieldOfNilStruct(t *testing.T) {
+	type Y struct{ a int }
+	type X struct{ b Y }
+
+	r := func() (r any) {
+		defer func() { r = recover() }()
+
+		var x *X
+		x = nil
+		p := &x.b // should panic
+		println(p)
+		return
+	}()
+
+	want := `runtime error: invalid memory address or nil pointer dereference`
+	got := fmt.Sprint(r)
+	if got != want {
+		t.Errorf("expected a panic for reading a field from a nil structure"+
+			"\n\twant: %v\n\tgot:  %v", want, got)
+	}
+}

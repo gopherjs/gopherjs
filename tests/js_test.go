@@ -1293,11 +1293,10 @@ func TestStringData(t *testing.T) {
 // where a pointer was being made to a field on a nil struct.
 // It should panic on creation of the pointer.
 func TestPointerToFieldOfNilStruct(t *testing.T) {
-	type X struct{ a, b int }
-
 	r := func() (r any) {
 		defer func() { r = recover() }()
 
+		type X struct{ a, b int }
 		var x *X
 		x = nil
 		p := &x.b // should panic
@@ -1306,20 +1305,18 @@ func TestPointerToFieldOfNilStruct(t *testing.T) {
 	}()
 
 	want := `runtime error: invalid memory address or nil pointer dereference`
-	got := fmt.Sprint(r)
-	if got != want {
+	if got := fmt.Sprint(r); got != want {
 		t.Errorf("expected a panic for reading a field from a nil structure"+
 			"\n\twant: %v\n\tgot:  %v", want, got)
 	}
 }
 
 func TestPointerToStructFieldOfNilStruct(t *testing.T) {
-	type Y struct{ a int }
-	type X struct{ b Y }
-
 	r := func() (r any) {
 		defer func() { r = recover() }()
 
+		type Y struct{ a int }
+		type X struct{ b Y }
 		var x *X
 		x = nil
 		p := &x.b // should panic
@@ -1328,8 +1325,43 @@ func TestPointerToStructFieldOfNilStruct(t *testing.T) {
 	}()
 
 	want := `runtime error: invalid memory address or nil pointer dereference`
-	got := fmt.Sprint(r)
-	if got != want {
+	if got := fmt.Sprint(r); got != want {
+		t.Errorf("expected a panic for reading a field from a nil structure"+
+			"\n\twant: %v\n\tgot:  %v", want, got)
+	}
+}
+
+func TestPointerToFieldOfNilStructInSlice(t *testing.T) {
+	r := func() (r any) {
+		defer func() { r = recover() }()
+
+		type X struct{ b int }
+		x := []*X{nil}
+		p := &x[0].b // should panic
+		println(p)
+		return
+	}()
+
+	want := `runtime error: invalid memory address or nil pointer dereference`
+	if got := fmt.Sprint(r); got != want {
+		t.Errorf("expected a panic for reading a field from a nil structure"+
+			"\n\twant: %v\n\tgot:  %v", want, got)
+	}
+}
+
+func TestPointerToNilSliceElement(t *testing.T) {
+	r := func() (r any) {
+		defer func() { r = recover() }()
+
+		x := []*[3]int{nil}
+		p := x[0] // should get nil pointer to array
+		q := *p   // should panic
+		println(q[0])
+		return
+	}()
+
+	want := `runtime error: invalid memory address or nil pointer dereference`
+	if got := fmt.Sprint(r); got != want {
 		t.Errorf("expected a panic for reading a field from a nil structure"+
 			"\n\twant: %v\n\tgot:  %v", want, got)
 	}

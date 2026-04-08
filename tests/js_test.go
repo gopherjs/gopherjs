@@ -1289,80 +1289,80 @@ func TestStringData(t *testing.T) {
 	})
 }
 
-// TestPointerToFieldOfNilStruct points out an errof found by fixedbugs/issue63657.go
-// where a pointer was being made to a field on a nil struct.
-// It should panic on creation of the pointer.
-func TestPointerToFieldOfNilStruct(t *testing.T) {
-	r := func() (r any) {
-		defer func() { r = recover() }()
-
-		type X struct{ a, b int }
-		var x *X
-		x = nil
-		p := &x.b // should panic
-		println(p)
-		return
-	}()
-
-	want := `runtime error: invalid memory address or nil pointer dereference`
-	if got := fmt.Sprint(r); got != want {
-		t.Errorf("expected a panic for reading a field from a nil structure"+
-			"\n\twant: %v\n\tgot:  %v", want, got)
+// TestNilPointerDereference was added because fixedbugs/issue63657.go
+// pointed out an error where a pointer was being made to a field on a nil struct.
+// It should panic on creation of the pointer but wasn't because the pointer wrapped
+// a get and set around the field such that if get or set were called then the panic
+// may occur. Go expects the panic to be at the creation of the pointer.
+func TestNilPointerDereference(t *testing.T) {
+	tests := []struct {
+		name string
+		fn   func()
+	}{
+		{
+			name: `pointer to int field on a nil struct`,
+			fn: func() {
+				type X struct{ a, b int }
+				x := (*X)(nil)
+				_ = &x.b // should panic
+			},
+		},
+		{
+			name: `pointer to struct field on nil struct`,
+			fn: func() {
+				type Y struct{ a int }
+				type X struct{ b Y }
+				x := (*X)(nil)
+				_ = &x.b // should panic
+			},
+		},
+		{
+			name: `pointer to field of nil struct in slice`,
+			fn: func() {
+				type X struct{ b int }
+				x := []*X{nil}
+				_ = &x[0].b // should panic
+			},
+		},
+		{
+			name: `pointer to nil array`,
+			fn: func() {
+				x := (*[3]int)(nil)
+				_ = *x // should panic
+			},
+		},
+		{
+			name: `pointer to nil struct`,
+			fn: func() {
+				type X struct{ b int }
+				x := (*X)(nil)
+				_ = *x // should panic
+			},
+		},
+		{
+			name: `named pointer to nil struct`,
+			fn: func() {
+				type X struct{ b int }
+				type P *X
+				x := P(nil)
+				_ = *x // should panic
+			},
+		},
 	}
-}
 
-func TestPointerToStructFieldOfNilStruct(t *testing.T) {
-	r := func() (r any) {
-		defer func() { r = recover() }()
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := func() (r any) {
+				defer func() { r = recover() }()
+				test.fn()
+				return
+			}()
 
-		type Y struct{ a int }
-		type X struct{ b Y }
-		var x *X
-		x = nil
-		p := &x.b // should panic
-		println(p)
-		return
-	}()
-
-	want := `runtime error: invalid memory address or nil pointer dereference`
-	if got := fmt.Sprint(r); got != want {
-		t.Errorf("expected a panic for reading a field from a nil structure"+
-			"\n\twant: %v\n\tgot:  %v", want, got)
-	}
-}
-
-func TestPointerToFieldOfNilStructInSlice(t *testing.T) {
-	r := func() (r any) {
-		defer func() { r = recover() }()
-
-		type X struct{ b int }
-		x := []*X{nil}
-		p := &x[0].b // should panic
-		println(p)
-		return
-	}()
-
-	want := `runtime error: invalid memory address or nil pointer dereference`
-	if got := fmt.Sprint(r); got != want {
-		t.Errorf("expected a panic for reading a field from a nil structure"+
-			"\n\twant: %v\n\tgot:  %v", want, got)
-	}
-}
-
-func TestPointerToNilSliceElement(t *testing.T) {
-	r := func() (r any) {
-		defer func() { r = recover() }()
-
-		x := []*[3]int{nil}
-		p := x[0] // should get nil pointer to array
-		q := *p   // should panic
-		println(q[0])
-		return
-	}()
-
-	want := `runtime error: invalid memory address or nil pointer dereference`
-	if got := fmt.Sprint(r); got != want {
-		t.Errorf("expected a panic for reading a field from a nil structure"+
-			"\n\twant: %v\n\tgot:  %v", want, got)
+			want := `runtime error: invalid memory address or nil pointer dereference`
+			if got := fmt.Sprint(r); got != want {
+				t.Errorf("expected a panic for reading a field from a nil structure"+
+					"\n\twant: %v\n\tgot:  %v", want, got)
+			}
+		})
 	}
 }

@@ -802,6 +802,10 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 		switch exprType.Underlying().(type) {
 		case *types.Struct, *types.Array:
+			innerTyp := fc.typeOf(e.X)
+			if _, ok := innerTyp.Underlying().(*types.Pointer); ok {
+				return fc.formatExpr("(%1e === %2s.nil && $throwNilPointerError(), %1e)", e.X, fc.typeName(innerTyp))
+			}
 			return fc.translateExpr(e.X)
 		}
 		return fc.formatExpr("%e.$get()", e.X)

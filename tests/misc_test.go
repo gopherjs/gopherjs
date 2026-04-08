@@ -1016,6 +1016,7 @@ func TestNilPointerDereference(t *testing.T) {
 		fn   func()
 	}{
 		{
+			// based on fixedbugs/issue63657.go
 			name: `pointer to int field on a nil struct`,
 			fn: func() {
 				type X struct{ a, b int }
@@ -1062,6 +1063,45 @@ func TestNilPointerDereference(t *testing.T) {
 				type P *X
 				x := P(nil)
 				_ = *x //nolint:nilderef
+			},
+		},
+		{
+			// based on fixedbugs/issue19246.go
+			// see: https://github.com/golang/go/issues/19246
+			name: `pointer dereferenced in function call`,
+			fn: func() {
+				type B struct{}
+				f := func(i any) {}
+				var b *B
+				f(*b) //nolint:nilderef
+			},
+		},
+		{
+			// based on fixedbugs/issue23837.go (1 of 3)
+			name: `unnamed struct comparison`,
+			fn: func() {
+				f := func(p, q *struct{}) bool { return *p == *q }
+				f(nil, nil)
+			},
+		},
+		{
+			// based on fixedbugs/issue23837.go (2 of 3)
+			name: `named struct comparison`,
+			fn: func() {
+				type T struct {
+					x struct{}
+					y int
+				}
+				g := func(p, q *T) bool { return *p == *q }
+				g(nil, nil)
+			},
+		},
+		{
+			// based on fixedbugs/issue23837.go (3 of 3)
+			name: `calling nil functions`,
+			fn: func() {
+				h := func(p, q func() struct{}) bool { return p() == q() }
+				h(nil, nil)
 			},
 		},
 	}

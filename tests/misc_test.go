@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"fmt"
 	"go/token"
 	"math"
 	"reflect"
@@ -205,6 +206,24 @@ func TestPointerOfStructConversion(t *testing.T) {
 
 	if got := reflect.TypeOf((AP)(&A{Value: 1})); got.String() != "tests.AP" {
 		t.Errorf("Got: reflect.TypeOf((AP)(&A{Value: 1})) = %v. Want: tests.AP.", got)
+	}
+}
+
+// TestNilPointerOfStructConversion is from https://github.com/gopherjs/gopherjs/issues/843.
+// The pointer for the new type should not be non-nil pointing to a nil pointer.
+// Originally, printing the new type did not work because the nil check did not
+// work on the non-nil pointer so the printer attempted to dereference the pointer
+// but at that point the "nil pointer dereference" error would panic.
+func TestNilPointerOfStructConversion(t *testing.T) {
+	type FooType struct{ ourField int }
+	type BarType struct{ ourField int }
+	var foo *FooType = nil
+	var bar *BarType = (*BarType)(foo)
+	if bar != nil {
+		t.Errorf(`nil pointer casted to a new type should still be nil but it was not`)
+	}
+	if want, got := `<nil>`, fmt.Sprintf(`%v`, bar); want != got {
+		t.Errorf("nil pointer casted to a new type printed the wrong result\n\twant: %q\n\tgot:  %q", want, got)
 	}
 }
 

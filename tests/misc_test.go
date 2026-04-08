@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"cmp"
 	"fmt"
 	"go/token"
 	"math"
@@ -1002,4 +1003,107 @@ func TestCrossPackageGenericCasting(t *testing.T) {
 	if got := fn(); got != wantInt {
 		t.Errorf(`Got: otherpkg.GetterHandle[int](otherpkg.Zero[int]) = %v, Want: %v`, got, wantInt)
 	}
+}
+
+// TestNilPointerDereference was added because fixedbugs/issue63657.go
+// pointed out an error where a pointer was being made to a field on a nil struct.
+// It should panic on creation of the pointer but wasn't because the pointer wrapped
+// a get and set around the field such that if get or set were called then the panic
+// may occur. Go expects the panic to be at the creation of the pointer.
+func TestNilPointerDereference(t *testing.T) {
+	tests := []struct {
+		name string
+		fn   func()
+	}{
+		{
+			name: `pointer to int field on a nil struct`,
+			fn: func() {
+				type X struct{ a, b int }
+				x := (*X)(nil)
+				_ = &x.b //nolint:nilderef
+			},
+		},
+		{
+			name: `pointer to struct field on nil struct`,
+			fn: func() {
+				type Y struct{ a int }
+				type X struct{ b Y }
+				x := (*X)(nil)
+				_ = &x.b //nolint:nilderef
+			},
+		},
+		{
+			name: `pointer to field of nil struct in slice`,
+			fn: func() {
+				type X struct{ b int }
+				x := []*X{nil}
+				_ = &x[0].b //nolint:nilderef
+			},
+		},
+		{
+			name: `pointer to nil array`,
+			fn: func() {
+				x := (*[3]int)(nil)
+				_ = *x //nolint:nilderef
+			},
+		},
+		{
+			name: `pointer to nil struct`,
+			fn: func() {
+				type X struct{ b int }
+				x := (*X)(nil)
+				_ = *x //nolint:nilderef
+			},
+		},
+		{
+			name: `named pointer to nil struct`,
+			fn: func() {
+				type X struct{ b int }
+				type P *X
+				x := P(nil)
+				_ = *x //nolint:nilderef
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := func() (r any) {
+				defer func() { r = recover() }()
+				test.fn()
+				return
+			}()
+
+			want := `runtime error: invalid memory address or nil pointer dereference`
+			if got := fmt.Sprint(r); got != want {
+				t.Errorf("expected a panic for reading a field from a nil structure"+
+					"\n\twant: %v\n\tgot:  %v", want, got)
+			}
+		})
+	}
+}
+
+func incIntPtr(count *int) { *count++ }
+
+func poorlyCountElements[E cmp.Ordered](data []E) int {
+	var count int
+	for range data {
+		incIntPtr(&count)
+	}
+	return count
+}
+
+// TestConcretePointerInGeneric tests a problem were the `&count` pointer
+// in `poorlyCountElements` was creating a pointer type (e.g. "count$24ptr")
+// that was only being added to the vars in the first instantiation of generic
+// function and not the second, so `poorlyCountElements[string]` would work
+// but `poorlyCountElements[int]` would fail with "count$24ptr is not defined".
+func TestConcretePointerInGeneric(t *testing.T) {
+	cats := []string{"meowser", "mittens", "wiskers"}
+	_ = poorlyCountElements(cats)
+
+	numbers := []int{4, 8, 15, 16, 23, 42}
+	_ = poorlyCountElements(numbers)
+
+	// If the test reaches this point wihout panicking then the test passes.
 }

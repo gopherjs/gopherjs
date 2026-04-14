@@ -496,8 +496,27 @@ func (fc *funcContext) varPtrName(o *types.Var) string {
 	if !ok {
 		name = fc.newVariable(o.Name()+"$ptr", isPkgLevel(o))
 		fc.pkgCtx.varPtrNames[o] = name
+		return name
+	}
+
+	// If name already exists for the package, check that the function's instantiation
+	// also has the name in its localVars. This is to handle generics where `o` is
+	// shared among multiple instantiations of the same generic, but `newVariable`
+	// is only called for the first.
+	if !slices_Contains(fc.localVars, name) {
+		fc.localVars = append(fc.localVars, name)
 	}
 	return name
+}
+
+// TODO(grantnelson-wf): Replace after go1.21 is supported to use `slices.Contains`.
+func slices_Contains[T comparable, S ~[]T](s S, v T) bool {
+	for i := range s {
+		if v == s[i] {
+			return true
+		}
+	}
+	return false
 }
 
 // typeName returns a JS identifier name for the given Go type.

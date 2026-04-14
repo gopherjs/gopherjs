@@ -1134,7 +1134,7 @@ func poorlyCountElements[E cmp.Ordered](data []E) int {
 }
 
 // TestConcretePointerInGeneric tests a problem were the `&count` pointer
-// in `poorlyCountElements` was creating a pointer type (e.g. "count$24ptr")
+// in `poorlyCountElements` was creating a pointer var (e.g. "count$24ptr")
 // that was only being added to the vars in the first instantiation of generic
 // function and not the second, so `poorlyCountElements[string]` would work
 // but `poorlyCountElements[int]` would fail with "count$24ptr is not defined".

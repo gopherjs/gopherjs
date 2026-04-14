@@ -26,6 +26,7 @@ jobs:
   ubuntu_smoke:
     name: Ubuntu Smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,6 +49,7 @@ jobs:
   windows_smoke:
     name: Window Smoke
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,6 +72,7 @@ jobs:
   darwin_smoke:
     name: Darwin Smoke
     runs-on: macos-latest
+    timeout-minutes: 10
     env:
       # Node version '12' is not found for darwin.
       NODE_VERSION: 20
@@ -93,6 +96,7 @@ jobs:
   lint:
     name: Lint Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -118,6 +122,7 @@ jobs:
   go_tests:
     name: Go Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -136,6 +141,7 @@ jobs:
   todomvc_check:
     name: TodoMVC GO111MODULE Check
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -177,6 +183,7 @@ jobs:
   gopherjs_tests:
     name: GopherJS Tests (${{ matrix.filter.name }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -208,6 +215,7 @@ jobs:
   gorepo_tests:
     name: Gorepo Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:

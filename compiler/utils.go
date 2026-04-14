@@ -496,8 +496,26 @@ func (fc *funcContext) varPtrName(o *types.Var) string {
 	if !ok {
 		name = fc.newVariable(o.Name()+"$ptr", isPkgLevel(o))
 		fc.pkgCtx.varPtrNames[o] = name
+		return name
+	}
+
+	// If name already exists for the package, check that the function's instantiation
+	// also has the name in its localVars. This is to handle generics where `o` is
+	// shared among multiple instantiations of the same generic, but `newVariable`
+	// is only called for the first.
+	if !fc.instance.IsTrivial() && !containsString(fc.localVars, name) {
+		fc.localVars = append(fc.localVars, name)
 	}
 	return name
+}
+
+func containsString(s []string, v string) bool {
+	for i := len(s) - 1; i >= 0; i-- {
+		if v == s[i] {
+			return true
+		}
+	}
+	return false
 }
 
 // typeName returns a JS identifier name for the given Go type.

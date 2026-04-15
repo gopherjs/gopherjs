@@ -2,7 +2,6 @@ encoding/xml
 go/build
 go/internal/srcimporter
 go/types
-internal/abi
 internal/intern
 internal/syscall/windows
 internal/syscall/windows/registry

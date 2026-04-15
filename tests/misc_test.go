@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"cmp"
 	"fmt"
 	"go/token"
 	"math"
@@ -1125,7 +1124,7 @@ func TestNilPointerDereference(t *testing.T) {
 
 func incIntPtr(count *int) { *count++ }
 
-func poorlyCountElements[E cmp.Ordered](data []E) int {
+func poorlyCountElements[T any](data []T) int {
 	var count int
 	for range data {
 		incIntPtr(&count)
@@ -1140,10 +1139,14 @@ func poorlyCountElements[E cmp.Ordered](data []E) int {
 // but `poorlyCountElements[int]` would fail with "count$24ptr is not defined".
 func TestConcretePointerInGeneric(t *testing.T) {
 	cats := []string{"meowser", "mittens", "wiskers"}
-	_ = poorlyCountElements(cats)
+	count := poorlyCountElements(cats)
+	if count != 3 {
+		t.Errorf("Unexpected value from count with [string]: got %d, want 3", count)
+	}
 
 	numbers := []int{4, 8, 15, 16, 23, 42}
-	_ = poorlyCountElements(numbers)
-
-	// If the test reaches this point wihout panicking then the test passes.
+	count = poorlyCountElements(numbers)
+	if count != 6 {
+		t.Errorf("Unexpected value from count with [int]: got %d, want 6", count)
+	}
 }

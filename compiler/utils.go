@@ -503,15 +503,14 @@ func (fc *funcContext) varPtrName(o *types.Var) string {
 	// also has the name in its localVars. This is to handle generics where `o` is
 	// shared among multiple instantiations of the same generic, but `newVariable`
 	// is only called for the first.
-	if !slices_Contains(fc.localVars, name) {
+	if !fc.instance.IsTrivial() && !containsString(fc.localVars, name) {
 		fc.localVars = append(fc.localVars, name)
 	}
 	return name
 }
 
-// TODO(grantnelson-wf): Replace after go1.21 is supported to use `slices.Contains`.
-func slices_Contains[T comparable, S ~[]T](s S, v T) bool {
-	for i := range s {
+func containsString(s []string, v string) bool {
+	for i := len(s) - 1; i >= 0; i-- {
 		if v == s[i] {
 			return true
 		}

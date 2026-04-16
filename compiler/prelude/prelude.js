@@ -645,6 +645,16 @@ var $unsafeSlice = (ptr, len, typ, methodName = "Slice") => {
         }
         return typ.nil;
     }
+    if (ptr.$index === undefined) {
+        // Go can cast a footprint of memory for some data into a array, but
+        // JS can not. If the $index is undefined then the pointer is for a
+        // struct field, a non-escaping scalar pointer, or something else, but not
+        // an array or slice.
+        $throwRuntimeError("unsafe." + methodName + ": pointer does not address a slice or array element (missing index)");
+    }
+    if (ptr.$target.buffer && ptr.$target.BYTES_PER_ELEMENT && target.constructor !== $nativeArray(elem.kind)) {
+        $throwRuntimeError("unsafe." + methodName + ": pointer does not match slice element storage layout");
+    }
     if (ptr.$index + len > ptr.$target.length) {
         // Go can grab abritraty footprints of memory, JS can not. Instead of trying
         // to grow the target, which would only work for Array, just always error.

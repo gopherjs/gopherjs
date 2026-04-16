@@ -2,9 +2,7 @@
 
 package binary
 
-import (
-	"testing"
-)
+import "testing"
 
 //gopherjs:replace The original cast the uint32 into a *byte which doesn't work in JS
 func TestNativeEndian(t *testing.T) {

@@ -645,6 +645,13 @@ var $unsafeSlice = (ptr, len, typ, methodName = "Slice") => {
         }
         return typ.nil;
     }
+    if (len === 0) {
+        var s0 = new typ(ptr.$target);
+        s0.$offset = ptr.$index !== undefined ? ptr.$index : 0;
+        s0.$length = 0;
+        s0.$capacity = 0;
+        return s0;
+    }
     if (ptr.$index === undefined) {
         // Go can cast a footprint of memory for some data into an array, but JS can not.
         // If the $index is undefined then the pointer is for a struct field,

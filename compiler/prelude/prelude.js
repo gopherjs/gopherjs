@@ -638,18 +638,18 @@ var $unsafeSlice = (ptr, len, typ, methodName = "Slice") => {
     if (len < 0) {
         $throwRuntimeError("unsafe."+methodName+": len out of range");
     }
-    if (ptr.$index === undefined) {
-        // Go can cast a footprint of memory for some data into an array, but JS can not.
-        // If the $index is undefined then the pointer is for a struct field,
-        // a non-escaping scalar pointer, or something else, but not an array or slice.
-        $throwRuntimeError("unsafe." + methodName + ": pointer does not address a slice or array element (missing index)");
-    }
     var ptrType = $ptrType(typ.elem);
     if (ptr === ptrType.nil || ptr.$target === undefined) {
         if (len > 0) {
             $throwRuntimeError("unsafe."+methodName+": ptr is nil and len is not zero");
         }
         return typ.nil;
+    }
+    if (ptr.$index === undefined) {
+        // Go can cast a footprint of memory for some data into an array, but JS can not.
+        // If the $index is undefined then the pointer is for a struct field,
+        // a non-escaping scalar pointer, or something else, but not an array or slice.
+        $throwRuntimeError("unsafe." + methodName + ": pointer does not address a slice or array element (missing index)");
     }
     if (ptr.$target.buffer && ptr.$target.BYTES_PER_ELEMENT && ptr.$target.constructor !== $nativeArray(typ.elem.kind)) {
         $throwRuntimeError("unsafe." + methodName + ": pointer does not match slice element storage layout");

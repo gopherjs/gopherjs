@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -107,14 +108,16 @@ func TestChainedCtx(t *testing.T) {
 				"primaryonly": {"po.go": "package primaryonly"},
 				"both":        {"both.go": "package both"},
 			}),
-			isVirtual: false,
+			isVirtual:   false,
+			stdPkgCache: &sync.Map{},
 		},
 		secondary: simpleCtx{
 			bctx: *buildutil.FakeContext(map[string]map[string]string{
 				"both":          {"both_secondary.go": "package both"},
 				"secondaryonly": {"so.go": "package secondaryonly"},
 			}),
-			isVirtual: true,
+			isVirtual:   true,
+			stdPkgCache: &sync.Map{},
 		},
 	}
 

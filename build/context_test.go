@@ -203,6 +203,55 @@ func TestIsStd(t *testing.T) {
 	}
 }
 
+func TestIsDefinitelyNotStdImportPath(t *testing.T) {
+	tests := []struct {
+		name       string
+		importPath string
+		expected   bool
+	}{
+		{
+			name:     "empty path",
+			expected: true,
+		},
+		{
+			name:       "relative local import",
+			importPath: "./pkg",
+			expected:   true,
+		},
+		{
+			name:       "parent local import",
+			importPath: "../pkg",
+			expected:   true,
+		},
+		{
+			name:       "dot in first element",
+			importPath: "github.com/gopherjs/gopherjs/build",
+			expected:   true,
+		},
+		{
+			name:       "standard package",
+			importPath: "fmt",
+		},
+		{
+			name:       "standard subpackage",
+			importPath: "net/http",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name,
+			func(t *testing.T) {
+				actual := isDefinitelyNotStdImportPath(test.importPath)
+				if actual != test.expected {
+					t.Errorf("isDefinitelyNotStdImportPath(%q) = %v, expected %v",
+						test.importPath,
+						actual,
+						test.expected)
+				}
+			})
+	}
+}
+
 func expectedPackage(bctx *build.Context, importPath string, goarch string) *build.Package {
 	targetRoot := filepath.Clean(filepath.Join(bctx.GOROOT, "pkg", bctx.GOOS+"_"+goarch))
 	return &build.Package{

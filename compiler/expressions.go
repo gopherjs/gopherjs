@@ -281,10 +281,10 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				// To allow a slice to be recreated from a `&s[i]` via casting a pointer back into the slice or using `unsafe.Slice`,
 				// we have to create pointer objects via `$indexPtr` even if the element is a struct or array, meaning ignore the `opIsStructOrArray` case.
 				if _, ok := fc.typeOf(x.X).Underlying().(*types.Slice); ok {
-					pattern := rangeCheck("$indexPtr(%1e.$array, %1e.$offset + %2e, %3s)", fc.pkgCtx.Types[x.Index].Value != nil, false)
+					pattern := rangeCheck("$indexPtr(%1e.$array, %1e.$offset + %2f, %3s)", fc.pkgCtx.Types[x.Index].Value != nil, false)
 					return fc.formatExpr(pattern, x.X, x.Index, fc.typeName(exprType))
 				}
-				pattern := rangeCheck("$indexPtr(%1e, %2e, %3s)", fc.pkgCtx.Types[x.Index].Value != nil, true)
+				pattern := rangeCheck("$indexPtr(%1e, %2f, %3s)", fc.pkgCtx.Types[x.Index].Value != nil, true)
 				return fc.formatExpr(pattern, x.X, x.Index, fc.typeName(exprType))
 			case *ast.StarExpr:
 				return fc.translateExpr(x.X)

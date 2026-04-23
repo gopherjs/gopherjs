@@ -3,6 +3,7 @@ package tests
 import (
 	"reflect"
 	"testing"
+	"unsafe"
 )
 
 func Test_SliceClear_Bytes(t *testing.T) {
@@ -44,5 +45,20 @@ func Test_SliceClear_Structs(t *testing.T) {
 	clear(s)
 	if want := make([]name, 4); !reflect.DeepEqual(s, want) {
 		t.Errorf("Got: %v after full clear, Want: %v", s, want)
+	}
+}
+
+func Test_UnsafeSlice(t *testing.T) {
+	var a [10]byte
+	x := a[1:4]
+	p := &x[2]
+	s := unsafe.Slice(p, 6) // s == a[3:9]
+
+	for i := range s {
+		s[i] = byte(i + 10)
+	}
+
+	if want := [10]byte{0, 0, 0, 10, 11, 12, 13, 14, 15, 0}; !reflect.DeepEqual(a, want) {
+		t.Errorf("Got: %v after unsafe slice, Want: %v", a, want)
 	}
 }

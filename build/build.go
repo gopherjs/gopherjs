@@ -844,6 +844,10 @@ type Session struct {
 	// is the unresolved import path and source directory.
 	importPaths map[string]map[string]string
 
+	// packages caches imported package metadata by resolved import path.
+	// This avoids repeated xctx.Import calls for the same package.
+	packages map[string]*PackageData
+
 	// sources is a map of parsed packages that have been built and augmented.
 	// This is keyed using resolved import paths. This is used to avoid
 	// rebuilding and augmenting packages that are imported by several packages.
@@ -864,6 +868,7 @@ func NewSession(options *Options) (*Session, error) {
 	s := &Session{
 		options:          options,
 		importPaths:      make(map[string]map[string]string),
+		packages:         make(map[string]*PackageData),
 		sources:          make(map[string]*sources.Sources),
 		UpToDateArchives: make(map[string]*compiler.Archive),
 	}
@@ -1085,6 +1090,16 @@ func (s *Session) loadTestPackage(pkg *PackageData) (*sources.Sources, error) {
 // Relative import paths are interpreted relative to the passed srcDir.
 // If srcDir is empty, current working directory is assumed.
 func (s *Session) loadImportPathWithSrcDir(path, srcDir string) (*PackageData, *sources.Sources, error) {
+	if pkg, ok := s.cachedPackageFor(path, srcDir); ok {
+		// Cache this srcDir lookup as well, so later getImportPath lookups avoid xctx.Import.
+		s.cacheImportPath(path, srcDir, pkg.ImportPath)
+		srcs, err := s.LoadPackages(pkg)
+		if err != nil {
+			return nil, nil, err
+		}
+		return pkg, srcs, nil
+	}
+
 	pkg, err := s.xctx.Import(path, srcDir, 0)
 	if s.Watcher != nil && pkg != nil { // add watch even on error
 		s.Watcher.Add(pkg.Dir)
@@ -1093,6 +1108,7 @@ func (s *Session) loadImportPathWithSrcDir(path, srcDir string) (*PackageData, *
 		return nil, nil, err
 	}
 
+	s.packages[pkg.ImportPath] = pkg
 	srcs, err := s.LoadPackages(pkg)
 	if err != nil {
 		return nil, nil, err
@@ -1100,6 +1116,20 @@ func (s *Session) loadImportPathWithSrcDir(path, srcDir string) (*PackageData, *
 
 	s.cacheImportPath(path, srcDir, pkg.ImportPath)
 	return pkg, srcs, nil
+}
+
+func (s *Session) cachedPackageFor(path, srcDir string) (*PackageData, bool) {
+	if resolved, ok := s.importPaths[srcDir][path]; ok {
+		pkg, found := s.packages[resolved]
+		return pkg, found
+	}
+
+	if !build.IsLocalImport(path) {
+		pkg, found := s.packages[path]
+		return pkg, found
+	}
+
+	return nil, false
 }
 
 // cacheImportPath stores the resolved import path for the build package
@@ -1278,6 +1308,19 @@ func (s *Session) getImportPath(path, srcDir string) (string, error) {
 	// Check if the import path is already cached.
 	if importPath, ok := s.importPaths[srcDir][path]; ok {
 		return importPath, nil
+	}
+
+	// Fast-path for non-local imports when we already have their metadata.
+	if !build.IsLocalImport(path) {
+		if _, ok := s.sources[path]; ok {
+			// Sources are keyed by canonical import path.
+			s.cacheImportPath(path, srcDir, path)
+			return path, nil
+		}
+		if pkg, ok := s.packages[path]; ok {
+			s.cacheImportPath(path, srcDir, pkg.ImportPath)
+			return pkg.ImportPath, nil
+		}
 	}
 
 	// Fall back to the slow import of the build package.

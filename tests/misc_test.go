@@ -984,3 +984,32 @@ func TestCrossPackageGenericCasting(t *testing.T) {
 		t.Errorf(`Got: otherpkg.GetterHandle[int](otherpkg.Zero[int]) = %v, Want: %v`, got, wantInt)
 	}
 }
+
+func incIntPtr(count *int) { *count++ }
+
+func poorlyCountElements[T any](data []T) int {
+	var count int
+	for range data {
+		incIntPtr(&count)
+	}
+	return count
+}
+
+// TestConcretePointerInGeneric tests a problem were the `&count` pointer
+// in `poorlyCountElements` was creating a pointer var (e.g. "count$24ptr")
+// that was only being added to the vars in the first instantiation of generic
+// function and not the second, so `poorlyCountElements[string]` would work
+// but `poorlyCountElements[int]` would fail with "count$24ptr is not defined".
+func TestConcretePointerInGeneric(t *testing.T) {
+	cats := []string{"meowser", "mittens", "wiskers"}
+	count := poorlyCountElements(cats)
+	if count != 3 {
+		t.Errorf("Unexpected value from count with [string]: got %d, want 3", count)
+	}
+
+	numbers := []int{4, 8, 15, 16, 23, 42}
+	count = poorlyCountElements(numbers)
+	if count != 6 {
+		t.Errorf("Unexpected value from count with [int]: got %d, want 6", count)
+	}
+}

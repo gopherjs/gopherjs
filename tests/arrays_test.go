@@ -232,3 +232,45 @@ func TestConversionFromSliceToArray(t *testing.T) {
 		}
 	})
 }
+
+type (
+	point struct{ name string }
+	table [3]*point
+)
+
+func (t *table) getPointName(i int) string {
+	return t[i-1].name
+}
+
+func (t *table) getNextTable() *table {
+	tables := unsafe.Slice(t, 2)
+	return &tables[1]
+}
+
+// TestTableArrayAccess is checking that an `$indexPtr` for an array in the slice/array,
+// gotten from `tables[0]` being used as receiver `*table`, can then be indexed correctly
+// with `t[i-1]`. To index correctly the `$indexPtr` that points to an array needs to
+// decorate the array with $get/$set/$target/$index, so that unsafe.Slice still works
+// but so do the indexer on the `$indexPtr`.
+func TestTableArrayAccess(t *testing.T) {
+	tables := &[4]table{}
+	tables[0] = table{
+		&point{name: `zero`},
+		&point{name: `one`},
+		&point{name: `two`},
+	}
+	tables[1] = table{
+		&point{name: `three`},
+		&point{name: `four`},
+		&point{name: `five`},
+	}
+
+	if want, got := `zero`, tables[0].getPointName(1); got != want {
+		t.Errorf("first point's name was unexpected:\n\twant: %q\n\tgot:  %q", want, got)
+	}
+
+	nextTable := tables[0].getNextTable()
+	if want, got := `four`, nextTable.getPointName(2); got != want {
+		t.Errorf("first point's name was unexpected:\n\twant: %q\n\tgot:  %q", want, got)
+	}
+}

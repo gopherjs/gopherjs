@@ -210,10 +210,11 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
             break;
 
         case $kindPtr:
-            typ = constructor || function (getter, setter, target) {
+            typ = constructor || function (getter, setter, target, index) {
                 this.$get = getter;
                 this.$set = setter;
                 this.$target = target;
+                if (index !== undefined) this.$index = index;
                 this.$val = this;
             };
             typ.keyFor = $idKey;
@@ -649,17 +650,36 @@ var $newDataPointer = (data, constructor) => {
     return new constructor(() => { return data; }, v => { data = v; });
 };
 
+var $indexPtrGet = function () { return this.$target[this.$index]; };
+var $indexPtrSet = function (v) { this.$target[this.$index] = v; };
 var $indexPtr = (array, index, constructor) => {
+    var makeIndexPtr = () => {
+        if (constructor.elem.kind === $kindStruct ||
+            constructor.elem.kind === $kindArray) {
+            var ptr = array[index];
+            if (ptr === undefined) {
+                  ptr = array[index] = constructor.elem.zero();
+            }
+            ptr.$val = ptr;
+            ptr.$target = array;
+            ptr.$index = index;
+            ptr.$get = $indexPtrGet;
+            ptr.$set = (v) => { constructor.elem.copy(array[index], v); };
+            return ptr
+        }
+        return new constructor($indexPtrGet, $indexPtrSet, array, index);
+    };
+
     if (array.buffer) {
         // Pointers to the same underlying ArrayBuffer share cache.
         var cache = array.buffer.$ptr = array.buffer.$ptr || {};
         // Pointers of different primitive types are non-comparable and stored in different caches.
         var typeCache = cache[array.name] = cache[array.name] || {};
         var cacheIdx = array.BYTES_PER_ELEMENT * index + array.byteOffset;
-        return typeCache[cacheIdx] || (typeCache[cacheIdx] = new constructor(() => { return array[index]; }, v => { array[index] = v; }));
+        return typeCache[cacheIdx] || (typeCache[cacheIdx] = makeIndexPtr());
     } else {
         array.$ptr = array.$ptr || {};
-        return array.$ptr[index] || (array.$ptr[index] = new constructor(() => { return array[index]; }, v => { array[index] = v; }));
+        return array.$ptr[index] || (array.$ptr[index] = makeIndexPtr());
     }
 };
 
@@ -672,6 +692,7 @@ var $sliceType = elem => {
     }
     return typ;
 };
+
 var $makeSlice = (typ, length, capacity = length) => {
     if (length < 0 || length > 2147483647) {
         $throwRuntimeError("makeslice: len out of range");

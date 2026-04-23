@@ -7,6 +7,14 @@ import _ "unsafe" // go:linkname
 //go:linkname setUpdate runtime.godebug_setUpdate
 func setUpdate(update func(def, env string))
 
+// GOPHERJS: Changing from a linked function to a no-op since this is
+// part of recording metrics for runtime. The metrics take time and size
+// measurments for Go (listed in [runtime/metrics.go]). GopherJS does not
+// currently record that information.
+//
+//gopherjs:replace
+func registerMetric(name string, read func() uint64) {}
+
 // GOPHERJS: Changing from a linked function to a no-op since this is to give
 // runtime the ability to do `newNonDefaultInc(name)` instead of
 // `godebug.New(name).IncNonDefault` but GopherJS's runtime doesn't need that.

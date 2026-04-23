@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -107,14 +108,16 @@ func TestChainedCtx(t *testing.T) {
 				"primaryonly": {"po.go": "package primaryonly"},
 				"both":        {"both.go": "package both"},
 			}),
-			isVirtual: false,
+			isVirtual:   false,
+			stdPkgCache: &sync.Map{},
 		},
 		secondary: simpleCtx{
 			bctx: *buildutil.FakeContext(map[string]map[string]string{
 				"both":          {"both_secondary.go": "package both"},
 				"secondaryonly": {"so.go": "package secondaryonly"},
 			}),
-			isVirtual: true,
+			isVirtual:   true,
+			stdPkgCache: &sync.Map{},
 		},
 	}
 
@@ -200,6 +203,55 @@ func TestIsStd(t *testing.T) {
 				t.Errorf("Got: simpleCtx.isStd(%q) = %v. Want: %v", test.importPath, got, test.want)
 			}
 		})
+	}
+}
+
+func TestIsDefinitelyNotStdImportPath(t *testing.T) {
+	tests := []struct {
+		name       string
+		importPath string
+		expected   bool
+	}{
+		{
+			name:     "empty path",
+			expected: true,
+		},
+		{
+			name:       "relative local import",
+			importPath: "./pkg",
+			expected:   true,
+		},
+		{
+			name:       "parent local import",
+			importPath: "../pkg",
+			expected:   true,
+		},
+		{
+			name:       "dot in first element",
+			importPath: "github.com/gopherjs/gopherjs/build",
+			expected:   true,
+		},
+		{
+			name:       "standard package",
+			importPath: "fmt",
+		},
+		{
+			name:       "standard subpackage",
+			importPath: "net/http",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name,
+			func(t *testing.T) {
+				actual := isDefinitelyNotStdImportPath(test.importPath)
+				if actual != test.expected {
+					t.Errorf("isDefinitelyNotStdImportPath(%q) = %v, expected %v",
+						test.importPath,
+						actual,
+						test.expected)
+				}
+			})
 	}
 }
 

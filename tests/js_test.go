@@ -1288,3 +1288,46 @@ func TestStringData(t *testing.T) {
 		}
 	})
 }
+
+func TestPointerToSliceIndex64(t *testing.T) {
+	// This test repeated an issue when using an int64 index in an pointer to a
+	// slice or array element causing the element to be resolved to the zero value
+	// of the structure. Since int64 and uint64 are stored as an object with a
+	// high/low value, we should use `%f` when creating the pattern for the
+	// expression to ensure they are flattened into a num.
+	type symbol struct {
+		name  string
+		value int
+		size  int
+	}
+	arr := [4]symbol{
+		{name: `a12b`, value: 8, size: 8},
+		{name: `a10`, value: 42, size: 64},
+		{name: `b4`, value: 3, size: 16},
+	}
+	slc := arr[:]
+
+	want := `&{a10 42 64}` // Must not be the zero value of the struct
+	check := func(p *symbol) {
+		if got := fmt.Sprintf(`%v`, p); got != want {
+			t.Errorf(`expected the pointer to the struct to be %s but it was %s`, want, got)
+		}
+	}
+
+	t.Run("Int64Array", func(t *testing.T) {
+		var index int64 = 1
+		check(&arr[index])
+	})
+	t.Run("Uint64Array", func(t *testing.T) {
+		var index uint64 = 1
+		check(&arr[index])
+	})
+	t.Run("Int64Slice", func(t *testing.T) {
+		var index int64 = 1
+		check(&slc[index])
+	})
+	t.Run("Uint64Slice", func(t *testing.T) {
+		var index uint64 = 1
+		check(&slc[index])
+	})
+}

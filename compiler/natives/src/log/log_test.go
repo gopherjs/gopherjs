@@ -4,6 +4,7 @@ package log
 
 import "testing"
 
+//gopherjs:replace
 func TestOutputRace(t *testing.T) {
 	t.Skip("Fails with: WaitGroup counter not zero")
 	// "log" files are updated in build/build.go#augmentOriginalImports to

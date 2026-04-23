@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"golang.org/x/tools/go/buildutil"
 
@@ -81,8 +82,9 @@ type XContext interface {
 // features.
 type simpleCtx struct {
 	bctx         build.Context
-	isVirtual    bool // Imported packages don't have a physical directory on disk.
-	noPostTweaks bool // Don't apply post-load tweaks to packages. For tests only.
+	stdPkgCache  *sync.Map // map[importPath]bool
+	isVirtual    bool      // Imported packages don't have a physical directory on disk.
+	noPostTweaks bool      // Don't apply post-load tweaks to packages. For tests only.
 }
 
 // Import implements XContext.Import().
@@ -274,11 +276,33 @@ func (sc simpleCtx) applyPostloadTweaks(pkg *build.Package) *build.Package {
 // isStd returns true if the given importPath resolves into a standard library
 // package. Relative paths are interpreted relative to srcDir.
 func (sc simpleCtx) isStd(importPath, srcDir string) bool {
-	pkg, err := sc.bctx.Import(importPath, srcDir, build.FindOnly)
-	if err != nil {
+	if !isGopherJSImportPath(importPath) && isDefinitelyNotStdImportPath(importPath) {
 		return false
 	}
+
+	cacheKey := importPath
+	if cachedValue, ok := sc.stdPkgCache.Load(cacheKey); ok {
+		return cachedValue.(bool)
+	}
+
+	pkg, err := sc.bctx.Import(importPath, srcDir, build.FindOnly)
+	if err != nil {
+		sc.stdPkgCache.Store(cacheKey, false)
+		return false
+	}
+	sc.stdPkgCache.Store(cacheKey, pkg.Goroot)
 	return pkg.Goroot
+}
+
+// isGopherJSImportPath reports whether importPath is one of the special
+// GopherJS runtime packages that may be resolved from embedded std-like sources.
+func isGopherJSImportPath(importPath string) bool {
+	switch importPath {
+	case "github.com/gopherjs/gopherjs/js", "github.com/gopherjs/gopherjs/nosync":
+		return true
+	default:
+		return false
+	}
 }
 
 var defaultBuildTags = []string{
@@ -328,6 +352,7 @@ func gopherjsCtx(e Env) *simpleCtx {
 // or Go Modules.
 func goCtx(e Env) *simpleCtx {
 	gc := simpleCtx{
+		stdPkgCache: &sync.Map{},
 		bctx: build.Context{
 			GOROOT:        e.GOROOT,
 			GOPATH:        e.GOPATH,
@@ -350,6 +375,22 @@ func goCtx(e Env) *simpleCtx {
 		},
 	}
 	return &gc
+}
+
+// A hauristic that will identify some import paths that definitely don't belong
+// to the standard library, so we can skip expensive checks for them.
+func isDefinitelyNotStdImportPath(importPath string) bool {
+	// Relative import paths and local imports can't be standard library packages.
+	if importPath == "" || build.IsLocalImport(importPath) {
+		return true
+	}
+
+	// Standard library packages don't contain dots in the first path element
+	firstElement := importPath
+	if i := strings.Index(firstElement, "/"); i >= 0 {
+		firstElement = firstElement[:i]
+	}
+	return strings.Contains(firstElement, ".")
 }
 
 // chainedCtx combines two build contexts. Secondary context acts as a fallback

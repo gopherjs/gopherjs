@@ -72,6 +72,7 @@ var $packages = {}, $idCounter = 0;
 var $keys = m => { return m ? Object.keys(m) : []; };
 var $flushConsole = () => { };
 var $throwRuntimeError; /* set by package "runtime" */
+var $newPanicNilError; /* set by package "runtime" — returns a new *PanicNilError */
 var $throwNilPointerError = () => { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var $call = (fn, rcvr, args) => { return fn.apply(rcvr, args); };
 var $makeFunc = fn => { return function(...args) { return $externalize(fn(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(args, []))), $emptyInterface); }; };

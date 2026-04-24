@@ -130,28 +130,36 @@ func mapCloneViaGo[M ~map[K]V, K comparable, V any](m M) M {
 }
 
 func BenchmarkMapClone(b *testing.B) {
-	// Results from 2026/4/6 running go1.21.13 on darwin/arm64 with Node.js v20.9.0.
+	// Results from 2026/4/24 running go1.21.13 on darwin/arm64 with Node.js v20.9.0.
 	//
 	// The results show that mapCloneViaJS is faster than the mapCloneViaGo
-	// after 5 key/value pairs. However, the speed is fast enough that for
-	// smaller maps, mapCloneViaJS should still be fine. I'm guessing people
-	// will clone larger maps that cloning tons of smaller maps, but if we need
-	// to we can add a switch based on the size of the map.
+	// after 6 key/value pairs. However, the speed is fast enough that for
+	// smaller maps, mapCloneViaJS should still be fine. Since I don't have
+	// statistics on how big maps that are cloned typically get, but I suspect
+	// that most maps are typically small, I'm going to switch algorithms based
+	// on size. However, we should occationally rerun this benchmark to
+	// update the size to switch between algorithms.
 	//
 	// | size  | mapCloneViaGo (ns/op) | mapCloneViaJS (ns/op) | Go/JS (%) |
 	// |------:|----------------------:|----------------------:|----------:|
-	// |     0 |                 19.23 |                 96.00 |     20.03 |
-	// |     1 |                 42.67 |                116.40 |     36.66 |
-	// |     2 |                 82.14 |                138.10 |     59.48 |
-	// |     3 |                111.60 |                167.90 |     66.47 |
-	// |     5 |                232.50 |                245.80 |     94.59 |
-	// |    10 |                469.60 |                408.70 |    114.90 |
-	// |    50 |               2554.00 |               1712.00 |    149.18 |
-	// |   100 |               5262.00 |               3630.00 |    144.96 |
-	// |  1000 |              67155.00 |              38843.00 |    172.89 |
-	// | 10000 |             956229.00 |             590539.00 |    161.92 |
+	// |     0 |                 20.50 |                102.50 |     20.00 |
+	// |     1 |                 44.70 |                119.80 |     37.31 |
+	// |     2 |                 75.94 |                136.50 |     55.63 |
+	// |     3 |                109.90 |                171.50 |     64.08 |
+	// |     4 |                154.80 |                189.90 |     81.52 |
+	// |     5 |                240.40 |                253.30 |     94.91 |
+	// |     6 |                272.70 |                280.70 |     97.15 |
+	// |     7 |                311.80 |                294.30 |    105.95 |
+	// |     8 |                366.90 |                323.30 |    113.49 |
+	// |     9 |                472.00 |                470.30 |    100.36 |
+	// |    10 |                561.20 |                493.00 |    113.83 |
+	// |    20 |               1063.00 |                769.00 |    138.23 |
+	// |    50 |               2624.00 |               1877.00 |    139.80 |
+	// |   100 |               5686.00 |               3864.00 |    147.15 |
+	// |  1000 |              70469.00 |              41779.00 |    168.67 |
+	// | 10000 |             935949.00 |             591048.00 |    158.35 |
 
-	for _, size := range []int{0, 1, 2, 3, 5, 10, 50, 100, 1000, 10000} {
+	for _, size := range []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 50, 100, 1000, 10000} {
 		m := make(map[string][]byte, size)
 		for i := 0; i < size; i++ {
 			key := fmt.Sprintf(`k%d`, i)
@@ -160,23 +168,23 @@ func BenchmarkMapClone(b *testing.B) {
 		}
 
 		mcopy1 := (map[string][]byte)(nil)
-		b.Run(fmt.Sprintf(`mapCloneViaJS(%d)`, size), func(b *testing.B) {
+		b.Run(fmt.Sprintf(`mapCloneViaGo(%d)`, size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				mcopy1 = mapCloneViaJS(m)
+				mcopy1 = mapCloneViaGo(m)
 			}
 		})
 		if !reflect.DeepEqual(m, mcopy1) {
-			b.Errorf(`deep equal indicated mapCloneViaJS of size %d did not return expected copy`, size)
+			b.Errorf(`deep equal indicated mapCloneViaGo of size %d did not return expected copy`, size)
 		}
 
 		mcopy2 := (map[string][]byte)(nil)
-		b.Run(fmt.Sprintf(`mapCloneViaGo(%d)`, size), func(b *testing.B) {
+		b.Run(fmt.Sprintf(`mapCloneViaJS(%d)`, size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				mcopy2 = mapCloneViaGo(m)
+				mcopy2 = mapCloneViaJS(m)
 			}
 		})
 		if !reflect.DeepEqual(m, mcopy2) {
-			b.Errorf(`deep equal indicated mapCloneViaGo of size %d did not return expected copy`, size)
+			b.Errorf(`deep equal indicated mapCloneViaJS of size %d did not return expected copy`, size)
 		}
 	}
 }

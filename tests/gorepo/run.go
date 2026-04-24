@@ -154,8 +154,6 @@ var knownFails = map[string]failReason{
 	// These are new tests in Go 1.21
 	"fixedbugs/issue58300.go":  {category: usesUnsupportedPackage, desc: "runtime.FuncForPC from outside of Caller() or Callers() which is not supported yet"},
 	"fixedbugs/issue58300b.go": {category: usesUnsupportedPackage, desc: "runtime.FuncForPC from outside of Caller() or Callers() which is not supported yet"},
-
-	// TODO(grantnelson-wf): Fill out
 }
 
 type failCategory uint8

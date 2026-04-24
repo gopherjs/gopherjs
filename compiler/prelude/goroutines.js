@@ -110,6 +110,9 @@ var $callDeferred = (deferred, jsErr, fromPanic) => {
 };
 
 var $panic = value => {
+    if (value === $ifaceNil) {
+        value = $newPanicNilError();
+    }
     $curGoroutine.panicStack.push(value);
     $callDeferred(null, null, true);
 };

@@ -72,6 +72,7 @@ var $packages = {}, $idCounter = 0;
 var $keys = m => { return m ? Object.keys(m) : []; };
 var $flushConsole = () => { };
 var $throwRuntimeError; /* set by package "runtime" */
+var $newPanicNilError; /* set by package "runtime" — returns a new *PanicNilError */
 var $throwNilPointerError = () => { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var $call = (fn, rcvr, args) => { return fn.apply(rcvr, args); };
 var $makeFunc = fn => { return function(...args) { return $externalize(fn(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(args, []))), $emptyInterface); }; };
@@ -644,6 +645,22 @@ var $unsafeSlice = (ptr, len, typ, methodName = "Slice") => {
             $throwRuntimeError("unsafe."+methodName+": ptr is nil and len is not zero");
         }
         return typ.nil;
+    }
+    if (len === 0) {
+        var s0 = new typ(ptr.$target);
+        s0.$offset = ptr.$index !== undefined ? ptr.$index : 0;
+        s0.$length = 0;
+        s0.$capacity = 0;
+        return s0;
+    }
+    if (ptr.$index === undefined) {
+        // Go can cast a footprint of memory for some data into an array, but JS can not.
+        // If the $index is undefined then the pointer is for a struct field,
+        // a non-escaping scalar pointer, or something else, but not an array or slice.
+        $throwRuntimeError("unsafe." + methodName + ": pointer does not address a slice or array element (missing index)");
+    }
+    if (ptr.$target.buffer && ptr.$target.BYTES_PER_ELEMENT && ptr.$target.constructor !== $nativeArray(typ.elem.kind)) {
+        $throwRuntimeError("unsafe." + methodName + ": pointer does not match slice element storage layout");
     }
     if (ptr.$index + len > ptr.$target.length) {
         // Go can grab abritraty footprints of memory, JS can not. Instead of trying

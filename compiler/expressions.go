@@ -271,15 +271,20 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 				newSel := &ast.SelectorExpr{X: fc.newIdent("this.$target", fc.typeOf(x.X)), Sel: x.Sel}
 				fc.setType(newSel, exprType)
 				fc.pkgCtx.additionalSelections[newSel] = sel
-				return fc.formatExpr("(%1e.$ptr_%2s || (%1e.$ptr_%2s = new %3s(function() { return %4e; }, function($v) { %5s }, %1e)))", x.X, x.Sel.Name, fc.typeName(exprType), newSel, fc.translateAssign(newSel, fc.newIdent("$v", exprType), false))
+				if _, ok := fc.typeOf(x.X).Underlying().(*types.Pointer); ok {
+					return fc.formatExpr("(%1e === %2s.nil && $throwNilPointerError(), (%1e.$ptr_%3s || (%1e.$ptr_%3s = new %4s(function() { return %5e; }, function($v) { %6s }, %1e))))",
+						x.X, fc.typeName(fc.typeOf(x.X)), x.Sel.Name, fc.typeName(exprType), newSel, fc.translateAssign(newSel, fc.newIdent("$v", exprType), false))
+				}
+				return fc.formatExpr("(%1e.$ptr_%2s || (%1e.$ptr_%2s = new %3s(function() { return %4e; }, function($v) { %5s }, %1e)))",
+					x.X, x.Sel.Name, fc.typeName(exprType), newSel, fc.translateAssign(newSel, fc.newIdent("$v", exprType), false))
 			case *ast.IndexExpr:
 				// To allow a slice to be recreated from a `&s[i]` via casting a pointer back into the slice or using `unsafe.Slice`,
 				// we have to create pointer objects via `$indexPtr` even if the element is a struct or array, meaning ignore the `opIsStructOrArray` case.
 				if _, ok := fc.typeOf(x.X).Underlying().(*types.Slice); ok {
-					pattern := rangeCheck("$indexPtr(%1e.$array, %1e.$offset + %2e, %3s)", fc.pkgCtx.Types[x.Index].Value != nil, false)
+					pattern := rangeCheck("$indexPtr(%1e.$array, %1e.$offset + %2f, %3s)", fc.pkgCtx.Types[x.Index].Value != nil, false)
 					return fc.formatExpr(pattern, x.X, x.Index, fc.typeName(exprType))
 				}
-				pattern := rangeCheck("$indexPtr(%1e, %2e, %3s)", fc.pkgCtx.Types[x.Index].Value != nil, true)
+				pattern := rangeCheck("$indexPtr(%1e, %2f, %3s)", fc.pkgCtx.Types[x.Index].Value != nil, true)
 				return fc.formatExpr(pattern, x.X, x.Index, fc.typeName(exprType))
 			case *ast.StarExpr:
 				return fc.translateExpr(x.X)
@@ -797,6 +802,10 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 		}
 		switch exprType.Underlying().(type) {
 		case *types.Struct, *types.Array:
+			innerTyp := fc.typeOf(e.X)
+			if _, ok := innerTyp.Underlying().(*types.Pointer); ok {
+				return fc.formatExpr("(%1e === %2s.nil && $throwNilPointerError(), %1e)", e.X, fc.typeName(innerTyp))
+			}
 			return fc.translateExpr(e.X)
 		}
 		return fc.formatExpr("%e.$get()", e.X)
@@ -1320,7 +1329,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 			//
 			// TODO(nevkontakte): Should this only apply when exprType is a pointer to a
 			// struct as well?
-			return fc.formatExpr("$pointerOfStructConversion(%e, %s)", expr, fc.typeName(desiredType))
+			return fc.formatExpr("(%1e === %2s.nil ? %3s.nil : $pointerOfStructConversion(%1e, %3s))", expr, fc.typeName(exprType), fc.typeName(desiredType))
 		}
 
 		if types.Identical(exprType, types.Typ[types.UnsafePointer]) {

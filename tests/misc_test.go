@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"fmt"
 	"go/token"
 	"math"
 	"reflect"
@@ -205,6 +206,24 @@ func TestPointerOfStructConversion(t *testing.T) {
 
 	if got := reflect.TypeOf((AP)(&A{Value: 1})); got.String() != "tests.AP" {
 		t.Errorf("Got: reflect.TypeOf((AP)(&A{Value: 1})) = %v. Want: tests.AP.", got)
+	}
+}
+
+// TestNilPointerOfStructConversion is from https://github.com/gopherjs/gopherjs/issues/843.
+// The pointer for the new type should not be non-nil pointing to a nil pointer.
+// Originally, printing the new type did not work because the nil check did not
+// work on the non-nil pointer so the printer attempted to dereference the pointer
+// but at that point the "nil pointer dereference" error would panic.
+func TestNilPointerOfStructConversion(t *testing.T) {
+	type FooType struct{ ourField int }
+	type BarType struct{ ourField int }
+	var foo *FooType = nil
+	var bar *BarType = (*BarType)(foo)
+	if bar != nil {
+		t.Errorf(`nil pointer casted to a new type should still be nil but it was not`)
+	}
+	if want, got := `<nil>`, fmt.Sprintf(`%v`, bar); want != got {
+		t.Errorf("nil pointer casted to a new type printed the wrong result\n\twant: %q\n\tgot:  %q", want, got)
 	}
 }
 
@@ -982,6 +1001,124 @@ func TestCrossPackageGenericCasting(t *testing.T) {
 	var wantInt int
 	if got := fn(); got != wantInt {
 		t.Errorf(`Got: otherpkg.GetterHandle[int](otherpkg.Zero[int]) = %v, Want: %v`, got, wantInt)
+	}
+}
+
+// TestNilPointerDereference was added because fixedbugs/issue63657.go
+// pointed out an error where a pointer was being made to a field on a nil struct.
+// It should panic on creation of the pointer but wasn't because the pointer wrapped
+// a get and set around the field such that if get or set were called then the panic
+// may occur. Go expects the panic to be at the creation of the pointer.
+func TestNilPointerDereference(t *testing.T) {
+	tests := []struct {
+		name string
+		fn   func()
+	}{
+		{
+			// based on fixedbugs/issue63657.go
+			name: `pointer to int field on a nil struct`,
+			fn: func() {
+				type X struct{ a, b int }
+				x := (*X)(nil)
+				_ = &x.b //nolint:nilderef
+			},
+		},
+		{
+			name: `pointer to struct field on nil struct`,
+			fn: func() {
+				type Y struct{ a int }
+				type X struct{ b Y }
+				x := (*X)(nil)
+				_ = &x.b //nolint:nilderef
+			},
+		},
+		{
+			name: `pointer to field of nil struct in slice`,
+			fn: func() {
+				type X struct{ b int }
+				x := []*X{nil}
+				_ = &x[0].b //nolint:nilderef
+			},
+		},
+		{
+			name: `pointer to nil array`,
+			fn: func() {
+				x := (*[3]int)(nil)
+				_ = *x //nolint:nilderef
+			},
+		},
+		{
+			name: `pointer to nil struct`,
+			fn: func() {
+				type X struct{ b int }
+				x := (*X)(nil)
+				_ = *x //nolint:nilderef
+			},
+		},
+		{
+			name: `named pointer to nil struct`,
+			fn: func() {
+				type X struct{ b int }
+				type P *X
+				x := P(nil)
+				_ = *x //nolint:nilderef
+			},
+		},
+		{
+			// based on fixedbugs/issue19246.go
+			// see: https://github.com/golang/go/issues/19246
+			name: `pointer dereferenced in function call`,
+			fn: func() {
+				type B struct{}
+				f := func(i any) {}
+				var b *B
+				f(*b) //nolint:nilderef
+			},
+		},
+		{
+			// based on fixedbugs/issue23837.go (1 of 3)
+			name: `unnamed struct comparison`,
+			fn: func() {
+				f := func(p, q *struct{}) bool { return *p == *q }
+				f(nil, nil)
+			},
+		},
+		{
+			// based on fixedbugs/issue23837.go (2 of 3)
+			name: `named struct comparison`,
+			fn: func() {
+				type T struct {
+					x struct{}
+					y int
+				}
+				g := func(p, q *T) bool { return *p == *q }
+				g(nil, nil)
+			},
+		},
+		{
+			// based on fixedbugs/issue23837.go (3 of 3)
+			name: `calling nil functions`,
+			fn: func() {
+				h := func(p, q func() struct{}) bool { return p() == q() }
+				h(nil, nil)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := func() (r any) {
+				defer func() { r = recover() }()
+				test.fn()
+				return
+			}()
+
+			want := `runtime error: invalid memory address or nil pointer dereference`
+			if got := fmt.Sprint(r); got != want {
+				t.Errorf("expected a panic for reading a field from a nil structure"+
+					"\n\twant: %v\n\tgot:  %v", want, got)
+			}
+		})
 	}
 }
 

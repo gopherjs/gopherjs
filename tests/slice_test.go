@@ -63,7 +63,7 @@ func Test_UnsafeSlice(t *testing.T) {
 	}
 }
 
-func Test_SliceToArray(t *testing.T) {
+func Test_OffsetSliceToArray(t *testing.T) {
 	s := []byte{1, 2, 3, 4, 5, 6, 7, 8}
 	s2 := s[2:6]
 	if want := []byte{3, 4, 5, 6}; !reflect.DeepEqual(s2, want) {

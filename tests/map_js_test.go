@@ -135,10 +135,15 @@ func BenchmarkMapClone(b *testing.B) {
 	// The results show that mapCloneViaJS is faster than the mapCloneViaGo
 	// after 6 key/value pairs. However, the speed is fast enough that for
 	// smaller maps, mapCloneViaJS should still be fine. Since I don't have
-	// statistics on how big maps that are cloned typically get, but I suspect
-	// that most maps are typically small, I'm going to switch algorithms based
-	// on size. However, we should occationally rerun this benchmark to
-	// update the size to switch between algorithms.
+	// statistics on how big maps that are cloned typically get, but I'd suspect
+	// that most maps are typically small, it might make sense to switch algorithms
+	// based on size. If we take that approach, we should occationally rerun this
+	// benchmark to update the size to switch between algorithms.
+	//
+	// However, there is concern about how the copies are made during the JS
+	// versions since we need to ensure a shallow copy is made of things like
+	// structs to ensure the cloned map does not target the same underlying
+	// object that can be modified to modify both maps.
 	//
 	// | size  | mapCloneViaGo (ns/op) | mapCloneViaJS (ns/op) | Go/JS (%) |
 	// |------:|----------------------:|----------------------:|----------:|

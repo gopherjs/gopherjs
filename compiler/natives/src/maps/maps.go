@@ -2,8 +2,6 @@
 
 package maps
 
-import "github.com/gopherjs/gopherjs/js"
-
 // Clone returns a copy of m.  This is a shallow clone:
 // the new keys and values are set using ordinary assignment.
 //
@@ -14,18 +12,12 @@ func Clone[M ~map[K]V, K comparable, V any](m M) M {
 	}
 
 	// See BenchmarkMapClone in ./tests/map_js_test.go
-	// TL:DR; A simple Go copy is faster only when less than 7 pairs, however
-	// since many maps may be small this switched betwen the algorithms.
-	if len(m) < 7 {
-		mcopy := make(M, len(m))
-		for k, v := range m {
-			mcopy[k] = v
-		}
-		return mcopy
+	// TL:DR; The simple Go copy version of clone may be slower for large maps
+	// but is faster for small maps and ensures that we don't run into a
+	// potentical issue with JS objects not being properly copied during clone.
+	mcopy := make(M, len(m))
+	for k, v := range m {
+		mcopy[k] = v
 	}
-
-	mptr := &M{}
-	cloned := js.Global.Get("Map").New(js.InternalObject(m))
-	js.InternalObject(mptr).Call(`$set`, cloned)
-	return *mptr
+	return mcopy
 }

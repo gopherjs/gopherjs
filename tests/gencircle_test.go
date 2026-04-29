@@ -2,6 +2,7 @@ package tests_test
 
 import (
 	"embed"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,22 +49,30 @@ func runOutputTest(t *testing.T, basePath, testPkg string, extraArgs ...string) 
 	mainPath := filepath.Join(basePath, testPkg, mainFile)
 	args := append([]string{`run`, mainPath}, extraArgs...)
 	gotBytes, err := exec.Command(`gopherjs`, args...).CombinedOutput()
-	got := normalizeOut(gotBytes)
-	if err != nil {
-		if _, ok := err.(*exec.ExitError); !ok {
-			t.Fatalf("unexpected error from exec: %v:\n%s", err, got)
-		}
+	if err != nil && !errors.Is(err, &exec.ExitError{}) {
+		t.Fatalf("unexpected error from exec: %v:\n%s", err, string(gotBytes))
 	}
 
+	hasOutFile := true
 	outPath := filepath.Join(basePath, testPkg, outFile)
 	wantBytes, err := os.ReadFile(outPath)
 	if err != nil {
-		t.Fatalf(`error reading %s file: %v`, outFile, err)
+		if !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf(`error reading %s file: %v`, outFile, err)
+		}
+		hasOutFile = false
 	}
-	want := normalizeOut(wantBytes)
 
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Got diff (-want,+got):\n%s", diff)
+	if hasOutFile {
+		got := normalizeOut(gotBytes)
+		want := normalizeOut(wantBytes)
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Got diff (-want,+got):\n%s", diff)
+		}
+	} else {
+		if len(gotBytes) > 0 {
+			t.Errorf("Expected no output but got:\n%s", string(gotBytes))
+		}
 	}
 }
 

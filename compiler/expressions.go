@@ -1329,7 +1329,7 @@ func (fc *funcContext) translateConversion(expr ast.Expr, desiredType types.Type
 			//
 			// TODO(nevkontakte): Should this only apply when exprType is a pointer to a
 			// struct as well?
-			return fc.formatExpr("(%1e === %2s.nil ? %3s.nil : $pointerOfStructConversion(%1e, %3s))", expr, fc.typeName(exprType), fc.typeName(desiredType))
+			return fc.formatExpr("$pointerOfStructConversion(%e, %s)", expr, fc.typeName(desiredType))
 		}
 
 		if types.Identical(exprType, types.Typ[types.UnsafePointer]) {

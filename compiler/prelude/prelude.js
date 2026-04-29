@@ -409,6 +409,9 @@ var $clone = (src, type) => {
 };
 
 var $pointerOfStructConversion = (obj, type) => {
+    if (obj === (obj.constructor && obj.constructor.nil)) {
+        return type.nil;
+    }
     if (obj.$proxies === undefined) {
         obj.$proxies = {};
         obj.$proxies[obj.constructor.string] = obj;

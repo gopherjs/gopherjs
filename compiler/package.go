@@ -30,7 +30,10 @@ type pkgContext struct {
 	typeNames typesutil.TypeNames
 	// Mapping from package import paths to JS variables that were assigned to an
 	// imported package and can be used to access it.
-	pkgVars      map[string]string
+	pkgVars map[string]string
+	// varPtrNames is for unexported package-level pointer type names only.
+	// Exported package-level names are always the full name from the Var.
+	// Function-level pointer type names are stored in the function context, not here.
 	varPtrNames  map[*types.Var]string
 	anonTypes    []*types.TypeName
 	anonTypeMap  typeutil.Map
@@ -84,6 +87,9 @@ type funcContext struct {
 	// auxiliary variables the compiler needs. It is used to generate `var`
 	// declaration at the top of the function, as well as context save/restore.
 	localVars []string
+	// varPtrNames are very similar to the package level pkgContext.varPtrNames
+	// except contains pointer names that are local to within this function context.
+	varPtrNames map[*types.Var]string
 	// AST expressions representing function's named return values. nil if the
 	// function has no return values or they are not named.
 	resultNames []ast.Expr
@@ -134,6 +140,7 @@ func newRootCtx(tContext *types.Context, srcs *sources.Sources, minify bool) *fu
 			instanceSet:  srcs.TypeInfo.InstanceSets,
 		},
 		allVars:     make(map[string]int),
+		varPtrNames: make(map[*types.Var]string),
 		flowDatas:   map[*types.Label]*flowData{nil: {}},
 		caseCounter: 1,
 		labelCases:  make(map[*types.Label]int),

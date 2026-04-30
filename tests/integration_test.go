@@ -18,3 +18,8 @@ func Test_JSSourceMap_Minified(t *testing.T) { runOutputTest(t, `testdata`, `jsS
 // to test that the package level type names do not conflict with function level
 // variable names when the code is minified.
 func Test_MinifyNaming(t *testing.T) { runOutputTest(t, `testdata`, `minifyNaming`, `-m`) }
+
+// Test_ProxyMethod uses testdata/proxyMethod/main.go
+// to test that a structure pointer cast into and out of a proxy can still have
+// its methods called on it.
+func Test_ProxyMethod(t *testing.T) { runOutputTest(t, `testdata`, `proxyMethod`) }

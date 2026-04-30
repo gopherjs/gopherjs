@@ -23,10 +23,8 @@ func TestGarbageCollection(t *testing.T) {
 // implemented" runtime stubs, which panic and crash the Node process before
 // the testing framework can recover. Skip the affected tests until proper
 // support is added; they cannot be overridden without defeating the test.
+//
+//gopherjs:replace
 func TestWasmImport(t *testing.T) {
-	t.Skip("//go:wasmimport is not supported by GopherJS")
-}
-
-func TestWasmExport(t *testing.T) {
 	t.Skip("//go:wasmimport is not supported by GopherJS")
 }

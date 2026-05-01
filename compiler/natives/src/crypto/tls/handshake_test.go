@@ -72,18 +72,21 @@ func TestClientHandshakeContextCancellation(t *testing.T) {
 	}
 }
 
+//gopherjs:replace
 func TestVerifyConnection(t *testing.T) {
 	// This should be rechecked after upgrading to Go 1.24 or later.
 	// go1.21.13/src/crypto/tls/handshake_test.go:testRSACertificate has expired.
 	t.Skip("Skipping test that uses predefined certificate that expired in Jan 1st 2025")
 }
 
+//gopherjs:replace
 func TestResumptionKeepsOCSPAndSCT(t *testing.T) {
 	// This should be rechecked after upgrading to Go 1.24 or later.
 	// go1.21.13/src/crypto/tls/handshake_test.go:testRSACertificate has expired.
 	t.Skip("Skipping test that uses predefined certificate that expired in Jan 1st 2025")
 }
 
+//gopherjs:replace
 func TestCrossVersionResume(t *testing.T) {
 	// This should be rechecked after upgrading to Go 1.24 or later.
 	// go1.21.13/src/crypto/tls/handshake_test.go:testRSACertificate has expired.

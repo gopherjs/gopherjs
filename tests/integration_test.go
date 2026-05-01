@@ -13,3 +13,8 @@ func Test_JSSourceMap_Unminified(t *testing.T) { runOutputTest(t, `testdata`, `j
 // Test_JSSourceMap_Minified uses testdata/jsSourceMap/main.go
 // to test that the source map generated for the JS code is correct on minified output.
 func Test_JSSourceMap_Minified(t *testing.T) { runOutputTest(t, `testdata`, `jsSourceMap`, `-m`) }
+
+// Test_ProxyMethod uses testdata/proxyMethod/main.go
+// to test that a structure pointer cast into and out of a proxy can still have
+// its methods called on it.
+func Test_ProxyMethod(t *testing.T) { runOutputTest(t, `testdata`, `proxyMethod`) }

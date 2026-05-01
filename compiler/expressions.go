@@ -1371,7 +1371,7 @@ func (fc *funcContext) translateImplicitConversion(expr ast.Expr, desiredType ty
 		return fc.formatExpr("%e", fc.zeroValue(desiredType))
 	}
 
-	switch desiredType.Underlying().(type) {
+	switch dt := desiredType.Underlying().(type) {
 	case *types.Slice:
 		return fc.formatExpr("$convertSliceType(%1e, %2s)", expr, fc.typeName(desiredType))
 
@@ -1385,6 +1385,18 @@ func (fc *funcContext) translateImplicitConversion(expr ast.Expr, desiredType ty
 		}
 		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {
 			return fc.formatExpr("new %1e.constructor.elem(%1e)", expr)
+		}
+
+	case *types.Pointer:
+		// Implicit conversion between named pointer-to-struct types or between
+		// one named pointer-to-struct type and an unnamed pointer-to-struct type
+		// needs the same proxy/unwrap that explicit conversions get so that
+		// the JS object has the methods for the type assigned to it and
+		// not just the JS prototype. See tests/testdata/proxyMethod/main.go
+		if _, isStruct := dt.Elem().Underlying().(*types.Struct); isStruct {
+			if sPtr, ok := exprType.Underlying().(*types.Pointer); ok && types.Identical(sPtr.Elem(), dt.Elem()) {
+				return fc.formatExpr("$pointerOfStructConversion(%e, %s)", expr, fc.typeName(desiredType))
+			}
 		}
 	}
 

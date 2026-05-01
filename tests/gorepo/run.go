@@ -82,7 +82,6 @@ var knownFails = map[string]failReason{
 			"runtime error: invalid memory address or nil pointer dereference"
 		want:
 			"value method main.T.F called using nil *T pointer"`},
-	"fixedbugs/issue19246.go": {desc: "expected nil pointer dereference panic"}, // Issue https://golang.org/issues/19246: Failed to evaluate some zero-sized values when converting them to interfaces.
 
 	// These are new tests in Go 1.10.
 	"fixedbugs/issue21887.go": {desc: "incorrect output (although within spec, not worth fixing) for println(^uint64(0)). got: { '$high': 4294967295, '$low': 4294967295, '$val': [Circular] } want: 18446744073709551615"},
@@ -95,7 +94,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue24547.go": {desc: "incorrect computing method sets with shadowed methods"},
 
 	// These are new tests in Go 1.12.
-	"fixedbugs/issue23837.go":  {desc: "missing panic on nil pointer-to-empty-struct dereference"},
 	"fixedbugs/issue27201.go":  {desc: "incorrect stack trace for nil dereference in inlined function"},
 	"fixedbugs/issue27518b.go": {desc: "sigpanic can make dead pointer live again"},
 	"fixedbugs/issue29190.go":  {desc: "append does not fail when length overflows", category: neverTerminates},
@@ -109,7 +107,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue24491a.go": {category: notApplicable, desc: "tests interaction between unsafe and GC; uses runtime.SetFinalizer()"},
 	"fixedbugs/issue24491b.go": {category: notApplicable, desc: "tests interaction between unsafe and GC; uses runtime.SetFinalizer()"},
 	"fixedbugs/issue29504.go":  {category: notApplicable, desc: "requires source map support beyond what GopherJS currently provides"},
-	"fixedbugs/issue29735.go":  {category: lowLevelRuntimeDifference, desc: "GopherJS only supports runtime.FuncForPC() with position counters previously returned by runtime.Callers() or runtime.Caller()"},
 	"fixedbugs/issue30116.go":  {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
 	"fixedbugs/issue30116u.go": {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
 	"fixedbugs/issue34395.go":  {category: neverTerminates, desc: "https://github.com/gopherjs/gopherjs/issues/1007"},
@@ -151,11 +148,11 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue25897a.go": {category: neverTerminates, desc: "does for { runtime.GC() }"},
 	"fixedbugs/issue54343.go":  {category: notApplicable, desc: "uses runtime.SetFinalizer() and runtime.GC()."},
 	"fixedbugs/issue57823.go":  {category: notApplicable, desc: "uses runtime.SetFinalizer() and runtime.GC()."},
-	"fixedbugs/issue59293.go":  {category: usesUnsupportedPackage, desc: "uses unsafe.SliceData() and unsafe.StringData()."},
 	"fixedbugs/issue43942.go":  {category: other, desc: "https://github.com/gopherjs/gopherjs/issues/1126"},
 
 	// These are new tests in Go 1.21
-	// TODO(grantnelson-wf): Fill out
+	"fixedbugs/issue58300.go":  {category: usesUnsupportedPackage, desc: "runtime.FuncForPC from outside of Caller() or Callers() which is not supported yet"},
+	"fixedbugs/issue58300b.go": {category: usesUnsupportedPackage, desc: "runtime.FuncForPC from outside of Caller() or Callers() which is not supported yet"},
 }
 
 type failCategory uint8

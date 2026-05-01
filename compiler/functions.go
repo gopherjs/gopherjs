@@ -38,6 +38,7 @@ func (fc *funcContext) nestedFunctionContext(info *analysis.FuncInfo, inst typep
 		parent:       fc,
 		allVars:      make(map[string]int, len(fc.allVars)),
 		localVars:    []string{},
+		varPtrNames:  make(map[*types.Var]string),
 		flowDatas:    map[*types.Label]*flowData{nil: {}},
 		caseCounter:  1,
 		labelCases:   make(map[*types.Label]int),

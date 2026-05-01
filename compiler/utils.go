@@ -488,34 +488,29 @@ func (fc *funcContext) methodName(fun *types.Func) string {
 }
 
 func (fc *funcContext) varPtrName(o *types.Var) string {
-	if isPkgLevel(o) && o.Exported() {
-		return fc.pkgVar(o.Pkg()) + "." + o.Name() + "$ptr"
-	}
+	if isPkgLevel(o) {
+		if o.Exported() {
+			return fc.pkgVar(o.Pkg()) + "." + o.Name() + "$ptr"
+		}
 
-	name, ok := fc.pkgCtx.varPtrNames[o]
-	if !ok {
-		name = fc.newVariable(o.Name()+"$ptr", isPkgLevel(o))
-		fc.pkgCtx.varPtrNames[o] = name
+		// Unexported package-level pointer types must share a name
+		// so use the package level varPtrNames.
+		name, ok := fc.pkgCtx.varPtrNames[o]
+		if !ok {
+			name = fc.newVariable(o.Name()+"$ptr", true)
+			fc.pkgCtx.varPtrNames[o] = name
+		}
 		return name
 	}
 
-	// If name already exists for the package, check that the function's instantiation
-	// also has the name in its localVars. This is to handle generics where `o` is
-	// shared among multiple instantiations of the same generic, but `newVariable`
-	// is only called for the first.
-	if !fc.instance.IsTrivial() && !containsString(fc.localVars, name) {
-		fc.localVars = append(fc.localVars, name)
+	// Local pointer types are in a function context scope and not shared
+	// across functions so use the function level varPtrNames.
+	name, ok := fc.varPtrNames[o]
+	if !ok {
+		name = fc.newVariable(o.Name()+"$ptr", false)
+		fc.varPtrNames[o] = name
 	}
 	return name
-}
-
-func containsString(s []string, v string) bool {
-	for i := len(s) - 1; i >= 0; i-- {
-		if v == s[i] {
-			return true
-		}
-	}
-	return false
 }
 
 // typeName returns a JS identifier name for the given Go type.

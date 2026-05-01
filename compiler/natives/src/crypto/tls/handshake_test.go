@@ -10,7 +10,7 @@ import (
 
 // Same as upstream, except we check for GOARCH=ecmascript instead of wasm.
 // This override can be removed after https://github.com/golang/go/pull/51827
-// is available in the upstream (likely after Go 1.19).
+// is available in the upstream (likely in Go 1.25).
 func TestServerHandshakeContextCancellation(t *testing.T) {
 	c, s := localPipe(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -42,7 +42,7 @@ func TestServerHandshakeContextCancellation(t *testing.T) {
 
 // Same as upstream, except we check for GOARCH=ecmascript instead of wasm.
 // This override can be removed after https://github.com/golang/go/pull/51827
-// is available in the upstream (likely after Go 1.19).
+// is available in the upstream (likely in Go 1.25).
 func TestClientHandshakeContextCancellation(t *testing.T) {
 	c, s := localPipe(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -72,14 +72,23 @@ func TestClientHandshakeContextCancellation(t *testing.T) {
 	}
 }
 
+//gopherjs:replace
 func TestVerifyConnection(t *testing.T) {
-	// This should be rechecked after upgrading to Go 1.20 or later.
-	// go1.19.13/src/crypto/tls/handshake_test.go:testRSACertificateIssuer has expired.
+	// This should be rechecked after upgrading to Go 1.24 or later.
+	// go1.21.13/src/crypto/tls/handshake_test.go:testRSACertificate has expired.
 	t.Skip("Skipping test that uses predefined certificate that expired in Jan 1st 2025")
 }
 
+//gopherjs:replace
 func TestResumptionKeepsOCSPAndSCT(t *testing.T) {
-	// This should be rechecked after upgrading to Go 1.20 or later.
-	// go1.19.13/src/crypto/tls/handshake_test.go:testRSACertificateIssuer has expired.
+	// This should be rechecked after upgrading to Go 1.24 or later.
+	// go1.21.13/src/crypto/tls/handshake_test.go:testRSACertificate has expired.
+	t.Skip("Skipping test that uses predefined certificate that expired in Jan 1st 2025")
+}
+
+//gopherjs:replace
+func TestCrossVersionResume(t *testing.T) {
+	// This should be rechecked after upgrading to Go 1.24 or later.
+	// go1.21.13/src/crypto/tls/handshake_test.go:testRSACertificate has expired.
 	t.Skip("Skipping test that uses predefined certificate that expired in Jan 1st 2025")
 }

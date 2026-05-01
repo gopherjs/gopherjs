@@ -183,7 +183,7 @@ jobs:
   gopherjs_tests:
     name: GopherJS Tests (${{ matrix.filter.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:

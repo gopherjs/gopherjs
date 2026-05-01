@@ -11,9 +11,9 @@ func Clone[M ~map[K]V, K comparable, V any](m M) M {
 		return nil
 	}
 
-	// See BenchmarkMapClone in ./tests/map_js_test.go
-	// TL:DR; The simple Go copy version of clone may be slower for large maps
-	// but is faster for small maps and ensures that we don't run into a
+	// A simple Go copy version of clone may be slower for large maps
+	// and faster for small maps than using the JS Map constructor to create
+	// a copy. However, the Go copy ensures that we don't run into a
 	// potentical issue with JS objects not being properly copied during clone.
 	mcopy := make(M, len(m))
 	for k, v := range m {

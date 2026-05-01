@@ -650,11 +650,11 @@ var $unsafeSlice = (ptr, len, typ, methodName = "Slice") => {
         return typ.nil;
     }
     if (len === 0) {
-        var s0 = new typ(ptr.$target);
-        s0.$offset = ptr.$index !== undefined ? ptr.$index : 0;
-        s0.$length = 0;
-        s0.$capacity = 0;
-        return s0;
+        var s = new typ(ptr.$target);
+        s.$offset = ptr.$index !== undefined ? ptr.$index : 0;
+        s.$length = 0;
+        s.$capacity = 0;
+        return s;
     }
     if (ptr.$index === undefined) {
         // Go can cast a footprint of memory for some data into an array, but JS can not.

@@ -62,3 +62,24 @@ func Test_UnsafeSlice(t *testing.T) {
 		t.Errorf("Got: %v after unsafe slice, Want: %v", a, want)
 	}
 }
+
+func Test_OffsetSliceToArray(t *testing.T) {
+	s := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+	s2 := s[2:6]
+	if want := []byte{3, 4, 5, 6}; !reflect.DeepEqual(s2, want) {
+		t.Errorf("Got: %v after getting sub-slice, Want: %v", s2, want)
+	}
+
+	// Originally there was an issue where this cast would clone the underlying array
+	// from s2 and copy it without the offset so the result would be `[4]byte{1, 2, 3, 4}`
+	// instead of the correct offset values.
+	a := [4]byte(s2)
+	if want := [4]byte{3, 4, 5, 6}; !reflect.DeepEqual(a, want) {
+		t.Errorf("Got: %v after casting to array, Want: %v", a, want)
+	}
+
+	s2[1] = 42
+	if want, got := byte(4), a[1]; want != got {
+		t.Errorf("Got: %v after casting to array, Want: %v", got, want)
+	}
+}

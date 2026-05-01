@@ -109,7 +109,6 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue24491a.go": {category: notApplicable, desc: "tests interaction between unsafe and GC; uses runtime.SetFinalizer()"},
 	"fixedbugs/issue24491b.go": {category: notApplicable, desc: "tests interaction between unsafe and GC; uses runtime.SetFinalizer()"},
 	"fixedbugs/issue29504.go":  {category: notApplicable, desc: "requires source map support beyond what GopherJS currently provides"},
-	"fixedbugs/issue29735.go":  {category: lowLevelRuntimeDifference, desc: "GopherJS only supports runtime.FuncForPC() with position counters previously returned by runtime.Callers() or runtime.Caller()"},
 	"fixedbugs/issue30116.go":  {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
 	"fixedbugs/issue30116u.go": {desc: "GopherJS doesn't specify the array/slice index selector in the out-of-bounds message"},
 	"fixedbugs/issue34395.go":  {category: neverTerminates, desc: "https://github.com/gopherjs/gopherjs/issues/1007"},

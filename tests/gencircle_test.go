@@ -53,26 +53,24 @@ func runOutputTest(t *testing.T, basePath, testPkg string, extraArgs ...string) 
 		t.Fatalf("unexpected error from exec: %v:\n%s", err, string(gotBytes))
 	}
 
-	hasOutFile := true
 	outPath := filepath.Join(basePath, testPkg, outFile)
 	wantBytes, err := os.ReadFile(outPath)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf(`error reading %s file: %v`, outFile, err)
 		}
-		hasOutFile = false
-	}
 
-	if hasOutFile {
-		got := normalizeOut(gotBytes)
-		want := normalizeOut(wantBytes)
-		if diff := cmp.Diff(want, got); diff != "" {
-			t.Errorf("Got diff (-want,+got):\n%s", diff)
-		}
-	} else {
+		// Has no output file so check if output was empty
 		if len(gotBytes) > 0 {
 			t.Errorf("Expected no output but got:\n%s", string(gotBytes))
 		}
+		return
+	}
+
+	got := normalizeOut(gotBytes)
+	want := normalizeOut(wantBytes)
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Got diff (-want,+got):\n%s", diff)
 	}
 }
 

@@ -158,6 +158,8 @@ type overrideInfo struct {
 // Standard Go library packages are augmented with files in compiler/natives folder.
 // If isTest is true and pkg.ImportPath has no _test suffix, package is built for running internal tests.
 // If isTest is true and pkg.ImportPath has _test suffix, package is built for running external tests.
+// If isTestBuild is true, the build is producing a test (`gopherjs test`).
+// Otherwise the build is producing a library or command (runs `main()`) project.
 //
 // The native packages are augmented by the contents of natives.FS in the following way.
 // The file names do not matter except the usual `_test` suffix. The files for
@@ -183,8 +185,12 @@ type overrideInfo struct {
 //   - New identifiers that don't exist in original package get added.
 //     Use `gopherjs:new` to ensure that the identifier is new and there was
 //     no original code for it.
-func parseAndAugment(xctx XContext, pkg *PackageData, isTest bool, fileSet *token.FileSet) ([]*ast.File, []incjs.File, error) {
+func parseAndAugment(xctx XContext, pkg *PackageData, isTest, isTestBuild bool, fileSet *token.FileSet) ([]*ast.File, []incjs.File, error) {
 	jsFiles, overlayFiles := parseOverlayFiles(xctx, pkg, isTest, fileSet)
+
+	if isTestBuild && pkg.ImportPath == `testing` {
+		overlayFiles = append(overlayFiles, getTestingInitFile(pkg, fileSet))
+	}
 
 	originalFiles, err := parserOriginalFiles(pkg, fileSet)
 	if err != nil {
@@ -258,6 +264,32 @@ func parseOverlayFiles(xctx XContext, pkg *PackageData, isTest bool, fileSet *to
 		files = append(files, file)
 	}
 	return jsFiles, files
+}
+
+// getTestingInitFile gets file to inject into the `testing` package when
+// GopherJS is building for a test (i.e. `gopherjs test`).
+//
+// The file adds an init to set `testing.testBinary` to "1" during the testing
+// package's own init phase, before any importing package's variable initializers
+// run. This is what makes `testing.Testing()` (added in Go 1.21) return true
+// from inside of test and false when running a project with from a main method.
+//
+// Go sets `testing.testBinary` by passing `-X testing.testBinary=1` to cmd/link
+// in `go test`. GopherJS does not implement the `-X` flag, so we inject this
+// init function instead.
+//
+// TODO(grantnelson-wf): If/when the build/cache is re-enabled, the cache key
+// for the `testing` package will need to incorporate the `isTestBuild` signal
+// so a cached non-test variant is not reused for a test build and vice versa.
+func getTestingInitFile(pkg *PackageData, fileSet *token.FileSet) *ast.File {
+	const source = "package testing\n\nfunc init() { testBinary = \"1\" }\n"
+	const filename = `gopherjs__testing_init.go`
+	filePath := path.Join(pkg.Dir, filename)
+	file, err := parser.ParseFile(fileSet, filePath, source, parser.ParseComments)
+	if err != nil {
+		panic(fmt.Errorf("failed to parse synthetic testing init overlay: %w", err))
+	}
+	return file
 }
 
 // parserOriginalFiles loads and parses the original files to augment.
@@ -1214,7 +1246,8 @@ func (s *Session) LoadPackages(pkg *PackageData) (*sources.Sources, error) {
 	// by parsing and augmenting the original files with overlay files.
 	if srcs == nil {
 		fileSet := token.NewFileSet()
-		files, overlayJsFiles, err := parseAndAugment(s.xctx, pkg, pkg.IsTest, fileSet)
+		isTestBuild := s.options.TestedPackage != ``
+		files, overlayJsFiles, err := parseAndAugment(s.xctx, pkg, pkg.IsTest, isTestBuild, fileSet)
 		if err != nil {
 			return nil, err
 		}

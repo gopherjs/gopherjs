@@ -237,7 +237,7 @@ var $convertSliceType = (slice, desiredType) => {
         return desiredType.nil; // Preserve nil value.
     }
 
-    return $subslice(new desiredType(slice.$array), slice.$offset, slice.$offset + slice.$length);
+    return $subslice(new desiredType(slice.$array), slice.$offset, slice.$offset + slice.$length, slice.$offset + slice.$capacity);
 }
 
 var $decodeRune = (str, pos) => {

@@ -302,7 +302,7 @@ func Callers(skip int, pc []uintptr) int {
 //
 // GopherJS notes:
 //   - PCs that didn't come from Caller/Callers (e.g. a function pointer obtained
-//     via reflect.ValueOf(fn).Pointer()) are not in our program counter table.
+//     via reflect.ValueOf(fn).Pointer()) are not in our positionCounters.
 //     For those, FuncForPC returns nil and we emit a Frame with the original PC
 //     and empty symbol fields, like Go will.
 //   - GopherJS's internal frames such as $callDeferred and $goroutine were
@@ -459,17 +459,21 @@ func (f *Func) Name() string {
 func FuncForPC(pc uintptr) *Func {
 	ipc := int(pc)
 	if ipc <= 0 || ipc >= len(positionCounters) {
+		// Since we are faking position counters, the only valid way to obtain one
+		// is through a Caller() or Callers() function. If pc is out of positionCounters
+		// bounds it must have been obtained in some other way, which is unexpected.
 		// FuncForPC in Go returns nil for a PC that does not correspond to a
-		// known function, and several STL packages rely on that:
+		// known function. so returning nil for PCs we cannot resolvable, even if
+		// Go could resolve it, lets the callers keep working with empty symbols.
+		// For example:
 		//   - log/slog passes PC=0 through CallersFrames when a Record was
 		//     created without a real caller (record.go's PC field)
 		//   - test/fixedbugs/issue29735.go deliberately walks past the
-		//     end of a function looking for the next.
+		//     end of a function looking for the next. This will cause it to
+		//     not secceed at what it is trying to do but will allow the test to pass.
 		//   - test/fixedbugs/issue58300.go and test/fixedbugs/issue58300b.go give
 		//     FuncForPC a function pointer from `reflect.ValueOf(fn).Pointer()`,
 		//     which is not produced by Caller/Callers and so isn't in our table.
-		// Returning nil for these unresolvable PCs lets callers keep working
-		// with empty symbols.
 		return nil
 	}
 	return positionCounters[ipc]

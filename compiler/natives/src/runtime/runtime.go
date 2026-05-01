@@ -123,8 +123,13 @@ var (
 	//
 	// We use the map and the slice below to convert a "file:line" position
 	// into an integer position counter and then to a Func instance.
+	//
+	// Index 0 is reserved as the "unknown PC": upstream Go documents
+	// PC=0 as "no caller available" (see e.g. log/slog.Record.PC), and packages
+	// using PCs, initialize a uintptr to zero and expect runtime.CallersFrames
+	// and runtime.FuncForPC to treat it as unknown.
 	knownPositions   = map[string]uintptr{}
-	positionCounters = []*Func{}
+	positionCounters = []*Func{nil}
 )
 
 func registerPosition(funcName string, file string, line int, col int) uintptr {
@@ -291,10 +296,26 @@ func Callers(skip int, pc []uintptr) int {
 	return len(frames)
 }
 
+// CallersFrames takes a slice of PC values returned by Callers and prepares to
+// return function/file/line information. Done is true when no more frames are
+// available.
+//
+// GopherJS notes:
+//   - PCs that didn't come from Caller/Callers (e.g. a function pointer obtained
+//     via reflect.ValueOf(fn).Pointer()) are not in our program counter table.
+//     For those, FuncForPC returns nil and we emit a Frame with the original PC
+//     and empty symbol fields, like Go will.
+//   - GopherJS's internal frames such as $callDeferred and $goroutine were
+//     already filtered (or aliased) by parseCallstack at capture time, so anything
+//     reaching CallersFrames is either a real Go frame or a PC we can't resolve.
 func CallersFrames(callers []uintptr) *Frames {
 	result := Frames{}
 	for _, pc := range callers {
 		fun := FuncForPC(pc)
+		if fun == nil {
+			result.frames = append(result.frames, Frame{PC: pc})
+			continue
+		}
 		result.frames = append(result.frames, Frame{
 			PC:       pc,
 			Func:     fun,
@@ -437,13 +458,19 @@ func (f *Func) Name() string {
 
 func FuncForPC(pc uintptr) *Func {
 	ipc := int(pc)
-	if ipc >= len(positionCounters) {
-		// Since we are faking position counters, the only valid way to obtain one
-		// is through a Caller() or Callers() function. If pc is out of positionCounters
-		// bounds it must have been obtained in some other way, which is unexpected.
-		// If a panic proves problematic, we can return a nil *Func, which will
-		// present itself as a generic "unknown" function.
-		panic("GopherJS: pc=" + itoa(ipc) + " is out of range of known position counters")
+	if ipc <= 0 || ipc >= len(positionCounters) {
+		// FuncForPC in Go returns nil for a PC that does not correspond to a
+		// known function, and several STL packages rely on that:
+		//   - log/slog passes PC=0 through CallersFrames when a Record was
+		//     created without a real caller (record.go's PC field)
+		//   - test/fixedbugs/issue29735.go deliberately walks past the
+		//     end of a function looking for the next.
+		//   - test/fixedbugs/issue58300.go and test/fixedbugs/issue58300b.go give
+		//     FuncForPC a function pointer from `reflect.ValueOf(fn).Pointer()`,
+		//     which is not produced by Caller/Callers and so isn't in our table.
+		// Returning nil for these unresolvable PCs lets callers keep working
+		// with empty symbols.
+		return nil
 	}
 	return positionCounters[ipc]
 }

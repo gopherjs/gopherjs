@@ -1295,6 +1295,9 @@ func TestPointerToSliceIndex64(t *testing.T) {
 	// of the structure. Since int64 and uint64 are stored as an object with a
 	// high/low value, we should use `%f` when creating the pattern for the
 	// expression to ensure they are flattened into a num.
+	// This does mean we are limited to 53 bit JS indices which is fine since
+	// JS's Array will error with a RangeError if the length goes over 32 bits.
+	// See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/length
 	type symbol struct {
 		name  string
 		value int

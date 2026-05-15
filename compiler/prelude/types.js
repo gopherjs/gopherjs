@@ -288,7 +288,14 @@ var $newType = (size, kind, string, named, pkg, exported, constructor) => {
                 typ.ptr.nil.$val = typ.ptr.nil;
                 /* methods for embedded fields */
                 $addMethodSynthesizer(() => {
+                    // Names occupied by fields declared directly on this
+                    // struct shadow any same-named promoted method per Go's
+                    // selector rules, so do not synthesize a dispatcher for
+                    // a method whose name collides with a field.
+                    var shadowedNames = {};
+                    fields.forEach(f => { shadowedNames[f.name] = true; });
                     var synthesizeMethod = (target, m, f) => {
+                        if (shadowedNames[m.name]) { return; }
                         if (target.prototype[m.prop] !== undefined) { return; }
                         target.prototype[m.prop] = function(...args) {
                             var v = this.$val[f.prop];
@@ -425,6 +432,10 @@ var $methodSet = typ => {
     while (current.length > 0) {
         var next = [];
         var mset = [];
+        // Names occupied by non-method declarations (fields, embedded fields)
+        // at this depth. Per Go's selector rules they shadow any promoted
+        // method of the same name at deeper depths.
+        var fieldNames = [];
 
         current.forEach(e => {
             if (seen[e.typ.string]) {
@@ -442,6 +453,7 @@ var $methodSet = typ => {
             switch (e.typ.kind) {
                 case $kindStruct:
                     e.typ.fields.forEach(f => {
+                        fieldNames.push(f.name);
                         if (f.embedded) {
                             var fTyp = f.typ;
                             var fIsPtr = (fTyp.kind === $kindPtr);
@@ -462,12 +474,23 @@ var $methodSet = typ => {
             }
         });
 
+        // Reserve names occupied by fields at this depth so deeper-depth
+        // methods can't claim them. Uses null as a sentinel meaning
+        // "shadowed by a field, omit from the method set".
+        fieldNames.forEach(n => {
+            if (base[n] === undefined) {
+                base[n] = null;
+            }
+        });
+
         current = next;
     }
 
     typ.methodSetCache = [];
     Object.keys(base).sort().forEach(name => {
-        typ.methodSetCache.push(base[name]);
+        if (base[name] !== null) {
+            typ.methodSetCache.push(base[name]);
+        }
     });
     return typ.methodSetCache;
 };

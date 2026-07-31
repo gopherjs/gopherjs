@@ -112,9 +112,11 @@ func isMitigatedInsertLinkname(sym symbol.Name) bool {
 //   - External linkname must be specified.
 //   - The directive must be applied to a package-level function or method (variables
 //     are not supported).
-//   - The local function referenced by the directive must have no body (in other
-//     words, it can only "import" an external function implementation into the
-//     local scope).
+//   - The local function may either be body-less, in which case the directive
+//     is a "pull" that imports the external implementation into the local
+//     scope, or have a body, in which case the directive is a "push" that
+//     exports the local implementation to the external body-less stub. When
+//     both sides carry matching directives ("handshake").
 func ParseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]GoLinkname, error) {
 	var errs errlist.ErrorList = nil
 	var directives []GoLinkname
@@ -149,10 +151,14 @@ func ParseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 			if isMitigatedInsertLinkname(link.Reference) {
 				return nil
 			}
-			return fmt.Errorf("gopherjs: //go:linkname can not insert local implementation into an external package %q", link.Implementation.PkgPath)
+			// Push link: Local function has a body meaning it is the implementation
+			// that is referencing the stub. Swap the sides so the link is the same as the pull form.
+			link.Implementation, link.Reference = link.Reference, link.Implementation
+			directives = append(directives, *link)
+			return nil
 		}
 
-		// Local function has no body, treat it as a reference to an external implementation.
+		// Pull link: Local function has no body, treat it as a reference to an external implementation.
 		directives = append(directives, *link)
 		return nil
 	}
@@ -224,11 +230,15 @@ func (gls *GoLinknameSet) Add(entries []GoLinkname) error {
 		gls.byReference = map[symbol.Name]GoLinkname{}
 	}
 	for _, e := range entries {
-		gls.byImplementation[e.Implementation] = append(gls.byImplementation[e.Implementation], e)
 		if prev, found := gls.byReference[e.Reference]; found {
+			if prev.Implementation == e.Implementation {
+				// Ignore the duplicate
+				continue
+			}
 			return fmt.Errorf("conflicting go:linkname directives: two implementations for %q: %q and %q",
 				e.Reference, prev.Implementation, e.Implementation)
 		}
+		gls.byImplementation[e.Implementation] = append(gls.byImplementation[e.Implementation], e)
 		gls.byReference[e.Reference] = e
 	}
 	return nil

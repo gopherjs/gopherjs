@@ -3,9 +3,8 @@
 package reflectlite
 
 import (
-	"unsafe"
-
 	"internal/abi"
+	"unsafe"
 
 	"github.com/gopherjs/gopherjs/js"
 )
@@ -89,8 +88,8 @@ func typedmemmove(t *abi.Type, dst, src unsafe.Pointer) {
 //gopherjs:new This is a simplified copy of the version in reflect.
 func methodReceiver(op string, v Value, i int) (fn unsafe.Pointer) {
 	var prop string
-	if v.typ.Kind() == abi.Interface {
-		tt := v.typ.InterfaceType()
+	if v.typ_.Kind() == abi.Interface {
+		tt := v.typ_.InterfaceType()
 		if i < 0 || i >= len(tt.Methods) {
 			panic("reflect: internal error: invalid method index")
 		}
@@ -100,19 +99,19 @@ func methodReceiver(op string, v Value, i int) (fn unsafe.Pointer) {
 		}
 		prop = tt.NameOff(m.Name).Name()
 	} else {
-		ms := v.typ.ExportedMethods()
+		ms := v.typ_.ExportedMethods()
 		if uint(i) >= uint(len(ms)) {
 			panic("reflect: internal error: invalid method index")
 		}
 		m := ms[i]
-		if !v.typ.NameOff(m.Name).IsExported() {
+		if !v.typ_.NameOff(m.Name).IsExported() {
 			panic("reflect: " + op + " of unexported method")
 		}
-		prop = js.Global.Call("$methodSet", jsType(v.typ)).Index(i).Get("prop").String()
+		prop = js.Global.Call("$methodSet", jsType(v.typ_)).Index(i).Get("prop").String()
 	}
 	rcvr := v.object()
-	if v.typ.IsWrapped() {
-		rcvr = jsType(v.typ).New(rcvr)
+	if v.typ_.IsWrapped() {
+		rcvr = jsType(v.typ_).New(rcvr)
 	}
 	fn = unsafe.Pointer(rcvr.Get(prop).Unsafe())
 	return
@@ -128,13 +127,13 @@ func valueInterface(v Value) any {
 		v = makeMethodValue("Interface", v)
 	}
 
-	if v.typ.IsWrapped() {
+	if v.typ_.IsWrapped() {
 		if v.flag&flagIndir != 0 && v.Kind() == abi.Struct {
-			cv := jsType(v.typ).Call("zero")
-			abi.CopyStruct(cv, v.object(), v.typ)
-			return any(unsafe.Pointer(jsType(v.typ).New(cv).Unsafe()))
+			cv := jsType(v.typ_).Call("zero")
+			abi.CopyStruct(cv, v.object(), v.typ_)
+			return any(unsafe.Pointer(jsType(v.typ_).New(cv).Unsafe()))
 		}
-		return any(unsafe.Pointer(jsType(v.typ).New(v.object()).Unsafe()))
+		return any(unsafe.Pointer(jsType(v.typ_).New(v.object()).Unsafe()))
 	}
 	return any(unsafe.Pointer(v.object().Unsafe()))
 }
@@ -161,8 +160,8 @@ func makeMethodValue(op string, v Value) Value {
 
 	fn := methodReceiver(op, v, int(v.flag)>>flagMethodShift)
 	rcvr := v.object()
-	if v.typ.IsWrapped() {
-		rcvr = jsType(v.typ).New(rcvr)
+	if v.typ_.IsWrapped() {
+		rcvr = jsType(v.typ_).New(rcvr)
 	}
 	fv := js.MakeFunc(func(this *js.Object, arguments []*js.Object) any {
 		return js.InternalObject(fn).Call("apply", rcvr, arguments)

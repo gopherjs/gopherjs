@@ -3,6 +3,7 @@ package errlist
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrTooManyErrors is added to the ErrorList by the Trim method.
@@ -15,7 +16,15 @@ func (errs ErrorList) Error() string {
 	if len(errs) == 0 {
 		return "<no errors>"
 	}
-	return fmt.Sprintf("%s (and %d more errors)", errs[0].Error(), len(errs[1:]))
+	if len(errs) == 1 {
+		return errs[0].Error()
+	}
+
+	parts := make([]string, len(errs))
+	for i, err := range errs {
+		parts[i] = fmt.Sprintf(`%d. %s`, i, err.Error())
+	}
+	return strings.Join(parts, "\n")
 }
 
 // ErrOrNil returns nil if ErrorList is empty, or the error otherwise.

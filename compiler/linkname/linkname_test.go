@@ -159,7 +159,7 @@ func TestParseGoLinknames(t *testing.T) {
 			`,
 			wantDirectives: []GoLinkname{},
 		}, {
-			desc: "gopherjs: can not insert local implementation",
+			desc: "gopherjs: can insert local implementation (push link)",
 			src: `package testcase
 			
 			import _ "unsafe"
@@ -167,7 +167,12 @@ func TestParseGoLinknames(t *testing.T) {
 			//go:linkname a other/package.a
 			func a() { println("do a") }
 			`,
-			wantError: `can not insert local implementation`,
+			wantDirectives: []GoLinkname{
+				{
+					Reference:      symbol.Name{PkgPath: `other/package`, Name: `a`},
+					Implementation: symbol.Name{PkgPath: `testcase`, Name: `a`},
+				},
+			},
 		}, {
 			desc:    `gopherjs: ignore known local implementation insert`,
 			pkgPath: `runtime`, // runtime is known and ignored

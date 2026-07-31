@@ -3,9 +3,8 @@
 package reflectlite
 
 import (
-	"unsafe"
-
 	"internal/abi"
+	"unsafe"
 
 	"github.com/gopherjs/gopherjs/js"
 )
@@ -23,7 +22,7 @@ func Field(v Value, i int) Value {
 
 //gopherjs:new
 func (v Value) Field(i int) Value {
-	tt := v.typ.StructType()
+	tt := v.typ_.StructType()
 	if tt == nil {
 		panic(&ValueError{"reflect.Value.Field", v.kind()})
 	}
@@ -32,7 +31,7 @@ func (v Value) Field(i int) Value {
 		panic("reflect: Field index out of range")
 	}
 
-	prop := jsType(v.typ).Get("fields").Index(i).Get("prop").String()
+	prop := jsType(v.typ_).Get("fields").Index(i).Get("prop").String()
 	field := &tt.Fields[i]
 	typ := field.Typ
 
@@ -49,14 +48,14 @@ func (v Value) Field(i int) Value {
 		if jsTag := structTagGet(tag, `js`); jsTag != "" {
 			for {
 				v = v.Field(0)
-				if v.typ == abi.JsObjectPtr {
+				if v.typ_ == abi.JsObjectPtr {
 					o := v.object().Get("object")
 					return Value{typ, unsafe.Pointer(typ.JsPtrTo().New(
 						js.InternalObject(func() *js.Object { return js.Global.Call("$internalize", o.Get(jsTag), jsType(typ)) }),
 						js.InternalObject(func(x *js.Object) { o.Set(jsTag, js.Global.Call("$externalize", x, jsType(typ))) }),
 					).Unsafe()), fl}
 				}
-				if v.typ.Kind() == abi.Pointer {
+				if v.typ_.Kind() == abi.Pointer {
 					v = v.Elem()
 				}
 			}

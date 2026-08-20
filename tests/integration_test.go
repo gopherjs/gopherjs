@@ -23,3 +23,7 @@ func Test_ProxyMethod(t *testing.T) { runOutputTest(t, `testdata`, `proxyMethod`
 // to test that the package level type names do not conflict with function level
 // variable names when the code is minified.
 func Test_MinifyNaming(t *testing.T) { runOutputTest(t, `testdata`, `minifyNaming`, `-m`) }
+
+// Test_PushLinkname uses testdata/pushlinkname/main.go
+// to test that linknames can be pushed and pulled.
+func Test_PushLinkname(t *testing.T) { runOutputTest(t, `testdata`, `pushlinkname`) }

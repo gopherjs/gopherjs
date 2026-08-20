@@ -3,32 +3,35 @@
 package reflectlite
 
 import (
-	"unsafe"
-
 	"internal/abi"
+	"unsafe"
 
 	"github.com/gopherjs/gopherjs/js"
 )
 
+func (v Value) typ() *abi.Type {
+	return v.typ_
+}
+
 //gopherjs:new
 func (v Value) object() *js.Object {
-	if v.typ.Kind() == abi.Array || v.typ.Kind() == abi.Struct {
+	if v.typ_.Kind() == abi.Array || v.typ_.Kind() == abi.Struct {
 		return js.InternalObject(v.ptr)
 	}
 	if v.flag&flagIndir != 0 {
 		val := js.InternalObject(v.ptr).Call("$get")
-		if val != js.Global.Get("$ifaceNil") && val.Get("constructor") != jsType(v.typ) {
-			switch v.typ.Kind() {
+		if val != js.Global.Get("$ifaceNil") && val.Get("constructor") != jsType(v.typ_) {
+			switch v.typ_.Kind() {
 			case abi.Uint64, abi.Int64:
-				val = jsType(v.typ).New(val.Get("$high"), val.Get("$low"))
+				val = jsType(v.typ_).New(val.Get("$high"), val.Get("$low"))
 			case abi.Complex64, abi.Complex128:
-				val = jsType(v.typ).New(val.Get("$real"), val.Get("$imag"))
+				val = jsType(v.typ_).New(val.Get("$real"), val.Get("$imag"))
 			case abi.Slice:
 				if val == val.Get("constructor").Get("nil") {
-					val = jsType(v.typ).Get("nil")
+					val = jsType(v.typ_).Get("nil")
 					break
 				}
-				newVal := jsType(v.typ).New(val.Get("$array"))
+				newVal := jsType(v.typ_).New(val.Get("$array"))
 				newVal.Set("$offset", val.Get("$offset"))
 				newVal.Set("$length", val.Get("$length"))
 				newVal.Set("$capacity", val.Get("$capacity"))
@@ -46,14 +49,14 @@ func (v Value) assignTo(context string, dst *abi.Type, target unsafe.Pointer) Va
 		v = makeMethodValue(context, v)
 	}
 	switch {
-	case directlyAssignable(dst, v.typ):
+	case directlyAssignable(dst, v.typ_):
 		// Overwrite type so that they match.
 		// Same memory layout, so no harm done.
 		fl := v.flag&(flagAddr|flagIndir) | v.flag.ro()
 		fl |= flag(dst.Kind())
 		return Value{dst, v.ptr, fl}
 
-	case implements(dst, v.typ):
+	case implements(dst, v.typ_):
 		if target == nil {
 			target = unsafe_New(dst)
 		}
@@ -70,14 +73,14 @@ func (v Value) assignTo(context string, dst *abi.Type, target unsafe.Pointer) Va
 	}
 
 	// Failed.
-	panic(context + ": value of type " + v.typ.String() + " is not assignable to type " + dst.String())
+	panic(context + ": value of type " + v.typ_.String() + " is not assignable to type " + dst.String())
 }
 
 //gopherjs:replace
 func (v Value) IsNil() bool {
 	switch k := v.kind(); k {
 	case abi.Pointer, abi.Slice:
-		return v.object() == jsType(v.typ).Get("nil")
+		return v.object() == jsType(v.typ_).Get("nil")
 	case abi.Chan:
 		return v.object() == js.Global.Get("$chanNil")
 	case abi.Func:
@@ -113,15 +116,15 @@ func (v Value) Len() int {
 func (v Value) Set(x Value) {
 	v.mustBeAssignable()
 	x.mustBeExported()
-	x = x.assignTo("reflect.Set", v.typ, nil)
+	x = x.assignTo("reflect.Set", v.typ_, nil)
 	if v.flag&flagIndir != 0 {
-		switch v.typ.Kind() {
+		switch v.typ_.Kind() {
 		case abi.Array:
-			jsType(v.typ).Call("copy", js.InternalObject(v.ptr), js.InternalObject(x.ptr))
+			jsType(v.typ_).Call("copy", js.InternalObject(v.ptr), js.InternalObject(x.ptr))
 		case abi.Interface:
 			js.InternalObject(v.ptr).Call("$set", js.InternalObject(valueInterface(x)))
 		case abi.Struct:
-			abi.CopyStruct(js.InternalObject(v.ptr), js.InternalObject(x.ptr), v.typ)
+			abi.CopyStruct(js.InternalObject(v.ptr), js.InternalObject(x.ptr), v.typ_)
 		default:
 			js.InternalObject(v.ptr).Call("$set", x.object())
 		}
@@ -138,15 +141,15 @@ func (v Value) Elem() Value {
 		if val == js.Global.Get("$ifaceNil") {
 			return Value{}
 		}
-		typ := abi.ReflectType(val.Get("constructor"))
-		return makeValue(typ, val.Get("$val"), v.flag.ro())
+		typ_ := abi.ReflectType(val.Get("constructor"))
+		return makeValue(typ_, val.Get("$val"), v.flag.ro())
 
 	case abi.Pointer:
 		if v.IsNil() {
 			return Value{}
 		}
 		val := v.object()
-		tt := (*abi.PtrType)(unsafe.Pointer(v.typ))
+		tt := (*abi.PtrType)(unsafe.Pointer(v.typ_))
 		fl := v.flag&flagRO | flagIndir | flagAddr
 		fl |= flag(tt.Elem.Kind())
 		return Value{tt.Elem, unsafe.Pointer(abi.WrapJsObject(tt.Elem, val).Unsafe()), fl}
@@ -164,3 +167,6 @@ func unpackEface(i any) Value
 
 //gopherjs:purge Unused method for emptyInterface
 func packEface(v Value) any
+
+//gopherjs:purge Problematic without pointers
+func noescape(p unsafe.Pointer) unsafe.Pointer

@@ -1334,3 +1334,24 @@ func TestPointerToSliceIndex64(t *testing.T) {
 		check(&slc[index])
 	})
 }
+
+func TestNowMonotonic(t *testing.T) {
+	date := js.Global.Get("Date")
+	origNow := date.Get("now")
+	defer date.Set("now", origNow)
+
+	t0 := time.Now()
+	// Step the wall clock one hour back, as an NTP correction could.
+	date.Set("now", js.Global.Call("eval", `(function(orig) { return function() { return orig.call(Date) - 3600000; }; })`).Invoke(origNow))
+	t1 := time.Now()
+
+	if d := t1.Sub(t0); d < 0 || d > time.Second {
+		t.Errorf("t1.Sub(t0) = %v, want a small non-negative duration unaffected by the wall clock step", d)
+	}
+	if d := t1.Round(0).Sub(t0.Round(0)); d > -59*time.Minute {
+		t.Errorf("wall clock difference = %v, want about -1h", d)
+	}
+	if d := time.Since(t0); d < 0 || d > time.Second {
+		t.Errorf("time.Since(t0) = %v, want a small non-negative duration", d)
+	}
+}

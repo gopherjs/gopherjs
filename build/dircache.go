@@ -185,8 +185,8 @@ func setListedLocation(bctx build.Context, pkg *build.Package, e dirEntry) {
 	pkg.Root = e.root
 	pkg.Goroot = false
 	pkg.ConflictDir = ""
-	pkg.SrcRoot, pkg.PkgRoot, pkg.BinDir, pkg.PkgTargetRoot, pkg.PkgObj = "", "", "", "", ""
 	if e.root == "" {
+		pkg.SrcRoot, pkg.PkgRoot, pkg.BinDir, pkg.PkgTargetRoot, pkg.PkgObj = "", "", "", "", ""
 		return
 	}
 	suffix := ""

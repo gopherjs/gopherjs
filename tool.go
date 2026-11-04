@@ -129,7 +129,7 @@ func main() {
 					return err
 				}
 
-				xctx := gbuild.NewBuildContext(s.InstallSuffix(), options.BuildTags)
+				xctx := s.XContext()
 				// Expand import path patterns.
 				pkgs, err := xctx.Match(args)
 				if err != nil {
@@ -192,7 +192,7 @@ func main() {
 
 			err = func() error {
 				// Expand import path patterns.
-				xctx := gbuild.NewBuildContext(s.InstallSuffix(), options.BuildTags)
+				xctx := s.XContext()
 				pkgs, err := xctx.Match(args)
 				if err != nil {
 					return fmt.Errorf("failed to expand patterns %v: %w", args, err)

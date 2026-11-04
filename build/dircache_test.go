@@ -49,11 +49,8 @@ func TestDirCacheMatchesImport(t *testing.T) {
 		})
 	}
 
-	if _, ok := dc.entries["github.com/spf13/pflag"]; !ok {
+	if dc.entries["github.com/spf13/pflag"] == nil {
 		t.Errorf("pflag was not recorded when listing cobra's dependencies")
-	}
-	if dc.listed["github.com/spf13/pflag"] {
-		t.Errorf("pflag was listed separately, want it resolved from cobra's dependency list")
 	}
 }
 

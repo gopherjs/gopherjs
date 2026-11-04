@@ -26,8 +26,7 @@ import (
 // context. A dirCache must therefore not be shared between contexts.
 type dirCache struct {
 	mu      sync.Mutex
-	entries map[string]dirEntry
-	listed  map[string]bool
+	entries map[string]*dirEntry // nil means looked up but not found
 }
 
 type dirEntry struct {
@@ -37,7 +36,7 @@ type dirEntry struct {
 }
 
 func newDirCache() *dirCache {
-	return &dirCache{entries: map[string]dirEntry{}, listed: map[string]bool{}}
+	return &dirCache{entries: map[string]*dirEntry{}}
 }
 
 // importPackage is equivalent to bctx.Import, but resolves package directories
@@ -46,8 +45,8 @@ func (dc *dirCache) importPackage(bctx build.Context, importPath, srcDir string,
 	if dc == nil || !resolvesWithGoList(bctx, importPath, srcDir, mode) {
 		return bctx.Import(importPath, srcDir, mode)
 	}
-	entry, ok := dc.lookup(bctx, importPath)
-	if !ok {
+	entry := dc.lookup(bctx, importPath)
+	if entry == nil {
 		return bctx.Import(importPath, srcDir, mode)
 	}
 
@@ -55,7 +54,7 @@ func (dc *dirCache) importPackage(bctx build.Context, importPath, srcDir string,
 	if pkg == nil {
 		return pkg, err
 	}
-	setListedLocation(bctx, pkg, entry)
+	setListedLocation(bctx, pkg, *entry)
 	return pkg, err
 }
 
@@ -124,21 +123,17 @@ func isSubdir(root, dir string) bool {
 // lookup returns the location of importPath, listing its dependency tree on
 // the first miss. The lock is held while `go list` runs so that concurrent
 // misses don't list the same tree twice.
-func (dc *dirCache) lookup(bctx build.Context, importPath string) (dirEntry, bool) {
+func (dc *dirCache) lookup(bctx build.Context, importPath string) *dirEntry {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	if e, ok := dc.entries[importPath]; ok {
-		return e, true
+		return e
 	}
-	if dc.listed[importPath] {
-		return dirEntry{}, false
-	}
-	dc.listed[importPath] = true
+	dc.entries[importPath] = nil
 	if err := dc.listDeps(bctx, importPath); err != nil {
-		return dirEntry{}, false
+		return nil
 	}
-	e, ok := dc.entries[importPath]
-	return e, ok
+	return dc.entries[importPath]
 }
 
 // listDeps runs `go list -deps` the same way go/build's importGo runs
@@ -176,8 +171,8 @@ func (dc *dirCache) listDeps(bctx build.Context, importPath string) error {
 		if len(f) != 4 || f[3] == "true" {
 			continue
 		}
-		if _, ok := dc.entries[f[0]]; !ok {
-			dc.entries[f[0]] = dirEntry{importPath: f[0], dir: f[1], root: f[2]}
+		if dc.entries[f[0]] == nil {
+			dc.entries[f[0]] = &dirEntry{importPath: f[0], dir: f[1], root: f[2]}
 		}
 	}
 	return nil

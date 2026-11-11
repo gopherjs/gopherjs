@@ -26,9 +26,12 @@ type runtimeTimer struct {
 	active  bool
 }
 
+// now reads the wall clock from Date and the monotonic clock from runtimeNano,
+// so that time.Time comparisons and durations are not affected by wall clock
+// adjustments (e.g. NTP corrections).
 func now() (sec int64, nsec int32, mono int64) {
-	n := runtimeNano()
-	return n / int64(Second), int32(n % int64(Second)), n
+	wall := js.Global.Get("Date").Call("now").Int64() * int64(Millisecond)
+	return wall / int64(Second), int32(wall % int64(Second)), runtimeNano()
 }
 
 func Sleep(d Duration) {

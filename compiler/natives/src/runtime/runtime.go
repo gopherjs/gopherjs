@@ -489,9 +489,18 @@ func throw(s string) {
 	panic(errorString(s))
 }
 
+// performance is the High Resolution Time API object, if the environment has one.
+// Its now() is monotonic, unlike Date, which follows every wall clock adjustment.
+var performance = js.Global.Get("performance")
+
+// nanotime returns the monotonic clock reading, falling back to the wall clock
+// in environments without performance.now().
 func nanotime() int64 {
+	if performance != js.Undefined && performance != nil && performance.Get("now") != js.Undefined {
+		return int64(performance.Call("now").Float() * 1_000_000)
+	}
 	const millisecond = 1_000_000
-	return js.Global.Get("Date").New().Call("getTime").Int64() * millisecond
+	return js.Global.Get("Date").Call("now").Int64() * millisecond
 }
 
 const godebugEnvKey = `GODEBUG`

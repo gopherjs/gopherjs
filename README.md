@@ -99,6 +99,9 @@ There are some GopherJS-specific environment variables:
 - `GOPHERJS_SKIP_VERSION_CHECK` - if set to true, GopherJS will not check
   Go version in the GOROOT for compatibility with the GopherJS release. This
   is primarily useful for testing GopherJS against unreleased versions of Go.
+- `GOPHERJS_NO_DIRCACHE` - if set, GopherJS runs `go list` once per imported
+  package to locate it, instead of listing each dependency tree once and
+  caching package locations.
 
 ### Performance Tips
 

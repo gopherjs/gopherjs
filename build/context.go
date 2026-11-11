@@ -83,14 +83,15 @@ type XContext interface {
 type simpleCtx struct {
 	bctx         build.Context
 	stdPkgCache  *sync.Map // map[importPath]bool
-	isVirtual    bool      // Imported packages don't have a physical directory on disk.
-	noPostTweaks bool      // Don't apply post-load tweaks to packages. For tests only.
+	dirs         *dirCache
+	isVirtual    bool // Imported packages don't have a physical directory on disk.
+	noPostTweaks bool // Don't apply post-load tweaks to packages. For tests only.
 }
 
 // Import implements XContext.Import().
 func (sc simpleCtx) Import(importPath string, srcDir string, mode build.ImportMode) (*PackageData, error) {
 	bctx, mode := sc.applyPreloadTweaks(importPath, srcDir, mode)
-	pkg, err := bctx.Import(importPath, srcDir, mode)
+	pkg, err := sc.dirs.importPackage(bctx, importPath, srcDir, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -352,6 +353,7 @@ func gopherjsCtx(e Env) *simpleCtx {
 func goCtx(e Env) *simpleCtx {
 	gc := simpleCtx{
 		stdPkgCache: &sync.Map{},
+		dirs:        newDirCache(),
 		bctx: build.Context{
 			GOROOT:        e.GOROOT,
 			GOPATH:        e.GOPATH,
